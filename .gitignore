@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+vendor/
+
+# Build outputs
+build/
+dist/
+
+# macOS
+.DS_Store
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# PHPUnit
+.phpunit.result.cache
+
+# wp-env
+.wp-env.override.json
+
+# Coverage
+coverage/
+
+# Serena project metadata
+.serena/
