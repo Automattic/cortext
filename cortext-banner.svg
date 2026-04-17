@@ -1,0 +1,212 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 500" width="1500" height="500">
+  <defs>
+    <!-- Dark background gradient -->
+    <radialGradient id="bgGradient" cx="30%" cy="50%" r="90%">
+      <stop offset="0%" stop-color="#0a1628"/>
+      <stop offset="50%" stop-color="#050a14"/>
+      <stop offset="100%" stop-color="#000000"/>
+    </radialGradient>
+
+    <!-- Brain glow around the O -->
+    <radialGradient id="brainGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#00e5ff" stop-opacity="0.5"/>
+      <stop offset="55%" stop-color="#0088ff" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Text gradient -->
+    <linearGradient id="textGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="50%" stop-color="#7de8ff"/>
+      <stop offset="100%" stop-color="#00bfff"/>
+    </linearGradient>
+
+    <!-- Node gradient -->
+    <radialGradient id="nodeGradient" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="40%" stop-color="#00e5ff"/>
+      <stop offset="100%" stop-color="#0066cc" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Connection line gradient -->
+    <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00e5ff" stop-opacity="0.25"/>
+      <stop offset="50%" stop-color="#00e5ff" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#00e5ff" stop-opacity="0.25"/>
+    </linearGradient>
+
+    <!-- Glow filter -->
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1500" height="500" fill="url(#bgGradient)"/>
+
+  <!-- Subtle grid pattern -->
+  <g opacity="0.08" stroke="#00e5ff" stroke-width="0.5">
+    <path d="M0 100 L1500 100 M0 200 L1500 200 M0 300 L1500 300 M0 400 L1500 400"/>
+    <path d="M100 0 L100 500 M200 0 L200 500 M300 0 L300 500 M400 0 L400 500 M500 0 L500 500 M600 0 L600 500 M700 0 L700 500 M800 0 L800 500 M900 0 L900 500 M1000 0 L1000 500 M1100 0 L1100 500 M1200 0 L1200 500 M1300 0 L1300 500 M1400 0 L1400 500"/>
+  </g>
+
+  <!-- Floating accent dots -->
+  <g fill="#00e5ff">
+    <circle cx="80" cy="80" r="1.5" opacity="0.6"/>
+    <circle cx="200" cy="420" r="1.5" opacity="0.5"/>
+    <circle cx="450" cy="60" r="1" opacity="0.4"/>
+    <circle cx="820" cy="440" r="1.5" opacity="0.6"/>
+    <circle cx="980" cy="80" r="1" opacity="0.5"/>
+    <circle cx="1420" cy="420" r="1.5" opacity="0.5"/>
+    <circle cx="1400" cy="100" r="1" opacity="0.4"/>
+    <circle cx="1200" cy="200" r="1" opacity="0.4"/>
+    <circle cx="1300" cy="350" r="1.5" opacity="0.5"/>
+  </g>
+
+  <!-- Glow halo behind the brain-O -->
+  <circle cx="264" cy="215" r="130" fill="url(#brainGlow)"/>
+
+  <!-- "C" -->
+  <text x="90" y="260"
+        font-family="'Helvetica Neue', Arial, sans-serif"
+        font-size="140"
+        font-weight="800"
+        letter-spacing="6"
+        fill="url(#textGradient)"
+        filter="url(#glow)">C</text>
+
+  <!-- Digital Brain replacing the "O" -->
+  <g transform="translate(264, 215) scale(0.42)" filter="url(#softGlow)">
+    <!-- Brain outline (stylized hemispheres) -->
+    <g fill="none" stroke="#00e5ff" stroke-width="2.5" opacity="0.9">
+      <!-- Left hemisphere -->
+      <path d="M -10 -135
+               C -70 -140, -140 -115, -165 -65
+               C -190 -25, -195 25, -175 65
+               C -160 100, -135 125, -95 135
+               C -60 143, -30 140, -10 130
+               L -10 -135 Z" opacity="0.8"/>
+
+      <!-- Right hemisphere -->
+      <path d="M 10 -135
+               C 70 -140, 140 -115, 165 -65
+               C 190 -25, 195 25, 175 65
+               C 160 100, 135 125, 95 135
+               C 60 143, 30 140, 10 130
+               L 10 -135 Z" opacity="0.8"/>
+
+      <!-- Left inner curves (gyri) -->
+      <path d="M -165 -65 C -130 -55, -100 -35, -80 -5" opacity="0.55"/>
+      <path d="M -190 -25 C -140 -15, -110 0, -90 25" opacity="0.55"/>
+      <path d="M -175 65 C -130 55, -100 45, -75 50" opacity="0.55"/>
+      <path d="M -135 125 C -110 105, -90 85, -70 80" opacity="0.55"/>
+      <path d="M -95 135 C -85 110, -80 85, -75 65" opacity="0.55"/>
+
+      <!-- Right inner curves (gyri) -->
+      <path d="M 165 -65 C 130 -55, 100 -35, 80 -5" opacity="0.55"/>
+      <path d="M 190 -25 C 140 -15, 110 0, 90 25" opacity="0.55"/>
+      <path d="M 175 65 C 130 55, 100 45, 75 50" opacity="0.55"/>
+      <path d="M 135 125 C 110 105, 90 85, 70 80" opacity="0.55"/>
+      <path d="M 95 135 C 85 110, 80 85, 75 65" opacity="0.55"/>
+
+      <!-- Crown curves -->
+      <path d="M -70 -140 C -30 -155, 30 -155, 70 -140" opacity="0.65"/>
+      <path d="M -110 -105 C -50 -125, 50 -125, 110 -105" opacity="0.5"/>
+    </g>
+
+    <!-- Neural network connections -->
+    <g stroke="url(#lineGradient)" stroke-width="1.5" fill="none" opacity="0.8">
+      <line x1="-120" y1="-80" x2="-60" y2="-40"/>
+      <line x1="-60" y1="-40" x2="-100" y2="20"/>
+      <line x1="-100" y1="20" x2="-40" y2="60"/>
+      <line x1="-40" y1="60" x2="-120" y2="90"/>
+      <line x1="-60" y1="-40" x2="0" y2="-80"/>
+      <line x1="0" y1="-80" x2="60" y2="-40"/>
+      <line x1="60" y1="-40" x2="100" y2="20"/>
+      <line x1="100" y1="20" x2="40" y2="60"/>
+      <line x1="40" y1="60" x2="120" y2="90"/>
+      <line x1="60" y1="-40" x2="-60" y2="-40"/>
+      <line x1="-40" y1="60" x2="40" y2="60"/>
+      <line x1="0" y1="-80" x2="0" y2="0"/>
+      <line x1="0" y1="0" x2="-40" y2="60"/>
+      <line x1="0" y1="0" x2="40" y2="60"/>
+      <line x1="0" y1="0" x2="-100" y2="20"/>
+      <line x1="0" y1="0" x2="100" y2="20"/>
+      <line x1="-150" y1="-20" x2="-100" y2="20"/>
+      <line x1="150" y1="-20" x2="100" y2="20"/>
+      <line x1="-120" y1="-80" x2="0" y2="-80"/>
+      <line x1="0" y1="-80" x2="120" y2="-80"/>
+      <line x1="-80" y1="110" x2="-40" y2="60"/>
+      <line x1="80" y1="110" x2="40" y2="60"/>
+      <line x1="-80" y1="110" x2="80" y2="110"/>
+    </g>
+
+    <!-- Neural nodes -->
+    <g fill="url(#nodeGradient)">
+      <circle cx="-120" cy="-80" r="8"/>
+      <circle cx="-60" cy="-40" r="9"/>
+      <circle cx="-100" cy="20" r="8"/>
+      <circle cx="-40" cy="60" r="9"/>
+      <circle cx="-120" cy="90" r="7"/>
+      <circle cx="0" cy="-80" r="10"/>
+      <circle cx="60" cy="-40" r="9"/>
+      <circle cx="100" cy="20" r="8"/>
+      <circle cx="40" cy="60" r="9"/>
+      <circle cx="120" cy="90" r="7"/>
+      <circle cx="0" cy="0" r="12"/>
+      <circle cx="-150" cy="-20" r="6"/>
+      <circle cx="150" cy="-20" r="6"/>
+      <circle cx="120" cy="-80" r="7"/>
+      <circle cx="-80" cy="110" r="8"/>
+      <circle cx="80" cy="110" r="8"/>
+    </g>
+
+    <!-- Bright center pulse -->
+    <circle cx="0" cy="0" r="5" fill="#ffffff" opacity="0.95"/>
+    <circle cx="0" cy="0" r="18" fill="none" stroke="#00e5ff" stroke-width="1.2" opacity="0.55"/>
+    <circle cx="0" cy="0" r="28" fill="none" stroke="#00e5ff" stroke-width="0.7" opacity="0.3"/>
+
+    <!-- Brain stem hint -->
+    <path d="M -10 135 C -5 155, 5 155, 10 135" fill="none" stroke="#00e5ff" stroke-width="2.5" opacity="0.65"/>
+  </g>
+
+  <!-- "RTEXT" -->
+  <text x="338" y="260"
+        font-family="'Helvetica Neue', Arial, sans-serif"
+        font-size="140"
+        font-weight="800"
+        letter-spacing="6"
+        fill="url(#textGradient)"
+        filter="url(#glow)">RTEXT</text>
+
+  <!-- Divider line -->
+  <line x1="95" y1="295" x2="760" y2="295" stroke="#00e5ff" stroke-width="2" opacity="0.7"/>
+  <circle cx="765" cy="295" r="3.5" fill="#00e5ff"/>
+
+  <!-- Subtitle: "Your Digital Brain. Your Rules." (Georgia italic) -->
+  <text x="95" y="355"
+        font-family="Georgia, 'Times New Roman', serif"
+        font-size="34"
+        font-style="italic"
+        font-weight="400"
+        fill="#e6f4ff">Your Digital Brain. Your Rules.</text>
+
+  <!-- Sub-subtitle: "Powered by WordPress" (Georgia upright) -->
+  <text x="95" y="405"
+        font-family="Georgia, 'Times New Roman', serif"
+        font-size="24"
+        font-weight="400"
+        fill="#7fb5d9">Powered by <tspan font-weight="700" fill="#ffffff">WordPress</tspan></text>
+</svg>
