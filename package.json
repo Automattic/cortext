@@ -1,0 +1,21 @@
+{
+	"name": "cortext",
+	"version": "0.0.1",
+	"description": "Notion-inspired workspace inside WordPress.",
+	"private": true,
+	"license": "GPL-2.0-or-later",
+	"scripts": {
+		"start": "wp-scripts start",
+		"build": "wp-scripts build",
+		"format": "wp-scripts format",
+		"wp-env": "wp-env",
+		"env:start": "wp-env start --runtime=playground"
+	},
+	"devDependencies": {
+		"@wordpress/env": "^10.0.0",
+		"@wordpress/scripts": "^30.0.0"
+	},
+	"dependencies": {
+		"@wordpress/dataviews": "^6.0.0"
+	}
+}
