@@ -20,18 +20,37 @@ import {
 import { Button, Spinner } from '@wordpress/components';
 import { cog } from '@wordpress/icons';
 
+import useAutosave from '../hooks/useAutosave';
+
 const POST_TYPE = 'page';
 const SCOPE = 'cortext';
 const INSPECTOR = 'cortext/block-inspector';
 
+const STATUS_LABELS = {
+	idle: '',
+	saving: __( 'Saving…', 'cortext' ),
+	saved: __( 'Saved', 'cortext' ),
+	error: __( 'Failed to save', 'cortext' ),
+};
+
+function SaveStatus() {
+	const { status } = useAutosave();
+	const label = STATUS_LABELS[ status ] ?? '';
+
+	return (
+		<div
+			className={ `cortext-canvas__status cortext-canvas__status--${ status }` }
+			role="status"
+			aria-live="polite"
+		>
+			{ label }
+		</div>
+	);
+}
+
 function Header() {
-	const { savePost } = useDispatch( editorStore );
 	const { enableComplementaryArea, disableComplementaryArea } =
 		useDispatch( interfaceStore );
-	const isSaving = useSelect(
-		( select ) => select( editorStore ).isSavingPost(),
-		[]
-	);
 	const isInspectorOpen = useSelect(
 		( select ) =>
 			select( interfaceStore ).getActiveComplementaryArea( SCOPE ) ===
@@ -41,15 +60,7 @@ function Header() {
 
 	return (
 		<div className="cortext-canvas__header">
-			<Button
-				variant="primary"
-				isBusy={ isSaving }
-				onClick={ () => savePost() }
-			>
-				{ isSaving
-					? __( 'Saving…', 'cortext' )
-					: __( 'Save', 'cortext' ) }
-			</Button>
+			<SaveStatus />
 			<Button
 				icon={ cog }
 				label={ __( 'Settings', 'cortext' ) }
