@@ -17,6 +17,7 @@ import {
 	useSensors,
 	pointerWithin,
 } from '@dnd-kit/core';
+import { useNavigate, useParams } from '@tanstack/react-router';
 
 import PageRow from './PageRow';
 import {
@@ -26,6 +27,7 @@ import {
 	isDescendantOf,
 	nextChildOrder,
 } from './pages-tree';
+import { computeUri } from '../router/useResolveEntity';
 
 // Stand-in until the `cortext_page` CPT lands — change this constant to swap.
 const POST_TYPE = 'page';
@@ -44,7 +46,7 @@ function parseDropId( id ) {
 	return { zone, targetId: pageId };
 }
 
-export default function Sidebar( { selectedId, onSelect } ) {
+export default function Sidebar() {
 	const { records, isResolving } = useEntityRecords( 'postType', POST_TYPE, {
 		per_page: 100,
 		status: [ 'private', 'publish' ],
@@ -52,6 +54,38 @@ export default function Sidebar( { selectedId, onSelect } ) {
 	} );
 	const { saveEntityRecord, deleteEntityRecord } = useDispatch( 'core' );
 	const pages = useMemo( () => records ?? [], [ records ] );
+	const navigate = useNavigate();
+	const params = useParams( { strict: false } );
+	const activeUri = params._splat ?? '';
+	const adminUrl = window.cortextSettings?.adminUrl ?? '/wp-admin/';
+
+	const selectedId = useMemo( () => {
+		if ( ! activeUri ) {
+			return null;
+		}
+		const match = pages.find(
+			( page ) => computeUri( page, pages ) === activeUri
+		);
+		return match?.id ?? null;
+	}, [ activeUri, pages ] );
+
+	const onSelect = useCallback(
+		( id ) => {
+			if ( id == null ) {
+				navigate( { to: '/' } );
+				return;
+			}
+			const page = pages.find( ( p ) => p.id === id );
+			if ( ! page ) {
+				return;
+			}
+			navigate( {
+				to: '/$',
+				params: { _splat: computeUri( page, pages ) },
+			} );
+		},
+		[ navigate, pages ]
+	);
 
 	const tree = useMemo( () => buildTree( pages ), [ pages ] );
 
@@ -294,7 +328,7 @@ export default function Sidebar( { selectedId, onSelect } ) {
 				<Button
 					icon="arrow-left-alt2"
 					label={ __( 'Back to WordPress', 'cortext' ) }
-					href="index.php"
+					href={ adminUrl }
 				/>
 				<Button variant="primary" onClick={ createRootPage }>
 					{ __( 'New page', 'cortext' ) }

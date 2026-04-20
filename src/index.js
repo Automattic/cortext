@@ -1,12 +1,12 @@
 import { createRoot } from '@wordpress/element';
 import { registerCoreBlocks } from '@wordpress/block-library';
 
-import App from './components/App';
+import { router, RouterProvider } from './router';
 import './index.scss';
 
 registerCoreBlocks();
 
 const root = document.getElementById( 'cortext-root' );
 if ( root ) {
-	createRoot( root ).render( <App /> );
+	createRoot( root ).render( <RouterProvider router={ router } /> );
 }

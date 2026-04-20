@@ -40,3 +40,17 @@ add_action(
 		\Cortext\Plugin::instance()->boot();
 	}
 );
+
+register_activation_hook(
+	__FILE__,
+	static function () {
+		delete_option( 'rewrite_rules' );
+	}
+);
+
+register_deactivation_hook(
+	__FILE__,
+	static function () {
+		delete_option( 'rewrite_rules' );
+	}
+);
