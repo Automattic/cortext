@@ -32,4 +32,29 @@ Two post types handle storage: `cortext_page` for workspace documents, and `cort
 
 ## Development
 
-Scaffolding, build instructions, and activation notes will land as the plugin takes shape.
+```
+./scripts/setup.sh   # install deps, assign a per-worktree port
+./scripts/run.sh     # refresh branch label, boot Playground, start watcher
+npm run dev          # JS watcher only (Playground already running)
+npm run build        # production build
+```
+
+Runs on WordPress Playground — no Docker required. The setup script writes a
+git-ignored `.wp-env.override.json` so parallel git worktrees use different
+ports, and drops a small auto-activated plugin that labels the site title
+with the current branch name.
+
+### Orchestrators (Conductor, Cursor, Cline, etc.)
+
+Wire these three scripts into your orchestrator's per-project settings:
+
+- **Setup**:   `./scripts/setup.sh`   — installs deps, assigns a per-worktree port, seeds the branch label
+- **Run**:     `./scripts/run.sh`     — refreshes the branch label, boots Playground, starts the JS watcher
+- **Archive**: `./scripts/archive.sh` — stops the detached Playground server
+
+Each worktree gets a deterministic port derived from its absolute path, so
+agents working in parallel worktrees don't collide on the Playground port.
+The run script re-derives the site-title label from the current branch each
+time, so it survives branch renames and checkouts within the worktree.
+The archive script matters because Playground runs detached — it survives
+the run process and would otherwise leak when a worktree is removed.

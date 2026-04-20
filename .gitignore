@@ -30,6 +30,7 @@ yarn-error.log*
 
 # wp-env
 .wp-env.override.json
+.wp-env-plugins/
 
 # Playwright MCP verification snapshots
 .playwright-mcp/

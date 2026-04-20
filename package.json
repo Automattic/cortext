@@ -5,11 +5,10 @@
 	"private": true,
 	"license": "GPL-2.0-or-later",
 	"scripts": {
-		"start": "wp-scripts start",
+		"start": "wp-env start --runtime=playground && npm run dev",
+		"dev": "wp-scripts start",
 		"build": "wp-scripts build",
-		"format": "wp-scripts format",
-		"wp-env": "wp-env",
-		"env:start": "wp-env start --runtime=playground"
+		"format": "wp-scripts format"
 	},
 	"devDependencies": {
 		"@wordpress/env": "^10.0.0",
