@@ -1,0 +1,106 @@
+@use "@wordpress/base-styles/colors" as *;
+@use "@wordpress/base-styles/variables" as *;
+
+// Hide core admin chrome on the Cortext screen (our CSS only loads here).
+// `is-fullscreen-mode` rules for these elements live in `wp-edit-post`'s
+// stylesheet, which we don't enqueue — so we apply them ourselves.
+body.is-fullscreen-mode {
+	#wpadminbar,
+	#adminmenuback,
+	#adminmenuwrap,
+	#adminmenumain,
+	#wpfooter {
+		display: none !important;
+	}
+
+	#wpcontent,
+	#wpbody,
+	#wpbody-content {
+		margin: 0 !important;
+		padding: 0 !important;
+	}
+}
+
+html.wp-toolbar {
+	padding-top: 0 !important;
+}
+
+.cortext-root {
+	position: fixed;
+	inset: 0;
+	background: $white;
+}
+
+.cortext-shell {
+	display: grid;
+	grid-template-columns: 280px 1fr;
+	height: 100vh;
+}
+
+.cortext-sidebar {
+	border-right: $border-width solid $gray-200;
+	overflow-y: auto;
+	padding: $grid-unit-15;
+
+	&__header {
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-10;
+		margin-bottom: $grid-unit-15;
+	}
+
+	&__loading,
+	&__empty {
+		color: $gray-700;
+		padding: $grid-unit-10;
+	}
+
+	&__list {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+
+		// Let list buttons span the sidebar width.
+		.components-button {
+			width: 100%;
+			justify-content: flex-start;
+		}
+	}
+}
+
+.cortext-shell__canvas {
+	display: flex;
+	overflow: hidden;
+}
+
+.cortext-canvas {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+
+	&__header {
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-10;
+		padding: $grid-unit-10 $grid-unit-20;
+		border-bottom: $border-width solid $gray-200;
+	}
+
+	&__loading,
+	&__empty {
+		flex: 1;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		color: $gray-700;
+	}
+
+	&__body {
+		flex: 1;
+		overflow-y: auto;
+	}
+
+	&__title {
+		padding: $grid-unit-30 $grid-unit-30 0;
+	}
+}

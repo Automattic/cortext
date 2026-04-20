@@ -66,6 +66,9 @@ final class Page {
 
 		wp_set_script_translations( self::SCRIPT_HANDLE, 'cortext' );
 
+		// Pulls wp-components, wp-block-editor, wp-block-library styles transitively.
+		wp_enqueue_style( 'wp-edit-blocks' );
+
 		$style_path = CORTEXT_PATH . 'build/index.css';
 		if ( file_exists( $style_path ) ) {
 			wp_enqueue_style(
