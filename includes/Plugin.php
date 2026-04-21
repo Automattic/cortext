@@ -9,7 +9,8 @@ declare( strict_types=1 );
 
 namespace Cortext;
 
-use Cortext\Admin\Page;
+use Cortext\Admin\MenuLink;
+use Cortext\Shell\Shell;
 
 final class Plugin {
 
@@ -23,7 +24,8 @@ final class Plugin {
 	}
 
 	public function boot(): void {
-		( new Page() )->register();
+		( new Shell() )->register();
+		( new MenuLink() )->register();
 	}
 
 	private function __construct() {}

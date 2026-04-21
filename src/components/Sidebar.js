@@ -17,6 +17,7 @@ import {
 	useSensors,
 	pointerWithin,
 } from '@dnd-kit/core';
+import { useNavigate, useParams } from '@tanstack/react-router';
 
 import PageRow from './PageRow';
 import {
@@ -26,6 +27,7 @@ import {
 	isDescendantOf,
 	nextChildOrder,
 } from './pages-tree';
+import { computeUri } from '../router/useResolveEntity';
 
 // Stand-in until the `cortext_page` CPT lands — change this constant to swap.
 const POST_TYPE = 'page';
@@ -44,7 +46,14 @@ function parseDropId( id ) {
 	return { zone, targetId: pageId };
 }
 
-export default function Sidebar( { selectedId, onSelect } ) {
+export default function Sidebar() {
+	// TODO(scale): per_page: 100 is the REST collection endpoint's hard ceiling.
+	// Workspaces are expected to exceed 100 pages — pages past the cap won't
+	// appear in the tree, and computeUri() walks ancestors via this same list,
+	// so deep-nested items whose ancestors are past the cap produce truncated
+	// (wrong) URIs that then 404 through useResolveEntity. Followup needs a
+	// lazy-loaded tree (load children on expand) or a paginated fetch of the
+	// full page set.
 	const { records, isResolving } = useEntityRecords( 'postType', POST_TYPE, {
 		per_page: 100,
 		status: [ 'private', 'publish' ],
@@ -52,6 +61,41 @@ export default function Sidebar( { selectedId, onSelect } ) {
 	} );
 	const { saveEntityRecord, deleteEntityRecord } = useDispatch( 'core' );
 	const pages = useMemo( () => records ?? [], [ records ] );
+	const navigate = useNavigate();
+	const params = useParams( { strict: false } );
+	const activeUri = params._splat ?? '';
+	const adminUrl = window.cortextSettings?.adminUrl ?? '/wp-admin/';
+
+	const selectedId = useMemo( () => {
+		if ( ! activeUri ) {
+			return null;
+		}
+		const match = pages.find(
+			( page ) => computeUri( page, pages ) === activeUri
+		);
+		return match?.id ?? null;
+	}, [ activeUri, pages ] );
+
+	// Callers that just created a record pass it as `pageHint` — after
+	// `await saveEntityRecord`, React hasn't re-rendered yet, so the closure's
+	// `pages` doesn't contain the new id and a plain lookup would no-op.
+	const onSelect = useCallback(
+		( id, pageHint ) => {
+			if ( id == null ) {
+				navigate( { to: '/' } );
+				return;
+			}
+			const page = pageHint ?? pages.find( ( p ) => p.id === id );
+			if ( ! page ) {
+				return;
+			}
+			navigate( {
+				to: '/$',
+				params: { _splat: computeUri( page, pages ) },
+			} );
+		},
+		[ navigate, pages ]
+	);
 
 	const tree = useMemo( () => buildTree( pages ), [ pages ] );
 
@@ -103,7 +147,7 @@ export default function Sidebar( { selectedId, onSelect } ) {
 			title: __( 'Untitled', 'cortext' ),
 		} );
 		if ( created?.id ) {
-			onSelect( created.id );
+			onSelect( created.id, created );
 			setAutoRenameId( created.id );
 		}
 	}, [ saveEntityRecord, onSelect ] );
@@ -118,7 +162,7 @@ export default function Sidebar( { selectedId, onSelect } ) {
 			} );
 			if ( created?.id ) {
 				expand( parentId );
-				onSelect( created.id );
+				onSelect( created.id, created );
 				setAutoRenameId( created.id );
 			}
 		},
@@ -155,7 +199,7 @@ export default function Sidebar( { selectedId, onSelect } ) {
 				if ( source.parent ) {
 					expand( source.parent );
 				}
-				onSelect( created.id );
+				onSelect( created.id, created );
 			}
 		},
 		[ saveEntityRecord, getRecordById, expand, onSelect ]
@@ -294,7 +338,7 @@ export default function Sidebar( { selectedId, onSelect } ) {
 				<Button
 					icon="arrow-left-alt2"
 					label={ __( 'Back to WordPress', 'cortext' ) }
-					href="index.php"
+					href={ adminUrl }
 				/>
 				<Button variant="primary" onClick={ createRootPage }>
 					{ __( 'New page', 'cortext' ) }
