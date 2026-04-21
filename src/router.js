@@ -1,3 +1,9 @@
+// Shell routes. `basepath` matches the PHP-side Shell::ROUTE_PREFIX rewrite —
+// injected through window.cortextSettings so JS has a single source of truth
+// for the URL prefix. The layout (Sidebar + main) is the root route; the index
+// route renders the empty state; `$` is a splat that catches all sub-paths and
+// hands the URI to EntityRoute for entity resolution.
+
 import {
 	createRouter,
 	createRootRoute,
@@ -39,7 +45,7 @@ const routeTree = rootRoute.addChildren( [ indexRoute, splatRoute ] );
 
 export const router = createRouter( {
 	routeTree,
-	basepath: '/cortext',
+	basepath: '/' + ( window.cortextSettings?.routePrefix ?? 'cortext' ),
 } );
 
 export { RouterProvider };

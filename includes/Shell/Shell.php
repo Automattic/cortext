@@ -101,7 +101,8 @@ final class Shell {
 			self::SCRIPT_HANDLE,
 			'window.cortextSettings = ' . wp_json_encode(
 				[
-					'adminUrl' => admin_url(),
+					'adminUrl'    => admin_url(),
+					'routePrefix' => self::ROUTE_PREFIX,
 				]
 			) . ';',
 			'before'

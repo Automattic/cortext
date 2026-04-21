@@ -47,6 +47,13 @@ function parseDropId( id ) {
 }
 
 export default function Sidebar() {
+	// TODO(scale): per_page: 100 is the REST collection endpoint's hard ceiling.
+	// Workspaces are expected to exceed 100 pages — pages past the cap won't
+	// appear in the tree, and computeUri() walks ancestors via this same list,
+	// so deep-nested items whose ancestors are past the cap produce truncated
+	// (wrong) URIs that then 404 through useResolveEntity. Followup needs a
+	// lazy-loaded tree (load children on expand) or a paginated fetch of the
+	// full page set.
 	const { records, isResolving } = useEntityRecords( 'postType', POST_TYPE, {
 		per_page: 100,
 		status: [ 'private', 'publish' ],
@@ -69,13 +76,16 @@ export default function Sidebar() {
 		return match?.id ?? null;
 	}, [ activeUri, pages ] );
 
+	// Callers that just created a record pass it as `pageHint` — after
+	// `await saveEntityRecord`, React hasn't re-rendered yet, so the closure's
+	// `pages` doesn't contain the new id and a plain lookup would no-op.
 	const onSelect = useCallback(
-		( id ) => {
+		( id, pageHint ) => {
 			if ( id == null ) {
 				navigate( { to: '/' } );
 				return;
 			}
-			const page = pages.find( ( p ) => p.id === id );
+			const page = pageHint ?? pages.find( ( p ) => p.id === id );
 			if ( ! page ) {
 				return;
 			}
@@ -137,7 +147,7 @@ export default function Sidebar() {
 			title: __( 'Untitled', 'cortext' ),
 		} );
 		if ( created?.id ) {
-			onSelect( created.id );
+			onSelect( created.id, created );
 			setAutoRenameId( created.id );
 		}
 	}, [ saveEntityRecord, onSelect ] );
@@ -152,7 +162,7 @@ export default function Sidebar() {
 			} );
 			if ( created?.id ) {
 				expand( parentId );
-				onSelect( created.id );
+				onSelect( created.id, created );
 				setAutoRenameId( created.id );
 			}
 		},
@@ -189,7 +199,7 @@ export default function Sidebar() {
 				if ( source.parent ) {
 					expand( source.parent );
 				}
-				onSelect( created.id );
+				onSelect( created.id, created );
 			}
 		},
 		[ saveEntityRecord, getRecordById, expand, onSelect ]
