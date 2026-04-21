@@ -6,17 +6,42 @@ import {
 	PostTitle,
 	store as editorStore,
 } from '@wordpress/editor';
-import { BlockList } from '@wordpress/block-editor';
+import {
+	BlockList,
+	BlockInspector,
+	BlockCanvas,
+} from '@wordpress/block-editor';
+import {
+	InterfaceSkeleton,
+	ComplementaryArea,
+	store as interfaceStore,
+} from '@wordpress/interface';
+import { store as preferencesStore } from '@wordpress/preferences';
 import { Button, Spinner } from '@wordpress/components';
+import { cog } from '@wordpress/icons';
 
 const POST_TYPE = 'page';
+const SCOPE = 'cortext';
+const INSPECTOR = 'cortext/block-inspector';
 
 function Header() {
 	const { savePost } = useDispatch( editorStore );
+	const { enableComplementaryArea, disableComplementaryArea } =
+		useDispatch( interfaceStore );
 	const isSaving = useSelect(
 		( select ) => select( editorStore ).isSavingPost(),
 		[]
 	);
+	const isInspectorOpen = useSelect( ( select ) => {
+		// `getActiveComplementaryArea` reads visibility from preferences via a
+		// registry selector bound to the parent registry, so EditorProvider's
+		// sub-registry doesn't see the dependency. Subscribe explicitly.
+		select( preferencesStore );
+		return (
+			select( interfaceStore ).getActiveComplementaryArea( SCOPE ) ===
+			INSPECTOR
+		);
+	}, [] );
 
 	return (
 		<div className="cortext-canvas__header">
@@ -29,7 +54,47 @@ function Header() {
 					? __( 'Saving…', 'cortext' )
 					: __( 'Save', 'cortext' ) }
 			</Button>
+			<Button
+				icon={ cog }
+				label={ __( 'Settings', 'cortext' ) }
+				isPressed={ isInspectorOpen }
+				onClick={ () =>
+					isInspectorOpen
+						? disableComplementaryArea( SCOPE )
+						: enableComplementaryArea( SCOPE, INSPECTOR )
+				}
+			/>
 		</div>
+	);
+}
+
+function InspectorSidebar() {
+	return (
+		<ComplementaryArea
+			scope={ SCOPE }
+			identifier={ INSPECTOR }
+			icon={ cog }
+			title={ __( 'Block', 'cortext' ) }
+			isPinnable={ false }
+			isActiveByDefault
+		>
+			<BlockInspector />
+		</ComplementaryArea>
+	);
+}
+
+function VisualCanvas() {
+	const styles = useSelect(
+		( select ) => select( editorStore ).getEditorSettings().styles,
+		[]
+	);
+	return (
+		<BlockCanvas height="100%" styles={ styles }>
+			<div className="cortext-canvas__title">
+				<PostTitle />
+			</div>
+			<BlockList />
+		</BlockCanvas>
 	);
 }
 
@@ -49,16 +114,17 @@ export default function Canvas( { postId } ) {
 	}
 
 	return (
-		<EditorProvider post={ post } settings={ {} }>
-			<div className="cortext-canvas">
-				<Header />
-				<div className="cortext-canvas__body">
-					<div className="cortext-canvas__title">
-						<PostTitle />
-					</div>
-					<BlockList />
-				</div>
-			</div>
+		<EditorProvider
+			post={ post }
+			settings={ window.cortextEditorSettings ?? {} }
+		>
+			<InterfaceSkeleton
+				className="cortext-canvas"
+				header={ <Header /> }
+				content={ <VisualCanvas /> }
+				sidebar={ <ComplementaryArea.Slot scope={ SCOPE } /> }
+			/>
+			<InspectorSidebar />
 		</EditorProvider>
 	);
 }

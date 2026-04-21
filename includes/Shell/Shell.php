@@ -118,8 +118,22 @@ final class Shell {
 
 		wp_set_script_translations( self::SCRIPT_HANDLE, 'cortext' );
 
-		// Pulls wp-components, wp-block-editor, wp-block-library styles transitively.
+		// Build block-editor settings server-side so the iframe canvas gets the
+		// same `styles` (theme.json output, block-library editor CSS, etc.) as
+		// the post editor.
+		$editor_context  = new \WP_Block_Editor_Context( [ 'name' => 'core/edit-post' ] );
+		$editor_settings = get_block_editor_settings( [], $editor_context );
+
+		wp_add_inline_script(
+			self::SCRIPT_HANDLE,
+			'window.cortextEditorSettings = ' . wp_json_encode( $editor_settings ) . ';',
+			'before'
+		);
+
+		// `wp-edit-blocks` only ships `block-editor/content.css`; the block
+		// toolbar popover needs `block-editor/style.css` (`wp-block-editor`).
 		wp_enqueue_style( 'wp-edit-blocks' );
+		wp_enqueue_style( 'wp-block-editor' );
 
 		$style_path = CORTEXT_PATH . 'build/index.css';
 		if ( file_exists( $style_path ) ) {

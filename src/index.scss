@@ -1,6 +1,10 @@
 @use "@wordpress/base-styles/colors" as *;
 @use "@wordpress/base-styles/variables" as *;
 
+// @wordpress/interface is a BUNDLED_PACKAGE (inlined into our JS) and WP
+// doesn't register a `wp-interface` style handle, so bundle its stylesheet.
+@use "../node_modules/@wordpress/interface/build-style/style.css";
+
 // Hide core admin chrome on the Cortext screen (our CSS only loads here).
 // `is-fullscreen-mode` rules for these elements live in `wp-edit-post`'s
 // stylesheet, which we don't enqueue — so we apply them ourselves.
@@ -189,38 +193,38 @@ html.wp-toolbar {
 }
 
 .cortext-shell__canvas {
-	display: flex;
+	position: relative;
 	overflow: hidden;
+
+	// InterfaceSkeleton defaults to `position: fixed` at >= 782px, which would
+	// escape our grid and overlap the page-list sidebar. Scope it to fill just
+	// our canvas column instead.
+	.interface-interface-skeleton {
+		position: absolute !important;
+		inset: 0;
+		min-height: 0;
+	}
 }
 
 .cortext-canvas {
-	flex: 1;
-	display: flex;
-	flex-direction: column;
-
 	&__header {
 		display: flex;
 		align-items: center;
 		gap: $grid-unit-10;
 		padding: $grid-unit-10 $grid-unit-20;
-		border-bottom: $border-width solid $gray-200;
+		flex: 1;
 	}
 
 	&__loading,
 	&__empty {
-		flex: 1;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		color: $gray-700;
-	}
-
-	&__body {
-		flex: 1;
-		overflow-y: auto;
+		height: 100%;
 	}
 
 	&__title {
-		padding: $grid-unit-30 $grid-unit-30 0;
+		padding: 0 $grid-unit-30;
 	}
 }
