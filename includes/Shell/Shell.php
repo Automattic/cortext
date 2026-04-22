@@ -17,11 +17,11 @@ final class Shell {
 	private const SCRIPT_HANDLE = 'cortext-shell';
 
 	public function register(): void {
-		add_action( 'init', [ $this, 'register_rewrite' ] );
-		add_filter( 'query_vars', [ $this, 'register_query_vars' ] );
-		add_filter( 'template_include', [ $this, 'maybe_render_shell' ] );
-		add_filter( 'redirect_canonical', [ $this, 'prevent_canonical_redirect' ] );
-		add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_assets' ] );
+		add_action( 'init', array( $this, 'register_rewrite' ) );
+		add_filter( 'query_vars', array( $this, 'register_query_vars' ) );
+		add_filter( 'template_include', array( $this, 'maybe_render_shell' ) );
+		add_filter( 'redirect_canonical', array( $this, 'prevent_canonical_redirect' ) );
+		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 	}
 
 	public function register_rewrite(): void {
@@ -33,6 +33,8 @@ final class Shell {
 	}
 
 	/**
+	 * Whitelist the shell query var so WP picks it up from the rewrite.
+	 *
 	 * @param string[] $vars
 	 * @return string[]
 	 */
@@ -55,7 +57,7 @@ final class Shell {
 			wp_die(
 				esc_html__( 'You do not have permission to access Cortext.', 'cortext' ),
 				esc_html__( 'Cortext', 'cortext' ),
-				[ 'response' => 403 ]
+				array( 'response' => 403 )
 			);
 		}
 
@@ -66,6 +68,8 @@ final class Shell {
 	}
 
 	/**
+	 * Skip canonical redirects on the shell URL so the rewrite stays intact.
+	 *
 	 * @param string|false $redirect_url
 	 * @return string|false
 	 */
@@ -86,7 +90,11 @@ final class Shell {
 			return;
 		}
 
-		/** @var array{dependencies: string[], version: string} $asset */
+		/**
+		 * Script asset manifest emitted by @wordpress/scripts.
+		 *
+		 * @var array{dependencies: string[], version: string} $asset
+		 */
 		$asset = require $asset_path;
 
 		wp_enqueue_script(
@@ -100,10 +108,10 @@ final class Shell {
 		wp_add_inline_script(
 			self::SCRIPT_HANDLE,
 			'window.cortextSettings = ' . wp_json_encode(
-				[
+				array(
 					'adminUrl'    => admin_url(),
 					'routePrefix' => self::ROUTE_PREFIX,
-				]
+				)
 			) . ';',
 			'before'
 		);
@@ -118,7 +126,7 @@ final class Shell {
 			wp_enqueue_style(
 				self::SCRIPT_HANDLE,
 				CORTEXT_URL . 'build/index.css',
-				[],
+				array(),
 				$asset['version']
 			);
 		}
