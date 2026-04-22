@@ -12,6 +12,7 @@
 // they don't paint on top of the canvas; #wpfooter joins the same rule
 // for visual cleanliness while debugging via the React DevTools panel.
 body.cortext-fullscreen {
+
 	#wpadminbar,
 	#adminmenumain,
 	#wpfooter {
@@ -196,6 +197,7 @@ body.cortext-fullscreen {
 }
 
 .cortext-canvas {
+
 	&__header {
 		display: flex;
 		align-items: center;
