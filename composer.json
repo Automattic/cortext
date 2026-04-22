@@ -15,7 +15,9 @@
 		"php": ">=8.1"
 	},
 	"require-dev": {
+		"automattic/wordbless": "^0.4",
 		"dealerdirect/phpcodesniffer-composer-installer": "^1.0",
+		"phpunit/phpunit": "^9.6",
 		"squizlabs/php_codesniffer": "^3.10",
 		"wp-coding-standards/wpcs": "^3.1"
 	},
@@ -24,14 +26,30 @@
 			"Cortext\\": "includes/"
 		}
 	},
+	"autoload-dev": {
+		"psr-4": {
+			"Cortext\\Tests\\": "tests/php/"
+		}
+	},
 	"scripts": {
+		"post-install-cmd": [
+			"WorDBless\\Composer\\InstallDropin::copy"
+		],
+		"post-update-cmd": [
+			"WorDBless\\Composer\\InstallDropin::copy"
+		],
 		"phpcs": "phpcs",
-		"phpcbf": "phpcbf"
+		"phpcbf": "phpcbf",
+		"test:php": "phpunit"
 	},
 	"config": {
 		"sort-packages": true,
 		"allow-plugins": {
-			"dealerdirect/phpcodesniffer-composer-installer": true
+			"dealerdirect/phpcodesniffer-composer-installer": true,
+			"roots/wordpress-core-installer": true
+		},
+		"platform": {
+			"php": "8.1"
 		}
 	}
 }
