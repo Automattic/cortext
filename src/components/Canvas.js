@@ -10,6 +10,7 @@ import {
 	BlockList,
 	BlockInspector,
 	BlockCanvas,
+	useSettings,
 } from '@wordpress/block-editor';
 import {
 	InterfaceSkeleton,
@@ -79,17 +80,20 @@ function InspectorSidebar() {
 }
 
 function VisualCanvas() {
-	const { styles, layout } = useSelect( ( select ) => {
-		const settings = select( editorStore ).getEditorSettings();
-		return {
-			styles: settings.styles,
-			layout: settings.__experimentalFeatures?.layout,
-		};
-	}, [] );
+	const styles = useSelect(
+		( select ) => select( editorStore ).getEditorSettings().styles,
+		[]
+	);
+	const [ layout ] = useSettings( 'layout' );
 	// Mirror the post editor's root-container setup so theme.json
 	// constrained layout (max-width, root padding, post-content gap)
 	// applies. Plain `<BlockList />` defaults to flow with no classes,
 	// leaving the root container full-width and unpadded.
+	//
+	// Constrained is hardcoded here (matching core's `fallbackLayout`
+	// when `themeSupportsLayout` is true). Classic themes that don't
+	// declare layout support would need a different root layout —
+	// out of scope until we target one.
 	return (
 		<BlockCanvas height="100%" styles={ styles }>
 			<div
