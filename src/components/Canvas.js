@@ -90,10 +90,18 @@ function VisualCanvas() {
 	// applies. Plain `<BlockList />` defaults to flow with no classes,
 	// leaving the root container full-width and unpadded.
 	//
-	// Constrained is hardcoded here (matching core's `fallbackLayout`
-	// when `themeSupportsLayout` is true). Classic themes that don't
-	// declare layout support would need a different root layout —
-	// out of scope until we target one.
+	// Constrained is hardcoded here. That covers the common case (block
+	// theme with the default constrained content layout) but it's wrong
+	// for two cases the core editor handles:
+	//   - Classic themes (no layout support): core falls back to
+	//     { type: 'default' } when `themeSupportsLayout` is false.
+	//   - Pages whose `core/post-content` block carries its own
+	//     `layout` attribute (e.g. flex, grid for landing pages):
+	//     core derives the wrapper class via `useLayoutClasses` against
+	//     the block's saved attributes, not the global setting.
+	// The second case matters once autosave is on — the editor would
+	// render the post centered while the frontend renders flex/grid,
+	// and the user wouldn't notice the divergence until preview.
 	return (
 		<BlockCanvas height="100%" styles={ styles }>
 			<div
