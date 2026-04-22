@@ -84,16 +84,30 @@ function InspectorSidebar() {
 }
 
 function VisualCanvas() {
-	const styles = useSelect(
-		( select ) => select( editorStore ).getEditorSettings().styles,
-		[]
-	);
+	const { styles, layout } = useSelect( ( select ) => {
+		const settings = select( editorStore ).getEditorSettings();
+		return {
+			styles: settings.styles,
+			layout: settings.__experimentalFeatures?.layout,
+		};
+	}, [] );
+	// Mirror the post editor's root-container setup so theme.json
+	// constrained layout (max-width, root padding, post-content gap)
+	// applies. Plain `<BlockList />` defaults to flow with no classes,
+	// leaving the root container full-width and unpadded.
 	return (
 		<BlockCanvas height="100%" styles={ styles }>
-			<div className="cortext-canvas__title">
+			<div
+				className="editor-visual-editor__post-title-wrapper is-layout-constrained has-global-padding"
+				contentEditable={ false }
+				style={ { marginTop: '4rem', marginBottom: '2rem' } }
+			>
 				<PostTitle />
 			</div>
-			<BlockList />
+			<BlockList
+				className="wp-block-post-content is-layout-constrained has-global-padding"
+				layout={ { type: 'constrained', ...layout } }
+			/>
 		</BlockCanvas>
 	);
 }
