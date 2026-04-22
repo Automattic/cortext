@@ -10,8 +10,8 @@
 		"build": "wp-scripts build",
 		"format": "wp-scripts format",
 		"format:check": "wp-scripts format --check",
-		"lint:js": "wp-scripts lint-js",
-		"lint:style": "wp-scripts lint-style",
+		"lint:js": "wp-scripts lint-js src",
+		"lint:style": "wp-scripts lint-style 'src/**/*.{css,pcss,scss}'",
 		"test:unit": "wp-scripts test-unit-js --config jest.config.js",
 		"test:unit:watch": "wp-scripts test-unit-js --config jest.config.js --watch"
 	},
