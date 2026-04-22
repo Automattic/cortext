@@ -81,7 +81,7 @@ export default function Sidebar() {
 	// `pages` doesn't contain the new id and a plain lookup would no-op.
 	const onSelect = useCallback(
 		( id, pageHint ) => {
-			if ( id == null ) {
+			if ( id === null || id === undefined ) {
 				navigate( { to: '/' } );
 				return;
 			}
