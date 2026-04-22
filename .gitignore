@@ -1,6 +1,7 @@
 # Dependencies
 node_modules/
 vendor/
+wordpress/
 
 # Build outputs
 build/
