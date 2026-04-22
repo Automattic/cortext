@@ -9,8 +9,7 @@ declare( strict_types=1 );
 
 namespace Cortext;
 
-use Cortext\Admin\MenuLink;
-use Cortext\Shell\Shell;
+use Cortext\Admin\Screen;
 
 final class Plugin {
 
@@ -24,8 +23,7 @@ final class Plugin {
 	}
 
 	public function boot(): void {
-		( new Shell() )->register();
-		( new MenuLink() )->register();
+		( new Screen() )->register();
 	}
 
 	private function __construct() {}

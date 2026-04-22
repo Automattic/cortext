@@ -1,13 +1,18 @@
-// Shell routes. `basepath` matches the PHP-side Shell::ROUTE_PREFIX rewrite —
-// injected through window.cortextSettings so JS has a single source of truth
-// for the URL prefix. The layout (Sidebar + main) is the root route; the index
+// Shell routes. The layout (Sidebar + main) is the root route; the index
 // route renders the empty state; `$` is a splat that catches all sub-paths and
 // hands the URI to EntityRoute for entity resolution.
+//
+// Memory history: the shell mounts at `wp-admin/admin.php?page=cortext`, a
+// pathname browser-history can't usefully route against. Until Commit B adds
+// the rewrite rule + ?p= adapter, in-app navigation lives in memory only —
+// page reloads return to the empty state and browser back/forward navigates
+// the wp-admin history, not the app's.
 
 import {
 	createRouter,
 	createRootRoute,
 	createRoute,
+	createMemoryHistory,
 	Outlet,
 	RouterProvider,
 } from '@tanstack/react-router';
@@ -45,7 +50,7 @@ const routeTree = rootRoute.addChildren( [ indexRoute, splatRoute ] );
 
 export const router = createRouter( {
 	routeTree,
-	basepath: '/' + ( window.cortextSettings?.routePrefix ?? 'cortext' ),
+	history: createMemoryHistory( { initialEntries: [ '/' ] } ),
 } );
 
 export { RouterProvider };
