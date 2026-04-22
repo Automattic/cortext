@@ -1,4 +1,4 @@
-name: CI
+name: Static checks
 
 on:
     push:
@@ -6,12 +6,12 @@ on:
     pull_request:
 
 concurrency:
-    group: ci-${{ github.ref }}
+    group: ${{ github.workflow }}-${{ github.ref }}
     cancel-in-progress: true
 
 jobs:
     lint:
-        name: JS / Lint
+        name: Lint
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v4
@@ -26,22 +26,8 @@ jobs:
             - run: npm run lint:style
             - run: npm run format:check
 
-    build:
-        name: JS / Build
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v4
-
-            - uses: actions/setup-node@v4
-              with:
-                  node-version: '22'
-                  cache: 'npm'
-
-            - run: npm ci
-            - run: npm run build
-
     phpcs:
-        name: PHP / PHPCS
+        name: PHPCS
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v4
