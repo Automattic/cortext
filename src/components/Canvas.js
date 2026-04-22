@@ -16,7 +16,6 @@ import {
 	ComplementaryArea,
 	store as interfaceStore,
 } from '@wordpress/interface';
-import { store as preferencesStore } from '@wordpress/preferences';
 import { Button, Spinner } from '@wordpress/components';
 import { cog } from '@wordpress/icons';
 
@@ -32,16 +31,12 @@ function Header() {
 		( select ) => select( editorStore ).isSavingPost(),
 		[]
 	);
-	const isInspectorOpen = useSelect( ( select ) => {
-		// `getActiveComplementaryArea` reads visibility from preferences via a
-		// registry selector bound to the parent registry, so EditorProvider's
-		// sub-registry doesn't see the dependency. Subscribe explicitly.
-		select( preferencesStore );
-		return (
+	const isInspectorOpen = useSelect(
+		( select ) =>
 			select( interfaceStore ).getActiveComplementaryArea( SCOPE ) ===
-			INSPECTOR
-		);
-	}, [] );
+			INSPECTOR,
+		[]
+	);
 
 	return (
 		<div className="cortext-canvas__header">
@@ -131,6 +126,7 @@ export default function Canvas( { postId } ) {
 		<EditorProvider
 			post={ post }
 			settings={ window.cortextEditorSettings ?? {} }
+			useSubRegistry={ false }
 		>
 			<InterfaceSkeleton
 				className="cortext-canvas"
