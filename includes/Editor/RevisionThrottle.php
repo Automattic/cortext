@@ -34,8 +34,8 @@ final class RevisionThrottle {
 	private const REVISIONS_TO_KEEP = 50;
 
 	public function register(): void {
-		add_filter( 'wp_save_post_revision_post_has_changed', [ $this, 'throttle_revision' ], 10, 3 );
-		add_filter( 'wp_revisions_to_keep', [ $this, 'cap_revisions' ], 10, 2 );
+		add_filter( 'wp_save_post_revision_post_has_changed', array( $this, 'throttle_revision' ), 10, 3 );
+		add_filter( 'wp_revisions_to_keep', array( $this, 'cap_revisions' ), 10, 2 );
 	}
 
 	/**
@@ -63,6 +63,8 @@ final class RevisionThrottle {
 	}
 
 	/**
+	 * Caps the number of revisions retained per Cortext page.
+	 *
 	 * @param int     $num  Default number of revisions to keep.
 	 * @param WP_Post $post The post being saved.
 	 */
