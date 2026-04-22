@@ -34,6 +34,14 @@ if ( ! file_exists( $cortext_autoload ) ) {
 }
 require $cortext_autoload;
 
+// Attach the block-assets filter at file-load time, not on `plugins_loaded`,
+// so it's in place before any other plugin can trigger `wp_default_styles`
+// and lock in `wp-block-library` against `common.css` for this request.
+add_filter(
+	'should_load_separate_core_block_assets',
+	[ \Cortext\Shell\Shell::class, 'maybe_combine_block_assets' ]
+);
+
 add_action(
 	'plugins_loaded',
 	static function () {

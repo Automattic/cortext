@@ -21,7 +21,6 @@ final class Shell {
 		add_filter( 'query_vars', array( $this, 'register_query_vars' ) );
 		add_filter( 'template_include', array( $this, 'maybe_render_shell' ) );
 		add_filter( 'redirect_canonical', array( $this, 'prevent_canonical_redirect' ) );
-		add_filter( 'should_load_separate_core_block_assets', array( $this, 'maybe_combine_block_assets' ) );
 		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 	}
 
@@ -93,15 +92,18 @@ final class Shell {
 	 * to per-block `wp-block-<name>` handles that never enqueue here.
 	 *
 	 * Matches the URL directly because `wp_default_styles` can fire before
-	 * `parse_request` populates query vars (e.g. plugins that touch
-	 * `wp_styles()` on `init`), at which point the filter would otherwise
-	 * fall through to its default and register `wp-block-library` against
-	 * `common.css` for the rest of the request.
+	 * `parse_request` populates query vars, at which point the filter would
+	 * otherwise fall through to its default and register `wp-block-library`
+	 * against `common.css` for the rest of the request.
+	 *
+	 * Static so we can attach the filter at file-load time in `cortext.php`,
+	 * before any plugin that calls `wp_styles()` on its own include or on
+	 * `plugins_loaded` priority lower than ours can lock the registration in.
 	 *
 	 * @param bool $value
 	 * @return bool
 	 */
-	public function maybe_combine_block_assets( $value ) {
+	public static function maybe_combine_block_assets( $value ) {
 		$uri  = isset( $_SERVER['REQUEST_URI'] ) ? wp_unslash( $_SERVER['REQUEST_URI'] ) : '';
 		$path = (string) wp_parse_url( $uri, PHP_URL_PATH );
 		if ( preg_match( '#(?:^|/)' . preg_quote( self::ROUTE_PREFIX, '#' ) . '(?:/|$)#', $path ) ) {
