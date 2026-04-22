@@ -1,6 +1,6 @@
 <?php
 /**
- * wp-admin menu item that points to the dedicated `/cortext/` shell URL.
+ * Admin menu item that points to the dedicated `/cortext/` shell URL.
  *
  * @package Cortext
  */
@@ -16,7 +16,7 @@ final class MenuLink {
 	private const MENU_SLUG = 'cortext';
 
 	public function register(): void {
-		add_action( 'admin_menu', [ $this, 'register_menu' ] );
+		add_action( 'admin_menu', array( $this, 'register_menu' ) );
 	}
 
 	public function register_menu(): void {
@@ -30,7 +30,7 @@ final class MenuLink {
 			3
 		);
 
-		add_action( 'load-' . $hook, [ $this, 'redirect_to_shell' ] );
+		add_action( 'load-' . $hook, array( $this, 'redirect_to_shell' ) );
 	}
 
 	public function redirect_to_shell(): void {
