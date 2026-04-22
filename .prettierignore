@@ -1,0 +1,13 @@
+# Hidden directories (local tooling, editor state, etc.) — except .github/ for workflows
+.*/
+!.github/
+
+# Dependencies and build output
+node_modules/
+vendor/
+build/
+dist/
+
+# Lockfiles
+package-lock.json
+composer.lock

@@ -8,7 +8,10 @@
 		"start": "wp-env start --runtime=playground && npm run dev",
 		"dev": "wp-scripts start",
 		"build": "wp-scripts build",
-		"format": "wp-scripts format"
+		"format": "wp-scripts format",
+		"format:check": "wp-scripts format --check",
+		"lint:js": "wp-scripts lint-js",
+		"lint:style": "wp-scripts lint-style"
 	},
 	"devDependencies": {
 		"@wordpress/env": "^10.0.0",

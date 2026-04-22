@@ -32,6 +32,9 @@ yarn-error.log*
 .wp-env.override.json
 .wp-env-plugins/
 
+# Claude Code local state (worktrees, settings, etc.)
+.claude/
+
 # Playwright MCP verification snapshots
 .playwright-mcp/
 
