@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<ruleset name="Cortext">
+	<description>Cortext coding standards.</description>
+
+	<file>cortext.php</file>
+	<file>includes/</file>
+
+	<exclude-pattern>*/node_modules/*</exclude-pattern>
+	<exclude-pattern>*/vendor/*</exclude-pattern>
+	<exclude-pattern>*/build/*</exclude-pattern>
+
+	<arg name="extensions" value="php"/>
+	<arg name="colors"/>
+	<arg value="sp"/>
+
+	<config name="minimum_supported_wp_version" value="6.6"/>
+	<config name="testVersion" value="8.1-"/>
+
+	<rule ref="WordPress">
+		<!-- Project uses PSR-4 autoloading (Foo.php), not WPCS's class-foo.php convention. -->
+		<exclude name="WordPress.Files.FileName"/>
+
+		<!-- PHP 8 strict types + self-explanatory names make docblocks redundant. -->
+		<!-- Docblocks that do exist still need to be well-formed (Generic.Commenting.*). -->
+		<exclude name="Squiz.Commenting.ClassComment.Missing"/>
+		<exclude name="Squiz.Commenting.FunctionComment.Missing"/>
+		<exclude name="Squiz.Commenting.FunctionComment.MissingParamComment"/>
+		<exclude name="Squiz.Commenting.VariableComment.Missing"/>
+	</rule>
+
+	<rule ref="WordPress.WP.I18n">
+		<properties>
+			<property name="text_domain" type="array">
+				<element value="cortext"/>
+			</property>
+		</properties>
+	</rule>
+</ruleset>
