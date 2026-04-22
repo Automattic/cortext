@@ -44,7 +44,7 @@ afterEach( () => {
 	jest.clearAllMocks();
 } );
 
-describe( 'useAutosave — debounce', () => {
+describe( 'useAutosave: debounce', () => {
 	it( 'does not save until DEBOUNCE_MS has elapsed after dirty', () => {
 		const savePost = jest.fn();
 		useDispatch.mockReturnValue( { savePost } );
@@ -103,7 +103,7 @@ describe( 'useAutosave — debounce', () => {
 	} );
 } );
 
-describe( 'useAutosave — throttle', () => {
+describe( 'useAutosave: throttle', () => {
 	it( 'waits for the remainder of MIN_SAVE_INTERVAL after a recent save', () => {
 		const savePost = jest.fn();
 		useDispatch.mockReturnValue( { savePost } );
@@ -116,7 +116,7 @@ describe( 'useAutosave — throttle', () => {
 		} );
 		expect( savePost ).toHaveBeenCalledTimes( 1 );
 
-		// Clean state, then dirty again 400ms later — throttle should delay
+		// Clean state, then dirty again 400ms later; throttle should delay
 		// the next save to 2000 - 400 = 1600ms from the first save.
 		setStoreState( { isDirty: false } );
 		rerender();
@@ -138,7 +138,7 @@ describe( 'useAutosave — throttle', () => {
 	} );
 } );
 
-describe( 'useAutosave — flush triggers', () => {
+describe( 'useAutosave: flush triggers', () => {
 	it( 'flushes immediately on window blur', () => {
 		const savePost = jest.fn();
 		useDispatch.mockReturnValue( { savePost } );
@@ -215,7 +215,7 @@ describe( 'useAutosave — flush triggers', () => {
 	} );
 } );
 
-describe( 'useAutosave — status', () => {
+describe( 'useAutosave: status', () => {
 	it( 'starts idle', () => {
 		const { result } = renderHook( () => useAutosave() );
 

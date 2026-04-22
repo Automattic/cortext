@@ -5,9 +5,9 @@
  * TODO (dormant code): This class is a no-op until the `cortext_page` CPT is
  * registered. While the app still points at the built-in `page` post type as a
  * stand-in, editing a Cortext page in dev will create a WP revision every ~2s
- * of typing. That's cosmetic clutter in `wp_posts`, not a correctness issue —
- * intentional, because scoping the throttle to `page` would alter core WP
- * behavior for other plugins/themes. Remove this TODO block and verify
+ * of typing. That's cosmetic clutter in `wp_posts`, not a correctness issue.
+ * This is intentional, because scoping the throttle to `page` would alter
+ * core WP behavior for other plugins/themes. Remove this TODO block and verify
  * end-to-end once the CPT lands.
  *
  * @package Cortext
