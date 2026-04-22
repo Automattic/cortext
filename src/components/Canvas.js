@@ -90,9 +90,10 @@ function VisualCanvas() {
 	// applies. Plain `<BlockList />` defaults to flow with no classes,
 	// leaving the root container full-width and unpadded.
 	//
-	// Constrained is hardcoded here. That covers the common case (block
-	// theme with the default constrained content layout) but it's wrong
-	// for two cases the core editor handles:
+	// TODO: derive the root layout from the page's resolved template
+	// (mirror core's `editedPostTemplate` lookup + `useLayoutClasses`
+	// against the template's `core/post-content` attributes). Until
+	// that's done we hardcode constrained, which is wrong in two cases:
 	//   - Classic themes (no layout support): core falls back to
 	//     { type: 'default' } when `themeSupportsLayout` is false.
 	//   - Pages whose `core/post-content` block carries its own
