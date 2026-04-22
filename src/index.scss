@@ -5,6 +5,7 @@
 // `is-fullscreen-mode` rules for these elements live in `wp-edit-post`'s
 // stylesheet, which we don't enqueue — so we apply them ourselves.
 body.is-fullscreen-mode {
+
 	#wpadminbar,
 	#adminmenuback,
 	#adminmenuwrap,
