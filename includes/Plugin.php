@@ -10,6 +10,7 @@ declare( strict_types=1 );
 namespace Cortext;
 
 use Cortext\Admin\Screen;
+use Cortext\Editor\RevisionThrottle;
 
 final class Plugin {
 
@@ -24,6 +25,7 @@ final class Plugin {
 
 	public function boot(): void {
 		( new Screen() )->register();
+		( new RevisionThrottle() )->register();
 	}
 
 	private function __construct() {}
