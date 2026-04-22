@@ -85,33 +85,6 @@ final class Shell {
 		return $redirect_url;
 	}
 
-	/**
-	 * Force combined block CSS on the Cortext shell so the iframe canvas
-	 * sees the full `wp-block-library` (style.css, not the common.css reset)
-	 * and per-block theme.json rules attach to `global-styles` rather than
-	 * to per-block `wp-block-<name>` handles that never enqueue here.
-	 *
-	 * Matches the URL directly because `wp_default_styles` can fire before
-	 * `parse_request` populates query vars, at which point the filter would
-	 * otherwise fall through to its default and register `wp-block-library`
-	 * against `common.css` for the rest of the request.
-	 *
-	 * Static so we can attach the filter at file-load time in `cortext.php`,
-	 * before any plugin that calls `wp_styles()` on its own include or on
-	 * `plugins_loaded` priority lower than ours can lock the registration in.
-	 *
-	 * @param bool $value
-	 * @return bool
-	 */
-	public static function maybe_combine_block_assets( $value ) {
-		$uri  = isset( $_SERVER['REQUEST_URI'] ) ? wp_unslash( $_SERVER['REQUEST_URI'] ) : '';
-		$path = (string) wp_parse_url( $uri, PHP_URL_PATH );
-		if ( preg_match( '#(?:^|/)' . preg_quote( self::ROUTE_PREFIX, '#' ) . '(?:/|$)#', $path ) ) {
-			return false;
-		}
-		return $value;
-	}
-
 	public function enqueue_assets(): void {
 		if ( ! get_query_var( self::QUERY_VAR ) ) {
 			return;
@@ -150,8 +123,55 @@ final class Shell {
 
 		wp_set_script_translations( self::SCRIPT_HANDLE, 'cortext' );
 
+		// `get_block_editor_settings()` builds the iframe's resolved
+		// assets from whatever stylesheets are currently registered.
+		// The Cortext shell renders at `/cortext/` — a frontend URL,
+		// so `is_admin()` is false and `wp_should_load_separate_core_block_assets()`
+		// returns true on block themes. That splits block CSS in two
+		// ways the iframe can't recover from:
+		//   1. `wp-block-library` is registered pointing at `common.css`
+		//      (reset only) instead of `style.css` (full block styles —
+		//      Quote borders, Code styling, etc.).
+		//   2. Per-block theme.json rules (TT5's Quote border, etc.) are
+		//      attached to `wp-block-<name>` handles that only enqueue
+		//      when the block actually renders on the page — never here.
+		// `wp-admin/post.php` doesn't hit either: admin forces the flag
+		// false so both pieces land on `wp-block-library` + `global-styles`
+		// directly. Reproduce that here.
+		//
+		// We tried filtering `should_load_separate_core_block_assets` to
+		// false on this route (cleaner extension point) but the filter
+		// runs too late: `wp_default_styles` fires from a plugin earlier
+		// in load order, registering `wp-block-library` against
+		// `common.css` before our hook attaches. Mutating the
+		// already-registered handle here is the only reliable point.
+		global $wp_styles;
+		if ( ! $wp_styles ) {
+			wp_styles();
+		}
+		$block_library_dep          = $wp_styles->registered['wp-block-library'] ?? null;
+		$original_block_library_src = null;
+		if ( $block_library_dep ) {
+			$original_block_library_src = $block_library_dep->src;
+			$suffix                     = defined( 'SCRIPT_DEBUG' ) && SCRIPT_DEBUG ? '' : '.min';
+			$block_library_dep->src     = "/wp-includes/css/dist/block-library/style{$suffix}.css";
+		}
+
+		$theme_json  = \WP_Theme_JSON_Resolver::get_merged_data();
+		$block_nodes = $theme_json->get_styles_block_nodes();
+		foreach ( $block_nodes as $node ) {
+			$block_css = $theme_json->get_styles_for_block( $node );
+			if ( $block_css ) {
+				wp_add_inline_style( 'global-styles', $block_css );
+			}
+		}
+
 		$editor_context  = new \WP_Block_Editor_Context( [ 'name' => 'core/edit-post' ] );
 		$editor_settings = get_block_editor_settings( [], $editor_context );
+
+		if ( $block_library_dep ) {
+			$block_library_dep->src = $original_block_library_src;
+		}
 
 		wp_add_inline_script(
 			self::SCRIPT_HANDLE,
