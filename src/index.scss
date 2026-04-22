@@ -5,31 +5,6 @@
 // doesn't register a `wp-interface` style handle, so bundle its stylesheet.
 @use "../node_modules/@wordpress/interface/build-style/style.css";
 
-// Hide core admin chrome on the Cortext screen (our CSS only loads here).
-// `is-fullscreen-mode` rules for these elements live in `wp-edit-post`'s
-// stylesheet, which we don't enqueue — so we apply them ourselves.
-body.is-fullscreen-mode {
-
-	#wpadminbar,
-	#adminmenuback,
-	#adminmenuwrap,
-	#adminmenumain,
-	#wpfooter {
-		display: none !important;
-	}
-
-	#wpcontent,
-	#wpbody,
-	#wpbody-content {
-		margin: 0 !important;
-		padding: 0 !important;
-	}
-}
-
-html.wp-toolbar {
-	padding-top: 0 !important;
-}
-
 .cortext-root {
 	position: fixed;
 	inset: 0;

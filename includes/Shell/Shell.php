@@ -62,6 +62,11 @@ final class Shell {
 			);
 		}
 
+		// Cortext owns the full viewport; suppress the front-end admin bar so
+		// it doesn't paint over the shell or push `html` down with its
+		// `wp-toolbar` padding.
+		show_admin_bar( false );
+
 		status_header( 200 );
 		nocache_headers();
 
