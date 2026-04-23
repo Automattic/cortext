@@ -98,4 +98,4 @@ A single React SPA mounted on a full-screen admin page.
 └───────────────┴────────────────────────────────────┘
 ```
 
-Chrome is hidden via the `is-fullscreen-mode` body class (the Site Editor pattern). Phase 2 may move to a custom URL via rewrite rule and `template_redirect`. The React shell is URL-agnostic, so the move is plumbing rather than architecture.
+Chrome is hidden via the `is-fullscreen-mode` body class (the Site Editor pattern). Phase 2 may move to a custom URL via rewrite rule and `template_redirect`. The outer URL shape is confined to `parseLocation` and `createHref` in `src/router.js`, so the move is plumbing rather than architecture.
