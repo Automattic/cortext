@@ -10,7 +10,7 @@ A WordPress plugin that brings a Notion-inspired workspace to your own WordPress
 
 Notion handles structured knowledge well, but your data lives on their servers. WordPress owns the data story and now has the primitives to close the UX gap: `@wordpress/dataviews`, standalone `@wordpress/editor` with `BlockCanvas`, and Block Bindings. Cortext composes them.
 
-Because it is still WordPress, Cortext picks up things Notion cannot: publishing a row as a fully-themed public page, custom theming throughout, and running entirely offline via WordPress Playground.
+Because it is still WordPress, Cortext picks up things Notion cannot: publishing a row as a fully-themed public page, custom theming throughout, and running entirely offline.
 
 ## How it works, in one paragraph
 
@@ -38,8 +38,8 @@ Quick start:
 
 ```
 ./scripts/setup.sh   # install deps, assign a per-worktree port
-./scripts/run.sh     # boot Playground, start the JS watcher
-./scripts/archive.sh # stop the detached Playground server
+./scripts/run.sh     # boot wp-env, start the JS watcher
+./scripts/archive.sh # stop the detached wp-env environment
 ```
 
-Runs on WordPress Playground; no Docker required. Parallel worktrees get deterministic per-path ports so branches and agents do not collide on the Playground port. Full workflow, contribution notes, and command reference in [Getting started](docs/getting-started.md).
+Runs on Docker via wp-env. Parallel worktrees get deterministic per-path ports so branches and agents do not collide. Full workflow, contribution notes, and command reference in [Getting started](docs/getting-started.md).
