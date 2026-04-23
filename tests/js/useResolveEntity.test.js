@@ -129,6 +129,30 @@ describe( 'useResolveEntity', () => {
 		expect( result.current.notFound ).toBe( true );
 		expect( result.current.entity ).toBeNull();
 	} );
+
+	it( 'does not refetch when the uri rewrites to a canonical form for the same id', async () => {
+		apiFetch.mockResolvedValueOnce( { id: 42, slug: '', parent: 0 } );
+
+		const { result, rerender } = renderHook(
+			( { uri } ) => useResolveEntity( uri ),
+			{ initialProps: { uri: '42' } }
+		);
+
+		await waitFor( () =>
+			expect( result.current.isResolving ).toBe( false )
+		);
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+
+		rerender( { uri: 'about-us-42' } );
+
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+		expect( result.current.isResolving ).toBe( false );
+		expect( result.current.entity ).toEqual( {
+			id: 42,
+			slug: '',
+			parent: 0,
+		} );
+	} );
 } );
 
 describe( 'computeUri', () => {

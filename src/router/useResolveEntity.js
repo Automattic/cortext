@@ -17,15 +17,18 @@ export function parseIdFromUri( uri ) {
 }
 
 export function useResolveEntity( uri ) {
+	const id = parseIdFromUri( uri );
 	const [ state, setState ] = useState( {
 		entity: null,
 		isResolving: true,
 		notFound: false,
 	} );
 
+	// Keyed on `id` rather than `uri` so that canonicalization rewrites
+	// (`/42` → `/about-us-42` for the same record) don't re-fetch and briefly
+	// flip state to `{ entity: null, isResolving: true }`, which would unmount
+	// the editor mid-typing.
 	useEffect( () => {
-		const id = parseIdFromUri( uri );
-
 		if ( ! id ) {
 			setState( {
 				entity: null,
@@ -63,7 +66,10 @@ export function useResolveEntity( uri ) {
 		return () => {
 			cancelled = true;
 		};
-	}, [ uri ] );
+		// `uri` is only read in the no-id branch to distinguish empty from
+		// malformed; we don't want a uri change with the same id to refetch.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [ id ] );
 
 	return state;
 }
