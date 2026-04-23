@@ -24,6 +24,7 @@ Two post types handle storage: `cortext_page` for workspace documents, and `cort
 - [Architecture](docs/architecture.md): content-model sketch.
 - [Shell architecture](docs/architecture/shell.md): React shell, mount point, editor setup.
 - [Data model](docs/architecture/data-model.md): REST contract and implementation status.
+- [Theming](docs/architecture/theming.md): content themes vs shell themes, token contract scope.
 - [Roadmap](docs/roadmap.md): what ships when.
 
 ## Requirements
