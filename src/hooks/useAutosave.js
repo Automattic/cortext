@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from '@wordpress/element';
+import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
 import { store as coreDataStore } from '@wordpress/core-data';
@@ -71,7 +71,7 @@ export default function useAutosave() {
 		}
 	};
 
-	const flushNow = () => {
+	const flushNow = useCallback( () => {
 		if ( debounceRef.current ) {
 			clearTimeout( debounceRef.current );
 			debounceRef.current = null;
@@ -87,7 +87,7 @@ export default function useAutosave() {
 			lastSaveAtRef.current = Date.now();
 			save();
 		}
-	};
+	}, [] );
 
 	useEffect( () => {
 		if ( ! isDirty || ! isSaveable ) {
@@ -155,7 +155,7 @@ export default function useAutosave() {
 			window.removeEventListener( 'beforeunload', onBeforeUnload );
 			flushNow();
 		};
-	}, [] );
+	}, [ flushNow ] );
 
 	return { status, lastSavedAt };
 }
