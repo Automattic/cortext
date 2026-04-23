@@ -55,7 +55,7 @@ export default function Sidebar() {
 	// full page set.
 	const { records, isResolving } = useEntityRecords( 'postType', POST_TYPE, {
 		per_page: 100,
-		status: [ 'private', 'publish' ],
+		status: [ 'auto-draft', 'private', 'publish' ],
 		context: 'edit',
 	} );
 	const { saveEntityRecord, deleteEntityRecord } = useDispatch( 'core' );
@@ -142,8 +142,7 @@ export default function Sidebar() {
 
 	const createRootPage = useCallback( async () => {
 		const created = await saveEntityRecord( 'postType', POST_TYPE, {
-			status: 'private',
-			title: __( 'Untitled', 'cortext' ),
+			status: 'auto-draft',
 		} );
 		if ( created?.id ) {
 			onSelect( created.id, created );
@@ -154,8 +153,7 @@ export default function Sidebar() {
 	const createChildPage = useCallback(
 		async ( parentId ) => {
 			const created = await saveEntityRecord( 'postType', POST_TYPE, {
-				status: 'private',
-				title: __( 'Untitled', 'cortext' ),
+				status: 'auto-draft',
 				parent: parentId,
 				menu_order: nextChildOrder( parentId, pages ),
 			} );
@@ -168,11 +166,18 @@ export default function Sidebar() {
 		[ saveEntityRecord, pages, expand, onSelect ]
 	);
 
+	// First rename promotes auto-draft to private so core regenerates post_name
+	// from the new title via wp_unique_post_slug(sanitize_title(...)).
 	const renamePage = useCallback(
 		async ( id, title ) => {
-			await saveEntityRecord( 'postType', POST_TYPE, { id, title } );
+			const current = getRecordById( id );
+			const payload = { id, title };
+			if ( current?.status === 'auto-draft' ) {
+				payload.status = 'private';
+			}
+			await saveEntityRecord( 'postType', POST_TYPE, payload );
 		},
-		[ saveEntityRecord ]
+		[ saveEntityRecord, getRecordById ]
 	);
 
 	const duplicatePage = useCallback(
