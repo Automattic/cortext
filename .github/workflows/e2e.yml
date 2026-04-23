@@ -17,6 +17,19 @@ jobs:
         steps:
             - uses: actions/checkout@v4
 
+            - uses: shivammathur/setup-php@v2
+              with:
+                  php-version: '8.1'
+                  tools: composer:v2
+                  coverage: none
+
+            - uses: actions/cache@v4
+              with:
+                  path: ~/.composer/cache
+                  key: composer-${{ hashFiles('composer.lock') }}
+
+            - run: composer install --no-interaction --prefer-dist --no-dev
+
             - uses: actions/setup-node@v4
               with:
                   node-version: '22'
