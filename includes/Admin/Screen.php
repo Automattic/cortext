@@ -63,7 +63,8 @@ final class Screen {
 
 		$asset_path = CORTEXT_PATH . 'build/index.asset.php';
 		if ( ! file_exists( $asset_path ) ) {
-			return;
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
+			throw new \Exception( "Missing asset file at '$asset_path'" );
 		}
 
 		/**
