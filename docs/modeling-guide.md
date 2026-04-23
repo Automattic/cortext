@@ -27,9 +27,9 @@ Four notes:
 
 | Row | Tags |
 |-----|------|
-| "Reading list" | — |
+| "Reading list" |  |
 | "Q2 kickoff meeting" | Meeting |
-| "Random ideas" | — |
+| "Random ideas" |  |
 | "Product review" | Meeting |
 
 ### Fields each row has
@@ -62,7 +62,7 @@ The single best test is:
 
 The grammar rule: collections are **nouns**, cross-type tags are **adjectives** or **roles**. A Task (noun) can be Urgent (adjective), Recurring (adjective), Client-facing (role). You wouldn't spin up a separate `UrgentTasks` collection any more than you'd have separate `red_cars` and `blue_cars` tables.
 
-A collection is the answer to "what is this?", deserves a top-level sidebar slot, and its fields apply to every row. A cross-type tag is optional (some rows have it, some don't), its fields are only meaningful when it's present, and it's cross-cutting — meaningful on Tasks, Projects, and Emails alike.
+A collection is the answer to "what is this?", deserves a top-level sidebar slot, and its fields apply to every row. A cross-type tag is optional (some rows have it, some don't), its fields are only meaningful when it's present, and it's cross-cutting: meaningful on Tasks, Projects, and Emails alike.
 
 ## Edge cases
 
