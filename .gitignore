@@ -42,5 +42,10 @@ yarn-error.log*
 # Coverage
 coverage/
 
+# Playwright
+artifacts/
+playwright-report/
+test-results/
+
 # Serena project metadata
 .serena/

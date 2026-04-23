@@ -12,13 +12,18 @@
 		"format:check": "wp-scripts format --check",
 		"lint:js": "wp-scripts lint-js src",
 		"lint:style": "wp-scripts lint-style 'src/**/*.{css,pcss,scss}'",
+		"env:start": "wp-env start --runtime=playground",
 		"test:unit": "wp-scripts test-unit-js --config jest.config.js",
-		"test:unit:watch": "wp-scripts test-unit-js --config jest.config.js --watch"
+		"test:unit:watch": "wp-scripts test-unit-js --config jest.config.js --watch",
+		"test:e2e": "wp-scripts test-playwright --config playwright.config.js",
+		"test:e2e:debug": "wp-scripts test-playwright --config playwright.config.js --ui"
 	},
 	"devDependencies": {
+		"@playwright/test": "^1.48.0",
 		"@testing-library/dom": "^10.4.1",
 		"@testing-library/jest-dom": "^6.9.1",
 		"@testing-library/react": "^16.3.2",
+		"@wordpress/e2e-test-utils-playwright": "^1.44.0",
 		"@wordpress/env": "^10.0.0",
 		"@wordpress/scripts": "^30.0.0"
 	},
