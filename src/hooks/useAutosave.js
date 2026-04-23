@@ -58,15 +58,15 @@ export default function useAutosave() {
 		postTitle,
 	};
 
-	// Promote auto-draft to private once the user has given the page a real
-	// title, so WP core regenerates post_name from the title on save.
+	// Promote draft to private once the user has given the page a real title,
+	// so WP core regenerates post_name from the title on save.
 	const maybePromoteStatus = () => {
 		const {
 			editPost: edit,
 			postStatus: s,
 			postTitle: t,
 		} = stateRef.current;
-		if ( s === 'auto-draft' && typeof t === 'string' && t.trim() !== '' ) {
+		if ( s === 'draft' && typeof t === 'string' && t.trim() !== '' ) {
 			edit( { status: 'private' } );
 		}
 	};

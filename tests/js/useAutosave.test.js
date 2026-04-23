@@ -329,7 +329,7 @@ describe( 'useAutosave: auto-draft promotion', () => {
 		useDispatch.mockReturnValue( { savePost, editPost } );
 		setStoreState( {
 			isDirty: true,
-			postStatus: 'auto-draft',
+			postStatus: 'draft',
 			postTitle: 'About Us',
 		} );
 
@@ -349,7 +349,7 @@ describe( 'useAutosave: auto-draft promotion', () => {
 		useDispatch.mockReturnValue( { savePost, editPost } );
 		setStoreState( {
 			isDirty: true,
-			postStatus: 'auto-draft',
+			postStatus: 'draft',
 			postTitle: '',
 		} );
 
@@ -369,7 +369,7 @@ describe( 'useAutosave: auto-draft promotion', () => {
 		useDispatch.mockReturnValue( { savePost, editPost } );
 		setStoreState( {
 			isDirty: true,
-			postStatus: 'auto-draft',
+			postStatus: 'draft',
 			postTitle: '   ',
 		} );
 
@@ -409,7 +409,7 @@ describe( 'useAutosave: auto-draft promotion', () => {
 		useDispatch.mockReturnValue( { savePost, editPost } );
 		setStoreState( {
 			isDirty: true,
-			postStatus: 'auto-draft',
+			postStatus: 'draft',
 			postTitle: 'Team',
 		} );
 

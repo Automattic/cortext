@@ -1,7 +1,13 @@
 import { __ } from '@wordpress/i18n';
 import { useEntityRecords } from '@wordpress/core-data';
 import { useDispatch, useSelect } from '@wordpress/data';
-import { useState, useMemo, useRef, useCallback } from '@wordpress/element';
+import {
+	useState,
+	useMemo,
+	useRef,
+	useCallback,
+	useEffect,
+} from '@wordpress/element';
 import {
 	Button,
 	Spinner,
@@ -27,7 +33,7 @@ import {
 	isDescendantOf,
 	nextChildOrder,
 } from './pages-tree';
-import { computeUri } from '../router/useResolveEntity';
+import { computeUri, parseIdFromUri } from '../router/useResolveEntity';
 
 const POST_TYPE = 'cortext_page';
 
@@ -48,14 +54,11 @@ function parseDropId( id ) {
 export default function Sidebar() {
 	// TODO(scale): per_page: 100 is the REST collection endpoint's hard ceiling.
 	// Workspaces are expected to exceed 100 pages — pages past the cap won't
-	// appear in the tree, and computeUri() walks ancestors via this same list,
-	// so deep-nested items whose ancestors are past the cap produce truncated
-	// (wrong) URIs that then 404 through useResolveEntity. Followup needs a
-	// lazy-loaded tree (load children on expand) or a paginated fetch of the
-	// full page set.
+	// appear in the tree. Followup needs a lazy-loaded tree (load children on
+	// expand) or a paginated fetch of the full page set.
 	const { records, isResolving } = useEntityRecords( 'postType', POST_TYPE, {
 		per_page: 100,
-		status: [ 'auto-draft', 'private', 'publish' ],
+		status: [ 'draft', 'private', 'publish' ],
 		context: 'edit',
 	} );
 	const { saveEntityRecord, deleteEntityRecord } = useDispatch( 'core' );
@@ -65,32 +68,48 @@ export default function Sidebar() {
 	const activeUri = params._splat ?? '';
 	const adminUrl = window.cortextSettings?.adminUrl ?? '/wp-admin/';
 
-	const selectedId = useMemo( () => {
-		if ( ! activeUri ) {
-			return null;
+	const selectedId = useMemo(
+		() => parseIdFromUri( activeUri ),
+		[ activeUri ]
+	);
+
+	// Keep the URL canonical: once autosave assigns a slug to the active
+	// page (draft → private promotion on first titled save), rewrite
+	// `?p=/42` to `?p=/about-us-42` via history.replace so the id remains
+	// authoritative while the visible URL reflects the latest title.
+	useEffect( () => {
+		if ( selectedId === null ) {
+			return;
 		}
-		const match = pages.find(
-			( page ) => computeUri( page, pages ) === activeUri
-		);
-		return match?.id ?? null;
-	}, [ activeUri, pages ] );
+		const current = pages.find( ( p ) => p.id === selectedId );
+		if ( ! current ) {
+			return;
+		}
+		const canonical = computeUri( current );
+		if ( canonical !== activeUri ) {
+			navigate( {
+				to: '/$',
+				params: { _splat: canonical },
+				replace: true,
+			} );
+		}
+	}, [ selectedId, pages, activeUri, navigate ] );
 
 	// Callers that just created a record pass it as `pageHint` — after
 	// `await saveEntityRecord`, React hasn't re-rendered yet, so the closure's
-	// `pages` doesn't contain the new id and a plain lookup would no-op.
+	// `pages` doesn't contain the new id. With id-based URLs we can build a
+	// usable URL from `{ id }` alone; the slug prefix is cosmetic.
 	const onSelect = useCallback(
 		( id, pageHint ) => {
 			if ( id === null || id === undefined ) {
 				navigate( { to: '/' } );
 				return;
 			}
-			const page = pageHint ?? pages.find( ( p ) => p.id === id );
-			if ( ! page ) {
-				return;
-			}
+			const page = pageHint ??
+				pages.find( ( p ) => p.id === id ) ?? { id };
 			navigate( {
 				to: '/$',
-				params: { _splat: computeUri( page, pages ) },
+				params: { _splat: computeUri( page ) },
 			} );
 		},
 		[ navigate, pages ]
@@ -142,7 +161,7 @@ export default function Sidebar() {
 
 	const createRootPage = useCallback( async () => {
 		const created = await saveEntityRecord( 'postType', POST_TYPE, {
-			status: 'auto-draft',
+			status: 'draft',
 		} );
 		if ( created?.id ) {
 			onSelect( created.id, created );
@@ -153,7 +172,7 @@ export default function Sidebar() {
 	const createChildPage = useCallback(
 		async ( parentId ) => {
 			const created = await saveEntityRecord( 'postType', POST_TYPE, {
-				status: 'auto-draft',
+				status: 'draft',
 				parent: parentId,
 				menu_order: nextChildOrder( parentId, pages ),
 			} );
@@ -166,13 +185,13 @@ export default function Sidebar() {
 		[ saveEntityRecord, pages, expand, onSelect ]
 	);
 
-	// First rename promotes auto-draft to private so core regenerates post_name
+	// First rename promotes draft to private so core regenerates post_name
 	// from the new title via wp_unique_post_slug(sanitize_title(...)).
 	const renamePage = useCallback(
 		async ( id, title ) => {
 			const current = getRecordById( id );
 			const payload = { id, title };
-			if ( current?.status === 'auto-draft' ) {
+			if ( current?.status === 'draft' ) {
 				payload.status = 'private';
 			}
 			await saveEntityRecord( 'postType', POST_TYPE, payload );
