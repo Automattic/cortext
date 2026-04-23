@@ -43,12 +43,24 @@ This is not optional. Playground runs detached and would leak the server process
 npm run dev          # JS watcher, when Playground is already running
 npm run build        # production build
 npm run lint:js      # ESLint, scoped to src/
+npm run lint:php     # PHPCS via npm (same as composer phpcs)
 npm run lint:style   # stylelint for src/**/*.{css,pcss,scss}
 npm run format       # Prettier
 npm run test:unit    # Jest
+npm run test:e2e     # Playwright end-to-end tests
 
 composer phpcs       # WordPress Coding Standards
 composer test:php    # PHPUnit (via WorDBless)
+```
+
+### End-to-end tests
+
+E2E tests run against a dedicated Playground instance on port 8889, separate from the development site:
+
+```
+npm run test:env:start   # boot the test environment
+npm run test:e2e         # run Playwright tests
+npm run test:e2e:debug   # run with the Playwright UI
 ```
 
 ## Parallel worktrees
