@@ -16,6 +16,10 @@ jest.mock( '@wordpress/editor', () => ( {
 	store: { name: 'core/editor' },
 } ) );
 
+jest.mock( '@wordpress/core-data', () => ( {
+	store: { name: 'core' },
+} ) );
+
 import { useSelect, useDispatch } from '@wordpress/data';
 import useAutosave from '../../src/hooks/useAutosave';
 
@@ -27,13 +31,40 @@ const DEFAULT_STATE = {
 	didFail: false,
 };
 
+let editsReference = {};
+
 function setStoreState( state ) {
 	const merged = { ...DEFAULT_STATE, ...state };
-	useSelect.mockReturnValue( merged );
+	const editorSelectors = {
+		isEditedPostDirty: () => merged.isDirty,
+		isEditedPostSaveable: () => merged.isSaveable,
+		isSavingPost: () => merged.isSaving,
+		didPostSaveRequestSucceed: () => merged.didSucceed,
+		didPostSaveRequestFail: () => merged.didFail,
+	};
+	const coreDataSelectors = {
+		getReferenceByDistinctEdits: () => editsReference,
+	};
+	useSelect.mockImplementation( ( mapSelect ) =>
+		mapSelect( ( storeName ) => {
+			if ( storeName.name === 'core/editor' ) {
+				return editorSelectors;
+			}
+			if ( storeName.name === 'core' ) {
+				return coreDataSelectors;
+			}
+			return {};
+		} )
+	);
+}
+
+function simulateEdit() {
+	editsReference = {};
 }
 
 beforeEach( () => {
 	jest.useFakeTimers();
+	editsReference = {};
 	setStoreState( {} );
 	useDispatch.mockReturnValue( { savePost: jest.fn() } );
 } );
@@ -59,6 +90,34 @@ describe( 'useAutosave: debounce', () => {
 
 		act( () => {
 			jest.advanceTimersByTime( 1 );
+		} );
+		expect( savePost ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'resets the debounce timer on every edit during continuous typing', () => {
+		const savePost = jest.fn();
+		useDispatch.mockReturnValue( { savePost } );
+		setStoreState( { isDirty: true } );
+
+		const { rerender } = renderHook( () => useAutosave() );
+
+		// Simulate continuous typing: every 200ms a new edit lands,
+		// each should reset the 800ms debounce timer.
+		for ( let i = 0; i < 10; i++ ) {
+			act( () => {
+				jest.advanceTimersByTime( 200 );
+			} );
+			simulateEdit();
+			setStoreState( { isDirty: true } );
+			rerender();
+		}
+
+		// 2000ms of typing elapsed, but no save should have fired.
+		expect( savePost ).not.toHaveBeenCalled();
+
+		// Now stop typing. After 800ms the debounce fires.
+		act( () => {
+			jest.advanceTimersByTime( 800 );
 		} );
 		expect( savePost ).toHaveBeenCalledTimes( 1 );
 	} );
