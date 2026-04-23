@@ -22,7 +22,7 @@ import { cog } from '@wordpress/icons';
 
 import useAutosave from '../hooks/useAutosave';
 
-const POST_TYPE = 'page';
+const POST_TYPE = 'cortext_page';
 const SCOPE = 'cortext';
 const INSPECTOR = 'cortext/block-inspector';
 

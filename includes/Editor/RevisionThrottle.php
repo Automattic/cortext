@@ -2,14 +2,6 @@
 /**
  * Throttles WordPress revision creation for Cortext-managed post types.
  *
- * TODO (dormant code): This class is a no-op until the `cortext_page` CPT is
- * registered. While the app still points at the built-in `page` post type as a
- * stand-in, editing a Cortext page in dev will create a WP revision every ~2s
- * of typing. That's cosmetic clutter in `wp_posts`, not a correctness issue.
- * This is intentional, because scoping the throttle to `page` would alter
- * core WP behavior for other plugins/themes. Remove this TODO block and verify
- * end-to-end once the CPT lands.
- *
  * @package Cortext
  */
 
@@ -17,11 +9,10 @@ declare( strict_types=1 );
 
 namespace Cortext\Editor;
 
+use Cortext\PostType\Page;
 use WP_Post;
 
 final class RevisionThrottle {
-
-	private const POST_TYPE = 'cortext_page';
 
 	/**
 	 * Minimum time between revision snapshots. Mirrors Notion's ~10 minute cadence.
@@ -46,7 +37,7 @@ final class RevisionThrottle {
 	 * @param WP_Post $post             The post being saved.
 	 */
 	public function throttle_revision( bool $post_has_changed, WP_Post $last_revision, WP_Post $post ): bool {
-		if ( self::POST_TYPE !== $post->post_type ) {
+		if ( Page::POST_TYPE !== $post->post_type ) {
 			return $post_has_changed;
 		}
 
@@ -69,7 +60,7 @@ final class RevisionThrottle {
 	 * @param WP_Post $post The post being saved.
 	 */
 	public function cap_revisions( int $num, WP_Post $post ): int {
-		if ( self::POST_TYPE !== $post->post_type ) {
+		if ( Page::POST_TYPE !== $post->post_type ) {
 			return $num;
 		}
 		return self::REVISIONS_TO_KEEP;

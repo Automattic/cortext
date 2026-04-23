@@ -18,11 +18,11 @@ import { addQueryArgs } from '@wordpress/url';
 // (`/cortext/v1/resolve?uri=...`) — which is also the natural shape for
 // phase 2 below, where URL-shape-to-entity-type rules stop being trivial.
 //
-// TODO(types): phase 1 only resolves `page` records. When cortext_page,
+// TODO(types): phase 1 only resolves `cortext_page` records. When
 // cortext_collection, cortext_collection_{slug}, and cortext_supertag land,
 // this hook grows branches that pick the right CPT/taxonomy per segment — or
 // is replaced by the server-side resolver described above.
-const POST_TYPE = 'page';
+const POST_TYPE = 'cortext_page';
 
 export function useResolveEntity( uri ) {
 	const [ state, setState ] = useState( {

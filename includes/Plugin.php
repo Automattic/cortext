@@ -11,6 +11,7 @@ namespace Cortext;
 
 use Cortext\Admin\Screen;
 use Cortext\Editor\RevisionThrottle;
+use Cortext\PostType\Page;
 
 final class Plugin {
 
@@ -25,6 +26,7 @@ final class Plugin {
 
 	public function boot(): void {
 		( new Screen() )->register();
+		( new Page() )->register();
 		( new RevisionThrottle() )->register();
 	}
 

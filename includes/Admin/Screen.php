@@ -15,6 +15,8 @@ declare( strict_types=1 );
 
 namespace Cortext\Admin;
 
+use Cortext\PostType\Page;
+
 final class Screen {
 
 	public const MENU_SLUG      = 'cortext';
@@ -37,6 +39,16 @@ final class Screen {
 			array( $this, 'render' ),
 			'dashicons-welcome-write-blog',
 			3
+		);
+
+		// Escape hatch: core's list table + post.php editor for Cortext pages,
+		// nested under the shell menu. Primary UI stays the React shell.
+		add_submenu_page(
+			self::MENU_SLUG,
+			__( 'Manage Pages', 'cortext' ),
+			__( 'Manage Pages', 'cortext' ),
+			'edit_posts',
+			'edit.php?post_type=' . Page::POST_TYPE
 		);
 	}
 
