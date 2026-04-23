@@ -17,7 +17,7 @@ Editor settings are built server-side from `WP_Block_Editor_Context('core/edit-p
 
 ## Client entry (React)
 
-Entry is `src/index.js`; routing lives in `src/router/` using TanStack Router. The shell is URL-agnostic, so moving to a custom rewrite-rule URL later is plumbing rather than an architectural change.
+Entry is `src/index.js`; routing lives in `src/router/` using TanStack Router. Page URLs use the shape `?page=cortext&p=/<slug>-<id>`, falling back to `?p=/<id>` for slug-less drafts; only the trailing id is authoritative, and `useResolveEntity` fetches the record by id. The slug prefix is cosmetic and `Sidebar` rewrites it via `history.replace` when autosave lands a new slug, so renames never break existing URLs. The outer wp-admin URL is confined to `parseLocation` and `createHref` in `src/router.js`, so switching to a rewrite-rule URL later is plumbing rather than an architectural change. See [design decisions](../decisions.md) for why id-based URLs and why new pages start as `draft`.
 
 `src/components/Canvas.js` renders a single page through `EditorProvider` with `useSubRegistry={ false }`. Keeping `core/editor` on the parent registry means stock editor components (`EditorAutosaveMonitor`, `PostLockedModal`, `EditorSnackbars`, `UnsavedChangesWarning`) can be dropped in directly if the shell wants them.
 

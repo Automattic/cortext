@@ -29,6 +29,8 @@ const DEFAULT_STATE = {
 	isSaving: false,
 	didSucceed: false,
 	didFail: false,
+	postStatus: 'private',
+	postTitle: '',
 };
 
 let editsReference = {};
@@ -41,6 +43,15 @@ function setStoreState( state ) {
 		isSavingPost: () => merged.isSaving,
 		didPostSaveRequestSucceed: () => merged.didSucceed,
 		didPostSaveRequestFail: () => merged.didFail,
+		getEditedPostAttribute: ( name ) => {
+			if ( name === 'status' ) {
+				return merged.postStatus;
+			}
+			if ( name === 'title' ) {
+				return merged.postTitle;
+			}
+			return undefined;
+		},
 	};
 	const coreDataSelectors = {
 		getReferenceByDistinctEdits: () => editsReference,
@@ -66,7 +77,10 @@ beforeEach( () => {
 	jest.useFakeTimers();
 	editsReference = {};
 	setStoreState( {} );
-	useDispatch.mockReturnValue( { savePost: jest.fn() } );
+	useDispatch.mockReturnValue( {
+		savePost: jest.fn(),
+		editPost: jest.fn(),
+	} );
 } );
 
 afterEach( () => {
@@ -305,5 +319,107 @@ describe( 'useAutosave: status', () => {
 		const { result } = renderHook( () => useAutosave() );
 
 		expect( result.current.status ).toBe( 'error' );
+	} );
+} );
+
+describe( 'useAutosave: auto-draft promotion', () => {
+	it( 'promotes auto-draft to private before saving when title is non-empty', () => {
+		const savePost = jest.fn();
+		const editPost = jest.fn();
+		useDispatch.mockReturnValue( { savePost, editPost } );
+		setStoreState( {
+			isDirty: true,
+			postStatus: 'draft',
+			postTitle: 'About Us',
+		} );
+
+		renderHook( () => useAutosave() );
+
+		act( () => {
+			jest.advanceTimersByTime( 800 );
+		} );
+
+		expect( editPost ).toHaveBeenCalledWith( { status: 'private' } );
+		expect( savePost ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'does not promote when title is empty', () => {
+		const savePost = jest.fn();
+		const editPost = jest.fn();
+		useDispatch.mockReturnValue( { savePost, editPost } );
+		setStoreState( {
+			isDirty: true,
+			postStatus: 'draft',
+			postTitle: '',
+		} );
+
+		renderHook( () => useAutosave() );
+
+		act( () => {
+			jest.advanceTimersByTime( 800 );
+		} );
+
+		expect( editPost ).not.toHaveBeenCalled();
+		expect( savePost ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'does not promote when title is whitespace only', () => {
+		const savePost = jest.fn();
+		const editPost = jest.fn();
+		useDispatch.mockReturnValue( { savePost, editPost } );
+		setStoreState( {
+			isDirty: true,
+			postStatus: 'draft',
+			postTitle: '   ',
+		} );
+
+		renderHook( () => useAutosave() );
+
+		act( () => {
+			jest.advanceTimersByTime( 800 );
+		} );
+
+		expect( editPost ).not.toHaveBeenCalled();
+		expect( savePost ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'does not promote when status is already private', () => {
+		const savePost = jest.fn();
+		const editPost = jest.fn();
+		useDispatch.mockReturnValue( { savePost, editPost } );
+		setStoreState( {
+			isDirty: true,
+			postStatus: 'private',
+			postTitle: 'About Us',
+		} );
+
+		renderHook( () => useAutosave() );
+
+		act( () => {
+			jest.advanceTimersByTime( 800 );
+		} );
+
+		expect( editPost ).not.toHaveBeenCalled();
+		expect( savePost ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'promotes on flush triggers (blur)', () => {
+		const savePost = jest.fn();
+		const editPost = jest.fn();
+		useDispatch.mockReturnValue( { savePost, editPost } );
+		setStoreState( {
+			isDirty: true,
+			postStatus: 'draft',
+			postTitle: 'Team',
+		} );
+
+		renderHook( () => useAutosave() );
+
+		act( () => {
+			window.dispatchEvent( new Event( 'blur' ) );
+		} );
+
+		expect( editPost ).toHaveBeenCalledWith( { status: 'private' } );
+		expect( savePost ).toHaveBeenCalledTimes( 1 );
 	} );
 } );

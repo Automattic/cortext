@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from '@wordpress/element';
+import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
 import { store as coreDataStore } from '@wordpress/core-data';
@@ -7,7 +7,7 @@ const DEBOUNCE_MS = 800;
 const MIN_SAVE_INTERVAL_MS = 2000;
 
 export default function useAutosave() {
-	const { savePost } = useDispatch( editorStore );
+	const { savePost, editPost } = useDispatch( editorStore );
 
 	const {
 		isDirty,
@@ -16,6 +16,8 @@ export default function useAutosave() {
 		didSucceed,
 		didFail,
 		editsReference,
+		postStatus,
+		postTitle,
 	} = useSelect( ( select ) => {
 		const editor = select( editorStore );
 		return {
@@ -26,6 +28,8 @@ export default function useAutosave() {
 			didFail: editor.didPostSaveRequestFail(),
 			editsReference:
 				select( coreDataStore ).getReferenceByDistinctEdits(),
+			postStatus: editor.getEditedPostAttribute( 'status' ),
+			postTitle: editor.getEditedPostAttribute( 'title' ),
 		};
 	}, [] );
 
@@ -35,10 +39,39 @@ export default function useAutosave() {
 	const debounceRef = useRef( null );
 	const lastSaveAtRef = useRef( 0 );
 
-	const stateRef = useRef( { isDirty, isSaveable, isSaving, savePost } );
-	stateRef.current = { isDirty, isSaveable, isSaving, savePost };
+	const stateRef = useRef( {
+		isDirty,
+		isSaveable,
+		isSaving,
+		savePost,
+		editPost,
+		postStatus,
+		postTitle,
+	} );
+	stateRef.current = {
+		isDirty,
+		isSaveable,
+		isSaving,
+		savePost,
+		editPost,
+		postStatus,
+		postTitle,
+	};
 
-	const flushNow = () => {
+	// Promote draft to private once the user has given the page a real title,
+	// so WP core regenerates post_name from the title on save.
+	const maybePromoteStatus = () => {
+		const {
+			editPost: edit,
+			postStatus: s,
+			postTitle: t,
+		} = stateRef.current;
+		if ( s === 'draft' && typeof t === 'string' && t.trim() !== '' ) {
+			edit( { status: 'private' } );
+		}
+	};
+
+	const flushNow = useCallback( () => {
 		if ( debounceRef.current ) {
 			clearTimeout( debounceRef.current );
 			debounceRef.current = null;
@@ -50,10 +83,11 @@ export default function useAutosave() {
 			savePost: save,
 		} = stateRef.current;
 		if ( d && s && ! saving ) {
+			maybePromoteStatus();
 			lastSaveAtRef.current = Date.now();
 			save();
 		}
-	};
+	}, [] );
 
 	useEffect( () => {
 		if ( ! isDirty || ! isSaveable ) {
@@ -74,6 +108,7 @@ export default function useAutosave() {
 				savePost: save,
 			} = stateRef.current;
 			if ( d && s && ! saving ) {
+				maybePromoteStatus();
 				lastSaveAtRef.current = Date.now();
 				save();
 			}
@@ -120,7 +155,7 @@ export default function useAutosave() {
 			window.removeEventListener( 'beforeunload', onBeforeUnload );
 			flushNow();
 		};
-	}, [] );
+	}, [ flushNow ] );
 
 	return { status, lastSavedAt };
 }
