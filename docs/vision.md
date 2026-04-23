@@ -31,3 +31,11 @@ This same principle shapes Cortext's relationship with AI. Cortext isn't an AI-f
 ### 2. Tailored UX
 
 Cortext is WordPress under the hood, but you wouldn't know it. The workspace UI is built from scratch to let users focus on their knowledge base, free from WordPress complexities. wp-admin remains available for operators who want it; everyone else lives in a Notion-style shell.
+
+### 3. Bounded customization
+
+Where Cortext exposes an extension point, the boundary is cosmetic or data-shaped, not structural. Layout grids, component positioning, and the shape of the workspace are owned by the product and do not shift across installs. The first concrete instance is the shell-theming contract (see [Theming](architecture/theming.md)): shell themes style the workspace via tokens, not by rearranging it.
+
+A customization surface that includes structure ships a different product on every site and turns docs, support, and mental models into per-install work. A bounded cosmetic or data-shaped API gives users freedom to make Cortext theirs without fragmenting what Cortext means.
+
+Apply this wherever an extension point is proposed. If something is load-bearing to the product shape, it is not a customization knob. If it is purely how something looks or which data surfaces, it is a candidate for the contract.
