@@ -7,7 +7,7 @@ Nomenclature | WordPress primitive
 Collection   | `cortext_collection` CPT
 Field        | `cortext_field` CPT
 Entry        | `cortext_collection_{$slug}` CPT
-Field value  | `cortext_field` post meta
+Field value  | `cortext_collection_{$slug}` post meta
 
 ### Creating a new database
 
