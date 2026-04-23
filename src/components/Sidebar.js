@@ -22,6 +22,7 @@ import { useNavigate, useParams } from '@tanstack/react-router';
 
 import PageRow from './PageRow';
 import SidebarTrash from './SidebarTrash';
+import ThemeToggle from './ThemeToggle';
 import {
 	buildTree,
 	computeDropTarget,
@@ -400,6 +401,7 @@ export default function Sidebar() {
 				<Button variant="primary" onClick={ createRootPage }>
 					{ __( 'New page', 'cortext' ) }
 				</Button>
+				<ThemeToggle />
 			</div>
 			<h2 className="cortext-sidebar__section-title">
 				{ __( 'Pages', 'cortext' ) }

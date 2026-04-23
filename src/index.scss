@@ -1,5 +1,4 @@
-@use "@wordpress/base-styles/colors" as *;
-@use "@wordpress/base-styles/variables" as *;
+@use "./styles/tokens";
 
 // @wordpress/interface is a BUNDLED_PACKAGE (inlined into our JS) and WP
 // doesn't register a `wp-interface` style handle, so bundle its stylesheet.
@@ -28,7 +27,10 @@ body.cortext-fullscreen {
 .cortext-root {
 	position: fixed;
 	inset: 0;
-	background: $white;
+	background: var(--cortext-color-surface);
+	color: var(--cortext-color-text);
+	font-family: var(--cortext-font-family);
+	font-size: var(--cortext-font-size-body);
 }
 
 .cortext-shell {
@@ -38,15 +40,15 @@ body.cortext-fullscreen {
 }
 
 .cortext-sidebar {
-	border-right: $border-width solid $gray-200;
+	border-right: var(--cortext-border-width) solid var(--cortext-color-border);
 	overflow-y: auto;
-	padding: $grid-unit-15;
+	padding: var(--cortext-space-md);
 
 	&__header {
 		display: flex;
 		align-items: center;
-		gap: $grid-unit-10;
-		margin-bottom: $grid-unit-15;
+		gap: var(--cortext-space-sm);
+		margin-bottom: var(--cortext-space-md);
 	}
 
 	&__section-title {
@@ -61,8 +63,8 @@ body.cortext-fullscreen {
 
 	&__loading,
 	&__empty {
-		color: $gray-700;
-		padding: $grid-unit-10;
+		color: var(--cortext-color-text-muted);
+		padding: var(--cortext-space-sm);
 	}
 
 	&__list,
@@ -84,13 +86,13 @@ body.cortext-fullscreen {
 		position: relative;
 		display: flex;
 		align-items: center;
-		gap: $grid-unit-05;
-		border-radius: 2px;
+		gap: var(--cortext-space-xs);
+		border-radius: var(--cortext-radius-sm);
 		cursor: grab;
 		user-select: none;
 
 		&.is-selected {
-			background: $gray-100;
+			background: var(--cortext-color-surface-raised);
 		}
 
 		&.is-dragging {
@@ -104,7 +106,7 @@ body.cortext-fullscreen {
 			position: absolute;
 			inset-inline: 0;
 			height: 2px;
-			background: var(--wp-admin-theme-color, $gray-700);
+			background: var(--cortext-color-accent);
 			pointer-events: none;
 		}
 
@@ -117,8 +119,8 @@ body.cortext-fullscreen {
 		}
 
 		&.is-drop-inside {
-			background: rgba($gray-700, 0.08);
-			outline: 1px dashed var(--wp-admin-theme-color, $gray-700);
+			background: var(--cortext-color-surface-raised);
+			outline: var(--cortext-border-width) dashed var(--cortext-color-accent);
 			outline-offset: -1px;
 		}
 	}
@@ -128,8 +130,8 @@ body.cortext-fullscreen {
 
 		&--placeholder {
 			display: inline-block;
-			width: $grid-unit-30;
-			height: $grid-unit-30;
+			width: var(--cortext-space-xl);
+			height: var(--cortext-space-xl);
 		}
 	}
 
@@ -184,12 +186,13 @@ body.cortext-fullscreen {
 	}
 
 	&__drag-preview {
-		padding: $grid-unit-05 $grid-unit-15;
-		background: $white;
-		border: $border-width solid $gray-200;
-		border-radius: 2px;
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
-		font-size: 13px;
+		padding: var(--cortext-space-xs) var(--cortext-space-md);
+		background: var(--cortext-color-surface);
+		color: var(--cortext-color-text);
+		border: var(--cortext-border-width) solid var(--cortext-color-border);
+		border-radius: var(--cortext-radius-sm);
+		box-shadow: 0 2px 8px var(--cortext-color-shadow);
+		font-size: var(--cortext-font-size-ui);
 		max-width: 260px;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -265,6 +268,9 @@ body.cortext-fullscreen {
 .cortext-shell__canvas {
 	position: relative;
 	overflow: hidden;
+	// Canvas keeps a light background regardless of shell theme — blocks,
+	// inserters, and pickers are authored for light backgrounds.
+	background: var(--cortext-color-canvas);
 
 	// InterfaceSkeleton defaults to `position: fixed` at >= 782px, which would
 	// escape our grid and overlap the page-list sidebar. Scope it to fill just
@@ -281,8 +287,8 @@ body.cortext-fullscreen {
 	&__header {
 		display: flex;
 		align-items: center;
-		gap: $grid-unit-10;
-		padding: $grid-unit-10 $grid-unit-20;
+		gap: var(--cortext-space-sm);
+		padding: var(--cortext-space-sm) var(--cortext-space-lg);
 		flex: 1;
 	}
 
@@ -292,7 +298,7 @@ body.cortext-fullscreen {
 		flex-direction: column;
 		align-items: center;
 		justify-content: center;
-		color: $gray-700;
+		color: var(--cortext-color-text-muted);
 		height: 100%;
 	}
 

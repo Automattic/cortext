@@ -10,7 +10,7 @@ A WordPress plugin that brings a Notion-inspired workspace to your own WordPress
 
 Notion handles structured knowledge well, but your data lives on their servers. WordPress owns the data story and now has the primitives to close the UX gap: `@wordpress/dataviews`, standalone `@wordpress/editor` with `BlockCanvas`, and Block Bindings. Cortext composes them.
 
-Because it is still WordPress, Cortext picks up things Notion cannot: publishing a row as a fully-themed public page, custom theming throughout, and running entirely offline.
+Because it is still WordPress, Cortext picks up things Notion cannot: publishing a row as a fully-themed public page, a bounded shell-theming API that lets the workspace chrome track your brand without fragmenting the UX, and running entirely offline.
 
 ## How it works, in one paragraph
 
@@ -24,6 +24,7 @@ Storage uses `crtxt_page` for workspace documents, `crtxt_collection` for collec
 - [Architecture](docs/architecture.md): content-model sketch.
 - [Shell architecture](docs/architecture/shell.md): React shell, mount point, editor setup.
 - [Data model](docs/architecture/data-model.md): REST contract and implementation status.
+- [Theming](docs/theming.md): shell vs content themes, the token contract.
 - [Roadmap](docs/roadmap.md): what ships when.
 
 ## Requirements

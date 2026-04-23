@@ -1,0 +1,48 @@
+// Cortext shell tokens (v1).
+// These CSS custom properties are the shell-theme API. Other stylesheets
+// consume tokens; they do not hardcode colors or spacing. Dark values
+// override under `[data-theme="dark"]` on the shell root and only apply
+// to chrome: the editor canvas stays light always because blocks,
+// inserters, and pickers are authored for light backgrounds.
+// The same values are emitted from PHP (see Cortext\Theming\Tokens) so
+// they cross the Gutenberg iframe boundary and so the frontend overlay
+// can read them without loading this stylesheet.
+
+.cortext-root {
+
+	// Color
+	--cortext-color-canvas: #fff;
+	--cortext-color-surface: #fff;
+	--cortext-color-surface-raised: #f0f0f0;
+	--cortext-color-border: #e0e0e0;
+	--cortext-color-text: #1e1e1e;
+	--cortext-color-text-muted: #757575;
+	--cortext-color-accent: var(--wp-admin-theme-color, #3858e9);
+	--cortext-color-accent-contrast: #fff;
+	--cortext-color-shadow: rgba(0, 0, 0, 0.12);
+
+	// Typography
+	--cortext-font-family: inherit;
+	--cortext-font-size-body: 13px;
+	--cortext-font-size-ui: 13px;
+
+	// Spacing
+	--cortext-space-xs: 4px;
+	--cortext-space-sm: 8px;
+	--cortext-space-md: 12px;
+	--cortext-space-lg: 16px;
+	--cortext-space-xl: 24px;
+
+	// Structural
+	--cortext-radius-sm: 2px;
+	--cortext-border-width: 1px;
+
+	&[data-theme="dark"] {
+		--cortext-color-surface: #2a2a2a;
+		--cortext-color-surface-raised: #383838;
+		--cortext-color-border: #3e3e3e;
+		--cortext-color-text: #f0f0f0;
+		--cortext-color-text-muted: #a0a0a0;
+		--cortext-color-shadow: rgba(0, 0, 0, 0.4);
+	}
+}

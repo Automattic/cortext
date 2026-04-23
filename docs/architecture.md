@@ -98,4 +98,10 @@ A single React SPA mounted on a full-screen admin page.
 └───────────────┴────────────────────────────────────┘
 ```
 
-Chrome is hidden via the `is-fullscreen-mode` body class (the Site Editor pattern). Phase 2 may move to a custom URL via rewrite rule and `template_redirect`. The outer URL shape is confined to `parseLocation` and `createHref` in `src/router.js`, so the move is plumbing rather than architecture.
+Chrome is hidden via the `is-fullscreen-mode` body class (the Site Editor pattern). Phase 2 may move to a custom URL via rewrite rule and `template_redirect`. The React shell is URL-agnostic, so the move is plumbing rather than architecture.
+
+## Theming
+
+Two surfaces, two APIs. The workspace shell has a bounded cosmetic API (the token contract: colors, typography, spacing); the content layer uses the full WordPress block-theme API for published public pages. The two never interfere: Cortext does not touch the active block theme, and the shell's dark-mode preference does not cross into the frontend.
+
+The token contract lives in three places in sync: `src/styles/_tokens.scss` for the admin shell chrome, `Cortext\Theming\Tokens::get_iframe_inline_css()` injected into `editor_settings['styles']` so tokens cross the Gutenberg iframe boundary, and `Cortext\Theming\Tokens::get_frontend_inline_css()` printed via `wp_head` so opt-in patterns (`patterns/cortext-header.php`, `patterns/cortext-footer.php`) have the tokens available on the public site. Dark mode is chrome-only (canvas stays light so blocks and pickers, all authored for light backgrounds, remain usable). Full design and roadmap: [theming.md](theming.md).
