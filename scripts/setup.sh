@@ -14,7 +14,7 @@ hash=$(printf '%s' "$PWD" | "$hash_cmd" | awk '{print $1}')
 port=$(( 8000 + 16#${hash:0:6} % 1000 ))
 
 cat > .wp-env.override.json <<EOF
-{ "port": ${port}, "plugins": [ "./.wp-env-plugins/worktree-label" ] }
+{ "port": ${port}, "plugins": [ ".", "./.wp-env-plugins/worktree-label" ] }
 EOF
 
 "$(dirname "$0")/refresh-label.sh"
