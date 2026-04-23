@@ -29,8 +29,7 @@ import {
 } from './pages-tree';
 import { computeUri } from '../router/useResolveEntity';
 
-// Stand-in until the `cortext_page` CPT lands — change this constant to swap.
-const POST_TYPE = 'page';
+const POST_TYPE = 'cortext_page';
 
 const AUTO_EXPAND_DELAY = 700;
 
