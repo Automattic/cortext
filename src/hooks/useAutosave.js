@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from '@wordpress/element';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
+import { store as coreDataStore } from '@wordpress/core-data';
 
 const DEBOUNCE_MS = 800;
 const MIN_SAVE_INTERVAL_MS = 2000;
@@ -8,19 +9,25 @@ const MIN_SAVE_INTERVAL_MS = 2000;
 export default function useAutosave() {
 	const { savePost } = useDispatch( editorStore );
 
-	const { isDirty, isSaveable, isSaving, didSucceed, didFail } = useSelect(
-		( select ) => {
-			const editor = select( editorStore );
-			return {
-				isDirty: editor.isEditedPostDirty(),
-				isSaveable: editor.isEditedPostSaveable(),
-				isSaving: editor.isSavingPost(),
-				didSucceed: editor.didPostSaveRequestSucceed(),
-				didFail: editor.didPostSaveRequestFail(),
-			};
-		},
-		[]
-	);
+	const {
+		isDirty,
+		isSaveable,
+		isSaving,
+		didSucceed,
+		didFail,
+		editsReference,
+	} = useSelect( ( select ) => {
+		const editor = select( editorStore );
+		return {
+			isDirty: editor.isEditedPostDirty(),
+			isSaveable: editor.isEditedPostSaveable(),
+			isSaving: editor.isSavingPost(),
+			didSucceed: editor.didPostSaveRequestSucceed(),
+			didFail: editor.didPostSaveRequestFail(),
+			editsReference:
+				select( coreDataStore ).getReferenceByDistinctEdits(),
+		};
+	}, [] );
 
 	const [ status, setStatus ] = useState( 'idle' );
 	const [ lastSavedAt, setLastSavedAt ] = useState( null );
@@ -78,7 +85,7 @@ export default function useAutosave() {
 				debounceRef.current = null;
 			}
 		};
-	}, [ isDirty, isSaveable ] );
+	}, [ isDirty, isSaveable, editsReference ] );
 
 	useEffect( () => {
 		if ( isSaving ) {
