@@ -187,7 +187,7 @@ export default function Sidebar() {
 				status: 'private',
 				title: sourceTitle
 					? /* translators: %s: source page title */
-					  /* eslint-disable-next-line @wordpress/i18n-no-variables */
+
 					  `${ sourceTitle } ${ __( '(copy)', 'cortext' ) }`
 					: __( 'Untitled (copy)', 'cortext' ),
 				content: source.content?.raw ?? '',
@@ -213,7 +213,6 @@ export default function Sidebar() {
 		const descendants = collectDescendants( id, pages );
 		// Delete children first, then the root.
 		for ( const childId of descendants ) {
-			// eslint-disable-next-line no-await-in-loop
 			await deleteEntityRecord( 'postType', POST_TYPE, childId, {
 				force: true,
 			} );
