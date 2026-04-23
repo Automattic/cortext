@@ -35,7 +35,10 @@ final class Page {
 				'public'                => false,
 				'publicly_queryable'    => false,
 				'exclude_from_search'   => true,
-				'show_ui'               => false,
+				// The React shell is the primary UI. Core's admin screens
+				// (edit.php list + post.php editor) stay enabled as an
+				// escape hatch, exposed through Admin\Screen's submenu.
+				'show_ui'               => true,
 				'show_in_menu'          => false,
 				'show_in_rest'          => true,
 				// Matches useResolveEntity.js's `/wp/v2/${POST_TYPE}s?...` URL shape; core

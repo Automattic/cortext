@@ -45,8 +45,8 @@ final class Test_Post_Type_Page extends BaseTestCase {
 		$this->assertTrue( $object->show_in_rest, 'cortext_page must be show_in_rest for @wordpress/core-data.' );
 		$this->assertSame( 'cortext_pages', $object->rest_base, 'rest_base must match the JS resolver URL shape.' );
 		$this->assertFalse( $object->public );
-		$this->assertFalse( $object->show_ui );
-		$this->assertFalse( $object->show_in_menu );
+		$this->assertTrue( $object->show_ui, 'show_ui stays on so Admin\Screen\'s submenu can link to the core list table as an escape hatch.' );
+		$this->assertFalse( $object->show_in_menu, 'show_in_menu is false because Admin\Screen owns the top-level menu.' );
 		$this->assertFalse( $object->publicly_queryable );
 		$this->assertTrue( $object->exclude_from_search );
 		$this->assertFalse( $object->has_archive );
