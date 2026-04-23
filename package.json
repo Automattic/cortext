@@ -13,6 +13,7 @@
 		"lint:js": "wp-scripts lint-js src",
 		"lint:style": "wp-scripts lint-style 'src/**/*.{css,pcss,scss}'",
 		"env:start": "wp-env start --runtime=playground",
+		"test:env:start": "wp-env --config .wp-env.test.json start --runtime playground",
 		"test:unit": "wp-scripts test-unit-js --config jest.config.js",
 		"test:unit:watch": "wp-scripts test-unit-js --config jest.config.js --watch",
 		"test:e2e": "wp-scripts test-playwright --config playwright.config.js",
@@ -24,8 +25,8 @@
 		"@testing-library/jest-dom": "^6.9.1",
 		"@testing-library/react": "^16.3.2",
 		"@wordpress/e2e-test-utils-playwright": "^1.44.0",
-		"@wordpress/env": "^10.0.0",
-		"@wordpress/scripts": "^30.0.0"
+		"@wordpress/env": "^11.4.0",
+		"@wordpress/scripts": "^32.0.0"
 	},
 	"dependencies": {
 		"@dnd-kit/core": "^6.1.0",
