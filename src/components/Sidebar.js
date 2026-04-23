@@ -342,7 +342,7 @@ export default function Sidebar() {
 					{ __( 'New page', 'cortext' ) }
 				</Button>
 			</div>
-			{ isResolving && (
+			{ isResolving && pages.length === 0 && (
 				<div className="cortext-sidebar__loading">
 					<Spinner />
 				</div>
