@@ -11,6 +11,7 @@
 		"format": "wp-scripts format",
 		"format:check": "wp-scripts format --check",
 		"lint:js": "wp-scripts lint-js src",
+		"lint:php": "composer run phpcs",
 		"lint:style": "wp-scripts lint-style 'src/**/*.{css,pcss,scss}'",
 		"env:start": "wp-env start --runtime=playground",
 		"test:env:start": "wp-env --config .wp-env.test.json start --runtime playground",
