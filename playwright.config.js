@@ -4,7 +4,7 @@
  * Extends the @wordpress/scripts default config. Resolves WP_BASE_URL from:
  *   1. env var (CI sets this explicitly)
  *   2. .wp-env.override.json port (per-worktree local dev)
- *   3. wp-env default 8888 (Playground has no separate tests env)
+ *   3. wp-env default 8889 (Playground has no separate tests env)
  */
 
 // Resolve before requiring the base config, which reads WP_BASE_URL at load time.
@@ -21,7 +21,7 @@ function resolveBaseURL() {
 	} catch ( _error ) {
 		// File is gitignored; absent on CI.
 	}
-	return 'http://localhost:8888';
+	return 'http://localhost:8889';
 }
 
 process.env.WP_BASE_URL = resolveBaseURL();

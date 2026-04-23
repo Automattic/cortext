@@ -58,7 +58,7 @@ export function useResolveEntity( uri ) {
 							_fields: 'id,slug,parent',
 						} ),
 					} );
-				} catch ( _err ) {
+				} catch {
 					if ( ! cancelled ) {
 						setState( {
 							entity: null,
