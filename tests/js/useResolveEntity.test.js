@@ -160,21 +160,27 @@ describe( 'useResolveEntity', () => {
 } );
 
 describe( 'computeUri', () => {
-	it( 'joins slug and id with a dash', () => {
+	it( 'joins slug and id with a dash, prefixed by type', () => {
 		expect( computeUri( { id: 42, slug: 'about-us' } ) ).toBe(
-			'about-us-42'
+			'page/about-us-42'
 		);
 	} );
 
-	it( 'returns a bare id when slug is empty', () => {
-		expect( computeUri( { id: 7, slug: '' } ) ).toBe( '7' );
+	it( 'returns prefix/id when slug is empty', () => {
+		expect( computeUri( { id: 7, slug: '' } ) ).toBe( 'page/7' );
 	} );
 
-	it( 'returns a bare id when slug is missing', () => {
-		expect( computeUri( { id: 7 } ) ).toBe( '7' );
+	it( 'returns prefix/id when slug is missing', () => {
+		expect( computeUri( { id: 7 } ) ).toBe( 'page/7' );
 	} );
 
 	it( 'treats whitespace-only slugs as empty', () => {
-		expect( computeUri( { id: 7, slug: '   ' } ) ).toBe( '7' );
+		expect( computeUri( { id: 7, slug: '   ' } ) ).toBe( 'page/7' );
+	} );
+
+	it( 'accepts a custom prefix', () => {
+		expect(
+			computeUri( { id: 3, slug: 'books' }, 'collection' )
+		).toBe( 'collection/books-3' );
 	} );
 } );
