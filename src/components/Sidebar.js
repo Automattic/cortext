@@ -61,6 +61,13 @@ export default function Sidebar() {
 		status: [ 'draft', 'private', 'publish' ],
 		context: 'edit',
 	} );
+
+	const { records: collections, isResolving: isResolvingCollections } =
+		useEntityRecords( 'postType', 'cortext_collection', {
+			per_page: 100,
+			status: 'publish',
+			context: 'edit',
+		} );
 	const { saveEntityRecord, deleteEntityRecord } = useDispatch( 'core' );
 	const pages = useMemo( () => records ?? [], [ records ] );
 	const navigate = useNavigate();
@@ -366,6 +373,9 @@ export default function Sidebar() {
 					{ __( 'New page', 'cortext' ) }
 				</Button>
 			</div>
+			<h2 className="cortext-sidebar__section-title">
+				{ __( 'Pages', 'cortext' ) }
+			</h2>
 			{ isResolving && pages.length === 0 && (
 				<div className="cortext-sidebar__loading">
 					<Spinner />
@@ -418,6 +428,39 @@ export default function Sidebar() {
 					) : null }
 				</DragOverlay>
 			</DndContext>
+
+			<h2 className="cortext-sidebar__section-title">
+				{ __( 'Collections', 'cortext' ) }
+			</h2>
+			{ isResolvingCollections && ! collections?.length && (
+				<div className="cortext-sidebar__loading">
+					<Spinner />
+				</div>
+			) }
+			{ ! isResolvingCollections && ! collections?.length && (
+				<p className="cortext-sidebar__empty">
+					{ __( 'No collections yet.', 'cortext' ) }
+				</p>
+			) }
+			{ collections?.length > 0 && (
+				<ul className="cortext-sidebar__list">
+					{ collections.map( ( collection ) => (
+						<li
+							key={ collection.id }
+							className="cortext-sidebar__node"
+						>
+							<div className="cortext-sidebar__row">
+								<Button
+									className="cortext-sidebar__title"
+									variant="tertiary"
+								>
+									{ collection.title.rendered }
+								</Button>
+							</div>
+						</li>
+					) ) }
+				</ul>
+			) }
 
 			{ pendingDeleteId !== null && (
 				<ConfirmDialog

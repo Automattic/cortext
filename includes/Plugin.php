@@ -11,6 +11,9 @@ namespace Cortext;
 
 use Cortext\Admin\Screen;
 use Cortext\Editor\RevisionThrottle;
+use Cortext\PostType\Collection;
+use Cortext\PostType\CollectionEntries;
+use Cortext\PostType\Field;
 use Cortext\PostType\Page;
 
 final class Plugin {
@@ -27,6 +30,9 @@ final class Plugin {
 	public function boot(): void {
 		( new Screen() )->register();
 		( new Page() )->register();
+		( new Collection() )->register();
+		( new Field() )->register();
+		( new CollectionEntries() )->register();
 		( new RevisionThrottle() )->register();
 	}
 
