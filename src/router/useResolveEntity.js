@@ -74,10 +74,75 @@ export function useResolveEntity( uri ) {
 	return state;
 }
 
-// Builds the URL segment for a page: `<slug>-<id>` when a slug exists, bare
-// `<id>` for fresh drafts. The id is the authoritative part — parseIdFromUri
-// only ever reads the trailing digits.
-export function computeUri( page ) {
-	const slug = typeof page.slug === 'string' ? page.slug.trim() : '';
-	return slug ? `${ slug }-${ page.id }` : `${ page.id }`;
+const COLLECTION_TYPE = 'cortext_collection';
+
+export function useResolveCollection( id ) {
+	const [ state, setState ] = useState( {
+		entity: null,
+		isResolving: true,
+		notFound: false,
+	} );
+
+	useEffect( () => {
+		if ( ! id ) {
+			setState( {
+				entity: null,
+				isResolving: false,
+				notFound: true,
+			} );
+			return undefined;
+		}
+
+		let cancelled = false;
+		setState( { entity: null, isResolving: true, notFound: false } );
+
+		apiFetch( {
+			path: `/wp/v2/${ COLLECTION_TYPE }s/${ id }?context=edit&_fields=id,slug`,
+		} )
+			.then( ( entity ) => {
+				if ( ! cancelled ) {
+					setState( {
+						entity,
+						isResolving: false,
+						notFound: false,
+					} );
+				}
+			} )
+			.catch( () => {
+				if ( ! cancelled ) {
+					setState( {
+						entity: null,
+						isResolving: false,
+						notFound: true,
+					} );
+				}
+			} );
+
+		return () => {
+			cancelled = true;
+		};
+	}, [ id ] );
+
+	return state;
+}
+
+// Builds the URL segment: `<prefix>/<slug>-<id>` when a slug exists, or
+// `<prefix>/<id>` for fresh drafts. The id is the authoritative part —
+// parseIdFromUri only ever reads the trailing digits.
+export function computeUri( entity, prefix = 'page' ) {
+	const slug = typeof entity.slug === 'string' ? entity.slug.trim() : '';
+	const tail = slug ? `${ slug }-${ entity.id }` : `${ entity.id }`;
+	return `${ prefix }/${ tail }`;
+}
+
+// Strips the prefix from a splat URI and returns { prefix, tail }.
+export function parseSplatUri( uri ) {
+	const slash = ( uri ?? '' ).indexOf( '/' );
+	if ( slash === -1 ) {
+		return { prefix: null, tail: uri ?? '' };
+	}
+	return {
+		prefix: uri.slice( 0, slash ),
+		tail: uri.slice( slash + 1 ),
+	};
 }
