@@ -43,11 +43,17 @@ export default function CollectionTable( { slug = 'books' } ) {
 	}
 
 	if ( ! collection ) {
-		return <p>No collection found for slug "{ slug }".</p>;
+		return <p>No collection found for slug &quot;{ slug }&quot;.</p>;
 	}
 
 	if ( ! fields?.length ) {
-		return <p>No fields found for collection "{ collection.title.rendered }".</p>;
+		return (
+			<p>
+				No fields found for collection &quot;
+				{ collection.title.rendered }
+				&quot;.
+			</p>
+		);
 	}
 
 	return (

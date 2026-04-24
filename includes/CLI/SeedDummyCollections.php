@@ -27,6 +27,9 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	 *     wp cortext seed
 	 *
 	 * @when after_wp_load
+	 *
+	 * @param array $args       Positional arguments.
+	 * @param array $assoc_args Associative arguments.
 	 */
 	public function __invoke( array $args, array $assoc_args ): void {
 		$collections = array(
@@ -97,7 +100,9 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		$existing = get_posts(
 			array(
 				'post_type'   => Collection::POST_TYPE,
+				// phpcs:ignore WordPress.DB.SlowDBQuery
 				'meta_key'    => 'slug',
+				// phpcs:ignore WordPress.DB.SlowDBQuery
 				'meta_value'  => $slug,
 				'numberposts' => 1,
 			)
@@ -222,6 +227,9 @@ final class SeedDummyCollections extends WP_CLI_Command {
 
 	/**
 	 * Finds a field by title among IDs already attached to a collection.
+	 *
+	 * @param string $title     The field title to search for.
+	 * @param array  $field_ids Array of field post IDs to search within.
 	 */
 	private function find_attached_field( string $title, array $field_ids ): ?int {
 		foreach ( $field_ids as $field_id ) {
