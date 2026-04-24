@@ -42,5 +42,5 @@ add_action(
 );
 
 if ( defined( 'WP_CLI' ) && WP_CLI ) {
-	\WP_CLI::add_command( 'cortext seed-books', \Cortext\CLI\SeedBooks::class );
+	\WP_CLI::add_command( 'cortext seed', \Cortext\CLI\SeedDummyCollections::class );
 }
