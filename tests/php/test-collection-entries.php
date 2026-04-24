@@ -41,7 +41,7 @@ final class Test_Collection_Entries extends BaseTestCase {
 		$collection_id = wp_insert_post(
 			array(
 				'post_type'   => Collection::POST_TYPE,
-				'post_status' => 'publish',
+				'post_status' => 'private',
 				'post_title'  => 'Venues',
 				'meta_input'  => array( 'slug' => 'venues' ),
 			)
@@ -57,7 +57,7 @@ final class Test_Collection_Entries extends BaseTestCase {
 		$collection_id = wp_insert_post(
 			array(
 				'post_type'   => Collection::POST_TYPE,
-				'post_status' => 'publish',
+				'post_status' => 'private',
 				'post_title'  => 'Meetings',
 				'meta_input'  => array( 'slug' => 'meetings' ),
 			)
@@ -78,7 +78,7 @@ final class Test_Collection_Entries extends BaseTestCase {
 		$collection_id = wp_insert_post(
 			array(
 				'post_type'   => Collection::POST_TYPE,
-				'post_status' => 'publish',
+				'post_status' => 'private',
 				'post_title'  => 'Tasks',
 				'meta_input'  => array( 'slug' => 'tasks' ),
 			)
@@ -95,7 +95,7 @@ final class Test_Collection_Entries extends BaseTestCase {
 		$collection_id = wp_insert_post(
 			array(
 				'post_type'   => Collection::POST_TYPE,
-				'post_status' => 'publish',
+				'post_status' => 'private',
 				'post_title'  => 'Projects',
 				'meta_input'  => array( 'slug' => 'projects' ),
 			)
@@ -104,7 +104,7 @@ final class Test_Collection_Entries extends BaseTestCase {
 		$field_id = wp_insert_post(
 			array(
 				'post_type'   => Field::POST_TYPE,
-				'post_status' => 'publish',
+				'post_status' => 'private',
 				'post_title'  => 'Status',
 				'meta_input'  => array( 'type' => 'select' ),
 			)
@@ -126,7 +126,7 @@ final class Test_Collection_Entries extends BaseTestCase {
 		$collection_id = wp_insert_post(
 			array(
 				'post_type'   => Collection::POST_TYPE,
-				'post_status' => 'publish',
+				'post_status' => 'private',
 				'post_title'  => 'Tags',
 				'meta_input'  => array( 'slug' => 'tags' ),
 			)
@@ -135,7 +135,7 @@ final class Test_Collection_Entries extends BaseTestCase {
 		$field_id = wp_insert_post(
 			array(
 				'post_type'   => Field::POST_TYPE,
-				'post_status' => 'publish',
+				'post_status' => 'private',
 				'post_title'  => 'Categories',
 				'meta_input'  => array( 'type' => 'multiselect' ),
 			)
@@ -158,7 +158,7 @@ final class Test_Collection_Entries extends BaseTestCase {
 		$collection_id = wp_insert_post(
 			array(
 				'post_type'   => Collection::POST_TYPE,
-				'post_status' => 'publish',
+				'post_status' => 'private',
 				'post_title'  => 'Too Long',
 				'meta_input'  => array( 'slug' => $long_slug ),
 			)
@@ -180,7 +180,7 @@ final class Test_Collection_Entries extends BaseTestCase {
 		$collection_id = wp_insert_post(
 			array(
 				'post_type'   => Collection::POST_TYPE,
-				'post_status' => 'publish',
+				'post_status' => 'private',
 				'post_title'  => 'Just Right',
 				'meta_input'  => array( 'slug' => $max_slug ),
 			)
@@ -199,7 +199,7 @@ final class Test_Collection_Entries extends BaseTestCase {
 		$collection_id = wp_insert_post(
 			array(
 				'post_type'   => Collection::POST_TYPE,
-				'post_status' => 'publish',
+				'post_status' => 'private',
 				'post_title'  => 'No Slug',
 			)
 		);

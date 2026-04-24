@@ -36,7 +36,7 @@ final class CollectionEntries {
 		$collections = get_posts(
 			array(
 				'post_type'   => Collection::POST_TYPE,
-				'post_status' => 'publish',
+				'post_status' => array( 'draft', 'private', 'publish' ),
 				'numberposts' => -1,
 			)
 		);
