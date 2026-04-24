@@ -44,6 +44,16 @@ body.cortext-fullscreen {
 		margin-bottom: $grid-unit-15;
 	}
 
+	&__section-title {
+		font-size: 11px;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+		color: $gray-700;
+		margin: $grid-unit-15 0 $grid-unit-05 0;
+		padding: 0 $grid-unit-05;
+	}
+
 	&__loading,
 	&__empty {
 		color: $gray-700;

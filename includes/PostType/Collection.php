@@ -61,6 +61,10 @@ final class Collection {
 				'type'   => 'string',
 				'single' => true,
 			),
+			'fields'    => array(
+				'type'   => 'string',
+				'single' => false,
+			),
 		);
 
 		foreach ( $meta as $key => $args ) {

@@ -40,3 +40,7 @@ add_action(
 		\Cortext\Plugin::instance()->boot();
 	}
 );
+
+if ( defined( 'WP_CLI' ) && WP_CLI ) {
+	\WP_CLI::add_command( 'cortext seed-books', \Cortext\CLI\SeedBooks::class );
+}
