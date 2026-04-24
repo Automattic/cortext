@@ -24,8 +24,8 @@ final class CollectionEntries {
 	 * `cortext_collection_` (20 chars) leaves no room for the slug,
 	 * so we use this shorter prefix instead.
 	 */
-	public const CPT_PREFIX   = 'crtxt_';
-	public const MAX_SLUG_LEN = 20 - 6; // 20-char WP limit minus prefix length.
+	public const CPT_PREFIX  = 'crtxt_';
+	public const MAX_CPT_LEN = 20;
 
 	public function register(): void {
 		add_action( 'init', array( $this, 'register_all' ), 20 );
@@ -51,7 +51,7 @@ final class CollectionEntries {
 			return;
 		}
 
-		if ( strlen( $slug ) > self::MAX_SLUG_LEN ) {
+		if ( strlen( self::CPT_PREFIX . $slug ) > self::MAX_CPT_LEN ) {
 			_doing_it_wrong(
 				__METHOD__,
 				esc_html(
@@ -59,7 +59,7 @@ final class CollectionEntries {
 						/* translators: 1: collection slug, 2: maximum allowed length */
 						__( 'Collection slug "%1$s" exceeds the %2$d-character limit and was not registered.', 'cortext' ),
 						$slug,
-						self::MAX_SLUG_LEN
+						self::MAX_CPT_LEN - strlen( self::CPT_PREFIX )
 					)
 				),
 				'0.0.1'

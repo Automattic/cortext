@@ -152,7 +152,8 @@ final class Test_Collection_Entries extends BaseTestCase {
 	}
 
 	public function test_rejects_slug_exceeding_max_length(): void {
-		$long_slug = str_repeat( 'a', CollectionEntries::MAX_SLUG_LEN + 1 );
+		$max_slug_len = CollectionEntries::MAX_CPT_LEN - strlen( CollectionEntries::CPT_PREFIX );
+		$long_slug    = str_repeat( 'a', $max_slug_len + 1 );
 
 		$collection_id = wp_insert_post(
 			array(
@@ -173,7 +174,8 @@ final class Test_Collection_Entries extends BaseTestCase {
 	}
 
 	public function test_accepts_slug_at_max_length(): void {
-		$max_slug = str_repeat( 'b', CollectionEntries::MAX_SLUG_LEN );
+		$max_slug_len = CollectionEntries::MAX_CPT_LEN - strlen( CollectionEntries::CPT_PREFIX );
+		$max_slug     = str_repeat( 'b', $max_slug_len );
 
 		$collection_id = wp_insert_post(
 			array(
