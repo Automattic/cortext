@@ -33,7 +33,11 @@ import {
 	isDescendantOf,
 	nextChildOrder,
 } from './pages-tree';
-import { computeUri, parseIdFromUri } from '../router/useResolveEntity';
+import {
+	computeUri,
+	parseIdFromUri,
+	parseSplatUri,
+} from '../router/useResolveEntity';
 
 const POST_TYPE = 'cortext_page';
 
@@ -75,9 +79,16 @@ export default function Sidebar() {
 	const activeUri = params._splat ?? '';
 	const adminUrl = window.cortextSettings?.adminUrl ?? '/wp-admin/';
 
-	const selectedId = useMemo(
-		() => parseIdFromUri( activeUri ),
+	const { prefix: activePrefix, tail: activeTail } = useMemo(
+		() => parseSplatUri( activeUri ),
 		[ activeUri ]
+	);
+	const selectedId = useMemo(
+		() =>
+			activePrefix === 'page' || activePrefix === null
+				? parseIdFromUri( activeTail )
+				: null,
+		[ activePrefix, activeTail ]
 	);
 
 	// Keep the URL canonical: once autosave assigns a slug to the active
@@ -92,7 +103,7 @@ export default function Sidebar() {
 		if ( ! current ) {
 			return;
 		}
-		const canonical = computeUri( current );
+		const canonical = computeUri( current, 'page' );
 		if ( canonical !== activeUri ) {
 			navigate( {
 				to: '/$',
@@ -116,7 +127,7 @@ export default function Sidebar() {
 				pages.find( ( p ) => p.id === id ) ?? { id };
 			navigate( {
 				to: '/$',
-				params: { _splat: computeUri( page ) },
+				params: { _splat: computeUri( page, 'page' ) },
 			} );
 		},
 		[ navigate, pages ]
@@ -453,6 +464,17 @@ export default function Sidebar() {
 								<Button
 									className="cortext-sidebar__title"
 									variant="tertiary"
+									onClick={ () =>
+										navigate( {
+											to: '/$',
+											params: {
+												_splat: computeUri(
+													collection,
+													'collection'
+												),
+											},
+										} )
+									}
 								>
 									{ collection.title.rendered }
 								</Button>

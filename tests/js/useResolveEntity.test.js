@@ -77,7 +77,11 @@ describe( 'useResolveEntity', () => {
 	} );
 
 	it( 'fetches the record by id from a slug-prefixed uri', async () => {
-		apiFetch.mockResolvedValueOnce( { id: 42, slug: 'about-us', parent: 0 } );
+		apiFetch.mockResolvedValueOnce( {
+			id: 42,
+			slug: 'about-us',
+			parent: 0,
+		} );
 
 		const { result } = renderHook( () =>
 			useResolveEntity( 'about-us-42' )

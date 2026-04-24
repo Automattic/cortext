@@ -19,7 +19,9 @@ test.describe( 'Cortext shell', () => {
 	} ) => {
 		await admin.visitAdminPage( 'admin.php', 'page=cortext' );
 
-		await expect( page ).toHaveURL( /\/wp-admin\/admin\.php\?page=cortext$/ );
+		await expect( page ).toHaveURL(
+			/\/wp-admin\/admin\.php\?page=cortext$/
+		);
 
 		const root = page.locator( '#cortext-root' );
 		await expect( root ).toBeVisible();
@@ -53,9 +55,9 @@ test.describe( 'Cortext shell', () => {
 
 		try {
 			// Keep Playground's `playground_auto_login_already_happened` cookie
-		// intact so the `--login` mu-plugin doesn't silently log us back in
-		// as admin when WP auth cookies are cleared.
-		await page.context().clearCookies( { name: /^wordpress_/ } );
+			// intact so the `--login` mu-plugin doesn't silently log us back in
+			// as admin when WP auth cookies are cleared.
+			await page.context().clearCookies( { name: /^wordpress_/ } );
 			await page.request.post( '/wp-login.php', {
 				failOnStatusCode: true,
 				form: {
