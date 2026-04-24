@@ -116,7 +116,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 				array(
 					'post_type'   => Collection::POST_TYPE,
 					'post_title'  => $spec['title'],
-					'post_status' => 'publish',
+					'post_status' => 'private',
 				),
 				true
 			);
@@ -152,7 +152,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 				array(
 					'post_type'   => Field::POST_TYPE,
 					'post_title'  => $title,
-					'post_status' => 'publish',
+					'post_status' => 'private',
 				),
 				true
 			);
@@ -206,7 +206,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 				array(
 					'post_type'   => $entry_cpt,
 					'post_title'  => $entry['title'],
-					'post_status' => 'publish',
+					'post_status' => 'private',
 				),
 				true
 			);

@@ -65,7 +65,7 @@ export default function Sidebar() {
 	const { records: collections, isResolving: isResolvingCollections } =
 		useEntityRecords( 'postType', 'cortext_collection', {
 			per_page: 100,
-			status: 'publish',
+			status: [ 'draft', 'private', 'publish' ],
 			context: 'edit',
 		} );
 	const { saveEntityRecord, deleteEntityRecord } = useDispatch( 'core' );
