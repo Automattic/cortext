@@ -219,6 +219,7 @@ body.cortext-fullscreen {
 	&__loading,
 	&__empty {
 		display: flex;
+		flex-direction: column;
 		align-items: center;
 		justify-content: center;
 		color: $gray-700;

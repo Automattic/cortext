@@ -54,7 +54,6 @@ export default function CollectionTable( { slug = 'books' } ) {
 		<table
 			style={ {
 				borderCollapse: 'collapse',
-				width: '100%',
 				fontFamily: 'inherit',
 			} }
 		>
