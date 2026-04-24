@@ -14,7 +14,7 @@ Because it is still WordPress, Cortext picks up things Notion cannot: publishing
 
 ## How it works, in one paragraph
 
-Two post types handle storage: `cortext_page` for workspace documents, and `cortext_collection_{slug}` for collection rows (one dynamically-registered CPT per collection). A global taxonomy (internally `cortext_supertag`, final user-facing name TBD) attaches to every collection CPT, enabling cross-collection polymorphism inspired by Tana's super tags. Typed properties register as post meta with UUID-based keys. One REST field, `cortext_row_resolved_schema`, returns the effective property set for a given row (union of collection and supertag properties) and is the only contract clients read. A React shell mounts Gutenberg's `EditorProvider` alongside `@wordpress/dataviews` on a full-screen admin page.
+Two post types handle storage: `cortext_page` for workspace documents, and `crtxt_{slug}` for collection rows (one dynamically-registered CPT per collection; the abbreviated prefix fits WordPress's 20-character post type slug limit). A global taxonomy (internally `cortext_supertag`, final user-facing name TBD) attaches to every collection CPT, enabling cross-collection polymorphism inspired by Tana's super tags. Typed properties register as post meta with UUID-based keys. One REST field, `cortext_row_resolved_schema`, returns the effective property set for a given row (union of collection and supertag properties) and is the only contract clients read. A React shell mounts Gutenberg's `EditorProvider` alongside `@wordpress/dataviews` on a full-screen admin page.
 
 ## Docs
 

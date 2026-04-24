@@ -22,7 +22,8 @@ final class CollectionEntries {
 	 *
 	 * WordPress enforces a 20-character limit on post type slugs.
 	 * `cortext_collection_` (20 chars) leaves no room for the slug,
-	 * so we use this shorter prefix instead.
+	 * so we use `crtxt_` — a vowel-stripped abbreviation of "cortext"
+	 * that stays recognisable while leaving 14 characters for the slug.
 	 */
 	public const CPT_PREFIX  = 'crtxt_';
 	public const MAX_CPT_LEN = 20;

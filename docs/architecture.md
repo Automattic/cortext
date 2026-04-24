@@ -6,8 +6,8 @@ Nomenclature | WordPress primitive
 -|-
 Collection   | `cortext_collection` CPT
 Field        | `cortext_field` CPT
-Entry        | `cortext_collection_{$slug}` CPT
-Field value  | `cortext_collection_{$slug}` post meta
+Entry        | `crtxt_{$slug}` CPT
+Field value  | `crtxt_{$slug}` post meta
 
 ### Creating a new database
 
@@ -15,13 +15,13 @@ Field value  | `cortext_collection_{$slug}` post meta
 
 ```php
 $collection_id = wp_insert_post( 'cortext_collection', [ ... ] );
-register_post_type( 'cortext_collection_books, [ ... ] );
+register_post_type( 'crtxt_books', [ ... ] );
 ```
 
 - we add a new row
 
 ```php
-$book_id = wp_insert_post( 'cortext_collection_books', $data );
+$book_id = wp_insert_post( 'crtxt_books', $data );
 ```
 
 - we add a new column
@@ -31,8 +31,8 @@ $field_id = wp_insert_post( 'cortext_field', $field_details );
 add_post_meta( $field_id, 'type', 'text' );
 add_post_meta( $collection_id, 'fields', $field_id );
 
-$type = get_post_meta( $field_id, 'type' );
-register_post_meta( 'cortext_collection_books', "field-{$field_id}", [ $type, ... ] );
+$type = get_post_meta( $field_id, 'type', true );
+register_post_meta( 'crtxt_books', "field-{$field_id}", [ $type, ... ] );
 ```
 
 - we add a cell value
@@ -47,10 +47,10 @@ update_post_meta( $book_id, "field-{$field_id}", $value );
 $collection_object = get_posts( 'cortext_collection', [ 'slug' => 'book' ] );
 $collection_id = $collection->ID;
 
-$collection_items = get_posts( "cortext_collection_{$slug}" );
+$collection_items = get_posts( "crtxt_{$slug}" );
 
-$collection_fields_ids = get_post_meta( $collection_id, 'fields' );
-$collection_fields = get_posts( 'cortext_field', [ 'post_id__in' => $collection_fields_ids ] );
+$collection_fields_ids = get_post_meta( $collection_id, 'fields', false );
+$collection_fields = array_map( 'get_post', $collection_fields_ids );
 
 foreach ( $collection_items as $item ) {
     $row_fields = get_post_meta( $item->ID );
