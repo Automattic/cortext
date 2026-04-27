@@ -70,8 +70,11 @@ function mapField( field ) {
 // of `cortext_field` post IDs in display order. Fetch those records, then
 // map each to a DataViews field. Row meta keys are `field-<post_id>`.
 export default function useCollectionFields( collectionId ) {
-	const { record: collection, isResolving: collectionResolving } =
-		useEntityRecord( 'postType', 'cortext_collection', collectionId ?? 0 );
+	const {
+		record: collection,
+		isResolving: collectionResolving,
+		hasResolved: collectionResolved,
+	} = useEntityRecord( 'postType', 'cortext_collection', collectionId ?? 0 );
 
 	const fieldIds = useMemo( () => {
 		const raw = collection?.meta?.fields;
@@ -81,25 +84,28 @@ export default function useCollectionFields( collectionId ) {
 		return raw.map( ( id ) => Number( id ) ).filter( Boolean );
 	}, [ collection ] );
 
-	const { records: fieldRecords, isResolving: fieldsResolving } =
-		useEntityRecords(
-			'postType',
-			'cortext_field',
-			{
-				include: fieldIds,
-				per_page: 100,
-				orderby: 'include',
-				// `cortext_field` posts are stored as `private`; without an
-				// explicit `status` REST defaults to `publish` and returns
-				// zero rows.
-				status: [ 'draft', 'private', 'publish' ],
-				context: 'edit',
-			},
-			// Skip the resolver when there are no IDs to look up. Passing
-			// `undefined`/`{}` would fall through to a default empty query,
-			// which fetches every `cortext_field` in the system.
-			{ enabled: fieldIds.length > 0 }
-		);
+	const {
+		records: fieldRecords,
+		isResolving: fieldsResolving,
+		hasResolved: fieldsResolved,
+	} = useEntityRecords(
+		'postType',
+		'cortext_field',
+		{
+			include: fieldIds,
+			per_page: 100,
+			orderby: 'include',
+			// `cortext_field` posts are stored as `private`; without an
+			// explicit `status` REST defaults to `publish` and returns
+			// zero rows.
+			status: [ 'draft', 'private', 'publish' ],
+			context: 'edit',
+		},
+		// Skip the resolver when there are no IDs to look up. Passing
+		// `undefined`/`{}` would fall through to a default empty query,
+		// which fetches every `cortext_field` in the system.
+		{ enabled: fieldIds.length > 0 }
+	);
 
 	const fields = useMemo( () => {
 		if ( ! Array.isArray( fieldRecords ) ) {
@@ -115,6 +121,8 @@ export default function useCollectionFields( collectionId ) {
 		isResolving:
 			Boolean( collectionId ) &&
 			( collectionResolving ||
-				( fieldIds.length > 0 && fieldsResolving ) ),
+				! collectionResolved ||
+				( fieldIds.length > 0 &&
+					( fieldsResolving || ! fieldsResolved ) ) ),
 	};
 }
