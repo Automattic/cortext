@@ -26,6 +26,7 @@ export default function useCollectionRows( collectionSlug, view ) {
 		data: [],
 		paginationInfo: { totalItems: 0, totalPages: 0 },
 		isLoading: false,
+		error: null,
 	} );
 
 	const requestIdRef = useRef( 0 );
@@ -39,6 +40,7 @@ export default function useCollectionRows( collectionSlug, view ) {
 				data: [],
 				paginationInfo: { totalItems: 0, totalPages: 0 },
 				isLoading: false,
+				error: null,
 			} );
 			return undefined;
 		}
@@ -52,7 +54,7 @@ export default function useCollectionRows( collectionSlug, view ) {
 			buildQueryArgs( view )
 		);
 
-		setState( ( prev ) => ( { ...prev, isLoading: true } ) );
+		setState( ( prev ) => ( { ...prev, isLoading: true, error: null } ) );
 
 		apiFetch( { path, parse: false } )
 			.then( async ( response ) => {
@@ -70,9 +72,10 @@ export default function useCollectionRows( collectionSlug, view ) {
 					data: Array.isArray( rows ) ? rows : [],
 					paginationInfo: { totalItems, totalPages },
 					isLoading: false,
+					error: null,
 				} );
 			} )
-			.catch( () => {
+			.catch( ( error ) => {
 				if ( requestId !== requestIdRef.current ) {
 					return;
 				}
@@ -80,6 +83,7 @@ export default function useCollectionRows( collectionSlug, view ) {
 					data: [],
 					paginationInfo: { totalItems: 0, totalPages: 0 },
 					isLoading: false,
+					error,
 				} );
 			} );
 

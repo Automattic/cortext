@@ -1,45 +1,176 @@
 import { __ } from '@wordpress/i18n';
-import { useBlockProps } from '@wordpress/block-editor';
-import { Placeholder, SelectControl, Spinner } from '@wordpress/components';
+import { BlockControls, useBlockProps } from '@wordpress/block-editor';
+import {
+	Button,
+	Dropdown,
+	Notice,
+	Placeholder,
+	Spinner,
+	TextControl,
+	ToolbarButton,
+} from '@wordpress/components';
 import { useEntityRecords } from '@wordpress/core-data';
-import { useCallback } from '@wordpress/element';
+import { useDispatch } from '@wordpress/data';
+import { useCallback, useState } from '@wordpress/element';
+import apiFetch from '@wordpress/api-fetch';
+import { replace } from '@wordpress/icons';
 
 import CollectionDataViews from '../../components/CollectionDataViews';
+import { COLLECTION_QUERY } from '../../collections';
 
-function CollectionPicker( { onSelect } ) {
-	const { records, isResolving } = useEntityRecords(
+function createDefaultView() {
+	return {
+		type: 'table',
+		fields: [],
+		sort: null,
+		filters: [],
+		perPage: 25,
+		page: 1,
+		search: '',
+		layout: {},
+	};
+}
+
+function CollectionPicker( { selectedId = '', onSelect } ) {
+	const { records, isResolving, hasResolved } = useEntityRecords(
 		'postType',
 		'crtxt_collection',
-		{
-			per_page: 100,
-			context: 'edit',
-			status: [ 'draft', 'private', 'publish' ],
-		}
+		COLLECTION_QUERY
 	);
 
-	const options = [
-		{ value: '', label: __( 'Select a collection…', 'cortext' ) },
-		...( records ?? [] ).map( ( c ) => ( {
-			value: String( c.id ),
-			label: c.title?.rendered || c.title?.raw || `#${ c.id }`,
-		} ) ),
-	];
+	const hasCollections = Boolean( records?.length );
+
+	if ( isResolving && ! hasCollections ) {
+		return <Spinner />;
+	}
+
+	if ( hasResolved && ! hasCollections ) {
+		return (
+			<p className="cortext-data-view-picker__empty">
+				{ __( 'No collections yet.', 'cortext' ) }
+			</p>
+		);
+	}
 
 	return (
-		<SelectControl
-			label={ __( 'Collection', 'cortext' ) }
-			value=""
-			options={ options }
-			onChange={ ( value ) => {
-				const id = parseInt( value, 10 );
-				if ( id ) {
-					onSelect( id );
-				}
-			} }
-			disabled={ isResolving }
-			__next40pxDefaultSize
-			__nextHasNoMarginBottom
-		/>
+		<div className="cortext-collection-chooser">
+			{ /* TODO: Add search once collection lists are long enough to make scanning noisy. */ }
+			{ ( records ?? [] ).map( ( collection ) => {
+				const title =
+					collection.title?.rendered ||
+					collection.title?.raw ||
+					`#${ collection.id }`;
+				const isSelected =
+					selectedId && Number( selectedId ) === collection.id;
+
+				return (
+					<Button
+						key={ collection.id }
+						className="cortext-collection-chooser__item"
+						variant={ isSelected ? 'secondary' : 'tertiary' }
+						isPressed={ isSelected }
+						onClick={ () => onSelect( collection.id ) }
+					>
+						{ title }
+					</Button>
+				);
+			} ) }
+		</div>
+	);
+}
+
+function CollectionCreator( { onCreate } ) {
+	const [ title, setTitle ] = useState( '' );
+	const [ isSaving, setIsSaving ] = useState( false );
+	const [ error, setError ] = useState( '' );
+	const { invalidateResolution } = useDispatch( 'core' );
+	const canCreate = title.trim() && ! isSaving;
+
+	const createCollection = async () => {
+		if ( ! canCreate ) {
+			return;
+		}
+
+		setIsSaving( true );
+		setError( '' );
+
+		try {
+			const collection = await apiFetch( {
+				path: '/cortext/v1/collections',
+				method: 'POST',
+				data: {
+					title: title.trim(),
+				},
+			} );
+			invalidateResolution( 'getEntityRecords', [
+				'postType',
+				'crtxt_collection',
+				COLLECTION_QUERY,
+			] );
+			onCreate( collection );
+		} catch ( apiError ) {
+			setError(
+				apiError?.message ||
+					__( 'Collection could not be created.', 'cortext' )
+			);
+		} finally {
+			setIsSaving( false );
+		}
+	};
+
+	return (
+		<div className="cortext-data-view-create">
+			{ error ? (
+				<Notice status="error" isDismissible={ false }>
+					{ error }
+				</Notice>
+			) : null }
+			<TextControl
+				label={ __( 'Name', 'cortext' ) }
+				value={ title }
+				onChange={ setTitle }
+				__next40pxDefaultSize
+				__nextHasNoMarginBottom
+			/>
+			<Button
+				variant="primary"
+				onClick={ createCollection }
+				isBusy={ isSaving }
+				disabled={ ! canCreate }
+			>
+				{ __( 'Create collection', 'cortext' ) }
+			</Button>
+		</div>
+	);
+}
+
+function CollectionToolbarControl( { collectionId, onSelect } ) {
+	return (
+		<BlockControls group="other">
+			<Dropdown
+				contentClassName="cortext-data-view-toolbar-popover"
+				popoverProps={ { placement: 'bottom-start' } }
+				renderToggle={ ( { isOpen, onToggle } ) => (
+					<ToolbarButton
+						icon={ replace }
+						label={ __( 'Change collection', 'cortext' ) }
+						onClick={ onToggle }
+						isPressed={ isOpen }
+					/>
+				) }
+				renderContent={ ( { onClose } ) => (
+					<div className="cortext-data-view-toolbar-popover__content">
+						<CollectionPicker
+							selectedId={ collectionId }
+							onSelect={ ( id ) => {
+								onSelect( id );
+								onClose();
+							} }
+						/>
+					</div>
+				) }
+			/>
+		</BlockControls>
 	);
 }
 
@@ -49,6 +180,12 @@ export default function Edit( { attributes, setAttributes } ) {
 
 	const setView = useCallback(
 		( next ) => setAttributes( { view: next } ),
+		[ setAttributes ]
+	);
+
+	const selectCollection = useCallback(
+		( id ) =>
+			setAttributes( { collectionId: id, view: createDefaultView() } ),
 		[ setAttributes ]
 	);
 
@@ -62,11 +199,14 @@ export default function Edit( { attributes, setAttributes } ) {
 						'cortext'
 					) }
 				>
-					<CollectionPicker
-						onSelect={ ( id ) =>
-							setAttributes( { collectionId: id } )
-						}
-					/>
+					<CollectionPicker onSelect={ selectCollection } />
+					<div className="cortext-data-view-placeholder__create">
+						<CollectionCreator
+							onCreate={ ( collection ) =>
+								selectCollection( collection.id )
+							}
+						/>
+					</div>
 				</Placeholder>
 			</div>
 		);
@@ -74,11 +214,35 @@ export default function Edit( { attributes, setAttributes } ) {
 
 	return (
 		<div { ...blockProps }>
+			<CollectionToolbarControl
+				collectionId={ collectionId }
+				onSelect={ ( id ) => {
+					if ( id !== collectionId ) {
+						selectCollection( id );
+					}
+				} }
+			/>
 			<CollectionDataViews
 				collectionId={ collectionId }
 				view={ view }
 				onChangeView={ setView }
 				loading={ <Spinner /> }
+				invalid={
+					<Notice status="warning" isDismissible={ false }>
+						{ __(
+							'This collection is no longer available. Choose another collection.',
+							'cortext'
+						) }
+					</Notice>
+				}
+				error={
+					<Notice status="error" isDismissible={ false }>
+						{ __(
+							'Collection rows could not be loaded.',
+							'cortext'
+						) }
+					</Notice>
+				}
 			/>
 		</div>
 	);

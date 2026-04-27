@@ -38,6 +38,7 @@ import {
 	parseIdFromUri,
 	parseSplatUri,
 } from '../router/useResolveEntity';
+import { COLLECTION_QUERY } from '../collections';
 
 const POST_TYPE = 'crtxt_page';
 
@@ -67,11 +68,7 @@ export default function Sidebar() {
 	} );
 
 	const { records: collections, isResolving: isResolvingCollections } =
-		useEntityRecords( 'postType', 'crtxt_collection', {
-			per_page: 100,
-			status: [ 'draft', 'private', 'publish' ],
-			context: 'edit',
-		} );
+		useEntityRecords( 'postType', 'crtxt_collection', COLLECTION_QUERY );
 	const { saveEntityRecord, deleteEntityRecord } = useDispatch( 'core' );
 	const pages = useMemo( () => records ?? [], [ records ] );
 	const navigate = useNavigate();
