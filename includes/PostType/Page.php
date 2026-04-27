@@ -1,6 +1,6 @@
 <?php
 /**
- * Registers the `cortext_page` custom post type.
+ * Registers the `crtxt_page` custom post type.
  *
  * @package Cortext
  */
@@ -11,7 +11,7 @@ namespace Cortext\PostType;
 
 final class Page {
 
-	public const POST_TYPE = 'cortext_page';
+	public const POST_TYPE = 'crtxt_page';
 
 	public function register(): void {
 		add_action( 'init', array( $this, 'register_post_type' ) );
@@ -42,9 +42,9 @@ final class Page {
 				'show_in_menu'          => false,
 				'show_in_rest'          => true,
 				// Matches useResolveEntity.js's `/wp/v2/${POST_TYPE}s?...` URL shape; core
-				// defaults rest_base to the CPT slug (`cortext_page`), which would 404 the
+				// defaults rest_base to the CPT slug (`crtxt_page`), which would 404 the
 				// segment-walk resolver. Keep explicit.
-				'rest_base'             => 'cortext_pages',
+				'rest_base'             => 'crtxt_pages',
 				'rest_controller_class' => 'WP_REST_Posts_Controller',
 				'has_archive'           => false,
 				'hierarchical'          => true,

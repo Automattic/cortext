@@ -27,7 +27,7 @@ extra network calls.
 ```
 
 `slug` is derived from `title` (lowercase, spaces → hyphens). It is used as the CPT
-suffix in WordPress (`cortext_collection_{slug}`).
+suffix in WordPress (`crtxt_{slug}`).
 
 ## FieldObject
 

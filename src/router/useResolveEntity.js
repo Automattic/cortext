@@ -6,7 +6,7 @@ import apiFetch from '@wordpress/api-fetch';
 // cosmetic: it keeps the URL human-readable without being authoritative, so
 // renaming a page can never break an existing link, and blank drafts (which
 // have no slug yet) remain addressable via their id alone.
-const POST_TYPE = 'cortext_page';
+const POST_TYPE = 'crtxt_page';
 
 // Pulls the trailing `<digits>` — optionally preceded by `-` — out of a URI.
 // Matches both `foo-42` and bare `42`. Returns null for anything else so
@@ -74,7 +74,7 @@ export function useResolveEntity( uri ) {
 	return state;
 }
 
-const COLLECTION_TYPE = 'cortext_collection';
+const COLLECTION_TYPE = 'crtxt_collection';
 
 export function useResolveCollection( id ) {
 	const [ state, setState ] = useState( {

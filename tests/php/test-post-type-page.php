@@ -15,7 +15,7 @@ use WorDBless\BaseTestCase;
 final class Test_Post_Type_Page extends BaseTestCase {
 
 	public function test_post_type_constant_matches_expected_slug(): void {
-		$this->assertSame( 'cortext_page', Page::POST_TYPE );
+		$this->assertSame( 'crtxt_page', Page::POST_TYPE );
 	}
 
 	public function test_register_hooks_init_action(): void {
@@ -29,7 +29,7 @@ final class Test_Post_Type_Page extends BaseTestCase {
 		);
 	}
 
-	public function test_register_post_type_registers_cortext_page(): void {
+	public function test_register_post_type_registers_crtxt_page(): void {
 		( new Page() )->register_post_type();
 
 		$this->assertTrue( post_type_exists( Page::POST_TYPE ) );
@@ -41,9 +41,9 @@ final class Test_Post_Type_Page extends BaseTestCase {
 		$object = get_post_type_object( Page::POST_TYPE );
 		$this->assertNotNull( $object );
 
-		$this->assertTrue( $object->hierarchical, 'cortext_page must be hierarchical for the page tree.' );
-		$this->assertTrue( $object->show_in_rest, 'cortext_page must be show_in_rest for @wordpress/core-data.' );
-		$this->assertSame( 'cortext_pages', $object->rest_base, 'rest_base must match the JS resolver URL shape.' );
+		$this->assertTrue( $object->hierarchical, 'crtxt_page must be hierarchical for the page tree.' );
+		$this->assertTrue( $object->show_in_rest, 'crtxt_page must be show_in_rest for @wordpress/core-data.' );
+		$this->assertSame( 'crtxt_pages', $object->rest_base, 'rest_base must match the JS resolver URL shape.' );
 		$this->assertFalse( $object->public );
 		$this->assertTrue( $object->show_ui, 'show_ui stays on so Admin\Screen\'s submenu can link to the core list table as an escape hatch.' );
 		$this->assertFalse( $object->show_in_menu, 'show_in_menu is false because Admin\Screen owns the top-level menu.' );

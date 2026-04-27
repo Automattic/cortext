@@ -67,14 +67,14 @@ function mapField( field ) {
 }
 
 // Reads a collection's fields from main's contract: `meta.fields` is an array
-// of `cortext_field` post IDs in display order. Fetch those records, then
+// of `crtxt_field` post IDs in display order. Fetch those records, then
 // map each to a DataViews field. Row meta keys are `field-<post_id>`.
 export default function useCollectionFields( collectionId ) {
 	const {
 		record: collection,
 		isResolving: collectionResolving,
 		hasResolved: collectionResolved,
-	} = useEntityRecord( 'postType', 'cortext_collection', collectionId ?? 0 );
+	} = useEntityRecord( 'postType', 'crtxt_collection', collectionId ?? 0 );
 
 	const fieldIds = useMemo( () => {
 		const raw = collection?.meta?.fields;
@@ -90,12 +90,12 @@ export default function useCollectionFields( collectionId ) {
 		hasResolved: fieldsResolved,
 	} = useEntityRecords(
 		'postType',
-		'cortext_field',
+		'crtxt_field',
 		{
 			include: fieldIds,
 			per_page: 100,
 			orderby: 'include',
-			// `cortext_field` posts are stored as `private`; without an
+			// `crtxt_field` posts are stored as `private`; without an
 			// explicit `status` REST defaults to `publish` and returns
 			// zero rows.
 			status: [ 'draft', 'private', 'publish' ],
@@ -103,7 +103,7 @@ export default function useCollectionFields( collectionId ) {
 		},
 		// Skip the resolver when there are no IDs to look up. Passing
 		// `undefined`/`{}` would fall through to a default empty query,
-		// which fetches every `cortext_field` in the system.
+		// which fetches every `crtxt_field` in the system.
 		{ enabled: fieldIds.length > 0 }
 	);
 

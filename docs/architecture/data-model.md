@@ -4,9 +4,9 @@ The parent-level [architecture.md](../architecture.md) is the authoritative sket
 
 ## Target summary
 
-- `cortext_page` CPT for hierarchical workspace documents.
-- `cortext_collection` CPT, one post per collection definition. For each collection, a row CPT is dynamically registered as `crtxt_{slug}` (`crtxt_` is a vowel-stripped abbreviation of "cortext", chosen because WordPress's 20-character post type slug limit rules out the full `cortext_collection_` prefix).
-- `cortext_field` CPT for field definitions, assigned to a collection via post meta and surfaced on each row CPT as dynamic meta keys.
+- `crtxt_page` CPT for hierarchical workspace documents.
+- `crtxt_collection` CPT, one post per collection definition. For each collection, a row CPT is dynamically registered as `crtxt_{slug}` (`crtxt_` is the shared data prefix and leaves room for the collection slug under WordPress's 20-character post type limit).
+- `crtxt_field` CPT for field definitions, assigned to a collection via post meta and surfaced on each row CPT as dynamic meta keys.
 - `cortext_supertag` global taxonomy attached to every collection CPT, so terms can cross collection boundaries.
 
 ## Single client contract
@@ -23,9 +23,9 @@ Field identity is stable, but labels are not. Meta keys are UUIDs rather than sl
 
 Registered CPTs:
 
-- `cortext_page` — hierarchical workspace documents.
-- `cortext_collection` — collection definitions, with `notion_id` and `slug` meta. Fields are attached via multi-value `fields` meta (each value is a `cortext_field` post ID).
-- `cortext_field` — field definitions, with `type`, `options`, `number_format`, `expression`, and `related_collection_id` meta.
+- `crtxt_page` — hierarchical workspace documents.
+- `crtxt_collection` — collection definitions, with `notion_id` and `slug` meta. Fields are attached via multi-value `fields` meta (each value is a `crtxt_field` post ID).
+- `crtxt_field` — field definitions, with `type`, `options`, `number_format`, `expression`, and `related_collection_id` meta.
 - `crtxt_{slug}` — dynamically registered at `init` priority 20, one per published collection. Entry posts carry `notion_id` meta and `field-{$field_id}` meta per attached field.
 
 Not yet registered: `cortext_supertag` taxonomy, `cortext_row_resolved_schema` REST field.
@@ -40,8 +40,8 @@ A future importer should consume the intermediate JSON format defined in [data-m
 
 Relations between databases require the related entry's WP post ID to already exist. Always import in this order:
 
-1. For each database: create the `cortext_collection` post, then call `CollectionEntries::register_for_collection()` so the entry CPT is available in the same request.
-2. For each database: create `cortext_field` posts, attach to collection via `add_post_meta( $collection_id, 'fields', $field_id )`, and register their entry-level meta.
+1. For each database: create the `crtxt_collection` post, then call `CollectionEntries::register_for_collection()` so the entry CPT is available in the same request.
+2. For each database: create `crtxt_field` posts, attach to collection via `add_post_meta( $collection_id, 'fields', $field_id )`, and register their entry-level meta.
 3. Insert all entries **without** relation values. Build a lookup map `notion_entry_id → wp_post_id`.
 4. Resolve and write relation values using the lookup map.
 

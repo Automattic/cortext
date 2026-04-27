@@ -93,7 +93,7 @@ describe( 'useResolveEntity', () => {
 
 		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
 		expect( apiFetch.mock.calls[ 0 ][ 0 ].path ).toMatch(
-			/\/wp\/v2\/cortext_pages\/42(?:\?|$)/
+			/\/wp\/v2\/crtxt_pages\/42(?:\?|$)/
 		);
 		expect( result.current ).toEqual( {
 			entity: { id: 42, slug: 'about-us', parent: 0 },
@@ -112,7 +112,7 @@ describe( 'useResolveEntity', () => {
 		);
 
 		expect( apiFetch.mock.calls[ 0 ][ 0 ].path ).toMatch(
-			/\/wp\/v2\/cortext_pages\/7(?:\?|$)/
+			/\/wp\/v2\/crtxt_pages\/7(?:\?|$)/
 		);
 		expect( result.current.entity ).toEqual( {
 			id: 7,

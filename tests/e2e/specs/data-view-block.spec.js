@@ -25,7 +25,7 @@ async function createCollectionFixture( requestUtils ) {
 
 	const collection = await requestUtils.rest( {
 		method: 'POST',
-		path: '/wp/v2/cortext_collections',
+		path: '/wp/v2/crtxt_collections',
 		data: {
 			title: `E2E Books ${ suffix }`,
 			status: 'private',
@@ -35,7 +35,7 @@ async function createCollectionFixture( requestUtils ) {
 
 	const field = await requestUtils.rest( {
 		method: 'POST',
-		path: '/wp/v2/cortext_fields',
+		path: '/wp/v2/crtxt_fields',
 		data: {
 			title: 'Author',
 			status: 'private',
@@ -45,7 +45,7 @@ async function createCollectionFixture( requestUtils ) {
 
 	await requestUtils.rest( {
 		method: 'POST',
-		path: `/wp/v2/cortext_collections/${ collection.id }`,
+		path: `/wp/v2/crtxt_collections/${ collection.id }`,
 		data: {
 			meta: { fields: [ String( field.id ) ] },
 		},
@@ -100,7 +100,7 @@ test.describe( 'Collection view block', () => {
 
 			fixture.page = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/cortext_pages',
+				path: '/wp/v2/crtxt_pages',
 				data: {
 					title: 'DataView block test page',
 					status: 'private',
@@ -140,7 +140,7 @@ test.describe( 'Collection view block', () => {
 			);
 
 			const saved = await requestUtils.rest( {
-				path: `/wp/v2/cortext_pages/${ fixture.page.id }`,
+				path: `/wp/v2/crtxt_pages/${ fixture.page.id }`,
 				params: { context: 'edit' },
 			} );
 			expect( saved.content.raw ).toContain( 'wp:cortext/data-view' );
@@ -166,16 +166,16 @@ test.describe( 'Collection view block', () => {
 			);
 			await deleteIfCreated(
 				requestUtils,
-				fixture.page && `/wp/v2/cortext_pages/${ fixture.page.id }`
+				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
-				fixture.field && `/wp/v2/cortext_fields/${ fixture.field.id }`
+				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/cortext_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
 			);
 		}
 	} );

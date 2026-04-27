@@ -2,9 +2,9 @@
 /**
  * Dynamically registers one CPT per published collection.
  *
- * Each `cortext_collection` post produces a `crtxt_{slug}` post type
+ * Each `crtxt_collection` post produces a `crtxt_{slug}` post type
  * whose entries are the rows of that collection. Field-level post meta
- * is registered for each attached `cortext_field`.
+ * is registered for each attached `crtxt_field`.
  *
  * @package Cortext
  */
@@ -20,10 +20,9 @@ final class CollectionEntries {
 	/**
 	 * Prefix for dynamically registered entry CPTs.
 	 *
-	 * WordPress enforces a 20-character limit on post type slugs.
-	 * `cortext_collection_` (20 chars) leaves no room for the slug,
-	 * so we use `crtxt_` — a vowel-stripped abbreviation of "cortext"
-	 * that stays recognisable while leaving 14 characters for the slug.
+	 * WordPress enforces a 20-character limit on post type slugs, so dynamic
+	 * row CPTs use the shared `crtxt_` prefix and leave 14 characters for the
+	 * collection slug.
 	 */
 	public const CPT_PREFIX  = 'crtxt_';
 	public const MAX_CPT_LEN = 20;
