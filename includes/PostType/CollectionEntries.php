@@ -2,9 +2,9 @@
 /**
  * Dynamically registers one CPT per published collection.
  *
- * Each `cortext_collection` post produces a `crtxt_{slug}` post type
+ * Each `crtxt_collection` post produces a `crtxt_{slug}` post type
  * whose entries are the rows of that collection. Field-level post meta
- * is registered for each attached `cortext_field`.
+ * is registered for each attached `crtxt_field`.
  *
  * @package Cortext
  */
@@ -20,13 +20,20 @@ final class CollectionEntries {
 	/**
 	 * Prefix for dynamically registered entry CPTs.
 	 *
-	 * WordPress enforces a 20-character limit on post type slugs.
-	 * `cortext_collection_` (20 chars) leaves no room for the slug,
-	 * so we use `crtxt_` — a vowel-stripped abbreviation of "cortext"
-	 * that stays recognisable while leaving 14 characters for the slug.
+	 * WordPress enforces a 20-character limit on post type slugs, so dynamic
+	 * row CPTs use the shared `crtxt_` prefix and leave 14 characters for the
+	 * collection slug.
 	 */
-	public const CPT_PREFIX  = 'crtxt_';
-	public const MAX_CPT_LEN = 20;
+	public const CPT_PREFIX      = 'crtxt_';
+	public const MAX_CPT_LEN     = 20;
+	private const RESERVED_SLUGS = array(
+		'collection',
+		'collections',
+		'field',
+		'fields',
+		'page',
+		'pages',
+	);
 
 	public function register(): void {
 		add_action( 'init', array( $this, 'register_all' ), 20 );
@@ -49,6 +56,21 @@ final class CollectionEntries {
 	public function register_for_collection( WP_Post $collection ): void {
 		$slug = get_post_meta( $collection->ID, 'slug', true );
 		if ( ! $slug ) {
+			return;
+		}
+
+		if ( in_array( $slug, self::RESERVED_SLUGS, true ) ) {
+			_doing_it_wrong(
+				__METHOD__,
+				esc_html(
+					sprintf(
+						/* translators: %s: collection slug */
+						__( 'Collection slug "%s" is reserved and was not registered.', 'cortext' ),
+						$slug
+					)
+				),
+				'0.0.1'
+			);
 			return;
 		}
 

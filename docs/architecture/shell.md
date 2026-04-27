@@ -37,4 +37,4 @@ The pages tree in `src/components/Sidebar.js` uses `@dnd-kit` for drag-and-drop 
 
 ## Current scope
 
-The canvas is wired to core `page` posts as a stand-in for `cortext_page` while the target data model lands. Collection CPTs and the supertag taxonomy are not registered yet. See [architecture.md](../architecture.md) for the intended storage sketch and [data-model.md](./data-model.md) for the REST contract.
+The canvas is wired to `crtxt_page`. Collection definition, field definition, and dynamic row CPTs are registered; the collection table in the empty state is still a temporary demo surface. The supertag taxonomy and resolved row-schema REST field are not registered yet. See [architecture.md](../architecture.md) for the storage sketch and [data-model.md](./data-model.md) for the REST contract.

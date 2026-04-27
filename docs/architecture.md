@@ -4,8 +4,8 @@
 
 Nomenclature | WordPress primitive
 -|-
-Collection   | `cortext_collection` CPT
-Field        | `cortext_field` CPT
+Collection   | `crtxt_collection` CPT
+Field        | `crtxt_field` CPT
 Entry        | `crtxt_{$slug}` CPT
 Field value  | `crtxt_{$slug}` post meta
 
@@ -14,7 +14,7 @@ Field value  | `crtxt_{$slug}` post meta
 - we create a new database
 
 ```php
-$collection_id = wp_insert_post( 'cortext_collection', [ ... ] );
+$collection_id = wp_insert_post( 'crtxt_collection', [ ... ] );
 register_post_type( 'crtxt_books', [ ... ] );
 ```
 
@@ -27,7 +27,7 @@ $book_id = wp_insert_post( 'crtxt_books', $data );
 - we add a new column
 
 ```php
-$field_id = wp_insert_post( 'cortext_field', $field_details );
+$field_id = wp_insert_post( 'crtxt_field', $field_details );
 add_post_meta( $field_id, 'type', 'text' );
 add_post_meta( $collection_id, 'fields', $field_id );
 
@@ -44,7 +44,7 @@ update_post_meta( $book_id, "field-{$field_id}", $value );
 ### Loading a collection on the client
 
 ```php
-$collection_object = get_posts( 'cortext_collection', [ 'slug' => 'book' ] );
+$collection_object = get_posts( 'crtxt_collection', [ 'slug' => 'book' ] );
 $collection_id = $collection->ID;
 
 $collection_items = get_posts( "crtxt_{$slug}" );

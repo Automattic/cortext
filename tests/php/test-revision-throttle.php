@@ -15,7 +15,7 @@ use WP_Post;
 
 final class Test_Revision_Throttle extends BaseTestCase {
 
-	private const POST_TYPE = 'cortext_page';
+	private const POST_TYPE = 'crtxt_page';
 
 	private function make_post( string $post_type ): WP_Post {
 		return new WP_Post(
@@ -61,7 +61,7 @@ final class Test_Revision_Throttle extends BaseTestCase {
 		$this->assertFalse( $throttle->throttle_revision( false, $revision, $post ) );
 	}
 
-	public function test_throttle_suppresses_cortext_page_within_interval_window(): void {
+	public function test_throttle_suppresses_crtxt_page_within_interval_window(): void {
 		$throttle = new RevisionThrottle();
 		$post     = $this->make_post( self::POST_TYPE );
 		$revision = $this->make_revision( 60 );
@@ -117,7 +117,7 @@ final class Test_Revision_Throttle extends BaseTestCase {
 		$this->assertSame( -1, $throttle->cap_revisions( -1, $post ) );
 	}
 
-	public function test_cap_revisions_caps_cortext_page_regardless_of_incoming_value(): void {
+	public function test_cap_revisions_caps_crtxt_page_regardless_of_incoming_value(): void {
 		$throttle = new RevisionThrottle();
 		$post     = $this->make_post( self::POST_TYPE );
 

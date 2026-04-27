@@ -1,6 +1,6 @@
 <?php
 /**
- * Registers the `cortext_field` custom post type.
+ * Registers the `crtxt_field` custom post type.
  *
  * @package Cortext
  */
@@ -11,7 +11,7 @@ namespace Cortext\PostType;
 
 final class Field {
 
-	public const POST_TYPE = 'cortext_field';
+	public const POST_TYPE = 'crtxt_field';
 
 	public function register(): void {
 		add_action( 'init', array( $this, 'register_post_type' ) );
@@ -37,7 +37,7 @@ final class Field {
 				'show_ui'            => true,
 				'show_in_menu'       => false,
 				'show_in_rest'       => true,
-				'rest_base'          => 'cortext_fields',
+				'rest_base'          => 'crtxt_fields',
 				'has_archive'        => false,
 				'hierarchical'       => false,
 				'supports'           => array( 'title', 'custom-fields' ),

@@ -173,6 +173,44 @@ final class Test_Collection_Entries extends BaseTestCase {
 		);
 	}
 
+	public function test_rejects_reserved_static_cpt_slug(): void {
+		$collection_id = wp_insert_post(
+			array(
+				'post_type'   => Collection::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Reserved',
+				'meta_input'  => array( 'slug' => 'page' ),
+			)
+		);
+
+		$collection = get_post( $collection_id );
+		( new CollectionEntries() )->register_for_collection( $collection );
+
+		$this->assertFalse(
+			post_type_exists( 'crtxt_page' ),
+			'Reserved slugs must not produce dynamic CPTs that collide with static CPTs.'
+		);
+	}
+
+	public function test_rejects_reserved_static_rest_base_slug(): void {
+		$collection_id = wp_insert_post(
+			array(
+				'post_type'   => Collection::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Reserved Rest Base',
+				'meta_input'  => array( 'slug' => 'pages' ),
+			)
+		);
+
+		$collection = get_post( $collection_id );
+		( new CollectionEntries() )->register_for_collection( $collection );
+
+		$this->assertFalse(
+			post_type_exists( 'crtxt_pages' ),
+			'Reserved slugs must not produce dynamic CPTs that collide with static REST bases.'
+		);
+	}
+
 	public function test_accepts_slug_at_max_length(): void {
 		$max_slug_len = CollectionEntries::MAX_CPT_LEN - strlen( CollectionEntries::CPT_PREFIX );
 		$max_slug     = str_repeat( 'b', $max_slug_len );

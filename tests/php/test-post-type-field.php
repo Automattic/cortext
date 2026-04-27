@@ -15,7 +15,7 @@ use WorDBless\BaseTestCase;
 final class Test_Post_Type_Field extends BaseTestCase {
 
 	public function test_post_type_constant_matches_expected_slug(): void {
-		$this->assertSame( 'cortext_field', Field::POST_TYPE );
+		$this->assertSame( 'crtxt_field', Field::POST_TYPE );
 	}
 
 	public function test_register_hooks_init_action(): void {
@@ -29,7 +29,7 @@ final class Test_Post_Type_Field extends BaseTestCase {
 		);
 	}
 
-	public function test_register_post_type_registers_cortext_field(): void {
+	public function test_register_post_type_registers_crtxt_field(): void {
 		( new Field() )->register_post_type();
 
 		$this->assertTrue( post_type_exists( Field::POST_TYPE ) );
@@ -43,7 +43,7 @@ final class Test_Post_Type_Field extends BaseTestCase {
 
 		$this->assertFalse( $object->hierarchical );
 		$this->assertTrue( $object->show_in_rest );
-		$this->assertSame( 'cortext_fields', $object->rest_base );
+		$this->assertSame( 'crtxt_fields', $object->rest_base );
 		$this->assertFalse( $object->public );
 		$this->assertTrue( $object->show_ui );
 		$this->assertFalse( $object->show_in_menu );

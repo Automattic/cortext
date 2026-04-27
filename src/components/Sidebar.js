@@ -39,7 +39,7 @@ import {
 	parseSplatUri,
 } from '../router/useResolveEntity';
 
-const POST_TYPE = 'cortext_page';
+const POST_TYPE = 'crtxt_page';
 
 const AUTO_EXPAND_DELAY = 700;
 
@@ -67,7 +67,7 @@ export default function Sidebar() {
 	} );
 
 	const { records: collections, isResolving: isResolvingCollections } =
-		useEntityRecords( 'postType', 'cortext_collection', {
+		useEntityRecords( 'postType', 'crtxt_collection', {
 			per_page: 100,
 			status: [ 'draft', 'private', 'publish' ],
 			context: 'edit',

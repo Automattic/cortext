@@ -1,6 +1,6 @@
 <?php
 /**
- * Registers the `cortext_collection` custom post type.
+ * Registers the `crtxt_collection` custom post type.
  *
  * @package Cortext
  */
@@ -11,7 +11,7 @@ namespace Cortext\PostType;
 
 final class Collection {
 
-	public const POST_TYPE = 'cortext_collection';
+	public const POST_TYPE = 'crtxt_collection';
 
 	public function register(): void {
 		add_action( 'init', array( $this, 'register_post_type' ) );
@@ -37,7 +37,7 @@ final class Collection {
 				'show_ui'            => true,
 				'show_in_menu'       => false,
 				'show_in_rest'       => true,
-				'rest_base'          => 'cortext_collections',
+				'rest_base'          => 'crtxt_collections',
 				'has_archive'        => false,
 				'hierarchical'       => false,
 				'supports'           => array( 'title', 'custom-fields' ),

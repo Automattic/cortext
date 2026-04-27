@@ -15,7 +15,7 @@ use WorDBless\BaseTestCase;
 final class Test_Post_Type_Collection extends BaseTestCase {
 
 	public function test_post_type_constant_matches_expected_slug(): void {
-		$this->assertSame( 'cortext_collection', Collection::POST_TYPE );
+		$this->assertSame( 'crtxt_collection', Collection::POST_TYPE );
 	}
 
 	public function test_register_hooks_init_action(): void {
@@ -29,7 +29,7 @@ final class Test_Post_Type_Collection extends BaseTestCase {
 		);
 	}
 
-	public function test_register_post_type_registers_cortext_collection(): void {
+	public function test_register_post_type_registers_crtxt_collection(): void {
 		( new Collection() )->register_post_type();
 
 		$this->assertTrue( post_type_exists( Collection::POST_TYPE ) );
@@ -41,9 +41,9 @@ final class Test_Post_Type_Collection extends BaseTestCase {
 		$object = get_post_type_object( Collection::POST_TYPE );
 		$this->assertNotNull( $object );
 
-		$this->assertFalse( $object->hierarchical, 'cortext_collection is not hierarchical.' );
-		$this->assertTrue( $object->show_in_rest, 'cortext_collection must be show_in_rest for @wordpress/core-data.' );
-		$this->assertSame( 'cortext_collections', $object->rest_base );
+		$this->assertFalse( $object->hierarchical, 'crtxt_collection is not hierarchical.' );
+		$this->assertTrue( $object->show_in_rest, 'crtxt_collection must be show_in_rest for @wordpress/core-data.' );
+		$this->assertSame( 'crtxt_collections', $object->rest_base );
 		$this->assertFalse( $object->public );
 		$this->assertTrue( $object->show_ui );
 		$this->assertFalse( $object->show_in_menu );

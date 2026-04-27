@@ -9,7 +9,7 @@ import CollectionDataViews from '../../components/CollectionDataViews';
 function CollectionPicker( { onSelect } ) {
 	const { records, isResolving } = useEntityRecords(
 		'postType',
-		'cortext_collection',
+		'crtxt_collection',
 		{
 			per_page: 100,
 			context: 'edit',
