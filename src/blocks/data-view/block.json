@@ -1,0 +1,34 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "cortext/data-view",
+	"title": "Collection view",
+	"category": "widgets",
+	"icon": "database",
+	"description": "Displays a Cortext collection's rows as a table, grid, or list.",
+	"textdomain": "cortext",
+	"supports": {
+		"html": false,
+		"reusable": false,
+		"multiple": true,
+		"inserter": true
+	},
+	"attributes": {
+		"collectionId": {
+			"type": "number"
+		},
+		"view": {
+			"type": "object",
+			"default": {
+				"type": "table",
+				"fields": [],
+				"sort": null,
+				"filters": [],
+				"perPage": 25,
+				"page": 1,
+				"search": "",
+				"layout": {}
+			}
+		}
+	}
+}
