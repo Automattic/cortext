@@ -103,6 +103,23 @@ final class Screen {
 		$editor_context  = new \WP_Block_Editor_Context( array( 'name' => 'core/edit-post' ) );
 		$editor_settings = get_block_editor_settings( array(), $editor_context );
 
+		// `build/index.css` carries the DataViews package CSS (bundled
+		// through `src/index.scss`) and our own plugin styles. The block
+		// editor iframe only injects stylesheets listed in
+		// `editor_settings.styles`, so enqueueing this handle on the admin
+		// page isn't enough. An `@import` inside the `css` entry gets
+		// stripped by core's transformStyles, so inline the file's contents.
+		$style_path = CORTEXT_PATH . 'build/index.css';
+		if ( file_exists( $style_path ) ) {
+			$style_css = file_get_contents( $style_path ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+			if ( is_string( $style_css ) && '' !== $style_css ) {
+				$editor_settings['styles']   = isset( $editor_settings['styles'] )
+					? $editor_settings['styles']
+					: array();
+				$editor_settings['styles'][] = array( 'css' => $style_css );
+			}
+		}
+
 		wp_add_inline_script(
 			self::SCRIPT_HANDLE,
 			'window.cortextEditorSettings = ' . wp_json_encode( $editor_settings ) . ';',
