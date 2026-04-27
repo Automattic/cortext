@@ -24,8 +24,16 @@ final class CollectionEntries {
 	 * row CPTs use the shared `crtxt_` prefix and leave 14 characters for the
 	 * collection slug.
 	 */
-	public const CPT_PREFIX  = 'crtxt_';
-	public const MAX_CPT_LEN = 20;
+	public const CPT_PREFIX      = 'crtxt_';
+	public const MAX_CPT_LEN     = 20;
+	private const RESERVED_SLUGS = array(
+		'collection',
+		'collections',
+		'field',
+		'fields',
+		'page',
+		'pages',
+	);
 
 	public function register(): void {
 		add_action( 'init', array( $this, 'register_all' ), 20 );
@@ -48,6 +56,21 @@ final class CollectionEntries {
 	public function register_for_collection( WP_Post $collection ): void {
 		$slug = get_post_meta( $collection->ID, 'slug', true );
 		if ( ! $slug ) {
+			return;
+		}
+
+		if ( in_array( $slug, self::RESERVED_SLUGS, true ) ) {
+			_doing_it_wrong(
+				__METHOD__,
+				esc_html(
+					sprintf(
+						/* translators: %s: collection slug */
+						__( 'Collection slug "%s" is reserved and was not registered.', 'cortext' ),
+						$slug
+					)
+				),
+				'0.0.1'
+			);
 			return;
 		}
 
