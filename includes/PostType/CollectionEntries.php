@@ -35,6 +35,10 @@ final class CollectionEntries {
 		'pages',
 	);
 
+	public static function is_reserved_slug( string $slug ): bool {
+		return in_array( $slug, self::RESERVED_SLUGS, true );
+	}
+
 	public function register(): void {
 		add_action( 'init', array( $this, 'register_all' ), 20 );
 	}
@@ -59,7 +63,7 @@ final class CollectionEntries {
 			return;
 		}
 
-		if ( in_array( $slug, self::RESERVED_SLUGS, true ) ) {
+		if ( self::is_reserved_slug( $slug ) ) {
 			_doing_it_wrong(
 				__METHOD__,
 				esc_html(
