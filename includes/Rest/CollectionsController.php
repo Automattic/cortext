@@ -122,6 +122,8 @@ final class CollectionsController {
 			$base = 'items';
 		}
 
+		$taken = $this->existing_slugs();
+
 		for ( $suffix = 0; $suffix < 1000; $suffix++ ) {
 			$suffix_text = $suffix > 0 ? '-' . ( $suffix + 1 ) : '';
 			$stem_length = $max_length - strlen( $suffix_text );
@@ -131,7 +133,7 @@ final class CollectionsController {
 			}
 
 			$candidate = $stem . $suffix_text;
-			if ( ! $this->slug_exists( $candidate ) ) {
+			if ( ! $this->slug_taken( $candidate, $taken ) ) {
 				return $candidate;
 			}
 		}
@@ -139,7 +141,7 @@ final class CollectionsController {
 		return substr( uniqid( 'c', false ), 0, $max_length );
 	}
 
-	private function slug_exists( string $slug ): bool {
+	private function slug_taken( string $slug, array $taken ): bool {
 		if ( CollectionEntries::is_reserved_slug( $slug ) ) {
 			return true;
 		}
@@ -148,7 +150,14 @@ final class CollectionsController {
 			return true;
 		}
 
-		$collections = get_posts(
+		return isset( $taken[ $slug ] );
+	}
+
+	/**
+	 * @return array<string, true> Set of slugs already in use, keyed by slug.
+	 */
+	private function existing_slugs(): array {
+		$collection_ids = get_posts(
 			array(
 				'post_type'   => Collection::POST_TYPE,
 				'post_status' => 'any',
@@ -157,12 +166,14 @@ final class CollectionsController {
 			)
 		);
 
-		foreach ( $collections as $collection_id ) {
-			if ( get_post_meta( (int) $collection_id, 'slug', true ) === $slug ) {
-				return true;
+		$slugs = array();
+		foreach ( $collection_ids as $collection_id ) {
+			$slug = get_post_meta( (int) $collection_id, 'slug', true );
+			if ( is_string( $slug ) && '' !== $slug ) {
+				$slugs[ $slug ] = true;
 			}
 		}
 
-		return false;
+		return $slugs;
 	}
 }
