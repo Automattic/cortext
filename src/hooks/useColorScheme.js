@@ -31,15 +31,24 @@ export default function useColorScheme() {
 		const seeded = window.cortextBootstrap?.colorScheme;
 		return VALUES.includes( seeded ) ? seeded : 'auto';
 	} );
+	const [ resolved, setResolved ] = useState( () =>
+		resolveScheme( preference )
+	);
 
 	useEffect( () => {
-		applyToRoot( resolveScheme( preference ) );
+		const next = resolveScheme( preference );
+		setResolved( next );
+		applyToRoot( next );
 
 		if ( preference !== 'auto' || ! window.matchMedia ) {
 			return undefined;
 		}
 		const mq = window.matchMedia( '(prefers-color-scheme: dark)' );
-		const onChange = () => applyToRoot( resolveScheme( 'auto' ) );
+		const onChange = () => {
+			const scheme = resolveScheme( 'auto' );
+			setResolved( scheme );
+			applyToRoot( scheme );
+		};
 		mq.addEventListener( 'change', onChange );
 		return () => mq.removeEventListener( 'change', onChange );
 	}, [ preference ] );
@@ -59,7 +68,7 @@ export default function useColorScheme() {
 
 	return {
 		preference,
-		resolved: resolveScheme( preference ),
+		resolved,
 		setPreference,
 	};
 }

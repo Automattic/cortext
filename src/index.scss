@@ -268,8 +268,9 @@ body.cortext-fullscreen {
 .cortext-shell__canvas {
 	position: relative;
 	overflow: hidden;
-	// Canvas keeps a light background regardless of shell theme — blocks,
-	// inserters, and pickers are authored for light backgrounds.
+	// The shell column that frames the iframe. Follows the shell theme via
+	// --cortext-color-canvas. The iframe interior is painted by the active
+	// block theme, not by this token.
 	background: var(--cortext-color-canvas);
 
 	// InterfaceSkeleton defaults to `position: fixed` at >= 782px, which would
@@ -984,4 +985,53 @@ body.cortext-column-dragging
 .dataviews-view-table
 thead > tr > th {
 	cursor: grabbing;
+}
+
+// @wordpress/components buttons inherit Cortext shell tokens only in chrome
+// that Cortext owns. The editor iframe, inspector, and block toolbars keep
+// Gutenberg's own component styling.
+.cortext-sidebar,
+.cortext-canvas__header {
+
+	.components-button {
+		border-radius: var(--cortext-shell-radius);
+	}
+
+	.components-button:not(.is-primary) {
+		background: var(--cortext-button-surface);
+		color: var(--cortext-button-text);
+
+		&:hover:not(:disabled),
+		&:focus:not(:disabled) {
+			background: var(--cortext-button-hover-surface);
+			color: var(--cortext-button-text);
+		}
+	}
+
+	.components-button.is-primary {
+		background: var(--cortext-button-primary-surface);
+		box-shadow: inset 0 0 0 var(--cortext-shell-border-width) var(--cortext-button-primary-surface);
+		color: var(--cortext-button-primary-text);
+
+		&:hover:not(:disabled),
+		&:focus:not(:disabled) {
+			background: var(--cortext-button-primary-hover-surface);
+			box-shadow: inset 0 0 0 var(--cortext-shell-border-width) var(--cortext-button-primary-hover-surface);
+			color: var(--cortext-button-primary-text);
+		}
+	}
+
+	.components-button.is-pressed {
+		background: var(--cortext-button-pressed-surface);
+		color: var(--cortext-button-text);
+	}
+
+	.components-button svg {
+		fill: currentcolor;
+	}
+
+	.dashicon,
+	.dashicons {
+		color: var(--cortext-button-text);
+	}
 }

@@ -9,13 +9,19 @@
  * - The Gutenberg canvas iframe. Screen.php appends the CSS string to
  *   `editor_settings['styles']`, which core hands to BlockCanvas and
  *   propagates across the iframe boundary.
- * - Public frontend pages that render a Cortext pattern. The `wp_head`
- *   hook prints the CSS so the pattern's inline `var(--cortext-*)`
- *   references resolve outside the shell.
+ * - Public frontend pages. The `wp_head` hook prints the CSS on every
+ *   frontend response so the Cortext patterns' inline `var(--cortext-*)`
+ *   references resolve outside the shell. Emission is unconditional: once
+ *   a pattern is inserted into a post it is indistinguishable from any
+ *   other block content, so gating on pattern presence is not reliable.
+ *   The declarations are a small static string with no dynamic input.
  *
- * The iframe variant omits dark overrides — dark mode is chrome-only in
- * phase 1. The frontend variant hardcodes the accent literal because
- * `--wp-admin-theme-color` is not defined on the public site.
+ * The iframe variant emits light values only. The iframe interior is
+ * the active block theme's domain, so nothing in Cortext's contract
+ * pushes dark values across the iframe boundary. The shell SCSS may
+ * carry dark overrides (see src/styles/_tokens.scss); the iframe does
+ * not inherit them. The frontend variant hardcodes the accent literal
+ * because `--wp-admin-theme-color` is not defined on the public site.
  *
  * @package Cortext
  */
@@ -34,8 +40,8 @@ final class Tokens {
 	 * CSS for the Gutenberg canvas iframe.
 	 *
 	 * Emitted into `editor_settings['styles']` so it crosses the iframe
-	 * boundary. Light values only — the canvas stays light regardless of
-	 * the shell's dark-mode preference.
+	 * boundary. Light values only. The iframe interior is painted by the
+	 * active block theme, not by this contract.
 	 */
 	public function get_iframe_inline_css(): string {
 		return ':root {' . $this->light_declarations( true ) . '}';
@@ -44,9 +50,9 @@ final class Tokens {
 	/**
 	 * CSS for the public frontend.
 	 *
-	 * Printed in `wp_head` so pages that opt into a Cortext header/footer
-	 * pattern have the tokens available. Frontend has no wp-admin theme
-	 * color, so the accent falls back to a hardcoded literal.
+	 * Printed in `wp_head` on every frontend response so Cortext patterns
+	 * have the tokens available wherever they render. Frontend has no
+	 * wp-admin theme color, so the accent falls back to a hardcoded literal.
 	 */
 	public function get_frontend_inline_css(): string {
 		return ':root {' . $this->light_declarations( false ) . '}';

@@ -22,7 +22,7 @@ The token contract is the API. Shell themes change values in it; they do not add
 
 | Token | Light default | Dark override |
 |-|-|-|
-| `--cortext-color-canvas` | `#fff` | `#fff` (canvas stays light, see Dark mode) |
+| `--cortext-color-canvas` | `#fff` | `#2a2a2a` |
 | `--cortext-color-surface` | `#fff` | `#2a2a2a` |
 | `--cortext-color-surface-raised` | `#f0f0f0` | `#383838` |
 | `--cortext-color-border` | `#e0e0e0` | `#3e3e3e` |
@@ -58,7 +58,7 @@ The same contract is emitted from three places: `src/styles/_tokens.scss` (admin
 
 Phase 1 supports a three-way preference: Light, Dark, or Match system. The toggle lives in the sidebar header.
 
-**Dark mode is chrome-only.** The shell root carries `data-theme="dark"`; the editor canvas iframe does not. Rationale: Gutenberg blocks, inserters, color pickers, and media inspectors are authored against light backgrounds. Flipping the canvas to dark produces a broken editing surface across the block ecosystem. The same choice shows up in Figma and VS Code: dark chrome, light canvas.
+**Dark mode paints shell chrome.** The shell root carries `data-theme="dark"`, and that covers every chrome surface: sidebar, toolbars, and the canvas column that frames the iframe. The Gutenberg iframe interior is a separate surface: Cortext does not paint inside the iframe, so the active block theme and its `theme.json` keep control of it. Rationale for the split: Gutenberg blocks, inserters, color pickers, and media inspectors are authored against light backgrounds, and coordinating dark overrides across the block ecosystem is out of scope for phase 1. The same split shows up in Figma and VS Code: dark chrome around a content area that the document itself controls.
 
 Persistence is `localStorage` for phase 1, keyed `cortext.colorScheme`. A pre-mount inline script (`Cortext\Theming\Preferences::get_bootstrap_js()`) stamps `data-theme` on the root before React mounts so the first paint matches the preference with no flash. Phase 3 moves persistence to user meta so the preference follows the user across browsers.
 
@@ -69,7 +69,7 @@ Two opt-in patterns ship in `patterns/`:
 - **Cortext Header** (`cortext/header`): site title and nav, surface background, bottom border.
 - **Cortext Footer** (`cortext/footer`): centered tagline, top border, muted text.
 
-Both reference `--cortext-*` tokens via inline style attributes on the block markup. The token CSS is printed on the frontend via `wp_head` (`Cortext\Theming\Tokens::print_frontend_css`), so the patterns keep their intended look wherever they render. Removing Cortext from a site removes the tokens; without them, the inline style declarations gracefully no-op and the block content stays visible.
+Both reference `--cortext-*` tokens via inline style attributes on the block markup. The token CSS is printed on every frontend response via `wp_head` (`Cortext\Theming\Tokens::print_frontend_css`), so the patterns keep their intended look wherever they render. Emission is unconditional in phase 1: once a pattern is inserted into a post it is indistinguishable from ordinary block content, so reliably gating on pattern presence is not practical. The declarations are a small static string. Removing Cortext from a site removes the tokens; without them, the inline style declarations gracefully no-op and the block content stays visible.
 
 Using these patterns is opt-in. Cortext does not replace the active theme's header or footer templates.
 

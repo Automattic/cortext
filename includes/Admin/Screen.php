@@ -17,7 +17,6 @@ namespace Cortext\Admin;
 
 use Cortext\PostType\Page;
 use Cortext\Theming\Preferences;
-use Cortext\Theming\Tokens;
 
 final class Screen {
 
@@ -131,14 +130,6 @@ final class Screen {
 				$editor_settings['styles'][] = array( 'css' => $style_css );
 			}
 		}
-
-		// Inject Cortext tokens into the iframe so patterns and any block
-		// referencing `--cortext-*` resolve inside the canvas. Appended
-		// after core/plugin styles so token values shadow any earlier
-		// fallbacks.
-		$editor_settings['styles'][] = array(
-			'css' => ( new Tokens() )->get_iframe_inline_css(),
-		);
 
 		wp_add_inline_script(
 			self::SCRIPT_HANDLE,

@@ -1,9 +1,11 @@
 // Cortext shell tokens (v1).
 // These CSS custom properties are the shell-theme API. Other stylesheets
 // consume tokens; they do not hardcode colors or spacing. Dark values
-// override under `[data-theme="dark"]` on the shell root and only apply
-// to chrome: the editor canvas stays light always because blocks,
-// inserters, and pickers are authored for light backgrounds.
+// override under `[data-theme="dark"]` on the shell root and apply to
+// shell chrome (sidebar, canvas column, toolbars). The Gutenberg iframe
+// interior is the active block theme's domain; Cortext does not repaint
+// it, and the PHP iframe emitter stays light-only so no dark value
+// leaks into the editing surface.
 // The same values are emitted from PHP (see Cortext\Theming\Tokens) so
 // they cross the Gutenberg iframe boundary and so the frontend overlay
 // can read them without loading this stylesheet.
@@ -38,6 +40,7 @@
 	--cortext-border-width: 1px;
 
 	&[data-theme="dark"] {
+		--cortext-color-canvas: #2a2a2a;
 		--cortext-color-surface: #2a2a2a;
 		--cortext-color-surface-raised: #383838;
 		--cortext-color-border: #3e3e3e;
