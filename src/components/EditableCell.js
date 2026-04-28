@@ -450,8 +450,7 @@ export default function EditableCell( {
 					checked={ Boolean( value ) }
 					onChange={ ( next ) => commit( next ) }
 					disabled={ isSaving }
-					label={ label }
-					hideLabelFromVision
+					aria-label={ label }
 					__nextHasNoMarginBottom
 				/>
 				<FieldError message={ error } />
