@@ -121,23 +121,28 @@ export function formatDisplay( value, type, elements ) {
 	return String( value );
 }
 
-function CellShell( { children, onActivate, ariaLabel, isEmpty } ) {
+function CellShell( { children, onActivate, ariaLabel, isEmpty, disabled } ) {
 	return (
 		<div
-			role="button"
-			tabIndex={ 0 }
+			role={ disabled ? undefined : 'button' }
+			tabIndex={ disabled ? -1 : 0 }
 			className={
-				'cortext-editable-cell' +
-				( isEmpty ? ' cortext-editable-cell--empty' : '' )
+				'cortext-editable-cell__shell' +
+				( isEmpty ? ' cortext-editable-cell__shell--empty' : '' )
 			}
-			onClick={ onActivate }
-			onKeyDown={ ( event ) => {
-				if ( event.key === 'Enter' || event.key === ' ' ) {
-					event.preventDefault();
-					onActivate();
-				}
-			} }
+			onClick={ disabled ? undefined : onActivate }
+			onKeyDown={
+				disabled
+					? undefined
+					: ( event ) => {
+							if ( event.key === 'Enter' || event.key === ' ' ) {
+								event.preventDefault();
+								onActivate();
+							}
+					  }
+			}
 			aria-label={ ariaLabel }
+			aria-hidden={ disabled }
 		>
 			{ children }
 		</div>
@@ -450,7 +455,7 @@ export default function EditableCell( {
 			<div
 				ref={ checkboxRef }
 				onKeyDown={ handleCheckboxKeyDown }
-				className="cortext-editable-cell"
+				className="cortext-cell-checkbox"
 			>
 				<CheckboxControl
 					checked={ Boolean( value ) }
@@ -468,75 +473,85 @@ export default function EditableCell( {
 		);
 	}
 
-	if ( ! isEditing ) {
-		return (
+	let editor = null;
+	if ( isEditing ) {
+		if ( fieldType === 'multiselect' ) {
+			editor = (
+				<MultiselectEdit
+					value={ Array.isArray( value ) ? value : [] }
+					elements={ elements ?? [] }
+					onCommit={ commit }
+					onCancel={ closeEditor }
+					label={ label }
+				/>
+			);
+		} else if ( fieldType === 'select' ) {
+			editor = (
+				<SelectEditor
+					value={ value }
+					elements={ elements }
+					onCommit={ commit }
+					onCancel={ closeEditor }
+					onTab={ ( direction ) =>
+						requestNext?.( rowId, fieldId, direction )
+					}
+					label={ label }
+				/>
+			);
+		} else if ( fieldType === 'date' || fieldType === 'datetime' ) {
+			editor = (
+				<DateEditor
+					value={ value }
+					type={ fieldType }
+					onCommit={ commit }
+					onCancel={ closeEditor }
+					label={ label }
+				/>
+			);
+		} else if (
+			TEXT_INPUT_TYPES.has( fieldType ) ||
+			fieldType === 'title'
+		) {
+			editor = (
+				<TextLikeEditor
+					value={ value ?? '' }
+					type={ fieldType === 'title' ? 'text' : fieldType }
+					onCommit={ commit }
+					onCancel={ closeEditor }
+					onTab={ ( direction ) =>
+						requestNext?.( rowId, fieldId, direction )
+					}
+					shouldAutoFocus
+					label={ label }
+				/>
+			);
+		}
+	}
+
+	// Always render the shell so its content sets the column's intrinsic
+	// width. When editing, overlay the editor on top via position:absolute
+	// so the column doesn't reflow to the editor's larger min-content.
+	return (
+		<div
+			className={
+				'cortext-editable-cell' +
+				( isEditing ? ' cortext-editable-cell--editing' : '' )
+			}
+		>
 			<CellShell
 				ariaLabel={ label }
 				isEmpty={ display === '' }
+				disabled={ isEditing }
 				onActivate={ () => setIsEditing( true ) }
 			>
 				{ display }
 			</CellShell>
-		);
-	}
-
-	let editor = null;
-	if ( fieldType === 'multiselect' ) {
-		editor = (
-			<MultiselectEdit
-				value={ Array.isArray( value ) ? value : [] }
-				elements={ elements ?? [] }
-				onCommit={ commit }
-				onCancel={ closeEditor }
-				label={ label }
-			/>
-		);
-	} else if ( fieldType === 'select' ) {
-		editor = (
-			<SelectEditor
-				value={ value }
-				elements={ elements }
-				onCommit={ commit }
-				onCancel={ closeEditor }
-				onTab={ ( direction ) =>
-					requestNext?.( rowId, fieldId, direction )
-				}
-				label={ label }
-			/>
-		);
-	} else if ( fieldType === 'date' || fieldType === 'datetime' ) {
-		editor = (
-			<DateEditor
-				value={ value }
-				type={ fieldType }
-				onCommit={ commit }
-				onCancel={ closeEditor }
-				label={ label }
-			/>
-		);
-	} else if ( TEXT_INPUT_TYPES.has( fieldType ) || fieldType === 'title' ) {
-		editor = (
-			<TextLikeEditor
-				value={ value ?? '' }
-				type={ fieldType === 'title' ? 'text' : fieldType }
-				onCommit={ commit }
-				onCancel={ closeEditor }
-				onTab={ ( direction ) =>
-					requestNext?.( rowId, fieldId, direction )
-				}
-				shouldAutoFocus
-				label={ label }
-			/>
-		);
-	} else {
-		// Unknown/unsupported types: fall back to display-only.
-		editor = <span className="cortext-cell-readonly">{ display }</span>;
-	}
-
-	return (
-		<div className="cortext-editable-cell cortext-editable-cell--editing">
-			{ editor }
-			<FieldError message={ error } />
+			{ isEditing && editor && (
+				<div className="cortext-editable-cell__overlay">
+					{ editor }
+					<FieldError message={ error } />
+				</div>
+			) }
 		</div>
 	);
 }

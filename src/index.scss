@@ -286,37 +286,54 @@ body.cortext-fullscreen {
 	width: 100%;
 }
 
+// DataViews uses a real <table> with default `table-layout: auto`, so
+// each column auto-sizes to its widest cell content. To keep the column
+// from reflowing when an editor mounts, we always render the display
+// shell (which sets the column's intrinsic width) and overlay the editor
+// on top via position: absolute. Absolutely-positioned children don't
+// contribute to their parent's intrinsic size, so the table never sees
+// the editor's wider min-content.
 .cortext-editable-cell {
-	cursor: text;
-	// 40px matches the height of the editor controls
-	// (TextControl/NumberControl/SelectControl with __next40pxDefaultSize),
-	// so opening a cell doesn't bump the row height.
-	min-height: $grid-unit-50;
+	position: relative;
 	width: 100%;
-	// `min-width: 0` lets the wrapper shrink below the intrinsic min-width
-	// of its editor children, so opening the editor doesn't push the
-	// column wider than the display state.
 	min-width: 0;
 	box-sizing: border-box;
-	padding: $grid-unit-05;
-	border-radius: 2px;
-	display: flex;
-	flex-direction: column;
-	justify-content: center;
 
-	&:hover,
-	&:focus-visible {
-		background: $gray-100;
-		outline: none;
+	&__shell {
+		cursor: text;
+		// 40px matches the height of the editor controls
+		// (TextControl/NumberControl/SelectControl with __next40pxDefaultSize),
+		// so opening a cell doesn't bump the row height.
+		min-height: $grid-unit-50;
+		padding: $grid-unit-05;
+		border-radius: 2px;
+		display: flex;
+		flex-direction: column;
+		justify-content: center;
+
+		&:hover,
+		&:focus-visible {
+			background: $gray-100;
+			outline: none;
+		}
 	}
 
-	&--editing {
-		background: transparent;
-		padding: 0;
+	// Hide the shell visually while editing but keep its layout space, so
+	// the column width stays anchored to the display state.
+	&--editing &__shell {
+		visibility: hidden;
+	}
 
-		// Make sure the editor (TextControl, Dropdown trigger Button,
-		// FormTokenField, etc.) fills exactly the cell width instead of
-		// sizing to its own content.
+	&__overlay {
+		position: absolute;
+		inset: 0;
+		z-index: 1;
+		background: $white;
+		display: flex;
+		flex-direction: column;
+		justify-content: center;
+
+		// Editor controls fill the overlay's width.
 		> * {
 			width: 100%;
 			min-width: 0;
@@ -331,7 +348,7 @@ body.cortext-fullscreen {
 	}
 
 	// Dropdown trigger buttons (select and date pickers) span the full
-	// cell width and left-align their text so the editing state lines up
+	// overlay width and left-align their text so the editing state lines up
 	// with the display state.
 	.cortext-select-edit__toggle.components-button,
 	.cortext-date-edit__toggle.components-button {
@@ -348,6 +365,19 @@ body.cortext-fullscreen {
 
 .cortext-cell-readonly {
 	color: $gray-700;
+}
+
+// Checkbox cells skip the shell/overlay dance because the input is
+// always rendered (no display vs editor distinction). Keep the same row
+// height as editable cells for visual consistency.
+.cortext-cell-checkbox {
+	min-height: $grid-unit-50;
+	padding: $grid-unit-05;
+	border-radius: 2px;
+	width: 100%;
+	box-sizing: border-box;
+	display: flex;
+	align-items: center;
 }
 
 .cortext-multiselect-edit {
