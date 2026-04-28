@@ -234,7 +234,7 @@ function TextLikeEditor( {
 	);
 }
 
-function SelectEditor( { value, elements, onCommit, onCancel, label } ) {
+function SelectEditor( { value, elements, onCommit, onCancel, onTab, label } ) {
 	const ref = useRef( null );
 	useEffect( () => {
 		ref.current?.focus?.();
@@ -243,6 +243,18 @@ function SelectEditor( { value, elements, onCommit, onCancel, label } ) {
 		{ value: '', label: __( 'Select…', 'cortext' ) },
 		...( elements ?? [] ),
 	];
+	const handleKeyDown = ( event ) => {
+		if ( event.key === 'Escape' ) {
+			event.preventDefault();
+			onCancel();
+		} else if ( event.key === 'Tab' && onTab ) {
+			// SelectControl commits via onChange already, so Tab just hops
+			// to the next cell. The current select's onBlur will fire when
+			// focus moves to the next editor and clean up.
+			event.preventDefault();
+			onTab( event.shiftKey ? -1 : 1 );
+		}
+	};
 	return (
 		<SelectControl
 			ref={ ref }
@@ -250,6 +262,7 @@ function SelectEditor( { value, elements, onCommit, onCancel, label } ) {
 			options={ options }
 			onChange={ ( next ) => onCommit( next === '' ? null : next ) }
 			onBlur={ onCancel }
+			onKeyDown={ handleKeyDown }
 			label={ label }
 			hideLabelFromVision
 			__next40pxDefaultSize
@@ -309,6 +322,7 @@ export default function EditableCell( {
 	const [ isEditing, setIsEditing ] = useState( false );
 	const [ isSaving, setIsSaving ] = useState( false );
 	const [ error, setError ] = useState( null );
+	const checkboxRef = useRef( null );
 
 	const rowId = item?.id;
 	const value = getValue
@@ -318,16 +332,25 @@ export default function EditableCell( {
 
 	// Open this cell when the parent targets it via editRequest (new-row
 	// title auto-open, Tab navigation, etc.), then clear the request so
-	// subsequent renders don't reopen.
+	// subsequent renders don't reopen. Checkbox has no edit/display state
+	// distinction; "opening" it just means focusing the underlying input.
 	useEffect( () => {
-		if (
+		const targeted =
 			rowId &&
 			editRequest?.rowId === rowId &&
 			editRequest?.fieldId === fieldId &&
-			! isEditing &&
 			! readOnly &&
-			saveRowField
-		) {
+			saveRowField;
+		if ( ! targeted ) {
+			return;
+		}
+		if ( fieldType === 'checkbox' ) {
+			const input = checkboxRef.current?.querySelector(
+				'input[type="checkbox"]'
+			);
+			input?.focus();
+			clearEditRequest?.();
+		} else if ( ! isEditing ) {
 			setIsEditing( true );
 			clearEditRequest?.();
 		}
@@ -338,6 +361,7 @@ export default function EditableCell( {
 		isEditing,
 		readOnly,
 		saveRowField,
+		fieldType,
 		clearEditRequest,
 	] );
 
@@ -376,10 +400,22 @@ export default function EditableCell( {
 		}
 	};
 
-	// Checkbox: direct toggle, no click-to-edit step.
+	// Checkbox: direct toggle, no click-to-edit step. The ref + onKeyDown
+	// on the wrapper give Tab navigation a place to focus into and out of.
 	if ( fieldType === 'checkbox' ) {
+		const handleCheckboxKeyDown = ( event ) => {
+			if ( event.key === 'Tab' && requestNext ) {
+				event.preventDefault();
+				requestNext( rowId, fieldId, event.shiftKey ? -1 : 1 );
+			}
+		};
 		return (
-			<div className="cortext-editable-cell">
+			// eslint-disable-next-line jsx-a11y/no-static-element-interactions
+			<div
+				ref={ checkboxRef }
+				onKeyDown={ handleCheckboxKeyDown }
+				className="cortext-editable-cell"
+			>
 				<CheckboxControl
 					checked={ Boolean( value ) }
 					onChange={ ( next ) => commit( next ) }
@@ -400,11 +436,7 @@ export default function EditableCell( {
 				isEmpty={ display === '' }
 				onActivate={ () => setIsEditing( true ) }
 			>
-				{ display || (
-					<span className="cortext-editable-cell__placeholder">
-						{ __( 'Empty', 'cortext' ) }
-					</span>
-				) }
+				{ display }
 			</CellShell>
 		);
 	}
@@ -427,6 +459,9 @@ export default function EditableCell( {
 				elements={ elements }
 				onCommit={ commit }
 				onCancel={ closeEditor }
+				onTab={ ( direction ) =>
+					requestNext?.( rowId, fieldId, direction )
+				}
 				label={ label }
 			/>
 		);
