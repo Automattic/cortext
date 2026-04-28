@@ -66,7 +66,7 @@ async function createCollectionFixture( requestUtils ) {
 	return { collection, field, entry, slug };
 }
 
-function createDataViewBlockMarkup( collectionId ) {
+function createDataViewBlockMarkup( collectionId, viewOverrides = {} ) {
 	const attributes = {
 		collectionId,
 		view: {
@@ -78,6 +78,7 @@ function createDataViewBlockMarkup( collectionId ) {
 			page: 1,
 			search: '',
 			layout: {},
+			...viewOverrides,
 		},
 	};
 
@@ -486,6 +487,209 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.fieldB && `/wp/v2/crtxt_fields/${ fixture.fieldB.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+			);
+		}
+
+	test( 'creates a new row from the New button and prefills from a single-equality filter', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+
+		try {
+			Object.assign(
+				fixture,
+				await createCollectionFixture( requestUtils )
+			);
+
+			const filterValue = 'Ursula K. Le Guin';
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_pages',
+				data: {
+					title: 'New row + prefill',
+					status: 'private',
+					content: createDataViewBlockMarkup( fixture.collection.id, {
+						filters: [
+							{
+								field: `field-${ fixture.field.id }`,
+								operator: 'is',
+								value: filterValue,
+							},
+						],
+					} ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/page/${ fixture.page.id }`
+			);
+
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.page.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+			await expect(
+				canvas.getByText( 'The Left Hand of Darkness' )
+			).toBeVisible();
+
+			const beforeRows = await requestUtils.rest( {
+				path: `/wp/v2/crtxt_${ fixture.slug }`,
+				params: {
+					context: 'edit',
+					status: 'draft,private,publish',
+					per_page: 100,
+				},
+			} );
+
+			await canvas
+				.getByRole( 'button', { name: 'New', exact: true } )
+				.click();
+
+			await expect
+				.poll( async () => {
+					const rows = await requestUtils.rest( {
+						path: `/wp/v2/crtxt_${ fixture.slug }`,
+						params: {
+							context: 'edit',
+							status: 'draft,private,publish',
+							per_page: 100,
+						},
+					} );
+					return rows.length;
+				} )
+				.toBe( beforeRows.length + 1 );
+
+			const afterRows = await requestUtils.rest( {
+				path: `/wp/v2/crtxt_${ fixture.slug }`,
+				params: {
+					context: 'edit',
+					status: 'draft,private,publish',
+					per_page: 100,
+				},
+			} );
+
+			const beforeIds = new Set( beforeRows.map( ( r ) => r.id ) );
+			const newRow = afterRows.find( ( r ) => ! beforeIds.has( r.id ) );
+			expect( newRow ).toBeTruthy();
+			expect( newRow.meta[ `field-${ fixture.field.id }` ] ).toBe(
+				filterValue
+			);
+
+			fixture.createdRowId = newRow.id;
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				fixture.createdRowId &&
+					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.createdRowId }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.entry &&
+					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+			);
+		}
+	} );
+
+	test( 'inline edit on a text cell persists', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+
+		try {
+			Object.assign(
+				fixture,
+				await createCollectionFixture( requestUtils )
+			);
+
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_pages',
+				data: {
+					title: 'Inline edit text cell',
+					status: 'private',
+					content: createDataViewBlockMarkup( fixture.collection.id ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/page/${ fixture.page.id }`
+			);
+
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.page.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+			const cell = canvas.getByText( 'Ursula K. Le Guin', {
+				exact: true,
+			} );
+			await expect( cell ).toBeVisible();
+			await cell.click();
+
+			const input = canvas.getByLabel( 'Author', { exact: true } );
+			await expect( input ).toBeVisible();
+			await input.fill( 'U. K. Le Guin' );
+			await input.press( 'Enter' );
+
+			await expect
+				.poll( async () => {
+					const row = await requestUtils.rest( {
+						path: `/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`,
+						params: { context: 'edit' },
+					} );
+					return row.meta[ `field-${ fixture.field.id }` ];
+				} )
+				.toBe( 'U. K. Le Guin' );
+
+			await expect( canvas.getByText( 'U. K. Le Guin' ) ).toBeVisible();
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				fixture.entry &&
+					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
