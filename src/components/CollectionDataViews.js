@@ -21,14 +21,14 @@ export default function CollectionDataViews( {
 	invalid,
 	error,
 } ) {
-	const { fields, collection, slug, isResolving } =
+	const { fields, collection, isResolving } =
 		useCollectionFields( collectionId );
 	const {
 		data,
 		paginationInfo,
 		isLoading,
 		error: rowError,
-	} = useCollectionRows( slug, view );
+	} = useCollectionRows( collectionId, view );
 	const dataViewFields = useMemo(
 		() => [ TITLE_FIELD, ...fields ],
 		[ fields ]

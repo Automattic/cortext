@@ -2,26 +2,42 @@ import { useEffect, useRef, useState } from '@wordpress/element';
 import { addQueryArgs } from '@wordpress/url';
 import apiFetch from '@wordpress/api-fetch';
 
-function buildQueryArgs( view ) {
+function buildQueryArgs( collectionId, view ) {
 	const args = {
-		context: 'edit',
+		collection: collectionId,
 		per_page: view?.perPage ?? 25,
 		page: view?.page ?? 1,
-		status: 'draft,private,publish',
 	};
 
 	if ( view?.search ) {
 		args.search = view.search;
 	}
 
-	// TODO: Add server-side support for DataViews field sorting/filtering
-	// before forwarding `view.sort` or `view.filters`. WP's posts REST
-	// controller does not understand collection field ids like `field-123`.
+	if ( view?.sort?.field && view?.sort?.direction ) {
+		args[ 'sort[field]' ] = view.sort.field;
+		args[ 'sort[direction]' ] = view.sort.direction;
+	}
+
+	if ( view?.filters?.length ) {
+		view.filters.forEach( ( filter, i ) => {
+			if ( filter.field && filter.operator ) {
+				args[ `filters[${ i }][field]` ] = filter.field;
+				args[ `filters[${ i }][operator]` ] = filter.operator;
+				if ( Array.isArray( filter.value ) ) {
+					filter.value.forEach( ( v, j ) => {
+						args[ `filters[${ i }][value][${ j }]` ] = v;
+					} );
+				} else {
+					args[ `filters[${ i }][value]` ] = filter.value;
+				}
+			}
+		} );
+	}
 
 	return args;
 }
 
-export default function useCollectionRows( collectionSlug, view ) {
+export default function useCollectionRows( collectionId, view ) {
 	const [ state, setState ] = useState( {
 		data: [],
 		paginationInfo: { totalItems: 0, totalPages: 0 },
@@ -30,12 +46,12 @@ export default function useCollectionRows( collectionSlug, view ) {
 	} );
 
 	const requestIdRef = useRef( 0 );
-	const queryKey = collectionSlug
-		? JSON.stringify( buildQueryArgs( view ) )
+	const queryKey = collectionId
+		? JSON.stringify( buildQueryArgs( collectionId, view ) )
 		: null;
 
 	useEffect( () => {
-		if ( ! collectionSlug ) {
+		if ( ! collectionId ) {
 			setState( {
 				data: [],
 				paginationInfo: { totalItems: 0, totalPages: 0 },
@@ -46,31 +62,24 @@ export default function useCollectionRows( collectionSlug, view ) {
 		}
 
 		const requestId = ++requestIdRef.current;
-		// `crtxt_<slug>` is the dynamic per-collection row CPT registered by
-		// `Cortext\PostType\CollectionEntries`. Slugs over 14 chars get
-		// rejected at registration; assume valid slugs here.
 		const path = addQueryArgs(
-			`/wp/v2/crtxt_${ collectionSlug }`,
-			buildQueryArgs( view )
+			'/cortext/v1/rows',
+			buildQueryArgs( collectionId, view )
 		);
 
 		setState( ( prev ) => ( { ...prev, isLoading: true, error: null } ) );
 
-		apiFetch( { path, parse: false } )
-			.then( async ( response ) => {
-				const rows = await response.json();
+		apiFetch( { path } )
+			.then( ( body ) => {
 				if ( requestId !== requestIdRef.current ) {
 					return;
 				}
-				const totalItems = Number(
-					response.headers.get( 'X-WP-Total' ) ?? rows.length
-				);
-				const totalPages = Number(
-					response.headers.get( 'X-WP-TotalPages' ) ?? 1
-				);
 				setState( {
-					data: Array.isArray( rows ) ? rows : [],
-					paginationInfo: { totalItems, totalPages },
+					data: Array.isArray( body.rows ) ? body.rows : [],
+					paginationInfo: {
+						totalItems: body.total ?? 0,
+						totalPages: body.totalPages ?? 1,
+					},
 					isLoading: false,
 					error: null,
 				} );
@@ -89,7 +98,7 @@ export default function useCollectionRows( collectionSlug, view ) {
 
 		return undefined;
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [ collectionSlug, queryKey ] );
+	}, [ collectionId, queryKey ] );
 
 	return state;
 }
