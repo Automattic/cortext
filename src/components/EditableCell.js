@@ -7,8 +7,6 @@ import {
 	MenuGroup,
 	MenuItem,
 	Notice,
-	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
-	__experimentalNumberControl as NumberControl,
 	TextControl,
 } from '@wordpress/components';
 import {
@@ -158,6 +156,9 @@ function inputTypeFor( type ) {
 	if ( type === 'url' ) {
 		return 'url';
 	}
+	if ( type === 'number' ) {
+		return 'number';
+	}
 	return 'text';
 }
 
@@ -205,21 +206,11 @@ function TextLikeEditor( {
 		}
 	};
 
-	if ( type === 'number' ) {
-		return (
-			<NumberControl
-				ref={ inputRef }
-				value={ local ?? '' }
-				onChange={ ( next ) => setLocal( next ?? '' ) }
-				onBlur={ commit }
-				onKeyDown={ handleKeyDown }
-				label={ label }
-				hideLabelFromVision
-				__next40pxDefaultSize
-			/>
-		);
-	}
-
+	// Number reuses TextControl with type="number" rather than the
+	// experimental NumberControl: NumberControl renders at a different
+	// height than TextControl (no `__nextHasNoMarginBottom` support, plus
+	// inline spin buttons), which made the row jitter when toggling
+	// between edit modes on a numeric cell.
 	return (
 		<TextControl
 			ref={ inputRef }
