@@ -288,9 +288,14 @@ body.cortext-fullscreen {
 
 .cortext-editable-cell {
 	cursor: text;
-	min-height: $grid-unit-30;
+	min-height: $grid-unit-40;
+	width: 100%;
+	box-sizing: border-box;
 	padding: $grid-unit-05;
 	border-radius: 2px;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
 
 	&:hover,
 	&:focus-visible {
