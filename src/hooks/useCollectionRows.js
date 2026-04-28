@@ -8,11 +8,6 @@ function buildQueryArgs( view ) {
 		per_page: view?.perPage ?? 25,
 		page: view?.page ?? 1,
 		status: 'draft,private,publish',
-		// Default to oldest-first so newly created rows land at the bottom
-		// of the table (Notion-style). When sort forwarding lands, an
-		// explicit `view.sort` should override this default.
-		orderby: 'date',
-		order: 'asc',
 	};
 
 	if ( view?.search ) {
@@ -22,6 +17,16 @@ function buildQueryArgs( view ) {
 	// TODO: Add server-side support for DataViews field sorting/filtering
 	// before forwarding `view.sort` or `view.filters`. WP's posts REST
 	// controller does not understand collection field ids like `field-123`.
+	//
+	// Until then: when the user hasn't picked a sort, default to
+	// oldest-first so newly created rows land at the bottom of the table
+	// (Notion-style). If `view.sort` is set we leave ordering to the REST
+	// default and let the sort-forwarding work pick it up later — better
+	// than silently overriding the user's choice.
+	if ( ! view?.sort?.field ) {
+		args.orderby = 'date';
+		args.order = 'asc';
+	}
 
 	return args;
 }

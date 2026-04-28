@@ -177,17 +177,24 @@ export default function CollectionDataViews( {
 
 	const onCreated = useCallback(
 		( created ) => {
-			// Rows are sorted oldest-first, so the new row lives on the last
-			// page. Hop there before refreshing so the user sees their row
-			// instead of staying on page 1.
-			const perPage = view?.perPage ?? 25;
-			const expectedTotal = ( paginationInfo?.totalItems ?? 0 ) + 1;
-			const lastPage = Math.max(
-				1,
-				Math.ceil( expectedTotal / perPage )
-			);
-			if ( ( view?.page ?? 1 ) !== lastPage ) {
-				onChangeView( { ...view, page: lastPage } );
+			// Without an explicit sort, the row list comes back oldest-first
+			// (see useCollectionRows), so the new row lives on the last page.
+			// Hop there before refreshing so the user lands on their row
+			// instead of page 1. Under a user-chosen sort the new row could
+			// be anywhere; refresh in place and let them find it.
+			const hasExplicitSort = Boolean( view?.sort?.field );
+			if ( ! hasExplicitSort ) {
+				const perPage = view?.perPage ?? 25;
+				const expectedTotal = ( paginationInfo?.totalItems ?? 0 ) + 1;
+				const lastPage = Math.max(
+					1,
+					Math.ceil( expectedTotal / perPage )
+				);
+				if ( ( view?.page ?? 1 ) !== lastPage ) {
+					onChangeView( { ...view, page: lastPage } );
+				} else {
+					refresh();
+				}
 			} else {
 				refresh();
 			}
