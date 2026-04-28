@@ -78,13 +78,3 @@ Worth a small spike before committing; `core-data`'s schema cache for rarely-cha
 **Where.** Checkbox cell in `src/components/EditableCell.js`.
 
 **Solution.** File a Gutenberg bug or PR. In the meantime, the `tech-debt.md#8` comment next to `aria-label` is the signal.
-
-## Sequencing
-
-Rough order if these get scheduled:
-
-1. File Gutenberg issues for the upstream items (#1, #6, #7, #8). Cheap, doesn't block anything.
-2. Move rows into `core-data` (#2). Deletes the most code and unblocks reactive pagination.
-3. Forward `view.sort` (#3). Standard WP filter pattern; same filter sets up #4.
-4. Forward `view.filters` (#4). Builds on #3.
-5. Switch the New-row footer to free composition (the local half of #7). Local cleanup once #2 has tidied the surrounding code.
