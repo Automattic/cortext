@@ -125,6 +125,19 @@ final class Test_Rest_Collections_Controller extends BaseTestCase {
 		$this->assertTrue( post_type_exists( 'crtxt_page-2' ) );
 	}
 
+	public function test_normalizes_non_latin_slug_for_post_type_name(): void {
+		$method = new \ReflectionMethod( CollectionsController::class, 'unique_slug' );
+		$method->setAccessible( true );
+		$slug = $method->invoke( new CollectionsController(), '你好' );
+
+		$this->assertSame( 'e4bda0e5a5bd', $slug );
+		$this->assertLessThanOrEqual(
+			CollectionEntries::MAX_CPT_LEN,
+			strlen( CollectionEntries::CPT_PREFIX . $slug )
+		);
+		$this->assertSame( CollectionEntries::CPT_PREFIX . $slug, sanitize_key( CollectionEntries::CPT_PREFIX . $slug ) );
+	}
+
 	public function test_rejects_empty_title(): void {
 		wp_set_current_user( $this->create_user( 'author' ) );
 

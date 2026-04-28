@@ -111,7 +111,7 @@ final class CollectionsController {
 
 	private function unique_slug( string $raw_slug ): string {
 		$max_length = CollectionEntries::MAX_CPT_LEN - strlen( CollectionEntries::CPT_PREFIX );
-		$base       = sanitize_title( $raw_slug );
+		$base       = sanitize_key( sanitize_title( $raw_slug ) );
 
 		if ( '' === $base ) {
 			$base = 'items';
@@ -154,6 +154,8 @@ final class CollectionsController {
 	}
 
 	/**
+	 * Gets existing collection slugs.
+	 *
 	 * @return array<string, true> Set of slugs already in use, keyed by slug.
 	 */
 	private function existing_slugs(): array {
