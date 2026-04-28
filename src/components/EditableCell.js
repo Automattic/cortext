@@ -7,6 +7,8 @@ import {
 	MenuGroup,
 	MenuItem,
 	Notice,
+	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+	__experimentalNumberControl as NumberControl,
 	TextControl,
 } from '@wordpress/components';
 import {
@@ -156,9 +158,6 @@ function inputTypeFor( type ) {
 	if ( type === 'url' ) {
 		return 'url';
 	}
-	if ( type === 'number' ) {
-		return 'number';
-	}
 	return 'text';
 }
 
@@ -206,11 +205,26 @@ function TextLikeEditor( {
 		}
 	};
 
-	// Number reuses TextControl with type="number" rather than the
-	// experimental NumberControl: NumberControl renders at a different
-	// height than TextControl (no `__nextHasNoMarginBottom` support, plus
-	// inline spin buttons), which made the row jitter when toggling
-	// between edit modes on a numeric cell.
+	if ( type === 'number' ) {
+		// `spinControls="none"` drops both NumberControl's custom spin
+		// buttons (the default "custom" mode renders them as a suffix
+		// inside the input, which widens the cell on focus) and the
+		// browser's native arrows. Keyboard arrow keys still work.
+		return (
+			<NumberControl
+				ref={ inputRef }
+				value={ local ?? '' }
+				onChange={ ( next ) => setLocal( next ?? '' ) }
+				onBlur={ commit }
+				onKeyDown={ handleKeyDown }
+				spinControls="none"
+				label={ label }
+				hideLabelFromVision
+				__next40pxDefaultSize
+			/>
+		);
+	}
+
 	return (
 		<TextControl
 			ref={ inputRef }
