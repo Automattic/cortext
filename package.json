@@ -2,6 +2,9 @@
 	"name": "cortext",
 	"version": "0.0.1",
 	"description": "Notion-inspired workspace inside WordPress.",
+	"engines": {
+		"node": "~24.15"
+	},
 	"private": true,
 	"license": "GPL-2.0-or-later",
 	"scripts": {
