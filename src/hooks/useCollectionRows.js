@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from '@wordpress/element';
+import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
 import { addQueryArgs } from '@wordpress/url';
 import apiFetch from '@wordpress/api-fetch';
 
@@ -28,11 +28,16 @@ export default function useCollectionRows( collectionSlug, view ) {
 		isLoading: false,
 		error: null,
 	} );
+	const [ refreshKey, setRefreshKey ] = useState( 0 );
 
 	const requestIdRef = useRef( 0 );
 	const queryKey = collectionSlug
 		? JSON.stringify( buildQueryArgs( view ) )
 		: null;
+
+	const refresh = useCallback( () => {
+		setRefreshKey( ( key ) => key + 1 );
+	}, [] );
 
 	useEffect( () => {
 		if ( ! collectionSlug ) {
@@ -89,7 +94,7 @@ export default function useCollectionRows( collectionSlug, view ) {
 
 		return undefined;
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [ collectionSlug, queryKey ] );
+	}, [ collectionSlug, queryKey, refreshKey ] );
 
-	return state;
+	return { ...state, refresh };
 }
