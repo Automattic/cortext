@@ -4,16 +4,18 @@ import {
 	CheckboxControl,
 	DateTimePicker,
 	Dropdown,
+	MenuGroup,
+	MenuItem,
 	Notice,
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalNumberControl as NumberControl,
-	SelectControl,
 	TextControl,
 } from '@wordpress/components';
 import {
 	createContext,
 	useContext,
 	useEffect,
+	useMemo,
 	useRef,
 	useState,
 } from '@wordpress/element';
@@ -235,38 +237,66 @@ function TextLikeEditor( {
 }
 
 function SelectEditor( { value, elements, onCommit, onCancel, onTab, label } ) {
-	const ref = useRef( null );
-	useEffect( () => {
-		ref.current?.focus?.();
-	}, [] );
-	const options = [
-		{ value: '', label: __( 'Select…', 'cortext' ) },
-		...( elements ?? [] ),
-	];
-	const handleKeyDown = ( event ) => {
-		if ( event.key === 'Escape' ) {
-			event.preventDefault();
-			onCancel();
-		} else if ( event.key === 'Tab' && onTab ) {
-			// SelectControl commits via onChange already, so Tab just hops
-			// to the next cell. The current select's onBlur will fire when
-			// focus moves to the next editor and clean up.
+	const items = useMemo( () => elements ?? [], [ elements ] );
+	const labelFor = useMemo( () => {
+		const map = new Map( items.map( ( e ) => [ e.value, e.label ] ) );
+		return ( v ) => map.get( v ) ?? v;
+	}, [ items ] );
+
+	const hasValue = value !== null && value !== undefined && value !== '';
+	const triggerLabel = hasValue
+		? labelFor( value )
+		: __( 'Select…', 'cortext' );
+
+	const handleTriggerKeyDown = ( event ) => {
+		if ( event.key === 'Tab' && onTab ) {
 			event.preventDefault();
 			onTab( event.shiftKey ? -1 : 1 );
 		}
 	};
+
 	return (
-		<SelectControl
-			ref={ ref }
-			value={ value ?? '' }
-			options={ options }
-			onChange={ ( next ) => onCommit( next === '' ? null : next ) }
-			onBlur={ onCancel }
-			onKeyDown={ handleKeyDown }
-			label={ label }
-			hideLabelFromVision
-			__next40pxDefaultSize
-			__nextHasNoMarginBottom
+		<Dropdown
+			defaultOpen
+			onClose={ onCancel }
+			popoverProps={ { placement: 'bottom-start' } }
+			renderToggle={ ( { isOpen, onToggle } ) => (
+				<Button
+					variant="tertiary"
+					className="cortext-select-edit__toggle"
+					onClick={ onToggle }
+					onKeyDown={ handleTriggerKeyDown }
+					aria-expanded={ isOpen }
+					aria-label={ label }
+				>
+					{ triggerLabel }
+				</Button>
+			) }
+			renderContent={ ( { onClose } ) => (
+				<MenuGroup>
+					<MenuItem
+						isSelected={ ! hasValue }
+						onClick={ () => {
+							onCommit( null );
+							onClose();
+						} }
+					>
+						{ __( 'Clear', 'cortext' ) }
+					</MenuItem>
+					{ items.map( ( opt ) => (
+						<MenuItem
+							key={ opt.value }
+							isSelected={ opt.value === value }
+							onClick={ () => {
+								onCommit( opt.value );
+								onClose();
+							} }
+						>
+							{ opt.label }
+						</MenuItem>
+					) ) }
+				</MenuGroup>
+			) }
 		/>
 	);
 }
