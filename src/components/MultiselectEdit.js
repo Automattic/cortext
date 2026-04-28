@@ -2,6 +2,10 @@ import { __ } from '@wordpress/i18n';
 import { Button, FormTokenField, Flex, FlexItem } from '@wordpress/components';
 import { useCallback, useMemo, useState } from '@wordpress/element';
 
+// tech-debt.md#2: DataViews v6 ships no `multiselect` dataform-control,
+// so this component fills the gap with FormTokenField. Once upstream
+// adds one, this file collapses to a thin wrapper or disappears.
+//
 // FormTokenField speaks in labels but our row meta stores raw values.
 // Keep two parallel maps and translate at the boundaries.
 export default function MultiselectEdit( {

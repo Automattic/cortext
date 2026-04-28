@@ -38,6 +38,10 @@ const TITLE_FIELD = {
 // whose operator is `is` (or its alias `equals`) and whose value is a single
 // scalar contribute. Multi-value operators (`isAny`, `isNone`, …) are skipped
 // because the issue scopes prefill to single equality clauses only.
+//
+// tech-debt.md#6: filters round-trip through block attributes only; the
+// server never applies them. Once filter forwarding lands this becomes a
+// side effect of real filtering rather than its only consumer.
 function prefillFromFilters( filters, fieldIds ) {
 	const prefill = {};
 	if ( ! Array.isArray( filters ) ) {
@@ -182,6 +186,12 @@ export default function CollectionDataViews( {
 			// Hop there before refreshing so the user lands on their row
 			// instead of page 1. Under a user-chosen sort the new row could
 			// be anywhere; refresh in place and let them find it.
+			//
+			// tech-debt.md#4: lastPage arithmetic is optimistic against
+			// possibly stale paginationInfo. With rows in core-data this
+			// becomes a useEffect on totalPages.
+			// tech-debt.md#5: the asc-by-date assumption only holds while
+			// view.sort isn't forwarded.
 			const hasExplicitSort = Boolean( view?.sort?.field );
 			if ( ! hasExplicitSort ) {
 				const perPage = view?.perPage ?? 25;
@@ -307,6 +317,9 @@ export default function CollectionDataViews( {
 					isLoading={ isLoading }
 					empty={ empty }
 				/>
+				{ /* tech-debt.md#3: DataViews has no footer slot, so the
+				   New-row affordance and its CSS layout sit outside the
+				   component instead of inside its layout chrome. */ }
 				<div className="cortext-data-view__footer">
 					<NewRowButton
 						slug={ slug }
