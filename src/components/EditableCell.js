@@ -23,7 +23,7 @@ import MultiselectEdit from './MultiselectEdit';
 // tech-debt.md#1: DataViews v6 has no inline cell editing in any layout,
 // so we mount this component from `field.render` (a display renderer in
 // the docs) and treat the click-to-edit + commit/cancel state as our own.
-// tech-debt.md#4: the save callback comes through context because
+// tech-debt.md#2: the save callback comes through context because
 // `field.render` only receives `{ item }`. Once rows live in core-data
 // the cell could call `saveEntityRecord` directly.
 export const RowMutationContext = createContext( {

@@ -2,9 +2,9 @@ import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
 import { addQueryArgs } from '@wordpress/url';
 import apiFetch from '@wordpress/api-fetch';
 
-// This hook is the central workaround spot for tech-debt.md#4 (rows
-// outside core-data), tech-debt.md#5 (no view.sort forwarding), and
-// tech-debt.md#6 (no view.filters forwarding). Each is referenced
+// This hook is the central workaround spot for tech-debt.md#2 (rows
+// outside core-data), tech-debt.md#3 (no view.sort forwarding), and
+// tech-debt.md#4 (no view.filters forwarding). Each is referenced
 // inline below where it lands.
 
 function buildQueryArgs( view ) {
@@ -19,11 +19,11 @@ function buildQueryArgs( view ) {
 		args.search = view.search;
 	}
 
-	// tech-debt.md#5 / tech-debt.md#6: WP's posts REST controller does not
+	// tech-debt.md#3 / tech-debt.md#4: WP's posts REST controller does not
 	// understand collection field ids like `field-123`, so view.sort and
 	// view.filters are not forwarded yet.
 	//
-	// Until #5 lands: when the user hasn't picked a sort, default to
+	// Until #3 lands: when the user hasn't picked a sort, default to
 	// oldest-first so newly created rows land at the bottom of the table
 	// (Notion-style). If view.sort is set we leave ordering to the REST
 	// default and let the sort-forwarding work pick it up later, rather
@@ -50,7 +50,7 @@ export default function useCollectionRows( collectionSlug, view ) {
 		? JSON.stringify( buildQueryArgs( view ) )
 		: null;
 
-	// tech-debt.md#4: callers POST via apiFetch and bump refresh() to
+	// tech-debt.md#2: callers POST via apiFetch and bump refresh() to
 	// re-read. With rows in core-data this whole counter goes away.
 	const refresh = useCallback( () => {
 		setRefreshKey( ( key ) => key + 1 );
