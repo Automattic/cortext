@@ -143,13 +143,16 @@ export default function Sidebar() {
 
 	const autoExpandTimerRef = useRef( null );
 
-	// Pull the source record straight from core-data for Duplicate (needs
-	// content.raw, which useEntityRecords above already fetches via
-	// context=edit).
-	const getRecordById = useSelect(
-		( select ) => ( id ) =>
-			select( 'core' ).getEntityRecord( 'postType', POST_TYPE, id ),
+	const getEntityRecord = useSelect(
+		( select ) => select( 'core' ).getEntityRecord,
 		[]
+	);
+
+	// Pull the source record straight from core-data for id-based actions like
+	// Duplicate and Rename.
+	const getRecordById = useCallback(
+		( id ) => getEntityRecord( 'postType', POST_TYPE, id ),
+		[ getEntityRecord ]
 	);
 
 	const toggleExpand = useCallback( ( id ) => {
