@@ -309,6 +309,7 @@ function DateEditor( { value, type, onCommit, onCancel, label } ) {
 			renderToggle={ ( { isOpen, onToggle } ) => (
 				<Button
 					variant="tertiary"
+					className="cortext-date-edit__toggle"
 					onClick={ onToggle }
 					aria-expanded={ isOpen }
 				>

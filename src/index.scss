@@ -293,6 +293,10 @@ body.cortext-fullscreen {
 	// so opening a cell doesn't bump the row height.
 	min-height: $grid-unit-50;
 	width: 100%;
+	// `min-width: 0` lets the wrapper shrink below the intrinsic min-width
+	// of its editor children, so opening the editor doesn't push the
+	// column wider than the display state.
+	min-width: 0;
 	box-sizing: border-box;
 	padding: $grid-unit-05;
 	border-radius: 2px;
@@ -309,6 +313,30 @@ body.cortext-fullscreen {
 	&--editing {
 		background: transparent;
 		padding: 0;
+
+		// Make sure the editor (TextControl, Dropdown trigger Button,
+		// FormTokenField, etc.) fills exactly the cell width instead of
+		// sizing to its own content.
+		> * {
+			width: 100%;
+			min-width: 0;
+			max-width: 100%;
+		}
+
+		// Dropdown's internal wrapper isn't a direct child, so target it
+		// explicitly so select / date triggers don't snap to label width.
+		.components-dropdown {
+			width: 100%;
+		}
+	}
+
+	// Dropdown trigger buttons (select and date pickers) span the full
+	// cell width and left-align their text so the editing state lines up
+	// with the display state.
+	.cortext-select-edit__toggle.components-button,
+	.cortext-date-edit__toggle.components-button {
+		width: 100%;
+		justify-content: flex-start;
 	}
 
 	&__error {
