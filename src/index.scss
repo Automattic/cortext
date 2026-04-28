@@ -286,13 +286,15 @@ body.cortext-fullscreen {
 	width: 100%;
 }
 
-// DataViews uses a real <table> with default `table-layout: auto`, so
-// each column auto-sizes to its widest cell content. To keep the column
-// from reflowing when an editor mounts, we always render the display
-// shell (which sets the column's intrinsic width) and overlay the editor
-// on top via position: absolute. Absolutely-positioned children don't
-// contribute to their parent's intrinsic size, so the table never sees
-// the editor's wider min-content.
+// tech-debt.md#5: DataViews uses a real <table> with default
+// `table-layout: auto`, so each column auto-sizes to its widest cell
+// content. To keep the column from reflowing when an editor mounts, we
+// always render the display shell (which sets the column's intrinsic
+// width) and overlay the editor on top via position: absolute.
+// Absolutely-positioned children don't contribute to their parent's
+// intrinsic size, so the table never sees the editor's wider min-content.
+// The shell's min-height is also pinned to 40px to match
+// __next40pxDefaultSize, so opening an editor doesn't bump row height.
 .cortext-editable-cell {
 	position: relative;
 	width: 100%;

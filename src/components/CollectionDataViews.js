@@ -374,7 +374,7 @@ export default function CollectionDataViews( {
 					isLoading={ isLoading }
 					empty={ empty }
 				/>
-				{ /* tech-debt.md#6: DataViews has no footer slot, so the
+				{ /* tech-debt.md#7: DataViews has no footer slot, so the
 				   New-row affordance and its CSS layout sit outside the
 				   component instead of inside its layout chrome. */ }
 				<div className="cortext-data-view__footer">

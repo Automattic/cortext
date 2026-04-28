@@ -461,7 +461,7 @@ export default function EditableCell( {
 					checked={ Boolean( value ) }
 					onChange={ ( next ) => commit( next ) }
 					disabled={ isSaving }
-					// tech-debt.md#7: CheckboxControl renders its `label`
+					// tech-debt.md#8: CheckboxControl renders its `label`
 					// prop visibly regardless of hideLabelFromVision, so we
 					// pass aria-label to keep screen readers labelled
 					// without doubling the column header text.

@@ -10,9 +10,9 @@ Pair with [decisions.md](decisions.md) for choices we've made peace with and [ro
 
 `src/components/EditableCell.js`, `RowMutationContext` and `requestNext` in `src/components/CollectionDataViews.js`, plus a sliver of `src/index.scss`.
 
-DataViews v6 ships display layouts and a separate `DataForm` for editing, but no way to make a table cell editable in place. So we mount our own editor from `field.render` (a display renderer in the docs, but the only seam we have), keep edit state per cell, and route saves back through a `RowMutationContext` since `field.render` only gets `{ item }`. Tab and Shift+Tab between cells live in the same layer: editors intercept Tab, ask the parent for the next editable cell via `requestNext`, and the target cell pops open via the `editRequest` channel that also handles auto-focusing the title cell of a fresh row. There's a layout twist too: DataViews renders an actual `<table>` with default `table-layout: auto`, so columns auto-size to their widest cell content. Mounting the editor inside the cell would change the column's intrinsic width and reflow the whole column. We work around this by always rendering the display state and overlaying the editor on top via `position: absolute`, so the table never sees the editor's wider min-content.
+DataViews v6 ships display layouts and a separate `DataForm` for editing, but no way to make a table cell editable in place. So we mount our own editor from `field.render` (a display renderer in the docs, but the only seam we have), keep edit state per cell, and route saves back through a `RowMutationContext` since `field.render` only gets `{ item }`. Tab and Shift+Tab between cells live in the same layer: editors intercept Tab, ask the parent for the next editable cell via `requestNext`, and the target cell pops open via the `editRequest` channel that also handles auto-focusing the title cell of a fresh row.
 
-What we'd want upstream: an `editable` mode on the table layout that uses each field's `Edit` per cell, an `onSaveItem(item, changes)` prop on `<DataViews>`, native cell-to-cell keyboard navigation, and a layout contract for "this control is rendered inline." With those, `RowMutationContext`, `requestNext`, most of `EditableCell`, and the cell-layout CSS go away.
+What we'd want upstream: an `editable` mode on the table layout that uses each field's `Edit` per cell, an `onSaveItem(item, changes)` prop on `<DataViews>`, native cell-to-cell keyboard navigation, and a layout contract for "this control is rendered inline." With those, `RowMutationContext`, `requestNext`, most of `EditableCell`, and the layout couplings tracked in #5 all go away.
 
 It's the biggest entry on this page (~530 lines of `EditableCell` plus context wiring and the navigation walker). File a Gutenberg issue with the use case and proposed shape; `docs/roadmap.md` even lists upstream issues as a stretch success metric.
 
@@ -20,7 +20,7 @@ It's the biggest entry on this page (~530 lines of `EditableCell` plus context w
 
 `src/hooks/useCollectionRows.js`, with side effects in `src/components/CollectionDataViews.js` (`saveRowField`, `onCreated`).
 
-`useCollectionRows` fetches rows with raw `apiFetch` and keeps its own state, including a `requestId` race guard and a `refresh()` counter callers bump after creating or updating a row. Mutations POST directly via `apiFetch`. The dynamic `crtxt_{slug}` post types are registered with `show_in_rest`, so `core-data`'s resolver should discover their schema lazily — we just haven't wired it.
+`useCollectionRows` fetches rows with raw `apiFetch` and keeps its own state, including a `requestId` race guard and a `refresh()` counter callers bump after creating or updating a row. Mutations POST directly via `apiFetch`. The dynamic `crtxt_{slug}` post types are registered with `show_in_rest`, so `core-data`'s resolver should discover their schema lazily; we just haven't wired it.
 
 Switching to `useEntityRecords('postType', \`crtxt_${slug}\`, query)` plus `saveEntityRecord` for writes hands caching, race protection, and post-mutation invalidation back to `core-data`. The knock-on workarounds it deletes:
 
@@ -28,7 +28,7 @@ Switching to `useEntityRecords('postType', \`crtxt_${slug}\`, query)` plus `save
 - Half of `RowMutationContext` (also driven by #1) exists because cells can't reach a `core-data` store that isn't there.
 - `onCreated` runs optimistic `lastPage = ceil((totalItems+1)/perPage)` arithmetic against possibly stale `paginationInfo`. With reactive pagination we'd watch `totalPages` in an effect.
 
-Worth a small spike before committing — `core-data`'s schema cache for rarely-changing post types is the only real risk.
+Worth a small spike before committing; `core-data`'s schema cache for rarely-changing post types is the only real risk.
 
 ## 3. `view.sort` isn't forwarded to REST `[internal]`
 
@@ -48,7 +48,18 @@ Filters round-trip through block attributes and feed `prefillFromFilters` for th
 
 Extends naturally from #3: the same REST filter grows a `meta_query` translation. `is`/`isAny`/`contains` map cleanly to `=`/`IN`/`LIKE` against the right `meta_key`. Once this lands, prefill becomes a side effect of real filtering rather than its only consumer.
 
-## 5. DataViews has no multiselect form control `[upstream]`
+## 5. Inline-edit layout couplings `[internal]`
+
+`src/components/EditableCell.js` and the `.cortext-editable-cell` rules in `src/index.scss`.
+
+Two small but real internal mechanisms exist because DataViews doesn't have an inline-edit contract (#1):
+
+- **Column anchoring via overlay.** DataViews renders an actual `<table>` with default `table-layout: auto`, so columns auto-size to their widest cell content. Mounting an editor inline would change the column's intrinsic width and reflow the whole column. We always render the display shell and overlay the editor on top via `position: absolute`, so the table only sees the display state's intrinsic width and the column stays anchored.
+- **Row height pin.** The shell's `min-height` is hardcoded to 40px to match `__next40pxDefaultSize`, the height of TextControl/NumberControl/SelectControl with the modern WP size flag. If WP changes the default control height, the pin desyncs and rows jitter again.
+
+Both go away if DataViews lands inline editing (#1) and exposes a layout contract for cells. Until then, the overlay is a clean enough pattern to keep, and the height pin is one CSS line worth maintaining. Worth tracking separately so the next person editing the cell layout knows the constraints rather than re-deriving them.
+
+## 6. DataViews has no multiselect form control `[upstream]`
 
 `src/components/MultiselectEdit.js`.
 
@@ -56,9 +67,9 @@ DataViews v6 ships `text`, `integer`, `email`, `datetime`, `radio`, `select`, `t
 
 What we'd want upstream: a `multiselect` dataform-control that DataForm and a future inline-edit mode (#1) resolve from `Edit: 'multiselect'`.
 
-Cost is small — the wrapper is short and self-contained — but every collection with a multiselect field carries the patch. File a Gutenberg issue or PR.
+Cost is small (the wrapper is short and self-contained) but every collection with a multiselect field carries the patch. File a Gutenberg issue or PR.
 
-## 6. DataViews has no `footer` slot `[upstream, soft]`
+## 7. DataViews has no `footer` slot `[upstream, soft]`
 
 `src/components/CollectionDataViews.js` (`cortext-data-view__footer` div), `src/index.scss` (`.cortext-data-view` flex layout).
 
@@ -66,11 +77,11 @@ The "+ New" affordance lives in our own div outside `<DataViews>`, with a small 
 
 This one is more "tidy up later" than tech debt: we can switch to DataViews free composition (already supported via `children`) and lay out `<DataViews.Layout />` and `<DataViews.Pagination />` ourselves. Free composition works today; an upstream `footer` prop would just be neater. Pick free composition before filing upstream.
 
-## 7. `CheckboxControl` ignores `hideLabelFromVision` `[upstream]`
+## 8. `CheckboxControl` ignores `hideLabelFromVision` `[upstream]`
 
 Checkbox cell in `src/components/EditableCell.js`.
 
-`CheckboxControl` always renders its `label` prop as a visible `<label>` next to the input regardless of `hideLabelFromVision` — verified against `node_modules/@wordpress/components/build-module/checkbox-control/index.mjs`. DataViews columns already show the field label in the header, so passing `label={ label }` echoed it next to every checkbox. We pass `aria-label={ label }` instead, which the component forwards to the underlying input. Screen readers still get a label; sighted users no longer see it twice.
+`CheckboxControl` always renders its `label` prop as a visible `<label>` next to the input regardless of `hideLabelFromVision` (verified against `node_modules/@wordpress/components/build-module/checkbox-control/index.mjs`). DataViews columns already show the field label in the header, so passing `label={ label }` echoed it next to every checkbox. We pass `aria-label={ label }` instead, which the component forwards to the underlying input. Screen readers still get a label; sighted users no longer see it twice.
 
 Tiny issue, tiny workaround. The risk is that the next contributor adding a checkbox cell reaches for `label` (since that's the documented prop) and the duplicate quietly returns. File a Gutenberg bug or PR; in the meantime, the in-code reference next to `aria-label` is the signal.
 
@@ -78,8 +89,8 @@ Tiny issue, tiny workaround. The risk is that the next contributor adding a chec
 
 Rough order if these get scheduled:
 
-1. File Gutenberg issues for the upstream items (#1, #5, #6, #7). Cheap, doesn't block anything.
+1. File Gutenberg issues for the upstream items (#1, #6, #7, #8). Cheap, doesn't block anything.
 2. Move rows into `core-data` (#2). Deletes the most code and unblocks reactive pagination.
 3. Forward `view.sort` (#3). Standard WP filter pattern; same filter sets up #4.
 4. Forward `view.filters` (#4). Builds on #3.
-5. Switch the New-row footer to free composition (the local half of #6). Local cleanup once #2 has tidied the surrounding code.
+5. Switch the New-row footer to free composition (the local half of #7). Local cleanup once #2 has tidied the surrounding code.

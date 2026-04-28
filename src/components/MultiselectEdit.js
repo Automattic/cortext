@@ -2,7 +2,7 @@ import { __ } from '@wordpress/i18n';
 import { Button, FormTokenField, Flex, FlexItem } from '@wordpress/components';
 import { useCallback, useMemo, useState } from '@wordpress/element';
 
-// tech-debt.md#5: DataViews v6 ships no `multiselect` dataform-control,
+// tech-debt.md#6: DataViews v6 ships no `multiselect` dataform-control,
 // so this component fills the gap with FormTokenField. Once upstream
 // adds one, this file collapses to a thin wrapper or disappears.
 //
