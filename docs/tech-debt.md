@@ -10,13 +10,13 @@ Each entry is numbered. Code that works around a numbered item references it as 
 
 ### 1. No inline cell editing in DataViews
 
-**Where it bites.** `src/components/EditableCell.js`, `RowMutationContext` plumbed through `src/components/CollectionDataViews.js`.
+**Where it bites.** `src/components/EditableCell.js`, `RowMutationContext` plumbed through `src/components/CollectionDataViews.js` (notably `requestNext` for Tab navigation).
 
-**Today.** `field.render` is documented as a display renderer, but we use it to mount `EditableCell`, which holds local edit state and swaps to a control on click. The save callback is threaded via React context because `field.render` only receives `{ item }` and has no access to a mutation hook.
+**Today.** `field.render` is documented as a display renderer, but we use it to mount `EditableCell`, which holds local edit state and swaps to a control on click. The save callback is threaded via React context because `field.render` only receives `{ item }` and has no access to a mutation hook. Tab and Shift+Tab between cells are also implemented in this layer: text-like and select editors intercept Tab, ask the parent for the next editable cell via `requestNext`, and the target cell pops open via the same `editRequest` channel that handles new-row title focus.
 
-**Cleaner.** An `editable` mode on the DataViews table layout that uses each field's `Edit` per cell, plus an `onSaveItem(item, changes)` prop on `<DataViews>`. With that, `RowMutationContext` and most of `EditableCell` go away.
+**Cleaner.** An `editable` mode on the DataViews table layout that uses each field's `Edit` per cell, plus an `onSaveItem(item, changes)` prop on `<DataViews>`, plus native cell-to-cell keyboard navigation. With those, `RowMutationContext`, `requestNext`, and most of `EditableCell` go away.
 
-**Cost.** ~270 lines in `EditableCell.js` and a context that wouldn't exist otherwise. Reading `field.render` against its documented intent.
+**Cost.** Roughly 530 lines in `EditableCell.js` plus the context wiring and the `requestNext` walker in `CollectionDataViews.js`. Reading `field.render` against its documented intent.
 
 **Action.** File a Gutenberg issue with the use case and proposed shape. `docs/roadmap.md` lists upstream issues as a stretch success metric.
 

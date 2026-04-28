@@ -159,7 +159,9 @@ export default function CollectionDataViews( {
 	const clearEditRequest = useCallback( () => setEditRequest( null ), [] );
 
 	// Editable, currently-visible columns in the order DataViews renders
-	// them. Drives Tab/Shift+Tab cell-to-cell navigation.
+	// them. Drives Tab/Shift+Tab cell-to-cell navigation. See
+	// tech-debt.md#1 — DataViews would own this if inline editing were
+	// upstream, and this walker would go away.
 	const editableVisibleFields = useMemo( () => {
 		const order = view?.fields ?? [];
 		const byId = new Map( dataViewFields.map( ( f ) => [ f.id, f ] ) );
