@@ -482,7 +482,6 @@ export default function EditableCell( {
 					elements={ elements ?? [] }
 					onCommit={ commit }
 					onCancel={ closeEditor }
-					label={ label }
 				/>
 			);
 		} else if ( fieldType === 'select' ) {

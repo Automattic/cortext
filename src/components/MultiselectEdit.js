@@ -8,12 +8,16 @@ import { useCallback, useMemo, useState } from '@wordpress/element';
 //
 // FormTokenField speaks in labels but our row meta stores raw values.
 // Keep two parallel maps and translate at the boundaries.
+//
+// `label` is intentionally not forwarded to FormTokenField: the prop
+// always renders a visible <label> regardless of hideLabelFromVision
+// (same upstream quirk as tech-debt.md#8 for CheckboxControl), and the
+// DataViews column header already announces the field.
 export default function MultiselectEdit( {
 	value,
 	elements,
 	onCommit,
 	onCancel,
-	label,
 } ) {
 	const valueToLabel = useMemo( () => {
 		const map = new Map();
@@ -49,11 +53,10 @@ export default function MultiselectEdit( {
 				value={ tokens }
 				suggestions={ suggestions }
 				onChange={ setTokens }
-				label={ label }
+				label=""
 				__experimentalExpandOnFocus
 				__experimentalShowHowTo={ false }
 				__nextHasNoMarginBottom
-				hideLabelFromVision
 			/>
 			<Flex justify="flex-end" gap={ 2 }>
 				<FlexItem>
