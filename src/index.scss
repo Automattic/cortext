@@ -285,3 +285,42 @@ body.cortext-fullscreen {
 	white-space: nowrap;
 	width: 100%;
 }
+
+.cortext-editable-cell {
+	cursor: text;
+	min-height: $grid-unit-30;
+	padding: $grid-unit-05;
+	border-radius: 2px;
+
+	&:hover,
+	&:focus-visible {
+		background: $gray-100;
+		outline: none;
+	}
+
+	&--editing {
+		background: transparent;
+		padding: 0;
+	}
+
+	&__placeholder {
+		color: $gray-600;
+		font-style: italic;
+	}
+
+	&__error {
+		color: #cc1818;
+		font-size: 12px;
+		margin-top: $grid-unit-05;
+	}
+}
+
+.cortext-cell-readonly {
+	color: $gray-700;
+}
+
+.cortext-multiselect-edit {
+	display: grid;
+	gap: $grid-unit-10;
+	min-width: 240px;
+}
