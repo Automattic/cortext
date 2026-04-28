@@ -288,7 +288,10 @@ body.cortext-fullscreen {
 
 .cortext-editable-cell {
 	cursor: text;
-	min-height: $grid-unit-40;
+	// 40px matches the height of the editor controls
+	// (TextControl/NumberControl/SelectControl with __next40pxDefaultSize),
+	// so opening a cell doesn't bump the row height.
+	min-height: $grid-unit-50;
 	width: 100%;
 	box-sizing: border-box;
 	padding: $grid-unit-05;
