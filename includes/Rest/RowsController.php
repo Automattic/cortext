@@ -344,7 +344,7 @@ final class RowsController {
 			'id'     => $post->ID,
 			'title'  => array(
 				'raw'      => $post->post_title,
-				'rendered' => get_the_title( $post ),
+				'rendered' => $post->post_title,
 			),
 			'status' => $post->post_status,
 			'meta'   => $meta,
