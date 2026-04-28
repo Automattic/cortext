@@ -1,16 +1,128 @@
+import apiFetch from '@wordpress/api-fetch';
+import { Button, Notice } from '@wordpress/components';
 import { DataViews } from '@wordpress/dataviews';
-import { useEffect, useMemo, useRef } from '@wordpress/element';
+import {
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
+import { plus } from '@wordpress/icons';
 
+import EditableCell, { RowMutationContext } from './EditableCell';
 import useCollectionFields from '../hooks/useCollectionFields';
 import useCollectionRows from '../hooks/useCollectionRows';
 
 const DEFAULT_LAYOUTS = { table: {}, grid: {}, list: {} };
+
 const TITLE_FIELD = {
 	id: 'title',
 	label: __( 'Title', 'cortext' ),
 	getValue: ( { item } ) => item?.title?.rendered ?? item?.title?.raw ?? '',
+	render: ( { item } ) => (
+		<EditableCell
+			item={ item }
+			fieldId="title"
+			fieldType="title"
+			label={ __( 'Title', 'cortext' ) }
+			getValue={ ( ctx ) =>
+				ctx.item?.title?.raw ?? ctx.item?.title?.rendered ?? ''
+			}
+		/>
+	),
 };
+
+// Pulls a "single equality" prefill out of the active filters: only filters
+// whose operator is `is` (or its alias `equals`) and whose value is a single
+// scalar contribute. Multi-value operators (`isAny`, `isNone`, …) are skipped
+// because the issue scopes prefill to single equality clauses only.
+function prefillFromFilters( filters, fieldIds ) {
+	const prefill = {};
+	if ( ! Array.isArray( filters ) ) {
+		return prefill;
+	}
+	for ( const filter of filters ) {
+		if ( ! filter || typeof filter !== 'object' ) {
+			continue;
+		}
+		const op = filter.operator;
+		if ( op !== 'is' && op !== 'equals' ) {
+			continue;
+		}
+		const { field, value } = filter;
+		if ( ! field || field === 'title' ) {
+			continue;
+		}
+		if ( Array.isArray( value ) || value === null || value === undefined ) {
+			continue;
+		}
+		if ( ! fieldIds.has( field ) ) {
+			continue;
+		}
+		prefill[ field ] = value;
+	}
+	return prefill;
+}
+
+function NewRowButton( { slug, view, fields, onCreated, disabled } ) {
+	const [ isCreating, setIsCreating ] = useState( false );
+	const [ error, setError ] = useState( null );
+
+	const fieldIds = useMemo(
+		() => new Set( fields.map( ( f ) => f.id ) ),
+		[ fields ]
+	);
+
+	const onClick = useCallback( async () => {
+		setIsCreating( true );
+		setError( null );
+		const meta = prefillFromFilters( view?.filters, fieldIds );
+		try {
+			const created = await apiFetch( {
+				path: `/wp/v2/crtxt_${ slug }`,
+				method: 'POST',
+				data: {
+					status: 'private',
+					title: '',
+					...( Object.keys( meta ).length ? { meta } : {} ),
+				},
+			} );
+			onCreated( created );
+		} catch ( err ) {
+			setError(
+				err?.message ?? __( 'Could not create row.', 'cortext' )
+			);
+		} finally {
+			setIsCreating( false );
+		}
+	}, [ slug, view, fieldIds, onCreated ] );
+
+	return (
+		<>
+			<Button
+				variant="primary"
+				icon={ plus }
+				onClick={ onClick }
+				isBusy={ isCreating }
+				disabled={ disabled || isCreating || ! slug }
+				__next40pxDefaultSize
+			>
+				{ __( 'New', 'cortext' ) }
+			</Button>
+			{ error ? (
+				<Notice
+					status="error"
+					isDismissible
+					onRemove={ () => setError( null ) }
+				>
+					{ error }
+				</Notice>
+			) : null }
+		</>
+	);
+}
 
 export default function CollectionDataViews( {
 	collectionId,
@@ -28,10 +140,49 @@ export default function CollectionDataViews( {
 		paginationInfo,
 		isLoading,
 		error: rowError,
+		refresh,
 	} = useCollectionRows( slug, view );
 	const dataViewFields = useMemo(
 		() => [ TITLE_FIELD, ...fields ],
 		[ fields ]
+	);
+	const [ autoFocusRowId, setAutoFocusRowId ] = useState( null );
+
+	const clearAutoFocus = useCallback( () => setAutoFocusRowId( null ), [] );
+
+	const saveRowField = useCallback(
+		async ( rowId, fieldId, value ) => {
+			if ( ! slug || ! rowId ) {
+				return null;
+			}
+			const payload =
+				fieldId === 'title'
+					? { title: value ?? '' }
+					: { meta: { [ fieldId ]: value } };
+			const updated = await apiFetch( {
+				path: `/wp/v2/crtxt_${ slug }/${ rowId }`,
+				method: 'POST',
+				data: payload,
+			} );
+			refresh();
+			return updated;
+		},
+		[ slug, refresh ]
+	);
+
+	const mutationContext = useMemo(
+		() => ( { saveRowField, autoFocusRowId, clearAutoFocus } ),
+		[ saveRowField, autoFocusRowId, clearAutoFocus ]
+	);
+
+	const onCreated = useCallback(
+		( created ) => {
+			refresh();
+			if ( created?.id ) {
+				setAutoFocusRowId( created.id );
+			}
+		},
+		[ refresh ]
 	);
 
 	const viewRef = useRef( view );
@@ -54,7 +205,13 @@ export default function CollectionDataViews( {
 
 		let nextFields;
 		if ( currentFields.length === 0 ) {
-			nextFields = dataViewFields.map( ( f ) => f.id );
+			// Default to editable columns only: read-only types like
+			// formula and rollup don't compute values yet, so showing
+			// them out of the box is just noise. Users can re-enable
+			// them via the View config.
+			nextFields = dataViewFields
+				.filter( ( f ) => f.editable )
+				.map( ( f ) => f.id );
 		} else {
 			nextFields = currentFields.filter( ( id ) => validIds.has( id ) );
 			if ( ! nextFields.includes( TITLE_FIELD.id ) ) {
@@ -116,17 +273,29 @@ export default function CollectionDataViews( {
 		);
 	}
 
-	return (
-		<DataViews
-			data={ data }
-			fields={ dataViewFields }
+	const header = (
+		<NewRowButton
+			slug={ slug }
 			view={ view }
-			onChangeView={ onChangeView }
-			paginationInfo={ paginationInfo }
-			defaultLayouts={ DEFAULT_LAYOUTS }
-			getItemId={ ( item ) => String( item.id ) }
-			isLoading={ isLoading }
-			empty={ empty }
+			fields={ fields }
+			onCreated={ onCreated }
 		/>
+	);
+
+	return (
+		<RowMutationContext.Provider value={ mutationContext }>
+			<DataViews
+				data={ data }
+				fields={ dataViewFields }
+				view={ view }
+				onChangeView={ onChangeView }
+				paginationInfo={ paginationInfo }
+				defaultLayouts={ DEFAULT_LAYOUTS }
+				getItemId={ ( item ) => String( item.id ) }
+				isLoading={ isLoading }
+				empty={ empty }
+				header={ header }
+			/>
+		</RowMutationContext.Provider>
 	);
 }
