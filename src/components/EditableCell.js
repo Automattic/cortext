@@ -28,8 +28,14 @@ import MultiselectEdit from './MultiselectEdit';
 // the cell could call `saveEntityRecord` directly.
 export const RowMutationContext = createContext( {
 	saveRowField: null,
-	autoFocusRowId: null,
-	clearAutoFocus: () => {},
+	// `{ rowId, fieldId }` of the cell that should pop into edit mode.
+	// Set by the parent when a new row is created (open the title) or
+	// when Tab navigation hops between cells.
+	editRequest: null,
+	clearEditRequest: () => {},
+	// Asks the parent to set editRequest to the next/prev editable cell.
+	// `direction` is 1 for Tab, -1 for Shift+Tab.
+	requestNext: () => {},
 } );
 
 const TEXT_INPUT_TYPES = new Set( [ 'text', 'email', 'url', 'number' ] );
@@ -158,6 +164,7 @@ function TextLikeEditor( {
 	type,
 	onCommit,
 	onCancel,
+	onTab,
 	shouldAutoFocus,
 	label,
 } ) {
@@ -171,18 +178,28 @@ function TextLikeEditor( {
 		}
 	}, [ shouldAutoFocus ] );
 
+	// `commit` returns the saveRowField promise (resolving to a truthy
+	// value on success, falsy on failure) so the keyboard handler can
+	// only chase Tab to the next cell once the current one persisted.
 	const commit = () => {
 		const next = type === 'number' ? toCommittedNumber( local ) : local;
-		onCommit( next );
+		return onCommit( next );
 	};
 
-	const handleKeyDown = ( event ) => {
+	const handleKeyDown = async ( event ) => {
 		if ( event.key === 'Enter' ) {
 			event.preventDefault();
-			commit();
+			await commit();
 		} else if ( event.key === 'Escape' ) {
 			event.preventDefault();
 			onCancel();
+		} else if ( event.key === 'Tab' && onTab ) {
+			event.preventDefault();
+			const direction = event.shiftKey ? -1 : 1;
+			const ok = await commit();
+			if ( ok ) {
+				onTab( direction );
+			}
 		}
 	};
 
@@ -287,7 +304,7 @@ export default function EditableCell( {
 	getValue,
 	readOnly = false,
 } ) {
-	const { saveRowField, autoFocusRowId, clearAutoFocus } =
+	const { saveRowField, editRequest, clearEditRequest, requestNext } =
 		useContext( RowMutationContext );
 	const [ isEditing, setIsEditing ] = useState( false );
 	const [ isSaving, setIsSaving ] = useState( false );
@@ -299,27 +316,29 @@ export default function EditableCell( {
 		: item?.meta?.[ fieldId ] ?? null;
 	const display = formatDisplay( value, fieldType, elements );
 
-	// Auto-open the title cell of a freshly created row, exactly once.
+	// Open this cell when the parent targets it via editRequest (new-row
+	// title auto-open, Tab navigation, etc.), then clear the request so
+	// subsequent renders don't reopen.
 	useEffect( () => {
 		if (
-			fieldId === 'title' &&
 			rowId &&
-			autoFocusRowId === rowId &&
+			editRequest?.rowId === rowId &&
+			editRequest?.fieldId === fieldId &&
 			! isEditing &&
 			! readOnly &&
 			saveRowField
 		) {
 			setIsEditing( true );
-			clearAutoFocus?.();
+			clearEditRequest?.();
 		}
 	}, [
 		fieldId,
 		rowId,
-		autoFocusRowId,
+		editRequest,
 		isEditing,
 		readOnly,
 		saveRowField,
-		clearAutoFocus,
+		clearEditRequest,
 	] );
 
 	if ( readOnly || ! saveRowField ) {
@@ -428,6 +447,9 @@ export default function EditableCell( {
 				type={ fieldType === 'title' ? 'text' : fieldType }
 				onCommit={ commit }
 				onCancel={ closeEditor }
+				onTab={ ( direction ) =>
+					requestNext?.( rowId, fieldId, direction )
+				}
 				shouldAutoFocus
 				label={ label }
 			/>

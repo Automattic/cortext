@@ -32,6 +32,7 @@ const TITLE_FIELD = {
 			}
 		/>
 	),
+	editable: true,
 };
 
 // Pulls a "single equality" prefill out of the active filters: only filters
@@ -150,9 +151,58 @@ export default function CollectionDataViews( {
 		() => [ TITLE_FIELD, ...fields ],
 		[ fields ]
 	);
-	const [ autoFocusRowId, setAutoFocusRowId ] = useState( null );
+	// editRequest is the "open this cell for editing" channel: cells that
+	// match its `{ rowId, fieldId }` flip to edit mode and clear it. Used
+	// for both the title-cell auto-open on a fresh row and Tab-driven
+	// navigation between cells.
+	const [ editRequest, setEditRequest ] = useState( null );
+	const clearEditRequest = useCallback( () => setEditRequest( null ), [] );
 
-	const clearAutoFocus = useCallback( () => setAutoFocusRowId( null ), [] );
+	// Editable, currently-visible columns in the order DataViews renders
+	// them. Drives Tab/Shift+Tab cell-to-cell navigation.
+	const editableVisibleFields = useMemo( () => {
+		const order = view?.fields ?? [];
+		const byId = new Map( dataViewFields.map( ( f ) => [ f.id, f ] ) );
+		return order
+			.map( ( id ) => byId.get( id ) )
+			.filter( ( f ) => f && f.editable );
+	}, [ dataViewFields, view?.fields ] );
+
+	const requestNext = useCallback(
+		( rowId, fieldId, direction ) => {
+			if ( ! data.length || ! editableVisibleFields.length ) {
+				return;
+			}
+			const fieldIdx = editableVisibleFields.findIndex(
+				( f ) => f.id === fieldId
+			);
+			const rowIdx = data.findIndex( ( r ) => r.id === rowId );
+			if ( fieldIdx < 0 || rowIdx < 0 ) {
+				return;
+			}
+
+			let nextField = fieldIdx + direction;
+			let nextRow = rowIdx;
+			if ( nextField >= editableVisibleFields.length ) {
+				nextField = 0;
+				nextRow += 1;
+			} else if ( nextField < 0 ) {
+				nextField = editableVisibleFields.length - 1;
+				nextRow -= 1;
+			}
+			if ( nextRow < 0 || nextRow >= data.length ) {
+				// Off the table edge; stop. Pagination crossings are out of
+				// scope for v1.
+				return;
+			}
+
+			setEditRequest( {
+				rowId: data[ nextRow ].id,
+				fieldId: editableVisibleFields[ nextField ].id,
+			} );
+		},
+		[ data, editableVisibleFields ]
+	);
 
 	const saveRowField = useCallback(
 		async ( rowId, fieldId, value ) => {
@@ -175,8 +225,13 @@ export default function CollectionDataViews( {
 	);
 
 	const mutationContext = useMemo(
-		() => ( { saveRowField, autoFocusRowId, clearAutoFocus } ),
-		[ saveRowField, autoFocusRowId, clearAutoFocus ]
+		() => ( {
+			saveRowField,
+			editRequest,
+			clearEditRequest,
+			requestNext,
+		} ),
+		[ saveRowField, editRequest, clearEditRequest, requestNext ]
 	);
 
 	const onCreated = useCallback(
@@ -209,7 +264,7 @@ export default function CollectionDataViews( {
 				refresh();
 			}
 			if ( created?.id ) {
-				setAutoFocusRowId( created.id );
+				setEditRequest( { rowId: created.id, fieldId: 'title' } );
 			}
 		},
 		[ refresh, view, paginationInfo, onChangeView ]

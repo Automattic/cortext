@@ -66,6 +66,7 @@ function mapField( field ) {
 		label,
 		getValue: ( { item } ) => item?.meta?.[ id ] ?? null,
 		render: buildRender( id, type, label, elements ),
+		editable: EDITABLE_TYPES.has( type ),
 	};
 
 	switch ( type ) {
