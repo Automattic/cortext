@@ -4,6 +4,7 @@ import {
 	CheckboxControl,
 	DateTimePicker,
 	Dropdown,
+	Notice,
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalNumberControl as NumberControl,
 	SelectControl,
@@ -32,8 +33,52 @@ export const RowMutationContext = createContext( {
 } );
 
 const TEXT_INPUT_TYPES = new Set( [ 'text', 'email', 'url', 'number' ] );
+const DATE_ONLY_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
+const DATE_PREFIX_PATTERN = /^(\d{4}-\d{2}-\d{2})(?:T|$)/;
 
-function formatDisplay( value, type, elements ) {
+function formatDateOnlyDisplay( value ) {
+	const match = DATE_ONLY_PATTERN.exec( String( value ) );
+	if ( ! match ) {
+		return null;
+	}
+
+	const [ , year, month, day ] = match;
+	const date = new Date( Number( year ), Number( month ) - 1, Number( day ) );
+	if (
+		date.getFullYear() !== Number( year ) ||
+		date.getMonth() !== Number( month ) - 1 ||
+		date.getDate() !== Number( day )
+	) {
+		return null;
+	}
+	return date.toLocaleDateString();
+}
+
+export function dateOnlyValue( value ) {
+	if ( value === null || value === undefined || value === '' ) {
+		return value;
+	}
+	const text = String( value );
+	return DATE_PREFIX_PATTERN.exec( text )?.[ 1 ] ?? text;
+}
+
+function FieldError( { message } ) {
+	if ( ! message ) {
+		return null;
+	}
+
+	return (
+		<Notice
+			className="cortext-editable-cell__error"
+			status="error"
+			isDismissible={ false }
+		>
+			{ message }
+		</Notice>
+	);
+}
+
+export function formatDisplay( value, type, elements ) {
 	if ( value === null || value === undefined || value === '' ) {
 		return '';
 	}
@@ -50,6 +95,12 @@ function formatDisplay( value, type, elements ) {
 	}
 
 	if ( type === 'date' || type === 'datetime' ) {
+		if ( type === 'date' ) {
+			const dateOnlyDisplay = formatDateOnlyDisplay( value );
+			if ( dateOnlyDisplay ) {
+				return dateOnlyDisplay;
+			}
+		}
 		const date = new Date( value );
 		if ( Number.isNaN( date.getTime() ) ) {
 			return String( value );
@@ -210,9 +261,13 @@ function DateEditor( { value, type, onCommit, onCancel, label } ) {
 				<div className="cortext-editable-cell__date">
 					<DateTimePicker
 						currentDate={ value || null }
-						onChange={ ( next ) => {
-							onCommit( next );
-							onClose();
+						onChange={ async ( next ) => {
+							const didSave = await onCommit(
+								type === 'date' ? dateOnlyValue( next ) : next
+							);
+							if ( didSave ) {
+								onClose();
+							}
 						} }
 						is12Hour
 						aria-label={ label }
@@ -287,30 +342,35 @@ export default function EditableCell( {
 			  ( next === '' && ( value === null || value === undefined ) );
 		if ( equal ) {
 			closeEditor();
-			return;
+			return true;
 		}
 		setIsSaving( true );
 		setError( null );
 		try {
 			await saveRowField( rowId, fieldId, next );
 			closeEditor();
+			return true;
 		} catch ( err ) {
 			setError( err?.message ?? __( 'Could not save.', 'cortext' ) );
 			setIsSaving( false );
+			return false;
 		}
 	};
 
 	// Checkbox: direct toggle, no click-to-edit step.
 	if ( fieldType === 'checkbox' ) {
 		return (
-			<CheckboxControl
-				checked={ Boolean( value ) }
-				onChange={ ( next ) => commit( next ) }
-				disabled={ isSaving }
-				label={ label }
-				hideLabelFromVision
-				__nextHasNoMarginBottom
-			/>
+			<div className="cortext-editable-cell">
+				<CheckboxControl
+					checked={ Boolean( value ) }
+					onChange={ ( next ) => commit( next ) }
+					disabled={ isSaving }
+					label={ label }
+					hideLabelFromVision
+					__nextHasNoMarginBottom
+				/>
+				<FieldError message={ error } />
+			</div>
 		);
 	}
 
@@ -380,11 +440,7 @@ export default function EditableCell( {
 	return (
 		<div className="cortext-editable-cell cortext-editable-cell--editing">
 			{ editor }
-			{ error ? (
-				<div className="cortext-editable-cell__error" role="alert">
-					{ error }
-				</div>
-			) : null }
+			<FieldError message={ error } />
 		</div>
 	);
 }
