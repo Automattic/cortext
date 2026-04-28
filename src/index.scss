@@ -324,3 +324,35 @@ body.cortext-fullscreen {
 	gap: $grid-unit-10;
 	min-width: 240px;
 }
+
+.cortext-data-view {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+
+	// DataViews fills the cortext-canvas__table wrapper with `height: 100%`,
+	// which leaves no room for siblings. Pinning DataViews to flex: 1 lets
+	// our footer sit below it without disappearing.
+	> .dataviews-wrapper {
+		flex: 1 1 auto;
+		min-height: 0;
+	}
+
+	&__footer {
+		flex: 0 0 auto;
+		padding: $grid-unit-05 $grid-unit-10;
+		border-top: $border-width solid $gray-200;
+	}
+
+	&__new-row.components-button {
+		justify-content: flex-start;
+		width: 100%;
+		color: $gray-700;
+		text-decoration: none;
+
+		&:hover:not(:disabled) {
+			background: $gray-100;
+			color: $gray-900;
+		}
+	}
+}

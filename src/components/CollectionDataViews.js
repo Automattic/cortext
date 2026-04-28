@@ -102,12 +102,12 @@ function NewRowButton( { slug, view, fields, onCreated, disabled } ) {
 	return (
 		<>
 			<Button
-				variant="primary"
+				className="cortext-data-view__new-row"
+				variant="tertiary"
 				icon={ plus }
 				onClick={ onClick }
 				isBusy={ isCreating }
 				disabled={ disabled || isCreating || ! slug }
-				__next40pxDefaultSize
 			>
 				{ __( 'New', 'cortext' ) }
 			</Button>
@@ -177,12 +177,25 @@ export default function CollectionDataViews( {
 
 	const onCreated = useCallback(
 		( created ) => {
-			refresh();
+			// Rows are sorted oldest-first, so the new row lives on the last
+			// page. Hop there before refreshing so the user sees their row
+			// instead of staying on page 1.
+			const perPage = view?.perPage ?? 25;
+			const expectedTotal = ( paginationInfo?.totalItems ?? 0 ) + 1;
+			const lastPage = Math.max(
+				1,
+				Math.ceil( expectedTotal / perPage )
+			);
+			if ( ( view?.page ?? 1 ) !== lastPage ) {
+				onChangeView( { ...view, page: lastPage } );
+			} else {
+				refresh();
+			}
 			if ( created?.id ) {
 				setAutoFocusRowId( created.id );
 			}
 		},
-		[ refresh ]
+		[ refresh, view, paginationInfo, onChangeView ]
 	);
 
 	const viewRef = useRef( view );
@@ -273,29 +286,29 @@ export default function CollectionDataViews( {
 		);
 	}
 
-	const header = (
-		<NewRowButton
-			slug={ slug }
-			view={ view }
-			fields={ fields }
-			onCreated={ onCreated }
-		/>
-	);
-
 	return (
 		<RowMutationContext.Provider value={ mutationContext }>
-			<DataViews
-				data={ data }
-				fields={ dataViewFields }
-				view={ view }
-				onChangeView={ onChangeView }
-				paginationInfo={ paginationInfo }
-				defaultLayouts={ DEFAULT_LAYOUTS }
-				getItemId={ ( item ) => String( item.id ) }
-				isLoading={ isLoading }
-				empty={ empty }
-				header={ header }
-			/>
+			<div className="cortext-data-view">
+				<DataViews
+					data={ data }
+					fields={ dataViewFields }
+					view={ view }
+					onChangeView={ onChangeView }
+					paginationInfo={ paginationInfo }
+					defaultLayouts={ DEFAULT_LAYOUTS }
+					getItemId={ ( item ) => String( item.id ) }
+					isLoading={ isLoading }
+					empty={ empty }
+				/>
+				<div className="cortext-data-view__footer">
+					<NewRowButton
+						slug={ slug }
+						view={ view }
+						fields={ fields }
+						onCreated={ onCreated }
+					/>
+				</div>
+			</div>
 		</RowMutationContext.Provider>
 	);
 }
