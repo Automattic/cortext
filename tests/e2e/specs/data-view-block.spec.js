@@ -325,4 +325,173 @@ test.describe( 'Collection view block', () => {
 			);
 		}
 	} );
+
+	test( 'drops dead field references from the view when a field is deleted', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+
+		try {
+			const suffix = Date.now().toString( 36 ).slice( -4 );
+			const slug = `e2eclean${ suffix }`;
+			fixture.slug = slug;
+
+			fixture.collection = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_collections',
+				data: {
+					title: `Cleanup ${ suffix }`,
+					status: 'private',
+					meta: { slug },
+				},
+			} );
+
+			fixture.fieldA = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_fields',
+				data: {
+					title: 'Author',
+					status: 'private',
+					meta: { type: 'text' },
+				},
+			} );
+
+			fixture.fieldB = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_fields',
+				data: {
+					title: 'Notes',
+					status: 'private',
+					meta: { type: 'text' },
+				},
+			} );
+
+			await requestUtils.rest( {
+				method: 'POST',
+				path: `/wp/v2/crtxt_collections/${ fixture.collection.id }`,
+				data: {
+					meta: {
+						fields: [
+							String( fixture.fieldA.id ),
+							String( fixture.fieldB.id ),
+						],
+					},
+				},
+			} );
+
+			const fieldAKey = `field-${ fixture.fieldA.id }`;
+			const fieldBKey = `field-${ fixture.fieldB.id }`;
+			const staleView = {
+				type: 'table',
+				fields: [ 'title', fieldAKey, fieldBKey ],
+				sort: { field: fieldAKey, direction: 'asc' },
+				filters: [
+					{
+						field: fieldAKey,
+						operator: 'is',
+						value: 'X',
+					},
+					{
+						field: fieldBKey,
+						operator: 'is',
+						value: 'Y',
+					},
+				],
+				perPage: 25,
+				page: 1,
+				search: 'preserved',
+				layout: { density: 'comfortable' },
+			};
+			const blockMarkup = `<!-- wp:cortext/data-view ${ JSON.stringify( {
+				collectionId: fixture.collection.id,
+				view: staleView,
+			} ) } /-->`;
+
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_pages',
+				data: {
+					title: 'View cleanup test page',
+					status: 'private',
+					content: blockMarkup,
+				},
+			} );
+
+			await requestUtils.rest( {
+				method: 'DELETE',
+				path: `/wp/v2/crtxt_fields/${ fixture.fieldA.id }`,
+				params: { force: true },
+			} );
+			fixture.fieldADeleted = true;
+
+			await requestUtils.rest( {
+				method: 'POST',
+				path: `/wp/v2/crtxt_collections/${ fixture.collection.id }`,
+				data: {
+					meta: { fields: [ String( fixture.fieldB.id ) ] },
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/page/${ fixture.page.id }`
+			);
+
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.page.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+			await expect( canvas.getByText( 'Notes' ) ).toBeVisible();
+
+			await page.evaluate( async () => {
+				await window.wp.data.dispatch( 'core/editor' ).savePost();
+			} );
+			await page.waitForFunction(
+				() => ! window.wp.data.select( 'core/editor' ).isSavingPost()
+			);
+
+			const saved = await requestUtils.rest( {
+				path: `/wp/v2/crtxt_pages/${ fixture.page.id }`,
+				params: { context: 'edit' },
+			} );
+
+			expect( saved.content.raw ).not.toContain( fieldAKey );
+			expect( saved.content.raw ).toContain( fieldBKey );
+			expect( saved.content.raw ).toContain( '"title"' );
+			expect( saved.content.raw ).toContain( '"sort":null' );
+			expect( saved.content.raw ).toContain( '"search":"preserved"' );
+			expect( saved.content.raw ).toContain(
+				'"layout":{"density":"comfortable"}'
+			);
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+			);
+			if ( ! fixture.fieldADeleted ) {
+				await deleteIfCreated(
+					requestUtils,
+					fixture.fieldA &&
+						`/wp/v2/crtxt_fields/${ fixture.fieldA.id }`
+				);
+			}
+			await deleteIfCreated(
+				requestUtils,
+				fixture.fieldB && `/wp/v2/crtxt_fields/${ fixture.fieldB.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+			);
+		}
+	} );
 } );
