@@ -8,6 +8,11 @@ function buildQueryArgs( view ) {
 		per_page: view?.perPage ?? 25,
 		page: view?.page ?? 1,
 		status: 'draft,private,publish',
+		// Default to oldest-first so newly created rows land at the bottom
+		// of the table (Notion-style). When sort forwarding lands, an
+		// explicit `view.sort` should override this default.
+		orderby: 'date',
+		order: 'asc',
 	};
 
 	if ( view?.search ) {
