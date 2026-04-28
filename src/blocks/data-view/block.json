@@ -11,9 +11,14 @@
 		"html": false,
 		"reusable": false,
 		"multiple": true,
-		"inserter": true
+		"inserter": true,
+		"align": [ "wide", "full" ]
 	},
 	"attributes": {
+		"align": {
+			"type": "string",
+			"default": "full"
+		},
 		"collectionId": {
 			"type": "number"
 		},
