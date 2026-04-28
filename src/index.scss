@@ -246,3 +246,42 @@ body.cortext-fullscreen {
 		padding: $grid-unit-30 0;
 	}
 }
+
+.cortext-data-view-picker__empty {
+	color: $gray-700;
+	margin: 0;
+}
+
+.cortext-data-view-placeholder__create {
+	border-top: $border-width solid $gray-200;
+	margin-top: $grid-unit-15;
+	padding-top: $grid-unit-15;
+	width: 100%;
+}
+
+.cortext-data-view-create {
+	display: grid;
+	gap: $grid-unit-15;
+	width: min(100%, 420px);
+}
+
+.cortext-data-view-toolbar-popover__content {
+	min-width: 260px;
+	padding: $grid-unit-15;
+}
+
+.cortext-collection-chooser {
+	display: grid;
+	gap: $grid-unit-05;
+	width: min(100%, 420px);
+}
+
+.cortext-collection-chooser__item.components-button {
+	justify-content: flex-start;
+	min-height: 36px;
+	overflow: hidden;
+	text-align: start;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	width: 100%;
+}

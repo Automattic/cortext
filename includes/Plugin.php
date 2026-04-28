@@ -15,6 +15,7 @@ use Cortext\PostType\Collection;
 use Cortext\PostType\CollectionEntries;
 use Cortext\PostType\Field;
 use Cortext\PostType\Page;
+use Cortext\Rest\CollectionsController;
 
 final class Plugin {
 
@@ -34,6 +35,7 @@ final class Plugin {
 		( new Field() )->register();
 		( new CollectionEntries() )->register();
 		( new RevisionThrottle() )->register();
+		( new CollectionsController() )->register();
 	}
 
 	private function __construct() {}

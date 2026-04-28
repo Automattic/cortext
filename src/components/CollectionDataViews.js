@@ -18,9 +18,17 @@ export default function CollectionDataViews( {
 	onChangeView,
 	loading = null,
 	empty,
+	invalid,
+	error,
 } ) {
-	const { fields, slug, isResolving } = useCollectionFields( collectionId );
-	const { data, paginationInfo, isLoading } = useCollectionRows( slug, view );
+	const { fields, collection, slug, isResolving } =
+		useCollectionFields( collectionId );
+	const {
+		data,
+		paginationInfo,
+		isLoading,
+		error: rowError,
+	} = useCollectionRows( slug, view );
 	const dataViewFields = useMemo(
 		() => [ TITLE_FIELD, ...fields ],
 		[ fields ]
@@ -55,6 +63,29 @@ export default function CollectionDataViews( {
 
 	if ( isResolving ) {
 		return loading;
+	}
+
+	if ( collectionId && ! collection ) {
+		return (
+			invalid ?? (
+				<p>
+					{ __(
+						'This collection is no longer available.',
+						'cortext'
+					) }
+				</p>
+			)
+		);
+	}
+
+	if ( rowError ) {
+		return (
+			error ?? (
+				<p>
+					{ __( 'Collection rows could not be loaded.', 'cortext' ) }
+				</p>
+			)
+		);
 	}
 
 	return (

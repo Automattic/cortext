@@ -84,6 +84,15 @@ function createDataViewBlockMarkup( collectionId ) {
 	return `<!-- wp:cortext/data-view ${ JSON.stringify( attributes ) } /-->`;
 }
 
+function createEmptyDataViewBlockMarkup() {
+	return '<!-- wp:cortext/data-view /-->';
+}
+
+function parseCollectionIdFromContent( content ) {
+	const match = content.match( /"collectionId":(\d+)/ );
+	return match ? Number( match[ 1 ] ) : 0;
+}
+
 test.describe( 'Collection view block', () => {
 	test( 'renders a selected collection and persists block attributes', async ( {
 		admin,
@@ -176,6 +185,143 @@ test.describe( 'Collection view block', () => {
 				requestUtils,
 				fixture.collection &&
 					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+			);
+		}
+	} );
+
+	test( 'creates a collection from the placeholder and can switch collections', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+
+		try {
+			Object.assign(
+				fixture,
+				await createCollectionFixture( requestUtils )
+			);
+
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_pages',
+				data: {
+					title: 'Inline collection creation page',
+					status: 'private',
+					content: createEmptyDataViewBlockMarkup(),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/page/${ fixture.page.id }`
+			);
+
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.page.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+			await canvas.getByLabel( 'Name' ).fill( 'Inline Books' );
+			await canvas
+				.getByRole( 'button', { name: 'Create collection' } )
+				.click();
+
+			await expect( canvas.getByText( 'Title' ) ).toBeVisible();
+			await expect(
+				page
+					.locator( '.cortext-sidebar' )
+					.getByText( 'Inline Books', { exact: true } )
+			).toBeVisible();
+
+			await page.evaluate( async () => {
+				await window.wp.data.dispatch( 'core/editor' ).savePost();
+			} );
+			await page.waitForFunction(
+				() => ! window.wp.data.select( 'core/editor' ).isSavingPost()
+			);
+
+			let saved = await requestUtils.rest( {
+				path: `/wp/v2/crtxt_pages/${ fixture.page.id }`,
+				params: { context: 'edit' },
+			} );
+
+			fixture.createdCollectionId = parseCollectionIdFromContent(
+				saved.content.raw
+			);
+			expect( fixture.createdCollectionId ).toBeGreaterThan( 0 );
+
+			const createdCollection = await requestUtils.rest( {
+				path: `/wp/v2/crtxt_collections/${ fixture.createdCollectionId }`,
+				params: { context: 'edit' },
+			} );
+			fixture.createdFieldIds = createdCollection.meta.fields || [];
+			expect( createdCollection.meta.slug ).toBe( 'inline-books' );
+			expect( fixture.createdFieldIds ).toEqual( [] );
+
+			await page
+				.getByRole( 'button', { name: 'Change collection' } )
+				.click();
+			await page
+				.locator( '.cortext-data-view-toolbar-popover' )
+				.getByRole( 'button', { name: /E2E Books/ } )
+				.click();
+
+			await expect(
+				canvas.getByText( 'The Left Hand of Darkness' )
+			).toBeVisible();
+
+			await page.evaluate( async () => {
+				await window.wp.data.dispatch( 'core/editor' ).savePost();
+			} );
+			await page.waitForFunction(
+				() => ! window.wp.data.select( 'core/editor' ).isSavingPost()
+			);
+
+			saved = await requestUtils.rest( {
+				path: `/wp/v2/crtxt_pages/${ fixture.page.id }`,
+				params: { context: 'edit' },
+			} );
+
+			expect( saved.content.raw ).toContain(
+				`"collectionId":${ fixture.collection.id }`
+			);
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.entry &&
+					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+			);
+			if ( fixture.createdFieldIds ) {
+				for ( const fieldId of fixture.createdFieldIds ) {
+					await deleteIfCreated(
+						requestUtils,
+						`/wp/v2/crtxt_fields/${ fieldId }`
+					);
+				}
+			}
+			await deleteIfCreated(
+				requestUtils,
+				fixture.createdCollectionId &&
+					`/wp/v2/crtxt_collections/${ fixture.createdCollectionId }`
 			);
 		}
 	} );
