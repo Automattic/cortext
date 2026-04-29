@@ -425,6 +425,16 @@ body.cortext-fullscreen {
 		min-height: 0;
 	}
 
+	// DataViews adds vertical padding to body cells, which leaves a gap
+	// above and below our editable cell shell, so the hover/edit background
+	// floats inside the row instead of filling it. Drop the td's
+	// padding-block so the shell's own min-height (matched to
+	// __next40pxDefaultSize, see tech-debt.md#5) controls row height.
+	// `<th>` keeps its padding so headers still breathe.
+	.dataviews-view-table tr td {
+		padding-block: 0;
+	}
+
 	&__footer {
 		flex: 0 0 auto;
 		padding: $grid-unit-05 $grid-unit-10;
