@@ -1,6 +1,11 @@
-import { useEffect, useRef, useState } from '@wordpress/element';
+import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
 import { addQueryArgs } from '@wordpress/url';
 import apiFetch from '@wordpress/api-fetch';
+
+// This hook is the central workaround spot for tech-debt.md#2 (rows
+// outside core-data), tech-debt.md#3 (no view.sort forwarding), and
+// tech-debt.md#4 (no view.filters forwarding). Each is referenced
+// inline below where it lands.
 
 function buildQueryArgs( collectionId, view ) {
 	const args = {
@@ -44,11 +49,18 @@ export default function useCollectionRows( collectionId, view ) {
 		isLoading: false,
 		error: null,
 	} );
+	const [ refreshKey, setRefreshKey ] = useState( 0 );
 
 	const requestIdRef = useRef( 0 );
 	const queryKey = collectionId
 		? JSON.stringify( buildQueryArgs( collectionId, view ) )
 		: null;
+
+	// tech-debt.md#2: callers POST via apiFetch and bump refresh() to
+	// re-read. With rows in core-data this whole counter goes away.
+	const refresh = useCallback( () => {
+		setRefreshKey( ( key ) => key + 1 );
+	}, [] );
 
 	useEffect( () => {
 		if ( ! collectionId ) {
@@ -98,7 +110,7 @@ export default function useCollectionRows( collectionId, view ) {
 
 		return undefined;
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [ collectionId, queryKey ] );
+	}, [ collectionId, queryKey, refreshKey ] );
 
-	return state;
+	return { ...state, refresh };
 }

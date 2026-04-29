@@ -179,8 +179,8 @@ describe( 'computeUri', () => {
 	} );
 
 	it( 'accepts a custom prefix', () => {
-		expect(
-			computeUri( { id: 3, slug: 'books' }, 'collection' )
-		).toBe( 'collection/books-3' );
+		expect( computeUri( { id: 3, slug: 'books' }, 'collection' ) ).toBe(
+			'collection/books-3'
+		);
 	} );
 } );
