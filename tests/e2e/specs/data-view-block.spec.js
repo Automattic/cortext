@@ -662,7 +662,15 @@ test.describe( 'Collection view block', () => {
 			await expect( cell ).toBeVisible();
 			await cell.click();
 
-			const input = canvas.getByLabel( 'Author', { exact: true } );
+			// `getByRole('textbox', ...)` rather than `getByLabel`: the
+			// editable cell's display shell also carries `aria-label="Author"`
+			// (so a screen reader names the cell when it's the focused
+			// "button" in display mode), and strict mode matches both the
+			// shell and the editor input. Filtering by role disambiguates.
+			const input = canvas.getByRole( 'textbox', {
+				name: 'Author',
+				exact: true,
+			} );
 			await expect( input ).toBeVisible();
 			await input.fill( 'U. K. Le Guin' );
 			await input.press( 'Enter' );

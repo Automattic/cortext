@@ -17,7 +17,7 @@
 	"attributes": {
 		"align": {
 			"type": "string",
-			"default": "full"
+			"default": "wide"
 		},
 		"collectionId": {
 			"type": "number"
