@@ -1,12 +1,6 @@
 import { __ } from '@wordpress/i18n';
-import {
-	Button,
-	Dropdown,
-	Flex,
-	FlexItem,
-	FormTokenField,
-} from '@wordpress/components';
-import { useCallback, useMemo, useState } from '@wordpress/element';
+import { Button, Dropdown, FormTokenField } from '@wordpress/components';
+import { useMemo, useState } from '@wordpress/element';
 
 // tech-debt.md#6: DataViews v6 ships no `multiselect` dataform-control,
 // so this component fills the gap with FormTokenField. Once upstream
@@ -22,7 +16,7 @@ import { useCallback, useMemo, useState } from '@wordpress/element';
 export default function MultiselectEdit( {
 	value,
 	elements,
-	onCommit,
+	onSave,
 	onCancel,
 	label,
 } ) {
@@ -47,12 +41,16 @@ export default function MultiselectEdit( {
 		[ elements ]
 	);
 
-	const commit = useCallback( () => {
-		const nextValues = tokens
+	// Persist on every change so adding or removing a token saves
+	// immediately. The popover stays open while the user keeps editing;
+	// closing the popover (click outside or trigger) just dismisses it.
+	const handleChange = ( nextTokens ) => {
+		setTokens( nextTokens );
+		const nextValues = nextTokens
 			.map( ( token ) => labelToValue.get( token ) ?? token )
 			.filter( ( v ) => v !== '' && v !== null && v !== undefined );
-		onCommit( nextValues );
-	}, [ tokens, labelToValue, onCommit ] );
+		onSave( nextValues );
+	};
 
 	const triggerLabel = tokens.length
 		? tokens.join( ', ' )
@@ -74,41 +72,17 @@ export default function MultiselectEdit( {
 					{ triggerLabel }
 				</Button>
 			) }
-			renderContent={ ( { onClose } ) => (
+			renderContent={ () => (
 				<div className="cortext-multiselect-edit__popover">
 					<FormTokenField
 						value={ tokens }
 						suggestions={ suggestions }
-						onChange={ setTokens }
+						onChange={ handleChange }
 						label=""
 						__experimentalExpandOnFocus
 						__experimentalShowHowTo={ false }
 						__nextHasNoMarginBottom
 					/>
-					<Flex justify="flex-end" gap={ 2 }>
-						<FlexItem>
-							<Button
-								variant="tertiary"
-								onClick={ () => {
-									onClose();
-									onCancel();
-								} }
-							>
-								{ __( 'Cancel', 'cortext' ) }
-							</Button>
-						</FlexItem>
-						<FlexItem>
-							<Button
-								variant="primary"
-								onClick={ () => {
-									commit();
-									onClose();
-								} }
-							>
-								{ __( 'Save', 'cortext' ) }
-							</Button>
-						</FlexItem>
-					</Flex>
 				</div>
 			) }
 		/>

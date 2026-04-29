@@ -286,8 +286,8 @@ function SelectEditor( { value, elements, onCommit, onCancel, onTab, label } ) {
 				<MenuGroup>
 					<MenuItem
 						isSelected={ ! hasValue }
-						onClick={ () => {
-							onCommit( null );
+						onClick={ async () => {
+							await onCommit( null );
 							onClose();
 						} }
 					>
@@ -297,8 +297,8 @@ function SelectEditor( { value, elements, onCommit, onCancel, onTab, label } ) {
 						<MenuItem
 							key={ opt.value }
 							isSelected={ opt.value === value }
-							onClick={ () => {
-								onCommit( opt.value );
+							onClick={ async () => {
+								await onCommit( opt.value );
 								onClose();
 							} }
 						>
@@ -476,11 +476,17 @@ export default function EditableCell( {
 	let editor = null;
 	if ( isEditing ) {
 		if ( fieldType === 'multiselect' ) {
+			// Multiselect persists on each token change rather than on a
+			// single commit (Notion-style: no Save button). Wire onSave
+			// straight to saveRowField so saving doesn't close the cell;
+			// closing happens via Dropdown's onClose firing onCancel.
 			editor = (
 				<MultiselectEdit
 					value={ Array.isArray( value ) ? value : [] }
 					elements={ elements ?? [] }
-					onCommit={ commit }
+					onSave={ ( nextValues ) =>
+						saveRowField?.( rowId, fieldId, nextValues )
+					}
 					onCancel={ closeEditor }
 					label={ label }
 				/>
