@@ -707,4 +707,180 @@ test.describe( 'Collection view block', () => {
 			);
 		}
 	} );
+
+	test( 'renders typed cells for url, checkbox, number, select, and multiselect', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = { fieldIds: [] };
+
+		try {
+			const suffix = Date.now().toString( 36 ).slice( -4 );
+			const slug = `e2etypes${ suffix }`;
+			fixture.slug = slug;
+
+			fixture.collection = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_collections',
+				data: {
+					title: `Typed cells ${ suffix }`,
+					status: 'private',
+					meta: { slug },
+				},
+			} );
+
+			const createField = async ( title, type, options ) => {
+				const meta = { type };
+				if ( options ) {
+					meta.options = JSON.stringify( options );
+				}
+				const field = await requestUtils.rest( {
+					method: 'POST',
+					path: '/wp/v2/crtxt_fields',
+					data: { title, status: 'private', meta },
+				} );
+				fixture.fieldIds.push( field.id );
+				return field;
+			};
+
+			const urlField = await createField( 'Homepage', 'url' );
+			const checkField = await createField( 'Done', 'checkbox' );
+			const numberField = await createField( 'Score', 'number' );
+			const selectField = await createField( 'Status', 'select', [
+				{ value: 'open', label: 'Open', color: '#ffe2dd' },
+				{ value: 'closed', label: 'Closed', color: '#e8e8e7' },
+			] );
+			const tagsField = await createField( 'Tags', 'multiselect', [
+				{ value: 'a', label: 'Alpha', color: '#ddebf1' },
+				{ value: 'b', label: 'Beta', color: '#ddedea' },
+			] );
+
+			await requestUtils.rest( {
+				method: 'POST',
+				path: `/wp/v2/crtxt_collections/${ fixture.collection.id }`,
+				data: {
+					meta: {
+						fields: fixture.fieldIds.map( String ),
+					},
+				},
+			} );
+
+			fixture.entry = await requestUtils.rest( {
+				method: 'POST',
+				path: `/wp/v2/crtxt_${ slug }`,
+				data: {
+					title: 'Sample row',
+					status: 'private',
+					meta: {
+						[ `field-${ urlField.id }` ]:
+							'https://example.com/welcome',
+						[ `field-${ checkField.id }` ]: true,
+						[ `field-${ numberField.id }` ]: 12.5,
+						[ `field-${ selectField.id }` ]: 'open',
+						[ `field-${ tagsField.id }` ]: [ 'a', 'b' ],
+					},
+				},
+			} );
+
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_pages',
+				data: {
+					title: 'Typed cell rendering page',
+					status: 'private',
+					content: createDataViewBlockMarkup(
+						fixture.collection.id,
+						{
+							fields: [
+								'title',
+								`field-${ urlField.id }`,
+								`field-${ checkField.id }`,
+								`field-${ numberField.id }`,
+								`field-${ selectField.id }`,
+								`field-${ tagsField.id }`,
+							],
+						}
+					),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/page/${ fixture.page.id }`
+			);
+
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.page.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+			await expect( canvas.getByText( 'Sample row' ) ).toBeVisible();
+
+			// URL: anchor with correct attributes.
+			const link = canvas.getByRole( 'link', {
+				name: 'https://example.com/welcome',
+			} );
+			await expect( link ).toBeVisible();
+			await expect( link ).toHaveAttribute(
+				'href',
+				'https://example.com/welcome'
+			);
+			await expect( link ).toHaveAttribute( 'target', '_blank' );
+			await expect( link ).toHaveAttribute(
+				'rel',
+				'noopener noreferrer'
+			);
+
+			// Number: decimal value renders intact.
+			await expect( canvas.getByText( '12.5' ) ).toBeVisible();
+
+			// Select: chip with the option's color (Notion shape parsed).
+			const statusChip = canvas.getByText( 'Open', { exact: true } );
+			await expect( statusChip ).toBeVisible();
+			await expect( statusChip ).toHaveClass( /cortext-chip/ );
+			await expect( statusChip ).not.toHaveClass(
+				/cortext-chip--neutral/
+			);
+
+			// Multiselect: one chip per value with their respective colors.
+			const tagAlpha = canvas.getByText( 'Alpha', { exact: true } );
+			const tagBeta = canvas.getByText( 'Beta', { exact: true } );
+			await expect( tagAlpha ).toHaveClass( /cortext-chip/ );
+			await expect( tagBeta ).toHaveClass( /cortext-chip/ );
+
+			// Checkbox: the cell is the editable CheckboxControl, not the
+			// formatDisplay icon path. Confirm a checked input is rendered.
+			const checkbox = canvas
+				.locator( '.cortext-cell-checkbox input[type="checkbox"]' )
+				.first();
+			await expect( checkbox ).toBeChecked();
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				fixture.entry &&
+					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+			);
+			for ( const fieldId of fixture.fieldIds ) {
+				await deleteIfCreated(
+					requestUtils,
+					`/wp/v2/crtxt_fields/${ fieldId }`
+				);
+			}
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+			);
+		}
+	} );
 } );

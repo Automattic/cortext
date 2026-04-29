@@ -389,6 +389,50 @@ body.cortext-fullscreen {
 	color: $gray-700;
 }
 
+.cortext-cell-link {
+	color: var(--wp-admin-theme-color);
+	text-decoration: underline;
+	text-underline-offset: 2px;
+
+	&:hover,
+	&:focus {
+		text-decoration: none;
+	}
+}
+
+.cortext-cell-check {
+	color: $gray-900;
+}
+
+// Single chip used by select cells; flex container for multiselect cells.
+// Background and foreground come from inline styles when an option color
+// is present; the neutral modifier covers options without one.
+.cortext-chip {
+	display: inline-flex;
+	align-items: center;
+	padding: 0 $grid-unit-10;
+	height: $grid-unit-30;
+	line-height: 1;
+	font-size: $default-font-size;
+	border-radius: $grid-unit-30;
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+
+	&--neutral {
+		background-color: $gray-100;
+		color: $gray-900;
+	}
+}
+
+.cortext-chips {
+	display: inline-flex;
+	flex-wrap: wrap;
+	gap: $grid-unit-05;
+	max-width: 100%;
+}
+
 // Checkbox cells skip the shell/overlay dance because the input is
 // always rendered (no display vs editor distinction). Keep the same row
 // height as editable cells for visual consistency.
