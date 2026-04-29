@@ -123,12 +123,16 @@ final class RowsController {
 			return $validation;
 		}
 
+		// Precompute which fields are multi-value so format_row does not
+		// re-fetch the field type for every row.
+		$multi_field_ids = $this->multi_value_field_ids( $field_ids );
+
 		$query_args = $this->build_query_args( $request, $slug );
 		$query      = new WP_Query( $query_args );
 
 		$rows = array_map(
-			function ( WP_Post $post ) use ( $field_ids ) {
-				return $this->format_row( $post, $field_ids );
+			function ( WP_Post $post ) use ( $field_ids, $multi_field_ids ) {
+				return $this->format_row( $post, $field_ids, $multi_field_ids );
 			},
 			$query->posts
 		);
@@ -322,20 +326,36 @@ final class RowsController {
 	}
 
 	/**
+	 * Returns the subset of field IDs whose type stores multiple values.
+	 *
+	 * @param int[] $field_ids All field IDs for the collection.
+	 * @return array<int, true> Keyed by field ID for fast lookup.
+	 */
+	private function multi_value_field_ids( array $field_ids ): array {
+		$multi = array();
+		foreach ( $field_ids as $field_id ) {
+			$field_type = (string) get_post_meta( $field_id, 'type', true );
+			if ( in_array( $field_type, array( 'multiselect', 'relation' ), true ) ) {
+				$multi[ $field_id ] = true;
+			}
+		}
+		return $multi;
+	}
+
+	/**
 	 * Formats a single row post for the response.
 	 *
-	 * @param WP_Post $post      Entry post object.
-	 * @param int[]   $field_ids Valid field IDs for the collection.
+	 * @param WP_Post         $post            Entry post object.
+	 * @param int[]           $field_ids       Valid field IDs for the collection.
+	 * @param array<int,true> $multi_field_ids Field IDs that are multi-value.
 	 * @return array
 	 */
-	private function format_row( WP_Post $post, array $field_ids ): array {
+	private function format_row( WP_Post $post, array $field_ids, array $multi_field_ids ): array {
 		$meta = array();
 		foreach ( $field_ids as $field_id ) {
-			$key        = "field-{$field_id}";
-			$field_type = (string) get_post_meta( $field_id, 'type', true );
-			$is_multi   = in_array( $field_type, array( 'multiselect', 'relation' ), true );
+			$key = "field-{$field_id}";
 
-			$meta[ $key ] = $is_multi
+			$meta[ $key ] = isset( $multi_field_ids[ $field_id ] )
 				? get_post_meta( $post->ID, $key, false )
 				: get_post_meta( $post->ID, $key, true );
 		}

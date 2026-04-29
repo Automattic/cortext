@@ -227,7 +227,7 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$method     = new \ReflectionMethod( $controller, 'format_row' );
 		$method->setAccessible( true );
 
-		$row = $method->invoke( $controller, get_post( $post_id ), array( $field_id ) );
+		$row = $method->invoke( $controller, get_post( $post_id ), array( $field_id ), array() );
 
 		$this->assertSame( $post_id, $row['id'] );
 		$this->assertSame( 'My Entry', $row['title']['raw'] );
@@ -271,7 +271,7 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$method     = new \ReflectionMethod( $controller, 'format_row' );
 		$method->setAccessible( true );
 
-		$row = $method->invoke( $controller, get_post( $post_id ), array( $field_id ) );
+		$row = $method->invoke( $controller, get_post( $post_id ), array( $field_id ), array( $field_id => true ) );
 
 		$this->assertIsArray( $row['meta']["field-{$field_id}"] );
 		$this->assertContains( 'alpha', $row['meta']["field-{$field_id}"] );
