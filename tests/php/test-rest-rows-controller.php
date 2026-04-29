@@ -309,6 +309,9 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertSame( 10, $args['posts_per_page'] );
 		$this->assertSame( 2, $args['paged'] );
 		$this->assertArrayNotHasKey( 's', $args );
+		// Default sort: oldest-first so new rows land at the bottom.
+		$this->assertSame( 'date', $args['orderby'] );
+		$this->assertSame( 'ASC', $args['order'] );
 	}
 
 	public function test_build_query_args_with_search(): void {

@@ -269,7 +269,12 @@ final class RowsController {
 		}
 
 		$sort = $request->get_param( 'sort' );
-		if ( is_array( $sort ) && ! empty( $sort['field'] ) ) {
+		if ( ! is_array( $sort ) || empty( $sort['field'] ) ) {
+			// Default to oldest-first so newly created rows land at the
+			// bottom of the table (Notion-style).
+			$args['orderby'] = 'date';
+			$args['order']   = 'ASC';
+		} else {
 			$direction = ( $sort['direction'] ?? 'asc' ) === 'desc' ? 'DESC' : 'ASC';
 
 			if ( 'title' === $sort['field'] ) {
