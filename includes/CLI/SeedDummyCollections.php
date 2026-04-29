@@ -20,11 +20,22 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	/**
 	 * Seeds sample collections (Books, Paintings, Demo) with fields and entries.
 	 *
-	 * Idempotent: skips any collection, field, or entry that already exists.
+	 * Idempotent: skips any collection, field, or entry that already exists, unless --reset is passed.
+	 *
+	 * ## OPTIONS
+	 *
+	 * [--reset]
+	 * : Delete all Cortext data except for pages (collections, fields, entries) before seeding.
+	 * Prompts for confirmation unless --force is also passed.
+	 *
+	 * [--force]
+	 * : Skip the confirmation prompt when using --reset.
 	 *
 	 * ## EXAMPLES
 	 *
 	 *     wp cortext seed
+	 *     wp cortext seed --reset
+	 *     wp cortext seed --reset --force
 	 *
 	 * @when after_wp_load
 	 *
@@ -32,6 +43,14 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	 * @param array $assoc_args Associative arguments.
 	 */
 	public function __invoke( array $args, array $assoc_args ): void {
+		if ( WP_CLI\Utils\get_flag_value( $assoc_args, 'reset', false ) ) {
+			WP_CLI::confirm(
+				'This will delete all Cortext collections, fields, and entries. Continue?',
+				array( 'yes' => WP_CLI\Utils\get_flag_value( $assoc_args, 'force', false ) )
+			);
+			$this->reset();
+		}
+
 		$collections = array(
 			array(
 				'title'   => 'Books',
@@ -295,6 +314,72 @@ final class SeedDummyCollections extends WP_CLI_Command {
 
 			WP_CLI::log( "Created entry '{$entry['title']}' (ID {$entry_id})." );
 		}
+	}
+
+	private function reset(): void {
+		// 1. Delete entries for each collection.
+		$collections = get_posts(
+			array(
+				'post_type'   => Collection::POST_TYPE,
+				'post_status' => 'any',
+				'numberposts' => -1,
+			)
+		);
+
+		foreach ( $collections as $collection ) {
+			$slug      = get_post_meta( $collection->ID, 'slug', true );
+			$entry_cpt = CollectionEntries::CPT_PREFIX . $slug;
+
+			if ( ! post_type_exists( $entry_cpt ) ) {
+				( new CollectionEntries() )->register_for_collection( $collection );
+			}
+
+			$entries = get_posts(
+				array(
+					'post_type'   => $entry_cpt,
+					'post_status' => 'any',
+					'numberposts' => -1,
+					'fields'      => 'ids',
+				)
+			);
+
+			foreach ( $entries as $entry_id ) {
+				wp_delete_post( $entry_id, true );
+			}
+
+			if ( $entries ) {
+				WP_CLI::log( sprintf( 'Deleted %d entries from "%s".', count( $entries ), $collection->post_title ) );
+			}
+		}
+
+		// 2. Delete all fields.
+		$fields = get_posts(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'any',
+				'numberposts' => -1,
+				'fields'      => 'ids',
+			)
+		);
+
+		foreach ( $fields as $field_id ) {
+			wp_delete_post( $field_id, true );
+		}
+
+		if ( $fields ) {
+			WP_CLI::log( sprintf( 'Deleted %d fields.', count( $fields ) ) );
+		}
+
+		// 3. Delete all collections.
+		foreach ( $collections as $collection ) {
+			wp_delete_post( $collection->ID, true );
+		}
+
+		if ( $collections ) {
+			WP_CLI::log( sprintf( 'Deleted %d collections.', count( $collections ) ) );
+		}
+
+		WP_CLI::success( 'Reset complete.' );
 	}
 
 	/**
