@@ -40,9 +40,8 @@ const TITLE_FIELD = {
 // scalar contribute. Multi-value operators (`isAny`, `isNone`, …) are skipped
 // because the issue scopes prefill to single equality clauses only.
 //
-// tech-debt.md#4: filters round-trip through block attributes only; the
-// server never applies them. Once filter forwarding lands this becomes a
-// side effect of real filtering rather than its only consumer.
+// The server now applies filters via GET /cortext/v1/rows, so prefill
+// is a side effect of real filtering rather than its only consumer.
 function prefillFromFilters( filters, fieldIds ) {
 	const prefill = {};
 	if ( ! Array.isArray( filters ) ) {
@@ -85,6 +84,7 @@ function NewRowButton( { slug, view, fields, onCreated, disabled } ) {
 		setError( null );
 		const meta = prefillFromFilters( view?.filters, fieldIds );
 		try {
+			// FIXME: Consider supporting row creation via /cortext/v1/rows.
 			const created = await apiFetch( {
 				path: `/wp/v2/crtxt_${ slug }`,
 				method: 'POST',
@@ -146,7 +146,7 @@ export default function CollectionDataViews( {
 		isLoading,
 		error: rowError,
 		refresh,
-	} = useCollectionRows( slug, view );
+	} = useCollectionRows( collectionId, view );
 	const dataViewFields = useMemo(
 		() => [ TITLE_FIELD, ...fields ],
 		[ fields ]
@@ -215,6 +215,7 @@ export default function CollectionDataViews( {
 				fieldId === 'title'
 					? { title: value ?? '' }
 					: { meta: { [ fieldId ]: value } };
+			// FIXME: Consider supporting row mutation via /cortext/v1/rows.
 			const updated = await apiFetch( {
 				path: `/wp/v2/crtxt_${ slug }/${ rowId }`,
 				method: 'POST',
@@ -247,8 +248,6 @@ export default function CollectionDataViews( {
 			// tech-debt.md#2: lastPage arithmetic is optimistic against
 			// possibly stale paginationInfo. With rows in core-data this
 			// becomes a useEffect on totalPages.
-			// tech-debt.md#3: the asc-by-date assumption only holds while
-			// view.sort isn't forwarded.
 			const hasExplicitSort = Boolean( view?.sort?.field );
 			if ( ! hasExplicitSort ) {
 				const perPage = view?.perPage ?? 25;

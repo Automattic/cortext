@@ -78,3 +78,11 @@ Worth a small spike before committing; `core-data`'s schema cache for rarely-cha
 **Where.** Checkbox cell in `src/components/EditableCell.js`.
 
 **Solution.** File a Gutenberg bug or PR. In the meantime, the `tech-debt.md#8` comment next to `aria-label` is the signal.
+
+## 9. WorDBless can't integration-test the rows endpoint `[internal]`
+
+**What.** WorDBless uses `Db_Less_Wpdb`, an in-memory store where `wp_insert_post` and `get_post` work via the object cache but `WP_Query` SQL returns zero results. The `RowsController` unit tests cover routing, permissions, validation, query-arg building, and row formatting (the last two via reflection), but cannot exercise the full path of inserting rows and verifying they come back from `GET /cortext/v1/rows`. A bug in the `WP_Query` translation (e.g. a wrong `meta_query` compare operator) would slip past unit tests.
+
+**Where.** `tests/php/test-rest-rows-controller.php`.
+
+**Solution.** Either switch the PHP test harness to `wp-env` + `WP_UnitTestCase` (which runs against a real database) or rely on e2e coverage in `tests/e2e/specs/data-view-block.spec.js` to close the gap. The e2e suite already exercises row loading, but dedicated integration tests for sort, filter, and pagination against real data would be more targeted.
