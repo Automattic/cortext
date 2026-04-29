@@ -425,14 +425,35 @@ body.cortext-fullscreen {
 		min-height: 0;
 	}
 
-	// DataViews adds vertical padding to body cells, which leaves a gap
-	// above and below our editable cell shell, so the hover/edit background
-	// floats inside the row instead of filling it. Drop the td's
-	// padding-block so the shell's own min-height (matched to
-	// __next40pxDefaultSize, see tech-debt.md#5) controls row height.
-	// `<th>` keeps its padding so headers still breathe.
-	.dataviews-view-table tr td {
-		padding-block: 0;
+	// DataViews paints row height via td `padding-block` per density, but
+	// our shell's hover/edit background lives on the shell, so the gray
+	// floated inside the row instead of filling it. Zero the td's
+	// padding-block to make the shell own the row, then replicate
+	// DataViews's per-density row heights on the shell (and the checkbox
+	// cell, which shares the shell's dimensions). Headers (`<th>`) keep
+	// their padding so they still breathe.
+	//
+	// Numbers track @wordpress/dataviews v6 td `padding-block` per density
+	// (4 compact, 12 balanced, 16 comfortable). See tech-debt.md#5.
+	.dataviews-view-table {
+		tr td {
+			padding-block: 0;
+		}
+
+		.cortext-editable-cell__shell,
+		.cortext-cell-checkbox {
+			min-height: $grid-unit-50 + 2 * $grid-unit-15; // 64 (balanced)
+		}
+
+		&.has-compact-density .cortext-editable-cell__shell,
+		&.has-compact-density .cortext-cell-checkbox {
+			min-height: $grid-unit-50 + 2 * $grid-unit-05; // 48 (compact)
+		}
+
+		&.has-comfortable-density .cortext-editable-cell__shell,
+		&.has-comfortable-density .cortext-cell-checkbox {
+			min-height: $grid-unit-50 + 2 * $grid-unit-20; // 72 (comfortable)
+		}
 	}
 
 	&__footer {

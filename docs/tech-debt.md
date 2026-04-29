@@ -46,14 +46,15 @@ Worth a small spike before committing; `core-data`'s schema cache for rarely-cha
 
 ## 5. Inline-edit layout couplings `[internal]`
 
-**What.** Two small but real internal mechanisms exist because DataViews doesn't have an inline-edit contract (#1):
+**What.** Three small but real internal mechanisms exist because DataViews doesn't have an inline-edit contract (#1):
 
 - **Column anchoring via overlay.** DataViews renders an actual `<table>` with default `table-layout: auto`, so columns auto-size to their widest cell content. Mounting an editor inline would change the column's intrinsic width and reflow the whole column. We always render the display shell and overlay the editor on top via `position: absolute`, so the table only sees the display state's intrinsic width and the column stays anchored.
 - **Row height pin.** The shell's `min-height` is hardcoded to 40px to match `__next40pxDefaultSize`, the height of TextControl/NumberControl/SelectControl with the modern WP size flag. If WP changes the default control height, the pin desyncs and rows jitter again.
+- **Density mirror.** DataViews paints row height via the td's `padding-block`, varied per density (`has-compact-density` / `has-comfortable-density`). The shell's hover/edit highlight lives on the shell itself, so the gray floated inside the larger row instead of covering it. We zero the td's `padding-block` so the shell becomes the row, then replicate DataViews's three densities via `min-height` overrides on the shell (and `.cortext-cell-checkbox`, which shares the shell's dimensions). The override hardcodes DataViews v6's per-density paddings (4 / 12 / 16); if upstream bumps them, rows silently desync until we update the three numbers.
 
-**Where.** `src/components/EditableCell.js` and the `.cortext-editable-cell` rules in `src/index.scss`.
+**Where.** `src/components/EditableCell.js` and the `.cortext-editable-cell`, `.cortext-cell-checkbox`, and `.cortext-data-view .dataviews-view-table` rules in `src/index.scss`.
 
-**Solution.** Both go away if DataViews lands inline editing (#1) and exposes a layout contract for cells. Until then the overlay is a clean enough pattern to keep, and the height pin is one CSS line worth maintaining. Worth tracking separately so the next person editing the cell layout knows the constraints rather than re-deriving them.
+**Solution.** All three go away if DataViews lands inline editing (#1) and exposes a layout contract for cells (or a CSS variable for cell padding the shell can hook into). Until then the overlay is a clean enough pattern to keep, the height pin is one CSS line worth maintaining, and the density mirror is the price of painting hover/edit highlights edge to edge. Worth tracking separately so the next person editing the cell layout knows the constraints rather than re-deriving them.
 
 ## 6. DataViews has no multiselect form control `[upstream]`
 
