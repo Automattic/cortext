@@ -431,11 +431,13 @@ body.cortext-fullscreen {
 	// padding-block to make the shell own the row, then replicate
 	// DataViews's per-density row heights on the shell (and the checkbox
 	// cell, which shares the shell's dimensions). Headers (`<th>`) keep
-	// their padding so they still breathe.
-	//
-	// Numbers track @wordpress/dataviews v6 td `padding-block` per density
-	// (4 compact, 12 balanced, 16 comfortable). See tech-debt.md#5.
+	// their padding so they still breathe. Balanced and comfortable mirror
+	// DataViews v6's td `padding-block` (12 and 16); compact is
+	// intentionally tighter than DataViews's default (4 -> 0) so the row
+	// matches the 40px editor floor and gets closer to a Notion-style
+	// density. See tech-debt.md#5.
 	.dataviews-view-table {
+
 		tr td {
 			padding-block: 0;
 		}
@@ -447,7 +449,8 @@ body.cortext-fullscreen {
 
 		&.has-compact-density .cortext-editable-cell__shell,
 		&.has-compact-density .cortext-cell-checkbox {
-			min-height: $grid-unit-50 + 2 * $grid-unit-05; // 48 (compact)
+			min-height: $grid-unit-50; // 40 (compact, the editor's floor)
+			padding-block: 0;
 		}
 
 		&.has-comfortable-density .cortext-editable-cell__shell,
