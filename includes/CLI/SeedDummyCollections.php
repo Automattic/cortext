@@ -112,11 +112,48 @@ final class SeedDummyCollections extends WP_CLI_Command {
 					'Homepage' => 'url',
 					'Status'   => array(
 						'type'    => 'select',
-						'options' => array( 'Draft', 'In review', 'Done' ),
+						'options' => array(
+							array(
+								'value' => 'Draft',
+								'label' => 'Draft',
+								'color' => '#e8e8e7',
+							),
+							array(
+								'value' => 'In review',
+								'label' => 'In review',
+								'color' => '#fbf3db',
+							),
+							array(
+								'value' => 'Done',
+								'label' => 'Done',
+								'color' => '#ddedea',
+							),
+						),
 					),
 					'Tags'     => array(
 						'type'    => 'multiselect',
-						'options' => array( 'bug', 'feature', 'chore', 'docs' ),
+						'options' => array(
+							array(
+								'value' => 'bug',
+								'label' => 'bug',
+								'color' => '#ffe2dd',
+							),
+							array(
+								'value' => 'feature',
+								'label' => 'feature',
+								'color' => '#ddebf1',
+							),
+							array(
+								'value' => 'chore',
+								'label' => 'chore',
+								'color' => '#fbdbc7',
+							),
+							array(
+								'value' => 'docs',
+								'label' => 'docs',
+								'color' => '#eae4f2',
+							),
+						),
 					),
 					'Due'      => 'date',
 					'Reminder' => 'datetime',
