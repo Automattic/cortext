@@ -425,6 +425,40 @@ body.cortext-fullscreen {
 		min-height: 0;
 	}
 
+	// DataViews paints row height via td `padding-block` per density, but
+	// our shell's hover/edit background lives on the shell, so the gray
+	// floated inside the row instead of filling it. Zero the td's
+	// padding-block to make the shell own the row, then replicate
+	// DataViews's per-density row heights on the shell (and the checkbox
+	// cell, which shares the shell's dimensions). Headers (`<th>`) keep
+	// their padding so they still breathe. Balanced and comfortable mirror
+	// DataViews v6's td `padding-block` (12 and 16); compact is
+	// intentionally tighter than DataViews's default (4 -> 0) so the row
+	// matches the 40px editor floor and gets closer to a Notion-style
+	// density. See tech-debt.md#5.
+	.dataviews-view-table {
+
+		tr td {
+			padding-block: 0;
+		}
+
+		.cortext-editable-cell__shell,
+		.cortext-cell-checkbox {
+			min-height: $grid-unit-50 + 2 * $grid-unit-15; // 64 (balanced)
+		}
+
+		&.has-compact-density .cortext-editable-cell__shell,
+		&.has-compact-density .cortext-cell-checkbox {
+			min-height: $grid-unit-50; // 40 (compact, the editor's floor)
+			padding-block: 0;
+		}
+
+		&.has-comfortable-density .cortext-editable-cell__shell,
+		&.has-comfortable-density .cortext-cell-checkbox {
+			min-height: $grid-unit-50 + 2 * $grid-unit-20; // 72 (comfortable)
+		}
+	}
+
 	&__footer {
 		flex: 0 0 auto;
 		padding: $grid-unit-05 $grid-unit-10;
