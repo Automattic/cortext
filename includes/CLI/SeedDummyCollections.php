@@ -18,7 +18,7 @@ use WP_CLI_Command;
 final class SeedDummyCollections extends WP_CLI_Command {
 
 	/**
-	 * Seeds sample collections (Books, Paintings) with fields and entries.
+	 * Seeds sample collections (Books, Paintings, Demo) with fields and entries.
 	 *
 	 * Idempotent: skips any collection, field, or entry that already exists.
 	 *
@@ -83,6 +83,53 @@ final class SeedDummyCollections extends WP_CLI_Command {
 					),
 				),
 			),
+			array(
+				'title'   => 'Demo',
+				'slug'    => 'demo',
+				'fields'  => array(
+					'Notes'    => 'text',
+					'Quantity' => 'number',
+					'Contact'  => 'email',
+					'Homepage' => 'url',
+					'Status'   => array(
+						'type'    => 'select',
+						'options' => array( 'Draft', 'In review', 'Done' ),
+					),
+					'Tags'     => array(
+						'type'    => 'multiselect',
+						'options' => array( 'bug', 'feature', 'chore', 'docs' ),
+					),
+					'Due'      => 'date',
+					'Reminder' => 'datetime',
+					'Done?'    => 'checkbox',
+				),
+				'entries' => array(
+					array(
+						'title'    => 'Wire up the inline editor',
+						'Notes'    => 'Click into any cell to edit.',
+						'Quantity' => 3,
+						'Contact'  => 'editor@example.com',
+						'Homepage' => 'https://example.com/editor',
+						'Status'   => 'In review',
+						'Tags'     => array( 'feature', 'docs' ),
+						'Due'      => '2026-05-15',
+						'Reminder' => '2026-05-14T09:00:00',
+						'Done?'    => false,
+					),
+					array(
+						'title'    => 'Polish the footer button',
+						'Notes'    => 'Notion-style "+ New" lives below the table.',
+						'Quantity' => 1,
+						'Contact'  => 'design@example.com',
+						'Homepage' => 'https://example.com/design',
+						'Status'   => 'Draft',
+						'Tags'     => array( 'chore' ),
+						'Due'      => '2026-05-20',
+						'Reminder' => '2026-05-19T15:30:00',
+						'Done?'    => true,
+					),
+				),
+			),
 		);
 
 		foreach ( $collections as $spec ) {
@@ -96,10 +143,14 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		$slug      = $spec['slug'];
 		$entry_cpt = CollectionEntries::CPT_PREFIX . $slug;
 
-		// 1. Find or create collection.
+		// 1. Find or create collection. `get_posts` defaults to `post_status:
+		// publish`, but our seeded collections are private; without an
+		// explicit status the lookup never matches and re-running the
+		// seeder accumulates duplicate collections sharing a slug.
 		$existing = get_posts(
 			array(
 				'post_type'   => Collection::POST_TYPE,
+				'post_status' => array( 'draft', 'private', 'publish' ),
 				// phpcs:ignore WordPress.DB.SlowDBQuery
 				'meta_key'    => 'slug',
 				// phpcs:ignore WordPress.DB.SlowDBQuery
@@ -138,8 +189,14 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		// 3. Find or create fields, attach to collection.
 		$existing_field_ids = get_post_meta( $collection_id, 'fields', false );
 		$field_ids          = array();
+		$field_types        = array();
 
-		foreach ( $spec['fields'] as $title => $type ) {
+		foreach ( $spec['fields'] as $title => $config ) {
+			$type    = is_array( $config ) ? $config['type'] : $config;
+			$options = is_array( $config ) && isset( $config['options'] ) ? $config['options'] : null;
+
+			$field_types[ $title ] = $type;
+
 			$found = $this->find_attached_field( $title, $existing_field_ids );
 
 			if ( $found ) {
@@ -162,6 +219,9 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			}
 
 			update_post_meta( $field_id, 'type', $type );
+			if ( null !== $options ) {
+				update_post_meta( $field_id, 'options', wp_json_encode( $options ) );
+			}
 			add_post_meta( $collection_id, 'fields', $field_id );
 			$field_ids[ $title ] = $field_id;
 			WP_CLI::log( "Created field '{$title}' (ID {$field_id}, type: {$type})." );
@@ -169,13 +229,13 @@ final class SeedDummyCollections extends WP_CLI_Command {
 
 		// 4. Register field meta on the entry CPT (safe to call repeatedly).
 		foreach ( $field_ids as $title => $field_id ) {
-			$type = $spec['fields'][ $title ];
+			$type = $field_types[ $title ];
 			register_post_meta(
 				$entry_cpt,
 				"field-{$field_id}",
 				array(
 					'type'         => CollectionEntries::wp_meta_type_for( $type ),
-					'single'       => true,
+					'single'       => 'multiselect' !== $type,
 					'show_in_rest' => true,
 				)
 			);
@@ -216,9 +276,21 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			}
 
 			foreach ( $field_ids as $field_name => $field_id ) {
-				if ( isset( $entry[ $field_name ] ) ) {
-					update_post_meta( $entry_id, "field-{$field_id}", $entry[ $field_name ] );
+				if ( ! array_key_exists( $field_name, $entry ) ) {
+					continue;
 				}
+
+				$value = $entry[ $field_name ];
+				$type  = $field_types[ $field_name ];
+
+				if ( 'multiselect' === $type && is_array( $value ) ) {
+					foreach ( $value as $item ) {
+						add_post_meta( $entry_id, "field-{$field_id}", $item );
+					}
+					continue;
+				}
+
+				update_post_meta( $entry_id, "field-{$field_id}", $value );
 			}
 
 			WP_CLI::log( "Created entry '{$entry['title']}' (ID {$entry_id})." );
