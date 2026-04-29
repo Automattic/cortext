@@ -285,3 +285,161 @@ body.cortext-fullscreen {
 	white-space: nowrap;
 	width: 100%;
 }
+
+// tech-debt.md#5: DataViews uses a real <table> with default
+// `table-layout: auto`, so each column auto-sizes to its widest cell
+// content. To keep the column from reflowing when an editor mounts, we
+// always render the display shell (which sets the column's intrinsic
+// width) and overlay the editor on top via position: absolute.
+// Absolutely-positioned children don't contribute to their parent's
+// intrinsic size, so the table never sees the editor's wider min-content.
+// The shell's min-height is also pinned to 40px to match
+// __next40pxDefaultSize, so opening an editor doesn't bump row height.
+.cortext-editable-cell {
+	position: relative;
+	width: 100%;
+	min-width: 0;
+	box-sizing: border-box;
+
+	&__shell {
+		cursor: text;
+		// 40px matches the height of the editor controls
+		// (TextControl/NumberControl/SelectControl with __next40pxDefaultSize),
+		// so opening a cell doesn't bump the row height.
+		min-height: $grid-unit-50;
+		padding: $grid-unit-05;
+		border-radius: 2px;
+		display: flex;
+		flex-direction: column;
+		justify-content: center;
+
+		&:hover,
+		&:focus-visible {
+			background: $gray-100;
+			outline: none;
+		}
+	}
+
+	// Hide the shell visually while editing but keep its layout space, so
+	// the column width stays anchored to the display state.
+	&--editing &__shell {
+		visibility: hidden;
+	}
+
+	&__overlay {
+		position: absolute;
+		inset: 0;
+		z-index: 1;
+		// Transparent: editor controls (TextControl, NumberControl) bring
+		// their own background; the dropdown trigger Buttons should read
+		// as cell text against the row's natural background.
+		background: transparent;
+		display: flex;
+		flex-direction: column;
+		justify-content: center;
+
+		// Editor controls fill the overlay's width.
+		> * {
+			width: 100%;
+			min-width: 0;
+			max-width: 100%;
+		}
+
+		// Dropdown's internal wrapper isn't a direct child, so target it
+		// explicitly so select / date triggers don't snap to label width.
+		.components-dropdown {
+			width: 100%;
+		}
+	}
+
+	// Dropdown trigger buttons (select / date / multiselect pickers) read
+	// as cell values rather than tertiary links. Without the override
+	// they pick up the WordPress link styling (blue text, hover underline),
+	// which looks out of place inside the table.
+	.cortext-select-edit__toggle.components-button,
+	.cortext-date-edit__toggle.components-button,
+	.cortext-multiselect-edit__toggle.components-button {
+		width: 100%;
+		height: 100%;
+		justify-content: flex-start;
+		padding-inline: $grid-unit-05;
+		color: inherit;
+		font-weight: inherit;
+		text-decoration: none;
+		background: transparent;
+		box-shadow: none;
+
+		&:hover:not(:disabled),
+		&:focus:not(:disabled) {
+			color: inherit;
+			background: transparent;
+			box-shadow: none;
+			text-decoration: none;
+		}
+	}
+
+	&__error {
+		color: #cc1818;
+		font-size: 12px;
+		margin-top: $grid-unit-05;
+	}
+}
+
+.cortext-cell-readonly {
+	color: $gray-700;
+}
+
+// Checkbox cells skip the shell/overlay dance because the input is
+// always rendered (no display vs editor distinction). Keep the same row
+// height as editable cells for visual consistency.
+.cortext-cell-checkbox {
+	min-height: $grid-unit-50;
+	padding: $grid-unit-05;
+	border-radius: 2px;
+	width: 100%;
+	box-sizing: border-box;
+	display: flex;
+	align-items: center;
+}
+
+.cortext-multiselect-edit {
+
+	&__popover {
+		display: grid;
+		gap: $grid-unit-10;
+		padding: $grid-unit-15;
+		min-width: 280px;
+	}
+}
+
+.cortext-data-view {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+
+	// DataViews fills the cortext-canvas__table wrapper with `height: 100%`,
+	// which leaves no room for siblings. Pinning DataViews to flex: 1 lets
+	// our footer sit below it without disappearing.
+	> .dataviews-wrapper {
+		flex: 1 1 auto;
+		min-height: 0;
+	}
+
+	&__footer {
+		flex: 0 0 auto;
+		padding: $grid-unit-05 $grid-unit-10;
+		border-top: $border-width solid $gray-200;
+	}
+
+	&__new-row.components-button {
+		justify-content: flex-start;
+		width: 100%;
+		color: $gray-700;
+		text-decoration: none;
+
+		&:hover:not(:disabled) {
+			background: $gray-100;
+			color: $gray-900;
+		}
+	}
+}

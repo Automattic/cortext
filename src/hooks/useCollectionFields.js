@@ -1,6 +1,8 @@
 import { useMemo } from '@wordpress/element';
 import { useEntityRecord, useEntityRecords } from '@wordpress/core-data';
 
+import EditableCell from '../components/EditableCell';
+
 function elementsFromOptions( raw ) {
 	if ( ! raw ) {
 		return undefined;
@@ -25,14 +27,46 @@ function elementsFromOptions( raw ) {
 	} );
 }
 
+// Cortext field types that this client knows how to edit inline. Anything
+// outside this set (formula, rollup, relation, …) renders read-only — see
+// `EditableCell`'s `readOnly` branch.
+const EDITABLE_TYPES = new Set( [
+	'text',
+	'number',
+	'email',
+	'url',
+	'select',
+	'multiselect',
+	'date',
+	'datetime',
+	'checkbox',
+] );
+
+function buildRender( id, type, label, elements ) {
+	const readOnly = ! EDITABLE_TYPES.has( type );
+	return ( { item } ) => (
+		<EditableCell
+			item={ item }
+			fieldId={ id }
+			fieldType={ type }
+			elements={ elements }
+			label={ label }
+			readOnly={ readOnly }
+		/>
+	);
+}
+
 function mapField( field ) {
 	const id = `field-${ field.id }`;
 	const label = field.title?.rendered || field.title?.raw || `#${ field.id }`;
 	const type = field.meta?.type ?? 'text';
+	const elements = elementsFromOptions( field.meta?.options );
 	const base = {
 		id,
 		label,
 		getValue: ( { item } ) => item?.meta?.[ id ] ?? null,
+		render: buildRender( id, type, label, elements ),
+		editable: EDITABLE_TYPES.has( type ),
 	};
 
 	switch ( type ) {
@@ -43,16 +77,12 @@ function mapField( field ) {
 		case 'url':
 			return { ...base, type: 'text' };
 		case 'select':
-			return {
-				...base,
-				type: 'text',
-				elements: elementsFromOptions( field.meta?.options ),
-			};
+			return { ...base, type: 'text', elements };
 		case 'multiselect':
 			return {
 				...base,
 				type: 'text',
-				elements: elementsFromOptions( field.meta?.options ),
+				elements,
 				isMultiple: true,
 			};
 		case 'date':

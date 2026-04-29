@@ -95,43 +95,46 @@ final class CollectionEntries {
 		}
 
 		$post_type = self::CPT_PREFIX . $slug;
-		if ( post_type_exists( $post_type ) ) {
-			return;
+
+		// Register the post type and the shared meta keys once. Field meta
+		// must register on every call so collections that happen to share
+		// a slug (e.g. duplicate seed entries) all contribute their field
+		// keys to the shared CPT instead of silently dropping at REST.
+		if ( ! post_type_exists( $post_type ) ) {
+			register_post_type(
+				$post_type,
+				array(
+					'labels'             => array(
+						'name'          => $collection->post_title,
+						'singular_name' => $collection->post_title,
+					),
+					'public'             => false,
+					'publicly_queryable' => false,
+					'show_ui'            => true,
+					'show_in_menu'       => false,
+					'show_in_rest'       => true,
+					'rest_base'          => $post_type,
+					'has_archive'        => false,
+					'hierarchical'       => false,
+					'supports'           => array( 'title', 'custom-fields' ),
+					'capability_type'    => 'post',
+					'map_meta_cap'       => true,
+					'can_export'         => true,
+					'delete_with_user'   => false,
+				)
+			);
+
+			register_post_meta(
+				$post_type,
+				'notion_id',
+				array(
+					'type'              => 'string',
+					'single'            => true,
+					'show_in_rest'      => true,
+					'sanitize_callback' => 'sanitize_text_field',
+				)
+			);
 		}
-
-		register_post_type(
-			$post_type,
-			array(
-				'labels'             => array(
-					'name'          => $collection->post_title,
-					'singular_name' => $collection->post_title,
-				),
-				'public'             => false,
-				'publicly_queryable' => false,
-				'show_ui'            => true,
-				'show_in_menu'       => false,
-				'show_in_rest'       => true,
-				'rest_base'          => $post_type,
-				'has_archive'        => false,
-				'hierarchical'       => false,
-				'supports'           => array( 'title', 'custom-fields' ),
-				'capability_type'    => 'post',
-				'map_meta_cap'       => true,
-				'can_export'         => true,
-				'delete_with_user'   => false,
-			)
-		);
-
-		register_post_meta(
-			$post_type,
-			'notion_id',
-			array(
-				'type'              => 'string',
-				'single'            => true,
-				'show_in_rest'      => true,
-				'sanitize_callback' => 'sanitize_text_field',
-			)
-		);
 
 		$this->register_field_meta( $post_type, $collection->ID );
 	}
