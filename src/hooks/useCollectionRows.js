@@ -2,10 +2,8 @@ import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
 import { addQueryArgs } from '@wordpress/url';
 import apiFetch from '@wordpress/api-fetch';
 
-// This hook is the central workaround spot for tech-debt.md#2 (rows
-// outside core-data), tech-debt.md#3 (no view.sort forwarding), and
-// tech-debt.md#4 (no view.filters forwarding). Each is referenced
-// inline below where it lands.
+// tech-debt.md#2: rows live outside core-data, so this hook manages
+// its own fetch state and exposes a manual refresh() handle.
 
 function buildQueryArgs( collectionId, view ) {
 	const args = {
