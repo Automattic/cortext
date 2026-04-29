@@ -3,7 +3,8 @@ import EditableCell from '../components/EditableCell';
 // Parses stored option records into the DataViews `elements` shape.
 // Accepts a string shorthand (`'red'` becomes `{ value: 'red', label: 'red' }`)
 // or `{ value, label, color? }`. `color` is an optional CSS color the chip
-// renderer reads.
+// renderer reads — tech-debt.md#11: DataViews's `Option` type doesn't
+// declare `color`, but it tolerates extra keys on element entries.
 export function elementsFromOptions( raw ) {
 	if ( ! raw ) {
 		return undefined;
@@ -78,9 +79,9 @@ export function mapField( field ) {
 	// EditableCell drives the actual edit/display, so these mappings only
 	// affect column-level metadata (default sort comparator, future filter
 	// UI). We pick the closest honest type rather than the prettiest one:
-	// numbers go through 'text' because 'integer' rejects decimals at sort
-	// time, multiselect goes through 'array' so DataViews understands the
-	// value cardinality.
+	// numbers and url go through 'text' because there's nothing closer
+	// (tech-debt.md#10), multiselect goes through 'array' so DataViews
+	// understands the value cardinality.
 	switch ( type ) {
 		case 'number':
 			return { ...base, type: 'text' };
