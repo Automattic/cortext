@@ -494,6 +494,7 @@ test.describe( 'Collection view block', () => {
 					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
 			);
 		}
+	} );
 
 	test( 'creates a new row from the New button and prefills from a single-equality filter', async ( {
 		admin,
