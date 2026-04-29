@@ -84,6 +84,7 @@ function NewRowButton( { slug, view, fields, onCreated, disabled } ) {
 		setError( null );
 		const meta = prefillFromFilters( view?.filters, fieldIds );
 		try {
+			// FIXME: Consider supporting row creation via /cortext/v1/rows.
 			const created = await apiFetch( {
 				path: `/wp/v2/crtxt_${ slug }`,
 				method: 'POST',
@@ -214,6 +215,7 @@ export default function CollectionDataViews( {
 				fieldId === 'title'
 					? { title: value ?? '' }
 					: { meta: { [ fieldId ]: value } };
+			// FIXME: Consider supporting row mutation via /cortext/v1/rows.
 			const updated = await apiFetch( {
 				path: `/wp/v2/crtxt_${ slug }/${ rowId }`,
 				method: 'POST',
