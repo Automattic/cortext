@@ -330,7 +330,10 @@ body.cortext-fullscreen {
 		position: absolute;
 		inset: 0;
 		z-index: 1;
-		background: $white;
+		// Transparent: editor controls (TextControl, NumberControl) bring
+		// their own background; the dropdown trigger Buttons should read
+		// as cell text against the row's natural background.
+		background: transparent;
 		display: flex;
 		flex-direction: column;
 		justify-content: center;
@@ -349,12 +352,13 @@ body.cortext-fullscreen {
 		}
 	}
 
-	// Dropdown trigger buttons (select and date pickers) read as cell
-	// values rather than tertiary links. Without the override they pick
-	// up the WordPress link styling (blue text, hover underline), which
-	// looks out of place inside the table.
+	// Dropdown trigger buttons (select / date / multiselect pickers) read
+	// as cell values rather than tertiary links. Without the override
+	// they pick up the WordPress link styling (blue text, hover underline),
+	// which looks out of place inside the table.
 	.cortext-select-edit__toggle.components-button,
-	.cortext-date-edit__toggle.components-button {
+	.cortext-date-edit__toggle.components-button,
+	.cortext-multiselect-edit__toggle.components-button {
 		width: 100%;
 		height: 100%;
 		justify-content: flex-start;
@@ -399,10 +403,13 @@ body.cortext-fullscreen {
 }
 
 .cortext-multiselect-edit {
-	display: grid;
-	gap: $grid-unit-05;
-	width: 100%;
-	min-width: 0;
+
+	&__popover {
+		display: grid;
+		gap: $grid-unit-10;
+		padding: $grid-unit-15;
+		min-width: 280px;
+	}
 }
 
 .cortext-data-view {

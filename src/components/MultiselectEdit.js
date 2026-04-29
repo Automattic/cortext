@@ -1,5 +1,11 @@
 import { __ } from '@wordpress/i18n';
-import { Button, FormTokenField, Flex, FlexItem } from '@wordpress/components';
+import {
+	Button,
+	Dropdown,
+	Flex,
+	FlexItem,
+	FormTokenField,
+} from '@wordpress/components';
 import { useCallback, useMemo, useState } from '@wordpress/element';
 
 // tech-debt.md#6: DataViews v6 ships no `multiselect` dataform-control,
@@ -18,6 +24,7 @@ export default function MultiselectEdit( {
 	elements,
 	onCommit,
 	onCancel,
+	label,
 } ) {
 	const valueToLabel = useMemo( () => {
 		const map = new Map();
@@ -47,29 +54,63 @@ export default function MultiselectEdit( {
 		onCommit( nextValues );
 	}, [ tokens, labelToValue, onCommit ] );
 
+	const triggerLabel = tokens.length
+		? tokens.join( ', ' )
+		: __( 'Select…', 'cortext' );
+
 	return (
-		<div className="cortext-multiselect-edit">
-			<FormTokenField
-				value={ tokens }
-				suggestions={ suggestions }
-				onChange={ setTokens }
-				label=""
-				__experimentalExpandOnFocus
-				__experimentalShowHowTo={ false }
-				__nextHasNoMarginBottom
-			/>
-			<Flex justify="flex-end" gap={ 2 }>
-				<FlexItem>
-					<Button variant="tertiary" onClick={ onCancel }>
-						{ __( 'Cancel', 'cortext' ) }
-					</Button>
-				</FlexItem>
-				<FlexItem>
-					<Button variant="primary" onClick={ commit }>
-						{ __( 'Save', 'cortext' ) }
-					</Button>
-				</FlexItem>
-			</Flex>
-		</div>
+		<Dropdown
+			defaultOpen
+			onClose={ onCancel }
+			popoverProps={ { placement: 'bottom-start' } }
+			renderToggle={ ( { isOpen, onToggle } ) => (
+				<Button
+					className="cortext-multiselect-edit__toggle"
+					variant="tertiary"
+					onClick={ onToggle }
+					aria-expanded={ isOpen }
+					aria-label={ label }
+				>
+					{ triggerLabel }
+				</Button>
+			) }
+			renderContent={ ( { onClose } ) => (
+				<div className="cortext-multiselect-edit__popover">
+					<FormTokenField
+						value={ tokens }
+						suggestions={ suggestions }
+						onChange={ setTokens }
+						label=""
+						__experimentalExpandOnFocus
+						__experimentalShowHowTo={ false }
+						__nextHasNoMarginBottom
+					/>
+					<Flex justify="flex-end" gap={ 2 }>
+						<FlexItem>
+							<Button
+								variant="tertiary"
+								onClick={ () => {
+									onClose();
+									onCancel();
+								} }
+							>
+								{ __( 'Cancel', 'cortext' ) }
+							</Button>
+						</FlexItem>
+						<FlexItem>
+							<Button
+								variant="primary"
+								onClick={ () => {
+									commit();
+									onClose();
+								} }
+							>
+								{ __( 'Save', 'cortext' ) }
+							</Button>
+						</FlexItem>
+					</Flex>
+				</div>
+			) }
+		/>
 	);
 }
