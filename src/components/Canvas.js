@@ -17,12 +17,18 @@ import {
 	ComplementaryArea,
 	store as interfaceStore,
 } from '@wordpress/interface';
-import { Button, Spinner } from '@wordpress/components';
+import { Button, Disabled, Notice, Spinner } from '@wordpress/components';
 import { cog } from '@wordpress/icons';
+import apiFetch from '@wordpress/api-fetch';
+import { useState } from '@wordpress/element';
 
 import useAutosave from '../hooks/useAutosave';
+import {
+	ACTIVE_PAGES_QUERY,
+	POST_TYPE,
+	TRASHED_PAGES_QUERY,
+} from './page-queries';
 
-const POST_TYPE = 'crtxt_page';
 const SCOPE = 'cortext';
 const INSPECTOR = 'cortext/block-inspector';
 
@@ -76,6 +82,17 @@ function Header() {
 }
 
 function InspectorSidebar() {
+	// Mirror the canvas: when the post is in trash, the inspector becomes
+	// read-only too. Otherwise users could still edit block attributes
+	// (alignment, colors, etc.) from the sidebar even though the canvas
+	// itself is locked.
+	const isTrashed = useSelect(
+		( select ) =>
+			select( editorStore ).getCurrentPostAttribute( 'status' ) ===
+			'trash',
+		[]
+	);
+
 	return (
 		<ComplementaryArea
 			scope={ SCOPE }
@@ -85,8 +102,73 @@ function InspectorSidebar() {
 			isPinnable={ false }
 			isActiveByDefault
 		>
-			<BlockInspector />
+			{ isTrashed ? (
+				<Disabled>
+					<BlockInspector />
+				</Disabled>
+			) : (
+				<BlockInspector />
+			) }
 		</ComplementaryArea>
+	);
+}
+
+function TrashedNotice( { postId } ) {
+	const { invalidateResolution, receiveEntityRecords } =
+		useDispatch( 'core' );
+	const [ isRestoring, setIsRestoring ] = useState( false );
+	const [ error, setError ] = useState( null );
+
+	const restore = async () => {
+		setError( null );
+		setIsRestoring( true );
+		try {
+			await apiFetch( {
+				path: `/cortext/v1/pages/${ postId }/restore`,
+				method: 'POST',
+			} );
+			// `wp_untrash_post` returned the page to its pre-trash status;
+			// pull a fresh copy into the store so the canvas drops the
+			// trashed banner without a navigation roundtrip.
+			const fresh = await apiFetch( {
+				path: `/wp/v2/crtxt_pages/${ postId }?context=edit`,
+			} );
+			receiveEntityRecords( 'postType', POST_TYPE, [ fresh ] );
+			invalidateResolution( 'getEntityRecords', [
+				'postType',
+				POST_TYPE,
+				ACTIVE_PAGES_QUERY,
+			] );
+			invalidateResolution( 'getEntityRecords', [
+				'postType',
+				POST_TYPE,
+				TRASHED_PAGES_QUERY,
+			] );
+		} catch ( err ) {
+			setError(
+				err?.message ?? __( 'Could not restore page.', 'cortext' )
+			);
+		} finally {
+			setIsRestoring( false );
+		}
+	};
+
+	return (
+		<Notice
+			className="cortext-canvas__notice"
+			status="warning"
+			isDismissible={ false }
+			actions={ [
+				{
+					label: __( 'Restore', 'cortext' ),
+					onClick: restore,
+					disabled: isRestoring,
+					variant: 'primary',
+				},
+			] }
+		>
+			{ error ? error : __( 'This page is in trash.', 'cortext' ) }
+		</Notice>
 	);
 }
 
@@ -146,6 +228,8 @@ export default function Canvas( { postId } ) {
 		);
 	}
 
+	const isTrashed = post.status === 'trash';
+
 	return (
 		<EditorProvider
 			post={ post }
@@ -155,7 +239,18 @@ export default function Canvas( { postId } ) {
 			<InterfaceSkeleton
 				className="cortext-canvas"
 				header={ <Header /> }
-				content={ <VisualCanvas /> }
+				content={
+					<>
+						{ isTrashed && <TrashedNotice postId={ post.id } /> }
+						{ isTrashed ? (
+							<Disabled className="cortext-canvas__locked">
+								<VisualCanvas />
+							</Disabled>
+						) : (
+							<VisualCanvas />
+						) }
+					</>
+				}
 				sidebar={ <ComplementaryArea.Slot scope={ SCOPE } /> }
 			/>
 			<InspectorSidebar />
