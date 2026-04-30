@@ -11,6 +11,7 @@ import {
 import { __ } from '@wordpress/i18n';
 import { plus } from '@wordpress/icons';
 
+import DataViewColumnInteractions from './DataViewColumnInteractions';
 import EditableCell, { RowMutationContext } from './EditableCell';
 import { TITLE_FIELD_ID, normalizeView } from './dataViewColumns';
 import useCollectionFields from '../hooks/useCollectionFields';
@@ -34,6 +35,10 @@ const TITLE_FIELD = {
 		/>
 	),
 	editable: true,
+	// Mirrors Notion: the title column never disappears. The DataViews
+	// column-visibility menu honors this flag, and our normalizeView keeps
+	// the id pinned in `view.fields` as defense in depth.
+	enableHiding: false,
 };
 
 // Pulls a "single equality" prefill out of the active filters: only filters
@@ -152,6 +157,7 @@ export default function CollectionDataViews( {
 		() => [ TITLE_FIELD, ...fields ],
 		[ fields ]
 	);
+	const tableWrapperRef = useRef( null );
 	// editRequest is the "open this cell for editing" channel: cells that
 	// match its `{ rowId, fieldId }` flip to edit mode and clear it. Used
 	// for both the title-cell auto-open on a fresh row and Tab-driven
@@ -361,7 +367,7 @@ export default function CollectionDataViews( {
 
 	return (
 		<RowMutationContext.Provider value={ mutationContext }>
-			<div className="cortext-data-view">
+			<div className="cortext-data-view" ref={ tableWrapperRef }>
 				<DataViews
 					data={ data }
 					fields={ dataViewFields }
@@ -373,6 +379,13 @@ export default function CollectionDataViews( {
 					isLoading={ isLoading }
 					empty={ empty }
 				/>
+				{ view?.type === 'table' && (
+					<DataViewColumnInteractions
+						wrapperRef={ tableWrapperRef }
+						view={ view }
+						onChangeView={ onChangeView }
+					/>
+				) }
 				{ /* tech-debt.md#7: DataViews has no footer slot, so the
 				   New-row affordance and its CSS layout sit outside the
 				   component instead of inside its layout chrome. */ }
