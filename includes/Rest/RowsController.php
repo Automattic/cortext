@@ -116,11 +116,26 @@ final class RowsController {
 		$slug      = (string) get_post_meta( $collection->ID, 'slug', true );
 		$field_ids = $this->collection_field_ids( $collection->ID );
 
-		// Validate field references in sort/filters.
-		$referenced = $this->referenced_fields( $request );
-		$validation = $this->validate_fields( $referenced, $field_ids, $collection_id );
-		if ( is_wp_error( $validation ) ) {
-			return $validation;
+		// Validate sort and filter references separately. Sort accepts
+		// 'title', 'field-N', and the sortable system fields; filters
+		// accept 'field-N' only — system field filtering is deferred
+		// (tech-debt.md#13).
+		$sort_validation = $this->validate_sort_field(
+			$request->get_param( 'sort' ),
+			$field_ids,
+			$collection_id
+		);
+		if ( is_wp_error( $sort_validation ) ) {
+			return $sort_validation;
+		}
+
+		$filter_validation = $this->validate_filter_fields(
+			$request->get_param( 'filters' ),
+			$field_ids,
+			$collection_id
+		);
+		if ( is_wp_error( $filter_validation ) ) {
+			return $filter_validation;
 		}
 
 		// Precompute which fields are multi-value so format_row does not
@@ -129,6 +144,11 @@ final class RowsController {
 
 		$query_args = $this->build_query_args( $request, $slug );
 		$query      = new WP_Query( $query_args );
+
+		// Prime the user object cache once before mapping rows so per-row
+		// display name lookups in format_row hit the cache instead of
+		// running N+1 queries.
+		$this->prime_user_cache( $query->posts );
 
 		$rows = array_map(
 			function ( WP_Post $post ) use ( $field_ids, $multi_field_ids ) {
@@ -191,53 +211,79 @@ final class RowsController {
 	}
 
 	/**
-	 * Extracts all field references from sort and filter params.
+	 * Validates the `sort` param's field key.
 	 *
-	 * @param WP_REST_Request $request Full request object.
-	 * @return string[] Field keys like "field-123".
+	 * Accepts `'title'`, any `field-N` belonging to the collection, and the
+	 * sortable system field keys (`'created_at'`, `'modified_at'`). Rejects
+	 * the `*_by` system field keys and any other identifier — sort on
+	 * display-value properties is an open architectural decision shared
+	 * with relations and rollups (tech-debt.md#14).
+	 *
+	 * @param mixed $sort           Sort param from the request.
+	 * @param int[] $field_ids      Valid field IDs for the collection.
+	 * @param int   $collection_id  Collection ID for error messages.
+	 * @return true|WP_Error
 	 */
-	private function referenced_fields( WP_REST_Request $request ): array {
-		$refs = array();
-
-		$sort = $request->get_param( 'sort' );
-		if ( is_array( $sort ) && ! empty( $sort['field'] ) && 'title' !== $sort['field'] ) {
-			$refs[] = $sort['field'];
+	private function validate_sort_field( $sort, array $field_ids, int $collection_id ) {
+		if ( ! is_array( $sort ) || empty( $sort['field'] ) ) {
+			return true;
 		}
 
-		$filters = $request->get_param( 'filters' );
-		if ( is_array( $filters ) ) {
-			foreach ( $filters as $filter ) {
-				if ( is_array( $filter ) && ! empty( $filter['field'] ) ) {
-					$refs[] = $filter['field'];
-				}
-			}
+		$allowed = array( 'title', 'created_at', 'modified_at' );
+		foreach ( $field_ids as $id ) {
+			$allowed[] = "field-{$id}";
 		}
 
-		return array_unique( $refs );
+		if ( ! in_array( $sort['field'], $allowed, true ) ) {
+			return new WP_Error(
+				'cortext_invalid_sort_field',
+				sprintf(
+					/* translators: 1: field key, 2: collection ID */
+					__( 'Field "%1$s" cannot be used to sort collection %2$d.', 'cortext' ),
+					$sort['field'],
+					$collection_id
+				),
+				array( 'status' => 400 )
+			);
+		}
+
+		return true;
 	}
 
 	/**
-	 * Validates that every referenced field key belongs to the collection.
+	 * Validates every `filters[].field` reference.
 	 *
-	 * @param string[] $referenced     Field keys like "field-123".
-	 * @param int[]    $field_ids      Valid field IDs for the collection.
-	 * @param int      $collection_id  Collection ID for error messages.
+	 * Accepts only `field-N` keys belonging to the collection. Title and
+	 * system fields are intentionally excluded: title isn't filterable
+	 * today (preserved from prior behavior), and system field filtering
+	 * is deferred (tech-debt.md#13). Rejection produces a clean 400.
+	 *
+	 * @param mixed $filters        Filters param from the request.
+	 * @param int[] $field_ids      Valid field IDs for the collection.
+	 * @param int   $collection_id  Collection ID for error messages.
 	 * @return true|WP_Error
 	 */
-	private function validate_fields( array $referenced, array $field_ids, int $collection_id ) {
-		$valid_keys = array();
-		foreach ( $field_ids as $id ) {
-			$valid_keys[] = "field-{$id}";
+	private function validate_filter_fields( $filters, array $field_ids, int $collection_id ) {
+		if ( ! is_array( $filters ) || count( $filters ) === 0 ) {
+			return true;
 		}
 
-		foreach ( $referenced as $key ) {
-			if ( ! in_array( $key, $valid_keys, true ) ) {
+		$allowed = array();
+		foreach ( $field_ids as $id ) {
+			$allowed[] = "field-{$id}";
+		}
+
+		foreach ( $filters as $filter ) {
+			if ( ! is_array( $filter ) || empty( $filter['field'] ) ) {
+				continue;
+			}
+			if ( ! in_array( $filter['field'], $allowed, true ) ) {
 				return new WP_Error(
-					'cortext_invalid_field',
+					'cortext_invalid_filter_field',
 					sprintf(
 						/* translators: 1: field key, 2: collection ID */
-						__( 'Field "%1$s" does not belong to collection %2$d.', 'cortext' ),
-						$key,
+						__( 'Field "%1$s" cannot be used to filter collection %2$d.', 'cortext' ),
+						$filter['field'],
 						$collection_id
 					),
 					array( 'status' => 400 )
@@ -279,6 +325,12 @@ final class RowsController {
 
 			if ( 'title' === $sort['field'] ) {
 				$args['orderby'] = 'title';
+				$args['order']   = $direction;
+			} elseif ( 'created_at' === $sort['field'] ) {
+				$args['orderby'] = 'date';
+				$args['order']   = $direction;
+			} elseif ( 'modified_at' === $sort['field'] ) {
+				$args['orderby'] = 'modified';
 				$args['order']   = $direction;
 			} else {
 				$field_id   = $this->field_id_from_key( $sort['field'] );
@@ -365,15 +417,85 @@ final class RowsController {
 				: get_post_meta( $post->ID, $key, true );
 		}
 
+		$created_by_id  = (int) $post->post_author;
+		$modified_by_id = (int) get_post_meta( $post->ID, '_modified_by', true );
+
 		return array(
-			'id'     => $post->ID,
-			'title'  => array(
+			'id'          => $post->ID,
+			'title'       => array(
 				'raw'      => $post->post_title,
 				'rendered' => $post->post_title,
 			),
-			'status' => $post->post_status,
-			'meta'   => $meta,
+			'status'      => $post->post_status,
+			'created_at'  => $this->format_gmt_date( $post->post_date_gmt ),
+			'modified_at' => $this->format_gmt_date( $post->post_modified_gmt ),
+			'created_by'  => $this->display_name_for( $created_by_id ),
+			'modified_by' => $this->display_name_for( $modified_by_id > 0 ? $modified_by_id : $created_by_id ),
+			'meta'        => $meta,
 		);
+	}
+
+	/**
+	 * Formats a GMT MySQL datetime as RFC3339 with explicit UTC offset.
+	 *
+	 * `mysql_to_rfc3339` strips the timezone, leaving the client to guess
+	 * whether the value is local or UTC. Since `_gmt` columns are always
+	 * UTC, render them as `+00:00` so the client formats them correctly.
+	 *
+	 * @param string|null $mysql_gmt MySQL datetime string in UTC.
+	 * @return string RFC3339 string, or empty string if the input is empty.
+	 */
+	private function format_gmt_date( ?string $mysql_gmt ): string {
+		if ( ! $mysql_gmt || '0000-00-00 00:00:00' === $mysql_gmt ) {
+			return '';
+		}
+		$timestamp = strtotime( $mysql_gmt . ' UTC' );
+		return false === $timestamp ? '' : gmdate( DATE_RFC3339, $timestamp );
+	}
+
+	/**
+	 * Resolves a user ID to a display name, or empty string when missing.
+	 *
+	 * Reads from the WP user object cache primed by `prime_user_cache` so
+	 * row pages stay at two user-related queries regardless of row count.
+	 *
+	 * @param int $user_id User ID to resolve.
+	 * @return string Display name, or empty string when the user is missing.
+	 */
+	private function display_name_for( int $user_id ): string {
+		if ( $user_id < 1 ) {
+			return '';
+		}
+		$user = get_userdata( $user_id );
+		return $user ? (string) $user->display_name : '';
+	}
+
+	/**
+	 * Pre-populates the user object cache with every author and last-editor
+	 * referenced by the current row page, so per-row `get_userdata` calls in
+	 * `format_row` resolve from cache. Without this, display name lookup is
+	 * N+1 on cold caches; with it, two batch queries cover any row count.
+	 *
+	 * @param WP_Post[] $posts Posts in the current row page.
+	 */
+	private function prime_user_cache( array $posts ): void {
+		if ( count( $posts ) === 0 ) {
+			return;
+		}
+
+		$ids = array();
+		foreach ( $posts as $post ) {
+			$ids[]       = (int) $post->post_author;
+			$modified_by = (int) get_post_meta( $post->ID, '_modified_by', true );
+			if ( $modified_by > 0 ) {
+				$ids[] = $modified_by;
+			}
+		}
+
+		$ids = array_values( array_unique( array_filter( $ids ) ) );
+		if ( count( $ids ) > 0 ) {
+			cache_users( $ids );
+		}
 	}
 
 	/**
