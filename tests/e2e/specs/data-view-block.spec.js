@@ -1019,4 +1019,136 @@ test.describe( 'Collection view block', () => {
 			);
 		}
 	} );
+
+	test( 'auto-removes an empty row when deselected without editing', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+
+		try {
+			Object.assign(
+				fixture,
+				await createCollectionFixture( requestUtils )
+			);
+
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_pages',
+				data: {
+					title: 'Empty row auto-remove',
+					status: 'private',
+					content: createDataViewBlockMarkup( fixture.collection.id ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/page/${ fixture.page.id }`
+			);
+
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.page.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+			await expect(
+				canvas.getByText( 'The Left Hand of Darkness' )
+			).toBeVisible();
+
+			const beforeRows = await requestUtils.rest( {
+				path: `/wp/v2/crtxt_${ fixture.slug }`,
+				params: {
+					context: 'edit',
+					status: 'draft,private,publish',
+					per_page: 100,
+				},
+			} );
+
+			// Click "New" to create an empty row; title cell receives focus.
+			await canvas
+				.getByRole( 'button', { name: 'New', exact: true } )
+				.click();
+
+			await expect
+				.poll( async () => {
+					const rows = await requestUtils.rest( {
+						path: `/wp/v2/crtxt_${ fixture.slug }`,
+						params: {
+							context: 'edit',
+							status: 'draft,private,publish',
+							per_page: 100,
+						},
+					} );
+					return rows.length;
+				} )
+				.toBe( beforeRows.length + 1 );
+
+			// Deselect: press Escape to leave the focused cell without typing
+			// anything, then click on an existing row to shift focus away.
+			await page.keyboard.press( 'Escape' );
+			await canvas
+				.getByText( 'The Left Hand of Darkness' )
+				.click();
+
+			// The empty row should be auto-purged.
+			await expect
+				.poll( async () => {
+					const rows = await requestUtils.rest( {
+						path: `/wp/v2/crtxt_${ fixture.slug }`,
+						params: {
+							context: 'edit',
+							status: 'draft,private,publish',
+							per_page: 100,
+						},
+					} );
+					return rows.length;
+				} )
+				.toBe( beforeRows.length );
+		} finally {
+			// Best-effort cleanup of any row the auto-purge may not have
+			// reached (e.g. if the test failed before deselection).
+			const remainingRows = await requestUtils
+				.rest( {
+					path: `/wp/v2/crtxt_${ fixture.slug }`,
+					params: {
+						status: 'draft,private,publish',
+						per_page: 100,
+					},
+				} )
+				.catch( () => [] );
+			for ( const row of remainingRows ) {
+				if ( row.id !== fixture.entry?.id ) {
+					await deleteIfCreated(
+						requestUtils,
+						`/wp/v2/crtxt_${ fixture.slug }/${ row.id }`
+					);
+				}
+			}
+			await deleteIfCreated(
+				requestUtils,
+				fixture.entry &&
+					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+			);
+		}
+	} );
 } );
