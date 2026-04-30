@@ -9,21 +9,26 @@
 export const TITLE_FIELD_ID = 'title';
 export const MAX_COLUMN_WIDTH = 640;
 
-// Per-type column-width floors. Small values mirror Notion's behavior: a
-// checkbox column can shrink to just the checkbox, a text column to a
-// single character plus ellipsis. Keys are DataViews `field.type` values
-// plus `title` for the title field (which doesn't carry a type).
+// Per-type column-width floors. Calibrated against Notion's behavior: most
+// columns shrink down to roughly eight characters of content plus padding;
+// checkboxes shrink further so the column can show only the checkbox; date
+// columns hold more glyphs by default so they need a touch more room.
+// Keys are DataViews `field.type` values plus `title` for the title field
+// (which doesn't carry a type).
 export const MIN_WIDTHS = {
-	title: 48,
-	text: 48,
-	email: 48,
-	integer: 48,
-	array: 48,
-	date: 80,
-	datetime: 80,
-	boolean: 32,
+	title: 80,
+	text: 80,
+	email: 80,
+	integer: 80,
+	array: 80,
+	date: 96,
+	datetime: 96,
+	// 48 fits the WP CheckboxControl (24px) plus our cell padding without
+	// clipping the focus ring. 32 was visually flush against the column
+	// boundary and trimmed the box.
+	boolean: 48,
 };
-export const DEFAULT_MIN_WIDTH = 48;
+export const DEFAULT_MIN_WIDTH = 80;
 
 export function getMinWidth( fieldType ) {
 	return MIN_WIDTHS[ fieldType ] ?? DEFAULT_MIN_WIDTH;
@@ -116,8 +121,10 @@ export function normalizeView( view, validIds, options = {} ) {
 }
 
 // Applies a width to a single column. Always returns through the layout shape
-// the library reads, with min/max anchored to the same constants the resize
-// drag enforces. `fieldType` selects the per-type minimum.
+// the library reads. We pin `maxWidth` to the user's chosen width (not the
+// global cap) because HTML tables treat `width` as a hint under
+// `table-layout: auto` — without an equal `maxWidth` the browser auto-grows
+// the column past the user's pick whenever cell content is wider.
 export function withColumnWidth( view, fieldId, width, fieldType ) {
 	const clamped = clampWidth( width, fieldType );
 	const layout = view?.layout ?? {};
@@ -127,7 +134,7 @@ export function withColumnWidth( view, fieldId, width, fieldType ) {
 		...previous,
 		width: clamped,
 		minWidth: getMinWidth( fieldType ),
-		maxWidth: MAX_COLUMN_WIDTH,
+		maxWidth: clamped,
 	};
 	return {
 		...view,

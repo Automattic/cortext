@@ -162,13 +162,15 @@ describe( 'normalizeView', () => {
 } );
 
 describe( 'withColumnWidth', () => {
-	it( 'writes the clamped width plus per-type min and global max', () => {
+	it( 'writes the clamped width plus per-type min and matching maxWidth', () => {
 		const view = { layout: { density: 'compact' } };
 		const next = withColumnWidth( view, 'field-1', 220, 'text' );
 		expect( next.layout.styles[ 'field-1' ] ).toEqual( {
 			width: 220,
 			minWidth: MIN_WIDTHS.text,
-			maxWidth: MAX_COLUMN_WIDTH,
+			// maxWidth matches width so the column actually shrinks under
+			// `table-layout: auto`; otherwise content would auto-grow it.
+			maxWidth: 220,
 		} );
 	} );
 

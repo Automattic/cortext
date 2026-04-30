@@ -302,6 +302,24 @@ function ColumnResizer( { fieldId, fieldType, headerEl, view, onChangeView } ) {
 			headerEl.classList.add( 'cortext-column-resizing' );
 			document.body.classList.add( 'cortext-column-resizing' );
 
+			// Find every cell in this column so the live drag mutates body
+			// `<td>`s alongside the header. Under `table-layout: auto` the
+			// column's width is the max of all cells' widths — constraining
+			// only the th leaves the column visually wide until commit, so
+			// the user sees no movement during the drag in tables where
+			// body content is wider than the header.
+			const tableEl = headerEl.closest( '.dataviews-view-table' );
+			const headerSiblings = headerEl.parentElement
+				? Array.from( headerEl.parentElement.children )
+				: [];
+			const colIndex = headerSiblings.indexOf( headerEl );
+			const bodyCells =
+				colIndex >= 0 && tableEl
+					? tableEl.querySelectorAll(
+							`tbody > tr > *:nth-child(${ colIndex + 1 })`
+					  )
+					: [];
+
 			const computeWidth = ( clientX ) => {
 				const next = startWidth + ( clientX - startX );
 				return Math.max(
@@ -310,15 +328,26 @@ function ColumnResizer( { fieldId, fieldType, headerEl, view, onChangeView } ) {
 				);
 			};
 
+			const applyLiveWidth = ( px ) => {
+				headerEl.style.width = px;
+				headerEl.style.maxWidth = px;
+				for ( const td of bodyCells ) {
+					td.style.width = px;
+					td.style.maxWidth = px;
+				}
+			};
+
 			const onPointerMove = ( moveEvent ) => {
 				// Direct DOM mutation during the drag: the library's render
 				// pass writes inline width from `view.layout.styles`, but
-				// it isn't running while the pointer is held — so writing
-				// `style.width` here gives live feedback without churning
-				// React state on every frame. The pointerup commit through
-				// `onChangeView` lets the next render take over.
+				// it isn't running while the pointer is held. Writing
+				// `style.width` and `style.maxWidth` here on every cell in
+				// the column gives live feedback without churning React
+				// state on every frame; the pointerup commit through
+				// `onChangeView` lets the next render take over and the
+				// inline styles get overwritten by the library's render.
 				const nextWidth = computeWidth( moveEvent.clientX );
-				headerEl.style.width = `${ nextWidth }px`;
+				applyLiveWidth( `${ nextWidth }px` );
 			};
 
 			const onPointerUp = ( upEvent ) => {

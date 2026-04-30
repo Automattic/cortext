@@ -444,11 +444,16 @@ body.cortext-fullscreen {
 	}
 }
 
+// Block-level flex (rather than inline-flex) so the container always takes
+// the cell's full width. With inline-flex the container sized to content
+// first and then `max-width: 100%` clamped it visually, but chips inside
+// were laid out against the unclamped width and overflowed the column.
 .cortext-chips {
-	display: inline-flex;
+	display: flex;
 	flex-wrap: wrap;
 	gap: $grid-unit-05;
 	max-width: 100%;
+	min-width: 0;
 }
 
 // Checkbox cells skip the shell/overlay dance because the input is
