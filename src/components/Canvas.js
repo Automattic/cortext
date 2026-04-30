@@ -123,17 +123,17 @@ function TrashedNotice( { postId } ) {
 		setError( null );
 		setIsRestoring( true );
 		try {
-			await apiFetch( {
+			const response = await apiFetch( {
 				path: `/cortext/v1/pages/${ postId }/restore`,
 				method: 'POST',
 			} );
-			// `wp_untrash_post` returned the page to its pre-trash status;
-			// pull a fresh copy into the store so the canvas drops the
-			// trashed banner without a navigation roundtrip.
-			const fresh = await apiFetch( {
-				path: `/wp/v2/crtxt_pages/${ postId }?context=edit`,
-			} );
-			receiveEntityRecords( 'postType', POST_TYPE, [ fresh ] );
+			// The endpoint returns the freshly-untrashed post so the canvas
+			// can drop the trashed banner without a follow-up GET.
+			if ( response?.post ) {
+				receiveEntityRecords( 'postType', POST_TYPE, [
+					response.post,
+				] );
+			}
 			invalidateResolution( 'getEntityRecords', [
 				'postType',
 				POST_TYPE,

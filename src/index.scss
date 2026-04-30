@@ -299,6 +299,10 @@ body.cortext-fullscreen {
 	// The trashed-page banner stacks above the BlockCanvas. Make the
 	// content slot a flex column so the canvas keeps its `height: 100%`
 	// behavior (it now fills the remaining space).
+	//
+	// Couples to a Gutenberg-internal class (`.interface-interface-skeleton__content`).
+	// Stable for now; revisit if `@wordpress/interface` ever exposes a slot
+	// for a notice region above the content.
 	.interface-interface-skeleton__content {
 		display: flex;
 		flex-direction: column;

@@ -17,6 +17,8 @@ import {
 	TRASHED_PAGES_QUERY,
 } from './page-queries';
 
+// Must stay in sync with `PageTrashCascade::META_KEY` in PHP. The meta is
+// exposed via REST as part of the `meta` field on each page record.
 const MARKER_META = '_cortext_trashed_by_parent';
 
 /**
@@ -180,10 +182,18 @@ export default function SidebarTrash( { activePages, selectedId, onSelect } ) {
 		setRowError( null );
 		setBusyId( id );
 		try {
-			await apiFetch( {
+			const response = await apiFetch( {
 				path: `/cortext/v1/pages/${ id }/permanent-delete`,
 				method: 'POST',
 			} );
+			// If the canvas was showing one of the deleted pages, navigate
+			// away. Without this `useEntityRecord` would return undefined
+			// and the canvas would spin forever (the page is genuinely gone
+			// now, not just trashed).
+			const deletedIds = response?.deleted ?? [];
+			if ( selectedId && deletedIds.includes( selectedId ) ) {
+				onSelect( null );
+			}
 			refreshQueries();
 		} catch ( error ) {
 			setRowError( {
@@ -194,7 +204,7 @@ export default function SidebarTrash( { activePages, selectedId, onSelect } ) {
 		} finally {
 			setBusyId( null );
 		}
-	}, [ pendingDeleteId, refreshQueries ] );
+	}, [ pendingDeleteId, refreshQueries, selectedId, onSelect ] );
 
 	const isLoading = ! hasResolved;
 	const hasError = status === 'ERROR';

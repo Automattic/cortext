@@ -287,6 +287,55 @@ describe( 'SidebarTrash', () => {
 		);
 	} );
 
+	it( 'navigates the canvas away when the open page is permanent-deleted (root or descendant)', async () => {
+		const onSelect = jest.fn();
+		setTrashRecords( { records: [ makePage( { id: 1 } ) ] } );
+		// Server-side cascade also deletes id 5 (a tagged descendant); the
+		// response lists every id that's gone now.
+		apiFetch.mockResolvedValue( { deleted: [ 1, 5 ] } );
+
+		render(
+			<SidebarTrash
+				activePages={ [] }
+				selectedId={ 5 }
+				onSelect={ onSelect }
+			/>
+		);
+
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Delete permanently' } )
+		);
+		clickConfirm();
+
+		await waitFor( () => {
+			expect( onSelect ).toHaveBeenCalledWith( null );
+		} );
+	} );
+
+	it( 'leaves the canvas alone when permanent-delete does not include the open page', async () => {
+		const onSelect = jest.fn();
+		setTrashRecords( { records: [ makePage( { id: 1 } ) ] } );
+		apiFetch.mockResolvedValue( { deleted: [ 1 ] } );
+
+		render(
+			<SidebarTrash
+				activePages={ [] }
+				selectedId={ 99 }
+				onSelect={ onSelect }
+			/>
+		);
+
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Delete permanently' } )
+		);
+		clickConfirm();
+
+		await waitFor( () => {
+			expect( apiFetch ).toHaveBeenCalled();
+		} );
+		expect( onSelect ).not.toHaveBeenCalled();
+	} );
+
 	it( 'hides cascade descendants and lists only roots', () => {
 		const root = makePage( {
 			id: 1,

@@ -58,6 +58,16 @@ final class PageTrashController {
 		);
 	}
 
+	/**
+	 * Permission gate. Returns a `WP_Error` with status 404 when the post id
+	 * is unknown or not a `crtxt_page` so the consumer can tell "not found"
+	 * from "not allowed" without leaking permission semantics into the route
+	 * callback. WP REST honours `WP_Error` returns from permission callbacks.
+	 *
+	 * @param WP_REST_Request $request Incoming REST request.
+	 *
+	 * @return bool|WP_Error
+	 */
 	public function check_trashed_page( WP_REST_Request $request ) {
 		$id   = (int) $request->get_param( 'id' );
 		$post = get_post( $id );
@@ -117,9 +127,26 @@ final class PageTrashController {
 		return new WP_REST_Response(
 			array(
 				'restored' => array_values( array_unique( array_merge( array( $id ), $revived ) ) ),
+				'post'     => $this->prepared_post( $id ),
 			),
 			200
 		);
+	}
+
+	/**
+	 * Runs the standard `WP_REST_Posts_Controller` against the given page so
+	 * the response payload matches what `useEntityRecord` already knows how to
+	 * consume. Lets clients drop a follow-up GET after a successful restore.
+	 *
+	 * @param int $id Page id to render.
+	 *
+	 * @return mixed
+	 */
+	private function prepared_post( int $id ) {
+		$rest_request = new WP_REST_Request( 'GET', '/wp/v2/crtxt_pages/' . $id );
+		$rest_request->set_param( 'context', 'edit' );
+		$response = rest_do_request( $rest_request );
+		return $response->is_error() ? null : $response->get_data();
 	}
 
 	public function permanent_delete( WP_REST_Request $request ) {

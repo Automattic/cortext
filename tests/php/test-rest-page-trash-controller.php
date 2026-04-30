@@ -59,7 +59,14 @@ final class Test_Rest_Page_Trash_Controller extends BaseTestCase {
 
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertNotSame( 'trash', get_post_status( $page_id ) );
-		$this->assertSame( array( $page_id ), $response->get_data()['restored'] );
+
+		$data = $response->get_data();
+		$this->assertSame( array( $page_id ), $data['restored'] );
+		// The freshly-untrashed post is included so the canvas can drop the
+		// banner without a follow-up GET.
+		$this->assertIsArray( $data['post'] );
+		$this->assertSame( $page_id, $data['post']['id'] );
+		$this->assertNotSame( 'trash', $data['post']['status'] );
 	}
 
 	public function test_returns_revived_descendants_in_restored_array(): void {
@@ -258,9 +265,13 @@ final class Test_Rest_Page_Trash_Controller extends BaseTestCase {
 	}
 
 	/**
-	 * Identical to the cascade test's shim. WorDBless's wpdb mock returns
-	 * empty for any query that isn't a primary-key lookup; the controller's
-	 * subtree walk relies on `meta_key` joins.
+	 * Identical to the shim in `test-page-trash-cascade.php`. WorDBless's
+	 * wpdb mock returns empty for any query that isn't a primary-key lookup;
+	 * the controller's subtree walk relies on `meta_key` joins.
+	 *
+	 * Duplicated rather than extracted because two callers don't justify a
+	 * trait yet. Lift into a shared `WorDBlessPostsQueryStub` trait when a
+	 * third test (e.g. PR 3's revisions controller) needs it.
 	 *
 	 * @param mixed    $pre   Existing filter return; passed through unchanged when null.
 	 * @param WP_Query $query The query being short-circuited.
