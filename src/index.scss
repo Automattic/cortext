@@ -487,6 +487,15 @@ body.cortext-fullscreen {
 			padding-block: 0;
 		}
 
+		// DataViews wraps each cell's render in a flex container that
+		// shrinks to the content's intrinsic width, so the hover/focus
+		// background on the editable shell only painted under the text
+		// instead of the whole cell. Force the wrapper to fill the td so
+		// every cell hovers edge-to-edge regardless of content length.
+		tbody .dataviews-view-table__cell-content-wrapper {
+			width: 100%;
+		}
+
 		.cortext-editable-cell__shell,
 		.cortext-cell-checkbox {
 			min-height: $grid-unit-50 + 2 * $grid-unit-15; // 64 (balanced)
@@ -545,21 +554,20 @@ body.cortext-fullscreen {
 	position: absolute;
 	top: 0;
 	right: 0;
-	width: 6px;
+	width: 8px;
 	height: 100%;
 	cursor: col-resize;
 	z-index: 2;
 	touch-action: none;
 
-	// 1px line on hover and during resize. Sits in the middle of the 6px
-	// hit area so the affordance is precise without being a pixel-thin
-	// drag target.
+	// 3px line on hover and during resize. Sits flush against the right
+	// edge of the th so adjacent columns don't paint over it.
 	&::after {
 		content: "";
 		position: absolute;
 		top: 0;
-		right: 2px;
-		width: 1px;
+		right: 0;
+		width: 3px;
 		height: 100%;
 		background: var(--wp-admin-theme-color);
 		opacity: 0;
