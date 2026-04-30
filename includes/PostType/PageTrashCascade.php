@@ -20,6 +20,7 @@ final class PageTrashCascade {
 	public const META_KEY = '_cortext_trashed_by_parent';
 
 	public function register(): void {
+		add_action( 'init', array( $this, 'register_meta' ) );
 		add_action( 'wp_trash_post', array( $this, 'cascade_trash' ), 10, 1 );
 		add_action( 'untrashed_post', array( $this, 'cascade_restore' ), 10, 1 );
 		// Core only wires wp_untrash_post_set_previous_status inside
@@ -32,6 +33,25 @@ final class PageTrashCascade {
 		// handle_bulk_actions-{screen} fires and we can absorb the no-op.
 		add_filter( 'bulk_actions-edit-' . Page::POST_TYPE, array( $this, 'replace_bulk_actions' ) );
 		add_filter( 'handle_bulk_actions-edit-' . Page::POST_TYPE, array( $this, 'handle_admin_bulk_action' ), 10, 3 );
+	}
+
+	/**
+	 * Exposes the cascade marker via REST so the sidebar Trash section can
+	 * filter rows down to cascade roots and walk the subtree client-side.
+	 */
+	public function register_meta(): void {
+		register_post_meta(
+			Page::POST_TYPE,
+			self::META_KEY,
+			array(
+				'type'          => 'integer',
+				'single'        => true,
+				'show_in_rest'  => true,
+				'auth_callback' => static function () {
+					return current_user_can( 'edit_posts' );
+				},
+			)
+		);
 	}
 
 	/**
