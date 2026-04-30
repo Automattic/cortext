@@ -883,4 +883,140 @@ test.describe( 'Collection view block', () => {
 			);
 		}
 	} );
+
+	test( 'renders system field columns as read-only when visible', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+
+		try {
+			const suffix = Date.now().toString( 36 ).slice( -4 );
+			const slug = `e2esys${ suffix }`;
+			fixture.slug = slug;
+
+			fixture.collection = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_collections',
+				data: {
+					title: `System fields ${ suffix }`,
+					status: 'private',
+					meta: { slug },
+				},
+			} );
+
+			fixture.field = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_fields',
+				data: {
+					title: 'Note',
+					status: 'private',
+					meta: { type: 'text' },
+				},
+			} );
+
+			await requestUtils.rest( {
+				method: 'POST',
+				path: `/wp/v2/crtxt_collections/${ fixture.collection.id }`,
+				data: {
+					meta: { fields: [ String( fixture.field.id ) ] },
+				},
+			} );
+
+			fixture.entry = await requestUtils.rest( {
+				method: 'POST',
+				path: `/wp/v2/crtxt_${ slug }`,
+				data: {
+					title: 'Sample row',
+					status: 'private',
+					meta: {
+						[ `field-${ fixture.field.id }` ]: 'a note',
+					},
+				},
+			} );
+
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_pages',
+				data: {
+					title: 'System field page',
+					status: 'private',
+					content: createDataViewBlockMarkup(
+						fixture.collection.id,
+						{
+							fields: [
+								'title',
+								'created_at',
+								'created_by',
+								'modified_at',
+								'modified_by',
+							],
+						}
+					),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/page/${ fixture.page.id }`
+			);
+
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.page.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+			await expect( canvas.getByText( 'Sample row' ) ).toBeVisible();
+
+			// Each system field cell renders inside a read-only span; no
+			// EditableCell mounts, no inline edit affordance.
+			const readOnlyCells = canvas.locator(
+				'.cortext-data-view td .cortext-cell-readonly'
+			);
+			// At least one read-only cell per system column should be
+			// present (the row may also have read-only cells from any
+			// non-editable custom field types, but we configured none of
+			// those here).
+			await expect( readOnlyCells.first() ).toBeVisible();
+			expect( await readOnlyCells.count() ).toBeGreaterThanOrEqual( 4 );
+
+			// `created_by` resolves to a non-empty author name.
+			const createdByCell = readOnlyCells.nth( 1 );
+			await expect( createdByCell ).not.toHaveText( '' );
+
+			// Read-only cells don't expose an editable shell; clicking
+			// them must not produce a CheckboxControl, TextControl, or
+			// any of EditableCell's edit affordances.
+			await createdByCell.click();
+			await expect(
+				canvas.locator( '.cortext-editable-cell--editing' )
+			).toHaveCount( 0 );
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				fixture.entry &&
+					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.field &&
+					`/wp/v2/crtxt_fields/${ fixture.field.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+			);
+		}
+	} );
 } );
