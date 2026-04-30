@@ -5,6 +5,8 @@ import apiFetch from '@wordpress/api-fetch';
 // tech-debt.md#2: rows live outside core-data, so this hook manages
 // its own fetch state and exposes a manual refresh() handle.
 
+const SERVER_OPERATORS = new Set( [ 'is', 'isNot', 'isAny', 'isNone' ] );
+
 function buildQueryArgs( collectionId, view ) {
 	const args = {
 		collection: collectionId,
@@ -14,6 +16,24 @@ function buildQueryArgs( collectionId, view ) {
 	if ( view?.search ) {
 		args.search = view.search;
 	}
+
+	// Ignore filters that the server isn't equipped to honor, otherwise
+	// changes in `view` will result in a new query to be requested from the
+	// server, even though the results will be the same.
+	const serverFilters = ( view?.filters ?? [] ).filter(
+		( f ) => f.field && f.operator && SERVER_OPERATORS.has( f.operator )
+	);
+	serverFilters.forEach( ( filter, i ) => {
+		args[ `filters[${ i }][field]` ] = filter.field;
+		args[ `filters[${ i }][operator]` ] = filter.operator;
+		if ( Array.isArray( filter.value ) ) {
+			filter.value.forEach( ( v, j ) => {
+				args[ `filters[${ i }][value][${ j }]` ] = v;
+			} );
+		} else {
+			args[ `filters[${ i }][value]` ] = filter.value;
+		}
+	} );
 
 	return args;
 }
