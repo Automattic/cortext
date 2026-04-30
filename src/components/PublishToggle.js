@@ -20,11 +20,6 @@ export default function PublishToggle() {
 
 	const isPublic = status === 'publish';
 
-	// Don't show the toggle for draft pages (no title yet).
-	if ( status === 'draft' ) {
-		return null;
-	}
-
 	const toggle = useCallback( async () => {
 		editPost( { status: isPublic ? 'private' : 'publish' } );
 		savePost();
@@ -37,6 +32,11 @@ export default function PublishToggle() {
 			setTimeout( () => setCopied( false ), 2000 );
 		}
 	}, [ link ] );
+
+	// Don't show the toggle for draft pages (no title yet).
+	if ( status === 'draft' ) {
+		return null;
+	}
 
 	return (
 		<div className="cortext-publish-toggle">
