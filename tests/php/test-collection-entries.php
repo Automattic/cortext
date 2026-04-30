@@ -249,6 +249,133 @@ final class Test_Collection_Entries extends BaseTestCase {
 		$this->assertTrue( true );
 	}
 
+	public function test_record_modified_by_writes_meta_on_entry_save(): void {
+		$user_id = wp_insert_user(
+			array(
+				'user_login' => 'mb_user',
+				'user_pass'  => 'password',
+				'role'       => 'editor',
+			)
+		);
+		wp_set_current_user( $user_id );
+
+		$entries = new CollectionEntries();
+		$entries->register();
+
+		$collection_id = wp_insert_post(
+			array(
+				'post_type'   => Collection::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Logs',
+				'meta_input'  => array( 'slug' => 'logs' ),
+			)
+		);
+		$entries->register_for_collection( get_post( $collection_id ) );
+
+		$post_id = wp_insert_post(
+			array(
+				'post_type'   => 'crtxt_logs',
+				'post_status' => 'publish',
+				'post_title'  => 'A log',
+			)
+		);
+
+		$this->assertSame( (int) $user_id, (int) get_post_meta( $post_id, '_modified_by', true ) );
+
+		wp_set_current_user( 0 );
+	}
+
+	public function test_record_modified_by_skips_when_no_user(): void {
+		wp_set_current_user( 0 );
+
+		$entries = new CollectionEntries();
+		$entries->register();
+
+		$collection_id = wp_insert_post(
+			array(
+				'post_type'   => Collection::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Cron',
+				'meta_input'  => array( 'slug' => 'cron' ),
+			)
+		);
+		$entries->register_for_collection( get_post( $collection_id ) );
+
+		// First save records a real user.
+		$author_id = wp_insert_user(
+			array(
+				'user_login' => 'mb_author',
+				'user_pass'  => 'password',
+				'role'       => 'author',
+			)
+		);
+		wp_set_current_user( $author_id );
+
+		$post_id = wp_insert_post(
+			array(
+				'post_type'   => 'crtxt_cron',
+				'post_status' => 'publish',
+				'post_title'  => 'Recorded',
+			)
+		);
+
+		$this->assertSame( (int) $author_id, (int) get_post_meta( $post_id, '_modified_by', true ) );
+
+		// Subsequent unauthenticated save (CLI / cron) must not clobber the
+		// last real editor with `0`.
+		wp_set_current_user( 0 );
+		wp_update_post(
+			array(
+				'ID'         => $post_id,
+				'post_title' => 'Updated by cron',
+			)
+		);
+
+		$this->assertSame(
+			(int) $author_id,
+			(int) get_post_meta( $post_id, '_modified_by', true ),
+			'Unauthenticated saves must leave _modified_by intact.'
+		);
+	}
+
+	public function test_record_modified_by_ignores_non_entry_post_types(): void {
+		$user_id = wp_insert_user(
+			array(
+				'user_login' => 'mb_skip',
+				'user_pass'  => 'password',
+				'role'       => 'editor',
+			)
+		);
+		wp_set_current_user( $user_id );
+
+		$entries = new CollectionEntries();
+		$entries->register();
+
+		// Saving a Collection or Field post must not record _modified_by:
+		// they aren't entry CPTs.
+		$collection_id = wp_insert_post(
+			array(
+				'post_type'   => Collection::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Container',
+				'meta_input'  => array( 'slug' => 'container' ),
+			)
+		);
+		$field_id = wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Some field',
+				'meta_input'  => array( 'type' => 'text' ),
+			)
+		);
+
+		$this->assertSame( '', get_post_meta( $collection_id, '_modified_by', true ) );
+		$this->assertSame( '', get_post_meta( $field_id, '_modified_by', true ) );
+
+		wp_set_current_user( 0 );
+	}
+
 	public function test_wp_meta_type_for_returns_correct_types(): void {
 		$this->assertSame( 'number', CollectionEntries::wp_meta_type_for( 'number' ) );
 		$this->assertSame( 'boolean', CollectionEntries::wp_meta_type_for( 'checkbox' ) );
