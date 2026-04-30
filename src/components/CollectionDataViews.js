@@ -170,9 +170,18 @@ export default function CollectionDataViews( {
 			.filter( ( f ) => f && f.editable );
 	}, [ dataViewFields, view?.fields ] );
 
+	// Search is already handled server-side, so strip it from the view
+	// before passing to filterSortAndPaginate. Without this, the client
+	// re-filters against enableGlobalSearch (which no fields set), dropping
+	// every row.
 	const { data: dataFiltered, paginationInfo: clientPaginationInfo } =
 		useMemo( () => {
-			return filterSortAndPaginate( data, view, dataViewFields );
+			const { search, ...viewWithoutSearch } = view;
+			return filterSortAndPaginate(
+				data,
+				viewWithoutSearch,
+				dataViewFields
+			);
 		}, [ data, view, dataViewFields ] );
 
 	const requestNext = useCallback(
