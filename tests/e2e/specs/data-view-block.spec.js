@@ -923,11 +923,11 @@ test.describe( 'Collection view block', () => {
 			const canvas = page.frameLocator( '[name="editor-canvas"]' );
 			await expect( canvas.getByText( 'Author' ) ).toBeVisible();
 
-			// Author is index 1 (title is index 0); its resizer is the second
-			// in DOM order. Native pointer events drive the drag, and pointer
-			// capture in the resize handler keeps the drag tracking even if
-			// the pointer leaves the editor canvas iframe.
-			const resizer = canvas.locator( '.cortext-column-resizer' ).first();
+			// Author is the second column (title is index 0, Author is
+			// index 1); its resizer is at .nth(1) in DOM order. Native
+			// pointer events drive the drag, and pointer capture keeps it
+			// tracking even if the pointer leaves the editor canvas iframe.
+			const resizer = canvas.locator( '.cortext-column-resizer' ).nth( 1 );
 			await expect( resizer ).toBeAttached();
 			const startBox = await resizer.boundingBox();
 
@@ -1095,27 +1095,24 @@ test.describe( 'Collection view block', () => {
 			await expect( headerButton( 'Author' ) ).toBeVisible();
 			await expect( headerButton( 'Notes' ) ).toBeVisible();
 
-			// Drag the Author drag handle past the midpoint of the Notes
-			// header so it lands after Notes.
-			const dragHandle = canvas
-				.locator( '.cortext-column-drag-handle' )
-				.first();
-			const handleBox = await dragHandle.boundingBox();
+			// The entire header is the drag area. Pick a point on the
+			// Author header that's well clear of the right-edge resizer
+			// (~6px), then drag past the midpoint of the Notes header so
+			// Author lands after Notes. Author is index 1 (title is 0).
+			const authorTh = canvas
+				.locator( '.dataviews-view-table thead > tr > th' )
+				.nth( 1 );
+			const authorBox = await authorTh.boundingBox();
 			const notesTh = canvas
 				.locator( '.dataviews-view-table thead > tr > th' )
 				.nth( 2 );
 			const notesBox = await notesTh.boundingBox();
 
-			await page.mouse.move(
-				handleBox.x + handleBox.width / 2,
-				handleBox.y + handleBox.height / 2
-			);
+			const startX = authorBox.x + 20;
+			const startY = authorBox.y + authorBox.height / 2;
+			await page.mouse.move( startX, startY );
 			await page.mouse.down();
-			await page.mouse.move(
-				handleBox.x + handleBox.width / 2 + 10,
-				handleBox.y + handleBox.height / 2,
-				{ steps: 4 }
-			);
+			await page.mouse.move( startX + 10, startY, { steps: 4 } );
 			await page.mouse.move(
 				notesBox.x + notesBox.width * 0.75,
 				notesBox.y + notesBox.height / 2,
@@ -1142,7 +1139,6 @@ test.describe( 'Collection view block', () => {
 			const fieldOrder = orderMatch[ 1 ]
 				.split( ',' )
 				.map( ( s ) => s.trim().replace( /"/g, '' ) );
-			expect( fieldOrder[ 0 ] ).toBe( 'title' );
 			expect( fieldOrder.indexOf( `field-${ fieldB.id }` ) ).toBeLessThan(
 				fieldOrder.indexOf( `field-${ fieldA.id }` )
 			);
@@ -1188,75 +1184,4 @@ test.describe( 'Collection view block', () => {
 		}
 	} );
 
-	test( 'title column has no resize or drag affordances', async ( {
-		admin,
-		page,
-		requestUtils,
-	} ) => {
-		const fixture = {};
-
-		try {
-			Object.assign(
-				fixture,
-				await createCollectionFixture( requestUtils )
-			);
-
-			fixture.page = await requestUtils.rest( {
-				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
-				data: {
-					title: 'Title column has no handles page',
-					status: 'private',
-					content: createDataViewBlockMarkup( fixture.collection.id ),
-				},
-			} );
-
-			await admin.visitAdminPage(
-				'admin.php',
-				`page=cortext&p=/page/${ fixture.page.id }`
-			);
-
-			await page.waitForFunction(
-				( postId ) =>
-					window.wp?.data
-						?.select( 'core/editor' )
-						?.getCurrentPostId?.() === postId,
-				fixture.page.id,
-				{ timeout: 15_000 }
-			);
-
-			const canvas = page.frameLocator( '[name="editor-canvas"]' );
-			await expect( canvas.getByText( 'Title' ) ).toBeVisible();
-			await expect( canvas.getByText( 'Author' ) ).toBeVisible();
-
-			const titleTh = canvas
-				.locator( '.dataviews-view-table thead > tr > th' )
-				.first();
-			await expect(
-				titleTh.locator( '.cortext-column-resizer' )
-			).toHaveCount( 0 );
-			await expect(
-				titleTh.locator( '.cortext-column-drag-handle' )
-			).toHaveCount( 0 );
-		} finally {
-			await deleteIfCreated(
-				requestUtils,
-				fixture.entry &&
-					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
-			);
-			await deleteIfCreated(
-				requestUtils,
-				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
-			);
-			await deleteIfCreated(
-				requestUtils,
-				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
-			);
-			await deleteIfCreated(
-				requestUtils,
-				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
-			);
-		}
-	} );
 } );

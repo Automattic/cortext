@@ -116,12 +116,11 @@ export function withColumnWidth( view, fieldId, width, options = {} ) {
 	};
 }
 
-// Moves a column from one index to another in `view.fields`. The title id is
-// pinned to position 0 — if the move would dislodge it (or leave a non-title
-// in front), it's re-prepended on the way out. Mirrors Notion's behavior:
-// the Name column never moves and never disappears.
-export function withColumnOrder( view, fromIndex, toIndex, options = {} ) {
-	const titleId = options.titleId ?? TITLE_FIELD_ID;
+// Moves a column from one index to another in `view.fields`. Every column
+// (including the title) reorders freely — the title's only constraint is
+// visibility, enforced via `enableHiding: false` on the field and the
+// `normalizeView` re-prepend if it ever drops out of `view.fields`.
+export function withColumnOrder( view, fromIndex, toIndex ) {
 	const fields = Array.isArray( view?.fields ) ? view.fields.slice() : [];
 	if (
 		fromIndex < 0 ||
@@ -132,17 +131,7 @@ export function withColumnOrder( view, fromIndex, toIndex, options = {} ) {
 	) {
 		return view;
 	}
-	const movingId = fields[ fromIndex ];
-	if ( movingId === titleId ) {
-		return view;
-	}
-	fields.splice( fromIndex, 1 );
-	let insertAt = toIndex;
-	// Don't allow a drop that would land left of the title column.
-	const titleIndex = fields.indexOf( titleId );
-	if ( titleIndex !== -1 && insertAt <= titleIndex ) {
-		insertAt = titleIndex + 1;
-	}
-	fields.splice( insertAt, 0, movingId );
+	const [ movingId ] = fields.splice( fromIndex, 1 );
+	fields.splice( toIndex, 0, movingId );
 	return { ...view, fields };
 }

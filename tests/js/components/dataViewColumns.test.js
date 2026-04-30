@@ -198,19 +198,22 @@ describe( 'withColumnOrder', () => {
 		expect( next.fields ).toEqual( [ TITLE_FIELD_ID, 'b', 'c', 'a' ] );
 	} );
 
-	it( 'returns the same view when moving the title id', () => {
-		const v = view( [ TITLE_FIELD_ID, 'a', 'b' ] );
-		expect( withColumnOrder( v, 0, 2 ) ).toBe( v );
+	it( 'moves the title id like any other column', () => {
+		const next = withColumnOrder(
+			view( [ TITLE_FIELD_ID, 'a', 'b' ] ),
+			0,
+			2
+		);
+		expect( next.fields ).toEqual( [ 'a', 'b', TITLE_FIELD_ID ] );
 	} );
 
-	it( 'never lets a non-title column land left of the title', () => {
+	it( 'allows a column to land left of the title', () => {
 		const next = withColumnOrder(
 			view( [ TITLE_FIELD_ID, 'a', 'b' ] ),
 			2,
 			0
 		);
-		expect( next.fields[ 0 ] ).toBe( TITLE_FIELD_ID );
-		expect( next.fields ).toEqual( [ TITLE_FIELD_ID, 'b', 'a' ] );
+		expect( next.fields ).toEqual( [ 'b', TITLE_FIELD_ID, 'a' ] );
 	} );
 
 	it( 'returns the same view for invalid indices', () => {

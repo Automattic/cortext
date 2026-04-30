@@ -523,11 +523,22 @@ body.cortext-fullscreen {
 	}
 }
 
-// Column resize and reorder affordances. Both are portaled into each non-
-// title `<th>` rendered by `@wordpress/dataviews`, so the th needs a
-// position anchor for the absolutely-placed handles.
+// Column resize and reorder affordances. The resizer is portaled into each
+// `<th>` rendered by `@wordpress/dataviews`, so the th needs a position
+// anchor. Reorder is wired via a native pointerdown listener on the th
+// itself — the entire header is the drag area, and clicks (no movement)
+// pass through to the library's column-header menu trigger.
 .cortext-data-view .dataviews-view-table thead > tr > th {
 	position: relative;
+	cursor: grab;
+
+	// The library renders the column label as a button that fills the th
+	// and brings its own `cursor: pointer`. Override so the entire header
+	// reads as draggable. The resizer's `cursor: col-resize` (below) wins
+	// at the right edge because the resizer overlays the th.
+	.dataviews-view-table-header-button {
+		cursor: inherit;
+	}
 }
 
 .cortext-column-resizer {
@@ -566,44 +577,6 @@ body.cortext-column-resizing {
 	user-select: none;
 }
 
-.cortext-column-drag-handle {
-	position: absolute;
-	top: 0;
-	left: 0;
-	width: 8px;
-	height: 100%;
-	padding: 0;
-	margin: 0;
-	background: transparent;
-	border: none;
-	cursor: grab;
-	z-index: 2;
-	touch-action: none;
-
-	// Subtle 2px bar on the th's left edge, visible on hover. Keeps the
-	// affordance discoverable without competing with the column label.
-	&::after {
-		content: "";
-		position: absolute;
-		top: 25%;
-		left: 3px;
-		width: 2px;
-		height: 50%;
-		background: $gray-400;
-		border-radius: 1px;
-		opacity: 0;
-		transition: opacity 100ms ease;
-	}
-
-	thead > tr > th:hover &::after {
-		opacity: 1;
-	}
-
-	&:active {
-		cursor: grabbing;
-	}
-}
-
 .cortext-column-drop-indicator {
 	position: absolute;
 	width: 2px;
@@ -616,4 +589,14 @@ body.cortext-column-resizing {
 body.cortext-column-dragging {
 	cursor: grabbing;
 	user-select: none;
+}
+
+// While a drag is active, the header reads as `grabbing` (overriding the
+// per-th `grab` set above). The header-button inherits its cursor from
+// the th (rule above), so this single override carries through.
+body.cortext-column-dragging
+.cortext-data-view
+.dataviews-view-table
+thead > tr > th {
+	cursor: grabbing;
 }

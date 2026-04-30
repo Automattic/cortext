@@ -35,9 +35,9 @@ const TITLE_FIELD = {
 		/>
 	),
 	editable: true,
-	// Mirrors Notion: the title column never disappears. The DataViews
-	// column-visibility menu honors this flag, and our normalizeView keeps
-	// the id pinned in `view.fields` as defense in depth.
+	// The title column can't be hidden (it's the row identity), but it
+	// reorders and resizes like any other column. `normalizeView` re-adds
+	// the id to `view.fields` if something corrupts the saved state.
 	enableHiding: false,
 };
 
