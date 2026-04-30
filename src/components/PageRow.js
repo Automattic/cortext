@@ -250,7 +250,7 @@ export default function PageRow( {
 										onClose();
 									} }
 								>
-									{ __( 'Delete', 'cortext' ) }
+									{ __( 'Trash', 'cortext' ) }
 								</MenuItem>
 							</MenuGroup>
 						) }
