@@ -336,6 +336,15 @@ body.cortext-fullscreen {
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+
+		// Multiselect renders `.cortext-chips` (a wrap-enabled flex
+		// container) inside the display span. The `nowrap` above would
+		// keep the chips on a single line and let them overflow into the
+		// next column, so swap to normal wrapping when chips are present
+		// and let `flex-wrap` do its job.
+		&:has(> .cortext-chips) {
+			white-space: normal;
+		}
 	}
 
 	// Hide the shell visually while editing but keep its layout space, so
