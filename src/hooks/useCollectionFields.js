@@ -84,12 +84,15 @@ function mapField( field ) {
 				type: 'text',
 				elements,
 				isMultiple: true,
+				filterBy: {
+					operators: [ 'isAny', 'isNone', 'isAll', 'isNotAll' ],
+				},
 			};
 		case 'date':
 		case 'datetime':
 			return { ...base, type: 'datetime' };
 		case 'checkbox':
-			return { ...base, type: 'text' };
+			return { ...base, type: 'boolean' };
 		case 'text':
 		default:
 			return { ...base, type: 'text' };

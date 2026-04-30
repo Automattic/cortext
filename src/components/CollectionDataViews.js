@@ -1,6 +1,6 @@
 import apiFetch from '@wordpress/api-fetch';
 import { Button, Notice } from '@wordpress/components';
-import { DataViews } from '@wordpress/dataviews';
+import { DataViews, filterSortAndPaginate } from '@wordpress/dataviews';
 import {
 	useCallback,
 	useEffect,
@@ -170,15 +170,20 @@ export default function CollectionDataViews( {
 			.filter( ( f ) => f && f.editable );
 	}, [ dataViewFields, view?.fields ] );
 
+	const { data: dataFiltered, paginationInfo: clientPaginationInfo } =
+		useMemo( () => {
+			return filterSortAndPaginate( data, view, dataViewFields );
+		}, [ data, view, dataViewFields ] );
+
 	const requestNext = useCallback(
 		( rowId, fieldId, direction ) => {
-			if ( ! data.length || ! editableVisibleFields.length ) {
+			if ( ! dataFiltered.length || ! editableVisibleFields.length ) {
 				return;
 			}
 			const fieldIdx = editableVisibleFields.findIndex(
 				( f ) => f.id === fieldId
 			);
-			const rowIdx = data.findIndex( ( r ) => r.id === rowId );
+			const rowIdx = dataFiltered.findIndex( ( r ) => r.id === rowId );
 			if ( fieldIdx < 0 || rowIdx < 0 ) {
 				return;
 			}
@@ -192,18 +197,18 @@ export default function CollectionDataViews( {
 				nextField = editableVisibleFields.length - 1;
 				nextRow -= 1;
 			}
-			if ( nextRow < 0 || nextRow >= data.length ) {
+			if ( nextRow < 0 || nextRow >= dataFiltered.length ) {
 				// Off the table edge; stop. Pagination crossings are out of
 				// scope for v1.
 				return;
 			}
 
 			setEditRequest( {
-				rowId: data[ nextRow ].id,
+				rowId: dataFiltered[ nextRow ].id,
 				fieldId: editableVisibleFields[ nextField ].id,
 			} );
 		},
-		[ data, editableVisibleFields ]
+		[ dataFiltered, editableVisibleFields ]
 	);
 
 	const saveRowField = useCallback(
@@ -363,11 +368,11 @@ export default function CollectionDataViews( {
 		<RowMutationContext.Provider value={ mutationContext }>
 			<div className="cortext-data-view">
 				<DataViews
-					data={ data }
+					data={ dataFiltered }
 					fields={ dataViewFields }
 					view={ view }
 					onChangeView={ onChangeView }
-					paginationInfo={ paginationInfo }
+					paginationInfo={ clientPaginationInfo }
 					defaultLayouts={ DEFAULT_LAYOUTS }
 					getItemId={ ( item ) => String( item.id ) }
 					isLoading={ isLoading }

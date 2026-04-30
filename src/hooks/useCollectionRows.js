@@ -8,33 +8,11 @@ import apiFetch from '@wordpress/api-fetch';
 function buildQueryArgs( collectionId, view ) {
 	const args = {
 		collection: collectionId,
-		per_page: view?.perPage ?? 25,
-		page: view?.page ?? 1,
+		per_page: -1,
 	};
 
 	if ( view?.search ) {
 		args.search = view.search;
-	}
-
-	if ( view?.sort?.field && view?.sort?.direction ) {
-		args[ 'sort[field]' ] = view.sort.field;
-		args[ 'sort[direction]' ] = view.sort.direction;
-	}
-
-	if ( view?.filters?.length ) {
-		view.filters.forEach( ( filter, i ) => {
-			if ( filter.field && filter.operator ) {
-				args[ `filters[${ i }][field]` ] = filter.field;
-				args[ `filters[${ i }][operator]` ] = filter.operator;
-				if ( Array.isArray( filter.value ) ) {
-					filter.value.forEach( ( v, j ) => {
-						args[ `filters[${ i }][value][${ j }]` ] = v;
-					} );
-				} else {
-					args[ `filters[${ i }][value]` ] = filter.value;
-				}
-			}
-		} );
 	}
 
 	return args;
