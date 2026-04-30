@@ -103,3 +103,27 @@ Worth a small spike before committing; `core-data`'s schema cache for rarely-cha
 **Where.** `elementsFromOptions` in `src/hooks/fieldMapping.js`. Read by `Chip` (`src/components/fields/Chip.js`) via `formatDisplay` in `src/components/EditableCell.js`.
 
 **Solution.** Add `color` (or a generic decoration slot) to DataViews's `Option` type upstream, then drop the piggyback. File a Gutenberg issue with the chip-render use case.
+
+## 12. `_modified_by` is plugin-stored, not native `[internal]`
+
+**What.** WordPress core stores `post_modified` (timestamp) but not who last edited the post. The "Last edited by" system column needs that information, so a `save_post` hook on entry CPTs records `_modified_by` post meta with the current user ID on every save. Skipped when no user is signed in (CLI imports, cron, seeds, unauthenticated REST) so background writes don't clobber the last real editor with `0`. Risk: third-party plugins that bypass `save_post` (direct DB writes) won't update `_modified_by`. Acceptable for the block's scope; entries created before this PR fall back to the post author when the meta is absent.
+
+**Where.** `record_modified_by` in `includes/PostType/CollectionEntries.php`, read by `format_row` in `includes/Rest/RowsController.php`.
+
+**Solution.** Either core grows native "last editor" tracking (unlikely; long-standing wishlist), or we accept the hook as the canonical answer. No upstream issue to file — this is just a small piece of plugin-managed state.
+
+## 13. System field filtering is deferred `[internal]`
+
+**What.** Filters route through `meta_query`, but system fields (`created_at`, `modified_at`, `created_by`, `modified_by`) live on the post table or in user data, not in post meta. The filter validator rejects all four with a clean 400 rather than silently no-op'ing through the meta_query branch. Users can sort by `created_at` and `modified_at` (free WP_Query orderby) but can't filter on any system field today.
+
+**Where.** `validate_filter_fields` and `build_query_args` in `includes/Rest/RowsController.php`.
+
+**Solution.** Add date-range filter operators with native `date_query` for `created_at` / `modified_at`, and JOIN-to-users filtering for `created_by` / `modified_by` (paired with #14, since the JOIN cost is shared with display-value sorting).
+
+## 14. Sort on display-value properties is an open architectural decision `[internal]`
+
+**What.** `created_by`, `modified_by`, future Person properties, Relation, value-Rollup, and Files all share the same pattern: stored value is an internal handle (user ID, post ID, attachment ID), useful sort is on the displayed string (display name, related-row title, filename). Sort by stored is meaningless from the UI; sort by display requires a JOIN (or in-memory sort). PR C ships sort only on the timestamp system fields and rejects sort on `_by` keys at the validator. The same problem will hit Relation and Rollup when those types ship (RSM-1468), so the architecture should be settled once.
+
+**Where.** `validate_sort_field` in `includes/Rest/RowsController.php` (rejects `_by` keys today). `enableSorting: false` for the `_by` system fields in `systemFields` (`src/hooks/fieldMapping.js`).
+
+**Solution.** A single decision shared with the relations/rollups work: JOIN-and-sort in `build_query_args`, in-memory sort after fetch, or a custom REST query path. Pick when picking up RSM-1468; until then, sort UI on display-value properties stays disabled. Tracked in RSM-1793.

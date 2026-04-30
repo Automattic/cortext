@@ -1,4 +1,10 @@
-import { elementsFromOptions, mapField } from '../../../src/hooks/fieldMapping';
+import { render } from '@testing-library/react';
+
+import {
+	elementsFromOptions,
+	mapField,
+	systemFields,
+} from '../../../src/hooks/fieldMapping';
 
 describe( 'elementsFromOptions', () => {
 	it( 'returns undefined for falsy input', () => {
@@ -85,6 +91,89 @@ describe( 'mapField', () => {
 		);
 		expect( mapField( baseField( { type: 'datetime' } ) ).type ).toBe(
 			'datetime'
+		);
+	} );
+} );
+
+describe( 'systemFields', () => {
+	const fields = systemFields();
+	const byId = ( id ) => fields.find( ( f ) => f.id === id );
+
+	it( 'returns the four system fields with stable ids', () => {
+		expect( fields ).toHaveLength( 4 );
+		expect( fields.map( ( f ) => f.id ) ).toEqual( [
+			'created_at',
+			'created_by',
+			'modified_at',
+			'modified_by',
+		] );
+	} );
+
+	it( 'marks every system field as not editable', () => {
+		fields.forEach( ( f ) => expect( f.editable ).toBe( false ) );
+	} );
+
+	it( 'enables sorting only on the timestamp fields', () => {
+		expect( byId( 'created_at' ).enableSorting ).toBe( true );
+		expect( byId( 'modified_at' ).enableSorting ).toBe( true );
+		expect( byId( 'created_by' ).enableSorting ).toBe( false );
+		expect( byId( 'modified_by' ).enableSorting ).toBe( false );
+	} );
+
+	it( 'maps timestamps to DataViews datetime and names to text', () => {
+		expect( byId( 'created_at' ).type ).toBe( 'datetime' );
+		expect( byId( 'modified_at' ).type ).toBe( 'datetime' );
+		expect( byId( 'created_by' ).type ).toBe( 'text' );
+		expect( byId( 'modified_by' ).type ).toBe( 'text' );
+	} );
+
+	it( 'reads each value from the row payload', () => {
+		const item = {
+			created_at: '2026-04-30T09:48:54+00:00',
+			modified_at: '2026-04-30T10:00:00+00:00',
+			created_by: 'Ada Lovelace',
+			modified_by: 'Grace Hopper',
+		};
+		expect( byId( 'created_at' ).getValue( { item } ) ).toBe(
+			'2026-04-30T09:48:54+00:00'
+		);
+		expect( byId( 'modified_at' ).getValue( { item } ) ).toBe(
+			'2026-04-30T10:00:00+00:00'
+		);
+		expect( byId( 'created_by' ).getValue( { item } ) ).toBe( 'Ada Lovelace' );
+		expect( byId( 'modified_by' ).getValue( { item } ) ).toBe( 'Grace Hopper' );
+	} );
+
+	it( 'returns null when the row is missing the value', () => {
+		fields.forEach( ( f ) =>
+			expect( f.getValue( { item: {} } ) ).toBeNull()
+		);
+	} );
+
+	it( 'renders names as plain text', () => {
+		const Render = byId( 'created_by' ).render;
+		const { container } = render(
+			<Render item={ { created_by: 'Ada Lovelace' } } />
+		);
+		expect( container.textContent ).toBe( 'Ada Lovelace' );
+	} );
+
+	it( 'renders empty when the value is missing', () => {
+		const Render = byId( 'modified_by' ).render;
+		const { container } = render( <Render item={ {} } /> );
+		expect( container.textContent ).toBe( '' );
+	} );
+
+	it( 'renders timestamps as a non-empty formatted string', () => {
+		const Render = byId( 'created_at' ).render;
+		const { container } = render(
+			<Render item={ { created_at: '2026-04-30T09:48:54+00:00' } } />
+		);
+		// We don't assert the exact format (locale-dependent), only that
+		// something formatted comes out and the empty branch isn't hit.
+		expect( container.textContent.length ).toBeGreaterThan( 0 );
+		expect( container.textContent ).not.toBe(
+			'2026-04-30T09:48:54+00:00'
 		);
 	} );
 } );
