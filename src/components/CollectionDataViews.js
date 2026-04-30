@@ -15,7 +15,7 @@ import EditableCell, { RowMutationContext } from './EditableCell';
 import useCollectionFields from '../hooks/useCollectionFields';
 import useCollectionRows from '../hooks/useCollectionRows';
 
-const DEFAULT_LAYOUTS = { table: {}, grid: {}, list: {} };
+const DEFAULT_LAYOUTS = { table: { density: 'compact' }, grid: {}, list: {} };
 
 const TITLE_FIELD = {
 	id: 'title',

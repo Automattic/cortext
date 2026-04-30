@@ -1,103 +1,7 @@
 import { useMemo } from '@wordpress/element';
 import { useEntityRecord, useEntityRecords } from '@wordpress/core-data';
 
-import EditableCell from '../components/EditableCell';
-
-function elementsFromOptions( raw ) {
-	if ( ! raw ) {
-		return undefined;
-	}
-	let options;
-	try {
-		options = typeof raw === 'string' ? JSON.parse( raw ) : raw;
-	} catch {
-		return undefined;
-	}
-	if ( ! Array.isArray( options ) ) {
-		return undefined;
-	}
-	return options.map( ( option ) => {
-		if ( typeof option === 'string' ) {
-			return { value: option, label: option };
-		}
-		return {
-			value: option.value ?? option.key ?? '',
-			label: option.label ?? option.value ?? '',
-		};
-	} );
-}
-
-// Cortext field types that this client knows how to edit inline. Anything
-// outside this set (formula, rollup, relation, …) renders read-only — see
-// `EditableCell`'s `readOnly` branch.
-const EDITABLE_TYPES = new Set( [
-	'text',
-	'number',
-	'email',
-	'url',
-	'select',
-	'multiselect',
-	'date',
-	'datetime',
-	'checkbox',
-] );
-
-function buildRender( id, type, label, elements ) {
-	const readOnly = ! EDITABLE_TYPES.has( type );
-	return ( { item } ) => (
-		<EditableCell
-			item={ item }
-			fieldId={ id }
-			fieldType={ type }
-			elements={ elements }
-			label={ label }
-			readOnly={ readOnly }
-		/>
-	);
-}
-
-function mapField( field ) {
-	const id = `field-${ field.id }`;
-	const label = field.title?.rendered || field.title?.raw || `#${ field.id }`;
-	const type = field.meta?.type ?? 'text';
-	const elements = elementsFromOptions( field.meta?.options );
-	const base = {
-		id,
-		label,
-		getValue: ( { item } ) => item?.meta?.[ id ] ?? null,
-		render: buildRender( id, type, label, elements ),
-		editable: EDITABLE_TYPES.has( type ),
-	};
-
-	switch ( type ) {
-		case 'number':
-			return { ...base, type: 'integer' };
-		case 'email':
-			return { ...base, type: 'email' };
-		case 'url':
-			return { ...base, type: 'text' };
-		case 'select':
-			return { ...base, type: 'text', elements };
-		case 'multiselect':
-			return {
-				...base,
-				type: 'text',
-				elements,
-				isMultiple: true,
-				filterBy: {
-					operators: [ 'isAny', 'isNone', 'isAll', 'isNotAll' ],
-				},
-			};
-		case 'date':
-		case 'datetime':
-			return { ...base, type: 'datetime' };
-		case 'checkbox':
-			return { ...base, type: 'boolean' };
-		case 'text':
-		default:
-			return { ...base, type: 'text' };
-	}
-}
+import { mapField, systemFields } from './fieldMapping';
 
 // Reads a collection's fields from main's contract: `meta.fields` is an array
 // of `crtxt_field` post IDs in display order. Fetch those records, then
@@ -141,10 +45,14 @@ export default function useCollectionFields( collectionId ) {
 	);
 
 	const fields = useMemo( () => {
-		if ( ! Array.isArray( fieldRecords ) ) {
-			return [];
-		}
-		return fieldRecords.map( mapField );
+		const custom = Array.isArray( fieldRecords )
+			? fieldRecords.map( mapField )
+			: [];
+		// System fields (created/modified timestamps + authors) sit at
+		// the bottom of the column visibility menu, default-hidden via
+		// `editable: false`. The REST controller injects their values
+		// into each row payload in `format_row`.
+		return [ ...custom, ...systemFields() ];
 	}, [ fieldRecords ] );
 
 	return {

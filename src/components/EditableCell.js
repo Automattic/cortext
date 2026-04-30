@@ -19,8 +19,10 @@ import {
 	useRef,
 	useState,
 } from '@wordpress/element';
+import { Icon, check } from '@wordpress/icons';
 
 import MultiselectEdit from './MultiselectEdit';
+import Chip from './fields/Chip';
 
 // tech-debt.md#1: DataViews v6 has no inline cell editing in any layout,
 // so we mount this component from `field.render` (a display renderer in
@@ -86,20 +88,85 @@ function FieldError( { message } ) {
 	);
 }
 
+// Conservative URL probe: only treat values as links when they parse as
+// http(s) URLs. Anything else (relative paths, mailto:, plain strings) is
+// rendered as text so we never produce a broken link.
+const URL_PATTERN = /^https?:\/\//i;
+
+// Returns either '' (empty cell) or a renderable value (string or JSX).
+// `display === ''` is the consumer's empty-cell signal — see CellShell's
+// `isEmpty` prop. Non-empty values may be JSX (anchor for url, icon for
+// checkbox, chip(s) for select / multiselect).
 export function formatDisplay( value, type, elements ) {
 	if ( value === null || value === undefined || value === '' ) {
 		return '';
 	}
 
 	if ( type === 'checkbox' ) {
-		return value ? __( 'Yes', 'cortext' ) : __( 'No', 'cortext' );
+		// `false` is a meaningful value but renders as a blank cell.
+		// Reaching this branch is rare in practice (interactive checkbox
+		// cells skip formatDisplay entirely; this only fires for read-only
+		// checkbox columns).
+		if ( ! value ) {
+			return '';
+		}
+		return <Icon icon={ check } className="cortext-cell-check" />;
 	}
 
-	if ( type === 'select' || type === 'multiselect' ) {
+	if ( type === 'url' ) {
+		const text = String( value ).trim();
+		if ( ! URL_PATTERN.test( text ) ) {
+			return text;
+		}
+		return (
+			<a
+				href={ text }
+				target="_blank"
+				rel="noopener noreferrer"
+				className="cortext-cell-link"
+				onClick={ ( event ) => event.stopPropagation() }
+			>
+				{ text }
+			</a>
+		);
+	}
+
+	if ( type === 'select' ) {
+		const single = Array.isArray( value ) ? value[ 0 ] : value;
+		if ( single === null || single === undefined || single === '' ) {
+			return '';
+		}
+		const element = elements?.find( ( e ) => e.value === single );
+		return (
+			<Chip
+				label={ element?.label ?? String( single ) }
+				color={ element?.color }
+			/>
+		);
+	}
+
+	if ( type === 'multiselect' ) {
 		const list = Array.isArray( value ) ? value : [ value ];
-		const labelFor = ( v ) =>
-			elements?.find( ( e ) => e.value === v )?.label ?? v;
-		return list.map( labelFor ).filter( Boolean ).join( ', ' );
+		const populated = list.filter(
+			( v ) => v !== null && v !== undefined && v !== ''
+		);
+		if ( populated.length === 0 ) {
+			return '';
+		}
+		return (
+			<span className="cortext-chips">
+				{ populated.map( ( v ) => {
+					const element = elements?.find( ( e ) => e.value === v );
+					return (
+						<Chip
+							key={ v }
+							label={ element?.label ?? String( v ) }
+							color={ element?.color }
+						/>
+					);
+				} ) }
+			</span>
+		);
 	}
 
 	if ( type === 'date' || type === 'datetime' ) {

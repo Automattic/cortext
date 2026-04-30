@@ -43,6 +43,12 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	 * @param array $assoc_args Associative arguments.
 	 */
 	public function __invoke( array $args, array $assoc_args ): void {
+		// Run as an administrator so seeded entries get a real `post_author`
+		// (otherwise CLI's user-0 context produces empty Created by /
+		// Last edited by columns) and the save_post hook records
+		// `_modified_by` against the same user.
+		wp_set_current_user( $this->default_seed_user_id() );
+
 		if ( WP_CLI\Utils\get_flag_value( $assoc_args, 'reset', false ) ) {
 			WP_CLI::confirm(
 				'This will delete all Cortext collections, fields, and entries. Continue?',
@@ -112,11 +118,48 @@ final class SeedDummyCollections extends WP_CLI_Command {
 					'Homepage' => 'url',
 					'Status'   => array(
 						'type'    => 'select',
-						'options' => array( 'Draft', 'In review', 'Done' ),
+						'options' => array(
+							array(
+								'value' => 'Draft',
+								'label' => 'Draft',
+								'color' => '#e8e8e7',
+							),
+							array(
+								'value' => 'In review',
+								'label' => 'In review',
+								'color' => '#fbf3db',
+							),
+							array(
+								'value' => 'Done',
+								'label' => 'Done',
+								'color' => '#ddedea',
+							),
+						),
 					),
 					'Tags'     => array(
 						'type'    => 'multiselect',
-						'options' => array( 'bug', 'feature', 'chore', 'docs' ),
+						'options' => array(
+							array(
+								'value' => 'bug',
+								'label' => 'bug',
+								'color' => '#ffe2dd',
+							),
+							array(
+								'value' => 'feature',
+								'label' => 'feature',
+								'color' => '#ddebf1',
+							),
+							array(
+								'value' => 'chore',
+								'label' => 'chore',
+								'color' => '#fbdbc7',
+							),
+							array(
+								'value' => 'docs',
+								'label' => 'docs',
+								'color' => '#eae4f2',
+							),
+						),
 					),
 					'Due'      => 'date',
 					'Reminder' => 'datetime',
@@ -156,6 +199,23 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		}
 
 		WP_CLI::success( 'Seeding complete.' );
+	}
+
+	/**
+	 * Returns the ID of the first administrator, or 1 as a fallback.
+	 *
+	 * Used to give the seed run a real user context so seeded entries
+	 * have a recognizable `post_author` and `_modified_by`.
+	 */
+	private function default_seed_user_id(): int {
+		$users = get_users(
+			array(
+				'role'   => 'administrator',
+				'number' => 1,
+				'fields' => array( 'ID' ),
+			)
+		);
+		return $users ? (int) $users[0]->ID : 1;
 	}
 
 	private function seed_collection( array $spec ): void {

@@ -27,7 +27,7 @@ function createDefaultView() {
 		perPage: 25,
 		page: 1,
 		search: '',
-		layout: {},
+		layout: { density: 'compact' },
 	};
 }
 

@@ -458,7 +458,308 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertSame( array( 'blue', 'green' ), $args['meta_query'][1]['value'] );
 	}
 
+	// -- System field tests ---------------------------------------------
+
+	public function test_format_row_includes_system_fields(): void {
+		$author_id = $this->create_user( 'author' );
+		$fixture   = $this->create_collection_fixture( 'sysfmt' );
+
+		$post_id = wp_insert_post(
+			array(
+				'post_type'   => 'crtxt_sysfmt',
+				'post_status' => 'publish',
+				'post_title'  => 'Entry',
+				'post_author' => $author_id,
+			)
+		);
+
+		$row = $this->invoke_format_row( $post_id, $fixture['field_id'] );
+
+		$this->assertArrayHasKey( 'created_at', $row );
+		$this->assertArrayHasKey( 'modified_at', $row );
+		$this->assertArrayHasKey( 'created_by', $row );
+		$this->assertArrayHasKey( 'modified_by', $row );
+	}
+
+	public function test_format_row_dates_are_rfc3339(): void {
+		$fixture = $this->create_collection_fixture( 'sysdates' );
+
+		$post_id = wp_insert_post(
+			array(
+				'post_type'   => 'crtxt_sysdates',
+				'post_status' => 'publish',
+				'post_title'  => 'Dated',
+			)
+		);
+
+		$row = $this->invoke_format_row( $post_id, $fixture['field_id'] );
+
+		// RFC3339 with offset: YYYY-MM-DDTHH:MM:SS+00:00 (or with timezone offset).
+		$this->assertMatchesRegularExpression(
+			'/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/',
+			$row['created_at']
+		);
+		$this->assertMatchesRegularExpression(
+			'/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/',
+			$row['modified_at']
+		);
+	}
+
+	public function test_format_row_resolves_author_display_name(): void {
+		$author_id = wp_insert_user(
+			array(
+				'user_login'   => 'sys_author',
+				'user_pass'    => 'password',
+				'display_name' => 'Ada Lovelace',
+				'role'         => 'author',
+			)
+		);
+		$fixture   = $this->create_collection_fixture( 'sysauthor' );
+
+		$post_id = wp_insert_post(
+			array(
+				'post_type'   => 'crtxt_sysauthor',
+				'post_status' => 'publish',
+				'post_title'  => 'Entry',
+				'post_author' => $author_id,
+			)
+		);
+
+		$row = $this->invoke_format_row( $post_id, $fixture['field_id'] );
+
+		$this->assertSame( 'Ada Lovelace', $row['created_by'] );
+	}
+
+	public function test_format_row_modified_by_falls_back_to_created_by(): void {
+		$author_id = wp_insert_user(
+			array(
+				'user_login'   => 'sys_fallback',
+				'user_pass'    => 'password',
+				'display_name' => 'Author Only',
+				'role'         => 'author',
+			)
+		);
+		$fixture   = $this->create_collection_fixture( 'sysfallback' );
+
+		$post_id = wp_insert_post(
+			array(
+				'post_type'   => 'crtxt_sysfallback',
+				'post_status' => 'publish',
+				'post_title'  => 'No edit history',
+				'post_author' => $author_id,
+			)
+		);
+		// Note: no _modified_by meta is set.
+
+		$row = $this->invoke_format_row( $post_id, $fixture['field_id'] );
+
+		$this->assertSame( 'Author Only', $row['created_by'] );
+		$this->assertSame( 'Author Only', $row['modified_by'] );
+	}
+
+	public function test_format_row_resolves_distinct_modified_by(): void {
+		$author_id = wp_insert_user(
+			array(
+				'user_login'   => 'sys_creator',
+				'user_pass'    => 'password',
+				'display_name' => 'Creator',
+				'role'         => 'author',
+			)
+		);
+		$editor_id = wp_insert_user(
+			array(
+				'user_login'   => 'sys_editor',
+				'user_pass'    => 'password',
+				'display_name' => 'Editor',
+				'role'         => 'editor',
+			)
+		);
+		$fixture   = $this->create_collection_fixture( 'sysdistinct' );
+
+		$post_id = wp_insert_post(
+			array(
+				'post_type'   => 'crtxt_sysdistinct',
+				'post_status' => 'publish',
+				'post_title'  => 'Edited',
+				'post_author' => $author_id,
+			)
+		);
+		update_post_meta( $post_id, '_modified_by', $editor_id );
+
+		$row = $this->invoke_format_row( $post_id, $fixture['field_id'] );
+
+		$this->assertSame( 'Creator', $row['created_by'] );
+		$this->assertSame( 'Editor', $row['modified_by'] );
+	}
+
+	// Multi-author flow through the REST endpoint isn't testable in
+	// WorDBless: `wp_insert_post` works via the object cache but
+	// `WP_Query` SQL returns zero results (tech-debt.md#9). The
+	// `test_format_row_resolves_distinct_modified_by` test above
+	// already covers display-name resolution for distinct users at the
+	// `format_row` layer; the full REST flow is exercised in e2e.
+
+	public function test_sort_accepts_created_at(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+
+		$fixture = $this->create_collection_fixture( 'syssortc' );
+
+		$response = $this->query_rows(
+			array(
+				'collection' => $fixture['collection_id'],
+				'sort'       => array(
+					'field'     => 'created_at',
+					'direction' => 'desc',
+				),
+			)
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+	}
+
+	public function test_sort_accepts_modified_at(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+
+		$fixture = $this->create_collection_fixture( 'syssortm' );
+
+		$response = $this->query_rows(
+			array(
+				'collection' => $fixture['collection_id'],
+				'sort'       => array(
+					'field'     => 'modified_at',
+					'direction' => 'asc',
+				),
+			)
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+	}
+
+	public function test_sort_rejects_created_by(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+
+		$fixture = $this->create_collection_fixture( 'sysrjcb' );
+
+		$response = $this->query_rows(
+			array(
+				'collection' => $fixture['collection_id'],
+				'sort'       => array(
+					'field'     => 'created_by',
+					'direction' => 'asc',
+				),
+			)
+		);
+
+		$this->assertSame( 400, $response->get_status() );
+	}
+
+	public function test_sort_rejects_modified_by(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+
+		$fixture = $this->create_collection_fixture( 'sysrjmb' );
+
+		$response = $this->query_rows(
+			array(
+				'collection' => $fixture['collection_id'],
+				'sort'       => array(
+					'field'     => 'modified_by',
+					'direction' => 'asc',
+				),
+			)
+		);
+
+		$this->assertSame( 400, $response->get_status() );
+	}
+
+	public function test_filter_rejects_all_system_fields(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+
+		$fixture = $this->create_collection_fixture( 'sysfilt' );
+
+		foreach ( array( 'created_at', 'modified_at', 'created_by', 'modified_by' ) as $key ) {
+			$response = $this->query_rows(
+				array(
+					'collection' => $fixture['collection_id'],
+					'filters'    => array(
+						array(
+							'field'    => $key,
+							'operator' => 'is',
+							'value'    => 'whatever',
+						),
+					),
+				)
+			);
+
+			$this->assertSame( 400, $response->get_status(), "Filter on {$key} must return 400." );
+		}
+	}
+
+	public function test_build_query_args_with_created_at_sort(): void {
+		$fixture = $this->create_collection_fixture( 'bqact' );
+
+		$args = $this->invoke_build_query_args(
+			$fixture['collection_id'],
+			'bqact',
+			array(
+				'field'     => 'created_at',
+				'direction' => 'desc',
+			)
+		);
+
+		$this->assertSame( 'date', $args['orderby'] );
+		$this->assertSame( 'DESC', $args['order'] );
+	}
+
+	public function test_build_query_args_with_modified_at_sort(): void {
+		$fixture = $this->create_collection_fixture( 'bqamod' );
+
+		$args = $this->invoke_build_query_args(
+			$fixture['collection_id'],
+			'bqamod',
+			array(
+				'field'     => 'modified_at',
+				'direction' => 'asc',
+			)
+		);
+
+		$this->assertSame( 'modified', $args['orderby'] );
+		$this->assertSame( 'ASC', $args['order'] );
+	}
+
 	// -- Helpers --------------------------------------------------------
+
+	private function invoke_format_row( int $post_id, int $field_id ): array {
+		$controller = new RowsController();
+		$method     = new \ReflectionMethod( $controller, 'format_row' );
+		$method->setAccessible( true );
+
+		return $method->invoke( $controller, get_post( $post_id ), array( $field_id ), array() );
+	}
+
+	private function invoke_build_query_args( int $collection_id, string $slug, array $sort ): array {
+		$request = new WP_REST_Request( 'GET', '/cortext/v1/rows' );
+		$request->set_query_params(
+			array(
+				'collection' => $collection_id,
+				'sort'       => $sort,
+			)
+		);
+		$request->set_default_params(
+			array(
+				'per_page' => 25,
+				'page'     => 1,
+				'search'   => '',
+				'sort'     => null,
+				'filters'  => array(),
+			)
+		);
+
+		$controller = new RowsController();
+		$method     = new \ReflectionMethod( $controller, 'build_query_args' );
+		$method->setAccessible( true );
+
+		return $method->invoke( $controller, $request, $slug );
+	}
 
 	private function query_rows( array $params ): \WP_REST_Response {
 		$request = new WP_REST_Request( 'GET', '/cortext/v1/rows' );

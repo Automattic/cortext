@@ -46,14 +46,15 @@ Worth a small spike before committing; `core-data`'s schema cache for rarely-cha
 
 ## 5. Inline-edit layout couplings `[internal]`
 
-**What.** Two small but real internal mechanisms exist because DataViews doesn't have an inline-edit contract (#1):
+**What.** Three small but real internal mechanisms exist because DataViews doesn't have an inline-edit contract (#1):
 
 - **Column anchoring via overlay.** DataViews renders an actual `<table>` with default `table-layout: auto`, so columns auto-size to their widest cell content. Mounting an editor inline would change the column's intrinsic width and reflow the whole column. We always render the display shell and overlay the editor on top via `position: absolute`, so the table only sees the display state's intrinsic width and the column stays anchored.
 - **Row height pin.** The shell's `min-height` is hardcoded to 40px to match `__next40pxDefaultSize`, the height of TextControl/NumberControl/SelectControl with the modern WP size flag. If WP changes the default control height, the pin desyncs and rows jitter again.
+- **Density mirror.** DataViews paints row height via the td's `padding-block`, varied per density (`has-compact-density` / `has-comfortable-density`). The shell's hover/edit highlight lives on the shell itself, so the gray floated inside the larger row instead of covering it. We zero the td's `padding-block` so the shell becomes the row, then replicate DataViews's per-density row heights via `min-height` overrides on the shell (and `.cortext-cell-checkbox`, which shares the shell's dimensions). Balanced and comfortable mirror DataViews v6 exactly (12 / 16); compact is intentionally tighter than the upstream default (4 -> 0) so the row matches the 40px editor floor, and that's the density we set as the project default in `createDefaultView` and `DEFAULT_LAYOUTS`. If upstream bumps the balanced/comfortable paddings, those two row heights silently desync until we update the numbers.
 
-**Where.** `src/components/EditableCell.js` and the `.cortext-editable-cell` rules in `src/index.scss`.
+**Where.** `src/components/EditableCell.js` and the `.cortext-editable-cell`, `.cortext-cell-checkbox`, and `.cortext-data-view .dataviews-view-table` rules in `src/index.scss`.
 
-**Solution.** Both go away if DataViews lands inline editing (#1) and exposes a layout contract for cells. Until then the overlay is a clean enough pattern to keep, and the height pin is one CSS line worth maintaining. Worth tracking separately so the next person editing the cell layout knows the constraints rather than re-deriving them.
+**Solution.** All three go away if DataViews lands inline editing (#1) and exposes a layout contract for cells (or a CSS variable for cell padding the shell can hook into). Until then the overlay is a clean enough pattern to keep, the height pin is one CSS line worth maintaining, and the density mirror is the price of painting hover/edit highlights edge to edge. Worth tracking separately so the next person editing the cell layout knows the constraints rather than re-deriving them.
 
 ## 6. DataViews has no multiselect form control `[upstream]`
 
@@ -86,3 +87,43 @@ Worth a small spike before committing; `core-data`'s schema cache for rarely-cha
 **Where.** `tests/php/test-rest-rows-controller.php`.
 
 **Solution.** Either switch the PHP test harness to `wp-env` + `WP_UnitTestCase` (which runs against a real database) or rely on e2e coverage in `tests/e2e/specs/data-view-block.spec.js` to close the gap. The e2e suite already exercises row loading, but dedicated integration tests for sort, filter, and pagination against real data would be more targeted.
+
+## 10. DataViews `FieldType` union has no `number` or `url` `[upstream]`
+
+**What.** DataViews v6's `FieldType` union is `'text' | 'integer' | 'datetime' | 'date' | 'media' | 'boolean' | 'email' | 'array'`. Cortext has `number` (decimals allowed) and `url`, neither of which has an exact match. We map both to `'text'`: `'integer'` rejects non-integers at validation time, and there's nothing closer for url. The cost lands on the column-level sort comparator: text sort is lexicographic, so `"10"` would sort before `"9"` for a number column. Today this is invisible because `view.sort` isn't forwarded to REST (#3), but the day sort lands, decimal columns will sort wrong unless we add a custom `sort` per field or DataViews ships the missing types.
+
+**Where.** `mapField` in `src/hooks/fieldMapping.js`.
+
+**Solution.** Either DataViews adds `'number'` and `'url'` to the `FieldType` union, or we attach a custom numeric `sort` to number fields when sort lands. Filing a Gutenberg issue is the cheaper play.
+
+## 11. DataViews `Option` type has no `color` `[upstream]`
+
+**What.** DataViews's `Option` shape is `{ value, label, description? }`. Cortext's select / multiselect options can carry a `color` for chip rendering, so we attach `color` as an extra key on each element. DataViews ignores unknown keys today, but a stricter validator upstream would strip it, breaking colored chips silently.
+
+**Where.** `elementsFromOptions` in `src/hooks/fieldMapping.js`. Read by `Chip` (`src/components/fields/Chip.js`) via `formatDisplay` in `src/components/EditableCell.js`.
+
+**Solution.** Add `color` (or a generic decoration slot) to DataViews's `Option` type upstream, then drop the piggyback. File a Gutenberg issue with the chip-render use case.
+
+## 12. `_modified_by` is plugin-stored, not native `[internal]`
+
+**What.** WordPress core stores `post_modified` (timestamp) but not who last edited the post. The "Last edited by" system column needs that information, so a `save_post` hook on entry CPTs records `_modified_by` post meta with the current user ID on every save. Skipped when no user is signed in (CLI imports, cron, seeds, unauthenticated REST) so background writes don't clobber the last real editor with `0`. Risk: third-party plugins that bypass `save_post` (direct DB writes) won't update `_modified_by`. Acceptable for the block's scope; entries created before this PR fall back to the post author when the meta is absent.
+
+**Where.** `record_modified_by` in `includes/PostType/CollectionEntries.php`, read by `format_row` in `includes/Rest/RowsController.php`.
+
+**Solution.** Either core grows native "last editor" tracking (unlikely; long-standing wishlist), or we accept the hook as the canonical answer. No upstream issue to file — this is just a small piece of plugin-managed state.
+
+## 13. System field filtering is deferred `[internal]`
+
+**What.** Filters route through `meta_query`, but system fields (`created_at`, `modified_at`, `created_by`, `modified_by`) live on the post table or in user data, not in post meta. The filter validator rejects all four with a clean 400 rather than silently no-op'ing through the meta_query branch. Users can sort by `created_at` and `modified_at` (free WP_Query orderby) but can't filter on any system field today.
+
+**Where.** `validate_filter_fields` and `build_query_args` in `includes/Rest/RowsController.php`.
+
+**Solution.** Add date-range filter operators with native `date_query` for `created_at` / `modified_at`, and JOIN-to-users filtering for `created_by` / `modified_by` (paired with #14, since the JOIN cost is shared with display-value sorting).
+
+## 14. Sort on display-value properties is an open architectural decision `[internal]`
+
+**What.** `created_by`, `modified_by`, future Person properties, Relation, value-Rollup, and Files all share the same pattern: stored value is an internal handle (user ID, post ID, attachment ID), useful sort is on the displayed string (display name, related-row title, filename). Sort by stored is meaningless from the UI; sort by display requires a JOIN (or in-memory sort). PR C ships sort only on the timestamp system fields and rejects sort on `_by` keys at the validator. The same problem will hit Relation and Rollup when those types ship (RSM-1468), so the architecture should be settled once.
+
+**Where.** `validate_sort_field` in `includes/Rest/RowsController.php` (rejects `_by` keys today). `enableSorting: false` for the `_by` system fields in `systemFields` (`src/hooks/fieldMapping.js`).
+
+**Solution.** A single decision shared with the relations/rollups work: JOIN-and-sort in `build_query_args`, in-memory sort after fetch, or a custom REST query path. Pick when picking up RSM-1468; until then, sort UI on display-value properties stays disabled. Tracked in RSM-1793.
