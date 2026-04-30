@@ -54,6 +54,11 @@ final class Page {
 					// Load-bearing: RevisionThrottle's filters only fire on post types that support revisions. Do not remove.
 					'revisions',
 					'page-attributes',
+					// `meta` only appears in the REST schema when a CPT
+					// supports custom-fields; PageTrashCascade's marker meta
+					// (registered with `show_in_rest`) needs this so the
+					// sidebar Trash filter can read it on the client.
+					'custom-fields',
 				),
 				'capability_type'       => 'post',
 				'map_meta_cap'          => true,

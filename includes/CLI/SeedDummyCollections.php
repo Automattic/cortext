@@ -12,20 +12,22 @@ namespace Cortext\CLI;
 use Cortext\PostType\Collection;
 use Cortext\PostType\CollectionEntries;
 use Cortext\PostType\Field;
+use Cortext\PostType\Page;
 use WP_CLI;
 use WP_CLI_Command;
 
 final class SeedDummyCollections extends WP_CLI_Command {
 
 	/**
-	 * Seeds sample collections (Books, Paintings, Demo) with fields and entries.
+	 * Seeds sample collections (Books, Paintings, Demo) plus a small page
+	 * hierarchy that exercises the trash + cascade flows.
 	 *
-	 * Idempotent: skips any collection, field, or entry that already exists, unless --reset is passed.
+	 * Idempotent: skips anything that already exists, unless --reset is passed.
 	 *
 	 * ## OPTIONS
 	 *
 	 * [--reset]
-	 * : Delete all Cortext data except for pages (collections, fields, entries) before seeding.
+	 * : Delete all Cortext data (collections, fields, entries, pages) before seeding.
 	 * Prompts for confirmation unless --force is also passed.
 	 *
 	 * [--force]
@@ -198,6 +200,8 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			$this->seed_collection( $spec );
 		}
 
+		$this->seed_pages();
+
 		WP_CLI::success( 'Seeding complete.' );
 	}
 
@@ -216,6 +220,84 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			)
 		);
 		return $users ? (int) $users[0]->ID : 1;
+	}
+
+	/**
+	 * Seeds a small page hierarchy useful for exercising the sidebar Trash
+	 * flow: a root with mixed-depth children, plus a sibling at the root so
+	 * cascade trash and intermediate-node restore can be tried end-to-end.
+	 */
+	private function seed_pages(): void {
+		$tree = array(
+			array(
+				'title'    => 'Workspace',
+				'children' => array(
+					array(
+						'title'    => 'Engineering',
+						'children' => array(
+							array( 'title' => 'Onboarding' ),
+							array(
+								'title'    => 'Standards',
+								'children' => array(
+									array( 'title' => 'PHP' ),
+									array( 'title' => 'JavaScript' ),
+								),
+							),
+						),
+					),
+					array(
+						'title'    => 'Design',
+						'children' => array(
+							array( 'title' => 'System' ),
+							array( 'title' => 'Mockups' ),
+						),
+					),
+				),
+			),
+			array( 'title' => 'Notes' ),
+		);
+
+		foreach ( $tree as $node ) {
+			$this->seed_page_tree( $node, 0 );
+		}
+	}
+
+	private function seed_page_tree( array $node, int $parent_id ): void {
+		$existing = get_posts(
+			array(
+				'post_type'   => Page::POST_TYPE,
+				'post_status' => array( 'draft', 'private', 'publish' ),
+				'post_parent' => $parent_id,
+				'title'       => $node['title'],
+				'numberposts' => 1,
+				'fields'      => 'ids',
+			)
+		);
+
+		if ( $existing ) {
+			$page_id = (int) $existing[0];
+			WP_CLI::log( "Page '{$node['title']}' already exists (ID {$page_id})." );
+		} else {
+			$page_id = wp_insert_post(
+				array(
+					'post_type'   => Page::POST_TYPE,
+					'post_status' => 'private',
+					'post_title'  => $node['title'],
+					'post_parent' => $parent_id,
+				),
+				true
+			);
+
+			if ( is_wp_error( $page_id ) ) {
+				WP_CLI::error( "Failed to create page '{$node['title']}': " . $page_id->get_error_message() );
+			}
+
+			WP_CLI::log( "Created page '{$node['title']}' (ID {$page_id})." );
+		}
+
+		foreach ( $node['children'] ?? array() as $child ) {
+			$this->seed_page_tree( $child, (int) $page_id );
+		}
 	}
 
 	private function seed_collection( array $spec ): void {
@@ -437,6 +519,25 @@ final class SeedDummyCollections extends WP_CLI_Command {
 
 		if ( $collections ) {
 			WP_CLI::log( sprintf( 'Deleted %d collections.', count( $collections ) ) );
+		}
+
+		// 4. Delete all pages, including trashed ones. WP_Query's 'any'
+		// excludes internal statuses like 'trash', so list them explicitly.
+		$pages = get_posts(
+			array(
+				'post_type'   => Page::POST_TYPE,
+				'post_status' => array( 'draft', 'private', 'publish', 'pending', 'future', 'trash' ),
+				'numberposts' => -1,
+				'fields'      => 'ids',
+			)
+		);
+
+		foreach ( $pages as $page_id ) {
+			wp_delete_post( (int) $page_id, true );
+		}
+
+		if ( $pages ) {
+			WP_CLI::log( sprintf( 'Deleted %d pages.', count( $pages ) ) );
 		}
 
 		WP_CLI::success( 'Reset complete.' );

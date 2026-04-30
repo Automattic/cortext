@@ -17,6 +17,7 @@ use Cortext\PostType\Field;
 use Cortext\PostType\Page;
 use Cortext\PostType\PageTrashCascade;
 use Cortext\Rest\CollectionsController;
+use Cortext\Rest\PageTrashController;
 use Cortext\Rest\RowsController;
 
 final class Plugin {
@@ -39,6 +40,7 @@ final class Plugin {
 		( new CollectionEntries() )->register();
 		( new RevisionThrottle() )->register();
 		( new CollectionsController() )->register();
+		( new PageTrashController() )->register();
 		( new RowsController() )->register();
 	}
 

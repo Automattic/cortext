@@ -195,6 +195,71 @@ body.cortext-fullscreen {
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
+
+	&__trash-row .cortext-sidebar__row {
+		padding: $grid-unit-05;
+		align-items: flex-start;
+	}
+
+	// The whole trash row's title/breadcrumb is one Button so the user can
+	// click anywhere on the text to open the trashed page in the canvas.
+	// Override the default inline-flex / center alignment so the two lines
+	// stack vertically with the title on top.
+	&__trash-text.components-button {
+		flex: 1 1 auto;
+		min-width: 0;
+		height: auto;
+		padding: 2px $grid-unit-05;
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 2px;
+		text-align: start;
+	}
+
+	&__trash-title {
+		font-weight: 500;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		max-width: 100%;
+	}
+
+	&__breadcrumb {
+		font-size: 11px;
+		color: $gray-700;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	&__trash-actions {
+		flex: 0 0 auto;
+		display: flex;
+		gap: 2px;
+		opacity: 0;
+		transition: opacity 0.12s ease;
+	}
+
+	&__trash-row:hover &__trash-actions,
+	&__trash-row:focus-within &__trash-actions {
+		opacity: 1;
+	}
+
+	&__error {
+		padding: $grid-unit-10;
+		display: flex;
+		flex-direction: column;
+		gap: $grid-unit-05;
+		color: $gray-700;
+	}
+
+	&__row-error {
+		margin: 0;
+		padding: 0 $grid-unit-05;
+		font-size: 11px;
+		color: #cc1818;
+	}
 }
 
 .cortext-shell__canvas {
@@ -229,6 +294,31 @@ body.cortext-fullscreen {
 		justify-content: center;
 		color: $gray-700;
 		height: 100%;
+	}
+
+	// The trashed-page banner stacks above the BlockCanvas. Make the
+	// content slot a flex column so the canvas keeps its `height: 100%`
+	// behavior (it now fills the remaining space). Couples to a
+	// Gutenberg-internal class; revisit if `@wordpress/interface` ever
+	// exposes a slot for a notice region above the content.
+	.interface-interface-skeleton__content {
+		display: flex;
+		flex-direction: column;
+		min-height: 0;
+	}
+
+	&__notice.components-notice {
+		flex: 0 0 auto;
+		margin: 0;
+		border-radius: 0;
+	}
+
+	// `<Disabled>` already neutralises pointer events for the trashed
+	// canvas; the muted opacity is the visual cue that editing is locked.
+	&__locked {
+		flex: 1 1 auto;
+		min-height: 0;
+		opacity: 0.7;
 	}
 
 	&__table {
