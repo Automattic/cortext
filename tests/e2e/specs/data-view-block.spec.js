@@ -789,19 +789,16 @@ test.describe( 'Collection view block', () => {
 				data: {
 					title: 'Typed cell rendering page',
 					status: 'private',
-					content: createDataViewBlockMarkup(
-						fixture.collection.id,
-						{
-							fields: [
-								'title',
-								`field-${ urlField.id }`,
-								`field-${ checkField.id }`,
-								`field-${ numberField.id }`,
-								`field-${ selectField.id }`,
-								`field-${ tagsField.id }`,
-							],
-						}
-					),
+					content: createDataViewBlockMarkup( fixture.collection.id, {
+						fields: [
+							'title',
+							`field-${ urlField.id }`,
+							`field-${ checkField.id }`,
+							`field-${ numberField.id }`,
+							`field-${ selectField.id }`,
+							`field-${ tagsField.id }`,
+						],
+					} ),
 				},
 			} );
 
@@ -876,6 +873,385 @@ test.describe( 'Collection view block', () => {
 					`/wp/v2/crtxt_fields/${ fieldId }`
 				);
 			}
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+			);
+		}
+	} );
+
+	test( 'resizes a column via drag and persists the width across reload', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+
+		try {
+			Object.assign(
+				fixture,
+				await createCollectionFixture( requestUtils )
+			);
+
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_pages',
+				data: {
+					title: 'Column resize persistence page',
+					status: 'private',
+					content: createDataViewBlockMarkup( fixture.collection.id, {
+						fields: [ 'title', `field-${ fixture.field.id }` ],
+					} ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/page/${ fixture.page.id }`
+			);
+
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.page.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+			await expect( canvas.getByText( 'Author' ) ).toBeVisible();
+
+			// Author is index 1 (title is index 0); its resizer is the second
+			// in DOM order. Native pointer events drive the drag, and pointer
+			// capture in the resize handler keeps the drag tracking even if
+			// the pointer leaves the editor canvas iframe.
+			const resizer = canvas.locator( '.cortext-column-resizer' ).first();
+			await expect( resizer ).toBeAttached();
+			const startBox = await resizer.boundingBox();
+
+			const dragDelta = 80;
+			await page.mouse.move(
+				startBox.x + startBox.width / 2,
+				startBox.y + startBox.height / 2
+			);
+			await page.mouse.down();
+			await page.mouse.move(
+				startBox.x + startBox.width / 2 + 10,
+				startBox.y + startBox.height / 2,
+				{ steps: 4 }
+			);
+			await page.mouse.move(
+				startBox.x + startBox.width / 2 + dragDelta,
+				startBox.y + startBox.height / 2,
+				{ steps: 8 }
+			);
+			await page.mouse.up();
+
+			await page.evaluate( async () => {
+				await window.wp.data.dispatch( 'core/editor' ).savePost();
+			} );
+			await page.waitForFunction(
+				() => ! window.wp.data.select( 'core/editor' ).isSavingPost()
+			);
+
+			const saved = await requestUtils.rest( {
+				path: `/wp/v2/crtxt_pages/${ fixture.page.id }`,
+				params: { context: 'edit' },
+			} );
+
+			const fieldKey = `field-${ fixture.field.id }`;
+			expect( saved.content.raw ).toContain( '"styles"' );
+			const widthMatch = saved.content.raw.match(
+				new RegExp( `"${ fieldKey }":\\{[^}]*"width":(\\d+)` )
+			);
+			expect( widthMatch ).not.toBeNull();
+			const persistedWidth = Number( widthMatch[ 1 ] );
+			expect( persistedWidth ).toBeGreaterThanOrEqual( 120 );
+			expect( persistedWidth ).toBeLessThanOrEqual( 640 );
+
+			await page.reload();
+			await expect( canvas.getByText( 'Author' ) ).toBeVisible();
+
+			const renderedWidth = await canvas
+				.locator( '.dataviews-view-table thead > tr > th' )
+				.nth( 1 )
+				.evaluate( ( el ) => el.style.width );
+			expect( renderedWidth ).toBe( `${ persistedWidth }px` );
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				fixture.entry &&
+					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+			);
+		}
+	} );
+
+	test( 'reorders columns via drag and persists the order across reload', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = { fieldIds: [] };
+
+		try {
+			const suffix = Date.now().toString( 36 ).slice( -4 );
+			const slug = `e2eorder${ suffix }`;
+			fixture.slug = slug;
+
+			fixture.collection = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_collections',
+				data: {
+					title: `Reorder ${ suffix }`,
+					status: 'private',
+					meta: { slug },
+				},
+			} );
+
+			const createField = async ( title ) => {
+				const f = await requestUtils.rest( {
+					method: 'POST',
+					path: '/wp/v2/crtxt_fields',
+					data: { title, status: 'private', meta: { type: 'text' } },
+				} );
+				fixture.fieldIds.push( f.id );
+				return f;
+			};
+
+			const fieldA = await createField( 'Author' );
+			const fieldB = await createField( 'Notes' );
+
+			await requestUtils.rest( {
+				method: 'POST',
+				path: `/wp/v2/crtxt_collections/${ fixture.collection.id }`,
+				data: {
+					meta: { fields: fixture.fieldIds.map( String ) },
+				},
+			} );
+
+			fixture.entry = await requestUtils.rest( {
+				method: 'POST',
+				path: `/wp/v2/crtxt_${ slug }`,
+				data: {
+					title: 'Sample',
+					status: 'private',
+					meta: {
+						[ `field-${ fieldA.id }` ]: 'Author A',
+						[ `field-${ fieldB.id }` ]: 'Notes B',
+					},
+				},
+			} );
+
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_pages',
+				data: {
+					title: 'Column reorder persistence page',
+					status: 'private',
+					content: createDataViewBlockMarkup( fixture.collection.id, {
+						fields: [
+							'title',
+							`field-${ fieldA.id }`,
+							`field-${ fieldB.id }`,
+						],
+					} ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/page/${ fixture.page.id }`
+			);
+
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.page.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+			const headerButton = ( name ) =>
+				canvas
+					.locator( '.dataviews-view-table-header-button' )
+					.filter( { hasText: name } );
+			await expect( headerButton( 'Author' ) ).toBeVisible();
+			await expect( headerButton( 'Notes' ) ).toBeVisible();
+
+			// Drag the Author drag handle past the midpoint of the Notes
+			// header so it lands after Notes.
+			const dragHandle = canvas
+				.locator( '.cortext-column-drag-handle' )
+				.first();
+			const handleBox = await dragHandle.boundingBox();
+			const notesTh = canvas
+				.locator( '.dataviews-view-table thead > tr > th' )
+				.nth( 2 );
+			const notesBox = await notesTh.boundingBox();
+
+			await page.mouse.move(
+				handleBox.x + handleBox.width / 2,
+				handleBox.y + handleBox.height / 2
+			);
+			await page.mouse.down();
+			await page.mouse.move(
+				handleBox.x + handleBox.width / 2 + 10,
+				handleBox.y + handleBox.height / 2,
+				{ steps: 4 }
+			);
+			await page.mouse.move(
+				notesBox.x + notesBox.width * 0.75,
+				notesBox.y + notesBox.height / 2,
+				{ steps: 10 }
+			);
+			await page.mouse.up();
+
+			await page.evaluate( async () => {
+				await window.wp.data.dispatch( 'core/editor' ).savePost();
+			} );
+			await page.waitForFunction(
+				() => ! window.wp.data.select( 'core/editor' ).isSavingPost()
+			);
+
+			const saved = await requestUtils.rest( {
+				path: `/wp/v2/crtxt_pages/${ fixture.page.id }`,
+				params: { context: 'edit' },
+			} );
+
+			const orderMatch = saved.content.raw.match(
+				/"fields":\[([^\]]+)\]/
+			);
+			expect( orderMatch ).not.toBeNull();
+			const fieldOrder = orderMatch[ 1 ]
+				.split( ',' )
+				.map( ( s ) => s.trim().replace( /"/g, '' ) );
+			expect( fieldOrder[ 0 ] ).toBe( 'title' );
+			expect( fieldOrder.indexOf( `field-${ fieldB.id }` ) ).toBeLessThan(
+				fieldOrder.indexOf( `field-${ fieldA.id }` )
+			);
+
+			await page.reload();
+			await expect( headerButton( 'Notes' ) ).toBeVisible();
+
+			const headerLabels = await canvas
+				.locator(
+					'.dataviews-view-table thead > tr > th .dataviews-view-table-header-button'
+				)
+				.allTextContents();
+			const notesIndex = headerLabels.findIndex( ( t ) =>
+				t.includes( 'Notes' )
+			);
+			const authorIndex = headerLabels.findIndex( ( t ) =>
+				t.includes( 'Author' )
+			);
+			expect( notesIndex ).toBeGreaterThan( -1 );
+			expect( authorIndex ).toBeGreaterThan( -1 );
+			expect( notesIndex ).toBeLessThan( authorIndex );
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				fixture.entry &&
+					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+			);
+			for ( const fieldId of fixture.fieldIds ) {
+				await deleteIfCreated(
+					requestUtils,
+					`/wp/v2/crtxt_fields/${ fieldId }`
+				);
+			}
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+			);
+		}
+	} );
+
+	test( 'title column has no resize or drag affordances', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+
+		try {
+			Object.assign(
+				fixture,
+				await createCollectionFixture( requestUtils )
+			);
+
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_pages',
+				data: {
+					title: 'Title column has no handles page',
+					status: 'private',
+					content: createDataViewBlockMarkup( fixture.collection.id ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/page/${ fixture.page.id }`
+			);
+
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.page.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+			await expect( canvas.getByText( 'Title' ) ).toBeVisible();
+			await expect( canvas.getByText( 'Author' ) ).toBeVisible();
+
+			const titleTh = canvas
+				.locator( '.dataviews-view-table thead > tr > th' )
+				.first();
+			await expect(
+				titleTh.locator( '.cortext-column-resizer' )
+			).toHaveCount( 0 );
+			await expect(
+				titleTh.locator( '.cortext-column-drag-handle' )
+			).toHaveCount( 0 );
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				fixture.entry &&
+					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
+			);
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
