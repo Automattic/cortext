@@ -9,6 +9,7 @@ import {
 
 import {
 	MAX_COLUMN_WIDTH,
+	TITLE_FIELD_ID,
 	getMinWidth,
 	withColumnOrder,
 	withColumnWidth,
@@ -31,7 +32,14 @@ const SKIP_HEADER_CLASSES = [
 // over and reorder.
 const DRAG_ACTIVATION_DISTANCE = 5;
 
-function findHeaderCells( wrapper, view ) {
+function fieldTypeFor( fieldId, fieldsById ) {
+	if ( fieldId === TITLE_FIELD_ID ) {
+		return 'title';
+	}
+	return fieldsById.get( fieldId )?.type;
+}
+
+function findHeaderCells( wrapper, view, fieldsById ) {
 	const table = wrapper?.querySelector( TABLE_SELECTOR );
 	if ( ! table ) {
 		return [];
@@ -48,12 +56,20 @@ function findHeaderCells( wrapper, view ) {
 	return fields
 		.map( ( fieldId, index ) => {
 			const el = cells[ index ];
-			return el ? { fieldId, index, el } : null;
+			if ( ! el ) {
+				return null;
+			}
+			return {
+				fieldId,
+				fieldType: fieldTypeFor( fieldId, fieldsById ),
+				index,
+				el,
+			};
 		} )
 		.filter( Boolean );
 }
 
-function useHeaderCells( wrapperRef, view ) {
+function useHeaderCells( wrapperRef, view, fields ) {
 	const [ cells, setCells ] = useState( [] );
 	const cellsRef = useRef( cells );
 	cellsRef.current = cells;
@@ -64,17 +80,22 @@ function useHeaderCells( wrapperRef, view ) {
 			return;
 		}
 
+		const fieldsById = new Map(
+			( fields ?? [] ).map( ( field ) => [ field.id, field ] )
+		);
+
 		// Compare by element identity and field id so unchanged scans don't
 		// rerender the portal layer.
 		const sync = () => {
-			const next = findHeaderCells( wrapper, view );
+			const next = findHeaderCells( wrapper, view, fieldsById );
 			const prev = cellsRef.current;
 			const same =
 				next.length === prev.length &&
 				next.every(
 					( cell, i ) =>
 						cell.el === prev[ i ].el &&
-						cell.fieldId === prev[ i ].fieldId
+						cell.fieldId === prev[ i ].fieldId &&
+						cell.fieldType === prev[ i ].fieldType
 				);
 			if ( ! same ) {
 				setCells( next );
@@ -86,7 +107,7 @@ function useHeaderCells( wrapperRef, view ) {
 		const observer = new window.MutationObserver( sync );
 		observer.observe( wrapper, { childList: true, subtree: true } );
 		return () => observer.disconnect();
-	}, [ wrapperRef, view ] );
+	}, [ wrapperRef, view, fields ] );
 
 	return cells;
 }
@@ -260,9 +281,7 @@ function useHeaderDrag( {
 	}, [ cells, onChangeViewRef, setDropTarget, viewRef, wrapperRef ] );
 }
 
-function ColumnResizer( { fieldId, headerEl, view, onChangeView } ) {
-	const minWidth = getMinWidth( fieldId );
-
+function ColumnResizer( { fieldId, fieldType, headerEl, view, onChangeView } ) {
 	const onPointerDown = useCallback(
 		( event ) => {
 			if ( event.button !== 0 ) {
@@ -274,6 +293,7 @@ function ColumnResizer( { fieldId, headerEl, view, onChangeView } ) {
 			const startX = event.clientX;
 			const startWidth = headerEl.getBoundingClientRect().width;
 			const handle = event.currentTarget;
+			const minWidth = getMinWidth( fieldType );
 			// Pointer capture re-targets pointermove/pointerup for this
 			// pointerId to the handle, even if the pointer leaves the iframe
 			// or the viewport. Without it, dragging past the editor canvas
@@ -309,14 +329,16 @@ function ColumnResizer( { fieldId, headerEl, view, onChangeView } ) {
 				headerEl.classList.remove( 'cortext-column-resizing' );
 				document.body.classList.remove( 'cortext-column-resizing' );
 				const nextWidth = computeWidth( upEvent.clientX );
-				onChangeView( withColumnWidth( view, fieldId, nextWidth ) );
+				onChangeView(
+					withColumnWidth( view, fieldId, nextWidth, fieldType )
+				);
 			};
 
 			handle.addEventListener( 'pointermove', onPointerMove );
 			handle.addEventListener( 'pointerup', onPointerUp );
 			handle.addEventListener( 'pointercancel', onPointerUp );
 		},
-		[ fieldId, headerEl, minWidth, onChangeView, view ]
+		[ fieldId, fieldType, headerEl, onChangeView, view ]
 	);
 
 	return (
@@ -333,9 +355,10 @@ function ColumnResizer( { fieldId, headerEl, view, onChangeView } ) {
 export default function DataViewColumnInteractions( {
 	wrapperRef,
 	view,
+	fields,
 	onChangeView,
 } ) {
-	const cells = useHeaderCells( wrapperRef, view );
+	const cells = useHeaderCells( wrapperRef, view, fields );
 	const [ dropTarget, setDropTarget ] = useState( null );
 
 	// Refs let the pointerdown handlers see the latest view + onChangeView
@@ -359,10 +382,11 @@ export default function DataViewColumnInteractions( {
 
 	return (
 		<>
-			{ cells.map( ( { fieldId, el } ) =>
+			{ cells.map( ( { fieldId, fieldType, el } ) =>
 				createPortal(
 					<ColumnResizer
 						fieldId={ fieldId }
+						fieldType={ fieldType }
 						headerEl={ el }
 						view={ view }
 						onChangeView={ onChangeView }

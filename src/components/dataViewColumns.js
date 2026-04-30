@@ -7,25 +7,49 @@
  */
 
 export const TITLE_FIELD_ID = 'title';
-
-// Title cells hold long row identifiers, so they need more headroom than the
-// generic columns. The cap matches what feels right at typical editor widths
-// without monopolising the table.
-export const MIN_TITLE_WIDTH = 180;
-export const MIN_COLUMN_WIDTH = 120;
 export const MAX_COLUMN_WIDTH = 640;
 
-export function getMinWidth( fieldId, { titleId = TITLE_FIELD_ID } = {} ) {
-	return fieldId === titleId ? MIN_TITLE_WIDTH : MIN_COLUMN_WIDTH;
+// Per-type column-width floors. Small values mirror Notion's behavior: a
+// checkbox column can shrink to just the checkbox, a text column to a
+// single character plus ellipsis. Keys are DataViews `field.type` values
+// plus `title` for the title field (which doesn't carry a type).
+export const MIN_WIDTHS = {
+	title: 48,
+	text: 48,
+	email: 48,
+	integer: 48,
+	array: 48,
+	date: 80,
+	datetime: 80,
+	boolean: 32,
+};
+export const DEFAULT_MIN_WIDTH = 48;
+
+export function getMinWidth( fieldType ) {
+	return MIN_WIDTHS[ fieldType ] ?? DEFAULT_MIN_WIDTH;
 }
 
-export function clampWidth( width, fieldId, options ) {
-	const min = getMinWidth( fieldId, options );
+// Clamp a width into the per-type [min, max] range used at write time
+// (resize drag). Falls back to the per-type min for non-finite input.
+export function clampWidth( width, fieldType ) {
+	const min = getMinWidth( fieldType );
 	const value = Number( width );
 	if ( ! Number.isFinite( value ) ) {
 		return min;
 	}
 	return Math.max( min, Math.min( MAX_COLUMN_WIDTH, Math.round( value ) ) );
+}
+
+// Sanitize-only clamp used by normalizeView when reading persisted widths.
+// Guards against negatives or absurd values from a hand-edited block
+// attribute, but doesn't enforce per-type minimums — those evolve over
+// time and shouldn't quietly rewrite saves on render.
+function sanitizeWidth( width ) {
+	const value = Number( width );
+	if ( ! Number.isFinite( value ) ) {
+		return 0;
+	}
+	return Math.max( 0, Math.min( MAX_COLUMN_WIDTH, Math.round( value ) ) );
 }
 
 // Reconciles a saved view against the live field set: drops style entries for
@@ -60,7 +84,7 @@ export function normalizeView( view, validIds, options = {} ) {
 		}
 		const next = { ...entry };
 		if ( entry.width !== undefined ) {
-			const clamped = clampWidth( entry.width, id, { titleId } );
+			const clamped = sanitizeWidth( entry.width );
 			if ( clamped !== entry.width ) {
 				stylesChanged = true;
 			}
@@ -93,18 +117,16 @@ export function normalizeView( view, validIds, options = {} ) {
 
 // Applies a width to a single column. Always returns through the layout shape
 // the library reads, with min/max anchored to the same constants the resize
-// drag enforces.
-export function withColumnWidth( view, fieldId, width, options = {} ) {
-	const titleId = options.titleId ?? TITLE_FIELD_ID;
-	const clamped = clampWidth( width, fieldId, { titleId } );
+// drag enforces. `fieldType` selects the per-type minimum.
+export function withColumnWidth( view, fieldId, width, fieldType ) {
+	const clamped = clampWidth( width, fieldType );
 	const layout = view?.layout ?? {};
 	const styles = layout.styles ?? {};
 	const previous = styles[ fieldId ] ?? {};
-	const min = getMinWidth( fieldId, { titleId } );
 	const nextEntry = {
 		...previous,
 		width: clamped,
-		minWidth: min,
+		minWidth: getMinWidth( fieldType ),
 		maxWidth: MAX_COLUMN_WIDTH,
 	};
 	return {

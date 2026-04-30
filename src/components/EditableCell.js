@@ -211,7 +211,7 @@ function CellShell( { children, onActivate, ariaLabel, isEmpty, disabled } ) {
 			aria-label={ ariaLabel }
 			aria-hidden={ disabled }
 		>
-			{ children }
+			<span className="cortext-editable-cell__display">{ children }</span>
 		</div>
 	);
 }

@@ -312,12 +312,30 @@ body.cortext-fullscreen {
 		display: flex;
 		flex-direction: column;
 		justify-content: center;
+		// `min-width: 0` lets the shell shrink below its content's intrinsic
+		// width inside the table's flex container, so narrow columns can
+		// truncate instead of forcing the column wider.
+		min-width: 0;
+		overflow: hidden;
 
 		&:hover,
 		&:focus-visible {
 			background: $gray-100;
 			outline: none;
 		}
+	}
+
+	// Wrap text content with an ellipsis when the column is narrower than
+	// the cell value. Chip/link displays carry their own truncation
+	// (`.cortext-chip` already sets text-overflow), so this rule only ever
+	// has to handle plain text content.
+	&__display {
+		display: block;
+		min-width: 0;
+		max-width: 100%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	// Hide the shell visually while editing but keep its layout space, so

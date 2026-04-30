@@ -968,7 +968,7 @@ test.describe( 'Collection view block', () => {
 			);
 			expect( widthMatch ).not.toBeNull();
 			const persistedWidth = Number( widthMatch[ 1 ] );
-			expect( persistedWidth ).toBeGreaterThanOrEqual( 120 );
+			expect( persistedWidth ).toBeGreaterThan( 0 );
 			expect( persistedWidth ).toBeLessThanOrEqual( 640 );
 
 			await page.reload();

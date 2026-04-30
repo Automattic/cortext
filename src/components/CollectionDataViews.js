@@ -383,6 +383,7 @@ export default function CollectionDataViews( {
 					<DataViewColumnInteractions
 						wrapperRef={ tableWrapperRef }
 						view={ view }
+						fields={ dataViewFields }
 						onChangeView={ onChangeView }
 					/>
 				) }

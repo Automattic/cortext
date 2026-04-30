@@ -1,7 +1,7 @@
 import {
+	DEFAULT_MIN_WIDTH,
 	MAX_COLUMN_WIDTH,
-	MIN_COLUMN_WIDTH,
-	MIN_TITLE_WIDTH,
+	MIN_WIDTHS,
 	TITLE_FIELD_ID,
 	clampWidth,
 	getMinWidth,
@@ -11,35 +11,46 @@ import {
 } from '../../../src/components/dataViewColumns';
 
 describe( 'getMinWidth', () => {
-	it( 'returns the title floor for the title id', () => {
-		expect( getMinWidth( TITLE_FIELD_ID ) ).toBe( MIN_TITLE_WIDTH );
+	it( 'returns the per-type floor for known DataViews types', () => {
+		expect( getMinWidth( 'boolean' ) ).toBe( MIN_WIDTHS.boolean );
+		expect( getMinWidth( 'datetime' ) ).toBe( MIN_WIDTHS.datetime );
+		expect( getMinWidth( 'text' ) ).toBe( MIN_WIDTHS.text );
+		expect( getMinWidth( 'title' ) ).toBe( MIN_WIDTHS.title );
 	} );
 
-	it( 'returns the standard floor for non-title columns', () => {
-		expect( getMinWidth( 'field-7' ) ).toBe( MIN_COLUMN_WIDTH );
+	it( 'falls back to the default floor for unknown types', () => {
+		expect( getMinWidth( undefined ) ).toBe( DEFAULT_MIN_WIDTH );
+		expect( getMinWidth( 'mystery' ) ).toBe( DEFAULT_MIN_WIDTH );
+	} );
+
+	it( 'lets checkbox columns shrink smaller than text columns', () => {
+		expect( getMinWidth( 'boolean' ) ).toBeLessThan(
+			getMinWidth( 'text' )
+		);
 	} );
 } );
 
 describe( 'clampWidth', () => {
-	it( 'clamps below-min widths up to the column floor', () => {
-		expect( clampWidth( 10, 'field-7' ) ).toBe( MIN_COLUMN_WIDTH );
+	it( 'clamps below-min widths up to the per-type floor', () => {
+		expect( clampWidth( 10, 'text' ) ).toBe( MIN_WIDTHS.text );
+		expect( clampWidth( 10, 'boolean' ) ).toBe( MIN_WIDTHS.boolean );
 	} );
 
 	it( 'clamps above-max widths down to the cap', () => {
-		expect( clampWidth( 9999, 'field-7' ) ).toBe( MAX_COLUMN_WIDTH );
+		expect( clampWidth( 9999, 'text' ) ).toBe( MAX_COLUMN_WIDTH );
 	} );
 
 	it( 'rounds to a whole pixel', () => {
-		expect( clampWidth( 240.6, 'field-7' ) ).toBe( 241 );
+		expect( clampWidth( 240.6, 'text' ) ).toBe( 241 );
 	} );
 
-	it( 'falls back to the floor when given a non-finite value', () => {
-		expect( clampWidth( NaN, 'field-7' ) ).toBe( MIN_COLUMN_WIDTH );
-		expect( clampWidth( null, 'field-7' ) ).toBe( MIN_COLUMN_WIDTH );
+	it( 'falls back to the per-type floor for non-finite values', () => {
+		expect( clampWidth( NaN, 'boolean' ) ).toBe( MIN_WIDTHS.boolean );
+		expect( clampWidth( null, 'text' ) ).toBe( MIN_WIDTHS.text );
 	} );
 
-	it( 'uses the higher title floor for the title id', () => {
-		expect( clampWidth( 100, TITLE_FIELD_ID ) ).toBe( MIN_TITLE_WIDTH );
+	it( 'uses the default floor when no type is provided', () => {
+		expect( clampWidth( 10 ) ).toBe( DEFAULT_MIN_WIDTH );
 	} );
 } );
 
@@ -99,13 +110,13 @@ describe( 'normalizeView', () => {
 		} );
 	} );
 
-	it( 'clamps persisted widths into the current [min, max] range', () => {
+	it( 'clamps persisted widths to the [0, max] range and rejects negatives', () => {
 		const view = {
 			...baseView(),
 			layout: {
 				density: 'compact',
 				styles: {
-					'field-1': { width: 5 },
+					'field-1': { width: -10 },
 					'field-2': { width: 9999 },
 				},
 			},
@@ -114,9 +125,7 @@ describe( 'normalizeView', () => {
 			view,
 			new Set( [ TITLE_FIELD_ID, 'field-1', 'field-2' ] )
 		);
-		expect( next.layout.styles[ 'field-1' ].width ).toBe(
-			MIN_COLUMN_WIDTH
-		);
+		expect( next.layout.styles[ 'field-1' ].width ).toBe( 0 );
 		expect( next.layout.styles[ 'field-2' ].width ).toBe(
 			MAX_COLUMN_WIDTH
 		);
@@ -153,14 +162,26 @@ describe( 'normalizeView', () => {
 } );
 
 describe( 'withColumnWidth', () => {
-	it( 'writes the clamped width plus min/max bounds the library reads', () => {
+	it( 'writes the clamped width plus per-type min and global max', () => {
 		const view = { layout: { density: 'compact' } };
-		const next = withColumnWidth( view, 'field-1', 220 );
+		const next = withColumnWidth( view, 'field-1', 220, 'text' );
 		expect( next.layout.styles[ 'field-1' ] ).toEqual( {
 			width: 220,
-			minWidth: MIN_COLUMN_WIDTH,
+			minWidth: MIN_WIDTHS.text,
 			maxWidth: MAX_COLUMN_WIDTH,
 		} );
+	} );
+
+	it( 'lets a checkbox column commit a smaller width than text', () => {
+		const view = { layout: { density: 'compact' } };
+		const checkbox = withColumnWidth( view, 'field-c', 10, 'boolean' );
+		const text = withColumnWidth( view, 'field-t', 10, 'text' );
+		expect(
+			checkbox.layout.styles[ 'field-c' ].width
+		).toBeLessThan( text.layout.styles[ 'field-t' ].width );
+		expect( checkbox.layout.styles[ 'field-c' ].width ).toBe(
+			MIN_WIDTHS.boolean
+		);
 	} );
 
 	it( 'preserves layout.density and existing styles for other fields', () => {
@@ -170,19 +191,11 @@ describe( 'withColumnWidth', () => {
 				styles: { 'field-other': { width: 160 } },
 			},
 		};
-		const next = withColumnWidth( view, 'field-1', 220 );
+		const next = withColumnWidth( view, 'field-1', 220, 'text' );
 		expect( next.layout.density ).toBe( 'compact' );
 		expect( next.layout.styles[ 'field-other' ] ).toEqual( {
 			width: 160,
 		} );
-	} );
-
-	it( 'clamps a tiny width up to the floor', () => {
-		const view = {};
-		const next = withColumnWidth( view, 'field-1', 5 );
-		expect( next.layout.styles[ 'field-1' ].width ).toBe(
-			MIN_COLUMN_WIDTH
-		);
 	} );
 } );
 
