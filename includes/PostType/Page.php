@@ -33,8 +33,12 @@ final class Page {
 					'all_items'     => __( 'All Cortext Pages', 'cortext' ),
 				),
 				'public'                => false,
-				'publicly_queryable'    => false,
+				'publicly_queryable'    => true,
 				'exclude_from_search'   => true,
+				'rewrite'               => array(
+					'slug'       => 'cortext',
+					'with_front' => false,
+				),
 				// The React shell is the primary UI. Core's admin screens
 				// (edit.php list + post.php editor) stay enabled as an
 				// escape hatch, exposed through Admin\Screen's submenu.

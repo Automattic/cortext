@@ -41,6 +41,14 @@ add_action(
 	}
 );
 
+register_activation_hook(
+	__FILE__,
+	static function () {
+		( new \Cortext\PostType\Page() )->register_post_type();
+		flush_rewrite_rules();
+	}
+);
+
 if ( defined( 'WP_CLI' ) && WP_CLI ) {
 	\WP_CLI::add_command( 'cortext seed', \Cortext\CLI\SeedDummyCollections::class );
 }
