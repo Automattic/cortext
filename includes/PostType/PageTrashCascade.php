@@ -12,39 +12,32 @@ namespace Cortext\PostType;
 final class PageTrashCascade {
 
 	/**
-	 * Per-post marker stamped on each child trashed by its parent's cascade.
-	 * The value is the immediate parent's id, not the cascade root, so
-	 * restoring any node walks just its tagged direct children. Recursion
-	 * through deeper levels happens via the `untrashed_post` action firing
-	 * for each restored child. Pages already in trash before the cascade are
-	 * not stamped, so an unrelated parent restore leaves them alone.
+	 * Marks a child as trashed by its parent. The value is the immediate
+	 * parent's id, so restoring any node finds its own children. Children
+	 * already in trash when the cascade reaches them stay unmarked and
+	 * don't ride along on a later parent-restore.
 	 */
 	public const META_KEY = '_cortext_trashed_by_parent';
 
 	public function register(): void {
 		add_action( 'wp_trash_post', array( $this, 'cascade_trash' ), 10, 1 );
 		add_action( 'untrashed_post', array( $this, 'cascade_restore' ), 10, 1 );
-		// Core only registers `wp_untrash_post_set_previous_status` from
-		// wp-admin/edit.php's bulk-untrash action, so programmatic restores
-		// (REST, WP-CLI, our cascade) default to `draft`. Re-register it for
-		// our CPT so a private/published page comes back with the status it
-		// had before being trashed.
+		// Core only wires wp_untrash_post_set_previous_status inside
+		// wp-admin/edit.php's bulk-untrash. Every other caller (REST, WP-CLI,
+		// our cascade) gets 'draft' on restore without this.
 		add_filter( 'wp_untrash_post_status', array( $this, 'restore_previous_status' ), 10, 3 );
-		// Replace the admin Pages list bulk trash/untrash actions with custom
-		// ones so they route through `handle_bulk_actions-{screen}` (core only
-		// fires that filter on its `default:` switch branch). Our handler
-		// tolerates `wp_trash_post`/`wp_untrash_post` returning `false` for
-		// pages that the cascade already handled, where core would `wp_die()`.
+		// edit.php's bulk loop wp_die()s when wp_trash_post returns false,
+		// which is what happens after the cascade already trashed the page.
+		// Rename trash/untrash so they land in the default branch where
+		// handle_bulk_actions-{screen} fires and we can absorb the no-op.
 		add_filter( 'bulk_actions-edit-' . Page::POST_TYPE, array( $this, 'replace_bulk_actions' ) );
 		add_filter( 'handle_bulk_actions-edit-' . Page::POST_TYPE, array( $this, 'handle_admin_bulk_action' ), 10, 3 );
 	}
 
 	/**
-	 * Trashes the page's direct children and stamps each with the page's id.
-	 * Hooked on `wp_trash_post`, which fires before the parent's status flips.
-	 * The recursive `wp_trash_post` calls fire this same action again for each
-	 * child, so deeper levels stamp themselves with their own immediate parent
-	 * and the cascade unrolls naturally without an explicit BFS.
+	 * Trashes a page's direct children and stamps each with the parent's id.
+	 * Each `wp_trash_post` call fires this hook for the child, so the subtree
+	 * comes down without an explicit walk.
 	 *
 	 * @param int $post_id ID of the page about to be trashed.
 	 */
@@ -61,13 +54,10 @@ final class PageTrashCascade {
 	}
 
 	/**
-	 * Restores the direct children that this page's earlier cascade trashed,
-	 * and clears the marker on this page so a later ancestor-restore does
-	 * not try to bring it back a second time.
-	 *
-	 * Recursion through deeper levels happens implicitly: each
-	 * `wp_untrash_post( $child_id )` fires `untrashed_post`, this handler
-	 * runs again for the child, and walks its own tagged direct children.
+	 * Restores any direct children this page's earlier cascade trashed and
+	 * clears the marker on this page so a later ancestor-restore doesn't
+	 * revive it twice. Each `wp_untrash_post` call fires this hook for the
+	 * child, walking its own tagged children.
 	 *
 	 * @param int $post_id ID of the page that was just restored.
 	 */
@@ -96,9 +86,9 @@ final class PageTrashCascade {
 	}
 
 	/**
-	 * Restores a `crtxt_page` to the status it had before being trashed.
-	 * Falls back to the default (typically `draft`) when no previous status
-	 * was recorded.
+	 * Restores a `crtxt_page` to the status it had before being trashed,
+	 * falling back to the default ('draft') when no previous status is
+	 * recorded.
 	 *
 	 * @param string $new_status      Status WordPress would otherwise assign on restore.
 	 * @param int    $post_id         ID of the page being restored.
@@ -112,9 +102,9 @@ final class PageTrashCascade {
 	}
 
 	/**
-	 * Replaces the admin Pages list's `trash` and `untrash` bulk actions with
-	 * cortext-prefixed equivalents so they route through
-	 * `handle_bulk_actions-{screen}` instead of core's wp_die-prone branches.
+	 * Renames trash and untrash so they route through
+	 * `handle_bulk_actions-{screen}` instead of edit.php's wp_die-prone
+	 * built-in branches.
 	 *
 	 * @param array $actions Bulk-action dropdown entries.
 	 *
@@ -133,9 +123,9 @@ final class PageTrashCascade {
 	}
 
 	/**
-	 * Handles the cortext-prefixed bulk actions. Counts how many of the
-	 * selected pages ended up in (or out of) trash regardless of whether
-	 * the work happened via this loop or a cascade triggered earlier in it.
+	 * Handles the renamed bulk actions. A selected page counts as processed
+	 * once its end status matches the action, whether this loop or a cascade
+	 * got there first.
 	 *
 	 * @param mixed  $sendback URL the admin will redirect to after processing.
 	 * @param string $action   Bulk action identifier.
@@ -179,9 +169,9 @@ final class PageTrashCascade {
 					++$locked;
 					continue;
 				}
-				// Ignore the return value: a `false` here just means the page
-				// was already trashed by the cascade firing on a parent earlier
-				// in the loop. Verify the resulting status instead.
+				// A false return usually means the cascade already trashed
+				// this page earlier in the loop, not that anything went wrong.
+				// Check the resulting status.
 				wp_trash_post( $post_id );
 				if ( 'trash' === get_post_status( $post_id ) ) {
 					++$count;
@@ -207,11 +197,11 @@ final class PageTrashCascade {
 	}
 
 	/**
-	 * Returns the direct children of a page whose status is not already
-	 * `trash`. Trashed siblings are skipped so a later restore of this page
-	 * does not pull them back in alongside the cascade.
+	 * Returns the page's direct children that aren't already in trash.
+	 * Already-trashed ones stay unmarked so a later parent-restore doesn't
+	 * pull them back too.
 	 *
-	 * @param int $post_id Page whose direct children we want.
+	 * @param int $post_id Page whose children we want.
 	 *
 	 * @return int[]
 	 */
