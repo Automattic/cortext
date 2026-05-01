@@ -215,31 +215,59 @@ function getColumnStyleWidth( headerEl ) {
 	return rect.width;
 }
 
-function computeTargetIndex( cells, clientX ) {
-	for ( let i = 0; i < cells.length; i += 1 ) {
-		const rect = cells[ i ].el.getBoundingClientRect();
-		if ( clientX < rect.left + rect.width / 2 ) {
-			return i;
-		}
-	}
-	return cells.length - 1;
-}
-
-function computeDropIndicator( cells, wrapper, targetIndex, fromIndex ) {
-	if ( ! wrapper || cells.length === 0 || targetIndex === null ) {
+function captureColumnDragLayout( cells, wrapper ) {
+	if ( ! wrapper || cells.length === 0 ) {
 		return null;
 	}
 	const wrapperRect = wrapper.getBoundingClientRect();
 	const headRect = cells[ 0 ].el.getBoundingClientRect();
-	const targetCell = cells[ targetIndex ];
-	const targetRect = targetCell.el.getBoundingClientRect();
+
+	return {
+		wrapperLeft: wrapperRect.left,
+		top: headRect.top - wrapperRect.top,
+		height: headRect.height,
+		rects: cells.map( ( cell ) => {
+			const rect = cell.el.getBoundingClientRect();
+			return {
+				index: cell.index,
+				left: rect.left,
+				right: rect.right,
+				width: rect.width,
+			};
+		} ),
+	};
+}
+
+function computeTargetIndex( layout, clientX ) {
+	if ( ! layout ) {
+		return null;
+	}
+	for ( let i = 0; i < layout.rects.length; i += 1 ) {
+		const rect = layout.rects[ i ];
+		if ( clientX < rect.left + rect.width / 2 ) {
+			return rect.index;
+		}
+	}
+	return layout.rects[ layout.rects.length - 1 ]?.index ?? null;
+}
+
+function computeDropIndicator( layout, targetIndex, fromIndex ) {
+	if ( ! layout || targetIndex === null ) {
+		return null;
+	}
+	const targetRect = layout.rects.find(
+		( rect ) => rect.index === targetIndex
+	);
+	if ( ! targetRect ) {
+		return null;
+	}
 	const targetEdge =
 		targetIndex > fromIndex ? targetRect.right : targetRect.left;
 
 	return {
-		left: targetEdge - wrapperRect.left,
-		top: headRect.top - wrapperRect.top,
-		height: headRect.height,
+		left: targetEdge - layout.wrapperLeft,
+		top: layout.top,
+		height: layout.height,
 		targetIndex,
 	};
 }
@@ -278,22 +306,25 @@ function clearColumnDragPreview( cells ) {
 	}
 }
 
-function applyColumnDragPreview( cells, fromIndex, targetIndex ) {
-	clearColumnDragPreview( cells );
+function applyColumnDragPreview( cells, layout, fromIndex, targetIndex ) {
 	if (
+		! layout ||
 		typeof fromIndex !== 'number' ||
-		typeof targetIndex !== 'number' ||
-		fromIndex === targetIndex
+		typeof targetIndex !== 'number'
 	) {
+		clearColumnDragPreview( cells );
 		return;
 	}
 
-	const sourceCell = cells[ fromIndex ];
-	if ( ! sourceCell ) {
+	const sourceRect = layout.rects.find(
+		( rect ) => rect.index === fromIndex
+	);
+	if ( ! sourceRect ) {
+		clearColumnDragPreview( cells );
 		return;
 	}
 
-	const sourceWidth = sourceCell.el.getBoundingClientRect().width;
+	const sourceWidth = sourceRect.width;
 	const start = Math.min( fromIndex, targetIndex );
 	const end = Math.max( fromIndex, targetIndex );
 	const direction = targetIndex > fromIndex ? -1 : 1;
@@ -302,13 +333,20 @@ function applyColumnDragPreview( cells, fromIndex, targetIndex ) {
 		cell.el.classList.add( 'cortext-column-reorder-preview' );
 		if ( cell.index === fromIndex ) {
 			cell.el.classList.add( 'cortext-column-drag-source' );
+		} else {
+			cell.el.classList.remove( 'cortext-column-drag-source' );
 		}
-		if ( cell.index >= start && cell.index <= end ) {
-			if ( cell.index !== fromIndex ) {
-				cell.el.style.transform = `translateX(${
-					direction * sourceWidth
-				}px)`;
-			}
+		if (
+			fromIndex !== targetIndex &&
+			cell.index >= start &&
+			cell.index <= end &&
+			cell.index !== fromIndex
+		) {
+			cell.el.style.transform = `translateX(${
+				direction * sourceWidth
+			}px)`;
+		} else {
+			cell.el.style.transform = '';
 		}
 	}
 }
@@ -505,40 +543,44 @@ export default function DataViewColumnInteractions( {
 	cellsRef.current = cells;
 	const dropTargetRef = useRef( dropTarget );
 	dropTargetRef.current = dropTarget;
+	const dragLayoutRef = useRef( null );
 
-	const updateDropTarget = useCallback(
+	const updateDropTarget = useCallback( ( event ) => {
+		const clientX = getDragClientX( event );
+		if ( clientX === null ) {
+			setDropTarget( null );
+			return null;
+		}
+
+		const layout = dragLayoutRef.current;
+		const nextTargetIndex = computeTargetIndex( layout, clientX );
+		const indicator = computeDropIndicator(
+			layout,
+			nextTargetIndex,
+			event.active.data.current?.index
+		);
+		applyColumnDragPreview(
+			cellsRef.current,
+			layout,
+			event.active.data.current?.index,
+			nextTargetIndex
+		);
+		setDropTarget( indicator );
+		return indicator;
+	}, [] );
+
+	const onDragStart = useCallback(
 		( event ) => {
-			const clientX = getDragClientX( event );
-			if ( clientX === null ) {
-				setDropTarget( null );
-				return null;
-			}
-
-			const nextTargetIndex = computeTargetIndex(
+			clearColumnDragPreview( cellsRef.current );
+			dragLayoutRef.current = captureColumnDragLayout(
 				cellsRef.current,
-				clientX
+				wrapperRef.current
 			);
-			const indicator = computeDropIndicator(
-				cellsRef.current,
-				wrapperRef.current,
-				nextTargetIndex,
-				event.active.data.current?.index
-			);
-			applyColumnDragPreview(
-				cellsRef.current,
-				event.active.data.current?.index,
-				nextTargetIndex
-			);
-			setDropTarget( indicator );
-			return indicator;
+			document.body.classList.add( 'cortext-column-dragging' );
+			setActiveColumn( event.active.data.current ?? null );
 		},
 		[ wrapperRef ]
 	);
-
-	const onDragStart = useCallback( ( event ) => {
-		document.body.classList.add( 'cortext-column-dragging' );
-		setActiveColumn( event.active.data.current ?? null );
-	}, [] );
 
 	const onDragMove = useCallback(
 		( event ) => {
@@ -555,6 +597,7 @@ export default function DataViewColumnInteractions( {
 
 			document.body.classList.remove( 'cortext-column-dragging' );
 			clearColumnDragPreview( cellsRef.current );
+			dragLayoutRef.current = null;
 			setDropTarget( null );
 			setActiveColumn( null );
 			suppressNextClick();
@@ -581,6 +624,7 @@ export default function DataViewColumnInteractions( {
 	const onDragCancel = useCallback( () => {
 		document.body.classList.remove( 'cortext-column-dragging' );
 		clearColumnDragPreview( cellsRef.current );
+		dragLayoutRef.current = null;
 		setDropTarget( null );
 		setActiveColumn( null );
 	}, [] );

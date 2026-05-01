@@ -1650,6 +1650,26 @@ test.describe( 'Collection view block', () => {
 					return box.x;
 				} )
 				.toBeLessThan( notesBox.x - 20 );
+			const notesTransform = await notesTh.evaluate(
+				( el ) => el.style.transform
+			);
+			expect( notesTransform ).toContain( 'translateX' );
+			await page.mouse.move(
+				notesBox.x + notesBox.width * 0.7,
+				notesBox.y + notesBox.height / 2,
+				{ steps: 4 }
+			);
+			await expect(
+				notesTh.evaluate( ( el ) => el.style.transform )
+			).resolves.toBe( notesTransform );
+			await page.mouse.move(
+				notesBox.x + notesBox.width * 0.8,
+				notesBox.y + notesBox.height / 2,
+				{ steps: 4 }
+			);
+			await expect(
+				notesTh.evaluate( ( el ) => el.style.transform )
+			).resolves.toBe( notesTransform );
 			const notesCellDragBox = await notesCell.boundingBox();
 			expect( Math.abs( notesCellDragBox.x - notesCellBox.x ) ).toBeLessThan(
 				1
