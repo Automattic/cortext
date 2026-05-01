@@ -28,11 +28,9 @@ import {
 
 const TABLE_SELECTOR = '.dataviews-view-table';
 const HEADER_CELLS_SELECTOR = '.dataviews-view-table thead > tr > th';
-// `@wordpress/dataviews` uses these classes for the bulk-select and per-row
-// actions columns. We aren't passing `actions` or `selection` props to
-// `<DataViews>`, so neither column should appear in our case — but we still
-// filter them out so the field-to-th index mapping stays robust if the
-// library starts rendering an extra `<th>` later.
+// tech-debt.md#12: DataViews doesn't expose stable table-column refs. This
+// adapter maps `view.fields` onto rendered `<th>` elements and filters out
+// library-owned utility columns so resize/reorder controls stay aligned.
 const SKIP_HEADER_CLASSES = [
 	'dataviews-view-table__checkbox-column',
 	'dataviews-view-table__actions-column',
@@ -448,6 +446,9 @@ function ColumnResizer( { fieldId, fieldType, headerEl, view, onChangeView } ) {
 			headerEl.classList.add( 'cortext-column-resizing' );
 			document.body.classList.add( 'cortext-column-resizing' );
 
+			// tech-debt.md#12: DataViews doesn't provide a live resize hook, so
+			// we mutate the rendered cells during pointer movement and commit
+			// the same width into `view.layout.styles` on pointerup.
 			// Find every cell in this column so the live drag mutates body
 			// `<td>`s alongside the header. Keeping both header and body
 			// cells in sync avoids a transient mismatch until React commits

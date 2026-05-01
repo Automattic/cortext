@@ -587,9 +587,8 @@ body.cortext-fullscreen {
 	}
 }
 
-// Column resize and reorder affordances. The resizer and dnd-kit drag handle
-// are portaled into each `<th>` rendered by `@wordpress/dataviews`, so the th
-// needs a position anchor.
+// tech-debt.md#12: The resizer and dnd-kit drag handle are portaled into each
+// `<th>` rendered by `@wordpress/dataviews`, so the th needs a position anchor.
 .cortext-data-view .dataviews-view-table thead > tr > th {
 	position: relative;
 	cursor: grab;
