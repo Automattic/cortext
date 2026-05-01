@@ -10,6 +10,8 @@
 
 const { test, expect } = require( '@wordpress/e2e-test-utils-playwright' );
 
+const { withExpectedConsoleError } = require( '../utils' );
+
 const SHELL_PATH = '/wp-admin/admin.php?page=cortext';
 
 test.describe( 'Cortext shell', () => {
@@ -53,28 +55,35 @@ test.describe( 'Cortext shell', () => {
 			roles: [ 'subscriber' ],
 		} );
 
-		try {
-			// Keep Playground's `playground_auto_login_already_happened` cookie
-			// intact so the `--login` mu-plugin doesn't silently log us back in
-			// as admin when WP auth cookies are cleared.
-			await page.context().clearCookies( { name: /^wordpress_/ } );
-			await page.request.post( '/wp-login.php', {
-				failOnStatusCode: true,
-				form: {
-					log: 'cortext-subscriber',
-					pwd: 'cortext-sub-password',
-				},
-			} );
+		await withExpectedConsoleError(
+			/the server responded with a status of 403/,
+			async () => {
+				try {
+					// Keep Playground's `playground_auto_login_already_happened` cookie
+					// intact so the `--login` mu-plugin doesn't silently log us back in
+					// as admin when WP auth cookies are cleared.
+					await page
+						.context()
+						.clearCookies( { name: /^wordpress_/ } );
 
-			const response = await page.goto( SHELL_PATH );
+					await page.request.post( '/wp-login.php', {
+						failOnStatusCode: true,
+						form: {
+							log: 'cortext-subscriber',
+							pwd: 'cortext-sub-password',
+						},
+					} );
+					const response = await page.goto( SHELL_PATH );
 
-			expect( response?.status() ).toBe( 403 );
-		} finally {
-			await requestUtils.rest( {
-				method: 'DELETE',
-				path: `/wp/v2/users/${ user.id }`,
-				params: { force: true, reassign: 1 },
-			} );
-		}
+					expect( response?.status() ).toBe( 403 );
+				} finally {
+					await requestUtils.rest( {
+						method: 'DELETE',
+						path: `/wp/v2/users/${ user.id }`,
+						params: { force: true, reassign: 1 },
+					} );
+				}
+			}
+		);
 	} );
 } );
