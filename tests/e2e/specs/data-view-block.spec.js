@@ -945,8 +945,14 @@ test.describe( 'Collection view block', () => {
 			const resizer = canvas
 				.locator( '.cortext-column-resizer' )
 				.nth( 1 );
+			const header = canvas
+				.locator( '.dataviews-view-table thead > tr > th' )
+				.nth( 1 );
 			await expect( resizer ).toBeAttached();
 			const startBox = await resizer.boundingBox();
+			const startWidth = await header.evaluate(
+				( el ) => el.getBoundingClientRect().width
+			);
 
 			const dragDelta = 80;
 			await page.mouse.move(
@@ -959,6 +965,11 @@ test.describe( 'Collection view block', () => {
 				startBox.y + startBox.height / 2,
 				{ steps: 4 }
 			);
+			const firstMoveWidth = await header.evaluate(
+				( el ) => el.getBoundingClientRect().width
+			);
+			expect( firstMoveWidth - startWidth ).toBeGreaterThan( 0 );
+			expect( firstMoveWidth - startWidth ).toBeLessThanOrEqual( 12 );
 			await page.mouse.move(
 				startBox.x + startBox.width / 2 + dragDelta,
 				startBox.y + startBox.height / 2,

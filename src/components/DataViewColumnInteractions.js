@@ -176,6 +176,34 @@ function applyColumnWidth( headerEl, width ) {
 	}
 }
 
+function getColumnStyleWidth( headerEl ) {
+	const inlineWidth = Number.parseFloat( headerEl.style.width );
+	if ( Number.isFinite( inlineWidth ) ) {
+		return inlineWidth;
+	}
+
+	const styles = window.getComputedStyle( headerEl );
+	const rect = headerEl.getBoundingClientRect();
+	if ( styles.boxSizing === 'border-box' ) {
+		return rect.width;
+	}
+
+	const horizontalExtras =
+		Number.parseFloat( styles.paddingLeft ) +
+		Number.parseFloat( styles.paddingRight ) +
+		Number.parseFloat( styles.borderLeftWidth ) +
+		Number.parseFloat( styles.borderRightWidth );
+	if ( Number.isFinite( horizontalExtras ) ) {
+		return Math.max( 0, rect.width - horizontalExtras );
+	}
+
+	const computedWidth = Number.parseFloat( styles.width );
+	if ( Number.isFinite( computedWidth ) ) {
+		return computedWidth;
+	}
+	return rect.width;
+}
+
 // Attaches a native `pointerdown` listener to each header `<th>` so the
 // entire header is the drag area. Clicks (no movement) bubble through to the
 // library's column-header menu trigger; drags past the activation distance
@@ -375,7 +403,7 @@ function ColumnResizer( { fieldId, fieldType, headerEl, view, onChangeView } ) {
 			}
 
 			const startX = event.clientX;
-			const startWidth = headerEl.getBoundingClientRect().width;
+			const startWidth = getColumnStyleWidth( headerEl );
 			const handle = event.currentTarget;
 			const minWidth = getMinWidth( fieldType );
 			// Pointer capture re-targets pointermove/pointerup for this
