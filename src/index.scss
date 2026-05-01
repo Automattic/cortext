@@ -429,6 +429,45 @@ body.cortext-fullscreen {
 	overflow: hidden;
 }
 
+// DataViews ships a `table-layout: auto; width: 100%` table. Auto
+// layout sizes each column based on content of every column, so
+// adding or deleting a field reflows every existing column. Switch to
+// fixed layout with explicit per-cell widths so the column count
+// stops affecting the surviving columns' widths. The wrapper
+// (.dataviews-wrapper) already has `overflow: auto`, so horizontal
+// scroll engages once the total column width exceeds the container.
+.dataviews-view-table {
+	table-layout: fixed;
+	width: max-content;
+}
+
+.dataviews-view-table th,
+.dataviews-view-table td {
+	width: 200px;
+}
+
+// Title carries the post name and tends to be longer than other
+// fields; give it more breathing room.
+.dataviews-view-table th:first-child,
+.dataviews-view-table td:first-child {
+	width: 280px;
+}
+
+// The trailing ghost column hosts only the `+ add field` trigger;
+// keep it slim so the table doesn't dedicate a full data column to
+// what's effectively a button. DataViews forces `min-width: 15ch`
+// on `.dataviews-view-table__cell-content-wrapper`; override it so
+// the column can actually shrink to the size we asked for.
+.dataviews-view-table th:last-child,
+.dataviews-view-table td:last-child {
+	width: 56px;
+
+	.dataviews-view-table__cell-content-wrapper,
+	.dataviews-view-table__primary-column-content {
+		min-width: 0;
+	}
+}
+
 // On custom-field columns we replace DataViews' built-in header trigger
 // (sort / hide / move) with our own combined dropdown that adds Rename /
 // Duplicate / Delete to the same menu. The built-in trigger is hidden
