@@ -143,7 +143,11 @@ export function systemFields() {
 
 export function mapField( field ) {
 	const id = `field-${ field.id }`;
-	const label = field.title?.rendered || field.title?.raw || `#${ field.id }`;
+	// Prefer `title.raw` over `title.rendered`: the latter has the
+	// `the_title` filter applied (wptexturize, entity encoding), which
+	// turns `&` into `&#038;`. We render the label as a JSX text child
+	// (auto-escaped by React), so the entity layer is unwanted noise.
+	const label = field.title?.raw || field.title?.rendered || `#${ field.id }`;
 	const type = field.meta?.type ?? 'text';
 	const elements = elementsFromOptions( field.meta?.options );
 	const base = {
