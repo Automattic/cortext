@@ -286,11 +286,11 @@ body.cortext-fullscreen {
 	width: 100%;
 }
 
-// tech-debt.md#5: DataViews uses a real <table> with default
-// `table-layout: auto`, so each column auto-sizes to its widest cell
-// content. To keep the column from reflowing when an editor mounts, we
-// always render the display shell (which sets the column's intrinsic
-// width) and overlay the editor on top via position: absolute.
+// tech-debt.md#5: DataViews uses a real <table>. Cortext switches it to
+// `table-layout: fixed` for predictable resizing, but the display shell
+// still anchors cell layout while editors mount. To keep the column from
+// reflowing when an editor mounts, we always render the display shell and
+// overlay the editor on top via position: absolute.
 // Absolutely-positioned children don't contribute to their parent's
 // intrinsic size, so the table never sees the editor's wider min-content.
 // The shell's min-height is also pinned to 40px to match
@@ -338,7 +338,8 @@ body.cortext-fullscreen {
 		white-space: nowrap;
 
 		// Multiselect renders `.cortext-chips` (a wrap-enabled flex
-		// container) inside the display span. The `nowrap` above would
+		// container). If it ever appears inside this display span, the
+		// `nowrap` above would
 		// keep the chips on a single line and let them overflow into the
 		// next column, so swap to normal wrapping when chips are present
 		// and let `flex-wrap` do its job.
@@ -417,6 +418,12 @@ body.cortext-fullscreen {
 }
 
 .cortext-cell-link {
+	display: inline-block;
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	vertical-align: middle;
 	color: var(--wp-admin-theme-color);
 	text-decoration: underline;
 	text-underline-offset: 2px;
@@ -442,6 +449,7 @@ body.cortext-fullscreen {
 	line-height: 1;
 	font-size: $default-font-size;
 	border-radius: $grid-unit-30;
+	min-width: 0;
 	max-width: 100%;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -453,6 +461,10 @@ body.cortext-fullscreen {
 	}
 }
 
+.cortext-editable-cell__shell > .cortext-chip {
+	align-self: flex-start;
+}
+
 // Block-level flex (rather than inline-flex) so the container always takes
 // the cell's full width. With inline-flex the container sized to content
 // first and then `max-width: 100%` clamped it visually, but chips inside
@@ -461,8 +473,10 @@ body.cortext-fullscreen {
 	display: flex;
 	flex-wrap: wrap;
 	gap: $grid-unit-05;
-	max-width: 100%;
+	width: 100%;
 	min-width: 0;
+	max-width: 100%;
+	overflow: hidden;
 }
 
 // Checkbox cells skip the shell/overlay dance because the input is
@@ -514,8 +528,10 @@ body.cortext-fullscreen {
 	// matches the 40px editor floor and gets closer to a Notion-style
 	// density. See tech-debt.md#5.
 	.dataviews-view-table {
+		table-layout: fixed;
 
 		tr td {
+			overflow: hidden;
 			padding-block: 0;
 		}
 
@@ -523,9 +539,14 @@ body.cortext-fullscreen {
 		// shrinks to the content's intrinsic width, so the hover/focus
 		// background on the editable shell only painted under the text
 		// instead of the whole cell. Force the wrapper to fill the td so
-		// every cell hovers edge-to-edge regardless of content length.
+		// every cell hovers edge-to-edge regardless of content length. The
+		// min/max reset also overrides DataViews's upstream 15ch floor, which
+		// otherwise lets narrow resized columns paint into their neighbors.
 		tbody .dataviews-view-table__cell-content-wrapper {
+			box-sizing: border-box;
 			width: 100%;
+			min-width: 0;
+			max-width: 100%;
 		}
 
 		.cortext-editable-cell__shell,
