@@ -587,11 +587,9 @@ body.cortext-fullscreen {
 	}
 }
 
-// Column resize and reorder affordances. The resizer is portaled into each
-// `<th>` rendered by `@wordpress/dataviews`, so the th needs a position
-// anchor. Reorder is wired via a native pointerdown listener on the th
-// itself — the entire header is the drag area, and clicks (no movement)
-// pass through to the library's column-header menu trigger.
+// Column resize and reorder affordances. The resizer and dnd-kit drag handle
+// are portaled into each `<th>` rendered by `@wordpress/dataviews`, so the th
+// needs a position anchor.
 .cortext-data-view .dataviews-view-table thead > tr > th {
 	position: relative;
 	cursor: grab;
@@ -620,6 +618,16 @@ body.cortext-fullscreen {
 			white-space: nowrap;
 		}
 	}
+}
+
+.cortext-column-drag-handle {
+	position: absolute;
+	inset: 0 8px 0 0;
+	padding: 0;
+	border: 0;
+	cursor: inherit;
+	background: transparent;
+	z-index: 1;
 }
 
 .cortext-column-resizer {
@@ -664,6 +672,19 @@ body.cortext-column-resizing {
 	pointer-events: none;
 	z-index: 3;
 	transform: translateX(-1px);
+}
+
+.cortext-column-drag-preview {
+	padding: $grid-unit-05 $grid-unit-15;
+	background: $white;
+	border: $border-width solid $gray-200;
+	border-radius: 2px;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+	font-size: 13px;
+	max-width: 240px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 body.cortext-column-dragging {

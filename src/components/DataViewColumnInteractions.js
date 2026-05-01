@@ -6,6 +6,16 @@ import {
 	useRef,
 	useState,
 } from '@wordpress/element';
+import {
+	DndContext,
+	DragOverlay,
+	PointerSensor,
+	pointerWithin,
+	useDraggable,
+	useDroppable,
+	useSensor,
+	useSensors,
+} from '@dnd-kit/core';
 
 import {
 	MAX_COLUMN_WIDTH,
@@ -29,9 +39,9 @@ const SKIP_HEADER_CLASSES = [
 ];
 
 // Pointer movement (px) that distinguishes a click from a drag. Below this
-// threshold, the column-header menu trigger fires normally; past it, we take
-// over and reorder.
+// threshold, dnd-kit leaves the column-header menu trigger alone.
 const DRAG_ACTIVATION_DISTANCE = 5;
+const HEADER_BUTTON_SELECTOR = '.dataviews-view-table-header-button';
 
 function fieldTypeFor( fieldId, fieldsById ) {
 	if ( fieldId === TITLE_FIELD_ID ) {
@@ -64,6 +74,7 @@ function findHeaderCells( wrapper, view, fieldsById ) {
 				fieldId,
 				fieldType: fieldTypeFor( fieldId, fieldsById ),
 				index,
+				label: el.textContent?.trim() || fieldId,
 				el,
 			};
 		} )
@@ -204,173 +215,113 @@ function getColumnStyleWidth( headerEl ) {
 	return rect.width;
 }
 
-// Attaches a native `pointerdown` listener to each header `<th>` so the
-// entire header is the drag area. Clicks (no movement) bubble through to the
-// library's column-header menu trigger; drags past the activation distance
-// take over, show the drop indicator, and on release commit the reorder
-// while suppressing the click that would otherwise open the menu.
-function useHeaderDrag( {
-	cells,
-	viewRef,
-	onChangeViewRef,
-	wrapperRef,
-	setDropTarget,
-} ) {
-	useEffect( () => {
-		if ( cells.length === 0 ) {
-			return undefined;
+function computeTargetIndex( cells, clientX ) {
+	for ( let i = 0; i < cells.length; i += 1 ) {
+		const rect = cells[ i ].el.getBoundingClientRect();
+		if ( clientX < rect.left + rect.width / 2 ) {
+			return i;
 		}
+	}
+	return cells.length - 1;
+}
 
-		const cellsList = cells;
+function computeDropIndicator( cells, wrapper, targetIndex, fromIndex ) {
+	if ( ! wrapper || cells.length === 0 || targetIndex === null ) {
+		return null;
+	}
+	const wrapperRect = wrapper.getBoundingClientRect();
+	const headRect = cells[ 0 ].el.getBoundingClientRect();
+	const targetCell = cells[ targetIndex ];
+	const targetRect = targetCell.el.getBoundingClientRect();
+	const targetEdge =
+		targetIndex > fromIndex ? targetRect.right : targetRect.left;
 
-		const computeTargetIndex = ( clientX ) => {
-			for ( let i = 0; i < cellsList.length; i += 1 ) {
-				const rect = cellsList[ i ].el.getBoundingClientRect();
-				if ( clientX < rect.left + rect.width / 2 ) {
-					return i;
-				}
-			}
-			return cellsList.length - 1;
-		};
+	return {
+		left: targetEdge - wrapperRect.left,
+		top: headRect.top - wrapperRect.top,
+		height: headRect.height,
+		targetIndex,
+	};
+}
 
-		const computeIndicator = ( targetIndex ) => {
-			const wrapper = wrapperRef.current;
-			if ( ! wrapper || cellsList.length === 0 ) {
-				return null;
-			}
-			const wrapperRect = wrapper.getBoundingClientRect();
-			const headRect = cellsList[ 0 ].el.getBoundingClientRect();
-			let leftPx;
-			if ( targetIndex >= cellsList.length ) {
-				const lastRect =
-					cellsList[
-						cellsList.length - 1
-					].el.getBoundingClientRect();
-				leftPx = lastRect.right - wrapperRect.left;
-			} else {
-				const rect =
-					cellsList[ targetIndex ].el.getBoundingClientRect();
-				leftPx = rect.left - wrapperRect.left;
-			}
-			return {
-				left: leftPx,
-				top: headRect.top - wrapperRect.top,
-				height: headRect.height,
-			};
-		};
+function getDragClientX( event ) {
+	const activator = event.activatorEvent;
+	if ( typeof activator?.clientX === 'number' ) {
+		return activator.clientX + event.delta.x;
+	}
+	const translated = event.active.rect.current.translated;
+	if ( translated ) {
+		return translated.left + translated.width / 2;
+	}
+	return null;
+}
 
-		const removers = cellsList.map( ( cell ) => {
-			const handler = ( event ) => {
-				if ( event.button !== 0 ) {
-					return;
-				}
-				// Don't intercept pointerdowns that originate inside the
-				// resize handle — the resizer owns its own drag.
-				if ( event.target?.closest?.( '.cortext-column-resizer' ) ) {
-					return;
-				}
+function suppressNextClick() {
+	const suppressClick = ( clickEvent ) => {
+		clickEvent.preventDefault();
+		clickEvent.stopPropagation();
+		window.removeEventListener( 'click', suppressClick, true );
+	};
+	window.addEventListener( 'click', suppressClick, true );
+	setTimeout( () => {
+		window.removeEventListener( 'click', suppressClick, true );
+	}, 0 );
+}
 
-				const startX = event.clientX;
-				const startY = event.clientY;
-				const fromIndex = cell.index;
-				const headerEl = cell.el;
-				let dragging = false;
+function ColumnDragHandle( { cell } ) {
+	const data = {
+		fieldId: cell.fieldId,
+		index: cell.index,
+		label: cell.label,
+	};
+	const {
+		attributes,
+		listeners,
+		setActivatorNodeRef,
+		setNodeRef: setDraggableNodeRef,
+	} = useDraggable( {
+		id: `column:${ cell.fieldId }`,
+		data,
+		attributes: {
+			role: 'button',
+			roleDescription: __( 'draggable column', 'cortext' ),
+			tabIndex: -1,
+		},
+	} );
+	const { setNodeRef: setDroppableNodeRef } = useDroppable( {
+		id: `column:${ cell.fieldId }`,
+		data,
+	} );
 
-				headerEl.setPointerCapture?.( event.pointerId );
+	const setHandleRef = useCallback(
+		( node ) => {
+			setDraggableNodeRef( node );
+			setDroppableNodeRef( node );
+			setActivatorNodeRef( node );
+		},
+		[ setActivatorNodeRef, setDraggableNodeRef, setDroppableNodeRef ]
+	);
 
-				const onPointerMove = ( moveEvent ) => {
-					const dx = moveEvent.clientX - startX;
-					const dy = moveEvent.clientY - startY;
-					if (
-						! dragging &&
-						Math.hypot( dx, dy ) < DRAG_ACTIVATION_DISTANCE
-					) {
-						return;
-					}
-					if ( ! dragging ) {
-						dragging = true;
-						document.body.classList.add(
-							'cortext-column-dragging'
-						);
-					}
-					const targetIndex = computeTargetIndex( moveEvent.clientX );
-					const indicator = computeIndicator( targetIndex );
-					if ( indicator ) {
-						setDropTarget( { ...indicator, targetIndex } );
-					}
-				};
+	const onClick = useCallback(
+		( event ) => {
+			event.preventDefault();
+			event.stopPropagation();
+			cell.el.querySelector( HEADER_BUTTON_SELECTOR )?.click();
+		},
+		[ cell.el ]
+	);
 
-				const onPointerUp = ( upEvent ) => {
-					headerEl.removeEventListener(
-						'pointermove',
-						onPointerMove
-					);
-					headerEl.removeEventListener( 'pointerup', onPointerUp );
-					headerEl.removeEventListener(
-						'pointercancel',
-						onPointerUp
-					);
-					headerEl.releasePointerCapture?.( upEvent.pointerId );
-					document.body.classList.remove( 'cortext-column-dragging' );
-					setDropTarget( null );
-
-					if ( ! dragging ) {
-						// Just a click; let the menu trigger fire normally.
-						return;
-					}
-
-					// After a drag, the browser still fires `click` on the
-					// element under the pointer. Swallow it once so the
-					// menu doesn't pop open immediately after a reorder.
-					const suppressClick = ( clickEvent ) => {
-						clickEvent.preventDefault();
-						clickEvent.stopPropagation();
-						window.removeEventListener(
-							'click',
-							suppressClick,
-							true
-						);
-					};
-					window.addEventListener( 'click', suppressClick, true );
-					// Belt-and-suspenders: if no click ever fires (because
-					// the pointer was released outside any clickable
-					// element), drop the listener on the next tick.
-					setTimeout( () => {
-						window.removeEventListener(
-							'click',
-							suppressClick,
-							true
-						);
-					}, 0 );
-
-					const targetIndex = computeTargetIndex( upEvent.clientX );
-					if ( targetIndex === fromIndex ) {
-						return;
-					}
-					onChangeViewRef.current(
-						withColumnOrder(
-							viewRef.current,
-							fromIndex,
-							targetIndex
-						)
-					);
-				};
-
-				headerEl.addEventListener( 'pointermove', onPointerMove );
-				headerEl.addEventListener( 'pointerup', onPointerUp );
-				headerEl.addEventListener( 'pointercancel', onPointerUp );
-			};
-
-			cell.el.addEventListener( 'pointerdown', handler );
-			return () => cell.el.removeEventListener( 'pointerdown', handler );
-		} );
-
-		return () => {
-			for ( const remove of removers ) {
-				remove();
-			}
-		};
-	}, [ cells, onChangeViewRef, setDropTarget, viewRef, wrapperRef ] );
+	return (
+		<button
+			type="button"
+			ref={ setHandleRef }
+			className="cortext-column-drag-handle"
+			aria-label={ cell.label }
+			{ ...attributes }
+			{ ...listeners }
+			onClick={ onClick }
+		/>
+	);
 }
 
 function ColumnResizer( { fieldId, fieldType, headerEl, view, onChangeView } ) {
@@ -494,39 +445,121 @@ export default function DataViewColumnInteractions( {
 } ) {
 	const cells = useHeaderCells( wrapperRef, view, fields );
 	const [ dropTarget, setDropTarget ] = useState( null );
+	const [ activeColumn, setActiveColumn ] = useState( null );
+	const sensors = useSensors(
+		useSensor( PointerSensor, {
+			activationConstraint: { distance: DRAG_ACTIVATION_DISTANCE },
+		} )
+	);
 
-	// Refs let the pointerdown handlers see the latest view + onChangeView
-	// without re-attaching on every block render.
 	const viewRef = useRef( view );
 	viewRef.current = view;
 	const onChangeViewRef = useRef( onChangeView );
 	onChangeViewRef.current = onChangeView;
+	const cellsRef = useRef( cells );
+	cellsRef.current = cells;
+	const dropTargetRef = useRef( dropTarget );
+	dropTargetRef.current = dropTarget;
 
-	useHeaderDrag( {
-		cells,
-		viewRef,
-		onChangeViewRef,
-		wrapperRef,
-		setDropTarget,
-	} );
+	const updateDropTarget = useCallback(
+		( event ) => {
+			const clientX = getDragClientX( event );
+			if ( clientX === null ) {
+				setDropTarget( null );
+				return null;
+			}
+
+			const nextTargetIndex = computeTargetIndex(
+				cellsRef.current,
+				clientX
+			);
+			const indicator = computeDropIndicator(
+				cellsRef.current,
+				wrapperRef.current,
+				nextTargetIndex,
+				event.active.data.current?.index
+			);
+			setDropTarget( indicator );
+			return indicator;
+		},
+		[ wrapperRef ]
+	);
+
+	const onDragStart = useCallback( ( event ) => {
+		document.body.classList.add( 'cortext-column-dragging' );
+		setActiveColumn( event.active.data.current ?? null );
+	}, [] );
+
+	const onDragMove = useCallback(
+		( event ) => {
+			updateDropTarget( event );
+		},
+		[ updateDropTarget ]
+	);
+
+	const onDragEnd = useCallback(
+		( event ) => {
+			const finalDropTarget =
+				updateDropTarget( event ) ?? dropTargetRef.current;
+			const fromIndex = event.active.data.current?.index;
+
+			document.body.classList.remove( 'cortext-column-dragging' );
+			setDropTarget( null );
+			setActiveColumn( null );
+			suppressNextClick();
+
+			if (
+				typeof fromIndex !== 'number' ||
+				! finalDropTarget ||
+				finalDropTarget.targetIndex === fromIndex
+			) {
+				return;
+			}
+
+			onChangeViewRef.current(
+				withColumnOrder(
+					viewRef.current,
+					fromIndex,
+					finalDropTarget.targetIndex
+				)
+			);
+		},
+		[ updateDropTarget ]
+	);
+
+	const onDragCancel = useCallback( () => {
+		document.body.classList.remove( 'cortext-column-dragging' );
+		setDropTarget( null );
+		setActiveColumn( null );
+	}, [] );
 
 	if ( cells.length === 0 ) {
 		return null;
 	}
 
 	return (
-		<>
-			{ cells.map( ( { fieldId, fieldType, el } ) =>
+		<DndContext
+			sensors={ sensors }
+			collisionDetection={ pointerWithin }
+			onDragStart={ onDragStart }
+			onDragMove={ onDragMove }
+			onDragEnd={ onDragEnd }
+			onDragCancel={ onDragCancel }
+		>
+			{ cells.map( ( cell ) =>
 				createPortal(
-					<ColumnResizer
-						fieldId={ fieldId }
-						fieldType={ fieldType }
-						headerEl={ el }
-						view={ view }
-						onChangeView={ onChangeView }
-					/>,
-					el,
-					fieldId
+					<>
+						<ColumnDragHandle cell={ cell } />
+						<ColumnResizer
+							fieldId={ cell.fieldId }
+							fieldType={ cell.fieldType }
+							headerEl={ cell.el }
+							view={ view }
+							onChangeView={ onChangeView }
+						/>
+					</>,
+					cell.el,
+					cell.fieldId
 				)
 			) }
 			{ dropTarget && (
@@ -540,6 +573,13 @@ export default function DataViewColumnInteractions( {
 					aria-hidden="true"
 				/>
 			) }
-		</>
+			<DragOverlay dropAnimation={ null }>
+				{ activeColumn ? (
+					<div className="cortext-column-drag-preview">
+						{ activeColumn.label }
+					</div>
+				) : null }
+			</DragOverlay>
+		</DndContext>
 	);
 }

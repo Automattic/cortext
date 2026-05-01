@@ -1630,6 +1630,9 @@ test.describe( 'Collection view block', () => {
 			await page.mouse.move( startX, startY );
 			await page.mouse.down();
 			await page.mouse.move( startX + 10, startY, { steps: 4 } );
+			await expect(
+				canvas.locator( '.cortext-column-drag-preview' )
+			).toContainText( 'Author' );
 			await page.mouse.move(
 				notesBox.x + notesBox.width * 0.75,
 				notesBox.y + notesBox.height / 2,
