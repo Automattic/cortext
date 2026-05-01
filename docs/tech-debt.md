@@ -135,3 +135,37 @@ Worth a small spike before committing; `core-data`'s schema cache for rarely-cha
 **Where.** `src/components/DataViewColumnInteractions.js`, `src/components/dataViewColumns.js`, the `DataViewColumnInteractions` mount in `src/components/CollectionDataViews.js`, and the column affordance / table wrapper rules in `src/index.scss`.
 
 **Solution.** Upstream DataViews could expose table-column APIs that cover `onChangeFields`, `onChangeColumnStyle`, resize handle rendering, per-field min/max widths, double-click autofit, drag overlay/insertion affordances, and stable header/cell slots or refs. If DataViews owned that layer, Cortext could drop the portal/DOM-query adapter, the wrapper min-width overrides, most of the dnd-kit column glue, and the direct DOM mutation used for live resize feedback.
+
+## 16. DataViews has no public per-column menu-item slot `[upstream, soft]`
+
+**What.** DataViews v6's column header dropdown (Sort / Add filter / Move left / Move right / Hide column) is a closed list — `column-header-menu.js` hardcodes the items and there's no `field.menuItems` (or similar) prop to inject schema actions like Rename / Duplicate / Delete. PR D therefore portals a separate kebab button next to DataViews' built-in column-header trigger and `DataViewColumnInteractions`' resize/reorder handles. Two dropdowns per column is more visual clutter than the Notion-style single combined menu we wanted, but it keeps Cortext out of DataViews' internal dropdown markup.
+
+**Where.** `src/components/fields/ColumnHeaderActions.js`.
+
+**Risk.** If DataViews changes how it positions content inside its header `<th>` (flexbox refactor, slot reordering), the kebab placement may need adjustment. Filter is intentionally omitted today (Cortext doesn't expose column-level filters in the visible header).
+
+**Solution.** Upstream a public per-column extension surface in DataViews: a `field.menuItems` array (or render-prop) that the built-in column header dropdown appends to its existing items. This would let downstream consumers (Cortext, Pattern Manager, Pages, Site Editor) add domain-specific actions in the existing dropdown rather than next to it. File this as a Gutenberg feature request once the PR D approach is in production.
+
+## 17. Ghost-column synthetic field is pinned in `view.fields` `[internal]`
+
+**What.** The `+ add field` ghost column is a synthetic DataViews field (`__add_field`) that has no data and no label. The block always pins it last in `view.fields` for the table layout and excludes it from the user-facing column visibility menu via `enableHiding: false`. If DataViews changes how `enableHiding` is honored, the synthetic could appear as a user-toggleable entry in the visibility menu, which would confuse the column list.
+
+**Where.** `GHOST_FIELD` and the view-sync effect in `src/components/CollectionDataViews.js`.
+
+**Solution.** If the visibility menu starts surfacing the synthetic, fork the field list in `CollectionDataViews.js` so the visibility menu sees only the data fields while DataViews' table layout still receives the synthetic.
+
+## 18. Field schema actions are table-layout only in PR D `[internal]`
+
+**What.** Rename, duplicate, and delete are surfaced via the column header kebab in the table layout. Grid and list layouts have no schema-action affordance and the ghost-column `+` is hidden as well; users in those layouts can still create fields via the toolbar Add field button but can't manage existing fields without switching to table.
+
+**Where.** `ColumnHeaderActions` mounts only when `view.type === 'table'` (`src/components/CollectionDataViews.js`).
+
+**Solution.** A top-level "Manage fields" UI (toolbar modal or a dedicated panel) that lists all custom fields with rename / duplicate / delete actions and works in every layout.
+
+## 19. Select / multi-select fields are created without inline option editing `[internal]`
+
+**What.** The Add field popover follows Notion's click-to-create model: clicking a type creates the field immediately. Select / multi-select fields are created with no pre-defined options, so users have to add option values via wp-admin (or by re-saving the field through the REST API). Notion sidesteps this by auto-discovering options from cell values; Cortext doesn't have that auto-discovery.
+
+**Where.** `src/components/fields/AddFieldPopover.js` (no options textarea), `includes/Rest/FieldsController.php` (still accepts an `options` array on `POST /cortext/v1/collections/<id>/fields` — the route is option-aware, only the UI doesn't surface it).
+
+**Solution.** A field-edit dialog accessible from the column header dropdown's Rename/Duplicate/Delete neighborhood, with a small options editor (one-per-line textarea or a Notion-style chip list with colors). Until then, users edit options in wp-admin or via REST.
