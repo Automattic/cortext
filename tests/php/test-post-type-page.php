@@ -47,7 +47,7 @@ final class Test_Post_Type_Page extends BaseTestCase {
 		$this->assertFalse( $object->public );
 		$this->assertTrue( $object->show_ui, 'show_ui stays on so Admin\Screen\'s submenu can link to the core list table as an escape hatch.' );
 		$this->assertFalse( $object->show_in_menu, 'show_in_menu is false because Admin\Screen owns the top-level menu.' );
-		$this->assertFalse( $object->publicly_queryable );
+		$this->assertTrue( $object->publicly_queryable, 'publicly_queryable is true so pages render on the front end.' );
 		$this->assertTrue( $object->exclude_from_search );
 		$this->assertFalse( $object->has_archive );
 	}

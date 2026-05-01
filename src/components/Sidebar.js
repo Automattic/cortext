@@ -8,12 +8,7 @@ import {
 	useCallback,
 	useEffect,
 } from '@wordpress/element';
-import {
-	Button,
-	Spinner,
-	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
-	__experimentalConfirmDialog as ConfirmDialog,
-} from '@wordpress/components';
+import { Button, Spinner } from '@wordpress/components';
 import {
 	DndContext,
 	DragOverlay,
@@ -26,21 +21,24 @@ import {
 import { useNavigate, useParams } from '@tanstack/react-router';
 
 import PageRow from './PageRow';
+import SidebarTrash from './SidebarTrash';
 import {
 	buildTree,
-	collectDescendants,
 	computeDropTarget,
 	isDescendantOf,
 	nextChildOrder,
 } from './pages-tree';
+import {
+	ACTIVE_PAGES_QUERY,
+	POST_TYPE,
+	TRASHED_PAGES_QUERY,
+} from './page-queries';
 import {
 	computeUri,
 	parseIdFromUri,
 	parseSplatUri,
 } from '../router/useResolveEntity';
 import { COLLECTION_QUERY } from '../collections';
-
-const POST_TYPE = 'crtxt_page';
 
 const AUTO_EXPAND_DELAY = 700;
 
@@ -61,15 +59,20 @@ export default function Sidebar() {
 	// Workspaces are expected to exceed 100 pages — pages past the cap won't
 	// appear in the tree. Followup needs a lazy-loaded tree (load children on
 	// expand) or a paginated fetch of the full page set.
-	const { records, isResolving } = useEntityRecords( 'postType', POST_TYPE, {
-		per_page: 100,
-		status: [ 'draft', 'private', 'publish' ],
-		context: 'edit',
-	} );
+	const { records, isResolving } = useEntityRecords(
+		'postType',
+		POST_TYPE,
+		ACTIVE_PAGES_QUERY
+	);
 
 	const { records: collections, isResolving: isResolvingCollections } =
 		useEntityRecords( 'postType', 'crtxt_collection', COLLECTION_QUERY );
-	const { saveEntityRecord, deleteEntityRecord } = useDispatch( 'core' );
+	const {
+		saveEntityRecord,
+		deleteEntityRecord,
+		invalidateResolution,
+		receiveEntityRecords,
+	} = useDispatch( 'core' );
 	const pages = useMemo( () => records ?? [], [ records ] );
 	const navigate = useNavigate();
 	const params = useParams( { strict: false } );
@@ -136,7 +139,6 @@ export default function Sidebar() {
 	const [ draggedId, setDraggedId ] = useState( null );
 	const [ activeDrop, setActiveDrop ] = useState( null );
 	const [ autoRenameId, setAutoRenameId ] = useState( null );
-	const [ pendingDeleteId, setPendingDeleteId ] = useState( null );
 
 	const autoExpandTimerRef = useRef( null );
 
@@ -246,24 +248,39 @@ export default function Sidebar() {
 		[ saveEntityRecord, getRecordById, expand, onSelect ]
 	);
 
-	const confirmDelete = useCallback( async () => {
-		const id = pendingDeleteId;
-		setPendingDeleteId( null );
-		if ( ! id ) {
-			return;
-		}
-		const descendants = collectDescendants( id, pages );
-		// Delete children first, then the root.
-		for ( const childId of descendants ) {
-			await deleteEntityRecord( 'postType', POST_TYPE, childId, {
-				force: true,
-			} );
-		}
-		await deleteEntityRecord( 'postType', POST_TYPE, id, { force: true } );
-		if ( selectedId === id || descendants.includes( selectedId ) ) {
-			onSelect( null );
-		}
-	}, [ pendingDeleteId, pages, deleteEntityRecord, selectedId, onSelect ] );
+	// Soft-delete: the server-side cascade trashes descendants. Trash is
+	// reversible (the user can restore from the Trash section), so no
+	// confirmation. The editor stays on the trashed page so the user can
+	// review what they trashed before deciding whether to restore.
+	//
+	// `deleteEntityRecord` always calls `removeItems` after the DELETE
+	// response, even for soft-delete, so the trashed record is yanked from
+	// the store and the canvas's `useEntityRecord( id )` would render an
+	// indefinite spinner. Put the trashed record (returned by the REST
+	// response) back into the store so the canvas can keep showing it.
+	const trashPage = useCallback(
+		async ( id ) => {
+			const trashed = await deleteEntityRecord(
+				'postType',
+				POST_TYPE,
+				id
+			);
+			if ( trashed ) {
+				receiveEntityRecords( 'postType', POST_TYPE, [ trashed ] );
+			}
+			invalidateResolution( 'getEntityRecords', [
+				'postType',
+				POST_TYPE,
+				ACTIVE_PAGES_QUERY,
+			] );
+			invalidateResolution( 'getEntityRecords', [
+				'postType',
+				POST_TYPE,
+				TRASHED_PAGES_QUERY,
+			] );
+		},
+		[ deleteEntityRecord, invalidateResolution, receiveEntityRecords ]
+	);
 
 	// --- Drag and drop -----------------------------------------------------
 
@@ -421,7 +438,7 @@ export default function Sidebar() {
 							onCreateChild={ createChildPage }
 							onRename={ renamePage }
 							onDuplicate={ duplicatePage }
-							onDelete={ ( id ) => setPendingDeleteId( id ) }
+							onDelete={ trashPage }
 							autoRenameId={ autoRenameId }
 							onAutoRenameConsumed={ () =>
 								setAutoRenameId( null )
@@ -484,26 +501,11 @@ export default function Sidebar() {
 				</ul>
 			) }
 
-			{ pendingDeleteId !== null && (
-				<ConfirmDialog
-					onConfirm={ confirmDelete }
-					onCancel={ () => setPendingDeleteId( null ) }
-					confirmButtonText={ __( 'Delete', 'cortext' ) }
-				>
-					{ renderDeleteMessage( pendingDeleteId, pages ) }
-				</ConfirmDialog>
-			) }
+			<SidebarTrash
+				activePages={ pages }
+				selectedId={ selectedId }
+				onSelect={ onSelect }
+			/>
 		</aside>
-	);
-}
-
-function renderDeleteMessage( id, pages ) {
-	const descendants = collectDescendants( id, pages );
-	if ( descendants.length === 0 ) {
-		return __( 'Delete this page? This cannot be undone.', 'cortext' );
-	}
-	return __(
-		'Delete this page and all its child pages? This cannot be undone.',
-		'cortext'
 	);
 }

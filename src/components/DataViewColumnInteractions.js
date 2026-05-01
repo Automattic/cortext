@@ -28,7 +28,7 @@ import {
 
 const TABLE_SELECTOR = '.dataviews-view-table';
 const HEADER_CELLS_SELECTOR = '.dataviews-view-table thead > tr > th';
-// tech-debt.md#12: DataViews doesn't expose stable table-column refs. This
+// tech-debt.md#15: DataViews doesn't expose stable table-column refs. This
 // adapter maps `view.fields` onto rendered `<th>` elements and filters out
 // library-owned utility columns so resize/reorder controls stay aligned.
 const SKIP_HEADER_CLASSES = [
@@ -455,7 +455,7 @@ function ColumnResizer( { fieldId, fieldType, headerEl, view, onChangeView } ) {
 			headerEl.classList.add( 'cortext-column-resizing' );
 			document.body.classList.add( 'cortext-column-resizing' );
 
-			// tech-debt.md#12: DataViews doesn't provide a live resize hook, so
+			// tech-debt.md#15: DataViews doesn't provide a live resize hook, so
 			// we mutate the rendered cells during pointer movement and commit
 			// the same width into `view.layout.styles` on pointerup.
 			// Find every cell in this column so the live drag mutates body

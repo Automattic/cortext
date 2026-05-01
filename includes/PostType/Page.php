@@ -33,8 +33,12 @@ final class Page {
 					'all_items'     => __( 'All Cortext Pages', 'cortext' ),
 				),
 				'public'                => false,
-				'publicly_queryable'    => false,
+				'publicly_queryable'    => true,
 				'exclude_from_search'   => true,
+				'rewrite'               => array(
+					'slug'       => 'cortext',
+					'with_front' => false,
+				),
 				// The React shell is the primary UI. Core's admin screens
 				// (edit.php list + post.php editor) stay enabled as an
 				// escape hatch, exposed through Admin\Screen's submenu.
@@ -54,6 +58,11 @@ final class Page {
 					// Load-bearing: RevisionThrottle's filters only fire on post types that support revisions. Do not remove.
 					'revisions',
 					'page-attributes',
+					// `meta` only appears in the REST schema when a CPT
+					// supports custom-fields; PageTrashCascade's marker meta
+					// (registered with `show_in_rest`) needs this so the
+					// sidebar Trash filter can read it on the client.
+					'custom-fields',
 				),
 				'capability_type'       => 'post',
 				'map_meta_cap'          => true,

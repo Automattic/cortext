@@ -26,6 +26,10 @@ const routeLockUnlockShim = path.resolve(
 
 module.exports = {
 	...defaultConfig,
+	entry: {
+		...defaultConfig.entry(),
+		frontend: path.resolve( __dirname, 'src/frontend.js' ),
+	},
 	plugins: [
 		...defaultConfig.plugins.map( ( plugin ) => {
 			if ( plugin instanceof DependencyExtractionWebpackPlugin ) {

@@ -41,6 +41,40 @@ final class CollectionEntries {
 
 	public function register(): void {
 		add_action( 'init', array( $this, 'register_all' ), 20 );
+		add_action( 'save_post', array( $this, 'record_modified_by' ), 10, 2 );
+	}
+
+	/**
+	 * Records the current user as the last editor of an entry.
+	 *
+	 * WordPress core stores `post_modified` (timestamp) but not who edited.
+	 * The plugin records `_modified_by` post meta on every entry save so the
+	 * "Last edited by" system column has a value to read. Skipped when no
+	 * user is signed in (CLI imports, cron, seeds, unauthenticated REST)
+	 * so background writes don't clobber the last real editor with `0`.
+	 *
+	 * @param int     $post_id Post ID being saved.
+	 * @param WP_Post $post    Post object being saved.
+	 */
+	public function record_modified_by( int $post_id, WP_Post $post ): void {
+		if ( wp_is_post_revision( $post_id ) || wp_is_post_autosave( $post_id ) ) {
+			return;
+		}
+
+		if ( strpos( $post->post_type, self::CPT_PREFIX ) !== 0 ) {
+			return;
+		}
+
+		if ( Collection::POST_TYPE === $post->post_type || Field::POST_TYPE === $post->post_type ) {
+			return;
+		}
+
+		$user_id = get_current_user_id();
+		if ( $user_id < 1 ) {
+			return;
+		}
+
+		update_post_meta( $post_id, '_modified_by', $user_id );
 	}
 
 	public function register_all(): void {

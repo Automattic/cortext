@@ -80,9 +80,10 @@ export default function useAutosave() {
 			isDirty: d,
 			isSaveable: s,
 			isSaving: saving,
+			postStatus: ps,
 			savePost: save,
 		} = stateRef.current;
-		if ( d && s && ! saving ) {
+		if ( d && s && ! saving && ps !== 'trash' ) {
 			maybePromoteStatus();
 			lastSaveAtRef.current = Date.now();
 			save();
@@ -91,6 +92,12 @@ export default function useAutosave() {
 
 	useEffect( () => {
 		if ( ! isDirty || ! isSaveable ) {
+			return undefined;
+		}
+		// Trashed pages are read-only in the canvas; never autosave them.
+		// The UI is locked via `<Disabled>`, but a stray edit through any
+		// other path (drag-drop, programmatic) shouldn't persist either.
+		if ( postStatus === 'trash' ) {
 			return undefined;
 		}
 		const elapsed = Date.now() - lastSaveAtRef.current;
@@ -105,9 +112,10 @@ export default function useAutosave() {
 				isDirty: d,
 				isSaveable: s,
 				isSaving: saving,
+				postStatus: ps,
 				savePost: save,
 			} = stateRef.current;
-			if ( d && s && ! saving ) {
+			if ( d && s && ! saving && ps !== 'trash' ) {
 				maybePromoteStatus();
 				lastSaveAtRef.current = Date.now();
 				save();
@@ -120,7 +128,7 @@ export default function useAutosave() {
 				debounceRef.current = null;
 			}
 		};
-	}, [ isDirty, isSaveable, editsReference ] );
+	}, [ isDirty, isSaveable, editsReference, postStatus ] );
 
 	useEffect( () => {
 		if ( isSaving ) {

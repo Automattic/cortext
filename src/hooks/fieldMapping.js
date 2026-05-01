@@ -1,3 +1,6 @@
+import { __ } from '@wordpress/i18n';
+import { dateI18n } from '@wordpress/date';
+
 import EditableCell from '../components/EditableCell';
 
 // Parses stored option records into the DataViews `elements` shape.
@@ -63,6 +66,79 @@ function buildRender( id, type, label, elements ) {
 
 function HeaderLabel( { children } ) {
 	return <span className="cortext-column-header-label">{ children }</span>;
+}
+
+// Returns the four read-only system fields surfaced alongside each
+// collection's custom fields: created at, last edited at, created by,
+// last edited by. The values come straight off the row payload (the
+// REST controller injects them in `format_row`); these definitions just
+// describe how they're rendered and which ones are sortable.
+//
+// `editable: false` keeps them out of the default `view.fields` seed
+// (CollectionDataViews seeds editable columns only), so they appear in
+// the column visibility menu default-hidden, addable like any other
+// field. Sort is enabled only on the timestamps — sort on display-value
+// properties (Person, Relation, Rollup) is an open architectural
+// decision shared with relations and rollups (tech-debt.md#14).
+export function systemFields() {
+	const formatDate = ( value ) =>
+		value ? dateI18n( 'M j, Y g:i a', value ) : '';
+	const formatText = ( value ) => ( value ? String( value ) : '' );
+
+	return [
+		{
+			id: 'created_at',
+			label: __( 'Created', 'cortext' ),
+			type: 'datetime',
+			editable: false,
+			enableSorting: true,
+			getValue: ( { item } ) => item?.created_at ?? null,
+			render: ( { item } ) => (
+				<span className="cortext-cell-readonly">
+					{ formatDate( item?.created_at ) }
+				</span>
+			),
+		},
+		{
+			id: 'created_by',
+			label: __( 'Created by', 'cortext' ),
+			type: 'text',
+			editable: false,
+			enableSorting: false,
+			getValue: ( { item } ) => item?.created_by ?? null,
+			render: ( { item } ) => (
+				<span className="cortext-cell-readonly">
+					{ formatText( item?.created_by ) }
+				</span>
+			),
+		},
+		{
+			id: 'modified_at',
+			label: __( 'Last edited', 'cortext' ),
+			type: 'datetime',
+			editable: false,
+			enableSorting: true,
+			getValue: ( { item } ) => item?.modified_at ?? null,
+			render: ( { item } ) => (
+				<span className="cortext-cell-readonly">
+					{ formatDate( item?.modified_at ) }
+				</span>
+			),
+		},
+		{
+			id: 'modified_by',
+			label: __( 'Last edited by', 'cortext' ),
+			type: 'text',
+			editable: false,
+			enableSorting: false,
+			getValue: ( { item } ) => item?.modified_by ?? null,
+			render: ( { item } ) => (
+				<span className="cortext-cell-readonly">
+					{ formatText( item?.modified_by ) }
+				</span>
+			),
+		},
+	];
 }
 
 export function mapField( field ) {

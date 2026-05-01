@@ -1,7 +1,7 @@
 import { useMemo } from '@wordpress/element';
 import { useEntityRecord, useEntityRecords } from '@wordpress/core-data';
 
-import { mapField } from './fieldMapping';
+import { mapField, systemFields } from './fieldMapping';
 
 // Reads a collection's fields from main's contract: `meta.fields` is an array
 // of `crtxt_field` post IDs in display order. Fetch those records, then
@@ -45,10 +45,14 @@ export default function useCollectionFields( collectionId ) {
 	);
 
 	const fields = useMemo( () => {
-		if ( ! Array.isArray( fieldRecords ) ) {
-			return [];
-		}
-		return fieldRecords.map( mapField );
+		const custom = Array.isArray( fieldRecords )
+			? fieldRecords.map( mapField )
+			: [];
+		// System fields (created/modified timestamps + authors) sit at
+		// the bottom of the column visibility menu, default-hidden via
+		// `editable: false`. The REST controller injects their values
+		// into each row payload in `format_row`.
+		return [ ...custom, ...systemFields() ];
 	}, [ fieldRecords ] );
 
 	return {
