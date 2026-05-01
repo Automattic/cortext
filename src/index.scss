@@ -478,19 +478,6 @@ body.cortext-fullscreen {
 	}
 }
 
-// Custom field columns and the ghost column carry a marker that
-// `ColumnHeaderActions` portals our trigger into. We hide DataViews'
-// built-in trigger on those <th>s and replace it with a single combined
-// dropdown (Sort / Move / Hide / Rename / Duplicate / Delete) for data
-// columns, or a `+` button for the ghost column. Title and system
-// fields don't have a marker, so their built-in triggers stay visible.
-// `tech-debt.md#16` covers the upstream gap that forces this takeover.
-.dataviews-view-table
-th:has(.cortext-column-header-marker)
-.dataviews-view-table-header-button:not(.cortext-column-header-trigger) {
-	display: none;
-}
-
 // `DataViewColumnInteractions` portals a transparent drag handle over
 // each <th> with `z-index: 1`, which intercepts pointer events and
 // keeps `.dataviews-view-table-header-button:hover` from ever firing.

@@ -138,11 +138,11 @@ Worth a small spike before committing; `core-data`'s schema cache for rarely-cha
 
 ## 16. DataViews has no per-column menu-item slot `[upstream, soft]`
 
-**What.** DataViews' column-header dropdown (Sort / Add filter / Move / Hide) is a closed list — there's no `field.menuItems` to inject Rename / Duplicate / Delete. To keep a single dropdown per column, we hide DataViews' built-in trigger on custom-field `<th>`s via CSS and portal our own combined trigger in (Sort / Move / Hide *plus* Rename / Duplicate / Delete). Title and system fields keep the built-in trigger. Main's drag-handle click-forward (`DataViewColumnInteractions`) iterates header buttons and skips `display: none` ones via `offsetParent`, so it lands on whichever trigger is visible. Filter is intentionally absent — Cortext doesn't surface column-level filters in the header.
+**What.** DataViews' column-header dropdown (Sort / Add filter / Move / Hide) is a closed list — there's no `field.menuItems` to inject Rename / Duplicate / Delete. To keep a single dropdown per column, `ColumnHeaderActions` portals our own combined trigger into each marker-bearing `<th>` and uses the same MutationObserver pass to detach DataViews' built-in trigger from those cells (Title and system fields keep theirs). Filter is intentionally absent — Cortext doesn't surface column-level filters in the header.
 
-**Where.** `src/components/fields/ColumnHeaderActions.js` (combined dropdown), `src/index.scss` (`.dataviews-view-table th:has(.cortext-column-header-marker) > .dataviews-view-table-header-button { display: none }`), `src/components/DataViewColumnInteractions.js` (visible-button click forward).
+**Where.** `src/components/fields/ColumnHeaderActions.js` (`stripDataViewsTrigger` in the observer pass + the combined-dropdown trigger), `src/components/DataViewColumnInteractions.js` (visible-button click forward).
 
-**Risk.** Re-implementing Sort / Move / Hide ourselves means new DataViews items in those menus won't show up here automatically. If main's drag handle stops calling `.click()` on the header trigger, the column-name click-to-open behavior would need a different forward.
+**Risk.** Re-implementing Sort / Move / Hide ourselves means new DataViews items won't show up here automatically. Detaching DataViews' trigger from the DOM after each render races React's reconciliation (the trigger gets re-rendered and we strip it again on the next observer tick); benign in practice, but a change to DataViews' header structure could surface React warnings or cause a flicker.
 
 **Solution.** A `field.menuItems` (array or render-prop) on DataViews fields, appended to the built-in dropdown. Other consumers (Pattern Manager, Pages, Site Editor) would benefit too. File as a Gutenberg feature request.
 
