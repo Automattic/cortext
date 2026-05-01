@@ -52,7 +52,9 @@ The token contract is the API. Shell themes change values in it; they do not add
 | `--cortext-radius-sm` | `2px` |
 | `--cortext-border-width` | `1px` |
 
-The same contract is emitted from three places: `src/styles/_tokens.scss` (admin shell chrome), `Cortext\Theming\Tokens::get_iframe_inline_css()` (Gutenberg canvas iframe, via `editor_settings['styles']`), and `Cortext\Theming\Tokens::get_frontend_inline_css()` (public pages, via `wp_head`). Keeping the three sources synchronized is the current maintenance cost. Phase 2 unifies them behind a single source of truth.
+The contract is emitted from two places: `src/styles/_tokens.scss` for the admin shell chrome, and `Cortext\Theming\Tokens::get_iframe_inline_css()` for the Gutenberg canvas iframe (injected via `editor_settings['styles']` so the values cross the iframe boundary). Keeping the two sources synchronized is the current maintenance cost. Phase 2 unifies them behind a single source of truth.
+
+The contract deliberately does not reach the public frontend. Published pages are the active block theme's domain; Cortext does not emit any tokens, styles, or patterns on `wp_head` or anywhere else outside the editing surface.
 
 ## Dark mode
 
@@ -62,22 +64,11 @@ Phase 1 supports a three-way preference: Light, Dark, or Match system. The toggl
 
 Persistence is `localStorage` for phase 1, keyed `cortext.colorScheme`. A pre-mount inline script (`Cortext\Theming\Preferences::get_bootstrap_js()`) stamps `data-theme` on the root before React mounts so the first paint matches the preference with no flash. Phase 3 moves persistence to user meta so the preference follows the user across browsers.
 
-## Frontend patterns
-
-Two opt-in patterns ship in `patterns/`:
-
-- **Cortext Header** (`cortext/header`): site title and nav, surface background, bottom border.
-- **Cortext Footer** (`cortext/footer`): centered tagline, top border, muted text.
-
-Both reference `--cortext-*` tokens via inline style attributes on the block markup. The token CSS is printed on every frontend response via `wp_head` (`Cortext\Theming\Tokens::print_frontend_css`), so the patterns keep their intended look wherever they render. Emission is unconditional in phase 1: once a pattern is inserted into a post it is indistinguishable from ordinary block content, so reliably gating on pattern presence is not practical. The declarations are a small static string. Removing Cortext from a site removes the tokens; without them, the inline style declarations gracefully no-op and the block content stays visible.
-
-Using these patterns is opt-in. Cortext does not replace the active theme's header or footer templates.
-
 ## Phased roadmap
 
-- **Phase 1 (current)**: token contract v1, light/dark/auto shell toggle, two opt-in frontend patterns. Persistence in localStorage. Contract not yet public; internal consumers only.
+- **Phase 1 (current)**: token contract v1, light/dark/auto shell toggle. Persistence in localStorage. Contract not yet public; internal consumers only.
 - **Phase 2**: consolidate the SCSS and PHP emitters behind a single source. Publish the contract as stable. Ship an accent picker.
-- **Phase 3**: per-user preference persistence (user meta). Optional `prefers-color-scheme` honoring on the public frontend.
+- **Phase 3**: per-user preference persistence (user meta).
 - **Phase 4**: `cortext_theme_tokens` PHP filter. Third parties can ship shell themes as token bundles. Contract becomes part of the public API surface.
 
 ## Extending (preview)
