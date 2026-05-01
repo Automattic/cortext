@@ -135,6 +135,34 @@ describe( 'normalizeView', () => {
 		);
 	} );
 
+	it( 'preserves CSS string widths supported by DataViews', () => {
+		const view = {
+			...baseView(),
+			layout: {
+				density: 'compact',
+				styles: {
+					'field-1': {
+						width: '240px',
+						minWidth: '12ch',
+						maxWidth: '30rem',
+					},
+					'field-2': { width: '20ch' },
+				},
+			},
+		};
+		const next = normalizeView(
+			view,
+			new Set( [ TITLE_FIELD_ID, 'field-1', 'field-2' ] )
+		);
+		expect( next ).toBe( view );
+		expect( next.layout.styles[ 'field-1' ] ).toEqual( {
+			width: '240px',
+			minWidth: '12ch',
+			maxWidth: '30rem',
+		} );
+		expect( next.layout.styles[ 'field-2' ].width ).toBe( '20ch' );
+	} );
+
 	it( 'preserves layout.density and other layout keys', () => {
 		const view = {
 			...baseView(),

@@ -45,10 +45,15 @@ export function clampWidth( width, fieldType ) {
 }
 
 // Sanitize-only clamp used by normalizeView when reading persisted widths.
-// Guards against negatives or absurd values from a hand-edited block
-// attribute, but doesn't enforce per-type minimums — those evolve over
-// time and shouldn't quietly rewrite saves on render.
+// Guards numeric widths against negatives or absurd values from a hand-edited
+// block attribute, but preserves CSS string widths supported by DataViews
+// (for example `240px` or `20ch`). It also doesn't enforce per-type minimums
+// — those evolve over time and shouldn't quietly rewrite saves on render.
 function sanitizeWidth( width ) {
+	if ( typeof width === 'string' ) {
+		return width;
+	}
+
 	const value = Number( width );
 	if ( ! Number.isFinite( value ) ) {
 		return 0;

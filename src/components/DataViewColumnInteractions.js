@@ -406,6 +406,15 @@ function ColumnDragHandle( { cell } ) {
 }
 
 function ColumnResizer( { fieldId, fieldType, headerEl, view, onChangeView } ) {
+	const cleanupRef = useRef( null );
+
+	useEffect( () => {
+		return () => {
+			cleanupRef.current?.();
+			cleanupRef.current = null;
+		};
+	}, [] );
+
 	const autoFitColumn = useCallback( () => {
 		const nextWidth = getAutoFitColumnWidth( headerEl, fieldType );
 		applyColumnWidth( headerEl, nextWidth );
@@ -487,12 +496,8 @@ function ColumnResizer( { fieldId, fieldType, headerEl, view, onChangeView } ) {
 			};
 
 			const onPointerUp = ( upEvent ) => {
-				handle.removeEventListener( 'pointermove', onPointerMove );
-				handle.removeEventListener( 'pointerup', onPointerUp );
-				handle.removeEventListener( 'pointercancel', onPointerUp );
-				handle.releasePointerCapture?.( upEvent.pointerId );
-				headerEl.classList.remove( 'cortext-column-resizing' );
-				document.body.classList.remove( 'cortext-column-resizing' );
+				cleanupRef.current?.();
+				cleanupRef.current = null;
 				const nextWidth = computeWidth( upEvent.clientX );
 				if ( nextWidth === Math.round( startWidth ) ) {
 					return;
@@ -505,6 +510,16 @@ function ColumnResizer( { fieldId, fieldType, headerEl, view, onChangeView } ) {
 			handle.addEventListener( 'pointermove', onPointerMove );
 			handle.addEventListener( 'pointerup', onPointerUp );
 			handle.addEventListener( 'pointercancel', onPointerUp );
+			cleanupRef.current = () => {
+				handle.removeEventListener( 'pointermove', onPointerMove );
+				handle.removeEventListener( 'pointerup', onPointerUp );
+				handle.removeEventListener( 'pointercancel', onPointerUp );
+				if ( handle.hasPointerCapture?.( event.pointerId ) ) {
+					handle.releasePointerCapture?.( event.pointerId );
+				}
+				headerEl.classList.remove( 'cortext-column-resizing' );
+				document.body.classList.remove( 'cortext-column-resizing' );
+			};
 		},
 		[ autoFitColumn, fieldId, fieldType, headerEl, onChangeView, view ]
 	);
@@ -628,6 +643,15 @@ export default function DataViewColumnInteractions( {
 		dragLayoutRef.current = null;
 		setDropTarget( null );
 		setActiveColumn( null );
+	}, [] );
+
+	useEffect( () => {
+		return () => {
+			document.body.classList.remove( 'cortext-column-dragging' );
+			document.body.classList.remove( 'cortext-column-resizing' );
+			clearColumnDragPreview( cellsRef.current );
+			dragLayoutRef.current = null;
+		};
 	}, [] );
 
 	if ( cells.length === 0 ) {
