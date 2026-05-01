@@ -432,16 +432,21 @@ body.cortext-fullscreen {
 // DataViews ships a `table-layout: auto; width: 100%` table. Auto
 // layout sizes each column based on the content of every column, so
 // adding or deleting a field reflows every existing column. Switch
-// to fixed layout with explicit per-cell widths so the column count
-// stops affecting the surviving columns' widths. The table is
-// content-sized (`width: max-content`); the wrapper
-// (.dataviews-wrapper) already has `overflow: auto`, so horizontal
-// scroll engages once the total column width exceeds the container.
-// Any leftover wrapper space sits to the right of the `+` ghost
-// column — same shape as Notion's table.
+// to fixed layout with content-width sizing and explicit per-cell
+// widths, so column count stops affecting the surviving columns'
+// widths and the table grows to its natural content width.
+// `.dataviews-wrapper` already has `overflow: auto`, so horizontal
+// scroll kicks in once columns exceed the wrapper.
 .dataviews-view-table {
 	table-layout: fixed;
 	width: max-content;
+	// Mirror DataViews' inter-row separator under the last row, so the
+	// table has a clean visual end before the "+ New" footer button.
+	// Putting the border on the table (rather than the wrapper or the
+	// footer) keeps it pinned to the table's content width — narrower
+	// than the wrapper when columns fit, scrolling with the rest when
+	// they don't.
+	border-bottom: $border-width solid $gray-200;
 }
 
 .dataviews-view-table th,
@@ -456,16 +461,16 @@ body.cortext-fullscreen {
 	width: 280px;
 }
 
-// The trailing ghost column hosts only the `+ add field` trigger.
-// Keep it slim so the `+` sits right next to the last data column.
-// DataViews forces `min-width: 15ch` on
-// `.dataviews-view-table__cell-content-wrapper` and adds
-// `padding-inline-end: 24px` on the last cell — both override our
-// width unless we collapse them.
-.dataviews-view-table th:last-child,
-.dataviews-view-table td:last-child {
+// Ghost column is just the `+` icon button. DataViews uses
+// `.dataviews-view-table tr td:last-child { padding-right: 48px }`
+// for the last column, plus `min-width: 15ch` on the cell content
+// wrapper. Match DataViews' selector specificity so our overrides
+// win, then size the column to the button's natural width with a
+// tight right padding.
+.dataviews-view-table tr th:last-child,
+.dataviews-view-table tr td:last-child {
 	width: 0;
-	padding-inline-end: $grid-unit-10;
+	padding-right: $grid-unit-10;
 
 	.dataviews-view-table__cell-content-wrapper,
 	.dataviews-view-table__primary-column-content {
@@ -768,6 +773,7 @@ th:has(.cortext-column-header-marker)
 	.dataviews-view-table {
 		table-layout: fixed;
 
+		/* stylelint-disable-next-line no-descending-specificity */
 		tr td {
 			overflow: hidden;
 			padding-block: 0;
@@ -807,7 +813,6 @@ th:has(.cortext-column-header-marker)
 	&__footer {
 		flex: 0 0 auto;
 		padding: $grid-unit-05 $grid-unit-10;
-		border-top: $border-width solid $gray-200;
 	}
 
 	&__new-row.components-button {
