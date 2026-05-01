@@ -183,18 +183,47 @@ export default function CollectionDataViews( {
 } ) {
 	const { fields, collection, slug, isResolving, fieldsResolved } =
 		useCollectionFields( collectionId );
+
+	const availableFields = useMemo(
+		() => [ TITLE_FIELD, ...fields ],
+		[ fields ]
+	);
+
+	// Compute a reconciled view synchronously so that useCollectionRows
+	// never fetches with stale/deleted field references. While fields are
+	// still resolving we don't know which IDs are valid, so defer the fetch.
+	const reconciledView = useMemo( () => {
+		if ( isResolving ) {
+			return view;
+		}
+		const validIds = new Set( availableFields.map( ( f ) => f.id ) );
+		const currentFilters = view?.filters ?? [];
+		const nextFilters = currentFilters.filter( ( filter ) =>
+			validIds.has( filter.field )
+		);
+		if ( nextFilters.length !== currentFilters.length ) {
+			return { ...view, filters: nextFilters };
+		}
+		return view;
+	}, [ view, availableFields, isResolving ] );
+
 	const {
 		data,
 		paginationInfo,
 		isLoading,
 		error: rowError,
 		refresh,
-	} = useCollectionRows( collectionId, view );
+	} = useCollectionRows( isResolving ? null : collectionId, reconciledView );
+
 	const isTableLayout = view?.type === 'table';
-	const dataViewFields = useMemo( () => {
-		const base = [ TITLE_FIELD, ...fields ];
-		return isTableLayout ? [ ...base, GHOST_FIELD ] : base;
-	}, [ fields, isTableLayout ] );
+	const dataViewFields = useMemo(
+		() =>
+			isTableLayout
+				? [ ...availableFields, GHOST_FIELD ]
+				: availableFields,
+		[ availableFields, isTableLayout ]
+	);
+
 	const tableWrapperRef = useRef( null );
 	// editRequest is the "open this cell for editing" channel: cells that
 	// match its `{ rowId, fieldId }` flip to edit mode and clear it. Used
@@ -209,11 +238,11 @@ export default function CollectionDataViews( {
 	// upstream, and this walker would go away.
 	const editableVisibleFields = useMemo( () => {
 		const order = view?.fields ?? [];
-		const byId = new Map( dataViewFields.map( ( f ) => [ f.id, f ] ) );
+		const byId = new Map( availableFields.map( ( f ) => [ f.id, f ] ) );
 		return order
 			.map( ( id ) => byId.get( id ) )
 			.filter( ( f ) => f && f.editable );
-	}, [ dataViewFields, view?.fields ] );
+	}, [ availableFields, view?.fields ] );
 
 	// Search is already handled server-side, so strip it from the view
 	// before passing to filterSortAndPaginate. Without this, the client
@@ -225,9 +254,9 @@ export default function CollectionDataViews( {
 			return filterSortAndPaginate(
 				data,
 				viewWithoutSearch,
-				dataViewFields
+				availableFields
 			);
-		}, [ data, view, dataViewFields ] );
+		}, [ data, view, availableFields ] );
 
 	const requestNext = useCallback(
 		( rowId, fieldId, direction ) => {
@@ -356,7 +385,7 @@ export default function CollectionDataViews( {
 		if ( isResolving || ! fieldsResolved ) {
 			return;
 		}
-		const validIds = new Set( dataViewFields.map( ( f ) => f.id ) );
+		const validIds = new Set( availableFields.map( ( f ) => f.id ) );
 		const currentView = viewRef.current;
 		const currentFields = currentView?.fields ?? [];
 		const previouslyKnown = knownFieldIdsRef.current;
@@ -369,7 +398,7 @@ export default function CollectionDataViews( {
 			// them via the View config.
 			seededView = {
 				...currentView,
-				fields: dataViewFields
+				fields: availableFields
 					.filter( ( f ) => f.editable )
 					.map( ( f ) => f.id ),
 			};
@@ -392,10 +421,10 @@ export default function CollectionDataViews( {
 			let inserted = false;
 			for (
 				let schemaIdx = 0;
-				schemaIdx < dataViewFields.length;
+				schemaIdx < availableFields.length;
 				schemaIdx++
 			) {
-				const f = dataViewFields[ schemaIdx ];
+				const f = availableFields[ schemaIdx ];
 				if (
 					! f.editable ||
 					previouslyKnown.has( f.id ) ||
@@ -405,7 +434,7 @@ export default function CollectionDataViews( {
 				}
 				let insertAt = next.length;
 				for ( let i = schemaIdx - 1; i >= 0; i-- ) {
-					const idx = next.indexOf( dataViewFields[ i ].id );
+					const idx = next.indexOf( availableFields[ i ].id );
 					if ( idx >= 0 ) {
 						insertAt = idx + 1;
 						break;
@@ -421,9 +450,9 @@ export default function CollectionDataViews( {
 
 		// Pin the ghost "+ add field" column last whenever the table
 		// layout is active. In grid/list layouts the synthetic field
-		// is absent from `dataViewFields`, so `normalizeView` dropped
-		// any stale reference already.
-		if ( validIds.has( GHOST_FIELD_ID ) ) {
+		// isn't part of `availableFields`, so `normalizeView` already
+		// dropped any stale reference.
+		if ( isTableLayout ) {
 			const stripped = ( normalized.fields ?? [] ).filter(
 				( id ) => id !== GHOST_FIELD_ID
 			);
@@ -462,7 +491,7 @@ export default function CollectionDataViews( {
 				filters: nextFilters,
 			} );
 		}
-	}, [ dataViewFields, isResolving, fieldsResolved ] );
+	}, [ availableFields, isTableLayout, isResolving, fieldsResolved ] );
 
 	if ( isResolving ) {
 		return loading;
@@ -509,7 +538,7 @@ export default function CollectionDataViews( {
 					<DataViewColumnInteractions
 						wrapperRef={ tableWrapperRef }
 						view={ view }
-						fields={ dataViewFields }
+						fields={ availableFields }
 						onChangeView={ onChangeView }
 					/>
 				) }
