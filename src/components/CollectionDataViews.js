@@ -150,17 +150,38 @@ export default function CollectionDataViews( {
 } ) {
 	const { fields, collection, slug, isResolving } =
 		useCollectionFields( collectionId );
+
+	const availableFields = useMemo(
+		() => [ TITLE_FIELD, ...fields ],
+		[ fields ]
+	);
+
+	// Compute a reconciled view synchronously so that useCollectionRows
+	// never fetches with stale/deleted field references. While fields are
+	// still resolving we don't know which IDs are valid, so defer the fetch.
+	const reconciledView = useMemo( () => {
+		if ( isResolving ) {
+			return view;
+		}
+		const validIds = new Set( availableFields.map( ( f ) => f.id ) );
+		const currentFilters = view?.filters ?? [];
+		const nextFilters = currentFilters.filter( ( filter ) =>
+			validIds.has( filter.field )
+		);
+		if ( nextFilters.length !== currentFilters.length ) {
+			return { ...view, filters: nextFilters };
+		}
+		return view;
+	}, [ view, availableFields, isResolving ] );
+
 	const {
 		data,
 		paginationInfo,
 		isLoading,
 		error: rowError,
 		refresh,
-	} = useCollectionRows( collectionId, view );
-	const dataViewFields = useMemo(
-		() => [ TITLE_FIELD, ...fields ],
-		[ fields ]
-	);
+	} = useCollectionRows( isResolving ? null : collectionId, reconciledView );
+
 	const tableWrapperRef = useRef( null );
 	// editRequest is the "open this cell for editing" channel: cells that
 	// match its `{ rowId, fieldId }` flip to edit mode and clear it. Used
@@ -175,11 +196,11 @@ export default function CollectionDataViews( {
 	// upstream, and this walker would go away.
 	const editableVisibleFields = useMemo( () => {
 		const order = view?.fields ?? [];
-		const byId = new Map( dataViewFields.map( ( f ) => [ f.id, f ] ) );
+		const byId = new Map( availableFields.map( ( f ) => [ f.id, f ] ) );
 		return order
 			.map( ( id ) => byId.get( id ) )
 			.filter( ( f ) => f && f.editable );
-	}, [ dataViewFields, view?.fields ] );
+	}, [ availableFields, view?.fields ] );
 
 	// Search is already handled server-side, so strip it from the view
 	// before passing to filterSortAndPaginate. Without this, the client
@@ -191,9 +212,9 @@ export default function CollectionDataViews( {
 			return filterSortAndPaginate(
 				data,
 				viewWithoutSearch,
-				dataViewFields
+				availableFields
 			);
-		}, [ data, view, dataViewFields ] );
+		}, [ data, view, availableFields ] );
 
 	const requestNext = useCallback(
 		( rowId, fieldId, direction ) => {
@@ -312,7 +333,7 @@ export default function CollectionDataViews( {
 		if ( isResolving ) {
 			return;
 		}
-		const validIds = new Set( dataViewFields.map( ( f ) => f.id ) );
+		const validIds = new Set( availableFields.map( ( f ) => f.id ) );
 		const currentView = viewRef.current;
 		const currentFields = currentView?.fields ?? [];
 
@@ -324,7 +345,7 @@ export default function CollectionDataViews( {
 			// them via the View config.
 			seededView = {
 				...currentView,
-				fields: dataViewFields
+				fields: availableFields
 					.filter( ( f ) => f.editable )
 					.map( ( f ) => f.id ),
 			};
@@ -354,7 +375,7 @@ export default function CollectionDataViews( {
 				filters: nextFilters,
 			} );
 		}
-	}, [ dataViewFields, isResolving ] );
+	}, [ availableFields, isResolving ] );
 
 	if ( isResolving ) {
 		return loading;
@@ -388,7 +409,7 @@ export default function CollectionDataViews( {
 			<div className="cortext-data-view" ref={ tableWrapperRef }>
 				<DataViews
 					data={ dataFiltered }
-					fields={ dataViewFields }
+					fields={ availableFields }
 					view={ view }
 					onChangeView={ onChangeView }
 					paginationInfo={ clientPaginationInfo }
@@ -401,7 +422,7 @@ export default function CollectionDataViews( {
 					<DataViewColumnInteractions
 						wrapperRef={ tableWrapperRef }
 						view={ view }
-						fields={ dataViewFields }
+						fields={ availableFields }
 						onChangeView={ onChangeView }
 					/>
 				) }
