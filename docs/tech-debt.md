@@ -178,3 +178,11 @@ Worth a small spike before committing; `core-data`'s schema cache for rarely-cha
 
 **Solution.** Upstream a `tableLayout` (or similar) prop on DataViews that exposes "auto with redistribution" vs. "fixed with content-sized columns" as a documented choice, plus per-field `width` hints so consumers can pin column widths without touching DataViews CSS.
 
+## 21. Field-meta cleanup uses a global delete `[internal]`
+
+**What.** `cleanup_after_field_delete` calls `delete_post_meta_by_key( "field-<id>" )`, which clears that meta key from every post in the database — not just Cortext entry CPTs. The collision risk is theoretical (`<id>` is a globally unique `crtxt_field` post ID, so any postmeta keyed that way belongs to a Cortext entry by construction), but the implementation doesn't enforce the scope. A scoped `DELETE pm FROM wp_postmeta pm INNER JOIN wp_posts p ON p.ID = pm.post_id WHERE pm.meta_key = … AND p.post_type IN (…)` would prove the scope on paper, except the test mock (WorDBless, see #9) can't execute the JOIN, so we'd lose unit coverage of the cleanup path.
+
+**Where.** `cleanup_after_field_delete` in `includes/PostType/CollectionEntries.php`.
+
+**Solution.** Stand up an integration test environment that runs against a real `wpdb` (e.g., `wp-env` test container with WP_PHPUnit), move the cleanup to a scoped SQL JOIN, and keep the unit suite for the parts that don't need a real database.
+

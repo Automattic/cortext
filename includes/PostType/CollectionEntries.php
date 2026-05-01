@@ -89,11 +89,15 @@ final class CollectionEntries {
 			return;
 		}
 
-		// Drop the field's `field-<id>` meta on every entry that has it.
-		// The key is naturally scoped: `<id>` is a globally unique post ID,
-		// so collisions with non-Cortext post meta are not a practical
-		// concern. `delete_post_meta_by_key` enumerates every row with that
-		// key across the postmeta table and removes it.
+		// Drop the field's `field-<id>` meta. `delete_post_meta_by_key`
+		// is global (clears the key from every post in the database),
+		// not strictly scoped to Cortext entry CPTs. We rely on the
+		// key being naturally unique: `<id>` is a globally unique post
+		// ID for a `crtxt_field` post, so any postmeta row keyed
+		// `field-<that-id>` belongs to a Cortext entry by construction.
+		// A scoped SQL JOIN would tighten the scope on paper but
+		// WorDBless (the test mock — see tech-debt.md#9) can't simulate
+		// it; tracked as tech-debt.md#21.
 		delete_post_meta_by_key( "field-{$post_id}" );
 
 		// Defensive: remove the field's string ID from any collection's
