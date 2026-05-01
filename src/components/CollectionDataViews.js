@@ -174,7 +174,7 @@ export default function CollectionDataViews( {
 	invalid,
 	error,
 } ) {
-	const { fields, collection, slug, isResolving } =
+	const { fields, collection, slug, isResolving, fieldsResolved } =
 		useCollectionFields( collectionId );
 	const {
 		data,
@@ -336,7 +336,13 @@ export default function CollectionDataViews( {
 	// they sit outside `normalizeView`'s scope. Other view settings
 	// (perPage, search, layout.density) are left alone.
 	useEffect( () => {
-		if ( isResolving ) {
+		// Don't run while we have no data at all *or* while the field
+		// records are mid-refetch — during a refetch `fieldRecords` is
+		// briefly empty for a new include query, and stripping orphan
+		// IDs against that transient state would wipe the user's
+		// `view.fields` (and their persisted view) until the refetch
+		// completes.
+		if ( isResolving || ! fieldsResolved ) {
 			return;
 		}
 		const validIds = new Set( dataViewFields.map( ( f ) => f.id ) );
@@ -400,7 +406,7 @@ export default function CollectionDataViews( {
 				filters: nextFilters,
 			} );
 		}
-	}, [ dataViewFields, isResolving ] );
+	}, [ dataViewFields, isResolving, fieldsResolved ] );
 
 	if ( isResolving ) {
 		return loading;

@@ -23,11 +23,11 @@ export function buildFieldListQuery( fieldIds ) {
 // of `crtxt_field` post IDs in display order. Fetch those records, then
 // map each to a DataViews field. Row meta keys are `field-<post_id>`.
 export default function useCollectionFields( collectionId ) {
-	const {
-		record: collection,
-		isResolving: collectionResolving,
-		hasResolved: collectionResolved,
-	} = useEntityRecord( 'postType', 'crtxt_collection', collectionId ?? 0 );
+	const { record: collection } = useEntityRecord(
+		'postType',
+		'crtxt_collection',
+		collectionId ?? 0
+	);
 
 	const fieldIds = useMemo( () => {
 		const raw = collection?.meta?.fields;
@@ -62,15 +62,26 @@ export default function useCollectionFields( collectionId ) {
 		return [ ...custom, ...systemFields() ];
 	}, [ fieldRecords ] );
 
+	// `isResolving` only flips true while we have no collection at all —
+	// i.e., the very first render or a fresh collection switch. core-data
+	// keeps cached records visible during refetches, so an invalidation
+	// after a mutation doesn't strand the UI on the loading spinner.
+	//
+	// `fieldsResolved` lets the view-sync wait for authoritative field
+	// data before running. During a refetch (e.g., after creating a
+	// field) `fieldRecords` briefly returns an empty array; without this
+	// guard the sync would treat all custom fields as "removed" and
+	// strip them from `view.fields`.
+	const fieldsResolvedFlag =
+		fieldIds.length === 0
+			? Boolean( collection )
+			: ! fieldsResolving && Boolean( fieldsResolved );
+
 	return {
 		fields,
 		collection: collection ?? null,
 		slug: collection?.meta?.slug ?? null,
-		isResolving:
-			Boolean( collectionId ) &&
-			( collectionResolving ||
-				! collectionResolved ||
-				( fieldIds.length > 0 &&
-					( fieldsResolving || ! fieldsResolved ) ) ),
+		isResolving: Boolean( collectionId ) && ! collection,
+		fieldsResolved: fieldsResolvedFlag,
 	};
 }
