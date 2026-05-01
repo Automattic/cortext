@@ -3,6 +3,22 @@ import { useEntityRecord, useEntityRecords } from '@wordpress/core-data';
 
 import { mapField, systemFields } from './fieldMapping';
 
+// Shared field-list query shape. Exported so mutation hooks can invalidate
+// the exact resolver used here without copy-pasting the parameters and
+// drifting out of sync. Does not include `include`, which is per-collection.
+export const FIELD_LIST_QUERY_BASE = {
+	per_page: 100,
+	orderby: 'include',
+	// `crtxt_field` posts are stored as `private`; without an explicit
+	// `status` REST defaults to `publish` and returns zero rows.
+	status: [ 'draft', 'private', 'publish' ],
+	context: 'edit',
+};
+
+export function buildFieldListQuery( fieldIds ) {
+	return { include: fieldIds, ...FIELD_LIST_QUERY_BASE };
+}
+
 // Reads a collection's fields from main's contract: `meta.fields` is an array
 // of `crtxt_field` post IDs in display order. Fetch those records, then
 // map each to a DataViews field. Row meta keys are `field-<post_id>`.
@@ -28,16 +44,7 @@ export default function useCollectionFields( collectionId ) {
 	} = useEntityRecords(
 		'postType',
 		'crtxt_field',
-		{
-			include: fieldIds,
-			per_page: 100,
-			orderby: 'include',
-			// `crtxt_field` posts are stored as `private`; without an
-			// explicit `status` REST defaults to `publish` and returns
-			// zero rows.
-			status: [ 'draft', 'private', 'publish' ],
-			context: 'edit',
-		},
+		buildFieldListQuery( fieldIds ),
 		// Skip the resolver when there are no IDs to look up. Passing
 		// `undefined`/`{}` would fall through to a default empty query,
 		// which fetches every `crtxt_field` in the system.
