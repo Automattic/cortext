@@ -64,6 +64,10 @@ function buildRender( id, type, label, elements ) {
 	);
 }
 
+function HeaderLabel( { children } ) {
+	return <span className="cortext-column-header-label">{ children }</span>;
+}
+
 // Returns the four read-only system fields surfaced alongside each
 // collection's custom fields: created at, last edited at, created by,
 // last edited by. The values come straight off the row payload (the
@@ -145,6 +149,7 @@ export function mapField( field ) {
 	const base = {
 		id,
 		label,
+		header: <HeaderLabel>{ label }</HeaderLabel>,
 		getValue: ( { item } ) => item?.meta?.[ id ] ?? null,
 		render: buildRender( id, type, label, elements ),
 		editable: EDITABLE_TYPES.has( type ),

@@ -1,0 +1,270 @@
+import {
+	DEFAULT_MIN_WIDTH,
+	MAX_COLUMN_WIDTH,
+	MIN_WIDTHS,
+	TITLE_FIELD_ID,
+	clampWidth,
+	getMinWidth,
+	normalizeView,
+	withColumnOrder,
+	withColumnWidth,
+} from '../../../src/components/dataViewColumns';
+
+describe( 'getMinWidth', () => {
+	it( 'returns the per-type floor for known DataViews types', () => {
+		expect( getMinWidth( 'boolean' ) ).toBe( MIN_WIDTHS.boolean );
+		expect( getMinWidth( 'datetime' ) ).toBe( MIN_WIDTHS.datetime );
+		expect( getMinWidth( 'text' ) ).toBe( MIN_WIDTHS.text );
+		expect( getMinWidth( 'title' ) ).toBe( MIN_WIDTHS.title );
+	} );
+
+	it( 'falls back to the default floor for unknown types', () => {
+		expect( getMinWidth( undefined ) ).toBe( DEFAULT_MIN_WIDTH );
+		expect( getMinWidth( 'mystery' ) ).toBe( DEFAULT_MIN_WIDTH );
+	} );
+
+	it( 'lets checkbox columns shrink smaller than text columns', () => {
+		expect( getMinWidth( 'boolean' ) ).toBeLessThan(
+			getMinWidth( 'text' )
+		);
+	} );
+
+	it( 'uses a compact floor for checkbox columns', () => {
+		expect( getMinWidth( 'boolean' ) ).toBe( 32 );
+	} );
+} );
+
+describe( 'clampWidth', () => {
+	it( 'clamps below-min widths up to the per-type floor', () => {
+		expect( clampWidth( 10, 'text' ) ).toBe( MIN_WIDTHS.text );
+		expect( clampWidth( 10, 'boolean' ) ).toBe( MIN_WIDTHS.boolean );
+	} );
+
+	it( 'clamps above-max widths down to the cap', () => {
+		expect( clampWidth( 9999, 'text' ) ).toBe( MAX_COLUMN_WIDTH );
+	} );
+
+	it( 'rounds to a whole pixel', () => {
+		expect( clampWidth( 240.6, 'text' ) ).toBe( 241 );
+	} );
+
+	it( 'falls back to the per-type floor for non-finite values', () => {
+		expect( clampWidth( NaN, 'boolean' ) ).toBe( MIN_WIDTHS.boolean );
+		expect( clampWidth( null, 'text' ) ).toBe( MIN_WIDTHS.text );
+	} );
+
+	it( 'uses the default floor when no type is provided', () => {
+		expect( clampWidth( 10 ) ).toBe( DEFAULT_MIN_WIDTH );
+	} );
+} );
+
+describe( 'normalizeView', () => {
+	const baseView = () => ( {
+		type: 'table',
+		fields: [ TITLE_FIELD_ID, 'field-1', 'field-2' ],
+		sort: null,
+		filters: [],
+		layout: { density: 'compact' },
+	} );
+
+	it( 'returns the same reference when nothing changes', () => {
+		const view = baseView();
+		const next = normalizeView(
+			view,
+			new Set( [ TITLE_FIELD_ID, 'field-1', 'field-2' ] )
+		);
+		expect( next ).toBe( view );
+	} );
+
+	it( 'drops fields whose ids are no longer in the schema', () => {
+		const view = baseView();
+		const next = normalizeView(
+			view,
+			new Set( [ TITLE_FIELD_ID, 'field-1' ] )
+		);
+		expect( next.fields ).toEqual( [ TITLE_FIELD_ID, 'field-1' ] );
+	} );
+
+	it( 'prepends the title id when fields filtered it out', () => {
+		const view = { ...baseView(), fields: [ 'field-1', 'field-2' ] };
+		const next = normalizeView(
+			view,
+			new Set( [ TITLE_FIELD_ID, 'field-1', 'field-2' ] )
+		);
+		expect( next.fields[ 0 ] ).toBe( TITLE_FIELD_ID );
+	} );
+
+	it( 'prunes layout.styles entries for fields that no longer exist', () => {
+		const view = {
+			...baseView(),
+			layout: {
+				density: 'compact',
+				styles: {
+					'field-1': { width: 200 },
+					'field-removed': { width: 200 },
+				},
+			},
+		};
+		const next = normalizeView(
+			view,
+			new Set( [ TITLE_FIELD_ID, 'field-1', 'field-2' ] )
+		);
+		expect( next.layout.styles ).toEqual( {
+			'field-1': { width: 200 },
+		} );
+	} );
+
+	it( 'clamps persisted widths to the [0, max] range and rejects negatives', () => {
+		const view = {
+			...baseView(),
+			layout: {
+				density: 'compact',
+				styles: {
+					'field-1': { width: -10 },
+					'field-2': { width: 9999 },
+				},
+			},
+		};
+		const next = normalizeView(
+			view,
+			new Set( [ TITLE_FIELD_ID, 'field-1', 'field-2' ] )
+		);
+		expect( next.layout.styles[ 'field-1' ].width ).toBe( 0 );
+		expect( next.layout.styles[ 'field-2' ].width ).toBe(
+			MAX_COLUMN_WIDTH
+		);
+	} );
+
+	it( 'preserves CSS string widths supported by DataViews', () => {
+		const view = {
+			...baseView(),
+			layout: {
+				density: 'compact',
+				styles: {
+					'field-1': {
+						width: '240px',
+						minWidth: '12ch',
+						maxWidth: '30rem',
+					},
+					'field-2': { width: '20ch' },
+				},
+			},
+		};
+		const next = normalizeView(
+			view,
+			new Set( [ TITLE_FIELD_ID, 'field-1', 'field-2' ] )
+		);
+		expect( next ).toBe( view );
+		expect( next.layout.styles[ 'field-1' ] ).toEqual( {
+			width: '240px',
+			minWidth: '12ch',
+			maxWidth: '30rem',
+		} );
+		expect( next.layout.styles[ 'field-2' ].width ).toBe( '20ch' );
+	} );
+
+	it( 'preserves layout.density and other layout keys', () => {
+		const view = {
+			...baseView(),
+			layout: { density: 'comfortable', somethingElse: 'keep' },
+		};
+		const next = normalizeView(
+			view,
+			new Set( [ TITLE_FIELD_ID, 'field-1' ] )
+		);
+		expect( next.layout.density ).toBe( 'comfortable' );
+		expect( next.layout.somethingElse ).toBe( 'keep' );
+	} );
+
+	it( 'drops the styles key entirely when no entries survive', () => {
+		const view = {
+			...baseView(),
+			layout: {
+				density: 'compact',
+				styles: { 'field-removed': { width: 200 } },
+			},
+		};
+		const next = normalizeView(
+			view,
+			new Set( [ TITLE_FIELD_ID, 'field-1' ] )
+		);
+		expect( next.layout.styles ).toBeUndefined();
+		expect( next.layout.density ).toBe( 'compact' );
+	} );
+} );
+
+describe( 'withColumnWidth', () => {
+	it( 'writes the clamped width plus per-type min and matching maxWidth', () => {
+		const view = { layout: { density: 'compact' } };
+		const next = withColumnWidth( view, 'field-1', 220, 'text' );
+		expect( next.layout.styles[ 'field-1' ] ).toEqual( {
+			width: 220,
+			minWidth: MIN_WIDTHS.text,
+			maxWidth: 220,
+		} );
+	} );
+
+	it( 'lets a checkbox column commit a smaller width than text', () => {
+		const view = { layout: { density: 'compact' } };
+		const checkbox = withColumnWidth( view, 'field-c', 10, 'boolean' );
+		const text = withColumnWidth( view, 'field-t', 10, 'text' );
+		expect( checkbox.layout.styles[ 'field-c' ].width ).toBeLessThan(
+			text.layout.styles[ 'field-t' ].width
+		);
+		expect( checkbox.layout.styles[ 'field-c' ].width ).toBe(
+			MIN_WIDTHS.boolean
+		);
+	} );
+
+	it( 'preserves layout.density and existing styles for other fields', () => {
+		const view = {
+			layout: {
+				density: 'compact',
+				styles: { 'field-other': { width: 160 } },
+			},
+		};
+		const next = withColumnWidth( view, 'field-1', 220, 'text' );
+		expect( next.layout.density ).toBe( 'compact' );
+		expect( next.layout.styles[ 'field-other' ] ).toEqual( {
+			width: 160,
+		} );
+	} );
+} );
+
+describe( 'withColumnOrder', () => {
+	const view = ( fields ) => ( { fields } );
+
+	it( 'moves a column to the requested index', () => {
+		const next = withColumnOrder(
+			view( [ TITLE_FIELD_ID, 'a', 'b', 'c' ] ),
+			1,
+			3
+		);
+		expect( next.fields ).toEqual( [ TITLE_FIELD_ID, 'b', 'c', 'a' ] );
+	} );
+
+	it( 'moves the title id like any other column', () => {
+		const next = withColumnOrder(
+			view( [ TITLE_FIELD_ID, 'a', 'b' ] ),
+			0,
+			2
+		);
+		expect( next.fields ).toEqual( [ 'a', 'b', TITLE_FIELD_ID ] );
+	} );
+
+	it( 'allows a column to land left of the title', () => {
+		const next = withColumnOrder(
+			view( [ TITLE_FIELD_ID, 'a', 'b' ] ),
+			2,
+			0
+		);
+		expect( next.fields ).toEqual( [ 'b', TITLE_FIELD_ID, 'a' ] );
+	} );
+
+	it( 'returns the same view for invalid indices', () => {
+		const v = view( [ TITLE_FIELD_ID, 'a', 'b' ] );
+		expect( withColumnOrder( v, -1, 1 ) ).toBe( v );
+		expect( withColumnOrder( v, 1, 99 ) ).toBe( v );
+		expect( withColumnOrder( v, 1, 1 ) ).toBe( v );
+	} );
+} );

@@ -11,28 +11,38 @@ import {
 import { __ } from '@wordpress/i18n';
 import { plus } from '@wordpress/icons';
 
+import DataViewColumnInteractions from './DataViewColumnInteractions';
 import EditableCell, { RowMutationContext } from './EditableCell';
+import { TITLE_FIELD_ID, normalizeView } from './dataViewColumns';
 import useCollectionFields from '../hooks/useCollectionFields';
 import useCollectionRows from '../hooks/useCollectionRows';
 
 const DEFAULT_LAYOUTS = { table: { density: 'compact' }, grid: {}, list: {} };
+const TITLE_LABEL = __( 'Title', 'cortext' );
 
 const TITLE_FIELD = {
-	id: 'title',
-	label: __( 'Title', 'cortext' ),
+	id: TITLE_FIELD_ID,
+	label: TITLE_LABEL,
+	header: (
+		<span className="cortext-column-header-label">{ TITLE_LABEL }</span>
+	),
 	getValue: ( { item } ) => item?.title?.rendered ?? item?.title?.raw ?? '',
 	render: ( { item } ) => (
 		<EditableCell
 			item={ item }
 			fieldId="title"
 			fieldType="title"
-			label={ __( 'Title', 'cortext' ) }
+			label={ TITLE_LABEL }
 			getValue={ ( ctx ) =>
 				ctx.item?.title?.raw ?? ctx.item?.title?.rendered ?? ''
 			}
 		/>
 	),
 	editable: true,
+	// The title column can't be hidden (it's the row identity), but it
+	// reorders and resizes like any other column. `normalizeView` re-adds
+	// the id to `view.fields` if something corrupts the saved state.
+	enableHiding: false,
 };
 
 // Pulls a "single equality" prefill out of the active filters: only filters
@@ -151,6 +161,7 @@ export default function CollectionDataViews( {
 		() => [ TITLE_FIELD, ...fields ],
 		[ fields ]
 	);
+	const tableWrapperRef = useRef( null );
 	// editRequest is the "open this cell for editing" channel: cells that
 	// match its `{ rowId, fieldId }` flip to edit mode and clear it. Used
 	// for both the title-cell auto-open on a fresh row and Tab-driven
@@ -291,10 +302,12 @@ export default function CollectionDataViews( {
 	onChangeViewRef.current = onChangeView;
 
 	// Reconcile saved view state with the live schema whenever the field
-	// set changes: drop visible columns, sort, and filters that reference
-	// fields that no longer exist (so a deleted field doesn't ghost in the
-	// saved attribute), pin Title visible, and seed defaults on first
-	// render. Other view settings (perPage, search, layout) are left alone.
+	// set changes: seed defaults on first render, then hand off to
+	// `normalizeView` for fields/styles cleanup (drop entries for fields
+	// that no longer exist, clamp persisted widths, pin title in fields).
+	// Sort and filters keep their own per-key reconciliation here because
+	// they sit outside `normalizeView`'s scope. Other view settings
+	// (perPage, search, layout.density) are left alone.
 	useEffect( () => {
 		if ( isResolving ) {
 			return;
@@ -303,43 +316,40 @@ export default function CollectionDataViews( {
 		const currentView = viewRef.current;
 		const currentFields = currentView?.fields ?? [];
 
-		let nextFields;
+		let seededView = currentView;
 		if ( currentFields.length === 0 ) {
 			// Default to editable columns only: read-only types like
 			// formula and rollup don't compute values yet, so showing
 			// them out of the box is just noise. Users can re-enable
 			// them via the View config.
-			nextFields = dataViewFields
-				.filter( ( f ) => f.editable )
-				.map( ( f ) => f.id );
-		} else {
-			nextFields = currentFields.filter( ( id ) => validIds.has( id ) );
-			if ( ! nextFields.includes( TITLE_FIELD.id ) ) {
-				nextFields = [ TITLE_FIELD.id, ...nextFields ];
-			}
+			seededView = {
+				...currentView,
+				fields: dataViewFields
+					.filter( ( f ) => f.editable )
+					.map( ( f ) => f.id ),
+			};
 		}
 
-		const currentSort = currentView?.sort ?? null;
+		const normalized = normalizeView( seededView, validIds );
+
+		const currentSort = normalized.sort ?? null;
 		const nextSort =
 			currentSort && validIds.has( currentSort.field )
 				? currentSort
 				: null;
 
-		const currentFilters = currentView?.filters ?? [];
+		const currentFilters = normalized.filters ?? [];
 		const nextFilters = currentFilters.filter( ( filter ) =>
 			validIds.has( filter.field )
 		);
 
-		const fieldsChanged =
-			currentFields.length !== nextFields.length ||
-			currentFields.some( ( id, i ) => id !== nextFields[ i ] );
 		const sortChanged = currentSort !== nextSort;
 		const filtersChanged = currentFilters.length !== nextFilters.length;
+		const normalizedChanged = normalized !== currentView;
 
-		if ( fieldsChanged || sortChanged || filtersChanged ) {
+		if ( normalizedChanged || sortChanged || filtersChanged ) {
 			onChangeViewRef.current( {
-				...currentView,
-				fields: nextFields,
+				...normalized,
 				sort: nextSort,
 				filters: nextFilters,
 			} );
@@ -375,7 +385,7 @@ export default function CollectionDataViews( {
 
 	return (
 		<RowMutationContext.Provider value={ mutationContext }>
-			<div className="cortext-data-view">
+			<div className="cortext-data-view" ref={ tableWrapperRef }>
 				<DataViews
 					data={ dataFiltered }
 					fields={ dataViewFields }
@@ -387,6 +397,14 @@ export default function CollectionDataViews( {
 					isLoading={ isLoading }
 					empty={ empty }
 				/>
+				{ view?.type === 'table' && (
+					<DataViewColumnInteractions
+						wrapperRef={ tableWrapperRef }
+						view={ view }
+						fields={ dataViewFields }
+						onChangeView={ onChangeView }
+					/>
+				) }
 				{ /* tech-debt.md#7: DataViews has no footer slot, so the
 				   New-row affordance and its CSS layout sit outside the
 				   component instead of inside its layout chrome. */ }

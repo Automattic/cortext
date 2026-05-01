@@ -376,11 +376,11 @@ body.cortext-fullscreen {
 	width: 100%;
 }
 
-// tech-debt.md#5: DataViews uses a real <table> with default
-// `table-layout: auto`, so each column auto-sizes to its widest cell
-// content. To keep the column from reflowing when an editor mounts, we
-// always render the display shell (which sets the column's intrinsic
-// width) and overlay the editor on top via position: absolute.
+// tech-debt.md#5: DataViews uses a real <table>. Cortext switches it to
+// `table-layout: fixed` for predictable resizing, but the display shell
+// still anchors cell layout while editors mount. To keep the column from
+// reflowing when an editor mounts, we always render the display shell and
+// overlay the editor on top via position: absolute.
 // Absolutely-positioned children don't contribute to their parent's
 // intrinsic size, so the table never sees the editor's wider min-content.
 // The shell's min-height is also pinned to 40px to match
@@ -402,11 +402,39 @@ body.cortext-fullscreen {
 		display: flex;
 		flex-direction: column;
 		justify-content: center;
+		// `min-width: 0` lets the shell shrink below its content's intrinsic
+		// width inside the table's flex container, so narrow columns can
+		// truncate instead of forcing the column wider.
+		min-width: 0;
+		overflow: hidden;
 
 		&:hover,
 		&:focus-visible {
 			background: $gray-100;
 			outline: none;
+		}
+	}
+
+	// Wrap text content with an ellipsis when the column is narrower than
+	// the cell value. Chip/link displays carry their own truncation
+	// (`.cortext-chip` already sets text-overflow), so this rule only ever
+	// has to handle plain text content.
+	&__display {
+		display: block;
+		min-width: 0;
+		max-width: 100%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+
+		// Multiselect renders `.cortext-chips` (a wrap-enabled flex
+		// container). If it ever appears inside this display span, the
+		// `nowrap` above would
+		// keep the chips on a single line and let them overflow into the
+		// next column, so swap to normal wrapping when chips are present
+		// and let `flex-wrap` do its job.
+		&:has(> .cortext-chips) {
+			white-space: normal;
 		}
 	}
 
@@ -480,6 +508,12 @@ body.cortext-fullscreen {
 }
 
 .cortext-cell-link {
+	display: inline-block;
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	vertical-align: middle;
 	color: var(--wp-admin-theme-color);
 	text-decoration: underline;
 	text-underline-offset: 2px;
@@ -505,6 +539,7 @@ body.cortext-fullscreen {
 	line-height: 1;
 	font-size: $default-font-size;
 	border-radius: $grid-unit-30;
+	min-width: 0;
 	max-width: 100%;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -516,11 +551,22 @@ body.cortext-fullscreen {
 	}
 }
 
+.cortext-editable-cell__shell > .cortext-chip {
+	align-self: flex-start;
+}
+
+// Block-level flex (rather than inline-flex) so the container always takes
+// the cell's full width. With inline-flex the container sized to content
+// first and then `max-width: 100%` clamped it visually, but chips inside
+// were laid out against the unclamped width and overflowed the column.
 .cortext-chips {
-	display: inline-flex;
+	display: flex;
 	flex-wrap: wrap;
 	gap: $grid-unit-05;
+	width: 100%;
+	min-width: 0;
 	max-width: 100%;
+	overflow: hidden;
 }
 
 // Checkbox cells skip the shell/overlay dance because the input is
@@ -528,12 +574,14 @@ body.cortext-fullscreen {
 // height as editable cells for visual consistency.
 .cortext-cell-checkbox {
 	min-height: $grid-unit-50;
-	padding: $grid-unit-05;
+	padding-block: $grid-unit-05;
+	padding-inline: 0;
 	border-radius: 2px;
 	width: 100%;
 	box-sizing: border-box;
 	display: flex;
 	align-items: center;
+	justify-content: center;
 }
 
 .cortext-multiselect-edit {
@@ -553,6 +601,7 @@ body.cortext-fullscreen {
 }
 
 .cortext-data-view {
+	position: relative; // anchor for the column drop indicator
 	display: flex;
 	flex-direction: column;
 	height: 100%;
@@ -577,9 +626,25 @@ body.cortext-fullscreen {
 	// matches the 40px editor floor and gets closer to a Notion-style
 	// density. See tech-debt.md#5.
 	.dataviews-view-table {
+		table-layout: fixed;
 
 		tr td {
+			overflow: hidden;
 			padding-block: 0;
+		}
+
+		// DataViews wraps each cell's render in a flex container that
+		// shrinks to the content's intrinsic width, so the hover/focus
+		// background on the editable shell only painted under the text
+		// instead of the whole cell. Force the wrapper to fill the td so
+		// every cell hovers edge-to-edge regardless of content length. The
+		// min/max reset also overrides DataViews's upstream 15ch floor, which
+		// otherwise lets narrow resized columns paint into their neighbors.
+		tbody .dataviews-view-table__cell-content-wrapper {
+			box-sizing: border-box;
+			width: 100%;
+			min-width: 0;
+			max-width: 100%;
 		}
 
 		.cortext-editable-cell__shell,
@@ -616,4 +681,126 @@ body.cortext-fullscreen {
 			color: $gray-900;
 		}
 	}
+}
+
+// tech-debt.md#15: The resizer and dnd-kit drag handle are portaled into each
+// `<th>` rendered by `@wordpress/dataviews`, so the th needs a position anchor.
+.cortext-data-view .dataviews-view-table thead > tr > th {
+	position: relative;
+	cursor: grab;
+
+	// The library renders the column label as a button that fills the th
+	// and brings its own `cursor: pointer`. Override so the entire header
+	// reads as draggable. The resizer's `cursor: col-resize` (below) wins
+	// at the right edge because the resizer overlays the th.
+	.dataviews-view-table-header-button {
+		cursor: inherit;
+		max-width: 100%;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+
+		> * {
+			min-width: 0;
+		}
+
+		.cortext-column-header-label {
+			display: block;
+			min-width: 0;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+	}
+}
+
+.cortext-column-drag-handle {
+	position: absolute;
+	inset: 0 8px 0 0;
+	padding: 0;
+	border: 0;
+	cursor: inherit;
+	background: transparent;
+	z-index: 1;
+}
+
+.cortext-column-resizer {
+	position: absolute;
+	top: 0;
+	right: 0;
+	width: 8px;
+	height: 100%;
+	cursor: col-resize;
+	z-index: 2;
+	touch-action: none;
+
+	// 3px line on hover and during resize. Sits flush against the right
+	// edge of the th so adjacent columns don't paint over it.
+	&::after {
+		content: "";
+		position: absolute;
+		top: 0;
+		right: 0;
+		width: 3px;
+		height: 100%;
+		background: var(--wp-admin-theme-color);
+		opacity: 0;
+		transition: opacity 100ms ease;
+	}
+
+	&:hover::after,
+	.cortext-column-resizing > &::after {
+		opacity: 1;
+	}
+}
+
+body.cortext-column-resizing {
+	cursor: col-resize;
+	user-select: none;
+}
+
+.cortext-column-drop-indicator {
+	position: absolute;
+	width: 2px;
+	background: var(--wp-admin-theme-color);
+	pointer-events: none;
+	z-index: 3;
+	transform: translateX(-1px);
+}
+
+.cortext-column-drag-preview {
+	padding: $grid-unit-05 $grid-unit-15;
+	background: $white;
+	border: $border-width solid $gray-200;
+	border-radius: 2px;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+	font-size: 13px;
+	max-width: 240px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.cortext-column-reorder-preview {
+	transition: transform 120ms ease;
+}
+
+.cortext-column-drag-source {
+	opacity: 0.45;
+}
+
+body.cortext-column-dragging {
+	cursor: grabbing;
+	user-select: none;
+}
+
+// While a drag is active, the header reads as `grabbing` (overriding the
+// per-th `grab` set above). The header-button inherits its cursor from
+// the th (rule above), so this single override carries through.
+body.cortext-column-dragging
+.cortext-data-view
+.dataviews-view-table
+thead > tr > th {
+	cursor: grabbing;
 }

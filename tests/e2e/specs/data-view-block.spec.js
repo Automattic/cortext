@@ -789,19 +789,16 @@ test.describe( 'Collection view block', () => {
 				data: {
 					title: 'Typed cell rendering page',
 					status: 'private',
-					content: createDataViewBlockMarkup(
-						fixture.collection.id,
-						{
-							fields: [
-								'title',
-								`field-${ urlField.id }`,
-								`field-${ checkField.id }`,
-								`field-${ numberField.id }`,
-								`field-${ selectField.id }`,
-								`field-${ tagsField.id }`,
-							],
-						}
-					),
+					content: createDataViewBlockMarkup( fixture.collection.id, {
+						fields: [
+							'title',
+							`field-${ urlField.id }`,
+							`field-${ checkField.id }`,
+							`field-${ numberField.id }`,
+							`field-${ selectField.id }`,
+							`field-${ tagsField.id }`,
+						],
+					} ),
 				},
 			} );
 
@@ -847,6 +844,21 @@ test.describe( 'Collection view block', () => {
 			await expect( statusChip ).not.toHaveClass(
 				/cortext-chip--neutral/
 			);
+			const statusChipGeometry = await statusChip.evaluate( ( chip ) => {
+				const shell = chip.closest(
+					'.cortext-editable-cell__shell'
+				);
+				const chipRect = chip.getBoundingClientRect();
+				const shellRect = shell.getBoundingClientRect();
+
+				return {
+					chipWidth: chipRect.width,
+					shellWidth: shellRect.width,
+				};
+			} );
+			expect( statusChipGeometry.chipWidth ).toBeLessThan(
+				statusChipGeometry.shellWidth - 8
+			);
 
 			// Multiselect: one chip per value with their respective colors.
 			const tagAlpha = canvas.getByText( 'Alpha', { exact: true } );
@@ -883,7 +895,6 @@ test.describe( 'Collection view block', () => {
 			);
 		}
 	} );
-
 	test( 'renders system field columns as read-only when visible', async ( {
 		admin,
 		page,
@@ -1012,6 +1023,850 @@ test.describe( 'Collection view block', () => {
 				fixture.field &&
 					`/wp/v2/crtxt_fields/${ fixture.field.id }`
 			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+			);
+		}
+	} );
+
+	test( 'resizes a column via drag and persists the width across reload', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+
+		try {
+			Object.assign(
+				fixture,
+				await createCollectionFixture( requestUtils )
+			);
+
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_pages',
+				data: {
+					title: 'Column resize persistence page',
+					status: 'private',
+					content: createDataViewBlockMarkup( fixture.collection.id, {
+						fields: [ 'title', `field-${ fixture.field.id }` ],
+					} ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/page/${ fixture.page.id }`
+			);
+
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.page.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+			await expect( canvas.getByText( 'Author' ) ).toBeVisible();
+
+			// Author is the second column (title is index 0, Author is
+			// index 1); its resizer is at .nth(1) in DOM order. Native
+			// pointer events drive the drag, and pointer capture keeps it
+			// tracking even if the pointer leaves the editor canvas iframe.
+			const resizer = canvas
+				.locator( '.cortext-column-resizer' )
+				.nth( 1 );
+			const header = canvas
+				.locator( '.dataviews-view-table thead > tr > th' )
+				.nth( 1 );
+			await expect( resizer ).toBeAttached();
+			const startBox = await resizer.boundingBox();
+			const startWidth = await header.evaluate(
+				( el ) => el.getBoundingClientRect().width
+			);
+
+			const dragDelta = 80;
+			await page.mouse.move(
+				startBox.x + startBox.width / 2,
+				startBox.y + startBox.height / 2
+			);
+			await page.mouse.down();
+			await page.mouse.move(
+				startBox.x + startBox.width / 2 + 10,
+				startBox.y + startBox.height / 2,
+				{ steps: 4 }
+			);
+			const firstMoveWidth = await header.evaluate(
+				( el ) => el.getBoundingClientRect().width
+			);
+			expect( firstMoveWidth - startWidth ).toBeGreaterThan( 0 );
+			expect( firstMoveWidth - startWidth ).toBeLessThanOrEqual( 12 );
+			await page.mouse.move(
+				startBox.x + startBox.width / 2 + dragDelta,
+				startBox.y + startBox.height / 2,
+				{ steps: 8 }
+			);
+			await page.mouse.up();
+
+			await page.evaluate( async () => {
+				await window.wp.data.dispatch( 'core/editor' ).savePost();
+			} );
+			await page.waitForFunction(
+				() => ! window.wp.data.select( 'core/editor' ).isSavingPost()
+			);
+
+			const saved = await requestUtils.rest( {
+				path: `/wp/v2/crtxt_pages/${ fixture.page.id }`,
+				params: { context: 'edit' },
+			} );
+
+			const fieldKey = `field-${ fixture.field.id }`;
+			expect( saved.content.raw ).toContain( '"styles"' );
+			const widthMatch = saved.content.raw.match(
+				new RegExp( `"${ fieldKey }":\\{[^}]*"width":(\\d+)` )
+			);
+			expect( widthMatch ).not.toBeNull();
+			const persistedWidth = Number( widthMatch[ 1 ] );
+			expect( persistedWidth ).toBeGreaterThan( 0 );
+			expect( persistedWidth ).toBeLessThanOrEqual( 640 );
+
+			await page.reload();
+			await expect( canvas.getByText( 'Author' ) ).toBeVisible();
+
+			const renderedWidth = await canvas
+				.locator( '.dataviews-view-table thead > tr > th' )
+				.nth( 1 )
+				.evaluate( ( el ) => el.style.width );
+			expect( renderedWidth ).toBe( `${ persistedWidth }px` );
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				fixture.entry &&
+					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+			);
+		}
+	} );
+
+	test( 'auto-sizes a column to content on resizer double click', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+
+		try {
+			Object.assign(
+				fixture,
+				await createCollectionFixture( requestUtils )
+			);
+
+			const fieldKey = `field-${ fixture.field.id }`;
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_pages',
+				data: {
+					title: 'Column auto-size page',
+					status: 'private',
+					content: createDataViewBlockMarkup( fixture.collection.id, {
+						fields: [ 'title', fieldKey ],
+						layout: {
+							density: 'compact',
+							styles: {
+								[ fieldKey ]: {
+									width: 80,
+									minWidth: 80,
+									maxWidth: 80,
+								},
+							},
+						},
+					} ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/page/${ fixture.page.id }`
+			);
+
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.page.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+			await expect( canvas.getByText( 'Author' ) ).toBeVisible();
+
+			const header = canvas
+				.locator( '.dataviews-view-table thead > tr > th' )
+				.nth( 1 );
+			await expect( header ).toHaveAttribute( 'style', /width: 80px/ );
+
+			const resizer = canvas
+				.locator( '.cortext-column-resizer' )
+				.nth( 1 );
+			const box = await resizer.boundingBox();
+			await page.mouse.dblclick(
+				box.x + box.width / 2,
+				box.y + box.height / 2
+			);
+
+			await expect
+				.poll( async () =>
+					header.evaluate(
+						( el ) => Number.parseFloat( el.style.width ) || 0
+					)
+				)
+				.toBeGreaterThan( 80 );
+
+			const authorCell = canvas
+				.locator( '.dataviews-view-table tbody > tr' )
+				.first()
+				.locator( 'td' )
+				.nth( 1 );
+			const overflow = await authorCell.evaluate( ( cell ) => {
+				const wrapper = cell.querySelector(
+					'.dataviews-view-table__cell-content-wrapper'
+				);
+				return wrapper.scrollWidth - wrapper.clientWidth;
+			} );
+			expect( overflow ).toBeLessThanOrEqual( 1 );
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				fixture.entry &&
+					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+			);
+		}
+	} );
+
+	test( 'ellipsis truncates narrow column headers without clipping focus rings', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = { fieldIds: [] };
+
+		try {
+			const suffix = Date.now().toString( 36 ).slice( -4 );
+			const slug = `e2eheader${ suffix }`;
+			fixture.slug = slug;
+
+			fixture.collection = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_collections',
+				data: {
+					title: `Header ellipsis ${ suffix }`,
+					status: 'private',
+					meta: { slug },
+				},
+			} );
+
+			const field = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_fields',
+				data: {
+					title: 'Done?',
+					status: 'private',
+					meta: { type: 'checkbox' },
+				},
+			} );
+			fixture.fieldIds.push( field.id );
+
+			await requestUtils.rest( {
+				method: 'POST',
+				path: `/wp/v2/crtxt_collections/${ fixture.collection.id }`,
+				data: { meta: { fields: [ String( field.id ) ] } },
+			} );
+
+			fixture.entry = await requestUtils.rest( {
+				method: 'POST',
+				path: `/wp/v2/crtxt_${ slug }`,
+				data: {
+					title: 'Header row',
+					status: 'private',
+					meta: { [ `field-${ field.id }` ]: true },
+				},
+			} );
+
+			const fieldKey = `field-${ field.id }`;
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_pages',
+				data: {
+					title: 'Header ellipsis page',
+					status: 'private',
+					content: createDataViewBlockMarkup( fixture.collection.id, {
+						fields: [ 'title', fieldKey ],
+						layout: {
+							density: 'compact',
+							styles: {
+								[ fieldKey ]: {
+									width: 32,
+									minWidth: 32,
+									maxWidth: 32,
+								},
+							},
+						},
+					} ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/page/${ fixture.page.id }`
+			);
+
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.page.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+			const button = canvas
+				.locator( '.dataviews-view-table-header-button' )
+				.nth( 1 );
+			await button.focus();
+			await expect( button ).toBeFocused();
+
+			const headerState = await button.evaluate( ( el ) => {
+				const span = el.querySelector( '.cortext-column-header-label' );
+				const buttonRect = el.getBoundingClientRect();
+				const spanRect = span.getBoundingClientRect();
+				const styles = window.getComputedStyle( span );
+				return {
+					buttonLeft: buttonRect.left,
+					buttonRight: buttonRect.right,
+					spanLeft: spanRect.left,
+					spanRight: spanRect.right,
+					spanOverflow: styles.overflow,
+					spanTextOverflow: styles.textOverflow,
+					spanWhiteSpace: styles.whiteSpace,
+				};
+			} );
+
+			const epsilon = 0.5;
+			expect( headerState.spanOverflow ).toBe( 'hidden' );
+			expect( headerState.spanTextOverflow ).toBe( 'ellipsis' );
+			expect( headerState.spanWhiteSpace ).toBe( 'nowrap' );
+			expect( headerState.spanLeft ).toBeGreaterThanOrEqual(
+				headerState.buttonLeft - epsilon
+			);
+			expect( headerState.spanRight ).toBeLessThanOrEqual(
+				headerState.buttonRight + epsilon
+			);
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				fixture.entry &&
+					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+			);
+			for ( const fieldId of fixture.fieldIds ) {
+				await deleteIfCreated(
+					requestUtils,
+					`/wp/v2/crtxt_fields/${ fieldId }`
+				);
+			}
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+			);
+		}
+	} );
+
+	test( 'keeps wrapped multiselect chips inside a narrow resized column', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = { fieldIds: [] };
+
+		const assertContained = async ( canvas ) => {
+			const table = canvas.locator( '.dataviews-view-table' );
+			const tagsHeader = table.locator( 'thead > tr > th' ).nth( 1 );
+			const tagsCell = table
+				.locator( 'tbody > tr' )
+				.first()
+				.locator( 'td' )
+				.nth( 1 );
+			const dueCell = table
+				.locator( 'tbody > tr' )
+				.first()
+				.locator( 'td' )
+				.nth( 2 );
+
+			await expect( tagsCell.locator( '.cortext-chip' ) ).toHaveCount(
+				2
+			);
+
+			const tagsHeaderWidth = await tagsHeader.evaluate(
+				( cell ) => cell.getBoundingClientRect().width
+			);
+			const geometry = await tagsCell.evaluate( ( cell ) => {
+				const cellRect = cell.getBoundingClientRect();
+				const chips = Array.from(
+					cell.querySelectorAll( '.cortext-chip' )
+				).map( ( chip ) => {
+					const rect = chip.getBoundingClientRect();
+					return {
+						left: rect.left,
+						right: rect.right,
+						top: rect.top,
+						bottom: rect.bottom,
+					};
+				} );
+				const dueRect = cell.nextElementSibling.getBoundingClientRect();
+
+				return {
+					cell: {
+						left: cellRect.left,
+						right: cellRect.right,
+					},
+					due: {
+						left: dueRect.left,
+						right: dueRect.right,
+					},
+					chips,
+				};
+			} );
+			const dueGeometry = await dueCell.evaluate( ( cell ) => {
+				const cellRect = cell.getBoundingClientRect();
+				const wrapper = cell.querySelector(
+					'.dataviews-view-table__cell-content-wrapper'
+				);
+				const wrapperRect = wrapper.getBoundingClientRect();
+				return {
+					cell: {
+						left: cellRect.left,
+						right: cellRect.right,
+					},
+					wrapper: {
+						left: wrapperRect.left,
+						right: wrapperRect.right,
+					},
+				};
+			} );
+
+			const epsilon = 0.5;
+			// Compact DataViews cells add 8px inline padding to the seeded
+			// 80px table width, so the rendered border box is 88px.
+			expect( tagsHeaderWidth ).toBeLessThanOrEqual( 88 + epsilon );
+			for ( const chip of geometry.chips ) {
+				expect( chip.left ).toBeGreaterThanOrEqual(
+					geometry.cell.left - epsilon
+				);
+				expect( chip.right ).toBeLessThanOrEqual(
+					geometry.cell.right + epsilon
+				);
+				expect( chip.right ).toBeLessThanOrEqual(
+					geometry.due.left + epsilon
+				);
+			}
+			expect( dueGeometry.wrapper.left ).toBeGreaterThanOrEqual(
+				dueGeometry.cell.left - epsilon
+			);
+			expect( dueGeometry.wrapper.right ).toBeLessThanOrEqual(
+				dueGeometry.cell.right + epsilon
+			);
+		};
+
+		try {
+			const suffix = Date.now().toString( 36 ).slice( -4 );
+			const slug = `e2eoverlap${ suffix }`;
+			fixture.slug = slug;
+
+			fixture.collection = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_collections',
+				data: {
+					title: `Resize overlap ${ suffix }`,
+					status: 'private',
+					meta: { slug },
+				},
+			} );
+
+			const createField = async ( title, type, options ) => {
+				const meta = { type };
+				if ( options ) {
+					meta.options = JSON.stringify( options );
+				}
+				const field = await requestUtils.rest( {
+					method: 'POST',
+					path: '/wp/v2/crtxt_fields',
+					data: { title, status: 'private', meta },
+				} );
+				fixture.fieldIds.push( field.id );
+				return field;
+			};
+
+			const tagsField = await createField( 'Tags', 'multiselect', [
+				{ value: 'feature', label: 'feature', color: '#ddebf1' },
+				{ value: 'docs', label: 'docs', color: '#e8def8' },
+			] );
+			const dueField = await createField( 'Due', 'date' );
+
+			await requestUtils.rest( {
+				method: 'POST',
+				path: `/wp/v2/crtxt_collections/${ fixture.collection.id }`,
+				data: {
+					meta: { fields: fixture.fieldIds.map( String ) },
+				},
+			} );
+
+			fixture.entry = await requestUtils.rest( {
+				method: 'POST',
+				path: `/wp/v2/crtxt_${ slug }`,
+				data: {
+					title: 'Resize overlap row',
+					status: 'private',
+					meta: {
+						[ `field-${ tagsField.id }` ]: [ 'feature', 'docs' ],
+						[ `field-${ dueField.id }` ]: '2026-05-15',
+					},
+				},
+			} );
+
+			const tagsKey = `field-${ tagsField.id }`;
+			const dueKey = `field-${ dueField.id }`;
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_pages',
+				data: {
+					title: 'Column resize overlap page',
+					status: 'private',
+					content: createDataViewBlockMarkup( fixture.collection.id, {
+						fields: [ 'title', tagsKey, dueKey ],
+						layout: {
+							density: 'compact',
+							styles: {
+								[ tagsKey ]: {
+									width: 80,
+									minWidth: 80,
+									maxWidth: 80,
+								},
+								[ dueKey ]: {
+									width: 96,
+									minWidth: 96,
+									maxWidth: 96,
+								},
+							},
+						},
+					} ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/page/${ fixture.page.id }`
+			);
+
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.page.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+			await expect(
+				canvas.getByText( 'Resize overlap row' )
+			).toBeVisible();
+			await assertContained( canvas );
+
+			await page.evaluate( async () => {
+				await window.wp.data.dispatch( 'core/editor' ).savePost();
+			} );
+			await page.waitForFunction(
+				() => ! window.wp.data.select( 'core/editor' ).isSavingPost()
+			);
+
+			await page.reload();
+			await expect(
+				canvas.getByText( 'Resize overlap row' )
+			).toBeVisible();
+			await assertContained( canvas );
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				fixture.entry &&
+					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+			);
+			for ( const fieldId of fixture.fieldIds ) {
+				await deleteIfCreated(
+					requestUtils,
+					`/wp/v2/crtxt_fields/${ fieldId }`
+				);
+			}
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+			);
+		}
+	} );
+
+	test( 'reorders columns via drag and persists the order across reload', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = { fieldIds: [] };
+
+		try {
+			const suffix = Date.now().toString( 36 ).slice( -4 );
+			const slug = `e2eorder${ suffix }`;
+			fixture.slug = slug;
+
+			fixture.collection = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_collections',
+				data: {
+					title: `Reorder ${ suffix }`,
+					status: 'private',
+					meta: { slug },
+				},
+			} );
+
+			const createField = async ( title ) => {
+				const f = await requestUtils.rest( {
+					method: 'POST',
+					path: '/wp/v2/crtxt_fields',
+					data: { title, status: 'private', meta: { type: 'text' } },
+				} );
+				fixture.fieldIds.push( f.id );
+				return f;
+			};
+
+			const fieldA = await createField( 'Author' );
+			const fieldB = await createField( 'Notes' );
+
+			await requestUtils.rest( {
+				method: 'POST',
+				path: `/wp/v2/crtxt_collections/${ fixture.collection.id }`,
+				data: {
+					meta: { fields: fixture.fieldIds.map( String ) },
+				},
+			} );
+
+			fixture.entry = await requestUtils.rest( {
+				method: 'POST',
+				path: `/wp/v2/crtxt_${ slug }`,
+				data: {
+					title: 'Sample',
+					status: 'private',
+					meta: {
+						[ `field-${ fieldA.id }` ]: 'Author A',
+						[ `field-${ fieldB.id }` ]: 'Notes B',
+					},
+				},
+			} );
+
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_pages',
+				data: {
+					title: 'Column reorder persistence page',
+					status: 'private',
+					content: createDataViewBlockMarkup( fixture.collection.id, {
+						fields: [
+							'title',
+							`field-${ fieldA.id }`,
+							`field-${ fieldB.id }`,
+						],
+					} ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/page/${ fixture.page.id }`
+			);
+
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.page.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+			const headerButton = ( name ) =>
+				canvas
+					.locator( '.dataviews-view-table-header-button' )
+					.filter( { hasText: name } );
+			await expect( headerButton( 'Author' ) ).toBeVisible();
+			await expect( headerButton( 'Notes' ) ).toBeVisible();
+
+			// The entire header is the drag area. Pick a point on the
+			// Author header that's well clear of the right-edge resizer
+			// (~6px), then drag past the midpoint of the Notes header so
+			// Author lands after Notes. Author is index 1 (title is 0).
+			const authorTh = canvas
+				.locator( '.dataviews-view-table thead > tr > th' )
+				.nth( 1 );
+			const authorBox = await authorTh.boundingBox();
+			const notesTh = canvas
+				.locator( '.dataviews-view-table thead > tr > th' )
+				.nth( 2 );
+			const notesBox = await notesTh.boundingBox();
+			const notesCell = canvas
+				.locator( '.dataviews-view-table tbody > tr' )
+				.first()
+				.locator( 'td' )
+				.nth( 2 );
+			const notesCellBox = await notesCell.boundingBox();
+
+			const startX = authorBox.x + 20;
+			const startY = authorBox.y + authorBox.height / 2;
+			await page.mouse.move( startX, startY );
+			await page.mouse.down();
+			await page.mouse.move( startX + 10, startY, { steps: 4 } );
+			await expect(
+				canvas.locator( '.cortext-column-drag-preview' )
+			).toContainText( 'Author' );
+			await page.mouse.move(
+				notesBox.x + notesBox.width * 0.75,
+				notesBox.y + notesBox.height / 2,
+				{ steps: 10 }
+			);
+			await expect
+				.poll( async () => {
+					const box = await notesTh.boundingBox();
+					return box.x;
+				} )
+				.toBeLessThan( notesBox.x - 20 );
+			const notesTransform = await notesTh.evaluate(
+				( el ) => el.style.transform
+			);
+			expect( notesTransform ).toContain( 'translateX' );
+			await page.mouse.move(
+				notesBox.x + notesBox.width * 0.7,
+				notesBox.y + notesBox.height / 2,
+				{ steps: 4 }
+			);
+			await expect(
+				notesTh.evaluate( ( el ) => el.style.transform )
+			).resolves.toBe( notesTransform );
+			await page.mouse.move(
+				notesBox.x + notesBox.width * 0.8,
+				notesBox.y + notesBox.height / 2,
+				{ steps: 4 }
+			);
+			await expect(
+				notesTh.evaluate( ( el ) => el.style.transform )
+			).resolves.toBe( notesTransform );
+			const notesCellDragBox = await notesCell.boundingBox();
+			expect( Math.abs( notesCellDragBox.x - notesCellBox.x ) ).toBeLessThan(
+				1
+			);
+			await page.mouse.up();
+
+			await page.evaluate( async () => {
+				await window.wp.data.dispatch( 'core/editor' ).savePost();
+			} );
+			await page.waitForFunction(
+				() => ! window.wp.data.select( 'core/editor' ).isSavingPost()
+			);
+
+			const saved = await requestUtils.rest( {
+				path: `/wp/v2/crtxt_pages/${ fixture.page.id }`,
+				params: { context: 'edit' },
+			} );
+
+			const orderMatch = saved.content.raw.match(
+				/"fields":\[([^\]]+)\]/
+			);
+			expect( orderMatch ).not.toBeNull();
+			const fieldOrder = orderMatch[ 1 ]
+				.split( ',' )
+				.map( ( s ) => s.trim().replace( /"/g, '' ) );
+			expect( fieldOrder.indexOf( `field-${ fieldB.id }` ) ).toBeLessThan(
+				fieldOrder.indexOf( `field-${ fieldA.id }` )
+			);
+
+			await page.reload();
+			await expect( headerButton( 'Notes' ) ).toBeVisible();
+
+			const headerLabels = await canvas
+				.locator(
+					'.dataviews-view-table thead > tr > th .dataviews-view-table-header-button'
+				)
+				.allTextContents();
+			const notesIndex = headerLabels.findIndex( ( t ) =>
+				t.includes( 'Notes' )
+			);
+			const authorIndex = headerLabels.findIndex( ( t ) =>
+				t.includes( 'Author' )
+			);
+			expect( notesIndex ).toBeGreaterThan( -1 );
+			expect( authorIndex ).toBeGreaterThan( -1 );
+			expect( notesIndex ).toBeLessThan( authorIndex );
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				fixture.entry &&
+					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+			);
+			for ( const fieldId of fixture.fieldIds ) {
+				await deleteIfCreated(
+					requestUtils,
+					`/wp/v2/crtxt_fields/${ fieldId }`
+				);
+			}
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&

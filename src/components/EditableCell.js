@@ -189,6 +189,12 @@ export function formatDisplay( value, type, elements ) {
 }
 
 function CellShell( { children, onActivate, ariaLabel, isEmpty, disabled } ) {
+	// Plain-text content gets the ellipsis wrapper so narrow columns
+	// truncate cleanly. JSX content (chips, links, icons) carries its own
+	// truncation/wrap rules and renders directly — putting `white-space:
+	// nowrap` above `flex-wrap: wrap` chips made multiselect cells overflow
+	// into adjacent columns.
+	const isText = typeof children === 'string';
 	return (
 		<div
 			role={ disabled ? undefined : 'button' }
@@ -211,7 +217,13 @@ function CellShell( { children, onActivate, ariaLabel, isEmpty, disabled } ) {
 			aria-label={ ariaLabel }
 			aria-hidden={ disabled }
 		>
-			{ children }
+			{ isText ? (
+				<span className="cortext-editable-cell__display">
+					{ children }
+				</span>
+			) : (
+				children
+			) }
 		</div>
 	);
 }
