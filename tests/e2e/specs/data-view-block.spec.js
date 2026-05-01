@@ -845,9 +845,7 @@ test.describe( 'Collection view block', () => {
 				/cortext-chip--neutral/
 			);
 			const statusChipGeometry = await statusChip.evaluate( ( chip ) => {
-				const shell = chip.closest(
-					'.cortext-editable-cell__shell'
-				);
+				const shell = chip.closest( '.cortext-editable-cell__shell' );
 				const chipRect = chip.getBoundingClientRect();
 				const shellRect = shell.getBoundingClientRect();
 
@@ -953,18 +951,15 @@ test.describe( 'Collection view block', () => {
 				data: {
 					title: 'System field page',
 					status: 'private',
-					content: createDataViewBlockMarkup(
-						fixture.collection.id,
-						{
-							fields: [
-								'title',
-								'created_at',
-								'created_by',
-								'modified_at',
-								'modified_by',
-							],
-						}
-					),
+					content: createDataViewBlockMarkup( fixture.collection.id, {
+						fields: [
+							'title',
+							'created_at',
+							'created_by',
+							'modified_at',
+							'modified_by',
+						],
+					} ),
 				},
 			} );
 
@@ -1020,8 +1015,7 @@ test.describe( 'Collection view block', () => {
 			);
 			await deleteIfCreated(
 				requestUtils,
-				fixture.field &&
-					`/wp/v2/crtxt_fields/${ fixture.field.id }`
+				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
@@ -1806,9 +1800,9 @@ test.describe( 'Collection view block', () => {
 				notesTh.evaluate( ( el ) => el.style.transform )
 			).resolves.toBe( notesTransform );
 			const notesCellDragBox = await notesCell.boundingBox();
-			expect( Math.abs( notesCellDragBox.x - notesCellBox.x ) ).toBeLessThan(
-				1
-			);
+			expect(
+				Math.abs( notesCellDragBox.x - notesCellBox.x )
+			).toBeLessThan( 1 );
 			await page.mouse.up();
 
 			await page.evaluate( async () => {
@@ -1867,6 +1861,156 @@ test.describe( 'Collection view block', () => {
 					`/wp/v2/crtxt_fields/${ fieldId }`
 				);
 			}
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+			);
+		}
+	} );
+	test( 'creates, renames, duplicates, and deletes fields without leaving the block', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+
+		try {
+			Object.assign(
+				fixture,
+				await createCollectionFixture( requestUtils )
+			);
+
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_pages',
+				data: {
+					title: 'Field management page',
+					status: 'private',
+					content: createDataViewBlockMarkup( fixture.collection.id ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/page/${ fixture.page.id }`
+			);
+
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.page.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+			await expect( canvas.getByText( 'Author' ) ).toBeVisible();
+
+			// 1. Toolbar Add field: create a "Notes" text field.
+			await page
+				.getByRole( 'button', { name: 'Add field', exact: true } )
+				.first()
+				.click();
+			const popover = page.locator(
+				'.cortext-data-view-toolbar-popover'
+			);
+			await popover.getByLabel( 'Name' ).fill( 'Notes' );
+			await popover.getByRole( 'button', { name: 'Create' } ).click();
+
+			const notesHeader = canvas.getByRole( 'columnheader', {
+				name: /Notes/,
+			} );
+			await expect( notesHeader ).toBeVisible();
+
+			// 2. Rename "Notes" → "Description" via the column header
+			//    dropdown (combined Sort/Move/Hide + Rename/Duplicate/
+			//    Delete menu — see docs/tech-debt.md#15).
+			await notesHeader.getByRole( 'button', { name: 'Notes' } ).click();
+			await page.getByRole( 'menuitem', { name: 'Rename' } ).click();
+
+			const renameInput = canvas.getByLabel( 'Field name' );
+			await renameInput.fill( 'Description' );
+			await renameInput.press( 'Enter' );
+
+			await expect(
+				canvas.getByRole( 'columnheader', { name: /Description/ } )
+			).toBeVisible();
+			await expect(
+				canvas.getByRole( 'columnheader', { name: /^Notes$/ } )
+			).toHaveCount( 0 );
+
+			// 3. Duplicate "Description" → "Copy of Description".
+			await canvas.getByRole( 'button', { name: 'Description' } ).click();
+			await page.getByRole( 'menuitem', { name: 'Duplicate' } ).click();
+
+			await expect(
+				canvas.getByRole( 'columnheader', {
+					name: /Copy of Description/,
+				} )
+			).toBeVisible();
+
+			// 4. Delete "Copy of Description" via the header dropdown +
+			//    confirm dialog.
+			await canvas
+				.getByRole( 'button', { name: 'Copy of Description' } )
+				.click();
+			await page.getByRole( 'menuitem', { name: 'Delete' } ).click();
+			await page
+				.getByRole( 'button', { name: 'Delete', exact: true } )
+				.click();
+
+			await expect(
+				canvas.getByRole( 'columnheader', {
+					name: /Copy of Description/,
+				} )
+			).toHaveCount( 0 );
+
+			// 5. Ghost column `+` opens the same popover and creates a field.
+			const ghostAdd = canvas
+				.locator( 'th' )
+				.last()
+				.getByRole( 'button', { name: 'Add field' } );
+			await ghostAdd.click();
+			const ghostPopover = page.locator(
+				'.cortext-data-view-toolbar-popover'
+			);
+			await ghostPopover.getByLabel( 'Name' ).fill( 'Tags' );
+			await ghostPopover
+				.getByRole( 'button', { name: 'Create' } )
+				.click();
+
+			await expect(
+				canvas.getByRole( 'columnheader', { name: /Tags/ } )
+			).toBeVisible();
+
+			// 6. Title's column header exposes only DataViews' built-in
+			//    dropdown (sort/hide). It does not surface schema actions
+			//    like Rename — clicking opens DataViews' menu, which has
+			//    no "Rename" item.
+			await canvas.getByRole( 'button', { name: 'Title' } ).click();
+			await expect(
+				page.getByRole( 'menuitem', { name: 'Rename' } )
+			).toHaveCount( 0 );
+		} finally {
+			// Best-effort cleanup. The created/duplicated fields aren't
+			// tracked individually, but they cascade with their
+			// collection's force-delete (and the server cleanup hook
+			// removes their entry meta).
+			await deleteIfCreated(
+				requestUtils,
+				fixture.entry &&
+					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
+			);
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
