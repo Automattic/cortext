@@ -3,7 +3,6 @@ import { __ } from '@wordpress/i18n';
 import {
 	Button,
 	Dropdown,
-	DropdownMenu,
 	MenuGroup,
 	MenuItem,
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
@@ -175,13 +174,19 @@ function FieldActions( { recordId, collectionId } ) {
 			onClick={ stopBubble }
 			onPointerDown={ stopBubble }
 		>
-			<DropdownMenu
-				icon={ moreVertical }
-				label={ __( 'Field actions', 'cortext' ) }
-				className="cortext-column-header-actions__trigger"
-				toggleProps={ { size: 'small' } }
-			>
-				{ ( { onClose } ) => (
+			<Dropdown
+				contentClassName="cortext-field-actions-popover"
+				popoverProps={ { placement: 'bottom-end' } }
+				renderToggle={ ( { isOpen, onToggle } ) => (
+					<Button
+						icon={ moreVertical }
+						size="small"
+						label={ __( 'Field actions', 'cortext' ) }
+						onClick={ onToggle }
+						aria-expanded={ isOpen }
+					/>
+				) }
+				renderContent={ ( { onClose } ) => (
 					<MenuGroup>
 						<MenuItem
 							onClick={ () => {
@@ -214,7 +219,7 @@ function FieldActions( { recordId, collectionId } ) {
 						</MenuItem>
 					</MenuGroup>
 				) }
-			</DropdownMenu>
+			/>
 			{ confirmDelete ? (
 				<ConfirmDialog
 					onConfirm={ onConfirmDelete }

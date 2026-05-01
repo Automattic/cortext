@@ -14,7 +14,11 @@ import { plus } from '@wordpress/icons';
 import DataViewColumnInteractions from './DataViewColumnInteractions';
 import EditableCell, { RowMutationContext } from './EditableCell';
 import ColumnHeaderActions from './fields/ColumnHeaderActions';
-import { TITLE_FIELD_ID, normalizeView } from './dataViewColumns';
+import {
+	GHOST_FIELD_ID,
+	TITLE_FIELD_ID,
+	normalizeView,
+} from './dataViewColumns';
 import useCollectionFields from '../hooks/useCollectionFields';
 import useCollectionRows from '../hooks/useCollectionRows';
 
@@ -56,7 +60,6 @@ const TITLE_FIELD = {
 // empty column that visually echoes Notion's "add column" affordance.
 // Pinned visible (and last) by the view-sync effect when
 // `view.type === 'table'`, dropped from `view.fields` for grid/list.
-export const GHOST_FIELD_ID = '__add_field';
 const GHOST_FIELD = {
 	id: GHOST_FIELD_ID,
 	type: 'text',

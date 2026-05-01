@@ -136,53 +136,53 @@ Worth a small spike before committing; `core-data`'s schema cache for rarely-cha
 
 **Solution.** Upstream DataViews could expose table-column APIs that cover `onChangeFields`, `onChangeColumnStyle`, resize handle rendering, per-field min/max widths, double-click autofit, drag overlay/insertion affordances, and stable header/cell slots or refs. If DataViews owned that layer, Cortext could drop the portal/DOM-query adapter, the wrapper min-width overrides, most of the dnd-kit column glue, and the direct DOM mutation used for live resize feedback.
 
-## 16. DataViews has no public per-column menu-item slot `[upstream, soft]`
+## 16. DataViews has no per-column menu-item slot `[upstream, soft]`
 
-**What.** DataViews v6's column header dropdown (Sort / Add filter / Move left / Move right / Hide column) is a closed list — `column-header-menu.js` hardcodes the items and there's no `field.menuItems` (or similar) prop to inject schema actions like Rename / Duplicate / Delete. PR D therefore portals a separate kebab button next to DataViews' built-in column-header trigger and `DataViewColumnInteractions`' resize/reorder handles. Two dropdowns per column is more visual clutter than the Notion-style single combined menu we wanted, but it keeps Cortext out of DataViews' internal dropdown markup.
+**What.** DataViews' column-header dropdown (Sort / Add filter / Move / Hide) is a closed list — there's no `field.menuItems` to inject Rename / Duplicate / Delete. We portal a kebab next to the built-in trigger instead. Two triggers per column is busier than a single combined menu, so the kebab hides until `:hover` / `:focus-within`. It uses WP's `Dropdown` rather than Ariakit's `DropdownMenu` — Ariakit's anchor falls back to viewport `(0, 0)` when the trigger is mounted via `createPortal`.
 
-**Where.** `src/components/fields/ColumnHeaderActions.js`.
+**Where.** `src/components/fields/ColumnHeaderActions.js`, hover-reveal CSS in `src/index.scss`.
 
-**Risk.** If DataViews changes how it positions content inside its header `<th>` (flexbox refactor, slot reordering), the kebab placement may need adjustment. Filter is intentionally omitted today (Cortext doesn't expose column-level filters in the visible header).
+**Risk.** A DataViews refactor of the header `<th>` layout could push the kebab off the right edge. Filter is intentionally absent — Cortext doesn't expose column-level filters in the visible header.
 
-**Solution.** Upstream a public per-column extension surface in DataViews: a `field.menuItems` array (or render-prop) that the built-in column header dropdown appends to its existing items. This would let downstream consumers (Cortext, Pattern Manager, Pages, Site Editor) add domain-specific actions in the existing dropdown rather than next to it. File this as a Gutenberg feature request once the PR D approach is in production.
+**Solution.** A `field.menuItems` (array or render-prop) on DataViews fields, appended to the built-in dropdown. Other consumers (Pattern Manager, Pages, Site Editor) would benefit too. File as a Gutenberg feature request.
 
-## 17. Ghost-column synthetic field is pinned in `view.fields` `[internal]`
+## 17. Ghost `+` column is a synthetic field pinned in `view.fields` `[internal]`
 
-**What.** The `+ add field` ghost column is a synthetic DataViews field (`__add_field`) that has no data and no label. The block always pins it last in `view.fields` for the table layout and excludes it from the user-facing column visibility menu via `enableHiding: false`. If DataViews changes how `enableHiding` is honored, the synthetic could appear as a user-toggleable entry in the visibility menu, which would confuse the column list.
+**What.** The `+ add field` column is a synthetic DataViews field (`__add_field`) — no data, no label, pinned last in `view.fields` for table layout. We rely on `enableHiding: false` to keep it out of the column-visibility menu. If DataViews stops honoring that flag, the synthetic leaks into the menu and confuses the column list.
 
 **Where.** `GHOST_FIELD` and the view-sync effect in `src/components/CollectionDataViews.js`.
 
-**Solution.** If the visibility menu starts surfacing the synthetic, fork the field list in `CollectionDataViews.js` so the visibility menu sees only the data fields while DataViews' table layout still receives the synthetic.
+**Solution.** If `enableHiding` ever stops working, fork the field list in `CollectionDataViews.js` — pass the synthetic to the table layout but hide it from the visibility menu.
 
-## 18. Field schema actions are table-layout only in PR D `[internal]`
+## 18. Field management is table-layout only `[internal]`
 
-**What.** Rename, duplicate, and delete are surfaced via the column header kebab in the table layout. Grid and list layouts have no schema-action affordance and the ghost-column `+` is hidden as well; users in those layouts can still create fields via the toolbar Add field button but can't manage existing fields without switching to table.
+**What.** Rename / Duplicate / Delete only show up in the table-layout column-header kebab. Grid and list layouts have no schema actions and no ghost `+`. Users there can still create fields via the toolbar Add field button, but they have to switch to table to manage existing fields.
 
 **Where.** `ColumnHeaderActions` mounts only when `view.type === 'table'` (`src/components/CollectionDataViews.js`).
 
-**Solution.** A top-level "Manage fields" UI (toolbar modal or a dedicated panel) that lists all custom fields with rename / duplicate / delete actions and works in every layout.
+**Solution.** A toolbar "Manage fields" panel listing every custom field with per-row rename / duplicate / delete, available in every layout.
 
-## 19. Select / multi-select fields are created without inline option editing `[internal]`
+## 19. Select / multi-select fields ship with no options `[internal]`
 
-**What.** The Add field popover follows Notion's click-to-create model: clicking a type creates the field immediately. Select / multi-select fields are created with no pre-defined options, so users have to add option values via wp-admin (or by re-saving the field through the REST API). Notion sidesteps this by auto-discovering options from cell values; Cortext doesn't have that auto-discovery.
+**What.** Add field creates the field immediately when you click a type — there's no second step for type-specific config. For select / multi-select that means the column starts empty; users have to add options via wp-admin or by re-saving through REST.
 
-**Where.** `src/components/fields/AddFieldPopover.js` (no options textarea), `includes/Rest/FieldsController.php` (still accepts an `options` array on `POST /cortext/v1/collections/<id>/fields` — the route is option-aware, only the UI doesn't surface it).
+**Where.** `src/components/fields/AddFieldPopover.js` (no options input). The REST route already accepts an `options` array; the UI just doesn't surface it.
 
-**Solution.** A field-edit dialog accessible from the column header dropdown's Rename/Duplicate/Delete neighborhood, with a small options editor (one-per-line textarea or a Notion-style chip list with colors). Until then, users edit options in wp-admin or via REST.
+**Solution.** A field-edit dialog from the column kebab (next to Rename / Duplicate / Delete) with an options editor — one-per-line textarea, or a chip list with colors. Until then, options live in wp-admin or REST.
 
-## 19. Table layout overrides couple to DataViews internals `[upstream, soft]`
+## 20. Table layout overrides couple to DataViews internals `[upstream, soft]`
 
-**What.** DataViews ships `table-layout: auto; width: 100%` plus per-cell padding rules (`.dataviews-view-table tr td:last-child { padding-right: 48px }`, `.dataviews-view-table__cell-content-wrapper { min-width: 15ch }`). Cortext flips the layout to `table-layout: fixed; width: max-content` with explicit per-cell widths so adding or removing a field doesn't reflow every other column, and matches DataViews' selector specificity to override the last-cell padding so the trailing ghost column stays slim. The result is a content-sized table with horizontal scroll on overflow — closer to Notion's shape — but it depends on DataViews' class names and CSS specificity remaining stable.
+**What.** DataViews ships `table-layout: auto; width: 100%` plus per-cell padding rules. We flip to `table-layout: fixed; width: max-content` with explicit per-cell widths so adding or removing a field doesn't reflow every other column, and match DataViews' selector specificity to override the last-cell padding so the ghost column stays slim. Result: a content-sized table that scrolls horizontally on overflow. Depends on DataViews' class names and selector specificity staying put.
 
 **Where.** `src/index.scss`, around the `.dataviews-view-table` block.
 
-**Solution.** Upstream a `tableLayout` (or similar) prop on DataViews that exposes "auto with redistribution" vs. "fixed with content-sized columns" as a documented choice, plus per-field `width` hints so consumers can pin column widths without touching DataViews CSS.
+**Solution.** A `tableLayout` (or similar) prop on DataViews so consumers can pick between "auto with redistribution" and "fixed with content-sized columns", plus per-field `width` hints so columns can be pinned without overriding DataViews CSS.
 
 ## 21. Field-meta cleanup uses a global delete `[internal]`
 
-**What.** `cleanup_after_field_delete` calls `delete_post_meta_by_key( "field-<id>" )`, which clears that meta key from every post in the database — not just Cortext entry CPTs. The collision risk is theoretical (`<id>` is a globally unique `crtxt_field` post ID, so any postmeta keyed that way belongs to a Cortext entry by construction), but the implementation doesn't enforce the scope. A scoped `DELETE pm FROM wp_postmeta pm INNER JOIN wp_posts p ON p.ID = pm.post_id WHERE pm.meta_key = … AND p.post_type IN (…)` would prove the scope on paper, except the test mock (WorDBless, see #9) can't execute the JOIN, so we'd lose unit coverage of the cleanup path.
+**What.** `cleanup_after_field_delete` calls `delete_post_meta_by_key( "field-<id>" )`, which wipes that key from every post — not just Cortext entry CPTs. The collision risk is theoretical (`<id>` is a globally unique `crtxt_field` post ID, so any postmeta keyed that way belongs to a Cortext entry by construction), but the code doesn't enforce that. A scoped `DELETE pm … INNER JOIN wp_posts p … WHERE p.post_type IN (…)` would prove the scope, but WorDBless (#9) can't run JOINs — we'd lose unit coverage of the cleanup path.
 
 **Where.** `cleanup_after_field_delete` in `includes/PostType/CollectionEntries.php`.
 
-**Solution.** Stand up an integration test environment that runs against a real `wpdb` (e.g., `wp-env` test container with WP_PHPUnit), move the cleanup to a scoped SQL JOIN, and keep the unit suite for the parts that don't need a real database.
+**Solution.** Stand up an integration environment with a real `wpdb` (`wp-env` + WP_PHPUnit), move the cleanup to a scoped JOIN, and keep WorDBless for the parts that don't need a real database.
 

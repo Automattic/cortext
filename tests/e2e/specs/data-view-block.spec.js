@@ -1928,10 +1928,13 @@ test.describe( 'Collection view block', () => {
 			} );
 			await expect( notesHeader ).toBeVisible();
 
-			// 2. Rename "Notes" → "Description" via the column header
-			//    dropdown (combined Sort/Move/Hide + Rename/Duplicate/
-			//    Delete menu — see docs/tech-debt.md#15).
-			await notesHeader.getByRole( 'button', { name: 'Notes' } ).click();
+			// 2. Rename "Notes" → "Description" via the kebab next to
+			//    DataViews' built-in trigger. The kebab is hover-revealed
+			//    (see docs/tech-debt.md#16) so we hover the column first.
+			await notesHeader.hover();
+			await notesHeader
+				.getByRole( 'button', { name: 'Field actions' } )
+				.click();
 			await page.getByRole( 'menuitem', { name: 'Rename' } ).click();
 
 			const renameInput = canvas.getByLabel( 'Field name' );
@@ -1946,7 +1949,13 @@ test.describe( 'Collection view block', () => {
 			).toHaveCount( 0 );
 
 			// 3. Duplicate "Description" → "Copy of Description".
-			await canvas.getByRole( 'button', { name: 'Description' } ).click();
+			const descriptionHeader = canvas.getByRole( 'columnheader', {
+				name: /^Description$/,
+			} );
+			await descriptionHeader.hover();
+			await descriptionHeader
+				.getByRole( 'button', { name: 'Field actions' } )
+				.click();
 			await page.getByRole( 'menuitem', { name: 'Duplicate' } ).click();
 
 			await expect(
@@ -1955,10 +1964,14 @@ test.describe( 'Collection view block', () => {
 				} )
 			).toBeVisible();
 
-			// 4. Delete "Copy of Description" via the header dropdown +
-			//    confirm dialog.
-			await canvas
-				.getByRole( 'button', { name: 'Copy of Description' } )
+			// 4. Delete "Copy of Description" via the kebab + confirm
+			//    dialog.
+			const copyHeader = canvas.getByRole( 'columnheader', {
+				name: /Copy of Description/,
+			} );
+			await copyHeader.hover();
+			await copyHeader
+				.getByRole( 'button', { name: 'Field actions' } )
 				.click();
 			await page.getByRole( 'menuitem', { name: 'Delete' } ).click();
 			await page
@@ -1989,14 +2002,25 @@ test.describe( 'Collection view block', () => {
 				canvas.getByRole( 'columnheader', { name: /Tags/ } )
 			).toBeVisible();
 
-			// 6. Title's column header exposes only DataViews' built-in
-			//    dropdown (sort/hide). It does not surface schema actions
-			//    like Rename — clicking opens DataViews' menu, which has
-			//    no "Rename" item.
-			await canvas.getByRole( 'button', { name: 'Title' } ).click();
+			// 6. Title's <th> has no Cortext kebab — schema actions are
+			//    custom-field only. DataViews' built-in dropdown still
+			//    opens via the column-name button (sort/hide).
+			const titleHeader = canvas.getByRole( 'columnheader', {
+				name: 'Title',
+			} );
 			await expect(
-				page.getByRole( 'menuitem', { name: 'Rename' } )
+				titleHeader.getByRole( 'button', { name: 'Field actions' } )
 			).toHaveCount( 0 );
+
+			// 7. Coexistence: on a custom column, DataViews' built-in
+			//    dropdown still opens for sort/hide alongside our kebab.
+			await canvas
+				.getByRole( 'button', { name: 'Description' } )
+				.click();
+			await expect(
+				page.getByRole( 'menuitem', { name: /Sort ascending/ } )
+			).toBeVisible();
+			await page.keyboard.press( 'Escape' );
 		} finally {
 			// Best-effort cleanup. The created/duplicated fields aren't
 			// tracked individually, but they cascade with their

@@ -18,6 +18,7 @@ import {
 } from '@dnd-kit/core';
 
 import {
+	GHOST_FIELD_ID,
 	MAX_COLUMN_WIDTH,
 	TITLE_FIELD_ID,
 	clampWidth,
@@ -66,6 +67,12 @@ function findHeaderCells( wrapper, view, fieldsById ) {
 		.map( ( fieldId, index ) => {
 			const el = cells[ index ];
 			if ( ! el ) {
+				return null;
+			}
+			// Skip the ghost "+ add field" column: empty content means
+			// no width to resize, and reordering the trailing add-field
+			// affordance would be confusing.
+			if ( fieldId === GHOST_FIELD_ID ) {
 				return null;
 			}
 			return {
