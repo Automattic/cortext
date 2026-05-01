@@ -69,6 +69,20 @@ test.describe( 'Public page rendering', () => {
 		const suffix = Date.now().toString( 36 ).slice( -4 );
 		let createdPage;
 
+		// Suppress the expected "Failed to load resource: 404" browser
+		// error forwarded by the test harness.
+		//
+		// See: @wordpress/e2e-test-utils-playwright: observeConsoleLogging
+		const originalConsoleError = console.error;
+		const expected404 = [];
+		console.error = ( ...args ) => {
+			if ( /404/.test( args.join( ' ' ) ) ) {
+				expected404.push( args );
+				return;
+			}
+			originalConsoleError.call( console, ...args );
+		};
+
 		try {
 			createdPage = await requestUtils.rest( {
 				method: 'POST',
@@ -86,7 +100,9 @@ test.describe( 'Public page rendering', () => {
 			);
 
 			expect( response?.status() ).toBe( 404 );
+			expect( expected404 ).toHaveLength( 1 );
 		} finally {
+			console.error = originalConsoleError;
 			await deleteIfCreated(
 				requestUtils,
 				createdPage && `/wp/v2/crtxt_pages/${ createdPage.id }`
