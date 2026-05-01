@@ -491,6 +491,16 @@ th:has(.cortext-column-header-marker)
 	display: none;
 }
 
+// `DataViewColumnInteractions` portals a transparent drag handle over
+// each <th> with `z-index: 1`, which intercepts pointer events and
+// keeps `.dataviews-view-table-header-button:hover` from ever firing.
+// Hang the hover state off the <th> instead so the cell as a whole
+// reads as a clickable affordance (and the gray shows through any
+// transparent overlay above it).
+.cortext-data-view .dataviews-view-table thead > tr > th:hover {
+	background-color: $gray-100;
+}
+
 .cortext-column-header-actions {
 	display: inline-flex;
 	align-items: center;
@@ -782,6 +792,7 @@ th:has(.cortext-column-header-marker)
 		// every cell hovers edge-to-edge regardless of content length. The
 		// min/max reset also overrides DataViews's upstream 15ch floor, which
 		// otherwise lets narrow resized columns paint into their neighbors.
+		/* stylelint-disable-next-line no-descending-specificity */
 		tbody .dataviews-view-table__cell-content-wrapper {
 			box-sizing: border-box;
 			width: 100%;
@@ -826,14 +837,18 @@ th:has(.cortext-column-header-marker)
 
 // tech-debt.md#15: The resizer and dnd-kit drag handle are portaled into each
 // `<th>` rendered by `@wordpress/dataviews`, so the th needs a position anchor.
+/* stylelint-disable-next-line no-descending-specificity */
 .cortext-data-view .dataviews-view-table thead > tr > th {
 	position: relative;
-	cursor: grab;
+	cursor: pointer;
 
 	// The library renders the column label as a button that fills the th
-	// and brings its own `cursor: pointer`. Override so the entire header
-	// reads as draggable. The resizer's `cursor: col-resize` (below) wins
-	// at the right edge because the resizer overlays the th.
+	// and brings its own `cursor: pointer`. Inherit the th's pointer so
+	// the entire header (including the drag handle overlay) reads as
+	// clickable — the dropdown is the primary affordance; drag still
+	// works via mousedown on the drag handle. The resizer's
+	// `cursor: col-resize` (below) wins at the right edge.
+	/* stylelint-disable-next-line no-descending-specificity */
 	.dataviews-view-table-header-button {
 		cursor: inherit;
 		max-width: 100%;

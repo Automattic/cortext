@@ -153,13 +153,14 @@ export function mapField( field ) {
 	const base = {
 		id,
 		label,
-		// Header content includes the label and a non-interactive marker
-		// span. `ColumnHeaderActions` queries the DOM for the marker and
-		// portals a sibling action button next to DataViews' built-in
-		// header trigger. The marker itself is aria-hidden and zero-size.
+		// Header content is just an aria-hidden marker.
+		// `ColumnHeaderActions` queries the DOM for it and portals our
+		// combined-dropdown trigger into the owning <th>; DataViews'
+		// built-in trigger is hidden via CSS on marker-bearing columns
+		// (tech-debt.md#16). Skipping the label here avoids leaking
+		// duplicate text into the th's accessible/text content.
 		header: (
 			<HeaderLabel>
-				{ label }
 				<span
 					className="cortext-column-header-marker"
 					data-cortext-field-marker={ field.id }

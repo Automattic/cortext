@@ -259,17 +259,36 @@ final class FieldsController {
 
 		$existing  = $this->collection_field_ids( $collection_id );
 		$reordered = array();
+		$inserted  = false;
 		foreach ( $existing as $id ) {
 			$reordered[] = $id;
 			if ( $id === $insert_after_id ) {
 				$reordered[] = $field_id_str;
+				$inserted    = true;
 			}
 		}
 
-		// Replace the multi-value meta in one shot to preserve order.
+		// Source ID disappeared between `duplicate()`'s validation and
+		// this re-read (race, or a meta_query filter quirk). Don't write
+		// `$reordered` — that would silently drop the new ID. Caller
+		// force-deletes the orphan field post.
+		if ( ! $inserted ) {
+			return false;
+		}
+
+		// WordPress doesn't expose an atomic multi-value meta update; the
+		// sequence is delete-then-add. If a re-add fails (filter, DB
+		// error), best-effort restore the previous list so the schema
+		// isn't lost.
 		delete_post_meta( $collection_id, 'fields' );
 		foreach ( $reordered as $id ) {
-			add_post_meta( $collection_id, 'fields', $id );
+			if ( false === add_post_meta( $collection_id, 'fields', $id ) ) {
+				delete_post_meta( $collection_id, 'fields' );
+				foreach ( $existing as $rollback_id ) {
+					add_post_meta( $collection_id, 'fields', $rollback_id );
+				}
+				return false;
+			}
 		}
 
 		return true;

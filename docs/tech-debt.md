@@ -180,7 +180,7 @@ Worth a small spike before committing; `core-data`'s schema cache for rarely-cha
 
 ## 21. Field-meta cleanup uses a global delete `[internal]`
 
-**What.** `cleanup_after_field_delete` calls `delete_post_meta_by_key( "field-<id>" )`, which wipes that key from every post — not just Cortext entry CPTs. The collision risk is theoretical (`<id>` is a globally unique `crtxt_field` post ID, so any postmeta keyed that way belongs to a Cortext entry by construction), but the code doesn't enforce that. A scoped `DELETE pm … INNER JOIN wp_posts p … WHERE p.post_type IN (…)` would prove the scope, but WorDBless (#9) can't run JOINs — we'd lose unit coverage of the cleanup path.
+**What.** `cleanup_after_field_delete` calls `delete_post_meta_by_key( "field-<id>" )`, which wipes that key from every post — not just Cortext entry CPTs. The collision risk is theoretical (`<id>` is a globally unique `crtxt_field` post ID, so any postmeta keyed that way belongs to a Cortext entry by construction), but the code doesn't enforce that. A scoped `DELETE pm … INNER JOIN wp_posts p … WHERE p.post_type IN (…)` would prove the scope, but WorDBless (#9) can't run JOINs and its in-memory `$wpdb->posts` isn't exposed via SQL — `WP_Query`/`get_posts` against dynamic entry CPTs returns empty in the mock, so the per-post fallback also can't be unit-tested here.
 
 **Where.** `cleanup_after_field_delete` in `includes/PostType/CollectionEntries.php`.
 

@@ -318,6 +318,102 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 		);
 	}
 
+	public function test_duplicate_rolls_back_when_meta_write_fails(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$collection_id = $this->create_collection_with_slug( 'Splice Fails', 'splice-fail' );
+
+		$source_id = (int) $this->create_field(
+			$collection_id,
+			array(
+				'title' => 'Source',
+				'type'  => 'text',
+			)
+		)->get_data()['id'];
+
+		// Fail the splice's add_post_meta for the new field's ID
+		// (auto-increment post IDs are monotonic, so the copy's ID is
+		// always higher than the source's). Existing IDs in the rollback
+		// path stay <= source_id and write through.
+		add_filter(
+			'add_post_metadata',
+			function ( $check, $object_id, $meta_key, $meta_value ) use ( $collection_id, $source_id ) {
+				if ( (int) $object_id !== $collection_id || 'fields' !== $meta_key ) {
+					return $check;
+				}
+				if ( (int) $meta_value > $source_id ) {
+					return false;
+				}
+				return $check;
+			},
+			10,
+			4
+		);
+
+		$response = $this->duplicate_field( $collection_id, $source_id );
+
+		$this->assertSame( 500, $response->get_status() );
+		$this->assertSame(
+			array( $source_id ),
+			array_map(
+				'intval',
+				get_post_meta( $collection_id, 'fields', false )
+			),
+			'Collection field list must be restored to its pre-duplicate state.'
+		);
+		$source_post = get_post( $source_id );
+		$this->assertInstanceOf(
+			\WP_Post::class,
+			$source_post,
+			'Source field must survive a failed duplicate.'
+		);
+		$this->assertSame( Field::POST_TYPE, $source_post->post_type );
+	}
+
+	public function test_duplicate_rolls_back_when_source_id_disappears_before_attach(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$collection_id = $this->create_collection_with_slug( 'Race', 'race' );
+
+		$source_id = (int) $this->create_field(
+			$collection_id,
+			array(
+				'title' => 'Source',
+				'type'  => 'text',
+			)
+		)->get_data()['id'];
+
+		// Simulate a race: duplicate()'s validation reads `meta.fields`
+		// and sees the source ID; attach_field re-reads (call #2+) and
+		// the source is gone. attach_field must return false so
+		// insert_and_attach can force-delete the orphan.
+		$reads = 0;
+		add_filter(
+			'get_post_metadata',
+			function ( $value, $object_id, $meta_key ) use ( &$reads, $collection_id ) {
+				if ( (int) $object_id !== $collection_id || 'fields' !== $meta_key ) {
+					return $value;
+				}
+				$reads++;
+				if ( $reads >= 2 ) {
+					return array();
+				}
+				return $value;
+			},
+			10,
+			4
+		);
+
+		$response = $this->duplicate_field( $collection_id, $source_id );
+
+		$this->assertSame( 500, $response->get_status() );
+		$source_post = get_post( $source_id );
+		$this->assertInstanceOf(
+			\WP_Post::class,
+			$source_post,
+			'Source field must survive a failed duplicate.'
+		);
+		$this->assertSame( Field::POST_TYPE, $source_post->post_type );
+	}
+
 	public function test_duplicate_fails_when_source_not_in_collection(): void {
 		wp_set_current_user( $this->create_user( 'editor' ) );
 		$first_id  = $this->create_collection_with_slug( 'First', 'first-d' );

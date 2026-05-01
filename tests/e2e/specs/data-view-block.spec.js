@@ -1992,10 +1992,16 @@ test.describe( 'Collection view block', () => {
 			// 6. Title's column header opens DataViews' built-in dropdown
 			//    (sort/hide/move). It does not surface schema actions
 			//    like Rename — the takeover only applies to custom fields.
+			//    Anchor the negative on a positive assertion so a broken
+			//    selector can't silently pass the Rename absence check.
 			await canvas.getByRole( 'button', { name: 'Title' } ).click();
+			await expect(
+				page.getByRole( 'menuitem', { name: /Sort ascending/ } )
+			).toBeVisible();
 			await expect(
 				page.getByRole( 'menuitem', { name: 'Rename' } )
 			).toHaveCount( 0 );
+			await page.keyboard.press( 'Escape' );
 		} finally {
 			// Best-effort cleanup. The created/duplicated fields aren't
 			// tracked individually, but they cascade with their
