@@ -25,18 +25,15 @@ function useFieldListInvalidation() {
 	const { invalidateResolution } = useDispatch( 'core' );
 	return useCallback(
 		( collectionId ) => {
+			// Invalidate the collection record only. After it refetches,
+			// `meta.fields` carries the new ID and `useCollectionFields`
+			// passes a different `include` to `useEntityRecords`. That
+			// new query is uncached, so the field list refetches without
+			// us touching the (impossible-to-target) old resolver.
 			invalidateResolution( 'getEntityRecord', [
 				'postType',
 				'crtxt_collection',
 				collectionId,
-			] );
-			// We can't predict the exact `include` shape of every active
-			// `useCollectionFields` resolver, so invalidate the whole
-			// `crtxt_field` records map. Cheap enough — the resolver
-			// re-fetches on next render.
-			invalidateResolution( 'getEntityRecords', [
-				'postType',
-				'crtxt_field',
 			] );
 		},
 		[ invalidateResolution ]

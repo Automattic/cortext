@@ -65,10 +65,6 @@ describe( 'useCreateField', () => {
 			'getEntityRecord',
 			[ 'postType', 'crtxt_collection', 5 ]
 		);
-		expect( mockDispatch.invalidateResolution ).toHaveBeenCalledWith(
-			'getEntityRecords',
-			[ 'postType', 'crtxt_field' ]
-		);
 	} );
 
 	it( 'forwards options on the request body when present', async () => {
@@ -124,10 +120,6 @@ describe( 'useDuplicateField', () => {
 		expect( mockDispatch.invalidateResolution ).toHaveBeenCalledWith(
 			'getEntityRecord',
 			[ 'postType', 'crtxt_collection', 7 ]
-		);
-		expect( mockDispatch.invalidateResolution ).toHaveBeenCalledWith(
-			'getEntityRecords',
-			[ 'postType', 'crtxt_field' ]
 		);
 	} );
 } );
