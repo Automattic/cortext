@@ -61,6 +61,10 @@ function buildRender( id, type, label, elements ) {
 	);
 }
 
+function HeaderLabel( { children } ) {
+	return <span className="cortext-column-header-label">{ children }</span>;
+}
+
 export function mapField( field ) {
 	const id = `field-${ field.id }`;
 	const label = field.title?.rendered || field.title?.raw || `#${ field.id }`;
@@ -69,6 +73,7 @@ export function mapField( field ) {
 	const base = {
 		id,
 		label,
+		header: <HeaderLabel>{ label }</HeaderLabel>,
 		getValue: ( { item } ) => item?.meta?.[ id ] ?? null,
 		render: buildRender( id, type, label, elements ),
 		editable: EDITABLE_TYPES.has( type ),

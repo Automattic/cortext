@@ -602,6 +602,23 @@ body.cortext-fullscreen {
 	// at the right edge because the resizer overlays the th.
 	.dataviews-view-table-header-button {
 		cursor: inherit;
+		max-width: 100%;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+
+		> * {
+			min-width: 0;
+		}
+
+		.cortext-column-header-label {
+			display: block;
+			min-width: 0;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
 	}
 }
 

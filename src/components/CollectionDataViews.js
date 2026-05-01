@@ -18,17 +18,21 @@ import useCollectionFields from '../hooks/useCollectionFields';
 import useCollectionRows from '../hooks/useCollectionRows';
 
 const DEFAULT_LAYOUTS = { table: { density: 'compact' }, grid: {}, list: {} };
+const TITLE_LABEL = __( 'Title', 'cortext' );
 
 const TITLE_FIELD = {
 	id: TITLE_FIELD_ID,
-	label: __( 'Title', 'cortext' ),
+	label: TITLE_LABEL,
+	header: (
+		<span className="cortext-column-header-label">{ TITLE_LABEL }</span>
+	),
 	getValue: ( { item } ) => item?.title?.rendered ?? item?.title?.raw ?? '',
 	render: ( { item } ) => (
 		<EditableCell
 			item={ item }
 			fieldId="title"
 			fieldType="title"
-			label={ __( 'Title', 'cortext' ) }
+			label={ TITLE_LABEL }
 			getValue={ ( ctx ) =>
 				ctx.item?.title?.raw ?? ctx.item?.title?.rendered ?? ''
 			}
