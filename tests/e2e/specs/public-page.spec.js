@@ -7,6 +7,8 @@
 
 const { test, expect } = require( '@wordpress/e2e-test-utils-playwright' );
 
+const { withExpectedConsoleError } = require( '../utils' );
+
 async function deleteIfCreated( requestUtils, path ) {
 	if ( ! path ) {
 		return;
@@ -69,44 +71,35 @@ test.describe( 'Public page rendering', () => {
 		const suffix = Date.now().toString( 36 ).slice( -4 );
 		let createdPage;
 
-		// Suppress the expected "Failed to load resource: 404" browser
-		// error forwarded by the test harness.
-		//
-		// See: @wordpress/e2e-test-utils-playwright: observeConsoleLogging
-		const originalConsoleError = console.error;
-		const expected404 = [];
-		console.error = ( ...args ) => {
-			if ( /404/.test( args.join( ' ' ) ) ) {
-				expected404.push( args );
-				return;
+		await withExpectedConsoleError(
+			/the server responded with a status of 404/,
+			async () => {
+				try {
+					createdPage = await requestUtils.rest( {
+						method: 'POST',
+						path: '/wp/v2/crtxt_pages',
+						data: {
+							title: `Private page ${ suffix }`,
+							status: 'private',
+						},
+					} );
+
+					await page
+						.context()
+						.clearCookies( { name: /^wordpress_/ } );
+
+					const response = await page.goto(
+						`/cortext/${ createdPage.slug }/`
+					);
+
+					expect( response?.status() ).toBe( 404 );
+				} finally {
+					await deleteIfCreated(
+						requestUtils,
+						createdPage && `/wp/v2/crtxt_pages/${ createdPage.id }`
+					);
+				}
 			}
-			originalConsoleError.call( console, ...args );
-		};
-
-		try {
-			createdPage = await requestUtils.rest( {
-				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
-				data: {
-					title: `Private page ${ suffix }`,
-					status: 'private',
-				},
-			} );
-
-			await page.context().clearCookies( { name: /^wordpress_/ } );
-
-			const response = await page.goto(
-				`/cortext/${ createdPage.slug }/`
-			);
-
-			expect( response?.status() ).toBe( 404 );
-			expect( expected404 ).toHaveLength( 1 );
-		} finally {
-			console.error = originalConsoleError;
-			await deleteIfCreated(
-				requestUtils,
-				createdPage && `/wp/v2/crtxt_pages/${ createdPage.id }`
-			);
-		}
+		);
 	} );
 } );
