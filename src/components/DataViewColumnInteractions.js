@@ -10,6 +10,7 @@ import {
 import {
 	MAX_COLUMN_WIDTH,
 	TITLE_FIELD_ID,
+	clampWidth,
 	getMinWidth,
 	withColumnOrder,
 	withColumnWidth,
@@ -110,6 +111,69 @@ function useHeaderCells( wrapperRef, view, fields ) {
 	}, [ wrapperRef, view, fields ] );
 
 	return cells;
+}
+
+function getColumnBodyCells( headerEl ) {
+	const tableEl = headerEl.closest( TABLE_SELECTOR );
+	const headerSiblings = headerEl.parentElement
+		? Array.from( headerEl.parentElement.children )
+		: [];
+	const colIndex = headerSiblings.indexOf( headerEl );
+	if ( colIndex < 0 || ! tableEl ) {
+		return [];
+	}
+	return Array.from(
+		tableEl.querySelectorAll(
+			`tbody > tr > *:nth-child(${ colIndex + 1 })`
+		)
+	);
+}
+
+function measureCellNaturalWidth( cell ) {
+	const table = document.createElement( 'table' );
+	const row = document.createElement( 'tr' );
+	const clone = cell.cloneNode( true );
+
+	clone.querySelector( '.cortext-column-resizer' )?.remove();
+	clone.removeAttribute( 'style' );
+	clone.style.width = 'auto';
+	clone.style.minWidth = '0';
+	clone.style.maxWidth = 'none';
+
+	table.className = cell.closest( TABLE_SELECTOR )?.className ?? '';
+	table.style.position = 'fixed';
+	table.style.left = '-10000px';
+	table.style.top = '0';
+	table.style.width = 'auto';
+	table.style.tableLayout = 'auto';
+	table.style.visibility = 'hidden';
+	table.style.pointerEvents = 'none';
+
+	row.appendChild( clone );
+	table.appendChild( row );
+	document.body.appendChild( table );
+	const width = clone.getBoundingClientRect().width;
+	table.remove();
+
+	return width;
+}
+
+function getAutoFitColumnWidth( headerEl, fieldType ) {
+	const cells = [ headerEl, ...getColumnBodyCells( headerEl ) ];
+	const naturalWidth = Math.max(
+		...cells.map( ( cell ) => measureCellNaturalWidth( cell ) )
+	);
+	return clampWidth( naturalWidth, fieldType );
+}
+
+function applyColumnWidth( headerEl, width ) {
+	const px = `${ width }px`;
+	headerEl.style.width = px;
+	headerEl.style.maxWidth = px;
+	for ( const td of getColumnBodyCells( headerEl ) ) {
+		td.style.width = px;
+		td.style.maxWidth = px;
+	}
 }
 
 // Attaches a native `pointerdown` listener to each header `<th>` so the
@@ -282,6 +346,21 @@ function useHeaderDrag( {
 }
 
 function ColumnResizer( { fieldId, fieldType, headerEl, view, onChangeView } ) {
+	const autoFitColumn = useCallback( () => {
+		const nextWidth = getAutoFitColumnWidth( headerEl, fieldType );
+		applyColumnWidth( headerEl, nextWidth );
+		onChangeView( withColumnWidth( view, fieldId, nextWidth, fieldType ) );
+	}, [ fieldId, fieldType, headerEl, onChangeView, view ] );
+
+	const onDoubleClick = useCallback(
+		( event ) => {
+			event.preventDefault();
+			event.stopPropagation();
+			autoFitColumn();
+		},
+		[ autoFitColumn ]
+	);
+
 	const onPointerDown = useCallback(
 		( event ) => {
 			if ( event.button !== 0 ) {
@@ -289,6 +368,11 @@ function ColumnResizer( { fieldId, fieldType, headerEl, view, onChangeView } ) {
 			}
 			event.preventDefault();
 			event.stopPropagation();
+
+			if ( event.detail >= 2 ) {
+				autoFitColumn();
+				return;
+			}
 
 			const startX = event.clientX;
 			const startWidth = headerEl.getBoundingClientRect().width;
@@ -303,22 +387,10 @@ function ColumnResizer( { fieldId, fieldType, headerEl, view, onChangeView } ) {
 			document.body.classList.add( 'cortext-column-resizing' );
 
 			// Find every cell in this column so the live drag mutates body
-			// `<td>`s alongside the header. Under `table-layout: auto` the
-			// column's width is the max of all cells' widths — constraining
-			// only the th leaves the column visually wide until commit, so
-			// the user sees no movement during the drag in tables where
-			// body content is wider than the header.
-			const tableEl = headerEl.closest( '.dataviews-view-table' );
-			const headerSiblings = headerEl.parentElement
-				? Array.from( headerEl.parentElement.children )
-				: [];
-			const colIndex = headerSiblings.indexOf( headerEl );
-			const bodyCells =
-				colIndex >= 0 && tableEl
-					? tableEl.querySelectorAll(
-							`tbody > tr > *:nth-child(${ colIndex + 1 })`
-					  )
-					: [];
+			// `<td>`s alongside the header. Keeping both header and body
+			// cells in sync avoids a transient mismatch until React commits
+			// the persisted width back through DataViews.
+			const bodyCells = getColumnBodyCells( headerEl );
 
 			const computeWidth = ( clientX ) => {
 				const next = startWidth + ( clientX - startX );
@@ -328,7 +400,8 @@ function ColumnResizer( { fieldId, fieldType, headerEl, view, onChangeView } ) {
 				);
 			};
 
-			const applyLiveWidth = ( px ) => {
+			const applyLiveWidth = ( width ) => {
+				const px = `${ width }px`;
 				headerEl.style.width = px;
 				headerEl.style.maxWidth = px;
 				for ( const td of bodyCells ) {
@@ -347,7 +420,7 @@ function ColumnResizer( { fieldId, fieldType, headerEl, view, onChangeView } ) {
 				// `onChangeView` lets the next render take over and the
 				// inline styles get overwritten by the library's render.
 				const nextWidth = computeWidth( moveEvent.clientX );
-				applyLiveWidth( `${ nextWidth }px` );
+				applyLiveWidth( nextWidth );
 			};
 
 			const onPointerUp = ( upEvent ) => {
@@ -358,6 +431,9 @@ function ColumnResizer( { fieldId, fieldType, headerEl, view, onChangeView } ) {
 				headerEl.classList.remove( 'cortext-column-resizing' );
 				document.body.classList.remove( 'cortext-column-resizing' );
 				const nextWidth = computeWidth( upEvent.clientX );
+				if ( nextWidth === Math.round( startWidth ) ) {
+					return;
+				}
 				onChangeView(
 					withColumnWidth( view, fieldId, nextWidth, fieldType )
 				);
@@ -367,7 +443,7 @@ function ColumnResizer( { fieldId, fieldType, headerEl, view, onChangeView } ) {
 			handle.addEventListener( 'pointerup', onPointerUp );
 			handle.addEventListener( 'pointercancel', onPointerUp );
 		},
-		[ fieldId, fieldType, headerEl, onChangeView, view ]
+		[ autoFitColumn, fieldId, fieldType, headerEl, onChangeView, view ]
 	);
 
 	return (
@@ -376,6 +452,7 @@ function ColumnResizer( { fieldId, fieldType, headerEl, view, onChangeView } ) {
 			role="separator"
 			aria-orientation="vertical"
 			aria-label={ __( 'Resize column', 'cortext' ) }
+			onDoubleClick={ onDoubleClick }
 			onPointerDown={ onPointerDown }
 		/>
 	);
