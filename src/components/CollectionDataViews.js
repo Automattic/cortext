@@ -331,6 +331,10 @@ export default function CollectionDataViews( {
 	viewRef.current = view;
 	const onChangeViewRef = useRef( onChangeView );
 	onChangeViewRef.current = onChangeView;
+	// Field IDs known on the previous sync. Drives the auto-show path
+	// for fields the user just created. `null` on first run signals
+	// "saved view, leave it alone."
+	const knownFieldIdsRef = useRef( null );
 
 	// Reconcile saved view state with the live schema whenever the field
 	// set changes: seed defaults on first render, then hand off to
@@ -352,6 +356,7 @@ export default function CollectionDataViews( {
 		const validIds = new Set( dataViewFields.map( ( f ) => f.id ) );
 		const currentView = viewRef.current;
 		const currentFields = currentView?.fields ?? [];
+		const previouslyKnown = knownFieldIdsRef.current;
 
 		let seededView = currentView;
 		if ( currentFields.length === 0 ) {
@@ -368,6 +373,48 @@ export default function CollectionDataViews( {
 		}
 
 		let normalized = normalizeView( seededView, validIds );
+
+		// Splice any editable field that just appeared in the schema
+		// (wasn't present on the previous sync) into its schema position
+		// in `view.fields`. The first render — `previouslyKnown` is
+		// `null` — leaves saved views alone; from then on, the diff
+		// detects fields the user just created via toolbar Add field
+		// or duplicate. Honors user-driven hides because the toggled-off
+		// field IS in `previouslyKnown` and gets skipped here. Inserting
+		// at the schema position (rather than appending) keeps a
+		// duplicated field next to its source instead of jumping to the
+		// end of the visible columns.
+		if ( previouslyKnown && currentFields.length > 0 ) {
+			const next = [ ...( normalized.fields ?? [] ) ];
+			let inserted = false;
+			for (
+				let schemaIdx = 0;
+				schemaIdx < dataViewFields.length;
+				schemaIdx++
+			) {
+				const f = dataViewFields[ schemaIdx ];
+				if (
+					! f.editable ||
+					previouslyKnown.has( f.id ) ||
+					next.includes( f.id )
+				) {
+					continue;
+				}
+				let insertAt = next.length;
+				for ( let i = schemaIdx - 1; i >= 0; i-- ) {
+					const idx = next.indexOf( dataViewFields[ i ].id );
+					if ( idx >= 0 ) {
+						insertAt = idx + 1;
+						break;
+					}
+				}
+				next.splice( insertAt, 0, f.id );
+				inserted = true;
+			}
+			if ( inserted ) {
+				normalized = { ...normalized, fields: next };
+			}
+		}
 
 		// Pin the ghost "+ add field" column last whenever the table
 		// layout is active. In grid/list layouts the synthetic field
@@ -387,6 +434,8 @@ export default function CollectionDataViews( {
 				normalized = { ...normalized, fields: nextFields };
 			}
 		}
+
+		knownFieldIdsRef.current = validIds;
 
 		const currentSort = normalized.sort ?? null;
 		const nextSort =

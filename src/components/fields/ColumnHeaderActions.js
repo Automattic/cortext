@@ -94,8 +94,7 @@ export default function ColumnHeaderActions( { collectionId } ) {
 					return next;
 				}
 				const same = prev.every(
-					( t, i ) =>
-						t.key === next[ i ].key && t.th === next[ i ].th
+					( t, i ) => t.key === next[ i ].key && t.th === next[ i ].th
 				);
 				return same ? prev : next;
 			} );
