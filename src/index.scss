@@ -546,6 +546,12 @@ body.cortext-fullscreen {
 	}
 }
 
+.cortext-publish-toggle {
+	display: flex;
+	align-items: center;
+	gap: $grid-unit-10;
+}
+
 .cortext-data-view {
 	display: flex;
 	flex-direction: column;

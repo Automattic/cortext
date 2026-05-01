@@ -11,6 +11,8 @@ namespace Cortext;
 
 use Cortext\Admin\Screen;
 use Cortext\Editor\RevisionThrottle;
+use Cortext\Frontend\Assets;
+use Cortext\Frontend\Template;
 use Cortext\PostType\Collection;
 use Cortext\PostType\CollectionEntries;
 use Cortext\PostType\Field;
@@ -42,6 +44,8 @@ final class Plugin {
 		( new CollectionsController() )->register();
 		( new PageTrashController() )->register();
 		( new RowsController() )->register();
+		( new Template() )->register();
+		( new Assets() )->register();
 	}
 
 	private function __construct() {}

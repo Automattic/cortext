@@ -28,6 +28,7 @@ import {
 	POST_TYPE,
 	TRASHED_PAGES_QUERY,
 } from './page-queries';
+import PublishToggle from './PublishToggle';
 
 const SCOPE = 'cortext';
 const INSPECTOR = 'cortext/block-inspector';
@@ -67,6 +68,7 @@ function Header() {
 	return (
 		<div className="cortext-canvas__header">
 			<SaveStatus />
+			<PublishToggle />
 			<Button
 				icon={ cog }
 				label={ __( 'Settings', 'cortext' ) }
