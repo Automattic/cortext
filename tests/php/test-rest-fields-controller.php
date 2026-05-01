@@ -286,6 +286,38 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 		);
 	}
 
+	public function test_duplicate_preserves_related_collection_id(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$collection_id = $this->create_collection_with_slug( 'Tasks', 'tasks-r' );
+		$target_id     = $this->create_collection_with_slug( 'People', 'people-r' );
+
+		// Relation fields aren't creatable through PR D's create route
+		// (its `type` enum doesn't include `relation`), but they exist in
+		// the DB when imported from external sources. Insert directly so
+		// the duplicate route sees a field with `related_collection_id`.
+		$source_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Assignee',
+				'meta_input'  => array(
+					'type'                  => 'relation',
+					'related_collection_id' => $target_id,
+				),
+			)
+		);
+		add_post_meta( $collection_id, 'fields', (string) $source_id );
+
+		$copy_id = (int) $this->duplicate_field( $collection_id, $source_id )
+			->get_data()['id'];
+
+		$this->assertSame( 'relation', get_post_meta( $copy_id, 'type', true ) );
+		$this->assertSame(
+			(string) $target_id,
+			(string) get_post_meta( $copy_id, 'related_collection_id', true )
+		);
+	}
+
 	public function test_duplicate_fails_when_source_not_in_collection(): void {
 		wp_set_current_user( $this->create_user( 'editor' ) );
 		$first_id  = $this->create_collection_with_slug( 'First', 'first-d' );

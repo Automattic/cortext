@@ -171,7 +171,15 @@ final class FieldsController {
 		$copy_title = trim( sprintf( __( 'Copy of %s', 'cortext' ), $source->post_title ) );
 
 		$meta = array();
-		foreach ( array( 'type', 'options', 'number_format', 'expression' ) as $key ) {
+		foreach (
+			array(
+				'type',
+				'options',
+				'number_format',
+				'expression',
+				'related_collection_id',
+			) as $key
+		) {
 			$value = get_post_meta( $field_id, $key, true );
 			if ( '' !== $value && null !== $value ) {
 				$meta[ $key ] = (string) $value;
