@@ -360,6 +360,117 @@ body.cortext-fullscreen {
 	padding: $grid-unit-15;
 }
 
+.cortext-add-field-popover {
+	display: grid;
+	gap: $grid-unit-15;
+	width: min(100%, 320px);
+
+	&__section-title {
+		font-size: 11px;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+		color: $gray-700;
+		display: block;
+		margin-bottom: $grid-unit-05;
+	}
+
+	&__type-grid {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: $grid-unit-05;
+	}
+
+	&__type-button {
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-10;
+		padding: $grid-unit-10;
+		border: $border-width solid $gray-200;
+		border-radius: 4px;
+		background: transparent;
+		text-align: start;
+		font-size: 13px;
+		color: $gray-900;
+		cursor: pointer;
+		transition: background-color 0.1s ease, border-color 0.1s ease;
+
+		&:disabled {
+			cursor: not-allowed;
+			opacity: 0.5;
+		}
+
+		&:focus-visible {
+			outline: 2px solid var(--wp-admin-theme-color, $gray-700);
+			outline-offset: -1px;
+		}
+
+		&:hover:not(:disabled) {
+			background: $gray-100;
+			border-color: $gray-700;
+		}
+	}
+
+	&__type-icon {
+		flex: 0 0 auto;
+		color: $gray-700;
+	}
+}
+
+// Marker spans live inside DataViews' header trigger button. Zero-size
+// and aria-hidden so they never receive focus or contribute to the
+// column width; the portal layer in `ColumnHeaderActions` finds them by
+// their `data-cortext-*-marker` attribute and projects a sibling button
+// into the owning <th>.
+.cortext-column-header-marker {
+	display: inline-block;
+	width: 0;
+	height: 0;
+	overflow: hidden;
+}
+
+// On custom-field columns we replace DataViews' built-in header trigger
+// (sort / hide / move) with our own combined dropdown that adds Rename /
+// Duplicate / Delete to the same menu. The built-in trigger is hidden
+// via CSS, our portaled trigger takes its place. The `:has()` scope
+// targets <th>s that carry our marker — Title and system fields don't
+// have markers, so their built-in triggers stay visible. See
+// `tech-debt.md#15` and `ColumnHeaderActions.js` for the full story.
+.dataviews-view-table
+th:has(.cortext-column-header-marker)
+.dataviews-view-table-header-button {
+	display: none;
+}
+
+.dataviews-view-table th:has(.cortext-column-header-marker--add) {
+	position: relative;
+}
+
+.cortext-column-header-actions {
+	display: inline-flex;
+	align-items: center;
+}
+
+// On the ghost column the `+` trigger sits over the cell; the built-in
+// DataViews button is empty for the ghost field, so we anchor the
+// portaled trigger to the th rather than letting it lay out inline.
+.cortext-column-header-actions--add {
+	position: absolute;
+	top: 50%;
+	right: $grid-unit-10;
+	transform: translateY(-50%);
+	z-index: 1;
+}
+
+.cortext-field-header-button.components-button {
+	font-weight: inherit;
+}
+
+.cortext-rename-field-inline .components-base-control {
+	margin-bottom: 0;
+	min-width: 140px;
+}
+
 .cortext-collection-chooser {
 	display: grid;
 	gap: $grid-unit-05;
