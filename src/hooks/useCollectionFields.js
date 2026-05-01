@@ -1,4 +1,4 @@
-import { useMemo } from '@wordpress/element';
+import { useMemo, useRef } from '@wordpress/element';
 import { useEntityRecord, useEntityRecords } from '@wordpress/core-data';
 
 import { mapField, systemFields } from './fieldMapping';
@@ -51,7 +51,7 @@ export default function useCollectionFields( collectionId ) {
 		{ enabled: fieldIds.length > 0 }
 	);
 
-	const fields = useMemo( () => {
+	const liveFields = useMemo( () => {
 		const custom = Array.isArray( fieldRecords )
 			? fieldRecords.map( mapField )
 			: [];
@@ -76,6 +76,21 @@ export default function useCollectionFields( collectionId ) {
 		fieldIds.length === 0
 			? Boolean( collection )
 			: ! fieldsResolving && Boolean( fieldsResolved );
+
+	// Latch the last authoritative `fields` snapshot. When the user
+	// adds or deletes a field, `meta.fields` changes, the
+	// `useEntityRecords` query gets a new `include`, and the records
+	// list briefly returns `null` while that query fetches. Without the
+	// latch, `dataViewFields` would lose every custom column for one or
+	// two render cycles, which DataViews paints as a column collapse
+	// and re-expansion. The ref keeps the previous resolved set visible
+	// until the new resolution lands; `view.fields` only changes once,
+	// atomically, when the new set is ready.
+	const stableFieldsRef = useRef( null );
+	if ( fieldsResolvedFlag ) {
+		stableFieldsRef.current = liveFields;
+	}
+	const fields = stableFieldsRef.current ?? liveFields;
 
 	return {
 		fields,
