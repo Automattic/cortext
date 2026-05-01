@@ -23,10 +23,9 @@ export const MIN_WIDTHS = {
 	array: 80,
 	date: 96,
 	datetime: 96,
-	// 48 fits the WP CheckboxControl (24px) plus our cell padding without
-	// clipping the focus ring. 32 was visually flush against the column
-	// boundary and trimmed the box.
-	boolean: 48,
+	// 32 gives the 24px WP CheckboxControl room inside our centered checkbox
+	// cell while letting boolean columns behave like compact status markers.
+	boolean: 32,
 };
 export const DEFAULT_MIN_WIDTH = 80;
 
@@ -121,10 +120,8 @@ export function normalizeView( view, validIds, options = {} ) {
 }
 
 // Applies a width to a single column. Always returns through the layout shape
-// the library reads. We pin `maxWidth` to the user's chosen width (not the
-// global cap) because HTML tables treat `width` as a hint under
-// `table-layout: auto` — without an equal `maxWidth` the browser auto-grows
-// the column past the user's pick whenever cell content is wider.
+// the library reads. We pin `maxWidth` to the user's chosen width too, so the
+// saved shape remains defensive if DataViews changes its table sizing again.
 export function withColumnWidth( view, fieldId, width, fieldType ) {
 	const clamped = clampWidth( width, fieldType );
 	const layout = view?.layout ?? {};

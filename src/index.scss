@@ -484,12 +484,14 @@ body.cortext-fullscreen {
 // height as editable cells for visual consistency.
 .cortext-cell-checkbox {
 	min-height: $grid-unit-50;
-	padding: $grid-unit-05;
+	padding-block: $grid-unit-05;
+	padding-inline: 0;
 	border-radius: 2px;
 	width: 100%;
 	box-sizing: border-box;
 	display: flex;
 	align-items: center;
+	justify-content: center;
 }
 
 .cortext-multiselect-edit {

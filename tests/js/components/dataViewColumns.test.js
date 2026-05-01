@@ -28,6 +28,10 @@ describe( 'getMinWidth', () => {
 			getMinWidth( 'text' )
 		);
 	} );
+
+	it( 'uses a compact floor for checkbox columns', () => {
+		expect( getMinWidth( 'boolean' ) ).toBe( 32 );
+	} );
 } );
 
 describe( 'clampWidth', () => {
@@ -168,8 +172,6 @@ describe( 'withColumnWidth', () => {
 		expect( next.layout.styles[ 'field-1' ] ).toEqual( {
 			width: 220,
 			minWidth: MIN_WIDTHS.text,
-			// maxWidth matches width so the column actually shrinks under
-			// `table-layout: auto`; otherwise content would auto-grow it.
 			maxWidth: 220,
 		} );
 	} );
@@ -178,9 +180,9 @@ describe( 'withColumnWidth', () => {
 		const view = { layout: { density: 'compact' } };
 		const checkbox = withColumnWidth( view, 'field-c', 10, 'boolean' );
 		const text = withColumnWidth( view, 'field-t', 10, 'text' );
-		expect(
-			checkbox.layout.styles[ 'field-c' ].width
-		).toBeLessThan( text.layout.styles[ 'field-t' ].width );
+		expect( checkbox.layout.styles[ 'field-c' ].width ).toBeLessThan(
+			text.layout.styles[ 'field-t' ].width
+		);
 		expect( checkbox.layout.styles[ 'field-c' ].width ).toBe(
 			MIN_WIDTHS.boolean
 		);
