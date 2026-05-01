@@ -27,7 +27,11 @@ const TITLE_FIELD = {
 	header: (
 		<span className="cortext-column-header-label">{ TITLE_LABEL }</span>
 	),
-	getValue: ( { item } ) => item?.title?.rendered ?? item?.title?.raw ?? '',
+	// Prefer `title.raw` over `title.rendered` so sort comparisons use
+	// the unfiltered string (the_title encodes `&` as `&#038;`, which
+	// would otherwise sort under that literal entity). Same reason as
+	// `mapField`'s label fallback in `src/hooks/fieldMapping.js`.
+	getValue: ( { item } ) => item?.title?.raw ?? item?.title?.rendered ?? '',
 	render: ( { item } ) => (
 		<EditableCell
 			item={ item }

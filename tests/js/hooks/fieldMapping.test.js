@@ -93,6 +93,17 @@ describe( 'mapField', () => {
 			'datetime'
 		);
 	} );
+
+	it( 'prefers title.raw over title.rendered for the column label', () => {
+		// `the_title` filter encodes `&` as `&#038;` on `title.rendered`,
+		// so we use the unfiltered string for the column header text.
+		const mapped = mapField( {
+			id: 5,
+			title: { raw: 'A & B', rendered: 'A &#038; B' },
+			meta: { type: 'text' },
+		} );
+		expect( mapped.label ).toBe( 'A & B' );
+	} );
 } );
 
 describe( 'systemFields', () => {
