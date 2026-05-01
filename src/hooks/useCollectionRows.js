@@ -13,10 +13,6 @@ function buildQueryArgs( collectionId, view ) {
 		per_page: -1,
 	};
 
-	if ( view?.search ) {
-		args.search = view.search;
-	}
-
 	// Ignore filters that the server isn't equipped to honor, otherwise
 	// changes in `view` will result in a new query to be requested from the
 	// server, even though the results will be the same.

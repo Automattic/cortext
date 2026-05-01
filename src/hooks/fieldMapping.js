@@ -153,6 +153,7 @@ export function mapField( field ) {
 		getValue: ( { item } ) => item?.meta?.[ id ] ?? null,
 		render: buildRender( id, type, label, elements ),
 		editable: EDITABLE_TYPES.has( type ),
+		enableGlobalSearch: [ 'text', 'email', 'url' ].includes( type ),
 	};
 
 	// DataViews v6's FieldType union is
