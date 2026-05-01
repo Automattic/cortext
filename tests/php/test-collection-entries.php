@@ -384,4 +384,167 @@ final class Test_Collection_Entries extends BaseTestCase {
 		$this->assertSame( 'string', CollectionEntries::wp_meta_type_for( 'date' ) );
 		$this->assertSame( 'string', CollectionEntries::wp_meta_type_for( 'relation' ) );
 	}
+
+	public function test_get_entry_post_types_excludes_utility_cpts(): void {
+		$entries       = new CollectionEntries();
+		$collection_id = wp_insert_post(
+			array(
+				'post_type'   => Collection::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Bookmarks',
+				'meta_input'  => array( 'slug' => 'bookmarks' ),
+			)
+		);
+		$entries->register_for_collection( get_post( $collection_id ) );
+
+		$result = CollectionEntries::get_entry_post_types();
+
+		$this->assertContains( 'crtxt_bookmarks', $result );
+		$this->assertNotContains( Collection::POST_TYPE, $result );
+		$this->assertNotContains( Field::POST_TYPE, $result );
+	}
+
+	public function test_field_delete_clears_entry_field_meta(): void {
+		$entries       = new CollectionEntries();
+		$collection_id = wp_insert_post(
+			array(
+				'post_type'   => Collection::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Posts To Read',
+				'meta_input'  => array( 'slug' => 'reads' ),
+			)
+		);
+		$field_id = wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Status',
+				'meta_input'  => array( 'type' => 'text' ),
+			)
+		);
+		add_post_meta( $collection_id, 'fields', (string) $field_id );
+
+		$entries->register_for_collection( get_post( $collection_id ) );
+		$entries->register();
+
+		$entry_a = wp_insert_post(
+			array(
+				'post_type'   => 'crtxt_reads',
+				'post_status' => 'publish',
+				'post_title'  => 'Entry A',
+			)
+		);
+		$entry_b = wp_insert_post(
+			array(
+				'post_type'   => 'crtxt_reads',
+				'post_status' => 'publish',
+				'post_title'  => 'Entry B',
+			)
+		);
+		update_post_meta( $entry_a, "field-{$field_id}", 'reading' );
+		update_post_meta( $entry_b, "field-{$field_id}", 'done' );
+
+		wp_delete_post( $field_id, true );
+
+		$this->assertSame( '', get_post_meta( $entry_a, "field-{$field_id}", true ) );
+		$this->assertSame( '', get_post_meta( $entry_b, "field-{$field_id}", true ) );
+	}
+
+	public function test_field_delete_keeps_unrelated_field_meta_on_other_entries(): void {
+		$entries       = new CollectionEntries();
+		$collection_id = wp_insert_post(
+			array(
+				'post_type'   => Collection::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Items',
+				'meta_input'  => array( 'slug' => 'items' ),
+			)
+		);
+		$field_a = wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'A',
+				'meta_input'  => array( 'type' => 'text' ),
+			)
+		);
+		$field_b = wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'B',
+				'meta_input'  => array( 'type' => 'text' ),
+			)
+		);
+		add_post_meta( $collection_id, 'fields', (string) $field_a );
+		add_post_meta( $collection_id, 'fields', (string) $field_b );
+		$entries->register_for_collection( get_post( $collection_id ) );
+		$entries->register();
+
+		$entry_id = wp_insert_post(
+			array(
+				'post_type'   => 'crtxt_items',
+				'post_status' => 'publish',
+				'post_title'  => 'Entry',
+			)
+		);
+		update_post_meta( $entry_id, "field-{$field_a}", 'value-a' );
+		update_post_meta( $entry_id, "field-{$field_b}", 'value-b' );
+
+		wp_delete_post( $field_a, true );
+
+		$this->assertSame( '', get_post_meta( $entry_id, "field-{$field_a}", true ) );
+		$this->assertSame(
+			'value-b',
+			get_post_meta( $entry_id, "field-{$field_b}", true ),
+			'Other field meta on the same entry must be left alone.'
+		);
+	}
+
+	public function test_non_field_delete_skips_entry_meta_cleanup(): void {
+		$entries       = new CollectionEntries();
+		$collection_id = wp_insert_post(
+			array(
+				'post_type'   => Collection::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Skip Test',
+				'meta_input'  => array( 'slug' => 'skip' ),
+			)
+		);
+		$field_id = wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Stays Attached',
+				'meta_input'  => array( 'type' => 'text' ),
+			)
+		);
+		add_post_meta( $collection_id, 'fields', (string) $field_id );
+		$entries->register_for_collection( get_post( $collection_id ) );
+		$entries->register();
+
+		$entry_id = wp_insert_post(
+			array(
+				'post_type'   => 'crtxt_skip',
+				'post_status' => 'publish',
+				'post_title'  => 'Entry',
+			)
+		);
+		update_post_meta( $entry_id, "field-{$field_id}", 'preserved' );
+
+		// Deleting an unrelated post must not run the field cleanup.
+		$unrelated_post_id = wp_insert_post(
+			array(
+				'post_type'   => 'post',
+				'post_status' => 'publish',
+				'post_title'  => 'Decoy',
+			)
+		);
+		wp_delete_post( $unrelated_post_id, true );
+
+		$this->assertSame(
+			'preserved',
+			get_post_meta( $entry_id, "field-{$field_id}", true )
+		);
+	}
 }
