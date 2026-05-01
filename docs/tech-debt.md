@@ -169,3 +169,12 @@ Worth a small spike before committing; `core-data`'s schema cache for rarely-cha
 **Where.** `src/components/fields/AddFieldPopover.js` (no options textarea), `includes/Rest/FieldsController.php` (still accepts an `options` array on `POST /cortext/v1/collections/<id>/fields` — the route is option-aware, only the UI doesn't surface it).
 
 **Solution.** A field-edit dialog accessible from the column header dropdown's Rename/Duplicate/Delete neighborhood, with a small options editor (one-per-line textarea or a Notion-style chip list with colors). Until then, users edit options in wp-admin or via REST.
+
+## 19. Table layout overrides couple to DataViews internals `[upstream, soft]`
+
+**What.** DataViews ships `table-layout: auto; width: 100%` plus per-cell padding rules (`.dataviews-view-table tr td:last-child { padding-right: 48px }`, `.dataviews-view-table__cell-content-wrapper { min-width: 15ch }`). Cortext flips the layout to `table-layout: fixed; width: max-content` with explicit per-cell widths so adding or removing a field doesn't reflow every other column, and matches DataViews' selector specificity to override the last-cell padding so the trailing ghost column stays slim. The result is a content-sized table with horizontal scroll on overflow — closer to Notion's shape — but it depends on DataViews' class names and CSS specificity remaining stable.
+
+**Where.** `src/index.scss`, around the `.dataviews-view-table` block.
+
+**Solution.** Upstream a `tableLayout` (or similar) prop on DataViews that exposes "auto with redistribution" vs. "fixed with content-sized columns" as a documented choice, plus per-field `width` hints so consumers can pin column widths without touching DataViews CSS.
+
