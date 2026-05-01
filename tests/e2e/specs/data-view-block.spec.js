@@ -1624,6 +1624,12 @@ test.describe( 'Collection view block', () => {
 				.locator( '.dataviews-view-table thead > tr > th' )
 				.nth( 2 );
 			const notesBox = await notesTh.boundingBox();
+			const notesCell = canvas
+				.locator( '.dataviews-view-table tbody > tr' )
+				.first()
+				.locator( 'td' )
+				.nth( 2 );
+			const notesCellBox = await notesCell.boundingBox();
 
 			const startX = authorBox.x + 20;
 			const startY = authorBox.y + authorBox.height / 2;
@@ -1644,6 +1650,10 @@ test.describe( 'Collection view block', () => {
 					return box.x;
 				} )
 				.toBeLessThan( notesBox.x - 20 );
+			const notesCellDragBox = await notesCell.boundingBox();
+			expect( Math.abs( notesCellDragBox.x - notesCellBox.x ) ).toBeLessThan(
+				1
+			);
 			await page.mouse.up();
 
 			await page.evaluate( async () => {

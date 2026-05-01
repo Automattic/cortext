@@ -268,19 +268,13 @@ function suppressNextClick() {
 	}, 0 );
 }
 
-function getColumnVisualCells( cell ) {
-	return [ cell.el, ...getColumnBodyCells( cell.el ) ];
-}
-
 function clearColumnDragPreview( cells ) {
 	for ( const cell of cells ) {
-		for ( const el of getColumnVisualCells( cell ) ) {
-			el.style.transform = '';
-			el.classList.remove(
-				'cortext-column-reorder-preview',
-				'cortext-column-drag-source'
-			);
-		}
+		cell.el.style.transform = '';
+		cell.el.classList.remove(
+			'cortext-column-reorder-preview',
+			'cortext-column-drag-source'
+		);
 	}
 }
 
@@ -305,17 +299,15 @@ function applyColumnDragPreview( cells, fromIndex, targetIndex ) {
 	const direction = targetIndex > fromIndex ? -1 : 1;
 
 	for ( const cell of cells ) {
-		for ( const el of getColumnVisualCells( cell ) ) {
-			el.classList.add( 'cortext-column-reorder-preview' );
-			if ( cell.index === fromIndex ) {
-				el.classList.add( 'cortext-column-drag-source' );
-			}
-			if ( cell.index >= start && cell.index <= end ) {
-				if ( cell.index !== fromIndex ) {
-					el.style.transform = `translateX(${
-						direction * sourceWidth
-					}px)`;
-				}
+		cell.el.classList.add( 'cortext-column-reorder-preview' );
+		if ( cell.index === fromIndex ) {
+			cell.el.classList.add( 'cortext-column-drag-source' );
+		}
+		if ( cell.index >= start && cell.index <= end ) {
+			if ( cell.index !== fromIndex ) {
+				cell.el.style.transform = `translateX(${
+					direction * sourceWidth
+				}px)`;
 			}
 		}
 	}
