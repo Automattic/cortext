@@ -1908,7 +1908,9 @@ test.describe( 'Collection view block', () => {
 			const canvas = page.frameLocator( '[name="editor-canvas"]' );
 			await expect( canvas.getByText( 'Author' ) ).toBeVisible();
 
-			// 1. Toolbar Add field: create a "Notes" text field.
+			// 1. Toolbar Add field: create a "Notes" text field. The
+			//    popover follows Notion's click-to-create model, so
+			//    picking a type submits.
 			await page
 				.getByRole( 'button', { name: 'Add field', exact: true } )
 				.first()
@@ -1917,7 +1919,9 @@ test.describe( 'Collection view block', () => {
 				'.cortext-data-view-toolbar-popover'
 			);
 			await popover.getByLabel( 'Name' ).fill( 'Notes' );
-			await popover.getByRole( 'button', { name: 'Create' } ).click();
+			await popover
+				.getByRole( 'button', { name: 'Text', exact: true } )
+				.click();
 
 			const notesHeader = canvas.getByRole( 'columnheader', {
 				name: /Notes/,
@@ -1978,7 +1982,7 @@ test.describe( 'Collection view block', () => {
 			);
 			await ghostPopover.getByLabel( 'Name' ).fill( 'Tags' );
 			await ghostPopover
-				.getByRole( 'button', { name: 'Create' } )
+				.getByRole( 'button', { name: 'Text', exact: true } )
 				.click();
 
 			await expect(
