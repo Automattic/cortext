@@ -149,7 +149,20 @@ export function mapField( field ) {
 	const base = {
 		id,
 		label,
-		header: <HeaderLabel>{ label }</HeaderLabel>,
+		// Header content includes the label and a non-interactive marker
+		// span. `ColumnHeaderActions` queries the DOM for the marker and
+		// portals a sibling action button next to DataViews' built-in
+		// header trigger. The marker itself is aria-hidden and zero-size.
+		header: (
+			<HeaderLabel>
+				{ label }
+				<span
+					className="cortext-column-header-marker"
+					data-cortext-field-marker={ field.id }
+					aria-hidden="true"
+				/>
+			</HeaderLabel>
+		),
 		getValue: ( { item } ) => item?.meta?.[ id ] ?? null,
 		render: buildRender( id, type, label, elements ),
 		editable: EDITABLE_TYPES.has( type ),
