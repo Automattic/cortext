@@ -138,11 +138,11 @@ Worth a small spike before committing; `core-data`'s schema cache for rarely-cha
 
 ## 16. DataViews has no per-column menu-item slot `[upstream, soft]`
 
-**What.** DataViews' column-header dropdown (Sort / Add filter / Move / Hide) is a closed list — there's no `field.menuItems` to inject Rename / Duplicate / Delete. We portal a kebab next to the built-in trigger instead. Two triggers per column is busier than a single combined menu, so the kebab hides until `:hover` / `:focus-within`. It uses WP's `Dropdown` rather than Ariakit's `DropdownMenu` — Ariakit's anchor falls back to viewport `(0, 0)` when the trigger is mounted via `createPortal`.
+**What.** DataViews' column-header dropdown (Sort / Add filter / Move / Hide) is a closed list — there's no `field.menuItems` to inject Rename / Duplicate / Delete. To keep a single dropdown per column, we hide DataViews' built-in trigger on custom-field `<th>`s via CSS and portal our own combined trigger in (Sort / Move / Hide *plus* Rename / Duplicate / Delete). Title and system fields keep the built-in trigger. Main's drag-handle click-forward (`DataViewColumnInteractions`) iterates header buttons and skips `display: none` ones via `offsetParent`, so it lands on whichever trigger is visible. Filter is intentionally absent — Cortext doesn't surface column-level filters in the header.
 
-**Where.** `src/components/fields/ColumnHeaderActions.js`, hover-reveal CSS in `src/index.scss`.
+**Where.** `src/components/fields/ColumnHeaderActions.js` (combined dropdown), `src/index.scss` (`.dataviews-view-table th:has(.cortext-column-header-marker) > .dataviews-view-table-header-button { display: none }`), `src/components/DataViewColumnInteractions.js` (visible-button click forward).
 
-**Risk.** A DataViews refactor of the header `<th>` layout could push the kebab off the right edge. Filter is intentionally absent — Cortext doesn't expose column-level filters in the visible header.
+**Risk.** Re-implementing Sort / Move / Hide ourselves means new DataViews items in those menus won't show up here automatically. If main's drag handle stops calling `.click()` on the header trigger, the column-name click-to-open behavior would need a different forward.
 
 **Solution.** A `field.menuItems` (array or render-prop) on DataViews fields, appended to the built-in dropdown. Other consumers (Pattern Manager, Pages, Site Editor) would benefit too. File as a Gutenberg feature request.
 

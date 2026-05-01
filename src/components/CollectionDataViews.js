@@ -514,7 +514,11 @@ export default function CollectionDataViews( {
 					/>
 				) }
 				{ isTableLayout && (
-					<ColumnHeaderActions collectionId={ collectionId } />
+					<ColumnHeaderActions
+						collectionId={ collectionId }
+						view={ view }
+						onChangeView={ onChangeView }
+					/>
 				) }
 				{ /* tech-debt.md#7: DataViews has no footer slot, so the
 				   New-row affordance and its CSS layout sit outside the

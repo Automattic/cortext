@@ -478,51 +478,22 @@ body.cortext-fullscreen {
 	}
 }
 
-// Cortext kebab (Rename / Duplicate / Delete) and ghost-column `+` are
-// portaled into each <th> next to DataViews' built-in trigger and main's
-// drag/resize handles. Kebab is hover-revealed so columns at rest don't
-// look crowded; ghost-column `+` is sticky-visible since it's the only
-// affordance there. Sits to the left of the 8px-wide resize handle.
-.cortext-column-header-actions {
-	position: absolute;
-	top: 50%;
-	right: 16px;
-	transform: translateY(-50%);
-	z-index: 2;
-	opacity: 0;
-	transition: opacity 120ms ease-out;
-}
-
-// Ghost-column variant: in-flow (drag/resize are gated off the ghost
-// column, so no overlap to worry about), sticky-visible.
-.cortext-column-header-actions--add {
-	position: static;
-	transform: none;
-	opacity: 1;
-	z-index: auto;
-}
-
-// The ghost column's DataViews trigger is empty — its only content is
-// the aria-hidden marker we use as a portal anchor (`querySelectorAll`
-// still resolves the marker through `display: none`). Hiding it here
-// leaves the + button as the sole cell content so it lines up with the
-// data-column labels instead of being pushed to the empty trigger's
-// baseline.
+// Custom field columns and the ghost column carry a marker that
+// `ColumnHeaderActions` portals our trigger into. We hide DataViews'
+// built-in trigger on those <th>s and replace it with a single combined
+// dropdown (Sort / Move / Hide / Rename / Duplicate / Delete) for data
+// columns, or a `+` button for the ghost column. Title and system
+// fields don't have a marker, so their built-in triggers stay visible.
+// `tech-debt.md#16` covers the upstream gap that forces this takeover.
 .dataviews-view-table
-th:has(.cortext-column-header-marker--add)
-.dataviews-view-table-header-button {
+th:has(.cortext-column-header-marker)
+.dataviews-view-table-header-button:not(.cortext-column-header-trigger) {
 	display: none;
 }
 
-.cortext-data-view
-.dataviews-view-table
-thead > tr > th:hover
-.cortext-column-header-actions:not(.cortext-column-header-actions--add),
-.cortext-data-view
-.dataviews-view-table
-thead > tr > th:focus-within
-.cortext-column-header-actions:not(.cortext-column-header-actions--add) {
-	opacity: 1;
+.cortext-column-header-actions {
+	display: inline-flex;
+	align-items: center;
 }
 
 .cortext-rename-field-inline .components-base-control {

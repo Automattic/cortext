@@ -394,7 +394,18 @@ function ColumnDragHandle( { cell } ) {
 		( event ) => {
 			event.preventDefault();
 			event.stopPropagation();
-			cell.el.querySelector( HEADER_BUTTON_SELECTOR )?.click();
+			// Forward to the visible header button. On custom field
+			// columns, Cortext hides DataViews' built-in trigger and
+			// portals its own combined dropdown trigger in (same class,
+			// later in DOM order); `offsetParent` rules out the hidden
+			// one. tech-debt.md#16.
+			const buttons = cell.el.querySelectorAll( HEADER_BUTTON_SELECTOR );
+			for ( const btn of buttons ) {
+				if ( btn.offsetParent !== null ) {
+					btn.click();
+					return;
+				}
+			}
 		},
 		[ cell.el ]
 	);

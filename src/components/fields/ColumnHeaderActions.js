@@ -8,14 +8,16 @@ import {
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalConfirmDialog as ConfirmDialog,
 } from '@wordpress/components';
+import { useEntityRecord } from '@wordpress/core-data';
 import {
 	createPortal,
 	useCallback,
 	useEffect,
+	useMemo,
 	useRef,
 	useState,
 } from '@wordpress/element';
-import { moreVertical, plus } from '@wordpress/icons';
+import { plus } from '@wordpress/icons';
 
 import AddFieldPopover from './AddFieldPopover';
 import RenameFieldInline from './RenameFieldInline';
@@ -23,13 +25,18 @@ import {
 	useDeleteField,
 	useDuplicateField,
 } from '../../hooks/useFieldMutations';
+import { GHOST_FIELD_ID, TITLE_FIELD_ID } from '../dataViewColumns';
 
 // Projects two kinds of triggers into the DataViews table header:
 //
-// - `[data-cortext-field-marker="<recordId>"]` — kebab menu (Rename /
-//   Duplicate / Delete) for custom fields, sibling to DataViews'
-//   built-in column-header trigger and `DataViewColumnInteractions`'
-//   resize/reorder handles.
+// - `[data-cortext-field-marker="<recordId>"]` — combined column-header
+//   dropdown for custom fields. Replaces DataViews' built-in trigger
+//   (hidden via CSS, see `tech-debt.md#16`) with a single menu owning
+//   Sort / Move / Hide *plus* Rename / Duplicate / Delete. The marker
+//   sits inside DataViews' (hidden) trigger and serves only as a portal
+//   anchor; the actual button is rendered as a sibling of the trigger,
+//   inheriting the same class so main's drag handle click-forward
+//   resolves to it.
 // - `[data-cortext-add-field-marker]` — `+` button on the ghost column
 //   that opens the same `AddFieldPopover` as the toolbar Add field
 //   trigger.
@@ -38,7 +45,11 @@ import {
 // position in DOM and walks up to the wrapping `.cortext-data-view`.
 // A MutationObserver re-syncs portals whenever DataViews mutates its
 // header markup (column toggles, sorting, resizing).
-export default function ColumnHeaderActions( { collectionId } ) {
+export default function ColumnHeaderActions( {
+	collectionId,
+	view,
+	onChangeView,
+} ) {
 	const anchorRef = useRef( null );
 	const [ targets, setTargets ] = useState( [] );
 
@@ -118,6 +129,8 @@ export default function ColumnHeaderActions( { collectionId } ) {
 						<FieldActions
 							recordId={ target.recordId }
 							collectionId={ collectionId }
+							view={ view }
+							onChangeView={ onChangeView }
 						/>,
 						target.th,
 						target.key
@@ -137,11 +150,81 @@ function stopBubble( event ) {
 	event.stopPropagation();
 }
 
-function FieldActions( { recordId, collectionId } ) {
+function FieldActions( { recordId, collectionId, view, onChangeView } ) {
 	const [ isRenaming, setIsRenaming ] = useState( false );
 	const [ confirmDelete, setConfirmDelete ] = useState( false );
 	const duplicate = useDuplicateField( collectionId );
 	const remove = useDeleteField( collectionId );
+	const { record } = useEntityRecord( 'postType', 'crtxt_field', recordId );
+
+	const dataViewId = `field-${ recordId }`;
+	const label =
+		record?.title?.raw || record?.title?.rendered || `#${ recordId }`;
+	const visibleFields = useMemo(
+		() => ( Array.isArray( view?.fields ) ? view.fields : [] ),
+		[ view ]
+	);
+	const sortField = view?.sort?.field ?? null;
+	const sortDirection = view?.sort?.direction ?? null;
+	const isSorted = sortField === dataViewId;
+
+	// Title is pinned at index 0 (PR A's normalizeView) and the ghost
+	// column at the end. Move only operates on the data-field region in
+	// between, so a sideways swap can't displace either.
+	const movableFields = useMemo(
+		() =>
+			visibleFields.filter(
+				( id ) => id !== TITLE_FIELD_ID && id !== GHOST_FIELD_ID
+			),
+		[ visibleFields ]
+	);
+	const movableIndex = movableFields.indexOf( dataViewId );
+	const canMoveLeft = movableIndex > 0;
+	const canMoveRight =
+		movableIndex >= 0 && movableIndex < movableFields.length - 1;
+
+	const dispatchSort = useCallback(
+		( direction ) => {
+			onChangeView( {
+				...view,
+				sort: { field: dataViewId, direction },
+			} );
+		},
+		[ onChangeView, view, dataViewId ]
+	);
+
+	const dispatchMove = useCallback(
+		( delta ) => {
+			const order = movableFields.slice();
+			const from = order.indexOf( dataViewId );
+			if ( from < 0 ) {
+				return;
+			}
+			const to = from + delta;
+			if ( to < 0 || to >= order.length ) {
+				return;
+			}
+			order.splice( from, 1 );
+			order.splice( to, 0, dataViewId );
+			// Re-stitch with title first and ghost last so neither can
+			// be displaced by a sideways swap.
+			const ordered = [];
+			if ( visibleFields.includes( TITLE_FIELD_ID ) ) {
+				ordered.push( TITLE_FIELD_ID );
+			}
+			ordered.push( ...order );
+			if ( visibleFields.includes( GHOST_FIELD_ID ) ) {
+				ordered.push( GHOST_FIELD_ID );
+			}
+			onChangeView( { ...view, fields: ordered } );
+		},
+		[ onChangeView, view, dataViewId, movableFields, visibleFields ]
+	);
+
+	const dispatchHide = useCallback( () => {
+		const next = visibleFields.filter( ( id ) => id !== dataViewId );
+		onChangeView( { ...view, fields: next } );
+	}, [ onChangeView, view, dataViewId, visibleFields ] );
 
 	const onConfirmDelete = useCallback( async () => {
 		try {
@@ -176,48 +259,108 @@ function FieldActions( { recordId, collectionId } ) {
 		>
 			<Dropdown
 				contentClassName="cortext-field-actions-popover"
-				popoverProps={ { placement: 'bottom-end' } }
+				popoverProps={ { placement: 'bottom-start' } }
 				renderToggle={ ( { isOpen, onToggle } ) => (
 					<Button
-						icon={ moreVertical }
-						size="small"
-						label={ __( 'Field actions', 'cortext' ) }
+						className="dataviews-view-table-header-button cortext-column-header-trigger"
+						variant="tertiary"
 						onClick={ onToggle }
 						aria-expanded={ isOpen }
-					/>
+					>
+						{ label }
+						{ isSorted ? (
+							<span aria-hidden="true">
+								{ sortDirection === 'asc' ? ' ↑' : ' ↓' }
+							</span>
+						) : null }
+					</Button>
 				) }
 				renderContent={ ( { onClose } ) => (
-					<MenuGroup>
-						<MenuItem
-							onClick={ () => {
-								onClose();
-								setIsRenaming( true );
-							} }
-						>
-							{ __( 'Rename', 'cortext' ) }
-						</MenuItem>
-						<MenuItem
-							onClick={ async () => {
-								onClose();
-								try {
-									await duplicate.run( recordId );
-								} catch {
-									// surfaced via duplicate.error.
+					<>
+						<MenuGroup>
+							<MenuItem
+								isSelected={
+									isSorted && sortDirection === 'asc'
 								}
-							} }
-						>
-							{ __( 'Duplicate', 'cortext' ) }
-						</MenuItem>
-						<MenuItem
-							isDestructive
-							onClick={ () => {
-								onClose();
-								setConfirmDelete( true );
-							} }
-						>
-							{ __( 'Delete', 'cortext' ) }
-						</MenuItem>
-					</MenuGroup>
+								onClick={ () => {
+									onClose();
+									dispatchSort( 'asc' );
+								} }
+							>
+								{ __( 'Sort ascending', 'cortext' ) }
+							</MenuItem>
+							<MenuItem
+								isSelected={
+									isSorted && sortDirection === 'desc'
+								}
+								onClick={ () => {
+									onClose();
+									dispatchSort( 'desc' );
+								} }
+							>
+								{ __( 'Sort descending', 'cortext' ) }
+							</MenuItem>
+						</MenuGroup>
+						<MenuGroup>
+							<MenuItem
+								disabled={ ! canMoveLeft }
+								onClick={ () => {
+									onClose();
+									dispatchMove( -1 );
+								} }
+							>
+								{ __( 'Move left', 'cortext' ) }
+							</MenuItem>
+							<MenuItem
+								disabled={ ! canMoveRight }
+								onClick={ () => {
+									onClose();
+									dispatchMove( 1 );
+								} }
+							>
+								{ __( 'Move right', 'cortext' ) }
+							</MenuItem>
+							<MenuItem
+								onClick={ () => {
+									onClose();
+									dispatchHide();
+								} }
+							>
+								{ __( 'Hide column', 'cortext' ) }
+							</MenuItem>
+						</MenuGroup>
+						<MenuGroup>
+							<MenuItem
+								onClick={ () => {
+									onClose();
+									setIsRenaming( true );
+								} }
+							>
+								{ __( 'Rename', 'cortext' ) }
+							</MenuItem>
+							<MenuItem
+								onClick={ async () => {
+									onClose();
+									try {
+										await duplicate.run( recordId );
+									} catch {
+										// surfaced via duplicate.error.
+									}
+								} }
+							>
+								{ __( 'Duplicate', 'cortext' ) }
+							</MenuItem>
+							<MenuItem
+								isDestructive
+								onClick={ () => {
+									onClose();
+									setConfirmDelete( true );
+								} }
+							>
+								{ __( 'Delete', 'cortext' ) }
+							</MenuItem>
+						</MenuGroup>
+					</>
 				) }
 			/>
 			{ confirmDelete ? (
