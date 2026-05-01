@@ -7,6 +7,8 @@
 
 const { test, expect } = require( '@wordpress/e2e-test-utils-playwright' );
 
+const { withExpectedConsoleError } = require( '../utils' );
+
 async function deleteIfCreated( requestUtils, path ) {
 	if ( ! path ) {
 		return;
@@ -69,28 +71,35 @@ test.describe( 'Public page rendering', () => {
 		const suffix = Date.now().toString( 36 ).slice( -4 );
 		let createdPage;
 
-		try {
-			createdPage = await requestUtils.rest( {
-				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
-				data: {
-					title: `Private page ${ suffix }`,
-					status: 'private',
-				},
-			} );
+		await withExpectedConsoleError(
+			/the server responded with a status of 404/,
+			async () => {
+				try {
+					createdPage = await requestUtils.rest( {
+						method: 'POST',
+						path: '/wp/v2/crtxt_pages',
+						data: {
+							title: `Private page ${ suffix }`,
+							status: 'private',
+						},
+					} );
 
-			await page.context().clearCookies( { name: /^wordpress_/ } );
+					await page
+						.context()
+						.clearCookies( { name: /^wordpress_/ } );
 
-			const response = await page.goto(
-				`/cortext/${ createdPage.slug }/`
-			);
+					const response = await page.goto(
+						`/cortext/${ createdPage.slug }/`
+					);
 
-			expect( response?.status() ).toBe( 404 );
-		} finally {
-			await deleteIfCreated(
-				requestUtils,
-				createdPage && `/wp/v2/crtxt_pages/${ createdPage.id }`
-			);
-		}
+					expect( response?.status() ).toBe( 404 );
+				} finally {
+					await deleteIfCreated(
+						requestUtils,
+						createdPage && `/wp/v2/crtxt_pages/${ createdPage.id }`
+					);
+				}
+			}
+		);
 	} );
 } );
