@@ -13,6 +13,7 @@ import { plus } from '@wordpress/icons';
 
 import DataViewColumnInteractions from './DataViewColumnInteractions';
 import EditableCell, { RowMutationContext } from './EditableCell';
+import ColumnHeaderActions from './fields/ColumnHeaderActions';
 import { TITLE_FIELD_ID, normalizeView } from './dataViewColumns';
 import useCollectionFields from '../hooks/useCollectionFields';
 import useCollectionRows from '../hooks/useCollectionRows';
@@ -43,6 +44,31 @@ const TITLE_FIELD = {
 	// reorders and resizes like any other column. `normalizeView` re-adds
 	// the id to `view.fields` if something corrupts the saved state.
 	enableHiding: false,
+};
+
+// Synthetic "ghost column" rendered at the right edge of the table layout.
+// Its `header` carries an aria-hidden marker that `ColumnHeaderActions`
+// portals a `+` button into; the row cells render `null`, leaving an
+// empty column that visually echoes Notion's "add column" affordance.
+// Pinned visible (and last) by the view-sync effect when
+// `view.type === 'table'`, dropped from `view.fields` for grid/list.
+export const GHOST_FIELD_ID = '__add_field';
+const GHOST_FIELD = {
+	id: GHOST_FIELD_ID,
+	type: 'text',
+	label: '',
+	enableSorting: false,
+	enableHiding: false,
+	editable: false,
+	getValue: () => '',
+	render: () => null,
+	header: (
+		<span
+			className="cortext-column-header-marker cortext-column-header-marker--add"
+			data-cortext-add-field-marker="true"
+			aria-hidden="true"
+		/>
+	),
 };
 
 // Pulls a "single equality" prefill out of the active filters: only filters
@@ -157,10 +183,11 @@ export default function CollectionDataViews( {
 		error: rowError,
 		refresh,
 	} = useCollectionRows( collectionId, view );
-	const dataViewFields = useMemo(
-		() => [ TITLE_FIELD, ...fields ],
-		[ fields ]
-	);
+	const isTableLayout = view?.type === 'table';
+	const dataViewFields = useMemo( () => {
+		const base = [ TITLE_FIELD, ...fields ];
+		return isTableLayout ? [ ...base, GHOST_FIELD ] : base;
+	}, [ fields, isTableLayout ] );
 	const tableWrapperRef = useRef( null );
 	// editRequest is the "open this cell for editing" channel: cells that
 	// match its `{ rowId, fieldId }` flip to edit mode and clear it. Used
@@ -330,7 +357,26 @@ export default function CollectionDataViews( {
 			};
 		}
 
-		const normalized = normalizeView( seededView, validIds );
+		let normalized = normalizeView( seededView, validIds );
+
+		// Pin the ghost "+ add field" column last whenever the table
+		// layout is active. In grid/list layouts the synthetic field
+		// is absent from `dataViewFields`, so `normalizeView` dropped
+		// any stale reference already.
+		if ( validIds.has( GHOST_FIELD_ID ) ) {
+			const stripped = ( normalized.fields ?? [] ).filter(
+				( id ) => id !== GHOST_FIELD_ID
+			);
+			const nextFields = [ ...stripped, GHOST_FIELD_ID ];
+			const fieldsChanged =
+				nextFields.length !== ( normalized.fields ?? [] ).length ||
+				nextFields.some(
+					( id, i ) => id !== ( normalized.fields ?? [] )[ i ]
+				);
+			if ( fieldsChanged ) {
+				normalized = { ...normalized, fields: nextFields };
+			}
+		}
 
 		const currentSort = normalized.sort ?? null;
 		const nextSort =
@@ -397,13 +443,16 @@ export default function CollectionDataViews( {
 					isLoading={ isLoading }
 					empty={ empty }
 				/>
-				{ view?.type === 'table' && (
+				{ isTableLayout && (
 					<DataViewColumnInteractions
 						wrapperRef={ tableWrapperRef }
 						view={ view }
 						fields={ dataViewFields }
 						onChangeView={ onChangeView }
 					/>
+				) }
+				{ isTableLayout && (
+					<ColumnHeaderActions collectionId={ collectionId } />
 				) }
 				{ /* tech-debt.md#7: DataViews has no footer slot, so the
 				   New-row affordance and its CSS layout sit outside the
