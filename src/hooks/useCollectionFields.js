@@ -23,11 +23,8 @@ export function buildFieldListQuery( fieldIds ) {
 // of `crtxt_field` post IDs in display order. Fetch those records, then
 // map each to a DataViews field. Row meta keys are `field-<post_id>`.
 export default function useCollectionFields( collectionId ) {
-	const { record: collection } = useEntityRecord(
-		'postType',
-		'crtxt_collection',
-		collectionId ?? 0
-	);
+	const { record: collection, isResolving: collectionResolving } =
+		useEntityRecord( 'postType', 'crtxt_collection', collectionId ?? 0 );
 
 	const fieldIds = useMemo( () => {
 		const raw = collection?.meta?.fields;
@@ -62,10 +59,14 @@ export default function useCollectionFields( collectionId ) {
 		return [ ...custom, ...systemFields() ];
 	}, [ fieldRecords ] );
 
-	// `isResolving` only flips true while we have no collection at all —
-	// i.e., the very first render or a fresh collection switch. core-data
-	// keeps cached records visible during refetches, so an invalidation
-	// after a mutation doesn't strand the UI on the loading spinner.
+	// `isResolving` flips true only while we're actively fetching AND
+	// have no record yet. After a 404 (resolution finishes with no
+	// collection) `collectionResolving` flips back to false, so the
+	// consumer can fall through to the invalid-collection notice
+	// instead of spinning forever. During a refetch (after a mutation)
+	// the cached collection stays truthy, so the spinner doesn't
+	// flash even though the resolver briefly enters the resolving
+	// state.
 	//
 	// `fieldsResolved` lets the view-sync wait for authoritative field
 	// data before running. During a refetch (e.g., after creating a
@@ -96,7 +97,8 @@ export default function useCollectionFields( collectionId ) {
 		fields,
 		collection: collection ?? null,
 		slug: collection?.meta?.slug ?? null,
-		isResolving: Boolean( collectionId ) && ! collection,
+		isResolving:
+			Boolean( collectionId ) && ! collection && collectionResolving,
 		fieldsResolved: fieldsResolvedFlag,
 	};
 }
