@@ -687,6 +687,14 @@ body.cortext-column-resizing {
 	white-space: nowrap;
 }
 
+.cortext-column-reorder-preview {
+	transition: transform 120ms ease;
+}
+
+.cortext-column-drag-source {
+	opacity: 0.45;
+}
+
 body.cortext-column-dragging {
 	cursor: grabbing;
 	user-select: none;

@@ -268,6 +268,59 @@ function suppressNextClick() {
 	}, 0 );
 }
 
+function getColumnVisualCells( cell ) {
+	return [ cell.el, ...getColumnBodyCells( cell.el ) ];
+}
+
+function clearColumnDragPreview( cells ) {
+	for ( const cell of cells ) {
+		for ( const el of getColumnVisualCells( cell ) ) {
+			el.style.transform = '';
+			el.classList.remove(
+				'cortext-column-reorder-preview',
+				'cortext-column-drag-source'
+			);
+		}
+	}
+}
+
+function applyColumnDragPreview( cells, fromIndex, targetIndex ) {
+	clearColumnDragPreview( cells );
+	if (
+		typeof fromIndex !== 'number' ||
+		typeof targetIndex !== 'number' ||
+		fromIndex === targetIndex
+	) {
+		return;
+	}
+
+	const sourceCell = cells[ fromIndex ];
+	if ( ! sourceCell ) {
+		return;
+	}
+
+	const sourceWidth = sourceCell.el.getBoundingClientRect().width;
+	const start = Math.min( fromIndex, targetIndex );
+	const end = Math.max( fromIndex, targetIndex );
+	const direction = targetIndex > fromIndex ? -1 : 1;
+
+	for ( const cell of cells ) {
+		for ( const el of getColumnVisualCells( cell ) ) {
+			el.classList.add( 'cortext-column-reorder-preview' );
+			if ( cell.index === fromIndex ) {
+				el.classList.add( 'cortext-column-drag-source' );
+			}
+			if ( cell.index >= start && cell.index <= end ) {
+				if ( cell.index !== fromIndex ) {
+					el.style.transform = `translateX(${
+						direction * sourceWidth
+					}px)`;
+				}
+			}
+		}
+	}
+}
+
 function ColumnDragHandle( { cell } ) {
 	const data = {
 		fieldId: cell.fieldId,
@@ -479,6 +532,11 @@ export default function DataViewColumnInteractions( {
 				nextTargetIndex,
 				event.active.data.current?.index
 			);
+			applyColumnDragPreview(
+				cellsRef.current,
+				event.active.data.current?.index,
+				nextTargetIndex
+			);
 			setDropTarget( indicator );
 			return indicator;
 		},
@@ -504,6 +562,7 @@ export default function DataViewColumnInteractions( {
 			const fromIndex = event.active.data.current?.index;
 
 			document.body.classList.remove( 'cortext-column-dragging' );
+			clearColumnDragPreview( cellsRef.current );
 			setDropTarget( null );
 			setActiveColumn( null );
 			suppressNextClick();
@@ -529,6 +588,7 @@ export default function DataViewColumnInteractions( {
 
 	const onDragCancel = useCallback( () => {
 		document.body.classList.remove( 'cortext-column-dragging' );
+		clearColumnDragPreview( cellsRef.current );
 		setDropTarget( null );
 		setActiveColumn( null );
 	}, [] );

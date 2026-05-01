@@ -1638,6 +1638,12 @@ test.describe( 'Collection view block', () => {
 				notesBox.y + notesBox.height / 2,
 				{ steps: 10 }
 			);
+			await expect
+				.poll( async () => {
+					const box = await notesTh.boundingBox();
+					return box.x;
+				} )
+				.toBeLessThan( notesBox.x - 20 );
 			await page.mouse.up();
 
 			await page.evaluate( async () => {
