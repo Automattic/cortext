@@ -83,11 +83,18 @@ export default function useAutosave() {
 			postStatus: ps,
 			savePost: save,
 		} = stateRef.current;
-		if ( d && s && ! saving && ps !== 'trash' ) {
-			maybePromoteStatus();
-			lastSaveAtRef.current = Date.now();
-			save();
+		if ( ! d || ! s || ps === 'trash' ) {
+			return Promise.resolve( true );
 		}
+		if ( saving ) {
+			return Promise.resolve( false );
+		}
+		maybePromoteStatus();
+		lastSaveAtRef.current = Date.now();
+		return Promise.resolve( save() ).then(
+			() => true,
+			() => false
+		);
 	}, [] );
 
 	useEffect( () => {
@@ -147,8 +154,12 @@ export default function useAutosave() {
 				flushNow();
 			}
 		};
-		const onBlur = () => flushNow();
-		const onBeforeUnload = () => flushNow();
+		const onBlur = () => {
+			flushNow();
+		};
+		const onBeforeUnload = () => {
+			flushNow();
+		};
 
 		document.addEventListener( 'visibilitychange', onVisibilityChange );
 		window.addEventListener( 'blur', onBlur );
@@ -165,5 +176,5 @@ export default function useAutosave() {
 		};
 	}, [ flushNow ] );
 
-	return { status, lastSavedAt };
+	return { status, lastSavedAt, flushNow, isDirty, isSaving };
 }

@@ -43,6 +43,7 @@ export default function useCollectionRows( collectionId, view ) {
 		data: [],
 		paginationInfo: { totalItems: 0, totalPages: 0 },
 		isLoading: false,
+		hasResolved: false,
 		error: null,
 	} );
 	const [ refreshKey, setRefreshKey ] = useState( 0 );
@@ -64,6 +65,7 @@ export default function useCollectionRows( collectionId, view ) {
 				data: [],
 				paginationInfo: { totalItems: 0, totalPages: 0 },
 				isLoading: false,
+				hasResolved: false,
 				error: null,
 			} );
 			return undefined;
@@ -75,7 +77,12 @@ export default function useCollectionRows( collectionId, view ) {
 			buildQueryArgs( collectionId, view )
 		);
 
-		setState( ( prev ) => ( { ...prev, isLoading: true, error: null } ) );
+		setState( ( prev ) => ( {
+			...prev,
+			isLoading: true,
+			hasResolved: false,
+			error: null,
+		} ) );
 
 		apiFetch( { path } )
 			.then( ( body ) => {
@@ -89,6 +96,7 @@ export default function useCollectionRows( collectionId, view ) {
 						totalPages: body.totalPages ?? 1,
 					},
 					isLoading: false,
+					hasResolved: true,
 					error: null,
 				} );
 			} )
@@ -100,6 +108,7 @@ export default function useCollectionRows( collectionId, view ) {
 					data: [],
 					paginationInfo: { totalItems: 0, totalPages: 0 },
 					isLoading: false,
+					hasResolved: true,
 					error,
 				} );
 			} );

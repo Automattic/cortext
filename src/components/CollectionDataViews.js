@@ -180,6 +180,7 @@ export default function CollectionDataViews( {
 	empty,
 	invalid,
 	error,
+	onReady,
 } ) {
 	const { fields, collection, slug, isResolving, fieldsResolved } =
 		useCollectionFields( collectionId );
@@ -211,6 +212,7 @@ export default function CollectionDataViews( {
 		data,
 		paginationInfo,
 		isLoading,
+		hasResolved: rowsResolved,
 		error: rowError,
 		refresh,
 	} = useCollectionRows( isResolving ? null : collectionId, reconciledView );
@@ -492,6 +494,12 @@ export default function CollectionDataViews( {
 			} );
 		}
 	}, [ availableFields, isTableLayout, isResolving, fieldsResolved ] );
+
+	useEffect( () => {
+		if ( ! isResolving && rowsResolved ) {
+			onReady?.();
+		}
+	}, [ isResolving, rowsResolved, onReady ] );
 
 	if ( isResolving ) {
 		return loading;

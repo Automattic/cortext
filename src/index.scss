@@ -286,6 +286,38 @@ body.cortext-fullscreen {
 	}
 }
 
+.cortext-workspace {
+	position: absolute;
+	inset: 0;
+	min-height: 0;
+}
+
+.cortext-workspace__pane {
+	position: absolute;
+	inset: 0;
+	min-height: 0;
+	visibility: hidden;
+	pointer-events: none;
+	z-index: 0;
+}
+
+.cortext-workspace__pane[data-preserve-paint="true"] {
+	visibility: visible;
+}
+
+.cortext-workspace__pane[data-active="true"] {
+	visibility: visible;
+	pointer-events: auto;
+	background: var(--cortext-canvas-frame-surface);
+	z-index: 1;
+}
+
+.cortext-collection-pane {
+	position: relative;
+	height: 100%;
+	min-height: 0;
+}
+
 .cortext-canvas {
 
 	&__header {
@@ -315,8 +347,14 @@ body.cortext-fullscreen {
 	// Gutenberg-internal class; revisit if `@wordpress/interface` ever
 	// exposes a slot for a notice region above the content.
 	.interface-interface-skeleton__content {
+		position: relative;
 		display: flex;
 		flex-direction: column;
+		min-height: 0;
+	}
+
+	&__visual {
+		flex: 1 1 auto;
 		min-height: 0;
 	}
 
