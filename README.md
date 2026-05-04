@@ -39,8 +39,8 @@ Quick start:
 
 ```
 ./scripts/setup.sh   # install deps, assign a per-worktree port
-./scripts/run.sh     # boot wp-env, start the JS watcher
+./scripts/run.sh     # boot wp-env, seed demo data, start the JS watcher
 ./scripts/archive.sh # stop the detached wp-env environment
 ```
 
-Runs on Docker via wp-env. Parallel worktrees get deterministic per-path ports so branches and agents do not collide. Full workflow, contribution notes, and command reference in [Getting started](docs/getting-started.md).
+Runs on Docker via wp-env. Parallel worktrees get deterministic per-path ports so branches and agents do not collide. Demo data is opt-in: `./scripts/run.sh` and `npm run env:start:seed` seed it; plain `wp-env start` does not. Full workflow, contribution notes, and command reference in [Getting started](docs/getting-started.md).
