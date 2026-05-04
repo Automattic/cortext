@@ -489,9 +489,9 @@ export default function CollectionDataViews( {
 
 	useEffect( () => {
 		if ( ! isResolving && rowsResolved ) {
-			onReady?.();
+			onReady?.( collectionId );
 		}
-	}, [ isResolving, rowsResolved, onReady ] );
+	}, [ collectionId, isResolving, rowsResolved, onReady ] );
 
 	if ( isResolving ) {
 		return loading;

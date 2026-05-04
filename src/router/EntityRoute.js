@@ -1,17 +1,19 @@
 import { useParams } from '@tanstack/react-router';
 import { Spinner } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
-import { useCallback, useEffect, useState } from '@wordpress/element';
+import {
+	useCallback,
+	useEffect,
+	useMemo,
+	useReducer,
+	useState,
+} from '@wordpress/element';
 
 import Canvas from '../components/Canvas';
 import CollectionDataViews from '../components/CollectionDataViews';
 import EmptyState from './EmptyState';
-import {
-	parseIdFromUri,
-	parseSplatUri,
-	useResolveEntity,
-	useResolveCollection,
-} from './useResolveEntity';
+import { useResolveEntity, useResolveCollection } from './useResolveEntity';
+import { init, parseTarget, reducer } from './entityRouteReducer';
 
 const DEFAULT_VIEW = {
 	type: 'table',
@@ -94,227 +96,112 @@ function WorkspacePane( { active, preservePaint = false, children } ) {
 	);
 }
 
-function getActiveCollectionId( activePane ) {
-	const match =
-		typeof activePane === 'string'
-			? activePane.match( /^collection:(\d+)$/ )
-			: null;
-	return match ? Number( match[ 1 ] ) : null;
-}
-
-// Activation flow:
-//   1. URL changes → routeKey recomputes synchronously.
-//   2. committedRouteKey catches up after one render so the new pane mounts
-//      (still inactive) before we hide the previous one.
-//   3. Each pane reports readiness through its own signal: the page canvas
-//      fires onDisplayedPost from inside the iframe portal; collections fire
-//      onReady once their rows resolve.
-//   4. Once a pane is ready we set activePane, swapping it on top.
-// The page pane carries data-preserve-paint so its iframe stays painted when
-// inactive, so navigating page → collection → page reuses the same iframe
-// rather than re-creating (and re-flashing) it.
 export default function EntityRoute() {
 	const params = useParams( { strict: false } );
-	const { prefix, tail } = parseSplatUri( params._splat ?? '' );
-	const isCollectionRoute = prefix === 'collection';
-	const isEmptyRoute = ! isCollectionRoute && ! tail;
-	const pageId = isCollectionRoute ? null : parseIdFromUri( tail );
-	const collectionId = isCollectionRoute ? parseIdFromUri( tail ) : null;
-	let routeKey = 'empty';
-	if ( isCollectionRoute ) {
-		routeKey = `collection:${ collectionId ?? 'invalid' }`;
-	} else if ( ! isEmptyRoute ) {
-		routeKey = `page:${ pageId ?? 'invalid' }`;
-	}
-	const [ committedRouteKey, setCommittedRouteKey ] = useState( routeKey );
-	const hasCurrentRouteRendered = committedRouteKey === routeKey;
+	const splat = params._splat ?? '';
+	const target = useMemo( () => parseTarget( splat ), [ splat ] );
 
-	const pageResolution = useResolveEntity( isCollectionRoute ? '' : tail );
-	const collectionResolution = useResolveCollection( collectionId );
+	const [ state, dispatch ] = useReducer( reducer, target, init );
+	const { active, mountedPageId, mountedCollectionIds } = state;
 
-	const [ requestedPageId, setRequestedPageId ] = useState( null );
-	const [ displayedPageId, setDisplayedPageId ] = useState( null );
-	const [ collectionIds, setCollectionIds ] = useState( [] );
-	const [ readyCollectionIds, setReadyCollectionIds ] = useState(
-		() => new Set()
+	const pageResolution = useResolveEntity(
+		target.kind === 'page' ? target.tail : ''
 	);
-	const [ activePane, setActivePane ] = useState( null );
+	const collectionResolution = useResolveCollection(
+		target.kind === 'collection' ? target.id : null
+	);
 
 	useEffect( () => {
-		setCommittedRouteKey( routeKey );
-	}, [ routeKey ] );
+		dispatch( { type: 'TARGET_CHANGED', target } );
+	}, [ target ] );
 
 	useEffect( () => {
-		if ( isEmptyRoute && hasCurrentRouteRendered ) {
-			setActivePane( 'empty' );
-		}
-	}, [ isEmptyRoute, hasCurrentRouteRendered ] );
-
-	useEffect( () => {
-		if ( isEmptyRoute || isCollectionRoute || ! hasCurrentRouteRendered ) {
+		if ( target.kind !== 'page' || target.id === null ) {
 			return;
 		}
-		const { entity, isResolving, notFound } = pageResolution;
-		if ( entity?.id === pageId ) {
-			setRequestedPageId( entity.id );
+		const {
+			entity,
+			isResolving,
+			notFound,
+			id: resolvedFor,
+		} = pageResolution;
+		// Drop a stale snapshot from the previous target; the resolver
+		// resets to the new id on its next effect run.
+		if ( resolvedFor !== target.id ) {
 			return;
 		}
-		if ( ! isResolving && notFound ) {
-			setActivePane( 'page:not-found' );
-		}
-	}, [
-		isEmptyRoute,
-		isCollectionRoute,
-		hasCurrentRouteRendered,
-		pageId,
-		pageResolution,
-	] );
-
-	useEffect( () => {
-		if (
-			! isCollectionRoute &&
-			hasCurrentRouteRendered &&
-			requestedPageId === pageId &&
-			requestedPageId &&
-			displayedPageId === requestedPageId
-		) {
-			setActivePane( 'page' );
-		}
-	}, [
-		isCollectionRoute,
-		hasCurrentRouteRendered,
-		pageId,
-		requestedPageId,
-		displayedPageId,
-	] );
-
-	useEffect( () => {
-		if ( ! isCollectionRoute || ! hasCurrentRouteRendered ) {
-			return;
-		}
-		const { entity, isResolving, notFound } = collectionResolution;
-		if ( entity?.id === collectionId ) {
-			setCollectionIds( ( current ) =>
-				current.includes( entity.id )
-					? current
-					: [ ...current, entity.id ]
-			);
-			if ( readyCollectionIds.has( entity.id ) ) {
-				setActivePane( `collection:${ entity.id }` );
-			}
+		if ( entity?.id === target.id ) {
+			dispatch( { type: 'PAGE_RESOLVED', id: entity.id } );
 			return;
 		}
 		if ( ! isResolving && notFound ) {
-			setActivePane( 'collection:not-found' );
+			dispatch( { type: 'PAGE_NOT_FOUND' } );
 		}
-	}, [
-		isCollectionRoute,
-		hasCurrentRouteRendered,
-		collectionId,
-		collectionResolution,
-		readyCollectionIds,
-	] );
+	}, [ target, pageResolution ] );
 
-	const handleDisplayedPost = useCallback( ( postId ) => {
-		setDisplayedPageId( postId );
+	useEffect( () => {
+		if ( target.kind !== 'collection' || target.id === null ) {
+			return;
+		}
+		const {
+			entity,
+			isResolving,
+			notFound,
+			id: resolvedFor,
+		} = collectionResolution;
+		if ( resolvedFor !== target.id ) {
+			return;
+		}
+		if ( entity?.id === target.id ) {
+			dispatch( { type: 'COLLECTION_RESOLVED', id: entity.id } );
+			return;
+		}
+		if ( ! isResolving && notFound ) {
+			dispatch( { type: 'COLLECTION_NOT_FOUND' } );
+		}
+	}, [ target, collectionResolution ] );
+
+	const handlePageDisplayed = useCallback( ( id ) => {
+		dispatch( { type: 'PAGE_DISPLAYED', id } );
 	}, [] );
 
-	const handleCollectionReady = useCallback(
-		( id ) => {
-			setReadyCollectionIds( ( current ) => {
-				if ( current.has( id ) ) {
-					return current;
-				}
-				const next = new Set( current );
-				next.add( id );
-				return next;
-			} );
-
-			if ( isCollectionRoute && collectionId === id ) {
-				setActivePane( `collection:${ id }` );
-			}
-		},
-		[ isCollectionRoute, collectionId ]
-	);
-
-	useEffect( () => {
-		const keepIds = new Set();
-		const activeCollectionId = getActiveCollectionId( activePane );
-		if ( activeCollectionId ) {
-			keepIds.add( activeCollectionId );
-		}
-		if ( isCollectionRoute && collectionId ) {
-			keepIds.add( collectionId );
-		}
-
-		setCollectionIds( ( current ) => {
-			const next = current.filter( ( id ) => keepIds.has( id ) );
-			return next.length === current.length ? current : next;
-		} );
-		setReadyCollectionIds( ( current ) => {
-			let changed = false;
-			const next = new Set();
-			current.forEach( ( id ) => {
-				if ( keepIds.has( id ) ) {
-					next.add( id );
-				} else {
-					changed = true;
-				}
-			} );
-			return changed ? next : current;
-		} );
-	}, [ activePane, isCollectionRoute, collectionId ] );
-
-	const isInitialPageLoad =
-		! activePane &&
-		! isCollectionRoute &&
-		! pageResolution.notFound &&
-		( pageResolution.isResolving ||
-			Boolean( pageId ) ||
-			( requestedPageId && displayedPageId !== requestedPageId ) );
-	const isInitialCollectionLoad =
-		! activePane &&
-		isCollectionRoute &&
-		! collectionResolution.notFound &&
-		( collectionResolution.isResolving ||
-			( collectionId && ! readyCollectionIds.has( collectionId ) ) );
-	const showLoading = Boolean( isInitialPageLoad || isInitialCollectionLoad );
-	const showEmpty =
-		activePane === 'empty' || ( ! activePane && ! showLoading );
+	const handleCollectionReady = useCallback( ( id ) => {
+		dispatch( { type: 'COLLECTION_READY', id } );
+	}, [] );
 
 	return (
 		<div className="cortext-workspace">
-			{ requestedPageId && (
-				<WorkspacePane active={ activePane === 'page' } preservePaint>
+			{ mountedPageId !== null && (
+				<WorkspacePane active={ active.kind === 'page' } preservePaint>
 					<Canvas
-						postId={ requestedPageId }
-						onDisplayedPost={ handleDisplayedPost }
+						postId={ mountedPageId }
+						onDisplayedPost={ handlePageDisplayed }
 					/>
 				</WorkspacePane>
 			) }
 
-			{ collectionIds.map( ( id ) => (
+			{ mountedCollectionIds.map( ( id ) => (
 				<WorkspacePane
 					key={ id }
-					active={ activePane === `collection:${ id }` }
+					active={ active.kind === 'collection' && active.id === id }
 				>
 					<CollectionPane
 						collectionId={ id }
-						onReady={ () => handleCollectionReady( id ) }
+						onReady={ handleCollectionReady }
 					/>
 				</WorkspacePane>
 			) ) }
 
-			<WorkspacePane active={ showEmpty }>
+			<WorkspacePane active={ active.kind === 'empty' }>
 				<EmptyState />
 			</WorkspacePane>
-			<WorkspacePane active={ activePane === 'page:not-found' }>
+			<WorkspacePane active={ active.kind === 'page-not-found' }>
 				<NotFoundPane type="page" />
 			</WorkspacePane>
-			<WorkspacePane active={ activePane === 'collection:not-found' }>
+			<WorkspacePane active={ active.kind === 'collection-not-found' }>
 				<NotFoundPane type="collection" />
 			</WorkspacePane>
-			<WorkspacePane active={ showLoading }>
+			<WorkspacePane active={ active.kind === 'loading' }>
 				<LoadingPane />
 			</WorkspacePane>
 		</div>
