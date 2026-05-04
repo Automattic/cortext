@@ -4,6 +4,7 @@ import { __ } from '@wordpress/i18n';
 import {
 	useCallback,
 	useEffect,
+	useMemo,
 	useReducer,
 	useState,
 } from '@wordpress/element';
@@ -97,7 +98,8 @@ function WorkspacePane( { active, preservePaint = false, children } ) {
 
 export default function EntityRoute() {
 	const params = useParams( { strict: false } );
-	const target = parseTarget( params._splat ?? '' );
+	const splat = params._splat ?? '';
+	const target = useMemo( () => parseTarget( splat ), [ splat ] );
 
 	const [ state, dispatch ] = useReducer( reducer, target, init );
 	const { active, mountedPageId, mountedCollectionIds } = state;
@@ -111,9 +113,7 @@ export default function EntityRoute() {
 
 	useEffect( () => {
 		dispatch( { type: 'TARGET_CHANGED', target } );
-		// `target` is a fresh object each render; its fields are the identity.
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [ target.kind, target.id, target.tail ] );
+	}, [ target ] );
 
 	useEffect( () => {
 		if ( target.kind !== 'page' || target.id === null ) {
@@ -137,7 +137,7 @@ export default function EntityRoute() {
 		if ( ! isResolving && notFound ) {
 			dispatch( { type: 'PAGE_NOT_FOUND' } );
 		}
-	}, [ target.kind, target.id, pageResolution ] );
+	}, [ target, pageResolution ] );
 
 	useEffect( () => {
 		if ( target.kind !== 'collection' || target.id === null ) {
@@ -159,7 +159,7 @@ export default function EntityRoute() {
 		if ( ! isResolving && notFound ) {
 			dispatch( { type: 'COLLECTION_NOT_FOUND' } );
 		}
-	}, [ target.kind, target.id, collectionResolution ] );
+	}, [ target, collectionResolution ] );
 
 	const handlePageDisplayed = useCallback( ( id ) => {
 		dispatch( { type: 'PAGE_DISPLAYED', id } );
