@@ -366,7 +366,11 @@ body.cortext-fullscreen {
 
 	// `<Disabled>` already neutralises pointer events for the trashed
 	// canvas; the muted opacity is the visual cue that editing is locked.
+	// `<Disabled>` itself renders a plain div, so make it a flex column so
+	// the inner `__visual` wrapper still receives a height.
 	&__locked {
+		display: flex;
+		flex-direction: column;
 		flex: 1 1 auto;
 		min-height: 0;
 		opacity: 0.7;
