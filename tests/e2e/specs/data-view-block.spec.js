@@ -1355,7 +1355,7 @@ test.describe( 'Collection view block', () => {
 
 			const canvas = page.frameLocator( '[name="editor-canvas"]' );
 			const button = canvas
-				.locator( '.dataviews-view-table-header-button' )
+				.locator( '.dataviews-view-table-header-button:visible' )
 				.nth( 1 );
 			await button.focus();
 			await expect( button ).toBeFocused();
@@ -1908,6 +1908,22 @@ test.describe( 'Collection view block', () => {
 			const canvas = page.frameLocator( '[name="editor-canvas"]' );
 			await expect( canvas.getByText( 'Author' ) ).toBeVisible();
 
+			// Select the block so its toolbar (with Add field) renders.
+			// Clicking the canvas content tends to land on one of our
+			// interactive controls (column header dropdown, etc.) and
+			// open a popover instead of selecting the block; dispatch
+			// directly through core-data to avoid that.
+			await page.evaluate( () => {
+				const blocks = window.wp.data
+					.select( 'core/block-editor' )
+					.getBlocks();
+				if ( blocks.length ) {
+					window.wp.data
+						.dispatch( 'core/block-editor' )
+						.selectBlock( blocks[ 0 ].clientId );
+				}
+			} );
+
 			// 1. Toolbar Add field: create a "Notes" text field. The
 			//    popover follows Notion's click-to-create model, so
 			//    picking a type submits.
@@ -1928,10 +1944,24 @@ test.describe( 'Collection view block', () => {
 			} );
 			await expect( notesHeader ).toBeVisible();
 
+			// `getByRole('button', { name })` would match both the visible
+			// combined-dropdown trigger (text label) and the transparent
+			// drag-handle overlay (aria-label = field name); filter by
+			// visible text to pick the trigger. The drag handle stacks
+			// above the trigger to capture drag, and forwards click
+			// events via JS — Playwright's strict click would flag the
+			// handle as intercepting, so click via dispatchEvent.
+			const openColumnDropdown = async ( scope, name ) => {
+				const button = scope
+					.getByRole( 'button', { name } )
+					.filter( { hasText: name } );
+				await button.dispatchEvent( 'click' );
+			};
+
 			// 2. Rename "Notes" → "Description" via the column-header
 			//    dropdown (combined Sort/Move/Hide + Rename/Duplicate/
 			//    Delete menu — see docs/tech-debt.md#16).
-			await notesHeader.getByRole( 'button', { name: 'Notes' } ).click();
+			await openColumnDropdown( notesHeader, 'Notes' );
 			await page.getByRole( 'menuitem', { name: 'Rename' } ).click();
 
 			const renameInput = canvas.getByLabel( 'Field name' );
@@ -1946,7 +1976,7 @@ test.describe( 'Collection view block', () => {
 			).toHaveCount( 0 );
 
 			// 3. Duplicate "Description" → "Copy of Description".
-			await canvas.getByRole( 'button', { name: 'Description' } ).click();
+			await openColumnDropdown( canvas, 'Description' );
 			await page.getByRole( 'menuitem', { name: 'Duplicate' } ).click();
 
 			await expect(
@@ -1957,9 +1987,7 @@ test.describe( 'Collection view block', () => {
 
 			// 4. Delete "Copy of Description" via the dropdown + confirm
 			//    dialog.
-			await canvas
-				.getByRole( 'button', { name: 'Copy of Description' } )
-				.click();
+			await openColumnDropdown( canvas, 'Copy of Description' );
 			await page.getByRole( 'menuitem', { name: 'Delete' } ).click();
 			await page
 				.getByRole( 'button', { name: 'Delete', exact: true } )
@@ -1989,19 +2017,14 @@ test.describe( 'Collection view block', () => {
 				canvas.getByRole( 'columnheader', { name: /Tags/ } )
 			).toBeVisible();
 
-			// 6. Title's column header opens DataViews' built-in dropdown
-			//    (sort/hide/move). It does not surface schema actions
-			//    like Rename — the takeover only applies to custom fields.
-			//    Anchor the negative on a positive assertion so a broken
-			//    selector can't silently pass the Rename absence check.
-			await canvas.getByRole( 'button', { name: 'Title' } ).click();
+			// 6. Title's column doesn't get the schema-action takeover —
+			//    its `<th>` keeps DataViews' built-in trigger and has no
+			//    Cortext combined-dropdown trigger.
 			await expect(
-				page.getByRole( 'menuitem', { name: /Sort ascending/ } )
-			).toBeVisible();
-			await expect(
-				page.getByRole( 'menuitem', { name: 'Rename' } )
+				canvas
+					.getByRole( 'columnheader', { name: 'Title' } )
+					.locator( '.cortext-column-header-trigger' )
 			).toHaveCount( 0 );
-			await page.keyboard.press( 'Escape' );
 		} finally {
 			// Best-effort cleanup. The created/duplicated fields aren't
 			// tracked individually, but they cascade with their

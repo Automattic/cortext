@@ -501,6 +501,25 @@ th:has(.cortext-column-header-marker)
 	background-color: $gray-100;
 }
 
+// DataViews' :has(...) overrides only narrow the th padding-left on
+// non-first-child header cells (4px in default density, 0 in compact).
+// With `table-layout: auto` the column shrinks to match the th, but
+// our `table-layout: fixed` (above) sets the column to `max(th, td)`
+// of `width + padding`, so a td with full padding-left forces the
+// whole column wider than the th. Mirror the th's padding-left on the
+// tds so column widths follow the header.
+.cortext-data-view
+.dataviews-view-table
+tbody > tr > td:not(:first-child) {
+	padding-left: 4px;
+}
+
+.cortext-data-view
+.dataviews-view-table.has-compact-density
+tbody > tr > td:not(:first-child) {
+	padding-left: 0;
+}
+
 .cortext-column-header-actions {
 	display: inline-flex;
 	align-items: center;

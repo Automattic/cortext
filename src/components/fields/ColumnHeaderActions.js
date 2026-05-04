@@ -146,10 +146,6 @@ export default function ColumnHeaderActions( {
 	);
 }
 
-function stopBubble( event ) {
-	event.stopPropagation();
-}
-
 function FieldActions( { recordId, collectionId, view, onChangeView } ) {
 	const [ isRenaming, setIsRenaming ] = useState( false );
 	const [ confirmDelete, setConfirmDelete ] = useState( false );
@@ -236,12 +232,7 @@ function FieldActions( { recordId, collectionId, view, onChangeView } ) {
 
 	if ( isRenaming ) {
 		return (
-			// eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events
-			<span
-				className="cortext-column-header-actions"
-				onClick={ stopBubble }
-				onPointerDown={ stopBubble }
-			>
+			<span className="cortext-column-header-actions">
 				<RenameFieldInline
 					recordId={ recordId }
 					onDone={ () => setIsRenaming( false ) }
@@ -251,12 +242,7 @@ function FieldActions( { recordId, collectionId, view, onChangeView } ) {
 	}
 
 	return (
-		// eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events
-		<span
-			className="cortext-column-header-actions"
-			onClick={ stopBubble }
-			onPointerDown={ stopBubble }
-		>
+		<span className="cortext-column-header-actions">
 			<Dropdown
 				contentClassName="cortext-field-actions-popover"
 				popoverProps={ { placement: 'bottom-start' } }
@@ -267,7 +253,9 @@ function FieldActions( { recordId, collectionId, view, onChangeView } ) {
 						onClick={ onToggle }
 						aria-expanded={ isOpen }
 					>
-						{ label }
+						<span className="cortext-column-header-label">
+							{ label }
+						</span>
 						{ isSorted ? (
 							<span aria-hidden="true">
 								{ sortDirection === 'asc' ? ' ↑' : ' ↓' }
@@ -381,12 +369,7 @@ function FieldActions( { recordId, collectionId, view, onChangeView } ) {
 
 function AddFieldTrigger( { collectionId } ) {
 	return (
-		// eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events
-		<span
-			className="cortext-column-header-actions cortext-column-header-actions--add"
-			onClick={ stopBubble }
-			onPointerDown={ stopBubble }
-		>
+		<span className="cortext-column-header-actions cortext-column-header-actions--add">
 			<Dropdown
 				contentClassName="cortext-data-view-toolbar-popover"
 				popoverProps={ { placement: 'bottom-end' } }

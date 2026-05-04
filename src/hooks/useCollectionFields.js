@@ -97,8 +97,17 @@ export default function useCollectionFields( collectionId ) {
 		fields,
 		collection: collection ?? null,
 		slug: collection?.meta?.slug ?? null,
+		// True while either the collection or the field list is still on
+		// its first resolution. Once the collection 404s,
+		// `collectionResolving` flips back to false so the consumer can
+		// fall through to the invalid-collection notice. `fieldsResolved`
+		// is sticky once core-data has resolved at least once, so refetch
+		// transients (e.g., after a mutation) don't flip this back to
+		// true and flash the loading spinner.
 		isResolving:
-			Boolean( collectionId ) && ! collection && collectionResolving,
+			Boolean( collectionId ) &&
+			( ( ! collection && collectionResolving ) ||
+				( !! collection && fieldIds.length > 0 && ! fieldsResolved ) ),
 		fieldsResolved: fieldsResolvedFlag,
 	};
 }
