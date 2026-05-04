@@ -176,6 +176,7 @@ export default function EntityRoute() {
 					<Canvas
 						postId={ mountedPageId }
 						onDisplayedPost={ handlePageDisplayed }
+						isActive={ active.kind === 'page' }
 					/>
 				</WorkspacePane>
 			) }

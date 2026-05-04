@@ -6,8 +6,10 @@
 // router emits those hrefs on navigation and parses them back on load.
 
 import { privateApis as routePrivateApis } from '@wordpress/route';
+import { SlotFillProvider } from '@wordpress/components';
 
 import Sidebar from './components/Sidebar';
+import WorkspaceTopBar from './components/WorkspaceTopBar';
 import EntityRoute from './router/EntityRoute';
 import { unlock } from './lock-unlock';
 
@@ -22,12 +24,15 @@ const {
 
 function RootLayout() {
 	return (
-		<div className="cortext-shell">
-			<Sidebar />
-			<main className="cortext-shell__canvas">
-				<EntityRoute />
-			</main>
-		</div>
+		<SlotFillProvider>
+			<div className="cortext-shell">
+				<Sidebar />
+				<main className="cortext-shell__canvas">
+					<WorkspaceTopBar />
+					<EntityRoute />
+				</main>
+			</div>
+		</SlotFillProvider>
 	);
 }
 

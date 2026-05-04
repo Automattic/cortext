@@ -29,6 +29,7 @@ import {
 	TRASHED_PAGES_QUERY,
 } from './page-queries';
 import PublishToggle from './PublishToggle';
+import { TopBarActionsFill } from './WorkspaceTopBar';
 
 const SCOPE = 'cortext';
 const INSPECTOR = 'cortext/block-inspector';
@@ -54,7 +55,7 @@ function SaveStatus( { status } ) {
 	);
 }
 
-function Header( { saveStatus } ) {
+function DocumentActions( { saveStatus, isActive } ) {
 	const { enableComplementaryArea, disableComplementaryArea } =
 		useDispatch( interfaceStore );
 	const isInspectorOpen = useSelect(
@@ -64,21 +65,31 @@ function Header( { saveStatus } ) {
 		[]
 	);
 
+	// Canvas stays mounted across route changes (preservePaint keeps the
+	// editor iframe warm). Suppress the Fill when this page isn't the active
+	// pane so a backgrounded editor doesn't keep projecting Save/Publish into
+	// the workspace top bar over a collection.
+	if ( ! isActive ) {
+		return null;
+	}
+
 	return (
-		<div className="cortext-canvas__header">
-			<SaveStatus status={ saveStatus } />
-			<PublishToggle />
-			<Button
-				icon={ cog }
-				label={ __( 'Settings', 'cortext' ) }
-				isPressed={ isInspectorOpen }
-				onClick={ () =>
-					isInspectorOpen
-						? disableComplementaryArea( SCOPE )
-						: enableComplementaryArea( SCOPE, INSPECTOR )
-				}
-			/>
-		</div>
+		<TopBarActionsFill>
+			<div className="cortext-document-actions">
+				<SaveStatus status={ saveStatus } />
+				<PublishToggle />
+				<Button
+					icon={ cog }
+					label={ __( 'Settings', 'cortext' ) }
+					isPressed={ isInspectorOpen }
+					onClick={ () =>
+						isInspectorOpen
+							? disableComplementaryArea( SCOPE )
+							: enableComplementaryArea( SCOPE, INSPECTOR )
+					}
+				/>
+			</div>
+		</TopBarActionsFill>
 	);
 }
 
@@ -226,7 +237,13 @@ function VisualCanvas( { postId, onReady } ) {
 	);
 }
 
-function CanvasEditor( { post, pendingPost, onSwitchPost, onDisplayedPost } ) {
+function CanvasEditor( {
+	post,
+	pendingPost,
+	onSwitchPost,
+	onDisplayedPost,
+	isActive,
+} ) {
 	const { status, flushNow, isDirty, isSaving } = useAutosave();
 	const isTrashed = post.status === 'trash';
 
@@ -253,9 +270,9 @@ function CanvasEditor( { post, pendingPost, onSwitchPost, onDisplayedPost } ) {
 
 	return (
 		<>
+			<DocumentActions saveStatus={ status } isActive={ isActive } />
 			<InterfaceSkeleton
 				className="cortext-canvas"
-				header={ <Header saveStatus={ status } /> }
 				content={
 					<>
 						{ isTrashed && <TrashedNotice postId={ post.id } /> }
@@ -281,7 +298,7 @@ function CanvasEditor( { post, pendingPost, onSwitchPost, onDisplayedPost } ) {
 	);
 }
 
-export default function Canvas( { postId, onDisplayedPost } ) {
+export default function Canvas( { postId, onDisplayedPost, isActive } ) {
 	const { record: requestedPost } = useEntityRecord(
 		'postType',
 		POST_TYPE,
@@ -326,6 +343,7 @@ export default function Canvas( { postId, onDisplayedPost } ) {
 				pendingPost={ pendingPost }
 				onSwitchPost={ setDisplayedPost }
 				onDisplayedPost={ onDisplayedPost }
+				isActive={ isActive }
 			/>
 		</EditorProvider>
 	);
