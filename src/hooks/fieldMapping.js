@@ -143,13 +143,31 @@ export function systemFields() {
 
 export function mapField( field ) {
 	const id = `field-${ field.id }`;
-	const label = field.title?.rendered || field.title?.raw || `#${ field.id }`;
+	// Prefer `title.raw` over `title.rendered`: the latter has the
+	// `the_title` filter applied (wptexturize, entity encoding), which
+	// turns `&` into `&#038;`. We render the label as a JSX text child
+	// (auto-escaped by React), so the entity layer is unwanted noise.
+	const label = field.title?.raw || field.title?.rendered || `#${ field.id }`;
 	const type = field.meta?.type ?? 'text';
 	const elements = elementsFromOptions( field.meta?.options );
 	const base = {
 		id,
 		label,
-		header: <HeaderLabel>{ label }</HeaderLabel>,
+		// Header content is just an aria-hidden marker.
+		// `ColumnHeaderActions` queries the DOM for it and portals our
+		// combined-dropdown trigger into the owning <th>; DataViews'
+		// built-in trigger is hidden via CSS on marker-bearing columns
+		// (tech-debt.md#16). Skipping the label here avoids leaking
+		// duplicate text into the th's accessible/text content.
+		header: (
+			<HeaderLabel>
+				<span
+					className="cortext-column-header-marker"
+					data-cortext-field-marker={ field.id }
+					aria-hidden="true"
+				/>
+			</HeaderLabel>
+		),
 		getValue: ( { item } ) => item?.meta?.[ id ] ?? null,
 		render: buildRender( id, type, label, elements ),
 		editable: EDITABLE_TYPES.has( type ),

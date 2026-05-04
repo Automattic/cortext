@@ -13,7 +13,12 @@ import { plus } from '@wordpress/icons';
 
 import DataViewColumnInteractions from './DataViewColumnInteractions';
 import EditableCell, { RowMutationContext } from './EditableCell';
-import { TITLE_FIELD_ID, normalizeView } from './dataViewColumns';
+import ColumnHeaderActions from './fields/ColumnHeaderActions';
+import {
+	GHOST_FIELD_ID,
+	TITLE_FIELD_ID,
+	normalizeView,
+} from './dataViewColumns';
 import useCollectionFields from '../hooks/useCollectionFields';
 import useCollectionRows from '../hooks/useCollectionRows';
 
@@ -26,7 +31,11 @@ const TITLE_FIELD = {
 	header: (
 		<span className="cortext-column-header-label">{ TITLE_LABEL }</span>
 	),
-	getValue: ( { item } ) => item?.title?.rendered ?? item?.title?.raw ?? '',
+	// Prefer `title.raw` over `title.rendered` so sort comparisons use
+	// the unfiltered string (the_title encodes `&` as `&#038;`, which
+	// would otherwise sort under that literal entity). Same reason as
+	// `mapField`'s label fallback in `src/hooks/fieldMapping.js`.
+	getValue: ( { item } ) => item?.title?.raw ?? item?.title?.rendered ?? '',
 	render: ( { item } ) => (
 		<EditableCell
 			item={ item }
@@ -43,6 +52,30 @@ const TITLE_FIELD = {
 	// reorders and resizes like any other column. `normalizeView` re-adds
 	// the id to `view.fields` if something corrupts the saved state.
 	enableHiding: false,
+};
+
+// Synthetic "ghost column" rendered at the right edge of the table layout.
+// Its `header` carries an aria-hidden marker that `ColumnHeaderActions`
+// portals a `+` button into; the row cells render `null`, leaving an
+// empty column that visually echoes Notion's "add column" affordance.
+// Pinned visible (and last) by the view-sync effect when
+// `view.type === 'table'`, dropped from `view.fields` for grid/list.
+const GHOST_FIELD = {
+	id: GHOST_FIELD_ID,
+	type: 'text',
+	label: '',
+	enableSorting: false,
+	enableHiding: false,
+	editable: false,
+	getValue: () => '',
+	render: () => null,
+	header: (
+		<span
+			className="cortext-column-header-marker cortext-column-header-marker--add"
+			data-cortext-add-field-marker="true"
+			aria-hidden="true"
+		/>
+	),
 };
 
 // Pulls a "single equality" prefill out of the active filters: only filters
@@ -148,7 +181,7 @@ export default function CollectionDataViews( {
 	invalid,
 	error,
 } ) {
-	const { fields, collection, slug, isResolving } =
+	const { fields, collection, slug, isResolving, fieldsResolved } =
 		useCollectionFields( collectionId );
 
 	const availableFields = useMemo(
@@ -181,6 +214,15 @@ export default function CollectionDataViews( {
 		error: rowError,
 		refresh,
 	} = useCollectionRows( isResolving ? null : collectionId, reconciledView );
+
+	const isTableLayout = view?.type === 'table';
+	const dataViewFields = useMemo(
+		() =>
+			isTableLayout
+				? [ ...availableFields, GHOST_FIELD ]
+				: availableFields,
+		[ availableFields, isTableLayout ]
+	);
 
 	const tableWrapperRef = useRef( null );
 	// editRequest is the "open this cell for editing" channel: cells that
@@ -321,6 +363,10 @@ export default function CollectionDataViews( {
 	viewRef.current = view;
 	const onChangeViewRef = useRef( onChangeView );
 	onChangeViewRef.current = onChangeView;
+	// Field IDs known on the previous sync. Drives the auto-show path
+	// for fields the user just created. `null` on first run signals
+	// "saved view, leave it alone."
+	const knownFieldIdsRef = useRef( null );
 
 	// Reconcile saved view state with the live schema whenever the field
 	// set changes: seed defaults on first render, then hand off to
@@ -330,12 +376,19 @@ export default function CollectionDataViews( {
 	// they sit outside `normalizeView`'s scope. Other view settings
 	// (perPage, search, layout.density) are left alone.
 	useEffect( () => {
-		if ( isResolving ) {
+		// Don't run while we have no data at all *or* while the field
+		// records are mid-refetch — during a refetch `fieldRecords` is
+		// briefly empty for a new include query, and stripping orphan
+		// IDs against that transient state would wipe the user's
+		// `view.fields` (and their persisted view) until the refetch
+		// completes.
+		if ( isResolving || ! fieldsResolved ) {
 			return;
 		}
 		const validIds = new Set( availableFields.map( ( f ) => f.id ) );
 		const currentView = viewRef.current;
 		const currentFields = currentView?.fields ?? [];
+		const previouslyKnown = knownFieldIdsRef.current;
 
 		let seededView = currentView;
 		if ( currentFields.length === 0 ) {
@@ -351,7 +404,70 @@ export default function CollectionDataViews( {
 			};
 		}
 
-		const normalized = normalizeView( seededView, validIds );
+		let normalized = normalizeView( seededView, validIds );
+
+		// Splice any editable field that just appeared in the schema
+		// (wasn't present on the previous sync) into its schema position
+		// in `view.fields`. The first render — `previouslyKnown` is
+		// `null` — leaves saved views alone; from then on, the diff
+		// detects fields the user just created via toolbar Add field
+		// or duplicate. Honors user-driven hides because the toggled-off
+		// field IS in `previouslyKnown` and gets skipped here. Inserting
+		// at the schema position (rather than appending) keeps a
+		// duplicated field next to its source instead of jumping to the
+		// end of the visible columns.
+		if ( previouslyKnown && currentFields.length > 0 ) {
+			const next = [ ...( normalized.fields ?? [] ) ];
+			let inserted = false;
+			for (
+				let schemaIdx = 0;
+				schemaIdx < availableFields.length;
+				schemaIdx++
+			) {
+				const f = availableFields[ schemaIdx ];
+				if (
+					! f.editable ||
+					previouslyKnown.has( f.id ) ||
+					next.includes( f.id )
+				) {
+					continue;
+				}
+				let insertAt = next.length;
+				for ( let i = schemaIdx - 1; i >= 0; i-- ) {
+					const idx = next.indexOf( availableFields[ i ].id );
+					if ( idx >= 0 ) {
+						insertAt = idx + 1;
+						break;
+					}
+				}
+				next.splice( insertAt, 0, f.id );
+				inserted = true;
+			}
+			if ( inserted ) {
+				normalized = { ...normalized, fields: next };
+			}
+		}
+
+		// Pin the ghost "+ add field" column last whenever the table
+		// layout is active. In grid/list layouts the synthetic field
+		// isn't part of `availableFields`, so `normalizeView` already
+		// dropped any stale reference.
+		if ( isTableLayout ) {
+			const stripped = ( normalized.fields ?? [] ).filter(
+				( id ) => id !== GHOST_FIELD_ID
+			);
+			const nextFields = [ ...stripped, GHOST_FIELD_ID ];
+			const fieldsChanged =
+				nextFields.length !== ( normalized.fields ?? [] ).length ||
+				nextFields.some(
+					( id, i ) => id !== ( normalized.fields ?? [] )[ i ]
+				);
+			if ( fieldsChanged ) {
+				normalized = { ...normalized, fields: nextFields };
+			}
+		}
+
+		knownFieldIdsRef.current = validIds;
 
 		const currentSort = normalized.sort ?? null;
 		const nextSort =
@@ -375,7 +491,7 @@ export default function CollectionDataViews( {
 				filters: nextFilters,
 			} );
 		}
-	}, [ availableFields, isResolving ] );
+	}, [ availableFields, isTableLayout, isResolving, fieldsResolved ] );
 
 	if ( isResolving ) {
 		return loading;
@@ -409,7 +525,7 @@ export default function CollectionDataViews( {
 			<div className="cortext-data-view" ref={ tableWrapperRef }>
 				<DataViews
 					data={ dataFiltered }
-					fields={ availableFields }
+					fields={ dataViewFields }
 					view={ view }
 					onChangeView={ onChangeView }
 					paginationInfo={ clientPaginationInfo }
@@ -418,11 +534,18 @@ export default function CollectionDataViews( {
 					isLoading={ isLoading }
 					empty={ empty }
 				/>
-				{ view?.type === 'table' && (
+				{ isTableLayout && (
 					<DataViewColumnInteractions
 						wrapperRef={ tableWrapperRef }
 						view={ view }
 						fields={ availableFields }
+						onChangeView={ onChangeView }
+					/>
+				) }
+				{ isTableLayout && (
+					<ColumnHeaderActions
+						collectionId={ collectionId }
+						view={ view }
 						onChangeView={ onChangeView }
 					/>
 				) }

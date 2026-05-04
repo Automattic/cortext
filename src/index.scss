@@ -360,6 +360,176 @@ body.cortext-fullscreen {
 	padding: $grid-unit-15;
 }
 
+.cortext-add-field-popover {
+	display: grid;
+	gap: $grid-unit-15;
+	width: min(100%, 320px);
+
+	&__section-title {
+		font-size: 11px;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+		color: $gray-700;
+		display: block;
+		margin-bottom: $grid-unit-05;
+	}
+
+	&__type-grid {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: $grid-unit-05;
+	}
+
+	&__type-button {
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-10;
+		padding: $grid-unit-10;
+		border: $border-width solid $gray-200;
+		border-radius: 4px;
+		background: transparent;
+		text-align: start;
+		font-size: 13px;
+		color: $gray-900;
+		cursor: pointer;
+		transition: background-color 0.1s ease, border-color 0.1s ease;
+
+		&:disabled {
+			cursor: not-allowed;
+			opacity: 0.5;
+		}
+
+		&:focus-visible {
+			outline: 2px solid var(--wp-admin-theme-color, $gray-700);
+			outline-offset: -1px;
+		}
+
+		&:hover:not(:disabled) {
+			background: $gray-100;
+			border-color: $gray-700;
+		}
+	}
+
+	&__type-icon {
+		flex: 0 0 auto;
+		color: $gray-700;
+	}
+}
+
+// Marker spans live inside DataViews' header trigger button. Zero-size
+// and aria-hidden so they never receive focus or contribute to the
+// column width; the portal layer in `ColumnHeaderActions` finds them by
+// their `data-cortext-*-marker` attribute and projects a sibling button
+// into the owning <th>.
+.cortext-column-header-marker {
+	display: inline-block;
+	width: 0;
+	height: 0;
+	overflow: hidden;
+}
+
+// DataViews ships a `table-layout: auto; width: 100%` table. Auto
+// layout sizes each column based on the content of every column, so
+// adding or deleting a field reflows every existing column. Switch
+// to fixed layout with content-width sizing and explicit per-cell
+// widths, so column count stops affecting the surviving columns'
+// widths and the table grows to its natural content width.
+// `.dataviews-wrapper` already has `overflow: auto`, so horizontal
+// scroll kicks in once columns exceed the wrapper.
+.dataviews-view-table {
+	table-layout: fixed;
+	width: max-content;
+	// Mirror DataViews' inter-row separator under the last row, so the
+	// table has a clean visual end before the "+ New" footer button.
+	// Putting the border on the table (rather than the wrapper or the
+	// footer) keeps it pinned to the table's content width — narrower
+	// than the wrapper when columns fit, scrolling with the rest when
+	// they don't.
+	border-bottom: $border-width solid $gray-200;
+}
+
+.dataviews-view-table th,
+.dataviews-view-table td {
+	width: 200px;
+}
+
+// Title carries the post name and tends to be longer than other
+// fields; give it more breathing room.
+.dataviews-view-table th:first-child,
+.dataviews-view-table td:first-child {
+	width: 280px;
+}
+
+// Ghost column is just the `+` icon button. DataViews uses
+// `.dataviews-view-table tr td:last-child { padding-right: 48px }`
+// for the last column, plus `min-width: 15ch` on the cell content
+// wrapper. Match DataViews' selector specificity so our overrides
+// win, then size the column to the button's natural width with a
+// tight right padding.
+.dataviews-view-table tr th:last-child,
+.dataviews-view-table tr td:last-child {
+	width: 0;
+	padding-right: $grid-unit-10;
+
+	.dataviews-view-table__cell-content-wrapper,
+	.dataviews-view-table__primary-column-content {
+		min-width: 0;
+	}
+}
+
+// Custom field columns and the ghost column carry a marker that
+// `ColumnHeaderActions` portals our trigger into. We hide DataViews'
+// built-in trigger on those <th>s and replace it with a single combined
+// dropdown (Sort / Move / Hide / Rename / Duplicate / Delete) for data
+// columns, or a `+` button for the ghost column. Title and system
+// fields don't have a marker, so their built-in triggers stay visible.
+// `tech-debt.md#16` covers the upstream gap that forces this takeover.
+.dataviews-view-table
+th:has(.cortext-column-header-marker)
+.dataviews-view-table-header-button:not(.cortext-column-header-trigger) {
+	display: none;
+}
+
+// `DataViewColumnInteractions` portals a transparent drag handle over
+// each <th> with `z-index: 1`, which intercepts pointer events and
+// keeps `.dataviews-view-table-header-button:hover` from ever firing.
+// Hang the hover state off the <th> instead so the cell as a whole
+// reads as a clickable affordance (and the gray shows through any
+// transparent overlay above it).
+.cortext-data-view .dataviews-view-table thead > tr > th:hover {
+	background-color: $gray-100;
+}
+
+// DataViews' :has(...) overrides only narrow the th padding-left on
+// non-first-child header cells (4px in default density, 0 in compact).
+// With `table-layout: auto` the column shrinks to match the th, but
+// our `table-layout: fixed` (above) sets the column to `max(th, td)`
+// of `width + padding`, so a td with full padding-left forces the
+// whole column wider than the th. Mirror the th's padding-left on the
+// tds so column widths follow the header.
+.cortext-data-view
+.dataviews-view-table
+tbody > tr > td:not(:first-child) {
+	padding-left: 4px;
+}
+
+.cortext-data-view
+.dataviews-view-table.has-compact-density
+tbody > tr > td:not(:first-child) {
+	padding-left: 0;
+}
+
+.cortext-column-header-actions {
+	display: inline-flex;
+	align-items: center;
+}
+
+.cortext-rename-field-inline .components-base-control {
+	margin-bottom: 0;
+	min-width: 140px;
+}
+
 .cortext-collection-chooser {
 	display: grid;
 	gap: $grid-unit-05;
@@ -628,6 +798,7 @@ body.cortext-fullscreen {
 	.dataviews-view-table {
 		table-layout: fixed;
 
+		/* stylelint-disable-next-line no-descending-specificity */
 		tr td {
 			overflow: hidden;
 			padding-block: 0;
@@ -640,6 +811,7 @@ body.cortext-fullscreen {
 		// every cell hovers edge-to-edge regardless of content length. The
 		// min/max reset also overrides DataViews's upstream 15ch floor, which
 		// otherwise lets narrow resized columns paint into their neighbors.
+		/* stylelint-disable-next-line no-descending-specificity */
 		tbody .dataviews-view-table__cell-content-wrapper {
 			box-sizing: border-box;
 			width: 100%;
@@ -667,7 +839,6 @@ body.cortext-fullscreen {
 	&__footer {
 		flex: 0 0 auto;
 		padding: $grid-unit-05 $grid-unit-10;
-		border-top: $border-width solid $gray-200;
 	}
 
 	&__new-row.components-button {
@@ -685,14 +856,18 @@ body.cortext-fullscreen {
 
 // tech-debt.md#15: The resizer and dnd-kit drag handle are portaled into each
 // `<th>` rendered by `@wordpress/dataviews`, so the th needs a position anchor.
+/* stylelint-disable-next-line no-descending-specificity */
 .cortext-data-view .dataviews-view-table thead > tr > th {
 	position: relative;
-	cursor: grab;
+	cursor: pointer;
 
 	// The library renders the column label as a button that fills the th
-	// and brings its own `cursor: pointer`. Override so the entire header
-	// reads as draggable. The resizer's `cursor: col-resize` (below) wins
-	// at the right edge because the resizer overlays the th.
+	// and brings its own `cursor: pointer`. Inherit the th's pointer so
+	// the entire header (including the drag handle overlay) reads as
+	// clickable — the dropdown is the primary affordance; drag still
+	// works via mousedown on the drag handle. The resizer's
+	// `cursor: col-resize` (below) wins at the right edge.
+	/* stylelint-disable-next-line no-descending-specificity */
 	.dataviews-view-table-header-button {
 		cursor: inherit;
 		max-width: 100%;

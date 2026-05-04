@@ -18,6 +18,7 @@ import {
 } from '@dnd-kit/core';
 
 import {
+	GHOST_FIELD_ID,
 	MAX_COLUMN_WIDTH,
 	TITLE_FIELD_ID,
 	clampWidth,
@@ -68,11 +69,22 @@ function findHeaderCells( wrapper, view, fieldsById ) {
 			if ( ! el ) {
 				return null;
 			}
+			// Skip the ghost "+ add field" column: empty content means
+			// no width to resize, and reordering the trailing add-field
+			// affordance would be confusing.
+			if ( fieldId === GHOST_FIELD_ID ) {
+				return null;
+			}
+			// Prefer the field's own label over the cell's textContent
+			// for the drag preview. Custom field columns render their
+			// label asynchronously (via `useEntityRecord`), so the cell
+			// can briefly contain only the fallback `field-<id>` text.
+			const fieldLabel = fieldsById.get( fieldId )?.label;
 			return {
 				fieldId,
 				fieldType: fieldTypeFor( fieldId, fieldsById ),
 				index,
-				label: el.textContent?.trim() || fieldId,
+				label: fieldLabel || el.textContent?.trim() || fieldId,
 				el,
 			};
 		} )
@@ -387,7 +399,18 @@ function ColumnDragHandle( { cell } ) {
 		( event ) => {
 			event.preventDefault();
 			event.stopPropagation();
-			cell.el.querySelector( HEADER_BUTTON_SELECTOR )?.click();
+			// Forward to the visible header button. On custom field
+			// columns, Cortext hides DataViews' built-in trigger and
+			// portals its own combined dropdown trigger in (same class,
+			// later in DOM order); `offsetParent` rules out the hidden
+			// one. tech-debt.md#16.
+			const buttons = cell.el.querySelectorAll( HEADER_BUTTON_SELECTOR );
+			for ( const btn of buttons ) {
+				if ( btn.offsetParent !== null ) {
+					btn.click();
+					return;
+				}
+			}
 		},
 		[ cell.el ]
 	);
@@ -666,6 +689,7 @@ export default function DataViewColumnInteractions( {
 			onDragMove={ onDragMove }
 			onDragEnd={ onDragEnd }
 			onDragCancel={ onDragCancel }
+			autoScroll={ false }
 		>
 			{ cells.map( ( cell ) =>
 				createPortal(

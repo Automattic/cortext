@@ -135,3 +135,54 @@ Worth a small spike before committing; `core-data`'s schema cache for rarely-cha
 **Where.** `src/components/DataViewColumnInteractions.js`, `src/components/dataViewColumns.js`, the `DataViewColumnInteractions` mount in `src/components/CollectionDataViews.js`, and the column affordance / table wrapper rules in `src/index.scss`.
 
 **Solution.** Upstream DataViews could expose table-column APIs that cover `onChangeFields`, `onChangeColumnStyle`, resize handle rendering, per-field min/max widths, double-click autofit, drag overlay/insertion affordances, and stable header/cell slots or refs. If DataViews owned that layer, Cortext could drop the portal/DOM-query adapter, the wrapper min-width overrides, most of the dnd-kit column glue, and the direct DOM mutation used for live resize feedback.
+
+## 16. DataViews has no per-column menu-item slot `[upstream, soft]`
+
+**What.** DataViews' column-header dropdown (Sort / Add filter / Move / Hide) is a closed list — there's no `field.menuItems` to inject Rename / Duplicate / Delete. To keep a single dropdown per column, we hide DataViews' built-in trigger on custom-field `<th>`s via CSS and portal our own combined trigger in (Sort / Move / Hide *plus* Rename / Duplicate / Delete). Title and system fields keep the built-in trigger. Main's drag-handle click-forward (`DataViewColumnInteractions`) iterates header buttons and skips `display: none` ones via `offsetParent`, so it lands on whichever trigger is visible. Filter is intentionally absent — Cortext doesn't surface column-level filters in the header.
+
+**Where.** `src/components/fields/ColumnHeaderActions.js` (combined dropdown), `src/index.scss` (`.dataviews-view-table th:has(.cortext-column-header-marker) > .dataviews-view-table-header-button { display: none }`), `src/components/DataViewColumnInteractions.js` (visible-button click forward).
+
+**Risk.** Re-implementing Sort / Move / Hide ourselves means new DataViews items in those menus won't show up here automatically. If main's drag handle stops calling `.click()` on the header trigger, the column-name click-to-open behavior would need a different forward.
+
+**Solution.** A `field.menuItems` (array or render-prop) on DataViews fields, appended to the built-in dropdown. Other consumers (Pattern Manager, Pages, Site Editor) would benefit too. File as a Gutenberg feature request.
+
+## 17. Ghost `+` column is a synthetic field pinned in `view.fields` `[internal]`
+
+**What.** The `+ add field` column is a synthetic DataViews field (`__add_field`) — no data, no label, pinned last in `view.fields` for table layout. We rely on `enableHiding: false` to keep it out of the column-visibility menu. If DataViews stops honoring that flag, the synthetic leaks into the menu and confuses the column list.
+
+**Where.** `GHOST_FIELD` and the view-sync effect in `src/components/CollectionDataViews.js`.
+
+**Solution.** If `enableHiding` ever stops working, fork the field list in `CollectionDataViews.js` — pass the synthetic to the table layout but hide it from the visibility menu.
+
+## 18. Field management is table-layout only `[internal]`
+
+**What.** Rename / Duplicate / Delete only show up in the table-layout column-header kebab. Grid and list layouts have no schema actions and no ghost `+`. Users there can still create fields via the toolbar Add field button, but they have to switch to table to manage existing fields.
+
+**Where.** `ColumnHeaderActions` mounts only when `view.type === 'table'` (`src/components/CollectionDataViews.js`).
+
+**Solution.** A toolbar "Manage fields" panel listing every custom field with per-row rename / duplicate / delete, available in every layout.
+
+## 19. Select / multi-select fields ship with no options `[internal]`
+
+**What.** Add field creates the field immediately when you click a type — there's no second step for type-specific config. For select / multi-select that means the column starts empty; users have to add options via wp-admin or by re-saving through REST.
+
+**Where.** `src/components/fields/AddFieldPopover.js` (no options input). The REST route already accepts an `options` array; the UI just doesn't surface it.
+
+**Solution.** A field-edit dialog from the column kebab (next to Rename / Duplicate / Delete) with an options editor — one-per-line textarea, or a chip list with colors. Until then, options live in wp-admin or REST.
+
+## 20. Table layout overrides couple to DataViews internals `[upstream, soft]`
+
+**What.** DataViews ships `table-layout: auto; width: 100%` plus per-cell padding rules. We flip to `table-layout: fixed; width: max-content` with explicit per-cell widths so adding or removing a field doesn't reflow every other column, and match DataViews' selector specificity to override the last-cell padding so the ghost column stays slim. Result: a content-sized table that scrolls horizontally on overflow. Depends on DataViews' class names and selector specificity staying put.
+
+**Where.** `src/index.scss`, around the `.dataviews-view-table` block.
+
+**Solution.** A `tableLayout` (or similar) prop on DataViews so consumers can pick between "auto with redistribution" and "fixed with content-sized columns", plus per-field `width` hints so columns can be pinned without overriding DataViews CSS.
+
+## 21. Field-meta cleanup uses a global delete `[internal]`
+
+**What.** `cleanup_after_field_delete` calls `delete_post_meta_by_key( "field-<id>" )`, which wipes that key from every post — not just Cortext entry CPTs. The collision risk is theoretical (`<id>` is a globally unique `crtxt_field` post ID, so any postmeta keyed that way belongs to a Cortext entry by construction), but the code doesn't enforce that. A scoped `DELETE pm … INNER JOIN wp_posts p … WHERE p.post_type IN (…)` would prove the scope, but WorDBless (#9) can't run JOINs and its in-memory `$wpdb->posts` isn't exposed via SQL — `WP_Query`/`get_posts` against dynamic entry CPTs returns empty in the mock, so the per-post fallback also can't be unit-tested here.
+
+**Where.** `cleanup_after_field_delete` in `includes/PostType/CollectionEntries.php`.
+
+**Solution.** Stand up an integration environment with a real `wpdb` (`wp-env` + WP_PHPUnit), move the cleanup to a scoped JOIN, and keep WorDBless for the parts that don't need a real database.
+

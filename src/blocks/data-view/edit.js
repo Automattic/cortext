@@ -13,9 +13,10 @@ import { useEntityRecords } from '@wordpress/core-data';
 import { useDispatch } from '@wordpress/data';
 import { useCallback, useState } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
-import { replace } from '@wordpress/icons';
+import { plus, replace } from '@wordpress/icons';
 
 import CollectionDataViews from '../../components/CollectionDataViews';
+import AddFieldPopover from '../../components/fields/AddFieldPopover';
 import { COLLECTION_QUERY } from '../../collections';
 
 function createDefaultView() {
@@ -166,6 +167,26 @@ function CollectionToolbarControl( { collectionId, onSelect } ) {
 								onSelect( id );
 								onClose();
 							} }
+						/>
+					</div>
+				) }
+			/>
+			<Dropdown
+				contentClassName="cortext-data-view-toolbar-popover"
+				popoverProps={ { placement: 'bottom-start' } }
+				renderToggle={ ( { isOpen, onToggle } ) => (
+					<ToolbarButton
+						icon={ plus }
+						label={ __( 'Add field', 'cortext' ) }
+						onClick={ onToggle }
+						isPressed={ isOpen }
+					/>
+				) }
+				renderContent={ ( { onClose } ) => (
+					<div className="cortext-data-view-toolbar-popover__content">
+						<AddFieldPopover
+							collectionId={ collectionId }
+							onCreate={ onClose }
 						/>
 					</div>
 				) }

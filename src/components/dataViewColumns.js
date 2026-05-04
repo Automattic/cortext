@@ -7,6 +7,7 @@
  */
 
 export const TITLE_FIELD_ID = 'title';
+export const GHOST_FIELD_ID = '__add_field';
 export const MAX_COLUMN_WIDTH = 640;
 
 // Per-type column-width floors. Calibrated against Notion's behavior: most
