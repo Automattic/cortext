@@ -1,5 +1,7 @@
 import { createSlotFill } from '@wordpress/components';
 
+import Breadcrumbs from './Breadcrumbs';
+
 const SLOT_NAME = 'CortextTopBarActions';
 
 const { Slot, Fill } = createSlotFill( SLOT_NAME );
@@ -13,7 +15,9 @@ export const TopBarActionsFill = Fill;
 export default function WorkspaceTopBar() {
 	return (
 		<div className="cortext-topbar">
-			<div className="cortext-topbar__lead" />
+			<div className="cortext-topbar__lead">
+				<Breadcrumbs />
+			</div>
 			<div className="cortext-topbar__actions">
 				<Slot bubblesVirtually />
 			</div>
