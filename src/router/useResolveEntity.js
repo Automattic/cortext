@@ -18,10 +18,13 @@ export function parseIdFromUri( uri ) {
 
 export function useResolveEntity( uri ) {
 	const id = parseIdFromUri( uri );
+	// `id` records which uri this state belongs to, so callers can ignore a
+	// stale notFound left over from the previous uri.
 	const [ state, setState ] = useState( {
 		entity: null,
 		isResolving: true,
 		notFound: false,
+		id,
 	} );
 
 	// Once `id` is real, this collapses to the id so canonicalization rewrites
@@ -36,12 +39,18 @@ export function useResolveEntity( uri ) {
 				entity: null,
 				isResolving: false,
 				notFound: Boolean( uri ),
+				id: null,
 			} );
 			return undefined;
 		}
 
 		let cancelled = false;
-		setState( { entity: null, isResolving: true, notFound: false } );
+		setState( {
+			entity: null,
+			isResolving: true,
+			notFound: false,
+			id,
+		} );
 
 		apiFetch( {
 			path: `/wp/v2/${ POST_TYPE }s/${ id }?context=edit&_fields=id,slug,parent`,
@@ -52,6 +61,7 @@ export function useResolveEntity( uri ) {
 						entity,
 						isResolving: false,
 						notFound: false,
+						id,
 					} );
 				}
 			} )
@@ -61,6 +71,7 @@ export function useResolveEntity( uri ) {
 						entity: null,
 						isResolving: false,
 						notFound: true,
+						id,
 					} );
 				}
 			} );
@@ -78,10 +89,12 @@ export function useResolveEntity( uri ) {
 const COLLECTION_TYPE = 'crtxt_collection';
 
 export function useResolveCollection( id ) {
+	// Same id-tagging as useResolveEntity above.
 	const [ state, setState ] = useState( {
 		entity: null,
 		isResolving: true,
 		notFound: false,
+		id,
 	} );
 
 	useEffect( () => {
@@ -90,12 +103,18 @@ export function useResolveCollection( id ) {
 				entity: null,
 				isResolving: false,
 				notFound: true,
+				id: null,
 			} );
 			return undefined;
 		}
 
 		let cancelled = false;
-		setState( { entity: null, isResolving: true, notFound: false } );
+		setState( {
+			entity: null,
+			isResolving: true,
+			notFound: false,
+			id,
+		} );
 
 		apiFetch( {
 			path: `/wp/v2/${ COLLECTION_TYPE }s/${ id }?context=edit&_fields=id,slug`,
@@ -106,6 +125,7 @@ export function useResolveCollection( id ) {
 						entity,
 						isResolving: false,
 						notFound: false,
+						id,
 					} );
 				}
 			} )
@@ -115,6 +135,7 @@ export function useResolveCollection( id ) {
 						entity: null,
 						isResolving: false,
 						notFound: true,
+						id,
 					} );
 				}
 			} );
