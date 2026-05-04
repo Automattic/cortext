@@ -52,9 +52,7 @@ The token contract is the API. Shell themes change values in it; they do not add
 | `--cortext-radius-sm` | `2px` |
 | `--cortext-border-width` | `1px` |
 
-The contract is emitted from two places: `src/styles/_tokens.scss` for the admin shell chrome, and `Cortext\Theming\Tokens::get_iframe_inline_css()` for the Gutenberg canvas iframe (injected via `editor_settings['styles']` so the values cross the iframe boundary). Keeping the two sources synchronized is the current maintenance cost. Phase 2 unifies them behind a single source of truth.
-
-The contract deliberately does not reach the public frontend. Published pages are the active block theme's domain; Cortext does not emit any tokens, styles, or patterns on `wp_head` or anywhere else outside the editing surface.
+The contract lives in `src/styles/_tokens.scss`. That's the only emitter: the shell consumes the tokens directly, and nothing else does. The Gutenberg canvas iframe is the active block theme's domain, so Cortext doesn't push tokens across the iframe boundary either. The contract deliberately does not reach the public frontend either; published pages are the active block theme's territory, and Cortext emits no tokens, styles, or patterns on `wp_head`.
 
 ## Dark mode
 
@@ -67,7 +65,7 @@ Persistence is `localStorage` for phase 1, keyed `cortext.colorScheme`. A pre-mo
 ## Phased roadmap
 
 - **Phase 1 (current)**: token contract v1, light/dark/auto shell toggle. Persistence in localStorage. Contract not yet public; internal consumers only.
-- **Phase 2**: consolidate the SCSS and PHP emitters behind a single source. Publish the contract as stable. Ship an accent picker.
+- **Phase 2**: publish the contract as stable. Ship an accent picker.
 - **Phase 3**: per-user preference persistence (user meta).
 - **Phase 4**: `cortext_theme_tokens` PHP filter. Third parties can ship shell themes as token bundles. Contract becomes part of the public API surface.
 
