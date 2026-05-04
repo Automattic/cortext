@@ -1,51 +1,57 @@
+@use "@wordpress/base-styles/colors" as colors;
+@use "@wordpress/base-styles/variables" as variables;
+
 // Cortext shell tokens (v1).
-// These CSS custom properties are the shell-theme API. Other stylesheets
-// consume tokens; they do not hardcode colors or spacing. Dark values
-// override under `[data-theme="dark"]` on the shell root and apply to
-// shell chrome (sidebar, canvas column, toolbars). The Gutenberg iframe
-// interior is the active block theme's domain; Cortext does not repaint
-// it, and the PHP iframe emitter stays light-only so no dark value
-// leaks into the editing surface.
-// The same values are emitted from PHP (see Cortext\Theming\Tokens) so
-// they cross the Gutenberg iframe boundary and so the frontend overlay
-// can read them without loading this stylesheet.
+// These CSS custom properties are the Cortext shell-theme API. They describe
+// Cortext-owned UI roles, while their defaults start from WordPress editor
+// primitives where that keeps the shell aligned with wp-admin. Gutenberg
+// content/theme tokens stay inside the editor iframe and published frontend.
 
 .cortext-root {
 
-	// Color
-	--cortext-color-canvas: #fff;
-	--cortext-color-surface: #fff;
-	--cortext-color-surface-raised: #f0f0f0;
-	--cortext-color-border: #e0e0e0;
-	--cortext-color-text: #1e1e1e;
-	--cortext-color-text-muted: #757575;
-	--cortext-color-accent: var(--wp-admin-theme-color, #3858e9);
-	--cortext-color-accent-contrast: #fff;
-	--cortext-color-shadow: rgba(0, 0, 0, 0.12);
+	// Shell surfaces
+	--cortext-shell-surface: #{colors.$white};
+	--cortext-sidebar-surface: #{colors.$white};
+	--cortext-sidebar-item-hover-surface: #{colors.$gray-100};
+	--cortext-sidebar-item-selected-surface: #{colors.$gray-100};
+	--cortext-canvas-frame-surface: #{colors.$white};
+	--cortext-chrome-border: #{colors.$gray-200};
+	--cortext-text: #{colors.$gray-900};
+	--cortext-text-muted: #{colors.$gray-700};
+	--cortext-shadow-color: rgba(0, 0, 0, 0.12);
 
-	// Typography
-	--cortext-font-family: inherit;
-	--cortext-font-size-body: 13px;
-	--cortext-font-size-ui: 13px;
+	// Accent follows the active admin/components theme by default, but is
+	// exposed as a Cortext role so shell themes don't depend on WP internals.
+	--cortext-accent: var(--wp-components-color-accent, var(--wp-admin-theme-color, #3858e9));
+	--cortext-accent-contrast: var(--wp-components-color-accent-inverted, #{colors.$white});
 
-	// Spacing
-	--cortext-space-xs: 4px;
-	--cortext-space-sm: 8px;
-	--cortext-space-md: 12px;
-	--cortext-space-lg: 16px;
-	--cortext-space-xl: 24px;
+	// Shell buttons. These map onto @wordpress/components buttons only inside
+	// Cortext-owned chrome, not globally in wp-admin or inside the iframe.
+	--cortext-button-surface: transparent;
+	--cortext-button-text: var(--cortext-text);
+	--cortext-button-hover-surface: var(--cortext-sidebar-item-hover-surface);
+	--cortext-button-pressed-surface: var(--cortext-sidebar-item-selected-surface);
+	--cortext-button-primary-surface: var(--cortext-accent);
+	--cortext-button-primary-hover-surface: var(--wp-components-color-accent-darker-10, var(--wp-admin-theme-color-darker-10, var(--cortext-accent)));
+	--cortext-button-primary-text: var(--cortext-accent-contrast);
 
-	// Structural
-	--cortext-radius-sm: 2px;
-	--cortext-border-width: 1px;
+	// Foundation values. Defaults come from WordPress base-styles; keeping
+	// them behind Cortext names lets the shell diverge later without making
+	// Gutenberg's token names the Cortext theme API.
+	--cortext-shell-font-family: inherit;
+	--cortext-shell-font-size: #{variables.$font-size-medium};
+	--cortext-shell-radius: #{variables.$radius-small};
+	--cortext-shell-border-width: #{variables.$border-width};
 
 	&[data-theme="dark"] {
-		--cortext-color-canvas: #2a2a2a;
-		--cortext-color-surface: #2a2a2a;
-		--cortext-color-surface-raised: #383838;
-		--cortext-color-border: #3e3e3e;
-		--cortext-color-text: #f0f0f0;
-		--cortext-color-text-muted: #a0a0a0;
-		--cortext-color-shadow: rgba(0, 0, 0, 0.4);
+		--cortext-shell-surface: #2a2a2a;
+		--cortext-sidebar-surface: #2a2a2a;
+		--cortext-sidebar-item-hover-surface: #333;
+		--cortext-sidebar-item-selected-surface: #383838;
+		--cortext-canvas-frame-surface: #2a2a2a;
+		--cortext-chrome-border: #3e3e3e;
+		--cortext-text: #f0f0f0;
+		--cortext-text-muted: #a0a0a0;
+		--cortext-shadow-color: rgba(0, 0, 0, 0.4);
 	}
 }

@@ -29,10 +29,10 @@ body.cortext-fullscreen {
 .cortext-root {
 	position: fixed;
 	inset: 0;
-	background: var(--cortext-color-surface);
-	color: var(--cortext-color-text);
-	font-family: var(--cortext-font-family);
-	font-size: var(--cortext-font-size-body);
+	background: var(--cortext-shell-surface);
+	color: var(--cortext-text);
+	font-family: var(--cortext-shell-font-family);
+	font-size: var(--cortext-shell-font-size);
 }
 
 .cortext-shell {
@@ -42,15 +42,16 @@ body.cortext-fullscreen {
 }
 
 .cortext-sidebar {
-	border-right: var(--cortext-border-width) solid var(--cortext-color-border);
+	background: var(--cortext-sidebar-surface);
+	border-right: var(--cortext-shell-border-width) solid var(--cortext-chrome-border);
 	overflow-y: auto;
-	padding: var(--cortext-space-md);
+	padding: $grid-unit-15;
 
 	&__header {
 		display: flex;
 		align-items: center;
-		gap: var(--cortext-space-sm);
-		margin-bottom: var(--cortext-space-md);
+		gap: $grid-unit-10;
+		margin-bottom: $grid-unit-15;
 	}
 
 	&__section-title {
@@ -58,15 +59,15 @@ body.cortext-fullscreen {
 		font-weight: 600;
 		text-transform: uppercase;
 		letter-spacing: 0.5px;
-		color: $gray-700;
+		color: var(--cortext-text-muted);
 		margin: $grid-unit-15 0 $grid-unit-05 0;
 		padding: 0 $grid-unit-05;
 	}
 
 	&__loading,
 	&__empty {
-		color: var(--cortext-color-text-muted);
-		padding: var(--cortext-space-sm);
+		color: var(--cortext-text-muted);
+		padding: $grid-unit-10;
 	}
 
 	&__list,
@@ -88,13 +89,13 @@ body.cortext-fullscreen {
 		position: relative;
 		display: flex;
 		align-items: center;
-		gap: var(--cortext-space-xs);
-		border-radius: var(--cortext-radius-sm);
+		gap: $grid-unit-05;
+		border-radius: var(--cortext-shell-radius);
 		cursor: grab;
 		user-select: none;
 
 		&.is-selected {
-			background: var(--cortext-color-surface-raised);
+			background: var(--cortext-sidebar-item-selected-surface);
 		}
 
 		&.is-dragging {
@@ -108,7 +109,7 @@ body.cortext-fullscreen {
 			position: absolute;
 			inset-inline: 0;
 			height: 2px;
-			background: var(--cortext-color-accent);
+			background: var(--cortext-accent);
 			pointer-events: none;
 		}
 
@@ -121,8 +122,8 @@ body.cortext-fullscreen {
 		}
 
 		&.is-drop-inside {
-			background: var(--cortext-color-surface-raised);
-			outline: var(--cortext-border-width) dashed var(--cortext-color-accent);
+			background: var(--cortext-sidebar-item-selected-surface);
+			outline: var(--cortext-shell-border-width) dashed var(--cortext-accent);
 			outline-offset: -1px;
 		}
 	}
@@ -132,8 +133,8 @@ body.cortext-fullscreen {
 
 		&--placeholder {
 			display: inline-block;
-			width: var(--cortext-space-xl);
-			height: var(--cortext-space-xl);
+			width: $grid-unit-30;
+			height: $grid-unit-30;
 		}
 	}
 
@@ -188,13 +189,13 @@ body.cortext-fullscreen {
 	}
 
 	&__drag-preview {
-		padding: var(--cortext-space-xs) var(--cortext-space-md);
-		background: var(--cortext-color-surface);
-		color: var(--cortext-color-text);
-		border: var(--cortext-border-width) solid var(--cortext-color-border);
-		border-radius: var(--cortext-radius-sm);
-		box-shadow: 0 2px 8px var(--cortext-color-shadow);
-		font-size: var(--cortext-font-size-ui);
+		padding: $grid-unit-05 $grid-unit-15;
+		background: var(--cortext-sidebar-surface);
+		color: var(--cortext-text);
+		border: var(--cortext-shell-border-width) solid var(--cortext-chrome-border);
+		border-radius: var(--cortext-shell-radius);
+		box-shadow: 0 2px 8px var(--cortext-shadow-color);
+		font-size: var(--cortext-shell-font-size);
 		max-width: 260px;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -271,9 +272,9 @@ body.cortext-fullscreen {
 	position: relative;
 	overflow: hidden;
 	// The shell column that frames the iframe. Follows the shell theme via
-	// --cortext-color-canvas. The iframe interior is painted by the active
+	// --cortext-canvas-frame-surface. The iframe interior is painted by the active
 	// block theme, not by this token.
-	background: var(--cortext-color-canvas);
+	background: var(--cortext-canvas-frame-surface);
 
 	// InterfaceSkeleton defaults to `position: fixed` at >= 782px, which would
 	// escape our grid and overlap the page-list sidebar. Scope it to fill just
@@ -290,9 +291,12 @@ body.cortext-fullscreen {
 	&__header {
 		display: flex;
 		align-items: center;
-		gap: var(--cortext-space-sm);
-		padding: var(--cortext-space-sm) var(--cortext-space-lg);
+		gap: $grid-unit-10;
+		padding: $grid-unit-10 $grid-unit-20;
 		flex: 1;
+		background: var(--cortext-shell-surface);
+		color: var(--cortext-text);
+		border-bottom: var(--cortext-shell-border-width) solid var(--cortext-chrome-border);
 	}
 
 	&__loading,
@@ -301,7 +305,7 @@ body.cortext-fullscreen {
 		flex-direction: column;
 		align-items: center;
 		justify-content: center;
-		color: var(--cortext-color-text-muted);
+		color: var(--cortext-text-muted);
 		height: 100%;
 	}
 
@@ -333,10 +337,17 @@ body.cortext-fullscreen {
 	&__table {
 		// DataViews' `.dataviews-wrapper` is `height: 100%`, so the wrapper
 		// must have an explicit height or it falls back to 0 + internal
-		// scroll. Pin to the canvas column with a 2rem inset for breathing
-		// room.
+		// scroll. Fill the canvas column: DataViews already owns the internal
+		// toolbar/table padding.
 		position: absolute;
-		inset: 2rem;
+		inset: 0;
+		overflow: hidden;
+		background: $white;
+		color: $gray-900;
+	}
+
+	&__table &__loading {
+		color: $gray-700;
 	}
 
 	&__empty-text {
