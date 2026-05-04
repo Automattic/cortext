@@ -187,7 +187,7 @@ export default function EntityRoute() {
 				>
 					<CollectionPane
 						collectionId={ id }
-						onReady={ () => handleCollectionReady( id ) }
+						onReady={ handleCollectionReady }
 					/>
 				</WorkspacePane>
 			) ) }
