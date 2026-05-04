@@ -20,7 +20,7 @@ import {
 import { Button, Disabled, Notice, Spinner } from '@wordpress/components';
 import { cog } from '@wordpress/icons';
 import apiFetch from '@wordpress/api-fetch';
-import { useState } from '@wordpress/element';
+import { useEffect, useState } from '@wordpress/element';
 
 import useAutosave from '../hooks/useAutosave';
 import {
@@ -40,8 +40,7 @@ const STATUS_LABELS = {
 	error: __( 'Failed to save', 'cortext' ),
 };
 
-function SaveStatus() {
-	const { status } = useAutosave();
+function SaveStatus( { status } ) {
 	const label = STATUS_LABELS[ status ] ?? '';
 
 	return (
@@ -55,7 +54,7 @@ function SaveStatus() {
 	);
 }
 
-function Header() {
+function Header( { saveStatus } ) {
 	const { enableComplementaryArea, disableComplementaryArea } =
 		useDispatch( interfaceStore );
 	const isInspectorOpen = useSelect(
@@ -67,7 +66,7 @@ function Header() {
 
 	return (
 		<div className="cortext-canvas__header">
-			<SaveStatus />
+			<SaveStatus status={ saveStatus } />
 			<PublishToggle />
 			<Button
 				icon={ cog }
@@ -174,12 +173,21 @@ function TrashedNotice( { postId } ) {
 	);
 }
 
-function VisualCanvas() {
+function CanvasReadyEffect( { postId, onReady } ) {
+	useEffect( () => {
+		onReady?.( postId );
+	}, [ postId, onReady ] );
+
+	return null;
+}
+
+function VisualCanvas( { postId, onReady } ) {
 	const styles = useSelect(
 		( select ) => select( editorStore ).getEditorSettings().styles,
 		[]
 	);
 	const [ layout ] = useSettings( 'layout' );
+
 	// Mirror the post editor's root-container setup so theme.json
 	// constrained layout (max-width, root padding, post-content gap)
 	// applies. Plain `<BlockList />` defaults to flow with no classes,
@@ -199,30 +207,102 @@ function VisualCanvas() {
 	// render the post centered while the frontend renders flex/grid,
 	// and the user wouldn't notice the divergence until preview.
 	return (
-		<BlockCanvas height="100%" styles={ styles }>
-			<div
-				className="editor-visual-editor__post-title-wrapper is-layout-constrained has-global-padding"
-				contentEditable={ false }
-				style={ { marginTop: '4rem', marginBottom: '2rem' } }
-			>
-				<PostTitle />
-			</div>
-			<BlockList
-				className="wp-block-post-content is-layout-constrained has-global-padding"
-				layout={ { type: 'constrained', ...layout } }
-			/>
-		</BlockCanvas>
+		<div className="cortext-canvas__visual">
+			<BlockCanvas height="100%" styles={ styles }>
+				<div
+					className="editor-visual-editor__post-title-wrapper is-layout-constrained has-global-padding"
+					contentEditable={ false }
+					style={ { marginTop: '4rem', marginBottom: '2rem' } }
+				>
+					<PostTitle />
+				</div>
+				<BlockList
+					className="wp-block-post-content is-layout-constrained has-global-padding"
+					layout={ { type: 'constrained', ...layout } }
+				/>
+				<CanvasReadyEffect postId={ postId } onReady={ onReady } />
+			</BlockCanvas>
+		</div>
 	);
 }
 
-export default function Canvas( { postId } ) {
-	const { record: post, isResolving } = useEntityRecord(
+function CanvasEditor( { post, pendingPost, onSwitchPost, onDisplayedPost } ) {
+	const { status, flushNow, isDirty, isSaving } = useAutosave();
+	const isTrashed = post.status === 'trash';
+
+	useEffect( () => {
+		if ( ! pendingPost || pendingPost.id === post.id ) {
+			return undefined;
+		}
+
+		let cancelled = false;
+
+		async function switchAfterSave() {
+			const didFlush = await flushNow();
+			if ( ! cancelled && didFlush ) {
+				onSwitchPost( pendingPost );
+			}
+		}
+
+		switchAfterSave();
+
+		return () => {
+			cancelled = true;
+		};
+	}, [ pendingPost, post.id, flushNow, isDirty, isSaving, onSwitchPost ] );
+
+	return (
+		<>
+			<InterfaceSkeleton
+				className="cortext-canvas"
+				header={ <Header saveStatus={ status } /> }
+				content={
+					<>
+						{ isTrashed && <TrashedNotice postId={ post.id } /> }
+						{ isTrashed ? (
+							<Disabled className="cortext-canvas__locked">
+								<VisualCanvas
+									postId={ post.id }
+									onReady={ onDisplayedPost }
+								/>
+							</Disabled>
+						) : (
+							<VisualCanvas
+								postId={ post.id }
+								onReady={ onDisplayedPost }
+							/>
+						) }
+					</>
+				}
+				sidebar={ <ComplementaryArea.Slot scope={ SCOPE } /> }
+			/>
+			<InspectorSidebar />
+		</>
+	);
+}
+
+export default function Canvas( { postId, onDisplayedPost } ) {
+	const { record: requestedPost } = useEntityRecord(
 		'postType',
 		POST_TYPE,
 		postId
 	);
+	const [ displayedPost, setDisplayedPost ] = useState( null );
+	const renderedPost = displayedPost ?? requestedPost;
 
-	if ( isResolving || ! post ) {
+	useEffect( () => {
+		if ( ! requestedPost ) {
+			return;
+		}
+		setDisplayedPost( ( current ) => {
+			if ( ! current || current.id === requestedPost.id ) {
+				return requestedPost;
+			}
+			return current;
+		} );
+	}, [ requestedPost ] );
+
+	if ( ! renderedPost ) {
 		return (
 			<div className="cortext-canvas__loading">
 				<Spinner />
@@ -230,32 +310,23 @@ export default function Canvas( { postId } ) {
 		);
 	}
 
-	const isTrashed = post.status === 'trash';
+	const pendingPost =
+		requestedPost && requestedPost.id !== renderedPost.id
+			? requestedPost
+			: null;
 
 	return (
 		<EditorProvider
-			post={ post }
+			post={ renderedPost }
 			settings={ window.cortextEditorSettings ?? {} }
 			useSubRegistry={ false }
 		>
-			<InterfaceSkeleton
-				className="cortext-canvas"
-				header={ <Header /> }
-				content={
-					<>
-						{ isTrashed && <TrashedNotice postId={ post.id } /> }
-						{ isTrashed ? (
-							<Disabled className="cortext-canvas__locked">
-								<VisualCanvas />
-							</Disabled>
-						) : (
-							<VisualCanvas />
-						) }
-					</>
-				}
-				sidebar={ <ComplementaryArea.Slot scope={ SCOPE } /> }
+			<CanvasEditor
+				post={ renderedPost }
+				pendingPost={ pendingPost }
+				onSwitchPost={ setDisplayedPost }
+				onDisplayedPost={ onDisplayedPost }
 			/>
-			<InspectorSidebar />
 		</EditorProvider>
 	);
 }

@@ -9,7 +9,6 @@ import { privateApis as routePrivateApis } from '@wordpress/route';
 
 import Sidebar from './components/Sidebar';
 import EntityRoute from './router/EntityRoute';
-import EmptyState from './router/EmptyState';
 import { unlock } from './lock-unlock';
 
 const {
@@ -17,7 +16,6 @@ const {
 	createRootRoute,
 	createRoute,
 	createBrowserHistory,
-	Outlet,
 	RouterProvider,
 	parseHref,
 } = unlock( routePrivateApis );
@@ -27,7 +25,7 @@ function RootLayout() {
 		<div className="cortext-shell">
 			<Sidebar />
 			<main className="cortext-shell__canvas">
-				<Outlet />
+				<EntityRoute />
 			</main>
 		</div>
 	);
@@ -38,13 +36,11 @@ const rootRoute = createRootRoute( { component: RootLayout } );
 const indexRoute = createRoute( {
 	getParentRoute: () => rootRoute,
 	path: '/',
-	component: EmptyState,
 } );
 
 const splatRoute = createRoute( {
 	getParentRoute: () => rootRoute,
 	path: '$',
-	component: EntityRoute,
 } );
 
 const routeTree = rootRoute.addChildren( [ indexRoute, splatRoute ] );

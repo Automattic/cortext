@@ -18,6 +18,7 @@ export default function useAutosave() {
 		editsReference,
 		postStatus,
 		postTitle,
+		currentPostId,
 	} = useSelect( ( select ) => {
 		const editor = select( editorStore );
 		return {
@@ -30,6 +31,7 @@ export default function useAutosave() {
 				select( coreDataStore ).getReferenceByDistinctEdits(),
 			postStatus: editor.getEditedPostAttribute( 'status' ),
 			postTitle: editor.getEditedPostAttribute( 'title' ),
+			currentPostId: editor.getCurrentPostId(),
 		};
 	}, [] );
 
@@ -83,11 +85,18 @@ export default function useAutosave() {
 			postStatus: ps,
 			savePost: save,
 		} = stateRef.current;
-		if ( d && s && ! saving && ps !== 'trash' ) {
-			maybePromoteStatus();
-			lastSaveAtRef.current = Date.now();
-			save();
+		if ( ! d || ! s || ps === 'trash' ) {
+			return Promise.resolve( true );
 		}
+		if ( saving ) {
+			return Promise.resolve( false );
+		}
+		maybePromoteStatus();
+		lastSaveAtRef.current = Date.now();
+		return Promise.resolve( save() ).then(
+			() => true,
+			() => false
+		);
 	}, [] );
 
 	useEffect( () => {
@@ -141,14 +150,32 @@ export default function useAutosave() {
 		}
 	}, [ isSaving, didSucceed, didFail ] );
 
+	// CanvasEditor stays mounted across post switches so the iframe survives,
+	// which means our local status would otherwise carry a stale "Failed to
+	// save" or "Saved" label into the next post. Skip the initial mount; the
+	// status flags from the editor store are already authoritative there.
+	const lastPostIdRef = useRef( currentPostId );
+	useEffect( () => {
+		if ( lastPostIdRef.current === currentPostId ) {
+			return;
+		}
+		lastPostIdRef.current = currentPostId;
+		setStatus( 'idle' );
+		setLastSavedAt( null );
+	}, [ currentPostId ] );
+
 	useEffect( () => {
 		const onVisibilityChange = () => {
 			if ( document.visibilityState === 'hidden' ) {
 				flushNow();
 			}
 		};
-		const onBlur = () => flushNow();
-		const onBeforeUnload = () => flushNow();
+		const onBlur = () => {
+			flushNow();
+		};
+		const onBeforeUnload = () => {
+			flushNow();
+		};
 
 		document.addEventListener( 'visibilitychange', onVisibilityChange );
 		window.addEventListener( 'blur', onBlur );
@@ -165,5 +192,5 @@ export default function useAutosave() {
 		};
 	}, [ flushNow ] );
 
-	return { status, lastSavedAt };
+	return { status, lastSavedAt, flushNow, isDirty, isSaving };
 }

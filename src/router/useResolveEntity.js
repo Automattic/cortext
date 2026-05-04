@@ -24,10 +24,12 @@ export function useResolveEntity( uri ) {
 		notFound: false,
 	} );
 
-	// Keyed on `id` rather than `uri` so that canonicalization rewrites
-	// (`/42` → `/about-us-42` for the same record) don't re-fetch and briefly
-	// flip state to `{ entity: null, isResolving: true }`, which would unmount
-	// the editor mid-typing.
+	// Once `id` is real, this collapses to the id so canonicalization rewrites
+	// (`/42` → `/about-us-42`) don't re-fetch. When `id` is null, distinct
+	// unparseable URIs each get their own key so empty → malformed (and
+	// malformed-A → malformed-B) re-run the effect and flip notFound.
+	const fetchKey = id !== null ? `id:${ id }` : `uri:${ uri ?? '' }`;
+
 	useEffect( () => {
 		if ( ! id ) {
 			setState( {
@@ -66,10 +68,9 @@ export function useResolveEntity( uri ) {
 		return () => {
 			cancelled = true;
 		};
-		// `uri` is only read in the no-id branch to distinguish empty from
-		// malformed; we don't want a uri change with the same id to refetch.
+		// `fetchKey` already encodes both id and (when id is null) uri.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [ id ] );
+	}, [ fetchKey ] );
 
 	return state;
 }
