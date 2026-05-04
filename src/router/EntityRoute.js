@@ -102,6 +102,17 @@ function getActiveCollectionId( activePane ) {
 	return match ? Number( match[ 1 ] ) : null;
 }
 
+// Activation flow:
+//   1. URL changes → routeKey recomputes synchronously.
+//   2. committedRouteKey catches up after one render so the new pane mounts
+//      (still inactive) before we hide the previous one.
+//   3. Each pane reports readiness through its own signal: the page canvas
+//      fires onDisplayedPost from inside the iframe portal; collections fire
+//      onReady once their rows resolve.
+//   4. Once a pane is ready we set activePane, swapping it on top.
+// The page pane carries data-preserve-paint so its iframe stays painted when
+// inactive, so navigating page → collection → page reuses the same iframe
+// rather than re-creating (and re-flashing) it.
 export default function EntityRoute() {
 	const params = useParams( { strict: false } );
 	const { prefix, tail } = parseSplatUri( params._splat ?? '' );
