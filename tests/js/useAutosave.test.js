@@ -31,6 +31,7 @@ const DEFAULT_STATE = {
 	didFail: false,
 	postStatus: 'private',
 	postTitle: '',
+	currentPostId: 1,
 };
 
 let editsReference = {};
@@ -43,6 +44,7 @@ function setStoreState( state ) {
 		isSavingPost: () => merged.isSaving,
 		didPostSaveRequestSucceed: () => merged.didSucceed,
 		didPostSaveRequestFail: () => merged.didFail,
+		getCurrentPostId: () => merged.currentPostId,
 		getEditedPostAttribute: ( name ) => {
 			if ( name === 'status' ) {
 				return merged.postStatus;
@@ -319,6 +321,21 @@ describe( 'useAutosave: status', () => {
 		const { result } = renderHook( () => useAutosave() );
 
 		expect( result.current.status ).toBe( 'error' );
+	} );
+
+	it( 'resets status when the current post id changes', () => {
+		setStoreState( { didFail: true, currentPostId: 1 } );
+
+		const { result, rerender } = renderHook( () => useAutosave() );
+		expect( result.current.status ).toBe( 'error' );
+
+		act( () => {
+			setStoreState( { didFail: false, currentPostId: 2 } );
+			rerender();
+		} );
+
+		expect( result.current.status ).toBe( 'idle' );
+		expect( result.current.lastSavedAt ).toBeNull();
 	} );
 } );
 

@@ -18,6 +18,7 @@ export default function useAutosave() {
 		editsReference,
 		postStatus,
 		postTitle,
+		currentPostId,
 	} = useSelect( ( select ) => {
 		const editor = select( editorStore );
 		return {
@@ -30,6 +31,7 @@ export default function useAutosave() {
 				select( coreDataStore ).getReferenceByDistinctEdits(),
 			postStatus: editor.getEditedPostAttribute( 'status' ),
 			postTitle: editor.getEditedPostAttribute( 'title' ),
+			currentPostId: editor.getCurrentPostId(),
 		};
 	}, [] );
 
@@ -147,6 +149,20 @@ export default function useAutosave() {
 			setLastSavedAt( Date.now() );
 		}
 	}, [ isSaving, didSucceed, didFail ] );
+
+	// CanvasEditor stays mounted across post switches so the iframe survives,
+	// which means our local status would otherwise carry a stale "Failed to
+	// save" or "Saved" label into the next post. Skip the initial mount; the
+	// status flags from the editor store are already authoritative there.
+	const lastPostIdRef = useRef( currentPostId );
+	useEffect( () => {
+		if ( lastPostIdRef.current === currentPostId ) {
+			return;
+		}
+		lastPostIdRef.current = currentPostId;
+		setStatus( 'idle' );
+		setLastSavedAt( null );
+	}, [ currentPostId ] );
 
 	useEffect( () => {
 		const onVisibilityChange = () => {
