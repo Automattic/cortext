@@ -19,8 +19,8 @@ use WP_CLI_Command;
 final class SeedDummyCollections extends WP_CLI_Command {
 
 	/**
-	 * Seeds sample collections (Books, Paintings, Demo) plus a small page
-	 * hierarchy that exercises the trash + cascade flows.
+	 * Seeds sample collections (Books, Paintings, Demo, Projects) plus a
+	 * realistic page hierarchy with embedded collection views.
 	 *
 	 * Idempotent: skips anything that already exists, unless --reset is passed.
 	 *
@@ -83,6 +83,141 @@ final class SeedDummyCollections extends WP_CLI_Command {
 						'Author' => 'Gabriel García Márquez',
 						'Year'   => 1967,
 					),
+					array(
+						'title'  => 'The Left Hand of Darkness',
+						'Author' => 'Ursula K. Le Guin',
+						'Year'   => 1969,
+					),
+					array(
+						'title'  => 'Invisible Cities',
+						'Author' => 'Italo Calvino',
+						'Year'   => 1972,
+					),
+					array(
+						'title'  => 'The Dispossessed',
+						'Author' => 'Ursula K. Le Guin',
+						'Year'   => 1974,
+					),
+					array(
+						'title'  => 'Ficciones',
+						'Author' => 'Jorge Luis Borges',
+						'Year'   => 1944,
+					),
+					array(
+						'title'  => 'The Master and Margarita',
+						'Author' => 'Mikhail Bulgakov',
+						'Year'   => 1967,
+					),
+					array(
+						'title'  => 'Things Fall Apart',
+						'Author' => 'Chinua Achebe',
+						'Year'   => 1958,
+					),
+					array(
+						'title'  => 'The Name of the Rose',
+						'Author' => 'Umberto Eco',
+						'Year'   => 1980,
+					),
+					array(
+						'title'  => 'Kindred',
+						'Author' => 'Octavia E. Butler',
+						'Year'   => 1979,
+					),
+					array(
+						'title'  => 'The Rings of Saturn',
+						'Author' => 'W. G. Sebald',
+						'Year'   => 1995,
+					),
+					array(
+						'title'  => 'Beloved',
+						'Author' => 'Toni Morrison',
+						'Year'   => 1987,
+					),
+					array(
+						'title'  => 'The Trial',
+						'Author' => 'Franz Kafka',
+						'Year'   => 1925,
+					),
+					array(
+						'title'  => 'Mrs Dalloway',
+						'Author' => 'Virginia Woolf',
+						'Year'   => 1925,
+					),
+					array(
+						'title'  => 'Pedro Páramo',
+						'Author' => 'Juan Rulfo',
+						'Year'   => 1955,
+					),
+					array(
+						'title'  => 'Season of Migration to the North',
+						'Author' => 'Tayeb Salih',
+						'Year'   => 1966,
+					),
+					array(
+						'title'  => 'The Tale of Genji',
+						'Author' => 'Murasaki Shikibu',
+						'Year'   => 1021,
+					),
+					array(
+						'title'  => 'The Vegetarian',
+						'Author' => 'Han Kang',
+						'Year'   => 2007,
+					),
+					array(
+						'title'  => 'Pale Fire',
+						'Author' => 'Vladimir Nabokov',
+						'Year'   => 1962,
+					),
+					array(
+						'title'  => 'The Savage Detectives',
+						'Author' => 'Roberto Bolaño',
+						'Year'   => 1998,
+					),
+					array(
+						'title'  => 'Austerlitz',
+						'Author' => 'W. G. Sebald',
+						'Year'   => 2001,
+					),
+					array(
+						'title'  => 'The Passion According to G.H.',
+						'Author' => 'Clarice Lispector',
+						'Year'   => 1964,
+					),
+					array(
+						'title'  => 'Midnight’s Children',
+						'Author' => 'Salman Rushdie',
+						'Year'   => 1981,
+					),
+					array(
+						'title'  => 'The God of Small Things',
+						'Author' => 'Arundhati Roy',
+						'Year'   => 1997,
+					),
+					array(
+						'title'  => 'Snow Country',
+						'Author' => 'Yasunari Kawabata',
+						'Year'   => 1948,
+					),
+					array(
+						'title'  => 'The Invention of Morel',
+						'Author' => 'Adolfo Bioy Casares',
+						'Year'   => 1940,
+					),
+					array(
+						'title'  => 'The Sound and the Fury',
+						'Author' => 'William Faulkner',
+						'Year'   => 1929,
+					),
+					array(
+						'title'  => 'The Leopard',
+						'Author' => 'Giuseppe Tomasi di Lampedusa',
+						'Year'   => 1958,
+					),
+					array(
+						'title'  => 'Parable of the Sower',
+						'Author' => 'Octavia E. Butler',
+						'Year'   => 1993,
+					),
 				),
 			),
 			array(
@@ -107,6 +242,141 @@ final class SeedDummyCollections extends WP_CLI_Command {
 						'title'  => 'Nymphéas',
 						'Author' => 'Claude Monet',
 						'Year'   => 1906,
+					),
+					array(
+						'title'  => 'Las Meninas',
+						'Author' => 'Diego Velázquez',
+						'Year'   => 1656,
+					),
+					array(
+						'title'  => 'The Starry Night',
+						'Author' => 'Vincent van Gogh',
+						'Year'   => 1889,
+					),
+					array(
+						'title'  => 'Guernica',
+						'Author' => 'Pablo Picasso',
+						'Year'   => 1937,
+					),
+					array(
+						'title'  => 'The Persistence of Memory',
+						'Author' => 'Salvador Dalí',
+						'Year'   => 1931,
+					),
+					array(
+						'title'  => 'The Birth of Venus',
+						'Author' => 'Sandro Botticelli',
+						'Year'   => 1486,
+					),
+					array(
+						'title'  => 'The Kiss',
+						'Author' => 'Gustav Klimt',
+						'Year'   => 1908,
+					),
+					array(
+						'title'  => 'Composition VIII',
+						'Author' => 'Wassily Kandinsky',
+						'Year'   => 1923,
+					),
+					array(
+						'title'  => 'American Gothic',
+						'Author' => 'Grant Wood',
+						'Year'   => 1930,
+					),
+					array(
+						'title'  => 'The Two Fridas',
+						'Author' => 'Frida Kahlo',
+						'Year'   => 1939,
+					),
+					array(
+						'title'  => 'Girl with a Pearl Earring',
+						'Author' => 'Johannes Vermeer',
+						'Year'   => 1665,
+					),
+					array(
+						'title'  => 'The Garden of Earthly Delights',
+						'Author' => 'Hieronymus Bosch',
+						'Year'   => 1515,
+					),
+					array(
+						'title'  => 'Liberty Leading the People',
+						'Author' => 'Eugène Delacroix',
+						'Year'   => 1830,
+					),
+					array(
+						'title'  => 'The Night Watch',
+						'Author' => 'Rembrandt van Rijn',
+						'Year'   => 1642,
+					),
+					array(
+						'title'  => 'The Arnolfini Portrait',
+						'Author' => 'Jan van Eyck',
+						'Year'   => 1434,
+					),
+					array(
+						'title'  => 'A Sunday Afternoon on the Island of La Grande Jatte',
+						'Author' => 'Georges Seurat',
+						'Year'   => 1886,
+					),
+					array(
+						'title'  => 'The School of Athens',
+						'Author' => 'Raphael',
+						'Year'   => 1511,
+					),
+					array(
+						'title'  => 'The Scream',
+						'Author' => 'Edvard Munch',
+						'Year'   => 1893,
+					),
+					array(
+						'title'  => 'Impression, Sunrise',
+						'Author' => 'Claude Monet',
+						'Year'   => 1872,
+					),
+					array(
+						'title'  => 'No. 5, 1948',
+						'Author' => 'Jackson Pollock',
+						'Year'   => 1948,
+					),
+					array(
+						'title'  => 'Campbell’s Soup Cans',
+						'Author' => 'Andy Warhol',
+						'Year'   => 1962,
+					),
+					array(
+						'title'  => 'The Sleeping Gypsy',
+						'Author' => 'Henri Rousseau',
+						'Year'   => 1897,
+					),
+					array(
+						'title'  => 'Christina’s World',
+						'Author' => 'Andrew Wyeth',
+						'Year'   => 1948,
+					),
+					array(
+						'title'  => 'The Gross Clinic',
+						'Author' => 'Thomas Eakins',
+						'Year'   => 1875,
+					),
+					array(
+						'title'  => 'The Oxbow',
+						'Author' => 'Thomas Cole',
+						'Year'   => 1836,
+					),
+					array(
+						'title'  => 'Black Square',
+						'Author' => 'Kazimir Malevich',
+						'Year'   => 1915,
+					),
+					array(
+						'title'  => 'Broadway Boogie Woogie',
+						'Author' => 'Piet Mondrian',
+						'Year'   => 1943,
+					),
+					array(
+						'title'  => 'The Treachery of Images',
+						'Author' => 'René Magritte',
+						'Year'   => 1929,
 					),
 				),
 			),
@@ -192,15 +462,196 @@ final class SeedDummyCollections extends WP_CLI_Command {
 						'Reminder' => '2026-05-19T15:30:00',
 						'Done?'    => true,
 					),
+					array(
+						'title'    => 'Add keyboard traversal coverage',
+						'Notes'    => 'Use Tab and Shift+Tab across editable cells.',
+						'Quantity' => 6,
+						'Contact'  => '',
+						'Homepage' => 'https://example.com/testing',
+						'Status'   => 'In review',
+						'Tags'     => array( 'bug', 'feature' ),
+						'Due'      => '2026-05-22',
+						'Reminder' => '',
+						'Done?'    => false,
+					),
+					array(
+						'title'    => 'Document wp-env demo seed',
+						'Notes'    => 'The seed command is safe to run after every start.',
+						'Quantity' => 2,
+						'Contact'  => 'docs@example.com',
+						'Homepage' => '',
+						'Status'   => 'Done',
+						'Tags'     => array( 'docs' ),
+						'Due'      => '2026-05-12',
+						'Reminder' => '2026-05-11T10:00:00',
+						'Done?'    => true,
+					),
+				),
+			),
+			array(
+				'title'   => 'Projects',
+				'slug'    => 'projects',
+				'fields'  => array(
+					'Status'      => array(
+						'type'    => 'select',
+						'options' => array(
+							array(
+								'value' => 'Backlog',
+								'label' => 'Backlog',
+								'color' => '#e8e8e7',
+							),
+							array(
+								'value' => 'Planned',
+								'label' => 'Planned',
+								'color' => '#ddebf1',
+							),
+							array(
+								'value' => 'In progress',
+								'label' => 'In progress',
+								'color' => '#fbf3db',
+							),
+							array(
+								'value' => 'Shipped',
+								'label' => 'Shipped',
+								'color' => '#ddedea',
+							),
+						),
+					),
+					'Priority'    => array(
+						'type'    => 'select',
+						'options' => array(
+							array(
+								'value' => 'Low',
+								'label' => 'Low',
+								'color' => '#e8e8e7',
+							),
+							array(
+								'value' => 'Medium',
+								'label' => 'Medium',
+								'color' => '#ddebf1',
+							),
+							array(
+								'value' => 'High',
+								'label' => 'High',
+								'color' => '#ffe2dd',
+							),
+						),
+					),
+					'Owner'       => 'text',
+					'Contact'     => 'email',
+					'Kickoff'     => 'date',
+					'Due'         => 'date',
+					'Tags'        => array(
+						'type'    => 'multiselect',
+						'options' => array(
+							array(
+								'value' => 'editor',
+								'label' => 'editor',
+								'color' => '#ddebf1',
+							),
+							array(
+								'value' => 'data',
+								'label' => 'data',
+								'color' => '#ddedea',
+							),
+							array(
+								'value' => 'dev-env',
+								'label' => 'dev-env',
+								'color' => '#fbdbc7',
+							),
+							array(
+								'value' => 'research',
+								'label' => 'research',
+								'color' => '#eae4f2',
+							),
+						),
+					),
+					'Progress'    => 'number',
+					'Blocked?'    => 'checkbox',
+					'Project URL' => 'url',
+					'Notes'       => 'text',
+				),
+				'entries' => array(
+					array(
+						'title'       => 'Seed realistic demo workspace',
+						'Status'      => 'In progress',
+						'Priority'    => 'High',
+						'Owner'       => 'Miguel',
+						'Contact'     => 'miguel@example.com',
+						'Kickoff'     => '2026-05-04',
+						'Due'         => '2026-05-17',
+						'Tags'        => array( 'dev-env', 'data' ),
+						'Progress'    => 65,
+						'Blocked?'    => false,
+						'Project URL' => 'https://example.com/projects/demo-workspace',
+						'Notes'       => 'Make wp-env starts immediately useful for local testing.',
+					),
+					array(
+						'title'       => 'Inline table editing polish',
+						'Status'      => 'Planned',
+						'Priority'    => 'Medium',
+						'Owner'       => 'Hector',
+						'Contact'     => 'hector@example.com',
+						'Kickoff'     => '2026-05-11',
+						'Due'         => '2026-05-29',
+						'Tags'        => array( 'editor' ),
+						'Progress'    => 20,
+						'Blocked?'    => false,
+						'Project URL' => '',
+						'Notes'       => 'Tighten keyboard flow and empty-cell behavior.',
+					),
+					array(
+						'title'       => 'Collection public templates',
+						'Status'      => 'Backlog',
+						'Priority'    => 'Low',
+						'Owner'       => 'Design',
+						'Contact'     => 'design@example.com',
+						'Kickoff'     => '',
+						'Due'         => '',
+						'Tags'        => array( 'research' ),
+						'Progress'    => 0,
+						'Blocked?'    => false,
+						'Project URL' => 'https://example.com/projects/public-templates',
+						'Notes'       => 'Keep empty dates in the demo for filter and display checks.',
+					),
+					array(
+						'title'       => 'DataViews view persistence',
+						'Status'      => 'Shipped',
+						'Priority'    => 'High',
+						'Owner'       => 'Platform',
+						'Contact'     => '',
+						'Kickoff'     => '2026-04-15',
+						'Due'         => '2026-05-01',
+						'Tags'        => array( 'data', 'editor' ),
+						'Progress'    => 100,
+						'Blocked?'    => false,
+						'Project URL' => 'https://example.com/projects/view-persistence',
+						'Notes'       => 'Column order, widths, and visibility survive reloads.',
+					),
+					array(
+						'title'       => 'Research relation fields',
+						'Status'      => 'Planned',
+						'Priority'    => 'Medium',
+						'Owner'       => 'Research',
+						'Contact'     => 'research@example.com',
+						'Kickoff'     => '2026-05-18',
+						'Due'         => '2026-06-12',
+						'Tags'        => array( 'research', 'data' ),
+						'Progress'    => 10,
+						'Blocked?'    => true,
+						'Project URL' => 'https://example.com/projects/relation-fields',
+						'Notes'       => 'Blocked until the resolved schema contract settles.',
+					),
 				),
 			),
 		);
 
+		$collection_ids = array();
 		foreach ( $collections as $spec ) {
-			$this->seed_collection( $spec );
+			$collection_ids[ $spec['slug'] ] = $this->seed_collection( $spec );
 		}
 
-		$this->seed_pages();
+		$this->seed_pages( $collection_ids );
 
 		WP_CLI::success( 'Seeding complete.' );
 	}
@@ -223,38 +674,133 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	}
 
 	/**
-	 * Seeds a small page hierarchy useful for exercising the sidebar Trash
-	 * flow: a root with mixed-depth children, plus a sibling at the root so
-	 * cascade trash and intermediate-node restore can be tried end-to-end.
+	 * Seeds a small realistic workspace hierarchy with starter content.
+	 *
+	 * @param array $collection_ids Collection IDs keyed by seeded collection slug.
 	 */
-	private function seed_pages(): void {
+	private function seed_pages( array $collection_ids ): void {
 		$tree = array(
 			array(
 				'title'    => 'Workspace',
+				'content'  => $this->page_content(
+					array(
+						$this->heading( 'Workspace dashboard' ),
+						$this->paragraph( 'This local workspace is seeded automatically for wp-env. It gives the shell, sidebar, editor canvas, and DataViews something realistic to render immediately.' ),
+						$this->data_view_block( $collection_ids['projects'] ?? 0 ),
+					)
+				),
 				'children' => array(
 					array(
 						'title'    => 'Engineering',
+						'content'  => $this->page_content(
+							array(
+								$this->heading( 'Engineering' ),
+								$this->paragraph( 'Use this area to test nested pages, drag and drop, duplication, trash restore, and inline document editing.' ),
+								$this->data_view_block( $collection_ids['projects'] ?? 0 ),
+							)
+						),
 						'children' => array(
-							array( 'title' => 'Onboarding' ),
+							array(
+								'title'   => 'Onboarding',
+								'content' => $this->page_content(
+									array(
+										$this->heading( 'Onboarding' ),
+										$this->paragraph( 'A compact starter page for checking title edits, autosave, nested sidebar rows, and readable editor content.' ),
+									)
+								),
+							),
 							array(
 								'title'    => 'Standards',
+								'content'  => $this->page_content(
+									array(
+										$this->heading( 'Standards' ),
+										$this->paragraph( 'Seeded standards pages keep the tree deep enough to exercise cascade trash and restore behavior.' ),
+									)
+								),
 								'children' => array(
-									array( 'title' => 'PHP' ),
-									array( 'title' => 'JavaScript' ),
+									array(
+										'title'   => 'PHP',
+										'content' => $this->page_content(
+											array(
+												$this->heading( 'PHP' ),
+												$this->paragraph( 'Run PHPCS and PHPUnit before sending changes that touch server behavior.' ),
+											)
+										),
+									),
+									array(
+										'title'   => 'JavaScript',
+										'content' => $this->page_content(
+											array(
+												$this->heading( 'JavaScript' ),
+												$this->paragraph( 'DataViews and the shell should stay close to WordPress package conventions.' ),
+											)
+										),
+									),
 								),
 							),
 						),
 					),
 					array(
 						'title'    => 'Design',
+						'content'  => $this->page_content(
+							array(
+								$this->heading( 'Design' ),
+								$this->paragraph( 'A branch of seeded pages for checking sibling ordering, rename flows, and editor canvas spacing.' ),
+							)
+						),
 						'children' => array(
-							array( 'title' => 'System' ),
-							array( 'title' => 'Mockups' ),
+							array(
+								'title'   => 'System',
+								'content' => $this->page_content(
+									array(
+										$this->heading( 'System' ),
+										$this->paragraph( 'Theme tokens and shell chrome can be tested here without creating fresh content.' ),
+									)
+								),
+							),
+							array(
+								'title'   => 'Mockups',
+								'content' => $this->page_content(
+									array(
+										$this->heading( 'Mockups' ),
+										$this->paragraph( 'Use this seeded page as a scratch area for block layout and inspector checks.' ),
+									)
+								),
+							),
 						),
 					),
 				),
 			),
-			array( 'title' => 'Notes' ),
+			array(
+				'title'   => 'Research',
+				'content' => $this->page_content(
+					array(
+						$this->heading( 'Research library' ),
+						$this->paragraph( 'Seeded books and paintings provide smaller collections for switching views and verifying mixed data sets.' ),
+						$this->data_view_block( $collection_ids['books'] ?? 0 ),
+						$this->data_view_block( $collection_ids['paintings'] ?? 0 ),
+					)
+				),
+			),
+			array(
+				'title'   => 'Demo database',
+				'content' => $this->page_content(
+					array(
+						$this->heading( 'Demo database' ),
+						$this->paragraph( 'This page embeds the field-type demo collection so local starts cover text, number, email, URL, select, multiselect, date, datetime, and checkbox cells.' ),
+						$this->data_view_block( $collection_ids['demo'] ?? 0 ),
+					)
+				),
+			),
+			array(
+				'title'   => 'Notes',
+				'content' => $this->page_content(
+					array(
+						$this->heading( 'Notes' ),
+						$this->paragraph( 'A root-level sibling page keeps sidebar actions and root ordering easy to test.' ),
+					)
+				),
+			),
 		);
 
 		foreach ( $tree as $node ) {
@@ -262,7 +808,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		}
 	}
 
-	private function seed_page_tree( array $node, int $parent_id ): void {
+	private function seed_page_tree( array $node, int $parent_id ): int {
 		$existing = get_posts(
 			array(
 				'post_type'   => Page::POST_TYPE,
@@ -277,13 +823,25 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		if ( $existing ) {
 			$page_id = (int) $existing[0];
 			WP_CLI::log( "Page '{$node['title']}' already exists (ID {$page_id})." );
+
+			$page = get_post( $page_id );
+			if ( isset( $node['content'] ) && $page && '' === trim( (string) $page->post_content ) ) {
+				wp_update_post(
+					array(
+						'ID'           => $page_id,
+						'post_content' => $node['content'],
+					)
+				);
+				WP_CLI::log( "Updated empty page '{$node['title']}' with demo content." );
+			}
 		} else {
 			$page_id = wp_insert_post(
 				array(
-					'post_type'   => Page::POST_TYPE,
-					'post_status' => 'private',
-					'post_title'  => $node['title'],
-					'post_parent' => $parent_id,
+					'post_type'    => Page::POST_TYPE,
+					'post_status'  => 'private',
+					'post_title'   => $node['title'],
+					'post_parent'  => $parent_id,
+					'post_content' => $node['content'] ?? '',
 				),
 				true
 			);
@@ -298,9 +856,59 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		foreach ( $node['children'] ?? array() as $child ) {
 			$this->seed_page_tree( $child, (int) $page_id );
 		}
+
+		return (int) $page_id;
 	}
 
-	private function seed_collection( array $spec ): void {
+	private function page_content( array $blocks ): string {
+		return implode( "\n\n", array_filter( $blocks ) );
+	}
+
+	private function heading( string $text, int $level = 2 ): string {
+		$level = max( 1, min( 6, $level ) );
+
+		return sprintf(
+			'<!-- wp:heading {"level":%1$d} --><h%1$d class="wp-block-heading">%2$s</h%1$d><!-- /wp:heading -->',
+			$level,
+			esc_html( $text )
+		);
+	}
+
+	private function paragraph( string $text ): string {
+		return sprintf(
+			'<!-- wp:paragraph --><p>%s</p><!-- /wp:paragraph -->',
+			esc_html( $text )
+		);
+	}
+
+	private function data_view_block( int $collection_id ): string {
+		if ( $collection_id <= 0 ) {
+			return '';
+		}
+
+		$attributes = array(
+			'collectionId' => $collection_id,
+			'view'         => array(
+				'type'    => 'table',
+				'fields'  => array(),
+				'sort'    => null,
+				'filters' => array(),
+				'perPage' => 25,
+				'page'    => 1,
+				'search'  => '',
+				'layout'  => array(
+					'density' => 'compact',
+				),
+			),
+		);
+
+		return sprintf(
+			'<!-- wp:cortext/data-view %s /-->',
+			wp_json_encode( $attributes )
+		);
+	}
+
+	private function seed_collection( array $spec ): int {
 		$slug      = $spec['slug'];
 		$entry_cpt = CollectionEntries::CPT_PREFIX . $slug;
 
@@ -414,7 +1022,10 @@ final class SeedDummyCollections extends WP_CLI_Command {
 
 		$existing_titles = array();
 		foreach ( $existing_entries as $entry_id ) {
-			$existing_titles[] = get_the_title( $entry_id );
+			$existing_entry = get_post( (int) $entry_id );
+			if ( $existing_entry ) {
+				$existing_titles[] = $existing_entry->post_title;
+			}
 		}
 
 		foreach ( $spec['entries'] as $entry ) {
@@ -456,6 +1067,8 @@ final class SeedDummyCollections extends WP_CLI_Command {
 
 			WP_CLI::log( "Created entry '{$entry['title']}' (ID {$entry_id})." );
 		}
+
+		return (int) $collection_id;
 	}
 
 	private function reset(): void {
