@@ -78,36 +78,43 @@ export default function useCollectionFields( collectionId ) {
 			? Boolean( collection )
 			: ! fieldsResolving && Boolean( fieldsResolved );
 
-	// Latch the last authoritative `fields` snapshot. When the user
-	// adds or deletes a field, `meta.fields` changes, the
-	// `useEntityRecords` query gets a new `include`, and the records
-	// list briefly returns `null` while that query fetches. Without the
-	// latch, `dataViewFields` would lose every custom column for one or
-	// two render cycles, which DataViews paints as a column collapse
-	// and re-expansion. The ref keeps the previous resolved set visible
-	// until the new resolution lands; `view.fields` only changes once,
-	// atomically, when the new set is ready.
-	const stableFieldsRef = useRef( null );
-	if ( fieldsResolvedFlag ) {
-		stableFieldsRef.current = liveFields;
+	// Latch the last authoritative `fields` snapshot scoped to the
+	// collection that produced it. When the user adds or deletes a
+	// field, `meta.fields` changes, the `useEntityRecords` query gets
+	// a new `include`, and core-data's `hasResolved` flips back to
+	// false until that query settles. Storing the previous fields keeps
+	// `dataViewFields` populated through the transient and lets
+	// `isResolving` stay false (no spinner flash). The collectionId
+	// pairing makes sure a collection switch reverts to the loading
+	// state rather than reusing the previous collection's fields.
+	const stableRef = useRef( { collectionId: null, fields: null } );
+	if ( fieldsResolvedFlag && collectionId ) {
+		stableRef.current = { collectionId, fields: liveFields };
 	}
-	const fields = stableFieldsRef.current ?? liveFields;
+	const hasStableFieldsForCollection =
+		stableRef.current.collectionId === collectionId &&
+		stableRef.current.fields !== null;
+	const fields = hasStableFieldsForCollection
+		? stableRef.current.fields
+		: liveFields;
 
 	return {
 		fields,
 		collection: collection ?? null,
 		slug: collection?.meta?.slug ?? null,
 		// True while either the collection or the field list is still on
-		// its first resolution. Once the collection 404s,
-		// `collectionResolving` flips back to false so the consumer can
-		// fall through to the invalid-collection notice. `fieldsResolved`
-		// is sticky once core-data has resolved at least once, so refetch
-		// transients (e.g., after a mutation) don't flip this back to
-		// true and flash the loading spinner.
+		// its first resolution for this collection. Once we've latched
+		// fields for the current collection (`hasStableFieldsForCollection`),
+		// subsequent refetches (after a mutation that changes the field
+		// list) keep this false so the table doesn't unmount and remount.
+		// The collection 404 path stays handled because
+		// `collectionResolving` flips back to false on resolution failure.
 		isResolving:
 			Boolean( collectionId ) &&
 			( ( ! collection && collectionResolving ) ||
-				( !! collection && fieldIds.length > 0 && ! fieldsResolved ) ),
+				( !! collection &&
+					fieldIds.length > 0 &&
+					! hasStableFieldsForCollection ) ),
 		fieldsResolved: fieldsResolvedFlag,
 	};
 }
