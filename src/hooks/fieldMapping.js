@@ -50,6 +50,8 @@ export const EDITABLE_TYPES = new Set( [
 	'checkbox',
 ] );
 
+const SEARCHABLE_TYPES = new Set( [ 'text', 'email', 'url' ] );
+
 function buildRender( id, type, label, elements ) {
 	const readOnly = ! EDITABLE_TYPES.has( type );
 	return ( { item } ) => (
@@ -153,7 +155,7 @@ export function mapField( field ) {
 		getValue: ( { item } ) => item?.meta?.[ id ] ?? null,
 		render: buildRender( id, type, label, elements ),
 		editable: EDITABLE_TYPES.has( type ),
-		enableGlobalSearch: [ 'text', 'email', 'url' ].includes( type ),
+		enableGlobalSearch: SEARCHABLE_TYPES.has( type ),
 	};
 
 	// DataViews v6's FieldType union is
