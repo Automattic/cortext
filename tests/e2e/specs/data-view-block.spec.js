@@ -1025,6 +1025,100 @@ test.describe( 'Collection view block', () => {
 		}
 	} );
 
+	test( 'global search filters rows by searchable text fields', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+
+		try {
+			Object.assign(
+				fixture,
+				await createCollectionFixture( requestUtils )
+			);
+
+			// A second entry whose Author value won't match the query.
+			fixture.entry2 = await requestUtils.rest( {
+				method: 'POST',
+				path: `/wp/v2/crtxt_${ fixture.slug }`,
+				data: {
+					title: 'Dune',
+					status: 'private',
+					meta: {
+						[ `field-${ fixture.field.id }` ]: 'Frank Herbert',
+					},
+				},
+			} );
+
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_pages',
+				data: {
+					title: 'Global search test page',
+					status: 'private',
+					content: createDataViewBlockMarkup( fixture.collection.id, {
+						search: 'Le Guin',
+					} ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/page/${ fixture.page.id }`
+			);
+
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.page.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+
+			// The matching row should be visible.
+			await expect(
+				canvas.getByText( 'The Left Hand of Darkness' )
+			).toBeVisible();
+			await expect(
+				canvas.getByText( 'Ursula K. Le Guin' )
+			).toBeVisible();
+
+			// The non-matching row should be filtered out.
+			await expect( canvas.getByText( 'Dune' ) ).toBeHidden();
+			await expect(
+				canvas.getByText( 'Frank Herbert' )
+			).toBeHidden();
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				fixture.entry2 &&
+					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry2.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.entry &&
+					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+			);
+		}
+	} );
+
 	test( 'resizes a column via drag and persists the width across reload', async ( {
 		admin,
 		page,

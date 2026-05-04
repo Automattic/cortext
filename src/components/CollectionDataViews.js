@@ -48,6 +48,7 @@ const TITLE_FIELD = {
 		/>
 	),
 	editable: true,
+	enableGlobalSearch: true,
 	// The title column can't be hidden (it's the row identity), but it
 	// reorders and resizes like any other column. `normalizeView` re-adds
 	// the id to `view.fields` if something corrupts the saved state.
@@ -244,18 +245,9 @@ export default function CollectionDataViews( {
 			.filter( ( f ) => f && f.editable );
 	}, [ availableFields, view?.fields ] );
 
-	// Search is already handled server-side, so strip it from the view
-	// before passing to filterSortAndPaginate. Without this, the client
-	// re-filters against enableGlobalSearch (which no fields set), dropping
-	// every row.
 	const { data: dataFiltered, paginationInfo: clientPaginationInfo } =
 		useMemo( () => {
-			const { search, ...viewWithoutSearch } = view;
-			return filterSortAndPaginate(
-				data,
-				viewWithoutSearch,
-				availableFields
-			);
+			return filterSortAndPaginate( data, view, availableFields );
 		}, [ data, view, availableFields ] );
 
 	const requestNext = useCallback(
