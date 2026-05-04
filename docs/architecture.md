@@ -2,29 +2,29 @@
 
 ## Content model
 
-Nomenclature | WordPress primitive
--|-
-Collection   | `crtxt_collection` CPT
-Field        | `crtxt_field` CPT
-Entry        | `crtxt_{$slug}` CPT
-Field value  | `crtxt_{$slug}` post meta
+| Nomenclature | WordPress primitive       |
+| ------------ | ------------------------- |
+| Collection   | `crtxt_collection` CPT    |
+| Field        | `crtxt_field` CPT         |
+| Entry        | `crtxt_{$slug}` CPT       |
+| Field value  | `crtxt_{$slug}` post meta |
 
 ### Creating a new database
 
-- we create a new database
+-   we create a new database
 
 ```php
 $collection_id = wp_insert_post( 'crtxt_collection', [ ... ] );
 register_post_type( 'crtxt_books', [ ... ] );
 ```
 
-- we add a new row
+-   we add a new row
 
 ```php
 $book_id = wp_insert_post( 'crtxt_books', $data );
 ```
 
-- we add a new column
+-   we add a new column
 
 ```php
 $field_id = wp_insert_post( 'crtxt_field', $field_details );
@@ -35,7 +35,7 @@ $type = get_post_meta( $field_id, 'type', true );
 register_post_meta( 'crtxt_books', "field-{$field_id}", [ $type, ... ] );
 ```
 
-- we add a cell value
+-   we add a cell value
 
 ```php
 update_post_meta( $book_id, "field-{$field_id}", $value );
@@ -63,17 +63,17 @@ foreach ( $collection_items as $item ) {
 
 To start off, maybe:
 
-- text
-- number
-- email
-- url
-- select
-- multiselect
-- date
-- datetime
-- checkbox
-- relation
-- formula
+-   text
+-   number
+-   email
+-   url
+-   select
+-   multiselect
+-   date
+-   datetime
+-   checkbox
+-   relation
+-   formula
 
 Later, _maybe_: `image`, `file`, `user_ref`, `post_ref`, `color`, `repeater`, `group`, conditional display.
 
@@ -98,10 +98,8 @@ A single React SPA mounted on a full-screen admin page.
 └───────────────┴────────────────────────────────────┘
 ```
 
-Chrome is hidden via the `is-fullscreen-mode` body class (the Site Editor pattern). Phase 2 may move to a custom URL via rewrite rule and `template_redirect`. The React shell is URL-agnostic, so the move is plumbing rather than architecture.
+Chrome is hidden via the `is-fullscreen-mode` body class, following the Site Editor pattern. Page routes mount the block editor canvas. Collection routes skip the editor canvas and mount DataViews directly in the shell on a light surface. DataViews is app UI, not block-theme content. Phase 2 may move the shell to a custom URL via rewrite rule and `template_redirect`; the React shell is URL-agnostic, so that change is mostly plumbing.
 
 ## Theming
 
-Two surfaces, two APIs. The workspace shell has a bounded cosmetic API (the token contract: colors, typography, spacing); the content layer uses the full WordPress block-theme API for published public pages. The two never interfere: Cortext does not touch the active block theme, and the shell's dark-mode preference does not cross into the frontend.
-
-The token contract lives in `src/styles/_tokens.scss`. Cortext does not push tokens across the Gutenberg iframe boundary or onto the public frontend; the iframe interior and published pages are both the active block theme's domain. Dark mode is chrome-only (so blocks and pickers, all authored for light backgrounds, remain usable inside the iframe). Full design and roadmap: [theming.md](theming.md).
+Shell chrome uses Cortext-owned semantic tokens in `src/styles/_tokens.scss`. Published pages and the editor iframe use the active WordPress block theme. Collection tables count as shell UI, but they stay on a light canvas until DataViews can be themed without breaking contrast. Details: [theming.md](theming.md).

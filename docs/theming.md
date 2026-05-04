@@ -1,84 +1,92 @@
 # Theming
 
-Cortext draws a line between two kinds of themes: the shell, and the content. They serve different surfaces, use different APIs, and carry different compatibility promises.
+Keep two surfaces apart.
 
-## Two kinds of themes
+The shell is Cortext's UI: sidebar, toolbar buttons, empty states, and the frame around the work area. Cortext owns those pieces. Shell themes change them through CSS custom properties on `.cortext-root`.
 
-| | Shell theme | Content theme |
-|-|-|-|
-| What it styles | The Cortext workspace chrome (sidebar, canvas frame, toolbars) | Published public pages |
-| API surface | Token contract (CSS custom properties) | WordPress block theme (templates + CSS) |
-| Who ships it | Cortext (phase 1), plus third parties (phase 4) | Any WordPress theme installed on the site |
-| Customisable | Bounded: cosmetic tokens only | Unbounded: the full theme API |
-| Coexists with WP themes | Yes. Shell theming does not touch the active WP theme | Yes. Cortext does not interfere with the active theme |
+Content is the other side. Published pages and the inside of Gutenberg's editor iframe follow the active WordPress block theme. Cortext does not add shell tokens to `wp_head` or pass shell colors into the iframe.
 
-Both theme types are themeable. What is deliberately not themeable is the *structure* of the workspace: sidebar + canvas grid, DataViews placement, block inspector positioning. Those stay consistent across installs because the product identity rides on them. The shell-theme API is therefore a bounded cosmetic surface, not a full override hook.
+## Collection canvas
 
-## Shell theming: the token contract (v1)
+Collections are the awkward case. They render in the shell, but they are not document content. They are also not ready to follow arbitrary shell colors, because DataViews and many `@wordpress/components` controls still assume a light admin surface.
 
-The token contract is the API. Shell themes change values in it; they do not add new layout, new regions, or new components. Tokens are CSS custom properties declared on `.cortext-root`.
+So collection routes get a light canvas of their own: `.cortext-canvas__table`. The Cortext shell can be dark around it, but the table stays on a surface DataViews handles well.
 
-### Color
+Do not confuse that with `--cortext-canvas-frame-surface`. That token still paints `.cortext-shell__canvas`: the empty state, the frame behind page routes, and the shell background around the editor iframe. Collection tables cover that frame with their light canvas. The dark override for `--cortext-canvas-frame-surface` is still live, even though collection routes hide it.
 
-| Token | Light default | Dark override |
-|-|-|-|
-| `--cortext-color-canvas` | `#fff` | `#2a2a2a` |
-| `--cortext-color-surface` | `#fff` | `#2a2a2a` |
-| `--cortext-color-surface-raised` | `#f0f0f0` | `#383838` |
-| `--cortext-color-border` | `#e0e0e0` | `#3e3e3e` |
-| `--cortext-color-text` | `#1e1e1e` | `#f0f0f0` |
-| `--cortext-color-text-muted` | `#757575` | `#a0a0a0` |
-| `--cortext-color-accent` | `var(--wp-admin-theme-color, #3858e9)` | (same cascade) |
-| `--cortext-color-accent-contrast` | `#fff` | `#fff` |
-| `--cortext-color-shadow` | `rgba(0, 0, 0, 0.12)` | `rgba(0, 0, 0, 0.4)` |
+## The token contract (v1)
 
-### Typography
+The contract lives in `src/styles/_tokens.scss`. These tokens name Cortext jobs, not Gutenberg variables. WordPress still provides useful defaults: the accent follows the admin/components accent, and base-styles handle ordinary spacing and density.
 
-| Token | Default |
+Theme authors should target Cortext roles instead of relying on whichever `--wp-*` variable happens to affect the right piece of chrome today.
+
+### Shell roles
+
+| Token | What it controls |
 |-|-|
-| `--cortext-font-family` | `inherit` (tracks wp-admin) |
-| `--cortext-font-size-body` | `13px` |
-| `--cortext-font-size-ui` | `13px` |
+| `--cortext-shell-surface` | Root shell and shell toolbar surface |
+| `--cortext-sidebar-surface` | Sidebar background |
+| `--cortext-sidebar-item-hover-surface` | Hover surface for sidebar controls |
+| `--cortext-sidebar-item-selected-surface` | Selected page/drop-target surface |
+| `--cortext-canvas-frame-surface` | Shell frame around the work area; collection tables may cover it with their own canvas |
+| `--cortext-chrome-border` | Borders between shell regions |
+| `--cortext-text` | Primary shell text |
+| `--cortext-text-muted` | Secondary shell text |
+| `--cortext-accent` | Shell accent, defaulting to `--wp-components-color-accent` / `--wp-admin-theme-color` |
+| `--cortext-accent-contrast` | Text/icon color on accent backgrounds |
+| `--cortext-shadow-color` | Shell drag-preview shadow |
 
-### Spacing and structure
+### Button roles
 
-| Token | Default |
+| Token | What it controls |
 |-|-|
-| `--cortext-space-xs` | `4px` |
-| `--cortext-space-sm` | `8px` |
-| `--cortext-space-md` | `12px` |
-| `--cortext-space-lg` | `16px` |
-| `--cortext-space-xl` | `24px` |
-| `--cortext-radius-sm` | `2px` |
-| `--cortext-border-width` | `1px` |
+| `--cortext-button-surface` | Default shell button surface |
+| `--cortext-button-text` | Default shell button text/icon color |
+| `--cortext-button-hover-surface` | Hover/focus surface for shell buttons |
+| `--cortext-button-pressed-surface` | Pressed shell button surface |
+| `--cortext-button-primary-surface` | Primary shell button surface |
+| `--cortext-button-primary-hover-surface` | Primary shell button hover/focus surface |
+| `--cortext-button-primary-text` | Primary shell button text/icon color |
 
-The contract lives in `src/styles/_tokens.scss`. That's the only emitter: the shell consumes the tokens directly, and nothing else does. The Gutenberg canvas iframe is the active block theme's domain, so Cortext doesn't push tokens across the iframe boundary either. The contract deliberately does not reach the public frontend either; published pages are the active block theme's territory, and Cortext emits no tokens, styles, or patterns on `wp_head`.
+### Foundation roles
+
+| Token | Default source |
+|-|-|
+| `--cortext-shell-font-family` | `inherit` |
+| `--cortext-shell-font-size` | WordPress base-styles medium font size |
+| `--cortext-shell-radius` | WordPress base-styles small radius |
+| `--cortext-shell-border-width` | WordPress base-styles border width |
+
+Spacing stays internal for now. The shell uses WordPress base-styles grid units directly. We should only expose spacing tokens if shell themes need to control density.
 
 ## Dark mode
 
-Phase 1 supports a three-way preference: Light, Dark, or Match system. The toggle lives in the sidebar header.
+Cortext has a three-way preference: Light, Dark, or Match system. The toggle lives in the sidebar header.
 
-**Dark mode paints shell chrome.** The shell root carries `data-theme="dark"`, and that covers every chrome surface: sidebar, toolbars, and the canvas column that frames the iframe. The Gutenberg iframe interior is a separate surface: Cortext does not paint inside the iframe, so the active block theme and its `theme.json` keep control of it. Rationale for the split: Gutenberg blocks, inserters, color pickers, and media inspectors are authored against light backgrounds, and coordinating dark overrides across the block ecosystem is out of scope for phase 1. The same split shows up in Figma and VS Code: dark chrome around a content area that the document itself controls.
+Dark mode changes shell chrome: sidebar, toolbar controls, empty state, and the editor frame. It does not darken the editor iframe. The active block theme owns the document surface.
 
-Persistence is `localStorage` for phase 1, keyed `cortext.colorScheme`. A pre-mount inline script (`Cortext\Theming\Preferences::get_bootstrap_js()`) stamps `data-theme` on the root before React mounts so the first paint matches the preference with no flash. Phase 3 moves persistence to user meta so the preference follows the user across browsers.
+Collection tables stay light for the same practical reason. DataViews renders in the shell, but its controls are still built for a light admin surface. Making that surface themeable is a separate job from darkening Cortext chrome.
 
-## Phased roadmap
+Preference is stored in `localStorage` under `cortext.colorScheme`. `Cortext\Theming\Preferences::get_bootstrap_js()` stamps `data-theme` on the shell root before React mounts so reloads in dark don't flash light first.
 
-- **Phase 1 (current)**: token contract v1, light/dark/auto shell toggle. Persistence in localStorage. Contract not yet public; internal consumers only.
-- **Phase 2**: publish the contract as stable. Ship an accent picker.
-- **Phase 3**: per-user preference persistence (user meta).
-- **Phase 4**: `cortext_theme_tokens` PHP filter. Third parties can ship shell themes as token bundles. Contract becomes part of the public API surface.
+## Roadmap
+
+- Phase 1 (current): internal semantic token contract, light/dark/auto shell toggle, localStorage persistence.
+- Phase 2: stable shell contract and an accent picker.
+- Phase 3: per-user persistence through user meta.
+- Phase 4: `cortext_theme_tokens` filter. Third parties can ship shell themes as token bundles, and the contract becomes public API.
 
 ## Extending (preview)
 
-Once phase 4 lands, a shell theme will look like:
+During phase 1, local experiments can use an override stylesheet loaded in the Cortext admin screen:
 
-```php
-add_filter( 'cortext_theme_tokens', function ( $tokens ) {
-	$tokens['color']['accent'] = '#8b5cf6';
-	$tokens['color']['surface-raised'] = '#efe9ff';
-	return $tokens;
-} );
+```css
+.cortext-root {
+	--cortext-sidebar-surface: #191724;
+	--cortext-sidebar-item-selected-surface: #26233a;
+	--cortext-button-primary-surface: #eb6f92;
+	--cortext-button-primary-text: #191724;
+}
 ```
 
-Structural layout is permanently out of scope. A shell theme cannot move the sidebar, remove the block inspector, or insert arbitrary regions. If a site needs structural divergence, the right tool is a WordPress plugin that replaces Cortext on that install, not a Cortext shell theme.
+Structural layout stays out of scope. A shell theme can't move the sidebar, remove the block inspector, or add new regions. The contract is cosmetic only.
