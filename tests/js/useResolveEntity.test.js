@@ -57,6 +57,7 @@ describe( 'useResolveEntity', () => {
 			entity: null,
 			isResolving: false,
 			notFound: false,
+			id: null,
 		} );
 		expect( apiFetch ).not.toHaveBeenCalled();
 	} );
@@ -72,6 +73,7 @@ describe( 'useResolveEntity', () => {
 			entity: null,
 			isResolving: false,
 			notFound: true,
+			id: null,
 		} );
 		expect( apiFetch ).not.toHaveBeenCalled();
 	} );
@@ -99,6 +101,7 @@ describe( 'useResolveEntity', () => {
 			entity: { id: 42, slug: 'about-us', parent: 0 },
 			isResolving: false,
 			notFound: false,
+			id: 42,
 		} );
 	} );
 
