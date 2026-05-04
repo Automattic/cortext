@@ -63,17 +63,6 @@ export default function ColumnHeaderActions( {
 			return undefined;
 		}
 
-		// Strip DataViews' built-in trigger off any <th> that carries one
-		// of our markers. The combined-dropdown trigger we portal in is
-		// the only column-header button on those cells, so DataViews'
-		// selectors and main's e2e tests count one button per column
-		// either way (tech-debt.md#16).
-		const stripDataViewsTrigger = ( th ) => {
-			th.querySelector(
-				'.dataviews-view-table-header-button:not(.cortext-column-header-trigger)'
-			)?.remove();
-		};
-
 		const sync = () => {
 			const next = [];
 			wrapper
@@ -83,7 +72,6 @@ export default function ColumnHeaderActions( {
 					if ( ! th ) {
 						return;
 					}
-					stripDataViewsTrigger( th );
 					const recordId = Number(
 						marker.getAttribute( 'data-cortext-field-marker' )
 					);
@@ -104,7 +92,6 @@ export default function ColumnHeaderActions( {
 					if ( ! th ) {
 						return;
 					}
-					stripDataViewsTrigger( th );
 					next.push( {
 						key: 'add-field',
 						kind: 'add',
