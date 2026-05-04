@@ -9,7 +9,7 @@ import {
 	TextControl,
 	ToolbarButton,
 } from '@wordpress/components';
-import { useEntityRecords } from '@wordpress/core-data';
+import { useEntityRecord, useEntityRecords } from '@wordpress/core-data';
 import { useDispatch } from '@wordpress/data';
 import { useCallback, useState } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
@@ -146,6 +146,14 @@ function CollectionCreator( { onCreate } ) {
 }
 
 function CollectionToolbarControl( { collectionId, onSelect } ) {
+	const { record: collection, isResolving } = useEntityRecord(
+		'postType',
+		'crtxt_collection',
+		collectionId ?? 0
+	);
+
+	const isCollectionValid = ! isResolving && collectionId && collection;
+
 	return (
 		<BlockControls group="other">
 			<Dropdown
@@ -171,26 +179,28 @@ function CollectionToolbarControl( { collectionId, onSelect } ) {
 					</div>
 				) }
 			/>
-			<Dropdown
-				contentClassName="cortext-data-view-toolbar-popover"
-				popoverProps={ { placement: 'bottom-start' } }
-				renderToggle={ ( { isOpen, onToggle } ) => (
-					<ToolbarButton
-						icon={ plus }
-						label={ __( 'Add field', 'cortext' ) }
-						onClick={ onToggle }
-						isPressed={ isOpen }
-					/>
-				) }
-				renderContent={ ( { onClose } ) => (
-					<div className="cortext-data-view-toolbar-popover__content">
-						<AddFieldPopover
-							collectionId={ collectionId }
-							onCreate={ onClose }
+			{ isCollectionValid && (
+				<Dropdown
+					contentClassName="cortext-data-view-toolbar-popover"
+					popoverProps={ { placement: 'bottom-start' } }
+					renderToggle={ ( { isOpen, onToggle } ) => (
+						<ToolbarButton
+							icon={ plus }
+							label={ __( 'Add field', 'cortext' ) }
+							onClick={ onToggle }
+							isPressed={ isOpen }
 						/>
-					</div>
-				) }
-			/>
+					) }
+					renderContent={ ( { onClose } ) => (
+						<div className="cortext-data-view-toolbar-popover__content">
+							<AddFieldPopover
+								collectionId={ collectionId }
+								onCreate={ onClose }
+							/>
+						</div>
+					) }
+				/>
+			) }
 		</BlockControls>
 	);
 }
