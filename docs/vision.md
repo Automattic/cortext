@@ -31,3 +31,5 @@ This same principle shapes Cortext's relationship with AI. Cortext isn't an AI-f
 ### 2. Tailored UX
 
 Cortext is WordPress under the hood, but you wouldn't know it. The workspace UI is built from scratch to let users focus on their knowledge base, free from WordPress complexities. wp-admin remains available for operators who want it; everyone else lives in a Notion-style shell.
+
+The shell is themeable, but the API is deliberately small. Operators can retune Cortext chrome with tokens. They cannot move the sidebar, reshape DataViews, or replace the inspector. Content pages keep the full WordPress block-theme API, so the workspace can feel like Cortext while published pages still feel like the site. See [Theming](theming.md) for the contract and roadmap.

@@ -22,6 +22,7 @@ use Cortext\Rest\CollectionsController;
 use Cortext\Rest\FieldsController;
 use Cortext\Rest\PageTrashController;
 use Cortext\Rest\RowsController;
+use Cortext\Theming\Preferences;
 
 final class Plugin {
 
@@ -48,6 +49,7 @@ final class Plugin {
 		( new RowsController() )->register();
 		( new Template() )->register();
 		( new Assets() )->register();
+		( new Preferences() )->register();
 	}
 
 	private function __construct() {}

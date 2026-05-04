@@ -1,5 +1,6 @@
 @use "@wordpress/base-styles/colors" as *;
 @use "@wordpress/base-styles/variables" as *;
+@use "./styles/tokens";
 
 // @wordpress/interface is a BUNDLED_PACKAGE (inlined into our JS) and WP
 // doesn't register a `wp-interface` style handle, so bundle its stylesheet.
@@ -28,7 +29,10 @@ body.cortext-fullscreen {
 .cortext-root {
 	position: fixed;
 	inset: 0;
-	background: $white;
+	background: var(--cortext-shell-surface);
+	color: var(--cortext-text);
+	font-family: var(--cortext-shell-font-family);
+	font-size: var(--cortext-shell-font-size);
 }
 
 .cortext-shell {
@@ -38,7 +42,8 @@ body.cortext-fullscreen {
 }
 
 .cortext-sidebar {
-	border-right: $border-width solid $gray-200;
+	background: var(--cortext-sidebar-surface);
+	border-right: var(--cortext-shell-border-width) solid var(--cortext-chrome-border);
 	overflow-y: auto;
 	padding: $grid-unit-15;
 
@@ -54,14 +59,14 @@ body.cortext-fullscreen {
 		font-weight: 600;
 		text-transform: uppercase;
 		letter-spacing: 0.5px;
-		color: $gray-700;
+		color: var(--cortext-text-muted);
 		margin: $grid-unit-15 0 $grid-unit-05 0;
 		padding: 0 $grid-unit-05;
 	}
 
 	&__loading,
 	&__empty {
-		color: $gray-700;
+		color: var(--cortext-text-muted);
 		padding: $grid-unit-10;
 	}
 
@@ -85,12 +90,12 @@ body.cortext-fullscreen {
 		display: flex;
 		align-items: center;
 		gap: $grid-unit-05;
-		border-radius: 2px;
+		border-radius: var(--cortext-shell-radius);
 		cursor: grab;
 		user-select: none;
 
 		&.is-selected {
-			background: $gray-100;
+			background: var(--cortext-sidebar-item-selected-surface);
 		}
 
 		&.is-dragging {
@@ -104,7 +109,7 @@ body.cortext-fullscreen {
 			position: absolute;
 			inset-inline: 0;
 			height: 2px;
-			background: var(--wp-admin-theme-color, $gray-700);
+			background: var(--cortext-accent);
 			pointer-events: none;
 		}
 
@@ -117,8 +122,8 @@ body.cortext-fullscreen {
 		}
 
 		&.is-drop-inside {
-			background: rgba($gray-700, 0.08);
-			outline: 1px dashed var(--wp-admin-theme-color, $gray-700);
+			background: var(--cortext-sidebar-item-selected-surface);
+			outline: var(--cortext-shell-border-width) dashed var(--cortext-accent);
 			outline-offset: -1px;
 		}
 	}
@@ -185,11 +190,12 @@ body.cortext-fullscreen {
 
 	&__drag-preview {
 		padding: $grid-unit-05 $grid-unit-15;
-		background: $white;
-		border: $border-width solid $gray-200;
-		border-radius: 2px;
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
-		font-size: 13px;
+		background: var(--cortext-sidebar-surface);
+		color: var(--cortext-text);
+		border: var(--cortext-shell-border-width) solid var(--cortext-chrome-border);
+		border-radius: var(--cortext-shell-radius);
+		box-shadow: 0 2px 8px var(--cortext-shadow-color);
+		font-size: var(--cortext-shell-font-size);
 		max-width: 260px;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -265,6 +271,10 @@ body.cortext-fullscreen {
 .cortext-shell__canvas {
 	position: relative;
 	overflow: hidden;
+	// The shell column that frames the iframe. Follows the shell theme via
+	// --cortext-canvas-frame-surface. The iframe interior is painted by the active
+	// block theme, not by this token.
+	background: var(--cortext-canvas-frame-surface);
 
 	// InterfaceSkeleton defaults to `position: fixed` at >= 782px, which would
 	// escape our grid and overlap the page-list sidebar. Scope it to fill just
@@ -284,6 +294,9 @@ body.cortext-fullscreen {
 		gap: $grid-unit-10;
 		padding: $grid-unit-10 $grid-unit-20;
 		flex: 1;
+		background: var(--cortext-shell-surface);
+		color: var(--cortext-text);
+		border-bottom: var(--cortext-shell-border-width) solid var(--cortext-chrome-border);
 	}
 
 	&__loading,
@@ -292,7 +305,7 @@ body.cortext-fullscreen {
 		flex-direction: column;
 		align-items: center;
 		justify-content: center;
-		color: $gray-700;
+		color: var(--cortext-text-muted);
 		height: 100%;
 	}
 
@@ -324,10 +337,17 @@ body.cortext-fullscreen {
 	&__table {
 		// DataViews' `.dataviews-wrapper` is `height: 100%`, so the wrapper
 		// must have an explicit height or it falls back to 0 + internal
-		// scroll. Pin to the canvas column with a 2rem inset for breathing
-		// room.
+		// scroll. Fill the canvas column: DataViews already owns the internal
+		// toolbar/table padding.
 		position: absolute;
-		inset: 2rem;
+		inset: 0;
+		overflow: hidden;
+		background: $white;
+		color: $gray-900;
+	}
+
+	&__table &__loading {
+		color: $gray-700;
 	}
 
 	&__empty-text {
@@ -978,4 +998,53 @@ body.cortext-column-dragging
 .dataviews-view-table
 thead > tr > th {
 	cursor: grabbing;
+}
+
+// @wordpress/components buttons inherit Cortext shell tokens only in chrome
+// that Cortext owns. The editor iframe, inspector, and block toolbars keep
+// Gutenberg's own component styling.
+.cortext-sidebar,
+.cortext-canvas__header {
+
+	.components-button {
+		border-radius: var(--cortext-shell-radius);
+	}
+
+	.components-button:not(.is-primary) {
+		background: var(--cortext-button-surface);
+		color: var(--cortext-button-text);
+
+		&:hover:not(:disabled),
+		&:focus:not(:disabled) {
+			background: var(--cortext-button-hover-surface);
+			color: var(--cortext-button-text);
+		}
+	}
+
+	.components-button.is-primary {
+		background: var(--cortext-button-primary-surface);
+		box-shadow: inset 0 0 0 var(--cortext-shell-border-width) var(--cortext-button-primary-surface);
+		color: var(--cortext-button-primary-text);
+
+		&:hover:not(:disabled),
+		&:focus:not(:disabled) {
+			background: var(--cortext-button-primary-hover-surface);
+			box-shadow: inset 0 0 0 var(--cortext-shell-border-width) var(--cortext-button-primary-hover-surface);
+			color: var(--cortext-button-primary-text);
+		}
+	}
+
+	.components-button.is-pressed {
+		background: var(--cortext-button-pressed-surface);
+		color: var(--cortext-button-text);
+	}
+
+	.components-button svg {
+		fill: currentcolor;
+	}
+
+	.dashicon,
+	.dashicons {
+		color: var(--cortext-button-text);
+	}
 }

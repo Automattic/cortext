@@ -16,6 +16,7 @@ declare( strict_types=1 );
 namespace Cortext\Admin;
 
 use Cortext\PostType\Page;
+use Cortext\Theming\Preferences;
 
 final class Screen {
 
@@ -93,6 +94,15 @@ final class Screen {
 			'before'
 		);
 
+		// Shell color-scheme pre-mount script: stamps `data-theme` on
+		// `#cortext-root` before React mounts so the first paint matches
+		// the user's preference without a flash.
+		wp_add_inline_script(
+			self::SCRIPT_HANDLE,
+			( new Preferences() )->get_bootstrap_js(),
+			'before'
+		);
+
 		wp_set_script_translations( self::SCRIPT_HANDLE, 'cortext' );
 
 		// Resolve the stylesheets the iframe canvas needs (core block CSS,
@@ -102,6 +112,10 @@ final class Screen {
 		// `style.css` — no src-swap or theme.json loop needed here.
 		$editor_context  = new \WP_Block_Editor_Context( array( 'name' => 'core/edit-post' ) );
 		$editor_settings = get_block_editor_settings( array(), $editor_context );
+
+		if ( ! isset( $editor_settings['styles'] ) || ! is_array( $editor_settings['styles'] ) ) {
+			$editor_settings['styles'] = array();
+		}
 
 		// `build/index.css` carries the DataViews package CSS (bundled
 		// through `src/index.scss`) and our own plugin styles. The block
@@ -113,9 +127,6 @@ final class Screen {
 		if ( file_exists( $style_path ) ) {
 			$style_css = file_get_contents( $style_path ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
 			if ( is_string( $style_css ) && '' !== $style_css ) {
-				$editor_settings['styles']   = isset( $editor_settings['styles'] )
-					? $editor_settings['styles']
-					: array();
 				$editor_settings['styles'][] = array( 'css' => $style_css );
 			}
 		}
