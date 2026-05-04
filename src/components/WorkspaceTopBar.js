@@ -12,11 +12,11 @@ const { Slot, Fill } = createSlotFill( SLOT_NAME );
 // while sharing chrome with the workspace shell.
 export const TopBarActionsFill = Fill;
 
-export default function WorkspaceTopBar() {
+export default function WorkspaceTopBar( { paintedRoute } ) {
 	return (
 		<div className="cortext-topbar">
 			<div className="cortext-topbar__lead">
-				<Breadcrumbs />
+				<Breadcrumbs paintedRoute={ paintedRoute } />
 			</div>
 			<div className="cortext-topbar__actions">
 				<Slot bubblesVirtually />

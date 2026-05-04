@@ -1,6 +1,6 @@
 import { __ } from '@wordpress/i18n';
 import { useEntityRecord, useEntityRecords } from '@wordpress/core-data';
-import { useNavigate, useParams } from '@tanstack/react-router';
+import { useNavigate } from '@tanstack/react-router';
 import { useCallback, useMemo } from '@wordpress/element';
 
 import {
@@ -8,11 +8,7 @@ import {
 	POST_TYPE as PAGE_POST_TYPE,
 } from '../components/page-queries';
 import { COLLECTION_QUERY } from '../collections';
-import {
-	computeUri,
-	parseIdFromUri,
-	parseSplatUri,
-} from '../router/useResolveEntity';
+import { computeUri } from '../router/useResolveEntity';
 
 const COLLECTION_POST_TYPE = 'crtxt_collection';
 
@@ -24,19 +20,17 @@ function titleOf( entity ) {
 	);
 }
 
-// Returns the breadcrumb segments for the active route. Page routes contribute
-// the natural ancestor chain; collection routes are flat (just the collection
-// itself). Empty / not-found / loading routes return an empty list. There is
-// no synthetic "workspace root" segment because there's no workspace home to
-// navigate to — `/` only renders the empty state.
-export default function useBreadcrumbSegments() {
-	const params = useParams( { strict: false } );
+// Returns the breadcrumb segments for the currently painted surface. Driven by
+// `paintedRoute` (from EntityRoute) rather than the URL so the breadcrumb
+// updates in lockstep with the document-actions Fill — both sides of the top
+// bar describe the same entity even mid-navigation. Page routes contribute the
+// natural ancestor chain; collection routes are flat. Empty / not-found /
+// unresolved routes return no segments.
+export default function useBreadcrumbSegments( paintedRoute ) {
 	const navigate = useNavigate();
-	const { prefix, tail } = parseSplatUri( params._splat ?? '' );
-	const isCollection = prefix === 'collection';
-	const id = parseIdFromUri( tail );
-	const pageId = ! isCollection && id ? id : null;
-	const collectionId = isCollection && id ? id : null;
+	const kind = paintedRoute?.kind ?? 'unresolved';
+	const pageId = kind === 'page' ? paintedRoute.id : null;
+	const collectionId = kind === 'collection' ? paintedRoute.id : null;
 
 	// Pulled from the same store the Sidebar populates, so no extra fetch.
 	const { records: pages } = useEntityRecords(
@@ -85,9 +79,6 @@ export default function useBreadcrumbSegments() {
 				pagesById.get( pageId ) ??
 				( currentPage?.id === pageId ? currentPage : null );
 			if ( ! head ) {
-				// Not yet resolved (loading) or 404. Suppress the breadcrumb
-				// rather than render "(untitled)" for a record that may not
-				// exist.
 				return [];
 			}
 			if ( ! pagesById.has( pageId ) ) {

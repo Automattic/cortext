@@ -11,6 +11,7 @@ import {
 
 import Canvas from '../components/Canvas';
 import CollectionDataViews from '../components/CollectionDataViews';
+import WorkspaceTopBar from '../components/WorkspaceTopBar';
 import EmptyState from './EmptyState';
 import { useResolveEntity, useResolveCollection } from './useResolveEntity';
 import { init, parseTarget, reducer } from './entityRouteReducer';
@@ -169,42 +170,69 @@ export default function EntityRoute() {
 		dispatch( { type: 'COLLECTION_READY', id } );
 	}, [] );
 
+	// Drives the breadcrumb from the same paint state the document-actions
+	// Fill uses, so both sides of the top bar update together. Reading the
+	// URL directly would race ahead of the still-active pane during the
+	// in-between window of a route change.
+	let paintedRoute = { kind: 'unresolved' };
+	if ( active.kind === 'page' ) {
+		paintedRoute = { kind: 'page', id: mountedPageId };
+	} else if ( active.kind === 'collection' ) {
+		paintedRoute = { kind: 'collection', id: active.id };
+	} else if (
+		active.kind === 'empty' ||
+		active.kind === 'page-not-found' ||
+		active.kind === 'collection-not-found'
+	) {
+		paintedRoute = { kind: active.kind };
+	}
+
 	return (
-		<div className="cortext-workspace">
-			{ mountedPageId !== null && (
-				<WorkspacePane active={ active.kind === 'page' } preservePaint>
-					<Canvas
-						postId={ mountedPageId }
-						onDisplayedPost={ handlePageDisplayed }
-						isActive={ active.kind === 'page' }
-					/>
-				</WorkspacePane>
-			) }
+		<>
+			<WorkspaceTopBar paintedRoute={ paintedRoute } />
+			<div className="cortext-workspace">
+				{ mountedPageId !== null && (
+					<WorkspacePane
+						active={ active.kind === 'page' }
+						preservePaint
+					>
+						<Canvas
+							postId={ mountedPageId }
+							onDisplayedPost={ handlePageDisplayed }
+							isActive={ active.kind === 'page' }
+						/>
+					</WorkspacePane>
+				) }
 
-			{ mountedCollectionIds.map( ( id ) => (
+				{ mountedCollectionIds.map( ( id ) => (
+					<WorkspacePane
+						key={ id }
+						active={
+							active.kind === 'collection' && active.id === id
+						}
+					>
+						<CollectionPane
+							collectionId={ id }
+							onReady={ handleCollectionReady }
+						/>
+					</WorkspacePane>
+				) ) }
+
+				<WorkspacePane active={ active.kind === 'empty' }>
+					<EmptyState />
+				</WorkspacePane>
+				<WorkspacePane active={ active.kind === 'page-not-found' }>
+					<NotFoundPane type="page" />
+				</WorkspacePane>
 				<WorkspacePane
-					key={ id }
-					active={ active.kind === 'collection' && active.id === id }
+					active={ active.kind === 'collection-not-found' }
 				>
-					<CollectionPane
-						collectionId={ id }
-						onReady={ handleCollectionReady }
-					/>
+					<NotFoundPane type="collection" />
 				</WorkspacePane>
-			) ) }
-
-			<WorkspacePane active={ active.kind === 'empty' }>
-				<EmptyState />
-			</WorkspacePane>
-			<WorkspacePane active={ active.kind === 'page-not-found' }>
-				<NotFoundPane type="page" />
-			</WorkspacePane>
-			<WorkspacePane active={ active.kind === 'collection-not-found' }>
-				<NotFoundPane type="collection" />
-			</WorkspacePane>
-			<WorkspacePane active={ active.kind === 'loading' }>
-				<LoadingPane />
-			</WorkspacePane>
-		</div>
+				<WorkspacePane active={ active.kind === 'loading' }>
+					<LoadingPane />
+				</WorkspacePane>
+			</div>
+		</>
 	);
 }

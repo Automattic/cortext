@@ -9,7 +9,6 @@ import { privateApis as routePrivateApis } from '@wordpress/route';
 import { SlotFillProvider } from '@wordpress/components';
 
 import Sidebar from './components/Sidebar';
-import WorkspaceTopBar from './components/WorkspaceTopBar';
 import EntityRoute from './router/EntityRoute';
 import { unlock } from './lock-unlock';
 
@@ -28,7 +27,6 @@ function RootLayout() {
 			<div className="cortext-shell">
 				<Sidebar />
 				<main className="cortext-shell__canvas">
-					<WorkspaceTopBar />
 					<EntityRoute />
 				</main>
 			</div>
