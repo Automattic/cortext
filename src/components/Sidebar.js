@@ -614,10 +614,14 @@ export default function Sidebar( {
 					label={ __( 'Back to WordPress', 'cortext' ) }
 					href={ adminUrl }
 					icon={
-						<span className="cortext-sidebar__back-icon">
-							<Icon icon={ chevronLeft } size={ 24 } />
-							<Icon icon={ wordpress } size={ 20 } />
-						</span>
+						collapsed ? (
+							<Icon icon={ wordpress } size={ 24 } />
+						) : (
+							<span className="cortext-sidebar__back-icon">
+								<Icon icon={ chevronLeft } size={ 24 } />
+								<Icon icon={ wordpress } size={ 20 } />
+							</span>
+						)
 					}
 				/>
 				<ThemeToggle />
