@@ -283,7 +283,7 @@ export default function PageRow( {
 						'cortext-sidebar__children-wrapper' +
 						( isExpanded ? ' is-expanded' : '' )
 					}
-					aria-hidden={ ! isExpanded }
+					{ ...( isExpanded ? {} : { inert: '' } ) }
 				>
 					<ul className="cortext-sidebar__children">
 						{ children.map( ( child ) => (
