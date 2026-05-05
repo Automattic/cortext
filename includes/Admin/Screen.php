@@ -62,8 +62,9 @@ final class Screen {
 			return;
 		}
 
-		// Loads wp.media so MediaUpload's Slot fill from @wordpress/media-utils
-		// can open the WordPress media library.
+		// Loads wp.media so MediaUpload (in the icon picker popover and the
+		// core/post-featured-image block inside the editor iframe) can open
+		// the WordPress media library.
 		wp_enqueue_media();
 
 		$asset_path = CORTEXT_PATH . 'build/index.asset.php';
