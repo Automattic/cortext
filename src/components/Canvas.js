@@ -1,17 +1,15 @@
 import { __ } from '@wordpress/i18n';
 import { useEntityRecord } from '@wordpress/core-data';
 import { useSelect, useDispatch } from '@wordpress/data';
-import {
-	EditorProvider,
-	PostTitle,
-	store as editorStore,
-} from '@wordpress/editor';
+import { EditorProvider, store as editorStore } from '@wordpress/editor';
 import {
 	BlockList,
 	BlockInspector,
 	BlockCanvas,
+	store as blockEditorStore,
 	useSettings,
 } from '@wordpress/block-editor';
+import { createBlock } from '@wordpress/blocks';
 import {
 	InterfaceSkeleton,
 	ComplementaryArea,
@@ -27,7 +25,7 @@ import {
 import { store as noticesStore } from '@wordpress/notices';
 import { cog } from '@wordpress/icons';
 import apiFetch from '@wordpress/api-fetch';
-import { useEffect, useState } from '@wordpress/element';
+import { useEffect, useLayoutEffect, useState } from '@wordpress/element';
 
 import useAutosave from '../hooks/useAutosave';
 import { withViewTransition } from '../hooks/viewTransition';
@@ -36,9 +34,6 @@ import {
 	POST_TYPE,
 	TRASHED_PAGES_QUERY,
 } from './page-queries';
-import PageCover, { AddCoverButton } from './PageCover';
-import PageIcon from './PageIcon';
-import PageIdentityControls from './PageIdentityControls';
 import PublishToggle from './PublishToggle';
 import { TopBarActionsFill } from './WorkspaceTopBar';
 
@@ -196,79 +191,103 @@ function TrashedNotice( { postId } ) {
 	);
 }
 
+// While one of our locked header blocks is selected, hide core's block
+// settings menu (the "kebab"). Its items (Cut, Copy, Add before/after,
+// Lock, Hide, Create pattern, etc.) make no sense on a fixed-position
+// singleton block, and there's no per-block API to filter individual
+// items. The contextual toolbar lives in the parent document while the
+// block itself is in the BlockCanvas iframe, so :has() can't bridge the
+// boundary; toggling a body class here lets a plain CSS rule do the work.
+function HideHeaderBlockKebab() {
+	const selectedName = useSelect( ( select ) => {
+		const store = select( blockEditorStore );
+		const clientId = store.getSelectedBlockClientId();
+		return clientId ? store.getBlockName( clientId ) : null;
+	}, [] );
+
+	useEffect( () => {
+		const isHeader =
+			selectedName === 'cortext/page-cover' ||
+			selectedName === 'cortext/page-icon' ||
+			selectedName === 'cortext/page-header-actions';
+		document.body.classList.toggle(
+			'cortext-hide-block-settings-menu',
+			isHeader
+		);
+		return () => {
+			document.body.classList.remove(
+				'cortext-hide-block-settings-menu'
+			);
+		};
+	}, [ selectedName ] );
+
+	return null;
+}
+
+// Auto-inserts the locked header blocks that aren't there yet:
+//   - cortext/page-header-actions (renders Add icon / Add cover)
+//   - core/post-title (so the title sits below cover and icon)
+// Both go after any cover/icon already in content, in canonical order.
+// Storage stays clean: post_title is still the source of truth; the
+// blocks are render hints and the actions block has a no-op server
+// render.
+function EnsureHeaderBlocks() {
+	const { hasActions, hasTitle, blockOrder } = useSelect( ( select ) => {
+		const store = select( blockEditorStore );
+		const order = store.getBlockOrder();
+		const names = order.map( ( id ) => store.getBlockName( id ) );
+		return {
+			hasActions: names.includes( 'cortext/page-header-actions' ),
+			hasTitle: names.includes( 'core/post-title' ),
+			blockOrder: names,
+		};
+	}, [] );
+	const { insertBlocks } = useDispatch( blockEditorStore );
+
+	// useLayoutEffect rather than useEffect: we want the insertion to
+	// happen between render and paint so the user never sees the
+	// intermediate state where the page has body content but the locked
+	// header blocks haven't been added yet (which manifests as content
+	// "sliding down" on first open).
+	useLayoutEffect( () => {
+		// Insert position: right after any cover and icon blocks.
+		let index = 0;
+		while (
+			blockOrder[ index ] === 'cortext/page-cover' ||
+			blockOrder[ index ] === 'cortext/page-icon'
+		) {
+			index++;
+		}
+
+		const toInsert = [];
+		if ( ! hasActions ) {
+			toInsert.push(
+				createBlock( 'cortext/page-header-actions', {
+					lock: { move: true, remove: true },
+				} )
+			);
+		}
+		if ( ! hasTitle ) {
+			toInsert.push(
+				createBlock( 'core/post-title', {
+					lock: { move: true, remove: true },
+				} )
+			);
+		}
+		if ( toInsert.length ) {
+			insertBlocks( toInsert, index, undefined, false );
+		}
+	}, [ hasActions, hasTitle, blockOrder, insertBlocks ] );
+
+	return null;
+}
+
 function CanvasReadyEffect( { postId, onReady } ) {
 	useEffect( () => {
 		onReady?.( postId );
 	}, [ postId, onReady ] );
 
 	return null;
-}
-
-function PageHeaderIdentity( { postId } ) {
-	const iconMeta = useSelect(
-		( select ) =>
-			select( editorStore ).getEditedPostAttribute( 'meta' )
-				?.cortext_page_icon ?? '',
-		[]
-	);
-	const featuredMedia = useSelect(
-		( select ) =>
-			select( editorStore ).getEditedPostAttribute( 'featured_media' ) ??
-			0,
-		[]
-	);
-
-	const hasIcon = !! iconMeta;
-	const hasCover = featuredMedia > 0;
-	const showAddActions = ! hasIcon || ! hasCover;
-
-	return (
-		<div className="cortext-page-identity">
-			<PageCover pageId={ postId } featuredMedia={ featuredMedia } />
-			<div className="cortext-page-identity__row">
-				{ hasIcon && (
-					<PageIdentityControls
-						pageId={ postId }
-						currentIcon={ iconMeta }
-						renderToggle={ ( { onToggle } ) => (
-							<Button
-								className="cortext-page-identity__icon-button"
-								onClick={ onToggle }
-								label={ __( 'Change icon', 'cortext' ) }
-							>
-								<PageIcon icon={ iconMeta } size={ 56 } />
-							</Button>
-						) }
-					/>
-				) }
-				{ showAddActions && (
-					<div className="cortext-page-identity__actions">
-						{ ! hasIcon && (
-							<PageIdentityControls
-								pageId={ postId }
-								currentIcon={ iconMeta }
-								renderToggle={ ( { onToggle } ) => (
-									<Button
-										className="cortext-page-identity__add-button"
-										variant="tertiary"
-										onClick={ onToggle }
-									>
-										{ __( 'Add icon', 'cortext' ) }
-									</Button>
-								) }
-							/>
-						) }
-						{ ! hasCover && (
-							<AddCoverButton
-								pageId={ postId }
-								className="cortext-page-identity__add-button"
-							/>
-						) }
-					</div>
-				) }
-			</div>
-		</div>
-	);
 }
 
 function VisualCanvas( { postId, onReady } ) {
@@ -296,29 +315,18 @@ function VisualCanvas( { postId, onReady } ) {
 	// The second case matters once autosave is on — the editor would
 	// render the post centered while the frontend renders flex/grid,
 	// and the user wouldn't notice the divergence until preview.
-	// PageHeaderIdentity must live outside the BlockCanvas iframe: MediaUpload
-	// calls `wp.media` from the host window, and the iframe's window has no
-	// `wp.media` of its own. Putting it above the iframe also keeps the WP
-	// media modal mounted in the top document where it expects to be.
 	return (
 		<div className="cortext-canvas__visual">
-			<PageHeaderIdentity postId={ postId } />
-			<div className="cortext-canvas__visual-canvas">
-				<BlockCanvas height="100%" styles={ styles }>
-					<div
-						className="editor-visual-editor__post-title-wrapper is-layout-constrained has-global-padding"
-						contentEditable={ false }
-						style={ { marginTop: '2rem', marginBottom: '2rem' } }
-					>
-						<PostTitle />
-					</div>
+			<BlockCanvas height="100%" styles={ styles }>
+				<EnsureHeaderBlocks />
+				<div className="cortext-canvas__editor">
 					<BlockList
 						className="wp-block-post-content is-layout-constrained has-global-padding"
 						layout={ { type: 'constrained', ...layout } }
 					/>
-					<CanvasReadyEffect postId={ postId } onReady={ onReady } />
-				</BlockCanvas>
-			</div>
+				</div>
+				<CanvasReadyEffect postId={ postId } onReady={ onReady } />
+			</BlockCanvas>
 		</div>
 	);
 }
@@ -361,6 +369,7 @@ function CanvasEditor( {
 		<>
 			<DocumentActions isActive={ isActive } />
 			<CortextSnackbars />
+			<HideHeaderBlockKebab />
 			<InterfaceSkeleton
 				className="cortext-canvas"
 				content={

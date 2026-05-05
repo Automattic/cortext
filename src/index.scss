@@ -820,16 +820,6 @@ body.cortext-sidebar-resizing {
 	&__visual {
 		flex: 1 1 auto;
 		min-height: 0;
-		display: flex;
-		flex-direction: column;
-	}
-
-	// PageHeaderIdentity is a fixed-height sibling above the iframe; the
-	// iframe wrapper claims the rest of the column so the BlockCanvas's
-	// `height: 100%` has something to fill.
-	&__visual-canvas {
-		flex: 1 1 auto;
-		min-height: 0;
 	}
 
 	&__notice.components-notice {
@@ -1959,78 +1949,52 @@ thead > tr > th {
 	}
 }
 
-.cortext-page-identity {
-	position: relative;
+// Opt-in entry point right above the title. Lives inside the BlockList
+// (it's the cortext/page-header-actions block) so when the user clicks
+// "Add cover", the cover is inserted at the top of content — above
+// these buttons — and ends up next to the editor toolbar. Hidden by
+// default; reveals when the user hovers (or keyboard-focuses) the
+// title or the actions themselves.
+.cortext-page-header-actions {
 	display: flex;
-	flex-direction: column;
-	background: var(--cortext-canvas-frame-surface);
-	flex: 0 0 auto;
+	gap: $grid-unit-05;
+	opacity: 0;
+	transition: opacity 0.15s ease;
+	pointer-events: none;
 
-	&__row {
-		max-width: 840px;
-		width: 100%;
-		margin: 0 auto;
-		padding: $grid-unit-10 $grid-unit-30 0;
-		display: flex;
-		align-items: flex-end;
-		gap: $grid-unit-15;
-		min-height: $grid-unit-40;
-	}
-
-	&__icon-button.components-button {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 72px;
-		height: 72px;
-		padding: 0;
-		// Pull the icon up so it overlaps the bottom of the cover when one
-		// is present; without a cover, the row's own padding keeps it tidy.
-		margin-block: -28px 0;
-		background: var(--cortext-shell-surface);
-		border: var(--cortext-shell-border-width) solid var(--cortext-chrome-border);
-		border-radius: var(--cortext-shell-radius);
-		font-size: 56px;
-		line-height: 1;
-
-		&:hover:not(:disabled),
-		&:focus:not(:disabled) {
-			background: var(--cortext-button-hover-surface);
-		}
-
-		.cortext-page-icon--image {
-			width: 56px;
-			height: 56px;
-		}
-	}
-
-	// Empty-state action toolbar: "Add icon" and "Add cover" sit next to each
-	// other, so users find both affordances in one spot rather than chasing
-	// them around the header.
-	&__actions {
-		display: inline-flex;
-		align-items: center;
-		gap: $grid-unit-05;
-		margin-inline-start: auto;
-	}
-
-	&__add-button.components-button {
-		color: var(--cortext-text-muted);
+	/* stylelint-disable-next-line no-descending-specificity */
+	.components-button {
+		color: var(--cortext-text-muted, #757575);
 	}
 }
 
-.cortext-page-cover {
-	position: relative;
-	width: 100%;
-	height: 200px;
-	overflow: hidden;
-	background: var(--cortext-chrome-border);
+.cortext-canvas__editor:has([data-type="core/post-title"]:hover) .cortext-page-header-actions,
+.cortext-canvas__editor:has([data-type="core/post-title"]:focus-within) .cortext-page-header-actions,
+.cortext-canvas__editor:has([data-type="cortext/page-header-actions"]:hover) .cortext-page-header-actions,
+.cortext-canvas__editor:has([data-type="cortext/page-header-actions"]:focus-within) .cortext-page-header-actions {
+	opacity: 1;
+	pointer-events: auto;
+}
 
-	&__image {
+// Page cover: full-width banner image with hover-revealed controls. The
+// wrapper class lives on both the editor (useBlockProps in edit.js) and
+// the frontend (PHP render_callback), so styling applies in both
+// contexts. Width isn't set here so core's `alignfull` keeps its
+// breakout margins. The wrapper itself owns the banner height so the
+// cover always reserves its slot — even before the media record has
+// finished loading on first open. Without this the wrapper collapsed to
+// 0 height while `useEntityRecord` was still resolving, then expanded
+// when the image arrived, pushing everything below it down.
+.cortext-page-cover-block {
+	position: relative;
+	height: clamp(140px, 26vh, 260px);
+
+	&__image,
+	img {
+		display: block;
 		width: 100%;
 		height: 100%;
 		object-fit: cover;
-		display: block;
 	}
 
 	&__controls {
@@ -2041,17 +2005,190 @@ thead > tr > th {
 		gap: $grid-unit-05;
 		opacity: 0;
 		transition: opacity 0.12s ease;
+
+		// Solid white background so the buttons stay readable against
+		// dark cover images, while keeping the rest of WP's default
+		// secondary-button styling (border, padding, type).
+		/* stylelint-disable no-descending-specificity */
+		.components-button {
+			background: #fff;
+
+			&:hover:not(:disabled),
+			&:focus:not(:disabled) {
+				background: #fff;
+			}
+		}
+		/* stylelint-enable no-descending-specificity */
 	}
 
 	&:hover &__controls,
 	&:focus-within &__controls {
 		opacity: 1;
 	}
+}
 
+// Page icon: small, left-aligned within the content column. When a cover
+// sits immediately above it (the canonical layout), the rule below
+// pulls it up to overlap the cover's bottom edge.
+.cortext-page-icon-block {
+	display: flex;
+	align-items: flex-end;
+	justify-content: flex-start;
+	max-width: var(--wp--style--global--content-size, 840px);
+	margin: $grid-unit-10 auto;
+	padding: 0 $grid-unit-20;
+
+	// The trigger is only an emoji or thumbnail; framing it like a button
+	// (border + shadow) reads as visual noise next to the cover. Keep the
+	// click affordance via a soft hover wash instead.
 	/* stylelint-disable-next-line no-descending-specificity */
-	&__menu .components-button {
-		background: var(--cortext-shell-surface);
-		box-shadow: 0 1px 3px var(--cortext-shadow-color);
+	.components-button {
+		padding: $grid-unit-05;
+		min-width: 0;
+		background: transparent;
+		border: 0;
+		box-shadow: none;
+		border-radius: var(--cortext-shell-radius, 4px);
+
+		/* stylelint-disable no-descending-specificity */
+		&:hover:not(:disabled),
+		&:focus:not(:disabled) {
+			background: var(--cortext-button-hover-surface, rgba(0, 0, 0, 0.06));
+			box-shadow: none;
+		}
+		/* stylelint-enable no-descending-specificity */
+	}
+
+	.cortext-page-icon--image {
+		width: 56px;
+		height: 56px;
+		border-radius: var(--cortext-shell-radius, 4px);
+	}
+}
+
+// Notion-style overlap: when the icon sits right after the cover, pull
+// it up so its bottom half rides over the cover's bottom edge. We use
+// `transform` rather than `margin-top` so the block's box model (and
+// thus the editor's selection outline) stays at its natural position;
+// margin would extend the outline up over the cover. The icon block
+// also gets `position: relative; z-index: 1` so the cover's selection
+// outline (drawn at the cover's box edges) sits below the icon's
+// visible glyph instead of cutting through it.
+/* stylelint-disable no-descending-specificity */
+.cortext-page-cover-block + .cortext-page-icon-block,
+[data-type="cortext/page-cover"] + [data-type="cortext/page-icon"] {
+	transform: translateY(-28px);
+	position: relative;
+	z-index: 1;
+}
+/* stylelint-enable no-descending-specificity */
+
+// Hide the block kebab (more options) while a Cortext header block is
+// selected. The body class is toggled by HideHeaderBlockKebab in
+// Canvas.js — see the long comment there for why a JS hook beats CSS
+// :has() here. We hide several adjacent wrappers because core's toolbar
+// keeps a placeholder slot around the kebab even when it's empty.
+body.cortext-hide-block-settings-menu .block-editor-block-settings-menu,
+body.cortext-hide-block-settings-menu .block-editor-block-toolbar > .block-editor-block-settings-menu,
+body.cortext-hide-block-settings-menu .components-toolbar-group:has(> .block-editor-block-settings-menu),
+body.cortext-hide-block-settings-menu .block-editor-block-toolbar__group-collapsible-toolbar,
+body.cortext-hide-block-settings-menu .block-editor-block-switcher {
+	display: none;
+}
+
+.cortext-icon-library {
+	display: flex;
+	flex-direction: column;
+	gap: $grid-unit-15;
+	padding: $grid-unit-15;
+	min-width: 360px;
+	max-width: 400px;
+
+	// Color swatches sit between the search input and the grid. The
+	// active color tints the entire grid via `color: var(--swatch)`,
+	// so users see the icons in their chosen color before clicking.
+	&__colors {
+		display: flex;
+		gap: $grid-unit-10;
+		flex-wrap: wrap;
+		align-items: center;
+		padding: $grid-unit-05 0;
+	}
+
+	&__swatch {
+		width: 24px;
+		height: 24px;
+		border-radius: 50%;
+		border: 1px solid var(--cortext-chrome-border, rgba(0, 0, 0, 0.18));
+		background: var(--swatch);
+		cursor: pointer;
+		padding: 0;
+		position: relative;
+
+		&:hover {
+			transform: scale(1.08);
+		}
+
+		// Active state: inset ring keeps the visible swatch size stable
+		// so the row doesn't jump when switching colors.
+		&.is-active {
+			box-shadow:
+				inset 0 0 0 2px #fff,
+				0 0 0 2px var(--cortext-accent, #3858e9);
+		}
+
+		// `default` swatch (currentColor) is hard to see as a fill, so
+		// render it as a transparent disk with a contrast border and a
+		// small "no" diagonal line to communicate "no color selected".
+		&[style*="currentColor"] {
+			background: transparent;
+			border-color: var(--cortext-text, #1e1e1e);
+
+			&::after {
+				content: "";
+				position: absolute;
+				inset: 0;
+				border-radius: 50%;
+				background: linear-gradient(45deg, transparent 47%, var(--cortext-text, #1e1e1e) 47% 53%, transparent 53%);
+			}
+		}
+	}
+
+	&__grid {
+		display: grid;
+		grid-template-columns: repeat(8, 1fr);
+		gap: $grid-unit-05;
+		max-height: 320px;
+		overflow-y: auto;
+		padding: $grid-unit-05 0;
+	}
+
+	&__item {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 36px;
+		height: 36px;
+		padding: 0;
+		border: 0;
+		background: transparent;
+		cursor: pointer;
+		border-radius: var(--cortext-shell-radius, 4px);
+		color: var(--cortext-text, #1e1e1e);
+
+		&:hover,
+		&:focus {
+			background: var(--cortext-button-hover-surface, rgba(0, 0, 0, 0.06));
+			outline: none;
+		}
+	}
+
+	&__empty {
+		grid-column: 1 / -1;
+		text-align: center;
+		color: var(--cortext-text-muted, #757575);
+		font-size: 12px;
+		margin: $grid-unit-10 0;
 	}
 }
 
@@ -2093,11 +2230,65 @@ thead > tr > th {
 			margin: 0;
 		}
 
-		&__footer {
+		// Custom tab row: tab buttons sized to content, Remove sits
+		// immediately after the last tab (no padding pushing it to the
+		// right edge of the popover).
+		&__tabs {
 			display: flex;
-			justify-content: flex-end;
-			padding: $grid-unit-05 $grid-unit-15;
-			border-top: $border-width solid var(--cortext-chrome-border);
+			align-items: center;
+			gap: $grid-unit-05;
+			padding: 0 $grid-unit-10;
+			border-bottom: 1px solid var(--cortext-chrome-border, rgba(0, 0, 0, 0.1));
+		}
+
+		&__tab {
+			height: 40px;
+			padding: 0 $grid-unit-10;
+			background: transparent;
+			border: 0;
+			cursor: pointer;
+			color: var(--cortext-text-muted, #757575);
+			font-size: 13px;
+			font-weight: 500;
+			position: relative;
+
+			&:hover {
+				color: var(--cortext-text, #1e1e1e);
+			}
+
+			&.is-active {
+				color: var(--cortext-text, #1e1e1e);
+
+				&::after {
+					content: "";
+					position: absolute;
+					left: $grid-unit-10;
+					right: $grid-unit-10;
+					bottom: -1px;
+					height: 2px;
+					background: var(--cortext-accent, #3858e9);
+				}
+			}
+		}
+
+		&__remove {
+			height: 40px;
+			padding: 0 $grid-unit-10;
+			background: transparent;
+			border: 0;
+			cursor: pointer;
+			color: #d63638 !important;
+			font-size: 13px;
+			font-weight: 500;
+
+			&:hover,
+			&:focus {
+				color: #b32d2e !important;
+			}
+		}
+
+		&__panel {
+			padding: 0;
 		}
 	}
 }
