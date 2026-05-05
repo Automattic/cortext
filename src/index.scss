@@ -1643,6 +1643,7 @@ tbody > tr > td:not(:first-child) {
 	display: flex;
 	flex-wrap: wrap;
 	gap: $grid-unit-05;
+	width: 100%;
 	min-width: 0;
 	max-width: 100%;
 	overflow: hidden;
@@ -2487,6 +2488,23 @@ tbody > tr > td:not(:first-child) {
 .wp-block-cortext-data-view .cortext-data-view {
 	height: var(--cortext-data-view-block-min-height);
 	min-height: 0;
+}
+
+// Embedded blocks are width-constrained by the editor canvas. Letting relation
+// chips wrap in offscreen columns makes the entire row taller, which makes the
+// visible columns feel padded and cramped. Keep relation cells to one line in
+// block mode; the full collection view can still wrap chips.
+.wp-block-cortext-data-view {
+
+	.cortext-relation-refs,
+	.cortext-relation-edit__toggle-refs {
+		flex-wrap: nowrap;
+	}
+
+	.cortext-relation-ref,
+	.cortext-relation-edit__toggle-ref {
+		flex: 0 0 auto;
+	}
 }
 
 // tech-debt.md#15: The resizer and dnd-kit drag handle are portaled into each
