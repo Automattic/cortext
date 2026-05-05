@@ -641,19 +641,6 @@ body.cortext-sidebar-resizing {
 
 .cortext-canvas {
 
-	&__header-right {
-		display: flex;
-		align-items: stretch;
-	}
-
-	// Buttons span the full toolbar height; remove their default radius
-	// so they read as edge-to-edge segments rather than floating chips.
-	&__header .components-button {
-		height: 100%;
-		min-height: 0;
-		border-radius: 0;
-	}
-
 	&__loading,
 	&__empty {
 		display: flex;
