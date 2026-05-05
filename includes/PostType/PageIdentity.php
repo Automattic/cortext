@@ -37,6 +37,11 @@ final class PageIdentity {
 	 * Returns the canonical locked title block markup that should sit
 	 * at the top of every `crtxt_page`. Used by the seeder for direct
 	 * inserts and by the wp_insert_post_data filter below.
+	 *
+	 * Note: prepending `core/post-title` to `post_content` makes the
+	 * public template render the title twice (the_title + the block's
+	 * own resolution of `post_title`). See tech-debt.md#32 for the
+	 * architectural fix that drops the block from content entirely.
 	 */
 	public static function header_blocks_markup(): string {
 		$lock = array(
