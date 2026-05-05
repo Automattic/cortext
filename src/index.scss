@@ -479,6 +479,128 @@ body.cortext-fullscreen {
 	}
 }
 
+// Notion-style format submenu. The outer popover sits beside the column
+// dropdown; each row is a button that anchors a third-level flyout for
+// picking a value. The visual is intentionally tight (240px panel) so it
+// reads as a continuation of the parent menu rather than a modal.
+.cortext-format-submenu {
+	&__panel {
+		min-width: 240px;
+		padding: $grid-unit-05;
+	}
+
+	&__row {
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-10;
+		width: 100%;
+		padding: $grid-unit-10 $grid-unit-15;
+		border: 0;
+		border-radius: 4px;
+		background: transparent;
+		text-align: start;
+		font-size: 13px;
+		color: $gray-900;
+		cursor: pointer;
+
+		&:hover,
+		&.is-open {
+			background: $gray-100;
+		}
+
+		&:focus-visible {
+			outline: 2px solid var(--wp-admin-theme-color, $gray-700);
+			outline-offset: -1px;
+		}
+	}
+
+	&__row-label {
+		flex: 1 1 auto;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	&__row-value {
+		flex: 0 0 auto;
+		color: $gray-700;
+		font-size: 12px;
+	}
+
+	&__row-chevron {
+		flex: 0 0 auto;
+		color: $gray-700;
+	}
+
+	&__note {
+		margin: $grid-unit-10 $grid-unit-15 $grid-unit-05;
+		padding: 0;
+		font-size: 11px;
+		color: $gray-700;
+	}
+
+	&__flyout {
+		.components-popover__content {
+			min-width: 200px;
+			padding: $grid-unit-05;
+		}
+	}
+
+	&__list {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		max-height: 320px;
+		overflow-y: auto;
+	}
+
+	&__list-item {
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-05;
+		width: 100%;
+		padding: $grid-unit-05 $grid-unit-10;
+		border: 0;
+		border-radius: 4px;
+		background: transparent;
+		text-align: start;
+		font-size: 13px;
+		color: $gray-900;
+		cursor: pointer;
+
+		&:hover {
+			background: $gray-100;
+		}
+
+		&:focus-visible {
+			outline: 2px solid var(--wp-admin-theme-color, $gray-700);
+			outline-offset: -1px;
+		}
+
+		&.is-selected {
+			color: var(--wp-admin-theme-color, $gray-900);
+		}
+	}
+
+	&__list-check {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 18px;
+		height: 18px;
+		flex: 0 0 auto;
+	}
+}
+
+// Format MenuItem dresses up like a submenu trigger: chevron on the
+// right, no "ellipsis" suffix that suggests a modal.
+.cortext-column-header-actions__submenu-item {
+	.components-menu-item__item {
+		flex: 1 1 auto;
+	}
+}
+
 // Marker spans live inside DataViews' header trigger button. Zero-size
 // and aria-hidden so they never receive focus or contribute to the
 // column width; the portal layer in `ColumnHeaderActions` finds them by
