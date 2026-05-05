@@ -341,7 +341,10 @@ describe( 'useAutosave: status', () => {
 
 		expect( createErrorNotice ).toHaveBeenCalledWith(
 			expect.any( String ),
-			{ type: 'snackbar' }
+			expect.objectContaining( {
+				type: 'snackbar',
+				id: 'cortext-autosave-error',
+			} )
 		);
 	} );
 

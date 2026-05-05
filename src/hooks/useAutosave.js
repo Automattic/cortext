@@ -151,6 +151,7 @@ export default function useAutosave() {
 			// autosave needs its own way of reaching the user. Snackbar
 			// is dismissable and stays out of the way when things work.
 			createErrorNotice( __( 'Failed to save changes.', 'cortext' ), {
+				id: 'cortext-autosave-error',
 				type: 'snackbar',
 			} );
 		} else if ( didSucceed ) {

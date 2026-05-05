@@ -3,7 +3,6 @@ import { useEntityRecord } from '@wordpress/core-data';
 import { useSelect, useDispatch } from '@wordpress/data';
 import {
 	EditorProvider,
-	EditorSnackbars,
 	PostTitle,
 	store as editorStore,
 } from '@wordpress/editor';
@@ -18,7 +17,14 @@ import {
 	ComplementaryArea,
 	store as interfaceStore,
 } from '@wordpress/interface';
-import { Button, Disabled, Notice, Spinner } from '@wordpress/components';
+import {
+	Button,
+	Disabled,
+	Notice,
+	SnackbarList,
+	Spinner,
+} from '@wordpress/components';
+import { store as noticesStore } from '@wordpress/notices';
 import { cog } from '@wordpress/icons';
 import apiFetch from '@wordpress/api-fetch';
 import { useEffect, useState } from '@wordpress/element';
@@ -35,6 +41,28 @@ import { TopBarActionsFill } from './WorkspaceTopBar';
 
 const SCOPE = 'cortext';
 const INSPECTOR = 'cortext/block-inspector';
+
+// Renders only Cortext-owned snackbars (the autosave failure toast). The
+// editor store also dispatches its own "Post updated" success notice on every
+// save; in an autosave-silent UI those would fire constantly, so we filter to
+// notices we tagged ourselves.
+function CortextSnackbars() {
+	const notices = useSelect(
+		( select ) =>
+			select( noticesStore )
+				.getNotices()
+				.filter(
+					( n ) =>
+						n.type === 'snackbar' &&
+						typeof n.id === 'string' &&
+						n.id.startsWith( 'cortext-' )
+				),
+		[]
+	);
+	const { removeNotice } = useDispatch( noticesStore );
+
+	return <SnackbarList notices={ notices } onRemove={ removeNotice } />;
+}
 
 function DocumentActions( { isActive } ) {
 	const { enableComplementaryArea, disableComplementaryArea } =
@@ -254,7 +282,7 @@ function CanvasEditor( {
 	return (
 		<>
 			<DocumentActions isActive={ isActive } />
-			<EditorSnackbars />
+			<CortextSnackbars />
 			<InterfaceSkeleton
 				className="cortext-canvas"
 				content={
