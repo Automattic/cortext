@@ -49,7 +49,15 @@ export default function PageRow( {
 
 	const [ isRenaming, setIsRenaming ] = useState( false );
 	const [ draftTitle, setDraftTitle ] = useState( '' );
+	const [ optimisticIcon, setOptimisticIcon ] = useState(
+		page.meta?.cortext_page_icon ?? ''
+	);
 	const renameInputRef = useRef( null );
+	const iconMeta = page.meta?.cortext_page_icon ?? '';
+
+	useEffect( () => {
+		setOptimisticIcon( iconMeta );
+	}, [ iconMeta ] );
 
 	// Start rename automatically if the parent asked for it (new page flow).
 	useEffect( () => {
@@ -118,8 +126,6 @@ export default function PageRow( {
 	}
 
 	const title = page.title?.rendered?.trim() || __( '(untitled)', 'cortext' );
-	const iconMeta = page.meta?.cortext_page_icon ?? '';
-
 	function commitRename() {
 		const next = draftTitle.trim();
 		if ( next && next !== ( page.title?.raw ?? page.title?.rendered ) ) {
@@ -180,7 +186,8 @@ export default function PageRow( {
 
 					<PageIdentityControls
 						pageId={ page.id }
-						currentIcon={ iconMeta }
+						currentIcon={ optimisticIcon }
+						onAfterSave={ setOptimisticIcon }
 						renderToggle={ ( { onToggle, currentIconNode } ) => (
 							<Button
 								className="cortext-sidebar__icon"

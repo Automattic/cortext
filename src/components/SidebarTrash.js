@@ -1,7 +1,12 @@
 import { __, sprintf, _n } from '@wordpress/i18n';
 import { useEntityRecords } from '@wordpress/core-data';
 import { useDispatch } from '@wordpress/data';
-import { useCallback, useMemo, useState } from '@wordpress/element';
+import {
+	useCallback,
+	useEffect,
+	useMemo,
+	useState,
+} from '@wordpress/element';
 import {
 	Button,
 	Spinner,
@@ -60,25 +65,37 @@ export default function SidebarTrash( { activePages, selectedId, onSelect } ) {
 	const [ pendingDeleteId, setPendingDeleteId ] = useState( null );
 	const [ rowError, setRowError ] = useState( null );
 	const [ busyId, setBusyId ] = useState( null );
+	const [ cachedTrashed, setCachedTrashed ] = useState( [] );
+	const [ hasTrashCache, setHasTrashCache ] = useState( false );
+
+	useEffect( () => {
+		if ( status !== 'ERROR' && hasResolved && Array.isArray( trashed ) ) {
+			setCachedTrashed( trashed );
+			setHasTrashCache( true );
+		}
+	}, [ hasResolved, status, trashed ] );
+
+	const visibleTrashed =
+		hasResolved && Array.isArray( trashed ) ? trashed : cachedTrashed;
 
 	const ancestorById = useMemo( () => {
 		const map = new Map();
 		( activePages ?? [] ).forEach( ( page ) => map.set( page.id, page ) );
 		// Trashed records take a back seat: a page that exists in both lists
 		// (shouldn't happen, but guard anyway) is shown by its active title.
-		( trashed ?? [] ).forEach( ( page ) => {
+		visibleTrashed.forEach( ( page ) => {
 			if ( ! map.has( page.id ) ) {
 				map.set( page.id, page );
 			}
 		} );
 		return map;
-	}, [ activePages, trashed ] );
+	}, [ activePages, visibleTrashed ] );
 
 	// Cascade roots: pages with no marker, plus pages whose marker points at
 	// a page that's no longer in trash (its tagged parent was permanently
 	// deleted). Without the second clause those orphans would be hidden.
 	const { roots, descendantCountById } = useMemo( () => {
-		const all = trashed ?? [];
+		const all = visibleTrashed;
 		const trashedById = new Map( all.map( ( p ) => [ p.id, p ] ) );
 		const childrenByMarker = new Map();
 
@@ -115,7 +132,7 @@ export default function SidebarTrash( { activePages, selectedId, onSelect } ) {
 		} );
 
 		return { roots: computedRoots, descendantCountById: counts };
-	}, [ trashed ] );
+	}, [ visibleTrashed ] );
 
 	const buildBreadcrumb = useCallback(
 		( page ) => {
@@ -210,8 +227,8 @@ export default function SidebarTrash( { activePages, selectedId, onSelect } ) {
 		}
 	}, [ pendingDeleteId, refreshQueries, selectedId, onSelect ] );
 
-	const isLoading = ! hasResolved;
-	const hasError = status === 'ERROR';
+	const isLoading = ! hasResolved && ! hasTrashCache;
+	const hasError = status === 'ERROR' && ! hasTrashCache;
 	const hasItems = roots.length > 0;
 	const pendingDescendantCount = pendingDeleteId
 		? descendantCountById.get( pendingDeleteId ) ?? 0
