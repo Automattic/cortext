@@ -1147,6 +1147,15 @@ body.cortext-sidebar-resizing {
 	}
 }
 
+// Replaces the `isDestructive` red text we used to get from MenuItem.
+// The new Menu.Item from privateApis has no destructive variant, so
+// the visual signal for "Delete" has to be applied here. Ariakit
+// flips the row to the theme color when active, which keeps the
+// active-state contrast intact.
+.cortext-column-header-actions__destructive-item:not([data-active-item="true"]) {
+	color: var(--wp-components-color-destructive, #cc1818);
+}
+
 // Marker spans live inside DataViews' header trigger button. Zero-size
 // and aria-hidden so they never receive focus or contribute to the
 // column width; the portal layer in `ColumnHeaderActions` finds them by

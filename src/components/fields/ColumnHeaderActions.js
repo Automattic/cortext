@@ -473,6 +473,7 @@ function FieldActions( { recordId, collectionId, view, onChangeView } ) {
 							</Menu.ItemLabel>
 						</Menu.Item>
 						<Menu.Item
+							className="cortext-column-header-actions__destructive-item"
 							prefix={ <Icon icon={ trash } /> }
 							onClick={ () => setConfirmDelete( true ) }
 						>
