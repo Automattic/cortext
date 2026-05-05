@@ -220,3 +220,11 @@ Double-click autofit is the trickiest piece. With no measurement hook upstream, 
 
 **Solution.** dnd-kit honoring `inert` (or computed `pointer-events: none`) on an ancestor would let us drop the prop-drilling. Until then, any tree-shaped surface that uses a CSS-clipped collapse animation has to thread `disabled` through its rows itself.
 
+## 26. Sidebar rename input pinned via WP component internals `[upstream]`
+
+**What.** The page-row rename uses `<TextControl size="compact" __next40pxDefaultSize>`, which should produce a 32px input matching the 32px row. It doesn't, on its own: the wrapping `BaseControl > field > InputControl > container` chain still contributes vertical space, so opening rename used to bump the row a few pixels. The fix pins `height` / `min-height` / `max-height` to `$grid-unit-40` and zeroes `padding-block` on every layer in that chain (`.components-base-control`, `.components-base-control__field`, `.components-input-control`, `.components-input-control__container`, `.components-input-control__input`). It works, but it couples Cortext to WP component-internal class names. If WP refactors `TextControl` (renames a class, drops a wrapper, restructures the DOM), the input loses its height pin and the row starts bumping again, silently.
+
+**Where.** The `&__rename` block in `src/index.scss`. The e2e test `keeps the rename input inside the page row height` in `tests/e2e/specs/sidebar-layout.spec.js` is the tripwire: it asserts the input never overflows the row's bounding rect, so a WP-internals refactor would surface there before reaching production.
+
+**Solution.** Either WP exposes a "fit-the-row" size for `TextControl` (or a CSS variable hook for input height), or we replace the rename `TextControl` with a plain `<input>` styled to match the row. The plain input is the more reliable path: drops the WP-internals coupling, but adds a small amount of styling and accessibility plumbing we currently get for free. Worth doing the day this test fails on a WP bump.
+
