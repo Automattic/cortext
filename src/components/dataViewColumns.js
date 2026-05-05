@@ -10,25 +10,16 @@ export const TITLE_FIELD_ID = 'title';
 export const GHOST_FIELD_ID = '__add_field';
 export const MAX_COLUMN_WIDTH = 640;
 
-// Per-type column-width floors. Calibrated against Notion's behavior: most
-// columns shrink down to roughly eight characters of content plus padding;
-// checkboxes shrink further so the column can show only the checkbox; date
-// columns hold more glyphs by default so they need a touch more room.
-// Keys are DataViews `field.type` values plus `title` for the title field
-// (which doesn't carry a type).
+// Per-type minimum widths. 32px is wide enough for a checkbox-sized
+// affordance and lets autofit shrink short values (single-digit integers,
+// short text) down to their rendered width. Title stays wider because it's
+// the row identity; dates need room for a typical formatted value.
 export const MIN_WIDTHS = {
 	title: 80,
-	text: 80,
-	email: 80,
-	integer: 80,
-	array: 80,
-	date: 96,
-	datetime: 96,
-	// 32 gives the 24px WP CheckboxControl room inside our centered checkbox
-	// cell while letting boolean columns behave like compact status markers.
-	boolean: 32,
+	date: 64,
+	datetime: 64,
 };
-export const DEFAULT_MIN_WIDTH = 80;
+export const DEFAULT_MIN_WIDTH = 32;
 
 export function getMinWidth( fieldType ) {
 	return MIN_WIDTHS[ fieldType ] ?? DEFAULT_MIN_WIDTH;
