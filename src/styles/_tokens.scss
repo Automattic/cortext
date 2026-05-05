@@ -15,6 +15,11 @@
 	--cortext-scrollbar-track: transparent;
 	--cortext-scrollbar-thumb: rgba(0, 0, 0, 0.12);
 	--cortext-scrollbar-thumb-hover: rgba(0, 0, 0, 0.28);
+
+	// Default height for the embedded data-view block. Roughly fits a header,
+	// pagination row, and ~10 compact rows so a fresh insertion is usable;
+	// override the variable to give the block a different default.
+	--cortext-data-view-block-min-height: 480px;
 }
 
 .cortext-root {

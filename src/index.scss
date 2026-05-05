@@ -971,7 +971,7 @@ tbody > tr > td:not(:first-child) {
 // Embedded block has no absolute parent, so use a min-height to keep a
 // fresh insertion usable. Width comes from Gutenberg's alignment.
 .wp-block-cortext-data-view .cortext-data-view {
-	min-height: 480px;
+	min-height: var(--cortext-data-view-block-min-height);
 }
 
 // tech-debt.md#15: The resizer and dnd-kit drag handle are portaled into each
