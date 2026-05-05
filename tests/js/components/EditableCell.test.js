@@ -133,6 +133,92 @@ describe( 'formatDisplay', () => {
 				formatNumberValue( 1234567, { style: 'comma' } )
 			).toBe( '1,234,567' );
 		} );
+
+		it( 'renders a bar visual when display is "bar"', () => {
+			const { container } = renderDisplay( 0.4, 'number', {
+				format: { style: 'percent', display: 'bar' },
+			} );
+			const fill = container.querySelector(
+				'.cortext-cell-bar__fill'
+			);
+			expect( fill ).not.toBeNull();
+			expect( fill.style.width ).toBe( '40%' );
+			expect(
+				container.querySelector( '.cortext-cell-bar__label' )
+					.textContent
+			).toBe( '40%' );
+		} );
+
+		it( 'renders a ring visual when display is "ring"', () => {
+			const { container } = renderDisplay( 25, 'number', {
+				format: { style: 'plain', display: 'ring' },
+			} );
+			expect(
+				container.querySelector( '.cortext-cell-ring__svg' )
+			).not.toBeNull();
+			expect(
+				container.querySelector( '.cortext-cell-ring__label' )
+					.textContent
+			).toBe( '25' );
+		} );
+
+		it( 'clamps bar fill to the 0..1 range', () => {
+			const { container } = renderDisplay( 250, 'number', {
+				format: { style: 'plain', display: 'bar' },
+			} );
+			expect(
+				container.querySelector( '.cortext-cell-bar__fill' ).style
+					.width
+			).toBe( '100%' );
+		} );
+
+		it( 'divides by the configured max for non-percent fills', () => {
+			// The motivating case: 1966 GBP out of 2000 should peg the
+			// bar near full instead of 100% (which 1966/100 → clamp would
+			// produce).
+			const { container } = renderDisplay( 1966, 'number', {
+				format: {
+					style: 'currency',
+					currency: 'GBP',
+					display: 'bar',
+					divideBy: 2000,
+				},
+			} );
+			expect(
+				container.querySelector( '.cortext-cell-bar__fill' ).style
+					.width
+			).toBe( '98.3%' );
+		} );
+
+		it( 'hides the bar label when showNumber is false', () => {
+			const { container } = renderDisplay( 0.4, 'number', {
+				format: {
+					style: 'percent',
+					display: 'bar',
+					showNumber: false,
+				},
+			} );
+			expect(
+				container.querySelector( '.cortext-cell-bar__label' )
+			).toBeNull();
+			expect(
+				container.querySelector( '.cortext-cell-bar__fill' )
+			).not.toBeNull();
+		} );
+
+		it( 'applies the chosen palette color to the bar fill', () => {
+			const { container } = renderDisplay( 0.5, 'number', {
+				format: {
+					style: 'percent',
+					display: 'bar',
+					color: 'green',
+				},
+			} );
+			expect(
+				container.querySelector( '.cortext-cell-bar__fill' ).style
+					.background
+			).toBe( 'rgb(15, 123, 108)' );
+		} );
 	} );
 
 	describe( 'formatDateValue helper', () => {
