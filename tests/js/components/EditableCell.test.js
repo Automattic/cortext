@@ -301,6 +301,9 @@ describe( 'formatDisplay', () => {
 				'href',
 				'https://example.test/wp-admin/admin.php?page=cortext&p=%2Fcollection%2Fpeople-7'
 			);
+			expect(
+				screen.getByRole( 'link', { name: 'Ada Lovelace' } )
+			).toHaveAttribute( 'target', '_top' );
 		} );
 	} );
 

@@ -350,6 +350,7 @@ function RelationReferences( { value } ) {
 						key={ ref.id }
 						className="cortext-relation-ref"
 						href={ collectionHref( ref ) }
+						target="_top"
 						onClick={ ( event ) => event.stopPropagation() }
 					>
 						{ title }
