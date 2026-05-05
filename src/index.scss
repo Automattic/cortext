@@ -2058,19 +2058,15 @@ thead > tr > th {
 }
 
 // Notion-style overlap: when the icon sits right after the cover, pull
-// it up so its bottom half rides over the cover's bottom edge. We use
-// `transform` rather than `margin-top` so the block's box model (and
-// thus the editor's selection outline) stays at its natural position;
-// margin would extend the outline up over the cover. The icon block
-// also gets `position: relative; z-index: 1` so the cover's selection
-// outline (drawn at the cover's box edges) sits below the icon's
-// visible glyph instead of cutting through it.
+// the block itself up so the title follows the visual icon position
+// instead of leaving a reserved blank row below the cover.
 /* stylelint-disable no-descending-specificity */
 .cortext-page-cover-block + .cortext-page-icon-block,
 [data-type="cortext/page-cover"] + [data-type="cortext/page-icon"] {
-	transform: translateY(-28px);
 	position: relative;
 	z-index: 1;
+	margin-block-start: -28px;
+	margin-block-end: 0;
 }
 /* stylelint-enable no-descending-specificity */
 
