@@ -4,11 +4,11 @@ import {
 	Button,
 	Dropdown,
 	Icon,
-	MenuGroup,
-	MenuItem,
+	privateApis as componentsPrivateApis,
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalConfirmDialog as ConfirmDialog,
 } from '@wordpress/components';
+import { unlock } from '../../lock-unlock';
 import { useEntityRecord } from '@wordpress/core-data';
 import {
 	createPortal,
@@ -18,7 +18,16 @@ import {
 	useRef,
 	useState,
 } from '@wordpress/element';
-import { chevronRight, plus } from '@wordpress/icons';
+import {
+	arrowLeft,
+	arrowRight,
+	chevronRight,
+	copy,
+	pencil,
+	plus,
+	trash,
+	unseen,
+} from '@wordpress/icons';
 
 import AddFieldPopover from './AddFieldPopover';
 import FieldFormatPopover from './FieldFormatPopover';
@@ -28,6 +37,8 @@ import {
 	useDuplicateField,
 } from '../../hooks/useFieldMutations';
 import { GHOST_FIELD_ID, TITLE_FIELD_ID } from '../dataViewColumns';
+
+const { Menu } = unlock( componentsPrivateApis );
 
 const FORMATTABLE_TYPES = new Set( [ 'number', 'date', 'datetime' ] );
 
@@ -152,6 +163,7 @@ export default function ColumnHeaderActions( {
 
 function FieldActions( { recordId, collectionId, view, onChangeView } ) {
 	const [ isRenaming, setIsRenaming ] = useState( false );
+	const [ isMenuOpen, setIsMenuOpen ] = useState( false );
 	const [ isFormatting, setIsFormatting ] = useState( false );
 	const [ confirmDelete, setConfirmDelete ] = useState( false );
 	const formatItemRef = useRef( null );
@@ -184,6 +196,38 @@ function FieldActions( { recordId, collectionId, view, onChangeView } ) {
 		setIsFormatting( true );
 	}, [ cancelClose ] );
 	useEffect( () => () => cancelClose(), [ cancelClose ] );
+
+	const closeMenu = useCallback( () => {
+		cancelClose();
+		setIsFormatting( false );
+		setIsMenuOpen( false );
+	}, [ cancelClose ] );
+
+	const onMenuOpenChange = useCallback(
+		( nextOpen ) => {
+			if ( nextOpen ) {
+				setIsMenuOpen( true );
+			} else {
+				closeMenu();
+			}
+		},
+		[ closeMenu ]
+	);
+
+	// Keep Ariakit from auto-hiding the menu when the user interacts
+	// with the format popover or one of its third-level flyouts.
+	const hideMenuOnInteractOutside = useCallback( ( event ) => {
+		const target = event.target;
+		if ( target && typeof target.closest === 'function' ) {
+			if (
+				target.closest( '.cortext-format-submenu' ) ||
+				target.closest( '.cortext-format-submenu__flyout' )
+			) {
+				return false;
+			}
+		}
+		return true;
+	}, [] );
 
 	const dataViewId = `field-${ recordId }`;
 	const label =
@@ -275,152 +319,151 @@ function FieldActions( { recordId, collectionId, view, onChangeView } ) {
 
 	return (
 		<span className="cortext-column-header-actions">
-			<Dropdown
-				contentClassName="cortext-field-actions-popover"
-				popoverProps={ { placement: 'bottom-start' } }
-				onClose={ () => {
-					cancelClose();
-					setIsFormatting( false );
-				} }
-				renderToggle={ ( { isOpen, onToggle } ) => (
-					<Button
-						className="dataviews-view-table-header-button cortext-column-header-trigger"
-						variant="tertiary"
-						onClick={ onToggle }
-						aria-expanded={ isOpen }
-					>
-						<span className="cortext-column-header-label">
-							{ label }
+			<Menu open={ isMenuOpen } onOpenChange={ onMenuOpenChange }>
+				<Menu.TriggerButton
+					render={
+						<Button
+							className="dataviews-view-table-header-button cortext-column-header-trigger"
+							variant="tertiary"
+						/>
+					}
+				>
+					<span className="cortext-column-header-label">
+						{ label }
+					</span>
+					{ isSorted ? (
+						<span aria-hidden="true">
+							{ sortDirection === 'asc' ? ' ↑' : ' ↓' }
 						</span>
-						{ isSorted ? (
-							<span aria-hidden="true">
-								{ sortDirection === 'asc' ? ' ↑' : ' ↓' }
-							</span>
-						) : null }
-					</Button>
-				) }
-				renderContent={ ( { onClose } ) => (
-					<>
-						{ /* Property-config group: edit how the column
-						     itself is defined. Mirrors Notion's first
-						     section (Edit property / Change type). */ }
-						<MenuGroup>
-							<MenuItem
-								onClick={ () => {
-									onClose();
-									setIsRenaming( true );
-								} }
-							>
+					) : null }
+				</Menu.TriggerButton>
+				<Menu.Popover
+					className="cortext-field-actions-popover"
+					modal={ false }
+					portal
+					hideOnInteractOutside={ hideMenuOnInteractOutside }
+					style={ { minWidth: '240px' } }
+				>
+					{ /* Property-config group: edit how the column
+					     itself is defined. Mirrors Notion's first
+					     section (Edit property / Change type). */ }
+					<Menu.Group>
+						<Menu.Item
+							prefix={ <Icon icon={ pencil } /> }
+							onClick={ () => setIsRenaming( true ) }
+						>
+							<Menu.ItemLabel>
 								{ __( 'Rename', 'cortext' ) }
-							</MenuItem>
-							{ canFormat ? (
-								<MenuItem
-									ref={ formatItemRef }
-									className="cortext-column-header-actions__submenu-item"
-									onClick={ openFormat }
-									onMouseEnter={ openFormat }
-									onMouseLeave={ scheduleClose }
-									suffix={
-										<Icon
-											icon={ chevronRight }
-											size={ 18 }
-										/>
-									}
-								>
-									{ __( 'Edit field', 'cortext' ) }
-								</MenuItem>
-							) : null }
-						</MenuGroup>
-						{ /* View group: sort, hide. Notion bundles
-						     filter/sort/group/hide together. */ }
-						<MenuGroup>
-							<MenuItem
-								isSelected={
-									isSorted && sortDirection === 'asc'
+							</Menu.ItemLabel>
+						</Menu.Item>
+						{ canFormat ? (
+							<Menu.Item
+								ref={ formatItemRef }
+								className="cortext-column-header-actions__submenu-item"
+								hideOnClick={ false }
+								suffix={
+									<Icon icon={ chevronRight } size={ 18 } />
 								}
-								onClick={ () => {
-									onClose();
-									dispatchSort( 'asc' );
-								} }
-							>
-								{ __( 'Sort ascending', 'cortext' ) }
-							</MenuItem>
-							<MenuItem
-								isSelected={
-									isSorted && sortDirection === 'desc'
-								}
-								onClick={ () => {
-									onClose();
-									dispatchSort( 'desc' );
-								} }
-							>
-								{ __( 'Sort descending', 'cortext' ) }
-							</MenuItem>
-							<MenuItem
-								onClick={ () => {
-									onClose();
-									dispatchHide();
-								} }
-							>
-								{ __( 'Hide column', 'cortext' ) }
-							</MenuItem>
-						</MenuGroup>
-						{ /* Column-lifecycle group: move, duplicate,
-						     delete. Notion's "Insert left/right /
-						     Duplicate / Delete property" cluster. */ }
-						<MenuGroup>
-							<MenuItem
-								disabled={ ! canMoveLeft }
-								onClick={ () => {
-									onClose();
-									dispatchMove( -1 );
-								} }
-							>
-								{ __( 'Move left', 'cortext' ) }
-							</MenuItem>
-							<MenuItem
-								disabled={ ! canMoveRight }
-								onClick={ () => {
-									onClose();
-									dispatchMove( 1 );
-								} }
-							>
-								{ __( 'Move right', 'cortext' ) }
-							</MenuItem>
-							<MenuItem
-								onClick={ async () => {
-									onClose();
-									try {
-										await duplicate.run( recordId );
-									} catch {
-										// surfaced via duplicate.error.
-									}
-								} }
-							>
-								{ __( 'Duplicate', 'cortext' ) }
-							</MenuItem>
-							<MenuItem
-								isDestructive
-								onClick={ () => {
-									onClose();
-									setConfirmDelete( true );
-								} }
-							>
-								{ __( 'Delete', 'cortext' ) }
-							</MenuItem>
-						</MenuGroup>
-						{ isFormatting && canFormat ? (
-							<FieldFormatPopover
-								recordId={ recordId }
-								anchor={ formatItemRef.current }
-								onClose={ () => setIsFormatting( false ) }
+								onClick={ openFormat }
 								onMouseEnter={ openFormat }
 								onMouseLeave={ scheduleClose }
-							/>
+							>
+								<Menu.ItemLabel>
+									{ __( 'Edit field', 'cortext' ) }
+								</Menu.ItemLabel>
+							</Menu.Item>
 						) : null }
-					</>
-				) }
-			/>
+					</Menu.Group>
+					<Menu.Separator />
+					{ /* View group: sort, hide. Notion bundles
+					     filter/sort/group/hide together. */ }
+					<Menu.Group>
+						<Menu.RadioItem
+							name="cortext-column-sort"
+							value="asc"
+							checked={ isSorted && sortDirection === 'asc' }
+							onChange={ () => dispatchSort( 'asc' ) }
+						>
+							<Menu.ItemLabel>
+								{ __( 'Sort ascending', 'cortext' ) }
+							</Menu.ItemLabel>
+						</Menu.RadioItem>
+						<Menu.RadioItem
+							name="cortext-column-sort"
+							value="desc"
+							checked={ isSorted && sortDirection === 'desc' }
+							onChange={ () => dispatchSort( 'desc' ) }
+						>
+							<Menu.ItemLabel>
+								{ __( 'Sort descending', 'cortext' ) }
+							</Menu.ItemLabel>
+						</Menu.RadioItem>
+						<Menu.Item
+							prefix={ <Icon icon={ unseen } /> }
+							onClick={ dispatchHide }
+						>
+							<Menu.ItemLabel>
+								{ __( 'Hide column', 'cortext' ) }
+							</Menu.ItemLabel>
+						</Menu.Item>
+					</Menu.Group>
+					<Menu.Separator />
+					{ /* Column-lifecycle group: move, duplicate,
+					     delete. Notion's "Insert left/right /
+					     Duplicate / Delete property" cluster. */ }
+					<Menu.Group>
+						<Menu.Item
+							prefix={ <Icon icon={ arrowLeft } /> }
+							disabled={ ! canMoveLeft }
+							onClick={ () => dispatchMove( -1 ) }
+						>
+							<Menu.ItemLabel>
+								{ __( 'Move left', 'cortext' ) }
+							</Menu.ItemLabel>
+						</Menu.Item>
+						<Menu.Item
+							prefix={ <Icon icon={ arrowRight } /> }
+							disabled={ ! canMoveRight }
+							onClick={ () => dispatchMove( 1 ) }
+						>
+							<Menu.ItemLabel>
+								{ __( 'Move right', 'cortext' ) }
+							</Menu.ItemLabel>
+						</Menu.Item>
+						<Menu.Item
+							prefix={ <Icon icon={ copy } /> }
+							onClick={ async () => {
+								try {
+									await duplicate.run( recordId );
+								} catch {
+									// surfaced via duplicate.error.
+								}
+							} }
+						>
+							<Menu.ItemLabel>
+								{ __( 'Duplicate', 'cortext' ) }
+							</Menu.ItemLabel>
+						</Menu.Item>
+						<Menu.Item
+							prefix={ <Icon icon={ trash } /> }
+							onClick={ () => setConfirmDelete( true ) }
+						>
+							<Menu.ItemLabel>
+								{ __( 'Delete', 'cortext' ) }
+							</Menu.ItemLabel>
+						</Menu.Item>
+					</Menu.Group>
+				</Menu.Popover>
+			</Menu>
+			{ isFormatting && canFormat ? (
+				<FieldFormatPopover
+					recordId={ recordId }
+					anchor={ formatItemRef.current }
+					onClose={ () => setIsFormatting( false ) }
+					onMouseEnter={ openFormat }
+					onMouseLeave={ scheduleClose }
+				/>
+			) : null }
 			{ confirmDelete ? (
 				<ConfirmDialog
 					onConfirm={ onConfirmDelete }
