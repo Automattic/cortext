@@ -26,9 +26,14 @@
 
 	// Shell surfaces
 	--cortext-shell-surface: #{colors.$white};
-	--cortext-sidebar-surface: #{colors.$white};
-	--cortext-sidebar-item-hover-surface: #{colors.$gray-100};
-	--cortext-sidebar-item-selected-surface: #{colors.$gray-100};
+	// Warm off-white for the sidebar (and topbar, which inherits this) so
+	// it reads as chrome rather than canvas. Hover and selected step a few
+	// values darker so the active page doesn't blur into a hover preview.
+	// The values aren't from the WP palette (which has no warm tones);
+	// they're picked to match a Notion-style chrome.
+	--cortext-sidebar-surface: #f7f6f3;
+	--cortext-sidebar-item-hover-surface: #ebeae6;
+	--cortext-sidebar-item-selected-surface: #e3e1dc;
 	--cortext-canvas-frame-surface: #{colors.$white};
 	--cortext-chrome-border: #{colors.$gray-200};
 	--cortext-text: #{colors.$gray-900};
