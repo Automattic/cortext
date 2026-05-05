@@ -65,6 +65,11 @@
 	--cortext-sidebar-width-min: 220px;
 	--cortext-sidebar-width-max: 480px;
 
+	// Sidebar header and canvas top bar both use this so the two columns
+	// share the same top edge and the bar doesn't change size between
+	// pages and collections.
+	--cortext-topbar-height: 48px;
+
 	&[data-theme="dark"] {
 		--cortext-shell-surface: #2a2a2a;
 		--cortext-sidebar-surface: #2a2a2a;

@@ -101,7 +101,8 @@ body.cortext-fullscreen {
 		display: flex;
 		align-items: center;
 		gap: $grid-unit-10;
-		padding: $grid-unit-10 $grid-unit-15;
+		height: var(--cortext-topbar-height);
+		padding-inline: $grid-unit-15;
 		border-bottom: var(--cortext-shell-border-width) solid var(--cortext-chrome-border);
 	}
 
@@ -553,7 +554,8 @@ body.cortext-sidebar-resizing {
 	display: flex;
 	align-items: center;
 	gap: $grid-unit-10;
-	padding: $grid-unit-10 $grid-unit-20;
+	height: var(--cortext-topbar-height);
+	padding-inline: $grid-unit-20;
 	background: var(--cortext-shell-surface);
 	color: var(--cortext-text);
 	border-bottom: var(--cortext-shell-border-width) solid var(--cortext-chrome-border);
