@@ -12,10 +12,14 @@ import { computeUri } from '../router/useResolveEntity';
 
 const COLLECTION_POST_TYPE = 'crtxt_collection';
 
+// Prefer `title.raw` over `title.rendered`: WordPress runs rendered titles
+// through its formatting pipeline, so `&` becomes `&#038;` etc. React would
+// then show the literal entity text in the bar (we don't use
+// `dangerouslySetInnerHTML`). Both fields are available under edit context.
 function titleOf( entity ) {
 	return (
-		entity?.title?.rendered?.trim() ||
 		entity?.title?.raw?.trim() ||
+		entity?.title?.rendered?.trim() ||
 		__( '(untitled)', 'cortext' )
 	);
 }

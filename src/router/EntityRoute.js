@@ -103,7 +103,8 @@ export default function EntityRoute() {
 	const target = useMemo( () => parseTarget( splat ), [ splat ] );
 
 	const [ state, dispatch ] = useReducer( reducer, target, init );
-	const { active, mountedPageId, mountedCollectionIds } = state;
+	const { active, mountedPageId, displayedPageId, mountedCollectionIds } =
+		state;
 
 	const pageResolution = useResolveEntity(
 		target.kind === 'page' ? target.tail : ''
@@ -171,12 +172,15 @@ export default function EntityRoute() {
 	}, [] );
 
 	// Drives the breadcrumb from the same paint state the document-actions
-	// Fill uses, so both sides of the top bar update together. Reading the
-	// URL directly would race ahead of the still-active pane during the
-	// in-between window of a route change.
+	// Fill uses, so both sides of the top bar update together. Use
+	// `displayedPageId` rather than `mountedPageId` for the page case: when
+	// navigating page A → B, mountedPageId flips to B as soon as B resolves,
+	// but Canvas keeps painting A until autosave flushes and `setDisplayedPost`
+	// catches up. Reading the mounted id would let the breadcrumb jump to B
+	// while A is still on screen.
 	let paintedRoute = { kind: 'unresolved' };
-	if ( active.kind === 'page' ) {
-		paintedRoute = { kind: 'page', id: mountedPageId };
+	if ( active.kind === 'page' && displayedPageId !== null ) {
+		paintedRoute = { kind: 'page', id: displayedPageId };
 	} else if ( active.kind === 'collection' ) {
 		paintedRoute = { kind: 'collection', id: active.id };
 	} else if (
