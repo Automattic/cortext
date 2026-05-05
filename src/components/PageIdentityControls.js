@@ -1,10 +1,20 @@
 import { __ } from '@wordpress/i18n';
-import { Button, Dropdown, TabPanel, Spinner } from '@wordpress/components';
+import { Button, Dropdown, Spinner } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
 import { store as coreStore } from '@wordpress/core-data';
-import { lazy, Suspense, useState } from '@wordpress/element';
-import { MediaUploadCheck } from '@wordpress/block-editor';
-import { MediaUpload } from '@wordpress/media-utils';
+import {
+	lazy,
+	Suspense,
+	useEffect,
+	useRef,
+	useState,
+} from '@wordpress/element';
+// Custom MediaPicker bridges to `window.parent.wp.media` so the modal
+// always opens in the host document where media-views' CSS and scripts
+// live. `MediaUpload` from @wordpress/{media-utils, block-editor} both
+// dereference `window.wp.media`, which is undefined inside the
+// BlockCanvas iframe.
+import MediaPicker, { MediaUploadCheck } from './MediaPicker';
 
 import PageIcon from './PageIcon';
 import { POST_TYPE } from './page-queries';
@@ -36,6 +46,10 @@ const EmojiPicker = lazy( async () => {
 	};
 } );
 
+// `@wordpress/icons` is also lazy-loaded — it ships a few hundred glyphs
+// and the picker doesn't need them until the user clicks the Icons tab.
+const IconLibraryPicker = lazy( () => import( './IconLibraryPicker' ) );
+
 function encodeEmoji( value ) {
 	return JSON.stringify( { type: 'emoji', value } );
 }
@@ -44,101 +58,172 @@ function encodeImage( id ) {
 	return JSON.stringify( { type: 'image', id } );
 }
 
-function PickerBody( { pageId, onClose, allowRemove } ) {
+function encodeWpIcon( name, color ) {
+	const payload = { type: 'wp', name };
+	if ( color && color !== 'default' ) {
+		payload.color = color;
+	}
+	return JSON.stringify( payload );
+}
+
+function PickerBody( { pageId, currentIcon, allowRemove, onAfterSave } ) {
 	const { editEntityRecord, saveEditedEntityRecord } =
 		useDispatch( coreStore );
-	const [ working, setWorking ] = useState( false );
 
-	const persist = async ( nextMetaValue ) => {
-		setWorking( true );
-		try {
-			editEntityRecord( 'postType', POST_TYPE, pageId, {
-				meta: { cortext_page_icon: nextMetaValue },
-			} );
-			await saveEditedEntityRecord( 'postType', POST_TYPE, pageId );
-			onClose();
-		} finally {
-			setWorking( false );
+	// Pull the current icon's color (if any) so the IconLibraryPicker
+	// opens with the previously-saved color highlighted instead of
+	// snapping back to "default" on every popover open.
+	let initialIconColor = 'default';
+	try {
+		const decoded = currentIcon ? JSON.parse( currentIcon ) : null;
+		if (
+			decoded?.type === 'wp' &&
+			typeof decoded.color === 'string' &&
+			decoded.color !== ''
+		) {
+			initialIconColor = decoded.color;
 		}
+	} catch {
+		// ignore malformed meta
+	}
+
+	// editEntityRecord updates the local data store synchronously so
+	// every subscriber (icon block, sidebar tree) sees the new value
+	// immediately. The actual server save is debounced — without it,
+	// rapid picks (browsing emojis, switching colors) fire a save per
+	// click, and each server round-trip re-renders the whole post
+	// graph (including the trash sidebar's resolution state), which
+	// reads as a flash on screen.
+	const saveTimer = useRef( null );
+	useEffect( () => {
+		return () => {
+			if ( saveTimer.current ) {
+				clearTimeout( saveTimer.current );
+				saveEditedEntityRecord( 'postType', POST_TYPE, pageId );
+			}
+		};
+	}, [ pageId, saveEditedEntityRecord ] );
+
+	const persist = ( nextMetaValue ) => {
+		editEntityRecord( 'postType', POST_TYPE, pageId, {
+			meta: { cortext_page_icon: nextMetaValue },
+		} );
+		onAfterSave?.( nextMetaValue );
+
+		if ( saveTimer.current ) {
+			clearTimeout( saveTimer.current );
+		}
+		saveTimer.current = setTimeout( () => {
+			saveTimer.current = null;
+			saveEditedEntityRecord( 'postType', POST_TYPE, pageId );
+		}, 600 );
 	};
 
 	const tabs = [
 		{ name: 'emoji', title: __( 'Emoji', 'cortext' ) },
+		{ name: 'icons', title: __( 'Icons', 'cortext' ) },
 		{ name: 'upload', title: __( 'Upload', 'cortext' ) },
 	];
+	const [ activeTab, setActiveTab ] = useState( 'emoji' );
+
+	const renderActive = () => {
+		if ( activeTab === 'emoji' ) {
+			return (
+				<Suspense
+					fallback={
+						<div className="cortext-page-identity-popover__loading">
+							<Spinner />
+						</div>
+					}
+				>
+					<EmojiPicker
+						onSelect={ ( native ) =>
+							persist( encodeEmoji( native ) )
+						}
+					/>
+				</Suspense>
+			);
+		}
+		if ( activeTab === 'icons' ) {
+			return (
+				<Suspense
+					fallback={
+						<div className="cortext-page-identity-popover__loading">
+							<Spinner />
+						</div>
+					}
+				>
+					<IconLibraryPicker
+						initialColor={ initialIconColor }
+						onSelect={ ( name, color ) =>
+							persist( encodeWpIcon( name, color ) )
+						}
+					/>
+				</Suspense>
+			);
+		}
+		return (
+			<MediaUploadCheck>
+				<MediaPicker
+					allowedTypes={ [ 'image' ] }
+					onSelect={ ( media ) => persist( encodeImage( media.id ) ) }
+					render={ ( { open } ) => (
+						<div className="cortext-page-identity-popover__upload">
+							<Button
+								variant="primary"
+								onClick={ open }
+								__next40pxDefaultSize
+							>
+								{ __( 'Open media library', 'cortext' ) }
+							</Button>
+							<p className="cortext-page-identity-popover__hint">
+								{ __(
+									'Pick or upload an image to use as this page’s icon.',
+									'cortext'
+								) }
+							</p>
+						</div>
+					) }
+				/>
+			</MediaUploadCheck>
+		);
+	};
 
 	return (
 		<div className="cortext-page-identity-popover">
-			{ working && (
-				<div
-					className="cortext-page-identity-popover__busy"
-					aria-hidden="true"
-				>
-					<Spinner />
-				</div>
-			) }
-			<TabPanel
-				className="cortext-page-identity-popover__tabs"
-				tabs={ tabs }
-			>
-				{ ( tab ) =>
-					tab.name === 'emoji' ? (
-						<Suspense
-							fallback={
-								<div className="cortext-page-identity-popover__loading">
-									<Spinner />
-								</div>
-							}
-						>
-							<EmojiPicker
-								onSelect={ ( native ) =>
-									persist( encodeEmoji( native ) )
-								}
-							/>
-						</Suspense>
-					) : (
-						<MediaUploadCheck>
-							<MediaUpload
-								allowedTypes={ [ 'image' ] }
-								onSelect={ ( media ) =>
-									persist( encodeImage( media.id ) )
-								}
-								render={ ( { open } ) => (
-									<div className="cortext-page-identity-popover__upload">
-										<Button
-											variant="primary"
-											onClick={ open }
-											__next40pxDefaultSize
-										>
-											{ __(
-												'Open media library',
-												'cortext'
-											) }
-										</Button>
-										<p className="cortext-page-identity-popover__hint">
-											{ __(
-												'Pick or upload an image to use as this page’s icon.',
-												'cortext'
-											) }
-										</p>
-									</div>
-								) }
-							/>
-						</MediaUploadCheck>
-					)
-				}
-			</TabPanel>
-			{ allowRemove && (
-				<div className="cortext-page-identity-popover__footer">
-					<Button
-						variant="tertiary"
-						isDestructive
+			<div className="cortext-page-identity-popover__tabs" role="tablist">
+				{ tabs.map( ( tab ) => (
+					<button
+						key={ tab.name }
+						type="button"
+						role="tab"
+						aria-selected={ activeTab === tab.name }
+						className={
+							'cortext-page-identity-popover__tab' +
+							( activeTab === tab.name ? ' is-active' : '' )
+						}
+						onClick={ () => setActiveTab( tab.name ) }
+					>
+						{ tab.title }
+					</button>
+				) ) }
+				{ allowRemove && (
+					<button
+						type="button"
+						className="cortext-page-identity-popover__remove"
+						style={ { color: '#d63638' } }
 						onClick={ () => persist( '' ) }
 					>
-						{ __( 'Remove icon', 'cortext' ) }
-					</Button>
-				</div>
-			) }
+						{ __( 'Remove', 'cortext' ) }
+					</button>
+				) }
+			</div>
+			<div
+				className="cortext-page-identity-popover__panel"
+				role="tabpanel"
+			>
+				{ renderActive() }
+			</div>
 		</div>
 	);
 }
@@ -151,6 +236,7 @@ export default function PageIdentityControls( {
 	currentIcon,
 	renderToggle,
 	popoverPlacement = 'bottom-start',
+	onAfterSave,
 } ) {
 	const hasIcon = !! currentIcon;
 
@@ -167,11 +253,12 @@ export default function PageIdentityControls( {
 					),
 				} )
 			}
-			renderContent={ ( { onClose } ) => (
+			renderContent={ () => (
 				<PickerBody
 					pageId={ pageId }
-					onClose={ onClose }
+					currentIcon={ currentIcon }
 					allowRemove={ hasIcon }
+					onAfterSave={ onAfterSave }
 				/>
 			) }
 		/>
