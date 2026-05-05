@@ -2119,6 +2119,11 @@ thead > tr > th {
 		/* stylelint-enable no-descending-specificity */
 	}
 
+	.cortext-page-icon-block__button.components-button {
+		width: calc(56px + #{ $grid-unit-05 * 2 });
+		height: calc(56px + #{ $grid-unit-05 * 2 });
+	}
+
 	.cortext-page-icon--image {
 		width: 56px;
 		height: 56px;
