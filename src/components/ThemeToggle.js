@@ -1,5 +1,5 @@
 import { __ } from '@wordpress/i18n';
-import { DropdownMenu } from '@wordpress/components';
+import { Button, Dropdown, MenuGroup, MenuItem } from '@wordpress/components';
 import { desktop, Icon } from '@wordpress/icons';
 
 import useColorScheme from '../hooks/useColorScheme';
@@ -29,32 +29,52 @@ export default function ThemeToggle() {
 
 	const triggerIcon = resolved === 'dark' ? moonIcon : sunIcon;
 
-	const controls = [
-		{
-			title: __( 'Light', 'cortext' ),
-			icon: sunIcon,
-			isActive: preference === 'light',
-			onClick: () => setPreference( 'light' ),
-		},
-		{
-			title: __( 'Dark', 'cortext' ),
-			icon: moonIcon,
-			isActive: preference === 'dark',
-			onClick: () => setPreference( 'dark' ),
-		},
-		{
-			title: __( 'Match system', 'cortext' ),
-			icon: <Icon icon={ desktop } />,
-			isActive: preference === 'auto',
-			onClick: () => setPreference( 'auto' ),
-		},
-	];
-
 	return (
-		<DropdownMenu
-			icon={ triggerIcon }
-			label={ __( 'Color scheme', 'cortext' ) }
-			controls={ controls }
+		<Dropdown
+			popoverProps={ { placement: 'bottom-end' } }
+			renderToggle={ ( { isOpen, onToggle } ) => (
+				<Button
+					className="cortext-sidebar__theme-toggle"
+					icon={ triggerIcon }
+					label={ __( 'Color scheme', 'cortext' ) }
+					onClick={ onToggle }
+					aria-expanded={ isOpen }
+				/>
+			) }
+			renderContent={ ( { onClose } ) => (
+				<MenuGroup>
+					<MenuItem
+						icon={ sunIcon }
+						isSelected={ preference === 'light' }
+						onClick={ () => {
+							setPreference( 'light' );
+							onClose();
+						} }
+					>
+						{ __( 'Light', 'cortext' ) }
+					</MenuItem>
+					<MenuItem
+						icon={ moonIcon }
+						isSelected={ preference === 'dark' }
+						onClick={ () => {
+							setPreference( 'dark' );
+							onClose();
+						} }
+					>
+						{ __( 'Dark', 'cortext' ) }
+					</MenuItem>
+					<MenuItem
+						icon={ <Icon icon={ desktop } /> }
+						isSelected={ preference === 'auto' }
+						onClick={ () => {
+							setPreference( 'auto' );
+							onClose();
+						} }
+					>
+						{ __( 'Match system', 'cortext' ) }
+					</MenuItem>
+				</MenuGroup>
+			) }
 		/>
 	);
 }
