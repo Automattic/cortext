@@ -850,6 +850,16 @@ tbody > tr > td:not(:first-child) {
 	justify-content: center;
 }
 
+// In compact density we zero the cell's `padding-left` (so columns hug their
+// content) but keep upstream's `padding-right: 8px`. The offset doesn't show
+// for left-aligned content, but a centered checkbox in a narrow column ends
+// up visibly shifted. Symmetric inline padding on body cells that hold a
+// checkbox puts the centered input back over the cell's geometric center.
+/* stylelint-disable-next-line no-descending-specificity */
+.cortext-data-view .dataviews-view-table tbody td:has(.cortext-cell-checkbox) {
+	padding-inline: 0;
+}
+
 .cortext-multiselect-edit {
 
 	&__popover {
