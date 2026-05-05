@@ -315,6 +315,32 @@ body.cortext-fullscreen {
 	&__rename {
 		flex: 1 1 auto;
 		min-width: 0;
+		height: $grid-unit-40;
+
+		// TextControl mounts BaseControl > field > InputBase > container >
+		// input, and each level can carry default padding/margin that
+		// grows the row past its compact min-height. Pin every wrapper
+		// to the same height so the row stays put when entering rename
+		// mode.
+		.components-base-control,
+		.components-base-control__field,
+		.components-input-control,
+		.components-input-control__container {
+			box-sizing: border-box;
+			margin: 0;
+			height: $grid-unit-40;
+			min-height: $grid-unit-40;
+			max-height: $grid-unit-40;
+		}
+
+		.components-input-control__input,
+		input {
+			box-sizing: border-box;
+			height: $grid-unit-40;
+			min-height: $grid-unit-40;
+			max-height: $grid-unit-40;
+			padding-block: 0;
+		}
 	}
 
 	&__menu,
