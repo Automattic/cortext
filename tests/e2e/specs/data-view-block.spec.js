@@ -2051,12 +2051,14 @@ test.describe( 'Collection view block', () => {
 					.filter( { hasText: name } );
 				await button.dispatchEvent( 'click' );
 			};
+			const columnMenuItem = ( name ) =>
+				canvas.getByRole( 'menuitem', { name } );
 
 			// 2. Rename "Notes" → "Description" via the column-header
 			//    dropdown (combined Sort/Move/Hide + Rename/Duplicate/
 			//    Delete menu — see docs/tech-debt.md#16).
 			await openColumnDropdown( notesHeader, 'Notes' );
-			await page.getByRole( 'menuitem', { name: 'Rename' } ).click();
+			await columnMenuItem( 'Rename' ).click();
 
 			const renameInput = canvas.getByLabel( 'Field name' );
 			await renameInput.fill( 'Description' );
@@ -2071,7 +2073,7 @@ test.describe( 'Collection view block', () => {
 
 			// 3. Duplicate "Description" → "Copy of Description".
 			await openColumnDropdown( canvas, 'Description' );
-			await page.getByRole( 'menuitem', { name: 'Duplicate' } ).click();
+			await columnMenuItem( 'Duplicate' ).click();
 
 			await expect(
 				canvas.getByRole( 'columnheader', {
@@ -2082,7 +2084,7 @@ test.describe( 'Collection view block', () => {
 			// 4. Delete "Copy of Description" via the dropdown + confirm
 			//    dialog.
 			await openColumnDropdown( canvas, 'Copy of Description' );
-			await page.getByRole( 'menuitem', { name: 'Delete' } ).click();
+			await columnMenuItem( 'Delete' ).click();
 			await page
 				.getByRole( 'button', { name: 'Delete', exact: true } )
 				.click();
