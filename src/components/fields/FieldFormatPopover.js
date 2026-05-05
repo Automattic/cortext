@@ -255,6 +255,11 @@ function DateFormBody( { type, config, onChange } ) {
 	const [ openRow, setOpenRow ] = useState( null );
 	const formatRowRef = useRef( null );
 	const timeRowRef = useRef( null );
+	// `date` fields store dates without a time component, the inline
+	// editor strips time on commit, and the renderer ignores time
+	// options for date-only values. Hide the Time row entirely so we
+	// don't expose a control that has nothing to act on.
+	const supportsTime = type === 'datetime';
 
 	const styleId = config?.style ?? 'locale';
 	const currentDateFormat =
@@ -264,7 +269,7 @@ function DateFormBody( { type, config, onChange } ) {
 	const pickFormat = ( item ) => {
 		onChange( {
 			style: item.id,
-			time: config?.time ?? type === 'datetime',
+			time: supportsTime ? config?.time ?? true : false,
 			hour12: config?.hour12 ?? true,
 		} );
 		setOpenRow( null );
@@ -290,15 +295,17 @@ function DateFormBody( { type, config, onChange } ) {
 					setOpenRow( openRow === 'format' ? null : 'format' )
 				}
 			/>
-			<SubmenuRow
-				ref={ timeRowRef }
-				label={ __( 'Time', 'cortext' ) }
-				value={ currentTime.label }
-				isOpen={ openRow === 'time' }
-				onClick={ () =>
-					setOpenRow( openRow === 'time' ? null : 'time' )
-				}
-			/>
+			{ supportsTime ? (
+				<SubmenuRow
+					ref={ timeRowRef }
+					label={ __( 'Time', 'cortext' ) }
+					value={ currentTime.label }
+					isOpen={ openRow === 'time' }
+					onClick={ () =>
+						setOpenRow( openRow === 'time' ? null : 'time' )
+					}
+				/>
+			) : null }
 			{ openRow === 'format' ? (
 				<Popover
 					anchor={ formatRowRef.current }
@@ -316,7 +323,7 @@ function DateFormBody( { type, config, onChange } ) {
 					/>
 				</Popover>
 			) : null }
-			{ openRow === 'time' ? (
+			{ supportsTime && openRow === 'time' ? (
 				<Popover
 					anchor={ timeRowRef.current }
 					placement="right-start"
