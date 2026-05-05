@@ -1423,8 +1423,21 @@ thead > tr > th {
 
 	.components-button {
 		border-radius: var(--cortext-shell-radius);
+
+		// WP components paints a 1.5px accent ring on `:focus:not(:active)`,
+		// which fires on click as well as keyboard nav. Inside chrome that
+		// already has hover/pressed/selected backgrounds, that ring reads
+		// as a stray line at the edge of each button (visible alongside
+		// the chevron / title / kebab in a hovered tree row). Drop it for
+		// click; keep `:focus-visible` so keyboard nav still has a focus
+		// indicator.
+		&:focus:not(:focus-visible) {
+			box-shadow: none;
+			outline: none;
+		}
 	}
 
+	/* stylelint-disable-next-line no-descending-specificity */
 	.components-button:not(.is-primary) {
 		background: var(--cortext-button-surface);
 		color: var(--cortext-button-text);
