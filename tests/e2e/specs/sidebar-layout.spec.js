@@ -125,6 +125,56 @@ async function readRenameRowGeometry( page ) {
 	} );
 }
 
+async function readFooterIconGeometry( page ) {
+	return page.evaluate( () => {
+		const back = document.querySelector( '.cortext-sidebar__back' );
+		const theme = document.querySelector(
+			'.cortext-sidebar__theme-toggle'
+		);
+		if ( ! back || ! theme ) {
+			return null;
+		}
+
+		const box = ( element ) => {
+			const rect = element.getBoundingClientRect();
+			return {
+				width: rect.width,
+				height: rect.height,
+				xCenter: rect.left + rect.width / 2,
+				yCenter: rect.top + rect.height / 2,
+			};
+		};
+
+		return {
+			back: box( back ),
+			theme: box( theme ),
+		};
+	} );
+}
+
+async function readThemePopoverPlacement( page ) {
+	return page.evaluate( () => {
+		const trigger = document.querySelector(
+			'.cortext-sidebar__theme-toggle'
+		);
+		const popover = Array.from(
+			document.querySelectorAll( '.components-popover' )
+		).find( ( element ) => element.textContent.includes( 'Match system' ) );
+		if ( ! trigger || ! popover ) {
+			return null;
+		}
+
+		const triggerBox = trigger.getBoundingClientRect();
+		const popoverBox = popover.getBoundingClientRect();
+
+		return {
+			triggerTop: triggerBox.top,
+			popoverBottom: popoverBox.bottom,
+			gap: triggerBox.top - popoverBox.bottom,
+		};
+	} );
+}
+
 async function clearSidebarPrefs( page ) {
 	await page.evaluate( () => {
 		try {
@@ -154,6 +204,7 @@ test.describe( 'Sidebar layout controls', () => {
 		await expect
 			.poll( () => readSidebarWidth( page ) )
 			.toBeLessThanOrEqual( RAIL_WIDTH + 2 );
+		const collapsedFooter = await readFooterIconGeometry( page );
 		await expect( page.locator( '#cortext-root' ) ).toHaveAttribute(
 			'data-sidebar-collapsed',
 			'true'
@@ -177,6 +228,36 @@ test.describe( 'Sidebar layout controls', () => {
 		expect( railAlignment.headerHeightDelta ).toBeLessThanOrEqual( 1 );
 		expect( railAlignment.toggleHeaderDelta ).toBeLessThanOrEqual( 1 );
 		expect( railAlignment.footerIconDelta ).toBeLessThanOrEqual( 1 );
+
+		await page.getByRole( 'button', { name: 'Expand sidebar' } ).click();
+		const expandingFooter = await readFooterIconGeometry( page );
+
+		expect( collapsedFooter ).not.toBeNull();
+		expect( expandingFooter ).not.toBeNull();
+		expect( expandingFooter.back.width ).toBe( collapsedFooter.back.width );
+		expect( expandingFooter.theme.width ).toBe(
+			collapsedFooter.theme.width
+		);
+		expect( expandingFooter.back.height ).toBe(
+			collapsedFooter.back.height
+		);
+		expect( expandingFooter.theme.height ).toBe(
+			collapsedFooter.theme.height
+		);
+
+		await expect
+			.poll( () => readSidebarWidth( page ) )
+			.toBeGreaterThan( 200 );
+
+		await page.getByRole( 'button', { name: 'Color scheme' } ).click();
+		await expect(
+			page.getByRole( 'menuitem', { name: 'Match system' } )
+		).toBeVisible();
+		const themePlacement = await readThemePopoverPlacement( page );
+		expect( themePlacement ).not.toBeNull();
+		expect( themePlacement.popoverBottom ).toBeLessThanOrEqual(
+			themePlacement.triggerTop + 1
+		);
 	} );
 
 	test( 'aligns the brand and current breadcrumb text vertically', async ( {
