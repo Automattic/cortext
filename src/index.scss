@@ -218,6 +218,14 @@ body.cortext-fullscreen {
 		cursor: grab;
 		user-select: none;
 
+		// Hover paints the whole row, not just the inner title button, so
+		// the chevron and kebab areas feel like part of what you're hovering.
+		// `:not(.is-selected)` keeps the active row on its selected
+		// background even while the cursor sits on it.
+		&:hover:not(.is-selected) {
+			background: var(--cortext-sidebar-item-hover-surface);
+		}
+
 		&.is-selected {
 			background: var(--cortext-sidebar-item-selected-surface);
 		}
@@ -355,6 +363,7 @@ body.cortext-fullscreen {
 		white-space: nowrap;
 	}
 
+	/* stylelint-disable-next-line no-descending-specificity */
 	&__trash-row .cortext-sidebar__row {
 		padding: $grid-unit-05;
 		align-items: flex-start;
