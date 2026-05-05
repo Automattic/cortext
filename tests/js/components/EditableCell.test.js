@@ -454,7 +454,14 @@ describe( 'EditableCell relation editor', () => {
 		);
 
 		fireEvent.click( screen.getByRole( 'button', { name: 'Assignee' } ) );
-		fireEvent.click( screen.getByText( 'Ada Lovelace' ) );
+		const option = screen.getByText( 'Ada Lovelace' );
+		const mouseDown = new MouseEvent( 'mousedown', {
+			bubbles: true,
+			cancelable: true,
+		} );
+		option.dispatchEvent( mouseDown );
+		expect( mouseDown.defaultPrevented ).toBe( true );
+		fireEvent.click( option );
 
 		await waitFor( () =>
 			expect( saveRowField ).toHaveBeenCalledWith( 11, 'field-5', [ 22 ] )

@@ -762,6 +762,9 @@ function RelationEditor( { value, relation, onSave, onCancel, label } ) {
 		const targetId = Number( rowId );
 		await commit( selectedIds.filter( ( id ) => id !== targetId ) );
 	};
+	const keepSearchFocused = ( event ) => {
+		event.preventDefault();
+	};
 	const createRelatedRow = async ( onClose ) => {
 		if ( ! canCreate || isCreating ) {
 			return;
@@ -876,6 +879,7 @@ function RelationEditor( { value, relation, onSave, onCancel, label } ) {
 												'Remove relation',
 												'cortext'
 											) }
+											onMouseDown={ keepSearchFocused }
 											onClick={ () => remove( ref.id ) }
 										/>
 									</span>
@@ -905,6 +909,7 @@ function RelationEditor( { value, relation, onSave, onCancel, label } ) {
 									key={ row.id }
 									type="button"
 									className="cortext-relation-edit__row"
+									onMouseDown={ keepSearchFocused }
 									onClick={ async () => {
 										const shouldClose = await toggle(
 											row.id
@@ -923,6 +928,7 @@ function RelationEditor( { value, relation, onSave, onCancel, label } ) {
 							<button
 								type="button"
 								className="cortext-relation-edit__row cortext-relation-edit__row--create"
+								onMouseDown={ keepSearchFocused }
 								onClick={ () => createRelatedRow( onClose ) }
 								disabled={ isCreating }
 							>
