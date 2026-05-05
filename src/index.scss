@@ -833,6 +833,10 @@ body.cortext-sidebar-resizing {
 		margin: $grid-unit-10 auto $grid-unit-10;
 		padding: 0 $grid-unit-20;
 
+		&:focus {
+			outline: none;
+		}
+
 		.components-dropdown {
 			display: flex;
 			align-items: center;
@@ -846,7 +850,10 @@ body.cortext-sidebar-resizing {
 			height: auto;
 			padding: $grid-unit-05;
 			line-height: 20px;
-			transition: opacity 0.12s ease;
+			transition:
+				opacity 0.12s ease,
+				background-color 0.12s ease,
+				box-shadow 0.12s ease;
 		}
 
 		&:focus-within .cortext-canvas__identity-action {
@@ -1973,6 +1980,14 @@ thead > tr > th {
 		color: var(--cortext-button-text);
 	}
 }
+
+/* stylelint-disable no-descending-specificity */
+.cortext-canvas__identity-actions .cortext-canvas__identity-action:hover:not(:disabled),
+.cortext-canvas__identity-actions .cortext-canvas__identity-action:focus-visible {
+	background: var(--cortext-button-hover-surface, rgba(0, 0, 0, 0.06));
+	color: var(--cortext-button-text, #1e1e1e);
+}
+/* stylelint-enable no-descending-specificity */
 
 .cortext-page-icon {
 	display: inline-flex;
