@@ -198,7 +198,7 @@ Double-click autofit is the trickiest piece. With no measurement hook upstream, 
 
 ## 23. Embedded data-view block has no width/height controls `[internal]`
 
-**What.** The `cortext/data-view` block exposes `align` (default / wide / full) for width but nothing for height. A freshly inserted block needs some visible height or it collapses to its toolbar, so we set `min-height` from `var(--cortext-data-view-block-min-height, 480px)`. The number is a guess: roughly fits a header, ~10 compact rows, footer, and pagination. It doesn't track the block's density or `perPage`, so a comfortable block with `perPage: 25` shows the same default viewport as a compact block with 5 rows.
+**What.** The `cortext/data-view` block exposes `align` (default / wide / full) for width but nothing for height. A freshly inserted block needs a usable viewport and long tables need to stay bounded inside the page, so we set `height` from `var(--cortext-data-view-block-min-height, 480px)` and let DataViews scroll internally. The number is a guess: roughly fits a header, ~10 compact rows, footer, and pagination. It doesn't track the block's density or `perPage`, so a comfortable block with `perPage: 25` shows the same default viewport as a compact block with 5 rows.
 
 **Where.** `--cortext-data-view-block-min-height` in `src/styles/_tokens.scss`, the `.wp-block-cortext-data-view .cortext-data-view` rule in `src/index.scss`, `src/blocks/data-view/block.json` (no `height` attribute today).
 
