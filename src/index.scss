@@ -217,10 +217,39 @@ body.cortext-fullscreen {
 	&__chevron {
 		flex: 0 0 auto;
 
+		// One icon, rotated 90 degrees to mark expansion. Animating a
+		// rotation reads cleaner than swapping right/down icons on click.
+		svg {
+			transition: transform 160ms ease;
+		}
+
+		&.is-expanded svg {
+			transform: rotate(90deg);
+		}
+
 		&--placeholder {
 			display: inline-block;
 			width: $grid-unit-30;
 			height: $grid-unit-30;
+		}
+	}
+
+	// `grid-template-rows: 0fr → 1fr` animates from collapsed to natural
+	// height without measuring. The inner ul needs `min-height: 0` and
+	// `overflow: hidden` so the grid track can clip below the content's
+	// intrinsic height.
+	&__children-wrapper {
+		display: grid;
+		grid-template-rows: 0fr;
+		transition: grid-template-rows 160ms ease;
+
+		> .cortext-sidebar__children {
+			min-height: 0;
+			overflow: hidden;
+		}
+
+		&.is-expanded {
+			grid-template-rows: 1fr;
 		}
 	}
 

@@ -7,7 +7,7 @@ import {
 	MenuItem,
 	TextControl,
 } from '@wordpress/components';
-import { chevronDown, chevronRight } from '@wordpress/icons';
+import { chevronRight } from '@wordpress/icons';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 
 const GRID_UNIT = 20; // matches $grid-unit-20 in index.scss
@@ -143,8 +143,11 @@ export default function PageRow( {
 				>
 					{ hasChildren ? (
 						<Button
-							className="cortext-sidebar__chevron"
-							icon={ isExpanded ? chevronDown : chevronRight }
+							className={
+								'cortext-sidebar__chevron' +
+								( isExpanded ? ' is-expanded' : '' )
+							}
+							icon={ chevronRight }
 							size="small"
 							label={
 								isExpanded
@@ -274,28 +277,36 @@ export default function PageRow( {
 				</div>
 			</div>
 
-			{ hasChildren && isExpanded && (
-				<ul className="cortext-sidebar__children">
-					{ children.map( ( child ) => (
-						<PageRow
-							key={ child.page.id }
-							node={ child }
-							depth={ depth + 1 }
-							selectedId={ selectedId }
-							expandedIds={ expandedIds }
-							draggedId={ draggedId }
-							activeDrop={ activeDrop }
-							onSelect={ onSelect }
-							onToggleExpand={ onToggleExpand }
-							onCreateChild={ onCreateChild }
-							onRename={ onRename }
-							onDuplicate={ onDuplicate }
-							onDelete={ onDelete }
-							autoRenameId={ autoRenameId }
-							onAutoRenameConsumed={ onAutoRenameConsumed }
-						/>
-					) ) }
-				</ul>
+			{ hasChildren && (
+				<div
+					className={
+						'cortext-sidebar__children-wrapper' +
+						( isExpanded ? ' is-expanded' : '' )
+					}
+					aria-hidden={ ! isExpanded }
+				>
+					<ul className="cortext-sidebar__children">
+						{ children.map( ( child ) => (
+							<PageRow
+								key={ child.page.id }
+								node={ child }
+								depth={ depth + 1 }
+								selectedId={ selectedId }
+								expandedIds={ expandedIds }
+								draggedId={ draggedId }
+								activeDrop={ activeDrop }
+								onSelect={ onSelect }
+								onToggleExpand={ onToggleExpand }
+								onCreateChild={ onCreateChild }
+								onRename={ onRename }
+								onDuplicate={ onDuplicate }
+								onDelete={ onDelete }
+								autoRenameId={ autoRenameId }
+								onAutoRenameConsumed={ onAutoRenameConsumed }
+							/>
+						) ) }
+					</ul>
+				</div>
 			) }
 		</li>
 	);
