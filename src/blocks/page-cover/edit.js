@@ -7,7 +7,8 @@ import {
 } from '@wordpress/block-editor';
 import MediaPicker, { MediaUploadCheck } from '../../components/MediaPicker';
 import { useEntityProp, useEntityRecord } from '@wordpress/core-data';
-import { useDispatch } from '@wordpress/data';
+import { useDispatch, useSelect } from '@wordpress/data';
+import { createBlock } from '@wordpress/blocks';
 import { useEffect } from '@wordpress/element';
 import {
 	Button,
@@ -16,6 +17,7 @@ import {
 	ToolbarGroup,
 } from '@wordpress/components';
 import { replace, trash } from '@wordpress/icons';
+import PageIdentityControls from '../../components/PageIdentityControls';
 
 // Renders the featured image as a full-width banner with hover-revealed
 // Replace/Remove controls in the top-right corner. We deliberately don't
@@ -37,12 +39,26 @@ export default function Edit( { context, clientId } ) {
 		'featured_media',
 		postId
 	);
+	const [ meta ] = useEntityProp( 'postType', postType, 'meta', postId );
+	const iconMeta = meta?.cortext_page_icon ?? '';
+	const { coverIndex, hasIconBlock } = useSelect(
+		( select ) => {
+			const store = select( blockEditorStore );
+			return {
+				coverIndex: clientId ? store.getBlockIndex( clientId ) : 0,
+				hasIconBlock: store
+					.getBlocks()
+					.some( ( block ) => block.name === 'cortext/page-icon' ),
+			};
+		},
+		[ clientId ]
+	);
 	const { record: media } = useEntityRecord(
 		'root',
 		'media',
 		featuredId || 0
 	);
-	const { removeBlock, updateBlockAttributes } =
+	const { insertBlocks, removeBlock, updateBlockAttributes } =
 		useDispatch( blockEditorStore );
 
 	// Block presence mirrors the underlying state: when the user clears
@@ -61,6 +77,20 @@ export default function Edit( { context, clientId } ) {
 		media?.media_details?.sizes?.large?.source_url ??
 		media?.source_url ??
 		null;
+
+	const ensureIconBlock = () => {
+		if ( hasIconBlock || ! clientId ) {
+			return;
+		}
+		insertBlocks(
+			createBlock( 'cortext/page-icon', {
+				lock: { move: true },
+			} ),
+			coverIndex + 1,
+			undefined,
+			false
+		);
+	};
 
 	return (
 		<>
@@ -133,6 +163,22 @@ export default function Edit( { context, clientId } ) {
 					/>
 				) }
 				<div className="cortext-page-cover-block__controls">
+					{ ! iconMeta && (
+						<PageIdentityControls
+							pageId={ postId }
+							currentIcon={ iconMeta }
+							onAfterSave={ ensureIconBlock }
+							renderToggle={ ( { onToggle } ) => (
+								<Button
+									variant="secondary"
+									size="small"
+									onClick={ onToggle }
+								>
+									{ __( 'Add icon', 'cortext' ) }
+								</Button>
+							) }
+						/>
+					) }
 					<MediaUploadCheck>
 						<MediaPicker
 							allowedTypes={ [ 'image' ] }

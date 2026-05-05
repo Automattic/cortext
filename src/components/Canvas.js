@@ -77,31 +77,25 @@ function PageIdentityActions( { postId } ) {
 	const isInsertingCoverRef = useRef( false );
 	const [ meta ] = useEntityProp( 'postType', POST_TYPE, 'meta', postId );
 	const iconMeta = meta?.cortext_page_icon ?? '';
-	const { hasIcon, hasCover, coverIndex, isTrashed } = useSelect(
-		( select ) => {
-			const blocks = select( blockEditorStore ).getBlocks();
-			const cover = blocks.findIndex(
+	const { hasIcon, hasCover, isTrashed } = useSelect( ( select ) => {
+		const blocks = select( blockEditorStore ).getBlocks();
+		return {
+			hasCover: blocks.some(
 				( block ) => block.name === 'cortext/page-cover'
-			);
-			return {
-				hasCover: cover >= 0,
-				hasIcon: blocks.some(
-					( block ) => block.name === 'cortext/page-icon'
-				),
-				coverIndex: cover,
-				isTrashed:
-					select( editorStore ).getCurrentPostAttribute(
-						'status'
-					) === 'trash',
-			};
-		},
-		[]
-	);
+			),
+			hasIcon: blocks.some(
+				( block ) => block.name === 'cortext/page-icon'
+			),
+			isTrashed:
+				select( editorStore ).getCurrentPostAttribute( 'status' ) ===
+				'trash',
+		};
+	}, [] );
 	const { insertBlocks } = useDispatch( blockEditorStore );
 	const { editEntityRecord, saveEditedEntityRecord } =
 		useDispatch( coreStore );
 
-	if ( isTrashed || ( hasIcon && hasCover ) ) {
+	if ( isTrashed || hasCover ) {
 		return null;
 	}
 
@@ -112,8 +106,7 @@ function PageIdentityActions( { postId } ) {
 		const block = createBlock( 'cortext/page-icon', {
 			lock: { move: true },
 		} );
-		const index = coverIndex >= 0 ? coverIndex + 1 : 0;
-		insertBlocks( block, index, undefined, false );
+		insertBlocks( block, 0, undefined, false );
 	};
 
 	const insertCover = async ( mediaId ) => {
@@ -136,14 +129,9 @@ function PageIdentityActions( { postId } ) {
 		}
 	};
 
-	const classes = [
-		'cortext-canvas__identity-actions',
-		hasCover ? 'has-cover' : 'is-inline',
-	].join( ' ' );
-
 	return (
-		<div className={ classes }>
-			{ ! hasIcon && (
+		<div className="cortext-canvas__identity-actions">
+			{ ! hasIcon && ! hasCover && (
 				<PageIdentityControls
 					pageId={ postId }
 					currentIcon={ iconMeta }
