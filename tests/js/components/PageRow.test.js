@@ -7,7 +7,7 @@
  * don't throw.
  */
 
-import { render, fireEvent } from '@testing-library/react';
+import { render, fireEvent, screen } from '@testing-library/react';
 import { DndContext } from '@dnd-kit/core';
 
 import PageRow from '../../../src/components/PageRow';
@@ -38,6 +38,9 @@ function baseProps( overrides = {} ) {
 		onRename: jest.fn(),
 		onDuplicate: jest.fn(),
 		onDelete: jest.fn(),
+		onSetHome: jest.fn(),
+		home: null,
+		isHomeUpdating: false,
 		autoRenameId: null,
 		onAutoRenameConsumed: jest.fn(),
 		...overrides,
@@ -134,5 +137,15 @@ describe( 'PageRow', () => {
 			container.querySelector( '.cortext-sidebar__rename input' )
 		).toBeTruthy();
 		expect( props.onAutoRenameConsumed ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'calls onSetHome from the action menu', () => {
+		const { container, props } = renderRow();
+		fireEvent.click( container.querySelector( '.cortext-sidebar__menu' ) );
+		fireEvent.click(
+			screen.getByRole( 'menuitem', { name: 'Set as home' } )
+		);
+
+		expect( props.onSetHome ).toHaveBeenCalledWith( 1 );
 	} );
 } );

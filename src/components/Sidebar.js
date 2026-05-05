@@ -9,8 +9,20 @@ import {
 	useCallback,
 	useEffect,
 } from '@wordpress/element';
-import { Button, Icon, Spinner } from '@wordpress/components';
-import { plus, wordpress } from '@wordpress/icons';
+import {
+	Button,
+	Dropdown,
+	Icon,
+	MenuGroup,
+	MenuItem,
+	Spinner,
+} from '@wordpress/components';
+import {
+	home as homeIcon,
+	moreVertical,
+	plus,
+	wordpress,
+} from '@wordpress/icons';
 
 // Notion-style sidebar toggle: panel outline with a vertical accent on
 // the left side. Same icon for both states; the aria-label tells the
@@ -63,6 +75,7 @@ import {
 	buildTree,
 	collectAncestorIds,
 	computeDropTarget,
+	firstPageInTree,
 	isDescendantOf,
 	nextChildOrder,
 } from './pages-tree';
@@ -77,6 +90,7 @@ import {
 	parseSplatUri,
 } from '../router/useResolveEntity';
 import { COLLECTION_QUERY } from '../collections';
+import { useWorkspaceHome } from '../hooks/useWorkspaceHome';
 
 const AUTO_EXPAND_DELAY = 700;
 
@@ -90,6 +104,82 @@ function parseDropId( id ) {
 		return null;
 	}
 	return { zone, targetId: pageId };
+}
+
+function collectionTitle( collection ) {
+	return (
+		collection.title?.rendered?.trim() ||
+		collection.title?.raw?.trim() ||
+		collection.title?.trim?.() ||
+		__( '(untitled)', 'cortext' )
+	);
+}
+
+function CollectionRow( {
+	collection,
+	isSelected,
+	isHome,
+	isHomeUpdating,
+	onSelect,
+	onSetHome,
+} ) {
+	const title = collectionTitle( collection );
+	const rowClasses = [ 'cortext-sidebar__row' ];
+	if ( isSelected ) {
+		rowClasses.push( 'is-selected' );
+	}
+
+	return (
+		<li className="cortext-sidebar__node">
+			<div className={ rowClasses.join( ' ' ) }>
+				<Button
+					className="cortext-sidebar__title"
+					size="compact"
+					variant="tertiary"
+					onClick={ onSelect }
+					isPressed={ isSelected }
+				>
+					{ title }
+				</Button>
+				<Dropdown
+					popoverProps={ { placement: 'bottom-end' } }
+					renderToggle={ ( { isOpen, onToggle } ) => (
+						<Button
+							className={
+								'cortext-sidebar__menu' +
+								( isOpen ? ' is-opened' : '' )
+							}
+							icon={ moreVertical }
+							size="small"
+							label={ sprintf(
+								/* translators: %s: collection title */
+								__( 'Actions for %s', 'cortext' ),
+								title
+							) }
+							onClick={ onToggle }
+							aria-expanded={ isOpen }
+						/>
+					) }
+					renderContent={ ( { onClose } ) => (
+						<MenuGroup>
+							<MenuItem
+								icon={ homeIcon }
+								disabled={ isHome || isHomeUpdating }
+								onClick={ () => {
+									onSetHome( collection.id );
+									onClose();
+								} }
+							>
+								{ isHome
+									? __( 'Home', 'cortext' )
+									: __( 'Set as home', 'cortext' ) }
+							</MenuItem>
+						</MenuGroup>
+					) }
+				/>
+			</div>
+		</li>
+	);
 }
 
 export default function Sidebar( {
@@ -110,6 +200,12 @@ export default function Sidebar( {
 
 	const { records: collections, isResolving: isResolvingCollections } =
 		useEntityRecords( 'postType', 'crtxt_collection', COLLECTION_QUERY );
+	const {
+		home,
+		setHome,
+		isResolving: isResolvingHome,
+		isUpdating: isHomeUpdating,
+	} = useWorkspaceHome();
 	const {
 		saveEntityRecord,
 		deleteEntityRecord,
@@ -139,6 +235,11 @@ export default function Sidebar( {
 			activePrefix === 'page' || activePrefix === null
 				? parseIdFromUri( activeTail )
 				: null,
+		[ activePrefix, activeTail ]
+	);
+	const selectedCollectionId = useMemo(
+		() =>
+			activePrefix === 'collection' ? parseIdFromUri( activeTail ) : null,
 		[ activePrefix, activeTail ]
 	);
 
@@ -182,6 +283,42 @@ export default function Sidebar( {
 			} );
 		},
 		[ navigate, pages ]
+	);
+
+	const fallbackHomePage = useMemo(
+		() => firstPageInTree( pages ),
+		[ pages ]
+	);
+	const homePath =
+		home?.path ??
+		( fallbackHomePage ? computeUri( fallbackHomePage ) : null );
+	const isHomeSelected = Boolean( homePath && activeUri === homePath );
+	const goHome = useCallback( () => {
+		if ( ! homePath ) {
+			return;
+		}
+		navigate( {
+			to: '/$',
+			params: { _splat: homePath },
+		} );
+	}, [ homePath, navigate ] );
+
+	const setPageHome = useCallback(
+		async ( id ) => {
+			try {
+				await setHome( { kind: 'page', id } );
+			} catch {}
+		},
+		[ setHome ]
+	);
+
+	const setCollectionHome = useCallback(
+		async ( id ) => {
+			try {
+				await setHome( { kind: 'collection', id } );
+			} catch {}
+		},
+		[ setHome ]
 	);
 
 	const tree = useMemo( () => buildTree( pages ), [ pages ] );
@@ -503,8 +640,31 @@ export default function Sidebar( {
 					onClick={ onToggleCollapsed }
 				/>
 			</div>
+			{ collapsed && (
+				<div className="cortext-sidebar__rail">
+					<Button
+						className="cortext-sidebar__rail-button"
+						icon={ homeIcon }
+						label={ __( 'Home', 'cortext' ) }
+						isPressed={ isHomeSelected }
+						disabled={ ! homePath || isResolvingHome }
+						onClick={ goHome }
+					/>
+				</div>
+			) }
 			{ ! collapsed && (
 				<div className="cortext-sidebar__content">
+					<div className="cortext-sidebar__home">
+						<Button
+							className="cortext-sidebar__home-button"
+							icon={ homeIcon }
+							isPressed={ isHomeSelected }
+							disabled={ ! homePath || isResolvingHome }
+							onClick={ goHome }
+						>
+							{ __( 'Home', 'cortext' ) }
+						</Button>
+					</div>
 					<div className="cortext-sidebar__section-header">
 						<h2 className="cortext-sidebar__section-title">
 							{ __( 'Pages', 'cortext' ) }
@@ -552,6 +712,9 @@ export default function Sidebar( {
 									onRename={ renamePage }
 									onDuplicate={ duplicatePage }
 									onDelete={ trashPage }
+									onSetHome={ setPageHome }
+									home={ home }
+									isHomeUpdating={ isHomeUpdating }
 									autoRenameId={ autoRenameId }
 									onAutoRenameConsumed={ () =>
 										setAutoRenameId( null )
@@ -595,31 +758,30 @@ export default function Sidebar( {
 					{ collections?.length > 0 && (
 						<ul className="cortext-sidebar__list">
 							{ collections.map( ( collection ) => (
-								<li
+								<CollectionRow
 									key={ collection.id }
-									className="cortext-sidebar__node"
-								>
-									<div className="cortext-sidebar__row">
-										<Button
-											className="cortext-sidebar__title"
-											size="compact"
-											variant="tertiary"
-											onClick={ () =>
-												navigate( {
-													to: '/$',
-													params: {
-														_splat: computeUri(
-															collection,
-															'collection'
-														),
-													},
-												} )
-											}
-										>
-											{ collection.title.rendered }
-										</Button>
-									</div>
-								</li>
+									collection={ collection }
+									isSelected={
+										selectedCollectionId === collection.id
+									}
+									isHome={
+										home?.kind === 'collection' &&
+										home.id === collection.id
+									}
+									isHomeUpdating={ isHomeUpdating }
+									onSetHome={ setCollectionHome }
+									onSelect={ () =>
+										navigate( {
+											to: '/$',
+											params: {
+												_splat: computeUri(
+													collection,
+													'collection'
+												),
+											},
+										} )
+									}
+								/>
 							) ) }
 						</ul>
 					) }

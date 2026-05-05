@@ -12,6 +12,7 @@ import { SlotFillProvider } from '@wordpress/components';
 import Sidebar from './components/Sidebar';
 import EntityRoute from './router/EntityRoute';
 import useSidebarLayout from './hooks/useSidebarLayout';
+import { WorkspaceHomeProvider } from './hooks/useWorkspaceHome';
 import { unlock } from './lock-unlock';
 
 const {
@@ -59,17 +60,19 @@ function RootLayout() {
 
 	return (
 		<SlotFillProvider>
-			<div className="cortext-shell">
-				<Sidebar
-					collapsed={ collapsed }
-					width={ width }
-					onToggleCollapsed={ toggleCollapsed }
-					onWidthChange={ setWidth }
-				/>
-				<main className="cortext-shell__canvas">
-					<EntityRoute />
-				</main>
-			</div>
+			<WorkspaceHomeProvider>
+				<div className="cortext-shell">
+					<Sidebar
+						collapsed={ collapsed }
+						width={ width }
+						onToggleCollapsed={ toggleCollapsed }
+						onWidthChange={ setWidth }
+					/>
+					<main className="cortext-shell__canvas">
+						<EntityRoute />
+					</main>
+				</div>
+			</WorkspaceHomeProvider>
 		</SlotFillProvider>
 	);
 }

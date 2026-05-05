@@ -22,7 +22,7 @@ test.describe( 'Cortext shell', () => {
 		await admin.visitAdminPage( 'admin.php', 'page=cortext' );
 
 		await expect( page ).toHaveURL(
-			/\/wp-admin\/admin\.php\?page=cortext$/
+			/\/wp-admin\/admin\.php\?page=cortext(?:&p=.*)?$/
 		);
 
 		const root = page.locator( '#cortext-root' );
