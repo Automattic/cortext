@@ -1,3 +1,11 @@
+import { __ } from '@wordpress/i18n';
+
+import {
+	optionColorVars,
+	isOptionColorName,
+	resolveDisplayColor,
+} from './optionPalette';
+
 // Picks a readable foreground for a hex background by computing relative
 // luminance. Returns null for non-hex CSS colors (named, rgb(), hsl(), …),
 // where we let the inherited cell text color stand.
@@ -31,15 +39,66 @@ function parseHex( value ) {
 	];
 }
 
-export default function Chip( { label, color } ) {
-	if ( ! color || typeof color !== 'string' ) {
+function RemoveButton( { onRemove, foreground } ) {
+	return (
+		<button
+			type="button"
+			className="cortext-chip__remove"
+			aria-label={ __( 'Remove', 'cortext' ) }
+			style={ foreground ? { color: foreground } : undefined }
+			onClick={ ( event ) => {
+				event.preventDefault();
+				event.stopPropagation();
+				onRemove();
+			} }
+		>
+			×
+		</button>
+	);
+}
+
+// Two color shapes are accepted: a palette name (`'blue'`) resolved
+// through the Cortext shell tokens so chips re-skin under light/dark, or
+// a raw CSS color (legacy seeds, Notion imports). The `'default'` palette
+// name renders as the neutral chip so saved options can opt out of color
+// without dropping the field. When `onRemove` is provided, a `×` button
+// is rendered inside the pill so dismiss controls live with the chip
+// background instead of as an external sibling — matches Notion's
+// selected-token strip in the multiselect picker.
+export default function Chip( { label, color, onRemove } ) {
+	const effective = resolveDisplayColor( color, label );
+
+	if ( effective === 'default' ) {
 		return (
 			<span className="cortext-chip cortext-chip--neutral">
 				{ label }
+				{ onRemove ? <RemoveButton onRemove={ onRemove } /> : null }
 			</span>
 		);
 	}
-	const background = color.trim();
+
+	if ( isOptionColorName( effective ) ) {
+		const vars = optionColorVars( effective );
+		return (
+			<span
+				className={ `cortext-chip cortext-chip--${ effective }` }
+				style={ {
+					backgroundColor: vars.background,
+					color: vars.foreground,
+				} }
+			>
+				{ label }
+				{ onRemove ? (
+					<RemoveButton
+						onRemove={ onRemove }
+						foreground={ vars.foreground }
+					/>
+				) : null }
+			</span>
+		);
+	}
+
+	const background = effective.trim();
 	const foreground = foregroundFor( background );
 	const style = { backgroundColor: background };
 	if ( foreground ) {
@@ -48,6 +107,9 @@ export default function Chip( { label, color } ) {
 	return (
 		<span className="cortext-chip" style={ style }>
 			{ label }
+			{ onRemove ? (
+				<RemoveButton onRemove={ onRemove } foreground={ foreground } />
+			) : null }
 		</span>
 	);
 }

@@ -2,38 +2,13 @@ import { __ } from '@wordpress/i18n';
 import { dateI18n } from '@wordpress/date';
 
 import EditableCell from '../components/EditableCell';
+import { elementsFromOptions } from './optionElements';
 
-// Parses stored option records into the DataViews `elements` shape.
-// Accepts a string shorthand (`'red'` becomes `{ value: 'red', label: 'red' }`)
-// or `{ value, label, color? }`. `color` is an optional CSS color the chip
-// renderer reads — tech-debt.md#11: DataViews's `Option` type doesn't
-// declare `color`, but it tolerates extra keys on element entries.
-export function elementsFromOptions( raw ) {
-	if ( ! raw ) {
-		return undefined;
-	}
-	let options;
-	try {
-		options = typeof raw === 'string' ? JSON.parse( raw ) : raw;
-	} catch {
-		return undefined;
-	}
-	if ( ! Array.isArray( options ) ) {
-		return undefined;
-	}
-	return options.map( ( option ) => {
-		if ( typeof option === 'string' ) {
-			return { value: option, label: option };
-		}
-		const value = option.value ?? '';
-		const label = option.label ?? option.value ?? '';
-		const element = { value, label };
-		if ( option.color ) {
-			element.color = option.color;
-		}
-		return element;
-	} );
-}
+// Re-export for existing call sites. The implementation lives in
+// `optionElements` (a leaf module with no React/component imports) so
+// it can be pulled into both UI code and Jest unit tests of
+// `useFieldMutations` without dragging `@wordpress/components` along.
+export { elementsFromOptions };
 
 // Parses stored format meta (number_format / date_format) into a plain
 // object. Same forgiving contract as `elementsFromOptions`: malformed
