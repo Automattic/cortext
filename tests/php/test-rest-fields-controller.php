@@ -105,6 +105,39 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 		);
 	}
 
+	public function test_create_preserves_color_from_palette_and_drops_unknown(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$collection_id = $this->create_collection_with_slug( 'Palette', 'palette-c' );
+
+		$response = $this->create_field(
+			$collection_id,
+			array(
+				'title'   => 'Status',
+				'type'    => 'select',
+				'options' => array(
+					array(
+						'value' => 'todo',
+						'label' => 'To do',
+						'color' => 'blue',
+					),
+					array(
+						'value' => 'doing',
+						'label' => 'Doing',
+						'color' => 'neon-magenta', // not in palette
+					),
+				),
+			)
+		);
+
+		$this->assertSame( 201, $response->get_status() );
+
+		$field_id = (int) $response->get_data()['id'];
+		$options  = json_decode( get_post_meta( $field_id, 'options', true ), true );
+
+		$this->assertSame( 'blue', $options[0]['color'] );
+		$this->assertArrayNotHasKey( 'color', $options[1] );
+	}
+
 	public function test_create_rejects_invalid_type(): void {
 		wp_set_current_user( $this->create_user( 'editor' ) );
 		$collection_id = $this->create_collection_with_slug( 'Items', 'items' );
@@ -504,6 +537,219 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 		$response = $this->duplicate_field( $collection_id, (int) $source_id );
 
 		$this->assertSame( 403, $response->get_status() );
+	}
+
+	public function test_update_options_round_trips_label_color_order(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$collection_id = $this->create_collection_with_slug( 'Update', 'update-o' );
+		$field_id      = (int) $this->create_field(
+			$collection_id,
+			array(
+				'title'   => 'Status',
+				'type'    => 'select',
+				'options' => array(
+					array(
+						'value' => 'todo',
+						'label' => 'To do',
+					),
+				),
+			)
+		)->get_data()['id'];
+
+		$response = $this->update_options(
+			$field_id,
+			array(
+				'options' => array(
+					array(
+						'value' => 'doing',
+						'label' => 'In progress',
+						'color' => 'orange',
+					),
+					array(
+						'value' => 'todo',
+						'label' => 'To do',
+						'color' => 'default',
+					),
+				),
+			)
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+
+		$stored = json_decode( get_post_meta( $field_id, 'options', true ), true );
+
+		$this->assertSame(
+			array(
+				array(
+					'value' => 'doing',
+					'label' => 'In progress',
+					'color' => 'orange',
+				),
+				array(
+					'value' => 'todo',
+					'label' => 'To do',
+					'color' => 'default',
+				),
+			),
+			$stored
+		);
+	}
+
+	public function test_update_options_strips_unknown_color(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$collection_id = $this->create_collection_with_slug( 'Strip', 'strip-c' );
+		$field_id      = (int) $this->create_field(
+			$collection_id,
+			array(
+				'title' => 'Tag',
+				'type'  => 'multiselect',
+			)
+		)->get_data()['id'];
+
+		$this->update_options(
+			$field_id,
+			array(
+				'options' => array(
+					array(
+						'value' => 'one',
+						'label' => 'One',
+						'color' => 'sienna',
+					),
+				),
+			)
+		);
+
+		$stored = json_decode( get_post_meta( $field_id, 'options', true ), true );
+
+		$this->assertArrayNotHasKey( 'color', $stored[0] );
+	}
+
+	public function test_update_options_rejects_non_select_field(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$collection_id = $this->create_collection_with_slug( 'Wrong', 'wrong-t' );
+		$field_id      = (int) $this->create_field(
+			$collection_id,
+			array(
+				'title' => 'Notes',
+				'type'  => 'text',
+			)
+		)->get_data()['id'];
+
+		$response = $this->update_options(
+			$field_id,
+			array(
+				'options' => array(
+					array(
+						'value' => 'a',
+						'label' => 'A',
+					),
+				),
+			)
+		);
+
+		$this->assertSame( 400, $response->get_status() );
+	}
+
+	public function test_update_options_rejects_replace_to_unknown_value(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$collection_id = $this->create_collection_with_slug( 'Replace', 'replace-x' );
+		$field_id      = (int) $this->create_field(
+			$collection_id,
+			array(
+				'title'   => 'Status',
+				'type'    => 'select',
+				'options' => array(
+					array(
+						'value' => 'a',
+						'label' => 'A',
+					),
+				),
+			)
+		)->get_data()['id'];
+
+		$response = $this->update_options(
+			$field_id,
+			array(
+				'options'    => array(
+					array(
+						'value' => 'a',
+						'label' => 'A',
+					),
+				),
+				'migrations' => array(
+					array(
+						'from'   => 'b',
+						'action' => 'replace',
+						'to'     => 'ghost',
+					),
+				),
+			)
+		);
+
+		$this->assertSame( 400, $response->get_status() );
+	}
+
+	public function test_update_options_requires_edit_capability(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$collection_id = $this->create_collection_with_slug( 'Auth', 'auth-o' );
+		$field_id      = (int) $this->create_field(
+			$collection_id,
+			array(
+				'title' => 'Status',
+				'type'  => 'select',
+			)
+		)->get_data()['id'];
+
+		wp_set_current_user( $this->create_user( 'subscriber' ) );
+
+		$response = $this->update_options(
+			$field_id,
+			array(
+				'options' => array(
+					array(
+						'value' => 'a',
+						'label' => 'A',
+					),
+				),
+			)
+		);
+
+		$this->assertSame( 403, $response->get_status() );
+	}
+
+	public function test_option_usage_returns_zero_when_no_rows_match(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$collection_id = $this->create_collection_with_slug( 'Usage', 'usage-z' );
+		$field_id      = (int) $this->create_field(
+			$collection_id,
+			array(
+				'title' => 'Status',
+				'type'  => 'select',
+			)
+		)->get_data()['id'];
+
+		$request = new WP_REST_Request(
+			'GET',
+			"/cortext/v1/fields/{$field_id}/options/lonely/usage"
+		);
+		$request->set_param( 'field_id', $field_id );
+		$request->set_param( 'value', 'lonely' );
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 0, $response->get_data()['count'] );
+	}
+
+	private function update_options( int $field_id, array $body ) {
+		$request = new WP_REST_Request(
+			'POST',
+			"/cortext/v1/fields/{$field_id}/options"
+		);
+		$request->set_param( 'field_id', $field_id );
+		foreach ( $body as $key => $value ) {
+			$request->set_param( $key, $value );
+		}
+		return rest_do_request( $request );
 	}
 
 	private function create_field( int $collection_id, array $body ) {
