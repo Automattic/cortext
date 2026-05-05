@@ -2049,23 +2049,36 @@ thead > tr > th {
 	}
 }
 
-// Page icon: participates in the same constrained content column as the
-// title. The button itself stays compact, but the block wrapper must stay
-// block-level; otherwise, when there is no cover before it, Gutenberg's
-// constrained layout no longer centers it with the title.
+// Page icon: keep Gutenberg's selected-block outline tight around the icon,
+// while manually anchoring that compact box to the page content column.
 .cortext-page-icon-block {
+	position: relative;
 	display: flex;
 	align-items: flex-end;
 	justify-content: flex-start;
-	max-width: var(--wp--style--global--content-size, 840px);
-	margin: $grid-unit-10 auto;
-	padding: 0 $grid-unit-20;
+	width: fit-content;
+	margin-block: $grid-unit-10;
+	margin-inline-start: max($grid-unit-20, calc((100% - var(--wp--style--global--content-size, 840px)) / 2 + #{$grid-unit-20}));
+	margin-inline-end: auto;
+
+	// Expanded invisible hover zone: keeps Add cover / Add icon discoverable
+	// when hovering the header area without making the selected-block box
+	// stretch across the whole content column.
+	&::before {
+		content: "";
+		position: absolute;
+		inset-block: -$grid-unit-20;
+		inset-inline-start: 0;
+		width: min(calc(100vw - (2 * #{$grid-unit-20})), var(--wp--style--global--content-size, 840px));
+	}
 
 	// The trigger is only an emoji or thumbnail; framing it like a button
 	// (border + shadow) reads as visual noise next to the cover. Keep the
 	// click affordance via a soft hover wash instead.
 	/* stylelint-disable-next-line no-descending-specificity */
 	.components-button {
+		position: relative;
+		z-index: 1;
 		padding: $grid-unit-05;
 		min-width: 0;
 		background: transparent;
