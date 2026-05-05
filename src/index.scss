@@ -1593,6 +1593,7 @@ tbody > tr > td:not(:first-child) {
 		width: 100%;
 		height: 100%;
 		justify-content: flex-start;
+		align-items: center;
 		padding-inline: $grid-unit-05;
 		overflow: hidden;
 		color: inherit;
@@ -1753,7 +1754,9 @@ tbody > tr > td:not(:first-child) {
 	&__toggle-refs {
 		display: flex;
 		align-items: center;
+		flex-wrap: wrap;
 		gap: $grid-unit-05;
+		width: 100%;
 		max-width: 100%;
 		min-width: 0;
 		overflow: hidden;
