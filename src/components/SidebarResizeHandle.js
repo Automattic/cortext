@@ -9,9 +9,9 @@ import {
 } from '../hooks/useSidebarLayout';
 
 // Pointer drag writes the CSS var on the root every move (no React
-// re-render per frame) and commits to state on pointerup. Keyboard
-// parity: the handle is focusable, with arrows/Home/End to resize and
-// Enter to toggle collapse.
+// re-render per frame) and commits to state on pointerup. Pointer cancel
+// reverts to the starting width. Keyboard parity: the handle is focusable,
+// with arrows/Home/End to resize and Enter to toggle collapse.
 export default function SidebarResizeHandle( {
 	width,
 	onChange,
@@ -63,20 +63,33 @@ export default function SidebarResizeHandle( {
 		[ writeRoot ]
 	);
 
-	const endResize = useCallback(
+	const cleanupResize = useCallback( ( event ) => {
+		if ( event.currentTarget.hasPointerCapture( event.pointerId ) ) {
+			event.currentTarget.releasePointerCapture( event.pointerId );
+		}
+		setIsResizing( false );
+		document.body.classList.remove( 'cortext-sidebar-resizing' );
+		const root = document.getElementById( 'cortext-root' );
+		if ( root ) {
+			root.removeAttribute( 'data-sidebar-resizing' );
+		}
+	}, [] );
+
+	const commitResize = useCallback(
 		( event ) => {
-			if ( event.currentTarget.hasPointerCapture( event.pointerId ) ) {
-				event.currentTarget.releasePointerCapture( event.pointerId );
-			}
-			setIsResizing( false );
-			document.body.classList.remove( 'cortext-sidebar-resizing' );
-			const root = document.getElementById( 'cortext-root' );
-			if ( root ) {
-				root.removeAttribute( 'data-sidebar-resizing' );
-			}
+			cleanupResize( event );
 			onChange( liveWidthRef.current );
 		},
-		[ onChange ]
+		[ cleanupResize, onChange ]
+	);
+
+	const cancelResize = useCallback(
+		( event ) => {
+			cleanupResize( event );
+			liveWidthRef.current = startWidthRef.current;
+			writeRoot( startWidthRef.current );
+		},
+		[ cleanupResize, writeRoot ]
 	);
 
 	const onKeyDown = useCallback(
@@ -127,8 +140,8 @@ export default function SidebarResizeHandle( {
 			aria-valuemax={ SIDEBAR_WIDTH_MAX }
 			onPointerDown={ onPointerDown }
 			onPointerMove={ onPointerMove }
-			onPointerUp={ endResize }
-			onPointerCancel={ endResize }
+			onPointerUp={ commitResize }
+			onPointerCancel={ cancelResize }
 			onKeyDown={ onKeyDown }
 		/>
 	);

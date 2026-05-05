@@ -7,10 +7,11 @@ import { __ } from '@wordpress/i18n';
 
 const DEBOUNCE_MS = 800;
 const MIN_SAVE_INTERVAL_MS = 2000;
+const AUTOSAVE_ERROR_NOTICE_ID = 'cortext-autosave-error';
 
 export default function useAutosave() {
 	const { savePost, editPost } = useDispatch( editorStore );
-	const { createErrorNotice } = useDispatch( noticesStore );
+	const { createErrorNotice, removeNotice } = useDispatch( noticesStore );
 
 	const {
 		isDirty,
@@ -151,14 +152,15 @@ export default function useAutosave() {
 			// autosave needs its own way of reaching the user. Snackbar
 			// is dismissable and stays out of the way when things work.
 			createErrorNotice( __( 'Failed to save changes.', 'cortext' ), {
-				id: 'cortext-autosave-error',
+				id: AUTOSAVE_ERROR_NOTICE_ID,
 				type: 'snackbar',
 			} );
 		} else if ( didSucceed ) {
 			setStatus( 'saved' );
 			setLastSavedAt( Date.now() );
+			removeNotice( AUTOSAVE_ERROR_NOTICE_ID );
 		}
-	}, [ isSaving, didSucceed, didFail, createErrorNotice ] );
+	}, [ isSaving, didSucceed, didFail, createErrorNotice, removeNotice ] );
 
 	// CanvasEditor stays mounted across post switches so the iframe survives,
 	// which means our local status would otherwise carry a stale "Failed to

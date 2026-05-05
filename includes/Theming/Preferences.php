@@ -46,9 +46,16 @@ final class Preferences {
 	var sidebarWidth = 280;
 	try {
 		sidebarCollapsed = window.localStorage.getItem( 'cortext.sidebarCollapsed' ) === 'true';
-		var rawWidth = parseInt( window.localStorage.getItem( 'cortext.sidebarWidth' ), 10 );
-		if ( rawWidth >= 220 && rawWidth <= 480 ) {
-			sidebarWidth = rawWidth;
+		var storedWidth = window.localStorage.getItem( 'cortext.sidebarWidth' );
+		var rawWidth = storedWidth === null ? NaN : Number( storedWidth );
+		if ( isFinite( rawWidth ) ) {
+			if ( rawWidth < 220 ) {
+				sidebarWidth = 220;
+			} else if ( rawWidth > 480 ) {
+				sidebarWidth = 480;
+			} else {
+				sidebarWidth = Math.round( rawWidth );
+			}
 		}
 	} catch ( e ) {}
 

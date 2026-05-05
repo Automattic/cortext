@@ -87,6 +87,7 @@ beforeEach( () => {
 		savePost: jest.fn(),
 		editPost: jest.fn(),
 		createErrorNotice: jest.fn(),
+		removeNotice: jest.fn(),
 	} );
 } );
 
@@ -334,6 +335,7 @@ describe( 'useAutosave: status', () => {
 			savePost: jest.fn(),
 			editPost: jest.fn(),
 			createErrorNotice,
+			removeNotice: jest.fn(),
 		} );
 		setStoreState( { didFail: true } );
 
@@ -345,6 +347,28 @@ describe( 'useAutosave: status', () => {
 				type: 'snackbar',
 				id: 'cortext-autosave-error',
 			} )
+		);
+	} );
+
+	it( 'removes the autosave error notice after a successful save', () => {
+		const removeNotice = jest.fn();
+		useDispatch.mockReturnValue( {
+			savePost: jest.fn(),
+			editPost: jest.fn(),
+			createErrorNotice: jest.fn(),
+			removeNotice,
+		} );
+		setStoreState( { didFail: true } );
+
+		const { rerender } = renderHook( () => useAutosave() );
+
+		act( () => {
+			setStoreState( { didFail: false, didSucceed: true } );
+			rerender();
+		} );
+
+		expect( removeNotice ).toHaveBeenCalledWith(
+			'cortext-autosave-error'
 		);
 	} );
 
