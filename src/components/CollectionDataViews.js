@@ -493,6 +493,32 @@ export default function CollectionDataViews( {
 		}
 	}, [ isResolving, rowsResolved, onReady ] );
 
+	// Block editor selects the block on any mousedown that bubbles up. When
+	// the user drags the dataviews scrollbar, the mousedown lands in the
+	// gutter (offset past the scrollable element's clientWidth/Height); stop
+	// propagation there so the scroll drag doesn't also pull a bounding box
+	// around the block. Cell/row/header clicks still bubble. Capture phase
+	// so we beat any descendant handler.
+	useEffect( () => {
+		const node = tableWrapperRef.current;
+		if ( ! node ) {
+			return;
+		}
+		const onMouseDown = ( event ) => {
+			const target = event.target;
+			if ( ! target || typeof target.clientWidth !== 'number' ) {
+				return;
+			}
+			const onVerticalScrollbar = event.offsetX > target.clientWidth;
+			const onHorizontalScrollbar = event.offsetY > target.clientHeight;
+			if ( onVerticalScrollbar || onHorizontalScrollbar ) {
+				event.stopPropagation();
+			}
+		};
+		node.addEventListener( 'mousedown', onMouseDown, true );
+		return () => node.removeEventListener( 'mousedown', onMouseDown, true );
+	}, [ isResolving, rowsResolved, rowError ] );
+
 	if ( isResolving ) {
 		return loading;
 	}
