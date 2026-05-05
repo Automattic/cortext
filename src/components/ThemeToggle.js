@@ -31,7 +31,7 @@ export default function ThemeToggle() {
 
 	return (
 		<Dropdown
-			popoverProps={ { placement: 'bottom-end' } }
+			popoverProps={ { placement: 'top-end' } }
 			renderToggle={ ( { isOpen, onToggle } ) => (
 				<Button
 					className="cortext-sidebar__theme-toggle"
