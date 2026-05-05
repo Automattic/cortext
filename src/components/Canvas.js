@@ -24,17 +24,19 @@ import apiFetch from '@wordpress/api-fetch';
 import { useEffect, useState } from '@wordpress/element';
 
 import useAutosave from '../hooks/useAutosave';
+import { withViewTransition } from '../hooks/viewTransition';
 import {
 	ACTIVE_PAGES_QUERY,
 	POST_TYPE,
 	TRASHED_PAGES_QUERY,
 } from './page-queries';
 import PublishToggle from './PublishToggle';
+import { TopBarActionsFill } from './WorkspaceTopBar';
 
 const SCOPE = 'cortext';
 const INSPECTOR = 'cortext/block-inspector';
 
-function Header() {
+function DocumentActions( { isActive } ) {
 	const { enableComplementaryArea, disableComplementaryArea } =
 		useDispatch( interfaceStore );
 	const isInspectorOpen = useSelect(
@@ -44,9 +46,17 @@ function Header() {
 		[]
 	);
 
+	// Canvas stays mounted across route changes (preservePaint keeps the
+	// editor iframe warm). Suppress the Fill when this page isn't the active
+	// pane so a backgrounded editor doesn't keep projecting Save/Publish into
+	// the workspace top bar over a collection.
+	if ( ! isActive ) {
+		return null;
+	}
+
 	return (
-		<div className="cortext-canvas__header">
-			<div className="cortext-canvas__header-right">
+		<TopBarActionsFill>
+			<div className="cortext-document-actions">
 				<PublishToggle />
 				<Button
 					icon={ cog }
@@ -59,7 +69,7 @@ function Header() {
 					}
 				/>
 			</div>
-		</div>
+		</TopBarActionsFill>
 	);
 }
 
@@ -207,7 +217,13 @@ function VisualCanvas( { postId, onReady } ) {
 	);
 }
 
-function CanvasEditor( { post, pendingPost, onSwitchPost, onDisplayedPost } ) {
+function CanvasEditor( {
+	post,
+	pendingPost,
+	onSwitchPost,
+	onDisplayedPost,
+	isActive,
+} ) {
 	const { flushNow, isDirty, isSaving } = useAutosave();
 	const isTrashed = post.status === 'trash';
 
@@ -221,7 +237,10 @@ function CanvasEditor( { post, pendingPost, onSwitchPost, onDisplayedPost } ) {
 		async function switchAfterSave() {
 			const didFlush = await flushNow();
 			if ( ! cancelled && didFlush ) {
-				onSwitchPost( pendingPost );
+				// Page-to-page swaps don't change EntityRoute's `active`, so
+				// the surface-level cross-fade can't see them. Trigger one
+				// here instead.
+				withViewTransition( () => onSwitchPost( pendingPost ) );
 			}
 		}
 
@@ -234,10 +253,10 @@ function CanvasEditor( { post, pendingPost, onSwitchPost, onDisplayedPost } ) {
 
 	return (
 		<>
+			<DocumentActions isActive={ isActive } />
+			<EditorSnackbars />
 			<InterfaceSkeleton
 				className="cortext-canvas"
-				header={ <Header /> }
-				notices={ <EditorSnackbars /> }
 				content={
 					<>
 						{ isTrashed && <TrashedNotice postId={ post.id } /> }
@@ -263,7 +282,7 @@ function CanvasEditor( { post, pendingPost, onSwitchPost, onDisplayedPost } ) {
 	);
 }
 
-export default function Canvas( { postId, onDisplayedPost } ) {
+export default function Canvas( { postId, onDisplayedPost, isActive } ) {
 	const { record: requestedPost } = useEntityRecord(
 		'postType',
 		POST_TYPE,
@@ -308,6 +327,7 @@ export default function Canvas( { postId, onDisplayedPost } ) {
 				pendingPost={ pendingPost }
 				onSwitchPost={ setDisplayedPost }
 				onDisplayedPost={ onDisplayedPost }
+				isActive={ isActive }
 			/>
 		</EditorProvider>
 	);

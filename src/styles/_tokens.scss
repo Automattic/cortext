@@ -7,6 +7,21 @@
 // primitives where that keeps the shell aligned with wp-admin. Gutenberg
 // content/theme tokens stay inside the editor iframe and published frontend.
 
+// At `:root` so the tokens reach inside the block-editor iframe (which has
+// its own document, no `.cortext-root` ancestor). Our CSS only enqueues in
+// cortext-owned contexts, so the global tokens don't leak.
+:root {
+	--cortext-scrollbar-size: 8px;
+	--cortext-scrollbar-track: transparent;
+	--cortext-scrollbar-thumb: rgba(0, 0, 0, 0.12);
+	--cortext-scrollbar-thumb-hover: rgba(0, 0, 0, 0.28);
+
+	// Default height for the embedded data-view block. Roughly fits a header,
+	// pagination row, and ~10 compact rows so a fresh insertion is usable;
+	// override the variable to give the block a different default.
+	--cortext-data-view-block-min-height: 480px;
+}
+
 .cortext-root {
 
 	// Shell surfaces
@@ -50,10 +65,6 @@
 	--cortext-sidebar-width-min: 220px;
 	--cortext-sidebar-width-max: 480px;
 
-	// Both the sidebar header and the canvas toolbar use this so the
-	// two columns line up at the top.
-	--cortext-topbar-height: 36px;
-
 	&[data-theme="dark"] {
 		--cortext-shell-surface: #2a2a2a;
 		--cortext-sidebar-surface: #2a2a2a;
@@ -64,5 +75,7 @@
 		--cortext-text: #f0f0f0;
 		--cortext-text-muted: #a0a0a0;
 		--cortext-shadow-color: rgba(0, 0, 0, 0.4);
+		--cortext-scrollbar-thumb: rgba(255, 255, 255, 0.16);
+		--cortext-scrollbar-thumb-hover: rgba(255, 255, 255, 0.32);
 	}
 }

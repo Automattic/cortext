@@ -7,6 +7,7 @@
 
 import { useEffect } from '@wordpress/element';
 import { privateApis as routePrivateApis } from '@wordpress/route';
+import { SlotFillProvider } from '@wordpress/components';
 
 import Sidebar from './components/Sidebar';
 import EntityRoute from './router/EntityRoute';
@@ -57,17 +58,19 @@ function RootLayout() {
 	}, [ toggleCollapsed ] );
 
 	return (
-		<div className="cortext-shell">
-			<Sidebar
-				collapsed={ collapsed }
-				width={ width }
-				onToggleCollapsed={ toggleCollapsed }
-				onWidthChange={ setWidth }
-			/>
-			<main className="cortext-shell__canvas">
-				<EntityRoute />
-			</main>
-		</div>
+		<SlotFillProvider>
+			<div className="cortext-shell">
+				<Sidebar
+					collapsed={ collapsed }
+					width={ width }
+					onToggleCollapsed={ toggleCollapsed }
+					onWidthChange={ setWidth }
+				/>
+				<main className="cortext-shell__canvas">
+					<EntityRoute />
+				</main>
+			</div>
+		</SlotFillProvider>
 	);
 }
 

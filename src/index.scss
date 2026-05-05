@@ -35,6 +35,40 @@ body.cortext-fullscreen {
 	font-size: var(--cortext-shell-font-size);
 }
 
+// Thin scrollbars with an alpha thumb that tints up on hover. Unscoped so
+// it reaches the block-editor iframe too (the iframe document has no
+// `.cortext-root` ancestor). Our CSS only loads in cortext-owned contexts,
+// so the global rules don't leak.
+*,
+*::before,
+*::after {
+	scrollbar-width: thin;
+	scrollbar-color: var(--cortext-scrollbar-thumb) var(--cortext-scrollbar-track);
+}
+
+::-webkit-scrollbar {
+	width: var(--cortext-scrollbar-size);
+	height: var(--cortext-scrollbar-size);
+}
+
+::-webkit-scrollbar-track {
+	background: var(--cortext-scrollbar-track);
+}
+
+::-webkit-scrollbar-thumb {
+	background-color: var(--cortext-scrollbar-thumb);
+	border-radius: 999px;
+	transition: background-color 120ms ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background-color: var(--cortext-scrollbar-thumb-hover);
+}
+
+::-webkit-scrollbar-corner {
+	background: transparent;
+}
+
 .cortext-shell {
 	display: grid;
 	grid-template-columns: var(--cortext-sidebar-width) 1fr;
@@ -67,8 +101,7 @@ body.cortext-fullscreen {
 		display: flex;
 		align-items: center;
 		gap: $grid-unit-10;
-		height: var(--cortext-topbar-height);
-		padding-inline: $grid-unit-15;
+		padding: $grid-unit-10 $grid-unit-15;
 		border-bottom: var(--cortext-shell-border-width) solid var(--cortext-chrome-border);
 	}
 
@@ -445,13 +478,24 @@ body.cortext-sidebar-resizing {
 	user-select: none;
 }
 
+// Skip the default root snapshot so the sidebar and top bar stay live
+// during the swap. Only the canvas opts in below.
+:root {
+	view-transition-name: none;
+}
+
 .cortext-shell__canvas {
 	position: relative;
 	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
 	// The shell column that frames the iframe. Follows the shell theme via
 	// --cortext-canvas-frame-surface. The iframe interior is painted by the active
 	// block theme, not by this token.
 	background: var(--cortext-canvas-frame-surface);
+	// Named so the cross-fade is scoped to this column.
+	view-transition-name: cortext-canvas;
 
 	// InterfaceSkeleton defaults to `position: fixed` at >= 782px, which would
 	// escape our grid and overlap the page-list sidebar. Scope it to fill just
@@ -463,9 +507,18 @@ body.cortext-sidebar-resizing {
 	}
 }
 
+@media (prefers-reduced-motion: reduce) {
+
+	::view-transition-group(cortext-canvas),
+	::view-transition-old(cortext-canvas),
+	::view-transition-new(cortext-canvas) {
+		animation: none !important;
+	}
+}
+
 .cortext-workspace {
-	position: absolute;
-	inset: 0;
+	position: relative;
+	flex: 1 1 auto;
 	min-height: 0;
 }
 
@@ -495,19 +548,98 @@ body.cortext-sidebar-resizing {
 	min-height: 0;
 }
 
-.cortext-canvas {
+.cortext-topbar {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	gap: $grid-unit-10;
+	padding: $grid-unit-10 $grid-unit-20;
+	background: var(--cortext-shell-surface);
+	color: var(--cortext-text);
+	border-bottom: var(--cortext-shell-border-width) solid var(--cortext-chrome-border);
+	min-height: 0;
 
-	&__header {
+	&__lead {
+		flex: 1 1 auto;
+		min-width: 0;
 		display: flex;
-		align-items: stretch;
-		justify-content: flex-end;
-		padding-inline: $grid-unit-15;
-		height: var(--cortext-topbar-height);
-		flex: 0 0 auto;
-		background: var(--cortext-shell-surface);
-		color: var(--cortext-text);
-		border-bottom: var(--cortext-shell-border-width) solid var(--cortext-chrome-border);
+		align-items: center;
 	}
+
+	&__actions {
+		flex: 0 0 auto;
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-10;
+	}
+}
+
+.cortext-document-actions {
+	display: flex;
+	align-items: center;
+	gap: $grid-unit-10;
+}
+
+.cortext-breadcrumbs {
+	min-width: 0;
+	flex: 1 1 auto;
+
+	&__list {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-05;
+		min-width: 0;
+		flex-wrap: nowrap;
+	}
+
+	&__item {
+		min-width: 0;
+		display: flex;
+		align-items: center;
+	}
+
+	&__separator {
+		color: var(--cortext-text-muted);
+		flex: 0 0 auto;
+		user-select: none;
+	}
+
+	&__ellipsis {
+		color: var(--cortext-text-muted);
+		flex: 0 0 auto;
+	}
+
+	&__segment {
+		appearance: none;
+		background: transparent;
+		border: 0;
+		padding: 0 $grid-unit-05;
+		font: inherit;
+		color: var(--cortext-text-muted);
+		cursor: pointer;
+		border-radius: var(--cortext-shell-radius);
+		max-width: 24ch;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+
+		&:hover:not(.is-current),
+		&:focus:not(.is-current) {
+			color: var(--cortext-text);
+			background: var(--cortext-button-hover-surface);
+		}
+
+		&.is-current {
+			color: var(--cortext-text);
+			cursor: default;
+		}
+	}
+}
+
+.cortext-canvas {
 
 	&__header-right {
 		display: flex;
@@ -1007,6 +1139,16 @@ tbody > tr > td:not(:first-child) {
 	justify-content: center;
 }
 
+// In compact density we zero the cell's `padding-left` (so columns hug their
+// content) but keep upstream's `padding-right: 8px`. The offset doesn't show
+// for left-aligned content, but a centered checkbox in a narrow column ends
+// up visibly shifted. Symmetric inline padding on body cells that hold a
+// checkbox puts the centered input back over the cell's geometric center.
+/* stylelint-disable-next-line no-descending-specificity */
+.cortext-data-view .dataviews-view-table tbody td:has(.cortext-cell-checkbox) {
+	padding-inline: 0;
+}
+
 .cortext-multiselect-edit {
 
 	&__popover {
@@ -1027,11 +1169,11 @@ tbody > tr > td:not(:first-child) {
 	position: relative; // anchor for the column drop indicator
 	display: flex;
 	flex-direction: column;
-	height: 100%;
 
-	// DataViews fills the cortext-canvas__table wrapper with `height: 100%`,
-	// which leaves no room for siblings. Pinning DataViews to flex: 1 lets
-	// our footer sit below it without disappearing.
+	// Let the wrapper grow to fill whatever height the parent provides, so
+	// our footer sits below the table instead of getting pushed off by the
+	// wrapper's own `height: 100%`. Parents own the height per-context: the
+	// canvas pane fills the viewport, the block sets a min-height.
 	> .dataviews-wrapper {
 		flex: 1 1 auto;
 		min-height: 0;
@@ -1105,6 +1247,21 @@ tbody > tr > td:not(:first-child) {
 			color: $gray-900;
 		}
 	}
+}
+
+// Per-context heights. The shared rules above stay context-agnostic; each
+// render path provides its own height.
+
+// Standalone pane fills the absolutely-positioned canvas.
+.cortext-canvas__table .cortext-data-view {
+	height: 100%;
+}
+
+// tech-debt.md#23: embedded block has no absolute parent and no per-instance
+// height attribute, so use a min-height token to keep a fresh insertion
+// usable. Width comes from Gutenberg's alignment.
+.wp-block-cortext-data-view .cortext-data-view {
+	min-height: var(--cortext-data-view-block-min-height);
 }
 
 // tech-debt.md#15: The resizer and dnd-kit drag handle are portaled into each
@@ -1237,7 +1394,7 @@ thead > tr > th {
 // that Cortext owns. The editor iframe, inspector, and block toolbars keep
 // Gutenberg's own component styling.
 .cortext-sidebar,
-.cortext-canvas__header {
+.cortext-topbar {
 
 	.components-button {
 		border-radius: var(--cortext-shell-radius);

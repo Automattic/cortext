@@ -6,11 +6,14 @@ import {
 	useEffect,
 	useMemo,
 	useReducer,
+	useRef,
 	useState,
 } from '@wordpress/element';
 
 import Canvas from '../components/Canvas';
 import CollectionDataViews from '../components/CollectionDataViews';
+import WorkspaceTopBar from '../components/WorkspaceTopBar';
+import { withViewTransition } from '../hooks/viewTransition';
 import EmptyState from './EmptyState';
 import { useResolveEntity, useResolveCollection } from './useResolveEntity';
 import { init, parseTarget, reducer } from './entityRouteReducer';
@@ -101,8 +104,28 @@ export default function EntityRoute() {
 	const splat = params._splat ?? '';
 	const target = useMemo( () => parseTarget( splat ), [ splat ] );
 
-	const [ state, dispatch ] = useReducer( reducer, target, init );
-	const { active, mountedPageId, mountedCollectionIds } = state;
+	const [ state, rawDispatch ] = useReducer( reducer, target, init );
+	const { active, mountedPageId, displayedPageId, mountedCollectionIds } =
+		state;
+
+	// Run the reducer ahead of time so we only wrap the dispatch when
+	// `active` actually flips. Otherwise every PAGE_RESOLVED or
+	// COLLECTION_RESOLVED would pin the canvas for the cross-fade
+	// duration even though nothing visible changed.
+	const stateRef = useRef( state );
+	stateRef.current = state;
+	const dispatch = useCallback( ( action ) => {
+		const before = stateRef.current;
+		const after = reducer( before, action );
+		const visualChanged =
+			before.active.kind !== after.active.kind ||
+			( before.active.id ?? null ) !== ( after.active.id ?? null );
+		if ( ! visualChanged ) {
+			rawDispatch( action );
+			return;
+		}
+		withViewTransition( () => rawDispatch( action ) );
+	}, [] );
 
 	const pageResolution = useResolveEntity(
 		target.kind === 'page' ? target.tail : ''
@@ -113,7 +136,7 @@ export default function EntityRoute() {
 
 	useEffect( () => {
 		dispatch( { type: 'TARGET_CHANGED', target } );
-	}, [ target ] );
+	}, [ target, dispatch ] );
 
 	useEffect( () => {
 		if ( target.kind !== 'page' || target.id === null ) {
@@ -137,7 +160,7 @@ export default function EntityRoute() {
 		if ( ! isResolving && notFound ) {
 			dispatch( { type: 'PAGE_NOT_FOUND' } );
 		}
-	}, [ target, pageResolution ] );
+	}, [ target, pageResolution, dispatch ] );
 
 	useEffect( () => {
 		if ( target.kind !== 'collection' || target.id === null ) {
@@ -159,51 +182,88 @@ export default function EntityRoute() {
 		if ( ! isResolving && notFound ) {
 			dispatch( { type: 'COLLECTION_NOT_FOUND' } );
 		}
-	}, [ target, collectionResolution ] );
+	}, [ target, collectionResolution, dispatch ] );
 
-	const handlePageDisplayed = useCallback( ( id ) => {
-		dispatch( { type: 'PAGE_DISPLAYED', id } );
-	}, [] );
+	const handlePageDisplayed = useCallback(
+		( id ) => {
+			dispatch( { type: 'PAGE_DISPLAYED', id } );
+		},
+		[ dispatch ]
+	);
 
-	const handleCollectionReady = useCallback( ( id ) => {
-		dispatch( { type: 'COLLECTION_READY', id } );
-	}, [] );
+	const handleCollectionReady = useCallback(
+		( id ) => {
+			dispatch( { type: 'COLLECTION_READY', id } );
+		},
+		[ dispatch ]
+	);
+
+	// Drives the breadcrumb from the same paint state the document-actions
+	// Fill uses, so both sides of the top bar update together. Use
+	// `displayedPageId` rather than `mountedPageId` for the page case: when
+	// navigating page A → B, mountedPageId flips to B as soon as B resolves,
+	// but Canvas keeps painting A until autosave flushes and `setDisplayedPost`
+	// catches up. Reading the mounted id would let the breadcrumb jump to B
+	// while A is still on screen.
+	let paintedRoute = { kind: 'unresolved' };
+	if ( active.kind === 'page' && displayedPageId !== null ) {
+		paintedRoute = { kind: 'page', id: displayedPageId };
+	} else if ( active.kind === 'collection' ) {
+		paintedRoute = { kind: 'collection', id: active.id };
+	} else if (
+		active.kind === 'empty' ||
+		active.kind === 'page-not-found' ||
+		active.kind === 'collection-not-found'
+	) {
+		paintedRoute = { kind: active.kind };
+	}
 
 	return (
-		<div className="cortext-workspace">
-			{ mountedPageId !== null && (
-				<WorkspacePane active={ active.kind === 'page' } preservePaint>
-					<Canvas
-						postId={ mountedPageId }
-						onDisplayedPost={ handlePageDisplayed }
-					/>
-				</WorkspacePane>
-			) }
+		<>
+			<WorkspaceTopBar paintedRoute={ paintedRoute } />
+			<div className="cortext-workspace">
+				{ mountedPageId !== null && (
+					<WorkspacePane
+						active={ active.kind === 'page' }
+						preservePaint
+					>
+						<Canvas
+							postId={ mountedPageId }
+							onDisplayedPost={ handlePageDisplayed }
+							isActive={ active.kind === 'page' }
+						/>
+					</WorkspacePane>
+				) }
 
-			{ mountedCollectionIds.map( ( id ) => (
+				{ mountedCollectionIds.map( ( id ) => (
+					<WorkspacePane
+						key={ id }
+						active={
+							active.kind === 'collection' && active.id === id
+						}
+					>
+						<CollectionPane
+							collectionId={ id }
+							onReady={ handleCollectionReady }
+						/>
+					</WorkspacePane>
+				) ) }
+
+				<WorkspacePane active={ active.kind === 'empty' }>
+					<EmptyState />
+				</WorkspacePane>
+				<WorkspacePane active={ active.kind === 'page-not-found' }>
+					<NotFoundPane type="page" />
+				</WorkspacePane>
 				<WorkspacePane
-					key={ id }
-					active={ active.kind === 'collection' && active.id === id }
+					active={ active.kind === 'collection-not-found' }
 				>
-					<CollectionPane
-						collectionId={ id }
-						onReady={ handleCollectionReady }
-					/>
+					<NotFoundPane type="collection" />
 				</WorkspacePane>
-			) ) }
-
-			<WorkspacePane active={ active.kind === 'empty' }>
-				<EmptyState />
-			</WorkspacePane>
-			<WorkspacePane active={ active.kind === 'page-not-found' }>
-				<NotFoundPane type="page" />
-			</WorkspacePane>
-			<WorkspacePane active={ active.kind === 'collection-not-found' }>
-				<NotFoundPane type="collection" />
-			</WorkspacePane>
-			<WorkspacePane active={ active.kind === 'loading' }>
-				<LoadingPane />
-			</WorkspacePane>
-		</div>
+				<WorkspacePane active={ active.kind === 'loading' }>
+					<LoadingPane />
+				</WorkspacePane>
+			</div>
+		</>
 	);
 }

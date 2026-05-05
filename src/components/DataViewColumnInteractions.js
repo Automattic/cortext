@@ -150,8 +150,17 @@ function getColumnBodyCells( headerEl ) {
 	);
 }
 
+// Buffer added to autofit measurements (px). Browsers can render text at
+// fractional pixel widths, and the cloned measurement and live render don't
+// always round the same way; a couple of pixels of slack keeps proportional
+// digit widths (`2007` is wider than `1939`) from clipping after autofit.
+const AUTOFIT_PADDING_BUFFER = 2;
+
 function measureCellNaturalWidth( cell ) {
+	const sourceTable = cell.closest( TABLE_SELECTOR );
+	const isHeader = cell.tagName === 'TH';
 	const table = document.createElement( 'table' );
+	const section = document.createElement( isHeader ? 'thead' : 'tbody' );
 	const row = document.createElement( 'tr' );
 	const clone = cell.cloneNode( true );
 
@@ -161,22 +170,52 @@ function measureCellNaturalWidth( cell ) {
 	clone.style.minWidth = '0';
 	clone.style.maxWidth = 'none';
 
-	table.className = cell.closest( TABLE_SELECTOR )?.className ?? '';
-	table.style.position = 'fixed';
-	table.style.left = '-10000px';
-	table.style.top = '0';
+	// Copy the rendered table's classes (including `has-*-density`) so the
+	// per-density padding rules apply to the measurement clone too.
+	table.className = sourceTable?.className ?? '';
 	table.style.width = 'auto';
 	table.style.tableLayout = 'auto';
-	table.style.visibility = 'hidden';
-	table.style.pointerEvents = 'none';
 
 	row.appendChild( clone );
-	table.appendChild( row );
-	document.body.appendChild( table );
-	const width = clone.getBoundingClientRect().width;
-	table.remove();
+	section.appendChild( row );
+	table.appendChild( section );
 
-	return width;
+	// Wrap the clone in `.cortext-data-view` and a real `<tbody>` / `<thead>`
+	// so our scoped overrides match it. Without those ancestors the upstream
+	// `min-width: 15ch` floor on `.dataviews-view-table__cell-content-wrapper`
+	// leaks back in and every column measures at least ~15 characters wide.
+	// `display: block` keeps the measurement table out of any flex layout.
+	const wrapper = document.createElement( 'div' );
+	wrapper.className = 'cortext-data-view';
+	wrapper.style.position = 'fixed';
+	wrapper.style.left = '-10000px';
+	wrapper.style.top = '0';
+	wrapper.style.visibility = 'hidden';
+	wrapper.style.pointerEvents = 'none';
+	wrapper.style.display = 'block';
+	wrapper.appendChild( table );
+
+	// Append next to the live table so the clone inherits the same fonts and
+	// tokens. Body inheritance differs from `.cortext-root` shell font on the
+	// SPA path, and the mismatch produced widths the live render couldn't fit.
+	const measurementHost = sourceTable?.parentNode ?? document.body;
+	measurementHost.appendChild( wrapper );
+
+	// `getBoundingClientRect` is border-box; `style.width = px` writes as
+	// content-box on `<th>` / `<td>`. Subtract the cell's own padding and
+	// border so the persisted width round-trips through render at the size we
+	// measured. Without this, each autofit grew the column by the chrome on
+	// every double-click.
+	const bbox = clone.getBoundingClientRect();
+	const styles = window.getComputedStyle( clone );
+	const chrome =
+		( Number.parseFloat( styles.paddingLeft ) || 0 ) +
+		( Number.parseFloat( styles.paddingRight ) || 0 ) +
+		( Number.parseFloat( styles.borderLeftWidth ) || 0 ) +
+		( Number.parseFloat( styles.borderRightWidth ) || 0 );
+	wrapper.remove();
+
+	return Math.max( 0, bbox.width - chrome );
 }
 
 function getAutoFitColumnWidth( headerEl, fieldType ) {
@@ -184,7 +223,7 @@ function getAutoFitColumnWidth( headerEl, fieldType ) {
 	const naturalWidth = Math.max(
 		...cells.map( ( cell ) => measureCellNaturalWidth( cell ) )
 	);
-	return clampWidth( naturalWidth, fieldType );
+	return clampWidth( naturalWidth + AUTOFIT_PADDING_BUFFER, fieldType );
 }
 
 function applyColumnWidth( headerEl, width ) {

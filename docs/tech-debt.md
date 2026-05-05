@@ -132,9 +132,11 @@ Worth a small spike before committing; `core-data`'s schema cache for rarely-cha
 
 **What.** DataViews persists table column order in `view.fields` and widths in `view.layout.styles`, but it doesn't expose a table-column interaction layer: no resize handles, min/max width contract, double-click autofit, reorder callback, drag preview, stable header/cell refs, or supported way to opt into `table-layout: fixed`. Cortext therefore portals resize and dnd-kit drag handles into DataViews-rendered `<th>` elements, snapshots header geometry during drag, mutates inline widths during resize for immediate feedback, and overrides internal table/cell wrapper CSS so narrow columns behave as hard constraints rather than intrinsic-size hints.
 
+Double-click autofit is the trickiest piece. With no measurement hook upstream, we clone the cell into a hidden subtree that has to recreate every ancestor that affects layout: a `.cortext-data-view` wrapper for our scoped overrides, a real `<tbody>` or `<thead>` for upstream's tbody-scoped rules, an append next to the live `.dataviews-wrapper` for font inheritance, and `display: block` on the wrapper so flex sizing on the parent doesn't push the measurement around. Then the persisted width subtracts the cell's own padding and border (we read border-box, write content-box), and a 2px buffer absorbs proportional-digit rounding so `2007` doesn't clip where `1939` fits. Each ancestor and constant is a place the live DOM can drift away from us.
+
 **Where.** `src/components/DataViewColumnInteractions.js`, `src/components/dataViewColumns.js`, the `DataViewColumnInteractions` mount in `src/components/CollectionDataViews.js`, and the column affordance / table wrapper rules in `src/index.scss`.
 
-**Solution.** Upstream DataViews could expose table-column APIs that cover `onChangeFields`, `onChangeColumnStyle`, resize handle rendering, per-field min/max widths, double-click autofit, drag overlay/insertion affordances, and stable header/cell slots or refs. If DataViews owned that layer, Cortext could drop the portal/DOM-query adapter, the wrapper min-width overrides, most of the dnd-kit column glue, and the direct DOM mutation used for live resize feedback.
+**Solution.** Upstream DataViews could expose table-column APIs that cover `onChangeFields`, `onChangeColumnStyle`, resize handle rendering, per-field min/max widths, double-click autofit, drag overlay/insertion affordances, and stable header/cell slots or refs. If DataViews owned that layer, Cortext could drop the portal/DOM-query adapter, the wrapper min-width overrides, most of the dnd-kit column glue, the cloned-measurement gymnastics, and the direct DOM mutation used for live resize feedback.
 
 ## 16. DataViews has no per-column menu-item slot `[upstream, soft]`
 
@@ -186,11 +188,19 @@ Worth a small spike before committing; `core-data`'s schema cache for rarely-cha
 
 **Solution.** Stand up an integration environment with a real `wpdb` (`wp-env` + WP_PHPUnit), move the cleanup to a scoped JOIN, and keep WorDBless for the parts that don't need a real database.
 
-## 22. Canvas toolbar is page-only `[internal]`
+## 22. Block editor selects on scrollbar drag `[upstream]`
 
-**What.** The top toolbar (Publish, Settings) lives inside `Canvas.js`, rendered as the `header` slot of `<InterfaceSkeleton>`. Collections take a different path (`EntityRoute` -> `CollectionPane`, a plain `<div>` with no `InterfaceSkeleton`) and show no toolbar at all. Now that the toolbar is styled to match the sidebar header height, the inconsistency is visible: pages show a polished top strip; collections jump straight from the sidebar header into content.
+**What.** Gutenberg selects a block on any `mousedown` that bubbles up to the block wrapper. Inside the data-view block, dragging the dataviews scrollbar fires a mousedown on the scrolling element and pulls a bounding box around the whole block. Gutenberg has no primitive for "this region scrolls, don't select on click." We listen for `mousedown` on `.cortext-data-view` in capture phase, sniff scrollbar-gutter clicks by geometry (target's computed `overflow-x/y` is `auto`/`scroll`, the element actually overflows, and the click landed past `clientWidth` or `clientHeight`), then `stopPropagation` so the event never reaches Gutenberg. Cell, row, and header clicks keep bubbling and select normally.
 
-**Where.** `Header` component in `src/components/Canvas.js`, mounted via `InterfaceSkeleton`'s `header` prop. `CollectionPane` in `src/router/EntityRoute.js` has no equivalent.
+**Where.** The mousedown effect on `tableWrapperRef` in `src/components/CollectionDataViews.js`.
 
-**Solution.** Lift the toolbar into the workspace shell (probably into `EntityRoute.js`) and expose a slot via `@wordpress/components` SlotFill so each pane contributes its own actions. Pages keep contributing Publish + Settings; collections grow their own actions (view switcher, "New entry") in a follow-up. Until then, collections just don't have the strip.
+**Solution.** A Gutenberg API for declaring interactive scroll regions on a block (or a way to opt mousedowns out of selection per descendant) would let us drop the heuristic. Until then the geometry sniff is the cleanest signal we have. The brittleness is in browser scrollbar pseudo-element behavior; the day someone introduces an overlay-scrollbar shim or a custom scroll library, this would need rethinking.
+
+## 23. Embedded data-view block has no width/height controls `[internal]`
+
+**What.** The `cortext/data-view` block exposes `align` (default / wide / full) for width but nothing for height. A freshly inserted block needs some visible height or it collapses to its toolbar, so we set `min-height` from `var(--cortext-data-view-block-min-height, 480px)`. The number is a guess: roughly fits a header, ~10 compact rows, footer, and pagination. It doesn't track the block's density or `perPage`, so a comfortable block with `perPage: 25` shows the same default viewport as a compact block with 5 rows.
+
+**Where.** `--cortext-data-view-block-min-height` in `src/styles/_tokens.scss`, the `.wp-block-cortext-data-view .cortext-data-view` rule in `src/index.scss`, `src/blocks/data-view/block.json` (no `height` attribute today).
+
+**Solution.** Add a `height` (or "rows visible") attribute to the block with an inspector control, fall back to the variable when unset, and let the variable stay as a theme-overridable default. Computing the default from `density × perPage` is a smaller win; once the per-block control exists, the default rarely matters.
 
