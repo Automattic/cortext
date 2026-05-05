@@ -35,6 +35,40 @@ body.cortext-fullscreen {
 	font-size: var(--cortext-shell-font-size);
 }
 
+// Thin scrollbars with an alpha thumb that tints up on hover. Unscoped so
+// it reaches the block-editor iframe too (the iframe document has no
+// `.cortext-root` ancestor). Our CSS only loads in cortext-owned contexts,
+// so the global rules don't leak.
+*,
+*::before,
+*::after {
+	scrollbar-width: thin;
+	scrollbar-color: var(--cortext-scrollbar-thumb) var(--cortext-scrollbar-track);
+}
+
+::-webkit-scrollbar {
+	width: var(--cortext-scrollbar-size);
+	height: var(--cortext-scrollbar-size);
+}
+
+::-webkit-scrollbar-track {
+	background: var(--cortext-scrollbar-track);
+}
+
+::-webkit-scrollbar-thumb {
+	background-color: var(--cortext-scrollbar-thumb);
+	border-radius: 999px;
+	transition: background-color 120ms ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background-color: var(--cortext-scrollbar-thumb-hover);
+}
+
+::-webkit-scrollbar-corner {
+	background: transparent;
+}
+
 .cortext-shell {
 	display: grid;
 	grid-template-columns: 280px 1fr;
@@ -916,6 +950,16 @@ tbody > tr > td:not(:first-child) {
 	justify-content: center;
 }
 
+// In compact density we zero the cell's `padding-left` (so columns hug their
+// content) but keep upstream's `padding-right: 8px`. The offset doesn't show
+// for left-aligned content, but a centered checkbox in a narrow column ends
+// up visibly shifted. Symmetric inline padding on body cells that hold a
+// checkbox puts the centered input back over the cell's geometric center.
+/* stylelint-disable-next-line no-descending-specificity */
+.cortext-data-view .dataviews-view-table tbody td:has(.cortext-cell-checkbox) {
+	padding-inline: 0;
+}
+
 .cortext-multiselect-edit {
 
 	&__popover {
@@ -936,11 +980,11 @@ tbody > tr > td:not(:first-child) {
 	position: relative; // anchor for the column drop indicator
 	display: flex;
 	flex-direction: column;
-	height: 100%;
 
-	// DataViews fills the cortext-canvas__table wrapper with `height: 100%`,
-	// which leaves no room for siblings. Pinning DataViews to flex: 1 lets
-	// our footer sit below it without disappearing.
+	// Let the wrapper grow to fill whatever height the parent provides, so
+	// our footer sits below the table instead of getting pushed off by the
+	// wrapper's own `height: 100%`. Parents own the height per-context: the
+	// canvas pane fills the viewport, the block sets a min-height.
 	> .dataviews-wrapper {
 		flex: 1 1 auto;
 		min-height: 0;
@@ -1014,6 +1058,21 @@ tbody > tr > td:not(:first-child) {
 			color: $gray-900;
 		}
 	}
+}
+
+// Per-context heights. The shared rules above stay context-agnostic; each
+// render path provides its own height.
+
+// Standalone pane fills the absolutely-positioned canvas.
+.cortext-canvas__table .cortext-data-view {
+	height: 100%;
+}
+
+// tech-debt.md#23: embedded block has no absolute parent and no per-instance
+// height attribute, so use a min-height token to keep a fresh insertion
+// usable. Width comes from Gutenberg's alignment.
+.wp-block-cortext-data-view .cortext-data-view {
+	min-height: var(--cortext-data-view-block-min-height);
 }
 
 // tech-debt.md#15: The resizer and dnd-kit drag handle are portaled into each

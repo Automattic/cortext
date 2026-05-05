@@ -493,6 +493,52 @@ export default function CollectionDataViews( {
 		}
 	}, [ collectionId, isResolving, rowsResolved, onReady ] );
 
+	// tech-debt.md#22: Gutenberg selects on any mousedown that bubbles up.
+	// Dragging the dataviews scrollbar lands in the gutter (offset past the
+	// scrollable element's clientWidth/Height); stop propagation there so
+	// the scroll drag doesn't also pull a bounding box around the block.
+	// Cell/row/header clicks still bubble. Capture phase so we beat any
+	// descendant handler.
+	useEffect( () => {
+		const node = tableWrapperRef.current;
+		if ( ! node ) {
+			return;
+		}
+		const onMouseDown = ( event ) => {
+			const target = event.target;
+			if (
+				! target ||
+				typeof target.clientWidth !== 'number' ||
+				typeof target.scrollWidth !== 'number'
+			) {
+				return;
+			}
+			// Only intercept on elements that actually scroll. Reading
+			// `overflow*` and the `scrollWidth/Height > clientWidth/Height`
+			// pair filters out clicks on non-scrolling elements (where
+			// `offsetX > clientWidth` would otherwise misfire on padding /
+			// border space).
+			const styles = window.getComputedStyle( target );
+			const canScrollY =
+				( styles.overflowY === 'auto' ||
+					styles.overflowY === 'scroll' ) &&
+				target.scrollHeight > target.clientHeight;
+			const canScrollX =
+				( styles.overflowX === 'auto' ||
+					styles.overflowX === 'scroll' ) &&
+				target.scrollWidth > target.clientWidth;
+			const onVerticalScrollbar =
+				canScrollY && event.offsetX > target.clientWidth;
+			const onHorizontalScrollbar =
+				canScrollX && event.offsetY > target.clientHeight;
+			if ( onVerticalScrollbar || onHorizontalScrollbar ) {
+				event.stopPropagation();
+			}
+		};
+		node.addEventListener( 'mousedown', onMouseDown, true );
+		return () => node.removeEventListener( 'mousedown', onMouseDown, true );
+	}, [ isResolving, rowsResolved, rowError ] );
+
 	if ( isResolving ) {
 		return loading;
 	}
