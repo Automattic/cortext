@@ -6,6 +6,7 @@
 
 import {
 	buildTree,
+	collectAncestorIds,
 	collectDescendants,
 	isDescendantOf,
 	computeDropTarget,
@@ -64,6 +65,28 @@ describe( 'collectDescendants', () => {
 	it( 'returns empty for a leaf', () => {
 		const pages = [ makePage( 1 ), makePage( 2, 1 ) ];
 		expect( collectDescendants( 2, pages ) ).toEqual( [] );
+	} );
+} );
+
+describe( 'collectAncestorIds', () => {
+	it( 'collects ancestors nearest parent first', () => {
+		const pages = [
+			makePage( 1 ),
+			makePage( 2, 1 ),
+			makePage( 3, 2 ),
+		];
+
+		expect( collectAncestorIds( 3, pages ) ).toEqual( [ 2, 1 ] );
+	} );
+
+	it( 'returns empty for a root page', () => {
+		expect( collectAncestorIds( 1, [ makePage( 1 ) ] ) ).toEqual( [] );
+	} );
+
+	it( 'stops when an ancestor is missing', () => {
+		const pages = [ makePage( 2, 1 ), makePage( 3, 2 ) ];
+
+		expect( collectAncestorIds( 3, pages ) ).toEqual( [ 2 ] );
 	} );
 } );
 

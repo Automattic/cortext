@@ -61,6 +61,7 @@ import SidebarTrash from './SidebarTrash';
 import ThemeToggle from './ThemeToggle';
 import {
 	buildTree,
+	collectAncestorIds,
 	computeDropTarget,
 	isDescendantOf,
 	nextChildOrder,
@@ -191,6 +192,27 @@ export default function Sidebar( {
 	const [ autoRenameId, setAutoRenameId ] = useState( null );
 
 	const autoExpandTimerRef = useRef( null );
+
+	useEffect( () => {
+		if ( selectedId === null ) {
+			return;
+		}
+		const ancestorIds = collectAncestorIds( selectedId, pages );
+		if ( ancestorIds.length === 0 ) {
+			return;
+		}
+		setExpandedIds( ( prev ) => {
+			let changed = false;
+			const next = new Set( prev );
+			ancestorIds.forEach( ( id ) => {
+				if ( ! next.has( id ) ) {
+					next.add( id );
+					changed = true;
+				}
+			} );
+			return changed ? next : prev;
+		} );
+	}, [ selectedId, pages ] );
 
 	const getEntityRecord = useSelect(
 		( select ) => select( 'core' ).getEntityRecord,

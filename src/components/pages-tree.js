@@ -74,6 +74,32 @@ export function collectDescendants( rootId, pages ) {
 }
 
 /**
+ * Collect ancestor page IDs for a page, nearest parent first.
+ * Used to expand the sidebar path for the active page after a reload.
+ *
+ * @param {number} pageId Active page ID.
+ * @param {Array}  pages  Flat page list.
+ * @return {number[]} Ancestor IDs, nearest parent first.
+ */
+export function collectAncestorIds( pageId, pages ) {
+	const byId = new Map( pages.map( ( p ) => [ p.id, p ] ) );
+	const out = [];
+	const seen = new Set( [ pageId ] );
+	let current = byId.get( pageId );
+
+	while ( current?.parent && byId.has( current.parent ) ) {
+		if ( seen.has( current.parent ) ) {
+			break;
+		}
+		out.push( current.parent );
+		seen.add( current.parent );
+		current = byId.get( current.parent );
+	}
+
+	return out;
+}
+
+/**
  * True iff `descendantId` is anywhere in the ancestor chain of `ancestorId`.
  * Used to reject drops that would create a cycle.
  *

@@ -238,6 +238,10 @@ body.cortext-fullscreen {
 			background: var(--cortext-sidebar-item-hover-surface);
 		}
 
+		&:focus-within:not(.is-selected) {
+			background: var(--cortext-sidebar-item-hover-surface);
+		}
+
 		&.is-selected {
 			background: var(--cortext-sidebar-item-selected-surface);
 		}
@@ -1512,6 +1516,14 @@ thead > tr > th {
 			background: var(--cortext-button-hover-surface);
 			color: var(--cortext-button-text);
 		}
+	}
+
+	// Keep hover/focus from painting only the inner title/action button, which
+	// makes the row look split into separate cells. The row itself handles
+	// the focus background.
+	.cortext-sidebar__row .components-button:not(.is-primary):hover:not(:disabled),
+	.cortext-sidebar__row .components-button:not(.is-primary):focus:not(:disabled) {
+		background: transparent;
 	}
 
 	.components-button.is-primary {
