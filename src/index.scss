@@ -831,6 +831,18 @@ body.cortext-sidebar-resizing {
 		width: 100%;
 		margin: $grid-unit-10 auto 0;
 		padding: 0 $grid-unit-20;
+
+		.cortext-canvas__identity-action {
+			opacity: 0;
+			pointer-events: none;
+			transition: opacity 0.12s ease;
+		}
+
+		&:hover .cortext-canvas__identity-action,
+		&:focus-within .cortext-canvas__identity-action {
+			opacity: 1;
+			pointer-events: auto;
+		}
 	}
 
 	&__block-canvas {
