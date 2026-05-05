@@ -1980,10 +1980,19 @@ thead > tr > th {
 }
 
 /* stylelint-disable no-descending-specificity */
-.cortext-canvas__identity-actions .cortext-canvas__identity-action:hover:not(:disabled),
-.cortext-canvas__identity-actions .cortext-canvas__identity-action:focus-visible {
-	background: rgba(0, 0, 0, 0.08);
+.cortext-canvas__identity-actions .cortext-canvas__identity-action.components-button {
+	background: rgba(0, 0, 0, 0.06);
 	box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+	color: var(--cortext-button-text, #1e1e1e);
+}
+
+.cortext-canvas__identity-actions .cortext-canvas__identity-action:hover:not(:disabled),
+.cortext-canvas__identity-actions .cortext-canvas__identity-action:focus:not(:disabled),
+.cortext-canvas__identity-actions .cortext-canvas__identity-action:focus-visible {
+	background: rgba(0, 0, 0, 0.12);
+	box-shadow:
+		inset 0 0 0 1px rgba(0, 0, 0, 0.12),
+		0 0 0 1.5px rgba(0, 0, 0, 0.04);
 	color: var(--cortext-button-text, #1e1e1e);
 }
 /* stylelint-enable no-descending-specificity */

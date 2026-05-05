@@ -78,20 +78,29 @@ function PageIdentityActions( { postId } ) {
 	const actionsRef = useRef( null );
 	const [ meta ] = useEntityProp( 'postType', POST_TYPE, 'meta', postId );
 	const iconMeta = meta?.cortext_page_icon ?? '';
-	const { hasIcon, hasCover, isTrashed } = useSelect( ( select ) => {
-		const blocks = select( blockEditorStore ).getBlocks();
-		return {
-			hasCover: blocks.some(
-				( block ) => block.name === 'cortext/page-cover'
-			),
-			hasIcon: blocks.some(
-				( block ) => block.name === 'cortext/page-icon'
-			),
-			isTrashed:
-				select( editorStore ).getCurrentPostAttribute( 'status' ) ===
-				'trash',
-		};
-	}, [] );
+	const { hasIcon, hasCover, isTrashed, selectedBlockName } = useSelect(
+		( select ) => {
+			const store = select( blockEditorStore );
+			const blocks = store.getBlocks();
+			const selectedClientId = store.getSelectedBlockClientId();
+			return {
+				hasCover: blocks.some(
+					( block ) => block.name === 'cortext/page-cover'
+				),
+				hasIcon: blocks.some(
+					( block ) => block.name === 'cortext/page-icon'
+				),
+				isTrashed:
+					select( editorStore ).getCurrentPostAttribute(
+						'status'
+					) === 'trash',
+				selectedBlockName: selectedClientId
+					? store.getBlockName( selectedClientId )
+					: null,
+			};
+		},
+		[]
+	);
 	const { insertBlocks } = useDispatch( blockEditorStore );
 	const { editEntityRecord, saveEditedEntityRecord } =
 		useDispatch( coreStore );
@@ -114,10 +123,17 @@ function PageIdentityActions( { postId } ) {
 				return;
 			}
 			const target = event.target;
+			const targetIsPostTitle =
+				target &&
+				typeof target.closest === 'function' &&
+				target.closest( '[data-type="core/post-title"]' );
+			const titleHasFocus = ownerDocument.querySelector(
+				'[data-type="core/post-title"]:focus-within'
+			);
 			if (
-				! target ||
-				typeof target.closest !== 'function' ||
-				! target.closest( '[data-type="core/post-title"]' )
+				! targetIsPostTitle &&
+				! titleHasFocus &&
+				selectedBlockName !== 'core/post-title'
 			) {
 				return;
 			}
@@ -142,7 +158,7 @@ function PageIdentityActions( { postId } ) {
 				focusFirstActionFromTitle,
 				true
 			);
-	}, [ hasCover, isTrashed ] );
+	}, [ hasCover, isTrashed, selectedBlockName ] );
 
 	if ( isTrashed || hasCover ) {
 		return null;
