@@ -81,6 +81,10 @@ const EmojiPicker = lazy( async () => {
 			onSkinToneInteraction,
 		} ) {
 			const wrapperRef = useRef( null );
+			const currentEmojiRef = useRef( currentEmoji );
+			useEffect( () => {
+				currentEmojiRef.current = currentEmoji;
+			}, [ currentEmoji ] );
 			const stopSkinTonePropagation = ( event ) => {
 				if ( isSkinToneEvent( event ) ) {
 					onSkinToneInteraction?.();
@@ -89,8 +93,9 @@ const EmojiPicker = lazy( async () => {
 			};
 			const updateCurrentEmojiSkin = ( event ) => {
 				const skin = skinFromEvent( event );
-				if ( skin && currentEmoji ) {
-					const native = nativeForSkin( currentEmoji, skin );
+				const selectedEmoji = currentEmojiRef.current;
+				if ( skin && selectedEmoji ) {
+					const native = nativeForSkin( selectedEmoji, skin );
 					if ( native ) {
 						window.setTimeout( () => onSelect( native ), 0 );
 					}
@@ -116,7 +121,10 @@ const EmojiPicker = lazy( async () => {
 				<div ref={ wrapperRef }>
 					<Picker
 						data={ data }
-						onEmojiSelect={ ( emoji ) => onSelect( emoji.native ) }
+						onEmojiSelect={ ( emoji ) => {
+							currentEmojiRef.current = emoji.native;
+							onSelect( emoji.native );
+						} }
 						theme="light"
 						previewPosition="none"
 						skinTonePosition="search"
