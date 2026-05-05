@@ -506,11 +506,31 @@ export default function CollectionDataViews( {
 		}
 		const onMouseDown = ( event ) => {
 			const target = event.target;
-			if ( ! target || typeof target.clientWidth !== 'number' ) {
+			if (
+				! target ||
+				typeof target.clientWidth !== 'number' ||
+				typeof target.scrollWidth !== 'number'
+			) {
 				return;
 			}
-			const onVerticalScrollbar = event.offsetX > target.clientWidth;
-			const onHorizontalScrollbar = event.offsetY > target.clientHeight;
+			// Only intercept on elements that actually scroll. Reading
+			// `overflow*` and the `scrollWidth/Height > clientWidth/Height`
+			// pair filters out clicks on non-scrolling elements (where
+			// `offsetX > clientWidth` would otherwise misfire on padding /
+			// border space).
+			const styles = window.getComputedStyle( target );
+			const canScrollY =
+				( styles.overflowY === 'auto' ||
+					styles.overflowY === 'scroll' ) &&
+				target.scrollHeight > target.clientHeight;
+			const canScrollX =
+				( styles.overflowX === 'auto' ||
+					styles.overflowX === 'scroll' ) &&
+				target.scrollWidth > target.clientWidth;
+			const onVerticalScrollbar =
+				canScrollY && event.offsetX > target.clientWidth;
+			const onHorizontalScrollbar =
+				canScrollX && event.offsetY > target.clientHeight;
 			if ( onVerticalScrollbar || onHorizontalScrollbar ) {
 				event.stopPropagation();
 			}
