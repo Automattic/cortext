@@ -176,6 +176,7 @@ export default function EditOptionsPopover( {
 	onPick,
 	onOptionsSaved,
 	onRowsChanged,
+	onRequestClose,
 } ) {
 	const update = useUpdateFieldOptions();
 	const flush = useFlushFieldRecord();
@@ -184,6 +185,7 @@ export default function EditOptionsPopover( {
 	const [ search, setSearch ] = useState( '' );
 	const [ openMenuValue, setOpenMenuValue ] = useState( null );
 	const searchInputRef = useRef( null );
+	const popoverRef = useRef( null );
 	const lastInitialRef = useRef( initialOptions );
 	const dirtyRef = useRef( false );
 
@@ -214,6 +216,29 @@ export default function EditOptionsPopover( {
 
 	const isPickMode = typeof onPick === 'function';
 	const isMultiselect = fieldType === 'multiselect';
+
+	useEffect( () => {
+		if ( ! openMenuValue || typeof onRequestClose !== 'function' ) {
+			return undefined;
+		}
+		const onPointerDown = ( event ) => {
+			const target = event.target;
+			if ( ! target || typeof target.closest !== 'function' ) {
+				return;
+			}
+			if (
+				popoverRef.current?.contains( target ) ||
+				target.closest( '.cortext-edit-options-popover__submenu' )
+			) {
+				return;
+			}
+			onRequestClose();
+		};
+		document.addEventListener( 'pointerdown', onPointerDown, true );
+		return () =>
+			document.removeEventListener( 'pointerdown', onPointerDown, true );
+	}, [ onRequestClose, openMenuValue ] );
+
 	const selectedValues = useMemo( () => {
 		if ( ! isPickMode ) {
 			return new Set();
@@ -396,7 +421,7 @@ export default function EditOptionsPopover( {
 	};
 
 	return (
-		<div className="cortext-edit-options-popover">
+		<div className="cortext-edit-options-popover" ref={ popoverRef }>
 			{ update.error ? (
 				<Notice status="error" isDismissible={ false }>
 					{ update.error?.message ||

@@ -601,6 +601,7 @@ function FieldActions( {
 							onFieldOptionsSaved?.( recordId, nextOptions )
 						}
 						onRowsChanged={ onRowsChanged }
+						onRequestClose={ () => setIsEditingOptions( false ) }
 					/>
 				</Popover>
 			) : null }

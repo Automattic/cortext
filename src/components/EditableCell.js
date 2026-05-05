@@ -540,6 +540,7 @@ function SelectEditor( {
 	onCommit,
 	onOptionsSaved,
 	onRowsChanged,
+	onRequestClose,
 	onCancel,
 	onTab,
 	recordId,
@@ -600,6 +601,7 @@ function SelectEditor( {
 						value={ value }
 						onOptionsSaved={ onOptionsSaved }
 						onRowsChanged={ onRowsChanged }
+						onRequestClose={ onRequestClose }
 						onPick={ async ( next ) => {
 							await onCommit( next );
 							onCancel();
@@ -807,6 +809,7 @@ export default function EditableCell( {
 						)
 					}
 					onRowsChanged={ refreshRows }
+					onRequestClose={ closeEditor }
 					onCancel={ closeEditor }
 					label={ label }
 				/>
@@ -825,6 +828,7 @@ export default function EditableCell( {
 						)
 					}
 					onRowsChanged={ refreshRows }
+					onRequestClose={ closeEditor }
 					onCancel={ closeEditor }
 					onTab={ ( direction ) =>
 						requestNext?.( rowId, fieldId, direction )

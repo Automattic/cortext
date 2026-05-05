@@ -230,6 +230,32 @@ describe( 'EditOptionsPopover', () => {
 		).toBeInTheDocument();
 	} );
 
+	it( 'requests the host popover to close when clicking outside an open option menu', async () => {
+		const onRequestClose = jest.fn();
+		render(
+			<EditOptionsPopover
+				recordId={ 7 }
+				fieldType="select"
+				initialOptions={ [
+					{ value: 'high', label: 'High', color: 'orange' },
+				] }
+				value="high"
+				onPick={ jest.fn() }
+				onRequestClose={ onRequestClose }
+			/>
+		);
+
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Edit option' } )
+		);
+		fireEvent.click( screen.getByRole( 'menuitemradio', { name: /Red/ } ) );
+		await waitFor( () => expect( mockUpdateRun ).toHaveBeenCalled() );
+
+		fireEvent.pointerDown( document.body );
+
+		expect( onRequestClose ).toHaveBeenCalledTimes( 1 );
+	} );
+
 	it( 'does not pick a newly-created option when saving it fails', async () => {
 		const onPick = jest.fn();
 		mockUpdateRun.mockRejectedValueOnce( new Error( 'nope' ) );

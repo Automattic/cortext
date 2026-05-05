@@ -27,6 +27,7 @@ export default function MultiselectEdit( {
 	onSave,
 	onOptionsSaved,
 	onRowsChanged,
+	onRequestClose,
 	onCancel,
 	label,
 } ) {
@@ -91,6 +92,7 @@ export default function MultiselectEdit( {
 						value={ current }
 						onOptionsSaved={ onOptionsSaved }
 						onRowsChanged={ onRowsChanged }
+						onRequestClose={ onRequestClose }
 						onPick={ handleToggle }
 					/>
 				</Popover>
