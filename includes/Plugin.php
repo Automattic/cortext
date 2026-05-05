@@ -17,6 +17,7 @@ use Cortext\PostType\Collection;
 use Cortext\PostType\CollectionEntries;
 use Cortext\PostType\Field;
 use Cortext\PostType\Page;
+use Cortext\PostType\PageIdentity;
 use Cortext\PostType\PageTrashCascade;
 use Cortext\Rest\CollectionsController;
 use Cortext\Rest\FieldsController;
@@ -38,6 +39,7 @@ final class Plugin {
 	public function boot(): void {
 		( new Screen() )->register();
 		( new Page() )->register();
+		( new PageIdentity() )->register();
 		( new PageTrashCascade() )->register();
 		( new Collection() )->register();
 		( new Field() )->register();

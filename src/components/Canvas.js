@@ -36,6 +36,9 @@ import {
 	POST_TYPE,
 	TRASHED_PAGES_QUERY,
 } from './page-queries';
+import PageCover, { AddCoverButton } from './PageCover';
+import PageIcon from './PageIcon';
+import PageIdentityControls from './PageIdentityControls';
 import PublishToggle from './PublishToggle';
 import { TopBarActionsFill } from './WorkspaceTopBar';
 
@@ -201,6 +204,73 @@ function CanvasReadyEffect( { postId, onReady } ) {
 	return null;
 }
 
+function PageHeaderIdentity( { postId } ) {
+	const iconMeta = useSelect(
+		( select ) =>
+			select( editorStore ).getEditedPostAttribute( 'meta' )
+				?.cortext_page_icon ?? '',
+		[]
+	);
+	const featuredMedia = useSelect(
+		( select ) =>
+			select( editorStore ).getEditedPostAttribute( 'featured_media' ) ??
+			0,
+		[]
+	);
+
+	const hasIcon = !! iconMeta;
+	const hasCover = featuredMedia > 0;
+	const showAddActions = ! hasIcon || ! hasCover;
+
+	return (
+		<div className="cortext-page-identity">
+			<PageCover pageId={ postId } featuredMedia={ featuredMedia } />
+			<div className="cortext-page-identity__row">
+				{ hasIcon && (
+					<PageIdentityControls
+						pageId={ postId }
+						currentIcon={ iconMeta }
+						renderToggle={ ( { onToggle } ) => (
+							<Button
+								className="cortext-page-identity__icon-button"
+								onClick={ onToggle }
+								label={ __( 'Change icon', 'cortext' ) }
+							>
+								<PageIcon icon={ iconMeta } size={ 56 } />
+							</Button>
+						) }
+					/>
+				) }
+				{ showAddActions && (
+					<div className="cortext-page-identity__actions">
+						{ ! hasIcon && (
+							<PageIdentityControls
+								pageId={ postId }
+								currentIcon={ iconMeta }
+								renderToggle={ ( { onToggle } ) => (
+									<Button
+										className="cortext-page-identity__add-button"
+										variant="tertiary"
+										onClick={ onToggle }
+									>
+										{ __( 'Add icon', 'cortext' ) }
+									</Button>
+								) }
+							/>
+						) }
+						{ ! hasCover && (
+							<AddCoverButton
+								pageId={ postId }
+								className="cortext-page-identity__add-button"
+							/>
+						) }
+					</div>
+				) }
+			</div>
+		</div>
+	);
+}
+
 function VisualCanvas( { postId, onReady } ) {
 	const styles = useSelect(
 		( select ) => select( editorStore ).getEditorSettings().styles,
@@ -226,22 +296,29 @@ function VisualCanvas( { postId, onReady } ) {
 	// The second case matters once autosave is on — the editor would
 	// render the post centered while the frontend renders flex/grid,
 	// and the user wouldn't notice the divergence until preview.
+	// PageHeaderIdentity must live outside the BlockCanvas iframe: MediaUpload
+	// calls `wp.media` from the host window, and the iframe's window has no
+	// `wp.media` of its own. Putting it above the iframe also keeps the WP
+	// media modal mounted in the top document where it expects to be.
 	return (
 		<div className="cortext-canvas__visual">
-			<BlockCanvas height="100%" styles={ styles }>
-				<div
-					className="editor-visual-editor__post-title-wrapper is-layout-constrained has-global-padding"
-					contentEditable={ false }
-					style={ { marginTop: '4rem', marginBottom: '2rem' } }
-				>
-					<PostTitle />
-				</div>
-				<BlockList
-					className="wp-block-post-content is-layout-constrained has-global-padding"
-					layout={ { type: 'constrained', ...layout } }
-				/>
-				<CanvasReadyEffect postId={ postId } onReady={ onReady } />
-			</BlockCanvas>
+			<PageHeaderIdentity postId={ postId } />
+			<div className="cortext-canvas__visual-canvas">
+				<BlockCanvas height="100%" styles={ styles }>
+					<div
+						className="editor-visual-editor__post-title-wrapper is-layout-constrained has-global-padding"
+						contentEditable={ false }
+						style={ { marginTop: '2rem', marginBottom: '2rem' } }
+					>
+						<PostTitle />
+					</div>
+					<BlockList
+						className="wp-block-post-content is-layout-constrained has-global-padding"
+						layout={ { type: 'constrained', ...layout } }
+					/>
+					<CanvasReadyEffect postId={ postId } onReady={ onReady } />
+				</BlockCanvas>
+			</div>
 		</div>
 	);
 }

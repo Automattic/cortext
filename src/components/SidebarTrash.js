@@ -11,6 +11,7 @@ import {
 import apiFetch from '@wordpress/api-fetch';
 import { rotateLeft, trash } from '@wordpress/icons';
 
+import PageIcon from './PageIcon';
 import {
 	ACTIVE_PAGES_QUERY,
 	POST_TYPE,
@@ -118,20 +119,23 @@ export default function SidebarTrash( { activePages, selectedId, onSelect } ) {
 
 	const buildBreadcrumb = useCallback(
 		( page ) => {
-			const titles = [];
+			const ancestors = [];
 			let current = page.parent ? ancestorById.get( page.parent ) : null;
 			const seen = new Set( [ page.id ] );
 			while ( current && ! seen.has( current.id ) ) {
 				seen.add( current.id );
-				titles.unshift(
-					current.title?.rendered?.trim() ||
-						__( '(untitled)', 'cortext' )
-				);
+				ancestors.unshift( {
+					id: current.id,
+					title:
+						current.title?.rendered?.trim() ||
+						__( '(untitled)', 'cortext' ),
+					icon: current.meta?.cortext_page_icon ?? '',
+				} );
 				current = current.parent
 					? ancestorById.get( current.parent )
 					: null;
 			}
-			return titles;
+			return ancestors;
 		},
 		[ ancestorById ]
 	);
@@ -256,6 +260,7 @@ export default function SidebarTrash( { activePages, selectedId, onSelect } ) {
 							page.title?.rendered?.trim() ||
 							__( '(untitled)', 'cortext' );
 						const breadcrumb = buildBreadcrumb( page );
+						const pageIcon = page.meta?.cortext_page_icon ?? '';
 						const isBusy = busyId === page.id;
 						const isSelected = selectedId === page.id;
 						const error =
@@ -293,16 +298,56 @@ export default function SidebarTrash( { activePages, selectedId, onSelect } ) {
 										}
 									>
 										<span className="cortext-sidebar__trash-title">
-											{ title }
+											<PageIcon
+												icon={ pageIcon }
+												size={ 14 }
+												className="cortext-sidebar__trash-title-icon"
+											/>
+											<span className="cortext-sidebar__trash-title-text">
+												{ title }
+											</span>
 										</span>
 										{ ( breadcrumb.length > 0 || meta ) && (
 											<span className="cortext-sidebar__breadcrumb">
-												{ [
-													breadcrumb.join( ' / ' ),
-													meta,
-												]
-													.filter( Boolean )
-													.join( ' · ' ) }
+												{ breadcrumb.map(
+													( crumb, index ) => (
+														<span
+															key={ crumb.id }
+															className="cortext-sidebar__breadcrumb-crumb"
+														>
+															<PageIcon
+																icon={
+																	crumb.icon
+																}
+																size={ 12 }
+															/>
+															<span>
+																{ crumb.title }
+															</span>
+															{ index <
+																breadcrumb.length -
+																	1 && (
+																<span
+																	className="cortext-sidebar__breadcrumb-sep"
+																	aria-hidden="true"
+																>
+																	{ ' / ' }
+																</span>
+															) }
+														</span>
+													)
+												) }
+												{ meta && (
+													<>
+														{ breadcrumb.length >
+															0 && (
+															<span aria-hidden="true">
+																{ ' · ' }
+															</span>
+														) }
+														<span>{ meta }</span>
+													</>
+												) }
 											</span>
 										) }
 									</Button>

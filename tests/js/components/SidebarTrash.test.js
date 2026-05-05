@@ -65,10 +65,13 @@ jest.mock( '@wordpress/icons', () => ( {
 	__esModule: true,
 	rotateLeft: 'rotate-left-icon',
 	trash: 'trash-icon',
+	page: 'page-icon',
+	Icon: ( { icon } ) => <span data-testid={ `icon-${ icon }` } />,
 } ) );
 
 jest.mock( '@wordpress/core-data', () => ( {
 	__esModule: true,
+	useEntityRecord: jest.fn().mockReturnValue( { record: null } ),
 	useEntityRecords: jest.fn(),
 } ) );
 

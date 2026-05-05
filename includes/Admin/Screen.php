@@ -62,6 +62,10 @@ final class Screen {
 			return;
 		}
 
+		// Loads wp.media so MediaUpload's Slot fill from @wordpress/media-utils
+		// can open the WordPress media library.
+		wp_enqueue_media();
+
 		$asset_path = CORTEXT_PATH . 'build/index.asset.php';
 		if ( ! file_exists( $asset_path ) ) {
 			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped

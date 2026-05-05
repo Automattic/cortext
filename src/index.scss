@@ -276,6 +276,10 @@ body.cortext-fullscreen {
 		}
 	}
 
+	// Chevron button, its placeholder, and the icon button must occupy the
+	// same column width so children's icons align under their parent's icon.
+	// WP's Button defaults to a wider intrinsic size; pin all three to
+	// $grid-unit-30 so the leading cells stack cleanly across depths.
 	&__chevron {
 		flex: 0 0 auto;
 
@@ -287,6 +291,13 @@ body.cortext-fullscreen {
 
 		&.is-expanded svg {
 			transform: rotate(90deg);
+		}
+
+		&.components-button {
+			width: $grid-unit-30;
+			height: $grid-unit-30;
+			min-width: 0;
+			padding: 0;
 		}
 
 		&--placeholder {
@@ -323,6 +334,23 @@ body.cortext-fullscreen {
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+
+	&__icon.components-button {
+		flex: 0 0 auto;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: $grid-unit-30;
+		height: $grid-unit-30;
+		padding: 0;
+		min-width: 0;
+		background: transparent;
+
+		&:hover:not(:disabled),
+		&:focus:not(:disabled) {
+			background: var(--cortext-button-hover-surface);
+		}
 	}
 
 	&__rename {
@@ -444,6 +472,15 @@ body.cortext-fullscreen {
 		text-overflow: ellipsis;
 		white-space: nowrap;
 		max-width: 100%;
+		display: inline-flex;
+		align-items: center;
+		gap: $grid-unit-05;
+	}
+
+	&__trash-title-text {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	&__breadcrumb {
@@ -452,6 +489,16 @@ body.cortext-fullscreen {
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+
+	&__breadcrumb-crumb {
+		display: inline-flex;
+		align-items: center;
+		gap: 2px;
+	}
+
+	&__breadcrumb-sep {
+		margin: 0 2px;
 	}
 
 	&__trash-actions {
@@ -771,6 +818,16 @@ body.cortext-sidebar-resizing {
 	}
 
 	&__visual {
+		flex: 1 1 auto;
+		min-height: 0;
+		display: flex;
+		flex-direction: column;
+	}
+
+	// PageHeaderIdentity is a fixed-height sibling above the iframe; the
+	// iframe wrapper claims the rest of the column so the BlockCanvas's
+	// `height: 100%` has something to fill.
+	&__visual-canvas {
 		flex: 1 1 auto;
 		min-height: 0;
 	}
@@ -1871,5 +1928,176 @@ thead > tr > th {
 	.dashicon,
 	.dashicons {
 		color: var(--cortext-button-text);
+	}
+}
+
+.cortext-page-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 auto;
+	line-height: 1;
+
+	&--emoji {
+		font-family:
+			"Apple Color Emoji",
+			"Segoe UI Emoji",
+			"Noto Color Emoji",
+			"Twemoji Mozilla",
+			sans-serif;
+	}
+
+	&--image {
+		object-fit: cover;
+		border-radius: 3px;
+	}
+
+	&--image-loading {
+		display: inline-block;
+		background: var(--cortext-chrome-border);
+		border-radius: 3px;
+	}
+}
+
+.cortext-page-identity {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	background: var(--cortext-canvas-frame-surface);
+	flex: 0 0 auto;
+
+	&__row {
+		max-width: 840px;
+		width: 100%;
+		margin: 0 auto;
+		padding: $grid-unit-10 $grid-unit-30 0;
+		display: flex;
+		align-items: flex-end;
+		gap: $grid-unit-15;
+		min-height: $grid-unit-40;
+	}
+
+	&__icon-button.components-button {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 72px;
+		height: 72px;
+		padding: 0;
+		// Pull the icon up so it overlaps the bottom of the cover when one
+		// is present; without a cover, the row's own padding keeps it tidy.
+		margin-block: -28px 0;
+		background: var(--cortext-shell-surface);
+		border: var(--cortext-shell-border-width) solid var(--cortext-chrome-border);
+		border-radius: var(--cortext-shell-radius);
+		font-size: 56px;
+		line-height: 1;
+
+		&:hover:not(:disabled),
+		&:focus:not(:disabled) {
+			background: var(--cortext-button-hover-surface);
+		}
+
+		.cortext-page-icon--image {
+			width: 56px;
+			height: 56px;
+		}
+	}
+
+	// Empty-state action toolbar: "Add icon" and "Add cover" sit next to each
+	// other, so users find both affordances in one spot rather than chasing
+	// them around the header.
+	&__actions {
+		display: inline-flex;
+		align-items: center;
+		gap: $grid-unit-05;
+		margin-inline-start: auto;
+	}
+
+	&__add-button.components-button {
+		color: var(--cortext-text-muted);
+	}
+}
+
+.cortext-page-cover {
+	position: relative;
+	width: 100%;
+	height: 200px;
+	overflow: hidden;
+	background: var(--cortext-chrome-border);
+
+	&__image {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		display: block;
+	}
+
+	&__controls {
+		position: absolute;
+		top: $grid-unit-10;
+		right: $grid-unit-10;
+		display: flex;
+		gap: $grid-unit-05;
+		opacity: 0;
+		transition: opacity 0.12s ease;
+	}
+
+	&:hover &__controls,
+	&:focus-within &__controls {
+		opacity: 1;
+	}
+
+	/* stylelint-disable-next-line no-descending-specificity */
+	&__menu .components-button {
+		background: var(--cortext-shell-surface);
+		box-shadow: 0 1px 3px var(--cortext-shadow-color);
+	}
+}
+
+.cortext-page-identity-popover-content {
+	min-width: 320px;
+
+	.cortext-page-identity-popover {
+		position: relative;
+		display: flex;
+		flex-direction: column;
+
+		&__busy {
+			position: absolute;
+			inset: 0;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			background: rgba(255, 255, 255, 0.6);
+			z-index: 2;
+		}
+
+		&__loading {
+			min-height: 320px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+		}
+
+		&__upload {
+			display: flex;
+			flex-direction: column;
+			gap: $grid-unit-10;
+			padding: $grid-unit-15;
+		}
+
+		&__hint {
+			font-size: 12px;
+			color: var(--cortext-text-muted);
+			margin: 0;
+		}
+
+		&__footer {
+			display: flex;
+			justify-content: flex-end;
+			padding: $grid-unit-05 $grid-unit-15;
+			border-top: $border-width solid var(--cortext-chrome-border);
+		}
 	}
 }

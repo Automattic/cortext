@@ -10,6 +10,8 @@ import {
 import { chevronRight, moreVertical, plus } from '@wordpress/icons';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 
+import PageIdentityControls from './PageIdentityControls';
+
 const GRID_UNIT = 20; // matches $grid-unit-20 in index.scss
 
 // A single page in the sidebar tree plus its rendered subtree.
@@ -116,6 +118,7 @@ export default function PageRow( {
 	}
 
 	const title = page.title?.rendered?.trim() || __( '(untitled)', 'cortext' );
+	const iconMeta = page.meta?.cortext_page_icon ?? '';
 
 	function commitRename() {
 		const next = draftTitle.trim();
@@ -174,6 +177,25 @@ export default function PageRow( {
 							aria-hidden="true"
 						/>
 					) }
+
+					<PageIdentityControls
+						pageId={ page.id }
+						currentIcon={ iconMeta }
+						renderToggle={ ( { onToggle, currentIconNode } ) => (
+							<Button
+								className="cortext-sidebar__icon"
+								onClick={ ( e ) => {
+									e.stopPropagation();
+									onToggle();
+								} }
+								onPointerDown={ ( e ) => e.stopPropagation() }
+								label={ __( 'Change icon', 'cortext' ) }
+								showTooltip={ false }
+							>
+								{ currentIconNode }
+							</Button>
+						) }
+					/>
 
 					{ isRenaming ? (
 						<div

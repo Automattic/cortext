@@ -30,6 +30,15 @@ module.exports = {
 		...defaultConfig.entry(),
 		frontend: path.resolve( __dirname, 'src/frontend.js' ),
 	},
+	output: {
+		...defaultConfig.output,
+		// wp-scripts defaults to `chunkFilename: '[name].js?...'`, but
+		// async chunks created via dynamic `import()` end up with only an
+		// id hint (no name), so the runtime computes one URL while the
+		// emitted file uses another (e.g. `324.js`). Pin chunks to `[id]`
+		// so emit and runtime URL stay in sync.
+		chunkFilename: '[id].js?ver=[chunkhash]',
+	},
 	plugins: [
 		...defaultConfig.plugins.map( ( plugin ) => {
 			if ( plugin instanceof DependencyExtractionWebpackPlugin ) {
