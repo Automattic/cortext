@@ -34,6 +34,16 @@ final class FieldsController {
 		'select',
 		'multiselect',
 		'relation',
+		'rollup',
+	);
+
+	private const ROLLUP_AGGREGATORS = array(
+		'count',
+		'sum',
+		'avg',
+		'min',
+		'max',
+		'latest',
 	);
 
 	public function register(): void {
@@ -50,20 +60,20 @@ final class FieldsController {
 					'callback'            => array( $this, 'create' ),
 					'permission_callback' => array( $this, 'can_edit_collection' ),
 					'args'                => array(
-						'collection_id'         => array(
+						'collection_id'            => array(
 							'type'     => 'integer',
 							'required' => true,
 						),
-						'title'                 => array(
+						'title'                    => array(
 							'type'     => 'string',
 							'required' => true,
 						),
-						'type'                  => array(
+						'type'                     => array(
 							'type'     => 'string',
 							'required' => true,
 							'enum'     => self::ALLOWED_TYPES,
 						),
-						'options'               => array(
+						'options'                  => array(
 							'type'     => 'array',
 							'required' => false,
 							'items'    => array(
@@ -75,23 +85,36 @@ final class FieldsController {
 								),
 							),
 						),
-						'related_collection_id' => array(
+						'related_collection_id'    => array(
 							'type'     => 'integer',
 							'required' => false,
 						),
-						'relation_multiple'     => array(
+						'relation_multiple'        => array(
 							'type'     => 'boolean',
 							'required' => false,
 							'default'  => true,
 						),
-						'reverse_title'         => array(
+						'reverse_title'            => array(
 							'type'     => 'string',
 							'required' => false,
 						),
-						'reverse_multiple'      => array(
+						'reverse_multiple'         => array(
 							'type'     => 'boolean',
 							'required' => false,
 							'default'  => true,
+						),
+						'rollup_relation_field_id' => array(
+							'type'     => 'integer',
+							'required' => false,
+						),
+						'rollup_target_field_id'   => array(
+							'type'     => 'integer',
+							'required' => false,
+						),
+						'rollup_aggregator'        => array(
+							'type'     => 'string',
+							'required' => false,
+							'enum'     => self::ROLLUP_AGGREGATORS,
 						),
 					),
 				),
@@ -238,6 +261,10 @@ final class FieldsController {
 			return $this->create_relation( $request, $collection_id, $title );
 		}
 
+		if ( 'rollup' === $type ) {
+			return $this->create_rollup( $request, $collection_id, $title );
+		}
+
 		$meta = array( 'type' => $type );
 		if ( $this->type_supports_options( $type ) && is_array( $options ) ) {
 			$meta['options'] = wp_json_encode( $this->normalize_options( $options ) );
@@ -304,6 +331,9 @@ final class FieldsController {
 				'expression',
 				'related_collection_id',
 				'relation_multiple',
+				'rollup_relation_field_id',
+				'rollup_target_field_id',
+				'rollup_aggregator',
 			) as $key
 		) {
 			$value = get_post_meta( $field_id, $key, true );
@@ -563,6 +593,119 @@ final class FieldsController {
 		}
 
 		return $this->field_response( $source_id, $title, 'relation' );
+	}
+
+	private function create_rollup(
+		WP_REST_Request $request,
+		int $collection_id,
+		string $title,
+		?string $insert_after_id = null
+	): WP_REST_Response|WP_Error {
+		$relation_field_id = (int) $request->get_param( 'rollup_relation_field_id' );
+		$target_field_id   = (int) $request->get_param( 'rollup_target_field_id' );
+		$aggregator        = (string) $request->get_param( 'rollup_aggregator' );
+		if ( '' === $aggregator ) {
+			$aggregator = 'count';
+		}
+
+		$validation = $this->validate_rollup_config(
+			$collection_id,
+			$relation_field_id,
+			$target_field_id,
+			$aggregator
+		);
+		if ( is_wp_error( $validation ) ) {
+			return $validation;
+		}
+
+		$meta = array(
+			'type'                     => 'rollup',
+			'rollup_relation_field_id' => (string) $relation_field_id,
+			'rollup_aggregator'        => $aggregator,
+		);
+		if ( $target_field_id > 0 ) {
+			$meta['rollup_target_field_id'] = (string) $target_field_id;
+		}
+
+		return $this->insert_and_attach( $collection_id, $title, $meta, $insert_after_id );
+	}
+
+	private function validate_rollup_config(
+		int $collection_id,
+		int $relation_field_id,
+		int $target_field_id,
+		string $aggregator
+	): bool|WP_Error {
+		if ( ! in_array( $aggregator, self::ROLLUP_AGGREGATORS, true ) ) {
+			return new WP_Error(
+				'cortext_rollup_aggregator_invalid',
+				__( 'Rollup aggregator is invalid.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$collection_fields = $this->collection_field_ids( $collection_id );
+		if ( ! in_array( (string) $relation_field_id, $collection_fields, true ) ) {
+			return new WP_Error(
+				'cortext_rollup_relation_invalid',
+				__( 'Rollup source relation must belong to this collection.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+		if ( 'relation' !== (string) get_post_meta( $relation_field_id, 'type', true ) ) {
+			return new WP_Error(
+				'cortext_rollup_source_not_relation',
+				__( 'Rollup source field must be a relation.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		if ( 'count' === $aggregator ) {
+			return true;
+		}
+		if ( $target_field_id < 1 ) {
+			return new WP_Error(
+				'cortext_rollup_target_required',
+				__( 'Rollup target field is required.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$target_collection_id = (int) get_post_meta( $relation_field_id, 'related_collection_id', true );
+		$target_fields        = $this->collection_field_ids( $target_collection_id );
+		if ( ! in_array( (string) $target_field_id, $target_fields, true ) ) {
+			return new WP_Error(
+				'cortext_rollup_target_invalid',
+				__( 'Rollup target field must belong to the related collection.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$target_type = (string) get_post_meta( $target_field_id, 'type', true );
+		if ( 'rollup' === $target_type ) {
+			return new WP_Error(
+				'cortext_rollup_of_rollup_unsupported',
+				__( 'Rollups cannot target other rollups.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		if ( in_array( $aggregator, array( 'sum', 'avg', 'min', 'max' ), true ) && 'number' !== $target_type ) {
+			return new WP_Error(
+				'cortext_rollup_target_must_be_number',
+				__( 'Numeric rollups must target a number field.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+		if ( 'latest' === $aggregator && ! in_array( $target_type, array( 'date', 'datetime' ), true ) ) {
+			return new WP_Error(
+				'cortext_rollup_target_must_be_date',
+				__( 'Latest rollups must target a date field.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		return true;
 	}
 
 	/**

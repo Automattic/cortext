@@ -31,7 +31,7 @@ export function parseFormat( raw ) {
 }
 
 // Cortext field types that this client knows how to edit inline. Anything
-// outside this set (formula, …) renders read-only — see
+// outside this set (formula, rollup, …) renders read-only — see
 // `EditableCell`'s `readOnly` branch.
 export const EDITABLE_TYPES = new Set( [
 	'text',
@@ -60,13 +60,18 @@ function parseBooleanMeta( raw, fallback = false ) {
 	);
 }
 
+function rollupDisplayType( meta ) {
+	return meta?.rollup_aggregator === 'latest' ? 'datetime' : 'number';
+}
+
 function buildRender( id, type, label, elements, format, relation ) {
 	const readOnly = ! EDITABLE_TYPES.has( type );
+	const displayType = type === 'rollup' ? rollupDisplayType( format ) : type;
 	return ( { item } ) => (
 		<EditableCell
 			item={ item }
 			fieldId={ id }
-			fieldType={ type }
+			fieldType={ displayType }
 			elements={ elements }
 			format={ format }
 			relation={ relation }
@@ -89,8 +94,9 @@ function HeaderLabel( { children } ) {
 // `editable: false` and no `recordId` keeps them out of the default
 // `view.fields` seed, so they appear in the column visibility menu
 // default-hidden, addable like any other field. Sort is enabled only on
-// the timestamps. Sort on display-value properties such as Person and
-// Relation is an open architectural decision (tech-debt.md#14).
+// the timestamps — sort on display-value
+// properties (Person, Relation, Rollup) is an open architectural
+// decision shared with relations and rollups (tech-debt.md#14).
 export function systemFields() {
 	const formatDate = ( value ) =>
 		value ? dateI18n( 'M j, Y g:i a', value ) : '';
@@ -170,6 +176,10 @@ export function mapField( field ) {
 		format = parseFormat( field.meta?.number_format );
 	} else if ( type === 'date' || type === 'datetime' ) {
 		format = parseFormat( field.meta?.date_format );
+	} else if ( type === 'rollup' ) {
+		format = {
+			rollup_aggregator: field.meta?.rollup_aggregator ?? 'count',
+		};
 	}
 	const relation =
 		type === 'relation'
@@ -190,6 +200,7 @@ export function mapField( field ) {
 		cortextType: type,
 		relatedCollectionId: relation?.targetCollectionId,
 		relationMultiple: relation?.multiple,
+		rollupAggregator: field.meta?.rollup_aggregator,
 		// Header content is just an aria-hidden marker.
 		// `ColumnHeaderActions` queries the DOM for it and portals our
 		// combined-dropdown trigger into the owning <th>; DataViews'
@@ -238,6 +249,28 @@ export function mapField( field ) {
 				enableSorting: false,
 				filterBy: false,
 			};
+		case 'rollup': {
+			if ( rollupDisplayType( field.meta ) === 'datetime' ) {
+				return {
+					...base,
+					type: 'datetime',
+					editable: false,
+					enableSorting: true,
+				};
+			}
+			return {
+				...base,
+				type: 'integer',
+				editable: false,
+				enableSorting: true,
+				isValid: { custom: () => null },
+				sort: ( a, b, direction ) => {
+					const av = Number( base.getValue( { item: a } ) ?? 0 );
+					const bv = Number( base.getValue( { item: b } ) ?? 0 );
+					return direction === 'asc' ? av - bv : bv - av;
+				},
+			};
+		}
 		case 'date':
 		case 'datetime':
 			return { ...base, type: 'datetime' };

@@ -164,7 +164,7 @@ export default function ColumnHeaderActions( {
 				return createPortal(
 					<AddFieldTrigger collectionId={ collectionId } />,
 					target.th,
-					target.key
+					`${ target.key }-${ collectionId }`
 				);
 			} ) }
 		</>

@@ -124,6 +124,32 @@ describe( 'mapField', () => {
 		expect( mapped.relationMultiple ).toBe( false );
 	} );
 
+	it( "maps numeric rollups to read-only DataViews 'integer' fields with numeric sorting", () => {
+		const mapped = mapField(
+			baseField( { type: 'rollup', rollup_aggregator: 'sum' } )
+		);
+		expect( mapped.type ).toBe( 'integer' );
+		expect( mapped.editable ).toBe( false );
+		expect( mapped.enableSorting ).toBe( true );
+		expect( mapped.rollupAggregator ).toBe( 'sum' );
+		expect(
+			mapped.sort(
+				{ meta: { 'field-5': 2 } },
+				{ meta: { 'field-5': 10 } },
+				'asc'
+			)
+		).toBeLessThan( 0 );
+	} );
+
+	it( "maps latest rollups to read-only DataViews 'datetime' fields", () => {
+		const mapped = mapField(
+			baseField( { type: 'rollup', rollup_aggregator: 'latest' } )
+		);
+		expect( mapped.type ).toBe( 'datetime' );
+		expect( mapped.editable ).toBe( false );
+		expect( mapped.enableSorting ).toBe( true );
+	} );
+
 	it( "maps email to DataViews 'email'", () => {
 		expect( mapField( baseField( { type: 'email' } ) ).type ).toBe(
 			'email'

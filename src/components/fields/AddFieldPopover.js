@@ -7,10 +7,11 @@ import {
 	TextControl,
 	ToggleControl,
 } from '@wordpress/components';
-import { useEntityRecords } from '@wordpress/core-data';
-import { useMemo, useState } from '@wordpress/element';
+import { useEntityRecord, useEntityRecords } from '@wordpress/core-data';
+import { useEffect, useMemo, useState } from '@wordpress/element';
 import {
 	atSymbol,
+	backup,
 	calendar,
 	check,
 	formatListBullets,
@@ -21,6 +22,9 @@ import {
 } from '@wordpress/icons';
 
 import { COLLECTION_QUERY } from '../../collections';
+import useCollectionFields, {
+	buildFieldListQuery,
+} from '../../hooks/useCollectionFields';
 import { useCreateField } from '../../hooks/useFieldMutations';
 
 // Inline SVG for the "number" type. `@wordpress/icons` doesn't ship a
@@ -85,6 +89,7 @@ const FIELD_TYPES = [
 	},
 	{ value: 'checkbox', label: __( 'Checkbox', 'cortext' ), icon: check },
 	{ value: 'relation', label: __( 'Relation', 'cortext' ), icon: link },
+	{ value: 'rollup', label: __( 'Rollup', 'cortext' ), icon: backup },
 	{ value: 'url', label: __( 'URL', 'cortext' ), icon: globe },
 	{ value: 'email', label: __( 'Email', 'cortext' ), icon: atSymbol },
 ];
@@ -94,12 +99,28 @@ const RELATION_LIMIT_OPTIONS = [
 	{ value: 'one', label: __( '1 page', 'cortext' ) },
 ];
 
+const ROLLUP_AGGREGATORS = [
+	{ value: 'count', label: __( 'Count', 'cortext' ) },
+	{ value: 'sum', label: __( 'Sum', 'cortext' ) },
+	{ value: 'avg', label: __( 'Average', 'cortext' ) },
+	{ value: 'min', label: __( 'Min', 'cortext' ) },
+	{ value: 'max', label: __( 'Max', 'cortext' ) },
+	{ value: 'latest', label: __( 'Latest date', 'cortext' ) },
+];
+
 function titleOf( record ) {
 	return record?.title?.raw || record?.title?.rendered || `#${ record?.id }`;
 }
 
 function fieldTypeLabel( type ) {
 	return FIELD_TYPES.find( ( fieldType ) => fieldType.value === type )?.label;
+}
+
+function rollupAggregatorLabel( aggregator ) {
+	return (
+		ROLLUP_AGGREGATORS.find( ( option ) => option.value === aggregator )
+			?.label ?? aggregator
+	);
 }
 
 function RelationConfig( {
@@ -235,6 +256,224 @@ function RelationConfig( {
 	);
 }
 
+function RollupConfig( {
+	collectionId,
+	title,
+	fallbackTitle,
+	isBusy,
+	onCreate,
+	onBack,
+	onError,
+	run,
+} ) {
+	const { fields } = useCollectionFields( collectionId );
+	const relationFields = fields.filter(
+		( field ) => field.cortextType === 'relation'
+	);
+	const [ relationFieldId, setRelationFieldId ] = useState( '' );
+	const [ aggregator, setAggregator ] = useState( 'count' );
+	const [ targetFieldId, setTargetFieldId ] = useState( '' );
+
+	const selectedRelation = relationFields.find(
+		( field ) => String( field.recordId ) === relationFieldId
+	);
+	const targetCollectionId = selectedRelation?.relatedCollectionId;
+	const { record: targetCollection } = useEntityRecord(
+		'postType',
+		'crtxt_collection',
+		targetCollectionId ?? 0
+	);
+	const targetFieldIds = useMemo( () => {
+		const raw = targetCollection?.meta?.fields;
+		return Array.isArray( raw )
+			? raw.map( ( id ) => Number( id ) ).filter( Boolean )
+			: [];
+	}, [ targetCollection ] );
+	const { records: targetFields } = useEntityRecords(
+		'postType',
+		'crtxt_field',
+		buildFieldListQuery( targetFieldIds ),
+		{ enabled: targetFieldIds.length > 0 }
+	);
+	const selectedTargetField = targetFields?.find(
+		( field ) => String( field.id ) === targetFieldId
+	);
+
+	const targetTypeAllowed = ( type ) => {
+		if ( [ 'sum', 'avg', 'min', 'max' ].includes( aggregator ) ) {
+			return type === 'number';
+		}
+		if ( aggregator === 'latest' ) {
+			return type === 'date' || type === 'datetime';
+		}
+		return false;
+	};
+	const targetOptions = [
+		{ value: '', label: __( 'Choose field…', 'cortext' ) },
+		...( targetFields ?? [] )
+			.filter( ( field ) => targetTypeAllowed( field.meta?.type ) )
+			.map( ( field ) => ( {
+				value: String( field.id ),
+				label: titleOf( field ),
+			} ) ),
+	];
+	const relationOptions = [
+		{ value: '', label: __( 'Choose relation…', 'cortext' ) },
+		...relationFields.map( ( field ) => ( {
+			value: String( field.recordId ),
+			label: field.label,
+		} ) ),
+	];
+	const needsTarget = aggregator !== 'count';
+	const defaultRollupTitle = useMemo( () => {
+		const collectionLabel = targetCollection
+			? titleOf( targetCollection )
+			: selectedRelation?.label;
+		if ( ! collectionLabel ) {
+			return fallbackTitle;
+		}
+		const aggregatorLabel = rollupAggregatorLabel( aggregator );
+		if ( needsTarget && selectedTargetField ) {
+			return sprintf(
+				/* translators: 1: collection title, 2: field title, 3: rollup aggregation label */
+				__( '%1$s / %2$s (%3$s)', 'cortext' ),
+				collectionLabel,
+				titleOf( selectedTargetField ),
+				aggregatorLabel
+			);
+		}
+		return sprintf(
+			/* translators: 1: collection title, 2: rollup aggregation label */
+			__( '%1$s (%2$s)', 'cortext' ),
+			collectionLabel,
+			aggregatorLabel
+		);
+	}, [
+		aggregator,
+		fallbackTitle,
+		needsTarget,
+		selectedRelation,
+		selectedTargetField,
+		targetCollection,
+	] );
+
+	useEffect( () => {
+		if ( relationFields.length === 1 && ! relationFieldId ) {
+			setRelationFieldId( String( relationFields[ 0 ].recordId ) );
+		}
+	}, [ relationFields, relationFieldId ] );
+
+	useEffect( () => {
+		if ( ! needsTarget || targetFieldId ) {
+			return;
+		}
+		const compatibleTargets = targetOptions
+			.slice( 1 )
+			.filter( ( option ) => option.value );
+		if ( compatibleTargets.length === 1 ) {
+			setTargetFieldId( compatibleTargets[ 0 ].value );
+		}
+	}, [ needsTarget, targetFieldId, targetOptions ] );
+
+	const submit = async () => {
+		if (
+			! relationFieldId ||
+			( needsTarget && ! targetFieldId ) ||
+			isBusy
+		) {
+			return;
+		}
+		try {
+			const created = await run( {
+				title: title.trim() || defaultRollupTitle,
+				type: 'rollup',
+				rollup_relation_field_id: Number( relationFieldId ),
+				rollup_target_field_id: targetFieldId
+					? Number( targetFieldId )
+					: undefined,
+				rollup_aggregator: aggregator,
+			} );
+			onCreate?.( created );
+		} catch ( apiError ) {
+			onError(
+				apiError?.message ||
+					__( 'Rollup could not be created.', 'cortext' )
+			);
+		}
+	};
+
+	return (
+		<div className="cortext-add-field-popover__config">
+			{ relationFields.length === 0 ? (
+				<Notice status="warning" isDismissible={ false }>
+					{ __(
+						'Create a relation before adding a rollup.',
+						'cortext'
+					) }
+				</Notice>
+			) : null }
+			<SelectControl
+				label={ __( 'Relation', 'cortext' ) }
+				value={ relationFieldId }
+				options={ relationOptions }
+				onChange={ ( next ) => {
+					setRelationFieldId( next );
+					setTargetFieldId( '' );
+				} }
+				disabled={ isBusy || relationFields.length === 0 }
+				__next40pxDefaultSize
+				__nextHasNoMarginBottom
+			/>
+			<SelectControl
+				label={ __( 'Calculate', 'cortext' ) }
+				value={ aggregator }
+				options={ ROLLUP_AGGREGATORS }
+				onChange={ ( next ) => {
+					setAggregator( next );
+					setTargetFieldId( '' );
+				} }
+				disabled={ isBusy || relationFields.length === 0 }
+				__next40pxDefaultSize
+				__nextHasNoMarginBottom
+			/>
+			{ needsTarget ? (
+				<SelectControl
+					label={ __( 'Target field', 'cortext' ) }
+					value={ targetFieldId }
+					options={ targetOptions }
+					onChange={ setTargetFieldId }
+					disabled={
+						isBusy || ! relationFieldId || targetOptions.length <= 1
+					}
+					__next40pxDefaultSize
+					__nextHasNoMarginBottom
+				/>
+			) : null }
+			<div className="cortext-add-field-popover__actions">
+				<Button
+					variant="tertiary"
+					onClick={ onBack }
+					disabled={ isBusy }
+				>
+					{ __( 'Back', 'cortext' ) }
+				</Button>
+				<Button
+					variant="primary"
+					onClick={ submit }
+					isBusy={ isBusy }
+					disabled={
+						isBusy ||
+						! relationFieldId ||
+						( needsTarget && ! targetFieldId )
+					}
+				>
+					{ __( 'Create rollup', 'cortext' ) }
+				</Button>
+			</div>
+		</div>
+	);
+}
+
 export default function AddFieldPopover( { collectionId, onCreate } ) {
 	const [ title, setTitle ] = useState( '' );
 	const [ submitError, setSubmitError ] = useState( '' );
@@ -252,7 +491,7 @@ export default function AddFieldPopover( { collectionId, onCreate } ) {
 			return;
 		}
 		setSubmitError( '' );
-		if ( chosenType === 'relation' ) {
+		if ( chosenType === 'relation' || chosenType === 'rollup' ) {
 			setConfigType( chosenType );
 			return;
 		}
@@ -288,6 +527,15 @@ export default function AddFieldPopover( { collectionId, onCreate } ) {
 	const fallbackTitle = configuredType
 		? configuredType.label
 		: fieldTypeLabel( 'text' );
+	let nameLabel = __( 'Name', 'cortext' );
+	let namePlaceholder = __( 'Type property name…', 'cortext' );
+	if ( configType === 'relation' ) {
+		nameLabel = __( 'Relation name', 'cortext' );
+		namePlaceholder = __( 'Relation name', 'cortext' );
+	} else if ( configType === 'rollup' ) {
+		nameLabel = __( 'Rollup name', 'cortext' );
+		namePlaceholder = __( 'Rollup name', 'cortext' );
+	}
 
 	let configuration = null;
 	if ( configType === 'relation' ) {
@@ -295,6 +543,19 @@ export default function AddFieldPopover( { collectionId, onCreate } ) {
 			<RelationConfig
 				collectionId={ collectionId }
 				collections={ collections ?? [] }
+				title={ title }
+				fallbackTitle={ fallbackTitle }
+				isBusy={ isBusy }
+				run={ run }
+				onCreate={ onCreate }
+				onBack={ () => setConfigType( null ) }
+				onError={ setSubmitError }
+			/>
+		);
+	} else if ( configType === 'rollup' ) {
+		configuration = (
+			<RollupConfig
+				collectionId={ collectionId }
 				title={ title }
 				fallbackTitle={ fallbackTitle }
 				isBusy={ isBusy }
@@ -314,16 +575,8 @@ export default function AddFieldPopover( { collectionId, onCreate } ) {
 				</Notice>
 			) : null }
 			<TextControl
-				label={
-					configType
-						? __( 'Relation name', 'cortext' )
-						: __( 'Name', 'cortext' )
-				}
-				placeholder={
-					configType
-						? __( 'Relation name', 'cortext' )
-						: __( 'Type property name…', 'cortext' )
-				}
+				label={ nameLabel }
+				placeholder={ namePlaceholder }
 				value={ title }
 				onChange={ setTitle }
 				onKeyDown={ ( event ) => {

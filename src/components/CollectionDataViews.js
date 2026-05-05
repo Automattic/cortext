@@ -18,6 +18,7 @@ import ColumnHeaderActions from './fields/ColumnHeaderActions';
 import {
 	GHOST_FIELD_ID,
 	TITLE_FIELD_ID,
+	isDefaultVisibleField,
 	normalizeView,
 } from './dataViewColumns';
 import useCollectionFields from '../hooks/useCollectionFields';
@@ -122,15 +123,23 @@ function NewRowButton( { slug, view, fields, onCreated, disabled } ) {
 	const [ isCreating, setIsCreating ] = useState( false );
 	const [ error, setError ] = useState( null );
 
-	const fieldIds = useMemo(
-		() => new Set( fields.map( ( f ) => f.id ) ),
+	const prefillableFieldIds = useMemo(
+		() =>
+			new Set(
+				fields
+					.filter(
+						( f ) =>
+							f.editable !== false && f.cortextType !== 'rollup'
+					)
+					.map( ( f ) => f.id )
+			),
 		[ fields ]
 	);
 
 	const onClick = useCallback( async () => {
 		setIsCreating( true );
 		setError( null );
-		const meta = prefillFromFilters( view?.filters, fieldIds );
+		const meta = prefillFromFilters( view?.filters, prefillableFieldIds );
 		try {
 			// FIXME: Consider supporting row creation via /cortext/v1/rows.
 			const created = await apiFetch( {
@@ -150,7 +159,7 @@ function NewRowButton( { slug, view, fields, onCreated, disabled } ) {
 		} finally {
 			setIsCreating( false );
 		}
-	}, [ slug, view, fieldIds, onCreated ] );
+	}, [ slug, view, prefillableFieldIds, onCreated ] );
 
 	return (
 		<>
@@ -220,7 +229,11 @@ export default function CollectionDataViews( {
 		hasResolved: rowsResolved,
 		error: rowError,
 		refresh,
-	} = useCollectionRows( isResolving ? null : collectionId, reconciledView );
+	} = useCollectionRows(
+		isResolving ? null : collectionId,
+		reconciledView,
+		availableFields
+	);
 
 	const isTableLayout = view?.type === 'table';
 	const dataViewFields = useMemo(
@@ -416,12 +429,12 @@ export default function CollectionDataViews( {
 
 		let seededView = currentView;
 		if ( currentFields.length === 0 ) {
-			// Default to editable columns only: read-only types like formula
-			// do not accept inline saves and can be enabled via the View config.
+			// Default to user-created collection fields. System fields stay
+			// hidden until enabled from the View config.
 			seededView = {
 				...currentView,
 				fields: availableFields
-					.filter( ( f ) => f.editable )
+					.filter( isDefaultVisibleField )
 					.map( ( f ) => f.id ),
 			};
 		}
@@ -450,7 +463,7 @@ export default function CollectionDataViews( {
 			) {
 				const f = availableFields[ schemaIdx ];
 				if (
-					! f.editable ||
+					! isDefaultVisibleField( f ) ||
 					previouslyKnown.has( f.id ) ||
 					next.includes( f.id )
 				) {

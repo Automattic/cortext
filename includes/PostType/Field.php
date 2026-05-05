@@ -59,6 +59,7 @@ final class Field {
 			'number_format',
 			'date_format',
 			'expression',
+			'rollup_aggregator',
 		);
 
 		foreach ( $string_meta as $key ) {
@@ -86,6 +87,8 @@ final class Field {
 
 		$integer_meta = array(
 			'relation_reverse_field_id',
+			'rollup_relation_field_id',
+			'rollup_target_field_id',
 		);
 
 		foreach ( $integer_meta as $key ) {

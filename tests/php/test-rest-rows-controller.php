@@ -494,7 +494,49 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertSame( array( 'blue', 'green' ), $args['meta_query'][1]['value'] );
 	}
 
-	// -- Relation tests -------------------------------------------------
+	public function test_build_query_args_skips_rollup_sort_and_filter_meta_query(): void {
+		$fixture = $this->create_collection_fixture( 'bqaroll', 'rollup' );
+
+		$request = new WP_REST_Request( 'GET', '/cortext/v1/rows' );
+		$request->set_query_params(
+			array(
+				'collection' => $fixture['collection_id'],
+				'sort'       => array(
+					'field'     => "field-{$fixture['field_id']}",
+					'direction' => 'desc',
+				),
+				'filters'    => array(
+					array(
+						'field'    => "field-{$fixture['field_id']}",
+						'operator' => 'is',
+						'value'    => '2',
+					),
+				),
+			)
+		);
+		$request->set_default_params(
+			array(
+				'per_page' => 25,
+				'page'     => 1,
+				'search'   => '',
+				'sort'     => null,
+				'filters'  => array(),
+			)
+		);
+
+		$controller = new RowsController();
+		$method     = new \ReflectionMethod( $controller, 'build_query_args' );
+		$method->setAccessible( true );
+
+		$args = $method->invoke( $controller, $request, 'bqaroll' );
+
+		$this->assertSame( 'date', $args['orderby'] );
+		$this->assertSame( 'ASC', $args['order'] );
+		$this->assertArrayNotHasKey( 'meta_key', $args );
+		$this->assertArrayNotHasKey( 'meta_query', $args );
+	}
+
+	// -- Relation and rollup tests --------------------------------------
 
 	public function test_update_row_field_syncs_relation_from_source_and_reverse(): void {
 		wp_set_current_user( $this->create_user( 'editor' ) );
@@ -614,6 +656,58 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 			'tasks-self',
 			$data['meta']["field-{$relation['source_id']}"][0]['collectionSlug']
 		);
+	}
+
+	public function test_rollups_compute_from_related_rows_and_update_on_read(): void {
+		$projects_id = $this->create_collection_with_slug( 'Projects', 'projects-calc' );
+		$invoices_id = $this->create_collection_with_slug( 'Invoices', 'invoices-calc' );
+
+		$relation = $this->create_relation_pair( $projects_id, $invoices_id );
+		$amount_id = $this->create_collection_field( $invoices_id, 'Amount', 'number' );
+		$date_id = $this->create_collection_field( $invoices_id, 'Due', 'date' );
+		$count_id = $this->create_rollup_field( $projects_id, 'Invoice count', $relation['source_id'], 0, 'count' );
+		$sum_id = $this->create_rollup_field( $projects_id, 'Total', $relation['source_id'], $amount_id, 'sum' );
+		$avg_id = $this->create_rollup_field( $projects_id, 'Average', $relation['source_id'], $amount_id, 'avg' );
+		$min_id = $this->create_rollup_field( $projects_id, 'Minimum', $relation['source_id'], $amount_id, 'min' );
+		$max_id = $this->create_rollup_field( $projects_id, 'Maximum', $relation['source_id'], $amount_id, 'max' );
+		$latest_id = $this->create_rollup_field( $projects_id, 'Latest due', $relation['source_id'], $date_id, 'latest' );
+
+		$project_id = $this->create_entry( 'crtxt_projects-calc', 'Liberation' );
+		$invoice_a = $this->create_entry( 'crtxt_invoices-calc', 'Invoice A' );
+		$invoice_b = $this->create_entry( 'crtxt_invoices-calc', 'Invoice B' );
+		update_post_meta( $invoice_a, "field-{$amount_id}", '10' );
+		update_post_meta( $invoice_a, "field-{$date_id}", '2026-05-01' );
+		update_post_meta( $invoice_b, "field-{$amount_id}", '5' );
+		update_post_meta( $invoice_b, "field-{$date_id}", '2026-05-03' );
+
+		Relations::sync_relation_value( $project_id, $relation['source_id'], array( $invoice_a, $invoice_b ) );
+
+		$field_ids = array(
+			$relation['source_id'],
+			$count_id,
+			$sum_id,
+			$avg_id,
+			$min_id,
+			$max_id,
+			$latest_id,
+		);
+		$row       = $this->invoke_format_row_with_fields( $project_id, $field_ids );
+
+		$this->assertSame( 2, $row['meta']["field-{$count_id}"] );
+		$this->assertSame( 15.0, $row['meta']["field-{$sum_id}"] );
+		$this->assertSame( 7.5, $row['meta']["field-{$avg_id}"] );
+		$this->assertSame( 5.0, $row['meta']["field-{$min_id}"] );
+		$this->assertSame( 10.0, $row['meta']["field-{$max_id}"] );
+		$this->assertSame( '2026-05-03', $row['meta']["field-{$latest_id}"] );
+		$this->assertSame( 'Invoice A', $row['meta']["field-{$relation['source_id']}"][0]['title']['raw'] );
+
+		update_post_meta( $invoice_b, "field-{$amount_id}", '20' );
+		update_post_meta( $invoice_a, "field-{$date_id}", '2026-05-04' );
+
+		$updated = $this->invoke_format_row_with_fields( $project_id, $field_ids );
+
+		$this->assertSame( 30.0, $updated['meta']["field-{$sum_id}"] );
+		$this->assertSame( '2026-05-04', $updated['meta']["field-{$latest_id}"] );
 	}
 
 	// -- System field tests ---------------------------------------------
@@ -1030,6 +1124,24 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 			'source_id'  => $source_id,
 			'reverse_id' => $reverse_id,
 		);
+	}
+
+	private function create_rollup_field(
+		int $collection_id,
+		string $title,
+		int $relation_field_id,
+		int $target_field_id,
+		string $aggregator
+	): int {
+		$meta = array(
+			'rollup_relation_field_id' => (string) $relation_field_id,
+			'rollup_aggregator'        => $aggregator,
+		);
+		if ( $target_field_id > 0 ) {
+			$meta['rollup_target_field_id'] = (string) $target_field_id;
+		}
+
+		return $this->create_collection_field( $collection_id, $title, 'rollup', $meta );
 	}
 
 	private function create_entry( string $post_type, string $title ): int {
