@@ -134,7 +134,6 @@ function PageIdentityActions( { postId } ) {
 			className="cortext-canvas__identity-actions"
 			role="group"
 			aria-label={ __( 'Page identity actions', 'cortext' ) }
-			tabIndex={ 0 }
 		>
 			{ ! hasIcon && ! hasCover && (
 				<PageIdentityControls

@@ -833,10 +833,6 @@ body.cortext-sidebar-resizing {
 		margin: $grid-unit-10 auto $grid-unit-10;
 		padding: 0 $grid-unit-20;
 
-		&:focus {
-			outline: none;
-		}
-
 		.components-dropdown {
 			display: flex;
 			align-items: center;
@@ -844,8 +840,6 @@ body.cortext-sidebar-resizing {
 
 		.cortext-canvas__identity-action {
 			opacity: 0;
-			visibility: hidden;
-			pointer-events: none;
 			min-width: 0;
 			height: auto;
 			padding: $grid-unit-05;
@@ -854,12 +848,15 @@ body.cortext-sidebar-resizing {
 				opacity 0.12s ease,
 				background-color 0.12s ease,
 				box-shadow 0.12s ease;
+
+			&:hover,
+			&:focus-visible {
+				opacity: 1;
+			}
 		}
 
 		&:focus-within .cortext-canvas__identity-action {
 			opacity: 1;
-			visibility: visible;
-			pointer-events: auto;
 		}
 	}
 
@@ -918,8 +915,6 @@ body:has([data-type="cortext/page-icon"]:hover) .cortext-canvas__identity-action
 body:has([data-type="cortext/page-icon"]:focus-within) .cortext-canvas__identity-action,
 body:has(.cortext-canvas__identity-actions:hover) .cortext-canvas__identity-action {
 	opacity: 1;
-	visibility: visible;
-	pointer-events: auto;
 }
 
 .cortext-data-view-picker__empty {
