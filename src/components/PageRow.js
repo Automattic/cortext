@@ -33,6 +33,11 @@ export default function PageRow( {
 	onDelete,
 	autoRenameId, // page id that should immediately enter rename mode
 	onAutoRenameConsumed,
+	// True when an ancestor is collapsed: this row and its subtree are
+	// visually clipped but stay mounted for the expand/collapse animation.
+	// Drop targets must be off so dnd-kit's pointerWithin doesn't hit
+	// invisible descendants and route a drop to the wrong row.
+	isHidden = false,
 } ) {
 	const { page, children } = node;
 	const hasChildren = children.length > 0;
@@ -84,14 +89,17 @@ export default function PageRow( {
 	const dropBefore = useDroppable( {
 		id: `before:${ page.id }`,
 		data: { zone: 'before', pageId: page.id },
+		disabled: isHidden,
 	} );
 	const dropInside = useDroppable( {
 		id: `inside:${ page.id }`,
 		data: { zone: 'inside', pageId: page.id },
+		disabled: isHidden,
 	} );
 	const dropAfter = useDroppable( {
 		id: `after:${ page.id }`,
 		data: { zone: 'after', pageId: page.id },
+		disabled: isHidden,
 	} );
 
 	const isDropTarget = activeDrop && activeDrop.targetId === page.id;
@@ -303,6 +311,7 @@ export default function PageRow( {
 								onDelete={ onDelete }
 								autoRenameId={ autoRenameId }
 								onAutoRenameConsumed={ onAutoRenameConsumed }
+								isHidden={ isHidden || ! isExpanded }
 							/>
 						) ) }
 					</ul>
