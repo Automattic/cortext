@@ -187,6 +187,26 @@ describe( 'normalizeView', () => {
 		expect( next.layout.styles ).toBeUndefined();
 		expect( next.layout.density ).toBe( 'compact' );
 	} );
+
+	it( 'prunes layout.math entries for removed fields or invalid options', () => {
+		const view = {
+			...baseView(),
+			layout: {
+				density: 'compact',
+				math: {
+					'field-1': 'sum',
+					'field-2': 'unknown',
+					'field-removed': 'count',
+				},
+			},
+		};
+		const next = normalizeView(
+			view,
+			new Set( [ TITLE_FIELD_ID, 'field-1', 'field-2' ] )
+		);
+		expect( next.layout.math ).toEqual( { 'field-1': 'sum' } );
+		expect( next.layout.density ).toBe( 'compact' );
+	} );
 } );
 
 describe( 'withColumnWidth', () => {
