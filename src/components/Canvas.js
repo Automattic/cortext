@@ -66,18 +66,22 @@ function Header( { saveStatus } ) {
 
 	return (
 		<div className="cortext-canvas__header">
-			<SaveStatus status={ saveStatus } />
-			<PublishToggle />
-			<Button
-				icon={ cog }
-				label={ __( 'Settings', 'cortext' ) }
-				isPressed={ isInspectorOpen }
-				onClick={ () =>
-					isInspectorOpen
-						? disableComplementaryArea( SCOPE )
-						: enableComplementaryArea( SCOPE, INSPECTOR )
-				}
-			/>
+			<div className="cortext-canvas__header-left">
+				<SaveStatus status={ saveStatus } />
+			</div>
+			<div className="cortext-canvas__header-right">
+				<PublishToggle />
+				<Button
+					icon={ cog }
+					label={ __( 'Settings', 'cortext' ) }
+					isPressed={ isInspectorOpen }
+					onClick={ () =>
+						isInspectorOpen
+							? disableComplementaryArea( SCOPE )
+							: enableComplementaryArea( SCOPE, INSPECTOR )
+					}
+				/>
+			</div>
 		</div>
 	);
 }
