@@ -33,7 +33,8 @@
 				"perPage": 25,
 				"page": 1,
 				"search": "",
-				"layout": {}
+				"layout": {},
+				"rowDetailMode": "side"
 			}
 		}
 	}

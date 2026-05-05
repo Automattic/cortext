@@ -210,6 +210,10 @@ export function mapField( field ) {
 		editable: EDITABLE_TYPES.has( type ),
 		cortextFormat: format,
 		enableGlobalSearch: SEARCHABLE_TYPES.has( type ),
+		cortextFieldType: type,
+		cortextElements: elements,
+		cortextFormat: format,
+		cortextRecordId: field.id,
 	};
 
 	// DataViews v6's FieldType union is

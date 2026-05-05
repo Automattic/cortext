@@ -9,7 +9,9 @@ const DEBOUNCE_MS = 800;
 const MIN_SAVE_INTERVAL_MS = 2000;
 const AUTOSAVE_ERROR_NOTICE_ID = 'cortext-autosave-error';
 
-export default function useAutosave() {
+export default function useAutosave( options = {} ) {
+	const debounceMs = options.debounceMs ?? DEBOUNCE_MS;
+	const minSaveIntervalMs = options.minSaveIntervalMs ?? MIN_SAVE_INTERVAL_MS;
 	const { savePost, editPost } = useDispatch( editorStore );
 	const { createErrorNotice, removeNotice } = useDispatch( noticesStore );
 
@@ -114,7 +116,7 @@ export default function useAutosave() {
 			return undefined;
 		}
 		const elapsed = Date.now() - lastSaveAtRef.current;
-		const wait = Math.max( DEBOUNCE_MS, MIN_SAVE_INTERVAL_MS - elapsed );
+		const wait = Math.max( debounceMs, minSaveIntervalMs - elapsed );
 
 		if ( debounceRef.current ) {
 			clearTimeout( debounceRef.current );
@@ -141,7 +143,15 @@ export default function useAutosave() {
 				debounceRef.current = null;
 			}
 		};
-	}, [ isDirty, isSaveable, editsReference, postStatus ] );
+	}, [
+		debounceMs,
+		editsReference,
+		isDirty,
+		isSaveable,
+		isSaving,
+		minSaveIntervalMs,
+		postStatus,
+	] );
 
 	useEffect( () => {
 		if ( isSaving ) {
