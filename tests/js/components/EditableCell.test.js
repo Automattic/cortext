@@ -1,13 +1,26 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+
+jest.mock( '../../../src/hooks/useCollectionRows', () => ( {
+	__esModule: true,
+	default: jest.fn(),
+} ) );
 
 import {
 	dateOnlyValue,
+	default as EditableCell,
 	formatDateValue,
 	formatDisplay,
 	formatNumberValue,
 	RowMutationContext,
 } from '../../../src/components/EditableCell';
-import EditableCell from '../../../src/components/EditableCell';
+import useCollectionRows from '../../../src/hooks/useCollectionRows';
+
+beforeEach( () => {
+	useCollectionRows.mockReturnValue( {
+		data: [],
+		isLoading: false,
+	} );
+} );
 
 function renderDisplay( value, type, options ) {
 	return render( <>{ formatDisplay( value, type, options ) }</> );
@@ -258,6 +271,34 @@ describe( 'formatDisplay', () => {
 		} );
 	} );
 
+	describe( 'relation', () => {
+		it( 'renders references as collection links', () => {
+			window.cortextSettings = {
+				adminUrl: 'https://example.test/wp-admin/',
+				menuSlug: 'cortext',
+			};
+
+			renderDisplay(
+				[
+					{
+						id: 12,
+						title: { raw: 'Ada Lovelace' },
+						collectionId: 7,
+						collectionSlug: 'people',
+					},
+				],
+				'relation'
+			);
+
+			expect(
+				screen.getByRole( 'link', { name: 'Ada Lovelace' } )
+			).toHaveAttribute(
+				'href',
+				'https://example.test/wp-admin/admin.php?page=cortext&p=%2Fcollection%2Fpeople-7'
+			);
+		} );
+	} );
+
 	describe( 'checkbox', () => {
 		it( 'renders an icon for truthy values', () => {
 			const { container } = renderDisplay( true, 'checkbox' );
@@ -379,5 +420,41 @@ describe( 'EditableCell option overrides', () => {
 		);
 
 		expect( screen.getByText( 'High' ) ).toHaveClass( 'cortext-chip--red' );
+	} );
+} );
+
+describe( 'EditableCell relation editor', () => {
+	it( 'saves selected target row ids from the relation picker', async () => {
+		useCollectionRows.mockReturnValue( {
+			data: [
+				{ id: 22, title: { raw: 'Ada Lovelace' } },
+				{ id: 33, title: { raw: 'Grace Hopper' } },
+			],
+			isLoading: false,
+		} );
+		const saveRowField = jest.fn().mockResolvedValue( true );
+
+		render(
+			<RowMutationContext.Provider value={ { saveRowField } }>
+				<EditableCell
+					item={ { id: 11, meta: { 'field-5': [] } } }
+					fieldId="field-5"
+					fieldType="relation"
+					label="Assignee"
+					relation={ { targetCollectionId: 9, multiple: true } }
+				/>
+			</RowMutationContext.Provider>
+		);
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Assignee' } ) );
+		fireEvent.click( screen.getByText( 'Ada Lovelace' ) );
+
+		await waitFor( () =>
+			expect( saveRowField ).toHaveBeenCalledWith( 11, 'field-5', [ 22 ] )
+		);
+		expect( useCollectionRows ).toHaveBeenCalledWith(
+			9,
+			expect.objectContaining( { type: 'table' } )
+		);
 	} );
 } );

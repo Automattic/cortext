@@ -46,11 +46,11 @@ export function useCreateField( collectionId ) {
 	const { isBusy, setIsBusy, error, setError } = useMutationState();
 	const invalidate = useFieldListInvalidation();
 	const run = useCallback(
-		async ( { title, type, options } ) => {
+		async ( { title, type, options, ...extra } ) => {
 			setIsBusy( true );
 			setError( null );
 			try {
-				const data = { title, type };
+				const data = { title, type, ...extra };
 				if ( options !== undefined ) {
 					data.options = options;
 				}

@@ -13,6 +13,7 @@ declare( strict_types=1 );
 
 namespace Cortext\PostType;
 
+use Cortext\Relations;
 use WP_Post;
 
 final class CollectionEntries {
@@ -35,6 +36,20 @@ final class CollectionEntries {
 		'pages',
 	);
 
+	/**
+	 * Field IDs whose paired reverse deletion is already in progress.
+	 *
+	 * @var array<int,true>
+	 */
+	private static array $deleting_relation_fields = array();
+
+	/**
+	 * Maps dynamic entry post types to their source collection IDs.
+	 *
+	 * @var array<string,int>
+	 */
+	private static array $entry_collection_ids = array();
+
 	public static function is_reserved_slug( string $slug ): bool {
 		return in_array( $slug, self::RESERVED_SLUGS, true );
 	}
@@ -43,6 +58,7 @@ final class CollectionEntries {
 		add_action( 'init', array( $this, 'register_all' ), 20 );
 		add_action( 'save_post', array( $this, 'record_modified_by' ), 10, 2 );
 		add_action( 'before_delete_post', array( $this, 'cleanup_after_field_delete' ), 10, 2 );
+		add_action( 'before_delete_post', array( $this, 'cleanup_after_entry_delete' ), 10, 2 );
 	}
 
 	/**
@@ -72,9 +88,7 @@ final class CollectionEntries {
 	 *
 	 * Two cleanups, scoped to Cortext data only:
 	 *
-	 * 1. Drops `field-<id>` postmeta rows from every entry across every
-	 *    Cortext entry CPT in one query. The JOIN against `wp_posts` keeps
-	 *    the delete from touching incidental meta on non-Cortext post types.
+	 * 1. Drops `field-<id>` postmeta rows from every entry.
 	 * 2. Removes the field's string ID from any collection's `meta.fields`
 	 *    list, preserving the order of the remaining IDs.
 	 *
@@ -89,6 +103,25 @@ final class CollectionEntries {
 			return;
 		}
 
+		$reverse_id = (int) get_post_meta( $post_id, 'relation_reverse_field_id', true );
+		if ( $reverse_id > 0 && empty( self::$deleting_relation_fields[ $reverse_id ] ) ) {
+			$reverse = get_post( $reverse_id );
+			if ( $reverse instanceof WP_Post && Field::POST_TYPE === $reverse->post_type ) {
+				$owner_collection_id         = (int) get_post_meta( $reverse_id, 'related_collection_id', true );
+				$reverse_owner_collection_id = (int) get_post_meta( $post_id, 'related_collection_id', true );
+				if ( $owner_collection_id > 0 ) {
+					delete_post_meta( $owner_collection_id, 'fields', (string) $post_id );
+				}
+				if ( $reverse_owner_collection_id > 0 ) {
+					delete_post_meta( $reverse_owner_collection_id, 'fields', (string) $reverse_id );
+				}
+
+				self::$deleting_relation_fields[ $post_id ] = true;
+				wp_delete_post( $reverse_id, true );
+				unset( self::$deleting_relation_fields[ $post_id ] );
+			}
+		}
+
 		// Drop the field's `field-<id>` meta. `delete_post_meta_by_key`
 		// is global (clears the key from every post in the database),
 		// not strictly scoped to Cortext entry CPTs. We rely on the
@@ -101,31 +134,70 @@ final class CollectionEntries {
 		delete_post_meta_by_key( "field-{$post_id}" );
 
 		// Defensive: remove the field's string ID from any collection's
-		// `meta.fields` list, preserving order of remaining IDs. A real DB
-		// supports the `meta_query` here; the WorDBless test mock does not
-		// (tech-debt.md#9), so this branch runs in production but is
-		// asserted via e2e instead of the PHP unit suite.
-		$field_id_str           = (string) $post_id;
-		$collections_with_field = get_posts(
+		// `meta.fields` list. Query by exact meta row and then filter the
+		// owners by post type so cache cleanup still goes through
+		// delete_post_meta().
+		global $wpdb;
+
+		$field_id_str = (string) $post_id;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- cleanup by exact field list value.
+		$collections_with_field = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = %s AND meta_value = %s",
+				'fields',
+				$field_id_str
+			)
+		);
+
+		foreach ( array_unique( array_map( 'intval', $collections_with_field ) ) as $collection_id ) {
+			if ( Collection::POST_TYPE !== get_post_type( $collection_id ) ) {
+				continue;
+			}
+			delete_post_meta( $collection_id, 'fields', $field_id_str );
+		}
+	}
+
+	public function cleanup_after_entry_delete( int $post_id, ?WP_Post $post = null ): void {
+		$post_type = $post instanceof WP_Post ? $post->post_type : get_post_type( $post_id );
+		if ( ! is_string( $post_type ) || ! str_starts_with( $post_type, self::CPT_PREFIX ) ) {
+			return;
+		}
+		if ( in_array( $post_type, array( Collection::POST_TYPE, Field::POST_TYPE ), true ) ) {
+			return;
+		}
+
+		$collection_id = $this->collection_id_for_entry_post_type( $post_type );
+		$field_ids     = $collection_id > 0
+			? array_map( 'intval', get_post_meta( $collection_id, 'fields', false ) )
+			: array();
+
+		Relations::remove_deleted_row_references( $post_id, $field_ids );
+	}
+
+	private function collection_id_for_entry_post_type( string $post_type ): int {
+		if ( isset( self::$entry_collection_ids[ $post_type ] ) ) {
+			return self::$entry_collection_ids[ $post_type ];
+		}
+
+		$slug = substr( $post_type, strlen( self::CPT_PREFIX ) );
+		if ( '' === $slug ) {
+			return 0;
+		}
+
+		$collections = get_posts(
 			array(
 				'post_type'      => Collection::POST_TYPE,
 				'post_status'    => array( 'draft', 'pending', 'private', 'publish' ),
 				'posts_per_page' => -1,
-				'fields'         => 'ids',
-				// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- one-time defensive cleanup.
-				'meta_query'     => array(
-					array(
-						'key'     => 'fields',
-						'value'   => $field_id_str,
-						'compare' => '=',
-					),
-				),
 			)
 		);
-
-		foreach ( $collections_with_field as $collection_id ) {
-			delete_post_meta( (int) $collection_id, 'fields', $field_id_str );
+		foreach ( $collections as $collection ) {
+			if ( (string) get_post_meta( $collection->ID, 'slug', true ) === $slug ) {
+				return (int) $collection->ID;
+			}
 		}
+
+		return 0;
 	}
 
 	/**
@@ -212,7 +284,8 @@ final class CollectionEntries {
 			return;
 		}
 
-		$post_type = self::CPT_PREFIX . $slug;
+		$post_type                                = self::CPT_PREFIX . $slug;
+		self::$entry_collection_ids[ $post_type ] = (int) $collection->ID;
 
 		// Register the post type and the shared meta keys once. Field meta
 		// must register on every call so collections that happen to share
@@ -266,14 +339,16 @@ final class CollectionEntries {
 				continue;
 			}
 
-			$field_type = get_post_meta( $field->ID, 'type', true );
+			$field_type  = get_post_meta( $field->ID, 'type', true );
+			$is_multiple = 'multiselect' === $field_type ||
+				( 'relation' === $field_type && Relations::relation_is_multiple( (int) $field->ID ) );
 
 			register_post_meta(
 				$post_type,
 				"field-{$field->ID}",
 				array(
 					'type'         => self::wp_meta_type_for( $field_type ),
-					'single'       => ! in_array( $field_type, array( 'multiselect', 'relation' ), true ),
+					'single'       => ! $is_multiple,
 					'show_in_rest' => true,
 				)
 			);

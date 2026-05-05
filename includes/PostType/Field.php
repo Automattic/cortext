@@ -83,5 +83,31 @@ final class Field {
 				'show_in_rest' => true,
 			)
 		);
+
+		$integer_meta = array(
+			'relation_reverse_field_id',
+		);
+
+		foreach ( $integer_meta as $key ) {
+			register_post_meta(
+				self::POST_TYPE,
+				$key,
+				array(
+					'type'         => 'integer',
+					'single'       => true,
+					'show_in_rest' => true,
+				)
+			);
+		}
+
+		register_post_meta(
+			self::POST_TYPE,
+			'relation_multiple',
+			array(
+				'type'         => 'boolean',
+				'single'       => true,
+				'show_in_rest' => true,
+			)
+		);
 	}
 }

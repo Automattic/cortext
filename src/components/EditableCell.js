@@ -1,11 +1,15 @@
-import { __ } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import {
 	Button,
 	CheckboxControl,
 	DateTimePicker,
 	Dropdown,
+	MenuGroup,
+	MenuItem,
 	Notice,
 	Popover,
+	SearchControl,
+	Spinner,
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalNumberControl as NumberControl,
 	TextControl,
@@ -26,6 +30,7 @@ import Chip from './fields/Chip';
 import EditOptionsPopover from './fields/EditOptionsPopover';
 import { resolveFormatColor } from './fields/formatColors';
 import { toRecordId } from '../hooks/fieldIds';
+import useCollectionRows from '../hooks/useCollectionRows';
 
 // Resolves the WordPress site locale into a BCP 47 tag for Intl. WP
 // stores locales as `en_US` / `de_DE`; Intl expects `en-US` / `de-DE`.
@@ -93,6 +98,16 @@ function FieldError( { message } ) {
 // http(s) URLs. Anything else (relative paths, mailto:, plain strings) is
 // rendered as text so we never produce a broken link.
 const URL_PATTERN = /^https?:\/\//i;
+const RELATION_PICKER_VIEW = {
+	type: 'table',
+	fields: [],
+	sort: null,
+	filters: [],
+	perPage: 25,
+	page: 1,
+	search: '',
+	layout: {},
+};
 
 // Clamp decimals to a sane range; Intl.NumberFormat throws above 100.
 function clampDecimals( decimals ) {
@@ -285,6 +300,60 @@ function NumberRing( { value, format, text } ) {
 	);
 }
 
+function relationIds( value ) {
+	const list = Array.isArray( value ) ? value : [ value ];
+	return list
+		.map( ( entry ) => {
+			if ( entry && typeof entry === 'object' && entry.id ) {
+				return Number( entry.id );
+			}
+			return Number( entry );
+		} )
+		.filter( ( id, index, ids ) => id > 0 && ids.indexOf( id ) === index );
+}
+
+function collectionHref( ref ) {
+	const collectionId = Number( ref?.collectionId );
+	if ( ! collectionId ) {
+		return '#';
+	}
+	const slug = String( ref?.collectionSlug ?? '' ).trim();
+	const tail = slug ? `${ slug }-${ collectionId }` : String( collectionId );
+	const adminUrl = window.cortextSettings?.adminUrl ?? '/wp-admin/';
+	const menuSlug = window.cortextSettings?.menuSlug ?? 'cortext';
+	const base = adminUrl.endsWith( '/' ) ? adminUrl : `${ adminUrl }/`;
+	const params = new URLSearchParams();
+	params.set( 'page', menuSlug );
+	params.set( 'p', `/collection/${ tail }` );
+	return `${ base }admin.php?${ params.toString() }`;
+}
+
+function RelationReferences( { value } ) {
+	const refs = Array.isArray( value ) ? value : [ value ];
+	const populated = refs.filter( ( ref ) => ref && ref.id );
+	if ( populated.length === 0 ) {
+		return '';
+	}
+	return (
+		<span className="cortext-relation-refs">
+			{ populated.map( ( ref ) => {
+				const title =
+					ref.title?.raw || ref.title?.rendered || `#${ ref.id }`;
+				return (
+					<a
+						key={ ref.id }
+						className="cortext-relation-ref"
+						href={ collectionHref( ref ) }
+						onClick={ ( event ) => event.stopPropagation() }
+					>
+						{ title }
+					</a>
+				);
+			} ) }
+		</span>
+	);
+}
+
 // Returns either '' (empty cell) or a renderable value (string or JSX).
 // `display === ''` is the consumer's empty-cell signal — see CellShell's
 // `isEmpty` prop. Non-empty values may be JSX (anchor for url, icon for
@@ -364,6 +433,10 @@ export function formatDisplay( value, type, options = {} ) {
 				} ) }
 			</span>
 		);
+	}
+
+	if ( type === 'relation' ) {
+		return <RelationReferences value={ value } />;
 	}
 
 	if ( type === 'date' || type === 'datetime' ) {
@@ -613,6 +686,128 @@ function SelectEditor( {
 	);
 }
 
+function RelationEditor( { value, relation, onSave, onCancel, label } ) {
+	const [ search, setSearch ] = useState( '' );
+	const selectedIds = useMemo( () => relationIds( value ), [ value ] );
+	const targetCollectionId = Number( relation?.targetCollectionId );
+	const isMultiple = relation?.multiple !== false;
+	const { data, isLoading } = useCollectionRows(
+		targetCollectionId || null,
+		RELATION_PICKER_VIEW
+	);
+
+	const rows = useMemo( () => {
+		const term = search.trim().toLowerCase();
+		if ( ! term ) {
+			return data;
+		}
+		return data.filter( ( row ) =>
+			( row.title?.raw || row.title?.rendered || '' )
+				.toLowerCase()
+				.includes( term )
+		);
+	}, [ data, search ] );
+
+	const commit = async ( nextIds ) => {
+		await onSave( nextIds );
+	};
+
+	const toggle = async ( rowId ) => {
+		if ( isMultiple ) {
+			const next = selectedIds.includes( rowId )
+				? selectedIds.filter( ( id ) => id !== rowId )
+				: [ ...selectedIds, rowId ];
+			await commit( next );
+			return false;
+		}
+		await commit( selectedIds.includes( rowId ) ? [] : [ rowId ] );
+		return true;
+	};
+
+	return (
+		<Dropdown
+			defaultOpen
+			onClose={ onCancel }
+			popoverProps={ { placement: 'bottom-start' } }
+			renderToggle={ ( { isOpen, onToggle } ) => (
+				<Button
+					variant="tertiary"
+					className="cortext-relation-edit__toggle"
+					onClick={ onToggle }
+					aria-expanded={ isOpen }
+					aria-label={ label }
+				>
+					{ selectedIds.length
+						? sprintf(
+								/* translators: %d: selected relation count */
+								_n(
+									'%d row selected',
+									'%d rows selected',
+									selectedIds.length,
+									'cortext'
+								),
+								selectedIds.length
+						  )
+						: __( 'Select rows…', 'cortext' ) }
+				</Button>
+			) }
+			renderContent={ ( { onClose } ) => (
+				<div className="cortext-relation-edit">
+					<SearchControl
+						label={ __( 'Search rows', 'cortext' ) }
+						value={ search }
+						onChange={ setSearch }
+						__nextHasNoMarginBottom
+					/>
+					<MenuGroup>
+						<MenuItem
+							isSelected={ selectedIds.length === 0 }
+							onClick={ async () => {
+								await commit( [] );
+								if ( ! isMultiple ) {
+									onClose();
+								}
+							} }
+						>
+							{ __( 'Clear', 'cortext' ) }
+						</MenuItem>
+						{ isLoading ? (
+							<div className="cortext-relation-edit__loading">
+								<Spinner />
+							</div>
+						) : null }
+						{ ! isLoading &&
+							rows.map( ( row ) => {
+								const title =
+									row.title?.raw ||
+									row.title?.rendered ||
+									`#${ row.id }`;
+								return (
+									<MenuItem
+										key={ row.id }
+										isSelected={ selectedIds.includes(
+											row.id
+										) }
+										onClick={ async () => {
+											const shouldClose = await toggle(
+												row.id
+											);
+											if ( shouldClose ) {
+												onClose();
+											}
+										} }
+									>
+										{ title }
+									</MenuItem>
+								);
+							} ) }
+					</MenuGroup>
+				</div>
+			) }
+		/>
+	);
+}
+
 function DateEditor( { value, type, format, onCommit, onCancel, label } ) {
 	return (
 		<Dropdown
@@ -657,6 +852,7 @@ export default function EditableCell( {
 	fieldType,
 	elements,
 	format,
+	relation,
 	label,
 	getValue,
 	readOnly = false,
@@ -683,6 +879,7 @@ export default function EditableCell( {
 	const display = formatDisplay( value, fieldType, {
 		elements: effectiveElements,
 		format,
+		relation,
 	} );
 
 	// Open this cell when the parent targets it via editRequest (new-row
@@ -810,6 +1007,18 @@ export default function EditableCell( {
 					}
 					onRowsChanged={ refreshRows }
 					onRequestClose={ closeEditor }
+					onCancel={ closeEditor }
+					label={ label }
+				/>
+			);
+		} else if ( fieldType === 'relation' ) {
+			editor = (
+				<RelationEditor
+					value={ Array.isArray( value ) ? value : [] }
+					relation={ relation }
+					onSave={ ( nextValues ) =>
+						saveRowField?.( rowId, fieldId, nextValues )
+					}
 					onCancel={ closeEditor }
 					label={ label }
 				/>

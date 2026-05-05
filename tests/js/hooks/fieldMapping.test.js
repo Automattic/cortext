@@ -108,6 +108,22 @@ describe( 'mapField', () => {
 		expect( mapped.isMultiple ).toBeUndefined();
 	} );
 
+	it( "maps relation to a non-sortable DataViews 'array'", () => {
+		const mapped = mapField(
+			baseField( {
+				type: 'relation',
+				related_collection_id: '9',
+				relation_multiple: '0',
+			} )
+		);
+		expect( mapped.type ).toBe( 'array' );
+		expect( mapped.editable ).toBe( true );
+		expect( mapped.enableSorting ).toBe( false );
+		expect( mapped.filterBy ).toBe( false );
+		expect( mapped.relatedCollectionId ).toBe( 9 );
+		expect( mapped.relationMultiple ).toBe( false );
+	} );
+
 	it( "maps email to DataViews 'email'", () => {
 		expect( mapField( baseField( { type: 'email' } ) ).type ).toBe(
 			'email'

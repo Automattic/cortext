@@ -12,6 +12,7 @@ namespace Cortext\Tests;
 use Cortext\PostType\Collection;
 use Cortext\PostType\CollectionEntries;
 use Cortext\PostType\Field;
+use Cortext\Relations;
 use Cortext\Rest\RowsController;
 use WorDBless\BaseTestCase;
 use WP_REST_Request;
@@ -42,6 +43,10 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 	public function test_route_is_registered(): void {
 		$routes = rest_get_server()->get_routes();
 		$this->assertArrayHasKey( '/cortext/v1/rows', $routes );
+		$this->assertArrayHasKey(
+			'/cortext/v1/collections/(?P<collection_id>\d+)/rows/(?P<row_id>\d+)',
+			$routes
+		);
 	}
 
 	public function test_requires_edit_posts_capability(): void {
@@ -458,6 +463,128 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertSame( array( 'blue', 'green' ), $args['meta_query'][1]['value'] );
 	}
 
+	// -- Relation tests -------------------------------------------------
+
+	public function test_update_row_field_syncs_relation_from_source_and_reverse(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$tasks_id  = $this->create_collection_with_slug( 'Tasks', 'tasks-sync' );
+		$people_id = $this->create_collection_with_slug( 'People', 'people-sync' );
+
+		$relation = $this->create_relation_pair( $tasks_id, $people_id );
+		$task_id  = $this->create_entry( 'crtxt_tasks-sync', 'Write tests' );
+		$person_id = $this->create_entry( 'crtxt_people-sync', 'Ada Lovelace' );
+
+		$response = $this->update_row_field(
+			$tasks_id,
+			$task_id,
+			"field-{$relation['source_id']}",
+			array( $person_id )
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			array( (string) $person_id ),
+			get_post_meta( $task_id, "field-{$relation['source_id']}", false )
+		);
+		$this->assertSame(
+			array( (string) $task_id ),
+			get_post_meta( $person_id, "field-{$relation['reverse_id']}", false )
+		);
+
+		$data = $response->get_data();
+		$ref  = $data['meta']["field-{$relation['source_id']}"][0];
+		$this->assertSame( $person_id, $ref['id'] );
+		$this->assertSame( 'Ada Lovelace', $ref['title']['raw'] );
+		$this->assertSame( $people_id, $ref['collectionId'] );
+		$this->assertSame( 'people-sync', $ref['collectionSlug'] );
+
+		$reverse_response = $this->update_row_field(
+			$people_id,
+			$person_id,
+			"field-{$relation['reverse_id']}",
+			array()
+		);
+
+		$this->assertSame( 200, $reverse_response->get_status() );
+		$this->assertSame(
+			array(),
+			get_post_meta( $task_id, "field-{$relation['source_id']}", false )
+		);
+		$this->assertSame(
+			array(),
+			get_post_meta( $person_id, "field-{$relation['reverse_id']}", false )
+		);
+	}
+
+	public function test_relation_sync_removes_conflicts_when_reverse_is_single(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$tasks_id  = $this->create_collection_with_slug( 'Tasks', 'tasks-card' );
+		$people_id = $this->create_collection_with_slug( 'People', 'people-card' );
+
+		$relation = $this->create_relation_pair( $tasks_id, $people_id, true, false );
+		$first_id = $this->create_entry( 'crtxt_tasks-card', 'First' );
+		$second_id = $this->create_entry( 'crtxt_tasks-card', 'Second' );
+		$person_id = $this->create_entry( 'crtxt_people-card', 'Grace Hopper' );
+
+		$this->update_row_field(
+			$tasks_id,
+			$first_id,
+			"field-{$relation['source_id']}",
+			array( $person_id )
+		);
+		$this->update_row_field(
+			$tasks_id,
+			$second_id,
+			"field-{$relation['source_id']}",
+			array( $person_id )
+		);
+
+		$this->assertSame(
+			array(),
+			get_post_meta( $first_id, "field-{$relation['source_id']}", false )
+		);
+		$this->assertSame(
+			array( (string) $person_id ),
+			get_post_meta( $second_id, "field-{$relation['source_id']}", false )
+		);
+		$this->assertSame(
+			array( (string) $second_id ),
+			get_post_meta( $person_id, "field-{$relation['reverse_id']}", false )
+		);
+	}
+
+	public function test_relation_sync_handles_self_relations(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$collection_id = $this->create_collection_with_slug( 'Tasks', 'tasks-self' );
+
+		$relation = $this->create_relation_pair( $collection_id, $collection_id );
+		$parent_id = $this->create_entry( 'crtxt_tasks-self', 'Parent' );
+		$child_id  = $this->create_entry( 'crtxt_tasks-self', 'Child' );
+
+		$response = $this->update_row_field(
+			$collection_id,
+			$parent_id,
+			"field-{$relation['source_id']}",
+			array( $child_id )
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			array( (string) $child_id ),
+			get_post_meta( $parent_id, "field-{$relation['source_id']}", false )
+		);
+		$this->assertSame(
+			array( (string) $parent_id ),
+			get_post_meta( $child_id, "field-{$relation['reverse_id']}", false )
+		);
+
+		$data = $response->get_data();
+		$this->assertSame(
+			'tasks-self',
+			$data['meta']["field-{$relation['source_id']}"][0]['collectionSlug']
+		);
+	}
+
 	// -- System field tests ---------------------------------------------
 
 	public function test_format_row_includes_system_fields(): void {
@@ -736,6 +863,22 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		return $method->invoke( $controller, get_post( $post_id ), array( $field_id ), array() );
 	}
 
+	/**
+	 * @param int[] $field_ids Field IDs to include in the formatted row.
+	 */
+	private function invoke_format_row_with_fields( int $post_id, array $field_ids ): array {
+		$controller = new RowsController();
+		$method     = new \ReflectionMethod( $controller, 'format_row' );
+		$method->setAccessible( true );
+
+		return $method->invoke(
+			$controller,
+			get_post( $post_id ),
+			$field_ids,
+			array()
+		);
+	}
+
 	private function invoke_build_query_args( int $collection_id, string $slug, array $sort ): array {
 		$request = new WP_REST_Request( 'GET', '/cortext/v1/rows' );
 		$request->set_query_params(
@@ -766,6 +909,95 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$request->set_query_params( $params );
 
 		return rest_do_request( $request );
+	}
+
+	private function update_row_field( int $collection_id, int $row_id, string $field, mixed $value ): \WP_REST_Response {
+		$request = new WP_REST_Request(
+			'POST',
+			"/cortext/v1/collections/{$collection_id}/rows/{$row_id}"
+		);
+		$request->set_param( 'collection_id', $collection_id );
+		$request->set_param( 'row_id', $row_id );
+		$request->set_param( 'field', $field );
+		$request->set_param( 'value', $value );
+
+		return rest_do_request( $request );
+	}
+
+	private function create_collection_with_slug( string $title, string $slug ): int {
+		$collection_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Collection::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => $title,
+				'meta_input'  => array( 'slug' => $slug ),
+			)
+		);
+
+		( new CollectionEntries() )->register_for_collection( get_post( $collection_id ) );
+
+		return $collection_id;
+	}
+
+	private function create_collection_field( int $collection_id, string $title, string $type, array $meta = array() ): int {
+		$field_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => $title,
+				'meta_input'  => array_merge( array( 'type' => $type ), $meta ),
+			)
+		);
+		add_post_meta( $collection_id, 'fields', (string) $field_id );
+		( new CollectionEntries() )->register_for_collection( get_post( $collection_id ) );
+
+		return $field_id;
+	}
+
+	/**
+	 * @return array{source_id:int,reverse_id:int}
+	 */
+	private function create_relation_pair(
+		int $source_collection_id,
+		int $target_collection_id,
+		bool $source_multiple = true,
+		bool $reverse_multiple = true
+	): array {
+		$source_id = $this->create_collection_field(
+			$source_collection_id,
+			'Relation',
+			'relation',
+			array(
+				'related_collection_id' => (string) $target_collection_id,
+				'relation_multiple'     => $source_multiple ? '1' : '0',
+			)
+		);
+		$reverse_id = $this->create_collection_field(
+			$target_collection_id,
+			'Reverse relation',
+			'relation',
+			array(
+				'related_collection_id' => (string) $source_collection_id,
+				'relation_multiple'     => $reverse_multiple ? '1' : '0',
+			)
+		);
+		update_post_meta( $source_id, 'relation_reverse_field_id', (string) $reverse_id );
+		update_post_meta( $reverse_id, 'relation_reverse_field_id', (string) $source_id );
+
+		return array(
+			'source_id'  => $source_id,
+			'reverse_id' => $reverse_id,
+		);
+	}
+
+	private function create_entry( string $post_type, string $title ): int {
+		return (int) wp_insert_post(
+			array(
+				'post_type'   => $post_type,
+				'post_status' => 'publish',
+				'post_title'  => $title,
+			)
+		);
 	}
 
 	/**

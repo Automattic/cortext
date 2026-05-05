@@ -11,6 +11,7 @@ namespace Cortext\Rest;
 
 use Cortext\PostType\Collection;
 use Cortext\PostType\CollectionEntries;
+use Cortext\Relations;
 use WP_Error;
 use WP_Post;
 use WP_Query;
@@ -93,10 +94,61 @@ final class RowsController {
 				),
 			)
 		);
+
+		register_rest_route(
+			self::NAMESPACE,
+			'/collections/(?P<collection_id>\d+)/rows/(?P<row_id>\d+)',
+			array(
+				array(
+					'methods'             => 'POST',
+					'callback'            => array( $this, 'update_row_field' ),
+					'permission_callback' => array( $this, 'can_edit_row' ),
+					'args'                => array(
+						'collection_id' => array(
+							'type'     => 'integer',
+							'required' => true,
+						),
+						'row_id'        => array(
+							'type'     => 'integer',
+							'required' => true,
+						),
+						'field'         => array(
+							'type'     => 'string',
+							'required' => true,
+						),
+						'value'         => array(
+							'required' => false,
+						),
+					),
+				),
+			)
+		);
 	}
 
 	public function can_read(): bool {
 		return current_user_can( 'edit_posts' );
+	}
+
+	public function can_edit_row( WP_REST_Request $request ): bool|WP_Error {
+		$collection_id = (int) $request->get_param( 'collection_id' );
+		$row_id        = (int) $request->get_param( 'row_id' );
+
+		$collection = $this->validate_collection( $collection_id );
+		if ( is_wp_error( $collection ) ) {
+			return $collection;
+		}
+
+		$slug = (string) get_post_meta( $collection_id, 'slug', true );
+		$row  = get_post( $row_id );
+		if ( ! $row instanceof WP_Post || CollectionEntries::CPT_PREFIX . $slug !== $row->post_type ) {
+			return new WP_Error(
+				'cortext_row_not_found',
+				__( 'Row not found.', 'cortext' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		return current_user_can( 'edit_post', $row_id );
 	}
 
 	/**
@@ -170,6 +222,79 @@ final class RowsController {
 		);
 	}
 
+	public function update_row_field( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+		$collection_id = (int) $request->get_param( 'collection_id' );
+		$row_id        = (int) $request->get_param( 'row_id' );
+		$field_key     = (string) $request->get_param( 'field' );
+		$value         = $request->get_param( 'value' );
+
+		$collection = $this->validate_collection( $collection_id );
+		if ( is_wp_error( $collection ) ) {
+			return $collection;
+		}
+
+		$slug = (string) get_post_meta( $collection_id, 'slug', true );
+		$row  = get_post( $row_id );
+		if ( ! $row instanceof WP_Post || CollectionEntries::CPT_PREFIX . $slug !== $row->post_type ) {
+			return new WP_Error(
+				'cortext_row_not_found',
+				__( 'Row not found.', 'cortext' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		if ( 'title' === $field_key ) {
+			$result = wp_update_post(
+				array(
+					'ID'         => $row_id,
+					'post_title' => sanitize_text_field( (string) $value ),
+				),
+				true
+			);
+			if ( is_wp_error( $result ) ) {
+				return $result;
+			}
+			$field_ids       = $this->collection_field_ids( $collection_id );
+			$multi_field_ids = $this->multi_value_field_ids( $field_ids );
+			return new WP_REST_Response(
+				$this->format_row( get_post( $row_id ), $field_ids, $multi_field_ids ),
+				200
+			);
+		}
+
+		$field_id  = $this->field_id_from_key( $field_key );
+		$field_ids = $this->collection_field_ids( $collection_id );
+		if ( ! $field_id || ! in_array( $field_id, $field_ids, true ) ) {
+			return new WP_Error(
+				'cortext_field_not_in_collection',
+				__( 'Field does not belong to this collection.', 'cortext' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		$field_type = (string) get_post_meta( $field_id, 'type', true );
+		if ( 'relation' === $field_type ) {
+			$synced = Relations::sync_relation_value( $row_id, $field_id, $value );
+			if ( is_wp_error( $synced ) ) {
+				return $synced;
+			}
+		} else {
+			$this->write_field_value( $row_id, $field_id, $field_type, $value );
+		}
+
+		$touch = wp_update_post( array( 'ID' => $row_id ), true );
+		if ( is_wp_error( $touch ) ) {
+			return $touch;
+		}
+
+		$field_ids       = $this->collection_field_ids( $collection_id );
+		$multi_field_ids = $this->multi_value_field_ids( $field_ids );
+		return new WP_REST_Response(
+			$this->format_row( get_post( $row_id ), $field_ids, $multi_field_ids ),
+			200
+		);
+	}
+
 	/**
 	 * Checks that the given ID points to a valid, registered collection.
 	 *
@@ -217,7 +342,7 @@ final class RowsController {
 	 * sortable system field keys (`'created_at'`, `'modified_at'`). Rejects
 	 * the `*_by` system field keys and any other identifier — sort on
 	 * display-value properties is an open architectural decision shared
-	 * with relations and rollups (tech-debt.md#14).
+	 * with relations (tech-debt.md#14).
 	 *
 	 * @param mixed $sort           Sort param from the request.
 	 * @param int[] $field_ids      Valid field IDs for the collection.
@@ -382,6 +507,70 @@ final class RowsController {
 		return $args;
 	}
 
+	private function write_field_value( int $row_id, int $field_id, string $field_type, mixed $value ): void {
+		$key = Relations::meta_key( $field_id );
+
+		if ( 'multiselect' === $field_type ) {
+			delete_post_meta( $row_id, $key );
+			$entries = is_array( $value ) ? $value : array( $value );
+			foreach ( $entries as $entry ) {
+				$text = sanitize_text_field( (string) $entry );
+				if ( '' !== $text ) {
+					add_post_meta( $row_id, $key, $text );
+				}
+			}
+			return;
+		}
+
+		if ( null === $value || '' === $value ) {
+			delete_post_meta( $row_id, $key );
+			return;
+		}
+
+		if ( 'number' === $field_type ) {
+			update_post_meta( $row_id, $key, is_numeric( $value ) ? (float) $value : $value );
+			return;
+		}
+
+		if ( 'checkbox' === $field_type ) {
+			update_post_meta( $row_id, $key, (bool) $value );
+			return;
+		}
+
+		update_post_meta( $row_id, $key, sanitize_text_field( (string) $value ) );
+	}
+
+	/**
+	 * Formats resolved references for a relation field.
+	 *
+	 * @param int $row_id   Row post ID.
+	 * @param int $field_id Relation field post ID.
+	 * @return array<int,array{id:int,title:array{raw:string,rendered:string},collectionId:int,collectionSlug:string}>
+	 */
+	private function format_relation_value( int $row_id, int $field_id ): array {
+		$target_collection_id = (int) get_post_meta( $field_id, 'related_collection_id', true );
+		$target_slug          = (string) get_post_meta( $target_collection_id, 'slug', true );
+		$refs                 = array();
+
+		foreach ( Relations::relation_values( $row_id, $field_id ) as $target_id ) {
+			$target = get_post( $target_id );
+			if ( ! $target instanceof WP_Post ) {
+				continue;
+			}
+			$refs[] = array(
+				'id'             => $target_id,
+				'title'          => array(
+					'raw'      => $target->post_title,
+					'rendered' => $target->post_title,
+				),
+				'collectionId'   => $target_collection_id,
+				'collectionSlug' => $target_slug,
+			);
+		}
+
+		return $refs;
+	}
+
 	/**
 	 * Returns the subset of field IDs whose type stores multiple values.
 	 *
@@ -392,7 +581,7 @@ final class RowsController {
 		$multi = array();
 		foreach ( $field_ids as $field_id ) {
 			$field_type = (string) get_post_meta( $field_id, 'type', true );
-			if ( in_array( $field_type, array( 'multiselect', 'relation' ), true ) ) {
+			if ( 'multiselect' === $field_type || ( 'relation' === $field_type && Relations::relation_is_multiple( $field_id ) ) ) {
 				$multi[ $field_id ] = true;
 			}
 		}
@@ -410,11 +599,16 @@ final class RowsController {
 	private function format_row( WP_Post $post, array $field_ids, array $multi_field_ids ): array {
 		$meta = array();
 		foreach ( $field_ids as $field_id ) {
-			$key = "field-{$field_id}";
+			$key        = "field-{$field_id}";
+			$field_type = (string) get_post_meta( $field_id, 'type', true );
 
-			$meta[ $key ] = isset( $multi_field_ids[ $field_id ] )
-				? get_post_meta( $post->ID, $key, false )
-				: get_post_meta( $post->ID, $key, true );
+			if ( 'relation' === $field_type ) {
+				$meta[ $key ] = $this->format_relation_value( $post->ID, $field_id );
+			} else {
+				$meta[ $key ] = isset( $multi_field_ids[ $field_id ] )
+					? get_post_meta( $post->ID, $key, false )
+					: get_post_meta( $post->ID, $key, true );
+			}
 		}
 
 		$created_by_id  = (int) $post->post_author;

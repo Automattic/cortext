@@ -31,7 +31,7 @@ export function parseFormat( raw ) {
 }
 
 // Cortext field types that this client knows how to edit inline. Anything
-// outside this set (formula, rollup, relation, …) renders read-only — see
+// outside this set (formula, …) renders read-only — see
 // `EditableCell`'s `readOnly` branch.
 export const EDITABLE_TYPES = new Set( [
 	'text',
@@ -43,11 +43,24 @@ export const EDITABLE_TYPES = new Set( [
 	'date',
 	'datetime',
 	'checkbox',
+	'relation',
 ] );
 
 const SEARCHABLE_TYPES = new Set( [ 'text', 'email', 'url' ] );
 
-function buildRender( id, type, label, elements, format ) {
+function parseBooleanMeta( raw, fallback = false ) {
+	if ( raw === undefined || raw === null || raw === '' ) {
+		return fallback;
+	}
+	if ( typeof raw === 'boolean' ) {
+		return raw;
+	}
+	return [ '1', 'true', 'yes', 'on' ].includes(
+		String( raw ).trim().toLowerCase()
+	);
+}
+
+function buildRender( id, type, label, elements, format, relation ) {
 	const readOnly = ! EDITABLE_TYPES.has( type );
 	return ( { item } ) => (
 		<EditableCell
@@ -56,6 +69,7 @@ function buildRender( id, type, label, elements, format ) {
 			fieldType={ type }
 			elements={ elements }
 			format={ format }
+			relation={ relation }
 			label={ label }
 			readOnly={ readOnly }
 		/>
@@ -72,12 +86,11 @@ function HeaderLabel( { children } ) {
 // REST controller injects them in `format_row`); these definitions just
 // describe how they're rendered and which ones are sortable.
 //
-// `editable: false` keeps them out of the default `view.fields` seed
-// (CollectionDataViews seeds editable columns only), so they appear in
-// the column visibility menu default-hidden, addable like any other
-// field. Sort is enabled only on the timestamps — sort on display-value
-// properties (Person, Relation, Rollup) is an open architectural
-// decision shared with relations and rollups (tech-debt.md#14).
+// `editable: false` and no `recordId` keeps them out of the default
+// `view.fields` seed, so they appear in the column visibility menu
+// default-hidden, addable like any other field. Sort is enabled only on
+// the timestamps. Sort on display-value properties such as Person and
+// Relation is an open architectural decision (tech-debt.md#14).
 export function systemFields() {
 	const formatDate = ( value ) =>
 		value ? dateI18n( 'M j, Y g:i a', value ) : '';
@@ -158,9 +171,25 @@ export function mapField( field ) {
 	} else if ( type === 'date' || type === 'datetime' ) {
 		format = parseFormat( field.meta?.date_format );
 	}
+	const relation =
+		type === 'relation'
+			? {
+					targetCollectionId: Number(
+						field.meta?.related_collection_id
+					),
+					multiple: parseBooleanMeta(
+						field.meta?.relation_multiple,
+						true
+					),
+			  }
+			: undefined;
 	const base = {
 		id,
 		label,
+		recordId: field.id,
+		cortextType: type,
+		relatedCollectionId: relation?.targetCollectionId,
+		relationMultiple: relation?.multiple,
 		// Header content is just an aria-hidden marker.
 		// `ColumnHeaderActions` queries the DOM for it and portals our
 		// combined-dropdown trigger into the owning <th>; DataViews'
@@ -177,7 +206,7 @@ export function mapField( field ) {
 			</HeaderLabel>
 		),
 		getValue: ( { item } ) => item?.meta?.[ id ] ?? null,
-		render: buildRender( id, type, label, elements, format ),
+		render: buildRender( id, type, label, elements, format, relation ),
 		editable: EDITABLE_TYPES.has( type ),
 		cortextType: type,
 		cortextFormat: format,
@@ -203,6 +232,13 @@ export function mapField( field ) {
 			return { ...base, type: 'text', elements };
 		case 'multiselect':
 			return { ...base, type: 'array', elements };
+		case 'relation':
+			return {
+				...base,
+				type: 'array',
+				enableSorting: false,
+				filterBy: false,
+			};
 		case 'date':
 		case 'datetime':
 			return { ...base, type: 'datetime' };

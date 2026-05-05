@@ -1060,6 +1060,17 @@ body:has(.cortext-canvas__identity-actions:hover) .cortext-canvas__identity-acti
 		flex: 0 0 auto;
 		color: $gray-700;
 	}
+
+	&__config {
+		display: grid;
+		gap: $grid-unit-15;
+	}
+
+	&__actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: $grid-unit-10;
+	}
 }
 
 // Notion-style format submenu. The outer popover sits beside the column
@@ -1577,7 +1588,8 @@ tbody > tr > td:not(:first-child) {
 	// which looks out of place inside the table.
 	.cortext-select-edit__toggle.components-button,
 	.cortext-date-edit__toggle.components-button,
-	.cortext-multiselect-edit__toggle.components-button {
+	.cortext-multiselect-edit__toggle.components-button,
+	.cortext-relation-edit__toggle.components-button {
 		width: 100%;
 		height: 100%;
 		justify-content: flex-start;
@@ -1622,6 +1634,48 @@ tbody > tr > td:not(:first-child) {
 	&:hover,
 	&:focus {
 		text-decoration: none;
+	}
+}
+
+.cortext-relation-refs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: $grid-unit-05;
+	min-width: 0;
+	max-width: 100%;
+	overflow: hidden;
+}
+
+.cortext-relation-ref {
+	display: inline-flex;
+	align-items: center;
+	max-width: 100%;
+	min-width: 0;
+	height: $grid-unit-30;
+	padding: 0 $grid-unit-10;
+	border-radius: $grid-unit-30;
+	background: $gray-100;
+	color: var(--wp-admin-theme-color);
+	text-decoration: none;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+
+	&:hover,
+	&:focus {
+		text-decoration: underline;
+		text-underline-offset: 2px;
+	}
+}
+
+.cortext-relation-edit {
+	width: 260px;
+	padding: $grid-unit-05;
+
+	&__loading {
+		display: flex;
+		justify-content: center;
+		padding: $grid-unit-15;
 	}
 }
 

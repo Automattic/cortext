@@ -12,6 +12,7 @@ namespace Cortext\Tests;
 use Cortext\PostType\Collection;
 use Cortext\PostType\CollectionEntries;
 use Cortext\PostType\Field;
+use Cortext\Relations;
 use WorDBless\BaseTestCase;
 
 final class Test_Collection_Entries extends BaseTestCase {
@@ -149,6 +150,38 @@ final class Test_Collection_Entries extends BaseTestCase {
 		$registered = get_registered_meta_keys( 'post', 'crtxt_tags' );
 		$this->assertArrayHasKey( "field-{$field_id}", $registered );
 		$this->assertFalse( $registered["field-{$field_id}"]['single'] );
+	}
+
+	public function test_relation_field_single_meta_follows_relation_cardinality(): void {
+		$collection_id = wp_insert_post(
+			array(
+				'post_type'   => Collection::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Tasks',
+				'meta_input'  => array( 'slug' => 'relmeta' ),
+			)
+		);
+
+		$field_id = wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Assignee',
+				'meta_input'  => array(
+					'type'              => 'relation',
+					'relation_multiple' => '0',
+				),
+			)
+		);
+
+		add_post_meta( $collection_id, 'fields', $field_id );
+
+		$collection = get_post( $collection_id );
+		( new CollectionEntries() )->register_for_collection( $collection );
+
+		$registered = get_registered_meta_keys( 'post', 'crtxt_relmeta' );
+		$this->assertArrayHasKey( "field-{$field_id}", $registered );
+		$this->assertTrue( $registered["field-{$field_id}"]['single'] );
 	}
 
 	public function test_rejects_slug_exceeding_max_length(): void {
@@ -501,6 +534,87 @@ final class Test_Collection_Entries extends BaseTestCase {
 		);
 	}
 
+	public function test_relation_field_delete_deletes_pair_and_clears_both_sides(): void {
+		$entries       = new CollectionEntries();
+		$tasks_id      = $this->create_collection_with_slug( 'Tasks', 'tasks-del' );
+		$people_id     = $this->create_collection_with_slug( 'People', 'people-del' );
+		$source_id     = $this->create_relation_field( $tasks_id, $people_id, 'Person' );
+		$reverse_id    = $this->create_relation_field( $people_id, $tasks_id, 'Tasks' );
+		update_post_meta( $source_id, 'relation_reverse_field_id', (string) $reverse_id );
+		update_post_meta( $reverse_id, 'relation_reverse_field_id', (string) $source_id );
+
+		$entries->register_for_collection( get_post( $tasks_id ) );
+		$entries->register_for_collection( get_post( $people_id ) );
+		$entries->register();
+
+		$task_id = wp_insert_post(
+			array(
+				'post_type'   => 'crtxt_tasks-del',
+				'post_status' => 'publish',
+				'post_title'  => 'Task',
+			)
+		);
+		$person_id = wp_insert_post(
+			array(
+				'post_type'   => 'crtxt_people-del',
+				'post_status' => 'publish',
+				'post_title'  => 'Person',
+			)
+		);
+		add_post_meta( $task_id, Relations::meta_key( $source_id ), (string) $person_id );
+		add_post_meta( $person_id, Relations::meta_key( $reverse_id ), (string) $task_id );
+
+		wp_delete_post( $source_id, true );
+
+		$this->assertNull( get_post( $source_id ) );
+		$this->assertNull( get_post( $reverse_id ) );
+		$this->assertSame( array(), get_post_meta( $task_id, Relations::meta_key( $source_id ), false ) );
+		$this->assertSame( array(), get_post_meta( $person_id, Relations::meta_key( $reverse_id ), false ) );
+		$this->assertNotContains(
+			(string) $source_id,
+			get_post_meta( $tasks_id, 'fields', false )
+		);
+		$this->assertNotContains(
+			(string) $reverse_id,
+			get_post_meta( $people_id, 'fields', false )
+		);
+	}
+
+	public function test_entry_delete_removes_stale_reverse_relation_references(): void {
+		$entries       = new CollectionEntries();
+		$tasks_id      = $this->create_collection_with_slug( 'Tasks', 'tasks-rdel' );
+		$people_id     = $this->create_collection_with_slug( 'People', 'people-rdel' );
+		$source_id     = $this->create_relation_field( $tasks_id, $people_id, 'Person' );
+		$reverse_id    = $this->create_relation_field( $people_id, $tasks_id, 'Tasks' );
+		update_post_meta( $source_id, 'relation_reverse_field_id', (string) $reverse_id );
+		update_post_meta( $reverse_id, 'relation_reverse_field_id', (string) $source_id );
+
+		$entries->register_for_collection( get_post( $tasks_id ) );
+		$entries->register_for_collection( get_post( $people_id ) );
+		$entries->register();
+
+		$task_id = wp_insert_post(
+			array(
+				'post_type'   => 'crtxt_tasks-rdel',
+				'post_status' => 'publish',
+				'post_title'  => 'Task',
+			)
+		);
+		$person_id = wp_insert_post(
+			array(
+				'post_type'   => 'crtxt_people-rdel',
+				'post_status' => 'publish',
+				'post_title'  => 'Person',
+			)
+		);
+		add_post_meta( $task_id, Relations::meta_key( $source_id ), (string) $person_id );
+		add_post_meta( $person_id, Relations::meta_key( $reverse_id ), (string) $task_id );
+
+		wp_delete_post( $task_id, true );
+
+		$this->assertSame( array(), get_post_meta( $person_id, Relations::meta_key( $reverse_id ), false ) );
+	}
+
 	public function test_non_field_delete_skips_entry_meta_cleanup(): void {
 		$entries       = new CollectionEntries();
 		$collection_id = wp_insert_post(
@@ -546,5 +660,34 @@ final class Test_Collection_Entries extends BaseTestCase {
 			'preserved',
 			get_post_meta( $entry_id, "field-{$field_id}", true )
 		);
+	}
+
+	private function create_collection_with_slug( string $title, string $slug ): int {
+		return (int) wp_insert_post(
+			array(
+				'post_type'   => Collection::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => $title,
+				'meta_input'  => array( 'slug' => $slug ),
+			)
+		);
+	}
+
+	private function create_relation_field( int $collection_id, int $target_collection_id, string $title ): int {
+		$field_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => $title,
+				'meta_input'  => array(
+					'type'                  => 'relation',
+					'related_collection_id' => (string) $target_collection_id,
+					'relation_multiple'     => '1',
+				),
+			)
+		);
+		add_post_meta( $collection_id, 'fields', (string) $field_id );
+
+		return $field_id;
 	}
 }
