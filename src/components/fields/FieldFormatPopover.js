@@ -1,11 +1,18 @@
 import { __ } from '@wordpress/i18n';
-import { Icon, Popover } from '@wordpress/components';
+import {
+	Icon,
+	Popover,
+	ToggleControl,
+	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+	__experimentalNumberControl as NumberControl,
+} from '@wordpress/components';
 import { useEntityRecord } from '@wordpress/core-data';
 import { useDispatch } from '@wordpress/data';
 import { forwardRef, useMemo, useRef, useState } from '@wordpress/element';
 import { check, chevronRight } from '@wordpress/icons';
 
 import { parseFormat } from '../../hooks/fieldMapping';
+import { FORMAT_COLORS, findFormatColor } from './formatColors';
 
 // Number "format" rows flatten the storage shape (style + currency) into
 // a single flat list so the menu mirrors Notion. Each entry carries the
@@ -167,21 +174,208 @@ function ChoiceList( { items, isSelected, onPick } ) {
 	);
 }
 
+// Tile previews mimic Notion's "Show as" thumbnails: a stylized number,
+// a horizontal progress bar, and a ring. Plain SVG so they don't depend
+// on icon glyphs that don't quite match.
+const NumberTilePreview = (
+	<span className="cortext-format-submenu__tile-preview-number">42</span>
+);
+
+const BarTilePreview = (
+	<svg
+		className="cortext-format-submenu__tile-preview-bar"
+		viewBox="0 0 40 6"
+		aria-hidden="true"
+	>
+		<rect x="0" y="2" width="40" height="2" rx="1" opacity="0.2" />
+		<rect x="0" y="2" width="24" height="2" rx="1" />
+	</svg>
+);
+
+const RingTilePreview = (
+	<svg
+		className="cortext-format-submenu__tile-preview-ring"
+		viewBox="0 0 20 20"
+		aria-hidden="true"
+	>
+		<circle
+			cx="10"
+			cy="10"
+			r="7"
+			fill="none"
+			strokeWidth="2.5"
+			opacity="0.2"
+		/>
+		<circle
+			cx="10"
+			cy="10"
+			r="7"
+			fill="none"
+			strokeWidth="2.5"
+			strokeDasharray={ 2 * Math.PI * 7 }
+			strokeDashoffset={ 2 * Math.PI * 7 * 0.4 }
+			transform="rotate(-90 10 10)"
+		/>
+	</svg>
+);
+
+const DISPLAY_OPTIONS = [
+	{
+		id: 'number',
+		label: __( 'Number', 'cortext' ),
+		preview: NumberTilePreview,
+	},
+	{ id: 'bar', label: __( 'Bar', 'cortext' ), preview: BarTilePreview },
+	{ id: 'ring', label: __( 'Ring', 'cortext' ), preview: RingTilePreview },
+];
+
+function ShowAsTiles( { value, onChange } ) {
+	const current = value ?? 'number';
+	return (
+		<div className="cortext-format-submenu__section">
+			<span className="cortext-format-submenu__section-title">
+				{ __( 'Show as', 'cortext' ) }
+			</span>
+			<div className="cortext-format-submenu__tiles">
+				{ DISPLAY_OPTIONS.map( ( option ) => {
+					const selected = option.id === current;
+					return (
+						<button
+							key={ option.id }
+							type="button"
+							role="radio"
+							aria-checked={ selected }
+							className={
+								'cortext-format-submenu__tile' +
+								( selected ? ' is-selected' : '' )
+							}
+							onClick={ () => onChange( option.id ) }
+						>
+							<span className="cortext-format-submenu__tile-preview">
+								{ option.preview }
+							</span>
+							<span className="cortext-format-submenu__tile-label">
+								{ option.label }
+							</span>
+						</button>
+					);
+				} ) }
+			</div>
+		</div>
+	);
+}
+
+function ColorSwatch( { id } ) {
+	const color = findFormatColor( id );
+	const style = color.hex
+		? { background: color.hex }
+		: { background: 'var(--wp-admin-theme-color, #007cba)' };
+	return (
+		<span
+			className="cortext-format-submenu__swatch"
+			style={ style }
+			aria-hidden="true"
+		/>
+	);
+}
+
+function ColorList( { value, onPick } ) {
+	const current = value ?? 'default';
+	return (
+		<ul className="cortext-format-submenu__list" role="menu">
+			{ FORMAT_COLORS.map( ( color ) => {
+				const selected = color.id === current;
+				return (
+					<li key={ color.id } role="none">
+						<button
+							type="button"
+							role="menuitemradio"
+							aria-checked={ selected }
+							className={
+								'cortext-format-submenu__list-item' +
+								( selected ? ' is-selected' : '' )
+							}
+							onClick={ () => onPick( color.id ) }
+						>
+							<span className="cortext-format-submenu__list-check">
+								{ selected ? <Icon icon={ check } /> : null }
+							</span>
+							<ColorSwatch id={ color.id } />
+							<span>{ color.label }</span>
+						</button>
+					</li>
+				);
+			} ) }
+		</ul>
+	);
+}
+
+// Inline-input row for "Divide by" — same row geometry as SubmenuRow but
+// with a NumberControl on the right instead of a chevron flyout.
+function SubmenuInputRow( { label, value, onChange, min = 1 } ) {
+	return (
+		<div className="cortext-format-submenu__inline-row">
+			<span className="cortext-format-submenu__row-label">{ label }</span>
+			<NumberControl
+				className="cortext-format-submenu__input"
+				value={ value }
+				onChange={ ( next ) => {
+					const num = Number( next );
+					onChange( Number.isFinite( num ) ? num : value );
+				} }
+				min={ min }
+				spinControls="none"
+				hideLabelFromVision
+				label={ label }
+				__next40pxDefaultSize
+			/>
+		</div>
+	);
+}
+
+function SubmenuToggleRow( { label, checked, onChange } ) {
+	return (
+		<div className="cortext-format-submenu__inline-row">
+			<span className="cortext-format-submenu__row-label">{ label }</span>
+			<ToggleControl
+				className="cortext-format-submenu__toggle"
+				checked={ checked }
+				onChange={ onChange }
+				label={ label }
+				hideLabelFromVision
+				__nextHasNoMarginBottom
+			/>
+		</div>
+	);
+}
+
 function NumberFormBody( { config, onChange } ) {
 	const [ openRow, setOpenRow ] = useState( null );
 	const formatRowRef = useRef( null );
 	const decimalsRowRef = useRef( null );
+	const colorRowRef = useRef( null );
 	const current = findNumberFormat( config );
 	const decimals = config?.decimals ?? null;
 	const hasDecimals = decimals !== null;
+	const display = config?.display ?? 'number';
+	const isVisual = display === 'bar' || display === 'ring';
+	const colorId = config?.color ?? 'default';
+	const currentColor = findFormatColor( colorId );
+	const divideBy = config?.divideBy ?? 100;
+	const showNumber = config?.showNumber !== false;
+	// Divide-by has no meaning for percent — values are already 0..1, the
+	// visual fills directly. Hide the row to keep the panel tidy.
+	const showDivideBy = isVisual && current.style !== 'percent';
 
 	const pickFormat = ( item ) => {
-		const next = { style: item.style };
-		if ( hasDecimals ) {
-			next.decimals = decimals;
+		const next = { ...( config ?? {} ), style: item.style };
+		if ( ! hasDecimals ) {
+			delete next.decimals;
 		}
 		if ( item.style === 'currency' ) {
 			next.currency = item.currency;
+		} else {
+			delete next.currency;
 		}
 		onChange( next );
 		setOpenRow( null );
@@ -196,6 +390,29 @@ function NumberFormBody( { config, onChange } ) {
 		}
 		onChange( next );
 		setOpenRow( null );
+	};
+
+	const pickDisplay = ( id ) => {
+		onChange( {
+			...( config ?? { style: 'plain' } ),
+			display: id,
+		} );
+	};
+
+	const pickColor = ( id ) => {
+		onChange( { ...( config ?? { style: 'plain' } ), color: id } );
+		setOpenRow( null );
+	};
+
+	const pickDivideBy = ( n ) => {
+		onChange( { ...( config ?? { style: 'plain' } ), divideBy: n } );
+	};
+
+	const pickShowNumber = ( checked ) => {
+		onChange( {
+			...( config ?? { style: 'plain' } ),
+			showNumber: checked,
+		} );
 	};
 
 	return (
@@ -222,6 +439,37 @@ function NumberFormBody( { config, onChange } ) {
 					setOpenRow( openRow === 'decimals' ? null : 'decimals' )
 				}
 			/>
+			<ShowAsTiles value={ display } onChange={ pickDisplay } />
+			{ isVisual ? (
+				<div className="cortext-format-submenu__visual-config">
+					<SubmenuRow
+						ref={ colorRowRef }
+						label={ __( 'Color', 'cortext' ) }
+						value={
+							<span className="cortext-format-submenu__color-value">
+								<ColorSwatch id={ colorId } />
+								<span>{ currentColor.label }</span>
+							</span>
+						}
+						isOpen={ openRow === 'color' }
+						onClick={ () =>
+							setOpenRow( openRow === 'color' ? null : 'color' )
+						}
+					/>
+					{ showDivideBy ? (
+						<SubmenuInputRow
+							label={ __( 'Divide by', 'cortext' ) }
+							value={ divideBy }
+							onChange={ pickDivideBy }
+						/>
+					) : null }
+					<SubmenuToggleRow
+						label={ __( 'Show number', 'cortext' ) }
+						checked={ showNumber }
+						onChange={ pickShowNumber }
+					/>
+				</div>
+			) : null }
 			{ openRow === 'format' ? (
 				<Popover
 					anchor={ formatRowRef.current }
@@ -250,6 +498,17 @@ function NumberFormBody( { config, onChange } ) {
 						isSelected={ ( item ) => item.value === decimals }
 						onPick={ ( item ) => pickDecimals( item.value ) }
 					/>
+				</Popover>
+			) : null }
+			{ openRow === 'color' ? (
+				<Popover
+					anchor={ colorRowRef.current }
+					placement="right-start"
+					offset={ 8 }
+					onClose={ () => setOpenRow( null ) }
+					className="cortext-format-submenu__flyout"
+				>
+					<ColorList value={ colorId } onPick={ pickColor } />
 				</Popover>
 			) : null }
 		</>

@@ -675,6 +675,132 @@ body.cortext-fullscreen {
 		color: $gray-700;
 	}
 
+	&__section {
+		padding: $grid-unit-10 $grid-unit-15 $grid-unit-05;
+	}
+
+	&__section-title {
+		display: block;
+		margin-bottom: $grid-unit-10;
+		font-size: 11px;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.4px;
+		color: $gray-700;
+	}
+
+	&__tiles {
+		display: grid;
+		grid-template-columns: repeat(3, 1fr);
+		gap: $grid-unit-05;
+	}
+
+	&__tile {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: $grid-unit-05;
+		padding: $grid-unit-10 $grid-unit-05;
+		min-height: 56px;
+		border: $border-width solid $gray-200;
+		border-radius: 4px;
+		background: transparent;
+		font-size: 11px;
+		color: $gray-900;
+		cursor: pointer;
+		transition: border-color 0.1s ease, background-color 0.1s ease;
+
+		&:hover {
+			background: $gray-100;
+		}
+
+		&:focus-visible {
+			outline: 2px solid var(--wp-admin-theme-color, $gray-700);
+			outline-offset: -1px;
+		}
+
+		&.is-selected {
+			border-color: var(--wp-admin-theme-color, $gray-700);
+			color: var(--wp-admin-theme-color, $gray-900);
+		}
+	}
+
+	&__tile-preview {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 20px;
+		color: currentcolor;
+	}
+
+	&__tile-preview-number {
+		font-weight: 600;
+		font-size: 14px;
+	}
+
+	&__tile-preview-bar {
+		width: 40px;
+		height: 6px;
+		fill: currentcolor;
+	}
+
+	&__tile-preview-ring {
+		width: 20px;
+		height: 20px;
+		stroke: currentcolor;
+	}
+
+	&__tile-label {
+		line-height: 1;
+	}
+
+	// Inline-control rows: same row geometry as the chevron rows but the
+	// right side hosts a small input or toggle instead of a value plus
+	// chevron. Keeps the panel visually coherent across row kinds.
+	&__inline-row {
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-10;
+		padding: $grid-unit-05 $grid-unit-15;
+	}
+
+	&__input {
+		flex: 0 0 auto;
+		width: 80px;
+
+		input {
+			text-align: end;
+		}
+	}
+
+	&__toggle {
+		flex: 0 0 auto;
+		margin: 0;
+	}
+
+	&__visual-config {
+		display: grid;
+		gap: 2px;
+		margin-top: $grid-unit-05;
+		padding-top: $grid-unit-05;
+		border-top: $border-width solid $gray-200;
+	}
+
+	&__swatch {
+		display: inline-block;
+		width: 14px;
+		height: 14px;
+		border-radius: 3px;
+		flex: 0 0 auto;
+	}
+
+	&__color-value {
+		display: inline-flex;
+		align-items: center;
+		gap: $grid-unit-05;
+	}
+
 	&__flyout {
 
 		.components-popover__content {
@@ -1017,6 +1143,66 @@ tbody > tr > td:not(:first-child) {
 
 .cortext-cell-check {
 	color: $gray-900;
+}
+
+// "Show as" cell visuals for number fields. Bar/ring share a value
+// label so users can read the precise number alongside the visual; the
+// visual sizes itself to fit the column's intrinsic width without
+// reflowing other cells.
+.cortext-cell-bar {
+	display: inline-flex;
+	align-items: center;
+	gap: $grid-unit-10;
+	width: 100%;
+	color: var(--wp-admin-theme-color, $gray-900);
+
+	&__track {
+		flex: 1 1 auto;
+		min-width: 40px;
+		max-width: 120px;
+		height: 6px;
+		border-radius: 999px;
+		background: $gray-200;
+		overflow: hidden;
+	}
+
+	&__fill {
+		display: block;
+		height: 100%;
+		background: currentcolor;
+	}
+
+	&__label {
+		flex: 0 0 auto;
+		color: $gray-900;
+		font-variant-numeric: tabular-nums;
+	}
+}
+
+.cortext-cell-ring {
+	display: inline-flex;
+	align-items: center;
+	gap: $grid-unit-10;
+	color: var(--wp-admin-theme-color, $gray-900);
+
+	&__svg {
+		width: 18px;
+		height: 18px;
+		flex: 0 0 auto;
+	}
+
+	&__track {
+		stroke: $gray-200;
+	}
+
+	&__fill {
+		stroke: currentcolor;
+	}
+
+	&__label {
+		color: $gray-900;
+		font-variant-numeric: tabular-nums;
+	}
 }
 
 // Single chip used by select cells; flex container for multiselect cells.
