@@ -318,19 +318,74 @@ function relationTitle( entry ) {
 }
 
 function collectionHref( ref ) {
-	const collectionId = Number( ref?.collectionId );
-	if ( ! collectionId ) {
+	const route = collectionRoute( ref );
+	if ( ! route ) {
 		return '#';
 	}
-	const slug = String( ref?.collectionSlug ?? '' ).trim();
-	const tail = slug ? `${ slug }-${ collectionId }` : String( collectionId );
 	const adminUrl = window.cortextSettings?.adminUrl ?? '/wp-admin/';
 	const menuSlug = window.cortextSettings?.menuSlug ?? 'cortext';
 	const base = adminUrl.endsWith( '/' ) ? adminUrl : `${ adminUrl }/`;
 	const params = new URLSearchParams();
 	params.set( 'page', menuSlug );
-	params.set( 'p', `/collection/${ tail }` );
+	params.set( 'p', `/${ route }` );
 	return `${ base }admin.php?${ params.toString() }`;
+}
+
+function collectionRoute( ref ) {
+	const collectionId = Number( ref?.collectionId );
+	if ( ! collectionId ) {
+		return '';
+	}
+	const slug = String( ref?.collectionSlug ?? '' ).trim();
+	const tail = slug ? `${ slug }-${ collectionId }` : String( collectionId );
+	return `collection/${ tail }`;
+}
+
+function topWindow() {
+	try {
+		if ( window.parent && window.parent !== window ) {
+			return window.parent;
+		}
+	} catch {
+		return window;
+	}
+	return window;
+}
+
+function shouldUseNativeLink( event ) {
+	return (
+		event.defaultPrevented ||
+		event.button !== 0 ||
+		event.metaKey ||
+		event.ctrlKey ||
+		event.altKey ||
+		event.shiftKey
+	);
+}
+
+function navigateToCollection( event, ref ) {
+	event.stopPropagation();
+	if ( shouldUseNativeLink( event ) ) {
+		return;
+	}
+	const route = collectionRoute( ref );
+	if ( ! route ) {
+		return;
+	}
+	const targetWindow = topWindow();
+	const router = targetWindow?.cortextRouter;
+	if ( router?.navigate ) {
+		event.preventDefault();
+		router.navigate( {
+			to: '/$',
+			params: { _splat: route },
+		} );
+		return;
+	}
+	if ( targetWindow && targetWindow !== window ) {
+		event.preventDefault();
+		targetWindow.location.href = collectionHref( ref );
+	}
 }
 
 function RelationReferences( { value } ) {
@@ -351,7 +406,9 @@ function RelationReferences( { value } ) {
 						className="cortext-relation-ref"
 						href={ collectionHref( ref ) }
 						target="_top"
-						onClick={ ( event ) => event.stopPropagation() }
+						onClick={ ( event ) =>
+							navigateToCollection( event, ref )
+						}
 					>
 						{ title }
 					</a>

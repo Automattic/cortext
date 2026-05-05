@@ -19,6 +19,7 @@ import useCollectionRows from '../../../src/hooks/useCollectionRows';
 
 beforeEach( () => {
 	apiFetch.mockReset();
+	delete window.cortextRouter;
 	useCollectionRows.mockReturnValue( {
 		data: [],
 		collection: null,
@@ -304,6 +305,42 @@ describe( 'formatDisplay', () => {
 			expect(
 				screen.getByRole( 'link', { name: 'Ada Lovelace' } )
 			).toHaveAttribute( 'target', '_top' );
+		} );
+
+		it( 'uses the Cortext router for plain relation link clicks', () => {
+			window.cortextSettings = {
+				adminUrl: 'https://example.test/wp-admin/',
+				menuSlug: 'cortext',
+			};
+			window.cortextRouter = { navigate: jest.fn() };
+
+			renderDisplay(
+				[
+					{
+						id: 12,
+						title: { raw: 'Ada Lovelace' },
+						collectionId: 7,
+						collectionSlug: 'people',
+					},
+				],
+				'relation'
+			);
+
+			const anchor = screen.getByRole( 'link', {
+				name: 'Ada Lovelace',
+			} );
+			const click = new MouseEvent( 'click', {
+				bubbles: true,
+				cancelable: true,
+				button: 0,
+			} );
+			anchor.dispatchEvent( click );
+
+			expect( click.defaultPrevented ).toBe( true );
+			expect( window.cortextRouter.navigate ).toHaveBeenCalledWith( {
+				to: '/$',
+				params: { _splat: 'collection/people-7' },
+			} );
 		} );
 	} );
 
