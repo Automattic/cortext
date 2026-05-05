@@ -41,6 +41,7 @@ module.exports = {
 	optimization: {
 		...defaultConfig.optimization,
 		chunkIds: 'named',
+		moduleIds: 'named',
 	},
 	plugins: [
 		...defaultConfig.plugins.map( ( plugin ) => {
