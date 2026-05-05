@@ -502,9 +502,9 @@ function VisualCanvas( { postId, onReady } ) {
 	// and the user wouldn't notice the divergence until preview.
 	return (
 		<div className="cortext-canvas__visual">
-			<PageIdentityActions postId={ postId } />
 			<div className="cortext-canvas__block-canvas">
 				<BlockCanvas height="100%" styles={ styles }>
+					<PageIdentityActions postId={ postId } />
 					<EnsureHeaderBlocks postId={ postId } />
 					<div className="cortext-canvas__editor">
 						<BlockList
