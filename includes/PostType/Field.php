@@ -57,6 +57,7 @@ final class Field {
 			'type',
 			'options',
 			'number_format',
+			'date_format',
 			'expression',
 		);
 

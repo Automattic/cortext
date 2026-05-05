@@ -176,6 +176,7 @@ final class FieldsController {
 				'type',
 				'options',
 				'number_format',
+				'date_format',
 				'expression',
 				'related_collection_id',
 			) as $key

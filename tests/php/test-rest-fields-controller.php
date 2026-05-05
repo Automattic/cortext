@@ -286,6 +286,54 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 		);
 	}
 
+	public function test_duplicate_clones_format_meta(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$collection_id = $this->create_collection_with_slug( 'Format Meta', 'format-meta' );
+
+		$number_format = wp_json_encode(
+			array(
+				'style'    => 'currency',
+				'decimals' => 2,
+				'currency' => 'EUR',
+			)
+		);
+		$date_format   = wp_json_encode(
+			array(
+				'style'  => 'us',
+				'time'   => true,
+				'hour12' => false,
+			)
+		);
+
+		// Format meta is written via core-data after creation, so insert
+		// the source field directly with the meta in place.
+		$source_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Price',
+				'meta_input'  => array(
+					'type'          => 'number',
+					'number_format' => $number_format,
+					'date_format'   => $date_format,
+				),
+			)
+		);
+		add_post_meta( $collection_id, 'fields', (string) $source_id );
+
+		$copy_id = (int) $this->duplicate_field( $collection_id, $source_id )
+			->get_data()['id'];
+
+		$this->assertSame(
+			$number_format,
+			get_post_meta( $copy_id, 'number_format', true )
+		);
+		$this->assertSame(
+			$date_format,
+			get_post_meta( $copy_id, 'date_format', true )
+		);
+	}
+
 	public function test_duplicate_preserves_related_collection_id(): void {
 		wp_set_current_user( $this->create_user( 'editor' ) );
 		$collection_id = $this->create_collection_with_slug( 'Tasks', 'tasks-r' );
