@@ -136,15 +136,24 @@ function PageIdentityActions( { postId } ) {
 		}
 	};
 
+	const classes = [
+		'cortext-canvas__identity-actions',
+		hasCover ? 'has-cover' : 'is-inline',
+	].join( ' ' );
+
 	return (
-		<div className="cortext-canvas__identity-actions">
+		<div className={ classes }>
 			{ ! hasIcon && (
 				<PageIdentityControls
 					pageId={ postId }
 					currentIcon={ iconMeta }
 					onAfterSave={ ensureIconBlock }
 					renderToggle={ ( { onToggle } ) => (
-						<Button variant="tertiary" onClick={ onToggle }>
+						<Button
+							className="cortext-canvas__identity-action"
+							variant="tertiary"
+							onClick={ onToggle }
+						>
 							{ __( 'Add icon', 'cortext' ) }
 						</Button>
 					) }
@@ -156,7 +165,11 @@ function PageIdentityActions( { postId } ) {
 						allowedTypes={ [ 'image' ] }
 						onSelect={ ( media ) => insertCover( media.id ) }
 						render={ ( { open } ) => (
-							<Button variant="tertiary" onClick={ open }>
+							<Button
+								className="cortext-canvas__identity-action"
+								variant="tertiary"
+								onClick={ open }
+							>
 								{ __( 'Add cover', 'cortext' ) }
 							</Button>
 						) }

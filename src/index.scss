@@ -831,6 +831,26 @@ body.cortext-sidebar-resizing {
 		width: 100%;
 		margin: $grid-unit-10 auto 0;
 		padding: 0 $grid-unit-20;
+
+		&.has-cover {
+			position: absolute;
+			inset-block-start: calc(clamp(140px, 26vh, 260px) - 18px);
+			inset-inline: 0;
+			z-index: 2;
+			margin-block-start: 0;
+			pointer-events: none;
+
+			.cortext-canvas__identity-action {
+				pointer-events: auto;
+				background: rgba(255, 255, 255, 0.92);
+				box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+
+				&:hover:not(:disabled),
+				&:focus:not(:disabled) {
+					background: #fff;
+				}
+			}
+		}
 	}
 
 	&__block-canvas {
