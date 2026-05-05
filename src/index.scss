@@ -484,6 +484,7 @@ body.cortext-fullscreen {
 // picking a value. The visual is intentionally tight (240px panel) so it
 // reads as a continuation of the parent menu rather than a modal.
 .cortext-format-submenu {
+
 	&__panel {
 		min-width: 240px;
 		padding: $grid-unit-05;
@@ -541,6 +542,7 @@ body.cortext-fullscreen {
 	}
 
 	&__flyout {
+
 		.components-popover__content {
 			min-width: 200px;
 			padding: $grid-unit-05;
@@ -596,6 +598,7 @@ body.cortext-fullscreen {
 // Format MenuItem dresses up like a submenu trigger: chevron on the
 // right, no "ellipsis" suffix that suggests a modal.
 .cortext-column-header-actions__submenu-item {
+
 	.components-menu-item__item {
 		flex: 1 1 auto;
 	}
