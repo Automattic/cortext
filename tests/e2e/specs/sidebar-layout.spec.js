@@ -10,10 +10,52 @@ const SHELL_QUERY = 'page=cortext';
 
 const RAIL_WIDTH = 56;
 
+async function deleteIfCreated( requestUtils, path ) {
+	if ( ! path ) {
+		return;
+	}
+	try {
+		await requestUtils.rest( {
+			method: 'DELETE',
+			path,
+			params: { force: true },
+		} );
+	} catch ( _error ) {
+		// Best-effort cleanup; the record may already be gone.
+	}
+}
+
 async function readSidebarWidth( page ) {
 	return page.evaluate( () => {
 		const sidebar = document.getElementById( 'cortext-sidebar' );
 		return sidebar ? Math.round( sidebar.getBoundingClientRect().width ) : 0;
+	} );
+}
+
+async function readChromeLabelAlignment( page ) {
+	return page.evaluate( () => {
+		const header = document.querySelector( '.cortext-sidebar__header' );
+		const brand = document.querySelector( '.cortext-sidebar__brand' );
+		const breadcrumb = document.querySelector(
+			'.cortext-breadcrumbs__segment.is-current'
+		);
+		if ( ! header || ! brand || ! breadcrumb ) {
+			return null;
+		}
+
+		const headerBox = header.getBoundingClientRect();
+		const brandBox = brand.getBoundingClientRect();
+		const breadcrumbBox = breadcrumb.getBoundingClientRect();
+
+		const headerCenter = headerBox.top + headerBox.height / 2;
+		const brandCenter = brandBox.top + brandBox.height / 2;
+		const breadcrumbCenter =
+			breadcrumbBox.top + breadcrumbBox.height / 2;
+
+		return {
+			labelDelta: Math.abs( brandCenter - breadcrumbCenter ),
+			headerDelta: Math.abs( brandCenter - headerCenter ),
+		};
 	} );
 }
 
@@ -61,6 +103,48 @@ test.describe( 'Sidebar layout controls', () => {
 		await expect(
 			page.getByRole( 'button', { name: 'Expand sidebar' } )
 		).toBeVisible();
+	} );
+
+	test( 'aligns the brand and current breadcrumb text vertically', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const suffix = Date.now().toString( 36 ).slice( -4 );
+		const fixture = {};
+
+		try {
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_pages',
+				data: {
+					title: `E2E Chrome Alignment ${ suffix }`,
+					status: 'private',
+				},
+			} );
+
+			await admin.visitAdminPage(
+				SHELL_PATH,
+				`page=cortext&p=/page/${ fixture.page.id }`
+			);
+
+			await expect(
+				page.locator( '.cortext-sidebar__brand' )
+			).toBeVisible();
+			await expect(
+				page.locator( '.cortext-breadcrumbs__segment.is-current' )
+			).toHaveText( `E2E Chrome Alignment ${ suffix }` );
+
+			const alignment = await readChromeLabelAlignment( page );
+			expect( alignment ).not.toBeNull();
+			expect( alignment.labelDelta ).toBeLessThanOrEqual( 2 );
+			expect( alignment.headerDelta ).toBeLessThanOrEqual( 2 );
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page ? `/wp/v2/crtxt_pages/${ fixture.page.id }` : null
+			);
+		}
 	} );
 
 	test( 'resize handle drags to a new width and persists', async ( {
