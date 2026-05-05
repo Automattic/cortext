@@ -1,6 +1,6 @@
 import { __ } from '@wordpress/i18n';
 import { Button, Popover } from '@wordpress/components';
-import { useMemo, useState } from '@wordpress/element';
+import { useMemo, useRef, useState } from '@wordpress/element';
 
 import Chip from './fields/Chip';
 import EditOptionsPopover from './fields/EditOptionsPopover';
@@ -26,20 +26,24 @@ export default function MultiselectEdit( {
 	elements,
 	onSave,
 	onOptionsSaved,
+	onRowsChanged,
 	onCancel,
 	label,
 } ) {
 	const [ anchor, setAnchor ] = useState( null );
 	const items = useMemo( () => elements ?? [], [ elements ] );
-	const current = useMemo(
-		() => ( Array.isArray( value ) ? value : [] ),
-		[ value ]
+	const [ current, setCurrent ] = useState( () =>
+		Array.isArray( value ) ? value : []
 	);
+	const currentRef = useRef( current );
 
 	const handleToggle = ( optionValue ) => {
-		const next = current.includes( optionValue )
-			? current.filter( ( v ) => v !== optionValue )
-			: [ ...current, optionValue ];
+		const selected = currentRef.current;
+		const next = selected.includes( optionValue )
+			? selected.filter( ( v ) => v !== optionValue )
+			: [ ...selected, optionValue ];
+		currentRef.current = next;
+		setCurrent( next );
 		onSave( next );
 	};
 
@@ -86,6 +90,7 @@ export default function MultiselectEdit( {
 						initialOptions={ items }
 						value={ current }
 						onOptionsSaved={ onOptionsSaved }
+						onRowsChanged={ onRowsChanged }
 						onPick={ handleToggle }
 					/>
 				</Popover>

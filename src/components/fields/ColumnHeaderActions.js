@@ -58,6 +58,7 @@ export default function ColumnHeaderActions( {
 	view,
 	onChangeView,
 	onFieldOptionsSaved,
+	onRowsChanged,
 } ) {
 	const anchorRef = useRef( null );
 	const [ targets, setTargets ] = useState( [] );
@@ -141,6 +142,7 @@ export default function ColumnHeaderActions( {
 							view={ view }
 							onChangeView={ onChangeView }
 							onFieldOptionsSaved={ onFieldOptionsSaved }
+							onRowsChanged={ onRowsChanged }
 						/>,
 						target.th,
 						target.key
@@ -162,6 +164,7 @@ function FieldActions( {
 	view,
 	onChangeView,
 	onFieldOptionsSaved,
+	onRowsChanged,
 } ) {
 	const [ isRenaming, setIsRenaming ] = useState( false );
 	const [ isFormatting, setIsFormatting ] = useState( false );
@@ -483,6 +486,7 @@ function FieldActions( {
 						onOptionsSaved={ ( nextOptions ) =>
 							onFieldOptionsSaved?.( recordId, nextOptions )
 						}
+						onRowsChanged={ onRowsChanged }
 					/>
 				</Popover>
 			) : null }

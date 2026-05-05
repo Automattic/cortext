@@ -30,6 +30,7 @@ export default function DeleteOptionDialog( {
 		remainingOptions[ 0 ]?.value ?? ''
 	);
 	const [ submitting, setSubmitting ] = useState( false );
+	const [ error, setError ] = useState( null );
 
 	useEffect( () => {
 		let cancelled = false;
@@ -46,7 +47,12 @@ export default function DeleteOptionDialog( {
 			} )
 			.catch( () => {
 				if ( ! cancelled ) {
-					onConfirm( null );
+					setError(
+						__(
+							'Could not check whether rows use this option.',
+							'cortext'
+						)
+					);
 				}
 			} );
 		return () => {
@@ -62,6 +68,18 @@ export default function DeleteOptionDialog( {
 			} ) ),
 		[ remainingOptions ]
 	);
+
+	if ( error ) {
+		return (
+			<ConfirmDialog
+				onConfirm={ onCancel }
+				onCancel={ onCancel }
+				confirmButtonText={ __( 'Close', 'cortext' ) }
+			>
+				<p>{ error }</p>
+			</ConfirmDialog>
+		);
+	}
 
 	if ( count === null || count === 0 ) {
 		return null;

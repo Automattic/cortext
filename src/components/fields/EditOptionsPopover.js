@@ -175,6 +175,7 @@ export default function EditOptionsPopover( {
 	value,
 	onPick,
 	onOptionsSaved,
+	onRowsChanged,
 } ) {
 	const update = useUpdateFieldOptions();
 	const flush = useFlushFieldRecord();
@@ -241,13 +242,16 @@ export default function EditOptionsPopover( {
 					? result.options
 					: nextOptions;
 				onOptionsSaved?.( savedOptions );
+				if ( migration ) {
+					onRowsChanged?.();
+				}
 				return true;
 			} catch {
 				// surfaced via update.error.
 				return false;
 			}
 		},
-		[ onOptionsSaved, recordId, update ]
+		[ onOptionsSaved, onRowsChanged, recordId, update ]
 	);
 
 	const handleLabelChange = ( optionValue, label ) => {
@@ -269,11 +273,7 @@ export default function EditOptionsPopover( {
 			}
 			return { ...o, color };
 		} );
-		const didSave = await commit( next );
-		if ( ! didSave ) {
-			return;
-		}
-		setOpenMenuValue( null );
+		await commit( next );
 	};
 
 	const handleAdd = async ( rawLabel ) => {
@@ -285,7 +285,11 @@ export default function EditOptionsPopover( {
 		const newValue = uniqueValue( slugify( label ), taken );
 		const color = pickNextOptionColor( options );
 		const created = { value: newValue, label, color };
-		await commit( [ ...options, created ] );
+		const didSave = await commit( [ ...options, created ] );
+		if ( ! didSave ) {
+			setOptions( options );
+			return null;
+		}
 		setSearch( '' );
 		return created;
 	};
@@ -319,8 +323,10 @@ export default function EditOptionsPopover( {
 	const handleDeleteConfirm = async ( migration ) => {
 		const target = deleting;
 		const next = options.filter( ( o ) => o.value !== target.value );
-		await commit( next, migration );
-		setDeleting( null );
+		const didSave = await commit( next, migration );
+		if ( didSave ) {
+			setDeleting( null );
+		}
 	};
 
 	const sortableIds = useMemo(

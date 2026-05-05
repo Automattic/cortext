@@ -58,6 +58,7 @@ export const RowMutationContext = createContext( {
 	requestNext: () => {},
 	optionOverrides: {},
 	updateFieldOptions: () => {},
+	refreshRows: () => {},
 } );
 
 const TEXT_INPUT_TYPES = new Set( [ 'text', 'email', 'url', 'number' ] );
@@ -538,6 +539,7 @@ function SelectEditor( {
 	elements,
 	onCommit,
 	onOptionsSaved,
+	onRowsChanged,
 	onCancel,
 	onTab,
 	recordId,
@@ -597,6 +599,7 @@ function SelectEditor( {
 						initialOptions={ items }
 						value={ value }
 						onOptionsSaved={ onOptionsSaved }
+						onRowsChanged={ onRowsChanged }
 						onPick={ async ( next ) => {
 							await onCommit( next );
 							onCancel();
@@ -663,6 +666,7 @@ export default function EditableCell( {
 		requestNext,
 		optionOverrides,
 		updateFieldOptions,
+		refreshRows,
 	} = useContext( RowMutationContext );
 	const [ isEditing, setIsEditing ] = useState( false );
 	const [ isSaving, setIsSaving ] = useState( false );
@@ -802,6 +806,7 @@ export default function EditableCell( {
 							nextOptions
 						)
 					}
+					onRowsChanged={ refreshRows }
 					onCancel={ closeEditor }
 					label={ label }
 				/>
@@ -819,6 +824,7 @@ export default function EditableCell( {
 							nextOptions
 						)
 					}
+					onRowsChanged={ refreshRows }
 					onCancel={ closeEditor }
 					onTab={ ( direction ) =>
 						requestNext?.( rowId, fieldId, direction )

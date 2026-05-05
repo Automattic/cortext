@@ -37,6 +37,25 @@ jest.mock( '@wordpress/components', () => {
 	const Notice = ( { children } ) =>
 		createElement( 'div', { role: 'alert' }, children );
 	const Popover = ( { children } ) => createElement( 'div', null, children );
+	const SelectControl = ( { label, value, options, onChange } ) =>
+		createElement( 'label', null, [
+			label,
+			createElement(
+				'select',
+				{
+					key: 'select',
+					value,
+					onChange: ( event ) => onChange( event.target.value ),
+				},
+				options.map( ( option ) =>
+					createElement(
+						'option',
+						{ key: option.value, value: option.value },
+						option.label
+					)
+				)
+			),
+		] );
 	const TextControl = ( { label, value, onChange, onBlur, onKeyDown } ) =>
 		createElement( 'label', null, [
 			label,
@@ -48,6 +67,25 @@ jest.mock( '@wordpress/components', () => {
 				onKeyDown,
 			} ),
 		] );
+	const ConfirmDialog = ( {
+		children,
+		onConfirm,
+		onCancel,
+		confirmButtonText,
+	} ) =>
+		createElement( 'div', { role: 'dialog' }, [
+			children,
+			createElement(
+				'button',
+				{ key: 'confirm', type: 'button', onClick: onConfirm },
+				confirmButtonText
+			),
+			createElement(
+				'button',
+				{ key: 'cancel', type: 'button', onClick: onCancel },
+				'Cancel'
+			),
+		] );
 
 	return {
 		__esModule: true,
@@ -57,7 +95,9 @@ jest.mock( '@wordpress/components', () => {
 		MenuItem,
 		Notice,
 		Popover,
+		SelectControl,
 		TextControl,
+		__experimentalConfirmDialog: ConfirmDialog,
 	};
 } );
 
@@ -99,6 +139,7 @@ jest.mock( '@dnd-kit/sortable', () => ( {
 
 const mockUpdateRun = jest.fn();
 const mockFlushRun = jest.fn();
+const mockUsageRun = jest.fn();
 
 jest.mock( '../../../src/hooks/useFieldMutations', () => ( {
 	__esModule: true,
@@ -107,6 +148,10 @@ jest.mock( '../../../src/hooks/useFieldMutations', () => ( {
 		error: null,
 	} ),
 	useFlushFieldRecord: () => mockFlushRun,
+	useOptionUsage: () => ( {
+		run: mockUsageRun,
+		error: null,
+	} ),
 } ) );
 
 import EditOptionsPopover from '../../../src/components/fields/EditOptionsPopover';
@@ -116,6 +161,8 @@ describe( 'EditOptionsPopover', () => {
 		mockUpdateRun.mockReset();
 		mockUpdateRun.mockResolvedValue( { id: 7 } );
 		mockFlushRun.mockReset();
+		mockUsageRun.mockReset();
+		mockUsageRun.mockResolvedValue( 0 );
 	} );
 
 	it( 'stores explicit default color instead of clearing it', async () => {
@@ -178,6 +225,88 @@ describe( 'EditOptionsPopover', () => {
 		expect( onOptionsSaved ).toHaveBeenCalledWith( [
 			{ value: 'high', label: 'High', color: 'red' },
 		] );
+		expect(
+			screen.getByRole( 'menuitemradio', { name: /Red/ } )
+		).toBeInTheDocument();
+	} );
+
+	it( 'does not pick a newly-created option when saving it fails', async () => {
+		const onPick = jest.fn();
+		mockUpdateRun.mockRejectedValueOnce( new Error( 'nope' ) );
+		render(
+			<EditOptionsPopover
+				recordId={ 7 }
+				fieldType="select"
+				initialOptions={ [] }
+				onPick={ onPick }
+			/>
+		);
+
+		fireEvent.change( screen.getByLabelText( 'Search or create option' ), {
+			target: { value: 'Critical' },
+		} );
+		fireEvent.click( screen.getByText( 'Create' ).closest( 'button' ) );
+
+		await waitFor( () => expect( mockUpdateRun ).toHaveBeenCalled() );
+		expect( onPick ).not.toHaveBeenCalled();
+		expect(
+			screen.getByLabelText( 'Search or create option' )
+		).toHaveValue( 'Critical' );
+	} );
+
+	it( 'refreshes rows after a delete migration succeeds', async () => {
+		const onRowsChanged = jest.fn();
+		mockUsageRun.mockResolvedValueOnce( 2 );
+		render(
+			<EditOptionsPopover
+				recordId={ 7 }
+				fieldType="select"
+				initialOptions={ [
+					{ value: 'old', label: 'Old', color: 'red' },
+					{ value: 'next', label: 'Next', color: 'blue' },
+				] }
+				onRowsChanged={ onRowsChanged }
+			/>
+		);
+
+		fireEvent.click(
+			screen.getAllByRole( 'button', { name: 'Edit option' } )[ 0 ]
+		);
+		fireEvent.click( screen.getByRole( 'button', { name: 'Delete' } ) );
+		await screen.findByRole( 'dialog' );
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Delete option' } )
+		);
+
+		await waitFor( () =>
+			expect( mockUpdateRun ).toHaveBeenCalledWith(
+				7,
+				[ { value: 'next', label: 'Next', color: 'blue' } ],
+				[ { from: 'old', action: 'clear' } ]
+			)
+		);
+		expect( onRowsChanged ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'blocks deletion when option usage lookup fails', async () => {
+		mockUsageRun.mockRejectedValueOnce( new Error( 'nope' ) );
+		render(
+			<EditOptionsPopover
+				recordId={ 7 }
+				fieldType="select"
+				initialOptions={ [ { value: 'old', label: 'Old' } ] }
+			/>
+		);
+
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Edit option' } )
+		);
+		fireEvent.click( screen.getByRole( 'button', { name: 'Delete' } ) );
+
+		expect( await screen.findByRole( 'dialog' ) ).toHaveTextContent(
+			'Could not check whether rows use this option.'
+		);
+		expect( mockUpdateRun ).not.toHaveBeenCalled();
 	} );
 
 	it( 'does not close pick-mode editors when a color edit fails', async () => {

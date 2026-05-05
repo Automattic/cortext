@@ -327,6 +327,7 @@ export default function CollectionDataViews( {
 			requestNext,
 			optionOverrides,
 			updateFieldOptions,
+			refreshRows: refresh,
 		} ),
 		[
 			saveRowField,
@@ -335,6 +336,7 @@ export default function CollectionDataViews( {
 			requestNext,
 			optionOverrides,
 			updateFieldOptions,
+			refresh,
 		]
 	);
 
@@ -613,6 +615,7 @@ export default function CollectionDataViews( {
 						view={ view }
 						onChangeView={ onChangeView }
 						onFieldOptionsSaved={ updateFieldOptions }
+						onRowsChanged={ refresh }
 					/>
 				) }
 				{ /* tech-debt.md#7: DataViews has no footer slot, so the
