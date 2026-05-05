@@ -75,10 +75,15 @@ const EmojiPicker = lazy( async () => {
 		);
 
 	return {
-		default: function LoadedEmojiPicker( { currentEmoji, onSelect } ) {
+		default: function LoadedEmojiPicker( {
+			currentEmoji,
+			onSelect,
+			onSkinToneInteraction,
+		} ) {
 			const wrapperRef = useRef( null );
 			const stopSkinTonePropagation = ( event ) => {
 				if ( isSkinToneEvent( event ) ) {
+					onSkinToneInteraction?.();
 					event.stopPropagation();
 				}
 			};
@@ -87,7 +92,7 @@ const EmojiPicker = lazy( async () => {
 				if ( skin && currentEmoji ) {
 					const native = nativeForSkin( currentEmoji, skin );
 					if ( native ) {
-						onSelect( native );
+						window.setTimeout( () => onSelect( native ), 0 );
 					}
 				}
 				stopSkinTonePropagation( event );
@@ -112,7 +117,7 @@ const EmojiPicker = lazy( async () => {
 					<Picker
 						data={ data }
 						onEmojiSelect={ ( emoji ) => onSelect( emoji.native ) }
-						theme="auto"
+						theme="light"
 						previewPosition="none"
 						skinTonePosition="search"
 					/>
@@ -180,7 +185,13 @@ function decodeEmoji( value ) {
 	return null;
 }
 
-function PickerBody( { pageId, currentIcon, allowRemove, onAfterSave } ) {
+function PickerBody( {
+	pageId,
+	currentIcon,
+	allowRemove,
+	onAfterSave,
+	onSkinToneInteraction,
+} ) {
 	const { editEntityRecord, saveEditedEntityRecord } =
 		useDispatch( coreStore );
 
@@ -242,6 +253,7 @@ function PickerBody( { pageId, currentIcon, allowRemove, onAfterSave } ) {
 				>
 					<EmojiPicker
 						currentEmoji={ currentEmoji }
+						onSkinToneInteraction={ onSkinToneInteraction }
 						onSelect={ ( native ) =>
 							persist( encodeEmoji( native ) )
 						}
@@ -351,9 +363,42 @@ export default function PageIdentityControls( {
 	onAfterSave,
 } ) {
 	const hasIcon = !! currentIcon;
+	const [ dropdownOpen, setDropdownOpen ] = useState( false );
+	const ignoreNextCloseRef = useRef( false );
+	const ignoreNextCloseTimerRef = useRef( null );
+
+	useEffect( () => {
+		return () => {
+			if ( ignoreNextCloseTimerRef.current ) {
+				clearTimeout( ignoreNextCloseTimerRef.current );
+			}
+		};
+	}, [] );
+
+	const keepOpenForSkinToneInteraction = () => {
+		ignoreNextCloseRef.current = true;
+		if ( ignoreNextCloseTimerRef.current ) {
+			clearTimeout( ignoreNextCloseTimerRef.current );
+		}
+		ignoreNextCloseTimerRef.current = setTimeout( () => {
+			ignoreNextCloseRef.current = false;
+			ignoreNextCloseTimerRef.current = null;
+		}, 250 );
+	};
+
+	const handleOpenChange = ( nextOpen ) => {
+		if ( ! nextOpen && ignoreNextCloseRef.current ) {
+			ignoreNextCloseRef.current = false;
+			setDropdownOpen( true );
+			return;
+		}
+		setDropdownOpen( nextOpen );
+	};
 
 	return (
 		<Dropdown
+			open={ dropdownOpen }
+			onToggle={ handleOpenChange }
 			popoverProps={ { placement: popoverPlacement } }
 			contentClassName="cortext-page-identity-popover-content"
 			renderToggle={ ( { isOpen, onToggle } ) =>
@@ -371,6 +416,7 @@ export default function PageIdentityControls( {
 					currentIcon={ currentIcon }
 					allowRemove={ hasIcon }
 					onAfterSave={ onAfterSave }
+					onSkinToneInteraction={ keepOpenForSkinToneInteraction }
 				/>
 			) }
 		/>
