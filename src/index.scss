@@ -2129,6 +2129,17 @@ thead > tr > th {
 		height: 56px;
 		border-radius: var(--cortext-shell-radius, 4px);
 	}
+
+	// `Dropdown` renders a `display: block` wrapper around the trigger.
+	// A block element holding an `inline-flex` button gets an anonymous
+	// line-box whose descender depends on the inner content's baseline:
+	// an emoji's baseline lives inside the glyph, an SVG icon has no text
+	// baseline so it sits at the bottom of the inline box. The result was
+	// a ~3px height drift between emoji and WP-icon variants that pushed
+	// the title below it. `inline-flex` removes the line-box entirely.
+	.cortext-page-identity-control {
+		display: inline-flex;
+	}
 }
 
 .block-editor-block-list__layout
@@ -2156,6 +2167,17 @@ thead > tr > th {
 	margin-block-end: 0;
 }
 /* stylelint-enable no-descending-specificity */
+
+// `@wordpress/icons` SVGs don't carry an explicit `fill="currentColor"`.
+// Inside the editor iframe the canvas stylesheet provides one globally,
+// so the named-color palette flowed through. The shell document has no
+// such global, so the sidebar tree rendered every WP-icon glyph black
+// regardless of the chosen color. Forcing `currentcolor` on our own
+// component keeps the palette working in every surface.
+/* stylelint-disable-next-line no-descending-specificity */
+.cortext-page-icon--wp svg {
+	fill: currentcolor;
+}
 
 // Hide the block kebab (more options) while a Cortext header block is
 // selected. The body class is toggled by HideHeaderBlockKebab in

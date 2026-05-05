@@ -13,7 +13,6 @@ import {
 } from '@wordpress/components';
 import { useEntityProp, store as coreStore } from '@wordpress/core-data';
 import { useDispatch } from '@wordpress/data';
-import { useEffect } from '@wordpress/element';
 import { replace, trash } from '@wordpress/icons';
 
 import PageIcon from '../../components/PageIcon';
@@ -34,22 +33,29 @@ export default function Edit( { context, clientId } ) {
 	const { editEntityRecord, saveEditedEntityRecord } =
 		useDispatch( coreStore );
 
+	// Couple the value clear and the block removal in the same
+	// user-triggered handler so we don't need a reactive effect that
+	// can misfire during page switches (useEntityProp returns `undefined`
+	// for a render while entity records are being threaded through).
+	// Picker-driven removes go through `onPickerSave`; the toolbar/
+	// inspector buttons call this directly.
 	const removeIcon = async () => {
+		if ( clientId ) {
+			updateBlockAttributes( clientId, { lock: {} } );
+			removeBlock( clientId, false );
+		}
 		editEntityRecord( 'postType', postType, postId, {
 			meta: { cortext_page_icon: '' },
 		} );
 		await saveEditedEntityRecord( 'postType', postType, postId );
 	};
 
-	// Drop the block when the picker clears the icon meta. Strip the lock
-	// first so existing rows (created before we relaxed `lock.remove`) can
-	// still be removed; otherwise removeBlock silently no-ops.
-	useEffect( () => {
-		if ( ! hasIcon && clientId ) {
+	const onPickerSave = ( nextMetaValue ) => {
+		if ( ! nextMetaValue && clientId ) {
 			updateBlockAttributes( clientId, { lock: {} } );
 			removeBlock( clientId, false );
 		}
-	}, [ hasIcon, clientId, removeBlock, updateBlockAttributes ] );
+	};
 
 	if ( ! postId ) {
 		return (
@@ -68,6 +74,7 @@ export default function Edit( { context, clientId } ) {
 					<PageIdentityControls
 						pageId={ postId }
 						currentIcon={ iconMeta }
+						onAfterSave={ onPickerSave }
 						renderToggle={ ( { onToggle } ) => (
 							<ToolbarButton
 								icon={ replace }
@@ -90,6 +97,7 @@ export default function Edit( { context, clientId } ) {
 					<PageIdentityControls
 						pageId={ postId }
 						currentIcon={ iconMeta }
+						onAfterSave={ onPickerSave }
 						renderToggle={ ( { onToggle } ) => (
 							<Button
 								variant="secondary"
@@ -119,6 +127,7 @@ export default function Edit( { context, clientId } ) {
 				<PageIdentityControls
 					pageId={ postId }
 					currentIcon={ iconMeta }
+					onAfterSave={ onPickerSave }
 					renderToggle={ ( { onToggle } ) =>
 						hasIcon ? (
 							<Button

@@ -10,7 +10,7 @@ import {
 import { chevronRight, moreVertical, plus } from '@wordpress/icons';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 
-import PageIdentityControls from './PageIdentityControls';
+import PageIcon from './PageIcon';
 
 const GRID_UNIT = 20; // matches $grid-unit-20 in index.scss
 
@@ -49,15 +49,8 @@ export default function PageRow( {
 
 	const [ isRenaming, setIsRenaming ] = useState( false );
 	const [ draftTitle, setDraftTitle ] = useState( '' );
-	const [ optimisticIcon, setOptimisticIcon ] = useState(
-		page.meta?.cortext_page_icon ?? ''
-	);
 	const renameInputRef = useRef( null );
 	const iconMeta = page.meta?.cortext_page_icon ?? '';
-
-	useEffect( () => {
-		setOptimisticIcon( iconMeta );
-	}, [ iconMeta ] );
 
 	// Start rename automatically if the parent asked for it (new page flow).
 	useEffect( () => {
@@ -184,25 +177,9 @@ export default function PageRow( {
 						/>
 					) }
 
-					<PageIdentityControls
-						pageId={ page.id }
-						currentIcon={ optimisticIcon }
-						onAfterSave={ setOptimisticIcon }
-						renderToggle={ ( { onToggle, currentIconNode } ) => (
-							<Button
-								className="cortext-sidebar__icon"
-								onClick={ ( e ) => {
-									e.stopPropagation();
-									onToggle();
-								} }
-								onPointerDown={ ( e ) => e.stopPropagation() }
-								label={ __( 'Change icon', 'cortext' ) }
-								showTooltip={ false }
-							>
-								{ currentIconNode }
-							</Button>
-						) }
-					/>
+					<span className="cortext-sidebar__icon" aria-hidden="true">
+						<PageIcon icon={ iconMeta } size={ 16 } />
+					</span>
 
 					{ isRenaming ? (
 						<div

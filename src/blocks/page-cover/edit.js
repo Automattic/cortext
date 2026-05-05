@@ -9,7 +9,6 @@ import MediaPicker, { MediaUploadCheck } from '../../components/MediaPicker';
 import { useEntityProp, useEntityRecord } from '@wordpress/core-data';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { createBlock } from '@wordpress/blocks';
-import { useEffect } from '@wordpress/element';
 import {
 	Button,
 	PanelBody,
@@ -61,17 +60,18 @@ export default function Edit( { context, clientId } ) {
 	const { insertBlocks, removeBlock, updateBlockAttributes } =
 		useDispatch( blockEditorStore );
 
-	// Block presence mirrors the underlying state: when the user clears
-	// the featured image, drop the block too so we never show an empty
-	// cover. We strip the `lock` attribute first because earlier inserts
-	// pinned `remove: true`, which would make `removeBlock` a silent
-	// no-op for existing rows.
-	useEffect( () => {
-		if ( ! featuredId && clientId ) {
+	// `setFeaturedId(0)` clears the meta; `removeBlock` deletes this
+	// block. Doing both in the same user-triggered handler keeps block
+	// presence and value coupled without a reactive useEffect, which
+	// previously misfired during page switches when useEntityProp was
+	// briefly out of sync and removed the saved cover.
+	const removeCover = () => {
+		if ( clientId ) {
 			updateBlockAttributes( clientId, { lock: {} } );
 			removeBlock( clientId, false );
 		}
-	}, [ featuredId, clientId, removeBlock, updateBlockAttributes ] );
+		setFeaturedId( 0 );
+	};
 
 	const src =
 		media?.media_details?.sizes?.large?.source_url ??
@@ -116,7 +116,7 @@ export default function Edit( { context, clientId } ) {
 						<ToolbarButton
 							icon={ trash }
 							label={ __( 'Remove cover', 'cortext' ) }
-							onClick={ () => setFeaturedId( 0 ) }
+							onClick={ removeCover }
 						/>
 					) }
 				</ToolbarGroup>
@@ -145,7 +145,7 @@ export default function Edit( { context, clientId } ) {
 						<Button
 							variant="tertiary"
 							isDestructive
-							onClick={ () => setFeaturedId( 0 ) }
+							onClick={ removeCover }
 							style={ { marginInlineStart: 8 } }
 							__next40pxDefaultSize
 						>
@@ -201,7 +201,7 @@ export default function Edit( { context, clientId } ) {
 						<Button
 							variant="secondary"
 							size="small"
-							onClick={ () => setFeaturedId( 0 ) }
+							onClick={ removeCover }
 						>
 							{ __( 'Remove', 'cortext' ) }
 						</Button>

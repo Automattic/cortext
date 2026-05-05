@@ -100,7 +100,20 @@ function ImageIcon( { id, size, alt, className } ) {
 export default function PageIcon( { icon, size = 16, alt, className } ) {
 	const parsed = useMemo( () => parsePageIcon( icon ), [ icon ] );
 	const classes = [ 'cortext-page-icon' ];
-	const boxStyle = { width: size, height: size };
+	// `display: inline-flex` is the load-bearing bit: spans are inline by
+	// default, so width/height get ignored and the emoji variant ends up
+	// sized by `font-size * line-height` — taller than the SVG-based
+	// variants. inline-flex makes the dimensions effective and centers
+	// whatever's inside, so swapping between emoji, wp icon, and image
+	// keeps the icon block the exact same height.
+	const boxStyle = {
+		display: 'inline-flex',
+		alignItems: 'center',
+		justifyContent: 'center',
+		width: size,
+		height: size,
+		lineHeight: 1,
+	};
 	if ( className ) {
 		classes.push( className );
 	}
