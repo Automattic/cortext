@@ -611,12 +611,14 @@ function DateFormBody( { type, config, onChange } ) {
 // selection. Hover handlers keep the panel open while the cursor is
 // somewhere over the column dropdown's Format row or this panel; the
 // parent owns the grace timer (`scheduleClose`) that absorbs the dead
-// pixels between them. `focusOnMount={ false }` keeps focus inside the
-// parent dropdown so it doesn't auto-close when the panel mounts.
+// pixels between them. Keyboard-opened panels can opt into focusOnMount so
+// tabbing enters the panel instead of moving to the next table column.
 export default function FieldFormatPopover( {
 	recordId,
 	anchor,
+	focusOnMount = false,
 	onClose,
+	onCloseWithFocus,
 	onMouseEnter,
 	onMouseLeave,
 } ) {
@@ -652,14 +654,24 @@ export default function FieldFormatPopover( {
 		return null;
 	}
 
+	const onPopoverKeyDown = ( event ) => {
+		if ( event.key !== 'Escape' && event.key !== 'ArrowLeft' ) {
+			return;
+		}
+		event.preventDefault();
+		event.stopPropagation();
+		onCloseWithFocus();
+	};
+
 	return (
 		<Popover
 			anchor={ anchor }
 			placement="right-start"
 			offset={ 8 }
 			onClose={ onClose }
-			focusOnMount={ false }
+			focusOnMount={ focusOnMount }
 			className="cortext-format-submenu"
+			onKeyDown={ onPopoverKeyDown }
 		>
 			<div
 				className="cortext-format-submenu__panel"

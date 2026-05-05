@@ -165,6 +165,7 @@ function FieldActions( { recordId, collectionId, view, onChangeView } ) {
 	const [ isRenaming, setIsRenaming ] = useState( false );
 	const [ isMenuOpen, setIsMenuOpen ] = useState( false );
 	const [ isFormatting, setIsFormatting ] = useState( false );
+	const [ shouldFocusFormat, setShouldFocusFormat ] = useState( false );
 	const [ confirmDelete, setConfirmDelete ] = useState( false );
 	const formatItemRef = useRef( null );
 	const closeTimerRef = useRef( null );
@@ -188,20 +189,55 @@ function FieldActions( { recordId, collectionId, view, onChangeView } ) {
 		cancelClose();
 		closeTimerRef.current = setTimeout( () => {
 			setIsFormatting( false );
+			setShouldFocusFormat( false );
 			closeTimerRef.current = null;
 		}, 180 );
 	}, [ cancelClose ] );
-	const openFormat = useCallback( () => {
-		cancelClose();
-		setIsFormatting( true );
-	}, [ cancelClose ] );
+	const openFormat = useCallback(
+		( focus = false ) => {
+			cancelClose();
+			setShouldFocusFormat( focus );
+			setIsFormatting( true );
+		},
+		[ cancelClose ]
+	);
 	useEffect( () => () => cancelClose(), [ cancelClose ] );
 
 	const closeMenu = useCallback( () => {
 		cancelClose();
 		setIsFormatting( false );
+		setShouldFocusFormat( false );
 		setIsMenuOpen( false );
 	}, [ cancelClose ] );
+
+	const closeFormat = useCallback( () => {
+		cancelClose();
+		setIsFormatting( false );
+		setShouldFocusFormat( false );
+	}, [ cancelClose ] );
+
+	const closeFormatAndFocusTrigger = useCallback( () => {
+		closeFormat();
+		window.requestAnimationFrame( () => {
+			formatItemRef.current?.focus();
+		} );
+	}, [ closeFormat ] );
+
+	const openFormatFromKeyboard = useCallback(
+		( event ) => {
+			if (
+				! [ 'ArrowRight', 'Enter', ' ', 'Spacebar' ].includes(
+					event.key
+				)
+			) {
+				return;
+			}
+			event.preventDefault();
+			event.stopPropagation();
+			openFormat( true );
+		},
+		[ openFormat ]
+	);
 
 	const onMenuOpenChange = useCallback(
 		( nextOpen ) => {
@@ -394,8 +430,9 @@ function FieldActions( { recordId, collectionId, view, onChangeView } ) {
 								suffix={
 									<Icon icon={ chevronRight } size={ 18 } />
 								}
-								onClick={ openFormat }
-								onMouseEnter={ openFormat }
+								onClick={ () => openFormat() }
+								onKeyDown={ openFormatFromKeyboard }
+								onMouseEnter={ () => openFormat() }
 								onMouseLeave={ scheduleClose }
 							>
 								<Menu.ItemLabel>
@@ -492,8 +529,10 @@ function FieldActions( { recordId, collectionId, view, onChangeView } ) {
 				<FieldFormatPopover
 					recordId={ recordId }
 					anchor={ formatItemRef.current }
-					onClose={ () => setIsFormatting( false ) }
-					onMouseEnter={ openFormat }
+					focusOnMount={ shouldFocusFormat ? 'firstElement' : false }
+					onClose={ closeFormat }
+					onCloseWithFocus={ closeFormatAndFocusTrigger }
+					onMouseEnter={ () => openFormat() }
 					onMouseLeave={ scheduleClose }
 				/>
 			) : null }
