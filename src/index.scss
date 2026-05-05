@@ -2049,28 +2049,17 @@ thead > tr > th {
 	}
 }
 
-// Page icon: keep Gutenberg's selected-block outline tight around the icon,
-// while manually anchoring that compact box to the page content column.
+// Page icon: use a normal content-column row for stable placement and a
+// generous hover target, but replace Gutenberg's full-row selected outline
+// with a tight outline around the icon button itself.
 .cortext-page-icon-block {
-	position: relative;
 	display: flex;
 	align-items: flex-end;
 	justify-content: flex-start;
-	width: fit-content;
-	margin-block: $grid-unit-10;
-	margin-inline-start: max($grid-unit-20, calc((100% - var(--wp--style--global--content-size, 840px)) / 2 + #{$grid-unit-20}));
-	margin-inline-end: auto;
-
-	// Expanded invisible hover zone: keeps Add cover / Add icon discoverable
-	// when hovering the header area without making the selected-block box
-	// stretch across the whole content column.
-	&::before {
-		content: "";
-		position: absolute;
-		inset-block: -$grid-unit-20;
-		inset-inline-start: 0;
-		width: min(calc(100vw - (2 * #{$grid-unit-20})), var(--wp--style--global--content-size, 840px));
-	}
+	max-width: var(--wp--style--global--content-size, 840px);
+	width: 100%;
+	margin: $grid-unit-10 auto;
+	padding: 0 $grid-unit-20;
 
 	// The trigger is only an emoji or thumbnail; framing it like a button
 	// (border + shadow) reads as visual noise next to the cover. Keep the
@@ -2100,6 +2089,19 @@ thead > tr > th {
 		height: 56px;
 		border-radius: var(--cortext-shell-radius, 4px);
 	}
+}
+
+.block-editor-block-list__layout
+.block-editor-block-list__block[data-type="cortext/page-icon"].is-selected::after {
+	box-shadow: none;
+	outline: none;
+}
+
+.block-editor-block-list__layout
+.block-editor-block-list__block[data-type="cortext/page-icon"].is-selected
+.cortext-page-icon-block__button {
+	outline: 1.5px solid var(--wp-admin-theme-color, #007cba);
+	outline-offset: 0;
 }
 
 // Notion-style overlap: when the icon sits right after the cover, pull
