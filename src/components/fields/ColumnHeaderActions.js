@@ -229,6 +229,32 @@ function FieldActions( { recordId, collectionId, view, onChangeView } ) {
 		return true;
 	}, [] );
 
+	// When this component renders inside an iframe (e.g. the Gutenberg
+	// canvas), Ariakit's outside-click listener only fires for events in
+	// the iframe document. Clicks on the editor chrome (sidebar, header)
+	// happen on the parent document, so without an extra listener there
+	// the menu stays open until the user clicks back into the canvas.
+	useEffect( () => {
+		if ( ! isMenuOpen ) {
+			return undefined;
+		}
+		let parentDoc;
+		try {
+			if ( window.parent && window.parent !== window ) {
+				parentDoc = window.parent.document;
+			}
+		} catch {
+			parentDoc = undefined;
+		}
+		if ( ! parentDoc || parentDoc === document ) {
+			return undefined;
+		}
+		const onParentMouseDown = () => closeMenu();
+		parentDoc.addEventListener( 'mousedown', onParentMouseDown );
+		return () =>
+			parentDoc.removeEventListener( 'mousedown', onParentMouseDown );
+	}, [ isMenuOpen, closeMenu ] );
+
 	const dataViewId = `field-${ recordId }`;
 	const label =
 		record?.title?.raw || record?.title?.rendered || `#${ recordId }`;
