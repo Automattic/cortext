@@ -268,6 +268,12 @@ body.cortext-fullscreen {
 	}
 }
 
+// Skip the default root snapshot so the sidebar and top bar stay live
+// during the swap. Only the canvas opts in below.
+:root {
+	view-transition-name: none;
+}
+
 .cortext-shell__canvas {
 	position: relative;
 	overflow: hidden;
@@ -278,6 +284,8 @@ body.cortext-fullscreen {
 	// --cortext-canvas-frame-surface. The iframe interior is painted by the active
 	// block theme, not by this token.
 	background: var(--cortext-canvas-frame-surface);
+	// Named so the cross-fade is scoped to this column.
+	view-transition-name: cortext-canvas;
 
 	// InterfaceSkeleton defaults to `position: fixed` at >= 782px, which would
 	// escape our grid and overlap the page-list sidebar. Scope it to fill just
@@ -286,6 +294,15 @@ body.cortext-fullscreen {
 		position: absolute !important;
 		inset: 0;
 		min-height: 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+	::view-transition-group(cortext-canvas),
+	::view-transition-old(cortext-canvas),
+	::view-transition-new(cortext-canvas) {
+		animation: none !important;
 	}
 }
 
