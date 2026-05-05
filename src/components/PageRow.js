@@ -2,12 +2,12 @@ import { __, sprintf } from '@wordpress/i18n';
 import { useState, useEffect, useRef } from '@wordpress/element';
 import {
 	Button,
-	DropdownMenu,
+	Dropdown,
 	MenuGroup,
 	MenuItem,
 	TextControl,
 } from '@wordpress/components';
-import { chevronRight } from '@wordpress/icons';
+import { chevronRight, moreVertical, plus } from '@wordpress/icons';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 
 const GRID_UNIT = 20; // matches $grid-unit-20 in index.scss
@@ -209,30 +209,44 @@ export default function PageRow( {
 						</Button>
 					) }
 
-					<DropdownMenu
-						className="cortext-sidebar__menu"
-						icon="ellipsis"
+					<Button
+						className="cortext-sidebar__add-child"
+						icon={ plus }
+						size="small"
 						label={ sprintf(
-							/* translators: %s: page title */
-							__( 'Actions for %s', 'cortext' ),
+							/* translators: %s: parent page title */
+							__( 'Add a page inside %s', 'cortext' ),
 							title
 						) }
-						popoverProps={ { placement: 'bottom-end' } }
-						toggleProps={ {
-							onPointerDown: ( e ) => e.stopPropagation(),
+						onClick={ ( e ) => {
+							e.stopPropagation();
+							onCreateChild( page.id );
 						} }
-					>
-						{ ( { onClose } ) => (
+						onPointerDown={ ( e ) => e.stopPropagation() }
+					/>
+
+					<Dropdown
+						popoverProps={ { placement: 'bottom-end' } }
+						renderToggle={ ( { isOpen, onToggle } ) => (
+							<Button
+								className={
+									'cortext-sidebar__menu' +
+									( isOpen ? ' is-opened' : '' )
+								}
+								icon={ moreVertical }
+								size="small"
+								label={ sprintf(
+									/* translators: %s: page title */
+									__( 'Actions for %s', 'cortext' ),
+									title
+								) }
+								onClick={ onToggle }
+								aria-expanded={ isOpen }
+								onPointerDown={ ( e ) => e.stopPropagation() }
+							/>
+						) }
+						renderContent={ ( { onClose } ) => (
 							<MenuGroup>
-								<MenuItem
-									icon="plus"
-									onClick={ () => {
-										onCreateChild( page.id );
-										onClose();
-									} }
-								>
-									{ __( 'Add child page', 'cortext' ) }
-								</MenuItem>
 								<MenuItem
 									icon="edit"
 									onClick={ () => {
@@ -263,7 +277,7 @@ export default function PageRow( {
 								</MenuItem>
 							</MenuGroup>
 						) }
-					</DropdownMenu>
+					/>
 
 					{ /* Drop zones overlay the row. pointer-events are off
 					     so they don't block clicks when idle. */ }

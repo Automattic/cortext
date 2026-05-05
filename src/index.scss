@@ -314,7 +314,8 @@ body.cortext-fullscreen {
 		min-width: 0;
 	}
 
-	&__menu {
+	&__menu,
+	&__add-child {
 		flex: 0 0 auto;
 		opacity: 0;
 		transition: opacity 0.12s ease;
@@ -322,7 +323,9 @@ body.cortext-fullscreen {
 
 	&__row:hover &__menu,
 	&__row:focus-within &__menu,
-	&__menu.is-opened {
+	&__menu.is-opened,
+	&__row:hover &__add-child,
+	&__row:focus-within &__add-child {
 		opacity: 1;
 	}
 
