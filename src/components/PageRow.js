@@ -183,6 +183,7 @@ export default function PageRow( {
 							<TextControl
 								__next40pxDefaultSize
 								__nextHasNoMarginBottom
+								size="compact"
 								value={ draftTitle }
 								onChange={ setDraftTitle }
 								onBlur={ commitRename }
@@ -202,6 +203,7 @@ export default function PageRow( {
 					) : (
 						<Button
 							className="cortext-sidebar__title"
+							size="compact"
 							onClick={ () => onSelect( page.id ) }
 							isPressed={ isSelected }
 						>

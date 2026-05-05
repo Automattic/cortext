@@ -214,6 +214,9 @@ body.cortext-fullscreen {
 		display: flex;
 		align-items: center;
 		gap: $grid-unit-05;
+		// Pin to the compact-size height of the title button and rename
+		// input so swapping between them doesn't bump the row.
+		height: $grid-unit-40;
 		border-radius: var(--cortext-shell-radius);
 		cursor: grab;
 		user-select: none;
