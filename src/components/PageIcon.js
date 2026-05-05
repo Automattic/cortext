@@ -101,6 +101,7 @@ export default function PageIcon( { icon, size = 16, alt, className } ) {
 	const parsed = useMemo( () => parsePageIcon( icon ), [ icon ] );
 	const classes = [ 'cortext-page-icon' ];
 	const boxStyle = { width: size, height: size };
+	const emojiSize = Math.round( size * 1.08 );
 	if ( className ) {
 		classes.push( className );
 	}
@@ -125,7 +126,7 @@ export default function PageIcon( { icon, size = 16, alt, className } ) {
 				className={ classes
 					.concat( 'cortext-page-icon--emoji' )
 					.join( ' ' ) }
-				style={ { ...boxStyle, fontSize: size } }
+				style={ { ...boxStyle, fontSize: emojiSize } }
 				aria-hidden={ alt ? undefined : 'true' }
 				role={ alt ? 'img' : undefined }
 				aria-label={ alt }
