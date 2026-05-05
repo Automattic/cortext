@@ -1981,8 +1981,8 @@ thead > tr > th {
 
 /* stylelint-disable no-descending-specificity */
 .cortext-canvas__identity-actions .cortext-canvas__identity-action.components-button {
-	background: rgba(0, 0, 0, 0.06);
-	box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+	background: transparent;
+	box-shadow: none;
 	color: var(--cortext-button-text, #1e1e1e);
 }
 
