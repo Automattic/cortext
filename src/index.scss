@@ -829,7 +829,7 @@ body.cortext-sidebar-resizing {
 		gap: $grid-unit-05;
 		max-width: var(--wp--style--global--content-size, 840px);
 		width: 100%;
-		margin: $grid-unit-10 auto 0;
+		margin: $grid-unit-10 auto $grid-unit-10;
 		padding: 0 $grid-unit-20;
 
 		.cortext-canvas__identity-action {
