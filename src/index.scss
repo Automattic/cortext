@@ -37,21 +37,65 @@ body.cortext-fullscreen {
 
 .cortext-shell {
 	display: grid;
-	grid-template-columns: 280px 1fr;
+	grid-template-columns: var(--cortext-sidebar-width) 1fr;
 	height: 100vh;
+	transition: grid-template-columns 160ms ease;
+}
+
+// Skip the transition while the drag/keyboard nudge is live so the grid
+// tracks the input frame for frame.
+.cortext-root[data-sidebar-resizing="true"] .cortext-shell {
+	transition: none;
+}
+
+// Collapsed: pin to rail width but keep the saved expanded width on the
+// root, so toggling back restores it.
+.cortext-root[data-sidebar-collapsed="true"] .cortext-shell {
+	grid-template-columns: var(--cortext-sidebar-width-rail) 1fr;
 }
 
 .cortext-sidebar {
+	position: relative;
+	display: flex;
+	flex-direction: column;
 	background: var(--cortext-sidebar-surface);
 	border-right: var(--cortext-shell-border-width) solid var(--cortext-chrome-border);
-	overflow-y: auto;
-	padding: $grid-unit-15;
+	overflow: hidden;
 
 	&__header {
+		flex: 0 0 auto;
 		display: flex;
 		align-items: center;
 		gap: $grid-unit-10;
-		margin-bottom: $grid-unit-15;
+		padding: $grid-unit-15;
+	}
+
+	&__new-page.components-button {
+		flex: 1 1 auto;
+		justify-content: center;
+	}
+
+	&__collapse-toggle {
+		margin-left: auto;
+	}
+
+	&__content {
+		flex: 1 1 auto;
+		min-height: 0;
+		overflow-y: auto;
+		padding: 0 $grid-unit-15 $grid-unit-15;
+	}
+
+	&__footer {
+		flex: 0 0 auto;
+		// Keeps the footer at the bottom in collapsed mode, where the
+		// content region isn't rendered.
+		margin-top: auto;
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-10;
+		padding: $grid-unit-10 $grid-unit-15;
+		border-top: var(--cortext-shell-border-width) solid var(--cortext-chrome-border);
 	}
 
 	&__section-title {
@@ -266,6 +310,66 @@ body.cortext-fullscreen {
 		font-size: 11px;
 		color: #cc1818;
 	}
+
+	// Modeled on `.cortext-column-resizer` so both resizers feel the same.
+	&__resize-handle {
+		position: absolute;
+		top: 0;
+		right: 0;
+		width: 8px;
+		height: 100%;
+		cursor: col-resize;
+		background: transparent;
+		border: 0;
+		padding: 0;
+		z-index: 2;
+		touch-action: none;
+
+		&::after {
+			content: "";
+			position: absolute;
+			top: 0;
+			right: 0;
+			width: 3px;
+			height: 100%;
+			background: var(--cortext-accent);
+			opacity: 0;
+			transition: opacity 100ms ease;
+		}
+
+		&:hover::after,
+		&:focus-visible::after,
+		&.is-resizing::after {
+			opacity: 1;
+		}
+
+		&:focus-visible {
+			outline: none;
+		}
+	}
+
+	// Sections aren't rendered when collapsed (see Sidebar.js); just stack
+	// the chrome.
+	&[data-collapsed="true"] {
+
+		.cortext-sidebar__header,
+		.cortext-sidebar__footer {
+			flex-direction: column;
+			align-items: stretch;
+			gap: $grid-unit-05;
+			padding: $grid-unit-05;
+		}
+
+		.cortext-sidebar__collapse-toggle {
+			margin-left: 0;
+		}
+	}
+}
+
+// Lock the global cursor and disable selection while a resize drag is live.
+body.cortext-sidebar-resizing {
+	cursor: col-resize;
+	user-select: none;
 }
 
 .cortext-shell__canvas {
