@@ -602,6 +602,7 @@ export default function Sidebar( {
 									<div className="cortext-sidebar__row">
 										<Button
 											className="cortext-sidebar__title"
+											size="compact"
 											variant="tertiary"
 											onClick={ () =>
 												navigate( {
