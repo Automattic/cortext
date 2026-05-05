@@ -1,4 +1,4 @@
-import { __, sprintf } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
 import {
 	Button,
@@ -339,6 +339,7 @@ function RelationReferences( { value } ) {
 	if ( populated.length === 0 ) {
 		return '';
 	}
+	const overflowCount = Math.max( 0, populated.length - 2 );
 	return (
 		<span className="cortext-relation-refs">
 			{ populated.map( ( ref ) => {
@@ -355,6 +356,27 @@ function RelationReferences( { value } ) {
 					</a>
 				);
 			} ) }
+			{ overflowCount > 0 ? (
+				<span
+					className="cortext-relation-ref-more"
+					aria-label={ sprintf(
+						/* translators: %d: number of hidden relation references */
+						_n(
+							'%d more relation',
+							'%d more relations',
+							overflowCount,
+							'cortext'
+						),
+						overflowCount
+					) }
+				>
+					{ sprintf(
+						/* translators: %d: number of hidden relation references */
+						__( '+%d', 'cortext' ),
+						overflowCount
+					) }
+				</span>
+			) : null }
 		</span>
 	);
 }

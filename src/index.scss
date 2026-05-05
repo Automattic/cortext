@@ -1650,6 +1650,7 @@ tbody > tr > td:not(:first-child) {
 }
 
 .cortext-relation-ref,
+.cortext-relation-ref-more,
 .cortext-relation-edit__toggle-ref,
 .cortext-relation-edit__selected-pill {
 	display: inline-flex;
@@ -1666,10 +1667,17 @@ tbody > tr > td:not(:first-child) {
 }
 
 .cortext-relation-ref,
+.cortext-relation-ref-more,
 .cortext-relation-edit__toggle-ref {
 	padding: 0 $grid-unit-10;
 	overflow: hidden;
 	text-overflow: ellipsis;
+}
+
+.cortext-relation-ref-more {
+	display: none;
+	flex: 0 0 auto;
+	color: $gray-700;
 }
 
 .cortext-relation-ref {
@@ -2504,6 +2512,14 @@ tbody > tr > td:not(:first-child) {
 	.cortext-relation-ref,
 	.cortext-relation-edit__toggle-ref {
 		flex: 0 0 auto;
+	}
+
+	.cortext-relation-ref:nth-of-type(n + 3) {
+		display: none;
+	}
+
+	.cortext-relation-ref-more {
+		display: inline-flex;
 	}
 }
 
