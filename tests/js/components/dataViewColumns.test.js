@@ -187,6 +187,49 @@ describe( 'normalizeView', () => {
 		expect( next.layout.styles ).toBeUndefined();
 		expect( next.layout.density ).toBe( 'compact' );
 	} );
+
+	it( 'keeps calculations for hidden fields that still exist', () => {
+		const view = {
+			...baseView(),
+			fields: [ TITLE_FIELD_ID ],
+			calculations: { 'field-1': 'sum' },
+		};
+		const next = normalizeView(
+			view,
+			new Set( [ TITLE_FIELD_ID, 'field-1' ] ),
+			{
+				fields: [
+					{ id: TITLE_FIELD_ID, cortextType: 'title' },
+					{ id: 'field-1', cortextType: 'number' },
+				],
+			}
+		);
+		expect( next.calculations ).toEqual( { 'field-1': 'sum' } );
+	} );
+
+	it( 'prunes calculations for removed, ghost, and disallowed fields', () => {
+		const view = {
+			...baseView(),
+			calculations: {
+				'field-1': 'sum',
+				'field-2': 'max',
+				'field-removed': 'count',
+				__add_field: 'count',
+			},
+		};
+		const next = normalizeView(
+			view,
+			new Set( [ TITLE_FIELD_ID, 'field-1', 'field-2' ] ),
+			{
+				fields: [
+					{ id: TITLE_FIELD_ID, cortextType: 'title' },
+					{ id: 'field-1', cortextType: 'text' },
+					{ id: 'field-2', cortextType: 'number' },
+				],
+			}
+		);
+		expect( next.calculations ).toEqual( { 'field-2': 'max' } );
+	} );
 } );
 
 describe( 'withColumnWidth', () => {
