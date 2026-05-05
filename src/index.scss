@@ -1326,11 +1326,24 @@ body:has(.cortext-canvas__identity-actions:hover) .cortext-canvas__identity-acti
 	}
 }
 
+// The parent column menu uses WP's private Menu, whose hover state is the
+// admin accent color. Cortext's sibling flyouts use neutral rows, so scope the
+// parent menu to the same treatment instead of making the children blue.
+.cortext-field-actions-popover {
+
+	[role="menuitem"][data-active-item]:not([data-focus-visible]):not([aria-disabled="true"]),
+	[role="menuitemradio"][data-active-item]:not([data-focus-visible]):not([aria-disabled="true"]),
+	[role="menuitemcheckbox"][data-active-item]:not([data-focus-visible]):not([aria-disabled="true"]) {
+		background-color: $gray-100;
+		color: $gray-900;
+	}
+}
+
 // Replaces the `isDestructive` red text we used to get from MenuItem.
 // The new Menu.Item from privateApis has no destructive variant, so
 // the visual signal for "Delete" has to be applied here. Ariakit
-// flips the row to the theme color when active, which keeps the
-// active-state contrast intact.
+// flips the row to the neutral active color above, which keeps the row
+// readable without leaking the destructive color into hover.
 .cortext-column-header-actions__destructive-item:not([data-active-item="true"]) {
 	color: var(--wp-components-color-destructive, #cc1818);
 }
