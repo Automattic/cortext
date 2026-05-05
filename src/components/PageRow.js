@@ -7,6 +7,7 @@ import {
 	MenuItem,
 	TextControl,
 } from '@wordpress/components';
+import { chevronDown, chevronRight } from '@wordpress/icons';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 
 const GRID_UNIT = 20; // matches $grid-unit-20 in index.scss
@@ -143,11 +144,8 @@ export default function PageRow( {
 					{ hasChildren ? (
 						<Button
 							className="cortext-sidebar__chevron"
-							icon={
-								isExpanded
-									? 'arrow-down-alt2'
-									: 'arrow-right-alt2'
-							}
+							icon={ isExpanded ? chevronDown : chevronRight }
+							size="small"
 							label={
 								isExpanded
 									? __( 'Collapse', 'cortext' )
