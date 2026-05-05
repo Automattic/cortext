@@ -33,28 +33,7 @@ import PublishToggle from './PublishToggle';
 const SCOPE = 'cortext';
 const INSPECTOR = 'cortext/block-inspector';
 
-const STATUS_LABELS = {
-	idle: '',
-	saving: __( 'Saving…', 'cortext' ),
-	saved: __( 'Saved', 'cortext' ),
-	error: __( 'Failed to save', 'cortext' ),
-};
-
-function SaveStatus( { status } ) {
-	const label = STATUS_LABELS[ status ] ?? '';
-
-	return (
-		<div
-			className={ `cortext-canvas__status cortext-canvas__status--${ status }` }
-			role="status"
-			aria-live="polite"
-		>
-			{ label }
-		</div>
-	);
-}
-
-function Header( { saveStatus } ) {
+function Header() {
 	const { enableComplementaryArea, disableComplementaryArea } =
 		useDispatch( interfaceStore );
 	const isInspectorOpen = useSelect(
@@ -66,9 +45,6 @@ function Header( { saveStatus } ) {
 
 	return (
 		<div className="cortext-canvas__header">
-			<div className="cortext-canvas__header-left">
-				<SaveStatus status={ saveStatus } />
-			</div>
 			<div className="cortext-canvas__header-right">
 				<PublishToggle />
 				<Button
@@ -231,7 +207,7 @@ function VisualCanvas( { postId, onReady } ) {
 }
 
 function CanvasEditor( { post, pendingPost, onSwitchPost, onDisplayedPost } ) {
-	const { status, flushNow, isDirty, isSaving } = useAutosave();
+	const { flushNow, isDirty, isSaving } = useAutosave();
 	const isTrashed = post.status === 'trash';
 
 	useEffect( () => {
@@ -259,7 +235,7 @@ function CanvasEditor( { post, pendingPost, onSwitchPost, onDisplayedPost } ) {
 		<>
 			<InterfaceSkeleton
 				className="cortext-canvas"
-				header={ <Header saveStatus={ status } /> }
+				header={ <Header /> }
 				content={
 					<>
 						{ isTrashed && <TrashedNotice postId={ post.id } /> }

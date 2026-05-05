@@ -500,16 +500,15 @@ body.cortext-sidebar-resizing {
 	&__header {
 		display: flex;
 		align-items: stretch;
-		justify-content: space-between;
+		justify-content: flex-end;
 		padding-inline: $grid-unit-15;
-		height: 36px;
+		height: var(--cortext-topbar-height);
 		flex: 0 0 auto;
 		background: var(--cortext-shell-surface);
 		color: var(--cortext-text);
 		border-bottom: var(--cortext-shell-border-width) solid var(--cortext-chrome-border);
 	}
 
-	&__header-left,
 	&__header-right {
 		display: flex;
 		align-items: stretch;
@@ -521,18 +520,6 @@ body.cortext-sidebar-resizing {
 		height: 100%;
 		min-height: 0;
 		border-radius: 0;
-	}
-
-	// Save status: muted text that fades in/out as the autosave hook
-	// flips between idle / saving / saved / error.
-	&__status {
-		font-size: 12px;
-		color: var(--cortext-text-muted);
-		min-width: 7ch;
-	}
-
-	&__status--error {
-		color: #cc1818;
 	}
 
 	&__loading,
