@@ -835,6 +835,9 @@ body.cortext-sidebar-resizing {
 		.cortext-canvas__identity-action {
 			opacity: 0;
 			pointer-events: none;
+			min-width: 0;
+			height: auto;
+			padding: $grid-unit-05;
 			transition: opacity 0.12s ease;
 		}
 
