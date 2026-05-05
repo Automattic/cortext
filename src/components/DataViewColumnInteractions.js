@@ -151,7 +151,10 @@ function getColumnBodyCells( headerEl ) {
 }
 
 function measureCellNaturalWidth( cell ) {
+	const sourceTable = cell.closest( TABLE_SELECTOR );
+	const isHeader = cell.tagName === 'TH';
 	const table = document.createElement( 'table' );
+	const section = document.createElement( isHeader ? 'thead' : 'tbody' );
 	const row = document.createElement( 'tr' );
 	const clone = cell.cloneNode( true );
 
@@ -161,22 +164,58 @@ function measureCellNaturalWidth( cell ) {
 	clone.style.minWidth = '0';
 	clone.style.maxWidth = 'none';
 
-	table.className = cell.closest( TABLE_SELECTOR )?.className ?? '';
-	table.style.position = 'fixed';
-	table.style.left = '-10000px';
-	table.style.top = '0';
+	// Drop the editable-cell shell's 8px internal padding from body cells.
+	// It's our hover/focus chrome, not content, and including it makes
+	// autofit reserve dead space for short values. The upstream `<th>`
+	// button padding stays put: the rendered cell relies on it for breathing
+	// room, so stripping it here would size the column tighter than the
+	// live render actually needs.
+	for ( const el of clone.querySelectorAll(
+		'.cortext-editable-cell__shell'
+	) ) {
+		el.style.padding = '0';
+	}
+
+	// Copy the rendered table's classes (including `has-*-density`) so the
+	// per-density padding rules apply to the measurement clone too.
+	table.className = sourceTable?.className ?? '';
 	table.style.width = 'auto';
 	table.style.tableLayout = 'auto';
-	table.style.visibility = 'hidden';
-	table.style.pointerEvents = 'none';
 
 	row.appendChild( clone );
-	table.appendChild( row );
-	document.body.appendChild( table );
-	const width = clone.getBoundingClientRect().width;
-	table.remove();
+	section.appendChild( row );
+	table.appendChild( section );
 
-	return width;
+	// Wrap the clone in `.cortext-data-view` and a real `<tbody>` / `<thead>`
+	// so our scoped overrides match it. Without those ancestors the upstream
+	// `min-width: 15ch` floor on `.dataviews-view-table__cell-content-wrapper`
+	// leaks back in and every column measures at least ~15 characters wide.
+	const wrapper = document.createElement( 'div' );
+	wrapper.className = 'cortext-data-view';
+	wrapper.style.position = 'fixed';
+	wrapper.style.left = '-10000px';
+	wrapper.style.top = '0';
+	wrapper.style.visibility = 'hidden';
+	wrapper.style.pointerEvents = 'none';
+	wrapper.appendChild( table );
+
+	document.body.appendChild( wrapper );
+	// `getBoundingClientRect` is border-box; `style.width = px` writes as
+	// content-box on `<th>` / `<td>`. Persisting the border-box width makes
+	// the rendered cell `width + padding` wide, and the next autofit then
+	// measures the now-wider cell and grows the column again on every
+	// double-click. Subtract the cell's own padding and border so the
+	// persisted width round-trips through render at the size we measured.
+	const bbox = clone.getBoundingClientRect();
+	const styles = window.getComputedStyle( clone );
+	const horizontalChrome =
+		( Number.parseFloat( styles.paddingLeft ) || 0 ) +
+		( Number.parseFloat( styles.paddingRight ) || 0 ) +
+		( Number.parseFloat( styles.borderLeftWidth ) || 0 ) +
+		( Number.parseFloat( styles.borderRightWidth ) || 0 );
+	wrapper.remove();
+
+	return Math.max( 0, bbox.width - horizontalChrome );
 }
 
 function getAutoFitColumnWidth( headerEl, fieldType ) {
