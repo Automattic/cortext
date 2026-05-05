@@ -1681,6 +1681,7 @@ tbody > tr > td:not(:first-child) {
 }
 
 .cortext-relation-ref {
+	gap: $grid-unit-05;
 	text-decoration: none;
 
 	&:hover,
@@ -1696,6 +1697,20 @@ tbody > tr > td:not(:first-child) {
 		outline: 0;
 		box-shadow: inset 0 0 0 2px var(--wp-admin-theme-color, $gray-700);
 	}
+}
+
+.cortext-relation-ref__icon {
+	flex: 0 0 auto;
+	width: 14px;
+	height: 14px;
+	color: $gray-700;
+}
+
+.cortext-relation-ref__title {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 .cortext-relation-edit-popover .components-popover__content {

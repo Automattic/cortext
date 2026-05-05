@@ -21,7 +21,7 @@ import {
 	useRef,
 	useState,
 } from '@wordpress/element';
-import { Icon, check, closeSmall, plus } from '@wordpress/icons';
+import { Icon, arrowUpRight, check, closeSmall, plus } from '@wordpress/icons';
 
 import MultiselectEdit from './MultiselectEdit';
 import Chip from './fields/Chip';
@@ -410,7 +410,13 @@ function RelationReferences( { value } ) {
 							navigateToCollection( event, ref )
 						}
 					>
-						{ title }
+						<Icon
+							className="cortext-relation-ref__icon"
+							icon={ arrowUpRight }
+						/>
+						<span className="cortext-relation-ref__title">
+							{ title }
+						</span>
 					</a>
 				);
 			} ) }
