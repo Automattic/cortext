@@ -2070,6 +2070,8 @@ thead > tr > th {
 		z-index: 1;
 		padding: $grid-unit-05;
 		min-width: 0;
+		min-height: 0;
+		height: auto;
 		background: transparent;
 		border: 0;
 		box-shadow: none;
