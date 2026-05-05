@@ -243,6 +243,23 @@ function isInsideIdentityPopover( node ) {
 	return false;
 }
 
+function isIdentityControlPointer( event, controlNode ) {
+	const path = event.composedPath?.() ?? [];
+	if ( controlNode && path.includes( controlNode ) ) {
+		return true;
+	}
+	if ( path.some( isInsideIdentityPopover ) ) {
+		return true;
+	}
+	const target = event.target;
+	return (
+		!! controlNode &&
+		target &&
+		typeof controlNode.contains === 'function' &&
+		controlNode.contains( target )
+	);
+}
+
 function PickerBody( {
 	pageId,
 	currentIcon,
@@ -421,6 +438,7 @@ export default function PageIdentityControls( {
 	onAfterSave,
 } ) {
 	const hasIcon = !! currentIcon;
+	const controlRef = useRef( null );
 	const [ dropdownOpen, setDropdownOpen ] = useState( false );
 	const ignoreNextCloseRef = useRef( false );
 	const ignoreNextCloseTimerRef = useRef( null );
@@ -432,6 +450,30 @@ export default function PageIdentityControls( {
 			}
 		};
 	}, [] );
+
+	useEffect( () => {
+		if ( ! dropdownOpen ) {
+			return undefined;
+		}
+		const ownerDocument = controlRef.current?.ownerDocument ?? document;
+		const closeOnOutsidePointer = ( event ) => {
+			if ( isIdentityControlPointer( event, controlRef.current ) ) {
+				return;
+			}
+			setDropdownOpen( false );
+		};
+		ownerDocument.addEventListener(
+			'pointerdown',
+			closeOnOutsidePointer,
+			true
+		);
+		return () =>
+			ownerDocument.removeEventListener(
+				'pointerdown',
+				closeOnOutsidePointer,
+				true
+			);
+	}, [ dropdownOpen ] );
 
 	const keepOpenForSkinToneInteraction = () => {
 		ignoreNextCloseRef.current = true;
@@ -467,6 +509,8 @@ export default function PageIdentityControls( {
 
 	return (
 		<Dropdown
+			ref={ controlRef }
+			className="cortext-page-identity-control"
 			open={ dropdownOpen }
 			onToggle={ handleOpenChange }
 			popoverProps={ {
