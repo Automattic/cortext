@@ -75,6 +75,7 @@ function CortextSnackbars() {
 
 function PageIdentityActions( { postId } ) {
 	const isInsertingCoverRef = useRef( false );
+	const actionsRef = useRef( null );
 	const [ meta ] = useEntityProp( 'postType', POST_TYPE, 'meta', postId );
 	const iconMeta = meta?.cortext_page_icon ?? '';
 	const { hasIcon, hasCover, isTrashed } = useSelect( ( select ) => {
@@ -94,6 +95,54 @@ function PageIdentityActions( { postId } ) {
 	const { insertBlocks } = useDispatch( blockEditorStore );
 	const { editEntityRecord, saveEditedEntityRecord } =
 		useDispatch( coreStore );
+
+	useEffect( () => {
+		if ( isTrashed || hasCover ) {
+			return undefined;
+		}
+		const node = actionsRef.current;
+		const ownerDocument = node?.ownerDocument;
+		if ( ! node || ! ownerDocument ) {
+			return undefined;
+		}
+		const focusFirstActionFromTitle = ( event ) => {
+			if (
+				event.key !== 'Tab' ||
+				event.shiftKey ||
+				event.defaultPrevented
+			) {
+				return;
+			}
+			const target = event.target;
+			if (
+				! target ||
+				typeof target.closest !== 'function' ||
+				! target.closest( '[data-type="core/post-title"]' )
+			) {
+				return;
+			}
+			const firstAction = node.querySelector(
+				'.cortext-canvas__identity-action:not(:disabled)'
+			);
+			if ( ! firstAction ) {
+				return;
+			}
+			event.preventDefault();
+			event.stopPropagation();
+			firstAction.focus();
+		};
+		ownerDocument.addEventListener(
+			'keydown',
+			focusFirstActionFromTitle,
+			true
+		);
+		return () =>
+			ownerDocument.removeEventListener(
+				'keydown',
+				focusFirstActionFromTitle,
+				true
+			);
+	}, [ hasCover, isTrashed ] );
 
 	if ( isTrashed || hasCover ) {
 		return null;
@@ -131,6 +180,7 @@ function PageIdentityActions( { postId } ) {
 
 	return (
 		<div
+			ref={ actionsRef }
 			className="cortext-canvas__identity-actions"
 			role="group"
 			aria-label={ __( 'Page identity actions', 'cortext' ) }

@@ -839,10 +839,13 @@ body.cortext-sidebar-resizing {
 		}
 
 		.cortext-canvas__identity-action {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
 			opacity: 0;
 			min-width: 0;
-			height: auto;
-			padding: $grid-unit-05;
+			height: $grid-unit-40;
+			padding: 0 $grid-unit-10;
 			line-height: 20px;
 			transition:
 				opacity 0.12s ease,
@@ -1979,7 +1982,7 @@ thead > tr > th {
 /* stylelint-disable no-descending-specificity */
 .cortext-canvas__identity-actions .cortext-canvas__identity-action:hover:not(:disabled),
 .cortext-canvas__identity-actions .cortext-canvas__identity-action:focus-visible {
-	background: rgba(0, 0, 0, 0.06);
+	background: rgba(0, 0, 0, 0.08);
 	box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
 	color: var(--cortext-button-text, #1e1e1e);
 }
