@@ -497,11 +497,11 @@ body.cortext-sidebar-resizing {
 
 	&__header {
 		display: flex;
-		align-items: center;
+		align-items: stretch;
 		justify-content: space-between;
-		gap: $grid-unit-10;
-		padding: $grid-unit-05 $grid-unit-20;
-		flex: 1;
+		padding-inline: $grid-unit-15;
+		height: 36px;
+		flex: 0 0 auto;
 		background: var(--cortext-shell-surface);
 		color: var(--cortext-text);
 		border-bottom: var(--cortext-shell-border-width) solid var(--cortext-chrome-border);
@@ -510,8 +510,15 @@ body.cortext-sidebar-resizing {
 	&__header-left,
 	&__header-right {
 		display: flex;
-		align-items: center;
-		gap: $grid-unit-10;
+		align-items: stretch;
+	}
+
+	// Buttons span the full toolbar height; remove their default radius
+	// so they read as edge-to-edge segments rather than floating chips.
+	&__header .components-button {
+		height: 100%;
+		min-height: 0;
+		border-radius: 0;
 	}
 
 	// Save status: muted text that fades in/out as the autosave hook
