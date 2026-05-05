@@ -705,6 +705,11 @@ final class SeedDummyCollections extends WP_CLI_Command {
 						'children' => array(
 							array(
 								'title'   => 'Onboarding',
+								'icon'    => array(
+									'type'  => 'wp',
+									'name'  => 'tip',
+									'color' => 'yellow',
+								),
 								'content' => $this->page_content(
 									array(
 										$this->paragraph( 'A compact starter page for checking title edits, autosave, nested sidebar rows, and readable editor content.' ),
@@ -731,6 +736,11 @@ final class SeedDummyCollections extends WP_CLI_Command {
 									),
 									array(
 										'title'   => 'JavaScript',
+										'icon'    => array(
+											'type'  => 'wp',
+											'name'  => 'code',
+											'color' => 'blue',
+										),
 										'content' => $this->page_content(
 											array(
 												$this->paragraph( 'DataViews and the shell should stay close to WordPress package conventions.' ),
@@ -762,6 +772,11 @@ final class SeedDummyCollections extends WP_CLI_Command {
 							),
 							array(
 								'title'   => 'Mockups',
+								'icon'    => array(
+									'type'  => 'wp',
+									'name'  => 'brush',
+									'color' => 'pink',
+								),
 								'content' => $this->page_content(
 									array(
 										$this->paragraph( 'Use this seeded page as a scratch area for block layout and inspector checks.' ),
@@ -786,11 +801,27 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			),
 			array(
 				'title'   => 'Demo database',
-				'icon'    => '🗄️',
+				'icon'    => array(
+					'type'  => 'wp',
+					'name'  => 'table',
+					'color' => 'green',
+				),
 				'content' => $this->page_content(
 					array(
 						$this->paragraph( 'This page embeds the field-type demo collection so local starts cover text, number, email, URL, select, multiselect, date, datetime, and checkbox cells.' ),
 						$this->data_view_block( $collection_ids['demo'] ?? 0 ),
+					)
+				),
+			),
+			array(
+				'title'   => 'About Cortext',
+				'icon'    => array(
+					'type'   => 'image',
+					'source' => $banner,
+				),
+				'content' => $this->page_content(
+					array(
+						$this->paragraph( 'A landing page for the project so reseeds always include the image-icon variant alongside the emoji and WP-icon ones.' ),
 					)
 				),
 			),
@@ -855,17 +886,10 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		}
 
 		if ( ! empty( $node['icon'] ) ) {
-			update_post_meta(
-				$page_id,
-				PageIdentity::META_KEY,
-				wp_json_encode(
-					array(
-						'type'  => 'emoji',
-						'value' => $node['icon'],
-					),
-					JSON_UNESCAPED_UNICODE
-				)
-			);
+			$icon_meta = $this->serialize_icon_meta( $node['icon'] );
+			if ( '' !== $icon_meta ) {
+				update_post_meta( $page_id, PageIdentity::META_KEY, $icon_meta );
+			}
 		}
 
 		if ( ! empty( $node['cover'] ) ) {
@@ -884,6 +908,59 @@ final class SeedDummyCollections extends WP_CLI_Command {
 
 	private function page_content( array $blocks ): string {
 		return implode( "\n\n", array_filter( $blocks ) );
+	}
+
+	/**
+	 * Returns the JSON meta string for a seeded page icon. Accepts either a
+	 * raw emoji (string) or a structured array describing a WP icon
+	 * (`['type' => 'wp', 'name' => ..., 'color' => ...]`) or an image icon
+	 * sourced from a bundled file (`['type' => 'image', 'source' => path]`).
+	 * Returns an empty string when the descriptor can't be resolved (e.g.
+	 * the image source is missing) so the caller can skip the meta update.
+	 *
+	 * @param mixed $icon Icon descriptor.
+	 */
+	private function serialize_icon_meta( $icon ): string {
+		if ( is_string( $icon ) && '' !== $icon ) {
+			return (string) wp_json_encode(
+				array(
+					'type'  => 'emoji',
+					'value' => $icon,
+				),
+				JSON_UNESCAPED_UNICODE
+			);
+		}
+
+		if ( ! is_array( $icon ) ) {
+			return '';
+		}
+
+		$type = $icon['type'] ?? '';
+
+		if ( 'wp' === $type && ! empty( $icon['name'] ) ) {
+			$payload = array(
+				'type' => 'wp',
+				'name' => $icon['name'],
+			);
+			if ( ! empty( $icon['color'] ) ) {
+				$payload['color'] = $icon['color'];
+			}
+			return (string) wp_json_encode( $payload );
+		}
+
+		if ( 'image' === $type && ! empty( $icon['source'] ) ) {
+			$attachment_id = $this->ensure_attachment_from_path( $icon['source'] );
+			if ( $attachment_id > 0 ) {
+				return (string) wp_json_encode(
+					array(
+						'type' => 'image',
+						'id'   => $attachment_id,
+					)
+				);
+			}
+		}
+
+		return '';
 	}
 
 	/**
