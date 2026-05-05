@@ -37,6 +37,7 @@ function buildQueryArgs( collectionId, view ) {
 export default function useCollectionRows( collectionId, view ) {
 	const [ state, setState ] = useState( {
 		data: [],
+		collection: null,
 		paginationInfo: { totalItems: 0, totalPages: 0 },
 		isLoading: false,
 		hasResolved: false,
@@ -59,6 +60,7 @@ export default function useCollectionRows( collectionId, view ) {
 		if ( ! collectionId ) {
 			setState( {
 				data: [],
+				collection: null,
 				paginationInfo: { totalItems: 0, totalPages: 0 },
 				isLoading: false,
 				hasResolved: false,
@@ -87,6 +89,7 @@ export default function useCollectionRows( collectionId, view ) {
 				}
 				setState( {
 					data: Array.isArray( body.rows ) ? body.rows : [],
+					collection: body.collection ?? null,
 					paginationInfo: {
 						totalItems: body.total ?? 0,
 						totalPages: body.totalPages ?? 1,
@@ -102,6 +105,7 @@ export default function useCollectionRows( collectionId, view ) {
 				}
 				setState( {
 					data: [],
+					collection: null,
 					paginationInfo: { totalItems: 0, totalPages: 0 },
 					isLoading: false,
 					hasResolved: true,

@@ -164,9 +164,8 @@ function RelationConfig( {
 	};
 
 	return (
-		<div className="cortext-add-field-popover__config cortext-add-field-popover__config--relation">
+		<div className="cortext-add-field-popover__config">
 			<SelectControl
-				className="cortext-add-field-popover__relation-row-control"
 				label={ __( 'Related to', 'cortext' ) }
 				value={ targetCollectionId }
 				options={ options }
@@ -176,7 +175,6 @@ function RelationConfig( {
 				__nextHasNoMarginBottom
 			/>
 			<SelectControl
-				className="cortext-add-field-popover__relation-row-control"
 				label={ __( 'Limit', 'cortext' ) }
 				value={ relationMultiple ? 'many' : 'one' }
 				options={ RELATION_LIMIT_OPTIONS }
@@ -186,7 +184,6 @@ function RelationConfig( {
 				__nextHasNoMarginBottom
 			/>
 			<ToggleControl
-				className="cortext-add-field-popover__relation-toggle"
 				label={ __( 'Add related property', 'cortext' ) }
 				checked={ showReverseOptions }
 				onChange={ setShowReverseOptions }
@@ -205,7 +202,6 @@ function RelationConfig( {
 						__nextHasNoMarginBottom
 					/>
 					<SelectControl
-						className="cortext-add-field-popover__relation-row-control"
 						label={ __( 'Related property limit', 'cortext' ) }
 						value={ reverseMultiple ? 'many' : 'one' }
 						options={ RELATION_LIMIT_OPTIONS }
@@ -228,7 +224,6 @@ function RelationConfig( {
 				</Button>
 				<Button
 					variant="primary"
-					className="cortext-add-field-popover__primary-action"
 					onClick={ submit }
 					isBusy={ isBusy }
 					disabled={ isBusy || ! targetCollectionId }

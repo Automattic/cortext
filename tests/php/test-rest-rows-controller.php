@@ -44,9 +44,40 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$routes = rest_get_server()->get_routes();
 		$this->assertArrayHasKey( '/cortext/v1/rows', $routes );
 		$this->assertArrayHasKey(
+			'/cortext/v1/collections/(?P<collection_id>\d+)/rows',
+			$routes
+		);
+		$this->assertArrayHasKey(
 			'/cortext/v1/collections/(?P<collection_id>\d+)/rows/(?P<row_id>\d+)',
 			$routes
 		);
+	}
+
+	public function test_create_row_creates_formatted_collection_entry(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+		$fixture = $this->create_collection_fixture( 'newrelrow', 'text' );
+
+		$response = $this->create_row( $fixture['collection_id'], 'New related page' );
+
+		$this->assertSame( 201, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertSame( 'New related page', $data['title']['raw'] );
+		$this->assertSame( 'private', get_post_status( $data['id'] ) );
+		$this->assertSame( 'crtxt_newrelrow', get_post_type( $data['id'] ) );
+		$this->assertArrayHasKey( "field-{$fixture['field_id']}", $data['meta'] );
+	}
+
+	public function test_query_rows_includes_collection_metadata(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+		$fixture = $this->create_collection_fixture( 'rowmeta', 'text' );
+
+		$response = $this->query_rows( array( 'collection' => $fixture['collection_id'] ) );
+
+		$this->assertSame( 200, $response->get_status() );
+		$collection = $response->get_data()['collection'];
+		$this->assertSame( $fixture['collection_id'], $collection['id'] );
+		$this->assertSame( 'Rowmeta', $collection['title']['raw'] );
+		$this->assertSame( 'rowmeta', $collection['slug'] );
 	}
 
 	public function test_requires_edit_posts_capability(): void {
@@ -907,6 +938,17 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 	private function query_rows( array $params ): \WP_REST_Response {
 		$request = new WP_REST_Request( 'GET', '/cortext/v1/rows' );
 		$request->set_query_params( $params );
+
+		return rest_do_request( $request );
+	}
+
+	private function create_row( int $collection_id, string $title ): \WP_REST_Response {
+		$request = new WP_REST_Request(
+			'POST',
+			"/cortext/v1/collections/{$collection_id}/rows"
+		);
+		$request->set_param( 'collection_id', $collection_id );
+		$request->set_param( 'title', $title );
 
 		return rest_do_request( $request );
 	}

@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
+jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 jest.mock( '../../../src/hooks/useCollectionRows', () => ( {
 	__esModule: true,
 	default: jest.fn(),
@@ -13,12 +14,16 @@ import {
 	formatNumberValue,
 	RowMutationContext,
 } from '../../../src/components/EditableCell';
+import apiFetch from '@wordpress/api-fetch';
 import useCollectionRows from '../../../src/hooks/useCollectionRows';
 
 beforeEach( () => {
+	apiFetch.mockReset();
 	useCollectionRows.mockReturnValue( {
 		data: [],
+		collection: null,
 		isLoading: false,
+		refresh: jest.fn(),
 	} );
 } );
 
@@ -430,7 +435,9 @@ describe( 'EditableCell relation editor', () => {
 				{ id: 22, title: { raw: 'Ada Lovelace' } },
 				{ id: 33, title: { raw: 'Grace Hopper' } },
 			],
+			collection: { title: { raw: 'People' } },
 			isLoading: false,
+			refresh: jest.fn(),
 		} );
 		const saveRowField = jest.fn().mockResolvedValue( true );
 
@@ -456,5 +463,51 @@ describe( 'EditableCell relation editor', () => {
 			9,
 			expect.objectContaining( { type: 'table' } )
 		);
+	} );
+
+	it( 'creates a missing target row from the relation picker', async () => {
+		const refreshTargetRows = jest.fn();
+		useCollectionRows.mockReturnValue( {
+			data: [],
+			collection: { title: { raw: 'People' } },
+			isLoading: false,
+			refresh: refreshTargetRows,
+		} );
+		apiFetch.mockResolvedValue( { id: 44, title: { raw: 'New Ada' } } );
+		const saveRowField = jest.fn().mockResolvedValue( true );
+
+		render(
+			<RowMutationContext.Provider value={ { saveRowField } }>
+				<EditableCell
+					item={ { id: 11, meta: { 'field-5': [] } } }
+					fieldId="field-5"
+					fieldType="relation"
+					label="Assignee"
+					relation={ { targetCollectionId: 9, multiple: true } }
+				/>
+			</RowMutationContext.Provider>
+		);
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Assignee' } ) );
+		fireEvent.change( screen.getByLabelText( 'Search rows' ), {
+			target: { value: 'New Ada' },
+		} );
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Create row "New Ada"' } )
+		);
+
+		await waitFor( () =>
+			expect( apiFetch ).toHaveBeenCalledWith( {
+				path: '/cortext/v1/collections/9/rows',
+				method: 'POST',
+				data: { title: 'New Ada' },
+			} )
+		);
+		await waitFor( () =>
+			expect( saveRowField ).toHaveBeenCalledWith( 11, 'field-5', [
+				44,
+			] )
+		);
+		expect( refreshTargetRows ).toHaveBeenCalled();
 	} );
 } );

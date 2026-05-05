@@ -97,6 +97,28 @@ final class RowsController {
 
 		register_rest_route(
 			self::NAMESPACE,
+			'/collections/(?P<collection_id>\d+)/rows',
+			array(
+				array(
+					'methods'             => 'POST',
+					'callback'            => array( $this, 'create_row' ),
+					'permission_callback' => array( $this, 'can_create_row' ),
+					'args'                => array(
+						'collection_id' => array(
+							'type'     => 'integer',
+							'required' => true,
+						),
+						'title'         => array(
+							'type'     => 'string',
+							'required' => true,
+						),
+					),
+				),
+			)
+		);
+
+		register_rest_route(
+			self::NAMESPACE,
 			'/collections/(?P<collection_id>\d+)/rows/(?P<row_id>\d+)',
 			array(
 				array(
@@ -126,6 +148,17 @@ final class RowsController {
 	}
 
 	public function can_read(): bool {
+		return current_user_can( 'edit_posts' );
+	}
+
+	public function can_create_row( WP_REST_Request $request ): bool|WP_Error {
+		$collection_id = (int) $request->get_param( 'collection_id' );
+
+		$collection = $this->validate_collection( $collection_id );
+		if ( is_wp_error( $collection ) ) {
+			return $collection;
+		}
+
 		return current_user_can( 'edit_posts' );
 	}
 
@@ -216,9 +249,58 @@ final class RowsController {
 				'rows'       => $rows,
 				'total'      => (int) $query->found_posts,
 				'totalPages' => (int) $query->max_num_pages,
+				'collection' => $this->collection_definition( $collection, $slug ),
 				'fields'     => $fields,
 			),
 			200
+		);
+	}
+
+	public function create_row( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+		$collection_id = (int) $request->get_param( 'collection_id' );
+		$title         = trim( sanitize_text_field( (string) $request->get_param( 'title' ) ) );
+
+		if ( '' === $title ) {
+			return new WP_Error(
+				'cortext_row_title_required',
+				__( 'Row title is required.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$collection = $this->validate_collection( $collection_id );
+		if ( is_wp_error( $collection ) ) {
+			return $collection;
+		}
+
+		$slug   = (string) get_post_meta( $collection_id, 'slug', true );
+		$row_id = wp_insert_post(
+			array(
+				'post_type'   => CollectionEntries::CPT_PREFIX . $slug,
+				'post_status' => 'private',
+				'post_title'  => $title,
+			),
+			true
+		);
+
+		if ( is_wp_error( $row_id ) ) {
+			return $row_id;
+		}
+
+		$row = get_post( (int) $row_id );
+		if ( ! $row instanceof WP_Post ) {
+			return new WP_Error(
+				'cortext_row_create_failed',
+				__( 'Row could not be created.', 'cortext' ),
+				array( 'status' => 500 )
+			);
+		}
+
+		$field_ids       = $this->collection_field_ids( $collection_id );
+		$multi_field_ids = $this->multi_value_field_ids( $field_ids );
+		return new WP_REST_Response(
+			$this->format_row( $row, $field_ids, $multi_field_ids ),
+			201
 		);
 	}
 
@@ -690,6 +772,24 @@ final class RowsController {
 		if ( count( $ids ) > 0 ) {
 			cache_users( $ids );
 		}
+	}
+
+	/**
+	 * Builds collection metadata for row response consumers.
+	 *
+	 * @param WP_Post $collection Collection post.
+	 * @param string  $slug       Collection row post type suffix.
+	 * @return array{id:int,title:array{raw:string,rendered:string},slug:string}
+	 */
+	private function collection_definition( WP_Post $collection, string $slug ): array {
+		return array(
+			'id'    => $collection->ID,
+			'title' => array(
+				'raw'      => $collection->post_title,
+				'rendered' => $collection->post_title,
+			),
+			'slug'  => $slug,
+		);
 	}
 
 	/**
