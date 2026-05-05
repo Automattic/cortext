@@ -249,11 +249,15 @@ function FieldActions( { recordId, collectionId, view, onChangeView } ) {
 		if ( ! parentDoc || parentDoc === document ) {
 			return undefined;
 		}
-		const onParentMouseDown = () => closeMenu();
+		const onParentMouseDown = ( event ) => {
+			if ( hideMenuOnInteractOutside( event ) ) {
+				closeMenu();
+			}
+		};
 		parentDoc.addEventListener( 'mousedown', onParentMouseDown );
 		return () =>
 			parentDoc.removeEventListener( 'mousedown', onParentMouseDown );
-	}, [ isMenuOpen, closeMenu ] );
+	}, [ isMenuOpen, closeMenu, hideMenuOnInteractOutside ] );
 
 	const dataViewId = `field-${ recordId }`;
 	const label =
