@@ -1686,7 +1686,9 @@ tbody > tr > td:not(:first-child) {
 	&:hover,
 	&:focus {
 		background: $gray-200;
+		box-shadow: none;
 		color: $gray-900;
+		outline: 0;
 		text-decoration: none;
 	}
 
