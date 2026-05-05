@@ -826,11 +826,17 @@ body.cortext-sidebar-resizing {
 
 	&__identity-actions {
 		display: flex;
+		align-items: center;
 		gap: $grid-unit-05;
 		max-width: var(--wp--style--global--content-size, 840px);
 		width: 100%;
 		margin: $grid-unit-10 auto $grid-unit-10;
 		padding: 0 $grid-unit-20;
+
+		.components-dropdown {
+			display: flex;
+			align-items: center;
+		}
 
 		.cortext-canvas__identity-action {
 			opacity: 0;
@@ -838,6 +844,7 @@ body.cortext-sidebar-resizing {
 			min-width: 0;
 			height: auto;
 			padding: $grid-unit-05;
+			line-height: 20px;
 			transition: opacity 0.12s ease;
 		}
 
