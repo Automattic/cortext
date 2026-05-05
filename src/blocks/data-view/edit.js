@@ -29,6 +29,7 @@ function createDefaultView() {
 		page: 1,
 		search: '',
 		layout: { density: 'compact' },
+		rowDetailMode: 'side',
 	};
 }
 

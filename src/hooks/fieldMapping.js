@@ -176,6 +176,10 @@ export function mapField( field ) {
 		render: buildRender( id, type, label, elements, format ),
 		editable: EDITABLE_TYPES.has( type ),
 		enableGlobalSearch: SEARCHABLE_TYPES.has( type ),
+		cortextFieldType: type,
+		cortextElements: elements,
+		cortextFormat: format,
+		cortextRecordId: field.id,
 	};
 
 	// DataViews v6's FieldType union is

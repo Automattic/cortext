@@ -234,7 +234,7 @@ final class CollectionEntries {
 					'rest_base'          => $post_type,
 					'has_archive'        => false,
 					'hierarchical'       => false,
-					'supports'           => array( 'title', 'custom-fields' ),
+					'supports'           => array( 'title', 'editor', 'custom-fields' ),
 					'capability_type'    => 'post',
 					'map_meta_cap'       => true,
 					'can_export'         => true,
