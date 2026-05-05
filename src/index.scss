@@ -840,6 +840,7 @@ body.cortext-sidebar-resizing {
 
 		.cortext-canvas__identity-action {
 			opacity: 0;
+			visibility: hidden;
 			pointer-events: none;
 			min-width: 0;
 			height: auto;
@@ -850,6 +851,7 @@ body.cortext-sidebar-resizing {
 
 		&:focus-within .cortext-canvas__identity-action {
 			opacity: 1;
+			visibility: visible;
 			pointer-events: auto;
 		}
 	}
@@ -909,6 +911,7 @@ body:has([data-type="cortext/page-icon"]:hover) .cortext-canvas__identity-action
 body:has([data-type="cortext/page-icon"]:focus-within) .cortext-canvas__identity-action,
 body:has(.cortext-canvas__identity-actions:hover) .cortext-canvas__identity-action {
 	opacity: 1;
+	visibility: visible;
 	pointer-events: auto;
 }
 
