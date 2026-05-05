@@ -493,12 +493,12 @@ export default function CollectionDataViews( {
 		}
 	}, [ isResolving, rowsResolved, onReady ] );
 
-	// Block editor selects the block on any mousedown that bubbles up. When
-	// the user drags the dataviews scrollbar, the mousedown lands in the
-	// gutter (offset past the scrollable element's clientWidth/Height); stop
-	// propagation there so the scroll drag doesn't also pull a bounding box
-	// around the block. Cell/row/header clicks still bubble. Capture phase
-	// so we beat any descendant handler.
+	// tech-debt.md#22: Gutenberg selects on any mousedown that bubbles up.
+	// Dragging the dataviews scrollbar lands in the gutter (offset past the
+	// scrollable element's clientWidth/Height); stop propagation there so
+	// the scroll drag doesn't also pull a bounding box around the block.
+	// Cell/row/header clicks still bubble. Capture phase so we beat any
+	// descendant handler.
 	useEffect( () => {
 		const node = tableWrapperRef.current;
 		if ( ! node ) {

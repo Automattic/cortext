@@ -132,9 +132,11 @@ Worth a small spike before committing; `core-data`'s schema cache for rarely-cha
 
 **What.** DataViews persists table column order in `view.fields` and widths in `view.layout.styles`, but it doesn't expose a table-column interaction layer: no resize handles, min/max width contract, double-click autofit, reorder callback, drag preview, stable header/cell refs, or supported way to opt into `table-layout: fixed`. Cortext therefore portals resize and dnd-kit drag handles into DataViews-rendered `<th>` elements, snapshots header geometry during drag, mutates inline widths during resize for immediate feedback, and overrides internal table/cell wrapper CSS so narrow columns behave as hard constraints rather than intrinsic-size hints.
 
+The double-click autofit is the most fragile piece. There's no upstream measurement hook, so we clone the cell into a hidden subtree that has to mirror the rendered DOM exactly: wrapped in `.cortext-data-view` so Cortext's scoped overrides apply, in a real `<tbody>` or `<thead>` so upstream's `tbody`-scoped rules apply, appended next to the live `.dataviews-wrapper` so font tokens inherit the same way, and forced to `display: block` so flex sizing on the parent doesn't drift the measurement. Even with all that, the persisted width has to subtract the cell's own padding and border (read-side is border-box, write-side is content-box), and a 2px buffer absorbs sub-pixel rendering of proportional digits. Each ancestor and constant is a way the live DOM could change and silently break measurement.
+
 **Where.** `src/components/DataViewColumnInteractions.js`, `src/components/dataViewColumns.js`, the `DataViewColumnInteractions` mount in `src/components/CollectionDataViews.js`, and the column affordance / table wrapper rules in `src/index.scss`.
 
-**Solution.** Upstream DataViews could expose table-column APIs that cover `onChangeFields`, `onChangeColumnStyle`, resize handle rendering, per-field min/max widths, double-click autofit, drag overlay/insertion affordances, and stable header/cell slots or refs. If DataViews owned that layer, Cortext could drop the portal/DOM-query adapter, the wrapper min-width overrides, most of the dnd-kit column glue, and the direct DOM mutation used for live resize feedback.
+**Solution.** Upstream DataViews could expose table-column APIs that cover `onChangeFields`, `onChangeColumnStyle`, resize handle rendering, per-field min/max widths, double-click autofit, drag overlay/insertion affordances, and stable header/cell slots or refs. If DataViews owned that layer, Cortext could drop the portal/DOM-query adapter, the wrapper min-width overrides, most of the dnd-kit column glue, the cloned-measurement gymnastics, and the direct DOM mutation used for live resize feedback.
 
 ## 16. DataViews has no per-column menu-item slot `[upstream, soft]`
 
@@ -185,4 +187,20 @@ Worth a small spike before committing; `core-data`'s schema cache for rarely-cha
 **Where.** `cleanup_after_field_delete` in `includes/PostType/CollectionEntries.php`.
 
 **Solution.** Stand up an integration environment with a real `wpdb` (`wp-env` + WP_PHPUnit), move the cleanup to a scoped JOIN, and keep WorDBless for the parts that don't need a real database.
+
+## 22. Block editor selects on scrollbar drag `[upstream]`
+
+**What.** Gutenberg selects a block on any `mousedown` that bubbles up to the block wrapper. Inside the data-view block, dragging the dataviews scrollbar fires a mousedown on the scrolling element and pulls a bounding box around the whole block. There's no Gutenberg primitive to mark a region "scroll, don't select." We listen for `mousedown` on `.cortext-data-view` in capture phase, sniff the scrollbar gutter by geometry — target's computed `overflow-x/y` is `auto`/`scroll`, the element actually overflows, and the click landed past `clientWidth` / `clientHeight` — and `stopPropagation` so the event never reaches Gutenberg. Cell, row, and header clicks keep bubbling and select normally.
+
+**Where.** The mousedown effect on `tableWrapperRef` in `src/components/CollectionDataViews.js`.
+
+**Solution.** A Gutenberg API for declaring interactive scroll regions on a block (or a way to opt mousedowns out of selection per descendant element) would let us drop the heuristic. Until then the geometry sniff is the cleanest signal we have; brittleness lives in browser scrollbar pseudo-element behavior and would surface the day someone introduces an overlay-scrollbar shim or a custom scroll library.
+
+## 23. Embedded data-view block has no width/height controls `[internal]`
+
+**What.** The `cortext/data-view` block exposes `align` (default / wide / full) for width but nothing for height. A freshly inserted block needs *some* visible height or it collapses to its toolbar, so we set `min-height` from `var(--cortext-data-view-block-min-height, 480px)`. The number is a guess — it roughly fits a header, ~10 compact rows, footer, and pagination — and doesn't track the block's density or `perPage`, so a comfortable-density block with `perPage: 25` shows the same default 480px viewport as a compact block with 5 rows.
+
+**Where.** `--cortext-data-view-block-min-height` in `src/styles/_tokens.scss`, the `.wp-block-cortext-data-view .cortext-data-view` rule in `src/index.scss`, `src/blocks/data-view/block.json` (no `height` attribute today).
+
+**Solution.** Add a `height` (or "rows visible") attribute to the block with an inspector control, fall back to the variable when unset, and let the variable stay as a theme-overridable default. Computing the default from `density × perPage` is a smaller win on its own — once the per-block control exists, the default rarely matters.
 

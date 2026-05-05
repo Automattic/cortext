@@ -968,8 +968,9 @@ tbody > tr > td:not(:first-child) {
 	height: 100%;
 }
 
-// Embedded block has no absolute parent, so use a min-height to keep a
-// fresh insertion usable. Width comes from Gutenberg's alignment.
+// tech-debt.md#23: embedded block has no absolute parent and no per-instance
+// height attribute, so use a min-height token to keep a fresh insertion
+// usable. Width comes from Gutenberg's alignment.
 .wp-block-cortext-data-view .cortext-data-view {
 	min-height: var(--cortext-data-view-block-min-height);
 }
