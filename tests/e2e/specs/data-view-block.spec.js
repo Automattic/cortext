@@ -893,6 +893,177 @@ test.describe( 'Collection view block', () => {
 			);
 		}
 	} );
+
+	test( 'navigates the field format panel from the column menu with keyboard', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+
+		try {
+			const suffix = Date.now().toString( 36 ).slice( -4 );
+			const slug = `e2eformat${ suffix }`;
+			fixture.slug = slug;
+
+			fixture.collection = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_collections',
+				data: {
+					title: `Format keyboard ${ suffix }`,
+					status: 'private',
+					meta: { slug },
+				},
+			} );
+
+			fixture.field = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_fields',
+				data: {
+					title: 'Score',
+					status: 'private',
+					meta: { type: 'number' },
+				},
+			} );
+
+			await requestUtils.rest( {
+				method: 'POST',
+				path: `/wp/v2/crtxt_collections/${ fixture.collection.id }`,
+				data: {
+					meta: { fields: [ String( fixture.field.id ) ] },
+				},
+			} );
+
+			fixture.entry = await requestUtils.rest( {
+				method: 'POST',
+				path: `/wp/v2/crtxt_${ slug }`,
+				data: {
+					title: 'Keyboard row',
+					status: 'private',
+					meta: {
+						[ `field-${ fixture.field.id }` ]: 12.5,
+					},
+				},
+			} );
+
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_pages',
+				data: {
+					title: 'Format keyboard page',
+					status: 'private',
+					content: createDataViewBlockMarkup( fixture.collection.id, {
+						fields: [ 'title', `field-${ fixture.field.id }` ],
+					} ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/page/${ fixture.page.id }`
+			);
+
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.page.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+			const scoreHeader = canvas.getByRole( 'columnheader', {
+				name: /Score/,
+			} );
+			const scoreButton = scoreHeader
+				.getByRole( 'button', { name: 'Score' } )
+				.filter( { hasText: 'Score' } );
+
+			await expect( scoreButton ).toBeVisible();
+			await scoreButton.focus();
+			await scoreButton.press( 'Enter' );
+
+			const renameItem = canvas.getByRole( 'menuitem', {
+				name: 'Rename',
+			} );
+			const editFieldItem = canvas.getByRole( 'menuitem', {
+				name: 'Edit field',
+			} );
+			await expect( renameItem ).toBeFocused();
+
+			await page.keyboard.press( 'ArrowDown' );
+			await expect( editFieldItem ).toBeFocused();
+
+			await page.keyboard.press( 'ArrowRight' );
+			const formatPanel = page.locator( '.cortext-format-submenu' );
+			const numberFormatRow = formatPanel.getByRole( 'button', {
+				name: /Number format/,
+			} );
+			await expect( numberFormatRow ).toBeFocused();
+
+			await page.keyboard.press( 'ArrowRight' );
+			const numberFormatFlyout = page.locator(
+				'.cortext-format-submenu__flyout'
+			);
+			const plainNumberOption = numberFormatFlyout.getByRole(
+				'menuitemradio',
+				{
+					name: 'Number',
+					exact: true,
+				}
+			);
+			await expect( plainNumberOption ).toBeFocused();
+
+			await page.keyboard.press( 'ArrowDown' );
+			await expect(
+				numberFormatFlyout.getByRole( 'menuitemradio', {
+					name: 'Number with commas',
+				} )
+			).toBeFocused();
+
+			await page.keyboard.press( 'ArrowLeft' );
+			await expect( numberFormatFlyout ).toHaveCount( 0 );
+			await expect( numberFormatRow ).toBeFocused();
+
+			const decimalPlacesRow = formatPanel.getByRole( 'button', {
+				name: /Decimal places/,
+			} );
+
+			await page.keyboard.press( 'ArrowDown' );
+			await expect( decimalPlacesRow ).toBeFocused();
+
+			await page.keyboard.press( 'ArrowUp' );
+			await expect( numberFormatRow ).toBeFocused();
+
+			await page.keyboard.press( 'ArrowDown' );
+			await expect( decimalPlacesRow ).toBeFocused();
+
+			await page.keyboard.press( 'ArrowLeft' );
+			await expect( formatPanel ).toHaveCount( 0 );
+			await expect( editFieldItem ).toBeFocused();
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				fixture.entry &&
+					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+			);
+		}
+	} );
+
 	test( 'renders system field columns as read-only when visible', async ( {
 		admin,
 		page,
@@ -1089,9 +1260,7 @@ test.describe( 'Collection view block', () => {
 
 			// The non-matching row should be filtered out.
 			await expect( canvas.getByText( 'Dune' ) ).toBeHidden();
-			await expect(
-				canvas.getByText( 'Frank Herbert' )
-			).toBeHidden();
+			await expect( canvas.getByText( 'Frank Herbert' ) ).toBeHidden();
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
@@ -2051,12 +2220,14 @@ test.describe( 'Collection view block', () => {
 					.filter( { hasText: name } );
 				await button.dispatchEvent( 'click' );
 			};
+			const columnMenuItem = ( name ) =>
+				canvas.getByRole( 'menuitem', { name } );
 
 			// 2. Rename "Notes" → "Description" via the column-header
 			//    dropdown (combined Sort/Move/Hide + Rename/Duplicate/
 			//    Delete menu — see docs/tech-debt.md#16).
 			await openColumnDropdown( notesHeader, 'Notes' );
-			await page.getByRole( 'menuitem', { name: 'Rename' } ).click();
+			await columnMenuItem( 'Rename' ).click();
 
 			const renameInput = canvas.getByLabel( 'Field name' );
 			await renameInput.fill( 'Description' );
@@ -2071,7 +2242,7 @@ test.describe( 'Collection view block', () => {
 
 			// 3. Duplicate "Description" → "Copy of Description".
 			await openColumnDropdown( canvas, 'Description' );
-			await page.getByRole( 'menuitem', { name: 'Duplicate' } ).click();
+			await columnMenuItem( 'Duplicate' ).click();
 
 			await expect(
 				canvas.getByRole( 'columnheader', {
@@ -2082,7 +2253,7 @@ test.describe( 'Collection view block', () => {
 			// 4. Delete "Copy of Description" via the dropdown + confirm
 			//    dialog.
 			await openColumnDropdown( canvas, 'Copy of Description' );
-			await page.getByRole( 'menuitem', { name: 'Delete' } ).click();
+			await columnMenuItem( 'Delete' ).click();
 			await page
 				.getByRole( 'button', { name: 'Delete', exact: true } )
 				.click();

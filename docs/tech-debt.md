@@ -228,3 +228,34 @@ Double-click autofit is the trickiest piece. With no measurement hook upstream, 
 
 **Solution.** Either WP exposes a "fit-the-row" size for `TextControl` (or a CSS variable hook for input height), or we replace the rename `TextControl` with a plain `<input>` styled to match the row. The plain input is the more reliable path: drops the WP-internals coupling, but adds a small amount of styling and accessibility plumbing we currently get for free. Worth doing the day this test fails on a WP bump.
 
+## 27. `Menu` outside-click only watches one document `[upstream]`
+
+**What.** WP's `Menu` (privateApis, Ariakit underneath) only sees clicks on the document the popover renders in. The `cortext/data-view` block renders inside Gutenberg's editor iframe, so clicks on the editor sidebar or top toolbar never reach Ariakit and the column dropdown stays open until the user clicks back into the canvas. We add a `mousedown` listener on `window.parent.document` while the menu is open and short-circuit when there isn't a parent (the Cortext admin isn't in an iframe).
+
+**Where.** The `useEffect` block in `FieldActions` in `src/components/fields/ColumnHeaderActions.js`.
+
+**Solution.** Either Ariakit grows a way to register extra documents for outside-click detection, or WP's wrapper does it for us. We drop the listener once that ships.
+
+## 28. `Menu.Item` has no destructive variant `[upstream]`
+
+**What.** The legacy `MenuItem` from `@wordpress/components` accepted `isDestructive` and rendered the row in red. The new privateApis `Menu.Item` dropped that prop without a replacement (verified in `node_modules/@wordpress/components/build-types/menu/types.d.ts` against `ItemProps`). For the Delete column action we paint the red ourselves with a className and one CSS rule, scoped to inactive rows so the focus/hover highlight overrides it.
+
+**Where.** The Delete `Menu.Item` in `src/components/fields/ColumnHeaderActions.js` and `.cortext-column-header-actions__destructive-item` in `src/index.scss`.
+
+**Solution.** Add `isDestructive` (or a `variant: 'destructive'`) to `Menu.Item` upstream. One-line change here once it ships.
+
+## 29. `Menu.Popover` doesn't portal by default `[upstream]`
+
+**What.** Without `portal` set, `Menu.Popover` renders inline at its mount point. Our column trigger lives inside a `<th>` whose `text-transform: uppercase` cascades into the menu items and turns every label into ALL CAPS. We pass `portal` explicitly. Most popovers in the system portal by default; this one doesn't.
+
+**Where.** The `<Menu.Popover portal …>` in `src/components/fields/ColumnHeaderActions.js`.
+
+**Solution.** Flip the default upstream. Trivial PR.
+
+## 30. `Menu` submenus only accept menu primitives `[upstream]`
+
+**What.** `Menu.SubmenuTriggerItem` opens a nested `Menu.Popover`, but the popover's children have to be `Menu.Item` / `Menu.Group` / `Menu.Separator`. Our "Edit field" submenu has tile previews (Number / Bar / Ring), labelled rows with right-anchored values, and three more popovers for format, color, and time choices. None of that fits the menu-primitive contract, so the format panel stays as a sibling popover, we run the hover-with-grace bridge ourselves, and the parent menu's `hideOnInteractOutside` filter ignores clicks landing in `.cortext-format-submenu` or `.cortext-format-submenu__flyout`.
+
+**Where.** `openFormat` / `scheduleClose` and `hideMenuOnInteractOutside` in `src/components/fields/ColumnHeaderActions.js`. `FieldFormatPopover` and its flyouts in `src/components/fields/FieldFormatPopover.js`.
+
+**Solution.** An arbitrary-content submenu variant in WP's `Menu` (or upstream Ariakit) would let the format panel mount as a real submenu, with outside-click and focus management owned by the library. Until then the manual bridge stays.

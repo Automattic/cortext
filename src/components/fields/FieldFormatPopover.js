@@ -14,6 +14,79 @@ import { check, chevronRight } from '@wordpress/icons';
 import { parseFormat } from '../../hooks/fieldMapping';
 import { FORMAT_COLORS, findFormatColor } from './formatColors';
 
+const FOCUSABLE_CONTROL_SELECTOR = [
+	'button:not(:disabled)',
+	'input:not(:disabled):not([type="hidden"])',
+	'select:not(:disabled)',
+	'textarea:not(:disabled)',
+	'[tabindex]:not([tabindex="-1"])',
+].join( ',' );
+
+function getFocusableControls( container ) {
+	return Array.from(
+		container?.querySelectorAll( FOCUSABLE_CONTROL_SELECTOR ) ?? []
+	).filter(
+		( element ) =>
+			! element.closest( '[hidden], [aria-hidden="true"]' ) &&
+			element.getAttribute( 'aria-disabled' ) !== 'true'
+	);
+}
+
+function shouldLetElementHandleArrowKeys( element ) {
+	if ( ! element ) {
+		return false;
+	}
+	if ( element.isContentEditable ) {
+		return true;
+	}
+	const tagName = element.tagName;
+	if ( tagName === 'TEXTAREA' || tagName === 'SELECT' ) {
+		return true;
+	}
+	if ( tagName !== 'INPUT' ) {
+		return false;
+	}
+	return ! [ 'button', 'checkbox', 'radio', 'reset', 'submit' ].includes(
+		element.type
+	);
+}
+
+function focusRelativeControl( container, activeElement, direction ) {
+	const controls = getFocusableControls( container );
+	if ( ! controls.length ) {
+		return false;
+	}
+	const currentIndex = controls.includes( activeElement )
+		? controls.indexOf( activeElement )
+		: -1;
+	let nextIndex;
+	if ( currentIndex === -1 ) {
+		nextIndex = direction > 0 ? 0 : controls.length - 1;
+	} else {
+		nextIndex =
+			( currentIndex + direction + controls.length ) % controls.length;
+	}
+	controls[ nextIndex ]?.focus();
+	return true;
+}
+
+function focusEdgeControl( container, edge ) {
+	const controls = getFocusableControls( container );
+	if ( ! controls.length ) {
+		return false;
+	}
+	const next =
+		edge === 'last' ? controls[ controls.length - 1 ] : controls[ 0 ];
+	next?.focus();
+	return true;
+}
+
+function focusRefOnNextFrame( ref ) {
+	window.requestAnimationFrame( () => {
+		ref.current?.focus();
+	} );
+}
+
 // Number "format" rows flatten the storage shape (style + currency) into
 // a single flat list so the menu mirrors Notion. Each entry carries the
 // `style` (and `currency` for the four currency rows) it projects onto
@@ -121,9 +194,18 @@ function findTimeOption( config, type ) {
 // `isOpen` toggles the focus ring so users can tell which row spawned
 // the visible flyout.
 const SubmenuRow = forwardRef( function SubmenuRow(
-	{ label, value, onClick, isOpen },
+	{ label, value, onClick, onOpen, isOpen },
 	ref
 ) {
+	const onKeyDown = ( event ) => {
+		if ( event.key !== 'ArrowRight' ) {
+			return;
+		}
+		event.preventDefault();
+		event.stopPropagation();
+		onOpen();
+	};
+
 	return (
 		<button
 			ref={ ref }
@@ -132,6 +214,7 @@ const SubmenuRow = forwardRef( function SubmenuRow(
 				'cortext-format-submenu__row' + ( isOpen ? ' is-open' : '' )
 			}
 			onClick={ onClick }
+			onKeyDown={ onKeyDown }
 			aria-haspopup="menu"
 			aria-expanded={ isOpen }
 		>
@@ -145,9 +228,51 @@ const SubmenuRow = forwardRef( function SubmenuRow(
 	);
 } );
 
-function ChoiceList( { items, isSelected, onPick } ) {
+function ChoiceList( {
+	items,
+	isSelected,
+	onPick,
+	onClose,
+	returnFocusRef,
+	renderBeforeLabel,
+} ) {
+	const closeAndReturnFocus = () => {
+		onClose();
+		focusRefOnNextFrame( returnFocusRef );
+	};
+	const onKeyDown = ( event ) => {
+		if ( event.key === 'Escape' || event.key === 'ArrowLeft' ) {
+			event.preventDefault();
+			event.stopPropagation();
+			closeAndReturnFocus();
+			return;
+		}
+		if ( event.key === 'ArrowDown' || event.key === 'ArrowUp' ) {
+			event.preventDefault();
+			event.stopPropagation();
+			focusRelativeControl(
+				event.currentTarget,
+				event.currentTarget.ownerDocument.activeElement,
+				event.key === 'ArrowDown' ? 1 : -1
+			);
+			return;
+		}
+		if ( event.key === 'Home' || event.key === 'End' ) {
+			event.preventDefault();
+			event.stopPropagation();
+			focusEdgeControl(
+				event.currentTarget,
+				event.key === 'End' ? 'last' : 'first'
+			);
+		}
+	};
+
 	return (
-		<ul className="cortext-format-submenu__list" role="menu">
+		<ul
+			className="cortext-format-submenu__list"
+			role="menu"
+			onKeyDown={ onKeyDown }
+		>
 			{ items.map( ( item ) => {
 				const selected = isSelected( item );
 				return (
@@ -162,9 +287,15 @@ function ChoiceList( { items, isSelected, onPick } ) {
 							}
 							onClick={ () => onPick( item ) }
 						>
-							<span className="cortext-format-submenu__list-check">
-								{ selected ? <Icon icon={ check } /> : null }
-							</span>
+							{ renderBeforeLabel ? (
+								renderBeforeLabel( item, selected )
+							) : (
+								<span className="cortext-format-submenu__list-check">
+									{ selected ? (
+										<Icon icon={ check } />
+									) : null }
+								</span>
+							) }
 							<span>{ item.label }</span>
 						</button>
 					</li>
@@ -279,34 +410,24 @@ function ColorSwatch( { id } ) {
 	);
 }
 
-function ColorList( { value, onPick } ) {
+function ColorList( { value, onPick, onClose, returnFocusRef } ) {
 	const current = value ?? 'default';
 	return (
-		<ul className="cortext-format-submenu__list" role="menu">
-			{ FORMAT_COLORS.map( ( color ) => {
-				const selected = color.id === current;
-				return (
-					<li key={ color.id } role="none">
-						<button
-							type="button"
-							role="menuitemradio"
-							aria-checked={ selected }
-							className={
-								'cortext-format-submenu__list-item' +
-								( selected ? ' is-selected' : '' )
-							}
-							onClick={ () => onPick( color.id ) }
-						>
-							<span className="cortext-format-submenu__list-check">
-								{ selected ? <Icon icon={ check } /> : null }
-							</span>
-							<ColorSwatch id={ color.id } />
-							<span>{ color.label }</span>
-						</button>
-					</li>
-				);
-			} ) }
-		</ul>
+		<ChoiceList
+			items={ FORMAT_COLORS }
+			isSelected={ ( color ) => color.id === current }
+			onPick={ ( color ) => onPick( color.id ) }
+			onClose={ onClose }
+			returnFocusRef={ returnFocusRef }
+			renderBeforeLabel={ ( color, selected ) => (
+				<>
+					<span className="cortext-format-submenu__list-check">
+						{ selected ? <Icon icon={ check } /> : null }
+					</span>
+					<ColorSwatch id={ color.id } />
+				</>
+			) }
+		/>
 	);
 }
 
@@ -425,6 +546,7 @@ function NumberFormBody( { config, onChange } ) {
 				onClick={ () =>
 					setOpenRow( openRow === 'format' ? null : 'format' )
 				}
+				onOpen={ () => setOpenRow( 'format' ) }
 			/>
 			<SubmenuRow
 				ref={ decimalsRowRef }
@@ -438,6 +560,7 @@ function NumberFormBody( { config, onChange } ) {
 				onClick={ () =>
 					setOpenRow( openRow === 'decimals' ? null : 'decimals' )
 				}
+				onOpen={ () => setOpenRow( 'decimals' ) }
 			/>
 			<ShowAsTiles value={ display } onChange={ pickDisplay } />
 			{ isVisual ? (
@@ -455,6 +578,7 @@ function NumberFormBody( { config, onChange } ) {
 						onClick={ () =>
 							setOpenRow( openRow === 'color' ? null : 'color' )
 						}
+						onOpen={ () => setOpenRow( 'color' ) }
 					/>
 					{ showDivideBy ? (
 						<SubmenuInputRow
@@ -482,6 +606,8 @@ function NumberFormBody( { config, onChange } ) {
 						items={ NUMBER_FORMATS }
 						isSelected={ ( item ) => item.id === current.id }
 						onPick={ pickFormat }
+						onClose={ () => setOpenRow( null ) }
+						returnFocusRef={ formatRowRef }
 					/>
 				</Popover>
 			) : null }
@@ -497,6 +623,8 @@ function NumberFormBody( { config, onChange } ) {
 						items={ DECIMAL_OPTIONS }
 						isSelected={ ( item ) => item.value === decimals }
 						onPick={ ( item ) => pickDecimals( item.value ) }
+						onClose={ () => setOpenRow( null ) }
+						returnFocusRef={ decimalsRowRef }
 					/>
 				</Popover>
 			) : null }
@@ -508,7 +636,12 @@ function NumberFormBody( { config, onChange } ) {
 					onClose={ () => setOpenRow( null ) }
 					className="cortext-format-submenu__flyout"
 				>
-					<ColorList value={ colorId } onPick={ pickColor } />
+					<ColorList
+						value={ colorId }
+						onPick={ pickColor }
+						onClose={ () => setOpenRow( null ) }
+						returnFocusRef={ colorRowRef }
+					/>
 				</Popover>
 			) : null }
 		</>
@@ -558,6 +691,7 @@ function DateFormBody( { type, config, onChange } ) {
 				onClick={ () =>
 					setOpenRow( openRow === 'format' ? null : 'format' )
 				}
+				onOpen={ () => setOpenRow( 'format' ) }
 			/>
 			{ supportsTime ? (
 				<SubmenuRow
@@ -568,6 +702,7 @@ function DateFormBody( { type, config, onChange } ) {
 					onClick={ () =>
 						setOpenRow( openRow === 'time' ? null : 'time' )
 					}
+					onOpen={ () => setOpenRow( 'time' ) }
 				/>
 			) : null }
 			{ openRow === 'format' ? (
@@ -584,6 +719,8 @@ function DateFormBody( { type, config, onChange } ) {
 							item.id === currentDateFormat.id
 						}
 						onPick={ pickFormat }
+						onClose={ () => setOpenRow( null ) }
+						returnFocusRef={ formatRowRef }
 					/>
 				</Popover>
 			) : null }
@@ -599,6 +736,8 @@ function DateFormBody( { type, config, onChange } ) {
 						items={ TIME_OPTIONS }
 						isSelected={ ( item ) => item.id === currentTime.id }
 						onPick={ pickTime }
+						onClose={ () => setOpenRow( null ) }
+						returnFocusRef={ timeRowRef }
 					/>
 				</Popover>
 			) : null }
@@ -611,12 +750,14 @@ function DateFormBody( { type, config, onChange } ) {
 // selection. Hover handlers keep the panel open while the cursor is
 // somewhere over the column dropdown's Format row or this panel; the
 // parent owns the grace timer (`scheduleClose`) that absorbs the dead
-// pixels between them. `focusOnMount={ false }` keeps focus inside the
-// parent dropdown so it doesn't auto-close when the panel mounts.
+// pixels between them. Keyboard-opened panels can opt into focusOnMount so
+// tabbing enters the panel instead of moving to the next table column.
 export default function FieldFormatPopover( {
 	recordId,
 	anchor,
+	focusOnMount = false,
 	onClose,
+	onCloseWithFocus,
 	onMouseEnter,
 	onMouseLeave,
 } ) {
@@ -652,14 +793,66 @@ export default function FieldFormatPopover( {
 		return null;
 	}
 
+	const onPopoverKeyDown = ( event ) => {
+		const activeElement = event.currentTarget.ownerDocument.activeElement;
+		if (
+			( event.key === 'ArrowDown' || event.key === 'ArrowUp' ) &&
+			! shouldLetElementHandleArrowKeys( activeElement )
+		) {
+			const panel = event.currentTarget.querySelector(
+				'.cortext-format-submenu__panel'
+			);
+			if (
+				focusRelativeControl(
+					panel,
+					activeElement,
+					event.key === 'ArrowDown' ? 1 : -1
+				)
+			) {
+				event.preventDefault();
+				event.stopPropagation();
+			}
+			return;
+		}
+		if (
+			( event.key === 'Home' || event.key === 'End' ) &&
+			! shouldLetElementHandleArrowKeys( activeElement )
+		) {
+			const panel = event.currentTarget.querySelector(
+				'.cortext-format-submenu__panel'
+			);
+			if (
+				focusEdgeControl(
+					panel,
+					event.key === 'End' ? 'last' : 'first'
+				)
+			) {
+				event.preventDefault();
+				event.stopPropagation();
+			}
+			return;
+		}
+		if (
+			event.key !== 'Escape' &&
+			( event.key !== 'ArrowLeft' ||
+				shouldLetElementHandleArrowKeys( activeElement ) )
+		) {
+			return;
+		}
+		event.preventDefault();
+		event.stopPropagation();
+		onCloseWithFocus();
+	};
+
 	return (
 		<Popover
 			anchor={ anchor }
 			placement="right-start"
 			offset={ 8 }
 			onClose={ onClose }
-			focusOnMount={ false }
+			focusOnMount={ focusOnMount }
 			className="cortext-format-submenu"
+			onKeyDown={ onPopoverKeyDown }
 		>
 			<div
 				className="cortext-format-submenu__panel"
