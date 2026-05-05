@@ -20,6 +20,10 @@ jest.mock( '@wordpress/core-data', () => ( {
 	store: { name: 'core' },
 } ) );
 
+jest.mock( '@wordpress/notices', () => ( {
+	store: { name: 'core/notices' },
+} ) );
+
 import { useSelect, useDispatch } from '@wordpress/data';
 import useAutosave from '../../src/hooks/useAutosave';
 
@@ -82,6 +86,7 @@ beforeEach( () => {
 	useDispatch.mockReturnValue( {
 		savePost: jest.fn(),
 		editPost: jest.fn(),
+		createErrorNotice: jest.fn(),
 	} );
 } );
 
@@ -321,6 +326,23 @@ describe( 'useAutosave: status', () => {
 		const { result } = renderHook( () => useAutosave() );
 
 		expect( result.current.status ).toBe( 'error' );
+	} );
+
+	it( 'surfaces a snackbar notice when a save fails', () => {
+		const createErrorNotice = jest.fn();
+		useDispatch.mockReturnValue( {
+			savePost: jest.fn(),
+			editPost: jest.fn(),
+			createErrorNotice,
+		} );
+		setStoreState( { didFail: true } );
+
+		renderHook( () => useAutosave() );
+
+		expect( createErrorNotice ).toHaveBeenCalledWith(
+			expect.any( String ),
+			{ type: 'snackbar' }
+		);
 	} );
 
 	it( 'resets status when the current post id changes', () => {

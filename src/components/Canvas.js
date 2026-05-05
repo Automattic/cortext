@@ -3,6 +3,7 @@ import { useEntityRecord } from '@wordpress/core-data';
 import { useSelect, useDispatch } from '@wordpress/data';
 import {
 	EditorProvider,
+	EditorSnackbars,
 	PostTitle,
 	store as editorStore,
 } from '@wordpress/editor';
@@ -236,6 +237,7 @@ function CanvasEditor( { post, pendingPost, onSwitchPost, onDisplayedPost } ) {
 			<InterfaceSkeleton
 				className="cortext-canvas"
 				header={ <Header /> }
+				notices={ <EditorSnackbars /> }
 				content={
 					<>
 						{ isTrashed && <TrashedNotice postId={ post.id } /> }
