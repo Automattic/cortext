@@ -894,7 +894,7 @@ test.describe( 'Collection view block', () => {
 		}
 	} );
 
-	test( 'opens the field format panel from the column menu with keyboard', async ( {
+	test( 'navigates the field format panel from the column menu with keyboard', async ( {
 		admin,
 		page,
 		requestUtils,
@@ -1002,10 +1002,42 @@ test.describe( 'Collection view block', () => {
 			} );
 			await expect( numberFormatRow ).toBeFocused();
 
-			await page.keyboard.press( 'Tab' );
+			await page.keyboard.press( 'ArrowRight' );
+			const numberFormatFlyout = page.locator(
+				'.cortext-format-submenu__flyout'
+			);
+			const plainNumberOption = numberFormatFlyout.getByRole(
+				'menuitemradio',
+				{
+					name: 'Number',
+					exact: true,
+				}
+			);
+			await expect( plainNumberOption ).toBeFocused();
+
+			await page.keyboard.press( 'ArrowDown' );
 			await expect(
-				formatPanel.getByRole( 'button', { name: /Decimal places/ } )
+				numberFormatFlyout.getByRole( 'menuitemradio', {
+					name: 'Number with commas',
+				} )
 			).toBeFocused();
+
+			await page.keyboard.press( 'ArrowLeft' );
+			await expect( numberFormatFlyout ).toHaveCount( 0 );
+			await expect( numberFormatRow ).toBeFocused();
+
+			const decimalPlacesRow = formatPanel.getByRole( 'button', {
+				name: /Decimal places/,
+			} );
+
+			await page.keyboard.press( 'ArrowDown' );
+			await expect( decimalPlacesRow ).toBeFocused();
+
+			await page.keyboard.press( 'ArrowUp' );
+			await expect( numberFormatRow ).toBeFocused();
+
+			await page.keyboard.press( 'ArrowDown' );
+			await expect( decimalPlacesRow ).toBeFocused();
 
 			await page.keyboard.press( 'ArrowLeft' );
 			await expect( formatPanel ).toHaveCount( 0 );
