@@ -50,6 +50,10 @@
 	--cortext-sidebar-width-min: 220px;
 	--cortext-sidebar-width-max: 480px;
 
+	// Both the sidebar header and the canvas toolbar use this so the
+	// two columns line up at the top.
+	--cortext-topbar-height: 36px;
+
 	&[data-theme="dark"] {
 		--cortext-shell-surface: #2a2a2a;
 		--cortext-sidebar-surface: #2a2a2a;

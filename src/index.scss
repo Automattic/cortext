@@ -67,7 +67,9 @@ body.cortext-fullscreen {
 		display: flex;
 		align-items: center;
 		gap: $grid-unit-10;
-		padding: $grid-unit-15;
+		height: var(--cortext-topbar-height);
+		padding-inline: $grid-unit-15;
+		border-bottom: var(--cortext-shell-border-width) solid var(--cortext-chrome-border);
 	}
 
 	&__brand {
