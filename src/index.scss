@@ -139,16 +139,23 @@ body.cortext-fullscreen {
 		}
 	}
 
-	// Sits inline with the section title; reveal on hover/focus, the same
-	// way `__menu` works on page rows.
+	// Touch/no-hover devices need visible actions because hover reveal is
+	// unavailable. Desktop fine pointers hide them below until hover/focus.
 	&__section-action.components-button {
-		opacity: 0;
+		opacity: 1;
 		transition: opacity 0.12s ease;
 	}
 
-	&__section-header:hover &__section-action,
-	&__section-header:focus-within &__section-action {
-		opacity: 1;
+	@media (hover: hover) and (pointer: fine) {
+
+		&__section-action.components-button {
+			opacity: 0;
+		}
+
+		&__section-header:hover &__section-action,
+		&__section-header:focus-within &__section-action {
+			opacity: 1;
+		}
 	}
 
 	&__content {
@@ -348,16 +355,24 @@ body.cortext-fullscreen {
 	&__menu,
 	&__add-child {
 		flex: 0 0 auto;
-		opacity: 0;
+		opacity: 1;
 		transition: opacity 0.12s ease;
 	}
 
-	&__row:hover &__menu,
-	&__row:focus-within &__menu,
-	&__menu.is-opened,
-	&__row:hover &__add-child,
-	&__row:focus-within &__add-child {
-		opacity: 1;
+	@media (hover: hover) and (pointer: fine) {
+
+		&__menu,
+		&__add-child {
+			opacity: 0;
+		}
+
+		&__row:hover &__menu,
+		&__row:focus-within &__menu,
+		&__menu.is-opened,
+		&__row:hover &__add-child,
+		&__row:focus-within &__add-child {
+			opacity: 1;
+		}
 	}
 
 	// Overlay droppable strips. Pointer-events off so they don't swallow
