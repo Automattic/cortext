@@ -2018,6 +2018,7 @@ thead > tr > th {
 		top: $grid-unit-10;
 		right: $grid-unit-10;
 		display: flex;
+		align-items: flex-start;
 		gap: $grid-unit-05;
 		opacity: 0;
 		transition: opacity 0.12s ease;
@@ -2033,6 +2034,11 @@ thead > tr > th {
 			&:focus:not(:disabled) {
 				background: #fff;
 			}
+		}
+
+		.components-dropdown {
+			display: flex;
+			align-items: flex-start;
 		}
 		/* stylelint-enable no-descending-specificity */
 	}
