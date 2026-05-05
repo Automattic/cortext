@@ -838,7 +838,6 @@ body.cortext-sidebar-resizing {
 			transition: opacity 0.12s ease;
 		}
 
-		&:hover .cortext-canvas__identity-action,
 		&:focus-within .cortext-canvas__identity-action {
 			opacity: 1;
 			pointer-events: auto;
@@ -889,6 +888,18 @@ body.cortext-sidebar-resizing {
 		text-align: center;
 		padding: $grid-unit-30 0;
 	}
+}
+
+// Reveal editor-only page identity actions when the user is working in the
+// page header, rather than when they discover the hidden actions row itself.
+// These nodes live inside BlockCanvas, so target the iframe document body.
+body:has([data-type="core/post-title"]:hover) .cortext-canvas__identity-action,
+body:has([data-type="core/post-title"]:focus-within) .cortext-canvas__identity-action,
+body:has([data-type="cortext/page-icon"]:hover) .cortext-canvas__identity-action,
+body:has([data-type="cortext/page-icon"]:focus-within) .cortext-canvas__identity-action,
+body:has(.cortext-canvas__identity-actions:hover) .cortext-canvas__identity-action {
+	opacity: 1;
+	pointer-events: auto;
 }
 
 .cortext-data-view-picker__empty {
