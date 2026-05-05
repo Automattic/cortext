@@ -97,11 +97,16 @@ function findNumberFormat( config ) {
 	);
 }
 
-function findTimeOption( config ) {
-	if ( ! config?.time ) {
+// Mirrors `formatDateValue`'s defaults so the row label matches what
+// the column actually renders: datetime fields show time on by default,
+// date fields never do, and 12-hour is the default clock.
+function findTimeOption( config, type ) {
+	const time = config?.time ?? type === 'datetime';
+	if ( ! time ) {
 		return TIME_OPTIONS[ 0 ];
 	}
-	return config.hour12 === false ? TIME_OPTIONS[ 2 ] : TIME_OPTIONS[ 1 ];
+	const hour12 = config?.hour12 ?? true;
+	return hour12 === false ? TIME_OPTIONS[ 2 ] : TIME_OPTIONS[ 1 ];
 }
 
 // One submenu row. The label sits left, the current value in the middle
@@ -264,7 +269,7 @@ function DateFormBody( { type, config, onChange } ) {
 	const styleId = config?.style ?? 'locale';
 	const currentDateFormat =
 		DATE_FORMATS.find( ( f ) => f.id === styleId ) ?? DATE_FORMATS[ 0 ];
-	const currentTime = findTimeOption( config );
+	const currentTime = findTimeOption( config, type );
 
 	const pickFormat = ( item ) => {
 		onChange( {
