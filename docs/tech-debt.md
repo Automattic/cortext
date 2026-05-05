@@ -186,3 +186,11 @@ Worth a small spike before committing; `core-data`'s schema cache for rarely-cha
 
 **Solution.** Stand up an integration environment with a real `wpdb` (`wp-env` + WP_PHPUnit), move the cleanup to a scoped JOIN, and keep WorDBless for the parts that don't need a real database.
 
+## 22. Canvas toolbar is page-only `[internal]`
+
+**What.** The top toolbar (Publish, Settings) lives inside `Canvas.js`, rendered as the `header` slot of `<InterfaceSkeleton>`. Collections take a different path (`EntityRoute` -> `CollectionPane`, a plain `<div>` with no `InterfaceSkeleton`) and show no toolbar at all. Now that the toolbar is styled to match the sidebar header height, the inconsistency is visible: pages show a polished top strip; collections jump straight from the sidebar header into content.
+
+**Where.** `Header` component in `src/components/Canvas.js`, mounted via `InterfaceSkeleton`'s `header` prop. `CollectionPane` in `src/router/EntityRoute.js` has no equivalent.
+
+**Solution.** Lift the toolbar into the workspace shell (probably into `EntityRoute.js`) and expose a slot via `@wordpress/components` SlotFill so each pane contributes its own actions. Pages keep contributing Publish + Settings; collections grow their own actions (view switcher, "New entry") in a follow-up. Until then, collections just don't have the strip.
+
