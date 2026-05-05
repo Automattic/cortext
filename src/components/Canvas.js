@@ -88,6 +88,7 @@ function DocumentActions( { isActive } ) {
 				<PublishToggle />
 				<Button
 					icon={ cog }
+					size="compact"
 					label={ __( 'Settings', 'cortext' ) }
 					isPressed={ isInspectorOpen }
 					onClick={ () =>
