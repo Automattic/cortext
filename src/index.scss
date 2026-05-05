@@ -567,7 +567,7 @@ body.cortext-sidebar-resizing {
 	gap: $grid-unit-10;
 	height: var(--cortext-topbar-height);
 	padding-inline: $grid-unit-20;
-	background: var(--cortext-shell-surface);
+	background: var(--cortext-sidebar-surface);
 	color: var(--cortext-text);
 	border-bottom: var(--cortext-shell-border-width) solid var(--cortext-chrome-border);
 	min-height: 0;
