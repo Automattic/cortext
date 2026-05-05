@@ -66,6 +66,28 @@ function encodeWpIcon( name, color ) {
 	return JSON.stringify( payload );
 }
 
+function decodeWpIcon( value ) {
+	try {
+		const decoded = value ? JSON.parse( value ) : null;
+		if (
+			decoded?.type === 'wp' &&
+			typeof decoded.name === 'string' &&
+			decoded.name !== ''
+		) {
+			return {
+				name: decoded.name,
+				color:
+					typeof decoded.color === 'string' && decoded.color !== ''
+						? decoded.color
+						: 'default',
+			};
+		}
+	} catch {
+		// ignore malformed meta
+	}
+	return null;
+}
+
 function PickerBody( { pageId, currentIcon, allowRemove, onAfterSave } ) {
 	const { editEntityRecord, saveEditedEntityRecord } =
 		useDispatch( coreStore );
@@ -73,19 +95,8 @@ function PickerBody( { pageId, currentIcon, allowRemove, onAfterSave } ) {
 	// Pull the current icon's color (if any) so the IconLibraryPicker
 	// opens with the previously-saved color highlighted instead of
 	// snapping back to "default" on every popover open.
-	let initialIconColor = 'default';
-	try {
-		const decoded = currentIcon ? JSON.parse( currentIcon ) : null;
-		if (
-			decoded?.type === 'wp' &&
-			typeof decoded.color === 'string' &&
-			decoded.color !== ''
-		) {
-			initialIconColor = decoded.color;
-		}
-	} catch {
-		// ignore malformed meta
-	}
+	const currentWpIcon = decodeWpIcon( currentIcon );
+	const initialIconColor = currentWpIcon?.color ?? 'default';
 
 	// editEntityRecord updates the local data store synchronously so
 	// every subscriber (icon block, sidebar tree) sees the new value
@@ -155,6 +166,13 @@ function PickerBody( { pageId, currentIcon, allowRemove, onAfterSave } ) {
 				>
 					<IconLibraryPicker
 						initialColor={ initialIconColor }
+						onColorSelect={ ( color ) => {
+							if ( currentWpIcon ) {
+								persist(
+									encodeWpIcon( currentWpIcon.name, color )
+								);
+							}
+						} }
 						onSelect={ ( name, color ) =>
 							persist( encodeWpIcon( name, color ) )
 						}

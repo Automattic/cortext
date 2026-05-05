@@ -42,7 +42,11 @@ const HumanizeName = ( name ) =>
 		.replace( /^./, ( c ) => c.toUpperCase() )
 		.trim();
 
-export default function IconLibraryPicker( { onSelect, initialColor } ) {
+export default function IconLibraryPicker( {
+	onSelect,
+	initialColor,
+	onColorSelect,
+} ) {
 	const [ filter, setFilter ] = useState( '' );
 	// Seed from the page's saved color so the swatches don't snap back to
 	// `default` every time the popover reopens. Falls back to default
@@ -88,7 +92,10 @@ export default function IconLibraryPicker( { onSelect, initialColor } ) {
 							( activeColor === color.name ? ' is-active' : '' )
 						}
 						style={ { '--swatch': color.css } }
-						onClick={ () => setActiveColor( color.name ) }
+						onClick={ () => {
+							setActiveColor( color.name );
+							onColorSelect?.( color.name );
+						} }
 						aria-checked={ activeColor === color.name }
 						aria-label={ color.label }
 						title={ color.label }
