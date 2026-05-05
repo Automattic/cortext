@@ -2056,16 +2056,25 @@ thead > tr > th {
 		opacity: 0;
 		transition: opacity 0.12s ease;
 
-		// Solid white background so the buttons stay readable against
-		// dark cover images, while keeping the rest of WP's default
-		// secondary-button styling (border, padding, type).
+		// Cortext chrome over the cover image: opaque shell surface so the
+		// buttons stay readable on dark covers, with cortext color tokens
+		// instead of WP's heavier secondary-button styling. The cortext
+		// tokens are scoped to `.cortext-root`, which doesn't extend into
+		// the editor iframe, so each var has a sensible literal fallback.
 		/* stylelint-disable no-descending-specificity */
 		.components-button {
-			background: #fff;
+			background: var(--cortext-shell-surface, #fff);
+			color: var(--cortext-button-text, #1e1e1e);
+			box-shadow: 0 0 0 var(--cortext-shell-border-width, 1px) var(--cortext-chrome-border, rgba(0, 0, 0, 0.12));
 
+			// Opaque hover fallback: the default Cortext hover surface is a
+			// translucent wash, which works fine on the shell but lets the
+			// cover image bleed through here and tank the text contrast.
 			&:hover:not(:disabled),
 			&:focus:not(:disabled) {
-				background: #fff;
+				background: var(--cortext-button-hover-surface, #ebeae6);
+				color: var(--cortext-button-text, #1e1e1e);
+				box-shadow: 0 0 0 var(--cortext-shell-border-width, 1px) var(--cortext-chrome-border, rgba(0, 0, 0, 0.12));
 			}
 		}
 
