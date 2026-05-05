@@ -39,6 +39,15 @@ const EmojiPicker = lazy( async () => {
 		const emoji = emojiForNative( native );
 		return emoji?.skins?.[ skin - 1 ]?.native ?? null;
 	};
+	const readStoredSkin = () => {
+		try {
+			const stored = window.localStorage.getItem( 'emoji-mart.skin' );
+			const skin = stored ? Number( JSON.parse( stored ) ) : 1;
+			return skin >= 1 && skin <= 6 ? skin : 1;
+		} catch {
+			return 1;
+		}
+	};
 	const skinFromEvent = ( event ) => {
 		const path = event.composedPath?.() ?? [];
 		const isSkinSelection = path.some(
@@ -82,6 +91,7 @@ const EmojiPicker = lazy( async () => {
 		} ) {
 			const wrapperRef = useRef( null );
 			const currentEmojiRef = useRef( currentEmoji );
+			const storedSkinRef = useRef( readStoredSkin() );
 			useEffect( () => {
 				currentEmojiRef.current = currentEmoji;
 			}, [ currentEmoji ] );
@@ -117,6 +127,25 @@ const EmojiPicker = lazy( async () => {
 					node.removeEventListener( 'click', updateCurrentEmojiSkin );
 				};
 			} );
+			useEffect( () => {
+				const timer = window.setInterval( () => {
+					const skin = readStoredSkin();
+					if ( skin === storedSkinRef.current ) {
+						return;
+					}
+					storedSkinRef.current = skin;
+					const selectedEmoji = currentEmojiRef.current;
+					if ( ! selectedEmoji ) {
+						return;
+					}
+					const native = nativeForSkin( selectedEmoji, skin );
+					if ( native ) {
+						onSkinToneInteraction?.();
+						onSelect( native );
+					}
+				}, 100 );
+				return () => window.clearInterval( timer );
+			}, [ onSelect, onSkinToneInteraction ] );
 			return (
 				<div ref={ wrapperRef }>
 					<Picker
@@ -191,6 +220,27 @@ function decodeEmoji( value ) {
 		// ignore malformed meta
 	}
 	return null;
+}
+
+function isInsideIdentityPopover( node ) {
+	if ( ! node || typeof node !== 'object' ) {
+		return false;
+	}
+	if ( typeof node.closest === 'function' ) {
+		if (
+			node.closest(
+				'.cortext-page-identity-popover-content, .cortext-page-identity-popover, em-emoji-picker'
+			)
+		) {
+			return true;
+		}
+	}
+	const root =
+		typeof node.getRootNode === 'function' ? node.getRootNode() : null;
+	if ( root?.host ) {
+		return isInsideIdentityPopover( root.host );
+	}
+	return false;
 }
 
 function PickerBody( {
@@ -402,12 +452,27 @@ export default function PageIdentityControls( {
 		}
 		setDropdownOpen( nextOpen );
 	};
+	const handlePopoverFocusOutside = ( event ) => {
+		const nextTarget =
+			event.relatedTarget ?? event.nativeEvent?.relatedTarget;
+		if (
+			isInsideIdentityPopover( nextTarget ) ||
+			( ! nextTarget && isInsideIdentityPopover( event.target ) ) ||
+			ignoreNextCloseRef.current
+		) {
+			return;
+		}
+		setDropdownOpen( false );
+	};
 
 	return (
 		<Dropdown
 			open={ dropdownOpen }
 			onToggle={ handleOpenChange }
-			popoverProps={ { placement: popoverPlacement } }
+			popoverProps={ {
+				placement: popoverPlacement,
+				onFocusOutside: handlePopoverFocusOutside,
+			} }
 			contentClassName="cortext-page-identity-popover-content"
 			renderToggle={ ( { isOpen, onToggle } ) =>
 				renderToggle( {
