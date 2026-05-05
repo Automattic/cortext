@@ -818,6 +818,22 @@ body.cortext-sidebar-resizing {
 	}
 
 	&__visual {
+		display: flex;
+		flex-direction: column;
+		flex: 1 1 auto;
+		min-height: 0;
+	}
+
+	&__identity-actions {
+		display: flex;
+		gap: $grid-unit-05;
+		max-width: var(--wp--style--global--content-size, 840px);
+		width: 100%;
+		margin: $grid-unit-10 auto 0;
+		padding: 0 $grid-unit-20;
+	}
+
+	&__block-canvas {
 		flex: 1 1 auto;
 		min-height: 0;
 	}
@@ -1855,7 +1871,8 @@ thead > tr > th {
 // that Cortext owns. The editor iframe, inspector, and block toolbars keep
 // Gutenberg's own component styling.
 .cortext-sidebar,
-.cortext-topbar {
+.cortext-topbar,
+.cortext-canvas__identity-actions {
 
 	.components-button {
 		border-radius: var(--cortext-shell-radius);
@@ -1949,33 +1966,6 @@ thead > tr > th {
 	}
 }
 
-// Opt-in entry point right above the title. Lives inside the BlockList
-// (it's the cortext/page-header-actions block) so when the user clicks
-// "Add cover", the cover is inserted at the top of content — above
-// these buttons — and ends up next to the editor toolbar. Hidden by
-// default; reveals when the user hovers (or keyboard-focuses) the
-// title or the actions themselves.
-.cortext-page-header-actions {
-	display: flex;
-	gap: $grid-unit-05;
-	opacity: 0;
-	transition: opacity 0.15s ease;
-	pointer-events: none;
-
-	/* stylelint-disable-next-line no-descending-specificity */
-	.components-button {
-		color: var(--cortext-text-muted, #757575);
-	}
-}
-
-.cortext-canvas__editor:has([data-type="core/post-title"]:hover) .cortext-page-header-actions,
-.cortext-canvas__editor:has([data-type="core/post-title"]:focus-within) .cortext-page-header-actions,
-.cortext-canvas__editor:has([data-type="cortext/page-header-actions"]:hover) .cortext-page-header-actions,
-.cortext-canvas__editor:has([data-type="cortext/page-header-actions"]:focus-within) .cortext-page-header-actions {
-	opacity: 1;
-	pointer-events: auto;
-}
-
 // Page cover: full-width banner image with hover-revealed controls. The
 // wrapper class lives on both the editor (useBlockProps in edit.js) and
 // the frontend (PHP render_callback), so styling applies in both
@@ -2027,16 +2017,15 @@ thead > tr > th {
 	}
 }
 
-// Page icon: small, left-aligned within the content column. When a cover
-// sits immediately above it (the canonical layout), the rule below
-// pulls it up to overlap the cover's bottom edge.
+// Page icon: hugs the icon button (`width: fit-content`) so the editor's
+// block selection outline traces the icon itself instead of stretching
+// across the entire content column. The wrapper still aligns to the
+// content column's left edge via the parent BlockList's padding.
 .cortext-page-icon-block {
-	display: flex;
+	display: inline-flex;
 	align-items: flex-end;
-	justify-content: flex-start;
-	max-width: var(--wp--style--global--content-size, 840px);
-	margin: $grid-unit-10 auto;
-	padding: 0 $grid-unit-20;
+	width: fit-content;
+	margin-block: $grid-unit-10;
 
 	// The trigger is only an emoji or thumbnail; framing it like a button
 	// (border + shadow) reads as visual noise next to the cover. Keep the

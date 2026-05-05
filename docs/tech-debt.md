@@ -259,3 +259,11 @@ Double-click autofit is the trickiest piece. With no measurement hook upstream, 
 **Where.** `openFormat` / `scheduleClose` and `hideMenuOnInteractOutside` in `src/components/fields/ColumnHeaderActions.js`. `FieldFormatPopover` and its flyouts in `src/components/fields/FieldFormatPopover.js`.
 
 **Solution.** An arbitrary-content submenu variant in WP's `Menu` (or upstream Ariakit) would let the format panel mount as a real submenu, with outside-click and focus management owned by the library. Until then the manual bridge stays.
+
+## 31. Block editor has no non-serialized before/after block chrome slot `[upstream]`
+
+**What.** Page identity actions ("Add icon" / "Add cover") are editor chrome, but the ideal visual placement is immediately before the page title inside the block canvas. Persisting an actions block put UI into post content, while portalling controls into the iframe coupled us to BlockList DOM and block hover/selection behavior. The current compromise renders editor-only actions from the canvas shell, outside the persisted `BlockList`, and inserts only the real dynamic blocks (`cortext/page-icon`, `cortext/page-cover`) into content.
+
+**Where.** `PageIdentityActions` and `EnsureHeaderBlocks` in `src/components/Canvas.js`; legacy no-op registration in `includes/Editor/PageHeaderActionsBlock.php`.
+
+**Solution.** Gutenberg could expose a non-serialized block chrome slot/fill, e.g. "before/after this block" keyed by `clientId`, block name, and root list. Fills would participate in editor layout and focus order but stay out of block order, list view, serialization, copy/paste, movers, undo history as content, and frontend rendering. Cortext could then render the identity actions before the root `core/post-title` without storing a fake block or querying iframe DOM.

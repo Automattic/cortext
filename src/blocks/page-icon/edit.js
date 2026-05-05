@@ -1,13 +1,20 @@
 import { __ } from '@wordpress/i18n';
 import {
 	useBlockProps,
+	BlockControls,
 	InspectorControls,
 	store as blockEditorStore,
 } from '@wordpress/block-editor';
-import { Button, PanelBody } from '@wordpress/components';
+import {
+	Button,
+	PanelBody,
+	ToolbarButton,
+	ToolbarGroup,
+} from '@wordpress/components';
 import { useEntityProp, store as coreStore } from '@wordpress/core-data';
 import { useDispatch } from '@wordpress/data';
 import { useEffect } from '@wordpress/element';
+import { replace, trash } from '@wordpress/icons';
 
 import PageIcon from '../../components/PageIcon';
 import PageIdentityControls from '../../components/PageIdentityControls';
@@ -56,6 +63,28 @@ export default function Edit( { context, clientId } ) {
 
 	return (
 		<>
+			<BlockControls group="other">
+				<ToolbarGroup>
+					<PageIdentityControls
+						pageId={ postId }
+						currentIcon={ iconMeta }
+						renderToggle={ ( { onToggle } ) => (
+							<ToolbarButton
+								icon={ replace }
+								label={ __( 'Change icon', 'cortext' ) }
+								onClick={ onToggle }
+							/>
+						) }
+					/>
+					{ hasIcon && (
+						<ToolbarButton
+							icon={ trash }
+							label={ __( 'Remove icon', 'cortext' ) }
+							onClick={ removeIcon }
+						/>
+					) }
+				</ToolbarGroup>
+			</BlockControls>
 			<InspectorControls>
 				<PanelBody title={ __( 'Icon', 'cortext' ) }>
 					<PageIdentityControls
@@ -94,7 +123,13 @@ export default function Edit( { context, clientId } ) {
 						hasIcon ? (
 							<Button
 								className="cortext-page-icon-block__button"
-								onClick={ onToggle }
+								onClick={ ( event ) => {
+									event.stopPropagation();
+									onToggle();
+								} }
+								onPointerDown={ ( event ) =>
+									event.stopPropagation()
+								}
 								label={ __( 'Change icon', 'cortext' ) }
 							>
 								<PageIcon icon={ iconMeta } size={ 56 } />
@@ -103,7 +138,13 @@ export default function Edit( { context, clientId } ) {
 							<Button
 								className="cortext-page-icon-block__add"
 								variant="tertiary"
-								onClick={ onToggle }
+								onClick={ ( event ) => {
+									event.stopPropagation();
+									onToggle();
+								} }
+								onPointerDown={ ( event ) =>
+									event.stopPropagation()
+								}
 							>
 								{ __( 'Add icon', 'cortext' ) }
 							</Button>

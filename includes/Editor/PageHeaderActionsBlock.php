@@ -1,6 +1,6 @@
 <?php
 /**
- * Server-side registration for the `cortext/page-header-actions` block.
+ * Legacy no-op registration for the `cortext/page-header-actions` block.
  *
  * @package Cortext
  */
@@ -32,9 +32,10 @@ final class PageHeaderActionsBlock {
 					'multiple' => false,
 					'inserter' => false,
 				),
-				// Editor-only block. The frontend never needs to render it,
-				// so we emit nothing and the block declaration in
-				// post_content stays as a no-op marker.
+				// Legacy editor-only block. New content no longer inserts
+				// it, and PageIdentity strips it on save. Keep the empty
+				// renderer so older saved comments do not leak frontend
+				// markup before their next edit.
 				'render_callback' => static function () {
 					return '';
 				},

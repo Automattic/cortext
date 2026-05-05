@@ -12,9 +12,10 @@ namespace Cortext\PostType;
 final class PageIdentity {
 
 	/**
-	 * Stored as a JSON string. Two shapes:
+	 * Stored as a JSON string. Three shapes:
 	 *   - emoji: {"type":"emoji","value":"📘"}
 	 *   - image: {"type":"image","id":123}
+	 *   - wp: {"type":"wp","name":"home","color":"blue"}
 	 * Empty string means no icon (each surface picks its own fallback).
 	 *
 	 * Single key keeps the registration simple and lets the React shell
@@ -25,16 +26,15 @@ final class PageIdentity {
 
 	public function register(): void {
 		add_action( 'init', array( $this, 'register_meta' ) );
-		// Bake the locked header blocks into post_content on create so
-		// they exist from the very first render. Without this the React
-		// shell ends up auto-inserting them after the editor mounts,
-		// which Gutenberg treats as freshly-inserted blocks and animates
-		// in — visible on first open as a slide/fade.
+		// Bake the locked title block into post_content on create so it
+		// exists from the very first render. Also strip the legacy
+		// editor-only page-header-actions block on every save; those
+		// actions are now transient editor chrome.
 		add_filter( 'wp_insert_post_data', array( $this, 'prepend_header_blocks' ), 10, 2 );
 	}
 
 	/**
-	 * Returns the canonical locked-header block markup that should sit
+	 * Returns the canonical locked title block markup that should sit
 	 * at the top of every `crtxt_page`. Used by the seeder for direct
 	 * inserts and by the wp_insert_post_data filter below.
 	 */
@@ -48,13 +48,6 @@ final class PageIdentity {
 
 		$blocks = array(
 			array(
-				'blockName'    => 'cortext/page-header-actions',
-				'attrs'        => $lock,
-				'innerBlocks'  => array(),
-				'innerHTML'    => '',
-				'innerContent' => array(),
-			),
-			array(
 				'blockName'    => 'core/post-title',
 				'attrs'        => $lock,
 				'innerBlocks'  => array(),
@@ -67,9 +60,9 @@ final class PageIdentity {
 	}
 
 	/**
-	 * Prepends the locked header blocks to post_content when a new
-	 * `crtxt_page` is created, unless they're already present. Skips
-	 * updates so we don't double-prepend on re-saves.
+	 * Prepends the locked title block to post_content when a new
+	 * `crtxt_page` is created, unless it's already present. Updates only
+	 * strip the legacy editor-only actions block.
 	 *
 	 * @param array $data    Slashed post data about to be inserted.
 	 * @param array $postarr Original input passed to wp_insert_post.
@@ -78,16 +71,20 @@ final class PageIdentity {
 		if ( Page::POST_TYPE !== ( $data['post_type'] ?? '' ) ) {
 			return $data;
 		}
-		// Only fire on create; updates always carry an `ID`.
+
+		$content              = (string) ( $data['post_content'] ?? '' );
+		$data['post_content'] = $this->strip_legacy_header_actions( $content );
+
+		// Only prepend the title on create; updates always carry an `ID`.
 		if ( ! empty( $postarr['ID'] ) ) {
 			return $data;
 		}
 
-		$content = (string) ( $data['post_content'] ?? '' );
-		// Already has the header markers? Leave it alone — the seeder
-		// pre-prepends them, and other paths might too.
+		$content = (string) $data['post_content'];
+		// Already has the title marker? Leave it alone — the seeder
+		// pre-prepends it, and other paths might too.
 		if (
-			str_contains( $content, '<!-- wp:cortext/page-header-actions' ) ||
+			str_contains( $content, '<!-- wp:post-title' ) ||
 			str_contains( $content, '<!-- wp:core/post-title' )
 		) {
 			return $data;
@@ -96,6 +93,33 @@ final class PageIdentity {
 		$data['post_content'] = wp_slash( self::header_blocks_markup() ) . $content;
 
 		return $data;
+	}
+
+	private function strip_legacy_header_actions( string $content ): string {
+		if ( ! str_contains( $content, '<!-- wp:cortext/page-header-actions' ) ) {
+			return $content;
+		}
+
+		$blocks = parse_blocks( wp_unslash( $content ) );
+		$blocks = $this->filter_legacy_header_actions( $blocks );
+
+		return wp_slash( serialize_blocks( $blocks ) );
+	}
+
+	private function filter_legacy_header_actions( array $blocks ): array {
+		$filtered = array();
+
+		foreach ( $blocks as $block ) {
+			if ( 'cortext/page-header-actions' === ( $block['blockName'] ?? null ) ) {
+				continue;
+			}
+			if ( ! empty( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] ) ) {
+				$block['innerBlocks'] = $this->filter_legacy_header_actions( $block['innerBlocks'] );
+			}
+			$filtered[] = $block;
+		}
+
+		return $filtered;
 	}
 
 	public function register_meta(): void {

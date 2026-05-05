@@ -1,12 +1,7 @@
 import { __, sprintf, _n } from '@wordpress/i18n';
 import { useEntityRecords } from '@wordpress/core-data';
 import { useDispatch } from '@wordpress/data';
-import {
-	useCallback,
-	useEffect,
-	useMemo,
-	useState,
-} from '@wordpress/element';
+import { useCallback, useEffect, useMemo, useState } from '@wordpress/element';
 import {
 	Button,
 	Spinner,

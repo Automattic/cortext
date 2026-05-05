@@ -32,12 +32,15 @@ module.exports = {
 	},
 	output: {
 		...defaultConfig.output,
-		// wp-scripts defaults to `chunkFilename: '[name].js?...'`, but
-		// async chunks created via dynamic `import()` end up with only an
-		// id hint (no name), so the runtime computes one URL while the
-		// emitted file uses another (e.g. `324.js`). Pin chunks to `[id]`
-		// so emit and runtime URL stay in sync.
-		chunkFilename: '[id].js?ver=[chunkhash]',
+		// Keep lazy chunk URLs stable across `start` and `build`.
+		// The editor may load a dev runtime that asks for named chunks,
+		// and a production build must not replace those files with
+		// numeric-only chunk names.
+		chunkFilename: '[name].js?ver=[chunkhash]',
+	},
+	optimization: {
+		...defaultConfig.optimization,
+		chunkIds: 'named',
 	},
 	plugins: [
 		...defaultConfig.plugins.map( ( plugin ) => {
