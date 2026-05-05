@@ -23,6 +23,7 @@ import apiFetch from '@wordpress/api-fetch';
 import { useEffect, useState } from '@wordpress/element';
 
 import useAutosave from '../hooks/useAutosave';
+import { withViewTransition } from '../hooks/viewTransition';
 import {
 	ACTIVE_PAGES_QUERY,
 	POST_TYPE,
@@ -257,7 +258,10 @@ function CanvasEditor( {
 		async function switchAfterSave() {
 			const didFlush = await flushNow();
 			if ( ! cancelled && didFlush ) {
-				onSwitchPost( pendingPost );
+				// Page-to-page swaps don't change EntityRoute's `active`, so
+				// the surface-level cross-fade can't see them. Trigger one
+				// here instead.
+				withViewTransition( () => onSwitchPost( pendingPost ) );
 			}
 		}
 
