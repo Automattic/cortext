@@ -19,6 +19,11 @@ function applyToRoot( resolved ) {
 	if ( root ) {
 		root.setAttribute( 'data-theme', resolved );
 	}
+	// Mirror onto body so Popover portals (mounted on body, outside the
+	// cortext-root subtree) can re-skin via `body[data-cortext-theme]`.
+	if ( typeof document !== 'undefined' && document.body ) {
+		document.body.setAttribute( 'data-cortext-theme', resolved );
+	}
 }
 
 // Single source of truth for shell color scheme. The PHP bootstrap script

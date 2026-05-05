@@ -1,90 +1,95 @@
 import { __ } from '@wordpress/i18n';
-import { Button, Dropdown, FormTokenField } from '@wordpress/components';
+import { Button, Popover } from '@wordpress/components';
 import { useMemo, useState } from '@wordpress/element';
 
-// tech-debt.md#6: DataViews v6 ships no `multiselect` dataform-control,
-// so this component fills the gap with FormTokenField. Once upstream
-// adds one, this file collapses to a thin wrapper or disappears.
+import Chip from './fields/Chip';
+import EditOptionsPopover from './fields/EditOptionsPopover';
+
+// Multiselect cell editor: a button trigger that shows the selected
+// chips, plus a controlled `Popover` hosting the unified
+// `EditOptionsPopover` in pick mode. `onPick` toggles the clicked value
+// in/out of the cell's array, so the popover stays open while the user
+// adjusts multiple values; `onSave` fires after each toggle so the row
+// meta updates incrementally (Notion-style, no Save button). Closing
+// happens via the Popover's outside-click which fires `onCancel`.
 //
-// FormTokenField speaks in labels but our row meta stores raw values.
-// Keep two parallel maps and translate at the boundaries.
-//
-// `label` is intentionally not forwarded to FormTokenField: the prop
-// always renders a visible <label> regardless of hideLabelFromVision
-// (same upstream quirk as tech-debt.md#8 for CheckboxControl), and the
-// DataViews column header already announces the field.
+// Replaces the previous `FormTokenField` implementation
+// (tech-debt.md#6) so the cell picker matches the column-header "Edit
+// options" surface: same chips, same per-option submenu, same
+// search-or-create input. Uses a controlled Popover (instead of
+// `Dropdown`) so the editor isn't torn down by Dropdown's outside-click
+// heuristics during option mutations (create / recolor / delete) that
+// cascade into a re-render of the row cell.
 export default function MultiselectEdit( {
+	recordId,
 	value,
 	elements,
 	onSave,
+	onOptionsSaved,
 	onCancel,
 	label,
 } ) {
-	const valueToLabel = useMemo( () => {
-		const map = new Map();
-		( elements ?? [] ).forEach( ( e ) => map.set( e.value, e.label ) );
-		return map;
-	}, [ elements ] );
-
-	const labelToValue = useMemo( () => {
-		const map = new Map();
-		( elements ?? [] ).forEach( ( e ) => map.set( e.label, e.value ) );
-		return map;
-	}, [ elements ] );
-
-	const [ tokens, setTokens ] = useState( () =>
-		( value ?? [] ).map( ( v ) => valueToLabel.get( v ) ?? String( v ) )
+	const [ anchor, setAnchor ] = useState( null );
+	const items = useMemo( () => elements ?? [], [ elements ] );
+	const current = useMemo(
+		() => ( Array.isArray( value ) ? value : [] ),
+		[ value ]
 	);
 
-	const suggestions = useMemo(
-		() => ( elements ?? [] ).map( ( e ) => e.label ),
-		[ elements ]
-	);
-
-	// Persist on every change so adding or removing a token saves
-	// immediately. The popover stays open while the user keeps editing;
-	// closing the popover (click outside or trigger) just dismisses it.
-	const handleChange = ( nextTokens ) => {
-		setTokens( nextTokens );
-		const nextValues = nextTokens
-			.map( ( token ) => labelToValue.get( token ) ?? token )
-			.filter( ( v ) => v !== '' && v !== null && v !== undefined );
-		onSave( nextValues );
+	const handleToggle = ( optionValue ) => {
+		const next = current.includes( optionValue )
+			? current.filter( ( v ) => v !== optionValue )
+			: [ ...current, optionValue ];
+		onSave( next );
 	};
 
-	const triggerLabel = tokens.length
-		? tokens.join( ', ' )
-		: __( 'Select…', 'cortext' );
+	const triggerContent = current.length ? (
+		<span className="cortext-chips">
+			{ current.map( ( v ) => {
+				const element = items.find( ( e ) => e.value === v );
+				return (
+					<Chip
+						key={ v }
+						label={ element?.label ?? String( v ) }
+						color={ element?.color }
+					/>
+				);
+			} ) }
+		</span>
+	) : (
+		<span className="cortext-select-edit__placeholder">
+			{ __( 'Select…', 'cortext' ) }
+		</span>
+	);
 
 	return (
-		<Dropdown
-			defaultOpen
-			onClose={ onCancel }
-			popoverProps={ { placement: 'bottom-start' } }
-			renderToggle={ ( { isOpen, onToggle } ) => (
-				<Button
-					className="cortext-multiselect-edit__toggle"
-					variant="tertiary"
-					onClick={ onToggle }
-					aria-expanded={ isOpen }
-					aria-label={ label }
+		<>
+			<Button
+				ref={ setAnchor }
+				className="cortext-multiselect-edit__toggle"
+				variant="tertiary"
+				aria-expanded
+				aria-label={ label }
+			>
+				{ triggerContent }
+			</Button>
+			{ anchor ? (
+				<Popover
+					anchor={ anchor }
+					placement="bottom-start"
+					onClose={ onCancel }
+					focusOnMount="firstElement"
 				>
-					{ triggerLabel }
-				</Button>
-			) }
-			renderContent={ () => (
-				<div className="cortext-multiselect-edit__popover">
-					<FormTokenField
-						value={ tokens }
-						suggestions={ suggestions }
-						onChange={ handleChange }
-						label=""
-						__experimentalExpandOnFocus
-						__experimentalShowHowTo={ false }
-						__nextHasNoMarginBottom
+					<EditOptionsPopover
+						recordId={ recordId }
+						fieldType="multiselect"
+						initialOptions={ items }
+						value={ current }
+						onOptionsSaved={ onOptionsSaved }
+						onPick={ handleToggle }
 					/>
-				</div>
-			) }
-		/>
+				</Popover>
+			) : null }
+		</>
 	);
 }

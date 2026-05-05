@@ -65,6 +65,9 @@ final class Preferences {
 		root.setAttribute( 'data-sidebar-collapsed', sidebarCollapsed ? 'true' : 'false' );
 		root.style.setProperty( '--cortext-sidebar-width', sidebarWidth + 'px' );
 	}
+	if ( document.body ) {
+		document.body.setAttribute( 'data-cortext-theme', resolved );
+	}
 
 	window.cortextBootstrap = {
 		colorScheme: pref,

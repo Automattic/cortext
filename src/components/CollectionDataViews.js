@@ -21,6 +21,7 @@ import {
 } from './dataViewColumns';
 import useCollectionFields from '../hooks/useCollectionFields';
 import useCollectionRows from '../hooks/useCollectionRows';
+import { elementsFromOptions } from '../hooks/optionElements';
 
 const DEFAULT_LAYOUTS = { table: { density: 'compact' }, grid: {}, list: {} };
 const TITLE_LABEL = __( 'Title', 'cortext' );
@@ -234,6 +235,15 @@ export default function CollectionDataViews( {
 	// navigation between cells.
 	const [ editRequest, setEditRequest ] = useState( null );
 	const clearEditRequest = useCallback( () => setEditRequest( null ), [] );
+	const [ optionOverrides, setOptionOverrides ] = useState( {} );
+	const updateFieldOptions = useCallback( ( recordId, nextOptions ) => {
+		const fieldId = `field-${ recordId }`;
+		const elements = elementsFromOptions( nextOptions ) || [];
+		setOptionOverrides( ( current ) => ( {
+			...current,
+			[ fieldId ]: elements,
+		} ) );
+	}, [] );
 
 	// Editable, currently-visible columns in the order DataViews renders
 	// them. Drives Tab/Shift+Tab cell-to-cell navigation. See
@@ -315,8 +325,17 @@ export default function CollectionDataViews( {
 			editRequest,
 			clearEditRequest,
 			requestNext,
+			optionOverrides,
+			updateFieldOptions,
 		} ),
-		[ saveRowField, editRequest, clearEditRequest, requestNext ]
+		[
+			saveRowField,
+			editRequest,
+			clearEditRequest,
+			requestNext,
+			optionOverrides,
+			updateFieldOptions,
+		]
 	);
 
 	const onCreated = useCallback(
@@ -593,6 +612,7 @@ export default function CollectionDataViews( {
 						collectionId={ collectionId }
 						view={ view }
 						onChangeView={ onChangeView }
+						onFieldOptionsSaved={ updateFieldOptions }
 					/>
 				) }
 				{ /* tech-debt.md#7: DataViews has no footer slot, so the
