@@ -44,7 +44,7 @@ export default function PublishToggle() {
 				icon={ isPublic ? globe : lock }
 				onClick={ toggle }
 				disabled={ isSaving }
-				variant={ isPublic ? 'primary' : 'secondary' }
+				variant="tertiary"
 				size="compact"
 			>
 				{ isPublic

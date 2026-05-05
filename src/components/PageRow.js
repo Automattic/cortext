@@ -2,11 +2,12 @@ import { __, sprintf } from '@wordpress/i18n';
 import { useState, useEffect, useRef } from '@wordpress/element';
 import {
 	Button,
-	DropdownMenu,
+	Dropdown,
 	MenuGroup,
 	MenuItem,
 	TextControl,
 } from '@wordpress/components';
+import { chevronRight, moreVertical, plus } from '@wordpress/icons';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 
 const GRID_UNIT = 20; // matches $grid-unit-20 in index.scss
@@ -32,6 +33,11 @@ export default function PageRow( {
 	onDelete,
 	autoRenameId, // page id that should immediately enter rename mode
 	onAutoRenameConsumed,
+	// True when an ancestor is collapsed: this row and its subtree are
+	// visually clipped but stay mounted for the expand/collapse animation.
+	// Drop targets must be off so dnd-kit's pointerWithin doesn't hit
+	// invisible descendants and route a drop to the wrong row.
+	isHidden = false,
 } ) {
 	const { page, children } = node;
 	const hasChildren = children.length > 0;
@@ -83,14 +89,17 @@ export default function PageRow( {
 	const dropBefore = useDroppable( {
 		id: `before:${ page.id }`,
 		data: { zone: 'before', pageId: page.id },
+		disabled: isHidden,
 	} );
 	const dropInside = useDroppable( {
 		id: `inside:${ page.id }`,
 		data: { zone: 'inside', pageId: page.id },
+		disabled: isHidden,
 	} );
 	const dropAfter = useDroppable( {
 		id: `after:${ page.id }`,
 		data: { zone: 'after', pageId: page.id },
+		disabled: isHidden,
 	} );
 
 	const isDropTarget = activeDrop && activeDrop.targetId === page.id;
@@ -142,12 +151,12 @@ export default function PageRow( {
 				>
 					{ hasChildren ? (
 						<Button
-							className="cortext-sidebar__chevron"
-							icon={
-								isExpanded
-									? 'arrow-down-alt2'
-									: 'arrow-right-alt2'
+							className={
+								'cortext-sidebar__chevron' +
+								( isExpanded ? ' is-expanded' : '' )
 							}
+							icon={ chevronRight }
+							size="small"
 							label={
 								isExpanded
 									? __( 'Collapse', 'cortext' )
@@ -174,6 +183,7 @@ export default function PageRow( {
 							<TextControl
 								__next40pxDefaultSize
 								__nextHasNoMarginBottom
+								size="compact"
 								value={ draftTitle }
 								onChange={ setDraftTitle }
 								onBlur={ commitRename }
@@ -193,6 +203,7 @@ export default function PageRow( {
 					) : (
 						<Button
 							className="cortext-sidebar__title"
+							size="compact"
 							onClick={ () => onSelect( page.id ) }
 							isPressed={ isSelected }
 						>
@@ -200,30 +211,44 @@ export default function PageRow( {
 						</Button>
 					) }
 
-					<DropdownMenu
-						className="cortext-sidebar__menu"
-						icon="ellipsis"
+					<Button
+						className="cortext-sidebar__add-child"
+						icon={ plus }
+						size="small"
 						label={ sprintf(
-							/* translators: %s: page title */
-							__( 'Actions for %s', 'cortext' ),
+							/* translators: %s: parent page title */
+							__( 'Add a page inside %s', 'cortext' ),
 							title
 						) }
-						popoverProps={ { placement: 'bottom-end' } }
-						toggleProps={ {
-							onPointerDown: ( e ) => e.stopPropagation(),
+						onClick={ ( e ) => {
+							e.stopPropagation();
+							onCreateChild( page.id );
 						} }
-					>
-						{ ( { onClose } ) => (
+						onPointerDown={ ( e ) => e.stopPropagation() }
+					/>
+
+					<Dropdown
+						popoverProps={ { placement: 'bottom-end' } }
+						renderToggle={ ( { isOpen, onToggle } ) => (
+							<Button
+								className={
+									'cortext-sidebar__menu' +
+									( isOpen ? ' is-opened' : '' )
+								}
+								icon={ moreVertical }
+								size="small"
+								label={ sprintf(
+									/* translators: %s: page title */
+									__( 'Actions for %s', 'cortext' ),
+									title
+								) }
+								onClick={ onToggle }
+								aria-expanded={ isOpen }
+								onPointerDown={ ( e ) => e.stopPropagation() }
+							/>
+						) }
+						renderContent={ ( { onClose } ) => (
 							<MenuGroup>
-								<MenuItem
-									icon="plus"
-									onClick={ () => {
-										onCreateChild( page.id );
-										onClose();
-									} }
-								>
-									{ __( 'Add child page', 'cortext' ) }
-								</MenuItem>
 								<MenuItem
 									icon="edit"
 									onClick={ () => {
@@ -254,7 +279,7 @@ export default function PageRow( {
 								</MenuItem>
 							</MenuGroup>
 						) }
-					</DropdownMenu>
+					/>
 
 					{ /* Drop zones overlay the row. pointer-events are off
 					     so they don't block clicks when idle. */ }
@@ -276,28 +301,37 @@ export default function PageRow( {
 				</div>
 			</div>
 
-			{ hasChildren && isExpanded && (
-				<ul className="cortext-sidebar__children">
-					{ children.map( ( child ) => (
-						<PageRow
-							key={ child.page.id }
-							node={ child }
-							depth={ depth + 1 }
-							selectedId={ selectedId }
-							expandedIds={ expandedIds }
-							draggedId={ draggedId }
-							activeDrop={ activeDrop }
-							onSelect={ onSelect }
-							onToggleExpand={ onToggleExpand }
-							onCreateChild={ onCreateChild }
-							onRename={ onRename }
-							onDuplicate={ onDuplicate }
-							onDelete={ onDelete }
-							autoRenameId={ autoRenameId }
-							onAutoRenameConsumed={ onAutoRenameConsumed }
-						/>
-					) ) }
-				</ul>
+			{ hasChildren && (
+				<div
+					className={
+						'cortext-sidebar__children-wrapper' +
+						( isExpanded ? ' is-expanded' : '' )
+					}
+					{ ...( isExpanded ? {} : { inert: '' } ) }
+				>
+					<ul className="cortext-sidebar__children">
+						{ children.map( ( child ) => (
+							<PageRow
+								key={ child.page.id }
+								node={ child }
+								depth={ depth + 1 }
+								selectedId={ selectedId }
+								expandedIds={ expandedIds }
+								draggedId={ draggedId }
+								activeDrop={ activeDrop }
+								onSelect={ onSelect }
+								onToggleExpand={ onToggleExpand }
+								onCreateChild={ onCreateChild }
+								onRename={ onRename }
+								onDuplicate={ onDuplicate }
+								onDelete={ onDelete }
+								autoRenameId={ autoRenameId }
+								onAutoRenameConsumed={ onAutoRenameConsumed }
+								isHidden={ isHidden || ! isExpanded }
+							/>
+						) ) }
+					</ul>
+				</div>
 			) }
 		</li>
 	);

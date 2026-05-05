@@ -1,4 +1,5 @@
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
+import apiFetch from '@wordpress/api-fetch';
 import { useEntityRecords } from '@wordpress/core-data';
 import { useDispatch, useSelect } from '@wordpress/data';
 import {
@@ -8,7 +9,41 @@ import {
 	useCallback,
 	useEffect,
 } from '@wordpress/element';
-import { Button, Spinner } from '@wordpress/components';
+import { Button, Icon, Spinner } from '@wordpress/components';
+import { plus, wordpress } from '@wordpress/icons';
+
+// Notion-style sidebar toggle: panel outline with a vertical accent on
+// the left side. Same icon for both states; the aria-label tells the
+// user what the toggle will do.
+const sidebarToggleIcon = (
+	<svg
+		xmlns="http://www.w3.org/2000/svg"
+		viewBox="0 0 24 24"
+		width="24"
+		height="24"
+		aria-hidden="true"
+		focusable="false"
+	>
+		<rect
+			x="4"
+			y="5"
+			width="16"
+			height="14"
+			rx="2"
+			stroke="currentColor"
+			strokeWidth="1.5"
+			fill="none"
+		/>
+		<line
+			x1="9"
+			y1="5"
+			x2="9"
+			y2="19"
+			stroke="currentColor"
+			strokeWidth="1.5"
+		/>
+	</svg>
+);
 import {
 	DndContext,
 	DragOverlay,
@@ -21,10 +56,12 @@ import {
 import { useNavigate, useParams } from '@tanstack/react-router';
 
 import PageRow from './PageRow';
+import SidebarResizeHandle from './SidebarResizeHandle';
 import SidebarTrash from './SidebarTrash';
 import ThemeToggle from './ThemeToggle';
 import {
 	buildTree,
+	collectAncestorIds,
 	computeDropTarget,
 	isDescendantOf,
 	nextChildOrder,
@@ -55,7 +92,12 @@ function parseDropId( id ) {
 	return { zone, targetId: pageId };
 }
 
-export default function Sidebar() {
+export default function Sidebar( {
+	collapsed = false,
+	width,
+	onToggleCollapsed,
+	onWidthChange,
+} ) {
 	// TODO(scale): per_page: 100 is the REST collection endpoint's hard ceiling.
 	// Workspaces are expected to exceed 100 pages — pages past the cap won't
 	// appear in the tree. Followup needs a lazy-loaded tree (load children on
@@ -79,6 +121,14 @@ export default function Sidebar() {
 	const params = useParams( { strict: false } );
 	const activeUri = params._splat ?? '';
 	const adminUrl = window.cortextSettings?.adminUrl ?? '/wp-admin/';
+	const userName = window.cortextSettings?.userDisplayName ?? '';
+	const brandLabel = userName
+		? sprintf(
+				/* translators: %s: user display name */
+				__( "%s's Cortext", 'cortext' ),
+				userName
+		  )
+		: __( 'Cortext', 'cortext' );
 
 	const { prefix: activePrefix, tail: activeTail } = useMemo(
 		() => parseSplatUri( activeUri ),
@@ -143,6 +193,27 @@ export default function Sidebar() {
 
 	const autoExpandTimerRef = useRef( null );
 
+	useEffect( () => {
+		if ( selectedId === null ) {
+			return;
+		}
+		const ancestorIds = collectAncestorIds( selectedId, pages );
+		if ( ancestorIds.length === 0 ) {
+			return;
+		}
+		setExpandedIds( ( prev ) => {
+			let changed = false;
+			const next = new Set( prev );
+			ancestorIds.forEach( ( id ) => {
+				if ( ! next.has( id ) ) {
+					next.add( id );
+					changed = true;
+				}
+			} );
+			return changed ? next : prev;
+		} );
+	}, [ selectedId, pages ] );
+
 	const getEntityRecord = useSelect(
 		( select ) => select( 'core' ).getEntityRecord,
 		[]
@@ -189,6 +260,25 @@ export default function Sidebar() {
 			setAutoRenameId( created.id );
 		}
 	}, [ saveEntityRecord, onSelect ] );
+
+	const createRootCollection = useCallback( async () => {
+		const created = await apiFetch( {
+			path: '/cortext/v1/collections',
+			method: 'POST',
+			data: { title: __( 'Untitled', 'cortext' ) },
+		} );
+		invalidateResolution( 'getEntityRecords', [
+			'postType',
+			'crtxt_collection',
+			COLLECTION_QUERY,
+		] );
+		if ( created?.id ) {
+			navigate( {
+				to: '/$',
+				params: { _splat: computeUri( created, 'collection' ) },
+			} );
+		}
+	}, [ invalidateResolution, navigate ] );
 
 	const createChildPage = useCallback(
 		async ( parentId ) => {
@@ -391,123 +481,172 @@ export default function Sidebar() {
 		: null;
 
 	return (
-		<aside className="cortext-sidebar">
+		<aside
+			id="cortext-sidebar"
+			className="cortext-sidebar"
+			data-collapsed={ collapsed ? 'true' : 'false' }
+		>
 			<div className="cortext-sidebar__header">
+				{ ! collapsed && (
+					<span className="cortext-sidebar__brand">
+						{ brandLabel }
+					</span>
+				) }
 				<Button
-					icon="arrow-left-alt2"
-					label={ __( 'Back to WordPress', 'cortext' ) }
-					href={ adminUrl }
+					className="cortext-sidebar__collapse-toggle"
+					icon={ sidebarToggleIcon }
+					label={
+						collapsed
+							? __( 'Expand sidebar', 'cortext' )
+							: __( 'Collapse sidebar', 'cortext' )
+					}
+					onClick={ onToggleCollapsed }
 				/>
-				<Button variant="primary" onClick={ createRootPage }>
-					{ __( 'New page', 'cortext' ) }
-				</Button>
+			</div>
+			{ ! collapsed && (
+				<div className="cortext-sidebar__content">
+					<div className="cortext-sidebar__section-header">
+						<h2 className="cortext-sidebar__section-title">
+							{ __( 'Pages', 'cortext' ) }
+						</h2>
+						<Button
+							className="cortext-sidebar__section-action"
+							icon={ plus }
+							size="small"
+							label={ __( 'New page', 'cortext' ) }
+							onClick={ createRootPage }
+						/>
+					</div>
+					{ isResolving && pages.length === 0 && (
+						<div className="cortext-sidebar__loading">
+							<Spinner />
+						</div>
+					) }
+					{ ! isResolving && pages.length === 0 && (
+						<p className="cortext-sidebar__empty">
+							{ __( 'No pages yet.', 'cortext' ) }
+						</p>
+					) }
+
+					<DndContext
+						sensors={ sensors }
+						collisionDetection={ pointerWithin }
+						onDragStart={ handleDragStart }
+						onDragOver={ handleDragOver }
+						onDragEnd={ handleDragEnd }
+						onDragCancel={ handleDragCancel }
+					>
+						<ul className="cortext-sidebar__list">
+							{ tree.map( ( node ) => (
+								<PageRow
+									key={ node.page.id }
+									node={ node }
+									depth={ 0 }
+									selectedId={ selectedId }
+									expandedIds={ expandedIds }
+									draggedId={ draggedId }
+									activeDrop={ activeDrop }
+									onSelect={ onSelect }
+									onToggleExpand={ toggleExpand }
+									onCreateChild={ createChildPage }
+									onRename={ renamePage }
+									onDuplicate={ duplicatePage }
+									onDelete={ trashPage }
+									autoRenameId={ autoRenameId }
+									onAutoRenameConsumed={ () =>
+										setAutoRenameId( null )
+									}
+								/>
+							) ) }
+						</ul>
+
+						<DragOverlay>
+							{ draggedPage ? (
+								<div className="cortext-sidebar__drag-preview">
+									{ draggedPage.title?.rendered?.trim() ||
+										__( '(untitled)', 'cortext' ) }
+								</div>
+							) : null }
+						</DragOverlay>
+					</DndContext>
+
+					<div className="cortext-sidebar__section-header">
+						<h2 className="cortext-sidebar__section-title">
+							{ __( 'Collections', 'cortext' ) }
+						</h2>
+						<Button
+							className="cortext-sidebar__section-action"
+							icon={ plus }
+							size="small"
+							label={ __( 'New collection', 'cortext' ) }
+							onClick={ createRootCollection }
+						/>
+					</div>
+					{ isResolvingCollections && ! collections?.length && (
+						<div className="cortext-sidebar__loading">
+							<Spinner />
+						</div>
+					) }
+					{ ! isResolvingCollections && ! collections?.length && (
+						<p className="cortext-sidebar__empty">
+							{ __( 'No collections yet.', 'cortext' ) }
+						</p>
+					) }
+					{ collections?.length > 0 && (
+						<ul className="cortext-sidebar__list">
+							{ collections.map( ( collection ) => (
+								<li
+									key={ collection.id }
+									className="cortext-sidebar__node"
+								>
+									<div className="cortext-sidebar__row">
+										<Button
+											className="cortext-sidebar__title"
+											size="compact"
+											variant="tertiary"
+											onClick={ () =>
+												navigate( {
+													to: '/$',
+													params: {
+														_splat: computeUri(
+															collection,
+															'collection'
+														),
+													},
+												} )
+											}
+										>
+											{ collection.title.rendered }
+										</Button>
+									</div>
+								</li>
+							) ) }
+						</ul>
+					) }
+
+					<SidebarTrash
+						activePages={ pages }
+						selectedId={ selectedId }
+						onSelect={ onSelect }
+					/>
+				</div>
+			) }
+			<div className="cortext-sidebar__footer">
+				<Button
+					className="cortext-sidebar__back"
+					label={ __( 'Go to WordPress', 'cortext' ) }
+					href={ adminUrl }
+					icon={ <Icon icon={ wordpress } size={ 24 } /> }
+				/>
 				<ThemeToggle />
 			</div>
-			<h2 className="cortext-sidebar__section-title">
-				{ __( 'Pages', 'cortext' ) }
-			</h2>
-			{ isResolving && pages.length === 0 && (
-				<div className="cortext-sidebar__loading">
-					<Spinner />
-				</div>
+			{ ! collapsed && (
+				<SidebarResizeHandle
+					width={ width }
+					onChange={ onWidthChange }
+					onToggleCollapsed={ onToggleCollapsed }
+				/>
 			) }
-			{ ! isResolving && pages.length === 0 && (
-				<p className="cortext-sidebar__empty">
-					{ __( 'No pages yet.', 'cortext' ) }
-				</p>
-			) }
-
-			<DndContext
-				sensors={ sensors }
-				collisionDetection={ pointerWithin }
-				onDragStart={ handleDragStart }
-				onDragOver={ handleDragOver }
-				onDragEnd={ handleDragEnd }
-				onDragCancel={ handleDragCancel }
-			>
-				<ul className="cortext-sidebar__list">
-					{ tree.map( ( node ) => (
-						<PageRow
-							key={ node.page.id }
-							node={ node }
-							depth={ 0 }
-							selectedId={ selectedId }
-							expandedIds={ expandedIds }
-							draggedId={ draggedId }
-							activeDrop={ activeDrop }
-							onSelect={ onSelect }
-							onToggleExpand={ toggleExpand }
-							onCreateChild={ createChildPage }
-							onRename={ renamePage }
-							onDuplicate={ duplicatePage }
-							onDelete={ trashPage }
-							autoRenameId={ autoRenameId }
-							onAutoRenameConsumed={ () =>
-								setAutoRenameId( null )
-							}
-						/>
-					) ) }
-				</ul>
-
-				<DragOverlay>
-					{ draggedPage ? (
-						<div className="cortext-sidebar__drag-preview">
-							{ draggedPage.title?.rendered?.trim() ||
-								__( '(untitled)', 'cortext' ) }
-						</div>
-					) : null }
-				</DragOverlay>
-			</DndContext>
-
-			<h2 className="cortext-sidebar__section-title">
-				{ __( 'Collections', 'cortext' ) }
-			</h2>
-			{ isResolvingCollections && ! collections?.length && (
-				<div className="cortext-sidebar__loading">
-					<Spinner />
-				</div>
-			) }
-			{ ! isResolvingCollections && ! collections?.length && (
-				<p className="cortext-sidebar__empty">
-					{ __( 'No collections yet.', 'cortext' ) }
-				</p>
-			) }
-			{ collections?.length > 0 && (
-				<ul className="cortext-sidebar__list">
-					{ collections.map( ( collection ) => (
-						<li
-							key={ collection.id }
-							className="cortext-sidebar__node"
-						>
-							<div className="cortext-sidebar__row">
-								<Button
-									className="cortext-sidebar__title"
-									variant="tertiary"
-									onClick={ () =>
-										navigate( {
-											to: '/$',
-											params: {
-												_splat: computeUri(
-													collection,
-													'collection'
-												),
-											},
-										} )
-									}
-								>
-									{ collection.title.rendered }
-								</Button>
-							</div>
-						</li>
-					) ) }
-				</ul>
-			) }
-
-			<SidebarTrash
-				activePages={ pages }
-				selectedId={ selectedId }
-				onSelect={ onSelect }
-			/>
 		</aside>
 	);
 }

@@ -20,6 +20,10 @@ jest.mock( '@wordpress/core-data', () => ( {
 	store: { name: 'core' },
 } ) );
 
+jest.mock( '@wordpress/notices', () => ( {
+	store: { name: 'core/notices' },
+} ) );
+
 import { useSelect, useDispatch } from '@wordpress/data';
 import useAutosave from '../../src/hooks/useAutosave';
 
@@ -82,6 +86,8 @@ beforeEach( () => {
 	useDispatch.mockReturnValue( {
 		savePost: jest.fn(),
 		editPost: jest.fn(),
+		createErrorNotice: jest.fn(),
+		removeNotice: jest.fn(),
 	} );
 } );
 
@@ -321,6 +327,49 @@ describe( 'useAutosave: status', () => {
 		const { result } = renderHook( () => useAutosave() );
 
 		expect( result.current.status ).toBe( 'error' );
+	} );
+
+	it( 'surfaces a snackbar notice when a save fails', () => {
+		const createErrorNotice = jest.fn();
+		useDispatch.mockReturnValue( {
+			savePost: jest.fn(),
+			editPost: jest.fn(),
+			createErrorNotice,
+			removeNotice: jest.fn(),
+		} );
+		setStoreState( { didFail: true } );
+
+		renderHook( () => useAutosave() );
+
+		expect( createErrorNotice ).toHaveBeenCalledWith(
+			expect.any( String ),
+			expect.objectContaining( {
+				type: 'snackbar',
+				id: 'cortext-autosave-error',
+			} )
+		);
+	} );
+
+	it( 'removes the autosave error notice after a successful save', () => {
+		const removeNotice = jest.fn();
+		useDispatch.mockReturnValue( {
+			savePost: jest.fn(),
+			editPost: jest.fn(),
+			createErrorNotice: jest.fn(),
+			removeNotice,
+		} );
+		setStoreState( { didFail: true } );
+
+		const { rerender } = renderHook( () => useAutosave() );
+
+		act( () => {
+			setStoreState( { didFail: false, didSucceed: true } );
+			rerender();
+		} );
+
+		expect( removeNotice ).toHaveBeenCalledWith(
+			'cortext-autosave-error'
+		);
 	} );
 
 	it( 'resets status when the current post id changes', () => {

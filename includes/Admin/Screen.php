@@ -87,8 +87,9 @@ final class Screen {
 			self::SCRIPT_HANDLE,
 			'window.cortextSettings = ' . wp_json_encode(
 				array(
-					'adminUrl' => admin_url(),
-					'menuSlug' => self::MENU_SLUG,
+					'adminUrl'        => admin_url(),
+					'menuSlug'        => self::MENU_SLUG,
+					'userDisplayName' => wp_get_current_user()->display_name,
 				)
 			) . ';',
 			'before'

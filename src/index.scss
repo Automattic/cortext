@@ -71,23 +71,122 @@ body.cortext-fullscreen {
 
 .cortext-shell {
 	display: grid;
-	grid-template-columns: 280px 1fr;
+	grid-template-columns: var(--cortext-sidebar-width) 1fr;
 	height: 100vh;
+	transition: grid-template-columns 160ms ease;
+}
+
+// Skip the transition while the drag/keyboard nudge is live so the grid
+// tracks the input frame for frame.
+.cortext-root[data-sidebar-resizing="true"] .cortext-shell {
+	transition: none;
+}
+
+// Collapsed: pin to rail width but keep the saved expanded width on the
+// root, so toggling back restores it.
+.cortext-root[data-sidebar-collapsed="true"] .cortext-shell {
+	grid-template-columns: var(--cortext-sidebar-width-rail) 1fr;
 }
 
 .cortext-sidebar {
+	position: relative;
+	display: flex;
+	flex-direction: column;
 	background: var(--cortext-sidebar-surface);
 	border-right: var(--cortext-shell-border-width) solid var(--cortext-chrome-border);
-	overflow-y: auto;
-	padding: $grid-unit-15;
+	overflow: hidden;
 
 	&__header {
+		flex: 0 0 auto;
 		display: flex;
 		align-items: center;
 		gap: $grid-unit-10;
-		margin-bottom: $grid-unit-15;
+		height: var(--cortext-topbar-height);
+		padding-inline: $grid-unit-20;
+		border-bottom: var(--cortext-shell-border-width) solid var(--cortext-chrome-border);
 	}
 
+	&__brand {
+		flex: 1 1 auto;
+		min-width: 0;
+		font-weight: 600;
+		font-size: 13px;
+		line-height: 20px;
+		color: var(--cortext-text);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	&__collapse-toggle {
+		align-self: center;
+		margin-left: auto;
+	}
+
+	&__section-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: $grid-unit-05;
+		margin: $grid-unit-15 0 $grid-unit-05 0;
+		padding: 0 $grid-unit-05;
+
+		// Title margin/padding moves to the row.
+		/* stylelint-disable-next-line no-descending-specificity */
+		.cortext-sidebar__section-title {
+			margin: 0;
+			padding: 0;
+		}
+	}
+
+	// Touch/no-hover devices need visible actions because hover reveal is
+	// unavailable. Desktop fine pointers hide them below until hover/focus.
+	&__section-action.components-button {
+		opacity: 1;
+		transition: opacity 0.12s ease;
+	}
+
+	@media (hover: hover) and (pointer: fine) {
+
+		&__section-action.components-button {
+			opacity: 0;
+		}
+
+		&__section-header:hover &__section-action,
+		&__section-header:focus-within &__section-action {
+			opacity: 1;
+		}
+	}
+
+	&__content {
+		flex: 1 1 auto;
+		min-height: 0;
+		overflow-y: auto;
+		padding: 0 $grid-unit-15 $grid-unit-15;
+	}
+
+	&__footer {
+		flex: 0 0 auto;
+		// Keeps the footer at the bottom in collapsed mode, where the
+		// content region isn't rendered.
+		margin-top: auto;
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-10;
+		padding: $grid-unit-10 $grid-unit-15;
+		border-top: var(--cortext-shell-border-width) solid var(--cortext-chrome-border);
+	}
+
+	&__back.components-button,
+	&__theme-toggle.components-button {
+		width: $grid-unit-40;
+		min-width: $grid-unit-40;
+		height: $grid-unit-40;
+		padding: 0;
+		justify-content: center;
+	}
+
+	/* stylelint-disable-next-line no-descending-specificity */
 	&__section-title {
 		font-size: 11px;
 		font-weight: 600;
@@ -124,9 +223,24 @@ body.cortext-fullscreen {
 		display: flex;
 		align-items: center;
 		gap: $grid-unit-05;
+		// Pin to the compact-size height of the title button and rename
+		// input so swapping between them doesn't bump the row.
+		height: $grid-unit-40;
 		border-radius: var(--cortext-shell-radius);
 		cursor: grab;
 		user-select: none;
+
+		// Hover paints the whole row, not just the inner title button, so
+		// the chevron and kebab areas feel like part of what you're hovering.
+		// `:not(.is-selected)` keeps the active row on its selected
+		// background even while the cursor sits on it.
+		&:hover:not(.is-selected) {
+			background: var(--cortext-sidebar-item-hover-surface);
+		}
+
+		&:focus-within:not(.is-selected) {
+			background: var(--cortext-sidebar-item-hover-surface);
+		}
 
 		&.is-selected {
 			background: var(--cortext-sidebar-item-selected-surface);
@@ -165,10 +279,39 @@ body.cortext-fullscreen {
 	&__chevron {
 		flex: 0 0 auto;
 
+		// One icon, rotated 90 degrees to mark expansion. Animating a
+		// rotation reads cleaner than swapping right/down icons on click.
+		svg {
+			transition: transform 160ms ease;
+		}
+
+		&.is-expanded svg {
+			transform: rotate(90deg);
+		}
+
 		&--placeholder {
 			display: inline-block;
 			width: $grid-unit-30;
 			height: $grid-unit-30;
+		}
+	}
+
+	// `grid-template-rows: 0fr → 1fr` animates from collapsed to natural
+	// height without measuring. The inner ul needs `min-height: 0` and
+	// `overflow: hidden` so the grid track can clip below the content's
+	// intrinsic height.
+	&__children-wrapper {
+		display: grid;
+		grid-template-rows: 0fr;
+		transition: grid-template-rows 160ms ease;
+
+		> .cortext-sidebar__children {
+			min-height: 0;
+			overflow: hidden;
+		}
+
+		&.is-expanded {
+			grid-template-rows: 1fr;
 		}
 	}
 
@@ -185,18 +328,55 @@ body.cortext-fullscreen {
 	&__rename {
 		flex: 1 1 auto;
 		min-width: 0;
+		height: $grid-unit-40;
+
+		// TextControl mounts BaseControl > field > InputBase > container >
+		// input, and each level can carry default padding/margin that
+		// grows the row past its compact min-height. Pin every wrapper
+		// to the same height so the row stays put when entering rename
+		// mode.
+		.components-base-control,
+		.components-base-control__field,
+		.components-input-control,
+		.components-input-control__container {
+			box-sizing: border-box;
+			margin: 0;
+			height: $grid-unit-40;
+			min-height: $grid-unit-40;
+			max-height: $grid-unit-40;
+		}
+
+		.components-input-control__input,
+		input {
+			box-sizing: border-box;
+			height: $grid-unit-40;
+			min-height: $grid-unit-40;
+			max-height: $grid-unit-40;
+			padding-block: 0;
+		}
 	}
 
-	&__menu {
+	&__menu,
+	&__add-child {
 		flex: 0 0 auto;
-		opacity: 0;
+		opacity: 1;
 		transition: opacity 0.12s ease;
 	}
 
-	&__row:hover &__menu,
-	&__row:focus-within &__menu,
-	&__menu.is-opened {
-		opacity: 1;
+	@media (hover: hover) and (pointer: fine) {
+
+		&__menu,
+		&__add-child {
+			opacity: 0;
+		}
+
+		&__row:hover &__menu,
+		&__row:focus-within &__menu,
+		&__menu.is-opened,
+		&__row:hover &__add-child,
+		&__row:focus-within &__add-child {
+			opacity: 1;
+		}
 	}
 
 	// Overlay droppable strips. Pointer-events off so they don't swallow
@@ -236,6 +416,7 @@ body.cortext-fullscreen {
 		white-space: nowrap;
 	}
 
+	/* stylelint-disable-next-line no-descending-specificity */
 	&__trash-row .cortext-sidebar__row {
 		padding: $grid-unit-05;
 		align-items: flex-start;
@@ -300,6 +481,82 @@ body.cortext-fullscreen {
 		font-size: 11px;
 		color: #cc1818;
 	}
+
+	// Modeled on `.cortext-column-resizer` so both resizers feel the same.
+	&__resize-handle {
+		position: absolute;
+		top: 0;
+		right: 0;
+		width: 8px;
+		height: 100%;
+		cursor: col-resize;
+		background: transparent;
+		border: 0;
+		padding: 0;
+		z-index: 2;
+		touch-action: none;
+
+		&::after {
+			content: "";
+			position: absolute;
+			top: 0;
+			right: 0;
+			width: 3px;
+			height: 100%;
+			background: var(--cortext-accent);
+			opacity: 0;
+			transition: opacity 100ms ease;
+		}
+
+		&:hover::after,
+		&:focus-visible::after,
+		&.is-resizing::after {
+			opacity: 1;
+		}
+
+		&:focus-visible {
+			outline: none;
+		}
+	}
+
+	// Sections aren't rendered when collapsed (see Sidebar.js); just stack
+	// the chrome.
+	&[data-collapsed="true"] {
+
+		.cortext-sidebar__header,
+		.cortext-sidebar__footer {
+			flex-direction: column;
+			align-items: center;
+			justify-content: center;
+			gap: $grid-unit-05;
+		}
+
+		.cortext-sidebar__header {
+			padding: 0;
+		}
+
+		.cortext-sidebar__footer {
+			padding: $grid-unit-05 0;
+		}
+
+		.cortext-sidebar__collapse-toggle {
+			margin-left: 0;
+		}
+
+		.cortext-sidebar__collapse-toggle.components-button {
+			width: $grid-unit-40;
+			min-width: $grid-unit-40;
+			height: $grid-unit-40;
+			padding: 0;
+			justify-content: center;
+		}
+	}
+}
+
+// Lock the global cursor and disable selection while a resize drag is live.
+body.cortext-sidebar-resizing {
+	cursor: col-resize;
+	user-select: none;
 }
 
 // Skip the default root snapshot so the sidebar and top bar stay live
@@ -377,8 +634,9 @@ body.cortext-fullscreen {
 	display: flex;
 	align-items: center;
 	gap: $grid-unit-10;
-	padding: $grid-unit-10 $grid-unit-20;
-	background: var(--cortext-shell-surface);
+	height: var(--cortext-topbar-height);
+	padding-inline: $grid-unit-20;
+	background: var(--cortext-sidebar-surface);
 	color: var(--cortext-text);
 	border-bottom: var(--cortext-shell-border-width) solid var(--cortext-chrome-border);
 	min-height: 0;
@@ -388,12 +646,15 @@ body.cortext-fullscreen {
 		min-width: 0;
 		display: flex;
 		align-items: center;
+		height: 20px;
+		line-height: 20px;
 	}
 
 	&__actions {
 		flex: 0 0 auto;
 		display: flex;
 		align-items: center;
+		align-self: center;
 		gap: $grid-unit-10;
 	}
 }
@@ -407,41 +668,63 @@ body.cortext-fullscreen {
 .cortext-breadcrumbs {
 	min-width: 0;
 	flex: 1 1 auto;
+	display: flex;
+	align-items: center;
+	height: 20px;
+	line-height: 20px;
 
 	&__list {
 		list-style: none;
 		margin: 0;
 		padding: 0;
 		display: flex;
-		align-items: center;
+		align-items: flex-start;
 		gap: $grid-unit-05;
+		height: 20px;
+		line-height: inherit;
 		min-width: 0;
 		flex-wrap: nowrap;
 	}
 
 	&__item {
+		list-style: none;
 		min-width: 0;
 		display: flex;
 		align-items: center;
+		height: 20px;
+		line-height: inherit;
 	}
 
 	&__separator {
+		list-style: none;
+		display: inline-flex;
+		align-items: center;
+		height: 20px;
 		color: var(--cortext-text-muted);
 		flex: 0 0 auto;
+		line-height: inherit;
 		user-select: none;
 	}
 
 	&__ellipsis {
+		display: inline-flex;
+		align-items: center;
+		height: 20px;
 		color: var(--cortext-text-muted);
 		flex: 0 0 auto;
+		line-height: inherit;
 	}
 
 	&__segment {
 		appearance: none;
+		display: inline-flex;
+		align-items: center;
+		height: 20px;
 		background: transparent;
 		border: 0;
 		padding: 0 $grid-unit-05;
 		font: inherit;
+		line-height: inherit;
 		color: var(--cortext-text-muted);
 		cursor: pointer;
 		border-radius: var(--cortext-shell-radius);
@@ -1520,8 +1803,21 @@ thead > tr > th {
 
 	.components-button {
 		border-radius: var(--cortext-shell-radius);
+
+		// WP components paints a 1.5px accent ring on `:focus:not(:active)`,
+		// which fires on click as well as keyboard nav. Inside chrome that
+		// already has hover/pressed/selected backgrounds, that ring reads
+		// as a stray line at the edge of each button (visible alongside
+		// the chevron / title / kebab in a hovered tree row). Drop it for
+		// click; keep `:focus-visible` so keyboard nav still has a focus
+		// indicator.
+		&:focus:not(:focus-visible) {
+			box-shadow: none;
+			outline: none;
+		}
 	}
 
+	/* stylelint-disable-next-line no-descending-specificity */
 	.components-button:not(.is-primary) {
 		background: var(--cortext-button-surface);
 		color: var(--cortext-button-text);
@@ -1531,6 +1827,14 @@ thead > tr > th {
 			background: var(--cortext-button-hover-surface);
 			color: var(--cortext-button-text);
 		}
+	}
+
+	// Keep hover/focus from painting only the inner title/action button, which
+	// makes the row look split into separate cells. The row itself handles
+	// the focus background.
+	.cortext-sidebar__row .components-button:not(.is-primary):hover:not(:disabled),
+	.cortext-sidebar__row .components-button:not(.is-primary):focus:not(:disabled) {
+		background: transparent;
 	}
 
 	.components-button.is-primary {

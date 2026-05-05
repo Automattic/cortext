@@ -5,11 +5,13 @@
 // URLs are canonical: `/wp-admin/admin.php?page=cortext&p=/<app-path>`. The
 // router emits those hrefs on navigation and parses them back on load.
 
+import { useEffect } from '@wordpress/element';
 import { privateApis as routePrivateApis } from '@wordpress/route';
 import { SlotFillProvider } from '@wordpress/components';
 
 import Sidebar from './components/Sidebar';
 import EntityRoute from './router/EntityRoute';
+import useSidebarLayout from './hooks/useSidebarLayout';
 import { unlock } from './lock-unlock';
 
 const {
@@ -21,11 +23,49 @@ const {
 	parseHref,
 } = unlock( routePrivateApis );
 
+// Cmd/Ctrl+\ to toggle the sidebar. Cmd+B would clash with rich-text bold
+// inside the editor iframe.
+function isEditableTarget( target ) {
+	if ( ! target ) {
+		return false;
+	}
+	if ( target.tagName === 'IFRAME' ) {
+		return true;
+	}
+	const tag = target.tagName;
+	if ( tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' ) {
+		return true;
+	}
+	return target.isContentEditable === true;
+}
+
 function RootLayout() {
+	const { collapsed, width, toggleCollapsed, setWidth } = useSidebarLayout();
+
+	useEffect( () => {
+		const onKeyDown = ( event ) => {
+			if ( event.key !== '\\' || ! ( event.metaKey || event.ctrlKey ) ) {
+				return;
+			}
+			if ( isEditableTarget( event.target ) ) {
+				return;
+			}
+			event.preventDefault();
+			toggleCollapsed();
+		};
+		window.addEventListener( 'keydown', onKeyDown );
+		return () => window.removeEventListener( 'keydown', onKeyDown );
+	}, [ toggleCollapsed ] );
+
 	return (
 		<SlotFillProvider>
 			<div className="cortext-shell">
-				<Sidebar />
+				<Sidebar
+					collapsed={ collapsed }
+					width={ width }
+					onToggleCollapsed={ toggleCollapsed }
+					onWidthChange={ setWidth }
+				/>
 				<main className="cortext-shell__canvas">
 					<EntityRoute />
 				</main>

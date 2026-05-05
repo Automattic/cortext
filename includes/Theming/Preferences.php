@@ -2,15 +2,13 @@
 /**
  * Shell preferences bootstrap.
  *
- * Emits a tiny pre-mount script that reads the user's color-scheme
- * preference from `localStorage`, resolves `auto` against the system
- * `prefers-color-scheme` media query, and stamps the result on
- * `#cortext-root` as `data-theme`. Running before React mounts removes
- * the flash between the root element rendering and the React hook
- * applying the attribute.
+ * Emits a pre-mount script that reads the user's shell preferences
+ * (color scheme, sidebar collapse + width) from localStorage and stamps
+ * the resolved values onto `#cortext-root`, so the first paint matches
+ * the user's preference without a flash before the React hooks mount.
  *
- * The same value is exposed as `window.cortextBootstrap.colorScheme` so
- * `useColorScheme()` can seed its initial state without re-reading
+ * Values are also exposed as `window.cortextBootstrap` so the hooks
+ * (`useColorScheme`, `useSidebarLayout`) can seed without re-reading
  * storage.
  *
  * @package Cortext
@@ -41,11 +39,37 @@ final class Preferences {
 	if ( pref === 'auto' ) {
 		resolved = window.matchMedia && window.matchMedia( '(prefers-color-scheme: dark)' ).matches ? 'dark' : 'light';
 	}
+
+	// Clamp to the same range as useSidebarLayout so a saved width never
+	// paints out of range.
+	var sidebarCollapsed = false;
+	var sidebarWidth = 280;
+	try {
+		sidebarCollapsed = window.localStorage.getItem( 'cortext.sidebarCollapsed' ) === 'true';
+		var storedWidth = window.localStorage.getItem( 'cortext.sidebarWidth' );
+		var rawWidth = storedWidth === null ? NaN : Number( storedWidth );
+		if ( isFinite( rawWidth ) ) {
+			if ( rawWidth < 220 ) {
+				sidebarWidth = 220;
+			} else if ( rawWidth > 480 ) {
+				sidebarWidth = 480;
+			} else {
+				sidebarWidth = Math.round( rawWidth );
+			}
+		}
+	} catch ( e ) {}
+
 	var root = document.getElementById( 'cortext-root' );
 	if ( root ) {
 		root.setAttribute( 'data-theme', resolved );
+		root.setAttribute( 'data-sidebar-collapsed', sidebarCollapsed ? 'true' : 'false' );
+		root.style.setProperty( '--cortext-sidebar-width', sidebarWidth + 'px' );
 	}
-	window.cortextBootstrap = { colorScheme: pref };
+
+	window.cortextBootstrap = {
+		colorScheme: pref,
+		sidebar: { collapsed: sidebarCollapsed, width: sidebarWidth },
+	};
 })();
 JS;
 	}
