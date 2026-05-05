@@ -256,6 +256,49 @@ describe( 'EditOptionsPopover', () => {
 		expect( onRequestClose ).toHaveBeenCalledTimes( 1 );
 	} );
 
+	it( 'shows unknown selected values so they can be cleared', () => {
+		const onPick = jest.fn();
+		render(
+			<EditOptionsPopover
+				recordId={ 7 }
+				fieldType="select"
+				initialOptions={ [ { value: 'known', label: 'Known' } ] }
+				value="stale"
+				onPick={ onPick }
+			/>
+		);
+
+		expect( screen.getByText( 'stale' ) ).toHaveClass(
+			'cortext-chip--neutral'
+		);
+		fireEvent.click( screen.getByRole( 'button', { name: 'Remove' } ) );
+
+		expect( onPick ).toHaveBeenCalledWith( null );
+	} );
+
+	it( 'shows unknown multiselect values so they can be cleared', () => {
+		const onPick = jest.fn();
+		render(
+			<EditOptionsPopover
+				recordId={ 7 }
+				fieldType="multiselect"
+				initialOptions={ [ { value: 'known', label: 'Known' } ] }
+				value={ [ 'known', 'stale' ] }
+				onPick={ onPick }
+			/>
+		);
+
+		expect( screen.getAllByText( 'Known' ).length ).toBeGreaterThan( 0 );
+		expect( screen.getByText( 'stale' ) ).toHaveClass(
+			'cortext-chip--neutral'
+		);
+		fireEvent.click(
+			screen.getAllByRole( 'button', { name: 'Remove' } )[ 1 ]
+		);
+
+		expect( onPick ).toHaveBeenCalledWith( 'stale' );
+	} );
+
 	it( 'does not pick a newly-created option when saving it fails', async () => {
 		const onPick = jest.fn();
 		mockUpdateRun.mockRejectedValueOnce( new Error( 'nope' ) );

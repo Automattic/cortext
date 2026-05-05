@@ -392,9 +392,10 @@ export default function EditOptionsPopover( {
 			Array.isArray( value ) && value.length
 				? value
 				: [ ...selectedValues ];
-		return ordered
-			.map( ( v ) => options.find( ( o ) => o.value === v ) )
-			.filter( Boolean );
+		return ordered.map( ( v ) => {
+			const found = options.find( ( o ) => o.value === v );
+			return found ?? { value: v, label: String( v ), color: 'default' };
+		} );
 	}, [ isPickMode, selectedValues, value, options ] );
 
 	const handleRemoveSelected = ( optionValue ) => {

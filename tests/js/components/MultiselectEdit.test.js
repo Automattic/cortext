@@ -70,4 +70,38 @@ describe( 'MultiselectEdit', () => {
 		expect( onSave ).toHaveBeenNthCalledWith( 1, [ 'a' ] );
 		expect( onSave ).toHaveBeenNthCalledWith( 2, [ 'a', 'b' ] );
 	} );
+
+	it( 'syncs local selections when the row value changes while open', () => {
+		const onSave = jest.fn();
+		const { rerender } = render(
+			<MultiselectEdit
+				recordId={ 7 }
+				value={ [ 'removed' ] }
+				elements={ [
+					{ value: 'removed', label: 'Removed' },
+					{ value: 'b', label: 'B' },
+				] }
+				onSave={ onSave }
+				onCancel={ jest.fn() }
+				label="Tags"
+			/>
+		);
+
+		rerender(
+			<MultiselectEdit
+				recordId={ 7 }
+				value={ [] }
+				elements={ [
+					{ value: 'removed', label: 'Removed' },
+					{ value: 'b', label: 'B' },
+				] }
+				onSave={ onSave }
+				onCancel={ jest.fn() }
+				label="Tags"
+			/>
+		);
+		fireEvent.click( screen.getByRole( 'button', { name: 'B' } ) );
+
+		expect( onSave ).toHaveBeenCalledWith( [ 'b' ] );
+	} );
 } );

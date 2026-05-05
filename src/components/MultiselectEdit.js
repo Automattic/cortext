@@ -1,6 +1,6 @@
 import { __ } from '@wordpress/i18n';
 import { Button, Popover } from '@wordpress/components';
-import { useMemo, useRef, useState } from '@wordpress/element';
+import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 
 import Chip from './fields/Chip';
 import EditOptionsPopover from './fields/EditOptionsPopover';
@@ -37,6 +37,12 @@ export default function MultiselectEdit( {
 		Array.isArray( value ) ? value : []
 	);
 	const currentRef = useRef( current );
+
+	useEffect( () => {
+		const next = Array.isArray( value ) ? value : [];
+		currentRef.current = next;
+		setCurrent( next );
+	}, [ value ] );
 
 	const handleToggle = ( optionValue ) => {
 		const selected = currentRef.current;
