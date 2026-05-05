@@ -10,7 +10,7 @@ import {
 	useEffect,
 } from '@wordpress/element';
 import { Button, Icon, Spinner } from '@wordpress/components';
-import { chevronLeft, plus, wordpress } from '@wordpress/icons';
+import { plus, wordpress } from '@wordpress/icons';
 
 // Notion-style sidebar toggle: panel outline with a vertical accent on
 // the left side. Same icon for both states; the aria-label tells the
@@ -611,18 +611,9 @@ export default function Sidebar( {
 			<div className="cortext-sidebar__footer">
 				<Button
 					className="cortext-sidebar__back"
-					label={ __( 'Back to WordPress', 'cortext' ) }
+					label={ __( 'Go to WordPress', 'cortext' ) }
 					href={ adminUrl }
-					icon={
-						collapsed ? (
-							<Icon icon={ wordpress } size={ 24 } />
-						) : (
-							<span className="cortext-sidebar__back-icon">
-								<Icon icon={ chevronLeft } size={ 24 } />
-								<Icon icon={ wordpress } size={ 20 } />
-							</span>
-						)
-					}
+					icon={ <Icon icon={ wordpress } size={ 24 } /> }
 				/>
 				<ThemeToggle />
 			</div>

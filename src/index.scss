@@ -151,13 +151,6 @@ body.cortext-fullscreen {
 		opacity: 1;
 	}
 
-	// `< W` back affordance. Inline-flex so the chevron and W sit side by
-	// side inside the WP `Button` icon slot.
-	&__back-icon {
-		display: inline-flex;
-		align-items: center;
-	}
-
 	&__content {
 		flex: 1 1 auto;
 		min-height: 0;
@@ -175,6 +168,15 @@ body.cortext-fullscreen {
 		gap: $grid-unit-10;
 		padding: $grid-unit-10 $grid-unit-15;
 		border-top: var(--cortext-shell-border-width) solid var(--cortext-chrome-border);
+	}
+
+	&__back.components-button,
+	&__theme-toggle.components-button {
+		width: $grid-unit-40;
+		min-width: $grid-unit-40;
+		height: $grid-unit-40;
+		padding: 0;
+		justify-content: center;
 	}
 
 	/* stylelint-disable-next-line no-descending-specificity */
@@ -522,9 +524,7 @@ body.cortext-fullscreen {
 			margin-left: 0;
 		}
 
-		.cortext-sidebar__collapse-toggle.components-button,
-		.cortext-sidebar__back.components-button,
-		.cortext-sidebar__theme-toggle.components-button {
+		.cortext-sidebar__collapse-toggle.components-button {
 			width: $grid-unit-40;
 			min-width: $grid-unit-40;
 			height: $grid-unit-40;
