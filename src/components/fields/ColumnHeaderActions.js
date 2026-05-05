@@ -408,6 +408,7 @@ function FieldActions( { recordId, collectionId, view, onChangeView } ) {
 							name="cortext-column-sort"
 							value="asc"
 							checked={ isSorted && sortDirection === 'asc' }
+							hideOnClick
 							onChange={ () => dispatchSort( 'asc' ) }
 						>
 							<Menu.ItemLabel>
@@ -418,6 +419,7 @@ function FieldActions( { recordId, collectionId, view, onChangeView } ) {
 							name="cortext-column-sort"
 							value="desc"
 							checked={ isSorted && sortDirection === 'desc' }
+							hideOnClick
 							onChange={ () => dispatchSort( 'desc' ) }
 						>
 							<Menu.ItemLabel>
