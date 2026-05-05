@@ -9,17 +9,6 @@
 export const TITLE_FIELD_ID = 'title';
 export const GHOST_FIELD_ID = '__add_field';
 export const MAX_COLUMN_WIDTH = 640;
-export const MATH_SUMMARY_VALUES = new Set( [
-	'none',
-	'count',
-	'percent',
-	'sum',
-	'average',
-	'median',
-	'min',
-	'max',
-	'range',
-] );
 
 // Per-type minimum widths. 32px is wide enough for a checkbox-sized
 // affordance and lets autofit shrink short values (single-digit integers,
@@ -82,7 +71,6 @@ export function normalizeView( view, validIds, options = {} ) {
 
 	const layout = view?.layout ?? {};
 	const styles = layout.styles ?? {};
-	const math = layout.math ?? {};
 	const nextStyles = {};
 	let stylesChanged = false;
 	for ( const id of Object.keys( styles ) ) {
@@ -105,22 +93,12 @@ export function normalizeView( view, validIds, options = {} ) {
 		}
 		nextStyles[ id ] = next;
 	}
-	const nextMath = {};
-	let mathChanged = false;
-	for ( const id of Object.keys( math ) ) {
-		const value = math[ id ];
-		if ( ! validSet.has( id ) || ! MATH_SUMMARY_VALUES.has( value ) ) {
-			mathChanged = true;
-			continue;
-		}
-		nextMath[ id ] = value;
-	}
 
 	const fieldsChanged =
 		currentFields.length !== nextFields.length ||
 		currentFields.some( ( id, i ) => id !== nextFields[ i ] );
 
-	if ( ! fieldsChanged && ! stylesChanged && ! mathChanged ) {
+	if ( ! fieldsChanged && ! stylesChanged ) {
 		return view;
 	}
 
@@ -129,11 +107,6 @@ export function normalizeView( view, validIds, options = {} ) {
 		nextLayout.styles = nextStyles;
 	} else {
 		delete nextLayout.styles;
-	}
-	if ( Object.keys( nextMath ).length > 0 ) {
-		nextLayout.math = nextMath;
-	} else {
-		delete nextLayout.math;
 	}
 
 	return {

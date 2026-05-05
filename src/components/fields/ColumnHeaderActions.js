@@ -36,47 +36,11 @@ import {
 	useDeleteField,
 	useDuplicateField,
 } from '../../hooks/useFieldMutations';
-import {
-	GHOST_FIELD_ID,
-	MATH_SUMMARY_VALUES,
-	TITLE_FIELD_ID,
-} from '../dataViewColumns';
+import { GHOST_FIELD_ID, TITLE_FIELD_ID } from '../dataViewColumns';
 
 const { Menu } = unlock( componentsPrivateApis );
 
 const FORMATTABLE_TYPES = new Set( [ 'number', 'date', 'datetime' ] );
-const MATH_OPTIONS = [
-	{ value: 'none', label: __( 'None', 'cortext' ) },
-	{ value: 'count', label: __( 'Count', 'cortext' ) },
-	{ value: 'percent', label: __( 'Percent', 'cortext' ) },
-	{ value: 'sum', label: __( 'Sum', 'cortext' ) },
-	{ value: 'average', label: __( 'Average', 'cortext' ) },
-	{ value: 'median', label: __( 'Median', 'cortext' ) },
-	{ value: 'min', label: __( 'Min', 'cortext' ) },
-	{ value: 'max', label: __( 'Max', 'cortext' ) },
-	{ value: 'range', label: __( 'Range', 'cortext' ) },
-];
-
-function withColumnMath( view, fieldId, value ) {
-	const layout = view?.layout ?? {};
-	const currentMath = layout.math ?? {};
-	const nextMath = { ...currentMath };
-	if ( value === 'none' || ! MATH_SUMMARY_VALUES.has( value ) ) {
-		delete nextMath[ fieldId ];
-	} else {
-		nextMath[ fieldId ] = value;
-	}
-	const nextLayout = { ...layout };
-	if ( Object.keys( nextMath ).length ) {
-		nextLayout.math = nextMath;
-	} else {
-		delete nextLayout.math;
-	}
-	return {
-		...view,
-		layout: nextLayout,
-	};
-}
 
 // Projects two kinds of triggers into the DataViews table header:
 //
@@ -341,11 +305,6 @@ function FieldActions( { recordId, collectionId, view, onChangeView } ) {
 	const sortField = view?.sort?.field ?? null;
 	const sortDirection = view?.sort?.direction ?? null;
 	const isSorted = sortField === dataViewId;
-	const mathValue = MATH_SUMMARY_VALUES.has(
-		view?.layout?.math?.[ dataViewId ]
-	)
-		? view.layout.math[ dataViewId ]
-		: 'none';
 
 	// Title is pinned at index 0 (PR A's normalizeView) and the ghost
 	// column at the end. Move only operates on the data-field region in
@@ -404,13 +363,6 @@ function FieldActions( { recordId, collectionId, view, onChangeView } ) {
 		const next = visibleFields.filter( ( id ) => id !== dataViewId );
 		onChangeView( { ...view, fields: next } );
 	}, [ onChangeView, view, dataViewId, visibleFields ] );
-
-	const dispatchMath = useCallback(
-		( value ) => {
-			onChangeView( withColumnMath( view, dataViewId, value ) );
-		},
-		[ onChangeView, view, dataViewId ]
-	);
 
 	const onConfirmDelete = useCallback( async () => {
 		try {
@@ -523,26 +475,6 @@ function FieldActions( { recordId, collectionId, view, onChangeView } ) {
 								{ __( 'Hide column', 'cortext' ) }
 							</Menu.ItemLabel>
 						</Menu.Item>
-					</Menu.Group>
-					<Menu.Separator />
-					<Menu.Group>
-						<Menu.GroupLabel>
-							{ __( 'Math', 'cortext' ) }
-						</Menu.GroupLabel>
-						{ MATH_OPTIONS.map( ( option ) => (
-							<Menu.RadioItem
-								key={ option.value }
-								name={ `cortext-column-math-${ recordId }` }
-								value={ option.value }
-								checked={ mathValue === option.value }
-								hideOnClick
-								onChange={ () => dispatchMath( option.value ) }
-							>
-								<Menu.ItemLabel>
-									{ option.label }
-								</Menu.ItemLabel>
-							</Menu.RadioItem>
-						) ) }
 					</Menu.Group>
 					<Menu.Separator />
 					{ /* Column-lifecycle group: move, duplicate,
