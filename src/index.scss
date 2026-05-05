@@ -870,11 +870,11 @@ tbody > tr > td:not(:first-child) {
 	position: relative; // anchor for the column drop indicator
 	display: flex;
 	flex-direction: column;
-	height: 100%;
 
-	// DataViews fills the cortext-canvas__table wrapper with `height: 100%`,
-	// which leaves no room for siblings. Pinning DataViews to flex: 1 lets
-	// our footer sit below it without disappearing.
+	// Let the wrapper grow to fill whatever height the parent provides, so
+	// our footer sits below the table instead of getting pushed off by the
+	// wrapper's own `height: 100%`. Parents own the height per-context: the
+	// canvas pane fills the viewport, the block sets a min-height.
 	> .dataviews-wrapper {
 		flex: 1 1 auto;
 		min-height: 0;
@@ -948,6 +948,20 @@ tbody > tr > td:not(:first-child) {
 			color: $gray-900;
 		}
 	}
+}
+
+// Per-context heights. The shared rules above stay context-agnostic; each
+// render path provides its own height.
+
+// Standalone pane fills the absolutely-positioned canvas.
+.cortext-canvas__table .cortext-data-view {
+	height: 100%;
+}
+
+// Embedded block has no absolute parent, so use a min-height to keep a
+// fresh insertion usable. Width comes from Gutenberg's alignment.
+.wp-block-cortext-data-view .cortext-data-view {
+	min-height: 480px;
 }
 
 // tech-debt.md#15: The resizer and dnd-kit drag handle are portaled into each
