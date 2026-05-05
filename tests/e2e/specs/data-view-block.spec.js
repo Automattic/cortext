@@ -798,6 +798,274 @@ test.describe( 'Collection view block', () => {
 		}
 	} );
 
+	test( 'row detail saves properties and remembers the selected mode', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+
+		try {
+			Object.assign(
+				fixture,
+				await createCollectionFixture( requestUtils )
+			);
+
+			fixture.secondEntry = await requestUtils.rest( {
+				method: 'POST',
+				path: `/wp/v2/crtxt_${ fixture.slug }`,
+				data: {
+					title: 'Kindred',
+					status: 'private',
+					meta: {
+						[ `field-${ fixture.field.id }` ]: 'Octavia Butler',
+					},
+				},
+			} );
+
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_pages',
+				data: {
+					title: 'Row detail page',
+					status: 'private',
+					content: createDataViewBlockMarkup( fixture.collection.id ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/page/${ fixture.page.id }`
+			);
+
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.page.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page.frameLocator(
+				'.cortext-canvas__visual iframe[name="editor-canvas"]'
+			);
+			await expect(
+				canvas.locator( '.dataviews-view-table__actions-column' )
+			).toHaveCount( 0 );
+			const firstRow = canvas
+				.locator( '.cortext-data-view tbody tr' )
+				.first();
+			const titleCellOpenButton = canvas
+				.locator( '.cortext-title-cell__open' )
+				.first();
+			await expect( titleCellOpenButton ).toHaveAttribute(
+				'aria-label',
+				'Open row'
+			);
+			await expect( titleCellOpenButton ).toHaveCSS( 'opacity', '0' );
+			await firstRow.hover();
+			await expect( titleCellOpenButton ).toHaveCSS( 'opacity', '1' );
+			await expect( titleCellOpenButton ).toContainText( 'Open' );
+			await titleCellOpenButton.click();
+			await expect
+				.poll( () => new URL( page.url() ).searchParams.get( 'row' ) )
+				.toBe( String( fixture.entry.id ) );
+			expect(
+				new URL( page.url() ).searchParams.get( 'rowCollection' )
+			).toBe( String( fixture.collection.id ) );
+
+			await expect(
+				canvas.getByRole( 'dialog', {
+					name: 'Row detail',
+				} )
+			).toHaveCount( 0 );
+
+			const detail = page.getByRole( 'dialog', {
+				name: 'Row detail',
+			} );
+			await expect( detail ).toBeVisible();
+			await detail.hover();
+			await expect( firstRow ).toHaveCSS(
+				'background-color',
+				'rgb(248, 248, 248)'
+			);
+			await expect( titleCellOpenButton ).toHaveCSS( 'opacity', '1' );
+			await expect(
+				detail.getByRole( 'heading', {
+					name: 'The Left Hand of Darkness',
+				} )
+			).toBeVisible();
+
+			const delayedSecondRowPattern = new RegExp(
+				`/wp-json/wp/v2/crtxt_${ fixture.slug }/${ fixture.secondEntry.id }(\\?|$)`
+			);
+			const delaySecondRow = async ( route ) => {
+				await page.waitForTimeout( 350 );
+				await route.continue();
+			};
+			await page.route( delayedSecondRowPattern, delaySecondRow );
+			await detail.getByRole( 'button', { name: 'Row below' } ).click();
+			await expect(
+				detail.locator( '.components-spinner' )
+			).toHaveCount( 0 );
+			await expect(
+				detail.getByRole( 'heading', {
+					name: 'The Left Hand of Darkness',
+				} )
+			).toBeVisible();
+			await expect
+				.poll( () => new URL( page.url() ).searchParams.get( 'row' ) )
+				.toBe( String( fixture.secondEntry.id ) );
+			await expect(
+				detail.getByRole( 'heading', { name: 'Kindred' } )
+			).toBeVisible();
+			await page.unroute( delayedSecondRowPattern, delaySecondRow );
+			await detail.getByRole( 'button', { name: 'Row above' } ).click();
+			await expect(
+				detail.getByRole( 'heading', {
+					name: 'The Left Hand of Darkness',
+				} )
+			).toBeVisible();
+			await expect
+				.poll( () => new URL( page.url() ).searchParams.get( 'row' ) )
+				.toBe( String( fixture.entry.id ) );
+
+			await detail
+				.getByRole( 'button', { name: 'Hide fields' } )
+				.click();
+			const collapsedFieldsButton = detail.locator(
+				'.cortext-row-detail__fields-indicator'
+			);
+			await expect(
+				detail.getByRole( 'textbox', { name: 'Title', exact: true } )
+			).toBeHidden();
+			await expect( collapsedFieldsButton ).toBeVisible();
+			await expect(
+				detail.locator( '.cortext-row-detail__content-editor' )
+			).toBeVisible();
+			await collapsedFieldsButton.click();
+			await expect(
+				detail.locator( '.cortext-row-detail__properties' )
+			).toBeVisible();
+
+			await detail
+				.getByRole( 'textbox', { name: 'Title', exact: true } )
+				.fill( 'Changed row detail title' );
+			await expect( firstRow.locator( 'td' ).first() ).toContainText(
+				'Changed row detail title'
+			);
+			await detail
+				.getByRole( 'textbox', { name: 'Author', exact: true } )
+				.fill( 'Octavia Butler' );
+			await expect( firstRow.locator( 'td' ).nth( 1 ) ).toContainText(
+				'Octavia Butler'
+			);
+
+			await expect(
+				detail.getByRole( 'button', { name: 'Center modal' } )
+			).toBeVisible();
+			await expect(
+				detail.getByRole( 'button', { name: 'Full page' } )
+			).toBeVisible();
+			await expect(
+				detail.getByRole( 'button', { name: 'Change layout' } )
+			).toHaveCount( 0 );
+			await detail
+				.getByRole( 'button', { name: 'Center modal' } )
+				.click();
+			const modalDetail = page.locator(
+				'.components-modal__frame.cortext-row-detail-modal'
+			);
+			await expect( modalDetail ).toBeVisible();
+			await expect(
+				modalDetail.getByRole( 'button', { name: 'Center modal' } )
+			).toHaveCount( 0 );
+			await expect(
+				modalDetail.getByRole( 'button', { name: 'Side peek' } )
+			).toBeVisible();
+			await expect(
+				modalDetail.getByRole( 'button', { name: 'Full page' } )
+			).toBeVisible();
+			await modalDetail
+				.getByRole( 'button', { name: 'Full page' } )
+				.click();
+			await expect( detail ).toBeHidden();
+			await expect(
+				canvas.getByText( 'Changed row detail title' )
+			).toBeVisible();
+
+			await page
+				.getByRole( 'navigation', { name: 'Breadcrumb' } )
+				.getByRole( 'button', {
+					name: fixture.collection.title.raw,
+					exact: true,
+				} )
+				.click();
+			await expect
+				.poll( () => new URL( page.url() ).searchParams.get( 'row' ) )
+				.toBeNull();
+			await expect(
+				canvas.getByRole( 'button', { name: 'Open row' } ).first()
+			).toBeVisible();
+
+			await expect
+				.poll( async () => {
+					const row = await requestUtils.rest( {
+						path: `/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`,
+						params: { context: 'edit' },
+					} );
+					return {
+						title: row.title.raw,
+						author: row.meta[ `field-${ fixture.field.id }` ],
+					};
+				} )
+				.toEqual( {
+					title: 'Changed row detail title',
+					author: 'Octavia Butler',
+				} );
+
+			await page.evaluate( async () => {
+				await window.wp.data.dispatch( 'core/editor' ).savePost();
+			} );
+			await page.waitForFunction(
+				() => ! window.wp.data.select( 'core/editor' ).isSavingPost()
+			);
+
+			const saved = await requestUtils.rest( {
+				path: `/wp/v2/crtxt_pages/${ fixture.page.id }`,
+				params: { context: 'edit' },
+			} );
+			expect( saved.content.raw ).not.toContain(
+				'"rowDetailMode":"full"'
+			);
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				fixture.entry &&
+					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.secondEntry &&
+					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.secondEntry.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+			);
+		}
+	} );
+
 	test( 'renders typed cells for url, checkbox, number, select, and multiselect', async ( {
 		admin,
 		page,
