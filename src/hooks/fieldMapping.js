@@ -35,6 +35,26 @@ export function elementsFromOptions( raw ) {
 	} );
 }
 
+// Parses stored format meta (number_format / date_format) into a plain
+// object. Same forgiving contract as `elementsFromOptions`: malformed
+// JSON, non-objects, and empty values all return `undefined` so callers
+// fall through to type-level defaults.
+export function parseFormat( raw ) {
+	if ( ! raw ) {
+		return undefined;
+	}
+	let parsed;
+	try {
+		parsed = typeof raw === 'string' ? JSON.parse( raw ) : raw;
+	} catch {
+		return undefined;
+	}
+	if ( ! parsed || typeof parsed !== 'object' || Array.isArray( parsed ) ) {
+		return undefined;
+	}
+	return parsed;
+}
+
 // Cortext field types that this client knows how to edit inline. Anything
 // outside this set (formula, rollup, relation, …) renders read-only — see
 // `EditableCell`'s `readOnly` branch.
@@ -52,7 +72,7 @@ export const EDITABLE_TYPES = new Set( [
 
 const SEARCHABLE_TYPES = new Set( [ 'text', 'email', 'url' ] );
 
-function buildRender( id, type, label, elements ) {
+function buildRender( id, type, label, elements, format ) {
 	const readOnly = ! EDITABLE_TYPES.has( type );
 	return ( { item } ) => (
 		<EditableCell
@@ -60,6 +80,7 @@ function buildRender( id, type, label, elements ) {
 			fieldId={ id }
 			fieldType={ type }
 			elements={ elements }
+			format={ format }
 			label={ label }
 			readOnly={ readOnly }
 		/>
@@ -152,6 +173,12 @@ export function mapField( field ) {
 	const label = field.title?.raw || field.title?.rendered || `#${ field.id }`;
 	const type = field.meta?.type ?? 'text';
 	const elements = elementsFromOptions( field.meta?.options );
+	let format;
+	if ( type === 'number' ) {
+		format = parseFormat( field.meta?.number_format );
+	} else if ( type === 'date' || type === 'datetime' ) {
+		format = parseFormat( field.meta?.date_format );
+	}
 	const base = {
 		id,
 		label,
@@ -171,7 +198,7 @@ export function mapField( field ) {
 			</HeaderLabel>
 		),
 		getValue: ( { item } ) => item?.meta?.[ id ] ?? null,
-		render: buildRender( id, type, label, elements ),
+		render: buildRender( id, type, label, elements, format ),
 		editable: EDITABLE_TYPES.has( type ),
 		enableGlobalSearch: SEARCHABLE_TYPES.has( type ),
 	};

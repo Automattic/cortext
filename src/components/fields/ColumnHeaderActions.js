@@ -3,6 +3,7 @@ import { __ } from '@wordpress/i18n';
 import {
 	Button,
 	Dropdown,
+	Icon,
 	MenuGroup,
 	MenuItem,
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
@@ -17,15 +18,18 @@ import {
 	useRef,
 	useState,
 } from '@wordpress/element';
-import { plus } from '@wordpress/icons';
+import { chevronRight, plus } from '@wordpress/icons';
 
 import AddFieldPopover from './AddFieldPopover';
+import FieldFormatPopover from './FieldFormatPopover';
 import RenameFieldInline from './RenameFieldInline';
 import {
 	useDeleteField,
 	useDuplicateField,
 } from '../../hooks/useFieldMutations';
 import { GHOST_FIELD_ID, TITLE_FIELD_ID } from '../dataViewColumns';
+
+const FORMATTABLE_TYPES = new Set( [ 'number', 'date', 'datetime' ] );
 
 // Projects two kinds of triggers into the DataViews table header:
 //
@@ -148,10 +152,38 @@ export default function ColumnHeaderActions( {
 
 function FieldActions( { recordId, collectionId, view, onChangeView } ) {
 	const [ isRenaming, setIsRenaming ] = useState( false );
+	const [ isFormatting, setIsFormatting ] = useState( false );
 	const [ confirmDelete, setConfirmDelete ] = useState( false );
+	const formatItemRef = useRef( null );
+	const closeTimerRef = useRef( null );
 	const duplicate = useDuplicateField( collectionId );
 	const remove = useDeleteField( collectionId );
 	const { record } = useEntityRecord( 'postType', 'crtxt_field', recordId );
+	const fieldType = record?.meta?.type;
+	const canFormat = FORMATTABLE_TYPES.has( fieldType );
+
+	// Format submenu uses a hover-with-grace pattern: the panel stays
+	// visible while the cursor is over either the trigger row or the
+	// panel itself. The grace timer absorbs the dead pixels between them
+	// so the user doesn't lose the panel by overshooting on the way over.
+	const cancelClose = useCallback( () => {
+		if ( closeTimerRef.current ) {
+			clearTimeout( closeTimerRef.current );
+			closeTimerRef.current = null;
+		}
+	}, [] );
+	const scheduleClose = useCallback( () => {
+		cancelClose();
+		closeTimerRef.current = setTimeout( () => {
+			setIsFormatting( false );
+			closeTimerRef.current = null;
+		}, 180 );
+	}, [ cancelClose ] );
+	const openFormat = useCallback( () => {
+		cancelClose();
+		setIsFormatting( true );
+	}, [ cancelClose ] );
+	useEffect( () => () => cancelClose(), [ cancelClose ] );
 
 	const dataViewId = `field-${ recordId }`;
 	const label =
@@ -246,6 +278,10 @@ function FieldActions( { recordId, collectionId, view, onChangeView } ) {
 			<Dropdown
 				contentClassName="cortext-field-actions-popover"
 				popoverProps={ { placement: 'bottom-start' } }
+				onClose={ () => {
+					cancelClose();
+					setIsFormatting( false );
+				} }
 				renderToggle={ ( { isOpen, onToggle } ) => (
 					<Button
 						className="dataviews-view-table-header-button cortext-column-header-trigger"
@@ -265,6 +301,38 @@ function FieldActions( { recordId, collectionId, view, onChangeView } ) {
 				) }
 				renderContent={ ( { onClose } ) => (
 					<>
+						{ /* Property-config group: edit how the column
+						     itself is defined. Mirrors Notion's first
+						     section (Edit property / Change type). */ }
+						<MenuGroup>
+							<MenuItem
+								onClick={ () => {
+									onClose();
+									setIsRenaming( true );
+								} }
+							>
+								{ __( 'Rename', 'cortext' ) }
+							</MenuItem>
+							{ canFormat ? (
+								<MenuItem
+									ref={ formatItemRef }
+									className="cortext-column-header-actions__submenu-item"
+									onClick={ openFormat }
+									onMouseEnter={ openFormat }
+									onMouseLeave={ scheduleClose }
+									suffix={
+										<Icon
+											icon={ chevronRight }
+											size={ 18 }
+										/>
+									}
+								>
+									{ __( 'Edit field', 'cortext' ) }
+								</MenuItem>
+							) : null }
+						</MenuGroup>
+						{ /* View group: sort, hide. Notion bundles
+						     filter/sort/group/hide together. */ }
 						<MenuGroup>
 							<MenuItem
 								isSelected={
@@ -288,7 +356,18 @@ function FieldActions( { recordId, collectionId, view, onChangeView } ) {
 							>
 								{ __( 'Sort descending', 'cortext' ) }
 							</MenuItem>
+							<MenuItem
+								onClick={ () => {
+									onClose();
+									dispatchHide();
+								} }
+							>
+								{ __( 'Hide column', 'cortext' ) }
+							</MenuItem>
 						</MenuGroup>
+						{ /* Column-lifecycle group: move, duplicate,
+						     delete. Notion's "Insert left/right /
+						     Duplicate / Delete property" cluster. */ }
 						<MenuGroup>
 							<MenuItem
 								disabled={ ! canMoveLeft }
@@ -307,24 +386,6 @@ function FieldActions( { recordId, collectionId, view, onChangeView } ) {
 								} }
 							>
 								{ __( 'Move right', 'cortext' ) }
-							</MenuItem>
-							<MenuItem
-								onClick={ () => {
-									onClose();
-									dispatchHide();
-								} }
-							>
-								{ __( 'Hide column', 'cortext' ) }
-							</MenuItem>
-						</MenuGroup>
-						<MenuGroup>
-							<MenuItem
-								onClick={ () => {
-									onClose();
-									setIsRenaming( true );
-								} }
-							>
-								{ __( 'Rename', 'cortext' ) }
 							</MenuItem>
 							<MenuItem
 								onClick={ async () => {
@@ -348,6 +409,15 @@ function FieldActions( { recordId, collectionId, view, onChangeView } ) {
 								{ __( 'Delete', 'cortext' ) }
 							</MenuItem>
 						</MenuGroup>
+						{ isFormatting && canFormat ? (
+							<FieldFormatPopover
+								recordId={ recordId }
+								anchor={ formatItemRef.current }
+								onClose={ () => setIsFormatting( false ) }
+								onMouseEnter={ openFormat }
+								onMouseLeave={ scheduleClose }
+							/>
+						) : null }
 					</>
 				) }
 			/>

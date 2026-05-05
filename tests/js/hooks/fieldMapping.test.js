@@ -3,6 +3,7 @@ import { render } from '@testing-library/react';
 import {
 	elementsFromOptions,
 	mapField,
+	parseFormat,
 	systemFields,
 } from '../../../src/hooks/fieldMapping';
 
@@ -38,9 +39,7 @@ describe( 'elementsFromOptions', () => {
 			elementsFromOptions( [
 				{ value: 'open', label: 'Open', color: '#ffe2dd' },
 			] )
-		).toEqual( [
-			{ value: 'open', label: 'Open', color: '#ffe2dd' },
-		] );
+		).toEqual( [ { value: 'open', label: 'Open', color: '#ffe2dd' } ] );
 	} );
 
 	it( 'accepts a JSON string as input', () => {
@@ -54,6 +53,36 @@ describe( 'elementsFromOptions', () => {
 	} );
 } );
 
+describe( 'parseFormat', () => {
+	it( 'returns undefined for falsy input', () => {
+		expect( parseFormat( null ) ).toBeUndefined();
+		expect( parseFormat( '' ) ).toBeUndefined();
+	} );
+
+	it( 'returns undefined for malformed JSON', () => {
+		expect( parseFormat( '{not json' ) ).toBeUndefined();
+	} );
+
+	it( 'returns undefined for non-objects', () => {
+		expect( parseFormat( '"hello"' ) ).toBeUndefined();
+		expect( parseFormat( '[1,2]' ) ).toBeUndefined();
+	} );
+
+	it( 'parses a JSON object', () => {
+		expect( parseFormat( '{"style":"comma","decimals":2}' ) ).toEqual( {
+			style: 'comma',
+			decimals: 2,
+		} );
+	} );
+
+	it( 'accepts an already-parsed object', () => {
+		expect( parseFormat( { style: 'us', time: false } ) ).toEqual( {
+			style: 'us',
+			time: false,
+		} );
+	} );
+} );
+
 describe( 'mapField', () => {
 	const baseField = ( overrides ) => ( {
 		id: 5,
@@ -62,7 +91,9 @@ describe( 'mapField', () => {
 	} );
 
 	it( "maps Cortext's number to DataViews 'text' so decimals sort correctly", () => {
-		expect( mapField( baseField( { type: 'number' } ) ).type ).toBe( 'text' );
+		expect( mapField( baseField( { type: 'number' } ) ).type ).toBe(
+			'text'
+		);
 	} );
 
 	it( "maps checkbox to DataViews 'boolean'", () => {
@@ -78,7 +109,9 @@ describe( 'mapField', () => {
 	} );
 
 	it( "maps email to DataViews 'email'", () => {
-		expect( mapField( baseField( { type: 'email' } ) ).type ).toBe( 'email' );
+		expect( mapField( baseField( { type: 'email' } ) ).type ).toBe(
+			'email'
+		);
 	} );
 
 	it( "maps url to DataViews 'text' (DataViews has no 'url' type)", () => {
@@ -151,8 +184,12 @@ describe( 'systemFields', () => {
 		expect( byId( 'modified_at' ).getValue( { item } ) ).toBe(
 			'2026-04-30T10:00:00+00:00'
 		);
-		expect( byId( 'created_by' ).getValue( { item } ) ).toBe( 'Ada Lovelace' );
-		expect( byId( 'modified_by' ).getValue( { item } ) ).toBe( 'Grace Hopper' );
+		expect( byId( 'created_by' ).getValue( { item } ) ).toBe(
+			'Ada Lovelace'
+		);
+		expect( byId( 'modified_by' ).getValue( { item } ) ).toBe(
+			'Grace Hopper'
+		);
 	} );
 
 	it( 'returns null when the row is missing the value', () => {
@@ -183,8 +220,6 @@ describe( 'systemFields', () => {
 		// We don't assert the exact format (locale-dependent), only that
 		// something formatted comes out and the empty branch isn't hit.
 		expect( container.textContent.length ).toBeGreaterThan( 0 );
-		expect( container.textContent ).not.toBe(
-			'2026-04-30T09:48:54+00:00'
-		);
+		expect( container.textContent ).not.toBe( '2026-04-30T09:48:54+00:00' );
 	} );
 } );

@@ -11,6 +11,7 @@ import {
 	__experimentalNumberControl as NumberControl,
 	TextControl,
 } from '@wordpress/components';
+import { getSettings } from '@wordpress/date';
 import {
 	createContext,
 	useContext,
@@ -23,6 +24,19 @@ import { Icon, check } from '@wordpress/icons';
 
 import MultiselectEdit from './MultiselectEdit';
 import Chip from './fields/Chip';
+
+// Resolves the WordPress site locale into a BCP 47 tag for Intl. WP
+// stores locales as `en_US` / `de_DE`; Intl expects `en-US` / `de-DE`.
+// All cell-level number and date formatting routes through this so a
+// single site renders identically for every viewer (matching how WP
+// formats dates server-side via `dateI18n`).
+function siteLocale() {
+	const wpLocale = getSettings()?.l10n?.locale;
+	if ( ! wpLocale ) {
+		return undefined;
+	}
+	return wpLocale.replace( '_', '-' );
+}
 
 // tech-debt.md#1: DataViews v6 has no inline cell editing in any layout,
 // so we mount this component from `field.render` (a display renderer in
@@ -45,24 +59,6 @@ export const RowMutationContext = createContext( {
 const TEXT_INPUT_TYPES = new Set( [ 'text', 'email', 'url', 'number' ] );
 const DATE_ONLY_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 const DATE_PREFIX_PATTERN = /^(\d{4}-\d{2}-\d{2})(?:T|$)/;
-
-function formatDateOnlyDisplay( value ) {
-	const match = DATE_ONLY_PATTERN.exec( String( value ) );
-	if ( ! match ) {
-		return null;
-	}
-
-	const [ , year, month, day ] = match;
-	const date = new Date( Number( year ), Number( month ) - 1, Number( day ) );
-	if (
-		date.getFullYear() !== Number( year ) ||
-		date.getMonth() !== Number( month ) - 1 ||
-		date.getDate() !== Number( day )
-	) {
-		return null;
-	}
-	return date.toLocaleDateString();
-}
 
 export function dateOnlyValue( value ) {
 	if ( value === null || value === undefined || value === '' ) {
@@ -93,11 +89,119 @@ function FieldError( { message } ) {
 // rendered as text so we never produce a broken link.
 const URL_PATTERN = /^https?:\/\//i;
 
+// Clamp decimals to a sane range; Intl.NumberFormat throws above 100.
+function clampDecimals( decimals ) {
+	const d = Number( decimals );
+	if ( ! Number.isFinite( d ) ) {
+		return 0;
+	}
+	return Math.min( 6, Math.max( 0, Math.trunc( d ) ) );
+}
+
+// Formats a number value per a stored `number_format` config. Returns
+// `String(value)` for non-numeric values so editing partial input ("3.")
+// or stale string values doesn't blow up the cell. Only forces a fixed
+// decimal count when the user explicitly picks one — otherwise we let
+// Intl decide, so a field with no saved format still shows `1.25` as
+// `1.25` rather than truncating it to `1`.
+export function formatNumberValue( value, format ) {
+	const num = typeof value === 'number' ? value : Number( value );
+	if ( ! Number.isFinite( num ) ) {
+		return String( value );
+	}
+	const style = format?.style ?? 'plain';
+	const hasDecimals =
+		format?.decimals !== undefined && format?.decimals !== null;
+	const fractionOpts = hasDecimals
+		? {
+				minimumFractionDigits: clampDecimals( format.decimals ),
+				maximumFractionDigits: clampDecimals( format.decimals ),
+		  }
+		: {};
+	const locale = siteLocale();
+	try {
+		if ( style === 'percent' ) {
+			return new Intl.NumberFormat( locale, {
+				style: 'percent',
+				...fractionOpts,
+			} ).format( num );
+		}
+		if ( style === 'currency' ) {
+			return new Intl.NumberFormat( locale, {
+				style: 'currency',
+				currency: format?.currency || 'USD',
+				...fractionOpts,
+			} ).format( num );
+		}
+		return new Intl.NumberFormat( locale, {
+			useGrouping: style === 'comma',
+			...fractionOpts,
+		} ).format( num );
+	} catch {
+		return String( num );
+	}
+}
+
+// Formats a date / datetime value per a stored `date_format` config.
+// Returns `String(value)` for unparseable input so the cell still shows
+// something rather than going blank on bad data.
+export function formatDateValue( value, type, format ) {
+	const style = format?.style ?? 'locale';
+	const showTime = format?.time ?? type === 'datetime';
+	const hour12 = format?.hour12 ?? true;
+	let locale;
+	if ( style === 'us' ) {
+		locale = 'en-US';
+	} else if ( style === 'eu' ) {
+		locale = 'en-GB';
+	} else {
+		locale = siteLocale();
+	}
+
+	// Date-only input (YYYY-MM-DD) builds a local-midnight Date so the
+	// calendar day is preserved across time zones. The default `Date`
+	// parser would treat it as UTC and shift the day west of GMT.
+	if ( type === 'date' ) {
+		const match = DATE_ONLY_PATTERN.exec( String( value ) );
+		if ( match ) {
+			const [ , y, m, d ] = match;
+			const date = new Date( Number( y ), Number( m ) - 1, Number( d ) );
+			return new Intl.DateTimeFormat( locale, {
+				year: 'numeric',
+				month: '2-digit',
+				day: '2-digit',
+			} ).format( date );
+		}
+	}
+
+	const date = new Date( value );
+	if ( Number.isNaN( date.getTime() ) ) {
+		return String( value );
+	}
+
+	const options = {
+		year: 'numeric',
+		month: '2-digit',
+		day: '2-digit',
+	};
+	if ( showTime ) {
+		options.hour = '2-digit';
+		options.minute = '2-digit';
+		options.hour12 = hour12;
+	}
+	return new Intl.DateTimeFormat( locale, options ).format( date );
+}
+
 // Returns either '' (empty cell) or a renderable value (string or JSX).
 // `display === ''` is the consumer's empty-cell signal — see CellShell's
 // `isEmpty` prop. Non-empty values may be JSX (anchor for url, icon for
 // checkbox, chip(s) for select / multiselect).
-export function formatDisplay( value, type, elements ) {
+//
+// Third arg is a bag of optional rendering hints: `elements` for select
+// chips, `format` for number / date config. Both are field-level and
+// constant across rows, so callers pass them once via the render prop.
+export function formatDisplay( value, type, options = {} ) {
+	const { elements, format } = options;
 	if ( value === null || value === undefined || value === '' ) {
 		return '';
 	}
@@ -170,19 +274,11 @@ export function formatDisplay( value, type, elements ) {
 	}
 
 	if ( type === 'date' || type === 'datetime' ) {
-		if ( type === 'date' ) {
-			const dateOnlyDisplay = formatDateOnlyDisplay( value );
-			if ( dateOnlyDisplay ) {
-				return dateOnlyDisplay;
-			}
-		}
-		const date = new Date( value );
-		if ( Number.isNaN( date.getTime() ) ) {
-			return String( value );
-		}
-		return type === 'date'
-			? date.toLocaleDateString()
-			: date.toLocaleString();
+		return formatDateValue( value, type, format );
+	}
+
+	if ( type === 'number' ) {
+		return formatNumberValue( value, format );
 	}
 
 	return String( value );
@@ -390,7 +486,7 @@ function SelectEditor( { value, elements, onCommit, onCancel, onTab, label } ) {
 	);
 }
 
-function DateEditor( { value, type, onCommit, onCancel, label } ) {
+function DateEditor( { value, type, format, onCommit, onCancel, label } ) {
 	return (
 		<Dropdown
 			defaultOpen
@@ -403,7 +499,7 @@ function DateEditor( { value, type, onCommit, onCancel, label } ) {
 					aria-expanded={ isOpen }
 				>
 					{ value
-						? formatDisplay( value, type )
+						? formatDisplay( value, type, { format } )
 						: __( 'Pick a date…', 'cortext' ) }
 				</Button>
 			) }
@@ -419,7 +515,7 @@ function DateEditor( { value, type, onCommit, onCancel, label } ) {
 								onClose();
 							}
 						} }
-						is12Hour
+						is12Hour={ format?.hour12 ?? true }
 						aria-label={ label }
 					/>
 				</div>
@@ -433,6 +529,7 @@ export default function EditableCell( {
 	fieldId,
 	fieldType,
 	elements,
+	format,
 	label,
 	getValue,
 	readOnly = false,
@@ -448,7 +545,7 @@ export default function EditableCell( {
 	const value = getValue
 		? getValue( { item } )
 		: item?.meta?.[ fieldId ] ?? null;
-	const display = formatDisplay( value, fieldType, elements );
+	const display = formatDisplay( value, fieldType, { elements, format } );
 
 	// Open this cell when the parent targets it via editRequest (new-row
 	// title auto-open, Tab navigation, etc.), then clear the request so
@@ -588,6 +685,7 @@ export default function EditableCell( {
 				<DateEditor
 					value={ value }
 					type={ fieldType }
+					format={ format }
 					onCommit={ commit }
 					onCancel={ closeEditor }
 					label={ label }
