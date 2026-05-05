@@ -34,7 +34,16 @@ export default function useBreadcrumbSegments( paintedRoute ) {
 	const navigate = useNavigate();
 	const kind = paintedRoute?.kind ?? 'unresolved';
 	const pageId = kind === 'page' ? paintedRoute.id : null;
-	const collectionId = kind === 'collection' ? paintedRoute.id : null;
+	const rowId = kind === 'row' ? paintedRoute.id : null;
+	const rowPostType = kind === 'row' ? paintedRoute.postType : null;
+	const onNavigateCollection =
+		kind === 'row' ? paintedRoute.onNavigateCollection : null;
+	let collectionId = null;
+	if ( kind === 'collection' ) {
+		collectionId = paintedRoute.id;
+	} else if ( kind === 'row' ) {
+		collectionId = paintedRoute.collectionId;
+	}
 
 	// Pulled from the same store the Sidebar populates, so no extra fetch.
 	const { records: pages } = useEntityRecords(
@@ -59,6 +68,12 @@ export default function useBreadcrumbSegments( paintedRoute ) {
 		'postType',
 		COLLECTION_POST_TYPE,
 		collectionId ?? 0
+	);
+	const { record: currentRow } = useEntityRecord(
+		'postType',
+		rowPostType ?? '',
+		rowId ?? 0,
+		{ enabled: Boolean( rowPostType && rowId ) }
 	);
 
 	const goToPage = useCallback(
@@ -123,6 +138,22 @@ export default function useBreadcrumbSegments( paintedRoute ) {
 			if ( ! collection ) {
 				return [];
 			}
+			if ( rowId ) {
+				return [
+					{
+						key: `collection:${ collection.id }`,
+						label: titleOf( collection ),
+						onClick: onNavigateCollection,
+						isCurrent: false,
+					},
+					{
+						key: `row:${ rowPostType }:${ rowId }`,
+						label: titleOf( currentRow ),
+						onClick: null,
+						isCurrent: true,
+					},
+				];
+			}
 			return [
 				{
 					key: `collection:${ collection.id }`,
@@ -137,10 +168,14 @@ export default function useBreadcrumbSegments( paintedRoute ) {
 	}, [
 		pageId,
 		collectionId,
+		rowId,
+		rowPostType,
+		onNavigateCollection,
 		pages,
 		collections,
 		currentPage,
 		currentCollection,
+		currentRow,
 		goToPage,
 	] );
 }

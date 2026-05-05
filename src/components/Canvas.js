@@ -30,6 +30,7 @@ import { store as noticesStore } from '@wordpress/notices';
 import { cog } from '@wordpress/icons';
 import apiFetch from '@wordpress/api-fetch';
 import {
+	useCallback,
 	useEffect,
 	useLayoutEffect,
 	useRef,
@@ -44,6 +45,7 @@ import {
 	TRASHED_PAGES_QUERY,
 } from './page-queries';
 import PublishToggle from './PublishToggle';
+import { RowDetailSidebarSlot } from './RowDetailSidebarSlot';
 import { TopBarActionsFill } from './WorkspaceTopBar';
 import MediaPicker, { MediaUploadCheck } from './MediaPicker';
 import PageIdentityControls from './PageIdentityControls';
@@ -238,7 +240,7 @@ function PageIdentityActions( { postId } ) {
 	);
 }
 
-function DocumentActions( { isActive } ) {
+function DocumentActions( { isActive, postType, topBarActions } ) {
 	const { enableComplementaryArea, disableComplementaryArea } =
 		useDispatch( interfaceStore );
 	const isInspectorOpen = useSelect(
@@ -259,7 +261,8 @@ function DocumentActions( { isActive } ) {
 	return (
 		<TopBarActionsFill>
 			<div className="cortext-document-actions">
-				<PublishToggle />
+				{ topBarActions }
+				{ postType === POST_TYPE ? <PublishToggle /> : null }
 				<Button
 					className="cortext-document-actions__settings"
 					icon={ cog }
@@ -593,13 +596,32 @@ function VisualCanvas( { postId, onReady } ) {
 
 function CanvasEditor( {
 	post,
+	postType,
 	pendingPost,
 	onSwitchPost,
 	onDisplayedPost,
 	isActive,
+	topBarActions,
+	notice,
+	onApi,
+	onSaved,
 } ) {
-	const { flushNow, isDirty, isSaving } = useAutosave();
+	const { status, flushNow, isDirty, isSaving } = useAutosave();
+	const { resetPost } = useDispatch( editorStore );
+	const discard = useCallback( () => resetPost(), [ resetPost ] );
 	const isTrashed = post.status === 'trash';
+	const canRestoreTrash = postType === POST_TYPE;
+
+	useEffect( () => {
+		onApi?.( { flushNow, discard } );
+		return () => onApi?.( null );
+	}, [ discard, flushNow, onApi ] );
+
+	useEffect( () => {
+		if ( status === 'saved' ) {
+			onSaved?.();
+		}
+	}, [ onSaved, status ] );
 
 	useEffect( () => {
 		if ( ! pendingPost || pendingPost.id === post.id ) {
@@ -627,14 +649,21 @@ function CanvasEditor( {
 
 	return (
 		<>
-			<DocumentActions isActive={ isActive } />
+			<DocumentActions
+				isActive={ isActive }
+				postType={ postType }
+				topBarActions={ topBarActions }
+			/>
 			<CortextSnackbars />
 			<HideHeaderBlockKebab />
 			<InterfaceSkeleton
 				className="cortext-canvas"
 				content={
 					<>
-						{ isTrashed && <TrashedNotice postId={ post.id } /> }
+						{ notice }
+						{ isTrashed && canRestoreTrash && (
+							<TrashedNotice postId={ post.id } />
+						) }
 						{ isTrashed ? (
 							<Disabled className="cortext-canvas__locked">
 								<VisualCanvas
@@ -650,28 +679,53 @@ function CanvasEditor( {
 						) }
 					</>
 				}
-				sidebar={ <ComplementaryArea.Slot scope={ SCOPE } /> }
+				sidebar={
+					isActive ? (
+						<RowDetailSidebarSlot
+							fallback={
+								<ComplementaryArea.Slot scope={ SCOPE } />
+							}
+						/>
+					) : (
+						<ComplementaryArea.Slot scope={ SCOPE } />
+					)
+				}
 			/>
 			<InspectorSidebar />
 		</>
 	);
 }
 
-export default function Canvas( { postId, onDisplayedPost, isActive } ) {
+export default function Canvas( {
+	postId,
+	postType = POST_TYPE,
+	onDisplayedPost,
+	isActive,
+	topBarActions = null,
+	notice = null,
+	onApi,
+	onSaved,
+	useSubRegistry = false,
+} ) {
 	const { record: requestedPost } = useEntityRecord(
 		'postType',
-		POST_TYPE,
+		postType,
 		postId
 	);
 	const [ displayedPost, setDisplayedPost ] = useState( null );
-	const renderedPost = displayedPost ?? requestedPost;
+	const renderedPost =
+		displayedPost?.type === postType ? displayedPost : requestedPost;
 
 	useEffect( () => {
 		if ( ! requestedPost ) {
 			return;
 		}
 		setDisplayedPost( ( current ) => {
-			if ( ! current || current.id === requestedPost.id ) {
+			if (
+				! current ||
+				current.type !== requestedPost.type ||
+				current.id === requestedPost.id
+			) {
 				return requestedPost;
 			}
 			return current;
@@ -687,7 +741,9 @@ export default function Canvas( { postId, onDisplayedPost, isActive } ) {
 	}
 
 	const pendingPost =
-		requestedPost && requestedPost.id !== renderedPost.id
+		requestedPost &&
+		( requestedPost.type !== renderedPost.type ||
+			requestedPost.id !== renderedPost.id )
 			? requestedPost
 			: null;
 
@@ -695,14 +751,19 @@ export default function Canvas( { postId, onDisplayedPost, isActive } ) {
 		<EditorProvider
 			post={ renderedPost }
 			settings={ window.cortextEditorSettings ?? {} }
-			useSubRegistry={ false }
+			useSubRegistry={ useSubRegistry }
 		>
 			<CanvasEditor
 				post={ renderedPost }
+				postType={ postType }
 				pendingPost={ pendingPost }
 				onSwitchPost={ setDisplayedPost }
 				onDisplayedPost={ onDisplayedPost }
 				isActive={ isActive }
+				topBarActions={ topBarActions }
+				notice={ notice }
+				onApi={ onApi }
+				onSaved={ onSaved }
 			/>
 		</EditorProvider>
 	);
