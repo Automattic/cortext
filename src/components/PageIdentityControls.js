@@ -30,17 +30,93 @@ const EmojiPicker = lazy( async () => {
 
 	const Picker = pickerModule.default;
 	const data = dataModule.default;
+	const emojis = Object.values( data.emojis ?? {} );
+	const emojiForNative = ( native ) =>
+		emojis.find( ( emoji ) =>
+			emoji.skins?.some( ( skin ) => skin.native === native )
+		);
+	const nativeForSkin = ( native, skin ) => {
+		const emoji = emojiForNative( native );
+		return emoji?.skins?.[ skin - 1 ]?.native ?? null;
+	};
+	const skinFromEvent = ( event ) => {
+		const path = event.composedPath?.() ?? [];
+		const isSkinSelection = path.some(
+			( target ) =>
+				target?.name === 'skin-tone' ||
+				target?.classList?.contains( 'option' )
+		);
+		if ( ! isSkinSelection ) {
+			return null;
+		}
+		for ( const target of path ) {
+			if ( target?.name === 'skin-tone' && target.value ) {
+				return Number( target.value );
+			}
+			if ( ! target?.classList ) {
+				continue;
+			}
+			for ( const className of target.classList ) {
+				const match = /^skin-tone-([1-6])$/.exec( className );
+				if ( match ) {
+					return Number( match[ 1 ] );
+				}
+			}
+		}
+		return null;
+	};
+	const isSkinToneEvent = ( event ) =>
+		( event.composedPath?.() ?? [] ).some(
+			( target ) =>
+				target?.name === 'skin-tone' ||
+				target?.classList?.contains( 'skin-tone-button' ) ||
+				target?.classList?.contains( 'skin-tone' ) ||
+				target?.classList?.contains( 'option' )
+		);
 
 	return {
-		default: function LoadedEmojiPicker( { onSelect } ) {
+		default: function LoadedEmojiPicker( { currentEmoji, onSelect } ) {
+			const wrapperRef = useRef( null );
+			const stopSkinTonePropagation = ( event ) => {
+				if ( isSkinToneEvent( event ) ) {
+					event.stopPropagation();
+				}
+			};
+			const updateCurrentEmojiSkin = ( event ) => {
+				const skin = skinFromEvent( event );
+				if ( skin && currentEmoji ) {
+					const native = nativeForSkin( currentEmoji, skin );
+					if ( native ) {
+						onSelect( native );
+					}
+				}
+				stopSkinTonePropagation( event );
+			};
+			useEffect( () => {
+				const node = wrapperRef.current;
+				if ( ! node ) {
+					return undefined;
+				}
+				node.addEventListener( 'pointerdown', stopSkinTonePropagation );
+				node.addEventListener( 'click', updateCurrentEmojiSkin );
+				return () => {
+					node.removeEventListener(
+						'pointerdown',
+						stopSkinTonePropagation
+					);
+					node.removeEventListener( 'click', updateCurrentEmojiSkin );
+				};
+			} );
 			return (
-				<Picker
-					data={ data }
-					onEmojiSelect={ ( emoji ) => onSelect( emoji.native ) }
-					theme="auto"
-					previewPosition="none"
-					skinTonePosition="search"
-				/>
+				<div ref={ wrapperRef }>
+					<Picker
+						data={ data }
+						onEmojiSelect={ ( emoji ) => onSelect( emoji.native ) }
+						theme="auto"
+						previewPosition="none"
+						skinTonePosition="search"
+					/>
+				</div>
 			);
 		},
 	};
@@ -88,6 +164,22 @@ function decodeWpIcon( value ) {
 	return null;
 }
 
+function decodeEmoji( value ) {
+	try {
+		const decoded = value ? JSON.parse( value ) : null;
+		if (
+			decoded?.type === 'emoji' &&
+			typeof decoded.value === 'string' &&
+			decoded.value !== ''
+		) {
+			return decoded.value;
+		}
+	} catch {
+		// ignore malformed meta
+	}
+	return null;
+}
+
 function PickerBody( { pageId, currentIcon, allowRemove, onAfterSave } ) {
 	const { editEntityRecord, saveEditedEntityRecord } =
 		useDispatch( coreStore );
@@ -97,6 +189,7 @@ function PickerBody( { pageId, currentIcon, allowRemove, onAfterSave } ) {
 	// snapping back to "default" on every popover open.
 	const currentWpIcon = decodeWpIcon( currentIcon );
 	const initialIconColor = currentWpIcon?.color ?? 'default';
+	const currentEmoji = decodeEmoji( currentIcon );
 
 	// editEntityRecord updates the local data store synchronously so
 	// every subscriber (icon block, sidebar tree) sees the new value
@@ -148,6 +241,7 @@ function PickerBody( { pageId, currentIcon, allowRemove, onAfterSave } ) {
 					}
 				>
 					<EmojiPicker
+						currentEmoji={ currentEmoji }
 						onSelect={ ( native ) =>
 							persist( encodeEmoji( native ) )
 						}
