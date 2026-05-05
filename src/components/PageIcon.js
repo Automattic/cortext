@@ -61,17 +61,23 @@ export function parsePageIcon( raw ) {
 	return null;
 }
 
-function ImageIcon( { id, size, alt } ) {
+function ImageIcon( { id, size, alt, className } ) {
 	const { record } = useEntityRecord( 'root', 'media', id );
 	const src =
 		record?.media_details?.sizes?.thumbnail?.source_url ??
 		record?.source_url ??
 		null;
+	const classes = [ 'cortext-page-icon' ];
+	if ( className ) {
+		classes.push( className );
+	}
 
 	if ( ! src ) {
 		return (
 			<span
-				className="cortext-page-icon cortext-page-icon--image-loading"
+				className={ classes
+					.concat( 'cortext-page-icon--image-loading' )
+					.join( ' ' ) }
 				style={ { width: size, height: size } }
 				aria-hidden="true"
 			/>
@@ -80,7 +86,9 @@ function ImageIcon( { id, size, alt } ) {
 
 	return (
 		<img
-			className="cortext-page-icon cortext-page-icon--image"
+			className={ classes
+				.concat( 'cortext-page-icon--image' )
+				.join( ' ' ) }
 			src={ src }
 			alt={ alt ?? '' }
 			width={ size }
@@ -92,6 +100,7 @@ function ImageIcon( { id, size, alt } ) {
 export default function PageIcon( { icon, size = 16, alt, className } ) {
 	const parsed = useMemo( () => parsePageIcon( icon ), [ icon ] );
 	const classes = [ 'cortext-page-icon' ];
+	const boxStyle = { width: size, height: size };
 	if ( className ) {
 		classes.push( className );
 	}
@@ -102,6 +111,7 @@ export default function PageIcon( { icon, size = 16, alt, className } ) {
 				className={ classes
 					.concat( 'cortext-page-icon--fallback' )
 					.join( ' ' ) }
+				style={ boxStyle }
 				aria-hidden="true"
 			>
 				<Icon icon={ pageGlyph } size={ size } />
@@ -115,7 +125,7 @@ export default function PageIcon( { icon, size = 16, alt, className } ) {
 				className={ classes
 					.concat( 'cortext-page-icon--emoji' )
 					.join( ' ' ) }
-				style={ { fontSize: size } }
+				style={ { ...boxStyle, fontSize: size } }
 				aria-hidden={ alt ? undefined : 'true' }
 				role={ alt ? 'img' : undefined }
 				aria-label={ alt }
@@ -134,7 +144,7 @@ export default function PageIcon( { icon, size = 16, alt, className } ) {
 				className={ classes
 					.concat( 'cortext-page-icon--wp' )
 					.join( ' ' ) }
-				style={ colorStyle }
+				style={ { ...boxStyle, ...colorStyle } }
 				aria-hidden={ alt ? undefined : 'true' }
 				role={ alt ? 'img' : undefined }
 				aria-label={ alt }
@@ -144,5 +154,12 @@ export default function PageIcon( { icon, size = 16, alt, className } ) {
 		);
 	}
 
-	return <ImageIcon id={ parsed.id } size={ size } alt={ alt } />;
+	return (
+		<ImageIcon
+			id={ parsed.id }
+			size={ size }
+			alt={ alt }
+			className={ className }
+		/>
+	);
 }
