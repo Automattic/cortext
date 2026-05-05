@@ -1,4 +1,5 @@
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
+import apiFetch from '@wordpress/api-fetch';
 import { useEntityRecords } from '@wordpress/core-data';
 import { useDispatch, useSelect } from '@wordpress/data';
 import {
@@ -8,8 +9,8 @@ import {
 	useCallback,
 	useEffect,
 } from '@wordpress/element';
-import { Button, Spinner } from '@wordpress/components';
-import { chevronLeft, chevronRight } from '@wordpress/icons';
+import { Button, Icon, Spinner } from '@wordpress/components';
+import { chevronLeft, chevronRight, plus, wordpress } from '@wordpress/icons';
 import {
 	DndContext,
 	DragOverlay,
@@ -86,6 +87,14 @@ export default function Sidebar( {
 	const params = useParams( { strict: false } );
 	const activeUri = params._splat ?? '';
 	const adminUrl = window.cortextSettings?.adminUrl ?? '/wp-admin/';
+	const userName = window.cortextSettings?.userDisplayName ?? '';
+	const brandLabel = userName
+		? sprintf(
+				/* translators: %s: user display name */
+				__( "%s's Cortext", 'cortext' ),
+				userName
+		  )
+		: __( 'Cortext', 'cortext' );
 
 	const { prefix: activePrefix, tail: activeTail } = useMemo(
 		() => parseSplatUri( activeUri ),
@@ -196,6 +205,25 @@ export default function Sidebar( {
 			setAutoRenameId( created.id );
 		}
 	}, [ saveEntityRecord, onSelect ] );
+
+	const createRootCollection = useCallback( async () => {
+		const created = await apiFetch( {
+			path: '/cortext/v1/collections',
+			method: 'POST',
+			data: { title: __( 'Untitled', 'cortext' ) },
+		} );
+		invalidateResolution( 'getEntityRecords', [
+			'postType',
+			'crtxt_collection',
+			COLLECTION_QUERY,
+		] );
+		if ( created?.id ) {
+			navigate( {
+				to: '/$',
+				params: { _splat: computeUri( created, 'collection' ) },
+			} );
+		}
+	}, [ invalidateResolution, navigate ] );
 
 	const createChildPage = useCallback(
 		async ( parentId ) => {
@@ -404,20 +432,10 @@ export default function Sidebar( {
 			data-collapsed={ collapsed ? 'true' : 'false' }
 		>
 			<div className="cortext-sidebar__header">
-				{ collapsed ? (
-					<Button
-						icon="plus"
-						label={ __( 'New page', 'cortext' ) }
-						onClick={ createRootPage }
-					/>
-				) : (
-					<Button
-						className="cortext-sidebar__new-page"
-						variant="primary"
-						onClick={ createRootPage }
-					>
-						{ __( 'New page', 'cortext' ) }
-					</Button>
+				{ ! collapsed && (
+					<span className="cortext-sidebar__brand">
+						{ brandLabel }
+					</span>
 				) }
 				<Button
 					className="cortext-sidebar__collapse-toggle"
@@ -432,9 +450,18 @@ export default function Sidebar( {
 			</div>
 			{ ! collapsed && (
 				<div className="cortext-sidebar__content">
-					<h2 className="cortext-sidebar__section-title">
-						{ __( 'Pages', 'cortext' ) }
-					</h2>
+					<div className="cortext-sidebar__section-header">
+						<h2 className="cortext-sidebar__section-title">
+							{ __( 'Pages', 'cortext' ) }
+						</h2>
+						<Button
+							className="cortext-sidebar__section-action"
+							icon={ plus }
+							size="small"
+							label={ __( 'New page', 'cortext' ) }
+							onClick={ createRootPage }
+						/>
+					</div>
 					{ isResolving && pages.length === 0 && (
 						<div className="cortext-sidebar__loading">
 							<Spinner />
@@ -488,9 +515,18 @@ export default function Sidebar( {
 						</DragOverlay>
 					</DndContext>
 
-					<h2 className="cortext-sidebar__section-title">
-						{ __( 'Collections', 'cortext' ) }
-					</h2>
+					<div className="cortext-sidebar__section-header">
+						<h2 className="cortext-sidebar__section-title">
+							{ __( 'Collections', 'cortext' ) }
+						</h2>
+						<Button
+							className="cortext-sidebar__section-action"
+							icon={ plus }
+							size="small"
+							label={ __( 'New collection', 'cortext' ) }
+							onClick={ createRootCollection }
+						/>
+					</div>
 					{ isResolvingCollections && ! collections?.length && (
 						<div className="cortext-sidebar__loading">
 							<Spinner />
@@ -541,9 +577,15 @@ export default function Sidebar( {
 			) }
 			<div className="cortext-sidebar__footer">
 				<Button
-					icon="arrow-left-alt2"
+					className="cortext-sidebar__back"
 					label={ __( 'Back to WordPress', 'cortext' ) }
 					href={ adminUrl }
+					icon={
+						<span className="cortext-sidebar__back-icon">
+							<Icon icon={ chevronLeft } size={ 18 } />
+							<Icon icon={ wordpress } size={ 20 } />
+						</span>
+					}
 				/>
 				<ThemeToggle />
 			</div>

@@ -70,13 +70,54 @@ body.cortext-fullscreen {
 		padding: $grid-unit-15;
 	}
 
-	&__new-page.components-button {
+	&__brand {
 		flex: 1 1 auto;
-		justify-content: center;
+		min-width: 0;
+		font-weight: 600;
+		font-size: 13px;
+		color: var(--cortext-text);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	&__collapse-toggle {
 		margin-left: auto;
+	}
+
+	&__section-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: $grid-unit-05;
+		margin: $grid-unit-15 0 $grid-unit-05 0;
+		padding: 0 $grid-unit-05;
+
+		// Title margin/padding moves to the row.
+		/* stylelint-disable-next-line no-descending-specificity */
+		.cortext-sidebar__section-title {
+			margin: 0;
+			padding: 0;
+		}
+	}
+
+	// Sits inline with the section title; reveal on hover/focus, the same
+	// way `__menu` works on page rows.
+	&__section-action.components-button {
+		opacity: 0;
+		transition: opacity 0.12s ease;
+	}
+
+	&__section-header:hover &__section-action,
+	&__section-header:focus-within &__section-action {
+		opacity: 1;
+	}
+
+	// `< W` back affordance. Inline-flex so the chevron and W sit side by
+	// side inside the WP `Button` icon slot.
+	&__back-icon {
+		display: inline-flex;
+		align-items: center;
 	}
 
 	&__content {
@@ -98,6 +139,7 @@ body.cortext-fullscreen {
 		border-top: var(--cortext-shell-border-width) solid var(--cortext-chrome-border);
 	}
 
+	/* stylelint-disable-next-line no-descending-specificity */
 	&__section-title {
 		font-size: 11px;
 		font-weight: 600;
