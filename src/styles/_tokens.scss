@@ -43,6 +43,13 @@
 	--cortext-shell-radius: #{variables.$radius-small};
 	--cortext-shell-border-width: #{variables.$border-width};
 
+	// Sidebar widths. Min/max also live in useSidebarLayout and in
+	// Theming\Preferences; keep the three in sync.
+	--cortext-sidebar-width: 280px;
+	--cortext-sidebar-width-rail: 56px;
+	--cortext-sidebar-width-min: 220px;
+	--cortext-sidebar-width-max: 480px;
+
 	&[data-theme="dark"] {
 		--cortext-shell-surface: #2a2a2a;
 		--cortext-sidebar-surface: #2a2a2a;
