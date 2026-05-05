@@ -1,0 +1,19 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "cortext/page-header-actions",
+	"title": "Page header actions",
+	"category": "widgets",
+	"icon": "plus",
+	"description": "Hover-revealed Add icon / Add cover affordance, sitting right above the page title.",
+	"textdomain": "cortext",
+	"usesContext": [ "postId", "postType" ],
+	"supports": {
+		"html": false,
+		"reusable": false,
+		"multiple": false,
+		"inserter": false,
+		"customClassName": false
+	},
+	"attributes": {}
+}

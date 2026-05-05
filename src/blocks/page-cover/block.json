@@ -1,0 +1,26 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "cortext/page-cover",
+	"title": "Page cover",
+	"category": "widgets",
+	"icon": "format-image",
+	"description": "Notion-style page cover image, bound to the page's featured image.",
+	"textdomain": "cortext",
+	"usesContext": [ "postId", "postType" ],
+	"supports": {
+		"html": false,
+		"reusable": false,
+		"multiple": false,
+		"inserter": false,
+		"customClassName": false,
+		"align": [ "full" ],
+		"lock": false
+	},
+	"attributes": {
+		"align": {
+			"type": "string",
+			"default": "full"
+		}
+	}
+}
