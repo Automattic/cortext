@@ -89,6 +89,11 @@ const FIELD_TYPES = [
 	{ value: 'email', label: __( 'Email', 'cortext' ), icon: atSymbol },
 ];
 
+const RELATION_LIMIT_OPTIONS = [
+	{ value: 'many', label: __( 'No limit', 'cortext' ) },
+	{ value: 'one', label: __( '1 page', 'cortext' ) },
+];
+
 function titleOf( record ) {
 	return record?.title?.raw || record?.title?.rendered || `#${ record?.id }`;
 }
@@ -112,6 +117,7 @@ function RelationConfig( {
 	const [ relationMultiple, setRelationMultiple ] = useState( true );
 	const [ reverseTitle, setReverseTitle ] = useState( '' );
 	const [ reverseMultiple, setReverseMultiple ] = useState( true );
+	const [ showReverseOptions, setShowReverseOptions ] = useState( true );
 
 	const options = useMemo(
 		() => [
@@ -158,9 +164,10 @@ function RelationConfig( {
 	};
 
 	return (
-		<div className="cortext-add-field-popover__config">
+		<div className="cortext-add-field-popover__config cortext-add-field-popover__config--relation">
 			<SelectControl
-				label={ __( 'Target collection', 'cortext' ) }
+				className="cortext-add-field-popover__relation-row-control"
+				label={ __( 'Related to', 'cortext' ) }
 				value={ targetCollectionId }
 				options={ options }
 				onChange={ setTargetCollectionId }
@@ -168,29 +175,49 @@ function RelationConfig( {
 				__next40pxDefaultSize
 				__nextHasNoMarginBottom
 			/>
-			<ToggleControl
-				label={ __( 'Allow multiple rows', 'cortext' ) }
-				checked={ relationMultiple }
-				onChange={ setRelationMultiple }
-				disabled={ isBusy }
-				__nextHasNoMarginBottom
-			/>
-			<TextControl
-				label={ __( 'Reverse field name', 'cortext' ) }
-				placeholder={ defaultReverseTitle }
-				value={ reverseTitle }
-				onChange={ setReverseTitle }
+			<SelectControl
+				className="cortext-add-field-popover__relation-row-control"
+				label={ __( 'Limit', 'cortext' ) }
+				value={ relationMultiple ? 'many' : 'one' }
+				options={ RELATION_LIMIT_OPTIONS }
+				onChange={ ( next ) => setRelationMultiple( next === 'many' ) }
 				disabled={ isBusy }
 				__next40pxDefaultSize
 				__nextHasNoMarginBottom
 			/>
 			<ToggleControl
-				label={ __( 'Reverse allows multiple rows', 'cortext' ) }
-				checked={ reverseMultiple }
-				onChange={ setReverseMultiple }
+				className="cortext-add-field-popover__relation-toggle"
+				label={ __( 'Add related property', 'cortext' ) }
+				checked={ showReverseOptions }
+				onChange={ setShowReverseOptions }
 				disabled={ isBusy }
 				__nextHasNoMarginBottom
 			/>
+			{ showReverseOptions ? (
+				<>
+					<TextControl
+						label={ __( 'Related property name', 'cortext' ) }
+						placeholder={ defaultReverseTitle }
+						value={ reverseTitle }
+						onChange={ setReverseTitle }
+						disabled={ isBusy }
+						__next40pxDefaultSize
+						__nextHasNoMarginBottom
+					/>
+					<SelectControl
+						className="cortext-add-field-popover__relation-row-control"
+						label={ __( 'Related property limit', 'cortext' ) }
+						value={ reverseMultiple ? 'many' : 'one' }
+						options={ RELATION_LIMIT_OPTIONS }
+						onChange={ ( next ) =>
+							setReverseMultiple( next === 'many' )
+						}
+						disabled={ isBusy }
+						__next40pxDefaultSize
+						__nextHasNoMarginBottom
+					/>
+				</>
+			) : null }
 			<div className="cortext-add-field-popover__actions">
 				<Button
 					variant="tertiary"
@@ -201,11 +228,12 @@ function RelationConfig( {
 				</Button>
 				<Button
 					variant="primary"
+					className="cortext-add-field-popover__primary-action"
 					onClick={ submit }
 					isBusy={ isBusy }
 					disabled={ isBusy || ! targetCollectionId }
 				>
-					{ __( 'Create relation', 'cortext' ) }
+					{ __( 'Add relation', 'cortext' ) }
 				</Button>
 			</div>
 		</div>
@@ -291,8 +319,16 @@ export default function AddFieldPopover( { collectionId, onCreate } ) {
 				</Notice>
 			) : null }
 			<TextControl
-				label={ __( 'Name', 'cortext' ) }
-				placeholder={ __( 'Type property name…', 'cortext' ) }
+				label={
+					configType
+						? __( 'Relation name', 'cortext' )
+						: __( 'Name', 'cortext' )
+				}
+				placeholder={
+					configType
+						? __( 'Relation name', 'cortext' )
+						: __( 'Type property name…', 'cortext' )
+				}
 				value={ title }
 				onChange={ setTitle }
 				onKeyDown={ ( event ) => {
@@ -302,6 +338,7 @@ export default function AddFieldPopover( { collectionId, onCreate } ) {
 					}
 				} }
 				disabled={ isBusy }
+				hideLabelFromVision={ Boolean( configType ) }
 				__next40pxDefaultSize
 				__nextHasNoMarginBottom
 			/>

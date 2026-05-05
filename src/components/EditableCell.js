@@ -4,11 +4,8 @@ import {
 	CheckboxControl,
 	DateTimePicker,
 	Dropdown,
-	MenuGroup,
-	MenuItem,
 	Notice,
 	Popover,
-	SearchControl,
 	Spinner,
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalNumberControl as NumberControl,
@@ -23,7 +20,13 @@ import {
 	useRef,
 	useState,
 } from '@wordpress/element';
-import { Icon, check } from '@wordpress/icons';
+import {
+	Icon,
+	check,
+	closeSmall,
+	page as pageIcon,
+	pages,
+} from '@wordpress/icons';
 
 import MultiselectEdit from './MultiselectEdit';
 import Chip from './fields/Chip';
@@ -310,6 +313,13 @@ function relationIds( value ) {
 			return Number( entry );
 		} )
 		.filter( ( id, index, ids ) => id > 0 && ids.indexOf( id ) === index );
+}
+
+function relationTitle( entry ) {
+	if ( ! entry ) {
+		return '';
+	}
+	return entry?.title?.raw || entry?.title?.rendered || `#${ entry?.id }`;
 }
 
 function collectionHref( ref ) {
@@ -688,6 +698,7 @@ function SelectEditor( {
 
 function RelationEditor( { value, relation, onSave, onCancel, label } ) {
 	const [ search, setSearch ] = useState( '' );
+	const searchRef = useRef( null );
 	const selectedIds = useMemo( () => relationIds( value ), [ value ] );
 	const targetCollectionId = Number( relation?.targetCollectionId );
 	const isMultiple = relation?.multiple !== false;
@@ -695,6 +706,8 @@ function RelationEditor( { value, relation, onSave, onCancel, label } ) {
 		targetCollectionId || null,
 		RELATION_PICKER_VIEW
 	);
+	const targetCollectionTitle =
+		relation?.targetCollectionTitle || __( 'Target database', 'cortext' );
 
 	const rows = useMemo( () => {
 		const term = search.trim().toLowerCase();
@@ -707,6 +720,19 @@ function RelationEditor( { value, relation, onSave, onCancel, label } ) {
 				.includes( term )
 		);
 	}, [ data, search ] );
+	const selectedRefs = useMemo( () => {
+		const currentRefs = Array.isArray( value ) ? value : [ value ];
+		return selectedIds.map(
+			( id ) =>
+				data.find( ( row ) => row.id === id ) ||
+				currentRefs.find( ( ref ) => Number( ref?.id ) === id ) || {
+					id,
+				}
+		);
+	}, [ data, selectedIds, value ] );
+	const unselectedRows = rows.filter(
+		( row ) => ! selectedIds.includes( row.id )
+	);
 
 	const commit = async ( nextIds ) => {
 		await onSave( nextIds );
@@ -723,12 +749,22 @@ function RelationEditor( { value, relation, onSave, onCancel, label } ) {
 		await commit( selectedIds.includes( rowId ) ? [] : [ rowId ] );
 		return true;
 	};
+	const remove = async ( rowId ) => {
+		const targetId = Number( rowId );
+		await commit( selectedIds.filter( ( id ) => id !== targetId ) );
+	};
+	useEffect( () => {
+		searchRef.current?.focus();
+	}, [] );
 
 	return (
 		<Dropdown
 			defaultOpen
 			onClose={ onCancel }
-			popoverProps={ { placement: 'bottom-start' } }
+			popoverProps={ {
+				placement: 'bottom-start',
+				className: 'cortext-relation-edit-popover',
+			} }
 			renderToggle={ ( { isOpen, onToggle } ) => (
 				<Button
 					variant="tertiary"
@@ -753,55 +789,102 @@ function RelationEditor( { value, relation, onSave, onCancel, label } ) {
 			) }
 			renderContent={ ( { onClose } ) => (
 				<div className="cortext-relation-edit">
-					<SearchControl
-						label={ __( 'Search rows', 'cortext' ) }
-						value={ search }
-						onChange={ setSearch }
-						__nextHasNoMarginBottom
-					/>
-					<MenuGroup>
-						<MenuItem
-							isSelected={ selectedIds.length === 0 }
-							onClick={ async () => {
-								await commit( [] );
-								if ( ! isMultiple ) {
-									onClose();
-								}
-							} }
-						>
-							{ __( 'Clear', 'cortext' ) }
-						</MenuItem>
+					<div className="cortext-relation-edit__searchbar">
+						<input
+							ref={ searchRef }
+							className="cortext-relation-edit__search"
+							type="search"
+							value={ search }
+							onChange={ ( event ) =>
+								setSearch( event.target.value )
+							}
+							placeholder={ __(
+								'Link or create a page…',
+								'cortext'
+							) }
+							aria-label={ __( 'Search rows', 'cortext' ) }
+						/>
+						<span className="cortext-relation-edit__target">
+							{ __( 'In', 'cortext' ) }
+							<Icon icon={ pages } />
+							<strong>{ targetCollectionTitle }</strong>
+						</span>
+					</div>
+					{ selectedIds.length > 0 ? (
+						<div className="cortext-relation-edit__section">
+							<div className="cortext-relation-edit__section-label">
+								{ sprintf(
+									/* translators: %d: selected relation count */
+									_n(
+										'%d selected',
+										'%d selected',
+										selectedIds.length,
+										'cortext'
+									),
+									selectedIds.length
+								) }
+							</div>
+							{ selectedRefs.map( ( ref ) => (
+								<div
+									key={ ref.id }
+									className="cortext-relation-edit__row cortext-relation-edit__row--selected"
+								>
+									<Icon
+										icon={ pageIcon }
+										className="cortext-relation-edit__row-icon"
+									/>
+									<span className="cortext-relation-edit__row-title">
+										{ relationTitle( ref ) }
+									</span>
+									<Button
+										className="cortext-relation-edit__remove"
+										icon={ closeSmall }
+										label={ __( 'Unlink page', 'cortext' ) }
+										onClick={ () => remove( ref.id ) }
+									/>
+								</div>
+							) ) }
+						</div>
+					) : null }
+					<div className="cortext-relation-edit__section cortext-relation-edit__section--more">
+						<div className="cortext-relation-edit__section-label">
+							{ __( 'Select more', 'cortext' ) }
+						</div>
 						{ isLoading ? (
 							<div className="cortext-relation-edit__loading">
 								<Spinner />
 							</div>
 						) : null }
+						{ ! isLoading && unselectedRows.length === 0 ? (
+							<div className="cortext-relation-edit__empty">
+								{ __( 'No matching rows', 'cortext' ) }
+							</div>
+						) : null }
 						{ ! isLoading &&
-							rows.map( ( row ) => {
-								const title =
-									row.title?.raw ||
-									row.title?.rendered ||
-									`#${ row.id }`;
-								return (
-									<MenuItem
-										key={ row.id }
-										isSelected={ selectedIds.includes(
+							unselectedRows.map( ( row ) => (
+								<button
+									key={ row.id }
+									type="button"
+									className="cortext-relation-edit__row"
+									onClick={ async () => {
+										const shouldClose = await toggle(
 											row.id
-										) }
-										onClick={ async () => {
-											const shouldClose = await toggle(
-												row.id
-											);
-											if ( shouldClose ) {
-												onClose();
-											}
-										} }
-									>
-										{ title }
-									</MenuItem>
-								);
-							} ) }
-					</MenuGroup>
+										);
+										if ( shouldClose ) {
+											onClose();
+										}
+									} }
+								>
+									<Icon
+										icon={ pageIcon }
+										className="cortext-relation-edit__row-icon"
+									/>
+									<span className="cortext-relation-edit__row-title">
+										{ relationTitle( row ) }
+									</span>
+								</button>
+							) ) }
+					</div>
 				</div>
 			) }
 		/>
