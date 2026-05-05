@@ -505,13 +505,31 @@ body.cortext-fullscreen {
 		.cortext-sidebar__header,
 		.cortext-sidebar__footer {
 			flex-direction: column;
-			align-items: stretch;
+			align-items: center;
+			justify-content: center;
 			gap: $grid-unit-05;
-			padding: $grid-unit-05;
+		}
+
+		.cortext-sidebar__header {
+			padding: 0;
+		}
+
+		.cortext-sidebar__footer {
+			padding: $grid-unit-05 0;
 		}
 
 		.cortext-sidebar__collapse-toggle {
 			margin-left: 0;
+		}
+
+		.cortext-sidebar__collapse-toggle.components-button,
+		.cortext-sidebar__back.components-button,
+		.cortext-sidebar__theme-toggle.components-button {
+			width: $grid-unit-40;
+			min-width: $grid-unit-40;
+			height: $grid-unit-40;
+			padding: 0;
+			justify-content: center;
 		}
 	}
 }
