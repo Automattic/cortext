@@ -1594,6 +1594,7 @@ tbody > tr > td:not(:first-child) {
 		height: 100%;
 		justify-content: flex-start;
 		padding-inline: $grid-unit-05;
+		overflow: hidden;
 		color: inherit;
 		font-weight: inherit;
 		text-decoration: none;
@@ -1646,25 +1647,42 @@ tbody > tr > td:not(:first-child) {
 	overflow: hidden;
 }
 
-.cortext-relation-ref {
+.cortext-relation-ref,
+.cortext-relation-edit__toggle-ref,
+.cortext-relation-edit__selected-pill {
 	display: inline-flex;
 	align-items: center;
 	max-width: 100%;
 	min-width: 0;
 	height: $grid-unit-30;
-	padding: 0 $grid-unit-10;
 	border-radius: $grid-unit-30;
 	background: $gray-100;
-	color: var(--wp-admin-theme-color);
-	text-decoration: none;
+	color: $gray-900;
+	font-size: $default-font-size;
+	line-height: 1;
+	white-space: nowrap;
+}
+
+.cortext-relation-ref,
+.cortext-relation-edit__toggle-ref {
+	padding: 0 $grid-unit-10;
 	overflow: hidden;
 	text-overflow: ellipsis;
-	white-space: nowrap;
+}
+
+.cortext-relation-ref {
+	text-decoration: none;
 
 	&:hover,
 	&:focus {
-		text-decoration: underline;
-		text-underline-offset: 2px;
+		background: $gray-200;
+		color: $gray-900;
+		text-decoration: none;
+	}
+
+	&:focus-visible {
+		outline: 2px solid var(--wp-admin-theme-color, $gray-700);
+		outline-offset: 1px;
 	}
 }
 
@@ -1697,6 +1715,7 @@ tbody > tr > td:not(:first-child) {
 		width: 100%;
 
 		&:focus {
+			border-color: $gray-700;
 			box-shadow: none;
 			outline: 0;
 		}
@@ -1727,17 +1746,17 @@ tbody > tr > td:not(:first-child) {
 	}
 
 	&__selected-pill {
-		display: inline-flex;
+		gap: $grid-unit-05;
+		padding: 0 $grid-unit-05 0 $grid-unit-10;
+	}
+
+	&__toggle-refs {
+		display: flex;
 		align-items: center;
 		gap: $grid-unit-05;
 		max-width: 100%;
 		min-width: 0;
-		height: $grid-unit-30;
-		padding: 0 $grid-unit-05 0 $grid-unit-10;
-		border: $border-width solid $gray-200;
-		border-radius: 4px;
-		background: $gray-100;
-		color: $gray-900;
+		overflow: hidden;
 	}
 
 	&__selected-title {
@@ -1745,7 +1764,6 @@ tbody > tr > td:not(:first-child) {
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-		font-size: 13px;
 	}
 
 	&__row {
@@ -1800,8 +1818,10 @@ tbody > tr > td:not(:first-child) {
 		height: 22px;
 		padding: 0;
 		border: 0;
+		border-radius: $grid-unit-30;
 		background: transparent;
 		box-shadow: none;
+		color: $gray-700;
 
 		&:hover:not(:disabled),
 		&:focus:not(:disabled) {

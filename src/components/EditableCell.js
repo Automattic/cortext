@@ -1,4 +1,4 @@
-import { __, _n, sprintf } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
 import {
 	Button,
@@ -821,18 +821,20 @@ function RelationEditor( { value, relation, onSave, onCancel, label } ) {
 					aria-expanded={ isOpen }
 					aria-label={ label }
 				>
-					{ selectedIds.length
-						? sprintf(
-								/* translators: %d: selected relation count */
-								_n(
-									'%d row selected',
-									'%d rows selected',
-									selectedIds.length,
-									'cortext'
-								),
-								selectedIds.length
-						  )
-						: __( 'Select rows…', 'cortext' ) }
+					{ selectedRefs.length ? (
+						<span className="cortext-relation-edit__toggle-refs">
+							{ selectedRefs.map( ( ref ) => (
+								<span
+									key={ ref.id }
+									className="cortext-relation-edit__toggle-ref"
+								>
+									{ relationTitle( ref ) }
+								</span>
+							) ) }
+						</span>
+					) : (
+						__( 'Select rows…', 'cortext' )
+					) }
 				</Button>
 			) }
 			renderContent={ ( { onClose } ) => (
