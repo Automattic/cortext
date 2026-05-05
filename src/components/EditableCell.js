@@ -24,6 +24,7 @@ import { Icon, check } from '@wordpress/icons';
 
 import MultiselectEdit from './MultiselectEdit';
 import Chip from './fields/Chip';
+import { resolveFormatColor } from './fields/formatColors';
 
 // Resolves the WordPress site locale into a BCP 47 tag for Intl. WP
 // stores locales as `en_US` / `de_DE`; Intl expects `en-US` / `de-DE`.
@@ -192,6 +193,94 @@ export function formatDateValue( value, type, format ) {
 	return new Intl.DateTimeFormat( locale, options ).format( date );
 }
 
+// Maps a numeric value to a 0..1 fill ratio for the bar/ring visuals.
+// Percent fields are treated as 0..1 directly; everything else is
+// divided by `format.divideBy` (default 100). Out-of-range values clamp,
+// so a value beyond the configured max simply pegs the visual at full.
+function fillRatio( value, format ) {
+	const num = typeof value === 'number' ? value : Number( value );
+	if ( ! Number.isFinite( num ) ) {
+		return 0;
+	}
+	if ( format?.style === 'percent' ) {
+		return Math.min( 1, Math.max( 0, num ) );
+	}
+	const divisor = Number( format?.divideBy );
+	const safeDivisor =
+		Number.isFinite( divisor ) && divisor > 0 ? divisor : 100;
+	return Math.min( 1, Math.max( 0, num / safeDivisor ) );
+}
+
+function fillStyle( format ) {
+	const hex = resolveFormatColor( format?.color );
+	return hex ? { background: hex } : undefined;
+}
+
+function strokeStyle( format ) {
+	const hex = resolveFormatColor( format?.color );
+	return hex ? { stroke: hex } : undefined;
+}
+
+function NumberBar( { value, format, text } ) {
+	const ratio = fillRatio( value, format );
+	const showNumber = format?.showNumber !== false;
+	return (
+		<span className="cortext-cell-bar" title={ text }>
+			<span className="cortext-cell-bar__track">
+				<span
+					className="cortext-cell-bar__fill"
+					style={ {
+						width: `${ ratio * 100 }%`,
+						...fillStyle( format ),
+					} }
+				/>
+			</span>
+			{ showNumber ? (
+				<span className="cortext-cell-bar__label">{ text }</span>
+			) : null }
+		</span>
+	);
+}
+
+function NumberRing( { value, format, text } ) {
+	const ratio = fillRatio( value, format );
+	const showNumber = format?.showNumber !== false;
+	const circumference = 2 * Math.PI * 7;
+	return (
+		<span className="cortext-cell-ring" title={ text }>
+			<svg
+				className="cortext-cell-ring__svg"
+				viewBox="0 0 20 20"
+				aria-hidden="true"
+			>
+				<circle
+					cx="10"
+					cy="10"
+					r="7"
+					fill="none"
+					strokeWidth="2.5"
+					className="cortext-cell-ring__track"
+				/>
+				<circle
+					cx="10"
+					cy="10"
+					r="7"
+					fill="none"
+					strokeWidth="2.5"
+					className="cortext-cell-ring__fill"
+					style={ strokeStyle( format ) }
+					strokeDasharray={ circumference }
+					strokeDashoffset={ circumference * ( 1 - ratio ) }
+					transform="rotate(-90 10 10)"
+				/>
+			</svg>
+			{ showNumber ? (
+				<span className="cortext-cell-ring__label">{ text }</span>
+			) : null }
+		</span>
+	);
+}
+
 // Returns either '' (empty cell) or a renderable value (string or JSX).
 // `display === ''` is the consumer's empty-cell signal — see CellShell's
 // `isEmpty` prop. Non-empty values may be JSX (anchor for url, icon for
@@ -278,7 +367,18 @@ export function formatDisplay( value, type, options = {} ) {
 	}
 
 	if ( type === 'number' ) {
-		return formatNumberValue( value, format );
+		const text = formatNumberValue( value, format );
+		if ( format?.display === 'bar' ) {
+			return (
+				<NumberBar value={ value } format={ format } text={ text } />
+			);
+		}
+		if ( format?.display === 'ring' ) {
+			return (
+				<NumberRing value={ value } format={ format } text={ text } />
+			);
+		}
+		return text;
 	}
 
 	return String( value );
