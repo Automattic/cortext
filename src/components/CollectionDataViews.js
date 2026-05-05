@@ -266,6 +266,8 @@ export default function CollectionDataViews( {
 		}, [ data, view, availableFields ] );
 	const { data: dataFilteredForCalculations } = useMemo( () => {
 		const calculationView = { ...( view ?? {} ) };
+		// tech-debt.md#36: summaries need the filtered row set before
+		// pagination, which DataViews does not expose as a separate result.
 		delete calculationView.page;
 		delete calculationView.perPage;
 		return filterSortAndPaginate( data, calculationView, availableFields );

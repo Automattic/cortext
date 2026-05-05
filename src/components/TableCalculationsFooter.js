@@ -21,6 +21,8 @@ function useDataViewsTable( wrapperRef ) {
 		}
 
 		const sync = () => {
+			// tech-debt.md#36: DataViews has no table footer slot, so the
+			// calculation row has to attach to the table after it renders.
 			setTable( wrapper.querySelector( '.dataviews-view-table' ) );
 		};
 
