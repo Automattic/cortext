@@ -10,7 +10,40 @@ import {
 	useEffect,
 } from '@wordpress/element';
 import { Button, Icon, Spinner } from '@wordpress/components';
-import { chevronLeft, chevronRight, plus, wordpress } from '@wordpress/icons';
+import { chevronLeft, plus, wordpress } from '@wordpress/icons';
+
+// Notion-style sidebar toggle: panel outline with a vertical accent on
+// the left side. Same icon for both states; the aria-label tells the
+// user what the toggle will do.
+const sidebarToggleIcon = (
+	<svg
+		xmlns="http://www.w3.org/2000/svg"
+		viewBox="0 0 24 24"
+		width="24"
+		height="24"
+		aria-hidden="true"
+		focusable="false"
+	>
+		<rect
+			x="4"
+			y="5"
+			width="16"
+			height="14"
+			rx="2"
+			stroke="currentColor"
+			strokeWidth="1.5"
+			fill="none"
+		/>
+		<line
+			x1="9"
+			y1="5"
+			x2="9"
+			y2="19"
+			stroke="currentColor"
+			strokeWidth="1.5"
+		/>
+	</svg>
+);
 import {
 	DndContext,
 	DragOverlay,
@@ -439,7 +472,7 @@ export default function Sidebar( {
 				) }
 				<Button
 					className="cortext-sidebar__collapse-toggle"
-					icon={ collapsed ? chevronRight : chevronLeft }
+					icon={ sidebarToggleIcon }
 					label={
 						collapsed
 							? __( 'Expand sidebar', 'cortext' )
