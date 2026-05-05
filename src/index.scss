@@ -2017,15 +2017,17 @@ thead > tr > th {
 	}
 }
 
-// Page icon: hugs the icon button (`width: fit-content`) so the editor's
-// block selection outline traces the icon itself instead of stretching
-// across the entire content column. The wrapper still aligns to the
-// content column's left edge via the parent BlockList's padding.
+// Page icon: participates in the same constrained content column as the
+// title. The button itself stays compact, but the block wrapper must stay
+// block-level; otherwise, when there is no cover before it, Gutenberg's
+// constrained layout no longer centers it with the title.
 .cortext-page-icon-block {
-	display: inline-flex;
+	display: flex;
 	align-items: flex-end;
-	width: fit-content;
-	margin-block: $grid-unit-10;
+	justify-content: flex-start;
+	max-width: var(--wp--style--global--content-size, 840px);
+	margin: $grid-unit-10 auto;
+	padding: 0 $grid-unit-20;
 
 	// The trigger is only an emoji or thumbnail; framing it like a button
 	// (border + shadow) reads as visual noise next to the cover. Keep the
