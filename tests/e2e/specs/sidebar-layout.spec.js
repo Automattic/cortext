@@ -20,7 +20,7 @@ async function deleteIfCreated( requestUtils, path ) {
 			path,
 			params: { force: true },
 		} );
-	} catch ( _error ) {
+	} catch {
 		// Best-effort cleanup; the record may already be gone.
 	}
 }
@@ -28,7 +28,9 @@ async function deleteIfCreated( requestUtils, path ) {
 async function readSidebarWidth( page ) {
 	return page.evaluate( () => {
 		const sidebar = document.getElementById( 'cortext-sidebar' );
-		return sidebar ? Math.round( sidebar.getBoundingClientRect().width ) : 0;
+		return sidebar
+			? Math.round( sidebar.getBoundingClientRect().width )
+			: 0;
 	} );
 }
 
@@ -49,12 +51,76 @@ async function readChromeLabelAlignment( page ) {
 
 		const headerCenter = headerBox.top + headerBox.height / 2;
 		const brandCenter = brandBox.top + brandBox.height / 2;
-		const breadcrumbCenter =
-			breadcrumbBox.top + breadcrumbBox.height / 2;
+		const breadcrumbCenter = breadcrumbBox.top + breadcrumbBox.height / 2;
 
 		return {
 			labelDelta: Math.abs( brandCenter - breadcrumbCenter ),
 			headerDelta: Math.abs( brandCenter - headerCenter ),
+		};
+	} );
+}
+
+async function readCollapsedRailAlignment( page ) {
+	return page.evaluate( () => {
+		const header = document.querySelector( '.cortext-sidebar__header' );
+		const topbar = document.querySelector( '.cortext-topbar' );
+		const toggle = document.querySelector(
+			'.cortext-sidebar__collapse-toggle'
+		);
+		const back = document.querySelector( '.cortext-sidebar__back' );
+		const theme = document.querySelector(
+			'.cortext-sidebar__theme-toggle'
+		);
+		if ( ! header || ! topbar || ! toggle || ! back || ! theme ) {
+			return null;
+		}
+
+		const box = ( element ) => {
+			const rect = element.getBoundingClientRect();
+			return {
+				left: rect.left,
+				top: rect.top,
+				width: rect.width,
+				height: rect.height,
+				xCenter: rect.left + rect.width / 2,
+				yCenter: rect.top + rect.height / 2,
+			};
+		};
+
+		const headerBox = box( header );
+		const topbarBox = box( topbar );
+		const toggleBox = box( toggle );
+		const backBox = box( back );
+		const themeBox = box( theme );
+
+		return {
+			headerHeightDelta: Math.abs( headerBox.height - topbarBox.height ),
+			toggleHeaderDelta: Math.abs(
+				toggleBox.yCenter - headerBox.yCenter
+			),
+			footerIconDelta: Math.abs( backBox.xCenter - themeBox.xCenter ),
+		};
+	} );
+}
+
+async function readRenameRowGeometry( page ) {
+	return page.evaluate( () => {
+		const input = document.querySelector(
+			'.cortext-sidebar__rename input'
+		);
+		const row = input?.closest( '.cortext-sidebar__row' );
+		if ( ! input || ! row ) {
+			return null;
+		}
+
+		const inputBox = input.getBoundingClientRect();
+		const rowBox = row.getBoundingClientRect();
+
+		return {
+			inputHeight: inputBox.height,
+			rowHeight: rowBox.height,
+			overflowTop: rowBox.top - inputBox.top,
+			overflowBottom: inputBox.bottom - rowBox.bottom,
 		};
 	} );
 }
@@ -64,7 +130,7 @@ async function clearSidebarPrefs( page ) {
 		try {
 			window.localStorage.removeItem( 'cortext.sidebarCollapsed' );
 			window.localStorage.removeItem( 'cortext.sidebarWidth' );
-		} catch ( _e ) {}
+		} catch {}
 	} );
 }
 
@@ -88,21 +154,29 @@ test.describe( 'Sidebar layout controls', () => {
 		await expect
 			.poll( () => readSidebarWidth( page ) )
 			.toBeLessThanOrEqual( RAIL_WIDTH + 2 );
-		await expect(
-			page.locator( '#cortext-root' )
-		).toHaveAttribute( 'data-sidebar-collapsed', 'true' );
+		await expect( page.locator( '#cortext-root' ) ).toHaveAttribute(
+			'data-sidebar-collapsed',
+			'true'
+		);
 
 		await page.reload();
 
 		await expect
 			.poll( () => readSidebarWidth( page ) )
 			.toBeLessThanOrEqual( RAIL_WIDTH + 2 );
-		await expect(
-			page.locator( '#cortext-root' )
-		).toHaveAttribute( 'data-sidebar-collapsed', 'true' );
+		await expect( page.locator( '#cortext-root' ) ).toHaveAttribute(
+			'data-sidebar-collapsed',
+			'true'
+		);
 		await expect(
 			page.getByRole( 'button', { name: 'Expand sidebar' } )
 		).toBeVisible();
+
+		const railAlignment = await readCollapsedRailAlignment( page );
+		expect( railAlignment ).not.toBeNull();
+		expect( railAlignment.headerHeightDelta ).toBeLessThanOrEqual( 1 );
+		expect( railAlignment.toggleHeaderDelta ).toBeLessThanOrEqual( 1 );
+		expect( railAlignment.footerIconDelta ).toBeLessThanOrEqual( 1 );
 	} );
 
 	test( 'aligns the brand and current breadcrumb text vertically', async ( {
@@ -194,7 +268,9 @@ test.describe( 'Sidebar layout controls', () => {
 			.toBeGreaterThan( 200 );
 	} );
 
-	test( 'arrow keys nudge width on the focused handle', async ( { page } ) => {
+	test( 'arrow keys nudge width on the focused handle', async ( {
+		page,
+	} ) => {
 		const handle = page.locator( '.cortext-sidebar__resize-handle' );
 		await handle.focus();
 
@@ -206,13 +282,65 @@ test.describe( 'Sidebar layout controls', () => {
 			.toBeGreaterThan( startWidth );
 
 		await page.keyboard.press( 'End' );
-		await expect.poll( () => readSidebarWidth( page ) ).toBeGreaterThan(
-			startWidth + 100
-		);
+		await expect
+			.poll( () => readSidebarWidth( page ) )
+			.toBeGreaterThan( startWidth + 100 );
 
 		await page.keyboard.press( 'Home' );
-		await expect.poll( () => readSidebarWidth( page ) ).toBeLessThan(
-			startWidth + 1
-		);
+		await expect
+			.poll( () => readSidebarWidth( page ) )
+			.toBeLessThan( startWidth + 1 );
+	} );
+
+	test( 'keeps the rename input inside the page row height', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const suffix = Date.now().toString( 36 ).slice( -4 );
+		const title = `E2E Rename Geometry ${ suffix }`;
+		const fixture = {};
+
+		try {
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_pages',
+				data: { title, status: 'private' },
+			} );
+
+			await admin.visitAdminPage(
+				SHELL_PATH,
+				`page=cortext&p=/page/${ fixture.page.id }`
+			);
+
+			const sidebar = page.locator( '.cortext-sidebar' );
+			await sidebar
+				.getByRole( 'button', { name: title, exact: true } )
+				.hover();
+			await sidebar
+				.getByRole( 'button', {
+					name: `Actions for ${ title }`,
+					exact: true,
+				} )
+				.click();
+			await page.getByRole( 'menuitem', { name: 'Rename' } ).click();
+
+			await expect(
+				page.locator( '.cortext-sidebar__rename input' )
+			).toBeVisible();
+
+			const geometry = await readRenameRowGeometry( page );
+			expect( geometry ).not.toBeNull();
+			expect( geometry.inputHeight ).toBeLessThanOrEqual(
+				geometry.rowHeight
+			);
+			expect( geometry.overflowTop ).toBeLessThanOrEqual( 0 );
+			expect( geometry.overflowBottom ).toBeLessThanOrEqual( 0 );
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page ? `/wp/v2/crtxt_pages/${ fixture.page.id }` : null
+			);
+		}
 	} );
 } );
