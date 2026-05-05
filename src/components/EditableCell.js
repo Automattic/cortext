@@ -100,18 +100,24 @@ function clampDecimals( decimals ) {
 
 // Formats a number value per a stored `number_format` config. Returns
 // `String(value)` for non-numeric values so editing partial input ("3.")
-// or stale string values doesn't blow up the cell.
+// or stale string values doesn't blow up the cell. Only forces a fixed
+// decimal count when the user explicitly picks one — otherwise we let
+// Intl decide, so a field with no saved format still shows `1.25` as
+// `1.25` rather than truncating it to `1`.
 export function formatNumberValue( value, format ) {
 	const num = typeof value === 'number' ? value : Number( value );
 	if ( ! Number.isFinite( num ) ) {
 		return String( value );
 	}
 	const style = format?.style ?? 'plain';
-	const decimals = clampDecimals( format?.decimals );
-	const fractionOpts = {
-		minimumFractionDigits: decimals,
-		maximumFractionDigits: decimals,
-	};
+	const hasDecimals =
+		format?.decimals !== undefined && format?.decimals !== null;
+	const fractionOpts = hasDecimals
+		? {
+				minimumFractionDigits: clampDecimals( format.decimals ),
+				maximumFractionDigits: clampDecimals( format.decimals ),
+		  }
+		: {};
 	const locale = siteLocale();
 	try {
 		if ( style === 'percent' ) {

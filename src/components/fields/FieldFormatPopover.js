@@ -45,7 +45,19 @@ const NUMBER_FORMATS = [
 	},
 ];
 
-const DECIMAL_OPTIONS = [ 0, 1, 2, 3, 4, 5, 6 ];
+// `value: null` is the "let Intl decide" state; we store no `decimals`
+// key on the field meta in that case, so existing data keeps its
+// natural precision (e.g. 1.25 stays 1.25 rather than rounding).
+const DECIMAL_OPTIONS = [
+	{ id: 'default', label: __( 'Default', 'cortext' ), value: null },
+	{ id: 'd0', label: '0', value: 0 },
+	{ id: 'd1', label: '1', value: 1 },
+	{ id: 'd2', label: '2', value: 2 },
+	{ id: 'd3', label: '3', value: 3 },
+	{ id: 'd4', label: '4', value: 4 },
+	{ id: 'd5', label: '5', value: 5 },
+	{ id: 'd6', label: '6', value: 6 },
+];
 
 const DATE_FORMATS = [
 	{ id: 'locale', label: __( 'Locale default', 'cortext' ) },
@@ -155,10 +167,14 @@ function NumberFormBody( { config, onChange } ) {
 	const formatRowRef = useRef( null );
 	const decimalsRowRef = useRef( null );
 	const current = findNumberFormat( config );
-	const decimals = config?.decimals ?? 0;
+	const decimals = config?.decimals ?? null;
+	const hasDecimals = decimals !== null;
 
 	const pickFormat = ( item ) => {
-		const next = { style: item.style, decimals };
+		const next = { style: item.style };
+		if ( hasDecimals ) {
+			next.decimals = decimals;
+		}
 		if ( item.style === 'currency' ) {
 			next.currency = item.currency;
 		}
@@ -166,8 +182,14 @@ function NumberFormBody( { config, onChange } ) {
 		setOpenRow( null );
 	};
 
-	const pickDecimals = ( n ) => {
-		onChange( { ...( config ?? { style: 'plain' } ), decimals: n } );
+	const pickDecimals = ( value ) => {
+		const next = { ...( config ?? { style: 'plain' } ) };
+		if ( value === null ) {
+			delete next.decimals;
+		} else {
+			next.decimals = value;
+		}
+		onChange( next );
 		setOpenRow( null );
 	};
 
@@ -185,7 +207,11 @@ function NumberFormBody( { config, onChange } ) {
 			<SubmenuRow
 				ref={ decimalsRowRef }
 				label={ __( 'Decimal places', 'cortext' ) }
-				value={ String( decimals ) }
+				value={
+					hasDecimals
+						? String( decimals )
+						: __( 'Default', 'cortext' )
+				}
 				isOpen={ openRow === 'decimals' }
 				onClick={ () =>
 					setOpenRow( openRow === 'decimals' ? null : 'decimals' )
@@ -215,11 +241,7 @@ function NumberFormBody( { config, onChange } ) {
 					className="cortext-format-submenu__flyout"
 				>
 					<ChoiceList
-						items={ DECIMAL_OPTIONS.map( ( n ) => ( {
-							id: `d${ n }`,
-							label: String( n ),
-							value: n,
-						} ) ) }
+						items={ DECIMAL_OPTIONS }
 						isSelected={ ( item ) => item.value === decimals }
 						onPick={ ( item ) => pickDecimals( item.value ) }
 					/>

@@ -95,6 +95,32 @@ describe( 'formatDisplay', () => {
 			);
 		} );
 
+		it( 'preserves natural precision when no decimals are configured', () => {
+			// Existing fields and freshly-saved formats both omit
+			// `decimals`. The renderer must not force-truncate them — Intl
+			// keeps up to 3 fraction digits by default for plain output,
+			// which matches what users expect from "no format set".
+			expect( formatDisplay( 1.25, 'number' ) ).toBe( '1.25' );
+			expect(
+				formatDisplay( 1.25, 'number', {
+					format: { style: 'plain' },
+				} )
+			).toBe( '1.25' );
+			expect(
+				formatDisplay( 1234.5, 'number', {
+					format: { style: 'comma' },
+				} )
+			).toBe( '1,234.5' );
+		} );
+
+		it( 'rounds to the explicit decimals when 0 is picked', () => {
+			expect(
+				formatDisplay( 1.25, 'number', {
+					format: { style: 'plain', decimals: 0 },
+				} )
+			).toBe( '1' );
+		} );
+
 		it( 'follows the WordPress site locale for separators', () => {
 			// `@wordpress/date` defaults the locale to 'en' under jest, so
 			// the comma case still produces `1,234,567`. If the wiring
