@@ -35,11 +35,13 @@ import EditOptionsPopover from './EditOptionsPopover';
 import FieldFormatPopover from './FieldFormatPopover';
 import RenameFieldInline from './RenameFieldInline';
 import { elementsFromOptions } from '../../hooks/fieldMapping';
+import { TableCalculationPopover } from '../TableCalculationMenu';
 import {
 	useDeleteField,
 	useDuplicateField,
 } from '../../hooks/useFieldMutations';
 import { GHOST_FIELD_ID, TITLE_FIELD_ID } from '../dataViewColumns';
+import { withColumnCalculation } from '../tableCalculations';
 
 const TYPES_WITH_OPTIONS = new Set( [ 'select', 'multiselect' ] );
 const { Menu } = unlock( componentsPrivateApis );
@@ -181,9 +183,13 @@ function FieldActions( {
 	const [ isMenuOpen, setIsMenuOpen ] = useState( false );
 	const [ isFormatting, setIsFormatting ] = useState( false );
 	const [ isEditingOptions, setIsEditingOptions ] = useState( false );
+	const [ isCalculating, setIsCalculating ] = useState( false );
 	const [ shouldFocusFormat, setShouldFocusFormat ] = useState( false );
+	const [ shouldFocusCalculation, setShouldFocusCalculation ] =
+		useState( false );
 	const [ confirmDelete, setConfirmDelete ] = useState( false );
 	const formatItemRef = useRef( null );
+	const calculationItemRef = useRef( null );
 	const closeTimerRef = useRef( null );
 	const optionsAnchorRef = useRef( null );
 	const duplicate = useDuplicateField( collectionId );
@@ -214,14 +220,18 @@ function FieldActions( {
 		cancelClose();
 		closeTimerRef.current = setTimeout( () => {
 			setIsFormatting( false );
+			setIsCalculating( false );
 			setShouldFocusFormat( false );
+			setShouldFocusCalculation( false );
 			closeTimerRef.current = null;
 		}, 180 );
 	}, [ cancelClose ] );
 	const openFormat = useCallback(
 		( focus = false ) => {
 			cancelClose();
+			setIsCalculating( false );
 			setShouldFocusFormat( focus );
+			setShouldFocusCalculation( false );
 			setIsFormatting( true );
 		},
 		[ cancelClose ]
@@ -231,7 +241,9 @@ function FieldActions( {
 	const closeMenu = useCallback( () => {
 		cancelClose();
 		setIsFormatting( false );
+		setIsCalculating( false );
 		setShouldFocusFormat( false );
+		setShouldFocusCalculation( false );
 		setIsMenuOpen( false );
 	}, [ cancelClose ] );
 
@@ -241,12 +253,52 @@ function FieldActions( {
 		setShouldFocusFormat( false );
 	}, [ cancelClose ] );
 
+	const closeCalculation = useCallback( () => {
+		cancelClose();
+		setIsCalculating( false );
+		setShouldFocusCalculation( false );
+	}, [ cancelClose ] );
+
+	const openCalculation = useCallback(
+		( focus = false ) => {
+			cancelClose();
+			setIsFormatting( false );
+			setShouldFocusFormat( false );
+			setShouldFocusCalculation( focus );
+			setIsCalculating( true );
+		},
+		[ cancelClose ]
+	);
+
+	const openCalculationFromKeyboard = useCallback(
+		( event ) => {
+			if (
+				! [ 'ArrowRight', 'Enter', ' ', 'Spacebar' ].includes(
+					event.key
+				)
+			) {
+				return;
+			}
+			event.preventDefault();
+			event.stopPropagation();
+			openCalculation( true );
+		},
+		[ openCalculation ]
+	);
+
 	const closeFormatAndFocusTrigger = useCallback( () => {
 		closeFormat();
 		window.requestAnimationFrame( () => {
 			formatItemRef.current?.focus();
 		} );
 	}, [ closeFormat ] );
+
+	const closeCalculationAndFocusTrigger = useCallback( () => {
+		closeCalculation();
+		window.requestAnimationFrame( () => {
+			calculationItemRef.current?.focus();
+		} );
+	}, [ closeCalculation ] );
 
 	const openFormatFromKeyboard = useCallback(
 		( event ) => {
@@ -282,7 +334,8 @@ function FieldActions( {
 		if ( target && typeof target.closest === 'function' ) {
 			if (
 				target.closest( '.cortext-format-submenu' ) ||
-				target.closest( '.cortext-format-submenu__flyout' )
+				target.closest( '.cortext-format-submenu__flyout' ) ||
+				target.closest( '.cortext-table-calculation-submenu' )
 			) {
 				return false;
 			}
@@ -323,6 +376,14 @@ function FieldActions( {
 	const dataViewId = `field-${ recordId }`;
 	const label =
 		record?.title?.raw || record?.title?.rendered || `#${ recordId }`;
+	const calculationField = useMemo(
+		() => ( {
+			id: dataViewId,
+			label,
+			cortextType: fieldType ?? 'text',
+		} ),
+		[ dataViewId, fieldType, label ]
+	);
 	const visibleFields = useMemo(
 		() => ( Array.isArray( view?.fields ) ? view.fields : [] ),
 		[ view ]
@@ -482,6 +543,22 @@ function FieldActions( {
 					{ /* View group: sort, hide. Notion bundles
 					     filter/sort/group/hide together. */ }
 					<Menu.Group>
+						<Menu.Item
+							ref={ calculationItemRef }
+							className="cortext-column-header-actions__submenu-item"
+							hideOnClick={ false }
+							suffix={
+								<Icon icon={ chevronRight } size={ 18 } />
+							}
+							onClick={ () => openCalculation() }
+							onKeyDown={ openCalculationFromKeyboard }
+							onMouseEnter={ () => openCalculation() }
+							onMouseLeave={ scheduleClose }
+						>
+							<Menu.ItemLabel>
+								{ __( 'Calculate', 'cortext' ) }
+							</Menu.ItemLabel>
+						</Menu.Item>
 						<Menu.RadioItem
 							name="cortext-column-sort"
 							value="asc"
@@ -570,6 +647,29 @@ function FieldActions( {
 					onClose={ closeFormat }
 					onCloseWithFocus={ closeFormatAndFocusTrigger }
 					onMouseEnter={ () => openFormat() }
+					onMouseLeave={ scheduleClose }
+				/>
+			) : null }
+			{ isCalculating ? (
+				<TableCalculationPopover
+					anchor={ calculationItemRef.current }
+					field={ calculationField }
+					selected={ view?.calculations?.[ dataViewId ] }
+					focusOnMount={
+						shouldFocusCalculation ? 'firstElement' : false
+					}
+					onPick={ ( calculation ) => {
+						onChangeView(
+							withColumnCalculation(
+								view,
+								dataViewId,
+								calculation
+							)
+						);
+						closeMenu();
+					} }
+					onClose={ closeCalculationAndFocusTrigger }
+					onMouseEnter={ () => openCalculation() }
 					onMouseLeave={ scheduleClose }
 				/>
 			) : null }

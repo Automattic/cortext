@@ -13,6 +13,7 @@ import { plus } from '@wordpress/icons';
 
 import DataViewColumnInteractions from './DataViewColumnInteractions';
 import EditableCell, { RowMutationContext } from './EditableCell';
+import TableCalculationsFooter from './TableCalculationsFooter';
 import ColumnHeaderActions from './fields/ColumnHeaderActions';
 import {
 	GHOST_FIELD_ID,
@@ -49,6 +50,7 @@ const TITLE_FIELD = {
 		/>
 	),
 	editable: true,
+	cortextType: 'title',
 	enableGlobalSearch: true,
 	// The title column can't be hidden (it's the row identity), but it
 	// reorders and resizes like any other column. `normalizeView` re-adds
@@ -65,6 +67,7 @@ const TITLE_FIELD = {
 const GHOST_FIELD = {
 	id: GHOST_FIELD_ID,
 	type: 'text',
+	cortextType: 'ghost',
 	label: '',
 	enableSorting: false,
 	enableHiding: false,
@@ -261,6 +264,12 @@ export default function CollectionDataViews( {
 		useMemo( () => {
 			return filterSortAndPaginate( data, view, availableFields );
 		}, [ data, view, availableFields ] );
+	const { data: dataFilteredForCalculations } = useMemo( () => {
+		const calculationView = { ...( view ?? {} ) };
+		delete calculationView.page;
+		delete calculationView.perPage;
+		return filterSortAndPaginate( data, calculationView, availableFields );
+	}, [ data, view, availableFields ] );
 
 	const requestNext = useCallback(
 		( rowId, fieldId, direction ) => {
@@ -419,7 +428,9 @@ export default function CollectionDataViews( {
 			};
 		}
 
-		let normalized = normalizeView( seededView, validIds );
+		let normalized = normalizeView( seededView, validIds, {
+			fields: availableFields,
+		} );
 
 		// Splice any editable field that just appeared in the schema
 		// (wasn't present on the previous sync) into its schema position
@@ -601,6 +612,15 @@ export default function CollectionDataViews( {
 					isLoading={ isLoading }
 					empty={ empty }
 				/>
+				{ isTableLayout && (
+					<TableCalculationsFooter
+						wrapperRef={ tableWrapperRef }
+						view={ view }
+						fields={ availableFields }
+						data={ dataFilteredForCalculations }
+						onChangeView={ onChangeView }
+					/>
+				) }
 				{ isTableLayout && (
 					<DataViewColumnInteractions
 						wrapperRef={ tableWrapperRef }
