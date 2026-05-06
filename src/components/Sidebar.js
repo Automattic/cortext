@@ -110,12 +110,8 @@ export default function Sidebar( {
 
 	const { records: collections, isResolving: isResolvingCollections } =
 		useEntityRecords( 'postType', 'crtxt_collection', COLLECTION_QUERY );
-	const {
-		saveEntityRecord,
-		deleteEntityRecord,
-		invalidateResolution,
-		receiveEntityRecords,
-	} = useDispatch( 'core' );
+	const { saveEntityRecord, invalidateResolution, receiveEntityRecords } =
+		useDispatch( 'core' );
 	const pages = useMemo( () => records ?? [], [ records ] );
 	const navigate = useNavigate();
 	const params = useParams( { strict: false } );
@@ -344,19 +340,21 @@ export default function Sidebar( {
 	// confirmation. The editor stays on the trashed page so the user can
 	// review what they trashed before deciding whether to restore.
 	//
-	// `deleteEntityRecord` always calls `removeItems` after the DELETE
-	// response, even for soft-delete, so the trashed record is yanked from
-	// the store and the canvas's `useEntityRecord( id )` would render an
-	// indefinite spinner. Put the trashed record (returned by the REST
-	// response) back into the store so the canvas can keep showing it.
+	// Do not use core-data's `deleteEntityRecord` for this soft-delete path:
+	// it removes the current post from the raw record store before the canvas
+	// has finished its block-editor selection writes, which can crash core-data.
+	// Calling REST directly is intentional here, not a generic trash pattern:
+	// the REST response is still the source of truth, and we immediately put
+	// the returned trashed record back into core-data so the editor can keep
+	// rendering the page while the active/trash queries refresh below.
 	const trashPage = useCallback(
 		async ( id ) => {
-			const trashed = await deleteEntityRecord(
-				'postType',
-				POST_TYPE,
-				id
-			);
-			if ( trashed ) {
+			const deleted = await apiFetch( {
+				path: `/wp/v2/crtxt_pages/${ id }`,
+				method: 'DELETE',
+			} );
+			const trashed = deleted?.previous ?? deleted;
+			if ( trashed?.id ) {
 				receiveEntityRecords( 'postType', POST_TYPE, [ trashed ] );
 			}
 			invalidateResolution( 'getEntityRecords', [
@@ -370,7 +368,7 @@ export default function Sidebar( {
 				TRASHED_PAGES_QUERY,
 			] );
 		},
-		[ deleteEntityRecord, invalidateResolution, receiveEntityRecords ]
+		[ invalidateResolution, receiveEntityRecords ]
 	);
 
 	// --- Drag and drop -----------------------------------------------------
