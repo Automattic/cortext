@@ -6,6 +6,10 @@
 // doesn't register a `wp-interface` style handle, so bundle its stylesheet.
 @use "../node_modules/@wordpress/interface/build-style/style.css";
 
+// @wordpress/commands isn't registered as a style handle on plain wp-admin
+// screens, so bundle its modal/list styles for the cmd+K palette.
+@use "../node_modules/@wordpress/commands/build-style/style.css" as commands;
+
 // Same deal for @wordpress/dataviews. Importing via JS would be tree-shaken
 // because the package declares `sideEffects: false`; pulling it through
 // sass-loader side-steps that.
@@ -660,6 +664,10 @@ body.cortext-sidebar-resizing {
 	background: var(--cortext-canvas-frame-surface);
 	// Named so the cross-fade is scoped to this column.
 	view-transition-name: cortext-canvas;
+
+	&:focus {
+		outline: none;
+	}
 
 	// InterfaceSkeleton defaults to `position: fixed` at >= 782px, which would
 	// escape our grid and overlap the page-list sidebar. Scope it to fill just

@@ -11,6 +11,7 @@ import { SlotFillProvider } from '@wordpress/components';
 
 import Sidebar from './components/Sidebar';
 import EntityRoute from './router/EntityRoute';
+import CommandPalette from './components/CommandPalette';
 import useSidebarLayout from './hooks/useSidebarLayout';
 import { WorkspaceHomeProvider } from './hooks/useWorkspaceHome';
 import { unlock } from './lock-unlock';
@@ -68,10 +69,11 @@ function RootLayout() {
 						onToggleCollapsed={ toggleCollapsed }
 						onWidthChange={ setWidth }
 					/>
-					<main className="cortext-shell__canvas">
+					<main className="cortext-shell__canvas" tabIndex={ -1 }>
 						<EntityRoute history={ router.history } />
 					</main>
 				</div>
+				<CommandPalette />
 			</WorkspaceHomeProvider>
 		</SlotFillProvider>
 	);

@@ -28,6 +28,7 @@ final class Screen {
 	public function register(): void {
 		add_action( 'admin_menu', array( $this, 'register_menu' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
+		add_action( 'admin_enqueue_scripts', array( $this, 'dequeue_core_command_palette' ), 100 );
 		add_filter( 'admin_body_class', array( $this, 'add_body_class' ) );
 	}
 
@@ -157,6 +158,17 @@ final class Screen {
 				$asset['version']
 			);
 		}
+	}
+
+	public function dequeue_core_command_palette( string $hook_suffix ): void {
+		if ( self::HOOK_SUFFIX !== $hook_suffix ) {
+			return;
+		}
+
+		// Cortext owns the command palette on its full-screen admin surface.
+		// Core's admin palette registers global wp-admin commands and mounts a
+		// second CommandMenu instance against the same shared store.
+		wp_dequeue_script( 'wp-core-commands' );
 	}
 
 	public function add_body_class( string $classes ): string {
