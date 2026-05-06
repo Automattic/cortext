@@ -14,6 +14,15 @@ const MIN_WIDTH = 360;
 const MAX_WIDTH = 840;
 const RESIZE_STEP = 24;
 const MAX_VIEWPORT_RATIO = 0.66;
+const SIDEBAR_ANIMATION_MS = 300;
+const SIDEBAR_ANIMATION_FALLBACK_MS = SIDEBAR_ANIMATION_MS + 100;
+
+function prefersReducedMotion() {
+	return (
+		typeof window !== 'undefined' &&
+		window.matchMedia?.( '(prefers-reduced-motion: reduce)' ).matches
+	);
+}
 
 function getMaxWidth() {
 	if ( typeof window === 'undefined' ) {
@@ -47,9 +56,13 @@ function initialWidth() {
 	return clampWidth( Number.isFinite( stored ) ? stored : DEFAULT_WIDTH );
 }
 
-export function RowDetailSidebarSlot( { fallback = null } ) {
+export function RowDetailSidebarSlot( {
+	fallback = null,
+	isFallbackActive = false,
+} ) {
 	const fills = useSlotFills( RowDetailSidebar.name );
 	const hasRowDetail = Boolean( fills?.length );
+	const [ isRendered, setIsRendered ] = useState( hasRowDetail );
 	const [ width, setWidth ] = useState( initialWidth );
 	const dragRef = useRef( null );
 	const widthRef = useRef( width );
@@ -70,6 +83,25 @@ export function RowDetailSidebarSlot( { fallback = null } ) {
 	useEffect( () => {
 		widthRef.current = width;
 	}, [ width ] );
+
+	useEffect( () => {
+		if ( hasRowDetail ) {
+			setIsRendered( true );
+			return undefined;
+		}
+		if ( ! isRendered ) {
+			return undefined;
+		}
+		if ( prefersReducedMotion() ) {
+			setIsRendered( false );
+			return undefined;
+		}
+
+		const timeout = setTimeout( () => {
+			setIsRendered( false );
+		}, SIDEBAR_ANIMATION_FALLBACK_MS );
+		return () => clearTimeout( timeout );
+	}, [ hasRowDetail, isRendered ] );
 
 	useEffect( () => {
 		return () => {
@@ -159,39 +191,83 @@ export function RowDetailSidebarSlot( { fallback = null } ) {
 		[ commitWidth, width ]
 	);
 
-	if ( ! hasRowDetail ) {
+	const onShellAnimationEnd = useCallback(
+		( event ) => {
+			if ( hasRowDetail || event.target !== event.currentTarget ) {
+				return;
+			}
+			setIsRendered( false );
+		},
+		[ hasRowDetail ]
+	);
+
+	if ( ! isRendered ) {
 		return fallback;
 	}
 
 	const maxWidth = getMaxWidth();
+	const isClosing = ! hasRowDetail;
+	const shouldReserveFallback = Boolean( fallback && isFallbackActive );
 
-	return (
+	const shell = (
 		<div
-			className="cortext-row-detail-sidebar-shell"
+			className={
+				'cortext-row-detail-sidebar-shell' +
+				( isClosing
+					? ' cortext-row-detail-sidebar-shell--closing'
+					: '' )
+			}
+			aria-hidden={ isClosing ? true : undefined }
+			{ ...( isClosing ? { inert: '' } : {} ) }
 			style={ {
 				'--cortext-row-detail-sidebar-width': `${ width }px`,
 			} }
+			onAnimationEnd={ onShellAnimationEnd }
 		>
-			{ /* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */ }
-			<div
-				className="cortext-row-detail-sidebar-shell__resize-handle"
-				role="separator"
-				aria-label={ __( 'Resize row detail panel', 'cortext' ) }
-				aria-orientation="vertical"
-				aria-valuemin={ MIN_WIDTH }
-				aria-valuemax={ maxWidth }
-				aria-valuenow={ width }
-				tabIndex={ 0 }
-				onPointerDown={ onResizeStart }
-				onPointerMove={ onResizeMove }
-				onPointerUp={ onResizeEnd }
-				onPointerCancel={ onResizeEnd }
-				onKeyDown={ onResizeKeyDown }
-			/>
-			<RowDetailSidebar.Slot
-				bubblesVirtually
-				className="cortext-row-detail-sidebar"
-			/>
+			{ ! isClosing ? (
+				<>
+					{ /* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */ }
+					<div
+						className="cortext-row-detail-sidebar-shell__resize-handle"
+						role="separator"
+						aria-label={ __(
+							'Resize row detail panel',
+							'cortext'
+						) }
+						aria-orientation="vertical"
+						aria-valuemin={ MIN_WIDTH }
+						aria-valuemax={ maxWidth }
+						aria-valuenow={ width }
+						tabIndex={ 0 }
+						onPointerDown={ onResizeStart }
+						onPointerMove={ onResizeMove }
+						onPointerUp={ onResizeEnd }
+						onPointerCancel={ onResizeEnd }
+						onKeyDown={ onResizeKeyDown }
+					/>
+					<RowDetailSidebar.Slot
+						bubblesVirtually
+						className="cortext-row-detail-sidebar"
+					/>
+				</>
+			) : null }
 		</div>
 	);
+
+	if ( shouldReserveFallback ) {
+		return (
+			<div className="cortext-row-detail-sidebar-handoff cortext-row-detail-sidebar-handoff--reserve">
+				<div
+					className="cortext-row-detail-sidebar-handoff__fallback"
+					aria-hidden={ hasRowDetail ? true : undefined }
+					{ ...( hasRowDetail ? { inert: '' } : {} ) }
+				>
+					{ fallback }
+				</div>
+				{ shell }
+			</div>
+		);
+	}
+
+	return shell;
 }

@@ -609,6 +609,12 @@ function CanvasEditor( {
 	const { status, flushNow, isDirty, isSaving } = useAutosave();
 	const { resetPost } = useDispatch( editorStore );
 	const discard = useCallback( () => resetPost(), [ resetPost ] );
+	const isInspectorOpen = useSelect(
+		( select ) =>
+			select( interfaceStore ).getActiveComplementaryArea( SCOPE ) ===
+			INSPECTOR,
+		[]
+	);
 	const isTrashed = post.status === 'trash';
 	const canRestoreTrash = postType === POST_TYPE;
 
@@ -685,6 +691,7 @@ function CanvasEditor( {
 							fallback={
 								<ComplementaryArea.Slot scope={ SCOPE } />
 							}
+							isFallbackActive={ isInspectorOpen }
 						/>
 					) : (
 						<ComplementaryArea.Slot scope={ SCOPE } />

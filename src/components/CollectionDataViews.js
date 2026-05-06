@@ -39,6 +39,10 @@ const DEFAULT_LAYOUTS = { table: { density: 'compact' }, grid: {}, list: {} };
 const TITLE_LABEL = __( 'Title', 'cortext' );
 const ROW_SEARCH_KEY = 'row';
 const ROW_COLLECTION_SEARCH_KEY = 'rowCollection';
+const ROW_DETAIL_SIDE_SURFACE_EXIT_MS = 300;
+const ROW_DETAIL_MODAL_ENTER_MS = 200;
+const ROW_DETAIL_SIDE_TO_MODAL_HANDOFF_MS =
+	ROW_DETAIL_SIDE_SURFACE_EXIT_MS - ROW_DETAIL_MODAL_ENTER_MS;
 
 function parseSearchId( value ) {
 	if ( Array.isArray( value ) ) {
@@ -46,6 +50,13 @@ function parseSearchId( value ) {
 	}
 	const id = Number.parseInt( String( value ).replaceAll( '"', '' ), 10 );
 	return Number.isFinite( id ) && id > 0 ? id : null;
+}
+
+function prefersReducedMotion() {
+	return (
+		typeof window !== 'undefined' &&
+		window.matchMedia?.( '(prefers-reduced-motion: reduce)' ).matches
+	);
 }
 
 const OpenRowActionContext = createContext( {
@@ -482,9 +493,31 @@ export default function CollectionDataViews( {
 	const [ detailSaveError, setDetailSaveError ] = useState( null );
 	const [ pendingDetailTransition, setPendingDetailTransition ] =
 		useState( null );
+	const [ modeSurfaceTransition, setModeSurfaceTransition ] =
+		useState( null );
+	const modeSurfaceTransitionTimeoutRef = useRef( null );
+	const renderedRowDetailMode =
+		modeSurfaceTransition !== null
+			? modeSurfaceTransition.surfaceMode
+			: rowDetailMode;
 	const setDetailApi = useCallback( ( api ) => {
 		detailApiRef.current = api;
 	}, [] );
+	const clearModeSurfaceTransition = useCallback( () => {
+		if ( modeSurfaceTransitionTimeoutRef.current ) {
+			clearTimeout( modeSurfaceTransitionTimeoutRef.current );
+			modeSurfaceTransitionTimeoutRef.current = null;
+		}
+		setModeSurfaceTransition( null );
+	}, [] );
+	useEffect(
+		() => () => {
+			if ( modeSurfaceTransitionTimeoutRef.current ) {
+				clearTimeout( modeSurfaceTransitionTimeoutRef.current );
+			}
+		},
+		[]
+	);
 	const updateRouteRow = useCallback(
 		( rowId, options = {} ) => {
 			if ( ! collectionId || ! rowId ) {
@@ -570,12 +603,14 @@ export default function CollectionDataViews( {
 			setPendingDetailTransition( null );
 
 			if ( transition.type === 'close' ) {
+				clearModeSurfaceTransition();
 				setOpenRowId( null );
 				setFullRowId( null );
 				if ( transition.syncUrl !== false ) {
 					clearRouteRow( { replace: true } );
 				}
 			} else if ( transition.type === 'row' ) {
+				clearModeSurfaceTransition();
 				setOpenRowId( transition.rowId );
 				setFullRowId( null );
 				if ( transition.syncUrl !== false ) {
@@ -589,6 +624,7 @@ export default function CollectionDataViews( {
 					withRowDetailMode( viewRef.current, transition.mode )
 				);
 			} else if ( transition.type === 'full' ) {
+				clearModeSurfaceTransition();
 				if ( transition.syncUrl !== false ) {
 					updateRouteRow( transition.rowId, {
 						replace: ! transition.pushUrl,
@@ -600,7 +636,13 @@ export default function CollectionDataViews( {
 				refresh();
 			}
 		},
-		[ clearRouteRow, openFullRow, refresh, updateRouteRow ]
+		[
+			clearModeSurfaceTransition,
+			clearRouteRow,
+			openFullRow,
+			refresh,
+			updateRouteRow,
+		]
 	);
 
 	const runDetailTransition = useCallback(
@@ -697,14 +739,51 @@ export default function CollectionDataViews( {
 	);
 
 	const requestDetailMode = useCallback(
-		( mode ) => {
+		async ( mode ) => {
 			if ( mode === 'full' && openRowId ) {
+				clearModeSurfaceTransition();
 				runDetailTransition( { type: 'full', rowId: openRowId } );
 			} else if ( mode !== rowDetailMode ) {
+				if (
+					rowDetailMode === 'side' &&
+					mode === 'modal' &&
+					openRowId &&
+					! prefersReducedMotion()
+				) {
+					setModeSurfaceTransition( {
+						surfaceMode: 'side',
+					} );
+					const didSwitch = await runDetailTransition( {
+						type: 'mode',
+						mode,
+					} );
+					if ( ! didSwitch ) {
+						clearModeSurfaceTransition();
+						return;
+					}
+					setModeSurfaceTransition( {
+						surfaceMode: null,
+					} );
+					modeSurfaceTransitionTimeoutRef.current = setTimeout(
+						() => {
+							modeSurfaceTransitionTimeoutRef.current = null;
+							setModeSurfaceTransition( null );
+						},
+						ROW_DETAIL_SIDE_TO_MODAL_HANDOFF_MS
+					);
+					return;
+				}
+
+				clearModeSurfaceTransition();
 				runDetailTransition( { type: 'mode', mode } );
 			}
 		},
-		[ openRowId, rowDetailMode, runDetailTransition ]
+		[
+			clearModeSurfaceTransition,
+			openRowId,
+			rowDetailMode,
+			runDetailTransition,
+		]
 	);
 
 	const retryPendingDetailTransition = useCallback( () => {
@@ -720,12 +799,13 @@ export default function CollectionDataViews( {
 	}, [ pendingDetailTransition, runDetailTransition ] );
 
 	useEffect( () => {
+		clearModeSurfaceTransition();
 		setOpenRowId( null );
 		setFullRowId( null );
 		setDetailSaveError( null );
 		setPendingDetailTransition( null );
 		detailApiRef.current = null;
-	}, [ collectionId ] );
+	}, [ clearModeSurfaceTransition, collectionId ] );
 
 	useEffect( () => {
 		const routeTargetsThisCollection =
@@ -977,13 +1057,13 @@ export default function CollectionDataViews( {
 	const nextRowId = adjacentRowId( dataFiltered, openRowId, 1 );
 	let detailSurface = null;
 
-	if ( openRowId && postType && ! isFullDetail ) {
+	if ( openRowId && postType && ! isFullDetail && renderedRowDetailMode ) {
 		const detailView = (
 			<RowDetailView
 				canGoNext={ Boolean( nextRowId ) }
 				canGoPrevious={ Boolean( previousRowId ) }
 				fields={ availableFields }
-				mode={ rowDetailMode }
+				mode={ renderedRowDetailMode }
 				onApi={ setDetailApi }
 				onClose={ requestCloseDetail }
 				onDiscardPending={ discardPendingDetailTransition }
@@ -999,7 +1079,7 @@ export default function CollectionDataViews( {
 			/>
 		);
 		detailSurface =
-			rowDetailMode === 'side' ? (
+			renderedRowDetailMode === 'side' ? (
 				<RowDetailSidebar.Fill>{ detailView }</RowDetailSidebar.Fill>
 			) : (
 				detailView
