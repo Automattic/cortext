@@ -107,7 +107,7 @@ function WorkspacePane( { active, preservePaint = false, children } ) {
 	);
 }
 
-export default function EntityRoute() {
+export default function EntityRoute( { history } ) {
 	const params = useParams( { strict: false } );
 	const navigate = useNavigate();
 	const splat = params._splat ?? '';
@@ -263,7 +263,10 @@ export default function EntityRoute() {
 
 	return (
 		<>
-			<WorkspaceTopBar paintedRoute={ paintedRoute } />
+			<WorkspaceTopBar
+				history={ history }
+				paintedRoute={ paintedRoute }
+			/>
 			<div className="cortext-workspace">
 				{ mountedPageId !== null && (
 					<WorkspacePane

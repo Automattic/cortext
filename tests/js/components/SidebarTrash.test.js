@@ -65,10 +65,13 @@ jest.mock( '@wordpress/icons', () => ( {
 	__esModule: true,
 	rotateLeft: 'rotate-left-icon',
 	trash: 'trash-icon',
+	page: 'page-icon',
+	Icon: ( { icon } ) => <span data-testid={ `icon-${ icon }` } />,
 } ) );
 
 jest.mock( '@wordpress/core-data', () => ( {
 	__esModule: true,
+	useEntityRecord: jest.fn().mockReturnValue( { record: null } ),
 	useEntityRecords: jest.fn(),
 } ) );
 
@@ -152,6 +155,27 @@ describe( 'SidebarTrash', () => {
 		render( <SidebarTrash activePages={ [] } /> );
 
 		expect( screen.getByText( 'No trashed pages.' ) ).toBeInTheDocument();
+	} );
+
+	it( 'keeps the last resolved trash list visible during a background refetch', () => {
+		const page = makePage( {
+			id: 7,
+			title: { rendered: 'Cached doc', raw: 'Cached doc' },
+		} );
+		setTrashRecords( { records: [ page ] } );
+		const { rerender } = render( <SidebarTrash activePages={ [] } /> );
+
+		expect( screen.getByText( 'Cached doc' ) ).toBeInTheDocument();
+
+		setTrashRecords( {
+			records: undefined,
+			hasResolved: false,
+			status: 'RESOLVING',
+		} );
+		rerender( <SidebarTrash activePages={ [] } /> );
+
+		expect( screen.queryByTestId( 'spinner' ) ).not.toBeInTheDocument();
+		expect( screen.getByText( 'Cached doc' ) ).toBeInTheDocument();
 	} );
 
 	it( 'shows an error state with a Retry button when the fetch failed', () => {

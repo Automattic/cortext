@@ -1,17 +1,19 @@
 import { __ } from '@wordpress/i18n';
-import { useEntityRecord } from '@wordpress/core-data';
-import { useSelect, useDispatch } from '@wordpress/data';
 import {
-	EditorProvider,
-	PostTitle,
-	store as editorStore,
-} from '@wordpress/editor';
+	useEntityProp,
+	useEntityRecord,
+	store as coreStore,
+} from '@wordpress/core-data';
+import { useSelect, useDispatch } from '@wordpress/data';
+import { EditorProvider, store as editorStore } from '@wordpress/editor';
 import {
 	BlockList,
 	BlockInspector,
 	BlockCanvas,
+	store as blockEditorStore,
 	useSettings,
 } from '@wordpress/block-editor';
+import { createBlock } from '@wordpress/blocks';
 import {
 	InterfaceSkeleton,
 	ComplementaryArea,
@@ -27,7 +29,12 @@ import {
 import { store as noticesStore } from '@wordpress/notices';
 import { cog } from '@wordpress/icons';
 import apiFetch from '@wordpress/api-fetch';
-import { useEffect, useState } from '@wordpress/element';
+import {
+	useEffect,
+	useLayoutEffect,
+	useRef,
+	useState,
+} from '@wordpress/element';
 
 import useAutosave from '../hooks/useAutosave';
 import { withViewTransition } from '../hooks/viewTransition';
@@ -38,6 +45,8 @@ import {
 } from './page-queries';
 import PublishToggle from './PublishToggle';
 import { TopBarActionsFill } from './WorkspaceTopBar';
+import MediaPicker, { MediaUploadCheck } from './MediaPicker';
+import PageIdentityControls from './PageIdentityControls';
 
 const SCOPE = 'cortext';
 const INSPECTOR = 'cortext/block-inspector';
@@ -64,6 +73,171 @@ function CortextSnackbars() {
 	return <SnackbarList notices={ notices } onRemove={ removeNotice } />;
 }
 
+function PageIdentityActions( { postId } ) {
+	const isInsertingCoverRef = useRef( false );
+	const actionsRef = useRef( null );
+	const [ meta ] = useEntityProp( 'postType', POST_TYPE, 'meta', postId );
+	const iconMeta = meta?.cortext_page_icon ?? '';
+	const { hasIcon, hasCover, isTrashed, selectedBlockName } = useSelect(
+		( select ) => {
+			const store = select( blockEditorStore );
+			const blocks = store.getBlocks();
+			const selectedClientId = store.getSelectedBlockClientId();
+			return {
+				hasCover: blocks.some(
+					( block ) => block.name === 'cortext/page-cover'
+				),
+				hasIcon: blocks.some(
+					( block ) => block.name === 'cortext/page-icon'
+				),
+				isTrashed:
+					select( editorStore ).getCurrentPostAttribute(
+						'status'
+					) === 'trash',
+				selectedBlockName: selectedClientId
+					? store.getBlockName( selectedClientId )
+					: null,
+			};
+		},
+		[]
+	);
+	const { insertBlocks } = useDispatch( blockEditorStore );
+	const { editEntityRecord, saveEditedEntityRecord } =
+		useDispatch( coreStore );
+
+	useEffect( () => {
+		if ( isTrashed || hasCover ) {
+			return undefined;
+		}
+		const node = actionsRef.current;
+		const ownerDocument = node?.ownerDocument;
+		if ( ! node || ! ownerDocument ) {
+			return undefined;
+		}
+		const focusFirstActionFromTitle = ( event ) => {
+			if (
+				event.key !== 'Tab' ||
+				event.shiftKey ||
+				event.defaultPrevented
+			) {
+				return;
+			}
+			const target = event.target;
+			const targetIsPostTitle =
+				target &&
+				typeof target.closest === 'function' &&
+				target.closest( '[data-type="core/post-title"]' );
+			const titleHasFocus = ownerDocument.querySelector(
+				'[data-type="core/post-title"]:focus-within'
+			);
+			if (
+				! targetIsPostTitle &&
+				! titleHasFocus &&
+				selectedBlockName !== 'core/post-title'
+			) {
+				return;
+			}
+			const firstAction = node.querySelector(
+				'.cortext-canvas__identity-action:not(:disabled)'
+			);
+			if ( ! firstAction ) {
+				return;
+			}
+			event.preventDefault();
+			event.stopPropagation();
+			firstAction.focus();
+		};
+		ownerDocument.addEventListener(
+			'keydown',
+			focusFirstActionFromTitle,
+			true
+		);
+		return () =>
+			ownerDocument.removeEventListener(
+				'keydown',
+				focusFirstActionFromTitle,
+				true
+			);
+	}, [ hasCover, isTrashed, selectedBlockName ] );
+
+	if ( isTrashed || hasCover ) {
+		return null;
+	}
+
+	const ensureIconBlock = () => {
+		if ( hasIcon ) {
+			return;
+		}
+		const block = createBlock( 'cortext/page-icon', {
+			lock: { move: true },
+		} );
+		insertBlocks( block, 0, undefined, false );
+	};
+
+	const insertCover = async ( mediaId ) => {
+		if ( hasCover || isInsertingCoverRef.current ) {
+			return;
+		}
+		isInsertingCoverRef.current = true;
+		const block = createBlock( 'cortext/page-cover', {
+			align: 'full',
+			lock: { move: true },
+		} );
+		insertBlocks( block, 0, undefined, false );
+		try {
+			editEntityRecord( 'postType', POST_TYPE, postId, {
+				featured_media: mediaId,
+			} );
+			await saveEditedEntityRecord( 'postType', POST_TYPE, postId );
+		} finally {
+			isInsertingCoverRef.current = false;
+		}
+	};
+
+	return (
+		<div
+			ref={ actionsRef }
+			className="cortext-canvas__identity-actions"
+			role="group"
+			aria-label={ __( 'Page identity actions', 'cortext' ) }
+		>
+			{ ! hasIcon && ! hasCover && (
+				<PageIdentityControls
+					pageId={ postId }
+					currentIcon={ iconMeta }
+					onAfterSave={ ensureIconBlock }
+					renderToggle={ ( { onToggle } ) => (
+						<Button
+							className="cortext-canvas__identity-action"
+							variant="tertiary"
+							onClick={ onToggle }
+						>
+							{ __( 'Add icon', 'cortext' ) }
+						</Button>
+					) }
+				/>
+			) }
+			{ ! hasCover && (
+				<MediaUploadCheck>
+					<MediaPicker
+						allowedTypes={ [ 'image' ] }
+						onSelect={ ( media ) => insertCover( media.id ) }
+						render={ ( { open } ) => (
+							<Button
+								className="cortext-canvas__identity-action"
+								variant="tertiary"
+								onClick={ open }
+							>
+								{ __( 'Add cover', 'cortext' ) }
+							</Button>
+						) }
+					/>
+				</MediaUploadCheck>
+			) }
+		</div>
+	);
+}
+
 function DocumentActions( { isActive } ) {
 	const { enableComplementaryArea, disableComplementaryArea } =
 		useDispatch( interfaceStore );
@@ -87,6 +261,7 @@ function DocumentActions( { isActive } ) {
 			<div className="cortext-document-actions">
 				<PublishToggle />
 				<Button
+					className="cortext-document-actions__settings"
 					icon={ cog }
 					size="compact"
 					label={ __( 'Settings', 'cortext' ) }
@@ -193,6 +368,177 @@ function TrashedNotice( { postId } ) {
 	);
 }
 
+// While one of our locked header blocks is selected, hide core's block
+// settings menu (the "kebab"). Its items (Cut, Copy, Add before/after,
+// Lock, Hide, Create pattern, etc.) make no sense on a fixed-position
+// singleton block, and there's no per-block API to filter individual
+// items. The contextual toolbar lives in the parent document while the
+// block itself is in the BlockCanvas iframe, so :has() can't bridge the
+// boundary; toggling a body class here lets a plain CSS rule do the work.
+function HideHeaderBlockKebab() {
+	const selectedName = useSelect( ( select ) => {
+		const store = select( blockEditorStore );
+		const clientId = store.getSelectedBlockClientId();
+		return clientId ? store.getBlockName( clientId ) : null;
+	}, [] );
+
+	useEffect( () => {
+		const isHeader =
+			selectedName === 'cortext/page-cover' ||
+			selectedName === 'cortext/page-icon';
+		document.body.classList.toggle(
+			'cortext-hide-block-settings-menu',
+			isHeader
+		);
+		return () => {
+			document.body.classList.remove(
+				'cortext-hide-block-settings-menu'
+			);
+		};
+	}, [ selectedName ] );
+
+	return null;
+}
+
+// Auto-inserts the locked state/header blocks that aren't there yet and
+// strips legacy cortext/page-header-actions blocks. Those actions were
+// editor chrome saved as content; PageIdentityActions now renders them
+// outside BlockCanvas without adding a block to post_content.
+function EnsureHeaderBlocks( { postId } ) {
+	const [ meta ] = useEntityProp( 'postType', POST_TYPE, 'meta', postId );
+	const [ featuredId ] = useEntityProp(
+		'postType',
+		POST_TYPE,
+		'featured_media',
+		postId
+	);
+	const iconMeta = meta?.cortext_page_icon ?? '';
+	const {
+		coverIndex,
+		hasCover,
+		hasIcon,
+		hasTitle,
+		duplicateHeaderIds,
+		legacyActionIds,
+		isTrashed,
+	} = useSelect( ( select ) => {
+		const store = select( blockEditorStore );
+		const blocks = store.getBlocks();
+		const names = blocks.map( ( block ) => block.name );
+		const seenSingletons = new Set();
+		const duplicateIds = [];
+		blocks.forEach( ( block ) => {
+			if (
+				block.name !== 'cortext/page-cover' &&
+				block.name !== 'cortext/page-icon' &&
+				block.name !== 'core/post-title'
+			) {
+				return;
+			}
+			if ( seenSingletons.has( block.name ) ) {
+				duplicateIds.push( block.clientId );
+				return;
+			}
+			seenSingletons.add( block.name );
+		} );
+		return {
+			coverIndex: names.indexOf( 'cortext/page-cover' ),
+			hasCover: names.includes( 'cortext/page-cover' ),
+			hasIcon: names.includes( 'cortext/page-icon' ),
+			hasTitle: names.includes( 'core/post-title' ),
+			duplicateHeaderIds: duplicateIds,
+			legacyActionIds: blocks
+				.filter(
+					( block ) => block.name === 'cortext/page-header-actions'
+				)
+				.map( ( block ) => block.clientId ),
+			isTrashed:
+				select( editorStore ).getCurrentPostAttribute( 'status' ) ===
+				'trash',
+		};
+	}, [] );
+	const { insertBlocks, removeBlock, updateBlockAttributes } =
+		useDispatch( blockEditorStore );
+
+	useLayoutEffect( () => {
+		if ( isTrashed ) {
+			return;
+		}
+
+		[ ...legacyActionIds, ...duplicateHeaderIds ].forEach( ( clientId ) => {
+			updateBlockAttributes( clientId, { lock: {} } );
+			removeBlock( clientId, false );
+		} );
+	}, [
+		duplicateHeaderIds,
+		isTrashed,
+		legacyActionIds,
+		removeBlock,
+		updateBlockAttributes,
+	] );
+
+	// useLayoutEffect rather than useEffect: we want the insertion to
+	// happen between render and paint so the user never sees the
+	// intermediate state where the page has body content but the locked
+	// header blocks haven't been added yet.
+	useLayoutEffect( () => {
+		if ( isTrashed ) {
+			return;
+		}
+
+		if ( featuredId > 0 && ! hasCover ) {
+			insertBlocks(
+				createBlock( 'cortext/page-cover', {
+					align: 'full',
+					lock: { move: true },
+				} ),
+				0,
+				undefined,
+				false
+			);
+		}
+		if ( iconMeta && ! hasIcon ) {
+			let iconIndex = 0;
+			if ( hasCover ) {
+				iconIndex = coverIndex + 1;
+			} else if ( featuredId > 0 ) {
+				iconIndex = 1;
+			}
+			insertBlocks(
+				createBlock( 'cortext/page-icon', {
+					lock: { move: true },
+				} ),
+				iconIndex,
+				undefined,
+				false
+			);
+		}
+		if ( ! hasTitle ) {
+			const titleIndex =
+				( featuredId > 0 ? 1 : 0 ) + ( iconMeta ? 1 : 0 );
+			insertBlocks(
+				createBlock( 'core/post-title', {
+					lock: { move: true, remove: true },
+				} ),
+				titleIndex,
+				undefined,
+				false
+			);
+		}
+	}, [
+		coverIndex,
+		featuredId,
+		hasCover,
+		hasIcon,
+		hasTitle,
+		iconMeta,
+		insertBlocks,
+		isTrashed,
+	] );
+
+	return null;
+}
+
 function CanvasReadyEffect( { postId, onReady } ) {
 	useEffect( () => {
 		onReady?.( postId );
@@ -228,20 +574,19 @@ function VisualCanvas( { postId, onReady } ) {
 	// and the user wouldn't notice the divergence until preview.
 	return (
 		<div className="cortext-canvas__visual">
-			<BlockCanvas height="100%" styles={ styles }>
-				<div
-					className="editor-visual-editor__post-title-wrapper is-layout-constrained has-global-padding"
-					contentEditable={ false }
-					style={ { marginTop: '4rem', marginBottom: '2rem' } }
-				>
-					<PostTitle />
-				</div>
-				<BlockList
-					className="wp-block-post-content is-layout-constrained has-global-padding"
-					layout={ { type: 'constrained', ...layout } }
-				/>
-				<CanvasReadyEffect postId={ postId } onReady={ onReady } />
-			</BlockCanvas>
+			<div className="cortext-canvas__block-canvas">
+				<BlockCanvas height="100%" styles={ styles }>
+					<PageIdentityActions postId={ postId } />
+					<EnsureHeaderBlocks postId={ postId } />
+					<div className="cortext-canvas__editor">
+						<BlockList
+							className="wp-block-post-content is-layout-constrained has-global-padding"
+							layout={ { type: 'constrained', ...layout } }
+						/>
+					</div>
+					<CanvasReadyEffect postId={ postId } onReady={ onReady } />
+				</BlockCanvas>
+			</div>
 		</div>
 	);
 }
@@ -284,6 +629,7 @@ function CanvasEditor( {
 		<>
 			<DocumentActions isActive={ isActive } />
 			<CortextSnackbars />
+			<HideHeaderBlockKebab />
 			<InterfaceSkeleton
 				className="cortext-canvas"
 				content={

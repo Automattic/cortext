@@ -13,6 +13,7 @@ use Cortext\PostType\Collection;
 use Cortext\PostType\CollectionEntries;
 use Cortext\PostType\Field;
 use Cortext\PostType\Page;
+use Cortext\PostType\PageIdentity;
 use WP_CLI;
 use WP_CLI_Command;
 
@@ -684,12 +685,14 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	 * @return int Seeded Workspace page ID.
 	 */
 	private function seed_pages( array $collection_ids ): int {
-		$tree = array(
+		$banner = CORTEXT_PATH . 'cortext-banner.png';
+		$tree   = array(
 			array(
 				'title'    => 'Workspace',
+				'icon'     => '🏠',
+				'cover'    => $banner,
 				'content'  => $this->page_content(
 					array(
-						$this->heading( 'Workspace dashboard' ),
 						$this->paragraph( 'This local workspace is seeded automatically for wp-env. It gives the shell, sidebar, editor canvas, and DataViews something realistic to render immediately.' ),
 						$this->data_view_block( $collection_ids['projects'] ?? 0 ),
 					)
@@ -697,9 +700,9 @@ final class SeedDummyCollections extends WP_CLI_Command {
 				'children' => array(
 					array(
 						'title'    => 'Engineering',
+						'icon'     => '🛠️',
 						'content'  => $this->page_content(
 							array(
-								$this->heading( 'Engineering' ),
 								$this->paragraph( 'Use this area to test nested pages, drag and drop, duplication, trash restore, and inline document editing.' ),
 								$this->data_view_block( $collection_ids['projects'] ?? 0 ),
 							)
@@ -707,36 +710,44 @@ final class SeedDummyCollections extends WP_CLI_Command {
 						'children' => array(
 							array(
 								'title'   => 'Onboarding',
+								'icon'    => array(
+									'type'  => 'wp',
+									'name'  => 'tip',
+									'color' => 'yellow',
+								),
 								'content' => $this->page_content(
 									array(
-										$this->heading( 'Onboarding' ),
 										$this->paragraph( 'A compact starter page for checking title edits, autosave, nested sidebar rows, and readable editor content.' ),
 									)
 								),
 							),
 							array(
 								'title'    => 'Standards',
+								'icon'     => '📐',
 								'content'  => $this->page_content(
 									array(
-										$this->heading( 'Standards' ),
 										$this->paragraph( 'Seeded standards pages keep the tree deep enough to exercise cascade trash and restore behavior.' ),
 									)
 								),
 								'children' => array(
 									array(
 										'title'   => 'PHP',
+										'icon'    => '🐘',
 										'content' => $this->page_content(
 											array(
-												$this->heading( 'PHP' ),
 												$this->paragraph( 'Run PHPCS and PHPUnit before sending changes that touch server behavior.' ),
 											)
 										),
 									),
 									array(
 										'title'   => 'JavaScript',
+										'icon'    => array(
+											'type'  => 'wp',
+											'name'  => 'code',
+											'color' => 'blue',
+										),
 										'content' => $this->page_content(
 											array(
-												$this->heading( 'JavaScript' ),
 												$this->paragraph( 'DataViews and the shell should stay close to WordPress package conventions.' ),
 											)
 										),
@@ -747,27 +758,32 @@ final class SeedDummyCollections extends WP_CLI_Command {
 					),
 					array(
 						'title'    => 'Design',
+						'icon'     => '🎨',
+						'cover'    => $banner,
 						'content'  => $this->page_content(
 							array(
-								$this->heading( 'Design' ),
 								$this->paragraph( 'A branch of seeded pages for checking sibling ordering, rename flows, and editor canvas spacing.' ),
 							)
 						),
 						'children' => array(
 							array(
 								'title'   => 'System',
+								'icon'    => '🧩',
 								'content' => $this->page_content(
 									array(
-										$this->heading( 'System' ),
 										$this->paragraph( 'Theme tokens and shell chrome can be tested here without creating fresh content.' ),
 									)
 								),
 							),
 							array(
 								'title'   => 'Mockups',
+								'icon'    => array(
+									'type'  => 'wp',
+									'name'  => 'brush',
+									'color' => 'pink',
+								),
 								'content' => $this->page_content(
 									array(
-										$this->heading( 'Mockups' ),
 										$this->paragraph( 'Use this seeded page as a scratch area for block layout and inspector checks.' ),
 									)
 								),
@@ -778,9 +794,10 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			),
 			array(
 				'title'   => 'Research',
+				'icon'    => '🔬',
+				'cover'   => $banner,
 				'content' => $this->page_content(
 					array(
-						$this->heading( 'Research library' ),
 						$this->paragraph( 'Seeded books and paintings provide smaller collections for switching views and verifying mixed data sets.' ),
 						$this->data_view_block( $collection_ids['books'] ?? 0 ),
 						$this->data_view_block( $collection_ids['paintings'] ?? 0 ),
@@ -789,11 +806,27 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			),
 			array(
 				'title'   => 'Demo database',
+				'icon'    => array(
+					'type'  => 'wp',
+					'name'  => 'table',
+					'color' => 'green',
+				),
 				'content' => $this->page_content(
 					array(
-						$this->heading( 'Demo database' ),
 						$this->paragraph( 'This page embeds the field-type demo collection so local starts cover text, number, email, URL, select, multiselect, date, datetime, and checkbox cells.' ),
 						$this->data_view_block( $collection_ids['demo'] ?? 0 ),
+					)
+				),
+			),
+			array(
+				'title'   => 'About Cortext',
+				'icon'    => array(
+					'type'   => 'image',
+					'source' => $banner,
+				),
+				'content' => $this->page_content(
+					array(
+						$this->paragraph( 'A landing page for the project so reseeds always include the image-icon variant alongside the emoji and WP-icon ones.' ),
 					)
 				),
 			),
@@ -801,7 +834,6 @@ final class SeedDummyCollections extends WP_CLI_Command {
 				'title'   => 'Notes',
 				'content' => $this->page_content(
 					array(
-						$this->heading( 'Notes' ),
 						$this->paragraph( 'A root-level sibling page keeps sidebar actions and root ordering easy to test.' ),
 					)
 				),
@@ -864,6 +896,20 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			WP_CLI::log( "Created page '{$node['title']}' (ID {$page_id})." );
 		}
 
+		if ( ! empty( $node['icon'] ) ) {
+			$icon_meta = $this->serialize_icon_meta( $node['icon'] );
+			if ( '' !== $icon_meta ) {
+				update_post_meta( $page_id, PageIdentity::META_KEY, $icon_meta );
+			}
+		}
+
+		if ( ! empty( $node['cover'] ) ) {
+			$cover_id = $this->ensure_attachment_from_path( $node['cover'] );
+			if ( $cover_id > 0 ) {
+				update_post_meta( $page_id, '_thumbnail_id', $cover_id );
+			}
+		}
+
 		foreach ( $node['children'] ?? array() as $child ) {
 			$this->seed_page_tree( $child, (int) $page_id );
 		}
@@ -911,6 +957,118 @@ final class SeedDummyCollections extends WP_CLI_Command {
 
 	private function page_content( array $blocks ): string {
 		return implode( "\n\n", array_filter( $blocks ) );
+	}
+
+	/**
+	 * Returns the JSON meta string for a seeded page icon. Accepts either a
+	 * raw emoji (string) or a structured array describing a WP icon
+	 * (`['type' => 'wp', 'name' => ..., 'color' => ...]`) or an image icon
+	 * sourced from a bundled file (`['type' => 'image', 'source' => path]`).
+	 * Returns an empty string when the descriptor can't be resolved (e.g.
+	 * the image source is missing) so the caller can skip the meta update.
+	 *
+	 * @param mixed $icon Icon descriptor.
+	 */
+	private function serialize_icon_meta( $icon ): string {
+		if ( is_string( $icon ) && '' !== $icon ) {
+			return (string) wp_json_encode(
+				array(
+					'type'  => 'emoji',
+					'value' => $icon,
+				),
+				JSON_UNESCAPED_UNICODE
+			);
+		}
+
+		if ( ! is_array( $icon ) ) {
+			return '';
+		}
+
+		$type = $icon['type'] ?? '';
+
+		if ( 'wp' === $type && ! empty( $icon['name'] ) ) {
+			$payload = array(
+				'type' => 'wp',
+				'name' => $icon['name'],
+			);
+			if ( ! empty( $icon['color'] ) ) {
+				$payload['color'] = $icon['color'];
+			}
+			return (string) wp_json_encode( $payload );
+		}
+
+		if ( 'image' === $type && ! empty( $icon['source'] ) ) {
+			$attachment_id = $this->ensure_attachment_from_path( $icon['source'] );
+			if ( $attachment_id > 0 ) {
+				return (string) wp_json_encode(
+					array(
+						'type' => 'image',
+						'id'   => $attachment_id,
+					)
+				);
+			}
+		}
+
+		return '';
+	}
+
+	/**
+	 * Copies a plugin-bundled image into uploads and creates an attachment
+	 * for it (or returns the existing one keyed by filename). Returns the
+	 * attachment ID, or 0 on failure. Idempotent across reseeds.
+	 *
+	 * @param string $source_path Absolute path to the source image file.
+	 */
+	private function ensure_attachment_from_path( string $source_path ): int {
+		if ( ! file_exists( $source_path ) ) {
+			return 0;
+		}
+
+		$filename = basename( $source_path );
+		$existing = get_posts(
+			array(
+				'post_type'      => 'attachment',
+				'name'           => sanitize_title( pathinfo( $filename, PATHINFO_FILENAME ) ),
+				'posts_per_page' => 1,
+				'fields'         => 'ids',
+				'post_status'    => 'inherit',
+			)
+		);
+		if ( $existing ) {
+			return (int) $existing[0];
+		}
+
+		$upload_dir = wp_upload_dir();
+		if ( ! empty( $upload_dir['error'] ) ) {
+			return 0;
+		}
+
+		$dest = trailingslashit( $upload_dir['path'] ) . wp_unique_filename( $upload_dir['path'], $filename );
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		if ( ! @copy( $source_path, $dest ) ) {
+			return 0;
+		}
+
+		$filetype  = wp_check_filetype( $dest );
+		$attach_id = wp_insert_attachment(
+			array(
+				'guid'           => trailingslashit( $upload_dir['url'] ) . basename( $dest ),
+				'post_mime_type' => $filetype['type'] ?? 'image/png',
+				'post_title'     => pathinfo( $filename, PATHINFO_FILENAME ),
+				'post_content'   => '',
+				'post_status'    => 'inherit',
+			),
+			$dest
+		);
+		if ( is_wp_error( $attach_id ) || ! $attach_id ) {
+			return 0;
+		}
+
+		require_once ABSPATH . 'wp-admin/includes/image.php';
+		$metadata = wp_generate_attachment_metadata( $attach_id, $dest );
+		wp_update_attachment_metadata( $attach_id, $metadata );
+
+		return (int) $attach_id;
 	}
 
 	private function heading( string $text, int $level = 2 ): string {

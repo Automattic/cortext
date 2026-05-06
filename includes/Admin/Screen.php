@@ -62,6 +62,11 @@ final class Screen {
 			return;
 		}
 
+		// Loads wp.media so MediaUpload (in the icon picker popover and the
+		// core/post-featured-image block inside the editor iframe) can open
+		// the WordPress media library.
+		wp_enqueue_media();
+
 		$asset_path = CORTEXT_PATH . 'build/index.asset.php';
 		if ( ! file_exists( $asset_path ) ) {
 			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped

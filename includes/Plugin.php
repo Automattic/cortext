@@ -10,6 +10,9 @@ declare( strict_types=1 );
 namespace Cortext;
 
 use Cortext\Admin\Screen;
+use Cortext\Editor\PageCoverBlock;
+use Cortext\Editor\PageHeaderActionsBlock;
+use Cortext\Editor\PageIconBlock;
 use Cortext\Editor\RevisionThrottle;
 use Cortext\Frontend\Assets;
 use Cortext\Frontend\Template;
@@ -17,6 +20,7 @@ use Cortext\PostType\Collection;
 use Cortext\PostType\CollectionEntries;
 use Cortext\PostType\Field;
 use Cortext\PostType\Page;
+use Cortext\PostType\PageIdentity;
 use Cortext\PostType\PageTrashCascade;
 use Cortext\Rest\CollectionsController;
 use Cortext\Rest\FieldsController;
@@ -39,11 +43,15 @@ final class Plugin {
 	public function boot(): void {
 		( new Screen() )->register();
 		( new Page() )->register();
+		( new PageIdentity() )->register();
 		( new PageTrashCascade() )->register();
 		( new Collection() )->register();
 		( new Field() )->register();
 		( new CollectionEntries() )->register();
 		( new RevisionThrottle() )->register();
+		( new PageIconBlock() )->register();
+		( new PageCoverBlock() )->register();
+		( new PageHeaderActionsBlock() )->register();
 		( new CollectionsController() )->register();
 		( new FieldsController() )->register();
 		( new PageTrashController() )->register();

@@ -69,7 +69,7 @@ function RootLayout() {
 						onWidthChange={ setWidth }
 					/>
 					<main className="cortext-shell__canvas">
-						<EntityRoute />
+						<EntityRoute history={ router.history } />
 					</main>
 				</div>
 			</WorkspaceHomeProvider>
