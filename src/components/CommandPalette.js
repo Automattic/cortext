@@ -1,5 +1,5 @@
-// Cortext uses the WordPress command palette UI, but not the shared admin
-// command store. A local registry keeps core/wp-admin commands out of this app.
+// tech-debt.md#38: use WordPress' palette UI, but keep it on a local
+// registry so core/wp-admin commands do not show up in Cortext.
 
 import {
 	CommandMenu,

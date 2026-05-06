@@ -317,3 +317,13 @@ The state is ours too. `view.calculations` lives on the DataViews view object be
 **Where.** `mapField` / `buildRender` in `src/hooks/fieldMapping.js`, `src/components/relations/RelationEditor.js`, `src/components/relations/RelationReferences.js`, relation setup in `src/components/fields/AddFieldPopover.js`, and the `.cortext-relation-*` rules in `src/index.scss`.
 
 **Solution.** Upstream DataViews/DataForm (or shared WP components) could expose a generic reference field/control: target entity config, single vs multi cardinality, async search, optional create-new affordance, token/chip rendering hooks, and a supported action slot for opening or navigating to referenced records. Cortext would still own the backend relation sync and reverse-field semantics, but could drop most of the custom relation picker/display code and stop smuggling relation metadata through DataViews field objects.
+
+## 38. Command palette embedding needs host glue `[upstream, soft]`
+
+**What.** Cortext uses `@wordpress/commands` for the palette UI; we are not forking it. The rough part is that the package is built for the shared wp-admin command context. On the Cortext screen we need an app palette instead: no global wp-admin commands, no second Core palette competing for cmd+K, and focus returning to the workspace after a command runs. That leaves a few small bits of shell glue in Cortext: a local data registry, a `wp-core-commands` dequeue, a bundled stylesheet import, and a canvas ref for focus return.
+
+The user-facing placeholder is still Core's generic "Search commands and settings" string too. Fine for this slice, but it will feel off once the palette grows into actual Cortext search.
+
+**Where.** `src/components/CommandPalette.js`, the `canvasRef` passed from `src/router.js`, `dequeue_core_command_palette` in `includes/Admin/Screen.php`, and the `@wordpress/commands` stylesheet import in `src/index.scss`.
+
+**Solution.** Upstream could make app-owned palettes less ad hoc: a scoped command registry or namespace API, a supported way for full-screen admin apps to opt out of Core's admin palette, a custom input label, and an explicit focus-return target or after-close callback. With those, Cortext could keep registering commands through `@wordpress/commands` and drop most of the shell-specific wiring.
