@@ -8,6 +8,7 @@ import {
 	buildTree,
 	collectAncestorIds,
 	collectDescendants,
+	firstPageInTree,
 	isDescendantOf,
 	computeDropTarget,
 	nextChildOrder,
@@ -45,6 +46,23 @@ describe( 'buildTree', () => {
 		const roots = buildTree( pages );
 
 		expect( roots.map( ( r ) => r.page.id ) ).toEqual( [ 2, 3, 1 ] );
+	} );
+} );
+
+describe( 'firstPageInTree', () => {
+	it( 'returns null when there are no pages', () => {
+		expect( firstPageInTree( [] ) ).toBeNull();
+	} );
+
+	it( 'returns the first root page using sidebar tree ordering', () => {
+		const pages = [
+			makePage( 3, 0, 0 ),
+			makePage( 1, 0, 2 ),
+			makePage( 2, 0, 0 ),
+			makePage( 4, 2, 0 ),
+		];
+
+		expect( firstPageInTree( pages ).id ).toBe( 2 );
 	} );
 } );
 

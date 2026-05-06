@@ -45,6 +45,16 @@ export function buildTree( pages ) {
 }
 
 /**
+ * Returns the first page in the same ordering used by the sidebar tree.
+ *
+ * @param {Array} pages Flat page list.
+ * @return {Object|null} First root page, or null when there are no pages.
+ */
+export function firstPageInTree( pages ) {
+	return buildTree( pages )[ 0 ]?.page ?? null;
+}
+
+/**
  * Collect all descendant page IDs of a root page (root not included).
  * Used by the cascading delete path.
  *

@@ -1,5 +1,6 @@
-import { useParams } from '@tanstack/react-router';
+import { useNavigate, useParams } from '@tanstack/react-router';
 import { Spinner } from '@wordpress/components';
+import { useEntityRecords } from '@wordpress/core-data';
 import { __ } from '@wordpress/i18n';
 import {
 	useCallback,
@@ -13,9 +14,16 @@ import {
 import Canvas from '../components/Canvas';
 import CollectionDataViews from '../components/CollectionDataViews';
 import WorkspaceTopBar from '../components/WorkspaceTopBar';
+import { ACTIVE_PAGES_QUERY, POST_TYPE } from '../components/page-queries';
+import { firstPageInTree } from '../components/pages-tree';
 import { withViewTransition } from '../hooks/viewTransition';
+import { useWorkspaceHome } from '../hooks/useWorkspaceHome';
 import EmptyState from './EmptyState';
-import { useResolveEntity, useResolveCollection } from './useResolveEntity';
+import {
+	computeUri,
+	useResolveEntity,
+	useResolveCollection,
+} from './useResolveEntity';
 import { init, parseTarget, reducer } from './entityRouteReducer';
 
 const DEFAULT_VIEW = {
@@ -101,8 +109,15 @@ function WorkspacePane( { active, preservePaint = false, children } ) {
 
 export default function EntityRoute( { history } ) {
 	const params = useParams( { strict: false } );
+	const navigate = useNavigate();
 	const splat = params._splat ?? '';
 	const target = useMemo( () => parseTarget( splat ), [ splat ] );
+	const { home, isResolving: isResolvingHome } = useWorkspaceHome();
+	const { records: pages, isResolving: isResolvingPages } = useEntityRecords(
+		'postType',
+		POST_TYPE,
+		ACTIVE_PAGES_QUERY
+	);
 
 	const [ state, rawDispatch ] = useReducer( reducer, target, init );
 	const { active, mountedPageId, displayedPageId, mountedCollectionIds } =
@@ -137,6 +152,34 @@ export default function EntityRoute( { history } ) {
 	useEffect( () => {
 		dispatch( { type: 'TARGET_CHANGED', target } );
 	}, [ target, dispatch ] );
+
+	useEffect( () => {
+		if ( target.kind !== 'empty' ) {
+			return;
+		}
+		if ( isResolvingHome || isResolvingPages ) {
+			return;
+		}
+
+		const fallback = firstPageInTree( pages ?? [] );
+		const path = home?.path ?? ( fallback ? computeUri( fallback ) : null );
+		if ( ! path ) {
+			return;
+		}
+
+		navigate( {
+			to: '/$',
+			params: { _splat: path },
+			replace: true,
+		} );
+	}, [
+		target.kind,
+		home,
+		isResolvingHome,
+		pages,
+		isResolvingPages,
+		navigate,
+	] );
 
 	useEffect( () => {
 		if ( target.kind !== 'page' || target.id === null ) {

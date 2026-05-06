@@ -19,6 +19,8 @@ use WP_CLI_Command;
 
 final class SeedDummyCollections extends WP_CLI_Command {
 
+	private const WORKSPACE_HOME_META_KEY = 'cortext_workspace_home';
+
 	/**
 	 * Seeds sample collections (Books, Paintings, Demo, Projects) plus a
 	 * realistic page hierarchy with embedded collection views.
@@ -28,7 +30,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	 * ## OPTIONS
 	 *
 	 * [--reset]
-	 * : Delete all Cortext data (collections, fields, entries, pages) before seeding.
+	 * : Delete all Cortext data and workspace home preferences before seeding.
 	 * Prompts for confirmation unless --force is also passed.
 	 *
 	 * [--force]
@@ -50,11 +52,12 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		// (otherwise CLI's user-0 context produces empty Created by /
 		// Last edited by columns) and the save_post hook records
 		// `_modified_by` against the same user.
-		wp_set_current_user( $this->default_seed_user_id() );
+		$seed_user_id = $this->default_seed_user_id();
+		wp_set_current_user( $seed_user_id );
 
 		if ( WP_CLI\Utils\get_flag_value( $assoc_args, 'reset', false ) ) {
 			WP_CLI::confirm(
-				'This will delete all Cortext collections, fields, and entries. Continue?',
+				'This will delete all Cortext collections, fields, entries, pages, and workspace home preferences. Continue?',
 				array( 'yes' => WP_CLI\Utils\get_flag_value( $assoc_args, 'force', false ) )
 			);
 			$this->reset();
@@ -652,7 +655,8 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			$collection_ids[ $spec['slug'] ] = $this->seed_collection( $spec );
 		}
 
-		$this->seed_pages( $collection_ids );
+		$workspace_page_id = $this->seed_pages( $collection_ids );
+		$this->seed_workspace_home( $seed_user_id, $workspace_page_id );
 
 		WP_CLI::success( 'Seeding complete.' );
 	}
@@ -678,8 +682,9 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	 * Seeds a small realistic workspace hierarchy with starter content.
 	 *
 	 * @param array $collection_ids Collection IDs keyed by seeded collection slug.
+	 * @return int Seeded Workspace page ID.
 	 */
-	private function seed_pages( array $collection_ids ): void {
+	private function seed_pages( array $collection_ids ): int {
 		$banner = CORTEXT_PATH . 'cortext-banner.png';
 		$tree   = array(
 			array(
@@ -835,9 +840,15 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			),
 		);
 
+		$workspace_page_id = 0;
 		foreach ( $tree as $node ) {
-			$this->seed_page_tree( $node, 0 );
+			$page_id = $this->seed_page_tree( $node, 0 );
+			if ( 'Workspace' === $node['title'] ) {
+				$workspace_page_id = $page_id;
+			}
 		}
+
+		return $workspace_page_id;
 	}
 
 	private function seed_page_tree( array $node, int $parent_id ): int {
@@ -904,6 +915,44 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		}
 
 		return (int) $page_id;
+	}
+
+	private function seed_workspace_home( int $user_id, int $page_id ): void {
+		if ( $page_id <= 0 ) {
+			return;
+		}
+
+		$current = get_user_meta( $user_id, self::WORKSPACE_HOME_META_KEY, true );
+		if ( is_string( $current ) && '' !== $current && $this->workspace_home_exists( $current ) ) {
+			WP_CLI::log( 'Workspace home already exists. Skipping.' );
+			return;
+		}
+
+		update_user_meta( $user_id, self::WORKSPACE_HOME_META_KEY, "page:{$page_id}" );
+		WP_CLI::log( "Set workspace home to page 'Workspace' (ID {$page_id})." );
+	}
+
+	private function workspace_home_exists( string $raw ): bool {
+		$parts = explode( ':', $raw, 2 );
+		if ( 2 !== count( $parts ) ) {
+			return false;
+		}
+
+		$id = (int) $parts[1];
+		if ( $id <= 0 ) {
+			return false;
+		}
+
+		$post = get_post( $id );
+		if ( ! $post || 'trash' === $post->post_status ) {
+			return false;
+		}
+
+		$post_type = 'page' === $parts[0]
+			? Page::POST_TYPE
+			: ( 'collection' === $parts[0] ? Collection::POST_TYPE : null );
+
+		return null !== $post_type && $post_type === $post->post_type;
 	}
 
 	private function page_content( array $blocks ): string {
@@ -1309,6 +1358,10 @@ final class SeedDummyCollections extends WP_CLI_Command {
 
 		if ( $pages ) {
 			WP_CLI::log( sprintf( 'Deleted %d pages.', count( $pages ) ) );
+		}
+
+		if ( delete_metadata( 'user', 0, self::WORKSPACE_HOME_META_KEY, '', true ) ) {
+			WP_CLI::log( 'Deleted workspace home preferences.' );
 		}
 
 		WP_CLI::success( 'Reset complete.' );

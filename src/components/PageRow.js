@@ -7,7 +7,12 @@ import {
 	MenuItem,
 	TextControl,
 } from '@wordpress/components';
-import { chevronRight, moreVertical, plus } from '@wordpress/icons';
+import {
+	chevronRight,
+	home as homeIcon,
+	moreVertical,
+	plus,
+} from '@wordpress/icons';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 
 import PageIcon from './PageIcon';
@@ -33,6 +38,9 @@ export default function PageRow( {
 	onRename,
 	onDuplicate,
 	onDelete,
+	onSetHome,
+	home,
+	isHomeUpdating = false,
 	autoRenameId, // page id that should immediately enter rename mode
 	onAutoRenameConsumed,
 	// True when an ancestor is collapsed: this row and its subtree are
@@ -45,6 +53,7 @@ export default function PageRow( {
 	const hasChildren = children.length > 0;
 	const isExpanded = expandedIds.has( page.id );
 	const isSelected = page.id === selectedId;
+	const isHome = home?.kind === 'page' && home.id === page.id;
 	const isBeingDragged = draggedId === page.id;
 
 	const [ isRenaming, setIsRenaming ] = useState( false );
@@ -254,6 +263,18 @@ export default function PageRow( {
 						renderContent={ ( { onClose } ) => (
 							<MenuGroup>
 								<MenuItem
+									icon={ homeIcon }
+									disabled={ isHome || isHomeUpdating }
+									onClick={ () => {
+										onSetHome( page.id );
+										onClose();
+									} }
+								>
+									{ isHome
+										? __( 'Home', 'cortext' )
+										: __( 'Set as home', 'cortext' ) }
+								</MenuItem>
+								<MenuItem
 									icon="edit"
 									onClick={ () => {
 										startRename();
@@ -329,6 +350,9 @@ export default function PageRow( {
 								onRename={ onRename }
 								onDuplicate={ onDuplicate }
 								onDelete={ onDelete }
+								onSetHome={ onSetHome }
+								home={ home }
+								isHomeUpdating={ isHomeUpdating }
 								autoRenameId={ autoRenameId }
 								onAutoRenameConsumed={ onAutoRenameConsumed }
 								isHidden={ isHidden || ! isExpanded }
