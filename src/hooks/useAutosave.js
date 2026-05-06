@@ -46,6 +46,8 @@ export default function useAutosave( options = {} ) {
 
 	const debounceRef = useRef( null );
 	const lastSaveAtRef = useRef( 0 );
+	const savePromiseRef = useRef( null );
+	const savingWaitersRef = useRef( [] );
 
 	const stateRef = useRef( {
 		isDirty,
@@ -68,7 +70,7 @@ export default function useAutosave( options = {} ) {
 
 	// Promote draft to private once the user has given the page a real title,
 	// so WP core regenerates post_name from the title on save.
-	const maybePromoteStatus = () => {
+	const maybePromoteStatus = useCallback( () => {
 		const {
 			editPost: edit,
 			postStatus: s,
@@ -77,33 +79,81 @@ export default function useAutosave( options = {} ) {
 		if ( s === 'draft' && typeof t === 'string' && t.trim() !== '' ) {
 			edit( { status: 'private' } );
 		}
-	};
+	}, [] );
 
-	const flushNow = useCallback( () => {
+	const saveCurrentPost = useCallback( () => {
+		const { savePost: save } = stateRef.current;
+
+		maybePromoteStatus();
+		lastSaveAtRef.current = Date.now();
+		const savePromise = Promise.resolve( save() ).then(
+			() => true,
+			() => false
+		);
+		savePromiseRef.current = savePromise;
+		savePromise.finally( () => {
+			if ( savePromiseRef.current === savePromise ) {
+				savePromiseRef.current = null;
+			}
+		} );
+
+		return savePromise;
+	}, [ maybePromoteStatus ] );
+
+	const waitForSavingToFinish = useCallback( () => {
+		if ( ! stateRef.current.isSaving ) {
+			return Promise.resolve( true );
+		}
+
+		return new Promise( ( resolve ) => {
+			savingWaitersRef.current.push( resolve );
+		} );
+	}, [] );
+
+	const flushNow = useCallback( async () => {
 		if ( debounceRef.current ) {
 			clearTimeout( debounceRef.current );
 			debounceRef.current = null;
 		}
+
+		if ( savePromiseRef.current ) {
+			const didSave = await savePromiseRef.current;
+			if ( ! didSave ) {
+				return false;
+			}
+		}
+
+		if ( stateRef.current.isSaving ) {
+			const didSave = await waitForSavingToFinish();
+			if ( ! didSave ) {
+				return false;
+			}
+		}
+
 		const {
 			isDirty: d,
 			isSaveable: s,
 			isSaving: saving,
 			postStatus: ps,
-			savePost: save,
 		} = stateRef.current;
 		if ( ! d || ! s || ps === 'trash' ) {
-			return Promise.resolve( true );
+			return true;
 		}
 		if ( saving ) {
-			return Promise.resolve( false );
+			return waitForSavingToFinish();
 		}
-		maybePromoteStatus();
-		lastSaveAtRef.current = Date.now();
-		return Promise.resolve( save() ).then(
-			() => true,
-			() => false
-		);
-	}, [] );
+		return saveCurrentPost();
+	}, [ saveCurrentPost, waitForSavingToFinish ] );
+
+	useEffect( () => {
+		if ( isSaving || savingWaitersRef.current.length === 0 ) {
+			return;
+		}
+
+		const waiters = savingWaitersRef.current;
+		savingWaitersRef.current = [];
+		waiters.forEach( ( resolve ) => resolve( ! didFail ) );
+	}, [ didFail, isSaving ] );
 
 	useEffect( () => {
 		if ( ! isDirty || ! isSaveable ) {
@@ -128,12 +178,9 @@ export default function useAutosave( options = {} ) {
 				isSaveable: s,
 				isSaving: saving,
 				postStatus: ps,
-				savePost: save,
 			} = stateRef.current;
 			if ( d && s && ! saving && ps !== 'trash' ) {
-				maybePromoteStatus();
-				lastSaveAtRef.current = Date.now();
-				save();
+				saveCurrentPost();
 			}
 		}, wait );
 
@@ -151,6 +198,7 @@ export default function useAutosave( options = {} ) {
 		isSaving,
 		minSaveIntervalMs,
 		postStatus,
+		saveCurrentPost,
 	] );
 
 	useEffect( () => {
