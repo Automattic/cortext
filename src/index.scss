@@ -2386,6 +2386,14 @@ tbody > tr > td:not(:first-child) {
 			}
 		}
 
+		// When wrapped chips make one cell taller, neighboring editable
+		// shells keep their fixed density height. Paint the td hover/focus
+		// state too so the affordance covers the full row height.
+		tbody > tr > td:has(.cortext-editable-cell):hover,
+		tbody > tr > td:has(.cortext-editable-cell__shell:focus-visible) {
+			background: $gray-100;
+		}
+
 		.cortext-editable-cell__shell,
 		.cortext-cell-checkbox {
 			min-height: $grid-unit-50 + 2 * $grid-unit-15; // 64 (balanced)
