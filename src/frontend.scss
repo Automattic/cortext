@@ -1,8 +1,12 @@
 /**
  * Public-facing styles for Cortext pages.
  *
- * Enqueued only on singular crtxt_page views. Intentionally minimal —
+ * Enqueued only on singular crtxt_page views. Intentionally minimal,
  * core block styles come from wp-block-library, enqueued separately.
+ *
+ * Heads-up: the cover banner and icon-block rules live in index.scss
+ * (admin shell bundle only), so the PHP-rendered cover/icon markup is
+ * unstyled here. See tech-debt.md#33.
  */
 
 .cortext-public-page {

@@ -46,6 +46,7 @@ export default function PublishToggle() {
 				disabled={ isSaving }
 				variant="tertiary"
 				size="compact"
+				isPressed={ isPublic }
 			>
 				{ isPublic
 					? __( 'Public', 'cortext' )

@@ -221,7 +221,7 @@ export default function EditOptionsPopover( {
 		if ( ! openMenuValue || typeof onRequestClose !== 'function' ) {
 			return undefined;
 		}
-		// tech-debt.md#31: nested Popovers do not close the host picker
+		// tech-debt.md#35: nested Popovers do not close the host picker
 		// when the first outside click is consumed by the child menu.
 		const onPointerDown = ( event ) => {
 			const target = event.target;

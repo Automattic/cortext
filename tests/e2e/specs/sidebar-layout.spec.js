@@ -175,6 +175,16 @@ async function readThemePopoverPlacement( page ) {
 	} );
 }
 
+async function readButtonChromeState( locator ) {
+	return locator.evaluate( ( element ) => {
+		const styles = window.getComputedStyle( element );
+		return {
+			backgroundColor: styles.backgroundColor,
+			color: styles.color,
+		};
+	} );
+}
+
 async function clearSidebarPrefs( page ) {
 	await page.evaluate( () => {
 		try {
@@ -294,6 +304,166 @@ test.describe( 'Sidebar layout controls', () => {
 			expect( alignment ).not.toBeNull();
 			expect( alignment.labelDelta ).toBeLessThanOrEqual( 2 );
 			expect( alignment.headerDelta ).toBeLessThanOrEqual( 2 );
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page ? `/wp/v2/crtxt_pages/${ fixture.page.id }` : null
+			);
+		}
+	} );
+
+	test( 'keeps settings chrome responsive on hover in both themes', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const suffix = Date.now().toString( 36 ).slice( -4 );
+		const fixture = {};
+
+		try {
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_pages',
+				data: {
+					title: `E2E Cog Chrome ${ suffix }`,
+					status: 'private',
+				},
+			} );
+
+			await admin.visitAdminPage(
+				SHELL_PATH,
+				`page=cortext&p=/page/${ fixture.page.id }`
+			);
+
+			const settings = page.locator(
+				'.cortext-document-actions .components-button[aria-label="Settings"]'
+			);
+			await expect( settings ).toBeVisible();
+
+			await page.evaluate( () => {
+				document
+					.getElementById( 'cortext-root' )
+					?.setAttribute( 'data-theme', 'light' );
+			} );
+
+			if (
+				await settings.evaluate( ( element ) =>
+					element.classList.contains( 'is-pressed' )
+				)
+			) {
+				await settings.click();
+			}
+
+			await expect( settings ).not.toHaveClass( /is-pressed/ );
+			await page.mouse.move( 0, 0 );
+			const unpressedBeforeHover = await readButtonChromeState(
+				settings
+			);
+
+			await settings.hover();
+			const lightUnpressedAfterHover = await readButtonChromeState(
+				settings
+			);
+
+			expect( lightUnpressedAfterHover.backgroundColor ).not.toBe(
+				unpressedBeforeHover.backgroundColor
+			);
+			expect( lightUnpressedAfterHover.color ).not.toBe(
+				unpressedBeforeHover.color
+			);
+			expect( lightUnpressedAfterHover.backgroundColor ).not.toBe(
+				'rgb(30, 30, 30)'
+			);
+
+			await page.mouse.move( 0, 0 );
+			await page.evaluate( () => {
+				document
+					.getElementById( 'cortext-root' )
+					?.setAttribute( 'data-theme', 'dark' );
+			} );
+			const darkUnpressedBeforeHover = await readButtonChromeState(
+				settings
+			);
+
+			await settings.hover();
+			const darkUnpressedAfterHover = await readButtonChromeState(
+				settings
+			);
+
+			expect( darkUnpressedAfterHover.backgroundColor ).not.toBe(
+				darkUnpressedBeforeHover.backgroundColor
+			);
+			expect( darkUnpressedAfterHover.color ).not.toBe(
+				darkUnpressedBeforeHover.color
+			);
+			expect( darkUnpressedAfterHover.backgroundColor ).not.toBe(
+				'rgb(30, 30, 30)'
+			);
+
+			if (
+				await settings.evaluate(
+					( element ) => ! element.classList.contains( 'is-pressed' )
+				)
+			) {
+				await settings.click();
+			}
+
+			await expect( settings ).toHaveClass( /is-pressed/ );
+			await page.mouse.move( 0, 0 );
+			const beforeHover = await readButtonChromeState( settings );
+
+			await settings.hover();
+			const afterHover = await readButtonChromeState( settings );
+
+			expect( afterHover.backgroundColor ).not.toBe(
+				beforeHover.backgroundColor
+			);
+			expect( afterHover.color ).toBe( beforeHover.color );
+			expect( afterHover.backgroundColor ).not.toBe(
+				'rgb(30, 30, 30)'
+			);
+
+			const sidebar = page.locator( '.cortext-sidebar' );
+			const title = sidebar.getByRole( 'button', {
+				name: `E2E Cog Chrome ${ suffix }`,
+				exact: true,
+			} );
+			const selectedRow = title.locator(
+				'xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " cortext-sidebar__row ")][1]'
+			);
+
+			await expect( title ).toHaveClass( /is-pressed/ );
+			await expect( selectedRow ).toHaveClass( /is-selected/ );
+
+			const titleBeforeHover = await readButtonChromeState( title );
+			await title.hover();
+			const titleAfterHover = await readButtonChromeState( title );
+
+			expect( titleBeforeHover.backgroundColor ).toBe(
+				'rgba(0, 0, 0, 0)'
+			);
+			expect( titleAfterHover.backgroundColor ).toBe(
+				titleBeforeHover.backgroundColor
+			);
+
+			await title.hover();
+			const menu = sidebar.getByRole( 'button', {
+				name: `Actions for E2E Cog Chrome ${ suffix }`,
+				exact: true,
+			} );
+			await menu.click();
+			await expect( menu ).toHaveClass( /is-pressed/ );
+
+			const menuBeforeHover = await readButtonChromeState( menu );
+			await menu.hover();
+			const menuAfterHover = await readButtonChromeState( menu );
+
+			expect( menuBeforeHover.backgroundColor ).toBe(
+				'rgba(0, 0, 0, 0)'
+			);
+			expect( menuAfterHover.backgroundColor ).toBe(
+				menuBeforeHover.backgroundColor
+			);
 		} finally {
 			await deleteIfCreated(
 				requestUtils,

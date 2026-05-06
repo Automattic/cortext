@@ -9,6 +9,9 @@ const FIRST_PAGE_TITLE = `E2E Lifecycle Page A ${ SUFFIX }`;
 const SECOND_PAGE_TITLE = `E2E Lifecycle Page B ${ SUFFIX }`;
 const COLLECTION_TITLE = `E2E Lifecycle Collection ${ SUFFIX }`;
 const ENTRY_TITLE = `E2E Lifecycle Entry ${ SUFFIX }`;
+const HISTORY_FIRST_PAGE_TITLE = `E2E History Page A ${ SUFFIX }`;
+const HISTORY_SECOND_PAGE_TITLE = `E2E History Page B ${ SUFFIX }`;
+const HISTORY_COLLECTION_TITLE = `E2E History Collection ${ SUFFIX }`;
 
 async function deleteIfCreated( requestUtils, path ) {
 	if ( ! path ) {
@@ -37,6 +40,114 @@ async function waitForEditorPost( page, postId ) {
 }
 
 test.describe( 'Navigation lifecycle', () => {
+	test( 'top bar back and forward stay in sync with browser history', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+
+		try {
+			fixture.firstPage = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_pages',
+				data: { title: HISTORY_FIRST_PAGE_TITLE, status: 'private' },
+			} );
+			fixture.secondPage = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_pages',
+				data: { title: HISTORY_SECOND_PAGE_TITLE, status: 'private' },
+			} );
+			fixture.slug = `e2ehist${ SUFFIX }`;
+			fixture.collection = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_collections',
+				data: {
+					title: HISTORY_COLLECTION_TITLE,
+					status: 'private',
+					meta: { slug: fixture.slug },
+				},
+			} );
+
+			const backButton = page.getByRole( 'button', {
+				name: 'Go back',
+			} );
+			const forwardButton = page.getByRole( 'button', {
+				name: 'Go forward',
+			} );
+			const sidebar = page.locator( '.cortext-sidebar' );
+			const breadcrumb = page.getByRole( 'navigation', {
+				name: 'Breadcrumb',
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/page/${ fixture.firstPage.id }`
+			);
+			await waitForEditorPost( page, fixture.firstPage.id );
+			await expect( backButton ).toBeDisabled();
+			await expect( forwardButton ).toBeDisabled();
+
+			await sidebar
+				.getByRole( 'button', {
+					name: HISTORY_SECOND_PAGE_TITLE,
+					exact: true,
+				} )
+				.click();
+			await waitForEditorPost( page, fixture.secondPage.id );
+			await expect( backButton ).toBeEnabled();
+			await expect( forwardButton ).toBeDisabled();
+
+			await backButton.click();
+			await waitForEditorPost( page, fixture.firstPage.id );
+			await expect( backButton ).toBeDisabled();
+			await expect( forwardButton ).toBeEnabled();
+
+			await forwardButton.click();
+			await waitForEditorPost( page, fixture.secondPage.id );
+			await expect( backButton ).toBeEnabled();
+			await expect( forwardButton ).toBeDisabled();
+
+			await sidebar
+				.getByRole( 'button', {
+					name: HISTORY_COLLECTION_TITLE,
+					exact: true,
+				} )
+				.click();
+			await expect( breadcrumb ).toContainText(
+				HISTORY_COLLECTION_TITLE
+			);
+			await expect( backButton ).toBeEnabled();
+			await expect( forwardButton ).toBeDisabled();
+
+			await page.goBack();
+			await waitForEditorPost( page, fixture.secondPage.id );
+			await expect( forwardButton ).toBeEnabled();
+
+			await page.goForward();
+			await expect( breadcrumb ).toContainText(
+				HISTORY_COLLECTION_TITLE
+			);
+			await expect( forwardButton ).toBeDisabled();
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.secondPage &&
+					`/wp/v2/crtxt_pages/${ fixture.secondPage.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.firstPage &&
+					`/wp/v2/crtxt_pages/${ fixture.firstPage.id }`
+			);
+		}
+	} );
+
 	test( 'preserves the mounted page canvas and waits for collection rows', async ( {
 		admin,
 		page,

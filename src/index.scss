@@ -233,17 +233,24 @@ body.cortext-fullscreen {
 		// Hover paints the whole row, not just the inner title button, so
 		// the chevron and kebab areas feel like part of what you're hovering.
 		// `:not(.is-selected)` keeps the active row on its selected
-		// background even while the cursor sits on it.
-		&:hover:not(.is-selected) {
-			background: var(--cortext-sidebar-item-hover-surface);
-		}
-
+		// background even while the cursor sits on it. Title-text brightening
+		// is handled in the .cortext-sidebar block below so its specificity
+		// beats the @wordpress/components button :hover color rule.
+		&:hover:not(.is-selected),
 		&:focus-within:not(.is-selected) {
-			background: var(--cortext-sidebar-item-hover-surface);
+			background: var(--cortext-state-hover);
 		}
 
 		&.is-selected {
-			background: var(--cortext-sidebar-item-selected-surface);
+			background: var(--cortext-state-selected);
+			// Hairline top-edge highlight on the row gives the active page a
+			// soft "lift" without reading as a border.
+			box-shadow: inset 0 1px 0 var(--cortext-state-selected-highlight);
+
+			/* stylelint-disable-next-line no-descending-specificity */
+			.cortext-sidebar__title.components-button {
+				font-weight: 500;
+			}
 		}
 
 		&.is-dragging {
@@ -270,12 +277,16 @@ body.cortext-fullscreen {
 		}
 
 		&.is-drop-inside {
-			background: var(--cortext-sidebar-item-selected-surface);
+			background: var(--cortext-state-selected);
 			outline: var(--cortext-shell-border-width) dashed var(--cortext-accent);
 			outline-offset: -1px;
 		}
 	}
 
+	// Chevron button, its placeholder, and the icon button must occupy the
+	// same column width so children's icons align under their parent's icon.
+	// WP's Button defaults to a wider intrinsic size; pin all three to
+	// $grid-unit-30 so the leading cells stack cleanly across depths.
 	&__chevron {
 		flex: 0 0 auto;
 
@@ -287,6 +298,13 @@ body.cortext-fullscreen {
 
 		&.is-expanded svg {
 			transform: rotate(90deg);
+		}
+
+		&.components-button {
+			width: $grid-unit-30;
+			height: $grid-unit-30;
+			min-width: 0;
+			padding: 0;
 		}
 
 		&--placeholder {
@@ -315,6 +333,7 @@ body.cortext-fullscreen {
 		}
 	}
 
+	/* stylelint-disable-next-line no-descending-specificity */
 	&__title.components-button {
 		flex: 1 1 auto;
 		min-width: 0;
@@ -323,6 +342,23 @@ body.cortext-fullscreen {
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+
+	&__icon.components-button {
+		flex: 0 0 auto;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: $grid-unit-30;
+		height: $grid-unit-30;
+		padding: 0;
+		min-width: 0;
+		background: transparent;
+
+		&:hover:not(:disabled),
+		&:focus:not(:disabled) {
+			background: var(--cortext-button-hover-surface);
+		}
 	}
 
 	&__rename {
@@ -372,7 +408,7 @@ body.cortext-fullscreen {
 
 		&__row:hover &__menu,
 		&__row:focus-within &__menu,
-		&__menu.is-opened,
+		&__menu.is-pressed,
 		&__row:hover &__add-child,
 		&__row:focus-within &__add-child {
 			opacity: 1;
@@ -444,6 +480,15 @@ body.cortext-fullscreen {
 		text-overflow: ellipsis;
 		white-space: nowrap;
 		max-width: 100%;
+		display: inline-flex;
+		align-items: center;
+		gap: $grid-unit-05;
+	}
+
+	&__trash-title-text {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	&__breadcrumb {
@@ -452,6 +497,16 @@ body.cortext-fullscreen {
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+
+	&__breadcrumb-crumb {
+		display: inline-flex;
+		align-items: center;
+		gap: 2px;
+	}
+
+	&__breadcrumb-sep {
+		margin: 0 2px;
 	}
 
 	&__trash-actions {
@@ -646,8 +701,34 @@ body.cortext-sidebar-resizing {
 		min-width: 0;
 		display: flex;
 		align-items: center;
+		gap: $grid-unit-10;
 		height: 20px;
 		line-height: 20px;
+	}
+
+	&__history-nav {
+		flex: 0 0 auto;
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-05;
+		height: 24px;
+	}
+
+	&__history-button.components-button {
+		width: 24px;
+		min-width: 24px;
+		height: 24px;
+		padding: 0;
+		color: var(--cortext-text-muted);
+	}
+
+	&__history-button.components-button:disabled {
+		color: var(--cortext-text-muted);
+		opacity: 0.4;
+	}
+
+	&__history-button.components-button:not(:disabled):hover {
+		color: var(--cortext-text);
 	}
 
 	&__actions {
@@ -735,12 +816,12 @@ body.cortext-sidebar-resizing {
 
 		&:hover:not(.is-current),
 		&:focus:not(.is-current) {
-			color: var(--cortext-text);
+			color: var(--cortext-text-strong);
 			background: var(--cortext-button-hover-surface);
 		}
 
 		&.is-current {
-			color: var(--cortext-text);
+			color: var(--cortext-text-strong);
 			cursor: default;
 		}
 	}
@@ -771,6 +852,52 @@ body.cortext-sidebar-resizing {
 	}
 
 	&__visual {
+		display: flex;
+		flex-direction: column;
+		flex: 1 1 auto;
+		min-height: 0;
+	}
+
+	&__identity-actions {
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-05;
+		max-width: var(--wp--style--global--content-size, 840px);
+		width: 100%;
+		margin: $grid-unit-10 auto $grid-unit-10;
+		padding: 0 $grid-unit-20;
+
+		.components-dropdown {
+			display: flex;
+			align-items: center;
+		}
+
+		.cortext-canvas__identity-action {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			opacity: 0;
+			min-width: 0;
+			height: $grid-unit-40;
+			padding: 0 $grid-unit-10;
+			line-height: 20px;
+			transition:
+				opacity 0.12s ease,
+				background-color 0.12s ease,
+				box-shadow 0.12s ease;
+
+			&:hover,
+			&:focus-visible {
+				opacity: 1;
+			}
+		}
+
+		&:focus-within .cortext-canvas__identity-action {
+			opacity: 1;
+		}
+	}
+
+	&__block-canvas {
 		flex: 1 1 auto;
 		min-height: 0;
 	}
@@ -814,6 +941,17 @@ body.cortext-sidebar-resizing {
 		text-align: center;
 		padding: $grid-unit-30 0;
 	}
+}
+
+// Reveal editor-only page identity actions when the user is working in the
+// page header, rather than when they discover the hidden actions row itself.
+// These nodes live inside BlockCanvas, so target the iframe document body.
+body:has([data-type="core/post-title"]:hover) .cortext-canvas__identity-action,
+body:has([data-type="core/post-title"]:focus-within) .cortext-canvas__identity-action,
+body:has([data-type="cortext/page-icon"]:hover) .cortext-canvas__identity-action,
+body:has([data-type="cortext/page-icon"]:focus-within) .cortext-canvas__identity-action,
+body:has(.cortext-canvas__identity-actions:hover) .cortext-canvas__identity-action {
+	opacity: 1;
 }
 
 .cortext-data-view-picker__empty {
@@ -2108,7 +2246,8 @@ thead > tr > th {
 // that Cortext owns. The editor iframe, inspector, and block toolbars keep
 // Gutenberg's own component styling.
 .cortext-sidebar,
-.cortext-topbar {
+.cortext-topbar,
+.cortext-canvas__identity-actions {
 
 	.components-button {
 		border-radius: var(--cortext-shell-radius);
@@ -2131,19 +2270,58 @@ thead > tr > th {
 		background: var(--cortext-button-surface);
 		color: var(--cortext-button-text);
 
-		&:hover:not(:disabled),
-		&:focus:not(:disabled) {
+		// Skip pressed buttons: their .is-pressed rule below paints both
+		// background and text-strong, and we don't want hover/focus to revert
+		// either back to the default tier. Unpressed buttons brighten to
+		// strong on hover/focus so the icon/label pops alongside the overlay.
+		&:not(.is-pressed):hover:not(:disabled),
+		&:not(.is-pressed):focus-visible:not(:disabled) {
 			background: var(--cortext-button-hover-surface);
-			color: var(--cortext-button-text);
+			color: var(--cortext-text-strong);
 		}
 	}
 
-	// Keep hover/focus from painting only the inner title/action button, which
-	// makes the row look split into separate cells. The row itself handles
-	// the focus background.
+	.cortext-document-actions__settings.components-button:not(.is-primary):not(.is-pressed):hover:not(:disabled, [aria-disabled="true"]) {
+		background: var(--cortext-state-hover-strong, var(--cortext-button-hover-surface));
+		color: var(--cortext-text-strong);
+	}
+
+	.components-button.is-pressed {
+		// Strong text/icon so the toggled-on state pops, matching the sidebar
+		// selected row and the breadcrumb is-current treatment.
+		color: var(--cortext-text-strong);
+		background: var(--cortext-button-pressed-surface);
+
+		// Selectors match WP's own .is-pressed:hover specificity (which would
+		// otherwise flip the background to solid #1e1e1e); ours wins by source
+		// order and gives pressed chrome a stronger hover state.
+		/* stylelint-disable-next-line no-descending-specificity */
+		&:hover:not(:disabled, [aria-disabled="true"]) {
+			background: var(--cortext-state-selected-hover);
+			color: var(--cortext-text-strong);
+		}
+	}
+
+	// Keep hover/focus/pressed from painting only the inner title/action
+	// button, which makes the row look split into separate cells (or, with
+	// alpha overlays, visibly doubles the fill on the button). The row itself
+	// handles every state's background.
+	/* stylelint-disable no-descending-specificity */
 	.cortext-sidebar__row .components-button:not(.is-primary):hover:not(:disabled),
-	.cortext-sidebar__row .components-button:not(.is-primary):focus:not(:disabled) {
+	.cortext-sidebar__row .components-button:not(.is-primary):focus:not(:disabled),
+	.cortext-sidebar__row .components-button.is-pressed,
+	.cortext-sidebar__row .components-button.is-pressed:hover:not(:disabled, [aria-disabled="true"]) {
 		background: transparent;
+	}
+	/* stylelint-enable no-descending-specificity */
+
+	// Title text brightens whenever the row is hovered, focused, or selected.
+	// Lives in this block so its specificity sits above the button :hover/:focus
+	// color rule above (which would otherwise pin the title to default text).
+	.cortext-sidebar__row:hover .cortext-sidebar__title.components-button,
+	.cortext-sidebar__row:focus-within .cortext-sidebar__title.components-button,
+	.cortext-sidebar__row.is-selected .cortext-sidebar__title.components-button {
+		color: var(--cortext-text-strong);
 	}
 
 	.components-button.is-primary {
@@ -2159,11 +2337,6 @@ thead > tr > th {
 		}
 	}
 
-	.components-button.is-pressed {
-		background: var(--cortext-button-pressed-surface);
-		color: var(--cortext-button-text);
-	}
-
 	.components-button svg {
 		fill: currentcolor;
 	}
@@ -2171,5 +2344,426 @@ thead > tr > th {
 	.dashicon,
 	.dashicons {
 		color: var(--cortext-button-text);
+	}
+}
+
+/* stylelint-disable no-descending-specificity */
+.cortext-canvas__identity-actions .cortext-canvas__identity-action.components-button {
+	background: transparent;
+	box-shadow: none;
+	color: var(--cortext-button-text, #1e1e1e);
+}
+
+.cortext-canvas__identity-actions .cortext-canvas__identity-action.components-button:not(.is-primary):hover:not(:disabled),
+.cortext-canvas__identity-actions .cortext-canvas__identity-action.components-button:not(.is-primary):focus:not(:disabled),
+.cortext-canvas__identity-actions .cortext-canvas__identity-action.components-button:not(.is-primary):focus-visible {
+	background: var(--cortext-button-hover-surface, rgba(0, 0, 0, 0.06));
+	background-color: var(--cortext-button-hover-surface, rgba(0, 0, 0, 0.06));
+	box-shadow: none;
+	color: var(--cortext-button-text, #1e1e1e);
+}
+/* stylelint-enable no-descending-specificity */
+
+.cortext-page-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 auto;
+	line-height: 1;
+	vertical-align: middle;
+
+	&--emoji {
+		font-family:
+			"Apple Color Emoji",
+			"Segoe UI Emoji",
+			"Noto Color Emoji",
+			"Twemoji Mozilla",
+			sans-serif;
+	}
+
+	&--image {
+		object-fit: cover;
+		border-radius: 3px;
+	}
+
+	&--image-loading {
+		display: inline-block;
+		background: var(--cortext-chrome-border);
+		border-radius: 3px;
+	}
+}
+
+// Page cover: full-width banner image with hover-revealed controls. The
+// wrapper class lives on both the editor (useBlockProps in edit.js) and
+// the frontend (PHP render_callback), so styling applies in both
+// contexts. Width isn't set here so core's `alignfull` keeps its
+// breakout margins. The wrapper itself owns the banner height so the
+// cover always reserves its slot — even before the media record has
+// finished loading on first open. Without this the wrapper collapsed to
+// 0 height while `useEntityRecord` was still resolving, then expanded
+// when the image arrived, pushing everything below it down.
+.cortext-page-cover-block {
+	position: relative;
+	height: clamp(140px, 26vh, 260px);
+
+	&__image,
+	img {
+		display: block;
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+	}
+
+	&__controls {
+		position: absolute;
+		top: $grid-unit-10;
+		right: $grid-unit-10;
+		display: flex;
+		align-items: flex-start;
+		gap: $grid-unit-05;
+		opacity: 0;
+		transition: opacity 0.12s ease;
+
+		// Cortext chrome over the cover image: opaque shell surface so the
+		// buttons stay readable on dark covers, with cortext color tokens
+		// instead of WP's heavier secondary-button styling. The cortext
+		// tokens are scoped to `.cortext-root`, which doesn't extend into
+		// the editor iframe, so each var has a sensible literal fallback.
+		/* stylelint-disable no-descending-specificity */
+		.components-button {
+			background: var(--cortext-shell-surface, #fff);
+			color: var(--cortext-button-text, #1e1e1e);
+			box-shadow: 0 0 0 var(--cortext-shell-border-width, 1px) var(--cortext-chrome-border, rgba(0, 0, 0, 0.12));
+
+			// Opaque hover fallback: the default Cortext hover surface is a
+			// translucent wash, which works fine on the shell but lets the
+			// cover image bleed through here and tank the text contrast.
+			&:hover:not(:disabled),
+			&:focus:not(:disabled) {
+				background: var(--cortext-button-hover-surface, #ebeae6);
+				color: var(--cortext-button-text, #1e1e1e);
+				box-shadow: 0 0 0 var(--cortext-shell-border-width, 1px) var(--cortext-chrome-border, rgba(0, 0, 0, 0.12));
+			}
+		}
+
+		.components-dropdown {
+			display: flex;
+			align-items: flex-start;
+		}
+		/* stylelint-enable no-descending-specificity */
+	}
+
+	&:hover &__controls,
+	&:focus-within &__controls {
+		opacity: 1;
+	}
+}
+
+// Page icon: use a normal content-column row for stable placement and a
+// generous hover target, but replace Gutenberg's full-row selected outline
+// with a tight outline around the icon button itself.
+.cortext-page-icon-block {
+	display: flex;
+	align-items: flex-end;
+	justify-content: flex-start;
+	max-width: var(--wp--style--global--content-size, 840px);
+	width: 100%;
+	margin: $grid-unit-10 auto;
+	padding: 0 $grid-unit-20;
+
+	// The trigger is only an emoji or thumbnail; framing it like a button
+	// (border + shadow) reads as visual noise next to the cover. Keep the
+	// click affordance via a soft hover wash instead.
+	/* stylelint-disable-next-line no-descending-specificity */
+	.components-button {
+		position: relative;
+		z-index: 1;
+		padding: $grid-unit-05;
+		min-width: 0;
+		min-height: 0;
+		height: auto;
+		background: transparent;
+		border: 0;
+		box-shadow: none;
+		border-radius: var(--cortext-shell-radius, 4px);
+
+		/* stylelint-disable no-descending-specificity */
+		&:hover:not(:disabled),
+		&:focus:not(:disabled) {
+			background: var(--cortext-button-hover-surface, rgba(0, 0, 0, 0.06));
+			box-shadow: none;
+		}
+		/* stylelint-enable no-descending-specificity */
+	}
+
+	.cortext-page-icon-block__button.components-button {
+		width: calc(56px + #{ $grid-unit-05 * 2 });
+		height: calc(56px + #{ $grid-unit-05 * 2 });
+	}
+
+	.cortext-page-icon--image {
+		width: 56px;
+		height: 56px;
+		border-radius: var(--cortext-shell-radius, 4px);
+	}
+
+	// `Dropdown` renders a `display: block` wrapper around the trigger.
+	// A block element holding an `inline-flex` button gets an anonymous
+	// line-box whose descender depends on the inner content's baseline:
+	// an emoji's baseline lives inside the glyph, an SVG icon has no text
+	// baseline so it sits at the bottom of the inline box. The result was
+	// a ~3px height drift between emoji and WP-icon variants that pushed
+	// the title below it. `inline-flex` removes the line-box entirely.
+	.cortext-page-identity-control {
+		display: inline-flex;
+	}
+}
+
+.block-editor-block-list__layout
+.block-editor-block-list__block[data-type="cortext/page-icon"].is-selected::after {
+	box-shadow: none;
+	outline: none;
+}
+
+.block-editor-block-list__layout
+.block-editor-block-list__block[data-type="cortext/page-icon"].is-selected
+.cortext-page-icon-block__button {
+	outline: 1.5px solid var(--wp-admin-theme-color, #007cba);
+	outline-offset: 0;
+}
+
+// Notion-style overlap: when the icon sits right after the cover, pull
+// the block itself up so the title follows the visual icon position
+// instead of leaving a reserved blank row below the cover.
+/* stylelint-disable no-descending-specificity */
+.cortext-page-cover-block + .cortext-page-icon-block,
+[data-type="cortext/page-cover"] + [data-type="cortext/page-icon"] {
+	position: relative;
+	z-index: 1;
+	margin-block-start: -28px;
+	margin-block-end: 0;
+}
+/* stylelint-enable no-descending-specificity */
+
+// `@wordpress/icons` SVGs don't carry an explicit `fill="currentColor"`.
+// Inside the editor iframe the canvas stylesheet provides one globally,
+// so the named-color palette flowed through. The shell document has no
+// such global, so the sidebar tree rendered every glyph in pure black
+// regardless of the chosen palette color or the surrounding text color
+// (which matters in dark mode). Forcing `currentcolor` on our own
+// component covers both the colored WP-icon variant and the fallback
+// page glyph in every surface.
+/* stylelint-disable-next-line no-descending-specificity */
+.cortext-page-icon svg {
+	fill: currentcolor;
+}
+
+// Hide the block kebab (more options) while a Cortext header block is
+// selected. The body class is toggled by HideHeaderBlockKebab in
+// Canvas.js — see the long comment there for why a JS hook beats CSS
+// :has() here. We hide several adjacent wrappers because core's toolbar
+// keeps a placeholder slot around the kebab even when it's empty.
+body.cortext-hide-block-settings-menu .block-editor-block-settings-menu,
+body.cortext-hide-block-settings-menu .block-editor-block-toolbar > .block-editor-block-settings-menu,
+body.cortext-hide-block-settings-menu .components-toolbar-group:has(> .block-editor-block-settings-menu),
+body.cortext-hide-block-settings-menu .block-editor-block-toolbar__group-collapsible-toolbar,
+body.cortext-hide-block-settings-menu .block-editor-block-switcher {
+	display: none;
+}
+
+.cortext-icon-library {
+	display: flex;
+	flex-direction: column;
+	gap: $grid-unit-15;
+	padding: $grid-unit-15;
+	min-width: 360px;
+	max-width: 400px;
+
+	// Color swatches sit between the search input and the grid. The
+	// active color tints the entire grid via `color: var(--swatch)`,
+	// so users see the icons in their chosen color before clicking.
+	&__colors {
+		display: flex;
+		gap: $grid-unit-10;
+		flex-wrap: wrap;
+		align-items: center;
+		padding: $grid-unit-05 0;
+	}
+
+	&__swatch {
+		width: 24px;
+		height: 24px;
+		border-radius: 50%;
+		border: 1px solid var(--cortext-chrome-border, rgba(0, 0, 0, 0.18));
+		background: var(--swatch);
+		cursor: pointer;
+		padding: 0;
+		position: relative;
+
+		&:hover {
+			transform: scale(1.08);
+		}
+
+		// Active state: inset ring keeps the visible swatch size stable
+		// so the row doesn't jump when switching colors.
+		&.is-active {
+			box-shadow:
+				inset 0 0 0 2px #fff,
+				0 0 0 2px var(--cortext-accent, #3858e9);
+		}
+
+		// `default` swatch (currentColor) is hard to see as a fill, so
+		// render it as a transparent disk with a contrast border and a
+		// small "no" diagonal line to communicate "no color selected".
+		&[style*="currentColor"] {
+			background: transparent;
+			border-color: var(--cortext-text, #1e1e1e);
+
+			&::after {
+				content: "";
+				position: absolute;
+				inset: 0;
+				border-radius: 50%;
+				background: linear-gradient(45deg, transparent 47%, var(--cortext-text, #1e1e1e) 47% 53%, transparent 53%);
+			}
+		}
+	}
+
+	&__grid {
+		display: grid;
+		grid-template-columns: repeat(8, 1fr);
+		gap: $grid-unit-05;
+		max-height: 320px;
+		overflow-y: auto;
+		padding: $grid-unit-05 0;
+	}
+
+	&__item {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 36px;
+		height: 36px;
+		padding: 0;
+		border: 0;
+		background: transparent;
+		cursor: pointer;
+		border-radius: var(--cortext-shell-radius, 4px);
+		color: var(--cortext-text, #1e1e1e);
+
+		&:hover,
+		&:focus {
+			background: var(--cortext-button-hover-surface, rgba(0, 0, 0, 0.06));
+			outline: none;
+		}
+	}
+
+	&__empty {
+		grid-column: 1 / -1;
+		text-align: center;
+		color: var(--cortext-text-muted, #757575);
+		font-size: 12px;
+		margin: $grid-unit-10 0;
+	}
+}
+
+.cortext-page-identity-popover-content {
+	min-width: 320px;
+
+	.cortext-page-identity-popover {
+		position: relative;
+		display: flex;
+		flex-direction: column;
+
+		&__busy {
+			position: absolute;
+			inset: 0;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			background: rgba(255, 255, 255, 0.6);
+			z-index: 2;
+		}
+
+		&__loading {
+			min-height: 320px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+		}
+
+		&__upload {
+			display: flex;
+			flex-direction: column;
+			gap: $grid-unit-10;
+			padding: $grid-unit-15;
+		}
+
+		&__hint {
+			font-size: 12px;
+			color: var(--cortext-text-muted);
+			margin: 0;
+		}
+
+		// Custom tab row: tab buttons sized to content, Remove sits
+		// immediately after the last tab (no padding pushing it to the
+		// right edge of the popover).
+		&__tabs {
+			display: flex;
+			align-items: center;
+			gap: $grid-unit-05;
+			padding: 0 $grid-unit-10;
+			border-bottom: 1px solid var(--cortext-chrome-border, rgba(0, 0, 0, 0.1));
+		}
+
+		&__tab {
+			height: 40px;
+			padding: 0 $grid-unit-10;
+			background: transparent;
+			border: 0;
+			cursor: pointer;
+			color: var(--cortext-text-muted, #757575);
+			font-size: 13px;
+			font-weight: 500;
+			position: relative;
+
+			&:hover {
+				color: var(--cortext-text, #1e1e1e);
+			}
+
+			&.is-active {
+				color: var(--cortext-text, #1e1e1e);
+
+				&::after {
+					content: "";
+					position: absolute;
+					left: $grid-unit-10;
+					right: $grid-unit-10;
+					bottom: -1px;
+					height: 2px;
+					background: var(--cortext-accent, #3858e9);
+				}
+			}
+		}
+
+		&__remove {
+			height: 40px;
+			padding: 0 $grid-unit-10;
+			background: transparent;
+			border: 0;
+			cursor: pointer;
+			color: #d63638 !important;
+			font-size: 13px;
+			font-weight: 500;
+
+			&:hover,
+			&:focus {
+				color: #b32d2e !important;
+			}
+		}
+
+		&__panel {
+			padding: 0;
+		}
 	}
 }

@@ -2171,19 +2171,24 @@ test.describe( 'Collection view block', () => {
 			const canvas = page.frameLocator( '[name="editor-canvas"]' );
 			await expect( canvas.getByText( 'Author' ) ).toBeVisible();
 
-			// Select the block so its toolbar (with Add field) renders.
+			// Select the data-view block so its toolbar (with Add field) renders.
 			// Clicking the canvas content tends to land on one of our
 			// interactive controls (column header dropdown, etc.) and
 			// open a popover instead of selecting the block; dispatch
-			// directly through core-data to avoid that.
+			// directly through core-data to avoid that. Pages now also carry
+			// locked header blocks, so pick the data-view block by name instead
+			// of assuming it is the first block.
 			await page.evaluate( () => {
 				const blocks = window.wp.data
 					.select( 'core/block-editor' )
 					.getBlocks();
-				if ( blocks.length ) {
+				const dataViewBlock = blocks.find(
+					( block ) => block.name === 'cortext/data-view'
+				);
+				if ( dataViewBlock ) {
 					window.wp.data
 						.dispatch( 'core/block-editor' )
-						.selectBlock( blocks[ 0 ].clientId );
+						.selectBlock( dataViewBlock.clientId );
 				}
 			} );
 

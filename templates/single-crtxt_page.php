@@ -28,6 +28,13 @@ defined( 'ABSPATH' ) || exit;
 		the_post();
 		?>
 		<article id="post-<?php the_ID(); ?>">
+			<?php
+			// `the_title()` is the authoritative render; the same string also
+			// resolves a second time inside `the_content()` for any page
+			// whose `post_content` carries the locked `core/post-title`
+			// block prepended by `PageIdentity::prepend_header_blocks`.
+			// See tech-debt.md#32.
+			?>
 			<h1 class="cortext-public-page__title"><?php the_title(); ?></h1>
 			<div class="cortext-public-page__body">
 				<?php the_content(); ?>

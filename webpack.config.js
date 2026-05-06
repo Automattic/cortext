@@ -30,6 +30,19 @@ module.exports = {
 		...defaultConfig.entry(),
 		frontend: path.resolve( __dirname, 'src/frontend.js' ),
 	},
+	output: {
+		...defaultConfig.output,
+		// Keep lazy chunk URLs stable across `start` and `build`.
+		// The editor may load a dev runtime that asks for named chunks,
+		// and a production build must not replace those files with
+		// numeric-only chunk names.
+		chunkFilename: '[name].js?ver=[chunkhash]',
+	},
+	optimization: {
+		...defaultConfig.optimization,
+		chunkIds: 'named',
+		moduleIds: 'named',
+	},
 	plugins: [
 		...defaultConfig.plugins.map( ( plugin ) => {
 			if ( plugin instanceof DependencyExtractionWebpackPlugin ) {
