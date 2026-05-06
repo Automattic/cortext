@@ -10,6 +10,8 @@ import {
 import { chevronRight, moreVertical, plus } from '@wordpress/icons';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 
+import PageIcon from './PageIcon';
+
 const GRID_UNIT = 20; // matches $grid-unit-20 in index.scss
 
 // A single page in the sidebar tree plus its rendered subtree.
@@ -48,6 +50,7 @@ export default function PageRow( {
 	const [ isRenaming, setIsRenaming ] = useState( false );
 	const [ draftTitle, setDraftTitle ] = useState( '' );
 	const renameInputRef = useRef( null );
+	const iconMeta = page.meta?.cortext_page_icon ?? '';
 
 	// Start rename automatically if the parent asked for it (new page flow).
 	useEffect( () => {
@@ -116,7 +119,6 @@ export default function PageRow( {
 	}
 
 	const title = page.title?.rendered?.trim() || __( '(untitled)', 'cortext' );
-
 	function commitRename() {
 		const next = draftTitle.trim();
 		if ( next && next !== ( page.title?.raw ?? page.title?.rendered ) ) {
@@ -174,6 +176,10 @@ export default function PageRow( {
 							aria-hidden="true"
 						/>
 					) }
+
+					<span className="cortext-sidebar__icon" aria-hidden="true">
+						<PageIcon icon={ iconMeta } size={ 16 } />
+					</span>
 
 					{ isRenaming ? (
 						<div

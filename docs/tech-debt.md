@@ -259,3 +259,35 @@ Double-click autofit is the trickiest piece. With no measurement hook upstream, 
 **Where.** `openFormat` / `scheduleClose` and `hideMenuOnInteractOutside` in `src/components/fields/ColumnHeaderActions.js`. `FieldFormatPopover` and its flyouts in `src/components/fields/FieldFormatPopover.js`.
 
 **Solution.** An arbitrary-content submenu variant in WP's `Menu` (or upstream Ariakit) would let the format panel mount as a real submenu, with outside-click and focus management owned by the library. Until then the manual bridge stays.
+
+## 31. Block editor has no non-serialized before/after block chrome slot `[upstream]`
+
+**What.** Page identity actions ("Add icon" / "Add cover") are editor chrome, but the ideal visual placement is immediately before the page title inside the block canvas. Persisting an actions block put UI into post content, while portalling controls into the iframe coupled us to BlockList DOM and block hover/selection behavior. The current compromise renders editor-only actions from the canvas shell, outside the persisted `BlockList`, and inserts only the real dynamic blocks (`cortext/page-icon`, `cortext/page-cover`) into content.
+
+**Where.** `PageIdentityActions` and `EnsureHeaderBlocks` in `src/components/Canvas.js`; legacy no-op registration in `includes/Editor/PageHeaderActionsBlock.php`.
+
+**Solution.** Gutenberg could expose a non-serialized block chrome slot/fill, e.g. "before/after this block" keyed by `clientId`, block name, and root list. Fills would participate in editor layout and focus order but stay out of block order, list view, serialization, copy/paste, movers, undo history as content, and frontend rendering. Cortext could then render the identity actions before the root `core/post-title` without storing a fake block or querying iframe DOM.
+
+## 32. Public pages render the title twice `[internal]`
+
+**What.** `PageIdentity::prepend_header_blocks` slips a locked `core/post-title` block into `post_content` on insert, so the editor canvas can show the title inline as part of the BlockList. The public template still calls `the_title()` immediately before `the_content()`, and `core/post-title` resolves to the same `post_title` again, so every page created after this filter landed renders its title twice publicly. Older pages (no title block in their content) are fine until the editor next persists them.
+
+**Where.** `prepend_header_blocks` in `includes/PostType/PageIdentity.php`, paired with `the_title()` in `templates/single-crtxt_page.php`.
+
+**Solution.** Stop baking `core/post-title` into `post_content` and mount the editor's title input as canvas chrome above `BlockCanvas`, the way Gutenberg itself does it. The template keeps `the_title()` as the single source of truth; the editor keeps an inline-editable title; pages already saved with the block get a small migration that strips it. Until then `the_title()` is the authoritative render and the duplication is the cost of the canvas-as-blocklist shape.
+
+## 33. Frontend stylesheet doesn't carry the cover/icon rules `[internal]`
+
+**What.** `.cortext-page-cover-block` and `.cortext-page-icon` rules live in `src/index.scss`, which only builds to the admin shell bundle. The PHP `render_callback`s emit the same wrapper classes for the public frontend, but `src/frontend.scss` has no matching rules, so on a public `crtxt_page` the cover banner renders at intrinsic image size and the icon block falls back to inline-default layout.
+
+**Where.** `src/index.scss` (cover/icon block rules) versus `src/frontend.scss` (no matching rules), enqueued by the public template.
+
+**Solution.** Extract the cover/icon block rules into a partial both stylesheets `@use`, so admin and frontend stay in sync without copy-paste drift. The shell-only chrome (hover replace/remove, picker popovers) stays in `index.scss`; only the persisted block markup needs to be shared.
+
+## 34. WP-icon variant renders blank on the public frontend `[internal]`
+
+**What.** `PageIconBlock::render` emits a marker span (`<span class="cortext-page-icon--wp" data-icon="…">`) for the `wp` icon variant and relies on a frontend hydration step to fill in the SVG. `frontend.js` is CSS-only, so nothing fills it and the icon disappears on the public page; the saved color is also dropped. Emoji and image variants render server-side and are fine.
+
+**Where.** Case `'wp'` in `includes/Editor/PageIconBlock.php`, paired with `src/frontend.js` (no hydration).
+
+**Solution.** Either ship the SVG inline server-side (a small build-time generator that reads `@wordpress/icons` and emits a name-to-markup PHP map, refreshed on install) or hydrate from `data-icon` markers in `frontend.js` (smaller PHP surface, adds a public script). The inline-color is a one-line fix in either path. Until then, surface the limitation in the picker copy or restrict the saved variant to emoji + image for public-rendered pages.
