@@ -4,18 +4,18 @@ import {
 	CheckboxControl,
 	DateTimePicker,
 	Dropdown,
-	FormTokenField,
-	MenuGroup,
-	MenuItem,
 	Modal,
 	Notice,
+	Popover,
 	Spinner,
 } from '@wordpress/components';
 import { useEntityRecord } from '@wordpress/core-data';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { EditorProvider, store as editorStore } from '@wordpress/editor';
 import {
+	createPortal,
 	useCallback,
+	useContext,
 	useEffect,
 	useMemo,
 	useRef,
@@ -26,16 +26,28 @@ import {
 	chevronDown,
 	chevronUp,
 	closeSmall,
-	details,
 	drawerRight,
 	fullscreen,
+	seen,
 	square,
+	unseen,
 } from '@wordpress/icons';
 
 import useAutosave from '../hooks/useAutosave';
-import { dateOnlyValue, formatDisplay } from './EditableCell';
+import { toRecordId } from '../hooks/fieldIds';
+import {
+	RowMutationContext,
+	dateOnlyValue,
+	formatDisplay,
+} from './EditableCell';
 import { TITLE_FIELD_ID } from './dataViewColumns';
-import { getRowDetailMode, splitPropertyPatch } from './rowDetailUtils';
+import EditOptionsPopover from './fields/EditOptionsPopover';
+import {
+	getRowDetailMode,
+	isValidNumberDraft,
+	parseNumberPropertyValue,
+	splitPropertyPatch,
+} from './rowDetailUtils';
 
 export const ROW_DETAIL_MODE_ICONS = {
 	side: drawerRight,
@@ -48,6 +60,54 @@ const ROW_DETAIL_MODE_LABELS = {
 	modal: __( 'Center modal', 'cortext' ),
 	full: __( 'Full page', 'cortext' ),
 };
+const ROW_DETAIL_MODAL_CLOSE_MS = 240;
+const ROW_DETAIL_SWITCH_MS = 180;
+const ROW_DETAIL_SWITCH_FALLBACK_MS = ROW_DETAIL_SWITCH_MS + 100;
+
+function delay( duration ) {
+	return new Promise( ( resolve ) => {
+		setTimeout( resolve, duration );
+	} );
+}
+
+function detailKeyFor( detail ) {
+	if ( ! detail ) {
+		return null;
+	}
+	return `${ detail.postType }:${ detail.rowId }`;
+}
+
+function prefersReducedMotion() {
+	return (
+		typeof window !== 'undefined' &&
+		window.matchMedia?.( '(prefers-reduced-motion: reduce)' ).matches
+	);
+}
+
+function settleDetailPanes( panes ) {
+	const enteringPane = panes.find( ( pane ) => pane.state === 'entering' );
+	if ( enteringPane ) {
+		return panes
+			.filter(
+				( pane ) =>
+					pane.key === enteringPane.key || pane.state === 'preparing'
+			)
+			.map( ( pane ) =>
+				pane.key === enteringPane.key
+					? { ...pane, state: 'active' }
+					: pane
+			);
+	}
+	return panes.filter( ( pane ) => pane.state !== 'covered' );
+}
+
+function DetailReadySignal( { detailKey, onReady } ) {
+	useEffect( () => {
+		onReady( detailKey );
+	}, [ detailKey, onReady ] );
+
+	return null;
+}
 
 const ROW_DETAIL_EDITOR_CSS = `
 	body {
@@ -73,7 +133,7 @@ const ROW_DETAIL_EDITOR_CSS = `
 	}
 `;
 
-function RowAutosaveBridge( { onApi, onSaved } ) {
+function RowAutosaveBridge( { isActive = true, onApi, onSaved } ) {
 	const { status, flushNow, isDirty, isSaving } = useAutosave( {
 		debounceMs: 0,
 		minSaveIntervalMs: 0,
@@ -90,15 +150,18 @@ function RowAutosaveBridge( { onApi, onSaved } ) {
 	);
 
 	useEffect( () => {
+		if ( ! isActive ) {
+			return undefined;
+		}
 		onApi?.( { flushNow, discard, hasPendingEdits } );
 		return () => onApi?.( null );
-	}, [ discard, flushNow, hasPendingEdits, onApi ] );
+	}, [ discard, flushNow, hasPendingEdits, isActive, onApi ] );
 
 	useEffect( () => {
-		if ( status === 'saved' ) {
+		if ( isActive && status === 'saved' ) {
 			onSaved?.();
 		}
-	}, [ onSaved, status ] );
+	}, [ isActive, onSaved, status ] );
 
 	return null;
 }
@@ -144,136 +207,128 @@ function ReadOnlyProperty( { value, type, elements, format } ) {
 	);
 }
 
-function labelForElementValue( elements, value ) {
-	const match = ( elements ?? [] ).find( ( element ) => {
-		return String( element.value ) === String( value );
-	} );
-	return match?.label ?? value;
+function OptionPropertyValue( { value, type, elements } ) {
+	const display = formatDisplay( value, type, { elements } );
+	return display === '' ? emptyLabel() : display;
 }
 
-function SelectPropertyControl( { field, value, elements, onChange } ) {
-	const hasValue = value !== null && value !== undefined && value !== '';
-	const triggerLabel = hasValue
-		? labelForElementValue( elements, value )
-		: __( 'Empty', 'cortext' );
+function SelectPropertyControl( {
+	field,
+	value,
+	elements,
+	onChange,
+	onOptionsSaved,
+	onRowsChanged,
+} ) {
+	const [ anchor, setAnchor ] = useState( null );
+	const [ isOpen, setIsOpen ] = useState( false );
+	const close = useCallback( () => setIsOpen( false ), [] );
+	const recordId = field.cortextRecordId ?? toRecordId( field.id );
 
 	return (
-		<Dropdown
-			popoverProps={ { placement: 'bottom-start' } }
-			renderToggle={ ( { isOpen, onToggle } ) => (
-				<Button
-					className="cortext-row-detail__property-trigger"
-					variant="tertiary"
-					onClick={ onToggle }
-					aria-expanded={ isOpen }
-					aria-label={ field.label }
+		<>
+			<Button
+				ref={ setAnchor }
+				className="cortext-row-detail__property-trigger"
+				variant="tertiary"
+				onClick={ () => setIsOpen( true ) }
+				aria-expanded={ isOpen }
+				aria-label={ field.label }
+			>
+				<OptionPropertyValue
+					value={ value }
+					type="select"
+					elements={ elements }
+				/>
+			</Button>
+			{ isOpen && anchor ? (
+				<Popover
+					anchor={ anchor }
+					placement="bottom-start"
+					onClose={ close }
+					focusOnMount="firstElement"
 				>
-					{ triggerLabel }
-				</Button>
-			) }
-			renderContent={ ( { onClose } ) => (
-				<MenuGroup>
-					<MenuItem
-						isSelected={ ! hasValue }
-						onClick={ () => {
-							onChange( null );
-							onClose();
+					<EditOptionsPopover
+						recordId={ recordId }
+						fieldType="select"
+						initialOptions={ elements ?? [] }
+						value={ value }
+						onOptionsSaved={ onOptionsSaved }
+						onRowsChanged={ onRowsChanged }
+						onRequestClose={ close }
+						onPick={ async ( next ) => {
+							onChange( next );
+							close();
 						} }
-					>
-						{ __( 'Empty', 'cortext' ) }
-					</MenuItem>
-					{ ( elements ?? [] ).map( ( element ) => (
-						<MenuItem
-							key={ element.value }
-							isSelected={
-								String( element.value ) === String( value )
-							}
-							onClick={ () => {
-								onChange( element.value );
-								onClose();
-							} }
-						>
-							{ element.label }
-						</MenuItem>
-					) ) }
-				</MenuGroup>
-			) }
-		/>
-	);
-}
-
-function MultiselectPropertyControl( { field, value, elements, onChange } ) {
-	const valueToLabel = useMemo( () => {
-		const map = new Map();
-		( elements ?? [] ).forEach( ( element ) =>
-			map.set( element.value, element.label )
-		);
-		return map;
-	}, [ elements ] );
-	const labelToValue = useMemo( () => {
-		const map = new Map();
-		( elements ?? [] ).forEach( ( element ) =>
-			map.set( element.label, element.value )
-		);
-		return map;
-	}, [ elements ] );
-	const tokens = useMemo(
-		() =>
-			( Array.isArray( value ) ? value : [] ).map(
-				( item ) => valueToLabel.get( item ) ?? String( item )
-			),
-		[ value, valueToLabel ]
-	);
-	const suggestions = useMemo(
-		() => ( elements ?? [] ).map( ( element ) => element.label ),
-		[ elements ]
-	);
-	const triggerLabel = tokens.length
-		? tokens.join( ', ' )
-		: __( 'Empty', 'cortext' );
-
-	return (
-		<Dropdown
-			popoverProps={ { placement: 'bottom-start' } }
-			renderToggle={ ( { isOpen, onToggle } ) => (
-				<Button
-					className="cortext-row-detail__property-trigger"
-					variant="tertiary"
-					onClick={ onToggle }
-					aria-expanded={ isOpen }
-					aria-label={ field.label }
-				>
-					{ triggerLabel }
-				</Button>
-			) }
-			renderContent={ () => (
-				<div className="cortext-row-detail__tokens-popover">
-					<FormTokenField
-						value={ tokens }
-						suggestions={ suggestions }
-						onChange={ ( nextTokens ) => {
-							onChange(
-								nextTokens
-									.map(
-										( token ) =>
-											labelToValue.get( token ) ?? token
-									)
-									.filter(
-										( next ) =>
-											next !== '' &&
-											next !== null &&
-											next !== undefined
-									)
-							);
-						} }
-						label={ field.label }
-						__experimentalExpandOnFocus
-						__experimentalShowHowTo={ false }
-						__nextHasNoMarginBottom
 					/>
-				</div>
-			) }
-		/>
+				</Popover>
+			) : null }
+		</>
+	);
+}
+
+function MultiselectPropertyControl( {
+	field,
+	value,
+	elements,
+	onChange,
+	onOptionsSaved,
+	onRowsChanged,
+} ) {
+	const [ anchor, setAnchor ] = useState( null );
+	const [ isOpen, setIsOpen ] = useState( false );
+	const close = useCallback( () => setIsOpen( false ), [] );
+	const recordId = field.cortextRecordId ?? toRecordId( field.id );
+	const current = useMemo(
+		() => ( Array.isArray( value ) ? value : [] ),
+		[ value ]
+	);
+	const handlePick = useCallback(
+		( optionValue ) => {
+			const next = current.includes( optionValue )
+				? current.filter( ( item ) => item !== optionValue )
+				: [ ...current, optionValue ];
+			onChange( next );
+		},
+		[ current, onChange ]
+	);
+
+	return (
+		<>
+			<Button
+				ref={ setAnchor }
+				className="cortext-row-detail__property-trigger"
+				variant="tertiary"
+				onClick={ () => setIsOpen( true ) }
+				aria-expanded={ isOpen }
+				aria-label={ field.label }
+			>
+				<OptionPropertyValue
+					value={ current }
+					type="multiselect"
+					elements={ elements }
+				/>
+			</Button>
+			{ isOpen && anchor ? (
+				<Popover
+					anchor={ anchor }
+					placement="bottom-start"
+					onClose={ close }
+					focusOnMount="firstElement"
+				>
+					<EditOptionsPopover
+						recordId={ recordId }
+						fieldType="multiselect"
+						initialOptions={ elements ?? [] }
+						value={ current }
+						onOptionsSaved={ onOptionsSaved }
+						onRowsChanged={ onRowsChanged }
+						onRequestClose={ close }
+						onPick={ handlePick }
+					/>
+				</Popover>
+			) : null }
+		</>
 	);
 }
 
@@ -332,51 +387,112 @@ function valueForField( field, data ) {
 }
 
 function EditablePropertyText( { label, inputMode, value, onChange } ) {
-	const ref = useRef( null );
 	const textValue =
 		value === null || value === undefined ? '' : String( value );
+	const [ draft, setDraft ] = useState( textValue );
+	const [ isFocused, setIsFocused ] = useState( false );
 
 	useEffect( () => {
-		const ownerDocument = ref.current?.ownerDocument;
-		if (
-			ref.current &&
-			ownerDocument?.activeElement !== ref.current &&
-			ref.current.textContent !== textValue
-		) {
-			ref.current.textContent = textValue;
+		if ( ! isFocused ) {
+			setDraft( textValue );
 		}
-	}, [ textValue ] );
+	}, [ isFocused, textValue ] );
 
 	return (
-		<div
-			ref={ ref }
+		<input
 			aria-label={ label }
 			className="cortext-row-detail__property-editable-text"
-			contentEditable
-			data-placeholder={ __( 'Empty', 'cortext' ) }
 			inputMode={ inputMode }
-			role="textbox"
-			suppressContentEditableWarning
-			tabIndex={ 0 }
-			onInput={ ( event ) =>
-				onChange( event.currentTarget.textContent ?? '' )
-			}
-			onKeyDown={ ( event ) => {
-				if ( event.key === 'Enter' ) {
-					event.preventDefault();
-					event.currentTarget.blur();
-				}
+			placeholder={ isFocused ? '' : __( 'Empty', 'cortext' ) }
+			type="text"
+			value={ draft }
+			onBlur={ () => setIsFocused( false ) }
+			onChange={ ( event ) => {
+				const next = event.currentTarget.value;
+				setDraft( next );
+				onChange( next );
 			} }
-		>
-			{ textValue }
-		</div>
+			onFocus={ () => setIsFocused( true ) }
+		/>
 	);
 }
 
-function PropertyControl( { field, value, onChange } ) {
+function EditableNumberPropertyText( { label, value, onChange } ) {
+	const textValue =
+		value === null || value === undefined ? '' : String( value );
+	const committedTextRef = useRef( textValue );
+	const committedValueRef = useRef( value ?? null );
+	const [ draft, setDraft ] = useState( textValue );
+	const [ isFocused, setIsFocused ] = useState( false );
+
+	useEffect( () => {
+		committedTextRef.current = textValue;
+		committedValueRef.current = value ?? null;
+
+		if ( ! isFocused ) {
+			setDraft( textValue );
+		}
+	}, [ isFocused, textValue, value ] );
+
+	const commitDraft = useCallback(
+		( nextDraft ) => {
+			if ( ! isValidNumberDraft( nextDraft ) ) {
+				return;
+			}
+
+			setDraft( nextDraft );
+			const parsed = parseNumberPropertyValue( nextDraft );
+
+			if ( parsed.complete ) {
+				const normalized =
+					parsed.value === null ? '' : String( parsed.value );
+				if ( ! Object.is( parsed.value, committedValueRef.current ) ) {
+					onChange( parsed.value );
+				}
+				committedValueRef.current = parsed.value;
+				committedTextRef.current = normalized;
+			}
+		},
+		[ onChange ]
+	);
+
+	return (
+		<input
+			aria-label={ label }
+			className="cortext-row-detail__property-editable-text"
+			inputMode="decimal"
+			placeholder={ isFocused ? '' : __( 'Empty', 'cortext' ) }
+			type="text"
+			value={ draft }
+			onBlur={ () => {
+				setIsFocused( false );
+				const parsed = parseNumberPropertyValue( draft );
+
+				if ( parsed.valid && parsed.complete ) {
+					setDraft(
+						parsed.value === null ? '' : String( parsed.value )
+					);
+					return;
+				}
+
+				setDraft( committedTextRef.current );
+			} }
+			onChange={ ( event ) => commitDraft( event.currentTarget.value ) }
+			onFocus={ () => setIsFocused( true ) }
+		/>
+	);
+}
+
+function PropertyControl( {
+	field,
+	value,
+	elements,
+	onChange,
+	onOptionsSaved,
+	onRowsChanged,
+} ) {
 	const type = fieldType( field );
 	const label = field.label;
-	const elements = field.cortextElements ?? field.elements ?? [];
 
 	if ( type === 'checkbox' ) {
 		return (
@@ -392,17 +508,10 @@ function PropertyControl( { field, value, onChange } ) {
 
 	if ( type === 'number' ) {
 		return (
-			<EditablePropertyText
+			<EditableNumberPropertyText
 				label={ label }
-				inputMode="decimal"
-				value={ value ?? '' }
-				onChange={ ( next ) =>
-					onChange(
-						next === '' || next === null || next === undefined
-							? null
-							: Number( next )
-					)
-				}
+				value={ value }
+				onChange={ onChange }
 			/>
 		);
 	}
@@ -414,6 +523,8 @@ function PropertyControl( { field, value, onChange } ) {
 				value={ value }
 				elements={ elements }
 				onChange={ onChange }
+				onOptionsSaved={ onOptionsSaved }
+				onRowsChanged={ onRowsChanged }
 			/>
 		);
 	}
@@ -425,6 +536,8 @@ function PropertyControl( { field, value, onChange } ) {
 				value={ value }
 				elements={ elements }
 				onChange={ onChange }
+				onOptionsSaved={ onOptionsSaved }
+				onRowsChanged={ onRowsChanged }
 			/>
 		);
 	}
@@ -457,8 +570,65 @@ function PropertyControl( { field, value, onChange } ) {
 	);
 }
 
-function RowPropertyForm( { fields, row } ) {
+function PropertyValueMount( { fieldId, onMount } ) {
+	const setRef = useCallback(
+		( node ) => onMount( fieldId, node ),
+		[ fieldId, onMount ]
+	);
+
+	return (
+		<div
+			className="cortext-row-detail__property-value-stack"
+			ref={ setRef }
+		/>
+	);
+}
+
+function RowPropertyRows( { fields, onValueMount } ) {
+	return (
+		<div className="cortext-row-detail__properties cortext-row-detail__properties--rows">
+			{ fields.map( ( field ) => {
+				const isEditable =
+					field.id === TITLE_FIELD_ID ||
+					( field.editable && field.id?.startsWith?.( 'field-' ) );
+
+				return (
+					<div
+						key={ field.id }
+						className={
+							'cortext-row-detail__property' +
+							( isEditable
+								? ' cortext-row-detail__property--editable'
+								: ' cortext-row-detail__property--readonly' )
+						}
+					>
+						<div className="cortext-row-detail__property-label">
+							{ field.label }
+						</div>
+						<div className="cortext-row-detail__property-value">
+							<PropertyValueMount
+								fieldId={ field.id }
+								onMount={ onValueMount }
+							/>
+						</div>
+					</div>
+				);
+			} ) }
+		</div>
+	);
+}
+
+function RowPropertyValues( {
+	fields,
+	mountNodes,
+	row,
+	state,
+	isActive,
+	isHidden,
+} ) {
 	const { editPost } = useDispatch( editorStore );
+	const { optionOverrides, updateFieldOptions, refreshRows } =
+		useContext( RowMutationContext );
 	const { title, meta } = useSelect(
 		( select ) => ( {
 			title: select( editorStore ).getEditedPostAttribute( 'title' ),
@@ -497,51 +667,83 @@ function RowPropertyForm( { fields, row } ) {
 	);
 
 	return (
-		<div className="cortext-row-detail__properties">
+		<>
 			{ fields.map( ( field ) => {
+				const mountNode = mountNodes?.[ field.id ];
+				if ( ! mountNode ) {
+					return null;
+				}
+
 				const value = valueForField( field, data );
 				const type = fieldType( field );
+				const elements =
+					optionOverrides?.[ field.id ] ??
+					field.cortextElements ??
+					field.elements ??
+					[];
 				const isEditable =
 					field.id === TITLE_FIELD_ID ||
 					( field.editable && field.id?.startsWith?.( 'field-' ) );
 
-				return (
+				return createPortal(
 					<div
 						key={ field.id }
-						className={
-							'cortext-row-detail__property' +
-							( isEditable
-								? ' cortext-row-detail__property--editable'
-								: ' cortext-row-detail__property--readonly' )
-						}
+						className="cortext-row-detail__property-value-pane"
+						data-state={ state }
+						data-interactive={ isActive ? 'true' : 'false' }
+						aria-hidden={ isHidden ? true : undefined }
+						{ ...( isHidden ? { inert: '' } : {} ) }
 					>
-						<div className="cortext-row-detail__property-label">
-							{ field.label }
-						</div>
-						<div className="cortext-row-detail__property-value">
-							{ isEditable ? (
-								<PropertyControl
-									field={ field }
-									value={ value }
-									onChange={ ( next ) =>
-										update( { [ field.id ]: next } )
-									}
-								/>
-							) : (
-								<ReadOnlyProperty
-									value={ value }
-									type={ type }
-									elements={
-										field.cortextElements ?? field.elements
-									}
-									format={ field.cortextFormat }
-								/>
-							) }
-						</div>
-					</div>
+						{ isEditable ? (
+							<PropertyControl
+								field={ field }
+								value={ value }
+								elements={ elements }
+								onChange={ ( next ) =>
+									update( { [ field.id ]: next } )
+								}
+								onOptionsSaved={ ( nextOptions ) =>
+									updateFieldOptions?.(
+										field.cortextRecordId ??
+											toRecordId( field.id ),
+										nextOptions
+									)
+								}
+								onRowsChanged={ refreshRows }
+							/>
+						) : (
+							<ReadOnlyProperty
+								value={ value }
+								type={ type }
+								elements={ elements }
+								format={ field.cortextFormat }
+							/>
+						) }
+					</div>,
+					mountNode
 				);
 			} ) }
-		</div>
+		</>
+	);
+}
+
+function RowPropertyValuesPortal( {
+	fields,
+	isActive,
+	isHidden,
+	mountNodes,
+	row,
+	state,
+} ) {
+	return (
+		<RowPropertyValues
+			fields={ fields }
+			isActive={ isActive }
+			isHidden={ isHidden }
+			mountNodes={ mountNodes }
+			row={ row }
+			state={ state }
+		/>
 	);
 }
 
@@ -569,31 +771,154 @@ export function ModeControl( { mode, onChangeMode } ) {
 	);
 }
 
-function DetailFrame( {
+function titleFromRow( row ) {
+	const title = row?.title;
+	if ( typeof title === 'string' ) {
+		return title;
+	}
+	return title?.raw ?? title?.rendered ?? '';
+}
+
+function titleFromDetail( detail ) {
+	if ( ! detail ) {
+		return '';
+	}
+	return titleFromRow( detail.record ) || titleFromRow( detail.row );
+}
+
+function DetailTitleSignal( { isActive, onTitle, row } ) {
+	const editedTitle = useSelect(
+		( select ) => select( editorStore ).getEditedPostAttribute( 'title' ),
+		[]
+	);
+	const title =
+		typeof editedTitle === 'string' ? editedTitle : titleFromRow( row );
+
+	useEffect( () => {
+		if ( isActive ) {
+			onTitle?.( title );
+		}
+	}, [ isActive, onTitle, title ] );
+
+	return null;
+}
+
+function DetailBody( {
+	arePropertiesVisible,
+	children,
+	fields,
+	fieldCountLabel,
+	onValueMount,
+} ) {
+	return (
+		<div className="cortext-row-detail__body">
+			<div
+				className="cortext-row-detail__properties-region"
+				aria-hidden={ arePropertiesVisible ? undefined : true }
+				{ ...( arePropertiesVisible ? {} : { inert: '' } ) }
+			>
+				<div className="cortext-row-detail__properties-region-inner">
+					<div className="cortext-row-detail__properties-shell">
+						<RowPropertyRows
+							fields={ fields }
+							onValueMount={ onValueMount }
+						/>
+					</div>
+				</div>
+			</div>
+			<div
+				className="cortext-row-detail__fields-indicator-wrap"
+				aria-hidden={ arePropertiesVisible ? true : undefined }
+				{ ...( arePropertiesVisible ? { inert: '' } : {} ) }
+			>
+				<div className="cortext-row-detail__fields-indicator-inner">
+					<div
+						className="cortext-row-detail__fields-indicator"
+						aria-label={ sprintf(
+							/* translators: %s: Number of hidden fields. */
+							__( '%s hidden', 'cortext' ),
+							fieldCountLabel
+						) }
+					>
+						{ fieldCountLabel }
+					</div>
+				</div>
+			</div>
+			{ children }
+		</div>
+	);
+}
+
+function DetailPaneContent( {
+	fields,
+	isActive,
+	isHidden,
+	onApi,
+	onSaved,
+	onTitle,
+	propertyValueMounts,
+	row,
+	state,
+} ) {
+	return (
+		<>
+			<RowAutosaveBridge
+				isActive={ isActive }
+				onApi={ onApi }
+				onSaved={ onSaved }
+			/>
+			<DetailTitleSignal
+				isActive={ isActive }
+				onTitle={ onTitle }
+				row={ row }
+			/>
+			<RowPropertyValuesPortal
+				fields={ fields }
+				isActive={ isActive }
+				isHidden={ isHidden }
+				mountNodes={ propertyValueMounts }
+				row={ row }
+				state={ state }
+			/>
+			<RowContentEditor />
+		</>
+	);
+}
+
+function DetailShell( {
+	arePropertiesVisible,
+	children,
 	fields,
 	mode,
-	onApi,
 	onClose,
 	onDiscardPending,
 	onModeChange,
 	onNext,
 	onPrevious,
 	onRetryPending,
-	onSaved,
-	row,
 	saveError,
 	canGoNext,
 	canGoPrevious,
+	setArePropertiesVisible,
+	title,
 } ) {
-	const editedTitle = useSelect(
-		( select ) => select( editorStore ).getEditedPostAttribute( 'title' ),
-		[]
-	);
-	const title =
-		typeof editedTitle === 'string'
-			? editedTitle
-			: row?.title?.raw ?? row?.title?.rendered ?? '';
-	const [ arePropertiesVisible, setArePropertiesVisible ] = useState( true );
+	const [ propertyValueMounts, setPropertyValueMounts ] = useState( {} );
+	const setPropertyValueMount = useCallback( ( fieldId, node ) => {
+		setPropertyValueMounts( ( current ) => {
+			if ( node ) {
+				if ( current[ fieldId ] === node ) {
+					return current;
+				}
+				return { ...current, [ fieldId ]: node };
+			}
+			if ( ! current[ fieldId ] ) {
+				return current;
+			}
+			const next = { ...current };
+			delete next[ fieldId ];
+			return next;
+		} );
+	}, [] );
 	const fieldCountLabel = sprintf(
 		/* translators: %d: Number of row fields. */
 		_n( '%d field', '%d fields', fields.length, 'cortext' ),
@@ -606,7 +931,6 @@ function DetailFrame( {
 			data-properties-visible={ arePropertiesVisible ? 'true' : 'false' }
 		>
 			<div className="cortext-row-detail__header">
-				<RowAutosaveBridge onApi={ onApi } onSaved={ onSaved } />
 				<div
 					className="cortext-row-detail__toolbar"
 					role="toolbar"
@@ -615,7 +939,7 @@ function DetailFrame( {
 					<div className="cortext-row-detail__toolbar-group">
 						<Button
 							className="cortext-row-detail__toolbar-button cortext-row-detail__toolbar-button--icon"
-							icon={ details }
+							icon={ arePropertiesVisible ? unseen : seen }
 							label={
 								arePropertiesVisible
 									? __( 'Hide fields', 'cortext' )
@@ -686,39 +1010,14 @@ function DetailFrame( {
 					{ saveError }
 				</Notice>
 			) : null }
-			<div className="cortext-row-detail__body">
-				<div
-					className="cortext-row-detail__properties-region"
-					aria-hidden={ arePropertiesVisible ? undefined : true }
-					{ ...( arePropertiesVisible ? {} : { inert: '' } ) }
-				>
-					<div className="cortext-row-detail__properties-region-inner">
-						<RowPropertyForm fields={ fields } row={ row } />
-					</div>
-				</div>
-				<div
-					className="cortext-row-detail__fields-indicator-wrap"
-					aria-hidden={ arePropertiesVisible ? true : undefined }
-					{ ...( arePropertiesVisible ? { inert: '' } : {} ) }
-				>
-					<div className="cortext-row-detail__fields-indicator-inner">
-						<Button
-							className="cortext-row-detail__fields-indicator"
-							icon={ details }
-							label={ sprintf(
-								/* translators: %s: Number of hidden fields. */
-								__( 'Show %s', 'cortext' ),
-								fieldCountLabel
-							) }
-							variant="tertiary"
-							onClick={ () => setArePropertiesVisible( true ) }
-						>
-							{ fieldCountLabel }
-						</Button>
-					</div>
-				</div>
-				<RowContentEditor />
-			</div>
+			<DetailBody
+				arePropertiesVisible={ arePropertiesVisible }
+				fields={ fields }
+				fieldCountLabel={ fieldCountLabel }
+				onValueMount={ setPropertyValueMount }
+			>
+				{ children( { propertyValueMounts } ) }
+			</DetailBody>
 		</div>
 	);
 }
@@ -761,8 +1060,14 @@ export default function RowDetailView( {
 		enabled: Boolean( postType && rowId ),
 	} );
 	const normalizedMode = getRowDetailMode( { rowDetailMode: mode } );
+	const [ isModalClosing, setIsModalClosing ] = useState( false );
 	const targetDetail = useMemo( () => {
-		if ( ! record || ! postType || ! rowId ) {
+		if (
+			! record ||
+			! postType ||
+			! rowId ||
+			String( record.id ) !== String( rowId )
+		) {
 			return null;
 		}
 		return { postType, record, row, rowId };
@@ -775,54 +1080,278 @@ export default function RowDetailView( {
 		}
 	}, [ targetDetail ] );
 
+	useEffect( () => {
+		if ( normalizedMode !== 'modal' ) {
+			setIsModalClosing( false );
+		}
+	}, [ normalizedMode ] );
+
 	const activeDetail =
 		targetDetail ??
 		( resolvedDetail?.postType === postType ? resolvedDetail : null );
-	const isSwitchingRows = Boolean(
-		activeDetail && String( activeDetail.rowId ) !== String( rowId )
+	const activeDetailKey = detailKeyFor( activeDetail );
+	const [ arePropertiesVisible, setArePropertiesVisible ] = useState( true );
+	const [ displayTitle, setDisplayTitle ] = useState( () =>
+		titleFromDetail( activeDetail )
+	);
+	const [ detailPanes, setDetailPanes ] = useState( () =>
+		activeDetail && activeDetailKey
+			? [
+					{
+						key: activeDetailKey,
+						detail: activeDetail,
+						state: 'active',
+					},
+			  ]
+			: []
 	);
 
-	const content = ! activeDetail ? (
-		<LoadingDetail onClose={ onClose } />
-	) : (
-		<EditorProvider
-			key={ `${ activeDetail.postType }:${ activeDetail.rowId }` }
-			post={ activeDetail.record }
-			settings={ window.cortextEditorSettings ?? {} }
-		>
-			<DetailFrame
-				canGoNext={ ! isSwitchingRows && canGoNext }
-				canGoPrevious={ ! isSwitchingRows && canGoPrevious }
+	useEffect( () => {
+		if ( activeDetail ) {
+			setDisplayTitle( titleFromDetail( activeDetail ) );
+		}
+	}, [ activeDetail ] );
+
+	useEffect( () => {
+		if ( ! activeDetail || ! activeDetailKey ) {
+			setDetailPanes( [] );
+			return;
+		}
+
+		setDetailPanes( ( current ) => {
+			if ( current.some( ( pane ) => pane.key === activeDetailKey ) ) {
+				return current
+					.filter(
+						( pane ) =>
+							pane.key === activeDetailKey ||
+							pane.state !== 'preparing'
+					)
+					.map( ( pane ) => {
+						if ( pane.key !== activeDetailKey ) {
+							return pane;
+						}
+						return {
+							...pane,
+							detail: activeDetail,
+							state:
+								pane.state === 'covered'
+									? 'entering'
+									: pane.state,
+						};
+					} );
+			}
+
+			const visiblePanes = current
+				.filter(
+					( pane ) =>
+						pane.state === 'active' || pane.state === 'entering'
+				)
+				.map( ( pane ) => ( { ...pane, state: 'active' } ) );
+
+			return [
+				...visiblePanes,
+				{
+					key: activeDetailKey,
+					detail: activeDetail,
+					state: visiblePanes.length ? 'preparing' : 'active',
+				},
+			];
+		} );
+	}, [ activeDetail, activeDetailKey ] );
+
+	const onPaneReady = useCallback( ( readyKey ) => {
+		setDetailPanes( ( current ) => {
+			const readyPane = current.find( ( pane ) => pane.key === readyKey );
+			if ( ! readyPane || readyPane.state !== 'preparing' ) {
+				return current;
+			}
+
+			return current
+				.filter(
+					( pane ) =>
+						pane.key === readyKey || pane.state !== 'preparing'
+				)
+				.map( ( pane ) => {
+					if ( pane.key === readyKey ) {
+						return { ...pane, state: 'entering' };
+					}
+					if (
+						pane.state === 'active' ||
+						pane.state === 'entering'
+					) {
+						return { ...pane, state: 'covered' };
+					}
+					return pane;
+				} );
+		} );
+	}, [] );
+
+	const onPaneAnimationEnd = useCallback( ( event ) => {
+		if ( event.target !== event.currentTarget ) {
+			return;
+		}
+		setDetailPanes( settleDetailPanes );
+	}, [] );
+
+	useEffect( () => {
+		const isTransitioning = detailPanes.some(
+			( pane ) => pane.state === 'entering'
+		);
+		if ( ! isTransitioning ) {
+			return undefined;
+		}
+		if ( prefersReducedMotion() ) {
+			setDetailPanes( settleDetailPanes );
+			return undefined;
+		}
+
+		const timeout = setTimeout( () => {
+			setDetailPanes( settleDetailPanes );
+		}, ROW_DETAIL_SWITCH_FALLBACK_MS );
+		return () => clearTimeout( timeout );
+	}, [ detailPanes ] );
+
+	const requestClose = useCallback( async () => {
+		if ( normalizedMode !== 'modal' ) {
+			return onClose?.();
+		}
+		if ( isModalClosing ) {
+			return false;
+		}
+		if ( prefersReducedMotion() ) {
+			return onClose?.();
+		}
+
+		setIsModalClosing( true );
+		await delay( ROW_DETAIL_MODAL_CLOSE_MS );
+		const didClose = await onClose?.();
+		if ( didClose === false ) {
+			setIsModalClosing( false );
+		}
+		return didClose;
+	}, [ isModalClosing, normalizedMode, onClose ] );
+	const requestNativeModalClose = useCallback(
+		() => onClose?.(),
+		[ onClose ]
+	);
+	const activePane = detailPanes.find(
+		( pane ) => pane.key === activeDetailKey
+	);
+	const canUseRowControls = Boolean(
+		activeDetail &&
+			activePane &&
+			activePane.state !== 'preparing' &&
+			activePane.state !== 'covered' &&
+			String( activeDetail.rowId ) === String( rowId )
+	);
+
+	const content =
+		! activeDetail && detailPanes.length === 0 ? (
+			<LoadingDetail onClose={ requestClose } />
+		) : (
+			<DetailShell
+				arePropertiesVisible={ arePropertiesVisible }
+				canGoNext={ canUseRowControls && canGoNext }
+				canGoPrevious={ canUseRowControls && canGoPrevious }
 				fields={ fields }
 				mode={ normalizedMode }
-				onApi={ onApi }
-				onClose={ onClose }
+				onClose={ requestClose }
 				onDiscardPending={ onDiscardPending }
 				onModeChange={ onModeChange }
 				onNext={ onNext }
 				onPrevious={ onPrevious }
 				onRetryPending={ onRetryPending }
-				onSaved={ onSaved }
-				row={ {
-					...( activeDetail.row ?? {} ),
-					...activeDetail.record,
-					title: activeDetail.record.title ?? activeDetail.row?.title,
-					meta: activeDetail.record.meta ?? activeDetail.row?.meta,
-				} }
-				saveError={ saveError }
-			/>
-		</EditorProvider>
-	);
+				saveError={ canUseRowControls ? saveError : null }
+				setArePropertiesVisible={ setArePropertiesVisible }
+				title={ displayTitle }
+			>
+				{ ( { propertyValueMounts } ) => (
+					<div className="cortext-row-detail__pane-stack">
+						{ detailPanes.map( ( pane ) => {
+							const isCurrentPane =
+								pane.key === activeDetailKey &&
+								( pane.state === 'active' ||
+									pane.state === 'entering' );
+							const isHiddenPane =
+								pane.state === 'preparing' ||
+								pane.state === 'covered';
+							const isApiActive = isCurrentPane && ! isHiddenPane;
+							const paneRow = {
+								...( pane.detail.row ?? {} ),
+								...pane.detail.record,
+								title:
+									pane.detail.record.title ??
+									pane.detail.row?.title,
+								meta:
+									pane.detail.record.meta ??
+									pane.detail.row?.meta,
+							};
+
+							return (
+								<div
+									key={ pane.key }
+									className="cortext-row-detail__pane"
+									data-state={ pane.state }
+									data-interactive={
+										isApiActive ? 'true' : 'false'
+									}
+									aria-hidden={
+										isHiddenPane ? true : undefined
+									}
+									{ ...( isHiddenPane ? { inert: '' } : {} ) }
+									onAnimationEnd={ onPaneAnimationEnd }
+								>
+									<EditorProvider
+										post={ pane.detail.record }
+										settings={
+											window.cortextEditorSettings ?? {}
+										}
+									>
+										<DetailReadySignal
+											detailKey={ pane.key }
+											onReady={ onPaneReady }
+										/>
+										<DetailPaneContent
+											fields={ fields }
+											isActive={ isApiActive }
+											isHidden={ isHiddenPane }
+											onApi={ onApi }
+											onSaved={ onSaved }
+											onTitle={ setDisplayTitle }
+											propertyValueMounts={
+												propertyValueMounts
+											}
+											row={ paneRow }
+											state={ pane.state }
+										/>
+									</EditorProvider>
+								</div>
+							);
+						} ) }
+					</div>
+				) }
+			</DetailShell>
+		);
 
 	if ( normalizedMode === 'modal' ) {
 		return (
 			<Modal
-				className="cortext-row-detail-modal"
+				className={
+					'cortext-row-detail-modal' +
+					( isModalClosing
+						? ' cortext-row-detail-modal--closing'
+						: '' )
+				}
 				title={ __( 'Row detail', 'cortext' ) }
-				onRequestClose={ onClose }
+				overlayClassName={
+					isModalClosing ? 'is-animating-out' : undefined
+				}
+				onRequestClose={ requestNativeModalClose }
 				__experimentalHideHeader
 			>
-				{ content }
+				<div className="cortext-row-detail cortext-row-detail--modal">
+					{ content }
+				</div>
 			</Modal>
 		);
 	}

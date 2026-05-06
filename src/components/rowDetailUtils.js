@@ -51,3 +51,27 @@ export function splitPropertyPatch( patch, currentMeta = {} ) {
 
 	return next;
 }
+
+const NUMBER_DRAFT_PATTERN = /^[+-]?\d*(?:\.\d*)?$/;
+const NUMBER_COMPLETE_PATTERN = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/;
+
+export function isValidNumberDraft( value ) {
+	return NUMBER_DRAFT_PATTERN.test( String( value ?? '' ) );
+}
+
+export function parseNumberPropertyValue( value ) {
+	const text = String( value ?? '' );
+	if ( text === '' ) {
+		return { valid: true, complete: true, value: null };
+	}
+	if ( ! isValidNumberDraft( text ) ) {
+		return { valid: false, complete: false, value: null };
+	}
+	if ( ! NUMBER_COMPLETE_PATTERN.test( text ) ) {
+		return { valid: true, complete: false, value: null };
+	}
+	const number = Number( text );
+	return Number.isFinite( number )
+		? { valid: true, complete: true, value: number }
+		: { valid: false, complete: false, value: null };
+}
