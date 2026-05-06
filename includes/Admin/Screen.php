@@ -28,6 +28,7 @@ final class Screen {
 	public function register(): void {
 		add_action( 'admin_menu', array( $this, 'register_menu' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
+		// Run after core admin scripts so wp-core-commands can be dequeued.
 		add_action( 'admin_enqueue_scripts', array( $this, 'dequeue_core_command_palette' ), 100 );
 		add_filter( 'admin_body_class', array( $this, 'add_body_class' ) );
 	}

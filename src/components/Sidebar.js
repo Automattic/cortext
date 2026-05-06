@@ -77,7 +77,6 @@ import {
 	buildTree,
 	collectAncestorIds,
 	computeDropTarget,
-	firstPageInTree,
 	isDescendantOf,
 	nextChildOrder,
 } from './pages-tree';
@@ -92,7 +91,7 @@ import {
 	parseSplatUri,
 } from '../router/useResolveEntity';
 import { COLLECTION_QUERY } from '../collections';
-import { useWorkspaceHome } from '../hooks/useWorkspaceHome';
+import { useWorkspaceHomePath } from '../hooks/useWorkspaceHomePath';
 
 const AUTO_EXPAND_DELAY = 700;
 
@@ -194,23 +193,19 @@ export default function Sidebar( {
 	// Workspaces are expected to exceed 100 pages — pages past the cap won't
 	// appear in the tree. Followup needs a lazy-loaded tree (load children on
 	// expand) or a paginated fetch of the full page set.
-	const { records, isResolving } = useEntityRecords(
-		'postType',
-		POST_TYPE,
-		ACTIVE_PAGES_QUERY
-	);
-
 	const { records: collections, isResolving: isResolvingCollections } =
 		useEntityRecords( 'postType', 'crtxt_collection', COLLECTION_QUERY );
 	const {
+		pages,
+		homePath,
 		home,
 		setHome,
-		isResolving: isResolvingHome,
+		isResolvingHomePath,
+		isResolvingPages,
 		isUpdating: isHomeUpdating,
-	} = useWorkspaceHome();
+	} = useWorkspaceHomePath();
 	const { saveEntityRecord, invalidateResolution, receiveEntityRecords } =
 		useDispatch( 'core' );
-	const pages = useMemo( () => records ?? [], [ records ] );
 	const navigate = useNavigate();
 	const params = useParams( { strict: false } );
 	const activeUri = params._splat ?? '';
@@ -282,13 +277,6 @@ export default function Sidebar( {
 		},
 		[ navigate, pages ]
 	);
-	const fallbackHomePage = useMemo(
-		() => firstPageInTree( pages ),
-		[ pages ]
-	);
-	const homePath =
-		home?.path ??
-		( fallbackHomePage ? computeUri( fallbackHomePage ) : null );
 	const goHome = useCallback( () => {
 		if ( ! homePath ) {
 			return;
@@ -647,7 +635,7 @@ export default function Sidebar( {
 					className="cortext-sidebar__quick-action cortext-sidebar__quick-action--home"
 					icon={ homeIcon }
 					label={ __( 'Home', 'cortext' ) }
-					disabled={ ! homePath || isResolvingHome }
+					disabled={ ! homePath || isResolvingHomePath }
 					onClick={ goHome }
 				/>
 				<Button
@@ -671,12 +659,12 @@ export default function Sidebar( {
 							onClick={ createRootPage }
 						/>
 					</div>
-					{ isResolving && pages.length === 0 && (
+					{ isResolvingPages && pages.length === 0 && (
 						<div className="cortext-sidebar__loading">
 							<Spinner />
 						</div>
 					) }
-					{ ! isResolving && pages.length === 0 && (
+					{ ! isResolvingPages && pages.length === 0 && (
 						<p className="cortext-sidebar__empty">
 							{ __( 'No pages yet.', 'cortext' ) }
 						</p>
