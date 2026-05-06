@@ -233,17 +233,24 @@ body.cortext-fullscreen {
 		// Hover paints the whole row, not just the inner title button, so
 		// the chevron and kebab areas feel like part of what you're hovering.
 		// `:not(.is-selected)` keeps the active row on its selected
-		// background even while the cursor sits on it.
-		&:hover:not(.is-selected) {
-			background: var(--cortext-sidebar-item-hover-surface);
-		}
-
+		// background even while the cursor sits on it. Title-text brightening
+		// is handled in the .cortext-sidebar block below so its specificity
+		// beats the @wordpress/components button :hover color rule.
+		&:hover:not(.is-selected),
 		&:focus-within:not(.is-selected) {
-			background: var(--cortext-sidebar-item-hover-surface);
+			background: var(--cortext-state-hover);
 		}
 
 		&.is-selected {
-			background: var(--cortext-sidebar-item-selected-surface);
+			background: var(--cortext-state-selected);
+			// Hairline top-edge highlight on the row gives the active page a
+			// soft "lift" without reading as a border.
+			box-shadow: inset 0 1px 0 var(--cortext-state-selected-highlight);
+
+			/* stylelint-disable-next-line no-descending-specificity */
+			.cortext-sidebar__title.components-button {
+				font-weight: 500;
+			}
 		}
 
 		&.is-dragging {
@@ -270,7 +277,7 @@ body.cortext-fullscreen {
 		}
 
 		&.is-drop-inside {
-			background: var(--cortext-sidebar-item-selected-surface);
+			background: var(--cortext-state-selected);
 			outline: var(--cortext-shell-border-width) dashed var(--cortext-accent);
 			outline-offset: -1px;
 		}
@@ -315,6 +322,7 @@ body.cortext-fullscreen {
 		}
 	}
 
+	/* stylelint-disable-next-line no-descending-specificity */
 	&__title.components-button {
 		flex: 1 1 auto;
 		min-width: 0;
@@ -372,7 +380,7 @@ body.cortext-fullscreen {
 
 		&__row:hover &__menu,
 		&__row:focus-within &__menu,
-		&__menu.is-opened,
+		&__menu.is-pressed,
 		&__row:hover &__add-child,
 		&__row:focus-within &__add-child {
 			opacity: 1;
@@ -735,12 +743,12 @@ body.cortext-sidebar-resizing {
 
 		&:hover:not(.is-current),
 		&:focus:not(.is-current) {
-			color: var(--cortext-text);
+			color: var(--cortext-text-strong);
 			background: var(--cortext-button-hover-surface);
 		}
 
 		&.is-current {
-			color: var(--cortext-text);
+			color: var(--cortext-text-strong);
 			cursor: default;
 		}
 	}
@@ -1831,19 +1839,58 @@ thead > tr > th {
 		background: var(--cortext-button-surface);
 		color: var(--cortext-button-text);
 
-		&:hover:not(:disabled),
-		&:focus:not(:disabled) {
+		// Skip pressed buttons: their .is-pressed rule below paints both
+		// background and text-strong, and we don't want hover/focus to revert
+		// either back to the default tier. Unpressed buttons brighten to
+		// strong on hover/focus so the icon/label pops alongside the overlay.
+		&:not(.is-pressed):hover:not(:disabled),
+		&:not(.is-pressed):focus-visible:not(:disabled) {
 			background: var(--cortext-button-hover-surface);
-			color: var(--cortext-button-text);
+			color: var(--cortext-text-strong);
 		}
 	}
 
-	// Keep hover/focus from painting only the inner title/action button, which
-	// makes the row look split into separate cells. The row itself handles
-	// the focus background.
+	.cortext-document-actions__settings.components-button:not(.is-primary):not(.is-pressed):hover:not(:disabled, [aria-disabled="true"]) {
+		background: var(--cortext-state-hover-strong, var(--cortext-button-hover-surface));
+		color: var(--cortext-text-strong);
+	}
+
+	.components-button.is-pressed {
+		// Strong text/icon so the toggled-on state pops, matching the sidebar
+		// selected row and the breadcrumb is-current treatment.
+		color: var(--cortext-text-strong);
+		background: var(--cortext-button-pressed-surface);
+
+		// Selectors match WP's own .is-pressed:hover specificity (which would
+		// otherwise flip the background to solid #1e1e1e); ours wins by source
+		// order and gives pressed chrome a stronger hover state.
+		/* stylelint-disable-next-line no-descending-specificity */
+		&:hover:not(:disabled, [aria-disabled="true"]) {
+			background: var(--cortext-state-selected-hover);
+			color: var(--cortext-text-strong);
+		}
+	}
+
+	// Keep hover/focus/pressed from painting only the inner title/action
+	// button, which makes the row look split into separate cells (or, with
+	// alpha overlays, visibly doubles the fill on the button). The row itself
+	// handles every state's background.
+	/* stylelint-disable no-descending-specificity */
 	.cortext-sidebar__row .components-button:not(.is-primary):hover:not(:disabled),
-	.cortext-sidebar__row .components-button:not(.is-primary):focus:not(:disabled) {
+	.cortext-sidebar__row .components-button:not(.is-primary):focus:not(:disabled),
+	.cortext-sidebar__row .components-button.is-pressed,
+	.cortext-sidebar__row .components-button.is-pressed:hover:not(:disabled, [aria-disabled="true"]) {
 		background: transparent;
+	}
+	/* stylelint-enable no-descending-specificity */
+
+	// Title text brightens whenever the row is hovered, focused, or selected.
+	// Lives in this block so its specificity sits above the button :hover/:focus
+	// color rule above (which would otherwise pin the title to default text).
+	.cortext-sidebar__row:hover .cortext-sidebar__title.components-button,
+	.cortext-sidebar__row:focus-within .cortext-sidebar__title.components-button,
+	.cortext-sidebar__row.is-selected .cortext-sidebar__title.components-button {
+		color: var(--cortext-text-strong);
 	}
 
 	.components-button.is-primary {
@@ -1857,11 +1904,6 @@ thead > tr > th {
 			box-shadow: inset 0 0 0 var(--cortext-shell-border-width) var(--cortext-button-primary-hover-surface);
 			color: var(--cortext-button-primary-text);
 		}
-	}
-
-	.components-button.is-pressed {
-		background: var(--cortext-button-pressed-surface);
-		color: var(--cortext-button-text);
 	}
 
 	.components-button svg {
