@@ -195,7 +195,11 @@ function RowContentEditor() {
 }
 
 function emptyLabel() {
-	return <span className="cortext-row-detail__empty-value">Empty</span>;
+	return (
+		<span className="cortext-row-detail__empty-value">
+			{ __( 'Empty', 'cortext' ) }
+		</span>
+	);
 }
 
 function ReadOnlyProperty( { value, type, elements, format } ) {
@@ -374,6 +378,17 @@ function fieldType( field ) {
 		return 'text';
 	}
 	return field.cortextFieldType ?? field.type ?? 'text';
+}
+
+function isRowDetailFieldEditable( field ) {
+	if ( fieldType( field ) === 'relation' ) {
+		return false;
+	}
+
+	return (
+		field.id === TITLE_FIELD_ID ||
+		( field.editable && field.id?.startsWith?.( 'field-' ) )
+	);
 }
 
 function valueForField( field, data ) {
@@ -588,9 +603,7 @@ function RowPropertyRows( { fields, onValueMount } ) {
 	return (
 		<div className="cortext-row-detail__properties cortext-row-detail__properties--rows">
 			{ fields.map( ( field ) => {
-				const isEditable =
-					field.id === TITLE_FIELD_ID ||
-					( field.editable && field.id?.startsWith?.( 'field-' ) );
+				const isEditable = isRowDetailFieldEditable( field );
 
 				return (
 					<div
@@ -681,9 +694,7 @@ function RowPropertyValues( {
 					field.cortextElements ??
 					field.elements ??
 					[];
-				const isEditable =
-					field.id === TITLE_FIELD_ID ||
-					( field.editable && field.id?.startsWith?.( 'field-' ) );
+				const isEditable = isRowDetailFieldEditable( field );
 
 				return createPortal(
 					<div

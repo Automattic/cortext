@@ -550,12 +550,13 @@ function CanvasReadyEffect( { postId, onReady } ) {
 	return null;
 }
 
-function VisualCanvas( { postId, onReady } ) {
+function VisualCanvas( { postId, postType, onReady } ) {
 	const styles = useSelect(
 		( select ) => select( editorStore ).getEditorSettings().styles,
 		[]
 	);
 	const [ layout ] = useSettings( 'layout' );
+	const supportsPageIdentity = postType === POST_TYPE;
 
 	// Mirror the post editor's root-container setup so theme.json
 	// constrained layout (max-width, root padding, post-content gap)
@@ -579,8 +580,12 @@ function VisualCanvas( { postId, onReady } ) {
 		<div className="cortext-canvas__visual">
 			<div className="cortext-canvas__block-canvas">
 				<BlockCanvas height="100%" styles={ styles }>
-					<PageIdentityActions postId={ postId } />
-					<EnsureHeaderBlocks postId={ postId } />
+					{ supportsPageIdentity ? (
+						<>
+							<PageIdentityActions postId={ postId } />
+							<EnsureHeaderBlocks postId={ postId } />
+						</>
+					) : null }
 					<div className="cortext-canvas__editor">
 						<BlockList
 							className="wp-block-post-content is-layout-constrained has-global-padding"
@@ -674,12 +679,14 @@ function CanvasEditor( {
 							<Disabled className="cortext-canvas__locked">
 								<VisualCanvas
 									postId={ post.id }
+									postType={ postType }
 									onReady={ onDisplayedPost }
 								/>
 							</Disabled>
 						) : (
 							<VisualCanvas
 								postId={ post.id }
+								postType={ postType }
 								onReady={ onDisplayedPost }
 							/>
 						) }
