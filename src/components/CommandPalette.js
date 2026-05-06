@@ -1,7 +1,5 @@
-// Mounts Cortext's command palette and registers Cortext-owned commands.
-// The editor packages register their own commands in the default data
-// registry, so this palette uses an isolated registry to keep the menu scoped
-// to Cortext commands only.
+// Cortext uses the WordPress command palette UI, but not the shared admin
+// command store. A local registry keeps core/wp-admin commands out of this app.
 
 import {
 	CommandMenu,

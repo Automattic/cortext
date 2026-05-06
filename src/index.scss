@@ -6,8 +6,8 @@
 // doesn't register a `wp-interface` style handle, so bundle its stylesheet.
 @use "../node_modules/@wordpress/interface/build-style/style.css";
 
-// @wordpress/commands isn't registered as a style handle on plain wp-admin
-// screens, so bundle its modal/list styles for the cmd+K palette.
+// Plain wp-admin screens do not register this handle, so bundle the palette
+// styles here.
 @use "../node_modules/@wordpress/commands/build-style/style.css" as commands;
 
 // Same deal for @wordpress/dataviews. Importing via JS would be tree-shaken

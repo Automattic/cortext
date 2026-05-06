@@ -28,7 +28,7 @@ final class Screen {
 	public function register(): void {
 		add_action( 'admin_menu', array( $this, 'register_menu' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
-		// Run after core admin scripts so wp-core-commands can be dequeued.
+		// Core adds this late; run after it so this screen only has one palette.
 		add_action( 'admin_enqueue_scripts', array( $this, 'dequeue_core_command_palette' ), 100 );
 		add_filter( 'admin_body_class', array( $this, 'add_body_class' ) );
 	}
@@ -166,9 +166,8 @@ final class Screen {
 			return;
 		}
 
-		// Cortext owns the command palette on its full-screen admin surface.
-		// Core's admin palette registers global wp-admin commands and mounts a
-		// second CommandMenu instance against the same shared store.
+		// Cortext has its own palette here. Drop core's wp-admin palette so
+		// global admin commands do not leak into the app.
 		wp_dequeue_script( 'wp-core-commands' );
 	}
 
