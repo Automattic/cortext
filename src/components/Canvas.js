@@ -87,6 +87,7 @@ function DocumentActions( { isActive } ) {
 			<div className="cortext-document-actions">
 				<PublishToggle />
 				<Button
+					className="cortext-document-actions__settings"
 					icon={ cog }
 					size="compact"
 					label={ __( 'Settings', 'cortext' ) }

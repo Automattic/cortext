@@ -500,6 +500,7 @@ export default function Sidebar( {
 							? __( 'Expand sidebar', 'cortext' )
 							: __( 'Collapse sidebar', 'cortext' )
 					}
+					isPressed={ collapsed }
 					onClick={ onToggleCollapsed }
 				/>
 			</div>

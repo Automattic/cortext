@@ -38,6 +38,7 @@ export default function ThemeToggle() {
 					icon={ triggerIcon }
 					label={ __( 'Color scheme', 'cortext' ) }
 					onClick={ onToggle }
+					isPressed={ isOpen }
 					aria-expanded={ isOpen }
 				/>
 			) }

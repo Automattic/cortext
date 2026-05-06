@@ -231,10 +231,7 @@ export default function PageRow( {
 						popoverProps={ { placement: 'bottom-end' } }
 						renderToggle={ ( { isOpen, onToggle } ) => (
 							<Button
-								className={
-									'cortext-sidebar__menu' +
-									( isOpen ? ' is-opened' : '' )
-								}
+								className="cortext-sidebar__menu"
 								icon={ moreVertical }
 								size="small"
 								label={ sprintf(
@@ -243,6 +240,7 @@ export default function PageRow( {
 									title
 								) }
 								onClick={ onToggle }
+								isPressed={ isOpen }
 								aria-expanded={ isOpen }
 								onPointerDown={ ( e ) => e.stopPropagation() }
 							/>

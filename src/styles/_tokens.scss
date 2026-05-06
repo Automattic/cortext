@@ -27,17 +27,27 @@
 	// Shell surfaces
 	--cortext-shell-surface: #{colors.$white};
 	// Warm off-white for the sidebar (and topbar, which inherits this) so
-	// it reads as chrome rather than canvas. Hover and selected step a few
-	// values darker so the active page doesn't blur into a hover preview.
-	// The values aren't from the WP palette (which has no warm tones);
-	// they're picked to match a Notion-style chrome.
+	// it reads as chrome rather than canvas. Hover and selected ride on top
+	// as alpha overlays so the same tokens read in both themes and over any
+	// future surface (canvas, popovers, nested shells).
 	--cortext-sidebar-surface: #f7f6f3;
-	--cortext-sidebar-item-hover-surface: #ebeae6;
-	--cortext-sidebar-item-selected-surface: #e3e1dc;
+	// Interaction-state overlays. Apply on top of any chrome surface so the
+	// same tokens read in light, dark, and over future surfaces (canvas,
+	// popovers, nested shells) without per-context calibration.
+	// Light-mode alphas run a touch higher than dark's because black overlays
+	// on a near-white surface read more subtly than white overlays on a dark
+	// surface at the same alpha (perceptually).
+	--cortext-state-hover: rgba(0, 0, 0, 0.07);
+	--cortext-state-hover-strong: rgba(0, 0, 0, 0.09);
+	--cortext-state-selected: rgba(0, 0, 0, 0.09);
+	--cortext-state-selected-hover: rgba(0, 0, 0, 0.14);
+	// Hairline top-edge highlight on the active row to suggest a soft "lift".
+	--cortext-state-selected-highlight: rgba(255, 255, 255, 0.6);
 	--cortext-canvas-frame-surface: #{colors.$white};
 	--cortext-chrome-border: #{colors.$gray-200};
 	--cortext-text: #{colors.$gray-900};
 	--cortext-text-muted: #{colors.$gray-700};
+	--cortext-text-strong: #{colors.$gray-900};
 	--cortext-shadow-color: rgba(0, 0, 0, 0.12);
 
 	// Accent follows the active admin/components theme by default, but is
@@ -47,10 +57,13 @@
 
 	// Shell buttons. These map onto @wordpress/components buttons only inside
 	// Cortext-owned chrome, not globally in wp-admin or inside the iframe.
+	// Button text sits a tier below body text (gray-700 vs gray-900 in light;
+	// 78% vs 100% white in dark via dark-mode override) so hover/pressed can
+	// climb to --cortext-text-strong and the icon visibly responds.
 	--cortext-button-surface: transparent;
-	--cortext-button-text: var(--cortext-text);
-	--cortext-button-hover-surface: var(--cortext-sidebar-item-hover-surface);
-	--cortext-button-pressed-surface: var(--cortext-sidebar-item-selected-surface);
+	--cortext-button-text: #{colors.$gray-700};
+	--cortext-button-hover-surface: var(--cortext-state-hover);
+	--cortext-button-pressed-surface: var(--cortext-state-selected);
 	--cortext-button-primary-surface: var(--cortext-accent);
 	--cortext-button-primary-hover-surface: var(--wp-components-color-accent-darker-10, var(--wp-admin-theme-color-darker-10, var(--cortext-accent)));
 	--cortext-button-primary-text: var(--cortext-accent-contrast);
@@ -78,12 +91,22 @@
 	&[data-theme="dark"] {
 		--cortext-shell-surface: #2a2a2a;
 		--cortext-sidebar-surface: #2a2a2a;
-		--cortext-sidebar-item-hover-surface: #333;
-		--cortext-sidebar-item-selected-surface: #383838;
+		// Alphas run a touch stronger than Linear's defaults because the
+		// surface stays at #2a2a2a (not pushed toward true black), so the
+		// overlays need more weight to register.
+		--cortext-state-hover: rgba(255, 255, 255, 0.05);
+		--cortext-state-hover-strong: rgba(255, 255, 255, 0.075);
+		--cortext-state-selected: rgba(255, 255, 255, 0.09);
+		--cortext-state-selected-hover: rgba(255, 255, 255, 0.14);
+		--cortext-state-selected-highlight: rgba(255, 255, 255, 0.06);
 		--cortext-canvas-frame-surface: #2a2a2a;
 		--cortext-chrome-border: #3e3e3e;
-		--cortext-text: #f0f0f0;
-		--cortext-text-muted: #a0a0a0;
+		--cortext-text: rgba(255, 255, 255, 0.78);
+		--cortext-text-muted: rgba(255, 255, 255, 0.5);
+		--cortext-text-strong: #fff;
+		// Sit a tier below body text so hover/pressed (→ #fff) actually shows.
+		// 0.78 → 1.0 was too narrow on small icons; 0.6 → 1.0 reads.
+		--cortext-button-text: rgba(255, 255, 255, 0.6);
 		--cortext-shadow-color: rgba(0, 0, 0, 0.4);
 		--cortext-scrollbar-thumb: rgba(255, 255, 255, 0.16);
 		--cortext-scrollbar-thumb-hover: rgba(255, 255, 255, 0.32);
