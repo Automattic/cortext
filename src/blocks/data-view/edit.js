@@ -25,6 +25,7 @@ function createDefaultView() {
 		fields: [],
 		sort: null,
 		filters: [],
+		calculations: {},
 		perPage: 25,
 		page: 1,
 		search: '',

@@ -14,7 +14,7 @@ async function deleteIfCreated( requestUtils, path ) {
 			path,
 			params: { force: true },
 		} );
-	} catch ( _error ) {
+	} catch {
 		// Best-effort cleanup; failures here should not mask the test result.
 	}
 }
@@ -66,6 +66,95 @@ async function createCollectionFixture( requestUtils ) {
 	return { collection, field, entry, slug };
 }
 
+async function createCalculationFixture( requestUtils ) {
+	const suffix = Date.now().toString( 36 ).slice( -4 );
+	const slug = `e2ecalc${ suffix }`;
+
+	const collection = await requestUtils.rest( {
+		method: 'POST',
+		path: '/wp/v2/crtxt_collections',
+		data: {
+			title: `E2E Calculations ${ suffix }`,
+			status: 'private',
+			meta: { slug },
+		},
+	} );
+
+	const fields = {};
+	for ( const [ key, config ] of Object.entries( {
+		pages: { title: 'Pages', type: 'number' },
+		status: { title: 'Status', type: 'text' },
+		due: { title: 'Due', type: 'date' },
+		done: { title: 'Done', type: 'checkbox' },
+	} ) ) {
+		fields[ key ] = await requestUtils.rest( {
+			method: 'POST',
+			path: '/wp/v2/crtxt_fields',
+			data: {
+				title: config.title,
+				status: 'private',
+				meta: { type: config.type },
+			},
+		} );
+	}
+
+	await requestUtils.rest( {
+		method: 'POST',
+		path: `/wp/v2/crtxt_collections/${ collection.id }`,
+		data: {
+			meta: {
+				fields: Object.values( fields ).map( ( field ) =>
+					String( field.id )
+				),
+			},
+		},
+	} );
+
+	const rows = [];
+	for ( const row of [
+		{
+			title: 'Alpha Book',
+			pages: 10,
+			status: 'Alpha',
+			due: '2026-01-01',
+			done: false,
+		},
+		{
+			title: 'Beta Book',
+			pages: 20,
+			status: 'Beta',
+			due: '2026-02-01',
+			done: true,
+		},
+		{
+			title: 'Gamma Book',
+			pages: 30,
+			status: 'Gamma',
+			due: '2026-03-01',
+			done: false,
+		},
+	] ) {
+		rows.push(
+			await requestUtils.rest( {
+				method: 'POST',
+				path: `/wp/v2/crtxt_${ slug }`,
+				data: {
+					title: row.title,
+					status: 'private',
+					meta: {
+						[ `field-${ fields.pages.id }` ]: row.pages,
+						[ `field-${ fields.status.id }` ]: row.status,
+						[ `field-${ fields.due.id }` ]: row.due,
+						[ `field-${ fields.done.id }` ]: row.done,
+					},
+				},
+			} )
+		);
+	}
+
+	return { collection, fields, rows, slug };
+}
+
 function createDataViewBlockMarkup( collectionId, viewOverrides = {} ) {
 	const attributes = {
 		collectionId,
@@ -74,6 +163,7 @@ function createDataViewBlockMarkup( collectionId, viewOverrides = {} ) {
 			fields: [],
 			sort: null,
 			filters: [],
+			calculations: {},
 			perPage: 25,
 			page: 1,
 			search: '',
@@ -1280,6 +1370,297 @@ test.describe( 'Collection view block', () => {
 				requestUtils,
 				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
 			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+			);
+		}
+	} );
+
+	test( 'selects table footer calculations and persists them in the block view', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+
+		try {
+			Object.assign(
+				fixture,
+				await createCalculationFixture( requestUtils )
+			);
+			const pageKey = `field-${ fixture.fields.pages.id }`;
+			const statusKey = `field-${ fixture.fields.status.id }`;
+			const dueKey = `field-${ fixture.fields.due.id }`;
+			const doneKey = `field-${ fixture.fields.done.id }`;
+
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_pages',
+				data: {
+					title: 'Table calculations persistence page',
+					status: 'private',
+					content: createDataViewBlockMarkup( fixture.collection.id, {
+						fields: [
+							'title',
+							pageKey,
+							statusKey,
+							dueKey,
+							doneKey,
+						],
+					} ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/page/${ fixture.page.id }`
+			);
+
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.page.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+			await expect( canvas.getByText( 'Pages' ) ).toBeVisible();
+			const footer = canvas.locator( 'tfoot.cortext-table-calculations' );
+			const footerCells = footer.locator( 'td' );
+			await expect( footer ).toHaveCount( 0 );
+			const openColumnDropdown = async ( scope, name ) => {
+				const button = scope
+					.getByRole( 'button', { name } )
+					.filter( { hasText: name } );
+				await button.dispatchEvent( 'click' );
+			};
+			const clickMenuItem = async ( name ) => {
+				for ( const role of [ 'menuitem', 'menuitemradio' ] ) {
+					try {
+						await canvas
+							.getByRole( role, { name, exact: true } )
+							.click( { timeout: 500 } );
+						return;
+					} catch {}
+				}
+				for ( const role of [ 'menuitem', 'menuitemradio' ] ) {
+					try {
+						await page
+							.getByRole( role, { name, exact: true } )
+							.click( { timeout: 500 } );
+						return;
+					} catch {}
+				}
+				await page.getByText( name, { exact: true } ).click();
+			};
+
+			await openColumnDropdown(
+				canvas.getByRole( 'columnheader', { name: /Pages/ } ),
+				'Pages'
+			);
+			await clickMenuItem( 'Calculate' );
+			await clickMenuItem( 'Math' );
+			await clickMenuItem( 'Sum' );
+			await expect( footer ).toHaveCount( 1 );
+			await expect( footerCells.nth( 1 ) ).toContainText( 'Sum' );
+			await expect( footerCells.nth( 1 ) ).toContainText( '60' );
+			await expect
+				.poll( async () => {
+					const cell = await footerCells.nth( 1 ).boundingBox();
+					const button = await footerCells
+						.nth( 1 )
+						.locator( '.cortext-table-calculation__button' )
+						.boundingBox();
+					if ( ! cell || ! button ) {
+						return false;
+					}
+					return button.width >= cell.width - 1;
+				} )
+				.toBe( true );
+			await expect( footerCells.nth( 2 ) ).not.toContainText(
+				'Calculate'
+			);
+
+			const emptyStatusCalculation = footerCells
+				.nth( 2 )
+				.locator( '.cortext-table-calculation__button' );
+			await expect( emptyStatusCalculation ).toHaveAttribute(
+				'data-empty-label',
+				'Calculate'
+			);
+			await expect
+				.poll( () =>
+					emptyStatusCalculation.evaluate(
+						( element ) =>
+							window.getComputedStyle( element, '::before' )
+								.opacity
+					)
+				)
+				.toBe( '0' );
+			await emptyStatusCalculation.hover();
+			await expect
+				.poll( () =>
+					emptyStatusCalculation.evaluate(
+						( element ) =>
+							window.getComputedStyle( element, '::before' )
+								.opacity
+					)
+				)
+				.toBe( '1' );
+
+			await openColumnDropdown(
+				canvas.getByRole( 'columnheader', { name: /Status/ } ),
+				'Status'
+			);
+			await clickMenuItem( 'Calculate' );
+			await clickMenuItem( 'Count' );
+			await clickMenuItem( 'Count unique values' );
+			await expect( footerCells.nth( 2 ) ).toContainText( '3' );
+
+			await footerCells
+				.nth( 3 )
+				.locator( '.cortext-table-calculation__button' )
+				.click();
+			await clickMenuItem( 'Math' );
+			await clickMenuItem( 'Min' );
+			await expect( footerCells.nth( 3 ) ).not.toContainText(
+				'Calculate'
+			);
+
+			await footerCells
+				.nth( 4 )
+				.locator( '.cortext-table-calculation__button' )
+				.click();
+			await clickMenuItem( 'Count' );
+			await clickMenuItem( 'Count all' );
+			await expect( footerCells.nth( 4 ) ).toContainText( '3' );
+
+			await page.evaluate( async () => {
+				await window.wp.data.dispatch( 'core/editor' ).savePost();
+			} );
+			await page.waitForFunction(
+				() => ! window.wp.data.select( 'core/editor' ).isSavingPost()
+			);
+
+			const saved = await requestUtils.rest( {
+				path: `/wp/v2/crtxt_pages/${ fixture.page.id }`,
+				params: { context: 'edit' },
+			} );
+			expect( saved.content.raw ).toContain( '"calculations"' );
+			expect( saved.content.raw ).toContain( `"${ pageKey }":"sum"` );
+			expect( saved.content.raw ).toContain(
+				`"${ statusKey }":"countUnique"`
+			);
+			expect( saved.content.raw ).toContain( `"${ dueKey }":"min"` );
+			expect( saved.content.raw ).toContain( `"${ doneKey }":"count"` );
+
+			await page.reload();
+			await expect( footerCells.nth( 1 ) ).toContainText( 'Sum' );
+			await expect( footerCells.nth( 1 ) ).toContainText( '60' );
+		} finally {
+			for ( const row of fixture.rows ?? [] ) {
+				await deleteIfCreated(
+					requestUtils,
+					`/wp/v2/crtxt_${ fixture.slug }/${ row.id }`
+				);
+			}
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+			);
+			for ( const field of Object.values( fixture.fields ?? {} ) ) {
+				await deleteIfCreated(
+					requestUtils,
+					`/wp/v2/crtxt_fields/${ field.id }`
+				);
+			}
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+			);
+		}
+	} );
+
+	test( 'calculates against filtered rows before pagination', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+
+		try {
+			Object.assign(
+				fixture,
+				await createCalculationFixture( requestUtils )
+			);
+			const pageKey = `field-${ fixture.fields.pages.id }`;
+			const statusKey = `field-${ fixture.fields.status.id }`;
+
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_pages',
+				data: {
+					title: 'Filtered calculation page',
+					status: 'private',
+					content: createDataViewBlockMarkup( fixture.collection.id, {
+						fields: [ 'title', pageKey ],
+						filters: [
+							{
+								field: statusKey,
+								operator: 'isAny',
+								value: [ 'Alpha', 'Beta' ],
+							},
+						],
+						calculations: { [ pageKey ]: 'sum' },
+						perPage: 1,
+						page: 1,
+					} ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/page/${ fixture.page.id }`
+			);
+
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.page.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+			await expect( canvas.getByText( 'Alpha Book' ) ).toBeVisible();
+			await expect( canvas.getByText( 'Beta Book' ) ).toBeHidden();
+			await expect( canvas.getByText( 'Gamma Book' ) ).toBeHidden();
+			await expect(
+				canvas.locator( 'tfoot.cortext-table-calculations td' ).nth( 1 )
+			).toContainText( '30' );
+		} finally {
+			for ( const row of fixture.rows ?? [] ) {
+				await deleteIfCreated(
+					requestUtils,
+					`/wp/v2/crtxt_${ fixture.slug }/${ row.id }`
+				);
+			}
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+			);
+			for ( const field of Object.values( fixture.fields ?? {} ) ) {
+				await deleteIfCreated(
+					requestUtils,
+					`/wp/v2/crtxt_fields/${ field.id }`
+				);
+			}
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&

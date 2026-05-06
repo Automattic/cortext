@@ -70,7 +70,7 @@ Worth a small spike before committing; `core-data`'s schema cache for rarely-cha
 
 **Where.** `src/components/CollectionDataViews.js` (`cortext-data-view__footer` div), `src/index.scss` (`.cortext-data-view` flex layout).
 
-**Solution.** More "tidy up later" than tech debt: switch to DataViews free composition (already supported via `children`) and lay out `<DataViews.Layout />` and `<DataViews.Pagination />` ourselves. Free composition works today; an upstream `footer` prop would just be neater. Pick free composition before filing upstream.
+**Solution.** More "tidy up later" than tech debt: switch to DataViews free composition (already supported via `children`) and lay out `<DataViews.Layout />` and `<DataViews.Pagination />` ourselves. Free composition works today; an upstream `footer` prop would just be neater. This is separate from table-internal footer rows for calculations; see #36 for that harder gap.
 
 ## 8. `CheckboxControl` ignores `hideLabelFromVision` `[upstream]`
 
@@ -140,11 +140,11 @@ Double-click autofit is the trickiest piece. With no measurement hook upstream, 
 
 ## 16. DataViews has no per-column menu-item slot `[upstream, soft]`
 
-**What.** DataViews' column-header dropdown (Sort / Add filter / Move / Hide) is a closed list — there's no `field.menuItems` to inject Rename / Duplicate / Delete. To keep a single dropdown per column, we hide DataViews' built-in trigger on custom-field `<th>`s via CSS and portal our own combined trigger in (Sort / Move / Hide *plus* Rename / Duplicate / Delete). Title and system fields keep the built-in trigger. Main's drag-handle click-forward (`DataViewColumnInteractions`) iterates header buttons and skips `display: none` ones via `offsetParent`, so it lands on whichever trigger is visible. Filter is intentionally absent — Cortext doesn't surface column-level filters in the header.
+**What.** DataViews' column-header dropdown (Sort / Add filter / Move / Hide) is a closed list — there's no `field.menuItems` to inject Rename / Duplicate / Delete or Calculate. To keep a single dropdown per column, we hide DataViews' built-in trigger on custom-field `<th>`s via CSS and portal our own combined trigger in (Sort / Move / Hide *plus* field management and table calculations). Title and system fields keep the built-in trigger. Main's drag-handle click-forward (`DataViewColumnInteractions`) iterates header buttons and skips `display: none` ones via `offsetParent`, so it lands on whichever trigger is visible. Filter is intentionally absent — Cortext doesn't surface column-level filters in the header.
 
 **Where.** `src/components/fields/ColumnHeaderActions.js` (combined dropdown), `src/index.scss` (`.dataviews-view-table th:has(.cortext-column-header-marker) > .dataviews-view-table-header-button { display: none }`), `src/components/DataViewColumnInteractions.js` (visible-button click forward).
 
-**Risk.** Re-implementing Sort / Move / Hide ourselves means new DataViews items in those menus won't show up here automatically. If main's drag handle stops calling `.click()` on the header trigger, the column-name click-to-open behavior would need a different forward.
+**Risk.** Re-implementing Sort / Move / Hide ourselves means new DataViews items in those menus won't show up here automatically. Calculation controls add one more reason this custom menu has to stay in lockstep with DataViews. If main's drag handle stops calling `.click()` on the header trigger, the column-name click-to-open behavior would need a different forward.
 
 **Solution.** A `field.menuItems` (array or render-prop) on DataViews fields, appended to the built-in dropdown. Other consumers (Pattern Manager, Pages, Site Editor) would benefit too. File as a Gutenberg feature request.
 
@@ -254,11 +254,11 @@ Double-click autofit is the trickiest piece. With no measurement hook upstream, 
 
 ## 30. `Menu` submenus only accept menu primitives `[upstream]`
 
-**What.** `Menu.SubmenuTriggerItem` opens a nested `Menu.Popover`, but the popover's children have to be `Menu.Item` / `Menu.Group` / `Menu.Separator`. Our "Edit field" submenu has tile previews (Number / Bar / Ring), labelled rows with right-anchored values, and three more popovers for format, color, and time choices. None of that fits the menu-primitive contract, so the format panel stays as a sibling popover, we run the hover-with-grace bridge ourselves, and the parent menu's `hideOnInteractOutside` filter ignores clicks landing in `.cortext-format-submenu` or `.cortext-format-submenu__flyout`.
+**What.** `Menu.SubmenuTriggerItem` opens a nested `Menu.Popover`, but the popover's children have to be `Menu.Item` / `Menu.Group` / `Menu.Separator`. Our "Edit field" submenu has tile previews (Number / Bar / Ring), labelled rows with right-anchored values, and three more popovers for format, color, and time choices. The Calculate submenu is simpler, but it still needs the same hover bridge so it feels like the adjacent Edit field menu. None of that fits the menu-primitive contract cleanly, so these panels stay as sibling popovers, we run the hover-with-grace bridge ourselves, and the parent menu's `hideOnInteractOutside` filter ignores clicks landing in `.cortext-format-submenu`, `.cortext-format-submenu__flyout`, or `.cortext-table-calculation-submenu`.
 
-**Where.** `openFormat` / `scheduleClose` and `hideMenuOnInteractOutside` in `src/components/fields/ColumnHeaderActions.js`. `FieldFormatPopover` and its flyouts in `src/components/fields/FieldFormatPopover.js`.
+**Where.** `openFormat` / `openCalculation` / `scheduleClose` and `hideMenuOnInteractOutside` in `src/components/fields/ColumnHeaderActions.js`. `FieldFormatPopover` and its flyouts in `src/components/fields/FieldFormatPopover.js`. `TableCalculationMenu` and its flyouts in `src/components/TableCalculationMenu.js`.
 
-**Solution.** An arbitrary-content submenu variant in WP's `Menu` (or upstream Ariakit) would let the format panel mount as a real submenu, with outside-click and focus management owned by the library. Until then the manual bridge stays.
+**Solution.** An arbitrary-content submenu variant in WP's `Menu` (or upstream Ariakit) would let these panels mount as real submenus, with outside-click and focus management owned by the library. Until then the manual bridge stays.
 
 ## 31. Block editor has no non-serialized before/after block chrome slot `[upstream]`
 
@@ -299,3 +299,13 @@ Double-click autofit is the trickiest piece. With no measurement hook upstream, 
 **Where.** The pointer listener in `EditOptionsPopover` (`src/components/fields/EditOptionsPopover.js`) and the `onRequestClose` plumbing through `EditableCell`, `MultiselectEdit`, and `ColumnHeaderActions`.
 
 **Solution.** `Popover` needs a parent/child dismissal story: either close the whole stack when a click lands outside all related popovers, or expose enough event detail for a host popover to opt into that behavior without a document-level listener.
+
+## 36. Table calculations sit outside DataViews' table contract `[upstream, internal]`
+
+**What.** DataViews renders the table, but it doesn't expose a table footer row, a per-column summary cell, or a "filtered rows before pagination" result. The calculation footer therefore finds the rendered `.dataviews-view-table`, watches for it with a `MutationObserver`, and portals a `<tfoot>` into the table after DataViews has already rendered. To keep results aligned with the current search/filter state but not the current page, `CollectionDataViews` also runs DataViews' `filterSortAndPaginate` helper a second time with `page` and `perPage` removed.
+
+The state is ours too. `view.calculations` lives on the DataViews view object because embedded data-view blocks already persist that object, and named saved views do not exist yet. `normalizeView` prunes stale calculation entries when fields disappear or their type changes. That keeps the saved shape honest, but it is still Cortext state attached to a DataViews object that upstream knows nothing about.
+
+**Where.** `src/components/TableCalculationsFooter.js` (table lookup, observer, `<tfoot>` portal), `src/components/CollectionDataViews.js` (second filtering pass and footer mount), `src/components/tableCalculations.js` (operation matrix and result formatting), and `src/components/dataViewColumns.js` (view cleanup).
+
+**Solution.** Upstream DataViews could expose one of two shapes: a table `renderFooter` / `renderSummaryRow` slot, or a column-level summary API that receives the filtered, unpaginated rows. Either would let us drop the DOM lookup and portal. A separate helper that returns filtered rows before pagination would remove the second `filterSortAndPaginate` pass. Internally, saved named views should eventually make `calculations` part of Cortext's own saved view schema instead of just an extra key on embedded block state.

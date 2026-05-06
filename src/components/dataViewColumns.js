@@ -6,6 +6,8 @@
  * custom render path. Order persists on `view.fields`, also library-native.
  */
 
+import { sanitizeCalculations } from './tableCalculations';
+
 export const TITLE_FIELD_ID = 'title';
 export const GHOST_FIELD_ID = '__add_field';
 export const MAX_COLUMN_WIDTH = 640;
@@ -53,6 +55,15 @@ function sanitizeWidth( width ) {
 	return Math.max( 0, Math.min( MAX_COLUMN_WIDTH, Math.round( value ) ) );
 }
 
+function sameShallowObject( a, b ) {
+	const aKeys = Object.keys( a );
+	const bKeys = Object.keys( b );
+	return (
+		aKeys.length === bKeys.length &&
+		aKeys.every( ( key ) => a[ key ] === b[ key ] )
+	);
+}
+
 // Reconciles a saved view against the live field set: drops style entries for
 // fields that no longer exist, clamps persisted widths into the current
 // [min, max] range, and re-prepends the title id when reorder/cleanup left it
@@ -97,8 +108,27 @@ export function normalizeView( view, validIds, options = {} ) {
 	const fieldsChanged =
 		currentFields.length !== nextFields.length ||
 		currentFields.some( ( id, i ) => id !== nextFields[ i ] );
+	const rawCalculations = view?.calculations;
+	const hasCalculationObject =
+		rawCalculations &&
+		typeof rawCalculations === 'object' &&
+		! Array.isArray( rawCalculations );
+	const currentCalculations = hasCalculationObject ? rawCalculations : {};
+	const nextCalculations = Array.isArray( options.fields )
+		? sanitizeCalculations(
+				currentCalculations,
+				options.fields.filter( ( field ) => validSet.has( field.id ) )
+		  )
+		: Object.fromEntries(
+				Object.entries( currentCalculations ).filter( ( [ id ] ) =>
+					validSet.has( id )
+				)
+		  );
+	const calculationsChanged =
+		( rawCalculations !== undefined && ! hasCalculationObject ) ||
+		! sameShallowObject( currentCalculations, nextCalculations );
 
-	if ( ! fieldsChanged && ! stylesChanged ) {
+	if ( ! fieldsChanged && ! stylesChanged && ! calculationsChanged ) {
 		return view;
 	}
 
@@ -109,11 +139,18 @@ export function normalizeView( view, validIds, options = {} ) {
 		delete nextLayout.styles;
 	}
 
-	return {
+	const nextView = {
 		...view,
 		fields: nextFields,
 		layout: nextLayout,
 	};
+	if ( Object.keys( nextCalculations ).length > 0 ) {
+		nextView.calculations = nextCalculations;
+	} else {
+		delete nextView.calculations;
+	}
+
+	return nextView;
 }
 
 // Applies a width to a single column. Always returns through the layout shape

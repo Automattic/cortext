@@ -137,6 +137,20 @@ describe( 'mapField', () => {
 		} );
 		expect( mapped.label ).toBe( 'A & B' );
 	} );
+
+	it( 'preserves Cortext type and format metadata for table calculations', () => {
+		const mapped = mapField(
+			baseField( {
+				type: 'number',
+				number_format: '{"style":"comma","decimals":2}',
+			} )
+		);
+		expect( mapped.cortextType ).toBe( 'number' );
+		expect( mapped.cortextFormat ).toEqual( {
+			style: 'comma',
+			decimals: 2,
+		} );
+	} );
 } );
 
 describe( 'systemFields', () => {
