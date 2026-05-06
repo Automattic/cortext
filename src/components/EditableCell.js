@@ -1,4 +1,4 @@
-import { __, _n, sprintf } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
 import {
 	Button,
@@ -21,13 +21,15 @@ import {
 	useRef,
 	useState,
 } from '@wordpress/element';
-import { Icon, arrowUpRight, check, closeSmall, plus } from '@wordpress/icons';
+import { Icon, check, closeSmall, plus } from '@wordpress/icons';
 
 import MultiselectEdit from './MultiselectEdit';
 import Chip from './fields/Chip';
 import EditOptionsPopover from './fields/EditOptionsPopover';
 import { resolveFormatColor } from './fields/formatColors';
 import { toRecordId } from '../hooks/fieldIds';
+import RelationReferences from './relations/RelationReferences';
+import { relationIds, relationTitle } from './relations/relationUtils';
 import useCollectionRows from '../hooks/useCollectionRows';
 
 // Resolves the WordPress site locale into a BCP 47 tag for Intl. WP
@@ -293,153 +295,6 @@ function NumberRing( { value, format, text } ) {
 			</svg>
 			{ showNumber ? (
 				<span className="cortext-cell-ring__label">{ text }</span>
-			) : null }
-		</span>
-	);
-}
-
-function relationIds( value ) {
-	const list = Array.isArray( value ) ? value : [ value ];
-	return list
-		.map( ( entry ) => {
-			if ( entry && typeof entry === 'object' && entry.id ) {
-				return Number( entry.id );
-			}
-			return Number( entry );
-		} )
-		.filter( ( id, index, ids ) => id > 0 && ids.indexOf( id ) === index );
-}
-
-function relationTitle( entry ) {
-	if ( ! entry ) {
-		return '';
-	}
-	return entry?.title?.raw || entry?.title?.rendered || `#${ entry?.id }`;
-}
-
-function collectionHref( ref ) {
-	const route = collectionRoute( ref );
-	if ( ! route ) {
-		return '#';
-	}
-	const adminUrl = window.cortextSettings?.adminUrl ?? '/wp-admin/';
-	const menuSlug = window.cortextSettings?.menuSlug ?? 'cortext';
-	const base = adminUrl.endsWith( '/' ) ? adminUrl : `${ adminUrl }/`;
-	const params = new URLSearchParams();
-	params.set( 'page', menuSlug );
-	params.set( 'p', `/${ route }` );
-	return `${ base }admin.php?${ params.toString() }`;
-}
-
-function collectionRoute( ref ) {
-	const collectionId = Number( ref?.collectionId );
-	if ( ! collectionId ) {
-		return '';
-	}
-	const slug = String( ref?.collectionSlug ?? '' ).trim();
-	const tail = slug ? `${ slug }-${ collectionId }` : String( collectionId );
-	return `collection/${ tail }`;
-}
-
-function topWindow() {
-	try {
-		if ( window.parent && window.parent !== window ) {
-			return window.parent;
-		}
-	} catch {
-		return window;
-	}
-	return window;
-}
-
-function shouldUseNativeLink( event ) {
-	return (
-		event.defaultPrevented ||
-		event.button !== 0 ||
-		event.metaKey ||
-		event.ctrlKey ||
-		event.altKey ||
-		event.shiftKey
-	);
-}
-
-function navigateToCollection( event, ref ) {
-	event.stopPropagation();
-	if ( shouldUseNativeLink( event ) ) {
-		return;
-	}
-	const route = collectionRoute( ref );
-	if ( ! route ) {
-		return;
-	}
-	const targetWindow = topWindow();
-	const router = targetWindow?.cortextRouter;
-	if ( router?.navigate ) {
-		event.preventDefault();
-		router.navigate( {
-			to: '/$',
-			params: { _splat: route },
-		} );
-		return;
-	}
-	if ( targetWindow && targetWindow !== window ) {
-		event.preventDefault();
-		targetWindow.location.href = collectionHref( ref );
-	}
-}
-
-function RelationReferences( { value } ) {
-	const refs = Array.isArray( value ) ? value : [ value ];
-	const populated = refs.filter( ( ref ) => ref && ref.id );
-	if ( populated.length === 0 ) {
-		return '';
-	}
-	const overflowCount = Math.max( 0, populated.length - 2 );
-	return (
-		<span className="cortext-relation-refs">
-			{ populated.map( ( ref ) => {
-				const title =
-					ref.title?.raw || ref.title?.rendered || `#${ ref.id }`;
-				return (
-					<a
-						key={ ref.id }
-						className="cortext-relation-ref"
-						href={ collectionHref( ref ) }
-						target="_top"
-						onClick={ ( event ) =>
-							navigateToCollection( event, ref )
-						}
-					>
-						<Icon
-							className="cortext-relation-ref__icon"
-							icon={ arrowUpRight }
-						/>
-						<span className="cortext-relation-ref__title">
-							{ title }
-						</span>
-					</a>
-				);
-			} ) }
-			{ overflowCount > 0 ? (
-				<span
-					className="cortext-relation-ref-more"
-					aria-label={ sprintf(
-						/* translators: %d: number of hidden relation references */
-						_n(
-							'%d more relation',
-							'%d more relations',
-							overflowCount,
-							'cortext'
-						),
-						overflowCount
-					) }
-				>
-					{ sprintf(
-						/* translators: %d: number of hidden relation references */
-						__( '+%d', 'cortext' ),
-						overflowCount
-					) }
-				</span>
 			) : null }
 		</span>
 	);
