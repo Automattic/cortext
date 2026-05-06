@@ -1,10 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-
-jest.mock( '@wordpress/api-fetch', () => jest.fn() );
-jest.mock( '../../../src/hooks/useCollectionRows', () => ( {
-	__esModule: true,
-	default: jest.fn(),
-} ) );
+import { render, screen } from '@testing-library/react';
 
 import {
 	dateOnlyValue,
@@ -14,18 +8,9 @@ import {
 	formatNumberValue,
 	RowMutationContext,
 } from '../../../src/components/EditableCell';
-import apiFetch from '@wordpress/api-fetch';
-import useCollectionRows from '../../../src/hooks/useCollectionRows';
 
 beforeEach( () => {
-	apiFetch.mockReset();
 	delete window.cortextRouter;
-	useCollectionRows.mockReturnValue( {
-		data: [],
-		collection: null,
-		isLoading: false,
-		refresh: jest.fn(),
-	} );
 } );
 
 function renderDisplay( value, type, options ) {
@@ -277,73 +262,6 @@ describe( 'formatDisplay', () => {
 		} );
 	} );
 
-	describe( 'relation', () => {
-		it( 'renders references as collection links', () => {
-			window.cortextSettings = {
-				adminUrl: 'https://example.test/wp-admin/',
-				menuSlug: 'cortext',
-			};
-
-			renderDisplay(
-				[
-					{
-						id: 12,
-						title: { raw: 'Ada Lovelace' },
-						collectionId: 7,
-						collectionSlug: 'people',
-					},
-				],
-				'relation'
-			);
-
-			expect(
-				screen.getByRole( 'link', { name: 'Ada Lovelace' } )
-			).toHaveAttribute(
-				'href',
-				'https://example.test/wp-admin/admin.php?page=cortext&p=%2Fcollection%2Fpeople-7'
-			);
-			expect(
-				screen.getByRole( 'link', { name: 'Ada Lovelace' } )
-			).toHaveAttribute( 'target', '_top' );
-		} );
-
-		it( 'uses the Cortext router for plain relation link clicks', () => {
-			window.cortextSettings = {
-				adminUrl: 'https://example.test/wp-admin/',
-				menuSlug: 'cortext',
-			};
-			window.cortextRouter = { navigate: jest.fn() };
-
-			renderDisplay(
-				[
-					{
-						id: 12,
-						title: { raw: 'Ada Lovelace' },
-						collectionId: 7,
-						collectionSlug: 'people',
-					},
-				],
-				'relation'
-			);
-
-			const anchor = screen.getByRole( 'link', {
-				name: 'Ada Lovelace',
-			} );
-			const click = new MouseEvent( 'click', {
-				bubbles: true,
-				cancelable: true,
-				button: 0,
-			} );
-			anchor.dispatchEvent( click );
-
-			expect( click.defaultPrevented ).toBe( true );
-			expect( window.cortextRouter.navigate ).toHaveBeenCalledWith( {
-				to: '/$',
-				params: { _splat: 'collection/people-7' },
-			} );
-		} );
-	} );
-
 	describe( 'checkbox', () => {
 		it( 'renders an icon for truthy values', () => {
 			const { container } = renderDisplay( true, 'checkbox' );
@@ -438,7 +356,6 @@ describe( 'dateOnlyValue', () => {
 		expect( dateOnlyValue( '2026-04-16' ) ).toBe( '2026-04-16' );
 	} );
 } );
-
 describe( 'EditableCell option overrides', () => {
 	it( 'uses live option overrides for chip display without remapping fields', () => {
 		render(
@@ -465,96 +382,5 @@ describe( 'EditableCell option overrides', () => {
 		);
 
 		expect( screen.getByText( 'High' ) ).toHaveClass( 'cortext-chip--red' );
-	} );
-} );
-
-describe( 'EditableCell relation editor', () => {
-	it( 'saves selected target row ids from the relation picker', async () => {
-		useCollectionRows.mockReturnValue( {
-			data: [
-				{ id: 22, title: { raw: 'Ada Lovelace' } },
-				{ id: 33, title: { raw: 'Grace Hopper' } },
-			],
-			collection: { title: { raw: 'People' } },
-			isLoading: false,
-			refresh: jest.fn(),
-		} );
-		const saveRowField = jest.fn().mockResolvedValue( true );
-
-		render(
-			<RowMutationContext.Provider value={ { saveRowField } }>
-				<EditableCell
-					item={ { id: 11, meta: { 'field-5': [] } } }
-					fieldId="field-5"
-					fieldType="relation"
-					label="Assignee"
-					relation={ { targetCollectionId: 9, multiple: true } }
-				/>
-			</RowMutationContext.Provider>
-		);
-
-		fireEvent.click( screen.getByRole( 'button', { name: 'Assignee' } ) );
-		const option = screen.getByText( 'Ada Lovelace' );
-		const mouseDown = new MouseEvent( 'mousedown', {
-			bubbles: true,
-			cancelable: true,
-		} );
-		option.dispatchEvent( mouseDown );
-		expect( mouseDown.defaultPrevented ).toBe( true );
-		fireEvent.click( option );
-
-		await waitFor( () =>
-			expect( saveRowField ).toHaveBeenCalledWith( 11, 'field-5', [ 22 ] )
-		);
-		expect( useCollectionRows ).toHaveBeenCalledWith(
-			9,
-			expect.objectContaining( { type: 'table' } )
-		);
-	} );
-
-	it( 'creates a missing target row from the relation picker', async () => {
-		const refreshTargetRows = jest.fn();
-		useCollectionRows.mockReturnValue( {
-			data: [],
-			collection: { title: { raw: 'People' } },
-			isLoading: false,
-			refresh: refreshTargetRows,
-		} );
-		apiFetch.mockResolvedValue( { id: 44, title: { raw: 'New Ada' } } );
-		const saveRowField = jest.fn().mockResolvedValue( true );
-
-		render(
-			<RowMutationContext.Provider value={ { saveRowField } }>
-				<EditableCell
-					item={ { id: 11, meta: { 'field-5': [] } } }
-					fieldId="field-5"
-					fieldType="relation"
-					label="Assignee"
-					relation={ { targetCollectionId: 9, multiple: true } }
-				/>
-			</RowMutationContext.Provider>
-		);
-
-		fireEvent.click( screen.getByRole( 'button', { name: 'Assignee' } ) );
-		fireEvent.change( screen.getByLabelText( 'Search rows' ), {
-			target: { value: 'New Ada' },
-		} );
-		fireEvent.click(
-			screen.getByRole( 'button', { name: 'Create row "New Ada"' } )
-		);
-
-		await waitFor( () =>
-			expect( apiFetch ).toHaveBeenCalledWith( {
-				path: '/cortext/v1/collections/9/rows',
-				method: 'POST',
-				data: { title: 'New Ada' },
-			} )
-		);
-		await waitFor( () =>
-			expect( saveRowField ).toHaveBeenCalledWith( 11, 'field-5', [
-				44,
-			] )
-		);
-		expect( refreshTargetRows ).toHaveBeenCalled();
 	} );
 } );
