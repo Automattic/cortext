@@ -208,7 +208,6 @@ export function mapField( field ) {
 		getValue: ( { item } ) => item?.meta?.[ id ] ?? null,
 		render: buildRender( id, type, label, elements, format, relation ),
 		editable: EDITABLE_TYPES.has( type ),
-		cortextType: type,
 		cortextFormat: format,
 		enableGlobalSearch: SEARCHABLE_TYPES.has( type ),
 	};
