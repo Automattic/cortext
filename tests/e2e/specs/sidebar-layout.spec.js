@@ -393,14 +393,12 @@ test.describe( 'Sidebar layout controls', () => {
 
 			await expect( settings ).not.toHaveClass( /is-pressed/ );
 			await page.mouse.move( 0, 0 );
-			const unpressedBeforeHover = await readButtonChromeState(
-				settings
-			);
+			const unpressedBeforeHover =
+				await readButtonChromeState( settings );
 
 			await settings.hover();
-			const lightUnpressedAfterHover = await readButtonChromeState(
-				settings
-			);
+			const lightUnpressedAfterHover =
+				await readButtonChromeState( settings );
 
 			expect( lightUnpressedAfterHover.backgroundColor ).not.toBe(
 				unpressedBeforeHover.backgroundColor
@@ -418,14 +416,12 @@ test.describe( 'Sidebar layout controls', () => {
 					.getElementById( 'cortext-root' )
 					?.setAttribute( 'data-theme', 'dark' );
 			} );
-			const darkUnpressedBeforeHover = await readButtonChromeState(
-				settings
-			);
+			const darkUnpressedBeforeHover =
+				await readButtonChromeState( settings );
 
 			await settings.hover();
-			const darkUnpressedAfterHover = await readButtonChromeState(
-				settings
-			);
+			const darkUnpressedAfterHover =
+				await readButtonChromeState( settings );
 
 			expect( darkUnpressedAfterHover.backgroundColor ).not.toBe(
 				darkUnpressedBeforeHover.backgroundColor
@@ -456,9 +452,7 @@ test.describe( 'Sidebar layout controls', () => {
 				beforeHover.backgroundColor
 			);
 			expect( afterHover.color ).toBe( beforeHover.color );
-			expect( afterHover.backgroundColor ).not.toBe(
-				'rgb(30, 30, 30)'
-			);
+			expect( afterHover.backgroundColor ).not.toBe( 'rgb(30, 30, 30)' );
 
 			const sidebar = page.locator( '.cortext-sidebar' );
 			const title = sidebar.getByRole( 'button', {

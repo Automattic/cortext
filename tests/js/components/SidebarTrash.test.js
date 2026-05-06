@@ -110,7 +110,11 @@ beforeEach( () => {
 	useDispatch.mockReturnValue( dispatchMocks );
 } );
 
-function setTrashRecords( { records = [], status = 'SUCCESS', hasResolved = true } = {} ) {
+function setTrashRecords( {
+	records = [],
+	status = 'SUCCESS',
+	hasResolved = true,
+} = {} ) {
 	useEntityRecords.mockReturnValue( {
 		records,
 		status,
@@ -143,7 +147,9 @@ describe( 'SidebarTrash', () => {
 
 		const { container } = render( <SidebarTrash activePages={ [] } /> );
 
-		expect( container.querySelector( '.cortext-sidebar__loading' ) ).toBeTruthy();
+		expect(
+			container.querySelector( '.cortext-sidebar__loading' )
+		).toBeTruthy();
 		expect(
 			container.querySelector( '.cortext-sidebar__empty' )
 		).toBeFalsy();
@@ -228,9 +234,7 @@ describe( 'SidebarTrash', () => {
 
 		setTrashRecords( { records: [ orphan ] } );
 
-		const { container } = render(
-			<SidebarTrash activePages={ [] } />
-		);
+		const { container } = render( <SidebarTrash activePages={ [] } /> );
 
 		expect(
 			container.querySelector( '.cortext-sidebar__breadcrumb' )
@@ -239,15 +243,15 @@ describe( 'SidebarTrash', () => {
 
 	it( 'POSTs to /cortext/v1/pages/<id>/restore and refreshes both page queries', async () => {
 		setTrashRecords( {
-			records: [ makePage( { id: 7, title: { rendered: 'Doc', raw: 'Doc' } } ) ],
+			records: [
+				makePage( { id: 7, title: { rendered: 'Doc', raw: 'Doc' } } ),
+			],
 		} );
 		apiFetch.mockResolvedValue( { restored: [ 7 ] } );
 
 		render( <SidebarTrash activePages={ [] } /> );
 
-		fireEvent.click(
-			screen.getByRole( 'button', { name: 'Restore' } )
-		);
+		fireEvent.click( screen.getByRole( 'button', { name: 'Restore' } ) );
 
 		await waitFor( () => {
 			expect( apiFetch ).toHaveBeenCalledWith( {
@@ -274,9 +278,7 @@ describe( 'SidebarTrash', () => {
 
 		render( <SidebarTrash activePages={ [] } /> );
 
-		fireEvent.click(
-			screen.getByRole( 'button', { name: 'Restore' } )
-		);
+		fireEvent.click( screen.getByRole( 'button', { name: 'Restore' } ) );
 
 		await waitFor( () => {
 			expect( screen.getByText( 'Server exploded' ) ).toBeInTheDocument();
@@ -388,7 +390,10 @@ describe( 'SidebarTrash', () => {
 	} );
 
 	it( 'shows the cascade subtree count beside the root', () => {
-		const root = makePage( { id: 1, title: { rendered: 'Workspace', raw: 'Workspace' } } );
+		const root = makePage( {
+			id: 1,
+			title: { rendered: 'Workspace', raw: 'Workspace' },
+		} );
 		const child = makePage( {
 			id: 2,
 			parent: 1,
@@ -446,11 +451,17 @@ describe( 'SidebarTrash', () => {
 
 		fireEvent.click( screen.getByText( 'Stranded' ) );
 
-		expect( onSelect ).toHaveBeenCalledWith( 42, expect.objectContaining( { id: 42 } ) );
+		expect( onSelect ).toHaveBeenCalledWith(
+			42,
+			expect.objectContaining( { id: 42 } )
+		);
 	} );
 
 	it( 'announces subtree size in the permanent-delete confirmation', () => {
-		const root = makePage( { id: 1, title: { rendered: 'Workspace', raw: 'Workspace' } } );
+		const root = makePage( {
+			id: 1,
+			title: { rendered: 'Workspace', raw: 'Workspace' },
+		} );
 		const child = makePage( {
 			id: 2,
 			parent: 1,

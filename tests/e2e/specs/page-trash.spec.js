@@ -88,17 +88,21 @@ test.describe( 'Page trash flow', () => {
 					exact: true,
 				} )
 				.click( { force: true } );
-			await page
-				.getByRole( 'menuitem', { name: 'Trash' } )
-				.click();
+			await page.getByRole( 'menuitem', { name: 'Trash' } ).click();
 
 			// Active sidebar drops the whole subtree; the Trash section
 			// shows the cascade root with the subpage count.
 			await expect(
-				sidebar.getByRole( 'button', { name: PARENT_TITLE, exact: true } )
+				sidebar.getByRole( 'button', {
+					name: PARENT_TITLE,
+					exact: true,
+				} )
 			).toHaveCount( 0 );
 			await expect(
-				sidebar.getByRole( 'button', { name: CHILD_TITLE, exact: true } )
+				sidebar.getByRole( 'button', {
+					name: CHILD_TITLE,
+					exact: true,
+				} )
 			).toHaveCount( 0 );
 
 			const trashList = page.locator( '.cortext-sidebar__trash-list' );
@@ -107,16 +111,17 @@ test.describe( 'Page trash flow', () => {
 
 			// Canvas keeps the parent open with a trashed banner.
 			const notice = page.locator( '.cortext-canvas__notice' );
-			await expect( notice ).toContainText(
-				'This page is in trash.'
-			);
+			await expect( notice ).toContainText( 'This page is in trash.' );
 
 			// Restore via the banner. Subtree returns; banner disappears.
 			await notice.getByRole( 'button', { name: 'Restore' } ).click();
 
 			await expect( notice ).toHaveCount( 0 );
 			await expect(
-				sidebar.getByRole( 'button', { name: PARENT_TITLE, exact: true } )
+				sidebar.getByRole( 'button', {
+					name: PARENT_TITLE,
+					exact: true,
+				} )
 			).toBeVisible();
 			await expect( trashList ).toHaveCount( 0 );
 		} finally {

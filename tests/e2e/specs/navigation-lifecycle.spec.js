@@ -31,9 +31,8 @@ async function deleteIfCreated( requestUtils, path ) {
 async function waitForEditorPost( page, postId ) {
 	await page.waitForFunction(
 		( expectedPostId ) =>
-			window.wp?.data
-				?.select( 'core/editor' )
-				?.getCurrentPostId?.() === expectedPostId,
+			window.wp?.data?.select( 'core/editor' )?.getCurrentPostId?.() ===
+			expectedPostId,
 		postId,
 		{ timeout: 15_000 }
 	);
@@ -217,17 +216,20 @@ test.describe( 'Navigation lifecycle', () => {
 			const rowsGate = new Promise( ( resolve ) => {
 				releaseRows = resolve;
 			} );
-			await page.route( '**/wp-json/cortext/v1/rows**', async ( route ) => {
-				if (
-					route
-						.request()
-						.url()
-						.includes( `collection=${ fixture.collection.id }` )
-				) {
-					await rowsGate;
+			await page.route(
+				'**/wp-json/cortext/v1/rows**',
+				async ( route ) => {
+					if (
+						route
+							.request()
+							.url()
+							.includes( `collection=${ fixture.collection.id }` )
+					) {
+						await rowsGate;
+					}
+					await route.continue();
 				}
-				await route.continue();
-			} );
+			);
 			const rowsRequest = page.waitForRequest(
 				( request ) =>
 					request.url().includes( '/wp-json/cortext/v1/rows' ) &&
