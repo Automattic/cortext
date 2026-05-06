@@ -311,23 +311,21 @@ export default function CollectionDataViews( {
 
 	const saveRowField = useCallback(
 		async ( rowId, fieldId, value ) => {
-			if ( ! slug || ! rowId ) {
+			if ( ! collectionId || ! rowId ) {
 				return null;
 			}
-			const payload =
-				fieldId === 'title'
-					? { title: value ?? '' }
-					: { meta: { [ fieldId ]: value } };
-			// FIXME: Consider supporting row mutation via /cortext/v1/rows.
 			const updated = await apiFetch( {
-				path: `/wp/v2/crtxt_${ slug }/${ rowId }`,
+				path: `/cortext/v1/collections/${ collectionId }/rows/${ rowId }`,
 				method: 'POST',
-				data: payload,
+				data: {
+					field: fieldId,
+					value,
+				},
 			} );
 			refresh();
 			return updated;
 		},
-		[ slug, refresh ]
+		[ collectionId, refresh ]
 	);
 
 	const mutationContext = useMemo(
@@ -418,10 +416,8 @@ export default function CollectionDataViews( {
 
 		let seededView = currentView;
 		if ( currentFields.length === 0 ) {
-			// Default to editable columns only: read-only types like
-			// formula and rollup don't compute values yet, so showing
-			// them out of the box is just noise. Users can re-enable
-			// them via the View config.
+			// Default to editable columns only: read-only types like formula
+			// do not accept inline saves and can be enabled via the View config.
 			seededView = {
 				...currentView,
 				fields: availableFields

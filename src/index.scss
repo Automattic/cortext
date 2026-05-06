@@ -1060,6 +1060,17 @@ body:has(.cortext-canvas__identity-actions:hover) .cortext-canvas__identity-acti
 		flex: 0 0 auto;
 		color: $gray-700;
 	}
+
+	&__config {
+		display: grid;
+		gap: $grid-unit-15;
+	}
+
+	&__actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: $grid-unit-10;
+	}
 }
 
 // Notion-style format submenu. The outer popover sits beside the column
@@ -1577,11 +1588,14 @@ tbody > tr > td:not(:first-child) {
 	// which looks out of place inside the table.
 	.cortext-select-edit__toggle.components-button,
 	.cortext-date-edit__toggle.components-button,
-	.cortext-multiselect-edit__toggle.components-button {
+	.cortext-multiselect-edit__toggle.components-button,
+	.cortext-relation-edit__toggle.components-button {
 		width: 100%;
 		height: 100%;
 		justify-content: flex-start;
+		align-items: center;
 		padding-inline: $grid-unit-05;
+		overflow: hidden;
 		color: inherit;
 		font-weight: inherit;
 		text-decoration: none;
@@ -1622,6 +1636,245 @@ tbody > tr > td:not(:first-child) {
 	&:hover,
 	&:focus {
 		text-decoration: none;
+	}
+}
+
+.cortext-relation-refs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: $grid-unit-05;
+	width: 100%;
+	min-width: 0;
+	max-width: 100%;
+	overflow: hidden;
+}
+
+.cortext-relation-ref,
+.cortext-relation-ref-more,
+.cortext-relation-edit__toggle-ref,
+.cortext-relation-edit__selected-pill {
+	display: inline-flex;
+	align-items: center;
+	max-width: 100%;
+	min-width: 0;
+	height: $grid-unit-30;
+	border-radius: $grid-unit-30;
+	background: $gray-100;
+	color: $gray-900;
+	font-size: $default-font-size;
+	line-height: 1;
+	white-space: nowrap;
+}
+
+.cortext-relation-ref,
+.cortext-relation-ref-more,
+.cortext-relation-edit__toggle-ref {
+	padding: 0 $grid-unit-10;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.cortext-relation-ref-more {
+	display: none;
+	flex: 0 0 auto;
+	color: $gray-700;
+}
+
+.cortext-relation-ref {
+	gap: $grid-unit-05;
+	text-decoration: none;
+
+	&:hover,
+	&:focus {
+		background: $gray-200;
+		box-shadow: none;
+		color: $gray-900;
+		outline: 0;
+		text-decoration: none;
+	}
+
+	&:focus-visible {
+		outline: 0;
+		box-shadow: inset 0 0 0 2px var(--wp-admin-theme-color, $gray-700);
+	}
+}
+
+.cortext-relation-ref__icon {
+	flex: 0 0 auto;
+	width: 14px;
+	height: 14px;
+	color: $gray-700;
+}
+
+.cortext-relation-ref__title {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.cortext-relation-edit-popover .components-popover__content {
+	padding: $grid-unit-05;
+}
+
+.cortext-relation-edit {
+	width: min(320px, calc(100vw - 32px));
+	max-height: min(380px, calc(100vh - 120px));
+	overflow: auto;
+
+	&__searchbar {
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-10;
+		padding: $grid-unit-05;
+	}
+
+	&__search {
+		flex: 1 1 auto;
+		min-width: 0;
+		height: $grid-unit-40;
+		padding: 0 $grid-unit-10;
+		border: $border-width solid $gray-200;
+		border-radius: 4px;
+		background: $white;
+		font-size: 13px;
+		line-height: 20px;
+		width: 100%;
+
+		&:focus {
+			border-color: $gray-700;
+			box-shadow: none;
+			outline: 0;
+		}
+	}
+
+	&__section {
+		padding: $grid-unit-05;
+
+		& + & {
+			border-top: $border-width solid $gray-200;
+		}
+	}
+
+	&__section-label {
+		margin: $grid-unit-05 $grid-unit-05 $grid-unit-05;
+		color: $gray-700;
+		font-size: 11px;
+		font-weight: 600;
+		letter-spacing: 0.5px;
+		text-transform: uppercase;
+	}
+
+	&__selected-list {
+		display: flex;
+		flex-wrap: wrap;
+		gap: $grid-unit-05;
+		padding: 0 $grid-unit-05 $grid-unit-05;
+	}
+
+	&__selected-pill {
+		gap: $grid-unit-05;
+		padding: 0 $grid-unit-05 0 $grid-unit-10;
+	}
+
+	&__toggle-refs {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: $grid-unit-05;
+		width: 100%;
+		max-width: 100%;
+		min-width: 0;
+		overflow: hidden;
+	}
+
+	&__selected-title {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	&__row {
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-10;
+		width: 100%;
+		min-height: $grid-unit-40;
+		padding: $grid-unit-05 $grid-unit-10;
+		border: 0;
+		border-radius: 4px;
+		background: transparent;
+		color: $gray-900;
+		text-align: start;
+		cursor: pointer;
+
+		&:hover,
+		&:focus-visible {
+			background: $gray-100;
+		}
+
+		&:focus-visible {
+			outline: 2px solid var(--wp-admin-theme-color, $gray-700);
+			outline-offset: -1px;
+		}
+
+		&:disabled {
+			cursor: default;
+			opacity: 0.5;
+		}
+	}
+
+	&__row-icon {
+		flex: 0 0 auto;
+		color: $gray-700;
+	}
+
+	&__row-title {
+		flex: 1 1 auto;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-size: 13px;
+		font-weight: 400;
+	}
+
+	&__remove.components-button {
+		flex: 0 0 auto;
+		width: 22px;
+		min-width: 22px;
+		height: 22px;
+		padding: 0;
+		border: 0;
+		border-radius: $grid-unit-30;
+		background: transparent;
+		box-shadow: none;
+		color: $gray-700;
+
+		&:hover:not(:disabled),
+		&:focus:not(:disabled) {
+			background: $gray-200;
+			box-shadow: none;
+		}
+	}
+
+	&__loading {
+		display: flex;
+		justify-content: center;
+		padding: $grid-unit-15;
+	}
+
+	&__empty {
+		padding: $grid-unit-10;
+		color: $gray-700;
+		font-size: 13px;
+	}
+
+	&__error {
+		padding: $grid-unit-05 $grid-unit-10;
+		color: #cc1818;
+		font-size: 12px;
 	}
 }
 
@@ -2133,6 +2386,14 @@ tbody > tr > td:not(:first-child) {
 			}
 		}
 
+		// When wrapped chips make one cell taller, neighboring editable
+		// shells keep their fixed density height. Paint the td hover/focus
+		// state too so the affordance covers the full row height.
+		tbody > tr > td:has(.cortext-editable-cell):hover,
+		tbody > tr > td:has(.cortext-editable-cell__shell:focus-visible) {
+			background: $gray-100;
+		}
+
 		.cortext-editable-cell__shell,
 		.cortext-cell-checkbox {
 			min-height: $grid-unit-50 + 2 * $grid-unit-15; // 64 (balanced)
@@ -2254,11 +2515,37 @@ tbody > tr > td:not(:first-child) {
 	height: 100%;
 }
 
-// tech-debt.md#23: embedded block has no absolute parent and no per-instance
-// height attribute, so use a min-height token to keep a fresh insertion
-// usable. Width comes from Gutenberg's alignment.
+// tech-debt.md#23: embedded block has no per-instance height attribute, so use
+// a fixed viewport height and let DataViews scroll internally. Width comes from
+// Gutenberg's alignment.
 .wp-block-cortext-data-view .cortext-data-view {
-	min-height: var(--cortext-data-view-block-min-height);
+	height: var(--cortext-data-view-block-min-height);
+	min-height: 0;
+}
+
+// Embedded blocks are width-constrained by the editor canvas. Letting relation
+// chips wrap in offscreen columns makes the entire row taller, which makes the
+// visible columns feel padded and cramped. Keep relation cells to one line in
+// block mode; the full collection view can still wrap chips.
+.wp-block-cortext-data-view {
+
+	.cortext-relation-refs,
+	.cortext-relation-edit__toggle-refs {
+		flex-wrap: nowrap;
+	}
+
+	.cortext-relation-ref,
+	.cortext-relation-edit__toggle-ref {
+		flex: 0 0 auto;
+	}
+
+	.cortext-relation-ref:nth-of-type(n + 3) {
+		display: none;
+	}
+
+	.cortext-relation-ref-more {
+		display: inline-flex;
+	}
 }
 
 // tech-debt.md#15: The resizer and dnd-kit drag handle are portaled into each

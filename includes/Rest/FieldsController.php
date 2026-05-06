@@ -13,6 +13,7 @@ use Cortext\OptionPalette;
 use Cortext\PostType\Collection;
 use Cortext\PostType\CollectionEntries;
 use Cortext\PostType\Field;
+use Cortext\Relations;
 use WP_Error;
 use WP_Post;
 use WP_REST_Request;
@@ -32,6 +33,7 @@ final class FieldsController {
 		'checkbox',
 		'select',
 		'multiselect',
+		'relation',
 	);
 
 	public function register(): void {
@@ -48,20 +50,20 @@ final class FieldsController {
 					'callback'            => array( $this, 'create' ),
 					'permission_callback' => array( $this, 'can_edit_collection' ),
 					'args'                => array(
-						'collection_id' => array(
+						'collection_id'         => array(
 							'type'     => 'integer',
 							'required' => true,
 						),
-						'title'         => array(
+						'title'                 => array(
 							'type'     => 'string',
 							'required' => true,
 						),
-						'type'          => array(
+						'type'                  => array(
 							'type'     => 'string',
 							'required' => true,
 							'enum'     => self::ALLOWED_TYPES,
 						),
-						'options'       => array(
+						'options'               => array(
 							'type'     => 'array',
 							'required' => false,
 							'items'    => array(
@@ -72,6 +74,24 @@ final class FieldsController {
 									'color' => array( 'type' => 'string' ),
 								),
 							),
+						),
+						'related_collection_id' => array(
+							'type'     => 'integer',
+							'required' => false,
+						),
+						'relation_multiple'     => array(
+							'type'     => 'boolean',
+							'required' => false,
+							'default'  => true,
+						),
+						'reverse_title'         => array(
+							'type'     => 'string',
+							'required' => false,
+						),
+						'reverse_multiple'      => array(
+							'type'     => 'boolean',
+							'required' => false,
+							'default'  => true,
 						),
 					),
 				),
@@ -214,6 +234,10 @@ final class FieldsController {
 		$type    = (string) $request->get_param( 'type' );
 		$options = $request->get_param( 'options' );
 
+		if ( 'relation' === $type ) {
+			return $this->create_relation( $request, $collection_id, $title );
+		}
+
 		$meta = array( 'type' => $type );
 		if ( $this->type_supports_options( $type ) && is_array( $options ) ) {
 			$meta['options'] = wp_json_encode( $this->normalize_options( $options ) );
@@ -250,7 +274,25 @@ final class FieldsController {
 		}
 
 		/* translators: %s: source field title */
-		$copy_title = trim( sprintf( __( 'Copy of %s', 'cortext' ), $source->post_title ) );
+		$copy_title  = trim( sprintf( __( 'Copy of %s', 'cortext' ), $source->post_title ) );
+		$source_type = (string) get_post_meta( $field_id, 'type', true );
+
+		if ( 'relation' === $source_type ) {
+			$reverse_id    = (int) get_post_meta( $field_id, 'relation_reverse_field_id', true );
+			$reverse       = $reverse_id > 0 ? get_post( $reverse_id ) : null;
+			$reverse_title = '';
+			if ( $reverse instanceof WP_Post ) {
+				/* translators: %s: reverse field title */
+				$reverse_title = trim( sprintf( __( 'Copy of %s', 'cortext' ), $reverse->post_title ) );
+			}
+
+			$copy_request = new WP_REST_Request( 'POST', $request->get_route() );
+			$copy_request->set_param( 'related_collection_id', (int) get_post_meta( $field_id, 'related_collection_id', true ) );
+			$copy_request->set_param( 'relation_multiple', Relations::relation_is_multiple( $field_id ) );
+			$copy_request->set_param( 'reverse_multiple', $reverse_id > 0 ? Relations::relation_is_multiple( $reverse_id ) : true );
+			$copy_request->set_param( 'reverse_title', $reverse_title );
+			return $this->create_relation( $copy_request, $collection_id, $copy_title, (string) $field_id );
+		}
 
 		$meta = array();
 		foreach (
@@ -261,6 +303,7 @@ final class FieldsController {
 				'date_format',
 				'expression',
 				'related_collection_id',
+				'relation_multiple',
 			) as $key
 		) {
 			$value = get_post_meta( $field_id, $key, true );
@@ -448,6 +491,80 @@ final class FieldsController {
 		return $count;
 	}
 
+	private function create_relation(
+		WP_REST_Request $request,
+		int $collection_id,
+		string $title,
+		?string $insert_after_id = null
+	): WP_REST_Response|WP_Error {
+		$target_collection_id = (int) $request->get_param( 'related_collection_id' );
+		$target_or_error      = $this->require_collection( $target_collection_id );
+		if ( is_wp_error( $target_or_error ) ) {
+			return new WP_Error(
+				'cortext_relation_target_required',
+				__( 'Relation target collection is required.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$source_collection = get_post( $collection_id );
+		$source_title      = $source_collection instanceof WP_Post ? $source_collection->post_title : '';
+		$reverse_title     = trim( sanitize_text_field( (string) $request->get_param( 'reverse_title' ) ) );
+		if ( '' === $reverse_title ) {
+			$reverse_title = trim(
+				sprintf(
+					/* translators: %s: collection name */
+					__( 'Related %s', 'cortext' ),
+					'' !== $source_title ? $source_title : __( 'items', 'cortext' )
+				)
+			);
+		}
+
+		$source_multiple_param  = $request->get_param( 'relation_multiple' );
+		$reverse_multiple_param = $request->get_param( 'reverse_multiple' );
+		$source_multiple        = null === $source_multiple_param ? true : Relations::is_truthy( $source_multiple_param );
+		$reverse_multiple       = null === $reverse_multiple_param ? true : Relations::is_truthy( $reverse_multiple_param );
+
+		$source_meta  = array(
+			'type'                  => 'relation',
+			'related_collection_id' => (string) $target_collection_id,
+			'relation_multiple'     => $source_multiple ? '1' : '0',
+		);
+		$reverse_meta = array(
+			'type'                  => 'relation',
+			'related_collection_id' => (string) $collection_id,
+			'relation_multiple'     => $reverse_multiple ? '1' : '0',
+		);
+
+		$source_id = $this->insert_and_attach_id( $collection_id, $title, $source_meta, $insert_after_id );
+		if ( is_wp_error( $source_id ) ) {
+			return $source_id;
+		}
+
+		$reverse_id = $this->insert_and_attach_id( $target_collection_id, $reverse_title, $reverse_meta );
+		if ( is_wp_error( $reverse_id ) ) {
+			$this->detach_field( $collection_id, $source_id );
+			wp_delete_post( $source_id, true );
+			return $reverse_id;
+		}
+
+		$linked_source  = update_post_meta( $source_id, 'relation_reverse_field_id', (string) $reverse_id );
+		$linked_reverse = update_post_meta( $reverse_id, 'relation_reverse_field_id', (string) $source_id );
+		if ( false === $linked_source || false === $linked_reverse ) {
+			$this->detach_field( $collection_id, $source_id );
+			$this->detach_field( $target_collection_id, $reverse_id );
+			wp_delete_post( $source_id, true );
+			wp_delete_post( $reverse_id, true );
+			return new WP_Error(
+				'cortext_relation_link_failed',
+				__( 'Relation fields could not be linked.', 'cortext' ),
+				array( 'status' => 500 )
+			);
+		}
+
+		return $this->field_response( $source_id, $title, 'relation' );
+	}
+
 	/**
 	 * Inserts a new field post and attaches it to the collection.
 	 *
@@ -467,6 +584,29 @@ final class FieldsController {
 		array $meta,
 		?string $insert_after_id = null
 	): WP_REST_Response|WP_Error {
+		$field_id = $this->insert_and_attach_id( $collection_id, $title, $meta, $insert_after_id );
+		if ( is_wp_error( $field_id ) ) {
+			return $field_id;
+		}
+
+		return $this->field_response( $field_id, $title, isset( $meta['type'] ) ? $meta['type'] : '' );
+	}
+
+	/**
+	 * Inserts a field post and attaches it to a collection.
+	 *
+	 * @param int                  $collection_id   Collection post ID.
+	 * @param string               $title           Field title.
+	 * @param array<string,string> $meta Meta keys to write on the new field.
+	 * @param string|null          $insert_after_id String ID to insert after, or null to append.
+	 * @return int|WP_Error
+	 */
+	private function insert_and_attach_id(
+		int $collection_id,
+		string $title,
+		array $meta,
+		?string $insert_after_id = null
+	): int|WP_Error {
 		$field_id = wp_insert_post(
 			array(
 				'post_type'   => Field::POST_TYPE,
@@ -483,6 +623,7 @@ final class FieldsController {
 
 		$attached = $this->attach_field( $collection_id, (int) $field_id, $insert_after_id );
 		if ( ! $attached ) {
+			$this->detach_field( $collection_id, (int) $field_id );
 			wp_delete_post( (int) $field_id, true );
 			return new WP_Error(
 				'cortext_field_attach_failed',
@@ -496,13 +637,17 @@ final class FieldsController {
 			( new CollectionEntries() )->register_for_collection( $collection );
 		}
 
+		return (int) $field_id;
+	}
+
+	private function field_response( int $field_id, string $title, string $type ): WP_REST_Response {
 		$field = get_post( (int) $field_id );
 
 		return new WP_REST_Response(
 			array(
 				'id'    => (int) $field_id,
 				'title' => $field instanceof WP_Post ? $field->post_title : $title,
-				'type'  => isset( $meta['type'] ) ? $meta['type'] : '',
+				'type'  => $type,
 			),
 			201
 		);
@@ -551,6 +696,10 @@ final class FieldsController {
 		}
 
 		return true;
+	}
+
+	private function detach_field( int $collection_id, int $field_id ): void {
+		delete_post_meta( $collection_id, 'fields', (string) $field_id );
 	}
 
 	/**

@@ -2,12 +2,16 @@ import { render, screen } from '@testing-library/react';
 
 import {
 	dateOnlyValue,
+	default as EditableCell,
 	formatDateValue,
 	formatDisplay,
 	formatNumberValue,
 	RowMutationContext,
 } from '../../../src/components/EditableCell';
-import EditableCell from '../../../src/components/EditableCell';
+
+beforeEach( () => {
+	delete window.cortextRouter;
+} );
 
 function renderDisplay( value, type, options ) {
 	return render( <>{ formatDisplay( value, type, options ) }</> );
@@ -352,7 +356,6 @@ describe( 'dateOnlyValue', () => {
 		expect( dateOnlyValue( '2026-04-16' ) ).toBe( '2026-04-16' );
 	} );
 } );
-
 describe( 'EditableCell option overrides', () => {
 	it( 'uses live option overrides for chip display without remapping fields', () => {
 		render(

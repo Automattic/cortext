@@ -9,5 +9,6 @@ registerCoreBlocks();
 
 const root = document.getElementById( 'cortext-root' );
 if ( root ) {
+	window.cortextRouter = router;
 	createRoot( root ).render( <RouterProvider router={ router } /> );
 }

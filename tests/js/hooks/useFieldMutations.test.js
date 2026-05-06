@@ -99,6 +99,34 @@ describe( 'useCreateField', () => {
 		} );
 	} );
 
+	it( 'forwards relation config fields on the request body', async () => {
+		apiFetch.mockResolvedValueOnce( { id: 101 } );
+		const { result } = renderHook( () => useCreateField( 5 ) );
+		await act( async () => {
+			await result.current.run( {
+				title: 'Invoices',
+				type: 'relation',
+				related_collection_id: 9,
+				relation_multiple: true,
+				reverse_title: 'Projects',
+				reverse_multiple: false,
+			} );
+		} );
+
+		expect( apiFetch ).toHaveBeenCalledWith( {
+			path: '/cortext/v1/collections/5/fields',
+			method: 'POST',
+			data: {
+				title: 'Invoices',
+				type: 'relation',
+				related_collection_id: 9,
+				relation_multiple: true,
+				reverse_title: 'Projects',
+				reverse_multiple: false,
+			},
+		} );
+	} );
+
 	it( 'surfaces errors via `error` and rethrows', async () => {
 		const apiError = new Error( 'boom' );
 		apiFetch.mockRejectedValueOnce( apiError );

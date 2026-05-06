@@ -248,6 +248,97 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 		);
 	}
 
+	public function test_create_relation_creates_reverse_field_and_links_pair(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$source_collection_id = $this->create_collection_with_slug( 'Tasks', 'tasks-rel' );
+		$target_collection_id = $this->create_collection_with_slug( 'People', 'people-rel' );
+
+		$response = $this->create_field(
+			$source_collection_id,
+			array(
+				'title'                 => 'Assignee',
+				'type'                  => 'relation',
+				'related_collection_id' => $target_collection_id,
+				'relation_multiple'     => false,
+				'reverse_title'         => 'Tasks',
+				'reverse_multiple'      => true,
+			)
+		);
+
+		$this->assertSame( 201, $response->get_status() );
+
+		$source_field_id = (int) $response->get_data()['id'];
+		$target_fields   = array_map(
+			'intval',
+			get_post_meta( $target_collection_id, 'fields', false )
+		);
+		$this->assertCount( 1, $target_fields );
+
+		$reverse_field_id = $target_fields[0];
+		$this->assertSame( 'Assignee', get_post( $source_field_id )->post_title );
+		$this->assertSame( 'Tasks', get_post( $reverse_field_id )->post_title );
+		$this->assertSame(
+			$reverse_field_id,
+			(int) get_post_meta( $source_field_id, 'relation_reverse_field_id', true )
+		);
+		$this->assertSame(
+			$source_field_id,
+			(int) get_post_meta( $reverse_field_id, 'relation_reverse_field_id', true )
+		);
+		$this->assertSame(
+			$target_collection_id,
+			(int) get_post_meta( $source_field_id, 'related_collection_id', true )
+		);
+		$this->assertSame(
+			$source_collection_id,
+			(int) get_post_meta( $reverse_field_id, 'related_collection_id', true )
+		);
+		$this->assertSame( '0', get_post_meta( $source_field_id, 'relation_multiple', true ) );
+		$this->assertSame( '1', get_post_meta( $reverse_field_id, 'relation_multiple', true ) );
+	}
+
+	public function test_create_relation_rolls_back_source_when_reverse_attach_fails(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$source_collection_id = $this->create_collection_with_slug( 'Tasks', 'tasks-rev-fail' );
+		$target_collection_id = $this->create_collection_with_slug( 'People', 'people-rfail' );
+
+		add_filter(
+			'add_post_metadata',
+			function ( $check, $object_id, $meta_key ) use ( $target_collection_id ) {
+				if ( (int) $object_id === $target_collection_id && 'fields' === $meta_key ) {
+					return false;
+				}
+				return $check;
+			},
+			10,
+			3
+		);
+
+		$response = $this->create_field(
+			$source_collection_id,
+			array(
+				'title'                 => 'Assignee',
+				'type'                  => 'relation',
+				'related_collection_id' => $target_collection_id,
+			)
+		);
+
+		$this->assertSame( 500, $response->get_status() );
+		$this->assertSame(
+			array(),
+			get_posts(
+				array(
+					'post_type'      => Field::POST_TYPE,
+					'post_status'    => 'any',
+					'fields'         => 'ids',
+					'posts_per_page' => -1,
+				)
+			)
+		);
+		$this->assertSame( array(), get_post_meta( $source_collection_id, 'fields', false ) );
+		$this->assertSame( array(), get_post_meta( $target_collection_id, 'fields', false ) );
+	}
+
 	public function test_duplicate_inserts_after_source_with_copy_title(): void {
 		wp_set_current_user( $this->create_user( 'editor' ) );
 		$collection_id = $this->create_collection_with_slug( 'Schemas', 'schemas' );

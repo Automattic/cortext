@@ -198,7 +198,7 @@ Double-click autofit is the trickiest piece. With no measurement hook upstream, 
 
 ## 23. Embedded data-view block has no width/height controls `[internal]`
 
-**What.** The `cortext/data-view` block exposes `align` (default / wide / full) for width but nothing for height. A freshly inserted block needs some visible height or it collapses to its toolbar, so we set `min-height` from `var(--cortext-data-view-block-min-height, 480px)`. The number is a guess: roughly fits a header, ~10 compact rows, footer, and pagination. It doesn't track the block's density or `perPage`, so a comfortable block with `perPage: 25` shows the same default viewport as a compact block with 5 rows.
+**What.** The `cortext/data-view` block exposes `align` (default / wide / full) for width but nothing for height. A freshly inserted block needs a usable viewport and long tables need to stay bounded inside the page, so we set `height` from `var(--cortext-data-view-block-min-height, 640px)` and let DataViews scroll internally. The number is a guess: roughly fits a header, ~10 compact rows, footer, and pagination. It doesn't track the block's density or `perPage`, so a comfortable block with `perPage: 25` shows the same default viewport as a compact block with 5 rows.
 
 **Where.** `--cortext-data-view-block-min-height` in `src/styles/_tokens.scss`, the `.wp-block-cortext-data-view .cortext-data-view` rule in `src/index.scss`, `src/blocks/data-view/block.json` (no `height` attribute today).
 
@@ -309,3 +309,11 @@ The state is ours too. `view.calculations` lives on the DataViews view object be
 **Where.** `src/components/TableCalculationsFooter.js` (table lookup, observer, `<tfoot>` portal), `src/components/CollectionDataViews.js` (second filtering pass and footer mount), `src/components/tableCalculations.js` (operation matrix and result formatting), and `src/components/dataViewColumns.js` (view cleanup).
 
 **Solution.** Upstream DataViews could expose one of two shapes: a table `renderFooter` / `renderSummaryRow` slot, or a column-level summary API that receives the filtered, unpaginated rows. Either would let us drop the DOM lookup and portal. A separate helper that returns filtered rows before pagination would remove the second `filterSortAndPaginate` pass. Internally, saved named views should eventually make `calculations` part of Cortext's own saved view schema instead of just an extra key on embedded block state.
+
+## 37. DataViews has no relation/reference field primitive `[upstream]`
+
+**What.** Relation fields are stored as row post IDs, but the UI behavior is a reference field: search rows in a target collection, pick one or many, optionally create a missing row, render linked row chips, and navigate to the referenced collection/row. DataViews has no `relation` / `reference` field type and DataForm has no async record-picker control that accepts a target entity/query and cardinality. Cortext therefore maps relations to the closest DataViews metadata type, carries relation-specific metadata on the field object, renders relation display chips from `field.render`, and ships a custom picker backed by `useCollectionRows`. The same gap will get louder when row-modal opening and richer relation previews land.
+
+**Where.** `mapField` / `buildRender` in `src/hooks/fieldMapping.js`, `src/components/relations/RelationEditor.js`, `src/components/relations/RelationReferences.js`, relation setup in `src/components/fields/AddFieldPopover.js`, and the `.cortext-relation-*` rules in `src/index.scss`.
+
+**Solution.** Upstream DataViews/DataForm (or shared WP components) could expose a generic reference field/control: target entity config, single vs multi cardinality, async search, optional create-new affordance, token/chip rendering hooks, and a supported action slot for opening or navigating to referenced records. Cortext would still own the backend relation sync and reverse-field semantics, but could drop most of the custom relation picker/display code and stop smuggling relation metadata through DataViews field objects.

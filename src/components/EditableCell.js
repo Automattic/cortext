@@ -26,6 +26,8 @@ import Chip from './fields/Chip';
 import EditOptionsPopover from './fields/EditOptionsPopover';
 import { resolveFormatColor } from './fields/formatColors';
 import { toRecordId } from '../hooks/fieldIds';
+import RelationEditor from './relations/RelationEditor';
+import RelationReferences from './relations/RelationReferences';
 
 // Resolves the WordPress site locale into a BCP 47 tag for Intl. WP
 // stores locales as `en_US` / `de_DE`; Intl expects `en-US` / `de-DE`.
@@ -366,6 +368,10 @@ export function formatDisplay( value, type, options = {} ) {
 		);
 	}
 
+	if ( type === 'relation' ) {
+		return <RelationReferences value={ value } />;
+	}
+
 	if ( type === 'date' || type === 'datetime' ) {
 		return formatDateValue( value, type, format );
 	}
@@ -657,6 +663,7 @@ export default function EditableCell( {
 	fieldType,
 	elements,
 	format,
+	relation,
 	label,
 	getValue,
 	readOnly = false,
@@ -683,6 +690,7 @@ export default function EditableCell( {
 	const display = formatDisplay( value, fieldType, {
 		elements: effectiveElements,
 		format,
+		relation,
 	} );
 
 	// Open this cell when the parent targets it via editRequest (new-row
@@ -810,6 +818,18 @@ export default function EditableCell( {
 					}
 					onRowsChanged={ refreshRows }
 					onRequestClose={ closeEditor }
+					onCancel={ closeEditor }
+					label={ label }
+				/>
+			);
+		} else if ( fieldType === 'relation' ) {
+			editor = (
+				<RelationEditor
+					value={ Array.isArray( value ) ? value : [] }
+					relation={ relation }
+					onSave={ ( nextValues ) =>
+						saveRowField?.( rowId, fieldId, nextValues )
+					}
 					onCancel={ closeEditor }
 					label={ label }
 				/>
