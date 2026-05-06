@@ -1,7 +1,9 @@
 import {
 	adjacentRowId,
 	getRowDetailMode,
+	isValidNumberDraft,
 	normalizeRowDetailMode,
+	parseNumberPropertyValue,
 	splitPropertyPatch,
 	withRowDetailMode,
 } from '../../../src/components/rowDetailUtils';
@@ -83,5 +85,41 @@ describe( 'splitPropertyPatch', () => {
 			title: 'Only title',
 			meta: null,
 		} );
+	} );
+} );
+
+describe( 'number property helpers', () => {
+	it( 'allows numeric drafts a user can still finish typing', () => {
+		expect( isValidNumberDraft( '' ) ).toBe( true );
+		expect( isValidNumberDraft( '-' ) ).toBe( true );
+		expect( isValidNumberDraft( '12.' ) ).toBe( true );
+		expect( isValidNumberDraft( '.5' ) ).toBe( true );
+		expect( isValidNumberDraft( '20a6' ) ).toBe( false );
+		expect( isValidNumberDraft( '1.2.3' ) ).toBe( false );
+	} );
+
+	it( 'parses only empty or complete finite numbers for row meta', () => {
+		expect( parseNumberPropertyValue( '' ) ).toEqual( {
+			valid: true,
+			complete: true,
+			value: null,
+		} );
+		expect( parseNumberPropertyValue( '2026' ) ).toEqual( {
+			valid: true,
+			complete: true,
+			value: 2026,
+		} );
+		expect( parseNumberPropertyValue( '12.' ) ).toEqual( {
+			valid: true,
+			complete: true,
+			value: 12,
+		} );
+		expect( parseNumberPropertyValue( '-' ) ).toEqual( {
+			valid: true,
+			complete: false,
+			value: null,
+		} );
+		expect( parseNumberPropertyValue( 'Infinity' ).valid ).toBe( false );
+		expect( parseNumberPropertyValue( '20a6' ).valid ).toBe( false );
 	} );
 } );

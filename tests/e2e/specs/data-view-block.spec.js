@@ -811,6 +811,65 @@ test.describe( 'Collection view block', () => {
 				await createCollectionFixture( requestUtils )
 			);
 
+			fixture.tagsField = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_fields',
+				data: {
+					title: 'Tags',
+					status: 'private',
+					meta: {
+						type: 'multiselect',
+						options: JSON.stringify( [
+							{
+								value: 'research',
+								label: 'Research',
+								color: 'blue',
+							},
+							{ value: 'data', label: 'Data', color: 'green' },
+						] ),
+					},
+				},
+			} );
+
+			fixture.yearField = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_fields',
+				data: {
+					title: 'Year',
+					status: 'private',
+					meta: { type: 'number' },
+				},
+			} );
+
+			await requestUtils.rest( {
+				method: 'POST',
+				path: `/wp/v2/crtxt_collections/${ fixture.collection.id }`,
+				data: {
+					meta: {
+						fields: [
+							String( fixture.field.id ),
+							String( fixture.tagsField.id ),
+							String( fixture.yearField.id ),
+						],
+					},
+				},
+			} );
+
+			fixture.entry = await requestUtils.rest( {
+				method: 'POST',
+				path: `/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`,
+				data: {
+					meta: {
+						[ `field-${ fixture.field.id }` ]: 'Ursula K. Le Guin',
+						[ `field-${ fixture.tagsField.id }` ]: [
+							'research',
+							'data',
+						],
+						[ `field-${ fixture.yearField.id }` ]: 1969,
+					},
+				},
+			} );
+
 			fixture.secondEntry = await requestUtils.rest( {
 				method: 'POST',
 				path: `/wp/v2/crtxt_${ fixture.slug }`,
@@ -896,6 +955,37 @@ test.describe( 'Collection view block', () => {
 					name: 'The Left Hand of Darkness',
 				} )
 			).toBeVisible();
+			const tagsLabel = detail
+				.locator(
+					'.cortext-row-detail__properties--rows .cortext-row-detail__property-label'
+				)
+				.filter( { hasText: 'Tags' } );
+			await tagsLabel.evaluate( ( node ) =>
+				node.setAttribute( 'data-e2e-stable-label', 'tags' )
+			);
+			const tagsTrigger = detail.getByRole( 'button', {
+				name: 'Tags',
+				exact: true,
+			} );
+			await expect(
+				tagsTrigger.locator( '.cortext-chips > .cortext-chip' )
+			).toHaveText( [ 'Research', 'Data' ] );
+			await tagsTrigger.click();
+			const optionsPopover = page.locator(
+				'.cortext-edit-options-popover'
+			);
+			await expect( optionsPopover ).toBeVisible();
+			await expect(
+				optionsPopover.locator( '.cortext-chip' ).filter( {
+					hasText: 'Research',
+				} )
+			).toHaveCount( 2 );
+			await detail
+				.getByRole( 'heading', {
+					name: 'The Left Hand of Darkness',
+				} )
+				.click();
+			await expect( optionsPopover ).toBeHidden();
 
 			const delayedSecondRowPattern = new RegExp(
 				`/wp-json/wp/v2/crtxt_${ fixture.slug }/${ fixture.secondEntry.id }(\\?|$)`
@@ -906,9 +996,9 @@ test.describe( 'Collection view block', () => {
 			};
 			await page.route( delayedSecondRowPattern, delaySecondRow );
 			await detail.getByRole( 'button', { name: 'Row below' } ).click();
-			await expect(
-				detail.locator( '.components-spinner' )
-			).toHaveCount( 0 );
+			await expect( detail.locator( '.components-spinner' ) ).toHaveCount(
+				0
+			);
 			await expect(
 				detail.getByRole( 'heading', {
 					name: 'The Left Hand of Darkness',
@@ -920,6 +1010,9 @@ test.describe( 'Collection view block', () => {
 			await expect(
 				detail.getByRole( 'heading', { name: 'Kindred' } )
 			).toBeVisible();
+			await expect(
+				detail.locator( '[data-e2e-stable-label="tags"]' )
+			).toHaveText( 'Tags' );
 			await page.unroute( delayedSecondRowPattern, delaySecondRow );
 			await detail.getByRole( 'button', { name: 'Row above' } ).click();
 			await expect(
@@ -931,9 +1024,7 @@ test.describe( 'Collection view block', () => {
 				.poll( () => new URL( page.url() ).searchParams.get( 'row' ) )
 				.toBe( String( fixture.entry.id ) );
 
-			await detail
-				.getByRole( 'button', { name: 'Hide fields' } )
-				.click();
+			await detail.getByRole( 'button', { name: 'Hide fields' } ).click();
 			const collapsedFieldsButton = detail.locator(
 				'.cortext-row-detail__fields-indicator'
 			);
@@ -944,14 +1035,31 @@ test.describe( 'Collection view block', () => {
 			await expect(
 				detail.locator( '.cortext-row-detail__content-editor' )
 			).toBeVisible();
-			await collapsedFieldsButton.click();
 			await expect(
-				detail.locator( '.cortext-row-detail__properties' )
+				detail.getByRole( 'button', { name: 'Show fields' } )
+			).toBeVisible();
+			await detail.getByRole( 'button', { name: 'Show fields' } ).click();
+			await expect(
+				detail.locator( '.cortext-row-detail__properties--rows' )
 			).toBeVisible();
 
-			await detail
-				.getByRole( 'textbox', { name: 'Title', exact: true } )
-				.fill( 'Changed row detail title' );
+			const titleProperty = detail.getByRole( 'textbox', {
+				name: 'Title',
+				exact: true,
+			} );
+			await titleProperty.click();
+			await expect( titleProperty ).toHaveCSS(
+				'border-top-width',
+				'0px'
+			);
+			await expect( titleProperty ).toHaveCSS( 'box-shadow', 'none' );
+			await expect( titleProperty ).toHaveCSS(
+				'background-color',
+				'rgba(0, 0, 0, 0)'
+			);
+			await page.keyboard.press( 'ControlOrMeta+A' );
+			await page.keyboard.press( 'Backspace' );
+			await page.keyboard.type( 'Changed row detail title' );
 			await expect( firstRow.locator( 'td' ).first() ).toContainText(
 				'Changed row detail title'
 			);
@@ -961,6 +1069,18 @@ test.describe( 'Collection view block', () => {
 			await expect( firstRow.locator( 'td' ).nth( 1 ) ).toContainText(
 				'Octavia Butler'
 			);
+			const yearProperty = detail.getByRole( 'textbox', {
+				name: 'Year',
+				exact: true,
+			} );
+			await yearProperty.click();
+			await page.keyboard.press( 'ControlOrMeta+A' );
+			await page.keyboard.press( 'Backspace' );
+			await page.keyboard.type( '20a6' );
+			await expect( yearProperty ).toHaveValue( '206' );
+			await page.keyboard.press( 'ControlOrMeta+A' );
+			await page.keyboard.press( 'Backspace' );
+			await page.keyboard.type( '2026' );
 
 			await expect(
 				detail.getByRole( 'button', { name: 'Center modal' } )
@@ -1018,11 +1138,13 @@ test.describe( 'Collection view block', () => {
 					return {
 						title: row.title.raw,
 						author: row.meta[ `field-${ fixture.field.id }` ],
+						year: row.meta[ `field-${ fixture.yearField.id }` ],
 					};
 				} )
 				.toEqual( {
 					title: 'Changed row detail title',
 					author: 'Octavia Butler',
+					year: 2026,
 				} );
 
 			await page.evaluate( async () => {
@@ -1057,6 +1179,16 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.tagsField &&
+					`/wp/v2/crtxt_fields/${ fixture.tagsField.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.yearField &&
+					`/wp/v2/crtxt_fields/${ fixture.yearField.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
