@@ -4,6 +4,7 @@ import {
 	Button,
 	Dropdown,
 	Icon,
+	Popover,
 	privateApis as componentsPrivateApis,
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalConfirmDialog as ConfirmDialog,
@@ -30,14 +31,17 @@ import {
 } from '@wordpress/icons';
 
 import AddFieldPopover from './AddFieldPopover';
+import EditOptionsPopover from './EditOptionsPopover';
 import FieldFormatPopover from './FieldFormatPopover';
 import RenameFieldInline from './RenameFieldInline';
+import { elementsFromOptions } from '../../hooks/fieldMapping';
 import {
 	useDeleteField,
 	useDuplicateField,
 } from '../../hooks/useFieldMutations';
 import { GHOST_FIELD_ID, TITLE_FIELD_ID } from '../dataViewColumns';
 
+const TYPES_WITH_OPTIONS = new Set( [ 'select', 'multiselect' ] );
 const { Menu } = unlock( componentsPrivateApis );
 
 const FORMATTABLE_TYPES = new Set( [ 'number', 'date', 'datetime' ] );
@@ -64,6 +68,8 @@ export default function ColumnHeaderActions( {
 	collectionId,
 	view,
 	onChangeView,
+	onFieldOptionsSaved,
+	onRowsChanged,
 } ) {
 	const anchorRef = useRef( null );
 	const [ targets, setTargets ] = useState( [] );
@@ -146,6 +152,8 @@ export default function ColumnHeaderActions( {
 							collectionId={ collectionId }
 							view={ view }
 							onChangeView={ onChangeView }
+							onFieldOptionsSaved={ onFieldOptionsSaved }
+							onRowsChanged={ onRowsChanged }
 						/>,
 						target.th,
 						target.key
@@ -161,19 +169,36 @@ export default function ColumnHeaderActions( {
 	);
 }
 
-function FieldActions( { recordId, collectionId, view, onChangeView } ) {
+function FieldActions( {
+	recordId,
+	collectionId,
+	view,
+	onChangeView,
+	onFieldOptionsSaved,
+	onRowsChanged,
+} ) {
 	const [ isRenaming, setIsRenaming ] = useState( false );
 	const [ isMenuOpen, setIsMenuOpen ] = useState( false );
 	const [ isFormatting, setIsFormatting ] = useState( false );
+	const [ isEditingOptions, setIsEditingOptions ] = useState( false );
 	const [ shouldFocusFormat, setShouldFocusFormat ] = useState( false );
 	const [ confirmDelete, setConfirmDelete ] = useState( false );
 	const formatItemRef = useRef( null );
 	const closeTimerRef = useRef( null );
+	const optionsAnchorRef = useRef( null );
 	const duplicate = useDuplicateField( collectionId );
 	const remove = useDeleteField( collectionId );
 	const { record } = useEntityRecord( 'postType', 'crtxt_field', recordId );
 	const fieldType = record?.meta?.type;
 	const canFormat = FORMATTABLE_TYPES.has( fieldType );
+	const supportsOptions = TYPES_WITH_OPTIONS.has( fieldType );
+	const initialOptions = useMemo(
+		() =>
+			supportsOptions
+				? elementsFromOptions( record?.meta?.options ) || []
+				: [],
+		[ supportsOptions, record?.meta?.options ]
+	);
 
 	// Format submenu uses a hover-with-grace pattern: the panel stays
 	// visible while the cursor is over either the trigger row or the
@@ -384,7 +409,10 @@ function FieldActions( { recordId, collectionId, view, onChangeView } ) {
 	}
 
 	return (
-		<span className="cortext-column-header-actions">
+		<span
+			className="cortext-column-header-actions"
+			ref={ optionsAnchorRef }
+		>
 			<Menu open={ isMenuOpen } onOpenChange={ onMenuOpenChange }>
 				<Menu.TriggerButton
 					render={
@@ -437,6 +465,15 @@ function FieldActions( { recordId, collectionId, view, onChangeView } ) {
 							>
 								<Menu.ItemLabel>
 									{ __( 'Edit field', 'cortext' ) }
+								</Menu.ItemLabel>
+							</Menu.Item>
+						) : null }
+						{ supportsOptions ? (
+							<Menu.Item
+								onClick={ () => setIsEditingOptions( true ) }
+							>
+								<Menu.ItemLabel>
+									{ __( 'Edit options', 'cortext' ) }
 								</Menu.ItemLabel>
 							</Menu.Item>
 						) : null }
@@ -547,6 +584,26 @@ function FieldActions( { recordId, collectionId, view, onChangeView } ) {
 						'cortext'
 					) }
 				</ConfirmDialog>
+			) : null }
+			{ isEditingOptions && supportsOptions ? (
+				<Popover
+					anchor={ optionsAnchorRef.current }
+					placement="bottom-start"
+					onClose={ () => setIsEditingOptions( false ) }
+					focusOnMount="firstElement"
+					className="cortext-edit-options-popover-host"
+				>
+					<EditOptionsPopover
+						recordId={ recordId }
+						fieldType={ fieldType }
+						initialOptions={ initialOptions }
+						onOptionsSaved={ ( nextOptions ) =>
+							onFieldOptionsSaved?.( recordId, nextOptions )
+						}
+						onRowsChanged={ onRowsChanged }
+						onRequestClose={ () => setIsEditingOptions( false ) }
+					/>
+				</Popover>
 			) : null }
 		</span>
 	);

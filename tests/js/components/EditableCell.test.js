@@ -5,7 +5,9 @@ import {
 	formatDateValue,
 	formatDisplay,
 	formatNumberValue,
+	RowMutationContext,
 } from '../../../src/components/EditableCell';
+import EditableCell from '../../../src/components/EditableCell';
 
 function renderDisplay( value, type, options ) {
 	return render( <>{ formatDisplay( value, type, options ) }</> );
@@ -129,18 +131,16 @@ describe( 'formatDisplay', () => {
 			// the regression.
 			const { getSettings } = require( '@wordpress/date' );
 			expect( getSettings().l10n.locale ).toBe( 'en' );
-			expect(
-				formatNumberValue( 1234567, { style: 'comma' } )
-			).toBe( '1,234,567' );
+			expect( formatNumberValue( 1234567, { style: 'comma' } ) ).toBe(
+				'1,234,567'
+			);
 		} );
 
 		it( 'renders a bar visual when display is "bar"', () => {
 			const { container } = renderDisplay( 0.4, 'number', {
 				format: { style: 'percent', display: 'bar' },
 			} );
-			const fill = container.querySelector(
-				'.cortext-cell-bar__fill'
-			);
+			const fill = container.querySelector( '.cortext-cell-bar__fill' );
 			expect( fill ).not.toBeNull();
 			expect( fill.style.width ).toBe( '40%' );
 			expect(
@@ -167,8 +167,7 @@ describe( 'formatDisplay', () => {
 				format: { style: 'plain', display: 'bar' },
 			} );
 			expect(
-				container.querySelector( '.cortext-cell-bar__fill' ).style
-					.width
+				container.querySelector( '.cortext-cell-bar__fill' ).style.width
 			).toBe( '100%' );
 		} );
 
@@ -185,8 +184,7 @@ describe( 'formatDisplay', () => {
 				},
 			} );
 			expect(
-				container.querySelector( '.cortext-cell-bar__fill' ).style
-					.width
+				container.querySelector( '.cortext-cell-bar__fill' ).style.width
 			).toBe( '98.3%' );
 		} );
 
@@ -272,30 +270,46 @@ describe( 'formatDisplay', () => {
 	} );
 
 	describe( 'select', () => {
-		it( 'renders a chip with the option color when one is set', () => {
+		it( 'renders a chip with a palette modifier when an option color is set', () => {
 			const elements = [
-				{ value: 'open', label: 'Open', color: '#ffe2dd' },
+				{ value: 'open', label: 'Open', color: 'blue' },
 			];
 			renderDisplay( 'open', 'select', { elements } );
 			const chip = screen.getByText( 'Open' );
-			expect( chip ).toHaveClass( 'cortext-chip' );
+			expect( chip ).toHaveClass( 'cortext-chip--blue' );
 			expect( chip ).not.toHaveClass( 'cortext-chip--neutral' );
-			expect( chip.style.backgroundColor ).not.toBe( '' );
 		} );
 
-		it( 'sets a contrasting foreground for hex colors', () => {
+		it( 'normalizes non-palette stored colors (e.g. legacy hex) into a palette modifier', () => {
+			// Hex from old seeds and Notion imports never themed under
+			// dark mode because raw colors don't follow the CSS-variable
+			// palette. `resolveDisplayColor` rounds them to a hashed
+			// palette name so chips re-skin alongside the rest of the UI.
 			renderDisplay( 'open', 'select', {
 				elements: [
 					{ value: 'open', label: 'Open', color: '#000000' },
 				],
 			} );
-			expect( screen.getByText( 'Open' ).style.color ).toBe(
-				'rgb(255, 255, 255)'
-			);
+			const chip = screen.getByText( 'Open' );
+			expect( chip.className ).toMatch( /cortext-chip--/ );
+			expect( chip ).not.toHaveClass( 'cortext-chip--neutral' );
 		} );
 
-		it( 'falls back to a neutral chip when the option has no color', () => {
+		it( 'derives a stable palette color when the option has no stored color', () => {
 			const elements = [ { value: 'open', label: 'Open' } ];
+			renderDisplay( 'open', 'select', { elements } );
+			const chip = screen.getByText( 'Open' );
+			// Hash-based fallback in `resolveDisplayColor` — assert the
+			// chip lands on a palette modifier (any of them) so legacy
+			// options without `color` still render colored.
+			expect( chip.className ).toMatch( /cortext-chip--/ );
+			expect( chip ).not.toHaveClass( 'cortext-chip--neutral' );
+		} );
+
+		it( 'renders the explicit default color as a neutral chip', () => {
+			const elements = [
+				{ value: 'open', label: 'Open', color: 'default' },
+			];
 			renderDisplay( 'open', 'select', { elements } );
 			expect( screen.getByText( 'Open' ) ).toHaveClass(
 				'cortext-chip--neutral'
@@ -336,5 +350,34 @@ describe( 'dateOnlyValue', () => {
 	it( 'preserves date-only storage when date editors emit datetimes', () => {
 		expect( dateOnlyValue( '2026-04-16T14:30:00' ) ).toBe( '2026-04-16' );
 		expect( dateOnlyValue( '2026-04-16' ) ).toBe( '2026-04-16' );
+	} );
+} );
+
+describe( 'EditableCell option overrides', () => {
+	it( 'uses live option overrides for chip display without remapping fields', () => {
+		render(
+			<RowMutationContext.Provider
+				value={ {
+					optionOverrides: {
+						'field-7': [
+							{ value: 'high', label: 'High', color: 'red' },
+						],
+					},
+				} }
+			>
+				<EditableCell
+					item={ { id: 1, meta: { 'field-7': 'high' } } }
+					fieldId="field-7"
+					fieldType="select"
+					elements={ [
+						{ value: 'high', label: 'High', color: 'orange' },
+					] }
+					label="Priority"
+					readOnly
+				/>
+			</RowMutationContext.Provider>
+		);
+
+		expect( screen.getByText( 'High' ) ).toHaveClass( 'cortext-chip--red' );
 	} );
 } );

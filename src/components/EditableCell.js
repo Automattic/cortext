@@ -4,9 +4,8 @@ import {
 	CheckboxControl,
 	DateTimePicker,
 	Dropdown,
-	MenuGroup,
-	MenuItem,
 	Notice,
+	Popover,
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalNumberControl as NumberControl,
 	TextControl,
@@ -24,7 +23,9 @@ import { Icon, check } from '@wordpress/icons';
 
 import MultiselectEdit from './MultiselectEdit';
 import Chip from './fields/Chip';
+import EditOptionsPopover from './fields/EditOptionsPopover';
 import { resolveFormatColor } from './fields/formatColors';
+import { toRecordId } from '../hooks/fieldIds';
 
 // Resolves the WordPress site locale into a BCP 47 tag for Intl. WP
 // stores locales as `en_US` / `de_DE`; Intl expects `en-US` / `de-DE`.
@@ -55,6 +56,9 @@ export const RowMutationContext = createContext( {
 	// Asks the parent to set editRequest to the next/prev editable cell.
 	// `direction` is 1 for Tab, -1 for Shift+Tab.
 	requestNext: () => {},
+	optionOverrides: {},
+	updateFieldOptions: () => {},
+	refreshRows: () => {},
 } );
 
 const TEXT_INPUT_TYPES = new Set( [ 'text', 'email', 'url', 'number' ] );
@@ -521,7 +525,28 @@ function TextLikeEditor( {
 	);
 }
 
-function SelectEditor( { value, elements, onCommit, onCancel, onTab, label } ) {
+// Cell-side select editor: a button trigger plus a controlled `Popover`
+// hosting the unified `EditOptionsPopover` in pick mode. We use a
+// controlled Popover (rather than `Dropdown`) so the editor's lifetime
+// is owned by the cell's `isEditing` flag — option mutations cause the
+// entity store to refetch and re-render the cell, and `Dropdown`'s
+// outside-click heuristics could close everything mid-interaction
+// (creating an option, picking a color in the per-option submenu).
+// `Popover` here lets the parent unmount it explicitly when editing
+// ends, while still closing on outside click + Escape via `onClose`.
+function SelectEditor( {
+	value,
+	elements,
+	onCommit,
+	onOptionsSaved,
+	onRowsChanged,
+	onRequestClose,
+	onCancel,
+	onTab,
+	recordId,
+	label,
+} ) {
+	const [ anchor, setAnchor ] = useState( null );
 	const items = useMemo( () => elements ?? [], [ elements ] );
 	const labelFor = useMemo( () => {
 		const map = new Map( items.map( ( e ) => [ e.value, e.label ] ) );
@@ -529,9 +554,19 @@ function SelectEditor( { value, elements, onCommit, onCancel, onTab, label } ) {
 	}, [ items ] );
 
 	const hasValue = value !== null && value !== undefined && value !== '';
-	const triggerLabel = hasValue
-		? labelFor( value )
-		: __( 'Select…', 'cortext' );
+	const currentChip = hasValue
+		? items.find( ( e ) => e.value === value )
+		: null;
+	const triggerContent = hasValue ? (
+		<Chip
+			label={ currentChip?.label ?? labelFor( value ) }
+			color={ currentChip?.color }
+		/>
+	) : (
+		<span className="cortext-select-edit__placeholder">
+			{ __( 'Select…', 'cortext' ) }
+		</span>
+	);
 
 	const handleTriggerKeyDown = ( event ) => {
 		if ( event.key === 'Tab' && onTab ) {
@@ -541,48 +576,40 @@ function SelectEditor( { value, elements, onCommit, onCancel, onTab, label } ) {
 	};
 
 	return (
-		<Dropdown
-			defaultOpen
-			onClose={ onCancel }
-			popoverProps={ { placement: 'bottom-start' } }
-			renderToggle={ ( { isOpen, onToggle } ) => (
-				<Button
-					variant="tertiary"
-					className="cortext-select-edit__toggle"
-					onClick={ onToggle }
-					onKeyDown={ handleTriggerKeyDown }
-					aria-expanded={ isOpen }
-					aria-label={ label }
+		<>
+			<Button
+				ref={ setAnchor }
+				variant="tertiary"
+				className="cortext-select-edit__toggle"
+				onKeyDown={ handleTriggerKeyDown }
+				aria-expanded
+				aria-label={ label }
+			>
+				{ triggerContent }
+			</Button>
+			{ anchor ? (
+				<Popover
+					anchor={ anchor }
+					placement="bottom-start"
+					onClose={ onCancel }
+					focusOnMount="firstElement"
 				>
-					{ triggerLabel }
-				</Button>
-			) }
-			renderContent={ ( { onClose } ) => (
-				<MenuGroup>
-					<MenuItem
-						isSelected={ ! hasValue }
-						onClick={ async () => {
-							await onCommit( null );
-							onClose();
+					<EditOptionsPopover
+						recordId={ recordId }
+						fieldType="select"
+						initialOptions={ items }
+						value={ value }
+						onOptionsSaved={ onOptionsSaved }
+						onRowsChanged={ onRowsChanged }
+						onRequestClose={ onRequestClose }
+						onPick={ async ( next ) => {
+							await onCommit( next );
+							onCancel();
 						} }
-					>
-						{ __( 'Clear', 'cortext' ) }
-					</MenuItem>
-					{ items.map( ( opt ) => (
-						<MenuItem
-							key={ opt.value }
-							isSelected={ opt.value === value }
-							onClick={ async () => {
-								await onCommit( opt.value );
-								onClose();
-							} }
-						>
-							{ opt.label }
-						</MenuItem>
-					) ) }
-				</MenuGroup>
-			) }
-		/>
+					/>
+				</Popover>
+			) : null }
+		</>
 	);
 }
 
@@ -634,8 +661,15 @@ export default function EditableCell( {
 	getValue,
 	readOnly = false,
 } ) {
-	const { saveRowField, editRequest, clearEditRequest, requestNext } =
-		useContext( RowMutationContext );
+	const {
+		saveRowField,
+		editRequest,
+		clearEditRequest,
+		requestNext,
+		optionOverrides,
+		updateFieldOptions,
+		refreshRows,
+	} = useContext( RowMutationContext );
 	const [ isEditing, setIsEditing ] = useState( false );
 	const [ isSaving, setIsSaving ] = useState( false );
 	const [ error, setError ] = useState( null );
@@ -645,7 +679,11 @@ export default function EditableCell( {
 	const value = getValue
 		? getValue( { item } )
 		: item?.meta?.[ fieldId ] ?? null;
-	const display = formatDisplay( value, fieldType, { elements, format } );
+	const effectiveElements = optionOverrides?.[ fieldId ] ?? elements;
+	const display = formatDisplay( value, fieldType, {
+		elements: effectiveElements,
+		format,
+	} );
 
 	// Open this cell when the parent targets it via editRequest (new-row
 	// title auto-open, Tab navigation, etc.), then clear the request so
@@ -752,17 +790,26 @@ export default function EditableCell( {
 	let editor = null;
 	if ( isEditing ) {
 		if ( fieldType === 'multiselect' ) {
-			// Multiselect persists on each token change rather than on a
-			// single commit (Notion-style: no Save button). Wire onSave
-			// straight to saveRowField so saving doesn't close the cell;
-			// closing happens via Dropdown's onClose firing onCancel.
+			// Multiselect persists on each toggle (Notion-style: no Save
+			// button). Wire onSave straight to saveRowField so saving
+			// doesn't close the cell; closing happens via Dropdown's
+			// onClose firing onCancel.
 			editor = (
 				<MultiselectEdit
+					recordId={ toRecordId( fieldId ) }
 					value={ Array.isArray( value ) ? value : [] }
-					elements={ elements ?? [] }
+					elements={ effectiveElements ?? [] }
 					onSave={ ( nextValues ) =>
 						saveRowField?.( rowId, fieldId, nextValues )
 					}
+					onOptionsSaved={ ( nextOptions ) =>
+						updateFieldOptions?.(
+							toRecordId( fieldId ),
+							nextOptions
+						)
+					}
+					onRowsChanged={ refreshRows }
+					onRequestClose={ closeEditor }
 					onCancel={ closeEditor }
 					label={ label }
 				/>
@@ -770,9 +817,18 @@ export default function EditableCell( {
 		} else if ( fieldType === 'select' ) {
 			editor = (
 				<SelectEditor
+					recordId={ toRecordId( fieldId ) }
 					value={ value }
-					elements={ elements }
+					elements={ effectiveElements }
 					onCommit={ commit }
+					onOptionsSaved={ ( nextOptions ) =>
+						updateFieldOptions?.(
+							toRecordId( fieldId ),
+							nextOptions
+						)
+					}
+					onRowsChanged={ refreshRows }
+					onRequestClose={ closeEditor }
 					onCancel={ closeEditor }
 					onTab={ ( direction ) =>
 						requestNext?.( rowId, fieldId, direction )

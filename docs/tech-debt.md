@@ -58,11 +58,11 @@ Worth a small spike before committing; `core-data`'s schema cache for rarely-cha
 
 ## 6. DataViews has no multiselect form control `[upstream]`
 
-**What.** DataViews v6 ships `text`, `integer`, `email`, `datetime`, `radio`, `select`, `toggleGroup`, `boolean`, and `checkbox` controls but no multiselect. Our wrapper uses `FormTokenField` and translates between option labels (what the field shows) and option values (what we store as meta). Cost is small (the wrapper is short and self-contained) but every collection with a multiselect field carries the patch.
+**What.** DataViews v6 ships `text`, `integer`, `email`, `datetime`, `radio`, `select`, `toggleGroup`, `boolean`, and `checkbox` controls but no multiselect. Cortext used to bridge that with `FormTokenField`, but option editing outgrew it: multiselect now opens the same option picker as Select so users can create, recolor, rename, delete, and migrate options from the cell. That gives us one option-management surface, but it also means every multiselect cell still carries a custom editor instead of a DataViews-native control.
 
 **Where.** `src/components/MultiselectEdit.js`.
 
-**Solution.** A `multiselect` dataform-control upstream that DataForm and a future inline-edit mode (#1) resolve from `Edit: 'multiselect'`. File a Gutenberg issue or PR.
+**Solution.** A `multiselect` dataform-control upstream that DataForm and a future inline-edit mode (#1) resolve from `Edit: 'multiselect'`. It would need hooks for custom option rendering and option management, not just a token input, otherwise Cortext would still need the picker.
 
 ## 7. DataViews has no `footer` slot `[upstream, soft]`
 
@@ -291,3 +291,11 @@ Double-click autofit is the trickiest piece. With no measurement hook upstream, 
 **Where.** Case `'wp'` in `includes/Editor/PageIconBlock.php`, paired with `src/frontend.js` (no hydration).
 
 **Solution.** Either ship the SVG inline server-side (a small build-time generator that reads `@wordpress/icons` and emits a name-to-markup PHP map, refreshed on install) or hydrate from `data-icon` markers in `frontend.js` (smaller PHP surface, adds a public script). The inline-color is a one-line fix in either path. Until then, surface the limitation in the picker copy or restrict the saved variant to emoji + image for public-rendered pages.
+
+## 35. Nested `Popover` outside clicks do not close the host `[upstream]`
+
+**What.** `Popover` handles outside clicks one popover at a time. In the option editor, the main picker opens a second popover for an individual option's color/menu controls. After a color edit, the first click outside both popovers closed only the small option menu; the main picker stayed open because the host never saw that same outside click. We now listen for `pointerdown` while the option menu is open and ask the host to close when the click lands outside both popovers.
+
+**Where.** The pointer listener in `EditOptionsPopover` (`src/components/fields/EditOptionsPopover.js`) and the `onRequestClose` plumbing through `EditableCell`, `MultiselectEdit`, and `ColumnHeaderActions`.
+
+**Solution.** `Popover` needs a parent/child dismissal story: either close the whole stack when a click lands outside all related popovers, or expose enough event detail for a host popover to opt into that behavior without a document-level listener.

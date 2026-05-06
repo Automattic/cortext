@@ -1,6 +1,8 @@
 import { useCallback, useState } from '@wordpress/element';
-import { useDispatch } from '@wordpress/data';
+import { select, useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
+
+import { elementsFromOptions } from './optionElements';
 
 // Field mutation hooks. Each hook returns `{ run, isBusy, error }`. UI
 // callers always pass numeric record IDs; conversion from DataViews row
@@ -124,6 +126,145 @@ export function useRenameField() {
 		[ saveEntityRecord, setIsBusy, setError ]
 	);
 	return { run, isBusy, error };
+}
+
+// Rewrites a select/multiselect field's option list and, when migrations
+// are supplied, applies them to row values in one server-side
+// transaction. The hook intentionally stays write-only: pushing a fresh
+// field record into core-data changes DataViews' `fields` prop and tears
+// down active cell editors. Callers that need live repainting keep local
+// option overrides until the editor closes and `useFlushFieldRecord`
+// catches the entity store up.
+export function useUpdateFieldOptions() {
+	const { isBusy, setIsBusy, error, setError } = useMutationState();
+	const run = useCallback(
+		async ( recordId, options, migrations ) => {
+			setIsBusy( true );
+			setError( null );
+			try {
+				const data = { options };
+				if ( Array.isArray( migrations ) && migrations.length > 0 ) {
+					data.migrations = migrations;
+				}
+				const result = await apiFetch( {
+					path: `/cortext/v1/fields/${ recordId }/options`,
+					method: 'POST',
+					data,
+				} );
+				return result;
+			} catch ( apiError ) {
+				setError( apiError );
+				throw apiError;
+			} finally {
+				setIsBusy( false );
+			}
+		},
+		[ setIsBusy, setError ]
+	);
+	return { run, isBusy, error };
+}
+
+// Refetches a single `crtxt_field` record and pushes it into the
+// entity store, replacing whatever is there. Called by the option
+// popover hosts when they unmount, so the row cells (which read
+// through `useEntityRecords`) catch up with whatever the user changed
+// while the popover was open. Kept separate from `useUpdateFieldOptions`
+// so saves stay write-only and free of cascading re-renders.
+export function useFlushFieldRecord() {
+	const { receiveEntityRecords } = useDispatch( 'core' );
+	return useCallback(
+		async ( recordId ) => {
+			if ( ! recordId ) {
+				return;
+			}
+			try {
+				const fresh = await apiFetch( {
+					path: `/wp/v2/crtxt_fields/${ recordId }?context=edit`,
+				} );
+				receiveEntityRecords(
+					'postType',
+					'crtxt_field',
+					[ fresh ],
+					undefined,
+					true
+				);
+			} catch {
+				// Best-effort: if the refetch fails, the cell stays on
+				// its previous chip set until the next read triggers a
+				// natural refetch.
+			}
+		},
+		[ receiveEntityRecords ]
+	);
+}
+
+// Appends a new option to a field's existing list and saves. Used by the
+// cell editors so users can create a chip on the fly while picking a
+// value, matching Notion's "Create [foo]" suggestion. Reads the
+// freshest options from the entity store at call time (rather than
+// subscribing through `useEntityRecord`) and generates a unique slug-style
+// `value` from the label, deduping against existing option values.
+export function useCreateFieldOption( recordId ) {
+	const update = useUpdateFieldOptions();
+
+	const run = useCallback(
+		async ( label ) => {
+			const trimmed = String( label ?? '' ).trim();
+			if ( ! trimmed || ! recordId ) {
+				return null;
+			}
+			const record = select( 'core' ).getEntityRecord(
+				'postType',
+				'crtxt_field',
+				recordId
+			);
+			if ( ! record ) {
+				// Field hasn't been resolved into the entity store yet.
+				// Refusing to write avoids clobbering the existing
+				// options with an empty list; the caller surfaces this
+				// as a no-op (the new chip simply doesn't appear).
+				return null;
+			}
+			const current = elementsFromOptions( record?.meta?.options ) || [];
+			const taken = current.map( ( o ) => o.value );
+			const value = uniqueSlug( trimmed, taken );
+			const next = [ ...current, { value, label: trimmed } ];
+			await update.run( recordId, next );
+			return { value, label: trimmed };
+		},
+		[ recordId, update ]
+	);
+
+	return { run, isBusy: update.isBusy, error: update.error };
+}
+
+function uniqueSlug( label, taken ) {
+	const base =
+		String( label )
+			.toLowerCase()
+			.trim()
+			.replace( /[^\p{L}\p{N}]+/gu, '-' )
+			.replace( /^-+|-+$/g, '' ) || 'option';
+	if ( ! taken.includes( base ) ) {
+		return base;
+	}
+	let n = 2;
+	while ( taken.includes( `${ base }-${ n }` ) ) {
+		n++;
+	}
+	return `${ base }-${ n }`;
+}
+
+export function useOptionUsage() {
+	const run = useCallback( async ( recordId, value ) => {
+		const result = await apiFetch( {
+			path: `/cortext/v1/fields/${ recordId }/options/${ encodeURIComponent(
+				value
+			) }/usage`,
+		} );
+		return Number( result?.count ?? 0 );
+	}, [] );
+	return { run };
 }
 
 export function useDeleteField( collectionId ) {

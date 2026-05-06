@@ -8,8 +8,9 @@
 // content/theme tokens stay inside the editor iframe and published frontend.
 
 // At `:root` so the tokens reach inside the block-editor iframe (which has
-// its own document, no `.cortext-root` ancestor). Our CSS only enqueues in
-// cortext-owned contexts, so the global tokens don't leak.
+// its own document, no `.cortext-root` ancestor) and inside `Popover`
+// portals (which mount on body, also outside `.cortext-root`). Our CSS
+// only enqueues in cortext-owned contexts, so the global tokens don't leak.
 :root {
 	--cortext-scrollbar-size: 8px;
 	--cortext-scrollbar-track: transparent;
@@ -20,7 +21,39 @@
 	// pagination row, and ~10 compact rows so a fresh insertion is usable;
 	// override the variable to give the block a different default.
 	--cortext-data-view-block-min-height: 480px;
+
+	// Option chip palette. Backgrounds are muted tints; foregrounds are a
+	// matching hue dark enough to read on the background. Names mirror
+	// `Cortext\OptionPalette::names()` and the JS `OPTION_COLOR_NAMES`
+	// constant. Lives on `:root` (not `.cortext-root`) so popover portals
+	// can resolve the variables. `default` is intentionally absent: the
+	// neutral chip renders without a color and inherits `cortext-chip--neutral`.
+	--cortext-option-gray-bg: #ebeced;
+	--cortext-option-gray-fg: #5a5a5a;
+	--cortext-option-brown-bg: #f4eee5;
+	--cortext-option-brown-fg: #774f3a;
+	--cortext-option-orange-bg: #fbecdd;
+	--cortext-option-orange-fg: #b35a13;
+	--cortext-option-yellow-bg: #fbf3db;
+	--cortext-option-yellow-fg: #8a6018;
+	--cortext-option-green-bg: #ddedea;
+	--cortext-option-green-fg: #2a6b5b;
+	--cortext-option-blue-bg: #ddebf1;
+	--cortext-option-blue-fg: #2a5a82;
+	--cortext-option-purple-bg: #eae4f2;
+	--cortext-option-purple-fg: #5a3f9f;
+	--cortext-option-pink-bg: #f4dfeb;
+	--cortext-option-pink-fg: #9c3a6b;
+	--cortext-option-red-bg: #fbe4e4;
+	--cortext-option-red-fg: #a82a2a;
 }
+
+// Note: option chips intentionally don't have a dark-mode variant yet.
+// The shell can switch to dark theme but the canvas (where the table
+// rows live) is still painted with the light surface, so dark chips
+// would float on a light canvas and look out of place. Once the canvas
+// gets a real dark theme, mirror the palette under
+// `body[data-cortext-theme="dark"]` so popover portals re-skin too.
 
 .cortext-root {
 
