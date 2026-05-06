@@ -21,6 +21,7 @@ import {
 	home as homeIcon,
 	moreVertical,
 	plus,
+	search,
 	wordpress,
 } from '@wordpress/icons';
 
@@ -68,6 +69,7 @@ import {
 import { useNavigate, useParams } from '@tanstack/react-router';
 
 import PageRow from './PageRow';
+import { openCommandPalette } from './CommandPalette';
 import SidebarResizeHandle from './SidebarResizeHandle';
 import SidebarTrash from './SidebarTrash';
 import ThemeToggle from './ThemeToggle';
@@ -280,7 +282,6 @@ export default function Sidebar( {
 		},
 		[ navigate, pages ]
 	);
-
 	const fallbackHomePage = useMemo(
 		() => firstPageInTree( pages ),
 		[ pages ]
@@ -288,7 +289,6 @@ export default function Sidebar( {
 	const homePath =
 		home?.path ??
 		( fallbackHomePage ? computeUri( fallbackHomePage ) : null );
-	const isHomeSelected = Boolean( homePath && activeUri === homePath );
 	const goHome = useCallback( () => {
 		if ( ! homePath ) {
 			return;
@@ -635,35 +635,30 @@ export default function Sidebar( {
 							? __( 'Expand sidebar', 'cortext' )
 							: __( 'Collapse sidebar', 'cortext' )
 					}
-					isPressed={ collapsed }
 					onClick={ onToggleCollapsed }
 				/>
 			</div>
-			{ collapsed && (
-				<div className="cortext-sidebar__rail">
-					<Button
-						className="cortext-sidebar__rail-button"
-						icon={ homeIcon }
-						label={ __( 'Home', 'cortext' ) }
-						isPressed={ isHomeSelected }
-						disabled={ ! homePath || isResolvingHome }
-						onClick={ goHome }
-					/>
-				</div>
-			) }
+			<div
+				className="cortext-sidebar__quick-actions"
+				role="toolbar"
+				aria-label={ __( 'Quick actions', 'cortext' ) }
+			>
+				<Button
+					className="cortext-sidebar__quick-action cortext-sidebar__quick-action--home"
+					icon={ homeIcon }
+					label={ __( 'Home', 'cortext' ) }
+					disabled={ ! homePath || isResolvingHome }
+					onClick={ goHome }
+				/>
+				<Button
+					className="cortext-sidebar__quick-action cortext-sidebar__quick-action--search"
+					icon={ search }
+					label={ __( 'Search', 'cortext' ) }
+					onClick={ () => openCommandPalette() }
+				/>
+			</div>
 			{ ! collapsed && (
 				<div className="cortext-sidebar__content">
-					<div className="cortext-sidebar__home">
-						<Button
-							className="cortext-sidebar__home-button"
-							icon={ homeIcon }
-							isPressed={ isHomeSelected }
-							disabled={ ! homePath || isResolvingHome }
-							onClick={ goHome }
-						>
-							{ __( 'Home', 'cortext' ) }
-						</Button>
-					</div>
 					<div className="cortext-sidebar__section-header">
 						<h2 className="cortext-sidebar__section-title">
 							{ __( 'Pages', 'cortext' ) }
