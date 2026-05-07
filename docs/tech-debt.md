@@ -361,3 +361,11 @@ The user-facing placeholder is still Core's generic "Search commands and setting
 **Where.** `src/frontend.scss`, the `.cortext-public-page__body` rule with the FIXME comment.
 
 **Solution.** Use `wp_get_layout_style` or emit the `is-layout-constrained` class with `contentSize` / `wideSize` on the body wrapper, then add `alignwide` or `alignfull` to the data-view block's wrapper attributes in `DataView.php`. Remove the exclusion hack.
+
+## 43. DataView block shares a frontend bundle with page chrome `[internal]`
+
+**What.** The `cortext-frontend` script and style handle serves double duty: it hydrates the DataView block (React, DataViews, field renderers) and provides general page chrome (body font, content column, title styles). Both `Assets.php` and the render callback in `DataView.php` enqueue the same handle, creating a registration race where the first caller's dependency list wins and the second is silently ignored. The DataView block should provision its own script and style (e.g. `cortext-data-view-view`) via `viewScript`/`viewStyle` in `block.json` or its own dedicated handles in the render callback, so its dependencies (`wp-components`, `wp-api-fetch`, etc.) are self-contained. `cortext-frontend`, if it makes sense to exist, should only cover general concerns: page chrome, light/dark mode toggle, etc.
+
+**Where.** `includes/Block/DataView.php` (render callback enqueue), `includes/Frontend/Assets.php` (page-level enqueue), `src/frontend.js` (single entry point for both concerns).
+
+**Solution.** Split `src/frontend.js` into two entry points: one for page chrome (`cortext-frontend`) and one for the DataView block (`cortext-data-view-view`). The block entry handles hydration and declares its own dependencies. The page entry stays minimal. Update `webpack.config.js` with the new entry point, and update `DataView.php` to enqueue the block-specific handle.
