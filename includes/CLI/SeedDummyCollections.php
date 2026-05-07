@@ -1390,32 +1390,122 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			$this->register_collection_entries( $books_id );
 			$this->register_collection_entries( $projects_id );
 
-			$this->set_relation_by_titles(
-				'books',
-				'The Left Hand of Darkness',
-				$projects_relation['source_id'],
-				array(
-					'Research relation fields',
-				)
-			);
-			$this->set_relation_by_titles(
-				'books',
-				'Invisible Cities',
-				$projects_relation['source_id'],
-				array(
-					'Collection public templates',
-				)
-			);
-			$this->set_relation_by_titles(
-				'books',
-				'The Dispossessed',
-				$projects_relation['source_id'],
-				array(
-					'Seed realistic demo workspace',
-					'DataViews view persistence',
-				)
-			);
+			foreach ( $this->book_project_relations() as $book_title => $project_titles ) {
+				$this->set_relation_by_titles(
+					'books',
+					$book_title,
+					$projects_relation['source_id'],
+					$project_titles
+				);
+			}
 		}
+	}
+
+	/**
+	 * Returns seeded Books -> Projects relation examples.
+	 *
+	 * @return array<string,string[]>
+	 */
+	private function book_project_relations(): array {
+		return array(
+			'Terre des Hommes'                   => array(
+				'Seed realistic demo workspace',
+				'Inline table editing polish',
+			),
+			'Die Welt als Wille und Vorstellung' => array(
+				'Research relation fields',
+			),
+			'Cien Años de Soledad'               => array(
+				'Collection public templates',
+			),
+			'The Left Hand of Darkness'          => array(
+				'Research relation fields',
+			),
+			'Invisible Cities'                   => array(
+				'Collection public templates',
+			),
+			'The Dispossessed'                   => array(
+				'Seed realistic demo workspace',
+				'DataViews view persistence',
+			),
+			'Ficciones'                          => array(
+				'DataViews view persistence',
+			),
+			'The Master and Margarita'           => array(
+				'Inline table editing polish',
+			),
+			'Things Fall Apart'                  => array(
+				'Collection public templates',
+				'Research relation fields',
+			),
+			'The Name of the Rose'               => array(
+				'Seed realistic demo workspace',
+			),
+			'Kindred'                            => array(
+				'Inline table editing polish',
+				'DataViews view persistence',
+			),
+			'The Rings of Saturn'                => array(
+				'Research relation fields',
+			),
+			'Beloved'                            => array(
+				'Collection public templates',
+			),
+			'The Trial'                          => array(
+				'Inline table editing polish',
+			),
+			'Mrs Dalloway'                       => array(
+				'Seed realistic demo workspace',
+			),
+			'Pedro Páramo'                       => array(
+				'DataViews view persistence',
+			),
+			'Season of Migration to the North'   => array(
+				'Research relation fields',
+			),
+			'The Tale of Genji'                  => array(
+				'Collection public templates',
+			),
+			'The Vegetarian'                     => array(
+				'Inline table editing polish',
+				'Research relation fields',
+			),
+			'Pale Fire'                          => array(
+				'DataViews view persistence',
+			),
+			'The Savage Detectives'              => array(
+				'Seed realistic demo workspace',
+				'Research relation fields',
+			),
+			'Austerlitz'                         => array(
+				'DataViews view persistence',
+			),
+			'The Passion According to G.H.'      => array(
+				'Collection public templates',
+			),
+			'Midnight’s Children'                => array(
+				'Inline table editing polish',
+			),
+			'The God of Small Things'            => array(
+				'Seed realistic demo workspace',
+			),
+			'Snow Country'                       => array(
+				'Research relation fields',
+			),
+			'The Invention of Morel'             => array(
+				'DataViews view persistence',
+			),
+			'The Sound and the Fury'             => array(
+				'Inline table editing polish',
+				'Collection public templates',
+			),
+			'The Leopard'                        => array(
+				'Seed realistic demo workspace',
+			),
+			'Parable of the Sower'               => array(
+				'Research relation fields',
+			),
+		);
 	}
 
 	/**
