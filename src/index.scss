@@ -16,6 +16,20 @@
 // sass-loader side-steps that.
 @use "../node_modules/@wordpress/dataviews/build-style/style.css" as dataviews;
 
+.commands-command-menu__container {
+
+	.commands-command-menu__item {
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-10;
+		width: 100%;
+	}
+
+	.cortext-command-palette__group + .cortext-command-palette__group [cmdk-group-heading] {
+		border-top: var(--cortext-shell-border-width, 1px) solid var(--cortext-chrome-border, #e0e0e0);
+	}
+}
+
 // Hide wp-admin chrome on the Cortext screen. The React shell is
 // `position: fixed; inset: 0`, so admin scaffolding (toolbar, sidebar,
 // footer) would only matter where it has its own `position: fixed` and a

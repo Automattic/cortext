@@ -1,19 +1,18 @@
 // tech-debt.md#38: use WordPress' palette UI, but keep it on a local
 // registry so core/wp-admin commands do not show up in Cortext.
 
-import {
-	CommandMenu,
-	store as commandsStore,
-	useCommand,
-} from '@wordpress/commands';
+import { store as commandsStore, useCommand } from '@wordpress/commands';
 import { store as keyboardShortcutsStore } from '@wordpress/keyboard-shortcuts';
 import { store as preferencesStore } from '@wordpress/preferences';
 import { createRegistry, RegistryProvider, useDispatch } from '@wordpress/data';
 import { useNavigate } from '@tanstack/react-router';
-import { __ } from '@wordpress/i18n';
-import { home as homeIcon } from '@wordpress/icons';
+import { __, sprintf } from '@wordpress/i18n';
+import { home as homeIcon, listItem, table } from '@wordpress/icons';
 import { useCallback, useEffect, useMemo } from '@wordpress/element';
 
+import CortextCommandMenu from './CortextCommandMenu';
+import PageIcon from './PageIcon';
+import { useRecents } from '../hooks/useRecents';
 import { useWorkspaceHomePath } from '../hooks/useWorkspaceHomePath';
 
 const OPEN_COMMAND_PALETTE_EVENT = 'cortext:open-command-palette';
@@ -47,6 +46,29 @@ function focusCanvasAfterPaletteCloses( canvasRef ) {
 	window.setTimeout( () => {
 		canvasRef?.current?.focus( { preventScroll: true } );
 	}, 0 );
+}
+
+function recentCommandIcon( recent ) {
+	if ( recent?.kind === 'collection' ) {
+		return table;
+	}
+	if ( recent?.kind === 'row' ) {
+		return listItem;
+	}
+	return <PageIcon icon={ recent?.icon ?? '' } size={ 16 } />;
+}
+
+function recentTitle( recent ) {
+	const title = recent?.title?.trim?.() || __( '(untitled)', 'cortext' );
+	if ( recent?.kind === 'row' && recent?.collection?.title ) {
+		return sprintf(
+			/* translators: 1: row title, 2: collection title */
+			__( '%1$s in %2$s', 'cortext' ),
+			title,
+			recent.collection.title
+		);
+	}
+	return title;
 }
 
 function HomeCommandRegistration( {
@@ -83,11 +105,46 @@ function HomeCommandRegistration( {
 	return null;
 }
 
+function RecentCommandRegistration( { canvasRef, recent } ) {
+	const navigate = useNavigate();
+	const goToRecent = useCallback(
+		( { close } ) => {
+			if ( recent?.path ) {
+				navigate( {
+					to: '/$',
+					params: { _splat: recent.path },
+				} );
+			}
+			close();
+			focusCanvasAfterPaletteCloses( canvasRef );
+		},
+		[ canvasRef, navigate, recent?.path ]
+	);
+
+	useCommand( {
+		name: `cortext/recent/${ recent.kind }-${ recent.id }`,
+		label: recentTitle( recent ),
+		searchLabel: sprintf(
+			/* translators: %s: recent item title */
+			__( 'Open recent: %s', 'cortext' ),
+			recentTitle( recent )
+		),
+		context: DEFAULT_COMMAND_CONTEXT,
+		icon: recentCommandIcon( recent ),
+		keywords: [ __( 'recent', 'cortext' ), recent.kind ],
+		disabled: ! recent.path,
+		callback: goToRecent,
+	} );
+	return null;
+}
+
 function CommandPaletteContents( {
 	canvasRef,
 	homePath,
 	isResolvingHomePath,
 } ) {
+	const { recents } = useRecents();
+
 	return (
 		<>
 			<CommandPaletteOpenBridge />
@@ -96,7 +153,14 @@ function CommandPaletteContents( {
 				homePath={ homePath }
 				isResolvingHomePath={ isResolvingHomePath }
 			/>
-			<CommandMenu />
+			{ recents.map( ( recent ) => (
+				<RecentCommandRegistration
+					key={ `${ recent.kind }:${ recent.id }` }
+					canvasRef={ canvasRef }
+					recent={ recent }
+				/>
+			) ) }
+			<CortextCommandMenu />
 		</>
 	);
 }
