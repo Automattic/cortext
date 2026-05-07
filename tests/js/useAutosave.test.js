@@ -367,9 +367,7 @@ describe( 'useAutosave: status', () => {
 			rerender();
 		} );
 
-		expect( removeNotice ).toHaveBeenCalledWith(
-			'cortext-autosave-error'
-		);
+		expect( removeNotice ).toHaveBeenCalledWith( 'cortext-autosave-error' );
 	} );
 
 	it( 'resets status when the current post id changes', () => {

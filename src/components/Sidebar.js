@@ -21,6 +21,7 @@ import {
 	home as homeIcon,
 	moreVertical,
 	plus,
+	search,
 	wordpress,
 } from '@wordpress/icons';
 
@@ -68,6 +69,7 @@ import {
 import { useNavigate, useParams } from '@tanstack/react-router';
 
 import PageRow from './PageRow';
+import { openCommandPalette } from './CommandPalette';
 import SidebarResizeHandle from './SidebarResizeHandle';
 import SidebarTrash from './SidebarTrash';
 import ThemeToggle from './ThemeToggle';
@@ -75,7 +77,6 @@ import {
 	buildTree,
 	collectAncestorIds,
 	computeDropTarget,
-	firstPageInTree,
 	isDescendantOf,
 	nextChildOrder,
 } from './pages-tree';
@@ -90,7 +91,7 @@ import {
 	parseSplatUri,
 } from '../router/useResolveEntity';
 import { COLLECTION_QUERY } from '../collections';
-import { useWorkspaceHome } from '../hooks/useWorkspaceHome';
+import { useWorkspaceHomePath } from '../hooks/useWorkspaceHomePath';
 
 const AUTO_EXPAND_DELAY = 700;
 
@@ -192,23 +193,19 @@ export default function Sidebar( {
 	// Workspaces are expected to exceed 100 pages — pages past the cap won't
 	// appear in the tree. Followup needs a lazy-loaded tree (load children on
 	// expand) or a paginated fetch of the full page set.
-	const { records, isResolving } = useEntityRecords(
-		'postType',
-		POST_TYPE,
-		ACTIVE_PAGES_QUERY
-	);
-
 	const { records: collections, isResolving: isResolvingCollections } =
 		useEntityRecords( 'postType', 'crtxt_collection', COLLECTION_QUERY );
 	const {
+		pages,
+		homePath,
 		home,
 		setHome,
-		isResolving: isResolvingHome,
+		isResolvingHomePath,
+		isResolvingPages,
 		isUpdating: isHomeUpdating,
-	} = useWorkspaceHome();
+	} = useWorkspaceHomePath();
 	const { saveEntityRecord, invalidateResolution, receiveEntityRecords } =
 		useDispatch( 'core' );
-	const pages = useMemo( () => records ?? [], [ records ] );
 	const navigate = useNavigate();
 	const params = useParams( { strict: false } );
 	const activeUri = params._splat ?? '';
@@ -280,15 +277,6 @@ export default function Sidebar( {
 		},
 		[ navigate, pages ]
 	);
-
-	const fallbackHomePage = useMemo(
-		() => firstPageInTree( pages ),
-		[ pages ]
-	);
-	const homePath =
-		home?.path ??
-		( fallbackHomePage ? computeUri( fallbackHomePage ) : null );
-	const isHomeSelected = Boolean( homePath && activeUri === homePath );
 	const goHome = useCallback( () => {
 		if ( ! homePath ) {
 			return;
@@ -635,35 +623,30 @@ export default function Sidebar( {
 							? __( 'Expand sidebar', 'cortext' )
 							: __( 'Collapse sidebar', 'cortext' )
 					}
-					isPressed={ collapsed }
 					onClick={ onToggleCollapsed }
 				/>
 			</div>
-			{ collapsed && (
-				<div className="cortext-sidebar__rail">
-					<Button
-						className="cortext-sidebar__rail-button"
-						icon={ homeIcon }
-						label={ __( 'Home', 'cortext' ) }
-						isPressed={ isHomeSelected }
-						disabled={ ! homePath || isResolvingHome }
-						onClick={ goHome }
-					/>
-				</div>
-			) }
+			<div
+				className="cortext-sidebar__quick-actions"
+				role="toolbar"
+				aria-label={ __( 'Quick actions', 'cortext' ) }
+			>
+				<Button
+					className="cortext-sidebar__quick-action cortext-sidebar__quick-action--home"
+					icon={ homeIcon }
+					label={ __( 'Home', 'cortext' ) }
+					disabled={ ! homePath || isResolvingHomePath }
+					onClick={ goHome }
+				/>
+				<Button
+					className="cortext-sidebar__quick-action cortext-sidebar__quick-action--search"
+					icon={ search }
+					label={ __( 'Search', 'cortext' ) }
+					onClick={ () => openCommandPalette() }
+				/>
+			</div>
 			{ ! collapsed && (
 				<div className="cortext-sidebar__content">
-					<div className="cortext-sidebar__home">
-						<Button
-							className="cortext-sidebar__home-button"
-							icon={ homeIcon }
-							isPressed={ isHomeSelected }
-							disabled={ ! homePath || isResolvingHome }
-							onClick={ goHome }
-						>
-							{ __( 'Home', 'cortext' ) }
-						</Button>
-					</div>
 					<div className="cortext-sidebar__section-header">
 						<h2 className="cortext-sidebar__section-title">
 							{ __( 'Pages', 'cortext' ) }
@@ -676,12 +659,12 @@ export default function Sidebar( {
 							onClick={ createRootPage }
 						/>
 					</div>
-					{ isResolving && pages.length === 0 && (
+					{ isResolvingPages && pages.length === 0 && (
 						<div className="cortext-sidebar__loading">
 							<Spinner />
 						</div>
 					) }
-					{ ! isResolving && pages.length === 0 && (
+					{ ! isResolvingPages && pages.length === 0 && (
 						<p className="cortext-sidebar__empty">
 							{ __( 'No pages yet.', 'cortext' ) }
 						</p>

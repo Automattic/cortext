@@ -5,12 +5,13 @@
 // URLs are canonical: `/wp-admin/admin.php?page=cortext&p=/<app-path>`. The
 // router emits those hrefs on navigation and parses them back on load.
 
-import { useEffect } from '@wordpress/element';
+import { useEffect, useRef } from '@wordpress/element';
 import { privateApis as routePrivateApis } from '@wordpress/route';
 import { SlotFillProvider } from '@wordpress/components';
 
 import Sidebar from './components/Sidebar';
 import EntityRoute from './router/EntityRoute';
+import CommandPalette from './components/CommandPalette';
 import useSidebarLayout from './hooks/useSidebarLayout';
 import { WorkspaceHomeProvider } from './hooks/useWorkspaceHome';
 import { unlock } from './lock-unlock';
@@ -42,6 +43,7 @@ function isEditableTarget( target ) {
 
 function RootLayout() {
 	const { collapsed, width, toggleCollapsed, setWidth } = useSidebarLayout();
+	const canvasRef = useRef( null );
 
 	useEffect( () => {
 		const onKeyDown = ( event ) => {
@@ -68,10 +70,15 @@ function RootLayout() {
 						onToggleCollapsed={ toggleCollapsed }
 						onWidthChange={ setWidth }
 					/>
-					<main className="cortext-shell__canvas">
+					<main
+						ref={ canvasRef }
+						className="cortext-shell__canvas"
+						tabIndex={ -1 }
+					>
 						<EntityRoute history={ router.history } />
 					</main>
 				</div>
+				<CommandPalette canvasRef={ canvasRef } />
 			</WorkspaceHomeProvider>
 		</SlotFillProvider>
 	);

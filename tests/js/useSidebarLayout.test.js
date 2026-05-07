@@ -122,9 +122,9 @@ describe( 'useSidebarLayout: persistence', () => {
 			result.current.setCollapsed( true );
 		} );
 
-		expect( window.localStorage.getItem( 'cortext.sidebarCollapsed' ) ).toBe(
-			'true'
-		);
+		expect(
+			window.localStorage.getItem( 'cortext.sidebarCollapsed' )
+		).toBe( 'true' );
 	} );
 
 	it( 'toggleCollapsed flips and persists', () => {
@@ -136,17 +136,17 @@ describe( 'useSidebarLayout: persistence', () => {
 			result.current.toggleCollapsed();
 		} );
 		expect( result.current.collapsed ).toBe( true );
-		expect( window.localStorage.getItem( 'cortext.sidebarCollapsed' ) ).toBe(
-			'true'
-		);
+		expect(
+			window.localStorage.getItem( 'cortext.sidebarCollapsed' )
+		).toBe( 'true' );
 
 		act( () => {
 			result.current.toggleCollapsed();
 		} );
 		expect( result.current.collapsed ).toBe( false );
-		expect( window.localStorage.getItem( 'cortext.sidebarCollapsed' ) ).toBe(
-			'false'
-		);
+		expect(
+			window.localStorage.getItem( 'cortext.sidebarCollapsed' )
+		).toBe( 'false' );
 	} );
 
 	it( 'persists clamped width to localStorage', () => {

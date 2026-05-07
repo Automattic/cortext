@@ -110,7 +110,10 @@ describe( 'EntityRoute reducer', () => {
 	describe( 'PAGE_RESOLVED', () => {
 		it( 'mounts the page and activates when displayed matches', () => {
 			let state = init( pageTarget( 1 ) );
-			state = reducer( state, { type: 'TARGET_CHANGED', target: pageTarget( 1 ) } );
+			state = reducer( state, {
+				type: 'TARGET_CHANGED',
+				target: pageTarget( 1 ),
+			} );
 			state = reducer( state, { type: 'PAGE_DISPLAYED', id: 1 } );
 			state = reducer( state, { type: 'PAGE_RESOLVED', id: 1 } );
 			expect( state.mountedPageId ).toBe( 1 );
@@ -119,7 +122,10 @@ describe( 'EntityRoute reducer', () => {
 
 		it( 'mounts but does not activate before the page paints', () => {
 			let state = init( pageTarget( 1 ) );
-			state = reducer( state, { type: 'TARGET_CHANGED', target: pageTarget( 1 ) } );
+			state = reducer( state, {
+				type: 'TARGET_CHANGED',
+				target: pageTarget( 1 ),
+			} );
 			state = reducer( state, { type: 'PAGE_RESOLVED', id: 1 } );
 			expect( state.mountedPageId ).toBe( 1 );
 			expect( state.active ).toEqual( { kind: 'loading' } );
@@ -145,7 +151,10 @@ describe( 'EntityRoute reducer', () => {
 	describe( 'PAGE_NOT_FOUND', () => {
 		it( 'activates page-not-found on a page target', () => {
 			let state = init( pageTarget( 99 ) );
-			state = reducer( state, { type: 'TARGET_CHANGED', target: pageTarget( 99 ) } );
+			state = reducer( state, {
+				type: 'TARGET_CHANGED',
+				target: pageTarget( 99 ),
+			} );
 			state = reducer( state, { type: 'PAGE_NOT_FOUND' } );
 			expect( state.active ).toEqual( { kind: 'page-not-found' } );
 		} );
@@ -164,7 +173,10 @@ describe( 'EntityRoute reducer', () => {
 	describe( 'PAGE_DISPLAYED', () => {
 		it( 'activates page when paint catches up to mount + target', () => {
 			let state = init( pageTarget( 1 ) );
-			state = reducer( state, { type: 'TARGET_CHANGED', target: pageTarget( 1 ) } );
+			state = reducer( state, {
+				type: 'TARGET_CHANGED',
+				target: pageTarget( 1 ),
+			} );
 			state = reducer( state, { type: 'PAGE_RESOLVED', id: 1 } );
 			expect( state.active ).toEqual( { kind: 'loading' } );
 			state = reducer( state, { type: 'PAGE_DISPLAYED', id: 1 } );

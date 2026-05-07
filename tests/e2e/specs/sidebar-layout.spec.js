@@ -67,11 +67,29 @@ async function readCollapsedRailAlignment( page ) {
 		const toggle = document.querySelector(
 			'.cortext-sidebar__collapse-toggle'
 		);
+		const quickActions = document.querySelector(
+			'.cortext-sidebar__quick-actions'
+		);
+		const home = document.querySelector(
+			'.cortext-sidebar__quick-action--home'
+		);
+		const search = document.querySelector(
+			'.cortext-sidebar__quick-action--search'
+		);
 		const back = document.querySelector( '.cortext-sidebar__back' );
 		const theme = document.querySelector(
 			'.cortext-sidebar__theme-toggle'
 		);
-		if ( ! header || ! topbar || ! toggle || ! back || ! theme ) {
+		if (
+			! header ||
+			! topbar ||
+			! toggle ||
+			! quickActions ||
+			! home ||
+			! search ||
+			! back ||
+			! theme
+		) {
 			return null;
 		}
 
@@ -82,6 +100,8 @@ async function readCollapsedRailAlignment( page ) {
 				top: rect.top,
 				width: rect.width,
 				height: rect.height,
+				right: rect.right,
+				bottom: rect.bottom,
 				xCenter: rect.left + rect.width / 2,
 				yCenter: rect.top + rect.height / 2,
 			};
@@ -90,14 +110,24 @@ async function readCollapsedRailAlignment( page ) {
 		const headerBox = box( header );
 		const topbarBox = box( topbar );
 		const toggleBox = box( toggle );
+		const quickActionsBox = box( quickActions );
+		const homeBox = box( home );
+		const searchBox = box( search );
 		const backBox = box( back );
 		const themeBox = box( theme );
 
 		return {
 			headerHeightDelta: Math.abs( headerBox.height - topbarBox.height ),
+			toggleRailDelta: Math.abs( toggleBox.xCenter - headerBox.xCenter ),
 			toggleHeaderDelta: Math.abs(
 				toggleBox.yCenter - headerBox.yCenter
 			),
+			quickActionsRailDelta: Math.abs(
+				quickActionsBox.xCenter - headerBox.xCenter
+			),
+			actionColumnDelta: Math.abs( homeBox.xCenter - searchBox.xCenter ),
+			actionGap: searchBox.top - homeBox.bottom,
+			toolbarBelowHeader: quickActionsBox.top - headerBox.bottom,
 			footerIconDelta: Math.abs( backBox.xCenter - themeBox.xCenter ),
 		};
 	} );
@@ -236,7 +266,14 @@ test.describe( 'Sidebar layout controls', () => {
 		const railAlignment = await readCollapsedRailAlignment( page );
 		expect( railAlignment ).not.toBeNull();
 		expect( railAlignment.headerHeightDelta ).toBeLessThanOrEqual( 1 );
+		expect( railAlignment.toggleRailDelta ).toBeLessThanOrEqual( 1 );
 		expect( railAlignment.toggleHeaderDelta ).toBeLessThanOrEqual( 1 );
+		expect( railAlignment.quickActionsRailDelta ).toBeLessThanOrEqual( 1 );
+		expect( railAlignment.actionColumnDelta ).toBeLessThanOrEqual( 1 );
+		expect( railAlignment.actionGap ).toBeGreaterThanOrEqual( 0 );
+		expect( railAlignment.actionGap ).toBeLessThanOrEqual( 8 );
+		expect( railAlignment.toolbarBelowHeader ).toBeGreaterThanOrEqual( 0 );
+		expect( railAlignment.toolbarBelowHeader ).toBeLessThanOrEqual( 1 );
 		expect( railAlignment.footerIconDelta ).toBeLessThanOrEqual( 1 );
 
 		await page.getByRole( 'button', { name: 'Expand sidebar' } ).click();
@@ -356,14 +393,12 @@ test.describe( 'Sidebar layout controls', () => {
 
 			await expect( settings ).not.toHaveClass( /is-pressed/ );
 			await page.mouse.move( 0, 0 );
-			const unpressedBeforeHover = await readButtonChromeState(
-				settings
-			);
+			const unpressedBeforeHover =
+				await readButtonChromeState( settings );
 
 			await settings.hover();
-			const lightUnpressedAfterHover = await readButtonChromeState(
-				settings
-			);
+			const lightUnpressedAfterHover =
+				await readButtonChromeState( settings );
 
 			expect( lightUnpressedAfterHover.backgroundColor ).not.toBe(
 				unpressedBeforeHover.backgroundColor
@@ -381,14 +416,12 @@ test.describe( 'Sidebar layout controls', () => {
 					.getElementById( 'cortext-root' )
 					?.setAttribute( 'data-theme', 'dark' );
 			} );
-			const darkUnpressedBeforeHover = await readButtonChromeState(
-				settings
-			);
+			const darkUnpressedBeforeHover =
+				await readButtonChromeState( settings );
 
 			await settings.hover();
-			const darkUnpressedAfterHover = await readButtonChromeState(
-				settings
-			);
+			const darkUnpressedAfterHover =
+				await readButtonChromeState( settings );
 
 			expect( darkUnpressedAfterHover.backgroundColor ).not.toBe(
 				darkUnpressedBeforeHover.backgroundColor
@@ -419,9 +452,7 @@ test.describe( 'Sidebar layout controls', () => {
 				beforeHover.backgroundColor
 			);
 			expect( afterHover.color ).toBe( beforeHover.color );
-			expect( afterHover.backgroundColor ).not.toBe(
-				'rgb(30, 30, 30)'
-			);
+			expect( afterHover.backgroundColor ).not.toBe( 'rgb(30, 30, 30)' );
 
 			const sidebar = page.locator( '.cortext-sidebar' );
 			const title = sidebar.getByRole( 'button', {

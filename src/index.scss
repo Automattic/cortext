@@ -6,6 +6,10 @@
 // doesn't register a `wp-interface` style handle, so bundle its stylesheet.
 @use "../node_modules/@wordpress/interface/build-style/style.css";
 
+// tech-debt.md#38: wp-admin does not expose this handle on our screen, so
+// bundle the palette styles here.
+@use "../node_modules/@wordpress/commands/build-style/style.css" as commands;
+
 // Same deal for @wordpress/dataviews. Importing via JS would be tree-shaken
 // because the package declares `sideEffects: false`; pulling it through
 // sass-loader side-steps that.
@@ -103,7 +107,6 @@ body.cortext-fullscreen {
 		gap: $grid-unit-10;
 		height: var(--cortext-topbar-height);
 		padding-inline: $grid-unit-20;
-		border-bottom: var(--cortext-shell-border-width) solid var(--cortext-chrome-border);
 	}
 
 	&__brand {
@@ -116,6 +119,14 @@ body.cortext-fullscreen {
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+
+	&__quick-actions {
+		flex: 0 0 auto;
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-05;
+		padding: 0 $grid-unit-20 $grid-unit-10;
 	}
 
 	&__collapse-toggle {
@@ -615,7 +626,15 @@ body.cortext-fullscreen {
 		}
 
 		.cortext-sidebar__header {
+			height: var(--cortext-topbar-height);
 			padding: 0;
+		}
+
+		.cortext-sidebar__quick-actions {
+			flex-direction: column;
+			align-items: center;
+			width: 100%;
+			padding: 0 0 $grid-unit-10;
 		}
 
 		.cortext-sidebar__footer {
@@ -623,15 +642,22 @@ body.cortext-fullscreen {
 		}
 
 		.cortext-sidebar__collapse-toggle {
+			order: 1;
 			margin-left: 0;
 		}
 
-		.cortext-sidebar__collapse-toggle.components-button {
+		.cortext-sidebar__collapse-toggle.components-button,
+		.cortext-sidebar__quick-action.components-button {
 			width: $grid-unit-40;
 			min-width: $grid-unit-40;
 			height: $grid-unit-40;
 			padding: 0;
 			justify-content: center;
+		}
+
+		.cortext-sidebar__quick-action.components-button {
+			width: $grid-unit-30 + $grid-unit-05;
+			min-width: $grid-unit-30 + $grid-unit-05;
 		}
 	}
 }
@@ -660,6 +686,10 @@ body.cortext-sidebar-resizing {
 	background: var(--cortext-canvas-frame-surface);
 	// Named so the cross-fade is scoped to this column.
 	view-transition-name: cortext-canvas;
+
+	&:focus {
+		outline: none;
+	}
 
 	// InterfaceSkeleton defaults to `position: fixed` at >= 782px, which would
 	// escape our grid and overlap the page-list sidebar. Scope it to fill just

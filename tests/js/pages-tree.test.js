@@ -88,11 +88,7 @@ describe( 'collectDescendants', () => {
 
 describe( 'collectAncestorIds', () => {
 	it( 'collects ancestors nearest parent first', () => {
-		const pages = [
-			makePage( 1 ),
-			makePage( 2, 1 ),
-			makePage( 3, 2 ),
-		];
+		const pages = [ makePage( 1 ), makePage( 2, 1 ), makePage( 3, 2 ) ];
 
 		expect( collectAncestorIds( 3, pages ) ).toEqual( [ 2, 1 ] );
 	} );
