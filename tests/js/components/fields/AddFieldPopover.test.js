@@ -141,6 +141,32 @@ describe( 'AddFieldPopover rollup config', () => {
 		);
 	} );
 
+	it( 'creates Count all rollups without a target property', async () => {
+		targetFields = [];
+		render( <AddFieldPopover collectionId={ 5 } /> );
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Rollup' } ) );
+
+		await waitFor( () =>
+			expect( screen.getByLabelText( 'Calculate' ) ).toHaveValue(
+				'count'
+			)
+		);
+
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Create rollup' } )
+		);
+
+		await waitFor( () =>
+			expect( run ).toHaveBeenCalledWith( {
+				title: 'Invoices (Count all)',
+				type: 'rollup',
+				rollup_relation_field_id: 77,
+				rollup_aggregator: 'count',
+			} )
+		);
+	} );
+
 	it( 'adds number calculations only after selecting a number target', async () => {
 		targetFields = [
 			{

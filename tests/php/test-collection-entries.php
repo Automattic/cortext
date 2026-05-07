@@ -613,6 +613,39 @@ final class Test_Collection_Entries extends BaseTestCase {
 		);
 	}
 
+	public function test_target_field_delete_deletes_dependent_rollups(): void {
+		$entries     = new CollectionEntries();
+		$projects_id = $this->create_collection_with_slug( 'Projects', 'prj-target' );
+		$invoices_id = $this->create_collection_with_slug( 'Invoices', 'inv-target' );
+		$relation_id = $this->create_relation_field( $projects_id, $invoices_id, 'Invoices' );
+		$reverse_id  = $this->create_relation_field( $invoices_id, $projects_id, 'Projects' );
+		$amount_id   = $this->create_field( $invoices_id, 'Amount', 'number' );
+		$rollup_id   = $this->create_field(
+			$projects_id,
+			'Total',
+			'rollup',
+			array(
+				'rollup_relation_field_id' => (string) $relation_id,
+				'rollup_target_field_id'   => (string) $amount_id,
+				'rollup_aggregator'        => 'sum',
+			)
+		);
+		update_post_meta( $relation_id, 'relation_reverse_field_id', (string) $reverse_id );
+		update_post_meta( $reverse_id, 'relation_reverse_field_id', (string) $relation_id );
+
+		$entries->register_for_collection( get_post( $projects_id ) );
+		$entries->register_for_collection( get_post( $invoices_id ) );
+		$entries->register();
+
+		wp_delete_post( $amount_id, true );
+
+		$this->assertNull( get_post( $rollup_id ) );
+		$this->assertNotContains(
+			(string) $rollup_id,
+			get_post_meta( $projects_id, 'fields', false )
+		);
+	}
+
 	public function test_entry_delete_removes_stale_reverse_relation_references(): void {
 		$entries       = new CollectionEntries();
 		$tasks_id      = $this->create_collection_with_slug( 'Tasks', 'tasks-rdel' );

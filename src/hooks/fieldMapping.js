@@ -83,7 +83,8 @@ function rollupDisplayType( meta ) {
 		return 'rollup-date-range';
 	}
 	if ( ROLLUP_VALUE_AGGREGATORS.has( aggregator ) ) {
-		return meta?.rollup_target_type ?? 'text';
+		const targetType = meta?.rollup_target_type ?? 'text';
+		return targetType === 'select' ? 'multiselect' : targetType;
 	}
 	if ( ! ROLLUP_SCALAR_DATE_AGGREGATORS.has( aggregator ) ) {
 		return 'number';

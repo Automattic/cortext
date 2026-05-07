@@ -177,10 +177,34 @@ describe( 'mapField', () => {
 					'[{"value":"paid","label":"Paid","color":"green"}]',
 			} )
 		);
-		expect( mapped.type ).toBe( 'text' );
+		expect( mapped.type ).toBe( 'array' );
 		expect( mapped.editable ).toBe( false );
 		expect( mapped.enableSorting ).toBe( false );
 		expect( mapped.filterBy ).toBe( false );
+	} );
+
+	it( 'renders select value-list rollups as multiple chips', () => {
+		const mapped = mapField(
+			baseField( {
+				type: 'rollup',
+				rollup_aggregator: 'show_original',
+				rollup_target_type: 'select',
+				rollup_target_options:
+					'[{"value":"paid","label":"Paid","color":"green"},{"value":"draft","label":"Draft","color":"gray"}]',
+			} )
+		);
+		const { container } = render(
+			mapped.render( {
+				item: {
+					meta: {
+						'field-5': [ 'paid', 'draft' ],
+					},
+				},
+			} )
+		);
+
+		expect( container.textContent ).toContain( 'Paid' );
+		expect( container.textContent ).toContain( 'Draft' );
 	} );
 
 	it( 'maps date range rollups to read-only non-sortable text fields', () => {

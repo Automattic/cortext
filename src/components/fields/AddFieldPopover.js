@@ -303,7 +303,7 @@ function RollupConfig( {
 		( field ) => field.cortextType === 'relation'
 	);
 	const [ relationFieldId, setRelationFieldId ] = useState( '' );
-	const [ aggregator, setAggregator ] = useState( 'show_original' );
+	const [ aggregator, setAggregator ] = useState( 'count' );
 	const [ targetFieldId, setTargetFieldId ] = useState( '' );
 
 	const selectedRelation = relationFields.find(
@@ -348,6 +348,7 @@ function RollupConfig( {
 			rollupAggregatorOptionsForTarget( selectedTargetField?.meta?.type ),
 		[ selectedTargetField ]
 	);
+	const targetRequired = aggregator !== 'count';
 	const relationOptions = [
 		{ value: '', label: __( 'Choose relation…', 'cortext' ) },
 		...relationFields.map( ( field ) => ( {
@@ -399,10 +400,14 @@ function RollupConfig( {
 		const compatibleTargets = targetOptions.slice( 1 );
 		if ( compatibleTargets.length === 1 ) {
 			setTargetFieldId( compatibleTargets[ 0 ].value );
+			setAggregator( 'show_original' );
 		}
 	}, [ targetFieldId, targetOptions ] );
 
 	useEffect( () => {
+		if ( ! targetFieldId ) {
+			return;
+		}
 		if (
 			! aggregatorOptions.some(
 				( option ) => option.value === aggregator
@@ -410,20 +415,27 @@ function RollupConfig( {
 		) {
 			setAggregator( 'show_original' );
 		}
-	}, [ aggregator, aggregatorOptions ] );
+	}, [ aggregator, aggregatorOptions, targetFieldId ] );
 
 	const submit = async () => {
-		if ( ! relationFieldId || ! targetFieldId || isBusy ) {
+		if (
+			! relationFieldId ||
+			( targetRequired && ! targetFieldId ) ||
+			isBusy
+		) {
 			return;
 		}
 		try {
-			const created = await run( {
+			const payload = {
 				title: title.trim() || defaultRollupTitle,
 				type: 'rollup',
 				rollup_relation_field_id: Number( relationFieldId ),
-				rollup_target_field_id: Number( targetFieldId ),
 				rollup_aggregator: aggregator,
-			} );
+			};
+			if ( targetFieldId ) {
+				payload.rollup_target_field_id = Number( targetFieldId );
+			}
+			const created = await run( payload );
 			onCreate?.( created );
 		} catch ( apiError ) {
 			onError(
@@ -450,7 +462,7 @@ function RollupConfig( {
 				onChange={ ( next ) => {
 					setRelationFieldId( next );
 					setTargetFieldId( '' );
-					setAggregator( 'show_original' );
+					setAggregator( 'count' );
 				} }
 				disabled={ isBusy || relationFields.length === 0 }
 				__next40pxDefaultSize
@@ -475,7 +487,7 @@ function RollupConfig( {
 				value={ aggregator }
 				options={ aggregatorOptions }
 				onChange={ setAggregator }
-				disabled={ isBusy || ! targetFieldId }
+				disabled={ isBusy || ! relationFieldId }
 				__next40pxDefaultSize
 				__nextHasNoMarginBottom
 			/>
@@ -491,7 +503,11 @@ function RollupConfig( {
 					variant="primary"
 					onClick={ submit }
 					isBusy={ isBusy }
-					disabled={ isBusy || ! relationFieldId || ! targetFieldId }
+					disabled={
+						isBusy ||
+						! relationFieldId ||
+						( targetRequired && ! targetFieldId )
+					}
 				>
 					{ __( 'Create rollup', 'cortext' ) }
 				</Button>
