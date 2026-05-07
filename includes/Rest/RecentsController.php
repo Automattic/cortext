@@ -11,8 +11,8 @@ namespace Cortext\Rest;
 
 use Cortext\PostType\Collection;
 use Cortext\PostType\CollectionEntries;
+use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Page;
-use Cortext\PostType\PageIdentity;
 use WP_Error;
 use WP_Post;
 use WP_REST_Request;
@@ -239,7 +239,7 @@ final class RecentsController {
 			'path'  => $this->target_path( $post, $kind ),
 		);
 		if ( 'page' === $kind ) {
-			$icon = get_post_meta( $id, PageIdentity::META_KEY, true );
+			$icon = get_post_meta( $id, DocumentIdentity::META_KEY, true );
 			if ( is_string( $icon ) && '' !== $icon ) {
 				$target['icon'] = $icon;
 			}

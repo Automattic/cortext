@@ -424,9 +424,37 @@ describe( 'useAutosave: status', () => {
 
 		expect( result.current.status ).toBe( 'saved' );
 		expect( typeof result.current.lastSavedAt ).toBe( 'number' );
+		expect( mockTouchRecent ).not.toHaveBeenCalled();
+	} );
+
+	it( 'touches the configured page recent after a successful save', () => {
+		setStoreState( { didSucceed: true, currentPostId: 42 } );
+
+		renderHook( () =>
+			useAutosave( {
+				recentTarget: { kind: 'page', id: 42 },
+			} )
+		);
+
 		expect( mockTouchRecent ).toHaveBeenCalledWith( {
 			kind: 'page',
 			id: 42,
+		} );
+	} );
+
+	it( 'touches the configured row recent after a successful save', () => {
+		setStoreState( { didSucceed: true, currentPostId: 42 } );
+
+		renderHook( () =>
+			useAutosave( {
+				recentTarget: { kind: 'row', id: 42, collectionId: 9 },
+			} )
+		);
+
+		expect( mockTouchRecent ).toHaveBeenCalledWith( {
+			kind: 'row',
+			id: 42,
+			collectionId: 9,
 		} );
 	} );
 

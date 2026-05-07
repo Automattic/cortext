@@ -1019,6 +1019,7 @@ export default function CollectionDataViews( {
 			<RowDetailView
 				canGoNext={ Boolean( nextRowId ) }
 				canGoPrevious={ Boolean( previousRowId ) }
+				collectionId={ collectionId }
 				fields={ availableFields }
 				mode={ renderedRowDetailMode }
 				onApi={ setDetailApi }

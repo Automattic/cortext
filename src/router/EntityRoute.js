@@ -429,6 +429,14 @@ export default function EntityRoute( { history } ) {
 		[ invalidateResolution, receiveEntityRecords ]
 	);
 
+	const editorRecentTarget =
+		isRow && editorPostId !== null && rowParentCollectionId
+			? {
+					kind: 'row',
+					id: editorPostId,
+					collectionId: rowParentCollectionId,
+			  }
+			: null;
 	const editorCanvas =
 		editorPostId !== null && editorPostType ? (
 			<Canvas
@@ -441,6 +449,7 @@ export default function EntityRoute( { history } ) {
 				onDisplayedPost={ handleDocumentDisplayed }
 				isActive={ isDocumentActive }
 				onRestored={ onRestoreDocument }
+				recentTarget={ editorRecentTarget }
 			/>
 		) : null;
 

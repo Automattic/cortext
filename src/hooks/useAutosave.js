@@ -14,6 +14,9 @@ const AUTOSAVE_ERROR_NOTICE_ID = 'cortext-autosave-error';
 export default function useAutosave( options = {} ) {
 	const debounceMs = options.debounceMs ?? DEBOUNCE_MS;
 	const minSaveIntervalMs = options.minSaveIntervalMs ?? MIN_SAVE_INTERVAL_MS;
+	const recentKind = options.recentTarget?.kind ?? null;
+	const recentId = options.recentTarget?.id ?? null;
+	const recentCollectionId = options.recentTarget?.collectionId ?? null;
 	const { savePost, editPost } = useDispatch( editorStore );
 	const { createErrorNotice, removeNotice } = useDispatch( noticesStore );
 	const { touchRecent } = useRecents();
@@ -220,17 +223,23 @@ export default function useAutosave( options = {} ) {
 			setStatus( 'saved' );
 			setLastSavedAt( Date.now() );
 			removeNotice( AUTOSAVE_ERROR_NOTICE_ID );
-			if ( currentPostId ) {
-				touchRecent( { kind: 'page', id: currentPostId } );
+			if ( recentKind && recentId ) {
+				const target = { kind: recentKind, id: recentId };
+				if ( recentCollectionId ) {
+					target.collectionId = recentCollectionId;
+				}
+				touchRecent( target );
 			}
 		}
 	}, [
 		isSaving,
 		didSucceed,
 		didFail,
-		currentPostId,
 		createErrorNotice,
 		removeNotice,
+		recentKind,
+		recentId,
+		recentCollectionId,
 		touchRecent,
 	] );
 

@@ -50,6 +50,8 @@ export function RecentsProvider( { children } ) {
 	const [ isUpdating, setIsUpdating ] = useState( false );
 	const [ error, setError ] = useState( null );
 	const latestTouchRequest = useRef( 0 );
+	const pendingTouchCount = useRef( 0 );
+	const touchQueue = useRef( Promise.resolve() );
 
 	useEffect( () => {
 		let cancelled = false;
@@ -72,6 +74,10 @@ export function RecentsProvider( { children } ) {
 				if ( cancelled ) {
 					return;
 				}
+				if ( latestTouchRequest.current > 0 ) {
+					setIsResolving( false );
+					return;
+				}
 				setRecents( [] );
 				setError( nextError );
 				setIsResolving( false );
@@ -88,31 +94,44 @@ export function RecentsProvider( { children } ) {
 		}
 		const requestId = latestTouchRequest.current + 1;
 		latestTouchRequest.current = requestId;
+		pendingTouchCount.current += 1;
 		setIsUpdating( true );
 		setError( null );
-		try {
-			const response = await apiFetch( {
-				path: '/cortext/v1/recents',
-				method: 'POST',
-				data: target,
-			} );
-			const nextRecents = recentsFromResponse( response );
-			if ( requestId === latestTouchRequest.current ) {
-				applyRecents( setRecents, nextRecents );
-				setIsResolving( false );
+
+		const runTouch = async () => {
+			try {
+				const response = await apiFetch( {
+					path: '/cortext/v1/recents',
+					method: 'POST',
+					data: target,
+				} );
+				const nextRecents = recentsFromResponse( response );
+				if ( requestId === latestTouchRequest.current ) {
+					applyRecents( setRecents, nextRecents );
+					setIsResolving( false );
+				}
+				return nextRecents;
+			} catch ( nextError ) {
+				if ( requestId === latestTouchRequest.current ) {
+					setError( nextError );
+					setIsResolving( false );
+				}
+				return null;
+			} finally {
+				pendingTouchCount.current = Math.max(
+					0,
+					pendingTouchCount.current - 1
+				);
+				if ( pendingTouchCount.current === 0 ) {
+					setIsUpdating( false );
+				}
 			}
-			return nextRecents;
-		} catch ( nextError ) {
-			if ( requestId === latestTouchRequest.current ) {
-				setError( nextError );
-				setIsResolving( false );
-			}
-			return null;
-		} finally {
-			if ( requestId === latestTouchRequest.current ) {
-				setIsUpdating( false );
-			}
-		}
+		};
+
+		// Keep server-side user meta in the same order as local touch calls.
+		const queuedTouch = touchQueue.current.then( runTouch, runTouch );
+		touchQueue.current = queuedTouch.catch( () => null );
+		return queuedTouch;
 	}, [] );
 
 	const value = useMemo(

@@ -11,9 +11,9 @@ namespace Cortext\Tests;
 
 use Cortext\PostType\Collection;
 use Cortext\PostType\CollectionEntries;
+use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Field;
 use Cortext\PostType\Page;
-use Cortext\PostType\PageIdentity;
 use Cortext\Rest\RecentsController;
 use WorDBless\BaseTestCase;
 use WP_REST_Request;
@@ -67,7 +67,7 @@ final class Test_Rest_Recents_Controller extends BaseTestCase {
 			array(
 				'post_name'  => 'notes',
 				'meta_input' => array(
-					PageIdentity::META_KEY => $page_icon,
+					DocumentIdentity::META_KEY => $page_icon,
 				),
 			)
 		);

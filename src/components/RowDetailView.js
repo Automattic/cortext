@@ -146,10 +146,16 @@ function titleFromDetail( detail ) {
 	return titleFromRow( detail.record ) || titleFromRow( detail.row );
 }
 
-function RowAutosaveBridge( { isActive = true, onApi, onSaved } ) {
+function RowAutosaveBridge( {
+	isActive = true,
+	onApi,
+	onSaved,
+	recentTarget,
+} ) {
 	const { status, lastSavedAt, flushNow, isDirty, isSaving } = useAutosave( {
 		debounceMs: 0,
 		minSaveIntervalMs: 0,
+		recentTarget,
 	} );
 	const { resetPost } = useDispatch( editorStore );
 	const discard = useCallback( () => resetPost(), [ resetPost ] );
@@ -212,6 +218,7 @@ export function ModeControl( { mode, onChangeMode } ) {
 }
 
 function DetailPaneContent( {
+	collectionId,
 	fields,
 	isActive,
 	isHidden,
@@ -223,6 +230,7 @@ function DetailPaneContent( {
 	postType,
 	propertiesVisible,
 	row,
+	rowId,
 } ) {
 	const fallbackTitle = useMemo( () => titleFromRow( row ), [ row ] );
 	return (
@@ -231,6 +239,11 @@ function DetailPaneContent( {
 				isActive={ isActive }
 				onApi={ onApi }
 				onSaved={ onSaved }
+				recentTarget={
+					rowId && collectionId
+						? { kind: 'row', id: rowId, collectionId }
+						: null
+				}
 			/>
 			<RowTitleBridge
 				isActive={ isTitleActive }
@@ -391,6 +404,7 @@ function LoadingDetail( { onClose } ) {
 export default function RowDetailView( {
 	canGoNext,
 	canGoPrevious,
+	collectionId,
 	fields,
 	mode,
 	onApi,
@@ -680,7 +694,9 @@ export default function RowDetailView( {
 										propertiesVisible={
 											arePropertiesVisible
 										}
+										collectionId={ collectionId }
 										row={ paneRow }
+										rowId={ pane.detail.rowId }
 									/>
 								</EditorProvider>
 							</div>

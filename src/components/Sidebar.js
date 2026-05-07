@@ -120,13 +120,13 @@ export default function Sidebar( {
 		homePath,
 		home,
 		setHome,
-	isResolvingHomePath,
-	isResolvingPages,
-	isUpdating: isHomeUpdating,
-} = useWorkspaceHomePath();
-const {
-	favorites,
-	setFavorites,
+		isResolvingHomePath,
+		isResolvingPages,
+		isUpdating: isHomeUpdating,
+	} = useWorkspaceHomePath();
+	const {
+		favorites,
+		setFavorites,
 		isResolving: isResolvingFavorites,
 		isUpdating: isUpdatingFavorites,
 	} = useFavorites();
