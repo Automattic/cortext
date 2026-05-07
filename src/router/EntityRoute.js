@@ -1,7 +1,8 @@
 import { useNavigate, useParams } from '@tanstack/react-router';
-import { Spinner } from '@wordpress/components';
+import { Notice, Spinner } from '@wordpress/components';
 import { useEntityRecords } from '@wordpress/core-data';
 import { __ } from '@wordpress/i18n';
+import { useSearch } from '@wordpress/route';
 import {
 	useCallback,
 	useEffect,
@@ -13,6 +14,8 @@ import {
 
 import Canvas from '../components/Canvas';
 import CollectionDataViews from '../components/CollectionDataViews';
+import { RowFullEditorContext } from '../components/RowFullEditorContext';
+import { RowDetailSidebarSlot } from '../components/RowDetailSidebarSlot';
 import WorkspaceTopBar from '../components/WorkspaceTopBar';
 import { ACTIVE_PAGES_QUERY, POST_TYPE } from '../components/page-queries';
 import { firstPageInTree } from '../components/pages-tree';
@@ -36,7 +39,17 @@ const DEFAULT_VIEW = {
 	page: 1,
 	search: '',
 	layout: {},
+	rowDetailMode: 'side',
 };
+const ROW_SEARCH_KEY = 'row';
+
+function parseSearchId( value ) {
+	if ( Array.isArray( value ) ) {
+		return parseSearchId( value[ 0 ] );
+	}
+	const id = Number.parseInt( String( value ).replaceAll( '"', '' ), 10 );
+	return Number.isFinite( id ) && id > 0 ? id : null;
+}
 
 function CollectionView( { collectionId, onReady } ) {
 	const [ view, setView ] = useState( DEFAULT_VIEW );
@@ -70,6 +83,7 @@ function CollectionPane( { collectionId, onReady } ) {
 					onReady={ onReady }
 				/>
 			</div>
+			<RowDetailSidebarSlot />
 		</div>
 	);
 }
@@ -108,9 +122,39 @@ function WorkspacePane( { active, preservePaint = false, children } ) {
 	);
 }
 
+function RowFullSaveNotice( { message, onDiscard, onRetry } ) {
+	if ( ! message ) {
+		return null;
+	}
+
+	return (
+		<Notice
+			className="cortext-canvas__notice"
+			status="error"
+			isDismissible={ false }
+			actions={ [
+				{
+					label: __( 'Retry', 'cortext' ),
+					onClick: onRetry,
+					variant: 'primary',
+				},
+				{
+					label: __( 'Discard', 'cortext' ),
+					onClick: onDiscard,
+					variant: 'tertiary',
+				},
+			] }
+		>
+			{ message }
+		</Notice>
+	);
+}
+
 export default function EntityRoute( { history } ) {
 	const params = useParams( { strict: false } );
 	const navigate = useNavigate();
+	const search = useSearch( { strict: false } );
+	const routeRowId = parseSearchId( search?.[ ROW_SEARCH_KEY ] );
 	const splat = params._splat ?? '';
 	const target = useMemo( () => parseTarget( splat ), [ splat ] );
 	const { home, isResolving: isResolvingHome } = useWorkspaceHome();
@@ -242,6 +286,130 @@ export default function EntityRoute( { history } ) {
 		[ dispatch ]
 	);
 
+	const rowFullApiRef = useRef( null );
+	const [ rowFullTarget, setRowFullTarget ] = useState( null );
+	const rowFullTargetRef = useRef( rowFullTarget );
+	rowFullTargetRef.current = rowFullTarget;
+	const [ rowFullSaveError, setRowFullSaveError ] = useState( null );
+	const [ pendingRowFullTransition, setPendingRowFullTransition ] =
+		useState( null );
+	const [ suppressedRouteRow, setSuppressedRouteRow ] = useState( null );
+
+	const openRowFull = useCallback( ( rowTarget ) => {
+		setSuppressedRouteRow( null );
+		setRowFullSaveError( null );
+		setPendingRowFullTransition( null );
+		withViewTransition( () => setRowFullTarget( rowTarget ) );
+	}, [] );
+
+	const clearSuppressedRouteRow = useCallback( () => {
+		setSuppressedRouteRow( null );
+	}, [] );
+
+	const rowFullContext = useMemo(
+		() => ( {
+			clearSuppressedRouteRow,
+			openRowFull,
+			suppressedRouteRow,
+		} ),
+		[ clearSuppressedRouteRow, openRowFull, suppressedRouteRow ]
+	);
+
+	const setRowFullApi = useCallback( ( api ) => {
+		rowFullApiRef.current = api;
+	}, [] );
+
+	const applyRowFullTransition = useCallback( ( transition ) => {
+		const currentRowTarget = rowFullTargetRef.current;
+		if ( ! currentRowTarget ) {
+			return;
+		}
+
+		setRowFullSaveError( null );
+		setPendingRowFullTransition( null );
+
+		if ( transition.type === 'close' ) {
+			setSuppressedRouteRow( {
+				collectionId: currentRowTarget.collectionId,
+				rowId: currentRowTarget.rowId,
+			} );
+			currentRowTarget.onClose?.();
+			withViewTransition( () => setRowFullTarget( null ) );
+		} else if ( transition.type === 'mode' ) {
+			currentRowTarget.onModeChange?.(
+				transition.mode,
+				currentRowTarget.rowId
+			);
+			withViewTransition( () => setRowFullTarget( null ) );
+		}
+	}, [] );
+
+	const runRowFullTransition = useCallback(
+		async ( transition, options = {} ) => {
+			const api = rowFullApiRef.current;
+			setRowFullSaveError( null );
+
+			if ( options.discard ) {
+				api?.discard?.();
+				applyRowFullTransition( transition );
+				return true;
+			}
+
+			if ( api?.flushNow ) {
+				const didSave = await api.flushNow();
+				if ( ! didSave ) {
+					setPendingRowFullTransition( transition );
+					setRowFullSaveError(
+						__(
+							'Row changes could not be saved. Retry or discard the pending edits to continue.',
+							'cortext'
+						)
+					);
+					return false;
+				}
+			}
+
+			applyRowFullTransition( transition );
+			return true;
+		},
+		[ applyRowFullTransition ]
+	);
+
+	const retryPendingRowFullTransition = useCallback( () => {
+		if ( pendingRowFullTransition ) {
+			runRowFullTransition( pendingRowFullTransition );
+		}
+	}, [ pendingRowFullTransition, runRowFullTransition ] );
+
+	const discardPendingRowFullTransition = useCallback( () => {
+		if ( pendingRowFullTransition ) {
+			runRowFullTransition( pendingRowFullTransition, {
+				discard: true,
+			} );
+		}
+	}, [ pendingRowFullTransition, runRowFullTransition ] );
+
+	useEffect( () => {
+		if ( ! rowFullTarget ) {
+			return;
+		}
+		if ( String( routeRowId ) === String( rowFullTarget.rowId ) ) {
+			return;
+		}
+		runRowFullTransition( { type: 'close' } );
+	}, [ routeRowId, rowFullTarget, runRowFullTransition ] );
+
+	const rowFullNotice = (
+		<RowFullSaveNotice
+			message={ rowFullSaveError }
+			onDiscard={ discardPendingRowFullTransition }
+			onRetry={ retryPendingRowFullTransition }
+		/>
+	);
+	const navigateRowFullToCollection = useCallback( () => {
+		runRowFullTransition( { type: 'close' } );
+	}, [ runRowFullTransition ] );
+
 	// Drives the breadcrumb from the same paint state the document-actions
 	// Fill uses, so both sides of the top bar update together. Use
 	// `displayedPageId` rather than `mountedPageId` for the page case: when
@@ -250,7 +418,15 @@ export default function EntityRoute( { history } ) {
 	// catches up. Reading the mounted id would let the breadcrumb jump to B
 	// while A is still on screen.
 	let paintedRoute = { kind: 'unresolved' };
-	if ( active.kind === 'page' && displayedPageId !== null ) {
+	if ( rowFullTarget ) {
+		paintedRoute = {
+			kind: 'row',
+			collectionId: rowFullTarget.collectionId,
+			id: rowFullTarget.rowId,
+			onNavigateCollection: navigateRowFullToCollection,
+			postType: rowFullTarget.postType,
+		};
+	} else if ( active.kind === 'page' && displayedPageId !== null ) {
 		paintedRoute = { kind: 'page', id: displayedPageId };
 	} else if ( active.kind === 'collection' ) {
 		paintedRoute = { kind: 'collection', id: active.id };
@@ -262,22 +438,29 @@ export default function EntityRoute( { history } ) {
 		paintedRoute = { kind: active.kind };
 	}
 
+	const editorPostId = rowFullTarget?.rowId ?? mountedPageId;
+	const editorPostType = rowFullTarget?.postType;
+	const isEditorActive = Boolean( rowFullTarget ) || active.kind === 'page';
+
 	return (
-		<>
+		<RowFullEditorContext.Provider value={ rowFullContext }>
 			<WorkspaceTopBar
 				history={ history }
 				paintedRoute={ paintedRoute }
 			/>
 			<div className="cortext-workspace">
-				{ mountedPageId !== null && (
-					<WorkspacePane
-						active={ active.kind === 'page' }
-						preservePaint
-					>
+				{ editorPostId !== null && (
+					<WorkspacePane active={ isEditorActive } preservePaint>
 						<Canvas
-							postId={ mountedPageId }
-							onDisplayedPost={ handlePageDisplayed }
-							isActive={ active.kind === 'page' }
+							postId={ editorPostId }
+							postType={ editorPostType }
+							onDisplayedPost={
+								rowFullTarget ? undefined : handlePageDisplayed
+							}
+							isActive={ isEditorActive }
+							notice={ rowFullNotice }
+							onApi={ rowFullTarget ? setRowFullApi : undefined }
+							onSaved={ rowFullTarget?.onSaved }
 						/>
 					</WorkspacePane>
 				) }
@@ -286,7 +469,9 @@ export default function EntityRoute( { history } ) {
 					<WorkspacePane
 						key={ id }
 						active={
-							active.kind === 'collection' && active.id === id
+							! rowFullTarget &&
+							active.kind === 'collection' &&
+							active.id === id
 						}
 					>
 						<CollectionPane
@@ -296,21 +481,32 @@ export default function EntityRoute( { history } ) {
 					</WorkspacePane>
 				) ) }
 
-				<WorkspacePane active={ active.kind === 'empty' }>
+				<WorkspacePane
+					active={ ! rowFullTarget && active.kind === 'empty' }
+				>
 					<EmptyState />
 				</WorkspacePane>
-				<WorkspacePane active={ active.kind === 'page-not-found' }>
+				<WorkspacePane
+					active={
+						! rowFullTarget && active.kind === 'page-not-found'
+					}
+				>
 					<NotFoundPane type="page" />
 				</WorkspacePane>
 				<WorkspacePane
-					active={ active.kind === 'collection-not-found' }
+					active={
+						! rowFullTarget &&
+						active.kind === 'collection-not-found'
+					}
 				>
 					<NotFoundPane type="collection" />
 				</WorkspacePane>
-				<WorkspacePane active={ active.kind === 'loading' }>
+				<WorkspacePane
+					active={ ! rowFullTarget && active.kind === 'loading' }
+				>
 					<LoadingPane />
 				</WorkspacePane>
 			</div>
-		</>
+		</RowFullEditorContext.Provider>
 	);
 }

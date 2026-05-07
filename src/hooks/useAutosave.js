@@ -9,7 +9,9 @@ const DEBOUNCE_MS = 800;
 const MIN_SAVE_INTERVAL_MS = 2000;
 const AUTOSAVE_ERROR_NOTICE_ID = 'cortext-autosave-error';
 
-export default function useAutosave() {
+export default function useAutosave( options = {} ) {
+	const debounceMs = options.debounceMs ?? DEBOUNCE_MS;
+	const minSaveIntervalMs = options.minSaveIntervalMs ?? MIN_SAVE_INTERVAL_MS;
 	const { savePost, editPost } = useDispatch( editorStore );
 	const { createErrorNotice, removeNotice } = useDispatch( noticesStore );
 
@@ -44,6 +46,8 @@ export default function useAutosave() {
 
 	const debounceRef = useRef( null );
 	const lastSaveAtRef = useRef( 0 );
+	const savePromiseRef = useRef( null );
+	const savingWaitersRef = useRef( [] );
 
 	const stateRef = useRef( {
 		isDirty,
@@ -66,7 +70,7 @@ export default function useAutosave() {
 
 	// Promote draft to private once the user has given the page a real title,
 	// so WP core regenerates post_name from the title on save.
-	const maybePromoteStatus = () => {
+	const maybePromoteStatus = useCallback( () => {
 		const {
 			editPost: edit,
 			postStatus: s,
@@ -75,33 +79,81 @@ export default function useAutosave() {
 		if ( s === 'draft' && typeof t === 'string' && t.trim() !== '' ) {
 			edit( { status: 'private' } );
 		}
-	};
+	}, [] );
 
-	const flushNow = useCallback( () => {
+	const saveCurrentPost = useCallback( () => {
+		const { savePost: save } = stateRef.current;
+
+		maybePromoteStatus();
+		lastSaveAtRef.current = Date.now();
+		const savePromise = Promise.resolve( save() ).then(
+			() => true,
+			() => false
+		);
+		savePromiseRef.current = savePromise;
+		savePromise.finally( () => {
+			if ( savePromiseRef.current === savePromise ) {
+				savePromiseRef.current = null;
+			}
+		} );
+
+		return savePromise;
+	}, [ maybePromoteStatus ] );
+
+	const waitForSavingToFinish = useCallback( () => {
+		if ( ! stateRef.current.isSaving ) {
+			return Promise.resolve( true );
+		}
+
+		return new Promise( ( resolve ) => {
+			savingWaitersRef.current.push( resolve );
+		} );
+	}, [] );
+
+	const flushNow = useCallback( async () => {
 		if ( debounceRef.current ) {
 			clearTimeout( debounceRef.current );
 			debounceRef.current = null;
 		}
+
+		if ( savePromiseRef.current ) {
+			const didSave = await savePromiseRef.current;
+			if ( ! didSave ) {
+				return false;
+			}
+		}
+
+		if ( stateRef.current.isSaving ) {
+			const didSave = await waitForSavingToFinish();
+			if ( ! didSave ) {
+				return false;
+			}
+		}
+
 		const {
 			isDirty: d,
 			isSaveable: s,
 			isSaving: saving,
 			postStatus: ps,
-			savePost: save,
 		} = stateRef.current;
 		if ( ! d || ! s || ps === 'trash' ) {
-			return Promise.resolve( true );
+			return true;
 		}
 		if ( saving ) {
-			return Promise.resolve( false );
+			return waitForSavingToFinish();
 		}
-		maybePromoteStatus();
-		lastSaveAtRef.current = Date.now();
-		return Promise.resolve( save() ).then(
-			() => true,
-			() => false
-		);
-	}, [] );
+		return saveCurrentPost();
+	}, [ saveCurrentPost, waitForSavingToFinish ] );
+
+	useEffect( () => {
+		if ( isSaving || savingWaitersRef.current.length === 0 ) {
+			return;
+		}
+
+		const waiters = savingWaitersRef.current;
+		savingWaitersRef.current = [];
+		waiters.forEach( ( resolve ) => resolve( ! didFail ) );
+	}, [ didFail, isSaving ] );
 
 	useEffect( () => {
 		if ( ! isDirty || ! isSaveable ) {
@@ -114,7 +166,7 @@ export default function useAutosave() {
 			return undefined;
 		}
 		const elapsed = Date.now() - lastSaveAtRef.current;
-		const wait = Math.max( DEBOUNCE_MS, MIN_SAVE_INTERVAL_MS - elapsed );
+		const wait = Math.max( debounceMs, minSaveIntervalMs - elapsed );
 
 		if ( debounceRef.current ) {
 			clearTimeout( debounceRef.current );
@@ -126,12 +178,9 @@ export default function useAutosave() {
 				isSaveable: s,
 				isSaving: saving,
 				postStatus: ps,
-				savePost: save,
 			} = stateRef.current;
 			if ( d && s && ! saving && ps !== 'trash' ) {
-				maybePromoteStatus();
-				lastSaveAtRef.current = Date.now();
-				save();
+				saveCurrentPost();
 			}
 		}, wait );
 
@@ -141,7 +190,16 @@ export default function useAutosave() {
 				debounceRef.current = null;
 			}
 		};
-	}, [ isDirty, isSaveable, editsReference, postStatus ] );
+	}, [
+		debounceMs,
+		editsReference,
+		isDirty,
+		isSaveable,
+		isSaving,
+		minSaveIntervalMs,
+		postStatus,
+		saveCurrentPost,
+	] );
 
 	useEffect( () => {
 		if ( isSaving ) {

@@ -327,3 +327,19 @@ The user-facing placeholder is still Core's generic "Search commands and setting
 **Where.** `src/components/CommandPalette.js`, the `canvasRef` passed from `src/router.js`, `dequeue_core_command_palette` in `includes/Admin/Screen.php`, and the `@wordpress/commands` stylesheet import in `src/index.scss`.
 
 **Solution.** Upstream could make app-owned palettes less ad hoc: a scoped command registry or namespace API, a supported way for full-screen admin apps to opt out of Core's admin palette, a custom input label, and an explicit focus-return target or after-close callback. With those, Cortext could keep registering commands through `@wordpress/commands` and drop most of the shell-specific wiring.
+
+## 39. Row detail relation editing is deferred `[internal]`
+
+**What.** Relation fields look like regular row fields in the detail view, but they are not regular meta. A plain `editPost( { meta } )` save would only update the current row. It would skip `RowsController::update_row_field()` and `Relations::sync_relation_value()`, so the row on the other side of the relation could be left pointing at stale data. For now, row detail shows relations but does not let you edit them.
+
+**Where.** `isRowDetailFieldEditable` in `src/components/RowDetailView.js`.
+
+**Solution.** Reuse the relation picker in row detail and save relation changes through the row-field endpoint, not through generic post meta edits. Once DataViews has a real relation/reference field primitive (#37), there should be less custom wiring here.
+
+## 40. Autosave has to infer in-flight save completion `[upstream, soft]`
+
+**What.** `savePost()` gives us a promise when Cortext starts the save. If a save is already running, though, Gutenberg only tells us about it through selectors like `isSavingPost()` and `didPostSaveRequestFail()`. There is no promise to await. `flushNow()` has to keep its own small list of waiters and release them when `isSaving` flips back to false.
+
+**Where.** `savePromiseRef`, `savingWaitersRef`, and `flushNow` in `src/hooks/useAutosave.js`.
+
+**Solution.** Gutenberg could expose the current save promise, or make `savePost()` return the in-flight promise when one already exists. Then Cortext could drop the waiter bookkeeping.
