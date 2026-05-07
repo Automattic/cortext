@@ -378,3 +378,19 @@ The user-facing placeholder is still Core's generic "Search commands and setting
 **Where.** `RowProperties` in `src/components/RowProperties.js`, mounted from `src/components/Canvas.js` for full-page row documents and `src/components/RowDetailView.js` for side/modal row detail. There is still no `cortext/document-properties` block or PHP render callback.
 
 **Solution.** Build `cortext/document-properties` as a locked dynamic block, in the same family as `cortext/document-cover` and `cortext/document-icon`. Its `edit()` should reuse the row-property form inside the editor iframe. Its `render_callback` should read the row's collection schema and meta, then emit frontend HTML for public themes. The header-block insertion path should place it after cover/icon/title on row documents. The full-page hide/show control then becomes an editor visibility preference, not the source of truth for whether properties exist in the document.
+
+## 43. Row recents still target the parent collection `[internal]`
+
+**What.** Recents stores row identity (`kind: row`, row id, and parent collection id), but the response still sends the parent collection as the clickable path. Row documents now have their own document URLs, so this is only a first-pass fallback: it gets the user back to the right table, but not directly into the row document they touched. The stored identity is enough to improve the target without changing the saved meta shape.
+
+**Where.** Row handling in `includes/Rest/RecentsController.php`, row clicks in `src/components/SidebarRecents.js`, recent row commands in `src/components/CommandPalette.js`, and the row-recents e2e coverage in `tests/e2e/specs/recents.spec.js`.
+
+**Solution.** Have row recents return the row document path, or give recents a route target shape instead of a single path string. That target should use the same document URL helper as row detail and relations, so sidebar recents and palette recents open the row directly instead of stopping at the parent collection.
+
+## 44. Recents tracking is wired at each call site `[internal]`
+
+**What.** There is no workspace activity layer. Each surface that counts as a visit or edit calls `touchRecent` itself: route resolution, page autosave, sidebar rename, row field save, row creation, and relation-created rows. That makes the behavior easy to understand right now, but future write paths can forget to update recents unless the reviewer knows to look for it.
+
+**Where.** `src/router/EntityRoute.js`, `src/hooks/useAutosave.js`, `src/components/Sidebar.js`, `src/components/CollectionDataViews.js`, and `src/components/relations/RelationEditor.js`.
+
+**Solution.** If more activity surfaces appear, move this behind a small workspace activity helper or event. Route visits can stay in the router, but writes should eventually report through the same mutation path instead of each component remembering to call `touchRecent`. If rows move into `core-data` (#2), that would be a natural time to centralize row touches too.
