@@ -122,11 +122,13 @@ Worth a small spike before committing; `core-data`'s schema cache for rarely-cha
 
 ## 14. Sort on display-value properties is an open architectural decision `[internal]`
 
-**What.** `created_by`, `modified_by`, future Person properties, Relation, value-Rollup, and Files all share the same pattern: stored value is an internal handle (user ID, post ID, attachment ID), useful sort is on the displayed string (display name, related-row title, filename). Sort by stored is meaningless from the UI; sort by display requires a JOIN (or in-memory sort). PR C ships sort only on the timestamp system fields and rejects sort on `_by` keys at the validator. The same problem will hit Relation and Rollup when those types ship (RSM-1468), so the architecture should be settled once.
+**What.** `created_by`, `modified_by`, Person-style fields, Relations, relation-backed Rollups, and Files all share the same problem: the stored value is an internal handle, while the useful sort is the displayed value. Sorting by user ID, row ID, or attachment ID is not what users mean. Sorting by display name, related-row title, filename, or a computed rollup value needs either JOINs, denormalized display values, or an in-memory pass.
 
-**Where.** `validate_sort_field` in `includes/Rest/RowsController.php` (rejects `_by` keys today). `enableSorting: false` for the `_by` system fields in `systemFields` (`src/hooks/fieldMapping.js`).
+Relations and list-style rollups now keep sorting disabled. Scalar rollups can sort in the client while the table has all rows loaded, but the REST query path still cannot order by computed rollup values because they are not stored as row meta. `build_query_args` falls back to the default date ordering if a rollup sort reaches the server.
 
-**Solution.** A single decision shared with the relations/rollups work: JOIN-and-sort in `build_query_args`, in-memory sort after fetch, or a custom REST query path. Pick when picking up RSM-1468; until then, sort UI on display-value properties stays disabled. Tracked in RSM-1793.
+**Where.** `validate_sort_field` and `build_query_args` in `includes/Rest/RowsController.php`; `enableSorting: false` for display-value fields in `systemFields` and `mapField` (`src/hooks/fieldMapping.js`).
+
+**Solution.** Pick one model for display-value sorting: JOIN-and-sort in `build_query_args`, denormalize sortable display values into row meta, or keep fetching all rows and sort in memory. The answer should cover system user fields, Relations, Rollups, Person, and Files at the same time. Tracked in RSM-1793.
 
 ## 15. DataViews table columns lack interaction extension points `[upstream]`
 
@@ -328,7 +330,23 @@ The user-facing placeholder is still Core's generic "Search commands and setting
 
 **Solution.** Upstream could make app-owned palettes less ad hoc: a scoped command registry or namespace API, a supported way for full-screen admin apps to opt out of Core's admin palette, a custom input label, and an explicit focus-return target or after-close callback. With those, Cortext could keep registering commands through `@wordpress/commands` and drop most of the shell-specific wiring.
 
-## 39. Favorite rows have their own sidebar-row shape `[internal, soft]`
+## 39. Row detail relation editing is deferred `[internal]`
+
+**What.** Relation fields look like regular row fields in the detail view, but they are not regular meta. A plain `editPost( { meta } )` save would only update the current row. It would skip `RowsController::update_row_field()` and `Relations::sync_relation_value()`, so the row on the other side of the relation could be left pointing at stale data. For now, row detail shows relations but does not let you edit them.
+
+**Where.** `isRowDetailFieldEditable` in `src/components/RowDetailView.js`.
+
+**Solution.** Reuse the relation picker in row detail and save relation changes through the row-field endpoint, not through generic post meta edits. Once DataViews has a real relation/reference field primitive (#37), there should be less custom wiring here.
+
+## 40. Autosave has to infer in-flight save completion `[upstream, soft]`
+
+**What.** `savePost()` gives us a promise when Cortext starts the save. If a save is already running, though, Gutenberg only tells us about it through selectors like `isSavingPost()` and `didPostSaveRequestFail()`. There is no promise to await. `flushNow()` has to keep its own small list of waiters and release them when `isSaving` flips back to false.
+
+**Where.** `savePromiseRef`, `savingWaitersRef`, and `flushNow` in `src/hooks/useAutosave.js`.
+
+**Solution.** Gutenberg could expose the current save promise, or make `savePost()` return the in-flight promise when one already exists. Then Cortext could drop the waiter bookkeeping.
+
+## 41. Favorite rows have their own sidebar-row shape `[internal, soft]`
 
 **What.** Favorites look like sidebar rows, but they are not normal page-tree rows. They are shortcuts, they should never show the active selection state, and they are sortable only inside the Favorites section. Sharing the whole row as both a navigation button and a dnd-kit sortable handle made clicks repaint the hover state and feel like a flash. The current row splits those jobs: the icon is the drag handle, the title is a plain navigation button, and the star is the remove action. It works, but it means Favorites carry a small custom row shape alongside `PageRow` and `CollectionRow`.
 

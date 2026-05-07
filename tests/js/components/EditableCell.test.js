@@ -27,6 +27,14 @@ describe( 'formatDisplay', () => {
 		);
 	} );
 
+	describe( 'plain values', () => {
+		it( 'joins array values with comma-space', () => {
+			expect( formatDisplay( [ 'Alpha', 'Beta' ], 'text' ) ).toBe(
+				'Alpha, Beta'
+			);
+		} );
+	} );
+
 	describe( 'date / datetime', () => {
 		it( 'formats date-only values per the chosen locale', () => {
 			expect(

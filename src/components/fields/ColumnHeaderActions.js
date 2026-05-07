@@ -1,5 +1,5 @@
 /* global MutationObserver */
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import {
 	Button,
 	Dropdown,
@@ -34,6 +34,7 @@ import AddFieldPopover from './AddFieldPopover';
 import EditOptionsPopover from './EditOptionsPopover';
 import FieldFormatPopover from './FieldFormatPopover';
 import RenameFieldInline from './RenameFieldInline';
+import useCollectionFields from '../../hooks/useCollectionFields';
 import { elementsFromOptions } from '../../hooks/fieldMapping';
 import { TableCalculationPopover } from '../TableCalculationMenu';
 import {
@@ -164,7 +165,7 @@ export default function ColumnHeaderActions( {
 				return createPortal(
 					<AddFieldTrigger collectionId={ collectionId } />,
 					target.th,
-					target.key
+					`${ target.key }-${ collectionId }`
 				);
 			} ) }
 		</>
@@ -194,6 +195,7 @@ function FieldActions( {
 	const optionsAnchorRef = useRef( null );
 	const duplicate = useDuplicateField( collectionId );
 	const remove = useDeleteField( collectionId );
+	const { fields } = useCollectionFields( collectionId );
 	const { record } = useEntityRecord( 'postType', 'crtxt_field', recordId );
 	const fieldType = record?.meta?.type;
 	const canFormat = FORMATTABLE_TYPES.has( fieldType );
@@ -391,6 +393,16 @@ function FieldActions( {
 	const sortField = view?.sort?.field ?? null;
 	const sortDirection = view?.sort?.direction ?? null;
 	const isSorted = sortField === dataViewId;
+	const dependentRollups = useMemo(
+		() =>
+			fields.filter(
+				( field ) =>
+					field.cortextType === 'rollup' &&
+					( field.rollupRelationFieldId === recordId ||
+						field.rollupTargetFieldId === recordId )
+			),
+		[ fields, recordId ]
+	);
 
 	// Title is pinned at index 0 (PR A's normalizeView) and the ghost
 	// column at the end. Move only operates on the data-field region in
@@ -679,10 +691,32 @@ function FieldActions( {
 					onCancel={ () => setConfirmDelete( false ) }
 					confirmButtonText={ __( 'Delete', 'cortext' ) }
 				>
-					{ __(
-						'Delete this field? Existing values for this field will be removed from every entry.',
-						'cortext'
-					) }
+					<p>
+						{ __(
+							'Delete this field? Existing values for this field will be removed from every entry.',
+							'cortext'
+						) }
+					</p>
+					{ dependentRollups.length > 0 ? (
+						<p>
+							{ dependentRollups.length === 1
+								? __(
+										'This will also delete 1 rollup that depends on it:',
+										'cortext'
+								  )
+								: sprintf(
+										/* translators: %d: number of dependent rollup fields */
+										__(
+											'This will also delete %d rollups that depend on it:',
+											'cortext'
+										),
+										dependentRollups.length
+								  ) }{ ' ' }
+							{ dependentRollups
+								.map( ( field ) => field.label )
+								.join( ', ' ) }
+						</p>
+					) : null }
 				</ConfirmDialog>
 			) : null }
 			{ isEditingOptions && supportsOptions ? (

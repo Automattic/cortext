@@ -301,6 +301,24 @@ export function formatDisplay( value, type, options = {} ) {
 		return '';
 	}
 
+	if ( type === 'rollup-date-range' ) {
+		if ( ! value || typeof value !== 'object' ) {
+			return '';
+		}
+		const dateType =
+			format?.rollup_target_type === 'datetime' ? 'datetime' : 'date';
+		const start = value.start
+			? formatDateValue( value.start, dateType, format )
+			: '';
+		const end = value.end
+			? formatDateValue( value.end, dateType, format )
+			: '';
+		if ( start && end && start !== end ) {
+			return `${ start } - ${ end }`;
+		}
+		return start || end;
+	}
+
 	if ( type === 'checkbox' ) {
 		// `false` is a meaningful value but renders as a blank cell.
 		// Reaching this branch is rare in practice (interactive checkbox
@@ -373,10 +391,22 @@ export function formatDisplay( value, type, options = {} ) {
 	}
 
 	if ( type === 'date' || type === 'datetime' ) {
+		if ( Array.isArray( value ) ) {
+			return value
+				.map( ( item ) => formatDateValue( item, type, format ) )
+				.filter( Boolean )
+				.join( ', ' );
+		}
 		return formatDateValue( value, type, format );
 	}
 
 	if ( type === 'number' ) {
+		if ( Array.isArray( value ) ) {
+			return value
+				.map( ( item ) => formatNumberValue( item, format ) )
+				.filter( Boolean )
+				.join( ', ' );
+		}
 		const text = formatNumberValue( value, format );
 		if ( format?.display === 'bar' ) {
 			return (
@@ -391,10 +421,18 @@ export function formatDisplay( value, type, options = {} ) {
 		return text;
 	}
 
+	if ( Array.isArray( value ) ) {
+		return value
+			.filter(
+				( item ) => item !== null && item !== undefined && item !== ''
+			)
+			.map( ( item ) => String( item ) )
+			.join( ', ' );
+	}
 	return String( value );
 }
 
-function CellShell( { children, onActivate, ariaLabel, isEmpty, disabled } ) {
+function CellShell( { children, onActivate, ariaLabel, className, disabled } ) {
 	// Plain-text content gets the ellipsis wrapper so narrow columns
 	// truncate cleanly. JSX content (chips, links, icons) carries its own
 	// truncation/wrap rules and renders directly — putting `white-space:
@@ -405,10 +443,7 @@ function CellShell( { children, onActivate, ariaLabel, isEmpty, disabled } ) {
 		<div
 			role={ disabled ? undefined : 'button' }
 			tabIndex={ disabled ? -1 : 0 }
-			className={
-				'cortext-editable-cell__shell' +
-				( isEmpty ? ' cortext-editable-cell__shell--empty' : '' )
-			}
+			className={ className }
 			onClick={ disabled ? undefined : onActivate }
 			onKeyDown={
 				disabled
@@ -890,6 +925,10 @@ export default function EditableCell( {
 	// Always render the shell so its content sets the column's intrinsic
 	// width. When editing, overlay the editor on top via position:absolute
 	// so the column doesn't reflow to the editor's larger min-content.
+	const shellClassName =
+		'cortext-editable-cell__shell' +
+		( display === '' ? ' cortext-editable-cell__shell--empty' : '' );
+
 	return (
 		<div
 			className={
@@ -899,7 +938,7 @@ export default function EditableCell( {
 		>
 			<CellShell
 				ariaLabel={ label }
-				isEmpty={ display === '' }
+				className={ shellClassName }
 				disabled={ isEditing }
 				onActivate={ () => setIsEditing( true ) }
 			>

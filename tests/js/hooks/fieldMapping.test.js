@@ -124,6 +124,128 @@ describe( 'mapField', () => {
 		expect( mapped.relationMultiple ).toBe( false );
 	} );
 
+	it( "maps numeric rollups to read-only DataViews 'integer' fields with numeric sorting", () => {
+		const mapped = mapField(
+			baseField( { type: 'rollup', rollup_aggregator: 'sum' } )
+		);
+		expect( mapped.type ).toBe( 'integer' );
+		expect( mapped.editable ).toBe( false );
+		expect( mapped.enableSorting ).toBe( true );
+		expect( mapped.rollupAggregator ).toBe( 'sum' );
+		expect(
+			mapped.sort(
+				{ meta: { 'field-5': 2 } },
+				{ meta: { 'field-5': 10 } },
+				'asc'
+			)
+		).toBeLessThan( 0 );
+	} );
+
+	it( "maps latest rollups against a date target to read-only DataViews 'date' fields", () => {
+		const mapped = mapField(
+			baseField( {
+				type: 'rollup',
+				rollup_aggregator: 'latest',
+				rollup_target_type: 'date',
+			} )
+		);
+		expect( mapped.type ).toBe( 'date' );
+		expect( mapped.editable ).toBe( false );
+		expect( mapped.enableSorting ).toBe( true );
+	} );
+
+	it( "maps latest rollups against a datetime target to read-only DataViews 'datetime' fields", () => {
+		const mapped = mapField(
+			baseField( {
+				type: 'rollup',
+				rollup_aggregator: 'latest',
+				rollup_target_type: 'datetime',
+			} )
+		);
+		expect( mapped.type ).toBe( 'datetime' );
+		expect( mapped.editable ).toBe( false );
+		expect( mapped.enableSorting ).toBe( true );
+	} );
+
+	it( 'maps value-list rollups to read-only non-sortable fields', () => {
+		const mapped = mapField(
+			baseField( {
+				type: 'rollup',
+				rollup_aggregator: 'show_unique',
+				rollup_target_type: 'select',
+				rollup_target_options:
+					'[{"value":"paid","label":"Paid","color":"green"}]',
+			} )
+		);
+		expect( mapped.type ).toBe( 'array' );
+		expect( mapped.editable ).toBe( false );
+		expect( mapped.enableSorting ).toBe( false );
+		expect( mapped.filterBy ).toBe( false );
+	} );
+
+	it( 'renders select value-list rollups as multiple chips', () => {
+		const mapped = mapField(
+			baseField( {
+				type: 'rollup',
+				rollup_aggregator: 'show_original',
+				rollup_target_type: 'select',
+				rollup_target_options:
+					'[{"value":"paid","label":"Paid","color":"green"},{"value":"draft","label":"Draft","color":"gray"}]',
+			} )
+		);
+		const { container } = render(
+			mapped.render( {
+				item: {
+					meta: {
+						'field-5': [ 'paid', 'draft' ],
+					},
+				},
+			} )
+		);
+
+		expect( container.textContent ).toContain( 'Paid' );
+		expect( container.textContent ).toContain( 'Draft' );
+	} );
+
+	it( 'maps date range rollups to read-only non-sortable text fields', () => {
+		const mapped = mapField(
+			baseField( {
+				type: 'rollup',
+				rollup_aggregator: 'date_range',
+				rollup_target_type: 'date',
+			} )
+		);
+		expect( mapped.type ).toBe( 'text' );
+		expect( mapped.editable ).toBe( false );
+		expect( mapped.enableSorting ).toBe( false );
+		expect( mapped.filterBy ).toBe( false );
+	} );
+
+	it( 'renders date range rollups as start and end text', () => {
+		const mapped = mapField(
+			baseField( {
+				type: 'rollup',
+				rollup_aggregator: 'date_range',
+				rollup_target_type: 'date',
+				rollup_target_date_format: '{"style":"us"}',
+			} )
+		);
+		const { container } = render(
+			mapped.render( {
+				item: {
+					meta: {
+						'field-5': {
+							start: '2026-05-01',
+							end: '2026-05-03',
+						},
+					},
+				},
+			} )
+		);
+
+		expect( container.textContent ).toContain( '05/01/2026 - 05/03/2026' );
+	} );
+
 	it( "maps email to DataViews 'email'", () => {
 		expect( mapField( baseField( { type: 'email' } ) ).type ).toBe(
 			'email'

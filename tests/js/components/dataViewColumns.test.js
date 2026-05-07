@@ -5,6 +5,7 @@ import {
 	TITLE_FIELD_ID,
 	clampWidth,
 	getMinWidth,
+	isDefaultVisibleField,
 	normalizeView,
 	withColumnOrder,
 	withColumnWidth,
@@ -51,6 +52,31 @@ describe( 'clampWidth', () => {
 
 	it( 'uses the default floor when no type is provided', () => {
 		expect( clampWidth( 10 ) ).toBe( DEFAULT_MIN_WIDTH );
+	} );
+} );
+
+describe( 'isDefaultVisibleField', () => {
+	it( 'shows editable fields and user-created read-only fields', () => {
+		expect( isDefaultVisibleField( { id: 'title', editable: true } ) ).toBe(
+			true
+		);
+		expect(
+			isDefaultVisibleField( {
+				id: 'field-10',
+				recordId: 10,
+				editable: false,
+				cortextType: 'rollup',
+			} )
+		).toBe( true );
+	} );
+
+	it( 'keeps system fields hidden by default', () => {
+		expect(
+			isDefaultVisibleField( {
+				id: 'created_at',
+				editable: false,
+			} )
+		).toBe( false );
 	} );
 } );
 

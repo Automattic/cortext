@@ -294,6 +294,105 @@ describe( 'useAutosave: flush triggers', () => {
 		} );
 		expect( savePost ).not.toHaveBeenCalled();
 	} );
+
+	it( 'waits for an in-flight autosave instead of reporting failure', async () => {
+		let resolveSave;
+		const savePost = jest.fn(
+			() =>
+				new Promise( ( resolve ) => {
+					resolveSave = resolve;
+				} )
+		);
+		useDispatch.mockReturnValue( { savePost } );
+		setStoreState( { isDirty: true } );
+
+		const { result, rerender } = renderHook( () =>
+			useAutosave( { debounceMs: 0, minSaveIntervalMs: 0 } )
+		);
+
+		act( () => {
+			jest.advanceTimersByTime( 0 );
+		} );
+		expect( savePost ).toHaveBeenCalledTimes( 1 );
+
+		const flushPromise = result.current.flushNow();
+		act( () => {
+			setStoreState( { isDirty: false } );
+			rerender();
+		} );
+
+		await act( async () => {
+			resolveSave();
+			await expect( flushPromise ).resolves.toBe( true );
+		} );
+		expect( savePost ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'flushes edits made while an autosave is in flight', async () => {
+		let resolveFirstSave;
+		const savePost = jest
+			.fn()
+			.mockImplementationOnce(
+				() =>
+					new Promise( ( resolve ) => {
+						resolveFirstSave = resolve;
+					} )
+			)
+			.mockResolvedValueOnce();
+		useDispatch.mockReturnValue( { savePost } );
+		setStoreState( { isDirty: true } );
+
+		const { result, rerender } = renderHook( () =>
+			useAutosave( { debounceMs: 0, minSaveIntervalMs: 0 } )
+		);
+
+		act( () => {
+			jest.advanceTimersByTime( 0 );
+		} );
+		expect( savePost ).toHaveBeenCalledTimes( 1 );
+
+		const flushPromise = result.current.flushNow();
+		act( () => {
+			setStoreState( { isDirty: true, isSaving: false } );
+			rerender();
+		} );
+
+		await act( async () => {
+			resolveFirstSave();
+			await expect( flushPromise ).resolves.toBe( true );
+		} );
+		expect( savePost ).toHaveBeenCalledTimes( 2 );
+	} );
+
+	it( 'waits for a store-reported save before flushing remaining edits', async () => {
+		const savePost = jest.fn();
+		useDispatch.mockReturnValue( { savePost } );
+		setStoreState( { isDirty: true, isSaving: true } );
+
+		const { result, rerender } = renderHook( () =>
+			useAutosave( { debounceMs: 0, minSaveIntervalMs: 0 } )
+		);
+
+		let didResolve = false;
+		const flushPromise = result.current.flushNow().then( ( value ) => {
+			didResolve = true;
+			return value;
+		} );
+
+		await act( async () => {
+			await Promise.resolve();
+		} );
+		expect( didResolve ).toBe( false );
+		expect( savePost ).not.toHaveBeenCalled();
+
+		act( () => {
+			setStoreState( { isDirty: true, isSaving: false } );
+			rerender();
+		} );
+
+		await expect( flushPromise ).resolves.toBe( true );
+		expect( savePost ).toHaveBeenCalledTimes( 1 );
+	} );
 } );
 
 describe( 'useAutosave: status', () => {
