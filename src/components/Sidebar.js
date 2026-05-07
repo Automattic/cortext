@@ -63,6 +63,7 @@ import SidebarFavorites, {
 	filterFavoritesForTrashedPage,
 } from './SidebarFavorites';
 import SidebarResizeHandle from './SidebarResizeHandle';
+import SidebarRecents from './SidebarRecents';
 import SidebarTrash from './SidebarTrash';
 import ThemeToggle from './ThemeToggle';
 import {
@@ -688,6 +689,7 @@ const {
 						}
 						onReorder={ reorderFavorites }
 					/>
+					<SidebarRecents />
 
 					<div className="cortext-sidebar__section-header">
 						<h2 className="cortext-sidebar__section-title">

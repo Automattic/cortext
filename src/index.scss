@@ -419,6 +419,20 @@ body.cortext-fullscreen {
 		white-space: nowrap;
 	}
 
+	&__recent-icon {
+		flex: 0 0 $grid-unit-30;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: $grid-unit-30;
+		height: $grid-unit-30;
+		color: var(--cortext-text-muted);
+	}
+
+	&__recent-node {
+		will-change: transform, opacity;
+	}
+
 	&__icon.components-button {
 		flex: 0 0 auto;
 		display: inline-flex;
