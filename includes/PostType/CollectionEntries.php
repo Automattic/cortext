@@ -103,6 +103,8 @@ final class CollectionEntries {
 			return;
 		}
 
+		$this->delete_dependent_rollups_for_field( $post_id );
+
 		$reverse_id = (int) get_post_meta( $post_id, 'relation_reverse_field_id', true );
 		if ( $reverse_id > 0 && empty( self::$deleting_relation_fields[ $reverse_id ] ) ) {
 			$reverse = get_post( $reverse_id );
@@ -115,6 +117,9 @@ final class CollectionEntries {
 				if ( $reverse_owner_collection_id > 0 ) {
 					delete_post_meta( $reverse_owner_collection_id, 'fields', (string) $reverse_id );
 				}
+
+				$this->delete_dependent_rollups_in_collection( $post_id, $owner_collection_id );
+				$this->delete_dependent_rollups_in_collection( $reverse_id, $reverse_owner_collection_id );
 
 				self::$deleting_relation_fields[ $post_id ] = true;
 				wp_delete_post( $reverse_id, true );
@@ -154,6 +159,141 @@ final class CollectionEntries {
 				continue;
 			}
 			delete_post_meta( $collection_id, 'fields', $field_id_str );
+		}
+	}
+
+	/**
+	 * Deletes rollup fields in one collection that depend on a deleted field.
+	 *
+	 * @param int $field_id      Field post ID being deleted.
+	 * @param int $collection_id Collection whose fields should be scanned.
+	 */
+	private function delete_dependent_rollups_in_collection( int $field_id, int $collection_id ): void {
+		if ( $collection_id < 1 ) {
+			return;
+		}
+
+		$field_id_str = (string) $field_id;
+		foreach ( array_map( 'intval', get_post_meta( $collection_id, 'fields', false ) ) as $rollup_id ) {
+			if (
+				$rollup_id !== $field_id &&
+				Field::POST_TYPE === get_post_type( $rollup_id ) &&
+				'rollup' === (string) get_post_meta( $rollup_id, 'type', true ) &&
+				(
+					(string) get_post_meta( $rollup_id, 'rollup_relation_field_id', true ) === $field_id_str ||
+					(string) get_post_meta( $rollup_id, 'rollup_target_field_id', true ) === $field_id_str
+				)
+			) {
+				delete_post_meta( $collection_id, 'fields', (string) $rollup_id );
+				wp_delete_post( $rollup_id, true );
+			}
+		}
+	}
+
+	/**
+	 * Deletes rollup fields that depend on a deleted relation or target field.
+	 *
+	 * @param int $field_id Field post ID being deleted.
+	 */
+	private function delete_dependent_rollups_for_field( int $field_id ): void {
+		global $wpdb;
+
+		$field_id_str   = (string) $field_id;
+		$rollup_ids     = array();
+		$collection_ids = array_values( self::$entry_collection_ids );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- cleanup by exact field list value.
+		$attached_collection_ids = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = %s AND meta_value = %s",
+				'fields',
+				$field_id_str
+			)
+		);
+		$collection_ids          = array_merge(
+			$collection_ids,
+			$attached_collection_ids
+		);
+
+		foreach ( array( 'rollup_relation_field_id', 'rollup_target_field_id' ) as $meta_key ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- cleanup by exact rollup dependency meta.
+			$dependent_ids = $wpdb->get_col(
+				$wpdb->prepare(
+					"SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = %s AND meta_value = %s",
+					$meta_key,
+					$field_id_str
+				)
+			);
+			$rollup_ids    = array_merge(
+				$rollup_ids,
+				$dependent_ids
+			);
+		}
+
+		$fields = get_posts(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => array( 'draft', 'private', 'publish' ),
+				'numberposts' => -1,
+				'fields'      => 'ids',
+			)
+		);
+		foreach ( array_map( 'intval', $fields ) as $candidate_id ) {
+			if (
+				$candidate_id !== $field_id &&
+				'rollup' === (string) get_post_meta( $candidate_id, 'type', true ) &&
+				(
+					(string) get_post_meta( $candidate_id, 'rollup_relation_field_id', true ) === $field_id_str ||
+					(string) get_post_meta( $candidate_id, 'rollup_target_field_id', true ) === $field_id_str
+				)
+			) {
+				$rollup_ids[] = $candidate_id;
+			}
+		}
+
+		foreach ( array_unique( array_map( 'intval', $collection_ids ) ) as $collection_id ) {
+			if ( Collection::POST_TYPE !== get_post_type( $collection_id ) ) {
+				continue;
+			}
+			foreach ( array_map( 'intval', get_post_meta( $collection_id, 'fields', false ) ) as $rollup_id ) {
+				if (
+					$rollup_id !== $field_id &&
+					Field::POST_TYPE === get_post_type( $rollup_id ) &&
+					'rollup' === (string) get_post_meta( $rollup_id, 'type', true ) &&
+					(
+						(string) get_post_meta( $rollup_id, 'rollup_relation_field_id', true ) === $field_id_str ||
+						(string) get_post_meta( $rollup_id, 'rollup_target_field_id', true ) === $field_id_str
+					)
+				) {
+					$rollup_ids[] = $rollup_id;
+				}
+			}
+		}
+
+		foreach ( array_unique( array_map( 'intval', $rollup_ids ) ) as $rollup_id ) {
+			if (
+				$rollup_id === $field_id ||
+				Field::POST_TYPE !== get_post_type( $rollup_id ) ||
+				'rollup' !== (string) get_post_meta( $rollup_id, 'type', true )
+			) {
+				continue;
+			}
+
+			$rollup_id_str = (string) $rollup_id;
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- cleanup by exact field list value.
+			$owner_collection_ids = $wpdb->get_col(
+				$wpdb->prepare(
+					"SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = %s AND meta_value = %s",
+					'fields',
+					$rollup_id_str
+				)
+			);
+			$owner_collection_ids = array_merge( $owner_collection_ids, $collection_ids );
+			foreach ( array_unique( array_map( 'intval', $owner_collection_ids ) ) as $collection_id ) {
+				if ( Collection::POST_TYPE === get_post_type( $collection_id ) ) {
+					delete_post_meta( $collection_id, 'fields', $rollup_id_str );
+				}
+			}
+			wp_delete_post( $rollup_id, true );
 		}
 	}
 

@@ -7,17 +7,24 @@ import apiFetch from '@wordpress/api-fetch';
 
 const SERVER_OPERATORS = new Set( [ 'is', 'isNot', 'isAny', 'isNone' ] );
 
-function buildQueryArgs( collectionId, view ) {
+function buildQueryArgs( collectionId, view, fields = [] ) {
 	const args = {
 		collection: collectionId,
 		per_page: -1,
 	};
+	const fieldTypes = new Map(
+		fields.map( ( f ) => [ f.id, f.cortextType ] )
+	);
 
 	// Ignore filters that the server isn't equipped to honor, otherwise
 	// changes in `view` will result in a new query to be requested from the
 	// server, even though the results will be the same.
 	const serverFilters = ( view?.filters ?? [] ).filter(
-		( f ) => f.field && f.operator && SERVER_OPERATORS.has( f.operator )
+		( f ) =>
+			f.field &&
+			f.operator &&
+			SERVER_OPERATORS.has( f.operator ) &&
+			fieldTypes.get( f.field ) !== 'rollup'
 	);
 	serverFilters.forEach( ( filter, i ) => {
 		args[ `filters[${ i }][field]` ] = filter.field;
@@ -34,7 +41,18 @@ function buildQueryArgs( collectionId, view ) {
 	return args;
 }
 
-export default function useCollectionRows( collectionId, view ) {
+function schemaSignature( fields = [] ) {
+	return fields
+		.map(
+			( field ) =>
+				`${ field.id }:${ field.recordId ?? '' }:${
+					field.cortextType ?? ''
+				}`
+		)
+		.join( '|' );
+}
+
+export default function useCollectionRows( collectionId, view, fields = [] ) {
 	const [ state, setState ] = useState( {
 		data: [],
 		collection: null,
@@ -47,7 +65,10 @@ export default function useCollectionRows( collectionId, view ) {
 
 	const requestIdRef = useRef( 0 );
 	const queryKey = collectionId
-		? JSON.stringify( buildQueryArgs( collectionId, view ) )
+		? JSON.stringify( {
+				args: buildQueryArgs( collectionId, view, fields ),
+				schema: schemaSignature( fields ),
+		  } )
 		: null;
 
 	// tech-debt.md#2: callers POST via apiFetch and bump refresh() to
@@ -72,7 +93,7 @@ export default function useCollectionRows( collectionId, view ) {
 		const requestId = ++requestIdRef.current;
 		const path = addQueryArgs(
 			'/cortext/v1/rows',
-			buildQueryArgs( collectionId, view )
+			buildQueryArgs( collectionId, view, fields )
 		);
 
 		setState( ( prev ) => ( {

@@ -23,6 +23,13 @@ export const MIN_WIDTHS = {
 };
 export const DEFAULT_MIN_WIDTH = 32;
 
+// Default view seeding should show user-created collection fields even
+// when a field is read-only, as with rollups. System fields stay hidden
+// because they have no backing `crtxt_field` record.
+export function isDefaultVisibleField( field ) {
+	return Boolean( field?.editable || field?.recordId );
+}
+
 export function getMinWidth( fieldType ) {
 	return MIN_WIDTHS[ fieldType ] ?? DEFAULT_MIN_WIDTH;
 }

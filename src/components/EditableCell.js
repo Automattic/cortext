@@ -301,6 +301,24 @@ export function formatDisplay( value, type, options = {} ) {
 		return '';
 	}
 
+	if ( type === 'rollup-date-range' ) {
+		if ( ! value || typeof value !== 'object' ) {
+			return '';
+		}
+		const dateType =
+			format?.rollup_target_type === 'datetime' ? 'datetime' : 'date';
+		const start = value.start
+			? formatDateValue( value.start, dateType, format )
+			: '';
+		const end = value.end
+			? formatDateValue( value.end, dateType, format )
+			: '';
+		if ( start && end && start !== end ) {
+			return `${ start } - ${ end }`;
+		}
+		return start || end;
+	}
+
 	if ( type === 'checkbox' ) {
 		// `false` is a meaningful value but renders as a blank cell.
 		// Reaching this branch is rare in practice (interactive checkbox
@@ -373,10 +391,22 @@ export function formatDisplay( value, type, options = {} ) {
 	}
 
 	if ( type === 'date' || type === 'datetime' ) {
+		if ( Array.isArray( value ) ) {
+			return value
+				.map( ( item ) => formatDateValue( item, type, format ) )
+				.filter( Boolean )
+				.join( ', ' );
+		}
 		return formatDateValue( value, type, format );
 	}
 
 	if ( type === 'number' ) {
+		if ( Array.isArray( value ) ) {
+			return value
+				.map( ( item ) => formatNumberValue( item, format ) )
+				.filter( Boolean )
+				.join( ', ' );
+		}
 		const text = formatNumberValue( value, format );
 		if ( format?.display === 'bar' ) {
 			return (
@@ -391,6 +421,14 @@ export function formatDisplay( value, type, options = {} ) {
 		return text;
 	}
 
+	if ( Array.isArray( value ) ) {
+		return value
+			.filter(
+				( item ) => item !== null && item !== undefined && item !== ''
+			)
+			.map( ( item ) => String( item ) )
+			.join( ', ' );
+	}
 	return String( value );
 }
 

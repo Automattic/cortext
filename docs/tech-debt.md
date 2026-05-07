@@ -122,11 +122,13 @@ Worth a small spike before committing; `core-data`'s schema cache for rarely-cha
 
 ## 14. Sort on display-value properties is an open architectural decision `[internal]`
 
-**What.** `created_by`, `modified_by`, future Person properties, Relation, value-Rollup, and Files all share the same pattern: stored value is an internal handle (user ID, post ID, attachment ID), useful sort is on the displayed string (display name, related-row title, filename). Sort by stored is meaningless from the UI; sort by display requires a JOIN (or in-memory sort). PR C ships sort only on the timestamp system fields and rejects sort on `_by` keys at the validator. The same problem will hit Relation and Rollup when those types ship (RSM-1468), so the architecture should be settled once.
+**What.** `created_by`, `modified_by`, Person-style fields, Relations, relation-backed Rollups, and Files all share the same problem: the stored value is an internal handle, while the useful sort is the displayed value. Sorting by user ID, row ID, or attachment ID is not what users mean. Sorting by display name, related-row title, filename, or a computed rollup value needs either JOINs, denormalized display values, or an in-memory pass.
 
-**Where.** `validate_sort_field` in `includes/Rest/RowsController.php` (rejects `_by` keys today). `enableSorting: false` for the `_by` system fields in `systemFields` (`src/hooks/fieldMapping.js`).
+Relations and list-style rollups now keep sorting disabled. Scalar rollups can sort in the client while the table has all rows loaded, but the REST query path still cannot order by computed rollup values because they are not stored as row meta. `build_query_args` falls back to the default date ordering if a rollup sort reaches the server.
 
-**Solution.** A single decision shared with the relations/rollups work: JOIN-and-sort in `build_query_args`, in-memory sort after fetch, or a custom REST query path. Pick when picking up RSM-1468; until then, sort UI on display-value properties stays disabled. Tracked in RSM-1793.
+**Where.** `validate_sort_field` and `build_query_args` in `includes/Rest/RowsController.php`; `enableSorting: false` for display-value fields in `systemFields` and `mapField` (`src/hooks/fieldMapping.js`).
+
+**Solution.** Pick one model for display-value sorting: JOIN-and-sort in `build_query_args`, denormalize sortable display values into row meta, or keep fetching all rows and sort in memory. The answer should cover system user fields, Relations, Rollups, Person, and Files at the same time. Tracked in RSM-1793.
 
 ## 15. DataViews table columns lack interaction extension points `[upstream]`
 

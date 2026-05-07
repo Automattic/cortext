@@ -59,6 +59,11 @@ final class Field {
 			'number_format',
 			'date_format',
 			'expression',
+			'rollup_aggregator',
+			'rollup_target_type',
+			'rollup_target_options',
+			'rollup_target_number_format',
+			'rollup_target_date_format',
 		);
 
 		foreach ( $string_meta as $key ) {
@@ -86,6 +91,9 @@ final class Field {
 
 		$integer_meta = array(
 			'relation_reverse_field_id',
+			'rollup_relation_field_id',
+			'rollup_target_field_id',
+			'rollup_target_related_collection_id',
 		);
 
 		foreach ( $integer_meta as $key ) {
@@ -103,6 +111,16 @@ final class Field {
 		register_post_meta(
 			self::POST_TYPE,
 			'relation_multiple',
+			array(
+				'type'         => 'boolean',
+				'single'       => true,
+				'show_in_rest' => true,
+			)
+		);
+
+		register_post_meta(
+			self::POST_TYPE,
+			'rollup_target_relation_multiple',
 			array(
 				'type'         => 'boolean',
 				'single'       => true,

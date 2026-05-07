@@ -31,7 +31,7 @@ export function parseFormat( raw ) {
 }
 
 // Cortext field types that this client knows how to edit inline. Anything
-// outside this set (formula, …) renders read-only — see
+// outside this set (formula, rollup, …) renders read-only — see
 // `EditableCell`'s `readOnly` branch.
 export const EDITABLE_TYPES = new Set( [
 	'text',
@@ -47,6 +47,23 @@ export const EDITABLE_TYPES = new Set( [
 ] );
 
 const SEARCHABLE_TYPES = new Set( [ 'text', 'email', 'url' ] );
+const ROLLUP_VALUE_AGGREGATORS = new Set( [ 'show_original', 'show_unique' ] );
+const ROLLUP_NUMERIC_AGGREGATORS = new Set( [
+	'count',
+	'count_values',
+	'count_unique',
+	'empty',
+	'not_empty',
+	'percent_empty',
+	'percent_not_empty',
+	'sum',
+	'avg',
+	'median',
+	'min',
+	'max',
+	'range',
+] );
+const ROLLUP_SCALAR_DATE_AGGREGATORS = new Set( [ 'earliest', 'latest' ] );
 
 function parseBooleanMeta( raw, fallback = false ) {
 	if ( raw === undefined || raw === null || raw === '' ) {
@@ -60,13 +77,33 @@ function parseBooleanMeta( raw, fallback = false ) {
 	);
 }
 
+function rollupDisplayType( meta ) {
+	const aggregator = meta?.rollup_aggregator ?? 'count';
+	if ( aggregator === 'date_range' ) {
+		return 'rollup-date-range';
+	}
+	if ( ROLLUP_VALUE_AGGREGATORS.has( aggregator ) ) {
+		const targetType = meta?.rollup_target_type ?? 'text';
+		return targetType === 'select' ? 'multiselect' : targetType;
+	}
+	if ( ! ROLLUP_SCALAR_DATE_AGGREGATORS.has( aggregator ) ) {
+		return 'number';
+	}
+	// Preserve the target field's date/datetime distinction so
+	// `formatDateValue` can take its timezone-safe `date` path on
+	// `YYYY-MM-DD` values. Defaults to `date` when unknown — that's the
+	// branch that won't shift west of UTC.
+	return meta?.rollup_target_type === 'datetime' ? 'datetime' : 'date';
+}
+
 function buildRender( id, type, label, elements, format, relation ) {
 	const readOnly = ! EDITABLE_TYPES.has( type );
+	const displayType = type === 'rollup' ? rollupDisplayType( format ) : type;
 	return ( { item } ) => (
 		<EditableCell
 			item={ item }
 			fieldId={ id }
-			fieldType={ type }
+			fieldType={ displayType }
 			elements={ elements }
 			format={ format }
 			relation={ relation }
@@ -80,6 +117,40 @@ function HeaderLabel( { children } ) {
 	return <span className="cortext-column-header-label">{ children }</span>;
 }
 
+function rollupTargetFormat( meta ) {
+	if ( meta?.rollup_target_type === 'number' ) {
+		return parseFormat( meta?.rollup_target_number_format );
+	}
+	if (
+		meta?.rollup_target_type === 'date' ||
+		meta?.rollup_target_type === 'datetime'
+	) {
+		return parseFormat( meta?.rollup_target_date_format );
+	}
+	return undefined;
+}
+
+function fieldRelationConfig( field, type, rollupTargetType ) {
+	if ( type === 'relation' ) {
+		return {
+			targetCollectionId: Number( field.meta?.related_collection_id ),
+			multiple: parseBooleanMeta( field.meta?.relation_multiple, true ),
+		};
+	}
+	if ( type === 'rollup' && rollupTargetType === 'relation' ) {
+		return {
+			targetCollectionId: Number(
+				field.meta?.rollup_target_related_collection_id
+			),
+			multiple: parseBooleanMeta(
+				field.meta?.rollup_target_relation_multiple,
+				true
+			),
+		};
+	}
+	return undefined;
+}
+
 // Returns the four read-only system fields surfaced alongside each
 // collection's custom fields: created at, last edited at, created by,
 // last edited by. The values come straight off the row payload (the
@@ -89,8 +160,9 @@ function HeaderLabel( { children } ) {
 // `editable: false` and no `recordId` keeps them out of the default
 // `view.fields` seed, so they appear in the column visibility menu
 // default-hidden, addable like any other field. Sort is enabled only on
-// the timestamps. Sort on display-value properties such as Person and
-// Relation is an open architectural decision (tech-debt.md#14).
+// the timestamps — sort on display-value
+// properties (Person, Relation, Rollup) is an open architectural
+// decision shared with relations and rollups (tech-debt.md#14).
 export function systemFields() {
 	const formatDate = ( value ) =>
 		value ? dateI18n( 'M j, Y g:i a', value ) : '';
@@ -164,25 +236,33 @@ export function mapField( field ) {
 	// (auto-escaped by React), so the entity layer is unwanted noise.
 	const label = field.title?.raw || field.title?.rendered || `#${ field.id }`;
 	const type = field.meta?.type ?? 'text';
-	const elements = elementsFromOptions( field.meta?.options );
+	const rollupTargetType = field.meta?.rollup_target_type;
+	const elements = elementsFromOptions(
+		type === 'rollup'
+			? field.meta?.rollup_target_options
+			: field.meta?.options
+	);
 	let format;
 	if ( type === 'number' ) {
 		format = parseFormat( field.meta?.number_format );
 	} else if ( type === 'date' || type === 'datetime' ) {
 		format = parseFormat( field.meta?.date_format );
+	} else if ( type === 'rollup' ) {
+		const aggregator = field.meta?.rollup_aggregator ?? 'count';
+		format = {
+			...( rollupTargetFormat( field.meta ) ?? {} ),
+			rollup_aggregator: aggregator,
+			rollup_target_type: rollupTargetType,
+		};
+		if (
+			aggregator === 'percent_empty' ||
+			aggregator === 'percent_not_empty'
+		) {
+			format.style = 'percent';
+			format.decimals = format.decimals ?? 0;
+		}
 	}
-	const relation =
-		type === 'relation'
-			? {
-					targetCollectionId: Number(
-						field.meta?.related_collection_id
-					),
-					multiple: parseBooleanMeta(
-						field.meta?.relation_multiple,
-						true
-					),
-			  }
-			: undefined;
+	const relation = fieldRelationConfig( field, type, rollupTargetType );
 	const base = {
 		id,
 		label,
@@ -190,6 +270,9 @@ export function mapField( field ) {
 		cortextType: type,
 		relatedCollectionId: relation?.targetCollectionId,
 		relationMultiple: relation?.multiple,
+		rollupAggregator: field.meta?.rollup_aggregator,
+		rollupRelationFieldId: Number( field.meta?.rollup_relation_field_id ),
+		rollupTargetFieldId: Number( field.meta?.rollup_target_field_id ),
 		// Header content is just an aria-hidden marker.
 		// `ColumnHeaderActions` queries the DOM for it and portals our
 		// combined-dropdown trigger into the owning <th>; DataViews'
@@ -241,6 +324,42 @@ export function mapField( field ) {
 				enableSorting: false,
 				filterBy: false,
 			};
+		case 'rollup': {
+			const aggregator = field.meta?.rollup_aggregator ?? 'count';
+			const display = rollupDisplayType( field.meta );
+			if ( ROLLUP_SCALAR_DATE_AGGREGATORS.has( aggregator ) ) {
+				return {
+					...base,
+					type: display,
+					editable: false,
+					enableSorting: true,
+				};
+			}
+			if ( ROLLUP_NUMERIC_AGGREGATORS.has( aggregator ) ) {
+				return {
+					...base,
+					type: 'integer',
+					editable: false,
+					enableSorting: true,
+					isValid: { custom: () => null },
+					sort: ( a, b, direction ) => {
+						const av = Number( base.getValue( { item: a } ) ?? 0 );
+						const bv = Number( base.getValue( { item: b } ) ?? 0 );
+						return direction === 'asc' ? av - bv : bv - av;
+					},
+				};
+			}
+			return {
+				...base,
+				type:
+					display === 'relation' || display === 'multiselect'
+						? 'array'
+						: 'text',
+				editable: false,
+				enableSorting: false,
+				filterBy: false,
+			};
+		}
 		case 'date':
 		case 'datetime':
 			return { ...base, type: 'datetime' };
