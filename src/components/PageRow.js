@@ -12,6 +12,8 @@ import {
 	home as homeIcon,
 	moreVertical,
 	plus,
+	starEmpty,
+	starFilled,
 } from '@wordpress/icons';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 
@@ -38,6 +40,8 @@ export default function PageRow( {
 	onRename,
 	onDuplicate,
 	onDelete,
+	isFavorite = false,
+	onToggleFavorite,
 	onSetHome,
 	home,
 	isHomeUpdating = false,
@@ -53,6 +57,8 @@ export default function PageRow( {
 	const hasChildren = children.length > 0;
 	const isExpanded = expandedIds.has( page.id );
 	const isSelected = page.id === selectedId;
+	const pageIsFavorite =
+		typeof isFavorite === 'function' ? isFavorite( page.id ) : isFavorite;
 	const isHome = home?.kind === 'page' && home.id === page.id;
 	const isBeingDragged = draggedId === page.id;
 
@@ -263,6 +269,22 @@ export default function PageRow( {
 						renderContent={ ( { onClose } ) => (
 							<MenuGroup>
 								<MenuItem
+									icon={
+										pageIsFavorite ? starFilled : starEmpty
+									}
+									onClick={ () => {
+										onToggleFavorite?.( page.id );
+										onClose();
+									} }
+								>
+									{ pageIsFavorite
+										? __(
+												'Remove from favorites',
+												'cortext'
+										  )
+										: __( 'Add to favorites', 'cortext' ) }
+								</MenuItem>
+								<MenuItem
 									icon={ homeIcon }
 									disabled={ isHome || isHomeUpdating }
 									onClick={ () => {
@@ -350,6 +372,8 @@ export default function PageRow( {
 								onRename={ onRename }
 								onDuplicate={ onDuplicate }
 								onDelete={ onDelete }
+								isFavorite={ isFavorite }
+								onToggleFavorite={ onToggleFavorite }
 								onSetHome={ onSetHome }
 								home={ home }
 								isHomeUpdating={ isHomeUpdating }

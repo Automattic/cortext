@@ -13,6 +13,7 @@ import Sidebar from './components/Sidebar';
 import EntityRoute from './router/EntityRoute';
 import CommandPalette from './components/CommandPalette';
 import useSidebarLayout from './hooks/useSidebarLayout';
+import { FavoritesProvider } from './hooks/useFavorites';
 import { WorkspaceHomeProvider } from './hooks/useWorkspaceHome';
 import { unlock } from './lock-unlock';
 
@@ -63,22 +64,24 @@ function RootLayout() {
 	return (
 		<SlotFillProvider>
 			<WorkspaceHomeProvider>
-				<div className="cortext-shell">
-					<Sidebar
-						collapsed={ collapsed }
-						width={ width }
-						onToggleCollapsed={ toggleCollapsed }
-						onWidthChange={ setWidth }
-					/>
-					<main
-						ref={ canvasRef }
-						className="cortext-shell__canvas"
-						tabIndex={ -1 }
-					>
-						<EntityRoute history={ router.history } />
-					</main>
-				</div>
-				<CommandPalette canvasRef={ canvasRef } />
+				<FavoritesProvider>
+					<div className="cortext-shell">
+						<Sidebar
+							collapsed={ collapsed }
+							width={ width }
+							onToggleCollapsed={ toggleCollapsed }
+							onWidthChange={ setWidth }
+						/>
+						<main
+							ref={ canvasRef }
+							className="cortext-shell__canvas"
+							tabIndex={ -1 }
+						>
+							<EntityRoute history={ router.history } />
+						</main>
+					</div>
+					<CommandPalette canvasRef={ canvasRef } />
+				</FavoritesProvider>
 			</WorkspaceHomeProvider>
 		</SlotFillProvider>
 	);
