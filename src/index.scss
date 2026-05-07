@@ -322,6 +322,45 @@ body.cortext-fullscreen {
 		}
 	}
 
+	/* stylelint-disable no-descending-specificity */
+	&__favorite-row .cortext-sidebar__row {
+		cursor: default;
+	}
+
+	&__favorite-title {
+		flex: 1 1 auto;
+		min-width: 0;
+		height: $grid-unit-40;
+		padding: 0 $grid-unit-05;
+		border: 0;
+		background: transparent;
+		color: var(--cortext-text-muted);
+		font: inherit;
+		text-align: start;
+		cursor: pointer;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+
+		&:hover,
+		&:focus,
+		&:active {
+			background: transparent;
+			color: var(--cortext-text-muted);
+			outline: none;
+		}
+	}
+
+	&__favorite-row.is-added .cortext-sidebar__row {
+		animation: cortext-favorite-add 180ms ease-out;
+	}
+
+	&__favorite-row.is-removing .cortext-sidebar__row {
+		animation: cortext-favorite-remove 150ms ease-in forwards;
+		pointer-events: none;
+	}
+	/* stylelint-enable no-descending-specificity */
+
 	// Chevron button, its placeholder, and the icon button must occupy the
 	// same column width so children's icons align under their parent's icon.
 	// WP's Button defaults to a wider intrinsic size; pin all three to
@@ -400,6 +439,34 @@ body.cortext-fullscreen {
 		}
 	}
 
+	&__favorite-icon {
+		flex: 0 0 auto;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: $grid-unit-30;
+		height: $grid-unit-30;
+		color: var(--cortext-text-muted);
+	}
+
+	&__favorite-drag-handle {
+		flex: 0 0 auto;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: $grid-unit-30;
+		height: $grid-unit-30;
+		border: 0;
+		padding: 0;
+		background: transparent;
+		color: var(--cortext-text-muted);
+		cursor: grab;
+
+		&:active {
+			cursor: grabbing;
+		}
+	}
+
 	&__rename {
 		flex: 1 1 auto;
 		min-width: 0;
@@ -431,20 +498,28 @@ body.cortext-fullscreen {
 		}
 	}
 
+	&__favorite-toggle,
 	&__menu,
 	&__add-child {
 		flex: 0 0 auto;
 		opacity: 1;
 		transition: opacity 0.12s ease;
+
+		&.is-favorite {
+			color: var(--cortext-text-muted);
+		}
 	}
 
 	@media (hover: hover) and (pointer: fine) {
 
+		&__favorite-toggle,
 		&__menu,
 		&__add-child {
 			opacity: 0;
 		}
 
+		&__row:hover &__favorite-toggle,
+		&__row:focus-within &__favorite-toggle,
 		&__row:hover &__menu,
 		&__row:focus-within &__menu,
 		&__menu.is-pressed,
@@ -659,6 +734,32 @@ body.cortext-fullscreen {
 			width: $grid-unit-30 + $grid-unit-05;
 			min-width: $grid-unit-30 + $grid-unit-05;
 		}
+	}
+}
+
+@keyframes cortext-favorite-add {
+
+	from {
+		opacity: 0;
+		transform: translateY(-4px) scale(0.98);
+	}
+
+	to {
+		opacity: 1;
+		transform: translateY(0) scale(1);
+	}
+}
+
+@keyframes cortext-favorite-remove {
+
+	from {
+		opacity: 1;
+		transform: translateY(0) scale(1);
+	}
+
+	to {
+		opacity: 0;
+		transform: translateY(-4px) scale(0.98);
 	}
 }
 
