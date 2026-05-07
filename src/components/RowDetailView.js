@@ -432,6 +432,47 @@ function EditablePropertyText( { label, inputMode, value, onChange } ) {
 	);
 }
 
+function EditableRowTitle( { onTitle, row } ) {
+	const { editPost } = useDispatch( editorStore );
+	const editedTitle = useSelect(
+		( select ) => select( editorStore ).getEditedPostAttribute( 'title' ),
+		[]
+	);
+	const title =
+		typeof editedTitle === 'string' ? editedTitle : titleFromRow( row );
+	const [ draft, setDraft ] = useState( title );
+	const [ isFocused, setIsFocused ] = useState( false );
+
+	useEffect( () => {
+		onTitle?.( title );
+	}, [ onTitle, title ] );
+
+	useEffect( () => {
+		if ( ! isFocused ) {
+			setDraft( title );
+		}
+	}, [ isFocused, title ] );
+
+	return (
+		<h2 className="cortext-row-detail__title">
+			<input
+				aria-label={ __( 'Title', 'cortext' ) }
+				className="cortext-row-detail__title-input"
+				placeholder={ __( 'Untitled', 'cortext' ) }
+				type="text"
+				value={ draft }
+				onBlur={ () => setIsFocused( false ) }
+				onChange={ ( event ) => {
+					const next = event.currentTarget.value;
+					setDraft( next );
+					editPost( { title: next } );
+				} }
+				onFocus={ () => setIsFocused( true ) }
+			/>
+		</h2>
+	);
+}
+
 function EditableNumberPropertyText( { label, value, onChange } ) {
 	const textValue =
 		value === null || value === undefined ? '' : String( value );
@@ -797,21 +838,15 @@ function titleFromDetail( detail ) {
 	return titleFromRow( detail.record ) || titleFromRow( detail.row );
 }
 
-function DetailTitleSignal( { isActive, onTitle, row } ) {
-	const editedTitle = useSelect(
-		( select ) => select( editorStore ).getEditedPostAttribute( 'title' ),
-		[]
+function RowTitlePortal( { isActive, mountNode, onTitle, row } ) {
+	if ( ! isActive || ! mountNode ) {
+		return null;
+	}
+
+	return createPortal(
+		<EditableRowTitle onTitle={ onTitle } row={ row } />,
+		mountNode
 	);
-	const title =
-		typeof editedTitle === 'string' ? editedTitle : titleFromRow( row );
-
-	useEffect( () => {
-		if ( isActive ) {
-			onTitle?.( title );
-		}
-	}, [ isActive, onTitle, title ] );
-
-	return null;
 }
 
 function DetailBody( {
@@ -864,12 +899,14 @@ function DetailPaneContent( {
 	fields,
 	isActive,
 	isHidden,
+	isTitleActive,
 	onApi,
 	onSaved,
 	onTitle,
 	propertyValueMounts,
 	row,
 	state,
+	titleMountNode,
 } ) {
 	return (
 		<>
@@ -878,8 +915,9 @@ function DetailPaneContent( {
 				onApi={ onApi }
 				onSaved={ onSaved }
 			/>
-			<DetailTitleSignal
-				isActive={ isActive }
+			<RowTitlePortal
+				isActive={ isTitleActive }
+				mountNode={ titleMountNode }
 				onTitle={ onTitle }
 				row={ row }
 			/>
@@ -914,6 +952,7 @@ function DetailShell( {
 	title,
 } ) {
 	const [ propertyValueMounts, setPropertyValueMounts ] = useState( {} );
+	const [ titleMountNode, setTitleMountNode ] = useState( null );
 	const setPropertyValueMount = useCallback( ( fieldId, node ) => {
 		setPropertyValueMounts( ( current ) => {
 			if ( node ) {
@@ -995,9 +1034,16 @@ function DetailShell( {
 					</div>
 				</div>
 				<div className="cortext-row-detail__identity">
-					<h2 className="cortext-row-detail__title">
-						{ title || __( 'Untitled', 'cortext' ) }
-					</h2>
+					<div
+						className="cortext-row-detail__title-slot"
+						ref={ setTitleMountNode }
+					>
+						{ ! titleMountNode ? (
+							<h2 className="cortext-row-detail__title">
+								{ title || __( 'Untitled', 'cortext' ) }
+							</h2>
+						) : null }
+					</div>
 				</div>
 			</div>
 			{ saveError ? (
@@ -1027,7 +1073,7 @@ function DetailShell( {
 				fieldCountLabel={ fieldCountLabel }
 				onValueMount={ setPropertyValueMount }
 			>
-				{ children( { propertyValueMounts } ) }
+				{ children( { propertyValueMounts, titleMountNode } ) }
 			</DetailBody>
 		</div>
 	);
@@ -1115,6 +1161,10 @@ export default function RowDetailView( {
 					},
 			  ]
 			: []
+	);
+	const propertyFields = useMemo(
+		() => fields.filter( ( field ) => field.id !== TITLE_FIELD_ID ),
+		[ fields ]
 	);
 
 	useEffect( () => {
@@ -1264,7 +1314,7 @@ export default function RowDetailView( {
 				arePropertiesVisible={ arePropertiesVisible }
 				canGoNext={ canUseRowControls && canGoNext }
 				canGoPrevious={ canUseRowControls && canGoPrevious }
-				fields={ fields }
+				fields={ propertyFields }
 				mode={ normalizedMode }
 				onClose={ requestClose }
 				onDiscardPending={ onDiscardPending }
@@ -1276,7 +1326,7 @@ export default function RowDetailView( {
 				setArePropertiesVisible={ setArePropertiesVisible }
 				title={ displayTitle }
 			>
-				{ ( { propertyValueMounts } ) => (
+				{ ( { propertyValueMounts, titleMountNode } ) => (
 					<div className="cortext-row-detail__pane-stack">
 						{ detailPanes.map( ( pane ) => {
 							const isCurrentPane =
@@ -1287,6 +1337,10 @@ export default function RowDetailView( {
 								pane.state === 'preparing' ||
 								pane.state === 'covered';
 							const isApiActive = isCurrentPane && ! isHiddenPane;
+							const isTitleActive =
+								! isHiddenPane &&
+								( pane.state === 'active' ||
+									pane.state === 'entering' );
 							const paneRow = {
 								...( pane.detail.row ?? {} ),
 								...pane.detail.record,
@@ -1323,9 +1377,10 @@ export default function RowDetailView( {
 											onReady={ onPaneReady }
 										/>
 										<DetailPaneContent
-											fields={ fields }
+											fields={ propertyFields }
 											isActive={ isApiActive }
 											isHidden={ isHiddenPane }
+											isTitleActive={ isTitleActive }
 											onApi={ onApi }
 											onSaved={ onSaved }
 											onTitle={ setDisplayTitle }
@@ -1334,6 +1389,7 @@ export default function RowDetailView( {
 											}
 											row={ paneRow }
 											state={ pane.state }
+											titleMountNode={ titleMountNode }
 										/>
 									</EditorProvider>
 								</div>

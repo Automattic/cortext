@@ -1535,7 +1535,7 @@ tbody > tr > td:not(:first-child) {
 	box-sizing: border-box;
 
 	&__shell {
-		cursor: text;
+		cursor: pointer;
 		// 40px matches the height of the editor controls
 		// (TextControl/NumberControl/SelectControl with __next40pxDefaultSize),
 		// so opening a cell doesn't bump the row height.
@@ -2643,6 +2643,10 @@ tr:has(.cortext-title-cell--is-open)
 		min-width: 0;
 	}
 
+	&__title-slot {
+		min-width: 0;
+	}
+
 	&__title {
 		overflow: hidden;
 		margin: 0;
@@ -2652,6 +2656,60 @@ tr:has(.cortext-title-cell--is-open)
 		line-height: 1.3;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+
+	&__title-input {
+		appearance: none;
+		display: block;
+		overflow: hidden;
+		width: 100%;
+		min-width: 0;
+		margin: 0;
+		padding: 0 2px;
+		border: 0;
+		border-radius: 4px;
+		box-sizing: border-box;
+		outline: 0;
+		background: transparent;
+		box-shadow: none;
+		color: inherit;
+		cursor: text;
+		font: inherit;
+		line-height: inherit;
+		text-overflow: ellipsis;
+
+		&::placeholder {
+			color: var(--cortext-row-detail-muted);
+			opacity: 1;
+		}
+
+		&:hover {
+			background: var(--cortext-row-detail-hover-surface);
+		}
+
+		&:focus,
+		&:focus-visible {
+			background: transparent;
+			box-shadow: inset 0 0 0 1px var(--wp-admin-theme-color);
+		}
+	}
+
+	input.cortext-row-detail__title-input,
+	input.cortext-row-detail__title-input:hover,
+	input.cortext-row-detail__title-input:focus,
+	input.cortext-row-detail__title-input:focus-visible {
+		border: 0;
+		outline: 0;
+	}
+
+	input.cortext-row-detail__title-input:hover {
+		background: var(--cortext-row-detail-hover-surface);
+	}
+
+	input.cortext-row-detail__title-input:focus,
+	input.cortext-row-detail__title-input:focus-visible {
+		background: transparent;
+		box-shadow: inset 0 0 0 1px var(--wp-admin-theme-color);
 	}
 
 	/* stylelint-disable no-descending-specificity */
@@ -2855,6 +2913,7 @@ tr:has(.cortext-title-cell--is-open)
 		overflow: hidden;
 		padding-top: 8px;
 		color: var(--cortext-row-detail-muted);
+		cursor: default;
 		font-size: 12px;
 		font-weight: 400;
 		line-height: 1.3;

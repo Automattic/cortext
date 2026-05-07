@@ -685,10 +685,13 @@ export default function CollectionDataViews( {
 			if ( ! row?.id ) {
 				return;
 			}
+			if ( String( row.id ) === String( openRowId ) ) {
+				return;
+			}
 			runDetailTransition( {
 				type: rowDetailMode === 'full' ? 'full' : 'row',
 				rowId: row.id,
-				pushUrl: ! openRowId,
+				pushUrl: true,
 			} );
 		},
 		[ openRowId, rowDetailMode, runDetailTransition ]
@@ -732,7 +735,7 @@ export default function CollectionDataViews( {
 		( direction ) => {
 			const rowId = adjacentRowId( dataFiltered, openRowId, direction );
 			if ( rowId ) {
-				runDetailTransition( { type: 'row', rowId } );
+				runDetailTransition( { type: 'row', rowId, pushUrl: true } );
 			}
 		},
 		[ dataFiltered, openRowId, runDetailTransition ]

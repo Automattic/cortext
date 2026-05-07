@@ -926,6 +926,11 @@ test.describe( 'Collection view block', () => {
 			await firstRow.hover();
 			await expect( titleCellOpenButton ).toHaveCSS( 'opacity', '1' );
 			await expect( titleCellOpenButton ).toContainText( 'Open' );
+			await expect(
+				firstRow
+					.locator( '.cortext-editable-cell__display' )
+					.first()
+			).toHaveCSS( 'cursor', 'pointer' );
 			await titleCellOpenButton.click();
 			await expect
 				.poll( () => new URL( page.url() ).searchParams.get( 'row' ) )
@@ -950,16 +955,19 @@ test.describe( 'Collection view block', () => {
 				'rgb(248, 248, 248)'
 			);
 			await expect( titleCellOpenButton ).toHaveCSS( 'opacity', '1' );
-			await expect(
-				detail.getByRole( 'heading', {
-					name: 'The Left Hand of Darkness',
-				} )
-			).toBeVisible();
+			const detailTitle = detail.getByRole( 'textbox', {
+				name: 'Title',
+				exact: true,
+			} );
+			await expect( detailTitle ).toHaveValue(
+				'The Left Hand of Darkness'
+			);
 			const tagsLabel = detail
 				.locator(
 					'.cortext-row-detail__properties--rows .cortext-row-detail__property-label'
 				)
 				.filter( { hasText: 'Tags' } );
+			await expect( tagsLabel ).toHaveCSS( 'cursor', 'default' );
 			await tagsLabel.evaluate( ( node ) =>
 				node.setAttribute( 'data-e2e-stable-label', 'tags' )
 			);
@@ -980,11 +988,7 @@ test.describe( 'Collection view block', () => {
 					hasText: 'Research',
 				} )
 			).toHaveCount( 2 );
-			await detail
-				.getByRole( 'heading', {
-					name: 'The Left Hand of Darkness',
-				} )
-				.click();
+			await detailTitle.click();
 			await expect( optionsPopover ).toBeHidden();
 
 			const delayedSecondRowPattern = new RegExp(
@@ -999,30 +1003,55 @@ test.describe( 'Collection view block', () => {
 			await expect( detail.locator( '.components-spinner' ) ).toHaveCount(
 				0
 			);
-			await expect(
-				detail.getByRole( 'heading', {
-					name: 'The Left Hand of Darkness',
-				} )
-			).toBeVisible();
+			await expect( detailTitle ).toHaveValue(
+				'The Left Hand of Darkness'
+			);
 			await expect
 				.poll( () => new URL( page.url() ).searchParams.get( 'row' ) )
 				.toBe( String( fixture.secondEntry.id ) );
-			await expect(
-				detail.getByRole( 'heading', { name: 'Kindred' } )
-			).toBeVisible();
+			await expect( detailTitle ).toHaveValue( 'Kindred' );
 			await expect(
 				detail.locator( '[data-e2e-stable-label="tags"]' )
 			).toHaveText( 'Tags' );
 			await page.unroute( delayedSecondRowPattern, delaySecondRow );
 			await detail.getByRole( 'button', { name: 'Row above' } ).click();
-			await expect(
-				detail.getByRole( 'heading', {
-					name: 'The Left Hand of Darkness',
-				} )
-			).toBeVisible();
+			await expect( detailTitle ).toHaveValue(
+				'The Left Hand of Darkness'
+			);
 			await expect
 				.poll( () => new URL( page.url() ).searchParams.get( 'row' ) )
 				.toBe( String( fixture.entry.id ) );
+
+			const goBack = page.getByRole( 'button', { name: 'Go back' } );
+			const goForward = page.getByRole( 'button', {
+				name: 'Go forward',
+			} );
+			await expect( goBack ).toBeEnabled();
+			await goBack.click();
+			await expect
+				.poll( () => new URL( page.url() ).searchParams.get( 'row' ) )
+				.toBe( String( fixture.secondEntry.id ) );
+			await expect( detailTitle ).toHaveValue( 'Kindred' );
+			await goBack.click();
+			await expect
+				.poll( () => new URL( page.url() ).searchParams.get( 'row' ) )
+				.toBe( String( fixture.entry.id ) );
+			await expect( detailTitle ).toHaveValue(
+				'The Left Hand of Darkness'
+			);
+			await expect( goForward ).toBeEnabled();
+			await goForward.click();
+			await expect
+				.poll( () => new URL( page.url() ).searchParams.get( 'row' ) )
+				.toBe( String( fixture.secondEntry.id ) );
+			await expect( detailTitle ).toHaveValue( 'Kindred' );
+			await goForward.click();
+			await expect
+				.poll( () => new URL( page.url() ).searchParams.get( 'row' ) )
+				.toBe( String( fixture.entry.id ) );
+			await expect( detailTitle ).toHaveValue(
+				'The Left Hand of Darkness'
+			);
 
 			await detail.getByRole( 'button', { name: 'Hide fields' } ).click();
 			const collapsedFieldsButton = detail.locator(
@@ -1030,7 +1059,7 @@ test.describe( 'Collection view block', () => {
 			);
 			await expect(
 				detail.getByRole( 'textbox', { name: 'Title', exact: true } )
-			).toBeHidden();
+			).toBeVisible();
 			await expect( collapsedFieldsButton ).toBeVisible();
 			await expect(
 				detail.locator( '.cortext-row-detail__content-editor' )
@@ -1043,17 +1072,9 @@ test.describe( 'Collection view block', () => {
 				detail.locator( '.cortext-row-detail__properties--rows' )
 			).toBeVisible();
 
-			const titleProperty = detail.getByRole( 'textbox', {
-				name: 'Title',
-				exact: true,
-			} );
-			await titleProperty.click();
-			await expect( titleProperty ).toHaveCSS(
-				'border-top-width',
-				'0px'
-			);
-			await expect( titleProperty ).toHaveCSS( 'box-shadow', 'none' );
-			await expect( titleProperty ).toHaveCSS(
+			await detailTitle.click();
+			await expect( detailTitle ).toHaveCSS( 'border-top-width', '0px' );
+			await expect( detailTitle ).toHaveCSS(
 				'background-color',
 				'rgba(0, 0, 0, 0)'
 			);
@@ -1112,7 +1133,9 @@ test.describe( 'Collection view block', () => {
 				.click();
 			await expect( detail ).toBeHidden();
 			await expect(
-				canvas.getByText( 'Changed row detail title' )
+				page
+					.getByRole( 'navigation', { name: 'Breadcrumb' } )
+					.getByText( 'Changed row detail title' )
 			).toBeVisible();
 
 			await page
@@ -1327,9 +1350,16 @@ test.describe( 'Collection view block', () => {
 			// Number: decimal value renders intact.
 			await expect( canvas.getByText( '12.5' ) ).toBeVisible();
 
+			const table = canvas.locator( '.dataviews-view-table' );
+			const firstRow = table.locator( 'tbody > tr' ).first();
+
 			// Select: chip with the option's color (Notion shape parsed).
-			const statusChip = canvas.getByText( 'Open', { exact: true } );
+			const statusChip = firstRow
+				.locator( 'td' )
+				.nth( 4 )
+				.locator( '.cortext-chip', { hasText: 'Open' } );
 			await expect( statusChip ).toBeVisible();
+			await expect( statusChip ).toHaveCSS( 'cursor', 'pointer' );
 			await expect( statusChip ).toHaveClass( /cortext-chip/ );
 			await expect( statusChip ).not.toHaveClass(
 				/cortext-chip--neutral/

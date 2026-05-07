@@ -394,7 +394,7 @@ export function formatDisplay( value, type, options = {} ) {
 	return String( value );
 }
 
-function CellShell( { children, onActivate, ariaLabel, isEmpty, disabled } ) {
+function CellShell( { children, onActivate, ariaLabel, className, disabled } ) {
 	// Plain-text content gets the ellipsis wrapper so narrow columns
 	// truncate cleanly. JSX content (chips, links, icons) carries its own
 	// truncation/wrap rules and renders directly — putting `white-space:
@@ -405,10 +405,7 @@ function CellShell( { children, onActivate, ariaLabel, isEmpty, disabled } ) {
 		<div
 			role={ disabled ? undefined : 'button' }
 			tabIndex={ disabled ? -1 : 0 }
-			className={
-				'cortext-editable-cell__shell' +
-				( isEmpty ? ' cortext-editable-cell__shell--empty' : '' )
-			}
+			className={ className }
 			onClick={ disabled ? undefined : onActivate }
 			onKeyDown={
 				disabled
@@ -890,6 +887,10 @@ export default function EditableCell( {
 	// Always render the shell so its content sets the column's intrinsic
 	// width. When editing, overlay the editor on top via position:absolute
 	// so the column doesn't reflow to the editor's larger min-content.
+	const shellClassName =
+		'cortext-editable-cell__shell' +
+		( display === '' ? ' cortext-editable-cell__shell--empty' : '' );
+
 	return (
 		<div
 			className={
@@ -899,7 +900,7 @@ export default function EditableCell( {
 		>
 			<CellShell
 				ariaLabel={ label }
-				isEmpty={ display === '' }
+				className={ shellClassName }
 				disabled={ isEditing }
 				onActivate={ () => setIsEditing( true ) }
 			>
