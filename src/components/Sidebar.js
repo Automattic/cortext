@@ -85,6 +85,7 @@ import {
 } from '../router/useResolveEntity';
 import { COLLECTION_QUERY } from '../collections';
 import { useFavorites } from '../hooks/useFavorites';
+import { useRecents } from '../hooks/useRecents';
 import { useWorkspaceHomePath } from '../hooks/useWorkspaceHomePath';
 
 const AUTO_EXPAND_DELAY = 700;
@@ -118,16 +119,17 @@ export default function Sidebar( {
 		homePath,
 		home,
 		setHome,
-		isResolvingHomePath,
-		isResolvingPages,
-		isUpdating: isHomeUpdating,
-	} = useWorkspaceHomePath();
-	const {
-		favorites,
-		setFavorites,
+	isResolvingHomePath,
+	isResolvingPages,
+	isUpdating: isHomeUpdating,
+} = useWorkspaceHomePath();
+const {
+	favorites,
+	setFavorites,
 		isResolving: isResolvingFavorites,
 		isUpdating: isUpdatingFavorites,
 	} = useFavorites();
+	const { touchRecent } = useRecents();
 	const { saveEntityRecord, invalidateResolution, receiveEntityRecords } =
 		useDispatch( 'core' );
 	const navigate = useNavigate();
@@ -429,8 +431,9 @@ export default function Sidebar( {
 				payload.status = 'private';
 			}
 			await saveEntityRecord( 'postType', POST_TYPE, payload );
+			await touchRecent( { kind: 'page', id } );
 		},
-		[ saveEntityRecord, getRecordById ]
+		[ saveEntityRecord, getRecordById, touchRecent ]
 	);
 
 	const duplicatePage = useCallback(

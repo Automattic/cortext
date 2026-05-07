@@ -26,6 +26,7 @@ import {
 import { firstPageInTree } from '../components/pages-tree';
 import { COLLECTION_QUERY } from '../collections';
 import { withViewTransition } from '../hooks/viewTransition';
+import { useRecents } from '../hooks/useRecents';
 import { useWorkspaceHome } from '../hooks/useWorkspaceHome';
 import useCollectionFields from '../hooks/useCollectionFields';
 import EmptyState from './EmptyState';
@@ -139,6 +140,7 @@ export default function EntityRoute( { history } ) {
 	const splat = params._splat ?? '';
 	const target = useMemo( () => parseTarget( splat ), [ splat ] );
 	const { home, isResolving: isResolvingHome } = useWorkspaceHome();
+	const { touchRecent } = useRecents();
 	const { records: pages, isResolving: isResolvingPages } = useEntityRecords(
 		'postType',
 		POST_TYPE,
@@ -291,12 +293,39 @@ export default function EntityRoute( { history } ) {
 				id: entity.id,
 				postType: entity.type,
 			} );
+			if ( entity.type === POST_TYPE ) {
+				touchRecent( { kind: 'page', id: entity.id } );
+			}
 			return;
 		}
 		if ( ! isResolving && notFound ) {
 			dispatch( { type: 'DOCUMENT_NOT_FOUND' } );
 		}
-	}, [ target, documentResolution, dispatch ] );
+	}, [ target, documentResolution, dispatch, touchRecent ] );
+
+	useEffect( () => {
+		if (
+			target.kind !== 'document' ||
+			target.id === null ||
+			mountedDocumentId !== target.id ||
+			mountedDocumentType === POST_TYPE ||
+			! rowParentCollectionId
+		) {
+			return;
+		}
+		touchRecent( {
+			kind: 'row',
+			id: target.id,
+			collectionId: rowParentCollectionId,
+		} );
+	}, [
+		target.kind,
+		target.id,
+		mountedDocumentId,
+		mountedDocumentType,
+		rowParentCollectionId,
+		touchRecent,
+	] );
 
 	useEffect( () => {
 		if ( target.kind !== 'collection' || target.id === null ) {
@@ -313,12 +342,13 @@ export default function EntityRoute( { history } ) {
 		}
 		if ( entity?.id === target.id ) {
 			dispatch( { type: 'COLLECTION_RESOLVED', id: entity.id } );
+			touchRecent( { kind: 'collection', id: entity.id } );
 			return;
 		}
 		if ( ! isResolving && notFound ) {
 			dispatch( { type: 'COLLECTION_NOT_FOUND' } );
 		}
-	}, [ target, collectionResolution, dispatch ] );
+	}, [ target, collectionResolution, dispatch, touchRecent ] );
 
 	const handleDocumentDisplayed = useCallback(
 		( id ) => {

@@ -5,6 +5,8 @@ import { store as coreDataStore } from '@wordpress/core-data';
 import { store as noticesStore } from '@wordpress/notices';
 import { __ } from '@wordpress/i18n';
 
+import { useRecents } from './useRecents';
+
 const DEBOUNCE_MS = 800;
 const MIN_SAVE_INTERVAL_MS = 2000;
 const AUTOSAVE_ERROR_NOTICE_ID = 'cortext-autosave-error';
@@ -14,6 +16,7 @@ export default function useAutosave( options = {} ) {
 	const minSaveIntervalMs = options.minSaveIntervalMs ?? MIN_SAVE_INTERVAL_MS;
 	const { savePost, editPost } = useDispatch( editorStore );
 	const { createErrorNotice, removeNotice } = useDispatch( noticesStore );
+	const { touchRecent } = useRecents();
 
 	const {
 		isDirty,
@@ -217,8 +220,19 @@ export default function useAutosave( options = {} ) {
 			setStatus( 'saved' );
 			setLastSavedAt( Date.now() );
 			removeNotice( AUTOSAVE_ERROR_NOTICE_ID );
+			if ( currentPostId ) {
+				touchRecent( { kind: 'page', id: currentPostId } );
+			}
 		}
-	}, [ isSaving, didSucceed, didFail, createErrorNotice, removeNotice ] );
+	}, [
+		isSaving,
+		didSucceed,
+		didFail,
+		currentPostId,
+		createErrorNotice,
+		removeNotice,
+		touchRecent,
+	] );
 
 	// CanvasEditor stays mounted across post switches so the iframe survives,
 	// which means our local status would otherwise carry a stale "Failed to
