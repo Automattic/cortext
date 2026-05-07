@@ -327,3 +327,11 @@ The user-facing placeholder is still Core's generic "Search commands and setting
 **Where.** `src/components/CommandPalette.js`, the `canvasRef` passed from `src/router.js`, `dequeue_core_command_palette` in `includes/Admin/Screen.php`, and the `@wordpress/commands` stylesheet import in `src/index.scss`.
 
 **Solution.** Upstream could make app-owned palettes less ad hoc: a scoped command registry or namespace API, a supported way for full-screen admin apps to opt out of Core's admin palette, a custom input label, and an explicit focus-return target or after-close callback. With those, Cortext could keep registering commands through `@wordpress/commands` and drop most of the shell-specific wiring.
+
+## 39. Favorite rows have their own sidebar-row shape `[internal, soft]`
+
+**What.** Favorites look like sidebar rows, but they are not normal page-tree rows. They are shortcuts, they should never show the active selection state, and they are sortable only inside the Favorites section. Sharing the whole row as both a navigation button and a dnd-kit sortable handle made clicks repaint the hover state and feel like a flash. The current row splits those jobs: the icon is the drag handle, the title is a plain navigation button, and the star is the remove action. It works, but it means Favorites carry a small custom row shape alongside `PageRow` and `CollectionRow`.
+
+**Where.** `src/components/SidebarFavorites.js`, plus the `.cortext-sidebar__favorite-*` rules in `src/index.scss`.
+
+**Solution.** Extract a shared sidebar-row primitive with explicit slots for title navigation, drag handle, menu/actions, selected state, and shortcut-only rows. Then `PageRow`, `CollectionRow`, and `SidebarFavorites` can share the same interaction contract without reusing the wrong DOM shape for Favorites.
