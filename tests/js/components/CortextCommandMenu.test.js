@@ -1,10 +1,29 @@
-import { render } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { createRegistry, RegistryProvider } from '@wordpress/data';
+import { store as commandsStore } from '@wordpress/commands';
+import { store as keyboardShortcutsStore } from '@wordpress/keyboard-shortcuts';
+import { store as preferencesStore } from '@wordpress/preferences';
 import { table } from '@wordpress/icons';
 
 import {
 	CommandIcon,
+	default as CortextCommandMenu,
 	splitPaletteCommands,
 } from '../../../src/components/CortextCommandMenu';
+
+class ResizeObserverMock {
+	observe() {}
+	unobserve() {}
+	disconnect() {}
+}
+
+function createCommandPaletteRegistry() {
+	const registry = createRegistry();
+	registry.register( commandsStore );
+	registry.register( keyboardShortcutsStore );
+	registry.register( preferencesStore );
+	return registry;
+}
 
 describe( 'splitPaletteCommands', () => {
 	it( 'separates Cortext recents from the rest of the palette commands', () => {
@@ -29,5 +48,44 @@ describe( 'CommandIcon', () => {
 		const icon = container.querySelector( 'svg' );
 		expect( icon ).toHaveAttribute( 'width', '16' );
 		expect( icon ).toHaveAttribute( 'height', '16' );
+	} );
+} );
+
+describe( 'CortextCommandMenu', () => {
+	it( 'opens from the primary+k keyboard shortcut', async () => {
+		global.ResizeObserver = ResizeObserverMock;
+		Element.prototype.scrollIntoView = jest.fn();
+		const registry = createCommandPaletteRegistry();
+		registry.dispatch( commandsStore ).registerCommand( {
+			name: 'cortext/test',
+			label: 'Test command',
+			context: 'root',
+			callback: jest.fn(),
+		} );
+
+		render(
+			<RegistryProvider value={ registry }>
+				<CortextCommandMenu />
+			</RegistryProvider>
+		);
+
+		await waitFor( () =>
+			expect(
+				registry
+					.select( keyboardShortcutsStore )
+					.getShortcutKeyCombination( 'core/commands' )
+			).toEqual( { modifier: 'primary', character: 'k' } )
+		);
+
+		fireEvent.keyDown( document, {
+			key: 'k',
+			code: 'KeyK',
+			ctrlKey: true,
+		} );
+
+		expect(
+			await screen.findByPlaceholderText( 'Search commands and settings' )
+		).toBeInTheDocument();
+		expect( screen.getByText( 'Test command' ) ).toBeInTheDocument();
 	} );
 } );

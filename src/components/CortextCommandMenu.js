@@ -4,6 +4,7 @@ import { Modal, TextHighlight } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
 import {
 	useEffect,
+	useMemo,
 	useRef,
 	useState,
 	isValidElement,
@@ -153,13 +154,17 @@ function CommandInput( { search, setSearch } ) {
 }
 
 function PaletteGroups( { search } ) {
-	const { contextualCommands, allCommands } = useSelect( ( select ) => {
+	const { contextualCommands, staticCommands } = useSelect( ( select ) => {
 		const { getCommands } = select( commandsStore );
 		return {
 			contextualCommands: getCommands( true ),
-			allCommands: [ ...getCommands( false ), ...getCommands( true ) ],
+			staticCommands: getCommands( false ),
 		};
 	}, [] );
+	const allCommands = useMemo(
+		() => [ ...staticCommands, ...contextualCommands ],
+		[ staticCommands, contextualCommands ]
+	);
 	const { recentCommands, commands } = splitPaletteCommands(
 		search ? allCommands : contextualCommands
 	);

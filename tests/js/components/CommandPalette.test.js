@@ -1,8 +1,10 @@
 import { render } from '@testing-library/react';
 
 const mockUseCommand = jest.fn();
+const mockCreateRegistry = jest.fn( () => ( { register: jest.fn() } ) );
 const mockOpen = jest.fn();
 const mockNavigate = jest.fn();
+const mockParentRegistry = { parent: true };
 let mockRecents = [];
 
 jest.mock( '@wordpress/commands', () => ( {
@@ -19,9 +21,10 @@ jest.mock( '@wordpress/preferences', () => ( {
 } ) );
 
 jest.mock( '@wordpress/data', () => ( {
-	createRegistry: () => ( { register: jest.fn() } ),
+	createRegistry: ( ...args ) => mockCreateRegistry( ...args ),
 	RegistryProvider: ( { children } ) => children,
 	useDispatch: () => ( { open: mockOpen } ),
+	useRegistry: () => mockParentRegistry,
 } ) );
 
 jest.mock( '@tanstack/react-router', () => ( {
@@ -48,6 +51,7 @@ import CommandPalette from '../../../src/components/CommandPalette';
 beforeEach( () => {
 	jest.useFakeTimers();
 	mockUseCommand.mockReset();
+	mockCreateRegistry.mockClear();
 	mockOpen.mockReset();
 	mockNavigate.mockReset();
 	mockRecents = [];
@@ -76,6 +80,11 @@ describe( 'CommandPalette recents', () => {
 		];
 
 		render( <CommandPalette canvasRef={ { current: null } } /> );
+
+		expect( mockCreateRegistry ).toHaveBeenCalledWith(
+			{},
+			mockParentRegistry
+		);
 
 		const commands = mockUseCommand.mock.calls.map(
 			( [ command ] ) => command

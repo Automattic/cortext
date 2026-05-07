@@ -4,7 +4,12 @@
 import { store as commandsStore, useCommand } from '@wordpress/commands';
 import { store as keyboardShortcutsStore } from '@wordpress/keyboard-shortcuts';
 import { store as preferencesStore } from '@wordpress/preferences';
-import { createRegistry, RegistryProvider, useDispatch } from '@wordpress/data';
+import {
+	createRegistry,
+	RegistryProvider,
+	useDispatch,
+	useRegistry,
+} from '@wordpress/data';
 import { useNavigate } from '@tanstack/react-router';
 import { __, sprintf } from '@wordpress/i18n';
 import { home as homeIcon, listItem, table } from '@wordpress/icons';
@@ -22,8 +27,8 @@ export function openCommandPalette() {
 	window.dispatchEvent( new Event( OPEN_COMMAND_PALETTE_EVENT ) );
 }
 
-function createCommandPaletteRegistry() {
-	const registry = createRegistry();
+function createCommandPaletteRegistry( parentRegistry ) {
+	const registry = createRegistry( {}, parentRegistry );
 	registry.register( commandsStore );
 	registry.register( keyboardShortcutsStore );
 	registry.register( preferencesStore );
@@ -167,7 +172,11 @@ function CommandPaletteContents( {
 
 export default function CommandPalette( { canvasRef } ) {
 	const { homePath, isResolvingHomePath } = useWorkspaceHomePath();
-	const registry = useMemo( createCommandPaletteRegistry, [] );
+	const parentRegistry = useRegistry();
+	const registry = useMemo(
+		() => createCommandPaletteRegistry( parentRegistry ),
+		[ parentRegistry ]
+	);
 
 	return (
 		<RegistryProvider value={ registry }>
