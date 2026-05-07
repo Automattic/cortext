@@ -10,6 +10,7 @@ declare( strict_types=1 );
 namespace Cortext;
 
 use Cortext\Admin\Screen;
+use Cortext\Block\DataView;
 use Cortext\Editor\PageCoverBlock;
 use Cortext\Editor\PageHeaderActionsBlock;
 use Cortext\Editor\PageIconBlock;
@@ -61,6 +62,7 @@ final class Plugin {
 		( new WorkspaceHomeController() )->register();
 		( new Template() )->register();
 		( new Assets() )->register();
+		( new DataView() )->register();
 		( new Preferences() )->register();
 	}
 

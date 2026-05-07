@@ -353,3 +353,11 @@ The user-facing placeholder is still Core's generic "Search commands and setting
 **Where.** `src/components/SidebarFavorites.js`, plus the `.cortext-sidebar__favorite-*` rules in `src/index.scss`.
 
 **Solution.** Extract a shared sidebar-row primitive with explicit slots for title navigation, drag handle, menu/actions, selected state, and shortcut-only rows. Then `PageRow`, `CollectionRow`, and `SidebarFavorites` can share the same interaction contract without reusing the wrong DOM shape for Favorites.
+
+## 42. Public page layout doesn't use WordPress align classes `[internal]`
+
+**What.** The public template constrains non-block content to 650 px via a blanket `max-width` on `.cortext-public-page__body > :not(.wp-block-cortext-data-view)`. The data-view block breaks out of that constraint by virtue of the exclusion. This is fragile — it doesn't honor `alignwide`, `alignfull`, or any other block alignment, and will break for other wide blocks. The proper fix is to adopt WordPress's `align*` layout classes and `theme.json` content/wide widths so blocks opt into breakout with standard markup rather than CSS exclusions.
+
+**Where.** `src/frontend.scss`, the `.cortext-public-page__body` rule with the FIXME comment.
+
+**Solution.** Use `wp_get_layout_style` or emit the `is-layout-constrained` class with `contentSize` / `wideSize` on the body wrapper, then add `alignwide` or `alignfull` to the data-view block's wrapper attributes in `DataView.php`. Remove the exclusion hack.

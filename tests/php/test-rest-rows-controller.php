@@ -80,12 +80,56 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertSame( 'rowmeta', $collection['slug'] );
 	}
 
-	public function test_requires_edit_posts_capability(): void {
+	public function test_edit_context_requires_edit_posts_capability(): void {
 		wp_set_current_user( $this->create_user( 'subscriber' ) );
 
-		$response = $this->query_rows( array( 'collection' => 1 ) );
+		$response = $this->query_rows( array( 'collection' => 1, 'context' => 'edit' ) );
 
 		$this->assertSame( 403, $response->get_status() );
+	}
+
+	public function test_view_context_allows_anonymous_for_published_collection(): void {
+		wp_set_current_user( 0 );
+
+		$fixture = $this->create_collection_fixture( 'pub', 'text', 'publish' );
+
+		$response = $this->query_rows(
+			array(
+				'collection' => $fixture['collection_id'],
+				'context'    => 'view',
+			)
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+	}
+
+	public function test_view_context_rejects_unpublished_collection(): void {
+		wp_set_current_user( 0 );
+
+		$fixture = $this->create_collection_fixture( 'priv' );
+
+		$response = $this->query_rows(
+			array(
+				'collection' => $fixture['collection_id'],
+				'context'    => 'view',
+			)
+		);
+
+		// rest_authorization_required_code() returns 401 for anonymous users.
+		$this->assertSame( 401, $response->get_status() );
+	}
+
+	public function test_view_context_returns_404_for_nonexistent_collection(): void {
+		wp_set_current_user( 0 );
+
+		$response = $this->query_rows(
+			array(
+				'collection' => 999999,
+				'context'    => 'view',
+			)
+		);
+
+		$this->assertSame( 404, $response->get_status() );
 	}
 
 	public function test_rejects_nonexistent_collection(): void {
@@ -242,6 +286,46 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertSame( $fixture['field_id'], $fields[0]['id'] );
 		$this->assertSame( 'number', $fields[0]['type'] );
 		$this->assertSame( 'Score', $fields[0]['label'] );
+	}
+
+	public function test_field_definitions_include_options(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+
+		$collection_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Collection::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Opts',
+				'meta_input'  => array( 'slug' => 'opts' ),
+			)
+		);
+
+		$options_json = wp_json_encode( array(
+			array( 'value' => 'a', 'label' => 'Alpha' ),
+			array( 'value' => 'b', 'label' => 'Beta' ),
+		) );
+
+		$field_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Status',
+				'meta_input'  => array(
+					'type'    => 'select',
+					'options' => $options_json,
+				),
+			)
+		);
+
+		add_post_meta( $collection_id, 'fields', (string) $field_id );
+		( new CollectionEntries() )->register_for_collection( get_post( $collection_id ) );
+
+		$response = $this->query_rows( array( 'collection' => $collection_id ) );
+
+		$data   = $response->get_data();
+		$fields = $data['fields'];
+		$this->assertCount( 1, $fields );
+		$this->assertSame( $options_json, $fields[0]['options'] );
 	}
 
 	// -- Unit tests for format_row and build_query_args -----------------
@@ -1088,7 +1172,9 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 
 	private function query_rows( array $params ): \WP_REST_Response {
 		$request = new WP_REST_Request( 'GET', '/cortext/v1/rows' );
-		$request->set_query_params( $params );
+		// Default to edit context so existing tests keep hitting the
+		// authenticated path. Tests for public access pass context=view.
+		$request->set_query_params( array_merge( array( 'context' => 'edit' ), $params ) );
 
 		return rest_do_request( $request );
 	}
@@ -1216,11 +1302,11 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 	 *
 	 * @return array{collection_id: int, field_id: int}
 	 */
-	private function create_collection_fixture( string $slug, string $field_type = 'number' ): array {
+	private function create_collection_fixture( string $slug, string $field_type = 'number', string $post_status = 'private' ): array {
 		$collection_id = (int) wp_insert_post(
 			array(
 				'post_type'   => Collection::POST_TYPE,
-				'post_status' => 'private',
+				'post_status' => $post_status,
 				'post_title'  => ucfirst( $slug ),
 				'meta_input'  => array( 'slug' => $slug ),
 			)
