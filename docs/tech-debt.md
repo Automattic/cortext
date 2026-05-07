@@ -337,13 +337,15 @@ The state is ours too. `view.calculations` lives on the DataViews view object be
 
 ## 38. Command palette embedding needs host glue `[upstream, soft]`
 
-**What.** Cortext uses `@wordpress/commands` for the palette UI; we are not forking it. The rough part is that the package is built for the shared wp-admin command context. On the Cortext screen we need an app palette instead: no global wp-admin commands, no second Core palette competing for cmd+K, and focus returning to the workspace after a command runs. That leaves a few small bits of shell glue in Cortext: a local data registry, a `wp-core-commands` dequeue, a bundled stylesheet import, and a canvas ref for focus return.
+**What.** Cortext uses `@wordpress/commands` for command registration and palette state, but the stock menu is built for wp-admin. On the Cortext screen we need a scoped app palette: keep Core's commands out, avoid a second cmd+K menu, return focus to the workspace after a command runs, and put workspace recents in their own section instead of mixing them into suggestions. That leaves some glue in Cortext: a local data registry, a `wp-core-commands` dequeue, a bundled stylesheet import, a canvas ref for focus return, and a local command-menu renderer.
+
+The awkward bit is `CortextCommandMenu`. `@wordpress/commands` has a built-in "Recent" group, but that means recently used commands, not Cortext workspace history, and there is no public way to add a custom group. So Cortext renders the menu itself while still reading from the upstream command store. That is better than patching `node_modules` or poking the DOM after render, but upgrades need a close look at the upstream menu markup, CSS classes, keyboard behavior, and `cmdk` wiring.
 
 The user-facing placeholder is still Core's generic "Search commands and settings" string too. Fine for this slice, but it will feel off once the palette grows into actual Cortext search.
 
-**Where.** `src/components/CommandPalette.js`, the `canvasRef` passed from `src/router.js`, `dequeue_core_command_palette` in `includes/Admin/Screen.php`, and the `@wordpress/commands` stylesheet import in `src/index.scss`.
+**Where.** `src/components/CommandPalette.js`, `src/components/CortextCommandMenu.js`, the `canvasRef` passed from `src/router.js`, `dequeue_core_command_palette` in `includes/Admin/Screen.php`, and the `@wordpress/commands` stylesheet import and Cortext command-menu overrides in `src/index.scss`.
 
-**Solution.** Upstream could make app-owned palettes less ad hoc: a scoped command registry or namespace API, a supported way for full-screen admin apps to opt out of Core's admin palette, a custom input label, and an explicit focus-return target or after-close callback. With those, Cortext could keep registering commands through `@wordpress/commands` and drop most of the shell-specific wiring.
+**Solution.** Upstream could make app-owned palettes less ad hoc: a scoped command registry or namespace API, a supported way for full-screen admin apps to opt out of Core's admin palette, a custom input label, an explicit focus-return target or after-close callback, and a group/section API for registered commands or command loaders. With those, Cortext could keep registering commands through `@wordpress/commands`, render workspace recents through an upstream extension point, and drop the local menu renderer plus most of this shell-specific wiring.
 
 ## 39. Row detail relation editing is deferred `[internal]`
 
