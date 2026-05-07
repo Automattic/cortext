@@ -421,6 +421,14 @@ export function formatDisplay( value, type, options = {} ) {
 		return text;
 	}
 
+	if ( Array.isArray( value ) ) {
+		return value
+			.filter(
+				( item ) => item !== null && item !== undefined && item !== ''
+			)
+			.map( ( item ) => String( item ) )
+			.join( ', ' );
+	}
 	return String( value );
 }
 
