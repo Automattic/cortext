@@ -38,6 +38,8 @@ function baseProps( overrides = {} ) {
 		onRename: jest.fn(),
 		onDuplicate: jest.fn(),
 		onDelete: jest.fn(),
+		isFavorite: false,
+		onToggleFavorite: jest.fn(),
 		onSetHome: jest.fn(),
 		home: null,
 		isHomeUpdating: false,
@@ -147,5 +149,27 @@ describe( 'PageRow', () => {
 		);
 
 		expect( props.onSetHome ).toHaveBeenCalledWith( 1 );
+	} );
+
+	it( 'calls onToggleFavorite from the action menu', () => {
+		const { container, props } = renderRow();
+		fireEvent.click( container.querySelector( '.cortext-sidebar__menu' ) );
+		fireEvent.click(
+			screen.getByRole( 'menuitem', { name: 'Add to favorites' } )
+		);
+
+		expect( props.onToggleFavorite ).toHaveBeenCalledWith( 1 );
+		expect( props.onSelect ).not.toHaveBeenCalled();
+	} );
+
+	it( 'renders a remove favorite action when the page is favorited', () => {
+		const { container } = renderRow( { isFavorite: true } );
+		fireEvent.click( container.querySelector( '.cortext-sidebar__menu' ) );
+
+		expect(
+			screen.getByRole( 'menuitem', {
+				name: 'Remove from favorites',
+			} )
+		).toBeTruthy();
 	} );
 } );
