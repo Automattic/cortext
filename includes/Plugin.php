@@ -23,6 +23,7 @@ use Cortext\PostType\Page;
 use Cortext\PostType\PageIdentity;
 use Cortext\PostType\PageTrashCascade;
 use Cortext\Rest\CollectionsController;
+use Cortext\Rest\FavoritesController;
 use Cortext\Rest\FieldsController;
 use Cortext\Rest\PageTrashController;
 use Cortext\Rest\RowsController;
@@ -53,6 +54,7 @@ final class Plugin {
 		( new PageCoverBlock() )->register();
 		( new PageHeaderActionsBlock() )->register();
 		( new CollectionsController() )->register();
+		( new FavoritesController() )->register();
 		( new FieldsController() )->register();
 		( new PageTrashController() )->register();
 		( new RowsController() )->register();
