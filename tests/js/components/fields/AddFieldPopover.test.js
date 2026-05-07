@@ -21,9 +21,17 @@ import useCollectionFields from '../../../../src/hooks/useCollectionFields';
 import { useCreateField } from '../../../../src/hooks/useFieldMutations';
 
 const run = jest.fn();
+let targetFields;
 
 beforeEach( () => {
 	jest.clearAllMocks();
+	targetFields = [
+		{
+			id: 88,
+			title: { raw: 'Amount', rendered: 'Amount' },
+			meta: { type: 'number' },
+		},
+	];
 	run.mockResolvedValue( { id: 100, type: 'rollup' } );
 	useCreateField.mockReturnValue( {
 		run,
@@ -47,34 +55,45 @@ beforeEach( () => {
 				? {
 						id: 9,
 						title: { raw: 'Invoices', rendered: 'Invoices' },
-						meta: { fields: [ 88 ] },
+						meta: {
+							fields: targetFields.map( ( field ) => field.id ),
+						},
 				  }
 				: null,
 	} ) );
 	useEntityRecords.mockImplementation( ( kind, name ) => {
 		if ( kind === 'postType' && name === 'crtxt_field' ) {
-			return {
-				records: [
-					{
-						id: 88,
-						title: { raw: 'Amount', rendered: 'Amount' },
-						meta: { type: 'number' },
-					},
-				],
-			};
+			return { records: targetFields };
 		}
 		return { records: [] };
 	} );
 } );
 
 describe( 'AddFieldPopover rollup config', () => {
-	it( 'defaults count rollup names to the related collection and aggregator', async () => {
+	it( 'orders rollup controls as relation, target property, then calculate', async () => {
+		render( <AddFieldPopover collectionId={ 5 } /> );
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Rollup' } ) );
+
+		const relation = await screen.findByLabelText( 'Relation' );
+		const target = screen.getByLabelText( 'Target property' );
+		const calculate = screen.getByLabelText( 'Calculate' );
+		const controls = screen.getAllByRole( 'combobox' );
+
+		expect( controls[ 0 ] ).toBe( relation );
+		expect( controls[ 1 ] ).toBe( target );
+		expect( controls[ 2 ] ).toBe( calculate );
+	} );
+
+	it( 'defaults value rollup names to the related collection, target, and aggregator', async () => {
 		render( <AddFieldPopover collectionId={ 5 } /> );
 
 		fireEvent.click( screen.getByRole( 'button', { name: 'Rollup' } ) );
 
 		await waitFor( () =>
-			expect( screen.getByLabelText( 'Relation' ) ).toHaveValue( '77' )
+			expect( screen.getByLabelText( 'Target property' ) ).toHaveValue(
+				'88'
+			)
 		);
 
 		fireEvent.click(
@@ -83,33 +102,29 @@ describe( 'AddFieldPopover rollup config', () => {
 
 		await waitFor( () =>
 			expect( run ).toHaveBeenCalledWith( {
-				title: 'Invoices (Count)',
+				title: 'Invoices / Amount (Show original)',
 				type: 'rollup',
 				rollup_relation_field_id: 77,
-				rollup_target_field_id: undefined,
-				rollup_aggregator: 'count',
+				rollup_target_field_id: 88,
+				rollup_aggregator: 'show_original',
 			} )
 		);
 	} );
 
-	it( 'preselects the only relation and only compatible target field', async () => {
+	it( 'preselects the only relation and only target field', async () => {
 		render( <AddFieldPopover collectionId={ 5 } /> );
 
 		fireEvent.click( screen.getByRole( 'button', { name: 'Rollup' } ) );
 
 		await waitFor( () =>
-			expect( screen.getByLabelText( 'Relation' ) ).toHaveValue( '77' )
+			expect( screen.getByLabelText( 'Target property' ) ).toHaveValue(
+				'88'
+			)
 		);
 
 		fireEvent.change( screen.getByLabelText( 'Calculate' ), {
 			target: { value: 'sum' },
 		} );
-
-		await waitFor( () =>
-			expect( screen.getByLabelText( 'Target field' ) ).toHaveValue(
-				'88'
-			)
-		);
 
 		fireEvent.click(
 			screen.getByRole( 'button', { name: 'Create rollup' } )
@@ -124,5 +139,76 @@ describe( 'AddFieldPopover rollup config', () => {
 				rollup_aggregator: 'sum',
 			} )
 		);
+	} );
+
+	it( 'adds number calculations only after selecting a number target', async () => {
+		targetFields = [
+			{
+				id: 88,
+				title: { raw: 'Amount', rendered: 'Amount' },
+				meta: { type: 'number' },
+			},
+			{
+				id: 89,
+				title: { raw: 'Due', rendered: 'Due' },
+				meta: { type: 'date' },
+			},
+		];
+		render( <AddFieldPopover collectionId={ 5 } /> );
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Rollup' } ) );
+
+		await screen.findByLabelText( 'Target property' );
+		expect( screen.queryByRole( 'option', { name: 'Sum' } ) ).toBeNull();
+		expect(
+			screen.queryByRole( 'option', { name: 'Latest date' } )
+		).toBeNull();
+
+		fireEvent.change( screen.getByLabelText( 'Target property' ), {
+			target: { value: '88' },
+		} );
+
+		expect( screen.getByRole( 'option', { name: 'Sum' } ) ).toBeTruthy();
+		expect(
+			screen.queryByRole( 'option', { name: 'Latest date' } )
+		).toBeNull();
+	} );
+
+	it( 'adds date calculations only after selecting a date target', async () => {
+		targetFields = [
+			{
+				id: 88,
+				title: { raw: 'Amount', rendered: 'Amount' },
+				meta: { type: 'number' },
+			},
+			{
+				id: 89,
+				title: { raw: 'Due', rendered: 'Due' },
+				meta: { type: 'date' },
+			},
+		];
+		render( <AddFieldPopover collectionId={ 5 } /> );
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Rollup' } ) );
+
+		await screen.findByLabelText( 'Target property' );
+		expect(
+			screen.queryByRole( 'option', { name: 'Earliest date' } )
+		).toBeNull();
+
+		fireEvent.change( screen.getByLabelText( 'Target property' ), {
+			target: { value: '89' },
+		} );
+
+		expect(
+			screen.getByRole( 'option', { name: 'Earliest date' } )
+		).toBeTruthy();
+		expect(
+			screen.getByRole( 'option', { name: 'Latest date' } )
+		).toBeTruthy();
+		expect(
+			screen.getByRole( 'option', { name: 'Date range' } )
+		).toBeTruthy();
+		expect( screen.queryByRole( 'option', { name: 'Sum' } ) ).toBeNull();
 	} );
 } );

@@ -359,6 +359,14 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 				'type'  => 'number',
 			)
 		)->get_data()['id'];
+		$number_format = wp_json_encode(
+			array(
+				'style'    => 'currency',
+				'decimals' => 2,
+				'currency' => 'USD',
+			)
+		);
+		update_post_meta( $amount_id, 'number_format', $number_format );
 
 		$response = $this->create_field(
 			$source_collection_id,
@@ -378,6 +386,46 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 		$this->assertSame( $relation_id, (int) get_post_meta( $rollup_id, 'rollup_relation_field_id', true ) );
 		$this->assertSame( $amount_id, (int) get_post_meta( $rollup_id, 'rollup_target_field_id', true ) );
 		$this->assertSame( 'sum', get_post_meta( $rollup_id, 'rollup_aggregator', true ) );
+		$this->assertSame( 'number', get_post_meta( $rollup_id, 'rollup_target_type', true ) );
+		$this->assertSame( $number_format, get_post_meta( $rollup_id, 'rollup_target_number_format', true ) );
+	}
+
+	public function test_create_rollup_accepts_date_range_for_date_targets(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$source_collection_id = $this->create_collection_with_slug( 'Projects', 'projects-date-roll' );
+		$target_collection_id = $this->create_collection_with_slug( 'Invoices', 'invoices-date-roll' );
+
+		$relation_id = (int) $this->create_field(
+			$source_collection_id,
+			array(
+				'title'                 => 'Invoices',
+				'type'                  => 'relation',
+				'related_collection_id' => $target_collection_id,
+			)
+		)->get_data()['id'];
+		$date_id     = (int) $this->create_field(
+			$target_collection_id,
+			array(
+				'title' => 'Due',
+				'type'  => 'date',
+			)
+		)->get_data()['id'];
+
+		$response = $this->create_field(
+			$source_collection_id,
+			array(
+				'title'                    => 'Due range',
+				'type'                     => 'rollup',
+				'rollup_relation_field_id' => $relation_id,
+				'rollup_target_field_id'   => $date_id,
+				'rollup_aggregator'        => 'date_range',
+			)
+		);
+
+		$this->assertSame( 201, $response->get_status() );
+		$rollup_id = (int) $response->get_data()['id'];
+		$this->assertSame( 'date_range', get_post_meta( $rollup_id, 'rollup_aggregator', true ) );
+		$this->assertSame( 'date', get_post_meta( $rollup_id, 'rollup_target_type', true ) );
 	}
 
 	public function test_create_rollup_rejects_rollup_of_rollup(): void {
@@ -547,6 +595,43 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 			$date_format,
 			get_post_meta( $copy_id, 'date_format', true )
 		);
+	}
+
+	public function test_duplicate_clones_rollup_target_display_meta(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$collection_id = $this->create_collection_with_slug( 'Rollup Clone', 'rollup-clone' );
+		$options       = wp_json_encode(
+			array(
+				array(
+					'value' => 'paid',
+					'label' => 'Paid',
+					'color' => 'green',
+				),
+			)
+		);
+
+		$source_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Statuses',
+				'meta_input'  => array(
+					'type'                  => 'rollup',
+					'rollup_aggregator'     => 'show_unique',
+					'rollup_target_type'    => 'select',
+					'rollup_target_options' => $options,
+				),
+			)
+		);
+		add_post_meta( $collection_id, 'fields', (string) $source_id );
+
+		$copy_id = (int) $this->duplicate_field( $collection_id, $source_id )
+			->get_data()['id'];
+
+		$this->assertSame( 'rollup', get_post_meta( $copy_id, 'type', true ) );
+		$this->assertSame( 'show_unique', get_post_meta( $copy_id, 'rollup_aggregator', true ) );
+		$this->assertSame( 'select', get_post_meta( $copy_id, 'rollup_target_type', true ) );
+		$this->assertSame( $options, get_post_meta( $copy_id, 'rollup_target_options', true ) );
 	}
 
 	public function test_duplicate_preserves_related_collection_id(): void {

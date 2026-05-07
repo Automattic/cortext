@@ -116,6 +116,9 @@ final class CollectionEntries {
 					delete_post_meta( $reverse_owner_collection_id, 'fields', (string) $reverse_id );
 				}
 
+				$this->delete_dependent_rollups_in_collection( $post_id, $owner_collection_id );
+				$this->delete_dependent_rollups_in_collection( $reverse_id, $reverse_owner_collection_id );
+
 				self::$deleting_relation_fields[ $post_id ] = true;
 				wp_delete_post( $reverse_id, true );
 				unset( self::$deleting_relation_fields[ $post_id ] );
@@ -154,6 +157,30 @@ final class CollectionEntries {
 				continue;
 			}
 			delete_post_meta( $collection_id, 'fields', $field_id_str );
+		}
+	}
+
+	/**
+	 * Deletes rollup fields in a collection that depend on a relation field.
+	 *
+	 * @param int $field_id      Relation field post ID being deleted.
+	 * @param int $collection_id Collection whose fields should be scanned.
+	 */
+	private function delete_dependent_rollups_in_collection( int $field_id, int $collection_id ): void {
+		if ( $collection_id < 1 ) {
+			return;
+		}
+
+		foreach ( array_map( 'intval', get_post_meta( $collection_id, 'fields', false ) ) as $rollup_id ) {
+			if (
+				$rollup_id !== $field_id &&
+				Field::POST_TYPE === get_post_type( $rollup_id ) &&
+				'rollup' === (string) get_post_meta( $rollup_id, 'type', true ) &&
+				(string) get_post_meta( $rollup_id, 'rollup_relation_field_id', true ) === (string) $field_id
+			) {
+				delete_post_meta( $collection_id, 'fields', (string) $rollup_id );
+				wp_delete_post( $rollup_id, true );
+			}
 		}
 	}
 

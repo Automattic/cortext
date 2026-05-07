@@ -14,6 +14,7 @@ use Cortext\PostType\CollectionEntries;
 use Cortext\PostType\Field;
 use Cortext\PostType\Page;
 use Cortext\PostType\PageIdentity;
+use Cortext\Relations;
 use WP_CLI;
 use WP_CLI_Command;
 
@@ -655,6 +656,8 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			$collection_ids[ $spec['slug'] ] = $this->seed_collection( $spec );
 		}
 
+		$this->seed_relationship_examples( $collection_ids );
+
 		$workspace_page_id = $this->seed_pages( $collection_ids );
 		$this->seed_workspace_home( $seed_user_id, $workspace_page_id );
 
@@ -1276,6 +1279,409 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		}
 
 		return (int) $collection_id;
+	}
+
+	/**
+	 * Seeds relation and rollup examples after all base collections exist.
+	 *
+	 * @param array<string,int> $collection_ids Collection IDs keyed by slug.
+	 */
+	private function seed_relationship_examples( array $collection_ids ): void {
+		$projects_id = $collection_ids['projects'] ?? 0;
+		$demo_id     = $collection_ids['demo'] ?? 0;
+		$books_id    = $collection_ids['books'] ?? 0;
+
+		if ( $projects_id > 0 && $demo_id > 0 ) {
+			$tasks_relation = $this->ensure_relation_pair(
+				$projects_id,
+				'Tasks',
+				$demo_id,
+				'Project',
+				true,
+				false
+			);
+
+			$demo_fields = $this->attached_fields_by_title( $demo_id );
+			$this->ensure_rollup_field(
+				$projects_id,
+				'Task count',
+				$tasks_relation['source_id'],
+				0,
+				'count'
+			);
+			$this->ensure_rollup_field(
+				$projects_id,
+				'Task effort',
+				$tasks_relation['source_id'],
+				$demo_fields['Quantity'] ?? 0,
+				'sum'
+			);
+			$this->ensure_rollup_field(
+				$projects_id,
+				'Task statuses',
+				$tasks_relation['source_id'],
+				$demo_fields['Status'] ?? 0,
+				'show_unique'
+			);
+			$this->ensure_rollup_field(
+				$projects_id,
+				'Latest task due',
+				$tasks_relation['source_id'],
+				$demo_fields['Due'] ?? 0,
+				'latest'
+			);
+			$this->ensure_rollup_field(
+				$projects_id,
+				'Task due range',
+				$tasks_relation['source_id'],
+				$demo_fields['Due'] ?? 0,
+				'date_range'
+			);
+
+			$this->register_collection_entries( $projects_id );
+			$this->register_collection_entries( $demo_id );
+
+			$this->set_relation_by_titles(
+				'projects',
+				'Seed realistic demo workspace',
+				$tasks_relation['source_id'],
+				array(
+					'Wire up the inline editor',
+					'Document wp-env demo seed',
+				)
+			);
+			$this->set_relation_by_titles(
+				'projects',
+				'Inline table editing polish',
+				$tasks_relation['source_id'],
+				array(
+					'Polish the footer button',
+					'Add keyboard traversal coverage',
+				)
+			);
+		}
+
+		if ( $books_id > 0 && $projects_id > 0 ) {
+			$projects_relation = $this->ensure_relation_pair(
+				$books_id,
+				'Referenced projects',
+				$projects_id,
+				'Reference books',
+				true,
+				true
+			);
+
+			$project_fields = $this->attached_fields_by_title( $projects_id );
+			$this->ensure_rollup_field(
+				$books_id,
+				'Project statuses',
+				$projects_relation['source_id'],
+				$project_fields['Status'] ?? 0,
+				'show_unique'
+			);
+			$this->ensure_rollup_field(
+				$books_id,
+				'Project due range',
+				$projects_relation['source_id'],
+				$project_fields['Due'] ?? 0,
+				'date_range'
+			);
+
+			$this->register_collection_entries( $books_id );
+			$this->register_collection_entries( $projects_id );
+
+			$this->set_relation_by_titles(
+				'books',
+				'The Left Hand of Darkness',
+				$projects_relation['source_id'],
+				array(
+					'Research relation fields',
+				)
+			);
+			$this->set_relation_by_titles(
+				'books',
+				'Invisible Cities',
+				$projects_relation['source_id'],
+				array(
+					'Collection public templates',
+				)
+			);
+			$this->set_relation_by_titles(
+				'books',
+				'The Dispossessed',
+				$projects_relation['source_id'],
+				array(
+					'Seed realistic demo workspace',
+					'DataViews view persistence',
+				)
+			);
+		}
+	}
+
+	/**
+	 * Ensures a bidirectional relation field pair exists.
+	 *
+	 * @param int    $source_collection_id Source collection ID.
+	 * @param string $source_title         Source relation field title.
+	 * @param int    $target_collection_id Target collection ID.
+	 * @param string $reverse_title        Reverse relation field title.
+	 * @param bool   $source_multiple      Whether source accepts multiple rows.
+	 * @param bool   $reverse_multiple     Whether reverse accepts multiple rows.
+	 * @return array{source_id:int,reverse_id:int}
+	 */
+	private function ensure_relation_pair(
+		int $source_collection_id,
+		string $source_title,
+		int $target_collection_id,
+		string $reverse_title,
+		bool $source_multiple,
+		bool $reverse_multiple
+	): array {
+		$source_id  = $this->ensure_field_post( $source_collection_id, $source_title );
+		$reverse_id = (int) get_post_meta( $source_id, 'relation_reverse_field_id', true );
+
+		if ( $reverse_id < 1 || Field::POST_TYPE !== get_post_type( $reverse_id ) ) {
+			$reverse_id = $this->ensure_field_post( $target_collection_id, $reverse_title );
+		}
+
+		$this->update_relation_field_meta(
+			$source_id,
+			$target_collection_id,
+			$reverse_id,
+			$source_multiple
+		);
+		$this->update_relation_field_meta(
+			$reverse_id,
+			$source_collection_id,
+			$source_id,
+			$reverse_multiple
+		);
+
+		WP_CLI::log(
+			sprintf(
+				"Seeded relation '%s' (ID %d) <-> '%s' (ID %d).",
+				$source_title,
+				$source_id,
+				$reverse_title,
+				$reverse_id
+			)
+		);
+
+		return array(
+			'source_id'  => $source_id,
+			'reverse_id' => $reverse_id,
+		);
+	}
+
+	private function update_relation_field_meta(
+		int $field_id,
+		int $related_collection_id,
+		int $reverse_id,
+		bool $multiple
+	): void {
+		update_post_meta( $field_id, 'type', 'relation' );
+		update_post_meta( $field_id, 'related_collection_id', (string) $related_collection_id );
+		update_post_meta( $field_id, 'relation_reverse_field_id', (string) $reverse_id );
+		update_post_meta( $field_id, 'relation_multiple', $multiple ? '1' : '0' );
+	}
+
+	private function ensure_rollup_field(
+		int $collection_id,
+		string $title,
+		int $relation_field_id,
+		int $target_field_id,
+		string $aggregator
+	): int {
+		$field_id = $this->ensure_field_post( $collection_id, $title );
+
+		update_post_meta( $field_id, 'type', 'rollup' );
+		update_post_meta( $field_id, 'rollup_relation_field_id', (string) $relation_field_id );
+		update_post_meta( $field_id, 'rollup_aggregator', $aggregator );
+		$this->delete_rollup_target_meta( $field_id );
+
+		if ( $target_field_id > 0 ) {
+			update_post_meta( $field_id, 'rollup_target_field_id', (string) $target_field_id );
+			foreach ( $this->rollup_target_meta( $target_field_id ) as $key => $value ) {
+				update_post_meta( $field_id, $key, $value );
+			}
+		} else {
+			delete_post_meta( $field_id, 'rollup_target_field_id' );
+		}
+
+		WP_CLI::log(
+			sprintf(
+				"Seeded rollup '%s' (ID %d, aggregator: %s).",
+				$title,
+				$field_id,
+				$aggregator
+			)
+		);
+
+		return $field_id;
+	}
+
+	/**
+	 * Copies target display metadata onto a seeded rollup field.
+	 *
+	 * @param int $target_field_id Target field post ID.
+	 * @return array<string,string>
+	 */
+	private function rollup_target_meta( int $target_field_id ): array {
+		$target_type = (string) get_post_meta( $target_field_id, 'type', true );
+		$meta        = array();
+
+		if ( '' !== $target_type ) {
+			$meta['rollup_target_type'] = $target_type;
+		}
+
+		foreach (
+			array(
+				'options'               => 'rollup_target_options',
+				'number_format'         => 'rollup_target_number_format',
+				'date_format'           => 'rollup_target_date_format',
+				'related_collection_id' => 'rollup_target_related_collection_id',
+				'relation_multiple'     => 'rollup_target_relation_multiple',
+			) as $source_key => $rollup_key
+		) {
+			$value = get_post_meta( $target_field_id, $source_key, true );
+			if ( '' !== $value && null !== $value ) {
+				$meta[ $rollup_key ] = (string) $value;
+			}
+		}
+
+		return $meta;
+	}
+
+	private function delete_rollup_target_meta( int $field_id ): void {
+		foreach (
+			array(
+				'rollup_target_type',
+				'rollup_target_options',
+				'rollup_target_number_format',
+				'rollup_target_date_format',
+				'rollup_target_related_collection_id',
+				'rollup_target_relation_multiple',
+			) as $meta_key
+		) {
+			delete_post_meta( $field_id, $meta_key );
+		}
+	}
+
+	private function ensure_field_post( int $collection_id, string $title ): int {
+		$field_id = $this->find_attached_field(
+			$title,
+			get_post_meta( $collection_id, 'fields', false )
+		);
+
+		if ( $field_id ) {
+			return $field_id;
+		}
+
+		$field_id = wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_title'  => $title,
+				'post_status' => 'private',
+			),
+			true
+		);
+
+		if ( is_wp_error( $field_id ) ) {
+			WP_CLI::error( "Failed to create field '{$title}': " . $field_id->get_error_message() );
+		}
+
+		add_post_meta( $collection_id, 'fields', (string) $field_id );
+		WP_CLI::log( "Created field '{$title}' (ID {$field_id})." );
+
+		return (int) $field_id;
+	}
+
+	/**
+	 * Returns attached field IDs keyed by post title.
+	 *
+	 * @param int $collection_id Collection post ID.
+	 * @return array<string,int>
+	 */
+	private function attached_fields_by_title( int $collection_id ): array {
+		$fields = array();
+		foreach ( get_post_meta( $collection_id, 'fields', false ) as $field_id ) {
+			$field = get_post( (int) $field_id );
+			if ( $field && Field::POST_TYPE === $field->post_type ) {
+				$fields[ $field->post_title ] = (int) $field->ID;
+			}
+		}
+		return $fields;
+	}
+
+	/**
+	 * Replaces a seeded relation value by matching row titles.
+	 *
+	 * @param string   $source_slug   Source collection slug.
+	 * @param string   $source_title  Source row title.
+	 * @param int      $field_id      Source relation field ID.
+	 * @param string[] $target_titles Target row titles.
+	 */
+	private function set_relation_by_titles(
+		string $source_slug,
+		string $source_title,
+		int $field_id,
+		array $target_titles
+	): void {
+		$source_id = $this->entry_id_by_title( $source_slug, $source_title );
+		if ( $source_id < 1 ) {
+			WP_CLI::warning( "Could not seed relation for missing row '{$source_title}'." );
+			return;
+		}
+
+		$target_collection_id = (int) get_post_meta( $field_id, 'related_collection_id', true );
+		$target_slug          = (string) get_post_meta( $target_collection_id, 'slug', true );
+		$target_ids           = array();
+
+		foreach ( $target_titles as $target_title ) {
+			$target_id = $this->entry_id_by_title( $target_slug, $target_title );
+			if ( $target_id < 1 ) {
+				WP_CLI::warning( "Could not seed relation target '{$target_title}'." );
+				continue;
+			}
+			$target_ids[] = $target_id;
+		}
+
+		$result = Relations::sync_relation_value( $source_id, $field_id, $target_ids );
+		if ( is_wp_error( $result ) ) {
+			WP_CLI::warning(
+				sprintf(
+					"Could not seed relation for '%s': %s",
+					$source_title,
+					$result->get_error_message()
+				)
+			);
+		}
+	}
+
+	private function entry_id_by_title( string $collection_slug, string $title ): int {
+		if ( '' === $collection_slug ) {
+			return 0;
+		}
+
+		$entry_cpt = CollectionEntries::CPT_PREFIX . $collection_slug;
+		$entries   = get_posts(
+			array(
+				'post_type'   => $entry_cpt,
+				'post_status' => array( 'draft', 'private', 'publish' ),
+				'title'       => $title,
+				'numberposts' => 1,
+				'fields'      => 'ids',
+			)
+		);
+
+		return $entries ? (int) $entries[0] : 0;
+	}
+
+	private function register_collection_entries( int $collection_id ): void {
+		$collection = get_post( $collection_id );
+		if ( $collection ) {
+			( new CollectionEntries() )->register_for_collection( $collection );
+		}
 	}
 
 	private function reset(): void {

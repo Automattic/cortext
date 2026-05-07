@@ -47,6 +47,23 @@ export const EDITABLE_TYPES = new Set( [
 ] );
 
 const SEARCHABLE_TYPES = new Set( [ 'text', 'email', 'url' ] );
+const ROLLUP_VALUE_AGGREGATORS = new Set( [ 'show_original', 'show_unique' ] );
+const ROLLUP_NUMERIC_AGGREGATORS = new Set( [
+	'count',
+	'count_values',
+	'count_unique',
+	'empty',
+	'not_empty',
+	'percent_empty',
+	'percent_not_empty',
+	'sum',
+	'avg',
+	'median',
+	'min',
+	'max',
+	'range',
+] );
+const ROLLUP_SCALAR_DATE_AGGREGATORS = new Set( [ 'earliest', 'latest' ] );
 
 function parseBooleanMeta( raw, fallback = false ) {
 	if ( raw === undefined || raw === null || raw === '' ) {
@@ -61,7 +78,21 @@ function parseBooleanMeta( raw, fallback = false ) {
 }
 
 function rollupDisplayType( meta ) {
-	return meta?.rollup_aggregator === 'latest' ? 'datetime' : 'number';
+	const aggregator = meta?.rollup_aggregator ?? 'count';
+	if ( aggregator === 'date_range' ) {
+		return 'rollup-date-range';
+	}
+	if ( ROLLUP_VALUE_AGGREGATORS.has( aggregator ) ) {
+		return meta?.rollup_target_type ?? 'text';
+	}
+	if ( ! ROLLUP_SCALAR_DATE_AGGREGATORS.has( aggregator ) ) {
+		return 'number';
+	}
+	// Preserve the target field's date/datetime distinction so
+	// `formatDateValue` can take its timezone-safe `date` path on
+	// `YYYY-MM-DD` values. Defaults to `date` when unknown — that's the
+	// branch that won't shift west of UTC.
+	return meta?.rollup_target_type === 'datetime' ? 'datetime' : 'date';
 }
 
 function buildRender( id, type, label, elements, format, relation ) {
@@ -83,6 +114,40 @@ function buildRender( id, type, label, elements, format, relation ) {
 
 function HeaderLabel( { children } ) {
 	return <span className="cortext-column-header-label">{ children }</span>;
+}
+
+function rollupTargetFormat( meta ) {
+	if ( meta?.rollup_target_type === 'number' ) {
+		return parseFormat( meta?.rollup_target_number_format );
+	}
+	if (
+		meta?.rollup_target_type === 'date' ||
+		meta?.rollup_target_type === 'datetime'
+	) {
+		return parseFormat( meta?.rollup_target_date_format );
+	}
+	return undefined;
+}
+
+function fieldRelationConfig( field, type, rollupTargetType ) {
+	if ( type === 'relation' ) {
+		return {
+			targetCollectionId: Number( field.meta?.related_collection_id ),
+			multiple: parseBooleanMeta( field.meta?.relation_multiple, true ),
+		};
+	}
+	if ( type === 'rollup' && rollupTargetType === 'relation' ) {
+		return {
+			targetCollectionId: Number(
+				field.meta?.rollup_target_related_collection_id
+			),
+			multiple: parseBooleanMeta(
+				field.meta?.rollup_target_relation_multiple,
+				true
+			),
+		};
+	}
+	return undefined;
 }
 
 // Returns the four read-only system fields surfaced alongside each
@@ -170,29 +235,33 @@ export function mapField( field ) {
 	// (auto-escaped by React), so the entity layer is unwanted noise.
 	const label = field.title?.raw || field.title?.rendered || `#${ field.id }`;
 	const type = field.meta?.type ?? 'text';
-	const elements = elementsFromOptions( field.meta?.options );
+	const rollupTargetType = field.meta?.rollup_target_type;
+	const elements = elementsFromOptions(
+		type === 'rollup'
+			? field.meta?.rollup_target_options
+			: field.meta?.options
+	);
 	let format;
 	if ( type === 'number' ) {
 		format = parseFormat( field.meta?.number_format );
 	} else if ( type === 'date' || type === 'datetime' ) {
 		format = parseFormat( field.meta?.date_format );
 	} else if ( type === 'rollup' ) {
+		const aggregator = field.meta?.rollup_aggregator ?? 'count';
 		format = {
-			rollup_aggregator: field.meta?.rollup_aggregator ?? 'count',
+			...( rollupTargetFormat( field.meta ) ?? {} ),
+			rollup_aggregator: aggregator,
+			rollup_target_type: rollupTargetType,
 		};
+		if (
+			aggregator === 'percent_empty' ||
+			aggregator === 'percent_not_empty'
+		) {
+			format.style = 'percent';
+			format.decimals = format.decimals ?? 0;
+		}
 	}
-	const relation =
-		type === 'relation'
-			? {
-					targetCollectionId: Number(
-						field.meta?.related_collection_id
-					),
-					multiple: parseBooleanMeta(
-						field.meta?.relation_multiple,
-						true
-					),
-			  }
-			: undefined;
+	const relation = fieldRelationConfig( field, type, rollupTargetType );
 	const base = {
 		id,
 		label,
@@ -201,6 +270,8 @@ export function mapField( field ) {
 		relatedCollectionId: relation?.targetCollectionId,
 		relationMultiple: relation?.multiple,
 		rollupAggregator: field.meta?.rollup_aggregator,
+		rollupRelationFieldId: Number( field.meta?.rollup_relation_field_id ),
+		rollupTargetFieldId: Number( field.meta?.rollup_target_field_id ),
 		// Header content is just an aria-hidden marker.
 		// `ColumnHeaderActions` queries the DOM for it and portals our
 		// combined-dropdown trigger into the owning <th>; DataViews'
@@ -250,25 +321,39 @@ export function mapField( field ) {
 				filterBy: false,
 			};
 		case 'rollup': {
-			if ( rollupDisplayType( field.meta ) === 'datetime' ) {
+			const aggregator = field.meta?.rollup_aggregator ?? 'count';
+			const display = rollupDisplayType( field.meta );
+			if ( ROLLUP_SCALAR_DATE_AGGREGATORS.has( aggregator ) ) {
 				return {
 					...base,
-					type: 'datetime',
+					type: display,
 					editable: false,
 					enableSorting: true,
 				};
 			}
+			if ( ROLLUP_NUMERIC_AGGREGATORS.has( aggregator ) ) {
+				return {
+					...base,
+					type: 'integer',
+					editable: false,
+					enableSorting: true,
+					isValid: { custom: () => null },
+					sort: ( a, b, direction ) => {
+						const av = Number( base.getValue( { item: a } ) ?? 0 );
+						const bv = Number( base.getValue( { item: b } ) ?? 0 );
+						return direction === 'asc' ? av - bv : bv - av;
+					},
+				};
+			}
 			return {
 				...base,
-				type: 'integer',
+				type:
+					display === 'relation' || display === 'multiselect'
+						? 'array'
+						: 'text',
 				editable: false,
-				enableSorting: true,
-				isValid: { custom: () => null },
-				sort: ( a, b, direction ) => {
-					const av = Number( base.getValue( { item: a } ) ?? 0 );
-					const bv = Number( base.getValue( { item: b } ) ?? 0 );
-					return direction === 'asc' ? av - bv : bv - av;
-				},
+				enableSorting: false,
+				filterBy: false,
 			};
 		}
 		case 'date':

@@ -670,7 +670,7 @@ final class RowsController {
 		return $refs;
 	}
 
-	private function compute_rollup_value( int $row_id, int $field_id ): int|float|string|null {
+	private function compute_rollup_value( int $row_id, int $field_id ): mixed {
 		$relation_field_id = (int) get_post_meta( $field_id, 'rollup_relation_field_id', true );
 		$target_field_id   = (int) get_post_meta( $field_id, 'rollup_target_field_id', true );
 		$aggregator        = (string) get_post_meta( $field_id, 'rollup_aggregator', true );
@@ -683,11 +683,32 @@ final class RowsController {
 			return count( $related_ids );
 		}
 		if ( $target_field_id < 1 || count( $related_ids ) === 0 ) {
-			return in_array( $aggregator, array( 'sum' ), true ) ? 0 : null;
+			return 'sum' === $aggregator ? 0 : null;
 		}
 
-		if ( 'latest' === $aggregator ) {
-			return $this->latest_rollup_value( $related_ids, $target_field_id );
+		if ( in_array( $aggregator, array( 'show_original', 'show_unique' ), true ) ) {
+			$values = $this->rollup_values( $related_ids, $target_field_id );
+			return 'show_unique' === $aggregator ? $this->unique_rollup_values( $values ) : $values;
+		}
+
+		if ( in_array( $aggregator, array( 'count_values', 'count_unique', 'empty', 'not_empty', 'percent_empty', 'percent_not_empty' ), true ) ) {
+			return $this->count_rollup_value( $related_ids, $target_field_id, $aggregator );
+		}
+
+		if ( in_array( $aggregator, array( 'earliest', 'latest' ), true ) ) {
+			return $this->date_extrema_rollup_value( $related_ids, $target_field_id, 'earliest' === $aggregator ? 'min' : 'max' );
+		}
+
+		if ( 'date_range' === $aggregator ) {
+			$start = $this->date_extrema_rollup_value( $related_ids, $target_field_id, 'min' );
+			$end   = $this->date_extrema_rollup_value( $related_ids, $target_field_id, 'max' );
+			if ( null === $start && null === $end ) {
+				return null;
+			}
+			return array(
+				'start' => $start,
+				'end'   => $end,
+			);
 		}
 
 		$numbers = $this->numeric_rollup_values( $related_ids, $target_field_id );
@@ -698,9 +719,108 @@ final class RowsController {
 		return match ( $aggregator ) {
 			'sum' => array_sum( $numbers ),
 			'avg' => array_sum( $numbers ) / count( $numbers ),
+			'median' => $this->median_rollup_value( $numbers ),
 			'min' => min( $numbers ),
 			'max' => max( $numbers ),
+			'range' => max( $numbers ) - min( $numbers ),
 			default => null,
+		};
+	}
+
+	/**
+	 * Returns flattened, non-empty values from related rows for a target field.
+	 *
+	 * @param int[] $row_ids         Related row IDs.
+	 * @param int   $target_field_id Rollup target field post ID.
+	 * @return array<int,mixed>
+	 */
+	private function rollup_values( array $row_ids, int $target_field_id ): array {
+		$values = array();
+		foreach ( $row_ids as $row_id ) {
+			foreach ( $this->rollup_values_for_row( $row_id, $target_field_id ) as $value ) {
+				$values[] = $value;
+			}
+		}
+		return $values;
+	}
+
+	/**
+	 * Returns flattened values for one related row.
+	 *
+	 * @param int $row_id          Related row ID.
+	 * @param int $target_field_id Rollup target field post ID.
+	 * @return array<int,mixed>
+	 */
+	private function rollup_values_for_row( int $row_id, int $target_field_id ): array {
+		$type = (string) get_post_meta( $target_field_id, 'type', true );
+		if ( 'relation' === $type ) {
+			return $this->format_relation_value( $row_id, $target_field_id );
+		}
+
+		$key = Relations::meta_key( $target_field_id );
+		if ( 'multiselect' === $type ) {
+			return array_values(
+				array_filter(
+					get_post_meta( $row_id, $key, false ),
+					static fn( $value ) => '' !== $value && null !== $value
+				)
+			);
+		}
+
+		$value = get_post_meta( $row_id, $key, true );
+		return '' === $value || null === $value ? array() : array( $value );
+	}
+
+	/**
+	 * Returns unique values while preserving relation order.
+	 *
+	 * @param array<int,mixed> $values Values to de-duplicate.
+	 * @return array<int,mixed>
+	 */
+	private function unique_rollup_values( array $values ): array {
+		$seen   = array();
+		$unique = array();
+		foreach ( $values as $value ) {
+			$key = wp_json_encode( $value );
+			if ( isset( $seen[ $key ] ) ) {
+				continue;
+			}
+			$seen[ $key ] = true;
+			$unique[]     = $value;
+		}
+		return $unique;
+	}
+
+	/**
+	 * Computes count and percent rollups.
+	 *
+	 * @param int[]  $row_ids         Related row IDs.
+	 * @param int    $target_field_id Rollup target field post ID.
+	 * @param string $aggregator      Rollup aggregator.
+	 */
+	private function count_rollup_value( array $row_ids, int $target_field_id, string $aggregator ): int|float {
+		$total = count( $row_ids );
+		if ( 'count_values' === $aggregator ) {
+			return count( $this->rollup_values( $row_ids, $target_field_id ) );
+		}
+		if ( 'count_unique' === $aggregator ) {
+			return count( $this->unique_rollup_values( $this->rollup_values( $row_ids, $target_field_id ) ) );
+		}
+
+		$not_empty = 0;
+		foreach ( $row_ids as $row_id ) {
+			if ( count( $this->rollup_values_for_row( $row_id, $target_field_id ) ) > 0 ) {
+				++$not_empty;
+			}
+		}
+		$empty = $total - $not_empty;
+
+		return match ( $aggregator ) {
+			'empty' => $empty,
+			'not_empty' => $not_empty,
+			'percent_empty' => $total > 0 ? $empty / $total : 0,
+			'percent_not_empty' => $total > 0 ? $not_empty / $total : 0,
+			default => 0,
 		};
 	}
 
@@ -724,15 +844,31 @@ final class RowsController {
 	}
 
 	/**
-	 * Returns the latest date-like value for a rollup target field.
+	 * Returns the median numeric value for a rollup target field.
 	 *
-	 * @param int[] $row_ids Related row IDs.
-	 * @param int   $target_field_id Rollup target field post ID.
+	 * @param float[] $numbers Numeric values.
 	 */
-	private function latest_rollup_value( array $row_ids, int $target_field_id ): ?string {
-		$key         = Relations::meta_key( $target_field_id );
-		$latest_time = null;
-		$latest      = null;
+	private function median_rollup_value( array $numbers ): float {
+		sort( $numbers, SORT_NUMERIC );
+		$count  = count( $numbers );
+		$middle = intdiv( $count, 2 );
+		if ( 1 === $count % 2 ) {
+			return $numbers[ $middle ];
+		}
+		return ( $numbers[ $middle - 1 ] + $numbers[ $middle ] ) / 2;
+	}
+
+	/**
+	 * Returns the earliest or latest date-like value for a rollup target field.
+	 *
+	 * @param int[]  $row_ids         Related row IDs.
+	 * @param int    $target_field_id Rollup target field post ID.
+	 * @param string $direction       Either `min` or `max`.
+	 */
+	private function date_extrema_rollup_value( array $row_ids, int $target_field_id, string $direction ): ?string {
+		$key       = Relations::meta_key( $target_field_id );
+		$best_time = null;
+		$best      = null;
 		foreach ( $row_ids as $row_id ) {
 			$value = (string) get_post_meta( $row_id, $key, true );
 			if ( '' === $value ) {
@@ -742,12 +878,12 @@ final class RowsController {
 			if ( false === $time ) {
 				continue;
 			}
-			if ( null === $latest_time || $time > $latest_time ) {
-				$latest_time = $time;
-				$latest      = $value;
+			if ( null === $best_time || ( 'min' === $direction ? $time < $best_time : $time > $best_time ) ) {
+				$best_time = $time;
+				$best      = $value;
 			}
 		}
-		return $latest;
+		return $best;
 	}
 
 	/**

@@ -100,12 +100,30 @@ const RELATION_LIMIT_OPTIONS = [
 ];
 
 const ROLLUP_AGGREGATORS = [
-	{ value: 'count', label: __( 'Count', 'cortext' ) },
+	{ value: 'show_original', label: __( 'Show original', 'cortext' ) },
+	{ value: 'show_unique', label: __( 'Show unique values', 'cortext' ) },
+	{ value: 'count', label: __( 'Count all', 'cortext' ) },
+	{ value: 'count_values', label: __( 'Count values', 'cortext' ) },
+	{ value: 'count_unique', label: __( 'Count unique values', 'cortext' ) },
+	{ value: 'empty', label: __( 'Count empty', 'cortext' ) },
+	{ value: 'not_empty', label: __( 'Count not empty', 'cortext' ) },
+	{ value: 'percent_empty', label: __( 'Percent empty', 'cortext' ) },
+	{ value: 'percent_not_empty', label: __( 'Percent not empty', 'cortext' ) },
+];
+
+const ROLLUP_NUMBER_AGGREGATORS = [
 	{ value: 'sum', label: __( 'Sum', 'cortext' ) },
 	{ value: 'avg', label: __( 'Average', 'cortext' ) },
+	{ value: 'median', label: __( 'Median', 'cortext' ) },
 	{ value: 'min', label: __( 'Min', 'cortext' ) },
 	{ value: 'max', label: __( 'Max', 'cortext' ) },
+	{ value: 'range', label: __( 'Range', 'cortext' ) },
+];
+
+const ROLLUP_DATE_AGGREGATORS = [
+	{ value: 'earliest', label: __( 'Earliest date', 'cortext' ) },
 	{ value: 'latest', label: __( 'Latest date', 'cortext' ) },
+	{ value: 'date_range', label: __( 'Date range', 'cortext' ) },
 ];
 
 function titleOf( record ) {
@@ -118,9 +136,23 @@ function fieldTypeLabel( type ) {
 
 function rollupAggregatorLabel( aggregator ) {
 	return (
-		ROLLUP_AGGREGATORS.find( ( option ) => option.value === aggregator )
-			?.label ?? aggregator
+		[
+			...ROLLUP_AGGREGATORS,
+			...ROLLUP_NUMBER_AGGREGATORS,
+			...ROLLUP_DATE_AGGREGATORS,
+		].find( ( option ) => option.value === aggregator )?.label ?? aggregator
 	);
+}
+
+function rollupAggregatorOptionsForTarget( type ) {
+	const options = [ ...ROLLUP_AGGREGATORS ];
+	if ( type === 'number' ) {
+		options.push( ...ROLLUP_NUMBER_AGGREGATORS );
+	}
+	if ( type === 'date' || type === 'datetime' ) {
+		options.push( ...ROLLUP_DATE_AGGREGATORS );
+	}
+	return options;
 }
 
 function RelationConfig( {
@@ -271,7 +303,7 @@ function RollupConfig( {
 		( field ) => field.cortextType === 'relation'
 	);
 	const [ relationFieldId, setRelationFieldId ] = useState( '' );
-	const [ aggregator, setAggregator ] = useState( 'count' );
+	const [ aggregator, setAggregator ] = useState( 'show_original' );
 	const [ targetFieldId, setTargetFieldId ] = useState( '' );
 
 	const selectedRelation = relationFields.find(
@@ -299,24 +331,23 @@ function RollupConfig( {
 		( field ) => String( field.id ) === targetFieldId
 	);
 
-	const targetTypeAllowed = ( type ) => {
-		if ( [ 'sum', 'avg', 'min', 'max' ].includes( aggregator ) ) {
-			return type === 'number';
-		}
-		if ( aggregator === 'latest' ) {
-			return type === 'date' || type === 'datetime';
-		}
-		return false;
-	};
-	const targetOptions = [
-		{ value: '', label: __( 'Choose field…', 'cortext' ) },
-		...( targetFields ?? [] )
-			.filter( ( field ) => targetTypeAllowed( field.meta?.type ) )
-			.map( ( field ) => ( {
-				value: String( field.id ),
-				label: titleOf( field ),
-			} ) ),
-	];
+	const targetOptions = useMemo(
+		() => [
+			{ value: '', label: __( 'Choose field…', 'cortext' ) },
+			...( targetFields ?? [] )
+				.filter( ( field ) => field.meta?.type !== 'rollup' )
+				.map( ( field ) => ( {
+					value: String( field.id ),
+					label: titleOf( field ),
+				} ) ),
+		],
+		[ targetFields ]
+	);
+	const aggregatorOptions = useMemo(
+		() =>
+			rollupAggregatorOptionsForTarget( selectedTargetField?.meta?.type ),
+		[ selectedTargetField ]
+	);
 	const relationOptions = [
 		{ value: '', label: __( 'Choose relation…', 'cortext' ) },
 		...relationFields.map( ( field ) => ( {
@@ -324,7 +355,6 @@ function RollupConfig( {
 			label: field.label,
 		} ) ),
 	];
-	const needsTarget = aggregator !== 'count';
 	const defaultRollupTitle = useMemo( () => {
 		const collectionLabel = targetCollection
 			? titleOf( targetCollection )
@@ -333,7 +363,7 @@ function RollupConfig( {
 			return fallbackTitle;
 		}
 		const aggregatorLabel = rollupAggregatorLabel( aggregator );
-		if ( needsTarget && selectedTargetField ) {
+		if ( selectedTargetField ) {
 			return sprintf(
 				/* translators: 1: collection title, 2: field title, 3: rollup aggregation label */
 				__( '%1$s / %2$s (%3$s)', 'cortext' ),
@@ -351,7 +381,6 @@ function RollupConfig( {
 	}, [
 		aggregator,
 		fallbackTitle,
-		needsTarget,
 		selectedRelation,
 		selectedTargetField,
 		targetCollection,
@@ -364,23 +393,27 @@ function RollupConfig( {
 	}, [ relationFields, relationFieldId ] );
 
 	useEffect( () => {
-		if ( ! needsTarget || targetFieldId ) {
+		if ( targetFieldId ) {
 			return;
 		}
-		const compatibleTargets = targetOptions
-			.slice( 1 )
-			.filter( ( option ) => option.value );
+		const compatibleTargets = targetOptions.slice( 1 );
 		if ( compatibleTargets.length === 1 ) {
 			setTargetFieldId( compatibleTargets[ 0 ].value );
 		}
-	}, [ needsTarget, targetFieldId, targetOptions ] );
+	}, [ targetFieldId, targetOptions ] );
+
+	useEffect( () => {
+		if (
+			! aggregatorOptions.some(
+				( option ) => option.value === aggregator
+			)
+		) {
+			setAggregator( 'show_original' );
+		}
+	}, [ aggregator, aggregatorOptions ] );
 
 	const submit = async () => {
-		if (
-			! relationFieldId ||
-			( needsTarget && ! targetFieldId ) ||
-			isBusy
-		) {
+		if ( ! relationFieldId || ! targetFieldId || isBusy ) {
 			return;
 		}
 		try {
@@ -388,9 +421,7 @@ function RollupConfig( {
 				title: title.trim() || defaultRollupTitle,
 				type: 'rollup',
 				rollup_relation_field_id: Number( relationFieldId ),
-				rollup_target_field_id: targetFieldId
-					? Number( targetFieldId )
-					: undefined,
+				rollup_target_field_id: Number( targetFieldId ),
 				rollup_aggregator: aggregator,
 			} );
 			onCreate?.( created );
@@ -419,36 +450,35 @@ function RollupConfig( {
 				onChange={ ( next ) => {
 					setRelationFieldId( next );
 					setTargetFieldId( '' );
+					setAggregator( 'show_original' );
 				} }
 				disabled={ isBusy || relationFields.length === 0 }
 				__next40pxDefaultSize
 				__nextHasNoMarginBottom
 			/>
 			<SelectControl
-				label={ __( 'Calculate', 'cortext' ) }
-				value={ aggregator }
-				options={ ROLLUP_AGGREGATORS }
+				label={ __( 'Target property', 'cortext' ) }
+				value={ targetFieldId }
+				options={ targetOptions }
 				onChange={ ( next ) => {
-					setAggregator( next );
-					setTargetFieldId( '' );
+					setTargetFieldId( next );
+					setAggregator( 'show_original' );
 				} }
-				disabled={ isBusy || relationFields.length === 0 }
+				disabled={
+					isBusy || ! relationFieldId || targetOptions.length <= 1
+				}
 				__next40pxDefaultSize
 				__nextHasNoMarginBottom
 			/>
-			{ needsTarget ? (
-				<SelectControl
-					label={ __( 'Target field', 'cortext' ) }
-					value={ targetFieldId }
-					options={ targetOptions }
-					onChange={ setTargetFieldId }
-					disabled={
-						isBusy || ! relationFieldId || targetOptions.length <= 1
-					}
-					__next40pxDefaultSize
-					__nextHasNoMarginBottom
-				/>
-			) : null }
+			<SelectControl
+				label={ __( 'Calculate', 'cortext' ) }
+				value={ aggregator }
+				options={ aggregatorOptions }
+				onChange={ setAggregator }
+				disabled={ isBusy || ! targetFieldId }
+				__next40pxDefaultSize
+				__nextHasNoMarginBottom
+			/>
 			<div className="cortext-add-field-popover__actions">
 				<Button
 					variant="tertiary"
@@ -461,11 +491,7 @@ function RollupConfig( {
 					variant="primary"
 					onClick={ submit }
 					isBusy={ isBusy }
-					disabled={
-						isBusy ||
-						! relationFieldId ||
-						( needsTarget && ! targetFieldId )
-					}
+					disabled={ isBusy || ! relationFieldId || ! targetFieldId }
 				>
 					{ __( 'Create rollup', 'cortext' ) }
 				</Button>

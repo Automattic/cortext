@@ -39,11 +39,38 @@ final class FieldsController {
 
 	private const ROLLUP_AGGREGATORS = array(
 		'count',
+		'show_original',
+		'show_unique',
+		'count_values',
+		'count_unique',
+		'empty',
+		'not_empty',
+		'percent_empty',
+		'percent_not_empty',
 		'sum',
 		'avg',
+		'median',
 		'min',
 		'max',
+		'range',
+		'earliest',
 		'latest',
+		'date_range',
+	);
+
+	private const ROLLUP_NUMERIC_AGGREGATORS = array(
+		'sum',
+		'avg',
+		'median',
+		'min',
+		'max',
+		'range',
+	);
+
+	private const ROLLUP_DATE_AGGREGATORS = array(
+		'earliest',
+		'latest',
+		'date_range',
 	);
 
 	public function register(): void {
@@ -334,6 +361,12 @@ final class FieldsController {
 				'rollup_relation_field_id',
 				'rollup_target_field_id',
 				'rollup_aggregator',
+				'rollup_target_type',
+				'rollup_target_options',
+				'rollup_target_number_format',
+				'rollup_target_date_format',
+				'rollup_target_related_collection_id',
+				'rollup_target_relation_multiple',
 			) as $key
 		) {
 			$value = get_post_meta( $field_id, $key, true );
@@ -625,9 +658,42 @@ final class FieldsController {
 		);
 		if ( $target_field_id > 0 ) {
 			$meta['rollup_target_field_id'] = (string) $target_field_id;
+			$meta                           = array_merge( $meta, $this->rollup_target_meta( $target_field_id ) );
 		}
 
 		return $this->insert_and_attach( $collection_id, $title, $meta, $insert_after_id );
+	}
+
+	/**
+	 * Copies target display metadata onto the rollup field so table rendering
+	 * does not need to fetch the target field later.
+	 *
+	 * @param int $target_field_id Rollup target field post ID.
+	 * @return array<string,string>
+	 */
+	private function rollup_target_meta( int $target_field_id ): array {
+		$target_type = (string) get_post_meta( $target_field_id, 'type', true );
+		$meta        = array();
+		if ( '' !== $target_type ) {
+			$meta['rollup_target_type'] = $target_type;
+		}
+
+		foreach (
+			array(
+				'options'               => 'rollup_target_options',
+				'number_format'         => 'rollup_target_number_format',
+				'date_format'           => 'rollup_target_date_format',
+				'related_collection_id' => 'rollup_target_related_collection_id',
+				'relation_multiple'     => 'rollup_target_relation_multiple',
+			) as $source_key => $rollup_key
+		) {
+			$value = get_post_meta( $target_field_id, $source_key, true );
+			if ( '' !== $value && null !== $value ) {
+				$meta[ $rollup_key ] = (string) $value;
+			}
+		}
+
+		return $meta;
 	}
 
 	private function validate_rollup_config(
@@ -660,7 +726,7 @@ final class FieldsController {
 			);
 		}
 
-		if ( 'count' === $aggregator ) {
+		if ( 'count' === $aggregator && $target_field_id < 1 ) {
 			return true;
 		}
 		if ( $target_field_id < 1 ) {
@@ -690,17 +756,17 @@ final class FieldsController {
 			);
 		}
 
-		if ( in_array( $aggregator, array( 'sum', 'avg', 'min', 'max' ), true ) && 'number' !== $target_type ) {
+		if ( in_array( $aggregator, self::ROLLUP_NUMERIC_AGGREGATORS, true ) && 'number' !== $target_type ) {
 			return new WP_Error(
 				'cortext_rollup_target_must_be_number',
 				__( 'Numeric rollups must target a number field.', 'cortext' ),
 				array( 'status' => 400 )
 			);
 		}
-		if ( 'latest' === $aggregator && ! in_array( $target_type, array( 'date', 'datetime' ), true ) ) {
+		if ( in_array( $aggregator, self::ROLLUP_DATE_AGGREGATORS, true ) && ! in_array( $target_type, array( 'date', 'datetime' ), true ) ) {
 			return new WP_Error(
 				'cortext_rollup_target_must_be_date',
-				__( 'Latest rollups must target a date field.', 'cortext' ),
+				__( 'Date rollups must target a date field.', 'cortext' ),
 				array( 'status' => 400 )
 			);
 		}
