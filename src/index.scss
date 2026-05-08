@@ -1809,22 +1809,16 @@ tbody > tr > td:not(:first-child) {
 }
 
 .cortext-title-cell {
-	position: relative;
 	width: 100%;
 	min-width: 0;
 	max-width: 100%;
 	border-radius: 2px;
 	box-sizing: border-box;
 
-	// Icon sits in the cell's leading gutter so the title text keeps the
-	// same x-position whether or not a row has an icon.
 	&__icon {
-		position: absolute;
-		right: calc(100% + #{ $grid-unit-05 });
-		top: 50%;
 		display: inline-flex;
+		flex: 0 0 auto;
 		line-height: 0;
-		transform: translateY(-50%);
 	}
 
 	&--with-open-action {
@@ -1837,6 +1831,12 @@ tbody > tr > td:not(:first-child) {
 		.cortext-editable-cell {
 			min-width: 0;
 			max-width: 100%;
+		}
+
+		// When the row has a document icon, slot it before the editable
+		// cell so the leading column shows: icon, title, open-button.
+		&:has(.cortext-title-cell__icon) {
+			grid-template-columns: auto minmax(0, 1fr) auto;
 		}
 	}
 
