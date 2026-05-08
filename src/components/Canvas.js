@@ -9,7 +9,7 @@ import {
 } from '@wordpress/interface';
 import { Button, Disabled, SnackbarList, Spinner } from '@wordpress/components';
 import { store as noticesStore } from '@wordpress/notices';
-import { cog, seen, unseen } from '@wordpress/icons';
+import { chevronUp, cog, seen, unseen } from '@wordpress/icons';
 import { useCallback, useEffect, useState } from '@wordpress/element';
 
 import useAutosave from '../hooks/useAutosave';
@@ -237,6 +237,14 @@ function CanvasEditor( {
 	const rowProperties =
 		hasProperties && arePropertiesVisible ? (
 			<div className="cortext-row-detail cortext-row-detail--canvas-properties">
+				<Button
+					className="cortext-row-detail__collapse"
+					icon={ chevronUp }
+					size="small"
+					label={ __( 'Hide fields', 'cortext' ) }
+					showTooltip
+					onClick={ togglePropertiesVisible }
+				/>
 				<RowProperties fields={ fields } row={ row } />
 			</div>
 		) : null;
