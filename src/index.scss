@@ -1569,8 +1569,8 @@ body:has(.cortext-canvas__identity-actions:hover) .cortext-canvas__identity-acti
 // to fixed layout with content-width sizing and explicit per-cell
 // widths, so column count stops affecting the surviving columns'
 // widths and the table grows to its natural content width.
-// `.dataviews-wrapper` already has `overflow: auto`, so horizontal
-// scroll kicks in once columns exceed the wrapper.
+// `.cortext-data-view > .dataviews-wrapper` declares `overflow: auto`
+// itself, so horizontal scroll kicks in once columns exceed the wrapper.
 .dataviews-view-table {
 	table-layout: fixed;
 	width: max-content;
@@ -2613,6 +2613,12 @@ tr:has(.cortext-title-cell--is-open)
 	height: 100%;
 	min-height: 0;
 	background: $white;
+	// The shell paints a light surface even in dark mode, so the dark-theme
+	// scrollbar thumb (near-white, set on `.cortext-root[data-theme="dark"]`)
+	// disappears against it. Pin the scrollbar tokens to their light values
+	// here so the horizontal scrollbar on wide tables is visible.
+	--cortext-scrollbar-thumb: rgba(0, 0, 0, 0.12);
+	--cortext-scrollbar-thumb-hover: rgba(0, 0, 0, 0.28);
 
 	> .cortext-data-view {
 		flex: 1 1 auto;
@@ -3664,14 +3670,22 @@ body.cortext-row-detail-sidebar-resizing {
 	position: relative; // anchor for the column drop indicator
 	display: flex;
 	flex-direction: column;
+	width: 100%;
+	min-width: 0;
 
 	// Let the wrapper grow to fill whatever height the parent provides, so
 	// our footer sits below the table instead of getting pushed off by the
 	// wrapper's own `height: 100%`. Parents own the height per-context: the
 	// canvas pane fills the viewport, the block sets a min-height.
 	> .dataviews-wrapper {
-		flex: 1 1 auto;
+		height: auto;
+		width: 100%;
+		flex: 1 1 0;
+		min-width: 0;
 		min-height: 0;
+		// Own the scroll layer instead of relying on DataViews's upstream
+		// default — horizontal scroll wasn't kicking in for wide tables.
+		overflow: auto;
 	}
 
 	// DataViews paints row height via td `padding-block` per density, but
@@ -3850,13 +3864,20 @@ body.cortext-row-detail-sidebar-resizing {
 	height: 100%;
 }
 
-// tech-debt.md#23: embedded block has no per-instance height attribute, so use
-// a fixed viewport height and let DataViews scroll internally. Width comes from
-// Gutenberg's alignment.
-.wp-block-cortext-data-view .cortext-data-view-shell,
-.wp-block-cortext-data-view .cortext-data-view {
-	height: var(--cortext-data-view-block-min-height);
-	min-height: 0;
+// tech-debt.md#23: embedded block has no per-instance height attribute. Use
+// the shared token as a min-height so short collections still get a comfortable
+// viewport while long ones grow the block (and keep the footer in view) instead
+// of clipping. Width comes from Gutenberg's alignment.
+.wp-block-cortext-data-view .cortext-data-view-shell {
+	min-height: var(--cortext-data-view-block-min-height);
+}
+
+// Full-page mode wants the wrapper to fill a fixed-height parent and scroll
+// internally; block mode wants the wrapper to take its content size so the
+// block grows with the table instead of clipping the footer. Override the
+// shared `flex: 1 1 0` only here.
+.wp-block-cortext-data-view .cortext-data-view > .dataviews-wrapper {
+	flex: 0 0 auto;
 }
 
 // Embedded blocks are width-constrained by the editor canvas. Letting relation
