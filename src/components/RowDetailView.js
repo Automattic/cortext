@@ -653,6 +653,7 @@ export default function RowDetailView( {
 									settings={
 										window.cortextEditorSettings ?? {}
 									}
+									useSubRegistry
 								>
 									<DetailReadySignal
 										detailKey={ pane.key }
