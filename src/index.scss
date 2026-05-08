@@ -2666,9 +2666,13 @@ tr:has(.cortext-title-cell--is-open)
 		grid-template-rows: 0fr;
 	}
 
+	// Border on the body (not the wrapper) so it disappears with the
+	// content when collapsed; matches the toolbar's `__header`
+	// border-bottom in side / modal panes for visual consistency.
 	&__canvas-properties-body {
 		min-height: 0;
 		overflow: hidden;
+		border-bottom: $border-width solid $gray-200;
 	}
 
 	// Solid background pill so the chevron stays legible even when it
