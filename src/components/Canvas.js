@@ -9,7 +9,7 @@ import {
 } from '@wordpress/interface';
 import { Button, Disabled, SnackbarList, Spinner } from '@wordpress/components';
 import { store as noticesStore } from '@wordpress/notices';
-import { chevronUp, cog, seen, unseen } from '@wordpress/icons';
+import { chevronDown, chevronUp, cog, seen, unseen } from '@wordpress/icons';
 import { useCallback, useEffect, useState } from '@wordpress/element';
 
 import useAutosave from '../hooks/useAutosave';
@@ -234,8 +234,9 @@ function CanvasEditor( {
 	);
 	// tech-debt.md#41: row properties are shell chrome until they become a
 	// locked dynamic block with frontend rendering.
-	const rowProperties =
-		hasProperties && arePropertiesVisible ? (
+	let rowProperties = null;
+	if ( hasProperties && arePropertiesVisible ) {
+		rowProperties = (
 			<div className="cortext-row-detail cortext-row-detail--canvas-properties">
 				<Button
 					className="cortext-row-detail__collapse"
@@ -247,7 +248,21 @@ function CanvasEditor( {
 				/>
 				<RowProperties fields={ fields } row={ row } />
 			</div>
-		) : null;
+		);
+	} else if ( hasProperties ) {
+		rowProperties = (
+			<div className="cortext-row-detail cortext-row-detail--canvas-properties cortext-row-detail--canvas-properties-collapsed">
+				<Button
+					className="cortext-row-detail__expand"
+					icon={ chevronDown }
+					size="small"
+					label={ __( 'Show fields', 'cortext' ) }
+					showTooltip
+					onClick={ togglePropertiesVisible }
+				/>
+			</div>
+		);
+	}
 
 	return (
 		<>

@@ -2655,9 +2655,20 @@ tr:has(.cortext-title-cell--is-open)
 		width: 100%;
 	}
 
+	// When the properties are hidden, leave a thin strip with a chevron-down
+	// so the user has somewhere obvious to click to bring them back. The
+	// top-bar toggle still works too, but the contextual affordance is the
+	// discoverable one.
+	&--canvas-properties-collapsed {
+		display: flex;
+		align-items: center;
+		justify-content: flex-start;
+		min-height: $grid-unit-30;
+		padding: $grid-unit-05 $grid-unit-10;
+	}
+
 	// Hide-fields chevron tucked at the top-left of the canvas properties
-	// wrapper. The corresponding "show" affordance lives in the top bar
-	// (DocumentActions), so this button only ever needs to handle hide.
+	// wrapper. Fades in on hover/focus so the panel itself stays uncluttered.
 	&__collapse.components-button {
 		position: absolute;
 		top: $grid-unit-10;
@@ -2670,6 +2681,16 @@ tr:has(.cortext-title-cell--is-open)
 	&--canvas-properties:hover &__collapse.components-button,
 	&__collapse.components-button:focus-visible {
 		opacity: 1;
+	}
+
+	&__expand.components-button {
+		opacity: 0.6;
+		transition: opacity 0.12s ease;
+
+		&:hover,
+		&:focus-visible {
+			opacity: 1;
+		}
 	}
 
 	&__frame {
