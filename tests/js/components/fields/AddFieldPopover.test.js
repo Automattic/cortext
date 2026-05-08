@@ -7,8 +7,11 @@ jest.mock( '@wordpress/core-data', () => ( {
 
 jest.mock( '../../../../src/hooks/useCollectionFields', () => ( {
 	__esModule: true,
-	default: jest.fn(),
 	buildFieldListQuery: jest.fn( ( ids ) => ( { include: ids } ) ),
+} ) );
+
+jest.mock( '../../../../src/components/CollectionFieldsContext', () => ( {
+	useCollectionFieldsContext: jest.fn(),
 } ) );
 
 jest.mock( '../../../../src/hooks/useFieldMutations', () => ( {
@@ -17,7 +20,7 @@ jest.mock( '../../../../src/hooks/useFieldMutations', () => ( {
 
 import { useEntityRecord, useEntityRecords } from '@wordpress/core-data';
 import AddFieldPopover from '../../../../src/components/fields/AddFieldPopover';
-import useCollectionFields from '../../../../src/hooks/useCollectionFields';
+import { useCollectionFieldsContext } from '../../../../src/components/CollectionFieldsContext';
 import { useCreateField } from '../../../../src/hooks/useFieldMutations';
 
 const run = jest.fn();
@@ -38,7 +41,7 @@ beforeEach( () => {
 		isBusy: false,
 		error: null,
 	} );
-	useCollectionFields.mockReturnValue( {
+	useCollectionFieldsContext.mockReturnValue( {
 		fields: [
 			{
 				id: 'field-77',

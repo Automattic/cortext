@@ -18,6 +18,7 @@ import { plus, replace } from '@wordpress/icons';
 import CollectionDataViews from '../../components/CollectionDataViews';
 import AddFieldPopover from '../../components/fields/AddFieldPopover';
 import { COLLECTION_QUERY } from '../../collections';
+import { CollectionFieldsProvider } from '../../components/CollectionFieldsContext';
 
 function createDefaultView() {
 	return {
@@ -246,37 +247,39 @@ export default function Edit( { attributes, setAttributes } ) {
 	}
 
 	return (
-		<div { ...blockProps }>
-			<CollectionToolbarControl
-				collectionId={ collectionId }
-				onSelect={ ( id ) => {
-					if ( id !== collectionId ) {
-						selectCollection( id );
+		<CollectionFieldsProvider collectionId={ collectionId }>
+			<div { ...blockProps }>
+				<CollectionToolbarControl
+					collectionId={ collectionId }
+					onSelect={ ( id ) => {
+						if ( id !== collectionId ) {
+							selectCollection( id );
+						}
+					} }
+				/>
+				<CollectionDataViews
+					collectionId={ collectionId }
+					view={ view }
+					onChangeView={ setView }
+					loading={ <Spinner /> }
+					invalid={
+						<Notice status="warning" isDismissible={ false }>
+							{ __(
+								'This collection is no longer available. Choose another collection.',
+								'cortext'
+							) }
+						</Notice>
 					}
-				} }
-			/>
-			<CollectionDataViews
-				collectionId={ collectionId }
-				view={ view }
-				onChangeView={ setView }
-				loading={ <Spinner /> }
-				invalid={
-					<Notice status="warning" isDismissible={ false }>
-						{ __(
-							'This collection is no longer available. Choose another collection.',
-							'cortext'
-						) }
-					</Notice>
-				}
-				error={
-					<Notice status="error" isDismissible={ false }>
-						{ __(
-							'Collection rows could not be loaded.',
-							'cortext'
-						) }
-					</Notice>
-				}
-			/>
-		</div>
+					error={
+						<Notice status="error" isDismissible={ false }>
+							{ __(
+								'Collection rows could not be loaded.',
+								'cortext'
+							) }
+						</Notice>
+					}
+				/>
+			</div>
+		</CollectionFieldsProvider>
 	);
 }

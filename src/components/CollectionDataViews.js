@@ -32,7 +32,7 @@ import {
 	getRowDetailMode,
 	withRowDetailMode,
 } from './rowDetailUtils';
-import useCollectionFields from '../hooks/useCollectionFields';
+import { useCollectionFieldsContext } from './CollectionFieldsContext';
 import useCollectionRows from '../hooks/useCollectionRows';
 import { elementsFromOptions } from '../hooks/optionElements';
 
@@ -281,7 +281,7 @@ export default function CollectionDataViews( {
 	const navigate = useNavigate();
 	const routeSearch = useSearch( { strict: false } );
 	const { fields, collection, slug, isResolving, fieldsResolved } =
-		useCollectionFields( collectionId );
+		useCollectionFieldsContext();
 	const routeRowId = parseSearchId( routeSearch?.[ ROW_SEARCH_KEY ] );
 	const routeRowCollectionId = parseSearchId(
 		routeSearch?.[ ROW_COLLECTION_SEARCH_KEY ]

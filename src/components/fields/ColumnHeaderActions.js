@@ -34,7 +34,7 @@ import AddFieldPopover from './AddFieldPopover';
 import EditOptionsPopover from './EditOptionsPopover';
 import FieldFormatPopover from './FieldFormatPopover';
 import RenameFieldInline from './RenameFieldInline';
-import useCollectionFields from '../../hooks/useCollectionFields';
+import { useCollectionFieldsContext } from '../CollectionFieldsContext';
 import { elementsFromOptions } from '../../hooks/fieldMapping';
 import { TableCalculationPopover } from '../TableCalculationMenu';
 import {
@@ -195,7 +195,7 @@ function FieldActions( {
 	const optionsAnchorRef = useRef( null );
 	const duplicate = useDuplicateField( collectionId );
 	const remove = useDeleteField( collectionId );
-	const { fields } = useCollectionFields( collectionId );
+	const { fields } = useCollectionFieldsContext();
 	const { record } = useEntityRecord( 'postType', 'crtxt_field', recordId );
 	const fieldType = record?.meta?.type;
 	const canFormat = FORMATTABLE_TYPES.has( fieldType );
