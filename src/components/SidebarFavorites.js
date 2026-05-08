@@ -202,21 +202,15 @@ function SortableFavoriteRow( { item, isDisabled, onSelect, onRemove } ) {
 					transform: transformToString( transform ),
 					transition,
 				} }
+				{ ...attributes }
+				{ ...listeners }
 			>
-				<button
-					type="button"
-					className="cortext-sidebar__favorite-drag-handle"
-					aria-label={ __( 'Reorder favorite', 'cortext' ) }
-					{ ...attributes }
-					{ ...listeners }
+				<span
+					className="cortext-sidebar__favorite-icon"
+					aria-hidden="true"
 				>
-					<span
-						className="cortext-sidebar__favorite-icon"
-						aria-hidden="true"
-					>
-						<FavoriteIcon item={ item } />
-					</span>
-				</button>
+					<FavoriteIcon item={ item } />
+				</span>
 				<button
 					type="button"
 					className="cortext-sidebar__favorite-title"
@@ -257,6 +251,7 @@ function SortableFavoriteRow( { item, isDisabled, onSelect, onRemove } ) {
 						__( 'Remove %s from favorites', 'cortext' ),
 						item.title
 					) }
+					onPointerDown={ ( event ) => event.stopPropagation() }
 					onClick={ () => onRemove( item ) }
 					aria-pressed
 				/>

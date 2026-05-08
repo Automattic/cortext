@@ -162,9 +162,7 @@ describe( 'SidebarFavorites helpers', () => {
 			pages,
 		} );
 
-		expect(
-			screen.getByRole( 'button', { name: 'Notes' } )
-		).toBeInTheDocument();
+		expect( screen.getByText( 'Notes' ) ).toBeInTheDocument();
 
 		rerender(
 			<SidebarFavorites
@@ -197,8 +195,6 @@ describe( 'SidebarFavorites helpers', () => {
 			jest.advanceTimersByTime( 151 );
 		} );
 
-		expect(
-			screen.getByRole( 'button', { name: 'Notes' } )
-		).toBeInTheDocument();
+		expect( screen.getByText( 'Notes' ) ).toBeInTheDocument();
 	} );
 } );

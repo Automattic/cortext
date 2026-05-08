@@ -323,10 +323,6 @@ body.cortext-fullscreen {
 	}
 
 	/* stylelint-disable no-descending-specificity */
-	&__favorite-row .cortext-sidebar__row {
-		cursor: default;
-	}
-
 	&__favorite-title {
 		flex: 1 1 auto;
 		min-width: 0;
@@ -447,24 +443,6 @@ body.cortext-fullscreen {
 		width: $grid-unit-30;
 		height: $grid-unit-30;
 		color: var(--cortext-text-muted);
-	}
-
-	&__favorite-drag-handle {
-		flex: 0 0 auto;
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: $grid-unit-30;
-		height: $grid-unit-30;
-		border: 0;
-		padding: 0;
-		background: transparent;
-		color: var(--cortext-text-muted);
-		cursor: grab;
-
-		&:active {
-			cursor: grabbing;
-		}
 	}
 
 	&__rename {

@@ -83,7 +83,7 @@ async function dragFavoriteBefore(
 	storedKeys
 ) {
 	const active = page.locator(
-		`.cortext-sidebar__favorite-row[data-favorite-key="${ activeKey }"] .cortext-sidebar__favorite-drag-handle`
+		`.cortext-sidebar__favorite-row[data-favorite-key="${ activeKey }"] .cortext-sidebar__row`
 	);
 	const over = page.locator(
 		`.cortext-sidebar__favorite-row[data-favorite-key="${ overKey }"] .cortext-sidebar__row`
