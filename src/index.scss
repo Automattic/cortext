@@ -3903,6 +3903,8 @@ thead > tr > th {
 	// color rule above (which would otherwise pin the title to default text).
 	.cortext-sidebar__row:hover .cortext-sidebar__title.components-button,
 	.cortext-sidebar__row:focus-within .cortext-sidebar__title.components-button,
+	.cortext-sidebar__row:hover .cortext-sidebar__favorite-title,
+	.cortext-sidebar__row:focus-within .cortext-sidebar__favorite-title,
 	.cortext-sidebar__row.is-selected .cortext-sidebar__title.components-button {
 		color: var(--cortext-text-strong);
 	}

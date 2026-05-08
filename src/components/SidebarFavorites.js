@@ -1,6 +1,12 @@
 import { __, sprintf } from '@wordpress/i18n';
 import { Button, Icon, Spinner } from '@wordpress/components';
-import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
+import {
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from '@wordpress/element';
 import { customPostType, starFilled } from '@wordpress/icons';
 import {
 	DndContext,
@@ -181,10 +187,33 @@ function SortableFavoriteRow( { item, isDisabled, onSelect, onRemove } ) {
 		transition,
 		isDragging,
 	} = useSortable( { id: item.sortableId } );
+	const rowRef = useRef( null );
+	const wasDraggingRef = useRef( false );
+	const setRowRef = useCallback(
+		( node ) => {
+			rowRef.current = node;
+			setNodeRef( node );
+		},
+		[ setNodeRef ]
+	);
 	const rowClasses = [ 'cortext-sidebar__row' ];
 	if ( isDragging ) {
 		rowClasses.push( 'is-dragging' );
 	}
+
+	useEffect( () => {
+		if ( wasDraggingRef.current && ! isDragging ) {
+			const activeElement = rowRef.current?.ownerDocument?.activeElement;
+			if (
+				activeElement &&
+				rowRef.current?.contains( activeElement ) &&
+				typeof activeElement.blur === 'function'
+			) {
+				activeElement.blur();
+			}
+		}
+		wasDraggingRef.current = isDragging;
+	}, [ isDragging ] );
 
 	return (
 		<li
@@ -196,7 +225,7 @@ function SortableFavoriteRow( { item, isDisabled, onSelect, onRemove } ) {
 			data-favorite-key={ item.sortableId }
 		>
 			<div
-				ref={ setNodeRef }
+				ref={ setRowRef }
 				className={ rowClasses.join( ' ' ) }
 				style={ {
 					transform: transformToString( transform ),
@@ -369,9 +398,10 @@ export default function SidebarFavorites( {
 		if ( isDisabled ) {
 			return;
 		}
+		const activeId = String( active.id );
 		const next = moveFavorite(
 			favorites,
-			String( active.id ),
+			activeId,
 			over ? String( over.id ) : null
 		);
 		if ( next !== favorites ) {
