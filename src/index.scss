@@ -2649,43 +2649,46 @@ tr:has(.cortext-title-cell--is-open)
 		width: 100%;
 	}
 
+	// `grid-template-rows: 1fr → 0fr` is the smoothly-animatable way to
+	// collapse a wrapper to its content's natural height. The body child
+	// hides via overflow: hidden; the chevron escapes the collapse via
+	// position: absolute so it stays visible over the cover when hidden.
 	&--canvas-properties {
 		position: relative;
+		display: grid;
 		flex: 0 0 auto;
 		width: 100%;
+		grid-template-rows: 1fr;
+		transition: grid-template-rows 0.22s ease;
 	}
 
-	// When the properties are hidden, leave a thin strip with a chevron-down
-	// so the user has somewhere obvious to click to bring them back. The
-	// top-bar toggle still works too, but the contextual affordance is the
-	// discoverable one.
 	&--canvas-properties-collapsed {
-		display: flex;
-		align-items: center;
-		justify-content: flex-start;
-		min-height: $grid-unit-30;
-		padding: $grid-unit-05 $grid-unit-10;
+		grid-template-rows: 0fr;
 	}
 
-	// Hide-fields chevron tucked at the top-left of the canvas properties
-	// wrapper. Fades in on hover/focus so the panel itself stays uncluttered.
-	&__collapse.components-button {
+	&__canvas-properties-body {
+		min-height: 0;
+		overflow: hidden;
+	}
+
+	&__canvas-properties-toggle.components-button {
 		position: absolute;
 		top: $grid-unit-10;
 		left: $grid-unit-10;
-		z-index: 1;
+		z-index: 2;
 		opacity: 0;
 		transition: opacity 0.12s ease;
 	}
 
-	&--canvas-properties:hover &__collapse.components-button,
-	&__collapse.components-button:focus-visible {
+	&--canvas-properties:hover &__canvas-properties-toggle.components-button,
+	&__canvas-properties-toggle.components-button:focus-visible {
 		opacity: 1;
 	}
 
-	&__expand.components-button {
-		opacity: 0.6;
-		transition: opacity 0.12s ease;
+	// When the panel is collapsed, anchor the chevron over the cover so
+	// it's always discoverable; no need to hover the empty strip first.
+	&--canvas-properties-collapsed &__canvas-properties-toggle.components-button {
+		opacity: 0.7;
 
 		&:hover,
 		&:focus-visible {

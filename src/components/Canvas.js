@@ -234,35 +234,32 @@ function CanvasEditor( {
 	);
 	// tech-debt.md#41: row properties are shell chrome until they become a
 	// locked dynamic block with frontend rendering.
-	let rowProperties = null;
-	if ( hasProperties && arePropertiesVisible ) {
-		rowProperties = (
-			<div className="cortext-row-detail cortext-row-detail--canvas-properties">
-				<Button
-					className="cortext-row-detail__collapse"
-					icon={ chevronUp }
-					size="small"
-					label={ __( 'Hide fields', 'cortext' ) }
-					showTooltip
-					onClick={ togglePropertiesVisible }
-				/>
+	const rowProperties = hasProperties ? (
+		<div
+			className={
+				'cortext-row-detail cortext-row-detail--canvas-properties' +
+				( arePropertiesVisible
+					? ''
+					: ' cortext-row-detail--canvas-properties-collapsed' )
+			}
+		>
+			<Button
+				className="cortext-row-detail__canvas-properties-toggle"
+				icon={ arePropertiesVisible ? chevronUp : chevronDown }
+				size="small"
+				label={
+					arePropertiesVisible
+						? __( 'Hide fields', 'cortext' )
+						: __( 'Show fields', 'cortext' )
+				}
+				showTooltip
+				onClick={ togglePropertiesVisible }
+			/>
+			<div className="cortext-row-detail__canvas-properties-body">
 				<RowProperties fields={ fields } row={ row } />
 			</div>
-		);
-	} else if ( hasProperties ) {
-		rowProperties = (
-			<div className="cortext-row-detail cortext-row-detail--canvas-properties cortext-row-detail--canvas-properties-collapsed">
-				<Button
-					className="cortext-row-detail__expand"
-					icon={ chevronDown }
-					size="small"
-					label={ __( 'Show fields', 'cortext' ) }
-					showTooltip
-					onClick={ togglePropertiesVisible }
-				/>
-			</div>
-		);
-	}
+		</div>
+	) : null;
 
 	return (
 		<>
