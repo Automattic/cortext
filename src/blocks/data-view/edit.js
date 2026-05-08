@@ -59,10 +59,8 @@ const PER_PAGE_OPTIONS = [
 	{ value: '100', label: '100' },
 ];
 
-// Mirrors the block's `supports.align` (`block.json`). The "Default" option
-// writes the empty string rather than `undefined` so the value survives
-// serialization — otherwise the `block.json` `align` default would reapply
-// on parse and "Default" would round-trip back to "Wide".
+// The empty string is intentional. `undefined` would be dropped from the
+// block comment, and the `wide` default would come back on the next parse.
 const WIDTH_OPTIONS = [
 	{ value: '', label: __( 'Default', 'cortext' ) },
 	{ value: 'wide', label: __( 'Wide', 'cortext' ) },
@@ -285,8 +283,7 @@ function CollectionInspectorControls( {
 	const isCollectionValid = ! isResolving && collectionId && collection;
 	const visibleFieldIds = view?.fields ?? [];
 
-	// Visible fields in `view.fields` order so the inspector list reflects
-	// any column drag-reorder, then hidden fields appended in schema order.
+	// Checked fields follow the table order. Unchecked fields keep schema order.
 	const visibleFieldsInOrder = visibleFieldIds
 		.map( ( id ) => availableFields.find( ( f ) => f.id === id ) )
 		.filter( Boolean );
@@ -303,11 +300,8 @@ function CollectionInspectorControls( {
 		);
 		let nextFields;
 		if ( isVisible ) {
-			// Insert at schema position so a re-shown field lands next to
-			// its neighbors instead of at the end. Look backward first
-			// (place after the last preceding visible field); fall back
-			// to forward (place before the first following visible field)
-			// so a re-shown first-in-schema field doesn't get appended.
+			// Put the field back near its schema neighbors. Prefer the previous
+			// visible field; for the first field, use the next visible one.
 			const schemaIdx = availableFields.findIndex(
 				( f ) => f.id === fieldId
 			);
