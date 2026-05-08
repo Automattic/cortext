@@ -380,7 +380,7 @@ function PageFeaturedImageInspectorControls( { postId } ) {
 		media?.source_url ??
 		null;
 	let featuredImagePreview = (
-		<span>{ __( 'Featured image data is unavailable.', 'cortext' ) }</span>
+		<span>{ __( 'Featured image is not available.', 'cortext' ) }</span>
 	);
 	if ( isResolvingMedia && ! src ) {
 		featuredImagePreview = <Spinner />;
@@ -537,14 +537,14 @@ function PageActionsPanel( { postId } ) {
 				setError(
 					err?.message ??
 						__(
-							'Page was moved to trash, but could not be removed from favorites.',
+							'Page moved to Trash, but Favorites could not be updated.',
 							'cortext'
 						)
 				);
 			}
 		} catch ( err ) {
 			setError(
-				err?.message ?? __( 'Could not move page to trash.', 'cortext' )
+				err?.message ?? __( 'Could not move page to Trash.', 'cortext' )
 			);
 		} finally {
 			setIsTrashing( false );
@@ -601,7 +601,7 @@ function PageActionsPanel( { postId } ) {
 					className="cortext-page-inspector__action-button"
 					variant="secondary"
 					icon={ trash }
-					label={ __( 'Move to trash', 'cortext' ) }
+					label={ __( 'Move to Trash', 'cortext' ) }
 					isDestructive
 					onClick={ trashPage }
 					isBusy={ isTrashing }
