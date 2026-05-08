@@ -949,30 +949,22 @@ final class RowsController {
 			return $response;
 		}
 
-		// Don't overwrite `meta` with hydrated values: those meta keys are
-		// registered as `string`, so a follow-up save that round-trips the
-		// hydrated objects back to the server gets rejected with 400 and
-		// loops the autosave. Surface the hydrated shape on a parallel
-		// `cortext_hydrated_meta` field instead, leaving the raw stored
-		// values intact for the save path.
-		$hydrated = array();
+		$data = $response->get_data();
+		$meta = is_array( $data['meta'] ?? null ) ? $data['meta'] : array();
+
 		foreach ( $field_ids as $field_id ) {
 			$field_type = (string) get_post_meta( $field_id, 'type', true );
 			$key        = "field-{$field_id}";
 
 			if ( 'relation' === $field_type ) {
-				$hydrated[ $key ] = $this->format_relation_value( $post->ID, $field_id );
+				$meta[ $key ] = $this->format_relation_value( $post->ID, $field_id );
 			} elseif ( 'rollup' === $field_type ) {
-				$hydrated[ $key ] = $this->compute_rollup_value( $post->ID, $field_id );
+				$meta[ $key ] = $this->compute_rollup_value( $post->ID, $field_id );
 			}
 		}
 
-		if ( count( $hydrated ) > 0 ) {
-			$data                            = $response->get_data();
-			$data['cortext_hydrated_meta']   = $hydrated;
-			$response->set_data( $data );
-		}
-
+		$data['meta'] = $meta;
+		$response->set_data( $data );
 		return $response;
 	}
 

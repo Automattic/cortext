@@ -244,13 +244,6 @@ function valueForField( field, data ) {
 		return data.title ?? '';
 	}
 	if ( field.id?.startsWith?.( 'field-' ) ) {
-		// Relation and rollup values arrive on a separate, read-only
-		// response key so the editor's save path doesn't try to round-
-		// trip hydrated objects back into string-typed meta.
-		const type = fieldType( field );
-		if ( type === 'relation' || type === 'rollup' ) {
-			return data.hydratedMeta?.[ field.id ] ?? null;
-		}
 		return data.meta?.[ field.id ] ?? null;
 	}
 	return field.getValue?.( { item: data.row } ) ?? null;
@@ -469,14 +462,10 @@ export default function RowProperties( { fields, row, visible = true } ) {
 		[ fields ]
 	);
 
-	const { title, meta, hydratedMeta } = useSelect(
+	const { title, meta } = useSelect(
 		( select ) => ( {
 			title: select( editorStore ).getEditedPostAttribute( 'title' ),
 			meta: select( editorStore ).getEditedPostAttribute( 'meta' ) ?? {},
-			hydratedMeta:
-				select( editorStore ).getEditedPostAttribute(
-					'cortext_hydrated_meta'
-				) ?? {},
 		} ),
 		[]
 	);
@@ -489,14 +478,13 @@ export default function RowProperties( { fields, row, visible = true } ) {
 					? title
 					: row?.title?.raw ?? row?.title?.rendered ?? '',
 			meta: meta ?? {},
-			hydratedMeta: hydratedMeta ?? {},
 		} ),
-		[ hydratedMeta, meta, row, title ]
+		[ meta, row, title ]
 	);
 
 	const update = useCallback(
 		( patch ) => {
-			const split = splitPropertyPatch( patch );
+			const split = splitPropertyPatch( patch, meta );
 			const next = {};
 			if ( split.title !== undefined ) {
 				next.title = split.title;
@@ -508,7 +496,7 @@ export default function RowProperties( { fields, row, visible = true } ) {
 				editPost( next );
 			}
 		},
-		[ editPost ]
+		[ editPost, meta ]
 	);
 
 	if ( propertyFields.length === 0 ) {
