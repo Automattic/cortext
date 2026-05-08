@@ -147,12 +147,13 @@ function titleFromDetail( detail ) {
 }
 
 function RowAutosaveBridge( { isActive = true, onApi, onSaved } ) {
-	const { status, flushNow, isDirty, isSaving } = useAutosave( {
+	const { status, lastSavedAt, flushNow, isDirty, isSaving } = useAutosave( {
 		debounceMs: 0,
 		minSaveIntervalMs: 0,
 	} );
 	const { resetPost } = useDispatch( editorStore );
 	const discard = useCallback( () => resetPost(), [ resetPost ] );
+	const lastNotifiedSaveRef = useRef( null );
 	const autosaveStateRef = useRef( { isDirty, isSaving } );
 	autosaveStateRef.current = { isDirty, isSaving };
 	const hasPendingEdits = useCallback(
@@ -171,10 +172,17 @@ function RowAutosaveBridge( { isActive = true, onApi, onSaved } ) {
 	}, [ discard, flushNow, hasPendingEdits, isActive, onApi ] );
 
 	useEffect( () => {
-		if ( isActive && status === 'saved' ) {
-			onSaved?.();
+		if (
+			! isActive ||
+			status !== 'saved' ||
+			! lastSavedAt ||
+			lastNotifiedSaveRef.current === lastSavedAt
+		) {
+			return;
 		}
-	}, [ isActive, onSaved, status ] );
+		lastNotifiedSaveRef.current = lastSavedAt;
+		onSaved?.();
+	}, [ isActive, lastSavedAt, onSaved, status ] );
 
 	return null;
 }
