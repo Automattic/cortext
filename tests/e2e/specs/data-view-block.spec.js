@@ -1885,7 +1885,7 @@ test.describe( 'Collection view block', () => {
 						return;
 					} catch {}
 				}
-				await page.getByText( name, { exact: true } ).click();
+				await canvas.getByText( name, { exact: true } ).click();
 			};
 
 			await openColumnDropdown(
