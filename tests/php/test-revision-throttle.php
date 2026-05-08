@@ -15,7 +15,16 @@ use WP_Post;
 
 final class Test_Revision_Throttle extends BaseTestCase {
 
-	private const POST_TYPE = 'crtxt_page';
+	private const PAGE_POST_TYPE = 'crtxt_page';
+	private const ROW_POST_TYPE  = 'crtxt_widgets';
+
+	protected function setUp(): void {
+		parent::setUp();
+		// The throttle gates on post_type_supports('cortext-document'), so the
+		// fixture post types need the trait wired up before each case.
+		add_post_type_support( self::PAGE_POST_TYPE, 'cortext-document' );
+		add_post_type_support( self::ROW_POST_TYPE, 'cortext-document' );
+	}
 
 	private function make_post( string $post_type ): WP_Post {
 		return new WP_Post(
@@ -52,7 +61,7 @@ final class Test_Revision_Throttle extends BaseTestCase {
 		);
 	}
 
-	public function test_throttle_passes_through_for_non_cortext_post_types(): void {
+	public function test_throttle_passes_through_for_non_document_post_types(): void {
 		$throttle = new RevisionThrottle();
 		$post     = $this->make_post( 'page' );
 		$revision = $this->make_revision( 1 );
@@ -61,9 +70,9 @@ final class Test_Revision_Throttle extends BaseTestCase {
 		$this->assertFalse( $throttle->throttle_revision( false, $revision, $post ) );
 	}
 
-	public function test_throttle_suppresses_crtxt_page_within_interval_window(): void {
+	public function test_throttle_suppresses_page_document_within_interval_window(): void {
 		$throttle = new RevisionThrottle();
-		$post     = $this->make_post( self::POST_TYPE );
+		$post     = $this->make_post( self::PAGE_POST_TYPE );
 		$revision = $this->make_revision( 60 );
 
 		$this->assertFalse(
@@ -72,9 +81,20 @@ final class Test_Revision_Throttle extends BaseTestCase {
 		);
 	}
 
+	public function test_throttle_suppresses_row_document_within_interval_window(): void {
+		$throttle = new RevisionThrottle();
+		$post     = $this->make_post( self::ROW_POST_TYPE );
+		$revision = $this->make_revision( 60 );
+
+		$this->assertFalse(
+			$throttle->throttle_revision( true, $revision, $post ),
+			'Row CPTs that opt into cortext-document share the same throttle.'
+		);
+	}
+
 	public function test_throttle_just_inside_window_still_suppresses(): void {
 		$throttle = new RevisionThrottle();
-		$post     = $this->make_post( self::POST_TYPE );
+		$post     = $this->make_post( self::PAGE_POST_TYPE );
 		$revision = $this->make_revision( 599 );
 
 		$this->assertFalse( $throttle->throttle_revision( true, $revision, $post ) );
@@ -82,7 +102,7 @@ final class Test_Revision_Throttle extends BaseTestCase {
 
 	public function test_throttle_passes_through_once_interval_has_elapsed(): void {
 		$throttle = new RevisionThrottle();
-		$post     = $this->make_post( self::POST_TYPE );
+		$post     = $this->make_post( self::PAGE_POST_TYPE );
 		$revision = $this->make_revision( 601 );
 
 		$this->assertTrue(
@@ -97,7 +117,7 @@ final class Test_Revision_Throttle extends BaseTestCase {
 
 	public function test_throttle_passes_through_when_revision_timestamp_is_invalid(): void {
 		$throttle = new RevisionThrottle();
-		$post     = $this->make_post( self::POST_TYPE );
+		$post     = $this->make_post( self::PAGE_POST_TYPE );
 		$revision = new WP_Post(
 			(object) array(
 				'ID'                => 2,
@@ -109,7 +129,7 @@ final class Test_Revision_Throttle extends BaseTestCase {
 		$this->assertTrue( $throttle->throttle_revision( true, $revision, $post ) );
 	}
 
-	public function test_cap_revisions_passes_through_for_non_cortext_post_types(): void {
+	public function test_cap_revisions_passes_through_for_non_document_post_types(): void {
 		$throttle = new RevisionThrottle();
 		$post     = $this->make_post( 'page' );
 
@@ -117,9 +137,18 @@ final class Test_Revision_Throttle extends BaseTestCase {
 		$this->assertSame( -1, $throttle->cap_revisions( -1, $post ) );
 	}
 
-	public function test_cap_revisions_caps_crtxt_page_regardless_of_incoming_value(): void {
+	public function test_cap_revisions_caps_page_document_regardless_of_incoming_value(): void {
 		$throttle = new RevisionThrottle();
-		$post     = $this->make_post( self::POST_TYPE );
+		$post     = $this->make_post( self::PAGE_POST_TYPE );
+
+		$this->assertSame( 50, $throttle->cap_revisions( 5, $post ) );
+		$this->assertSame( 50, $throttle->cap_revisions( -1, $post ) );
+		$this->assertSame( 50, $throttle->cap_revisions( 999, $post ) );
+	}
+
+	public function test_cap_revisions_caps_row_document_regardless_of_incoming_value(): void {
+		$throttle = new RevisionThrottle();
+		$post     = $this->make_post( self::ROW_POST_TYPE );
 
 		$this->assertSame( 50, $throttle->cap_revisions( 5, $post ) );
 		$this->assertSame( 50, $throttle->cap_revisions( -1, $post ) );

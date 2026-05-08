@@ -1009,8 +1009,8 @@ body.cortext-sidebar-resizing {
 // These nodes live inside BlockCanvas, so target the iframe document body.
 body:has([data-type="core/post-title"]:hover) .cortext-canvas__identity-action,
 body:has([data-type="core/post-title"]:focus-within) .cortext-canvas__identity-action,
-body:has([data-type="cortext/page-icon"]:hover) .cortext-canvas__identity-action,
-body:has([data-type="cortext/page-icon"]:focus-within) .cortext-canvas__identity-action,
+body:has([data-type="cortext/document-icon"]:hover) .cortext-canvas__identity-action,
+body:has([data-type="cortext/document-icon"]:focus-within) .cortext-canvas__identity-action,
 body:has(.cortext-canvas__identity-actions:hover) .cortext-canvas__identity-action {
 	opacity: 1;
 }
@@ -2477,6 +2477,11 @@ tr:has(.cortext-title-cell--is-open)
 		width: 100%;
 	}
 
+	&--canvas-properties {
+		flex: 0 0 auto;
+		width: 100%;
+	}
+
 	&__frame {
 		display: flex;
 		flex-direction: column;
@@ -2542,8 +2547,8 @@ tr:has(.cortext-title-cell--is-open)
 	&--modal {
 
 		.cortext-row-detail__pane-stack {
-			flex: 0 0 auto;
-			height: auto;
+			flex: 1 1 auto;
+			height: 100%;
 			min-height: 320px;
 			overflow: visible;
 		}
@@ -2551,7 +2556,7 @@ tr:has(.cortext-title-cell--is-open)
 		.cortext-row-detail__pane {
 			position: relative;
 			inset: auto;
-			height: auto;
+			height: 100%;
 			min-height: 320px;
 		}
 
@@ -2854,6 +2859,10 @@ tr:has(.cortext-title-cell--is-open)
 		padding: $grid-unit-20 var(--cortext-row-detail-field-inset) $grid-unit-10;
 	}
 
+	&__properties[data-visible="false"] {
+		display: none;
+	}
+
 	&__fields-indicator-wrap {
 		grid-template-rows: 0fr;
 		opacity: 0;
@@ -3109,6 +3118,35 @@ tr:has(.cortext-title-cell--is-open)
 	}
 
 	&__content-editor iframe {
+		border: 0;
+		background: $white;
+	}
+
+	// EditorBody mounts a `cortext-canvas__visual` wrapper inside row detail
+	// panes after the row properties chrome. Give the iframe a real height
+	// without pushing the properties into the block-editor iframe.
+	.cortext-canvas__visual {
+		display: flex;
+		flex: 1 1 420px;
+		flex-direction: column;
+		min-height: 360px;
+		background: $white;
+		box-sizing: border-box;
+		overflow: visible;
+	}
+
+	.cortext-canvas__block-canvas {
+		display: flex;
+		flex: 1 1 auto;
+		min-height: 0;
+	}
+
+	.cortext-canvas__block-canvas > div {
+		flex: 1 1 auto;
+		min-height: 0;
+	}
+
+	.cortext-canvas__block-canvas iframe {
 		border: 0;
 		background: $white;
 	}
@@ -3868,7 +3906,7 @@ thead > tr > th {
 }
 /* stylelint-enable no-descending-specificity */
 
-.cortext-page-icon {
+.cortext-document-icon {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -3906,7 +3944,7 @@ thead > tr > th {
 // finished loading on first open. Without this the wrapper collapsed to
 // 0 height while `useEntityRecord` was still resolving, then expanded
 // when the image arrived, pushing everything below it down.
-.cortext-page-cover-block {
+.cortext-document-cover-block {
 	position: relative;
 	height: clamp(140px, 26vh, 260px);
 
@@ -3966,7 +4004,7 @@ thead > tr > th {
 // Page icon: use a normal content-column row for stable placement and a
 // generous hover target, but replace Gutenberg's full-row selected outline
 // with a tight outline around the icon button itself.
-.cortext-page-icon-block {
+.cortext-document-icon-block {
 	display: flex;
 	align-items: flex-end;
 	justify-content: flex-start;
@@ -4000,12 +4038,12 @@ thead > tr > th {
 		/* stylelint-enable no-descending-specificity */
 	}
 
-	.cortext-page-icon-block__button.components-button {
+	.cortext-document-icon-block__button.components-button {
 		width: calc(56px + #{ $grid-unit-05 * 2 });
 		height: calc(56px + #{ $grid-unit-05 * 2 });
 	}
 
-	.cortext-page-icon--image {
+	.cortext-document-icon--image {
 		width: 56px;
 		height: 56px;
 		border-radius: var(--cortext-shell-radius, 4px);
@@ -4018,20 +4056,20 @@ thead > tr > th {
 	// baseline so it sits at the bottom of the inline box. The result was
 	// a ~3px height drift between emoji and WP-icon variants that pushed
 	// the title below it. `inline-flex` removes the line-box entirely.
-	.cortext-page-identity-control {
+	.cortext-document-identity-control {
 		display: inline-flex;
 	}
 }
 
 .block-editor-block-list__layout
-.block-editor-block-list__block[data-type="cortext/page-icon"].is-selected::after {
+.block-editor-block-list__block[data-type="cortext/document-icon"].is-selected::after {
 	box-shadow: none;
 	outline: none;
 }
 
 .block-editor-block-list__layout
-.block-editor-block-list__block[data-type="cortext/page-icon"].is-selected
-.cortext-page-icon-block__button {
+.block-editor-block-list__block[data-type="cortext/document-icon"].is-selected
+.cortext-document-icon-block__button {
 	outline: 1.5px solid var(--wp-admin-theme-color, #007cba);
 	outline-offset: 0;
 }
@@ -4040,8 +4078,8 @@ thead > tr > th {
 // the block itself up so the title follows the visual icon position
 // instead of leaving a reserved blank row below the cover.
 /* stylelint-disable no-descending-specificity */
-.cortext-page-cover-block + .cortext-page-icon-block,
-[data-type="cortext/page-cover"] + [data-type="cortext/page-icon"] {
+.cortext-document-cover-block + .cortext-document-icon-block,
+[data-type="cortext/document-cover"] + [data-type="cortext/document-icon"] {
 	position: relative;
 	z-index: 1;
 	margin-block-start: -28px;
@@ -4058,7 +4096,7 @@ thead > tr > th {
 // component covers both the colored WP-icon variant and the fallback
 // page glyph in every surface.
 /* stylelint-disable-next-line no-descending-specificity */
-.cortext-page-icon svg {
+.cortext-document-icon svg {
 	fill: currentcolor;
 }
 
@@ -4171,10 +4209,10 @@ body.cortext-hide-block-settings-menu .block-editor-block-switcher {
 	}
 }
 
-.cortext-page-identity-popover-content {
+.cortext-document-identity-popover-content {
 	min-width: 320px;
 
-	.cortext-page-identity-popover {
+	.cortext-document-identity-popover {
 		position: relative;
 		display: flex;
 		flex-direction: column;

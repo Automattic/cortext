@@ -1,11 +1,11 @@
 {
 	"$schema": "https://schemas.wp.org/trunk/block.json",
 	"apiVersion": 3,
-	"name": "cortext/page-cover",
-	"title": "Page cover",
+	"name": "cortext/document-cover",
+	"title": "Document cover",
 	"category": "widgets",
 	"icon": "format-image",
-	"description": "Notion-style page cover image, bound to the page's featured image.",
+	"description": "Notion-style document cover image, bound to the document's featured image.",
 	"textdomain": "cortext",
 	"usesContext": [ "postId", "postType" ],
 	"supports": {

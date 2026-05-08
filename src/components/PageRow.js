@@ -59,7 +59,7 @@ export default function PageRow( {
 	const [ isRenaming, setIsRenaming ] = useState( false );
 	const [ draftTitle, setDraftTitle ] = useState( '' );
 	const renameInputRef = useRef( null );
-	const iconMeta = page.meta?.cortext_page_icon ?? '';
+	const iconMeta = page.meta?.cortext_document_icon ?? '';
 
 	// Start rename automatically if the parent asked for it (new page flow).
 	useEffect( () => {

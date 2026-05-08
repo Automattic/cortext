@@ -1,11 +1,11 @@
 {
 	"$schema": "https://schemas.wp.org/trunk/block.json",
 	"apiVersion": 3,
-	"name": "cortext/page-icon",
-	"title": "Page icon",
+	"name": "cortext/document-icon",
+	"title": "Document icon",
 	"category": "widgets",
 	"icon": "smiley",
-	"description": "Notion-style page identity icon. Reads from the cortext_page_icon post meta.",
+	"description": "Notion-style document identity icon. Reads from the cortext_document_icon post meta.",
 	"textdomain": "cortext",
 	"usesContext": [ "postId", "postType" ],
 	"supports": {

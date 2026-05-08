@@ -1,6 +1,6 @@
 <?php
 /**
- * Tests for Cortext\Rest\PageTrashController.
+ * Tests for Cortext\Rest\DocumentTrashController.
  *
  * @package Cortext
  */
@@ -11,7 +11,7 @@ namespace Cortext\Tests;
 
 use Cortext\PostType\Page;
 use Cortext\PostType\PageTrashCascade;
-use Cortext\Rest\PageTrashController;
+use Cortext\Rest\DocumentTrashController;
 use WorDBless\BaseTestCase;
 use WorDBless\Posts as WorDBlessPosts;
 use WP_Post;
@@ -19,7 +19,7 @@ use WP_Query;
 use WP_REST_Request;
 use WP_REST_Server;
 
-final class Test_Rest_Page_Trash_Controller extends BaseTestCase {
+final class Test_Rest_Document_Trash_Controller extends BaseTestCase {
 
 	public function set_up(): void {
 		parent::set_up();
@@ -38,7 +38,7 @@ final class Test_Rest_Page_Trash_Controller extends BaseTestCase {
 		( new PageTrashCascade() )->register();
 
 		$GLOBALS['wp_rest_server'] = new WP_REST_Server();
-		( new PageTrashController() )->register();
+		( new DocumentTrashController() )->register();
 		do_action( 'rest_api_init' );
 	}
 
@@ -111,10 +111,10 @@ final class Test_Rest_Page_Trash_Controller extends BaseTestCase {
 		$response = $this->restore( 99999 );
 
 		$this->assertSame( 404, $response->get_status() );
-		$this->assertSame( 'cortext_page_not_found', $response->get_data()['code'] );
+		$this->assertSame( 'cortext_document_not_found', $response->get_data()['code'] );
 	}
 
-	public function test_rejects_non_cortext_page_post_type(): void {
+	public function test_rejects_non_document_post_type(): void {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
 
 		$post_id = (int) wp_insert_post(
@@ -129,7 +129,7 @@ final class Test_Rest_Page_Trash_Controller extends BaseTestCase {
 		$response = $this->restore( $post_id );
 
 		$this->assertSame( 404, $response->get_status() );
-		$this->assertSame( 'cortext_page_not_found', $response->get_data()['code'] );
+		$this->assertSame( 'cortext_document_not_found', $response->get_data()['code'] );
 	}
 
 	public function test_rejects_page_that_is_not_in_trash(): void {
@@ -140,7 +140,7 @@ final class Test_Rest_Page_Trash_Controller extends BaseTestCase {
 		$response = $this->restore( $page_id );
 
 		$this->assertSame( 400, $response->get_status() );
-		$this->assertSame( 'cortext_page_not_trashed', $response->get_data()['code'] );
+		$this->assertSame( 'cortext_document_not_trashed', $response->get_data()['code'] );
 	}
 
 	public function test_requires_delete_post_capability(): void {
@@ -217,7 +217,7 @@ final class Test_Rest_Page_Trash_Controller extends BaseTestCase {
 		$response = $this->permanent_delete( $page_id );
 
 		$this->assertSame( 400, $response->get_status() );
-		$this->assertSame( 'cortext_page_not_trashed', $response->get_data()['code'] );
+		$this->assertSame( 'cortext_document_not_trashed', $response->get_data()['code'] );
 	}
 
 	public function test_permanent_delete_requires_delete_post_capability(): void {
@@ -231,13 +231,46 @@ final class Test_Rest_Page_Trash_Controller extends BaseTestCase {
 		$this->assertSame( 403, $response->get_status() );
 	}
 
+	public function test_restore_skips_cascade_walk_for_flat_row_documents(): void {
+		// A row CPT opts into cortext-document but has no hierarchy, so the
+		// cascade walk should return an empty descendant list and only the
+		// row itself surfaces in `restored`.
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$row_post_type = 'crtxt_widgets';
+		register_post_type(
+			$row_post_type,
+			array(
+				'public'       => false,
+				'show_in_rest' => true,
+				'rest_base'    => $row_post_type,
+				'supports'     => array( 'title', 'editor' ),
+			)
+		);
+		add_post_type_support( $row_post_type, 'cortext-document' );
+
+		$row_id = (int) wp_insert_post(
+			array(
+				'post_type'   => $row_post_type,
+				'post_status' => 'publish',
+				'post_title'  => 'A widget row',
+			)
+		);
+		wp_trash_post( $row_id );
+
+		$response = $this->restore( $row_id );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( $row_id ), $response->get_data()['restored'] );
+	}
+
 	private function restore( int $id ) {
-		$request = new WP_REST_Request( 'POST', '/cortext/v1/pages/' . $id . '/restore' );
+		$request = new WP_REST_Request( 'POST', '/cortext/v1/documents/' . $id . '/restore' );
 		return rest_do_request( $request );
 	}
 
 	private function permanent_delete( int $id ) {
-		$request = new WP_REST_Request( 'POST', '/cortext/v1/pages/' . $id . '/permanent-delete' );
+		$request = new WP_REST_Request( 'POST', '/cortext/v1/documents/' . $id . '/permanent-delete' );
 		return rest_do_request( $request );
 	}
 

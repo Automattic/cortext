@@ -1,6 +1,12 @@
 <?php
 /**
- * Per-page icon (emoji or uploaded image) for `crtxt_page`.
+ * Per-document icon (emoji or uploaded image) for any post type that opts into
+ * the `cortext-document` capability.
+ *
+ * Each opted-in CPT calls `DocumentIdentity::register_for_post_type()` from its
+ * own registration site, instead of this class iterating over post types at
+ * `init`. That keeps page registration and dynamic row CPT registration on the
+ * same code path and avoids any ordering dependency.
  *
  * @package Cortext
  */
@@ -9,7 +15,7 @@ declare( strict_types=1 );
 
 namespace Cortext\PostType;
 
-final class PageIdentity {
+final class DocumentIdentity {
 
 	/**
 	 * Stored as a JSON string. Three shapes:
@@ -22,10 +28,9 @@ final class PageIdentity {
 	 * branch on `type` at the read site rather than juggling two parallel
 	 * meta fields.
 	 */
-	public const META_KEY = 'cortext_page_icon';
+	public const META_KEY = 'cortext_document_icon';
 
 	public function register(): void {
-		add_action( 'init', array( $this, 'register_meta' ) );
 		// Bake the locked title block into post_content on create so it
 		// exists from the very first render. Also strip the legacy
 		// editor-only page-header-actions block on every save; those
@@ -34,8 +39,33 @@ final class PageIdentity {
 	}
 
 	/**
+	 * Opts a post type into the `cortext-document` capability and registers the
+	 * document icon meta on it. Call from the post type's own registration site,
+	 * after `register_post_type()` has run for that type.
+	 *
+	 * @param string $post_type Post type slug.
+	 */
+	public static function register_for_post_type( string $post_type ): void {
+		add_post_type_support( $post_type, 'cortext-document' );
+		register_post_meta(
+			$post_type,
+			self::META_KEY,
+			array(
+				'type'              => 'string',
+				'single'            => true,
+				'default'           => '',
+				'show_in_rest'      => true,
+				'auth_callback'     => static function () {
+					return current_user_can( 'edit_posts' );
+				},
+				'sanitize_callback' => array( self::class, 'sanitize' ),
+			)
+		);
+	}
+
+	/**
 	 * Returns the canonical locked title block markup that should sit
-	 * at the top of every `crtxt_page`. Used by the seeder for direct
+	 * at the top of every cortext document. Used by the seeder for direct
 	 * inserts and by the wp_insert_post_data filter below.
 	 *
 	 * Note: prepending `core/post-title` to `post_content` makes the
@@ -66,14 +96,15 @@ final class PageIdentity {
 
 	/**
 	 * Prepends the locked title block to post_content when a new
-	 * `crtxt_page` is created, unless it's already present. Updates only
+	 * cortext document is created, unless it's already present. Updates only
 	 * strip the legacy editor-only actions block.
 	 *
 	 * @param array $data    Slashed post data about to be inserted.
 	 * @param array $postarr Original input passed to wp_insert_post.
 	 */
 	public function prepend_header_blocks( array $data, array $postarr ): array {
-		if ( Page::POST_TYPE !== ( $data['post_type'] ?? '' ) ) {
+		$post_type = (string) ( $data['post_type'] ?? '' );
+		if ( '' === $post_type || ! post_type_supports( $post_type, 'cortext-document' ) ) {
 			return $data;
 		}
 
@@ -86,7 +117,7 @@ final class PageIdentity {
 		}
 
 		$content = (string) $data['post_content'];
-		// Already has the title marker? Leave it alone — the seeder
+		// Already has the title marker? Leave it alone; the seeder
 		// pre-prepends it, and other paths might too.
 		if (
 			str_contains( $content, '<!-- wp:post-title' ) ||
@@ -127,23 +158,6 @@ final class PageIdentity {
 		return $filtered;
 	}
 
-	public function register_meta(): void {
-		register_post_meta(
-			Page::POST_TYPE,
-			self::META_KEY,
-			array(
-				'type'              => 'string',
-				'single'            => true,
-				'default'           => '',
-				'show_in_rest'      => true,
-				'auth_callback'     => static function () {
-					return current_user_can( 'edit_posts' );
-				},
-				'sanitize_callback' => array( $this, 'sanitize' ),
-			)
-		);
-	}
-
 	/**
 	 * Validates the JSON shape and returns a canonical JSON string. Anything
 	 * we don't recognise collapses to '' so a malformed write reverts the
@@ -151,7 +165,7 @@ final class PageIdentity {
 	 *
 	 * @param mixed $value Raw meta value coming in from REST or PHP.
 	 */
-	public function sanitize( $value ): string {
+	public static function sanitize( $value ): string {
 		if ( ! is_string( $value ) || '' === $value ) {
 			return '';
 		}
@@ -173,7 +187,7 @@ final class PageIdentity {
 				// JSON_UNESCAPED_UNICODE keeps emoji as literal characters
 				// in the stored value. Without it, wp_json_encode emits
 				// `\uXXXX` surrogate-pair escapes, and any wp_slash along
-				// the REST path doubles the backslashes — by the time JS
+				// the REST path doubles the backslashes. By the time JS
 				// parses the meta the escapes never reconstitute and the
 				// emoji renders as raw text.
 				return wp_json_encode(

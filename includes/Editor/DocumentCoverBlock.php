@@ -1,7 +1,7 @@
 <?php
 /**
  * Server-side registration and frontend render for the
- * `cortext/page-cover` block.
+ * `cortext/document-cover` block.
  *
  * @package Cortext
  */
@@ -10,9 +10,9 @@ declare( strict_types=1 );
 
 namespace Cortext\Editor;
 
-final class PageCoverBlock {
+final class DocumentCoverBlock {
 
-	public const BLOCK_NAME = 'cortext/page-cover';
+	public const BLOCK_NAME = 'cortext/document-cover';
 
 	public function register(): void {
 		add_action( 'init', array( $this, 'register_block' ) );
@@ -23,7 +23,7 @@ final class PageCoverBlock {
 			self::BLOCK_NAME,
 			array(
 				'api_version'     => 3,
-				'title'           => __( 'Page cover', 'cortext' ),
+				'title'           => __( 'Document cover', 'cortext' ),
 				'category'        => 'widgets',
 				'icon'            => 'format-image',
 				'uses_context'    => array( 'postId', 'postType' ),
@@ -52,7 +52,7 @@ final class PageCoverBlock {
 	 * or no post context, so themes don't have to guard.
 	 *
 	 * @param array  $attributes Block attributes.
-	 * @param string $content    Inner HTML (none — block is dynamic).
+	 * @param string $content    Inner HTML (none; block is dynamic).
 	 * @param object $block      Parsed block instance, carrying context.
 	 */
 	public function render( $attributes, $content, $block ): string {
@@ -64,7 +64,7 @@ final class PageCoverBlock {
 		$image = get_the_post_thumbnail(
 			$post_id,
 			'large',
-			array( 'class' => 'cortext-page-cover-block__image' )
+			array( 'class' => 'cortext-document-cover-block__image' )
 		);
 		if ( '' === $image ) {
 			return '';
@@ -73,7 +73,7 @@ final class PageCoverBlock {
 		$align_class = isset( $attributes['align'] ) && 'full' === $attributes['align']
 			? 'alignfull'
 			: '';
-		$wrapper     = trim( 'cortext-page-cover-block ' . $align_class );
+		$wrapper     = trim( 'cortext-document-cover-block ' . $align_class );
 
 		return sprintf(
 			'<figure class="%s">%s</figure>',
