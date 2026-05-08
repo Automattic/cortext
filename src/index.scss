@@ -1869,8 +1869,7 @@ tbody > tr > td:not(:first-child) {
 }
 
 .cortext-title-cell:focus-within,
-.cortext-title-cell--with-open-action:hover,
-.cortext-title-cell--is-open {
+.cortext-title-cell--with-open-action:hover {
 	background: $gray-100;
 }
 
