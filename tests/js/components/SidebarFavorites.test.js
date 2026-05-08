@@ -1,8 +1,32 @@
-import {
+import { act, render, screen } from '@testing-library/react';
+
+import SidebarFavorites, {
 	favoriteKey,
+	filterFavoritesForTrashedPage,
 	moveFavorite,
 	resolveFavoriteItems,
 } from '../../../src/components/SidebarFavorites';
+
+function renderFavorites( props = {} ) {
+	return render(
+		<SidebarFavorites
+			favorites={ [] }
+			pages={ [] }
+			collections={ [] }
+			isResolving={ false }
+			isResolvingItems={ false }
+			isDisabled={ false }
+			onSelect={ jest.fn( () => false ) }
+			onRemove={ jest.fn() }
+			onReorder={ jest.fn() }
+			{ ...props }
+		/>
+	);
+}
+
+afterEach( () => {
+	jest.useRealTimers();
+} );
 
 describe( 'SidebarFavorites helpers', () => {
 	it( 'builds stable favorite keys', () => {
@@ -39,6 +63,29 @@ describe( 'SidebarFavorites helpers', () => {
 		expect(
 			moveFavorite( favorites, 'favorite:page:1', 'favorite:page:999' )
 		).toBe( favorites );
+	} );
+
+	it( 'filters favorites for a trashed page and loaded descendants', () => {
+		const favorites = [
+			{ kind: 'page', id: 1 },
+			{ kind: 'page', id: 2 },
+			{ kind: 'page', id: 3 },
+			{ kind: 'page', id: 4 },
+			{ kind: 'collection', id: 5 },
+		];
+		const pages = [
+			{ id: 1, parent: 0 },
+			{ id: 2, parent: 1 },
+			{ id: 3, parent: 2 },
+			{ id: 4, parent: 0 },
+		];
+
+		expect( filterFavoritesForTrashedPage( favorites, 1, pages ) ).toEqual(
+			[
+				{ kind: 'page', id: 4 },
+				{ kind: 'collection', id: 5 },
+			]
+		);
 	} );
 
 	it( 'resolves page and collection favorites from loaded records', () => {
@@ -79,5 +126,79 @@ describe( 'SidebarFavorites helpers', () => {
 				sortableId: 'favorite:collection:2',
 			},
 		] );
+	} );
+
+	it( 'uses stored paths for favorites missing from loaded sidebar records', () => {
+		const favorites = [ { kind: 'page', id: 1, path: 'page/old-1' } ];
+
+		expect( resolveFavoriteItems( favorites, [], [] ) ).toMatchObject( [
+			{
+				kind: 'page',
+				id: 1,
+				title: 'Page',
+				path: 'page/old-1',
+			},
+		] );
+	} );
+
+	it( 'filters missing favorites that do not have a stored path', () => {
+		expect(
+			resolveFavoriteItems( [ { kind: 'page', id: 1 } ], [], [] )
+		).toEqual( [] );
+	} );
+
+	it( 'does not let stale removal timers hide a re-added favorite', () => {
+		jest.useFakeTimers();
+		const favorite = { kind: 'page', id: 1, path: 'page/notes-1' };
+		const pages = [
+			{
+				id: 1,
+				slug: 'notes',
+				title: { rendered: 'Notes', raw: 'Notes' },
+			},
+		];
+		const { rerender } = renderFavorites( {
+			favorites: [ favorite ],
+			pages,
+		} );
+
+		expect(
+			screen.getByRole( 'button', { name: 'Notes' } )
+		).toBeInTheDocument();
+
+		rerender(
+			<SidebarFavorites
+				favorites={ [] }
+				pages={ pages }
+				collections={ [] }
+				isResolving={ false }
+				isResolvingItems={ false }
+				isDisabled={ false }
+				onSelect={ jest.fn( () => false ) }
+				onRemove={ jest.fn() }
+				onReorder={ jest.fn() }
+			/>
+		);
+		rerender(
+			<SidebarFavorites
+				favorites={ [ favorite ] }
+				pages={ pages }
+				collections={ [] }
+				isResolving={ false }
+				isResolvingItems={ false }
+				isDisabled={ false }
+				onSelect={ jest.fn( () => false ) }
+				onRemove={ jest.fn() }
+				onReorder={ jest.fn() }
+			/>
+		);
+
+		act( () => {
+			jest.advanceTimersByTime( 151 );
+		} );
+
+		expect(
+			screen.getByRole( 'button', { name: 'Notes' } )
+		).toBeInTheDocument();
 	} );
 } );

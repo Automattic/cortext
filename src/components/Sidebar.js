@@ -9,7 +9,7 @@ import {
 	useCallback,
 	useEffect,
 } from '@wordpress/element';
-import { Button, Icon, Spinner } from '@wordpress/components';
+import { Button, Icon, Notice, Spinner } from '@wordpress/components';
 import { home as homeIcon, plus, search, wordpress } from '@wordpress/icons';
 
 // Notion-style sidebar toggle: panel outline with a vertical accent on
@@ -58,7 +58,10 @@ import { useNavigate, useParams } from '@tanstack/react-router';
 import CollectionRow from './CollectionRow';
 import PageRow from './PageRow';
 import { openCommandPalette } from './CommandPalette';
-import SidebarFavorites, { favoriteKey } from './SidebarFavorites';
+import SidebarFavorites, {
+	favoriteKey,
+	filterFavoritesForTrashedPage,
+} from './SidebarFavorites';
 import SidebarResizeHandle from './SidebarResizeHandle';
 import SidebarTrash from './SidebarTrash';
 import ThemeToggle from './ThemeToggle';
@@ -122,6 +125,7 @@ export default function Sidebar( {
 		favorites,
 		setFavorites,
 		isResolving: isResolvingFavorites,
+		isUpdating: isUpdatingFavorites,
 	} = useFavorites();
 	const { saveEntityRecord, invalidateResolution, receiveEntityRecords } =
 		useDispatch( 'core' );
@@ -154,6 +158,9 @@ export default function Sidebar( {
 			activePrefix === 'collection' ? parseIdFromUri( activeTail ) : null,
 		[ activePrefix, activeTail ]
 	);
+	const [ favoritesError, setFavoritesError ] = useState( null );
+	const areFavoriteActionsDisabled =
+		isResolvingFavorites || isUpdatingFavorites;
 
 	// Keep the URL canonical: once autosave assigns a slug to the active
 	// page (draft → private promotion on first titled save), rewrite
@@ -239,26 +246,47 @@ export default function Sidebar( {
 	);
 	const toggleFavorite = useCallback(
 		async ( kind, id ) => {
+			if ( areFavoriteActionsDisabled ) {
+				return;
+			}
 			const key = favoriteKey( { kind, id } );
-			const exists = favoriteKeys.has( key );
-			const next = exists
-				? favorites.filter(
-						( favorite ) => favoriteKey( favorite ) !== key
-				  )
-				: [ ...favorites, { kind, id } ];
+			setFavoritesError( null );
 			try {
-				await setFavorites( next );
-			} catch {}
+				await setFavorites( ( current ) => {
+					const exists = current.some(
+						( favorite ) => favoriteKey( favorite ) === key
+					);
+					return exists
+						? current.filter(
+								( favorite ) => favoriteKey( favorite ) !== key
+						  )
+						: [ ...current, { kind, id } ];
+				} );
+			} catch ( err ) {
+				setFavoritesError(
+					err?.message ??
+						__( 'Could not update favorites.', 'cortext' )
+				);
+			}
 		},
-		[ favoriteKeys, favorites, setFavorites ]
+		[ areFavoriteActionsDisabled, setFavorites ]
 	);
 	const reorderFavorites = useCallback(
 		async ( next ) => {
+			if ( areFavoriteActionsDisabled ) {
+				return;
+			}
+			setFavoritesError( null );
 			try {
 				await setFavorites( next );
-			} catch {}
+			} catch ( err ) {
+				setFavoritesError(
+					err?.message ??
+						__( 'Could not reorder favorites.', 'cortext' )
+				);
+			}
 		},
-		[ setFavorites ]
+		[ areFavoriteActionsDisabled, setFavorites ]
 	);
 	const selectFavorite = useCallback(
 		( favorite ) => {
@@ -465,8 +493,21 @@ export default function Sidebar( {
 				POST_TYPE,
 				TRASHED_PAGES_QUERY,
 			] );
+			try {
+				await setFavorites( ( current ) =>
+					filterFavoritesForTrashedPage( current, id, pages )
+				);
+			} catch ( err ) {
+				setFavoritesError(
+					err?.message ??
+						__(
+							'Page was moved to trash, but could not be removed from favorites.',
+							'cortext'
+						)
+				);
+			}
 		},
-		[ invalidateResolution, receiveEntityRecords ]
+		[ invalidateResolution, pages, receiveEntityRecords, setFavorites ]
 	);
 
 	// --- Drag and drop -----------------------------------------------------
@@ -620,6 +661,14 @@ export default function Sidebar( {
 			</div>
 			{ ! collapsed && (
 				<div className="cortext-sidebar__content">
+					{ favoritesError ? (
+						<Notice
+							status="error"
+							onRemove={ () => setFavoritesError( null ) }
+						>
+							{ favoritesError }
+						</Notice>
+					) : null }
 					<SidebarFavorites
 						favorites={ favorites }
 						pages={ pages }
@@ -628,6 +677,7 @@ export default function Sidebar( {
 						isResolvingItems={
 							isResolvingPages || isResolvingCollections
 						}
+						isDisabled={ areFavoriteActionsDisabled }
 						onSelect={ selectFavorite }
 						onRemove={ ( favorite ) =>
 							toggleFavorite( favorite.kind, favorite.id )
@@ -683,6 +733,9 @@ export default function Sidebar( {
 									onDuplicate={ duplicatePage }
 									onDelete={ trashPage }
 									isFavorite={ isPageFavorite }
+									isFavoriteDisabled={
+										areFavoriteActionsDisabled
+									}
 									onToggleFavorite={ ( id ) =>
 										toggleFavorite( 'page', id )
 									}
@@ -745,6 +798,9 @@ export default function Sidebar( {
 									isFavorite={ isCollectionFavorite(
 										collection.id
 									) }
+									isFavoriteDisabled={
+										areFavoriteActionsDisabled
+									}
 									isHomeUpdating={ isHomeUpdating }
 									onToggleFavorite={ ( id ) =>
 										toggleFavorite( 'collection', id )

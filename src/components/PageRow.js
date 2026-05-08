@@ -41,6 +41,7 @@ export default function PageRow( {
 	onDuplicate,
 	onDelete,
 	isFavorite = false,
+	isFavoriteDisabled = false,
 	onToggleFavorite,
 	onSetHome,
 	home,
@@ -272,6 +273,7 @@ export default function PageRow( {
 									icon={
 										pageIsFavorite ? starFilled : starEmpty
 									}
+									disabled={ isFavoriteDisabled }
 									onClick={ () => {
 										onToggleFavorite?.( page.id );
 										onClose();
@@ -373,6 +375,7 @@ export default function PageRow( {
 								onDuplicate={ onDuplicate }
 								onDelete={ onDelete }
 								isFavorite={ isFavorite }
+								isFavoriteDisabled={ isFavoriteDisabled }
 								onToggleFavorite={ onToggleFavorite }
 								onSetHome={ onSetHome }
 								home={ home }

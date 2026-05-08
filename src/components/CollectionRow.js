@@ -20,6 +20,7 @@ export default function CollectionRow( {
 	collection,
 	isSelected,
 	isFavorite = false,
+	isFavoriteDisabled = false,
 	isHome,
 	isHomeUpdating,
 	onSelect,
@@ -67,6 +68,7 @@ export default function CollectionRow( {
 						<MenuGroup>
 							<MenuItem
 								icon={ isFavorite ? starFilled : starEmpty }
+								disabled={ isFavoriteDisabled }
 								onClick={ () => {
 									onToggleFavorite?.( collection.id );
 									onClose();
