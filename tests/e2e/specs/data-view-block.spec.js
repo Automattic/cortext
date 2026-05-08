@@ -1887,7 +1887,13 @@ test.describe( 'Collection view block', () => {
 						return;
 					} catch {}
 				}
-				await canvas.getByText( name, { exact: true } ).click();
+				await canvas
+					.locator( '[role="menuitem"], [role="menuitemradio"]' )
+					.filter( {
+						has: canvas.getByText( name, { exact: true } ),
+					} )
+					.first()
+					.click();
 			};
 
 			await openColumnDropdown(
@@ -2174,7 +2180,7 @@ test.describe( 'Collection view block', () => {
 				( el ) => el.getBoundingClientRect().width
 			);
 			expect( firstMoveWidth - startWidth ).toBeGreaterThan( 0 );
-			expect( firstMoveWidth - startWidth ).toBeLessThanOrEqual( 12 );
+			expect( firstMoveWidth - startWidth ).toBeLessThan( dragDelta );
 			await page.mouse.move(
 				startBox.x + startBox.width / 2 + dragDelta,
 				startBox.y + startBox.height / 2,
