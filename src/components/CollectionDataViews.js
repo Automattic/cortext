@@ -16,6 +16,7 @@ import { useNavigate } from '@wordpress/route';
 
 import DataViewColumnInteractions from './DataViewColumnInteractions';
 import EditableCell, { RowMutationContext } from './EditableCell';
+import PageIcon from './PageIcon';
 import TableCalculationsFooter from './TableCalculationsFooter';
 import ColumnHeaderActions from './fields/ColumnHeaderActions';
 import RowDetailView, { ROW_DETAIL_MODE_ICONS } from './RowDetailView';
@@ -62,6 +63,7 @@ function TitleCell( { item } ) {
 		useContext( OpenRowActionContext );
 	const canOpenRow = Boolean( enabled && requestOpenRow );
 	const isOpenRow = canOpenRow && String( item?.id ) === String( openRowId );
+	const documentIcon = item?.meta?.cortext_document_icon ?? '';
 	const openRow = useCallback(
 		( event ) => {
 			event.preventDefault();
@@ -82,6 +84,11 @@ function TitleCell( { item } ) {
 				( isOpenRow ? ' cortext-title-cell--is-open' : '' )
 			}
 		>
+			{ documentIcon ? (
+				<span className="cortext-title-cell__icon" aria-hidden="true">
+					<PageIcon icon={ documentIcon } size={ 16 } />
+				</span>
+			) : null }
 			<EditableCell
 				item={ item }
 				fieldId="title"

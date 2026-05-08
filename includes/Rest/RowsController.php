@@ -928,6 +928,10 @@ final class RowsController {
 			}
 		}
 
+		// Include the document icon so the row renders with its glyph in
+		// the table (and anywhere else the title gets a leading icon).
+		$meta['cortext_document_icon'] = (string) get_post_meta( $post->ID, 'cortext_document_icon', true );
+
 		$created_by_id  = (int) $post->post_author;
 		$modified_by_id = (int) get_post_meta( $post->ID, '_modified_by', true );
 
