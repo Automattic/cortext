@@ -14,6 +14,7 @@ import {
 
 import Canvas from '../components/Canvas';
 import CollectionDataViews from '../components/CollectionDataViews';
+import { CollectionFieldsProvider } from '../components/CollectionFieldsContext';
 import { RowMutationContext } from '../components/EditableCell';
 import { RowDetailSidebarSlot } from '../components/RowDetailSidebarSlot';
 import WorkspaceTopBar from '../components/WorkspaceTopBar';
@@ -73,15 +74,17 @@ function CollectionView( { collectionId, onReady } ) {
 
 function CollectionPane( { collectionId, onReady } ) {
 	return (
-		<div className="cortext-collection-pane">
-			<div className="cortext-canvas__table">
-				<CollectionView
-					collectionId={ collectionId }
-					onReady={ onReady }
-				/>
+		<CollectionFieldsProvider collectionId={ collectionId }>
+			<div className="cortext-collection-pane">
+				<div className="cortext-canvas__table">
+					<CollectionView
+						collectionId={ collectionId }
+						onReady={ onReady }
+					/>
+				</div>
+				<RowDetailSidebarSlot />
 			</div>
-			<RowDetailSidebarSlot />
-		</div>
+		</CollectionFieldsProvider>
 	);
 }
 

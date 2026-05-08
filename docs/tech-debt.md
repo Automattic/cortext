@@ -346,9 +346,17 @@ The user-facing placeholder is still Core's generic "Search commands and setting
 
 **Solution.** Gutenberg could expose the current save promise, or make `savePost()` return the in-flight promise when one already exists. Then Cortext could drop the waiter bookkeeping.
 
-## 41. Row properties need a real document block `[internal, important]`
+## 41. Favorite rows have their own sidebar-row shape `[internal, soft]`
 
-**What.** Important. Row documents now look much closer to pages in the editor, but their collection-field properties are still Cortext shell UI sitting above the block-editor iframe. That is fine for this pass: the form works, and full-page mode can hide it. It is not fine as the long-term publishing model. Because the properties sit outside `post_content`, public themes never see them through `the_content()`, and we cannot get the Notion order — cover, icon, title, properties, body — without another one-off surface. If rows can be published, this is the next architectural gap to close.
+**What.** Favorites look like sidebar rows, but they are not normal page-tree rows. They are shortcuts, they should never show the active selection state, and they are sortable only inside the Favorites section. Sharing the whole row as both a navigation button and a dnd-kit sortable handle made clicks repaint the hover state and feel like a flash. The current row splits those jobs: the icon is the drag handle, the title is a plain navigation button, and the star is the remove action. It works, but it means Favorites carry a small custom row shape alongside `PageRow` and `CollectionRow`.
+
+**Where.** `src/components/SidebarFavorites.js`, plus the `.cortext-sidebar__favorite-*` rules in `src/index.scss`.
+
+**Solution.** Extract a shared sidebar-row primitive with explicit slots for title navigation, drag handle, menu/actions, selected state, and shortcut-only rows. Then `PageRow`, `CollectionRow`, and `SidebarFavorites` can share the same interaction contract without reusing the wrong DOM shape for Favorites.
+
+## 42. Row properties need a real document block `[internal, important]`
+
+**What.** Important. Row documents now look much closer to pages in the editor, but their collection-field properties are still Cortext shell UI sitting above the block-editor iframe. That is fine for this pass: the form works, and full-page mode can hide it. It is not fine as the long-term publishing model. Because the properties sit outside `post_content`, public themes never see them through `the_content()`, and we cannot get the Notion order (cover, icon, title, properties, body) without another one-off surface. If rows can be published, this is the next architectural gap to close.
 
 **Where.** `RowProperties` in `src/components/RowProperties.js`, mounted from `src/components/Canvas.js` for full-page row documents and `src/components/RowDetailView.js` for side/modal row detail. There is still no `cortext/document-properties` block or PHP render callback.
 

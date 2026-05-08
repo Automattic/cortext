@@ -5,6 +5,7 @@
 // @wordpress/interface is a BUNDLED_PACKAGE (inlined into our JS) and WP
 // doesn't register a `wp-interface` style handle, so bundle its stylesheet.
 @use "../node_modules/@wordpress/interface/build-style/style.css";
+@use "../node_modules/@wordpress/editor/build-style/style.css" as editor;
 
 // tech-debt.md#38: wp-admin does not expose this handle on our screen, so
 // bundle the palette styles here.
@@ -322,6 +323,41 @@ body.cortext-fullscreen {
 		}
 	}
 
+	/* stylelint-disable no-descending-specificity */
+	&__favorite-title {
+		flex: 1 1 auto;
+		min-width: 0;
+		height: $grid-unit-40;
+		padding: 0 $grid-unit-05;
+		border: 0;
+		background: transparent;
+		color: var(--cortext-text-muted);
+		font: inherit;
+		text-align: start;
+		cursor: pointer;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+
+		&:hover,
+		&:focus,
+		&:active {
+			background: transparent;
+			color: var(--cortext-text-muted);
+			outline: none;
+		}
+	}
+
+	&__favorite-row.is-added .cortext-sidebar__row {
+		animation: cortext-favorite-add 180ms ease-out;
+	}
+
+	&__favorite-row.is-removing .cortext-sidebar__row {
+		animation: cortext-favorite-remove 150ms ease-in forwards;
+		pointer-events: none;
+	}
+	/* stylelint-enable no-descending-specificity */
+
 	// Chevron button, its placeholder, and the icon button must occupy the
 	// same column width so children's icons align under their parent's icon.
 	// WP's Button defaults to a wider intrinsic size; pin all three to
@@ -400,6 +436,16 @@ body.cortext-fullscreen {
 		}
 	}
 
+	&__favorite-icon {
+		flex: 0 0 auto;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: $grid-unit-30;
+		height: $grid-unit-30;
+		color: var(--cortext-text-muted);
+	}
+
 	&__rename {
 		flex: 1 1 auto;
 		min-width: 0;
@@ -431,20 +477,28 @@ body.cortext-fullscreen {
 		}
 	}
 
+	&__favorite-toggle,
 	&__menu,
 	&__add-child {
 		flex: 0 0 auto;
 		opacity: 1;
 		transition: opacity 0.12s ease;
+
+		&.is-favorite {
+			color: var(--cortext-text-muted);
+		}
 	}
 
 	@media (hover: hover) and (pointer: fine) {
 
+		&__favorite-toggle,
 		&__menu,
 		&__add-child {
 			opacity: 0;
 		}
 
+		&__row:hover &__favorite-toggle,
+		&__row:focus-within &__favorite-toggle,
 		&__row:hover &__menu,
 		&__row:focus-within &__menu,
 		&__menu.is-pressed,
@@ -662,6 +716,32 @@ body.cortext-fullscreen {
 	}
 }
 
+@keyframes cortext-favorite-add {
+
+	from {
+		opacity: 0;
+		transform: translateY(-4px) scale(0.98);
+	}
+
+	to {
+		opacity: 1;
+		transform: translateY(0) scale(1);
+	}
+}
+
+@keyframes cortext-favorite-remove {
+
+	from {
+		opacity: 1;
+		transform: translateY(0) scale(1);
+	}
+
+	to {
+		opacity: 0;
+		transform: translateY(-4px) scale(0.98);
+	}
+}
+
 // Lock the global cursor and disable selection while a resize drag is live.
 body.cortext-sidebar-resizing {
 	cursor: col-resize;
@@ -803,6 +883,85 @@ body.cortext-sidebar-resizing {
 	display: flex;
 	align-items: center;
 	gap: $grid-unit-10;
+}
+
+.cortext-page-inspector {
+
+	.components-panel__body {
+		border-top-color: var(--cortext-chrome-border);
+	}
+}
+
+.cortext-page-inspector__tools {
+	display: flex;
+	flex-direction: column;
+	gap: $grid-unit-20;
+}
+
+.cortext-page-inspector__tool {
+	display: flex;
+	flex-direction: column;
+	gap: $grid-unit-10;
+}
+
+.cortext-page-inspector__tool-label {
+	color: var(--cortext-text-muted);
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+}
+
+.cortext-page-inspector__control-row {
+	display: flex;
+	align-items: center;
+	flex-wrap: nowrap;
+	gap: $grid-unit-10;
+}
+
+.cortext-page-inspector__actions {
+	display: flex;
+	align-items: center;
+	flex-wrap: nowrap;
+	gap: $grid-unit-05;
+}
+
+.cortext-page-inspector__action-button.components-button {
+	flex: 1 1 0;
+	min-width: 0;
+	justify-content: center;
+}
+
+.cortext-page-inspector__icon-preview {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	flex: 0 0 auto;
+	border: $border-width solid var(--cortext-chrome-border);
+	border-radius: var(--cortext-shell-radius);
+	background: var(--cortext-canvas-frame-surface);
+}
+
+.cortext-page-inspector__featured-image-preview {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 100%;
+	aspect-ratio: 16 / 7;
+	overflow: hidden;
+	border: $border-width solid var(--cortext-chrome-border);
+	border-radius: var(--cortext-shell-radius);
+	background: var(--cortext-canvas-frame-surface);
+	color: var(--cortext-text-muted);
+	font-size: $default-font-size;
+
+	img {
+		display: block;
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+	}
 }
 
 .cortext-breadcrumbs {
@@ -3862,6 +4021,8 @@ thead > tr > th {
 	// color rule above (which would otherwise pin the title to default text).
 	.cortext-sidebar__row:hover .cortext-sidebar__title.components-button,
 	.cortext-sidebar__row:focus-within .cortext-sidebar__title.components-button,
+	.cortext-sidebar__row:hover .cortext-sidebar__favorite-title,
+	.cortext-sidebar__row:focus-within .cortext-sidebar__favorite-title,
 	.cortext-sidebar__row.is-selected .cortext-sidebar__title.components-button {
 		color: var(--cortext-text-strong);
 	}

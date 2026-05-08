@@ -100,9 +100,8 @@ jest.mock( '../../../../src/hooks/useFieldMutations', () => ( {
 	useDuplicateField: () => ( { run: jest.fn() } ),
 } ) );
 
-jest.mock( '../../../../src/hooks/useCollectionFields', () => ( {
-	__esModule: true,
-	default: jest.fn(),
+jest.mock( '../../../../src/components/CollectionFieldsContext', () => ( {
+	useCollectionFieldsContext: jest.fn(),
 } ) );
 
 jest.mock( '../../../../src/components/fields/AddFieldPopover', () => ( {
@@ -114,7 +113,7 @@ jest.mock( '../../../../src/components/fields/AddFieldPopover', () => ( {
 
 import ColumnHeaderActions from '../../../../src/components/fields/ColumnHeaderActions';
 import { useEntityRecord } from '@wordpress/core-data';
-import useCollectionFields from '../../../../src/hooks/useCollectionFields';
+import { useCollectionFieldsContext } from '../../../../src/components/CollectionFieldsContext';
 
 function Harness( { collectionId, recordId } ) {
 	return (
@@ -144,7 +143,7 @@ function Harness( { collectionId, recordId } ) {
 
 describe( 'ColumnHeaderActions', () => {
 	beforeEach( () => {
-		useCollectionFields.mockReturnValue( { fields: [] } );
+		useCollectionFieldsContext.mockReturnValue( { fields: [] } );
 		useEntityRecord.mockReturnValue( {
 			record: {
 				id: 77,
@@ -173,7 +172,7 @@ describe( 'ColumnHeaderActions', () => {
 	} );
 
 	it( 'warns when deleting a field will also delete dependent rollups', async () => {
-		useCollectionFields.mockReturnValue( {
+		useCollectionFieldsContext.mockReturnValue( {
 			fields: [
 				{
 					id: 'field-77',

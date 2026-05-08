@@ -22,9 +22,8 @@ import {
 } from '@wordpress/icons';
 
 import { COLLECTION_QUERY } from '../../collections';
-import useCollectionFields, {
-	buildFieldListQuery,
-} from '../../hooks/useCollectionFields';
+import { buildFieldListQuery } from '../../hooks/useCollectionFields';
+import { useCollectionFieldsContext } from '../CollectionFieldsContext';
 import { useCreateField } from '../../hooks/useFieldMutations';
 
 // Inline SVG for the "number" type. `@wordpress/icons` doesn't ship a
@@ -289,7 +288,6 @@ function RelationConfig( {
 }
 
 function RollupConfig( {
-	collectionId,
 	title,
 	fallbackTitle,
 	isBusy,
@@ -298,7 +296,7 @@ function RollupConfig( {
 	onError,
 	run,
 } ) {
-	const { fields } = useCollectionFields( collectionId );
+	const { fields } = useCollectionFieldsContext();
 	const relationFields = fields.filter(
 		( field ) => field.cortextType === 'relation'
 	);
@@ -597,7 +595,6 @@ export default function AddFieldPopover( { collectionId, onCreate } ) {
 	} else if ( configType === 'rollup' ) {
 		configuration = (
 			<RollupConfig
-				collectionId={ collectionId }
 				title={ title }
 				fallbackTitle={ fallbackTitle }
 				isBusy={ isBusy }

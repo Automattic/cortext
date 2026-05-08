@@ -31,7 +31,7 @@ import {
 	getRowDetailMode,
 	withRowDetailMode,
 } from './rowDetailUtils';
-import useCollectionFields from '../hooks/useCollectionFields';
+import { useCollectionFieldsContext } from './CollectionFieldsContext';
 import useCollectionRows from '../hooks/useCollectionRows';
 import { elementsFromOptions } from '../hooks/optionElements';
 import { computeDocumentUri } from '../router/useResolveEntity';
@@ -270,7 +270,7 @@ export default function CollectionDataViews( {
 } ) {
 	const navigate = useNavigate();
 	const { fields, collection, slug, isResolving, fieldsResolved } =
-		useCollectionFields( collectionId );
+		useCollectionFieldsContext();
 
 	const availableFields = useMemo(
 		() => [ TITLE_FIELD, ...fields ],
@@ -635,21 +635,21 @@ export default function CollectionDataViews( {
 				return;
 			}
 			runDetailTransition( {
-				type: rowDetailMode === 'full' ? 'full' : 'row',
+				type: savedRowDetailMode === 'full' ? 'full' : 'row',
 				rowId: row.id,
 			} );
 		},
-		[ openRowId, rowDetailMode, runDetailTransition ]
+		[ openRowId, runDetailTransition, savedRowDetailMode ]
 	);
 
 	const openRowActionContext = useMemo(
 		() => ( {
 			enabled: isTableLayout,
-			icon: ROW_DETAIL_MODE_ICONS[ rowDetailMode ],
+			icon: ROW_DETAIL_MODE_ICONS[ savedRowDetailMode ],
 			openRowId,
 			requestOpenRow,
 		} ),
-		[ isTableLayout, openRowId, requestOpenRow, rowDetailMode ]
+		[ isTableLayout, openRowId, requestOpenRow, savedRowDetailMode ]
 	);
 
 	const rowActions = useMemo(
@@ -657,13 +657,13 @@ export default function CollectionDataViews( {
 			{
 				id: 'open-row',
 				label: __( 'Open row', 'cortext' ),
-				icon: ROW_DETAIL_MODE_ICONS[ rowDetailMode ],
+				icon: ROW_DETAIL_MODE_ICONS[ savedRowDetailMode ],
 				isPrimary: true,
 				context: 'single',
 				callback: ( items ) => requestOpenRow( items?.[ 0 ] ),
 			},
 		],
-		[ requestOpenRow, rowDetailMode ]
+		[ requestOpenRow, savedRowDetailMode ]
 	);
 
 	const dataViewActions = useMemo(

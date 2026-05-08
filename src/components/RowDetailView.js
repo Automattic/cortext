@@ -32,7 +32,7 @@ export const ROW_DETAIL_MODE_ICONS = {
 	full: fullscreen,
 };
 
-const ROW_DETAIL_MODE_LABELS = {
+export const ROW_DETAIL_MODE_LABELS = {
 	side: __( 'Side peek', 'cortext' ),
 	modal: __( 'Center modal', 'cortext' ),
 	full: __( 'Full page', 'cortext' ),
