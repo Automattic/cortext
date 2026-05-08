@@ -1,8 +1,8 @@
 import { useNavigate, useParams } from '@tanstack/react-router';
-import { Notice, Spinner } from '@wordpress/components';
+import { Spinner } from '@wordpress/components';
 import { useEntityRecords } from '@wordpress/core-data';
+import { useDispatch } from '@wordpress/data';
 import { __ } from '@wordpress/i18n';
-import { useSearch } from '@wordpress/route';
 import {
 	useCallback,
 	useEffect,
@@ -14,18 +14,24 @@ import {
 
 import Canvas from '../components/Canvas';
 import CollectionDataViews from '../components/CollectionDataViews';
-import { RowFullEditorContext } from '../components/RowFullEditorContext';
+import { RowMutationContext } from '../components/EditableCell';
 import { RowDetailSidebarSlot } from '../components/RowDetailSidebarSlot';
 import WorkspaceTopBar from '../components/WorkspaceTopBar';
-import { ACTIVE_PAGES_QUERY, POST_TYPE } from '../components/page-queries';
+import {
+	ACTIVE_PAGES_QUERY,
+	POST_TYPE,
+	TRASHED_PAGES_QUERY,
+} from '../components/page-queries';
 import { firstPageInTree } from '../components/pages-tree';
+import { COLLECTION_QUERY } from '../collections';
 import { withViewTransition } from '../hooks/viewTransition';
 import { useWorkspaceHome } from '../hooks/useWorkspaceHome';
+import useCollectionFields from '../hooks/useCollectionFields';
 import EmptyState from './EmptyState';
 import {
-	computeUri,
-	useResolveEntity,
+	computeDocumentUri,
 	useResolveCollection,
+	useResolveDocument,
 } from './useResolveEntity';
 import { init, parseTarget, reducer } from './entityRouteReducer';
 
@@ -41,15 +47,6 @@ const DEFAULT_VIEW = {
 	layout: {},
 	rowDetailMode: 'side',
 };
-const ROW_SEARCH_KEY = 'row';
-
-function parseSearchId( value ) {
-	if ( Array.isArray( value ) ) {
-		return parseSearchId( value[ 0 ] );
-	}
-	const id = Number.parseInt( String( value ).replaceAll( '"', '' ), 10 );
-	return Number.isFinite( id ) && id > 0 ? id : null;
-}
 
 function CollectionView( { collectionId, onReady } ) {
 	const [ view, setView ] = useState( DEFAULT_VIEW );
@@ -97,13 +94,13 @@ function LoadingPane() {
 }
 
 function NotFoundPane( { type } ) {
+	const copy =
+		type === 'collection'
+			? __( "That collection doesn't exist.", 'cortext' )
+			: __( "That document doesn't exist.", 'cortext' );
 	return (
 		<div className="cortext-canvas__empty">
-			<p>
-				{ type === 'collection'
-					? __( "That collection doesn't exist.", 'cortext' )
-					: __( "That page doesn't exist.", 'cortext' ) }
-			</p>
+			<p>{ copy }</p>
 		</div>
 	);
 }
@@ -122,39 +119,20 @@ function WorkspacePane( { active, preservePaint = false, children } ) {
 	);
 }
 
-function RowFullSaveNotice( { message, onDiscard, onRetry } ) {
-	if ( ! message ) {
-		return null;
-	}
-
-	return (
-		<Notice
-			className="cortext-canvas__notice"
-			status="error"
-			isDismissible={ false }
-			actions={ [
-				{
-					label: __( 'Retry', 'cortext' ),
-					onClick: onRetry,
-					variant: 'primary',
-				},
-				{
-					label: __( 'Discard', 'cortext' ),
-					onClick: onDiscard,
-					variant: 'tertiary',
-				},
-			] }
-		>
-			{ message }
-		</Notice>
-	);
-}
+// Default mutation context for documents reached by deep link or direct
+// navigation rather than from a live CollectionDataViews mount. Inline
+// option edits land in editor state regardless; refreshing the table on
+// save isn't possible because no table is mounted, but the data layer
+// stays sound.
+const ROW_MUTATION_DEFAULT = {
+	optionOverrides: {},
+	updateFieldOptions: () => {},
+	refreshRows: () => {},
+};
 
 export default function EntityRoute( { history } ) {
 	const params = useParams( { strict: false } );
 	const navigate = useNavigate();
-	const search = useSearch( { strict: false } );
-	const routeRowId = parseSearchId( search?.[ ROW_SEARCH_KEY ] );
 	const splat = params._splat ?? '';
 	const target = useMemo( () => parseTarget( splat ), [ splat ] );
 	const { home, isResolving: isResolvingHome } = useWorkspaceHome();
@@ -165,11 +143,16 @@ export default function EntityRoute( { history } ) {
 	);
 
 	const [ state, rawDispatch ] = useReducer( reducer, target, init );
-	const { active, mountedPageId, displayedPageId, mountedCollectionIds } =
-		state;
+	const {
+		active,
+		mountedDocumentId,
+		mountedDocumentType,
+		displayedDocumentId,
+		mountedCollectionIds,
+	} = state;
 
 	// Run the reducer ahead of time so we only wrap the dispatch when
-	// `active` actually flips. Otherwise every PAGE_RESOLVED or
+	// `active` actually flips. Otherwise every DOCUMENT_RESOLVED or
 	// COLLECTION_RESOLVED would pin the canvas for the cross-fade
 	// duration even though nothing visible changed.
 	const stateRef = useRef( state );
@@ -187,12 +170,71 @@ export default function EntityRoute( { history } ) {
 		withViewTransition( () => rawDispatch( action ) );
 	}, [] );
 
-	const pageResolution = useResolveEntity(
-		target.kind === 'page' ? target.tail : ''
+	const documentResolution = useResolveDocument(
+		target.kind === 'document' ? target.tail : ''
 	);
 	const collectionResolution = useResolveCollection(
 		target.kind === 'collection' ? target.id : null
 	);
+
+	// For document targets that turn out to be rows, we still need the
+	// row's collection field schema (rendered as the property panel). The
+	// resolver hands us the post type; the parent collection comes from
+	// matching its `meta.slug` against the post type's `crtxt_<slug>`
+	// suffix.
+	//
+	// Note: the row CPT slug is `meta.slug`, not the collection's
+	// `post_name`. They diverge because `meta.slug` is truncated to the
+	// CPT-prefix budget (see CollectionEntries::MAX_CPT_LEN). REST's
+	// `?slug=` filter is `post_name__in`, which is the wrong field, and
+	// the default status filter is `publish` while collections are
+	// created `private`. So we reuse the workspace-wide `COLLECTION_QUERY`
+	// (already covers draft/private/publish) and match `meta.slug`
+	// client-side, which mirrors `CollectionEntries::collection_id_for_entry_post_type`
+	// on the PHP side.
+	const rowCollectionSlug = useMemo( () => {
+		if ( ! mountedDocumentType ) {
+			return null;
+		}
+		if ( mountedDocumentType === POST_TYPE ) {
+			return null;
+		}
+		return mountedDocumentType.startsWith( 'crtxt_' )
+			? mountedDocumentType.slice( 'crtxt_'.length )
+			: null;
+	}, [ mountedDocumentType ] );
+	const { records: workspaceCollections } = useEntityRecords(
+		'postType',
+		'crtxt_collection',
+		COLLECTION_QUERY,
+		{ enabled: Boolean( rowCollectionSlug ) }
+	);
+	const rowParentCollectionId = useMemo( () => {
+		if ( ! rowCollectionSlug || ! workspaceCollections ) {
+			return null;
+		}
+		const match = workspaceCollections.find(
+			( collection ) => collection?.meta?.slug === rowCollectionSlug
+		);
+		return match?.id ?? null;
+	}, [ rowCollectionSlug, workspaceCollections ] );
+	const rowFieldsState = useCollectionFields( rowParentCollectionId );
+	const rowFields = useMemo( () => {
+		if ( ! rowCollectionSlug || ! rowFieldsState?.fields ) {
+			return undefined;
+		}
+		return [
+			{
+				id: 'title',
+				label: __( 'Title', 'cortext' ),
+				cortextType: 'title',
+				editable: true,
+				getValue: ( { item } ) =>
+					item?.title?.raw ?? item?.title?.rendered ?? '',
+			},
+			...rowFieldsState.fields,
+		];
+	}, [ rowCollectionSlug, rowFieldsState?.fields ] );
 
 	useEffect( () => {
 		dispatch( { type: 'TARGET_CHANGED', target } );
@@ -207,7 +249,8 @@ export default function EntityRoute( { history } ) {
 		}
 
 		const fallback = firstPageInTree( pages ?? [] );
-		const path = home?.path ?? ( fallback ? computeUri( fallback ) : null );
+		const path =
+			home?.path ?? ( fallback ? computeDocumentUri( fallback ) : null );
 		if ( ! path ) {
 			return;
 		}
@@ -227,7 +270,7 @@ export default function EntityRoute( { history } ) {
 	] );
 
 	useEffect( () => {
-		if ( target.kind !== 'page' || target.id === null ) {
+		if ( target.kind !== 'document' || target.id === null ) {
 			return;
 		}
 		const {
@@ -235,20 +278,22 @@ export default function EntityRoute( { history } ) {
 			isResolving,
 			notFound,
 			id: resolvedFor,
-		} = pageResolution;
-		// Drop a stale snapshot from the previous target; the resolver
-		// resets to the new id on its next effect run.
+		} = documentResolution;
 		if ( resolvedFor !== target.id ) {
 			return;
 		}
 		if ( entity?.id === target.id ) {
-			dispatch( { type: 'PAGE_RESOLVED', id: entity.id } );
+			dispatch( {
+				type: 'DOCUMENT_RESOLVED',
+				id: entity.id,
+				postType: entity.type,
+			} );
 			return;
 		}
 		if ( ! isResolving && notFound ) {
-			dispatch( { type: 'PAGE_NOT_FOUND' } );
+			dispatch( { type: 'DOCUMENT_NOT_FOUND' } );
 		}
-	}, [ target, pageResolution, dispatch ] );
+	}, [ target, documentResolution, dispatch ] );
 
 	useEffect( () => {
 		if ( target.kind !== 'collection' || target.id === null ) {
@@ -272,9 +317,9 @@ export default function EntityRoute( { history } ) {
 		}
 	}, [ target, collectionResolution, dispatch ] );
 
-	const handlePageDisplayed = useCallback(
+	const handleDocumentDisplayed = useCallback(
 		( id ) => {
-			dispatch( { type: 'PAGE_DISPLAYED', id } );
+			dispatch( { type: 'DOCUMENT_DISPLAYED', id } );
 		},
 		[ dispatch ]
 	);
@@ -286,182 +331,98 @@ export default function EntityRoute( { history } ) {
 		[ dispatch ]
 	);
 
-	const rowFullApiRef = useRef( null );
-	const [ rowFullTarget, setRowFullTarget ] = useState( null );
-	const rowFullTargetRef = useRef( rowFullTarget );
-	rowFullTargetRef.current = rowFullTarget;
-	const [ rowFullSaveError, setRowFullSaveError ] = useState( null );
-	const [ pendingRowFullTransition, setPendingRowFullTransition ] =
-		useState( null );
-	const [ suppressedRouteRow, setSuppressedRouteRow ] = useState( null );
-
-	const openRowFull = useCallback( ( rowTarget ) => {
-		setSuppressedRouteRow( null );
-		setRowFullSaveError( null );
-		setPendingRowFullTransition( null );
-		withViewTransition( () => setRowFullTarget( rowTarget ) );
-	}, [] );
-
-	const clearSuppressedRouteRow = useCallback( () => {
-		setSuppressedRouteRow( null );
-	}, [] );
-
-	const rowFullContext = useMemo(
-		() => ( {
-			clearSuppressedRouteRow,
-			openRowFull,
-			suppressedRouteRow,
-		} ),
-		[ clearSuppressedRouteRow, openRowFull, suppressedRouteRow ]
-	);
-
-	const setRowFullApi = useCallback( ( api ) => {
-		rowFullApiRef.current = api;
-	}, [] );
-
-	const applyRowFullTransition = useCallback( ( transition ) => {
-		const currentRowTarget = rowFullTargetRef.current;
-		if ( ! currentRowTarget ) {
-			return;
-		}
-
-		setRowFullSaveError( null );
-		setPendingRowFullTransition( null );
-
-		if ( transition.type === 'close' ) {
-			setSuppressedRouteRow( {
-				collectionId: currentRowTarget.collectionId,
-				rowId: currentRowTarget.rowId,
-			} );
-			currentRowTarget.onClose?.();
-			withViewTransition( () => setRowFullTarget( null ) );
-		} else if ( transition.type === 'mode' ) {
-			currentRowTarget.onModeChange?.(
-				transition.mode,
-				currentRowTarget.rowId
-			);
-			withViewTransition( () => setRowFullTarget( null ) );
-		}
-	}, [] );
-
-	const runRowFullTransition = useCallback(
-		async ( transition, options = {} ) => {
-			const api = rowFullApiRef.current;
-			setRowFullSaveError( null );
-
-			if ( options.discard ) {
-				api?.discard?.();
-				applyRowFullTransition( transition );
-				return true;
-			}
-
-			if ( api?.flushNow ) {
-				const didSave = await api.flushNow();
-				if ( ! didSave ) {
-					setPendingRowFullTransition( transition );
-					setRowFullSaveError(
-						__(
-							'Row changes could not be saved. Retry or discard the pending edits to continue.',
-							'cortext'
-						)
-					);
-					return false;
-				}
-			}
-
-			applyRowFullTransition( transition );
-			return true;
-		},
-		[ applyRowFullTransition ]
-	);
-
-	const retryPendingRowFullTransition = useCallback( () => {
-		if ( pendingRowFullTransition ) {
-			runRowFullTransition( pendingRowFullTransition );
-		}
-	}, [ pendingRowFullTransition, runRowFullTransition ] );
-
-	const discardPendingRowFullTransition = useCallback( () => {
-		if ( pendingRowFullTransition ) {
-			runRowFullTransition( pendingRowFullTransition, {
-				discard: true,
-			} );
-		}
-	}, [ pendingRowFullTransition, runRowFullTransition ] );
-
-	useEffect( () => {
-		if ( ! rowFullTarget ) {
-			return;
-		}
-		if ( String( routeRowId ) === String( rowFullTarget.rowId ) ) {
-			return;
-		}
-		runRowFullTransition( { type: 'close' } );
-	}, [ routeRowId, rowFullTarget, runRowFullTransition ] );
-
-	const rowFullNotice = (
-		<RowFullSaveNotice
-			message={ rowFullSaveError }
-			onDiscard={ discardPendingRowFullTransition }
-			onRetry={ retryPendingRowFullTransition }
-		/>
-	);
-	const navigateRowFullToCollection = useCallback( () => {
-		runRowFullTransition( { type: 'close' } );
-	}, [ runRowFullTransition ] );
-
 	// Drives the breadcrumb from the same paint state the document-actions
-	// Fill uses, so both sides of the top bar update together. Use
-	// `displayedPageId` rather than `mountedPageId` for the page case: when
-	// navigating page A → B, mountedPageId flips to B as soon as B resolves,
-	// but Canvas keeps painting A until autosave flushes and `setDisplayedPost`
-	// catches up. Reading the mounted id would let the breadcrumb jump to B
-	// while A is still on screen.
+	// Fill uses, so both sides of the top bar update together.
 	let paintedRoute = { kind: 'unresolved' };
-	if ( rowFullTarget ) {
+	if ( active.kind === 'document' && displayedDocumentId !== null ) {
 		paintedRoute = {
-			kind: 'row',
-			collectionId: rowFullTarget.collectionId,
-			id: rowFullTarget.rowId,
-			onNavigateCollection: navigateRowFullToCollection,
-			postType: rowFullTarget.postType,
+			kind: 'document',
+			id: displayedDocumentId,
+			postType: mountedDocumentType,
+			collectionId: rowParentCollectionId,
 		};
-	} else if ( active.kind === 'page' && displayedPageId !== null ) {
-		paintedRoute = { kind: 'page', id: displayedPageId };
 	} else if ( active.kind === 'collection' ) {
 		paintedRoute = { kind: 'collection', id: active.id };
 	} else if (
 		active.kind === 'empty' ||
-		active.kind === 'page-not-found' ||
+		active.kind === 'document-not-found' ||
 		active.kind === 'collection-not-found'
 	) {
 		paintedRoute = { kind: active.kind };
 	}
 
-	const editorPostId = rowFullTarget?.rowId ?? mountedPageId;
-	const editorPostType = rowFullTarget?.postType;
-	const isEditorActive = Boolean( rowFullTarget ) || active.kind === 'page';
+	const isDocumentActive = active.kind === 'document';
+	const editorPostId = isDocumentActive ? mountedDocumentId : null;
+	const editorPostType = isDocumentActive ? mountedDocumentType : null;
+	const isRow = isDocumentActive && Boolean( rowCollectionSlug );
+
+	const { invalidateResolution, receiveEntityRecords } =
+		useDispatch( 'core' );
+
+	// Two-mode restore handler: pages share the page-tree query keys with
+	// the sidebar trash list, so a successful restore must invalidate both
+	// ACTIVE/TRASHED queries to make the row reappear in the right list.
+	// Rows live in collection-scoped queries; invalidate the row's CPT so
+	// the next visit to its collection refetches.
+	const onRestoreDocument = useCallback(
+		( postId, postType, response ) => {
+			if ( response?.post && postType ) {
+				receiveEntityRecords( 'postType', postType, [ response.post ] );
+			}
+			if ( postType === POST_TYPE ) {
+				invalidateResolution( 'getEntityRecords', [
+					'postType',
+					POST_TYPE,
+					ACTIVE_PAGES_QUERY,
+				] );
+				invalidateResolution( 'getEntityRecords', [
+					'postType',
+					POST_TYPE,
+					TRASHED_PAGES_QUERY,
+				] );
+			} else if ( postType ) {
+				invalidateResolution( 'getEntityRecords', [
+					'postType',
+					postType,
+				] );
+			}
+		},
+		[ invalidateResolution, receiveEntityRecords ]
+	);
+
+	const editorCanvas =
+		editorPostId !== null && editorPostType ? (
+			<Canvas
+				postId={ editorPostId }
+				postType={ editorPostType }
+				fields={ isRow ? rowFields : undefined }
+				row={
+					isRow ? documentResolution.entity ?? undefined : undefined
+				}
+				onDisplayedPost={ handleDocumentDisplayed }
+				isActive={ isDocumentActive }
+				onRestored={ onRestoreDocument }
+			/>
+		) : null;
 
 	return (
-		<RowFullEditorContext.Provider value={ rowFullContext }>
+		<>
 			<WorkspaceTopBar
 				history={ history }
 				paintedRoute={ paintedRoute }
 			/>
 			<div className="cortext-workspace">
-				{ editorPostId !== null && (
-					<WorkspacePane active={ isEditorActive } preservePaint>
-						<Canvas
-							postId={ editorPostId }
-							postType={ editorPostType }
-							onDisplayedPost={
-								rowFullTarget ? undefined : handlePageDisplayed
-							}
-							isActive={ isEditorActive }
-							notice={ rowFullNotice }
-							onApi={ rowFullTarget ? setRowFullApi : undefined }
-							onSaved={ rowFullTarget?.onSaved }
-						/>
+				{ editorCanvas !== null && (
+					<WorkspacePane active={ isDocumentActive } preservePaint>
+						{ isRow ? (
+							<RowMutationContext.Provider
+								value={ ROW_MUTATION_DEFAULT }
+							>
+								{ editorCanvas }
+							</RowMutationContext.Provider>
+						) : (
+							editorCanvas
+						) }
 					</WorkspacePane>
 				) }
 
@@ -469,9 +430,7 @@ export default function EntityRoute( { history } ) {
 					<WorkspacePane
 						key={ id }
 						active={
-							! rowFullTarget &&
-							active.kind === 'collection' &&
-							active.id === id
+							active.kind === 'collection' && active.id === id
 						}
 					>
 						<CollectionPane
@@ -481,32 +440,21 @@ export default function EntityRoute( { history } ) {
 					</WorkspacePane>
 				) ) }
 
-				<WorkspacePane
-					active={ ! rowFullTarget && active.kind === 'empty' }
-				>
+				<WorkspacePane active={ active.kind === 'empty' }>
 					<EmptyState />
 				</WorkspacePane>
-				<WorkspacePane
-					active={
-						! rowFullTarget && active.kind === 'page-not-found'
-					}
-				>
-					<NotFoundPane type="page" />
+				<WorkspacePane active={ active.kind === 'document-not-found' }>
+					<NotFoundPane type="document" />
 				</WorkspacePane>
 				<WorkspacePane
-					active={
-						! rowFullTarget &&
-						active.kind === 'collection-not-found'
-					}
+					active={ active.kind === 'collection-not-found' }
 				>
 					<NotFoundPane type="collection" />
 				</WorkspacePane>
-				<WorkspacePane
-					active={ ! rowFullTarget && active.kind === 'loading' }
-				>
+				<WorkspacePane active={ active.kind === 'loading' }>
 					<LoadingPane />
 				</WorkspacePane>
 			</div>
-		</RowFullEditorContext.Provider>
+		</>
 	);
 }

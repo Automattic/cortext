@@ -23,6 +23,7 @@ use Cortext\PostType\Field;
 use Cortext\PostType\Page;
 use Cortext\PostType\PageTrashCascade;
 use Cortext\Rest\CollectionsController;
+use Cortext\Rest\DocumentLocatorController;
 use Cortext\Rest\DocumentTrashController;
 use Cortext\Rest\FieldsController;
 use Cortext\Rest\RowsController;
@@ -54,6 +55,7 @@ final class Plugin {
 		( new PageHeaderActionsBlock() )->register();
 		( new CollectionsController() )->register();
 		( new FieldsController() )->register();
+		( new DocumentLocatorController() )->register();
 		( new DocumentTrashController() )->register();
 		( new RowsController() )->register();
 		( new WorkspaceHomeController() )->register();

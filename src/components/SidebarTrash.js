@@ -33,8 +33,8 @@ const MARKER_META = '_cortext_trashed_by_parent';
  * (orphans with stale markers) get promoted back to roots so they remain
  * reachable.
  *
- * Restore goes through `/cortext/v1/pages/<id>/restore` and permanent delete
- * through `/cortext/v1/pages/<id>/permanent-delete`. Both endpoints invoke
+ * Restore goes through `/cortext/v1/documents/<id>/restore` and permanent delete
+ * through `/cortext/v1/documents/<id>/permanent-delete`. Both endpoints invoke
  * `PageTrashCascade`'s subtree handling on the server; the client only needs
  * to invalidate the page queries afterwards.
  *
@@ -141,7 +141,7 @@ export default function SidebarTrash( { activePages, selectedId, onSelect } ) {
 					title:
 						current.title?.rendered?.trim() ||
 						__( '(untitled)', 'cortext' ),
-					icon: current.meta?.cortext_page_icon ?? '',
+					icon: current.meta?.cortext_document_icon ?? '',
 				} );
 				current = current.parent
 					? ancestorById.get( current.parent )
@@ -171,7 +171,7 @@ export default function SidebarTrash( { activePages, selectedId, onSelect } ) {
 			setBusyId( id );
 			try {
 				await apiFetch( {
-					path: `/cortext/v1/pages/${ id }/restore`,
+					path: `/cortext/v1/documents/${ id }/restore`,
 					method: 'POST',
 				} );
 				refreshQueries();
@@ -199,7 +199,7 @@ export default function SidebarTrash( { activePages, selectedId, onSelect } ) {
 		setBusyId( id );
 		try {
 			const response = await apiFetch( {
-				path: `/cortext/v1/pages/${ id }/permanent-delete`,
+				path: `/cortext/v1/documents/${ id }/permanent-delete`,
 				method: 'POST',
 			} );
 			// If the canvas was showing one of the deleted pages, navigate
@@ -272,7 +272,7 @@ export default function SidebarTrash( { activePages, selectedId, onSelect } ) {
 							page.title?.rendered?.trim() ||
 							__( '(untitled)', 'cortext' );
 						const breadcrumb = buildBreadcrumb( page );
-						const pageIcon = page.meta?.cortext_page_icon ?? '';
+						const pageIcon = page.meta?.cortext_document_icon ?? '';
 						const isBusy = busyId === page.id;
 						const isSelected = selectedId === page.id;
 						const error =

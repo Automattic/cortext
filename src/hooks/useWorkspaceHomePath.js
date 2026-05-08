@@ -3,7 +3,7 @@ import { useMemo } from '@wordpress/element';
 
 import { ACTIVE_PAGES_QUERY, POST_TYPE } from '../components/page-queries';
 import { firstPageInTree } from '../components/pages-tree';
-import { computeUri } from '../router/useResolveEntity';
+import { computeDocumentUri } from '../router/useResolveEntity';
 import { useWorkspaceHome } from './useWorkspaceHome';
 
 export function useWorkspaceHomePath() {
@@ -26,7 +26,7 @@ export function useWorkspaceHomePath() {
 	);
 	const homePath =
 		home?.path ??
-		( fallbackHomePage ? computeUri( fallbackHomePage ) : null );
+		( fallbackHomePage ? computeDocumentUri( fallbackHomePage ) : null );
 	const isResolvingHomePath =
 		isResolvingHome || ( ! home?.path && isResolvingPages );
 
