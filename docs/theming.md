@@ -1,5 +1,7 @@
 # Theming
 
+These are implementation notes for the current prototype, not a stable public API. Theme tokens may change without backward compatibility until the data and UI contracts settle.
+
 Keep two surfaces apart.
 
 The shell is Cortext's UI: sidebar, toolbar buttons, empty states, and the frame around the work area. Cortext owns those pieces. Shell themes change them through CSS custom properties on `.cortext-root`.
@@ -22,40 +24,40 @@ Theme authors should target Cortext roles instead of relying on whichever `--wp-
 
 ### Shell roles
 
-| Token | What it controls |
-|-|-|
-| `--cortext-shell-surface` | Root shell and shell toolbar surface |
-| `--cortext-sidebar-surface` | Sidebar background |
-| `--cortext-sidebar-item-hover-surface` | Hover surface for sidebar controls |
-| `--cortext-sidebar-item-selected-surface` | Selected page/drop-target surface |
-| `--cortext-canvas-frame-surface` | Shell frame around the work area; collection tables may cover it with their own canvas |
-| `--cortext-chrome-border` | Borders between shell regions |
-| `--cortext-text` | Primary shell text |
-| `--cortext-text-muted` | Secondary shell text |
-| `--cortext-accent` | Shell accent, defaulting to `--wp-components-color-accent` / `--wp-admin-theme-color` |
-| `--cortext-accent-contrast` | Text/icon color on accent backgrounds |
-| `--cortext-shadow-color` | Shell drag-preview shadow |
+| Token                                     | What it controls                                                                       |
+| ----------------------------------------- | -------------------------------------------------------------------------------------- |
+| `--cortext-shell-surface`                 | Root shell and shell toolbar surface                                                   |
+| `--cortext-sidebar-surface`               | Sidebar background                                                                     |
+| `--cortext-sidebar-item-hover-surface`    | Hover surface for sidebar controls                                                     |
+| `--cortext-sidebar-item-selected-surface` | Selected page/drop-target surface                                                      |
+| `--cortext-canvas-frame-surface`          | Shell frame around the work area; collection tables may cover it with their own canvas |
+| `--cortext-chrome-border`                 | Borders between shell regions                                                          |
+| `--cortext-text`                          | Primary shell text                                                                     |
+| `--cortext-text-muted`                    | Secondary shell text                                                                   |
+| `--cortext-accent`                        | Shell accent, defaulting to `--wp-components-color-accent` / `--wp-admin-theme-color`  |
+| `--cortext-accent-contrast`               | Text/icon color on accent backgrounds                                                  |
+| `--cortext-shadow-color`                  | Shell drag-preview shadow                                                              |
 
 ### Button roles
 
-| Token | What it controls |
-|-|-|
-| `--cortext-button-surface` | Default shell button surface |
-| `--cortext-button-text` | Default shell button text/icon color |
-| `--cortext-button-hover-surface` | Hover/focus surface for shell buttons |
-| `--cortext-button-pressed-surface` | Pressed shell button surface |
-| `--cortext-button-primary-surface` | Primary shell button surface |
+| Token                                    | What it controls                         |
+| ---------------------------------------- | ---------------------------------------- |
+| `--cortext-button-surface`               | Default shell button surface             |
+| `--cortext-button-text`                  | Default shell button text/icon color     |
+| `--cortext-button-hover-surface`         | Hover/focus surface for shell buttons    |
+| `--cortext-button-pressed-surface`       | Pressed shell button surface             |
+| `--cortext-button-primary-surface`       | Primary shell button surface             |
 | `--cortext-button-primary-hover-surface` | Primary shell button hover/focus surface |
-| `--cortext-button-primary-text` | Primary shell button text/icon color |
+| `--cortext-button-primary-text`          | Primary shell button text/icon color     |
 
 ### Foundation roles
 
-| Token | Default source |
-|-|-|
-| `--cortext-shell-font-family` | `inherit` |
-| `--cortext-shell-font-size` | WordPress base-styles medium font size |
-| `--cortext-shell-radius` | WordPress base-styles small radius |
-| `--cortext-shell-border-width` | WordPress base-styles border width |
+| Token                          | Default source                         |
+| ------------------------------ | -------------------------------------- |
+| `--cortext-shell-font-family`  | `inherit`                              |
+| `--cortext-shell-font-size`    | WordPress base-styles medium font size |
+| `--cortext-shell-radius`       | WordPress base-styles small radius     |
+| `--cortext-shell-border-width` | WordPress base-styles border width     |
 
 Spacing stays internal for now. The shell uses WordPress base-styles grid units directly. We should only expose spacing tokens if shell themes need to control density.
 
@@ -71,10 +73,10 @@ Preference is stored in `localStorage` under `cortext.colorScheme`. `Cortext\The
 
 ## Roadmap
 
-- Phase 1 (current): internal semantic token contract, light/dark/auto shell toggle, localStorage persistence.
-- Phase 2: stable shell contract and an accent picker.
-- Phase 3: per-user persistence through user meta.
-- Phase 4: `cortext_theme_tokens` filter. Third parties can ship shell themes as token bundles, and the contract becomes public API.
+-   Phase 1 (current): internal semantic token contract, light/dark/auto shell toggle, localStorage persistence.
+-   Phase 2: stable shell contract and an accent picker.
+-   Phase 3: per-user persistence through user meta.
+-   Phase 4: `cortext_theme_tokens` filter. Third parties can ship shell themes as token bundles, and the contract becomes public API.
 
 ## Extending (preview)
 

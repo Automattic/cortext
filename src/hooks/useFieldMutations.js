@@ -200,7 +200,7 @@ export function useFlushFieldRecord() {
 
 // Appends a new option to a field's existing list and saves. Used by the
 // cell editors so users can create a chip on the fly while picking a
-// value, matching Notion's "Create [foo]" suggestion. Reads the
+// value, matching the "Create [foo]" suggestion. Reads the
 // freshest options from the entity store at call time (rather than
 // subscribing through `useEntityRecord`) and generates a unique slug-style
 // `value` from the label, deduping against existing option values.

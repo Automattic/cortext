@@ -44,7 +44,7 @@ const numberIcon = (
 );
 
 // Inline SVG for "date and time": a calendar with a clock face. Mirrors
-// Notion's separation between Date and Date & time.
+// Keep Date and Date & time as separate field choices.
 const datetimeIcon = (
 	<svg
 		xmlns="http://www.w3.org/2000/svg"
@@ -535,7 +535,7 @@ export default function AddFieldPopover( { collectionId, onCreate } ) {
 			setConfigType( chosenType );
 			return;
 		}
-		// Notion-style fallback: an empty name is allowed; the field
+		// Empty-name fallback: an empty name is allowed; the field
 		// title defaults to the type label ("Text", "Number", …) and
 		// the user can rename later via the column header dropdown.
 		const trimmed = title.trim();

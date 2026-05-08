@@ -1,6 +1,6 @@
 === Cortext ===
 Contributors: priethor, mcsf
-Tags: knowledge-base, notion, collections, dataviews, block-editor
+Tags: knowledge-base, collections, dataviews, block-editor, workspace
 Requires at least: 6.9
 Tested up to: 6.9
 Requires PHP: 8.1
@@ -8,13 +8,13 @@ Stable tag: 0.0.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Notion-inspired workspace on your own WordPress site: nested pages, typed collections with multiple views, and cross-type taxonomies.
+Knowledge base for WordPress: nested pages, typed collections with multiple views, and cross-type taxonomies.
 
 == Description ==
 
-Cortext enables a Notion-inspired workspace on your own WordPress site, perfect for creating your knowledge base. You get nested pages, typed collections with multiple views, and cross-type taxonomies that add fields to individual rows. Built on native WordPress primitives: CPTs, post meta, taxonomies, Gutenberg, DataViews, Block Bindings.
+Cortext is an experimental prototype. Do not use it on production sites or with data you cannot afford to lose. The data layer will change: post types, meta keys, REST responses, block attributes, theme tokens, and stored content shapes are not stable yet. Early builds will not include data migrations or upgrade paths.
 
-Status: prototype under active development.
+Cortext creates a knowledge base inside WordPress. You get nested pages, typed collections with multiple views, and cross-type taxonomies that add fields to individual rows. It is built on native WordPress primitives: CPTs, post meta, taxonomies, Gutenberg, DataViews, and Block Bindings.
 
 == Changelog ==
 

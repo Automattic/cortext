@@ -64,7 +64,7 @@ final class Test_Post_Type_Collection extends BaseTestCase {
 
 		$registered = get_registered_meta_keys( 'post', Collection::POST_TYPE );
 
-		$this->assertArrayHasKey( 'notion_id', $registered );
 		$this->assertArrayHasKey( 'slug', $registered );
+		$this->assertArrayHasKey( 'fields', $registered );
 	}
 }

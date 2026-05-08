@@ -161,7 +161,7 @@ function SortableOptionRow( {
 // cell's value; without `onPick` it is just a label and rows are pure
 // management. The single search-or-create input at the top filters the
 // list and offers a "Create [label]" suggestion when typing a value
-// that doesn't exist yet, matching Notion's pattern.
+// that doesn't exist yet, matching the inline create pattern.
 //
 // Local state mirrors the saved option list so user edits feel instant;
 // each mutation calls `useUpdateFieldOptions` which refetches the field

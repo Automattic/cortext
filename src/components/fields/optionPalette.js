@@ -31,7 +31,7 @@ export function optionColorVars( name ) {
 
 // Stable display fallback for chips that have no `color` stored, or
 // whose stored color isn't one of our palette names (e.g. legacy hex
-// values from seeds or Notion imports). Always returns either
+// values from seeds or imported data). Always returns either
 // `'default'` (the explicit neutral opt-out) or one of the named
 // palette colors, so chips always resolve through the SCSS tokens and
 // re-skin under light/dark theme. Raw hex values would otherwise paint
@@ -59,7 +59,7 @@ export function resolveDisplayColor( color, label ) {
 }
 
 // Picks the next palette color for a freshly created option, mirroring
-// Notion's behavior of giving each new chip a distinct hue. Ranks colors
+// Gives each new chip a distinct hue. Ranks colors
 // by how often they already appear in the option list and returns the
 // least-used one, preferring earlier palette entries when tied. Skips
 // `'default'` so new chips are visually distinct out of the box.

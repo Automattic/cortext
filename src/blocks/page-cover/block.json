@@ -5,7 +5,7 @@
 	"title": "Page cover",
 	"category": "widgets",
 	"icon": "format-image",
-	"description": "Notion-style page cover image, bound to the page's featured image.",
+	"description": "Page cover image, bound to the page's featured image.",
 	"textdomain": "cortext",
 	"usesContext": [ "postId", "postType" ],
 	"supports": {

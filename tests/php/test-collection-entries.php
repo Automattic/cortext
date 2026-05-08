@@ -75,23 +75,6 @@ final class Test_Collection_Entries extends BaseTestCase {
 		$this->assertSame( 'crtxt_meetings', $object->rest_base );
 	}
 
-	public function test_notion_id_meta_is_registered_on_entry_cpt(): void {
-		$collection_id = wp_insert_post(
-			array(
-				'post_type'   => Collection::POST_TYPE,
-				'post_status' => 'private',
-				'post_title'  => 'Tasks',
-				'meta_input'  => array( 'slug' => 'tasks' ),
-			)
-		);
-
-		$collection = get_post( $collection_id );
-		( new CollectionEntries() )->register_for_collection( $collection );
-
-		$registered = get_registered_meta_keys( 'post', 'crtxt_tasks' );
-		$this->assertArrayHasKey( 'notion_id', $registered );
-	}
-
 	public function test_field_meta_is_registered_on_entry_cpt(): void {
 		$collection_id = wp_insert_post(
 			array(

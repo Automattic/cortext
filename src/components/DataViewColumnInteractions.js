@@ -151,7 +151,7 @@ function getColumnBodyCells( headerEl ) {
 }
 
 // Buffer added to autofit measurements (px). Browsers can render text at
-// fractional pixel widths, and the cloned measurement and live render don't
+// fractional pixel widths, and the copied measurement and live render don't
 // always round the same way; a couple of pixels of slack keeps proportional
 // digit widths (`2007` is wider than `1939`) from clipping after autofit.
 const AUTOFIT_PADDING_BUFFER = 2;
@@ -171,7 +171,7 @@ function measureCellNaturalWidth( cell ) {
 	clone.style.maxWidth = 'none';
 
 	// Copy the rendered table's classes (including `has-*-density`) so the
-	// per-density padding rules apply to the measurement clone too.
+	// per-density padding rules apply to the measurement copy too.
 	table.className = sourceTable?.className ?? '';
 	table.style.width = 'auto';
 	table.style.tableLayout = 'auto';
@@ -180,7 +180,7 @@ function measureCellNaturalWidth( cell ) {
 	section.appendChild( row );
 	table.appendChild( section );
 
-	// Wrap the clone in `.cortext-data-view` and a real `<tbody>` / `<thead>`
+	// Wrap the copy in `.cortext-data-view` and a real `<tbody>` / `<thead>`
 	// so our scoped overrides match it. Without those ancestors the upstream
 	// `min-width: 15ch` floor on `.dataviews-view-table__cell-content-wrapper`
 	// leaks back in and every column measures at least ~15 characters wide.
@@ -195,7 +195,7 @@ function measureCellNaturalWidth( cell ) {
 	wrapper.style.display = 'block';
 	wrapper.appendChild( table );
 
-	// Append next to the live table so the clone inherits the same fonts and
+	// Append next to the live table so the copy inherits the same fonts and
 	// tokens. Body inheritance differs from `.cortext-root` shell font on the
 	// SPA path, and the mismatch produced widths the live render couldn't fit.
 	const measurementHost = sourceTable?.parentNode ?? document.body;

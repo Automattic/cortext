@@ -11,7 +11,7 @@ Running log of significant design decisions. Newest first. Each entry captures *
 - Fresh drafts have an empty `post_name`, so the segment walker cannot address them. Creating a new page could not open it.
 - Core never regenerates `post_name` from `post_title` after the first committed slug, so renames leave the URL stuck on the original slug (see next entry).
 
-Id-based URLs sidestep both issues. The id is stable from creation, renames cannot break URLs, and cold-path resolution is one round-trip instead of N. Notion and Linear use the same pattern for the same reasons.
+Id-based URLs sidestep both issues. The id is stable from creation, renames cannot break URLs, and cold-path resolution is one round-trip instead of N.
 
 **Trade-off.** URLs lose the "glance and know the page" property of slug paths. For a `public: false` admin workspace this is cosmetic: URLs are not shared externally, and the sidebar carries the hierarchy view. If Cortext ever exposes pages at public URLs, a slug-path resolver can be layered on top; the id remains in the URL as a fallback identifier.
 

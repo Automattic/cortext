@@ -1,12 +1,12 @@
 # Content Modeling Guide
 
-How to think about collections and cross-type taxonomies: when to use which, with concrete examples. If you've used Notion, Tana, or Anytype, you already know most of this.
+How to think about collections and cross-type taxonomies: when to use which, with concrete examples.
 
-A note on naming: the pitch calls these "cross-type taxonomies" (inspired by Tana's super tags). The final user-facing name is TBD, but the mental model is the same regardless. Internally the WordPress taxonomy is registered as `cortext_supertag`.
+A note on naming: the pitch calls these "cross-type taxonomies". The final user-facing name is TBD, but the mental model is the same regardless. Internally the WordPress taxonomy is registered as `cortext_supertag`.
 
 ## Mental model in plain words
 
-- A **collection** is a group of one kind of thing. Tasks, Projects, People. In Notion this is called a "database"; in WordPress terms, each collection is its own custom post type (CPT).
+- A **collection** is a group of one kind of thing. Tasks, Projects, People. In WordPress terms, each collection is its own custom post type (CPT).
 - A **row** is one item in that collection. A specific task, a specific project. A row is a post of the collection's CPT.
 - A **cross-type taxonomy term** (working term: "cross-type tag") is a reusable label you can stick on any row, regardless of which collection it's in. "High-priority", "Deadline-driven", "Needs legal review". In WordPress terms, a term in one global taxonomy attached to every collection CPT.
 - Each cross-type tag carries **extra fields** that get added to any row you stick it on. "High-priority" might contribute a `priority_reason` text field. "Deadline-driven" might contribute a `deadline_review_date` date field.

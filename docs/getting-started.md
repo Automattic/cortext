@@ -7,7 +7,7 @@ Cortext is an early prototype. There is no packaged release yet; to try it you r
 - PHP 8.1+
 - WordPress 6.9+ (provided by wp-env)
 - Docker (recommended runtime for wp-env)
-- Node.js 20+ (matching `@wordpress/scripts`)
+- Node.js 24.15 (matching `package.json` and CI)
 - Git
 
 ## First-time setup

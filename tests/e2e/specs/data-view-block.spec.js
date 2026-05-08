@@ -929,9 +929,7 @@ test.describe( 'Collection view block', () => {
 			await expect( titleCellOpenButton ).toHaveCSS( 'opacity', '1' );
 			await expect( titleCellOpenButton ).toContainText( 'Open' );
 			await expect(
-				firstRow
-					.locator( '.cortext-editable-cell__display' )
-					.first()
+				firstRow.locator( '.cortext-editable-cell__display' ).first()
 			).toHaveCSS( 'cursor', 'pointer' );
 			await titleCellOpenButton.click();
 			await expect
@@ -1355,7 +1353,7 @@ test.describe( 'Collection view block', () => {
 			const table = canvas.locator( '.dataviews-view-table' );
 			const firstRow = table.locator( 'tbody > tr' ).first();
 
-			// Select: chip with the option's color (Notion shape parsed).
+			// Select: chip with the option's color.
 			const statusChip = firstRow
 				.locator( 'td' )
 				.nth( 4 )
@@ -3012,7 +3010,7 @@ test.describe( 'Collection view block', () => {
 			} );
 
 			// 1. Toolbar Add field: create a "Notes" text field. The
-			//    popover follows Notion's click-to-create model, so
+			//    popover follows click-to-create behavior, so
 			//    picking a type submits.
 			await page
 				.getByRole( 'button', { name: 'Add field', exact: true } )

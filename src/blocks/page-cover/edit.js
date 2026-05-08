@@ -22,7 +22,7 @@ import PageIdentityControls from '../../components/PageIdentityControls';
 // Replace/Remove controls in the top-right corner. We deliberately don't
 // reuse <PostFeaturedImage> from @wordpress/editor — its built-in layout
 // flanks a natural-size thumbnail with Replace/Remove buttons, which
-// fights any attempt at a Notion-style cover. We keep the same plumbing
+// fights any attempt at a full-width page cover. We keep the same plumbing
 // underneath (MediaUpload + featured_media) so the WP media library and
 // inspector continue to work.
 export default function Edit( { context, clientId } ) {
