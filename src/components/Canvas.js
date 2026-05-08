@@ -8,7 +8,6 @@ import { useSelect, useDispatch } from '@wordpress/data';
 import { EditorProvider, store as editorStore } from '@wordpress/editor';
 import {
 	BlockList,
-	BlockInspector,
 	BlockCanvas,
 	store as blockEditorStore,
 	useSettings,
@@ -16,7 +15,6 @@ import {
 import { createBlock } from '@wordpress/blocks';
 import {
 	InterfaceSkeleton,
-	ComplementaryArea,
 	store as interfaceStore,
 } from '@wordpress/interface';
 import {
@@ -49,9 +47,13 @@ import { RowDetailSidebarSlot } from './RowDetailSidebarSlot';
 import { TopBarActionsFill } from './WorkspaceTopBar';
 import MediaPicker, { MediaUploadCheck } from './MediaPicker';
 import PageIdentityControls from './PageIdentityControls';
-
-const SCOPE = 'cortext';
-const INSPECTOR = 'cortext/block-inspector';
+import PageInspectorSidebar, {
+	BLOCK_INSPECTOR,
+	INSPECTOR_SCOPE,
+	InspectorSidebarSlot,
+	PAGE_INSPECTOR,
+	isInspectorArea,
+} from './PageInspectorSidebar';
 
 // Renders only Cortext-owned snackbars (the autosave failure toast). The
 // editor store also dispatches its own "Post updated" success notice on every
@@ -245,10 +247,15 @@ function DocumentActions( { isActive, postType, topBarActions } ) {
 		useDispatch( interfaceStore );
 	const isInspectorOpen = useSelect(
 		( select ) =>
-			select( interfaceStore ).getActiveComplementaryArea( SCOPE ) ===
-			INSPECTOR,
+			isInspectorArea(
+				select( interfaceStore ).getActiveComplementaryArea(
+					INSPECTOR_SCOPE
+				)
+			),
 		[]
 	);
+	const defaultInspector =
+		postType === POST_TYPE ? PAGE_INSPECTOR : BLOCK_INSPECTOR;
 
 	// Canvas stays mounted across route changes (preservePaint keeps the
 	// editor iframe warm). Suppress the Fill when this page isn't the active
@@ -271,44 +278,15 @@ function DocumentActions( { isActive, postType, topBarActions } ) {
 					isPressed={ isInspectorOpen }
 					onClick={ () =>
 						isInspectorOpen
-							? disableComplementaryArea( SCOPE )
-							: enableComplementaryArea( SCOPE, INSPECTOR )
+							? disableComplementaryArea( INSPECTOR_SCOPE )
+							: enableComplementaryArea(
+									INSPECTOR_SCOPE,
+									defaultInspector
+							  )
 					}
 				/>
 			</div>
 		</TopBarActionsFill>
-	);
-}
-
-function InspectorSidebar() {
-	// Mirror the canvas: when the post is in trash, the inspector becomes
-	// read-only too. Otherwise users could still edit block attributes
-	// (alignment, colors, etc.) from the sidebar even though the canvas
-	// itself is locked.
-	const isTrashed = useSelect(
-		( select ) =>
-			select( editorStore ).getCurrentPostAttribute( 'status' ) ===
-			'trash',
-		[]
-	);
-
-	return (
-		<ComplementaryArea
-			scope={ SCOPE }
-			identifier={ INSPECTOR }
-			icon={ cog }
-			title={ __( 'Block', 'cortext' ) }
-			isPinnable={ false }
-			isActiveByDefault
-		>
-			{ isTrashed ? (
-				<Disabled>
-					<BlockInspector />
-				</Disabled>
-			) : (
-				<BlockInspector />
-			) }
-		</ComplementaryArea>
 	);
 }
 
@@ -616,8 +594,11 @@ function CanvasEditor( {
 	const discard = useCallback( () => resetPost(), [ resetPost ] );
 	const isInspectorOpen = useSelect(
 		( select ) =>
-			select( interfaceStore ).getActiveComplementaryArea( SCOPE ) ===
-			INSPECTOR,
+			isInspectorArea(
+				select( interfaceStore ).getActiveComplementaryArea(
+					INSPECTOR_SCOPE
+				)
+			),
 		[]
 	);
 	const isTrashed = post.status === 'trash';
@@ -695,17 +676,15 @@ function CanvasEditor( {
 				sidebar={
 					isActive ? (
 						<RowDetailSidebarSlot
-							fallback={
-								<ComplementaryArea.Slot scope={ SCOPE } />
-							}
+							fallback={ <InspectorSidebarSlot /> }
 							isFallbackActive={ isInspectorOpen }
 						/>
 					) : (
-						<ComplementaryArea.Slot scope={ SCOPE } />
+						<InspectorSidebarSlot />
 					)
 				}
 			/>
-			<InspectorSidebar />
+			<PageInspectorSidebar postId={ post.id } postType={ postType } />
 		</>
 	);
 }
