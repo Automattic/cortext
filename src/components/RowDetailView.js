@@ -101,7 +101,8 @@ const ROW_DETAIL_EDITOR_CSS = `
 		margin-block-start: 0;
 	}
 
-	.editor-styles-wrapper .block-editor-block-list__layout {
+	.editor-styles-wrapper > .block-editor-block-list__layout,
+	.editor-styles-wrapper .block-editor-block-list__layout.is-root-container {
 		min-height: 180px;
 	}
 
