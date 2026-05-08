@@ -32,7 +32,7 @@ import {
 	getRowDetailMode,
 	withRowDetailMode,
 } from './rowDetailUtils';
-import useCollectionFields from '../hooks/useCollectionFields';
+import { useCollectionFieldsContext } from './CollectionFieldsContext';
 import useCollectionRows from '../hooks/useCollectionRows';
 import { elementsFromOptions } from '../hooks/optionElements';
 
@@ -281,7 +281,7 @@ export default function CollectionDataViews( {
 	const navigate = useNavigate();
 	const routeSearch = useSearch( { strict: false } );
 	const { fields, collection, slug, isResolving, fieldsResolved } =
-		useCollectionFields( collectionId );
+		useCollectionFieldsContext();
 	const routeRowId = parseSearchId( routeSearch?.[ ROW_SEARCH_KEY ] );
 	const routeRowCollectionId = parseSearchId(
 		routeSearch?.[ ROW_COLLECTION_SEARCH_KEY ]
@@ -702,22 +702,22 @@ export default function CollectionDataViews( {
 				return;
 			}
 			runDetailTransition( {
-				type: rowDetailMode === 'full' ? 'full' : 'row',
+				type: savedRowDetailMode === 'full' ? 'full' : 'row',
 				rowId: row.id,
 				pushUrl: true,
 			} );
 		},
-		[ openRowId, rowDetailMode, runDetailTransition ]
+		[ openRowId, runDetailTransition, savedRowDetailMode ]
 	);
 
 	const openRowActionContext = useMemo(
 		() => ( {
 			enabled: isTableLayout,
-			icon: ROW_DETAIL_MODE_ICONS[ rowDetailMode ],
+			icon: ROW_DETAIL_MODE_ICONS[ savedRowDetailMode ],
 			openRowId,
 			requestOpenRow,
 		} ),
-		[ isTableLayout, openRowId, requestOpenRow, rowDetailMode ]
+		[ isTableLayout, openRowId, requestOpenRow, savedRowDetailMode ]
 	);
 
 	const rowActions = useMemo(
@@ -725,13 +725,13 @@ export default function CollectionDataViews( {
 			{
 				id: 'open-row',
 				label: __( 'Open row', 'cortext' ),
-				icon: ROW_DETAIL_MODE_ICONS[ rowDetailMode ],
+				icon: ROW_DETAIL_MODE_ICONS[ savedRowDetailMode ],
 				isPrimary: true,
 				context: 'single',
 				callback: ( items ) => requestOpenRow( items?.[ 0 ] ),
 			},
 		],
-		[ requestOpenRow, rowDetailMode ]
+		[ requestOpenRow, savedRowDetailMode ]
 	);
 
 	const dataViewActions = useMemo(
@@ -850,7 +850,7 @@ export default function CollectionDataViews( {
 		}
 
 		runDetailTransition( {
-			type: rowDetailMode === 'full' ? 'full' : 'row',
+			type: savedRowDetailMode === 'full' ? 'full' : 'row',
 			rowId: routeRowId,
 			syncUrl: false,
 		} );
@@ -859,8 +859,8 @@ export default function CollectionDataViews( {
 		clearSuppressedRouteRow,
 		routeRowCollectionId,
 		routeRowId,
-		rowDetailMode,
 		runDetailTransition,
+		savedRowDetailMode,
 		suppressedRouteRow,
 	] );
 

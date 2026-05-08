@@ -356,7 +356,9 @@ test.describe( 'Collection view block', () => {
 			expect( fixture.createdFieldIds ).toEqual( [] );
 
 			await page
-				.getByRole( 'button', { name: 'Change collection' } )
+				.locator(
+					'[data-toolbar-item="true"][aria-label="Change collection"]'
+				)
 				.click();
 			await page
 				.locator( '.cortext-data-view-toolbar-popover' )
