@@ -2671,30 +2671,36 @@ tr:has(.cortext-title-cell--is-open)
 		overflow: hidden;
 	}
 
+	// Solid background pill so the chevron stays legible even when it
+	// floats over a dark cover image. The button itself is small; the
+	// pill keeps a constant contrast surface regardless of what's behind.
 	&__canvas-properties-toggle.components-button {
 		position: absolute;
 		top: $grid-unit-10;
 		left: $grid-unit-10;
 		z-index: 2;
+		background: rgba(255, 255, 255, 0.92);
+		color: $gray-900;
+		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
 		opacity: 0;
-		transition: opacity 0.12s ease;
-	}
-
-	&--canvas-properties:hover &__canvas-properties-toggle.components-button,
-	&__canvas-properties-toggle.components-button:focus-visible {
-		opacity: 1;
-	}
-
-	// When the panel is collapsed, anchor the chevron over the cover so
-	// it's always discoverable; no need to hover the empty strip first.
-	&--canvas-properties-collapsed &__canvas-properties-toggle.components-button {
-		opacity: 0.7;
+		transition: opacity 0.12s ease, background-color 0.12s ease;
 
 		&:hover,
 		&:focus-visible {
-			opacity: 1;
+			background: $white;
+			color: $gray-900;
 		}
 	}
+
+	/* stylelint-disable no-descending-specificity */
+	&--canvas-properties:hover &__canvas-properties-toggle.components-button,
+	&__canvas-properties-toggle.components-button:focus-visible,
+	// When collapsed, the chevron is the only affordance, so keep it
+	// always visible (still tap to bring properties back).
+	&--canvas-properties-collapsed &__canvas-properties-toggle.components-button {
+		opacity: 1;
+	}
+	/* stylelint-enable no-descending-specificity */
 
 	&__frame {
 		display: flex;
