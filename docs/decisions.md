@@ -6,7 +6,7 @@ Running log of significant design decisions. Newest first. Each entry captures *
 
 **Decision.** Page URLs encode the post id as the authoritative identifier: `?page=cortext&p=/<slug>-<id>` (e.g. `?p=/about-us-42`), falling back to `?p=/<id>` when the slug is empty. `src/router/useResolveEntity.js` extracts the trailing digits via `parseIdFromUri` and fetches `GET /wp/v2/crtxt_pages/<id>?context=edit`. The slug prefix is cosmetic. When autosave assigns a real slug, `Sidebar` rewrites the URL via `history.replace` so the visible URL reflects the latest title.
 
-**Why.** The previous URL shape was a hierarchical slug path (`?p=/about-us/team`) resolved by walking one segment at a time through the REST collection endpoint. That works for titled pages but fails in two ways the shell hit in practice:
+**Why.** The previous URL shape followed a pattern other apps use: a hierarchical slug path (`?p=/about-us/team`) resolved by walking one segment at a time through the REST collection endpoint. That works for titled pages but fails in two ways the shell hit in practice:
 
 - Fresh drafts have an empty `post_name`, so the segment walker cannot address them. Creating a new page could not open it.
 - Core never regenerates `post_name` from `post_title` after the first committed slug, so renames leave the URL stuck on the original slug (see next entry).

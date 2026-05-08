@@ -1,105 +1,50 @@
 # Architecture
 
-## Content model
+Cortext is a WordPress plugin for building a knowledge base with documents,
+collections, and typed rows. This page gives the contributor-level picture. It
+is not a public API contract.
 
-| Nomenclature | WordPress primitive       |
-| ------------ | ------------------------- |
-| Collection   | `crtxt_collection` CPT    |
-| Field        | `crtxt_field` CPT         |
-| Entry        | `crtxt_{$slug}` CPT       |
-| Field value  | `crtxt_{$slug}` post meta |
+The short version: Cortext keeps its data in WordPress, then adds a focused admin
+shell on top.
 
-### Creating a new database
+## Storage
 
--   we create a new database
+Cortext currently uses WordPress posts and post meta for the main data model:
 
-```php
-$collection_id = wp_insert_post( 'crtxt_collection', [ ... ] );
-register_post_type( 'crtxt_books', [ ... ] );
-```
+-   Pages are hierarchical WordPress posts with Gutenberg content.
+-   Collections describe a type of record, such as tasks, books, or people.
+-   Fields describe the properties that belong to a collection.
+-   Rows are records inside a collection.
+-   Field values are stored as row metadata.
 
--   we add a new row
+The exact post types, meta keys, REST responses, and block attributes are still
+allowed to change. Do not build external integrations against them yet.
 
-```php
-$book_id = wp_insert_post( 'crtxt_books', $data );
-```
+## Admin shell
 
--   we add a new column
+The main product surface is a full-screen React app in wp-admin. It has a
+sidebar for pages and collections, a Gutenberg canvas for documents, and
+collection views for records.
 
-```php
-$field_id = wp_insert_post( 'crtxt_field', $field_details );
-add_post_meta( $field_id, 'type', 'text' );
-add_post_meta( $collection_id, 'fields', $field_id );
+Collection views use WordPress's DataViews package where it fits, with Cortext
+code around it for inline editing, relations, rollups, row details, and embedded
+views inside pages.
 
-$type = get_post_meta( $field_id, 'type', true );
-register_post_meta( 'crtxt_books', "field-{$field_id}", [ $type, ... ] );
-```
+## Frontend
 
--   we add a cell value
+Cortext pages can render on the public site through a thin plugin template. The
+active WordPress theme still owns the public page surface. Cortext's shell theme
+does not leak into published content.
 
-```php
-update_post_meta( $book_id, "field-{$field_id}", $value );
-```
+## What is still unsettled
 
-### Loading a collection on the client
+Several ideas are still being tested, including reusable schema across
+collections, import/export, migrations, and the shape of a stable REST contract.
+Until those settle, treat this repo as a prototype and treat the data as
+disposable.
 
-```php
-$collection_object = get_posts( 'crtxt_collection', [ 'slug' => 'book' ] );
-$collection_id = $collection->ID;
+More detailed notes live in:
 
-$collection_items = get_posts( "crtxt_{$slug}" );
-
-$collection_fields_ids = get_post_meta( $collection_id, 'fields', false );
-$collection_fields = array_map( 'get_post', $collection_fields_ids );
-
-foreach ( $collection_items as $item ) {
-    $row_fields = get_post_meta( $item->ID );
-}
-
-// etc.
-```
-
-### Fields
-
-To start off, maybe:
-
--   text
--   number
--   email
--   url
--   select
--   multiselect
--   date
--   datetime
--   checkbox
--   relation
--   formula
-
-Later, _maybe_: `image`, `file`, `user_ref`, `post_ref`, `color`, `repeater`, `group`, conditional display.
-
-## UI shell
-
-A single React SPA mounted on a full-screen admin page.
-
-```
-┌───────────────┬────────────────────────────────────┐
-│               │  Page/Row title                     │
-│    Sidebar    ├────────────────────────────────────┤
-│    ━━━━━━     │                                     │
-│    Pages      │   EditorProvider + BlockCanvas      │
-│    └ child    │   (documents and rows)              │
-│    ━━━━━━     │                                     │
-│    Collections│   or                                │
-│    - Tasks    │                                     │
-│    - Docs     │   <DataViews>                       │
-│    ━━━━━━     │                                     │
-│    Supertags  │                                     │
-│    - Urgent   │                                     │
-└───────────────┴────────────────────────────────────┘
-```
-
-Chrome is hidden via the `is-fullscreen-mode` body class, following the Site Editor pattern. Page routes mount the block editor canvas. Collection routes skip the editor canvas and mount DataViews directly in the shell on a light surface. DataViews is app UI, not block-theme content. Phase 2 may move the shell to a custom URL via rewrite rule and `template_redirect`; the React shell is URL-agnostic, so that change is mostly plumbing.
-
-## Theming
-
-Shell chrome uses Cortext-owned semantic tokens in `src/styles/_tokens.scss`. Published pages and the editor iframe use the active WordPress block theme. Collection tables count as shell UI, but they stay on a light canvas until DataViews can be themed without breaking contrast. Details: [theming.md](theming.md).
+-   [Shell architecture](architecture/shell.md)
+-   [Data model](architecture/data-model.md)
+-   [Theming](theming.md)

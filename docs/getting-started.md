@@ -4,11 +4,11 @@ Cortext is an early prototype. There is no packaged release yet; to try it you r
 
 ## Requirements
 
-- PHP 8.1+
-- WordPress 6.9+ (provided by wp-env)
-- Docker (recommended runtime for wp-env)
-- Node.js 24.15 (matching `package.json` and CI)
-- Git
+-   PHP 8.1+
+-   WordPress 6.9+ (provided by wp-env)
+-   Docker (recommended runtime for wp-env)
+-   Node.js 24.15 (matching `package.json` and CI)
+-   Git
 
 ## First-time setup
 
@@ -79,15 +79,15 @@ Ports are derived from the worktree's absolute path, so multiple worktrees (one 
 
 If you use an agent orchestrator (Conductor, Cursor, Cline, or similar), wire:
 
-- Setup hook: `./scripts/setup.sh`
-- Run hook: `./scripts/run.sh`
-- Archive hook: `./scripts/archive.sh`
+-   Setup hook: `./scripts/setup.sh`
+-   Run hook: `./scripts/run.sh`
+-   Archive hook: `./scripts/archive.sh`
 
 ## Contributing
 
 Cortext is a prototype, so docs, architecture notes, and scope are all fair game for PRs.
 
-- Branch prefix: `add/`, `fix/`, `docs/`, `refactor/`, `tests/`, followed by a concise slug.
-- CI runs ESLint, stylelint, Jest, PHPCS, and PHPUnit. Keep them green before requesting review.
-- The [design principles](vision.md) describe the posture the project is willing to defend; if a PR proposes routing around a WordPress primitive, expect the conversation to start there.
-- The [content modeling guide](modeling-guide.md) captures the mental model for collections and cross-type tags, which is the vocabulary used in issues and reviews.
+-   Branch prefix: `add/`, `fix/`, `docs/`, `refactor/`, `tests/`, followed by a concise slug.
+-   CI runs ESLint, stylelint, Jest, PHPCS, and PHPUnit. Keep them green before requesting review.
+-   The [design principles](vision.md) describe the posture the project is willing to defend; if a PR proposes routing around a WordPress primitive, expect the conversation to start there.
+-   The [content modeling guide](modeling-guide.md) captures the current mental model for collections.

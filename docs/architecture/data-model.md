@@ -1,35 +1,33 @@
 # Data model
 
-The parent-level [architecture.md](../architecture.md) is the main sketch for storage decisions: CPTs, field CPT, meta keys, and loading shape. This page tracks the prototype as it exists today. It is not a stable public API. Stored shapes may change without backward compatibility until the data model settles.
+These are implementation notes for the current prototype. They are not a stable
+public API.
 
-## Target summary
+## Current shape
 
--   `crtxt_page` CPT for hierarchical workspace documents.
--   `crtxt_collection` CPT, one post per collection definition. For each collection, a row CPT is dynamically registered as `crtxt_{slug}` (`crtxt_` is the shared data prefix and leaves room for the collection slug under WordPress's 20-character post type limit).
--   `crtxt_field` CPT for field definitions, assigned to a collection via post meta and surfaced on each row CPT as dynamic meta keys.
--   `cortext_supertag` global taxonomy attached to every collection CPT, so terms can cross collection boundaries.
+Cortext stores its main data in WordPress posts and post meta:
 
-## Single client contract
+-   `crtxt_page` stores workspace documents.
+-   `crtxt_collection` stores collection definitions.
+-   `crtxt_field` stores field definitions.
+-   Each collection gets a row post type based on its slug.
+-   Row values are stored as field-keyed post meta.
 
-The target shell contract is one REST field on each row: `cortext_row_resolved_schema`. It will return the effective property set for that row: collection fields plus fields contributed by every attached cross-type tag.
+This keeps the data inspectable with normal WordPress tools while the product
+surface can stay focused on knowledge base workflows.
 
-Keep row-schema knowledge out of one-off endpoints. If the shell needs new properties, extend the resolved schema instead of adding a parallel endpoint. That keeps the client contract small and reduces drift between server and client views of a row.
+## What can change
 
-## Field-id-based meta keys
+Post type names, meta keys, REST responses, block attributes, and stored content
+shapes can change during early versions. We are not promising migrations yet.
 
-Field labels can change. Field IDs should not. Entry values use `field-{$field_id}` meta keys rather than label-derived slugs, so renaming a field does not break stored values.
+The main thing to preserve is the principle, not the exact current shape:
+Cortext data should remain WordPress data unless there is a strong reason to
+leave that path.
 
-## Implementation status
+## Import/export
 
-Registered CPTs:
-
--   `crtxt_page` — hierarchical workspace documents.
--   `crtxt_collection` — collection definitions, with `slug` meta. Fields are attached via multi-value `fields` meta (each value is a `crtxt_field` post ID).
--   `crtxt_field` — field definitions, with `type`, `options`, `number_format`, `expression`, and `related_collection_id` meta.
--   `crtxt_{slug}` — dynamically registered at `init` priority 20, one per published collection. Entry posts carry `field-{$field_id}` meta per attached field.
-
-Not yet registered: `cortext_supertag` taxonomy, `cortext_row_resolved_schema` REST field.
-
-## Future import shape
-
-Import is a stretch goal, not part of the current data contract. The working sketch lives in [data-model-intermediate-json.md](./data-model-intermediate-json.md). Treat it as a draft for discussion, not as something callers can rely on.
+Import and export are not part of the current data contract. The working import
+payload sketch lives in
+[data-model-intermediate-json.md](./data-model-intermediate-json.md). Treat it
+as a draft, not an integration API.

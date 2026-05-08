@@ -9,24 +9,30 @@
 >
 > We are not writing migrations for early builds. Treat anything you create with Cortext today as throwaway data.
 
-A WordPress plugin for building a knowledge base inside your own site: nested pages, typed collections with multiple views, and cross-type taxonomies that add fields to individual rows. Built on native WordPress primitives (CPTs, post meta, taxonomies, Gutenberg, DataViews, Block Bindings).
+A WordPress plugin for building a knowledge base inside your own site: nested
+pages, typed collections, multiple views, and publishing through WordPress.
 
 ## Why
 
-WordPress already has the data story: self-hosted, exportable, and built on APIs that have survived real use. Cortext uses that foundation for knowledge bases. `@wordpress/dataviews`, standalone `@wordpress/editor` with `BlockCanvas`, and Block Bindings provide the UI pieces.
+WordPress already has the hard parts: ownership, publishing, export, themes, and
+a data model people can inspect without Cortext. This project tries to make those
+pieces feel like one knowledge base instead of a pile of admin screens.
 
-Because it is still WordPress, Cortext can publish knowledge base entries as fully themed public pages, run locally, export through WordPress tools, and keep data readable through standard post, meta, and taxonomy storage.
+Because it is still WordPress, Cortext can publish knowledge base entries as
+themed public pages, run locally, and keep data in ordinary WordPress storage.
 
 ## How it works, in one paragraph
 
-Storage uses `crtxt_page` for documents, `crtxt_collection` for collection definitions, `crtxt_field` for field definitions, and `crtxt_{slug}` for collection rows. Each collection gets its own dynamically registered CPT. A global cross-type taxonomy, internally `cortext_supertag`, will let reusable labels add fields across collection boundaries. Typed properties live in post meta. A future REST field, `cortext_row_resolved_schema`, will return the effective property set for a row. The admin UI is a React shell that mounts Gutenberg's `EditorProvider` alongside `@wordpress/dataviews`.
+Cortext stores documents, collection definitions, fields, and collection rows as
+WordPress posts and post meta. The admin UI is a React shell that combines a
+Gutenberg document editor with collection views built on WordPress packages.
 
 ## Docs
 
 -   [Getting started](docs/getting-started.md): install, run, day-to-day commands.
 -   [Vision and principles](docs/vision.md): what drives the design.
--   [Content modeling guide](docs/modeling-guide.md): collections vs cross-type taxonomies, with examples.
--   [Architecture](docs/architecture.md): content-model sketch.
+-   [Content modeling guide](docs/modeling-guide.md): how to choose useful collections.
+-   [Architecture](docs/architecture.md): current storage and shell overview.
 -   [Shell architecture](docs/architecture/shell.md): React shell, mount point, editor setup.
 -   [Data model](docs/architecture/data-model.md): implementation notes and current status.
 -   [Theming](docs/theming.md): shell vs content themes, and current token notes.
