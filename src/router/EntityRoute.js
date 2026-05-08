@@ -355,9 +355,15 @@ export default function EntityRoute( { history } ) {
 	}
 
 	const isDocumentActive = active.kind === 'document';
-	const editorPostId = isDocumentActive ? mountedDocumentId : null;
-	const editorPostType = isDocumentActive ? mountedDocumentType : null;
-	const isRow = isDocumentActive && Boolean( rowCollectionSlug );
+	// Mount Canvas whenever a document is mounted, not only when it's the
+	// active pane. The pane visibility is driven by `isDocumentActive` via
+	// `WorkspacePane` and the `isActive` prop. Gating the mount on
+	// `isDocumentActive` would deadlock the load: Canvas can't fire
+	// `DOCUMENT_DISPLAYED` until it renders, and `active` can't flip to
+	// `document` until that dispatch arrives.
+	const editorPostId = mountedDocumentId;
+	const editorPostType = mountedDocumentType;
+	const isRow = Boolean( editorPostId ) && Boolean( rowCollectionSlug );
 
 	const { invalidateResolution, receiveEntityRecords } =
 		useDispatch( 'core' );
