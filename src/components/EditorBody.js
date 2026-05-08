@@ -257,8 +257,13 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 				'trash',
 		};
 	}, [] );
-	const { insertBlocks, removeBlock, updateBlockAttributes } =
-		useDispatch( blockEditorStore );
+	const {
+		insertBlocks,
+		removeBlock,
+		updateBlockAttributes,
+		startTyping,
+		stopTyping,
+	} = useDispatch( blockEditorStore );
 
 	useLayoutEffect( () => {
 		if ( isTrashed ) {
@@ -281,12 +286,28 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 	// happen between render and paint so the user never sees the
 	// intermediate state where the document has body content but the
 	// locked header blocks haven't been added yet.
+	//
+	// `useMovingAnimation` (the hook that animates blocks when their
+	// index changes) skips the animation while `isTyping` is true. Wrap
+	// the inserts in a startTyping/stopTyping pair so existing body
+	// blocks don't slide downward as the headers land — that animation
+	// reads as "the icon is being inserted right now" when really the
+	// document is just hydrating.
 	useLayoutEffect( () => {
 		if ( isTrashed ) {
 			return;
 		}
 
-		if ( featuredId > 0 && ! hasCover ) {
+		const needsCover = featuredId > 0 && ! hasCover;
+		const needsIcon = iconMeta && ! hasIcon;
+		const needsTitle = ! hasTitle;
+		if ( ! needsCover && ! needsIcon && ! needsTitle ) {
+			return;
+		}
+
+		startTyping();
+
+		if ( needsCover ) {
 			insertBlocks(
 				createBlock( DOCUMENT_COVER_BLOCK, {
 					align: 'full',
@@ -297,7 +318,7 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 				false
 			);
 		}
-		if ( iconMeta && ! hasIcon ) {
+		if ( needsIcon ) {
 			let iconIndex = 0;
 			if ( hasCover ) {
 				iconIndex = coverIndex + 1;
@@ -313,7 +334,7 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 				false
 			);
 		}
-		if ( ! hasTitle ) {
+		if ( needsTitle ) {
 			const titleIndex =
 				( featuredId > 0 ? 1 : 0 ) + ( iconMeta ? 1 : 0 );
 			insertBlocks(
@@ -325,6 +346,11 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 				false
 			);
 		}
+
+		// Release the typing flag on the next frame, after the moving
+		// animation has been decided (and skipped) for this render pass.
+		const handle = window.requestAnimationFrame( () => stopTyping() );
+		return () => window.cancelAnimationFrame( handle );
 	}, [
 		coverIndex,
 		featuredId,
@@ -334,6 +360,8 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 		iconMeta,
 		insertBlocks,
 		isTrashed,
+		startTyping,
+		stopTyping,
 	] );
 
 	return null;
