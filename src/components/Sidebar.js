@@ -501,7 +501,7 @@ export default function Sidebar( {
 				setFavoritesError(
 					err?.message ??
 						__(
-							'Page was moved to trash, but could not be removed from favorites.',
+							'Page moved to Trash, but Favorites could not be updated.',
 							'cortext'
 						)
 				);

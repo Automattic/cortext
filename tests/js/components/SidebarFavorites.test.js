@@ -65,7 +65,7 @@ describe( 'SidebarFavorites helpers', () => {
 		).toBe( favorites );
 	} );
 
-	it( 'filters favorites for a trashed page and loaded descendants', () => {
+	it( 'removes a trashed page and loaded descendants from favorites', () => {
 		const favorites = [
 			{ kind: 'page', id: 1 },
 			{ kind: 'page', id: 2 },
@@ -128,7 +128,7 @@ describe( 'SidebarFavorites helpers', () => {
 		] );
 	} );
 
-	it( 'uses stored paths for favorites missing from loaded sidebar records', () => {
+	it( 'uses stored paths when sidebar records are missing', () => {
 		const favorites = [ { kind: 'page', id: 1, path: 'page/old-1' } ];
 
 		expect( resolveFavoriteItems( favorites, [], [] ) ).toMatchObject( [
@@ -141,13 +141,13 @@ describe( 'SidebarFavorites helpers', () => {
 		] );
 	} );
 
-	it( 'filters missing favorites that do not have a stored path', () => {
+	it( 'drops missing favorites without a stored path', () => {
 		expect(
 			resolveFavoriteItems( [ { kind: 'page', id: 1 } ], [], [] )
 		).toEqual( [] );
 	} );
 
-	it( 'does not let stale removal timers hide a re-added favorite', () => {
+	it( 'keeps a re-added favorite visible after the removal timer fires', () => {
 		jest.useFakeTimers();
 		const favorite = { kind: 'page', id: 1, path: 'page/notes-1' };
 		const pages = [

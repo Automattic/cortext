@@ -46,7 +46,7 @@ describe( 'useFavorites', () => {
 		] );
 	} );
 
-	it( 'waits for initial load before applying updater writes', async () => {
+	it( 'waits for the first load before writing updater results', async () => {
 		const initialLoad = deferred();
 		apiFetch.mockImplementation( ( options ) => {
 			if ( options.method === 'PUT' ) {
@@ -93,7 +93,7 @@ describe( 'useFavorites', () => {
 		} );
 	} );
 
-	it( 'serializes writes so a failed write cannot clobber a later one', async () => {
+	it( 'keeps a failed write from overwriting a later one', async () => {
 		const firstWrite = deferred();
 		const secondWrite = deferred();
 		const putCalls = [];
