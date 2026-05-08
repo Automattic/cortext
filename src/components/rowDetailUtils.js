@@ -30,7 +30,7 @@ export function adjacentRowId( rows, currentRowId, direction ) {
 	return next?.id ?? null;
 }
 
-export function splitPropertyPatch( patch, currentMeta = {} ) {
+export function splitPropertyPatch( patch ) {
 	const next = {
 		title: undefined,
 		meta: null,
@@ -45,8 +45,12 @@ export function splitPropertyPatch( patch, currentMeta = {} ) {
 		}
 	}
 
+	// Only the changed keys get sent through editPost. Merging in the
+	// full current meta would mark every key edited and round-trip the
+	// whole map back to REST on save, which fails when any meta value
+	// (e.g. a hydrated relation) doesn't match its registered type.
 	if ( Object.keys( metaPatch ).length > 0 ) {
-		next.meta = { ...( currentMeta ?? {} ), ...metaPatch };
+		next.meta = metaPatch;
 	}
 
 	return next;
