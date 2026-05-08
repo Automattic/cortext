@@ -484,7 +484,7 @@ export default function RowProperties( { fields, row, visible = true } ) {
 
 	const update = useCallback(
 		( patch ) => {
-			const split = splitPropertyPatch( patch, meta );
+			const split = splitPropertyPatch( patch );
 			const next = {};
 			if ( split.title !== undefined ) {
 				next.title = split.title;
@@ -496,7 +496,7 @@ export default function RowProperties( { fields, row, visible = true } ) {
 				editPost( next );
 			}
 		},
-		[ editPost, meta ]
+		[ editPost ]
 	);
 
 	if ( propertyFields.length === 0 ) {
