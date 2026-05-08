@@ -12,14 +12,13 @@ import {
 } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { plus } from '@wordpress/icons';
-import { useNavigate, useSearch } from '@wordpress/route';
+import { useNavigate } from '@wordpress/route';
 
 import DataViewColumnInteractions from './DataViewColumnInteractions';
 import EditableCell, { RowMutationContext } from './EditableCell';
 import TableCalculationsFooter from './TableCalculationsFooter';
 import ColumnHeaderActions from './fields/ColumnHeaderActions';
 import RowDetailView, { ROW_DETAIL_MODE_ICONS } from './RowDetailView';
-import { RowFullEditorContext } from './RowFullEditorContext';
 import { RowDetailSidebar } from './RowDetailSidebarSlot';
 import {
 	GHOST_FIELD_ID,
@@ -35,23 +34,14 @@ import {
 import useCollectionFields from '../hooks/useCollectionFields';
 import useCollectionRows from '../hooks/useCollectionRows';
 import { elementsFromOptions } from '../hooks/optionElements';
+import { computeDocumentUri } from '../router/useResolveEntity';
 
 const DEFAULT_LAYOUTS = { table: { density: 'compact' }, grid: {}, list: {} };
 const TITLE_LABEL = __( 'Title', 'cortext' );
-const ROW_SEARCH_KEY = 'row';
-const ROW_COLLECTION_SEARCH_KEY = 'rowCollection';
 const ROW_DETAIL_SIDE_SURFACE_EXIT_MS = 300;
 const ROW_DETAIL_MODAL_ENTER_MS = 200;
 const ROW_DETAIL_SIDE_TO_MODAL_HANDOFF_MS =
 	ROW_DETAIL_SIDE_SURFACE_EXIT_MS - ROW_DETAIL_MODAL_ENTER_MS;
-
-function parseSearchId( value ) {
-	if ( Array.isArray( value ) ) {
-		return parseSearchId( value[ 0 ] );
-	}
-	const id = Number.parseInt( String( value ).replaceAll( '"', '' ), 10 );
-	return Number.isFinite( id ) && id > 0 ? id : null;
-}
 
 function prefersReducedMotion() {
 	return (
@@ -279,13 +269,8 @@ export default function CollectionDataViews( {
 	onReady,
 } ) {
 	const navigate = useNavigate();
-	const routeSearch = useSearch( { strict: false } );
 	const { fields, collection, slug, isResolving, fieldsResolved } =
 		useCollectionFields( collectionId );
-	const routeRowId = parseSearchId( routeSearch?.[ ROW_SEARCH_KEY ] );
-	const routeRowCollectionId = parseSearchId(
-		routeSearch?.[ ROW_COLLECTION_SEARCH_KEY ]
-	);
 
 	const availableFields = useMemo(
 		() => [ TITLE_FIELD, ...fields ],
@@ -496,13 +481,8 @@ export default function CollectionDataViews( {
 	const rowDetailMode =
 		savedRowDetailMode === 'full' ? 'side' : savedRowDetailMode;
 	const postType = slug ? `crtxt_${ slug }` : null;
-	const { clearSuppressedRouteRow, openRowFull, suppressedRouteRow } =
-		useContext( RowFullEditorContext );
 	const detailApiRef = useRef( null );
 	const [ openRowId, setOpenRowId ] = useState( null );
-	const openRowIdRef = useRef( openRowId );
-	openRowIdRef.current = openRowId;
-	const [ fullRowId, setFullRowId ] = useState( null );
 	const [ detailSaveError, setDetailSaveError ] = useState( null );
 	const [ pendingDetailTransition, setPendingDetailTransition ] =
 		useState( null );
@@ -531,35 +511,32 @@ export default function CollectionDataViews( {
 		},
 		[]
 	);
-	const updateRouteRow = useCallback(
-		( rowId, options = {} ) => {
-			if ( ! collectionId || ! rowId ) {
+	const navigateToFullRow = useCallback(
+		( rowId ) => {
+			if ( ! rowId ) {
 				return;
 			}
+			// Full mode is the only row state that lives in the URL. Side
+			// and modal panes are local React state. `computeDocumentUri`
+			// gives pages and rows the same URL shape; the post type is
+			// resolved via the document locator on the way in.
+			const targetRow =
+				dataFiltered.find(
+					( candidate ) => String( candidate.id ) === String( rowId )
+				) ??
+				data.find(
+					( candidate ) => String( candidate.id ) === String( rowId )
+				) ??
+				null;
+			const splatPath = computeDocumentUri(
+				targetRow ?? { id: rowId, slug: '' }
+			);
 			navigate( {
-				search: ( current ) => ( {
-					...( current ?? {} ),
-					[ ROW_COLLECTION_SEARCH_KEY ]: collectionId,
-					[ ROW_SEARCH_KEY ]: rowId,
-				} ),
-				replace: options.replace ?? false,
+				to: '/$',
+				params: { _splat: splatPath },
 			} );
 		},
-		[ collectionId, navigate ]
-	);
-	const clearRouteRow = useCallback(
-		( options = {} ) => {
-			navigate( {
-				search: ( current ) => {
-					const next = { ...( current ?? {} ) };
-					delete next[ ROW_COLLECTION_SEARCH_KEY ];
-					delete next[ ROW_SEARCH_KEY ];
-					return next;
-				},
-				replace: options.replace ?? true,
-			} );
-		},
-		[ navigate ]
+		[ data, dataFiltered, navigate ]
 	);
 
 	const openRow = useMemo( () => {
@@ -576,38 +553,13 @@ export default function CollectionDataViews( {
 
 	const openFullRow = useCallback(
 		( rowId ) => {
-			if ( ! openRowFull || ! postType || ! rowId ) {
+			if ( ! rowId ) {
 				return false;
 			}
-			setOpenRowId( rowId );
-			setFullRowId( rowId );
-			openRowFull( {
-				collectionId,
-				postType,
-				rowId,
-				onClose: () => {
-					setOpenRowId( null );
-					setFullRowId( null );
-					setDetailSaveError( null );
-					setPendingDetailTransition( null );
-					clearRouteRow( { replace: true } );
-					refresh();
-				},
-				onModeChange: ( mode, nextRowId ) => {
-					setOpenRowId( nextRowId );
-					setFullRowId( null );
-					setDetailSaveError( null );
-					setPendingDetailTransition( null );
-					onChangeViewRef.current(
-						withRowDetailMode( viewRef.current, mode )
-					);
-					refresh();
-				},
-				onSaved: refresh,
-			} );
+			navigateToFullRow( rowId );
 			return true;
 		},
-		[ clearRouteRow, collectionId, openRowFull, postType, refresh ]
+		[ navigateToFullRow ]
 	);
 
 	const applyDetailTransition = useCallback(
@@ -618,44 +570,25 @@ export default function CollectionDataViews( {
 			if ( transition.type === 'close' ) {
 				clearModeSurfaceTransition();
 				setOpenRowId( null );
-				setFullRowId( null );
-				if ( transition.syncUrl !== false ) {
-					clearRouteRow( { replace: true } );
-				}
 			} else if ( transition.type === 'row' ) {
 				clearModeSurfaceTransition();
 				setOpenRowId( transition.rowId );
-				setFullRowId( null );
-				if ( transition.syncUrl !== false ) {
-					updateRouteRow( transition.rowId, {
-						replace: ! transition.pushUrl,
-					} );
-				}
 			} else if ( transition.type === 'mode' ) {
-				setFullRowId( null );
 				onChangeViewRef.current(
 					withRowDetailMode( viewRef.current, transition.mode )
 				);
 			} else if ( transition.type === 'full' ) {
+				// Route change to a document URL; clear the local pane
+				// state so it doesn't flash on the way out.
 				clearModeSurfaceTransition();
-				if ( transition.syncUrl !== false ) {
-					updateRouteRow( transition.rowId, {
-						replace: ! transition.pushUrl,
-					} );
-				}
+				setOpenRowId( null );
 				openFullRow( transition.rowId );
 			}
 			if ( options.refreshRows ) {
 				refresh();
 			}
 		},
-		[
-			clearModeSurfaceTransition,
-			clearRouteRow,
-			openFullRow,
-			refresh,
-			updateRouteRow,
-		]
+		[ clearModeSurfaceTransition, openFullRow, refresh ]
 	);
 
 	const runDetailTransition = useCallback(
@@ -704,7 +637,6 @@ export default function CollectionDataViews( {
 			runDetailTransition( {
 				type: rowDetailMode === 'full' ? 'full' : 'row',
 				rowId: row.id,
-				pushUrl: true,
 			} );
 		},
 		[ openRowId, rowDetailMode, runDetailTransition ]
@@ -748,7 +680,7 @@ export default function CollectionDataViews( {
 		( direction ) => {
 			const rowId = adjacentRowId( dataFiltered, openRowId, direction );
 			if ( rowId ) {
-				runDetailTransition( { type: 'row', rowId, pushUrl: true } );
+				runDetailTransition( { type: 'row', rowId } );
 			}
 		},
 		[ dataFiltered, openRowId, runDetailTransition ]
@@ -817,52 +749,10 @@ export default function CollectionDataViews( {
 	useEffect( () => {
 		clearModeSurfaceTransition();
 		setOpenRowId( null );
-		setFullRowId( null );
 		setDetailSaveError( null );
 		setPendingDetailTransition( null );
 		detailApiRef.current = null;
 	}, [ clearModeSurfaceTransition, collectionId ] );
-
-	useEffect( () => {
-		const routeTargetsThisCollection =
-			routeRowId &&
-			routeRowCollectionId &&
-			String( routeRowCollectionId ) === String( collectionId );
-
-		if ( ! routeTargetsThisCollection ) {
-			clearSuppressedRouteRow?.();
-			if ( openRowIdRef.current ) {
-				runDetailTransition( { type: 'close', syncUrl: false } );
-			}
-			return;
-		}
-
-		if (
-			String( suppressedRouteRow?.collectionId ) ===
-				String( collectionId ) &&
-			String( suppressedRouteRow?.rowId ) === String( routeRowId )
-		) {
-			return;
-		}
-
-		if ( String( openRowIdRef.current ) === String( routeRowId ) ) {
-			return;
-		}
-
-		runDetailTransition( {
-			type: rowDetailMode === 'full' ? 'full' : 'row',
-			rowId: routeRowId,
-			syncUrl: false,
-		} );
-	}, [
-		collectionId,
-		clearSuppressedRouteRow,
-		routeRowCollectionId,
-		routeRowId,
-		rowDetailMode,
-		runDetailTransition,
-		suppressedRouteRow,
-	] );
 
 	// Reconcile saved view state with the live schema whenever the field
 	// set changes: seed defaults on first render, then hand off to
@@ -1068,12 +958,11 @@ export default function CollectionDataViews( {
 		);
 	}
 
-	const isFullDetail = Boolean( fullRowId );
 	const previousRowId = adjacentRowId( dataFiltered, openRowId, -1 );
 	const nextRowId = adjacentRowId( dataFiltered, openRowId, 1 );
 	let detailSurface = null;
 
-	if ( openRowId && postType && ! isFullDetail && renderedRowDetailMode ) {
+	if ( openRowId && postType && renderedRowDetailMode ) {
 		const detailView = (
 			<RowDetailView
 				canGoNext={ Boolean( nextRowId ) }
@@ -1086,6 +975,7 @@ export default function CollectionDataViews( {
 				onModeChange={ requestDetailMode }
 				onNext={ () => requestAdjacentRow( 1 ) }
 				onPrevious={ () => requestAdjacentRow( -1 ) }
+				onRestored={ refresh }
 				onRetryPending={ retryPendingDetailTransition }
 				onSaved={ refresh }
 				postType={ postType }
@@ -1110,62 +1000,57 @@ export default function CollectionDataViews( {
 					data-row-detail-mode={ rowDetailMode }
 					data-row-detail-open={ openRowId ? 'true' : 'false' }
 				>
-					{ ! isFullDetail && (
-						<div
-							className="cortext-data-view"
-							ref={ tableWrapperRef }
-						>
-							<DataViews
-								data={ dataFiltered }
-								fields={ dataViewFields }
+					<div className="cortext-data-view" ref={ tableWrapperRef }>
+						<DataViews
+							data={ dataFiltered }
+							fields={ dataViewFields }
+							view={ view }
+							onChangeView={ onChangeView }
+							paginationInfo={ clientPaginationInfo }
+							defaultLayouts={ DEFAULT_LAYOUTS }
+							getItemId={ ( item ) => String( item.id ) }
+							isLoading={ isLoading }
+							empty={ empty }
+							actions={ dataViewActions }
+						/>
+						{ isTableLayout && (
+							<TableCalculationsFooter
+								wrapperRef={ tableWrapperRef }
+								view={ view }
+								fields={ availableFields }
+								data={ dataFilteredForCalculations }
+								onChangeView={ onChangeView }
+							/>
+						) }
+						{ isTableLayout && (
+							<DataViewColumnInteractions
+								wrapperRef={ tableWrapperRef }
+								view={ view }
+								fields={ availableFields }
+								onChangeView={ onChangeView }
+							/>
+						) }
+						{ isTableLayout && (
+							<ColumnHeaderActions
+								collectionId={ collectionId }
 								view={ view }
 								onChangeView={ onChangeView }
-								paginationInfo={ clientPaginationInfo }
-								defaultLayouts={ DEFAULT_LAYOUTS }
-								getItemId={ ( item ) => String( item.id ) }
-								isLoading={ isLoading }
-								empty={ empty }
-								actions={ dataViewActions }
+								onFieldOptionsSaved={ updateFieldOptions }
+								onRowsChanged={ refresh }
 							/>
-							{ isTableLayout && (
-								<TableCalculationsFooter
-									wrapperRef={ tableWrapperRef }
-									view={ view }
-									fields={ availableFields }
-									data={ dataFilteredForCalculations }
-									onChangeView={ onChangeView }
-								/>
-							) }
-							{ isTableLayout && (
-								<DataViewColumnInteractions
-									wrapperRef={ tableWrapperRef }
-									view={ view }
-									fields={ availableFields }
-									onChangeView={ onChangeView }
-								/>
-							) }
-							{ isTableLayout && (
-								<ColumnHeaderActions
-									collectionId={ collectionId }
-									view={ view }
-									onChangeView={ onChangeView }
-									onFieldOptionsSaved={ updateFieldOptions }
-									onRowsChanged={ refresh }
-								/>
-							) }
-							{ /* tech-debt.md#7: DataViews has no footer slot, so the
+						) }
+						{ /* tech-debt.md#7: DataViews has no footer slot, so the
 							   New-row affordance and its CSS layout sit outside the
 							   component instead of inside its layout chrome. */ }
-							<div className="cortext-data-view__footer">
-								<NewRowButton
-									slug={ slug }
-									view={ view }
-									fields={ fields }
-									onCreated={ onCreated }
-								/>
-							</div>
+						<div className="cortext-data-view__footer">
+							<NewRowButton
+								slug={ slug }
+								view={ view }
+								fields={ fields }
+								onCreated={ onCreated }
+							/>
 						</div>
-					) }
+					</div>
 					{ detailSurface }
 				</div>
 			</OpenRowActionContext.Provider>

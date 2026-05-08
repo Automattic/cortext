@@ -932,12 +932,14 @@ test.describe( 'Collection view block', () => {
 					.first()
 			).toHaveCSS( 'cursor', 'pointer' );
 			await titleCellOpenButton.click();
-			await expect
-				.poll( () => new URL( page.url() ).searchParams.get( 'row' ) )
-				.toBe( String( fixture.entry.id ) );
+			// Side and modal panes are local React state, not URL state.
+			// Full mode is the only row view that lives in the URL.
+			expect(
+				new URL( page.url() ).searchParams.get( 'row' )
+			).toBeNull();
 			expect(
 				new URL( page.url() ).searchParams.get( 'rowCollection' )
-			).toBe( String( fixture.collection.id ) );
+			).toBeNull();
 
 			await expect(
 				canvas.getByRole( 'dialog', {
