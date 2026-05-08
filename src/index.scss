@@ -3344,13 +3344,16 @@ tr:has(.cortext-title-cell--is-open)
 
 	// EditorBody mounts a `cortext-canvas__visual` wrapper inside row detail
 	// panes after the row properties chrome. Give the iframe a real height
-	// without pushing the properties into the block-editor iframe.
+	// without pushing the properties into the block-editor iframe. The
+	// border-top is the visual divider between the row's properties form
+	// and the document body below.
 	.cortext-canvas__visual {
 		display: flex;
 		flex: 1 1 420px;
 		flex-direction: column;
 		min-height: 360px;
 		background: $white;
+		border-top: 1px solid var(--cortext-row-detail-border);
 		box-sizing: border-box;
 		overflow: visible;
 	}
