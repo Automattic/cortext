@@ -961,11 +961,13 @@ test.describe( 'Collection view block', () => {
 				'rgb(248, 248, 248)'
 			);
 			await expect( titleCellOpenButton ).toHaveCSS( 'opacity', '1' );
-			const detailTitle = detail.getByRole( 'textbox', {
-				name: 'Title',
-				exact: true,
-			} );
-			await expect( detailTitle ).toHaveValue(
+			// The row detail chrome now mirrors the post title as an
+			// `<h2>`; the editable input lives inside the row's
+			// EditorBody iframe (locked `core/post-title` block).
+			const detailTitle = detail.locator(
+				'.cortext-row-detail__title'
+			);
+			await expect( detailTitle ).toHaveText(
 				'The Left Hand of Darkness'
 			);
 			const tagsLabel = detail
@@ -1009,18 +1011,15 @@ test.describe( 'Collection view block', () => {
 			await expect( detail.locator( '.components-spinner' ) ).toHaveCount(
 				0
 			);
-			await expect( detailTitle ).toHaveValue(
-				'The Left Hand of Darkness'
-			);
 			// Side and modal panes are local React state, not URL state,
 			// so verify the navigation via the detail title rather than ?row.
-			await expect( detailTitle ).toHaveValue( 'Kindred' );
+			await expect( detailTitle ).toHaveText( 'Kindred' );
 			await expect(
 				detail.locator( '[data-e2e-stable-label="tags"]' )
 			).toHaveText( 'Tags' );
 			await page.unroute( delayedSecondRowPattern, delaySecondRow );
 			await detail.getByRole( 'button', { name: 'Row above' } ).click();
-			await expect( detailTitle ).toHaveValue(
+			await expect( detailTitle ).toHaveText(
 				'The Left Hand of Darkness'
 			);
 			// Side and modal panes are local React state, not URL state, so
@@ -1046,18 +1045,11 @@ test.describe( 'Collection view block', () => {
 				detail.locator( '.cortext-row-detail__properties--rows' )
 			).toBeVisible();
 
-			await detailTitle.click();
-			await expect( detailTitle ).toHaveCSS( 'border-top-width', '0px' );
-			await expect( detailTitle ).toHaveCSS(
-				'background-color',
-				'rgba(0, 0, 0, 0)'
-			);
-			await page.keyboard.press( 'ControlOrMeta+A' );
-			await page.keyboard.press( 'Backspace' );
-			await page.keyboard.type( 'Changed row detail title' );
-			await expect( firstRow.locator( 'td' ).first() ).toContainText(
-				'Changed row detail title'
-			);
+			// The chrome heading mirrors the post title; the editable title
+			// lives inside the row's EditorBody iframe via the locked
+			// `core/post-title` block, so we don't try to edit it from
+			// the chrome anymore. The Author / Year edits below still
+			// cover the row-property save flow end-to-end.
 			await detail
 				.getByRole( 'textbox', { name: 'Author', exact: true } )
 				.fill( 'Octavia Butler' );
@@ -1109,7 +1101,7 @@ test.describe( 'Collection view block', () => {
 			await expect(
 				page
 					.getByRole( 'navigation', { name: 'Breadcrumb' } )
-					.getByText( 'Changed row detail title' )
+					.getByText( 'The Left Hand of Darkness' )
 			).toBeVisible();
 
 			await page
@@ -1139,7 +1131,7 @@ test.describe( 'Collection view block', () => {
 					};
 				} )
 				.toEqual( {
-					title: 'Changed row detail title',
+					title: 'The Left Hand of Darkness',
 					author: 'Octavia Butler',
 					year: 2026,
 				} );
