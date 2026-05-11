@@ -15,10 +15,6 @@ function readSeen() {
 export default function useAlphaNotice() {
 	const [ isOpen, setOpen ] = useState( () => ! readSeen() );
 
-	const dismiss = useCallback( () => {
-		setOpen( false );
-	}, [] );
-
 	const acknowledge = useCallback( ( persist ) => {
 		if ( persist ) {
 			try {
@@ -28,5 +24,5 @@ export default function useAlphaNotice() {
 		setOpen( false );
 	}, [] );
 
-	return { isOpen, dismiss, acknowledge };
+	return { isOpen, acknowledge };
 }

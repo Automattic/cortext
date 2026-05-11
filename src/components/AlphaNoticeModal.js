@@ -10,7 +10,7 @@ import { Icon, backup, bug, comment } from '@wordpress/icons';
 
 const REPO_URL = 'https://github.com/Automattic/cortext';
 
-export default function AlphaNoticeModal( { onAcknowledge, onDismiss } ) {
+export default function AlphaNoticeModal( { onAcknowledge } ) {
 	const [ dontShowAgain, setDontShowAgain ] = useState( true );
 
 	return (
@@ -18,7 +18,7 @@ export default function AlphaNoticeModal( { onAcknowledge, onDismiss } ) {
 			className="cortext-alpha-notice"
 			overlayClassName="cortext-alpha-notice-overlay"
 			title={ __( 'Welcome to Cortext (alpha)', 'cortext' ) }
-			onRequestClose={ onDismiss }
+			onRequestClose={ () => onAcknowledge( dontShowAgain ) }
 			size="medium"
 		>
 			<p className="cortext-alpha-notice__intro">

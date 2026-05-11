@@ -87,7 +87,6 @@ function RootLayout() {
 					{ alphaNotice.isOpen && (
 						<AlphaNoticeModal
 							onAcknowledge={ alphaNotice.acknowledge }
-							onDismiss={ alphaNotice.dismiss }
 						/>
 					) }
 				</FavoritesProvider>
