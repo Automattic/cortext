@@ -136,6 +136,59 @@ describe( 'useCollectionRows', () => {
 		expect( result.current.queryMode ).toBe( 'client' );
 	} );
 
+	it( 'fetches remaining client-mode pages in parallel', async () => {
+		const resolvers = new Map();
+		apiFetch.mockImplementation( ( { path } ) => {
+			const page = Number(
+				new URL( path, 'https://example.test' ).searchParams.get(
+					'page'
+				)
+			);
+			if ( page === 1 ) {
+				return Promise.resolve( {
+					rows: [ { id: 1 } ],
+					collection: null,
+					total: 4,
+					totalPages: 4,
+				} );
+			}
+			return new Promise( ( resolve ) => {
+				resolvers.set( page, () =>
+					resolve( {
+						rows: [ { id: page } ],
+						collection: null,
+						total: 4,
+						totalPages: 4,
+					} )
+				);
+			} );
+		} );
+
+		const view = {
+			type: 'table',
+			filters: [],
+			page: 1,
+			perPage: 25,
+			search: 'ada',
+		};
+
+		const { result } = renderHook( () =>
+			useCollectionRows( 7, view, baseFields )
+		);
+
+		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 4 ) );
+
+		resolvers.get( 4 )();
+		resolvers.get( 2 )();
+		resolvers.get( 3 )();
+
+		await waitFor( () =>
+			expect( result.current.data.map( ( row ) => row.id ) ).toEqual( [
+				1, 2, 3, 4,
+			] )
+		);
+	} );
+
 	it( 'falls back to paged client mode for unsupported filters and sorts', async () => {
 		const view = {
 			type: 'table',

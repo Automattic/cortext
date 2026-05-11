@@ -6,6 +6,7 @@ import apiFetch from '@wordpress/api-fetch';
 // its own fetch state and exposes a manual refresh() handle.
 
 const CLIENT_PER_PAGE = 100;
+const CLIENT_PAGE_FETCH_CONCURRENCY = 4;
 const SERVER_OPERATORS = new Set( [ 'is', 'isNot', 'isAny', 'isNone' ] );
 const SERVER_SORT_FIELDS = new Set( [ 'title', 'created_at', 'modified_at' ] );
 const SERVER_SORT_FIELD_TYPES = new Set( [
@@ -259,19 +260,47 @@ export default function useCollectionRows(
 					const rows = Array.isArray( firstPage.rows )
 						? [ ...firstPage.rows ]
 						: [];
+					const remainingPages = Array.from(
+						{ length: totalPages - 1 },
+						( _, index ) => index + 2
+					);
+					const remainingPageBodies = [];
+					let nextPageIndex = 0;
 
-					for ( let page = 2; page <= totalPages; page++ ) {
-						const nextPage = await fetchRowsPage( {
-							...activeQueryPlan.args,
-							page,
-						} );
-						if ( requestId !== requestIdRef.current ) {
-							return;
-						}
-						if ( Array.isArray( nextPage.rows ) ) {
-							rows.push( ...nextPage.rows );
+					async function fetchNextPages() {
+						while (
+							nextPageIndex < remainingPages.length &&
+							requestId === requestIdRef.current
+						) {
+							const index = nextPageIndex++;
+							const page = remainingPages[ index ];
+							const nextPage = await fetchRowsPage( {
+								...activeQueryPlan.args,
+								page,
+							} );
+							if ( requestId !== requestIdRef.current ) {
+								return;
+							}
+							remainingPageBodies[ index ] = nextPage;
 						}
 					}
+
+					const workerCount = Math.min(
+						CLIENT_PAGE_FETCH_CONCURRENCY,
+						remainingPages.length
+					);
+					await Promise.all(
+						Array.from( { length: workerCount }, fetchNextPages )
+					);
+					if ( requestId !== requestIdRef.current ) {
+						return;
+					}
+
+					remainingPageBodies.forEach( ( nextPage ) => {
+						if ( Array.isArray( nextPage?.rows ) ) {
+							rows.push( ...nextPage.rows );
+						}
+					} );
 
 					body = { ...firstPage, rows };
 				}
