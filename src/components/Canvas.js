@@ -203,7 +203,10 @@ function CanvasEditor( {
 	}, [ onSaved, status ] );
 
 	useEffect( () => {
-		if ( ! pendingPost || pendingPost.id === post.id ) {
+		if (
+			! pendingPost ||
+			( pendingPost.id === post.id && pendingPost.type === post.type )
+		) {
 			return undefined;
 		}
 
@@ -212,9 +215,9 @@ function CanvasEditor( {
 		async function switchAfterSave() {
 			const didFlush = await flushNow();
 			if ( ! cancelled && didFlush ) {
-				// Page-to-page swaps don't change EntityRoute's `active`, so
-				// the surface-level cross-fade can't see them. Trigger one
-				// here instead.
+				// Document-to-document swaps don't change EntityRoute's
+				// `active`, so the surface-level cross-fade can't see them.
+				// Trigger one here instead.
 				withViewTransition( () => onSwitchPost( pendingPost ) );
 			}
 		}
@@ -224,7 +227,15 @@ function CanvasEditor( {
 		return () => {
 			cancelled = true;
 		};
-	}, [ pendingPost, post.id, flushNow, isDirty, isSaving, onSwitchPost ] );
+	}, [
+		pendingPost,
+		post.id,
+		post.type,
+		flushNow,
+		isDirty,
+		isSaving,
+		onSwitchPost,
+	] );
 
 	const hasProperties = Array.isArray( fields ) && fields.length > 0;
 	const [ arePropertiesVisible, setArePropertiesVisible ] = useState( true );
@@ -327,21 +338,30 @@ export default function Canvas( {
 		postId
 	);
 	const [ displayedPost, setDisplayedPost ] = useState( null );
-	const renderedPost =
-		displayedPost?.type === postType ? displayedPost : requestedPost;
+	// Keep the previously-rendered post mounted (any type) until CanvasEditor's
+	// pendingPost effect flushes unsaved edits and explicitly swaps. Falling
+	// back to `requestedPost` on type mismatch would re-mount the editor
+	// immediately and drop in-flight edits on cross-type navigation
+	// (page → row, row → page).
+	const renderedPost = displayedPost ?? requestedPost;
 
 	useEffect( () => {
 		if ( ! requestedPost ) {
 			return;
 		}
 		setDisplayedPost( ( current ) => {
+			if ( ! current ) {
+				return requestedPost;
+			}
+			// Same document: refresh with the freshest payload.
 			if (
-				! current ||
-				current.type !== requestedPost.type ||
-				current.id === requestedPost.id
+				current.id === requestedPost.id &&
+				current.type === requestedPost.type
 			) {
 				return requestedPost;
 			}
+			// Different document (any axis): hold so the editor can flush
+			// before the swap; CanvasEditor calls setDisplayedPost itself.
 			return current;
 		} );
 	}, [ requestedPost ] );
@@ -369,7 +389,7 @@ export default function Canvas( {
 		>
 			<CanvasEditor
 				post={ renderedPost }
-				postType={ postType }
+				postType={ renderedPost.type }
 				fields={ fields }
 				row={ row }
 				pendingPost={ pendingPost }
