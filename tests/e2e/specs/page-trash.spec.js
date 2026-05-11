@@ -111,7 +111,7 @@ test.describe( 'Page trash flow', () => {
 
 			// Canvas keeps the parent open with a trashed banner.
 			const notice = page.locator( '.cortext-canvas__notice' );
-			await expect( notice ).toContainText( 'This page is in trash.' );
+			await expect( notice ).toContainText( 'This document is in trash.' );
 
 			// Restore via the banner. Subtree returns; banner disappears.
 			await notice.getByRole( 'button', { name: 'Restore' } ).click();

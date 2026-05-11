@@ -908,9 +908,13 @@ test.describe( 'Collection view block', () => {
 				{ timeout: 15_000 }
 			);
 
-			const canvas = page.frameLocator(
-				'.cortext-canvas__visual iframe[name="editor-canvas"]'
-			);
+			// Scope to the parent page's editor iframe. After the row peek
+			// opens, RowDetailView mounts its own EditorBody (another
+			// `.cortext-canvas__visual iframe`), so the unqualified
+			// frameLocator would resolve to two elements.
+			const canvas = page
+				.getByRole( 'region', { name: 'Content' } )
+				.frameLocator( 'iframe[name="editor-canvas"]' );
 			await expect(
 				canvas.locator( '.dataviews-view-table__actions-column' )
 			).toHaveCount( 0 );
