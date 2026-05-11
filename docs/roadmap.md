@@ -1,7 +1,6 @@
 # Roadmap
 
-Cortext is still a prototype. The next goal is simple: make the WordPress-native
-knowledge base model clear enough to test in public.
+Cortext is still a prototype. The next goal is simple: make the WordPress-native knowledge base model clear enough to test in public.
 
 ## Current prototype
 
@@ -18,9 +17,7 @@ The repo already has a usable first shape:
 
 ## Before this is production-ready
 
-The storage model, REST responses, block attributes, and theme tokens still need
-to settle. **Until then, data schemas are volatile, user data is assumed
-disposable, and migrations are not planned.**
+The storage model, REST responses, block attributes, and theme tokens still need to settle. **Until then, data schemas are volatile, user data is assumed disposable, and migrations are not planned.**
 
 The next work should focus on:
 

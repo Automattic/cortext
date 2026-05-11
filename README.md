@@ -9,23 +9,17 @@
 >
 > We are not writing migrations for early builds. Treat anything you create with Cortext today as throwaway data.
 
-A WordPress plugin for building a knowledge base inside your own site: nested
-pages, typed collections, multiple views, and publishing through WordPress.
+A WordPress plugin for building a knowledge base inside your own site: nested pages, typed collections, multiple views, and publishing through WordPress.
 
 ## Why
 
-WordPress already has the hard parts: ownership, publishing, export, themes, and
-a data model people can inspect without Cortext. This project tries to make those
-pieces feel like one knowledge base instead of a pile of admin screens.
+WordPress already has the hard parts: ownership, publishing, export, themes, and a data model people can inspect without Cortext. This project tries to make those pieces feel like one knowledge base instead of a pile of admin screens.
 
-Because it is still WordPress, Cortext can publish knowledge base entries as
-themed public pages, run locally, and keep data in ordinary WordPress storage.
+Because it is still WordPress, Cortext can publish knowledge base entries as themed public pages, run locally, and keep data in ordinary WordPress storage.
 
 ## How it works, in one paragraph
 
-Cortext stores documents, collection definitions, fields, and collection rows as
-WordPress posts and post meta. The admin UI is a React shell that combines a
-WordPress block editor for documents with collection views built on WordPress packages.
+Cortext stores documents, collection definitions, fields, and collection rows as WordPress posts and post meta. The admin UI is a React shell that combines a WordPress block editor for documents with collection views built on WordPress packages.
 
 ## Docs
 
