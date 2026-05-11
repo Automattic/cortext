@@ -28,7 +28,7 @@ cd cortext
 
 `run.sh` boots wp-env detached, re-derives the site-title label from the current branch, seeds the Cortext demo workspace, and starts the JS watcher. When the admin URL is ready, sign in and click "Cortext" in the admin menu.
 
-Plain `wp-env start`, `npm run env:start`, and `npm start` skip the seed. To opt in, use `./scripts/run.sh`, `npm run start:seed`, `npm run env:start:seed`, or `npm run env:seed`. Reruns are safe: existing collections, fields, entries, and non-empty pages are left alone, and only missing demo records get added. The seed creates a small page tree with embedded collection views so the editor and DataViews have something to render on first boot.
+Plain `wp-env start`, `npm run env:start`, and `npm start` skip the seed. To opt in, use `./scripts/run.sh`, `npm run start:seed`, `npm run env:start:seed`, or `npm run env:seed`. Reruns are safe: existing collections, fields, entries, and non-empty pages are left alone, and only missing demo records get added. The default seed creates a compact page tree and a few representative rows per collection; use `npm run env:seed:full` when you need the larger catalog.
 
 To stop cleanly:
 
@@ -50,7 +50,9 @@ npm run format       # Prettier
 npm run start:seed   # boot wp-env, seed demo data, start the JS watcher
 npm run env:start:seed # boot wp-env and add any missing demo data
 npm run env:seed     # add any missing demo data to the dev wp-env
+npm run env:seed:full # add the full demo catalog to the dev wp-env
 npm run env:seed:reset # delete Cortext data and recreate the demo set
+npm run env:seed:reset:full # delete Cortext data and recreate the full demo set
 npm run test:unit    # Jest
 npm run test:e2e     # Playwright end-to-end tests
 
@@ -66,7 +68,9 @@ E2E tests run against a dedicated wp-env instance on port 8889, separate from th
 npm run test:env:start   # boot the test environment
 npm run test:env:start:seed # boot the test environment and seed demo data
 npm run test:env:seed    # add any missing demo data to the test wp-env
+npm run test:env:seed:full # add the full demo catalog to the test wp-env
 npm run test:env:seed:reset # delete Cortext test data and recreate the demo set
+npm run test:env:seed:reset:full # delete Cortext test data and recreate the full demo set
 npm run test:e2e         # run Playwright tests
 npm run test:e2e:debug   # run with the Playwright UI
 ```
