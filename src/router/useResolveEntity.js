@@ -70,7 +70,7 @@ export function useResolveDocument( uri ) {
 				}
 				try {
 					const entity = await apiFetch( {
-						path: `/wp/v2/${ restBase }/${ id }?context=edit&_fields=id,slug,parent,type`,
+						path: `/wp/v2/${ restBase }/${ id }?context=edit&_fields=id,slug,parent,type,created_at,created_by,modified_at,modified_by,cortext_hydrated_meta`,
 					} );
 					if ( ! cancelled ) {
 						setState( {

@@ -944,35 +944,49 @@ final class RowsController {
 			return $response;
 		}
 
+		$data = $response->get_data();
+
+		// Hydrate the system fields (created_at / by, modified_at / by) the
+		// same way `format_row` does for the table feed, so the same field
+		// definitions render correctly in side peek, modal, and full page.
+		// Without this, full-page rows show "Empty" for those columns
+		// because the standard WP REST response only exposes `author` /
+		// `date_gmt` and they don't match the field getters' shape.
+		$created_by_id       = (int) $post->post_author;
+		$modified_by_id      = (int) get_post_meta( $post->ID, '_modified_by', true );
+		$data['created_at']  = $this->format_gmt_date( $post->post_date_gmt );
+		$data['modified_at'] = $this->format_gmt_date( $post->post_modified_gmt );
+		$data['created_by']  = $this->display_name_for( $created_by_id );
+		$data['modified_by'] = $this->display_name_for(
+			$modified_by_id > 0 ? $modified_by_id : $created_by_id
+		);
+
 		$field_ids = $this->collection_field_ids( $collection->ID );
-		if ( count( $field_ids ) === 0 ) {
-			return $response;
-		}
+		if ( count( $field_ids ) > 0 ) {
+			// Don't overwrite `meta` with hydrated values: those meta keys
+			// are registered as `string`, so a follow-up save that round-
+			// trips the hydrated objects back to the server gets rejected
+			// with 400 and loops the autosave. Surface the hydrated shape
+			// on a parallel `cortext_hydrated_meta` field instead, leaving
+			// the raw stored values intact for the save path.
+			$hydrated = array();
+			foreach ( $field_ids as $field_id ) {
+				$field_type = (string) get_post_meta( $field_id, 'type', true );
+				$key        = "field-{$field_id}";
 
-		// Don't overwrite `meta` with hydrated values: those meta keys are
-		// registered as `string`, so a follow-up save that round-trips the
-		// hydrated objects back to the server gets rejected with 400 and
-		// loops the autosave. Surface the hydrated shape on a parallel
-		// `cortext_hydrated_meta` field instead, leaving the raw stored
-		// values intact for the save path.
-		$hydrated = array();
-		foreach ( $field_ids as $field_id ) {
-			$field_type = (string) get_post_meta( $field_id, 'type', true );
-			$key        = "field-{$field_id}";
+				if ( 'relation' === $field_type ) {
+					$hydrated[ $key ] = $this->format_relation_value( $post->ID, $field_id );
+				} elseif ( 'rollup' === $field_type ) {
+					$hydrated[ $key ] = $this->compute_rollup_value( $post->ID, $field_id );
+				}
+			}
 
-			if ( 'relation' === $field_type ) {
-				$hydrated[ $key ] = $this->format_relation_value( $post->ID, $field_id );
-			} elseif ( 'rollup' === $field_type ) {
-				$hydrated[ $key ] = $this->compute_rollup_value( $post->ID, $field_id );
+			if ( count( $hydrated ) > 0 ) {
+				$data['cortext_hydrated_meta'] = $hydrated;
 			}
 		}
 
-		if ( count( $hydrated ) > 0 ) {
-			$data                          = $response->get_data();
-			$data['cortext_hydrated_meta'] = $hydrated;
-			$response->set_data( $data );
-		}
-
+		$response->set_data( $data );
 		return $response;
 	}
 
