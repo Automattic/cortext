@@ -976,9 +976,6 @@ test.describe( 'Collection view block', () => {
 				)
 				.filter( { hasText: 'Tags' } );
 			await expect( tagsLabel ).toHaveCSS( 'cursor', 'default' );
-			await tagsLabel.evaluate( ( node ) =>
-				node.setAttribute( 'data-e2e-stable-label', 'tags' )
-			);
 			const tagsTrigger = detail.getByRole( 'button', {
 				name: 'Tags',
 				exact: true,
@@ -1014,9 +1011,15 @@ test.describe( 'Collection view block', () => {
 			// Side and modal panes are local React state, not URL state,
 			// so verify the navigation via the detail title rather than ?row.
 			await expect( detailTitle ).toHaveText( 'Kindred' );
+			// The second row keeps the same field layout (still in the same
+			// collection), so its property panel still renders the Tags label.
 			await expect(
-				detail.locator( '[data-e2e-stable-label="tags"]' )
-			).toHaveText( 'Tags' );
+				detail
+					.locator(
+						'.cortext-row-detail__properties--rows .cortext-row-detail__property-label'
+					)
+					.filter( { hasText: 'Tags' } )
+			).toBeVisible();
 			await page.unroute( delayedSecondRowPattern, delaySecondRow );
 			await detail.getByRole( 'button', { name: 'Row above' } ).click();
 			await expect( detailTitle ).toHaveText(
