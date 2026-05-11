@@ -1168,8 +1168,8 @@ body.cortext-sidebar-resizing {
 // These nodes live inside BlockCanvas, so target the iframe document body.
 body:has([data-type="core/post-title"]:hover) .cortext-canvas__identity-action,
 body:has([data-type="core/post-title"]:focus-within) .cortext-canvas__identity-action,
-body:has([data-type="cortext/page-icon"]:hover) .cortext-canvas__identity-action,
-body:has([data-type="cortext/page-icon"]:focus-within) .cortext-canvas__identity-action,
+body:has([data-type="cortext/document-icon"]:hover) .cortext-canvas__identity-action,
+body:has([data-type="cortext/document-icon"]:focus-within) .cortext-canvas__identity-action,
 body:has(.cortext-canvas__identity-actions:hover) .cortext-canvas__identity-action {
 	opacity: 1;
 }
@@ -1569,8 +1569,8 @@ body:has(.cortext-canvas__identity-actions:hover) .cortext-canvas__identity-acti
 // to fixed layout with content-width sizing and explicit per-cell
 // widths, so column count stops affecting the surviving columns'
 // widths and the table grows to its natural content width.
-// `.dataviews-wrapper` already has `overflow: auto`, so horizontal
-// scroll kicks in once columns exceed the wrapper.
+// `.cortext-data-view > .dataviews-wrapper` declares `overflow: auto`
+// itself, so horizontal scroll kicks in once columns exceed the wrapper.
 .dataviews-view-table {
 	table-layout: fixed;
 	width: max-content;
@@ -1809,11 +1809,22 @@ tbody > tr > td:not(:first-child) {
 }
 
 .cortext-title-cell {
+	// Fill the td so the cell's selection / hover background paints the
+	// whole column slot, even when another cell stretches the row.
+	display: flex;
+	align-items: center;
 	width: 100%;
+	height: 100%;
 	min-width: 0;
 	max-width: 100%;
 	border-radius: 2px;
 	box-sizing: border-box;
+
+	&__icon {
+		display: inline-flex;
+		flex: 0 0 auto;
+		line-height: 0;
+	}
 
 	&--with-open-action {
 		display: grid;
@@ -1825,6 +1836,12 @@ tbody > tr > td:not(:first-child) {
 		.cortext-editable-cell {
 			min-width: 0;
 			max-width: 100%;
+		}
+
+		// When the row has a document icon, slot it before the editable
+		// cell so the leading column shows: icon, title, open-button.
+		&:has(.cortext-title-cell__icon) {
+			grid-template-columns: auto minmax(0, 1fr) auto;
 		}
 	}
 
@@ -1852,12 +1869,7 @@ tbody > tr > td:not(:first-child) {
 }
 
 .cortext-title-cell:focus-within,
-.cortext-data-view
-.dataviews-view-table
-tbody
-tr:hover
-.cortext-title-cell--with-open-action,
-.cortext-title-cell--is-open {
+.cortext-title-cell--with-open-action:hover {
 	background: $gray-100;
 }
 
@@ -2601,6 +2613,12 @@ tr:has(.cortext-title-cell--is-open)
 	height: 100%;
 	min-height: 0;
 	background: $white;
+	// The shell paints a light surface even in dark mode, so the dark-theme
+	// scrollbar thumb (near-white, set on `.cortext-root[data-theme="dark"]`)
+	// disappears against it. Pin the scrollbar tokens to their light values
+	// here so the horizontal scrollbar on wide tables is visible.
+	--cortext-scrollbar-thumb: rgba(0, 0, 0, 0.12);
+	--cortext-scrollbar-thumb-hover: rgba(0, 0, 0, 0.28);
 
 	> .cortext-data-view {
 		flex: 1 1 auto;
@@ -2635,6 +2653,63 @@ tr:has(.cortext-title-cell--is-open)
 		flex: 1 1 auto;
 		width: 100%;
 	}
+
+	// `grid-template-rows: 1fr → 0fr` is the smoothly-animatable way to
+	// collapse a wrapper to its content's natural height. The body child
+	// hides via overflow: hidden; the chevron escapes the collapse via
+	// position: absolute so it stays visible over the cover when hidden.
+	&--canvas-properties {
+		position: relative;
+		display: grid;
+		flex: 0 0 auto;
+		width: 100%;
+		grid-template-rows: 1fr;
+		transition: grid-template-rows 0.22s ease;
+	}
+
+	&--canvas-properties-collapsed {
+		grid-template-rows: 0fr;
+	}
+
+	// Border on the body (not the wrapper) so it disappears with the
+	// content when collapsed; matches the toolbar's `__header`
+	// border-bottom in side / modal panes for visual consistency.
+	&__canvas-properties-body {
+		min-height: 0;
+		overflow: hidden;
+		border-bottom: $border-width solid $gray-200;
+	}
+
+	// Solid background pill so the chevron stays legible even when it
+	// floats over a dark cover image. The button itself is small; the
+	// pill keeps a constant contrast surface regardless of what's behind.
+	&__canvas-properties-toggle.components-button {
+		position: absolute;
+		top: $grid-unit-10;
+		left: $grid-unit-10;
+		z-index: 2;
+		background: rgba(255, 255, 255, 0.92);
+		color: $gray-900;
+		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+		opacity: 0;
+		transition: opacity 0.12s ease, background-color 0.12s ease;
+
+		&:hover,
+		&:focus-visible {
+			background: $white;
+			color: $gray-900;
+		}
+	}
+
+	/* stylelint-disable no-descending-specificity */
+	&--canvas-properties:hover &__canvas-properties-toggle.components-button,
+	&__canvas-properties-toggle.components-button:focus-visible,
+	// When collapsed, the chevron is the only affordance, so keep it
+	// always visible (still tap to bring properties back).
+	&--canvas-properties-collapsed &__canvas-properties-toggle.components-button {
+		opacity: 1;
+	}
+	/* stylelint-enable no-descending-specificity */
 
 	&__frame {
 		display: flex;
@@ -2701,8 +2776,8 @@ tr:has(.cortext-title-cell--is-open)
 	&--modal {
 
 		.cortext-row-detail__pane-stack {
-			flex: 0 0 auto;
-			height: auto;
+			flex: 1 1 auto;
+			height: 100%;
 			min-height: 320px;
 			overflow: visible;
 		}
@@ -2710,7 +2785,7 @@ tr:has(.cortext-title-cell--is-open)
 		.cortext-row-detail__pane {
 			position: relative;
 			inset: auto;
-			height: auto;
+			height: 100%;
 			min-height: 320px;
 		}
 
@@ -3013,6 +3088,10 @@ tr:has(.cortext-title-cell--is-open)
 		padding: $grid-unit-20 var(--cortext-row-detail-field-inset) $grid-unit-10;
 	}
 
+	&__properties[data-visible="false"] {
+		display: none;
+	}
+
 	&__fields-indicator-wrap {
 		grid-template-rows: 0fr;
 		opacity: 0;
@@ -3268,6 +3347,38 @@ tr:has(.cortext-title-cell--is-open)
 	}
 
 	&__content-editor iframe {
+		border: 0;
+		background: $white;
+	}
+
+	// EditorBody mounts a `cortext-canvas__visual` wrapper inside row detail
+	// panes after the row properties chrome. Give the iframe a real height
+	// without pushing the properties into the block-editor iframe. The
+	// border-top mirrors the toolbar's border-bottom (`__header`) so the
+	// divider above and below the properties form match.
+	.cortext-canvas__visual {
+		display: flex;
+		flex: 1 1 420px;
+		flex-direction: column;
+		min-height: 360px;
+		background: $white;
+		border-top: $border-width solid $gray-200;
+		box-sizing: border-box;
+		overflow: visible;
+	}
+
+	.cortext-canvas__block-canvas {
+		display: flex;
+		flex: 1 1 auto;
+		min-height: 0;
+	}
+
+	.cortext-canvas__block-canvas > div {
+		flex: 1 1 auto;
+		min-height: 0;
+	}
+
+	.cortext-canvas__block-canvas iframe {
 		border: 0;
 		background: $white;
 	}
@@ -3559,14 +3670,22 @@ body.cortext-row-detail-sidebar-resizing {
 	position: relative; // anchor for the column drop indicator
 	display: flex;
 	flex-direction: column;
+	width: 100%;
+	min-width: 0;
 
 	// Let the wrapper grow to fill whatever height the parent provides, so
 	// our footer sits below the table instead of getting pushed off by the
 	// wrapper's own `height: 100%`. Parents own the height per-context: the
 	// canvas pane fills the viewport, the block sets a min-height.
 	> .dataviews-wrapper {
-		flex: 1 1 auto;
+		height: auto;
+		width: 100%;
+		flex: 1 1 0;
+		min-width: 0;
 		min-height: 0;
+		// Own the scroll layer instead of relying on DataViews's upstream
+		// default — horizontal scroll wasn't kicking in for wide tables.
+		overflow: auto;
 	}
 
 	// DataViews paints row height via td `padding-block` per density, but
@@ -3745,13 +3864,20 @@ body.cortext-row-detail-sidebar-resizing {
 	height: 100%;
 }
 
-// tech-debt.md#23: embedded block has no per-instance height attribute, so use
-// a fixed viewport height and let DataViews scroll internally. Width comes from
-// Gutenberg's alignment.
-.wp-block-cortext-data-view .cortext-data-view-shell,
-.wp-block-cortext-data-view .cortext-data-view {
-	height: var(--cortext-data-view-block-min-height);
-	min-height: 0;
+// tech-debt.md#23: embedded block has no per-instance height attribute. Use
+// the shared token as a min-height so short collections still get a comfortable
+// viewport while long ones grow the block (and keep the footer in view) instead
+// of clipping. Width comes from Gutenberg's alignment.
+.wp-block-cortext-data-view .cortext-data-view-shell {
+	min-height: var(--cortext-data-view-block-min-height);
+}
+
+// Full-page mode wants the wrapper to fill a fixed-height parent and scroll
+// internally; block mode wants the wrapper to take its content size so the
+// block grows with the table instead of clipping the footer. Override the
+// shared `flex: 1 1 0` only here.
+.wp-block-cortext-data-view .cortext-data-view > .dataviews-wrapper {
+	flex: 0 0 auto;
 }
 
 // Embedded blocks are width-constrained by the editor canvas. Letting relation
@@ -4029,7 +4155,7 @@ thead > tr > th {
 }
 /* stylelint-enable no-descending-specificity */
 
-.cortext-page-icon {
+.cortext-document-icon {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -4067,7 +4193,7 @@ thead > tr > th {
 // finished loading on first open. Without this the wrapper collapsed to
 // 0 height while `useEntityRecord` was still resolving, then expanded
 // when the image arrived, pushing everything below it down.
-.cortext-page-cover-block {
+.cortext-document-cover-block {
 	position: relative;
 	height: clamp(140px, 26vh, 260px);
 
@@ -4127,7 +4253,7 @@ thead > tr > th {
 // Page icon: use a normal content-column row for stable placement and a
 // generous hover target, but replace Gutenberg's full-row selected outline
 // with a tight outline around the icon button itself.
-.cortext-page-icon-block {
+.cortext-document-icon-block {
 	display: flex;
 	align-items: flex-end;
 	justify-content: flex-start;
@@ -4161,12 +4287,12 @@ thead > tr > th {
 		/* stylelint-enable no-descending-specificity */
 	}
 
-	.cortext-page-icon-block__button.components-button {
+	.cortext-document-icon-block__button.components-button {
 		width: calc(56px + #{ $grid-unit-05 * 2 });
 		height: calc(56px + #{ $grid-unit-05 * 2 });
 	}
 
-	.cortext-page-icon--image {
+	.cortext-document-icon--image {
 		width: 56px;
 		height: 56px;
 		border-radius: var(--cortext-shell-radius, 4px);
@@ -4179,20 +4305,20 @@ thead > tr > th {
 	// baseline so it sits at the bottom of the inline box. The result was
 	// a ~3px height drift between emoji and WP-icon variants that pushed
 	// the title below it. `inline-flex` removes the line-box entirely.
-	.cortext-page-identity-control {
+	.cortext-document-identity-control {
 		display: inline-flex;
 	}
 }
 
 .block-editor-block-list__layout
-.block-editor-block-list__block[data-type="cortext/page-icon"].is-selected::after {
+.block-editor-block-list__block[data-type="cortext/document-icon"].is-selected::after {
 	box-shadow: none;
 	outline: none;
 }
 
 .block-editor-block-list__layout
-.block-editor-block-list__block[data-type="cortext/page-icon"].is-selected
-.cortext-page-icon-block__button {
+.block-editor-block-list__block[data-type="cortext/document-icon"].is-selected
+.cortext-document-icon-block__button {
 	outline: 1.5px solid var(--wp-admin-theme-color, #007cba);
 	outline-offset: 0;
 }
@@ -4201,8 +4327,8 @@ thead > tr > th {
 // the block itself up so the title follows the visual icon position
 // instead of leaving a reserved blank row below the cover.
 /* stylelint-disable no-descending-specificity */
-.cortext-page-cover-block + .cortext-page-icon-block,
-[data-type="cortext/page-cover"] + [data-type="cortext/page-icon"] {
+.cortext-document-cover-block + .cortext-document-icon-block,
+[data-type="cortext/document-cover"] + [data-type="cortext/document-icon"] {
 	position: relative;
 	z-index: 1;
 	margin-block-start: -28px;
@@ -4219,7 +4345,7 @@ thead > tr > th {
 // component covers both the colored WP-icon variant and the fallback
 // page glyph in every surface.
 /* stylelint-disable-next-line no-descending-specificity */
-.cortext-page-icon svg {
+.cortext-document-icon svg {
 	fill: currentcolor;
 }
 
@@ -4332,10 +4458,10 @@ body.cortext-hide-block-settings-menu .block-editor-block-switcher {
 	}
 }
 
-.cortext-page-identity-popover-content {
+.cortext-document-identity-popover-content {
 	min-width: 320px;
 
-	.cortext-page-identity-popover {
+	.cortext-document-identity-popover {
 		position: relative;
 		display: flex;
 		flex-direction: column;

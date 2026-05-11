@@ -16,17 +16,17 @@ import { useDispatch } from '@wordpress/data';
 import { replace, trash } from '@wordpress/icons';
 
 import PageIcon from '../../components/PageIcon';
-import PageIdentityControls from '../../components/PageIdentityControls';
+import DocumentIdentityControls from '../../components/DocumentIdentityControls';
 
 export default function Edit( { context, clientId } ) {
 	const postId = context?.postId;
-	const postType = context?.postType ?? 'crtxt_page';
+	const postType = context?.postType;
 	const blockProps = useBlockProps( {
-		className: 'cortext-page-icon-block',
+		className: 'cortext-document-icon-block',
 	} );
 
 	const [ meta ] = useEntityProp( 'postType', postType, 'meta', postId );
-	const iconMeta = meta?.cortext_page_icon ?? '';
+	const iconMeta = meta?.cortext_document_icon ?? '';
 	const hasIcon = !! iconMeta;
 	const { removeBlock, updateBlockAttributes } =
 		useDispatch( blockEditorStore );
@@ -45,7 +45,7 @@ export default function Edit( { context, clientId } ) {
 			removeBlock( clientId, false );
 		}
 		editEntityRecord( 'postType', postType, postId, {
-			meta: { cortext_page_icon: '' },
+			meta: { cortext_document_icon: '' },
 		} );
 		await saveEditedEntityRecord( 'postType', postType, postId );
 	};
@@ -57,11 +57,11 @@ export default function Edit( { context, clientId } ) {
 		}
 	};
 
-	if ( ! postId ) {
+	if ( ! postId || ! postType ) {
 		return (
 			<div { ...blockProps }>
-				<span className="cortext-page-icon-block__hint">
-					{ __( 'Page icon is unavailable here.', 'cortext' ) }
+				<span className="cortext-document-icon-block__hint">
+					{ __( 'Document icon is unavailable here.', 'cortext' ) }
 				</span>
 			</div>
 		);
@@ -71,8 +71,9 @@ export default function Edit( { context, clientId } ) {
 		<>
 			<BlockControls group="other">
 				<ToolbarGroup>
-					<PageIdentityControls
-						pageId={ postId }
+					<DocumentIdentityControls
+						postId={ postId }
+						postType={ postType }
 						currentIcon={ iconMeta }
 						onAfterSave={ onPickerSave }
 						renderToggle={ ( { onToggle } ) => (
@@ -94,8 +95,9 @@ export default function Edit( { context, clientId } ) {
 			</BlockControls>
 			<InspectorControls>
 				<PanelBody title={ __( 'Icon', 'cortext' ) }>
-					<PageIdentityControls
-						pageId={ postId }
+					<DocumentIdentityControls
+						postId={ postId }
+						postType={ postType }
 						currentIcon={ iconMeta }
 						onAfterSave={ onPickerSave }
 						renderToggle={ ( { onToggle } ) => (
@@ -124,14 +126,15 @@ export default function Edit( { context, clientId } ) {
 				</PanelBody>
 			</InspectorControls>
 			<div { ...blockProps }>
-				<PageIdentityControls
-					pageId={ postId }
+				<DocumentIdentityControls
+					postId={ postId }
+					postType={ postType }
 					currentIcon={ iconMeta }
 					onAfterSave={ onPickerSave }
 					renderToggle={ ( { onToggle } ) =>
 						hasIcon ? (
 							<Button
-								className="cortext-page-icon-block__button"
+								className="cortext-document-icon-block__button"
 								onClick={ ( event ) => {
 									event.stopPropagation();
 									onToggle();
@@ -145,7 +148,7 @@ export default function Edit( { context, clientId } ) {
 							</Button>
 						) : (
 							<Button
-								className="cortext-page-icon-block__add"
+								className="cortext-document-icon-block__add"
 								variant="tertiary"
 								onClick={ ( event ) => {
 									event.stopPropagation();

@@ -17,7 +17,6 @@ import {
 import MediaPicker, { MediaUploadCheck } from './MediaPicker';
 
 import PageIcon from './PageIcon';
-import { POST_TYPE } from './page-queries';
 
 // The picker carries ~150KB of emoji data, so defer it until the popover
 // actually opens. The first interaction pays the load cost; subsequent
@@ -164,7 +163,7 @@ const EmojiPicker = lazy( async () => {
 	};
 } );
 
-// `@wordpress/icons` is also lazy-loaded — it ships a few hundred glyphs
+// `@wordpress/icons` is also lazy-loaded; it ships a few hundred glyphs
 // and the picker doesn't need them until the user clicks the Icons tab.
 const IconLibraryPicker = lazy( () => import( './IconLibraryPicker' ) );
 
@@ -229,7 +228,7 @@ function isInsideIdentityPopover( node ) {
 	if ( typeof node.closest === 'function' ) {
 		if (
 			node.closest(
-				'.cortext-page-identity-popover-content, .cortext-page-identity-popover, em-emoji-picker'
+				'.cortext-document-identity-popover-content, .cortext-document-identity-popover, em-emoji-picker'
 			)
 		) {
 			return true;
@@ -261,7 +260,8 @@ function isIdentityControlPointer( event, controlNode ) {
 }
 
 function PickerBody( {
-	pageId,
+	postId,
+	postType,
 	currentIcon,
 	allowRemove,
 	onAfterSave,
@@ -279,7 +279,7 @@ function PickerBody( {
 
 	// editEntityRecord updates the local data store synchronously so
 	// every subscriber (icon block, sidebar tree) sees the new value
-	// immediately. The actual server save is debounced — without it,
+	// immediately. The actual server save is debounced; without it,
 	// rapid picks (browsing emojis, switching colors) fire a save per
 	// click, and each server round-trip re-renders the whole post
 	// graph (including the trash sidebar's resolution state), which
@@ -289,14 +289,14 @@ function PickerBody( {
 		return () => {
 			if ( saveTimer.current ) {
 				clearTimeout( saveTimer.current );
-				saveEditedEntityRecord( 'postType', POST_TYPE, pageId );
+				saveEditedEntityRecord( 'postType', postType, postId );
 			}
 		};
-	}, [ pageId, saveEditedEntityRecord ] );
+	}, [ postId, postType, saveEditedEntityRecord ] );
 
 	const persist = ( nextMetaValue ) => {
-		editEntityRecord( 'postType', POST_TYPE, pageId, {
-			meta: { cortext_page_icon: nextMetaValue },
+		editEntityRecord( 'postType', postType, postId, {
+			meta: { cortext_document_icon: nextMetaValue },
 		} );
 		onAfterSave?.( nextMetaValue );
 
@@ -305,7 +305,7 @@ function PickerBody( {
 		}
 		saveTimer.current = setTimeout( () => {
 			saveTimer.current = null;
-			saveEditedEntityRecord( 'postType', POST_TYPE, pageId );
+			saveEditedEntityRecord( 'postType', postType, postId );
 		}, 600 );
 	};
 
@@ -321,7 +321,7 @@ function PickerBody( {
 			return (
 				<Suspense
 					fallback={
-						<div className="cortext-page-identity-popover__loading">
+						<div className="cortext-document-identity-popover__loading">
 							<Spinner />
 						</div>
 					}
@@ -340,7 +340,7 @@ function PickerBody( {
 			return (
 				<Suspense
 					fallback={
-						<div className="cortext-page-identity-popover__loading">
+						<div className="cortext-document-identity-popover__loading">
 							<Spinner />
 						</div>
 					}
@@ -367,7 +367,7 @@ function PickerBody( {
 					allowedTypes={ [ 'image' ] }
 					onSelect={ ( media ) => persist( encodeImage( media.id ) ) }
 					render={ ( { open } ) => (
-						<div className="cortext-page-identity-popover__upload">
+						<div className="cortext-document-identity-popover__upload">
 							<Button
 								variant="primary"
 								onClick={ open }
@@ -375,9 +375,9 @@ function PickerBody( {
 							>
 								{ __( 'Open media library', 'cortext' ) }
 							</Button>
-							<p className="cortext-page-identity-popover__hint">
+							<p className="cortext-document-identity-popover__hint">
 								{ __(
-									'Pick or upload an image to use as this page’s icon.',
+									'Pick or upload an image to use as this document’s icon.',
 									'cortext'
 								) }
 							</p>
@@ -389,8 +389,11 @@ function PickerBody( {
 	};
 
 	return (
-		<div className="cortext-page-identity-popover">
-			<div className="cortext-page-identity-popover__tabs" role="tablist">
+		<div className="cortext-document-identity-popover">
+			<div
+				className="cortext-document-identity-popover__tabs"
+				role="tablist"
+			>
 				{ tabs.map( ( tab ) => (
 					<button
 						key={ tab.name }
@@ -398,7 +401,7 @@ function PickerBody( {
 						role="tab"
 						aria-selected={ activeTab === tab.name }
 						className={
-							'cortext-page-identity-popover__tab' +
+							'cortext-document-identity-popover__tab' +
 							( activeTab === tab.name ? ' is-active' : '' )
 						}
 						onClick={ () => setActiveTab( tab.name ) }
@@ -409,7 +412,7 @@ function PickerBody( {
 				{ allowRemove && (
 					<button
 						type="button"
-						className="cortext-page-identity-popover__remove"
+						className="cortext-document-identity-popover__remove"
 						style={ { color: '#d63638' } }
 						onClick={ () => persist( '' ) }
 					>
@@ -418,7 +421,7 @@ function PickerBody( {
 				) }
 			</div>
 			<div
-				className="cortext-page-identity-popover__panel"
+				className="cortext-document-identity-popover__panel"
 				role="tabpanel"
 			>
 				{ renderActive() }
@@ -428,10 +431,11 @@ function PickerBody( {
 }
 
 // Render-prop API: caller controls the trigger element so the picker can
-// open from a sidebar row, the page header, or a toolbar button without
+// open from a sidebar row, the document header, or a toolbar button without
 // each surface duplicating Dropdown plumbing.
-export default function PageIdentityControls( {
-	pageId,
+export default function DocumentIdentityControls( {
+	postId,
+	postType,
 	currentIcon,
 	renderToggle,
 	popoverPlacement = 'bottom-start',
@@ -510,14 +514,14 @@ export default function PageIdentityControls( {
 	return (
 		<Dropdown
 			ref={ controlRef }
-			className="cortext-page-identity-control"
+			className="cortext-document-identity-control"
 			open={ dropdownOpen }
 			onToggle={ handleOpenChange }
 			popoverProps={ {
 				placement: popoverPlacement,
 				onFocusOutside: handlePopoverFocusOutside,
 			} }
-			contentClassName="cortext-page-identity-popover-content"
+			contentClassName="cortext-document-identity-popover-content"
 			renderToggle={ ( { isOpen, onToggle } ) =>
 				renderToggle( {
 					isOpen,
@@ -529,7 +533,8 @@ export default function PageIdentityControls( {
 			}
 			renderContent={ () => (
 				<PickerBody
-					pageId={ pageId }
+					postId={ postId }
+					postType={ postType }
 					currentIcon={ currentIcon }
 					allowRemove={ hasIcon }
 					onAfterSave={ onAfterSave }

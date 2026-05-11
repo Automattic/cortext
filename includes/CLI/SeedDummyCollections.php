@@ -12,8 +12,8 @@ namespace Cortext\CLI;
 use Cortext\PostType\Collection;
 use Cortext\PostType\CollectionEntries;
 use Cortext\PostType\Field;
+use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Page;
-use Cortext\PostType\PageIdentity;
 use Cortext\Relations;
 use WP_CLI;
 use WP_CLI_Command;
@@ -902,7 +902,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		if ( ! empty( $node['icon'] ) ) {
 			$icon_meta = $this->serialize_icon_meta( $node['icon'] );
 			if ( '' !== $icon_meta ) {
-				update_post_meta( $page_id, PageIdentity::META_KEY, $icon_meta );
+				update_post_meta( $page_id, DocumentIdentity::META_KEY, $icon_meta );
 			}
 		}
 

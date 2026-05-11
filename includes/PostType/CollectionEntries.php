@@ -447,7 +447,10 @@ final class CollectionEntries {
 					'rest_base'          => $post_type,
 					'has_archive'        => false,
 					'hierarchical'       => false,
-					'supports'           => array( 'title', 'editor', 'custom-fields' ),
+					// `thumbnail` exposes featured_media so document covers
+					// work for rows; `revisions` lets RevisionThrottle cap
+					// row history the same way it caps page history.
+					'supports'           => array( 'title', 'editor', 'custom-fields', 'thumbnail', 'revisions' ),
 					'capability_type'    => 'post',
 					'map_meta_cap'       => true,
 					'can_export'         => true,
@@ -455,6 +458,7 @@ final class CollectionEntries {
 				)
 			);
 
+			DocumentIdentity::register_for_post_type( $post_type );
 		}
 
 		$this->register_field_meta( $post_type, $collection->ID );

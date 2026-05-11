@@ -1,15 +1,24 @@
 import { parseIdFromUri, parseSplatUri } from './useResolveEntity';
 
 // A null id means the URL was malformed (e.g. /collection/foo).
+//
+// Two kinds in the splat:
+//   - `collection`: explicit `collection/<slug>-<id>` prefix. Collections
+//     are schema containers, not documents.
+//   - `document`: anything else with an id. Pages and rows both fall here;
+//     the resolver discovers the actual post type via the document
+//     locator endpoint.
 export function parseTarget( splat ) {
 	const { prefix, tail } = parseSplatUri( splat );
 	if ( prefix === 'collection' ) {
 		return { kind: 'collection', id: parseIdFromUri( tail ), tail };
 	}
-	if ( ! tail ) {
+	if ( ! splat ) {
 		return { kind: 'empty', tail: '' };
 	}
-	return { kind: 'page', id: parseIdFromUri( tail ), tail };
+	// No prefix or any other prefix: treat the whole splat as a document
+	// uri. parseIdFromUri reads the trailing digits regardless of slug.
+	return { kind: 'document', id: parseIdFromUri( splat ), tail: splat };
 }
 
 // Keep what the URL points at and what's currently visible (so paint survives
@@ -52,7 +61,7 @@ function pruneCollections( state ) {
 // during transitions: the old pane keeps painting until the new one is ready,
 // then `active` flips.
 //
-// Mount state is separate so a page Canvas can sit in the DOM behind an
+// Mount state is separate so a document Canvas can sit in the DOM behind an
 // active collection and reactivate without remounting the iframe.
 export function reducer( state, action ) {
 	switch ( action.type ) {
@@ -62,14 +71,14 @@ export function reducer( state, action ) {
 
 			if ( target.kind === 'empty' ) {
 				active = { kind: 'empty' };
-			} else if ( target.kind === 'page' ) {
+			} else if ( target.kind === 'document' ) {
 				if ( target.id === null ) {
-					active = { kind: 'page-not-found' };
+					active = { kind: 'document-not-found' };
 				} else if (
-					state.mountedPageId === target.id &&
-					state.displayedPageId === target.id
+					state.mountedDocumentId === target.id &&
+					state.displayedDocumentId === target.id
 				) {
-					active = { kind: 'page' };
+					active = { kind: 'document', id: target.id };
 				}
 			} else if ( target.kind === 'collection' ) {
 				if ( target.id === null ) {
@@ -85,38 +94,42 @@ export function reducer( state, action ) {
 			return pruneCollections( { ...state, target, active } );
 		}
 
-		case 'PAGE_RESOLVED': {
+		case 'DOCUMENT_RESOLVED': {
 			if (
-				state.target.kind !== 'page' ||
+				state.target.kind !== 'document' ||
 				state.target.id !== action.id
 			) {
 				return state;
 			}
-			const next = { ...state, mountedPageId: action.id };
-			if ( state.displayedPageId === action.id ) {
-				next.active = { kind: 'page' };
+			const next = {
+				...state,
+				mountedDocumentId: action.id,
+				mountedDocumentType: action.postType,
+			};
+			if ( state.displayedDocumentId === action.id ) {
+				next.active = { kind: 'document', id: action.id };
 			}
 			return pruneCollections( next );
 		}
 
-		case 'PAGE_NOT_FOUND': {
-			if ( state.target.kind !== 'page' ) {
+		case 'DOCUMENT_NOT_FOUND': {
+			if ( state.target.kind !== 'document' ) {
 				return state;
 			}
 			return pruneCollections( {
 				...state,
-				active: { kind: 'page-not-found' },
+				active: { kind: 'document-not-found' },
 			} );
 		}
 
-		case 'PAGE_DISPLAYED': {
-			const next = { ...state, displayedPageId: action.id };
+		case 'DOCUMENT_DISPLAYED': {
+			const next = { ...state, displayedDocumentId: action.id };
 			if (
-				state.target.kind === 'page' &&
+				state.target.kind === 'document' &&
 				state.target.id === action.id &&
-				state.mountedPageId === action.id
+				state.mountedDocumentId === action.id
 			) {
-				next.active = { kind: 'page' };
+				next.active = { kind: 'document', id: action.id };
 			}
 			return pruneCollections( next );
 		}
@@ -173,8 +186,8 @@ export function init( target ) {
 	let active;
 	if ( target.kind === 'empty' ) {
 		active = { kind: 'empty' };
-	} else if ( target.kind === 'page' && target.id === null ) {
-		active = { kind: 'page-not-found' };
+	} else if ( target.kind === 'document' && target.id === null ) {
+		active = { kind: 'document-not-found' };
 	} else if ( target.kind === 'collection' && target.id === null ) {
 		active = { kind: 'collection-not-found' };
 	} else {
@@ -183,8 +196,9 @@ export function init( target ) {
 	return {
 		target,
 		active,
-		mountedPageId: null,
-		displayedPageId: null,
+		mountedDocumentId: null,
+		mountedDocumentType: null,
+		displayedDocumentId: null,
 		mountedCollectionIds: [],
 		readyCollectionIds: new Set(),
 	};

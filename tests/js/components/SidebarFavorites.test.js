@@ -115,7 +115,7 @@ describe( 'SidebarFavorites helpers', () => {
 				kind: 'page',
 				id: 1,
 				title: 'Hello',
-				path: 'page/hello-1',
+				path: 'hello-1',
 				sortableId: 'favorite:page:1',
 			},
 			{

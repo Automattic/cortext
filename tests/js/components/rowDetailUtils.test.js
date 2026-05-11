@@ -53,22 +53,21 @@ describe( 'adjacentRowId', () => {
 } );
 
 describe( 'splitPropertyPatch', () => {
-	it( 'separates title edits from meta edits', () => {
+	it( 'separates title edits from meta edits and only sends the patch', () => {
+		// Only the keys the user actually changed go through. Merging the
+		// existing meta would mark every key edited and round-trip values
+		// (including hydrated relations / rollups) back into REST on save.
 		expect(
-			splitPropertyPatch(
-				{
-					title: 'Next title',
-					'field-1': 'Author',
-					'field-2': true,
-				},
-				{ 'field-1': 'Previous', 'field-3': 'Kept' }
-			)
+			splitPropertyPatch( {
+				title: 'Next title',
+				'field-1': 'Author',
+				'field-2': true,
+			} )
 		).toEqual( {
 			title: 'Next title',
 			meta: {
 				'field-1': 'Author',
 				'field-2': true,
-				'field-3': 'Kept',
 			},
 		} );
 	} );

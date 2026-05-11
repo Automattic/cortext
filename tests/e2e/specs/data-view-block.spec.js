@@ -210,7 +210,7 @@ test.describe( 'Collection view block', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ fixture.page.id }`
+				`page=cortext&p=/${ fixture.page.id }`
 			);
 
 			await page.waitForFunction(
@@ -305,7 +305,7 @@ test.describe( 'Collection view block', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ fixture.page.id }`
+				`page=cortext&p=/${ fixture.page.id }`
 			);
 
 			await page.waitForFunction(
@@ -529,7 +529,7 @@ test.describe( 'Collection view block', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ fixture.page.id }`
+				`page=cortext&p=/${ fixture.page.id }`
 			);
 
 			await page.waitForFunction(
@@ -622,7 +622,7 @@ test.describe( 'Collection view block', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ fixture.page.id }`
+				`page=cortext&p=/${ fixture.page.id }`
 			);
 
 			await page.waitForFunction(
@@ -735,7 +735,7 @@ test.describe( 'Collection view block', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ fixture.page.id }`
+				`page=cortext&p=/${ fixture.page.id }`
 			);
 
 			await page.waitForFunction(
@@ -896,7 +896,7 @@ test.describe( 'Collection view block', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ fixture.page.id }`
+				`page=cortext&p=/${ fixture.page.id }`
 			);
 
 			await page.waitForFunction(
@@ -908,9 +908,13 @@ test.describe( 'Collection view block', () => {
 				{ timeout: 15_000 }
 			);
 
-			const canvas = page.frameLocator(
-				'.cortext-canvas__visual iframe[name="editor-canvas"]'
-			);
+			// Scope to the parent page's editor iframe. After the row peek
+			// opens, RowDetailView mounts its own EditorBody (another
+			// `.cortext-canvas__visual iframe`), so the unqualified
+			// frameLocator would resolve to two elements.
+			const canvas = page
+				.getByRole( 'region', { name: 'Content' } )
+				.frameLocator( 'iframe[name="editor-canvas"]' );
 			await expect(
 				canvas.locator( '.dataviews-view-table__actions-column' )
 			).toHaveCount( 0 );
@@ -932,12 +936,14 @@ test.describe( 'Collection view block', () => {
 				firstRow.locator( '.cortext-editable-cell__display' ).first()
 			).toHaveCSS( 'cursor', 'pointer' );
 			await titleCellOpenButton.click();
-			await expect
-				.poll( () => new URL( page.url() ).searchParams.get( 'row' ) )
-				.toBe( String( fixture.entry.id ) );
+			// Side and modal panes are local React state, not URL state.
+			// Full mode is the only row view that lives in the URL.
+			expect(
+				new URL( page.url() ).searchParams.get( 'row' )
+			).toBeNull();
 			expect(
 				new URL( page.url() ).searchParams.get( 'rowCollection' )
-			).toBe( String( fixture.collection.id ) );
+			).toBeNull();
 
 			await expect(
 				canvas.getByRole( 'dialog', {
@@ -955,11 +961,13 @@ test.describe( 'Collection view block', () => {
 				'rgb(248, 248, 248)'
 			);
 			await expect( titleCellOpenButton ).toHaveCSS( 'opacity', '1' );
-			const detailTitle = detail.getByRole( 'textbox', {
-				name: 'Title',
-				exact: true,
-			} );
-			await expect( detailTitle ).toHaveValue(
+			// The row detail chrome now mirrors the post title as an
+			// `<h2>`; the editable input lives inside the row's
+			// EditorBody iframe (locked `core/post-title` block).
+			const detailTitle = detail.locator(
+				'.cortext-row-detail__title'
+			);
+			await expect( detailTitle ).toHaveText(
 				'The Left Hand of Darkness'
 			);
 			const tagsLabel = detail
@@ -968,9 +976,6 @@ test.describe( 'Collection view block', () => {
 				)
 				.filter( { hasText: 'Tags' } );
 			await expect( tagsLabel ).toHaveCSS( 'cursor', 'default' );
-			await tagsLabel.evaluate( ( node ) =>
-				node.setAttribute( 'data-e2e-stable-label', 'tags' )
-			);
 			const tagsTrigger = detail.getByRole( 'button', {
 				name: 'Tags',
 				exact: true,
@@ -1003,87 +1008,51 @@ test.describe( 'Collection view block', () => {
 			await expect( detail.locator( '.components-spinner' ) ).toHaveCount(
 				0
 			);
-			await expect( detailTitle ).toHaveValue(
-				'The Left Hand of Darkness'
-			);
-			await expect
-				.poll( () => new URL( page.url() ).searchParams.get( 'row' ) )
-				.toBe( String( fixture.secondEntry.id ) );
-			await expect( detailTitle ).toHaveValue( 'Kindred' );
+			// Side and modal panes are local React state, not URL state,
+			// so verify the navigation via the detail title rather than ?row.
+			await expect( detailTitle ).toHaveText( 'Kindred' );
+			// The second row keeps the same field layout (still in the same
+			// collection), so its property panel still renders the Tags label.
 			await expect(
-				detail.locator( '[data-e2e-stable-label="tags"]' )
-			).toHaveText( 'Tags' );
+				detail
+					.locator(
+						'.cortext-row-detail__properties--rows .cortext-row-detail__property-label'
+					)
+					.filter( { hasText: 'Tags' } )
+			).toBeVisible();
 			await page.unroute( delayedSecondRowPattern, delaySecondRow );
 			await detail.getByRole( 'button', { name: 'Row above' } ).click();
-			await expect( detailTitle ).toHaveValue(
+			await expect( detailTitle ).toHaveText(
 				'The Left Hand of Darkness'
 			);
-			await expect
-				.poll( () => new URL( page.url() ).searchParams.get( 'row' ) )
-				.toBe( String( fixture.entry.id ) );
-
-			const goBack = page.getByRole( 'button', { name: 'Go back' } );
-			const goForward = page.getByRole( 'button', {
-				name: 'Go forward',
-			} );
-			await expect( goBack ).toBeEnabled();
-			await goBack.click();
-			await expect
-				.poll( () => new URL( page.url() ).searchParams.get( 'row' ) )
-				.toBe( String( fixture.secondEntry.id ) );
-			await expect( detailTitle ).toHaveValue( 'Kindred' );
-			await goBack.click();
-			await expect
-				.poll( () => new URL( page.url() ).searchParams.get( 'row' ) )
-				.toBe( String( fixture.entry.id ) );
-			await expect( detailTitle ).toHaveValue(
-				'The Left Hand of Darkness'
-			);
-			await expect( goForward ).toBeEnabled();
-			await goForward.click();
-			await expect
-				.poll( () => new URL( page.url() ).searchParams.get( 'row' ) )
-				.toBe( String( fixture.secondEntry.id ) );
-			await expect( detailTitle ).toHaveValue( 'Kindred' );
-			await goForward.click();
-			await expect
-				.poll( () => new URL( page.url() ).searchParams.get( 'row' ) )
-				.toBe( String( fixture.entry.id ) );
-			await expect( detailTitle ).toHaveValue(
-				'The Left Hand of Darkness'
-			);
+			// Side and modal panes are local React state, not URL state, so
+			// browser Back/Forward doesn't navigate between rows anymore.
+			// The Row above / Row below buttons above already cover that.
 
 			await detail.getByRole( 'button', { name: 'Hide fields' } ).click();
-			const collapsedFieldsButton = detail.locator(
-				'.cortext-row-detail__fields-indicator'
-			);
+			// The properties panel stays mounted but goes `aria-hidden`/inert
+			// when collapsed; the editable content (iframe) is still around.
+			await expect( detailTitle ).toBeVisible();
 			await expect(
-				detail.getByRole( 'textbox', { name: 'Title', exact: true } )
-			).toBeVisible();
-			await expect( collapsedFieldsButton ).toBeVisible();
-			await expect(
-				detail.locator( '.cortext-row-detail__content-editor' )
-			).toBeVisible();
+				detail.locator(
+					'.cortext-row-detail__properties--rows[data-visible="false"]'
+				)
+			).toBeAttached();
 			await expect(
 				detail.getByRole( 'button', { name: 'Show fields' } )
 			).toBeVisible();
 			await detail.getByRole( 'button', { name: 'Show fields' } ).click();
 			await expect(
-				detail.locator( '.cortext-row-detail__properties--rows' )
+				detail.locator(
+					'.cortext-row-detail__properties--rows[data-visible="true"]'
+				)
 			).toBeVisible();
 
-			await detailTitle.click();
-			await expect( detailTitle ).toHaveCSS( 'border-top-width', '0px' );
-			await expect( detailTitle ).toHaveCSS(
-				'background-color',
-				'rgba(0, 0, 0, 0)'
-			);
-			await page.keyboard.press( 'ControlOrMeta+A' );
-			await page.keyboard.press( 'Backspace' );
-			await page.keyboard.type( 'Changed row detail title' );
-			await expect( firstRow.locator( 'td' ).first() ).toContainText(
-				'Changed row detail title'
-			);
+			// The chrome heading mirrors the post title; the editable title
+			// lives inside the row's EditorBody iframe via the locked
+			// `core/post-title` block, so we don't try to edit it from
+			// the chrome anymore. The Author / Year edits below still
+			// cover the row-property save flow end-to-end.
 			await detail
 				.getByRole( 'textbox', { name: 'Author', exact: true } )
 				.fill( 'Octavia Butler' );
@@ -1135,7 +1104,7 @@ test.describe( 'Collection view block', () => {
 			await expect(
 				page
 					.getByRole( 'navigation', { name: 'Breadcrumb' } )
-					.getByText( 'Changed row detail title' )
+					.getByText( 'The Left Hand of Darkness' )
 			).toBeVisible();
 
 			await page
@@ -1148,9 +1117,14 @@ test.describe( 'Collection view block', () => {
 			await expect
 				.poll( () => new URL( page.url() ).searchParams.get( 'row' ) )
 				.toBeNull();
+			// The breadcrumb's collection link now navigates to the
+			// collection's own management surface, which renders the same
+			// DataViews table directly (no editor iframe).
 			await expect(
-				canvas.getByRole( 'button', { name: 'Open row' } ).first()
-			).toBeVisible();
+				page
+					.getByRole( 'button', { name: 'Open row' } )
+					.first()
+			).toBeAttached();
 
 			await expect
 				.poll( async () => {
@@ -1165,7 +1139,7 @@ test.describe( 'Collection view block', () => {
 					};
 				} )
 				.toEqual( {
-					title: 'Changed row detail title',
+					title: 'The Left Hand of Darkness',
 					author: 'Octavia Butler',
 					year: 2026,
 				} );
@@ -1317,7 +1291,7 @@ test.describe( 'Collection view block', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ fixture.page.id }`
+				`page=cortext&p=/${ fixture.page.id }`
 			);
 
 			await page.waitForFunction(
@@ -1480,7 +1454,7 @@ test.describe( 'Collection view block', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ fixture.page.id }`
+				`page=cortext&p=/${ fixture.page.id }`
 			);
 
 			await page.waitForFunction(
@@ -1656,7 +1630,7 @@ test.describe( 'Collection view block', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ fixture.page.id }`
+				`page=cortext&p=/${ fixture.page.id }`
 			);
 
 			await page.waitForFunction(
@@ -1756,7 +1730,7 @@ test.describe( 'Collection view block', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ fixture.page.id }`
+				`page=cortext&p=/${ fixture.page.id }`
 			);
 
 			await page.waitForFunction(
@@ -1845,7 +1819,7 @@ test.describe( 'Collection view block', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ fixture.page.id }`
+				`page=cortext&p=/${ fixture.page.id }`
 			);
 
 			await page.waitForFunction(
@@ -2061,7 +2035,7 @@ test.describe( 'Collection view block', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ fixture.page.id }`
+				`page=cortext&p=/${ fixture.page.id }`
 			);
 
 			await page.waitForFunction(
@@ -2132,7 +2106,7 @@ test.describe( 'Collection view block', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ fixture.page.id }`
+				`page=cortext&p=/${ fixture.page.id }`
 			);
 
 			await page.waitForFunction(
@@ -2276,7 +2250,7 @@ test.describe( 'Collection view block', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ fixture.page.id }`
+				`page=cortext&p=/${ fixture.page.id }`
 			);
 
 			await page.waitForFunction(
@@ -2421,7 +2395,7 @@ test.describe( 'Collection view block', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ fixture.page.id }`
+				`page=cortext&p=/${ fixture.page.id }`
 			);
 
 			await page.waitForFunction(
@@ -2673,7 +2647,7 @@ test.describe( 'Collection view block', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ fixture.page.id }`
+				`page=cortext&p=/${ fixture.page.id }`
 			);
 
 			await page.waitForFunction(
@@ -2801,7 +2775,7 @@ test.describe( 'Collection view block', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ fixture.page.id }`
+				`page=cortext&p=/${ fixture.page.id }`
 			);
 
 			await page.waitForFunction(
@@ -2973,7 +2947,7 @@ test.describe( 'Collection view block', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ fixture.page.id }`
+				`page=cortext&p=/${ fixture.page.id }`
 			);
 
 			await page.waitForFunction(

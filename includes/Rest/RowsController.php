@@ -37,6 +37,21 @@ final class RowsController {
 	}
 
 	public function register_routes(): void {
+		// Hydrate relation values and compute rollups in the standard
+		// `/wp/v2/<rest_base>/<id>` response for every row CPT, so peek and
+		// modal panes (which use `useEntityRecord`) see the same shape as
+		// the collection table feed at `/cortext/v1/rows`. Without this,
+		// `meta.field-<id>` for a relation field returns the raw stored
+		// IDs (strings), and rollups aren't computed at all.
+		foreach ( CollectionEntries::get_entry_post_types() as $entry_post_type ) {
+			add_filter(
+				"rest_prepare_{$entry_post_type}",
+				array( $this, 'filter_rest_prepare_row' ),
+				10,
+				3
+			);
+		}
+
 		register_rest_route(
 			self::NAMESPACE,
 			'/rows',
@@ -904,6 +919,106 @@ final class RowsController {
 	}
 
 	/**
+	 * Filters the standard WP REST response for a row post so it carries
+	 * hydrated relations and computed rollups, matching the shape exposed
+	 * by `/cortext/v1/rows`. Editor surfaces that fetch the row via
+	 * `useEntityRecord` (peek pane, modal pane, full document) then see
+	 * the same data the table sees, instead of raw stored IDs.
+	 *
+	 * @param WP_REST_Response $response The prepared response object.
+	 * @param WP_Post          $post     The post being prepared.
+	 * @return WP_REST_Response
+	 */
+	public function filter_rest_prepare_row( $response, WP_Post $post ): WP_REST_Response {
+		if ( ! $response instanceof WP_REST_Response ) {
+			return $response;
+		}
+
+		$slug = substr( $post->post_type, strlen( CollectionEntries::CPT_PREFIX ) );
+		if ( '' === $slug ) {
+			return $response;
+		}
+
+		$collection = $this->find_collection_by_slug( $slug );
+		if ( ! $collection instanceof WP_Post ) {
+			return $response;
+		}
+
+		$data = $response->get_data();
+
+		// Hydrate the system fields (created_at / by, modified_at / by) the
+		// same way `format_row` does for the table feed, so the same field
+		// definitions render correctly in side peek, modal, and full page.
+		// Without this, full-page rows show "Empty" for those columns
+		// because the standard WP REST response only exposes `author` /
+		// `date_gmt` and they don't match the field getters' shape.
+		$created_by_id       = (int) $post->post_author;
+		$modified_by_id      = (int) get_post_meta( $post->ID, '_modified_by', true );
+		$data['created_at']  = $this->format_gmt_date( $post->post_date_gmt );
+		$data['modified_at'] = $this->format_gmt_date( $post->post_modified_gmt );
+		$data['created_by']  = $this->display_name_for( $created_by_id );
+		$data['modified_by'] = $this->display_name_for(
+			$modified_by_id > 0 ? $modified_by_id : $created_by_id
+		);
+
+		$field_ids = $this->collection_field_ids( $collection->ID );
+		if ( count( $field_ids ) > 0 ) {
+			// Don't overwrite `meta` with hydrated values: those meta keys
+			// are registered as `string`, so a follow-up save that round-
+			// trips the hydrated objects back to the server gets rejected
+			// with 400 and loops the autosave. Surface the hydrated shape
+			// on a parallel `cortext_hydrated_meta` field instead, leaving
+			// the raw stored values intact for the save path.
+			$hydrated = array();
+			foreach ( $field_ids as $field_id ) {
+				$field_type = (string) get_post_meta( $field_id, 'type', true );
+				$key        = "field-{$field_id}";
+
+				if ( 'relation' === $field_type ) {
+					$hydrated[ $key ] = $this->format_relation_value( $post->ID, $field_id );
+				} elseif ( 'rollup' === $field_type ) {
+					$hydrated[ $key ] = $this->compute_rollup_value( $post->ID, $field_id );
+				}
+			}
+
+			if ( count( $hydrated ) > 0 ) {
+				$data['cortext_hydrated_meta'] = $hydrated;
+			}
+		}
+
+		$response->set_data( $data );
+		return $response;
+	}
+
+	/**
+	 * Looks up a collection by its `meta.slug` (the canonical identifier
+	 * embedded in the row CPT slug). Mirrors
+	 * `CollectionEntries::collection_id_for_entry_post_type` but returns the
+	 * post object directly since the caller already needs collection context.
+	 *
+	 * @param string $slug Collection meta slug (e.g., `books` for `crtxt_books`).
+	 * @return WP_Post|null
+	 */
+	private function find_collection_by_slug( string $slug ): ?WP_Post {
+		$matches = get_posts(
+			array(
+				'post_type'      => Collection::POST_TYPE,
+				'post_status'    => array( 'draft', 'private', 'publish' ),
+				// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+				'meta_query'     => array(
+					array(
+						'key'   => 'slug',
+						'value' => $slug,
+					),
+				),
+				'posts_per_page' => 1,
+			)
+		);
+
+		return ! empty( $matches ) ? $matches[0] : null;
+	}
+
+	/**
 	 * Formats a single row post for the response.
 	 *
 	 * @param WP_Post         $post            Entry post object.
@@ -927,6 +1042,10 @@ final class RowsController {
 					: get_post_meta( $post->ID, $key, true );
 			}
 		}
+
+		// Include the document icon so the row renders with its glyph in
+		// the table (and anywhere else the title gets a leading icon).
+		$meta['cortext_document_icon'] = (string) get_post_meta( $post->ID, 'cortext_document_icon', true );
 
 		$created_by_id  = (int) $post->post_author;
 		$modified_by_id = (int) get_post_meta( $post->ID, '_modified_by', true );

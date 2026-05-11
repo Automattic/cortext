@@ -33,7 +33,7 @@ final class PageHeaderActionsBlock {
 					'inserter' => false,
 				),
 				// Legacy editor-only block. New content no longer inserts
-				// it, and PageIdentity strips it on save. Keep the empty
+				// it, and DocumentIdentity strips it on save. Keep the empty
 				// renderer so older saved comments do not leak frontend
 				// markup before their next edit.
 				'render_callback' => static function () {

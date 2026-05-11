@@ -25,7 +25,10 @@ import {
 import PageIcon from './PageIcon';
 import { collectionTitle } from './CollectionRow';
 import { collectDescendants } from './pages-tree';
-import { computeUri } from '../router/useResolveEntity';
+import {
+	computeCollectionUri,
+	computeDocumentUri,
+} from '../router/useResolveEntity';
 import { whenViewTransitionsSettled } from '../hooks/viewTransition';
 
 const FAVORITE_ADD_ANIMATION_MS = 220;
@@ -104,7 +107,7 @@ export function resolveFavoriteItems( favorites, pages, collections ) {
 					sortableId: key,
 					record: page,
 					title: page ? pageTitle( page ) : __( 'Page', 'cortext' ),
-					path: page ? computeUri( page, 'page' ) : favorite.path,
+					path: page ? computeDocumentUri( page ) : favorite.path,
 				};
 			}
 
@@ -124,7 +127,7 @@ export function resolveFavoriteItems( favorites, pages, collections ) {
 						? collectionTitle( collection )
 						: __( 'Collection', 'cortext' ),
 					path: collection
-						? computeUri( collection, 'collection' )
+						? computeCollectionUri( collection )
 						: favorite.path,
 				};
 			}
@@ -169,7 +172,7 @@ function FavoriteIcon( { item } ) {
 	if ( item.kind === 'page' ) {
 		return (
 			<PageIcon
-				icon={ item.record?.meta?.cortext_page_icon ?? '' }
+				icon={ item.record?.meta?.cortext_document_icon ?? '' }
 				size={ 16 }
 			/>
 		);

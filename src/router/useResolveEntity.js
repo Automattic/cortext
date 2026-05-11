@@ -1,25 +1,26 @@
 import { useState, useEffect } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
 
-// Resolves a URI like "about-us-42" or "42" to a page entity by extracting the
-// trailing numeric id and fetching that record directly. The slug prefix is
-// cosmetic: it keeps the URL human-readable without being authoritative, so
-// renaming a page can never break an existing link, and blank drafts (which
-// have no slug yet) remain addressable via their id alone.
-const POST_TYPE = 'crtxt_page';
+// Resolves a document URI like `<slug>-<id>` or bare `<id>` to a post entity.
+// Only the trailing id is authoritative; the slug is cosmetic, so renames
+// don't break existing links and fresh drafts stay addressable as a bare id.
+//
+// Two REST round trips:
+//   1. `/cortext/v1/documents/<id>` returns the post type (and rest_base).
+//      Pages and row CPTs both opt into the `cortext-document` trait, so
+//      one locator covers both.
+//   2. `/wp/v2/<rest_base>/<id>` returns the record (slug, parent, meta).
 
-// Pulls the trailing `<digits>` — optionally preceded by `-` — out of a URI.
-// Matches both `foo-42` and bare `42`. Returns null for anything else so
-// callers can treat a missing id as "route to empty state, not 404".
+// Pulls the trailing `<digits>`, optionally preceded by `-`, out of a URI.
+// Matches `foo-42` and bare `42`. Returns null otherwise so callers can
+// route to empty state instead of 404.
 export function parseIdFromUri( uri ) {
 	const match = ( uri ?? '' ).match( /(?:^|-)(\d+)$/ );
 	return match ? parseInt( match[ 1 ], 10 ) : null;
 }
 
-export function useResolveEntity( uri ) {
+export function useResolveDocument( uri ) {
 	const id = parseIdFromUri( uri );
-	// `id` records which uri this state belongs to, so callers can ignore a
-	// stale notFound left over from the previous uri.
 	const [ state, setState ] = useState( {
 		entity: null,
 		isResolving: true,
@@ -52,17 +53,42 @@ export function useResolveEntity( uri ) {
 			id,
 		} );
 
-		apiFetch( {
-			path: `/wp/v2/${ POST_TYPE }s/${ id }?context=edit&_fields=id,slug,parent`,
-		} )
-			.then( ( entity ) => {
-				if ( ! cancelled ) {
+		apiFetch( { path: `/cortext/v1/documents/${ id }` } )
+			.then( async ( locator ) => {
+				if ( cancelled ) {
+					return;
+				}
+				const restBase = locator?.rest_base ?? locator?.type;
+				if ( ! restBase ) {
 					setState( {
-						entity,
+						entity: null,
 						isResolving: false,
-						notFound: false,
+						notFound: true,
 						id,
 					} );
+					return;
+				}
+				try {
+					const entity = await apiFetch( {
+						path: `/wp/v2/${ restBase }/${ id }?context=edit&_fields=id,slug,parent,type,created_at,created_by,modified_at,modified_by,cortext_hydrated_meta`,
+					} );
+					if ( ! cancelled ) {
+						setState( {
+							entity,
+							isResolving: false,
+							notFound: false,
+							id,
+						} );
+					}
+				} catch {
+					if ( ! cancelled ) {
+						setState( {
+							entity: null,
+							isResolving: false,
+							notFound: true,
+							id,
+						} );
+					}
 				}
 			} )
 			.catch( () => {
@@ -89,7 +115,7 @@ export function useResolveEntity( uri ) {
 const COLLECTION_TYPE = 'crtxt_collection';
 
 export function useResolveCollection( id ) {
-	// Same id-tagging as useResolveEntity above.
+	// Same id-tagging as useResolveDocument above.
 	const [ state, setState ] = useState( {
 		entity: null,
 		isResolving: true,
@@ -148,13 +174,23 @@ export function useResolveCollection( id ) {
 	return state;
 }
 
-// Builds the URL segment: `<prefix>/<slug>-<id>` when a slug exists, or
-// `<prefix>/<id>` for fresh drafts. The id is the authoritative part —
-// parseIdFromUri only ever reads the trailing digits.
-export function computeUri( entity, prefix = 'page' ) {
-	const slug = typeof entity.slug === 'string' ? entity.slug.trim() : '';
+// Builds the URL segment: `<slug>-<id>` when a slug exists, or bare `<id>`
+// for fresh drafts. parseIdFromUri only reads the trailing digits, so the
+// slug part is purely cosmetic. No prefix; documents are the default kind
+// in the splat.
+export function computeDocumentUri( entity ) {
+	const slug = typeof entity?.slug === 'string' ? entity.slug.trim() : '';
+	return slug ? `${ slug }-${ entity.id }` : `${ entity.id }`;
+}
+
+// Builds a collection URL segment with the explicit `collection/` prefix.
+// Collections aren't documents (they're schema containers), so the prefix
+// is the routing discriminator that picks the table renderer instead of
+// the document editor.
+export function computeCollectionUri( entity ) {
+	const slug = typeof entity?.slug === 'string' ? entity.slug.trim() : '';
 	const tail = slug ? `${ slug }-${ entity.id }` : `${ entity.id }`;
-	return `${ prefix }/${ tail }`;
+	return `collection/${ tail }`;
 }
 
 // Strips the prefix from a splat URI and returns { prefix, tail }.

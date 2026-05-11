@@ -16,20 +16,20 @@ import {
 	ToolbarGroup,
 } from '@wordpress/components';
 import { replace, trash } from '@wordpress/icons';
-import PageIdentityControls from '../../components/PageIdentityControls';
+import DocumentIdentityControls from '../../components/DocumentIdentityControls';
 
 // Renders the featured image as a full-width banner with hover-revealed
 // Replace/Remove controls in the top-right corner. We deliberately don't
-// reuse <PostFeaturedImage> from @wordpress/editor — its built-in layout
+// reuse <PostFeaturedImage> from @wordpress/editor; its built-in layout
 // flanks a natural-size thumbnail with Replace/Remove buttons, which
 // fights any attempt at a full-width page cover. We keep the same plumbing
 // underneath (MediaUpload + featured_media) so the WP media library and
 // inspector continue to work.
 export default function Edit( { context, clientId } ) {
 	const postId = context?.postId;
-	const postType = context?.postType ?? 'crtxt_page';
+	const postType = context?.postType;
 	const blockProps = useBlockProps( {
-		className: 'cortext-page-cover-block',
+		className: 'cortext-document-cover-block',
 	} );
 
 	const [ featuredId, setFeaturedId ] = useEntityProp(
@@ -39,7 +39,7 @@ export default function Edit( { context, clientId } ) {
 		postId
 	);
 	const [ meta ] = useEntityProp( 'postType', postType, 'meta', postId );
-	const iconMeta = meta?.cortext_page_icon ?? '';
+	const iconMeta = meta?.cortext_document_icon ?? '';
 	const { coverIndex, hasIconBlock } = useSelect(
 		( select ) => {
 			const store = select( blockEditorStore );
@@ -47,7 +47,9 @@ export default function Edit( { context, clientId } ) {
 				coverIndex: clientId ? store.getBlockIndex( clientId ) : 0,
 				hasIconBlock: store
 					.getBlocks()
-					.some( ( block ) => block.name === 'cortext/page-icon' ),
+					.some(
+						( block ) => block.name === 'cortext/document-icon'
+					),
 			};
 		},
 		[ clientId ]
@@ -83,7 +85,7 @@ export default function Edit( { context, clientId } ) {
 			return;
 		}
 		insertBlocks(
-			createBlock( 'cortext/page-icon', {
+			createBlock( 'cortext/document-icon', {
 				lock: { move: true },
 			} ),
 			coverIndex + 1,
@@ -91,6 +93,16 @@ export default function Edit( { context, clientId } ) {
 			false
 		);
 	};
+
+	if ( ! postId || ! postType ) {
+		return (
+			<div { ...blockProps }>
+				<span className="cortext-document-cover-block__hint">
+					{ __( 'Document cover is unavailable here.', 'cortext' ) }
+				</span>
+			</div>
+		);
+	}
 
 	return (
 		<>
@@ -157,15 +169,16 @@ export default function Edit( { context, clientId } ) {
 			<div { ...blockProps }>
 				{ src && (
 					<img
-						className="cortext-page-cover-block__image"
+						className="cortext-document-cover-block__image"
 						src={ src }
 						alt={ media?.alt_text ?? '' }
 					/>
 				) }
-				<div className="cortext-page-cover-block__controls">
+				<div className="cortext-document-cover-block__controls">
 					{ ! iconMeta && (
-						<PageIdentityControls
-							pageId={ postId }
+						<DocumentIdentityControls
+							postId={ postId }
+							postType={ postType }
 							currentIcon={ iconMeta }
 							onAfterSave={ ensureIconBlock }
 							renderToggle={ ( { onToggle } ) => (

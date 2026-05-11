@@ -4,7 +4,7 @@ import { useMemo } from '@wordpress/element';
 
 import PageIconWp from './PageIconWp';
 
-// Three shapes are persisted in the cortext_page_icon meta:
+// Three shapes are persisted in the cortext_document_icon meta:
 //   { type: 'emoji', value: '📘' }
 //   { type: 'image', id: 123 }
 //   { type: 'wp', name: 'home', color?: 'red' }
@@ -67,7 +67,7 @@ function ImageIcon( { id, size, alt, className } ) {
 		record?.media_details?.sizes?.thumbnail?.source_url ??
 		record?.source_url ??
 		null;
-	const classes = [ 'cortext-page-icon' ];
+	const classes = [ 'cortext-document-icon' ];
 	if ( className ) {
 		classes.push( className );
 	}
@@ -76,7 +76,7 @@ function ImageIcon( { id, size, alt, className } ) {
 		return (
 			<span
 				className={ classes
-					.concat( 'cortext-page-icon--image-loading' )
+					.concat( 'cortext-document-icon--image-loading' )
 					.join( ' ' ) }
 				style={ { width: size, height: size } }
 				aria-hidden="true"
@@ -87,7 +87,7 @@ function ImageIcon( { id, size, alt, className } ) {
 	return (
 		<img
 			className={ classes
-				.concat( 'cortext-page-icon--image' )
+				.concat( 'cortext-document-icon--image' )
 				.join( ' ' ) }
 			src={ src }
 			alt={ alt ?? '' }
@@ -99,7 +99,7 @@ function ImageIcon( { id, size, alt, className } ) {
 
 export default function PageIcon( { icon, size = 16, alt, className } ) {
 	const parsed = useMemo( () => parsePageIcon( icon ), [ icon ] );
-	const classes = [ 'cortext-page-icon' ];
+	const classes = [ 'cortext-document-icon' ];
 	// `display: inline-flex` is the load-bearing bit: spans are inline by
 	// default, so width/height get ignored and the emoji variant ends up
 	// sized by `font-size * line-height` — taller than the SVG-based
@@ -122,7 +122,7 @@ export default function PageIcon( { icon, size = 16, alt, className } ) {
 		return (
 			<span
 				className={ classes
-					.concat( 'cortext-page-icon--fallback' )
+					.concat( 'cortext-document-icon--fallback' )
 					.join( ' ' ) }
 				style={ boxStyle }
 				aria-hidden="true"
@@ -136,7 +136,7 @@ export default function PageIcon( { icon, size = 16, alt, className } ) {
 		return (
 			<span
 				className={ classes
-					.concat( 'cortext-page-icon--emoji' )
+					.concat( 'cortext-document-icon--emoji' )
 					.join( ' ' ) }
 				style={ { ...boxStyle, fontSize: size } }
 				aria-hidden={ alt ? undefined : 'true' }
@@ -155,7 +155,7 @@ export default function PageIcon( { icon, size = 16, alt, className } ) {
 		return (
 			<span
 				className={ classes
-					.concat( 'cortext-page-icon--wp' )
+					.concat( 'cortext-document-icon--wp' )
 					.join( ' ' ) }
 				style={ { ...boxStyle, ...colorStyle } }
 				aria-hidden={ alt ? undefined : 'true' }

@@ -44,7 +44,7 @@ import apiFetch from '@wordpress/api-fetch';
 
 import MediaPicker, { MediaUploadCheck } from './MediaPicker';
 import PageIcon from './PageIcon';
-import PageIdentityControls from './PageIdentityControls';
+import DocumentIdentityControls from './DocumentIdentityControls';
 import { filterFavoritesForTrashedPage } from './SidebarFavorites';
 import {
 	ACTIVE_PAGES_QUERY,
@@ -184,15 +184,15 @@ function InspectorToolGroup( { label, children } ) {
 
 function PageIconInspectorControls( { postId } ) {
 	const [ meta ] = useEntityProp( 'postType', POST_TYPE, 'meta', postId );
-	const iconMeta = meta?.cortext_page_icon ?? '';
+	const iconMeta = meta?.cortext_document_icon ?? '';
 	const { coverIndex, hasCoverBlock, iconBlockId } = useSelect(
 		( select ) => {
 			const blocks = select( blockEditorStore ).getBlocks();
 			const coverBlock = blocks.find(
-				( block ) => block.name === 'cortext/page-cover'
+				( block ) => block.name === 'cortext/document-cover'
 			);
 			const iconBlock = blocks.find(
-				( block ) => block.name === 'cortext/page-icon'
+				( block ) => block.name === 'cortext/document-icon'
 			);
 			return {
 				coverIndex: coverBlock ? blocks.indexOf( coverBlock ) : -1,
@@ -227,7 +227,7 @@ function PageIconInspectorControls( { postId } ) {
 			}
 			const insertIndex = hasCoverBlock ? coverIndex + 1 : 0;
 			insertBlocks(
-				createBlock( 'cortext/page-icon', {
+				createBlock( 'cortext/document-icon', {
 					lock: { move: true },
 				} ),
 				insertIndex,
@@ -249,7 +249,7 @@ function PageIconInspectorControls( { postId } ) {
 		try {
 			removeIconBlock();
 			editEntityRecord( 'postType', POST_TYPE, postId, {
-				meta: { cortext_page_icon: '' },
+				meta: { cortext_document_icon: '' },
 			} );
 			await saveEditedEntityRecord( 'postType', POST_TYPE, postId );
 		} finally {
@@ -268,8 +268,9 @@ function PageIconInspectorControls( { postId } ) {
 						<PageIcon icon={ iconMeta } size={ 24 } />
 					</span>
 				) : null }
-				<PageIdentityControls
-					pageId={ postId }
+				<DocumentIdentityControls
+					postId={ postId }
+					postType={ POST_TYPE }
 					currentIcon={ iconMeta }
 					onAfterSave={ syncIconBlock }
 					renderToggle={ ( { onToggle } ) => (
@@ -317,7 +318,7 @@ function PageFeaturedImageInspectorControls( { postId } ) {
 		( select ) =>
 			select( blockEditorStore )
 				.getBlocks()
-				.find( ( block ) => block.name === 'cortext/page-cover' )
+				.find( ( block ) => block.name === 'cortext/document-cover' )
 				?.clientId ?? null,
 		[]
 	);
@@ -331,7 +332,7 @@ function PageFeaturedImageInspectorControls( { postId } ) {
 			return;
 		}
 		insertBlocks(
-			createBlock( 'cortext/page-cover', {
+			createBlock( 'cortext/document-cover', {
 				align: 'full',
 				lock: { move: true },
 			} ),

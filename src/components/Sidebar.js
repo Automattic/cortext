@@ -78,7 +78,8 @@ import {
 	TRASHED_PAGES_QUERY,
 } from './page-queries';
 import {
-	computeUri,
+	computeCollectionUri,
+	computeDocumentUri,
 	parseIdFromUri,
 	parseSplatUri,
 } from '../router/useResolveEntity';
@@ -174,7 +175,7 @@ export default function Sidebar( {
 		if ( ! current ) {
 			return;
 		}
-		const canonical = computeUri( current, 'page' );
+		const canonical = computeDocumentUri( current );
 		if ( canonical !== activeUri ) {
 			navigate( {
 				to: '/$',
@@ -198,7 +199,7 @@ export default function Sidebar( {
 				pages.find( ( p ) => p.id === id ) ?? { id };
 			navigate( {
 				to: '/$',
-				params: { _splat: computeUri( page, 'page' ) },
+				params: { _splat: computeDocumentUri( page ) },
 			} );
 		},
 		[ navigate, pages ]
@@ -397,7 +398,7 @@ export default function Sidebar( {
 		if ( created?.id ) {
 			navigate( {
 				to: '/$',
-				params: { _splat: computeUri( created, 'collection' ) },
+				params: { _splat: computeCollectionUri( created ) },
 			} );
 		}
 	}, [ invalidateResolution, navigate ] );
@@ -810,9 +811,8 @@ export default function Sidebar( {
 										navigate( {
 											to: '/$',
 											params: {
-												_splat: computeUri(
-													collection,
-													'collection'
+												_splat: computeCollectionUri(
+													collection
 												),
 											},
 										} )

@@ -1,7 +1,7 @@
 <?php
 /**
  * Server-side registration and frontend render for the
- * `cortext/page-icon` block.
+ * `cortext/document-icon` block.
  *
  * @package Cortext
  */
@@ -10,11 +10,11 @@ declare( strict_types=1 );
 
 namespace Cortext\Editor;
 
-use Cortext\PostType\PageIdentity;
+use Cortext\PostType\DocumentIdentity;
 
-final class PageIconBlock {
+final class DocumentIconBlock {
 
-	public const BLOCK_NAME = 'cortext/page-icon';
+	public const BLOCK_NAME = 'cortext/document-icon';
 
 	public function register(): void {
 		add_action( 'init', array( $this, 'register_block' ) );
@@ -25,7 +25,7 @@ final class PageIconBlock {
 			self::BLOCK_NAME,
 			array(
 				'api_version'     => 3,
-				'title'           => __( 'Page icon', 'cortext' ),
+				'title'           => __( 'Document icon', 'cortext' ),
 				'category'        => 'widgets',
 				'icon'            => 'smiley',
 				'uses_context'    => array( 'postId', 'postType' ),
@@ -41,12 +41,12 @@ final class PageIconBlock {
 	}
 
 	/**
-	 * Frontend render: emits the emoji span or `<img>` for the page icon
+	 * Frontend render: emits the emoji span or `<img>` for the document icon
 	 * meta. Returns an empty string when the block is rendered outside a
-	 * page context or the meta is empty, so themes don't have to guard.
+	 * document context or the meta is empty, so themes don't have to guard.
 	 *
-	 * @param array  $attributes Block attributes (unused — meta is the source of truth).
-	 * @param string $content    Inner HTML (none — block is dynamic).
+	 * @param array  $attributes Block attributes (unused; meta is the source of truth).
+	 * @param string $content    Inner HTML (none; block is dynamic).
 	 * @param object $block      Parsed block instance, carrying context.
 	 */
 	public function render( $attributes, $content, $block ): string {
@@ -55,7 +55,7 @@ final class PageIconBlock {
 			return '';
 		}
 
-		$raw = (string) get_post_meta( $post_id, PageIdentity::META_KEY, true );
+		$raw = (string) get_post_meta( $post_id, DocumentIdentity::META_KEY, true );
 		if ( '' === $raw ) {
 			return '';
 		}
@@ -72,7 +72,7 @@ final class PageIconBlock {
 					return '';
 				}
 				return sprintf(
-					'<div class="cortext-page-icon-block"><span class="cortext-page-icon cortext-page-icon--emoji" aria-hidden="true">%s</span></div>',
+					'<div class="cortext-document-icon-block"><span class="cortext-document-icon cortext-document-icon--emoji" aria-hidden="true">%s</span></div>',
 					esc_html( $emoji )
 				);
 
@@ -85,12 +85,12 @@ final class PageIconBlock {
 					$attachment_id,
 					'thumbnail',
 					false,
-					array( 'class' => 'cortext-page-icon cortext-page-icon--image' )
+					array( 'class' => 'cortext-document-icon cortext-document-icon--image' )
 				);
 				if ( '' === $img ) {
 					return '';
 				}
-				return '<div class="cortext-page-icon-block">' . $img . '</div>';
+				return '<div class="cortext-document-icon-block">' . $img . '</div>';
 
 			case 'wp':
 				// We don't ship the SVG markup server-side; @wordpress/icons
@@ -107,7 +107,7 @@ final class PageIconBlock {
 					return '';
 				}
 				return sprintf(
-					'<div class="cortext-page-icon-block"><span class="cortext-page-icon cortext-page-icon--wp" data-icon="%s" aria-hidden="true"></span></div>',
+					'<div class="cortext-document-icon-block"><span class="cortext-document-icon cortext-document-icon--wp" data-icon="%s" aria-hidden="true"></span></div>',
 					esc_attr( $name )
 				);
 		}

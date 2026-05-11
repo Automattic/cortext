@@ -264,23 +264,23 @@ Double-click autofit is the trickiest piece. With no measurement hook upstream, 
 
 ## 31. Block editor has no non-serialized before/after block chrome slot `[upstream]`
 
-**What.** Page identity actions ("Add icon" / "Add cover") are editor chrome, but the ideal visual placement is immediately before the page title inside the block canvas. Persisting an actions block put UI into post content, while portalling controls into the iframe coupled us to BlockList DOM and block hover/selection behavior. The current compromise renders editor-only actions from the canvas shell, outside the persisted `BlockList`, and inserts only the real dynamic blocks (`cortext/page-icon`, `cortext/page-cover`) into content.
+**What.** Document identity actions ("Add icon" / "Add cover") are editor chrome, but the ideal visual placement is immediately before the document title inside the block canvas. Persisting an actions block put UI into post content, while portalling controls into the iframe coupled us to BlockList DOM and block hover/selection behavior. The current compromise renders editor-only actions from the canvas shell, outside the persisted `BlockList`, and inserts only the real dynamic blocks (`cortext/document-icon`, `cortext/document-cover`) into content.
 
-**Where.** `PageIdentityActions` and `EnsureHeaderBlocks` in `src/components/Canvas.js`; legacy no-op registration in `includes/Editor/PageHeaderActionsBlock.php`.
+**Where.** `DocumentIdentityActions` and `EnsureHeaderBlocks` in `src/components/EditorBody.js`; legacy no-op registration in `includes/Editor/PageHeaderActionsBlock.php`.
 
 **Solution.** Gutenberg could expose a non-serialized block chrome slot/fill, e.g. "before/after this block" keyed by `clientId`, block name, and root list. Fills would participate in editor layout and focus order but stay out of block order, list view, serialization, copy/paste, movers, undo history as content, and frontend rendering. Cortext could then render the identity actions before the root `core/post-title` without storing a fake block or querying iframe DOM.
 
 ## 32. Public pages render the title twice `[internal]`
 
-**What.** `PageIdentity::prepend_header_blocks` slips a locked `core/post-title` block into `post_content` on insert, so the editor canvas can show the title inline as part of the BlockList. The public template still calls `the_title()` immediately before `the_content()`, and `core/post-title` resolves to the same `post_title` again, so every page created after this filter landed renders its title twice publicly. Older pages (no title block in their content) are fine until the editor next persists them.
+**What.** `DocumentIdentity::prepend_header_blocks` slips a locked `core/post-title` block into `post_content` on insert, so the editor canvas can show the title inline as part of the BlockList. The public template still calls `the_title()` immediately before `the_content()`, and `core/post-title` resolves to the same `post_title` again, so every page created after this filter landed renders its title twice publicly. Older pages (no title block in their content) are fine until the editor next persists them.
 
-**Where.** `prepend_header_blocks` in `includes/PostType/PageIdentity.php`, paired with `the_title()` in `templates/single-crtxt_page.php`.
+**Where.** `prepend_header_blocks` in `includes/PostType/DocumentIdentity.php`, paired with `the_title()` in `templates/single-crtxt_page.php`.
 
 **Solution.** Stop baking `core/post-title` into `post_content` and mount the editor's title input as canvas chrome above `BlockCanvas`, the way Gutenberg itself does it. The template keeps `the_title()` as the single source of truth; the editor keeps an inline-editable title; pages already saved with the block get a small migration that strips it. Until then `the_title()` is the authoritative render and the duplication is the cost of the canvas-as-blocklist shape.
 
 ## 33. Frontend stylesheet doesn't carry the cover/icon rules `[internal]`
 
-**What.** `.cortext-page-cover-block` and `.cortext-page-icon` rules live in `src/index.scss`, which only builds to the admin shell bundle. The PHP `render_callback`s emit the same wrapper classes for the public frontend, but `src/frontend.scss` has no matching rules, so on a public `crtxt_page` the cover banner renders at intrinsic image size and the icon block falls back to inline-default layout.
+**What.** `.cortext-document-cover-block` and `.cortext-document-icon` rules live in `src/index.scss`, which only builds to the admin shell bundle. The PHP `render_callback`s emit the same wrapper classes for the public frontend, but `src/frontend.scss` has no matching rules, so on a public `crtxt_page` the cover banner renders at intrinsic image size and the icon block falls back to inline-default layout.
 
 **Where.** `src/index.scss` (cover/icon block rules) versus `src/frontend.scss` (no matching rules), enqueued by the public template.
 
@@ -288,9 +288,9 @@ Double-click autofit is the trickiest piece. With no measurement hook upstream, 
 
 ## 34. WP-icon variant renders blank on the public frontend `[internal]`
 
-**What.** `PageIconBlock::render` emits a marker span (`<span class="cortext-page-icon--wp" data-icon="…">`) for the `wp` icon variant and relies on a frontend hydration step to fill in the SVG. `frontend.js` is CSS-only, so nothing fills it and the icon disappears on the public page; the saved color is also dropped. Emoji and image variants render server-side and are fine.
+**What.** `DocumentIconBlock::render` emits a marker span (`<span class="cortext-document-icon--wp" data-icon="…">`) for the `wp` icon variant and relies on a frontend hydration step to fill in the SVG. `frontend.js` is CSS-only, so nothing fills it and the icon disappears on the public page; the saved color is also dropped. Emoji and image variants render server-side and are fine.
 
-**Where.** Case `'wp'` in `includes/Editor/PageIconBlock.php`, paired with `src/frontend.js` (no hydration).
+**Where.** Case `'wp'` in `includes/Editor/DocumentIconBlock.php`, paired with `src/frontend.js` (no hydration).
 
 **Solution.** Either ship the SVG inline server-side (a small build-time generator that reads `@wordpress/icons` and emits a name-to-markup PHP map, refreshed on install) or hydrate from `data-icon` markers in `frontend.js` (smaller PHP surface, adds a public script). The inline-color is a one-line fix in either path. Until then, surface the limitation in the picker copy or restrict the saved variant to emoji + image for public-rendered pages.
 
@@ -353,3 +353,11 @@ The user-facing placeholder is still Core's generic "Search commands and setting
 **Where.** `src/components/SidebarFavorites.js`, plus the `.cortext-sidebar__favorite-*` rules in `src/index.scss`.
 
 **Solution.** Extract a shared sidebar-row primitive with explicit slots for title navigation, drag handle, menu/actions, selected state, and shortcut-only rows. Then `PageRow`, `CollectionRow`, and `SidebarFavorites` can share the same interaction contract without reusing the wrong DOM shape for Favorites.
+
+## 42. Row properties need a real document block `[internal, important]`
+
+**What.** Important. Row documents now look much closer to pages in the editor, but their collection-field properties are still Cortext shell UI sitting above the block-editor iframe. That is fine for this pass: the form works, and full-page mode can hide it. It is not fine as the long-term publishing model. Because the properties sit outside `post_content`, public themes never see them through `the_content()`, and we cannot get the Notion order (cover, icon, title, properties, body) without another one-off surface. If rows can be published, this is the next architectural gap to close.
+
+**Where.** `RowProperties` in `src/components/RowProperties.js`, mounted from `src/components/Canvas.js` for full-page row documents and `src/components/RowDetailView.js` for side/modal row detail. There is still no `cortext/document-properties` block or PHP render callback.
+
+**Solution.** Build `cortext/document-properties` as a locked dynamic block, in the same family as `cortext/document-cover` and `cortext/document-icon`. Its `edit()` should reuse the row-property form inside the editor iframe. Its `render_callback` should read the row's collection schema and meta, then emit frontend HTML for public themes. The header-block insertion path should place it after cover/icon/title on row documents. The full-page hide/show control then becomes an editor visibility preference, not the source of truth for whether properties exist in the document.

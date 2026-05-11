@@ -327,7 +327,7 @@ test.describe( 'Sidebar layout controls', () => {
 
 			await admin.visitAdminPage(
 				SHELL_PATH,
-				`page=cortext&p=/page/${ fixture.page.id }`
+				`page=cortext&p=/${ fixture.page.id }`
 			);
 
 			await expect(
@@ -369,7 +369,7 @@ test.describe( 'Sidebar layout controls', () => {
 
 			await admin.visitAdminPage(
 				SHELL_PATH,
-				`page=cortext&p=/page/${ fixture.page.id }`
+				`page=cortext&p=/${ fixture.page.id }`
 			);
 
 			const settings = page.locator(
@@ -592,7 +592,7 @@ test.describe( 'Sidebar layout controls', () => {
 
 			await admin.visitAdminPage(
 				SHELL_PATH,
-				`page=cortext&p=/page/${ fixture.page.id }`
+				`page=cortext&p=/${ fixture.page.id }`
 			);
 
 			const sidebar = page.locator( '.cortext-sidebar' );
