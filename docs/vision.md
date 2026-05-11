@@ -6,13 +6,13 @@ Knowledge bases need documents, typed records, views, and relations. WordPress
 has the storage pieces for that work, but the editing experience is scattered
 across custom fields, list tables, plugin screens, and theme templates.
 
-WordPress owns the data story. It is self-hosted, exportable, and stable. The block editor handles documents well. What is missing is a knowledge base interface that treats pages, collections, fields, and views as one product surface while keeping the data in WordPress.
+WordPress is self-hosted, exportable, and stable. The block editor handles documents well. What is missing is a knowledge base interface that treats pages, collections, fields, and views as one product surface while keeping the data in WordPress.
 
 ## The opportunity
 
 WordPress core now has enough of the pieces to make this practical: posts, post
-meta, REST, Gutenberg, and DataViews. Cortext wires those together into one
-knowledge base surface.
+meta, REST, the block editor, and DataViews. Cortext wires those together into
+one knowledge base surface.
 
 ## Design principles
 
@@ -37,4 +37,4 @@ without building a separate data layer too early.
 
 Cortext is WordPress under the hood, but the workspace UI is built for maintaining a knowledge base rather than doing ordinary wp-admin chores. wp-admin stays available for operators who want it; everyone else works in a dedicated shell.
 
-The shell is themeable, but the API is intentionally small. Operators can retune Cortext chrome with tokens. They cannot move the sidebar, reshape DataViews, or replace the inspector. Content pages keep the full WordPress block-theme API, so the workspace can feel like Cortext while published pages still feel like the site. See [Theming](theming.md) for the current contract notes.
+The workspace UI can be themed, but the API is intentionally small. Themes can adjust colors and basic visual details; they cannot move the sidebar, reshape DataViews, or replace the inspector. Content pages keep the full WordPress block-theme API, so the workspace can feel like Cortext while published pages still feel like the site. See [Theming](theming.md) for the current contract notes.

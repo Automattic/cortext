@@ -25,18 +25,16 @@ themed public pages, run locally, and keep data in ordinary WordPress storage.
 
 Cortext stores documents, collection definitions, fields, and collection rows as
 WordPress posts and post meta. The admin UI is a React shell that combines a
-Gutenberg document editor with collection views built on WordPress packages.
+WordPress block editor for documents with collection views built on WordPress packages.
 
 ## Docs
 
 -   [Getting started](docs/getting-started.md): install, run, day-to-day commands.
 -   [Vision and principles](docs/vision.md): what drives the design.
--   [Content modeling guide](docs/modeling-guide.md): how to choose useful collections.
 -   [Architecture](docs/architecture.md): current storage and shell overview.
 -   [Shell architecture](docs/architecture/shell.md): React shell, mount point, editor setup.
 -   [Data model](docs/architecture/data-model.md): implementation notes and current status.
 -   [Theming](docs/theming.md): shell vs content themes, and current token notes.
--   [Licensing](docs/licensing.md): why Cortext uses GPLv2-or-later.
 -   [Roadmap](docs/roadmap.md): what ships when.
 
 ## Requirements

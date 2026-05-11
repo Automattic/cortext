@@ -6,7 +6,7 @@ API.
 Cortext has two visual surfaces:
 
 -   The shell: sidebar, toolbar, buttons, empty states, and collection views.
--   Content: published pages and the Gutenberg editor canvas.
+-   Content: published pages and the block editor canvas.
 
 The shell is Cortext UI. Published content belongs to the active WordPress theme.
 Cortext should not push shell colors into public pages or into the editor iframe.

@@ -24,10 +24,3 @@ shapes can change during early versions. We are not promising migrations yet.
 The main thing to preserve is the principle, not the exact current shape:
 Cortext data should remain WordPress data unless there is a strong reason to
 leave that path.
-
-## Import/export
-
-Import and export are not part of the current data contract. The working import
-payload sketch lives in
-[data-model-intermediate-json.md](./data-model-intermediate-json.md). Treat it
-as a draft, not an integration API.

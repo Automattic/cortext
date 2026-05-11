@@ -8,17 +8,19 @@ knowledge base model clear enough to test in public.
 The repo already has a usable first shape:
 
 -   A full-screen admin shell.
--   Nested pages backed by Gutenberg.
+-   Nested pages edited with the WordPress block editor.
 -   Typed collections with table, grid, and list views.
--   Inline row editing, relation fields, rollups, and row details.
+-   Inline editing of rows.
+-   Relation fields, rollups, and row details.
 -   Collection views that can be embedded inside pages.
--   Basic public rendering for Cortext pages.
--   Experimental shell theming.
+-   Basic publishing abilities for Cortext pages.
+-   Experimental workspace UI theming.
 
 ## Before this is production-ready
 
 The storage model, REST responses, block attributes, and theme tokens still need
-to settle. Until then, early data is disposable and migrations are not planned.
+to settle. **Until then, data schemas are volatile, user data is assumed
+disposable, and migrations are not planned.**
 
 The next work should focus on:
 
@@ -26,6 +28,6 @@ The next work should focus on:
 -   Hardening permissions, tests, accessibility, and editor edge cases.
 -   Deciding which APIs are internal and which can become public.
 -   Designing import/export around multiple sources, not one source too early.
--   Adding migrations only after the data model slows down.
+-   Adding migrations only after the data model stabilizes somewhat.
 
 Other ideas can wait until the basic model has had more real use.

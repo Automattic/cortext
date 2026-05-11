@@ -6,13 +6,7 @@ Start with [Getting started](docs/getting-started.md) for setup, local developme
 
 ## Branches
 
-Use a short branch prefix followed by a concise slug:
-
--   `add/`
--   `fix/`
--   `docs/`
--   `refactor/`
--   `tests/`
+Use a short, self-explanatory branch name. Prefixes like `add/`, `fix/`, or `docs/` are fine, but clarity matters more than strict naming.
 
 ## Checks
 
@@ -27,7 +21,7 @@ npm run test:unit
 composer run test:php
 ```
 
-For UI or routing changes, run the relevant Playwright coverage with `npm run test:e2e` too.
+For UI or routing changes, run the relevant Playwright coverage with `npm run test:e2e` too. E2E tests use the dedicated wp-env test environment described in [Getting started](docs/getting-started.md), not the main development environment.
 
 ## License
 

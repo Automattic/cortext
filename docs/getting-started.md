@@ -7,7 +7,7 @@ Cortext is an early prototype. There is no packaged release yet; to try it you r
 -   PHP 8.1+
 -   WordPress 6.9+ (provided by wp-env)
 -   Docker (recommended runtime for wp-env)
--   Node.js 24.15 (matching `package.json` and CI)
+-   Node.js 24.15
 -   Git
 
 ## First-time setup
@@ -90,4 +90,3 @@ Cortext is a prototype, so docs, architecture notes, and scope are all fair game
 -   Branch prefix: `add/`, `fix/`, `docs/`, `refactor/`, `tests/`, followed by a concise slug.
 -   CI runs ESLint, stylelint, Jest, PHPCS, and PHPUnit. Keep them green before requesting review.
 -   The [design principles](vision.md) describe the posture the project is willing to defend; if a PR proposes routing around a WordPress primitive, expect the conversation to start there.
--   The [content modeling guide](modeling-guide.md) captures the current mental model for collections.

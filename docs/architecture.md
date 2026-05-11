@@ -11,7 +11,7 @@ shell on top.
 
 Cortext currently uses WordPress posts and post meta for the main data model:
 
--   Pages are hierarchical WordPress posts with Gutenberg content.
+-   Pages are hierarchical WordPress posts with block content.
 -   Collections describe a type of record, such as tasks, books, or people.
 -   Fields describe the properties that belong to a collection.
 -   Rows are records inside a collection.
@@ -23,7 +23,7 @@ allowed to change. Do not build external integrations against them yet.
 ## Admin shell
 
 The main product surface is a full-screen React app in wp-admin. It has a
-sidebar for pages and collections, a Gutenberg canvas for documents, and
+sidebar for pages and collections, a block editor canvas for documents, and
 collection views for records.
 
 Collection views use WordPress's DataViews package where it fits, with Cortext

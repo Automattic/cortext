@@ -2,7 +2,7 @@
 
 Cortext runs as a React app inside wp-admin. The shell is full-screen, but it
 still uses WordPress authentication, permissions, REST nonces, editor settings,
-and block assets.
+core-data for loading and saving WordPress records, and block assets.
 
 ## Server entry
 
@@ -12,7 +12,7 @@ screen. It also keeps the core Pages list table reachable as an escape hatch for
 bulk operations the shell does not cover yet.
 
 The plugin bootstraps editor settings on the server and exposes them to the
-client. That lets Cortext mount Gutenberg without recreating the editor
+client. That lets Cortext mount the block editor without recreating the editor
 environment from scratch.
 
 ## Client shell
@@ -22,7 +22,7 @@ the browser stays on the Cortext wp-admin page.
 
 The shell has two main work surfaces:
 
--   Page routes mount a Gutenberg editor canvas for `crtxt_page` documents.
+-   Page routes mount a block editor canvas for `crtxt_page` documents.
 -   Collection routes mount DataViews-backed record views for rows.
 
 The sidebar handles page navigation and nesting. Autosave is split between a

@@ -1,9 +1,11 @@
-# Ideal extracted Notion data shape
+# Draft Notion import payload shape
 
-This is the normalized structure we want to produce from the Notion API before handing
-data off to any importer (PHP, JS, etc.). It is self-contained: all databases, their
-schemas, and their entries live in one object, so relations can be resolved by ID without
-extra network calls.
+This is a technical sketch for a possible Notion importer. It is not implemented,
+and it is not a stable API. It describes the normalized structure we would expect
+from a Notion import before Cortext turns it into WordPress posts, fields, and meta.
+
+The payload is self-contained: all databases, their schemas, and their entries
+live in one object, so relations can be resolved by ID without extra network calls.
 
 ## Top-level envelope
 
