@@ -16,33 +16,48 @@ Pair with [decisions.md](decisions.md) for choices we've made peace with and [ro
 
 ## 2. Rows aren't in `core-data`'s entity store `[internal]`
 
-**What.** `useCollectionRows` fetches rows with raw `apiFetch` and keeps its own state, including a `requestId` race guard and a `refresh()` counter callers bump after creating or updating a row. Mutations POST directly via `apiFetch`. The dynamic `crtxt_{slug}` post types are registered with `show_in_rest`, so `core-data`'s resolver should discover their schema lazily; we just haven't wired it.
+Updated by [#80](https://github.com/priethor/cortext/pull/80).
 
-**Where.** `src/hooks/useCollectionRows.js`, with side effects in `src/components/CollectionDataViews.js` (`saveRowField`, `onCreated`).
+**What.** Rows still bypass `core-data`. `useCollectionRows` owns the fetch state, the `requestId` race guard, the manual `refresh()` counter, and the choice between server and client mode. #80 moved the normal table path to paged REST requests, then changed the fallback from one `per_page=-1` request to pages of 100 fetched with a small concurrency cap. That is a better failure mode, but it is still a second row-loading layer beside the WordPress data store.
 
-**Solution.** Switch to `useEntityRecords('postType', \`crtxt_${slug}\`, query)` plus `saveEntityRecord` for writes. `core-data` then handles caching, race protection, and post-mutation invalidation. Knock-on workarounds it deletes:
+The dynamic `crtxt_{slug}` post types already use `show_in_rest`, so `core-data` should be able to discover them lazily. We just have not wired rows through it yet. Mutations still POST directly with `apiFetch`, then ask the hook to refetch.
+
+**Where.** `src/hooks/useCollectionRows.js`, with side effects in `src/components/CollectionDataViews.js` (`saveRowField`, `onCreated`) and forced client mode in `src/components/relations/RelationEditor.js`.
+
+**Solution.** Switch to `useEntityRecords('postType', \`crtxt_${slug}\`, query)` plus `saveEntityRecord` for writes once the remaining query shapes can be expressed there. `core-data` would then own caching, race protection, and post-mutation invalidation. Knock-on workarounds it deletes:
 
 - The `refresh()` handle exists only because rows aren't reactive.
 - Half of `RowMutationContext` (also driven by #1) exists because cells can't reach a `core-data` store that isn't there.
 - `onCreated` runs optimistic `lastPage = ceil((totalItems+1)/perPage)` arithmetic against possibly stale `paginationInfo`. With reactive pagination we'd watch `totalPages` in an effect.
+- The server/client planner becomes normal resolver queries instead of a local fetch policy.
 
 Worth a small spike before committing; `core-data`'s schema cache for rarely-changing post types is the only real risk.
 
-## 3. `view.sort` isn't forwarded to REST `[internal]`
+## 3. Sorting support is split between REST and client mode `[internal]`
 
-**What.** `buildQueryArgs` ignores `view.sort` entirely. As a placeholder, we pin `orderby=date order=asc` whenever `view.sort.field` is unset so newly created rows land at the bottom of the table. If the user picks a sort via the DataViews UI, we silently drop it. Result: the sort UI looks interactive but doesn't stick, and the asc-by-date assumption leaks into the page-jump on row creation.
+Updated by [#80](https://github.com/priethor/cortext/pull/80).
 
-**Where.** `src/hooks/useCollectionRows.js` (`buildQueryArgs`), and the conditional in `onCreated` in `src/components/CollectionDataViews.js`.
+**What.** #80 fixed the old bad state where the sort UI changed but REST ignored it. REST now handles `title`, `created_at`, `modified_at`, and scalar `field-{id}` columns that can sort by `meta_value` or `meta_value_num`. With no explicit sort, REST still uses oldest-first ordering so new rows land at the bottom of the table.
 
-**Solution.** Translate `view.sort` to REST `orderby/order`. Native fields (`title`, `date`, `id`, `menu_order`) map directly. For `field-{id}` keys, add a `rest_{post_type}_query` filter on the row CPT (`includes/PostType/CollectionEntries.php`) that recognizes `orderby=field-X` and rewrites it to `meta_value`/`meta_value_num` with the matching `meta_key`. Standard WordPress pattern; same filter sets us up for #4.
+The debt is the split brain. The client has an allow-list for server-safe sorts, and `RowsController::build_query_args` has the PHP version of the same story. Unsupported sorts fall back to client mode: fetch all pages, then let DataViews sort locally. That keeps the result honest, but it is not where we want sorting to live long-term.
 
-## 4. `view.filters` isn't forwarded to REST `[internal]`
+The hard cases are still display-value sorts: users, relations, list-style rollups, files, and any field where the value users see is not the value stored in meta. That broader choice is tracked in #14.
 
-**What.** Filters round-trip through block attributes and feed `prefillFromFilters` for the New-row prefill, but they don't filter the loaded dataset. The "filter prefill" feature works because we read the stored filter, not because the server applied it. Filters appear functional but the result set never shrinks, which gets loud once a real collection has more than a page of rows.
+**Where.** The query planner and sort allow-lists in `src/hooks/useCollectionRows.js`, the `onCreated` no-sort branch in `src/components/CollectionDataViews.js`, and `validate_sort_field` / `build_query_args` in `includes/Rest/RowsController.php`.
 
-**Where.** `src/hooks/useCollectionRows.js` (`buildQueryArgs`), and `prefillFromFilters` in `src/components/CollectionDataViews.js`.
+**Solution.** Make REST the source of truth for sortable fields and expose that capability to the client instead of mirroring it by hand. Resolve #14 for display-value sorts, then remove the client fallback for sorting except where DataViews really needs a local-only view state.
 
-**Solution.** Extend the same REST filter as #3 with a `meta_query` translation. `is`/`isAny`/`contains` map cleanly to `=`/`IN`/`LIKE` against the right `meta_key`. Once this lands, prefill becomes a side effect of real filtering rather than its only consumer.
+## 4. Filtering support is split between REST and client mode `[internal]`
+
+Updated by [#80](https://github.com/priethor/cortext/pull/80).
+
+**What.** #80 also made simple field filters real on the server. Equality and membership filters for stored `field-{id}` values now become a REST `meta_query`. When the server cannot handle a filter, the hook falls back to client mode, fetches all pages, and lets DataViews filter locally. That is much better than showing a filter UI that does nothing.
+
+The cost is another split support matrix. The client checks field type, operator, and value shape before choosing server mode. `RowsController` validates field ownership and builds the actual `meta_query`. System fields are still deferred (#13), title filtering still is not a REST feature, and operators like `contains` stay client-only until PHP translates them.
+
+**Where.** `isServerSupportedFilter` and `addFiltersToArgs` in `src/hooks/useCollectionRows.js`, `validate_filter_fields` / `build_query_args` in `includes/Rest/RowsController.php`, and `prefillFromFilters` in `src/components/CollectionDataViews.js`.
+
+**Solution.** Move the remaining filter operators and field families into REST, then make the client consume a server-owned capability map instead of maintaining its own allow-list. `contains` can map to `LIKE` for simple meta values; system fields need the date/user handling from #13.
 
 ## 5. Inline-edit layout couplings `[internal]`
 

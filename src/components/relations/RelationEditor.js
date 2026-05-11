@@ -36,7 +36,12 @@ export default function RelationEditor( {
 		data,
 		isLoading,
 		refresh: refreshTargetRows,
-	} = useCollectionRows( targetCollectionId || null, RELATION_PICKER_VIEW );
+	} = useCollectionRows(
+		targetCollectionId || null,
+		RELATION_PICKER_VIEW,
+		[],
+		{ forceClient: true }
+	);
 	const createTitle = search.trim();
 
 	const rows = useMemo( () => {

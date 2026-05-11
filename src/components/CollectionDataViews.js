@@ -44,6 +44,10 @@ const ROW_DETAIL_MODAL_ENTER_MS = 200;
 const ROW_DETAIL_SIDE_TO_MODAL_HANDOFF_MS =
 	ROW_DETAIL_SIDE_SURFACE_EXIT_MS - ROW_DETAIL_MODAL_ENTER_MS;
 
+function hasActiveCalculations( view ) {
+	return Object.values( view?.calculations ?? {} ).some( Boolean );
+}
+
 function prefersReducedMotion() {
 	return (
 		typeof window !== 'undefined' &&
@@ -304,18 +308,21 @@ export default function CollectionDataViews( {
 
 	const {
 		data,
-		paginationInfo,
+		paginationInfo: serverPaginationInfo,
 		isLoading,
 		hasResolved: rowsResolved,
 		error: rowError,
 		refresh,
+		queryMode,
 	} = useCollectionRows(
 		isResolving ? null : collectionId,
 		reconciledView,
-		availableFields
+		availableFields,
+		{ forceClient: hasActiveCalculations( reconciledView ) }
 	);
 
 	const isTableLayout = view?.type === 'table';
+	const isServerPaginated = queryMode === 'server';
 	const dataViewFields = useMemo(
 		() =>
 			isTableLayout
@@ -355,16 +362,34 @@ export default function CollectionDataViews( {
 
 	const { data: dataFiltered, paginationInfo: clientPaginationInfo } =
 		useMemo( () => {
+			if ( isServerPaginated ) {
+				return {
+					data,
+					paginationInfo: serverPaginationInfo,
+				};
+			}
 			return filterSortAndPaginate( data, view, availableFields );
-		}, [ data, view, availableFields ] );
+		}, [
+			data,
+			view,
+			availableFields,
+			isServerPaginated,
+			serverPaginationInfo,
+		] );
 	const { data: dataFilteredForCalculations } = useMemo( () => {
+		if ( isServerPaginated ) {
+			return { data };
+		}
 		const calculationView = { ...( view ?? {} ) };
 		// tech-debt.md#36: summaries need the filtered row set before
 		// pagination, which DataViews does not expose as a separate result.
 		delete calculationView.page;
 		delete calculationView.perPage;
 		return filterSortAndPaginate( data, calculationView, availableFields );
-	}, [ data, view, availableFields ] );
+	}, [ data, view, availableFields, isServerPaginated ] );
+	const activePaginationInfo = isServerPaginated
+		? serverPaginationInfo
+		: clientPaginationInfo;
 
 	const requestNext = useCallback(
 		( rowId, fieldId, direction ) => {
@@ -456,7 +481,8 @@ export default function CollectionDataViews( {
 			const hasExplicitSort = Boolean( view?.sort?.field );
 			if ( ! hasExplicitSort ) {
 				const perPage = view?.perPage ?? 25;
-				const expectedTotal = ( paginationInfo?.totalItems ?? 0 ) + 1;
+				const expectedTotal =
+					( activePaginationInfo?.totalItems ?? 0 ) + 1;
 				const lastPage = Math.max(
 					1,
 					Math.ceil( expectedTotal / perPage )
@@ -473,7 +499,7 @@ export default function CollectionDataViews( {
 				setEditRequest( { rowId: created.id, fieldId: 'title' } );
 			}
 		},
-		[ refresh, view, paginationInfo, onChangeView ]
+		[ refresh, view, activePaginationInfo, onChangeView ]
 	);
 
 	const viewRef = useRef( view );
@@ -1013,7 +1039,7 @@ export default function CollectionDataViews( {
 							fields={ dataViewFields }
 							view={ view }
 							onChangeView={ onChangeView }
-							paginationInfo={ clientPaginationInfo }
+							paginationInfo={ activePaginationInfo }
 							defaultLayouts={ DEFAULT_LAYOUTS }
 							getItemId={ ( item ) => String( item.id ) }
 							isLoading={ isLoading }
