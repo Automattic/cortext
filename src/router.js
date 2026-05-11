@@ -12,7 +12,9 @@ import { SlotFillProvider } from '@wordpress/components';
 import Sidebar from './components/Sidebar';
 import EntityRoute from './router/EntityRoute';
 import CommandPalette from './components/CommandPalette';
+import AlphaNoticeModal from './components/AlphaNoticeModal';
 import useSidebarLayout from './hooks/useSidebarLayout';
+import useAlphaNotice from './hooks/useAlphaNotice';
 import { FavoritesProvider } from './hooks/useFavorites';
 import { WorkspaceHomeProvider } from './hooks/useWorkspaceHome';
 import { unlock } from './lock-unlock';
@@ -44,6 +46,7 @@ function isEditableTarget( target ) {
 
 function RootLayout() {
 	const { collapsed, width, toggleCollapsed, setWidth } = useSidebarLayout();
+	const alphaNotice = useAlphaNotice();
 	const canvasRef = useRef( null );
 
 	useEffect( () => {
@@ -81,6 +84,12 @@ function RootLayout() {
 						</main>
 					</div>
 					<CommandPalette canvasRef={ canvasRef } />
+					{ alphaNotice.isOpen && (
+						<AlphaNoticeModal
+							onAcknowledge={ alphaNotice.acknowledge }
+							onDismiss={ alphaNotice.dismiss }
+						/>
+					) }
 				</FavoritesProvider>
 			</WorkspaceHomeProvider>
 		</SlotFillProvider>
