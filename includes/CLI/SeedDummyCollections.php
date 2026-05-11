@@ -244,7 +244,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			// exist on Wikimedia Commons (most modern album art is fair-use
 			// only and doesn't), so reseeded rows get real images instead of
 			// falling back to picsum. Fall Out Boy and Los Ángeles Azules are
-			// included by request — their portraits work, but their album
+			// included by request: their portraits work, but their album
 			// covers fall back to picsum.
 			'musicians'  => array(
 				'The Beatles',
@@ -1135,7 +1135,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 						'Status' => 'Finished',
 						'Rating' => 4,
 						'Read?'  => true,
-						'Notes'  => 'Discworld book one — Rincewind, the Luggage, and a tourist named Twoflower.',
+						'Notes'  => 'Discworld book one. Rincewind, the Luggage, and a tourist named Twoflower.',
 					),
 					array(
 						'title'  => 'Mort',
@@ -1155,7 +1155,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 						'Status' => 'Finished',
 						'Rating' => 5,
 						'Read?'  => true,
-						'Notes'  => 'Ankh-Morpork city watch debut — Vimes, Carrot, and a dragon problem.',
+						'Notes'  => 'Ankh-Morpork city watch debut. Vimes, Carrot, and a dragon problem.',
 					),
 					array(
 						'title'  => 'Small Gods',
@@ -1175,7 +1175,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 						'Status' => 'Finished',
 						'Rating' => 5,
 						'Read?'  => true,
-						'Notes'  => 'Discworld Hogswatch night — Death, belief, and the auditors.',
+						'Notes'  => 'Discworld Hogswatch night. Death, belief, and the auditors.',
 					),
 					array(
 						'title'  => 'Going Postal',
@@ -3946,19 +3946,19 @@ final class SeedDummyCollections extends WP_CLI_Command {
 
 		$upload_dir = wp_upload_dir();
 		if ( ! empty( $upload_dir['error'] ) ) {
-			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
 			@unlink( $tmp );
 			return 0;
 		}
 
 		$dest = trailingslashit( $upload_dir['path'] ) . wp_unique_filename( $upload_dir['path'], $filename );
-		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.rename_rename
 		if ( ! @rename( $tmp, $dest ) && ! @copy( $tmp, $dest ) ) {
-			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
 			@unlink( $tmp );
 			return 0;
 		}
-		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
 		@unlink( $tmp );
 
 		$filetype  = wp_check_filetype( $dest );
@@ -3988,9 +3988,12 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	 * First tries to resolve the row to a real Wikimedia Commons file via
 	 * Wikidata (so an author row gets that author's actual portrait); falls
 	 * back to Lorem Picsum when no Commons image is available. Commons files
-	 * carry their own per-image license (commonly CC-BY-SA) — see each file's
+	 * carry their own per-image license (commonly CC-BY-SA): see each file's
 	 * Commons page for credit; Picsum serves Unsplash photos under the
 	 * Unsplash License (attribution appreciated, not required).
+	 *
+	 * @param string $collection_slug Source collection slug.
+	 * @param string $title           Row title.
 	 */
 	private function row_icon_url( string $collection_slug, string $title ): ?string {
 		$icon_collections = array( 'authors', 'musicians', 'books', 'albums' );
@@ -4004,7 +4007,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		// Books and albums rarely have P18 on Wikidata (covers are fair-use
 		// only), so when the user opts in to real images, reach for Open
 		// Library / Cover Art Archive instead of the picsum fallback. The
-		// real cover doubles as the icon — a Discworld book row gets the
+		// real cover doubles as the icon: a Discworld book row gets the
 		// actual Discworld cover top-left and again as featured image.
 		if ( $this->fetch_real_images && in_array( $collection_slug, array( 'books', 'albums' ), true ) ) {
 			$cover = $this->real_cover_url( $collection_slug, $title );
@@ -4054,29 +4057,29 @@ final class SeedDummyCollections extends WP_CLI_Command {
 				if ( null === $url ) {
 					continue;
 				}
-				$total++;
+				++$total;
 				$dest = $this->bundle_icon_path( $slug, $title );
 				if ( file_exists( $dest ) ) {
-					$cached++;
+					++$cached;
 					continue;
 				}
 				$tmp = download_url( $url, 30 );
 				if ( is_wp_error( $tmp ) ) {
 					WP_CLI::warning( "Failed to download icon for {$slug}/{$title}: " . $tmp->get_error_message() );
-					$missed++;
+					++$missed;
 					continue;
 				}
 				// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 				if ( ! @copy( $tmp, $dest ) ) {
-					// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+					// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
 					@unlink( $tmp );
 					WP_CLI::warning( "Failed to write {$dest}" );
-					$missed++;
+					++$missed;
 					continue;
 				}
-				// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+				// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
 				@unlink( $tmp );
-				$downloaded++;
+				++$downloaded;
 				WP_CLI::log( "Bundled {$slug}/{$title} -> " . basename( $dest ) );
 			}
 		}
@@ -4135,29 +4138,29 @@ final class SeedDummyCollections extends WP_CLI_Command {
 				if ( null === $url ) {
 					continue;
 				}
-				$total++;
+				++$total;
 				$dest = CORTEXT_PATH . 'seed-assets/covers/' . sanitize_title( $slug ) . '-' . sanitize_title( $title ) . '.jpg';
 				if ( file_exists( $dest ) ) {
-					$cached++;
+					++$cached;
 					continue;
 				}
 				$tmp = download_url( $url, 30 );
 				if ( is_wp_error( $tmp ) ) {
 					WP_CLI::warning( "Failed to download cover for {$slug}/{$title}: " . $tmp->get_error_message() );
-					$missed++;
+					++$missed;
 					continue;
 				}
 				// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 				if ( ! @copy( $tmp, $dest ) ) {
-					// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+					// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
 					@unlink( $tmp );
 					WP_CLI::warning( "Failed to write {$dest}" );
-					$missed++;
+					++$missed;
 					continue;
 				}
-				// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+				// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
 				@unlink( $tmp );
-				$downloaded++;
+				++$downloaded;
 				WP_CLI::log( "Bundled cover {$slug}/{$title} -> " . basename( $dest ) );
 			}
 		}
@@ -4178,6 +4181,9 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	 * same way `commons_image_url()` caches Wikidata lookups. Books resolve
 	 * via Open Library; albums via MusicBrainz + Cover Art Archive. Returns
 	 * null when no cover is available; cached as `''` so misses don't re-hit.
+	 *
+	 * @param string $collection_slug Source collection slug.
+	 * @param string $title           Row title.
 	 */
 	private function real_cover_url( string $collection_slug, string $title ): ?string {
 		$cache_key = 'cortext_seed_cover_' . md5( $collection_slug . '|' . $title );
@@ -4228,7 +4234,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		// MusicBrainz requires an explicit User-Agent and applies a 1 req/s
 		// rate limit. The transient cache layer keeps this from biting once
 		// covers are resolved; on first prefetch, allow ~1s per row.
-		$query = sprintf( 'release:"%s" AND artist:"%s"', addslashes( $title ), addslashes( $artist ) );
+		$query    = sprintf( 'release:"%s" AND artist:"%s"', addslashes( $title ), addslashes( $artist ) );
 		$response = wp_remote_get(
 			'https://musicbrainz.org/ws/2/release/?' . http_build_query(
 				array(
@@ -4283,6 +4289,9 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	 * `Special:FilePath` URL with `?width=256`, which 302s to a thumbnail.
 	 * Returns null on any failure (no entity, no P18, network error) so the
 	 * caller can fall back.
+	 *
+	 * @param string $collection_slug Source collection slug.
+	 * @param string $title           Row title.
 	 */
 	private function commons_image_url( string $collection_slug, string $title ): ?string {
 		// Resolving a Commons URL takes two HTTP round-trips to Wikidata,
@@ -4303,7 +4312,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	}
 
 	private function resolve_commons_image_url( string $collection_slug, string $title ): ?string {
-		// Wikidata's `wbsearchentities` matches labels/aliases — appending an
+		// Wikidata's `wbsearchentities` matches labels/aliases, so appending an
 		// English hint to the query kills matches. Disambiguate by scanning
 		// the top results' descriptions for collection-appropriate keywords
 		// instead, and fall through to the top hit if none match.
@@ -4313,7 +4322,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			'books'     => array( 'novel', 'book', 'novella', 'short story', 'story collection' ),
 			'albums'    => array( 'album', 'studio album', 'compilation', 'live album', 'ep' ),
 		);
-		$keywords = $keyword_map[ $collection_slug ] ?? null;
+		$keywords    = $keyword_map[ $collection_slug ] ?? null;
 		if ( null === $keywords ) {
 			return null;
 		}
@@ -4340,11 +4349,11 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	 * dropping the row entirely; wrong matches still get caught downstream
 	 * when the entity has no P18). Returns null only when search is empty.
 	 *
-	 * @param string                                $title    Row title.
-	 * @param array<int,string>                     $keywords Lowercase keywords to look for in entity descriptions.
+	 * @param string            $title    Row title.
+	 * @param array<int,string> $keywords Lowercase keywords to look for in entity descriptions.
 	 */
 	private function wikidata_resolve_entity( string $title, array $keywords ): ?string {
-		$url = 'https://www.wikidata.org/w/api.php?' . http_build_query(
+		$url  = 'https://www.wikidata.org/w/api.php?' . http_build_query(
 			array(
 				'action'   => 'wbsearchentities',
 				'search'   => $title,
@@ -4372,7 +4381,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	}
 
 	private function wikidata_image_filename( string $entity_id ): ?string {
-		$url = 'https://www.wikidata.org/w/api.php?' . http_build_query(
+		$url    = 'https://www.wikidata.org/w/api.php?' . http_build_query(
 			array(
 				'action' => 'wbgetentities',
 				'ids'    => $entity_id,
@@ -4411,6 +4420,10 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	 * grant icons, and rows whose icon is bundled in `seed-assets/icons/`
 	 * (the common case in fresh worktrees). Only rows missing from the
 	 * bundle pay the Wikidata + image-download cost.
+	 *
+	 * @param int    $entry_id        Row post ID.
+	 * @param string $collection_slug Source collection slug.
+	 * @param string $title           Row title.
 	 */
 	private function maybe_apply_row_icon( int $entry_id, string $collection_slug, string $title ): void {
 		if ( $entry_id <= 0 ) {
@@ -4424,7 +4437,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		// the existing bundle was prefetched against picsum (Wikidata has no
 		// P18 for most modern works), so the bundled file is a random photo
 		// rather than the real cover. Reach for the live cover lookup instead.
-		// Authors/musicians keep using the bundle — their Commons portraits
+		// Authors/musicians keep using the bundle: their Commons portraits
 		// are correct already.
 		$skip_bundle = $this->fetch_real_images
 			&& in_array( $collection_slug, array( 'books', 'albums' ), true );
@@ -4488,7 +4501,10 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	 * Returns the absolute path to the bundled icon for a row, or null if
 	 * none exists. Bundle filenames are deterministic on `(slug, title)`
 	 * (not on URL hash) so the seeder can probe for them without first
-	 * resolving Wikidata — which is the whole point of the bundle.
+	 * resolving Wikidata, which is the whole point of the bundle.
+	 *
+	 * @param string $collection_slug Source collection slug.
+	 * @param string $title           Row title.
 	 */
 	private function bundled_icon_path( string $collection_slug, string $title ): ?string {
 		$icon_collections = array( 'authors', 'musicians', 'books', 'albums' );
@@ -4511,6 +4527,10 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	 * row (no live fetch), so add a file under that path to give a row a
 	 * featured image. Skips rows that already have `_thumbnail_id`, so a
 	 * manually-set cover survives a reseed.
+	 *
+	 * @param int    $entry_id        Row post ID.
+	 * @param string $collection_slug Source collection slug.
+	 * @param string $title           Row title.
 	 */
 	private function maybe_apply_row_cover( int $entry_id, string $collection_slug, string $title ): void {
 		if ( $entry_id <= 0 ) {
@@ -5470,53 +5490,53 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	 */
 	private function album_artist_relations(): array {
 		return array(
-			'Homogenic'                       => 'Björk',
-			'Vespertine'                      => 'Björk',
-			'Blackstar'                       => 'David Bowie',
-			'Low'                             => 'David Bowie',
-			'Blue'                            => 'Joni Mitchell',
-			'Hejira'                          => 'Joni Mitchell',
-			'Kind of Blue'                    => 'Miles Davis',
-			'Bitches Brew'                    => 'Miles Davis',
-			'Pastel Blues'                    => 'Nina Simone',
-			'Wild Is the Wind'                => 'Nina Simone',
-			'Kid A'                           => 'Radiohead',
-			'In Rainbows'                     => 'Radiohead',
-			'To Pimp a Butterfly'             => 'Kendrick Lamar',
-			'DAMN.'                           => 'Kendrick Lamar',
-			'Hounds of Love'                  => 'Kate Bush',
-			'The Dreaming'                    => 'Kate Bush',
-			'Ambient 1: Music for Airports'   => 'Brian Eno',
-			'Another Green World'             => 'Brian Eno',
-			'Zombie'                          => 'Fela Kuti',
-			'Expensive Shit'                  => 'Fela Kuti',
-			'Diamond Life'                    => 'Sade',
-			'Love Deluxe'                     => 'Sade',
-			'Selected Ambient Works 85-92'    => 'Aphex Twin',
-			'Richard D. James Album'          => 'Aphex Twin',
-			'The Miseducation of Lauryn Hill' => 'Lauryn Hill',
-			'Remain in Light'                 => 'Talking Heads',
-			'Speaking in Tongues'             => 'Talking Heads',
-			'The Low End Theory'              => 'A Tribe Called Quest',
-			'Midnight Marauders'              => 'A Tribe Called Quest',
-			'Dummy'                           => 'Portishead',
-			'Third'                           => 'Portishead',
-			'Async'                           => 'Ryuichi Sakamoto',
-			'Thousand Knives'                 => 'Ryuichi Sakamoto',
-			'A Seat at the Table'             => 'Solange',
-			'When I Get Home'                 => 'Solange',
-			'Abbey Road'                      => 'The Beatles',
+			'Homogenic'                            => 'Björk',
+			'Vespertine'                           => 'Björk',
+			'Blackstar'                            => 'David Bowie',
+			'Low'                                  => 'David Bowie',
+			'Blue'                                 => 'Joni Mitchell',
+			'Hejira'                               => 'Joni Mitchell',
+			'Kind of Blue'                         => 'Miles Davis',
+			'Bitches Brew'                         => 'Miles Davis',
+			'Pastel Blues'                         => 'Nina Simone',
+			'Wild Is the Wind'                     => 'Nina Simone',
+			'Kid A'                                => 'Radiohead',
+			'In Rainbows'                          => 'Radiohead',
+			'To Pimp a Butterfly'                  => 'Kendrick Lamar',
+			'DAMN.'                                => 'Kendrick Lamar',
+			'Hounds of Love'                       => 'Kate Bush',
+			'The Dreaming'                         => 'Kate Bush',
+			'Ambient 1: Music for Airports'        => 'Brian Eno',
+			'Another Green World'                  => 'Brian Eno',
+			'Zombie'                               => 'Fela Kuti',
+			'Expensive Shit'                       => 'Fela Kuti',
+			'Diamond Life'                         => 'Sade',
+			'Love Deluxe'                          => 'Sade',
+			'Selected Ambient Works 85-92'         => 'Aphex Twin',
+			'Richard D. James Album'               => 'Aphex Twin',
+			'The Miseducation of Lauryn Hill'      => 'Lauryn Hill',
+			'Remain in Light'                      => 'Talking Heads',
+			'Speaking in Tongues'                  => 'Talking Heads',
+			'The Low End Theory'                   => 'A Tribe Called Quest',
+			'Midnight Marauders'                   => 'A Tribe Called Quest',
+			'Dummy'                                => 'Portishead',
+			'Third'                                => 'Portishead',
+			'Async'                                => 'Ryuichi Sakamoto',
+			'Thousand Knives'                      => 'Ryuichi Sakamoto',
+			'A Seat at the Table'                  => 'Solange',
+			'When I Get Home'                      => 'Solange',
+			'Abbey Road'                           => 'The Beatles',
 			'Sgt. Peppers Lonely Hearts Club Band' => 'The Beatles',
-			'The Dark Side of the Moon'       => 'Pink Floyd',
-			'The Wall'                        => 'Pink Floyd',
-			'Purple Rain'                     => 'Prince',
-			'Take This to Your Grave'         => 'Fall Out Boy',
-			'From Under the Cork Tree'        => 'Fall Out Boy',
-			'Infinity on High'                => 'Fall Out Boy',
-			'Save Rock and Roll'              => 'Fall Out Boy',
-			'El Listón de tu Pelo'            => 'Los Ángeles Azules',
-			'Cómo te voy a olvidar'           => 'Los Ángeles Azules',
-			'De Buenas Raíces'                => 'Los Ángeles Azules',
+			'The Dark Side of the Moon'            => 'Pink Floyd',
+			'The Wall'                             => 'Pink Floyd',
+			'Purple Rain'                          => 'Prince',
+			'Take This to Your Grave'              => 'Fall Out Boy',
+			'From Under the Cork Tree'             => 'Fall Out Boy',
+			'Infinity on High'                     => 'Fall Out Boy',
+			'Save Rock and Roll'                   => 'Fall Out Boy',
+			'El Listón de tu Pelo'                 => 'Los Ángeles Azules',
+			'Cómo te voy a olvidar'                => 'Los Ángeles Azules',
+			'De Buenas Raíces'                     => 'Los Ángeles Azules',
 		);
 	}
 
@@ -5527,53 +5547,53 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	 */
 	private function album_label_relations(): array {
 		return array(
-			'Homogenic'                       => 'One Little Independent',
-			'Vespertine'                      => 'One Little Independent',
-			'Blackstar'                       => 'RCA',
-			'Low'                             => 'RCA',
-			'Blue'                            => 'Asylum',
-			'Hejira'                          => 'Asylum',
-			'Kind of Blue'                    => 'Columbia',
-			'Bitches Brew'                    => 'Columbia',
-			'Pastel Blues'                    => 'Columbia',
-			'Wild Is the Wind'                => 'Columbia',
-			'Kid A'                           => 'XL Recordings',
-			'In Rainbows'                     => 'XL Recordings',
-			'To Pimp a Butterfly'             => 'Top Dawg Entertainment',
-			'DAMN.'                           => 'Top Dawg Entertainment',
-			'Hounds of Love'                  => 'EMI',
-			'The Dreaming'                    => 'EMI',
-			'Ambient 1: Music for Airports'   => 'Island',
-			'Another Green World'             => 'Island',
-			'Zombie'                          => 'Island',
-			'Expensive Shit'                  => 'Island',
-			'Diamond Life'                    => 'Epic',
-			'Love Deluxe'                     => 'Epic',
-			'Selected Ambient Works 85-92'    => 'Warp',
-			'Richard D. James Album'          => 'Warp',
-			'The Miseducation of Lauryn Hill' => 'Columbia',
-			'Remain in Light'                 => 'Sire',
-			'Speaking in Tongues'             => 'Sire',
-			'The Low End Theory'              => 'Jive',
-			'Midnight Marauders'              => 'Jive',
-			'Dummy'                           => 'Island',
-			'Third'                           => 'Island',
-			'Async'                           => 'Milan',
-			'Thousand Knives'                 => 'Columbia',
-			'A Seat at the Table'             => 'Columbia',
-			'When I Get Home'                 => 'Columbia',
-			'Abbey Road'                      => 'Apple Records',
+			'Homogenic'                            => 'One Little Independent',
+			'Vespertine'                           => 'One Little Independent',
+			'Blackstar'                            => 'RCA',
+			'Low'                                  => 'RCA',
+			'Blue'                                 => 'Asylum',
+			'Hejira'                               => 'Asylum',
+			'Kind of Blue'                         => 'Columbia',
+			'Bitches Brew'                         => 'Columbia',
+			'Pastel Blues'                         => 'Columbia',
+			'Wild Is the Wind'                     => 'Columbia',
+			'Kid A'                                => 'XL Recordings',
+			'In Rainbows'                          => 'XL Recordings',
+			'To Pimp a Butterfly'                  => 'Top Dawg Entertainment',
+			'DAMN.'                                => 'Top Dawg Entertainment',
+			'Hounds of Love'                       => 'EMI',
+			'The Dreaming'                         => 'EMI',
+			'Ambient 1: Music for Airports'        => 'Island',
+			'Another Green World'                  => 'Island',
+			'Zombie'                               => 'Island',
+			'Expensive Shit'                       => 'Island',
+			'Diamond Life'                         => 'Epic',
+			'Love Deluxe'                          => 'Epic',
+			'Selected Ambient Works 85-92'         => 'Warp',
+			'Richard D. James Album'               => 'Warp',
+			'The Miseducation of Lauryn Hill'      => 'Columbia',
+			'Remain in Light'                      => 'Sire',
+			'Speaking in Tongues'                  => 'Sire',
+			'The Low End Theory'                   => 'Jive',
+			'Midnight Marauders'                   => 'Jive',
+			'Dummy'                                => 'Island',
+			'Third'                                => 'Island',
+			'Async'                                => 'Milan',
+			'Thousand Knives'                      => 'Columbia',
+			'A Seat at the Table'                  => 'Columbia',
+			'When I Get Home'                      => 'Columbia',
+			'Abbey Road'                           => 'Apple Records',
 			'Sgt. Peppers Lonely Hearts Club Band' => 'Apple Records',
-			'The Dark Side of the Moon'       => 'Harvest',
-			'The Wall'                        => 'Harvest',
-			'Purple Rain'                     => 'Warner Bros. Records',
-			'Take This to Your Grave'         => 'Fueled by Ramen',
-			'From Under the Cork Tree'        => 'Fueled by Ramen',
-			'Infinity on High'                => 'Island',
-			'Save Rock and Roll'              => 'Island',
-			'El Listón de tu Pelo'            => 'Disa',
-			'Cómo te voy a olvidar'           => 'Disa',
-			'De Buenas Raíces'                => 'Disa',
+			'The Dark Side of the Moon'            => 'Harvest',
+			'The Wall'                             => 'Harvest',
+			'Purple Rain'                          => 'Warner Bros. Records',
+			'Take This to Your Grave'              => 'Fueled by Ramen',
+			'From Under the Cork Tree'             => 'Fueled by Ramen',
+			'Infinity on High'                     => 'Island',
+			'Save Rock and Roll'                   => 'Island',
+			'El Listón de tu Pelo'                 => 'Disa',
+			'Cómo te voy a olvidar'                => 'Disa',
+			'De Buenas Raíces'                     => 'Disa',
 		);
 	}
 
@@ -5948,7 +5968,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		foreach ( $title_order as $title ) {
 			$title = (string) $title;
 			if ( isset( $by_title[ $title ] ) ) {
-				$ordered_ids[]                     = (int) $by_title[ $title ];
+				$ordered_ids[]                        = (int) $by_title[ $title ];
 				$ordered_index[ $by_title[ $title ] ] = true;
 			}
 		}
@@ -5979,57 +5999,126 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	private function canonical_column_orders(): array {
 		return array(
 			'authors'    => array(
-				'Country', 'Era', 'Born', 'Genres',
-				'Books', 'Book count', 'Latest book', 'Average rating', 'Book genres',
-				'Website', 'Notes',
+				'Country',
+				'Era',
+				'Born',
+				'Genres',
+				'Books',
+				'Book count',
+				'Latest book',
+				'Average rating',
+				'Book genres',
+				'Website',
+				'Notes',
 			),
 			'publishers' => array(
-				'Country', 'Founded', 'Focus',
-				'Books', 'Catalog count', 'Latest publication', 'Catalog genres',
-				'Website', 'Notes',
+				'Country',
+				'Founded',
+				'Focus',
+				'Books',
+				'Catalog count',
+				'Latest publication',
+				'Catalog genres',
+				'Website',
+				'Notes',
 			),
 			'books'      => array(
-				'Author', 'Publisher',
-				'Year', 'Genre', 'Pages', 'Rating', 'Read?', 'Status',
+				'Author',
+				'Publisher',
+				'Year',
+				'Genre',
+				'Pages',
+				'Rating',
+				'Read?',
+				'Status',
 				'Notes',
 			),
 			'musicians'  => array(
-				'Country', 'Active since', 'Genres',
-				'Albums', 'Album count', 'Latest release', 'Album genres',
-				'Website', 'Notes',
+				'Country',
+				'Active since',
+				'Genres',
+				'Albums',
+				'Album count',
+				'Latest release',
+				'Album genres',
+				'Website',
+				'Notes',
 			),
 			'labels'     => array(
-				'Country', 'Founded', 'Focus',
-				'Albums', 'Release count', 'Latest release', 'Release genres',
-				'Website', 'Notes',
+				'Country',
+				'Founded',
+				'Focus',
+				'Albums',
+				'Release count',
+				'Latest release',
+				'Release genres',
+				'Website',
+				'Notes',
 			),
 			'albums'     => array(
-				'Artist', 'Label',
-				'Year', 'Genre', 'Format', 'Length',
-				'Tracks', 'Track count', 'Runtime', 'Track moods',
-				'Favorite?', 'Notes',
+				'Artist',
+				'Label',
+				'Year',
+				'Genre',
+				'Format',
+				'Length',
+				'Tracks',
+				'Track count',
+				'Runtime',
+				'Track moods',
+				'Favorite?',
+				'Notes',
 			),
 			'tracks'     => array(
 				'Album',
-				'Track #', 'Duration', 'Mood',
-				'Favorite?', 'Notes',
+				'Track #',
+				'Duration',
+				'Mood',
+				'Favorite?',
+				'Notes',
 			),
 			'people'     => array(
-				'Role', 'Team', 'Capacity',
-				'Owned projects', 'Owned project count',
-				'Assigned tasks', 'Assigned task count',
-				'Email', 'Location', 'Notes',
+				'Role',
+				'Team',
+				'Capacity',
+				'Owned projects',
+				'Owned project count',
+				'Assigned tasks',
+				'Assigned task count',
+				'Email',
+				'Location',
+				'Notes',
 			),
 			'projects'   => array(
-				'Status', 'Owner', 'Priority',
-				'Tasks', 'Task count', 'Task effort', 'Progress',
-				'Kickoff', 'Due', 'Latest task due', 'Task statuses', 'Task due range',
-				'Tags', 'Blocked?', 'Project URL', 'Notes',
+				'Status',
+				'Owner',
+				'Priority',
+				'Tasks',
+				'Task count',
+				'Task effort',
+				'Progress',
+				'Kickoff',
+				'Due',
+				'Latest task due',
+				'Task statuses',
+				'Task due range',
+				'Tags',
+				'Blocked?',
+				'Project URL',
+				'Notes',
 			),
 			'tasks'      => array(
-				'Status', 'Project', 'Assignee',
-				'Type', 'Effort', 'Due', 'Reminder',
-				'Tags', 'Done?', 'URL', 'Notes',
+				'Status',
+				'Project',
+				'Assignee',
+				'Type',
+				'Effort',
+				'Due',
+				'Reminder',
+				'Tags',
+				'Done?',
+				'URL',
+				'Notes',
 			),
 		);
 	}
