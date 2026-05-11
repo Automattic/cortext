@@ -64,7 +64,7 @@ describe( 'calculationOptionsForField', () => {
 		] );
 	} );
 
-	it( 'keeps Notion-style count options for select fields', () => {
+	it( 'keeps count options for select fields', () => {
 		expect(
 			calculationOptionsForField(
 				field( { type: 'text', cortextType: 'select' } )

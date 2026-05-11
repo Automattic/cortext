@@ -139,7 +139,7 @@ const TITLE_FIELD = {
 // Synthetic "ghost column" rendered at the right edge of the table layout.
 // Its `header` carries an aria-hidden marker that `ColumnHeaderActions`
 // portals a `+` button into; the row cells render `null`, leaving an
-// empty column that visually echoes Notion's "add column" affordance.
+// empty column that visually echoes an "add column" affordance.
 // Pinned visible (and last) by the view-sync effect when
 // `view.type === 'table'`, dropped from `view.fields` for grid/list.
 const GHOST_FIELD = {

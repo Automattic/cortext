@@ -12,7 +12,7 @@ import {
 import { Button, Icon, Notice, Spinner } from '@wordpress/components';
 import { home as homeIcon, plus, search, wordpress } from '@wordpress/icons';
 
-// Notion-style sidebar toggle: panel outline with a vertical accent on
+// Sidebar toggle: panel outline with a vertical accent on
 // the left side. Same icon for both states; the aria-label tells the
 // user what the toggle will do.
 const sidebarToggleIcon = (

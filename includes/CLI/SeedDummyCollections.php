@@ -457,7 +457,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 					),
 					array(
 						'title'    => 'Polish the footer button',
-						'Notes'    => 'Notion-style "+ New" lives below the table.',
+						'Notes'    => 'Inline "+ New" lives below the table.',
 						'Quantity' => 1,
 						'Contact'  => 'design@example.com',
 						'Homepage' => 'https://example.com/design',

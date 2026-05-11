@@ -5,7 +5,7 @@
 	"title": "Document cover",
 	"category": "widgets",
 	"icon": "format-image",
-	"description": "Notion-style document cover image, bound to the document's featured image.",
+	"description": "Document cover image, bound to the document's featured image.",
 	"textdomain": "cortext",
 	"usesContext": [ "postId", "postType" ],
 	"supports": {

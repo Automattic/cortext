@@ -5,7 +5,7 @@
 	"title": "Document icon",
 	"category": "widgets",
 	"icon": "smiley",
-	"description": "Notion-style document identity icon. Reads from the cortext_document_icon post meta.",
+	"description": "Document identity icon. Reads from the cortext_document_icon post meta.",
 	"textdomain": "cortext",
 	"usesContext": [ "postId", "postType" ],
 	"supports": {

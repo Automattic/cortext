@@ -14,7 +14,7 @@ use WP_Post;
 final class RevisionThrottle {
 
 	/**
-	 * Minimum time between revision snapshots. Mirrors Notion's ~10 minute cadence.
+	 * Minimum time between revision snapshots. Keeps rapid autosaves from creating a revision per edit.
 	 */
 	private const MIN_INTERVAL_SECONDS = 600;
 

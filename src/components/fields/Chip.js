@@ -59,12 +59,12 @@ function RemoveButton( { onRemove, foreground } ) {
 
 // Two color shapes are accepted: a palette name (`'blue'`) resolved
 // through the Cortext shell tokens so chips re-skin under light/dark, or
-// a raw CSS color (legacy seeds, Notion imports). The `'default'` palette
+// a raw CSS color (legacy seeds or imported data). The `'default'` palette
 // name renders as the neutral chip so saved options can opt out of color
 // without dropping the field. When `onRemove` is provided, a `×` button
 // is rendered inside the pill so dismiss controls live with the chip
-// background instead of as an external sibling — matches Notion's
-// selected-token strip in the multiselect picker.
+// background instead of as an external sibling, so chip labels and controls
+// stay together in the multiselect picker.
 export default function Chip( { label, color, onRemove } ) {
 	const effective = resolveDisplayColor( color, label );
 

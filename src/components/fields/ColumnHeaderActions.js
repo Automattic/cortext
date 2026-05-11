@@ -512,7 +512,7 @@ function FieldActions( {
 					style={ { minWidth: '240px' } }
 				>
 					{ /* Property-config group: edit how the column
-					     itself is defined. Mirrors Notion's first
+					     itself is defined. Keeps field actions grouped by
 					     section (Edit property / Change type). */ }
 					<Menu.Group>
 						<Menu.Item
@@ -552,8 +552,7 @@ function FieldActions( {
 						) : null }
 					</Menu.Group>
 					<Menu.Separator />
-					{ /* View group: sort, hide. Notion bundles
-					     filter/sort/group/hide together. */ }
+					{ /* View group: keep sort/hide actions together. */ }
 					<Menu.Group>
 						<Menu.Item
 							ref={ calculationItemRef }
@@ -603,9 +602,7 @@ function FieldActions( {
 						</Menu.Item>
 					</Menu.Group>
 					<Menu.Separator />
-					{ /* Column-lifecycle group: move, duplicate,
-					     delete. Notion's "Insert left/right /
-					     Duplicate / Delete property" cluster. */ }
+					{ /* Column-lifecycle group: move, duplicate, delete. */ }
 					<Menu.Group>
 						<Menu.Item
 							prefix={ <Icon icon={ arrowLeft } /> }

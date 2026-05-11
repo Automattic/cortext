@@ -1265,7 +1265,7 @@ body:has(.cortext-canvas__identity-actions:hover) .cortext-canvas__identity-acti
 	}
 }
 
-// Notion-style format submenu. The outer popover sits beside the column
+// Cascading format submenu. The outer popover sits beside the column
 // dropdown; each row is a button that anchors a third-level flyout for
 // picking a value. The visual is intentionally tight (240px panel) so it
 // reads as a continuation of the parent menu rather than a modal.
@@ -2494,7 +2494,7 @@ tr:has(.cortext-title-cell--is-open)
 		gap: $grid-unit-05;
 	}
 
-	// Per-option config menu (Notion-style "..." popover): rename input,
+	// Per-option config menu: rename input,
 	// Delete, then a vertical list of named colors.
 	&__menu {
 		width: 220px;
@@ -3697,7 +3697,7 @@ body.cortext-row-detail-sidebar-resizing {
 	// their padding so they still breathe. Balanced and comfortable mirror
 	// DataViews v6's td `padding-block` (12 and 16); compact is
 	// intentionally tighter than DataViews's default (4 -> 0) so the row
-	// matches the 40px editor floor and gets closer to a Notion-style
+	// matches the 40px editor floor and gets closer to a compact
 	// density. See tech-debt.md#5.
 	.dataviews-view-table {
 		table-layout: fixed;
@@ -4323,7 +4323,7 @@ thead > tr > th {
 	outline-offset: 0;
 }
 
-// Notion-style overlap: when the icon sits right after the cover, pull
+// Cover overlap: when the icon sits right after the cover, pull
 // the block itself up so the title follows the visual icon position
 // instead of leaving a reserved blank row below the cover.
 /* stylelint-disable no-descending-specificity */

@@ -88,7 +88,7 @@ function focusRefOnNextFrame( ref ) {
 }
 
 // Number "format" rows flatten the storage shape (style + currency) into
-// a single flat list so the menu mirrors Notion. Each entry carries the
+// a single flat list so the menu stays compact. Each entry carries the
 // `style` (and `currency` for the four currency rows) it projects onto
 // the persisted `number_format` JSON.
 const NUMBER_FORMATS = [
@@ -305,7 +305,7 @@ function ChoiceList( {
 	);
 }
 
-// Tile previews mimic Notion's "Show as" thumbnails: a stylized number,
+// Tile previews for display choices: a stylized number,
 // a horizontal progress bar, and a ring. Plain SVG so they don't depend
 // on icon glyphs that don't quite match.
 const NumberTilePreview = (
@@ -745,7 +745,7 @@ function DateFormBody( { type, config, onChange } ) {
 	);
 }
 
-// Renders Notion-style cascading format menu. Anchored to the Format
+// Renders a cascading format menu. Anchored to the Format
 // menu item so it sits beside the column dropdown. Auto-saves on every
 // selection. Hover handlers keep the panel open while the cursor is
 // somewhere over the column dropdown's Format row or this panel; the
