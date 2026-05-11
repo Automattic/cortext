@@ -1030,22 +1030,22 @@ test.describe( 'Collection view block', () => {
 			// The Row above / Row below buttons above already cover that.
 
 			await detail.getByRole( 'button', { name: 'Hide fields' } ).click();
-			const collapsedFieldsButton = detail.locator(
-				'.cortext-row-detail__fields-indicator'
-			);
+			// The properties panel stays mounted but goes `aria-hidden`/inert
+			// when collapsed; the editable content (iframe) is still around.
+			await expect( detailTitle ).toBeVisible();
 			await expect(
-				detail.getByRole( 'textbox', { name: 'Title', exact: true } )
-			).toBeVisible();
-			await expect( collapsedFieldsButton ).toBeVisible();
-			await expect(
-				detail.locator( '.cortext-row-detail__content-editor' )
-			).toBeVisible();
+				detail.locator(
+					'.cortext-row-detail__properties--rows[data-visible="false"]'
+				)
+			).toBeAttached();
 			await expect(
 				detail.getByRole( 'button', { name: 'Show fields' } )
 			).toBeVisible();
 			await detail.getByRole( 'button', { name: 'Show fields' } ).click();
 			await expect(
-				detail.locator( '.cortext-row-detail__properties--rows' )
+				detail.locator(
+					'.cortext-row-detail__properties--rows[data-visible="true"]'
+				)
 			).toBeVisible();
 
 			// The chrome heading mirrors the post title; the editable title
@@ -1117,9 +1117,14 @@ test.describe( 'Collection view block', () => {
 			await expect
 				.poll( () => new URL( page.url() ).searchParams.get( 'row' ) )
 				.toBeNull();
+			// The breadcrumb's collection link now navigates to the
+			// collection's own management surface, which renders the same
+			// DataViews table directly (no editor iframe).
 			await expect(
-				canvas.getByRole( 'button', { name: 'Open row' } ).first()
-			).toBeVisible();
+				page
+					.getByRole( 'button', { name: 'Open row' } )
+					.first()
+			).toBeAttached();
 
 			await expect
 				.poll( async () => {
