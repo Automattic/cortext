@@ -55,7 +55,7 @@ test.describe( 'Page trash flow', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ parent.id }`
+				`page=cortext&p=/${ parent.id }`
 			);
 
 			// Wait for the editor to load the parent.

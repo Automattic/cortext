@@ -210,7 +210,7 @@ test.describe( 'Collection view block', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ fixture.page.id }`
+				`page=cortext&p=/${ fixture.page.id }`
 			);
 
 			await page.waitForFunction(
@@ -305,7 +305,7 @@ test.describe( 'Collection view block', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ fixture.page.id }`
+				`page=cortext&p=/${ fixture.page.id }`
 			);
 
 			await page.waitForFunction(
@@ -529,7 +529,7 @@ test.describe( 'Collection view block', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ fixture.page.id }`
+				`page=cortext&p=/${ fixture.page.id }`
 			);
 
 			await page.waitForFunction(
@@ -622,7 +622,7 @@ test.describe( 'Collection view block', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ fixture.page.id }`
+				`page=cortext&p=/${ fixture.page.id }`
 			);
 
 			await page.waitForFunction(
@@ -735,7 +735,7 @@ test.describe( 'Collection view block', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ fixture.page.id }`
+				`page=cortext&p=/${ fixture.page.id }`
 			);
 
 			await page.waitForFunction(
@@ -896,7 +896,7 @@ test.describe( 'Collection view block', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ fixture.page.id }`
+				`page=cortext&p=/${ fixture.page.id }`
 			);
 
 			await page.waitForFunction(
@@ -1008,9 +1008,8 @@ test.describe( 'Collection view block', () => {
 			await expect( detailTitle ).toHaveValue(
 				'The Left Hand of Darkness'
 			);
-			await expect
-				.poll( () => new URL( page.url() ).searchParams.get( 'row' ) )
-				.toBe( String( fixture.secondEntry.id ) );
+			// Side and modal panes are local React state, not URL state,
+			// so verify the navigation via the detail title rather than ?row.
 			await expect( detailTitle ).toHaveValue( 'Kindred' );
 			await expect(
 				detail.locator( '[data-e2e-stable-label="tags"]' )
@@ -1020,40 +1019,9 @@ test.describe( 'Collection view block', () => {
 			await expect( detailTitle ).toHaveValue(
 				'The Left Hand of Darkness'
 			);
-			await expect
-				.poll( () => new URL( page.url() ).searchParams.get( 'row' ) )
-				.toBe( String( fixture.entry.id ) );
-
-			const goBack = page.getByRole( 'button', { name: 'Go back' } );
-			const goForward = page.getByRole( 'button', {
-				name: 'Go forward',
-			} );
-			await expect( goBack ).toBeEnabled();
-			await goBack.click();
-			await expect
-				.poll( () => new URL( page.url() ).searchParams.get( 'row' ) )
-				.toBe( String( fixture.secondEntry.id ) );
-			await expect( detailTitle ).toHaveValue( 'Kindred' );
-			await goBack.click();
-			await expect
-				.poll( () => new URL( page.url() ).searchParams.get( 'row' ) )
-				.toBe( String( fixture.entry.id ) );
-			await expect( detailTitle ).toHaveValue(
-				'The Left Hand of Darkness'
-			);
-			await expect( goForward ).toBeEnabled();
-			await goForward.click();
-			await expect
-				.poll( () => new URL( page.url() ).searchParams.get( 'row' ) )
-				.toBe( String( fixture.secondEntry.id ) );
-			await expect( detailTitle ).toHaveValue( 'Kindred' );
-			await goForward.click();
-			await expect
-				.poll( () => new URL( page.url() ).searchParams.get( 'row' ) )
-				.toBe( String( fixture.entry.id ) );
-			await expect( detailTitle ).toHaveValue(
-				'The Left Hand of Darkness'
-			);
+			// Side and modal panes are local React state, not URL state, so
+			// browser Back/Forward doesn't navigate between rows anymore.
+			// The Row above / Row below buttons above already cover that.
 
 			await detail.getByRole( 'button', { name: 'Hide fields' } ).click();
 			const collapsedFieldsButton = detail.locator(
@@ -1319,7 +1287,7 @@ test.describe( 'Collection view block', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ fixture.page.id }`
+				`page=cortext&p=/${ fixture.page.id }`
 			);
 
 			await page.waitForFunction(
@@ -1482,7 +1450,7 @@ test.describe( 'Collection view block', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ fixture.page.id }`
+				`page=cortext&p=/${ fixture.page.id }`
 			);
 
 			await page.waitForFunction(
@@ -1658,7 +1626,7 @@ test.describe( 'Collection view block', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ fixture.page.id }`
+				`page=cortext&p=/${ fixture.page.id }`
 			);
 
 			await page.waitForFunction(
@@ -1758,7 +1726,7 @@ test.describe( 'Collection view block', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ fixture.page.id }`
+				`page=cortext&p=/${ fixture.page.id }`
 			);
 
 			await page.waitForFunction(
@@ -1847,7 +1815,7 @@ test.describe( 'Collection view block', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ fixture.page.id }`
+				`page=cortext&p=/${ fixture.page.id }`
 			);
 
 			await page.waitForFunction(
@@ -2063,7 +2031,7 @@ test.describe( 'Collection view block', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ fixture.page.id }`
+				`page=cortext&p=/${ fixture.page.id }`
 			);
 
 			await page.waitForFunction(
@@ -2134,7 +2102,7 @@ test.describe( 'Collection view block', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ fixture.page.id }`
+				`page=cortext&p=/${ fixture.page.id }`
 			);
 
 			await page.waitForFunction(
@@ -2278,7 +2246,7 @@ test.describe( 'Collection view block', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ fixture.page.id }`
+				`page=cortext&p=/${ fixture.page.id }`
 			);
 
 			await page.waitForFunction(
@@ -2423,7 +2391,7 @@ test.describe( 'Collection view block', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ fixture.page.id }`
+				`page=cortext&p=/${ fixture.page.id }`
 			);
 
 			await page.waitForFunction(
@@ -2675,7 +2643,7 @@ test.describe( 'Collection view block', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ fixture.page.id }`
+				`page=cortext&p=/${ fixture.page.id }`
 			);
 
 			await page.waitForFunction(
@@ -2803,7 +2771,7 @@ test.describe( 'Collection view block', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ fixture.page.id }`
+				`page=cortext&p=/${ fixture.page.id }`
 			);
 
 			await page.waitForFunction(
@@ -2975,7 +2943,7 @@ test.describe( 'Collection view block', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ fixture.page.id }`
+				`page=cortext&p=/${ fixture.page.id }`
 			);
 
 			await page.waitForFunction(

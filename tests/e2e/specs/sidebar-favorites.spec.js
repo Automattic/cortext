@@ -281,7 +281,7 @@ test.describe( 'Sidebar favorites', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ createdPage.id }`
+				`page=cortext&p=/${ createdPage.id }`
 			);
 
 			const row = page.locator(
