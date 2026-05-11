@@ -55,7 +55,9 @@ describe( 'RelationEditor', () => {
 		await waitFor( () => expect( onSave ).toHaveBeenCalledWith( [ 22 ] ) );
 		expect( useCollectionRows ).toHaveBeenCalledWith(
 			9,
-			expect.objectContaining( { type: 'table' } )
+			expect.objectContaining( { type: 'table' } ),
+			[],
+			{ forceClient: true }
 		);
 	} );
 
