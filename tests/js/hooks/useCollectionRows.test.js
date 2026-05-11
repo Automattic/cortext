@@ -248,6 +248,29 @@ describe( 'useCollectionRows', () => {
 		expect( lastRequestPath() ).not.toContain( 'created_by' );
 	} );
 
+	it( 'falls back for custom field sorts', async () => {
+		const view = {
+			type: 'table',
+			filters: [],
+			sort: {
+				field: 'field-10',
+				direction: 'asc',
+			},
+			page: 1,
+			perPage: 25,
+		};
+
+		const { result } = renderHook( () =>
+			useCollectionRows( 7, view, baseFields )
+		);
+
+		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 1 ) );
+		expect( result.current.queryMode ).toBe( 'client' );
+		expect( lastRequestPath() ).toContain( 'page=1' );
+		expect( lastRequestPath() ).toContain( 'per_page=100' );
+		expect( lastRequestPath() ).not.toContain( 'sort[field]' );
+	} );
+
 	it( 'falls back for incomplete multi-value filters', async () => {
 		const view = {
 			type: 'table',

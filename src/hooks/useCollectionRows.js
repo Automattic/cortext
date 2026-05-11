@@ -9,16 +9,6 @@ const CLIENT_PER_PAGE = 100;
 const CLIENT_PAGE_FETCH_CONCURRENCY = 4;
 const SERVER_OPERATORS = new Set( [ 'is', 'isNot', 'isAny', 'isNone' ] );
 const SERVER_SORT_FIELDS = new Set( [ 'title', 'created_at', 'modified_at' ] );
-const SERVER_SORT_FIELD_TYPES = new Set( [
-	'text',
-	'number',
-	'email',
-	'url',
-	'select',
-	'date',
-	'datetime',
-	'checkbox',
-] );
 const SERVER_FILTER_FIELD_TYPES = new Set( [
 	'text',
 	'number',
@@ -62,17 +52,11 @@ function perPageNumber( value, fallback = 25 ) {
 	return Math.min( 100, Math.floor( number ) );
 }
 
-function isServerSupportedSort( sort, fieldTypes ) {
+function isServerSupportedSort( sort ) {
 	if ( ! sort?.field ) {
 		return true;
 	}
-	if ( SERVER_SORT_FIELDS.has( sort.field ) ) {
-		return true;
-	}
-	return (
-		isCollectionFieldKey( sort.field ) &&
-		SERVER_SORT_FIELD_TYPES.has( fieldTypes.get( sort.field ) )
-	);
+	return SERVER_SORT_FIELDS.has( sort.field );
 }
 
 function isServerSupportedFilter( filter, fieldTypes ) {
@@ -150,7 +134,7 @@ function buildQueryPlan( collectionId, view, fields = [], options = {} ) {
 		! options.forceClient &&
 		! hasSearch( view ) &&
 		! hasCalculations( view ) &&
-		isServerSupportedSort( view?.sort, fieldTypes ) &&
+		isServerSupportedSort( view?.sort ) &&
 		filters.every( ( filter ) =>
 			isServerSupportedFilter( filter, fieldTypes )
 		);
