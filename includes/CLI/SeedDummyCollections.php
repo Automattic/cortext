@@ -26,6 +26,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	private const ENTRY_CONTENT_VERSION   = 'rich-connected-row-seed-2026-05-07';
 
 	private bool $seed_full_dataset = false;
+	private bool $fetch_real_images = false;
 
 	/**
 	 * Seeds connected sample collections (books/authors/publishers,
@@ -54,6 +55,21 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	 * so worktrees come up in seconds without hitting Wikidata or Picsum.
 	 * Combine with `--full` to bundle the entire catalog.
 	 *
+	 * [--with-real-images]
+	 * : Fetch the actual book/album cover from Open Library and Cover Art
+	 * Archive at seed time. Used as the row's cover image, and as the row's
+	 * icon when no Wikimedia Commons portrait/cover is available (so a
+	 * Discworld book row gets its real cover instead of a picsum fallback).
+	 * Cached via WP transients so a `--reset` reseed reuses prior lookups.
+	 * Images stay in the WP media library, never in the repo, so the
+	 * plugin doesn't redistribute publishers' artwork.
+	 *
+	 * [--prefetch-covers]
+	 * : Like `--prefetch-icons` but for real covers. Downloads each book/album
+	 * cover into `seed-assets/covers/` so worktrees can ship offline. Existing
+	 * bundle files are preserved, so manually-curated covers (e.g., a public-
+	 * domain stand-in) survive prefetching.
+	 *
 	 * ## EXAMPLES
 	 *
 	 *     wp cortext seed
@@ -62,6 +78,8 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	 *     wp cortext seed --reset --force
 	 *     wp cortext seed --reset --force --full
 	 *     wp cortext seed --prefetch-icons --full
+	 *     wp cortext seed --reset --force --with-real-images
+	 *     wp cortext seed --prefetch-covers --full
 	 *
 	 * @when after_wp_load
 	 *
@@ -74,6 +92,14 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			$this->prefetch_icons();
 			return;
 		}
+
+		if ( WP_CLI\Utils\get_flag_value( $assoc_args, 'prefetch-covers', false ) ) {
+			$this->seed_full_dataset = WP_CLI\Utils\get_flag_value( $assoc_args, 'full', false );
+			$this->prefetch_covers();
+			return;
+		}
+
+		$this->fetch_real_images = WP_CLI\Utils\get_flag_value( $assoc_args, 'with-real-images', false );
 
 		// Run as an administrator so seeded entries get a real `post_author`
 		// (otherwise CLI's user-0 context produces empty Created by /
@@ -103,7 +129,11 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			WP_CLI::log( 'Seeding compact demo dataset. Pass --full to include every sample row.' );
 			$collections = $this->compact_collection_entries( $collections );
 		}
-		WP_CLI::log( 'Row images: bundle only (offline). Pass --prefetch-icons to extend the bundle.' );
+		if ( $this->fetch_real_images ) {
+			WP_CLI::log( 'Row images: bundle first, then live Wikimedia Commons / Open Library / Cover Art Archive for misses (per-file license, see each source).' );
+		} else {
+			WP_CLI::log( 'Row images: bundle only (offline). Pass --with-real-images for live Wikimedia / Open Library / Cover Art Archive lookups, or --prefetch-icons to extend the bundle.' );
+		}
 
 		$collection_ids = array();
 		foreach ( $collections as $spec ) {
@@ -3429,6 +3459,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			array(
 				'title'   => 'Library',
 				'icon'    => '📚',
+				'cover'   => CORTEXT_PATH . 'seed-assets/covers/page-library.jpg',
 				'content' => $this->page_content(
 					array(
 						$this->paragraph( 'The library cluster models books as records connected to authors and publishers. It is deliberately large enough to make relations, rollups, filters, and search feel real.' ),
@@ -3970,6 +4001,17 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		if ( null !== $commons ) {
 			return $commons;
 		}
+		// Books and albums rarely have P18 on Wikidata (covers are fair-use
+		// only), so when the user opts in to real images, reach for Open
+		// Library / Cover Art Archive instead of the picsum fallback. The
+		// real cover doubles as the icon — a Discworld book row gets the
+		// actual Discworld cover top-left and again as featured image.
+		if ( $this->fetch_real_images && in_array( $collection_slug, array( 'books', 'albums' ), true ) ) {
+			$cover = $this->real_cover_url( $collection_slug, $title );
+			if ( null !== $cover ) {
+				return $cover;
+			}
+		}
 		$seed = sanitize_title( $collection_slug . '-' . $title );
 		return 'https://picsum.photos/seed/' . rawurlencode( $seed ) . '/256/256';
 	}
@@ -4049,6 +4091,189 @@ final class SeedDummyCollections extends WP_CLI_Command {
 				$bundle_dir
 			)
 		);
+	}
+
+	/**
+	 * Walks book and album rows, resolves each to a real cover URL via
+	 * Open Library / Cover Art Archive, and downloads into
+	 * `seed-assets/covers/`. Existing bundle files are kept (so a curated
+	 * stand-in survives), so re-running this is a way to fill in any gaps
+	 * left by manual curation. Honors `--full`.
+	 */
+	private function prefetch_covers(): void {
+		$bundle_dir = CORTEXT_PATH . 'seed-assets/covers';
+		if ( ! is_dir( $bundle_dir ) && ! wp_mkdir_p( $bundle_dir ) ) {
+			WP_CLI::error( "Failed to create {$bundle_dir}" );
+		}
+
+		$collections = array_merge(
+			$this->literature_collections(),
+			$this->music_collections()
+		);
+		if ( ! $this->seed_full_dataset ) {
+			$collections = $this->compact_collection_entries( $collections );
+		}
+
+		require_once ABSPATH . 'wp-admin/includes/file.php';
+
+		$downloaded = 0;
+		$cached     = 0;
+		$missed     = 0;
+		$total      = 0;
+
+		foreach ( $collections as $spec ) {
+			$slug = (string) ( $spec['slug'] ?? '' );
+			if ( ! in_array( $slug, array( 'books', 'albums' ), true ) ) {
+				continue;
+			}
+			foreach ( ( $spec['entries'] ?? array() ) as $entry ) {
+				$title = (string) ( $entry['title'] ?? '' );
+				if ( '' === $title ) {
+					continue;
+				}
+				$url = $this->real_cover_url( $slug, $title );
+				if ( null === $url ) {
+					continue;
+				}
+				$total++;
+				$dest = CORTEXT_PATH . 'seed-assets/covers/' . sanitize_title( $slug ) . '-' . sanitize_title( $title ) . '.jpg';
+				if ( file_exists( $dest ) ) {
+					$cached++;
+					continue;
+				}
+				$tmp = download_url( $url, 30 );
+				if ( is_wp_error( $tmp ) ) {
+					WP_CLI::warning( "Failed to download cover for {$slug}/{$title}: " . $tmp->get_error_message() );
+					$missed++;
+					continue;
+				}
+				// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+				if ( ! @copy( $tmp, $dest ) ) {
+					// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+					@unlink( $tmp );
+					WP_CLI::warning( "Failed to write {$dest}" );
+					$missed++;
+					continue;
+				}
+				// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+				@unlink( $tmp );
+				$downloaded++;
+				WP_CLI::log( "Bundled cover {$slug}/{$title} -> " . basename( $dest ) );
+			}
+		}
+
+		WP_CLI::success(
+			sprintf(
+				'Prefetched %d / %d covers (%d already bundled, %d failed).',
+				$downloaded,
+				$total,
+				$cached,
+				$missed
+			)
+		);
+	}
+
+	/**
+	 * Looks up a real book or album cover URL with transient caching, the
+	 * same way `commons_image_url()` caches Wikidata lookups. Books resolve
+	 * via Open Library; albums via MusicBrainz + Cover Art Archive. Returns
+	 * null when no cover is available; cached as `''` so misses don't re-hit.
+	 */
+	private function real_cover_url( string $collection_slug, string $title ): ?string {
+		$cache_key = 'cortext_seed_cover_' . md5( $collection_slug . '|' . $title );
+		$cached    = get_transient( $cache_key );
+		if ( false !== $cached ) {
+			return '' === $cached ? null : (string) $cached;
+		}
+
+		$resolved = $this->resolve_real_cover_url( $collection_slug, $title );
+		set_transient( $cache_key, $resolved ?? '', MONTH_IN_SECONDS );
+		return $resolved;
+	}
+
+	private function resolve_real_cover_url( string $collection_slug, string $title ): ?string {
+		if ( 'books' === $collection_slug ) {
+			$author = $this->book_author_relations()[ $title ] ?? '';
+			return $this->open_library_cover_url( $title, $author );
+		}
+		if ( 'albums' === $collection_slug ) {
+			$artist = $this->album_artist_relations()[ $title ] ?? '';
+			return $this->cover_art_archive_url( $title, $artist );
+		}
+		return null;
+	}
+
+	private function open_library_cover_url( string $title, string $author ): ?string {
+		$params = array(
+			'title' => $title,
+			'limit' => 5,
+		);
+		if ( '' !== $author ) {
+			$params['author'] = $author;
+		}
+		$data = $this->fetch_json( 'https://openlibrary.org/search.json?' . http_build_query( $params ) );
+		if ( null === $data || empty( $data['docs'] ) ) {
+			return null;
+		}
+		foreach ( $data['docs'] as $doc ) {
+			$cover_id = (int) ( $doc['cover_i'] ?? 0 );
+			if ( $cover_id > 0 ) {
+				return 'https://covers.openlibrary.org/b/id/' . $cover_id . '-L.jpg';
+			}
+		}
+		return null;
+	}
+
+	private function cover_art_archive_url( string $title, string $artist ): ?string {
+		// MusicBrainz requires an explicit User-Agent and applies a 1 req/s
+		// rate limit. The transient cache layer keeps this from biting once
+		// covers are resolved; on first prefetch, allow ~1s per row.
+		$query = sprintf( 'release:"%s" AND artist:"%s"', addslashes( $title ), addslashes( $artist ) );
+		$response = wp_remote_get(
+			'https://musicbrainz.org/ws/2/release/?' . http_build_query(
+				array(
+					'query' => $query,
+					'fmt'   => 'json',
+					'limit' => 10,
+				)
+			),
+			array(
+				'timeout' => 15,
+				'headers' => array(
+					'User-Agent' => 'CortextSeeder/1.0 (https://github.com/Automattic/cortext)',
+				),
+			)
+		);
+		if ( is_wp_error( $response ) ) {
+			return null;
+		}
+		$data = json_decode( wp_remote_retrieve_body( $response ), true );
+		if ( ! is_array( $data ) || empty( $data['releases'] ) ) {
+			return null;
+		}
+
+		foreach ( $data['releases'] as $release ) {
+			$mbid = (string) ( $release['id'] ?? '' );
+			if ( '' === $mbid ) {
+				continue;
+			}
+			$cover_url = "https://coverartarchive.org/release/{$mbid}/front-500";
+			$check     = wp_remote_head(
+				$cover_url,
+				array(
+					'timeout'     => 10,
+					'redirection' => 3,
+				)
+			);
+			if ( is_wp_error( $check ) ) {
+				continue;
+			}
+			$code = (int) wp_remote_retrieve_response_code( $check );
+			if ( 200 === $code ) {
+				return $cover_url;
+			}
+		}
+		return null;
 	}
 
 	/**
@@ -4195,18 +4420,37 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			return;
 		}
 
-		$bundle_path = $this->bundled_icon_path( $collection_slug, $title );
-		if ( null !== $bundle_path ) {
-			$icon_meta = $this->serialize_icon_meta(
-				array(
-					'type'   => 'image',
-					'source' => $bundle_path,
-				)
-			);
-			if ( '' !== $icon_meta ) {
-				update_post_meta( $entry_id, DocumentIdentity::META_KEY, $icon_meta );
-				WP_CLI::log( sprintf( '  Icon (bundle) attached to entry %d.', $entry_id ) );
+		// `--with-real-images` overrides the bundled icon for books and albums:
+		// the existing bundle was prefetched against picsum (Wikidata has no
+		// P18 for most modern works), so the bundled file is a random photo
+		// rather than the real cover. Reach for the live cover lookup instead.
+		// Authors/musicians keep using the bundle — their Commons portraits
+		// are correct already.
+		$skip_bundle = $this->fetch_real_images
+			&& in_array( $collection_slug, array( 'books', 'albums' ), true );
+
+		if ( ! $skip_bundle ) {
+			$bundle_path = $this->bundled_icon_path( $collection_slug, $title );
+			if ( null !== $bundle_path ) {
+				$icon_meta = $this->serialize_icon_meta(
+					array(
+						'type'   => 'image',
+						'source' => $bundle_path,
+					)
+				);
+				if ( '' !== $icon_meta ) {
+					update_post_meta( $entry_id, DocumentIdentity::META_KEY, $icon_meta );
+					WP_CLI::log( sprintf( '  Icon (bundle) attached to entry %d.', $entry_id ) );
+				}
+				return;
 			}
+		}
+
+		// Default seed is fully offline: if the bundle didn't have a match,
+		// don't reach for Wikidata or Picsum. The user opts in to network
+		// lookups with `--with-real-images`, or runs `--prefetch-icons` to
+		// extend the bundle once.
+		if ( ! $this->fetch_real_images ) {
 			return;
 		}
 
@@ -4222,9 +4466,22 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		);
 		if ( '' !== $icon_meta ) {
 			update_post_meta( $entry_id, DocumentIdentity::META_KEY, $icon_meta );
-			$source = false !== strpos( $icon_url, 'commons.wikimedia.org' ) ? 'commons' : 'picsum';
+			$source = $this->row_icon_source_label( $icon_url );
 			WP_CLI::log( sprintf( '  Icon (%s) attached to entry %d.', $source, $entry_id ) );
 		}
+	}
+
+	private function row_icon_source_label( string $url ): string {
+		if ( false !== strpos( $url, 'commons.wikimedia.org' ) ) {
+			return 'commons';
+		}
+		if ( false !== strpos( $url, 'openlibrary.org' ) ) {
+			return 'open-library';
+		}
+		if ( false !== strpos( $url, 'coverartarchive.org' ) ) {
+			return 'cover-art-archive';
+		}
+		return 'picsum';
 	}
 
 	/**
@@ -4246,6 +4503,47 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		$slug = sanitize_title( $collection_slug );
 		$key  = sanitize_title( $title );
 		return CORTEXT_PATH . 'seed-assets/icons/' . $slug . '-' . $key . '.jpg';
+	}
+
+	/**
+	 * Attaches a bundled cover image to a row when one is provided in
+	 * `seed-assets/covers/<slug>-<title-slug>.jpg`. Covers are opt-in per
+	 * row (no live fetch), so add a file under that path to give a row a
+	 * featured image. Skips rows that already have `_thumbnail_id`, so a
+	 * manually-set cover survives a reseed.
+	 */
+	private function maybe_apply_row_cover( int $entry_id, string $collection_slug, string $title ): void {
+		if ( $entry_id <= 0 ) {
+			return;
+		}
+		if ( (int) get_post_meta( $entry_id, '_thumbnail_id', true ) > 0 ) {
+			return;
+		}
+		$slug = sanitize_title( $collection_slug );
+		$key  = sanitize_title( $title );
+		$path = CORTEXT_PATH . 'seed-assets/covers/' . $slug . '-' . $key . '.jpg';
+		if ( file_exists( $path ) ) {
+			$cover_id = $this->ensure_attachment_from_path( $path );
+			if ( $cover_id > 0 ) {
+				update_post_meta( $entry_id, '_thumbnail_id', $cover_id );
+				WP_CLI::log( sprintf( '  Cover (bundle) attached to entry %d.', $entry_id ) );
+			}
+			return;
+		}
+
+		if ( ! $this->fetch_real_images ) {
+			return;
+		}
+		$url = $this->real_cover_url( $collection_slug, $title );
+		if ( null === $url ) {
+			return;
+		}
+		$cover_id = $this->ensure_attachment_from_url( $url );
+		if ( $cover_id > 0 ) {
+			update_post_meta( $entry_id, '_thumbnail_id', $cover_id );
+			$source = false !== strpos( $url, 'openlibrary.org' ) ? 'open-library' : 'cover-art-archive';
+			WP_CLI::log( sprintf( '  Cover (%s) attached to entry %d.', $source, $entry_id ) );
+		}
 	}
 
 	private function heading( string $text, int $level = 2 ): string {
@@ -4709,6 +5007,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 				$existing_entry_id = $existing_entries_by_title[ $entry['title'] ];
 				$this->update_entry_content( $existing_entry_id, $entry_content );
 				$this->maybe_apply_row_icon( $existing_entry_id, $spec['slug'], $entry['title'] );
+				$this->maybe_apply_row_cover( $existing_entry_id, $spec['slug'], $entry['title'] );
 				WP_CLI::log( "Entry '{$entry['title']}' already exists. Skipping." );
 				continue;
 			}
@@ -4729,6 +5028,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 
 			update_post_meta( (int) $entry_id, '_cortext_seed_entry_content_version', self::ENTRY_CONTENT_VERSION );
 			$this->maybe_apply_row_icon( (int) $entry_id, $spec['slug'], $entry['title'] );
+			$this->maybe_apply_row_cover( (int) $entry_id, $spec['slug'], $entry['title'] );
 
 			foreach ( $field_ids as $field_name => $field_id ) {
 				if ( array_key_exists( $field_name, $entry ) ) {
