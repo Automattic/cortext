@@ -229,6 +229,21 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertIsArray( $data['fields'] );
 	}
 
+	public function test_rejects_legacy_all_rows_per_page_sentinel(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+
+		$fixture = $this->create_collection_fixture( 'allrows' );
+
+		$response = $this->query_rows(
+			array(
+				'collection' => $fixture['collection_id'],
+				'per_page'   => -1,
+			)
+		);
+
+		$this->assertSame( 400, $response->get_status() );
+	}
+
 	public function test_field_definitions_in_response(): void {
 		wp_set_current_user( $this->create_user( 'author' ) );
 
