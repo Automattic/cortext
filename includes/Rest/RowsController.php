@@ -532,7 +532,7 @@ final class RowsController {
 		$sort = $request->get_param( 'sort' );
 		if ( ! is_array( $sort ) || empty( $sort['field'] ) ) {
 			// Default to oldest-first so newly created rows land at the
-			// bottom of the table (Notion-style).
+			// bottom of the table.
 			$args['orderby'] = 'date';
 			$args['order']   = 'ASC';
 		} else {

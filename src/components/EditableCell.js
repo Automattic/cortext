@@ -833,7 +833,7 @@ export default function EditableCell( {
 	let editor = null;
 	if ( isEditing ) {
 		if ( fieldType === 'multiselect' ) {
-			// Multiselect persists on each toggle (Notion-style: no Save
+			// Multiselect persists on each toggle: no Save
 			// button). Wire onSave straight to saveRowField so saving
 			// doesn't close the cell; closing happens via Dropdown's
 			// onClose firing onCancel.

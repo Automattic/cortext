@@ -455,16 +455,6 @@ final class CollectionEntries {
 				)
 			);
 
-			register_post_meta(
-				$post_type,
-				'notion_id',
-				array(
-					'type'              => 'string',
-					'single'            => true,
-					'show_in_rest'      => true,
-					'sanitize_callback' => 'sanitize_text_field',
-				)
-			);
 		}
 
 		$this->register_field_meta( $post_type, $collection->ID );

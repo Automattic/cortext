@@ -53,7 +53,6 @@ final class Field {
 
 	private function register_meta(): void {
 		$string_meta = array(
-			'notion_id',
 			'type',
 			'options',
 			'number_format',

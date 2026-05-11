@@ -293,7 +293,7 @@ describe( 'formatDisplay', () => {
 		} );
 
 		it( 'normalizes non-palette stored colors (e.g. legacy hex) into a palette modifier', () => {
-			// Hex from old seeds and Notion imports never themed under
+			// Hex from old seeds and imported data never themed under
 			// dark mode because raw colors don't follow the CSS-variable
 			// palette. `resolveDisplayColor` rounds them to a hashed
 			// palette name so chips re-skin alongside the rest of the UI.

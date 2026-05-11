@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Cortext
  * Plugin URI:        https://github.com/priethor/cortext
- * Description:       Notion-inspired workspace inside WordPress: nested pages, typed collections with multiple views, and cross-type taxonomies that add fields to individual rows.
+ * Description:       Build a WordPress-native knowledge base with nested pages, typed collections, flexible views, and publishing through your own site.
  * Version:           0.0.1
  * Requires at least: 6.9
  * Requires PHP:      8.1

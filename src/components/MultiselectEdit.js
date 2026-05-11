@@ -10,7 +10,7 @@ import EditOptionsPopover from './fields/EditOptionsPopover';
 // `EditOptionsPopover` in pick mode. `onPick` toggles the clicked value
 // in/out of the cell's array, so the popover stays open while the user
 // adjusts multiple values; `onSave` fires after each toggle so the row
-// meta updates incrementally (Notion-style, no Save button). Closing
+// meta updates incrementally, with no Save button. Closing
 // happens via the Popover's outside-click which fires `onCancel`.
 //
 // Replaces the previous `FormTokenField` implementation

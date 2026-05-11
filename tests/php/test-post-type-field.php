@@ -64,7 +64,6 @@ final class Test_Post_Type_Field extends BaseTestCase {
 
 		$registered = get_registered_meta_keys( 'post', Field::POST_TYPE );
 
-		$this->assertArrayHasKey( 'notion_id', $registered );
 		$this->assertArrayHasKey( 'type', $registered );
 		$this->assertArrayHasKey( 'options', $registered );
 		$this->assertArrayHasKey( 'number_format', $registered );
