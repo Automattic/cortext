@@ -365,37 +365,7 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertSame( 'ASC', $args['order'] );
 	}
 
-	public function test_build_query_args_carries_compiled_filter_sql(): void {
-		$fixture = $this->create_collection_fixture( 'bqas' );
-
-		$request = new WP_REST_Request( 'GET', '/cortext/v1/rows' );
-		$request->set_query_params(
-			array(
-				'collection' => $fixture['collection_id'],
-			)
-		);
-		$request->set_default_params(
-			array(
-				'per_page' => 25,
-				'page'     => 1,
-				'search'   => '',
-				'sort'     => null,
-				'filters'  => array(),
-			)
-		);
-
-		$controller = new RowsController();
-		$method     = new \ReflectionMethod( $controller, 'build_query_args' );
-		$method->setAccessible( true );
-
-		$args = $method->invoke( $controller, $request, 'bqas', 'compiled where sql', 'compiled join sql' );
-
-		$this->assertArrayNotHasKey( 's', $args );
-		$this->assertSame( 'compiled where sql', $args['cortext_rows_where'] );
-		$this->assertSame( 'compiled join sql', $args['cortext_rows_join'] );
-	}
-
-	public function test_build_query_args_with_title_sort(): void {
+public function test_build_query_args_with_title_sort(): void {
 		$fixture = $this->create_collection_fixture( 'bqat' );
 
 		$request = new WP_REST_Request( 'GET', '/cortext/v1/rows' );

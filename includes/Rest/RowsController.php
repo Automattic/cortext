@@ -14,7 +14,6 @@ use Cortext\PostType\CollectionEntries;
 use Cortext\Relations;
 use WP_Error;
 use WP_Post;
-use WP_Query;
 use WP_REST_Request;
 use WP_REST_Response;
 
@@ -224,45 +223,15 @@ final class RowsController {
 		// re-fetch the field type for every row.
 		$multi_field_ids = $this->multi_value_field_ids( $field_ids );
 
-		$query_args                             = $this->build_query_args( $request, $slug, $where_sql, $filter_sql['join'] );
-		$token                                  = uniqid( 'cortext_rows_', true );
-		$query_args['cortext_rows_query_token'] = $token;
-		$query_args['cortext_rows_sort']        = $request->get_param( 'sort' );
-
-		$where_callback = function ( string $where, WP_Query $query ) use ( $token ): string {
-			if ( $query->get( 'cortext_rows_query_token' ) !== $token ) {
-				return $where;
-			}
-			$extra = (string) $query->get( 'cortext_rows_where' );
-			if ( '' === $extra ) {
-				return $where;
-			}
-			return "{$where} AND {$extra}";
-		};
-
-		$clauses_callback = function ( array $clauses, WP_Query $query ) use ( $token, $row_query, $field_schema ): array {
-			if ( $query->get( 'cortext_rows_query_token' ) !== $token ) {
-				return $clauses;
-			}
-			$clauses = $row_query->apply_filter_join_clauses(
-				$clauses,
-				(string) $query->get( 'cortext_rows_join' )
-			);
-			return $row_query->apply_sort_clauses(
-				$clauses,
-				$query->get( 'cortext_rows_sort' ),
-				$field_schema
-			);
-		};
-
-		add_filter( 'posts_where', $where_callback, 10, 2 );
-		add_filter( 'posts_clauses', $clauses_callback, 10, 2 );
-		try {
-			$query = new WP_Query( $query_args );
-		} finally {
-			remove_filter( 'posts_where', $where_callback, 10 );
-			remove_filter( 'posts_clauses', $clauses_callback, 10 );
-		}
+		$query_args = $this->build_query_args( $request, $slug );
+		$scope      = new RowsQueryScope(
+			$row_query,
+			$field_schema,
+			$where_sql,
+			$filter_sql['join'],
+			$request->get_param( 'sort' )
+		);
+		$query      = $scope->run( $query_args );
 
 		// Prime the user object cache once before mapping rows so per-row
 		// display name lookups in format_row hit the cache instead of
@@ -464,24 +433,15 @@ final class RowsController {
 	 *
 	 * @param WP_REST_Request $request Full request object.
 	 * @param string          $slug    Collection slug.
-	 * @param string          $where_sql Prepared row filter/search SQL.
-	 * @param string          $join_sql Prepared row filter JOIN SQL.
 	 * @return array
 	 */
-	private function build_query_args( WP_REST_Request $request, string $slug, string $where_sql = '', string $join_sql = '' ): array {
+	private function build_query_args( WP_REST_Request $request, string $slug ): array {
 		$args = array(
 			'post_type'      => CollectionEntries::CPT_PREFIX . $slug,
 			'post_status'    => array( 'draft', 'private', 'publish' ),
 			'posts_per_page' => (int) $request->get_param( 'per_page' ),
 			'paged'          => (int) $request->get_param( 'page' ),
 		);
-
-		if ( '' !== $where_sql ) {
-			$args['cortext_rows_where'] = $where_sql;
-		}
-		if ( '' !== $join_sql ) {
-			$args['cortext_rows_join'] = $join_sql;
-		}
 
 		$sort = $request->get_param( 'sort' );
 		if ( ! is_array( $sort ) || empty( $sort['field'] ) ) {
