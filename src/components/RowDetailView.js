@@ -656,6 +656,9 @@ export default function RowDetailView( {
 							meta:
 								pane.detail.record.meta ??
 								pane.detail.row?.meta,
+							cortext_hydrated_meta:
+								pane.detail.record.cortext_hydrated_meta ??
+								pane.detail.row?.cortext_hydrated_meta,
 						};
 
 						return (

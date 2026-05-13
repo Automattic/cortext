@@ -13,6 +13,7 @@ declare( strict_types=1 );
 
 namespace Cortext\PostType;
 
+use Cortext\Fields\FieldTypeRegistry;
 use Cortext\Relations;
 use WP_Post;
 
@@ -490,10 +491,6 @@ final class CollectionEntries {
 	}
 
 	public static function wp_meta_type_for( string $cortext_type ): string {
-		return match ( $cortext_type ) {
-			'number'   => 'number',
-			'checkbox' => 'boolean',
-			default    => 'string',
-		};
+		return FieldTypeRegistry::wp_meta_type( $cortext_type );
 	}
 }

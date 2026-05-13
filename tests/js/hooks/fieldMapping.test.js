@@ -90,16 +90,207 @@ describe( 'mapField', () => {
 		meta: { type: 'text', ...( overrides ?? {} ) },
 	} );
 
-	it( "maps Cortext's number to DataViews 'text' so decimals sort correctly", () => {
-		expect( mapField( baseField( { type: 'number' } ) ).type ).toBe(
-			'text'
-		);
+	it( "maps Cortext's number to DataViews 'integer' with a decimal-safe filter control", () => {
+		const mapped = mapField( baseField( { type: 'number' } ) );
+
+		expect( mapped.type ).toBe( 'integer' );
+		expect( mapped.Edit ).toEqual( expect.any( Function ) );
+		expect( mapped.isValid.custom() ).toBeNull();
 	} );
 
-	it( "maps checkbox to DataViews 'boolean'", () => {
-		expect( mapField( baseField( { type: 'checkbox' } ) ).type ).toBe(
-			'boolean'
+	it( 'carries server query capabilities from the REST field record', () => {
+		const mapped = mapField( {
+			...baseField( { type: 'select' } ),
+			cortext_capabilities: {
+				sortable: true,
+				filterable: true,
+				operators: [ 'is', 'isAny' ],
+			},
+		} );
+
+		expect( mapped.sortable ).toBe( true );
+		expect( mapped.filterable ).toBe( true );
+		expect( mapped.operators ).toEqual( [ 'is', 'isAny' ] );
+	} );
+
+	it( 'configures DataViews text filters from UI-supported server operators', () => {
+		const mapped = mapField( {
+			...baseField( { type: 'text' } ),
+			cortext_capabilities: {
+				sortable: true,
+				filterable: true,
+				operators: [
+					'is',
+					'isNot',
+					'contains',
+					'notContains',
+					'startsWith',
+					'endsWith',
+					'isEmpty',
+				],
+			},
+		} );
+
+		expect( mapped.filterBy ).toEqual( {
+			operators: [
+				'is',
+				'isNot',
+				'contains',
+				'notContains',
+				'startsWith',
+			],
+		} );
+	} );
+
+	it( 'configures DataViews number filters from UI-supported server operators', () => {
+		const mapped = mapField( {
+			...baseField( { type: 'number' } ),
+			cortext_capabilities: {
+				sortable: true,
+				filterable: true,
+				operators: [
+					'is',
+					'greaterThan',
+					'lessThan',
+					'between',
+					'isEmpty',
+				],
+			},
+		} );
+
+		expect( mapped.filterBy ).toEqual( {
+			operators: [ 'is', 'greaterThan', 'lessThan', 'between' ],
+		} );
+	} );
+
+	it( 'configures DataViews date filters from UI-supported server operators', () => {
+		const mapped = mapField( {
+			...baseField( { type: 'date' } ),
+			cortext_capabilities: {
+				sortable: true,
+				filterable: true,
+				operators: [
+					'on',
+					'is',
+					'before',
+					'after',
+					'between',
+					'isEmpty',
+				],
+			},
+		} );
+
+		expect( mapped.filterBy ).toEqual( {
+			operators: [ 'on', 'before', 'after', 'between' ],
+		} );
+	} );
+
+	it( 'configures DataViews datetime filters without unsupported date-only range operators', () => {
+		const mapped = mapField( {
+			...baseField( { type: 'datetime' } ),
+			cortext_capabilities: {
+				sortable: true,
+				filterable: true,
+				operators: [
+					'on',
+					'is',
+					'before',
+					'after',
+					'between',
+					'isEmpty',
+				],
+			},
+		} );
+
+		expect( mapped.filterBy ).toEqual( {
+			operators: [ 'on', 'before', 'after' ],
+		} );
+	} );
+
+	it( 'configures DataViews option filters from UI-supported server operators', () => {
+		const select = mapField( {
+			...baseField( { type: 'select' } ),
+			cortext_capabilities: {
+				sortable: true,
+				filterable: true,
+				operators: [ 'is', 'isNot', 'isAny', 'isNone' ],
+			},
+		} );
+		const multiselect = mapField( {
+			...baseField( { type: 'multiselect' } ),
+			cortext_capabilities: {
+				sortable: false,
+				filterable: true,
+				operators: [ 'contains', 'notContains', 'isAny', 'isNone' ],
+			},
+		} );
+
+		expect( select.filterBy ).toEqual( {
+			operators: [ 'isAny', 'isNone' ],
+		} );
+		expect( multiselect.filterBy ).toEqual( {
+			operators: [ 'isAny', 'isNone' ],
+		} );
+	} );
+
+	it( 'defaults missing server query capabilities to unsupported', () => {
+		const mapped = mapField( baseField( { type: 'text' } ) );
+
+		expect( mapped.sortable ).toBe( false );
+		expect( mapped.filterable ).toBe( false );
+		expect( mapped.operators ).toEqual( [] );
+	} );
+
+	it( 'reads filter control data from top-level field ids', () => {
+		const mapped = mapField( baseField( { type: 'text' } ) );
+
+		expect( mapped.getValue( { item: { 'field-5': 'alpha' } } ) ).toBe(
+			'alpha'
 		);
+		expect(
+			mapped.getValue( { item: { meta: { 'field-5': 'beta' } } } )
+		).toBe( 'beta' );
+	} );
+
+	it( 'sorts number field values numerically with empty values last', () => {
+		const mapped = mapField( baseField( { type: 'number' } ) );
+
+		expect(
+			mapped.sort(
+				{ meta: { 'field-5': '2' } },
+				{ meta: { 'field-5': '10' } },
+				'asc'
+			)
+		).toBeLessThan( 0 );
+		expect(
+			mapped.sort(
+				{ meta: { 'field-5': '2' } },
+				{ meta: { 'field-5': '10' } },
+				'desc'
+			)
+		).toBeGreaterThan( 0 );
+		expect(
+			mapped.sort(
+				{ meta: { 'field-5': '' } },
+				{ meta: { 'field-5': '10' } },
+				'asc'
+			)
+		).toBeGreaterThan( 0 );
+	} );
+
+	it( "maps checkbox to DataViews 'boolean' values", () => {
+		const mapped = mapField( baseField( { type: 'checkbox' } ) );
+
+		expect( mapped.type ).toBe( 'boolean' );
+		expect(
+			mapped.getValue( { item: { meta: { 'field-5': '1' } } } )
+		).toBe( true );
+		expect( mapped.getValue( { item: { meta: { 'field-5': '' } } } ) ).toBe(
+			false
+		);
+		expect(
+			mapped.getValue( { item: { meta: { 'field-5': false } } } )
+		).toBe( false );
 	} );
 
 	it( "maps multiselect to DataViews 'array' (not text + isMultiple)", () => {
@@ -256,10 +447,8 @@ describe( 'mapField', () => {
 		expect( mapField( baseField( { type: 'url' } ) ).type ).toBe( 'text' );
 	} );
 
-	it( 'maps date and datetime to DataViews datetime', () => {
-		expect( mapField( baseField( { type: 'date' } ) ).type ).toBe(
-			'datetime'
-		);
+	it( 'maps date and datetime to matching DataViews date types', () => {
+		expect( mapField( baseField( { type: 'date' } ) ).type ).toBe( 'date' );
 		expect( mapField( baseField( { type: 'datetime' } ) ).type ).toBe(
 			'datetime'
 		);
@@ -314,6 +503,17 @@ describe( 'systemFields', () => {
 		expect( byId( 'modified_at' ).enableSorting ).toBe( true );
 		expect( byId( 'created_by' ).enableSorting ).toBe( false );
 		expect( byId( 'modified_by' ).enableSorting ).toBe( false );
+	} );
+
+	it( 'marks only timestamp system fields as server-sortable', () => {
+		expect( byId( 'created_at' ).sortable ).toBe( true );
+		expect( byId( 'modified_at' ).sortable ).toBe( true );
+		expect( byId( 'created_by' ).sortable ).toBe( false );
+		expect( byId( 'modified_by' ).sortable ).toBe( false );
+		fields.forEach( ( f ) => {
+			expect( f.filterable ).toBe( false );
+			expect( f.operators ).toEqual( [] );
+		} );
 	} );
 
 	it( 'maps timestamps to DataViews datetime and names to text', () => {

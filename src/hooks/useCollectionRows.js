@@ -7,34 +7,24 @@ import apiFetch from '@wordpress/api-fetch';
 
 const CLIENT_PER_PAGE = 100;
 const CLIENT_PAGE_FETCH_CONCURRENCY = 4;
-const SERVER_OPERATORS = new Set( [ 'is', 'isNot', 'isAny', 'isNone' ] );
-const SERVER_SORT_FIELDS = new Set( [ 'title', 'created_at', 'modified_at' ] );
-const SERVER_FILTER_FIELD_TYPES = new Set( [
-	'text',
-	'number',
-	'email',
-	'url',
-	'select',
-	'multiselect',
-	'date',
-	'datetime',
-	'checkbox',
-] );
 
-function fieldTypeMap( fields = [] ) {
-	return new Map( fields.map( ( f ) => [ f.id, f.cortextType ] ) );
+function serverFieldInfo( field ) {
+	return {
+		filterable: field.filterable === true,
+		sortable: field.sortable === true,
+		type: field.cortextFieldType ?? field.cortextType ?? field.type,
+		operators: Array.isArray( field.operators )
+			? field.operators
+			: undefined,
+	};
 }
 
-function hasSearch( view ) {
-	return Boolean( String( view?.search ?? '' ).trim() );
+function fieldInfoMap( fields = [] ) {
+	return new Map( fields.map( ( f ) => [ f.id, serverFieldInfo( f ) ] ) );
 }
 
 function hasCalculations( view ) {
 	return Object.values( view?.calculations ?? {} ).some( Boolean );
-}
-
-function isCollectionFieldKey( field ) {
-	return /^field-\d+$/.test( field );
 }
 
 function pageNumber( value, fallback = 1 ) {
@@ -52,53 +42,213 @@ function perPageNumber( value, fallback = 25 ) {
 	return Math.min( 100, Math.floor( number ) );
 }
 
-function isServerSupportedSort( sort ) {
+function isServerSupportedSort( sort, fieldInfo ) {
 	if ( ! sort?.field ) {
 		return true;
 	}
-	return SERVER_SORT_FIELDS.has( sort.field );
+	const info = fieldInfo.get( sort.field );
+	return info?.sortable === true;
 }
 
-function isServerSupportedFilter( filter, fieldTypes ) {
-	if (
-		! filter ||
-		typeof filter !== 'object' ||
-		! filter.field ||
-		! filter.operator ||
-		! SERVER_OPERATORS.has( filter.operator )
-	) {
-		return false;
-	}
-	if (
-		( filter.operator === 'isAny' || filter.operator === 'isNone' ) &&
-		( ! Array.isArray( filter.value ) || filter.value.length === 0 )
-	) {
-		return false;
-	}
-	if (
-		( filter.operator === 'is' || filter.operator === 'isNot' ) &&
-		( filter.value === undefined || Array.isArray( filter.value ) )
-	) {
-		return false;
-	}
-	return (
-		isCollectionFieldKey( filter.field ) &&
-		SERVER_FILTER_FIELD_TYPES.has( fieldTypes.get( filter.field ) )
-	);
+function filterInfo( filter, fieldInfo ) {
+	return filter?.field ? fieldInfo.get( filter.field ) : undefined;
 }
 
-function addFiltersToArgs( args, filters ) {
-	filters.forEach( ( filter, i ) => {
-		args[ `filters[${ i }][field]` ] = filter.field;
-		args[ `filters[${ i }][operator]` ] = filter.operator;
-		if ( Array.isArray( filter.value ) ) {
-			filter.value.forEach( ( v, j ) => {
-				args[ `filters[${ i }][value][${ j }]` ] = v;
-			} );
-		} else {
-			args[ `filters[${ i }][value]` ] = filter.value;
+function hasUsableFilterValue( filter ) {
+	const operator = filter?.operator;
+	if (
+		operator === 'isEmpty' ||
+		operator === 'isNotEmpty' ||
+		operator === 'isChecked' ||
+		operator === 'isUnchecked'
+	) {
+		return true;
+	}
+	if ( operator === 'between' ) {
+		return Array.isArray( filter.value ) && filter.value.length === 2;
+	}
+	if ( operator === 'isAny' || operator === 'isNone' ) {
+		return Array.isArray( filter.value ) && filter.value.length > 0;
+	}
+	return filter?.value !== undefined && ! Array.isArray( filter.value );
+}
+
+function booleanFilterValue( value ) {
+	if ( value === true || value === 1 ) {
+		return true;
+	}
+	if ( value === false || value === 0 || value === '' ) {
+		return false;
+	}
+	if ( typeof value !== 'string' ) {
+		return undefined;
+	}
+
+	const normalized = value.trim().toLowerCase();
+	if ( [ '1', 'true', 'yes', 'on' ].includes( normalized ) ) {
+		return true;
+	}
+	if ( [ '0', 'false', 'no', 'off' ].includes( normalized ) ) {
+		return false;
+	}
+	return undefined;
+}
+
+function normalizeFilterForServer( filter, fieldInfo ) {
+	const info = filterInfo( filter, fieldInfo );
+	if (
+		( info?.type === 'select' || info?.type === 'multiselect' ) &&
+		( filter?.operator === 'isAny' || filter?.operator === 'isNone' ) &&
+		filter.value !== undefined &&
+		! Array.isArray( filter.value )
+	) {
+		return { ...filter, value: [ filter.value ] };
+	}
+
+	if (
+		info?.type === 'select' &&
+		( filter?.operator === 'is' || filter?.operator === 'isNot' ) &&
+		Array.isArray( filter.value ) &&
+		filter.value.length === 1
+	) {
+		return { ...filter, value: filter.value[ 0 ] };
+	}
+
+	if (
+		info?.type !== 'checkbox' ||
+		( filter?.operator !== 'is' && filter?.operator !== 'isNot' )
+	) {
+		return filter;
+	}
+
+	const value = booleanFilterValue( filter.value );
+	if ( value === undefined ) {
+		return filter;
+	}
+
+	const checked = filter.operator === 'is' ? value : ! value;
+	const { value: _value, ...normalized } = filter;
+	return {
+		...normalized,
+		operator: checked ? 'isChecked' : 'isUnchecked',
+	};
+}
+
+function leafFilterResult( filter, fieldInfo ) {
+	const info = filterInfo( filter, fieldInfo );
+	if (
+		! info?.filterable ||
+		! filter?.operator ||
+		! Array.isArray( info.operators ) ||
+		! info.operators.includes( filter.operator )
+	) {
+		return { node: null, hasUnsupported: true, alwaysTrue: false };
+	}
+
+	if ( ! hasUsableFilterValue( filter ) ) {
+		return { node: null, hasUnsupported: false, alwaysTrue: true };
+	}
+
+	return { node: filter, hasUnsupported: false, alwaysTrue: false };
+}
+
+function serverFilterNode( filter, fieldInfo ) {
+	if ( ! filter || typeof filter !== 'object' ) {
+		return { node: null, hasUnsupported: true, alwaysTrue: false };
+	}
+
+	const isGroup = Boolean( filter.relation || filter.filters );
+	if ( ! isGroup ) {
+		const normalized = normalizeFilterForServer( filter, fieldInfo );
+		return leafFilterResult( normalized, fieldInfo );
+	}
+
+	const relation = String( filter.relation ?? 'AND' ).toUpperCase();
+	if ( relation !== 'AND' && relation !== 'OR' ) {
+		return { node: null, hasUnsupported: true, alwaysTrue: false };
+	}
+	if ( ! Array.isArray( filter.filters ) || filter.filters.length === 0 ) {
+		return { node: null, hasUnsupported: true, alwaysTrue: false };
+	}
+
+	const children = [];
+	let hasUnsupported = false;
+	let hasAlwaysTrue = false;
+	for ( const child of filter.filters ) {
+		const result = serverFilterNode( child, fieldInfo );
+		if ( result.node ) {
+			children.push( result.node );
 		}
-	} );
+		if ( result.hasUnsupported ) {
+			hasUnsupported = true;
+		}
+		if ( result.alwaysTrue ) {
+			hasAlwaysTrue = true;
+		}
+	}
+
+	// DataViews' final client pass only understands flat leaf filters.
+	// Forward grouped filters only when the whole tree can run server-side.
+	if ( hasUnsupported ) {
+		return { node: null, hasUnsupported: true, alwaysTrue: false };
+	}
+	if ( relation === 'OR' && hasAlwaysTrue ) {
+		return { node: null, hasUnsupported: false, alwaysTrue: true };
+	}
+	if ( children.length === 0 ) {
+		return { node: null, hasUnsupported: false, alwaysTrue: true };
+	}
+	return {
+		node: { relation, filters: children },
+		hasUnsupported: false,
+		alwaysTrue: false,
+	};
+}
+
+function serverFilterResult( filters, fieldInfo ) {
+	if ( ! Array.isArray( filters ) ) {
+		return { filters: [], hasUnsupported: false };
+	}
+
+	const supported = [];
+	let hasUnsupported = false;
+	for ( const filter of filters ) {
+		const result = serverFilterNode( filter, fieldInfo );
+		if ( result.node ) {
+			supported.push( result.node );
+		}
+		if ( result.hasUnsupported ) {
+			hasUnsupported = true;
+		}
+	}
+	return { filters: supported, hasUnsupported };
+}
+
+function addValueArgs( args, prefix, value ) {
+	if ( value === undefined ) {
+		return;
+	}
+	if ( Array.isArray( value ) ) {
+		value.forEach( ( item, i ) => {
+			args[ `${ prefix }[value][${ i }]` ] = item;
+		} );
+		return;
+	}
+	args[ `${ prefix }[value]` ] = value;
+}
+
+function addFilterArgs( args, prefix, filter ) {
+	if ( filter.relation && Array.isArray( filter.filters ) ) {
+		args[ `${ prefix }[relation]` ] = filter.relation;
+		filter.filters.forEach( ( child, i ) => {
+			addFilterArgs( args, `${ prefix }[filters][${ i }]`, child );
+		} );
+		return;
+	}
+
+	args[ `${ prefix }[field]` ] = filter.field;
+	args[ `${ prefix }[operator]` ] = filter.operator;
+	addValueArgs( args, prefix, filter.value );
 }
 
 function buildClientQueryArgs( collectionId ) {
@@ -109,35 +259,55 @@ function buildClientQueryArgs( collectionId ) {
 	};
 }
 
-function buildServerQueryArgs( collectionId, view ) {
+export function buildQueryArgs( collectionId, view, fields = [] ) {
+	const fieldInfo = fieldInfoMap( fields );
+	const serverView = isServerSupportedSort( view?.sort, fieldInfo )
+		? view
+		: { ...( view ?? {} ), sort: null };
+	return buildServerQueryArgs(
+		collectionId,
+		serverView,
+		serverFilterResult( view?.filters, fieldInfo ).filters
+	);
+}
+
+function buildServerQueryArgs( collectionId, view, filters = [] ) {
 	const args = {
 		collection: collectionId,
 		page: pageNumber( view?.page ),
 		per_page: perPageNumber( view?.perPage ),
 	};
 
+	if ( view?.search ) {
+		args.search = view.search;
+	}
+
 	if ( view?.sort?.field ) {
 		args[ 'sort[field]' ] = view.sort.field;
 		args[ 'sort[direction]' ] =
-			view.sort.direction === 'asc' ? 'asc' : 'desc';
+			view.sort.direction === 'desc' ? 'desc' : 'asc';
 	}
 
-	addFiltersToArgs( args, view?.filters ?? [] );
+	filters.forEach( ( filter, i ) => {
+		addFilterArgs( args, `filters[${ i }]`, filter );
+	} );
 
 	return args;
 }
 
-function buildQueryPlan( collectionId, view, fields = [], options = {} ) {
-	const fieldTypes = fieldTypeMap( fields );
-	const filters = Array.isArray( view?.filters ) ? view.filters : [];
+export function buildQueryPlan(
+	collectionId,
+	view,
+	fields = [],
+	options = {}
+) {
+	const fieldInfo = fieldInfoMap( fields );
+	const filterResult = serverFilterResult( view?.filters, fieldInfo );
 	const canUseServer =
 		! options.forceClient &&
-		! hasSearch( view ) &&
 		! hasCalculations( view ) &&
-		isServerSupportedSort( view?.sort ) &&
-		filters.every( ( filter ) =>
-			isServerSupportedFilter( filter, fieldTypes )
-		);
+		isServerSupportedSort( view?.sort, fieldInfo ) &&
+		! filterResult.hasUnsupported;
 
 	if ( ! canUseServer ) {
 		return {
@@ -148,7 +318,7 @@ function buildQueryPlan( collectionId, view, fields = [], options = {} ) {
 
 	return {
 		mode: 'server',
-		args: buildServerQueryArgs( collectionId, view ),
+		args: buildServerQueryArgs( collectionId, view, filterResult.filters ),
 	};
 }
 
@@ -158,6 +328,12 @@ function schemaSignature( fields = [] ) {
 			( field ) =>
 				`${ field.id }:${ field.recordId ?? '' }:${
 					field.cortextType ?? ''
+				}:${ field.sortable === true ? '1' : '0' }:${
+					field.filterable === true ? '1' : '0'
+				}:${
+					Array.isArray( field.operators )
+						? field.operators.join( ',' )
+						: '?'
 				}`
 		)
 		.join( '|' );

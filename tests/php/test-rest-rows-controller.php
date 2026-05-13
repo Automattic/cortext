@@ -365,36 +365,7 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertSame( 'ASC', $args['order'] );
 	}
 
-	public function test_build_query_args_with_search(): void {
-		$fixture = $this->create_collection_fixture( 'bqas' );
-
-		$request = new WP_REST_Request( 'GET', '/cortext/v1/rows' );
-		$request->set_query_params(
-			array(
-				'collection' => $fixture['collection_id'],
-				'search'     => 'hello',
-			)
-		);
-		$request->set_default_params(
-			array(
-				'per_page' => 25,
-				'page'     => 1,
-				'search'   => '',
-				'sort'     => null,
-				'filters'  => array(),
-			)
-		);
-
-		$controller = new RowsController();
-		$method     = new \ReflectionMethod( $controller, 'build_query_args' );
-		$method->setAccessible( true );
-
-		$args = $method->invoke( $controller, $request, 'bqas' );
-
-		$this->assertSame( 'hello', $args['s'] );
-	}
-
-	public function test_build_query_args_with_title_sort(): void {
+public function test_build_query_args_with_title_sort(): void {
 		$fixture = $this->create_collection_fixture( 'bqat' );
 
 		$request = new WP_REST_Request( 'GET', '/cortext/v1/rows' );
@@ -456,12 +427,12 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 
 		$args = $method->invoke( $controller, $request, 'bqan' );
 
-		$this->assertSame( "field-{$fixture['field_id']}", $args['meta_key'] );
-		$this->assertSame( 'meta_value_num', $args['orderby'] );
+		$this->assertArrayNotHasKey( 'meta_key', $args );
+		$this->assertSame( 'none', $args['orderby'] );
 		$this->assertSame( 'ASC', $args['order'] );
 	}
 
-	public function test_build_query_args_with_filters(): void {
+	public function test_build_query_args_ignores_raw_filters(): void {
 		$fixture = $this->create_collection_fixture( 'bqaf', 'text' );
 
 		$request = new WP_REST_Request( 'GET', '/cortext/v1/rows' );
@@ -498,28 +469,26 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 
 		$args = $method->invoke( $controller, $request, 'bqaf' );
 
-		$this->assertArrayHasKey( 'meta_query', $args );
-		$this->assertCount( 2, $args['meta_query'] );
-
-		$this->assertSame( "field-{$fixture['field_id']}", $args['meta_query'][0]['key'] );
-		$this->assertSame( '=', $args['meta_query'][0]['compare'] );
-		$this->assertSame( 'red', $args['meta_query'][0]['value'] );
-
-		$this->assertSame( 'IN', $args['meta_query'][1]['compare'] );
-		$this->assertSame( array( 'blue', 'green' ), $args['meta_query'][1]['value'] );
+		$this->assertArrayNotHasKey( 'meta_query', $args );
 	}
 
-	public function test_build_query_args_skips_rollup_sort_and_filter_meta_query(): void {
+	public function test_query_rows_rejects_rollup_sort_and_filter(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+
 		$fixture = $this->create_collection_fixture( 'bqaroll', 'rollup' );
 
-		$request = new WP_REST_Request( 'GET', '/cortext/v1/rows' );
-		$request->set_query_params(
+		$sort_response = $this->query_rows(
 			array(
 				'collection' => $fixture['collection_id'],
 				'sort'       => array(
 					'field'     => "field-{$fixture['field_id']}",
 					'direction' => 'desc',
 				),
+			)
+		);
+		$filter_response = $this->query_rows(
+			array(
+				'collection' => $fixture['collection_id'],
 				'filters'    => array(
 					array(
 						'field'    => "field-{$fixture['field_id']}",
@@ -529,26 +498,9 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 				),
 			)
 		);
-		$request->set_default_params(
-			array(
-				'per_page' => 25,
-				'page'     => 1,
-				'search'   => '',
-				'sort'     => null,
-				'filters'  => array(),
-			)
-		);
 
-		$controller = new RowsController();
-		$method     = new \ReflectionMethod( $controller, 'build_query_args' );
-		$method->setAccessible( true );
-
-		$args = $method->invoke( $controller, $request, 'bqaroll' );
-
-		$this->assertSame( 'date', $args['orderby'] );
-		$this->assertSame( 'ASC', $args['order'] );
-		$this->assertArrayNotHasKey( 'meta_key', $args );
-		$this->assertArrayNotHasKey( 'meta_query', $args );
+		$this->assertSame( 400, $sort_response->get_status() );
+		$this->assertSame( 400, $filter_response->get_status() );
 	}
 
 	// -- Relation and rollup tests --------------------------------------

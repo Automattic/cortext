@@ -9,6 +9,8 @@ declare( strict_types=1 );
 
 namespace Cortext\PostType;
 
+use Cortext\Fields\FieldTypeRegistry;
+
 final class Field {
 
 	public const POST_TYPE = 'crtxt_field';
@@ -49,6 +51,52 @@ final class Field {
 		);
 
 		$this->register_meta();
+		$this->register_rest_fields();
+	}
+
+	public function register_rest_fields(): void {
+		register_rest_field(
+			self::POST_TYPE,
+			'cortext_capabilities',
+			array(
+				'get_callback' => array( $this, 'get_rest_capabilities' ),
+				'schema'       => array(
+					'type'       => 'object',
+					'context'    => array( 'view', 'edit' ),
+					'readonly'   => true,
+					'properties' => array(
+						'sortable'   => array(
+							'type'     => 'boolean',
+							'readonly' => true,
+						),
+						'filterable' => array(
+							'type'     => 'boolean',
+							'readonly' => true,
+						),
+						'operators'  => array(
+							'type'     => 'array',
+							'readonly' => true,
+							'items'    => array(
+								'type' => 'string',
+							),
+						),
+					),
+				),
+			)
+		);
+	}
+
+	/**
+	 * Returns query capabilities for one field REST record.
+	 *
+	 * @param array<string,mixed> $field_record REST post response data.
+	 * @return array{sortable:bool,filterable:bool,operators:string[]}
+	 */
+	public function get_rest_capabilities( array $field_record ): array {
+		$field_id = isset( $field_record['id'] ) ? (int) $field_record['id'] : 0;
+		$type     = $field_id > 0 ? (string) get_post_meta( $field_id, 'type', true ) : '';
+
+		return FieldTypeRegistry::capabilities_for( $type );
 	}
 
 	private function register_meta(): void {

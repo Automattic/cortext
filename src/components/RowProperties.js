@@ -37,9 +37,12 @@ import { TITLE_FIELD_ID } from './dataViewColumns';
 import EditOptionsPopover from './fields/EditOptionsPopover';
 import { toRecordId } from '../hooks/fieldIds';
 import {
+	isRowDetailFieldEditable,
 	isValidNumberDraft,
 	parseNumberPropertyValue,
+	rowDetailFieldType as fieldType,
 	splitPropertyPatch,
+	valueForField,
 } from './rowDetailUtils';
 
 function emptyLabel() {
@@ -219,41 +222,6 @@ function DatePropertyControl( { field, value, type, onChange } ) {
 			) }
 		/>
 	);
-}
-
-function fieldType( field ) {
-	if ( field.id === TITLE_FIELD_ID ) {
-		return 'text';
-	}
-	return field.cortextFieldType ?? field.type ?? 'text';
-}
-
-function isRowDetailFieldEditable( field ) {
-	if ( fieldType( field ) === 'relation' ) {
-		return false;
-	}
-
-	return (
-		field.id === TITLE_FIELD_ID ||
-		( field.editable && field.id?.startsWith?.( 'field-' ) )
-	);
-}
-
-function valueForField( field, data ) {
-	if ( field.id === TITLE_FIELD_ID ) {
-		return data.title ?? '';
-	}
-	if ( field.id?.startsWith?.( 'field-' ) ) {
-		// Relation and rollup values arrive on a separate, read-only
-		// response key so the editor's save path doesn't try to round-
-		// trip hydrated objects back into string-typed meta.
-		const type = fieldType( field );
-		if ( type === 'relation' || type === 'rollup' ) {
-			return data.hydratedMeta?.[ field.id ] ?? null;
-		}
-		return data.meta?.[ field.id ] ?? null;
-	}
-	return field.getValue?.( { item: data.row } ) ?? null;
 }
 
 function EditablePropertyText( { label, inputMode, value, onChange } ) {
@@ -473,26 +441,28 @@ export default function RowProperties( { fields, row, visible = true } ) {
 		( select ) => ( {
 			title: select( editorStore ).getEditedPostAttribute( 'title' ),
 			meta: select( editorStore ).getEditedPostAttribute( 'meta' ) ?? {},
-			hydratedMeta:
-				select( editorStore ).getEditedPostAttribute(
-					'cortext_hydrated_meta'
-				) ?? {},
+			hydratedMeta: select( editorStore ).getEditedPostAttribute(
+				'cortext_hydrated_meta'
+			),
 		} ),
 		[]
 	);
 
-	const data = useMemo(
-		() => ( {
+	const data = useMemo( () => {
+		const storeHydratedMeta =
+			hydratedMeta && Object.keys( hydratedMeta ).length > 0
+				? hydratedMeta
+				: null;
+		return {
 			row,
 			title:
 				typeof title === 'string'
 					? title
 					: row?.title?.raw ?? row?.title?.rendered ?? '',
 			meta: meta ?? {},
-			hydratedMeta: hydratedMeta ?? {},
-		} ),
-		[ hydratedMeta, meta, row, title ]
-	);
+			hydratedMeta: storeHydratedMeta ?? row?.cortext_hydrated_meta ?? {},
+		};
+	}, [ hydratedMeta, meta, row, title ] );
 
 	const update = useCallback(
 		( patch ) => {

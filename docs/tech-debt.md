@@ -35,29 +35,29 @@ Worth a small spike before committing; `core-data`'s schema cache for rarely-cha
 
 ## 3. Sorting support is split between REST and client mode `[internal]`
 
-Updated by [#80](https://github.com/priethor/cortext/pull/80).
+Updated by [#80](https://github.com/priethor/cortext/pull/80) and RSM-1459.
 
-**What.** #80 fixed the old bad state where the sort UI changed but REST ignored it. REST now handles `title`, `created_at`, `modified_at`, and scalar `field-{id}` columns that can sort by `meta_value` or `meta_value_num`. With no explicit sort, REST still uses oldest-first ordering so new rows land at the bottom of the table.
+**What.** #80 fixed the old bad state where the sort UI changed but REST ignored it. RSM-1459 moved the supported scalar collection sorts into `/cortext/v1/rows`: title, timestamps, text-like fields, number, date/datetime, select, checkbox, email, and URL. With no explicit sort, REST still uses oldest-first ordering so new rows land at the bottom of the table.
 
-The debt is the split brain. The client has an allow-list for server-safe sorts, and `RowsController::build_query_args` has the PHP version of the same story. Unsupported sorts fall back to client mode: fetch all pages, then let DataViews sort locally. That keeps the result honest, but it is not where we want sorting to live long-term.
+The debt is the split brain. The client has an allow-list for server-safe sorts, and `FieldTypeRegistry` / `RowsFilterQuery` own the PHP version of the same story. Unsupported display-value sorts fall back to client mode: fetch all pages, then let DataViews sort locally. That keeps the result honest, but it is not where we want sorting to live long-term.
 
 The hard cases are still display-value sorts: users, relations, list-style rollups, files, and any field where the value users see is not the value stored in meta. That broader choice is tracked in #14.
 
-**Where.** The query planner and sort allow-lists in `src/hooks/useCollectionRows.js`, the `onCreated` no-sort branch in `src/components/CollectionDataViews.js`, and `validate_sort_field` / `build_query_args` in `includes/Rest/RowsController.php`.
+**Where.** The query planner and sort allow-lists in `src/hooks/useCollectionRows.js`, the `onCreated` no-sort branch in `src/components/CollectionDataViews.js`, `FieldTypeRegistry`, and `RowsFilterQuery::validate_sort()`.
 
 **Solution.** Make REST the source of truth for sortable fields and expose that capability to the client instead of mirroring it by hand. Resolve #14 for display-value sorts, then remove the client fallback for sorting except where DataViews really needs a local-only view state.
 
-## 4. Filtering support is split between REST and client mode `[internal]`
+## 4. Filtering support is split between REST and client mode `[upstream, internal]`
 
-Updated by [#80](https://github.com/priethor/cortext/pull/80).
+Updated by [#80](https://github.com/priethor/cortext/pull/80) and RSM-1459.
 
-**What.** #80 also made simple field filters real on the server. Equality and membership filters for stored `field-{id}` values now become a REST `meta_query`. When the server cannot handle a filter, the hook falls back to client mode, fetches all pages, and lets DataViews filter locally. That is much better than showing a filter UI that does nothing.
+**What.** #80 made simple field filters real on the server. RSM-1459 expanded that to the supported Notion-style operators, title filters, split-term search, and nested `AND` / `OR` groups through `RowsFilterQuery` and `RowsMetaQuery`. When the server cannot handle a filter, the hook falls back to client mode, fetches all pages, applies grouped filters in a small Cortext wrapper, and lets DataViews handle the remaining flat search/sort/pagination work.
 
-The cost is another split support matrix. The client checks field type, operator, and value shape before choosing server mode. `RowsController` validates field ownership and builds the actual `meta_query`. System fields are still deferred (#13), title filtering still is not a REST feature, and operators like `contains` stay client-only until PHP translates them.
+The cost is another split support matrix. The client checks field type, operator, grouping, and value shape before choosing server mode. PHP validates the same contract from the collection schema. `FieldTypeRegistry` is Cortext's local stand-in for an upstream field-query capability contract: sortable, filterable, text-like, storage type, and supported operators. WordPress post meta and DataViews each know part of that story, but neither exposes the whole contract for custom field types today. System fields are still deferred (#13), display-value fields are still client-only, and grouped filters only go server-side when every descendant is supported.
 
-**Where.** `isServerSupportedFilter` and `addFiltersToArgs` in `src/hooks/useCollectionRows.js`, `validate_filter_fields` / `build_query_args` in `includes/Rest/RowsController.php`, and `prefillFromFilters` in `src/components/CollectionDataViews.js`.
+**Where.** `FieldTypeRegistry`, `serverFilterNode` / `buildQueryPlan` in `src/hooks/useCollectionRows.js`, `filterSortAndPaginateWithGroups` in `src/components/groupedFilters.js`, `RowsFilterQuery`, `RowsMetaQuery`, and `prefillFromFilters` in `src/components/CollectionDataViews.js`.
 
-**Solution.** Move the remaining filter operators and field families into REST, then make the client consume a server-owned capability map instead of maintaining its own allow-list. `contains` can map to `LIKE` for simple meta values; system fields need the date/user handling from #13.
+**Solution.** Make the server-owned capability map the only local source of truth, then shrink it if DataViews or WordPress grows a first-class query-capability contract for custom fields. System fields need the date/user handling from #13, and display-value fields need dedicated query semantics instead of pretending stored meta is the UI value.
 
 ## 5. Inline-edit layout couplings `[internal]`
 
@@ -103,13 +103,13 @@ The cost is another split support matrix. The client checks field type, operator
 
 **Solution.** Either switch the PHP test harness to `wp-env` + `WP_UnitTestCase` (which runs against a real database) or rely on e2e coverage in `tests/e2e/specs/data-view-block.spec.js` to close the gap. The e2e suite already exercises row loading, but dedicated integration tests for sort, filter, and pagination against real data would be more targeted.
 
-## 10. DataViews `FieldType` union has no `number` or `url` `[upstream]`
+## 10. DataViews `FieldType` union has no decimal `number` or `url` `[upstream]`
 
-**What.** DataViews v6's `FieldType` union is `'text' | 'integer' | 'datetime' | 'date' | 'media' | 'boolean' | 'email' | 'array'`. Cortext has `number` (decimals allowed) and `url`, neither of which has an exact match. We map both to `'text'`: `'integer'` rejects non-integers at validation time, and there's nothing closer for url. The cost lands on the column-level sort comparator: text sort is lexicographic, so `"10"` would sort before `"9"` for a number column. Today this is invisible because `view.sort` isn't forwarded to REST (#3), but the day sort lands, decimal columns will sort wrong unless we add a custom `sort` per field or DataViews ships the missing types.
+**What.** DataViews v6's `FieldType` union is `'text' | 'integer' | 'datetime' | 'date' | 'media' | 'boolean' | 'email' | 'array'`. Cortext has `number` (decimals allowed) and `url`, neither of which has an exact match. We map numbers to `'integer'` so the filter UI can offer numeric operators, then disable DataViews' integer-only validator, attach a decimal-aware sort comparator, and provide a decimal-safe number filter control because the built-in integer `between` control applies whole-number min/max bounds. URLs still map to `'text'`, which is close enough for contains/starts-with filters but not an exact semantic type.
 
 **Where.** `mapField` in `src/hooks/fieldMapping.js`.
 
-**Solution.** Either DataViews adds `'number'` and `'url'` to the `FieldType` union, or we attach a custom numeric `sort` to number fields when sort lands. Filing a Gutenberg issue is the cheaper play.
+**Solution.** DataViews adds a decimal-friendly `'number'` type and a `'url'` type, or exposes a cleaner way for consumers to supply custom field controls/operator sets without borrowing the nearest built-in type. Filing a Gutenberg issue is the cheaper play.
 
 ## 11. DataViews `Option` type has no `color` `[upstream]`
 
@@ -394,3 +394,19 @@ The user-facing placeholder is still Core's generic "Search commands and setting
 **Where.** `src/router/EntityRoute.js`, `src/hooks/useAutosave.js`, `src/components/Sidebar.js`, `src/components/CollectionDataViews.js`, and `src/components/relations/RelationEditor.js`.
 
 **Solution.** If more activity surfaces appear, move this behind a small workspace activity helper or event. Route visits can stay in the router, but writes should eventually report through the same mutation path instead of each component remembering to call `touchRecent`. If rows move into `core-data` (#2), that would be a natural time to centralize row touches too.
+
+## 45. Select server sort uses stored values, not option order `[internal]`
+
+**What.** Server-side row sorting treats select fields as scalar stored values. That keeps `GET /cortext/v1/rows` sortable without joining or decoding option metadata, but it differs from Notion-style curated option ordering.
+
+**Where.** `RowsFilterQuery::apply_sort_clauses()` in `includes/Rest/RowsFilterQuery.php`.
+
+**Solution.** If users expect select order to follow the field's configured options, compile select sorts into an option-order `CASE` expression generated from the field schema. Until then, document stored-value sorting as the v1 behavior.
+
+## 46. Row filters extend `WP_Meta_Query` with custom compares `[upstream, soft]`
+
+**What.** `RowsMetaQuery` keeps row filters on WordPress's native meta-query tree instead of building a parallel SQL compiler, but core's compares do not cover every database-style operator Cortext needs. `LIKE` always wraps both sides, so starts-with and ends-with need one-sided patterns. Multi-value fields need "no meta row has this value" for `isNone` / `notContains`, which is not the same as a plain `!=` join. Title filters also live on `wp_posts.post_title`, outside post meta, so they ride through a sentinel clause.
+
+**Where.** `RowsMetaQuery` in `includes/Rest/RowsMetaQuery.php`, called from `RowsFilterQuery::meta_query_sql()`.
+
+**Solution.** Upstream `WP_Meta_Query` could grow one-sided `LIKE` compares and value-bearing negative `NOT EXISTS` compares. A structured title-query helper in `WP_Query` would cover the title sentinel separately. If those land, `RowsMetaQuery` shrinks back toward a thin adapter or disappears.

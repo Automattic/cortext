@@ -5,6 +5,7 @@ import {
 	normalizeRowDetailMode,
 	parseNumberPropertyValue,
 	splitPropertyPatch,
+	valueForField,
 	withRowDetailMode,
 } from '../../../src/components/rowDetailUtils';
 
@@ -84,6 +85,63 @@ describe( 'splitPropertyPatch', () => {
 			title: 'Only title',
 			meta: null,
 		} );
+	} );
+} );
+
+describe( 'valueForField', () => {
+	it( 'uses hydrated relation values for readonly relation properties', () => {
+		const relation = [
+			{
+				id: 123,
+				title: { raw: 'Target row', rendered: 'Target row' },
+			},
+		];
+
+		expect(
+			valueForField(
+				{
+					id: 'field-7',
+					cortextFieldType: 'relation',
+					editable: true,
+				},
+				{
+					meta: { 'field-7': [ '123' ] },
+					hydratedMeta: { 'field-7': relation },
+				}
+			)
+		).toBe( relation );
+	} );
+
+	it( 'uses hydrated rollup values for readonly rollup properties', () => {
+		expect(
+			valueForField(
+				{
+					id: 'field-8',
+					cortextFieldType: 'rollup',
+					editable: false,
+				},
+				{
+					meta: { 'field-8': '' },
+					hydratedMeta: { 'field-8': 42 },
+				}
+			)
+		).toBe( 42 );
+	} );
+
+	it( 'keeps editable fields on raw meta so saves do not round-trip hydrated data', () => {
+		expect(
+			valueForField(
+				{
+					id: 'field-9',
+					cortextFieldType: 'text',
+					editable: true,
+				},
+				{
+					meta: { 'field-9': 'raw value' },
+					hydratedMeta: { 'field-9': 'display value' },
+				}
+			)
+		).toBe( 'raw value' );
 	} );
 } );
 
