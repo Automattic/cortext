@@ -34,6 +34,7 @@ import {
 } from './rowDetailUtils';
 import { useCollectionFieldsContext } from './CollectionFieldsContext';
 import useCollectionRows from '../hooks/useCollectionRows';
+import { useRecents } from '../hooks/useRecents';
 import { elementsFromOptions } from '../hooks/optionElements';
 import { computeDocumentUri } from '../router/useResolveEntity';
 
@@ -282,6 +283,7 @@ export default function CollectionDataViews( {
 	const navigate = useNavigate();
 	const { fields, collection, slug, isResolving, fieldsResolved } =
 		useCollectionFieldsContext();
+	const { touchRecent } = useRecents();
 
 	const availableFields = useMemo(
 		() => [ TITLE_FIELD, ...fields ],
@@ -440,10 +442,15 @@ export default function CollectionDataViews( {
 					value,
 				},
 			} );
+			touchRecent( {
+				kind: 'row',
+				id: updated?.id ?? rowId,
+				collectionId,
+			} );
 			refresh();
 			return updated;
 		},
-		[ collectionId, refresh ]
+		[ collectionId, refresh, touchRecent ]
 	);
 
 	const mutationContext = useMemo(
@@ -496,10 +503,22 @@ export default function CollectionDataViews( {
 				refresh();
 			}
 			if ( created?.id ) {
+				touchRecent( {
+					kind: 'row',
+					id: created.id,
+					collectionId,
+				} );
 				setEditRequest( { rowId: created.id, fieldId: 'title' } );
 			}
 		},
-		[ refresh, view, activePaginationInfo, onChangeView ]
+		[
+			refresh,
+			view,
+			activePaginationInfo,
+			onChangeView,
+			touchRecent,
+			collectionId,
+		]
 	);
 
 	const viewRef = useRef( view );
@@ -1000,6 +1019,7 @@ export default function CollectionDataViews( {
 			<RowDetailView
 				canGoNext={ Boolean( nextRowId ) }
 				canGoPrevious={ Boolean( previousRowId ) }
+				collectionId={ collectionId }
 				fields={ availableFields }
 				mode={ renderedRowDetailMode }
 				onApi={ setDetailApi }

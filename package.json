@@ -71,6 +71,7 @@
 		"@wordpress/private-apis": "^1.44.0",
 		"@wordpress/route": "^0.10.0",
 		"@wordpress/url": "^4.44.0",
+		"cmdk": "^1.1.1",
 		"emoji-mart": "^5.6.0"
 	}
 }

@@ -337,13 +337,15 @@ The state is ours too. `view.calculations` lives on the DataViews view object be
 
 ## 38. Command palette embedding needs host glue `[upstream, soft]`
 
-**What.** Cortext uses `@wordpress/commands` for the palette UI; we are not forking it. The rough part is that the package is built for the shared wp-admin command context. On the Cortext screen we need an app palette instead: no global wp-admin commands, no second Core palette competing for cmd+K, and focus returning to the workspace after a command runs. That leaves a few small bits of shell glue in Cortext: a local data registry, a `wp-core-commands` dequeue, a bundled stylesheet import, and a canvas ref for focus return.
+**What.** Cortext uses `@wordpress/commands` for command registration and palette state, but the stock menu is built for wp-admin. On the Cortext screen we need a scoped app palette: keep Core's commands out, avoid a second cmd+K menu, return focus to the workspace after a command runs, and put workspace recents in their own section instead of mixing them into suggestions. That leaves some glue in Cortext: a local data registry, a `wp-core-commands` dequeue, a bundled stylesheet import, a canvas ref for focus return, and a local command-menu renderer.
+
+The awkward bit is `CortextCommandMenu`. `@wordpress/commands` has a built-in "Recent" group, but that means recently used commands, not Cortext workspace history, and there is no public way to add a custom group. So Cortext renders the menu itself while still reading from the upstream command store. That is better than patching `node_modules` or poking the DOM after render, but upgrades need a close look at the upstream menu markup, CSS classes, keyboard behavior, and `cmdk` wiring.
 
 The user-facing placeholder is still Core's generic "Search commands and settings" string too. Fine for this slice, but it will feel off once the palette grows into actual Cortext search.
 
-**Where.** `src/components/CommandPalette.js`, the `canvasRef` passed from `src/router.js`, `dequeue_core_command_palette` in `includes/Admin/Screen.php`, and the `@wordpress/commands` stylesheet import in `src/index.scss`.
+**Where.** `src/components/CommandPalette.js`, `src/components/CortextCommandMenu.js`, the `canvasRef` passed from `src/router.js`, `dequeue_core_command_palette` in `includes/Admin/Screen.php`, and the `@wordpress/commands` stylesheet import and Cortext command-menu overrides in `src/index.scss`.
 
-**Solution.** Upstream could make app-owned palettes less ad hoc: a scoped command registry or namespace API, a supported way for full-screen admin apps to opt out of Core's admin palette, a custom input label, and an explicit focus-return target or after-close callback. With those, Cortext could keep registering commands through `@wordpress/commands` and drop most of the shell-specific wiring.
+**Solution.** Upstream could make app-owned palettes less ad hoc: a scoped command registry or namespace API, a supported way for full-screen admin apps to opt out of Core's admin palette, a custom input label, an explicit focus-return target or after-close callback, and a group/section API for registered commands or command loaders. With those, Cortext could keep registering commands through `@wordpress/commands`, render workspace recents through an upstream extension point, and drop the local menu renderer plus most of this shell-specific wiring.
 
 ## 39. Row detail relation editing is deferred `[internal]`
 
@@ -376,3 +378,19 @@ The user-facing placeholder is still Core's generic "Search commands and setting
 **Where.** `RowProperties` in `src/components/RowProperties.js`, mounted from `src/components/Canvas.js` for full-page row documents and `src/components/RowDetailView.js` for side/modal row detail. There is still no `cortext/document-properties` block or PHP render callback.
 
 **Solution.** Build `cortext/document-properties` as a locked dynamic block, in the same family as `cortext/document-cover` and `cortext/document-icon`. Its `edit()` should reuse the row-property form inside the editor iframe. Its `render_callback` should read the row's collection schema and meta, then emit frontend HTML for public themes. The header-block insertion path should place it after cover/icon/title on row documents. The full-page hide/show control then becomes an editor visibility preference, not the source of truth for whether properties exist in the document.
+
+## 43. Row recents still target the parent collection `[internal]`
+
+**What.** Recents stores row identity (`kind: row`, row id, and parent collection id), but the response still sends the parent collection as the clickable path. Row documents now have their own document URLs, so this is only a first-pass fallback: it gets the user back to the right table, but not directly into the row document they touched. The stored identity is enough to improve the target without changing the saved meta shape.
+
+**Where.** Row handling in `includes/Rest/RecentsController.php`, row clicks in `src/components/SidebarRecents.js`, recent row commands in `src/components/CommandPalette.js`, and the row-recents e2e coverage in `tests/e2e/specs/recents.spec.js`.
+
+**Solution.** Have row recents return the row document path, or give recents a route target shape instead of a single path string. That target should use the same document URL helper as row detail and relations, so sidebar recents and palette recents open the row directly instead of stopping at the parent collection.
+
+## 44. Recents tracking is wired at each call site `[internal]`
+
+**What.** There is no workspace activity layer. Each surface that counts as a visit or edit calls `touchRecent` itself: route resolution, page autosave, sidebar rename, row field save, row creation, and relation-created rows. That makes the behavior easy to understand right now, but future write paths can forget to update recents unless the reviewer knows to look for it.
+
+**Where.** `src/router/EntityRoute.js`, `src/hooks/useAutosave.js`, `src/components/Sidebar.js`, `src/components/CollectionDataViews.js`, and `src/components/relations/RelationEditor.js`.
+
+**Solution.** If more activity surfaces appear, move this behind a small workspace activity helper or event. Route visits can stay in the router, but writes should eventually report through the same mutation path instead of each component remembering to call `touchRecent`. If rows move into `core-data` (#2), that would be a natural time to centralize row touches too.

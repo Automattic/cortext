@@ -27,6 +27,7 @@ use Cortext\Rest\DocumentLocatorController;
 use Cortext\Rest\DocumentTrashController;
 use Cortext\Rest\FavoritesController;
 use Cortext\Rest\FieldsController;
+use Cortext\Rest\RecentsController;
 use Cortext\Rest\RowsController;
 use Cortext\Rest\WorkspaceHomeController;
 use Cortext\Theming\Preferences;
@@ -59,6 +60,7 @@ final class Plugin {
 		( new FieldsController() )->register();
 		( new DocumentLocatorController() )->register();
 		( new DocumentTrashController() )->register();
+		( new RecentsController() )->register();
 		( new RowsController() )->register();
 		( new WorkspaceHomeController() )->register();
 		( new Template() )->register();

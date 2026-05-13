@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 import { Icon, closeSmall, plus } from '@wordpress/icons';
 
 import useCollectionRows from '../../hooks/useCollectionRows';
+import { useRecents } from '../../hooks/useRecents';
 import { relationIds, relationTitle } from './relationUtils';
 
 const RELATION_PICKER_VIEW = {
@@ -29,6 +30,7 @@ export default function RelationEditor( {
 	const [ isCreating, setIsCreating ] = useState( false );
 	const [ createError, setCreateError ] = useState( '' );
 	const searchRef = useRef( null );
+	const { touchRecent } = useRecents();
 	const selectedIds = useMemo( () => relationIds( value ), [ value ] );
 	const targetCollectionId = Number( relation?.targetCollectionId );
 	const isMultiple = relation?.multiple !== false;
@@ -121,6 +123,11 @@ export default function RelationEditor( {
 					__( 'Related row could not be created.', 'cortext' )
 				);
 			}
+			touchRecent( {
+				kind: 'row',
+				id: createdId,
+				collectionId: targetCollectionId,
+			} );
 			const nextIds = isMultiple
 				? [
 						...selectedIds.filter( ( id ) => id !== createdId ),

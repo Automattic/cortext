@@ -176,8 +176,16 @@ function CanvasEditor( {
 	onApi,
 	onSaved,
 	onRestored,
+	recentTarget,
 } ) {
-	const { status, flushNow, isDirty, isSaving } = useAutosave();
+	const autosaveRecentTarget =
+		recentTarget ??
+		( postType === POST_TYPE && post?.id
+			? { kind: 'page', id: post.id }
+			: null );
+	const { status, flushNow, isDirty, isSaving } = useAutosave( {
+		recentTarget: autosaveRecentTarget,
+	} );
 	const { resetPost } = useDispatch( editorStore );
 	const discard = useCallback( () => resetPost(), [ resetPost ] );
 	const isInspectorOpen = useSelect(
@@ -330,6 +338,7 @@ export default function Canvas( {
 	onApi,
 	onSaved,
 	onRestored,
+	recentTarget,
 	useSubRegistry = false,
 } ) {
 	const { record: requestedPost } = useEntityRecord(
@@ -401,6 +410,7 @@ export default function Canvas( {
 				onApi={ onApi }
 				onSaved={ onSaved }
 				onRestored={ onRestored }
+				recentTarget={ recentTarget }
 			/>
 		</EditorProvider>
 	);
