@@ -22,16 +22,6 @@ final class RowsController {
 
 	private const NAMESPACE = 'cortext/v1';
 
-	/**
-	 * Supported filter operators and their WP_Query compare equivalents.
-	 */
-	private const FILTER_OPERATORS = array(
-		'is'     => '=',
-		'isNot'  => '!=',
-		'isAny'  => 'IN',
-		'isNone' => 'NOT IN',
-	);
-
 	public function register(): void {
 		add_action( 'rest_api_init', array( $this, 'register_routes' ) );
 	}
@@ -71,10 +61,9 @@ final class RowsController {
 							'minimum' => 1,
 						),
 						'per_page'   => array(
-							'type'    => 'integer',
-							'default' => 25,
-							'minimum' => 1,
-							'maximum' => 100,
+							'type'              => 'integer',
+							'default'           => 25,
+							'validate_callback' => static fn( $value ) => (int) $value >= 1 && (int) $value <= 100,
 						),
 						'search'     => array(
 							'type'    => 'string',
@@ -94,16 +83,6 @@ final class RowsController {
 						'filters'    => array(
 							'type'    => 'array',
 							'default' => array(),
-							'items'   => array(
-								'type'       => 'object',
-								'properties' => array(
-									'field'    => array( 'type' => 'string' ),
-									'operator' => array( 'type' => 'string' ),
-									'value'    => array(
-										'type' => array( 'string', 'number', 'boolean', 'array' ),
-									),
-								),
-							),
 						),
 					),
 				),
@@ -216,34 +195,74 @@ final class RowsController {
 		$slug      = (string) get_post_meta( $collection->ID, 'slug', true );
 		$field_ids = $this->collection_field_ids( $collection->ID );
 
-		// Validate sort and filter references separately. Sort accepts
-		// 'title', 'field-N', and the sortable system fields; filters
-		// accept 'field-N' only — system field filtering is deferred
-		// (tech-debt.md#13).
-		$sort_validation = $this->validate_sort_field(
+		$row_query    = new RowsFilterQuery();
+		$field_schema = $row_query->field_schema_for( $collection_id );
+
+		$sort_validation = $row_query->validate_sort(
 			$request->get_param( 'sort' ),
-			$field_ids,
+			$field_schema,
 			$collection_id
 		);
 		if ( is_wp_error( $sort_validation ) ) {
 			return $sort_validation;
 		}
 
-		$filter_validation = $this->validate_filter_fields(
+		$filter_sql = $row_query->compile_filters(
 			$request->get_param( 'filters' ),
-			$field_ids,
+			$field_schema,
 			$collection_id
 		);
-		if ( is_wp_error( $filter_validation ) ) {
-			return $filter_validation;
+		if ( is_wp_error( $filter_sql ) ) {
+			return $filter_sql;
 		}
+
+		$search_where = $row_query->compile_search( (string) $request->get_param( 'search' ), $field_schema );
+		$where_parts  = array_values( array_filter( array( $filter_sql['where'], $search_where ) ) );
+		$where_sql    = count( $where_parts ) > 0 ? '( ' . implode( ' AND ', $where_parts ) . ' )' : '';
 
 		// Precompute which fields are multi-value so format_row does not
 		// re-fetch the field type for every row.
 		$multi_field_ids = $this->multi_value_field_ids( $field_ids );
 
-		$query_args = $this->build_query_args( $request, $slug );
-		$query      = new WP_Query( $query_args );
+		$query_args                             = $this->build_query_args( $request, $slug, $where_sql, $filter_sql['join'] );
+		$token                                  = uniqid( 'cortext_rows_', true );
+		$query_args['cortext_rows_query_token'] = $token;
+		$query_args['cortext_rows_sort']        = $request->get_param( 'sort' );
+
+		$where_callback = function ( string $where, WP_Query $query ) use ( $token ): string {
+			if ( $query->get( 'cortext_rows_query_token' ) !== $token ) {
+				return $where;
+			}
+			$extra = (string) $query->get( 'cortext_rows_where' );
+			if ( '' === $extra ) {
+				return $where;
+			}
+			return "{$where} AND {$extra}";
+		};
+
+		$clauses_callback = function ( array $clauses, WP_Query $query ) use ( $token, $row_query, $field_schema ): array {
+			if ( $query->get( 'cortext_rows_query_token' ) !== $token ) {
+				return $clauses;
+			}
+			$clauses = $row_query->apply_filter_join_clauses(
+				$clauses,
+				(string) $query->get( 'cortext_rows_join' )
+			);
+			return $row_query->apply_sort_clauses(
+				$clauses,
+				$query->get( 'cortext_rows_sort' ),
+				$field_schema
+			);
+		};
+
+		add_filter( 'posts_where', $where_callback, 10, 2 );
+		add_filter( 'posts_clauses', $clauses_callback, 10, 2 );
+		try {
+			$query = new WP_Query( $query_args );
+		} finally {
+			remove_filter( 'posts_where', $where_callback, 10 );
+			remove_filter( 'posts_clauses', $clauses_callback, 10 );
+		}
 
 		// Prime the user object cache once before mapping rows so per-row
 		// display name lookups in format_row hit the cache instead of
@@ -441,97 +460,15 @@ final class RowsController {
 	}
 
 	/**
-	 * Validates the `sort` param's field key.
-	 *
-	 * Accepts `'title'`, any `field-N` belonging to the collection, and the
-	 * sortable system field keys (`'created_at'`, `'modified_at'`). Rejects
-	 * the `*_by` system field keys and any other identifier — sort on
-	 * display-value properties is an open architectural decision shared
-	 * with relations and rollups (tech-debt.md#14).
-	 *
-	 * @param mixed $sort           Sort param from the request.
-	 * @param int[] $field_ids      Valid field IDs for the collection.
-	 * @param int   $collection_id  Collection ID for error messages.
-	 * @return true|WP_Error
-	 */
-	private function validate_sort_field( $sort, array $field_ids, int $collection_id ) {
-		if ( ! is_array( $sort ) || empty( $sort['field'] ) ) {
-			return true;
-		}
-
-		$allowed = array( 'title', 'created_at', 'modified_at' );
-		foreach ( $field_ids as $id ) {
-			$allowed[] = "field-{$id}";
-		}
-
-		if ( ! in_array( $sort['field'], $allowed, true ) ) {
-			return new WP_Error(
-				'cortext_invalid_sort_field',
-				sprintf(
-					/* translators: 1: field key, 2: collection ID */
-					__( 'Field "%1$s" cannot be used to sort collection %2$d.', 'cortext' ),
-					$sort['field'],
-					$collection_id
-				),
-				array( 'status' => 400 )
-			);
-		}
-
-		return true;
-	}
-
-	/**
-	 * Validates every `filters[].field` reference.
-	 *
-	 * Accepts only `field-N` keys belonging to the collection. Title and
-	 * system fields are intentionally excluded: title isn't filterable
-	 * today (preserved from prior behavior), and system field filtering
-	 * is deferred (tech-debt.md#13). Rejection produces a clean 400.
-	 *
-	 * @param mixed $filters        Filters param from the request.
-	 * @param int[] $field_ids      Valid field IDs for the collection.
-	 * @param int   $collection_id  Collection ID for error messages.
-	 * @return true|WP_Error
-	 */
-	private function validate_filter_fields( $filters, array $field_ids, int $collection_id ) {
-		if ( ! is_array( $filters ) || count( $filters ) === 0 ) {
-			return true;
-		}
-
-		$allowed = array();
-		foreach ( $field_ids as $id ) {
-			$allowed[] = "field-{$id}";
-		}
-
-		foreach ( $filters as $filter ) {
-			if ( ! is_array( $filter ) || empty( $filter['field'] ) ) {
-				continue;
-			}
-			if ( ! in_array( $filter['field'], $allowed, true ) ) {
-				return new WP_Error(
-					'cortext_invalid_filter_field',
-					sprintf(
-						/* translators: 1: field key, 2: collection ID */
-						__( 'Field "%1$s" cannot be used to filter collection %2$d.', 'cortext' ),
-						$filter['field'],
-						$collection_id
-					),
-					array( 'status' => 400 )
-				);
-			}
-		}
-
-		return true;
-	}
-
-	/**
 	 * Translates REST params into WP_Query arguments.
 	 *
 	 * @param WP_REST_Request $request Full request object.
 	 * @param string          $slug    Collection slug.
+	 * @param string          $where_sql Prepared row filter/search SQL.
+	 * @param string          $join_sql Prepared row filter JOIN SQL.
 	 * @return array
 	 */
-	private function build_query_args( WP_REST_Request $request, string $slug ): array {
+	private function build_query_args( WP_REST_Request $request, string $slug, string $where_sql = '', string $join_sql = '' ): array {
 		$args = array(
 			'post_type'      => CollectionEntries::CPT_PREFIX . $slug,
 			'post_status'    => array( 'draft', 'private', 'publish' ),
@@ -539,9 +476,11 @@ final class RowsController {
 			'paged'          => (int) $request->get_param( 'page' ),
 		);
 
-		$search = $request->get_param( 'search' );
-		if ( '' !== $search ) {
-			$args['s'] = $search;
+		if ( '' !== $where_sql ) {
+			$args['cortext_rows_where'] = $where_sql;
+		}
+		if ( '' !== $join_sql ) {
+			$args['cortext_rows_join'] = $join_sql;
 		}
 
 		$sort = $request->get_param( 'sort' );
@@ -563,58 +502,8 @@ final class RowsController {
 				$args['orderby'] = 'modified';
 				$args['order']   = $direction;
 			} else {
-				$field_id   = $this->field_id_from_key( $sort['field'] );
-				$field_type = $field_id ? (string) get_post_meta( $field_id, 'type', true ) : '';
-				if ( 'rollup' === $field_type ) {
-					$args['orderby'] = 'date';
-					$args['order']   = 'ASC';
-				} else {
-					$wp_type = CollectionEntries::wp_meta_type_for( $field_type );
-
-					$args['meta_key'] = $sort['field']; // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
-					$args['orderby']  = 'number' === $wp_type ? 'meta_value_num' : 'meta_value';
-					$args['order']    = $direction;
-				}
-			}
-		}
-
-		$filters = $request->get_param( 'filters' );
-		if ( is_array( $filters ) && count( $filters ) > 0 ) {
-			$meta_query = array();
-
-			foreach ( $filters as $filter ) {
-				if ( ! is_array( $filter ) ) {
-					continue;
-				}
-
-				$field    = $filter['field'] ?? '';
-				$operator = $filter['operator'] ?? '';
-				$value    = $filter['value'] ?? '';
-
-				if ( '' === $field || ! isset( self::FILTER_OPERATORS[ $operator ] ) ) {
-					continue;
-				}
-				$field_id = $this->field_id_from_key( $field );
-				if ( $field_id && 'rollup' === (string) get_post_meta( $field_id, 'type', true ) ) {
-					continue;
-				}
-
-				$compare = self::FILTER_OPERATORS[ $operator ];
-
-				// IN / NOT IN require array values.
-				if ( in_array( $compare, array( 'IN', 'NOT IN' ), true ) && ! is_array( $value ) ) {
-					$value = array( $value );
-				}
-
-				$meta_query[] = array(
-					'key'     => $field,
-					'value'   => $value,
-					'compare' => $compare,
-				);
-			}
-
-			if ( count( $meta_query ) > 0 ) {
-				$args['meta_query'] = $meta_query; // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+				$args['orderby'] = 'none';
+				$args['order']   = $direction;
 			}
 		}
 
@@ -651,7 +540,34 @@ final class RowsController {
 			return;
 		}
 
+		if ( 'date' === $field_type || 'datetime' === $field_type ) {
+			update_post_meta( $row_id, $key, $this->normalize_date_field_value( $value, $field_type ) );
+			return;
+		}
+
 		update_post_meta( $row_id, $key, sanitize_text_field( (string) $value ) );
+	}
+
+	private function normalize_date_field_value( mixed $value, string $field_type ): string {
+		$text = trim( (string) $value );
+		if ( '' === $text ) {
+			return '';
+		}
+
+		if ( preg_match( '/^(\d{4}-\d{2}-\d{2})/', $text, $matches ) ) {
+			if ( 'date' === $field_type ) {
+				return $matches[1];
+			}
+			$timestamp = strtotime( $text );
+			return false === $timestamp ? sanitize_text_field( $text ) : gmdate( DATE_RFC3339, $timestamp );
+		}
+
+		$timestamp = strtotime( $text );
+		if ( false === $timestamp ) {
+			return sanitize_text_field( $text );
+		}
+
+		return 'date' === $field_type ? gmdate( 'Y-m-d', $timestamp ) : gmdate( DATE_RFC3339, $timestamp );
 	}
 
 	/**

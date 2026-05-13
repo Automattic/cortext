@@ -9,6 +9,7 @@ declare( strict_types=1 );
 
 namespace Cortext\Rest;
 
+use Cortext\Fields\FieldTypeRegistry;
 use Cortext\OptionPalette;
 use Cortext\PostType\Collection;
 use Cortext\PostType\CollectionEntries;
@@ -22,20 +23,6 @@ use WP_REST_Response;
 final class FieldsController {
 
 	private const NAMESPACE = 'cortext/v1';
-
-	private const ALLOWED_TYPES = array(
-		'text',
-		'email',
-		'url',
-		'number',
-		'date',
-		'datetime',
-		'checkbox',
-		'select',
-		'multiselect',
-		'relation',
-		'rollup',
-	);
 
 	private const ROLLUP_AGGREGATORS = array(
 		'count',
@@ -98,7 +85,7 @@ final class FieldsController {
 						'type'                     => array(
 							'type'     => 'string',
 							'required' => true,
-							'enum'     => self::ALLOWED_TYPES,
+							'enum'     => FieldTypeRegistry::types(),
 						),
 						'options'                  => array(
 							'type'     => 'array',
