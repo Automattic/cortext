@@ -84,7 +84,9 @@ describe( 'CortextCommandMenu', () => {
 		} );
 
 		expect(
-			await screen.findByPlaceholderText( 'Search commands and settings' )
+			await screen.findByPlaceholderText(
+				'Search pages, collections, and actions'
+			)
 		).toBeInTheDocument();
 		expect( screen.getByText( 'Test command' ) ).toBeInTheDocument();
 	} );

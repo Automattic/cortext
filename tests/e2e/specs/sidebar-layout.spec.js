@@ -126,7 +126,7 @@ async function readCollapsedRailAlignment( page ) {
 				quickActionsBox.xCenter - headerBox.xCenter
 			),
 			actionColumnDelta: Math.abs( homeBox.xCenter - searchBox.xCenter ),
-			actionGap: searchBox.top - homeBox.bottom,
+			actionGap: homeBox.top - searchBox.bottom,
 			toolbarBelowHeader: quickActionsBox.top - headerBox.bottom,
 			footerIconDelta: Math.abs( backBox.xCenter - themeBox.xCenter ),
 		};

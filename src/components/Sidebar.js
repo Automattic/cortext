@@ -1,4 +1,4 @@
-import { __, sprintf } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
 import { useEntityRecords } from '@wordpress/core-data';
 import { useDispatch, useSelect } from '@wordpress/data';
@@ -10,7 +10,14 @@ import {
 	useEffect,
 } from '@wordpress/element';
 import { Button, Icon, Notice, Spinner } from '@wordpress/components';
-import { home as homeIcon, plus, search, wordpress } from '@wordpress/icons';
+import { displayShortcut } from '@wordpress/keycodes';
+import {
+	home as homeIcon,
+	plus,
+	search,
+	trash as trashIcon,
+	wordpress,
+} from '@wordpress/icons';
 
 // Sidebar toggle: panel outline with a vertical accent on
 // the left side. Same icon for both states; the aria-label tells the
@@ -44,6 +51,35 @@ const sidebarToggleIcon = (
 		/>
 	</svg>
 );
+
+const cortextMarkIcon = (
+	<svg
+		xmlns="http://www.w3.org/2000/svg"
+		viewBox="0 0 24 24"
+		width="24"
+		height="24"
+		aria-hidden="true"
+		focusable="false"
+	>
+		<ellipse
+			cx="12"
+			cy="12"
+			rx="7"
+			ry="6"
+			stroke="currentColor"
+			strokeWidth="1.6"
+			fill="none"
+		/>
+		<path
+			d="M12 6v12M8.5 8.5 12 10l3.5-1.5"
+			stroke="currentColor"
+			strokeWidth="1.4"
+			strokeLinecap="round"
+			fill="none"
+		/>
+		<circle cx="12" cy="10" r="0.9" fill="currentColor" />
+	</svg>
+);
 import {
 	DndContext,
 	DragOverlay,
@@ -65,7 +101,7 @@ import SidebarFavorites, {
 import SidebarResizeHandle from './SidebarResizeHandle';
 import SidebarRecents from './SidebarRecents';
 import SidebarSection from './SidebarSection';
-import SidebarTrash from './SidebarTrash';
+import SidebarTrash, { computeSidebarTrashRoots } from './SidebarTrash';
 import ThemeToggle from './ThemeToggle';
 import {
 	buildTree,
@@ -117,6 +153,11 @@ export default function Sidebar( {
 	// expand) or a paginated fetch of the full page set.
 	const { records: collections, isResolving: isResolvingCollections } =
 		useEntityRecords( 'postType', 'crtxt_collection', COLLECTION_QUERY );
+	const { records: trashedPages } = useEntityRecords(
+		'postType',
+		POST_TYPE,
+		TRASHED_PAGES_QUERY
+	);
 	const {
 		pages,
 		homePath,
@@ -140,6 +181,7 @@ export default function Sidebar( {
 	const activeUri = params._splat ?? '';
 	const adminUrl = window.cortextSettings?.adminUrl ?? '/wp-admin/';
 	const userName = window.cortextSettings?.userDisplayName ?? '';
+	const commandPaletteShortcut = displayShortcut.primary( 'k' );
 	const brandLabel = userName
 		? sprintf(
 				/* translators: %s: user display name */
@@ -219,6 +261,14 @@ export default function Sidebar( {
 			params: { _splat: homePath },
 		} );
 	}, [ homePath, navigate ] );
+	const toggleTrashPanel = useCallback( () => {
+		if ( collapsed ) {
+			setIsTrashPanelOpen( true );
+			onToggleCollapsed?.();
+			return;
+		}
+		setIsTrashPanelOpen( ( current ) => ! current );
+	}, [ collapsed, onToggleCollapsed ] );
 
 	const setPageHome = useCallback(
 		async ( id ) => {
@@ -319,8 +369,28 @@ export default function Sidebar( {
 	const [ draggedId, setDraggedId ] = useState( null );
 	const [ activeDrop, setActiveDrop ] = useState( null );
 	const [ autoRenameId, setAutoRenameId ] = useState( null );
+	const [ isTrashPanelOpen, setIsTrashPanelOpen ] = useState( false );
 
 	const autoExpandTimerRef = useRef( null );
+	const trashCount = useMemo(
+		() => computeSidebarTrashRoots( trashedPages ?? [] ).roots.length,
+		[ trashedPages ]
+	);
+	let trashButtonLabel = __( 'Open Trash', 'cortext' );
+	if ( isTrashPanelOpen ) {
+		trashButtonLabel = __( 'Close Trash', 'cortext' );
+	} else if ( trashCount > 0 ) {
+		trashButtonLabel = sprintf(
+			/* translators: %d: number of trashed pages */
+			_n(
+				'Open Trash, %d item',
+				'Open Trash, %d items',
+				trashCount,
+				'cortext'
+			),
+			trashCount
+		);
+	}
 
 	useEffect( () => {
 		if ( selectedId === null ) {
@@ -342,6 +412,12 @@ export default function Sidebar( {
 			return changed ? next : prev;
 		} );
 	}, [ selectedId, pages ] );
+
+	useEffect( () => {
+		if ( collapsed ) {
+			setIsTrashPanelOpen( false );
+		}
+	}, [ collapsed ] );
 
 	const getEntityRecord = useSelect(
 		( select ) => select( 'core' ).getEntityRecord,
@@ -470,7 +546,7 @@ export default function Sidebar( {
 	);
 
 	// Soft-delete: the server-side cascade trashes descendants. Trash is
-	// reversible (the user can restore from the Trash section), so no
+	// reversible (the user can restore from the Trash panel), so no
 	// confirmation. The editor stays on the trashed page so the user can
 	// review what they trashed before deciding whether to restore.
 	//
@@ -514,6 +590,7 @@ export default function Sidebar( {
 						)
 				);
 			}
+			setIsTrashPanelOpen( true );
 		},
 		[ invalidateResolution, pages, receiveEntityRecords, setFavorites ]
 	);
@@ -634,7 +711,15 @@ export default function Sidebar( {
 			<div className="cortext-sidebar__header">
 				{ ! collapsed && (
 					<span className="cortext-sidebar__brand">
-						{ brandLabel }
+						<span
+							className="cortext-sidebar__brand-mark"
+							aria-hidden="true"
+						>
+							{ cortextMarkIcon }
+						</span>
+						<span className="cortext-sidebar__brand-text">
+							{ brandLabel }
+						</span>
 					</span>
 				) }
 				<Button
@@ -654,18 +739,31 @@ export default function Sidebar( {
 				aria-label={ __( 'Quick actions', 'cortext' ) }
 			>
 				<Button
+					className="cortext-sidebar__quick-action cortext-sidebar__quick-action--search"
+					label={ __( 'Search or run a command', 'cortext' ) }
+					onClick={ () => openCommandPalette() }
+				>
+					<Icon icon={ search } size={ 16 } />
+					{ ! collapsed && (
+						<>
+							<span className="cortext-sidebar__quick-action-label">
+								{ __( 'Search or run a command', 'cortext' ) }
+							</span>
+							<kbd className="cortext-sidebar__quick-action-kbd">
+								{ commandPaletteShortcut }
+							</kbd>
+						</>
+					) }
+				</Button>
+				<Button
 					className="cortext-sidebar__quick-action cortext-sidebar__quick-action--home"
-					icon={ homeIcon }
 					label={ __( 'Home', 'cortext' ) }
 					disabled={ ! homePath || isResolvingHomePath }
 					onClick={ goHome }
-				/>
-				<Button
-					className="cortext-sidebar__quick-action cortext-sidebar__quick-action--search"
-					icon={ search }
-					label={ __( 'Search', 'cortext' ) }
-					onClick={ () => openCommandPalette() }
-				/>
+				>
+					<Icon icon={ homeIcon } size={ 16 } />
+					{ ! collapsed && <span>{ __( 'Home', 'cortext' ) }</span> }
+				</Button>
 			</div>
 			{ ! collapsed && (
 				<div className="cortext-sidebar__content">
@@ -853,29 +951,61 @@ export default function Sidebar( {
 							</ul>
 						) }
 					</SidebarSection>
-
-					<SidebarSection
-						id="trash"
-						title={ __( 'Trash', 'cortext' ) }
-						isCollapsed={ isSectionCollapsed( 'trash' ) }
-						onToggle={ () => toggleSection( 'trash' ) }
-					>
-						<SidebarTrash
-							activePages={ pages }
-							selectedId={ selectedId }
-							onSelect={ onSelect }
-						/>
-					</SidebarSection>
 				</div>
 			) }
+			{ ! collapsed && isTrashPanelOpen && (
+				<section
+					id="cortext-sidebar-trash-panel"
+					className="cortext-sidebar__trash-panel"
+					aria-label={ __( 'Trash', 'cortext' ) }
+				>
+					<div className="cortext-sidebar__trash-panel-header">
+						<h2 className="cortext-sidebar__section-title">
+							{ __( 'Trash', 'cortext' ) }
+						</h2>
+					</div>
+					<SidebarTrash
+						activePages={ pages }
+						selectedId={ selectedId }
+						onSelect={ onSelect }
+					/>
+				</section>
+			) }
 			<div className="cortext-sidebar__footer">
-				<Button
-					className="cortext-sidebar__back"
-					label={ __( 'Go to WordPress', 'cortext' ) }
-					href={ adminUrl }
-					icon={ <Icon icon={ wordpress } size={ 24 } /> }
+				<div className="cortext-sidebar__footer-group cortext-sidebar__footer-group--navigation">
+					<Button
+						className="cortext-sidebar__footer-button cortext-sidebar__trash-footer"
+						label={ trashButtonLabel }
+						aria-expanded={ ! collapsed && isTrashPanelOpen }
+						aria-controls="cortext-sidebar-trash-panel"
+						isPressed={ ! collapsed && isTrashPanelOpen }
+						onClick={ toggleTrashPanel }
+					>
+						<Icon icon={ trashIcon } size={ 20 } />
+						{ trashCount > 0 && (
+							<span
+								className="cortext-sidebar__footer-count"
+								aria-hidden="true"
+							>
+								{ trashCount > 99 ? '99+' : trashCount }
+							</span>
+						) }
+					</Button>
+				</div>
+				<div className="cortext-sidebar__footer-spacer" />
+				<div
+					className="cortext-sidebar__footer-separator"
+					aria-hidden="true"
 				/>
-				<ThemeToggle />
+				<div className="cortext-sidebar__footer-group cortext-sidebar__footer-group--preferences">
+					<ThemeToggle />
+					<Button
+						className="cortext-sidebar__back"
+						label={ __( 'Go to WordPress', 'cortext' ) }
+						href={ adminUrl }
+						icon={ <Icon icon={ wordpress } size={ 24 } /> }
+					/>
+				</div>
 			</div>
 			{ ! collapsed && (
 				<SidebarResizeHandle

@@ -127,10 +127,34 @@ body.cortext-fullscreen {
 	&__brand {
 		flex: 1 1 auto;
 		min-width: 0;
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-10;
 		font-weight: 600;
 		font-size: 13px;
 		line-height: 20px;
 		color: var(--cortext-text);
+	}
+
+	&__brand-mark {
+		flex: 0 0 auto;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: $grid-unit-30;
+		height: $grid-unit-30;
+		color: var(--cortext-accent-contrast);
+		background: var(--cortext-accent);
+		border-radius: 50%;
+	}
+
+	&__brand-mark svg {
+		width: 18px;
+		height: 18px;
+	}
+
+	&__brand-text {
+		min-width: 0;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
@@ -139,9 +163,64 @@ body.cortext-fullscreen {
 	&__quick-actions {
 		flex: 0 0 auto;
 		display: flex;
+		flex-direction: column;
 		align-items: center;
 		gap: $grid-unit-05;
 		padding: 0 $grid-unit-20 $grid-unit-10;
+	}
+
+	&__quick-action.components-button {
+		width: 100%;
+		min-width: 0;
+		height: $grid-unit-40;
+		padding: 0 $grid-unit-10;
+		justify-content: flex-start;
+		gap: $grid-unit-05;
+		color: var(--cortext-text-muted);
+		text-align: start;
+	}
+
+	&__quick-action--search.components-button {
+		border: var(--cortext-shell-border-width) solid var(--cortext-chrome-border);
+		background: var(--cortext-control-surface);
+		box-shadow: inset 0 1px 0 var(--cortext-control-highlight);
+	}
+
+	&__quick-action--search.components-button:hover:not(:disabled),
+	&__quick-action--search.components-button:focus:not(:disabled) {
+		border-color: var(--cortext-accent);
+		background: var(--cortext-control-hover-surface);
+	}
+
+	&__quick-action--home.components-button:hover:not(:disabled),
+	&__quick-action--home.components-button:focus:not(:disabled) {
+		background: var(--cortext-state-hover);
+		color: var(--cortext-text-strong);
+	}
+
+	&__quick-action-label {
+		flex: 1 1 auto;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	&__quick-action-kbd {
+		flex: 0 0 auto;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-width: $grid-unit-30;
+		height: $grid-unit-20;
+		padding: 0 6px;
+		border: var(--cortext-shell-border-width) solid var(--cortext-chrome-border);
+		border-radius: var(--cortext-shell-radius);
+		background: var(--cortext-keycap-surface);
+		color: var(--cortext-text-muted);
+		font-size: 11px;
+		font-family: inherit;
+		line-height: 1;
 	}
 
 	&__collapse-toggle {
@@ -269,11 +348,30 @@ body.cortext-fullscreen {
 		margin-top: auto;
 		display: flex;
 		align-items: center;
-		gap: $grid-unit-10;
+		gap: $grid-unit-05;
 		padding: $grid-unit-10 $grid-unit-15;
 		border-top: var(--cortext-shell-border-width) solid var(--cortext-chrome-border);
 	}
 
+	&__footer-group {
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-05;
+		min-width: 0;
+	}
+
+	&__footer-spacer {
+		flex: 1 1 auto;
+		min-width: $grid-unit-10;
+	}
+
+	&__footer-separator {
+		width: var(--cortext-shell-border-width);
+		height: $grid-unit-20;
+		background: var(--cortext-chrome-border);
+	}
+
+	&__footer-button.components-button,
 	&__back.components-button,
 	&__theme-toggle.components-button {
 		width: $grid-unit-40;
@@ -281,6 +379,47 @@ body.cortext-fullscreen {
 		height: $grid-unit-40;
 		padding: 0;
 		justify-content: center;
+	}
+
+	&__trash-footer.components-button {
+		width: auto;
+		gap: $grid-unit-05;
+		padding: 0 $grid-unit-10;
+	}
+
+	&__footer-count {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 16px;
+		height: 16px;
+		padding: 0 5px;
+		border-radius: 999px;
+		background: var(--cortext-count-badge-surface);
+		color: var(--cortext-count-badge-text);
+		font-size: 10px;
+		font-weight: 600;
+		line-height: 16px;
+		text-align: center;
+	}
+
+	&__trash-panel {
+		flex: 0 1 auto;
+		max-height: min(280px, 38vh);
+		overflow-y: auto;
+		padding: 0 $grid-unit-15 $grid-unit-10;
+		border-top: var(--cortext-shell-border-width) solid var(--cortext-chrome-border);
+	}
+
+	&__trash-panel-header {
+		display: flex;
+		align-items: center;
+		padding: $grid-unit-10 $grid-unit-05 0;
+	}
+
+	&__trash-panel-header &__section-title {
+		margin: 0;
+		padding: 0;
 	}
 
 	/* stylelint-disable-next-line no-descending-specificity */
@@ -496,13 +635,17 @@ body.cortext-fullscreen {
 		will-change: transform, opacity;
 	}
 
-	&__icon.components-button {
+	&__icon {
 		flex: 0 0 auto;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
 		width: $grid-unit-30;
 		height: $grid-unit-30;
+		color: var(--cortext-text-muted);
+	}
+
+	&__icon.components-button {
 		padding: 0;
 		min-width: 0;
 		background: transparent;
@@ -772,6 +915,16 @@ body.cortext-fullscreen {
 			padding: $grid-unit-05 0;
 		}
 
+		.cortext-sidebar__footer-group {
+			flex-direction: column;
+			gap: $grid-unit-05;
+		}
+
+		.cortext-sidebar__footer-spacer,
+		.cortext-sidebar__footer-separator {
+			display: none;
+		}
+
 		.cortext-sidebar__collapse-toggle {
 			order: 1;
 			margin-left: 0;
@@ -789,6 +942,22 @@ body.cortext-fullscreen {
 		.cortext-sidebar__quick-action.components-button {
 			width: $grid-unit-30 + $grid-unit-05;
 			min-width: $grid-unit-30 + $grid-unit-05;
+		}
+
+		.cortext-sidebar__quick-action--search.components-button {
+			border-color: transparent;
+			background: transparent;
+			box-shadow: none;
+		}
+
+		.cortext-sidebar__trash-footer.components-button {
+			width: $grid-unit-40;
+			min-width: $grid-unit-40;
+			padding: 0;
+		}
+
+		.cortext-sidebar__footer-count {
+			display: none;
 		}
 	}
 }
