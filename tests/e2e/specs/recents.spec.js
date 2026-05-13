@@ -47,6 +47,27 @@ async function readRecentsPlacement( page ) {
 	} );
 }
 
+async function clearSidebarSectionPrefs( page ) {
+	await page.evaluate( () => {
+		try {
+			window.localStorage.removeItem(
+				'cortext.sidebarSectionsCollapsed'
+			);
+		} catch {}
+	} );
+}
+
+async function expandRecentsIfCollapsed( page ) {
+	const sidebar = page.locator( '.cortext-sidebar' );
+	const expandRecents = sidebar.getByRole( 'button', {
+		name: 'Expand Recents',
+	} );
+
+	if ( await expandRecents.count() ) {
+		await expandRecents.click();
+	}
+}
+
 async function createCollectionFixture( requestUtils ) {
 	const suffix = Date.now().toString( 36 ).slice( -4 );
 	const slug = `e2erec${ suffix }`;
@@ -145,9 +166,15 @@ test.describe( 'Sidebar recents', () => {
 				'admin.php',
 				`page=cortext&p=/page/${ recentPage.id }`
 			);
+			await clearSidebarSectionPrefs( page );
+			await page.reload();
 			await waitForEditorPost( page, recentPage.id );
 
 			const sidebar = page.locator( '.cortext-sidebar' );
+			await expect(
+				sidebar.getByRole( 'button', { name: 'Expand Recents' } )
+			).toBeVisible();
+			await expandRecentsIfCollapsed( page );
 			await expect(
 				sidebar.getByRole( 'button', {
 					name: `Recent page: ${ pageTitle }`,
@@ -250,6 +277,7 @@ test.describe( 'Sidebar recents', () => {
 				.toBe( 'U. K. Le Guin' );
 
 			const sidebar = page.locator( '.cortext-sidebar' );
+			await expandRecentsIfCollapsed( page );
 			const recentRow = sidebar.getByRole( 'button', {
 				name: `Recent row: The Left Hand of Darkness in ${ fixture.collectionTitle }`,
 			} );

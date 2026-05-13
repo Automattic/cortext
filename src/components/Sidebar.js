@@ -64,6 +64,7 @@ import SidebarFavorites, {
 } from './SidebarFavorites';
 import SidebarResizeHandle from './SidebarResizeHandle';
 import SidebarRecents from './SidebarRecents';
+import SidebarSection from './SidebarSection';
 import SidebarTrash from './SidebarTrash';
 import ThemeToggle from './ThemeToggle';
 import {
@@ -87,6 +88,7 @@ import {
 import { COLLECTION_QUERY } from '../collections';
 import { useFavorites } from '../hooks/useFavorites';
 import { useRecents } from '../hooks/useRecents';
+import useSidebarSections from '../hooks/useSidebarSections';
 import { useWorkspaceHomePath } from '../hooks/useWorkspaceHomePath';
 
 const AUTO_EXPAND_DELAY = 700;
@@ -165,6 +167,7 @@ export default function Sidebar( {
 	const [ favoritesError, setFavoritesError ] = useState( null );
 	const areFavoriteActionsDisabled =
 		isResolvingFavorites || isUpdatingFavorites;
+	const { isSectionCollapsed, toggleSection } = useSidebarSections();
 
 	// Keep the URL canonical: once autosave assigns a slug to the active
 	// page (draft → private promotion on first titled save), rewrite
@@ -674,164 +677,195 @@ export default function Sidebar( {
 							{ favoritesError }
 						</Notice>
 					) : null }
-					<SidebarFavorites
-						favorites={ favorites }
-						pages={ pages }
-						collections={ collections ?? [] }
-						isResolving={ isResolvingFavorites }
-						isResolvingItems={
-							isResolvingPages || isResolvingCollections
-						}
-						isDisabled={ areFavoriteActionsDisabled }
-						onSelect={ selectFavorite }
-						onRemove={ ( favorite ) =>
-							toggleFavorite( favorite.kind, favorite.id )
-						}
-						onReorder={ reorderFavorites }
-					/>
-					<SidebarRecents />
-
-					<div className="cortext-sidebar__section-header">
-						<h2 className="cortext-sidebar__section-title">
-							{ __( 'Pages', 'cortext' ) }
-						</h2>
-						<Button
-							className="cortext-sidebar__section-action"
-							icon={ plus }
-							size="small"
-							label={ __( 'New page', 'cortext' ) }
-							onClick={ createRootPage }
-						/>
-					</div>
-					{ isResolvingPages && pages.length === 0 && (
-						<div className="cortext-sidebar__loading">
-							<Spinner />
-						</div>
-					) }
-					{ ! isResolvingPages && pages.length === 0 && (
-						<p className="cortext-sidebar__empty">
-							{ __( 'No pages yet.', 'cortext' ) }
-						</p>
-					) }
-
-					<DndContext
-						sensors={ sensors }
-						collisionDetection={ pointerWithin }
-						onDragStart={ handleDragStart }
-						onDragOver={ handleDragOver }
-						onDragEnd={ handleDragEnd }
-						onDragCancel={ handleDragCancel }
+					<SidebarSection
+						id="recents"
+						title={ __( 'Recents', 'cortext' ) }
+						isCollapsed={ isSectionCollapsed( 'recents' ) }
+						onToggle={ () => toggleSection( 'recents' ) }
 					>
-						<ul className="cortext-sidebar__list">
-							{ tree.map( ( node ) => (
-								<PageRow
-									key={ node.page.id }
-									node={ node }
-									depth={ 0 }
-									selectedId={ selectedId }
-									expandedIds={ expandedIds }
-									draggedId={ draggedId }
-									activeDrop={ activeDrop }
-									onSelect={ onSelect }
-									onToggleExpand={ toggleExpand }
-									onCreateChild={ createChildPage }
-									onRename={ renamePage }
-									onDuplicate={ duplicatePage }
-									onDelete={ trashPage }
-									isFavorite={ isPageFavorite }
-									isFavoriteDisabled={
-										areFavoriteActionsDisabled
-									}
-									onToggleFavorite={ ( id ) =>
-										toggleFavorite( 'page', id )
-									}
-									onSetHome={ setPageHome }
-									home={ home }
-									isHomeUpdating={ isHomeUpdating }
-									autoRenameId={ autoRenameId }
-									onAutoRenameConsumed={ () =>
-										setAutoRenameId( null )
-									}
-								/>
-							) ) }
-						</ul>
+						<SidebarRecents />
+					</SidebarSection>
 
-						<DragOverlay>
-							{ draggedPage ? (
-								<div className="cortext-sidebar__drag-preview">
-									{ draggedPage.title?.rendered?.trim() ||
-										__( '(untitled)', 'cortext' ) }
-								</div>
-							) : null }
-						</DragOverlay>
-					</DndContext>
-
-					<div className="cortext-sidebar__section-header">
-						<h2 className="cortext-sidebar__section-title">
-							{ __( 'Collections', 'cortext' ) }
-						</h2>
-						<Button
-							className="cortext-sidebar__section-action"
-							icon={ plus }
-							size="small"
-							label={ __( 'New collection', 'cortext' ) }
-							onClick={ createRootCollection }
+					<SidebarSection
+						id="favorites"
+						title={ __( 'Favorites', 'cortext' ) }
+						isCollapsed={ isSectionCollapsed( 'favorites' ) }
+						onToggle={ () => toggleSection( 'favorites' ) }
+					>
+						<SidebarFavorites
+							favorites={ favorites }
+							pages={ pages }
+							collections={ collections ?? [] }
+							isResolving={ isResolvingFavorites }
+							isResolvingItems={
+								isResolvingPages || isResolvingCollections
+							}
+							isDisabled={ areFavoriteActionsDisabled }
+							onSelect={ selectFavorite }
+							onRemove={ ( favorite ) =>
+								toggleFavorite( favorite.kind, favorite.id )
+							}
+							onReorder={ reorderFavorites }
 						/>
-					</div>
-					{ isResolvingCollections && ! collections?.length && (
-						<div className="cortext-sidebar__loading">
-							<Spinner />
-						</div>
-					) }
-					{ ! isResolvingCollections && ! collections?.length && (
-						<p className="cortext-sidebar__empty">
-							{ __( 'No collections yet.', 'cortext' ) }
-						</p>
-					) }
-					{ collections?.length > 0 && (
-						<ul className="cortext-sidebar__list">
-							{ collections.map( ( collection ) => (
-								<CollectionRow
-									key={ collection.id }
-									collection={ collection }
-									isSelected={
-										selectedCollectionId === collection.id
-									}
-									isHome={
-										home?.kind === 'collection' &&
-										home.id === collection.id
-									}
-									isFavorite={ isCollectionFavorite(
-										collection.id
-									) }
-									isFavoriteDisabled={
-										areFavoriteActionsDisabled
-									}
-									isHomeUpdating={ isHomeUpdating }
-									onToggleFavorite={ ( id ) =>
-										toggleFavorite( 'collection', id )
-									}
-									onSetHome={ setCollectionHome }
-									onSelect={ () =>
-										navigate( {
-											to: '/$',
-											params: {
-												_splat: computeCollectionUri(
-													collection
-												),
-											},
-										} )
-									}
-								/>
-							) ) }
-						</ul>
-					) }
+					</SidebarSection>
 
-					<SidebarTrash
-						activePages={ pages }
-						selectedId={ selectedId }
-						onSelect={ onSelect }
-					/>
+					<SidebarSection
+						id="pages"
+						title={ __( 'Pages', 'cortext' ) }
+						isCollapsed={ isSectionCollapsed( 'pages' ) }
+						onToggle={ () => toggleSection( 'pages' ) }
+						actions={
+							<Button
+								className="cortext-sidebar__section-action"
+								icon={ plus }
+								size="small"
+								label={ __( 'New page', 'cortext' ) }
+								onClick={ createRootPage }
+							/>
+						}
+					>
+						{ isResolvingPages && pages.length === 0 && (
+							<div className="cortext-sidebar__loading">
+								<Spinner />
+							</div>
+						) }
+						{ ! isResolvingPages && pages.length === 0 && (
+							<p className="cortext-sidebar__empty">
+								{ __( 'No pages yet.', 'cortext' ) }
+							</p>
+						) }
+
+						<DndContext
+							sensors={ sensors }
+							collisionDetection={ pointerWithin }
+							onDragStart={ handleDragStart }
+							onDragOver={ handleDragOver }
+							onDragEnd={ handleDragEnd }
+							onDragCancel={ handleDragCancel }
+						>
+							<ul className="cortext-sidebar__list">
+								{ tree.map( ( node ) => (
+									<PageRow
+										key={ node.page.id }
+										node={ node }
+										depth={ 0 }
+										selectedId={ selectedId }
+										expandedIds={ expandedIds }
+										draggedId={ draggedId }
+										activeDrop={ activeDrop }
+										onSelect={ onSelect }
+										onToggleExpand={ toggleExpand }
+										onCreateChild={ createChildPage }
+										onRename={ renamePage }
+										onDuplicate={ duplicatePage }
+										onDelete={ trashPage }
+										isFavorite={ isPageFavorite }
+										isFavoriteDisabled={
+											areFavoriteActionsDisabled
+										}
+										onToggleFavorite={ ( id ) =>
+											toggleFavorite( 'page', id )
+										}
+										onSetHome={ setPageHome }
+										home={ home }
+										isHomeUpdating={ isHomeUpdating }
+										autoRenameId={ autoRenameId }
+										onAutoRenameConsumed={ () =>
+											setAutoRenameId( null )
+										}
+									/>
+								) ) }
+							</ul>
+
+							<DragOverlay>
+								{ draggedPage ? (
+									<div className="cortext-sidebar__drag-preview">
+										{ draggedPage.title?.rendered?.trim() ||
+											__( '(untitled)', 'cortext' ) }
+									</div>
+								) : null }
+							</DragOverlay>
+						</DndContext>
+					</SidebarSection>
+
+					<SidebarSection
+						id="collections"
+						title={ __( 'Collections', 'cortext' ) }
+						isCollapsed={ isSectionCollapsed( 'collections' ) }
+						onToggle={ () => toggleSection( 'collections' ) }
+						actions={
+							<Button
+								className="cortext-sidebar__section-action"
+								icon={ plus }
+								size="small"
+								label={ __( 'New collection', 'cortext' ) }
+								onClick={ createRootCollection }
+							/>
+						}
+					>
+						{ isResolvingCollections && ! collections?.length && (
+							<div className="cortext-sidebar__loading">
+								<Spinner />
+							</div>
+						) }
+						{ ! isResolvingCollections && ! collections?.length && (
+							<p className="cortext-sidebar__empty">
+								{ __( 'No collections yet.', 'cortext' ) }
+							</p>
+						) }
+						{ collections?.length > 0 && (
+							<ul className="cortext-sidebar__list">
+								{ collections.map( ( collection ) => (
+									<CollectionRow
+										key={ collection.id }
+										collection={ collection }
+										isSelected={
+											selectedCollectionId ===
+											collection.id
+										}
+										isHome={
+											home?.kind === 'collection' &&
+											home.id === collection.id
+										}
+										isFavorite={ isCollectionFavorite(
+											collection.id
+										) }
+										isFavoriteDisabled={
+											areFavoriteActionsDisabled
+										}
+										isHomeUpdating={ isHomeUpdating }
+										onToggleFavorite={ ( id ) =>
+											toggleFavorite( 'collection', id )
+										}
+										onSetHome={ setCollectionHome }
+										onSelect={ () =>
+											navigate( {
+												to: '/$',
+												params: {
+													_splat: computeCollectionUri(
+														collection
+													),
+												},
+											} )
+										}
+									/>
+								) ) }
+							</ul>
+						) }
+					</SidebarSection>
+
+					<SidebarSection
+						id="trash"
+						title={ __( 'Trash', 'cortext' ) }
+						isCollapsed={ isSectionCollapsed( 'trash' ) }
+						onToggle={ () => toggleSection( 'trash' ) }
+					>
+						<SidebarTrash
+							activePages={ pages }
+							selectedId={ selectedId }
+							onSelect={ onSelect }
+						/>
+					</SidebarSection>
 				</div>
 			) }
 			<div className="cortext-sidebar__footer">

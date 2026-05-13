@@ -154,11 +154,6 @@ export default function SidebarRecents() {
 
 	return (
 		<>
-			<div className="cortext-sidebar__section-header cortext-sidebar__section-header--recents">
-				<h2 className="cortext-sidebar__section-title">
-					{ __( 'Recents', 'cortext' ) }
-				</h2>
-			</div>
 			{ isResolving && recents.length === 0 && (
 				<div className="cortext-sidebar__loading">
 					<Spinner />

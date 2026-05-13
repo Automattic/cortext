@@ -152,7 +152,6 @@ body.cortext-fullscreen {
 	&__section-header {
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
 		gap: $grid-unit-05;
 		margin: $grid-unit-15 0 $grid-unit-05 0;
 		padding: 0 $grid-unit-05;
@@ -160,8 +159,52 @@ body.cortext-fullscreen {
 		// Title margin/padding moves to the row.
 		/* stylelint-disable-next-line no-descending-specificity */
 		.cortext-sidebar__section-title {
+			flex: 1 1 auto;
+			min-width: 0;
 			margin: 0;
 			padding: 0;
+		}
+	}
+
+	&__section-title-button.components-button {
+		width: 100%;
+		min-width: 0;
+		height: $grid-unit-30;
+		padding: 0 $grid-unit-05;
+		justify-content: flex-start;
+		font-size: 11px;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+		color: var(--cortext-text-muted);
+		text-align: start;
+
+		&:hover:not(:disabled),
+		&:focus:not(:disabled) {
+			background: var(--cortext-state-hover);
+			color: var(--cortext-text-strong);
+		}
+	}
+
+	&__section-actions {
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-05;
+		margin-left: auto;
+	}
+
+	&__section-body-wrapper {
+		display: grid;
+		grid-template-rows: 0fr;
+		transition: grid-template-rows 160ms ease;
+
+		> .cortext-sidebar__section-body {
+			min-height: 0;
+			overflow: hidden;
+		}
+
+		&.is-expanded {
+			grid-template-rows: 1fr;
 		}
 	}
 
@@ -255,6 +298,12 @@ body.cortext-fullscreen {
 	&__empty {
 		color: var(--cortext-text-muted);
 		padding: $grid-unit-10;
+	}
+
+	&__empty--inline {
+		margin: 0;
+		font-size: 12px;
+		line-height: 16px;
 	}
 
 	&__list,

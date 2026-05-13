@@ -231,10 +231,6 @@ export default function SidebarTrash( { activePages, selectedId, onSelect } ) {
 
 	return (
 		<>
-			<h2 className="cortext-sidebar__section-title">
-				{ __( 'Trash', 'cortext' ) }
-			</h2>
-
 			{ isLoading && (
 				<div className="cortext-sidebar__loading">
 					<Spinner />
