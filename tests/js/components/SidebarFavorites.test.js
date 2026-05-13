@@ -139,14 +139,47 @@ describe( 'SidebarFavorites helpers', () => {
 	} );
 
 	it( 'uses stored paths when sidebar records are missing', () => {
-		const favorites = [ { kind: 'page', id: 1, path: 'page/old-1' } ];
+		const favorites = [
+			{
+				kind: 'page',
+				id: 1,
+				title: 'Stored Notes',
+				path: 'page/old-1',
+				icon: 'notebook',
+			},
+		];
 
 		expect( resolveFavoriteItems( favorites, [], [] ) ).toMatchObject( [
 			{
 				kind: 'page',
 				id: 1,
-				title: 'Page',
+				title: 'Stored Notes',
 				path: 'page/old-1',
+				icon: 'notebook',
+			},
+		] );
+	} );
+
+	it( 'uses stored collection titles when sidebar records are missing', () => {
+		expect(
+			resolveFavoriteItems(
+				[
+					{
+						kind: 'collection',
+						id: 2,
+						title: 'Stored Books',
+						path: 'collection/books-2',
+					},
+				],
+				[],
+				[]
+			)
+		).toMatchObject( [
+			{
+				kind: 'collection',
+				id: 2,
+				title: 'Stored Books',
+				path: 'collection/books-2',
 			},
 		] );
 	} );
@@ -206,6 +239,83 @@ describe( 'SidebarFavorites helpers', () => {
 		} );
 
 		expect( screen.getByText( 'Notes' ) ).toBeInTheDocument();
+	} );
+
+	it( 'does not mark initially loaded favorites as newly added', () => {
+		const favorite = { kind: 'page', id: 1 };
+		const pages = [
+			{
+				id: 1,
+				slug: 'notes',
+				title: { rendered: 'Notes', raw: 'Notes' },
+			},
+		];
+		const { rerender } = renderFavorites( {
+			favorites: [],
+			pages,
+			isResolving: true,
+		} );
+
+		rerender(
+			<SidebarFavorites
+				favorites={ [ favorite ] }
+				pages={ pages }
+				collections={ [] }
+				isResolving={ false }
+				isResolvingItems={ false }
+				isDisabled={ false }
+				onSelect={ jest.fn( () => false ) }
+				onRemove={ jest.fn() }
+				onReorder={ jest.fn() }
+			/>
+		);
+
+		expect(
+			screen
+				.getByText( 'Notes' )
+				.closest( '.cortext-sidebar__favorite-row' )
+		).not.toHaveClass( 'is-added' );
+	} );
+
+	it( 'marks favorites added after initial load as newly added', () => {
+		const notes = { kind: 'page', id: 1 };
+		const tasks = { kind: 'page', id: 2 };
+		const pages = [
+			{
+				id: 1,
+				slug: 'notes',
+				title: { rendered: 'Notes', raw: 'Notes' },
+			},
+			{
+				id: 2,
+				slug: 'tasks',
+				title: { rendered: 'Tasks', raw: 'Tasks' },
+			},
+		];
+		const { rerender } = renderFavorites( {
+			favorites: [ notes ],
+			pages,
+		} );
+
+		rerender(
+			<SidebarFavorites
+				favorites={ [ notes, tasks ] }
+				pages={ pages }
+				collections={ [] }
+				isResolving={ false }
+				isResolvingItems={ false }
+				isDisabled={ false }
+				onSelect={ jest.fn( () => false ) }
+				onRemove={ jest.fn() }
+				onReorder={ jest.fn() }
+			/>
+		);
+
+		expect(
+			screen
+				.getByText( 'Tasks' )
+				.closest( '.cortext-sidebar__favorite-row' )
+		).toHaveClass( 'is-added' );
 	} );
 
 	it( 'keeps the empty state when favorites is empty and sidebar records re-resolve', () => {

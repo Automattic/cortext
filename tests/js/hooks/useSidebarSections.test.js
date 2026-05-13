@@ -56,7 +56,6 @@ describe( 'useSidebarSections', () => {
 		expect( result.current.isSectionCollapsed( 'collections' ) ).toBe(
 			false
 		);
-		expect( result.current.isSectionCollapsed( 'trash' ) ).toBe( false );
 	} );
 
 	it( 'seeds from localStorage with missing keys filled from defaults', () => {
@@ -72,7 +71,6 @@ describe( 'useSidebarSections', () => {
 		expect( result.current.isSectionCollapsed( 'collections' ) ).toBe(
 			false
 		);
-		expect( result.current.isSectionCollapsed( 'trash' ) ).toBe( false );
 	} );
 
 	it( 'toggles a section and persists the merged state', () => {
@@ -92,7 +90,6 @@ describe( 'useSidebarSections', () => {
 			favorites: false,
 			pages: true,
 			collections: false,
-			trash: false,
 		} );
 	} );
 

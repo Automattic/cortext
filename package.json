@@ -65,6 +65,7 @@
 		"@wordpress/icons": "^12.2.0",
 		"@wordpress/interface": "^9.0.0",
 		"@wordpress/keyboard-shortcuts": "^5.44.0",
+		"@wordpress/keycodes": "^4.45.0",
 		"@wordpress/media-utils": "^5.45.0",
 		"@wordpress/notices": "^5.44.0",
 		"@wordpress/preferences": "^4.44.0",

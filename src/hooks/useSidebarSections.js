@@ -8,7 +8,6 @@ export const SIDEBAR_SECTION_DEFAULTS = {
 	favorites: false,
 	pages: false,
 	collections: false,
-	trash: false,
 };
 
 export function normalizeSidebarSectionsCollapsed( value ) {

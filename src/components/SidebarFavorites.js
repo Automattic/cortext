@@ -46,6 +46,10 @@ function pageTitle( page ) {
 	return page.title?.rendered?.trim() || __( '(untitled)', 'cortext' );
 }
 
+function favoriteTitle( favorite, fallback ) {
+	return favorite.title?.trim?.() || fallback;
+}
+
 export function favoriteKey( favorite ) {
 	return `favorite:${ favorite.kind }:${ Number( favorite.id ) }`;
 }
@@ -106,8 +110,13 @@ export function resolveFavoriteItems( favorites, pages, collections ) {
 					key,
 					sortableId: key,
 					record: page,
-					title: page ? pageTitle( page ) : __( 'Page', 'cortext' ),
+					title: page
+						? pageTitle( page )
+						: favoriteTitle( favorite, __( 'Page', 'cortext' ) ),
 					path: page ? computeDocumentUri( page ) : favorite.path,
+					icon: page
+						? page.meta?.cortext_document_icon ?? ''
+						: favorite.icon ?? '',
 				};
 			}
 
@@ -125,7 +134,10 @@ export function resolveFavoriteItems( favorites, pages, collections ) {
 					record: collection,
 					title: collection
 						? collectionTitle( collection )
-						: __( 'Collection', 'cortext' ),
+						: favoriteTitle(
+								favorite,
+								__( 'Collection', 'cortext' )
+						  ),
 					path: collection
 						? computeCollectionUri( collection )
 						: favorite.path,
@@ -170,12 +182,7 @@ function mergeDisplayFavorites( currentDisplay, nextFavorites, removingKeys ) {
 
 function FavoriteIcon( { item } ) {
 	if ( item.kind === 'page' ) {
-		return (
-			<PageIcon
-				icon={ item.record?.meta?.cortext_document_icon ?? '' }
-				size={ 16 }
-			/>
-		);
+		return <PageIcon icon={ item.icon ?? '' } size={ 16 } />;
 	}
 
 	return <Icon icon={ customPostType } size={ 16 } />;
@@ -309,6 +316,7 @@ export default function SidebarFavorites( {
 	const previousKeysRef = useRef( null );
 	const latestFavoritesRef = useRef( favorites );
 	const removingKeysRef = useRef( new Set() );
+	const hasCompletedInitialLoadRef = useRef( ! isResolving );
 	const timersRef = useRef( [] );
 
 	useEffect( () => {
@@ -318,9 +326,13 @@ export default function SidebarFavorites( {
 		);
 		const previousKeys = previousKeysRef.current;
 		previousKeysRef.current = currentKeys;
+		const canAnimateChanges = hasCompletedInitialLoadRef.current;
 
 		if ( ! previousKeys ) {
 			setDisplayFavorites( favorites );
+			if ( ! isResolving ) {
+				hasCompletedInitialLoadRef.current = true;
+			}
 			return;
 		}
 
@@ -334,7 +346,7 @@ export default function SidebarFavorites( {
 		nextAdded.forEach( ( key ) => nextRemovingKeys.delete( key ) );
 		nextRemoved.forEach( ( key ) => nextRemovingKeys.add( key ) );
 
-		if ( nextAdded.size > 0 ) {
+		if ( canAnimateChanges && nextAdded.size > 0 ) {
 			setAddedKeys( nextAdded );
 			const timer = setTimeout( () => {
 				setAddedKeys( ( keys ) => {
@@ -372,7 +384,11 @@ export default function SidebarFavorites( {
 			}, FAVORITE_REMOVE_ANIMATION_MS );
 			timersRef.current.push( timer );
 		}
-	}, [ favorites ] );
+
+		if ( ! isResolving ) {
+			hasCompletedInitialLoadRef.current = true;
+		}
+	}, [ favorites, isResolving ] );
 
 	const items = useMemo(
 		() => resolveFavoriteItems( displayFavorites, pages, collections ),

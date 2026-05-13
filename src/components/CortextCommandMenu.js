@@ -22,7 +22,11 @@ import { store as commandsStore } from '@wordpress/commands';
 // can live in their own section.
 const ITEM_ID_PREFIX = 'command-palette-item-';
 const RECENT_COMMAND_PREFIX = 'cortext/recent/';
-const inputLabel = __( 'Search commands and settings' );
+const commandMenuLabel = __( 'Search or run a command', 'cortext' );
+const inputPlaceholder = __(
+	'Search pages, collections, and actions',
+	'cortext'
+);
 
 const CATEGORY_LABELS = {
 	command: __( 'Command' ),
@@ -147,7 +151,7 @@ function CommandInput( { search, setSearch } ) {
 			ref={ commandMenuInput }
 			value={ search }
 			onValueChange={ setSearch }
-			placeholder={ inputLabel }
+			placeholder={ inputPlaceholder }
 			aria-activedescendant={ selectedItemId }
 		/>
 	);
@@ -257,7 +261,7 @@ export default function CortextCommandMenu() {
 			contentLabel={ __( 'Command palette' ) }
 		>
 			<div className="commands-command-menu__container">
-				<Command label={ inputLabel } loop>
+				<Command label={ commandMenuLabel } loop>
 					<div className="commands-command-menu__header">
 						<Icon
 							className="commands-command-menu__header-search-icon"

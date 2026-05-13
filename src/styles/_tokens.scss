@@ -83,10 +83,11 @@
 	--cortext-text-strong: #{colors.$gray-900};
 	--cortext-shadow-color: rgba(0, 0, 0, 0.12);
 
-	// Accent follows the active admin/components theme by default, but is
-	// exposed as a Cortext role so shell themes don't depend on WP internals.
-	--cortext-accent: var(--wp-components-color-accent, var(--wp-admin-theme-color, #3858e9));
-	--cortext-accent-contrast: var(--wp-components-color-accent-inverted, #{colors.$white});
+	// Cortext-owned product accent. WordPress blue stays available through
+	// WP component variables, but shell chrome should not inherit it as the
+	// default brand color.
+	--cortext-accent: #0a1530;
+	--cortext-accent-contrast: #5ad9ff;
 
 	// Shell buttons. These map onto @wordpress/components buttons only inside
 	// Cortext-owned chrome, not globally in wp-admin or inside the iframe.
@@ -98,8 +99,16 @@
 	--cortext-button-hover-surface: var(--cortext-state-hover);
 	--cortext-button-pressed-surface: var(--cortext-state-selected);
 	--cortext-button-primary-surface: var(--cortext-accent);
-	--cortext-button-primary-hover-surface: var(--wp-components-color-accent-darker-10, var(--wp-admin-theme-color-darker-10, var(--cortext-accent)));
+	--cortext-button-primary-hover-surface: color-mix(in srgb, var(--cortext-accent) 88%, var(--cortext-accent-contrast));
 	--cortext-button-primary-text: var(--cortext-accent-contrast);
+
+	// Compact chrome controls.
+	--cortext-control-surface: var(--cortext-shell-surface);
+	--cortext-control-hover-surface: var(--cortext-shell-surface);
+	--cortext-control-highlight: var(--cortext-state-selected-highlight);
+	--cortext-keycap-surface: var(--cortext-sidebar-surface);
+	--cortext-count-badge-surface: var(--cortext-state-hover-strong);
+	--cortext-count-badge-text: var(--cortext-text-muted);
 
 	// Foundation values. Defaults come from WordPress base-styles; keeping
 	// them behind Cortext names lets the shell diverge later without making

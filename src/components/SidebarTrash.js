@@ -22,8 +22,48 @@ import {
 // exposed via REST as part of the `meta` field on each page record.
 const MARKER_META = '_cortext_trashed_by_parent';
 
+export function computeSidebarTrashRoots( trashedPages = [] ) {
+	const all = Array.isArray( trashedPages ) ? trashedPages : [];
+	const trashedById = new Map( all.map( ( page ) => [ page.id, page ] ) );
+	const childrenByMarker = new Map();
+
+	const markerOf = ( page ) => Number( page.meta?.[ MARKER_META ] ?? 0 );
+
+	all.forEach( ( page ) => {
+		const marker = markerOf( page );
+		if ( marker > 0 && trashedById.has( marker ) ) {
+			if ( ! childrenByMarker.has( marker ) ) {
+				childrenByMarker.set( marker, [] );
+			}
+			childrenByMarker.get( marker ).push( page );
+		}
+	} );
+
+	const roots = all.filter( ( page ) => {
+		const marker = markerOf( page );
+		return marker === 0 || ! trashedById.has( marker );
+	} );
+
+	const descendantCountById = new Map();
+	roots.forEach( ( root ) => {
+		let count = 0;
+		const stack = [ ...( childrenByMarker.get( root.id ) ?? [] ) ];
+		while ( stack.length ) {
+			const node = stack.pop();
+			count++;
+			const kids = childrenByMarker.get( node.id );
+			if ( kids ) {
+				stack.push( ...kids );
+			}
+		}
+		descendantCountById.set( root.id, count );
+	} );
+
+	return { roots, descendantCountById };
+}
+
 /**
- * Renders the sidebar Trash section: a flat list of trashed pages with a
+ * Renders the sidebar Trash panel: a flat list of trashed pages with a
  * breadcrumb on each row plus inline Restore and Delete-permanently actions.
  *
  * Only cascade roots are listed. Subpages dragged into trash by a parent's
@@ -89,45 +129,10 @@ export default function SidebarTrash( { activePages, selectedId, onSelect } ) {
 	// Cascade roots: pages with no marker, plus pages whose marker points at
 	// a page that's no longer in trash (its tagged parent was permanently
 	// deleted). Without the second clause those orphans would be hidden.
-	const { roots, descendantCountById } = useMemo( () => {
-		const all = visibleTrashed;
-		const trashedById = new Map( all.map( ( p ) => [ p.id, p ] ) );
-		const childrenByMarker = new Map();
-
-		const markerOf = ( page ) => Number( page.meta?.[ MARKER_META ] ?? 0 );
-
-		all.forEach( ( page ) => {
-			const marker = markerOf( page );
-			if ( marker > 0 && trashedById.has( marker ) ) {
-				if ( ! childrenByMarker.has( marker ) ) {
-					childrenByMarker.set( marker, [] );
-				}
-				childrenByMarker.get( marker ).push( page );
-			}
-		} );
-
-		const computedRoots = all.filter( ( page ) => {
-			const marker = markerOf( page );
-			return marker === 0 || ! trashedById.has( marker );
-		} );
-
-		const counts = new Map();
-		computedRoots.forEach( ( root ) => {
-			let count = 0;
-			const stack = [ ...( childrenByMarker.get( root.id ) ?? [] ) ];
-			while ( stack.length ) {
-				const node = stack.pop();
-				count++;
-				const kids = childrenByMarker.get( node.id );
-				if ( kids ) {
-					stack.push( ...kids );
-				}
-			}
-			counts.set( root.id, count );
-		} );
-
-		return { roots: computedRoots, descendantCountById: counts };
-	}, [ visibleTrashed ] );
+	const { roots, descendantCountById } = useMemo(
+		() => computeSidebarTrashRoots( visibleTrashed ),
+		[ visibleTrashed ]
+	);
 
 	const buildBreadcrumb = useCallback(
 		( page ) => {
