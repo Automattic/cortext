@@ -7,6 +7,7 @@ import {
 	getMinWidth,
 	isDefaultVisibleField,
 	normalizeView,
+	pruneFiltersForFields,
 	withColumnOrder,
 	withColumnWidth,
 } from '../../../src/components/dataViewColumns';
@@ -77,6 +78,71 @@ describe( 'isDefaultVisibleField', () => {
 				editable: false,
 			} )
 		).toBe( false );
+	} );
+} );
+
+describe( 'pruneFiltersForFields', () => {
+	it( 'preserves grouped filters when every descendant field is valid', () => {
+		const filters = [
+			{
+				relation: 'OR',
+				filters: [
+					{ field: 'title', operator: 'contains', value: 'A' },
+					{ field: 'field-1', operator: 'is', value: 'open' },
+				],
+			},
+		];
+
+		expect(
+			pruneFiltersForFields(
+				filters,
+				new Set( [ TITLE_FIELD_ID, 'field-1' ] )
+			)
+		).toBe( filters );
+	} );
+
+	it( 'prunes stale leaves inside groups without dropping the whole group', () => {
+		const filters = [
+			{
+				relation: 'AND',
+				filters: [
+					{ field: 'field-1', operator: 'is', value: 'open' },
+					{ field: 'field-deleted', operator: 'is', value: 'gone' },
+				],
+			},
+		];
+
+		expect(
+			pruneFiltersForFields(
+				filters,
+				new Set( [ TITLE_FIELD_ID, 'field-1' ] )
+			)
+		).toEqual( [
+			{
+				relation: 'AND',
+				filters: [
+					{ field: 'field-1', operator: 'is', value: 'open' },
+				],
+			},
+		] );
+	} );
+
+	it( 'drops groups that have no valid descendants', () => {
+		const filters = [
+			{
+				relation: 'OR',
+				filters: [
+					{ field: 'field-deleted', operator: 'is', value: 'gone' },
+				],
+			},
+		];
+
+		expect(
+			pruneFiltersForFields(
+				filters,
+				new Set( [ TITLE_FIELD_ID, 'field-1' ] )
+			)
+		).toEqual( [] );
 	} );
 } );
 

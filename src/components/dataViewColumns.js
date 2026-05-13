@@ -71,6 +71,51 @@ function sameShallowObject( a, b ) {
 	);
 }
 
+function pruneFilterNodeForFields( filter, validSet ) {
+	if ( ! filter || typeof filter !== 'object' ) {
+		return null;
+	}
+
+	const isGroup = Boolean( filter.relation || filter.filters );
+	if ( ! isGroup ) {
+		return filter.field && validSet.has( filter.field ) ? filter : null;
+	}
+
+	const currentChildren = Array.isArray( filter.filters )
+		? filter.filters
+		: [];
+	const nextChildren = pruneFiltersForFields( currentChildren, validSet );
+	if ( nextChildren.length === 0 ) {
+		return null;
+	}
+	return nextChildren === currentChildren
+		? filter
+		: { ...filter, filters: nextChildren };
+}
+
+export function pruneFiltersForFields( filters, validIds ) {
+	if ( ! Array.isArray( filters ) ) {
+		return [];
+	}
+
+	const validSet =
+		validIds instanceof Set ? validIds : new Set( validIds ?? [] );
+	let changed = false;
+	const next = [];
+	for ( const filter of filters ) {
+		const pruned = pruneFilterNodeForFields( filter, validSet );
+		if ( ! pruned ) {
+			changed = true;
+			continue;
+		}
+		if ( pruned !== filter ) {
+			changed = true;
+		}
+		next.push( pruned );
+	}
+	return changed ? next : filters;
+}
+
 // Reconciles a saved view against the live field set: drops style entries for
 // fields that no longer exist, clamps persisted widths into the current
 // [min, max] range, and re-prepends the title id when reorder/cleanup left it

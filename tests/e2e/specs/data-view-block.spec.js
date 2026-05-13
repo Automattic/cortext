@@ -964,9 +964,7 @@ test.describe( 'Collection view block', () => {
 			// The row detail chrome now mirrors the post title as an
 			// `<h2>`; the editable input lives inside the row's
 			// EditorBody iframe (locked `core/post-title` block).
-			const detailTitle = detail.locator(
-				'.cortext-row-detail__title'
-			);
+			const detailTitle = detail.locator( '.cortext-row-detail__title' );
 			await expect( detailTitle ).toHaveText(
 				'The Left Hand of Darkness'
 			);
@@ -1121,9 +1119,7 @@ test.describe( 'Collection view block', () => {
 			// collection's own management surface, which renders the same
 			// DataViews table directly (no editor iframe).
 			await expect(
-				page
-					.getByRole( 'button', { name: 'Open row' } )
-					.first()
+				page.getByRole( 'button', { name: 'Open row' } ).first()
 			).toBeAttached();
 
 			await expect

@@ -30,6 +30,43 @@ export function adjacentRowId( rows, currentRowId, direction ) {
 	return next?.id ?? null;
 }
 
+export function rowDetailFieldType( field ) {
+	if ( field.id === 'title' ) {
+		return 'text';
+	}
+	return field.cortextFieldType ?? field.type ?? 'text';
+}
+
+export function isRowDetailFieldEditable( field ) {
+	if ( rowDetailFieldType( field ) === 'relation' ) {
+		return false;
+	}
+
+	return (
+		field.id === 'title' ||
+		( field.editable && field.id?.startsWith?.( 'field-' ) )
+	);
+}
+
+export function valueForField( field, data ) {
+	if ( field.id === 'title' ) {
+		return data.title ?? '';
+	}
+	if ( field.id?.startsWith?.( 'field-' ) ) {
+		if (
+			! isRowDetailFieldEditable( field ) &&
+			Object.prototype.hasOwnProperty.call(
+				data.hydratedMeta ?? {},
+				field.id
+			)
+		) {
+			return data.hydratedMeta[ field.id ] ?? null;
+		}
+		return data.meta?.[ field.id ] ?? null;
+	}
+	return field.getValue?.( { item: data.row } ) ?? null;
+}
+
 export function splitPropertyPatch( patch ) {
 	const next = {
 		title: undefined,

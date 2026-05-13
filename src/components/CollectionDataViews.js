@@ -1,6 +1,6 @@
 import apiFetch from '@wordpress/api-fetch';
 import { Button, Notice } from '@wordpress/components';
-import { DataViews, filterSortAndPaginate } from '@wordpress/dataviews';
+import { DataViews } from '@wordpress/dataviews';
 import {
 	createContext,
 	useCallback,
@@ -17,6 +17,7 @@ import { useNavigate } from '@wordpress/route';
 import DataViewColumnInteractions from './DataViewColumnInteractions';
 import EditableCell, { RowMutationContext } from './EditableCell';
 import PageIcon from './PageIcon';
+import { filterSortAndPaginateWithGroups } from './groupedFilters';
 import TableCalculationsFooter from './TableCalculationsFooter';
 import ColumnHeaderActions from './fields/ColumnHeaderActions';
 import RowDetailView, { ROW_DETAIL_MODE_ICONS } from './RowDetailView';
@@ -26,6 +27,7 @@ import {
 	TITLE_FIELD_ID,
 	isDefaultVisibleField,
 	normalizeView,
+	pruneFiltersForFields,
 } from './dataViewColumns';
 import {
 	adjacentRowId,
@@ -33,6 +35,7 @@ import {
 	withRowDetailMode,
 } from './rowDetailUtils';
 import { useCollectionFieldsContext } from './CollectionFieldsContext';
+import { dataViewsFilterByForType } from '../hooks/fieldMapping';
 import useCollectionRows from '../hooks/useCollectionRows';
 import { useRecents } from '../hooks/useRecents';
 import { elementsFromOptions } from '../hooks/optionElements';
@@ -40,6 +43,16 @@ import { computeDocumentUri } from '../router/useResolveEntity';
 
 const DEFAULT_LAYOUTS = { table: { density: 'compact' }, grid: {}, list: {} };
 const TITLE_LABEL = __( 'Title', 'cortext' );
+const TITLE_FILTER_OPERATORS = [
+	'is',
+	'isNot',
+	'contains',
+	'notContains',
+	'startsWith',
+	'endsWith',
+	'isEmpty',
+	'isNotEmpty',
+];
 const ROW_DETAIL_SIDE_SURFACE_EXIT_MS = 300;
 const ROW_DETAIL_MODAL_ENTER_MS = 200;
 const ROW_DETAIL_SIDE_TO_MODAL_HANDOFF_MS =
@@ -122,6 +135,7 @@ function TitleCell( { item } ) {
 
 const TITLE_FIELD = {
 	id: TITLE_FIELD_ID,
+	type: 'text',
 	label: TITLE_LABEL,
 	header: (
 		<span className="cortext-column-header-label">{ TITLE_LABEL }</span>
@@ -130,10 +144,19 @@ const TITLE_FIELD = {
 	// the unfiltered string (the_title encodes `&` as `&#038;`, which
 	// would otherwise sort under that literal entity). Same reason as
 	// `mapField`'s label fallback in `src/hooks/fieldMapping.js`.
-	getValue: ( { item } ) => item?.title?.raw ?? item?.title?.rendered ?? '',
+	getValue: ( { item } ) => {
+		const title = item?.title;
+		return typeof title === 'string'
+			? title
+			: title?.raw ?? title?.rendered ?? '';
+	},
 	render: ( { item } ) => <TitleCell item={ item } />,
 	editable: true,
 	cortextType: 'title',
+	sortable: true,
+	filterable: true,
+	operators: TITLE_FILTER_OPERATORS,
+	filterBy: dataViewsFilterByForType( 'text', TITLE_FILTER_OPERATORS ),
 	enableGlobalSearch: true,
 	// The title column can't be hidden (it's the row identity), but it
 	// reorders and resizes like any other column. `normalizeView` re-adds
@@ -152,6 +175,10 @@ const GHOST_FIELD = {
 	type: 'text',
 	cortextType: 'ghost',
 	label: '',
+	sortable: false,
+	filterable: false,
+	operators: [],
+	filterBy: false,
 	enableSorting: false,
 	enableHiding: false,
 	editable: false,
@@ -169,8 +196,8 @@ const GHOST_FIELD = {
 };
 
 // Pulls a "single equality" prefill out of the active filters: only filters
-// whose operator is `is` (or its alias `equals`) and whose value is a single
-// scalar contribute. Multi-value operators (`isAny`, `isNone`, …) are skipped
+// whose operator is `is` and whose value is a single scalar contribute.
+// Multi-value operators (`isAny`, `isNone`, …) are skipped
 // because the issue scopes prefill to single equality clauses only.
 //
 // The server now applies filters via GET /cortext/v1/rows, so prefill
@@ -185,7 +212,7 @@ function prefillFromFilters( filters, fieldIds ) {
 			continue;
 		}
 		const op = filter.operator;
-		if ( op !== 'is' && op !== 'equals' ) {
+		if ( op !== 'is' ) {
 			continue;
 		}
 		const { field, value } = filter;
@@ -299,10 +326,8 @@ export default function CollectionDataViews( {
 		}
 		const validIds = new Set( availableFields.map( ( f ) => f.id ) );
 		const currentFilters = view?.filters ?? [];
-		const nextFilters = currentFilters.filter( ( filter ) =>
-			validIds.has( filter.field )
-		);
-		if ( nextFilters.length !== currentFilters.length ) {
+		const nextFilters = pruneFiltersForFields( currentFilters, validIds );
+		if ( nextFilters !== currentFilters ) {
 			return { ...view, filters: nextFilters };
 		}
 		return view;
@@ -370,7 +395,11 @@ export default function CollectionDataViews( {
 					paginationInfo: serverPaginationInfo,
 				};
 			}
-			return filterSortAndPaginate( data, view, availableFields );
+			return filterSortAndPaginateWithGroups(
+				data,
+				view,
+				availableFields
+			);
 		}, [
 			data,
 			view,
@@ -387,7 +416,11 @@ export default function CollectionDataViews( {
 		// pagination, which DataViews does not expose as a separate result.
 		delete calculationView.page;
 		delete calculationView.perPage;
-		return filterSortAndPaginate( data, calculationView, availableFields );
+		return filterSortAndPaginateWithGroups(
+			data,
+			calculationView,
+			availableFields
+		);
 	}, [ data, view, availableFields, isServerPaginated ] );
 	const activePaginationInfo = isServerPaginated
 		? serverPaginationInfo
@@ -914,12 +947,10 @@ export default function CollectionDataViews( {
 				: null;
 
 		const currentFilters = normalized.filters ?? [];
-		const nextFilters = currentFilters.filter( ( filter ) =>
-			validIds.has( filter.field )
-		);
+		const nextFilters = pruneFiltersForFields( currentFilters, validIds );
 
 		const sortChanged = currentSort !== nextSort;
-		const filtersChanged = currentFilters.length !== nextFilters.length;
+		const filtersChanged = currentFilters !== nextFilters;
 		const normalizedChanged = normalized !== currentView;
 
 		if ( normalizedChanged || sortChanged || filtersChanged ) {

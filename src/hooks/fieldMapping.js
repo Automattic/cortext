@@ -1,5 +1,11 @@
 import { __ } from '@wordpress/i18n';
 import { dateI18n } from '@wordpress/date';
+import {
+	BaseControl,
+	Flex,
+	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+	__experimentalNumberControl as NumberControl,
+} from '@wordpress/components';
 
 import EditableCell from '../components/EditableCell';
 import { elementsFromOptions } from './optionElements';
@@ -47,6 +53,32 @@ export const EDITABLE_TYPES = new Set( [
 ] );
 
 const SEARCHABLE_TYPES = new Set( [ 'text', 'email', 'url' ] );
+const DATAVIEWS_TEXT_FILTER_OPERATORS = [
+	'is',
+	'isNot',
+	'contains',
+	'notContains',
+	'startsWith',
+];
+const DATAVIEWS_NUMBER_FILTER_OPERATORS = [
+	'is',
+	'greaterThan',
+	'lessThan',
+	'between',
+];
+const DATAVIEWS_DATE_FILTER_OPERATORS = [ 'on', 'before', 'after', 'between' ];
+const DATAVIEWS_DATETIME_FILTER_OPERATORS = [ 'on', 'before', 'after' ];
+const DATAVIEWS_OPTION_FILTER_OPERATORS = [ 'isAny', 'isNone' ];
+const SERVER_SORT_ONLY = {
+	sortable: true,
+	filterable: false,
+	operators: [],
+};
+const NOT_SERVER_QUERYABLE = {
+	sortable: false,
+	filterable: false,
+	operators: [],
+};
 const ROLLUP_VALUE_AGGREGATORS = new Set( [ 'show_original', 'show_unique' ] );
 const ROLLUP_NUMERIC_AGGREGATORS = new Set( [
 	'count',
@@ -151,6 +183,161 @@ function fieldRelationConfig( field, type, rollupTargetType ) {
 	return undefined;
 }
 
+function isEmptySortValue( value ) {
+	return value === null || value === undefined || value === '';
+}
+
+function compareEmptyLast( aValue, bValue ) {
+	const aEmpty = isEmptySortValue( aValue );
+	const bEmpty = isEmptySortValue( bValue );
+	if ( aEmpty && bEmpty ) {
+		return 0;
+	}
+	if ( aEmpty ) {
+		return 1;
+	}
+	if ( bEmpty ) {
+		return -1;
+	}
+	return null;
+}
+
+function sortNumberValues( getValue ) {
+	return ( a, b, direction ) => {
+		const av = getValue( { item: a } );
+		const bv = getValue( { item: b } );
+		const emptyCompare = compareEmptyLast( av, bv );
+		if ( emptyCompare !== null ) {
+			return emptyCompare;
+		}
+
+		const an = Number( av );
+		const bn = Number( bv );
+		const diff =
+			Number.isFinite( an ) && Number.isFinite( bn )
+				? an - bn
+				: String( av ).localeCompare( String( bv ) );
+		return direction === 'asc' ? diff : -diff;
+	};
+}
+
+function numberFilterValue( value ) {
+	return value === '' || value === undefined ? undefined : Number( value );
+}
+
+function NumberFilterControl( {
+	data,
+	field,
+	onChange,
+	hideLabelFromVision,
+	operator,
+} ) {
+	const { id, label, description } = field;
+	const value = field.getValue( { item: data } ) ?? '';
+
+	if ( operator === 'between' ) {
+		const [ min = '', max = '' ] = Array.isArray( value ) ? value : [];
+		return (
+			<BaseControl __nextHasNoMarginBottom>
+				<Flex direction="row" gap={ 4 }>
+					<NumberControl
+						label={ __( 'Min.', 'cortext' ) }
+						value={ min }
+						onChange={ ( next ) =>
+							onChange( {
+								[ id ]: [ numberFilterValue( next ), max ],
+							} )
+						}
+						__next40pxDefaultSize
+						hideLabelFromVision={ hideLabelFromVision }
+					/>
+					<NumberControl
+						label={ __( 'Max.', 'cortext' ) }
+						value={ max }
+						onChange={ ( next ) =>
+							onChange( {
+								[ id ]: [ min, numberFilterValue( next ) ],
+							} )
+						}
+						__next40pxDefaultSize
+						hideLabelFromVision={ hideLabelFromVision }
+					/>
+				</Flex>
+			</BaseControl>
+		);
+	}
+
+	return (
+		<NumberControl
+			label={ label }
+			help={ description }
+			value={ value }
+			onChange={ ( next ) =>
+				onChange( { [ id ]: numberFilterValue( next ) } )
+			}
+			__next40pxDefaultSize
+			hideLabelFromVision={ hideLabelFromVision }
+		/>
+	);
+}
+
+function supportedDataViewsOperators( operators, candidates ) {
+	return candidates.filter( ( operator ) => operators.includes( operator ) );
+}
+
+export function dataViewsFilterByForType( type, operators ) {
+	let supported = [];
+	switch ( type ) {
+		case 'text':
+		case 'email':
+		case 'url':
+			supported = supportedDataViewsOperators(
+				operators,
+				DATAVIEWS_TEXT_FILTER_OPERATORS
+			);
+			break;
+		case 'number':
+			supported = supportedDataViewsOperators(
+				operators,
+				DATAVIEWS_NUMBER_FILTER_OPERATORS
+			);
+			break;
+		case 'date':
+			supported = supportedDataViewsOperators(
+				operators,
+				DATAVIEWS_DATE_FILTER_OPERATORS
+			);
+			break;
+		case 'datetime':
+			supported = supportedDataViewsOperators(
+				operators,
+				DATAVIEWS_DATETIME_FILTER_OPERATORS
+			);
+			break;
+		case 'select':
+		case 'multiselect':
+			supported = supportedDataViewsOperators(
+				operators,
+				DATAVIEWS_OPTION_FILTER_OPERATORS
+			);
+			break;
+		default:
+			return undefined;
+	}
+	return supported.length > 0 ? { operators: supported } : undefined;
+}
+
+function fieldValue( item, id ) {
+	if ( item && Object.prototype.hasOwnProperty.call( item, id ) ) {
+		return item[ id ];
+	}
+	return item?.meta?.[ id ] ?? null;
+}
+
+function checkboxFieldValue( item, id ) {
+	return parseBooleanMeta( fieldValue( item, id ), false );
+}
+
 // Returns the four read-only system fields surfaced alongside each
 // collection's custom fields: created at, last edited at, created by,
 // last edited by. The values come straight off the row payload (the
@@ -174,6 +361,7 @@ export function systemFields() {
 			label: __( 'Created', 'cortext' ),
 			type: 'datetime',
 			cortextType: 'datetime',
+			...SERVER_SORT_ONLY,
 			editable: false,
 			enableSorting: true,
 			getValue: ( { item } ) => item?.created_at ?? null,
@@ -188,6 +376,7 @@ export function systemFields() {
 			label: __( 'Created by', 'cortext' ),
 			type: 'text',
 			cortextType: 'text',
+			...NOT_SERVER_QUERYABLE,
 			editable: false,
 			enableSorting: false,
 			getValue: ( { item } ) => item?.created_by ?? null,
@@ -202,6 +391,7 @@ export function systemFields() {
 			label: __( 'Last edited', 'cortext' ),
 			type: 'datetime',
 			cortextType: 'datetime',
+			...SERVER_SORT_ONLY,
 			editable: false,
 			enableSorting: true,
 			getValue: ( { item } ) => item?.modified_at ?? null,
@@ -216,6 +406,7 @@ export function systemFields() {
 			label: __( 'Last edited by', 'cortext' ),
 			type: 'text',
 			cortextType: 'text',
+			...NOT_SERVER_QUERYABLE,
 			editable: false,
 			enableSorting: false,
 			getValue: ( { item } ) => item?.modified_by ?? null,
@@ -263,11 +454,19 @@ export function mapField( field ) {
 		}
 	}
 	const relation = fieldRelationConfig( field, type, rollupTargetType );
+	const capabilities = field.cortext_capabilities ?? {};
+	const operators = Array.isArray( capabilities.operators )
+		? capabilities.operators
+		: [];
 	const base = {
 		id,
 		label,
 		recordId: field.id,
 		cortextType: type,
+		sortable: capabilities.sortable === true,
+		filterable: capabilities.filterable === true,
+		operators,
+		filterBy: dataViewsFilterByForType( type, operators ),
 		relatedCollectionId: relation?.targetCollectionId,
 		relationMultiple: relation?.multiple,
 		rollupAggregator: field.meta?.rollup_aggregator,
@@ -288,7 +487,7 @@ export function mapField( field ) {
 				/>
 			</HeaderLabel>
 		),
-		getValue: ( { item } ) => item?.meta?.[ id ] ?? null,
+		getValue: ( { item } ) => fieldValue( item, id ),
 		render: buildRender( id, type, label, elements, format, relation ),
 		editable: EDITABLE_TYPES.has( type ),
 		enableGlobalSearch: SEARCHABLE_TYPES.has( type ),
@@ -303,12 +502,19 @@ export function mapField( field ) {
 	// EditableCell drives the actual edit/display, so these mappings only
 	// affect column-level metadata (default sort comparator, future filter
 	// UI). We pick the closest honest type rather than the prettiest one:
-	// numbers and url go through 'text' because there's nothing closer
-	// (tech-debt.md#10), multiselect goes through 'array' so DataViews
-	// understands the value cardinality.
+	// decimals go through 'integer' with DataViews' integer-only
+	// validator disabled because there's no exact number type
+	// (tech-debt.md#10), url goes through 'text', and multiselect goes
+	// through 'array' so DataViews understands the value cardinality.
 	switch ( type ) {
 		case 'number':
-			return { ...base, type: 'text' };
+			return {
+				...base,
+				type: 'integer',
+				Edit: NumberFilterControl,
+				isValid: { custom: () => null },
+				sort: sortNumberValues( base.getValue ),
+			};
 		case 'email':
 			return { ...base, type: 'email' };
 		case 'url':
@@ -317,6 +523,12 @@ export function mapField( field ) {
 			return { ...base, type: 'text', elements };
 		case 'multiselect':
 			return { ...base, type: 'array', elements };
+		case 'checkbox':
+			return {
+				...base,
+				type: 'boolean',
+				getValue: ( { item } ) => checkboxFieldValue( item, id ),
+			};
 		case 'relation':
 			return {
 				...base,
@@ -361,10 +573,9 @@ export function mapField( field ) {
 			};
 		}
 		case 'date':
+			return { ...base, type: 'date' };
 		case 'datetime':
 			return { ...base, type: 'datetime' };
-		case 'checkbox':
-			return { ...base, type: 'boolean' };
 		case 'text':
 		default:
 			return { ...base, type: 'text' };
