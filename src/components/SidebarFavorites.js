@@ -393,10 +393,6 @@ export default function SidebarFavorites( {
 		};
 	}, [] );
 
-	if ( ! isResolving && displayFavorites.length === 0 ) {
-		return null;
-	}
-
 	const handleDragEnd = ( { active, over } ) => {
 		if ( isDisabled ) {
 			return;
@@ -418,18 +414,26 @@ export default function SidebarFavorites( {
 		}
 		onRemove( item );
 	};
+	const hasFavorites = favorites.length > 0;
+	const isLoading =
+		isResolving ||
+		( hasFavorites && isResolvingItems && items.length === 0 );
+	const isEmpty = ! isLoading && ! hasFavorites;
 
 	return (
 		<div className="cortext-sidebar__favorites">
-			<div className="cortext-sidebar__section-header">
-				<h2 className="cortext-sidebar__section-title">
-					{ __( 'Favorites', 'cortext' ) }
-				</h2>
-			</div>
-			{ ( isResolving || isResolvingItems ) && items.length === 0 ? (
+			{ isLoading ? (
 				<div className="cortext-sidebar__loading">
 					<Spinner />
 				</div>
+			) : null }
+			{ isEmpty ? (
+				<p className="cortext-sidebar__empty cortext-sidebar__empty--inline">
+					{ __(
+						'Star a page from its title menu to pin it here.',
+						'cortext'
+					) }
+				</p>
 			) : null }
 			{ items.length > 0 ? (
 				<DndContext

@@ -29,6 +29,16 @@ afterEach( () => {
 } );
 
 describe( 'SidebarFavorites helpers', () => {
+	it( 'renders an inline empty state when there are no favorites', () => {
+		renderFavorites();
+
+		expect(
+			screen.getByText(
+				'Star a page from its title menu to pin it here.'
+			)
+		).toBeInTheDocument();
+	} );
+
 	it( 'builds stable favorite keys', () => {
 		expect( favoriteKey( { kind: 'page', id: 12 } ) ).toBe(
 			'favorite:page:12'
@@ -196,5 +206,38 @@ describe( 'SidebarFavorites helpers', () => {
 		} );
 
 		expect( screen.getByText( 'Notes' ) ).toBeInTheDocument();
+	} );
+
+	it( 'keeps the empty state when favorites is empty and sidebar records re-resolve', () => {
+		const { container, rerender } = renderFavorites();
+
+		expect(
+			screen.getByText(
+				'Star a page from its title menu to pin it here.'
+			)
+		).toBeInTheDocument();
+
+		rerender(
+			<SidebarFavorites
+				favorites={ [] }
+				pages={ [] }
+				collections={ [] }
+				isResolving={ false }
+				isResolvingItems
+				isDisabled={ false }
+				onSelect={ jest.fn( () => false ) }
+				onRemove={ jest.fn() }
+				onReorder={ jest.fn() }
+			/>
+		);
+
+		expect(
+			screen.getByText(
+				'Star a page from its title menu to pin it here.'
+			)
+		).toBeInTheDocument();
+		expect(
+			container.querySelector( '.cortext-sidebar__loading' )
+		).toBeNull();
 	} );
 } );

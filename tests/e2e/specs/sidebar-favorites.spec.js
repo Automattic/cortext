@@ -182,7 +182,9 @@ test.describe( 'Sidebar favorites', () => {
 				collectionKey,
 			] );
 
-			const favorites = page.locator( '.cortext-sidebar__favorites' );
+			const favorites = page.locator(
+				'.cortext-sidebar__section--favorites'
+			);
 			await expect(
 				favorites.getByRole( 'heading', { name: 'Favorites' } )
 			).toBeVisible();
