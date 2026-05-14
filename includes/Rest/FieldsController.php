@@ -587,7 +587,13 @@ final class FieldsController {
 		}
 
 		$meta_key = Relations::meta_key( $field_id );
-		$tokens   = array();
+		// Hash-keyed set for O(1) dedupe — `in_array` over a growing list
+		// scales quadratically once the unique-token count grows past a few
+		// hundred, which is the realistic worst case for a high-cardinality
+		// text column being converted. `array_keys` preserves insertion
+		// order so the first occurrence wins, matching the previous
+		// `in_array` semantics.
+		$seen = array();
 		foreach ( $row_ids as $row_id ) {
 			$stored = get_post_meta( (int) $row_id, $meta_key, true );
 			if ( null === $stored || '' === $stored ) {
@@ -598,12 +604,12 @@ final class FieldsController {
 				$row_tokens = array_slice( $row_tokens, 0, 1 );
 			}
 			foreach ( $row_tokens as $token ) {
-				if ( ! in_array( $token, $tokens, true ) ) {
-					$tokens[] = $token;
+				if ( ! isset( $seen[ $token ] ) ) {
+					$seen[ $token ] = true;
 				}
 			}
 		}
-		return $tokens;
+		return array_keys( $seen );
 	}
 
 	/**
