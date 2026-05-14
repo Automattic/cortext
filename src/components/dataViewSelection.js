@@ -135,5 +135,8 @@ export function toggleVisibleSelection( previousSelection, visibleIds ) {
 
 export function removeDeletedSelection( previousSelection, deletedIds ) {
 	const deleted = new Set( deletedIds.map( normalizeRowId ) );
-	return previousSelection.filter( ( id ) => ! deleted.has( id ) );
+	return previousSelection
+		.map( normalizeRowId )
+		.filter( Boolean )
+		.filter( ( id ) => ! deleted.has( id ) );
 }

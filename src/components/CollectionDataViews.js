@@ -24,6 +24,7 @@ import { useNavigate } from '@wordpress/route';
 import DataViewColumnInteractions from './DataViewColumnInteractions';
 import EditableCell, { RowMutationContext } from './EditableCell';
 import PageIcon from './PageIcon';
+import allSettledWithConcurrency from './allSettledWithConcurrency';
 import { filterSortAndPaginateWithGroups } from './groupedFilters';
 import TableCalculationsFooter from './TableCalculationsFooter';
 import ColumnHeaderActions from './fields/ColumnHeaderActions';
@@ -296,6 +297,7 @@ const TABLE_ROW_SELECTOR =
 const GRID_CARD_SELECTOR = '.dataviews-view-grid__card';
 const INTERACTIVE_SELECTION_IGNORE_SELECTOR =
 	'button, a, input, textarea, select, [contenteditable="true"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], .components-button';
+const BULK_DELETE_CONCURRENCY = 4;
 
 function findDataViewItemFromEvent( event, wrapper, layout, rows ) {
 	const target = event.target;
@@ -1199,13 +1201,14 @@ export default function CollectionDataViews( {
 			}
 
 			setRowActionError( null );
-			const results = await Promise.allSettled(
-				nextRows.map( ( row ) =>
+			const results = await allSettledWithConcurrency(
+				nextRows,
+				BULK_DELETE_CONCURRENCY,
+				( row ) =>
 					apiFetch( {
 						path: `/wp/v2/${ postType }/${ row.id }`,
 						method: 'DELETE',
 					} )
-				)
 			);
 
 			const deletedIds = [];

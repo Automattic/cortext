@@ -75,7 +75,7 @@ describe( 'dataViewSelection', () => {
 	} );
 
 	it( 'removes deleted rows from selection', () => {
-		expect( removeDeletedSelection( [ '1', '2', '3' ], [ 2 ] ) ).toEqual( [
+		expect( removeDeletedSelection( [ '1', 2, '3' ], [ 2 ] ) ).toEqual( [
 			'1',
 			'3',
 		] );
