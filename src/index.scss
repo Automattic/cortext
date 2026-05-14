@@ -1918,6 +1918,15 @@ body:has(.cortext-canvas__identity-actions:hover) .cortext-canvas__identity-acti
 	}
 }
 
+// Regular cells get vertical centering from DataViews' inner wrapper.
+// The row-actions cell skips that wrapper, so center the kebab on the td.
+.cortext-data-view
+.dataviews-view-table
+tbody
+td.dataviews-view-table__actions-column {
+	vertical-align: middle;
+}
+
 // Custom field columns carry a marker that `ColumnHeaderActions`
 // portals our trigger into. We hide DataViews' built-in trigger on
 // those <th>s and replace it with a single combined dropdown (Sort /
