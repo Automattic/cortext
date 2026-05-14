@@ -1007,63 +1007,62 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 		$this->assertSame( 0, $response->get_data()['count'] );
 	}
 
-	public function test_convert_plan_classifies_text_to_number(): void {
+	public function test_collect_option_tokens_for_text_to_select_dedupes_and_keeps_first(): void {
 		wp_set_current_user( $this->create_user( 'editor' ) );
 		[ , $field_id, $row_ids ] = $this->fixture_text_field_with_rows(
-			'plan-num',
-			array( '42', '3.14', '-7', 'abc', '12 cats' )
-		);
-
-		$plan = $this->build_plan( $field_id, 'number', $row_ids );
-
-		$this->assertSame( 'text', $plan['from'] );
-		$this->assertSame( 'number', $plan['to'] );
-		$this->assertSame( 5, $plan['total'] );
-		$this->assertSame( 3, $plan['displays'] );
-		$this->assertSame( 2, $plan['hidden'] );
-		$this->assertSame( 0, $plan['empty'] );
-		$this->assertSame( array(), $plan['new_options'] );
-	}
-
-	public function test_convert_plan_classifies_empty_and_partial(): void {
-		wp_set_current_user( $this->create_user( 'editor' ) );
-		[ , $field_id, $row_ids ] = $this->fixture_text_field_with_rows(
-			'plan-empty',
-			array( '42', '', 'abc', '' )
-		);
-
-		$plan = $this->build_plan( $field_id, 'number', $row_ids );
-
-		$this->assertSame( 4, $plan['total'] );
-		$this->assertSame( 1, $plan['displays'] );
-		$this->assertSame( 1, $plan['hidden'] );
-		$this->assertSame( 2, $plan['empty'] );
-	}
-
-	public function test_convert_plan_extends_options_for_text_to_select(): void {
-		wp_set_current_user( $this->create_user( 'editor' ) );
-		[ , $field_id, $row_ids ] = $this->fixture_text_field_with_rows(
-			'plan-sel',
+			'tokens-sel',
 			array( 'Open', 'Closed', 'Open', 'In Progress' )
 		);
 
-		$plan = $this->build_plan( $field_id, 'select', $row_ids );
+		$tokens = $this->collect_option_tokens( $field_id, 'select', $row_ids );
 
-		sort( $plan['new_options'] );
-		$this->assertSame( array( 'Closed', 'In Progress', 'Open' ), $plan['new_options'] );
+		sort( $tokens );
+		$this->assertSame( array( 'Closed', 'In Progress', 'Open' ), $tokens );
 	}
 
-	public function test_convert_plan_splits_delimiters_for_text_to_multiselect(): void {
+	public function test_collect_option_tokens_for_text_to_multiselect_splits_delimiters(): void {
 		wp_set_current_user( $this->create_user( 'editor' ) );
 		[ , $field_id, $row_ids ] = $this->fixture_text_field_with_rows(
-			'plan-multi',
+			'tokens-multi',
 			array( 'Open, Closed', 'In Progress', 'Open; Pending' )
 		);
 
-		$plan = $this->build_plan( $field_id, 'multiselect', $row_ids );
+		$tokens = $this->collect_option_tokens( $field_id, 'multiselect', $row_ids );
 
-		sort( $plan['new_options'] );
-		$this->assertSame( array( 'Closed', 'In Progress', 'Open', 'Pending' ), $plan['new_options'] );
+		sort( $tokens );
+		$this->assertSame( array( 'Closed', 'In Progress', 'Open', 'Pending' ), $tokens );
+	}
+
+	public function test_collect_option_tokens_for_text_to_select_keeps_only_first_token(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		[ , $field_id, $row_ids ] = $this->fixture_text_field_with_rows(
+			'tokens-sel-first',
+			array( 'Open, Closed, Pending' )
+		);
+
+		$tokens = $this->collect_option_tokens( $field_id, 'select', $row_ids );
+
+		$this->assertSame( array( 'Open' ), $tokens );
+	}
+
+	public function test_convert_text_to_number_returns_lean_response_without_scanning_rows(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		[ , $field_id ] = $this->fixture_text_field_with_rows( 'lean', array( '42', 'abc' ) );
+
+		$response = $this->convert_field( $field_id, 'number' );
+
+		$this->assertSame( 200, $response->get_status() );
+		$data = $response->get_data();
+		// Non-option conversions skip the row scan entirely, so the response
+		// carries no preview counts and `new_options` is always empty.
+		$this->assertSame(
+			array( 'id', 'type', 'from', 'new_options' ),
+			array_keys( $data )
+		);
+		$this->assertSame( 'number', $data['type'] );
+		$this->assertSame( 'text', $data['from'] );
+		$this->assertSame( array(), $data['new_options'] );
+		$this->assertSame( 'number', get_post_meta( $field_id, 'type', true ) );
 	}
 
 	public function test_convert_rejects_unsupported_pair(): void {
@@ -1115,25 +1114,23 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 			array( 'Open', 'Closed', 'Open' )
 		);
 
-		$plan = $this->build_plan( $field_id, 'select', $row_ids );
-		$this->assertSame( array( 'Open', 'Closed' ), $plan['new_options'] );
-
-		// Apply commit the same way the REST handler does: write options
-		// first, then flip the type. This is exactly what `convert()` runs;
-		// keeping it inline here lets the test verify what the row endpoint
-		// will return immediately after, without the WorDBless-incompatible
-		// `WP_Query` row enumeration that the real handler also performs.
+		// Mirror what the REST handler does: collect option tokens, write
+		// options, flip type. Kept inline so the test can verify what the row
+		// endpoint will return immediately after, without the WorDBless-
+		// incompatible `WP_Query` row enumeration that the real handler also
+		// performs.
+		$tokens    = $this->collect_option_tokens( $field_id, 'select', $row_ids );
 		$additions = array();
-		foreach ( $plan['new_options'] as $value ) {
+		foreach ( $tokens as $value ) {
 			$additions[] = array(
 				'value' => $value,
 				'label' => $value,
 			);
 		}
+		$this->assertSame( array( 'Open', 'Closed' ), $tokens );
 		update_post_meta( $field_id, 'options', wp_json_encode( $additions ) );
 		update_post_meta( $field_id, 'type', 'select' );
 
-		// Now what would the rows endpoint return for each row's value?
 		$rendered = array();
 		foreach ( $row_ids as $row_id ) {
 			$rendered[] = $this->invoke_format_typed_value( $row_id, $field_id, 'select', false );
@@ -1153,14 +1150,14 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 			)
 		);
 
-		$plan = $this->build_plan( $field_id, 'select', $row_ids );
-		// For select targets the plan keeps only the first split-token per
-		// row, so the option list mirrors what the cell will render.
-		sort( $plan['new_options'] );
-		$this->assertSame( array( 'Done', 'In Progress', 'Open' ), $plan['new_options'] );
+		$tokens = $this->collect_option_tokens( $field_id, 'select', $row_ids );
+		// For select targets each row contributes only its first split-token,
+		// so the option list mirrors what the cell will render.
+		sort( $tokens );
+		$this->assertSame( array( 'Done', 'In Progress', 'Open' ), $tokens );
 
 		$additions = array();
-		foreach ( $plan['new_options'] as $value ) {
+		foreach ( $tokens as $value ) {
 			$additions[] = array(
 				'value' => $value,
 				'label' => $value,
@@ -1378,11 +1375,8 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 			array( '42', 'abc' )
 		);
 
-		$plan_forward = $this->build_plan( $field_id, 'number', $row_ids );
-		$this->assertSame( 1, $plan_forward['displays'] );
-		$this->assertSame( 1, $plan_forward['hidden'] );
-
-		// Flip the type without touching row values, mirroring `convert`.
+		// Non-option conversion: flip the type without touching row values,
+		// mirroring `convert()` (which writes only `type` here).
 		update_post_meta( $field_id, 'type', 'number' );
 
 		// Round-trip the type back to text — row meta is still the original.
@@ -1396,9 +1390,9 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 		$this->assertSame( array( '42', 'abc' ), $values );
 	}
 
-	private function build_plan( int $field_id, string $target_type, array $row_ids ): array {
+	private function collect_option_tokens( int $field_id, string $target_type, array $row_ids ): array {
 		$controller = new FieldsController();
-		$method     = new \ReflectionMethod( $controller, 'build_conversion_plan' );
+		$method     = new \ReflectionMethod( $controller, 'collect_option_tokens' );
 		$method->setAccessible( true );
 		return $method->invoke( $controller, $field_id, $target_type, $row_ids );
 	}

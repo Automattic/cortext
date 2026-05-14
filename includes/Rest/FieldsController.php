@@ -485,68 +485,6 @@ final class FieldsController {
 		$field_id    = (int) $request->get_param( 'field_id' );
 		$target_type = (string) $request->get_param( 'type' );
 
-		$plan = $this->build_conversion_plan( $field_id, $target_type );
-		if ( is_wp_error( $plan ) ) {
-			return $plan;
-		}
-
-		$source_type = $plan['from'];
-
-		if ( in_array( $source_type, array( 'date', 'datetime' ), true ) && 'text' === $target_type ) {
-			$prior_format = (string) get_post_meta( $field_id, 'date_format', true );
-			if ( '' !== $prior_format ) {
-				update_post_meta( $field_id, 'prior_date_format', $prior_format );
-			} else {
-				update_post_meta( $field_id, 'prior_date_format', $source_type );
-			}
-		}
-
-		if ( count( $plan['new_options'] ) > 0 ) {
-			$existing      = $this->existing_options( $field_id );
-			$existing_vals = array_column( $existing, 'value' );
-			$additions     = array();
-			foreach ( $plan['new_options'] as $value ) {
-				if ( in_array( $value, $existing_vals, true ) ) {
-					continue;
-				}
-				$additions[] = array(
-					'value' => $value,
-					'label' => $value,
-				);
-			}
-			$merged = array_merge( $existing, $additions );
-			update_post_meta( $field_id, 'options', wp_json_encode( $merged ) );
-		}
-
-		update_post_meta( $field_id, 'type', $target_type );
-
-		return new WP_REST_Response(
-			array(
-				'id'          => $field_id,
-				'type'        => $target_type,
-				'from'        => $source_type,
-				'total'       => $plan['total'],
-				'displays'    => $plan['displays'],
-				'hidden'      => $plan['hidden'],
-				'empty'       => $plan['empty'],
-				'new_options' => $plan['new_options'],
-			),
-			200
-		);
-	}
-
-	/**
-	 * Iterates the rows of the collection that owns the field and classifies
-	 * each stored value under the proposed target type. Returns counts plus the
-	 * unique tokens that should be auto-added to the field's options list on
-	 * commit (only for text-like → select / multiselect conversions).
-	 *
-	 * @param int        $field_id         Field post ID being converted.
-	 * @param string     $target_type      Cortext field type to convert into.
-	 * @param int[]|null $row_ids_override Optional row ID list (testing seam).
-	 * @return array{from:string,to:string,total:int,displays:int,hidden:int,empty:int,new_options:string[]}|WP_Error
-	 */
-	private function build_conversion_plan( int $field_id, string $target_type, ?array $row_ids_override = null ): array|WP_Error {
 		$source_type = (string) get_post_meta( $field_id, 'type', true );
 		if ( '' === $source_type ) {
 			return new WP_Error(
@@ -564,6 +502,69 @@ final class FieldsController {
 			);
 		}
 
+		$new_options = array();
+		if ( FieldTypeConverter::extends_options( $source_type, $target_type ) ) {
+			$tokens_or_error = $this->collect_option_tokens( $field_id, $target_type );
+			if ( is_wp_error( $tokens_or_error ) ) {
+				return $tokens_or_error;
+			}
+			$new_options = $tokens_or_error;
+			if ( count( $new_options ) > 0 ) {
+				$existing      = $this->existing_options( $field_id );
+				$existing_vals = array_column( $existing, 'value' );
+				$additions     = array();
+				foreach ( $new_options as $value ) {
+					if ( in_array( $value, $existing_vals, true ) ) {
+						continue;
+					}
+					$additions[] = array(
+						'value' => $value,
+						'label' => $value,
+					);
+				}
+				if ( count( $additions ) > 0 ) {
+					$merged = array_merge( $existing, $additions );
+					update_post_meta( $field_id, 'options', wp_json_encode( $merged ) );
+				}
+			}
+		}
+
+		if ( in_array( $source_type, array( 'date', 'datetime' ), true ) && 'text' === $target_type ) {
+			$prior_format = (string) get_post_meta( $field_id, 'date_format', true );
+			update_post_meta(
+				$field_id,
+				'prior_date_format',
+				'' !== $prior_format ? $prior_format : $source_type
+			);
+		}
+
+		update_post_meta( $field_id, 'type', $target_type );
+
+		return new WP_REST_Response(
+			array(
+				'id'          => $field_id,
+				'type'        => $target_type,
+				'from'        => $source_type,
+				'new_options' => $new_options,
+			),
+			200
+		);
+	}
+
+	/**
+	 * Walks the rows of the collection that owns the field and harvests the
+	 * unique split-tokens that should seed the target's options list. Only
+	 * called for text-like → select / multiselect conversions; every other
+	 * conversion skips row enumeration entirely and finishes in O(1).
+	 *
+	 * @param int        $field_id         Field post ID being converted.
+	 * @param string     $target_type      Target field type (`select` or `multiselect`).
+	 * @param int[]|null $row_ids_override Optional row ID list (testing seam for
+	 *                                     environments where `WP_Query` over the
+	 *                                     entry CPT doesn't return rows).
+	 * @return string[]|WP_Error
+	 */
+	private function collect_option_tokens( int $field_id, string $target_type, ?array $row_ids_override = null ): array|WP_Error {
 		if ( null === $row_ids_override ) {
 			$post_type = $this->row_post_type_for_field( $field_id );
 			if ( null === $post_type ) {
@@ -585,58 +586,24 @@ final class FieldsController {
 			$row_ids = $row_ids_override;
 		}
 
-		$meta_key      = Relations::meta_key( $field_id );
-		$extends_opts  = FieldTypeConverter::extends_options( $source_type, $target_type );
-		$displays      = 0;
-		$hidden        = 0;
-		$empty         = 0;
-		$option_tokens = array();
-
+		$meta_key = Relations::meta_key( $field_id );
+		$tokens   = array();
 		foreach ( $row_ids as $row_id ) {
-			$row_id = (int) $row_id;
-
-			if ( 'multiselect' === $source_type ) {
-				$stored = get_post_meta( $row_id, $meta_key, false );
-			} else {
-				$stored = get_post_meta( $row_id, $meta_key, true );
+			$stored = get_post_meta( (int) $row_id, $meta_key, true );
+			if ( null === $stored || '' === $stored ) {
+				continue;
 			}
-
-			$status = FieldTypeConverter::classify( $source_type, $target_type, $stored );
-			switch ( $status ) {
-				case FieldTypeConverter::STATUS_DISPLAYS:
-					++$displays;
-					break;
-				case FieldTypeConverter::STATUS_HIDDEN:
-					++$hidden;
-					break;
-				case FieldTypeConverter::STATUS_EMPTY:
-				default:
-					++$empty;
-					break;
+			$row_tokens = FieldTypeConverter::split_tokens( (string) $stored );
+			if ( 'select' === $target_type && count( $row_tokens ) > 1 ) {
+				$row_tokens = array_slice( $row_tokens, 0, 1 );
 			}
-
-			if ( $extends_opts && FieldTypeConverter::STATUS_DISPLAYS === $status ) {
-				$tokens = FieldTypeConverter::split_tokens( (string) $stored );
-				if ( 'select' === $target_type && count( $tokens ) > 1 ) {
-					$tokens = array_slice( $tokens, 0, 1 );
-				}
-				foreach ( $tokens as $token ) {
-					if ( ! in_array( $token, $option_tokens, true ) ) {
-						$option_tokens[] = $token;
-					}
+			foreach ( $row_tokens as $token ) {
+				if ( ! in_array( $token, $tokens, true ) ) {
+					$tokens[] = $token;
 				}
 			}
 		}
-
-		return array(
-			'from'        => $source_type,
-			'to'          => $target_type,
-			'total'       => count( $row_ids ),
-			'displays'    => $displays,
-			'hidden'      => $hidden,
-			'empty'       => $empty,
-			'new_options' => $option_tokens,
-		);
+		return $tokens;
 	}
 
 	/**
