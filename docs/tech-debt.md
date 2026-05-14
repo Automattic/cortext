@@ -33,6 +33,8 @@ The dynamic `crtxt_{slug}` post types already use `show_in_rest`, so `core-data`
 
 Worth a small spike before committing; `core-data`'s schema cache for rarely-changing post types is the only real risk.
 
+This does not mean every document-shaped query should move to `core-data`. Single records and mutations should use the entity store where WordPress supports it; cross-type product views, like Trash, can stay behind `/cortext/v1/documents/*` endpoints.
+
 ## 3. Sorting support is split between REST and client mode `[internal]`
 
 Updated by [#80](https://github.com/priethor/cortext/pull/80) and RSM-1459.
@@ -418,3 +420,13 @@ The user-facing placeholder is still Core's generic "Search commands and setting
 **Where.** `useSubmenuPlacement` in `src/hooks/useSubmenuPlacement.js`, wired into `src/components/fields/FieldFormatPopover.js` and `src/components/TableCalculationMenu.js`.
 
 **Solution.** WordPress Popover could expose fallback placements, or pass enough Floating UI middleware through for consumers to say "try right, then left, then bottom" without measuring after render. If that lands, Cortext can drop `useSubmenuPlacement` and let the Popover own cascading-menu collision handling.
+
+## 48. Cortext document layer is still thin `[internal]`
+
+**What.** Pages and collection rows both opt into `cortext-document`, and Trash now uses document routes for list, restore, and permanent delete. That is the right direction, but the rest of the client still knows too much about the split. Pages have the page tree and `core-data` queries. Rows have `useCollectionRows`. Recents, favorites, routing, and invalidation still branch on page versus row more often than a shared document layer should require.
+
+Trash shows the shape of the problem. The API is document-first, but the client still has to refresh page tree queries, row queries, collection context, and the generic Trash list through separate paths.
+
+**Where.** `includes/Rest/DocumentTrashController.php`, `src/components/SidebarTrash.js`, `src/components/Sidebar.js`, `src/router/useResolveEntity.js`, `src/router/EntityRoute.js`, `src/hooks/documentTrashInvalidation.js`, `src/hooks/rowInvalidation.js`, and `src/hooks/useTrashedDocuments.js`.
+
+**Solution.** Build a small document layer instead of making every feature rediscover page-vs-row rules: shared helpers for document kind/context, document paths, document invalidation, and cross-type document lists. Individual records can still use `core-data` where WordPress supports it. Cross-type views can stay as `/cortext/v1/documents/*` endpoints. The point is not to hide pages and rows completely; it is to keep shared document features from hand-stitching the same branches every time.
