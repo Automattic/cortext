@@ -165,17 +165,17 @@ Double-click autofit is the trickiest piece. With no measurement hook upstream, 
 
 **Solution.** A `field.menuItems` (array or render-prop) on DataViews fields, appended to the built-in dropdown. Other consumers (Pattern Manager, Pages, Site Editor) would benefit too. File as a Gutenberg feature request.
 
-## 17. Ghost `+` column is a synthetic field pinned in `view.fields` `[internal]`
+## 17. Add-field header piggybacks on the DataViews actions column `[upstream, soft]`
 
-**What.** The `+ add field` column is a synthetic DataViews field (`__add_field`) — no data, no label, pinned last in `view.fields` for table layout. We rely on `enableHiding: false` to keep it out of the column-visibility menu. If DataViews stops honoring that flag, the synthetic leaks into the menu and confuses the column list.
+**What.** The table's `+ add field` button now sits in DataViews' row-actions column header. `ColumnHeaderActions` finds `th.dataviews-view-table__actions-column` and portals the button there; CSS hides the built-in "Actions" label and keeps the header cell sticky on the right. This is cleaner than the old synthetic `__add_field` column because it no longer leaks into `view.fields`, but it still leans on DataViews internals. If the class name, header rendering, or sticky-column markup changes, the button can disappear or stop lining up with the row kebabs.
 
-**Where.** `GHOST_FIELD` and the view-sync effect in `src/components/CollectionDataViews.js`.
+**Where.** `src/components/fields/ColumnHeaderActions.js` (actions-column lookup and portal), `src/index.scss` (`.dataviews-view-table__actions-column` overrides), and the legacy `__add_field` cleanup in `src/components/CollectionDataViews.js`.
 
-**Solution.** If `enableHiding` ever stops working, fork the field list in `CollectionDataViews.js` — pass the synthetic to the table layout but hide it from the visibility menu.
+**Solution.** DataViews exposes a trailing table-header slot, an add-column slot, or a header action area separate from per-row actions. Then the portal targets a real extension point, the sticky/header-label CSS disappears, and `__add_field` stays only as migration cleanup for old saved views.
 
 ## 18. Field management is table-layout only `[internal]`
 
-**What.** Rename / Duplicate / Delete only show up in the table-layout column-header kebab. Grid and list layouts have no schema actions and no ghost `+`. Users there can still create fields via the toolbar Add field button, but they have to switch to table to manage existing fields.
+**What.** Rename / Duplicate / Delete only show up in the table-layout column-header kebab. Grid and list layouts have no schema actions. Users there can still create fields via the toolbar Add field button, but they have to switch to table to manage existing fields.
 
 **Where.** `ColumnHeaderActions` mounts only when `view.type === 'table'` (`src/components/CollectionDataViews.js`).
 
@@ -191,7 +191,7 @@ Double-click autofit is the trickiest piece. With no measurement hook upstream, 
 
 ## 20. Table layout overrides couple to DataViews internals `[upstream, soft]`
 
-**What.** DataViews ships `table-layout: auto; width: 100%` plus per-cell padding rules. We flip to `table-layout: fixed; width: max-content` with explicit per-cell widths so adding or removing a field doesn't reflow every other column, and match DataViews' selector specificity to override the last-cell padding so the ghost column stays slim. Result: a content-sized table that scrolls horizontally on overflow. Depends on DataViews' class names and selector specificity staying put.
+**What.** DataViews ships `table-layout: auto; width: 100%` plus per-cell padding rules. We flip to `table-layout: fixed; width: max-content` with explicit per-cell widths so adding or removing a field doesn't reflow every other column. We also override the actions-column header so the add-field button stays pinned beside the row kebabs. The table sizes to its content and scrolls horizontally on overflow. Depends on DataViews' class names and selector specificity staying put.
 
 **Where.** `src/index.scss`, around the `.dataviews-view-table` block.
 

@@ -1,5 +1,10 @@
 import apiFetch from '@wordpress/api-fetch';
-import { Button, Notice } from '@wordpress/components';
+import {
+	Button,
+	Notice,
+	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+	__experimentalConfirmDialog as ConfirmDialog,
+} from '@wordpress/components';
 import { DataViews } from '@wordpress/dataviews';
 import {
 	createContext,
@@ -10,9 +15,10 @@ import {
 	useRef,
 	useState,
 } from '@wordpress/element';
-import { __ } from '@wordpress/i18n';
-import { plus } from '@wordpress/icons';
+import { __, sprintf } from '@wordpress/i18n';
+import { copy, plus, trash } from '@wordpress/icons';
 import { useNavigate } from '@wordpress/route';
+import { addQueryArgs } from '@wordpress/url';
 
 import DataViewColumnInteractions from './DataViewColumnInteractions';
 import EditableCell, { RowMutationContext } from './EditableCell';
@@ -20,7 +26,10 @@ import PageIcon from './PageIcon';
 import { filterSortAndPaginateWithGroups } from './groupedFilters';
 import TableCalculationsFooter from './TableCalculationsFooter';
 import ColumnHeaderActions from './fields/ColumnHeaderActions';
-import RowDetailView, { ROW_DETAIL_MODE_ICONS } from './RowDetailView';
+import RowDetailView, {
+	ROW_DETAIL_MODE_ICONS,
+	ROW_DETAIL_MODE_LABELS,
+} from './RowDetailView';
 import { RowDetailSidebar } from './RowDetailSidebarSlot';
 import {
 	GHOST_FIELD_ID,
@@ -162,37 +171,6 @@ const TITLE_FIELD = {
 	// reorders and resizes like any other column. `normalizeView` re-adds
 	// the id to `view.fields` if something corrupts the saved state.
 	enableHiding: false,
-};
-
-// Synthetic "ghost column" rendered at the right edge of the table layout.
-// Its `header` carries an aria-hidden marker that `ColumnHeaderActions`
-// portals a `+` button into; the row cells render `null`, leaving an
-// empty column that visually echoes an "add column" affordance.
-// Pinned visible (and last) by the view-sync effect when
-// `view.type === 'table'`, dropped from `view.fields` for grid/list.
-const GHOST_FIELD = {
-	id: GHOST_FIELD_ID,
-	type: 'text',
-	cortextType: 'ghost',
-	label: '',
-	sortable: false,
-	filterable: false,
-	operators: [],
-	filterBy: false,
-	enableSorting: false,
-	enableHiding: false,
-	editable: false,
-	getValue: () => '',
-	render: () => (
-		<span className="cortext-data-view__ghost-cell" aria-hidden="true" />
-	),
-	header: (
-		<span
-			className="cortext-column-header-marker cortext-column-header-marker--add"
-			data-cortext-add-field-marker="true"
-			aria-hidden="true"
-		/>
-	),
 };
 
 // Pulls a "single equality" prefill out of the active filters: only filters
@@ -350,13 +328,7 @@ export default function CollectionDataViews( {
 
 	const isTableLayout = view?.type === 'table';
 	const isServerPaginated = queryMode === 'server';
-	const dataViewFields = useMemo(
-		() =>
-			isTableLayout
-				? [ ...availableFields, GHOST_FIELD ]
-				: availableFields,
-		[ availableFields, isTableLayout ]
-	);
+	const dataViewFields = availableFields;
 
 	const tableWrapperRef = useRef( null );
 	// editRequest is the "open this cell for editing" channel: cells that
@@ -737,24 +709,144 @@ export default function CollectionDataViews( {
 		[ isTableLayout, openRowId, requestOpenRow, savedRowDetailMode ]
 	);
 
-	const rowActions = useMemo(
-		() => [
-			{
-				id: 'open-row',
-				label: __( 'Open row', 'cortext' ),
-				icon: ROW_DETAIL_MODE_ICONS[ savedRowDetailMode ],
-				isPrimary: true,
-				context: 'single',
-				callback: ( items ) => requestOpenRow( items?.[ 0 ] ),
-			},
-		],
-		[ requestOpenRow, savedRowDetailMode ]
+	const [ pendingDeleteRow, setPendingDeleteRow ] = useState( null );
+	const [ rowActionError, setRowActionError ] = useState( null );
+
+	const openRowInMode = useCallback(
+		( row, mode ) => {
+			if ( ! row?.id ) {
+				return;
+			}
+			if ( mode === 'full' ) {
+				runDetailTransition( { type: 'full', rowId: row.id } );
+				return;
+			}
+			// Store the chosen side/modal mode before opening. This matches
+			// the in-detail mode toggle: an explicit choice updates the
+			// user's preference.
+			if ( savedRowDetailMode !== mode ) {
+				onChangeView( withRowDetailMode( view, mode ) );
+			}
+			runDetailTransition( { type: 'row', rowId: row.id } );
+		},
+		[ onChangeView, runDetailTransition, savedRowDetailMode, view ]
 	);
 
-	const dataViewActions = useMemo(
-		() => ( isTableLayout ? undefined : rowActions ),
-		[ isTableLayout, rowActions ]
+	const duplicateRow = useCallback(
+		async ( row ) => {
+			if ( ! collectionId || ! row?.id ) {
+				return;
+			}
+			setRowActionError( null );
+			try {
+				const created = await apiFetch( {
+					path: `/cortext/v1/collections/${ collectionId }/rows/${ row.id }/duplicate`,
+					method: 'POST',
+				} );
+				if ( created?.id ) {
+					touchRecent( {
+						kind: 'row',
+						id: created.id,
+						collectionId,
+					} );
+				}
+				refresh();
+			} catch ( apiError ) {
+				setRowActionError(
+					apiError?.message ??
+						__( 'Could not duplicate row.', 'cortext' )
+				);
+			}
+		},
+		[ collectionId, refresh, touchRecent ]
 	);
+
+	const requestDeleteRow = useCallback( ( row ) => {
+		if ( ! row?.id ) {
+			return;
+		}
+		setRowActionError( null );
+		setPendingDeleteRow( row );
+	}, [] );
+
+	const cancelDeleteRow = useCallback( () => {
+		setPendingDeleteRow( null );
+	}, [] );
+
+	const confirmDeleteRow = useCallback( async () => {
+		const row = pendingDeleteRow;
+		setPendingDeleteRow( null );
+		if ( ! row?.id || ! postType ) {
+			return;
+		}
+		try {
+			await apiFetch( {
+				path: addQueryArgs( `/wp/v2/${ postType }/${ row.id }`, {
+					force: true,
+				} ),
+				method: 'DELETE',
+			} );
+			if ( String( row.id ) === String( openRowId ) ) {
+				runDetailTransition( { type: 'close' } );
+			}
+			refresh();
+		} catch ( apiError ) {
+			setRowActionError(
+				apiError?.message ?? __( 'Could not delete row.', 'cortext' )
+			);
+		}
+	}, [
+		openRowId,
+		pendingDeleteRow,
+		postType,
+		refresh,
+		runDetailTransition,
+	] );
+
+	const rowActions = useMemo( () => {
+		const actions = [];
+		// List and grid get one primary Open action, matching the saved
+		// detail mode. Table already has the inline Open button in the title
+		// cell, so these actions stay inside the menu there.
+		for ( const mode of [ 'side', 'modal', 'full' ] ) {
+			actions.push( {
+				id: `open-in-${ mode }`,
+				label: sprintf(
+					/* translators: %s: row detail mode (Side peek, Center modal, Full page). */
+					__( 'Open in %s', 'cortext' ),
+					ROW_DETAIL_MODE_LABELS[ mode ]
+				),
+				icon: ROW_DETAIL_MODE_ICONS[ mode ],
+				isPrimary: ! isTableLayout && mode === savedRowDetailMode,
+				context: 'single',
+				callback: ( items ) => openRowInMode( items?.[ 0 ], mode ),
+			} );
+		}
+		actions.push( {
+			id: 'duplicate-row',
+			label: __( 'Duplicate', 'cortext' ),
+			icon: copy,
+			context: 'single',
+			callback: ( items ) => duplicateRow( items?.[ 0 ] ),
+		} );
+		actions.push( {
+			id: 'delete-row',
+			label: __( 'Delete', 'cortext' ),
+			icon: trash,
+			isDestructive: true,
+			context: 'single',
+			callback: ( items ) => requestDeleteRow( items?.[ 0 ] ),
+		} );
+		return actions;
+	}, [
+		duplicateRow,
+		isTableLayout,
+		openRowInMode,
+		requestDeleteRow,
+		savedRowDetailMode,
+	] );
+
+	const dataViewActions = rowActions;
 
 	const requestCloseDetail = useCallback(
 		() => runDetailTransition( { type: 'close' } ),
@@ -919,23 +1011,15 @@ export default function CollectionDataViews( {
 			}
 		}
 
-		// Pin the ghost "+ add field" column last whenever the table
-		// layout is active. In grid/list layouts the synthetic field
-		// isn't part of `availableFields`, so `normalizeView` already
-		// dropped any stale reference.
-		if ( isTableLayout ) {
-			const stripped = ( normalized.fields ?? [] ).filter(
-				( id ) => id !== GHOST_FIELD_ID
-			);
-			const nextFields = [ ...stripped, GHOST_FIELD_ID ];
-			const fieldsChanged =
-				nextFields.length !== ( normalized.fields ?? [] ).length ||
-				nextFields.some(
-					( id, i ) => id !== ( normalized.fields ?? [] )[ i ]
-				);
-			if ( fieldsChanged ) {
-				normalized = { ...normalized, fields: nextFields };
-			}
+		// Drop `__add_field` from older saved views. The add-field button now
+		// uses the DataViews actions header instead of a synthetic column.
+		if ( ( normalized.fields ?? [] ).includes( GHOST_FIELD_ID ) ) {
+			normalized = {
+				...normalized,
+				fields: ( normalized.fields ?? [] ).filter(
+					( id ) => id !== GHOST_FIELD_ID
+				),
+			};
 		}
 
 		knownFieldIdsRef.current = validIds;
@@ -1085,6 +1169,15 @@ export default function CollectionDataViews( {
 					data-row-detail-open={ openRowId ? 'true' : 'false' }
 				>
 					<div className="cortext-data-view" ref={ tableWrapperRef }>
+						{ rowActionError && (
+							<Notice
+								status="error"
+								isDismissible
+								onRemove={ () => setRowActionError( null ) }
+							>
+								{ rowActionError }
+							</Notice>
+						) }
 						<DataViews
 							data={ dataFiltered }
 							fields={ dataViewFields }
@@ -1137,6 +1230,24 @@ export default function CollectionDataViews( {
 					</div>
 					{ detailSurface }
 				</div>
+				{ pendingDeleteRow && (
+					<ConfirmDialog
+						onConfirm={ confirmDeleteRow }
+						onCancel={ cancelDeleteRow }
+						confirmButtonText={ __( 'Delete', 'cortext' ) }
+					>
+						{ sprintf(
+							/* translators: %s: row title. */
+							__(
+								'Delete "%s"? This cannot be undone.',
+								'cortext'
+							),
+							pendingDeleteRow?.title?.rendered ||
+								pendingDeleteRow?.title?.raw ||
+								__( '(untitled)', 'cortext' )
+						) }
+					</ConfirmDialog>
+				) }
 			</OpenRowActionContext.Provider>
 		</RowMutationContext.Provider>
 	);

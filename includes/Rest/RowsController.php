@@ -139,6 +139,28 @@ final class RowsController {
 				),
 			)
 		);
+
+		register_rest_route(
+			self::NAMESPACE,
+			'/collections/(?P<collection_id>\d+)/rows/(?P<row_id>\d+)/duplicate',
+			array(
+				array(
+					'methods'             => 'POST',
+					'callback'            => array( $this, 'duplicate_row' ),
+					'permission_callback' => array( $this, 'can_duplicate_row' ),
+					'args'                => array(
+						'collection_id' => array(
+							'type'     => 'integer',
+							'required' => true,
+						),
+						'row_id'        => array(
+							'type'     => 'integer',
+							'required' => true,
+						),
+					),
+				),
+			)
+		);
 	}
 
 	public function can_read(): bool {
@@ -176,6 +198,24 @@ final class RowsController {
 		}
 
 		return current_user_can( 'edit_post', $row_id );
+	}
+
+	/**
+	 * Allows duplication only when the user can edit the source row and add
+	 * rows to the collection.
+	 *
+	 * @param WP_REST_Request $request Incoming REST request.
+	 * @return bool|WP_Error
+	 */
+	public function can_duplicate_row( WP_REST_Request $request ): bool|WP_Error {
+		$edit_check = $this->can_edit_row( $request );
+		if ( is_wp_error( $edit_check ) ) {
+			return $edit_check;
+		}
+		if ( ! $edit_check ) {
+			return false;
+		}
+		return current_user_can( 'edit_posts' );
 	}
 
 	/**
@@ -386,6 +426,113 @@ final class RowsController {
 		return new WP_REST_Response(
 			$this->format_row( get_post( $row_id ), $field_ids, $multi_field_ids ),
 			200
+		);
+	}
+
+	/**
+	 * Duplicates a row. Copies the title as "Copy of %s", plus content, status,
+	 * document icon, featured media, and stored field values. Relation values
+	 * are copied only when the reverse field accepts more than one row; copying
+	 * a single reverse would move the relation away from the source row.
+	 *
+	 * @param WP_REST_Request $request Incoming REST request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function duplicate_row( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+		$collection_id = (int) $request->get_param( 'collection_id' );
+		$row_id        = (int) $request->get_param( 'row_id' );
+
+		$collection = $this->validate_collection( $collection_id );
+		if ( is_wp_error( $collection ) ) {
+			return $collection;
+		}
+
+		$slug   = (string) get_post_meta( $collection_id, 'slug', true );
+		$source = get_post( $row_id );
+		if ( ! $source instanceof WP_Post || CollectionEntries::CPT_PREFIX . $slug !== $source->post_type ) {
+			return new WP_Error(
+				'cortext_row_not_found',
+				__( 'Row not found.', 'cortext' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		$copy_title = sprintf(
+			/* translators: %s: original row title. */
+			__( 'Copy of %s', 'cortext' ),
+			$source->post_title
+		);
+
+		$new_id = wp_insert_post(
+			array(
+				'post_type'    => $source->post_type,
+				'post_status'  => $source->post_status,
+				'post_title'   => $copy_title,
+				'post_content' => $source->post_content,
+				'post_excerpt' => $source->post_excerpt,
+			),
+			true
+		);
+		if ( is_wp_error( $new_id ) ) {
+			return $new_id;
+		}
+
+		$new_id    = (int) $new_id;
+		$field_ids = $this->collection_field_ids( $collection_id );
+
+		foreach ( $field_ids as $field_id ) {
+			$field_type = (string) get_post_meta( $field_id, 'type', true );
+
+			if ( 'rollup' === $field_type ) {
+				continue;
+			}
+
+			if ( 'relation' === $field_type ) {
+				$reverse_id = (int) get_post_meta( $field_id, 'relation_reverse_field_id', true );
+				if ( $reverse_id < 1 || ! Relations::relation_is_multiple( $reverse_id ) ) {
+					continue;
+				}
+				$values = Relations::relation_values( $row_id, $field_id );
+				if ( count( $values ) === 0 ) {
+					continue;
+				}
+				$synced = Relations::sync_relation_value( $new_id, $field_id, $values );
+				if ( is_wp_error( $synced ) ) {
+					return $synced;
+				}
+				continue;
+			}
+
+			$key = Relations::meta_key( $field_id );
+			if ( 'multiselect' === $field_type ) {
+				foreach ( get_post_meta( $row_id, $key, false ) as $value ) {
+					if ( '' !== $value && null !== $value ) {
+						add_post_meta( $new_id, $key, $value );
+					}
+				}
+				continue;
+			}
+
+			$value = get_post_meta( $row_id, $key, true );
+			if ( '' !== $value && null !== $value ) {
+				update_post_meta( $new_id, $key, $value );
+			}
+		}
+
+		$icon = (string) get_post_meta( $row_id, 'cortext_document_icon', true );
+		if ( '' !== $icon ) {
+			update_post_meta( $new_id, 'cortext_document_icon', $icon );
+		}
+
+		$thumbnail_id = (int) get_post_thumbnail_id( $row_id );
+		if ( $thumbnail_id > 0 ) {
+			set_post_thumbnail( $new_id, $thumbnail_id );
+		}
+
+		$multi_field_ids = $this->multi_value_field_ids( $field_ids );
+		return new WP_REST_Response(
+			$this->format_row( get_post( $new_id ), $field_ids, $multi_field_ids ),
+			201
 		);
 	}
 
