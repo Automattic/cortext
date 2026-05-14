@@ -9,6 +9,7 @@ declare( strict_types=1 );
 
 namespace Cortext\Rest;
 
+use Cortext\Fields\FieldTypeConverter;
 use Cortext\Fields\FieldTypeRegistry;
 use Cortext\OptionPalette;
 use Cortext\PostType\Collection;
@@ -196,6 +197,29 @@ final class FieldsController {
 									'to'     => array( 'type' => 'string' ),
 								),
 							),
+						),
+					),
+				),
+			)
+		);
+
+		register_rest_route(
+			self::NAMESPACE,
+			'/fields/(?P<field_id>\d+)/convert',
+			array(
+				array(
+					'methods'             => 'POST',
+					'callback'            => array( $this, 'convert' ),
+					'permission_callback' => array( $this, 'can_edit_field' ),
+					'args'                => array(
+						'field_id' => array(
+							'type'     => 'integer',
+							'required' => true,
+						),
+						'type'     => array(
+							'type'     => 'string',
+							'required' => true,
+							'enum'     => FieldTypeRegistry::types(),
 						),
 					),
 				),
@@ -446,6 +470,189 @@ final class FieldsController {
 			),
 			200
 		);
+	}
+
+	/**
+	 * Changes a field's type without touching row meta. Text-like values can
+	 * add options when moving to select or multiselect, and date fields keep
+	 * their old display format when moving to text.
+	 *
+	 * @param WP_REST_Request $request Request carrying `field_id` and target `type`.
+	 */
+	public function convert( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+		$field_id    = (int) $request->get_param( 'field_id' );
+		$target_type = (string) $request->get_param( 'type' );
+
+		$source_type = (string) get_post_meta( $field_id, 'type', true );
+		if ( '' === $source_type ) {
+			return new WP_Error(
+				'cortext_field_type_missing',
+				__( 'Field type could not be determined.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		if ( ! FieldTypeConverter::supports( $source_type, $target_type ) ) {
+			return new WP_Error(
+				'cortext_field_conversion_unsupported',
+				__( 'This type change is not supported.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$new_options = array();
+		if ( FieldTypeConverter::extends_options( $source_type, $target_type ) ) {
+			$tokens_or_error = $this->collect_option_tokens( $field_id, $target_type );
+			if ( is_wp_error( $tokens_or_error ) ) {
+				return $tokens_or_error;
+			}
+			$new_options = $tokens_or_error;
+			if ( count( $new_options ) > 0 ) {
+				$existing      = $this->existing_options( $field_id );
+				$existing_vals = array_column( $existing, 'value' );
+				$additions     = array();
+				foreach ( $new_options as $value ) {
+					if ( in_array( $value, $existing_vals, true ) ) {
+						continue;
+					}
+					$additions[] = array(
+						'value' => $value,
+						'label' => $value,
+					);
+				}
+				if ( count( $additions ) > 0 ) {
+					$merged = array_merge( $existing, $additions );
+					update_post_meta( $field_id, 'options', wp_json_encode( $merged ) );
+				}
+			}
+		}
+
+		if ( in_array( $source_type, array( 'date', 'datetime' ), true ) && 'text' === $target_type ) {
+			$prior_format = (string) get_post_meta( $field_id, 'date_format', true );
+			update_post_meta(
+				$field_id,
+				'prior_date_format',
+				'' !== $prior_format ? $prior_format : $source_type
+			);
+		}
+
+		update_post_meta( $field_id, 'type', $target_type );
+
+		return new WP_REST_Response(
+			array(
+				'id'          => $field_id,
+				'type'        => $target_type,
+				'from'        => $source_type,
+				'new_options' => $new_options,
+			),
+			200
+		);
+	}
+
+	/**
+	 * Collects option tokens from existing rows for text-like → select or
+	 * multiselect conversions. Other type changes skip the row scan.
+	 *
+	 * @param int        $field_id         Field post ID being converted.
+	 * @param string     $target_type      Target field type (`select` or `multiselect`).
+	 * @param int[]|null $row_ids_override Optional row IDs for tests.
+	 * @return string[]|WP_Error
+	 */
+	private function collect_option_tokens( int $field_id, string $target_type, ?array $row_ids_override = null ): array|WP_Error {
+		if ( null === $row_ids_override ) {
+			$post_type = $this->row_post_type_for_field( $field_id );
+			if ( null === $post_type ) {
+				return new WP_Error(
+					'cortext_field_collection_missing',
+					__( 'Field collection could not be determined.', 'cortext' ),
+					array( 'status' => 400 )
+				);
+			}
+			$row_ids = get_posts(
+				array(
+					'post_type'      => $post_type,
+					'post_status'    => array( 'draft', 'pending', 'private', 'publish', 'future', 'inherit' ),
+					'posts_per_page' => -1,
+					'fields'         => 'ids',
+				)
+			);
+		} else {
+			$row_ids = $row_ids_override;
+		}
+
+		$meta_key = Relations::meta_key( $field_id );
+		// Keep the first occurrence of each token without repeatedly scanning
+		// the growing list.
+		$seen = array();
+		foreach ( $row_ids as $row_id ) {
+			$stored = get_post_meta( (int) $row_id, $meta_key, true );
+			if ( null === $stored || '' === $stored ) {
+				continue;
+			}
+			$row_tokens = FieldTypeConverter::split_tokens( (string) $stored );
+			if ( 'select' === $target_type && count( $row_tokens ) > 1 ) {
+				$row_tokens = array_slice( $row_tokens, 0, 1 );
+			}
+			foreach ( $row_tokens as $token ) {
+				if ( ! isset( $seen[ $token ] ) ) {
+					$seen[ $token ] = true;
+				}
+			}
+		}
+		return array_keys( $seen );
+	}
+
+	/**
+	 * Finds the entry post type for the collection that owns this field.
+	 *
+	 * A field belongs to one collection, so the first match is enough.
+	 *
+	 * @param int $field_id Field post ID to resolve.
+	 */
+	private function row_post_type_for_field( int $field_id ): ?string {
+		$field_id_str = (string) $field_id;
+
+		// Try collections already registered in this request first. This avoids
+		// an extra query in the common path and keeps tests simple.
+		foreach ( CollectionEntries::known_collection_ids() as $collection_id ) {
+			$ids = array_map( 'strval', get_post_meta( (int) $collection_id, 'fields', false ) );
+			if ( in_array( $field_id_str, $ids, true ) ) {
+				return Relations::entry_post_type_for_collection( (int) $collection_id );
+			}
+		}
+
+		// Fall back to postmeta for collections not registered yet.
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- field→collection reverse lookup; bounded by a single matching row.
+		$collection_id = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = %s AND meta_value = %s LIMIT 1",
+				'fields',
+				$field_id_str
+			)
+		);
+		if ( $collection_id < 1 ) {
+			return null;
+		}
+		return Relations::entry_post_type_for_collection( $collection_id );
+	}
+
+	/**
+	 * Reads the field's current options.
+	 *
+	 * @param int $field_id Field post ID whose options should be read.
+	 * @return array<int,array{value:string,label:string,color?:string}>
+	 */
+	private function existing_options( int $field_id ): array {
+		$raw = (string) get_post_meta( $field_id, 'options', true );
+		if ( '' === $raw ) {
+			return array();
+		}
+		$decoded = json_decode( $raw, true );
+		if ( ! is_array( $decoded ) ) {
+			return array();
+		}
+		return $this->normalize_options( $decoded );
 	}
 
 	/**

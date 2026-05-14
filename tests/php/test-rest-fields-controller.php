@@ -1007,6 +1007,429 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 		$this->assertSame( 0, $response->get_data()['count'] );
 	}
 
+	public function test_collect_option_tokens_for_text_to_select_dedupes_and_keeps_first(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		[ , $field_id, $row_ids ] = $this->fixture_text_field_with_rows(
+			'tokens-sel',
+			array( 'Open', 'Closed', 'Open', 'In Progress' )
+		);
+
+		$tokens = $this->collect_option_tokens( $field_id, 'select', $row_ids );
+
+		sort( $tokens );
+		$this->assertSame( array( 'Closed', 'In Progress', 'Open' ), $tokens );
+	}
+
+	public function test_collect_option_tokens_for_text_to_multiselect_splits_delimiters(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		[ , $field_id, $row_ids ] = $this->fixture_text_field_with_rows(
+			'tokens-multi',
+			array( 'Open, Closed', 'In Progress', 'Open; Pending' )
+		);
+
+		$tokens = $this->collect_option_tokens( $field_id, 'multiselect', $row_ids );
+
+		sort( $tokens );
+		$this->assertSame( array( 'Closed', 'In Progress', 'Open', 'Pending' ), $tokens );
+	}
+
+	public function test_collect_option_tokens_for_text_to_select_keeps_only_first_token(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		[ , $field_id, $row_ids ] = $this->fixture_text_field_with_rows(
+			'tokens-sel-first',
+			array( 'Open, Closed, Pending' )
+		);
+
+		$tokens = $this->collect_option_tokens( $field_id, 'select', $row_ids );
+
+		$this->assertSame( array( 'Open' ), $tokens );
+	}
+
+	public function test_convert_text_to_number_returns_lean_response_without_scanning_rows(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		[ , $field_id ] = $this->fixture_text_field_with_rows( 'lean', array( '42', 'abc' ) );
+
+		$response = $this->convert_field( $field_id, 'number' );
+
+		$this->assertSame( 200, $response->get_status() );
+		$data = $response->get_data();
+		// Non-option conversions do not scan rows, so the response stays small.
+		$this->assertSame(
+			array( 'id', 'type', 'from', 'new_options' ),
+			array_keys( $data )
+		);
+		$this->assertSame( 'number', $data['type'] );
+		$this->assertSame( 'text', $data['from'] );
+		$this->assertSame( array(), $data['new_options'] );
+		$this->assertSame( 'number', get_post_meta( $field_id, 'type', true ) );
+	}
+
+	public function test_convert_rejects_unsupported_pair(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		[ , $field_id ] = $this->fixture_text_field_with_rows( 'reject', array( 'a' ) );
+
+		$response = $this->convert_field( $field_id, 'relation' );
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'cortext_field_conversion_unsupported', $response->as_error()->get_error_code() );
+		$this->assertSame( 'text', get_post_meta( $field_id, 'type', true ) );
+	}
+
+	public function test_convert_rejects_same_type(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		[ , $field_id ] = $this->fixture_text_field_with_rows( 'same', array( 'a' ) );
+
+		$response = $this->convert_field( $field_id, 'text' );
+		$this->assertSame( 400, $response->get_status() );
+	}
+
+	public function test_convert_date_to_text_stashes_prior_format(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$collection_id = $this->create_collection_with_slug( 'Dates', 'datestash' );
+
+		$field_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Due',
+				'meta_input'  => array(
+					'type'        => 'date',
+					'date_format' => 'F j, Y',
+				),
+			)
+		);
+		add_post_meta( $collection_id, 'fields', (string) $field_id );
+		( new CollectionEntries() )->register_for_collection( get_post( $collection_id ) );
+
+		$response = $this->convert_field( $field_id, 'text' );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'F j, Y', get_post_meta( $field_id, 'prior_date_format', true ) );
+		$this->assertSame( 'text', get_post_meta( $field_id, 'type', true ) );
+	}
+
+	public function test_convert_text_to_select_makes_format_typed_value_return_chip(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		[ , $field_id, $row_ids ] = $this->fixture_text_field_with_rows(
+			'select-render',
+			array( 'Open', 'Closed', 'Open' )
+		);
+
+		// Mirror the commit path inline so the test can inspect the row output
+		// without depending on WorDBless row queries.
+		$tokens    = $this->collect_option_tokens( $field_id, 'select', $row_ids );
+		$additions = array();
+		foreach ( $tokens as $value ) {
+			$additions[] = array(
+				'value' => $value,
+				'label' => $value,
+			);
+		}
+		$this->assertSame( array( 'Open', 'Closed' ), $tokens );
+		update_post_meta( $field_id, 'options', wp_json_encode( $additions ) );
+		update_post_meta( $field_id, 'type', 'select' );
+
+		$rendered = array();
+		foreach ( $row_ids as $row_id ) {
+			$rendered[] = $this->invoke_format_typed_value( $row_id, $field_id, 'select', false );
+		}
+
+		$this->assertSame( array( 'Open', 'Closed', 'Open' ), $rendered );
+	}
+
+	public function test_convert_text_to_select_renders_first_token_for_delimited_values(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		[ , $field_id, $row_ids ] = $this->fixture_text_field_with_rows(
+			'select-split',
+			array(
+				'Open, Closed, Pending',
+				'In Progress',
+				'Done; Archived',
+			)
+		);
+
+		$tokens = $this->collect_option_tokens( $field_id, 'select', $row_ids );
+		// Select keeps only the first token from each row.
+		sort( $tokens );
+		$this->assertSame( array( 'Done', 'In Progress', 'Open' ), $tokens );
+
+		$additions = array();
+		foreach ( $tokens as $value ) {
+			$additions[] = array(
+				'value' => $value,
+				'label' => $value,
+			);
+		}
+		update_post_meta( $field_id, 'options', wp_json_encode( $additions ) );
+		update_post_meta( $field_id, 'type', 'select' );
+
+		$rendered = array();
+		foreach ( $row_ids as $row_id ) {
+			$rendered[] = $this->invoke_format_typed_value( $row_id, $field_id, 'select', false );
+		}
+
+		$this->assertSame( array( 'Open', 'In Progress', 'Done' ), $rendered );
+	}
+
+	private function invoke_format_typed_value(
+		int $row_id,
+		int $field_id,
+		string $field_type,
+		bool $is_multi
+	) {
+		$controller = new \Cortext\Rest\RowsController();
+		$method     = new \ReflectionMethod( $controller, 'format_typed_value' );
+		$method->setAccessible( true );
+		return $method->invoke( $controller, $row_id, $field_id, $field_type, $is_multi );
+	}
+
+	public function test_format_typed_value_preserves_select_option_with_delimiters(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$collection_id = $this->create_collection_with_slug( 'Vendors', 'vendors-sel' );
+
+		$field_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Vendor',
+				'meta_input'  => array(
+					'type'    => 'select',
+					'options' => wp_json_encode(
+						array(
+							array(
+								'value' => 'ACME, Inc.',
+								'label' => 'ACME, Inc.',
+							),
+						)
+					),
+				),
+			)
+		);
+		add_post_meta( $collection_id, 'fields', (string) $field_id );
+		( new CollectionEntries() )->register_for_collection( get_post( $collection_id ) );
+
+		$row_id = (int) wp_insert_post(
+			array(
+				'post_type'   => 'crtxt_vendors-sel',
+				'post_status' => 'publish',
+				'post_title'  => 'Row',
+			)
+		);
+		update_post_meta( $row_id, "field-{$field_id}", 'ACME, Inc.' );
+
+		$this->assertSame(
+			'ACME, Inc.',
+			$this->invoke_format_typed_value( $row_id, $field_id, 'select', false )
+		);
+	}
+
+	public function test_format_typed_value_preserves_multiselect_option_with_delimiters(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$collection_id = $this->create_collection_with_slug( 'Tags', 'tags-multi' );
+
+		$field_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Vendors',
+				'meta_input'  => array(
+					'type'    => 'multiselect',
+					'options' => wp_json_encode(
+						array(
+							array(
+								'value' => 'ACME, Inc.',
+								'label' => 'ACME, Inc.',
+							),
+						)
+					),
+				),
+			)
+		);
+		add_post_meta( $collection_id, 'fields', (string) $field_id );
+		( new CollectionEntries() )->register_for_collection( get_post( $collection_id ) );
+
+		$row_id = (int) wp_insert_post(
+			array(
+				'post_type'   => 'crtxt_tags-multi',
+				'post_status' => 'publish',
+				'post_title'  => 'Row',
+			)
+		);
+		add_post_meta( $row_id, "field-{$field_id}", 'ACME, Inc.' );
+
+		$this->assertSame(
+			array( 'ACME, Inc.' ),
+			$this->invoke_format_typed_value( $row_id, $field_id, 'multiselect', true )
+		);
+	}
+
+	public function test_write_field_value_replaces_multiselect_residue(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$collection_id = $this->create_collection_with_slug( 'Edits', 'edits-collapse' );
+
+		$field_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Format',
+				'meta_input'  => array( 'type' => 'text' ),
+			)
+		);
+		add_post_meta( $collection_id, 'fields', (string) $field_id );
+		( new CollectionEntries() )->register_for_collection( get_post( $collection_id ) );
+
+		$row_id = (int) wp_insert_post(
+			array(
+				'post_type'   => 'crtxt_edits-collapse',
+				'post_status' => 'publish',
+				'post_title'  => 'Row',
+			)
+		);
+		// Simulate leftover multiselect storage: two meta rows under one key.
+		add_post_meta( $row_id, "field-{$field_id}", 'CD' );
+		add_post_meta( $row_id, "field-{$field_id}", 'Record' );
+
+		$controller = new \Cortext\Rest\RowsController();
+		$method     = new \ReflectionMethod( $controller, 'write_field_value' );
+		$method->setAccessible( true );
+		$method->invoke( $controller, $row_id, $field_id, 'text', 'vinyl' );
+
+		$this->assertSame(
+			array( 'vinyl' ),
+			get_post_meta( $row_id, "field-{$field_id}", false ),
+			'Single-value writes should replace leftover multiselect rows.'
+		);
+	}
+
+	public function test_format_typed_value_joins_multiselect_residue_for_text(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$collection_id = $this->create_collection_with_slug( 'Formats', 'formats-join' );
+
+		$field_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Formats',
+				// Back to `text`, but the row still has multiple chip values.
+				'meta_input'  => array( 'type' => 'text' ),
+			)
+		);
+		add_post_meta( $collection_id, 'fields', (string) $field_id );
+		( new CollectionEntries() )->register_for_collection( get_post( $collection_id ) );
+
+		$row_id = (int) wp_insert_post(
+			array(
+				'post_type'   => 'crtxt_formats-join',
+				'post_status' => 'publish',
+				'post_title'  => 'Row',
+			)
+		);
+		add_post_meta( $row_id, "field-{$field_id}", 'CD' );
+		add_post_meta( $row_id, "field-{$field_id}", 'Record' );
+
+		$this->assertSame(
+			'CD, Record',
+			$this->invoke_format_typed_value( $row_id, $field_id, 'text', false )
+		);
+	}
+
+	public function test_format_typed_value_hides_invalid_email(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		[ , $field_id, $row_ids ] = $this->fixture_text_field_with_rows(
+			'email-invalid',
+			array( 'user@example.com', 'not-an-email', '' )
+		);
+		update_post_meta( $field_id, 'type', 'email' );
+
+		$rendered = array();
+		foreach ( $row_ids as $row_id ) {
+			$rendered[] = $this->invoke_format_typed_value( $row_id, $field_id, 'email', false );
+		}
+		$this->assertSame( array( 'user@example.com', '', '' ), $rendered );
+	}
+
+	public function test_format_typed_value_hides_invalid_url(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		[ , $field_id, $row_ids ] = $this->fixture_text_field_with_rows(
+			'url-invalid',
+			array( 'https://example.com', 'abc', '' )
+		);
+		update_post_meta( $field_id, 'type', 'url' );
+
+		$rendered = array();
+		foreach ( $row_ids as $row_id ) {
+			$rendered[] = $this->invoke_format_typed_value( $row_id, $field_id, 'url', false );
+		}
+		$this->assertSame( array( 'https://example.com', '', '' ), $rendered );
+	}
+
+	public function test_convert_round_trip_preserves_stored_text(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		[ , $field_id, $row_ids ] = $this->fixture_text_field_with_rows(
+			'round-trip',
+			array( '42', 'abc' )
+		);
+
+		// Non-option conversion: only the field type changes.
+		update_post_meta( $field_id, 'type', 'number' );
+
+		// Change back to text; row meta is still the original.
+		update_post_meta( $field_id, 'type', 'text' );
+
+		$values = array();
+		foreach ( $row_ids as $row_id ) {
+			$values[] = (string) get_post_meta( $row_id, "field-{$field_id}", true );
+		}
+		sort( $values );
+		$this->assertSame( array( '42', 'abc' ), $values );
+	}
+
+	private function collect_option_tokens( int $field_id, string $target_type, array $row_ids ): array {
+		$controller = new FieldsController();
+		$method     = new \ReflectionMethod( $controller, 'collect_option_tokens' );
+		$method->setAccessible( true );
+		return $method->invoke( $controller, $field_id, $target_type, $row_ids );
+	}
+
+	private function convert_field( int $field_id, string $target_type ) {
+		$request = new WP_REST_Request( 'POST', "/cortext/v1/fields/{$field_id}/convert" );
+		$request->set_param( 'field_id', $field_id );
+		$request->set_param( 'type', $target_type );
+		return rest_do_request( $request );
+	}
+
+	/**
+	 * @return array{0:int,1:int,2:int[]} Collection id, field id, row ids.
+	 */
+	private function fixture_text_field_with_rows( string $slug, array $values ): array {
+		$collection_id = $this->create_collection_with_slug( ucfirst( $slug ), $slug );
+
+		$field_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Status',
+				'meta_input'  => array( 'type' => 'text' ),
+			)
+		);
+		add_post_meta( $collection_id, 'fields', (string) $field_id );
+		( new CollectionEntries() )->register_for_collection( get_post( $collection_id ) );
+
+		$row_post_type = 'crtxt_' . $slug;
+		$row_ids       = array();
+		foreach ( $values as $idx => $value ) {
+			$row_id = (int) wp_insert_post(
+				array(
+					'post_type'   => $row_post_type,
+					'post_status' => 'publish',
+					'post_title'  => "Row {$idx}",
+				)
+			);
+			update_post_meta( $row_id, "field-{$field_id}", $value );
+			$row_ids[] = $row_id;
+		}
+
+		return array( $collection_id, $field_id, $row_ids );
+	}
+
 	private function update_options( int $field_id, array $body ) {
 		$request = new WP_REST_Request(
 			'POST',
