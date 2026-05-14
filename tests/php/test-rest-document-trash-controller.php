@@ -432,9 +432,8 @@ final class Test_Rest_Document_Trash_Controller extends BaseTestCase {
 	}
 
 	public function test_restore_skips_cascade_walk_for_flat_row_documents(): void {
-		// A row CPT opts into cortext-document but has no hierarchy, so the
-		// cascade walk should return an empty descendant list and only the
-		// row itself surfaces in `restored`.
+		// Row CPTs opt into cortext-document but have no hierarchy today, so
+		// restore should only return the row itself.
 		wp_set_current_user( $this->create_user( 'administrator' ) );
 
 		$row_post_type = 'crtxt_widgets';

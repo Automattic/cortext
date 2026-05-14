@@ -27,8 +27,8 @@ const EMPTY_TRASHED_DOCUMENTS_STATE = {
 	refresh: () => {},
 };
 
-// Keep this in sync with `PageTrashCascade::META_KEY`. The Trash endpoint
-// sends the marker for every document so the sidebar can show cascade roots.
+// Keep this in sync with `PageTrashCascade::META_KEY`. The Trash endpoint sends
+// this marker for every document so the sidebar can find cascade roots.
 const MARKER_META = '_cortext_trashed_by_parent';
 
 export function computeSidebarTrashRoots( trashedDocuments = [] ) {
@@ -107,22 +107,22 @@ function descendantLabel( kind, count ) {
 /**
  * Sidebar Trash for Cortext documents.
  *
- * The panel lists cascade roots. Children trashed by a parent ride with that
- * parent on restore or permanent delete. If a marker points to a parent that
- * is no longer in Trash, the orphan is shown so it is still recoverable.
+ * Trash shows cascade roots. Children that were trashed with a parent are
+ * restored or deleted with that parent. If a marker points to a parent that is
+ * no longer in Trash, the orphan still appears so it can be recovered.
  *
- * Mutations use the document Trash endpoints. Pages also invalidate the page
- * tree; rows notify collection queries because relation chips and rollups can
- * change outside the row's own collection.
+ * Mutations use the document Trash endpoints. Pages also refresh the page tree;
+ * rows notify collection queries because relation chips and rollups can change
+ * outside the row's own collection.
  *
  * @param {Object}      props
- * @param {Array}       props.activePages           Active page records, used for
- *                                                  breadcrumb ancestor lookup.
+ * @param {Array}       props.activePages           Active page records for
+ *                                                  breadcrumb lookup.
  * @param {number|null} props.selectedId            Currently-selected page id, used
  *                                                  to highlight a trashed document when
  *                                                  the canvas is showing it.
- * @param {Function}    props.onSelect              Called when a trashed document
- *                                                  opens in the canvas.
+ * @param {Function}    props.onSelect              Opens a trashed document in
+ *                                                  the canvas.
  * @param {Object}      props.trashedDocumentsState Trashed document query state.
  */
 export default function SidebarTrash( {
@@ -165,8 +165,8 @@ export default function SidebarTrash( {
 	const ancestorById = useMemo( () => {
 		const map = new Map();
 		( activePages ?? [] ).forEach( ( page ) => map.set( page.id, page ) );
-		// Prefer active records for pages that somehow appear in both lists;
-		// their title is fresher than the trashed snapshot.
+		// Prefer active records for pages that somehow appear in both lists.
+		// Their title is fresher than the trashed snapshot.
 		visibleTrashed.forEach( ( document ) => {
 			if ( ! map.has( document.id ) ) {
 				map.set( document.id, document );
@@ -175,8 +175,8 @@ export default function SidebarTrash( {
 		return map;
 	}, [ activePages, visibleTrashed ] );
 
-	// Cascade roots: documents with no marker, plus documents whose marker
-	// points at a parent that's no longer in trash.
+	// Roots are documents with no marker, plus documents whose marker points
+	// at a parent that's no longer in Trash.
 	const { roots, descendantCountById } = useMemo(
 		() => computeSidebarTrashRoots( visibleTrashed ),
 		[ visibleTrashed ]
@@ -329,25 +329,25 @@ export default function SidebarTrash( {
 	}, [ invalidateResolution, refreshTrash ] );
 
 	let pendingDeleteMessage = __(
-		'Permanently delete this page? This cannot be undone.',
+		"Permanently delete this page? You can't undo this.",
 		'cortext'
 	);
 	if ( pendingKind === 'row' ) {
 		pendingDeleteMessage = __(
-			'Permanently delete this row? This cannot be undone.',
+			"Permanently delete this row? You can't undo this.",
 			'cortext'
 		);
 	} else if ( pendingKind === 'document' ) {
 		pendingDeleteMessage = __(
-			'Permanently delete this document? This cannot be undone.',
+			"Permanently delete this document? You can't undo this.",
 			'cortext'
 		);
 	} else if ( pendingDescendantCount > 0 ) {
 		pendingDeleteMessage = sprintf(
 			/* translators: %d: number of subpages that will be deleted along with the page. */
 			_n(
-				'Permanently delete this page and %d subpage? This cannot be undone.',
-				'Permanently delete this page and %d subpages? This cannot be undone.',
+				"Permanently delete this page and %d subpage? You can't undo this.",
+				"Permanently delete this page and %d subpages? You can't undo this.",
 				pendingDescendantCount,
 				'cortext'
 			),
@@ -358,8 +358,8 @@ export default function SidebarTrash( {
 		pendingDeleteMessage = sprintf(
 			/* translators: %d: number of nested items that will be deleted along with the row. */
 			_n(
-				'Permanently delete this row and %d nested item? This cannot be undone.',
-				'Permanently delete this row and %d nested items? This cannot be undone.',
+				"Permanently delete this row and %d nested item? You can't undo this.",
+				"Permanently delete this row and %d nested items? You can't undo this.",
 				pendingDescendantCount,
 				'cortext'
 			),
@@ -369,8 +369,8 @@ export default function SidebarTrash( {
 		pendingDeleteMessage = sprintf(
 			/* translators: %d: number of nested items that will be deleted along with the document. */
 			_n(
-				'Permanently delete this document and %d nested item? This cannot be undone.',
-				'Permanently delete this document and %d nested items? This cannot be undone.',
+				"Permanently delete this document and %d nested item? You can't undo this.",
+				"Permanently delete this document and %d nested items? You can't undo this.",
 				pendingDescendantCount,
 				'cortext'
 			),
@@ -397,7 +397,7 @@ export default function SidebarTrash( {
 
 			{ ! isLoading && ! hasError && ! hasItems && (
 				<p className="cortext-sidebar__empty">
-					{ __( 'No trashed items.', 'cortext' ) }
+					{ __( 'Trash is empty.', 'cortext' ) }
 				</p>
 			) }
 

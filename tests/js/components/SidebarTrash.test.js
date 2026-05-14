@@ -206,7 +206,7 @@ describe( 'SidebarTrash', () => {
 
 		renderSidebarTrash();
 
-		expect( screen.getByText( 'No trashed items.' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Trash is empty.' ) ).toBeInTheDocument();
 	} );
 
 	it( 'keeps the last resolved trash list visible during a background refetch', () => {
@@ -572,7 +572,7 @@ describe( 'SidebarTrash', () => {
 
 		expect(
 			screen.getByText(
-				'Permanently delete this page and 1 subpage? This cannot be undone.'
+				"Permanently delete this page and 1 subpage? You can't undo this."
 			)
 		).toBeInTheDocument();
 	} );

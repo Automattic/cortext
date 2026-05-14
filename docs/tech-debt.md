@@ -18,7 +18,7 @@ Pair with [decisions.md](decisions.md) for choices we've made peace with and [ro
 
 Updated by [#80](https://github.com/priethor/cortext/pull/80) and #179.
 
-**What.** Rows still bypass `core-data`. `useCollectionRows` owns the fetch state, the `requestId` race guard, the manual `refresh()` counter, and the choice between server and client mode. #80 moved the normal table path to paged REST requests, then changed the fallback from one `per_page=-1` request to pages of 100 fetched with a small concurrency cap. #179 made the gap easier to hit: trashing or restoring a row can change relation chips and rollups in other open collections. There is no shared row store to know that, so the client fires small row/document-trash events and the open row queries plus sidebar Trash list refetch.
+**What.** Rows still sit outside `core-data`. `useCollectionRows` owns fetch state, the `requestId` race guard, the manual `refresh()` counter, and the choice between server and client mode. #80 moved the normal table path to paged REST requests, then changed the fallback from one `per_page=-1` request to pages of 100 fetched with a small concurrency cap. #179 exposed the same gap from another angle: trashing or restoring a row can change relation chips and rollups in other open collections. Since there is no shared row store, the client fires small row and document-trash events, then lets open row queries and the sidebar Trash list refetch.
 
 The dynamic `crtxt_{slug}` post types already use `show_in_rest`, so `core-data` can probably discover them lazily. We have not wired rows through it yet. Mutations still POST directly with `apiFetch`, then ask the hook to refetch.
 
@@ -423,10 +423,10 @@ The user-facing placeholder is still Core's generic "Search commands and setting
 
 ## 48. Cortext document layer is still thin `[internal]`
 
-**What.** Pages and collection rows both opt into `cortext-document`. Trash now lists, restores, and permanently deletes through document routes. The rest of the client is not there yet: pages still go through the page tree and `core-data`, rows still go through `useCollectionRows`, and recents, favorites, routing, and invalidation still ask "page or row?" in places that should only need "document."
+**What.** Pages and collection rows both opt into `cortext-document`. Trash now lists, restores, and permanently deletes through document routes. The client has not caught up yet: pages still go through the page tree and `core-data`, rows still go through `useCollectionRows`, and recents, favorites, routing, and invalidation still ask "page or row?" in places that should only need "document."
 
-Trash is the current example. The endpoint is document-first, but the client still refreshes the page tree, row queries, collection context, and the Trash list through separate calls.
+Trash is the clearest example. The endpoint is document-first, but the client still refreshes the page tree, row queries, collection context, and the Trash list through separate calls.
 
 **Where.** `includes/Rest/DocumentTrashController.php`, `src/components/SidebarTrash.js`, `src/components/Sidebar.js`, `src/router/useResolveEntity.js`, `src/router/EntityRoute.js`, `src/hooks/documentTrashInvalidation.js`, `src/hooks/rowInvalidation.js`, and `src/hooks/useTrashedDocuments.js`.
 
-**Solution.** Add a small document layer: helpers for document kind/context, canonical paths, invalidation, and cross-type document lists. Individual records can still use `core-data` where WordPress supports it. Cross-type views can stay as `/cortext/v1/documents/*` endpoints. Pages and rows do not need to disappear as concepts; shared document features just should not rebuild the same branching every time.
+**Solution.** Add a small document layer for document kind/context, paths, invalidation, and cross-type lists. Individual records can still use `core-data` where WordPress supports it. Cross-type views can stay as `/cortext/v1/documents/*` endpoints. Pages and rows do not need to disappear as concepts; shared document features just should not rebuild the same branching every time.

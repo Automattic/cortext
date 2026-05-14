@@ -1,7 +1,7 @@
 import { useEffect } from '@wordpress/element';
 
-// tech-debt.md#2: rows do not have a core-data store yet. Use a small
-// cross-surface event until row caching and dependency refresh live there.
+// tech-debt.md#2: rows do not have a core-data store yet. Use this small
+// event until row caching and dependent refreshes live there.
 export const COLLECTION_ROWS_CHANGED_EVENT = 'cortext:collection-rows-changed';
 
 function normalizeCollectionId( collectionId ) {
