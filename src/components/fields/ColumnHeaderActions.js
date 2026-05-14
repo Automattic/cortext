@@ -109,19 +109,21 @@ export default function ColumnHeaderActions( {
 						th,
 					} );
 				} );
-			wrapper
-				.querySelectorAll( '[data-cortext-add-field-marker]' )
-				.forEach( ( marker ) => {
-					const th = marker.closest( 'th' );
-					if ( ! th ) {
-						return;
-					}
-					next.push( {
-						key: 'add-field',
-						kind: 'add',
-						th,
-					} );
+			// `+ add field` lives in the dataviews actions column header
+			// (`<th class="dataviews-view-table__actions-column">`).
+			// That column is rendered whenever the table has row actions,
+			// which we always do, so we don't need a separate ghost column
+			// for this affordance. See `tech-debt.md#16`.
+			const actionsTh = wrapper.querySelector(
+				'th.dataviews-view-table__actions-column'
+			);
+			if ( actionsTh ) {
+				next.push( {
+					key: 'add-field',
+					kind: 'add',
+					th: actionsTh,
 				} );
+			}
 
 			setTargets( ( prev ) => {
 				if ( prev.length !== next.length ) {
@@ -750,7 +752,7 @@ function AddFieldTrigger( { collectionId } ) {
 					<Button
 						icon={ plus }
 						label={ __( 'Add field', 'cortext' ) }
-						size="small"
+						size="compact"
 						onClick={ onToggle }
 						isPressed={ isOpen }
 					/>

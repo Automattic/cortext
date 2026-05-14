@@ -1841,29 +1841,34 @@ body:has(.cortext-canvas__identity-actions:hover) .cortext-canvas__identity-acti
 	width: 280px;
 }
 
-// Ghost column is just the `+` icon button. DataViews uses
-// `.dataviews-view-table tr td:last-child { padding-right: 48px }`
-// for the last column, plus `min-width: 15ch` on the cell content
-// wrapper. Match DataViews' selector specificity so our overrides
-// win, then size the column to the button's natural width with a
-// tight right padding.
-.dataviews-view-table tr th:has(.cortext-column-header-marker--add),
-.dataviews-view-table tr td:has(.cortext-data-view__ghost-cell) {
-	width: 0;
-	padding-right: $grid-unit-10;
+// `+ add field` is portaled into the dataviews actions column header.
+// Hide the built-in "Actions" label so the column reads as a single
+// `+` affordance; the kebab in each row body already conveys the
+// per-row actions meaning. The header `<th>` should be sticky-right
+// like its body siblings, but `<thead>` itself is sticky-top, and the
+// double-sticky combination misbehaves in some browsers — the inner
+// horizontal sticky stops engaging once the outer vertical sticky
+// kicks in. Promote the `<th>`'s stacking and reaffirm sticky-right
+// so the `+` stays pinned alongside the row kebab during horizontal
+// scroll. `!important` is here because dataviews ships an identical
+// declaration whose specificity ties ours; the duplicate keeps the
+// rule from losing to any later cascade rewrite.
+.dataviews-view-table thead th.dataviews-view-table__actions-column {
+	position: sticky !important;
+	right: 0 !important;
+	z-index: 3;
+	background-color: #fff;
 
-	.dataviews-view-table__cell-content-wrapper,
-	.dataviews-view-table__primary-column-content {
-		min-width: 0;
+	> .dataviews-view-table-header {
+		display: none;
 	}
 }
 
-// Custom field columns and the ghost column carry a marker that
-// `ColumnHeaderActions` portals our trigger into. We hide DataViews'
-// built-in trigger on those <th>s and replace it with a single combined
-// dropdown (Sort / Move / Hide / Rename / Duplicate / Delete) for data
-// columns, or a `+` button for the ghost column. Title and system
-// fields don't have a marker, so their built-in triggers stay visible.
+// Custom field columns carry a marker that `ColumnHeaderActions`
+// portals our trigger into. We hide DataViews' built-in trigger on
+// those <th>s and replace it with a single combined dropdown (Sort /
+// Move / Hide / Rename / Duplicate / Delete). Title and system fields
+// don't have a marker, so their built-in triggers stay visible.
 // `tech-debt.md#16` covers the upstream gap that forces this takeover.
 .dataviews-view-table
 th:has(.cortext-column-header-marker)

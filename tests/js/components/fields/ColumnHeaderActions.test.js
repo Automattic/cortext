@@ -126,9 +126,7 @@ function Harness( { collectionId, recordId } ) {
 								<span data-cortext-field-marker={ recordId } />
 							</th>
 						) : null }
-						<th>
-							<span data-cortext-add-field-marker="true" />
-						</th>
+						<th className="dataviews-view-table__actions-column" />
 					</tr>
 				</thead>
 			</table>
