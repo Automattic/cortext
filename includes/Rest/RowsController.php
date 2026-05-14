@@ -1411,7 +1411,7 @@ final class RowsController {
 				'id'      => $field_id,
 				'label'   => $field->post_title,
 				'type'    => $type,
-				'options' => $options ?: null,
+				'options' => empty( $options ) ? null : $options,
 			);
 		}
 		return $definitions;
