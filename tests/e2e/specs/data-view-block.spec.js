@@ -155,6 +155,36 @@ async function createCalculationFixture( requestUtils ) {
 	return { collection, fields, rows, slug };
 }
 
+async function createManualOrderFixture( requestUtils ) {
+	const suffix = Date.now().toString( 36 ).slice( -4 );
+	const slug = `e2eorder${ suffix }`;
+
+	const collection = await requestUtils.rest( {
+		method: 'POST',
+		path: '/wp/v2/crtxt_collections',
+		data: {
+			title: `E2E Order ${ suffix }`,
+			status: 'private',
+			meta: { slug },
+		},
+	} );
+
+	const rows = [];
+	for ( const title of [ 'Alpha Manual', 'Beta Manual', 'Gamma Manual' ] ) {
+		rows.push(
+			await requestUtils.rest( {
+				method: 'POST',
+				path: `/cortext/v1/collections/${ collection.id }/rows`,
+				data: {
+					title,
+				},
+			} )
+		);
+	}
+
+	return { collection, rows, slug };
+}
+
 function createDataViewBlockMarkup( collectionId, viewOverrides = {} ) {
 	const attributes = {
 		collectionId,
@@ -182,6 +212,77 @@ function createEmptyDataViewBlockMarkup() {
 function parseCollectionIdFromContent( content ) {
 	const match = content.match( /"collectionId":(\d+)/ );
 	return match ? Number( match[ 1 ] ) : 0;
+}
+
+async function dragRenderedRow(
+	page,
+	canvas,
+	fromIndex,
+	toIndex,
+	zone = 'before',
+	layout = 'table',
+	titles = [ 'Alpha Manual', 'Beta Manual', 'Gamma Manual' ]
+) {
+	const orderedTitles = await renderedManualTitles( canvas, titles );
+	const sourceTitle = orderedTitles[ fromIndex ];
+	const targetTitle = orderedTitles[ toIndex ];
+	const source = canvas.getByRole( 'button', {
+		name: `Reorder row: ${ sourceTitle }`,
+	} );
+	const target = canvas.getByText( targetTitle, { exact: true } ).first();
+
+	await source.waitFor( { state: 'attached' } );
+	const sourceBox = await source.boundingBox();
+	const targetBox = await target.boundingBox();
+	expect( sourceBox ).toBeTruthy();
+	expect( targetBox ).toBeTruthy();
+
+	const beforeOffset = layout === 'list' ? 48 : 16;
+	const targetY =
+		zone === 'before'
+			? targetBox.y - beforeOffset
+			: targetBox.y + targetBox.height + 16;
+
+	await page.mouse.move(
+		sourceBox.x + sourceBox.width / 2,
+		sourceBox.y + sourceBox.height / 2
+	);
+	await page.mouse.down();
+	await page.mouse.move(
+		sourceBox.x + sourceBox.width / 2 + 8,
+		sourceBox.y + sourceBox.height / 2 + 8,
+		{ steps: 2 }
+	);
+	await expect( canvas.locator( '.cortext-row-drag-preview' ) ).toContainText(
+		sourceTitle
+	);
+	await page.mouse.move( targetBox.x + targetBox.width / 2, targetY, {
+		steps: 12,
+	} );
+	await page.mouse.up();
+}
+
+async function renderedManualTitles(
+	canvas,
+	titles = [ 'Alpha Manual', 'Beta Manual', 'Gamma Manual' ]
+) {
+	const rendered = [];
+
+	for ( const title of titles ) {
+		const locator = canvas.getByText( title, { exact: true } ).first();
+		await locator.waitFor( { state: 'visible' } );
+		const box = await locator.boundingBox();
+		expect( box ).toBeTruthy();
+		rendered.push( {
+			title,
+			x: Math.round( box.x ),
+			y: Math.round( box.y ),
+		} );
+	}
+
+	return rendered
+		.sort( ( a, b ) => a.y - b.y || a.x - b.x )
+		.map( ( item ) => item.title );
 }
 
 test.describe( 'Collection view block', () => {
@@ -272,6 +373,300 @@ test.describe( 'Collection view block', () => {
 				requestUtils,
 				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
 			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+			);
+		}
+	} );
+
+	for ( const layout of [ 'table', 'list', 'grid' ] ) {
+		test( `manually reorders rows in ${ layout } layout`, async ( {
+			admin,
+			page,
+			requestUtils,
+		} ) => {
+			const fixture = {};
+
+			try {
+				Object.assign(
+					fixture,
+					await createManualOrderFixture( requestUtils )
+				);
+
+				fixture.page = await requestUtils.rest( {
+					method: 'POST',
+					path: '/wp/v2/crtxt_pages',
+					data: {
+						title: `Manual row order ${ layout }`,
+						status: 'private',
+						content: createDataViewBlockMarkup(
+							fixture.collection.id,
+							{
+								type: layout,
+								fields: [ 'title' ],
+								sort: {
+									field: 'created_at',
+									direction: 'asc',
+								},
+							}
+						),
+					},
+				} );
+
+				await admin.visitAdminPage(
+					'admin.php',
+					`page=cortext&p=/${ fixture.page.id }`
+				);
+
+				await page.waitForFunction(
+					( postId ) =>
+						window.wp?.data
+							?.select( 'core/editor' )
+							?.getCurrentPostId?.() === postId,
+					fixture.page.id,
+					{ timeout: 15_000 }
+				);
+
+				const canvas = page.frameLocator( '[name="editor-canvas"]' );
+				await expect(
+					canvas.getByText( 'Alpha Manual' )
+				).toBeVisible();
+				await expect(
+					canvas.locator( '.cortext-row-drag-handle' )
+				).toHaveCount( 3 );
+
+				await dragRenderedRow( page, canvas, 2, 0, 'before', layout );
+				await expect(
+					page.getByText(
+						'This will clear the current sort and keep rows where you drop them.'
+					)
+				).toBeVisible();
+				await page
+					.getByRole( 'button', { name: 'Keep this order' } )
+					.click();
+				await expect(
+					page.getByText(
+						'This will clear the current sort and keep rows where you drop them.'
+					)
+				).not.toBeVisible();
+				await expect
+					.poll( () => renderedManualTitles( canvas ) )
+					.toEqual( [
+						expect.stringContaining( 'Gamma Manual' ),
+						expect.stringContaining( 'Alpha Manual' ),
+						expect.stringContaining( 'Beta Manual' ),
+					] );
+
+				await page.evaluate( async () => {
+					await window.wp.data.dispatch( 'core/editor' ).savePost();
+				} );
+				await page.waitForFunction(
+					() =>
+						! window.wp.data.select( 'core/editor' ).isSavingPost()
+				);
+
+				await page.reload();
+				await expect
+					.poll( () => renderedManualTitles( canvas ) )
+					.toEqual( [
+						expect.stringContaining( 'Gamma Manual' ),
+						expect.stringContaining( 'Alpha Manual' ),
+						expect.stringContaining( 'Beta Manual' ),
+					] );
+
+				fixture.rows.push(
+					await requestUtils.rest( {
+						method: 'POST',
+						path: `/cortext/v1/collections/${ fixture.collection.id }/rows`,
+						data: {
+							title: 'Delta Manual',
+						},
+					} )
+				);
+
+				await page.reload();
+				await expect(
+					canvas.getByText( 'Delta Manual' )
+				).toBeVisible();
+				await expect
+					.poll( () =>
+						renderedManualTitles( canvas, [
+							'Alpha Manual',
+							'Beta Manual',
+							'Gamma Manual',
+							'Delta Manual',
+						] )
+					)
+					.toEqual( [
+						expect.stringContaining( 'Gamma Manual' ),
+						expect.stringContaining( 'Alpha Manual' ),
+						expect.stringContaining( 'Beta Manual' ),
+						expect.stringContaining( 'Delta Manual' ),
+					] );
+
+				if ( layout === 'table' ) {
+					await page.evaluate( () => {
+						const block = window.wp.data
+							.select( 'core/block-editor' )
+							.getBlocks()
+							.find(
+								( item ) => item.name === 'cortext/data-view'
+							);
+						window.wp.data
+							.dispatch( 'core/block-editor' )
+							.updateBlockAttributes( block.clientId, {
+								view: {
+									...block.attributes.view,
+									sort: {
+										field: 'created_at',
+										direction: 'asc',
+									},
+								},
+							} );
+					} );
+					await expect
+						.poll( () =>
+							renderedManualTitles( canvas, [
+								'Alpha Manual',
+								'Beta Manual',
+								'Gamma Manual',
+								'Delta Manual',
+							] )
+						)
+						.toEqual( [
+							expect.stringContaining( 'Alpha Manual' ),
+							expect.stringContaining( 'Beta Manual' ),
+							expect.stringContaining( 'Gamma Manual' ),
+							expect.stringContaining( 'Delta Manual' ),
+						] );
+
+					await dragRenderedRow(
+						page,
+						canvas,
+						3,
+						0,
+						'before',
+						layout,
+						[
+							'Alpha Manual',
+							'Beta Manual',
+							'Gamma Manual',
+							'Delta Manual',
+						]
+					);
+					await expect(
+						page.getByText(
+							'This will clear the current sort and keep rows where you drop them.'
+						)
+					).toBeVisible();
+					await page
+						.getByRole( 'button', { name: 'Cancel' } )
+						.click();
+					await expect(
+						page.getByText(
+							'This will clear the current sort and keep rows where you drop them.'
+						)
+					).not.toBeVisible();
+					await expect
+						.poll( () =>
+							renderedManualTitles( canvas, [
+								'Alpha Manual',
+								'Beta Manual',
+								'Gamma Manual',
+								'Delta Manual',
+							] )
+						)
+						.toEqual( [
+							expect.stringContaining( 'Alpha Manual' ),
+							expect.stringContaining( 'Beta Manual' ),
+							expect.stringContaining( 'Gamma Manual' ),
+							expect.stringContaining( 'Delta Manual' ),
+						] );
+				}
+			} finally {
+				if ( fixture.rows ) {
+					for ( const row of fixture.rows ) {
+						await deleteIfCreated(
+							requestUtils,
+							`/wp/v2/crtxt_${ fixture.slug }/${ row.id }`
+						);
+					}
+				}
+				await deleteIfCreated(
+					requestUtils,
+					fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+				);
+				await deleteIfCreated(
+					requestUtils,
+					fixture.collection &&
+						`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+				);
+			}
+		} );
+	}
+
+	test( 'shows row drag handles in the full-screen collection table', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+
+		try {
+			Object.assign(
+				fixture,
+				await createManualOrderFixture( requestUtils )
+			);
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/collection/${ fixture.slug }-${ fixture.collection.id }`
+			);
+
+			await expect( page.getByText( 'Alpha Manual' ) ).toBeVisible( {
+				timeout: 15_000,
+			} );
+			await expect(
+				page.locator( '.cortext-row-drag-handle' )
+			).toHaveCount( 3 );
+			const dataViewBox = await page
+				.locator( '.cortext-data-view' )
+				.boundingBox();
+			const handleBox = await page
+				.getByRole( 'button', {
+					name: 'Reorder row: Alpha Manual',
+				} )
+				.boundingBox();
+			expect( dataViewBox ).toBeTruthy();
+			expect( handleBox ).toBeTruthy();
+			expect( handleBox.x ).toBeGreaterThanOrEqual( dataViewBox.x );
+			await expect
+				.poll( async () =>
+					Number(
+						await page
+							.getByRole( 'button', {
+								name: 'Reorder row: Alpha Manual',
+							} )
+							.evaluate(
+								( node ) =>
+									node.ownerDocument.defaultView.getComputedStyle(
+										node
+									).opacity
+							)
+					)
+				)
+				.toBeGreaterThan( 0 );
+		} finally {
+			if ( fixture.rows ) {
+				for ( const row of fixture.rows ) {
+					await deleteIfCreated(
+						requestUtils,
+						`/wp/v2/crtxt_${ fixture.slug }/${ row.id }`
+					);
+				}
+			}
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&

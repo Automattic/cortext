@@ -393,6 +393,8 @@ function FieldActions( {
 	const sortField = view?.sort?.field ?? null;
 	const sortDirection = view?.sort?.direction ?? null;
 	const isSorted = sortField === dataViewId;
+	const sortMenuKey = isSorted ? sortDirection : 'none';
+	const sortRadioGroupName = `cortext-column-sort-${ recordId }-${ sortMenuKey }`;
 	const dependentRollups = useMemo(
 		() =>
 			fields.filter(
@@ -486,7 +488,11 @@ function FieldActions( {
 			className="cortext-column-header-actions"
 			ref={ optionsAnchorRef }
 		>
-			<Menu open={ isMenuOpen } onOpenChange={ onMenuOpenChange }>
+			<Menu
+				key={ `menu-${ dataViewId }-${ sortMenuKey }` }
+				open={ isMenuOpen }
+				onOpenChange={ onMenuOpenChange }
+			>
 				<Menu.TriggerButton
 					render={
 						<Button
@@ -553,7 +559,7 @@ function FieldActions( {
 					</Menu.Group>
 					<Menu.Separator />
 					{ /* View group: keep sort/hide actions together. */ }
-					<Menu.Group>
+					<Menu.Group key={ `sort-${ dataViewId }-${ sortMenuKey }` }>
 						<Menu.Item
 							ref={ calculationItemRef }
 							className="cortext-column-header-actions__submenu-item"
@@ -571,7 +577,7 @@ function FieldActions( {
 							</Menu.ItemLabel>
 						</Menu.Item>
 						<Menu.RadioItem
-							name="cortext-column-sort"
+							name={ sortRadioGroupName }
 							value="asc"
 							checked={ isSorted && sortDirection === 'asc' }
 							hideOnClick
@@ -582,7 +588,7 @@ function FieldActions( {
 							</Menu.ItemLabel>
 						</Menu.RadioItem>
 						<Menu.RadioItem
-							name="cortext-column-sort"
+							name={ sortRadioGroupName }
 							value="desc"
 							checked={ isSorted && sortDirection === 'desc' }
 							hideOnClick

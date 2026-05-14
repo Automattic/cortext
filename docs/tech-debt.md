@@ -410,3 +410,13 @@ The user-facing placeholder is still Core's generic "Search commands and setting
 **Where.** `RowsMetaQuery` in `includes/Rest/RowsMetaQuery.php`, called from `RowsFilterQuery::meta_query_sql()`.
 
 **Solution.** Upstream `WP_Meta_Query` could grow one-sided `LIKE` compares and value-bearing negative `NOT EXISTS` compares. A structured title-query helper in `WP_Query` would cover the title sentinel separately. If those land, `RowsMetaQuery` shrinks back toward a thin adapter or disappears.
+
+## 47. DataViews has no row reorder API `[upstream]`
+
+**What.** Manual order lives on the row posts, but DataViews doesn't give us row refs, drag handles, drop targets, or an `onReorder` hook. Cortext has to decorate the layouts after DataViews renders them: find rows by internal class selectors, match them to `rows` by visible index, portal dnd-kit handles into the first data cell, place fixed drop targets over row gaps, clone a few cells for the drag preview, and hold CSS transforms while the REST request and refetch finish.
+
+That makes row reorder sensitive to DataViews DOM changes: density classes, bulk-selection cells, fullscreen mode, block embedding, and scroll containers all matter. Grid still uses before/after card targets because a linear row gap doesn't map cleanly to a two-dimensional card layout. Fine for v1, but it is one more reason this belongs in a DataViews API instead of a DOM adapter.
+
+**Where.** `src/components/DataViewRowReorder.js`, `src/components/RowDragHandle.js`, the mount in `src/components/CollectionDataViews.js`, and the row-reorder rules in `src/index.scss`.
+
+**Solution.** DataViews could expose stable row ids/refs, a row-handle render prop, keyboard-aware reorder callbacks, a table/list gap model, and row preview/drop indicator hooks. Cortext would keep the REST/manual-order policy and drop the selectors, MutationObserver, portals, and transform bookkeeping.

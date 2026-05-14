@@ -7,6 +7,7 @@ import apiFetch from '@wordpress/api-fetch';
 
 const CLIENT_PER_PAGE = 100;
 const CLIENT_PAGE_FETCH_CONCURRENCY = 4;
+const MANUAL_SORT_ID = 'manual';
 
 function serverFieldInfo( field ) {
 	return {
@@ -46,8 +47,18 @@ function isServerSupportedSort( sort, fieldInfo ) {
 	if ( ! sort?.field ) {
 		return true;
 	}
+	if ( sort.field === MANUAL_SORT_ID ) {
+		return true;
+	}
 	const info = fieldInfo.get( sort.field );
 	return info?.sortable === true;
+}
+
+function viewForServer( view ) {
+	if ( view?.sort?.field !== MANUAL_SORT_ID ) {
+		return view;
+	}
+	return { ...( view ?? {} ), sort: null };
 }
 
 function filterInfo( filter, fieldInfo ) {
@@ -266,7 +277,7 @@ export function buildQueryArgs( collectionId, view, fields = [] ) {
 		: { ...( view ?? {} ), sort: null };
 	return buildServerQueryArgs(
 		collectionId,
-		serverView,
+		viewForServer( serverView ),
 		serverFilterResult( view?.filters, fieldInfo ).filters
 	);
 }
@@ -318,7 +329,11 @@ export function buildQueryPlan(
 
 	return {
 		mode: 'server',
-		args: buildServerQueryArgs( collectionId, view, filterResult.filters ),
+		args: buildServerQueryArgs(
+			collectionId,
+			viewForServer( view ),
+			filterResult.filters
+		),
 	};
 }
 

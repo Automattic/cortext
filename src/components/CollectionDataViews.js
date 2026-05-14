@@ -15,6 +15,7 @@ import { plus } from '@wordpress/icons';
 import { useNavigate } from '@wordpress/route';
 
 import DataViewColumnInteractions from './DataViewColumnInteractions';
+import DataViewRowReorder from './DataViewRowReorder';
 import EditableCell, { RowMutationContext } from './EditableCell';
 import PageIcon from './PageIcon';
 import { filterSortAndPaginateWithGroups } from './groupedFilters';
@@ -509,11 +510,11 @@ export default function CollectionDataViews( {
 
 	const onCreated = useCallback(
 		( created ) => {
-			// Without an explicit sort, the row list comes back oldest-first
-			// (see useCollectionRows), so the new row lives on the last page.
-			// Hop there before refreshing so the user lands on their row
-			// instead of page 1. Under a user-chosen sort the new row could
-			// be anywhere; refresh in place and let them find it.
+			// Without an explicit sort, rows use their stored order and new
+			// rows append to the end. Move to the last page before refreshing
+			// so the new row is visible instead of sending the user back to
+			// page 1. With a user-chosen sort, the new row could land anywhere;
+			// refresh in place and leave the view alone.
 			//
 			// tech-debt.md#2: lastPage arithmetic is optimistic against
 			// possibly stale paginationInfo. With rows in core-data this
@@ -755,7 +756,6 @@ export default function CollectionDataViews( {
 		() => ( isTableLayout ? undefined : rowActions ),
 		[ isTableLayout, rowActions ]
 	);
-
 	const requestCloseDetail = useCallback(
 		() => runDetailTransition( { type: 'close' } ),
 		[ runDetailTransition ]
@@ -1096,6 +1096,14 @@ export default function CollectionDataViews( {
 							isLoading={ isLoading }
 							empty={ empty }
 							actions={ dataViewActions }
+						/>
+						<DataViewRowReorder
+							wrapperRef={ tableWrapperRef }
+							view={ view }
+							onChangeView={ onChangeView }
+							collectionId={ collectionId }
+							rows={ dataFiltered }
+							onReordered={ refresh }
 						/>
 						{ isTableLayout && (
 							<TableCalculationsFooter

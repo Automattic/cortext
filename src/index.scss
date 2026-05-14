@@ -4187,6 +4187,201 @@ body.cortext-row-detail-sidebar-resizing {
 	}
 }
 
+.cortext-row-reorder-cell {
+	position: relative;
+}
+
+.cortext-data-view
+.dataviews-view-table
+.cortext-row-reorder-cell {
+	padding-left: 24px;
+}
+
+.cortext-row-reorder-target {
+	transition:
+		transform 120ms ease,
+		opacity 120ms ease;
+}
+
+body.cortext-row-dragging .cortext-row-reorder-target {
+	will-change: transform;
+}
+
+body.cortext-row-reorder-no-transition .cortext-row-reorder-target {
+	transition: none;
+}
+
+.cortext-row-reorder-target--active {
+	opacity: 0;
+}
+
+.cortext-row-reorder-target--displaced {
+	position: relative;
+	z-index: 1;
+}
+
+.cortext-row-drag-handle {
+	position: absolute;
+	top: 50%;
+	left: 2px;
+	width: 24px;
+	height: 24px;
+	padding: 0;
+	border: 0;
+	border-radius: 2px;
+	background-color: transparent;
+	background-image:
+		radial-gradient(circle at 8px 7px, currentcolor 1px, transparent 1.5px),
+		radial-gradient(circle at 14px 7px, currentcolor 1px, transparent 1.5px),
+		radial-gradient(circle at 8px 12px, currentcolor 1px, transparent 1.5px),
+		radial-gradient(circle at 14px 12px, currentcolor 1px, transparent 1.5px),
+		radial-gradient(circle at 8px 17px, currentcolor 1px, transparent 1.5px),
+		radial-gradient(circle at 14px 17px, currentcolor 1px, transparent 1.5px);
+	color: $gray-700;
+	cursor: grab;
+	opacity: 0.55;
+	transform: translateY(-50%);
+	z-index: 2;
+	touch-action: none;
+}
+
+.cortext-row-drag-handle:focus-visible {
+	opacity: 1;
+	outline: 2px solid var(--wp-admin-theme-color);
+	outline-offset: 1px;
+}
+
+.cortext-row-drag-handle:hover,
+.cortext-row-drag-handle[data-dragging="true"] {
+	opacity: 1;
+}
+
+.cortext-row-drop-indicator {
+	pointer-events: none;
+	z-index: 100000;
+}
+
+body.cortext-row-dragging .cortext-row-drop-indicator {
+	pointer-events: auto;
+}
+
+.cortext-row-drop-indicator::before {
+	content: "";
+	position: absolute;
+	right: 0;
+	left: 0;
+	top: 0;
+	border-top: 2px solid var(--wp-admin-theme-color);
+	opacity: 0;
+}
+
+.cortext-row-drop-indicator--after::before {
+	top: auto;
+	bottom: 0;
+}
+
+.cortext-row-drop-indicator--gap::before {
+	top: var(--cortext-row-drop-line-top, 50%);
+}
+
+.cortext-row-drop-indicator.is-active::before {
+	opacity: 1;
+}
+
+.cortext-row-drag-preview {
+	display: flex;
+	align-items: stretch;
+	max-width: calc(100vw - 48px);
+	background: $white;
+	border: $border-width solid $gray-200;
+	border-left: 3px solid var(--wp-admin-theme-color);
+	border-radius: 2px;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+	font-size: 13px;
+	line-height: 1.4;
+	pointer-events: none;
+	overflow: hidden;
+}
+
+.cortext-row-drag-preview__cell {
+	display: flex;
+	align-items: center;
+	flex: 0 1 160px;
+	min-width: 0;
+	padding: 4px $grid-unit-10;
+	overflow: hidden;
+	white-space: nowrap;
+}
+
+.cortext-row-drag-preview__cell-content-wrapper {
+	display: flex;
+	align-items: center;
+	min-height: $grid-unit-40;
+}
+
+.cortext-row-drag-preview__cell--primary {
+	flex: 1 1 220px;
+}
+
+.cortext-row-drag-preview--compact .cortext-row-drag-preview__cell {
+	padding: $grid-unit-05 $grid-unit-10;
+}
+
+.cortext-row-drag-preview--balanced .cortext-row-drag-preview__cell {
+	padding: $grid-unit-15;
+}
+
+.cortext-row-drag-preview--comfortable .cortext-row-drag-preview__cell {
+	padding: $grid-unit-20 $grid-unit-15;
+}
+
+body.cortext-row-dragging {
+	cursor: grabbing;
+	user-select: none;
+}
+
+body.cortext-row-reorder-suppress-hover
+.dataviews-view-table
+tr.is-hovered:not(.is-selected),
+body.cortext-row-reorder-suppress-hover
+.dataviews-view-table
+tr.is-hovered:not(.is-selected)
+.dataviews-view-table__actions-column--sticky,
+body.cortext-row-reorder-suppress-hover
+.dataviews-view-list
+div[role="row"]:not(.is-selected):hover,
+body.cortext-row-reorder-suppress-hover
+.dataviews-view-list
+div[role="row"]:not(.is-selected).is-hovered {
+	background-color: transparent;
+}
+
+body.cortext-row-reorder-suppress-hover
+.dataviews-view-list
+div[role="row"]:not(.is-selected):hover
+.dataviews-view-list__title-field,
+body.cortext-row-reorder-suppress-hover
+.dataviews-view-list
+div[role="row"]:not(.is-selected):hover
+.dataviews-view-list__fields,
+body.cortext-row-reorder-suppress-hover
+.dataviews-view-list
+div[role="row"]:not(.is-selected).is-hovered
+.dataviews-view-list__title-field,
+body.cortext-row-reorder-suppress-hover
+.dataviews-view-list
+div[role="row"]:not(.is-selected).is-hovered
+.dataviews-view-list__fields {
+	color: inherit;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+	.cortext-row-reorder-target {
+		transition: none;
+	}
+}
+
 .cortext-column-drag-handle {
 	position: absolute;
 	inset: 0 8px 0 0;
