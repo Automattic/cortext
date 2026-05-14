@@ -1,8 +1,9 @@
 import { Icon, Popover } from '@wordpress/components';
-import { useMemo, useRef, useState } from '@wordpress/element';
+import { useMemo, useRef } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { check, chevronRight } from '@wordpress/icons';
 
+import { useSubmenuPlacement } from '../hooks/useSubmenuPlacement';
 import {
 	CALCULATION_LABELS,
 	CALCULATION_NONE,
@@ -156,6 +157,7 @@ export default function TableCalculationMenu( {
 	onClose,
 	onMouseEnter,
 	onMouseLeave,
+	anchor,
 } ) {
 	const validSelected = isCalculationAvailable( field, selected )
 		? selected
@@ -164,9 +166,15 @@ export default function TableCalculationMenu( {
 		() => calculationGroupsForField( field ),
 		[ field ]
 	);
-	const [ openGroup, setOpenGroup ] = useState( null );
 	const groupRefs = useRef( {} );
+	const panelRef = useRef( null );
 	const noneSelected = ! validSelected;
+	const {
+		submenuRef,
+		placement: submenuPlacement,
+		openKey: openGroup,
+		open: openGroupAt,
+	} = useSubmenuPlacement( anchor, panelRef );
 
 	const pick = ( calculation ) => {
 		onPick( calculation === CALCULATION_NONE ? null : calculation );
@@ -201,6 +209,7 @@ export default function TableCalculationMenu( {
 
 	return (
 		<div
+			ref={ panelRef }
 			className="cortext-format-submenu__panel cortext-table-calculation-menu"
 			role="menu"
 			tabIndex={ -1 }
@@ -232,7 +241,7 @@ export default function TableCalculationMenu( {
 						<CalculationGroupRow
 							group={ group }
 							isOpen={ isOpen }
-							onOpen={ () => setOpenGroup( group.id ) }
+							onOpen={ () => openGroupAt( group.id ) }
 							rowRef={ ( element ) => {
 								groupRefs.current[ group.id ] = element;
 							} }
@@ -240,20 +249,34 @@ export default function TableCalculationMenu( {
 						{ isOpen ? (
 							<Popover
 								anchor={ groupRefs.current[ group.id ] }
-								placement="right-start"
+								placement={ submenuPlacement }
 								offset={ 8 }
-								onClose={ () => setOpenGroup( null ) }
+								shift
+								resize={ false }
+								onClose={ () => openGroupAt( null ) }
 								className="cortext-format-submenu__flyout cortext-table-calculation-submenu__flyout"
 							>
-								<CalculationChoiceList
-									options={ group.options }
-									selected={ validSelected }
-									onPick={ pick }
-									onClose={ () => setOpenGroup( null ) }
-									returnFocusRef={ {
-										current: groupRefs.current[ group.id ],
-									} }
-								/>
+								{ /* This submenu is portaled out of the
+								     panel, so the panel's mouseLeave fires
+								     as soon as the cursor crosses into here.
+								     Re-bind the hover-grace handlers so the
+								     parent's close timer keeps pausing. */ }
+								<div
+									ref={ submenuRef }
+									onMouseEnter={ onMouseEnter }
+									onMouseLeave={ onMouseLeave }
+								>
+									<CalculationChoiceList
+										options={ group.options }
+										selected={ validSelected }
+										onPick={ pick }
+										onClose={ () => openGroupAt( null ) }
+										returnFocusRef={ {
+											current:
+												groupRefs.current[ group.id ],
+										} }
+									/>
+								</div>
 							</Popover>
 						) : null }
 					</div>
@@ -278,6 +301,8 @@ export function TableCalculationPopover( {
 			anchor={ anchor }
 			placement="right-start"
 			offset={ 8 }
+			shift
+			resize={ false }
 			onClose={ onClose }
 			focusOnMount={ focusOnMount }
 			className="cortext-format-submenu cortext-table-calculation-submenu"
@@ -289,6 +314,7 @@ export function TableCalculationPopover( {
 				onClose={ onClose }
 				onMouseEnter={ onMouseEnter }
 				onMouseLeave={ onMouseLeave }
+				anchor={ anchor }
 			/>
 		</Popover>
 	);
