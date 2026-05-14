@@ -9,6 +9,7 @@ declare( strict_types=1 );
 
 namespace Cortext\Rest;
 
+use Cortext\Fields\FieldTypeConverter;
 use Cortext\PostType\Collection;
 use Cortext\PostType\CollectionEntries;
 use Cortext\Relations;
@@ -490,6 +491,14 @@ final class RowsController {
 			return;
 		}
 
+		// A single-value edit should clear leftover multi-row values first.
+		// Otherwise `update_post_meta` updates only row 0 and stale chips can
+		// come back after another type change.
+		$existing = get_post_meta( $row_id, $key, false );
+		if ( is_array( $existing ) && count( $existing ) > 1 ) {
+			delete_post_meta( $row_id, $key );
+		}
+
 		if ( 'number' === $field_type ) {
 			update_post_meta( $row_id, $key, is_numeric( $value ) ? (float) $value : $value );
 			return;
@@ -913,9 +922,12 @@ final class RowsController {
 			} elseif ( 'rollup' === $field_type ) {
 				$meta[ $key ] = $this->compute_rollup_value( $post->ID, $field_id );
 			} else {
-				$meta[ $key ] = isset( $multi_field_ids[ $field_id ] )
-					? get_post_meta( $post->ID, $key, false )
-					: get_post_meta( $post->ID, $key, true );
+				$meta[ $key ] = $this->format_typed_value(
+					$post->ID,
+					$field_id,
+					$field_type,
+					isset( $multi_field_ids[ $field_id ] )
+				);
 			}
 		}
 
@@ -939,6 +951,169 @@ final class RowsController {
 			'modified_by' => $this->display_name_for( $modified_by_id > 0 ? $modified_by_id : $created_by_id ),
 			'meta'        => $meta,
 		);
+	}
+
+	/**
+	 * Formats stored meta for the field's current type. Values that no longer
+	 * fit the type render empty, but the raw meta stays on disk so changing the
+	 * type back can show it again.
+	 *
+	 * @param int    $row_id     Row post ID.
+	 * @param int    $field_id   Field post ID.
+	 * @param string $field_type Cortext field type.
+	 * @param bool   $is_multi   Whether the field allows multiple meta rows.
+	 * @return mixed
+	 */
+	private function format_typed_value( int $row_id, int $field_id, string $field_type, bool $is_multi ) {
+		$key = "field-{$field_id}";
+
+		if ( 'multiselect' === $field_type ) {
+			$values = get_post_meta( $row_id, $key, false );
+			if ( ! is_array( $values ) || count( $values ) === 0 ) {
+				return array();
+			}
+			$normalized = array_values( array_map( 'strval', $values ) );
+			$options    = $this->valid_option_values( $field_id );
+			if ( count( $options ) === 0 ) {
+				return $normalized;
+			}
+			$matched = array_values(
+				array_filter( $normalized, static fn( string $v ): bool => in_array( $v, $options, true ) )
+			);
+			if ( count( $matched ) > 0 ) {
+				return $matched;
+			}
+			// A single unmatched row may be leftover text from a conversion.
+			// Split it, but only keep tokens that are real options.
+			if ( count( $normalized ) === 1 && preg_match( '/[\n,;]/', $normalized[0] ) ) {
+				$tokens = FieldTypeConverter::split_tokens( $normalized[0] );
+				return array_values(
+					array_filter( $tokens, static fn( string $v ): bool => in_array( $v, $options, true ) )
+				);
+			}
+			return array();
+		}
+
+		$stored = $is_multi
+			? get_post_meta( $row_id, $key, false )
+			: get_post_meta( $row_id, $key, true );
+
+		if ( 'select' === $field_type ) {
+			$value = is_array( $stored ) ? '' : trim( (string) $stored );
+			if ( '' === $value ) {
+				return '';
+			}
+			$options = $this->valid_option_values( $field_id );
+			if ( count( $options ) === 0 ) {
+				return $value;
+			}
+			if ( in_array( $value, $options, true ) ) {
+				return $value;
+			}
+			// Leftover delimited text from a conversion: use the first token
+			// only if it is now a real option.
+			if ( preg_match( '/[\n,;]/', $value ) ) {
+				$tokens = FieldTypeConverter::split_tokens( $value );
+				if ( count( $tokens ) > 0 && in_array( $tokens[0], $options, true ) ) {
+					return $tokens[0];
+				}
+			}
+			return '';
+		}
+
+		if ( 'number' === $field_type ) {
+			if ( is_array( $stored ) || null === $stored || '' === $stored ) {
+				return null;
+			}
+			return is_numeric( $stored ) ? (float) $stored : null;
+		}
+
+		if ( 'date' === $field_type || 'datetime' === $field_type ) {
+			$text = is_array( $stored ) ? '' : trim( (string) $stored );
+			if ( '' === $text ) {
+				return '';
+			}
+			$timestamp = strtotime( $text );
+			if ( false === $timestamp ) {
+				return '';
+			}
+			return 'date' === $field_type
+				? gmdate( 'Y-m-d', $timestamp )
+				: gmdate( DATE_RFC3339, $timestamp );
+		}
+
+		if ( 'checkbox' === $field_type ) {
+			if ( is_array( $stored ) || null === $stored || '' === $stored ) {
+				return false;
+			}
+			return Relations::is_truthy( $stored );
+		}
+
+		if ( 'email' === $field_type ) {
+			$value = is_array( $stored ) ? '' : trim( (string) $stored );
+			if ( '' === $value ) {
+				return '';
+			}
+			return false !== is_email( $value ) ? $value : '';
+		}
+
+		if ( 'url' === $field_type ) {
+			$value = is_array( $stored ) ? '' : trim( (string) $stored );
+			if ( '' === $value ) {
+				return '';
+			}
+			return false !== wp_http_validate_url( $value ) ? $value : '';
+		}
+
+		if ( 'text' === $field_type ) {
+			// If this used to be multiselect, show all remaining meta rows.
+			$all = get_post_meta( $row_id, $key, false );
+			if ( is_array( $all ) && count( $all ) > 1 ) {
+				$text = implode( ', ', array_map( 'strval', $all ) );
+			} else {
+				$text = is_array( $stored ) ? '' : (string) $stored;
+			}
+			$prior_format = (string) get_post_meta( $field_id, 'prior_date_format', true );
+			if ( '' !== $prior_format && '' !== trim( $text ) ) {
+				$timestamp = strtotime( trim( $text ) );
+				if ( false !== $timestamp ) {
+					$format = in_array( $prior_format, array( 'date', 'datetime' ), true )
+						? ( 'date' === $prior_format ? 'Y-m-d' : DATE_RFC3339 )
+						: $prior_format;
+					return wp_date( $format, $timestamp );
+				}
+			}
+			return $text;
+		}
+
+		return $stored;
+	}
+
+	/**
+	 * Reads valid values for a select or multiselect field.
+	 *
+	 * @param int $field_id Field post ID whose options should be read.
+	 * @return string[]
+	 */
+	private function valid_option_values( int $field_id ): array {
+		$raw = (string) get_post_meta( $field_id, 'options', true );
+		if ( '' === $raw ) {
+			return array();
+		}
+		$decoded = json_decode( $raw, true );
+		if ( ! is_array( $decoded ) ) {
+			return array();
+		}
+		$values = array();
+		foreach ( $decoded as $entry ) {
+			if ( is_array( $entry ) && isset( $entry['value'] ) ) {
+				$value = trim( (string) $entry['value'] );
+				if ( '' !== $value ) {
+					$values[] = $value;
+				}
+			}
+		}
+		return $values;
 	}
 
 	/**
