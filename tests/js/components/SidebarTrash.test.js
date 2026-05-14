@@ -137,6 +137,37 @@ function makePage( overrides = {} ) {
 	};
 }
 
+function makeRow( overrides = {} ) {
+	const { meta, collection, ...rest } = overrides;
+	return {
+		id: 101,
+		type: 'crtxt_books',
+		slug: 'archived-book',
+		status: 'trash',
+		title: { rendered: 'Archived book', raw: 'Archived book' },
+		meta: { cortext_document_icon: '', ...( meta ?? {} ) },
+		collection: {
+			id: 12,
+			slug: 'books',
+			title: { rendered: 'Books', raw: 'Books' },
+			...( collection ?? {} ),
+		},
+		...rest,
+	};
+}
+
+function makeRowsState( overrides = {} ) {
+	return {
+		rows: [],
+		total: 0,
+		isLoading: false,
+		hasResolved: true,
+		error: null,
+		refresh: jest.fn(),
+		...overrides,
+	};
+}
+
 describe( 'SidebarTrash', () => {
 	it( 'shows a spinner while the trash query resolves', () => {
 		setTrashRecords( {
@@ -160,7 +191,7 @@ describe( 'SidebarTrash', () => {
 
 		render( <SidebarTrash activePages={ [] } /> );
 
-		expect( screen.getByText( 'No trashed pages.' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'No trashed items.' ) ).toBeInTheDocument();
 	} );
 
 	it( 'keeps the last resolved trash list visible during a background refetch', () => {
@@ -190,7 +221,7 @@ describe( 'SidebarTrash', () => {
 		render( <SidebarTrash activePages={ [] } /> );
 
 		expect(
-			screen.getByText( 'Could not load trashed pages.' )
+			screen.getByText( 'Could not load Trash.' )
 		).toBeInTheDocument();
 
 		fireEvent.click( screen.getByRole( 'button', { name: 'Retry' } ) );
@@ -270,6 +301,59 @@ describe( 'SidebarTrash', () => {
 		);
 	} );
 
+	it( 'renders trashed rows with collection context', () => {
+		const row = makeRow( {
+			id: 17,
+			title: { rendered: 'Draft record', raw: 'Draft record' },
+			collection: {
+				id: 22,
+				title: { rendered: 'Research', raw: 'Research' },
+			},
+		} );
+		setTrashRecords( { records: [] } );
+
+		render(
+			<SidebarTrash
+				activePages={ [] }
+				trashedRowsState={ makeRowsState( {
+					rows: [ row ],
+					total: 1,
+				} ) }
+			/>
+		);
+
+		expect( screen.getByText( 'Draft record' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Research' ) ).toBeInTheDocument();
+	} );
+
+	it( 'POSTs row restore and refreshes trashed rows', async () => {
+		const refresh = jest.fn();
+		setTrashRecords( { records: [] } );
+		apiFetch.mockResolvedValue( { restored: [ 17 ] } );
+
+		render(
+			<SidebarTrash
+				activePages={ [] }
+				trashedRowsState={ makeRowsState( {
+					rows: [ makeRow( { id: 17 } ) ],
+					total: 1,
+					refresh,
+				} ) }
+			/>
+		);
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Restore' } ) );
+
+		await waitFor( () => {
+			expect( apiFetch ).toHaveBeenCalledWith( {
+				path: '/cortext/v1/documents/17/restore',
+				method: 'POST',
+			} );
+		} );
+		expect( refresh ).toHaveBeenCalled();
+		expect( dispatchMocks.invalidateResolution ).not.toHaveBeenCalled();
+	} );
+
 	it( 'surfaces a row-level error when restore fails and leaves the row in trash', async () => {
 		setTrashRecords( {
 			records: [ makePage( { id: 8 } ) ],
@@ -311,6 +395,40 @@ describe( 'SidebarTrash', () => {
 			'getEntityRecords',
 			[ 'postType', POST_TYPE, TRASHED_PAGES_QUERY ]
 		);
+	} );
+
+	it( 'POSTs row permanent-delete after confirmation and navigates away when selected', async () => {
+		const onSelect = jest.fn();
+		const refresh = jest.fn();
+		setTrashRecords( { records: [] } );
+		apiFetch.mockResolvedValue( { deleted: [ 17 ] } );
+
+		render(
+			<SidebarTrash
+				activePages={ [] }
+				selectedId={ 17 }
+				onSelect={ onSelect }
+				trashedRowsState={ makeRowsState( {
+					rows: [ makeRow( { id: 17 } ) ],
+					total: 1,
+					refresh,
+				} ) }
+			/>
+		);
+
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Delete permanently' } )
+		);
+		clickConfirm();
+
+		await waitFor( () => {
+			expect( apiFetch ).toHaveBeenCalledWith( {
+				path: '/cortext/v1/documents/17/permanent-delete',
+				method: 'POST',
+			} );
+		} );
+		expect( refresh ).toHaveBeenCalled();
+		expect( onSelect ).toHaveBeenCalledWith( null );
 	} );
 
 	it( 'navigates the canvas away when the open page is permanent-deleted (root or descendant)', async () => {

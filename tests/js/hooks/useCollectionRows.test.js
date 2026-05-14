@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 
 jest.mock( '@wordpress/api-fetch', () => ( {
 	__esModule: true,
@@ -10,6 +10,7 @@ import useCollectionRows, {
 	buildQueryArgs,
 	buildQueryPlan,
 } from '../../../src/hooks/useCollectionRows';
+import { notifyCollectionRowsChanged } from '../../../src/hooks/rowInvalidation';
 
 beforeEach( () => {
 	jest.clearAllMocks();
@@ -818,5 +819,20 @@ describe( 'useCollectionRows', () => {
 				path: expect.stringContaining( 'collection=7' ),
 			} )
 		);
+	} );
+
+	it( 'refetches rows when a global row invalidation event fires', async () => {
+		const view = { type: 'table', filters: [], page: 1, perPage: 25 };
+
+		renderHook( () => useCollectionRows( 7, view, baseFields ) );
+
+		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 1 ) );
+
+		act( () => {
+			notifyCollectionRowsChanged();
+		} );
+
+		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 2 ) );
+		expect( lastRequestPath() ).toContain( 'collection=7' );
 	} );
 } );

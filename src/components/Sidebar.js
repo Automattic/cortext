@@ -125,6 +125,7 @@ import { COLLECTION_QUERY } from '../collections';
 import { useFavorites } from '../hooks/useFavorites';
 import { useRecents } from '../hooks/useRecents';
 import useSidebarSections from '../hooks/useSidebarSections';
+import useTrashedRows from '../hooks/useTrashedRows';
 import { useWorkspaceHomePath } from '../hooks/useWorkspaceHomePath';
 
 const AUTO_EXPAND_DELAY = 700;
@@ -158,6 +159,7 @@ export default function Sidebar( {
 		POST_TYPE,
 		TRASHED_PAGES_QUERY
 	);
+	const trashedRowsState = useTrashedRows();
 	const {
 		pages,
 		homePath,
@@ -373,15 +375,17 @@ export default function Sidebar( {
 
 	const autoExpandTimerRef = useRef( null );
 	const trashCount = useMemo(
-		() => computeSidebarTrashRoots( trashedPages ?? [] ).roots.length,
-		[ trashedPages ]
+		() =>
+			computeSidebarTrashRoots( trashedPages ?? [] ).roots.length +
+			trashedRowsState.total,
+		[ trashedPages, trashedRowsState.total ]
 	);
 	let trashButtonLabel = __( 'Open Trash', 'cortext' );
 	if ( isTrashPanelOpen ) {
 		trashButtonLabel = __( 'Close Trash', 'cortext' );
 	} else if ( trashCount > 0 ) {
 		trashButtonLabel = sprintf(
-			/* translators: %d: number of trashed pages */
+			/* translators: %d: number of trashed pages and rows */
 			_n(
 				'Open Trash, %d item',
 				'Open Trash, %d items',
@@ -968,6 +972,7 @@ export default function Sidebar( {
 						activePages={ pages }
 						selectedId={ selectedId }
 						onSelect={ onSelect }
+						trashedRowsState={ trashedRowsState }
 					/>
 				</section>
 			) }

@@ -29,6 +29,7 @@ import { withViewTransition } from '../hooks/viewTransition';
 import { useRecents } from '../hooks/useRecents';
 import { useWorkspaceHome } from '../hooks/useWorkspaceHome';
 import useCollectionFields from '../hooks/useCollectionFields';
+import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
 import EmptyState from './EmptyState';
 import {
 	computeDocumentUri,
@@ -401,8 +402,8 @@ export default function EntityRoute( { history } ) {
 	// Two-mode restore handler: pages share the page-tree query keys with
 	// the sidebar trash list, so a successful restore must invalidate both
 	// ACTIVE/TRASHED queries to make the row reappear in the right list.
-	// Rows live in collection-scoped queries; invalidate the row's CPT so
-	// the next visit to its collection refetches.
+	// Rows live in collection-scoped queries; also dispatch the row
+	// invalidation event so open collections and the Trash row list refetch.
 	const onRestoreDocument = useCallback(
 		( postId, postType, response ) => {
 			if ( response?.post && postType ) {
@@ -424,6 +425,7 @@ export default function EntityRoute( { history } ) {
 					'postType',
 					postType,
 				] );
+				notifyCollectionRowsChanged();
 			}
 		},
 		[ invalidateResolution, receiveEntityRecords ]
