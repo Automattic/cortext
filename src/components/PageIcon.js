@@ -93,6 +93,8 @@ function ImageIcon( { id, size, alt, className } ) {
 			alt={ alt ?? '' }
 			width={ size }
 			height={ size }
+			loading="lazy"
+			decoding="async"
 		/>
 	);
 }

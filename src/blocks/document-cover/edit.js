@@ -172,6 +172,8 @@ export default function Edit( { context, clientId } ) {
 						className="cortext-document-cover-block__image"
 						src={ src }
 						alt={ media?.alt_text ?? '' }
+						loading="lazy"
+						decoding="async"
 					/>
 				) }
 				<div className="cortext-document-cover-block__controls">
