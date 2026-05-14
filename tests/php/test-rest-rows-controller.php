@@ -43,6 +43,7 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 	public function test_route_is_registered(): void {
 		$routes = rest_get_server()->get_routes();
 		$this->assertArrayHasKey( '/cortext/v1/rows', $routes );
+		$this->assertArrayHasKey( '/cortext/v1/rows/trash', $routes );
 		$this->assertArrayHasKey(
 			'/cortext/v1/collections/(?P<collection_id>\d+)/rows',
 			$routes
@@ -263,6 +264,14 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertSame( 'Score', $fields[0]['label'] );
 	}
 
+	public function test_trashed_rows_route_requires_edit_posts_capability(): void {
+		wp_set_current_user( $this->create_user( 'subscriber' ) );
+
+		$response = $this->query_trashed_rows();
+
+		$this->assertSame( 403, $response->get_status() );
+	}
+
 	// -- Unit tests for format_row and build_query_args -----------------
 
 	public function test_format_row_returns_expected_shape(): void {
@@ -288,6 +297,37 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertSame( 'My Entry', $row['title']['raw'] );
 		$this->assertSame( 'publish', $row['status'] );
 		$this->assertSame( 'hello', $row['meta']["field-{$field_id}"] );
+	}
+
+	public function test_format_trashed_row_returns_sidebar_shape(): void {
+		$fixture       = $this->create_collection_fixture( 'trashfmt', 'text' );
+		$collection_id = $fixture['collection_id'];
+		$row_id        = (int) wp_insert_post(
+			array(
+				'post_type'   => 'crtxt_trashfmt',
+				'post_status' => 'trash',
+				'post_title'  => 'Archived Row',
+				'post_name'   => 'archived-row',
+				'meta_input'  => array(
+					'cortext_document_icon' => '{"type":"wp","name":"list","color":"blue"}',
+				),
+			)
+		);
+
+		$controller = new RowsController();
+		$method     = new \ReflectionMethod( $controller, 'format_trashed_row' );
+		$method->setAccessible( true );
+
+		$row = $method->invoke( $controller, get_post( $row_id ), get_post( $collection_id ) );
+
+		$this->assertSame( $row_id, $row['id'] );
+		$this->assertSame( 'crtxt_trashfmt', $row['type'] );
+		$this->assertSame( 'trash', $row['status'] );
+		$this->assertSame( 'Archived Row', $row['title']['raw'] );
+		$this->assertSame( '{"type":"wp","name":"list","color":"blue"}', $row['meta']['cortext_document_icon'] );
+		$this->assertSame( $collection_id, $row['collection']['id'] );
+		$this->assertSame( 'trashfmt', $row['collection']['slug'] );
+		$this->assertSame( 'Trashfmt', $row['collection']['title']['raw'] );
 	}
 
 	public function test_format_row_returns_array_for_multiselect(): void {
@@ -736,6 +776,48 @@ public function test_build_query_args_with_title_sort(): void {
 
 		$this->assertSame( 30.0, $updated['meta']["field-{$sum_id}"] );
 		$this->assertSame( '2026-05-04', $updated['meta']["field-{$latest_id}"] );
+	}
+
+	public function test_trashed_relation_targets_are_hidden_without_clearing_meta(): void {
+		$projects_id = $this->create_collection_with_slug( 'Projects', 'projtr' );
+		$invoices_id = $this->create_collection_with_slug( 'Invoices', 'invtr' );
+
+		$relation = $this->create_relation_pair( $projects_id, $invoices_id );
+		$amount_id = $this->create_collection_field( $invoices_id, 'Amount', 'number' );
+		$count_id = $this->create_rollup_field( $projects_id, 'Invoice count', $relation['source_id'], 0, 'count' );
+		$sum_id = $this->create_rollup_field( $projects_id, 'Total', $relation['source_id'], $amount_id, 'sum' );
+
+		$project_id = $this->create_entry( 'crtxt_projtr', 'Project' );
+		$kept_id = $this->create_entry( 'crtxt_invtr', 'Kept invoice' );
+		$trashed_id = $this->create_entry( 'crtxt_invtr', 'Trashed invoice' );
+		update_post_meta( $kept_id, "field-{$amount_id}", '10' );
+		update_post_meta( $trashed_id, "field-{$amount_id}", '20' );
+		Relations::sync_relation_value( $project_id, $relation['source_id'], array( $kept_id, $trashed_id ) );
+
+		wp_trash_post( $trashed_id );
+
+		$row = $this->invoke_format_row_with_fields(
+			$project_id,
+			array( $relation['source_id'], $count_id, $sum_id )
+		);
+
+		$this->assertSame( array( (string) $kept_id, (string) $trashed_id ), get_post_meta( $project_id, "field-{$relation['source_id']}", false ) );
+		$this->assertSame( array( (string) $project_id ), get_post_meta( $trashed_id, "field-{$relation['reverse_id']}", false ) );
+		$this->assertCount( 1, $row['meta']["field-{$relation['source_id']}"] );
+		$this->assertSame( $kept_id, $row['meta']["field-{$relation['source_id']}"][0]['id'] );
+		$this->assertSame( 1, $row['meta']["field-{$count_id}"] );
+		$this->assertSame( 10.0, $row['meta']["field-{$sum_id}"] );
+
+		wp_untrash_post( $trashed_id );
+
+		$restored = $this->invoke_format_row_with_fields(
+			$project_id,
+			array( $relation['source_id'], $count_id, $sum_id )
+		);
+
+		$this->assertCount( 2, $restored['meta']["field-{$relation['source_id']}"] );
+		$this->assertSame( 2, $restored['meta']["field-{$count_id}"] );
+		$this->assertSame( 30.0, $restored['meta']["field-{$sum_id}"] );
 	}
 
 	// -- System field tests ---------------------------------------------
@@ -1248,6 +1330,12 @@ public function test_build_query_args_with_title_sort(): void {
 	private function query_rows( array $params ): \WP_REST_Response {
 		$request = new WP_REST_Request( 'GET', '/cortext/v1/rows' );
 		$request->set_query_params( $params );
+
+		return rest_do_request( $request );
+	}
+
+	private function query_trashed_rows(): \WP_REST_Response {
+		$request = new WP_REST_Request( 'GET', '/cortext/v1/rows/trash' );
 
 		return rest_do_request( $request );
 	}

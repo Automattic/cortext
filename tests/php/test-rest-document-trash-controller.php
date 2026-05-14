@@ -231,6 +231,37 @@ final class Test_Rest_Document_Trash_Controller extends BaseTestCase {
 		$this->assertSame( 403, $response->get_status() );
 	}
 
+	public function test_permanent_delete_removes_a_trashed_row_document(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$row_post_type = 'crtxt_trashrow';
+		register_post_type(
+			$row_post_type,
+			array(
+				'public'       => false,
+				'show_in_rest' => true,
+				'rest_base'    => $row_post_type,
+				'supports'     => array( 'title', 'editor' ),
+			)
+		);
+		add_post_type_support( $row_post_type, 'cortext-document' );
+
+		$row_id = (int) wp_insert_post(
+			array(
+				'post_type'   => $row_post_type,
+				'post_status' => 'publish',
+				'post_title'  => 'A trashed row',
+			)
+		);
+		wp_trash_post( $row_id );
+
+		$response = $this->permanent_delete( $row_id );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( $row_id ), $response->get_data()['deleted'] );
+		$this->assertNull( get_post( $row_id ) );
+	}
+
 	public function test_restore_skips_cascade_walk_for_flat_row_documents(): void {
 		// A row CPT opts into cortext-document but has no hierarchy, so the
 		// cascade walk should return an empty descendant list and only the
