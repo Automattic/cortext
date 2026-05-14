@@ -966,22 +966,29 @@ final class RowsController {
 			if ( ! is_array( $values ) || count( $values ) === 0 ) {
 				return array();
 			}
-			// Single meta row carrying delimited text (data converted from a
-			// text-like field) — split on \n , ; into chips.
-			if ( count( $values ) === 1 ) {
-				$single = (string) $values[0];
-				if ( preg_match( '/[\n,;]/', $single ) ) {
-					return FieldTypeConverter::split_tokens( $single );
-				}
-			}
 			$normalized = array_values( array_map( 'strval', $values ) );
 			$options    = $this->valid_option_values( $field_id );
 			if ( count( $options ) === 0 ) {
 				return $normalized;
 			}
-			return array_values(
+			$matched = array_values(
 				array_filter( $normalized, static fn( string $v ): bool => in_array( $v, $options, true ) )
 			);
+			if ( count( $matched ) > 0 ) {
+				return $matched;
+			}
+			// No raw value matched. If a single meta row carries delimited
+			// text (residue of a text→multiselect conversion), split it and
+			// keep the tokens that exist in the options list. Native option
+			// values that happen to contain `,` / `;` / `\n` were already
+			// matched above and never hit this branch.
+			if ( count( $normalized ) === 1 && preg_match( '/[\n,;]/', $normalized[0] ) ) {
+				$tokens = FieldTypeConverter::split_tokens( $normalized[0] );
+				return array_values(
+					array_filter( $tokens, static fn( string $v ): bool => in_array( $v, $options, true ) )
+				);
+			}
+			return array();
 		}
 
 		$stored = $is_multi
@@ -993,22 +1000,24 @@ final class RowsController {
 			if ( '' === $value ) {
 				return '';
 			}
-			// A single meta row carrying delimited text comes from a
-			// type-change off text / number / email / url. Mirror the
-			// commit-time split so the cell renders the same first-token
-			// chip the preview promised the user.
-			if ( preg_match( '/[\n,;]/', $value ) ) {
-				$tokens = FieldTypeConverter::split_tokens( $value );
-				$value  = count( $tokens ) > 0 ? $tokens[0] : '';
-				if ( '' === $value ) {
-					return '';
-				}
-			}
 			$options = $this->valid_option_values( $field_id );
 			if ( count( $options ) === 0 ) {
 				return $value;
 			}
-			return in_array( $value, $options, true ) ? $value : '';
+			if ( in_array( $value, $options, true ) ) {
+				return $value;
+			}
+			// Raw value didn't match. Residue of a text-like → select
+			// conversion: take the first split-token if it matches an
+			// option. Pre-existing option values containing `,` / `;` /
+			// `\n` matched above and never reach this branch.
+			if ( preg_match( '/[\n,;]/', $value ) ) {
+				$tokens = FieldTypeConverter::split_tokens( $value );
+				if ( count( $tokens ) > 0 && in_array( $tokens[0], $options, true ) ) {
+					return $tokens[0];
+				}
+			}
+			return '';
 		}
 
 		if ( 'number' === $field_type ) {
@@ -1037,6 +1046,22 @@ final class RowsController {
 				return false;
 			}
 			return Relations::is_truthy( $stored );
+		}
+
+		if ( 'email' === $field_type ) {
+			$value = is_array( $stored ) ? '' : trim( (string) $stored );
+			if ( '' === $value ) {
+				return '';
+			}
+			return false !== is_email( $value ) ? $value : '';
+		}
+
+		if ( 'url' === $field_type ) {
+			$value = is_array( $stored ) ? '' : trim( (string) $stored );
+			if ( '' === $value ) {
+				return '';
+			}
+			return false !== wp_http_validate_url( $value ) ? $value : '';
 		}
 
 		if ( 'text' === $field_type ) {

@@ -1189,6 +1189,116 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 		return $method->invoke( $controller, $row_id, $field_id, $field_type, $is_multi );
 	}
 
+	public function test_format_typed_value_preserves_select_option_with_delimiters(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$collection_id = $this->create_collection_with_slug( 'Vendors', 'vendors-sel' );
+
+		$field_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Vendor',
+				'meta_input'  => array(
+					'type'    => 'select',
+					'options' => wp_json_encode(
+						array(
+							array(
+								'value' => 'ACME, Inc.',
+								'label' => 'ACME, Inc.',
+							),
+						)
+					),
+				),
+			)
+		);
+		add_post_meta( $collection_id, 'fields', (string) $field_id );
+		( new CollectionEntries() )->register_for_collection( get_post( $collection_id ) );
+
+		$row_id = (int) wp_insert_post(
+			array(
+				'post_type'   => 'crtxt_vendors-sel',
+				'post_status' => 'publish',
+				'post_title'  => 'Row',
+			)
+		);
+		update_post_meta( $row_id, "field-{$field_id}", 'ACME, Inc.' );
+
+		$this->assertSame(
+			'ACME, Inc.',
+			$this->invoke_format_typed_value( $row_id, $field_id, 'select', false )
+		);
+	}
+
+	public function test_format_typed_value_preserves_multiselect_option_with_delimiters(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$collection_id = $this->create_collection_with_slug( 'Tags', 'tags-multi' );
+
+		$field_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Vendors',
+				'meta_input'  => array(
+					'type'    => 'multiselect',
+					'options' => wp_json_encode(
+						array(
+							array(
+								'value' => 'ACME, Inc.',
+								'label' => 'ACME, Inc.',
+							),
+						)
+					),
+				),
+			)
+		);
+		add_post_meta( $collection_id, 'fields', (string) $field_id );
+		( new CollectionEntries() )->register_for_collection( get_post( $collection_id ) );
+
+		$row_id = (int) wp_insert_post(
+			array(
+				'post_type'   => 'crtxt_tags-multi',
+				'post_status' => 'publish',
+				'post_title'  => 'Row',
+			)
+		);
+		add_post_meta( $row_id, "field-{$field_id}", 'ACME, Inc.' );
+
+		$this->assertSame(
+			array( 'ACME, Inc.' ),
+			$this->invoke_format_typed_value( $row_id, $field_id, 'multiselect', true )
+		);
+	}
+
+	public function test_format_typed_value_hides_invalid_email(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		[ , $field_id, $row_ids ] = $this->fixture_text_field_with_rows(
+			'email-invalid',
+			array( 'user@example.com', 'not-an-email', '' )
+		);
+		update_post_meta( $field_id, 'type', 'email' );
+
+		$rendered = array();
+		foreach ( $row_ids as $row_id ) {
+			$rendered[] = $this->invoke_format_typed_value( $row_id, $field_id, 'email', false );
+		}
+		$this->assertSame( array( 'user@example.com', '', '' ), $rendered );
+	}
+
+	public function test_format_typed_value_hides_invalid_url(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		[ , $field_id, $row_ids ] = $this->fixture_text_field_with_rows(
+			'url-invalid',
+			array( 'https://example.com', 'abc', '' )
+		);
+		update_post_meta( $field_id, 'type', 'url' );
+
+		$rendered = array();
+		foreach ( $row_ids as $row_id ) {
+			$rendered[] = $this->invoke_format_typed_value( $row_id, $field_id, 'url', false );
+		}
+		$this->assertSame( array( 'https://example.com', '', '' ), $rendered );
+	}
+
 	public function test_convert_round_trip_preserves_stored_text(): void {
 		wp_set_current_user( $this->create_user( 'editor' ) );
 		[ , $field_id, $row_ids ] = $this->fixture_text_field_with_rows(
@@ -1219,13 +1329,6 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 		$method     = new \ReflectionMethod( $controller, 'build_conversion_plan' );
 		$method->setAccessible( true );
 		return $method->invoke( $controller, $field_id, $target_type, $row_ids );
-	}
-
-	private function convert_preview( int $field_id, string $target_type ) {
-		$request = new WP_REST_Request( 'POST', "/cortext/v1/fields/{$field_id}/convert/preview" );
-		$request->set_param( 'field_id', $field_id );
-		$request->set_param( 'type', $target_type );
-		return rest_do_request( $request );
 	}
 
 	private function convert_field( int $field_id, string $target_type ) {

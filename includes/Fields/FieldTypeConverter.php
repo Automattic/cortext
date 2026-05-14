@@ -5,9 +5,9 @@
  * The converter never writes anything. It tells callers, per stored value,
  * whether the cell will render under the target type ("displays"), render
  * empty ("hidden"), or was already empty ("empty"). The commit handler
- * uses these counts to drive the preview UI; the actual conversion at
- * commit time is just `update_post_meta` on the field's `type` (plus an
- * option-list extension for select / multiselect targets).
+ * uses these counts for its response; the actual conversion at commit time
+ * is just `update_post_meta` on the field's `type` (plus an option-list
+ * extension for select / multiselect targets).
  *
  * @package Cortext
  */
@@ -100,7 +100,7 @@ final class FieldTypeConverter {
 		}
 
 		if ( 'url' === $to ) {
-			return '' !== esc_url_raw( $text ) ? self::STATUS_DISPLAYS : self::STATUS_HIDDEN;
+			return false !== wp_http_validate_url( $text ) ? self::STATUS_DISPLAYS : self::STATUS_HIDDEN;
 		}
 
 		// text / select target: any non-empty source renders.

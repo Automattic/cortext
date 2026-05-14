@@ -267,35 +267,6 @@ export function useOptionUsage() {
 	return { run };
 }
 
-// Dry-runs a field type change. Returns counts of rows that will display
-// vs render empty after the change, plus the unique tokens that would be
-// added as new select/multiselect options for text-like → option-list
-// targets. The popover calls this whenever the user picks a different
-// target type so it can show the preview before the user confirms.
-export function usePreviewFieldTypeChange() {
-	const { isBusy, setIsBusy, error, setError } = useMutationState();
-	const run = useCallback(
-		async ( recordId, targetType ) => {
-			setIsBusy( true );
-			setError( null );
-			try {
-				return await apiFetch( {
-					path: `/cortext/v1/fields/${ recordId }/convert/preview`,
-					method: 'POST',
-					data: { type: targetType },
-				} );
-			} catch ( apiError ) {
-				setError( apiError );
-				throw apiError;
-			} finally {
-				setIsBusy( false );
-			}
-		},
-		[ setIsBusy, setError ]
-	);
-	return { run, isBusy, error };
-}
-
 // Commits a field type change. The server flips the `type` meta on the
 // field (plus extends `options` for text-like → select / multiselect),
 // leaves all row meta untouched, and returns the post-commit counts.

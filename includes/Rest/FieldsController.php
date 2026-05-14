@@ -205,29 +205,6 @@ final class FieldsController {
 
 		register_rest_route(
 			self::NAMESPACE,
-			'/fields/(?P<field_id>\d+)/convert/preview',
-			array(
-				array(
-					'methods'             => 'POST',
-					'callback'            => array( $this, 'convert_preview' ),
-					'permission_callback' => array( $this, 'can_edit_field' ),
-					'args'                => array(
-						'field_id' => array(
-							'type'     => 'integer',
-							'required' => true,
-						),
-						'type'     => array(
-							'type'     => 'string',
-							'required' => true,
-							'enum'     => FieldTypeRegistry::types(),
-						),
-					),
-				),
-			)
-		);
-
-		register_rest_route(
-			self::NAMESPACE,
 			'/fields/(?P<field_id>\d+)/convert',
 			array(
 				array(
@@ -496,26 +473,6 @@ final class FieldsController {
 	}
 
 	/**
-	 * Dry-runs a field type change. Returns the same plan the commit handler
-	 * would apply: counts of rows that will display vs render empty, a small
-	 * sample, and the unique option tokens that would be auto-added for
-	 * text-like → select / multiselect targets.
-	 *
-	 * @param WP_REST_Request $request Request carrying `field_id` and target `type`.
-	 */
-	public function convert_preview( WP_REST_Request $request ): WP_REST_Response|WP_Error {
-		$field_id    = (int) $request->get_param( 'field_id' );
-		$target_type = (string) $request->get_param( 'type' );
-
-		$plan = $this->build_conversion_plan( $field_id, $target_type );
-		if ( is_wp_error( $plan ) ) {
-			return $plan;
-		}
-
-		return new WP_REST_Response( $plan, 200 );
-	}
-
-	/**
 	 * Commits a field type change. Flips the field's `type` meta in place,
 	 * extends the options list for text-like → select / multiselect targets,
 	 * and stashes the field's prior `date_format` when converting away from a
@@ -580,15 +537,14 @@ final class FieldsController {
 
 	/**
 	 * Iterates the rows of the collection that owns the field and classifies
-	 * each stored value under the proposed target type. Returns counts plus a
-	 * sample for the preview UI and the unique tokens that would be auto-added
-	 * to the field's options list on commit (only for text-like → select /
-	 * multiselect conversions).
+	 * each stored value under the proposed target type. Returns counts plus the
+	 * unique tokens that should be auto-added to the field's options list on
+	 * commit (only for text-like → select / multiselect conversions).
 	 *
 	 * @param int        $field_id         Field post ID being converted.
 	 * @param string     $target_type      Cortext field type to convert into.
 	 * @param int[]|null $row_ids_override Optional row ID list (testing seam).
-	 * @return array{from:string,to:string,total:int,displays:int,hidden:int,empty:int,sample:array<int,array<string,mixed>>,new_options:string[]}|WP_Error
+	 * @return array{from:string,to:string,total:int,displays:int,hidden:int,empty:int,new_options:string[]}|WP_Error
 	 */
 	private function build_conversion_plan( int $field_id, string $target_type, ?array $row_ids_override = null ): array|WP_Error {
 		$source_type = (string) get_post_meta( $field_id, 'type', true );
@@ -634,9 +590,7 @@ final class FieldsController {
 		$displays      = 0;
 		$hidden        = 0;
 		$empty         = 0;
-		$sample        = array();
 		$option_tokens = array();
-		$sample_limit  = 10;
 
 		foreach ( $row_ids as $row_id ) {
 			$row_id = (int) $row_id;
@@ -672,24 +626,6 @@ final class FieldsController {
 					}
 				}
 			}
-
-			if ( count( $sample ) < $sample_limit && FieldTypeConverter::STATUS_EMPTY !== $status ) {
-				$row     = get_post( $row_id );
-				$preview = array(
-					'row_id'    => $row_id,
-					'row_title' => $row instanceof WP_Post ? $row->post_title : '',
-					'old_value' => is_array( $stored ) ? implode( ', ', array_map( 'strval', $stored ) ) : (string) $stored,
-					'status'    => $status,
-				);
-				if ( $extends_opts && FieldTypeConverter::STATUS_DISPLAYS === $status ) {
-					$tokens = FieldTypeConverter::split_tokens( (string) $stored );
-					if ( 'select' === $target_type && count( $tokens ) > 1 ) {
-						$tokens = array_slice( $tokens, 0, 1 );
-					}
-					$preview['new_chips'] = $tokens;
-				}
-				$sample[] = $preview;
-			}
 		}
 
 		return array(
@@ -699,7 +635,6 @@ final class FieldsController {
 			'displays'    => $displays,
 			'hidden'      => $hidden,
 			'empty'       => $empty,
-			'sample'      => $sample,
 			'new_options' => $option_tokens,
 		);
 	}

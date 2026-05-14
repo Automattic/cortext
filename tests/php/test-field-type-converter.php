@@ -70,7 +70,8 @@ final class Test_Field_Type_Converter extends BaseTestCase {
 
 	public function test_classify_text_to_url(): void {
 		$this->assertSame( FieldTypeConverter::STATUS_DISPLAYS, FieldTypeConverter::classify( 'text', 'url', 'https://example.com' ) );
-		$this->assertSame( FieldTypeConverter::STATUS_DISPLAYS, FieldTypeConverter::classify( 'text', 'url', 'example.com' ) );
+		$this->assertSame( FieldTypeConverter::STATUS_HIDDEN, FieldTypeConverter::classify( 'text', 'url', 'abc' ) );
+		$this->assertSame( FieldTypeConverter::STATUS_HIDDEN, FieldTypeConverter::classify( 'text', 'url', 'example.com' ) );
 	}
 
 	public function test_classify_to_checkbox_always_displays(): void {
