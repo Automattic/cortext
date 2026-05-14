@@ -240,6 +240,11 @@ function comparison_lines( array $current, string $base_path, string $base_label
 		return $lines;
 	}
 
+	if ( ! reports_share_config( $current, $base['report'] ) ) {
+		$lines[] = 'Baseline stale: seed args or budget changed.';
+		return $lines;
+	}
+
 	$current_scenarios = is_array( $current['scenarios'] ?? null ) ? $current['scenarios'] : array();
 	$base_scenarios    = is_array( $base['report']['scenarios'] ?? null ) ? $base['report']['scenarios'] : array();
 	$rows              = array();
@@ -272,6 +277,16 @@ function comparison_lines( array $current, string $base_path, string $base_label
 			$rows
 		)
 	);
+}
+
+/**
+ * @param array<string,mixed> $current
+ * @param array<string,mixed> $base
+ */
+function reports_share_config( array $current, array $base ): bool {
+	return is_string( $current['seed_config_hash'] ?? null )
+		&& is_string( $base['seed_config_hash'] ?? null )
+		&& hash_equals( $base['seed_config_hash'], $current['seed_config_hash'] );
 }
 
 function escape_cell( mixed $value ): string {

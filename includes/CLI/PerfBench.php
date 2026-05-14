@@ -151,15 +151,16 @@ final class PerfBench {
 	public static function bench( array $args, array $assoc_args ): void {
 		unset( $args );
 
-		$bench      = new self();
-		$iterations = self::flag_int( $assoc_args, 'iterations', self::DEFAULT_ITERATIONS, 1 );
-		$warmup     = self::flag_int( $assoc_args, 'warmup', self::DEFAULT_WARMUP, 0 );
-		$budget     = $bench->load_budget(
+		$bench       = new self();
+		$iterations  = self::flag_int( $assoc_args, 'iterations', self::DEFAULT_ITERATIONS, 1 );
+		$warmup      = self::flag_int( $assoc_args, 'warmup', self::DEFAULT_WARMUP, 0 );
+		$budget_path = self::normalize_local_path(
 			(string) ( $assoc_args['budget'] ?? CORTEXT_PATH . 'includes/CLI/perf-budgets.json' )
 		);
+		$budget      = $bench->load_budget( $budget_path );
 
 		try {
-			$result = $bench->run_benchmark( $iterations, $warmup, $budget );
+			$result = $bench->run_benchmark( $iterations, $warmup, $budget, $budget_path );
 		} catch ( RuntimeException $exception ) {
 			\WP_CLI::error( $exception->getMessage() );
 			return;
@@ -305,10 +306,11 @@ final class PerfBench {
 	 * @param int                 $iterations Measured iterations.
 	 * @param int                 $warmup     Warm-up iterations.
 	 * @param array<string,mixed> $budget     Budget config.
+	 * @param string              $budget_path Budget file path.
 	 * @return array<string,mixed> Benchmark report.
 	 * @throws RuntimeException When the dataset is missing or a scenario fails.
 	 */
-	public function run_benchmark( int $iterations, int $warmup, array $budget ): array {
+	public function run_benchmark( int $iterations, int $warmup, array $budget, string $budget_path = 'includes/CLI/perf-budgets.json' ): array {
 		$started_at = hrtime( true );
 		$manifest   = get_option( self::DATASET_OPTION );
 		if ( ! is_array( $manifest ) || ! $this->manifest_is_usable( $manifest ) ) {
@@ -356,16 +358,17 @@ final class PerfBench {
 		$budget_result = self::apply_budgets( $summaries, $budget );
 
 		return array(
-			'version'    => 1,
-			'elapsedMs'  => self::elapsed_ms( $started_at ),
-			'dataset'    => self::public_dataset_summary( $manifest ),
-			'iterations' => array(
+			'version'          => 1,
+			'seed_config_hash' => self::benchmark_config_hash( $manifest, $budget, $budget_path ),
+			'elapsedMs'        => self::elapsed_ms( $started_at ),
+			'dataset'          => self::public_dataset_summary( $manifest ),
+			'iterations'       => array(
 				'warmup'   => $warmup,
 				'measured' => $iterations,
 			),
-			'passed'     => $budget_result['passed'],
-			'failures'   => $budget_result['failures'],
-			'scenarios'  => $budget_result['scenarios'],
+			'passed'           => $budget_result['passed'],
+			'failures'         => $budget_result['failures'],
+			'scenarios'        => $budget_result['scenarios'],
 		);
 	}
 
@@ -1425,9 +1428,7 @@ final class PerfBench {
 	 * @throws RuntimeException When the budget file cannot be loaded.
 	 */
 	private function load_budget( string $path ): array {
-		if ( ! str_starts_with( $path, '/' ) ) {
-			$path = CORTEXT_PATH . ltrim( $path, '/' );
-		}
+		$path = self::normalize_local_path( $path );
 		if ( ! file_exists( $path ) ) {
 			throw new RuntimeException( esc_html( "Budget file not found: {$path}" ) );
 		}
@@ -1494,6 +1495,48 @@ final class PerfBench {
 			'rollups'             => (int) ( $config['rollups'] ?? 0 ),
 			'collectionRows'      => $collections,
 		);
+	}
+
+	/**
+	 * Hashes the benchmark config that has to match before comparing runs.
+	 *
+	 * @param array<string,mixed> $manifest    Dataset manifest.
+	 * @param array<string,mixed> $budget      Budget config.
+	 * @param string              $budget_path Budget file path.
+	 */
+	private static function benchmark_config_hash( array $manifest, array $budget, string $budget_path ): string {
+		$config = isset( $manifest['config'] ) && is_array( $manifest['config'] )
+			? self::normalize_int_map( $manifest['config'] )
+			: array();
+
+		return sha1(
+			(string) wp_json_encode(
+				array(
+					'seed'        => (string) ( $manifest['seed'] ?? self::DATASET_SEED ),
+					'seed_args'   => $config,
+					'budget_path' => self::relative_local_path( $budget_path ),
+					'budget'      => $budget,
+				),
+				JSON_UNESCAPED_SLASHES
+			)
+		);
+	}
+
+	private static function normalize_local_path( string $path ): string {
+		if ( str_starts_with( $path, '/' ) ) {
+			return $path;
+		}
+
+		return CORTEXT_PATH . ltrim( $path, '/' );
+	}
+
+	private static function relative_local_path( string $path ): string {
+		$path = self::normalize_local_path( $path );
+		if ( str_starts_with( $path, CORTEXT_PATH ) ) {
+			return ltrim( substr( $path, strlen( CORTEXT_PATH ) ), '/' );
+		}
+
+		return $path;
 	}
 
 	/**

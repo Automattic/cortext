@@ -20,6 +20,7 @@ on:
     workflow_dispatch:
 
 permissions:
+    actions: read
     contents: read
     issues: write
 
@@ -34,9 +35,49 @@ jobs:
     performance-bench:
         name: Performance benchmark
         runs-on: ubuntu-latest
-        timeout-minutes: 40
+        timeout-minutes: 20
         steps:
             - uses: actions/checkout@v4
+
+            - name: Download main benchmark baseline
+              if: github.event_name == 'pull_request'
+              continue-on-error: true
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  REPOSITORY: ${{ github.repository }}
+              run: |
+                  set -euo pipefail
+
+                  mkdir -p artifacts/main-baseline
+                  run_id="$(gh run list \
+                    --repo "$REPOSITORY" \
+                    --workflow perf-bench.yml \
+                    --branch main \
+                    --status completed \
+                    --limit 1 \
+                    --json databaseId \
+                    --jq '.[0].databaseId // ""')"
+
+                  if [ -z "$run_id" ]; then
+                    echo "No completed main benchmark run found."
+                    exit 0
+                  fi
+
+                  if ! gh run download "$run_id" \
+                    --repo "$REPOSITORY" \
+                    --name perf-bench-main \
+                    --dir artifacts/main-baseline; then
+                    echo "No main benchmark artifact found."
+                    exit 0
+                  fi
+
+                  base_json="$(find artifacts/main-baseline -name 'perf-bench.json' -type f | head -n 1)"
+                  if [ -z "$base_json" ]; then
+                    echo "Main benchmark artifact had no perf-bench.json."
+                    exit 0
+                  fi
+
+                  cp "$base_json" artifacts/perf-bench-base.json
 
             - uses: shivammathur/setup-php@v2
               with:
@@ -58,45 +99,6 @@ jobs:
               with:
                   node-version: '24.15'
                   cache: 'pnpm'
-
-            - name: Benchmark main
-              if: github.event_name == 'pull_request'
-              continue-on-error: true
-              env:
-                  BASE_REF: main
-                  HEAD_SHA: ${{ github.sha }}
-              run: |
-                  set -euo pipefail
-
-                  restore_head() {
-                    git checkout --force "$HEAD_SHA"
-                  }
-                  trap restore_head EXIT
-
-                  mkdir -p artifacts
-                  git fetch --no-tags --depth=1 origin "$BASE_REF"
-                  git checkout --force FETCH_HEAD
-
-                  composer install --no-interaction --prefer-dist --no-dev
-                  pnpm install --frozen-lockfile
-
-                  pnpm run env:start
-                  pnpm exec wp-env run cli wp cortext perf-seed \
-                    --reset \
-                    --force \
-                    --collections=3 \
-                    --rows=1250 \
-                    --fields=8 \
-                    --wide-fields=40 \
-                    --relations=1 \
-                    --rollups=1
-
-                  set -o pipefail
-                  pnpm exec wp-env run cli wp cortext perf-bench \
-                    --iterations=5 \
-                    --warmup=1 \
-                    --budget=includes/CLI/perf-budgets.json \
-                    --pretty | tee artifacts/perf-bench-base.json
 
             - run: composer install --no-interaction --prefer-dist --no-dev
 
@@ -165,6 +167,15 @@ jobs:
                       --comparison-only \
                       --summary= > artifacts/perf-bench-comment-body.md
                   fi
+
+            - name: Upload main benchmark baseline
+              if: always() && github.event_name == 'push'
+              uses: actions/upload-artifact@v4
+              with:
+                  name: perf-bench-main
+                  path: artifacts/perf-bench.json
+                  if-no-files-found: ignore
+                  retention-days: 90
 
             - name: Post PR benchmark comment
               if: always() && github.event_name == 'pull_request'
