@@ -491,6 +491,17 @@ final class RowsController {
 			return;
 		}
 
+		// Single-value field types must replace any multi-row residue from a
+		// prior multiselect (or other multi-write path). `update_post_meta`
+		// updates only the first matching row, so without this collapse the
+		// user's edit lands on row 0 while stale rows 1..n persist and
+		// reappear if the field is ever converted back to multiselect or
+		// rendered with the multi-row join.
+		$existing = get_post_meta( $row_id, $key, false );
+		if ( is_array( $existing ) && count( $existing ) > 1 ) {
+			delete_post_meta( $row_id, $key );
+		}
+
 		if ( 'number' === $field_type ) {
 			update_post_meta( $row_id, $key, is_numeric( $value ) ? (float) $value : $value );
 			return;
@@ -1065,8 +1076,16 @@ final class RowsController {
 		}
 
 		if ( 'text' === $field_type ) {
+			// Residue from a multiselect field (multi-meta-row storage) the
+			// user edited before converting back: join the chip values so
+			// the cell reflects what was on disk, not just the first row.
+			$all = get_post_meta( $row_id, $key, false );
+			if ( is_array( $all ) && count( $all ) > 1 ) {
+				$text = implode( ', ', array_map( 'strval', $all ) );
+			} else {
+				$text = is_array( $stored ) ? '' : (string) $stored;
+			}
 			$prior_format = (string) get_post_meta( $field_id, 'prior_date_format', true );
-			$text         = is_array( $stored ) ? '' : (string) $stored;
 			if ( '' !== $prior_format && '' !== trim( $text ) ) {
 				$timestamp = strtotime( trim( $text ) );
 				if ( false !== $timestamp ) {

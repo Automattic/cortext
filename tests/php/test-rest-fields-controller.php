@@ -1269,6 +1269,78 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 		);
 	}
 
+	public function test_write_field_value_replaces_multiselect_residue(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$collection_id = $this->create_collection_with_slug( 'Edits', 'edits-collapse' );
+
+		$field_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Format',
+				'meta_input'  => array( 'type' => 'text' ),
+			)
+		);
+		add_post_meta( $collection_id, 'fields', (string) $field_id );
+		( new CollectionEntries() )->register_for_collection( get_post( $collection_id ) );
+
+		$row_id = (int) wp_insert_post(
+			array(
+				'post_type'   => 'crtxt_edits-collapse',
+				'post_status' => 'publish',
+				'post_title'  => 'Row',
+			)
+		);
+		// Simulate post-multiselect residue: two meta rows under the same key.
+		add_post_meta( $row_id, "field-{$field_id}", 'CD' );
+		add_post_meta( $row_id, "field-{$field_id}", 'Record' );
+
+		$controller = new \Cortext\Rest\RowsController();
+		$method     = new \ReflectionMethod( $controller, 'write_field_value' );
+		$method->setAccessible( true );
+		$method->invoke( $controller, $row_id, $field_id, 'text', 'vinyl' );
+
+		$this->assertSame(
+			array( 'vinyl' ),
+			get_post_meta( $row_id, "field-{$field_id}", false ),
+			'Single-value write must collapse the multiselect residue, not stack on top of it.'
+		);
+	}
+
+	public function test_format_typed_value_joins_multiselect_residue_for_text(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$collection_id = $this->create_collection_with_slug( 'Formats', 'formats-join' );
+
+		$field_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Formats',
+				// Simulates the after-state of a text→multiselect conversion
+				// followed by a chip deselect: type is back to `text`, but the
+				// row meta carries the surviving chip values as multiple rows.
+				'meta_input'  => array( 'type' => 'text' ),
+			)
+		);
+		add_post_meta( $collection_id, 'fields', (string) $field_id );
+		( new CollectionEntries() )->register_for_collection( get_post( $collection_id ) );
+
+		$row_id = (int) wp_insert_post(
+			array(
+				'post_type'   => 'crtxt_formats-join',
+				'post_status' => 'publish',
+				'post_title'  => 'Row',
+			)
+		);
+		add_post_meta( $row_id, "field-{$field_id}", 'CD' );
+		add_post_meta( $row_id, "field-{$field_id}", 'Record' );
+
+		$this->assertSame(
+			'CD, Record',
+			$this->invoke_format_typed_value( $row_id, $field_id, 'text', false )
+		);
+	}
+
 	public function test_format_typed_value_hides_invalid_email(): void {
 		wp_set_current_user( $this->create_user( 'editor' ) );
 		[ , $field_id, $row_ids ] = $this->fixture_text_field_with_rows(
