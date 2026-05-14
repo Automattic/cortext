@@ -10,6 +10,9 @@ import { globe, lock } from '@wordpress/icons';
 /**
  * Walks the block tree and returns unique collectionId values from all
  * cortext/data-view blocks.
+ *
+ * @param {Array} blocks Block list to walk.
+ * @return {number[]} Unique collection IDs.
  */
 function getCollectionIds( blocks ) {
 	const ids = new Set();

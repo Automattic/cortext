@@ -20,10 +20,11 @@ export default function PublicDataView( { collectionId, view: initialView } ) {
 		...initialView,
 	} ) );
 
-	const { data, fields: fieldDefs, isLoading } = usePublicRows(
-		collectionId,
-		view
-	);
+	const {
+		data,
+		fields: fieldDefs,
+		isLoading,
+	} = usePublicRows( collectionId, view );
 
 	const fields = useMemo(
 		() => buildPublicFields( fieldDefs ),
@@ -49,16 +50,13 @@ export default function PublicDataView( { collectionId, view: initialView } ) {
 		return normalizeView( seeded, validIds );
 	}, [ view, fields, isLoading, fieldDefs.length ] );
 
-	const onChangeView = useCallback(
-		( next ) => {
-			// Persist the raw view from DataViews so hide/show and
-			// reorder updates land in state exactly as DataViews
-			// produced them. The reconciledView memo above handles
-			// cleanup on the next render.
-			setView( next );
-		},
-		[]
-	);
+	const onChangeView = useCallback( ( next ) => {
+		// Persist the raw view from DataViews so hide/show and
+		// reorder updates land in state exactly as DataViews
+		// produced them. The reconciledView memo above handles
+		// cleanup on the next render.
+		setView( next );
+	}, [] );
 
 	const { data: dataFiltered, paginationInfo } = useMemo(
 		() => filterSortAndPaginate( data, reconciledView, fields ),

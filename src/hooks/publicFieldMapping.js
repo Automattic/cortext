@@ -63,10 +63,10 @@ const SYSTEM_FIELDS = [
 /**
  * Builds a DataViews-compatible field spec from a REST field definition.
  *
- * @param {Object} fieldDef  Field definition from the REST response.
- * @param {number} fieldDef.id
- * @param {string} fieldDef.label
- * @param {string} fieldDef.type
+ * @param {Object}      fieldDef         Field definition from the REST response.
+ * @param {number}      fieldDef.id
+ * @param {string}      fieldDef.label
+ * @param {string}      fieldDef.type
  * @param {string|null} fieldDef.options JSON-encoded options string.
  * @return {Object} DataViews field spec.
  */

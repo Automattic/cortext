@@ -19,9 +19,6 @@ document.querySelectorAll( '[data-cortext-data-view]' ).forEach( ( el ) => {
 	const init = JSON.parse( script.textContent );
 	const root = createRoot( el );
 	root.render(
-		<PublicDataView
-			collectionId={ init.collectionId }
-			view={ init.view }
-		/>
+		<PublicDataView collectionId={ init.collectionId } view={ init.view } />
 	);
 } );
