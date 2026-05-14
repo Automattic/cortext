@@ -7,6 +7,7 @@ import {
 
 // Picks a `Popover` placement for a row submenu inside a cascading menu,
 // adjusting after render if the chosen side overflows the viewport.
+// See docs/tech-debt.md#47.
 // `@wordpress/components` `Popover` only flips on the main axis and shifts
 // on the cross axis, so a `right-start` submenu that overflows past the
 // viewport's right edge wouldn't be pulled back into view on its own.

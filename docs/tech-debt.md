@@ -410,3 +410,11 @@ The user-facing placeholder is still Core's generic "Search commands and setting
 **Where.** `RowsMetaQuery` in `includes/Rest/RowsMetaQuery.php`, called from `RowsFilterQuery::meta_query_sql()`.
 
 **Solution.** Upstream `WP_Meta_Query` could grow one-sided `LIKE` compares and value-bearing negative `NOT EXISTS` compares. A structured title-query helper in `WP_Query` would cover the title sentinel separately. If those land, `RowsMetaQuery` shrinks back toward a thin adapter or disappears.
+
+## 47. Cascading Popovers need manual fallback placement `[upstream, soft]`
+
+**What.** `@wordpress/components` `Popover` can shift a submenu along the cross axis, but it does not try a left-side fallback when a `right-start` cascading submenu runs past the viewport edge. Cortext now measures the outer menu and the portaled submenu, starts on the side that keeps the submenu away from the column dropdown, then switches to `left-start` or `bottom-start` if the first placement clips. This keeps Format and Calculate submenus usable near the right side of the table, but it is still a local placement policy layered on top of Popover.
+
+**Where.** `useSubmenuPlacement` in `src/hooks/useSubmenuPlacement.js`, wired into `src/components/fields/FieldFormatPopover.js` and `src/components/TableCalculationMenu.js`.
+
+**Solution.** WordPress Popover could expose fallback placements, or pass enough Floating UI middleware through for consumers to say "try right, then left, then bottom" without measuring after render. If that lands, Cortext can drop `useSubmenuPlacement` and let the Popover own cascading-menu collision handling.
