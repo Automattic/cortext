@@ -66,7 +66,7 @@ it( 'keeps cached documents visible during a refresh', async () => {
 	await waitFor( () => expect( result.current.documents ).toEqual( [] ) );
 } );
 
-it( 'surfaces fetch errors without dropping cached documents', async () => {
+it( 'keeps cached documents when a refresh fails', async () => {
 	const document = { id: 10, title: { raw: 'Cached' } };
 	apiFetch.mockResolvedValueOnce( { documents: [ document ], total: 1 } );
 

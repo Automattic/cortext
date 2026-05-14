@@ -400,10 +400,10 @@ export default function EntityRoute( { history } ) {
 	const { invalidateResolution, receiveEntityRecords } =
 		useDispatch( 'core' );
 
-	// Two-mode restore handler: pages still use core-data for the active tree,
-	// while rows live in collection-scoped queries. The generic Trash list is
-	// refreshed by a document-level event; row restores also invalidate open
-	// collection row queries.
+	// Restore has two cache paths: pages still use core-data for the tree,
+	// while rows use collection-scoped queries. Both refresh the generic Trash
+	// list; rows also notify open collections because relations/rollups can
+	// change elsewhere.
 	const onRestoreDocument = useCallback(
 		( postId, postType, response ) => {
 			if ( response?.post && postType ) {

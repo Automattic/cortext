@@ -1,8 +1,7 @@
 import { useEffect } from '@wordpress/element';
 
-// tech-debt.md#2: rows live outside core-data, so row mutations need a
-// lightweight cross-surface invalidation signal until the entity store owns
-// row caching and dependency refresh.
+// tech-debt.md#2: rows do not have a core-data store yet. Use a small
+// cross-surface event until row caching and dependency refresh live there.
 export const COLLECTION_ROWS_CHANGED_EVENT = 'cortext:collection-rows-changed';
 
 function normalizeCollectionId( collectionId ) {

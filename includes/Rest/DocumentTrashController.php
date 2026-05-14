@@ -83,7 +83,7 @@ final class DocumentTrashController {
 	}
 
 	/**
-	 * Returns every trashed Cortext document the current user can edit.
+	 * Lists trashed Cortext documents the current user can edit.
 	 *
 	 * @return WP_REST_Response
 	 */
@@ -237,7 +237,7 @@ final class DocumentTrashController {
 	}
 
 	/**
-	 * Formats a trashed Cortext document for the sidebar Trash response.
+	 * Formats one trashed document for the sidebar Trash response.
 	 *
 	 * @param WP_Post $post Trashed document post.
 	 * @return array<string,mixed>|null

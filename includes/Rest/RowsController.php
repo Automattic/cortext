@@ -718,9 +718,9 @@ final class RowsController {
 	}
 
 	/**
-	 * Returns stored relation row IDs that should participate in visible
-	 * row output. Trashed targets stay stored so restoring them revives the
-	 * relation, but they should not appear in relation chips or rollups.
+	 * Returns stored relation targets that are still visible. Trashed targets
+	 * stay in meta so restore brings the relation back, but chips and rollups
+	 * skip them while they are in Trash.
 	 *
 	 * @param int $row_id   Row post ID.
 	 * @param int $field_id Relation field post ID.

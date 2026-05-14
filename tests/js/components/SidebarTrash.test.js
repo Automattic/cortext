@@ -338,7 +338,7 @@ describe( 'SidebarTrash', () => {
 		expect( screen.getByText( 'Research' ) ).toBeInTheDocument();
 	} );
 
-	it( 'POSTs row restore and refreshes trashed rows', async () => {
+	it( 'restores a row through the document endpoint', async () => {
 		const refresh = jest.fn();
 		setTrashRecords( { records: [ makeRow( { id: 17 } ) ] } );
 		trashState.refresh = refresh;
@@ -358,7 +358,7 @@ describe( 'SidebarTrash', () => {
 		expect( dispatchMocks.invalidateResolution ).not.toHaveBeenCalled();
 	} );
 
-	it( 'surfaces a row-level error when restore fails and leaves the row in trash', async () => {
+	it( 'shows restore errors next to the item', async () => {
 		setTrashRecords( {
 			records: [ makePage( { id: 8 } ) ],
 		} );
@@ -401,7 +401,7 @@ describe( 'SidebarTrash', () => {
 		);
 	} );
 
-	it( 'POSTs row permanent-delete after confirmation and navigates away when selected', async () => {
+	it( 'permanently deletes a selected row through the document endpoint', async () => {
 		const onSelect = jest.fn();
 		const refresh = jest.fn();
 		setTrashRecords( { records: [ makeRow( { id: 17 } ) ] } );
@@ -515,9 +515,9 @@ describe( 'SidebarTrash', () => {
 	} );
 
 	it( 'promotes orphaned descendants (stale marker) back to roots', () => {
-		// Marker points at a parent that's no longer in trash (it was
-		// permanently deleted before this PR's cascade was wired in, or by
-		// some other path). The orphan should still appear in the list.
+		// Marker points at a parent no longer in Trash. It may have been
+		// permanently deleted by an older build or a different path; either
+		// way, the orphan still needs to be reachable.
 		const orphan = makePage( {
 			id: 7,
 			title: { rendered: 'Stranded', raw: 'Stranded' },

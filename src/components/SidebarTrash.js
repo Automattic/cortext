@@ -27,8 +27,8 @@ const EMPTY_TRASHED_DOCUMENTS_STATE = {
 	refresh: () => {},
 };
 
-// Must stay in sync with `PageTrashCascade::META_KEY` in PHP. The generic
-// Trash listing exposes it on each document so roots can be computed client-side.
+// Keep this in sync with `PageTrashCascade::META_KEY`. The Trash endpoint
+// sends the marker for every document so the sidebar can show cascade roots.
 const MARKER_META = '_cortext_trashed_by_parent';
 
 export function computeSidebarTrashRoots( trashedDocuments = [] ) {
@@ -41,18 +41,18 @@ export function computeSidebarTrashRoots( trashedDocuments = [] ) {
 	const markerOf = ( document ) =>
 		Number( document.meta?.[ MARKER_META ] ?? 0 );
 
-	all.forEach( ( page ) => {
-		const marker = markerOf( page );
+	all.forEach( ( document ) => {
+		const marker = markerOf( document );
 		if ( marker > 0 && trashedById.has( marker ) ) {
 			if ( ! childrenByMarker.has( marker ) ) {
 				childrenByMarker.set( marker, [] );
 			}
-			childrenByMarker.get( marker ).push( page );
+			childrenByMarker.get( marker ).push( document );
 		}
 	} );
 
-	const roots = all.filter( ( page ) => {
-		const marker = markerOf( page );
+	const roots = all.filter( ( document ) => {
+		const marker = markerOf( document );
 		return marker === 0 || ! trashedById.has( marker );
 	} );
 
@@ -105,16 +105,15 @@ function descendantLabel( kind, count ) {
 }
 
 /**
- * Renders the sidebar Trash panel: a flat list of trashed Cortext document
- * roots, with inline Restore and Delete-permanently actions.
+ * Sidebar Trash for Cortext documents.
  *
- * Only cascade roots are listed. Documents dragged into trash by a parent's
- * cascade ride along when the root is restored or permanently deleted. Orphans
- * with stale markers get promoted back to roots so they remain reachable.
+ * The panel lists cascade roots. Children trashed by a parent ride with that
+ * parent on restore or permanent delete. If a marker points to a parent that
+ * is no longer in Trash, the orphan is shown so it is still recoverable.
  *
- * Restore goes through `/cortext/v1/documents/<id>/restore` and permanent delete
- * through `/cortext/v1/documents/<id>/permanent-delete`. Page mutations
- * invalidate page queries; row mutations invalidate affected collection rows.
+ * Mutations use the document Trash endpoints. Pages also invalidate the page
+ * tree; rows notify collection queries because relation chips and rollups can
+ * change outside the row's own collection.
  *
  * @param {Object}      props
  * @param {Array}       props.activePages           Active page records, used for
@@ -122,10 +121,8 @@ function descendantLabel( kind, count ) {
  * @param {number|null} props.selectedId            Currently-selected page id, used
  *                                                  to highlight a trashed document when
  *                                                  the canvas is showing it.
- * @param {Function}    props.onSelect              Called with a document id when a
- *                                                  trashed page or row is clicked,
- *                                                  navigating the canvas to that
- *                                                  document (read-only view).
+ * @param {Function}    props.onSelect              Called when a trashed document
+ *                                                  opens in the canvas.
  * @param {Object}      props.trashedDocumentsState Trashed document query state.
  */
 export default function SidebarTrash( {
@@ -168,11 +165,11 @@ export default function SidebarTrash( {
 	const ancestorById = useMemo( () => {
 		const map = new Map();
 		( activePages ?? [] ).forEach( ( page ) => map.set( page.id, page ) );
-		// Trashed records take a back seat: a page that exists in both lists
-		// (shouldn't happen, but guard anyway) is shown by its active title.
-		visibleTrashed.forEach( ( page ) => {
-			if ( ! map.has( page.id ) ) {
-				map.set( page.id, page );
+		// Prefer active records for pages that somehow appear in both lists;
+		// their title is fresher than the trashed snapshot.
+		visibleTrashed.forEach( ( document ) => {
+			if ( ! map.has( document.id ) ) {
+				map.set( document.id, document );
 			}
 		} );
 		return map;
