@@ -159,6 +159,64 @@ final class Test_Rest_Document_Trash_Controller extends BaseTestCase {
 		$this->assertSame( 'Albums', $row['collection']['title']['raw'] );
 	}
 
+	public function test_trashed_documents_resolves_collection_once_per_row_post_type(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		wp_insert_post(
+			array(
+				'post_type'   => Collection::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Cached albums',
+				'meta_input'  => array( 'slug' => 'cachedalbums' ),
+			)
+		);
+
+		$row_post_type = 'crtxt_cachedalbums';
+		register_post_type(
+			$row_post_type,
+			array(
+				'public'       => false,
+				'show_in_rest' => true,
+				'rest_base'    => $row_post_type,
+				'supports'     => array( 'title', 'editor' ),
+			)
+		);
+		add_post_type_support( $row_post_type, 'cortext-document' );
+
+		foreach ( array( 'First trashed album', 'Second trashed album' ) as $title ) {
+			$row_id = (int) wp_insert_post(
+				array(
+					'post_type'   => $row_post_type,
+					'post_status' => 'publish',
+					'post_title'  => $title,
+				)
+			);
+			wp_trash_post( $row_id );
+		}
+
+		$collection_lookups = 0;
+		$count_lookups      = static function ( $pre, WP_Query $query ) use ( &$collection_lookups ) {
+			$vars = $query->query_vars;
+			if (
+				Collection::POST_TYPE === ( $vars['post_type'] ?? '' ) &&
+				'slug' === ( $vars['meta_key'] ?? '' ) &&
+				'cachedalbums' === ( $vars['meta_value'] ?? '' )
+			) {
+				++$collection_lookups;
+			}
+
+			return $pre;
+		};
+		add_filter( 'posts_pre_query', $count_lookups, 9, 2 );
+
+		$response = $this->query_trashed_documents();
+
+		remove_filter( 'posts_pre_query', $count_lookups, 9 );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 1, $collection_lookups );
+	}
+
 	public function test_restores_a_trashed_page_and_returns_its_id(): void {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
 

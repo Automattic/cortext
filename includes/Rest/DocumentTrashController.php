@@ -107,12 +107,18 @@ final class DocumentTrashController {
 				)
 			);
 
+			if ( empty( $posts ) ) {
+				continue;
+			}
+
+			$collection = $this->find_collection_by_row_post_type( $post_type );
+
 			foreach ( $posts as $post ) {
 				if ( ! $post instanceof WP_Post || ! current_user_can( 'edit_post', $post->ID ) ) {
 					continue;
 				}
 
-				$document = $this->format_trashed_document( $post );
+				$document = $this->format_trashed_document( $post, $collection );
 				if ( null !== $document ) {
 					$documents[] = $document;
 				}
@@ -239,16 +245,16 @@ final class DocumentTrashController {
 	/**
 	 * Formats one trashed document for the sidebar Trash response.
 	 *
-	 * @param WP_Post $post Trashed document post.
+	 * @param WP_Post  $post Trashed document post.
+	 * @param ?WP_Post $collection Collection post for row documents, when available.
 	 * @return array<string,mixed>|null
 	 */
-	private function format_trashed_document( WP_Post $post ): ?array {
+	private function format_trashed_document( WP_Post $post, ?WP_Post $collection ): ?array {
 		if ( ! post_type_supports( $post->post_type, 'cortext-document' ) ) {
 			return null;
 		}
 
-		$collection = $this->find_collection_by_row_post_type( $post->post_type );
-		$kind       = Page::POST_TYPE === $post->post_type
+		$kind = Page::POST_TYPE === $post->post_type
 			? 'page'
 			: ( $collection instanceof WP_Post ? 'row' : 'document' );
 
