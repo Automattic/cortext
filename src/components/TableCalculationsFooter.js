@@ -96,6 +96,8 @@ export default function TableCalculationsFooter( {
 	fields,
 	data,
 	onChangeView,
+	hasSelectionColumn = false,
+	bulkActions = null,
 } ) {
 	const table = useDataViewsTable( wrapperRef );
 	const fieldsById = useMemo(
@@ -110,14 +112,20 @@ export default function TableCalculationsFooter( {
 			isCalculationAvailable( field, view?.calculations?.[ field.id ] )
 		);
 	} );
+	const hasBulkActions = Boolean( bulkActions );
 
-	if ( ! table || visibleFields.length === 0 || ! hasVisibleCalculation ) {
+	if ( ! table || ( ! hasVisibleCalculation && ! hasBulkActions ) ) {
 		return null;
 	}
 
 	return createPortal(
 		<tfoot className="cortext-table-calculations">
 			<tr>
+				{ hasSelectionColumn ? (
+					<td className="cortext-table-calculations__selection-spacer">
+						{ bulkActions }
+					</td>
+				) : null }
 				{ visibleFields.map( ( fieldId ) => {
 					const field = fieldsById.get( fieldId );
 					const style = view?.layout?.styles?.[ fieldId ] ?? {};

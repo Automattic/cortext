@@ -1907,10 +1907,21 @@ body:has(.cortext-canvas__identity-actions:hover) .cortext-canvas__identity-acti
 	padding-right: $grid-unit-05;
 }
 
+.dataviews-view-table th.dataviews-view-table__checkbox-column,
+.dataviews-view-table td.dataviews-view-table__checkbox-column,
+.dataviews-view-table td.cortext-table-calculations__selection-spacer {
+	width: 44px;
+	min-width: 44px;
+	max-width: 44px;
+}
+
 // Title carries the post name and tends to be longer than other
 // fields; give it more breathing room.
-.dataviews-view-table th:first-child,
-.dataviews-view-table td:first-child {
+.dataviews-view-table th.dataviews-view-table__checkbox-column + th,
+.dataviews-view-table td.dataviews-view-table__checkbox-column + td,
+.dataviews-view-table td.cortext-table-calculations__selection-spacer + td,
+.dataviews-view-table th:first-child:not(.dataviews-view-table__checkbox-column),
+.dataviews-view-table td:first-child:not(.dataviews-view-table__checkbox-column) {
 	width: 280px;
 }
 
@@ -4005,6 +4016,10 @@ body.cortext-row-detail-sidebar-resizing {
 		overflow: auto;
 	}
 
+	.dataviews__view-actions:has(.dataviews-filters__visibility-toggle[aria-expanded="false"]) + .dataviews-filters__container {
+		display: none;
+	}
+
 	// DataViews paints row height via td `padding-block` per density, but
 	// our shell's hover/edit background lives on the shell, so the gray
 	// floated inside the row instead of filling it. Zero the td's
@@ -4050,7 +4065,24 @@ body.cortext-row-detail-sidebar-resizing {
 				border-bottom: 0;
 				background: $white;
 				color: $gray-700;
-				vertical-align: top;
+				vertical-align: middle;
+			}
+
+			td.cortext-table-calculations__selection-spacer {
+				overflow: visible;
+			}
+
+			.cortext-table-calculations__bulk-actions {
+				position: relative;
+				z-index: 3;
+				width: max-content;
+				min-height: $grid-unit-40;
+				margin-right: 0;
+				padding-right: $grid-unit-20;
+			}
+
+			.dataviews-bulk-actions-footer__item-count {
+				white-space: nowrap;
 			}
 		}
 

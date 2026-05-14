@@ -197,6 +197,12 @@ function parseCollectionIdFromContent( content ) {
 	return match ? Number( match[ 1 ] ) : 0;
 }
 
+async function listCollectionRows( requestUtils, collectionId ) {
+	return requestUtils.rest( {
+		path: `/cortext/v1/rows?collection=${ collectionId }&per_page=100`,
+	} );
+}
+
 test.describe( 'Collection view block', () => {
 	test( 'renders a selected collection and persists block attributes', async ( {
 		admin,
@@ -807,6 +813,139 @@ test.describe( 'Collection view block', () => {
 				requestUtils,
 				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
 			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+			);
+		}
+	} );
+
+	test( 'selects rows across pages and bulk deletes them', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+
+		try {
+			Object.assign(
+				fixture,
+				await createCalculationFixture( requestUtils )
+			);
+			const pagesKey = `field-${ fixture.fields.pages.id }`;
+
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_pages',
+				data: {
+					title: 'Bulk row delete page',
+					status: 'private',
+					content: createDataViewBlockMarkup( fixture.collection.id, {
+						fields: [ 'title', pagesKey ],
+						perPage: 2,
+						page: 1,
+					} ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/${ fixture.page.id }`
+			);
+
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.page.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+			const table = canvas.locator( '.dataviews-view-table' );
+			const alphaRow = table
+				.locator( 'tbody > tr' )
+				.filter( { hasText: 'Alpha Book' } );
+			const betaRow = table
+				.locator( 'tbody > tr' )
+				.filter( { hasText: 'Beta Book' } );
+
+			await expect( alphaRow ).toBeVisible();
+			await alphaRow
+				.locator( '.dataviews-selection-checkbox input' )
+				.check();
+			await expect( canvas.getByText( '1 Row selected' ) ).toBeVisible();
+			await betaRow
+				.locator( '.dataviews-selection-checkbox input' )
+				.check();
+			await expect( canvas.getByText( '2 Rows selected' ) ).toBeVisible();
+			await canvas
+				.getByRole( 'button', { name: 'Clear selection' } )
+				.click();
+			await expect( canvas.getByText( '2 Rows selected' ) ).toBeHidden();
+
+			await alphaRow.dispatchEvent( 'click' );
+			await expect( canvas.getByText( '1 Row selected' ) ).toHaveCount(
+				0
+			);
+			await betaRow.dispatchEvent( 'click', { shiftKey: true } );
+			await expect( canvas.getByText( '2 Rows selected' ) ).toBeVisible();
+
+			await canvas.getByRole( 'button', { name: 'Next page' } ).click();
+
+			const gammaRow = table
+				.locator( 'tbody > tr' )
+				.filter( { hasText: 'Gamma Book' } );
+			await expect( gammaRow ).toBeVisible();
+			await expect( canvas.getByText( '2 Rows selected' ) ).toBeVisible();
+			await gammaRow.dispatchEvent( 'click', {
+				[ process.platform === 'darwin' ? 'metaKey' : 'ctrlKey' ]: true,
+			} );
+			await expect( canvas.getByText( '3 Rows selected' ) ).toBeVisible();
+
+			await canvas
+				.getByRole( 'button', { name: 'Delete selected rows' } )
+				.click();
+			await expect(
+				page.getByText( 'Delete 3 rows? This cannot be undone.' )
+			).toBeVisible();
+			await page
+				.getByRole( 'button', { name: 'Delete', exact: true } )
+				.click();
+
+			await expect
+				.poll( async () => {
+					const response = await listCollectionRows(
+						requestUtils,
+						fixture.collection.id
+					);
+					return response.rows.map( ( row ) => row.title.raw );
+				} )
+				.toEqual( [] );
+
+			await expect( canvas.getByText( '3 Rows selected' ) ).toBeHidden();
+			await expect( canvas.getByText( 'Alpha Book' ) ).toBeHidden();
+			await expect( canvas.getByText( 'Beta Book' ) ).toBeHidden();
+			await expect( canvas.getByText( 'Gamma Book' ) ).toBeHidden();
+		} finally {
+			for ( const row of fixture.rows ?? [] ) {
+				await deleteIfCreated(
+					requestUtils,
+					`/wp/v2/crtxt_${ fixture.slug }/${ row.id }`
+				);
+			}
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+			);
+			for ( const field of Object.values( fixture.fields ?? {} ) ) {
+				await deleteIfCreated(
+					requestUtils,
+					`/wp/v2/crtxt_fields/${ field.id }`
+				);
+			}
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
