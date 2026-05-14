@@ -1,0 +1,70 @@
+{
+	"version": 1,
+	"scenarios": {
+		"rows_page_1": {
+			"p95_ms": 500,
+			"sql_queries_p95": 250,
+			"memory_bytes_p95": 16777216
+		},
+		"rows_page_50": {
+			"p95_ms": 500,
+			"sql_queries_p95": 150,
+			"memory_bytes_p95": 16777216
+		},
+		"rows_page_walk": {
+			"p95_ms": 1500,
+			"sql_queries_p95": 650,
+			"memory_bytes_p95": 16777216
+		},
+		"rows_sort_meta_value": {
+			"p95_ms": 750,
+			"sql_queries_p95": 150,
+			"memory_bytes_p95": 16777216
+		},
+		"rows_search_text": {
+			"p95_ms": 750,
+			"sql_queries_p95": 300,
+			"memory_bytes_p95": 16777216
+		},
+		"rows_filter_mixed": {
+			"p95_ms": 750,
+			"sql_queries_p95": 250,
+			"memory_bytes_p95": 16777216
+		},
+		"rows_relation_hydration": {
+			"p95_ms": 1000,
+			"sql_queries_p95": 400,
+			"memory_bytes_p95": 16777216
+		},
+		"rows_rollup_heavy": {
+			"p95_ms": 1000,
+			"sql_queries_p95": 400,
+			"memory_bytes_p95": 16777216
+		},
+		"rows_wide_schema": {
+			"p95_ms": 1000,
+			"sql_queries_p95": 150,
+			"memory_bytes_p95": 16777216
+		},
+		"relation_many_targets": {
+			"p95_ms": 2500,
+			"sql_queries_p95": 3000,
+			"memory_bytes_p95": 16777216
+		},
+		"relation_small_delta": {
+			"p95_ms": 2000,
+			"sql_queries_p95": 2200,
+			"memory_bytes_p95": 16777216
+		},
+		"migrate_1000_rows": {
+			"p95_ms": 4000,
+			"sql_queries_p95": 4500,
+			"memory_bytes_p95": 16777216
+		},
+		"migrate_many_rows": {
+			"p95_ms": 5000,
+			"sql_queries_p95": 5500,
+			"memory_bytes_p95": 16777216
+		}
+	}
+}
