@@ -287,6 +287,18 @@ function NumberRing( { value, format, text } ) {
 	);
 }
 
+// Splits a delimited string on `\n` `,` `;` and trims each token, dropping
+// empties. Mirrors `FieldTypeConverter::split_tokens` server-side so the
+// transient state right after a text→select / text→multiselect conversion
+// (row meta still raw text, field type already updated) renders the same
+// chips the rows endpoint will return on its next response.
+function splitTokens( value ) {
+	return String( value )
+		.split( /[\n,;]/ )
+		.map( ( token ) => token.trim() )
+		.filter( Boolean );
+}
+
 // Returns either '' (empty cell) or a renderable value (string or JSX).
 // `display === ''` is the consumer's empty-cell signal — see CellShell's
 // `isEmpty` prop. Non-empty values may be JSX (anchor for url, icon for
@@ -349,9 +361,25 @@ export function formatDisplay( value, type, options = {} ) {
 	}
 
 	if ( type === 'select' ) {
-		const single = Array.isArray( value ) ? value[ 0 ] : value;
+		let single = Array.isArray( value ) ? value[ 0 ] : value;
 		if ( single === null || single === undefined || single === '' ) {
 			return '';
+		}
+		// Right after a text→select conversion the row hasn't refetched yet,
+		// so the cell receives the raw text. Mirror the backend's split
+		// fallback when the raw string doesn't match any registered option
+		// so the chip lands on the first token immediately, without the
+		// flash of a one-chip monster covering the whole text.
+		if (
+			typeof single === 'string' &&
+			elements?.length &&
+			! elements.some( ( e ) => e.value === single ) &&
+			/[\n,;]/.test( single )
+		) {
+			const tokens = splitTokens( single );
+			if ( tokens.length > 0 ) {
+				single = tokens[ 0 ];
+			}
 		}
 		const element = elements?.find( ( e ) => e.value === single );
 		return (
@@ -363,7 +391,23 @@ export function formatDisplay( value, type, options = {} ) {
 	}
 
 	if ( type === 'multiselect' ) {
-		const list = Array.isArray( value ) ? value : [ value ];
+		let list;
+		if ( Array.isArray( value ) ) {
+			list = value;
+		} else if (
+			typeof value === 'string' &&
+			/[\n,;]/.test( value ) &&
+			elements?.length &&
+			! elements.some( ( e ) => e.value === value )
+		) {
+			// Pre-refetch state right after a text→multiselect conversion:
+			// the cell receives the raw delimited string. Split client-side
+			// so the chips render immediately, matching what the row endpoint
+			// will return on its next response.
+			list = splitTokens( value );
+		} else {
+			list = [ value ];
+		}
 		const populated = list.filter(
 			( v ) => v !== null && v !== undefined && v !== ''
 		);

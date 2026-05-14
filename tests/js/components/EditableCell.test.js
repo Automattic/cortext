@@ -355,6 +355,37 @@ describe( 'formatDisplay', () => {
 				''
 			);
 		} );
+
+		it( 'splits a delimited string when the value is not a known option (post-conversion transient)', () => {
+			const elements = [
+				{ value: 'CD', label: 'CD' },
+				{ value: 'LP', label: 'LP' },
+				{ value: 'Record', label: 'Record' },
+			];
+			renderDisplay( 'CD, LP, Record', 'multiselect', { elements } );
+			expect( screen.getByText( 'CD' ) ).toHaveClass( 'cortext-chip' );
+			expect( screen.getByText( 'LP' ) ).toHaveClass( 'cortext-chip' );
+			expect( screen.getByText( 'Record' ) ).toHaveClass(
+				'cortext-chip'
+			);
+		} );
+
+		it( 'preserves a known option that legitimately contains commas', () => {
+			const elements = [ { value: 'ACME, Inc.', label: 'ACME, Inc.' } ];
+			renderDisplay( 'ACME, Inc.', 'multiselect', { elements } );
+			expect( screen.getByText( 'ACME, Inc.' ) ).toHaveClass(
+				'cortext-chip'
+			);
+		} );
+	} );
+
+	describe( 'select post-conversion transient', () => {
+		it( 'renders the first split-token when the value is not a known option', () => {
+			const elements = [ { value: 'CD', label: 'CD' } ];
+			renderDisplay( 'CD, LP, Record', 'select', { elements } );
+			expect( screen.getByText( 'CD' ) ).toHaveClass( 'cortext-chip' );
+			expect( screen.queryByText( 'LP' ) ).toBeNull();
+		} );
 	} );
 } );
 
