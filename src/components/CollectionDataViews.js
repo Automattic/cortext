@@ -42,6 +42,7 @@ import { dataViewsFilterByForType } from '../hooks/fieldMapping';
 import useCollectionRows from '../hooks/useCollectionRows';
 import { useRecents } from '../hooks/useRecents';
 import { elementsFromOptions } from '../hooks/optionElements';
+import { notifyDocumentTrashChanged } from '../hooks/documentTrashInvalidation';
 import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
 import { computeDocumentUri } from '../router/useResolveEntity';
 
@@ -770,6 +771,7 @@ export default function CollectionDataViews( {
 					runDetailTransition( { type: 'close' } );
 				}
 				refresh();
+				notifyDocumentTrashChanged();
 				notifyCollectionRowsChanged();
 			} catch ( apiError ) {
 				setRowActionError(

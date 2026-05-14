@@ -1,5 +1,4 @@
 import { __, sprintf, _n } from '@wordpress/i18n';
-import { useEntityRecords } from '@wordpress/core-data';
 import { useDispatch } from '@wordpress/data';
 import { useCallback, useEffect, useMemo, useState } from '@wordpress/element';
 import {
@@ -19,8 +18,8 @@ import {
 } from './page-queries';
 import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
 
-const EMPTY_TRASHED_ROWS_STATE = {
-	rows: [],
+const EMPTY_TRASHED_DOCUMENTS_STATE = {
+	documents: [],
 	total: 0,
 	isLoading: false,
 	hasResolved: true,
@@ -28,16 +27,19 @@ const EMPTY_TRASHED_ROWS_STATE = {
 	refresh: () => {},
 };
 
-// Must stay in sync with `PageTrashCascade::META_KEY` in PHP. The meta is
-// exposed via REST as part of the `meta` field on each page record.
+// Must stay in sync with `PageTrashCascade::META_KEY` in PHP. The generic
+// Trash listing exposes it on each document so roots can be computed client-side.
 const MARKER_META = '_cortext_trashed_by_parent';
 
-export function computeSidebarTrashRoots( trashedPages = [] ) {
-	const all = Array.isArray( trashedPages ) ? trashedPages : [];
-	const trashedById = new Map( all.map( ( page ) => [ page.id, page ] ) );
+export function computeSidebarTrashRoots( trashedDocuments = [] ) {
+	const all = Array.isArray( trashedDocuments ) ? trashedDocuments : [];
+	const trashedById = new Map(
+		all.map( ( document ) => [ document.id, document ] )
+	);
 	const childrenByMarker = new Map();
 
-	const markerOf = ( page ) => Number( page.meta?.[ MARKER_META ] ?? 0 );
+	const markerOf = ( document ) =>
+		Number( document.meta?.[ MARKER_META ] ?? 0 );
 
 	all.forEach( ( page ) => {
 		const marker = markerOf( page );
@@ -79,46 +81,65 @@ function titleText( title, fallback ) {
 	return title?.rendered?.trim() || title?.raw?.trim() || fallback;
 }
 
+function documentKind( document ) {
+	if ( document?.kind ) {
+		return document.kind;
+	}
+	return document?.type === POST_TYPE ? 'page' : 'document';
+}
+
+function descendantLabel( kind, count ) {
+	if ( kind === 'page' ) {
+		return sprintf(
+			/* translators: %d: number of subpages */
+			_n( '%d subpage', '%d subpages', count, 'cortext' ),
+			count
+		);
+	}
+
+	return sprintf(
+		/* translators: %d: number of nested trashed documents */
+		_n( '%d nested item', '%d nested items', count, 'cortext' ),
+		count
+	);
+}
+
 /**
- * Renders the sidebar Trash panel: a flat list of trashed page cascade roots
- * and trashed collection rows, with inline Restore and Delete-permanently
- * actions.
+ * Renders the sidebar Trash panel: a flat list of trashed Cortext document
+ * roots, with inline Restore and Delete-permanently actions.
  *
- * Only cascade roots are listed. Subpages dragged into trash by a parent's
- * cascade ride along when the root is restored or permanently deleted, and
- * are intentionally hidden so the user manages whole trees rather than
- * fragments. Pages whose recorded parent has since been permanently deleted
- * (orphans with stale markers) get promoted back to roots so they remain
- * reachable.
+ * Only cascade roots are listed. Documents dragged into trash by a parent's
+ * cascade ride along when the root is restored or permanently deleted. Orphans
+ * with stale markers get promoted back to roots so they remain reachable.
  *
  * Restore goes through `/cortext/v1/documents/<id>/restore` and permanent delete
  * through `/cortext/v1/documents/<id>/permanent-delete`. Page mutations
- * invalidate page queries; row mutations invalidate the row trash list and the
- * affected collection.
+ * invalidate page queries; row mutations invalidate affected collection rows.
  *
  * @param {Object}      props
- * @param {Array}       props.activePages      Active page records, used for
- *                                             breadcrumb ancestor lookup.
- * @param {number|null} props.selectedId       Currently-selected page id, used
- *                                             to highlight a trashed document when
- *                                             the canvas is showing it.
- * @param {Function}    props.onSelect         Called with a document id when a
- *                                             trashed page or row is clicked,
- *                                             navigating the canvas to that
- *                                             document (read-only view).
- * @param {Object}      props.trashedRowsState Trashed row query state.
+ * @param {Array}       props.activePages           Active page records, used for
+ *                                                  breadcrumb ancestor lookup.
+ * @param {number|null} props.selectedId            Currently-selected page id, used
+ *                                                  to highlight a trashed document when
+ *                                                  the canvas is showing it.
+ * @param {Function}    props.onSelect              Called with a document id when a
+ *                                                  trashed page or row is clicked,
+ *                                                  navigating the canvas to that
+ *                                                  document (read-only view).
+ * @param {Object}      props.trashedDocumentsState Trashed document query state.
  */
 export default function SidebarTrash( {
 	activePages,
 	selectedId,
 	onSelect,
-	trashedRowsState = EMPTY_TRASHED_ROWS_STATE,
+	trashedDocumentsState = EMPTY_TRASHED_DOCUMENTS_STATE,
 } ) {
 	const {
-		records: trashed,
-		status,
+		documents: trashedDocuments,
+		isLoading: isResolvingTrash,
+		error: trashError,
 		hasResolved,
-	} = useEntityRecords( 'postType', POST_TYPE, TRASHED_PAGES_QUERY );
+	} = trashedDocumentsState;
 
 	const { invalidateResolution } = useDispatch( 'core' );
 
@@ -129,14 +150,20 @@ export default function SidebarTrash( {
 	const [ hasTrashCache, setHasTrashCache ] = useState( false );
 
 	useEffect( () => {
-		if ( status !== 'ERROR' && hasResolved && Array.isArray( trashed ) ) {
-			setCachedTrashed( trashed );
+		if (
+			! trashError &&
+			hasResolved &&
+			Array.isArray( trashedDocuments )
+		) {
+			setCachedTrashed( trashedDocuments );
 			setHasTrashCache( true );
 		}
-	}, [ hasResolved, status, trashed ] );
+	}, [ hasResolved, trashError, trashedDocuments ] );
 
 	const visibleTrashed =
-		hasResolved && Array.isArray( trashed ) ? trashed : cachedTrashed;
+		hasResolved && Array.isArray( trashedDocuments )
+			? trashedDocuments
+			: cachedTrashed;
 
 	const ancestorById = useMemo( () => {
 		const map = new Map();
@@ -151,22 +178,20 @@ export default function SidebarTrash( {
 		return map;
 	}, [ activePages, visibleTrashed ] );
 
-	// Cascade roots: pages with no marker, plus pages whose marker points at
-	// a page that's no longer in trash (its tagged parent was permanently
-	// deleted). Without the second clause those orphans would be hidden.
+	// Cascade roots: documents with no marker, plus documents whose marker
+	// points at a parent that's no longer in trash.
 	const { roots, descendantCountById } = useMemo(
 		() => computeSidebarTrashRoots( visibleTrashed ),
 		[ visibleTrashed ]
 	);
-	const trashedRows = Array.isArray( trashedRowsState.rows )
-		? trashedRowsState.rows
-		: [];
 
 	const buildBreadcrumb = useCallback(
-		( page ) => {
+		( document ) => {
 			const ancestors = [];
-			let current = page.parent ? ancestorById.get( page.parent ) : null;
-			const seen = new Set( [ page.id ] );
+			let current = document.parent
+				? ancestorById.get( document.parent )
+				: null;
+			const seen = new Set( [ document.id ] );
 			while ( current && ! seen.has( current.id ) ) {
 				seen.add( current.id );
 				ancestors.unshift( {
@@ -198,14 +223,19 @@ export default function SidebarTrash( {
 		] );
 	}, [ invalidateResolution ] );
 
+	const refreshTrash = useCallback( () => {
+		trashedDocumentsState.refresh?.();
+	}, [ trashedDocumentsState ] );
+
 	const refreshRows = useCallback( () => {
 		notifyCollectionRowsChanged();
-		trashedRowsState.refresh?.();
-	}, [ trashedRowsState ] );
+		refreshTrash();
+	}, [ refreshTrash ] );
 
 	const restore = useCallback(
 		async ( item ) => {
-			const { id, kind } = item;
+			const { id } = item;
+			const kind = documentKind( item );
 			setRowError( null );
 			setBusyId( id );
 			try {
@@ -217,6 +247,7 @@ export default function SidebarTrash( {
 					refreshRows( item );
 				} else {
 					refreshQueries();
+					refreshTrash();
 				}
 			} catch ( error ) {
 				setRowError( {
@@ -231,7 +262,7 @@ export default function SidebarTrash( {
 				setBusyId( null );
 			}
 		},
-		[ refreshQueries, refreshRows ]
+		[ refreshQueries, refreshRows, refreshTrash ]
 	);
 
 	const confirmPermanentDelete = useCallback( async () => {
@@ -240,7 +271,8 @@ export default function SidebarTrash( {
 		if ( ! item?.id ) {
 			return;
 		}
-		const { id, kind } = item;
+		const { id } = item;
+		const kind = documentKind( item );
 		setRowError( null );
 		setBusyId( id );
 		try {
@@ -260,6 +292,7 @@ export default function SidebarTrash( {
 				refreshRows( item );
 			} else {
 				refreshQueries();
+				refreshTrash();
 			}
 		} catch ( error ) {
 			setRowError( {
@@ -273,40 +306,43 @@ export default function SidebarTrash( {
 		} finally {
 			setBusyId( null );
 		}
-	}, [ pendingDelete, refreshQueries, refreshRows, selectedId, onSelect ] );
+	}, [
+		pendingDelete,
+		refreshQueries,
+		refreshRows,
+		refreshTrash,
+		selectedId,
+		onSelect,
+	] );
 
-	const isLoadingPages = ! hasResolved && ! hasTrashCache;
-	const isLoadingRows =
-		trashedRowsState.isLoading &&
-		! trashedRowsState.hasResolved &&
-		trashedRows.length === 0;
-	const isLoading = isLoadingPages || isLoadingRows;
-	const hasPageError = status === 'ERROR' && ! hasTrashCache;
-	const hasRowError = Boolean(
-		trashedRowsState.error && ! trashedRows.length
-	);
-	const hasError = hasPageError || hasRowError;
-	const hasItems = roots.length > 0 || trashedRows.length > 0;
-	const pendingDescendantCount =
-		pendingDelete?.kind === 'page'
-			? descendantCountById.get( pendingDelete.id ) ?? 0
-			: 0;
+	const isLoading = isResolvingTrash && ! hasTrashCache;
+	const hasError = Boolean( trashError && ! hasTrashCache );
+	const hasItems = roots.length > 0;
+	const pendingKind = pendingDelete ? documentKind( pendingDelete ) : null;
+	const pendingDescendantCount = pendingDelete
+		? descendantCountById.get( pendingDelete.id ) ?? 0
+		: 0;
 	const retryTrashFetch = useCallback( () => {
 		invalidateResolution( 'getEntityRecords', [
 			'postType',
 			POST_TYPE,
 			TRASHED_PAGES_QUERY,
 		] );
-		trashedRowsState.refresh?.();
-	}, [ invalidateResolution, trashedRowsState ] );
+		refreshTrash();
+	}, [ invalidateResolution, refreshTrash ] );
 
 	let pendingDeleteMessage = __(
 		'Permanently delete this page? This cannot be undone.',
 		'cortext'
 	);
-	if ( pendingDelete?.kind === 'row' ) {
+	if ( pendingKind === 'row' ) {
 		pendingDeleteMessage = __(
 			'Permanently delete this row? This cannot be undone.',
+			'cortext'
+		);
+	} else if ( pendingKind === 'document' ) {
+		pendingDeleteMessage = __(
+			'Permanently delete this document? This cannot be undone.',
 			'cortext'
 		);
 	} else if ( pendingDescendantCount > 0 ) {
@@ -315,6 +351,29 @@ export default function SidebarTrash( {
 			_n(
 				'Permanently delete this page and %d subpage? This cannot be undone.',
 				'Permanently delete this page and %d subpages? This cannot be undone.',
+				pendingDescendantCount,
+				'cortext'
+			),
+			pendingDescendantCount
+		);
+	}
+	if ( pendingDescendantCount > 0 && pendingKind === 'row' ) {
+		pendingDeleteMessage = sprintf(
+			/* translators: %d: number of nested items that will be deleted along with the row. */
+			_n(
+				'Permanently delete this row and %d nested item? This cannot be undone.',
+				'Permanently delete this row and %d nested items? This cannot be undone.',
+				pendingDescendantCount,
+				'cortext'
+			),
+			pendingDescendantCount
+		);
+	} else if ( pendingDescendantCount > 0 && pendingKind === 'document' ) {
+		pendingDeleteMessage = sprintf(
+			/* translators: %d: number of nested items that will be deleted along with the document. */
+			_n(
+				'Permanently delete this document and %d nested item? This cannot be undone.',
+				'Permanently delete this document and %d nested items? This cannot be undone.',
 				pendingDescendantCount,
 				'cortext'
 			),
@@ -347,31 +406,32 @@ export default function SidebarTrash( {
 
 			{ ! isLoading && ! hasError && hasItems && (
 				<ul className="cortext-sidebar__list cortext-sidebar__trash-list">
-					{ roots.map( ( page ) => {
+					{ roots.map( ( document ) => {
+						const kind = documentKind( document );
 						const title = titleText(
-							page.title,
+							document.title,
 							__( '(untitled)', 'cortext' )
 						);
-						const breadcrumb = buildBreadcrumb( page );
-						const pageIcon = page.meta?.cortext_document_icon ?? '';
-						const isBusy = busyId === page.id;
-						const isSelected = selectedId === page.id;
+						const breadcrumb =
+							kind === 'page' ? buildBreadcrumb( document ) : [];
+						const documentIcon =
+							document.meta?.cortext_document_icon ?? '';
+						const isBusy = busyId === document.id;
+						const isSelected = selectedId === document.id;
 						const error =
-							rowError?.id === page.id ? rowError : null;
-						const subpages =
-							descendantCountById.get( page.id ) ?? 0;
-						const meta = subpages
-							? sprintf(
-									/* translators: %d: number of subpages */
-									_n(
-										'%d subpage',
-										'%d subpages',
-										subpages,
-										'cortext'
-									),
-									subpages
-							  )
+							rowError?.id === document.id ? rowError : null;
+						const descendantCount =
+							descendantCountById.get( document.id ) ?? 0;
+						const meta = descendantCount
+							? descendantLabel( kind, descendantCount )
 							: '';
+						const collectionTitle =
+							kind === 'row'
+								? titleText(
+										document.collection?.title,
+										__( 'Collection', 'cortext' )
+								  )
+								: '';
 						const rowClasses = [ 'cortext-sidebar__row' ];
 						if ( isSelected ) {
 							rowClasses.push( 'is-selected' );
@@ -379,7 +439,7 @@ export default function SidebarTrash( {
 
 						return (
 							<li
-								key={ page.id }
+								key={ document.id }
 								className="cortext-sidebar__node cortext-sidebar__trash-row"
 							>
 								<div className={ rowClasses.join( ' ' ) }>
@@ -387,12 +447,12 @@ export default function SidebarTrash( {
 										className="cortext-sidebar__title cortext-sidebar__trash-text"
 										variant="tertiary"
 										onClick={ () =>
-											onSelect( page.id, page )
+											onSelect( document.id, document )
 										}
 									>
 										<span className="cortext-sidebar__trash-title">
 											<PageIcon
-												icon={ pageIcon }
+												icon={ documentIcon }
 												size={ 14 }
 												className="cortext-sidebar__trash-title-icon"
 											/>
@@ -400,7 +460,9 @@ export default function SidebarTrash( {
 												{ title }
 											</span>
 										</span>
-										{ ( breadcrumb.length > 0 || meta ) && (
+										{ ( breadcrumb.length > 0 ||
+											collectionTitle ||
+											meta ) && (
 											<span className="cortext-sidebar__breadcrumb">
 												{ breadcrumb.map(
 													( crumb, index ) => (
@@ -430,10 +492,16 @@ export default function SidebarTrash( {
 														</span>
 													)
 												) }
+												{ collectionTitle && (
+													<span>
+														{ collectionTitle }
+													</span>
+												) }
 												{ meta && (
 													<>
-														{ breadcrumb.length >
-															0 && (
+														{ ( breadcrumb.length >
+															0 ||
+															collectionTitle ) && (
 															<span aria-hidden="true">
 																{ ' · ' }
 															</span>
@@ -452,8 +520,8 @@ export default function SidebarTrash( {
 											disabled={ isBusy }
 											onClick={ () =>
 												restore( {
-													...page,
-													kind: 'page',
+													...document,
+													kind,
 												} )
 											}
 										/>
@@ -468,95 +536,8 @@ export default function SidebarTrash( {
 											disabled={ isBusy }
 											onClick={ () =>
 												setPendingDelete( {
-													...page,
-													kind: 'page',
-												} )
-											}
-										/>
-									</div>
-								</div>
-								{ error && (
-									<p
-										className="cortext-sidebar__row-error"
-										role="alert"
-									>
-										{ error.message }
-									</p>
-								) }
-							</li>
-						);
-					} ) }
-					{ trashedRows.map( ( row ) => {
-						const title = titleText(
-							row.title,
-							__( '(untitled)', 'cortext' )
-						);
-						const collectionTitle = titleText(
-							row.collection?.title,
-							__( 'Collection', 'cortext' )
-						);
-						const rowIcon = row.meta?.cortext_document_icon ?? '';
-						const isBusy = busyId === row.id;
-						const isSelected = selectedId === row.id;
-						const error = rowError?.id === row.id ? rowError : null;
-						const rowClasses = [ 'cortext-sidebar__row' ];
-						if ( isSelected ) {
-							rowClasses.push( 'is-selected' );
-						}
-
-						return (
-							<li
-								key={ `row:${ row.id }` }
-								className="cortext-sidebar__node cortext-sidebar__trash-row"
-							>
-								<div className={ rowClasses.join( ' ' ) }>
-									<Button
-										className="cortext-sidebar__title cortext-sidebar__trash-text"
-										variant="tertiary"
-										onClick={ () =>
-											onSelect( row.id, row )
-										}
-									>
-										<span className="cortext-sidebar__trash-title">
-											<PageIcon
-												icon={ rowIcon }
-												size={ 14 }
-												className="cortext-sidebar__trash-title-icon"
-											/>
-											<span className="cortext-sidebar__trash-title-text">
-												{ title }
-											</span>
-										</span>
-										<span className="cortext-sidebar__breadcrumb">
-											{ collectionTitle }
-										</span>
-									</Button>
-									<div className="cortext-sidebar__trash-actions">
-										<Button
-											size="small"
-											icon={ rotateLeft }
-											label={ __( 'Restore', 'cortext' ) }
-											disabled={ isBusy }
-											onClick={ () =>
-												restore( {
-													...row,
-													kind: 'row',
-												} )
-											}
-										/>
-										<Button
-											size="small"
-											icon={ trash }
-											isDestructive
-											label={ __(
-												'Delete permanently',
-												'cortext'
-											) }
-											disabled={ isBusy }
-											onClick={ () =>
-												setPendingDelete( {
-													...row,
-													kind: 'row',
+													...document,
+													kind,
 												} )
 											}
 										/>

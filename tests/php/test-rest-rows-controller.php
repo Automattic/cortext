@@ -43,7 +43,6 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 	public function test_route_is_registered(): void {
 		$routes = rest_get_server()->get_routes();
 		$this->assertArrayHasKey( '/cortext/v1/rows', $routes );
-		$this->assertArrayHasKey( '/cortext/v1/rows/trash', $routes );
 		$this->assertArrayHasKey(
 			'/cortext/v1/collections/(?P<collection_id>\d+)/rows',
 			$routes
@@ -264,14 +263,6 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertSame( 'Score', $fields[0]['label'] );
 	}
 
-	public function test_trashed_rows_route_requires_edit_posts_capability(): void {
-		wp_set_current_user( $this->create_user( 'subscriber' ) );
-
-		$response = $this->query_trashed_rows();
-
-		$this->assertSame( 403, $response->get_status() );
-	}
-
 	// -- Unit tests for format_row and build_query_args -----------------
 
 	public function test_format_row_returns_expected_shape(): void {
@@ -297,37 +288,6 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertSame( 'My Entry', $row['title']['raw'] );
 		$this->assertSame( 'publish', $row['status'] );
 		$this->assertSame( 'hello', $row['meta']["field-{$field_id}"] );
-	}
-
-	public function test_format_trashed_row_returns_sidebar_shape(): void {
-		$fixture       = $this->create_collection_fixture( 'trashfmt', 'text' );
-		$collection_id = $fixture['collection_id'];
-		$row_id        = (int) wp_insert_post(
-			array(
-				'post_type'   => 'crtxt_trashfmt',
-				'post_status' => 'trash',
-				'post_title'  => 'Archived Row',
-				'post_name'   => 'archived-row',
-				'meta_input'  => array(
-					'cortext_document_icon' => '{"type":"wp","name":"list","color":"blue"}',
-				),
-			)
-		);
-
-		$controller = new RowsController();
-		$method     = new \ReflectionMethod( $controller, 'format_trashed_row' );
-		$method->setAccessible( true );
-
-		$row = $method->invoke( $controller, get_post( $row_id ), get_post( $collection_id ) );
-
-		$this->assertSame( $row_id, $row['id'] );
-		$this->assertSame( 'crtxt_trashfmt', $row['type'] );
-		$this->assertSame( 'trash', $row['status'] );
-		$this->assertSame( 'Archived Row', $row['title']['raw'] );
-		$this->assertSame( '{"type":"wp","name":"list","color":"blue"}', $row['meta']['cortext_document_icon'] );
-		$this->assertSame( $collection_id, $row['collection']['id'] );
-		$this->assertSame( 'trashfmt', $row['collection']['slug'] );
-		$this->assertSame( 'Trashfmt', $row['collection']['title']['raw'] );
 	}
 
 	public function test_format_row_returns_array_for_multiselect(): void {
@@ -1330,12 +1290,6 @@ public function test_build_query_args_with_title_sort(): void {
 	private function query_rows( array $params ): \WP_REST_Response {
 		$request = new WP_REST_Request( 'GET', '/cortext/v1/rows' );
 		$request->set_query_params( $params );
-
-		return rest_do_request( $request );
-	}
-
-	private function query_trashed_rows(): \WP_REST_Response {
-		$request = new WP_REST_Request( 'GET', '/cortext/v1/rows/trash' );
 
 		return rest_do_request( $request );
 	}

@@ -91,18 +91,6 @@ final class RowsController {
 
 		register_rest_route(
 			self::NAMESPACE,
-			'/rows/trash',
-			array(
-				array(
-					'methods'             => 'GET',
-					'callback'            => array( $this, 'get_trashed_rows' ),
-					'permission_callback' => array( $this, 'can_read' ),
-				),
-			)
-		);
-
-		register_rest_route(
-			self::NAMESPACE,
 			'/collections/(?P<collection_id>\d+)/rows',
 			array(
 				array(
@@ -307,55 +295,6 @@ final class RowsController {
 				'totalPages' => (int) $query->max_num_pages,
 				'collection' => $this->collection_definition( $collection, $slug ),
 				'fields'     => $fields,
-			),
-			200
-		);
-	}
-
-	/**
-	 * Returns every trashed collection row the current user can edit.
-	 *
-	 * @return WP_REST_Response
-	 */
-	public function get_trashed_rows(): WP_REST_Response {
-		$rows = array();
-
-		foreach ( CollectionEntries::get_entry_post_types() as $post_type ) {
-			$collection = $this->find_collection_by_row_post_type( $post_type );
-			if ( ! $collection instanceof WP_Post ) {
-				continue;
-			}
-
-			$posts = get_posts(
-				array(
-					'post_type'      => $post_type,
-					'post_status'    => 'trash',
-					'posts_per_page' => -1,
-					'orderby'        => 'modified',
-					'order'          => 'DESC',
-				)
-			);
-
-			foreach ( $posts as $post ) {
-				if ( ! $post instanceof WP_Post || ! current_user_can( 'edit_post', $post->ID ) ) {
-					continue;
-				}
-				$rows[] = $this->format_trashed_row( $post, $collection );
-			}
-		}
-
-		usort(
-			$rows,
-			static fn( array $a, array $b ): int => strcmp(
-				(string) ( $b['modified_at'] ?? '' ),
-				(string) ( $a['modified_at'] ?? '' )
-			)
-		);
-
-		return new WP_REST_Response(
-			array(
-				'rows'  => $rows,
-				'total' => count( $rows ),
 			),
 			200
 		);
@@ -1129,52 +1068,6 @@ final class RowsController {
 		);
 
 		return ! empty( $matches ) ? $matches[0] : null;
-	}
-
-	/**
-	 * Looks up the source collection for a dynamic row CPT.
-	 *
-	 * @param string $post_type Dynamic row post type.
-	 * @return WP_Post|null
-	 */
-	private function find_collection_by_row_post_type( string $post_type ): ?WP_Post {
-		if ( ! str_starts_with( $post_type, CollectionEntries::CPT_PREFIX ) ) {
-			return null;
-		}
-
-		$slug = substr( $post_type, strlen( CollectionEntries::CPT_PREFIX ) );
-		if ( '' === $slug ) {
-			return null;
-		}
-
-		return $this->find_collection_by_slug( $slug );
-	}
-
-	/**
-	 * Formats one trashed row for the sidebar trash response.
-	 *
-	 * @param WP_Post $post       Trashed row post.
-	 * @param WP_Post $collection Source collection.
-	 * @return array<string,mixed>
-	 */
-	private function format_trashed_row( WP_Post $post, WP_Post $collection ): array {
-		$slug = substr( $post->post_type, strlen( CollectionEntries::CPT_PREFIX ) );
-
-		return array(
-			'id'          => (int) $post->ID,
-			'type'        => $post->post_type,
-			'slug'        => $post->post_name,
-			'status'      => $post->post_status,
-			'title'       => array(
-				'raw'      => $post->post_title,
-				'rendered' => $post->post_title,
-			),
-			'modified_at' => $this->format_gmt_date( $post->post_modified_gmt ),
-			'meta'        => array(
-				'cortext_document_icon' => (string) get_post_meta( $post->ID, 'cortext_document_icon', true ),
-			),
-			'collection'  => $this->collection_definition( $collection, $slug ),
-		);
 	}
 
 	/**

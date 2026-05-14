@@ -10,6 +10,7 @@ declare( strict_types=1 );
 namespace Cortext\Tests;
 
 use Cortext\PostType\Page;
+use Cortext\PostType\Collection;
 use Cortext\PostType\PageTrashCascade;
 use Cortext\Rest\DocumentTrashController;
 use WorDBless\BaseTestCase;
@@ -25,6 +26,7 @@ final class Test_Rest_Document_Trash_Controller extends BaseTestCase {
 		parent::set_up();
 
 		( new Page() )->register_post_type();
+		( new Collection() )->register_post_type();
 
 		remove_all_actions( 'wp_trash_post' );
 		remove_all_actions( 'untrashed_post' );
@@ -46,6 +48,115 @@ final class Test_Rest_Document_Trash_Controller extends BaseTestCase {
 		remove_filter( 'posts_pre_query', array( $this, 'serve_posts_from_memory' ), 10 );
 		wp_set_current_user( 0 );
 		parent::tear_down();
+	}
+
+	public function test_routes_are_registered(): void {
+		$routes = rest_get_server()->get_routes();
+
+		$this->assertArrayHasKey( '/cortext/v1/documents/trash', $routes );
+		$this->assertArrayHasKey( '/cortext/v1/documents/(?P<id>\d+)/restore', $routes );
+		$this->assertArrayHasKey( '/cortext/v1/documents/(?P<id>\d+)/permanent-delete', $routes );
+	}
+
+	public function test_trashed_documents_route_requires_edit_posts_capability(): void {
+		wp_set_current_user( $this->create_user( 'subscriber' ) );
+
+		$response = $this->query_trashed_documents();
+
+		$this->assertSame( 403, $response->get_status() );
+	}
+
+	public function test_trashed_documents_lists_pages_and_rows(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$page_id = $this->create_page(
+			array(
+				'post_title'  => 'Trashed page',
+				'post_parent' => 123,
+			)
+		);
+		update_post_meta( $page_id, 'cortext_document_icon', '{"type":"emoji","value":"P"}' );
+		update_post_meta( $page_id, PageTrashCascade::META_KEY, '99' );
+		wp_trash_post( $page_id );
+
+		$collection_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Collection::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Albums',
+				'meta_input'  => array( 'slug' => 'albums' ),
+			)
+		);
+		$row_post_type = 'crtxt_albums';
+		register_post_type(
+			$row_post_type,
+			array(
+				'public'       => false,
+				'show_in_rest' => true,
+				'rest_base'    => $row_post_type,
+				'supports'     => array( 'title', 'editor', 'custom-fields' ),
+			)
+		);
+		add_post_type_support( $row_post_type, 'cortext-document' );
+
+		$row_id = (int) wp_insert_post(
+			array(
+				'post_type'   => $row_post_type,
+				'post_status' => 'publish',
+				'post_title'  => 'Trashed album',
+				'post_name'   => 'trashed-album',
+				'meta_input'  => array(
+					'cortext_document_icon' => '{"type":"wp","name":"album"}',
+				),
+			)
+		);
+		wp_trash_post( $row_id );
+
+		$published_row = (int) wp_insert_post(
+			array(
+				'post_type'   => $row_post_type,
+				'post_status' => 'publish',
+				'post_title'  => 'Visible album',
+			)
+		);
+		$regular_post = (int) wp_insert_post(
+			array(
+				'post_type'   => 'post',
+				'post_status' => 'publish',
+				'post_title'  => 'Regular post',
+			)
+		);
+		wp_trash_post( $regular_post );
+
+		$response = $this->query_trashed_documents();
+
+		$this->assertSame( 200, $response->get_status() );
+		$data      = $response->get_data();
+		$documents = $data['documents'];
+		$this->assertSame( 2, $data['total'] );
+		$this->assertCount( 2, $documents );
+
+		$by_id = array_column( $documents, null, 'id' );
+		$this->assertArrayHasKey( $page_id, $by_id );
+		$this->assertArrayHasKey( $row_id, $by_id );
+		$this->assertArrayNotHasKey( $published_row, $by_id );
+		$this->assertArrayNotHasKey( $regular_post, $by_id );
+
+		$page = $by_id[ $page_id ];
+		$this->assertSame( Page::POST_TYPE, $page['type'] );
+		$this->assertSame( 'page', $page['kind'] );
+		$this->assertSame( 'trash', $page['status'] );
+		$this->assertSame( 123, $page['parent'] );
+		$this->assertSame( 99, $page['meta'][ PageTrashCascade::META_KEY ] );
+
+		$row = $by_id[ $row_id ];
+		$this->assertSame( $row_post_type, $row['type'] );
+		$this->assertSame( 'row', $row['kind'] );
+		$this->assertSame( 'Trashed album', $row['title']['raw'] );
+		$this->assertSame( '{"type":"wp","name":"album"}', $row['meta']['cortext_document_icon'] );
+		$this->assertSame( $collection_id, $row['collection']['id'] );
+		$this->assertSame( 'albums', $row['collection']['slug'] );
+		$this->assertSame( 'Albums', $row['collection']['title']['raw'] );
 	}
 
 	public function test_restores_a_trashed_page_and_returns_its_id(): void {
@@ -305,6 +416,11 @@ final class Test_Rest_Document_Trash_Controller extends BaseTestCase {
 		return rest_do_request( $request );
 	}
 
+	private function query_trashed_documents() {
+		$request = new WP_REST_Request( 'GET', '/cortext/v1/documents/trash' );
+		return rest_do_request( $request );
+	}
+
 	private function create_user( string $role ): int {
 		return (int) wp_insert_user(
 			array(
@@ -347,13 +463,15 @@ final class Test_Rest_Document_Trash_Controller extends BaseTestCase {
 
 		$wants_parent_filter = ! empty( $vars['post_parent'] );
 		$wants_meta_filter   = ! empty( $vars['meta_key'] );
-		if ( ! $wants_parent_filter && ! $wants_meta_filter ) {
+		$statuses            = (array) ( $vars['post_status'] ?? array() );
+		$wants_trash_query   = in_array( 'trash', $statuses, true );
+		if ( ! $wants_parent_filter && ! $wants_meta_filter && ! $wants_trash_query ) {
 			return $pre;
 		}
 
 		$candidates = $this->all_in_memory_posts();
 
-		if ( ! empty( $vars['post_type'] ) ) {
+		if ( ! empty( $vars['post_type'] ) && 'any' !== $vars['post_type'] ) {
 			$types      = (array) $vars['post_type'];
 			$candidates = array_filter(
 				$candidates,
@@ -370,7 +488,6 @@ final class Test_Rest_Document_Trash_Controller extends BaseTestCase {
 		}
 
 		if ( ! empty( $vars['post_status'] ) ) {
-			$statuses   = (array) $vars['post_status'];
 			$candidates = array_filter(
 				$candidates,
 				static fn( WP_Post $post ): bool => in_array( $post->post_status, $statuses, true )
