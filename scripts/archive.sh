@@ -3,4 +3,4 @@
 # worktree is archived.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-npx wp-env stop --runtime=playground
+pnpm exec wp-env stop --runtime=playground

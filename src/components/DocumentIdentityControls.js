@@ -23,8 +23,10 @@ import PageIcon from './PageIcon';
 // opens are instant.
 const EmojiPicker = lazy( async () => {
 	const [ pickerModule, dataModule ] = await Promise.all( [
-		import( '@emoji-mart/react' ),
-		import( '@emoji-mart/data' ),
+		import(
+			/* webpackChunkName: "emoji-mart-react" */ '@emoji-mart/react'
+		),
+		import( /* webpackChunkName: "emoji-mart-data" */ '@emoji-mart/data' ),
 	] );
 
 	const Picker = pickerModule.default;
@@ -165,7 +167,11 @@ const EmojiPicker = lazy( async () => {
 
 // `@wordpress/icons` is also lazy-loaded; it ships a few hundred glyphs
 // and the picker doesn't need them until the user clicks the Icons tab.
-const IconLibraryPicker = lazy( () => import( './IconLibraryPicker' ) );
+const IconLibraryPicker = lazy( () =>
+	import(
+		/* webpackChunkName: "icon-library-picker" */ './IconLibraryPicker'
+	)
+);
 
 function encodeEmoji( value ) {
 	return JSON.stringify( { type: 'emoji', value } );

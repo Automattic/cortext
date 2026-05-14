@@ -16,15 +16,20 @@ jobs:
         steps:
             - uses: actions/checkout@v4
 
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 11.0.8
+                  standalone: true
+
             - uses: actions/setup-node@v4
               with:
                   node-version: '24.15'
-                  cache: 'npm'
+                  cache: 'pnpm'
 
-            - run: npm ci
-            - run: npm run lint:js
-            - run: npm run lint:style
-            - run: npm run format:check
+            - run: pnpm install --frozen-lockfile
+            - run: pnpm run lint:js
+            - run: pnpm run lint:style
+            - run: pnpm run format:check
 
     phpcs:
         name: PHPCS
