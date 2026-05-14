@@ -106,8 +106,13 @@ jest.mock( '../../../../src/components/CollectionFieldsContext', () => ( {
 
 jest.mock( '../../../../src/components/fields/AddFieldPopover', () => ( {
 	__esModule: true,
-	default: ( { collectionId } ) => (
-		<div>{ `Add field for collection ${ collectionId }` }</div>
+	default: ( { collectionId, onCreate } ) => (
+		<div>
+			<div>{ `Add field for collection ${ collectionId }` }</div>
+			<button type="button" onClick={ () => onCreate?.( { id: 123 } ) }>
+				Create mock field
+			</button>
+		</div>
 	),
 } ) );
 
@@ -115,7 +120,7 @@ import ColumnHeaderActions from '../../../../src/components/fields/ColumnHeaderA
 import { useEntityRecord } from '@wordpress/core-data';
 import { useCollectionFieldsContext } from '../../../../src/components/CollectionFieldsContext';
 
-function Harness( { collectionId, recordId } ) {
+function Harness( { collectionId, recordId, onFieldCreated = jest.fn() } ) {
 	return (
 		<div className="cortext-data-view">
 			<table>
@@ -134,6 +139,7 @@ function Harness( { collectionId, recordId } ) {
 				collectionId={ collectionId }
 				view={ { fields: [] } }
 				onChangeView={ jest.fn() }
+				onFieldCreated={ onFieldCreated }
 			/>
 		</div>
 	);
@@ -164,6 +170,27 @@ describe( 'ColumnHeaderActions', () => {
 
 		rerender( <Harness collectionId={ 6 } /> );
 
+		await waitFor( () =>
+			expect( screen.queryByRole( 'dialog' ) ).not.toBeInTheDocument()
+		);
+	} );
+
+	it( 'passes the created field out of the add-field dropdown', async () => {
+		const onFieldCreated = jest.fn();
+		render(
+			<Harness collectionId={ 5 } onFieldCreated={ onFieldCreated } />
+		);
+
+		fireEvent.click(
+			await screen.findByRole( 'button', { name: 'Add field' } )
+		);
+		fireEvent.click(
+			screen.getByRole( 'button', {
+				name: 'Create mock field',
+			} )
+		);
+
+		expect( onFieldCreated ).toHaveBeenCalledWith( { id: 123 } );
 		await waitFor( () =>
 			expect( screen.queryByRole( 'dialog' ) ).not.toBeInTheDocument()
 		);

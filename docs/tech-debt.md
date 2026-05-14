@@ -169,9 +169,11 @@ Double-click autofit is the trickiest piece. With no measurement hook upstream, 
 
 **What.** The table's `+ add field` button now sits in DataViews' row-actions column header. `ColumnHeaderActions` finds `th.dataviews-view-table__actions-column` and portals the button there; CSS hides the built-in "Actions" label and keeps the header cell sticky on the right. This is cleaner than the old synthetic `__add_field` column because it no longer leaks into `view.fields`, but it still leans on DataViews internals. If the class name, header rendering, or sticky-column markup changes, the button can disappear or stop lining up with the row kebabs.
 
-**Where.** `src/components/fields/ColumnHeaderActions.js` (actions-column lookup and portal), `src/index.scss` (`.dataviews-view-table__actions-column` overrides), and the legacy `__add_field` cleanup in `src/components/CollectionDataViews.js`.
+The create-field flow also has to reveal the new trailing column itself. It carries the created field ID back to `CollectionDataViews`, waits until the field marker exists in the rendered header, then scrolls `.dataviews-wrapper` to the right edge. The interaction feels right, but it still depends on DataViews' DOM shape.
 
-**Solution.** DataViews exposes a trailing table-header slot, an add-column slot, or a header action area separate from per-row actions. Then the portal targets a real extension point, the sticky/header-label CSS disappears, and `__add_field` stays only as migration cleanup for old saved views.
+**Where.** `src/components/fields/ColumnHeaderActions.js` (actions-column lookup and portal), `src/components/CollectionDataViews.js` and `src/components/dataViewScroll.js` (created-field reveal and `.dataviews-wrapper` scroll), `src/index.scss` (`.dataviews-view-table__actions-column` overrides), and the legacy `__add_field` cleanup in `src/components/CollectionDataViews.js`.
+
+**Solution.** DataViews exposes a trailing table-header slot, an add-column slot, or a header action area separate from per-row actions, plus refs for the table scroll wrapper and rendered headers. Then the portal targets a real extension point, the reveal code stops querying DataViews DOM, the sticky/header-label CSS disappears, and `__add_field` stays only as migration cleanup for old saved views.
 
 ## 18. Field management is table-layout only `[internal]`
 

@@ -32,6 +32,7 @@ import { cog, plus, replace } from '@wordpress/icons';
 import CollectionDataViews from '../../components/CollectionDataViews';
 import AddFieldPopover from '../../components/fields/AddFieldPopover';
 import { COLLECTION_QUERY } from '../../collections';
+import { toDataViewId } from '../../hooks/fieldIds';
 import {
 	CollectionFieldsProvider,
 	useCollectionFieldsContext,
@@ -200,7 +201,11 @@ function CollectionCreator( { onCreate } ) {
 	);
 }
 
-function CollectionToolbarControl( { collectionId, onSelect } ) {
+function CollectionToolbarControl( {
+	collectionId,
+	onSelect,
+	onFieldCreated,
+} ) {
 	const { collection, isResolving } = useCollectionFieldsContext();
 	const { enableComplementaryArea } = useDispatch( interfaceStore );
 
@@ -247,7 +252,10 @@ function CollectionToolbarControl( { collectionId, onSelect } ) {
 						<div className="cortext-data-view-toolbar-popover__content">
 							<AddFieldPopover
 								collectionId={ collectionId }
-								onCreate={ onClose }
+								onCreate={ ( created ) => {
+									onFieldCreated?.( created );
+									onClose();
+								} }
 							/>
 						</div>
 					) }
@@ -274,6 +282,7 @@ function CollectionInspectorControls( {
 	onSelect,
 	onChangeView,
 	onChangeAlign,
+	onFieldCreated,
 } ) {
 	const {
 		fields: availableFields,
@@ -393,7 +402,10 @@ function CollectionInspectorControls( {
 								<div className="cortext-data-view-toolbar-popover__content">
 									<AddFieldPopover
 										collectionId={ collectionId }
-										onCreate={ onClose }
+										onCreate={ ( created ) => {
+											onFieldCreated?.( created );
+											onClose();
+										} }
 									/>
 								</div>
 							) }
@@ -504,6 +516,7 @@ function CollectionInspectorControls( {
 export default function Edit( { attributes, setAttributes } ) {
 	const { collectionId, view, align } = attributes;
 	const blockProps = useBlockProps();
+	const [ revealFieldId, setRevealFieldId ] = useState( null );
 
 	const setView = useCallback(
 		( next ) => setAttributes( { view: next } ),
@@ -523,9 +536,23 @@ export default function Edit( { attributes, setAttributes } ) {
 
 	const onSelectCollection = ( id ) => {
 		if ( id !== collectionId ) {
+			setRevealFieldId( null );
 			selectCollection( id );
 		}
 	};
+
+	const onFieldCreated = useCallback( ( created ) => {
+		const fieldId = toDataViewId( created?.id );
+		if ( fieldId ) {
+			setRevealFieldId( fieldId );
+		}
+	}, [] );
+
+	const onFieldRevealed = useCallback( ( fieldId ) => {
+		setRevealFieldId( ( current ) =>
+			current === fieldId ? null : current
+		);
+	}, [] );
 
 	if ( ! collectionId ) {
 		return (
@@ -561,6 +588,7 @@ export default function Edit( { attributes, setAttributes } ) {
 				<CollectionToolbarControl
 					collectionId={ collectionId }
 					onSelect={ onSelectCollection }
+					onFieldCreated={ onFieldCreated }
 				/>
 				<CollectionInspectorControls
 					collectionId={ collectionId }
@@ -569,11 +597,14 @@ export default function Edit( { attributes, setAttributes } ) {
 					onSelect={ onSelectCollection }
 					onChangeView={ setView }
 					onChangeAlign={ setAlign }
+					onFieldCreated={ onFieldCreated }
 				/>
 				<CollectionDataViews
 					collectionId={ collectionId }
 					view={ view }
 					onChangeView={ setView }
+					revealFieldId={ revealFieldId }
+					onFieldRevealed={ onFieldRevealed }
 					loading={ <Spinner /> }
 					invalid={
 						<Notice status="warning" isDismissible={ false }>
