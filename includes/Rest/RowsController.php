@@ -9,6 +9,7 @@ declare( strict_types=1 );
 
 namespace Cortext\Rest;
 
+use Cortext\Fields\FieldTypeConverter;
 use Cortext\PostType\Collection;
 use Cortext\PostType\CollectionEntries;
 use Cortext\Relations;
@@ -913,9 +914,12 @@ final class RowsController {
 			} elseif ( 'rollup' === $field_type ) {
 				$meta[ $key ] = $this->compute_rollup_value( $post->ID, $field_id );
 			} else {
-				$meta[ $key ] = isset( $multi_field_ids[ $field_id ] )
-					? get_post_meta( $post->ID, $key, false )
-					: get_post_meta( $post->ID, $key, true );
+				$meta[ $key ] = $this->format_typed_value(
+					$post->ID,
+					$field_id,
+					$field_type,
+					isset( $multi_field_ids[ $field_id ] )
+				);
 			}
 		}
 
@@ -939,6 +943,145 @@ final class RowsController {
 			'modified_by' => $this->display_name_for( $modified_by_id > 0 ? $modified_by_id : $created_by_id ),
 			'meta'        => $meta,
 		);
+	}
+
+	/**
+	 * Per-type tolerance pass on a row's stored meta. Returns a value the
+	 * client can render directly; out-of-shape values (text in a number
+	 * field after a type change, etc.) come back as empty so cells render
+	 * blank rather than displaying garbage. The original raw meta is
+	 * preserved on disk and reappears if the field type is reverted.
+	 *
+	 * @param int    $row_id     Row post ID.
+	 * @param int    $field_id   Field post ID.
+	 * @param string $field_type Cortext field type.
+	 * @param bool   $is_multi   Whether the field allows multiple meta rows.
+	 * @return mixed
+	 */
+	private function format_typed_value( int $row_id, int $field_id, string $field_type, bool $is_multi ) {
+		$key = "field-{$field_id}";
+
+		if ( 'multiselect' === $field_type ) {
+			$values = get_post_meta( $row_id, $key, false );
+			if ( ! is_array( $values ) || count( $values ) === 0 ) {
+				return array();
+			}
+			// Single meta row carrying delimited text (data converted from a
+			// text-like field) — split on \n , ; into chips.
+			if ( count( $values ) === 1 ) {
+				$single = (string) $values[0];
+				if ( preg_match( '/[\n,;]/', $single ) ) {
+					return FieldTypeConverter::split_tokens( $single );
+				}
+			}
+			$normalized = array_values( array_map( 'strval', $values ) );
+			$options    = $this->valid_option_values( $field_id );
+			if ( count( $options ) === 0 ) {
+				return $normalized;
+			}
+			return array_values(
+				array_filter( $normalized, static fn( string $v ): bool => in_array( $v, $options, true ) )
+			);
+		}
+
+		$stored = $is_multi
+			? get_post_meta( $row_id, $key, false )
+			: get_post_meta( $row_id, $key, true );
+
+		if ( 'select' === $field_type ) {
+			$value = is_array( $stored ) ? '' : trim( (string) $stored );
+			if ( '' === $value ) {
+				return '';
+			}
+			// A single meta row carrying delimited text comes from a
+			// type-change off text / number / email / url. Mirror the
+			// commit-time split so the cell renders the same first-token
+			// chip the preview promised the user.
+			if ( preg_match( '/[\n,;]/', $value ) ) {
+				$tokens = FieldTypeConverter::split_tokens( $value );
+				$value  = count( $tokens ) > 0 ? $tokens[0] : '';
+				if ( '' === $value ) {
+					return '';
+				}
+			}
+			$options = $this->valid_option_values( $field_id );
+			if ( count( $options ) === 0 ) {
+				return $value;
+			}
+			return in_array( $value, $options, true ) ? $value : '';
+		}
+
+		if ( 'number' === $field_type ) {
+			if ( is_array( $stored ) || null === $stored || '' === $stored ) {
+				return null;
+			}
+			return is_numeric( $stored ) ? (float) $stored : null;
+		}
+
+		if ( 'date' === $field_type || 'datetime' === $field_type ) {
+			$text = is_array( $stored ) ? '' : trim( (string) $stored );
+			if ( '' === $text ) {
+				return '';
+			}
+			$timestamp = strtotime( $text );
+			if ( false === $timestamp ) {
+				return '';
+			}
+			return 'date' === $field_type
+				? gmdate( 'Y-m-d', $timestamp )
+				: gmdate( DATE_RFC3339, $timestamp );
+		}
+
+		if ( 'checkbox' === $field_type ) {
+			if ( is_array( $stored ) || null === $stored || '' === $stored ) {
+				return false;
+			}
+			return Relations::is_truthy( $stored );
+		}
+
+		if ( 'text' === $field_type ) {
+			$prior_format = (string) get_post_meta( $field_id, 'prior_date_format', true );
+			$text         = is_array( $stored ) ? '' : (string) $stored;
+			if ( '' !== $prior_format && '' !== trim( $text ) ) {
+				$timestamp = strtotime( trim( $text ) );
+				if ( false !== $timestamp ) {
+					$format = in_array( $prior_format, array( 'date', 'datetime' ), true )
+						? ( 'date' === $prior_format ? 'Y-m-d' : DATE_RFC3339 )
+						: $prior_format;
+					return wp_date( $format, $timestamp );
+				}
+			}
+			return $text;
+		}
+
+		return $stored;
+	}
+
+	/**
+	 * Reads a select/multiselect field's valid option values.
+	 *
+	 * @param int $field_id Field post ID whose options should be read.
+	 * @return string[]
+	 */
+	private function valid_option_values( int $field_id ): array {
+		$raw = (string) get_post_meta( $field_id, 'options', true );
+		if ( '' === $raw ) {
+			return array();
+		}
+		$decoded = json_decode( $raw, true );
+		if ( ! is_array( $decoded ) ) {
+			return array();
+		}
+		$values = array();
+		foreach ( $decoded as $entry ) {
+			if ( is_array( $entry ) && isset( $entry['value'] ) ) {
+				$value = trim( (string) $entry['value'] );
+				if ( '' !== $value ) {
+					$values[] = $value;
+				}
+			}
+		}
+		return $values;
 	}
 
 	/**

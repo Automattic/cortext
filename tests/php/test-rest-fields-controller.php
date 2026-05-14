@@ -1007,6 +1007,268 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 		$this->assertSame( 0, $response->get_data()['count'] );
 	}
 
+	public function test_convert_plan_classifies_text_to_number(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		[ , $field_id, $row_ids ] = $this->fixture_text_field_with_rows(
+			'plan-num',
+			array( '42', '3.14', '-7', 'abc', '12 cats' )
+		);
+
+		$plan = $this->build_plan( $field_id, 'number', $row_ids );
+
+		$this->assertSame( 'text', $plan['from'] );
+		$this->assertSame( 'number', $plan['to'] );
+		$this->assertSame( 5, $plan['total'] );
+		$this->assertSame( 3, $plan['displays'] );
+		$this->assertSame( 2, $plan['hidden'] );
+		$this->assertSame( 0, $plan['empty'] );
+		$this->assertSame( array(), $plan['new_options'] );
+	}
+
+	public function test_convert_plan_classifies_empty_and_partial(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		[ , $field_id, $row_ids ] = $this->fixture_text_field_with_rows(
+			'plan-empty',
+			array( '42', '', 'abc', '' )
+		);
+
+		$plan = $this->build_plan( $field_id, 'number', $row_ids );
+
+		$this->assertSame( 4, $plan['total'] );
+		$this->assertSame( 1, $plan['displays'] );
+		$this->assertSame( 1, $plan['hidden'] );
+		$this->assertSame( 2, $plan['empty'] );
+	}
+
+	public function test_convert_plan_extends_options_for_text_to_select(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		[ , $field_id, $row_ids ] = $this->fixture_text_field_with_rows(
+			'plan-sel',
+			array( 'Open', 'Closed', 'Open', 'In Progress' )
+		);
+
+		$plan = $this->build_plan( $field_id, 'select', $row_ids );
+
+		sort( $plan['new_options'] );
+		$this->assertSame( array( 'Closed', 'In Progress', 'Open' ), $plan['new_options'] );
+	}
+
+	public function test_convert_plan_splits_delimiters_for_text_to_multiselect(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		[ , $field_id, $row_ids ] = $this->fixture_text_field_with_rows(
+			'plan-multi',
+			array( 'Open, Closed', 'In Progress', 'Open; Pending' )
+		);
+
+		$plan = $this->build_plan( $field_id, 'multiselect', $row_ids );
+
+		sort( $plan['new_options'] );
+		$this->assertSame( array( 'Closed', 'In Progress', 'Open', 'Pending' ), $plan['new_options'] );
+	}
+
+	public function test_convert_rejects_unsupported_pair(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		[ , $field_id ] = $this->fixture_text_field_with_rows( 'reject', array( 'a' ) );
+
+		$response = $this->convert_field( $field_id, 'relation' );
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'cortext_field_conversion_unsupported', $response->as_error()->get_error_code() );
+		$this->assertSame( 'text', get_post_meta( $field_id, 'type', true ) );
+	}
+
+	public function test_convert_rejects_same_type(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		[ , $field_id ] = $this->fixture_text_field_with_rows( 'same', array( 'a' ) );
+
+		$response = $this->convert_field( $field_id, 'text' );
+		$this->assertSame( 400, $response->get_status() );
+	}
+
+	public function test_convert_date_to_text_stashes_prior_format(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$collection_id = $this->create_collection_with_slug( 'Dates', 'datestash' );
+
+		$field_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Due',
+				'meta_input'  => array(
+					'type'        => 'date',
+					'date_format' => 'F j, Y',
+				),
+			)
+		);
+		add_post_meta( $collection_id, 'fields', (string) $field_id );
+		( new CollectionEntries() )->register_for_collection( get_post( $collection_id ) );
+
+		$response = $this->convert_field( $field_id, 'text' );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'F j, Y', get_post_meta( $field_id, 'prior_date_format', true ) );
+		$this->assertSame( 'text', get_post_meta( $field_id, 'type', true ) );
+	}
+
+	public function test_convert_text_to_select_makes_format_typed_value_return_chip(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		[ , $field_id, $row_ids ] = $this->fixture_text_field_with_rows(
+			'select-render',
+			array( 'Open', 'Closed', 'Open' )
+		);
+
+		$plan = $this->build_plan( $field_id, 'select', $row_ids );
+		$this->assertSame( array( 'Open', 'Closed' ), $plan['new_options'] );
+
+		// Apply commit the same way the REST handler does: write options
+		// first, then flip the type. This is exactly what `convert()` runs;
+		// keeping it inline here lets the test verify what the row endpoint
+		// will return immediately after, without the WorDBless-incompatible
+		// `WP_Query` row enumeration that the real handler also performs.
+		$additions = array();
+		foreach ( $plan['new_options'] as $value ) {
+			$additions[] = array(
+				'value' => $value,
+				'label' => $value,
+			);
+		}
+		update_post_meta( $field_id, 'options', wp_json_encode( $additions ) );
+		update_post_meta( $field_id, 'type', 'select' );
+
+		// Now what would the rows endpoint return for each row's value?
+		$rendered = array();
+		foreach ( $row_ids as $row_id ) {
+			$rendered[] = $this->invoke_format_typed_value( $row_id, $field_id, 'select', false );
+		}
+
+		$this->assertSame( array( 'Open', 'Closed', 'Open' ), $rendered );
+	}
+
+	public function test_convert_text_to_select_renders_first_token_for_delimited_values(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		[ , $field_id, $row_ids ] = $this->fixture_text_field_with_rows(
+			'select-split',
+			array(
+				'Open, Closed, Pending',
+				'In Progress',
+				'Done; Archived',
+			)
+		);
+
+		$plan = $this->build_plan( $field_id, 'select', $row_ids );
+		// For select targets the plan keeps only the first split-token per
+		// row, so the option list mirrors what the cell will render.
+		sort( $plan['new_options'] );
+		$this->assertSame( array( 'Done', 'In Progress', 'Open' ), $plan['new_options'] );
+
+		$additions = array();
+		foreach ( $plan['new_options'] as $value ) {
+			$additions[] = array(
+				'value' => $value,
+				'label' => $value,
+			);
+		}
+		update_post_meta( $field_id, 'options', wp_json_encode( $additions ) );
+		update_post_meta( $field_id, 'type', 'select' );
+
+		$rendered = array();
+		foreach ( $row_ids as $row_id ) {
+			$rendered[] = $this->invoke_format_typed_value( $row_id, $field_id, 'select', false );
+		}
+
+		$this->assertSame( array( 'Open', 'In Progress', 'Done' ), $rendered );
+	}
+
+	private function invoke_format_typed_value(
+		int $row_id,
+		int $field_id,
+		string $field_type,
+		bool $is_multi
+	) {
+		$controller = new \Cortext\Rest\RowsController();
+		$method     = new \ReflectionMethod( $controller, 'format_typed_value' );
+		$method->setAccessible( true );
+		return $method->invoke( $controller, $row_id, $field_id, $field_type, $is_multi );
+	}
+
+	public function test_convert_round_trip_preserves_stored_text(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		[ , $field_id, $row_ids ] = $this->fixture_text_field_with_rows(
+			'round-trip',
+			array( '42', 'abc' )
+		);
+
+		$plan_forward = $this->build_plan( $field_id, 'number', $row_ids );
+		$this->assertSame( 1, $plan_forward['displays'] );
+		$this->assertSame( 1, $plan_forward['hidden'] );
+
+		// Flip the type without touching row values, mirroring `convert`.
+		update_post_meta( $field_id, 'type', 'number' );
+
+		// Round-trip the type back to text — row meta is still the original.
+		update_post_meta( $field_id, 'type', 'text' );
+
+		$values = array();
+		foreach ( $row_ids as $row_id ) {
+			$values[] = (string) get_post_meta( $row_id, "field-{$field_id}", true );
+		}
+		sort( $values );
+		$this->assertSame( array( '42', 'abc' ), $values );
+	}
+
+	private function build_plan( int $field_id, string $target_type, array $row_ids ): array {
+		$controller = new FieldsController();
+		$method     = new \ReflectionMethod( $controller, 'build_conversion_plan' );
+		$method->setAccessible( true );
+		return $method->invoke( $controller, $field_id, $target_type, $row_ids );
+	}
+
+	private function convert_preview( int $field_id, string $target_type ) {
+		$request = new WP_REST_Request( 'POST', "/cortext/v1/fields/{$field_id}/convert/preview" );
+		$request->set_param( 'field_id', $field_id );
+		$request->set_param( 'type', $target_type );
+		return rest_do_request( $request );
+	}
+
+	private function convert_field( int $field_id, string $target_type ) {
+		$request = new WP_REST_Request( 'POST', "/cortext/v1/fields/{$field_id}/convert" );
+		$request->set_param( 'field_id', $field_id );
+		$request->set_param( 'type', $target_type );
+		return rest_do_request( $request );
+	}
+
+	/**
+	 * @return array{0:int,1:int,2:int[]} Collection id, field id, row ids.
+	 */
+	private function fixture_text_field_with_rows( string $slug, array $values ): array {
+		$collection_id = $this->create_collection_with_slug( ucfirst( $slug ), $slug );
+
+		$field_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Status',
+				'meta_input'  => array( 'type' => 'text' ),
+			)
+		);
+		add_post_meta( $collection_id, 'fields', (string) $field_id );
+		( new CollectionEntries() )->register_for_collection( get_post( $collection_id ) );
+
+		$row_post_type = 'crtxt_' . $slug;
+		$row_ids       = array();
+		foreach ( $values as $idx => $value ) {
+			$row_id = (int) wp_insert_post(
+				array(
+					'post_type'   => $row_post_type,
+					'post_status' => 'publish',
+					'post_title'  => "Row {$idx}",
+				)
+			);
+			update_post_meta( $row_id, "field-{$field_id}", $value );
+			$row_ids[] = $row_id;
+		}
+
+		return array( $collection_id, $field_id, $row_ids );
+	}
+
 	private function update_options( int $field_id, array $body ) {
 		$request = new WP_REST_Request(
 			'POST',

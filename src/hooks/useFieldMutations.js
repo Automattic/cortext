@@ -267,6 +267,70 @@ export function useOptionUsage() {
 	return { run };
 }
 
+// Dry-runs a field type change. Returns counts of rows that will display
+// vs render empty after the change, plus the unique tokens that would be
+// added as new select/multiselect options for text-like → option-list
+// targets. The popover calls this whenever the user picks a different
+// target type so it can show the preview before the user confirms.
+export function usePreviewFieldTypeChange() {
+	const { isBusy, setIsBusy, error, setError } = useMutationState();
+	const run = useCallback(
+		async ( recordId, targetType ) => {
+			setIsBusy( true );
+			setError( null );
+			try {
+				return await apiFetch( {
+					path: `/cortext/v1/fields/${ recordId }/convert/preview`,
+					method: 'POST',
+					data: { type: targetType },
+				} );
+			} catch ( apiError ) {
+				setError( apiError );
+				throw apiError;
+			} finally {
+				setIsBusy( false );
+			}
+		},
+		[ setIsBusy, setError ]
+	);
+	return { run, isBusy, error };
+}
+
+// Commits a field type change. The server flips the `type` meta on the
+// field (plus extends `options` for text-like → select / multiselect),
+// leaves all row meta untouched, and returns the post-commit counts.
+// Hook callers must pass `collectionId` so the field list invalidates
+// after the type changes and the column rerenders with the new cell
+// editor and renderer.
+export function useChangeFieldType( collectionId ) {
+	const { isBusy, setIsBusy, error, setError } = useMutationState();
+	const invalidate = useFieldListInvalidation();
+	const flush = useFlushFieldRecord();
+	const run = useCallback(
+		async ( recordId, targetType ) => {
+			setIsBusy( true );
+			setError( null );
+			try {
+				const result = await apiFetch( {
+					path: `/cortext/v1/fields/${ recordId }/convert`,
+					method: 'POST',
+					data: { type: targetType },
+				} );
+				await flush( recordId );
+				invalidate( collectionId );
+				return result;
+			} catch ( apiError ) {
+				setError( apiError );
+				throw apiError;
+			} finally {
+				setIsBusy( false );
+			}
+		},
+		[ collectionId, flush, invalidate, setIsBusy, setError ]
+	);
+	return { run, isBusy, error };
+}
+
 export function useDeleteField( collectionId ) {
 	const { deleteEntityRecord, invalidateResolution } = useDispatch( 'core' );
 	const { isBusy, setIsBusy, error, setError } = useMutationState();

@@ -31,6 +31,7 @@ import {
 } from '@wordpress/icons';
 
 import AddFieldPopover from './AddFieldPopover';
+import ChangeFieldTypePopover from './ChangeFieldTypePopover';
 import EditOptionsPopover from './EditOptionsPopover';
 import FieldFormatPopover from './FieldFormatPopover';
 import RenameFieldInline from './RenameFieldInline';
@@ -48,6 +49,15 @@ const TYPES_WITH_OPTIONS = new Set( [ 'select', 'multiselect' ] );
 const { Menu } = unlock( componentsPrivateApis );
 
 const FORMATTABLE_TYPES = new Set( [ 'number', 'date', 'datetime' ] );
+
+// Conversion is not offered for these source types (the converter rejects
+// any pair that touches them server-side; hide the menu item so we don't
+// invite a click that always errors).
+const UNCONVERTIBLE_SOURCE_TYPES = new Set( [
+	'relation',
+	'rollup',
+	'formula',
+] );
 
 // Projects two kinds of triggers into the DataViews table header:
 //
@@ -184,6 +194,7 @@ function FieldActions( {
 	const [ isMenuOpen, setIsMenuOpen ] = useState( false );
 	const [ isFormatting, setIsFormatting ] = useState( false );
 	const [ isEditingOptions, setIsEditingOptions ] = useState( false );
+	const [ isChangingType, setIsChangingType ] = useState( false );
 	const [ isCalculating, setIsCalculating ] = useState( false );
 	const [ shouldFocusFormat, setShouldFocusFormat ] = useState( false );
 	const [ shouldFocusCalculation, setShouldFocusCalculation ] =
@@ -200,6 +211,8 @@ function FieldActions( {
 	const fieldType = record?.meta?.type;
 	const canFormat = FORMATTABLE_TYPES.has( fieldType );
 	const supportsOptions = TYPES_WITH_OPTIONS.has( fieldType );
+	const canChangeType =
+		Boolean( fieldType ) && ! UNCONVERTIBLE_SOURCE_TYPES.has( fieldType );
 	const initialOptions = useMemo(
 		() =>
 			supportsOptions
@@ -550,6 +563,15 @@ function FieldActions( {
 								</Menu.ItemLabel>
 							</Menu.Item>
 						) : null }
+						{ canChangeType ? (
+							<Menu.Item
+								onClick={ () => setIsChangingType( true ) }
+							>
+								<Menu.ItemLabel>
+									{ __( 'Change type…', 'cortext' ) }
+								</Menu.ItemLabel>
+							</Menu.Item>
+						) : null }
 					</Menu.Group>
 					<Menu.Separator />
 					{ /* View group: keep sort/hide actions together. */ }
@@ -735,6 +757,18 @@ function FieldActions( {
 						onRequestClose={ () => setIsEditingOptions( false ) }
 					/>
 				</Popover>
+			) : null }
+			{ isChangingType && canChangeType ? (
+				<ChangeFieldTypePopover
+					anchor={ optionsAnchorRef.current }
+					collectionId={ collectionId }
+					recordId={ recordId }
+					currentType={ fieldType }
+					onClose={ () => {
+						setIsChangingType( false );
+						onRowsChanged?.();
+					} }
+				/>
 			) : null }
 		</span>
 	);

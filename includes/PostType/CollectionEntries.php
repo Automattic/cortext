@@ -315,6 +315,19 @@ final class CollectionEntries {
 		Relations::remove_deleted_row_references( $post_id, $field_ids );
 	}
 
+	/**
+	 * Collection IDs for which an entry CPT has been registered during this
+	 * request. Populated lazily by `register_for_collection` and useful for
+	 * scans that would otherwise need a `WP_Query` over the collections —
+	 * notably the field→collection reverse lookup used by the type-change
+	 * REST endpoints.
+	 *
+	 * @return int[]
+	 */
+	public static function known_collection_ids(): array {
+		return array_values( self::$entry_collection_ids );
+	}
+
 	private function collection_id_for_entry_post_type( string $post_type ): int {
 		if ( isset( self::$entry_collection_ids[ $post_type ] ) ) {
 			return self::$entry_collection_ids[ $post_type ];
