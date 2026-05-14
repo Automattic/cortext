@@ -16,17 +16,17 @@ Pair with [decisions.md](decisions.md) for choices we've made peace with and [ro
 
 ## 2. Rows aren't in `core-data`'s entity store `[internal]`
 
-Updated by [#80](https://github.com/priethor/cortext/pull/80).
+Updated by [#80](https://github.com/priethor/cortext/pull/80) and #179.
 
-**What.** Rows still bypass `core-data`. `useCollectionRows` owns the fetch state, the `requestId` race guard, the manual `refresh()` counter, and the choice between server and client mode. #80 moved the normal table path to paged REST requests, then changed the fallback from one `per_page=-1` request to pages of 100 fetched with a small concurrency cap. That is a better failure mode, but it is still a second row-loading layer beside the WordPress data store.
+**What.** Rows still bypass `core-data`. `useCollectionRows` owns the fetch state, the `requestId` race guard, the manual `refresh()` counter, and the choice between server and client mode. #80 moved the normal table path to paged REST requests, then changed the fallback from one `per_page=-1` request to pages of 100 fetched with a small concurrency cap. #179 added row Trash, which widened the same gap: trashing or restoring one row can change other open collections because relation chips and rollups ignore trashed targets. Since no shared entity store knows those dependencies, the client dispatches a small row-change event so open row queries and the sidebar Trash row list refetch.
 
 The dynamic `crtxt_{slug}` post types already use `show_in_rest`, so `core-data` should be able to discover them lazily. We just have not wired rows through it yet. Mutations still POST directly with `apiFetch`, then ask the hook to refetch.
 
-**Where.** `src/hooks/useCollectionRows.js`, with side effects in `src/components/CollectionDataViews.js` (`saveRowField`, `onCreated`) and forced client mode in `src/components/relations/RelationEditor.js`.
+**Where.** `src/hooks/useCollectionRows.js`, `src/hooks/rowInvalidation.js`, and `src/hooks/useTrashedRows.js`, with side effects in `src/components/CollectionDataViews.js` (`saveRowField`, `onCreated`, row trash), `src/components/SidebarTrash.js`, `src/router/EntityRoute.js`, and forced client mode in `src/components/relations/RelationEditor.js`.
 
 **Solution.** Switch to `useEntityRecords('postType', \`crtxt_${slug}\`, query)` plus `saveEntityRecord` for writes once the remaining query shapes can be expressed there. `core-data` would then own caching, race protection, and post-mutation invalidation. Knock-on workarounds it deletes:
 
-- The `refresh()` handle exists only because rows aren't reactive.
+- The `refresh()` handle and row-change event exist only because rows aren't reactive.
 - Half of `RowMutationContext` (also driven by #1) exists because cells can't reach a `core-data` store that isn't there.
 - `onCreated` runs optimistic `lastPage = ceil((totalItems+1)/perPage)` arithmetic against possibly stale `paginationInfo`. With reactive pagination we'd watch `totalPages` in an effect.
 - The server/client planner becomes normal resolver queries instead of a local fetch policy.
