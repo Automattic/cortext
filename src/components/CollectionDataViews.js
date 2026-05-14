@@ -11,6 +11,7 @@ import {
 	useCallback,
 	useContext,
 	useEffect,
+	useLayoutEffect,
 	useMemo,
 	useRef,
 	useState,
@@ -37,7 +38,9 @@ import {
 	isDefaultVisibleField,
 	normalizeView,
 	pruneFiltersForFields,
+	withNewlyVisibleFields,
 } from './dataViewColumns';
+import { scrollToEndQuickly } from './dataViewScroll';
 import {
 	adjacentRowId,
 	getRowDetailMode,
@@ -45,6 +48,7 @@ import {
 } from './rowDetailUtils';
 import { useCollectionFieldsContext } from './CollectionFieldsContext';
 import { dataViewsFilterByForType } from '../hooks/fieldMapping';
+import { toDataViewId, toRecordId } from '../hooks/fieldIds';
 import useCollectionRows from '../hooks/useCollectionRows';
 import { useRecents } from '../hooks/useRecents';
 import { elementsFromOptions } from '../hooks/optionElements';
@@ -284,6 +288,8 @@ export default function CollectionDataViews( {
 	invalid,
 	error,
 	onReady,
+	revealFieldId = null,
+	onFieldRevealed,
 } ) {
 	const navigate = useNavigate();
 	const { fields, collection, slug, isResolving, fieldsResolved } =
@@ -331,6 +337,19 @@ export default function CollectionDataViews( {
 	const dataViewFields = availableFields;
 
 	const tableWrapperRef = useRef( null );
+	const [ localRevealFieldId, setLocalRevealFieldId ] = useState( null );
+	const pendingRevealFieldId = revealFieldId ?? localRevealFieldId;
+	const requestRevealCreatedField = useCallback( ( created ) => {
+		const fieldId = toDataViewId( created?.id );
+		if ( fieldId ) {
+			const wrapper =
+				tableWrapperRef.current?.querySelector( '.dataviews-wrapper' );
+			if ( wrapper ) {
+				scrollToEndQuickly( wrapper, { snapIfAtEnd: true } );
+			}
+			setLocalRevealFieldId( fieldId );
+		}
+	}, [] );
 	// editRequest is the "open this cell for editing" channel: cells that
 	// match its `{ rowId, fieldId }` flip to edit mode and clear it. Used
 	// for both the title-cell auto-open on a fresh row and Tab-driven
@@ -969,47 +988,16 @@ export default function CollectionDataViews( {
 			fields: availableFields,
 		} );
 
-		// Splice any editable field that just appeared in the schema
-		// (wasn't present on the previous sync) into its schema position
-		// in `view.fields`. The first render — `previouslyKnown` is
-		// `null` — leaves saved views alone; from then on, the diff
-		// detects fields the user just created via toolbar Add field
-		// or duplicate. Honors user-driven hides because the toggled-off
-		// field IS in `previouslyKnown` and gets skipped here. Inserting
-		// at the schema position (rather than appending) keeps a
-		// duplicated field next to its source instead of jumping to the
-		// end of the visible columns.
-		if ( previouslyKnown && currentFields.length > 0 ) {
-			const next = [ ...( normalized.fields ?? [] ) ];
-			let inserted = false;
-			for (
-				let schemaIdx = 0;
-				schemaIdx < availableFields.length;
-				schemaIdx++
-			) {
-				const f = availableFields[ schemaIdx ];
-				if (
-					! isDefaultVisibleField( f ) ||
-					previouslyKnown.has( f.id ) ||
-					next.includes( f.id )
-				) {
-					continue;
-				}
-				let insertAt = next.length;
-				for ( let i = schemaIdx - 1; i >= 0; i-- ) {
-					const idx = next.indexOf( availableFields[ i ].id );
-					if ( idx >= 0 ) {
-						insertAt = idx + 1;
-						break;
-					}
-				}
-				next.splice( insertAt, 0, f.id );
-				inserted = true;
-			}
-			if ( inserted ) {
-				normalized = { ...normalized, fields: next };
-			}
-		}
+		// Add fields that just appeared in the schema to `view.fields`.
+		// The first run leaves saved views alone. Fields created through
+		// Add field go at the end; duplicates and outside schema changes
+		// keep the old placement rule.
+		normalized = withNewlyVisibleFields(
+			normalized,
+			availableFields,
+			previouslyKnown,
+			pendingRevealFieldId
+		);
 
 		// Drop `__add_field` from older saved views. The add-field button now
 		// uses the DataViews actions header instead of a synthetic column.
@@ -1044,7 +1032,68 @@ export default function CollectionDataViews( {
 				filters: nextFilters,
 			} );
 		}
-	}, [ availableFields, isTableLayout, isResolving, fieldsResolved ] );
+	}, [
+		availableFields,
+		isTableLayout,
+		isResolving,
+		fieldsResolved,
+		pendingRevealFieldId,
+	] );
+
+	useLayoutEffect( () => {
+		if (
+			! isTableLayout ||
+			! pendingRevealFieldId ||
+			isResolving ||
+			! fieldsResolved
+		) {
+			return undefined;
+		}
+		if ( ! ( view?.fields ?? [] ).includes( pendingRevealFieldId ) ) {
+			return undefined;
+		}
+
+		const recordId = toRecordId( pendingRevealFieldId );
+		const reveal = () => {
+			const wrapper =
+				tableWrapperRef.current?.querySelector( '.dataviews-wrapper' );
+			if ( ! wrapper ) {
+				return false;
+			}
+			if ( recordId ) {
+				const marker = tableWrapperRef.current?.querySelector(
+					`[data-cortext-field-marker="${ recordId }"]`
+				);
+				if ( ! marker ) {
+					return false;
+				}
+			}
+			scrollToEndQuickly( wrapper );
+			if ( localRevealFieldId === pendingRevealFieldId ) {
+				setLocalRevealFieldId( null );
+			}
+			onFieldRevealed?.( pendingRevealFieldId );
+			return true;
+		};
+
+		if ( reveal() ) {
+			return undefined;
+		}
+
+		const frame = window.requestAnimationFrame( reveal );
+
+		return () => {
+			window.cancelAnimationFrame( frame );
+		};
+	}, [
+		fieldsResolved,
+		isResolving,
+		isTableLayout,
+		localRevealFieldId,
+		onFieldRevealed,
+		pendingRevealFieldId,
+		view?.fields,
+	] );
 
 	useEffect( () => {
 		if ( ! isResolving && rowsResolved ) {
@@ -1213,6 +1262,7 @@ export default function CollectionDataViews( {
 								view={ view }
 								onChangeView={ onChangeView }
 								onFieldOptionsSaved={ updateFieldOptions }
+								onFieldCreated={ requestRevealCreatedField }
 								onRowsChanged={ refresh }
 							/>
 						) }

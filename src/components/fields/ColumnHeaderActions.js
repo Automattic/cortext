@@ -75,6 +75,7 @@ export default function ColumnHeaderActions( {
 	view,
 	onChangeView,
 	onFieldOptionsSaved,
+	onFieldCreated,
 	onRowsChanged,
 } ) {
 	const anchorRef = useRef( null );
@@ -166,7 +167,10 @@ export default function ColumnHeaderActions( {
 					);
 				}
 				return createPortal(
-					<AddFieldTrigger collectionId={ collectionId } />,
+					<AddFieldTrigger
+						collectionId={ collectionId }
+						onFieldCreated={ onFieldCreated }
+					/>,
 					target.th,
 					`${ target.key }-${ collectionId }`
 				);
@@ -766,7 +770,7 @@ function FieldActions( {
 	);
 }
 
-function AddFieldTrigger( { collectionId } ) {
+function AddFieldTrigger( { collectionId, onFieldCreated } ) {
 	return (
 		<span className="cortext-column-header-actions cortext-column-header-actions--add">
 			<Dropdown
@@ -785,7 +789,10 @@ function AddFieldTrigger( { collectionId } ) {
 					<div className="cortext-data-view-toolbar-popover__content">
 						<AddFieldPopover
 							collectionId={ collectionId }
-							onCreate={ onClose }
+							onCreate={ ( created ) => {
+								onFieldCreated?.( created );
+								onClose();
+							} }
 						/>
 					</div>
 				) }

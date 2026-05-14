@@ -205,6 +205,57 @@ export function normalizeView( view, validIds, options = {} ) {
 	return nextView;
 }
 
+// Adds fields that just appeared in the schema to the saved column order.
+// Add field flows can push the new column to the end. Everything else keeps
+// the old placement rule, so duplicated fields still stay near their source.
+export function withNewlyVisibleFields(
+	view,
+	availableFields,
+	previouslyKnown,
+	explicitAppendFieldId = null
+) {
+	const currentFields = Array.isArray( view?.fields ) ? view.fields : [];
+	if ( ! previouslyKnown || currentFields.length === 0 ) {
+		return view;
+	}
+
+	const next = currentFields.slice();
+	let inserted = false;
+	const appendId =
+		typeof explicitAppendFieldId === 'string'
+			? explicitAppendFieldId
+			: null;
+
+	for ( let schemaIdx = 0; schemaIdx < availableFields.length; schemaIdx++ ) {
+		const field = availableFields[ schemaIdx ];
+		if (
+			! isDefaultVisibleField( field ) ||
+			previouslyKnown.has( field.id ) ||
+			next.includes( field.id )
+		) {
+			continue;
+		}
+		if ( field.id === appendId ) {
+			next.push( field.id );
+			inserted = true;
+			continue;
+		}
+
+		let insertAt = next.length;
+		for ( let i = schemaIdx - 1; i >= 0; i-- ) {
+			const idx = next.indexOf( availableFields[ i ].id );
+			if ( idx >= 0 ) {
+				insertAt = idx + 1;
+				break;
+			}
+		}
+		next.splice( insertAt, 0, field.id );
+		inserted = true;
+	}
+
+	return inserted ? { ...view, fields: next } : view;
+}
+
 // Applies a width to a single column. Always returns through the layout shape
 // the library reads. We pin `maxWidth` to the user's chosen width too, so the
 // saved shape remains defensive if DataViews changes its table sizing again.
