@@ -3,12 +3,28 @@ name: Performance benchmark
 on:
     push:
         branches: [main]
+        paths:
+            - includes/CLI/**
+            - src/**
+            - tests/e2e/specs/perf-ui.spec.js
+            - .github/workflows/perf-bench.yml
+            - .github/scripts/write-perf-bench-summary.php
     pull_request:
         branches: [main]
+        paths:
+            - includes/CLI/**
+            - src/**
+            - tests/e2e/specs/perf-ui.spec.js
+            - .github/workflows/perf-bench.yml
+            - .github/scripts/write-perf-bench-summary.php
+    workflow_dispatch:
 
 permissions:
     contents: read
     issues: write
+
+env:
+    CORTEXT_PERF_UI: ${{ vars.CORTEXT_PERF_UI || '0' }}
 
 concurrency:
     group: ${{ github.workflow }}-${{ github.ref }}
@@ -111,6 +127,22 @@ jobs:
                     --fail-on-budget \
                     --pretty | tee artifacts/perf-bench.json
 
+            - name: Run UI performance benchmark
+              if: github.event_name == 'workflow_dispatch' || env.CORTEXT_PERF_UI == '1'
+              env:
+                  WP_BASE_URL: http://localhost:8888
+              run: |
+                  set -euo pipefail
+
+                  if [ ! -f tests/e2e/specs/perf-ui.spec.js ]; then
+                    echo "No UI performance spec found."
+                    exit 0
+                  fi
+
+                  pnpm exec playwright install --with-deps chromium
+                  pnpm run build
+                  pnpm exec wp-scripts test-playwright --config playwright.config.js tests/e2e/specs/perf-ui.spec.js
+
             - name: Write benchmark summaries
               if: always()
               env:
@@ -172,5 +204,7 @@ jobs:
               uses: actions/upload-artifact@v4
               with:
                   name: perf-bench
-                  path: artifacts/perf-bench*.json
+                  path: |
+                      artifacts/perf-bench*.json
+                      playwright-report/
                   retention-days: 7
