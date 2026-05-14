@@ -1077,7 +1077,7 @@ final class PerfBench {
 			// first-page query, field lookup, row formatting, relations, rollups,
 			// and user names.
 			'rows_page_1'             => array(
-				'label' => 'Rows page 1',
+				'label' => 'Open the first rows page',
 				'run'   => fn() => $this->rest_request(
 					'GET',
 					'/cortext/v1/rows',
@@ -1091,7 +1091,7 @@ final class PerfBench {
 			// Page 50 makes the default dataset large enough for pagination costs
 			// to show up instead of hiding behind the first-page path.
 			'rows_page_50'            => array(
-				'label' => 'Rows page 50',
+				'label' => 'Open rows page 50',
 				'run'   => fn() => $this->rest_request(
 					'GET',
 					'/cortext/v1/rows',
@@ -1106,7 +1106,7 @@ final class PerfBench {
 			// request. It catches repeated field loading and relation/rollup
 			// formatting while keeping the CI run cheap.
 			'rows_page_walk'          => array(
-				'label' => 'Rows page walk',
+				'label' => 'Visit rows pages 1, 2, 3, and 50',
 				'run'   => fn() => array_map(
 					fn( int $page ) => $this->rest_request(
 						'GET',
@@ -1123,7 +1123,7 @@ final class PerfBench {
 			// Sorting by a custom field goes through the postmeta join and the
 			// ORDER BY meta_value path.
 			'rows_sort_meta_value'    => array(
-				'label' => 'Rows sorted by custom field',
+				'label' => 'Sort rows by a custom field',
 				'run'   => fn() => $this->rest_request(
 					'GET',
 					'/cortext/v1/rows',
@@ -1140,7 +1140,7 @@ final class PerfBench {
 			),
 			// Text search takes its own SQL path across titles and text fields.
 			'rows_search_text'        => array(
-				'label' => 'Rows text search',
+				'label' => 'Search rows by text',
 				'run'   => fn() => $this->rest_request(
 					'GET',
 					'/cortext/v1/rows',
@@ -1155,7 +1155,7 @@ final class PerfBench {
 			// Mixed filters exercise grouped filter SQL. Multi-value, number,
 			// select, and date clauses each take different branches.
 			'rows_filter_mixed'       => array(
-				'label' => 'Rows mixed filters',
+				'label' => 'Filter rows across tags, number, select, and date',
 				'run'   => fn() => $this->rest_request(
 					'GET',
 					'/cortext/v1/rows',
@@ -1201,7 +1201,7 @@ final class PerfBench {
 			// Page 2 is seeded with many related rows per row, so relation
 			// formatting has enough work to show up.
 			'rows_relation_hydration' => array(
-				'label' => 'Rows with many relation targets',
+				'label' => 'Load rows with many related records',
 				'run'   => fn() => $this->rest_request(
 					'GET',
 					'/cortext/v1/rows',
@@ -1215,7 +1215,7 @@ final class PerfBench {
 			// Page 3 has even more related rows. That makes rollup computation
 			// visible instead of blending into the page 1 baseline.
 			'rows_rollup_heavy'       => array(
-				'label' => 'Rows with heavy rollups',
+				'label' => 'Load rows with heavy rollups',
 				'run'   => fn() => $this->rest_request(
 					'GET',
 					'/cortext/v1/rows',
@@ -1229,7 +1229,7 @@ final class PerfBench {
 			// The third collection is wide on purpose. It measures field loading
 			// and per-row meta formatting with many columns.
 			'rows_wide_schema'        => array(
-				'label' => 'Rows with wide schema',
+				'label' => 'Load rows with a wide schema',
 				'run'   => fn() => $this->rest_request(
 					'GET',
 					'/cortext/v1/rows',
@@ -1243,7 +1243,7 @@ final class PerfBench {
 			// Replacing a large relation list has to sync many reverse pointers.
 			// This is the expensive relation picker write case.
 			'relation_many_targets'   => array(
-				'label'   => 'Replace many relation targets',
+				'label'   => 'Replace 250 related records',
 				'prepare' => fn() => Relations::set_relation_values( $relation_row_id, $relation_field_id, $relation_source_targets, true ),
 				'run'     => fn() => $this->rest_request(
 					'POST',
@@ -1259,7 +1259,7 @@ final class PerfBench {
 			// Changing one target in a large relation list should stay much
 			// cheaper than replacing the whole list.
 			'relation_small_delta'    => array(
-				'label'   => 'Change one relation target',
+				'label'   => 'Change one related record',
 				'prepare' => fn() => Relations::set_relation_values( $relation_row_id, $relation_field_id, $relation_source_targets, true ),
 				'run'     => fn() => $this->rest_request(
 					'POST',
@@ -1276,7 +1276,7 @@ final class PerfBench {
 			// branch on either side of 1000 today, so one exact-cap scenario keeps
 			// the signal focused without paying for duplicate boundary runs.
 			'migrate_1000_rows'       => array(
-				'label'   => 'Migrate 1000 rows',
+				'label'   => 'Migrate 1000 select values',
 				'prepare' => fn() => $this->prepare_migration(
 					(int) $manifest['migration_field_id'],
 					array_map( 'intval', $manifest['migration_row_ids'] ),
@@ -1288,7 +1288,7 @@ final class PerfBench {
 			// This is the migration number to watch right now: the whole primary
 			// collection on the code path we have today.
 			'migrate_many_rows'       => array(
-				'label'   => 'Migrate all primary rows',
+				'label'   => 'Migrate every primary row',
 				'prepare' => fn() => $this->prepare_migration(
 					(int) $manifest['migration_field_id'],
 					$primary_row_ids,
