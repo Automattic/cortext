@@ -5,7 +5,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-npm install
+pnpm install
 composer install --no-interaction
 
 hash_cmd=$(command -v shasum || command -v sha1sum)

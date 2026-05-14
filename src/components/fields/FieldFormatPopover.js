@@ -194,7 +194,7 @@ function findTimeOption( config, type ) {
 // (muted), and a chevron on the right hints at the third-level flyout.
 // `isOpen` toggles the focus ring so users can tell which row spawned
 // the visible flyout.
-const SubmenuRow = forwardRef( function SubmenuRow(
+const SubmenuRow = forwardRef( function SubmenuRowComponent(
 	{ label, value, onClick, onOpen, isOpen },
 	ref
 ) {
