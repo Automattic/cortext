@@ -132,6 +132,7 @@ jobs:
             - name: Run UI performance benchmark
               if: github.event_name == 'workflow_dispatch' || env.CORTEXT_PERF_UI == '1'
               env:
+                  # The benchmark workflow starts the dev wp-env, which serves WordPress on 8888.
                   WP_BASE_URL: http://localhost:8888
               run: |
                   set -euo pipefail

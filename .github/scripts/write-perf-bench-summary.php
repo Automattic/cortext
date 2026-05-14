@@ -241,7 +241,7 @@ function comparison_lines( array $current, string $base_path, string $base_label
 	}
 
 	if ( ! reports_share_config( $current, $base['report'] ) ) {
-		$lines[] = 'Baseline stale: seed args or budget changed.';
+		$lines[] = 'Baseline stale: seed args or budget path changed.';
 		return $lines;
 	}
 
@@ -269,7 +269,7 @@ function comparison_lines( array $current, string $base_path, string $base_label
 		return $lines;
 	}
 
-	return array_merge(
+	$lines = array_merge(
 		$lines,
 		markdown_table(
 			array( 'Scenario', 'p50 ms', 'p95 ms', 'SQL p95', 'Memory p95' ),
@@ -277,6 +277,11 @@ function comparison_lines( array $current, string $base_path, string $base_label
 			$rows
 		)
 	);
+
+	$lines[] = '';
+	$lines[] = '_Deltas <10% on p50/p95 may be runner noise; SQL counts and memory are deterministic._';
+
+	return $lines;
 }
 
 /**

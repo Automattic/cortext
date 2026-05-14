@@ -359,7 +359,7 @@ final class PerfBench {
 
 		return array(
 			'version'          => 1,
-			'seed_config_hash' => self::benchmark_config_hash( $manifest, $budget, $budget_path ),
+			'seed_config_hash' => self::benchmark_config_hash( $manifest, $budget_path ),
 			'elapsedMs'        => self::elapsed_ms( $started_at ),
 			'dataset'          => self::public_dataset_summary( $manifest ),
 			'iterations'       => array(
@@ -1501,10 +1501,9 @@ final class PerfBench {
 	 * Hashes the benchmark config that has to match before comparing runs.
 	 *
 	 * @param array<string,mixed> $manifest    Dataset manifest.
-	 * @param array<string,mixed> $budget      Budget config.
 	 * @param string              $budget_path Budget file path.
 	 */
-	private static function benchmark_config_hash( array $manifest, array $budget, string $budget_path ): string {
+	private static function benchmark_config_hash( array $manifest, string $budget_path ): string {
 		$config = isset( $manifest['config'] ) && is_array( $manifest['config'] )
 			? self::normalize_int_map( $manifest['config'] )
 			: array();
@@ -1515,7 +1514,6 @@ final class PerfBench {
 					'seed'        => (string) ( $manifest['seed'] ?? self::DATASET_SEED ),
 					'seed_args'   => $config,
 					'budget_path' => self::relative_local_path( $budget_path ),
-					'budget'      => $budget,
 				),
 				JSON_UNESCAPED_SLASHES
 			)
