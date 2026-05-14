@@ -5,9 +5,8 @@ import { useMemo, useState } from '@wordpress/element';
 import { FIELD_TYPES } from './AddFieldPopover';
 import { useChangeFieldType } from '../../hooks/useFieldMutations';
 
-// Types we never offer as conversion source or target. Relation and rollup
-// involve cross-collection data that can't be safely reinterpreted; formula
-// will follow the same rule once it ships.
+// These types depend on other fields or collections, so we do not offer them
+// as conversion targets.
 const UNCONVERTIBLE = new Set( [ 'relation', 'rollup', 'formula' ] );
 
 function pickTargetTypes( currentType ) {
@@ -41,7 +40,7 @@ export default function ChangeFieldTypePopover( {
 			await commit.run( recordId, targetType );
 			onClose?.();
 		} catch {
-			// Error rendered inline; popover stays open so the user can retry.
+			// Keep the popover open so the inline error stays visible.
 			setPending( null );
 		}
 	};

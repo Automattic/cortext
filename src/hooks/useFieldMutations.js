@@ -267,12 +267,8 @@ export function useOptionUsage() {
 	return { run };
 }
 
-// Commits a field type change. The server flips the `type` meta on the
-// field (plus extends `options` for text-like → select / multiselect),
-// leaves all row meta untouched, and returns the post-commit counts.
-// Hook callers must pass `collectionId` so the field list invalidates
-// after the type changes and the column rerenders with the new cell
-// editor and renderer.
+// Changes the field type on the server, then refreshes the field record and
+// list so the column gets the right renderer and editor.
 export function useChangeFieldType( collectionId ) {
 	const { isBusy, setIsBusy, error, setError } = useMutationState();
 	const invalidate = useFieldListInvalidation();

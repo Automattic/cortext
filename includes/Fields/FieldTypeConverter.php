@@ -2,12 +2,10 @@
 /**
  * Classifies how a row value behaves when a field's type changes.
  *
- * The converter never writes anything. It tells callers, per stored value,
- * whether the cell will render under the target type ("displays"), render
- * empty ("hidden"), or was already empty ("empty"). The commit handler
- * uses these counts for its response; the actual conversion at commit time
- * is just `update_post_meta` on the field's `type` (plus an option-list
- * extension for select / multiselect targets).
+ * The converter does not write row data. It only tells callers whether a
+ * stored value would show under the new type, render empty, or was empty
+ * already. The commit path changes the field type and, for select-like
+ * targets, adds any missing options.
  *
  * @package Cortext
  */
@@ -27,7 +25,7 @@ final class FieldTypeConverter {
 	private const TEXT_LIKE_SOURCES = array( 'text', 'number', 'email', 'url' );
 
 	/**
-	 * Whether a type-change conversion is supported.
+	 * Whether a field can move from one type to another.
 	 *
 	 * @param string $from Source Cortext field type.
 	 * @param string $to   Target Cortext field type.
@@ -49,7 +47,7 @@ final class FieldTypeConverter {
 	}
 
 	/**
-	 * Classifies a stored row value under a type change.
+	 * Classifies one stored row value for a type change.
 	 *
 	 * @param string $from         Source Cortext field type.
 	 * @param string $to           Target Cortext field type.
@@ -63,7 +61,7 @@ final class FieldTypeConverter {
 			return self::STATUS_HIDDEN;
 		}
 
-		// Checkbox target always renders (truthy → checked, falsy → unchecked).
+		// Checkboxes can render any stored value as checked or unchecked.
 		if ( 'checkbox' === $to ) {
 			return self::STATUS_DISPLAYS;
 		}
@@ -80,12 +78,10 @@ final class FieldTypeConverter {
 			return self::STATUS_EMPTY;
 		}
 
-		// text/number/email/url → select / multiselect always displays (commit auto-adds options).
+		// Text-like values become options during the commit.
 		if ( in_array( $to, array( 'select', 'multiselect' ), true ) && in_array( $from, self::TEXT_LIKE_SOURCES, true ) ) {
 			return self::STATUS_DISPLAYS;
 		}
-
-		// select → anything else falls through to the target-specific check below.
 
 		if ( 'number' === $to ) {
 			return is_numeric( $text ) ? self::STATUS_DISPLAYS : self::STATUS_HIDDEN;
@@ -103,16 +99,14 @@ final class FieldTypeConverter {
 			return false !== wp_http_validate_url( $text ) ? self::STATUS_DISPLAYS : self::STATUS_HIDDEN;
 		}
 
-		// text / select target: any non-empty source renders.
+		// Text and select targets can show any non-empty value.
 		return self::STATUS_DISPLAYS;
 	}
 
 	/**
-	 * Splits a text-like value into tokens on `\n`, `,`, `;`.
+	 * Splits text into option tokens.
 	 *
-	 * Used when converting text/number/email/url into select or multiselect:
-	 * a row value like `"Open, Closed"` contributes both `Open` and `Closed`
-	 * as options, and a multiselect cell renders two chips.
+	 * A value like `"Open, Closed"` becomes two options: `Open` and `Closed`.
 	 *
 	 * @param string $value Raw stored value to split.
 	 * @return string[]
@@ -137,7 +131,7 @@ final class FieldTypeConverter {
 	}
 
 	/**
-	 * Whether the conversion auto-extends the field's option list at commit.
+	 * Whether this type change should add options during commit.
 	 *
 	 * @param string $from Source Cortext field type.
 	 * @param string $to   Target Cortext field type.

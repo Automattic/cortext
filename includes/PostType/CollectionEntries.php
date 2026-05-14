@@ -316,11 +316,9 @@ final class CollectionEntries {
 	}
 
 	/**
-	 * Collection IDs for which an entry CPT has been registered during this
-	 * request. Populated lazily by `register_for_collection` and useful for
-	 * scans that would otherwise need a `WP_Query` over the collections —
-	 * notably the field→collection reverse lookup used by the type-change
-	 * REST endpoints.
+	 * Collection IDs whose entry post types are already registered in this
+	 * request. The type-change endpoints use this for a cheap field→collection
+	 * lookup before falling back to postmeta.
 	 *
 	 * @return int[]
 	 */

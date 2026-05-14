@@ -356,7 +356,7 @@ describe( 'formatDisplay', () => {
 			);
 		} );
 
-		it( 'splits a delimited string when the value is not a known option (post-conversion transient)', () => {
+		it( 'splits a delimited string when it is not a known option yet', () => {
 			const elements = [
 				{ value: 'CD', label: 'CD' },
 				{ value: 'LP', label: 'LP' },
@@ -370,7 +370,7 @@ describe( 'formatDisplay', () => {
 			);
 		} );
 
-		it( 'preserves a known option that legitimately contains commas', () => {
+		it( 'preserves a known option that contains commas', () => {
 			const elements = [ { value: 'ACME, Inc.', label: 'ACME, Inc.' } ];
 			renderDisplay( 'ACME, Inc.', 'multiselect', { elements } );
 			expect( screen.getByText( 'ACME, Inc.' ) ).toHaveClass(

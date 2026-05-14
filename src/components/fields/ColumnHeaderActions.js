@@ -50,9 +50,7 @@ const { Menu } = unlock( componentsPrivateApis );
 
 const FORMATTABLE_TYPES = new Set( [ 'number', 'date', 'datetime' ] );
 
-// Conversion is not offered for these source types (the converter rejects
-// any pair that touches them server-side; hide the menu item so we don't
-// invite a click that always errors).
+// The server rejects conversions for these types, so hide the action up front.
 const UNCONVERTIBLE_SOURCE_TYPES = new Set( [
 	'relation',
 	'rollup',

@@ -491,12 +491,9 @@ final class RowsController {
 			return;
 		}
 
-		// Single-value field types must replace any multi-row residue from a
-		// prior multiselect (or other multi-write path). `update_post_meta`
-		// updates only the first matching row, so without this collapse the
-		// user's edit lands on row 0 while stale rows 1..n persist and
-		// reappear if the field is ever converted back to multiselect or
-		// rendered with the multi-row join.
+		// A single-value edit should clear leftover multi-row values first.
+		// Otherwise `update_post_meta` updates only row 0 and stale chips can
+		// come back after another type change.
 		$existing = get_post_meta( $row_id, $key, false );
 		if ( is_array( $existing ) && count( $existing ) > 1 ) {
 			delete_post_meta( $row_id, $key );
@@ -957,11 +954,9 @@ final class RowsController {
 	}
 
 	/**
-	 * Per-type tolerance pass on a row's stored meta. Returns a value the
-	 * client can render directly; out-of-shape values (text in a number
-	 * field after a type change, etc.) come back as empty so cells render
-	 * blank rather than displaying garbage. The original raw meta is
-	 * preserved on disk and reappears if the field type is reverted.
+	 * Formats stored meta for the field's current type. Values that no longer
+	 * fit the type render empty, but the raw meta stays on disk so changing the
+	 * type back can show it again.
 	 *
 	 * @param int    $row_id     Row post ID.
 	 * @param int    $field_id   Field post ID.
@@ -988,11 +983,8 @@ final class RowsController {
 			if ( count( $matched ) > 0 ) {
 				return $matched;
 			}
-			// No raw value matched. If a single meta row carries delimited
-			// text (residue of a text→multiselect conversion), split it and
-			// keep the tokens that exist in the options list. Native option
-			// values that happen to contain `,` / `;` / `\n` were already
-			// matched above and never hit this branch.
+			// A single unmatched row may be leftover text from a conversion.
+			// Split it, but only keep tokens that are real options.
 			if ( count( $normalized ) === 1 && preg_match( '/[\n,;]/', $normalized[0] ) ) {
 				$tokens = FieldTypeConverter::split_tokens( $normalized[0] );
 				return array_values(
@@ -1018,10 +1010,8 @@ final class RowsController {
 			if ( in_array( $value, $options, true ) ) {
 				return $value;
 			}
-			// Raw value didn't match. Residue of a text-like → select
-			// conversion: take the first split-token if it matches an
-			// option. Pre-existing option values containing `,` / `;` /
-			// `\n` matched above and never reach this branch.
+			// Leftover delimited text from a conversion: use the first token
+			// only if it is now a real option.
 			if ( preg_match( '/[\n,;]/', $value ) ) {
 				$tokens = FieldTypeConverter::split_tokens( $value );
 				if ( count( $tokens ) > 0 && in_array( $tokens[0], $options, true ) ) {
@@ -1076,9 +1066,7 @@ final class RowsController {
 		}
 
 		if ( 'text' === $field_type ) {
-			// Residue from a multiselect field (multi-meta-row storage) the
-			// user edited before converting back: join the chip values so
-			// the cell reflects what was on disk, not just the first row.
+			// If this used to be multiselect, show all remaining meta rows.
 			$all = get_post_meta( $row_id, $key, false );
 			if ( is_array( $all ) && count( $all ) > 1 ) {
 				$text = implode( ', ', array_map( 'strval', $all ) );
@@ -1102,7 +1090,7 @@ final class RowsController {
 	}
 
 	/**
-	 * Reads a select/multiselect field's valid option values.
+	 * Reads valid values for a select or multiselect field.
 	 *
 	 * @param int $field_id Field post ID whose options should be read.
 	 * @return string[]

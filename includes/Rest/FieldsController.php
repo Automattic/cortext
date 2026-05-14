@@ -473,11 +473,9 @@ final class FieldsController {
 	}
 
 	/**
-	 * Commits a field type change. Flips the field's `type` meta in place,
-	 * extends the options list for text-like → select / multiselect targets,
-	 * and stashes the field's prior `date_format` when converting away from a
-	 * date type so the text cell can keep rendering values in the format the
-	 * user was already seeing. Row meta is never written.
+	 * Changes a field's type without touching row meta. Text-like values can
+	 * add options when moving to select or multiselect, and date fields keep
+	 * their old display format when moving to text.
 	 *
 	 * @param WP_REST_Request $request Request carrying `field_id` and target `type`.
 	 */
@@ -552,16 +550,12 @@ final class FieldsController {
 	}
 
 	/**
-	 * Walks the rows of the collection that owns the field and harvests the
-	 * unique split-tokens that should seed the target's options list. Only
-	 * called for text-like → select / multiselect conversions; every other
-	 * conversion skips row enumeration entirely and finishes in O(1).
+	 * Collects option tokens from existing rows for text-like → select or
+	 * multiselect conversions. Other type changes skip the row scan.
 	 *
 	 * @param int        $field_id         Field post ID being converted.
 	 * @param string     $target_type      Target field type (`select` or `multiselect`).
-	 * @param int[]|null $row_ids_override Optional row ID list (testing seam for
-	 *                                     environments where `WP_Query` over the
-	 *                                     entry CPT doesn't return rows).
+	 * @param int[]|null $row_ids_override Optional row IDs for tests.
 	 * @return string[]|WP_Error
 	 */
 	private function collect_option_tokens( int $field_id, string $target_type, ?array $row_ids_override = null ): array|WP_Error {
@@ -587,12 +581,8 @@ final class FieldsController {
 		}
 
 		$meta_key = Relations::meta_key( $field_id );
-		// Hash-keyed set for O(1) dedupe — `in_array` over a growing list
-		// scales quadratically once the unique-token count grows past a few
-		// hundred, which is the realistic worst case for a high-cardinality
-		// text column being converted. `array_keys` preserves insertion
-		// order so the first occurrence wins, matching the previous
-		// `in_array` semantics.
+		// Keep the first occurrence of each token without repeatedly scanning
+		// the growing list.
 		$seen = array();
 		foreach ( $row_ids as $row_id ) {
 			$stored = get_post_meta( (int) $row_id, $meta_key, true );
@@ -615,19 +605,15 @@ final class FieldsController {
 	/**
 	 * Finds the entry post type for the collection that owns this field.
 	 *
-	 * Walks every Cortext collection and checks its `fields` meta list for
-	 * the field ID. The collection→fields relation is many-to-one (a field
-	 * belongs to a single collection), so the first match wins.
+	 * A field belongs to one collection, so the first match is enough.
 	 *
 	 * @param int $field_id Field post ID to resolve.
 	 */
 	private function row_post_type_for_field( int $field_id ): ?string {
 		$field_id_str = (string) $field_id;
 
-		// Cache-first: walk collections whose entry CPT has already been
-		// registered this request. Avoids a `WP_Query` over `crtxt_collection`
-		// in the common case and works in test environments that don't fully
-		// back `wp_posts` queries.
+		// Try collections already registered in this request first. This avoids
+		// an extra query in the common path and keeps tests simple.
 		foreach ( CollectionEntries::known_collection_ids() as $collection_id ) {
 			$ids = array_map( 'strval', get_post_meta( (int) $collection_id, 'fields', false ) );
 			if ( in_array( $field_id_str, $ids, true ) ) {
@@ -635,8 +621,7 @@ final class FieldsController {
 			}
 		}
 
-		// Fallback: direct postmeta lookup for collections whose entry CPT
-		// hasn't been registered yet during this request lifecycle.
+		// Fall back to postmeta for collections not registered yet.
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- field→collection reverse lookup; bounded by a single matching row.
 		$collection_id = (int) $wpdb->get_var(
@@ -653,7 +638,7 @@ final class FieldsController {
 	}
 
 	/**
-	 * Reads the field's existing normalized options list.
+	 * Reads the field's current options.
 	 *
 	 * @param int $field_id Field post ID whose options should be read.
 	 * @return array<int,array{value:string,label:string,color?:string}>

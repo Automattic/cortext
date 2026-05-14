@@ -1053,8 +1053,7 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 
 		$this->assertSame( 200, $response->get_status() );
 		$data = $response->get_data();
-		// Non-option conversions skip the row scan entirely, so the response
-		// carries no preview counts and `new_options` is always empty.
+		// Non-option conversions do not scan rows, so the response stays small.
 		$this->assertSame(
 			array( 'id', 'type', 'from', 'new_options' ),
 			array_keys( $data )
@@ -1114,11 +1113,8 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 			array( 'Open', 'Closed', 'Open' )
 		);
 
-		// Mirror what the REST handler does: collect option tokens, write
-		// options, flip type. Kept inline so the test can verify what the row
-		// endpoint will return immediately after, without the WorDBless-
-		// incompatible `WP_Query` row enumeration that the real handler also
-		// performs.
+		// Mirror the commit path inline so the test can inspect the row output
+		// without depending on WorDBless row queries.
 		$tokens    = $this->collect_option_tokens( $field_id, 'select', $row_ids );
 		$additions = array();
 		foreach ( $tokens as $value ) {
@@ -1151,8 +1147,7 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 		);
 
 		$tokens = $this->collect_option_tokens( $field_id, 'select', $row_ids );
-		// For select targets each row contributes only its first split-token,
-		// so the option list mirrors what the cell will render.
+		// Select keeps only the first token from each row.
 		sort( $tokens );
 		$this->assertSame( array( 'Done', 'In Progress', 'Open' ), $tokens );
 
@@ -1288,7 +1283,7 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 				'post_title'  => 'Row',
 			)
 		);
-		// Simulate post-multiselect residue: two meta rows under the same key.
+		// Simulate leftover multiselect storage: two meta rows under one key.
 		add_post_meta( $row_id, "field-{$field_id}", 'CD' );
 		add_post_meta( $row_id, "field-{$field_id}", 'Record' );
 
@@ -1300,7 +1295,7 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 		$this->assertSame(
 			array( 'vinyl' ),
 			get_post_meta( $row_id, "field-{$field_id}", false ),
-			'Single-value write must collapse the multiselect residue, not stack on top of it.'
+			'Single-value writes should replace leftover multiselect rows.'
 		);
 	}
 
@@ -1313,9 +1308,7 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 				'post_type'   => Field::POST_TYPE,
 				'post_status' => 'private',
 				'post_title'  => 'Formats',
-				// Simulates the after-state of a text→multiselect conversion
-				// followed by a chip deselect: type is back to `text`, but the
-				// row meta carries the surviving chip values as multiple rows.
+				// Back to `text`, but the row still has multiple chip values.
 				'meta_input'  => array( 'type' => 'text' ),
 			)
 		);
@@ -1375,11 +1368,10 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 			array( '42', 'abc' )
 		);
 
-		// Non-option conversion: flip the type without touching row values,
-		// mirroring `convert()` (which writes only `type` here).
+		// Non-option conversion: only the field type changes.
 		update_post_meta( $field_id, 'type', 'number' );
 
-		// Round-trip the type back to text — row meta is still the original.
+		// Change back to text; row meta is still the original.
 		update_post_meta( $field_id, 'type', 'text' );
 
 		$values = array();

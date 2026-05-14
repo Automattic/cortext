@@ -1511,10 +1511,8 @@ body:has(.cortext-canvas__identity-actions:hover) .cortext-canvas__identity-acti
 	}
 }
 
-// "Change type" popover. Quick action: pick a target type from a 2-column
-// grid and the field flips immediately. No confirmation — the change is
-// fully reversible by switching the type back, so adding an "Are you sure"
-// step is friction without payoff.
+// "Change type" popover. The action commits immediately because row values
+// stay on disk and switching back restores what the user had before.
 .cortext-change-field-type-popover {
 
 	&__body {

@@ -287,11 +287,8 @@ function NumberRing( { value, format, text } ) {
 	);
 }
 
-// Splits a delimited string on `\n` `,` `;` and trims each token, dropping
-// empties. Mirrors `FieldTypeConverter::split_tokens` server-side so the
-// transient state right after a text→select / text→multiselect conversion
-// (row meta still raw text, field type already updated) renders the same
-// chips the rows endpoint will return on its next response.
+// Keep the first render after a text→select or text→multiselect change in
+// sync with the server: the field type may update before the row data refetches.
 function splitTokens( value ) {
 	return String( value )
 		.split( /[\n,;]/ )
@@ -365,11 +362,8 @@ export function formatDisplay( value, type, options = {} ) {
 		if ( single === null || single === undefined || single === '' ) {
 			return '';
 		}
-		// Right after a text→select conversion the row hasn't refetched yet,
-		// so the cell receives the raw text. Mirror the backend's split
-		// fallback when the raw string doesn't match any registered option
-		// so the chip lands on the first token immediately, without the
-		// flash of a one-chip monster covering the whole text.
+		// The field type can update before the row refetches. If the raw text
+		// is not an option yet, show the first split token for now.
 		if (
 			typeof single === 'string' &&
 			elements?.length &&
@@ -400,10 +394,8 @@ export function formatDisplay( value, type, options = {} ) {
 			elements?.length &&
 			! elements.some( ( e ) => e.value === value )
 		) {
-			// Pre-refetch state right after a text→multiselect conversion:
-			// the cell receives the raw delimited string. Split client-side
-			// so the chips render immediately, matching what the row endpoint
-			// will return on its next response.
+			// Same early-render case as select, but multi-select keeps every
+			// split token.
 			list = splitTokens( value );
 		} else {
 			list = [ value ];
