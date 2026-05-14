@@ -462,3 +462,13 @@ Trash is the clearest example. The endpoint is document-first, but the client st
 **Where.** Selection state and `captureSelectionIntent` in `src/components/CollectionDataViews.js`, helper functions in `src/components/dataViewSelection.js`, and coverage in `tests/js/components/dataViewSelection.test.js` plus `tests/e2e/specs/data-view-block.spec.js`.
 
 **Solution.** DataViews could treat selection as a persistent ID set, with range selection and consistent modifier behavior across table and grid. It should not filter hidden IDs out of the controlled value before handing it to layouts. Bulk actions also need either all selected items, or an item resolver for selected IDs that are not on the current page. With that, Cortext can drop the row cache, click-intent capture, and most of `dataViewSelection.js`.
+
+## 49. Bulk row delete fans out through per-row REST calls `[internal, soft]`
+
+**What.** Bulk row delete still uses the same row REST delete endpoint as the single-row action. The client sends one `DELETE /wp/v2/<row post type>/<id>?force=true` per selected row, capped at four concurrent requests by `allSettledWithConcurrency`. That cap keeps a large selection from flooding the server, and the all-settled result shape lets us keep partial-failure behavior simple.
+
+This is fine for the current DataView scale. It is not a real bulk operation, though. A 100-row delete still means 100 REST writes, just in a small queue. There is no atomic all-or-nothing behavior, no server-side progress state, and no way to resume if the browser goes away mid-run.
+
+**Where.** `confirmDeleteRows` in `src/components/CollectionDataViews.js`, the queue helper in `src/components/allSettledWithConcurrency.js`, and coverage in `tests/js/components/allSettledWithConcurrency.test.js`.
+
+**Solution.** If collections start handling large row sets, add a collection-row bulk delete endpoint or an async job endpoint with progress polling. That endpoint should own permission checks, deletion order, partial-failure reporting, and cleanup. Then the DataView action can send selected IDs once instead of managing a client-side queue.
