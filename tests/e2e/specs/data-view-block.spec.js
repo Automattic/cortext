@@ -821,7 +821,7 @@ test.describe( 'Collection view block', () => {
 		}
 	} );
 
-	test( 'selects rows across pages and bulk deletes them', async ( {
+	test( 'selects rows across pages and trashes the selection', async ( {
 		admin,
 		page,
 		requestUtils,
@@ -839,7 +839,7 @@ test.describe( 'Collection view block', () => {
 				method: 'POST',
 				path: '/wp/v2/crtxt_pages',
 				data: {
-					title: 'Bulk row delete page',
+					title: 'Bulk row trash page',
 					status: 'private',
 					content: createDataViewBlockMarkup( fixture.collection.id, {
 						fields: [ 'title', pagesKey ],
@@ -876,22 +876,22 @@ test.describe( 'Collection view block', () => {
 			await alphaRow
 				.locator( '.dataviews-selection-checkbox input' )
 				.check();
-			await expect( canvas.getByText( '1 Row selected' ) ).toBeVisible();
+			await expect( canvas.getByText( '1 row selected' ) ).toBeVisible();
 			await betaRow
 				.locator( '.dataviews-selection-checkbox input' )
 				.check();
-			await expect( canvas.getByText( '2 Rows selected' ) ).toBeVisible();
+			await expect( canvas.getByText( '2 rows selected' ) ).toBeVisible();
 			await canvas
 				.getByRole( 'button', { name: 'Clear selection' } )
 				.click();
-			await expect( canvas.getByText( '2 Rows selected' ) ).toBeHidden();
+			await expect( canvas.getByText( '2 rows selected' ) ).toBeHidden();
 
 			await alphaRow.dispatchEvent( 'click' );
-			await expect( canvas.getByText( '1 Row selected' ) ).toHaveCount(
+			await expect( canvas.getByText( '1 row selected' ) ).toHaveCount(
 				0
 			);
 			await betaRow.dispatchEvent( 'click', { shiftKey: true } );
-			await expect( canvas.getByText( '2 Rows selected' ) ).toBeVisible();
+			await expect( canvas.getByText( '2 rows selected' ) ).toBeVisible();
 
 			await canvas.getByRole( 'button', { name: 'Next page' } ).click();
 
@@ -899,21 +899,16 @@ test.describe( 'Collection view block', () => {
 				.locator( 'tbody > tr' )
 				.filter( { hasText: 'Gamma Book' } );
 			await expect( gammaRow ).toBeVisible();
-			await expect( canvas.getByText( '2 Rows selected' ) ).toBeVisible();
+			await expect( canvas.getByText( '2 rows selected' ) ).toBeVisible();
 			await gammaRow.dispatchEvent( 'click', {
 				[ process.platform === 'darwin' ? 'metaKey' : 'ctrlKey' ]: true,
 			} );
-			await expect( canvas.getByText( '3 Rows selected' ) ).toBeVisible();
+			await expect( canvas.getByText( '3 rows selected' ) ).toBeVisible();
 
 			await canvas
-				.getByRole( 'button', { name: 'Delete selected rows' } )
+				.getByRole( 'button', { name: 'Trash selected rows' } )
 				.click();
-			await expect(
-				page.getByText( 'Delete 3 rows? This cannot be undone.' )
-			).toBeVisible();
-			await page
-				.getByRole( 'button', { name: 'Delete', exact: true } )
-				.click();
+			await expect( canvas.getByText( '3 rows selected' ) ).toBeHidden();
 
 			await expect
 				.poll( async () => {
@@ -925,7 +920,6 @@ test.describe( 'Collection view block', () => {
 				} )
 				.toEqual( [] );
 
-			await expect( canvas.getByText( '3 Rows selected' ) ).toBeHidden();
 			await expect( canvas.getByText( 'Alpha Book' ) ).toBeHidden();
 			await expect( canvas.getByText( 'Beta Book' ) ).toBeHidden();
 			await expect( canvas.getByText( 'Gamma Book' ) ).toBeHidden();

@@ -9,13 +9,13 @@ import {
 } from '../../../src/components/dataViewSelection';
 
 describe( 'dataViewSelection', () => {
-	it( 'merges current-page selection changes without dropping hidden selections', () => {
+	it( 'keeps off-page selections when the visible page changes', () => {
 		expect(
 			mergeVisibleSelection( [ 'off-page', '1' ], [ '2' ], [ '1', '2' ] )
 		).toEqual( [ 'off-page', '2' ] );
 	} );
 
-	it( 'ignores selection changes without an explicit selection intent', () => {
+	it( 'ignores DataViews row clicks without a selection intent', () => {
 		expect(
 			applyVisibleSelectionChange(
 				[ 'off-page', '1' ],
@@ -25,7 +25,7 @@ describe( 'dataViewSelection', () => {
 		).toEqual( [ 'off-page', '1' ] );
 	} );
 
-	it( 'preserves hidden selections for modifier toggles', () => {
+	it( 'keeps off-page selections when modifier clicks change the visible page', () => {
 		expect(
 			applyVisibleSelectionChange(
 				[ 'off-page', '1' ],
@@ -36,7 +36,7 @@ describe( 'dataViewSelection', () => {
 		).toEqual( [ 'off-page', '1', '2' ] );
 	} );
 
-	it( 'adds a checkbox target when the table row click reports a singleton first', () => {
+	it( 'adds the checkbox target when DataViews reports the row click first', () => {
 		expect(
 			applyVisibleSelectionChange( [ '1' ], [ '2' ], [ '1', '2' ], {
 				type: 'merge',
@@ -46,7 +46,7 @@ describe( 'dataViewSelection', () => {
 		).toEqual( [ '1', '2' ] );
 	} );
 
-	it( 'selects a visible range from the anchor to the target', () => {
+	it( 'selects the visible range between anchor and target', () => {
 		expect( rangeSelection( [ '1', '2', '3', '4' ], '2', '4' ) ).toEqual( [
 			'2',
 			'3',
@@ -59,13 +59,13 @@ describe( 'dataViewSelection', () => {
 		] );
 	} );
 
-	it( 'falls back to the target when a range anchor is unavailable', () => {
+	it( 'selects the target when the range anchor is missing', () => {
 		expect( rangeSelection( [ '1', '2', '3' ], '9', '2' ) ).toEqual( [
 			'2',
 		] );
 	} );
 
-	it( 'toggles all visible rows without dropping hidden selections', () => {
+	it( 'toggles visible rows without losing off-page selections', () => {
 		expect(
 			toggleVisibleSelection( [ 'off-page' ], [ '1', '2' ] )
 		).toEqual( [ 'off-page', '1', '2' ] );
@@ -81,7 +81,7 @@ describe( 'dataViewSelection', () => {
 		] );
 	} );
 
-	it( 'matches DataViews grouped render order', () => {
+	it( 'orders rows the way grouped DataViews renders them', () => {
 		const rows = [
 			{ id: 1, status: 'A' },
 			{ id: 2, status: 'B' },

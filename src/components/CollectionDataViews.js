@@ -1265,13 +1265,7 @@ export default function CollectionDataViews( {
 				setRowActionError( deleteErrorMessage );
 			}
 		},
-		[
-			forgetDeletedRows,
-			openRowId,
-			postType,
-			refresh,
-			runDetailTransition,
-		]
+		[ forgetDeletedRows, openRowId, postType, refresh, runDetailTransition ]
 	);
 
 	const requestDeleteSelectedRows = useCallback( () => {
@@ -1782,8 +1776,8 @@ export default function CollectionDataViews( {
 						</div>
 					</div>
 					{ detailSurface }
-					</div>
-				</OpenRowActionContext.Provider>
-			</RowMutationContext.Provider>
+				</div>
+			</OpenRowActionContext.Provider>
+		</RowMutationContext.Provider>
 	);
 }

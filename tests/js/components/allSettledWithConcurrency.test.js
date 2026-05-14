@@ -1,7 +1,7 @@
 import allSettledWithConcurrency from '../../../src/components/allSettledWithConcurrency';
 
 describe( 'allSettledWithConcurrency', () => {
-	it( 'limits concurrent tasks and preserves result order', async () => {
+	it( 'runs only the allowed number of tasks at once and keeps result order', async () => {
 		let active = 0;
 		let maxActive = 0;
 
@@ -27,7 +27,7 @@ describe( 'allSettledWithConcurrency', () => {
 		] );
 	} );
 
-	it( 'returns rejected results without stopping later tasks', async () => {
+	it( 'records failures and keeps running', async () => {
 		const error = new Error( 'Nope' );
 
 		const results = await allSettledWithConcurrency(
