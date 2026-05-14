@@ -721,9 +721,9 @@ export default function CollectionDataViews( {
 				runDetailTransition( { type: 'full', rowId: row.id } );
 				return;
 			}
-			// Persist the chosen mode so the surface renders side vs modal
-			// correctly, then open the row. Matches the existing in-detail
-			// mode toggle: an explicit choice updates the user's preference.
+			// Store the chosen side/modal mode before opening. This matches
+			// the in-detail mode toggle: an explicit choice updates the
+			// user's preference.
 			if ( savedRowDetailMode !== mode ) {
 				onChangeView( withRowDetailMode( view, mode ) );
 			}
@@ -805,11 +805,9 @@ export default function CollectionDataViews( {
 
 	const rowActions = useMemo( () => {
 		const actions = [];
-		// Three explicit "Open in" entries (side / modal / full). The one
-		// matching the saved mode is primary on list and grid layouts, so
-		// it surfaces as an inline icon button next to the kebab. Table
-		// layout has its own title-cell inline Open button, so none of the
-		// "Open in" actions is primary there.
+		// List and grid get one primary Open action, matching the saved
+		// detail mode. Table already has the inline Open button in the title
+		// cell, so these actions stay inside the menu there.
 		for ( const mode of [ 'side', 'modal', 'full' ] ) {
 			actions.push( {
 				id: `open-in-${ mode }`,
@@ -1013,9 +1011,8 @@ export default function CollectionDataViews( {
 			}
 		}
 
-		// Strip any legacy ghost-column id from saved views; the "+ add
-		// field" affordance now lives in the dataviews actions column
-		// header, not a synthetic table column.
+		// Drop `__add_field` from older saved views. The add-field button now
+		// uses the DataViews actions header instead of a synthetic column.
 		if ( ( normalized.fields ?? [] ).includes( GHOST_FIELD_ID ) ) {
 			normalized = {
 				...normalized,

@@ -1841,18 +1841,11 @@ body:has(.cortext-canvas__identity-actions:hover) .cortext-canvas__identity-acti
 	width: 280px;
 }
 
-// `+ add field` is portaled into the dataviews actions column header.
-// Hide the built-in "Actions" label so the column reads as a single
-// `+` affordance; the kebab in each row body already conveys the
-// per-row actions meaning. The header `<th>` should be sticky-right
-// like its body siblings, but `<thead>` itself is sticky-top, and the
-// double-sticky combination misbehaves in some browsers — the inner
-// horizontal sticky stops engaging once the outer vertical sticky
-// kicks in. Promote the `<th>`'s stacking and reaffirm sticky-right
-// so the `+` stays pinned alongside the row kebab during horizontal
-// scroll. `!important` is here because dataviews ships an identical
-// declaration whose specificity ties ours; the duplicate keeps the
-// rule from losing to any later cascade rewrite.
+// The add-field button is portaled into DataViews' actions column header.
+// Hide the built-in "Actions" label; the row kebabs already explain the
+// column. The header cell needs its own sticky-right rule because the sticky
+// `<thead>` can otherwise break horizontal stickiness in some browsers.
+// `!important` matches DataViews' own tied-specificity sticky rule.
 .dataviews-view-table thead th.dataviews-view-table__actions-column {
 	position: sticky !important;
 	right: 0 !important;

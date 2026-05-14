@@ -49,24 +49,19 @@ const { Menu } = unlock( componentsPrivateApis );
 
 const FORMATTABLE_TYPES = new Set( [ 'number', 'date', 'datetime' ] );
 
-// Projects two kinds of triggers into the DataViews table header:
+// Projects Cortext controls into DataViews' table header:
 //
-// - `[data-cortext-field-marker="<recordId>"]` — combined column-header
-//   dropdown for custom fields. Replaces DataViews' built-in trigger
-//   (hidden via CSS, see `tech-debt.md#16`) with a single menu owning
-//   Sort / Move / Hide *plus* Rename / Duplicate / Delete. The marker
-//   sits inside DataViews' (hidden) trigger and serves only as a portal
-//   anchor; the actual button is rendered as a sibling of the trigger,
-//   inheriting the same class so main's drag handle click-forward
-//   resolves to it.
-// - `[data-cortext-add-field-marker]` — `+` button on the ghost column
-//   that opens the same `AddFieldPopover` as the toolbar Add field
-//   trigger.
+// - `[data-cortext-field-marker="<recordId>"]` marks custom fields. We hide
+//   DataViews' trigger (see `tech-debt.md#16`) and portal in one menu with
+//   Sort / Move / Hide plus Rename / Duplicate / Delete. The marker is only
+//   the anchor; the real button is a sibling so the column drag handle can
+//   still forward clicks to it.
+// - `th.dataviews-view-table__actions-column` — `+` button in the
+//   row-actions column header that opens the same `AddFieldPopover`
+//   as the toolbar Add field trigger. See `tech-debt.md#17`.
 //
-// Renders an invisible anchor element so the component finds its own
-// position in DOM and walks up to the wrapping `.cortext-data-view`.
-// A MutationObserver re-syncs portals whenever DataViews mutates its
-// header markup (column toggles, sorting, resizing).
+// The invisible anchor lets this component find its wrapper. A
+// MutationObserver re-syncs portals after DataViews rewrites the header.
 export default function ColumnHeaderActions( {
 	collectionId,
 	view,
@@ -109,11 +104,9 @@ export default function ColumnHeaderActions( {
 						th,
 					} );
 				} );
-			// `+ add field` lives in the dataviews actions column header
-			// (`<th class="dataviews-view-table__actions-column">`).
-			// That column is rendered whenever the table has row actions,
-			// which we always do, so we don't need a separate ghost column
-			// for this affordance. See `tech-debt.md#16`.
+			// The add-field button lives in DataViews' actions column header.
+			// Row actions keep that column rendered, so we no longer need a
+			// synthetic table column for it. See `tech-debt.md#17`.
 			const actionsTh = wrapper.querySelector(
 				'th.dataviews-view-table__actions-column'
 			);
@@ -406,9 +399,8 @@ function FieldActions( {
 		[ fields, recordId ]
 	);
 
-	// Title is pinned at index 0 (PR A's normalizeView) and the ghost
-	// column at the end. Move only operates on the data-field region in
-	// between, so a sideways swap can't displace either.
+	// Move only touches data fields. Title stays pinned, and the legacy
+	// ghost id is ignored if an older saved view still has it.
 	const movableFields = useMemo(
 		() =>
 			visibleFields.filter(
@@ -444,8 +436,8 @@ function FieldActions( {
 			}
 			order.splice( from, 1 );
 			order.splice( to, 0, dataViewId );
-			// Re-stitch with title first and ghost last so neither can
-			// be displaced by a sideways swap.
+			// Put title back first. Preserve the legacy ghost id for now;
+			// CollectionDataViews strips it on the next normalization pass.
 			const ordered = [];
 			if ( visibleFields.includes( TITLE_FIELD_ID ) ) {
 				ordered.push( TITLE_FIELD_ID );

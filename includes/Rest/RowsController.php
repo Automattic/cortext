@@ -200,8 +200,8 @@ final class RowsController {
 	}
 
 	/**
-	 * Permission gate for duplicating a row: must be able to read the source
-	 * row and to create new rows in the same collection.
+	 * Allows duplication only when the user can edit the source row and add
+	 * rows to the collection.
 	 *
 	 * @param WP_REST_Request $request Incoming REST request.
 	 * @return bool|WP_Error
@@ -429,11 +429,10 @@ final class RowsController {
 	}
 
 	/**
-	 * Creates a new row that mirrors an existing one. Copies the title (with a
-	 * "Copy of …" prefix), content, status, document icon, featured media, and
-	 * every stored field value. Relations sync to the new row only when their
-	 * reverse side is multi-valued; single-valued reverses would otherwise
-	 * displace the source row's pointer, mutating the original.
+	 * Duplicates a row. Copies the title as "Copy of %s", plus content, status,
+	 * document icon, featured media, and stored field values. Relation values
+	 * are copied only when the reverse field accepts more than one row; copying
+	 * a single reverse would move the relation away from the source row.
 	 *
 	 * @param WP_REST_Request $request Incoming REST request.
 	 * @return WP_REST_Response|WP_Error
