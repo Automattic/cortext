@@ -9,12 +9,12 @@ declare( strict_types=1 );
 
 namespace Cortext\Rest;
 
+use Cortext\Fields\FieldTypeConverter;
 use Cortext\PostType\Collection;
 use Cortext\PostType\CollectionEntries;
 use Cortext\Relations;
 use WP_Error;
 use WP_Post;
-use WP_Query;
 use WP_REST_Request;
 use WP_REST_Response;
 
@@ -22,21 +22,26 @@ final class RowsController {
 
 	private const NAMESPACE = 'cortext/v1';
 
-	/**
-	 * Supported filter operators and their WP_Query compare equivalents.
-	 */
-	private const FILTER_OPERATORS = array(
-		'is'     => '=',
-		'isNot'  => '!=',
-		'isAny'  => 'IN',
-		'isNone' => 'NOT IN',
-	);
-
 	public function register(): void {
 		add_action( 'rest_api_init', array( $this, 'register_routes' ) );
 	}
 
 	public function register_routes(): void {
+		// Hydrate relation values and compute rollups in the standard
+		// `/wp/v2/<rest_base>/<id>` response for every row CPT, so peek and
+		// modal panes (which use `useEntityRecord`) see the same shape as
+		// the collection table feed at `/cortext/v1/rows`. Without this,
+		// `meta.field-<id>` for a relation field returns the raw stored
+		// IDs (strings), and rollups aren't computed at all.
+		foreach ( CollectionEntries::get_entry_post_types() as $entry_post_type ) {
+			add_filter(
+				"rest_prepare_{$entry_post_type}",
+				array( $this, 'filter_rest_prepare_row' ),
+				10,
+				3
+			);
+		}
+
 		register_rest_route(
 			self::NAMESPACE,
 			'/rows',
@@ -56,10 +61,9 @@ final class RowsController {
 							'minimum' => 1,
 						),
 						'per_page'   => array(
-							'type'    => 'integer',
-							'default' => 25,
-							'minimum' => 1,
-							'maximum' => 100,
+							'type'              => 'integer',
+							'default'           => 25,
+							'validate_callback' => static fn( $value ) => (int) $value >= 1 && (int) $value <= 100,
 						),
 						'search'     => array(
 							'type'    => 'string',
@@ -79,16 +83,6 @@ final class RowsController {
 						'filters'    => array(
 							'type'    => 'array',
 							'default' => array(),
-							'items'   => array(
-								'type'       => 'object',
-								'properties' => array(
-									'field'    => array( 'type' => 'string' ),
-									'operator' => array( 'type' => 'string' ),
-									'value'    => array(
-										'type' => array( 'string', 'number', 'boolean', 'array' ),
-									),
-								),
-							),
 						),
 						'context'    => array(
 							'type'    => 'string',
@@ -145,6 +139,28 @@ final class RowsController {
 						),
 						'value'         => array(
 							'required' => false,
+						),
+					),
+				),
+			)
+		);
+
+		register_rest_route(
+			self::NAMESPACE,
+			'/collections/(?P<collection_id>\d+)/rows/(?P<row_id>\d+)/duplicate',
+			array(
+				array(
+					'methods'             => 'POST',
+					'callback'            => array( $this, 'duplicate_row' ),
+					'permission_callback' => array( $this, 'can_duplicate_row' ),
+					'args'                => array(
+						'collection_id' => array(
+							'type'     => 'integer',
+							'required' => true,
+						),
+						'row_id'        => array(
+							'type'     => 'integer',
+							'required' => true,
 						),
 					),
 				),
@@ -232,6 +248,24 @@ final class RowsController {
 	}
 
 	/**
+	 * Allows duplication only when the user can edit the source row and add
+	 * rows to the collection.
+	 *
+	 * @param WP_REST_Request $request Incoming REST request.
+	 * @return bool|WP_Error
+	 */
+	public function can_duplicate_row( WP_REST_Request $request ): bool|WP_Error {
+		$edit_check = $this->can_edit_row( $request );
+		if ( is_wp_error( $edit_check ) ) {
+			return $edit_check;
+		}
+		if ( ! $edit_check ) {
+			return false;
+		}
+		return current_user_can( 'edit_posts' );
+	}
+
+	/**
 	 * Returns paginated, sortable, filterable rows for a collection.
 	 *
 	 * @param WP_REST_Request $request Full request object.
@@ -248,34 +282,44 @@ final class RowsController {
 		$slug      = (string) get_post_meta( $collection->ID, 'slug', true );
 		$field_ids = $this->collection_field_ids( $collection->ID );
 
-		// Validate sort and filter references separately. Sort accepts
-		// 'title', 'field-N', and the sortable system fields; filters
-		// accept 'field-N' only — system field filtering is deferred
-		// (tech-debt.md#13).
-		$sort_validation = $this->validate_sort_field(
+		$row_query    = new RowsFilterQuery();
+		$field_schema = $row_query->field_schema_for( $collection_id );
+
+		$sort_validation = $row_query->validate_sort(
 			$request->get_param( 'sort' ),
-			$field_ids,
+			$field_schema,
 			$collection_id
 		);
 		if ( is_wp_error( $sort_validation ) ) {
 			return $sort_validation;
 		}
 
-		$filter_validation = $this->validate_filter_fields(
+		$filter_sql = $row_query->compile_filters(
 			$request->get_param( 'filters' ),
-			$field_ids,
+			$field_schema,
 			$collection_id
 		);
-		if ( is_wp_error( $filter_validation ) ) {
-			return $filter_validation;
+		if ( is_wp_error( $filter_sql ) ) {
+			return $filter_sql;
 		}
+
+		$search_where = $row_query->compile_search( (string) $request->get_param( 'search' ), $field_schema );
+		$where_parts  = array_values( array_filter( array( $filter_sql['where'], $search_where ) ) );
+		$where_sql    = count( $where_parts ) > 0 ? '( ' . implode( ' AND ', $where_parts ) . ' )' : '';
 
 		// Precompute which fields are multi-value so format_row does not
 		// re-fetch the field type for every row.
 		$multi_field_ids = $this->multi_value_field_ids( $field_ids );
 
 		$query_args = $this->build_query_args( $request, $slug );
-		$query      = new WP_Query( $query_args );
+		$scope      = new RowsQueryScope(
+			$row_query,
+			$field_schema,
+			$where_sql,
+			$filter_sql['join'],
+			$request->get_param( 'sort' )
+		);
+		$query      = $scope->run( $query_args );
 
 		// Prime the user object cache once before mapping rows so per-row
 		// display name lookups in format_row hit the cache instead of
@@ -433,6 +477,113 @@ final class RowsController {
 	}
 
 	/**
+	 * Duplicates a row. Copies the title as "Copy of %s", plus content, status,
+	 * document icon, featured media, and stored field values. Relation values
+	 * are copied only when the reverse field accepts more than one row; copying
+	 * a single reverse would move the relation away from the source row.
+	 *
+	 * @param WP_REST_Request $request Incoming REST request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function duplicate_row( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+		$collection_id = (int) $request->get_param( 'collection_id' );
+		$row_id        = (int) $request->get_param( 'row_id' );
+
+		$collection = $this->validate_collection( $collection_id );
+		if ( is_wp_error( $collection ) ) {
+			return $collection;
+		}
+
+		$slug   = (string) get_post_meta( $collection_id, 'slug', true );
+		$source = get_post( $row_id );
+		if ( ! $source instanceof WP_Post || CollectionEntries::CPT_PREFIX . $slug !== $source->post_type ) {
+			return new WP_Error(
+				'cortext_row_not_found',
+				__( 'Row not found.', 'cortext' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		$copy_title = sprintf(
+			/* translators: %s: original row title. */
+			__( 'Copy of %s', 'cortext' ),
+			$source->post_title
+		);
+
+		$new_id = wp_insert_post(
+			array(
+				'post_type'    => $source->post_type,
+				'post_status'  => $source->post_status,
+				'post_title'   => $copy_title,
+				'post_content' => $source->post_content,
+				'post_excerpt' => $source->post_excerpt,
+			),
+			true
+		);
+		if ( is_wp_error( $new_id ) ) {
+			return $new_id;
+		}
+
+		$new_id    = (int) $new_id;
+		$field_ids = $this->collection_field_ids( $collection_id );
+
+		foreach ( $field_ids as $field_id ) {
+			$field_type = (string) get_post_meta( $field_id, 'type', true );
+
+			if ( 'rollup' === $field_type ) {
+				continue;
+			}
+
+			if ( 'relation' === $field_type ) {
+				$reverse_id = (int) get_post_meta( $field_id, 'relation_reverse_field_id', true );
+				if ( $reverse_id < 1 || ! Relations::relation_is_multiple( $reverse_id ) ) {
+					continue;
+				}
+				$values = Relations::relation_values( $row_id, $field_id );
+				if ( count( $values ) === 0 ) {
+					continue;
+				}
+				$synced = Relations::sync_relation_value( $new_id, $field_id, $values );
+				if ( is_wp_error( $synced ) ) {
+					return $synced;
+				}
+				continue;
+			}
+
+			$key = Relations::meta_key( $field_id );
+			if ( 'multiselect' === $field_type ) {
+				foreach ( get_post_meta( $row_id, $key, false ) as $value ) {
+					if ( '' !== $value && null !== $value ) {
+						add_post_meta( $new_id, $key, $value );
+					}
+				}
+				continue;
+			}
+
+			$value = get_post_meta( $row_id, $key, true );
+			if ( '' !== $value && null !== $value ) {
+				update_post_meta( $new_id, $key, $value );
+			}
+		}
+
+		$icon = (string) get_post_meta( $row_id, 'cortext_document_icon', true );
+		if ( '' !== $icon ) {
+			update_post_meta( $new_id, 'cortext_document_icon', $icon );
+		}
+
+		$thumbnail_id = (int) get_post_thumbnail_id( $row_id );
+		if ( $thumbnail_id > 0 ) {
+			set_post_thumbnail( $new_id, $thumbnail_id );
+		}
+
+		$multi_field_ids = $this->multi_value_field_ids( $field_ids );
+		return new WP_REST_Response(
+			$this->format_row( get_post( $new_id ), $field_ids, $multi_field_ids ),
+			201
+		);
+	}
+
+	/**
 	 * Checks that the given ID points to a valid, registered collection.
 	 *
 	 * @param int $collection_id Collection post ID.
@@ -473,90 +624,6 @@ final class RowsController {
 	}
 
 	/**
-	 * Validates the `sort` param's field key.
-	 *
-	 * Accepts `'title'`, any `field-N` belonging to the collection, and the
-	 * sortable system field keys (`'created_at'`, `'modified_at'`). Rejects
-	 * the `*_by` system field keys and any other identifier — sort on
-	 * display-value properties is an open architectural decision shared
-	 * with relations and rollups (tech-debt.md#14).
-	 *
-	 * @param mixed $sort           Sort param from the request.
-	 * @param int[] $field_ids      Valid field IDs for the collection.
-	 * @param int   $collection_id  Collection ID for error messages.
-	 * @return true|WP_Error
-	 */
-	private function validate_sort_field( $sort, array $field_ids, int $collection_id ) {
-		if ( ! is_array( $sort ) || empty( $sort['field'] ) ) {
-			return true;
-		}
-
-		$allowed = array( 'title', 'created_at', 'modified_at' );
-		foreach ( $field_ids as $id ) {
-			$allowed[] = "field-{$id}";
-		}
-
-		if ( ! in_array( $sort['field'], $allowed, true ) ) {
-			return new WP_Error(
-				'cortext_invalid_sort_field',
-				sprintf(
-					/* translators: 1: field key, 2: collection ID */
-					__( 'Field "%1$s" cannot be used to sort collection %2$d.', 'cortext' ),
-					$sort['field'],
-					$collection_id
-				),
-				array( 'status' => 400 )
-			);
-		}
-
-		return true;
-	}
-
-	/**
-	 * Validates every `filters[].field` reference.
-	 *
-	 * Accepts only `field-N` keys belonging to the collection. Title and
-	 * system fields are intentionally excluded: title isn't filterable
-	 * today (preserved from prior behavior), and system field filtering
-	 * is deferred (tech-debt.md#13). Rejection produces a clean 400.
-	 *
-	 * @param mixed $filters        Filters param from the request.
-	 * @param int[] $field_ids      Valid field IDs for the collection.
-	 * @param int   $collection_id  Collection ID for error messages.
-	 * @return true|WP_Error
-	 */
-	private function validate_filter_fields( $filters, array $field_ids, int $collection_id ) {
-		if ( ! is_array( $filters ) || count( $filters ) === 0 ) {
-			return true;
-		}
-
-		$allowed = array();
-		foreach ( $field_ids as $id ) {
-			$allowed[] = "field-{$id}";
-		}
-
-		foreach ( $filters as $filter ) {
-			if ( ! is_array( $filter ) || empty( $filter['field'] ) ) {
-				continue;
-			}
-			if ( ! in_array( $filter['field'], $allowed, true ) ) {
-				return new WP_Error(
-					'cortext_invalid_filter_field',
-					sprintf(
-						/* translators: 1: field key, 2: collection ID */
-						__( 'Field "%1$s" cannot be used to filter collection %2$d.', 'cortext' ),
-						$filter['field'],
-						$collection_id
-					),
-					array( 'status' => 400 )
-				);
-			}
-		}
-
-		return true;
-	}
-
-	/**
 	 * Translates REST params into WP_Query arguments.
 	 *
 	 * @param WP_REST_Request $request Full request object.
@@ -571,15 +638,10 @@ final class RowsController {
 			'paged'          => (int) $request->get_param( 'page' ),
 		);
 
-		$search = $request->get_param( 'search' );
-		if ( '' !== $search ) {
-			$args['s'] = $search;
-		}
-
 		$sort = $request->get_param( 'sort' );
 		if ( ! is_array( $sort ) || empty( $sort['field'] ) ) {
 			// Default to oldest-first so newly created rows land at the
-			// bottom of the table (Notion-style).
+			// bottom of the table.
 			$args['orderby'] = 'date';
 			$args['order']   = 'ASC';
 		} else {
@@ -595,58 +657,8 @@ final class RowsController {
 				$args['orderby'] = 'modified';
 				$args['order']   = $direction;
 			} else {
-				$field_id   = $this->field_id_from_key( $sort['field'] );
-				$field_type = $field_id ? (string) get_post_meta( $field_id, 'type', true ) : '';
-				if ( 'rollup' === $field_type ) {
-					$args['orderby'] = 'date';
-					$args['order']   = 'ASC';
-				} else {
-					$wp_type = CollectionEntries::wp_meta_type_for( $field_type );
-
-					$args['meta_key'] = $sort['field']; // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
-					$args['orderby']  = 'number' === $wp_type ? 'meta_value_num' : 'meta_value';
-					$args['order']    = $direction;
-				}
-			}
-		}
-
-		$filters = $request->get_param( 'filters' );
-		if ( is_array( $filters ) && count( $filters ) > 0 ) {
-			$meta_query = array();
-
-			foreach ( $filters as $filter ) {
-				if ( ! is_array( $filter ) ) {
-					continue;
-				}
-
-				$field    = $filter['field'] ?? '';
-				$operator = $filter['operator'] ?? '';
-				$value    = $filter['value'] ?? '';
-
-				if ( '' === $field || ! isset( self::FILTER_OPERATORS[ $operator ] ) ) {
-					continue;
-				}
-				$field_id = $this->field_id_from_key( $field );
-				if ( $field_id && 'rollup' === (string) get_post_meta( $field_id, 'type', true ) ) {
-					continue;
-				}
-
-				$compare = self::FILTER_OPERATORS[ $operator ];
-
-				// IN / NOT IN require array values.
-				if ( in_array( $compare, array( 'IN', 'NOT IN' ), true ) && ! is_array( $value ) ) {
-					$value = array( $value );
-				}
-
-				$meta_query[] = array(
-					'key'     => $field,
-					'value'   => $value,
-					'compare' => $compare,
-				);
-			}
-
-			if ( count( $meta_query ) > 0 ) {
-				$args['meta_query'] = $meta_query; // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+				$args['orderby'] = 'none';
+				$args['order']   = $direction;
 			}
 		}
 
@@ -673,6 +685,14 @@ final class RowsController {
 			return;
 		}
 
+		// A single-value edit should clear leftover multi-row values first.
+		// Otherwise `update_post_meta` updates only row 0 and stale chips can
+		// come back after another type change.
+		$existing = get_post_meta( $row_id, $key, false );
+		if ( is_array( $existing ) && count( $existing ) > 1 ) {
+			delete_post_meta( $row_id, $key );
+		}
+
 		if ( 'number' === $field_type ) {
 			update_post_meta( $row_id, $key, is_numeric( $value ) ? (float) $value : $value );
 			return;
@@ -683,7 +703,34 @@ final class RowsController {
 			return;
 		}
 
+		if ( 'date' === $field_type || 'datetime' === $field_type ) {
+			update_post_meta( $row_id, $key, $this->normalize_date_field_value( $value, $field_type ) );
+			return;
+		}
+
 		update_post_meta( $row_id, $key, sanitize_text_field( (string) $value ) );
+	}
+
+	private function normalize_date_field_value( mixed $value, string $field_type ): string {
+		$text = trim( (string) $value );
+		if ( '' === $text ) {
+			return '';
+		}
+
+		if ( preg_match( '/^(\d{4}-\d{2}-\d{2})/', $text, $matches ) ) {
+			if ( 'date' === $field_type ) {
+				return $matches[1];
+			}
+			$timestamp = strtotime( $text );
+			return false === $timestamp ? sanitize_text_field( $text ) : gmdate( DATE_RFC3339, $timestamp );
+		}
+
+		$timestamp = strtotime( $text );
+		if ( false === $timestamp ) {
+			return sanitize_text_field( $text );
+		}
+
+		return 'date' === $field_type ? gmdate( 'Y-m-d', $timestamp ) : gmdate( DATE_RFC3339, $timestamp );
 	}
 
 	/**
@@ -951,6 +998,106 @@ final class RowsController {
 	}
 
 	/**
+	 * Filters the standard WP REST response for a row post so it carries
+	 * hydrated relations and computed rollups, matching the shape exposed
+	 * by `/cortext/v1/rows`. Editor surfaces that fetch the row via
+	 * `useEntityRecord` (peek pane, modal pane, full document) then see
+	 * the same data the table sees, instead of raw stored IDs.
+	 *
+	 * @param WP_REST_Response $response The prepared response object.
+	 * @param WP_Post          $post     The post being prepared.
+	 * @return WP_REST_Response
+	 */
+	public function filter_rest_prepare_row( $response, WP_Post $post ): WP_REST_Response {
+		if ( ! $response instanceof WP_REST_Response ) {
+			return $response;
+		}
+
+		$slug = substr( $post->post_type, strlen( CollectionEntries::CPT_PREFIX ) );
+		if ( '' === $slug ) {
+			return $response;
+		}
+
+		$collection = $this->find_collection_by_slug( $slug );
+		if ( ! $collection instanceof WP_Post ) {
+			return $response;
+		}
+
+		$data = $response->get_data();
+
+		// Hydrate the system fields (created_at / by, modified_at / by) the
+		// same way `format_row` does for the table feed, so the same field
+		// definitions render correctly in side peek, modal, and full page.
+		// Without this, full-page rows show "Empty" for those columns
+		// because the standard WP REST response only exposes `author` /
+		// `date_gmt` and they don't match the field getters' shape.
+		$created_by_id       = (int) $post->post_author;
+		$modified_by_id      = (int) get_post_meta( $post->ID, '_modified_by', true );
+		$data['created_at']  = $this->format_gmt_date( $post->post_date_gmt );
+		$data['modified_at'] = $this->format_gmt_date( $post->post_modified_gmt );
+		$data['created_by']  = $this->display_name_for( $created_by_id );
+		$data['modified_by'] = $this->display_name_for(
+			$modified_by_id > 0 ? $modified_by_id : $created_by_id
+		);
+
+		$field_ids = $this->collection_field_ids( $collection->ID );
+		if ( count( $field_ids ) > 0 ) {
+			// Don't overwrite `meta` with hydrated values: those meta keys
+			// are registered as `string`, so a follow-up save that round-
+			// trips the hydrated objects back to the server gets rejected
+			// with 400 and loops the autosave. Surface the hydrated shape
+			// on a parallel `cortext_hydrated_meta` field instead, leaving
+			// the raw stored values intact for the save path.
+			$hydrated = array();
+			foreach ( $field_ids as $field_id ) {
+				$field_type = (string) get_post_meta( $field_id, 'type', true );
+				$key        = "field-{$field_id}";
+
+				if ( 'relation' === $field_type ) {
+					$hydrated[ $key ] = $this->format_relation_value( $post->ID, $field_id );
+				} elseif ( 'rollup' === $field_type ) {
+					$hydrated[ $key ] = $this->compute_rollup_value( $post->ID, $field_id );
+				}
+			}
+
+			if ( count( $hydrated ) > 0 ) {
+				$data['cortext_hydrated_meta'] = $hydrated;
+			}
+		}
+
+		$response->set_data( $data );
+		return $response;
+	}
+
+	/**
+	 * Looks up a collection by its `meta.slug` (the canonical identifier
+	 * embedded in the row CPT slug). Mirrors
+	 * `CollectionEntries::collection_id_for_entry_post_type` but returns the
+	 * post object directly since the caller already needs collection context.
+	 *
+	 * @param string $slug Collection meta slug (e.g., `books` for `crtxt_books`).
+	 * @return WP_Post|null
+	 */
+	private function find_collection_by_slug( string $slug ): ?WP_Post {
+		$matches = get_posts(
+			array(
+				'post_type'      => Collection::POST_TYPE,
+				'post_status'    => array( 'draft', 'private', 'publish' ),
+				// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+				'meta_query'     => array(
+					array(
+						'key'   => 'slug',
+						'value' => $slug,
+					),
+				),
+				'posts_per_page' => 1,
+			)
+		);
+
+		return ! empty( $matches ) ? $matches[0] : null;
+	}
+
+	/**
 	 * Formats a single row post for the response.
 	 *
 	 * @param WP_Post         $post            Entry post object.
@@ -969,11 +1116,18 @@ final class RowsController {
 			} elseif ( 'rollup' === $field_type ) {
 				$meta[ $key ] = $this->compute_rollup_value( $post->ID, $field_id );
 			} else {
-				$meta[ $key ] = isset( $multi_field_ids[ $field_id ] )
-					? get_post_meta( $post->ID, $key, false )
-					: get_post_meta( $post->ID, $key, true );
+				$meta[ $key ] = $this->format_typed_value(
+					$post->ID,
+					$field_id,
+					$field_type,
+					isset( $multi_field_ids[ $field_id ] )
+				);
 			}
 		}
+
+		// Include the document icon so the row renders with its glyph in
+		// the table (and anywhere else the title gets a leading icon).
+		$meta['cortext_document_icon'] = (string) get_post_meta( $post->ID, 'cortext_document_icon', true );
 
 		$created_by_id  = (int) $post->post_author;
 		$modified_by_id = (int) get_post_meta( $post->ID, '_modified_by', true );
@@ -991,6 +1145,169 @@ final class RowsController {
 			'modified_by' => $this->display_name_for( $modified_by_id > 0 ? $modified_by_id : $created_by_id ),
 			'meta'        => $meta,
 		);
+	}
+
+	/**
+	 * Formats stored meta for the field's current type. Values that no longer
+	 * fit the type render empty, but the raw meta stays on disk so changing the
+	 * type back can show it again.
+	 *
+	 * @param int    $row_id     Row post ID.
+	 * @param int    $field_id   Field post ID.
+	 * @param string $field_type Cortext field type.
+	 * @param bool   $is_multi   Whether the field allows multiple meta rows.
+	 * @return mixed
+	 */
+	private function format_typed_value( int $row_id, int $field_id, string $field_type, bool $is_multi ) {
+		$key = "field-{$field_id}";
+
+		if ( 'multiselect' === $field_type ) {
+			$values = get_post_meta( $row_id, $key, false );
+			if ( ! is_array( $values ) || count( $values ) === 0 ) {
+				return array();
+			}
+			$normalized = array_values( array_map( 'strval', $values ) );
+			$options    = $this->valid_option_values( $field_id );
+			if ( count( $options ) === 0 ) {
+				return $normalized;
+			}
+			$matched = array_values(
+				array_filter( $normalized, static fn( string $v ): bool => in_array( $v, $options, true ) )
+			);
+			if ( count( $matched ) > 0 ) {
+				return $matched;
+			}
+			// A single unmatched row may be leftover text from a conversion.
+			// Split it, but only keep tokens that are real options.
+			if ( count( $normalized ) === 1 && preg_match( '/[\n,;]/', $normalized[0] ) ) {
+				$tokens = FieldTypeConverter::split_tokens( $normalized[0] );
+				return array_values(
+					array_filter( $tokens, static fn( string $v ): bool => in_array( $v, $options, true ) )
+				);
+			}
+			return array();
+		}
+
+		$stored = $is_multi
+			? get_post_meta( $row_id, $key, false )
+			: get_post_meta( $row_id, $key, true );
+
+		if ( 'select' === $field_type ) {
+			$value = is_array( $stored ) ? '' : trim( (string) $stored );
+			if ( '' === $value ) {
+				return '';
+			}
+			$options = $this->valid_option_values( $field_id );
+			if ( count( $options ) === 0 ) {
+				return $value;
+			}
+			if ( in_array( $value, $options, true ) ) {
+				return $value;
+			}
+			// Leftover delimited text from a conversion: use the first token
+			// only if it is now a real option.
+			if ( preg_match( '/[\n,;]/', $value ) ) {
+				$tokens = FieldTypeConverter::split_tokens( $value );
+				if ( count( $tokens ) > 0 && in_array( $tokens[0], $options, true ) ) {
+					return $tokens[0];
+				}
+			}
+			return '';
+		}
+
+		if ( 'number' === $field_type ) {
+			if ( is_array( $stored ) || null === $stored || '' === $stored ) {
+				return null;
+			}
+			return is_numeric( $stored ) ? (float) $stored : null;
+		}
+
+		if ( 'date' === $field_type || 'datetime' === $field_type ) {
+			$text = is_array( $stored ) ? '' : trim( (string) $stored );
+			if ( '' === $text ) {
+				return '';
+			}
+			$timestamp = strtotime( $text );
+			if ( false === $timestamp ) {
+				return '';
+			}
+			return 'date' === $field_type
+				? gmdate( 'Y-m-d', $timestamp )
+				: gmdate( DATE_RFC3339, $timestamp );
+		}
+
+		if ( 'checkbox' === $field_type ) {
+			if ( is_array( $stored ) || null === $stored || '' === $stored ) {
+				return false;
+			}
+			return Relations::is_truthy( $stored );
+		}
+
+		if ( 'email' === $field_type ) {
+			$value = is_array( $stored ) ? '' : trim( (string) $stored );
+			if ( '' === $value ) {
+				return '';
+			}
+			return false !== is_email( $value ) ? $value : '';
+		}
+
+		if ( 'url' === $field_type ) {
+			$value = is_array( $stored ) ? '' : trim( (string) $stored );
+			if ( '' === $value ) {
+				return '';
+			}
+			return false !== wp_http_validate_url( $value ) ? $value : '';
+		}
+
+		if ( 'text' === $field_type ) {
+			// If this used to be multiselect, show all remaining meta rows.
+			$all = get_post_meta( $row_id, $key, false );
+			if ( is_array( $all ) && count( $all ) > 1 ) {
+				$text = implode( ', ', array_map( 'strval', $all ) );
+			} else {
+				$text = is_array( $stored ) ? '' : (string) $stored;
+			}
+			$prior_format = (string) get_post_meta( $field_id, 'prior_date_format', true );
+			if ( '' !== $prior_format && '' !== trim( $text ) ) {
+				$timestamp = strtotime( trim( $text ) );
+				if ( false !== $timestamp ) {
+					$format = in_array( $prior_format, array( 'date', 'datetime' ), true )
+						? ( 'date' === $prior_format ? 'Y-m-d' : DATE_RFC3339 )
+						: $prior_format;
+					return wp_date( $format, $timestamp );
+				}
+			}
+			return $text;
+		}
+
+		return $stored;
+	}
+
+	/**
+	 * Reads valid values for a select or multiselect field.
+	 *
+	 * @param int $field_id Field post ID whose options should be read.
+	 * @return string[]
+	 */
+	private function valid_option_values( int $field_id ): array {
+		$raw = (string) get_post_meta( $field_id, 'options', true );
+		if ( '' === $raw ) {
+			return array();
+		}
+		$decoded = json_decode( $raw, true );
+		if ( ! is_array( $decoded ) ) {
+			return array();
+		}
+		$values = array();
+		foreach ( $decoded as $entry ) {
+			if ( is_array( $entry ) && isset( $entry['value'] ) ) {
+				$value = trim( (string) $entry['value'] );
+				if ( '' !== $value ) {
+					$values[] = $value;
+				}
+			}
+		}
+		return $values;
 	}
 
 	/**

@@ -5,6 +5,10 @@ jest.mock( '../../../../src/hooks/useCollectionRows', () => ( {
 	__esModule: true,
 	default: jest.fn(),
 } ) );
+const mockTouchRecent = jest.fn();
+jest.mock( '../../../../src/hooks/useRecents', () => ( {
+	useRecents: () => ( { touchRecent: mockTouchRecent } ),
+} ) );
 
 import apiFetch from '@wordpress/api-fetch';
 import RelationEditor from '../../../../src/components/relations/RelationEditor';
@@ -12,6 +16,7 @@ import useCollectionRows from '../../../../src/hooks/useCollectionRows';
 
 beforeEach( () => {
 	apiFetch.mockReset();
+	mockTouchRecent.mockReset();
 	useCollectionRows.mockReturnValue( {
 		data: [],
 		collection: null,
@@ -55,7 +60,9 @@ describe( 'RelationEditor', () => {
 		await waitFor( () => expect( onSave ).toHaveBeenCalledWith( [ 22 ] ) );
 		expect( useCollectionRows ).toHaveBeenCalledWith(
 			9,
-			expect.objectContaining( { type: 'table' } )
+			expect.objectContaining( { type: 'table' } ),
+			[],
+			{ forceClient: true }
 		);
 	} );
 
@@ -95,6 +102,11 @@ describe( 'RelationEditor', () => {
 			} )
 		);
 		await waitFor( () => expect( onSave ).toHaveBeenCalledWith( [ 44 ] ) );
+		expect( mockTouchRecent ).toHaveBeenCalledWith( {
+			kind: 'row',
+			id: 44,
+			collectionId: 9,
+		} );
 		expect( refreshTargetRows ).toHaveBeenCalled();
 	} );
 } );

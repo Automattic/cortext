@@ -71,6 +71,51 @@ function sameShallowObject( a, b ) {
 	);
 }
 
+function pruneFilterNodeForFields( filter, validSet ) {
+	if ( ! filter || typeof filter !== 'object' ) {
+		return null;
+	}
+
+	const isGroup = Boolean( filter.relation || filter.filters );
+	if ( ! isGroup ) {
+		return filter.field && validSet.has( filter.field ) ? filter : null;
+	}
+
+	const currentChildren = Array.isArray( filter.filters )
+		? filter.filters
+		: [];
+	const nextChildren = pruneFiltersForFields( currentChildren, validSet );
+	if ( nextChildren.length === 0 ) {
+		return null;
+	}
+	return nextChildren === currentChildren
+		? filter
+		: { ...filter, filters: nextChildren };
+}
+
+export function pruneFiltersForFields( filters, validIds ) {
+	if ( ! Array.isArray( filters ) ) {
+		return [];
+	}
+
+	const validSet =
+		validIds instanceof Set ? validIds : new Set( validIds ?? [] );
+	let changed = false;
+	const next = [];
+	for ( const filter of filters ) {
+		const pruned = pruneFilterNodeForFields( filter, validSet );
+		if ( ! pruned ) {
+			changed = true;
+			continue;
+		}
+		if ( pruned !== filter ) {
+			changed = true;
+		}
+		next.push( pruned );
+	}
+	return changed ? next : filters;
+}
+
 // Reconciles a saved view against the live field set: drops style entries for
 // fields that no longer exist, clamps persisted widths into the current
 // [min, max] range, and re-prepends the title id when reorder/cleanup left it
@@ -158,6 +203,57 @@ export function normalizeView( view, validIds, options = {} ) {
 	}
 
 	return nextView;
+}
+
+// Adds fields that just appeared in the schema to the saved column order.
+// Add field flows can push the new column to the end. Everything else keeps
+// the old placement rule, so duplicated fields still stay near their source.
+export function withNewlyVisibleFields(
+	view,
+	availableFields,
+	previouslyKnown,
+	explicitAppendFieldId = null
+) {
+	const currentFields = Array.isArray( view?.fields ) ? view.fields : [];
+	if ( ! previouslyKnown || currentFields.length === 0 ) {
+		return view;
+	}
+
+	const next = currentFields.slice();
+	let inserted = false;
+	const appendId =
+		typeof explicitAppendFieldId === 'string'
+			? explicitAppendFieldId
+			: null;
+
+	for ( let schemaIdx = 0; schemaIdx < availableFields.length; schemaIdx++ ) {
+		const field = availableFields[ schemaIdx ];
+		if (
+			! isDefaultVisibleField( field ) ||
+			previouslyKnown.has( field.id ) ||
+			next.includes( field.id )
+		) {
+			continue;
+		}
+		if ( field.id === appendId ) {
+			next.push( field.id );
+			inserted = true;
+			continue;
+		}
+
+		let insertAt = next.length;
+		for ( let i = schemaIdx - 1; i >= 0; i-- ) {
+			const idx = next.indexOf( availableFields[ i ].id );
+			if ( idx >= 0 ) {
+				insertAt = idx + 1;
+				break;
+			}
+		}
+		next.splice( insertAt, 0, field.id );
+		inserted = true;
+	}
+
+	return inserted ? { ...view, fields: next } : view;
 }
 
 // Applies a width to a single column. Always returns through the layout shape

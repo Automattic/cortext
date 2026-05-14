@@ -5,6 +5,7 @@
 // @wordpress/interface is a BUNDLED_PACKAGE (inlined into our JS) and WP
 // doesn't register a `wp-interface` style handle, so bundle its stylesheet.
 @use "../node_modules/@wordpress/interface/build-style/style.css";
+@use "../node_modules/@wordpress/editor/build-style/style.css" as editor;
 
 // tech-debt.md#38: wp-admin does not expose this handle on our screen, so
 // bundle the palette styles here.
@@ -14,6 +15,20 @@
 // because the package declares `sideEffects: false`; pulling it through
 // sass-loader side-steps that.
 @use "../node_modules/@wordpress/dataviews/build-style/style.css" as dataviews;
+
+.commands-command-menu__container {
+
+	.commands-command-menu__item {
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-10;
+		width: 100%;
+	}
+
+	.cortext-command-palette__group + .cortext-command-palette__group [cmdk-group-heading] {
+		border-top: var(--cortext-shell-border-width, 1px) solid var(--cortext-chrome-border, #e0e0e0);
+	}
+}
 
 // Hide wp-admin chrome on the Cortext screen. The React shell is
 // `position: fixed; inset: 0`, so admin scaffolding (toolbar, sidebar,
@@ -112,10 +127,34 @@ body.cortext-fullscreen {
 	&__brand {
 		flex: 1 1 auto;
 		min-width: 0;
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-10;
 		font-weight: 600;
 		font-size: 13px;
 		line-height: 20px;
 		color: var(--cortext-text);
+	}
+
+	&__brand-mark {
+		flex: 0 0 auto;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: $grid-unit-30;
+		height: $grid-unit-30;
+		color: var(--cortext-accent-contrast);
+		background: var(--cortext-accent);
+		border-radius: 50%;
+	}
+
+	&__brand-mark svg {
+		width: 18px;
+		height: 18px;
+	}
+
+	&__brand-text {
+		min-width: 0;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
@@ -124,9 +163,64 @@ body.cortext-fullscreen {
 	&__quick-actions {
 		flex: 0 0 auto;
 		display: flex;
+		flex-direction: column;
 		align-items: center;
 		gap: $grid-unit-05;
 		padding: 0 $grid-unit-20 $grid-unit-10;
+	}
+
+	&__quick-action.components-button {
+		width: 100%;
+		min-width: 0;
+		height: $grid-unit-40;
+		padding: 0 $grid-unit-10;
+		justify-content: flex-start;
+		gap: $grid-unit-05;
+		color: var(--cortext-text-muted);
+		text-align: start;
+	}
+
+	&__quick-action--search.components-button {
+		border: var(--cortext-shell-border-width) solid var(--cortext-chrome-border);
+		background: var(--cortext-control-surface);
+		box-shadow: inset 0 1px 0 var(--cortext-control-highlight);
+	}
+
+	&__quick-action--search.components-button:hover:not(:disabled),
+	&__quick-action--search.components-button:focus:not(:disabled) {
+		border-color: var(--cortext-accent);
+		background: var(--cortext-control-hover-surface);
+	}
+
+	&__quick-action--home.components-button:hover:not(:disabled),
+	&__quick-action--home.components-button:focus:not(:disabled) {
+		background: var(--cortext-state-hover);
+		color: var(--cortext-text-strong);
+	}
+
+	&__quick-action-label {
+		flex: 1 1 auto;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	&__quick-action-kbd {
+		flex: 0 0 auto;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-width: $grid-unit-30;
+		height: $grid-unit-20;
+		padding: 0 6px;
+		border: var(--cortext-shell-border-width) solid var(--cortext-chrome-border);
+		border-radius: var(--cortext-shell-radius);
+		background: var(--cortext-keycap-surface);
+		color: var(--cortext-text-muted);
+		font-size: 11px;
+		font-family: inherit;
+		line-height: 1;
 	}
 
 	&__collapse-toggle {
@@ -137,7 +231,6 @@ body.cortext-fullscreen {
 	&__section-header {
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
 		gap: $grid-unit-05;
 		margin: $grid-unit-15 0 $grid-unit-05 0;
 		padding: 0 $grid-unit-05;
@@ -145,8 +238,52 @@ body.cortext-fullscreen {
 		// Title margin/padding moves to the row.
 		/* stylelint-disable-next-line no-descending-specificity */
 		.cortext-sidebar__section-title {
+			flex: 1 1 auto;
+			min-width: 0;
 			margin: 0;
 			padding: 0;
+		}
+	}
+
+	&__section-title-button.components-button {
+		width: 100%;
+		min-width: 0;
+		height: $grid-unit-30;
+		padding: 0 $grid-unit-05;
+		justify-content: flex-start;
+		font-size: 11px;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+		color: var(--cortext-text-muted);
+		text-align: start;
+
+		&:hover:not(:disabled),
+		&:focus:not(:disabled) {
+			background: var(--cortext-state-hover);
+			color: var(--cortext-text-strong);
+		}
+	}
+
+	&__section-actions {
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-05;
+		margin-left: auto;
+	}
+
+	&__section-body-wrapper {
+		display: grid;
+		grid-template-rows: 0fr;
+		transition: grid-template-rows 160ms ease;
+
+		> .cortext-sidebar__section-body {
+			min-height: 0;
+			overflow: hidden;
+		}
+
+		&.is-expanded {
+			grid-template-rows: 1fr;
 		}
 	}
 
@@ -211,11 +348,30 @@ body.cortext-fullscreen {
 		margin-top: auto;
 		display: flex;
 		align-items: center;
-		gap: $grid-unit-10;
+		gap: $grid-unit-05;
 		padding: $grid-unit-10 $grid-unit-15;
 		border-top: var(--cortext-shell-border-width) solid var(--cortext-chrome-border);
 	}
 
+	&__footer-group {
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-05;
+		min-width: 0;
+	}
+
+	&__footer-spacer {
+		flex: 1 1 auto;
+		min-width: $grid-unit-10;
+	}
+
+	&__footer-separator {
+		width: var(--cortext-shell-border-width);
+		height: $grid-unit-20;
+		background: var(--cortext-chrome-border);
+	}
+
+	&__footer-button.components-button,
 	&__back.components-button,
 	&__theme-toggle.components-button {
 		width: $grid-unit-40;
@@ -223,6 +379,47 @@ body.cortext-fullscreen {
 		height: $grid-unit-40;
 		padding: 0;
 		justify-content: center;
+	}
+
+	&__trash-footer.components-button {
+		width: auto;
+		gap: $grid-unit-05;
+		padding: 0 $grid-unit-10;
+	}
+
+	&__footer-count {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 16px;
+		height: 16px;
+		padding: 0 5px;
+		border-radius: 999px;
+		background: var(--cortext-count-badge-surface);
+		color: var(--cortext-count-badge-text);
+		font-size: 10px;
+		font-weight: 600;
+		line-height: 16px;
+		text-align: center;
+	}
+
+	&__trash-panel {
+		flex: 0 1 auto;
+		max-height: min(280px, 38vh);
+		overflow-y: auto;
+		padding: 0 $grid-unit-15 $grid-unit-10;
+		border-top: var(--cortext-shell-border-width) solid var(--cortext-chrome-border);
+	}
+
+	&__trash-panel-header {
+		display: flex;
+		align-items: center;
+		padding: $grid-unit-10 $grid-unit-05 0;
+	}
+
+	&__trash-panel-header &__section-title {
+		margin: 0;
+		padding: 0;
 	}
 
 	/* stylelint-disable-next-line no-descending-specificity */
@@ -240,6 +437,12 @@ body.cortext-fullscreen {
 	&__empty {
 		color: var(--cortext-text-muted);
 		padding: $grid-unit-10;
+	}
+
+	&__empty--inline {
+		margin: 0;
+		font-size: 12px;
+		line-height: 16px;
 	}
 
 	&__list,
@@ -323,10 +526,6 @@ body.cortext-fullscreen {
 	}
 
 	/* stylelint-disable no-descending-specificity */
-	&__favorite-row .cortext-sidebar__row {
-		cursor: default;
-	}
-
 	&__favorite-title {
 		flex: 1 1 auto;
 		min-width: 0;
@@ -422,13 +621,31 @@ body.cortext-fullscreen {
 		white-space: nowrap;
 	}
 
-	&__icon.components-button {
+	&__recent-icon {
+		flex: 0 0 $grid-unit-30;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: $grid-unit-30;
+		height: $grid-unit-30;
+		color: var(--cortext-text-muted);
+	}
+
+	&__recent-node {
+		will-change: transform, opacity;
+	}
+
+	&__icon {
 		flex: 0 0 auto;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
 		width: $grid-unit-30;
 		height: $grid-unit-30;
+		color: var(--cortext-text-muted);
+	}
+
+	&__icon.components-button {
 		padding: 0;
 		min-width: 0;
 		background: transparent;
@@ -447,24 +664,6 @@ body.cortext-fullscreen {
 		width: $grid-unit-30;
 		height: $grid-unit-30;
 		color: var(--cortext-text-muted);
-	}
-
-	&__favorite-drag-handle {
-		flex: 0 0 auto;
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: $grid-unit-30;
-		height: $grid-unit-30;
-		border: 0;
-		padding: 0;
-		background: transparent;
-		color: var(--cortext-text-muted);
-		cursor: grab;
-
-		&:active {
-			cursor: grabbing;
-		}
 	}
 
 	&__rename {
@@ -716,6 +915,16 @@ body.cortext-fullscreen {
 			padding: $grid-unit-05 0;
 		}
 
+		.cortext-sidebar__footer-group {
+			flex-direction: column;
+			gap: $grid-unit-05;
+		}
+
+		.cortext-sidebar__footer-spacer,
+		.cortext-sidebar__footer-separator {
+			display: none;
+		}
+
 		.cortext-sidebar__collapse-toggle {
 			order: 1;
 			margin-left: 0;
@@ -733,6 +942,22 @@ body.cortext-fullscreen {
 		.cortext-sidebar__quick-action.components-button {
 			width: $grid-unit-30 + $grid-unit-05;
 			min-width: $grid-unit-30 + $grid-unit-05;
+		}
+
+		.cortext-sidebar__quick-action--search.components-button {
+			border-color: transparent;
+			background: transparent;
+			box-shadow: none;
+		}
+
+		.cortext-sidebar__trash-footer.components-button {
+			width: $grid-unit-40;
+			min-width: $grid-unit-40;
+			padding: 0;
+		}
+
+		.cortext-sidebar__footer-count {
+			display: none;
 		}
 	}
 }
@@ -904,6 +1129,85 @@ body.cortext-sidebar-resizing {
 	display: flex;
 	align-items: center;
 	gap: $grid-unit-10;
+}
+
+.cortext-page-inspector {
+
+	.components-panel__body {
+		border-top-color: var(--cortext-chrome-border);
+	}
+}
+
+.cortext-page-inspector__tools {
+	display: flex;
+	flex-direction: column;
+	gap: $grid-unit-20;
+}
+
+.cortext-page-inspector__tool {
+	display: flex;
+	flex-direction: column;
+	gap: $grid-unit-10;
+}
+
+.cortext-page-inspector__tool-label {
+	color: var(--cortext-text-muted);
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+}
+
+.cortext-page-inspector__control-row {
+	display: flex;
+	align-items: center;
+	flex-wrap: nowrap;
+	gap: $grid-unit-10;
+}
+
+.cortext-page-inspector__actions {
+	display: flex;
+	align-items: center;
+	flex-wrap: nowrap;
+	gap: $grid-unit-05;
+}
+
+.cortext-page-inspector__action-button.components-button {
+	flex: 1 1 0;
+	min-width: 0;
+	justify-content: center;
+}
+
+.cortext-page-inspector__icon-preview {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	flex: 0 0 auto;
+	border: $border-width solid var(--cortext-chrome-border);
+	border-radius: var(--cortext-shell-radius);
+	background: var(--cortext-canvas-frame-surface);
+}
+
+.cortext-page-inspector__featured-image-preview {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 100%;
+	aspect-ratio: 16 / 7;
+	overflow: hidden;
+	border: $border-width solid var(--cortext-chrome-border);
+	border-radius: var(--cortext-shell-radius);
+	background: var(--cortext-canvas-frame-surface);
+	color: var(--cortext-text-muted);
+	font-size: $default-font-size;
+
+	img {
+		display: block;
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+	}
 }
 
 .cortext-breadcrumbs {
@@ -1110,8 +1414,8 @@ body.cortext-sidebar-resizing {
 // These nodes live inside BlockCanvas, so target the iframe document body.
 body:has([data-type="core/post-title"]:hover) .cortext-canvas__identity-action,
 body:has([data-type="core/post-title"]:focus-within) .cortext-canvas__identity-action,
-body:has([data-type="cortext/page-icon"]:hover) .cortext-canvas__identity-action,
-body:has([data-type="cortext/page-icon"]:focus-within) .cortext-canvas__identity-action,
+body:has([data-type="cortext/document-icon"]:hover) .cortext-canvas__identity-action,
+body:has([data-type="cortext/document-icon"]:focus-within) .cortext-canvas__identity-action,
 body:has(.cortext-canvas__identity-actions:hover) .cortext-canvas__identity-action {
 	opacity: 1;
 }
@@ -1207,7 +1511,68 @@ body:has(.cortext-canvas__identity-actions:hover) .cortext-canvas__identity-acti
 	}
 }
 
-// Notion-style format submenu. The outer popover sits beside the column
+// "Change type" popover. The action commits immediately because row values
+// stay on disk and switching back restores what the user had before.
+.cortext-change-field-type-popover {
+
+	&__body {
+		display: grid;
+		gap: $grid-unit-10;
+		padding: $grid-unit-15;
+		width: 320px;
+	}
+
+	&__title {
+		font-size: 11px;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+		color: $gray-700;
+	}
+
+	&__grid {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: $grid-unit-05;
+	}
+
+	&__type-button {
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-10;
+		padding: $grid-unit-10;
+		border: $border-width solid $gray-200;
+		border-radius: 4px;
+		background: transparent;
+		text-align: start;
+		font-size: 13px;
+		color: $gray-900;
+		cursor: pointer;
+		transition: background-color 0.1s ease, border-color 0.1s ease;
+
+		&:disabled {
+			cursor: not-allowed;
+			opacity: 0.5;
+		}
+
+		&:focus-visible {
+			outline: 2px solid var(--wp-admin-theme-color, $gray-700);
+			outline-offset: -1px;
+		}
+
+		&:hover:not(:disabled) {
+			background: $gray-100;
+			border-color: $gray-700;
+		}
+	}
+
+	&__type-icon {
+		flex: 0 0 auto;
+		color: $gray-700;
+	}
+}
+
+// Cascading format submenu. The outer popover sits beside the column
 // dropdown; each row is a button that anchors a third-level flyout for
 // picking a value. The visual is intentionally tight (240px panel) so it
 // reads as a continuation of the parent menu rather than a modal.
@@ -1511,8 +1876,8 @@ body:has(.cortext-canvas__identity-actions:hover) .cortext-canvas__identity-acti
 // to fixed layout with content-width sizing and explicit per-cell
 // widths, so column count stops affecting the surviving columns'
 // widths and the table grows to its natural content width.
-// `.dataviews-wrapper` already has `overflow: auto`, so horizontal
-// scroll kicks in once columns exceed the wrapper.
+// `.cortext-data-view > .dataviews-wrapper` declares `overflow: auto`
+// itself, so horizontal scroll kicks in once columns exceed the wrapper.
 .dataviews-view-table {
 	table-layout: fixed;
 	width: max-content;
@@ -1537,29 +1902,36 @@ body:has(.cortext-canvas__identity-actions:hover) .cortext-canvas__identity-acti
 	width: 280px;
 }
 
-// Ghost column is just the `+` icon button. DataViews uses
-// `.dataviews-view-table tr td:last-child { padding-right: 48px }`
-// for the last column, plus `min-width: 15ch` on the cell content
-// wrapper. Match DataViews' selector specificity so our overrides
-// win, then size the column to the button's natural width with a
-// tight right padding.
-.dataviews-view-table tr th:has(.cortext-column-header-marker--add),
-.dataviews-view-table tr td:has(.cortext-data-view__ghost-cell) {
-	width: 0;
-	padding-right: $grid-unit-10;
+// The add-field button is portaled into DataViews' actions column header.
+// Hide the built-in "Actions" label; the row kebabs already explain the
+// column. The header cell needs its own sticky-right rule because the sticky
+// `<thead>` can otherwise break horizontal stickiness in some browsers.
+// `!important` matches DataViews' own tied-specificity sticky rule.
+.dataviews-view-table thead th.dataviews-view-table__actions-column {
+	position: sticky !important;
+	right: 0 !important;
+	z-index: 3;
+	background-color: #fff;
 
-	.dataviews-view-table__cell-content-wrapper,
-	.dataviews-view-table__primary-column-content {
-		min-width: 0;
+	> .dataviews-view-table-header {
+		display: none;
 	}
 }
 
-// Custom field columns and the ghost column carry a marker that
-// `ColumnHeaderActions` portals our trigger into. We hide DataViews'
-// built-in trigger on those <th>s and replace it with a single combined
-// dropdown (Sort / Move / Hide / Rename / Duplicate / Delete) for data
-// columns, or a `+` button for the ghost column. Title and system
-// fields don't have a marker, so their built-in triggers stay visible.
+// Regular cells get vertical centering from DataViews' inner wrapper.
+// The row-actions cell skips that wrapper, so center the kebab on the td.
+.cortext-data-view
+.dataviews-view-table
+tbody
+td.dataviews-view-table__actions-column {
+	vertical-align: middle;
+}
+
+// Custom field columns carry a marker that `ColumnHeaderActions`
+// portals our trigger into. We hide DataViews' built-in trigger on
+// those <th>s and replace it with a single combined dropdown (Sort /
+// Move / Hide / Rename / Duplicate / Delete). Title and system fields
+// don't have a marker, so their built-in triggers stay visible.
 // `tech-debt.md#16` covers the upstream gap that forces this takeover.
 .dataviews-view-table
 th:has(.cortext-column-header-marker)
@@ -1751,11 +2123,22 @@ tbody > tr > td:not(:first-child) {
 }
 
 .cortext-title-cell {
+	// Fill the td so the cell's selection / hover background paints the
+	// whole column slot, even when another cell stretches the row.
+	display: flex;
+	align-items: center;
 	width: 100%;
+	height: 100%;
 	min-width: 0;
 	max-width: 100%;
 	border-radius: 2px;
 	box-sizing: border-box;
+
+	&__icon {
+		display: inline-flex;
+		flex: 0 0 auto;
+		line-height: 0;
+	}
 
 	&--with-open-action {
 		display: grid;
@@ -1767,6 +2150,12 @@ tbody > tr > td:not(:first-child) {
 		.cortext-editable-cell {
 			min-width: 0;
 			max-width: 100%;
+		}
+
+		// When the row has a document icon, slot it before the editable
+		// cell so the leading column shows: icon, title, open-button.
+		&:has(.cortext-title-cell__icon) {
+			grid-template-columns: auto minmax(0, 1fr) auto;
 		}
 	}
 
@@ -1794,12 +2183,7 @@ tbody > tr > td:not(:first-child) {
 }
 
 .cortext-title-cell:focus-within,
-.cortext-data-view
-.dataviews-view-table
-tbody
-tr:hover
-.cortext-title-cell--with-open-action,
-.cortext-title-cell--is-open {
+.cortext-title-cell--with-open-action:hover {
 	background: $gray-100;
 }
 
@@ -2424,7 +2808,7 @@ tr:has(.cortext-title-cell--is-open)
 		gap: $grid-unit-05;
 	}
 
-	// Per-option config menu (Notion-style "..." popover): rename input,
+	// Per-option config menu: rename input,
 	// Delete, then a vertical list of named colors.
 	&__menu {
 		width: 220px;
@@ -2543,6 +2927,12 @@ tr:has(.cortext-title-cell--is-open)
 	height: 100%;
 	min-height: 0;
 	background: $white;
+	// The shell paints a light surface even in dark mode, so the dark-theme
+	// scrollbar thumb (near-white, set on `.cortext-root[data-theme="dark"]`)
+	// disappears against it. Pin the scrollbar tokens to their light values
+	// here so the horizontal scrollbar on wide tables is visible.
+	--cortext-scrollbar-thumb: rgba(0, 0, 0, 0.12);
+	--cortext-scrollbar-thumb-hover: rgba(0, 0, 0, 0.28);
 
 	> .cortext-data-view {
 		flex: 1 1 auto;
@@ -2577,6 +2967,63 @@ tr:has(.cortext-title-cell--is-open)
 		flex: 1 1 auto;
 		width: 100%;
 	}
+
+	// `grid-template-rows: 1fr → 0fr` is the smoothly-animatable way to
+	// collapse a wrapper to its content's natural height. The body child
+	// hides via overflow: hidden; the chevron escapes the collapse via
+	// position: absolute so it stays visible over the cover when hidden.
+	&--canvas-properties {
+		position: relative;
+		display: grid;
+		flex: 0 0 auto;
+		width: 100%;
+		grid-template-rows: 1fr;
+		transition: grid-template-rows 0.22s ease;
+	}
+
+	&--canvas-properties-collapsed {
+		grid-template-rows: 0fr;
+	}
+
+	// Border on the body (not the wrapper) so it disappears with the
+	// content when collapsed; matches the toolbar's `__header`
+	// border-bottom in side / modal panes for visual consistency.
+	&__canvas-properties-body {
+		min-height: 0;
+		overflow: hidden;
+		border-bottom: $border-width solid $gray-200;
+	}
+
+	// Solid background pill so the chevron stays legible even when it
+	// floats over a dark cover image. The button itself is small; the
+	// pill keeps a constant contrast surface regardless of what's behind.
+	&__canvas-properties-toggle.components-button {
+		position: absolute;
+		top: $grid-unit-10;
+		left: $grid-unit-10;
+		z-index: 2;
+		background: rgba(255, 255, 255, 0.92);
+		color: $gray-900;
+		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+		opacity: 0;
+		transition: opacity 0.12s ease, background-color 0.12s ease;
+
+		&:hover,
+		&:focus-visible {
+			background: $white;
+			color: $gray-900;
+		}
+	}
+
+	/* stylelint-disable no-descending-specificity */
+	&--canvas-properties:hover &__canvas-properties-toggle.components-button,
+	&__canvas-properties-toggle.components-button:focus-visible,
+	// When collapsed, the chevron is the only affordance, so keep it
+	// always visible (still tap to bring properties back).
+	&--canvas-properties-collapsed &__canvas-properties-toggle.components-button {
+		opacity: 1;
+	}
+	/* stylelint-enable no-descending-specificity */
 
 	&__frame {
 		display: flex;
@@ -2643,8 +3090,8 @@ tr:has(.cortext-title-cell--is-open)
 	&--modal {
 
 		.cortext-row-detail__pane-stack {
-			flex: 0 0 auto;
-			height: auto;
+			flex: 1 1 auto;
+			height: 100%;
 			min-height: 320px;
 			overflow: visible;
 		}
@@ -2652,7 +3099,7 @@ tr:has(.cortext-title-cell--is-open)
 		.cortext-row-detail__pane {
 			position: relative;
 			inset: auto;
-			height: auto;
+			height: 100%;
 			min-height: 320px;
 		}
 
@@ -2955,6 +3402,10 @@ tr:has(.cortext-title-cell--is-open)
 		padding: $grid-unit-20 var(--cortext-row-detail-field-inset) $grid-unit-10;
 	}
 
+	&__properties[data-visible="false"] {
+		display: none;
+	}
+
 	&__fields-indicator-wrap {
 		grid-template-rows: 0fr;
 		opacity: 0;
@@ -3210,6 +3661,38 @@ tr:has(.cortext-title-cell--is-open)
 	}
 
 	&__content-editor iframe {
+		border: 0;
+		background: $white;
+	}
+
+	// EditorBody mounts a `cortext-canvas__visual` wrapper inside row detail
+	// panes after the row properties chrome. Give the iframe a real height
+	// without pushing the properties into the block-editor iframe. The
+	// border-top mirrors the toolbar's border-bottom (`__header`) so the
+	// divider above and below the properties form match.
+	.cortext-canvas__visual {
+		display: flex;
+		flex: 1 1 420px;
+		flex-direction: column;
+		min-height: 360px;
+		background: $white;
+		border-top: $border-width solid $gray-200;
+		box-sizing: border-box;
+		overflow: visible;
+	}
+
+	.cortext-canvas__block-canvas {
+		display: flex;
+		flex: 1 1 auto;
+		min-height: 0;
+	}
+
+	.cortext-canvas__block-canvas > div {
+		flex: 1 1 auto;
+		min-height: 0;
+	}
+
+	.cortext-canvas__block-canvas iframe {
 		border: 0;
 		background: $white;
 	}
@@ -3501,14 +3984,22 @@ body.cortext-row-detail-sidebar-resizing {
 	position: relative; // anchor for the column drop indicator
 	display: flex;
 	flex-direction: column;
+	width: 100%;
+	min-width: 0;
 
 	// Let the wrapper grow to fill whatever height the parent provides, so
 	// our footer sits below the table instead of getting pushed off by the
 	// wrapper's own `height: 100%`. Parents own the height per-context: the
 	// canvas pane fills the viewport, the block sets a min-height.
 	> .dataviews-wrapper {
-		flex: 1 1 auto;
+		height: auto;
+		width: 100%;
+		flex: 1 1 0;
+		min-width: 0;
 		min-height: 0;
+		// Own the scroll layer instead of relying on DataViews's upstream
+		// default — horizontal scroll wasn't kicking in for wide tables.
+		overflow: auto;
 	}
 
 	// DataViews paints row height via td `padding-block` per density, but
@@ -3520,7 +4011,7 @@ body.cortext-row-detail-sidebar-resizing {
 	// their padding so they still breathe. Balanced and comfortable mirror
 	// DataViews v6's td `padding-block` (12 and 16); compact is
 	// intentionally tighter than DataViews's default (4 -> 0) so the row
-	// matches the 40px editor floor and gets closer to a Notion-style
+	// matches the 40px editor floor and gets closer to a compact
 	// density. See tech-debt.md#5.
 	.dataviews-view-table {
 		table-layout: fixed;
@@ -3687,13 +4178,20 @@ body.cortext-row-detail-sidebar-resizing {
 	height: 100%;
 }
 
-// tech-debt.md#23: embedded block has no per-instance height attribute, so use
-// a fixed viewport height and let DataViews scroll internally. Width comes from
-// Gutenberg's alignment.
-.wp-block-cortext-data-view .cortext-data-view-shell,
-.wp-block-cortext-data-view .cortext-data-view {
-	height: var(--cortext-data-view-block-min-height);
-	min-height: 0;
+// tech-debt.md#23: embedded block has no per-instance height attribute. Use
+// the shared token as a min-height so short collections still get a comfortable
+// viewport while long ones grow the block (and keep the footer in view) instead
+// of clipping. Width comes from Gutenberg's alignment.
+.wp-block-cortext-data-view .cortext-data-view-shell {
+	min-height: var(--cortext-data-view-block-min-height);
+}
+
+// Full-page mode wants the wrapper to fill a fixed-height parent and scroll
+// internally; block mode wants the wrapper to take its content size so the
+// block grows with the table instead of clipping the footer. Override the
+// shared `flex: 1 1 0` only here.
+.wp-block-cortext-data-view .cortext-data-view > .dataviews-wrapper {
+	flex: 0 0 auto;
 }
 
 // Embedded blocks are width-constrained by the editor canvas. Letting relation
@@ -3925,6 +4423,8 @@ thead > tr > th {
 	// color rule above (which would otherwise pin the title to default text).
 	.cortext-sidebar__row:hover .cortext-sidebar__title.components-button,
 	.cortext-sidebar__row:focus-within .cortext-sidebar__title.components-button,
+	.cortext-sidebar__row:hover .cortext-sidebar__favorite-title,
+	.cortext-sidebar__row:focus-within .cortext-sidebar__favorite-title,
 	.cortext-sidebar__row.is-selected .cortext-sidebar__title.components-button {
 		color: var(--cortext-text-strong);
 	}
@@ -3969,7 +4469,7 @@ thead > tr > th {
 }
 /* stylelint-enable no-descending-specificity */
 
-.cortext-page-icon {
+.cortext-document-icon {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -4007,7 +4507,7 @@ thead > tr > th {
 // finished loading on first open. Without this the wrapper collapsed to
 // 0 height while `useEntityRecord` was still resolving, then expanded
 // when the image arrived, pushing everything below it down.
-.cortext-page-cover-block {
+.cortext-document-cover-block {
 	position: relative;
 	height: clamp(140px, 26vh, 260px);
 
@@ -4067,7 +4567,7 @@ thead > tr > th {
 // Page icon: use a normal content-column row for stable placement and a
 // generous hover target, but replace Gutenberg's full-row selected outline
 // with a tight outline around the icon button itself.
-.cortext-page-icon-block {
+.cortext-document-icon-block {
 	display: flex;
 	align-items: flex-end;
 	justify-content: flex-start;
@@ -4101,12 +4601,12 @@ thead > tr > th {
 		/* stylelint-enable no-descending-specificity */
 	}
 
-	.cortext-page-icon-block__button.components-button {
+	.cortext-document-icon-block__button.components-button {
 		width: calc(56px + #{ $grid-unit-05 * 2 });
 		height: calc(56px + #{ $grid-unit-05 * 2 });
 	}
 
-	.cortext-page-icon--image {
+	.cortext-document-icon--image {
 		width: 56px;
 		height: 56px;
 		border-radius: var(--cortext-shell-radius, 4px);
@@ -4119,30 +4619,30 @@ thead > tr > th {
 	// baseline so it sits at the bottom of the inline box. The result was
 	// a ~3px height drift between emoji and WP-icon variants that pushed
 	// the title below it. `inline-flex` removes the line-box entirely.
-	.cortext-page-identity-control {
+	.cortext-document-identity-control {
 		display: inline-flex;
 	}
 }
 
 .block-editor-block-list__layout
-.block-editor-block-list__block[data-type="cortext/page-icon"].is-selected::after {
+.block-editor-block-list__block[data-type="cortext/document-icon"].is-selected::after {
 	box-shadow: none;
 	outline: none;
 }
 
 .block-editor-block-list__layout
-.block-editor-block-list__block[data-type="cortext/page-icon"].is-selected
-.cortext-page-icon-block__button {
+.block-editor-block-list__block[data-type="cortext/document-icon"].is-selected
+.cortext-document-icon-block__button {
 	outline: 1.5px solid var(--wp-admin-theme-color, #007cba);
 	outline-offset: 0;
 }
 
-// Notion-style overlap: when the icon sits right after the cover, pull
+// Cover overlap: when the icon sits right after the cover, pull
 // the block itself up so the title follows the visual icon position
 // instead of leaving a reserved blank row below the cover.
 /* stylelint-disable no-descending-specificity */
-.cortext-page-cover-block + .cortext-page-icon-block,
-[data-type="cortext/page-cover"] + [data-type="cortext/page-icon"] {
+.cortext-document-cover-block + .cortext-document-icon-block,
+[data-type="cortext/document-cover"] + [data-type="cortext/document-icon"] {
 	position: relative;
 	z-index: 1;
 	margin-block-start: -28px;
@@ -4159,7 +4659,7 @@ thead > tr > th {
 // component covers both the colored WP-icon variant and the fallback
 // page glyph in every surface.
 /* stylelint-disable-next-line no-descending-specificity */
-.cortext-page-icon svg {
+.cortext-document-icon svg {
 	fill: currentcolor;
 }
 
@@ -4272,10 +4772,10 @@ body.cortext-hide-block-settings-menu .block-editor-block-switcher {
 	}
 }
 
-.cortext-page-identity-popover-content {
+.cortext-document-identity-popover-content {
 	min-width: 320px;
 
-	.cortext-page-identity-popover {
+	.cortext-document-identity-popover {
 		position: relative;
 		display: flex;
 		flex-direction: column;
@@ -4371,4 +4871,73 @@ body.cortext-hide-block-settings-menu .block-editor-block-switcher {
 			padding: 0;
 		}
 	}
+}
+
+// Opt the alpha notice out of root view transitions. Without this, the
+// initial `withViewTransition` dispatch in EntityRoute snapshots the whole
+// document (modal portal included) and the cross-fade makes the modal
+// visibly blink on first load. Giving the overlay + frame their own names
+// lifts them into separate view-transition layers; setting both old/new
+// to a stable opacity keeps the modal visually stationary for the duration
+// of the transition.
+.cortext-alpha-notice-overlay {
+	view-transition-name: cortext-alpha-notice-overlay;
+}
+
+.cortext-alpha-notice {
+	view-transition-name: cortext-alpha-notice-frame;
+
+	&__intro {
+		margin-top: 0;
+	}
+
+	&__list {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+	}
+
+	&__list li {
+		display: flex;
+		align-items: flex-start;
+		gap: 12px;
+		margin: 0;
+	}
+
+	&__icon {
+		display: inline-flex;
+		flex-shrink: 0;
+		margin-top: 2px;
+		color: var(--wp-admin-theme-color, #007cba);
+	}
+
+	&__repo {
+		margin-top: 20px;
+		margin-bottom: 0;
+	}
+
+	&__footer {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 16px;
+		margin-top: 24px;
+		padding-top: 16px;
+		border-top: 1px solid #e0e0e0;
+	}
+}
+
+::view-transition-old(cortext-alpha-notice-overlay),
+::view-transition-old(cortext-alpha-notice-frame) {
+	animation: none;
+	opacity: 0;
+}
+
+::view-transition-new(cortext-alpha-notice-overlay),
+::view-transition-new(cortext-alpha-notice-frame) {
+	animation: none;
+	opacity: 1;
 }

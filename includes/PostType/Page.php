@@ -63,7 +63,7 @@ final class Page {
 					// (registered with `show_in_rest`) needs this so the
 					// sidebar Trash filter can read it on the client.
 					'custom-fields',
-					// Page covers ride on the native featured image so REST
+					// Document covers ride on the native featured image so REST
 					// already exposes `featured_media`; the React shell reads
 					// and writes it directly.
 					'thumbnail',
@@ -74,5 +74,7 @@ final class Page {
 				'delete_with_user'      => false,
 			)
 		);
+
+		DocumentIdentity::register_for_post_type( self::POST_TYPE );
 	}
 }

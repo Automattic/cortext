@@ -22,9 +22,8 @@ import {
 } from '@wordpress/icons';
 
 import { COLLECTION_QUERY } from '../../collections';
-import useCollectionFields, {
-	buildFieldListQuery,
-} from '../../hooks/useCollectionFields';
+import { buildFieldListQuery } from '../../hooks/useCollectionFields';
+import { useCollectionFieldsContext } from '../CollectionFieldsContext';
 import { useCreateField } from '../../hooks/useFieldMutations';
 
 // Inline SVG for the "number" type. `@wordpress/icons` doesn't ship a
@@ -45,7 +44,7 @@ const numberIcon = (
 );
 
 // Inline SVG for "date and time": a calendar with a clock face. Mirrors
-// Notion's separation between Date and Date & time.
+// Keep Date and Date & time as separate field choices.
 const datetimeIcon = (
 	<svg
 		xmlns="http://www.w3.org/2000/svg"
@@ -68,7 +67,7 @@ const datetimeIcon = (
 	</svg>
 );
 
-const FIELD_TYPES = [
+export const FIELD_TYPES = [
 	{ value: 'text', label: __( 'Text', 'cortext' ), icon: typography },
 	{ value: 'number', label: __( 'Number', 'cortext' ), icon: numberIcon },
 	{
@@ -289,7 +288,6 @@ function RelationConfig( {
 }
 
 function RollupConfig( {
-	collectionId,
 	title,
 	fallbackTitle,
 	isBusy,
@@ -298,7 +296,7 @@ function RollupConfig( {
 	onError,
 	run,
 } ) {
-	const { fields } = useCollectionFields( collectionId );
+	const { fields } = useCollectionFieldsContext();
 	const relationFields = fields.filter(
 		( field ) => field.cortextType === 'relation'
 	);
@@ -537,7 +535,7 @@ export default function AddFieldPopover( { collectionId, onCreate } ) {
 			setConfigType( chosenType );
 			return;
 		}
-		// Notion-style fallback: an empty name is allowed; the field
+		// Empty-name fallback: an empty name is allowed; the field
 		// title defaults to the type label ("Text", "Number", …) and
 		// the user can rename later via the column header dropdown.
 		const trimmed = title.trim();
@@ -597,7 +595,6 @@ export default function AddFieldPopover( { collectionId, onCreate } ) {
 	} else if ( configType === 'rollup' ) {
 		configuration = (
 			<RollupConfig
-				collectionId={ collectionId }
 				title={ title }
 				fallbackTitle={ fallbackTitle }
 				isBusy={ isBusy }

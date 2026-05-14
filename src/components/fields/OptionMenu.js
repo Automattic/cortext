@@ -57,7 +57,7 @@ export function SwatchSquare( { color } ) {
 	);
 }
 
-// Per-option config menu, modeled on Notion's "..." popover: rename
+// Per-option config menu: rename
 // input at the top, Delete, then a vertical list of named colors with a
 // check on the active one. Owns its own draft label state so typing
 // doesn't fire saves on every keystroke; commits on Enter or blur. Used

@@ -22,8 +22,48 @@ import {
 // exposed via REST as part of the `meta` field on each page record.
 const MARKER_META = '_cortext_trashed_by_parent';
 
+export function computeSidebarTrashRoots( trashedPages = [] ) {
+	const all = Array.isArray( trashedPages ) ? trashedPages : [];
+	const trashedById = new Map( all.map( ( page ) => [ page.id, page ] ) );
+	const childrenByMarker = new Map();
+
+	const markerOf = ( page ) => Number( page.meta?.[ MARKER_META ] ?? 0 );
+
+	all.forEach( ( page ) => {
+		const marker = markerOf( page );
+		if ( marker > 0 && trashedById.has( marker ) ) {
+			if ( ! childrenByMarker.has( marker ) ) {
+				childrenByMarker.set( marker, [] );
+			}
+			childrenByMarker.get( marker ).push( page );
+		}
+	} );
+
+	const roots = all.filter( ( page ) => {
+		const marker = markerOf( page );
+		return marker === 0 || ! trashedById.has( marker );
+	} );
+
+	const descendantCountById = new Map();
+	roots.forEach( ( root ) => {
+		let count = 0;
+		const stack = [ ...( childrenByMarker.get( root.id ) ?? [] ) ];
+		while ( stack.length ) {
+			const node = stack.pop();
+			count++;
+			const kids = childrenByMarker.get( node.id );
+			if ( kids ) {
+				stack.push( ...kids );
+			}
+		}
+		descendantCountById.set( root.id, count );
+	} );
+
+	return { roots, descendantCountById };
+}
+
 /**
- * Renders the sidebar Trash section: a flat list of trashed pages with a
+ * Renders the sidebar Trash panel: a flat list of trashed pages with a
  * breadcrumb on each row plus inline Restore and Delete-permanently actions.
  *
  * Only cascade roots are listed. Subpages dragged into trash by a parent's
@@ -33,8 +73,8 @@ const MARKER_META = '_cortext_trashed_by_parent';
  * (orphans with stale markers) get promoted back to roots so they remain
  * reachable.
  *
- * Restore goes through `/cortext/v1/pages/<id>/restore` and permanent delete
- * through `/cortext/v1/pages/<id>/permanent-delete`. Both endpoints invoke
+ * Restore goes through `/cortext/v1/documents/<id>/restore` and permanent delete
+ * through `/cortext/v1/documents/<id>/permanent-delete`. Both endpoints invoke
  * `PageTrashCascade`'s subtree handling on the server; the client only needs
  * to invalidate the page queries afterwards.
  *
@@ -89,45 +129,10 @@ export default function SidebarTrash( { activePages, selectedId, onSelect } ) {
 	// Cascade roots: pages with no marker, plus pages whose marker points at
 	// a page that's no longer in trash (its tagged parent was permanently
 	// deleted). Without the second clause those orphans would be hidden.
-	const { roots, descendantCountById } = useMemo( () => {
-		const all = visibleTrashed;
-		const trashedById = new Map( all.map( ( p ) => [ p.id, p ] ) );
-		const childrenByMarker = new Map();
-
-		const markerOf = ( page ) => Number( page.meta?.[ MARKER_META ] ?? 0 );
-
-		all.forEach( ( page ) => {
-			const marker = markerOf( page );
-			if ( marker > 0 && trashedById.has( marker ) ) {
-				if ( ! childrenByMarker.has( marker ) ) {
-					childrenByMarker.set( marker, [] );
-				}
-				childrenByMarker.get( marker ).push( page );
-			}
-		} );
-
-		const computedRoots = all.filter( ( page ) => {
-			const marker = markerOf( page );
-			return marker === 0 || ! trashedById.has( marker );
-		} );
-
-		const counts = new Map();
-		computedRoots.forEach( ( root ) => {
-			let count = 0;
-			const stack = [ ...( childrenByMarker.get( root.id ) ?? [] ) ];
-			while ( stack.length ) {
-				const node = stack.pop();
-				count++;
-				const kids = childrenByMarker.get( node.id );
-				if ( kids ) {
-					stack.push( ...kids );
-				}
-			}
-			counts.set( root.id, count );
-		} );
-
-		return { roots: computedRoots, descendantCountById: counts };
-	}, [ visibleTrashed ] );
+	const { roots, descendantCountById } = useMemo(
+		() => computeSidebarTrashRoots( visibleTrashed ),
+		[ visibleTrashed ]
+	);
 
 	const buildBreadcrumb = useCallback(
 		( page ) => {
@@ -141,7 +146,7 @@ export default function SidebarTrash( { activePages, selectedId, onSelect } ) {
 					title:
 						current.title?.rendered?.trim() ||
 						__( '(untitled)', 'cortext' ),
-					icon: current.meta?.cortext_page_icon ?? '',
+					icon: current.meta?.cortext_document_icon ?? '',
 				} );
 				current = current.parent
 					? ancestorById.get( current.parent )
@@ -171,7 +176,7 @@ export default function SidebarTrash( { activePages, selectedId, onSelect } ) {
 			setBusyId( id );
 			try {
 				await apiFetch( {
-					path: `/cortext/v1/pages/${ id }/restore`,
+					path: `/cortext/v1/documents/${ id }/restore`,
 					method: 'POST',
 				} );
 				refreshQueries();
@@ -199,7 +204,7 @@ export default function SidebarTrash( { activePages, selectedId, onSelect } ) {
 		setBusyId( id );
 		try {
 			const response = await apiFetch( {
-				path: `/cortext/v1/pages/${ id }/permanent-delete`,
+				path: `/cortext/v1/documents/${ id }/permanent-delete`,
 				method: 'POST',
 			} );
 			// If the canvas was showing one of the deleted pages, navigate
@@ -231,10 +236,6 @@ export default function SidebarTrash( { activePages, selectedId, onSelect } ) {
 
 	return (
 		<>
-			<h2 className="cortext-sidebar__section-title">
-				{ __( 'Trash', 'cortext' ) }
-			</h2>
-
 			{ isLoading && (
 				<div className="cortext-sidebar__loading">
 					<Spinner />
@@ -272,7 +273,7 @@ export default function SidebarTrash( { activePages, selectedId, onSelect } ) {
 							page.title?.rendered?.trim() ||
 							__( '(untitled)', 'cortext' );
 						const breadcrumb = buildBreadcrumb( page );
-						const pageIcon = page.meta?.cortext_page_icon ?? '';
+						const pageIcon = page.meta?.cortext_document_icon ?? '';
 						const isBusy = busyId === page.id;
 						const isSelected = selectedId === page.id;
 						const error =

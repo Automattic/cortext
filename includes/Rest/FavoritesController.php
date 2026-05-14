@@ -10,6 +10,7 @@ declare( strict_types=1 );
 namespace Cortext\Rest;
 
 use Cortext\PostType\Collection;
+use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Page;
 use WP_Error;
 use WP_Post;
@@ -182,7 +183,7 @@ final class FavoritesController {
 	 * @param string $kind Target kind.
 	 * @param int    $id Target post ID.
 	 * @param bool   $require_edit Whether to enforce edit_post capability.
-	 * @return array{kind:string,id:int,path:string}|WP_Error
+	 * @return array<string,mixed>|WP_Error
 	 */
 	private function format_target( string $kind, int $id, bool $require_edit ) {
 		if ( ! in_array( $kind, array( 'page', 'collection' ), true ) || $id < 1 ) {
@@ -206,11 +207,20 @@ final class FavoritesController {
 			);
 		}
 
-		return array(
-			'kind' => $kind,
-			'id'   => $id,
-			'path' => $this->target_path( $post, $kind ),
+		$target = array(
+			'kind'  => $kind,
+			'id'    => $id,
+			'title' => $this->post_title( $post ),
+			'path'  => $this->target_path( $post, $kind ),
 		);
+		if ( 'page' === $kind ) {
+			$icon = get_post_meta( $id, DocumentIdentity::META_KEY, true );
+			if ( is_string( $icon ) && '' !== $icon ) {
+				$target['icon'] = $icon;
+			}
+		}
+
+		return $target;
 	}
 
 	private function invalid_target_error(): WP_Error {
@@ -228,6 +238,11 @@ final class FavoritesController {
 
 		$type = 'page' === $kind ? Page::POST_TYPE : Collection::POST_TYPE;
 		return $type === $post->post_type;
+	}
+
+	private function post_title( WP_Post $post ): string {
+		$title = trim( $post->post_title );
+		return '' === $title ? __( '(untitled)', 'cortext' ) : $title;
 	}
 
 	private function target_path( WP_Post $post, string $kind ): string {

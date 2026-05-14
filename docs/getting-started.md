@@ -4,11 +4,12 @@ Cortext is an early prototype. There is no packaged release yet; to try it you r
 
 ## Requirements
 
-- PHP 8.1+
-- WordPress 6.9+ (provided by wp-env)
-- Docker (recommended runtime for wp-env)
-- Node.js 20+ (matching `@wordpress/scripts`)
-- Git
+-   PHP 8.1+
+-   WordPress 6.9+ (provided by wp-env)
+-   Docker (recommended runtime for wp-env)
+-   Node.js 24.15
+-   pnpm 11+
+-   Git
 
 ## First-time setup
 
@@ -28,7 +29,7 @@ cd cortext
 
 `run.sh` boots wp-env detached, re-derives the site-title label from the current branch, seeds the Cortext demo workspace, and starts the JS watcher. When the admin URL is ready, sign in and click "Cortext" in the admin menu.
 
-Plain `wp-env start`, `npm run env:start`, and `npm start` skip the seed. To opt in, use `./scripts/run.sh`, `npm run start:seed`, `npm run env:start:seed`, or `npm run env:seed`. Reruns are safe: existing collections, fields, entries, and non-empty pages are left alone, and only missing demo records get added. The seed creates a small page tree with embedded collection views so the editor and DataViews have something to render on first boot.
+Plain `wp-env start`, `pnpm run env:start`, and `pnpm start` skip the seed. To opt in, use `./scripts/run.sh`, `pnpm run start:seed`, `pnpm run env:start:seed`, or `pnpm run env:seed`. Reruns are safe: existing collections, fields, entries, and non-empty pages are left alone, and only missing demo records get added. The default seed creates a compact page tree and a few representative rows per collection; use `pnpm run env:seed:full` when you need the larger catalog.
 
 To stop cleanly:
 
@@ -41,18 +42,20 @@ This is not optional. wp-env runs detached and would leak containers if a worktr
 ## Day-to-day
 
 ```
-npm run dev          # JS watcher, when wp-env is already running
-npm run build        # production build
-npm run lint:js      # ESLint, scoped to src/
-npm run lint:php     # PHPCS via npm (same as composer phpcs)
-npm run lint:style   # stylelint for src/**/*.{css,pcss,scss}
-npm run format       # Prettier
-npm run start:seed   # boot wp-env, seed demo data, start the JS watcher
-npm run env:start:seed # boot wp-env and add any missing demo data
-npm run env:seed     # add any missing demo data to the dev wp-env
-npm run env:seed:reset # delete Cortext data and recreate the demo set
-npm run test:unit    # Jest
-npm run test:e2e     # Playwright end-to-end tests
+pnpm run dev          # JS watcher, when wp-env is already running
+pnpm run build        # production build
+pnpm run lint:js      # ESLint, scoped to src/
+pnpm run lint:php     # PHPCS via pnpm (same as composer phpcs)
+pnpm run lint:style   # stylelint for src/**/*.{css,pcss,scss}
+pnpm run format       # Prettier
+pnpm run start:seed   # boot wp-env, seed demo data, start the JS watcher
+pnpm run env:start:seed # boot wp-env and add any missing demo data
+pnpm run env:seed     # add any missing demo data to the dev wp-env
+pnpm run env:seed:full # add the full demo catalog to the dev wp-env
+pnpm run env:seed:reset # delete Cortext data and recreate the demo set
+pnpm run env:seed:reset:full # delete Cortext data and recreate the full demo set
+pnpm run test:unit    # Jest
+pnpm run test:e2e     # Playwright end-to-end tests
 
 composer phpcs       # WordPress Coding Standards
 composer test:php    # PHPUnit (via WorDBless)
@@ -63,12 +66,14 @@ composer test:php    # PHPUnit (via WorDBless)
 E2E tests run against a dedicated wp-env instance on port 8889, separate from the development site:
 
 ```
-npm run test:env:start   # boot the test environment
-npm run test:env:start:seed # boot the test environment and seed demo data
-npm run test:env:seed    # add any missing demo data to the test wp-env
-npm run test:env:seed:reset # delete Cortext test data and recreate the demo set
-npm run test:e2e         # run Playwright tests
-npm run test:e2e:debug   # run with the Playwright UI
+pnpm run test:env:start   # boot the test environment
+pnpm run test:env:start:seed # boot the test environment and seed demo data
+pnpm run test:env:seed    # add any missing demo data to the test wp-env
+pnpm run test:env:seed:full # add the full demo catalog to the test wp-env
+pnpm run test:env:seed:reset # delete Cortext test data and recreate the demo set
+pnpm run test:env:seed:reset:full # delete Cortext test data and recreate the full demo set
+pnpm run test:e2e         # run Playwright tests
+pnpm run test:e2e:debug   # run with the Playwright UI
 ```
 
 These run the same seed command as the dev environment, just pointed at `.wp-env.test.json`.
@@ -79,15 +84,14 @@ Ports are derived from the worktree's absolute path, so multiple worktrees (one 
 
 If you use an agent orchestrator (Conductor, Cursor, Cline, or similar), wire:
 
-- Setup hook: `./scripts/setup.sh`
-- Run hook: `./scripts/run.sh`
-- Archive hook: `./scripts/archive.sh`
+-   Setup hook: `./scripts/setup.sh`
+-   Run hook: `./scripts/run.sh`
+-   Archive hook: `./scripts/archive.sh`
 
 ## Contributing
 
 Cortext is a prototype, so docs, architecture notes, and scope are all fair game for PRs.
 
-- Branch prefix: `add/`, `fix/`, `docs/`, `refactor/`, `tests/`, followed by a concise slug.
-- CI runs ESLint, stylelint, Jest, PHPCS, and PHPUnit. Keep them green before requesting review.
-- The [design principles](vision.md) describe the posture the project is willing to defend; if a PR proposes routing around a WordPress primitive, expect the conversation to start there.
-- The [content modeling guide](modeling-guide.md) captures the mental model for collections and cross-type tags, which is the vocabulary used in issues and reviews.
+-   Branch prefix: `add/`, `fix/`, `docs/`, `refactor/`, `tests/`, followed by a concise slug.
+-   CI runs ESLint, stylelint, Jest, PHPCS, and PHPUnit. Keep them green before requesting review.
+-   The [design principles](vision.md) describe the posture the project is willing to defend; if a PR proposes routing around a WordPress primitive, expect the conversation to start there.

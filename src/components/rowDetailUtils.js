@@ -30,7 +30,44 @@ export function adjacentRowId( rows, currentRowId, direction ) {
 	return next?.id ?? null;
 }
 
-export function splitPropertyPatch( patch, currentMeta = {} ) {
+export function rowDetailFieldType( field ) {
+	if ( field.id === 'title' ) {
+		return 'text';
+	}
+	return field.cortextFieldType ?? field.type ?? 'text';
+}
+
+export function isRowDetailFieldEditable( field ) {
+	if ( rowDetailFieldType( field ) === 'relation' ) {
+		return false;
+	}
+
+	return (
+		field.id === 'title' ||
+		( field.editable && field.id?.startsWith?.( 'field-' ) )
+	);
+}
+
+export function valueForField( field, data ) {
+	if ( field.id === 'title' ) {
+		return data.title ?? '';
+	}
+	if ( field.id?.startsWith?.( 'field-' ) ) {
+		if (
+			! isRowDetailFieldEditable( field ) &&
+			Object.prototype.hasOwnProperty.call(
+				data.hydratedMeta ?? {},
+				field.id
+			)
+		) {
+			return data.hydratedMeta[ field.id ] ?? null;
+		}
+		return data.meta?.[ field.id ] ?? null;
+	}
+	return field.getValue?.( { item: data.row } ) ?? null;
+}
+
+export function splitPropertyPatch( patch ) {
 	const next = {
 		title: undefined,
 		meta: null,
@@ -45,8 +82,12 @@ export function splitPropertyPatch( patch, currentMeta = {} ) {
 		}
 	}
 
+	// Only the changed keys go through editPost. Merging the full
+	// current meta would mark every key edited and round-trip values
+	// (including hydrated relations / rollups) back into REST on save,
+	// where they'd be rejected against their `string`-typed registration.
 	if ( Object.keys( metaPatch ).length > 0 ) {
-		next.meta = { ...( currentMeta ?? {} ), ...metaPatch };
+		next.meta = metaPatch;
 	}
 
 	return next;

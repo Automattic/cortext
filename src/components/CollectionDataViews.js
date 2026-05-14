@@ -1,56 +1,78 @@
 import apiFetch from '@wordpress/api-fetch';
-import { Button, Notice } from '@wordpress/components';
-import { DataViews, filterSortAndPaginate } from '@wordpress/dataviews';
+import {
+	Button,
+	Notice,
+	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+	__experimentalConfirmDialog as ConfirmDialog,
+} from '@wordpress/components';
+import { DataViews } from '@wordpress/dataviews';
 import {
 	createContext,
 	useCallback,
 	useContext,
 	useEffect,
+	useLayoutEffect,
 	useMemo,
 	useRef,
 	useState,
 } from '@wordpress/element';
-import { __ } from '@wordpress/i18n';
-import { plus } from '@wordpress/icons';
-import { useNavigate, useSearch } from '@wordpress/route';
+import { __, sprintf } from '@wordpress/i18n';
+import { copy, plus, trash } from '@wordpress/icons';
+import { useNavigate } from '@wordpress/route';
+import { addQueryArgs } from '@wordpress/url';
 
 import DataViewColumnInteractions from './DataViewColumnInteractions';
 import EditableCell, { RowMutationContext } from './EditableCell';
+import PageIcon from './PageIcon';
+import { filterSortAndPaginateWithGroups } from './groupedFilters';
 import TableCalculationsFooter from './TableCalculationsFooter';
 import ColumnHeaderActions from './fields/ColumnHeaderActions';
-import RowDetailView, { ROW_DETAIL_MODE_ICONS } from './RowDetailView';
-import { RowFullEditorContext } from './RowFullEditorContext';
+import RowDetailView, {
+	ROW_DETAIL_MODE_ICONS,
+	ROW_DETAIL_MODE_LABELS,
+} from './RowDetailView';
 import { RowDetailSidebar } from './RowDetailSidebarSlot';
 import {
 	GHOST_FIELD_ID,
 	TITLE_FIELD_ID,
 	isDefaultVisibleField,
 	normalizeView,
+	pruneFiltersForFields,
+	withNewlyVisibleFields,
 } from './dataViewColumns';
+import { scrollToEndQuickly } from './dataViewScroll';
 import {
 	adjacentRowId,
 	getRowDetailMode,
 	withRowDetailMode,
 } from './rowDetailUtils';
-import useCollectionFields from '../hooks/useCollectionFields';
+import { useCollectionFieldsContext } from './CollectionFieldsContext';
+import { dataViewsFilterByForType } from '../hooks/fieldMapping';
+import { toDataViewId, toRecordId } from '../hooks/fieldIds';
 import useCollectionRows from '../hooks/useCollectionRows';
+import { useRecents } from '../hooks/useRecents';
 import { elementsFromOptions } from '../hooks/optionElements';
+import { computeDocumentUri } from '../router/useResolveEntity';
 
 const DEFAULT_LAYOUTS = { table: { density: 'compact' }, grid: {}, list: {} };
 const TITLE_LABEL = __( 'Title', 'cortext' );
-const ROW_SEARCH_KEY = 'row';
-const ROW_COLLECTION_SEARCH_KEY = 'rowCollection';
+const TITLE_FILTER_OPERATORS = [
+	'is',
+	'isNot',
+	'contains',
+	'notContains',
+	'startsWith',
+	'endsWith',
+	'isEmpty',
+	'isNotEmpty',
+];
 const ROW_DETAIL_SIDE_SURFACE_EXIT_MS = 300;
 const ROW_DETAIL_MODAL_ENTER_MS = 200;
 const ROW_DETAIL_SIDE_TO_MODAL_HANDOFF_MS =
 	ROW_DETAIL_SIDE_SURFACE_EXIT_MS - ROW_DETAIL_MODAL_ENTER_MS;
 
-function parseSearchId( value ) {
-	if ( Array.isArray( value ) ) {
-		return parseSearchId( value[ 0 ] );
-	}
-	const id = Number.parseInt( String( value ).replaceAll( '"', '' ), 10 );
-	return Number.isFinite( id ) && id > 0 ? id : null;
+function hasActiveCalculations( view ) {
+	return Object.values( view?.calculations ?? {} ).some( Boolean );
 }
 
 function prefersReducedMotion() {
@@ -72,6 +94,7 @@ function TitleCell( { item } ) {
 		useContext( OpenRowActionContext );
 	const canOpenRow = Boolean( enabled && requestOpenRow );
 	const isOpenRow = canOpenRow && String( item?.id ) === String( openRowId );
+	const documentIcon = item?.meta?.cortext_document_icon ?? '';
 	const openRow = useCallback(
 		( event ) => {
 			event.preventDefault();
@@ -92,6 +115,11 @@ function TitleCell( { item } ) {
 				( isOpenRow ? ' cortext-title-cell--is-open' : '' )
 			}
 		>
+			{ documentIcon ? (
+				<span className="cortext-title-cell__icon" aria-hidden="true">
+					<PageIcon icon={ documentIcon } size={ 16 } />
+				</span>
+			) : null }
 			<EditableCell
 				item={ item }
 				fieldId="title"
@@ -120,6 +148,7 @@ function TitleCell( { item } ) {
 
 const TITLE_FIELD = {
 	id: TITLE_FIELD_ID,
+	type: 'text',
 	label: TITLE_LABEL,
 	header: (
 		<span className="cortext-column-header-label">{ TITLE_LABEL }</span>
@@ -128,10 +157,19 @@ const TITLE_FIELD = {
 	// the unfiltered string (the_title encodes `&` as `&#038;`, which
 	// would otherwise sort under that literal entity). Same reason as
 	// `mapField`'s label fallback in `src/hooks/fieldMapping.js`.
-	getValue: ( { item } ) => item?.title?.raw ?? item?.title?.rendered ?? '',
+	getValue: ( { item } ) => {
+		const title = item?.title;
+		return typeof title === 'string'
+			? title
+			: title?.raw ?? title?.rendered ?? '';
+	},
 	render: ( { item } ) => <TitleCell item={ item } />,
 	editable: true,
 	cortextType: 'title',
+	sortable: true,
+	filterable: true,
+	operators: TITLE_FILTER_OPERATORS,
+	filterBy: dataViewsFilterByForType( 'text', TITLE_FILTER_OPERATORS ),
 	enableGlobalSearch: true,
 	// The title column can't be hidden (it's the row identity), but it
 	// reorders and resizes like any other column. `normalizeView` re-adds
@@ -139,36 +177,9 @@ const TITLE_FIELD = {
 	enableHiding: false,
 };
 
-// Synthetic "ghost column" rendered at the right edge of the table layout.
-// Its `header` carries an aria-hidden marker that `ColumnHeaderActions`
-// portals a `+` button into; the row cells render `null`, leaving an
-// empty column that visually echoes Notion's "add column" affordance.
-// Pinned visible (and last) by the view-sync effect when
-// `view.type === 'table'`, dropped from `view.fields` for grid/list.
-const GHOST_FIELD = {
-	id: GHOST_FIELD_ID,
-	type: 'text',
-	cortextType: 'ghost',
-	label: '',
-	enableSorting: false,
-	enableHiding: false,
-	editable: false,
-	getValue: () => '',
-	render: () => (
-		<span className="cortext-data-view__ghost-cell" aria-hidden="true" />
-	),
-	header: (
-		<span
-			className="cortext-column-header-marker cortext-column-header-marker--add"
-			data-cortext-add-field-marker="true"
-			aria-hidden="true"
-		/>
-	),
-};
-
 // Pulls a "single equality" prefill out of the active filters: only filters
-// whose operator is `is` (or its alias `equals`) and whose value is a single
-// scalar contribute. Multi-value operators (`isAny`, `isNone`, …) are skipped
+// whose operator is `is` and whose value is a single scalar contribute.
+// Multi-value operators (`isAny`, `isNone`, …) are skipped
 // because the issue scopes prefill to single equality clauses only.
 //
 // The server now applies filters via GET /cortext/v1/rows, so prefill
@@ -183,7 +194,7 @@ function prefillFromFilters( filters, fieldIds ) {
 			continue;
 		}
 		const op = filter.operator;
-		if ( op !== 'is' && op !== 'equals' ) {
+		if ( op !== 'is' ) {
 			continue;
 		}
 		const { field, value } = filter;
@@ -277,15 +288,13 @@ export default function CollectionDataViews( {
 	invalid,
 	error,
 	onReady,
+	revealFieldId = null,
+	onFieldRevealed,
 } ) {
 	const navigate = useNavigate();
-	const routeSearch = useSearch( { strict: false } );
 	const { fields, collection, slug, isResolving, fieldsResolved } =
-		useCollectionFields( collectionId );
-	const routeRowId = parseSearchId( routeSearch?.[ ROW_SEARCH_KEY ] );
-	const routeRowCollectionId = parseSearchId(
-		routeSearch?.[ ROW_COLLECTION_SEARCH_KEY ]
-	);
+		useCollectionFieldsContext();
+	const { touchRecent } = useRecents();
 
 	const availableFields = useMemo(
 		() => [ TITLE_FIELD, ...fields ],
@@ -301,10 +310,8 @@ export default function CollectionDataViews( {
 		}
 		const validIds = new Set( availableFields.map( ( f ) => f.id ) );
 		const currentFilters = view?.filters ?? [];
-		const nextFilters = currentFilters.filter( ( filter ) =>
-			validIds.has( filter.field )
-		);
-		if ( nextFilters.length !== currentFilters.length ) {
+		const nextFilters = pruneFiltersForFields( currentFilters, validIds );
+		if ( nextFilters !== currentFilters ) {
 			return { ...view, filters: nextFilters };
 		}
 		return view;
@@ -312,27 +319,37 @@ export default function CollectionDataViews( {
 
 	const {
 		data,
-		paginationInfo,
+		paginationInfo: serverPaginationInfo,
 		isLoading,
 		hasResolved: rowsResolved,
 		error: rowError,
 		refresh,
+		queryMode,
 	} = useCollectionRows(
 		isResolving ? null : collectionId,
 		reconciledView,
-		availableFields
+		availableFields,
+		{ forceClient: hasActiveCalculations( reconciledView ) }
 	);
 
 	const isTableLayout = view?.type === 'table';
-	const dataViewFields = useMemo(
-		() =>
-			isTableLayout
-				? [ ...availableFields, GHOST_FIELD ]
-				: availableFields,
-		[ availableFields, isTableLayout ]
-	);
+	const isServerPaginated = queryMode === 'server';
+	const dataViewFields = availableFields;
 
 	const tableWrapperRef = useRef( null );
+	const [ localRevealFieldId, setLocalRevealFieldId ] = useState( null );
+	const pendingRevealFieldId = revealFieldId ?? localRevealFieldId;
+	const requestRevealCreatedField = useCallback( ( created ) => {
+		const fieldId = toDataViewId( created?.id );
+		if ( fieldId ) {
+			const wrapper =
+				tableWrapperRef.current?.querySelector( '.dataviews-wrapper' );
+			if ( wrapper ) {
+				scrollToEndQuickly( wrapper, { snapIfAtEnd: true } );
+			}
+			setLocalRevealFieldId( fieldId );
+		}
+	}, [] );
 	// editRequest is the "open this cell for editing" channel: cells that
 	// match its `{ rowId, fieldId }` flip to edit mode and clear it. Used
 	// for both the title-cell auto-open on a fresh row and Tab-driven
@@ -363,16 +380,42 @@ export default function CollectionDataViews( {
 
 	const { data: dataFiltered, paginationInfo: clientPaginationInfo } =
 		useMemo( () => {
-			return filterSortAndPaginate( data, view, availableFields );
-		}, [ data, view, availableFields ] );
+			if ( isServerPaginated ) {
+				return {
+					data,
+					paginationInfo: serverPaginationInfo,
+				};
+			}
+			return filterSortAndPaginateWithGroups(
+				data,
+				view,
+				availableFields
+			);
+		}, [
+			data,
+			view,
+			availableFields,
+			isServerPaginated,
+			serverPaginationInfo,
+		] );
 	const { data: dataFilteredForCalculations } = useMemo( () => {
+		if ( isServerPaginated ) {
+			return { data };
+		}
 		const calculationView = { ...( view ?? {} ) };
 		// tech-debt.md#36: summaries need the filtered row set before
 		// pagination, which DataViews does not expose as a separate result.
 		delete calculationView.page;
 		delete calculationView.perPage;
-		return filterSortAndPaginate( data, calculationView, availableFields );
-	}, [ data, view, availableFields ] );
+		return filterSortAndPaginateWithGroups(
+			data,
+			calculationView,
+			availableFields
+		);
+	}, [ data, view, availableFields, isServerPaginated ] );
+	const activePaginationInfo = isServerPaginated
+		? serverPaginationInfo
+		: clientPaginationInfo;
 
 	const requestNext = useCallback(
 		( rowId, fieldId, direction ) => {
@@ -423,10 +466,15 @@ export default function CollectionDataViews( {
 					value,
 				},
 			} );
+			touchRecent( {
+				kind: 'row',
+				id: updated?.id ?? rowId,
+				collectionId,
+			} );
 			refresh();
 			return updated;
 		},
-		[ collectionId, refresh ]
+		[ collectionId, refresh, touchRecent ]
 	);
 
 	const mutationContext = useMemo(
@@ -464,7 +512,8 @@ export default function CollectionDataViews( {
 			const hasExplicitSort = Boolean( view?.sort?.field );
 			if ( ! hasExplicitSort ) {
 				const perPage = view?.perPage ?? 25;
-				const expectedTotal = ( paginationInfo?.totalItems ?? 0 ) + 1;
+				const expectedTotal =
+					( activePaginationInfo?.totalItems ?? 0 ) + 1;
 				const lastPage = Math.max(
 					1,
 					Math.ceil( expectedTotal / perPage )
@@ -478,10 +527,22 @@ export default function CollectionDataViews( {
 				refresh();
 			}
 			if ( created?.id ) {
+				touchRecent( {
+					kind: 'row',
+					id: created.id,
+					collectionId,
+				} );
 				setEditRequest( { rowId: created.id, fieldId: 'title' } );
 			}
 		},
-		[ refresh, view, paginationInfo, onChangeView ]
+		[
+			refresh,
+			view,
+			activePaginationInfo,
+			onChangeView,
+			touchRecent,
+			collectionId,
+		]
 	);
 
 	const viewRef = useRef( view );
@@ -496,13 +557,8 @@ export default function CollectionDataViews( {
 	const rowDetailMode =
 		savedRowDetailMode === 'full' ? 'side' : savedRowDetailMode;
 	const postType = slug ? `crtxt_${ slug }` : null;
-	const { clearSuppressedRouteRow, openRowFull, suppressedRouteRow } =
-		useContext( RowFullEditorContext );
 	const detailApiRef = useRef( null );
 	const [ openRowId, setOpenRowId ] = useState( null );
-	const openRowIdRef = useRef( openRowId );
-	openRowIdRef.current = openRowId;
-	const [ fullRowId, setFullRowId ] = useState( null );
 	const [ detailSaveError, setDetailSaveError ] = useState( null );
 	const [ pendingDetailTransition, setPendingDetailTransition ] =
 		useState( null );
@@ -531,35 +587,32 @@ export default function CollectionDataViews( {
 		},
 		[]
 	);
-	const updateRouteRow = useCallback(
-		( rowId, options = {} ) => {
-			if ( ! collectionId || ! rowId ) {
+	const navigateToFullRow = useCallback(
+		( rowId ) => {
+			if ( ! rowId ) {
 				return;
 			}
+			// Full mode is the only row state that lives in the URL. Side
+			// and modal panes are local React state. `computeDocumentUri`
+			// gives pages and rows the same URL shape; the post type is
+			// resolved via the document locator on the way in.
+			const targetRow =
+				dataFiltered.find(
+					( candidate ) => String( candidate.id ) === String( rowId )
+				) ??
+				data.find(
+					( candidate ) => String( candidate.id ) === String( rowId )
+				) ??
+				null;
+			const splatPath = computeDocumentUri(
+				targetRow ?? { id: rowId, slug: '' }
+			);
 			navigate( {
-				search: ( current ) => ( {
-					...( current ?? {} ),
-					[ ROW_COLLECTION_SEARCH_KEY ]: collectionId,
-					[ ROW_SEARCH_KEY ]: rowId,
-				} ),
-				replace: options.replace ?? false,
+				to: '/$',
+				params: { _splat: splatPath },
 			} );
 		},
-		[ collectionId, navigate ]
-	);
-	const clearRouteRow = useCallback(
-		( options = {} ) => {
-			navigate( {
-				search: ( current ) => {
-					const next = { ...( current ?? {} ) };
-					delete next[ ROW_COLLECTION_SEARCH_KEY ];
-					delete next[ ROW_SEARCH_KEY ];
-					return next;
-				},
-				replace: options.replace ?? true,
-			} );
-		},
-		[ navigate ]
+		[ data, dataFiltered, navigate ]
 	);
 
 	const openRow = useMemo( () => {
@@ -576,38 +629,13 @@ export default function CollectionDataViews( {
 
 	const openFullRow = useCallback(
 		( rowId ) => {
-			if ( ! openRowFull || ! postType || ! rowId ) {
+			if ( ! rowId ) {
 				return false;
 			}
-			setOpenRowId( rowId );
-			setFullRowId( rowId );
-			openRowFull( {
-				collectionId,
-				postType,
-				rowId,
-				onClose: () => {
-					setOpenRowId( null );
-					setFullRowId( null );
-					setDetailSaveError( null );
-					setPendingDetailTransition( null );
-					clearRouteRow( { replace: true } );
-					refresh();
-				},
-				onModeChange: ( mode, nextRowId ) => {
-					setOpenRowId( nextRowId );
-					setFullRowId( null );
-					setDetailSaveError( null );
-					setPendingDetailTransition( null );
-					onChangeViewRef.current(
-						withRowDetailMode( viewRef.current, mode )
-					);
-					refresh();
-				},
-				onSaved: refresh,
-			} );
+			navigateToFullRow( rowId );
 			return true;
 		},
-		[ clearRouteRow, collectionId, openRowFull, postType, refresh ]
+		[ navigateToFullRow ]
 	);
 
 	const applyDetailTransition = useCallback(
@@ -618,44 +646,25 @@ export default function CollectionDataViews( {
 			if ( transition.type === 'close' ) {
 				clearModeSurfaceTransition();
 				setOpenRowId( null );
-				setFullRowId( null );
-				if ( transition.syncUrl !== false ) {
-					clearRouteRow( { replace: true } );
-				}
 			} else if ( transition.type === 'row' ) {
 				clearModeSurfaceTransition();
 				setOpenRowId( transition.rowId );
-				setFullRowId( null );
-				if ( transition.syncUrl !== false ) {
-					updateRouteRow( transition.rowId, {
-						replace: ! transition.pushUrl,
-					} );
-				}
 			} else if ( transition.type === 'mode' ) {
-				setFullRowId( null );
 				onChangeViewRef.current(
 					withRowDetailMode( viewRef.current, transition.mode )
 				);
 			} else if ( transition.type === 'full' ) {
+				// Route change to a document URL; clear the local pane
+				// state so it doesn't flash on the way out.
 				clearModeSurfaceTransition();
-				if ( transition.syncUrl !== false ) {
-					updateRouteRow( transition.rowId, {
-						replace: ! transition.pushUrl,
-					} );
-				}
+				setOpenRowId( null );
 				openFullRow( transition.rowId );
 			}
 			if ( options.refreshRows ) {
 				refresh();
 			}
 		},
-		[
-			clearModeSurfaceTransition,
-			clearRouteRow,
-			openFullRow,
-			refresh,
-			updateRouteRow,
-		]
+		[ clearModeSurfaceTransition, openFullRow, refresh ]
 	);
 
 	const runDetailTransition = useCallback(
@@ -702,42 +711,161 @@ export default function CollectionDataViews( {
 				return;
 			}
 			runDetailTransition( {
-				type: rowDetailMode === 'full' ? 'full' : 'row',
+				type: savedRowDetailMode === 'full' ? 'full' : 'row',
 				rowId: row.id,
-				pushUrl: true,
 			} );
 		},
-		[ openRowId, rowDetailMode, runDetailTransition ]
+		[ openRowId, runDetailTransition, savedRowDetailMode ]
 	);
 
 	const openRowActionContext = useMemo(
 		() => ( {
 			enabled: isTableLayout,
-			icon: ROW_DETAIL_MODE_ICONS[ rowDetailMode ],
+			icon: ROW_DETAIL_MODE_ICONS[ savedRowDetailMode ],
 			openRowId,
 			requestOpenRow,
 		} ),
-		[ isTableLayout, openRowId, requestOpenRow, rowDetailMode ]
+		[ isTableLayout, openRowId, requestOpenRow, savedRowDetailMode ]
 	);
 
-	const rowActions = useMemo(
-		() => [
-			{
-				id: 'open-row',
-				label: __( 'Open row', 'cortext' ),
-				icon: ROW_DETAIL_MODE_ICONS[ rowDetailMode ],
-				isPrimary: true,
+	const [ pendingDeleteRow, setPendingDeleteRow ] = useState( null );
+	const [ rowActionError, setRowActionError ] = useState( null );
+
+	const openRowInMode = useCallback(
+		( row, mode ) => {
+			if ( ! row?.id ) {
+				return;
+			}
+			if ( mode === 'full' ) {
+				runDetailTransition( { type: 'full', rowId: row.id } );
+				return;
+			}
+			// Store the chosen side/modal mode before opening. This matches
+			// the in-detail mode toggle: an explicit choice updates the
+			// user's preference.
+			if ( savedRowDetailMode !== mode ) {
+				onChangeView( withRowDetailMode( view, mode ) );
+			}
+			runDetailTransition( { type: 'row', rowId: row.id } );
+		},
+		[ onChangeView, runDetailTransition, savedRowDetailMode, view ]
+	);
+
+	const duplicateRow = useCallback(
+		async ( row ) => {
+			if ( ! collectionId || ! row?.id ) {
+				return;
+			}
+			setRowActionError( null );
+			try {
+				const created = await apiFetch( {
+					path: `/cortext/v1/collections/${ collectionId }/rows/${ row.id }/duplicate`,
+					method: 'POST',
+				} );
+				if ( created?.id ) {
+					touchRecent( {
+						kind: 'row',
+						id: created.id,
+						collectionId,
+					} );
+				}
+				refresh();
+			} catch ( apiError ) {
+				setRowActionError(
+					apiError?.message ??
+						__( 'Could not duplicate row.', 'cortext' )
+				);
+			}
+		},
+		[ collectionId, refresh, touchRecent ]
+	);
+
+	const requestDeleteRow = useCallback( ( row ) => {
+		if ( ! row?.id ) {
+			return;
+		}
+		setRowActionError( null );
+		setPendingDeleteRow( row );
+	}, [] );
+
+	const cancelDeleteRow = useCallback( () => {
+		setPendingDeleteRow( null );
+	}, [] );
+
+	const confirmDeleteRow = useCallback( async () => {
+		const row = pendingDeleteRow;
+		setPendingDeleteRow( null );
+		if ( ! row?.id || ! postType ) {
+			return;
+		}
+		try {
+			await apiFetch( {
+				path: addQueryArgs( `/wp/v2/${ postType }/${ row.id }`, {
+					force: true,
+				} ),
+				method: 'DELETE',
+			} );
+			if ( String( row.id ) === String( openRowId ) ) {
+				runDetailTransition( { type: 'close' } );
+			}
+			refresh();
+		} catch ( apiError ) {
+			setRowActionError(
+				apiError?.message ?? __( 'Could not delete row.', 'cortext' )
+			);
+		}
+	}, [
+		openRowId,
+		pendingDeleteRow,
+		postType,
+		refresh,
+		runDetailTransition,
+	] );
+
+	const rowActions = useMemo( () => {
+		const actions = [];
+		// List and grid get one primary Open action, matching the saved
+		// detail mode. Table already has the inline Open button in the title
+		// cell, so these actions stay inside the menu there.
+		for ( const mode of [ 'side', 'modal', 'full' ] ) {
+			actions.push( {
+				id: `open-in-${ mode }`,
+				label: sprintf(
+					/* translators: %s: row detail mode (Side peek, Center modal, Full page). */
+					__( 'Open in %s', 'cortext' ),
+					ROW_DETAIL_MODE_LABELS[ mode ]
+				),
+				icon: ROW_DETAIL_MODE_ICONS[ mode ],
+				isPrimary: ! isTableLayout && mode === savedRowDetailMode,
 				context: 'single',
-				callback: ( items ) => requestOpenRow( items?.[ 0 ] ),
-			},
-		],
-		[ requestOpenRow, rowDetailMode ]
-	);
+				callback: ( items ) => openRowInMode( items?.[ 0 ], mode ),
+			} );
+		}
+		actions.push( {
+			id: 'duplicate-row',
+			label: __( 'Duplicate', 'cortext' ),
+			icon: copy,
+			context: 'single',
+			callback: ( items ) => duplicateRow( items?.[ 0 ] ),
+		} );
+		actions.push( {
+			id: 'delete-row',
+			label: __( 'Delete', 'cortext' ),
+			icon: trash,
+			isDestructive: true,
+			context: 'single',
+			callback: ( items ) => requestDeleteRow( items?.[ 0 ] ),
+		} );
+		return actions;
+	}, [
+		duplicateRow,
+		isTableLayout,
+		openRowInMode,
+		requestDeleteRow,
+		savedRowDetailMode,
+	] );
 
-	const dataViewActions = useMemo(
-		() => ( isTableLayout ? undefined : rowActions ),
-		[ isTableLayout, rowActions ]
-	);
+	const dataViewActions = rowActions;
 
 	const requestCloseDetail = useCallback(
 		() => runDetailTransition( { type: 'close' } ),
@@ -748,7 +876,7 @@ export default function CollectionDataViews( {
 		( direction ) => {
 			const rowId = adjacentRowId( dataFiltered, openRowId, direction );
 			if ( rowId ) {
-				runDetailTransition( { type: 'row', rowId, pushUrl: true } );
+				runDetailTransition( { type: 'row', rowId } );
 			}
 		},
 		[ dataFiltered, openRowId, runDetailTransition ]
@@ -817,52 +945,10 @@ export default function CollectionDataViews( {
 	useEffect( () => {
 		clearModeSurfaceTransition();
 		setOpenRowId( null );
-		setFullRowId( null );
 		setDetailSaveError( null );
 		setPendingDetailTransition( null );
 		detailApiRef.current = null;
 	}, [ clearModeSurfaceTransition, collectionId ] );
-
-	useEffect( () => {
-		const routeTargetsThisCollection =
-			routeRowId &&
-			routeRowCollectionId &&
-			String( routeRowCollectionId ) === String( collectionId );
-
-		if ( ! routeTargetsThisCollection ) {
-			clearSuppressedRouteRow?.();
-			if ( openRowIdRef.current ) {
-				runDetailTransition( { type: 'close', syncUrl: false } );
-			}
-			return;
-		}
-
-		if (
-			String( suppressedRouteRow?.collectionId ) ===
-				String( collectionId ) &&
-			String( suppressedRouteRow?.rowId ) === String( routeRowId )
-		) {
-			return;
-		}
-
-		if ( String( openRowIdRef.current ) === String( routeRowId ) ) {
-			return;
-		}
-
-		runDetailTransition( {
-			type: rowDetailMode === 'full' ? 'full' : 'row',
-			rowId: routeRowId,
-			syncUrl: false,
-		} );
-	}, [
-		collectionId,
-		clearSuppressedRouteRow,
-		routeRowCollectionId,
-		routeRowId,
-		rowDetailMode,
-		runDetailTransition,
-		suppressedRouteRow,
-	] );
 
 	// Reconcile saved view state with the live schema whenever the field
 	// set changes: seed defaults on first render, then hand off to
@@ -902,65 +988,26 @@ export default function CollectionDataViews( {
 			fields: availableFields,
 		} );
 
-		// Splice any editable field that just appeared in the schema
-		// (wasn't present on the previous sync) into its schema position
-		// in `view.fields`. The first render — `previouslyKnown` is
-		// `null` — leaves saved views alone; from then on, the diff
-		// detects fields the user just created via toolbar Add field
-		// or duplicate. Honors user-driven hides because the toggled-off
-		// field IS in `previouslyKnown` and gets skipped here. Inserting
-		// at the schema position (rather than appending) keeps a
-		// duplicated field next to its source instead of jumping to the
-		// end of the visible columns.
-		if ( previouslyKnown && currentFields.length > 0 ) {
-			const next = [ ...( normalized.fields ?? [] ) ];
-			let inserted = false;
-			for (
-				let schemaIdx = 0;
-				schemaIdx < availableFields.length;
-				schemaIdx++
-			) {
-				const f = availableFields[ schemaIdx ];
-				if (
-					! isDefaultVisibleField( f ) ||
-					previouslyKnown.has( f.id ) ||
-					next.includes( f.id )
-				) {
-					continue;
-				}
-				let insertAt = next.length;
-				for ( let i = schemaIdx - 1; i >= 0; i-- ) {
-					const idx = next.indexOf( availableFields[ i ].id );
-					if ( idx >= 0 ) {
-						insertAt = idx + 1;
-						break;
-					}
-				}
-				next.splice( insertAt, 0, f.id );
-				inserted = true;
-			}
-			if ( inserted ) {
-				normalized = { ...normalized, fields: next };
-			}
-		}
+		// Add fields that just appeared in the schema to `view.fields`.
+		// The first run leaves saved views alone. Fields created through
+		// Add field go at the end; duplicates and outside schema changes
+		// keep the old placement rule.
+		normalized = withNewlyVisibleFields(
+			normalized,
+			availableFields,
+			previouslyKnown,
+			pendingRevealFieldId
+		);
 
-		// Pin the ghost "+ add field" column last whenever the table
-		// layout is active. In grid/list layouts the synthetic field
-		// isn't part of `availableFields`, so `normalizeView` already
-		// dropped any stale reference.
-		if ( isTableLayout ) {
-			const stripped = ( normalized.fields ?? [] ).filter(
-				( id ) => id !== GHOST_FIELD_ID
-			);
-			const nextFields = [ ...stripped, GHOST_FIELD_ID ];
-			const fieldsChanged =
-				nextFields.length !== ( normalized.fields ?? [] ).length ||
-				nextFields.some(
-					( id, i ) => id !== ( normalized.fields ?? [] )[ i ]
-				);
-			if ( fieldsChanged ) {
-				normalized = { ...normalized, fields: nextFields };
-			}
+		// Drop `__add_field` from older saved views. The add-field button now
+		// uses the DataViews actions header instead of a synthetic column.
+		if ( ( normalized.fields ?? [] ).includes( GHOST_FIELD_ID ) ) {
+			normalized = {
+				...normalized,
+				fields: ( normalized.fields ?? [] ).filter(
+					( id ) => id !== GHOST_FIELD_ID
+				),
+			};
 		}
 
 		knownFieldIdsRef.current = validIds;
@@ -972,12 +1019,10 @@ export default function CollectionDataViews( {
 				: null;
 
 		const currentFilters = normalized.filters ?? [];
-		const nextFilters = currentFilters.filter( ( filter ) =>
-			validIds.has( filter.field )
-		);
+		const nextFilters = pruneFiltersForFields( currentFilters, validIds );
 
 		const sortChanged = currentSort !== nextSort;
-		const filtersChanged = currentFilters.length !== nextFilters.length;
+		const filtersChanged = currentFilters !== nextFilters;
 		const normalizedChanged = normalized !== currentView;
 
 		if ( normalizedChanged || sortChanged || filtersChanged ) {
@@ -987,7 +1032,68 @@ export default function CollectionDataViews( {
 				filters: nextFilters,
 			} );
 		}
-	}, [ availableFields, isTableLayout, isResolving, fieldsResolved ] );
+	}, [
+		availableFields,
+		isTableLayout,
+		isResolving,
+		fieldsResolved,
+		pendingRevealFieldId,
+	] );
+
+	useLayoutEffect( () => {
+		if (
+			! isTableLayout ||
+			! pendingRevealFieldId ||
+			isResolving ||
+			! fieldsResolved
+		) {
+			return undefined;
+		}
+		if ( ! ( view?.fields ?? [] ).includes( pendingRevealFieldId ) ) {
+			return undefined;
+		}
+
+		const recordId = toRecordId( pendingRevealFieldId );
+		const reveal = () => {
+			const wrapper =
+				tableWrapperRef.current?.querySelector( '.dataviews-wrapper' );
+			if ( ! wrapper ) {
+				return false;
+			}
+			if ( recordId ) {
+				const marker = tableWrapperRef.current?.querySelector(
+					`[data-cortext-field-marker="${ recordId }"]`
+				);
+				if ( ! marker ) {
+					return false;
+				}
+			}
+			scrollToEndQuickly( wrapper );
+			if ( localRevealFieldId === pendingRevealFieldId ) {
+				setLocalRevealFieldId( null );
+			}
+			onFieldRevealed?.( pendingRevealFieldId );
+			return true;
+		};
+
+		if ( reveal() ) {
+			return undefined;
+		}
+
+		const frame = window.requestAnimationFrame( reveal );
+
+		return () => {
+			window.cancelAnimationFrame( frame );
+		};
+	}, [
+		fieldsResolved,
+		isResolving,
+		isTableLayout,
+		localRevealFieldId,
+		onFieldRevealed,
+		pendingRevealFieldId,
+		view?.fields,
+	] );
 
 	useEffect( () => {
 		if ( ! isResolving && rowsResolved ) {
@@ -1068,16 +1174,16 @@ export default function CollectionDataViews( {
 		);
 	}
 
-	const isFullDetail = Boolean( fullRowId );
 	const previousRowId = adjacentRowId( dataFiltered, openRowId, -1 );
 	const nextRowId = adjacentRowId( dataFiltered, openRowId, 1 );
 	let detailSurface = null;
 
-	if ( openRowId && postType && ! isFullDetail && renderedRowDetailMode ) {
+	if ( openRowId && postType && renderedRowDetailMode ) {
 		const detailView = (
 			<RowDetailView
 				canGoNext={ Boolean( nextRowId ) }
 				canGoPrevious={ Boolean( previousRowId ) }
+				collectionId={ collectionId }
 				fields={ availableFields }
 				mode={ renderedRowDetailMode }
 				onApi={ setDetailApi }
@@ -1086,6 +1192,7 @@ export default function CollectionDataViews( {
 				onModeChange={ requestDetailMode }
 				onNext={ () => requestAdjacentRow( 1 ) }
 				onPrevious={ () => requestAdjacentRow( -1 ) }
+				onRestored={ refresh }
 				onRetryPending={ retryPendingDetailTransition }
 				onSaved={ refresh }
 				postType={ postType }
@@ -1110,64 +1217,87 @@ export default function CollectionDataViews( {
 					data-row-detail-mode={ rowDetailMode }
 					data-row-detail-open={ openRowId ? 'true' : 'false' }
 				>
-					{ ! isFullDetail && (
-						<div
-							className="cortext-data-view"
-							ref={ tableWrapperRef }
-						>
-							<DataViews
-								data={ dataFiltered }
-								fields={ dataViewFields }
+					<div className="cortext-data-view" ref={ tableWrapperRef }>
+						{ rowActionError && (
+							<Notice
+								status="error"
+								isDismissible
+								onRemove={ () => setRowActionError( null ) }
+							>
+								{ rowActionError }
+							</Notice>
+						) }
+						<DataViews
+							data={ dataFiltered }
+							fields={ dataViewFields }
+							view={ view }
+							onChangeView={ onChangeView }
+							paginationInfo={ activePaginationInfo }
+							defaultLayouts={ DEFAULT_LAYOUTS }
+							getItemId={ ( item ) => String( item.id ) }
+							isLoading={ isLoading }
+							empty={ empty }
+							actions={ dataViewActions }
+						/>
+						{ isTableLayout && (
+							<TableCalculationsFooter
+								wrapperRef={ tableWrapperRef }
+								view={ view }
+								fields={ availableFields }
+								data={ dataFilteredForCalculations }
+								onChangeView={ onChangeView }
+							/>
+						) }
+						{ isTableLayout && (
+							<DataViewColumnInteractions
+								wrapperRef={ tableWrapperRef }
+								view={ view }
+								fields={ availableFields }
+								onChangeView={ onChangeView }
+							/>
+						) }
+						{ isTableLayout && (
+							<ColumnHeaderActions
+								collectionId={ collectionId }
 								view={ view }
 								onChangeView={ onChangeView }
-								paginationInfo={ clientPaginationInfo }
-								defaultLayouts={ DEFAULT_LAYOUTS }
-								getItemId={ ( item ) => String( item.id ) }
-								isLoading={ isLoading }
-								empty={ empty }
-								actions={ dataViewActions }
+								onFieldOptionsSaved={ updateFieldOptions }
+								onFieldCreated={ requestRevealCreatedField }
+								onRowsChanged={ refresh }
 							/>
-							{ isTableLayout && (
-								<TableCalculationsFooter
-									wrapperRef={ tableWrapperRef }
-									view={ view }
-									fields={ availableFields }
-									data={ dataFilteredForCalculations }
-									onChangeView={ onChangeView }
-								/>
-							) }
-							{ isTableLayout && (
-								<DataViewColumnInteractions
-									wrapperRef={ tableWrapperRef }
-									view={ view }
-									fields={ availableFields }
-									onChangeView={ onChangeView }
-								/>
-							) }
-							{ isTableLayout && (
-								<ColumnHeaderActions
-									collectionId={ collectionId }
-									view={ view }
-									onChangeView={ onChangeView }
-									onFieldOptionsSaved={ updateFieldOptions }
-									onRowsChanged={ refresh }
-								/>
-							) }
-							{ /* tech-debt.md#7: DataViews has no footer slot, so the
+						) }
+						{ /* tech-debt.md#7: DataViews has no footer slot, so the
 							   New-row affordance and its CSS layout sit outside the
 							   component instead of inside its layout chrome. */ }
-							<div className="cortext-data-view__footer">
-								<NewRowButton
-									slug={ slug }
-									view={ view }
-									fields={ fields }
-									onCreated={ onCreated }
-								/>
-							</div>
+						<div className="cortext-data-view__footer">
+							<NewRowButton
+								slug={ slug }
+								view={ view }
+								fields={ fields }
+								onCreated={ onCreated }
+							/>
 						</div>
-					) }
+					</div>
 					{ detailSurface }
 				</div>
+				{ pendingDeleteRow && (
+					<ConfirmDialog
+						onConfirm={ confirmDeleteRow }
+						onCancel={ cancelDeleteRow }
+						confirmButtonText={ __( 'Delete', 'cortext' ) }
+					>
+						{ sprintf(
+							/* translators: %s: row title. */
+							__(
+								'Delete "%s"? This cannot be undone.',
+								'cortext'
+							),
+							pendingDeleteRow?.title?.rendered ||
+								pendingDeleteRow?.title?.raw ||
+								__( '(untitled)', 'cortext' )
+						) }
+					</ConfirmDialog>
+				) }
 			</OpenRowActionContext.Provider>
 		</RowMutationContext.Provider>
 	);

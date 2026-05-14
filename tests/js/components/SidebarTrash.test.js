@@ -241,7 +241,7 @@ describe( 'SidebarTrash', () => {
 		).toBeFalsy();
 	} );
 
-	it( 'POSTs to /cortext/v1/pages/<id>/restore and refreshes both page queries', async () => {
+	it( 'POSTs to /cortext/v1/documents/<id>/restore and refreshes both page queries', async () => {
 		setTrashRecords( {
 			records: [
 				makePage( { id: 7, title: { rendered: 'Doc', raw: 'Doc' } } ),
@@ -255,7 +255,7 @@ describe( 'SidebarTrash', () => {
 
 		await waitFor( () => {
 			expect( apiFetch ).toHaveBeenCalledWith( {
-				path: '/cortext/v1/pages/7/restore',
+				path: '/cortext/v1/documents/7/restore',
 				method: 'POST',
 			} );
 		} );
@@ -287,7 +287,7 @@ describe( 'SidebarTrash', () => {
 		expect( dispatchMocks.invalidateResolution ).not.toHaveBeenCalled();
 	} );
 
-	it( 'POSTs to /cortext/v1/pages/<id>/permanent-delete after confirmation', async () => {
+	it( 'POSTs to /cortext/v1/documents/<id>/permanent-delete after confirmation', async () => {
 		setTrashRecords( {
 			records: [ makePage( { id: 9 } ) ],
 		} );
@@ -302,7 +302,7 @@ describe( 'SidebarTrash', () => {
 
 		await waitFor( () => {
 			expect( apiFetch ).toHaveBeenCalledWith( {
-				path: '/cortext/v1/pages/9/permanent-delete',
+				path: '/cortext/v1/documents/9/permanent-delete',
 				method: 'POST',
 			} );
 		} );

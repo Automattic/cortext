@@ -96,7 +96,7 @@ test.describe( 'Workspace home', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ homePage.id }`
+				`page=cortext&p=/${ homePage.id }`
 			);
 			await waitForEditorPost( page, homePage.id );
 			await setSidebarItemAsHome( page, PAGE_HOME_TITLE );
@@ -143,7 +143,9 @@ test.describe( 'Workspace home', () => {
 
 			await admin.visitAdminPage( 'admin.php', 'page=cortext' );
 			await waitForEditorPost( page, homePage.id );
-			await expect.poll( () => appPath( page ) ).toContain( '/page/' );
+			await expect
+				.poll( () => appPath( page ) )
+				.toContain( String( homePage.id ) );
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
@@ -237,7 +239,9 @@ test.describe( 'Workspace home', () => {
 
 			await admin.visitAdminPage( 'admin.php', 'page=cortext' );
 			await waitForEditorPost( page, fallback.id );
-			await expect.poll( () => appPath( page ) ).toContain( '/page/' );
+			await expect
+				.poll( () => appPath( page ) )
+				.toContain( String( fallback.id ) );
 		} finally {
 			await deleteIfCreated(
 				requestUtils,

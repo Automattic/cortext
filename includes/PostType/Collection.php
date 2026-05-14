@@ -53,15 +53,11 @@ final class Collection {
 
 	private function register_meta(): void {
 		$meta = array(
-			'notion_id' => array(
+			'slug'   => array(
 				'type'   => 'string',
 				'single' => true,
 			),
-			'slug'      => array(
-				'type'   => 'string',
-				'single' => true,
-			),
-			'fields'    => array(
+			'fields' => array(
 				'type'   => 'string',
 				'single' => false,
 			),

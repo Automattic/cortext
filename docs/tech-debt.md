@@ -16,33 +16,48 @@ Pair with [decisions.md](decisions.md) for choices we've made peace with and [ro
 
 ## 2. Rows aren't in `core-data`'s entity store `[internal]`
 
-**What.** `useCollectionRows` fetches rows with raw `apiFetch` and keeps its own state, including a `requestId` race guard and a `refresh()` counter callers bump after creating or updating a row. Mutations POST directly via `apiFetch`. The dynamic `crtxt_{slug}` post types are registered with `show_in_rest`, so `core-data`'s resolver should discover their schema lazily; we just haven't wired it.
+Updated by [#80](https://github.com/priethor/cortext/pull/80).
 
-**Where.** `src/hooks/useCollectionRows.js`, with side effects in `src/components/CollectionDataViews.js` (`saveRowField`, `onCreated`).
+**What.** Rows still bypass `core-data`. `useCollectionRows` owns the fetch state, the `requestId` race guard, the manual `refresh()` counter, and the choice between server and client mode. #80 moved the normal table path to paged REST requests, then changed the fallback from one `per_page=-1` request to pages of 100 fetched with a small concurrency cap. That is a better failure mode, but it is still a second row-loading layer beside the WordPress data store.
 
-**Solution.** Switch to `useEntityRecords('postType', \`crtxt_${slug}\`, query)` plus `saveEntityRecord` for writes. `core-data` then handles caching, race protection, and post-mutation invalidation. Knock-on workarounds it deletes:
+The dynamic `crtxt_{slug}` post types already use `show_in_rest`, so `core-data` should be able to discover them lazily. We just have not wired rows through it yet. Mutations still POST directly with `apiFetch`, then ask the hook to refetch.
+
+**Where.** `src/hooks/useCollectionRows.js`, with side effects in `src/components/CollectionDataViews.js` (`saveRowField`, `onCreated`) and forced client mode in `src/components/relations/RelationEditor.js`.
+
+**Solution.** Switch to `useEntityRecords('postType', \`crtxt_${slug}\`, query)` plus `saveEntityRecord` for writes once the remaining query shapes can be expressed there. `core-data` would then own caching, race protection, and post-mutation invalidation. Knock-on workarounds it deletes:
 
 - The `refresh()` handle exists only because rows aren't reactive.
 - Half of `RowMutationContext` (also driven by #1) exists because cells can't reach a `core-data` store that isn't there.
 - `onCreated` runs optimistic `lastPage = ceil((totalItems+1)/perPage)` arithmetic against possibly stale `paginationInfo`. With reactive pagination we'd watch `totalPages` in an effect.
+- The server/client planner becomes normal resolver queries instead of a local fetch policy.
 
 Worth a small spike before committing; `core-data`'s schema cache for rarely-changing post types is the only real risk.
 
-## 3. `view.sort` isn't forwarded to REST `[internal]`
+## 3. Sorting support is split between REST and client mode `[internal]`
 
-**What.** `buildQueryArgs` ignores `view.sort` entirely. As a placeholder, we pin `orderby=date order=asc` whenever `view.sort.field` is unset so newly created rows land at the bottom of the table. If the user picks a sort via the DataViews UI, we silently drop it. Result: the sort UI looks interactive but doesn't stick, and the asc-by-date assumption leaks into the page-jump on row creation.
+Updated by [#80](https://github.com/priethor/cortext/pull/80) and RSM-1459.
 
-**Where.** `src/hooks/useCollectionRows.js` (`buildQueryArgs`), and the conditional in `onCreated` in `src/components/CollectionDataViews.js`.
+**What.** #80 fixed the old bad state where the sort UI changed but REST ignored it. RSM-1459 moved the supported scalar collection sorts into `/cortext/v1/rows`: title, timestamps, text-like fields, number, date/datetime, select, checkbox, email, and URL. With no explicit sort, REST still uses oldest-first ordering so new rows land at the bottom of the table.
 
-**Solution.** Translate `view.sort` to REST `orderby/order`. Native fields (`title`, `date`, `id`, `menu_order`) map directly. For `field-{id}` keys, add a `rest_{post_type}_query` filter on the row CPT (`includes/PostType/CollectionEntries.php`) that recognizes `orderby=field-X` and rewrites it to `meta_value`/`meta_value_num` with the matching `meta_key`. Standard WordPress pattern; same filter sets us up for #4.
+The debt is the split brain. The client has an allow-list for server-safe sorts, and `FieldTypeRegistry` / `RowsFilterQuery` own the PHP version of the same story. Unsupported display-value sorts fall back to client mode: fetch all pages, then let DataViews sort locally. That keeps the result honest, but it is not where we want sorting to live long-term.
 
-## 4. `view.filters` isn't forwarded to REST `[internal]`
+The hard cases are still display-value sorts: users, relations, list-style rollups, files, and any field where the value users see is not the value stored in meta. That broader choice is tracked in #14.
 
-**What.** Filters round-trip through block attributes and feed `prefillFromFilters` for the New-row prefill, but they don't filter the loaded dataset. The "filter prefill" feature works because we read the stored filter, not because the server applied it. Filters appear functional but the result set never shrinks, which gets loud once a real collection has more than a page of rows.
+**Where.** The query planner and sort allow-lists in `src/hooks/useCollectionRows.js`, the `onCreated` no-sort branch in `src/components/CollectionDataViews.js`, `FieldTypeRegistry`, and `RowsFilterQuery::validate_sort()`.
 
-**Where.** `src/hooks/useCollectionRows.js` (`buildQueryArgs`), and `prefillFromFilters` in `src/components/CollectionDataViews.js`.
+**Solution.** Make REST the source of truth for sortable fields and expose that capability to the client instead of mirroring it by hand. Resolve #14 for display-value sorts, then remove the client fallback for sorting except where DataViews really needs a local-only view state.
 
-**Solution.** Extend the same REST filter as #3 with a `meta_query` translation. `is`/`isAny`/`contains` map cleanly to `=`/`IN`/`LIKE` against the right `meta_key`. Once this lands, prefill becomes a side effect of real filtering rather than its only consumer.
+## 4. Filtering support is split between REST and client mode `[upstream, internal]`
+
+Updated by [#80](https://github.com/priethor/cortext/pull/80) and RSM-1459.
+
+**What.** #80 made simple field filters real on the server. RSM-1459 expanded that to the supported Notion-style operators, title filters, split-term search, and nested `AND` / `OR` groups through `RowsFilterQuery` and `RowsMetaQuery`. When the server cannot handle a filter, the hook falls back to client mode, fetches all pages, applies grouped filters in a small Cortext wrapper, and lets DataViews handle the remaining flat search/sort/pagination work.
+
+The cost is another split support matrix. The client checks field type, operator, grouping, and value shape before choosing server mode. PHP validates the same contract from the collection schema. `FieldTypeRegistry` is Cortext's local stand-in for an upstream field-query capability contract: sortable, filterable, text-like, storage type, and supported operators. WordPress post meta and DataViews each know part of that story, but neither exposes the whole contract for custom field types today. System fields are still deferred (#13), display-value fields are still client-only, and grouped filters only go server-side when every descendant is supported.
+
+**Where.** `FieldTypeRegistry`, `serverFilterNode` / `buildQueryPlan` in `src/hooks/useCollectionRows.js`, `filterSortAndPaginateWithGroups` in `src/components/groupedFilters.js`, `RowsFilterQuery`, `RowsMetaQuery`, and `prefillFromFilters` in `src/components/CollectionDataViews.js`.
+
+**Solution.** Make the server-owned capability map the only local source of truth, then shrink it if DataViews or WordPress grows a first-class query-capability contract for custom fields. System fields need the date/user handling from #13, and display-value fields need dedicated query semantics instead of pretending stored meta is the UI value.
 
 ## 5. Inline-edit layout couplings `[internal]`
 
@@ -88,13 +103,13 @@ Worth a small spike before committing; `core-data`'s schema cache for rarely-cha
 
 **Solution.** Either switch the PHP test harness to `wp-env` + `WP_UnitTestCase` (which runs against a real database) or rely on e2e coverage in `tests/e2e/specs/data-view-block.spec.js` to close the gap. The e2e suite already exercises row loading, but dedicated integration tests for sort, filter, and pagination against real data would be more targeted.
 
-## 10. DataViews `FieldType` union has no `number` or `url` `[upstream]`
+## 10. DataViews `FieldType` union has no decimal `number` or `url` `[upstream]`
 
-**What.** DataViews v6's `FieldType` union is `'text' | 'integer' | 'datetime' | 'date' | 'media' | 'boolean' | 'email' | 'array'`. Cortext has `number` (decimals allowed) and `url`, neither of which has an exact match. We map both to `'text'`: `'integer'` rejects non-integers at validation time, and there's nothing closer for url. The cost lands on the column-level sort comparator: text sort is lexicographic, so `"10"` would sort before `"9"` for a number column. Today this is invisible because `view.sort` isn't forwarded to REST (#3), but the day sort lands, decimal columns will sort wrong unless we add a custom `sort` per field or DataViews ships the missing types.
+**What.** DataViews v6's `FieldType` union is `'text' | 'integer' | 'datetime' | 'date' | 'media' | 'boolean' | 'email' | 'array'`. Cortext has `number` (decimals allowed) and `url`, neither of which has an exact match. We map numbers to `'integer'` so the filter UI can offer numeric operators, then disable DataViews' integer-only validator, attach a decimal-aware sort comparator, and provide a decimal-safe number filter control because the built-in integer `between` control applies whole-number min/max bounds. URLs still map to `'text'`, which is close enough for contains/starts-with filters but not an exact semantic type.
 
 **Where.** `mapField` in `src/hooks/fieldMapping.js`.
 
-**Solution.** Either DataViews adds `'number'` and `'url'` to the `FieldType` union, or we attach a custom numeric `sort` to number fields when sort lands. Filing a Gutenberg issue is the cheaper play.
+**Solution.** DataViews adds a decimal-friendly `'number'` type and a `'url'` type, or exposes a cleaner way for consumers to supply custom field controls/operator sets without borrowing the nearest built-in type. Filing a Gutenberg issue is the cheaper play.
 
 ## 11. DataViews `Option` type has no `color` `[upstream]`
 
@@ -150,17 +165,19 @@ Double-click autofit is the trickiest piece. With no measurement hook upstream, 
 
 **Solution.** A `field.menuItems` (array or render-prop) on DataViews fields, appended to the built-in dropdown. Other consumers (Pattern Manager, Pages, Site Editor) would benefit too. File as a Gutenberg feature request.
 
-## 17. Ghost `+` column is a synthetic field pinned in `view.fields` `[internal]`
+## 17. Add-field header piggybacks on the DataViews actions column `[upstream, soft]`
 
-**What.** The `+ add field` column is a synthetic DataViews field (`__add_field`) — no data, no label, pinned last in `view.fields` for table layout. We rely on `enableHiding: false` to keep it out of the column-visibility menu. If DataViews stops honoring that flag, the synthetic leaks into the menu and confuses the column list.
+**What.** The table's `+ add field` button now sits in DataViews' row-actions column header. `ColumnHeaderActions` finds `th.dataviews-view-table__actions-column` and portals the button there; CSS hides the built-in "Actions" label and keeps the header cell sticky on the right. This is cleaner than the old synthetic `__add_field` column because it no longer leaks into `view.fields`, but it still leans on DataViews internals. If the class name, header rendering, or sticky-column markup changes, the button can disappear or stop lining up with the row kebabs.
 
-**Where.** `GHOST_FIELD` and the view-sync effect in `src/components/CollectionDataViews.js`.
+The create-field flow also has to reveal the new trailing column itself. It carries the created field ID back to `CollectionDataViews`, waits until the field marker exists in the rendered header, then scrolls `.dataviews-wrapper` to the right edge. The interaction feels right, but it still depends on DataViews' DOM shape.
 
-**Solution.** If `enableHiding` ever stops working, fork the field list in `CollectionDataViews.js` — pass the synthetic to the table layout but hide it from the visibility menu.
+**Where.** `src/components/fields/ColumnHeaderActions.js` (actions-column lookup and portal), `src/components/CollectionDataViews.js` and `src/components/dataViewScroll.js` (created-field reveal and `.dataviews-wrapper` scroll), `src/index.scss` (`.dataviews-view-table__actions-column` overrides), and the legacy `__add_field` cleanup in `src/components/CollectionDataViews.js`.
+
+**Solution.** DataViews exposes a trailing table-header slot, an add-column slot, or a header action area separate from per-row actions, plus refs for the table scroll wrapper and rendered headers. Then the portal targets a real extension point, the reveal code stops querying DataViews DOM, the sticky/header-label CSS disappears, and `__add_field` stays only as migration cleanup for old saved views.
 
 ## 18. Field management is table-layout only `[internal]`
 
-**What.** Rename / Duplicate / Delete only show up in the table-layout column-header kebab. Grid and list layouts have no schema actions and no ghost `+`. Users there can still create fields via the toolbar Add field button, but they have to switch to table to manage existing fields.
+**What.** Rename / Duplicate / Delete only show up in the table-layout column-header kebab. Grid and list layouts have no schema actions. Users there can still create fields via the toolbar Add field button, but they have to switch to table to manage existing fields.
 
 **Where.** `ColumnHeaderActions` mounts only when `view.type === 'table'` (`src/components/CollectionDataViews.js`).
 
@@ -176,7 +193,7 @@ Double-click autofit is the trickiest piece. With no measurement hook upstream, 
 
 ## 20. Table layout overrides couple to DataViews internals `[upstream, soft]`
 
-**What.** DataViews ships `table-layout: auto; width: 100%` plus per-cell padding rules. We flip to `table-layout: fixed; width: max-content` with explicit per-cell widths so adding or removing a field doesn't reflow every other column, and match DataViews' selector specificity to override the last-cell padding so the ghost column stays slim. Result: a content-sized table that scrolls horizontally on overflow. Depends on DataViews' class names and selector specificity staying put.
+**What.** DataViews ships `table-layout: auto; width: 100%` plus per-cell padding rules. We flip to `table-layout: fixed; width: max-content` with explicit per-cell widths so adding or removing a field doesn't reflow every other column. We also override the actions-column header so the add-field button stays pinned beside the row kebabs. The table sizes to its content and scrolls horizontally on overflow. Depends on DataViews' class names and selector specificity staying put.
 
 **Where.** `src/index.scss`, around the `.dataviews-view-table` block.
 
@@ -264,23 +281,23 @@ Double-click autofit is the trickiest piece. With no measurement hook upstream, 
 
 ## 31. Block editor has no non-serialized before/after block chrome slot `[upstream]`
 
-**What.** Page identity actions ("Add icon" / "Add cover") are editor chrome, but the ideal visual placement is immediately before the page title inside the block canvas. Persisting an actions block put UI into post content, while portalling controls into the iframe coupled us to BlockList DOM and block hover/selection behavior. The current compromise renders editor-only actions from the canvas shell, outside the persisted `BlockList`, and inserts only the real dynamic blocks (`cortext/page-icon`, `cortext/page-cover`) into content.
+**What.** Document identity actions ("Add icon" / "Add cover") are editor chrome, but the ideal visual placement is immediately before the document title inside the block canvas. Persisting an actions block put UI into post content, while portalling controls into the iframe coupled us to BlockList DOM and block hover/selection behavior. The current compromise renders editor-only actions from the canvas shell, outside the persisted `BlockList`, and inserts only the real dynamic blocks (`cortext/document-icon`, `cortext/document-cover`) into content.
 
-**Where.** `PageIdentityActions` and `EnsureHeaderBlocks` in `src/components/Canvas.js`; legacy no-op registration in `includes/Editor/PageHeaderActionsBlock.php`.
+**Where.** `DocumentIdentityActions` and `EnsureHeaderBlocks` in `src/components/EditorBody.js`; legacy no-op registration in `includes/Editor/PageHeaderActionsBlock.php`.
 
 **Solution.** Gutenberg could expose a non-serialized block chrome slot/fill, e.g. "before/after this block" keyed by `clientId`, block name, and root list. Fills would participate in editor layout and focus order but stay out of block order, list view, serialization, copy/paste, movers, undo history as content, and frontend rendering. Cortext could then render the identity actions before the root `core/post-title` without storing a fake block or querying iframe DOM.
 
 ## 32. Public pages render the title twice `[internal]`
 
-**What.** `PageIdentity::prepend_header_blocks` slips a locked `core/post-title` block into `post_content` on insert, so the editor canvas can show the title inline as part of the BlockList. The public template still calls `the_title()` immediately before `the_content()`, and `core/post-title` resolves to the same `post_title` again, so every page created after this filter landed renders its title twice publicly. Older pages (no title block in their content) are fine until the editor next persists them.
+**What.** `DocumentIdentity::prepend_header_blocks` slips a locked `core/post-title` block into `post_content` on insert, so the editor canvas can show the title inline as part of the BlockList. The public template still calls `the_title()` immediately before `the_content()`, and `core/post-title` resolves to the same `post_title` again, so every page created after this filter landed renders its title twice publicly. Older pages (no title block in their content) are fine until the editor next persists them.
 
-**Where.** `prepend_header_blocks` in `includes/PostType/PageIdentity.php`, paired with `the_title()` in `templates/single-crtxt_page.php`.
+**Where.** `prepend_header_blocks` in `includes/PostType/DocumentIdentity.php`, paired with `the_title()` in `templates/single-crtxt_page.php`.
 
 **Solution.** Stop baking `core/post-title` into `post_content` and mount the editor's title input as canvas chrome above `BlockCanvas`, the way Gutenberg itself does it. The template keeps `the_title()` as the single source of truth; the editor keeps an inline-editable title; pages already saved with the block get a small migration that strips it. Until then `the_title()` is the authoritative render and the duplication is the cost of the canvas-as-blocklist shape.
 
 ## 33. Frontend stylesheet doesn't carry the cover/icon rules `[internal]`
 
-**What.** `.cortext-page-cover-block` and `.cortext-page-icon` rules live in `src/index.scss`, which only builds to the admin shell bundle. The PHP `render_callback`s emit the same wrapper classes for the public frontend, but `src/frontend.scss` has no matching rules, so on a public `crtxt_page` the cover banner renders at intrinsic image size and the icon block falls back to inline-default layout.
+**What.** `.cortext-document-cover-block` and `.cortext-document-icon` rules live in `src/index.scss`, which only builds to the admin shell bundle. The PHP `render_callback`s emit the same wrapper classes for the public frontend, but `src/frontend.scss` has no matching rules, so on a public `crtxt_page` the cover banner renders at intrinsic image size and the icon block falls back to inline-default layout.
 
 **Where.** `src/index.scss` (cover/icon block rules) versus `src/frontend.scss` (no matching rules), enqueued by the public template.
 
@@ -288,9 +305,9 @@ Double-click autofit is the trickiest piece. With no measurement hook upstream, 
 
 ## 34. WP-icon variant renders blank on the public frontend `[internal]`
 
-**What.** `PageIconBlock::render` emits a marker span (`<span class="cortext-page-icon--wp" data-icon="…">`) for the `wp` icon variant and relies on a frontend hydration step to fill in the SVG. `frontend.js` is CSS-only, so nothing fills it and the icon disappears on the public page; the saved color is also dropped. Emoji and image variants render server-side and are fine.
+**What.** `DocumentIconBlock::render` emits a marker span (`<span class="cortext-document-icon--wp" data-icon="…">`) for the `wp` icon variant and relies on a frontend hydration step to fill in the SVG. `frontend.js` is CSS-only, so nothing fills it and the icon disappears on the public page; the saved color is also dropped. Emoji and image variants render server-side and are fine.
 
-**Where.** Case `'wp'` in `includes/Editor/PageIconBlock.php`, paired with `src/frontend.js` (no hydration).
+**Where.** Case `'wp'` in `includes/Editor/DocumentIconBlock.php`, paired with `src/frontend.js` (no hydration).
 
 **Solution.** Either ship the SVG inline server-side (a small build-time generator that reads `@wordpress/icons` and emits a name-to-markup PHP map, refreshed on install) or hydrate from `data-icon` markers in `frontend.js` (smaller PHP surface, adds a public script). The inline-color is a one-line fix in either path. Until then, surface the limitation in the picker copy or restrict the saved variant to emoji + image for public-rendered pages.
 
@@ -322,13 +339,15 @@ The state is ours too. `view.calculations` lives on the DataViews view object be
 
 ## 38. Command palette embedding needs host glue `[upstream, soft]`
 
-**What.** Cortext uses `@wordpress/commands` for the palette UI; we are not forking it. The rough part is that the package is built for the shared wp-admin command context. On the Cortext screen we need an app palette instead: no global wp-admin commands, no second Core palette competing for cmd+K, and focus returning to the workspace after a command runs. That leaves a few small bits of shell glue in Cortext: a local data registry, a `wp-core-commands` dequeue, a bundled stylesheet import, and a canvas ref for focus return.
+**What.** Cortext uses `@wordpress/commands` for command registration and palette state, but the stock menu is built for wp-admin. On the Cortext screen we need a scoped app palette: keep Core's commands out, avoid a second cmd+K menu, return focus to the workspace after a command runs, and put workspace recents in their own section instead of mixing them into suggestions. That leaves some glue in Cortext: a local data registry, a `wp-core-commands` dequeue, a bundled stylesheet import, a canvas ref for focus return, and a local command-menu renderer.
+
+The awkward bit is `CortextCommandMenu`. `@wordpress/commands` has a built-in "Recent" group, but that means recently used commands, not Cortext workspace history, and there is no public way to add a custom group. So Cortext renders the menu itself while still reading from the upstream command store. That is better than patching `node_modules` or poking the DOM after render, but upgrades need a close look at the upstream menu markup, CSS classes, keyboard behavior, and `cmdk` wiring.
 
 The user-facing placeholder is still Core's generic "Search commands and settings" string too. Fine for this slice, but it will feel off once the palette grows into actual Cortext search.
 
-**Where.** `src/components/CommandPalette.js`, the `canvasRef` passed from `src/router.js`, `dequeue_core_command_palette` in `includes/Admin/Screen.php`, and the `@wordpress/commands` stylesheet import in `src/index.scss`.
+**Where.** `src/components/CommandPalette.js`, `src/components/CortextCommandMenu.js`, the `canvasRef` passed from `src/router.js`, `dequeue_core_command_palette` in `includes/Admin/Screen.php`, and the `@wordpress/commands` stylesheet import and Cortext command-menu overrides in `src/index.scss`.
 
-**Solution.** Upstream could make app-owned palettes less ad hoc: a scoped command registry or namespace API, a supported way for full-screen admin apps to opt out of Core's admin palette, a custom input label, and an explicit focus-return target or after-close callback. With those, Cortext could keep registering commands through `@wordpress/commands` and drop most of the shell-specific wiring.
+**Solution.** Upstream could make app-owned palettes less ad hoc: a scoped command registry or namespace API, a supported way for full-screen admin apps to opt out of Core's admin palette, a custom input label, an explicit focus-return target or after-close callback, and a group/section API for registered commands or command loaders. With those, Cortext could keep registering commands through `@wordpress/commands`, render workspace recents through an upstream extension point, and drop the local menu renderer plus most of this shell-specific wiring.
 
 ## 39. Row detail relation editing is deferred `[internal]`
 
@@ -354,7 +373,55 @@ The user-facing placeholder is still Core's generic "Search commands and setting
 
 **Solution.** Extract a shared sidebar-row primitive with explicit slots for title navigation, drag handle, menu/actions, selected state, and shortcut-only rows. Then `PageRow`, `CollectionRow`, and `SidebarFavorites` can share the same interaction contract without reusing the wrong DOM shape for Favorites.
 
-## 42. Public page layout doesn't use WordPress align classes `[internal]`
+## 42. Row properties need a real document block `[internal, important]`
+
+**What.** Important. Row documents now look much closer to pages in the editor, but their collection-field properties are still Cortext shell UI sitting above the block-editor iframe. That is fine for this pass: the form works, and full-page mode can hide it. It is not fine as the long-term publishing model. Because the properties sit outside `post_content`, public themes never see them through `the_content()`, and we cannot get the Notion order (cover, icon, title, properties, body) without another one-off surface. If rows can be published, this is the next architectural gap to close.
+
+**Where.** `RowProperties` in `src/components/RowProperties.js`, mounted from `src/components/Canvas.js` for full-page row documents and `src/components/RowDetailView.js` for side/modal row detail. There is still no `cortext/document-properties` block or PHP render callback.
+
+**Solution.** Build `cortext/document-properties` as a locked dynamic block, in the same family as `cortext/document-cover` and `cortext/document-icon`. Its `edit()` should reuse the row-property form inside the editor iframe. Its `render_callback` should read the row's collection schema and meta, then emit frontend HTML for public themes. The header-block insertion path should place it after cover/icon/title on row documents. The full-page hide/show control then becomes an editor visibility preference, not the source of truth for whether properties exist in the document.
+
+## 43. Row recents still target the parent collection `[internal]`
+
+**What.** Recents stores row identity (`kind: row`, row id, and parent collection id), but the response still sends the parent collection as the clickable path. Row documents now have their own document URLs, so this is only a first-pass fallback: it gets the user back to the right table, but not directly into the row document they touched. The stored identity is enough to improve the target without changing the saved meta shape.
+
+**Where.** Row handling in `includes/Rest/RecentsController.php`, row clicks in `src/components/SidebarRecents.js`, recent row commands in `src/components/CommandPalette.js`, and the row-recents e2e coverage in `tests/e2e/specs/recents.spec.js`.
+
+**Solution.** Have row recents return the row document path, or give recents a route target shape instead of a single path string. That target should use the same document URL helper as row detail and relations, so sidebar recents and palette recents open the row directly instead of stopping at the parent collection.
+
+## 44. Recents tracking is wired at each call site `[internal]`
+
+**What.** There is no workspace activity layer. Each surface that counts as a visit or edit calls `touchRecent` itself: route resolution, page autosave, sidebar rename, row field save, row creation, and relation-created rows. That makes the behavior easy to understand right now, but future write paths can forget to update recents unless the reviewer knows to look for it.
+
+**Where.** `src/router/EntityRoute.js`, `src/hooks/useAutosave.js`, `src/components/Sidebar.js`, `src/components/CollectionDataViews.js`, and `src/components/relations/RelationEditor.js`.
+
+**Solution.** If more activity surfaces appear, move this behind a small workspace activity helper or event. Route visits can stay in the router, but writes should eventually report through the same mutation path instead of each component remembering to call `touchRecent`. If rows move into `core-data` (#2), that would be a natural time to centralize row touches too.
+
+## 45. Select server sort uses stored values, not option order `[internal]`
+
+**What.** Server-side row sorting treats select fields as scalar stored values. That keeps `GET /cortext/v1/rows` sortable without joining or decoding option metadata, but it differs from Notion-style curated option ordering.
+
+**Where.** `RowsFilterQuery::apply_sort_clauses()` in `includes/Rest/RowsFilterQuery.php`.
+
+**Solution.** If users expect select order to follow the field's configured options, compile select sorts into an option-order `CASE` expression generated from the field schema. Until then, document stored-value sorting as the v1 behavior.
+
+## 46. Row filters extend `WP_Meta_Query` with custom compares `[upstream, soft]`
+
+**What.** `RowsMetaQuery` keeps row filters on WordPress's native meta-query tree instead of building a parallel SQL compiler, but core's compares do not cover every database-style operator Cortext needs. `LIKE` always wraps both sides, so starts-with and ends-with need one-sided patterns. Multi-value fields need "no meta row has this value" for `isNone` / `notContains`, which is not the same as a plain `!=` join. Title filters also live on `wp_posts.post_title`, outside post meta, so they ride through a sentinel clause.
+
+**Where.** `RowsMetaQuery` in `includes/Rest/RowsMetaQuery.php`, called from `RowsFilterQuery::meta_query_sql()`.
+
+**Solution.** Upstream `WP_Meta_Query` could grow one-sided `LIKE` compares and value-bearing negative `NOT EXISTS` compares. A structured title-query helper in `WP_Query` would cover the title sentinel separately. If those land, `RowsMetaQuery` shrinks back toward a thin adapter or disappears.
+
+## 47. Cascading Popovers need manual fallback placement `[upstream, soft]`
+
+**What.** `@wordpress/components` `Popover` can shift a submenu along the cross axis, but it does not try a left-side fallback when a `right-start` cascading submenu runs past the viewport edge. Cortext now measures the outer menu and the portaled submenu, starts on the side that keeps the submenu away from the column dropdown, then switches to `left-start` or `bottom-start` if the first placement clips. This keeps Format and Calculate submenus usable near the right side of the table, but it is still a local placement policy layered on top of Popover.
+
+**Where.** `useSubmenuPlacement` in `src/hooks/useSubmenuPlacement.js`, wired into `src/components/fields/FieldFormatPopover.js` and `src/components/TableCalculationMenu.js`.
+
+**Solution.** WordPress Popover could expose fallback placements, or pass enough Floating UI middleware through for consumers to say "try right, then left, then bottom" without measuring after render. If that lands, Cortext can drop `useSubmenuPlacement` and let the Popover own cascading-menu collision handling.
+
+## 48. Public page layout doesn't use WordPress align classes `[internal]`
 
 **What.** The public template constrains non-block content to 650 px via a blanket `max-width` on `.cortext-public-page__body > :not(.wp-block-cortext-data-view)`. The data-view block breaks out of that constraint by virtue of the exclusion. This is fragile — it doesn't honor `alignwide`, `alignfull`, or any other block alignment, and will break for other wide blocks. The proper fix is to adopt WordPress's `align*` layout classes and `theme.json` content/wide widths so blocks opt into breakout with standard markup rather than CSS exclusions.
 
@@ -362,7 +429,7 @@ The user-facing placeholder is still Core's generic "Search commands and setting
 
 **Solution.** Use `wp_get_layout_style` or emit the `is-layout-constrained` class with `contentSize` / `wideSize` on the body wrapper, then add `alignwide` or `alignfull` to the data-view block's wrapper attributes in `DataView.php`. Remove the exclusion hack.
 
-## 43. DataView block shares a frontend bundle with page chrome `[internal]`
+## 49. DataView block shares a frontend bundle with page chrome `[internal]`
 
 **What.** The `cortext-frontend` script and style handle serves double duty: it hydrates the DataView block (React, DataViews, field renderers) and provides general page chrome (body font, content column, title styles). Both `Assets.php` and the render callback in `DataView.php` enqueue the same handle, creating a registration race where the first caller's dependency list wins and the second is silently ignored. The DataView block should provision its own script and style (e.g. `cortext-data-view-view`) via `viewScript`/`viewStyle` in `block.json` or its own dedicated handles in the render callback, so its dependencies (`wp-components`, `wp-api-fetch`, etc.) are self-contained. `cortext-frontend`, if it makes sense to exist, should only cover general concerns: page chrome, light/dark mode toggle, etc.
 

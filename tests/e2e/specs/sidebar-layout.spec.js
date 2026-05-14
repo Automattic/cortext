@@ -126,7 +126,7 @@ async function readCollapsedRailAlignment( page ) {
 				quickActionsBox.xCenter - headerBox.xCenter
 			),
 			actionColumnDelta: Math.abs( homeBox.xCenter - searchBox.xCenter ),
-			actionGap: searchBox.top - homeBox.bottom,
+			actionGap: homeBox.top - searchBox.bottom,
 			toolbarBelowHeader: quickActionsBox.top - headerBox.bottom,
 			footerIconDelta: Math.abs( backBox.xCenter - themeBox.xCenter ),
 		};
@@ -220,6 +220,9 @@ async function clearSidebarPrefs( page ) {
 		try {
 			window.localStorage.removeItem( 'cortext.sidebarCollapsed' );
 			window.localStorage.removeItem( 'cortext.sidebarWidth' );
+			window.localStorage.removeItem(
+				'cortext.sidebarSectionsCollapsed'
+			);
 		} catch {}
 	} );
 }
@@ -327,7 +330,7 @@ test.describe( 'Sidebar layout controls', () => {
 
 			await admin.visitAdminPage(
 				SHELL_PATH,
-				`page=cortext&p=/page/${ fixture.page.id }`
+				`page=cortext&p=/${ fixture.page.id }`
 			);
 
 			await expect(
@@ -369,7 +372,7 @@ test.describe( 'Sidebar layout controls', () => {
 
 			await admin.visitAdminPage(
 				SHELL_PATH,
-				`page=cortext&p=/page/${ fixture.page.id }`
+				`page=cortext&p=/${ fixture.page.id }`
 			);
 
 			const settings = page.locator(
@@ -532,6 +535,99 @@ test.describe( 'Sidebar layout controls', () => {
 		);
 	} );
 
+	test( 'section collapse persists without changing page subtree state', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const suffix = Date.now().toString( 36 ).slice( -4 );
+		const parentTitle = `E2E Section Parent ${ suffix }`;
+		const childTitle = `E2E Section Child ${ suffix }`;
+		const fixture = {};
+
+		try {
+			fixture.parent = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_pages',
+				data: {
+					title: parentTitle,
+					status: 'private',
+				},
+			} );
+			fixture.child = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_pages',
+				data: {
+					title: childTitle,
+					status: 'private',
+					parent: fixture.parent.id,
+				},
+			} );
+
+			await admin.visitAdminPage(
+				SHELL_PATH,
+				`page=cortext&p=/${ fixture.child.id }`
+			);
+			await clearSidebarPrefs( page );
+			await page.reload();
+
+			const sidebar = page.locator( '.cortext-sidebar' );
+			await expect(
+				sidebar.getByRole( 'button', {
+					name: childTitle,
+					exact: true,
+				} )
+			).toBeVisible();
+
+			await sidebar
+				.getByRole( 'button', { name: 'Collapse Pages' } )
+				.click();
+
+			await expect(
+				sidebar.getByRole( 'button', {
+					name: childTitle,
+					exact: true,
+				} )
+			).toHaveCount( 0 );
+
+			await page.reload();
+
+			await expect(
+				sidebar.getByRole( 'button', { name: 'Expand Pages' } )
+			).toBeVisible();
+			await expect(
+				sidebar.getByRole( 'button', {
+					name: childTitle,
+					exact: true,
+				} )
+			).toHaveCount( 0 );
+
+			await sidebar
+				.getByRole( 'button', { name: 'Expand Pages' } )
+				.click();
+
+			await expect(
+				sidebar.getByRole( 'button', {
+					name: childTitle,
+					exact: true,
+				} )
+			).toBeVisible();
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				fixture.child
+					? `/wp/v2/crtxt_pages/${ fixture.child.id }`
+					: null
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.parent
+					? `/wp/v2/crtxt_pages/${ fixture.parent.id }`
+					: null
+			);
+		}
+	} );
+
 	test( 'Cmd/Ctrl+\\ toggles collapse', async ( { page } ) => {
 		const modifier =
 			process.platform === 'darwin' ? 'Meta+\\' : 'Control+\\';
@@ -592,7 +688,7 @@ test.describe( 'Sidebar layout controls', () => {
 
 			await admin.visitAdminPage(
 				SHELL_PATH,
-				`page=cortext&p=/page/${ fixture.page.id }`
+				`page=cortext&p=/${ fixture.page.id }`
 			);
 
 			const sidebar = page.locator( '.cortext-sidebar' );

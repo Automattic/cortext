@@ -81,7 +81,7 @@ test.describe( 'Navigation lifecycle', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ fixture.firstPage.id }`
+				`page=cortext&p=/${ fixture.firstPage.id }`
 			);
 			await waitForEditorPost( page, fixture.firstPage.id );
 			await expect( backButton ).toBeDisabled();
@@ -184,7 +184,7 @@ test.describe( 'Navigation lifecycle', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ fixture.firstPage.id }`
+				`page=cortext&p=/${ fixture.firstPage.id }`
 			);
 			await waitForEditorPost( page, fixture.firstPage.id );
 

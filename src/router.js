@@ -12,8 +12,11 @@ import { SlotFillProvider } from '@wordpress/components';
 import Sidebar from './components/Sidebar';
 import EntityRoute from './router/EntityRoute';
 import CommandPalette from './components/CommandPalette';
+import AlphaNoticeModal from './components/AlphaNoticeModal';
 import useSidebarLayout from './hooks/useSidebarLayout';
+import useAlphaNotice from './hooks/useAlphaNotice';
 import { FavoritesProvider } from './hooks/useFavorites';
+import { RecentsProvider } from './hooks/useRecents';
 import { WorkspaceHomeProvider } from './hooks/useWorkspaceHome';
 import { unlock } from './lock-unlock';
 
@@ -44,6 +47,7 @@ function isEditableTarget( target ) {
 
 function RootLayout() {
 	const { collapsed, width, toggleCollapsed, setWidth } = useSidebarLayout();
+	const alphaNotice = useAlphaNotice();
 	const canvasRef = useRef( null );
 
 	useEffect( () => {
@@ -65,22 +69,29 @@ function RootLayout() {
 		<SlotFillProvider>
 			<WorkspaceHomeProvider>
 				<FavoritesProvider>
-					<div className="cortext-shell">
-						<Sidebar
-							collapsed={ collapsed }
-							width={ width }
-							onToggleCollapsed={ toggleCollapsed }
-							onWidthChange={ setWidth }
-						/>
-						<main
-							ref={ canvasRef }
-							className="cortext-shell__canvas"
-							tabIndex={ -1 }
-						>
-							<EntityRoute history={ router.history } />
-						</main>
-					</div>
-					<CommandPalette canvasRef={ canvasRef } />
+					<RecentsProvider>
+						<div className="cortext-shell">
+							<Sidebar
+								collapsed={ collapsed }
+								width={ width }
+								onToggleCollapsed={ toggleCollapsed }
+								onWidthChange={ setWidth }
+							/>
+							<main
+								ref={ canvasRef }
+								className="cortext-shell__canvas"
+								tabIndex={ -1 }
+							>
+								<EntityRoute history={ router.history } />
+							</main>
+						</div>
+						<CommandPalette canvasRef={ canvasRef } />
+						{ alphaNotice.isOpen && (
+							<AlphaNoticeModal
+								onAcknowledge={ alphaNotice.acknowledge }
+							/>
+						) }
+					</RecentsProvider>
 				</FavoritesProvider>
 			</WorkspaceHomeProvider>
 		</SlotFillProvider>

@@ -1,6 +1,8 @@
 import { __, sprintf } from '@wordpress/i18n';
 import { Button, Dropdown, MenuGroup, MenuItem } from '@wordpress/components';
 import {
+	Icon,
+	customPostType,
 	home as homeIcon,
 	moreVertical,
 	starEmpty,
@@ -20,6 +22,7 @@ export default function CollectionRow( {
 	collection,
 	isSelected,
 	isFavorite = false,
+	isFavoriteDisabled = false,
 	isHome,
 	isHomeUpdating,
 	onSelect,
@@ -35,6 +38,13 @@ export default function CollectionRow( {
 	return (
 		<li className="cortext-sidebar__node">
 			<div className={ rowClasses.join( ' ' ) }>
+				<span
+					className="cortext-sidebar__chevron cortext-sidebar__chevron--placeholder"
+					aria-hidden="true"
+				/>
+				<span className="cortext-sidebar__icon" aria-hidden="true">
+					<Icon icon={ customPostType } size={ 16 } />
+				</span>
 				<Button
 					className="cortext-sidebar__title"
 					size="compact"
@@ -67,6 +77,7 @@ export default function CollectionRow( {
 						<MenuGroup>
 							<MenuItem
 								icon={ isFavorite ? starFilled : starEmpty }
+								disabled={ isFavoriteDisabled }
 								onClick={ () => {
 									onToggleFavorite?.( collection.id );
 									onClose();

@@ -1,0 +1,264 @@
+name: Performance benchmark
+
+on:
+    push:
+        branches: [main]
+    pull_request:
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    performance-bench:
+        name: Performance benchmark
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: shivammathur/setup-php@v2
+              with:
+                  php-version: '8.1'
+                  tools: composer:v2
+                  coverage: none
+
+            - uses: actions/cache@v4
+              with:
+                  path: ~/.composer/cache
+                  key: composer-${{ hashFiles('composer.lock') }}
+
+            - run: composer install --no-interaction --prefer-dist --no-dev
+
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 11.0.8
+                  standalone: true
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: '24.15'
+                  cache: 'pnpm'
+
+            - run: pnpm install --frozen-lockfile
+
+            - run: pnpm run env:start
+
+            - name: Seed benchmark dataset
+              run: >
+                  pnpm exec wp-env run cli wp cortext perf-seed
+                  --reset
+                  --force
+                  --collections=3
+                  --rows=1250
+                  --fields=8
+                  --wide-fields=40
+                  --relations=1
+                  --rollups=1
+
+            - name: Run benchmark
+              run: |
+                  set -o pipefail
+                  mkdir -p artifacts
+                  pnpm exec wp-env run cli wp cortext perf-bench \
+                    --iterations=5 \
+                    --warmup=1 \
+                    --budget=includes/CLI/perf-budgets.json \
+                    --fail-on-budget \
+                    --pretty | tee artifacts/perf-bench.json
+
+            - name: Write benchmark summary
+              if: always()
+              run: |
+                  if [ ! -s artifacts/perf-bench.json ]; then
+                    echo "The benchmark did not write any output."
+                    echo "The benchmark did not write any output." >> "$GITHUB_STEP_SUMMARY"
+                    exit 0
+                  fi
+
+                  php <<'PHP'
+                  <?php
+                  $summary_path = getenv( 'GITHUB_STEP_SUMMARY' );
+                  $raw          = file_get_contents( 'artifacts/perf-bench.json' );
+                  $json_start   = strpos( $raw, '{' );
+
+                  if ( false === $json_start ) {
+                      $message = "The benchmark output did not include JSON.\n";
+                      echo $message;
+                      file_put_contents( $summary_path, $message, FILE_APPEND );
+                      exit( 0 );
+                  }
+
+                  $json      = null;
+                  $depth     = 0;
+                  $in_string = false;
+                  $escaped   = false;
+                  $length    = strlen( $raw );
+                  for ( $index = $json_start; $index < $length; $index++ ) {
+                      $char = $raw[ $index ];
+
+                      if ( $in_string ) {
+                          if ( $escaped ) {
+                              $escaped = false;
+                          } elseif ( '\\' === $char ) {
+                              $escaped = true;
+                          } elseif ( '"' === $char ) {
+                              $in_string = false;
+                          }
+                          continue;
+                      }
+
+                      if ( '"' === $char ) {
+                          $in_string = true;
+                      } elseif ( '{' === $char ) {
+                          $depth++;
+                      } elseif ( '}' === $char ) {
+                          $depth--;
+                          if ( 0 === $depth ) {
+                              $json = substr( $raw, $json_start, $index - $json_start + 1 );
+                              break;
+                          }
+                      }
+                  }
+
+                  if ( null === $json ) {
+                      $message = "The benchmark JSON could not be found in the wp-env output.\n";
+                      echo $message;
+                      file_put_contents( $summary_path, $message, FILE_APPEND );
+                      exit( 0 );
+                  }
+
+                  $report = json_decode( $json, true );
+                  if ( ! is_array( $report ) ) {
+                      $message = "The benchmark JSON could not be parsed: " . json_last_error_msg() . "\n";
+                      echo $message;
+                      file_put_contents( $summary_path, $message, FILE_APPEND );
+                      exit( 0 );
+                  }
+
+                  $escape = static function ( mixed $value ): string {
+                      return str_replace( array( '|', "\n", "\r" ), array( '\\|', ' ', ' ' ), (string) $value );
+                  };
+                  $number = static function ( mixed $value, int $decimals = 3 ): string {
+                      return is_numeric( $value ) ? number_format( (float) $value, $decimals, '.', '' ) : 'n/a';
+                  };
+                  $integer = static function ( mixed $value ): string {
+                      return is_numeric( $value ) ? (string) (int) $value : 'n/a';
+                  };
+                  $memory = static function ( mixed $value ): string {
+                      return is_numeric( $value ) ? number_format( (float) $value / 1048576, 1, '.', '' ) . ' MiB' : 'n/a';
+                  };
+                  $failure_value = static function ( string $metric, mixed $value ) use ( $number, $integer, $memory ): string {
+                      if ( 'memory_bytes_p95' === $metric ) {
+                          return $memory( $value );
+                      }
+                      if ( str_starts_with( $metric, 'sql_queries_' ) ) {
+                          return $integer( $value );
+                      }
+                      return $number( $value );
+                  };
+                  $markdown_table = static function ( array $headers, array $alignments, array $rows ): array {
+                      $widths = array_map( 'strlen', $headers );
+
+                      foreach ( $rows as $row ) {
+                          foreach ( $row as $index => $cell ) {
+                              $widths[ $index ] = max( $widths[ $index ] ?? 0, strlen( $cell ) );
+                          }
+                      }
+
+                      foreach ( $widths as $index => $width ) {
+                          $widths[ $index ] = max( 3, $width );
+                      }
+
+                      $format_row = static function ( array $row ) use ( $alignments, $widths ): string {
+                          foreach ( $row as $index => $cell ) {
+                              $pad_type      = 'right' === ( $alignments[ $index ] ?? 'left' ) ? STR_PAD_LEFT : STR_PAD_RIGHT;
+                              $row[ $index ] = str_pad( $cell, $widths[ $index ], ' ', $pad_type );
+                          }
+
+                          return '| ' . implode( ' | ', $row ) . ' |';
+                      };
+
+                      $separator = array();
+                      foreach ( $widths as $index => $width ) {
+                          $separator[] = 'right' === ( $alignments[ $index ] ?? 'left' )
+                              ? str_repeat( '-', $width - 1 ) . ':'
+                              : str_repeat( '-', $width );
+                      }
+
+                      return array_merge(
+                          array( $format_row( $headers ), '| ' . implode( ' | ', $separator ) . ' |' ),
+                          array_map( $format_row, $rows )
+                      );
+                  };
+
+                  $iterations = is_array( $report['iterations'] ?? null ) ? $report['iterations'] : array();
+                  $lines      = array(
+                      '## Performance benchmark',
+                      '',
+                      '- Result: ' . ( ! empty( $report['passed'] ) ? 'passed' : 'failed' ),
+                      '- Total time: ' . $number( $report['elapsedMs'] ?? null ) . ' ms',
+                      '- Runs: ' . $integer( $iterations['measured'] ?? null ) . ' measured, ' . $integer( $iterations['warmup'] ?? null ) . ' warm-up',
+                      '',
+                  );
+
+                  $scenario_rows = array();
+                  foreach ( (array) ( $report['scenarios'] ?? array() ) as $scenario ) {
+                      $budget          = is_array( $scenario['budget'] ?? null ) ? $scenario['budget'] : array();
+                      $scenario_rows[] = array(
+                          ! empty( $scenario['passed'] ) ? 'pass' : 'fail',
+                          $escape( $scenario['label'] ?? '' ),
+                          $number( $scenario['p50_ms'] ?? null ),
+                          $number( $scenario['p95_ms'] ?? null ),
+                          $number( $budget['p95_ms'] ?? null ),
+                          $integer( $scenario['sql_queries_p50'] ?? null ),
+                          $integer( $scenario['sql_queries_p95'] ?? null ),
+                          $integer( $budget['sql_queries_p95'] ?? null ),
+                          $memory( $scenario['memory_bytes_p95'] ?? null ),
+                          $memory( $budget['memory_bytes_p95'] ?? null )
+                      );
+                  }
+                  $lines = array_merge(
+                      $lines,
+                      $markdown_table(
+                          array( 'Status', 'Scenario', 'p50 ms', 'p95 ms', 'p95 limit', 'SQL p50', 'SQL p95', 'SQL limit', 'Memory p95', 'Memory limit' ),
+                          array( 'left', 'left', 'right', 'right', 'right', 'right', 'right', 'right', 'right', 'right' ),
+                          $scenario_rows
+                      )
+                  );
+
+                  if ( ! empty( $report['failures'] ) ) {
+                      $lines[] = '';
+                      $lines[] = '### Budget misses';
+                      $lines[] = '';
+
+                      $failure_rows = array();
+                      foreach ( (array) $report['failures'] as $failure ) {
+                          $failure_rows[] = array(
+                              $escape( $failure['scenario'] ?? '' ),
+                              $escape( $failure['metric'] ?? '' ),
+                              $failure_value( (string) ( $failure['metric'] ?? '' ), $failure['actual'] ?? null ),
+                              $failure_value( (string) ( $failure['metric'] ?? '' ), $failure['budget'] ?? null )
+                          );
+                      }
+                      $lines = array_merge(
+                          $lines,
+                          $markdown_table(
+                              array( 'Scenario', 'Metric', 'Actual', 'Budget' ),
+                              array( 'left', 'left', 'right', 'right' ),
+                              $failure_rows
+                          )
+                      );
+                  }
+
+                  $output = implode( "\n", $lines ) . "\n";
+                  echo $output;
+                  file_put_contents( $summary_path, $output, FILE_APPEND );
+                  PHP
+
+            - if: failure()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: perf-bench
+                  path: artifacts/perf-bench.json
+                  retention-days: 7

@@ -7,8 +7,10 @@ import {
 	getMinWidth,
 	isDefaultVisibleField,
 	normalizeView,
+	pruneFiltersForFields,
 	withColumnOrder,
 	withColumnWidth,
+	withNewlyVisibleFields,
 } from '../../../src/components/dataViewColumns';
 
 describe( 'getMinWidth', () => {
@@ -80,6 +82,71 @@ describe( 'isDefaultVisibleField', () => {
 	} );
 } );
 
+describe( 'pruneFiltersForFields', () => {
+	it( 'preserves grouped filters when every descendant field is valid', () => {
+		const filters = [
+			{
+				relation: 'OR',
+				filters: [
+					{ field: 'title', operator: 'contains', value: 'A' },
+					{ field: 'field-1', operator: 'is', value: 'open' },
+				],
+			},
+		];
+
+		expect(
+			pruneFiltersForFields(
+				filters,
+				new Set( [ TITLE_FIELD_ID, 'field-1' ] )
+			)
+		).toBe( filters );
+	} );
+
+	it( 'prunes stale leaves inside groups without dropping the whole group', () => {
+		const filters = [
+			{
+				relation: 'AND',
+				filters: [
+					{ field: 'field-1', operator: 'is', value: 'open' },
+					{ field: 'field-deleted', operator: 'is', value: 'gone' },
+				],
+			},
+		];
+
+		expect(
+			pruneFiltersForFields(
+				filters,
+				new Set( [ TITLE_FIELD_ID, 'field-1' ] )
+			)
+		).toEqual( [
+			{
+				relation: 'AND',
+				filters: [
+					{ field: 'field-1', operator: 'is', value: 'open' },
+				],
+			},
+		] );
+	} );
+
+	it( 'drops groups that have no valid descendants', () => {
+		const filters = [
+			{
+				relation: 'OR',
+				filters: [
+					{ field: 'field-deleted', operator: 'is', value: 'gone' },
+				],
+			},
+		];
+
+		expect(
+			pruneFiltersForFields(
+				filters,
+				new Set( [ TITLE_FIELD_ID, 'field-1' ] )
+			)
+		).toEqual( [] );
+	} );
+} );
+
 describe( 'normalizeView', () => {
 	const baseView = () => ( {
 		type: 'table',
@@ -100,6 +167,18 @@ describe( 'normalizeView', () => {
 
 	it( 'drops fields whose ids are no longer in the schema', () => {
 		const view = baseView();
+		const next = normalizeView(
+			view,
+			new Set( [ TITLE_FIELD_ID, 'field-1' ] )
+		);
+		expect( next.fields ).toEqual( [ TITLE_FIELD_ID, 'field-1' ] );
+	} );
+
+	it( 'drops the legacy add-field ghost column', () => {
+		const view = {
+			...baseView(),
+			fields: [ TITLE_FIELD_ID, 'field-1', '__add_field' ],
+		};
 		const next = normalizeView(
 			view,
 			new Set( [ TITLE_FIELD_ID, 'field-1' ] )
@@ -255,6 +334,45 @@ describe( 'normalizeView', () => {
 			}
 		);
 		expect( next.calculations ).toEqual( { 'field-2': 'max' } );
+	} );
+} );
+
+describe( 'withNewlyVisibleFields', () => {
+	const fields = [
+		{ id: TITLE_FIELD_ID, editable: true },
+		{ id: 'field-1', recordId: 1, editable: true },
+		{ id: 'field-99', recordId: 99, editable: true },
+		{ id: 'field-2', recordId: 2, editable: true },
+	];
+	const known = new Set( [ TITLE_FIELD_ID, 'field-1', 'field-2' ] );
+
+	it( 'puts fields created from Add field at the end', () => {
+		const view = { fields: [ TITLE_FIELD_ID, 'field-1', 'field-2' ] };
+		const next = withNewlyVisibleFields( view, fields, known, 'field-99' );
+		expect( next.fields ).toEqual( [
+			TITLE_FIELD_ID,
+			'field-1',
+			'field-2',
+			'field-99',
+		] );
+	} );
+
+	it( 'keeps other schema additions near their schema neighbors', () => {
+		const view = { fields: [ TITLE_FIELD_ID, 'field-1', 'field-2' ] };
+		const next = withNewlyVisibleFields( view, fields, known );
+		expect( next.fields ).toEqual( [
+			TITLE_FIELD_ID,
+			'field-1',
+			'field-99',
+			'field-2',
+		] );
+	} );
+
+	it( 'leaves first-render saved views alone', () => {
+		const view = { fields: [ TITLE_FIELD_ID, 'field-1', 'field-2' ] };
+		expect( withNewlyVisibleFields( view, fields, null, 'field-99' ) ).toBe(
+			view
+		);
 	} );
 } );
 

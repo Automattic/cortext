@@ -1,15 +1,17 @@
 {
 	"name": "cortext",
 	"version": "0.0.1",
-	"description": "Notion-inspired workspace inside WordPress.",
+	"description": "Knowledge base inside WordPress.",
 	"engines": {
-		"node": "~24.15"
+		"node": "~24.15",
+		"pnpm": ">=11"
 	},
 	"private": true,
 	"license": "GPL-2.0-or-later",
+	"packageManager": "pnpm@11.0.8",
 	"scripts": {
-		"start": "wp-env start && npm run dev",
-		"start:seed": "wp-env start && npm run env:seed && npm run dev",
+		"start": "wp-env start && pnpm run dev",
+		"start:seed": "wp-env start && pnpm run env:seed && pnpm run dev",
 		"dev": "wp-scripts start",
 		"build": "wp-scripts build",
 		"format": "wp-scripts format",
@@ -18,13 +20,17 @@
 		"lint:php": "composer run phpcs",
 		"lint:style": "wp-scripts lint-style 'src/**/*.{css,pcss,scss}'",
 		"env:start": "wp-env start",
-		"env:start:seed": "wp-env start && npm run env:seed",
+		"env:start:seed": "wp-env start && pnpm run env:seed",
 		"env:seed": "node scripts/wp-env-seed.mjs",
+		"env:seed:full": "node scripts/wp-env-seed.mjs --full",
 		"env:seed:reset": "node scripts/wp-env-seed.mjs --reset --force",
+		"env:seed:reset:full": "node scripts/wp-env-seed.mjs --reset --force --full",
 		"test:env:start": "wp-env --config .wp-env.test.json start",
-		"test:env:start:seed": "wp-env --config .wp-env.test.json start && npm run test:env:seed",
+		"test:env:start:seed": "wp-env --config .wp-env.test.json start && pnpm run test:env:seed",
 		"test:env:seed": "node scripts/wp-env-seed.mjs --config .wp-env.test.json",
+		"test:env:seed:full": "node scripts/wp-env-seed.mjs --config .wp-env.test.json --full",
 		"test:env:seed:reset": "node scripts/wp-env-seed.mjs --config .wp-env.test.json --reset --force",
+		"test:env:seed:reset:full": "node scripts/wp-env-seed.mjs --config .wp-env.test.json --reset --force --full",
 		"test:unit": "wp-scripts test-unit-js --config jest.config.js",
 		"test:unit:watch": "wp-scripts test-unit-js --config jest.config.js --watch",
 		"test:e2e": "wp-scripts test-playwright --config playwright.config.js",
@@ -37,7 +43,9 @@
 		"@testing-library/react": "^16.3.2",
 		"@wordpress/e2e-test-utils-playwright": "^1.44.0",
 		"@wordpress/env": "^11.4.0",
-		"@wordpress/scripts": "^32.0.0"
+		"@wordpress/scripts": "^32.0.0",
+		"react": "18.3.1",
+		"react-dom": "18.3.1"
 	},
 	"dependencies": {
 		"@dnd-kit/core": "^6.1.0",
@@ -46,6 +54,7 @@
 		"@emoji-mart/react": "^1.1.1",
 		"@tanstack/react-router": "^1.168.23",
 		"@wordpress/api-fetch": "^7.44.0",
+		"@wordpress/base-styles": "^6.20.0",
 		"@wordpress/block-editor": "^15.17.0",
 		"@wordpress/block-library": "^9.44.0",
 		"@wordpress/blocks": "^15.7.0",
@@ -61,12 +70,14 @@
 		"@wordpress/icons": "^12.2.0",
 		"@wordpress/interface": "^9.0.0",
 		"@wordpress/keyboard-shortcuts": "^5.44.0",
+		"@wordpress/keycodes": "^4.45.0",
 		"@wordpress/media-utils": "^5.45.0",
 		"@wordpress/notices": "^5.44.0",
 		"@wordpress/preferences": "^4.44.0",
 		"@wordpress/private-apis": "^1.44.0",
 		"@wordpress/route": "^0.10.0",
 		"@wordpress/url": "^4.44.0",
+		"cmdk": "^1.1.1",
 		"emoji-mart": "^5.6.0"
 	}
 }

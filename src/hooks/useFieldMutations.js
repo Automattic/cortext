@@ -200,7 +200,7 @@ export function useFlushFieldRecord() {
 
 // Appends a new option to a field's existing list and saves. Used by the
 // cell editors so users can create a chip on the fly while picking a
-// value, matching Notion's "Create [foo]" suggestion. Reads the
+// value, matching the "Create [foo]" suggestion. Reads the
 // freshest options from the entity store at call time (rather than
 // subscribing through `useEntityRecord`) and generates a unique slug-style
 // `value` from the label, deduping against existing option values.
@@ -265,6 +265,37 @@ export function useOptionUsage() {
 		return Number( result?.count ?? 0 );
 	}, [] );
 	return { run };
+}
+
+// Changes the field type on the server, then refreshes the field record and
+// list so the column gets the right renderer and editor.
+export function useChangeFieldType( collectionId ) {
+	const { isBusy, setIsBusy, error, setError } = useMutationState();
+	const invalidate = useFieldListInvalidation();
+	const flush = useFlushFieldRecord();
+	const run = useCallback(
+		async ( recordId, targetType ) => {
+			setIsBusy( true );
+			setError( null );
+			try {
+				const result = await apiFetch( {
+					path: `/cortext/v1/fields/${ recordId }/convert`,
+					method: 'POST',
+					data: { type: targetType },
+				} );
+				await flush( recordId );
+				invalidate( collectionId );
+				return result;
+			} catch ( apiError ) {
+				setError( apiError );
+				throw apiError;
+			} finally {
+				setIsBusy( false );
+			}
+		},
+		[ collectionId, flush, invalidate, setIsBusy, setError ]
+	);
+	return { run, isBusy, error };
 }
 
 export function useDeleteField( collectionId ) {

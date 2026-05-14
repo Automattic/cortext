@@ -293,7 +293,7 @@ describe( 'formatDisplay', () => {
 		} );
 
 		it( 'normalizes non-palette stored colors (e.g. legacy hex) into a palette modifier', () => {
-			// Hex from old seeds and Notion imports never themed under
+			// Hex from old seeds and imported data never themed under
 			// dark mode because raw colors don't follow the CSS-variable
 			// palette. `resolveDisplayColor` rounds them to a hashed
 			// palette name so chips re-skin alongside the rest of the UI.
@@ -354,6 +354,37 @@ describe( 'formatDisplay', () => {
 			expect( formatDisplay( [], 'multiselect', { elements: [] } ) ).toBe(
 				''
 			);
+		} );
+
+		it( 'splits a delimited string when it is not a known option yet', () => {
+			const elements = [
+				{ value: 'CD', label: 'CD' },
+				{ value: 'LP', label: 'LP' },
+				{ value: 'Record', label: 'Record' },
+			];
+			renderDisplay( 'CD, LP, Record', 'multiselect', { elements } );
+			expect( screen.getByText( 'CD' ) ).toHaveClass( 'cortext-chip' );
+			expect( screen.getByText( 'LP' ) ).toHaveClass( 'cortext-chip' );
+			expect( screen.getByText( 'Record' ) ).toHaveClass(
+				'cortext-chip'
+			);
+		} );
+
+		it( 'preserves a known option that contains commas', () => {
+			const elements = [ { value: 'ACME, Inc.', label: 'ACME, Inc.' } ];
+			renderDisplay( 'ACME, Inc.', 'multiselect', { elements } );
+			expect( screen.getByText( 'ACME, Inc.' ) ).toHaveClass(
+				'cortext-chip'
+			);
+		} );
+	} );
+
+	describe( 'select post-conversion transient', () => {
+		it( 'renders the first split-token when the value is not a known option', () => {
+			const elements = [ { value: 'CD', label: 'CD' } ];
+			renderDisplay( 'CD, LP, Record', 'select', { elements } );
+			expect( screen.getByText( 'CD' ) ).toHaveClass( 'cortext-chip' );
+			expect( screen.queryByText( 'LP' ) ).toBeNull();
 		} );
 	} );
 } );

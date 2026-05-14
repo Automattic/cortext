@@ -8,7 +8,10 @@ import {
 	POST_TYPE as PAGE_POST_TYPE,
 } from '../components/page-queries';
 import { COLLECTION_QUERY } from '../collections';
-import { computeUri } from '../router/useResolveEntity';
+import {
+	computeCollectionUri,
+	computeDocumentUri,
+} from '../router/useResolveEntity';
 
 const COLLECTION_POST_TYPE = 'crtxt_collection';
 
@@ -27,25 +30,28 @@ function titleOf( entity ) {
 // Returns the breadcrumb segments for the currently painted surface. Driven by
 // `paintedRoute` (from EntityRoute) rather than the URL so the breadcrumb
 // updates in lockstep with the document-actions Fill — both sides of the top
-// bar describe the same entity even mid-navigation. Page routes contribute the
-// natural ancestor chain; collection routes are flat. Empty / not-found /
-// unresolved routes return no segments.
+// bar describe the same entity even mid-navigation.
+//
+// Document targets carry a `postType`. Pages (`crtxt_page`) contribute the
+// natural ancestor chain; rows (dynamic `crtxt_<slug>`) contribute their
+// parent collection plus the row title. Collection targets are flat.
 export default function useBreadcrumbSegments( paintedRoute ) {
 	const navigate = useNavigate();
 	const kind = paintedRoute?.kind ?? 'unresolved';
-	const pageId = kind === 'page' ? paintedRoute.id : null;
-	const rowId = kind === 'row' ? paintedRoute.id : null;
-	const rowPostType = kind === 'row' ? paintedRoute.postType : null;
-	const onNavigateCollection =
-		kind === 'row' ? paintedRoute.onNavigateCollection : null;
+	const documentId = kind === 'document' ? paintedRoute.id : null;
+	const documentPostType = kind === 'document' ? paintedRoute.postType : null;
+	const isPageDocument = documentPostType === PAGE_POST_TYPE;
+	const isRowDocument = Boolean( documentPostType ) && ! isPageDocument;
+	const pageId = isPageDocument ? documentId : null;
+	const rowId = isRowDocument ? documentId : null;
+	const rowPostType = isRowDocument ? documentPostType : null;
 	let collectionId = null;
 	if ( kind === 'collection' ) {
 		collectionId = paintedRoute.id;
-	} else if ( kind === 'row' ) {
-		collectionId = paintedRoute.collectionId;
+	} else if ( isRowDocument ) {
+		collectionId = paintedRoute.collectionId ?? null;
 	}
 
-	// Pulled from the same store the Sidebar populates, so no extra fetch.
 	const { records: pages } = useEntityRecords(
 		'postType',
 		PAGE_POST_TYPE,
@@ -57,8 +63,6 @@ export default function useBreadcrumbSegments( paintedRoute ) {
 		COLLECTION_QUERY
 	);
 
-	// Falls back to the single-record fetch when the list hasn't resolved yet
-	// (or doesn't contain the active id, e.g. a freshly-created page).
 	const { record: currentPage } = useEntityRecord(
 		'postType',
 		PAGE_POST_TYPE,
@@ -80,7 +84,17 @@ export default function useBreadcrumbSegments( paintedRoute ) {
 		( page ) => {
 			navigate( {
 				to: '/$',
-				params: { _splat: computeUri( page, 'page' ) },
+				params: { _splat: computeDocumentUri( page ) },
+			} );
+		},
+		[ navigate ]
+	);
+
+	const goToCollection = useCallback(
+		( collection ) => {
+			navigate( {
+				to: '/$',
+				params: { _splat: computeCollectionUri( collection ) },
 			} );
 		},
 		[ navigate ]
@@ -91,9 +105,6 @@ export default function useBreadcrumbSegments( paintedRoute ) {
 			const pagesById = new Map(
 				( pages ?? [] ).map( ( p ) => [ p.id, p ] )
 			);
-			// `currentPage` may resolve before the active-pages list, or be
-			// the only source for a freshly-created page that's not yet in
-			// the cached query. Treat it as authoritative when it matches.
 			const head =
 				pagesById.get( pageId ) ??
 				( currentPage?.id === pageId ? currentPage : null );
@@ -143,7 +154,7 @@ export default function useBreadcrumbSegments( paintedRoute ) {
 					{
 						key: `collection:${ collection.id }`,
 						label: titleOf( collection ),
-						onClick: onNavigateCollection,
+						onClick: () => goToCollection( collection ),
 						isCurrent: false,
 					},
 					{
@@ -170,12 +181,12 @@ export default function useBreadcrumbSegments( paintedRoute ) {
 		collectionId,
 		rowId,
 		rowPostType,
-		onNavigateCollection,
 		pages,
 		collections,
 		currentPage,
 		currentCollection,
 		currentRow,
 		goToPage,
+		goToCollection,
 	] );
 }

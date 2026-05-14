@@ -1,18 +1,29 @@
 import { reducer, init } from '../../src/router/entityRouteReducer';
 
 const emptyTarget = { kind: 'empty', tail: '' };
-const pageTarget = ( id ) => ( { kind: 'page', id, tail: `${ id }` } );
+const documentTarget = ( id ) => ( {
+	kind: 'document',
+	id,
+	tail: `${ id }`,
+} );
 const collectionTarget = ( id ) => ( {
 	kind: 'collection',
 	id,
 	tail: `${ id }`,
 } );
 
-function activate( state, target ) {
+const PAGE_TYPE = 'crtxt_page';
+
+function activate( state, target, options = {} ) {
+	const postType = options.postType ?? PAGE_TYPE;
 	let next = reducer( state, { type: 'TARGET_CHANGED', target } );
-	if ( target.kind === 'page' && target.id !== null ) {
-		next = reducer( next, { type: 'PAGE_RESOLVED', id: target.id } );
-		next = reducer( next, { type: 'PAGE_DISPLAYED', id: target.id } );
+	if ( target.kind === 'document' && target.id !== null ) {
+		next = reducer( next, {
+			type: 'DOCUMENT_RESOLVED',
+			id: target.id,
+			postType,
+		} );
+		next = reducer( next, { type: 'DOCUMENT_DISPLAYED', id: target.id } );
 	} else if ( target.kind === 'collection' && target.id !== null ) {
 		next = reducer( next, { type: 'COLLECTION_RESOLVED', id: target.id } );
 		next = reducer( next, { type: 'COLLECTION_READY', id: target.id } );
@@ -26,16 +37,16 @@ describe( 'EntityRoute reducer', () => {
 			expect( init( emptyTarget ).active ).toEqual( { kind: 'empty' } );
 		} );
 
-		it( 'starts a page target as loading', () => {
-			expect( init( pageTarget( 1 ) ).active ).toEqual( {
+		it( 'starts a document target as loading', () => {
+			expect( init( documentTarget( 1 ) ).active ).toEqual( {
 				kind: 'loading',
 			} );
 		} );
 
-		it( 'starts a malformed page target as page-not-found', () => {
-			const target = { kind: 'page', id: null, tail: 'foo' };
+		it( 'starts a malformed document target as document-not-found', () => {
+			const target = { kind: 'document', id: null, tail: 'foo' };
 			expect( init( target ).active ).toEqual( {
-				kind: 'page-not-found',
+				kind: 'document-not-found',
 			} );
 		} );
 
@@ -47,35 +58,43 @@ describe( 'EntityRoute reducer', () => {
 		} );
 
 		it( 'has empty mount state', () => {
-			const state = init( pageTarget( 1 ) );
-			expect( state.mountedPageId ).toBeNull();
-			expect( state.displayedPageId ).toBeNull();
+			const state = init( documentTarget( 1 ) );
+			expect( state.mountedDocumentId ).toBeNull();
+			expect( state.mountedDocumentType ).toBeNull();
+			expect( state.displayedDocumentId ).toBeNull();
 			expect( state.mountedCollectionIds ).toEqual( [] );
 			expect( state.readyCollectionIds.size ).toBe( 0 );
 		} );
 	} );
 
 	describe( 'TARGET_CHANGED', () => {
-		it( 'preserves paint when navigating to a not-yet-mounted page', () => {
-			const state = activate( init( pageTarget( 1 ) ), pageTarget( 1 ) );
+		it( 'preserves paint when navigating to a not-yet-mounted document', () => {
+			const state = activate(
+				init( documentTarget( 1 ) ),
+				documentTarget( 1 )
+			);
 			const next = reducer( state, {
 				type: 'TARGET_CHANGED',
-				target: pageTarget( 2 ),
+				target: documentTarget( 2 ),
 			} );
-			expect( next.target ).toEqual( pageTarget( 2 ) );
-			expect( next.active ).toEqual( { kind: 'page' } ); // still showing 1
+			expect( next.target ).toEqual( documentTarget( 2 ) );
+			// Still painting document 1 — preservePaint until 2 is ready.
+			expect( next.active ).toEqual( { kind: 'document', id: 1 } );
 		} );
 
-		it( 'reactivates a page that is already mounted and displayed', () => {
-			let state = activate( init( pageTarget( 1 ) ), pageTarget( 1 ) );
+		it( 'reactivates a document that is already mounted and displayed', () => {
+			let state = activate(
+				init( documentTarget( 1 ) ),
+				documentTarget( 1 )
+			);
 			state = activate( state, collectionTarget( 5 ) );
 			expect( state.active ).toEqual( { kind: 'collection', id: 5 } );
 
 			state = reducer( state, {
 				type: 'TARGET_CHANGED',
-				target: pageTarget( 1 ),
+				target: documentTarget( 1 ),
 			} );
-			expect( state.active ).toEqual( { kind: 'page' } );
+			expect( state.active ).toEqual( { kind: 'document', id: 1 } );
 		} );
 
 		it( 'reactivates a collection that is already mounted and ready', () => {
@@ -83,13 +102,16 @@ describe( 'EntityRoute reducer', () => {
 				init( collectionTarget( 5 ) ),
 				collectionTarget( 5 )
 			);
-			state = activate( state, pageTarget( 1 ) );
-			// The previous collection is pruned once the page activates.
+			state = activate( state, documentTarget( 1 ) );
+			// The previous collection is pruned once the document activates.
 			expect( state.mountedCollectionIds ).toEqual( [] );
 		} );
 
 		it( 'switches to empty immediately', () => {
-			const state = activate( init( pageTarget( 1 ) ), pageTarget( 1 ) );
+			const state = activate(
+				init( documentTarget( 1 ) ),
+				documentTarget( 1 )
+			);
 			const next = reducer( state, {
 				type: 'TARGET_CHANGED',
 				target: emptyTarget,
@@ -97,102 +119,139 @@ describe( 'EntityRoute reducer', () => {
 			expect( next.active ).toEqual( { kind: 'empty' } );
 		} );
 
-		it( 'switches to page-not-found for a malformed page url', () => {
-			const state = activate( init( pageTarget( 1 ) ), pageTarget( 1 ) );
+		it( 'switches to document-not-found for a malformed document url', () => {
+			const state = activate(
+				init( documentTarget( 1 ) ),
+				documentTarget( 1 )
+			);
 			const next = reducer( state, {
 				type: 'TARGET_CHANGED',
-				target: { kind: 'page', id: null, tail: 'foo' },
+				target: { kind: 'document', id: null, tail: 'foo' },
 			} );
-			expect( next.active ).toEqual( { kind: 'page-not-found' } );
+			expect( next.active ).toEqual( { kind: 'document-not-found' } );
 		} );
 	} );
 
-	describe( 'PAGE_RESOLVED', () => {
-		it( 'mounts the page and activates when displayed matches', () => {
-			let state = init( pageTarget( 1 ) );
+	describe( 'DOCUMENT_RESOLVED', () => {
+		it( 'mounts the document and activates when displayed matches', () => {
+			let state = init( documentTarget( 1 ) );
 			state = reducer( state, {
 				type: 'TARGET_CHANGED',
-				target: pageTarget( 1 ),
+				target: documentTarget( 1 ),
 			} );
-			state = reducer( state, { type: 'PAGE_DISPLAYED', id: 1 } );
-			state = reducer( state, { type: 'PAGE_RESOLVED', id: 1 } );
-			expect( state.mountedPageId ).toBe( 1 );
-			expect( state.active ).toEqual( { kind: 'page' } );
+			state = reducer( state, { type: 'DOCUMENT_DISPLAYED', id: 1 } );
+			state = reducer( state, {
+				type: 'DOCUMENT_RESOLVED',
+				id: 1,
+				postType: PAGE_TYPE,
+			} );
+			expect( state.mountedDocumentId ).toBe( 1 );
+			expect( state.mountedDocumentType ).toBe( PAGE_TYPE );
+			expect( state.active ).toEqual( { kind: 'document', id: 1 } );
 		} );
 
-		it( 'mounts but does not activate before the page paints', () => {
-			let state = init( pageTarget( 1 ) );
+		it( 'mounts but does not activate before the document paints', () => {
+			let state = init( documentTarget( 1 ) );
 			state = reducer( state, {
 				type: 'TARGET_CHANGED',
-				target: pageTarget( 1 ),
+				target: documentTarget( 1 ),
 			} );
-			state = reducer( state, { type: 'PAGE_RESOLVED', id: 1 } );
-			expect( state.mountedPageId ).toBe( 1 );
+			state = reducer( state, {
+				type: 'DOCUMENT_RESOLVED',
+				id: 1,
+				postType: PAGE_TYPE,
+			} );
+			expect( state.mountedDocumentId ).toBe( 1 );
 			expect( state.active ).toEqual( { kind: 'loading' } );
 		} );
 
 		it( 'ignores a resolution for a different target', () => {
-			const state = activate( init( pageTarget( 1 ) ), pageTarget( 1 ) );
-			const next = reducer( state, { type: 'PAGE_RESOLVED', id: 99 } );
+			const state = activate(
+				init( documentTarget( 1 ) ),
+				documentTarget( 1 )
+			);
+			const next = reducer( state, {
+				type: 'DOCUMENT_RESOLVED',
+				id: 99,
+				postType: PAGE_TYPE,
+			} );
 			expect( next ).toBe( state );
 		} );
 
-		it( 'ignores a resolution when the target is no longer a page', () => {
-			let state = activate( init( pageTarget( 1 ) ), pageTarget( 1 ) );
+		it( 'ignores a resolution when the target is no longer a document', () => {
+			let state = activate(
+				init( documentTarget( 1 ) ),
+				documentTarget( 1 )
+			);
 			state = reducer( state, {
 				type: 'TARGET_CHANGED',
 				target: collectionTarget( 5 ),
 			} );
-			const next = reducer( state, { type: 'PAGE_RESOLVED', id: 1 } );
+			const next = reducer( state, {
+				type: 'DOCUMENT_RESOLVED',
+				id: 1,
+				postType: PAGE_TYPE,
+			} );
 			expect( next ).toBe( state );
 		} );
 	} );
 
-	describe( 'PAGE_NOT_FOUND', () => {
-		it( 'activates page-not-found on a page target', () => {
-			let state = init( pageTarget( 99 ) );
+	describe( 'DOCUMENT_NOT_FOUND', () => {
+		it( 'activates document-not-found on a document target', () => {
+			let state = init( documentTarget( 99 ) );
 			state = reducer( state, {
 				type: 'TARGET_CHANGED',
-				target: pageTarget( 99 ),
+				target: documentTarget( 99 ),
 			} );
-			state = reducer( state, { type: 'PAGE_NOT_FOUND' } );
-			expect( state.active ).toEqual( { kind: 'page-not-found' } );
+			state = reducer( state, { type: 'DOCUMENT_NOT_FOUND' } );
+			expect( state.active ).toEqual( { kind: 'document-not-found' } );
 		} );
 
-		it( 'is ignored when the target is no longer a page', () => {
-			let state = activate( init( pageTarget( 1 ) ), pageTarget( 1 ) );
+		it( 'is ignored when the target is no longer a document', () => {
+			let state = activate(
+				init( documentTarget( 1 ) ),
+				documentTarget( 1 )
+			);
 			state = reducer( state, {
 				type: 'TARGET_CHANGED',
 				target: collectionTarget( 5 ),
 			} );
-			const next = reducer( state, { type: 'PAGE_NOT_FOUND' } );
+			const next = reducer( state, { type: 'DOCUMENT_NOT_FOUND' } );
 			expect( next ).toBe( state );
 		} );
 	} );
 
-	describe( 'PAGE_DISPLAYED', () => {
-		it( 'activates page when paint catches up to mount + target', () => {
-			let state = init( pageTarget( 1 ) );
+	describe( 'DOCUMENT_DISPLAYED', () => {
+		it( 'activates document when paint catches up to mount + target', () => {
+			let state = init( documentTarget( 1 ) );
 			state = reducer( state, {
 				type: 'TARGET_CHANGED',
-				target: pageTarget( 1 ),
+				target: documentTarget( 1 ),
 			} );
-			state = reducer( state, { type: 'PAGE_RESOLVED', id: 1 } );
+			state = reducer( state, {
+				type: 'DOCUMENT_RESOLVED',
+				id: 1,
+				postType: PAGE_TYPE,
+			} );
 			expect( state.active ).toEqual( { kind: 'loading' } );
-			state = reducer( state, { type: 'PAGE_DISPLAYED', id: 1 } );
-			expect( state.active ).toEqual( { kind: 'page' } );
-			expect( state.displayedPageId ).toBe( 1 );
+			state = reducer( state, { type: 'DOCUMENT_DISPLAYED', id: 1 } );
+			expect( state.active ).toEqual( { kind: 'document', id: 1 } );
+			expect( state.displayedDocumentId ).toBe( 1 );
 		} );
 
-		it( 'records displayedPageId even when it does not match the target', () => {
-			let state = activate( init( pageTarget( 1 ) ), pageTarget( 1 ) );
+		it( 'records displayedDocumentId even when it does not match the target', () => {
+			let state = activate(
+				init( documentTarget( 1 ) ),
+				documentTarget( 1 )
+			);
 			state = reducer( state, {
 				type: 'TARGET_CHANGED',
-				target: pageTarget( 2 ),
+				target: documentTarget( 2 ),
 			} );
-			state = reducer( state, { type: 'PAGE_DISPLAYED', id: 1 } );
-			expect( state.displayedPageId ).toBe( 1 );
-			expect( state.active ).toEqual( { kind: 'page' } ); // preserved paint
+			state = reducer( state, { type: 'DOCUMENT_DISPLAYED', id: 1 } );
+			expect( state.displayedDocumentId ).toBe( 1 );
+			// Preserved paint of document 1 while target is 2.
+			expect( state.active ).toEqual( { kind: 'document', id: 1 } );
 		} );
 	} );
 
@@ -273,37 +332,44 @@ describe( 'EntityRoute reducer', () => {
 			expect( state.mountedCollectionIds ).toEqual( [ 7 ] );
 		} );
 
-		it( 'drops mounted collections when leaving for a page', () => {
+		it( 'drops mounted collections when leaving for a document', () => {
 			let state = activate(
 				init( collectionTarget( 5 ) ),
 				collectionTarget( 5 )
 			);
-			state = activate( state, pageTarget( 1 ) );
+			state = activate( state, documentTarget( 1 ) );
 			expect( state.mountedCollectionIds ).toEqual( [] );
 			expect( state.readyCollectionIds.size ).toBe( 0 );
 		} );
 	} );
 
 	describe( 'navigation flows', () => {
-		it( 'cold-loads /page/A through loading → page', () => {
-			let state = init( pageTarget( 1 ) );
+		it( 'cold-loads a document through loading → document', () => {
+			let state = init( documentTarget( 1 ) );
 			expect( state.active ).toEqual( { kind: 'loading' } );
-			state = reducer( state, { type: 'PAGE_RESOLVED', id: 1 } );
+			state = reducer( state, {
+				type: 'DOCUMENT_RESOLVED',
+				id: 1,
+				postType: PAGE_TYPE,
+			} );
 			expect( state.active ).toEqual( { kind: 'loading' } );
-			state = reducer( state, { type: 'PAGE_DISPLAYED', id: 1 } );
-			expect( state.active ).toEqual( { kind: 'page' } );
+			state = reducer( state, { type: 'DOCUMENT_DISPLAYED', id: 1 } );
+			expect( state.active ).toEqual( { kind: 'document', id: 1 } );
 		} );
 
-		it( 'page → collection → page reuses the page mount', () => {
-			let state = activate( init( pageTarget( 1 ) ), pageTarget( 1 ) );
-			const mountedPageId = state.mountedPageId;
+		it( 'document → collection → document reuses the document mount', () => {
+			let state = activate(
+				init( documentTarget( 1 ) ),
+				documentTarget( 1 )
+			);
+			const mountedDocumentId = state.mountedDocumentId;
 			state = activate( state, collectionTarget( 5 ) );
 			state = reducer( state, {
 				type: 'TARGET_CHANGED',
-				target: pageTarget( 1 ),
+				target: documentTarget( 1 ),
 			} );
-			expect( state.mountedPageId ).toBe( mountedPageId );
-			expect( state.active ).toEqual( { kind: 'page' } );
+			expect( state.mountedDocumentId ).toBe( mountedDocumentId );
+			expect( state.active ).toEqual( { kind: 'document', id: 1 } );
 		} );
 	} );
 } );

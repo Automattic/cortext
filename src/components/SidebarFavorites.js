@@ -1,6 +1,12 @@
 import { __, sprintf } from '@wordpress/i18n';
 import { Button, Icon, Spinner } from '@wordpress/components';
-import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
+import {
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from '@wordpress/element';
 import { customPostType, starFilled } from '@wordpress/icons';
 import {
 	DndContext,
@@ -18,7 +24,11 @@ import {
 
 import PageIcon from './PageIcon';
 import { collectionTitle } from './CollectionRow';
-import { computeUri } from '../router/useResolveEntity';
+import { collectDescendants } from './pages-tree';
+import {
+	computeCollectionUri,
+	computeDocumentUri,
+} from '../router/useResolveEntity';
 import { whenViewTransitionsSettled } from '../hooks/viewTransition';
 
 const FAVORITE_ADD_ANIMATION_MS = 220;
@@ -34,6 +44,10 @@ function transformToString( transform ) {
 
 function pageTitle( page ) {
 	return page.title?.rendered?.trim() || __( '(untitled)', 'cortext' );
+}
+
+function favoriteTitle( favorite, fallback ) {
+	return favorite.title?.trim?.() || fallback;
 }
 
 export function favoriteKey( favorite ) {
@@ -57,6 +71,19 @@ export function moveFavorite( favorites, activeId, overId ) {
 	}
 
 	return arrayMove( favorites, from, to );
+}
+
+export function filterFavoritesForTrashedPage( favorites, pageId, pages ) {
+	const trashedPageIds = new Set( [
+		Number( pageId ),
+		...collectDescendants( Number( pageId ), pages ),
+	] );
+
+	return favorites.filter(
+		( favorite ) =>
+			favorite.kind !== 'page' ||
+			! trashedPageIds.has( Number( favorite.id ) )
+	);
 }
 
 export function resolveFavoriteItems( favorites, pages, collections ) {
@@ -83,8 +110,13 @@ export function resolveFavoriteItems( favorites, pages, collections ) {
 					key,
 					sortableId: key,
 					record: page,
-					title: page ? pageTitle( page ) : __( 'Page', 'cortext' ),
-					path: page ? computeUri( page, 'page' ) : favorite.path,
+					title: page
+						? pageTitle( page )
+						: favoriteTitle( favorite, __( 'Page', 'cortext' ) ),
+					path: page ? computeDocumentUri( page ) : favorite.path,
+					icon: page
+						? page.meta?.cortext_document_icon ?? ''
+						: favorite.icon ?? '',
 				};
 			}
 
@@ -102,9 +134,12 @@ export function resolveFavoriteItems( favorites, pages, collections ) {
 					record: collection,
 					title: collection
 						? collectionTitle( collection )
-						: __( 'Collection', 'cortext' ),
+						: favoriteTitle(
+								favorite,
+								__( 'Collection', 'cortext' )
+						  ),
 					path: collection
-						? computeUri( collection, 'collection' )
+						? computeCollectionUri( collection )
 						: favorite.path,
 				};
 			}
@@ -114,20 +149,46 @@ export function resolveFavoriteItems( favorites, pages, collections ) {
 		.filter( Boolean );
 }
 
+function mergeDisplayFavorites( currentDisplay, nextFavorites, removingKeys ) {
+	const nextByKey = new Map(
+		nextFavorites.map( ( favorite ) => [
+			favoriteKey( favorite ),
+			favorite,
+		] )
+	);
+	const seen = new Set();
+	const merged = [];
+
+	currentDisplay.forEach( ( favorite ) => {
+		const key = favoriteKey( favorite );
+		if ( nextByKey.has( key ) ) {
+			merged.push( nextByKey.get( key ) );
+			seen.add( key );
+		} else if ( removingKeys.has( key ) ) {
+			merged.push( favorite );
+			seen.add( key );
+		}
+	} );
+
+	nextFavorites.forEach( ( favorite ) => {
+		const key = favoriteKey( favorite );
+		if ( ! seen.has( key ) ) {
+			merged.push( favorite );
+		}
+	} );
+
+	return merged;
+}
+
 function FavoriteIcon( { item } ) {
 	if ( item.kind === 'page' ) {
-		return (
-			<PageIcon
-				icon={ item.record?.meta?.cortext_page_icon ?? '' }
-				size={ 16 }
-			/>
-		);
+		return <PageIcon icon={ item.icon ?? '' } size={ 16 } />;
 	}
 
 	return <Icon icon={ customPostType } size={ 16 } />;
 }
 
-function SortableFavoriteRow( { item, onSelect, onRemove } ) {
+function SortableFavoriteRow( { item, isDisabled, onSelect, onRemove } ) {
 	const {
 		attributes,
 		listeners,
@@ -136,10 +197,33 @@ function SortableFavoriteRow( { item, onSelect, onRemove } ) {
 		transition,
 		isDragging,
 	} = useSortable( { id: item.sortableId } );
+	const rowRef = useRef( null );
+	const wasDraggingRef = useRef( false );
+	const setRowRef = useCallback(
+		( node ) => {
+			rowRef.current = node;
+			setNodeRef( node );
+		},
+		[ setNodeRef ]
+	);
 	const rowClasses = [ 'cortext-sidebar__row' ];
 	if ( isDragging ) {
 		rowClasses.push( 'is-dragging' );
 	}
+
+	useEffect( () => {
+		if ( wasDraggingRef.current && ! isDragging ) {
+			const activeElement = rowRef.current?.ownerDocument?.activeElement;
+			if (
+				activeElement &&
+				rowRef.current?.contains( activeElement ) &&
+				typeof activeElement.blur === 'function'
+			) {
+				activeElement.blur();
+			}
+		}
+		wasDraggingRef.current = isDragging;
+	}, [ isDragging ] );
 
 	return (
 		<li
@@ -151,27 +235,21 @@ function SortableFavoriteRow( { item, onSelect, onRemove } ) {
 			data-favorite-key={ item.sortableId }
 		>
 			<div
-				ref={ setNodeRef }
+				ref={ setRowRef }
 				className={ rowClasses.join( ' ' ) }
 				style={ {
 					transform: transformToString( transform ),
 					transition,
 				} }
+				{ ...attributes }
+				{ ...listeners }
 			>
-				<button
-					type="button"
-					className="cortext-sidebar__favorite-drag-handle"
-					aria-label={ __( 'Reorder favorite', 'cortext' ) }
-					{ ...attributes }
-					{ ...listeners }
+				<span
+					className="cortext-sidebar__favorite-icon"
+					aria-hidden="true"
 				>
-					<span
-						className="cortext-sidebar__favorite-icon"
-						aria-hidden="true"
-					>
-						<FavoriteIcon item={ item } />
-					</span>
-				</button>
+					<FavoriteIcon item={ item } />
+				</span>
 				<button
 					type="button"
 					className="cortext-sidebar__favorite-title"
@@ -206,11 +284,13 @@ function SortableFavoriteRow( { item, onSelect, onRemove } ) {
 					className="cortext-sidebar__favorite-toggle is-favorite"
 					icon={ starFilled }
 					size="small"
+					disabled={ isDisabled }
 					label={ sprintf(
 						/* translators: %s: favorite title */
 						__( 'Remove %s from favorites', 'cortext' ),
 						item.title
 					) }
+					onPointerDown={ ( event ) => event.stopPropagation() }
 					onClick={ () => onRemove( item ) }
 					aria-pressed
 				/>
@@ -225,6 +305,7 @@ export default function SidebarFavorites( {
 	collections,
 	isResolving,
 	isResolvingItems,
+	isDisabled,
 	onSelect,
 	onRemove,
 	onReorder,
@@ -233,17 +314,25 @@ export default function SidebarFavorites( {
 	const [ addedKeys, setAddedKeys ] = useState( () => new Set() );
 	const [ removingKeys, setRemovingKeys ] = useState( () => new Set() );
 	const previousKeysRef = useRef( null );
+	const latestFavoritesRef = useRef( favorites );
+	const removingKeysRef = useRef( new Set() );
+	const hasCompletedInitialLoadRef = useRef( ! isResolving );
 	const timersRef = useRef( [] );
 
 	useEffect( () => {
+		latestFavoritesRef.current = favorites;
 		const currentKeys = new Set(
 			favorites.map( ( favorite ) => favoriteKey( favorite ) )
 		);
 		const previousKeys = previousKeysRef.current;
 		previousKeysRef.current = currentKeys;
+		const canAnimateChanges = hasCompletedInitialLoadRef.current;
 
 		if ( ! previousKeys ) {
 			setDisplayFavorites( favorites );
+			if ( ! isResolving ) {
+				hasCompletedInitialLoadRef.current = true;
+			}
 			return;
 		}
 
@@ -253,8 +342,11 @@ export default function SidebarFavorites( {
 		const nextRemoved = new Set(
 			[ ...previousKeys ].filter( ( key ) => ! currentKeys.has( key ) )
 		);
+		const nextRemovingKeys = new Set( removingKeysRef.current );
+		nextAdded.forEach( ( key ) => nextRemovingKeys.delete( key ) );
+		nextRemoved.forEach( ( key ) => nextRemovingKeys.add( key ) );
 
-		if ( nextAdded.size > 0 ) {
+		if ( canAnimateChanges && nextAdded.size > 0 ) {
 			setAddedKeys( nextAdded );
 			const timer = setTimeout( () => {
 				setAddedKeys( ( keys ) => {
@@ -266,26 +358,37 @@ export default function SidebarFavorites( {
 			timersRef.current.push( timer );
 		}
 
-		if ( nextRemoved.size > 0 ) {
-			setRemovingKeys( ( keys ) => {
-				const next = new Set( keys );
-				nextRemoved.forEach( ( key ) => next.add( key ) );
-				return next;
-			} );
-			const timer = setTimeout( () => {
-				setRemovingKeys( ( keys ) => {
-					const next = new Set( keys );
-					nextRemoved.forEach( ( key ) => next.delete( key ) );
-					return next;
-				} );
-				setDisplayFavorites( favorites );
-			}, FAVORITE_REMOVE_ANIMATION_MS );
-			timersRef.current.push( timer );
-			return;
+		if ( nextAdded.size > 0 || nextRemoved.size > 0 ) {
+			removingKeysRef.current = nextRemovingKeys;
+			setRemovingKeys( nextRemovingKeys );
+			setDisplayFavorites( ( current ) =>
+				mergeDisplayFavorites( current, favorites, nextRemovingKeys )
+			);
+		} else {
+			setDisplayFavorites( favorites );
 		}
 
-		setDisplayFavorites( favorites );
-	}, [ favorites ] );
+		if ( nextRemoved.size > 0 ) {
+			const timer = setTimeout( () => {
+				const next = new Set( removingKeysRef.current );
+				nextRemoved.forEach( ( key ) => next.delete( key ) );
+				removingKeysRef.current = next;
+				setRemovingKeys( next );
+				setDisplayFavorites( ( current ) =>
+					mergeDisplayFavorites(
+						current,
+						latestFavoritesRef.current,
+						next
+					)
+				);
+			}, FAVORITE_REMOVE_ANIMATION_MS );
+			timersRef.current.push( timer );
+		}
+
+		if ( ! isResolving ) {
+			hasCompletedInitialLoadRef.current = true;
+		}
+	}, [ favorites, isResolving ] );
 
 	const items = useMemo(
 		() => resolveFavoriteItems( displayFavorites, pages, collections ),
@@ -306,14 +409,14 @@ export default function SidebarFavorites( {
 		};
 	}, [] );
 
-	if ( ! isResolving && displayFavorites.length === 0 ) {
-		return null;
-	}
-
 	const handleDragEnd = ( { active, over } ) => {
+		if ( isDisabled ) {
+			return;
+		}
+		const activeId = String( active.id );
 		const next = moveFavorite(
 			favorites,
-			String( active.id ),
+			activeId,
 			over ? String( over.id ) : null
 		);
 		if ( next !== favorites ) {
@@ -322,29 +425,31 @@ export default function SidebarFavorites( {
 	};
 
 	const requestRemove = ( item ) => {
-		setRemovingKeys( ( keys ) => new Set( keys ).add( item.sortableId ) );
-		const timer = setTimeout( () => {
-			onRemove( item );
-			setRemovingKeys( ( keys ) => {
-				const next = new Set( keys );
-				next.delete( item.sortableId );
-				return next;
-			} );
-		}, FAVORITE_REMOVE_ANIMATION_MS );
-		timersRef.current.push( timer );
+		if ( isDisabled ) {
+			return;
+		}
+		onRemove( item );
 	};
+	const hasFavorites = favorites.length > 0;
+	const isLoading =
+		isResolving ||
+		( hasFavorites && isResolvingItems && items.length === 0 );
+	const isEmpty = ! isLoading && ! hasFavorites;
 
 	return (
 		<div className="cortext-sidebar__favorites">
-			<div className="cortext-sidebar__section-header">
-				<h2 className="cortext-sidebar__section-title">
-					{ __( 'Favorites', 'cortext' ) }
-				</h2>
-			</div>
-			{ ( isResolving || isResolvingItems ) && items.length === 0 ? (
+			{ isLoading ? (
 				<div className="cortext-sidebar__loading">
 					<Spinner />
 				</div>
+			) : null }
+			{ isEmpty ? (
+				<p className="cortext-sidebar__empty cortext-sidebar__empty--inline">
+					{ __(
+						'Star a page from its title menu to pin it here.',
+						'cortext'
+					) }
+				</p>
 			) : null }
 			{ items.length > 0 ? (
 				<DndContext
@@ -369,6 +474,7 @@ export default function SidebarFavorites( {
 											item.sortableId
 										),
 									} }
+									isDisabled={ isDisabled }
 									onSelect={ onSelect }
 									onRemove={ requestRemove }
 								/>

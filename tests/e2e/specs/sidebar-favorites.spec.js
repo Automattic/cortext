@@ -83,7 +83,7 @@ async function dragFavoriteBefore(
 	storedKeys
 ) {
 	const active = page.locator(
-		`.cortext-sidebar__favorite-row[data-favorite-key="${ activeKey }"] .cortext-sidebar__favorite-drag-handle`
+		`.cortext-sidebar__favorite-row[data-favorite-key="${ activeKey }"] .cortext-sidebar__row`
 	);
 	const over = page.locator(
 		`.cortext-sidebar__favorite-row[data-favorite-key="${ overKey }"] .cortext-sidebar__row`
@@ -182,7 +182,9 @@ test.describe( 'Sidebar favorites', () => {
 				collectionKey,
 			] );
 
-			const favorites = page.locator( '.cortext-sidebar__favorites' );
+			const favorites = page.locator(
+				'.cortext-sidebar__section--favorites'
+			);
 			await expect(
 				favorites.getByRole( 'heading', { name: 'Favorites' } )
 			).toBeVisible();
@@ -281,7 +283,7 @@ test.describe( 'Sidebar favorites', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ createdPage.id }`
+				`page=cortext&p=/${ createdPage.id }`
 			);
 
 			const row = page.locator(

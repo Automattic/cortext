@@ -13,12 +13,11 @@ function resolveBaseURL() {
 		return process.env.WP_BASE_URL;
 	}
 	try {
-		// eslint-disable-next-line global-require
 		const override = require( './.wp-env.override.json' );
 		if ( override.port ) {
 			return `http://localhost:${ override.port }`;
 		}
-	} catch ( _error ) {
+	} catch {
 		// File is gitignored; absent on CI.
 	}
 	return 'http://localhost:8889';
@@ -32,6 +31,7 @@ const baseConfig = require( '@wordpress/scripts/config/playwright.config.js' );
 module.exports = defineConfig( {
 	...baseConfig,
 	testDir: './tests/e2e/specs',
+	globalSetup: require.resolve( './tests/e2e/global-setup.js' ),
 	// wp-env is started explicitly by the developer / CI.
 	webServer: undefined,
 	use: {

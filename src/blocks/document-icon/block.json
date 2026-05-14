@@ -1,0 +1,20 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "cortext/document-icon",
+	"title": "Document icon",
+	"category": "widgets",
+	"icon": "smiley",
+	"description": "Document identity icon. Reads from the cortext_document_icon post meta.",
+	"textdomain": "cortext",
+	"usesContext": [ "postId", "postType" ],
+	"supports": {
+		"html": false,
+		"reusable": false,
+		"multiple": false,
+		"inserter": false,
+		"customClassName": false,
+		"lock": false
+	},
+	"attributes": {}
+}

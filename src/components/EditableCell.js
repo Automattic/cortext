@@ -287,6 +287,15 @@ function NumberRing( { value, format, text } ) {
 	);
 }
 
+// Keep the first render after a text→select or text→multiselect change in
+// sync with the server: the field type may update before the row data refetches.
+function splitTokens( value ) {
+	return String( value )
+		.split( /[\n,;]/ )
+		.map( ( token ) => token.trim() )
+		.filter( Boolean );
+}
+
 // Returns either '' (empty cell) or a renderable value (string or JSX).
 // `display === ''` is the consumer's empty-cell signal — see CellShell's
 // `isEmpty` prop. Non-empty values may be JSX (anchor for url, icon for
@@ -349,9 +358,22 @@ export function formatDisplay( value, type, options = {} ) {
 	}
 
 	if ( type === 'select' ) {
-		const single = Array.isArray( value ) ? value[ 0 ] : value;
+		let single = Array.isArray( value ) ? value[ 0 ] : value;
 		if ( single === null || single === undefined || single === '' ) {
 			return '';
+		}
+		// The field type can update before the row refetches. If the raw text
+		// is not an option yet, show the first split token for now.
+		if (
+			typeof single === 'string' &&
+			elements?.length &&
+			! elements.some( ( e ) => e.value === single ) &&
+			/[\n,;]/.test( single )
+		) {
+			const tokens = splitTokens( single );
+			if ( tokens.length > 0 ) {
+				single = tokens[ 0 ];
+			}
 		}
 		const element = elements?.find( ( e ) => e.value === single );
 		return (
@@ -363,7 +385,21 @@ export function formatDisplay( value, type, options = {} ) {
 	}
 
 	if ( type === 'multiselect' ) {
-		const list = Array.isArray( value ) ? value : [ value ];
+		let list;
+		if ( Array.isArray( value ) ) {
+			list = value;
+		} else if (
+			typeof value === 'string' &&
+			/[\n,;]/.test( value ) &&
+			elements?.length &&
+			! elements.some( ( e ) => e.value === value )
+		) {
+			// Same early-render case as select, but multi-select keeps every
+			// split token.
+			list = splitTokens( value );
+		} else {
+			list = [ value ];
+		}
 		const populated = list.filter(
 			( v ) => v !== null && v !== undefined && v !== ''
 		);
@@ -833,7 +869,7 @@ export default function EditableCell( {
 	let editor = null;
 	if ( isEditing ) {
 		if ( fieldType === 'multiselect' ) {
-			// Multiselect persists on each toggle (Notion-style: no Save
+			// Multiselect persists on each toggle: no Save
 			// button). Wire onSave straight to saveRowField so saving
 			// doesn't close the cell; closing happens via Dropdown's
 			// onClose firing onCancel.

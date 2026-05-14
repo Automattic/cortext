@@ -1,6 +1,6 @@
 <?php
 /**
- * Throttles WordPress revision creation for Cortext-managed post types.
+ * Throttles WordPress revision creation for Cortext-managed documents.
  *
  * @package Cortext
  */
@@ -9,18 +9,17 @@ declare( strict_types=1 );
 
 namespace Cortext\Editor;
 
-use Cortext\PostType\Page;
 use WP_Post;
 
 final class RevisionThrottle {
 
 	/**
-	 * Minimum time between revision snapshots. Mirrors Notion's ~10 minute cadence.
+	 * Minimum time between revision snapshots. Keeps rapid autosaves from creating a revision per edit.
 	 */
 	private const MIN_INTERVAL_SECONDS = 600;
 
 	/**
-	 * Total revisions to retain per Cortext page.
+	 * Total revisions to retain per Cortext document.
 	 */
 	private const REVISIONS_TO_KEEP = 50;
 
@@ -37,7 +36,7 @@ final class RevisionThrottle {
 	 * @param WP_Post $post             The post being saved.
 	 */
 	public function throttle_revision( bool $post_has_changed, WP_Post $last_revision, WP_Post $post ): bool {
-		if ( Page::POST_TYPE !== $post->post_type ) {
+		if ( ! post_type_supports( $post->post_type, 'cortext-document' ) ) {
 			return $post_has_changed;
 		}
 
@@ -54,13 +53,13 @@ final class RevisionThrottle {
 	}
 
 	/**
-	 * Caps the number of revisions retained per Cortext page.
+	 * Caps the number of revisions retained per Cortext document.
 	 *
 	 * @param int     $num  Default number of revisions to keep.
 	 * @param WP_Post $post The post being saved.
 	 */
 	public function cap_revisions( int $num, WP_Post $post ): int {
-		if ( Page::POST_TYPE !== $post->post_type ) {
+		if ( ! post_type_supports( $post->post_type, 'cortext-document' ) ) {
 			return $num;
 		}
 		return self::REVISIONS_TO_KEEP;

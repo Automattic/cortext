@@ -2,7 +2,7 @@
  * E2E coverage for the page trash flow in the Cortext shell.
  *
  * Walks the user-visible path the unit tests can't: open a page, trash it
- * from the sidebar dropdown, see the Trash section pick it up with the
+ * from the sidebar dropdown, see the Trash panel pick it up with the
  * cascade subpage count, the canvas locked behind a notice, and Restore
  * via the banner unwinding the whole thing.
  */
@@ -55,7 +55,7 @@ test.describe( 'Page trash flow', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/page/${ parent.id }`
+				`page=cortext&p=/${ parent.id }`
 			);
 
 			// Wait for the editor to load the parent.
@@ -90,7 +90,7 @@ test.describe( 'Page trash flow', () => {
 				.click( { force: true } );
 			await page.getByRole( 'menuitem', { name: 'Trash' } ).click();
 
-			// Active sidebar drops the whole subtree; the Trash section
+			// Active sidebar drops the whole subtree; the Trash panel
 			// shows the cascade root with the subpage count.
 			await expect(
 				sidebar.getByRole( 'button', {
@@ -111,7 +111,9 @@ test.describe( 'Page trash flow', () => {
 
 			// Canvas keeps the parent open with a trashed banner.
 			const notice = page.locator( '.cortext-canvas__notice' );
-			await expect( notice ).toContainText( 'This page is in trash.' );
+			await expect( notice ).toContainText(
+				'This document is in trash.'
+			);
 
 			// Restore via the banner. Subtree returns; banner disappears.
 			await notice.getByRole( 'button', { name: 'Restore' } ).click();
@@ -123,7 +125,14 @@ test.describe( 'Page trash flow', () => {
 					exact: true,
 				} )
 			).toBeVisible();
-			await expect( trashList ).toHaveCount( 0 );
+			await expect(
+				page
+					.locator( '#cortext-sidebar-trash-panel' )
+					.getByRole( 'button', {
+						name: PARENT_TITLE,
+						exact: true,
+					} )
+			).toHaveCount( 0 );
 		} finally {
 			await deleteIfCreated( requestUtils, child?.id );
 			await deleteIfCreated( requestUtils, parent?.id );

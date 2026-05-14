@@ -100,23 +100,27 @@ jest.mock( '../../../../src/hooks/useFieldMutations', () => ( {
 	useDuplicateField: () => ( { run: jest.fn() } ),
 } ) );
 
-jest.mock( '../../../../src/hooks/useCollectionFields', () => ( {
-	__esModule: true,
-	default: jest.fn(),
+jest.mock( '../../../../src/components/CollectionFieldsContext', () => ( {
+	useCollectionFieldsContext: jest.fn(),
 } ) );
 
 jest.mock( '../../../../src/components/fields/AddFieldPopover', () => ( {
 	__esModule: true,
-	default: ( { collectionId } ) => (
-		<div>{ `Add field for collection ${ collectionId }` }</div>
+	default: ( { collectionId, onCreate } ) => (
+		<div>
+			<div>{ `Add field for collection ${ collectionId }` }</div>
+			<button type="button" onClick={ () => onCreate?.( { id: 123 } ) }>
+				Create mock field
+			</button>
+		</div>
 	),
 } ) );
 
 import ColumnHeaderActions from '../../../../src/components/fields/ColumnHeaderActions';
 import { useEntityRecord } from '@wordpress/core-data';
-import useCollectionFields from '../../../../src/hooks/useCollectionFields';
+import { useCollectionFieldsContext } from '../../../../src/components/CollectionFieldsContext';
 
-function Harness( { collectionId, recordId } ) {
+function Harness( { collectionId, recordId, onFieldCreated = jest.fn() } ) {
 	return (
 		<div className="cortext-data-view">
 			<table>
@@ -127,9 +131,7 @@ function Harness( { collectionId, recordId } ) {
 								<span data-cortext-field-marker={ recordId } />
 							</th>
 						) : null }
-						<th>
-							<span data-cortext-add-field-marker="true" />
-						</th>
+						<th className="dataviews-view-table__actions-column" />
 					</tr>
 				</thead>
 			</table>
@@ -137,6 +139,7 @@ function Harness( { collectionId, recordId } ) {
 				collectionId={ collectionId }
 				view={ { fields: [] } }
 				onChangeView={ jest.fn() }
+				onFieldCreated={ onFieldCreated }
 			/>
 		</div>
 	);
@@ -144,7 +147,7 @@ function Harness( { collectionId, recordId } ) {
 
 describe( 'ColumnHeaderActions', () => {
 	beforeEach( () => {
-		useCollectionFields.mockReturnValue( { fields: [] } );
+		useCollectionFieldsContext.mockReturnValue( { fields: [] } );
 		useEntityRecord.mockReturnValue( {
 			record: {
 				id: 77,
@@ -172,8 +175,29 @@ describe( 'ColumnHeaderActions', () => {
 		);
 	} );
 
+	it( 'passes the created field out of the add-field dropdown', async () => {
+		const onFieldCreated = jest.fn();
+		render(
+			<Harness collectionId={ 5 } onFieldCreated={ onFieldCreated } />
+		);
+
+		fireEvent.click(
+			await screen.findByRole( 'button', { name: 'Add field' } )
+		);
+		fireEvent.click(
+			screen.getByRole( 'button', {
+				name: 'Create mock field',
+			} )
+		);
+
+		expect( onFieldCreated ).toHaveBeenCalledWith( { id: 123 } );
+		await waitFor( () =>
+			expect( screen.queryByRole( 'dialog' ) ).not.toBeInTheDocument()
+		);
+	} );
+
 	it( 'warns when deleting a field will also delete dependent rollups', async () => {
-		useCollectionFields.mockReturnValue( {
+		useCollectionFieldsContext.mockReturnValue( {
 			fields: [
 				{
 					id: 'field-77',

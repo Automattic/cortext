@@ -11,8 +11,16 @@ namespace Cortext\Tests;
 
 use Cortext\PostType\Field;
 use WorDBless\BaseTestCase;
+use WP_REST_Request;
+use WP_REST_Server;
 
 final class Test_Post_Type_Field extends BaseTestCase {
+
+	public function tear_down(): void {
+		wp_set_current_user( 0 );
+
+		parent::tear_down();
+	}
 
 	public function test_post_type_constant_matches_expected_slug(): void {
 		$this->assertSame( 'crtxt_field', Field::POST_TYPE );
@@ -64,7 +72,6 @@ final class Test_Post_Type_Field extends BaseTestCase {
 
 		$registered = get_registered_meta_keys( 'post', Field::POST_TYPE );
 
-		$this->assertArrayHasKey( 'notion_id', $registered );
 		$this->assertArrayHasKey( 'type', $registered );
 		$this->assertArrayHasKey( 'options', $registered );
 		$this->assertArrayHasKey( 'number_format', $registered );
@@ -78,5 +85,48 @@ final class Test_Post_Type_Field extends BaseTestCase {
 
 		$this->assertArrayHasKey( 'related_collection_id', $registered );
 		$this->assertSame( 'integer', $registered['related_collection_id']['type'] );
+	}
+
+	public function test_rest_response_includes_cortext_capabilities(): void {
+		$field_post_type = new Field();
+		$field_post_type->register_post_type();
+
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$field_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Status',
+				'meta_input'  => array( 'type' => 'select' ),
+			)
+		);
+
+		$GLOBALS['wp_rest_server'] = new WP_REST_Server();
+		do_action( 'rest_api_init' );
+
+		$request = new WP_REST_Request( 'GET', "/wp/v2/crtxt_fields/{$field_id}" );
+		$request->set_param( 'context', 'edit' );
+		$response = rest_get_server()->dispatch( $request );
+		$data     = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			array(
+				'sortable'   => true,
+				'filterable' => true,
+				'operators'  => array( 'is', 'isNot', 'isAny', 'isNone' ),
+			),
+			$data['cortext_capabilities']
+		);
+	}
+
+	private function create_user( string $role ): int {
+		return (int) wp_insert_user(
+			array(
+				'user_login' => uniqid( 'cortext_', false ),
+				'user_pass'  => 'password',
+				'role'       => $role,
+			)
+		);
 	}
 }

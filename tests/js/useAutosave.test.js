@@ -24,6 +24,11 @@ jest.mock( '@wordpress/notices', () => ( {
 	store: { name: 'core/notices' },
 } ) );
 
+const mockTouchRecent = jest.fn();
+jest.mock( '../../src/hooks/useRecents', () => ( {
+	useRecents: () => ( { touchRecent: mockTouchRecent } ),
+} ) );
+
 import { useSelect, useDispatch } from '@wordpress/data';
 import useAutosave from '../../src/hooks/useAutosave';
 
@@ -89,6 +94,7 @@ beforeEach( () => {
 		createErrorNotice: jest.fn(),
 		removeNotice: jest.fn(),
 	} );
+	mockTouchRecent.mockReset();
 } );
 
 afterEach( () => {
@@ -412,12 +418,44 @@ describe( 'useAutosave: status', () => {
 	} );
 
 	it( 'reports saved and captures lastSavedAt after a successful save', () => {
-		setStoreState( { didSucceed: true } );
+		setStoreState( { didSucceed: true, currentPostId: 42 } );
 
 		const { result } = renderHook( () => useAutosave() );
 
 		expect( result.current.status ).toBe( 'saved' );
 		expect( typeof result.current.lastSavedAt ).toBe( 'number' );
+		expect( mockTouchRecent ).not.toHaveBeenCalled();
+	} );
+
+	it( 'touches the configured page recent after a successful save', () => {
+		setStoreState( { didSucceed: true, currentPostId: 42 } );
+
+		renderHook( () =>
+			useAutosave( {
+				recentTarget: { kind: 'page', id: 42 },
+			} )
+		);
+
+		expect( mockTouchRecent ).toHaveBeenCalledWith( {
+			kind: 'page',
+			id: 42,
+		} );
+	} );
+
+	it( 'touches the configured row recent after a successful save', () => {
+		setStoreState( { didSucceed: true, currentPostId: 42 } );
+
+		renderHook( () =>
+			useAutosave( {
+				recentTarget: { kind: 'row', id: 42, collectionId: 9 },
+			} )
+		);
+
+		expect( mockTouchRecent ).toHaveBeenCalledWith( {
+			kind: 'row',
+			id: 42,
+			collectionId: 9,
+		} );
 	} );
 
 	it( 'reports error after a failed save', () => {

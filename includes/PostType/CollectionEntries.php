@@ -13,6 +13,7 @@ declare( strict_types=1 );
 
 namespace Cortext\PostType;
 
+use Cortext\Fields\FieldTypeRegistry;
 use Cortext\Relations;
 use WP_Post;
 
@@ -314,6 +315,17 @@ final class CollectionEntries {
 		Relations::remove_deleted_row_references( $post_id, $field_ids );
 	}
 
+	/**
+	 * Collection IDs whose entry post types are already registered in this
+	 * request. The type-change endpoints use this for a cheap field→collection
+	 * lookup before falling back to postmeta.
+	 *
+	 * @return int[]
+	 */
+	public static function known_collection_ids(): array {
+		return array_values( self::$entry_collection_ids );
+	}
+
 	private function collection_id_for_entry_post_type( string $post_type ): int {
 		if ( isset( self::$entry_collection_ids[ $post_type ] ) ) {
 			return self::$entry_collection_ids[ $post_type ];
@@ -447,7 +459,10 @@ final class CollectionEntries {
 					'rest_base'          => $post_type,
 					'has_archive'        => false,
 					'hierarchical'       => false,
-					'supports'           => array( 'title', 'editor', 'custom-fields' ),
+					// `thumbnail` exposes featured_media so document covers
+					// work for rows; `revisions` lets RevisionThrottle cap
+					// row history the same way it caps page history.
+					'supports'           => array( 'title', 'editor', 'custom-fields', 'thumbnail', 'revisions' ),
 					'capability_type'    => 'post',
 					'map_meta_cap'       => true,
 					'can_export'         => true,
@@ -455,16 +470,7 @@ final class CollectionEntries {
 				)
 			);
 
-			register_post_meta(
-				$post_type,
-				'notion_id',
-				array(
-					'type'              => 'string',
-					'single'            => true,
-					'show_in_rest'      => true,
-					'sanitize_callback' => 'sanitize_text_field',
-				)
-			);
+			DocumentIdentity::register_for_post_type( $post_type );
 		}
 
 		$this->register_field_meta( $post_type, $collection->ID );
@@ -496,10 +502,6 @@ final class CollectionEntries {
 	}
 
 	public static function wp_meta_type_for( string $cortext_type ): string {
-		return match ( $cortext_type ) {
-			'number'   => 'number',
-			'checkbox' => 'boolean',
-			default    => 'string',
-		};
+		return FieldTypeRegistry::wp_meta_type( $cortext_type );
 	}
 }

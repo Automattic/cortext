@@ -18,7 +18,7 @@ const ICON_NAMES = Object.entries( icons )
 	.map( ( [ name ] ) => name )
 	.sort();
 
-// Notion-style palette: a fixed set of named colors so the storage stays
+// Fixed named palette so the storage stays
 // validatable (PHP sanitize accepts only these names) and so the visual
 // language is consistent across the editor and frontend. `default` falls
 // back to currentColor, which means the icon picks up the surrounding

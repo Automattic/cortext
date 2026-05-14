@@ -51,6 +51,10 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 			'/cortext/v1/collections/(?P<collection_id>\d+)/rows/(?P<row_id>\d+)',
 			$routes
 		);
+		$this->assertArrayHasKey(
+			'/cortext/v1/collections/(?P<collection_id>\d+)/rows/(?P<row_id>\d+)/duplicate',
+			$routes
+		);
 	}
 
 	public function test_create_row_creates_formatted_collection_entry(): void {
@@ -273,6 +277,21 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertIsArray( $data['fields'] );
 	}
 
+	public function test_rejects_legacy_all_rows_per_page_sentinel(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+
+		$fixture = $this->create_collection_fixture( 'allrows' );
+
+		$response = $this->query_rows(
+			array(
+				'collection' => $fixture['collection_id'],
+				'per_page'   => -1,
+			)
+		);
+
+		$this->assertSame( 400, $response->get_status() );
+	}
+
 	public function test_field_definitions_in_response(): void {
 		wp_set_current_user( $this->create_user( 'author' ) );
 
@@ -434,36 +453,7 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertSame( 'ASC', $args['order'] );
 	}
 
-	public function test_build_query_args_with_search(): void {
-		$fixture = $this->create_collection_fixture( 'bqas' );
-
-		$request = new WP_REST_Request( 'GET', '/cortext/v1/rows' );
-		$request->set_query_params(
-			array(
-				'collection' => $fixture['collection_id'],
-				'search'     => 'hello',
-			)
-		);
-		$request->set_default_params(
-			array(
-				'per_page' => 25,
-				'page'     => 1,
-				'search'   => '',
-				'sort'     => null,
-				'filters'  => array(),
-			)
-		);
-
-		$controller = new RowsController();
-		$method     = new \ReflectionMethod( $controller, 'build_query_args' );
-		$method->setAccessible( true );
-
-		$args = $method->invoke( $controller, $request, 'bqas' );
-
-		$this->assertSame( 'hello', $args['s'] );
-	}
-
-	public function test_build_query_args_with_title_sort(): void {
+public function test_build_query_args_with_title_sort(): void {
 		$fixture = $this->create_collection_fixture( 'bqat' );
 
 		$request = new WP_REST_Request( 'GET', '/cortext/v1/rows' );
@@ -525,12 +515,12 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 
 		$args = $method->invoke( $controller, $request, 'bqan' );
 
-		$this->assertSame( "field-{$fixture['field_id']}", $args['meta_key'] );
-		$this->assertSame( 'meta_value_num', $args['orderby'] );
+		$this->assertArrayNotHasKey( 'meta_key', $args );
+		$this->assertSame( 'none', $args['orderby'] );
 		$this->assertSame( 'ASC', $args['order'] );
 	}
 
-	public function test_build_query_args_with_filters(): void {
+	public function test_build_query_args_ignores_raw_filters(): void {
 		$fixture = $this->create_collection_fixture( 'bqaf', 'text' );
 
 		$request = new WP_REST_Request( 'GET', '/cortext/v1/rows' );
@@ -567,28 +557,26 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 
 		$args = $method->invoke( $controller, $request, 'bqaf' );
 
-		$this->assertArrayHasKey( 'meta_query', $args );
-		$this->assertCount( 2, $args['meta_query'] );
-
-		$this->assertSame( "field-{$fixture['field_id']}", $args['meta_query'][0]['key'] );
-		$this->assertSame( '=', $args['meta_query'][0]['compare'] );
-		$this->assertSame( 'red', $args['meta_query'][0]['value'] );
-
-		$this->assertSame( 'IN', $args['meta_query'][1]['compare'] );
-		$this->assertSame( array( 'blue', 'green' ), $args['meta_query'][1]['value'] );
+		$this->assertArrayNotHasKey( 'meta_query', $args );
 	}
 
-	public function test_build_query_args_skips_rollup_sort_and_filter_meta_query(): void {
+	public function test_query_rows_rejects_rollup_sort_and_filter(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+
 		$fixture = $this->create_collection_fixture( 'bqaroll', 'rollup' );
 
-		$request = new WP_REST_Request( 'GET', '/cortext/v1/rows' );
-		$request->set_query_params(
+		$sort_response = $this->query_rows(
 			array(
 				'collection' => $fixture['collection_id'],
 				'sort'       => array(
 					'field'     => "field-{$fixture['field_id']}",
 					'direction' => 'desc',
 				),
+			)
+		);
+		$filter_response = $this->query_rows(
+			array(
+				'collection' => $fixture['collection_id'],
 				'filters'    => array(
 					array(
 						'field'    => "field-{$fixture['field_id']}",
@@ -598,26 +586,9 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 				),
 			)
 		);
-		$request->set_default_params(
-			array(
-				'per_page' => 25,
-				'page'     => 1,
-				'search'   => '',
-				'sort'     => null,
-				'filters'  => array(),
-			)
-		);
 
-		$controller = new RowsController();
-		$method     = new \ReflectionMethod( $controller, 'build_query_args' );
-		$method->setAccessible( true );
-
-		$args = $method->invoke( $controller, $request, 'bqaroll' );
-
-		$this->assertSame( 'date', $args['orderby'] );
-		$this->assertSame( 'ASC', $args['order'] );
-		$this->assertArrayNotHasKey( 'meta_key', $args );
-		$this->assertArrayNotHasKey( 'meta_query', $args );
+		$this->assertSame( 400, $sort_response->get_status() );
+		$this->assertSame( 400, $filter_response->get_status() );
 	}
 
 	// -- Relation and rollup tests --------------------------------------
@@ -1119,6 +1090,194 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertSame( 'ASC', $args['order'] );
 	}
 
+	// -- Duplicate tests ------------------------------------------------
+
+	public function test_duplicate_row_creates_copy_with_prefixed_title(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$fixture = $this->create_collection_fixture( 'dup', 'text' );
+		$source_id = $this->create_entry( 'crtxt_dup', 'My Row' );
+		update_post_meta( $source_id, "field-{$fixture['field_id']}", 'hello' );
+
+		$response = $this->duplicate_row( $fixture['collection_id'], $source_id );
+
+		$this->assertSame( 201, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertNotSame( $source_id, $data['id'] );
+		$this->assertSame( 'Copy of My Row', $data['title']['raw'] );
+		$this->assertSame( 'crtxt_dup', get_post_type( $data['id'] ) );
+		$this->assertSame( 'hello', $data['meta']["field-{$fixture['field_id']}"] );
+
+		// Source row stays untouched.
+		$this->assertSame( 'My Row', get_post( $source_id )->post_title );
+		$this->assertSame( 'hello', get_post_meta( $source_id, "field-{$fixture['field_id']}", true ) );
+	}
+
+	public function test_duplicate_row_copies_content_and_status(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$fixture = $this->create_collection_fixture( 'dupc', 'text' );
+
+		$source_id = (int) wp_insert_post(
+			array(
+				'post_type'    => 'crtxt_dupc',
+				'post_status'  => 'private',
+				'post_title'   => 'Original',
+				'post_content' => '<p>Body text.</p>',
+				'post_excerpt' => 'short summary',
+			)
+		);
+
+		$response = $this->duplicate_row( $fixture['collection_id'], $source_id );
+
+		$this->assertSame( 201, $response->get_status() );
+		$copy = get_post( $response->get_data()['id'] );
+		$this->assertSame( '<p>Body text.</p>', $copy->post_content );
+		$this->assertSame( 'short summary', $copy->post_excerpt );
+		$this->assertSame( 'private', $copy->post_status );
+	}
+
+	public function test_duplicate_row_copies_multiselect_values(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$collection_id = $this->create_collection_with_slug( 'Tagged', 'dupms' );
+		$field_id      = $this->create_collection_field( $collection_id, 'Tags', 'multiselect' );
+		$source_id     = $this->create_entry( 'crtxt_dupms', 'Tagged row' );
+		add_post_meta( $source_id, "field-{$field_id}", 'alpha' );
+		add_post_meta( $source_id, "field-{$field_id}", 'beta' );
+
+		$response = $this->duplicate_row( $collection_id, $source_id );
+
+		$this->assertSame( 201, $response->get_status() );
+		$new_id = $response->get_data()['id'];
+		$values = get_post_meta( $new_id, "field-{$field_id}", false );
+		$this->assertContains( 'alpha', $values );
+		$this->assertContains( 'beta', $values );
+		$this->assertCount( 2, $values );
+	}
+
+	public function test_duplicate_row_skips_rollups(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$projects_id = $this->create_collection_with_slug( 'Projects', 'dup-proj' );
+		$invoices_id = $this->create_collection_with_slug( 'Invoices', 'dup-inv' );
+		$relation    = $this->create_relation_pair( $projects_id, $invoices_id );
+		$count_id    = $this->create_rollup_field( $projects_id, 'Count', $relation['source_id'], 0, 'count' );
+
+		$project_id = $this->create_entry( 'crtxt_dup-proj', 'Project A' );
+		$invoice_id = $this->create_entry( 'crtxt_dup-inv', 'Invoice 1' );
+		\Cortext\Relations::sync_relation_value(
+			$project_id,
+			$relation['source_id'],
+			array( $invoice_id )
+		);
+
+		$response = $this->duplicate_row( $projects_id, $project_id );
+
+		$this->assertSame( 201, $response->get_status() );
+		$new_id = $response->get_data()['id'];
+		// Rollup values are computed on read; no stored meta to copy.
+		$this->assertSame( '', get_post_meta( $new_id, "field-{$count_id}", true ) );
+	}
+
+	public function test_duplicate_row_copies_relation_when_reverse_is_multiple(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$tasks_id  = $this->create_collection_with_slug( 'Tasks', 'dup-task' );
+		$people_id = $this->create_collection_with_slug( 'People', 'dup-people' );
+		$relation  = $this->create_relation_pair( $tasks_id, $people_id, true, true );
+
+		$task_id   = $this->create_entry( 'crtxt_dup-task', 'Original task' );
+		$person_id = $this->create_entry( 'crtxt_dup-people', 'Ada' );
+		\Cortext\Relations::sync_relation_value(
+			$task_id,
+			$relation['source_id'],
+			array( $person_id )
+		);
+
+		$response = $this->duplicate_row( $tasks_id, $task_id );
+
+		$this->assertSame( 201, $response->get_status() );
+		$new_id = $response->get_data()['id'];
+
+		// New row points at the same person.
+		$this->assertSame(
+			array( (string) $person_id ),
+			get_post_meta( $new_id, "field-{$relation['source_id']}", false )
+		);
+		// Source row still points at the person; reverse list contains both.
+		$this->assertSame(
+			array( (string) $person_id ),
+			get_post_meta( $task_id, "field-{$relation['source_id']}", false )
+		);
+		$reverse_values = get_post_meta( $person_id, "field-{$relation['reverse_id']}", false );
+		$this->assertContains( (string) $task_id, $reverse_values );
+		$this->assertContains( (string) $new_id, $reverse_values );
+	}
+
+	public function test_duplicate_row_skips_relation_when_reverse_is_single(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$tasks_id  = $this->create_collection_with_slug( 'Tasks', 'dup-tsng' );
+		$people_id = $this->create_collection_with_slug( 'People', 'dup-psng' );
+		// Reverse is single-valued: each person can be tied to only one task.
+		$relation = $this->create_relation_pair( $tasks_id, $people_id, true, false );
+
+		$task_id   = $this->create_entry( 'crtxt_dup-tsng', 'Original task' );
+		$person_id = $this->create_entry( 'crtxt_dup-psng', 'Ada' );
+		\Cortext\Relations::sync_relation_value(
+			$task_id,
+			$relation['source_id'],
+			array( $person_id )
+		);
+
+		$response = $this->duplicate_row( $tasks_id, $task_id );
+
+		$this->assertSame( 201, $response->get_status() );
+		$new_id = $response->get_data()['id'];
+
+		// Source row keeps its relation; new row has no relation.
+		$this->assertSame(
+			array( (string) $person_id ),
+			get_post_meta( $task_id, "field-{$relation['source_id']}", false )
+		);
+		$this->assertSame(
+			array(),
+			get_post_meta( $new_id, "field-{$relation['source_id']}", false )
+		);
+		$this->assertSame(
+			array( (string) $task_id ),
+			get_post_meta( $person_id, "field-{$relation['reverse_id']}", false )
+		);
+	}
+
+	public function test_duplicate_row_copies_document_icon(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$fixture   = $this->create_collection_fixture( 'dupic', 'text' );
+		$source_id = $this->create_entry( 'crtxt_dupic', 'Iconified' );
+		$icon      = wp_json_encode( array( 'type' => 'wp', 'name' => 'home' ) );
+		update_post_meta( $source_id, 'cortext_document_icon', $icon );
+
+		$response = $this->duplicate_row( $fixture['collection_id'], $source_id );
+
+		$this->assertSame( 201, $response->get_status() );
+		$new_id = $response->get_data()['id'];
+		$this->assertSame( $icon, get_post_meta( $new_id, 'cortext_document_icon', true ) );
+	}
+
+	public function test_duplicate_row_returns_404_for_unknown_row(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$fixture = $this->create_collection_fixture( 'dupnf' );
+
+		$response = $this->duplicate_row( $fixture['collection_id'], 999999 );
+
+		$this->assertSame( 404, $response->get_status() );
+	}
+
+	public function test_duplicate_row_requires_edit_caps(): void {
+		wp_set_current_user( $this->create_user( 'subscriber' ) );
+		$fixture   = $this->create_collection_fixture( 'dupperm' );
+		$source_id = $this->create_entry( 'crtxt_dupperm', 'Original' );
+
+		$response = $this->duplicate_row( $fixture['collection_id'], $source_id );
+
+		$this->assertSame( 403, $response->get_status() );
+	}
+
 	// -- Helpers --------------------------------------------------------
 
 	private function invoke_format_row( int $post_id, int $field_id ): array {
@@ -1199,6 +1358,17 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$request->set_param( 'row_id', $row_id );
 		$request->set_param( 'field', $field );
 		$request->set_param( 'value', $value );
+
+		return rest_do_request( $request );
+	}
+
+	private function duplicate_row( int $collection_id, int $row_id ): \WP_REST_Response {
+		$request = new WP_REST_Request(
+			'POST',
+			"/cortext/v1/collections/{$collection_id}/rows/{$row_id}/duplicate"
+		);
+		$request->set_param( 'collection_id', $collection_id );
+		$request->set_param( 'row_id', $row_id );
 
 		return rest_do_request( $request );
 	}

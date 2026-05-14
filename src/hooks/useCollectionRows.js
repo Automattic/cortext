@@ -5,40 +5,321 @@ import apiFetch from '@wordpress/api-fetch';
 // tech-debt.md#2: rows live outside core-data, so this hook manages
 // its own fetch state and exposes a manual refresh() handle.
 
-const SERVER_OPERATORS = new Set( [ 'is', 'isNot', 'isAny', 'isNone' ] );
+const CLIENT_PER_PAGE = 100;
+const CLIENT_PAGE_FETCH_CONCURRENCY = 4;
 
-function buildQueryArgs( collectionId, view, fields = [] ) {
+function serverFieldInfo( field ) {
+	return {
+		filterable: field.filterable === true,
+		sortable: field.sortable === true,
+		type: field.cortextFieldType ?? field.cortextType ?? field.type,
+		operators: Array.isArray( field.operators )
+			? field.operators
+			: undefined,
+	};
+}
+
+function fieldInfoMap( fields = [] ) {
+	return new Map( fields.map( ( f ) => [ f.id, serverFieldInfo( f ) ] ) );
+}
+
+function hasCalculations( view ) {
+	return Object.values( view?.calculations ?? {} ).some( Boolean );
+}
+
+function pageNumber( value, fallback = 1 ) {
+	const number = Number( value );
+	return Number.isFinite( number ) && number >= 1
+		? Math.floor( number )
+		: fallback;
+}
+
+function perPageNumber( value, fallback = 25 ) {
+	const number = Number( value );
+	if ( ! Number.isFinite( number ) || number < 1 ) {
+		return fallback;
+	}
+	return Math.min( 100, Math.floor( number ) );
+}
+
+function isServerSupportedSort( sort, fieldInfo ) {
+	if ( ! sort?.field ) {
+		return true;
+	}
+	const info = fieldInfo.get( sort.field );
+	return info?.sortable === true;
+}
+
+function filterInfo( filter, fieldInfo ) {
+	return filter?.field ? fieldInfo.get( filter.field ) : undefined;
+}
+
+function hasUsableFilterValue( filter ) {
+	const operator = filter?.operator;
+	if (
+		operator === 'isEmpty' ||
+		operator === 'isNotEmpty' ||
+		operator === 'isChecked' ||
+		operator === 'isUnchecked'
+	) {
+		return true;
+	}
+	if ( operator === 'between' ) {
+		return Array.isArray( filter.value ) && filter.value.length === 2;
+	}
+	if ( operator === 'isAny' || operator === 'isNone' ) {
+		return Array.isArray( filter.value ) && filter.value.length > 0;
+	}
+	return filter?.value !== undefined && ! Array.isArray( filter.value );
+}
+
+function booleanFilterValue( value ) {
+	if ( value === true || value === 1 ) {
+		return true;
+	}
+	if ( value === false || value === 0 || value === '' ) {
+		return false;
+	}
+	if ( typeof value !== 'string' ) {
+		return undefined;
+	}
+
+	const normalized = value.trim().toLowerCase();
+	if ( [ '1', 'true', 'yes', 'on' ].includes( normalized ) ) {
+		return true;
+	}
+	if ( [ '0', 'false', 'no', 'off' ].includes( normalized ) ) {
+		return false;
+	}
+	return undefined;
+}
+
+function normalizeFilterForServer( filter, fieldInfo ) {
+	const info = filterInfo( filter, fieldInfo );
+	if (
+		( info?.type === 'select' || info?.type === 'multiselect' ) &&
+		( filter?.operator === 'isAny' || filter?.operator === 'isNone' ) &&
+		filter.value !== undefined &&
+		! Array.isArray( filter.value )
+	) {
+		return { ...filter, value: [ filter.value ] };
+	}
+
+	if (
+		info?.type === 'select' &&
+		( filter?.operator === 'is' || filter?.operator === 'isNot' ) &&
+		Array.isArray( filter.value ) &&
+		filter.value.length === 1
+	) {
+		return { ...filter, value: filter.value[ 0 ] };
+	}
+
+	if (
+		info?.type !== 'checkbox' ||
+		( filter?.operator !== 'is' && filter?.operator !== 'isNot' )
+	) {
+		return filter;
+	}
+
+	const value = booleanFilterValue( filter.value );
+	if ( value === undefined ) {
+		return filter;
+	}
+
+	const checked = filter.operator === 'is' ? value : ! value;
+	const { value: _value, ...normalized } = filter;
+	return {
+		...normalized,
+		operator: checked ? 'isChecked' : 'isUnchecked',
+	};
+}
+
+function leafFilterResult( filter, fieldInfo ) {
+	const info = filterInfo( filter, fieldInfo );
+	if (
+		! info?.filterable ||
+		! filter?.operator ||
+		! Array.isArray( info.operators ) ||
+		! info.operators.includes( filter.operator )
+	) {
+		return { node: null, hasUnsupported: true, alwaysTrue: false };
+	}
+
+	if ( ! hasUsableFilterValue( filter ) ) {
+		return { node: null, hasUnsupported: false, alwaysTrue: true };
+	}
+
+	return { node: filter, hasUnsupported: false, alwaysTrue: false };
+}
+
+function serverFilterNode( filter, fieldInfo ) {
+	if ( ! filter || typeof filter !== 'object' ) {
+		return { node: null, hasUnsupported: true, alwaysTrue: false };
+	}
+
+	const isGroup = Boolean( filter.relation || filter.filters );
+	if ( ! isGroup ) {
+		const normalized = normalizeFilterForServer( filter, fieldInfo );
+		return leafFilterResult( normalized, fieldInfo );
+	}
+
+	const relation = String( filter.relation ?? 'AND' ).toUpperCase();
+	if ( relation !== 'AND' && relation !== 'OR' ) {
+		return { node: null, hasUnsupported: true, alwaysTrue: false };
+	}
+	if ( ! Array.isArray( filter.filters ) || filter.filters.length === 0 ) {
+		return { node: null, hasUnsupported: true, alwaysTrue: false };
+	}
+
+	const children = [];
+	let hasUnsupported = false;
+	let hasAlwaysTrue = false;
+	for ( const child of filter.filters ) {
+		const result = serverFilterNode( child, fieldInfo );
+		if ( result.node ) {
+			children.push( result.node );
+		}
+		if ( result.hasUnsupported ) {
+			hasUnsupported = true;
+		}
+		if ( result.alwaysTrue ) {
+			hasAlwaysTrue = true;
+		}
+	}
+
+	// DataViews' final client pass only understands flat leaf filters.
+	// Forward grouped filters only when the whole tree can run server-side.
+	if ( hasUnsupported ) {
+		return { node: null, hasUnsupported: true, alwaysTrue: false };
+	}
+	if ( relation === 'OR' && hasAlwaysTrue ) {
+		return { node: null, hasUnsupported: false, alwaysTrue: true };
+	}
+	if ( children.length === 0 ) {
+		return { node: null, hasUnsupported: false, alwaysTrue: true };
+	}
+	return {
+		node: { relation, filters: children },
+		hasUnsupported: false,
+		alwaysTrue: false,
+	};
+}
+
+function serverFilterResult( filters, fieldInfo ) {
+	if ( ! Array.isArray( filters ) ) {
+		return { filters: [], hasUnsupported: false };
+	}
+
+	const supported = [];
+	let hasUnsupported = false;
+	for ( const filter of filters ) {
+		const result = serverFilterNode( filter, fieldInfo );
+		if ( result.node ) {
+			supported.push( result.node );
+		}
+		if ( result.hasUnsupported ) {
+			hasUnsupported = true;
+		}
+	}
+	return { filters: supported, hasUnsupported };
+}
+
+function addValueArgs( args, prefix, value ) {
+	if ( value === undefined ) {
+		return;
+	}
+	if ( Array.isArray( value ) ) {
+		value.forEach( ( item, i ) => {
+			args[ `${ prefix }[value][${ i }]` ] = item;
+		} );
+		return;
+	}
+	args[ `${ prefix }[value]` ] = value;
+}
+
+function addFilterArgs( args, prefix, filter ) {
+	if ( filter.relation && Array.isArray( filter.filters ) ) {
+		args[ `${ prefix }[relation]` ] = filter.relation;
+		filter.filters.forEach( ( child, i ) => {
+			addFilterArgs( args, `${ prefix }[filters][${ i }]`, child );
+		} );
+		return;
+	}
+
+	args[ `${ prefix }[field]` ] = filter.field;
+	args[ `${ prefix }[operator]` ] = filter.operator;
+	addValueArgs( args, prefix, filter.value );
+}
+
+function buildClientQueryArgs( collectionId ) {
+	return {
+		collection: collectionId,
+		page: 1,
+		per_page: CLIENT_PER_PAGE,
+	};
+}
+
+export function buildQueryArgs( collectionId, view, fields = [] ) {
+	const fieldInfo = fieldInfoMap( fields );
+	const serverView = isServerSupportedSort( view?.sort, fieldInfo )
+		? view
+		: { ...( view ?? {} ), sort: null };
+	return buildServerQueryArgs(
+		collectionId,
+		serverView,
+		serverFilterResult( view?.filters, fieldInfo ).filters
+	);
+}
+
+function buildServerQueryArgs( collectionId, view, filters = [] ) {
 	const args = {
 		collection: collectionId,
-		per_page: -1,
+		page: pageNumber( view?.page ),
+		per_page: perPageNumber( view?.perPage ),
 	};
-	const fieldTypes = new Map(
-		fields.map( ( f ) => [ f.id, f.cortextType ] )
-	);
 
-	// Ignore filters that the server isn't equipped to honor, otherwise
-	// changes in `view` will result in a new query to be requested from the
-	// server, even though the results will be the same.
-	const serverFilters = ( view?.filters ?? [] ).filter(
-		( f ) =>
-			f.field &&
-			f.operator &&
-			SERVER_OPERATORS.has( f.operator ) &&
-			fieldTypes.get( f.field ) !== 'rollup'
-	);
-	serverFilters.forEach( ( filter, i ) => {
-		args[ `filters[${ i }][field]` ] = filter.field;
-		args[ `filters[${ i }][operator]` ] = filter.operator;
-		if ( Array.isArray( filter.value ) ) {
-			filter.value.forEach( ( v, j ) => {
-				args[ `filters[${ i }][value][${ j }]` ] = v;
-			} );
-		} else {
-			args[ `filters[${ i }][value]` ] = filter.value;
-		}
+	if ( view?.search ) {
+		args.search = view.search;
+	}
+
+	if ( view?.sort?.field ) {
+		args[ 'sort[field]' ] = view.sort.field;
+		args[ 'sort[direction]' ] =
+			view.sort.direction === 'desc' ? 'desc' : 'asc';
+	}
+
+	filters.forEach( ( filter, i ) => {
+		addFilterArgs( args, `filters[${ i }]`, filter );
 	} );
 
 	return args;
+}
+
+export function buildQueryPlan(
+	collectionId,
+	view,
+	fields = [],
+	options = {}
+) {
+	const fieldInfo = fieldInfoMap( fields );
+	const filterResult = serverFilterResult( view?.filters, fieldInfo );
+	const canUseServer =
+		! options.forceClient &&
+		! hasCalculations( view ) &&
+		isServerSupportedSort( view?.sort, fieldInfo ) &&
+		! filterResult.hasUnsupported;
+
+	if ( ! canUseServer ) {
+		return {
+			mode: 'client',
+			args: buildClientQueryArgs( collectionId ),
+		};
+	}
+
+	return {
+		mode: 'server',
+		args: buildServerQueryArgs( collectionId, view, filterResult.filters ),
+	};
 }
 
 function schemaSignature( fields = [] ) {
@@ -47,12 +328,34 @@ function schemaSignature( fields = [] ) {
 			( field ) =>
 				`${ field.id }:${ field.recordId ?? '' }:${
 					field.cortextType ?? ''
+				}:${ field.sortable === true ? '1' : '0' }:${
+					field.filterable === true ? '1' : '0'
+				}:${
+					Array.isArray( field.operators )
+						? field.operators.join( ',' )
+						: '?'
 				}`
 		)
 		.join( '|' );
 }
 
-export default function useCollectionRows( collectionId, view, fields = [] ) {
+function totalPagesNumber( value ) {
+	const number = Number( value );
+	return Number.isFinite( number ) && number >= 1 ? Math.floor( number ) : 1;
+}
+
+async function fetchRowsPage( args ) {
+	return apiFetch( {
+		path: addQueryArgs( '/cortext/v1/rows', args ),
+	} );
+}
+
+export default function useCollectionRows(
+	collectionId,
+	view,
+	fields = [],
+	options = {}
+) {
 	const [ state, setState ] = useState( {
 		data: [],
 		collection: null,
@@ -64,10 +367,14 @@ export default function useCollectionRows( collectionId, view, fields = [] ) {
 	const [ refreshKey, setRefreshKey ] = useState( 0 );
 
 	const requestIdRef = useRef( 0 );
+	const queryPlan = collectionId
+		? buildQueryPlan( collectionId, view, fields, options )
+		: null;
 	const queryKey = collectionId
 		? JSON.stringify( {
-				args: buildQueryArgs( collectionId, view, fields ),
+				args: queryPlan.args,
 				schema: schemaSignature( fields ),
+				mode: queryPlan.mode,
 		  } )
 		: null;
 
@@ -91,10 +398,7 @@ export default function useCollectionRows( collectionId, view, fields = [] ) {
 		}
 
 		const requestId = ++requestIdRef.current;
-		const path = addQueryArgs(
-			'/cortext/v1/rows',
-			buildQueryArgs( collectionId, view, fields )
-		);
+		const activeQueryPlan = queryPlan;
 
 		setState( ( prev ) => ( {
 			...prev,
@@ -103,11 +407,64 @@ export default function useCollectionRows( collectionId, view, fields = [] ) {
 			error: null,
 		} ) );
 
-		apiFetch( { path } )
-			.then( ( body ) => {
+		async function loadRows() {
+			try {
+				const firstPage = await fetchRowsPage( activeQueryPlan.args );
 				if ( requestId !== requestIdRef.current ) {
 					return;
 				}
+
+				let body = firstPage;
+				if ( activeQueryPlan.mode === 'client' ) {
+					const totalPages = totalPagesNumber( firstPage.totalPages );
+					const rows = Array.isArray( firstPage.rows )
+						? [ ...firstPage.rows ]
+						: [];
+					const remainingPages = Array.from(
+						{ length: totalPages - 1 },
+						( _, index ) => index + 2
+					);
+					const remainingPageBodies = [];
+					let nextPageIndex = 0;
+
+					async function fetchNextPages() {
+						while (
+							nextPageIndex < remainingPages.length &&
+							requestId === requestIdRef.current
+						) {
+							const index = nextPageIndex++;
+							const page = remainingPages[ index ];
+							const nextPage = await fetchRowsPage( {
+								...activeQueryPlan.args,
+								page,
+							} );
+							if ( requestId !== requestIdRef.current ) {
+								return;
+							}
+							remainingPageBodies[ index ] = nextPage;
+						}
+					}
+
+					const workerCount = Math.min(
+						CLIENT_PAGE_FETCH_CONCURRENCY,
+						remainingPages.length
+					);
+					await Promise.all(
+						Array.from( { length: workerCount }, fetchNextPages )
+					);
+					if ( requestId !== requestIdRef.current ) {
+						return;
+					}
+
+					remainingPageBodies.forEach( ( nextPage ) => {
+						if ( Array.isArray( nextPage?.rows ) ) {
+							rows.push( ...nextPage.rows );
+						}
+					} );
+
+					body = { ...firstPage, rows };
+				}
+
 				setState( {
 					data: Array.isArray( body.rows ) ? body.rows : [],
 					collection: body.collection ?? null,
@@ -119,8 +476,7 @@ export default function useCollectionRows( collectionId, view, fields = [] ) {
 					hasResolved: true,
 					error: null,
 				} );
-			} )
-			.catch( ( error ) => {
+			} catch ( error ) {
 				if ( requestId !== requestIdRef.current ) {
 					return;
 				}
@@ -132,11 +488,14 @@ export default function useCollectionRows( collectionId, view, fields = [] ) {
 					hasResolved: true,
 					error,
 				} );
-			} );
+			}
+		}
+
+		loadRows();
 
 		return undefined;
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [ collectionId, queryKey, refreshKey ] );
 
-	return { ...state, refresh };
+	return { ...state, refresh, queryMode: queryPlan?.mode ?? 'client' };
 }

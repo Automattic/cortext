@@ -8,10 +8,11 @@ import {
 } from '@wordpress/components';
 import { useEntityRecord } from '@wordpress/core-data';
 import { useDispatch } from '@wordpress/data';
-import { forwardRef, useMemo, useRef, useState } from '@wordpress/element';
+import { forwardRef, useMemo, useRef } from '@wordpress/element';
 import { check, chevronRight } from '@wordpress/icons';
 
 import { parseFormat } from '../../hooks/fieldMapping';
+import { useSubmenuPlacement } from '../../hooks/useSubmenuPlacement';
 import { FORMAT_COLORS, findFormatColor } from './formatColors';
 
 const FOCUSABLE_CONTROL_SELECTOR = [
@@ -88,7 +89,7 @@ function focusRefOnNextFrame( ref ) {
 }
 
 // Number "format" rows flatten the storage shape (style + currency) into
-// a single flat list so the menu mirrors Notion. Each entry carries the
+// a single flat list so the menu stays compact. Each entry carries the
 // `style` (and `currency` for the four currency rows) it projects onto
 // the persisted `number_format` JSON.
 const NUMBER_FORMATS = [
@@ -193,7 +194,7 @@ function findTimeOption( config, type ) {
 // (muted), and a chevron on the right hints at the third-level flyout.
 // `isOpen` toggles the focus ring so users can tell which row spawned
 // the visible flyout.
-const SubmenuRow = forwardRef( function SubmenuRow(
+const SubmenuRow = forwardRef( function SubmenuRowComponent(
 	{ label, value, onClick, onOpen, isOpen },
 	ref
 ) {
@@ -305,7 +306,7 @@ function ChoiceList( {
 	);
 }
 
-// Tile previews mimic Notion's "Show as" thumbnails: a stylized number,
+// Tile previews for display choices: a stylized number,
 // a horizontal progress bar, and a ring. Plain SVG so they don't depend
 // on icon glyphs that don't quite match.
 const NumberTilePreview = (
@@ -470,8 +471,20 @@ function SubmenuToggleRow( { label, checked, onChange } ) {
 	);
 }
 
-function NumberFormBody( { config, onChange } ) {
-	const [ openRow, setOpenRow ] = useState( null );
+function NumberFormBody( {
+	config,
+	onChange,
+	anchor,
+	panelRef,
+	onMouseEnter,
+	onMouseLeave,
+} ) {
+	const {
+		submenuRef,
+		placement: submenuPlacement,
+		openKey: openRow,
+		open: setOpenRow,
+	} = useSubmenuPlacement( anchor, panelRef );
 	const formatRowRef = useRef( null );
 	const decimalsRowRef = useRef( null );
 	const colorRowRef = useRef( null );
@@ -597,59 +610,96 @@ function NumberFormBody( { config, onChange } ) {
 			{ openRow === 'format' ? (
 				<Popover
 					anchor={ formatRowRef.current }
-					placement="right-start"
+					placement={ submenuPlacement }
 					offset={ 8 }
+					shift
+					resize={ false }
 					onClose={ () => setOpenRow( null ) }
 					className="cortext-format-submenu__flyout"
 				>
-					<ChoiceList
-						items={ NUMBER_FORMATS }
-						isSelected={ ( item ) => item.id === current.id }
-						onPick={ pickFormat }
-						onClose={ () => setOpenRow( null ) }
-						returnFocusRef={ formatRowRef }
-					/>
+					<div
+						ref={ submenuRef }
+						onMouseEnter={ onMouseEnter }
+						onMouseLeave={ onMouseLeave }
+					>
+						<ChoiceList
+							items={ NUMBER_FORMATS }
+							isSelected={ ( item ) => item.id === current.id }
+							onPick={ pickFormat }
+							onClose={ () => setOpenRow( null ) }
+							returnFocusRef={ formatRowRef }
+						/>
+					</div>
 				</Popover>
 			) : null }
 			{ openRow === 'decimals' ? (
 				<Popover
 					anchor={ decimalsRowRef.current }
-					placement="right-start"
+					placement={ submenuPlacement }
 					offset={ 8 }
+					shift
+					resize={ false }
 					onClose={ () => setOpenRow( null ) }
 					className="cortext-format-submenu__flyout"
 				>
-					<ChoiceList
-						items={ DECIMAL_OPTIONS }
-						isSelected={ ( item ) => item.value === decimals }
-						onPick={ ( item ) => pickDecimals( item.value ) }
-						onClose={ () => setOpenRow( null ) }
-						returnFocusRef={ decimalsRowRef }
-					/>
+					<div
+						ref={ submenuRef }
+						onMouseEnter={ onMouseEnter }
+						onMouseLeave={ onMouseLeave }
+					>
+						<ChoiceList
+							items={ DECIMAL_OPTIONS }
+							isSelected={ ( item ) => item.value === decimals }
+							onPick={ ( item ) => pickDecimals( item.value ) }
+							onClose={ () => setOpenRow( null ) }
+							returnFocusRef={ decimalsRowRef }
+						/>
+					</div>
 				</Popover>
 			) : null }
 			{ openRow === 'color' ? (
 				<Popover
 					anchor={ colorRowRef.current }
-					placement="right-start"
+					placement={ submenuPlacement }
 					offset={ 8 }
+					shift
+					resize={ false }
 					onClose={ () => setOpenRow( null ) }
 					className="cortext-format-submenu__flyout"
 				>
-					<ColorList
-						value={ colorId }
-						onPick={ pickColor }
-						onClose={ () => setOpenRow( null ) }
-						returnFocusRef={ colorRowRef }
-					/>
+					<div
+						ref={ submenuRef }
+						onMouseEnter={ onMouseEnter }
+						onMouseLeave={ onMouseLeave }
+					>
+						<ColorList
+							value={ colorId }
+							onPick={ pickColor }
+							onClose={ () => setOpenRow( null ) }
+							returnFocusRef={ colorRowRef }
+						/>
+					</div>
 				</Popover>
 			) : null }
 		</>
 	);
 }
 
-function DateFormBody( { type, config, onChange } ) {
-	const [ openRow, setOpenRow ] = useState( null );
+function DateFormBody( {
+	type,
+	config,
+	onChange,
+	anchor,
+	panelRef,
+	onMouseEnter,
+	onMouseLeave,
+} ) {
+	const {
+		submenuRef,
+		placement: submenuPlacement,
+		openKey: openRow,
+		open: setOpenRow,
+	} = useSubmenuPlacement( anchor, panelRef );
 	const formatRowRef = useRef( null );
 	const timeRowRef = useRef( null );
 	// `date` fields store dates without a time component, the inline
@@ -708,44 +758,62 @@ function DateFormBody( { type, config, onChange } ) {
 			{ openRow === 'format' ? (
 				<Popover
 					anchor={ formatRowRef.current }
-					placement="right-start"
+					placement={ submenuPlacement }
 					offset={ 8 }
+					shift
+					resize={ false }
 					onClose={ () => setOpenRow( null ) }
 					className="cortext-format-submenu__flyout"
 				>
-					<ChoiceList
-						items={ DATE_FORMATS }
-						isSelected={ ( item ) =>
-							item.id === currentDateFormat.id
-						}
-						onPick={ pickFormat }
-						onClose={ () => setOpenRow( null ) }
-						returnFocusRef={ formatRowRef }
-					/>
+					<div
+						ref={ submenuRef }
+						onMouseEnter={ onMouseEnter }
+						onMouseLeave={ onMouseLeave }
+					>
+						<ChoiceList
+							items={ DATE_FORMATS }
+							isSelected={ ( item ) =>
+								item.id === currentDateFormat.id
+							}
+							onPick={ pickFormat }
+							onClose={ () => setOpenRow( null ) }
+							returnFocusRef={ formatRowRef }
+						/>
+					</div>
 				</Popover>
 			) : null }
 			{ supportsTime && openRow === 'time' ? (
 				<Popover
 					anchor={ timeRowRef.current }
-					placement="right-start"
+					placement={ submenuPlacement }
 					offset={ 8 }
+					shift
+					resize={ false }
 					onClose={ () => setOpenRow( null ) }
 					className="cortext-format-submenu__flyout"
 				>
-					<ChoiceList
-						items={ TIME_OPTIONS }
-						isSelected={ ( item ) => item.id === currentTime.id }
-						onPick={ pickTime }
-						onClose={ () => setOpenRow( null ) }
-						returnFocusRef={ timeRowRef }
-					/>
+					<div
+						ref={ submenuRef }
+						onMouseEnter={ onMouseEnter }
+						onMouseLeave={ onMouseLeave }
+					>
+						<ChoiceList
+							items={ TIME_OPTIONS }
+							isSelected={ ( item ) =>
+								item.id === currentTime.id
+							}
+							onPick={ pickTime }
+							onClose={ () => setOpenRow( null ) }
+							returnFocusRef={ timeRowRef }
+						/>
+					</div>
 				</Popover>
 			) : null }
 		</>
 	);
 }
 
-// Renders Notion-style cascading format menu. Anchored to the Format
+// Renders a cascading format menu. Anchored to the Format
 // menu item so it sits beside the column dropdown. Auto-saves on every
 // selection. Hover handlers keep the panel open while the cursor is
 // somewhere over the column dropdown's Format row or this panel; the
@@ -761,6 +829,7 @@ export default function FieldFormatPopover( {
 	onMouseEnter,
 	onMouseLeave,
 } ) {
+	const panelRef = useRef( null );
 	const { record } = useEntityRecord( 'postType', 'crtxt_field', recordId );
 	const { editEntityRecord, saveEditedEntityRecord } = useDispatch( 'core' );
 
@@ -855,17 +924,29 @@ export default function FieldFormatPopover( {
 			onKeyDown={ onPopoverKeyDown }
 		>
 			<div
+				ref={ panelRef }
 				className="cortext-format-submenu__panel"
 				onMouseEnter={ onMouseEnter }
 				onMouseLeave={ onMouseLeave }
 			>
 				{ isNumber ? (
-					<NumberFormBody config={ initial } onChange={ persist } />
+					<NumberFormBody
+						config={ initial }
+						onChange={ persist }
+						anchor={ anchor }
+						panelRef={ panelRef }
+						onMouseEnter={ onMouseEnter }
+						onMouseLeave={ onMouseLeave }
+					/>
 				) : (
 					<DateFormBody
 						type={ type }
 						config={ initial }
 						onChange={ persist }
+						anchor={ anchor }
+						panelRef={ panelRef }
+						onMouseEnter={ onMouseEnter }
+						onMouseLeave={ onMouseLeave }
 					/>
 				) }
 				<p className="cortext-format-submenu__note">

@@ -9,8 +9,8 @@ port=$(node -p 'require("./.wp-env.override.json").port')
 cortext_url="http://localhost:${port}/wp-admin/admin.php?page=cortext"
 echo "Cortext admin: ${cortext_url}"
 
-npm run env:start 2>&1 | sed "s#WordPress development site started at http://localhost:${port}#Cortext admin: ${cortext_url}#"
-npm run env:seed
+pnpm run env:start 2>&1 | sed "s#WordPress development site started at http://localhost:${port}#Cortext admin: ${cortext_url}#"
+pnpm run env:seed
 echo "Cortext admin: ${cortext_url}"
 
-exec npm run dev
+exec pnpm run dev

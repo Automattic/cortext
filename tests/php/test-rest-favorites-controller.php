@@ -10,6 +10,7 @@ declare( strict_types=1 );
 namespace Cortext\Tests;
 
 use Cortext\PostType\Collection;
+use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Page;
 use Cortext\Rest\FavoritesController;
 use WorDBless\BaseTestCase;
@@ -47,8 +48,20 @@ final class Test_Rest_Favorites_Controller extends BaseTestCase {
 
 	public function test_sets_and_reads_page_and_collection_favorites_in_order(): void {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
-		$page_id       = $this->create_page( array( 'post_name' => 'daily-notes' ) );
-		$collection_id = $this->create_collection( 'books' );
+		$page_id       = $this->create_page(
+			array(
+				'post_name'  => 'daily-notes',
+				'post_title' => 'Daily Notes',
+			)
+		);
+		$page_icon = wp_json_encode(
+			array(
+				'type' => 'wp',
+				'name' => 'notebook',
+			)
+		);
+		update_post_meta( $page_id, DocumentIdentity::META_KEY, $page_icon );
+		$collection_id = $this->create_collection( 'books', 'Books' );
 
 		$set_response = $this->set_favorites(
 			array(
@@ -66,14 +79,17 @@ final class Test_Rest_Favorites_Controller extends BaseTestCase {
 
 		$expected = array(
 			array(
-				'kind' => 'collection',
-				'id'   => $collection_id,
-				'path' => "collection/books-{$collection_id}",
+				'kind'  => 'collection',
+				'id'    => $collection_id,
+				'title' => 'Books',
+				'path'  => "collection/books-{$collection_id}",
 			),
 			array(
-				'kind' => 'page',
-				'id'   => $page_id,
-				'path' => "page/daily-notes-{$page_id}",
+				'kind'  => 'page',
+				'id'    => $page_id,
+				'title' => 'Daily Notes',
+				'path'  => "page/daily-notes-{$page_id}",
+				'icon'  => $page_icon,
 			),
 		);
 		$this->assertSame( 200, $set_response->get_status() );
@@ -303,12 +319,12 @@ final class Test_Rest_Favorites_Controller extends BaseTestCase {
 		return (int) $id;
 	}
 
-	private function create_collection( string $slug ): int {
+	private function create_collection( string $slug, string $title = '' ): int {
 		$id = wp_insert_post(
 			array(
 				'post_type'   => Collection::POST_TYPE,
 				'post_status' => 'private',
-				'post_title'  => 'Test collection ' . wp_generate_uuid4(),
+				'post_title'  => '' === $title ? 'Test collection ' . wp_generate_uuid4() : $title,
 				'meta_input'  => array(
 					'slug' => $slug,
 				),
