@@ -2,69 +2,69 @@
 	"version": 1,
 	"scenarios": {
 		"rows_page_1": {
-			"p95_ms": 500,
-			"sql_queries_p95": 250,
-			"memory_bytes_p95": 16777216
+			"p95_ms": 100,
+			"sql_queries_p95": 200,
+			"memory_bytes_p95": 8388608
 		},
 		"rows_page_50": {
-			"p95_ms": 500,
-			"sql_queries_p95": 150,
-			"memory_bytes_p95": 16777216
+			"p95_ms": 75,
+			"sql_queries_p95": 100,
+			"memory_bytes_p95": 8388608
 		},
 		"rows_page_walk": {
-			"p95_ms": 1500,
-			"sql_queries_p95": 650,
-			"memory_bytes_p95": 16777216
+			"p95_ms": 250,
+			"sql_queries_p95": 450,
+			"memory_bytes_p95": 8388608
 		},
 		"rows_sort_meta_value": {
-			"p95_ms": 750,
-			"sql_queries_p95": 150,
-			"memory_bytes_p95": 16777216
+			"p95_ms": 100,
+			"sql_queries_p95": 100,
+			"memory_bytes_p95": 8388608
 		},
 		"rows_search_text": {
-			"p95_ms": 750,
-			"sql_queries_p95": 300,
-			"memory_bytes_p95": 16777216
+			"p95_ms": 100,
+			"sql_queries_p95": 150,
+			"memory_bytes_p95": 8388608
 		},
 		"rows_filter_mixed": {
-			"p95_ms": 750,
-			"sql_queries_p95": 250,
-			"memory_bytes_p95": 16777216
+			"p95_ms": 150,
+			"sql_queries_p95": 180,
+			"memory_bytes_p95": 8388608
 		},
 		"rows_relation_hydration": {
-			"p95_ms": 1000,
-			"sql_queries_p95": 400,
-			"memory_bytes_p95": 16777216
+			"p95_ms": 150,
+			"sql_queries_p95": 280,
+			"memory_bytes_p95": 8388608
 		},
 		"rows_rollup_heavy": {
-			"p95_ms": 1000,
-			"sql_queries_p95": 400,
-			"memory_bytes_p95": 16777216
+			"p95_ms": 200,
+			"sql_queries_p95": 280,
+			"memory_bytes_p95": 8388608
 		},
 		"rows_wide_schema": {
-			"p95_ms": 1000,
-			"sql_queries_p95": 150,
-			"memory_bytes_p95": 16777216
+			"p95_ms": 100,
+			"sql_queries_p95": 120,
+			"memory_bytes_p95": 8388608
 		},
 		"relation_many_targets": {
-			"p95_ms": 2500,
-			"sql_queries_p95": 3000,
-			"memory_bytes_p95": 16777216
+			"p95_ms": 1200,
+			"sql_queries_p95": 2800,
+			"memory_bytes_p95": 8388608
 		},
 		"relation_small_delta": {
-			"p95_ms": 2000,
-			"sql_queries_p95": 2200,
-			"memory_bytes_p95": 16777216
+			"p95_ms": 900,
+			"sql_queries_p95": 2000,
+			"memory_bytes_p95": 8388608
 		},
 		"migrate_1000_rows": {
-			"p95_ms": 4000,
-			"sql_queries_p95": 4500,
-			"memory_bytes_p95": 16777216
+			"p95_ms": 2000,
+			"sql_queries_p95": 4300,
+			"memory_bytes_p95": 8388608
 		},
 		"migrate_many_rows": {
-			"p95_ms": 5000,
-			"sql_queries_p95": 5500,
-			"memory_bytes_p95": 16777216
+			"p95_ms": 2400,
+			"sql_queries_p95": 5300,
+			"memory_bytes_p95": 8388608
 		}
 	}
 }
