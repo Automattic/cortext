@@ -287,25 +287,17 @@ function comparison_lines( array $current, string $base_path, string $base_label
 		}
 
 		$base_scenario = $base_scenarios[ $scenario_id ];
-		foreach ( $metrics as $metric ) {
-			$change_summary = add_metric_change(
-				$change_summary,
-				$scenario[ $metric['key'] ] ?? null,
-				$base_scenario[ $metric['key'] ] ?? null,
-				$metric['type']
-			);
-		}
+		$scenario_summary = scenario_change_summary( $scenario, $base_scenario, $metrics );
+		$change_summary   = merge_change_summary( $change_summary, $scenario_summary );
 
-		$row = array( escape_cell( $scenario['label'] ?? $scenario_id ) );
-		foreach ( $metrics as $metric ) {
-			$row[] = comparison_value(
-				$scenario[ $metric['key'] ] ?? null,
-				$base_scenario[ $metric['key'] ] ?? null,
-				$metric['type']
-			);
-		}
-
-		$rows[] = $row;
+		$rows[] = array(
+			escape_cell( $scenario['label'] ?? $scenario_id ),
+			scenario_takeaway( $scenario_summary ),
+			(string) $scenario_summary['better'],
+			(string) $scenario_summary['worse'],
+			(string) $scenario_summary['same'],
+			notable_changes_text( $scenario_summary ),
+		);
 	}
 
 	if ( count( $rows ) === 0 ) {
@@ -316,13 +308,13 @@ function comparison_lines( array $current, string $base_path, string $base_label
 	$lines[] = comparison_summary_text( $change_summary );
 	$lines[] = '';
 	$lines[] = '<details>';
-	$lines[] = '<summary>Show metric comparison table</summary>';
+	$lines[] = '<summary>Show scenario comparison table</summary>';
 	$lines[] = '';
 
 	foreach (
 		markdown_table(
-			array_merge( array( 'Scenario' ), array_column( $metrics, 'label' ) ),
-			array_merge( array( 'left' ), array_fill( 0, count( $metrics ), 'right' ) ),
+			array( 'Scenario', 'Takeaway', 'Better', 'Worse', 'Stable', 'Notable changes' ),
+			array( 'left', 'left', 'right', 'right', 'right', 'left' ),
 			$rows
 		) as $table_line
 	) {
@@ -335,6 +327,111 @@ function comparison_lines( array $current, string $base_path, string $base_label
 	$lines[] = '_Deltas <10% on p50/p95 may be runner noise; SQL counts and memory are deterministic._';
 
 	return $lines;
+}
+
+/**
+ * Summarizes all metric changes for a single scenario.
+ *
+ * @param array<string,mixed>                                $scenario      Current scenario.
+ * @param array<string,mixed>                                $base_scenario Base scenario.
+ * @param array<int,array{key:string,label:string,type:string}> $metrics    Comparable metrics.
+ * @return array{total:int,better:int,worse:int,same:int,better_changes:array<int,string>,worse_changes:array<int,string>}
+ */
+function scenario_change_summary( array $scenario, array $base_scenario, array $metrics ): array {
+	$summary = empty_change_summary();
+
+	foreach ( $metrics as $metric ) {
+		$current = $scenario[ $metric['key'] ] ?? null;
+		$base    = $base_scenario[ $metric['key'] ] ?? null;
+		$change  = metric_change_kind( $current, $base, $metric['type'] );
+
+		if ( 'missing' === $change ) {
+			continue;
+		}
+
+		++$summary['total'];
+
+		if ( 'same' === $change ) {
+			++$summary['same'];
+			continue;
+		}
+
+		++$summary[ $change ];
+		$summary[ $change . '_changes' ][] = metric_change_text( $metric['label'], $current, $base, $metric['type'] );
+	}
+
+	return $summary;
+}
+
+/**
+ * Combines one scenario summary into the aggregate summary.
+ *
+ * @param array{total:int,better:int,worse:int,same:int} $summary          Aggregate summary.
+ * @param array{total:int,better:int,worse:int,same:int} $scenario_summary Scenario summary.
+ * @return array{total:int,better:int,worse:int,same:int}
+ */
+function merge_change_summary( array $summary, array $scenario_summary ): array {
+	foreach ( array( 'total', 'better', 'worse', 'same' ) as $key ) {
+		$summary[ $key ] += $scenario_summary[ $key ];
+	}
+
+	return $summary;
+}
+
+/**
+ * Formats the scenario-level result.
+ *
+ * @param array{better:int,worse:int} $summary Scenario summary.
+ */
+function scenario_takeaway( array $summary ): string {
+	if ( 0 === $summary['better'] && 0 === $summary['worse'] ) {
+		return 'unchanged';
+	}
+
+	if ( $summary['better'] > 0 && 0 === $summary['worse'] ) {
+		return 'better';
+	}
+
+	if ( $summary['worse'] > 0 && 0 === $summary['better'] ) {
+		return 'worse';
+	}
+
+	if ( $summary['better'] > $summary['worse'] ) {
+		return 'mostly better';
+	}
+
+	if ( $summary['worse'] > $summary['better'] ) {
+		return 'mostly worse';
+	}
+
+	return 'mixed';
+}
+
+/**
+ * Formats notable metric changes for one scenario.
+ *
+ * @param array{better_changes:array<int,string>,worse_changes:array<int,string>} $summary Scenario summary.
+ */
+function notable_changes_text( array $summary ): string {
+	$parts = array();
+
+	if ( count( $summary['better_changes'] ) > 0 ) {
+		$parts[] = 'Better: ' . implode( ', ', $summary['better_changes'] );
+	}
+
+	if ( count( $summary['worse_changes'] ) > 0 ) {
+		$parts[] = 'Worse: ' . implode( ', ', $summary['worse_changes'] );
+	}
+
+	if ( count( $parts ) === 0 ) {
+		return 'No notable changes';
+	}
+
+	return implode( '<br>', array_map( 'escape_cell', $parts ) );
+}
+
+function metric_change_text( string $label, mixed $current, mixed $base, string $type ): string {
+	return $label . ' ' . short_delta_value( $current, $base, $type );
 }
 
 /**
@@ -420,47 +517,49 @@ function metric_type( string $key ): string {
 /**
  * Creates empty metric change counts.
  *
- * @return array{total:int,better:int,worse:int,same:int}
+ * @return array{total:int,better:int,worse:int,same:int,better_changes:array<int,string>,worse_changes:array<int,string>}
  */
 function empty_change_summary(): array {
 	return array(
-		'total'  => 0,
-		'better' => 0,
-		'worse'  => 0,
-		'same'   => 0,
+		'total'          => 0,
+		'better'         => 0,
+		'worse'          => 0,
+		'same'           => 0,
+		'better_changes' => array(),
+		'worse_changes'  => array(),
 	);
 }
 
-/**
- * Counts one comparable metric change.
- *
- * @param array{total:int,better:int,worse:int,same:int} $summary
- * @param mixed                                          $current Current metric value.
- * @param mixed                                          $base    Base metric value.
- * @param string                                         $type    Metric formatting type.
- * @return array{total:int,better:int,worse:int,same:int}
- */
-function add_metric_change( array $summary, mixed $current, mixed $base, string $type ): array {
+function metric_change_kind( mixed $current, mixed $base, string $type ): string {
 	if ( ! is_numeric( $current ) || ! is_numeric( $base ) ) {
-		return $summary;
+		return 'missing';
 	}
 
 	$current_float = (float) $current;
 	$base_float    = (float) $base;
 	$delta         = $current_float - $base_float;
-	$notable       = is_notable_metric_change( $delta, $base_float, $type );
 
-	++$summary['total'];
-
-	if ( ! $notable ) {
-		++$summary['same'];
-	} elseif ( $current_float < $base_float ) {
-		++$summary['better'];
-	} else {
-		++$summary['worse'];
+	if ( ! is_notable_metric_change( $delta, $base_float, $type ) ) {
+		return 'same';
 	}
 
-	return $summary;
+	return $current_float < $base_float ? 'better' : 'worse';
+}
+
+function short_delta_value( mixed $current, mixed $base, string $type ): string {
+	if ( ! is_numeric( $current ) || ! is_numeric( $base ) ) {
+		return 'n/a';
+	}
+
+	$current_float = (float) $current;
+	$base_float    = (float) $base;
+	$delta         = $current_float - $base_float;
+
+	return match ( $type ) {
+		'integer' => signed_number( $delta, 0 ),
+		'memory'  => signed_number( $delta / 1048576, 1 ) . ' MiB',
+		default   => 0.0 !== $base_float ? signed_number( $delta / $base_float * 100, 1 ) . '%' : signed_number( $delta, 3 ) . ' ms',
+	};
 }
 
 /**
@@ -541,44 +640,6 @@ function failure_value( string $metric, mixed $value ): string {
 	}
 
 	return number_value( $value );
-}
-
-function comparison_value( mixed $current, mixed $base, string $type ): string {
-	if ( ! is_numeric( $current ) || ! is_numeric( $base ) ) {
-		return 'n/a';
-	}
-
-	return formatted_value( $current, $type ) . ' (Δ ' . delta_value( $current, $base, $type ) . ')';
-}
-
-function formatted_value( mixed $value, string $type ): string {
-	return match ( $type ) {
-		'integer' => integer_value( $value ),
-		'memory'  => memory_value( $value ),
-		default   => number_value( $value ),
-	};
-}
-
-function delta_value( mixed $current, mixed $base, string $type ): string {
-	if ( ! is_numeric( $current ) || ! is_numeric( $base ) ) {
-		return 'n/a';
-	}
-
-	$current_float = (float) $current;
-	$base_float    = (float) $base;
-	$delta         = $current_float - $base_float;
-	$percent       = 0.0 !== $base_float ? $delta / $base_float * 100 : null;
-	$delta_text    = match ( $type ) {
-		'integer' => signed_number( $delta, 0 ),
-		'memory'  => signed_number( $delta / 1048576, 1 ) . ' MiB',
-		default   => signed_number( $delta, 3 ) . ' ms',
-	};
-
-	if ( null === $percent ) {
-		return $delta_text;
-	}
-
-	return $delta_text . ', ' . signed_number( $percent, 1 ) . '%';
 }
 
 function signed_number( float $value, int $decimals ): string {
