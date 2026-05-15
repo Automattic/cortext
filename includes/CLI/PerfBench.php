@@ -192,6 +192,7 @@ final class PerfBench {
 			'runs'             => count( $samples ),
 			'p50_ms'           => round( (float) self::percentile( $latencies, 50 ), 3 ),
 			'p95_ms'           => round( (float) self::percentile( $latencies, 95 ), 3 ),
+			'mad_ms'           => round( (float) self::mad( $latencies ), 3 ),
 			'sql_queries_p50'  => (int) self::percentile( $queries, 50 ),
 			'sql_queries_p95'  => (int) self::percentile( $queries, 95 ),
 			'memory_bytes_p50' => (int) self::percentile( $memory, 50 ),
@@ -1357,6 +1358,7 @@ final class PerfBench {
 			array(
 				'total_p50_ms' => $aggregate['p50_ms'],
 				'total_p95_ms' => $aggregate['p95_ms'],
+				'total_mad_ms' => $aggregate['mad_ms'],
 			)
 		);
 
@@ -1364,6 +1366,7 @@ final class PerfBench {
 			$step_summary                     = self::summarize_samples( $samples );
 			$summary[ "{$step_name}_p50_ms" ] = $step_summary['p50_ms'];
 			$summary[ "{$step_name}_p95_ms" ] = $step_summary['p95_ms'];
+			$summary[ "{$step_name}_mad_ms" ] = $step_summary['mad_ms'];
 		}
 
 		return $summary;
@@ -1680,6 +1683,27 @@ final class PerfBench {
 		$index = (int) ceil( ( $percentile / 100 ) * count( $values ) ) - 1;
 		$index = max( 0, min( count( $values ) - 1, $index ) );
 		return $values[ $index ];
+	}
+
+	/**
+	 * Returns the median absolute deviation, used as a robust noise floor for
+	 * timing comparisons. With small n the percentile-based p95 is dominated by
+	 * a single outlier; MAD against the median stays stable.
+	 *
+	 * @param array<int,int|float> $values Values.
+	 */
+	private static function mad( array $values ): float {
+		if ( count( $values ) === 0 ) {
+			return 0.0;
+		}
+
+		$median     = (float) self::percentile( $values, 50 );
+		$deviations = array();
+		foreach ( $values as $value ) {
+			$deviations[] = abs( (float) $value - $median );
+		}
+
+		return (float) self::percentile( $deviations, 50 );
 	}
 
 	private static function flag_int( array $assoc_args, string $key, int $fallback, int $min ): int {

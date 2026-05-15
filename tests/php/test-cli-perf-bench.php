@@ -59,6 +59,7 @@ final class Test_CLI_Perf_Bench extends BaseTestCase {
 				'runs',
 				'p50_ms',
 				'p95_ms',
+				'mad_ms',
 				'sql_queries_p50',
 				'sql_queries_p95',
 				'memory_bytes_p50',
@@ -69,6 +70,7 @@ final class Test_CLI_Perf_Bench extends BaseTestCase {
 		$this->assertSame( 3, $summary['runs'] );
 		$this->assertSame( 20.988, $summary['p50_ms'] );
 		$this->assertSame( 30.123, $summary['p95_ms'] );
+		$this->assertSame( 9.136, $summary['mad_ms'] );
 		$this->assertSame( 10, $summary['sql_queries_p50'] );
 		$this->assertSame( 12, $summary['sql_queries_p95'] );
 	}
@@ -138,16 +140,20 @@ final class Test_CLI_Perf_Bench extends BaseTestCase {
 				'runs',
 				'p50_ms',
 				'p95_ms',
+				'mad_ms',
 				'sql_queries_p50',
 				'sql_queries_p95',
 				'memory_bytes_p50',
 				'memory_bytes_p95',
 				'total_p50_ms',
 				'total_p95_ms',
+				'total_mad_ms',
 				'resolve_p50_ms',
 				'resolve_p95_ms',
+				'resolve_mad_ms',
 				'hydrate_p50_ms',
 				'hydrate_p95_ms',
+				'hydrate_mad_ms',
 			),
 			array_keys( $summary )
 		);
