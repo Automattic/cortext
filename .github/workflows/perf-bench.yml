@@ -216,6 +216,18 @@ jobs:
                       --current=artifacts/perf-ui.json | tee artifacts/perf-ui-summary.md
                   fi
 
+                  if [ "$GITHUB_EVENT_NAME" = "pull_request" ] && [ -s artifacts/perf-ui-summary.md ]; then
+                    {
+                      echo
+                      echo '<details>'
+                      echo '<summary>Show UI performance benchmark</summary>'
+                      echo
+                      cat artifacts/perf-ui-summary.md
+                      echo
+                      echo '</details>'
+                    } >> artifacts/perf-bench-comment-body.md
+                  fi
+
             - name: Post PR benchmark comment
               if: always() && github.event_name == 'pull_request'
               continue-on-error: true
