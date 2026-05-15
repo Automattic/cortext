@@ -17,9 +17,8 @@ import apiFetch from '@wordpress/api-fetch';
  */
 
 /**
- * One Cortext document as returned by `/cortext/v1/documents`. Mirrors the
- * lightweight shape that recents and trash use, plus an optional excerpt for
- * search-style consumers.
+ * One Cortext document as returned by `/cortext/v1/documents`. It uses the
+ * same small shape as recents and trash, with an optional excerpt for search.
  *
  * @typedef {Object} CortextDocument
  * @property {'page'|'row'}              kind         Document kind.
@@ -39,9 +38,8 @@ function readNumber( value, fallback ) {
 }
 
 /**
- * Fetches Cortext documents (pages and collection rows) through the unified
- * read service. State machine mirrors `useTrashedDocuments` so consumers can
- * reuse the same loading/empty/error patterns.
+ * Fetches Cortext documents (pages and collection rows) from the shared
+ * document endpoint. The loading state matches the old trash hook shape.
  *
  * @param {Object}          [options]
  * @param {string}          [options.search]  Free-text search string.

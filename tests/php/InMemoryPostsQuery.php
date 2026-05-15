@@ -6,11 +6,11 @@
  * single-row primary-key lookup, so calls like `WP_Query` with `meta_key`,
  * `post_parent`, post-type filters, or `s` search all come back empty even
  * though the in-memory post store has matches. This trait installs a
- * `posts_pre_query` filter that answers from the in-memory store, plus a
- * `found_posts` filter so total counts survive pagination.
+ * `posts_pre_query` filter that answers from the in-memory store and keeps
+ * pagination totals available.
  *
- * Use by `use InMemoryPostsQuery;` in a test class and call
- * `install_in_memory_posts_query()` from `set_up()` and
+ * Tracked in docs/tech-debt.md#9. Use by `use InMemoryPostsQuery;` in a test
+ * class and call `install_in_memory_posts_query()` from `set_up()` and
  * `uninstall_in_memory_posts_query()` from `tear_down()`.
  *
  * @package Cortext
@@ -112,8 +112,8 @@ trait InMemoryPostsQuery {
 
 		$orderby = (string) ( $vars['orderby'] ?? '' );
 		if ( in_array( $orderby, array( 'modified', 'date' ), true ) ) {
-			$direction = strtoupper( (string) ( $vars['order'] ?? 'DESC' ) );
-			$field     = 'modified' === $orderby ? 'post_modified_gmt' : 'post_date_gmt';
+			$direction  = strtoupper( (string) ( $vars['order'] ?? 'DESC' ) );
+			$field      = 'modified' === $orderby ? 'post_modified_gmt' : 'post_date_gmt';
 			$candidates = array_values( $candidates );
 			usort(
 				$candidates,
@@ -126,10 +126,9 @@ trait InMemoryPostsQuery {
 
 		$candidates = array_values( $candidates );
 
-		// posts_pre_query short-circuits the SQL path, so WP_Query never
-		// runs set_found_posts(). Set it directly on the query object,
-		// which posts_pre_query gets by reference, so callers that rely on
-		// pagination totals (`$query->found_posts`) see the right number.
+		// posts_pre_query short-circuits the SQL path, so WP_Query never calls
+		// set_found_posts(). Set the count here so callers still get pagination
+		// totals from `$query->found_posts`.
 		$query->found_posts = count( $candidates );
 
 		$per_page = (int) ( $vars['posts_per_page'] ?? 0 );
@@ -146,6 +145,8 @@ trait InMemoryPostsQuery {
 	}
 
 	/**
+	 * Returns every in-memory post as a `WP_Post`.
+	 *
 	 * @return WP_Post[]
 	 */
 	private function all_in_memory_posts(): array {

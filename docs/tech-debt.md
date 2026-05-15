@@ -99,11 +99,13 @@ The cost is another split support matrix. The client checks field type, operator
 
 ## 9. WorDBless can't integration-test the rows endpoint `[internal]`
 
-**What.** WorDBless uses `Db_Less_Wpdb`, an in-memory store where `wp_insert_post` and `get_post` work via the object cache but `WP_Query` SQL returns zero results. The `RowsController` unit tests cover routing, permissions, validation, query-arg building, and row formatting (the last two via reflection), but cannot exercise the full path of inserting rows and verifying they come back from `GET /cortext/v1/rows`. A bug in the `WP_Query` translation (e.g. a wrong `meta_query` compare operator) would slip past unit tests.
+**What.** WorDBless uses `Db_Less_Wpdb`, an in-memory store where `wp_insert_post` and `get_post` work via the object cache but `WP_Query` SQL returns zero results. `InMemoryPostsQuery` now covers the simple query shapes used by document listing and page-trash cascade tests: post type, status, parent, `meta_key` / `meta_value`, search, ordering, and pagination. That keeps those tests useful, but it is still an approximation of WordPress queries, not a real database.
 
-**Where.** `tests/php/test-rest-rows-controller.php`.
+The harder gap remains the rows endpoint. `RowsController` unit tests cover routing, permissions, validation, query-arg building, and row formatting (the last two via reflection), but cannot exercise the full path of inserting rows and verifying they come back from `GET /cortext/v1/rows`. `RowsFilterQuery` and `RowsMetaQuery` build SQL for custom compares and grouped filters; a wrong join, `meta_query` compare, or title sentinel would still slip past WorDBless-only tests.
 
-**Solution.** Either switch the PHP test harness to `wp-env` + `WP_UnitTestCase` (which runs against a real database) or rely on e2e coverage in `tests/e2e/specs/data-view-block.spec.js` to close the gap. The e2e suite already exercises row loading, but dedicated integration tests for sort, filter, and pagination against real data would be more targeted.
+**Where.** `tests/php/InMemoryPostsQuery.php`, `tests/php/test-documents.php`, `tests/php/test-rest-documents-controller.php`, `tests/php/test-page-trash-cascade.php`, `tests/php/test-rest-document-trash-controller.php`, and `tests/php/test-rest-recents-controller.php`, plus the still-limited row coverage in `tests/php/test-rest-rows-controller.php`.
+
+**Solution.** Keep the in-memory shim for simple document queries, but test the row endpoint against a real `wpdb` before treating sort/filter/pagination as covered. Either add a `wp-env` + `WP_UnitTestCase` suite for rows, or rely on targeted e2e coverage in `tests/e2e/specs/data-view-block.spec.js` until that suite exists. Once real database coverage exists, the shim should stay limited to tests that only need cheap post lookup behavior.
 
 ## 10. DataViews `FieldType` union has no decimal `number` or `url` `[upstream]`
 
@@ -425,10 +427,10 @@ The user-facing placeholder is still Core's generic "Search commands and setting
 
 ## 48. Cortext document layer is still thin `[internal]`
 
-**What.** Pages and collection rows both opt into `cortext-document`. Trash now lists, restores, and permanently deletes through document routes. The client has not caught up yet: pages still go through the page tree and `core-data`, rows still go through `useCollectionRows`, and recents, favorites, routing, and invalidation still ask "page or row?" in places that should only need "document."
+**What.** Pages and collection rows both opt into `cortext-document`, and there is now a shared reader: `Cortext\Documents`, `GET /cortext/v1/documents`, `useDocuments`, trash listing, and recents formatting all use the same document shape. That removes the old one-off trash enumerator and gives cross-type search/list code one place to start.
 
-Trash is the clearest example. The endpoint is document-first, but the client still refreshes the page tree, row queries, collection context, and the Trash list through separate calls.
+The layer is still mostly read-only. Pages still go through the page tree and `core-data`, rows still go through `useCollectionRows`, and restore/delete still fan out into page-tree refresh, row-query invalidation, collection context refresh, and Trash refresh. Favorites, routing, URL targets, and activity tracking also still ask "page or row?" in places that should only need "document." Row documents in recents still route back to their parent collection (#43), so the document shape carries a path, but not always the final document target users expect.
 
-**Where.** `includes/Rest/DocumentTrashController.php`, `src/components/SidebarTrash.js`, `src/components/Sidebar.js`, `src/router/useResolveEntity.js`, `src/router/EntityRoute.js`, `src/hooks/documentTrashInvalidation.js`, `src/hooks/rowInvalidation.js`, and `src/hooks/useTrashedDocuments.js`.
+**Where.** `includes/Documents.php`, `includes/Rest/DocumentsController.php`, `includes/Rest/RecentsController.php`, `src/hooks/useDocuments.js`, `src/hooks/useTrashedDocuments.js`, `src/components/SidebarTrash.js`, `src/router/useResolveEntity.js`, `src/router/EntityRoute.js`, `src/hooks/documentTrashInvalidation.js`, and `src/hooks/rowInvalidation.js`.
 
-**Solution.** Add a small document layer for document kind/context, paths, invalidation, and cross-type lists. Individual records can still use `core-data` where WordPress supports it. Cross-type views can stay as `/cortext/v1/documents/*` endpoints. Pages and rows do not need to disappear as concepts; shared document features just should not rebuild the same branching every time.
+**Solution.** Keep `Cortext\Documents` as the cross-type reader, then move shared document behavior behind it one piece at a time: URL targets, invalidation, activity/recents, favorites, and trash refresh. Individual records can still use `core-data` or row endpoints where WordPress models them well. Cross-type views can stay under `/cortext/v1/documents`; shared document features should not rebuild the same page/row branching every time.

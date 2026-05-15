@@ -1,13 +1,13 @@
 <?php
 /**
- * Read/list/search service for Cortext documents.
+ * Finds and lists Cortext documents.
  *
  * "Document" is the union of post types that opt into the `cortext-document`
- * trait: pages (`crtxt_page`) and collection rows (`crtxt_<slug>`). Anything
- * that needs to enumerate "Cortext things" should go through here instead of
- * hardcoding the list of post types.
+ * trait: pages (`crtxt_page`) and collection rows (`crtxt_<slug>`). Code that
+ * needs all Cortext documents should use this service instead of rebuilding the
+ * post-type list.
  *
- * Scope is read-only; write paths still go through `wp/v2` and the collection
+ * This service only reads; writes still go through `wp/v2` and the collection
  * row controllers.
  *
  * @package Cortext
@@ -37,9 +37,9 @@ final class Documents {
 	private const MAX_PER_PAGE     = 100;
 
 	/**
-	 * Per-instance memo of `row CPT -> parent collection` lookups so a single
-	 * `list()` call that returns many rows of the same CPT does not re-query
-	 * the collection per row. Cleared on demand by callers that span requests.
+	 * Caches `row CPT -> parent collection` lookups for this service instance.
+	 * A `list()` call with many rows from the same CPT then asks for the
+	 * collection once.
 	 *
 	 * @var array<string,?WP_Post>
 	 */
@@ -64,8 +64,8 @@ final class Documents {
 	/**
 	 * Resolves a document by id. Returns null when the id is unknown, the
 	 * post type does not opt into the trait, or the current user cannot edit
-	 * the post. Callers treat null as "not found" without leaking permission
-	 * semantics.
+	 * the post. Callers treat null as "not found" without exposing whether
+	 * the user lacked permission.
 	 *
 	 * Options:
 	 *   - `include_excerpt` (bool, default false): include a derived excerpt.
@@ -108,8 +108,8 @@ final class Documents {
 	 *   - `search` (string): split-term match across title, excerpt, content.
 	 *   - `kind`   (string): 'page' or 'row' to restrict by document kind.
 	 *   - `status` (string|string[]): post status filter. Defaults to
-	 *     `publish, draft, private`. Pass `'trash'` to list trashed documents
-	 *     (no pagination; SidebarTrash and similar surfaces need every entry).
+	 *     `publish, draft, private`. Pass `'trash'` to list every trashed
+	 *     document, since the Trash sidebar needs the full set.
 	 *   - `page`   (int):    1-based page number.
 	 *   - `per_page` (int):  page size, clamped to MAX_PER_PAGE.
 	 *   - `include_excerpt` (bool): include excerpt in formatted documents.
@@ -138,8 +138,8 @@ final class Documents {
 		$query_args = array(
 			'post_type'           => $post_types,
 			'post_status'         => $statuses,
-			// Trashed lists feed the sidebar Trash, which needs every entry up
-			// front to compute cascade roots. All other lists paginate.
+			// Trash needs every entry to compute cascade roots. Other document
+			// lists paginate.
 			'paged'               => $is_trash ? 1 : $page,
 			'posts_per_page'      => $is_trash ? -1 : $per_page,
 			'orderby'             => 'modified',
@@ -241,11 +241,9 @@ final class Documents {
 	}
 
 	/**
-	 * Renders one document into the shared shape. Row documents include the
-	 * parent collection summary so consumers can render breadcrumbs without a
-	 * second lookup. Returns null when the post type does not opt into the
-	 * trait, so callers that have already validated the post still get a safe
-	 * "not a document" signal.
+	 * Formats one document for the shared response shape. Row documents include
+	 * the parent collection summary so callers can render breadcrumbs without a
+	 * second lookup. Returns null when the post type is not a Cortext document.
 	 *
 	 * @param WP_Post            $post Document post.
 	 * @param array<string,bool> $opts Formatting flags.
@@ -262,8 +260,7 @@ final class Documents {
 			: null;
 
 		if ( self::KIND_ROW === $kind && ! $collection instanceof WP_Post ) {
-			// Row without a resolvable parent collection is unreachable in the
-			// UI; drop it rather than surface a half-built document.
+			// A row without its parent collection cannot be opened in the UI.
 			return null;
 		}
 
@@ -314,9 +311,9 @@ final class Documents {
 	}
 
 	/**
-	 * Maps a post type to its document kind, or null when the post type is
-	 * not a Cortext document. Public so other surfaces (trash, breadcrumbs)
-	 * can branch on the same classification.
+	 * Maps a post type to its document kind, or null when the post type is not
+	 * a Cortext document. Public so trash, breadcrumbs, and similar code can
+	 * branch on the same classification.
 	 *
 	 * @param string $post_type Post type slug.
 	 */
@@ -333,9 +330,9 @@ final class Documents {
 	}
 
 	/**
-	 * Locates the collection post that owns a given row CPT by matching the
-	 * post type suffix to the collection's `slug` meta. Public so callers that
-	 * already have a row in hand do not re-derive the same lookup.
+	 * Finds the collection post that owns a row CPT by matching the post-type
+	 * suffix to the collection's `slug` meta. Public so callers that already
+	 * have a row in hand do not repeat the lookup.
 	 *
 	 * @param string $post_type Row CPT slug, e.g. `crtxt_projects`.
 	 */

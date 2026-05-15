@@ -3,8 +3,8 @@
  * REST endpoints for restoring and permanently deleting trashed Cortext
  * documents (pages and collection rows).
  *
- * Page documents carry hierarchy, so restore/delete here also walks the
- * `PageTrashCascade` marker chain to surface descendants. Row documents are
+ * Page documents carry hierarchy, so restore/delete also walks the
+ * `PageTrashCascade` marker chain and returns descendants. Row documents are
  * flat per collection, so the cascade walk is a no-op for them.
  *
  * @package Cortext
@@ -66,8 +66,8 @@ final class DocumentTrashController {
 	/**
 	 * Permission gate. Returns a `WP_Error` with status 404 when the post id
 	 * is unknown or its post type does not opt into `cortext-document` so the
-	 * consumer can tell "not found" from "not allowed" without leaking
-	 * permission semantics into the route callback. WP REST honours `WP_Error`
+	 * caller can tell "not found" from "not allowed" without exposing
+	 * permission details in the route callback. WP REST honours `WP_Error`
 	 * returns from permission callbacks.
 	 *
 	 * @param WP_REST_Request $request Incoming REST request.
@@ -107,7 +107,7 @@ final class DocumentTrashController {
 			);
 		}
 
-		// Snapshot the tagged subtree before the cascade runs. The
+		// Record the tagged subtree before the cascade runs. The
 		// `untrashed_post` action fires synchronously inside `wp_untrash_post`,
 		// so a post-call query alone could not tell which descendants this
 		// restore brought back versus which were already out of trash. The
@@ -175,7 +175,7 @@ final class DocumentTrashController {
 			);
 		}
 
-		// Snapshot the subtree up front, then delete leaves-first so WP's
+		// Record the subtree, then delete leaves-first so WP's
 		// hierarchical-delete reparenting (`post_parent = $deleted->post_parent`)
 		// has nothing to do for any non-leaf. Cascade is page-only; rows are
 		// flat and produce an empty descendant list.

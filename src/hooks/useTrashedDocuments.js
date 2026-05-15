@@ -2,9 +2,8 @@ import useDocuments from './useDocuments';
 import { useDocumentTrashInvalidation } from './documentTrashInvalidation';
 
 /**
- * Sidebar Trash view of the unified `/cortext/v1/documents` endpoint. Thin
- * wrapper around `useDocuments` that pins the trash status and refreshes when
- * any trash mutation (restore, permanent delete) fires the invalidation event.
+ * Trash uses `/cortext/v1/documents?status=trash`; this hook adds the
+ * invalidation refresh used after restore and permanent delete.
  */
 export default function useTrashedDocuments() {
 	const result = useDocuments( { status: 'trash' } );

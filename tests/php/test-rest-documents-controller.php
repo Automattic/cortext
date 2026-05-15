@@ -113,7 +113,7 @@ final class Test_Rest_Documents_Controller extends BaseTestCase {
 
 	public function test_matches_search(): void {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
-		$match    = $this->create_page( array( 'post_title' => 'Quarterly report' ) );
+		$match     = $this->create_page( array( 'post_title' => 'Quarterly report' ) );
 		$unrelated = $this->create_page( array( 'post_title' => 'Unrelated' ) );
 
 		$response = $this->query( array( 'search' => 'quarterly' ) );
@@ -182,8 +182,8 @@ final class Test_Rest_Documents_Controller extends BaseTestCase {
 
 		$by_id = array_column( $response->get_data()['documents'], null, 'id' );
 		$this->assertArrayHasKey( $page_id, $by_id );
-		// Trash listing carries trash-specific meta; the lightweight excerpt
-		// is for live documents only.
+		// Trash lists carry trash metadata; excerpts are only for live
+		// document lists.
 		$this->assertArrayHasKey( 'meta', $by_id[ $page_id ] );
 	}
 

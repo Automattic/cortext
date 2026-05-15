@@ -200,7 +200,7 @@ final class RecentsController {
 	}
 
 	/**
-	 * Formats a supported Cortext target into the recents response contract.
+	 * Formats a supported Cortext target for the recents response.
 	 *
 	 * @param string $kind Target kind.
 	 * @param int    $id Target post ID.

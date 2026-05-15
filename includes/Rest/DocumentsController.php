@@ -3,8 +3,8 @@
  * REST endpoint for listing and searching Cortext documents.
  *
  * Lists every post type that opts into the `cortext-document` trait (pages
- * plus collection rows) through one read surface so consumers do not have to
- * enumerate post types themselves. Single-resource reads still go through
+ * plus collection rows) from one endpoint, so callers do not need to rebuild
+ * the post-type list. Single-resource reads still go through
  * `DocumentLocatorController` plus `/wp/v2/<rest_base>/<id>`.
  *
  * @package Cortext
