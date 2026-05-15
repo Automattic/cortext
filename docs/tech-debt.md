@@ -219,11 +219,11 @@ The create-field flow also has to reveal the new trailing column itself. It carr
 
 ## 23. Embedded data-view block has no width/height controls `[internal]`
 
-**What.** The `cortext/data-view` block exposes `align` (default / wide / full) for width but nothing for height. A freshly inserted block needs a usable viewport and long tables need to stay bounded inside the page, so we set `height` from `var(--cortext-data-view-block-min-height, 640px)` and let DataViews scroll internally. The number is a guess: roughly fits a header, ~10 compact rows, footer, and pagination. It doesn't track the block's density or `perPage`, so a comfortable block with `perPage: 25` shows the same default viewport as a compact block with 5 rows.
+**What.** The `cortext/data-view` block exposes `align` (default / wide / full) for width but nothing for height. For now the block sizes to its content: short tables fit their rows, long tables grow with the page, and empty blocks fall back to DataViews' no-results state. That default is easy to understand, but authors still can't say "show 10 rows and scroll the rest." A long table stretches the document.
 
-**Where.** `--cortext-data-view-block-min-height` in `src/styles/_tokens.scss`, the `.wp-block-cortext-data-view .cortext-data-view` rule in `src/index.scss`, `src/blocks/data-view/block.json` (no `height` attribute today).
+**Where.** `src/blocks/data-view/block.json` (no `height` attribute today). The block-mode size rule lives in `src/index.scss` next to the `.wp-block-cortext-data-view .cortext-data-view > .dataviews-wrapper` override.
 
-**Solution.** Add a `height` (or "rows visible") attribute to the block with an inspector control, fall back to the variable when unset, and let the variable stay as a theme-overridable default. Computing the default from `density × perPage` is a smaller win; once the per-block control exists, the default rarely matters.
+**Solution.** Add a `height` (or "rows visible") attribute to the block with an inspector control, and clamp the shell to that value when set. A density-aware default would help, but the per-block control is the part that matters.
 
 ## 24. Workspace notices filtered by id prefix `[upstream, soft]`
 
