@@ -15,9 +15,11 @@ declare(strict_types=1);
 
 $args         = parse_args( $argv );
 $current_path = $args['current'] ?? 'artifacts/perf-ui.json';
+$base_path    = $args['base'] ?? '';
+$base_label   = $args['base-label'] ?? 'base';
 $summary_path = $args['summary'] ?? getenv( 'GITHUB_STEP_SUMMARY' );
 
-$output = build_output( $current_path );
+$output = build_output( $current_path, $base_path, $base_label );
 // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- CLI markdown output for GitHub summaries should stay unescaped.
 echo $output;
 
@@ -48,18 +50,18 @@ function parse_args( array $argv ): array {
 	return $args;
 }
 
-function build_output( string $current_path ): string {
-	if ( ! is_file( $current_path ) || 0 === filesize( $current_path ) ) {
-		return "UI performance run produced no output.\n";
+function build_output( string $current_path, string $base_path, string $base_label ): string {
+	$current = load_report( $current_path, 'UI performance run' );
+	if ( null === $current['report'] ) {
+		return $current['message'];
 	}
-	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Reads a local artifact path in a standalone CI helper.
-	$raw = file_get_contents( $current_path );
-	if ( false === $raw ) {
-		return "Could not read UI performance output.\n";
-	}
-	$report = json_decode( $raw, true );
-	if ( ! is_array( $report ) ) {
-		return 'Could not parse UI performance JSON: ' . json_last_error_msg() . "\n";
+
+	$base_report = null;
+	if ( '' !== $base_path ) {
+		$base = load_report( $base_path, "{$base_label} UI performance run" );
+		if ( null !== $base['report'] ) {
+			$base_report = $base['report'];
+		}
 	}
 
 	// Categories are ordered from broadest (collection-level) down to the
@@ -89,7 +91,9 @@ function build_output( string $current_path ): string {
 		'command_palette_open'     => 'Open command palette',
 	);
 
-	$scenarios = is_array( $report['scenarios'] ?? null ) ? $report['scenarios'] : array();
+	$scenarios      = is_array( $current['report']['scenarios'] ?? null ) ? $current['report']['scenarios'] : array();
+	$base_scenarios = is_array( $base_report['scenarios'] ?? null ) ? $base_report['scenarios'] : array();
+	$has_base       = count( $base_scenarios ) > 0;
 
 	$grouped = array_fill_keys( array_keys( $category_order ), array() );
 	$unknown = array();
@@ -118,13 +122,14 @@ function build_output( string $current_path ): string {
 		}
 		$rows[] = array( '**' . $category_label . '**', '', '', '', '' );
 		foreach ( $grouped[ $category_id ] as $name => $data ) {
-			$label  = $scenario_labels[ $name ] ?? $name;
-			$rows[] = array(
+			$label         = $scenario_labels[ $name ] ?? $name;
+			$base_scenario = is_array( $base_scenarios[ $name ] ?? null ) ? $base_scenarios[ $name ] : array();
+			$rows[]        = array(
 				$label,
-				integer_value( $data['ready_ms'] ?? null ),
-				integer_value( $data['rows_api_ms'] ?? null ),
-				integer_value( $data['rest_request_count'] ?? null ),
-				integer_value( $data['long_task_total_ms'] ?? null ),
+				ui_metric_value( $data['ready_ms'] ?? null, $base_scenario['ready_ms'] ?? null, $has_base ),
+				ui_metric_value( $data['rows_api_ms'] ?? null, $base_scenario['rows_api_ms'] ?? null, $has_base ),
+				ui_metric_value( $data['rest_request_count'] ?? null, $base_scenario['rest_request_count'] ?? null, $has_base ),
+				ui_metric_value( $data['long_task_total_ms'] ?? null, $base_scenario['long_task_total_ms'] ?? null, $has_base ),
 			);
 		}
 	}
@@ -133,17 +138,84 @@ function build_output( string $current_path ): string {
 		return "UI performance run had no scenarios.\n";
 	}
 
-	$lines = array( '## UI performance', '' );
+	$title = $has_base ? '## UI performance vs ' . $base_label : '## UI performance';
+	$lines = array( $title, '' );
 	$lines = array_merge( $lines, markdown_table( $headers, $alignments, $rows ) );
 
 	return implode( "\n", $lines ) . "\n";
 }
 
-function integer_value( mixed $value ): string {
-	if ( is_numeric( $value ) ) {
-		return (string) (int) round( (float) $value );
+/**
+ * Loads a UI performance JSON report.
+ *
+ * @param string $path  Artifact path.
+ * @param string $label Human-readable report label.
+ * @return array{report:?array<string,mixed>,message:string}
+ */
+function load_report( string $path, string $label ): array {
+	if ( ! is_file( $path ) || 0 === filesize( $path ) ) {
+		return array(
+			'report'  => null,
+			'message' => "{$label} produced no output.\n",
+		);
 	}
-	return 'n/a';
+
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Reads a local artifact path in a standalone CI helper.
+	$raw = file_get_contents( $path );
+	if ( false === $raw ) {
+		return array(
+			'report'  => null,
+			'message' => "Could not read {$label} output.\n",
+		);
+	}
+
+	$report = json_decode( $raw, true );
+	if ( ! is_array( $report ) ) {
+		return array(
+			'report'  => null,
+			'message' => 'Could not parse ' . $label . ' JSON: ' . json_last_error_msg() . "\n",
+		);
+	}
+
+	return array(
+		'report'  => $report,
+		'message' => '',
+	);
+}
+
+function ui_metric_value( mixed $current, mixed $base, bool $include_delta ): string {
+	if ( ! is_numeric( $current ) ) {
+		return 'n/a';
+	}
+
+	$current_value = (int) round( (float) $current );
+	if ( ! $include_delta || ! is_numeric( $base ) ) {
+		return (string) $current_value;
+	}
+
+	return $current_value . ' (Δ ' . delta_value( $current_value, (float) $base ) . ')';
+}
+
+function delta_value( int $current, float $base ): string {
+	$base_value = (int) round( $base );
+	$delta      = $current - $base_value;
+	$percent    = 0 !== $base_value ? $delta / $base_value * 100 : null;
+	$delta_text = signed_number( $delta, 0 );
+
+	if ( null === $percent ) {
+		return $delta_text;
+	}
+
+	return $delta_text . ', ' . signed_number( $percent, 1 ) . '%';
+}
+
+function signed_number( float $value, int $decimals ): string {
+	$formatted = number_format( $value, $decimals, '.', '' );
+	if ( $value > 0 ) {
+		return '+' . $formatted;
+	}
+
+	return $formatted;
 }
 
 /**

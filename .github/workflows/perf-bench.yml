@@ -108,6 +108,33 @@ jobs:
                     --warmup=1 \
                     --pretty | tee artifacts/perf-bench-base.json
 
+            - name: Run baseline UI performance benchmark
+              if: github.event_name == 'pull_request' && env.CORTEXT_PERF_UI == '1'
+              continue-on-error: true
+              env:
+                  # The benchmark workflow starts the dev wp-env, which serves WordPress on 8888.
+                  WP_BASE_URL: http://localhost:8888
+              run: |
+                  set -euo pipefail
+
+                  if [ ! -f tests/e2e/specs/perf-ui.spec.js ]; then
+                    echo "No UI performance spec found."
+                    exit 0
+                  fi
+
+                  pnpm exec playwright install --with-deps chromium
+                  pnpm run build
+                  set +e
+                  pnpm exec wp-scripts test-playwright --config playwright.config.js tests/e2e/specs/perf-ui.spec.js
+                  status="$?"
+                  set -e
+
+                  if [ -s artifacts/perf-ui.json ]; then
+                    mv artifacts/perf-ui.json artifacts/perf-ui-base.json
+                  fi
+
+                  exit "$status"
+
             - name: Destroy wp-env between runs
               if: github.event_name == 'pull_request'
               run: printf 'y\n' | pnpm exec wp-env destroy
@@ -212,8 +239,12 @@ jobs:
                   fi
 
                   if [ -s artifacts/perf-ui.json ]; then
-                    php .github/scripts/write-perf-ui-summary.php \
-                      --current=artifacts/perf-ui.json | tee artifacts/perf-ui-summary.md
+                    ui_args=(--current=artifacts/perf-ui.json)
+                    if [ "$GITHUB_EVENT_NAME" = "pull_request" ] && [ -s artifacts/perf-ui-base.json ]; then
+                      ui_args+=(--base=artifacts/perf-ui-base.json --base-label=main)
+                    fi
+
+                    php .github/scripts/write-perf-ui-summary.php "${ui_args[@]}" | tee artifacts/perf-ui-summary.md
                   fi
 
                   if [ "$GITHUB_EVENT_NAME" = "pull_request" ] && [ -s artifacts/perf-ui-summary.md ]; then
