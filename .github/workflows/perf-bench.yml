@@ -123,18 +123,13 @@ jobs:
             - name: Run benchmark
               run: |
                   set -o pipefail
-                  fail_args=()
-                  if [ "$GITHUB_EVENT_NAME" = "push" ]; then
-                    fail_args+=(--fail-on-budget)
-                  fi
-
                   mkdir -p artifacts
                   pnpm exec wp-env run cli wp cortext perf-bench \
                     --iterations=5 \
                     --warmup=1 \
                     --budget=includes/CLI/perf-budgets.json \
-                    --pretty \
-                    "${fail_args[@]}" | tee artifacts/perf-bench.json
+                    --fail-on-budget \
+                    --pretty | tee artifacts/perf-bench.json
 
             - name: Run UI performance benchmark
               if: github.event_name == 'workflow_dispatch' || env.CORTEXT_PERF_UI == '1'
