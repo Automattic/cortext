@@ -4289,8 +4289,10 @@ body.cortext-row-reorder-no-transition .cortext-row-reorder-target {
 	transition: none !important;
 }
 
+// Hide the source placeholder, including collapsed table borders, while the
+// drag preview represents the row.
 .cortext-row-reorder-target--active {
-	opacity: 0;
+	visibility: hidden;
 }
 
 .cortext-row-reorder-target--displaced {

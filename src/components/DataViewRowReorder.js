@@ -39,6 +39,7 @@ const ROW_SUPPRESS_HOVER_CLASS = 'cortext-row-reorder-suppress-hover';
 const ROW_NO_TRANSITION_CLASS = 'cortext-row-reorder-no-transition';
 const ADD_FIELD_ID = '__add_field';
 const ROW_ACTIONS_CHROME_RESERVE = 48;
+const ROW_DROP_ZONE_MAX_SIDE = 24;
 const HOVER_SUPPRESSION_RELEASE_DELAY = 120;
 const FREEZE_SAFETY_TIMEOUT = 3000;
 
@@ -701,16 +702,17 @@ function displacementForDrop( renderedRows, activeRow, activeDrop ) {
 	const nextRows = renderedRows.filter( ( row ) => row.rowId !== activeId );
 	nextRows.splice( finalIndex, 0, renderedRows[ activeIndex ] );
 
+	let targetTop = renderedRows[ 0 ]?.rect.top ?? 0;
 	for ( const [ index, row ] of nextRows.entries() ) {
-		const finalRect = renderedRows[ index ]?.rect;
-		if ( ! finalRect ) {
+		if ( ! renderedRows[ index ] ) {
 			continue;
 		}
 
 		const offset = {
-			x: Math.round( finalRect.left - row.rect.left ),
-			y: Math.round( finalRect.top - row.rect.top ),
+			x: 0,
+			y: Math.round( targetTop - row.rect.top ),
 		};
+		targetTop += row.rect.height;
 
 		if ( row.rowId === activeId ) {
 			activeOffset = offset.x || offset.y ? offset : null;
@@ -950,15 +952,17 @@ function linearRowGaps( renderedRows, activeRow ) {
 		}
 
 		const anchor = before ?? after;
-		const top = after
+		const rawTop = after
 			? after.rect.top + after.rect.height / 2
 			: before.rect.top;
-		const bottom = before
+		const rawBottom = before
 			? before.rect.top + before.rect.height / 2
 			: after.rect.top + after.rect.height;
 		const lineTop = before
 			? before.rect.top
 			: after.rect.top + after.rect.height;
+		const top = Math.max( rawTop, lineTop - ROW_DROP_ZONE_MAX_SIDE );
+		const bottom = Math.min( rawBottom, lineTop + ROW_DROP_ZONE_MAX_SIDE );
 		const left = Math.min(
 			after?.rect.left ?? anchor.rect.left,
 			before?.rect.left ?? anchor.rect.left

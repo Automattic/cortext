@@ -146,7 +146,7 @@ afterEach( () => {
 	);
 } );
 
-function createWrapper() {
+function createWrapper( heights = [ 40, 40, 40 ] ) {
 	const wrapper = document.createElement( 'div' );
 	wrapper.innerHTML = `
 		<table class="dataviews-view-table">
@@ -157,15 +157,19 @@ function createWrapper() {
 			</tbody>
 		</table>
 	`;
+	let top = 0;
 	Array.from( wrapper.querySelectorAll( 'tr' ) ).forEach( ( row, index ) => {
+		const height = heights[ index ] ?? 40;
+		const rowTop = top;
+		top += height;
 		row.getClientRects = () => [ {} ];
 		row.getBoundingClientRect = () => ( {
-			top: 40 * index,
+			top: rowTop,
 			left: 10,
 			width: 320,
-			height: 40,
+			height,
 			right: 330,
-			bottom: 40 * ( index + 1 ),
+			bottom: rowTop + height,
 		} );
 	} );
 	document.body.appendChild( wrapper );
@@ -181,8 +185,8 @@ function draggableDataFor( rowId ) {
 	);
 }
 
-async function renderReorder( props = {} ) {
-	const wrapperRef = { current: createWrapper() };
+async function renderReorder( props = {}, options = {} ) {
+	const wrapperRef = { current: createWrapper( options.rowHeights ) };
 	const onChangeView = jest.fn();
 	const onReordered = jest.fn();
 	const componentProps = {
@@ -654,6 +658,24 @@ describe( 'DataViewRowReorder', () => {
 		);
 	} );
 
+	it( 'caps gap hitboxes next to tall rows', async () => {
+		await renderReorder( {}, { rowHeights: [ 40, 160, 40 ] } );
+
+		const gapBetweenShortAndTall = document.querySelectorAll(
+			'.cortext-row-drop-indicator--gap'
+		)[ 1 ];
+
+		expect( gapBetweenShortAndTall ).toHaveStyle( {
+			top: '20px',
+			height: '44px',
+		} );
+		expect(
+			gapBetweenShortAndTall.style.getPropertyValue(
+				'--cortext-row-drop-line-top'
+			)
+		).toBe( '20px' );
+	} );
+
 	it( 'displaces rows to open a gap while dragging upward', async () => {
 		await renderReorder();
 		const renderedTableRows = document.querySelectorAll( 'tr' );
@@ -725,6 +747,23 @@ describe( 'DataViewRowReorder', () => {
 		expect( renderedTableRows[ 0 ] ).toHaveClass(
 			'cortext-row-reorder-target--active'
 		);
+	} );
+
+	it( 'uses the dragged row height when displacing taller rows', async () => {
+		await renderReorder( {}, { rowHeights: [ 40, 100, 40 ] } );
+		const renderedTableRows = document.querySelectorAll( 'tr' );
+
+		dragStart( 3 );
+		dragOver( gapDrop( 0, 1, null ) );
+
+		await waitFor( () =>
+			expect( renderedTableRows[ 0 ] ).toHaveStyle( {
+				transform: 'translate3d(0, 40px, 0)',
+			} )
+		);
+		expect( renderedTableRows[ 1 ] ).toHaveStyle( {
+			transform: 'translate3d(0, 40px, 0)',
+		} );
 	} );
 
 	it( 'keeps the placed transform unanimated after drop', async () => {
