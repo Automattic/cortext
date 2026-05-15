@@ -151,15 +151,16 @@ final class PerfBench {
 	public static function bench( array $args, array $assoc_args ): void {
 		unset( $args );
 
-		$bench      = new self();
-		$iterations = self::flag_int( $assoc_args, 'iterations', self::DEFAULT_ITERATIONS, 1 );
-		$warmup     = self::flag_int( $assoc_args, 'warmup', self::DEFAULT_WARMUP, 0 );
-		$budget     = $bench->load_budget(
+		$bench       = new self();
+		$iterations  = self::flag_int( $assoc_args, 'iterations', self::DEFAULT_ITERATIONS, 1 );
+		$warmup      = self::flag_int( $assoc_args, 'warmup', self::DEFAULT_WARMUP, 0 );
+		$budget_path = self::normalize_local_path(
 			(string) ( $assoc_args['budget'] ?? CORTEXT_PATH . 'includes/CLI/perf-budgets.json' )
 		);
+		$budget      = $bench->load_budget( $budget_path );
 
 		try {
-			$result = $bench->run_benchmark( $iterations, $warmup, $budget );
+			$result = $bench->run_benchmark( $iterations, $warmup, $budget, $budget_path );
 		} catch ( RuntimeException $exception ) {
 			\WP_CLI::error( $exception->getMessage() );
 			return;
@@ -305,10 +306,11 @@ final class PerfBench {
 	 * @param int                 $iterations Measured iterations.
 	 * @param int                 $warmup     Warm-up iterations.
 	 * @param array<string,mixed> $budget     Budget config.
+	 * @param string              $budget_path Budget file path.
 	 * @return array<string,mixed> Benchmark report.
 	 * @throws RuntimeException When the dataset is missing or a scenario fails.
 	 */
-	public function run_benchmark( int $iterations, int $warmup, array $budget ): array {
+	public function run_benchmark( int $iterations, int $warmup, array $budget, string $budget_path = 'includes/CLI/perf-budgets.json' ): array {
 		$started_at = hrtime( true );
 		$manifest   = get_option( self::DATASET_OPTION );
 		if ( ! is_array( $manifest ) || ! $this->manifest_is_usable( $manifest ) ) {
@@ -334,6 +336,11 @@ final class PerfBench {
 		$summaries = array();
 
 		foreach ( $scenarios as $name => $scenario ) {
+			if ( isset( $scenario['steps'] ) && is_array( $scenario['steps'] ) ) {
+				$summaries[ $name ] = $this->run_stepped_scenario( $scenario, $warmup, $iterations );
+				continue;
+			}
+
 			$samples = array();
 			$total   = $warmup + $iterations;
 			for ( $index = 0; $index < $total; $index++ ) {
@@ -356,16 +363,17 @@ final class PerfBench {
 		$budget_result = self::apply_budgets( $summaries, $budget );
 
 		return array(
-			'version'    => 1,
-			'elapsedMs'  => self::elapsed_ms( $started_at ),
-			'dataset'    => self::public_dataset_summary( $manifest ),
-			'iterations' => array(
+			'version'          => 1,
+			'seed_config_hash' => self::benchmark_config_hash( $manifest, $budget_path ),
+			'elapsedMs'        => self::elapsed_ms( $started_at ),
+			'dataset'          => self::public_dataset_summary( $manifest ),
+			'iterations'       => array(
 				'warmup'   => $warmup,
 				'measured' => $iterations,
 			),
-			'passed'     => $budget_result['passed'],
-			'failures'   => $budget_result['failures'],
-			'scenarios'  => $budget_result['scenarios'],
+			'passed'           => $budget_result['passed'],
+			'failures'         => $budget_result['failures'],
+			'scenarios'        => $budget_result['scenarios'],
 		);
 	}
 
@@ -1036,11 +1044,13 @@ final class PerfBench {
 	/**
 	 * Builds the scenario callbacks.
 	 *
-	 * Labels stay short so the JSON is easy to scan. The comments carry the
-	 * why; otherwise budget reviews lose that context fast.
+	 * Labels stay short so the JSON is easy to scan. Put the reasoning in
+	 * comments; budget reviews go stale fast without it. Each scenario uses
+	 * either `run` for one measured callback or `steps` for named callbacks
+	 * that are measured separately and then rolled up.
 	 *
 	 * @param array<string,mixed> $manifest Dataset manifest.
-	 * @return array<string,array{label:string,prepare?:callable,run:callable}>
+	 * @return array<string,array{label:string,prepare?:callable,run?:callable,steps?:array<string,callable>}>
 	 * @throws RuntimeException When relation scenario data is missing.
 	 */
 	private function scenario_callbacks( array $manifest ): array {
@@ -1071,6 +1081,11 @@ final class PerfBench {
 		// Keep writes off the pages read below. Otherwise a second benchmark run
 		// would change the rows used by the read scenarios.
 		$relation_row_id = $primary_row_ids[ self::PAGE_SIZE * 4 ] ?? $primary_row_ids[0];
+		// Page 3 starts in the heavy-rollup zone. Opening that row covers
+		// relation and rollup hydration while staying away from rows touched by
+		// write scenarios.
+		$row_detail_row_id = $primary_row_ids[ self::PAGE_SIZE * 2 ] ?? $primary_row_ids[0];
+		$row_rest_base     = CollectionEntries::CPT_PREFIX . (string) $manifest['primary_slug'];
 
 		return array(
 			// This is the first thing users hit when opening a collection:
@@ -1226,6 +1241,28 @@ final class PerfBench {
 					)
 				),
 			),
+			// Opening a single row takes two REST calls: the locator maps an id
+			// to a rest_base, then core REST returns the record with
+			// cortext_hydrated_meta. Keep both timings so resolver cost does
+			// not hide inside hydrate if it grows.
+			'row_detail_open'         => array(
+				'label' => 'Open a row detail (resolve and hydrate)',
+				'steps' => array(
+					'resolve' => fn() => $this->rest_request(
+						'GET',
+						"/cortext/v1/documents/{$row_detail_row_id}",
+						array()
+					),
+					'hydrate' => fn() => $this->rest_request(
+						'GET',
+						"/wp/v2/{$row_rest_base}/{$row_detail_row_id}",
+						array(
+							'context' => 'edit',
+							'_fields' => 'id,slug,parent,type,created_at,created_by,modified_at,modified_by,cortext_hydrated_meta',
+						)
+					),
+				),
+			),
 			// The third collection is wide on purpose. It measures field loading
 			// and per-row meta formatting with many columns.
 			'rows_wide_schema'        => array(
@@ -1298,6 +1335,85 @@ final class PerfBench {
 				'run'     => fn() => $this->migrate_options( (int) $manifest['migration_field_id'], 'old-many', 'new-many' ),
 			),
 		);
+	}
+
+	/**
+	 * Builds the summary for a scenario split into steps. User-facing latency
+	 * is the sum of step latencies, SQL queries are summed, and memory uses the
+	 * highest step peak. Per-step fields only expose latency; SQL and memory
+	 * would make the report noisy without adding much.
+	 *
+	 * @param string                                                                            $label         Scenario label.
+	 * @param array<int,array{latency_ms:float,sql_queries:int,memory_bytes:int}>               $total_samples Aggregate samples per iteration.
+	 * @param array<string,array<int,array{latency_ms:float,sql_queries:int,memory_bytes:int}>> $step_samples Per-step samples per iteration, keyed by step name.
+	 * @return array<string,mixed>
+	 */
+	public static function summarize_stepped_samples( string $label, array $total_samples, array $step_samples ): array {
+		$aggregate = self::summarize_samples( $total_samples );
+
+		$summary = array_merge(
+			array( 'label' => $label ),
+			$aggregate,
+			array(
+				'total_p50_ms' => $aggregate['p50_ms'],
+				'total_p95_ms' => $aggregate['p95_ms'],
+			)
+		);
+
+		foreach ( $step_samples as $step_name => $samples ) {
+			$step_summary                     = self::summarize_samples( $samples );
+			$summary[ "{$step_name}_p50_ms" ] = $step_summary['p50_ms'];
+			$summary[ "{$step_name}_p95_ms" ] = $step_summary['p95_ms'];
+		}
+
+		return $summary;
+	}
+
+	/**
+	 * Runs a scenario split into named steps.
+	 *
+	 * @param array{label:string,steps:array<string,callable>,prepare?:callable} $scenario   Scenario config.
+	 * @param int                                                                $warmup     Warm-up iterations.
+	 * @param int                                                                $iterations Measured iterations.
+	 * @return array<string,mixed>
+	 */
+	private function run_stepped_scenario( array $scenario, int $warmup, int $iterations ): array {
+		$steps         = $scenario['steps'];
+		$step_samples  = array_fill_keys( array_keys( $steps ), array() );
+		$total_samples = array();
+
+		$total = $warmup + $iterations;
+		for ( $index = 0; $index < $total; $index++ ) {
+			if ( isset( $scenario['prepare'] ) && is_callable( $scenario['prepare'] ) ) {
+				$scenario['prepare']();
+			}
+
+			$iteration_latency = 0.0;
+			$iteration_sql     = 0;
+			$iteration_memory  = 0;
+			$per_step          = array();
+
+			foreach ( $steps as $step_name => $step_callback ) {
+				$sample                 = $this->measure( $step_callback );
+				$per_step[ $step_name ] = $sample;
+				$iteration_latency     += $sample['latency_ms'];
+				$iteration_sql         += $sample['sql_queries'];
+				$iteration_memory       = max( $iteration_memory, $sample['memory_bytes'] );
+			}
+
+			if ( $index >= $warmup ) {
+				foreach ( $per_step as $step_name => $sample ) {
+					$step_samples[ $step_name ][] = $sample;
+				}
+				$total_samples[] = array(
+					'latency_ms'   => $iteration_latency,
+					'sql_queries'  => $iteration_sql,
+					'memory_bytes' => $iteration_memory,
+				);
+			}
+		}
+
+		return self::summarize_stepped_samples( (string) $scenario['label'], $total_samples, $step_samples );
 	}
 
 	/**
@@ -1425,9 +1541,7 @@ final class PerfBench {
 	 * @throws RuntimeException When the budget file cannot be loaded.
 	 */
 	private function load_budget( string $path ): array {
-		if ( ! str_starts_with( $path, '/' ) ) {
-			$path = CORTEXT_PATH . ltrim( $path, '/' );
-		}
+		$path = self::normalize_local_path( $path );
 		if ( ! file_exists( $path ) ) {
 			throw new RuntimeException( esc_html( "Budget file not found: {$path}" ) );
 		}
@@ -1494,6 +1608,46 @@ final class PerfBench {
 			'rollups'             => (int) ( $config['rollups'] ?? 0 ),
 			'collectionRows'      => $collections,
 		);
+	}
+
+	/**
+	 * Hashes the benchmark config that has to match before comparing runs.
+	 *
+	 * @param array<string,mixed> $manifest    Dataset manifest.
+	 * @param string              $budget_path Budget file path.
+	 */
+	private static function benchmark_config_hash( array $manifest, string $budget_path ): string {
+		$config = isset( $manifest['config'] ) && is_array( $manifest['config'] )
+			? self::normalize_int_map( $manifest['config'] )
+			: array();
+
+		return sha1(
+			(string) wp_json_encode(
+				array(
+					'seed'        => (string) ( $manifest['seed'] ?? self::DATASET_SEED ),
+					'seed_args'   => $config,
+					'budget_path' => self::relative_local_path( $budget_path ),
+				),
+				JSON_UNESCAPED_SLASHES
+			)
+		);
+	}
+
+	private static function normalize_local_path( string $path ): string {
+		if ( str_starts_with( $path, '/' ) ) {
+			return $path;
+		}
+
+		return CORTEXT_PATH . ltrim( $path, '/' );
+	}
+
+	private static function relative_local_path( string $path ): string {
+		$path = self::normalize_local_path( $path );
+		if ( str_starts_with( $path, CORTEXT_PATH ) ) {
+			return ltrim( substr( $path, strlen( CORTEXT_PATH ) ), '/' );
+		}
+
+		return $path;
 	}
 
 	/**

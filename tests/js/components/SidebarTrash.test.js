@@ -85,7 +85,6 @@ jest.mock( '@wordpress/api-fetch', () => ( {
 	default: jest.fn(),
 } ) );
 
-import { useEntityRecords } from '@wordpress/core-data';
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 
@@ -102,24 +101,37 @@ const dispatchMocks = {
 };
 
 beforeEach( () => {
-	useEntityRecords.mockReset();
 	useDispatch.mockReset();
 	apiFetch.mockReset();
 	dispatchMocks.deleteEntityRecord.mockReset();
 	dispatchMocks.invalidateResolution.mockReset();
 	useDispatch.mockReturnValue( dispatchMocks );
+	trashState = makeDocumentsState();
 } );
+
+let trashState;
 
 function setTrashRecords( {
 	records = [],
 	status = 'SUCCESS',
 	hasResolved = true,
 } = {} ) {
-	useEntityRecords.mockReturnValue( {
-		records,
-		status,
+	trashState = makeDocumentsState( {
+		documents: records ?? [],
+		isLoading: status === 'RESOLVING',
 		hasResolved,
+		error: status === 'ERROR' ? new Error( 'Could not fetch' ) : null,
 	} );
+}
+
+function renderSidebarTrash( props = {} ) {
+	return render(
+		<SidebarTrash
+			activePages={ [] }
+			trashedDocumentsState={ trashState }
+			{ ...props }
+		/>
+	);
 }
 
 function clickConfirm() {
@@ -130,10 +142,44 @@ function makePage( overrides = {} ) {
 	const { meta, ...rest } = overrides;
 	return {
 		id: 1,
+		type: POST_TYPE,
+		kind: 'page',
 		title: { rendered: 'A page', raw: 'A page' },
 		parent: 0,
 		meta: { _cortext_trashed_by_parent: 0, ...( meta ?? {} ) },
 		...rest,
+	};
+}
+
+function makeRow( overrides = {} ) {
+	const { meta, collection, ...rest } = overrides;
+	return {
+		id: 101,
+		type: 'crtxt_books',
+		kind: 'row',
+		slug: 'archived-book',
+		status: 'trash',
+		title: { rendered: 'Archived book', raw: 'Archived book' },
+		meta: { cortext_document_icon: '', ...( meta ?? {} ) },
+		collection: {
+			id: 12,
+			slug: 'books',
+			title: { rendered: 'Books', raw: 'Books' },
+			...( collection ?? {} ),
+		},
+		...rest,
+	};
+}
+
+function makeDocumentsState( overrides = {} ) {
+	return {
+		documents: [],
+		total: 0,
+		isLoading: false,
+		hasResolved: true,
+		error: null,
+		refresh: jest.fn(),
+		...overrides,
 	};
 }
 
@@ -145,7 +191,7 @@ describe( 'SidebarTrash', () => {
 			status: 'RESOLVING',
 		} );
 
-		const { container } = render( <SidebarTrash activePages={ [] } /> );
+		const { container } = renderSidebarTrash();
 
 		expect(
 			container.querySelector( '.cortext-sidebar__loading' )
@@ -158,9 +204,9 @@ describe( 'SidebarTrash', () => {
 	it( 'shows the empty state when the trash is empty', () => {
 		setTrashRecords( { records: [] } );
 
-		render( <SidebarTrash activePages={ [] } /> );
+		renderSidebarTrash();
 
-		expect( screen.getByText( 'No trashed pages.' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Trash is empty.' ) ).toBeInTheDocument();
 	} );
 
 	it( 'keeps the last resolved trash list visible during a background refetch', () => {
@@ -169,7 +215,7 @@ describe( 'SidebarTrash', () => {
 			title: { rendered: 'Cached doc', raw: 'Cached doc' },
 		} );
 		setTrashRecords( { records: [ page ] } );
-		const { rerender } = render( <SidebarTrash activePages={ [] } /> );
+		const { rerender } = renderSidebarTrash();
 
 		expect( screen.getByText( 'Cached doc' ) ).toBeInTheDocument();
 
@@ -178,7 +224,12 @@ describe( 'SidebarTrash', () => {
 			hasResolved: false,
 			status: 'RESOLVING',
 		} );
-		rerender( <SidebarTrash activePages={ [] } /> );
+		rerender(
+			<SidebarTrash
+				activePages={ [] }
+				trashedDocumentsState={ trashState }
+			/>
+		);
 
 		expect( screen.queryByTestId( 'spinner' ) ).not.toBeInTheDocument();
 		expect( screen.getByText( 'Cached doc' ) ).toBeInTheDocument();
@@ -187,10 +238,10 @@ describe( 'SidebarTrash', () => {
 	it( 'shows an error state with a Retry button when the fetch failed', () => {
 		setTrashRecords( { records: undefined, status: 'ERROR' } );
 
-		render( <SidebarTrash activePages={ [] } /> );
+		renderSidebarTrash();
 
 		expect(
-			screen.getByText( 'Could not load trashed pages.' )
+			screen.getByText( 'Could not load Trash.' )
 		).toBeInTheDocument();
 
 		fireEvent.click( screen.getByRole( 'button', { name: 'Retry' } ) );
@@ -219,9 +270,9 @@ describe( 'SidebarTrash', () => {
 
 		setTrashRecords( { records: [ child ] } );
 
-		const { container } = render(
-			<SidebarTrash activePages={ [ grandparent, parent ] } />
-		);
+		const { container } = renderSidebarTrash( {
+			activePages: [ grandparent, parent ],
+		} );
 
 		expect( screen.getByText( 'Notes' ) ).toBeInTheDocument();
 		expect(
@@ -234,7 +285,7 @@ describe( 'SidebarTrash', () => {
 
 		setTrashRecords( { records: [ orphan ] } );
 
-		const { container } = render( <SidebarTrash activePages={ [] } /> );
+		const { container } = renderSidebarTrash();
 
 		expect(
 			container.querySelector( '.cortext-sidebar__breadcrumb' )
@@ -249,7 +300,7 @@ describe( 'SidebarTrash', () => {
 		} );
 		apiFetch.mockResolvedValue( { restored: [ 7 ] } );
 
-		render( <SidebarTrash activePages={ [] } /> );
+		renderSidebarTrash();
 
 		fireEvent.click( screen.getByRole( 'button', { name: 'Restore' } ) );
 
@@ -270,13 +321,50 @@ describe( 'SidebarTrash', () => {
 		);
 	} );
 
-	it( 'surfaces a row-level error when restore fails and leaves the row in trash', async () => {
+	it( 'renders trashed rows with collection context', () => {
+		const row = makeRow( {
+			id: 17,
+			title: { rendered: 'Draft record', raw: 'Draft record' },
+			collection: {
+				id: 22,
+				title: { rendered: 'Research', raw: 'Research' },
+			},
+		} );
+		setTrashRecords( { records: [ row ] } );
+
+		renderSidebarTrash();
+
+		expect( screen.getByText( 'Draft record' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Research' ) ).toBeInTheDocument();
+	} );
+
+	it( 'restores a row through the document endpoint', async () => {
+		const refresh = jest.fn();
+		setTrashRecords( { records: [ makeRow( { id: 17 } ) ] } );
+		trashState.refresh = refresh;
+		apiFetch.mockResolvedValue( { restored: [ 17 ] } );
+
+		renderSidebarTrash();
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Restore' } ) );
+
+		await waitFor( () => {
+			expect( apiFetch ).toHaveBeenCalledWith( {
+				path: '/cortext/v1/documents/17/restore',
+				method: 'POST',
+			} );
+		} );
+		expect( refresh ).toHaveBeenCalled();
+		expect( dispatchMocks.invalidateResolution ).not.toHaveBeenCalled();
+	} );
+
+	it( 'shows restore errors next to the item', async () => {
 		setTrashRecords( {
 			records: [ makePage( { id: 8 } ) ],
 		} );
 		apiFetch.mockRejectedValue( { message: 'Server exploded' } );
 
-		render( <SidebarTrash activePages={ [] } /> );
+		renderSidebarTrash();
 
 		fireEvent.click( screen.getByRole( 'button', { name: 'Restore' } ) );
 
@@ -293,7 +381,7 @@ describe( 'SidebarTrash', () => {
 		} );
 		apiFetch.mockResolvedValue( { deleted: [ 9 ] } );
 
-		render( <SidebarTrash activePages={ [] } /> );
+		renderSidebarTrash();
 
 		fireEvent.click(
 			screen.getByRole( 'button', { name: 'Delete permanently' } )
@@ -313,6 +401,30 @@ describe( 'SidebarTrash', () => {
 		);
 	} );
 
+	it( 'permanently deletes a selected row through the document endpoint', async () => {
+		const onSelect = jest.fn();
+		const refresh = jest.fn();
+		setTrashRecords( { records: [ makeRow( { id: 17 } ) ] } );
+		trashState.refresh = refresh;
+		apiFetch.mockResolvedValue( { deleted: [ 17 ] } );
+
+		renderSidebarTrash( { selectedId: 17, onSelect } );
+
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Delete permanently' } )
+		);
+		clickConfirm();
+
+		await waitFor( () => {
+			expect( apiFetch ).toHaveBeenCalledWith( {
+				path: '/cortext/v1/documents/17/permanent-delete',
+				method: 'POST',
+			} );
+		} );
+		expect( refresh ).toHaveBeenCalled();
+		expect( onSelect ).toHaveBeenCalledWith( null );
+	} );
+
 	it( 'navigates the canvas away when the open page is permanent-deleted (root or descendant)', async () => {
 		const onSelect = jest.fn();
 		setTrashRecords( { records: [ makePage( { id: 1 } ) ] } );
@@ -320,13 +432,7 @@ describe( 'SidebarTrash', () => {
 		// response lists every id that's gone now.
 		apiFetch.mockResolvedValue( { deleted: [ 1, 5 ] } );
 
-		render(
-			<SidebarTrash
-				activePages={ [] }
-				selectedId={ 5 }
-				onSelect={ onSelect }
-			/>
-		);
+		renderSidebarTrash( { selectedId: 5, onSelect } );
 
 		fireEvent.click(
 			screen.getByRole( 'button', { name: 'Delete permanently' } )
@@ -343,13 +449,7 @@ describe( 'SidebarTrash', () => {
 		setTrashRecords( { records: [ makePage( { id: 1 } ) ] } );
 		apiFetch.mockResolvedValue( { deleted: [ 1 ] } );
 
-		render(
-			<SidebarTrash
-				activePages={ [] }
-				selectedId={ 99 }
-				onSelect={ onSelect }
-			/>
-		);
+		renderSidebarTrash( { selectedId: 99, onSelect } );
 
 		fireEvent.click(
 			screen.getByRole( 'button', { name: 'Delete permanently' } )
@@ -382,7 +482,7 @@ describe( 'SidebarTrash', () => {
 
 		setTrashRecords( { records: [ root, child, grandchild ] } );
 
-		render( <SidebarTrash activePages={ [] } /> );
+		renderSidebarTrash();
 
 		expect( screen.getByText( 'Workspace' ) ).toBeInTheDocument();
 		expect( screen.queryByText( 'Engineering' ) ).not.toBeInTheDocument();
@@ -407,7 +507,7 @@ describe( 'SidebarTrash', () => {
 
 		setTrashRecords( { records: [ root, child, grandchild ] } );
 
-		const { container } = render( <SidebarTrash activePages={ [] } /> );
+		const { container } = renderSidebarTrash();
 
 		expect(
 			container.querySelector( '.cortext-sidebar__breadcrumb' )
@@ -415,9 +515,9 @@ describe( 'SidebarTrash', () => {
 	} );
 
 	it( 'promotes orphaned descendants (stale marker) back to roots', () => {
-		// Marker points at a parent that's no longer in trash (it was
-		// permanently deleted before this PR's cascade was wired in, or by
-		// some other path). The orphan should still appear in the list.
+		// Marker points at a parent no longer in Trash. It may have been
+		// permanently deleted by an older build or a different path; either
+		// way, the orphan still needs to be reachable.
 		const orphan = makePage( {
 			id: 7,
 			title: { rendered: 'Stranded', raw: 'Stranded' },
@@ -427,7 +527,7 @@ describe( 'SidebarTrash', () => {
 
 		setTrashRecords( { records: [ orphan ] } );
 
-		render( <SidebarTrash activePages={ [] } /> );
+		renderSidebarTrash();
 
 		expect( screen.getByText( 'Stranded' ) ).toBeInTheDocument();
 	} );
@@ -441,13 +541,7 @@ describe( 'SidebarTrash', () => {
 
 		setTrashRecords( { records: [ root ] } );
 
-		render(
-			<SidebarTrash
-				activePages={ [] }
-				selectedId={ null }
-				onSelect={ onSelect }
-			/>
-		);
+		renderSidebarTrash( { selectedId: null, onSelect } );
 
 		fireEvent.click( screen.getByText( 'Stranded' ) );
 
@@ -470,7 +564,7 @@ describe( 'SidebarTrash', () => {
 
 		setTrashRecords( { records: [ root, child ] } );
 
-		render( <SidebarTrash activePages={ [] } /> );
+		renderSidebarTrash();
 
 		fireEvent.click(
 			screen.getByRole( 'button', { name: 'Delete permanently' } )
@@ -478,7 +572,7 @@ describe( 'SidebarTrash', () => {
 
 		expect(
 			screen.getByText(
-				'Permanently delete this page and 1 subpage? This cannot be undone.'
+				"Permanently delete this page and 1 subpage? You can't undo this."
 			)
 		).toBeInTheDocument();
 	} );

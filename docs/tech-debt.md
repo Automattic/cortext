@@ -16,22 +16,24 @@ Pair with [decisions.md](decisions.md) for choices we've made peace with and [ro
 
 ## 2. Rows aren't in `core-data`'s entity store `[internal]`
 
-Updated by [#80](https://github.com/priethor/cortext/pull/80).
+Updated by [#80](https://github.com/priethor/cortext/pull/80) and #179.
 
-**What.** Rows still bypass `core-data`. `useCollectionRows` owns the fetch state, the `requestId` race guard, the manual `refresh()` counter, and the choice between server and client mode. #80 moved the normal table path to paged REST requests, then changed the fallback from one `per_page=-1` request to pages of 100 fetched with a small concurrency cap. That is a better failure mode, but it is still a second row-loading layer beside the WordPress data store.
+**What.** Rows still sit outside `core-data`. `useCollectionRows` owns fetch state, the `requestId` race guard, the manual `refresh()` counter, and the choice between server and client mode. #80 moved the normal table path to paged REST requests, then changed the fallback from one `per_page=-1` request to pages of 100 fetched with a small concurrency cap. #179 exposed the same gap from another angle: trashing or restoring a row can change relation chips and rollups in other open collections. Since there is no shared row store, the client fires small row and document-trash events, then lets open row queries and the sidebar Trash list refetch.
 
-The dynamic `crtxt_{slug}` post types already use `show_in_rest`, so `core-data` should be able to discover them lazily. We just have not wired rows through it yet. Mutations still POST directly with `apiFetch`, then ask the hook to refetch.
+The dynamic `crtxt_{slug}` post types already use `show_in_rest`, so `core-data` can probably discover them lazily. We have not wired rows through it yet. Mutations still POST directly with `apiFetch`, then ask the hook to refetch.
 
-**Where.** `src/hooks/useCollectionRows.js`, with side effects in `src/components/CollectionDataViews.js` (`saveRowField`, `onCreated`) and forced client mode in `src/components/relations/RelationEditor.js`.
+**Where.** `src/hooks/useCollectionRows.js`, `src/hooks/rowInvalidation.js`, `src/hooks/documentTrashInvalidation.js`, and `src/hooks/useTrashedDocuments.js`, with call sites in `src/components/CollectionDataViews.js` (`saveRowField`, `onCreated`, row trash), `src/components/SidebarTrash.js`, `src/router/EntityRoute.js`, and forced client mode in `src/components/relations/RelationEditor.js`.
 
 **Solution.** Switch to `useEntityRecords('postType', \`crtxt_${slug}\`, query)` plus `saveEntityRecord` for writes once the remaining query shapes can be expressed there. `core-data` would then own caching, race protection, and post-mutation invalidation. Knock-on workarounds it deletes:
 
-- The `refresh()` handle exists only because rows aren't reactive.
+- The `refresh()` handles and invalidation events exist only because rows aren't reactive.
 - Half of `RowMutationContext` (also driven by #1) exists because cells can't reach a `core-data` store that isn't there.
 - `onCreated` runs optimistic `lastPage = ceil((totalItems+1)/perPage)` arithmetic against possibly stale `paginationInfo`. With reactive pagination we'd watch `totalPages` in an effect.
 - The server/client planner becomes normal resolver queries instead of a local fetch policy.
 
 Worth a small spike before committing; `core-data`'s schema cache for rarely-changing post types is the only real risk.
+
+That does not mean every document-shaped query belongs in `core-data`. Single records and mutations should use the entity store when WordPress can model them. Cross-type product views, like Trash, can stay behind `/cortext/v1/documents/*` endpoints.
 
 ## 3. Sorting support is split between REST and client mode `[internal]`
 
@@ -217,11 +219,11 @@ The create-field flow also has to reveal the new trailing column itself. It carr
 
 ## 23. Embedded data-view block has no width/height controls `[internal]`
 
-**What.** The `cortext/data-view` block exposes `align` (default / wide / full) for width but nothing for height. A freshly inserted block needs a usable viewport and long tables need to stay bounded inside the page, so we set `height` from `var(--cortext-data-view-block-min-height, 640px)` and let DataViews scroll internally. The number is a guess: roughly fits a header, ~10 compact rows, footer, and pagination. It doesn't track the block's density or `perPage`, so a comfortable block with `perPage: 25` shows the same default viewport as a compact block with 5 rows.
+**What.** The `cortext/data-view` block exposes `align` (default / wide / full) for width but nothing for height. For now the block sizes to its content: short tables fit their rows, long tables grow with the page, and empty blocks fall back to DataViews' no-results state. That default is easy to understand, but authors still can't say "show 10 rows and scroll the rest." A long table stretches the document.
 
-**Where.** `--cortext-data-view-block-min-height` in `src/styles/_tokens.scss`, the `.wp-block-cortext-data-view .cortext-data-view` rule in `src/index.scss`, `src/blocks/data-view/block.json` (no `height` attribute today).
+**Where.** `src/blocks/data-view/block.json` (no `height` attribute today). The block-mode size rule lives in `src/index.scss` next to the `.wp-block-cortext-data-view .cortext-data-view > .dataviews-wrapper` override.
 
-**Solution.** Add a `height` (or "rows visible") attribute to the block with an inspector control, fall back to the variable when unset, and let the variable stay as a theme-overridable default. Computing the default from `density × perPage` is a smaller win; once the per-block control exists, the default rarely matters.
+**Solution.** Add a `height` (or "rows visible") attribute to the block with an inspector control, and clamp the shell to that value when set. A density-aware default would help, but the per-block control is the part that matters.
 
 ## 24. Workspace notices filtered by id prefix `[upstream, soft]`
 
@@ -421,7 +423,17 @@ The user-facing placeholder is still Core's generic "Search commands and setting
 
 **Solution.** WordPress Popover could expose fallback placements, or pass enough Floating UI middleware through for consumers to say "try right, then left, then bottom" without measuring after render. If that lands, Cortext can drop `useSubmenuPlacement` and let the Popover own cascading-menu collision handling.
 
-## 48. Public page layout doesn't use WordPress align classes `[internal]`
+## 48. Cortext document layer is still thin `[internal]`
+
+**What.** Pages and collection rows both opt into `cortext-document`. Trash now lists, restores, and permanently deletes through document routes. The client has not caught up yet: pages still go through the page tree and `core-data`, rows still go through `useCollectionRows`, and recents, favorites, routing, and invalidation still ask "page or row?" in places that should only need "document."
+
+Trash is the clearest example. The endpoint is document-first, but the client still refreshes the page tree, row queries, collection context, and the Trash list through separate calls.
+
+**Where.** `includes/Rest/DocumentTrashController.php`, `src/components/SidebarTrash.js`, `src/components/Sidebar.js`, `src/router/useResolveEntity.js`, `src/router/EntityRoute.js`, `src/hooks/documentTrashInvalidation.js`, `src/hooks/rowInvalidation.js`, and `src/hooks/useTrashedDocuments.js`.
+
+**Solution.** Add a small document layer for document kind/context, paths, invalidation, and cross-type lists. Individual records can still use `core-data` where WordPress supports it. Cross-type views can stay as `/cortext/v1/documents/*` endpoints. Pages and rows do not need to disappear as concepts; shared document features just should not rebuild the same branching every time.
+
+## 49. Public page layout doesn't use WordPress align classes `[internal]`
 
 **What.** The public template constrains non-block content to 650 px via a blanket `max-width` on `.cortext-public-page__body > :not(.wp-block-cortext-data-view)`. The data-view block breaks out of that constraint by virtue of the exclusion. This is fragile — it doesn't honor `alignwide`, `alignfull`, or any other block alignment, and will break for other wide blocks. The proper fix is to adopt WordPress's `align*` layout classes and `theme.json` content/wide widths so blocks opt into breakout with standard markup rather than CSS exclusions.
 
@@ -429,7 +441,7 @@ The user-facing placeholder is still Core's generic "Search commands and setting
 
 **Solution.** Use `wp_get_layout_style` or emit the `is-layout-constrained` class with `contentSize` / `wideSize` on the body wrapper, then add `alignwide` or `alignfull` to the data-view block's wrapper attributes in `DataView.php`. Remove the exclusion hack.
 
-## 49. DataView block shares a frontend bundle with page chrome `[internal]`
+## 50. DataView block shares a frontend bundle with page chrome `[internal]`
 
 **What.** The `cortext-frontend` script and style handle serves double duty: it hydrates the DataView block (React, DataViews, field renderers) and provides general page chrome (body font, content column, title styles). Both `Assets.php` and the render callback in `DataView.php` enqueue the same handle, creating a registration race where the first caller's dependency list wins and the second is silently ignored. The DataView block should provision its own script and style (e.g. `cortext-data-view-view`) via `viewScript`/`viewStyle` in `block.json` or its own dedicated handles in the render callback, so its dependencies (`wp-components`, `wp-api-fetch`, etc.) are self-contained. `cortext-frontend`, if it makes sense to exist, should only cover general concerns: page chrome, light/dark mode toggle, etc.
 

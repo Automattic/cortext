@@ -14,9 +14,12 @@ declare( strict_types=1 );
 
 namespace Cortext\Rest;
 
+use Cortext\PostType\Collection;
+use Cortext\PostType\CollectionEntries;
 use Cortext\PostType\Page;
 use Cortext\PostType\PageTrashCascade;
 use WP_Error;
+use WP_Post;
 use WP_REST_Request;
 use WP_REST_Response;
 
@@ -34,6 +37,18 @@ final class DocumentTrashController {
 				'type'     => 'integer',
 				'required' => true,
 			),
+		);
+
+		register_rest_route(
+			self::NAMESPACE,
+			'/documents/trash',
+			array(
+				array(
+					'methods'             => 'GET',
+					'callback'            => array( $this, 'get_trashed_documents' ),
+					'permission_callback' => array( $this, 'can_read_documents' ),
+				),
+			)
 		);
 
 		register_rest_route(
@@ -60,6 +75,70 @@ final class DocumentTrashController {
 					'args'                => $id_arg,
 				),
 			)
+		);
+	}
+
+	public function can_read_documents(): bool {
+		return current_user_can( 'edit_posts' );
+	}
+
+	/**
+	 * Lists trashed Cortext documents the current user can edit.
+	 *
+	 * @return WP_REST_Response
+	 */
+	public function get_trashed_documents(): WP_REST_Response {
+		$documents  = array();
+		$post_types = array_values(
+			array_filter(
+				get_post_types(),
+				static fn( string $post_type ): bool => post_type_supports( $post_type, 'cortext-document' )
+			)
+		);
+
+		foreach ( $post_types as $post_type ) {
+			$posts = get_posts(
+				array(
+					'post_type'      => $post_type,
+					'post_status'    => 'trash',
+					'posts_per_page' => -1,
+					'orderby'        => 'modified',
+					'order'          => 'DESC',
+				)
+			);
+
+			if ( empty( $posts ) ) {
+				continue;
+			}
+
+			$collection = $this->find_collection_by_row_post_type( $post_type );
+
+			foreach ( $posts as $post ) {
+				if ( ! $post instanceof WP_Post || ! current_user_can( 'edit_post', $post->ID ) ) {
+					continue;
+				}
+
+				$document = $this->format_trashed_document( $post, $collection );
+				if ( null !== $document ) {
+					$documents[] = $document;
+				}
+			}
+		}
+
+		usort(
+			$documents,
+			static fn( array $a, array $b ): int => strcmp(
+				(string) ( $b['modified_at'] ?? '' ),
+				(string) ( $a['modified_at'] ?? '' )
+			)
+		);
+
+		return new WP_REST_Response(
+			array(
+				'documents' => $documents,
+				'total'     => count( $documents ),
+			),
+			200
 		);
 	}
 
@@ -161,6 +240,90 @@ final class DocumentTrashController {
 		$rest_request->set_param( 'context', 'edit' );
 		$response = rest_do_request( $rest_request );
 		return $response->is_error() ? null : $response->get_data();
+	}
+
+	/**
+	 * Formats one trashed document for the sidebar Trash response.
+	 *
+	 * @param WP_Post  $post Trashed document post.
+	 * @param ?WP_Post $collection Collection post for row documents, when available.
+	 * @return array<string,mixed>|null
+	 */
+	private function format_trashed_document( WP_Post $post, ?WP_Post $collection ): ?array {
+		if ( ! post_type_supports( $post->post_type, 'cortext-document' ) ) {
+			return null;
+		}
+
+		$kind = Page::POST_TYPE === $post->post_type
+			? 'page'
+			: ( $collection instanceof WP_Post ? 'row' : 'document' );
+
+		$document = array(
+			'id'          => (int) $post->ID,
+			'type'        => $post->post_type,
+			'kind'        => $kind,
+			'slug'        => $post->post_name,
+			'status'      => $post->post_status,
+			'parent'      => (int) $post->post_parent,
+			'menu_order'  => (int) $post->menu_order,
+			'title'       => array(
+				'raw'      => $post->post_title,
+				'rendered' => $post->post_title,
+			),
+			'modified_at' => $this->format_gmt_date( $post->post_modified_gmt ),
+			'meta'        => array(
+				'cortext_document_icon'    => (string) get_post_meta( $post->ID, 'cortext_document_icon', true ),
+				PageTrashCascade::META_KEY => (int) get_post_meta( $post->ID, PageTrashCascade::META_KEY, true ),
+			),
+		);
+
+		if ( $collection instanceof WP_Post ) {
+			$slug                   = substr( $post->post_type, strlen( CollectionEntries::CPT_PREFIX ) );
+			$document['collection'] = array(
+				'id'    => (int) $collection->ID,
+				'slug'  => $slug,
+				'title' => array(
+					'raw'      => $collection->post_title,
+					'rendered' => $collection->post_title,
+				),
+			);
+		}
+
+		return $document;
+	}
+
+	private function find_collection_by_row_post_type( string $post_type ): ?WP_Post {
+		if (
+			! str_starts_with( $post_type, CollectionEntries::CPT_PREFIX ) ||
+			Collection::POST_TYPE === $post_type
+		) {
+			return null;
+		}
+
+		$slug = substr( $post_type, strlen( CollectionEntries::CPT_PREFIX ) );
+		if ( '' === $slug ) {
+			return null;
+		}
+
+		$collections = get_posts(
+			array(
+				'post_type'      => Collection::POST_TYPE,
+				'post_status'    => array( 'draft', 'private', 'publish' ),
+				'posts_per_page' => 1,
+				'meta_key'       => 'slug', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				'meta_value'     => $slug,  // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			)
+		);
+
+		return $collections[0] ?? null;
+	}
+
+	private function format_gmt_date( string $mysql_gmt ): string {
+		$timestamp = strtotime( $mysql_gmt . ' UTC' );
+		if ( false === $timestamp ) {
+			return '';
+		}
+		return gmdate( 'c', $timestamp );
 	}
 
 	public function permanent_delete( WP_REST_Request $request ) {
