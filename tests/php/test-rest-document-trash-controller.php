@@ -14,13 +14,13 @@ use Cortext\PostType\Collection;
 use Cortext\PostType\PageTrashCascade;
 use Cortext\Rest\DocumentTrashController;
 use WorDBless\BaseTestCase;
-use WorDBless\Posts as WorDBlessPosts;
-use WP_Post;
 use WP_Query;
 use WP_REST_Request;
 use WP_REST_Server;
 
 final class Test_Rest_Document_Trash_Controller extends BaseTestCase {
+
+	use InMemoryPostsQuery;
 
 	public function set_up(): void {
 		parent::set_up();
@@ -32,10 +32,7 @@ final class Test_Rest_Document_Trash_Controller extends BaseTestCase {
 		remove_all_actions( 'untrashed_post' );
 		remove_all_filters( 'wp_untrash_post_status' );
 
-		// Same WorDBless workaround the cascade tests use: the wpdb mock
-		// returns empty for non-PK queries, so the controller's marker
-		// lookup needs an in-memory shim.
-		add_filter( 'posts_pre_query', array( $this, 'serve_posts_from_memory' ), 10, 2 );
+		$this->install_in_memory_posts_query();
 
 		( new PageTrashCascade() )->register();
 
@@ -45,7 +42,7 @@ final class Test_Rest_Document_Trash_Controller extends BaseTestCase {
 	}
 
 	public function tear_down(): void {
-		remove_filter( 'posts_pre_query', array( $this, 'serve_posts_from_memory' ), 10 );
+		$this->uninstall_in_memory_posts_query();
 		wp_set_current_user( 0 );
 		parent::tear_down();
 	}
@@ -499,85 +496,5 @@ final class Test_Rest_Document_Trash_Controller extends BaseTestCase {
 		$this->assertIsInt( $id );
 		$this->assertGreaterThan( 0, $id );
 		return (int) $id;
-	}
-
-	/**
-	 * Identical to the shim in `test-page-trash-cascade.php`. WorDBless's
-	 * wpdb mock returns empty for any query that isn't a primary-key lookup;
-	 * the controller's subtree walk relies on `meta_key` joins.
-	 *
-	 * Duplicated rather than extracted because two callers don't justify a
-	 * trait yet. Lift into a shared `WorDBlessPostsQueryStub` trait when a
-	 * third test (e.g. PR 3's revisions controller) needs it.
-	 *
-	 * @param mixed    $pre   Existing filter return; passed through unchanged when null.
-	 * @param WP_Query $query The query being short-circuited.
-	 *
-	 * @return mixed
-	 */
-	public function serve_posts_from_memory( $pre, WP_Query $query ) {
-		$vars = $query->query_vars;
-
-		$wants_parent_filter = ! empty( $vars['post_parent'] );
-		$wants_meta_filter   = ! empty( $vars['meta_key'] );
-		$statuses            = (array) ( $vars['post_status'] ?? array() );
-		$wants_trash_query   = in_array( 'trash', $statuses, true );
-		if ( ! $wants_parent_filter && ! $wants_meta_filter && ! $wants_trash_query ) {
-			return $pre;
-		}
-
-		$candidates = $this->all_in_memory_posts();
-
-		if ( ! empty( $vars['post_type'] ) && 'any' !== $vars['post_type'] ) {
-			$types      = (array) $vars['post_type'];
-			$candidates = array_filter(
-				$candidates,
-				static fn( WP_Post $post ): bool => in_array( $post->post_type, $types, true )
-			);
-		}
-
-		if ( $wants_parent_filter ) {
-			$parent     = (int) $vars['post_parent'];
-			$candidates = array_filter(
-				$candidates,
-				static fn( WP_Post $post ): bool => (int) $post->post_parent === $parent
-			);
-		}
-
-		if ( ! empty( $vars['post_status'] ) ) {
-			$candidates = array_filter(
-				$candidates,
-				static fn( WP_Post $post ): bool => in_array( $post->post_status, $statuses, true )
-			);
-		}
-
-		if ( $wants_meta_filter ) {
-			$key        = (string) $vars['meta_key'];
-			$value      = (string) ( $vars['meta_value'] ?? '' );
-			$candidates = array_filter(
-				$candidates,
-				static fn( WP_Post $post ): bool => (string) get_post_meta( (int) $post->ID, $key, true ) === $value
-			);
-		}
-
-		$candidates = array_values( $candidates );
-
-		if ( 'ids' === ( $vars['fields'] ?? '' ) ) {
-			return array_map( static fn( WP_Post $post ): int => (int) $post->ID, $candidates );
-		}
-
-		return $candidates;
-	}
-
-	/**
-	 * @return WP_Post[]
-	 */
-	private function all_in_memory_posts(): array {
-		$store = WorDBlessPosts::init()->posts;
-		$out   = array();
-		foreach ( $store as $row ) {
-			$out[] = new WP_Post( $row );
-		}
-		return $out;
 	}
 }
