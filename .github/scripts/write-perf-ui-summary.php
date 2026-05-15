@@ -95,8 +95,169 @@ function build_output( string $current_path, string $base_path, string $base_lab
 	$base_scenarios = is_array( $base_report['scenarios'] ?? null ) ? $base_report['scenarios'] : array();
 	$has_base       = count( $base_scenarios ) > 0;
 
+	if ( count( $scenarios ) === 0 ) {
+		return "UI performance run had no scenarios.\n";
+	}
+
+	if ( $has_base ) {
+		return render_comparison( $scenarios, $base_scenarios, $scenario_labels, $category_order, $base_label );
+	}
+
+	return render_current_only( $scenarios, $scenario_labels, $category_order );
+}
+
+/**
+ * Renders the full UI performance table when there is no baseline to compare
+ * against (e.g. a push to main).
+ *
+ * @param array<string,mixed> $scenarios       Current scenarios keyed by id.
+ * @param array<string,string> $scenario_labels Label per scenario id.
+ * @param array<string,string> $category_order  Ordered category id => label.
+ */
+function render_current_only( array $scenarios, array $scenario_labels, array $category_order ): string {
+	$grouped = group_scenarios_by_category( $scenarios, $category_order );
+
+	$headers    = array( 'Scenario', 'ready ms', 'rows API ms', 'REST', 'longtask total' );
+	$alignments = array( 'left', 'right', 'right', 'right', 'right' );
+	$rows       = array();
+
+	foreach ( $category_order as $category_id => $category_label ) {
+		if ( empty( $grouped[ $category_id ] ) ) {
+			continue;
+		}
+		$rows[] = array( '**' . $category_label . '**', '', '', '', '' );
+		foreach ( $grouped[ $category_id ] as $name => $data ) {
+			$rows[] = array(
+				$scenario_labels[ $name ] ?? $name,
+				ui_metric_value( $data['ready_ms'] ?? null ),
+				ui_metric_value( $data['rows_api_ms'] ?? null ),
+				ui_metric_value( $data['rest_request_count'] ?? null ),
+				ui_metric_value( $data['long_task_total_ms'] ?? null ),
+			);
+		}
+	}
+
+	$lines = array( '## UI performance', '' );
+	$lines = array_merge( $lines, markdown_table( $headers, $alignments, $rows ) );
+
+	return implode( "\n", $lines ) . "\n";
+}
+
+/**
+ * Renders the comparison view: one-line headline if everything is within noise,
+ * otherwise a compact table that only lists scenarios with notable changes.
+ *
+ * @param array<string,mixed>  $scenarios       Current scenarios.
+ * @param array<string,mixed>  $base_scenarios  Baseline scenarios.
+ * @param array<string,string> $scenario_labels Label per scenario id.
+ * @param array<string,string> $category_order  Ordered category id => label.
+ * @param string               $base_label      Baseline label.
+ */
+function render_comparison( array $scenarios, array $base_scenarios, array $scenario_labels, array $category_order, string $base_label ): string {
+	$grouped = group_scenarios_by_category( $scenarios, $category_order );
+
+	$ui_metrics = array(
+		array(
+			'key'   => 'ready_ms',
+			'label' => 'ready_ms',
+			'type'  => 'timing',
+		),
+		array(
+			'key'   => 'rows_api_ms',
+			'label' => 'rows_api_ms',
+			'type'  => 'timing',
+		),
+		array(
+			'key'   => 'long_task_total_ms',
+			'label' => 'longtask',
+			'type'  => 'timing',
+		),
+		array(
+			'key'   => 'rest_request_count',
+			'label' => 'REST',
+			'type'  => 'integer',
+		),
+	);
+
+	$changed_rows   = array();
+	$within_noise   = 0;
+	$total_compared = 0;
+
+	foreach ( $category_order as $category_id => $category_label ) {
+		if ( empty( $grouped[ $category_id ] ) ) {
+			continue;
+		}
+		foreach ( $grouped[ $category_id ] as $name => $data ) {
+			$base = is_array( $base_scenarios[ $name ] ?? null ) ? $base_scenarios[ $name ] : null;
+			if ( null === $base ) {
+				continue;
+			}
+
+			++$total_compared;
+			$buckets = ui_scenario_change_buckets( $data, $base, $ui_metrics );
+
+			if ( ! $buckets['has_changes'] ) {
+				++$within_noise;
+				continue;
+			}
+
+			$changed_rows[] = array(
+				$scenario_labels[ $name ] ?? $name,
+				$category_label,
+				format_ui_change_cell( $buckets['timing'] ),
+				format_ui_change_cell( $buckets['deterministic'] ),
+			);
+		}
+	}
+
+	$title = '## UI performance vs ' . $base_label;
+
+	if ( 0 === $total_compared ) {
+		return $title . "\n\nNo shared UI scenarios to compare.\n";
+	}
+
+	if ( count( $changed_rows ) === 0 ) {
+		return $title . "\n\nAll " . $total_compared . ' UI ' . ( 1 === $total_compared ? 'scenario' : 'scenarios' ) . " within noise.\n";
+	}
+
+	$changed  = count( $changed_rows );
+	$headline = $changed . ' of ' . $total_compared . ' UI ' . ( 1 === $total_compared ? 'scenario' : 'scenarios' ) . ' changed';
+	if ( $within_noise > 0 ) {
+		$headline .= '; ' . $within_noise . ' within noise';
+	}
+
+	$lines   = array( $title, '', $headline . '.', '' );
+	$lines[] = '<details>';
+	$lines[] = '<summary>Show changes</summary>';
+	$lines[] = '';
+
+	foreach ( markdown_table( array( 'Scenario', 'Category', 'Timing', 'Deterministic' ), array( 'left', 'left', 'left', 'left' ), $changed_rows ) as $line ) {
+		$lines[] = $line;
+	}
+
+	$lines[] = '';
+	$lines[] = '</details>';
+	$lines[] = '';
+	$lines[] = '_UI timing deltas count past 15%. REST request counts are deterministic; any non-zero delta is counted._';
+
+	return implode( "\n", $lines ) . "\n";
+}
+
+/**
+ * Groups scenarios into the configured category order, with an `_uncategorized`
+ * bucket appended on the fly when needed.
+ *
+ * @param array<string,mixed>   $scenarios      Scenarios keyed by id.
+ * @param array<string,string> &$category_order Ordered category id => label.
+ *                                              Mutated to add `_uncategorized`
+ *                                              when scenarios fall outside the
+ *                                              known categories.
+ * @return array<string,array<string,mixed>>
+ */
+function group_scenarios_by_category( array $scenarios, array &$category_order ): array {
 	$grouped = array_fill_keys( array_keys( $category_order ), array() );
 	$unknown = array();
+
 	foreach ( $scenarios as $name => $data ) {
 		if ( ! is_array( $data ) ) {
 			continue;
@@ -108,41 +269,98 @@ function build_output( string $current_path, string $base_path, string $base_lab
 			$unknown[ $name ] = $data;
 		}
 	}
+
 	if ( count( $unknown ) > 0 ) {
 		$grouped['_uncategorized']        = $unknown;
 		$category_order['_uncategorized'] = 'Uncategorized';
 	}
 
-	$headers    = array( 'Scenario', 'ready ms', 'rows API ms', 'REST', 'longtask total' );
-	$alignments = array( 'left', 'right', 'right', 'right', 'right' );
-	$rows       = array();
-	foreach ( $category_order as $category_id => $category_label ) {
-		if ( empty( $grouped[ $category_id ] ) ) {
+	return $grouped;
+}
+
+/**
+ * Buckets notable metric changes for one UI scenario.
+ *
+ * @param array<string,mixed>                                  $current Current scenario.
+ * @param array<string,mixed>                                  $base    Base scenario.
+ * @param array<int,array{key:string,label:string,type:string}> $metrics Metrics to compare.
+ * @return array{has_changes:bool,timing:array<int,string>,deterministic:array<int,string>}
+ */
+function ui_scenario_change_buckets( array $current, array $base, array $metrics ): array {
+	$timing        = array();
+	$deterministic = array();
+
+	foreach ( $metrics as $metric ) {
+		$current_value = $current[ $metric['key'] ] ?? null;
+		$base_value    = $base[ $metric['key'] ] ?? null;
+		$change        = ui_metric_change_text( $current_value, $base_value, $metric );
+
+		if ( null === $change ) {
 			continue;
 		}
-		$rows[] = array( '**' . $category_label . '**', '', '', '', '' );
-		foreach ( $grouped[ $category_id ] as $name => $data ) {
-			$label         = $scenario_labels[ $name ] ?? $name;
-			$base_scenario = is_array( $base_scenarios[ $name ] ?? null ) ? $base_scenarios[ $name ] : array();
-			$rows[]        = array(
-				$label,
-				ui_metric_value( $data['ready_ms'] ?? null, $base_scenario['ready_ms'] ?? null, $has_base ),
-				ui_metric_value( $data['rows_api_ms'] ?? null, $base_scenario['rows_api_ms'] ?? null, $has_base ),
-				ui_metric_value( $data['rest_request_count'] ?? null, $base_scenario['rest_request_count'] ?? null, $has_base ),
-				ui_metric_value( $data['long_task_total_ms'] ?? null, $base_scenario['long_task_total_ms'] ?? null, $has_base ),
-			);
+
+		if ( 'timing' === $metric['type'] ) {
+			$timing[] = $change;
+		} else {
+			$deterministic[] = $change;
 		}
 	}
 
-	if ( count( $rows ) === 0 ) {
-		return "UI performance run had no scenarios.\n";
+	return array(
+		'has_changes'   => count( $timing ) > 0 || count( $deterministic ) > 0,
+		'timing'        => $timing,
+		'deterministic' => $deterministic,
+	);
+}
+
+/**
+ * Returns the formatted change text for one UI metric, or null if the change
+ * sits within the noise floor (or either value is missing).
+ *
+ * @param mixed                                  $current Current value.
+ * @param mixed                                  $base    Base value.
+ * @param array{key:string,label:string,type:string} $metric Metric definition.
+ */
+function ui_metric_change_text( mixed $current, mixed $base, array $metric ): ?string {
+	if ( ! is_numeric( $current ) || ! is_numeric( $base ) ) {
+		return null;
 	}
 
-	$title = $has_base ? '## UI performance vs ' . $base_label : '## UI performance';
-	$lines = array( $title, '' );
-	$lines = array_merge( $lines, markdown_table( $headers, $alignments, $rows ) );
+	$current_value = (int) round( (float) $current );
+	$base_value    = (int) round( (float) $base );
+	$delta         = $current_value - $base_value;
 
-	return implode( "\n", $lines ) . "\n";
+	if ( 0 === $delta ) {
+		return null;
+	}
+
+	if ( 'integer' === $metric['type'] ) {
+		return $metric['label'] . ' ' . signed_number( (float) $delta, 0 );
+	}
+
+	if ( 0 === $base_value ) {
+		return $metric['label'] . ' ' . signed_number( (float) $delta, 0 ) . ' ms';
+	}
+
+	$percent = ( $delta / $base_value ) * 100.0;
+	if ( abs( $percent ) < 15.0 ) {
+		return null;
+	}
+
+	return $metric['label'] . ' ' . signed_number( $percent, 1 ) . '%';
+}
+
+/**
+ * Renders a list of change strings as a single table cell.
+ *
+ * @param array<int,string> $changes Change strings.
+ */
+function format_ui_change_cell( array $changes ): string {
+	if ( count( $changes ) === 0 ) {
+		return '-';
+	}
+
+	return implode( ', ', $changes );
 }
 
 /**
@@ -183,30 +401,12 @@ function load_report( string $path, string $label ): array {
 	);
 }
 
-function ui_metric_value( mixed $current, mixed $base, bool $include_delta ): string {
+function ui_metric_value( mixed $current ): string {
 	if ( ! is_numeric( $current ) ) {
 		return 'n/a';
 	}
 
-	$current_value = (int) round( (float) $current );
-	if ( ! $include_delta || ! is_numeric( $base ) ) {
-		return (string) $current_value;
-	}
-
-	return $current_value . ' (Δ ' . delta_value( $current_value, (float) $base ) . ')';
-}
-
-function delta_value( int $current, float $base ): string {
-	$base_value = (int) round( $base );
-	$delta      = $current - $base_value;
-	$percent    = 0 !== $base_value ? $delta / $base_value * 100 : null;
-	$delta_text = signed_number( $delta, 0 );
-
-	if ( null === $percent ) {
-		return $delta_text;
-	}
-
-	return $delta_text . ', ' . signed_number( $percent, 1 ) . '%';
+	return (string) (int) round( (float) $current );
 }
 
 function signed_number( float $value, int $decimals ): string {
