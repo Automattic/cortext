@@ -293,9 +293,6 @@ function comparison_lines( array $current, string $base_path, string $base_label
 		$rows[] = array(
 			escape_cell( $scenario['label'] ?? $scenario_id ),
 			scenario_takeaway( $scenario_summary ),
-			(string) $scenario_summary['better'],
-			(string) $scenario_summary['worse'],
-			(string) $scenario_summary['same'],
 			notable_changes_text( $scenario_summary ),
 		);
 	}
@@ -313,8 +310,8 @@ function comparison_lines( array $current, string $base_path, string $base_label
 
 	foreach (
 		markdown_table(
-			array( 'Scenario', 'Takeaway', 'Better', 'Worse', 'Stable', 'Notable changes' ),
-			array( 'left', 'left', 'right', 'right', 'right', 'left' ),
+			array( 'Scenario', 'Result', 'Notable changes' ),
+			array( 'left', 'left', 'left' ),
 			$rows
 		) as $table_line
 	) {
