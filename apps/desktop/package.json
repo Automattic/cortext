@@ -1,0 +1,15 @@
+{
+	"name": "cortext-desktop",
+	"version": "0.0.1",
+	"description": "Cortext desktop app, Electron shell hosting the Cortext plugin via WordPress Playground.",
+	"private": true,
+	"license": "GPL-2.0-or-later",
+	"main": "main.js",
+	"scripts": {
+		"start": "electron .",
+		"snapshot": "node scripts/build-snapshot.mjs"
+	},
+	"devDependencies": {
+		"electron": "^33.2.0"
+	}
+}

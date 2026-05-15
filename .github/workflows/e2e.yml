@@ -10,9 +10,48 @@ concurrency:
     cancel-in-progress: true
 
 jobs:
+    changes:
+        name: Detect changed paths
+        runs-on: ubuntu-latest
+        outputs:
+            e2e_changed: ${{ steps.changed_paths.outputs.e2e_changed }}
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - id: changed_paths
+              shell: bash
+              run: |
+                  set -euo pipefail
+
+                  if [ "${{ github.event_name }}" = "pull_request" ]; then
+                    base="${{ github.event.pull_request.base.sha }}"
+                    head="${{ github.event.pull_request.head.sha }}"
+                  else
+                    base="${{ github.event.before }}"
+                    head="${{ github.sha }}"
+                  fi
+
+                  if [ "$base" = "0000000000000000000000000000000000000000" ]; then
+                    changed_files="$(git diff-tree --no-commit-id --name-only -r "$head")"
+                  else
+                    changed_files="$(git diff --name-only "$base" "$head")"
+                  fi
+
+                  e2e_paths='^(\.github/workflows/e2e\.yml|composer\.(json|lock)|package\.json|pnpm-lock\.yaml|playwright\.config\.js|\.wp-env\.json|cortext\.php|includes/|templates/|src/|build/|tests/e2e/|seed-assets/|scripts/wp-env-seed\.mjs)'
+
+                  if [ -n "$changed_files" ] && grep -Eq "$e2e_paths" <<< "$changed_files"; then
+                    echo "e2e_changed=true" >> "$GITHUB_OUTPUT"
+                  else
+                    echo "e2e_changed=false" >> "$GITHUB_OUTPUT"
+                  fi
+
     playwright:
         name: Playwright
         runs-on: ubuntu-latest
+        needs: changes
+        if: needs.changes.outputs.e2e_changed == 'true'
         timeout-minutes: 20
         steps:
             - uses: actions/checkout@v4
