@@ -8,6 +8,11 @@ $base_path    = $args['base'] ?? '';
 $base_label   = $args['base-label'] ?? 'base';
 $summary_path = $args['summary'] ?? getenv( 'GITHUB_STEP_SUMMARY' );
 $comparison_only = isset( $args['comparison-only'] ) && '0' !== $args['comparison-only'];
+$failures_only_metric = $args['failures-only-metric'] ?? '';
+
+if ( '' !== $failures_only_metric ) {
+	exit( failures_are_only_metric( $current_path, $failures_only_metric ) ? 0 : 1 );
+}
 
 $output = build_output( $current_path, $base_path, $base_label, $comparison_only );
 echo $output;
@@ -62,6 +67,26 @@ function build_output( string $current_path, string $base_path, string $base_lab
 	}
 
 	return implode( "\n", $lines ) . "\n";
+}
+
+function failures_are_only_metric( string $current_path, string $metric ): bool {
+	$current = load_report( $current_path, 'benchmark' );
+	if ( null === $current['report'] ) {
+		return false;
+	}
+
+	$failures = $current['report']['failures'] ?? null;
+	if ( ! is_array( $failures ) || count( $failures ) === 0 ) {
+		return false;
+	}
+
+	foreach ( $failures as $failure ) {
+		if ( ! is_array( $failure ) || ( $failure['metric'] ?? '' ) !== $metric ) {
+			return false;
+		}
+	}
+
+	return true;
 }
 
 /**

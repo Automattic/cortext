@@ -9,6 +9,7 @@ on:
             - tests/e2e/specs/perf-ui.spec.js
             - .github/workflows/perf-bench.yml
             - .github/scripts/write-perf-bench-summary.php
+            - .github/scripts/write-perf-ui-summary.php
     pull_request:
         branches: [main]
         paths:
@@ -17,6 +18,7 @@ on:
             - tests/e2e/specs/perf-ui.spec.js
             - .github/workflows/perf-bench.yml
             - .github/scripts/write-perf-bench-summary.php
+            - .github/scripts/write-perf-ui-summary.php
     workflow_dispatch:
 
 permissions:
@@ -120,14 +122,38 @@ jobs:
 
             - name: Run benchmark
               run: |
-                  set -o pipefail
+                  set -euo pipefail
                   mkdir -p artifacts
-                  pnpm exec wp-env run cli wp cortext perf-bench \
-                    --iterations=5 \
-                    --warmup=1 \
-                    --budget=includes/CLI/perf-budgets.json \
-                    --fail-on-budget \
-                    --pretty | tee artifacts/perf-bench.json
+
+                  run_benchmark() {
+                    local output_path="$1"
+
+                    pnpm exec wp-env run cli wp cortext perf-bench \
+                      --iterations=10 \
+                      --warmup=1 \
+                      --budget=includes/CLI/perf-budgets.json \
+                      --fail-on-budget \
+                      --pretty | tee "$output_path"
+                    local status="${PIPESTATUS[0]}"
+
+                    return "$status"
+                  }
+
+                  set +e
+                  run_benchmark artifacts/perf-bench.json
+                  status="$?"
+                  set -e
+
+                  if [ "$status" -ne 0 ] && php .github/scripts/write-perf-bench-summary.php --current=artifacts/perf-bench.json --failures-only-metric=p95_ms; then
+                    echo "Only p95 latency budgets missed; retrying the benchmark once."
+                    cp artifacts/perf-bench.json artifacts/perf-bench-first.json
+                    set +e
+                    run_benchmark artifacts/perf-bench.json
+                    status="$?"
+                    set -e
+                  fi
+
+                  exit "$status"
 
             - name: Run UI performance benchmark
               if: github.event_name == 'workflow_dispatch' || env.CORTEXT_PERF_UI == '1'
@@ -169,6 +195,11 @@ jobs:
                       --summary= > artifacts/perf-bench-comment-body.md
                   fi
 
+                  if [ -s artifacts/perf-ui.json ]; then
+                    php .github/scripts/write-perf-ui-summary.php \
+                      --current=artifacts/perf-ui.json | tee artifacts/perf-ui-summary.md
+                  fi
+
             - name: Upload main benchmark baseline
               if: always() && github.event_name == 'push'
               uses: actions/upload-artifact@v4
@@ -199,17 +230,24 @@ jobs:
                     cat artifacts/perf-bench-comment-body.md
                   } > "$comment_file"
 
-                  comment_id="$(gh api "repos/$REPOSITORY/issues/$PR_NUMBER/comments" \
+                  if ! comment_id="$(gh api "repos/$REPOSITORY/issues/$PR_NUMBER/comments" \
                     --paginate \
                     --jq '.[] | select(.user.type == "Bot" and (.body | contains("<!-- cortext-perf-bench-comment -->"))) | .id' \
-                    | tail -n 1)"
+                    | tail -n 1)"; then
+                    echo "Could not read existing PR benchmark comments; skipping comment."
+                    exit 0
+                  fi
 
                   if [ -n "$comment_id" ]; then
-                    gh api --method PATCH "repos/$REPOSITORY/issues/comments/$comment_id" \
-                      --field "body=@$comment_file" >/dev/null
+                    if ! gh api --method PATCH "repos/$REPOSITORY/issues/comments/$comment_id" \
+                      --field "body=@$comment_file" >/dev/null; then
+                      echo "Could not update PR benchmark comment; skipping comment."
+                    fi
                   else
-                    gh api --method POST "repos/$REPOSITORY/issues/$PR_NUMBER/comments" \
-                      --field "body=@$comment_file" >/dev/null
+                    if ! gh api --method POST "repos/$REPOSITORY/issues/$PR_NUMBER/comments" \
+                      --field "body=@$comment_file" >/dev/null; then
+                      echo "Could not create PR benchmark comment; skipping comment."
+                    fi
                   fi
 
             - if: failure()

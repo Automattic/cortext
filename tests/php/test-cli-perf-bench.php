@@ -73,6 +73,89 @@ final class Test_CLI_Perf_Bench extends BaseTestCase {
 		$this->assertSame( 12, $summary['sql_queries_p95'] );
 	}
 
+	public function test_summarize_stepped_samples_exposes_total_and_per_step_metrics(): void {
+		$total_samples = array(
+			array(
+				'latency_ms'   => 12.0,
+				'sql_queries'  => 8,
+				'memory_bytes' => 2000,
+			),
+			array(
+				'latency_ms'   => 18.0,
+				'sql_queries'  => 12,
+				'memory_bytes' => 2400,
+			),
+			array(
+				'latency_ms'   => 15.0,
+				'sql_queries'  => 10,
+				'memory_bytes' => 2200,
+			),
+		);
+
+		$step_samples = array(
+			'resolve' => array(
+				array(
+					'latency_ms'   => 2.0,
+					'sql_queries'  => 1,
+					'memory_bytes' => 500,
+				),
+				array(
+					'latency_ms'   => 3.0,
+					'sql_queries'  => 2,
+					'memory_bytes' => 600,
+				),
+				array(
+					'latency_ms'   => 2.5,
+					'sql_queries'  => 1,
+					'memory_bytes' => 550,
+				),
+			),
+			'hydrate' => array(
+				array(
+					'latency_ms'   => 10.0,
+					'sql_queries'  => 7,
+					'memory_bytes' => 2000,
+				),
+				array(
+					'latency_ms'   => 15.0,
+					'sql_queries'  => 10,
+					'memory_bytes' => 2400,
+				),
+				array(
+					'latency_ms'   => 12.5,
+					'sql_queries'  => 9,
+					'memory_bytes' => 2200,
+				),
+			),
+		);
+
+		$summary = PerfBench::summarize_stepped_samples( 'Open a row detail', $total_samples, $step_samples );
+
+		$this->assertSame( 'Open a row detail', $summary['label'] );
+		$this->assertSame(
+			array(
+				'label',
+				'runs',
+				'p50_ms',
+				'p95_ms',
+				'sql_queries_p50',
+				'sql_queries_p95',
+				'memory_bytes_p50',
+				'memory_bytes_p95',
+				'total_p50_ms',
+				'total_p95_ms',
+				'resolve_p50_ms',
+				'resolve_p95_ms',
+				'hydrate_p50_ms',
+				'hydrate_p95_ms',
+			),
+			array_keys( $summary )
+		);
+		$this->assertSame( $summary['p50_ms'], $summary['total_p50_ms'] );
+		$this->assertSame( $summary['p95_ms'], $summary['total_p95_ms'] );
+		$this->assertGreaterThan( $summary['resolve_p50_ms'], $summary['hydrate_p50_ms'] );
+	}
+
 	public function test_apply_budgets_marks_failures(): void {
 		$result = PerfBench::apply_budgets(
 			array(
