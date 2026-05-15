@@ -394,7 +394,10 @@ test.describe( 'Collection view block', () => {
 		}
 	} );
 
-	for ( const layout of [ 'table', 'list', 'grid' ] ) {
+	// Grid layout doesn't expose row reorder yet (card-to-card drops need a
+	// 2D model); the JS unit test "does not mount row reorder for grid
+	// layout yet" guards the behaviour, so e2e covers table and list only.
+	for ( const layout of [ 'table', 'list' ] ) {
 		test( `manually reorders rows in ${ layout } layout`, async ( {
 			admin,
 			page,
@@ -453,7 +456,7 @@ test.describe( 'Collection view block', () => {
 				await dragRenderedRow( page, canvas, 2, 0, 'before', layout );
 				await expect(
 					page.getByText(
-						'This will clear the current sort and keep rows where you drop them.'
+						'Rows will stay where you dropped them, and the current sort will be cleared.'
 					)
 				).toBeVisible();
 				await page
@@ -461,7 +464,7 @@ test.describe( 'Collection view block', () => {
 					.click();
 				await expect(
 					page.getByText(
-						'This will clear the current sort and keep rows where you drop them.'
+						'Rows will stay where you dropped them, and the current sort will be cleared.'
 					)
 				).not.toBeVisible();
 				await expect
@@ -571,7 +574,7 @@ test.describe( 'Collection view block', () => {
 					);
 					await expect(
 						page.getByText(
-							'This will clear the current sort and keep rows where you drop them.'
+							'Rows will stay where you dropped them, and the current sort will be cleared.'
 						)
 					).toBeVisible();
 					await page
@@ -579,7 +582,7 @@ test.describe( 'Collection view block', () => {
 						.click();
 					await expect(
 						page.getByText(
-							'This will clear the current sort and keep rows where you drop them.'
+							'Rows will stay where you dropped them, and the current sort will be cleared.'
 						)
 					).not.toBeVisible();
 					await expect
