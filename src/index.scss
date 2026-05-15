@@ -4208,7 +4208,9 @@ body.cortext-row-detail-sidebar-resizing {
 	z-index: auto;
 }
 
+.block-editor-block-list__layout
 .block-editor-block-list__block[data-type="cortext/data-view"].is-selected::after,
+.block-editor-block-list__layout
 .block-editor-block-list__block[data-type="cortext/data-view"]:focus::after {
 	z-index: 10;
 }
