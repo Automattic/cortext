@@ -33,7 +33,7 @@ final class Assets {
 		wp_enqueue_style(
 			'cortext-frontend',
 			CORTEXT_URL . 'build/frontend.css',
-			array( 'wp-block-library' ),
+			array( 'wp-block-library', 'wp-components' ),
 			$version
 		);
 	}

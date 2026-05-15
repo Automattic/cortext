@@ -1,0 +1,121 @@
+/**
+ * Read-only field mapping for the public frontend.
+ *
+ * Takes the lightweight field definitions from the REST response
+ * ({ id, label, type, options }) and produces DataViews field specs
+ * with read-only renderers. No EditableCell, no editor dependencies.
+ */
+
+import { __ } from '@wordpress/i18n';
+
+import { elementsFromOptions } from './fieldMapping';
+import { formatDisplay } from '../utils/formatDisplay';
+
+const TITLE_FIELD = {
+	id: 'title',
+	label: __( 'Title', 'cortext' ),
+	type: 'text',
+	enableGlobalSearch: true,
+	enableHiding: false,
+	getValue: ( { item } ) => item?.title?.rendered ?? '',
+	render: ( { item } ) => item?.title?.rendered ?? '',
+};
+
+const SYSTEM_FIELDS = [
+	{
+		id: 'created_at',
+		label: __( 'Created', 'cortext' ),
+		type: 'datetime',
+		enableGlobalSearch: false,
+		enableSorting: true,
+		getValue: ( { item } ) => item?.created_at ?? '',
+		render: ( { item } ) => {
+			const value = item?.created_at;
+			if ( ! value ) {
+				return '';
+			}
+			const date = new Date( value );
+			return Number.isNaN( date.getTime() )
+				? ''
+				: date.toLocaleDateString();
+		},
+	},
+	{
+		id: 'modified_at',
+		label: __( 'Modified', 'cortext' ),
+		type: 'datetime',
+		enableGlobalSearch: false,
+		enableSorting: true,
+		getValue: ( { item } ) => item?.modified_at ?? '',
+		render: ( { item } ) => {
+			const value = item?.modified_at;
+			if ( ! value ) {
+				return '';
+			}
+			const date = new Date( value );
+			return Number.isNaN( date.getTime() )
+				? ''
+				: date.toLocaleDateString();
+		},
+	},
+];
+
+/**
+ * Builds a DataViews-compatible field spec from a REST field definition.
+ *
+ * @param {Object}      fieldDef         Field definition from the REST response.
+ * @param {number}      fieldDef.id
+ * @param {string}      fieldDef.label
+ * @param {string}      fieldDef.type
+ * @param {string|null} fieldDef.options JSON-encoded options string.
+ * @return {Object} DataViews field spec.
+ */
+function mapPublicField( fieldDef ) {
+	const id = `field-${ fieldDef.id }`;
+	const { label, type } = fieldDef;
+	const elements = elementsFromOptions( fieldDef.options );
+
+	const base = {
+		id,
+		label,
+		getValue: ( { item } ) => item?.meta?.[ id ] ?? null,
+		render: ( { item } ) =>
+			formatDisplay( item?.meta?.[ id ] ?? null, type, elements ),
+	};
+
+	switch ( type ) {
+		case 'number':
+			return { ...base, type: 'text' };
+		case 'email':
+			return { ...base, type: 'email' };
+		case 'url':
+			return { ...base, type: 'text' };
+		case 'select':
+			return { ...base, type: 'text', elements };
+		case 'multiselect':
+			return { ...base, type: 'array', elements };
+		case 'date':
+		case 'datetime':
+			return { ...base, type: 'datetime' };
+		case 'checkbox':
+			return { ...base, type: 'boolean' };
+		case 'text':
+		default:
+			return { ...base, type: 'text' };
+	}
+}
+
+/**
+ * Builds the full field list for a public DataViews instance.
+ *
+ * Returns every available field — DataViews uses `view.fields` to
+ * control which columns are visible. Pre-filtering here would cause
+ * hidden fields to disappear from the field-visibility settings.
+ *
+ * @param {Array} fieldDefs Field definitions from the REST response.
+ * @return {Object[]} DataViews field specs.
+ */
+export function buildPublicFields( fieldDefs ) {
+	const customFields = fieldDefs.map( mapPublicField );
+	return [ TITLE_FIELD, ...customFields, ...SYSTEM_FIELDS ];
+}
