@@ -246,7 +246,14 @@ final class Documents {
 		return $document;
 	}
 
-	private function kind_for_post_type( string $post_type ): ?string {
+	/**
+	 * Maps a post type to its document kind, or null when the post type is
+	 * not a Cortext document. Public so other surfaces (trash, breadcrumbs)
+	 * can branch on the same classification.
+	 *
+	 * @param string $post_type Post type slug.
+	 */
+	public function kind_for_post_type( string $post_type ): ?string {
 		if ( Page::POST_TYPE === $post_type ) {
 			return self::KIND_PAGE;
 		}
@@ -260,11 +267,12 @@ final class Documents {
 
 	/**
 	 * Locates the collection post that owns a given row CPT by matching the
-	 * post type suffix to the collection's `slug` meta.
+	 * post type suffix to the collection's `slug` meta. Public so callers that
+	 * already have a row in hand do not re-derive the same lookup.
 	 *
 	 * @param string $post_type Row CPT slug, e.g. `crtxt_projects`.
 	 */
-	private function find_collection_by_row_post_type( string $post_type ): ?WP_Post {
+	public function find_collection_by_row_post_type( string $post_type ): ?WP_Post {
 		if (
 			! str_starts_with( $post_type, CollectionEntries::CPT_PREFIX ) ||
 			Collection::POST_TYPE === $post_type

@@ -14,7 +14,7 @@ declare( strict_types=1 );
 
 namespace Cortext\Rest;
 
-use Cortext\PostType\Collection;
+use Cortext\Documents;
 use Cortext\PostType\CollectionEntries;
 use Cortext\PostType\Page;
 use Cortext\PostType\PageTrashCascade;
@@ -26,6 +26,12 @@ use WP_REST_Response;
 final class DocumentTrashController {
 
 	private const NAMESPACE = 'cortext/v1';
+
+	private Documents $documents;
+
+	public function __construct( ?Documents $documents = null ) {
+		$this->documents = $documents ?? new Documents();
+	}
 
 	public function register(): void {
 		add_action( 'rest_api_init', array( $this, 'register_routes' ) );
@@ -88,15 +94,9 @@ final class DocumentTrashController {
 	 * @return WP_REST_Response
 	 */
 	public function get_trashed_documents(): WP_REST_Response {
-		$documents  = array();
-		$post_types = array_values(
-			array_filter(
-				get_post_types(),
-				static fn( string $post_type ): bool => post_type_supports( $post_type, 'cortext-document' )
-			)
-		);
+		$documents = array();
 
-		foreach ( $post_types as $post_type ) {
+		foreach ( $this->documents->get_document_post_types() as $post_type ) {
 			$posts = get_posts(
 				array(
 					'post_type'      => $post_type,
@@ -111,7 +111,7 @@ final class DocumentTrashController {
 				continue;
 			}
 
-			$collection = $this->find_collection_by_row_post_type( $post_type );
+			$collection = $this->documents->find_collection_by_row_post_type( $post_type );
 
 			foreach ( $posts as $post ) {
 				if ( ! $post instanceof WP_Post || ! current_user_can( 'edit_post', $post->ID ) ) {
@@ -290,32 +290,6 @@ final class DocumentTrashController {
 		}
 
 		return $document;
-	}
-
-	private function find_collection_by_row_post_type( string $post_type ): ?WP_Post {
-		if (
-			! str_starts_with( $post_type, CollectionEntries::CPT_PREFIX ) ||
-			Collection::POST_TYPE === $post_type
-		) {
-			return null;
-		}
-
-		$slug = substr( $post_type, strlen( CollectionEntries::CPT_PREFIX ) );
-		if ( '' === $slug ) {
-			return null;
-		}
-
-		$collections = get_posts(
-			array(
-				'post_type'      => Collection::POST_TYPE,
-				'post_status'    => array( 'draft', 'private', 'publish' ),
-				'posts_per_page' => 1,
-				'meta_key'       => 'slug', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
-				'meta_value'     => $slug,  // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
-			)
-		);
-
-		return $collections[0] ?? null;
 	}
 
 	private function format_gmt_date( string $mysql_gmt ): string {
