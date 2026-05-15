@@ -698,7 +698,7 @@ final class RowsController {
 		$target_slug          = (string) get_post_meta( $target_collection_id, 'slug', true );
 		$refs                 = array();
 
-		foreach ( Relations::relation_values( $row_id, $field_id ) as $target_id ) {
+		foreach ( $this->visible_relation_values( $row_id, $field_id ) as $target_id ) {
 			$target = get_post( $target_id );
 			if ( ! $target instanceof WP_Post ) {
 				continue;
@@ -717,6 +717,26 @@ final class RowsController {
 		return $refs;
 	}
 
+	/**
+	 * Returns relation targets that should show up now. Trashed targets stay in
+	 * meta so restore can bring the relation back, but chips and rollups ignore
+	 * them while they are in Trash.
+	 *
+	 * @param int $row_id   Row post ID.
+	 * @param int $field_id Relation field post ID.
+	 * @return int[]
+	 */
+	private function visible_relation_values( int $row_id, int $field_id ): array {
+		$ids = array();
+		foreach ( Relations::relation_values( $row_id, $field_id ) as $target_id ) {
+			$target = get_post( $target_id );
+			if ( $target instanceof WP_Post && 'trash' !== $target->post_status ) {
+				$ids[] = $target_id;
+			}
+		}
+		return $ids;
+	}
+
 	private function compute_rollup_value( int $row_id, int $field_id ): mixed {
 		$relation_field_id = (int) get_post_meta( $field_id, 'rollup_relation_field_id', true );
 		$target_field_id   = (int) get_post_meta( $field_id, 'rollup_target_field_id', true );
@@ -725,7 +745,7 @@ final class RowsController {
 			$aggregator = 'count';
 		}
 
-		$related_ids = Relations::relation_values( $row_id, $relation_field_id );
+		$related_ids = $this->visible_relation_values( $row_id, $relation_field_id );
 		if ( 'count' === $aggregator ) {
 			return count( $related_ids );
 		}

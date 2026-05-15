@@ -16,22 +16,24 @@ Pair with [decisions.md](decisions.md) for choices we've made peace with and [ro
 
 ## 2. Rows aren't in `core-data`'s entity store `[internal]`
 
-Updated by [#80](https://github.com/priethor/cortext/pull/80).
+Updated by [#80](https://github.com/priethor/cortext/pull/80) and #179.
 
-**What.** Rows still bypass `core-data`. `useCollectionRows` owns the fetch state, the `requestId` race guard, the manual `refresh()` counter, and the choice between server and client mode. #80 moved the normal table path to paged REST requests, then changed the fallback from one `per_page=-1` request to pages of 100 fetched with a small concurrency cap. That is a better failure mode, but it is still a second row-loading layer beside the WordPress data store.
+**What.** Rows still sit outside `core-data`. `useCollectionRows` owns fetch state, the `requestId` race guard, the manual `refresh()` counter, and the choice between server and client mode. #80 moved the normal table path to paged REST requests, then changed the fallback from one `per_page=-1` request to pages of 100 fetched with a small concurrency cap. #179 exposed the same gap from another angle: trashing or restoring a row can change relation chips and rollups in other open collections. Since there is no shared row store, the client fires small row and document-trash events, then lets open row queries and the sidebar Trash list refetch.
 
-The dynamic `crtxt_{slug}` post types already use `show_in_rest`, so `core-data` should be able to discover them lazily. We just have not wired rows through it yet. Mutations still POST directly with `apiFetch`, then ask the hook to refetch.
+The dynamic `crtxt_{slug}` post types already use `show_in_rest`, so `core-data` can probably discover them lazily. We have not wired rows through it yet. Mutations still POST directly with `apiFetch`, then ask the hook to refetch.
 
-**Where.** `src/hooks/useCollectionRows.js`, with side effects in `src/components/CollectionDataViews.js` (`saveRowField`, `onCreated`) and forced client mode in `src/components/relations/RelationEditor.js`.
+**Where.** `src/hooks/useCollectionRows.js`, `src/hooks/rowInvalidation.js`, `src/hooks/documentTrashInvalidation.js`, and `src/hooks/useTrashedDocuments.js`, with call sites in `src/components/CollectionDataViews.js` (`saveRowField`, `onCreated`, row trash), `src/components/SidebarTrash.js`, `src/router/EntityRoute.js`, and forced client mode in `src/components/relations/RelationEditor.js`.
 
 **Solution.** Switch to `useEntityRecords('postType', \`crtxt_${slug}\`, query)` plus `saveEntityRecord` for writes once the remaining query shapes can be expressed there. `core-data` would then own caching, race protection, and post-mutation invalidation. Knock-on workarounds it deletes:
 
-- The `refresh()` handle exists only because rows aren't reactive.
+- The `refresh()` handles and invalidation events exist only because rows aren't reactive.
 - Half of `RowMutationContext` (also driven by #1) exists because cells can't reach a `core-data` store that isn't there.
 - `onCreated` runs optimistic `lastPage = ceil((totalItems+1)/perPage)` arithmetic against possibly stale `paginationInfo`. With reactive pagination we'd watch `totalPages` in an effect.
 - The server/client planner becomes normal resolver queries instead of a local fetch policy.
 
 Worth a small spike before committing; `core-data`'s schema cache for rarely-changing post types is the only real risk.
+
+That does not mean every document-shaped query belongs in `core-data`. Single records and mutations should use the entity store when WordPress can model them. Cross-type product views, like Trash, can stay behind `/cortext/v1/documents/*` endpoints.
 
 ## 3. Sorting support is split between REST and client mode `[internal]`
 
@@ -420,3 +422,13 @@ The user-facing placeholder is still Core's generic "Search commands and setting
 **Where.** `useSubmenuPlacement` in `src/hooks/useSubmenuPlacement.js`, wired into `src/components/fields/FieldFormatPopover.js` and `src/components/TableCalculationMenu.js`.
 
 **Solution.** WordPress Popover could expose fallback placements, or pass enough Floating UI middleware through for consumers to say "try right, then left, then bottom" without measuring after render. If that lands, Cortext can drop `useSubmenuPlacement` and let the Popover own cascading-menu collision handling.
+
+## 48. Cortext document layer is still thin `[internal]`
+
+**What.** Pages and collection rows both opt into `cortext-document`. Trash now lists, restores, and permanently deletes through document routes. The client has not caught up yet: pages still go through the page tree and `core-data`, rows still go through `useCollectionRows`, and recents, favorites, routing, and invalidation still ask "page or row?" in places that should only need "document."
+
+Trash is the clearest example. The endpoint is document-first, but the client still refreshes the page tree, row queries, collection context, and the Trash list through separate calls.
+
+**Where.** `includes/Rest/DocumentTrashController.php`, `src/components/SidebarTrash.js`, `src/components/Sidebar.js`, `src/router/useResolveEntity.js`, `src/router/EntityRoute.js`, `src/hooks/documentTrashInvalidation.js`, `src/hooks/rowInvalidation.js`, and `src/hooks/useTrashedDocuments.js`.
+
+**Solution.** Add a small document layer for document kind/context, paths, invalidation, and cross-type lists. Individual records can still use `core-data` where WordPress supports it. Cross-type views can stay as `/cortext/v1/documents/*` endpoints. Pages and rows do not need to disappear as concepts; shared document features just should not rebuild the same branching every time.

@@ -29,6 +29,8 @@ import { withViewTransition } from '../hooks/viewTransition';
 import { useRecents } from '../hooks/useRecents';
 import { useWorkspaceHome } from '../hooks/useWorkspaceHome';
 import useCollectionFields from '../hooks/useCollectionFields';
+import { notifyDocumentTrashChanged } from '../hooks/documentTrashInvalidation';
+import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
 import EmptyState from './EmptyState';
 import {
 	computeDocumentUri,
@@ -398,11 +400,9 @@ export default function EntityRoute( { history } ) {
 	const { invalidateResolution, receiveEntityRecords } =
 		useDispatch( 'core' );
 
-	// Two-mode restore handler: pages share the page-tree query keys with
-	// the sidebar trash list, so a successful restore must invalidate both
-	// ACTIVE/TRASHED queries to make the row reappear in the right list.
-	// Rows live in collection-scoped queries; invalidate the row's CPT so
-	// the next visit to its collection refetches.
+	// Restore still has two cache paths: pages use core-data for the tree, rows
+	// use collection-scoped queries. Both refresh the Trash list; rows also
+	// notify open collections because relations and rollups can change elsewhere.
 	const onRestoreDocument = useCallback(
 		( postId, postType, response ) => {
 			if ( response?.post && postType ) {
@@ -419,11 +419,14 @@ export default function EntityRoute( { history } ) {
 					POST_TYPE,
 					TRASHED_PAGES_QUERY,
 				] );
+				notifyDocumentTrashChanged();
 			} else if ( postType ) {
 				invalidateResolution( 'getEntityRecords', [
 					'postType',
 					postType,
 				] );
+				notifyDocumentTrashChanged();
+				notifyCollectionRowsChanged();
 			}
 		},
 		[ invalidateResolution, receiveEntityRecords ]
