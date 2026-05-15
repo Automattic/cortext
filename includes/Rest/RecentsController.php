@@ -220,12 +220,9 @@ final class RecentsController {
 			return $this->format_row_target( $id, $collection_id );
 		}
 
-		if ( 'page' === $kind ) {
-			return $this->format_page_target( $id );
-		}
-
-		$post = get_post( $id );
-		if ( ! $post instanceof WP_Post || Collection::POST_TYPE !== $post->post_type || 'trash' === $post->post_status ) {
+		$post          = get_post( $id );
+		$expected_type = 'page' === $kind ? Page::POST_TYPE : Collection::POST_TYPE;
+		if ( ! $post instanceof WP_Post || $expected_type !== $post->post_type || 'trash' === $post->post_status ) {
 			return new WP_Error(
 				'cortext_recents_not_found',
 				__( 'Recent target was not found.', 'cortext' ),
@@ -238,6 +235,14 @@ final class RecentsController {
 				'cortext_recents_forbidden',
 				__( 'You are not allowed to use this target as a recent item.', 'cortext' ),
 				array( 'status' => 403 )
+			);
+		}
+
+		if ( 'page' === $kind ) {
+			return $this->documents->format_document( $post ) ?? new WP_Error(
+				'cortext_recents_not_found',
+				__( 'Recent target was not found.', 'cortext' ),
+				array( 'status' => 404 )
 			);
 		}
 
@@ -247,43 +252,6 @@ final class RecentsController {
 			'title' => $this->post_title( $post ),
 			'path'  => $this->target_path( $post, $kind ),
 		);
-	}
-
-	/**
-	 * Validates a page target and delegates formatting to the documents
-	 * repository so the recent payload mirrors the rest of the document API.
-	 *
-	 * @param int $id Page post id.
-	 * @return array<string,mixed>|WP_Error
-	 */
-	private function format_page_target( int $id ) {
-		$post = get_post( $id );
-		if ( ! $post instanceof WP_Post || Page::POST_TYPE !== $post->post_type || 'trash' === $post->post_status ) {
-			return new WP_Error(
-				'cortext_recents_not_found',
-				__( 'Recent target was not found.', 'cortext' ),
-				array( 'status' => 404 )
-			);
-		}
-
-		if ( ! current_user_can( 'edit_post', $id ) ) {
-			return new WP_Error(
-				'cortext_recents_forbidden',
-				__( 'You are not allowed to use this target as a recent item.', 'cortext' ),
-				array( 'status' => 403 )
-			);
-		}
-
-		$document = $this->documents->format_document( $post );
-		if ( null === $document ) {
-			return new WP_Error(
-				'cortext_recents_not_found',
-				__( 'Recent target was not found.', 'cortext' ),
-				array( 'status' => 404 )
-			);
-		}
-
-		return $document;
 	}
 
 	/**
