@@ -24,7 +24,7 @@ on:
 permissions:
     actions: read
     contents: read
-    issues: write
+    pull-requests: write
 
 env:
     CORTEXT_PERF_UI: ${{ vars.CORTEXT_PERF_UI || '0' }}
@@ -37,49 +37,17 @@ jobs:
     performance-bench:
         name: Performance benchmark
         runs-on: ubuntu-latest
-        timeout-minutes: 20
+        timeout-minutes: 25
         steps:
             - uses: actions/checkout@v4
 
-            - name: Download main benchmark baseline
+            - name: Capture PR HEAD and fetch main
               if: github.event_name == 'pull_request'
-              continue-on-error: true
-              env:
-                  GH_TOKEN: ${{ github.token }}
-                  REPOSITORY: ${{ github.repository }}
+              id: refs
               run: |
                   set -euo pipefail
-
-                  mkdir -p artifacts/main-baseline
-                  run_id="$(gh run list \
-                    --repo "$REPOSITORY" \
-                    --workflow perf-bench.yml \
-                    --branch main \
-                    --status completed \
-                    --limit 1 \
-                    --json databaseId \
-                    --jq '.[0].databaseId // ""')"
-
-                  if [ -z "$run_id" ]; then
-                    echo "No completed main benchmark run found."
-                    exit 0
-                  fi
-
-                  if ! gh run download "$run_id" \
-                    --repo "$REPOSITORY" \
-                    --name perf-bench-main \
-                    --dir artifacts/main-baseline; then
-                    echo "No main benchmark artifact found."
-                    exit 0
-                  fi
-
-                  base_json="$(find artifacts/main-baseline -name 'perf-bench.json' -type f | head -n 1)"
-                  if [ -z "$base_json" ]; then
-                    echo "Main benchmark artifact had no perf-bench.json."
-                    exit 0
-                  fi
-
-                  cp "$base_json" artifacts/perf-bench-base.json
+                  echo "pr_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+                  git fetch origin main --depth=1
 
             - uses: shivammathur/setup-php@v2
               with:
@@ -102,11 +70,59 @@ jobs:
                   node-version: '24.15'
                   cache: 'pnpm'
 
-            - run: composer install --no-interaction --prefer-dist --no-dev
+            - name: Check out main for baseline
+              if: github.event_name == 'pull_request'
+              run: git checkout --detach origin/main
 
-            - run: pnpm install --frozen-lockfile
+            - name: Install dependencies (baseline)
+              if: github.event_name == 'pull_request'
+              run: |
+                  composer install --no-interaction --prefer-dist --no-dev
+                  pnpm install --frozen-lockfile
 
-            - run: pnpm run env:start
+            - name: Start wp-env (baseline)
+              if: github.event_name == 'pull_request'
+              run: pnpm run env:start
+
+            - name: Seed dataset (baseline)
+              if: github.event_name == 'pull_request'
+              run: >
+                  pnpm exec wp-env run cli wp cortext perf-seed
+                  --reset
+                  --force
+                  --collections=3
+                  --rows=1250
+                  --fields=8
+                  --wide-fields=40
+                  --relations=1
+                  --rollups=1
+
+            - name: Run baseline benchmark
+              if: github.event_name == 'pull_request'
+              continue-on-error: true
+              run: |
+                  set -euo pipefail
+                  mkdir -p artifacts
+                  pnpm exec wp-env run cli wp cortext perf-bench \
+                    --iterations=10 \
+                    --warmup=1 \
+                    --pretty | tee artifacts/perf-bench-base.json
+
+            - name: Destroy wp-env between runs
+              if: github.event_name == 'pull_request'
+              run: printf 'y\n' | pnpm exec wp-env destroy
+
+            - name: Restore PR HEAD
+              if: github.event_name == 'pull_request'
+              run: git checkout --detach ${{ steps.refs.outputs.pr_sha }}
+
+            - name: Install dependencies
+              run: |
+                  composer install --no-interaction --prefer-dist --no-dev
+                  pnpm install --frozen-lockfile
+
+            - name: Start wp-env
+              run: pnpm run env:start
 
             - name: Seed benchmark dataset
               run: >
@@ -199,15 +215,6 @@ jobs:
                     php .github/scripts/write-perf-ui-summary.php \
                       --current=artifacts/perf-ui.json | tee artifacts/perf-ui-summary.md
                   fi
-
-            - name: Upload main benchmark baseline
-              if: always() && github.event_name == 'push'
-              uses: actions/upload-artifact@v4
-              with:
-                  name: perf-bench-main
-                  path: artifacts/perf-bench.json
-                  if-no-files-found: ignore
-                  retention-days: 90
 
             - name: Post PR benchmark comment
               if: always() && github.event_name == 'pull_request'
