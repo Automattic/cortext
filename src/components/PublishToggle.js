@@ -1,18 +1,47 @@
 import { __ } from '@wordpress/i18n';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
+import { store as blockEditorStore } from '@wordpress/block-editor';
+import { store as coreStore } from '@wordpress/core-data';
 import { Button } from '@wordpress/components';
 import { useCallback, useState } from '@wordpress/element';
 import { globe, lock } from '@wordpress/icons';
 
+/**
+ * Walks the block tree and returns unique collectionId values from all
+ * cortext/data-view blocks.
+ *
+ * @param {Array} blocks Block list to walk.
+ * @return {number[]} Unique collection IDs.
+ */
+function getCollectionIds( blocks ) {
+	const ids = new Set();
+	( function walk( list ) {
+		for ( const block of list ) {
+			if (
+				block.name === 'cortext/data-view' &&
+				block.attributes.collectionId
+			) {
+				ids.add( block.attributes.collectionId );
+			}
+			if ( block.innerBlocks?.length ) {
+				walk( block.innerBlocks );
+			}
+		}
+	} )( blocks );
+	return [ ...ids ];
+}
+
 export default function PublishToggle() {
 	const { editPost, savePost } = useDispatch( editorStore );
-	const { status, link, isSaving } = useSelect( ( select ) => {
+	const { saveEntityRecord } = useDispatch( coreStore );
+	const { status, link, isSaving, blocks } = useSelect( ( select ) => {
 		const editor = select( editorStore );
 		return {
 			status: editor.getEditedPostAttribute( 'status' ),
 			link: editor.getEditedPostAttribute( 'link' ),
 			isSaving: editor.isSavingPost(),
+			blocks: select( blockEditorStore ).getBlocks(),
 		};
 	}, [] );
 
@@ -21,9 +50,23 @@ export default function PublishToggle() {
 	const isPublic = status === 'publish';
 
 	const toggle = useCallback( async () => {
+		// Publishing the page also publishes any referenced collections
+		// so their rows become publicly queryable.
+		if ( ! isPublic ) {
+			const collectionIds = getCollectionIds( blocks );
+			await Promise.all(
+				collectionIds.map( ( id ) =>
+					saveEntityRecord( 'postType', 'crtxt_collection', {
+						id,
+						status: 'publish',
+					} )
+				)
+			);
+		}
+
 		editPost( { status: isPublic ? 'private' : 'publish' } );
 		savePost();
-	}, [ editPost, savePost, isPublic ] );
+	}, [ editPost, savePost, saveEntityRecord, isPublic, blocks ] );
 
 	const copyLink = useCallback( async () => {
 		if ( link ) {

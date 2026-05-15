@@ -219,11 +219,11 @@ The create-field flow also has to reveal the new trailing column itself. It carr
 
 ## 23. Embedded data-view block has no width/height controls `[internal]`
 
-**What.** The `cortext/data-view` block exposes `align` (default / wide / full) for width but nothing for height. A freshly inserted block needs a usable viewport and long tables need to stay bounded inside the page, so we set `height` from `var(--cortext-data-view-block-min-height, 640px)` and let DataViews scroll internally. The number is a guess: roughly fits a header, ~10 compact rows, footer, and pagination. It doesn't track the block's density or `perPage`, so a comfortable block with `perPage: 25` shows the same default viewport as a compact block with 5 rows.
+**What.** The `cortext/data-view` block exposes `align` (default / wide / full) for width but nothing for height. For now the block sizes to its content: short tables fit their rows, long tables grow with the page, and empty blocks fall back to DataViews' no-results state. That default is easy to understand, but authors still can't say "show 10 rows and scroll the rest." A long table stretches the document.
 
-**Where.** `--cortext-data-view-block-min-height` in `src/styles/_tokens.scss`, the `.wp-block-cortext-data-view .cortext-data-view` rule in `src/index.scss`, `src/blocks/data-view/block.json` (no `height` attribute today).
+**Where.** `src/blocks/data-view/block.json` (no `height` attribute today). The block-mode size rule lives in `src/index.scss` next to the `.wp-block-cortext-data-view .cortext-data-view > .dataviews-wrapper` override.
 
-**Solution.** Add a `height` (or "rows visible") attribute to the block with an inspector control, fall back to the variable when unset, and let the variable stay as a theme-overridable default. Computing the default from `density × perPage` is a smaller win; once the per-block control exists, the default rarely matters.
+**Solution.** Add a `height` (or "rows visible") attribute to the block with an inspector control, and clamp the shell to that value when set. A density-aware default would help, but the per-block control is the part that matters.
 
 ## 24. Workspace notices filtered by id prefix `[upstream, soft]`
 
@@ -442,3 +442,19 @@ That makes row reorder sensitive to DataViews DOM changes: density classes, bulk
 **Where.** `src/components/DataViewRowReorder.js`, `src/components/RowDragHandle.js`, the mount in `src/components/CollectionDataViews.js`, and the row-reorder rules in `src/index.scss`.
 
 **Solution.** DataViews could expose stable row ids/refs, a row-handle render prop, keyboard-aware reorder callbacks, a table/list gap model, and row preview/drop indicator hooks. Cortext would keep the REST/manual-order policy and drop the selectors, MutationObserver, portals, and transform bookkeeping.
+
+## 50. Public page layout doesn't use WordPress align classes `[internal]`
+
+**What.** The public template constrains non-block content to 650 px via a blanket `max-width` on `.cortext-public-page__body > :not(.wp-block-cortext-data-view)`. The data-view block breaks out of that constraint by virtue of the exclusion. This is fragile — it doesn't honor `alignwide`, `alignfull`, or any other block alignment, and will break for other wide blocks. The proper fix is to adopt WordPress's `align*` layout classes and `theme.json` content/wide widths so blocks opt into breakout with standard markup rather than CSS exclusions.
+
+**Where.** `src/frontend.scss`, the `.cortext-public-page__body` rule with the FIXME comment.
+
+**Solution.** Use `wp_get_layout_style` or emit the `is-layout-constrained` class with `contentSize` / `wideSize` on the body wrapper, then add `alignwide` or `alignfull` to the data-view block's wrapper attributes in `DataView.php`. Remove the exclusion hack.
+
+## 51. DataView block shares a frontend bundle with page chrome `[internal]`
+
+**What.** The `cortext-frontend` script and style handle serves double duty: it hydrates the DataView block (React, DataViews, field renderers) and provides general page chrome (body font, content column, title styles). Both `Assets.php` and the render callback in `DataView.php` enqueue the same handle, creating a registration race where the first caller's dependency list wins and the second is silently ignored. The DataView block should provision its own script and style (e.g. `cortext-data-view-view`) via `viewScript`/`viewStyle` in `block.json` or its own dedicated handles in the render callback, so its dependencies (`wp-components`, `wp-api-fetch`, etc.) are self-contained. `cortext-frontend`, if it makes sense to exist, should only cover general concerns: page chrome, light/dark mode toggle, etc.
+
+**Where.** `includes/Block/DataView.php` (render callback enqueue), `includes/Frontend/Assets.php` (page-level enqueue), `src/frontend.js` (single entry point for both concerns).
+
+**Solution.** Split `src/frontend.js` into two entry points: one for page chrome (`cortext-frontend`) and one for the DataView block (`cortext-data-view-view`). The block entry handles hydration and declares its own dependencies. The page entry stays minimal. Update `webpack.config.js` with the new entry point, and update `DataView.php` to enqueue the block-specific handle.

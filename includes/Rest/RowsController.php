@@ -84,6 +84,11 @@ final class RowsController {
 							'type'    => 'array',
 							'default' => array(),
 						),
+						'context'    => array(
+							'type'    => 'string',
+							'default' => 'view',
+							'enum'    => array( 'view', 'edit' ),
+						),
 					),
 				),
 			)
@@ -197,8 +202,50 @@ final class RowsController {
 		);
 	}
 
-	public function can_read(): bool {
-		return current_user_can( 'edit_posts' );
+	/**
+	 * Permission gate for the rows endpoint.
+	 *
+	 * `context=edit` requires `edit_posts` (existing editor behaviour).
+	 * `context=view` is public — anyone may read rows from a published
+	 * collection.
+	 *
+	 * @param WP_REST_Request $request Full request object.
+	 * @return bool|WP_Error
+	 */
+	public function can_read( WP_REST_Request $request ) {
+		if ( current_user_can( 'edit_posts' ) ) {
+			return true;
+		}
+
+		if ( 'edit' === $request['context'] ) {
+			return new WP_Error(
+				'rest_forbidden_context',
+				__( 'Sorry, you are not allowed to edit posts in this post type.', 'cortext' ),
+				array( 'status' => rest_authorization_required_code() )
+			);
+		}
+
+		// context=view: allow if the collection is published.
+		$collection_id = (int) $request->get_param( 'collection' );
+		$collection    = get_post( $collection_id );
+
+		if ( ! $collection || Collection::POST_TYPE !== $collection->post_type ) {
+			return new WP_Error(
+				'cortext_collection_not_found',
+				__( 'Collection not found.', 'cortext' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		if ( 'publish' !== $collection->post_status ) {
+			return new WP_Error(
+				'cortext_collection_not_public',
+				__( 'Collection is not public.', 'cortext' ),
+				array( 'status' => rest_authorization_required_code() )
+			);
+		}
+
+		return true;
 	}
 
 	public function can_create_row( WP_REST_Request $request ): bool|WP_Error {
@@ -1468,10 +1515,14 @@ final class RowsController {
 			if ( ! $field ) {
 				continue;
 			}
+			$type    = (string) get_post_meta( $field_id, 'type', true );
+			$options = get_post_meta( $field_id, 'options', true );
+
 			$definitions[] = array(
-				'id'    => $field_id,
-				'label' => $field->post_title,
-				'type'  => (string) get_post_meta( $field_id, 'type', true ),
+				'id'      => $field_id,
+				'label'   => $field->post_title,
+				'type'    => $type,
+				'options' => empty( $options ) ? null : $options,
 			);
 		}
 		return $definitions;
