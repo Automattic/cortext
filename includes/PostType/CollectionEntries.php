@@ -512,40 +512,34 @@ final class CollectionEntries {
 	}
 
 	private function max_menu_order_for_entry_post_type( string $post_type, int $exclude_post_id ): int {
-		$posts = array();
 		if ( $this->is_wordbless_active() ) {
-			$posts = array_values(
-				array_filter(
-					\WorDBless\Posts::init()->posts,
-					static fn( $post ) =>
-						$post_type === $post->post_type &&
-						(int) $post->ID !== $exclude_post_id &&
-						in_array( $post->post_status, array( 'draft', 'private', 'publish' ), true )
-				)
-			);
-		} else {
-			$existing_ids = get_posts(
-				array(
-					'post_type'      => $post_type,
-					'post_status'    => array( 'draft', 'private', 'publish' ),
-					'posts_per_page' => -1,
-					'post__not_in'   => array( $exclude_post_id ),
-					'fields'         => 'ids',
-				)
-			);
-			foreach ( $existing_ids as $existing_id ) {
-				$existing = get_post( (int) $existing_id );
-				if ( $existing instanceof WP_Post ) {
-					$posts[] = $existing;
+			$max_order = 0;
+			foreach ( \WorDBless\Posts::init()->posts as $existing ) {
+				if (
+					$post_type === $existing->post_type &&
+					(int) $existing->ID !== $exclude_post_id &&
+					in_array( $existing->post_status, array( 'draft', 'private', 'publish' ), true )
+				) {
+					$max_order = max( $max_order, (int) $existing->menu_order );
 				}
 			}
+			return $max_order;
 		}
 
-		$max_order = 0;
-		foreach ( $posts as $existing ) {
-			$max_order = max( $max_order, (int) $existing->menu_order );
-		}
-		return $max_order;
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Reads one aggregate during insert without loading every row post.
+		return (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COALESCE(MAX(menu_order), 0)
+				FROM {$wpdb->posts}
+				WHERE post_type = %s
+				AND post_status IN ('draft', 'private', 'publish')
+				AND ID != %d",
+				$post_type,
+				$exclude_post_id
+			)
+		);
 	}
 
 	private function update_entry_menu_order( int $post_id, int $menu_order ): void {

@@ -204,6 +204,16 @@ async function renderReorderInParent( parentProps = {} ) {
 	);
 }
 
+function deferred() {
+	let resolve;
+	let reject;
+	const promise = new Promise( ( promiseResolve, promiseReject ) => {
+		resolve = promiseResolve;
+		reject = promiseReject;
+	} );
+	return { promise, resolve, reject };
+}
+
 function gapDrop( insertionIndex, beforeId, afterId ) {
 	return {
 		type: 'gap',
@@ -569,6 +579,8 @@ describe( 'DataViewRowReorder', () => {
 	} );
 
 	it( 'keeps sorted rows in place until the sort is cleared', async () => {
+		const request = deferred();
+		mockApiFetch.mockReturnValueOnce( request.promise );
 		const view = {
 			type: 'table',
 			sort: { field: 'title', direction: 'asc' },
@@ -600,10 +612,7 @@ describe( 'DataViewRowReorder', () => {
 		await waitFor( () =>
 			expect( mockApiFetch ).toHaveBeenCalledTimes( 1 )
 		);
-		expect( onChangeView ).toHaveBeenCalledWith( {
-			type: 'table',
-			sort: null,
-		} );
+		expect( onChangeView ).not.toHaveBeenCalled();
 		expect( mockApiFetch.mock.calls[ 0 ][ 0 ].data ).toEqual( {
 			before_id: 1,
 			after_id: null,
@@ -623,6 +632,16 @@ describe( 'DataViewRowReorder', () => {
 		);
 		expect( renderedTableRows[ 2 ] ).toHaveClass(
 			'cortext-row-reorder-target--displaced'
+		);
+		await act( async () => {
+			request.resolve( { reseeded: false } );
+			await request.promise;
+		} );
+		await waitFor( () =>
+			expect( onChangeView ).toHaveBeenCalledWith( {
+				type: 'table',
+				sort: null,
+			} )
 		);
 	} );
 
@@ -688,6 +707,32 @@ describe( 'DataViewRowReorder', () => {
 				}
 			)
 		);
+		expect( onReordered ).not.toHaveBeenCalled();
+	} );
+
+	it( 'keeps the current sort when a confirmed reorder request fails', async () => {
+		mockApiFetch.mockRejectedValueOnce( new Error( 'Nope' ) );
+		const view = {
+			type: 'table',
+			sort: { field: 'title', direction: 'asc' },
+		};
+		const { onChangeView, onReordered } = await renderReorder( { view } );
+
+		dragEnd( 3, gapDrop( 0, 1, null ) );
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Keep this order' } )
+		);
+
+		await waitFor( () =>
+			expect( mockCreateErrorNotice ).toHaveBeenCalledWith(
+				"Couldn't move the row.",
+				{
+					id: 'cortext-row-reorder-failed',
+					type: 'snackbar',
+				}
+			)
+		);
+		expect( onChangeView ).not.toHaveBeenCalled();
 		expect( onReordered ).not.toHaveBeenCalled();
 	} );
 

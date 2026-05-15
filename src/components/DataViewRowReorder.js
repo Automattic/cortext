@@ -986,6 +986,12 @@ export default function DataViewRowReorder( {
 						current_sort: request.currentSort ?? null,
 					},
 				} );
+				if ( request.clearSortOnSuccess ) {
+					onChangeViewRef.current( {
+						...( viewRef.current ?? {} ),
+						sort: null,
+					} );
+				}
 				onReorderedRef.current?.();
 			} catch {
 				clearVisualState( { withoutTransition: true } );
@@ -1060,6 +1066,7 @@ export default function DataViewRowReorder( {
 				row,
 				drop,
 				expectedOrder,
+				clearSortOnSuccess: Boolean( currentSort?.field ),
 			};
 			const hasExplicitSort =
 				Boolean( currentSort?.field ) &&
@@ -1072,12 +1079,6 @@ export default function DataViewRowReorder( {
 			}
 
 			freezeDropState( row, drop, expectedOrder );
-			if ( currentSort?.field === MANUAL_SORT_ID ) {
-				onChangeViewRef.current( {
-					...( viewRef.current ?? {} ),
-					sort: null,
-				} );
-			}
 			performReorder( request );
 		},
 		[ clearDragState, freezeDropState, performReorder, renderedRows ]
@@ -1093,10 +1094,6 @@ export default function DataViewRowReorder( {
 		if ( ! request ) {
 			return;
 		}
-		onChangeViewRef.current( {
-			...( viewRef.current ?? {} ),
-			sort: null,
-		} );
 		freezeDropState( request.row, request.drop, request.expectedOrder );
 		performReorder( request );
 	}, [ freezeDropState, pendingRequest, performReorder ] );
