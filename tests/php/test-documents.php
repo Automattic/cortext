@@ -239,6 +239,67 @@ final class Test_Documents extends BaseTestCase {
 		$this->assertSame( array(), array_intersect( $ids_one, $ids_two ) );
 	}
 
+	public function test_list_paginates_after_permission_filtering(): void {
+		$owner_id  = $this->create_user( 'administrator' );
+		$viewer_id = $this->create_user( 'contributor' );
+
+		wp_set_current_user( $owner_id );
+		$this->create_page(
+			array(
+				'post_author'       => $owner_id,
+				'post_title'        => 'Other newest',
+				'post_modified'     => '2025-01-05 00:00:00',
+				'post_modified_gmt' => '2025-01-05 00:00:00',
+			)
+		);
+		$this->create_page(
+			array(
+				'post_author'       => $owner_id,
+				'post_title'        => 'Other newer',
+				'post_modified'     => '2025-01-04 00:00:00',
+				'post_modified_gmt' => '2025-01-04 00:00:00',
+			)
+		);
+
+		$editable_ids = array(
+			$this->create_page(
+				array(
+					'post_author'       => $viewer_id,
+					'post_title'        => 'Mine one',
+					'post_modified'     => '2025-01-03 00:00:00',
+					'post_modified_gmt' => '2025-01-03 00:00:00',
+				)
+			),
+			$this->create_page(
+				array(
+					'post_author'       => $viewer_id,
+					'post_title'        => 'Mine two',
+					'post_modified'     => '2025-01-02 00:00:00',
+					'post_modified_gmt' => '2025-01-02 00:00:00',
+				)
+			),
+			$this->create_page(
+				array(
+					'post_author'       => $viewer_id,
+					'post_title'        => 'Mine three',
+					'post_modified'     => '2025-01-01 00:00:00',
+					'post_modified_gmt' => '2025-01-01 00:00:00',
+				)
+			),
+		);
+
+		wp_set_current_user( $viewer_id );
+
+		$result = $this->documents->list( array( 'per_page' => 2 ) );
+
+		$this->assertSame( 3, $result['total'] );
+		$this->assertCount( 2, $result['documents'] );
+		$this->assertSame(
+			array_slice( $editable_ids, 0, 2 ),
+			array_map( static fn ( array $doc ): int => $doc['id'], $result['documents'] )
+		);
+	}
+
 	public function test_list_resolves_collection_once_per_row_post_type(): void {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
 		$this->create_collection( 'cachedalbums', 'Cached albums' );

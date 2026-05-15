@@ -138,31 +138,38 @@ final class Documents {
 		$query_args = array(
 			'post_type'           => $post_types,
 			'post_status'         => $statuses,
-			// Trash needs every entry to compute cascade roots. Other document
-			// lists paginate.
-			'paged'               => $is_trash ? 1 : $page,
-			'posts_per_page'      => $is_trash ? -1 : $per_page,
+			'fields'              => 'ids',
+			'posts_per_page'      => -1,
 			'orderby'             => 'modified',
 			'order'               => 'DESC',
 			'ignore_sticky_posts' => true,
+			'no_found_rows'       => true,
 		);
 
 		if ( '' !== $search ) {
 			$query_args['s'] = $search;
 		}
 
-		$query = new WP_Query( $query_args );
+		$query        = new WP_Query( $query_args );
+		$editable_ids = array_values(
+			array_filter(
+				array_map( 'intval', $query->posts ),
+				static fn( int $post_id ): bool => current_user_can( 'edit_post', $post_id )
+			)
+		);
+		$total        = count( $editable_ids );
+		$page_ids     = $is_trash
+			? $editable_ids
+			: array_slice( $editable_ids, ( $page - 1 ) * $per_page, $per_page );
 
 		$opts      = array(
 			'include_excerpt'    => ! empty( $args['include_excerpt'] ),
 			'include_trash_meta' => $is_trash,
 		);
 		$documents = array();
-		foreach ( $query->posts as $post ) {
+		foreach ( $page_ids as $post_id ) {
+			$post = get_post( $post_id );
 			if ( ! $post instanceof WP_Post ) {
-				continue;
-			}
-			if ( ! current_user_can( 'edit_post', $post->ID ) ) {
 				continue;
 			}
 			$document = $this->format_document( $post, $opts );
@@ -173,7 +180,7 @@ final class Documents {
 
 		return array(
 			'documents' => $documents,
-			'total'     => (int) $query->found_posts,
+			'total'     => $total,
 		);
 	}
 
