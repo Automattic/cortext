@@ -9,9 +9,9 @@ declare( strict_types=1 );
 
 namespace Cortext\Rest;
 
+use Cortext\Documents;
 use Cortext\PostType\Collection;
 use Cortext\PostType\CollectionEntries;
-use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Page;
 use WP_Error;
 use WP_Post;
@@ -23,6 +23,12 @@ final class RecentsController {
 	private const NAMESPACE = 'cortext/v1';
 	private const META_KEY  = 'cortext_recents';
 	private const MAX_ITEMS = 5;
+
+	private Documents $documents;
+
+	public function __construct( ?Documents $documents = null ) {
+		$this->documents = $documents ?? new Documents();
+	}
 
 	public function register(): void {
 		add_action( 'rest_api_init', array( $this, 'register_routes' ) );
@@ -214,9 +220,12 @@ final class RecentsController {
 			return $this->format_row_target( $id, $collection_id );
 		}
 
+		if ( 'page' === $kind ) {
+			return $this->format_page_target( $id );
+		}
+
 		$post = get_post( $id );
-		$type = 'page' === $kind ? Page::POST_TYPE : Collection::POST_TYPE;
-		if ( ! $post instanceof WP_Post || $type !== $post->post_type || 'trash' === $post->post_status ) {
+		if ( ! $post instanceof WP_Post || Collection::POST_TYPE !== $post->post_type || 'trash' === $post->post_status ) {
 			return new WP_Error(
 				'cortext_recents_not_found',
 				__( 'Recent target was not found.', 'cortext' ),
@@ -232,20 +241,49 @@ final class RecentsController {
 			);
 		}
 
-		$target = array(
+		return array(
 			'kind'  => $kind,
 			'id'    => $id,
 			'title' => $this->post_title( $post ),
 			'path'  => $this->target_path( $post, $kind ),
 		);
-		if ( 'page' === $kind ) {
-			$icon = get_post_meta( $id, DocumentIdentity::META_KEY, true );
-			if ( is_string( $icon ) && '' !== $icon ) {
-				$target['icon'] = $icon;
-			}
+	}
+
+	/**
+	 * Validates a page target and delegates formatting to the documents
+	 * repository so the recent payload mirrors the rest of the document API.
+	 *
+	 * @param int $id Page post id.
+	 * @return array<string,mixed>|WP_Error
+	 */
+	private function format_page_target( int $id ) {
+		$post = get_post( $id );
+		if ( ! $post instanceof WP_Post || Page::POST_TYPE !== $post->post_type || 'trash' === $post->post_status ) {
+			return new WP_Error(
+				'cortext_recents_not_found',
+				__( 'Recent target was not found.', 'cortext' ),
+				array( 'status' => 404 )
+			);
 		}
 
-		return $target;
+		if ( ! current_user_can( 'edit_post', $id ) ) {
+			return new WP_Error(
+				'cortext_recents_forbidden',
+				__( 'You are not allowed to use this target as a recent item.', 'cortext' ),
+				array( 'status' => 403 )
+			);
+		}
+
+		$document = $this->documents->format_document( $post );
+		if ( null === $document ) {
+			return new WP_Error(
+				'cortext_recents_not_found',
+				__( 'Recent target was not found.', 'cortext' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		return $document;
 	}
 
 	/**
@@ -301,19 +339,16 @@ final class RecentsController {
 			);
 		}
 
-		$collection_path = $this->target_path( $collection, 'collection' );
+		$document = $this->documents->format_document( $row );
+		if ( null === $document ) {
+			return new WP_Error(
+				'cortext_recents_not_found',
+				__( 'Recent target was not found.', 'cortext' ),
+				array( 'status' => 404 )
+			);
+		}
 
-		return array(
-			'kind'       => 'row',
-			'id'         => $row_id,
-			'title'      => $this->post_title( $row ),
-			'path'       => $collection_path,
-			'collection' => array(
-				'id'    => $collection_id,
-				'title' => $this->post_title( $collection ),
-				'path'  => $collection_path,
-			),
-		);
+		return $document;
 	}
 
 	private function post_title( WP_Post $post ): string {
