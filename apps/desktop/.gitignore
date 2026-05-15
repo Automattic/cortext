@@ -3,3 +3,4 @@ dist
 out
 snapshot.zip
 .snapshot-work
+.snapshot-cache

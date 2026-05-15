@@ -1,0 +1,116 @@
+name: Desktop E2E
+
+on:
+    push:
+        branches: [main]
+    pull_request:
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    changes:
+        name: Detect changed paths
+        runs-on: ubuntu-latest
+        outputs:
+            desktop_changed: ${{ steps.changed_paths.outputs.desktop_changed }}
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - id: changed_paths
+              shell: bash
+              run: |
+                  set -euo pipefail
+
+                  if [ "${{ github.event_name }}" = "pull_request" ]; then
+                    base="${{ github.event.pull_request.base.sha }}"
+                    head="${{ github.event.pull_request.head.sha }}"
+                  else
+                    base="${{ github.event.before }}"
+                    head="${{ github.sha }}"
+                  fi
+
+                  if [ "$base" = "0000000000000000000000000000000000000000" ]; then
+                    changed_files="$(git diff-tree --no-commit-id --name-only -r "$head")"
+                  else
+                    changed_files="$(git diff --name-only "$base" "$head")"
+                  fi
+
+                  desktop_paths='^(\.github/workflows/desktop-e2e\.yml|apps/desktop/)'
+
+                  if [ -n "$changed_files" ] && grep -Eq "$desktop_paths" <<< "$changed_files"; then
+                    echo "desktop_changed=true" >> "$GITHUB_OUTPUT"
+                  else
+                    echo "desktop_changed=false" >> "$GITHUB_OUTPUT"
+                  fi
+
+    playwright:
+        name: Playwright (Electron)
+        runs-on: ubuntu-latest
+        needs: changes
+        if: needs.changes.outputs.desktop_changed == 'true'
+        timeout-minutes: 20
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: shivammathur/setup-php@v2
+              with:
+                  php-version: '8.3'
+                  extensions: pdo_sqlite, sqlite3, mbstring, json, curl, openssl
+                  tools: composer:v2
+                  coverage: none
+
+            - uses: actions/cache@v4
+              with:
+                  path: ~/.composer/cache
+                  key: composer-${{ hashFiles('composer.lock') }}
+
+            - run: composer install --no-interaction --prefer-dist --no-dev
+
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 11.0.8
+                  standalone: true
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: '24.15'
+                  cache: 'pnpm'
+
+            - run: pnpm install --frozen-lockfile
+
+            - name: Install desktop dependencies
+              working-directory: apps/desktop
+              run: npm ci
+
+            - name: Install Playwright browsers
+              working-directory: apps/desktop
+              run: npx playwright install --with-deps chromium
+
+            - name: Cache snapshot downloads (WP core + wp-cli + SQLite plugin)
+              uses: actions/cache@v4
+              with:
+                  path: apps/desktop/.snapshot-cache
+                  key: desktop-snapshot-cache-${{ hashFiles('apps/desktop/scripts/build-snapshot.mjs') }}
+
+            - name: Build snapshot
+              working-directory: apps/desktop
+              run: npm run snapshot
+
+            # Electron needs an X server on Linux runners; xvfb-run provides
+            # one for the test process and tears it down after.
+            - name: Run desktop smoke test
+              working-directory: apps/desktop
+              run: xvfb-run --auto-servernum npm run test:e2e
+
+            - if: failure()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: desktop-playwright-artifacts
+                  path: |
+                      apps/desktop/test-results/
+                      apps/desktop/playwright-report/
+                  retention-days: 7
