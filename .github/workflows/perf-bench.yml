@@ -261,6 +261,14 @@ jobs:
                     } >> artifacts/perf-bench-comment-body.md
                   fi
 
+                  if [ "$GITHUB_EVENT_NAME" = "pull_request" ] && [ -s artifacts/perf-bench-comment-body.md ]; then
+                    run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+                    {
+                      echo
+                      echo "_Full per-scenario numbers in the [job summary](${run_url})._"
+                    } >> artifacts/perf-bench-comment-body.md
+                  fi
+
             - name: Post PR benchmark comment
               if: always() && github.event_name == 'pull_request'
               continue-on-error: true
