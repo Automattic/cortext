@@ -267,6 +267,37 @@ export function useOptionUsage() {
 	return { run };
 }
 
+// Changes the field type on the server, then refreshes the field record and
+// list so the column gets the right renderer and editor.
+export function useChangeFieldType( collectionId ) {
+	const { isBusy, setIsBusy, error, setError } = useMutationState();
+	const invalidate = useFieldListInvalidation();
+	const flush = useFlushFieldRecord();
+	const run = useCallback(
+		async ( recordId, targetType ) => {
+			setIsBusy( true );
+			setError( null );
+			try {
+				const result = await apiFetch( {
+					path: `/cortext/v1/fields/${ recordId }/convert`,
+					method: 'POST',
+					data: { type: targetType },
+				} );
+				await flush( recordId );
+				invalidate( collectionId );
+				return result;
+			} catch ( apiError ) {
+				setError( apiError );
+				throw apiError;
+			} finally {
+				setIsBusy( false );
+			}
+		},
+		[ collectionId, flush, invalidate, setIsBusy, setError ]
+	);
+	return { run, isBusy, error };
+}
+
 export function useDeleteField( collectionId ) {
 	const { deleteEntityRecord, invalidateResolution } = useDispatch( 'core' );
 	const { isBusy, setIsBusy, error, setError } = useMutationState();

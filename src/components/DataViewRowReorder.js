@@ -41,7 +41,7 @@ const ROW_NO_TRANSITION_CLASS = 'cortext-row-reorder-no-transition';
 const HOVER_SUPPRESSION_RELEASE_DELAY = 120;
 const FREEZE_SAFETY_TIMEOUT = 3000;
 
-// tech-debt.md#47: DataViews doesn't expose row refs or reorder hooks.
+// tech-debt.md#48: DataViews doesn't expose row refs or reorder hooks.
 // Keep the DOM selectors for this adapter in one place.
 const ROW_SELECTORS = {
 	table: '.dataviews-view-table tbody > tr',

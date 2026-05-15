@@ -19,6 +19,19 @@ async function deleteIfCreated( requestUtils, path ) {
 	}
 }
 
+async function expectTableScrolledToEnd( canvas ) {
+	const wrapper = canvas
+		.locator( '.cortext-data-view > .dataviews-wrapper' )
+		.first();
+	await expect
+		.poll( async () =>
+			wrapper.evaluate(
+				( el ) => el.scrollLeft + el.clientWidth >= el.scrollWidth - 2
+			)
+		)
+		.toBe( true );
+}
+
 async function createCollectionFixture( requestUtils ) {
 	const suffix = Date.now().toString( 36 ).slice( -4 );
 	const slug = `e2ebooks${ suffix }`;
@@ -3393,6 +3406,7 @@ test.describe( 'Collection view block', () => {
 				name: /Notes/,
 			} );
 			await expect( notesHeader ).toBeVisible();
+			await expectTableScrolledToEnd( canvas );
 
 			// `getByRole('button', { name })` would match both the visible
 			// combined-dropdown trigger (text label) and the transparent
@@ -3468,6 +3482,7 @@ test.describe( 'Collection view block', () => {
 			await expect(
 				canvas.getByRole( 'columnheader', { name: /Tags/ } )
 			).toBeVisible();
+			await expectTableScrolledToEnd( canvas );
 
 			// 6. Title's column doesn't get the schema-action takeover —
 			//    its `<th>` keeps DataViews' built-in trigger and has no

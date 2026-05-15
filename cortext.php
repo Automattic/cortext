@@ -51,4 +51,6 @@ register_activation_hook(
 
 if ( defined( 'WP_CLI' ) && WP_CLI ) {
 	\WP_CLI::add_command( 'cortext seed', \Cortext\CLI\SeedDummyCollections::class );
+	\WP_CLI::add_command( 'cortext perf-seed', array( \Cortext\CLI\PerfBench::class, 'seed' ) );
+	\WP_CLI::add_command( 'cortext perf-bench', array( \Cortext\CLI\PerfBench::class, 'bench' ) );
 }

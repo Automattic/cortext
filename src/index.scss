@@ -1511,6 +1511,67 @@ body:has(.cortext-canvas__identity-actions:hover) .cortext-canvas__identity-acti
 	}
 }
 
+// "Change type" popover. The action commits immediately because row values
+// stay on disk and switching back restores what the user had before.
+.cortext-change-field-type-popover {
+
+	&__body {
+		display: grid;
+		gap: $grid-unit-10;
+		padding: $grid-unit-15;
+		width: 320px;
+	}
+
+	&__title {
+		font-size: 11px;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+		color: $gray-700;
+	}
+
+	&__grid {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: $grid-unit-05;
+	}
+
+	&__type-button {
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-10;
+		padding: $grid-unit-10;
+		border: $border-width solid $gray-200;
+		border-radius: 4px;
+		background: transparent;
+		text-align: start;
+		font-size: 13px;
+		color: $gray-900;
+		cursor: pointer;
+		transition: background-color 0.1s ease, border-color 0.1s ease;
+
+		&:disabled {
+			cursor: not-allowed;
+			opacity: 0.5;
+		}
+
+		&:focus-visible {
+			outline: 2px solid var(--wp-admin-theme-color, $gray-700);
+			outline-offset: -1px;
+		}
+
+		&:hover:not(:disabled) {
+			background: $gray-100;
+			border-color: $gray-700;
+		}
+	}
+
+	&__type-icon {
+		flex: 0 0 auto;
+		color: $gray-700;
+	}
+}
+
 // Cascading format submenu. The outer popover sits beside the column
 // dropdown; each row is a button that anchors a third-level flyout for
 // picking a value. The visual is intentionally tight (240px panel) so it
@@ -1841,29 +1902,36 @@ body:has(.cortext-canvas__identity-actions:hover) .cortext-canvas__identity-acti
 	width: 280px;
 }
 
-// Ghost column is just the `+` icon button. DataViews uses
-// `.dataviews-view-table tr td:last-child { padding-right: 48px }`
-// for the last column, plus `min-width: 15ch` on the cell content
-// wrapper. Match DataViews' selector specificity so our overrides
-// win, then size the column to the button's natural width with a
-// tight right padding.
-.dataviews-view-table tr th:has(.cortext-column-header-marker--add),
-.dataviews-view-table tr td:has(.cortext-data-view__ghost-cell) {
-	width: 0;
-	padding-right: $grid-unit-10;
+// The add-field button is portaled into DataViews' actions column header.
+// Hide the built-in "Actions" label; the row kebabs already explain the
+// column. The header cell needs its own sticky-right rule because the sticky
+// `<thead>` can otherwise break horizontal stickiness in some browsers.
+// `!important` matches DataViews' own tied-specificity sticky rule.
+.dataviews-view-table thead th.dataviews-view-table__actions-column {
+	position: sticky !important;
+	right: 0 !important;
+	z-index: 3;
+	background-color: #fff;
 
-	.dataviews-view-table__cell-content-wrapper,
-	.dataviews-view-table__primary-column-content {
-		min-width: 0;
+	> .dataviews-view-table-header {
+		display: none;
 	}
 }
 
-// Custom field columns and the ghost column carry a marker that
-// `ColumnHeaderActions` portals our trigger into. We hide DataViews'
-// built-in trigger on those <th>s and replace it with a single combined
-// dropdown (Sort / Move / Hide / Rename / Duplicate / Delete) for data
-// columns, or a `+` button for the ghost column. Title and system
-// fields don't have a marker, so their built-in triggers stay visible.
+// Regular cells get vertical centering from DataViews' inner wrapper.
+// The row-actions cell skips that wrapper, so center the kebab on the td.
+.cortext-data-view
+.dataviews-view-table
+tbody
+td.dataviews-view-table__actions-column {
+	vertical-align: middle;
+}
+
+// Custom field columns carry a marker that `ColumnHeaderActions`
+// portals our trigger into. We hide DataViews' built-in trigger on
+// those <th>s and replace it with a single combined dropdown (Sort /
+// Move / Hide / Rename / Duplicate / Delete). Title and system fields
+// don't have a marker, so their built-in triggers stay visible.
 // `tech-debt.md#16` covers the upstream gap that forces this takeover.
 .dataviews-view-table
 th:has(.cortext-column-header-marker)

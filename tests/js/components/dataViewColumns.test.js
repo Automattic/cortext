@@ -10,6 +10,7 @@ import {
 	pruneFiltersForFields,
 	withColumnOrder,
 	withColumnWidth,
+	withNewlyVisibleFields,
 } from '../../../src/components/dataViewColumns';
 
 describe( 'getMinWidth', () => {
@@ -173,6 +174,18 @@ describe( 'normalizeView', () => {
 		expect( next.fields ).toEqual( [ TITLE_FIELD_ID, 'field-1' ] );
 	} );
 
+	it( 'drops the legacy add-field ghost column', () => {
+		const view = {
+			...baseView(),
+			fields: [ TITLE_FIELD_ID, 'field-1', '__add_field' ],
+		};
+		const next = normalizeView(
+			view,
+			new Set( [ TITLE_FIELD_ID, 'field-1' ] )
+		);
+		expect( next.fields ).toEqual( [ TITLE_FIELD_ID, 'field-1' ] );
+	} );
+
 	it( 'prepends the title id when fields filtered it out', () => {
 		const view = { ...baseView(), fields: [ 'field-1', 'field-2' ] };
 		const next = normalizeView(
@@ -321,6 +334,45 @@ describe( 'normalizeView', () => {
 			}
 		);
 		expect( next.calculations ).toEqual( { 'field-2': 'max' } );
+	} );
+} );
+
+describe( 'withNewlyVisibleFields', () => {
+	const fields = [
+		{ id: TITLE_FIELD_ID, editable: true },
+		{ id: 'field-1', recordId: 1, editable: true },
+		{ id: 'field-99', recordId: 99, editable: true },
+		{ id: 'field-2', recordId: 2, editable: true },
+	];
+	const known = new Set( [ TITLE_FIELD_ID, 'field-1', 'field-2' ] );
+
+	it( 'puts fields created from Add field at the end', () => {
+		const view = { fields: [ TITLE_FIELD_ID, 'field-1', 'field-2' ] };
+		const next = withNewlyVisibleFields( view, fields, known, 'field-99' );
+		expect( next.fields ).toEqual( [
+			TITLE_FIELD_ID,
+			'field-1',
+			'field-2',
+			'field-99',
+		] );
+	} );
+
+	it( 'keeps other schema additions near their schema neighbors', () => {
+		const view = { fields: [ TITLE_FIELD_ID, 'field-1', 'field-2' ] };
+		const next = withNewlyVisibleFields( view, fields, known );
+		expect( next.fields ).toEqual( [
+			TITLE_FIELD_ID,
+			'field-1',
+			'field-99',
+			'field-2',
+		] );
+	} );
+
+	it( 'leaves first-render saved views alone', () => {
+		const view = { fields: [ TITLE_FIELD_ID, 'field-1', 'field-2' ] };
+		expect( withNewlyVisibleFields( view, fields, null, 'field-99' ) ).toBe(
+			view
+		);
 	} );
 } );
 

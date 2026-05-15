@@ -165,17 +165,19 @@ Double-click autofit is the trickiest piece. With no measurement hook upstream, 
 
 **Solution.** A `field.menuItems` (array or render-prop) on DataViews fields, appended to the built-in dropdown. Other consumers (Pattern Manager, Pages, Site Editor) would benefit too. File as a Gutenberg feature request.
 
-## 17. Ghost `+` column is a synthetic field pinned in `view.fields` `[internal]`
+## 17. Add-field header piggybacks on the DataViews actions column `[upstream, soft]`
 
-**What.** The `+ add field` column is a synthetic DataViews field (`__add_field`) — no data, no label, pinned last in `view.fields` for table layout. We rely on `enableHiding: false` to keep it out of the column-visibility menu. If DataViews stops honoring that flag, the synthetic leaks into the menu and confuses the column list.
+**What.** The table's `+ add field` button now sits in DataViews' row-actions column header. `ColumnHeaderActions` finds `th.dataviews-view-table__actions-column` and portals the button there; CSS hides the built-in "Actions" label and keeps the header cell sticky on the right. This is cleaner than the old synthetic `__add_field` column because it no longer leaks into `view.fields`, but it still leans on DataViews internals. If the class name, header rendering, or sticky-column markup changes, the button can disappear or stop lining up with the row kebabs.
 
-**Where.** `GHOST_FIELD` and the view-sync effect in `src/components/CollectionDataViews.js`.
+The create-field flow also has to reveal the new trailing column itself. It carries the created field ID back to `CollectionDataViews`, waits until the field marker exists in the rendered header, then scrolls `.dataviews-wrapper` to the right edge. The interaction feels right, but it still depends on DataViews' DOM shape.
 
-**Solution.** If `enableHiding` ever stops working, fork the field list in `CollectionDataViews.js` — pass the synthetic to the table layout but hide it from the visibility menu.
+**Where.** `src/components/fields/ColumnHeaderActions.js` (actions-column lookup and portal), `src/components/CollectionDataViews.js` and `src/components/dataViewScroll.js` (created-field reveal and `.dataviews-wrapper` scroll), `src/index.scss` (`.dataviews-view-table__actions-column` overrides), and the legacy `__add_field` cleanup in `src/components/CollectionDataViews.js`.
+
+**Solution.** DataViews exposes a trailing table-header slot, an add-column slot, or a header action area separate from per-row actions, plus refs for the table scroll wrapper and rendered headers. Then the portal targets a real extension point, the reveal code stops querying DataViews DOM, the sticky/header-label CSS disappears, and `__add_field` stays only as migration cleanup for old saved views.
 
 ## 18. Field management is table-layout only `[internal]`
 
-**What.** Rename / Duplicate / Delete only show up in the table-layout column-header kebab. Grid and list layouts have no schema actions and no ghost `+`. Users there can still create fields via the toolbar Add field button, but they have to switch to table to manage existing fields.
+**What.** Rename / Duplicate / Delete only show up in the table-layout column-header kebab. Grid and list layouts have no schema actions. Users there can still create fields via the toolbar Add field button, but they have to switch to table to manage existing fields.
 
 **Where.** `ColumnHeaderActions` mounts only when `view.type === 'table'` (`src/components/CollectionDataViews.js`).
 
@@ -191,7 +193,7 @@ Double-click autofit is the trickiest piece. With no measurement hook upstream, 
 
 ## 20. Table layout overrides couple to DataViews internals `[upstream, soft]`
 
-**What.** DataViews ships `table-layout: auto; width: 100%` plus per-cell padding rules. We flip to `table-layout: fixed; width: max-content` with explicit per-cell widths so adding or removing a field doesn't reflow every other column, and match DataViews' selector specificity to override the last-cell padding so the ghost column stays slim. Result: a content-sized table that scrolls horizontally on overflow. Depends on DataViews' class names and selector specificity staying put.
+**What.** DataViews ships `table-layout: auto; width: 100%` plus per-cell padding rules. We flip to `table-layout: fixed; width: max-content` with explicit per-cell widths so adding or removing a field doesn't reflow every other column. We also override the actions-column header so the add-field button stays pinned beside the row kebabs. The table sizes to its content and scrolls horizontally on overflow. Depends on DataViews' class names and selector specificity staying put.
 
 **Where.** `src/index.scss`, around the `.dataviews-view-table` block.
 
@@ -411,7 +413,15 @@ The user-facing placeholder is still Core's generic "Search commands and setting
 
 **Solution.** Upstream `WP_Meta_Query` could grow one-sided `LIKE` compares and value-bearing negative `NOT EXISTS` compares. A structured title-query helper in `WP_Query` would cover the title sentinel separately. If those land, `RowsMetaQuery` shrinks back toward a thin adapter or disappears.
 
-## 47. DataViews has no row reorder API `[upstream]`
+## 47. Cascading Popovers need manual fallback placement `[upstream, soft]`
+
+**What.** `@wordpress/components` `Popover` can shift a submenu along the cross axis, but it does not try a left-side fallback when a `right-start` cascading submenu runs past the viewport edge. Cortext now measures the outer menu and the portaled submenu, starts on the side that keeps the submenu away from the column dropdown, then switches to `left-start` or `bottom-start` if the first placement clips. This keeps Format and Calculate submenus usable near the right side of the table, but it is still a local placement policy layered on top of Popover.
+
+**Where.** `useSubmenuPlacement` in `src/hooks/useSubmenuPlacement.js`, wired into `src/components/fields/FieldFormatPopover.js` and `src/components/TableCalculationMenu.js`.
+
+**Solution.** WordPress Popover could expose fallback placements, or pass enough Floating UI middleware through for consumers to say "try right, then left, then bottom" without measuring after render. If that lands, Cortext can drop `useSubmenuPlacement` and let the Popover own cascading-menu collision handling.
+
+## 48. DataViews has no row reorder API `[upstream]`
 
 **What.** Manual order lives on the row posts, but DataViews doesn't give us row refs, drag handles, drop targets, or an `onReorder` hook. Cortext has to decorate the layouts after DataViews renders them: find rows by internal class selectors, match them to `rows` by visible index, portal dnd-kit handles into the first data cell, place fixed drop targets over row gaps, clone a few cells for the drag preview, and hold CSS transforms while the REST request and refetch finish.
 

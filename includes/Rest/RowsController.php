@@ -9,6 +9,7 @@ declare( strict_types=1 );
 
 namespace Cortext\Rest;
 
+use Cortext\Fields\FieldTypeConverter;
 use Cortext\PostType\Collection;
 use Cortext\PostType\CollectionEntries;
 use Cortext\Relations;
@@ -172,6 +173,28 @@ final class RowsController {
 				),
 			)
 		);
+
+		register_rest_route(
+			self::NAMESPACE,
+			'/collections/(?P<collection_id>\d+)/rows/(?P<row_id>\d+)/duplicate',
+			array(
+				array(
+					'methods'             => 'POST',
+					'callback'            => array( $this, 'duplicate_row' ),
+					'permission_callback' => array( $this, 'can_duplicate_row' ),
+					'args'                => array(
+						'collection_id' => array(
+							'type'     => 'integer',
+							'required' => true,
+						),
+						'row_id'        => array(
+							'type'     => 'integer',
+							'required' => true,
+						),
+					),
+				),
+			)
+		);
 	}
 
 	public function can_read(): bool {
@@ -209,6 +232,24 @@ final class RowsController {
 		}
 
 		return current_user_can( 'edit_post', $row_id );
+	}
+
+	/**
+	 * Allows duplication only when the user can edit the source row and add
+	 * rows to the collection.
+	 *
+	 * @param WP_REST_Request $request Incoming REST request.
+	 * @return bool|WP_Error
+	 */
+	public function can_duplicate_row( WP_REST_Request $request ): bool|WP_Error {
+		$edit_check = $this->can_edit_row( $request );
+		if ( is_wp_error( $edit_check ) ) {
+			return $edit_check;
+		}
+		if ( ! $edit_check ) {
+			return false;
+		}
+		return current_user_can( 'edit_posts' );
 	}
 
 	/**
@@ -465,6 +506,113 @@ final class RowsController {
 	}
 
 	/**
+	 * Duplicates a row. Copies the title as "Copy of %s", plus content, status,
+	 * document icon, featured media, and stored field values. Relation values
+	 * are copied only when the reverse field accepts more than one row; copying
+	 * a single reverse would move the relation away from the source row.
+	 *
+	 * @param WP_REST_Request $request Incoming REST request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function duplicate_row( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+		$collection_id = (int) $request->get_param( 'collection_id' );
+		$row_id        = (int) $request->get_param( 'row_id' );
+
+		$collection = $this->validate_collection( $collection_id );
+		if ( is_wp_error( $collection ) ) {
+			return $collection;
+		}
+
+		$slug   = (string) get_post_meta( $collection_id, 'slug', true );
+		$source = get_post( $row_id );
+		if ( ! $source instanceof WP_Post || CollectionEntries::CPT_PREFIX . $slug !== $source->post_type ) {
+			return new WP_Error(
+				'cortext_row_not_found',
+				__( 'Row not found.', 'cortext' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		$copy_title = sprintf(
+			/* translators: %s: original row title. */
+			__( 'Copy of %s', 'cortext' ),
+			$source->post_title
+		);
+
+		$new_id = wp_insert_post(
+			array(
+				'post_type'    => $source->post_type,
+				'post_status'  => $source->post_status,
+				'post_title'   => $copy_title,
+				'post_content' => $source->post_content,
+				'post_excerpt' => $source->post_excerpt,
+			),
+			true
+		);
+		if ( is_wp_error( $new_id ) ) {
+			return $new_id;
+		}
+
+		$new_id    = (int) $new_id;
+		$field_ids = $this->collection_field_ids( $collection_id );
+
+		foreach ( $field_ids as $field_id ) {
+			$field_type = (string) get_post_meta( $field_id, 'type', true );
+
+			if ( 'rollup' === $field_type ) {
+				continue;
+			}
+
+			if ( 'relation' === $field_type ) {
+				$reverse_id = (int) get_post_meta( $field_id, 'relation_reverse_field_id', true );
+				if ( $reverse_id < 1 || ! Relations::relation_is_multiple( $reverse_id ) ) {
+					continue;
+				}
+				$values = Relations::relation_values( $row_id, $field_id );
+				if ( count( $values ) === 0 ) {
+					continue;
+				}
+				$synced = Relations::sync_relation_value( $new_id, $field_id, $values );
+				if ( is_wp_error( $synced ) ) {
+					return $synced;
+				}
+				continue;
+			}
+
+			$key = Relations::meta_key( $field_id );
+			if ( 'multiselect' === $field_type ) {
+				foreach ( get_post_meta( $row_id, $key, false ) as $value ) {
+					if ( '' !== $value && null !== $value ) {
+						add_post_meta( $new_id, $key, $value );
+					}
+				}
+				continue;
+			}
+
+			$value = get_post_meta( $row_id, $key, true );
+			if ( '' !== $value && null !== $value ) {
+				update_post_meta( $new_id, $key, $value );
+			}
+		}
+
+		$icon = (string) get_post_meta( $row_id, 'cortext_document_icon', true );
+		if ( '' !== $icon ) {
+			update_post_meta( $new_id, 'cortext_document_icon', $icon );
+		}
+
+		$thumbnail_id = (int) get_post_thumbnail_id( $row_id );
+		if ( $thumbnail_id > 0 ) {
+			set_post_thumbnail( $new_id, $thumbnail_id );
+		}
+
+		$multi_field_ids = $this->multi_value_field_ids( $field_ids );
+		return new WP_REST_Response(
+			$this->format_row( get_post( $new_id ), $field_ids, $multi_field_ids ),
+			201
+		);
+	}
+
+	/**
 	 * Checks that the given ID points to a valid, registered collection.
 	 *
 	 * @param int $collection_id Collection post ID.
@@ -577,6 +725,14 @@ final class RowsController {
 		if ( null === $value || '' === $value ) {
 			delete_post_meta( $row_id, $key );
 			return;
+		}
+
+		// A single-value edit should clear leftover multi-row values first.
+		// Otherwise `update_post_meta` updates only row 0 and stale chips can
+		// come back after another type change.
+		$existing = get_post_meta( $row_id, $key, false );
+		if ( is_array( $existing ) && count( $existing ) > 1 ) {
+			delete_post_meta( $row_id, $key );
 		}
 
 		if ( 'number' === $field_type ) {
@@ -1002,9 +1158,12 @@ final class RowsController {
 			} elseif ( 'rollup' === $field_type ) {
 				$meta[ $key ] = $this->compute_rollup_value( $post->ID, $field_id );
 			} else {
-				$meta[ $key ] = isset( $multi_field_ids[ $field_id ] )
-					? get_post_meta( $post->ID, $key, false )
-					: get_post_meta( $post->ID, $key, true );
+				$meta[ $key ] = $this->format_typed_value(
+					$post->ID,
+					$field_id,
+					$field_type,
+					isset( $multi_field_ids[ $field_id ] )
+				);
 			}
 		}
 
@@ -1028,6 +1187,169 @@ final class RowsController {
 			'modified_by' => $this->display_name_for( $modified_by_id > 0 ? $modified_by_id : $created_by_id ),
 			'meta'        => $meta,
 		);
+	}
+
+	/**
+	 * Formats stored meta for the field's current type. Values that no longer
+	 * fit the type render empty, but the raw meta stays on disk so changing the
+	 * type back can show it again.
+	 *
+	 * @param int    $row_id     Row post ID.
+	 * @param int    $field_id   Field post ID.
+	 * @param string $field_type Cortext field type.
+	 * @param bool   $is_multi   Whether the field allows multiple meta rows.
+	 * @return mixed
+	 */
+	private function format_typed_value( int $row_id, int $field_id, string $field_type, bool $is_multi ) {
+		$key = "field-{$field_id}";
+
+		if ( 'multiselect' === $field_type ) {
+			$values = get_post_meta( $row_id, $key, false );
+			if ( ! is_array( $values ) || count( $values ) === 0 ) {
+				return array();
+			}
+			$normalized = array_values( array_map( 'strval', $values ) );
+			$options    = $this->valid_option_values( $field_id );
+			if ( count( $options ) === 0 ) {
+				return $normalized;
+			}
+			$matched = array_values(
+				array_filter( $normalized, static fn( string $v ): bool => in_array( $v, $options, true ) )
+			);
+			if ( count( $matched ) > 0 ) {
+				return $matched;
+			}
+			// A single unmatched row may be leftover text from a conversion.
+			// Split it, but only keep tokens that are real options.
+			if ( count( $normalized ) === 1 && preg_match( '/[\n,;]/', $normalized[0] ) ) {
+				$tokens = FieldTypeConverter::split_tokens( $normalized[0] );
+				return array_values(
+					array_filter( $tokens, static fn( string $v ): bool => in_array( $v, $options, true ) )
+				);
+			}
+			return array();
+		}
+
+		$stored = $is_multi
+			? get_post_meta( $row_id, $key, false )
+			: get_post_meta( $row_id, $key, true );
+
+		if ( 'select' === $field_type ) {
+			$value = is_array( $stored ) ? '' : trim( (string) $stored );
+			if ( '' === $value ) {
+				return '';
+			}
+			$options = $this->valid_option_values( $field_id );
+			if ( count( $options ) === 0 ) {
+				return $value;
+			}
+			if ( in_array( $value, $options, true ) ) {
+				return $value;
+			}
+			// Leftover delimited text from a conversion: use the first token
+			// only if it is now a real option.
+			if ( preg_match( '/[\n,;]/', $value ) ) {
+				$tokens = FieldTypeConverter::split_tokens( $value );
+				if ( count( $tokens ) > 0 && in_array( $tokens[0], $options, true ) ) {
+					return $tokens[0];
+				}
+			}
+			return '';
+		}
+
+		if ( 'number' === $field_type ) {
+			if ( is_array( $stored ) || null === $stored || '' === $stored ) {
+				return null;
+			}
+			return is_numeric( $stored ) ? (float) $stored : null;
+		}
+
+		if ( 'date' === $field_type || 'datetime' === $field_type ) {
+			$text = is_array( $stored ) ? '' : trim( (string) $stored );
+			if ( '' === $text ) {
+				return '';
+			}
+			$timestamp = strtotime( $text );
+			if ( false === $timestamp ) {
+				return '';
+			}
+			return 'date' === $field_type
+				? gmdate( 'Y-m-d', $timestamp )
+				: gmdate( DATE_RFC3339, $timestamp );
+		}
+
+		if ( 'checkbox' === $field_type ) {
+			if ( is_array( $stored ) || null === $stored || '' === $stored ) {
+				return false;
+			}
+			return Relations::is_truthy( $stored );
+		}
+
+		if ( 'email' === $field_type ) {
+			$value = is_array( $stored ) ? '' : trim( (string) $stored );
+			if ( '' === $value ) {
+				return '';
+			}
+			return false !== is_email( $value ) ? $value : '';
+		}
+
+		if ( 'url' === $field_type ) {
+			$value = is_array( $stored ) ? '' : trim( (string) $stored );
+			if ( '' === $value ) {
+				return '';
+			}
+			return false !== wp_http_validate_url( $value ) ? $value : '';
+		}
+
+		if ( 'text' === $field_type ) {
+			// If this used to be multiselect, show all remaining meta rows.
+			$all = get_post_meta( $row_id, $key, false );
+			if ( is_array( $all ) && count( $all ) > 1 ) {
+				$text = implode( ', ', array_map( 'strval', $all ) );
+			} else {
+				$text = is_array( $stored ) ? '' : (string) $stored;
+			}
+			$prior_format = (string) get_post_meta( $field_id, 'prior_date_format', true );
+			if ( '' !== $prior_format && '' !== trim( $text ) ) {
+				$timestamp = strtotime( trim( $text ) );
+				if ( false !== $timestamp ) {
+					$format = in_array( $prior_format, array( 'date', 'datetime' ), true )
+						? ( 'date' === $prior_format ? 'Y-m-d' : DATE_RFC3339 )
+						: $prior_format;
+					return wp_date( $format, $timestamp );
+				}
+			}
+			return $text;
+		}
+
+		return $stored;
+	}
+
+	/**
+	 * Reads valid values for a select or multiselect field.
+	 *
+	 * @param int $field_id Field post ID whose options should be read.
+	 * @return string[]
+	 */
+	private function valid_option_values( int $field_id ): array {
+		$raw = (string) get_post_meta( $field_id, 'options', true );
+		if ( '' === $raw ) {
+			return array();
+		}
+		$decoded = json_decode( $raw, true );
+		if ( ! is_array( $decoded ) ) {
+			return array();
+		}
+		$values = array();
+		foreach ( $decoded as $entry ) {
+			if ( is_array( $entry ) && isset( $entry['value'] ) ) {
+				$value = trim( (string) $entry['value'] );
+				if ( '' !== $value ) {
+					$values[] = $value;
+				}
+			}
+		}
+		return $values;
 	}
 
 	/**

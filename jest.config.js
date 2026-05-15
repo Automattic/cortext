@@ -12,5 +12,7 @@ module.exports = {
 	// awareness module. Default Jest doesn't transform node_modules, so the
 	// `export` keyword blows up at parse time. Allowlist parsel-js so Babel
 	// transpiles it before Node parses it.
-	transformIgnorePatterns: [ '/node_modules/(?!(parsel-js)/)' ],
+	transformIgnorePatterns: [
+		'node_modules/(?!(\\.pnpm/)?(parsel-js|@parsel-js)(@|/))',
+	],
 };

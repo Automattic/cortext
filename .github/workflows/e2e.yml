@@ -30,20 +30,25 @@ jobs:
 
             - run: composer install --no-interaction --prefer-dist --no-dev
 
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 11.0.8
+                  standalone: true
+
             - uses: actions/setup-node@v4
               with:
                   node-version: '24.15'
-                  cache: 'npm'
+                  cache: 'pnpm'
 
-            - run: npm ci
+            - run: pnpm install --frozen-lockfile
 
-            - run: npx playwright install --with-deps chromium
+            - run: pnpm exec playwright install --with-deps chromium
 
-            - run: npm run build
+            - run: pnpm run build
 
-            - run: npm run env:start
+            - run: pnpm run env:start
 
-            - run: npm run test:e2e
+            - run: pnpm run test:e2e
               env:
                   WP_BASE_URL: http://localhost:8888
 

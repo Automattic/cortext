@@ -67,7 +67,7 @@ const datetimeIcon = (
 	</svg>
 );
 
-const FIELD_TYPES = [
+export const FIELD_TYPES = [
 	{ value: 'text', label: __( 'Text', 'cortext' ), icon: typography },
 	{ value: 'number', label: __( 'Number', 'cortext' ), icon: numberIcon },
 	{

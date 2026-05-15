@@ -322,6 +322,17 @@ final class CollectionEntries {
 		Relations::remove_deleted_row_references( $post_id, $field_ids );
 	}
 
+	/**
+	 * Collection IDs whose entry post types are already registered in this
+	 * request. The type-change endpoints use this for a cheap field→collection
+	 * lookup before falling back to postmeta.
+	 *
+	 * @return int[]
+	 */
+	public static function known_collection_ids(): array {
+		return array_values( self::$entry_collection_ids );
+	}
+
 	private function collection_id_for_entry_post_type( string $post_type ): int {
 		if ( isset( self::$entry_collection_ids[ $post_type ] ) ) {
 			return self::$entry_collection_ids[ $post_type ];

@@ -31,6 +31,7 @@ import {
 } from '@wordpress/icons';
 
 import AddFieldPopover from './AddFieldPopover';
+import ChangeFieldTypePopover from './ChangeFieldTypePopover';
 import EditOptionsPopover from './EditOptionsPopover';
 import FieldFormatPopover from './FieldFormatPopover';
 import RenameFieldInline from './RenameFieldInline';
@@ -49,29 +50,32 @@ const { Menu } = unlock( componentsPrivateApis );
 
 const FORMATTABLE_TYPES = new Set( [ 'number', 'date', 'datetime' ] );
 
-// Projects two kinds of triggers into the DataViews table header:
+// The server rejects conversions for these types, so hide the action up front.
+const UNCONVERTIBLE_SOURCE_TYPES = new Set( [
+	'relation',
+	'rollup',
+	'formula',
+] );
+
+// Projects Cortext controls into DataViews' table header:
 //
-// - `[data-cortext-field-marker="<recordId>"]` — combined column-header
-//   dropdown for custom fields. Replaces DataViews' built-in trigger
-//   (hidden via CSS, see `tech-debt.md#16`) with a single menu owning
-//   Sort / Move / Hide *plus* Rename / Duplicate / Delete. The marker
-//   sits inside DataViews' (hidden) trigger and serves only as a portal
-//   anchor; the actual button is rendered as a sibling of the trigger,
-//   inheriting the same class so main's drag handle click-forward
-//   resolves to it.
-// - `[data-cortext-add-field-marker]` — `+` button on the ghost column
-//   that opens the same `AddFieldPopover` as the toolbar Add field
-//   trigger.
+// - `[data-cortext-field-marker="<recordId>"]` marks custom fields. We hide
+//   DataViews' trigger (see `tech-debt.md#16`) and portal in one menu with
+//   Sort / Move / Hide plus Rename / Duplicate / Delete. The marker is only
+//   the anchor; the real button is a sibling so the column drag handle can
+//   still forward clicks to it.
+// - `th.dataviews-view-table__actions-column` — `+` button in the
+//   row-actions column header that opens the same `AddFieldPopover`
+//   as the toolbar Add field trigger. See `tech-debt.md#17`.
 //
-// Renders an invisible anchor element so the component finds its own
-// position in DOM and walks up to the wrapping `.cortext-data-view`.
-// A MutationObserver re-syncs portals whenever DataViews mutates its
-// header markup (column toggles, sorting, resizing).
+// The invisible anchor lets this component find its wrapper. A
+// MutationObserver re-syncs portals after DataViews rewrites the header.
 export default function ColumnHeaderActions( {
 	collectionId,
 	view,
 	onChangeView,
 	onFieldOptionsSaved,
+	onFieldCreated,
 	onRowsChanged,
 } ) {
 	const anchorRef = useRef( null );
@@ -109,19 +113,19 @@ export default function ColumnHeaderActions( {
 						th,
 					} );
 				} );
-			wrapper
-				.querySelectorAll( '[data-cortext-add-field-marker]' )
-				.forEach( ( marker ) => {
-					const th = marker.closest( 'th' );
-					if ( ! th ) {
-						return;
-					}
-					next.push( {
-						key: 'add-field',
-						kind: 'add',
-						th,
-					} );
+			// The add-field button lives in DataViews' actions column header.
+			// Row actions keep that column rendered, so we no longer need a
+			// synthetic table column for it. See `tech-debt.md#17`.
+			const actionsTh = wrapper.querySelector(
+				'th.dataviews-view-table__actions-column'
+			);
+			if ( actionsTh ) {
+				next.push( {
+					key: 'add-field',
+					kind: 'add',
+					th: actionsTh,
 				} );
+			}
 
 			setTargets( ( prev ) => {
 				if ( prev.length !== next.length ) {
@@ -163,7 +167,10 @@ export default function ColumnHeaderActions( {
 					);
 				}
 				return createPortal(
-					<AddFieldTrigger collectionId={ collectionId } />,
+					<AddFieldTrigger
+						collectionId={ collectionId }
+						onFieldCreated={ onFieldCreated }
+					/>,
 					target.th,
 					`${ target.key }-${ collectionId }`
 				);
@@ -184,6 +191,7 @@ function FieldActions( {
 	const [ isMenuOpen, setIsMenuOpen ] = useState( false );
 	const [ isFormatting, setIsFormatting ] = useState( false );
 	const [ isEditingOptions, setIsEditingOptions ] = useState( false );
+	const [ isChangingType, setIsChangingType ] = useState( false );
 	const [ isCalculating, setIsCalculating ] = useState( false );
 	const [ shouldFocusFormat, setShouldFocusFormat ] = useState( false );
 	const [ shouldFocusCalculation, setShouldFocusCalculation ] =
@@ -200,6 +208,8 @@ function FieldActions( {
 	const fieldType = record?.meta?.type;
 	const canFormat = FORMATTABLE_TYPES.has( fieldType );
 	const supportsOptions = TYPES_WITH_OPTIONS.has( fieldType );
+	const canChangeType =
+		Boolean( fieldType ) && ! UNCONVERTIBLE_SOURCE_TYPES.has( fieldType );
 	const initialOptions = useMemo(
 		() =>
 			supportsOptions
@@ -406,9 +416,8 @@ function FieldActions( {
 		[ fields, recordId ]
 	);
 
-	// Title is pinned at index 0 (PR A's normalizeView) and the ghost
-	// column at the end. Move only operates on the data-field region in
-	// between, so a sideways swap can't displace either.
+	// Move only touches data fields. Title stays pinned, and the legacy
+	// ghost id is ignored if an older saved view still has it.
 	const movableFields = useMemo(
 		() =>
 			visibleFields.filter(
@@ -444,8 +453,8 @@ function FieldActions( {
 			}
 			order.splice( from, 1 );
 			order.splice( to, 0, dataViewId );
-			// Re-stitch with title first and ghost last so neither can
-			// be displaced by a sideways swap.
+			// Put title back first. Preserve the legacy ghost id for now;
+			// CollectionDataViews strips it on the next normalization pass.
 			const ordered = [];
 			if ( visibleFields.includes( TITLE_FIELD_ID ) ) {
 				ordered.push( TITLE_FIELD_ID );
@@ -553,6 +562,15 @@ function FieldActions( {
 							>
 								<Menu.ItemLabel>
 									{ __( 'Edit options', 'cortext' ) }
+								</Menu.ItemLabel>
+							</Menu.Item>
+						) : null }
+						{ canChangeType ? (
+							<Menu.Item
+								onClick={ () => setIsChangingType( true ) }
+							>
+								<Menu.ItemLabel>
+									{ __( 'Change type…', 'cortext' ) }
 								</Menu.ItemLabel>
 							</Menu.Item>
 						) : null }
@@ -742,11 +760,23 @@ function FieldActions( {
 					/>
 				</Popover>
 			) : null }
+			{ isChangingType && canChangeType ? (
+				<ChangeFieldTypePopover
+					anchor={ optionsAnchorRef.current }
+					collectionId={ collectionId }
+					recordId={ recordId }
+					currentType={ fieldType }
+					onClose={ () => {
+						setIsChangingType( false );
+						onRowsChanged?.();
+					} }
+				/>
+			) : null }
 		</span>
 	);
 }
 
-function AddFieldTrigger( { collectionId } ) {
+function AddFieldTrigger( { collectionId, onFieldCreated } ) {
 	return (
 		<span className="cortext-column-header-actions cortext-column-header-actions--add">
 			<Dropdown
@@ -756,7 +786,7 @@ function AddFieldTrigger( { collectionId } ) {
 					<Button
 						icon={ plus }
 						label={ __( 'Add field', 'cortext' ) }
-						size="small"
+						size="compact"
 						onClick={ onToggle }
 						isPressed={ isOpen }
 					/>
@@ -765,7 +795,10 @@ function AddFieldTrigger( { collectionId } ) {
 					<div className="cortext-data-view-toolbar-popover__content">
 						<AddFieldPopover
 							collectionId={ collectionId }
-							onCreate={ onClose }
+							onCreate={ ( created ) => {
+								onFieldCreated?.( created );
+								onClose();
+							} }
 						/>
 					</div>
 				) }
