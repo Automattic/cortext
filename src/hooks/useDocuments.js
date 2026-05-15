@@ -46,6 +46,7 @@ function readNumber( value, fallback ) {
  * @param {Object}          [options]
  * @param {string}          [options.search]  Free-text search string.
  * @param {'page'|'row'|''} [options.kind]    Filter to a specific document kind.
+ * @param {'trash'|''}      [options.status]  Pass `'trash'` for the sidebar Trash view.
  * @param {number}          [options.page]    1-based page number.
  * @param {number}          [options.perPage] Page size, clamped server-side to 100.
  *
@@ -62,6 +63,7 @@ export default function useDocuments( options = {} ) {
 	const {
 		search = '',
 		kind = '',
+		status = '',
 		page = 1,
 		perPage = DEFAULT_PER_PAGE,
 	} = options;
@@ -88,6 +90,9 @@ export default function useDocuments( options = {} ) {
 		if ( kind ) {
 			params.set( 'kind', kind );
 		}
+		if ( status ) {
+			params.set( 'status', status );
+		}
 		if ( page > 1 ) {
 			params.set( 'page', String( page ) );
 		}
@@ -96,7 +101,7 @@ export default function useDocuments( options = {} ) {
 		}
 		const qs = params.toString();
 		return qs ? `?${ qs }` : '';
-	}, [ search, kind, page, perPage ] );
+	}, [ search, kind, status, page, perPage ] );
 
 	useEffect( () => {
 		const requestId = ++requestIdRef.current;

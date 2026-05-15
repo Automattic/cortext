@@ -51,6 +51,11 @@ final class DocumentsController {
 							'default' => '',
 							'enum'    => array( '', Documents::KIND_PAGE, Documents::KIND_ROW ),
 						),
+						'status'   => array(
+							'type'    => 'string',
+							'default' => '',
+							'enum'    => array( '', Documents::STATUS_TRASH ),
+						),
 						'page'     => array(
 							'type'    => 'integer',
 							'default' => 1,
@@ -72,10 +77,13 @@ final class DocumentsController {
 	}
 
 	public function get_documents( WP_REST_Request $request ): WP_REST_Response {
+		$status = (string) $request->get_param( 'status' );
+
 		$result = $this->documents->list(
 			array(
 				'search'          => (string) $request->get_param( 'search' ),
 				'kind'            => (string) $request->get_param( 'kind' ),
+				'status'          => '' === $status ? null : $status,
 				'page'            => (int) $request->get_param( 'page' ),
 				'per_page'        => (int) $request->get_param( 'per_page' ),
 				'include_excerpt' => true,

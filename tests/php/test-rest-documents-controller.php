@@ -14,6 +14,7 @@ use Cortext\PostType\CollectionEntries;
 use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Field;
 use Cortext\PostType\Page;
+use Cortext\PostType\PageTrashCascade;
 use Cortext\Rest\DocumentsController;
 use WorDBless\BaseTestCase;
 use WP_REST_Request;
@@ -128,6 +129,74 @@ final class Test_Rest_Documents_Controller extends BaseTestCase {
 		$response = $this->query( array( 'kind' => 'wat' ) );
 
 		$this->assertSame( 400, $response->get_status() );
+	}
+
+	public function test_status_trash_lists_pages_and_rows_with_trash_metadata(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$collection_id = $this->create_collection( 'albums', 'Albums' );
+		$page_id       = $this->create_page(
+			array(
+				'post_title'  => 'Trashed page',
+				'post_parent' => 123,
+				'meta_input'  => array(
+					DocumentIdentity::META_KEY => '{"type":"emoji","value":"P"}',
+					PageTrashCascade::META_KEY => '99',
+				),
+			)
+		);
+		wp_trash_post( $page_id );
+
+		$row_id = $this->create_row( 'crtxt_albums', 'Trashed album' );
+		wp_trash_post( $row_id );
+
+		$visible_page = $this->create_page( array( 'post_title' => 'Still here' ) );
+
+		$response = $this->query( array( 'status' => 'trash' ) );
+
+		$this->assertSame( 200, $response->get_status() );
+		$by_id = array_column( $response->get_data()['documents'], null, 'id' );
+
+		$this->assertArrayHasKey( $page_id, $by_id );
+		$this->assertArrayHasKey( $row_id, $by_id );
+		$this->assertArrayNotHasKey( $visible_page, $by_id );
+
+		$page = $by_id[ $page_id ];
+		$this->assertSame( 'page', $page['kind'] );
+		$this->assertSame( 123, $page['parent'] );
+		$this->assertSame( 99, $page['meta'][ PageTrashCascade::META_KEY ] );
+		$this->assertSame( '{"type":"emoji","value":"P"}', $page['meta']['cortext_document_icon'] );
+
+		$row = $by_id[ $row_id ];
+		$this->assertSame( 'row', $row['kind'] );
+		$this->assertSame( $collection_id, $row['collection']['id'] );
+		$this->assertSame( 'Albums', $row['collection']['title'] );
+	}
+
+	public function test_status_trash_excerpt_is_excluded(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$page_id = $this->create_page( array( 'post_title' => 'Trashed' ) );
+		wp_trash_post( $page_id );
+
+		$response = $this->query( array( 'status' => 'trash' ) );
+
+		$by_id = array_column( $response->get_data()['documents'], null, 'id' );
+		$this->assertArrayHasKey( $page_id, $by_id );
+		// Trash listing carries trash-specific meta; the lightweight excerpt
+		// is for live documents only.
+		$this->assertArrayHasKey( 'meta', $by_id[ $page_id ] );
+	}
+
+	public function test_default_listing_excludes_trashed_documents(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$live    = $this->create_page( array( 'post_title' => 'Live' ) );
+		$trashed = $this->create_page( array( 'post_title' => 'Trashed' ) );
+		wp_trash_post( $trashed );
+
+		$ids = array_column( $this->query()->get_data()['documents'], 'id' );
+
+		$this->assertContains( $live, $ids );
+		$this->assertNotContains( $trashed, $ids );
 	}
 
 	private function query( array $params = array() ) {

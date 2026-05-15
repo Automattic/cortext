@@ -21,6 +21,7 @@ use Cortext\PostType\Collection;
 use Cortext\PostType\CollectionEntries;
 use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Page;
+use Cortext\PostType\PageTrashCascade;
 use WP_Post;
 use WP_Query;
 
@@ -29,8 +30,20 @@ final class Documents {
 	public const KIND_PAGE = 'page';
 	public const KIND_ROW  = 'row';
 
+	public const STATUS_TRASH = 'trash';
+
+	private const DEFAULT_STATUSES = array( 'publish', 'draft', 'private' );
 	private const DEFAULT_PER_PAGE = 20;
 	private const MAX_PER_PAGE     = 100;
+
+	/**
+	 * Per-instance memo of `row CPT -> parent collection` lookups so a single
+	 * `list()` call that returns many rows of the same CPT does not re-query
+	 * the collection per row. Cleared on demand by callers that span requests.
+	 *
+	 * @var array<string,?WP_Post>
+	 */
+	private array $collection_cache = array();
 
 	/**
 	 * Returns every registered post type that opts into the `cortext-document`
@@ -94,6 +107,9 @@ final class Documents {
 	 * Arguments:
 	 *   - `search` (string): split-term match across title, excerpt, content.
 	 *   - `kind`   (string): 'page' or 'row' to restrict by document kind.
+	 *   - `status` (string|string[]): post status filter. Defaults to
+	 *     `publish, draft, private`. Pass `'trash'` to list trashed documents
+	 *     (no pagination; SidebarTrash and similar surfaces need every entry).
 	 *   - `page`   (int):    1-based page number.
 	 *   - `per_page` (int):  page size, clamped to MAX_PER_PAGE.
 	 *   - `include_excerpt` (bool): include excerpt in formatted documents.
@@ -110,6 +126,8 @@ final class Documents {
 			);
 		}
 
+		$statuses = $this->normalize_statuses( $args['status'] ?? null );
+		$is_trash = array( self::STATUS_TRASH ) === $statuses;
 		$page     = max( 1, (int) ( $args['page'] ?? 1 ) );
 		$per_page = min(
 			self::MAX_PER_PAGE,
@@ -119,9 +137,11 @@ final class Documents {
 
 		$query_args = array(
 			'post_type'           => $post_types,
-			'post_status'         => array( 'publish', 'draft', 'private' ),
-			'paged'               => $page,
-			'posts_per_page'      => $per_page,
+			'post_status'         => $statuses,
+			// Trashed lists feed the sidebar Trash, which needs every entry up
+			// front to compute cascade roots. All other lists paginate.
+			'paged'               => $is_trash ? 1 : $page,
+			'posts_per_page'      => $is_trash ? -1 : $per_page,
 			'orderby'             => 'modified',
 			'order'               => 'DESC',
 			'ignore_sticky_posts' => true,
@@ -134,7 +154,8 @@ final class Documents {
 		$query = new WP_Query( $query_args );
 
 		$opts      = array(
-			'include_excerpt' => ! empty( $args['include_excerpt'] ),
+			'include_excerpt'    => ! empty( $args['include_excerpt'] ),
+			'include_trash_meta' => $is_trash,
 		);
 		$documents = array();
 		foreach ( $query->posts as $post ) {
@@ -154,6 +175,37 @@ final class Documents {
 			'documents' => $documents,
 			'total'     => (int) $query->found_posts,
 		);
+	}
+
+	/**
+	 * Normalises the status arg. Accepts a string, an array of strings, or
+	 * null (default set). Unknown statuses fall back to the default set.
+	 *
+	 * @param mixed $status Status request value.
+	 * @return string[]
+	 */
+	private function normalize_statuses( $status ): array {
+		if ( null === $status || '' === $status ) {
+			return self::DEFAULT_STATUSES;
+		}
+
+		$candidates = array_values(
+			array_filter(
+				array_map(
+					static fn( $value ): string => is_string( $value ) ? $value : '',
+					(array) $status
+				),
+				static fn( string $value ): bool => '' !== $value
+			)
+		);
+		if ( empty( $candidates ) ) {
+			return self::DEFAULT_STATUSES;
+		}
+
+		$allowed = array_merge( self::DEFAULT_STATUSES, array( self::STATUS_TRASH ) );
+		$valid   = array_values( array_intersect( $candidates, $allowed ) );
+
+		return empty( $valid ) ? self::DEFAULT_STATUSES : $valid;
 	}
 
 	/**
@@ -216,21 +268,23 @@ final class Documents {
 		}
 
 		$document = array(
-			'kind'  => $kind,
-			'id'    => (int) $post->ID,
-			'title' => $this->post_title( $post ),
-			'path'  => $collection instanceof WP_Post
+			'kind'   => $kind,
+			'id'     => (int) $post->ID,
+			'title'  => $this->post_title( $post ),
+			'path'   => $collection instanceof WP_Post
 				? $this->collection_path( $collection )
 				: $this->page_path( $post ),
+			'parent' => (int) $post->post_parent,
 		);
 
 		if ( ! empty( $opts['include_excerpt'] ) ) {
 			$document['excerpt'] = $this->build_excerpt( $post );
 		}
 
+		$icon = '';
 		if ( self::KIND_PAGE === $kind ) {
-			$icon = get_post_meta( $post->ID, DocumentIdentity::META_KEY, true );
-			if ( is_string( $icon ) && '' !== $icon ) {
+			$icon = (string) get_post_meta( $post->ID, DocumentIdentity::META_KEY, true );
+			if ( '' !== $icon ) {
 				$document['icon'] = $icon;
 			}
 		}
@@ -243,7 +297,20 @@ final class Documents {
 			);
 		}
 
+		if ( ! empty( $opts['include_trash_meta'] ) ) {
+			$document['modified_at'] = $this->format_gmt_date( $post->post_modified_gmt );
+			$document['meta']        = array(
+				'cortext_document_icon'    => $icon,
+				PageTrashCascade::META_KEY => (int) get_post_meta( $post->ID, PageTrashCascade::META_KEY, true ),
+			);
+		}
+
 		return $document;
+	}
+
+	private function format_gmt_date( string $mysql_gmt ): string {
+		$timestamp = strtotime( $mysql_gmt . ' UTC' );
+		return false === $timestamp ? '' : gmdate( 'c', $timestamp );
 	}
 
 	/**
@@ -273,6 +340,18 @@ final class Documents {
 	 * @param string $post_type Row CPT slug, e.g. `crtxt_projects`.
 	 */
 	public function find_collection_by_row_post_type( string $post_type ): ?WP_Post {
+		if ( array_key_exists( $post_type, $this->collection_cache ) ) {
+			return $this->collection_cache[ $post_type ];
+		}
+
+		$collection = $this->lookup_collection_by_row_post_type( $post_type );
+
+		$this->collection_cache[ $post_type ] = $collection;
+
+		return $collection;
+	}
+
+	private function lookup_collection_by_row_post_type( string $post_type ): ?WP_Post {
 		if (
 			! str_starts_with( $post_type, CollectionEntries::CPT_PREFIX ) ||
 			Collection::POST_TYPE === $post_type

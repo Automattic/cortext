@@ -28,7 +28,7 @@ it( 'fetches trashed documents', async () => {
 	await waitFor( () => expect( result.current.hasResolved ).toBe( true ) );
 
 	expect( apiFetch ).toHaveBeenCalledWith( {
-		path: '/cortext/v1/documents/trash',
+		path: '/cortext/v1/documents?status=trash',
 	} );
 	expect( result.current.documents ).toEqual( [ document ] );
 	expect( result.current.total ).toBe( 1 );

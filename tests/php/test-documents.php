@@ -15,6 +15,7 @@ use Cortext\PostType\CollectionEntries;
 use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Field;
 use Cortext\PostType\Page;
+use Cortext\PostType\PageTrashCascade;
 use WorDBless\BaseTestCase;
 
 final class Test_Documents extends BaseTestCase {
@@ -236,6 +237,50 @@ final class Test_Documents extends BaseTestCase {
 		$ids_one = array_map( static fn ( array $doc ): int => $doc['id'], $page_one['documents'] );
 		$ids_two = array_map( static fn ( array $doc ): int => $doc['id'], $page_two['documents'] );
 		$this->assertSame( array(), array_intersect( $ids_one, $ids_two ) );
+	}
+
+	public function test_list_resolves_collection_once_per_row_post_type(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$this->create_collection( 'cachedalbums', 'Cached albums' );
+		$this->create_row( 'crtxt_cachedalbums', 'First' );
+		$this->create_row( 'crtxt_cachedalbums', 'Second' );
+
+		$collection_lookups = 0;
+		$count_lookups      = static function ( $pre, \WP_Query $query ) use ( &$collection_lookups ) {
+			$vars = $query->query_vars;
+			if (
+				Collection::POST_TYPE === ( $vars['post_type'] ?? '' ) &&
+				'slug' === ( $vars['meta_key'] ?? '' ) &&
+				'cachedalbums' === ( $vars['meta_value'] ?? '' )
+			) {
+				++$collection_lookups;
+			}
+			return $pre;
+		};
+		add_filter( 'posts_pre_query', $count_lookups, 9, 2 );
+
+		$this->documents->list( array( 'kind' => Documents::KIND_ROW ) );
+
+		remove_filter( 'posts_pre_query', $count_lookups, 9 );
+
+		$this->assertSame( 1, $collection_lookups );
+	}
+
+	public function test_list_with_status_trash_returns_trashed_documents(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$live    = $this->create_page( array( 'post_title' => 'Live' ) );
+		$trashed = $this->create_page( array( 'post_title' => 'Going away' ) );
+		wp_trash_post( $trashed );
+
+		$result = $this->documents->list( array( 'status' => Documents::STATUS_TRASH ) );
+
+		$ids = array_map( static fn ( array $doc ): int => $doc['id'], $result['documents'] );
+		$this->assertContains( $trashed, $ids );
+		$this->assertNotContains( $live, $ids );
+
+		$by_id = array_column( $result['documents'], null, 'id' );
+		$this->assertArrayHasKey( 'meta', $by_id[ $trashed ] );
+		$this->assertArrayHasKey( PageTrashCascade::META_KEY, $by_id[ $trashed ]['meta'] );
 	}
 
 	public function test_list_excludes_trashed_documents(): void {
