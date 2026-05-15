@@ -1,6 +1,10 @@
 <?php
 /**
- * Tests for Cortext\Rest\DocumentTrashController.
+ * Tests for the trash mutation routes on Cortext\Rest\DocumentsController.
+ *
+ * Read tests (GET /cortext/v1/documents) live in
+ * test-rest-documents-controller.php; this file owns restore and
+ * permanent-delete because they need the PageTrashCascade fixture.
  *
  * @package Cortext
  */
@@ -12,12 +16,12 @@ namespace Cortext\Tests;
 use Cortext\PostType\Collection;
 use Cortext\PostType\Page;
 use Cortext\PostType\PageTrashCascade;
-use Cortext\Rest\DocumentTrashController;
+use Cortext\Rest\DocumentsController;
 use WorDBless\BaseTestCase;
 use WP_REST_Request;
 use WP_REST_Server;
 
-final class Test_Rest_Document_Trash_Controller extends BaseTestCase {
+final class Test_Rest_Documents_Controller_Mutations extends BaseTestCase {
 
 	use InMemoryPostsQuery;
 
@@ -36,7 +40,7 @@ final class Test_Rest_Document_Trash_Controller extends BaseTestCase {
 		( new PageTrashCascade() )->register();
 
 		$GLOBALS['wp_rest_server'] = new WP_REST_Server();
-		( new DocumentTrashController() )->register();
+		( new DocumentsController() )->register();
 		do_action( 'rest_api_init' );
 	}
 

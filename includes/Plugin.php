@@ -25,7 +25,6 @@ use Cortext\PostType\PageTrashCascade;
 use Cortext\Rest\CollectionsController;
 use Cortext\Rest\DocumentLocatorController;
 use Cortext\Rest\DocumentsController;
-use Cortext\Rest\DocumentTrashController;
 use Cortext\Rest\FavoritesController;
 use Cortext\Rest\FieldsController;
 use Cortext\Rest\RecentsController;
@@ -61,7 +60,6 @@ final class Plugin {
 		( new FieldsController() )->register();
 		( new DocumentLocatorController() )->register();
 		( new DocumentsController() )->register();
-		( new DocumentTrashController() )->register();
 		( new RecentsController() )->register();
 		( new RowsController() )->register();
 		( new WorkspaceHomeController() )->register();
