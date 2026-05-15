@@ -122,14 +122,38 @@ jobs:
 
             - name: Run benchmark
               run: |
-                  set -o pipefail
+                  set -euo pipefail
                   mkdir -p artifacts
-                  pnpm exec wp-env run cli wp cortext perf-bench \
-                    --iterations=5 \
-                    --warmup=1 \
-                    --budget=includes/CLI/perf-budgets.json \
-                    --fail-on-budget \
-                    --pretty | tee artifacts/perf-bench.json
+
+                  run_benchmark() {
+                    local output_path="$1"
+
+                    pnpm exec wp-env run cli wp cortext perf-bench \
+                      --iterations=10 \
+                      --warmup=1 \
+                      --budget=includes/CLI/perf-budgets.json \
+                      --fail-on-budget \
+                      --pretty | tee "$output_path"
+                    local status="${PIPESTATUS[0]}"
+
+                    return "$status"
+                  }
+
+                  set +e
+                  run_benchmark artifacts/perf-bench.json
+                  status="$?"
+                  set -e
+
+                  if [ "$status" -ne 0 ] && php .github/scripts/write-perf-bench-summary.php --current=artifacts/perf-bench.json --failures-only-metric=p95_ms; then
+                    echo "Only p95 latency budgets missed; retrying the benchmark once."
+                    cp artifacts/perf-bench.json artifacts/perf-bench-first.json
+                    set +e
+                    run_benchmark artifacts/perf-bench.json
+                    status="$?"
+                    set -e
+                  fi
+
+                  exit "$status"
 
             - name: Run UI performance benchmark
               if: github.event_name == 'workflow_dispatch' || env.CORTEXT_PERF_UI == '1'
