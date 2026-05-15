@@ -21,6 +21,8 @@ use WP_REST_Server;
 
 final class Test_Rest_Recents_Controller extends BaseTestCase {
 
+	use InMemoryPostsQuery;
+
 	private const META_KEY = 'cortext_recents';
 
 	public function set_up(): void {
@@ -30,12 +32,15 @@ final class Test_Rest_Recents_Controller extends BaseTestCase {
 		( new Page() )->register_post_type();
 		( new Collection() )->register_post_type();
 
+		$this->install_in_memory_posts_query();
+
 		$GLOBALS['wp_rest_server'] = new WP_REST_Server();
 		( new RecentsController() )->register();
 		do_action( 'rest_api_init' );
 	}
 
 	public function tear_down(): void {
+		$this->uninstall_in_memory_posts_query();
 		wp_set_current_user( 0 );
 		parent::tear_down();
 	}

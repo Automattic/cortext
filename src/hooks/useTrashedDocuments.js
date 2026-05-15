@@ -1,65 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
-import apiFetch from '@wordpress/api-fetch';
-
+import useDocuments from './useDocuments';
 import { useDocumentTrashInvalidation } from './documentTrashInvalidation';
 
+/**
+ * Trash uses `/cortext/v1/documents?status=trash`; this hook adds the
+ * invalidation refresh used after restore and permanent delete.
+ */
 export default function useTrashedDocuments() {
-	const [ state, setState ] = useState( {
-		documents: [],
-		total: 0,
-		isLoading: false,
-		hasResolved: false,
-		error: null,
-	} );
-	const [ refreshKey, setRefreshKey ] = useState( 0 );
-	const requestIdRef = useRef( 0 );
-
-	const refresh = useCallback( () => {
-		setRefreshKey( ( key ) => key + 1 );
-	}, [] );
-
-	useDocumentTrashInvalidation( refresh );
-
-	useEffect( () => {
-		const requestId = ++requestIdRef.current;
-
-		setState( ( current ) => ( {
-			...current,
-			isLoading: true,
-			hasResolved: false,
-			error: null,
-		} ) );
-
-		apiFetch( { path: '/cortext/v1/documents/trash' } )
-			.then( ( body ) => {
-				if ( requestId !== requestIdRef.current ) {
-					return;
-				}
-				const documents = Array.isArray( body?.documents )
-					? body.documents
-					: [];
-				setState( {
-					documents,
-					total: Number.isFinite( Number( body?.total ) )
-						? Number( body.total )
-						: documents.length,
-					isLoading: false,
-					hasResolved: true,
-					error: null,
-				} );
-			} )
-			.catch( ( error ) => {
-				if ( requestId !== requestIdRef.current ) {
-					return;
-				}
-				setState( ( current ) => ( {
-					...current,
-					isLoading: false,
-					hasResolved: true,
-					error,
-				} ) );
-			} );
-	}, [ refreshKey ] );
-
-	return { ...state, refresh };
+	const result = useDocuments( { status: 'trash' } );
+	useDocumentTrashInvalidation( result.refresh );
+	return result;
 }

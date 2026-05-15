@@ -217,6 +217,68 @@ final class PageTrashCascade {
 	}
 
 	/**
+	 * BFS over the cascade-marker tree rooted at `$root_id`, returning every
+	 * trashed descendant whose marker chain ties back to the root. The marker
+	 * stores each child's immediate parent, so the walk expands one level at
+	 * a time. Page-only by design; row CPTs are flat and produce an empty list.
+	 *
+	 * Used by the restore and permanent-delete REST endpoints to record the
+	 * subtree before the mutation runs (untrashed_post fires synchronously
+	 * inside wp_untrash_post, so a post-call query would not isolate which
+	 * descendants this restore brought back).
+	 *
+	 * @param int $root_id Page id to walk from.
+	 *
+	 * @return int[] Trashed descendant ids (root excluded), no guaranteed order.
+	 */
+	public function descendants_for_root( int $root_id ): array {
+		if ( Page::POST_TYPE !== get_post_type( $root_id ) ) {
+			return array();
+		}
+
+		$collected = array();
+		$frontier  = array( $root_id );
+
+		while ( ! empty( $frontier ) ) {
+			$next = array();
+			foreach ( $frontier as $current ) {
+				foreach ( $this->trashed_children_tagged_with( $current ) as $child_id ) {
+					if ( ! in_array( $child_id, $collected, true ) ) {
+						$collected[] = $child_id;
+						$next[]      = $child_id;
+					}
+				}
+			}
+			$frontier = $next;
+		}
+
+		return $collected;
+	}
+
+	/**
+	 * Returns trashed pages currently tagged with the given parent id.
+	 *
+	 * @param int $parent_id Page id to match against the cascade marker.
+	 *
+	 * @return int[]
+	 */
+	private function trashed_children_tagged_with( int $parent_id ): array {
+		$ids = get_posts(
+			array(
+				'post_type'      => Page::POST_TYPE,
+				'post_status'    => 'trash',
+				'posts_per_page' => -1,
+				'fields'         => 'ids',
+				'no_found_rows'  => true,
+				'meta_key'       => self::META_KEY,   // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				'meta_value'     => (string) $parent_id, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			)
+		);
+
+		return array_map( 'intval', $ids );
+	}
+
+	/**
 	 * Returns the page's direct children that aren't already in trash.
 	 * Already-trashed ones stay unmarked so a later parent-restore doesn't
 	 * pull them back too.

@@ -12,11 +12,10 @@ namespace Cortext\Tests;
 use Cortext\PostType\Page;
 use Cortext\PostType\PageTrashCascade;
 use WorDBless\BaseTestCase;
-use WorDBless\Posts as WorDBlessPosts;
-use WP_Post;
-use WP_Query;
 
 final class Test_Page_Trash_Cascade extends BaseTestCase {
+
+	use InMemoryPostsQuery;
 
 	public function set_up(): void {
 		parent::set_up();
@@ -29,17 +28,13 @@ final class Test_Page_Trash_Cascade extends BaseTestCase {
 		remove_all_filters( 'bulk_actions-edit-' . Page::POST_TYPE );
 		remove_all_filters( 'handle_bulk_actions-edit-' . Page::POST_TYPE );
 
-		// WorDBless's wpdb mock returns empty for any query that is not a
-		// single-row primary-key lookup; cascade operations rely on
-		// `post_parent` and meta_key joins. Intercept WP_Query before it
-		// builds SQL and answer from WorDBless's in-memory store instead.
-		add_filter( 'posts_pre_query', array( $this, 'serve_posts_from_memory' ), 10, 2 );
+		$this->install_in_memory_posts_query();
 
 		( new PageTrashCascade() )->register();
 	}
 
 	public function tear_down(): void {
-		remove_filter( 'posts_pre_query', array( $this, 'serve_posts_from_memory' ), 10 );
+		$this->uninstall_in_memory_posts_query();
 		parent::tear_down();
 	}
 
@@ -288,80 +283,5 @@ final class Test_Page_Trash_Cascade extends BaseTestCase {
 		$this->assertGreaterThan( 0, $id );
 
 		return (int) $id;
-	}
-
-	/**
-	 * Short-circuits WP_Query for the queries the cascade emits, answering
-	 * from WorDBless's in-memory post store. Only handles the filters the
-	 * cascade uses: post_type, post_parent, post_status, meta_key+meta_value.
-	 *
-	 * @param mixed    $pre   Existing filter return; passed through unchanged when null.
-	 * @param WP_Query $query The query being short-circuited.
-	 *
-	 * @return mixed
-	 */
-	public function serve_posts_from_memory( $pre, WP_Query $query ) {
-		$vars = $query->query_vars;
-
-		$wants_parent_filter = ! empty( $vars['post_parent'] );
-		$wants_meta_filter   = ! empty( $vars['meta_key'] );
-		if ( ! $wants_parent_filter && ! $wants_meta_filter ) {
-			return $pre;
-		}
-
-		$candidates = $this->all_in_memory_posts();
-
-		if ( ! empty( $vars['post_type'] ) ) {
-			$types      = (array) $vars['post_type'];
-			$candidates = array_filter(
-				$candidates,
-				static fn( WP_Post $post ): bool => in_array( $post->post_type, $types, true )
-			);
-		}
-
-		if ( $wants_parent_filter ) {
-			$parent     = (int) $vars['post_parent'];
-			$candidates = array_filter(
-				$candidates,
-				static fn( WP_Post $post ): bool => (int) $post->post_parent === $parent
-			);
-		}
-
-		if ( ! empty( $vars['post_status'] ) ) {
-			$statuses   = (array) $vars['post_status'];
-			$candidates = array_filter(
-				$candidates,
-				static fn( WP_Post $post ): bool => in_array( $post->post_status, $statuses, true )
-			);
-		}
-
-		if ( $wants_meta_filter ) {
-			$key        = (string) $vars['meta_key'];
-			$value      = (string) ( $vars['meta_value'] ?? '' );
-			$candidates = array_filter(
-				$candidates,
-				static fn( WP_Post $post ): bool => (string) get_post_meta( (int) $post->ID, $key, true ) === $value
-			);
-		}
-
-		$candidates = array_values( $candidates );
-
-		if ( 'ids' === ( $vars['fields'] ?? '' ) ) {
-			return array_map( static fn( WP_Post $post ): int => (int) $post->ID, $candidates );
-		}
-
-		return $candidates;
-	}
-
-	/**
-	 * @return WP_Post[]
-	 */
-	private function all_in_memory_posts(): array {
-		$store = WorDBlessPosts::init()->posts;
-		$out   = array();
-		foreach ( $store as $row ) {
-			$out[] = new WP_Post( $row );
-		}
-		return $out;
 	}
 }
