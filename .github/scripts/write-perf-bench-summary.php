@@ -274,12 +274,12 @@ function comparison_lines( array $current, string $base_path, string $base_label
 	$base_scenarios    = is_array( $base['report']['scenarios'] ?? null ) ? $base['report']['scenarios'] : array();
 	$rows              = array();
 	$change_summary    = empty_change_summary();
-	$metrics           = array(
-		array( 'p50_ms', 'number' ),
-		array( 'p95_ms', 'number' ),
-		array( 'sql_queries_p95', 'integer' ),
-		array( 'memory_bytes_p95', 'memory' ),
-	);
+	$metrics           = comparison_metric_definitions( $current_scenarios, $base_scenarios );
+
+	if ( count( $metrics ) === 0 ) {
+		$lines[] = 'No comparable metrics to compare.';
+		return $lines;
+	}
 
 	foreach ( $current_scenarios as $scenario_id => $scenario ) {
 		if ( ! is_array( $scenario ) || ! isset( $base_scenarios[ $scenario_id ] ) || ! is_array( $base_scenarios[ $scenario_id ] ) ) {
@@ -290,19 +290,22 @@ function comparison_lines( array $current, string $base_path, string $base_label
 		foreach ( $metrics as $metric ) {
 			$change_summary = add_metric_change(
 				$change_summary,
-				$scenario[ $metric[0] ] ?? null,
-				$base_scenario[ $metric[0] ] ?? null,
-				$metric[1]
+				$scenario[ $metric['key'] ] ?? null,
+				$base_scenario[ $metric['key'] ] ?? null,
+				$metric['type']
 			);
 		}
 
-		$rows[] = array(
-			escape_cell( $scenario['label'] ?? $scenario_id ),
-			comparison_value( $scenario['p50_ms'] ?? null, $base_scenario['p50_ms'] ?? null, 'number' ),
-			comparison_value( $scenario['p95_ms'] ?? null, $base_scenario['p95_ms'] ?? null, 'number' ),
-			comparison_value( $scenario['sql_queries_p95'] ?? null, $base_scenario['sql_queries_p95'] ?? null, 'integer' ),
-			comparison_value( $scenario['memory_bytes_p95'] ?? null, $base_scenario['memory_bytes_p95'] ?? null, 'memory' ),
-		);
+		$row = array( escape_cell( $scenario['label'] ?? $scenario_id ) );
+		foreach ( $metrics as $metric ) {
+			$row[] = comparison_value(
+				$scenario[ $metric['key'] ] ?? null,
+				$base_scenario[ $metric['key'] ] ?? null,
+				$metric['type']
+			);
+		}
+
+		$rows[] = $row;
 	}
 
 	if ( count( $rows ) === 0 ) {
@@ -318,8 +321,8 @@ function comparison_lines( array $current, string $base_path, string $base_label
 
 	foreach (
 		markdown_table(
-			array( 'Scenario', 'p50 ms', 'p95 ms', 'SQL p95', 'Memory p95' ),
-			array( 'left', 'right', 'right', 'right', 'right' ),
+			array_merge( array( 'Scenario' ), array_column( $metrics, 'label' ) ),
+			array_merge( array( 'left' ), array_fill( 0, count( $metrics ), 'right' ) ),
 			$rows
 		) as $table_line
 	) {
@@ -332,6 +335,86 @@ function comparison_lines( array $current, string $base_path, string $base_label
 	$lines[] = '_Deltas <10% on p50/p95 may be runner noise; SQL counts and memory are deterministic._';
 
 	return $lines;
+}
+
+/**
+ * Builds the comparable metric columns present in the benchmark reports.
+ *
+ * @param array<string,mixed> $current_scenarios Current report scenarios.
+ * @param array<string,mixed> $base_scenarios    Base report scenarios.
+ * @return array<int,array{key:string,label:string,type:string}>
+ */
+function comparison_metric_definitions( array $current_scenarios, array $base_scenarios ): array {
+	$metrics = array();
+
+	foreach ( $current_scenarios as $scenario_id => $scenario ) {
+		if ( ! is_array( $scenario ) || ! isset( $base_scenarios[ $scenario_id ] ) || ! is_array( $base_scenarios[ $scenario_id ] ) ) {
+			continue;
+		}
+
+		foreach ( $scenario as $key => $value ) {
+			if ( ! should_compare_metric( $key, $value, $base_scenarios[ $scenario_id ][ $key ] ?? null ) || isset( $metrics[ $key ] ) ) {
+				continue;
+			}
+
+			$metrics[ $key ] = array(
+				'key'   => $key,
+				'label' => metric_label( $key ),
+				'type'  => metric_type( $key ),
+			);
+		}
+	}
+
+	return array_values( $metrics );
+}
+
+/**
+ * Checks whether a scenario value should be compared as a metric.
+ */
+function should_compare_metric( string $key, mixed $current, mixed $base ): bool {
+	if ( in_array( $key, array( 'runs' ), true ) ) {
+		return false;
+	}
+
+	return is_numeric( $current ) && is_numeric( $base );
+}
+
+/**
+ * Formats a benchmark metric key as a markdown table header.
+ */
+function metric_label( string $key ): string {
+	if ( preg_match( '/^p(\\d+)_ms$/', $key, $matches ) ) {
+		return 'p' . $matches[1] . ' ms';
+	}
+
+	if ( preg_match( '/^sql_queries_p(\\d+)$/', $key, $matches ) ) {
+		return 'SQL p' . $matches[1];
+	}
+
+	if ( preg_match( '/^memory_bytes_p(\\d+)$/', $key, $matches ) ) {
+		return 'Memory p' . $matches[1];
+	}
+
+	if ( preg_match( '/^(.+)_p(\\d+)_ms$/', $key, $matches ) ) {
+		return ucwords( str_replace( '_', ' ', $matches[1] ) ) . ' p' . $matches[2] . ' ms';
+	}
+
+	return ucwords( str_replace( '_', ' ', $key ) );
+}
+
+/**
+ * Infers how a benchmark metric should be formatted.
+ */
+function metric_type( string $key ): string {
+	if ( str_starts_with( $key, 'memory_bytes_' ) ) {
+		return 'memory';
+	}
+
+	if ( str_starts_with( $key, 'sql_queries_' ) ) {
+		return 'integer';
+	}
+
+	return 'number';
 }
 
 /**

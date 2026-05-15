@@ -37,7 +37,7 @@ jobs:
     performance-bench:
         name: Performance benchmark
         runs-on: ubuntu-latest
-        timeout-minutes: 25
+        timeout-minutes: 40
         steps:
             - uses: actions/checkout@v4
 
@@ -109,9 +109,10 @@ jobs:
                     --pretty | tee artifacts/perf-bench-base.json
 
             - name: Run baseline UI performance benchmark
-              if: github.event_name == 'pull_request' && env.CORTEXT_PERF_UI == '1'
+              if: github.event_name == 'pull_request'
               continue-on-error: true
               env:
+                  CORTEXT_PERF_UI: '1'
                   # The benchmark workflow starts the dev wp-env, which serves WordPress on 8888.
                   WP_BASE_URL: http://localhost:8888
               run: |
@@ -199,8 +200,9 @@ jobs:
                   exit "$status"
 
             - name: Run UI performance benchmark
-              if: github.event_name == 'workflow_dispatch' || env.CORTEXT_PERF_UI == '1'
+              if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || env.CORTEXT_PERF_UI == '1'
               env:
+                  CORTEXT_PERF_UI: '1'
                   # The benchmark workflow starts the dev wp-env, which serves WordPress on 8888.
                   WP_BASE_URL: http://localhost:8888
               run: |
