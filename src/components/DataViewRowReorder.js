@@ -38,16 +38,15 @@ const ROW_DRAGGING_CLASS = 'cortext-row-dragging';
 const ROW_SUPPRESS_HOVER_CLASS = 'cortext-row-reorder-suppress-hover';
 const ROW_NO_TRANSITION_CLASS = 'cortext-row-reorder-no-transition';
 const ADD_FIELD_ID = '__add_field';
-// Width to reserve at the right of the preview for the sticky actions column.
-// DataViews' actions cell measures ~88px in practice; 48 is enough so the last
-// field never sits flush against the actions affordance, without leaving a
-// jarring empty strip on rows with short content. Bump this if DataViews ever
-// widens the actions chrome and the preview starts crowding it.
+// Reserves room on the right of the preview for the sticky actions cell.
+// The cell is about 88px in DataViews; 48 lets the last field breathe on
+// wide rows while keeping the preview tight on short ones. Bump it if the
+// actions cell ever grows.
 const ROW_ACTIONS_CHROME_RESERVE = 48;
-// Maximum half-height of a gap drop zone above/below the seam between two
-// rows. Without this cap, tall rows produce gap hitboxes that span half the
-// row -- meaning a drop near the middle of the row would activate the gap.
-// 24px keeps the hitbox aimable but bounded.
+// Half-height limit for a gap drop zone above or below the seam between
+// two rows. With no cap, a tall row produces a hitbox that reaches the
+// row's middle, so a drop halfway down still registers as a between-rows
+// drop. 24px feels easy to aim at and keeps the row body clear.
 const ROW_DROP_ZONE_MAX_SIDE = 24;
 const HOVER_SUPPRESSION_RELEASE_DELAY = 120;
 const FREEZE_SAFETY_TIMEOUT = 3000;
@@ -165,12 +164,12 @@ function isCheckboxTableCell( cell ) {
 }
 
 function isActionsTableCell( cell ) {
-	// DataViews labels the actions column with the two upstream classes below.
-	// The third check (last cell containing a button) is a fallback for the
-	// brief moments when the column hasn't picked up its sticky modifier yet
-	// during re-renders, since the preview is built off the live DOM. Schema
-	// fields never render a bare `<button>` directly inside their `<td>` in
-	// this codebase, so the false-positive risk is bounded.
+	// DataViews tags the actions column with the two classes below. The third
+	// check (last cell that has a button) catches the few frames during a
+	// re-render where neither class has landed yet; we read the live DOM, so
+	// a missing class shows up as a missing cell. None of our schema fields
+	// render a bare button straight inside their td, so false positives
+	// aren't really a worry here.
 	return (
 		cell.classList.contains( 'dataviews-view-table__actions-column' ) ||
 		cell.classList.contains(
@@ -219,166 +218,200 @@ function previewDensity( rowElement, view ) {
 		: 'balanced';
 }
 
-function rowPreviewCells( rowElement, layout, row, view ) {
-	const label = rowLabel( row );
-	if ( layout === 'table' ) {
-		const allCells = tableCells( rowElement );
-		const expectedFieldCount = visibleFieldCount( view );
-		const container = rowViewportContainer( rowElement );
-		const containerRect = container?.getBoundingClientRect() ?? null;
-		const intersectsViewport = ( rect ) => {
-			if ( ! containerRect ) {
-				return true;
-			}
-			return (
-				rect.right > containerRect.left &&
-				rect.left < containerRect.right
-			);
-		};
-		const measuredCells = allCells.map( ( cell ) => ( {
-			cell,
-			rect: cell.getBoundingClientRect(),
-			isCheckbox: isCheckboxTableCell( cell ),
-			isKnownActions: isActionsTableCell( cell ),
-		} ) );
-		const hasActionsChrome = measuredCells.some(
-			( info ) => info.isKnownActions
-		);
-		const actionsLeft = measuredCells.reduce( ( left, info ) => {
-			if (
-				info.isKnownActions &&
+function measureRowCells( allCells ) {
+	return allCells.map( ( cell ) => ( {
+		cell,
+		rect: cell.getBoundingClientRect(),
+		isCheckbox: isCheckboxTableCell( cell ),
+		isKnownActions: isActionsTableCell( cell ),
+	} ) );
+}
+
+function rectIntersectsViewport( rect, containerRect ) {
+	if ( ! containerRect ) {
+		return true;
+	}
+	return rect.right > containerRect.left && rect.left < containerRect.right;
+}
+
+// Returns the horizontal box the field cells have to fit into and whether
+// the preview needs room on the right for the sticky actions cell. The
+// trailing-utility branch catches actions cells that haven't picked up
+// their class yet but are already taking a slot past the last
+// `view.fields` entry.
+function computeContentBounds(
+	measuredCells,
+	containerRect,
+	expectedFieldCount
+) {
+	const intersects = ( rect ) =>
+		rectIntersectsViewport( rect, containerRect );
+	const hasActionsChrome = measuredCells.some(
+		( info ) => info.isKnownActions
+	);
+	const actionsLeft = measuredCells.reduce( ( left, info ) => {
+		if (
+			info.isKnownActions &&
+			info.rect.width > 0 &&
+			intersects( info.rect )
+		) {
+			return Math.min( left, info.rect.left );
+		}
+		return left;
+	}, Infinity );
+	const hasTrailingUtilityCell =
+		expectedFieldCount !== null &&
+		measuredCells.filter(
+			( info ) =>
+				! info.isCheckbox &&
 				info.rect.width > 0 &&
-				intersectsViewport( info.rect )
-			) {
-				return Math.min( left, info.rect.left );
-			}
-			return left;
-		}, Infinity );
-		const hasTrailingUtilityCell =
-			expectedFieldCount !== null &&
-			measuredCells.filter(
-				( info ) =>
-					! info.isCheckbox &&
-					info.rect.width > 0 &&
-					intersectsViewport( info.rect )
-			).length > expectedFieldCount;
-		const reservedRight =
-			containerRect && ( hasActionsChrome || hasTrailingUtilityCell )
-				? containerRect.right - ROW_ACTIONS_CHROME_RESERVE
-				: containerRect?.right ?? Infinity;
-		const contentRight = Math.min(
+				intersects( info.rect )
+		).length > expectedFieldCount;
+	const needsActionsReserve =
+		Boolean( containerRect ) &&
+		( hasActionsChrome || hasTrailingUtilityCell );
+	const reservedRight = needsActionsReserve
+		? containerRect.right - ROW_ACTIONS_CHROME_RESERVE
+		: containerRect?.right ?? Infinity;
+	return {
+		intersects,
+		contentLeft: containerRect?.left ?? -Infinity,
+		contentRight: Math.min(
 			reservedRight,
 			Number.isFinite( actionsLeft ) ? actionsLeft : Infinity
-		);
-		const contentLeft = containerRect?.left ?? -Infinity;
-		const fitsContentViewport = ( rect ) =>
-			rect.left >= contentLeft && rect.right <= contentRight;
+		),
+		trailingSpacerRight: needsActionsReserve
+			? Math.round( containerRect.right )
+			: null,
+	};
+}
 
-		const clipToContainer = ( rect ) => {
-			if ( ! containerRect ) {
-				return {
-					left: Math.round( rect.left ),
-					right: Math.round( rect.right ),
-					width: Math.round( rect.width ),
-				};
-			}
-
-			const left = Math.round(
-				Math.max( rect.left, containerRect.left )
-			);
-			const right = Math.round(
-				Math.min( rect.right, containerRect.right )
-			);
-			return {
-				left,
-				right,
-				width: Math.max( 0, right - left ),
-			};
+function clipRectToContainer( rect, containerRect ) {
+	if ( ! containerRect ) {
+		return {
+			left: Math.round( rect.left ),
+			right: Math.round( rect.right ),
+			width: Math.round( rect.width ),
 		};
+	}
+	const left = Math.round( Math.max( rect.left, containerRect.left ) );
+	const right = Math.round( Math.min( rect.right, containerRect.right ) );
+	return { left, right, width: Math.max( 0, right - left ) };
+}
 
-		const cells = [];
-		let fieldCellsSeen = 0;
-		const fieldLimit = expectedFieldCount ?? Infinity;
-		for ( const info of measuredCells ) {
-			const { cell, rect, isCheckbox, isKnownActions } = info;
-			if ( rect.width <= 0 || ! intersectsViewport( rect ) ) {
-				continue;
-			}
-			const isField =
-				! isCheckbox && ! isKnownActions && fieldCellsSeen < fieldLimit;
-			if ( isField && ! fitsContentViewport( rect ) ) {
-				continue;
-			}
-			if (
-				! isField &&
-				! isCheckbox &&
-				! isKnownActions &&
-				! fitsContentViewport( rect )
-			) {
-				continue;
-			}
-			if ( isField ) {
-				fieldCellsSeen += 1;
-			}
-			const clipped = clipToContainer( rect );
-			if ( clipped.width <= 0 ) {
-				continue;
-			}
-			cells.push( {
-				cell,
-				rect,
-				clipped,
-				isCheckbox,
-				isActions: isKnownActions || ( ! isCheckbox && ! isField ),
-				isField,
-			} );
+// Tags every visible cell as field/checkbox/actions and clips its rect to
+// the container, keeping the original row order. Skips off-screen cells,
+// zero-width cells, and any non-utility cell that runs past the content
+// bounds (the reserved sticky actions slot lives there), so the preview
+// stops at the chrome instead of bleeding into it.
+function selectVisibleCells(
+	measuredCells,
+	bounds,
+	containerRect,
+	expectedFieldCount
+) {
+	const fieldLimit = expectedFieldCount ?? Infinity;
+	const fitsContent = ( rect ) =>
+		rect.left >= bounds.contentLeft && rect.right <= bounds.contentRight;
+	const visible = [];
+	let fieldCellsSeen = 0;
+	for ( const info of measuredCells ) {
+		const { cell, rect, isCheckbox, isKnownActions } = info;
+		if ( rect.width <= 0 || ! bounds.intersects( rect ) ) {
+			continue;
 		}
-
-		const previewCells = [];
-		let cursor = null;
-		let primaryAssigned = false;
-		for ( const info of cells ) {
-			const { left, right, width } = info.clipped;
-			if ( cursor !== null && left > cursor ) {
-				previewCells.push( {
-					width: left - cursor,
-					isSpacer: true,
-				} );
-			}
-
-			const isPrimary = info.isField && ! primaryAssigned;
-			if ( isPrimary ) {
-				primaryAssigned = true;
-			}
-			previewCells.push( {
-				source: info.cell,
-				text: normalizePreviewText( info.cell.textContent ?? '' ),
-				width,
-				isPrimary,
-				isCheckbox: info.isCheckbox,
-				isActions: info.isActions,
-			} );
-			cursor = cursor === null ? right : Math.max( cursor, right );
+		const isField =
+			! isCheckbox && ! isKnownActions && fieldCellsSeen < fieldLimit;
+		// Drop fields that overflow the reserved content zone and also drop
+		// unknown trailing cells (fields beyond `view.fields`) so they don't
+		// crowd the actions chrome.
+		if ( ! isCheckbox && ! isKnownActions && ! fitsContent( rect ) ) {
+			continue;
 		}
-		const previewRight =
-			containerRect && ( hasActionsChrome || hasTrailingUtilityCell )
-				? Math.round( containerRect.right )
-				: null;
-		if (
-			cursor !== null &&
-			previewRight !== null &&
-			previewRight > cursor
-		) {
-			previewCells.push( {
-				width: previewRight - cursor,
-				isSpacer: true,
-			} );
+		if ( isField ) {
+			fieldCellsSeen += 1;
 		}
+		const clipped = clipRectToContainer( rect, containerRect );
+		if ( clipped.width <= 0 ) {
+			continue;
+		}
+		visible.push( {
+			cell,
+			clipped,
+			isCheckbox,
+			isActions: isKnownActions || ( ! isCheckbox && ! isField ),
+			isField,
+		} );
+	}
+	return visible;
+}
 
-		return previewCells.length ? previewCells : [ { text: label } ];
+// Walks the visible cells left to right and drops a spacer wherever two of
+// them left a horizontal gap (a hidden field, or a sticky cell that jumped
+// position). The final spacer fills the actions reserve so the preview
+// ends flush with the container's right edge.
+function interleavePreviewCells( visibleCells, trailingSpacerRight ) {
+	const previewCells = [];
+	let cursor = null;
+	let primaryAssigned = false;
+	for ( const info of visibleCells ) {
+		const { left, right, width } = info.clipped;
+		if ( cursor !== null && left > cursor ) {
+			previewCells.push( { width: left - cursor, isSpacer: true } );
+		}
+		const isPrimary = info.isField && ! primaryAssigned;
+		if ( isPrimary ) {
+			primaryAssigned = true;
+		}
+		previewCells.push( {
+			source: info.cell,
+			text: normalizePreviewText( info.cell.textContent ?? '' ),
+			width,
+			isPrimary,
+			isCheckbox: info.isCheckbox,
+			isActions: info.isActions,
+		} );
+		cursor = cursor === null ? right : Math.max( cursor, right );
+	}
+	if (
+		cursor !== null &&
+		trailingSpacerRight !== null &&
+		trailingSpacerRight > cursor
+	) {
+		previewCells.push( {
+			width: trailingSpacerRight - cursor,
+			isSpacer: true,
+		} );
+	}
+	return previewCells;
+}
+
+function rowPreviewCells( rowElement, layout, row, view ) {
+	const label = rowLabel( row );
+	if ( layout !== 'table' ) {
+		return [ { text: label } ];
 	}
 
-	return [ { text: label } ];
+	const measuredCells = measureRowCells( tableCells( rowElement ) );
+	const expectedFieldCount = visibleFieldCount( view );
+	const containerRect =
+		rowViewportContainer( rowElement )?.getBoundingClientRect() ?? null;
+	const bounds = computeContentBounds(
+		measuredCells,
+		containerRect,
+		expectedFieldCount
+	);
+	const visible = selectVisibleCells(
+		measuredCells,
+		bounds,
+		containerRect,
+		expectedFieldCount
+	);
+	const previewCells = interleavePreviewCells(
+		visible,
+		bounds.trailingSpacerRight
+	);
+	return previewCells.length ? previewCells : [ { text: label } ];
 }
 
 function rowPreviewWidth( rowElement, layout, rect ) {
@@ -598,6 +631,15 @@ function useRenderedRows( wrapperRef, view, rows ) {
 		sync();
 		const observer = new window.MutationObserver( sync );
 		observer.observe( wrapper, { childList: true, subtree: true } );
+		// Pull `ResizeObserver` from the wrapper's window so the block editor
+		// iframe uses its own constructor. We watch both the outer wrapper
+		// and DataViews' inner scroller: the preview width comes from the
+		// inner scroller, but the outer one moves whenever the embedding
+		// block resizes. If `.dataviews-wrapper` mounts later (lazy
+		// hydration, for example), MutationObserver above re-runs `sync` but
+		// doesn't re-attach the ResizeObserver. DataViews mounts that wrapper
+		// on first paint today, so a late remount is the next thing to chase
+		// if this breaks.
 		const ResizeObserverConstructor =
 			wrapper.ownerDocument?.defaultView?.ResizeObserver;
 		const resizeObserver = ResizeObserverConstructor
@@ -717,6 +759,11 @@ function displacementForDrop( renderedRows, activeRow, activeDrop ) {
 	const nextRows = renderedRows.filter( ( row ) => row.rowId !== activeId );
 	nextRows.splice( finalIndex, 0, renderedRows[ activeIndex ] );
 
+	// Stack heights as we go instead of borrowing
+	// `renderedRows[index].rect.top`. Rows can have different heights (an
+	// expanded editor cell next to collapsed ones, for instance), so the
+	// row sitting at `index` right now may not be where the moved row will
+	// end up.
 	let targetTop = renderedRows[ 0 ]?.rect.top ?? 0;
 	for ( const [ index, row ] of nextRows.entries() ) {
 		if ( ! renderedRows[ index ] ) {
@@ -1156,9 +1203,10 @@ export default function DataViewRowReorder( {
 	);
 
 	// Hold the dropped position until the refetch confirms the new order.
-	// This order matters: remove the body class that enables row transitions
-	// before `useRowDisplacement` applies the placed transform. Otherwise the
-	// active row animates from its old position for one frame after drop.
+	// The order of statements matters: drop the body class that enables row
+	// transitions before `useRowDisplacement` runs the placed transform.
+	// Leave it in and the active row animates from its old position for one
+	// frame after drop.
 	const freezeDropState = useCallback(
 		( row, drop, expectedOrder ) => {
 			clearNoTransitionFrame();

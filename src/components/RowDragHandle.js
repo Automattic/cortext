@@ -36,6 +36,12 @@ export default function RowDragHandle( { row } ) {
 		},
 	} );
 
+	// dnd-kit's draggable has two roles: the node it measures for collision
+	// detection (and anchors the overlay to), and the activator whose
+	// pointerdown kicks off the drag. The `<tr>` is the node; the small
+	// handle button is the activator. If both pointed at the button,
+	// dnd-kit would size the drag around 24px and the preview would float
+	// off to one side of the row.
 	useLayoutEffect( () => {
 		if ( ! row.el ) {
 			return undefined;
