@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
 import { addQueryArgs } from '@wordpress/url';
 import apiFetch from '@wordpress/api-fetch';
 
+import { useCollectionRowsInvalidation } from './rowInvalidation';
+
 // tech-debt.md#2: rows live outside core-data, so this hook manages
 // its own fetch state and exposes a manual refresh() handle.
 
@@ -398,6 +400,8 @@ export default function useCollectionRows(
 	const refresh = useCallback( () => {
 		setRefreshKey( ( key ) => key + 1 );
 	}, [] );
+
+	useCollectionRowsInvalidation( collectionId, refresh );
 
 	useEffect( () => {
 		if ( ! collectionId ) {

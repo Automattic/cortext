@@ -125,7 +125,9 @@ import { COLLECTION_QUERY } from '../collections';
 import { useFavorites } from '../hooks/useFavorites';
 import { useRecents } from '../hooks/useRecents';
 import useSidebarSections from '../hooks/useSidebarSections';
+import useTrashedDocuments from '../hooks/useTrashedDocuments';
 import { useWorkspaceHomePath } from '../hooks/useWorkspaceHomePath';
+import { notifyDocumentTrashChanged } from '../hooks/documentTrashInvalidation';
 
 const AUTO_EXPAND_DELAY = 700;
 
@@ -153,11 +155,7 @@ export default function Sidebar( {
 	// expand) or a paginated fetch of the full page set.
 	const { records: collections, isResolving: isResolvingCollections } =
 		useEntityRecords( 'postType', 'crtxt_collection', COLLECTION_QUERY );
-	const { records: trashedPages } = useEntityRecords(
-		'postType',
-		POST_TYPE,
-		TRASHED_PAGES_QUERY
-	);
+	const trashedDocumentsState = useTrashedDocuments();
 	const {
 		pages,
 		homePath,
@@ -372,16 +370,19 @@ export default function Sidebar( {
 	const [ isTrashPanelOpen, setIsTrashPanelOpen ] = useState( false );
 
 	const autoExpandTimerRef = useRef( null );
-	const trashCount = useMemo(
-		() => computeSidebarTrashRoots( trashedPages ?? [] ).roots.length,
-		[ trashedPages ]
-	);
+	const trashCount = useMemo( () => {
+		if ( Array.isArray( trashedDocumentsState.documents ) ) {
+			return computeSidebarTrashRoots( trashedDocumentsState.documents )
+				.roots.length;
+		}
+		return trashedDocumentsState.total;
+	}, [ trashedDocumentsState.documents, trashedDocumentsState.total ] );
 	let trashButtonLabel = __( 'Open Trash', 'cortext' );
 	if ( isTrashPanelOpen ) {
 		trashButtonLabel = __( 'Close Trash', 'cortext' );
 	} else if ( trashCount > 0 ) {
 		trashButtonLabel = sprintf(
-			/* translators: %d: number of trashed pages */
+			/* translators: %d: number of trashed pages and rows */
 			_n(
 				'Open Trash, %d item',
 				'Open Trash, %d items',
@@ -577,6 +578,7 @@ export default function Sidebar( {
 				POST_TYPE,
 				TRASHED_PAGES_QUERY,
 			] );
+			notifyDocumentTrashChanged();
 			try {
 				await setFavorites( ( current ) =>
 					filterFavoritesForTrashedPage( current, id, pages )
@@ -968,6 +970,7 @@ export default function Sidebar( {
 						activePages={ pages }
 						selectedId={ selectedId }
 						onSelect={ onSelect }
+						trashedDocumentsState={ trashedDocumentsState }
 					/>
 				</section>
 			) }

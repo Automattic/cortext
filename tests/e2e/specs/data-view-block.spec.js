@@ -688,6 +688,98 @@ test.describe( 'Collection view block', () => {
 		}
 	} );
 
+	test( 'trashes a row from the DataViews menu and restores it from Trash', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+
+		try {
+			Object.assign(
+				fixture,
+				await createCollectionFixture( requestUtils )
+			);
+
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_pages',
+				data: {
+					title: 'Row trash test page',
+					status: 'private',
+					content: createDataViewBlockMarkup( fixture.collection.id ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/${ fixture.page.id }`
+			);
+
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.page.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+			const rowTitle = canvas.getByText( 'The Left Hand of Darkness' );
+			await expect( rowTitle ).toBeVisible();
+
+			const tableRow = canvas
+				.locator( '.dataviews-view-table tbody tr' )
+				.filter( { hasText: 'The Left Hand of Darkness' } );
+			await tableRow.hover();
+			await tableRow
+				.getByRole( 'button', { name: 'Actions' } )
+				.click( { force: true } );
+			await canvas.getByRole( 'menuitem', { name: 'Trash' } ).click();
+
+			await expect( rowTitle ).toHaveCount( 0 );
+
+			const sidebar = page.locator( '.cortext-sidebar' );
+			await sidebar.locator( '.cortext-sidebar__trash-footer' ).click();
+			const trashPanel = page.locator( '#cortext-sidebar-trash-panel' );
+			await expect( trashPanel ).toContainText(
+				'The Left Hand of Darkness'
+			);
+			await expect( trashPanel ).toContainText(
+				fixture.collection.title.rendered
+			);
+
+			await trashPanel
+				.getByRole( 'button', { name: 'Restore' } )
+				.click( { force: true } );
+
+			await expect( rowTitle ).toBeVisible();
+			await expect( trashPanel ).not.toContainText(
+				'The Left Hand of Darkness'
+			);
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				fixture.entry &&
+					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+			);
+		}
+	} );
+
 	test( 'creates a collection from the placeholder and can switch collections', async ( {
 		admin,
 		page,
