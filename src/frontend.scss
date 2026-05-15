@@ -35,11 +35,11 @@
 .cortext-public-page__body {
 	font-size: 1rem;
 
-    // FIXME honor alignwide, alignfull, etc. (tech-debt.md#42)
-    & > :not(.wp-block-cortext-data-view) {
-      margin: auto;
-      max-width: 650px;
-    }
+	// FIXME honor alignwide, alignfull, etc. (tech-debt.md#42)
+	> :not(.wp-block-cortext-data-view) {
+		margin: auto;
+		max-width: 650px;
+	}
 }
 
 // -- DataView block: shared cell/chip display styles ---------------------

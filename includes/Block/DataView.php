@@ -36,6 +36,7 @@ final class DataView {
 	 * @param string $content    Inner block content (unused).
 	 * @return string HTML output.
 	 */
+	// phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed
 	public function render( array $attributes, string $content ): string {
 		$collection_id = $attributes['collectionId'] ?? 0;
 		if ( ! $collection_id ) {
