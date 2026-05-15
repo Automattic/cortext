@@ -1,5 +1,11 @@
 import apiFetch from '@wordpress/api-fetch';
-import { Button, Notice } from '@wordpress/components';
+import {
+	Button,
+	CheckboxControl,
+	Notice,
+	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+	__experimentalHStack as HStack,
+} from '@wordpress/components';
 import { DataViews } from '@wordpress/dataviews';
 import {
 	createContext,
@@ -11,13 +17,14 @@ import {
 	useRef,
 	useState,
 } from '@wordpress/element';
-import { __, sprintf } from '@wordpress/i18n';
-import { copy, plus, trash } from '@wordpress/icons';
+import { __, _n, sprintf } from '@wordpress/i18n';
+import { closeSmall, copy, plus, trash } from '@wordpress/icons';
 import { useNavigate } from '@wordpress/route';
 
 import DataViewColumnInteractions from './DataViewColumnInteractions';
 import EditableCell, { RowMutationContext } from './EditableCell';
 import PageIcon from './PageIcon';
+import allSettledWithConcurrency from './allSettledWithConcurrency';
 import { filterSortAndPaginateWithGroups } from './groupedFilters';
 import TableCalculationsFooter from './TableCalculationsFooter';
 import ColumnHeaderActions from './fields/ColumnHeaderActions';
@@ -40,6 +47,16 @@ import {
 	getRowDetailMode,
 	withRowDetailMode,
 } from './rowDetailUtils';
+import {
+	applyVisibleSelectionChange,
+	mergeVisibleSelection,
+	normalizeRowId,
+	rangeSelection,
+	removeDeletedSelection,
+	rowIds,
+	rowsInDataViewRenderOrder,
+	toggleVisibleSelection,
+} from './dataViewSelection';
 import { useCollectionFieldsContext } from './CollectionFieldsContext';
 import { dataViewsFilterByForType } from '../hooks/fieldMapping';
 import { toDataViewId, toRecordId } from '../hooks/fieldIds';
@@ -275,6 +292,191 @@ function NewRowButton( { slug, view, fields, onCreated, disabled } ) {
 	);
 }
 
+const TABLE_ROW_SELECTOR =
+	'.dataviews-view-table tbody > tr:not(.dataviews-view-table__group-header-row)';
+const GRID_CARD_SELECTOR = '.dataviews-view-grid__card';
+const INTERACTIVE_SELECTION_IGNORE_SELECTOR =
+	'button, a, input, textarea, select, [contenteditable="true"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], .components-button';
+const BULK_DELETE_CONCURRENCY = 4;
+
+function findDataViewItemFromEvent( event, wrapper, layout, rows ) {
+	const target = event.target;
+	if ( ! target || ! wrapper ) {
+		return null;
+	}
+
+	const selector =
+		layout === 'grid' ? GRID_CARD_SELECTOR : TABLE_ROW_SELECTOR;
+	const itemElement = target.closest?.( selector );
+	if ( ! itemElement || ! wrapper.contains( itemElement ) ) {
+		return null;
+	}
+
+	const renderedItems = Array.from( wrapper.querySelectorAll( selector ) );
+	const index = renderedItems.indexOf( itemElement );
+	if ( index < 0 || ! rows[ index ]?.id ) {
+		return null;
+	}
+
+	return {
+		id: normalizeRowId( rows[ index ].id ),
+		row: rows[ index ],
+	};
+}
+
+function DataViewsChrome( { footer } ) {
+	return (
+		<>
+			<HStack
+				alignment="top"
+				justify="space-between"
+				className="dataviews__view-actions"
+				spacing={ 1 }
+			>
+				<HStack
+					justify="start"
+					expanded={ false }
+					className="dataviews__search"
+				>
+					<DataViews.Search />
+					<DataViews.FiltersToggle />
+				</HStack>
+				<HStack
+					spacing={ 1 }
+					expanded={ false }
+					style={ { flexShrink: 0 } }
+				>
+					<DataViews.LayoutSwitcher />
+					<DataViews.ViewConfig />
+				</HStack>
+			</HStack>
+			<DataViews.Filters className="dataviews-filters__container" />
+			<DataViews.Layout />
+			{ footer }
+		</>
+	);
+}
+
+function DataViewsBulkSelectionControls( {
+	className = 'dataviews-bulk-actions-footer__container',
+	selectedIds,
+	visibleIds,
+	onClearSelection,
+	onDeleteSelected,
+	onToggleVisibleSelection,
+} ) {
+	const selectedSet = useMemo(
+		() => new Set( selectedIds ),
+		[ selectedIds ]
+	);
+	const selectedCount = selectedIds.length;
+	const visibleCount = visibleIds.length;
+	const selectedVisibleCount = visibleIds.filter( ( id ) =>
+		selectedSet.has( id )
+	).length;
+	const allVisibleSelected =
+		visibleCount > 0 && selectedVisibleCount === visibleCount;
+	const hasVisibleSelection = selectedVisibleCount > 0;
+
+	const countLabel =
+		selectedCount > 0
+			? sprintf(
+					/* translators: %d: number of selected rows. */
+					_n(
+						'%d row selected',
+						'%d rows selected',
+						selectedCount,
+						'cortext'
+					),
+					selectedCount
+			  )
+			: sprintf(
+					/* translators: %d: number of visible rows. */
+					_n( '%d row', '%d rows', visibleCount, 'cortext' ),
+					visibleCount
+			  );
+
+	return (
+		<HStack expanded={ false } className={ className } spacing={ 3 }>
+			<CheckboxControl
+				className="dataviews-view-table-selection-checkbox"
+				__nextHasNoMarginBottom
+				checked={ allVisibleSelected }
+				indeterminate={ ! allVisibleSelected && hasVisibleSelection }
+				onChange={ onToggleVisibleSelection }
+				aria-label={
+					allVisibleSelected
+						? __( 'Deselect visible rows', 'cortext' )
+						: __( 'Select visible rows', 'cortext' )
+				}
+			/>
+			<span className="dataviews-bulk-actions-footer__item-count">
+				{ countLabel }
+			</span>
+			<HStack
+				className="dataviews-bulk-actions-footer__action-buttons"
+				expanded={ false }
+				spacing={ 1 }
+			>
+				{ selectedCount > 0 && (
+					<Button
+						icon={ trash }
+						isDestructive
+						label={ __( 'Trash selected rows', 'cortext' ) }
+						onClick={ onDeleteSelected }
+						size="compact"
+						showTooltip
+						tooltipPosition="top"
+					/>
+				) }
+				{ selectedCount > 0 && (
+					<Button
+						icon={ closeSmall }
+						label={ __( 'Clear selection', 'cortext' ) }
+						onClick={ onClearSelection }
+						size="compact"
+						showTooltip
+						tooltipPosition="top"
+					/>
+				) }
+			</HStack>
+		</HStack>
+	);
+}
+
+function DataViewsSelectionFooter( {
+	enabled,
+	selectedIds,
+	visibleIds,
+	totalItems,
+	totalPages,
+	onClearSelection,
+	onDeleteSelected,
+	onToggleVisibleSelection,
+} ) {
+	const showBulkControls = enabled && totalItems > 0;
+	const showPagination = totalItems > 0 && totalPages > 1;
+
+	if ( ! showBulkControls && ! showPagination ) {
+		return null;
+	}
+
+	return (
+		<HStack expanded={ false } justify="end" className="dataviews-footer">
+			{ showBulkControls ? (
+				<DataViewsBulkSelectionControls
+					selectedIds={ selectedIds }
+					visibleIds={ visibleIds }
+					onClearSelection={ onClearSelection }
+					onDeleteSelected={ onDeleteSelected }
+					onToggleVisibleSelection={ onToggleVisibleSelection }
+				/>
+			) : null }
+			<DataViews.Pagination />
+		</HStack>
+	);
+}
+
 export default function CollectionDataViews( {
 	collectionId,
 	view,
@@ -329,6 +531,8 @@ export default function CollectionDataViews( {
 	);
 
 	const isTableLayout = view?.type === 'table';
+	const isGridLayout = view?.type === 'grid';
+	const supportsRowSelection = isTableLayout || isGridLayout;
 	const isServerPaginated = queryMode === 'server';
 	const dataViewFields = availableFields;
 
@@ -412,6 +616,194 @@ export default function CollectionDataViews( {
 	const activePaginationInfo = isServerPaginated
 		? serverPaginationInfo
 		: clientPaginationInfo;
+
+	const dataFilteredInRenderOrder = useMemo(
+		() => rowsInDataViewRenderOrder( dataFiltered, view, dataViewFields ),
+		[ dataFiltered, view, dataViewFields ]
+	);
+	const visibleRowIds = useMemo(
+		() => rowIds( dataFilteredInRenderOrder ),
+		[ dataFilteredInRenderOrder ]
+	);
+	const visibleRowsById = useMemo(
+		() =>
+			new Map(
+				dataFiltered.map( ( row ) => [ normalizeRowId( row.id ), row ] )
+			),
+		[ dataFiltered ]
+	);
+	const [ selectedRowIds, setSelectedRowIds ] = useState( [] );
+	const [ selectedRowsById, setSelectedRowsById ] = useState( {} );
+	const [ selectionAnchorId, setSelectionAnchorId ] = useState( null );
+	// tech-debt.md#48: DataViews only gives layouts the current-page
+	// selection, so Cortext owns off-page ids and click-intent merging.
+	const selectionInteractionRef = useRef( null );
+
+	const cacheSelectedRows = useCallback(
+		( ids ) => {
+			setSelectedRowsById( ( current ) => {
+				let next = current;
+				ids.forEach( ( id ) => {
+					const row = visibleRowsById.get( normalizeRowId( id ) );
+					if ( ! row ) {
+						return;
+					}
+					if ( next === current ) {
+						next = { ...current };
+					}
+					next[ normalizeRowId( id ) ] = row;
+				} );
+				return next;
+			} );
+		},
+		[ visibleRowsById ]
+	);
+
+	const selectedRows = useMemo(
+		() =>
+			selectedRowIds
+				.map(
+					( id ) =>
+						selectedRowsById[ id ] ?? visibleRowsById.get( id )
+				)
+				.filter( Boolean ),
+		[ selectedRowIds, selectedRowsById, visibleRowsById ]
+	);
+
+	const updateSelectedRowIds = useCallback(
+		( updater ) => {
+			setSelectedRowIds( ( current ) => {
+				const next =
+					typeof updater === 'function'
+						? updater( current )
+						: updater;
+				cacheSelectedRows( next );
+				return next;
+			} );
+		},
+		[ cacheSelectedRows ]
+	);
+
+	const onChangeSelection = useCallback(
+		( nextVisibleSelection ) => {
+			if ( ! supportsRowSelection ) {
+				return;
+			}
+			const interaction = selectionInteractionRef.current ?? {};
+			selectionInteractionRef.current = null;
+			if ( ! interaction.type ) {
+				return;
+			}
+			updateSelectedRowIds( ( current ) =>
+				applyVisibleSelectionChange(
+					current,
+					nextVisibleSelection,
+					visibleRowIds,
+					interaction
+				)
+			);
+			if ( interaction.targetId ) {
+				setSelectionAnchorId( interaction.targetId );
+			}
+		},
+		[ supportsRowSelection, updateSelectedRowIds, visibleRowIds ]
+	);
+
+	const clearSelection = useCallback( () => {
+		setSelectedRowIds( [] );
+		setSelectedRowsById( {} );
+		setSelectionAnchorId( null );
+	}, [] );
+
+	const toggleVisibleRows = useCallback( () => {
+		updateSelectedRowIds( ( current ) =>
+			toggleVisibleSelection( current, visibleRowIds )
+		);
+	}, [ updateSelectedRowIds, visibleRowIds ] );
+
+	const captureSelectionIntent = useCallback(
+		( event ) => {
+			if ( ! supportsRowSelection ) {
+				return;
+			}
+			selectionInteractionRef.current = null;
+			const target = event.target;
+			if ( ! target?.closest ) {
+				return;
+			}
+			if ( target.closest( '.dataviews-footer' ) ) {
+				return;
+			}
+
+			if (
+				target.closest( '.dataviews-view-table-selection-checkbox' )
+			) {
+				selectionInteractionRef.current = { type: 'merge' };
+				return;
+			}
+
+			const rowInfo = findDataViewItemFromEvent(
+				event,
+				tableWrapperRef.current,
+				isGridLayout ? 'grid' : 'table',
+				dataFilteredInRenderOrder
+			);
+
+			if ( target.closest( '.dataviews-selection-checkbox' ) ) {
+				selectionInteractionRef.current = {
+					type: 'merge',
+					source: 'checkbox',
+					targetId: rowInfo?.id,
+				};
+				return;
+			}
+
+			if ( target.closest( INTERACTIVE_SELECTION_IGNORE_SELECTOR ) ) {
+				return;
+			}
+
+			if ( ! rowInfo ) {
+				return;
+			}
+
+			if ( event.shiftKey ) {
+				event.preventDefault();
+				event.stopPropagation();
+				const nextVisibleSelection = rangeSelection(
+					visibleRowIds,
+					selectionAnchorId,
+					rowInfo.id
+				);
+				updateSelectedRowIds( ( current ) =>
+					mergeVisibleSelection(
+						current,
+						nextVisibleSelection,
+						visibleRowIds
+					)
+				);
+				setSelectionAnchorId( rowInfo.id );
+				return;
+			}
+
+			if ( event.metaKey || event.ctrlKey ) {
+				selectionInteractionRef.current = {
+					type: 'merge',
+					targetId: rowInfo.id,
+				};
+				return;
+			}
+
+			setSelectionAnchorId( rowInfo.id );
+		},
+		[
+			dataFilteredInRenderOrder,
+			isGridLayout,
+			selectionAnchorId,
+			supportsRowSelection,
+			updateSelectedRowIds,
+			visibleRowIds,
+		]
+	);
 
 	const requestNext = useCallback(
 		( rowId, fieldId, direction ) => {
@@ -775,32 +1167,110 @@ export default function CollectionDataViews( {
 		[ collectionId, refresh, touchRecent ]
 	);
 
-	const trashRow = useCallback(
-		async ( row ) => {
-			if ( ! row?.id || ! postType ) {
+	const forgetDeletedRows = useCallback(
+		( deletedIds, options = {} ) => {
+			if ( options.clearSelection ) {
+				clearSelection();
 				return;
 			}
-			setRowActionError( null );
-			try {
-				await apiFetch( {
-					path: `/wp/v2/${ postType }/${ row.id }`,
-					method: 'DELETE',
+			setSelectedRowIds( ( current ) =>
+				removeDeletedSelection( current, deletedIds )
+			);
+			setSelectedRowsById( ( current ) => {
+				const deleted = new Set( deletedIds.map( normalizeRowId ) );
+				let next = current;
+				deleted.forEach( ( id ) => {
+					if ( Object.prototype.hasOwnProperty.call( next, id ) ) {
+						if ( next === current ) {
+							next = { ...current };
+						}
+						delete next[ id ];
+					}
 				} );
-				if ( String( row.id ) === String( openRowId ) ) {
+				return next;
+			} );
+		},
+		[ clearSelection ]
+	);
+
+	const requestDeleteRows = useCallback(
+		async ( rows, options = {} ) => {
+			const nextRows = ( rows ?? [] ).filter( ( row ) => row?.id );
+			if ( nextRows.length === 0 || ! postType ) {
+				return;
+			}
+
+			setRowActionError( null );
+			const results = await allSettledWithConcurrency(
+				nextRows,
+				BULK_DELETE_CONCURRENCY,
+				( row ) =>
+					apiFetch( {
+						path: `/wp/v2/${ postType }/${ row.id }`,
+						method: 'DELETE',
+					} )
+			);
+
+			const deletedIds = [];
+			const failedRows = [];
+			results.forEach( ( result, index ) => {
+				const row = nextRows[ index ];
+				if ( result.status === 'fulfilled' ) {
+					deletedIds.push( normalizeRowId( row.id ) );
+				} else {
+					failedRows.push( row );
+				}
+			} );
+
+			if ( deletedIds.length > 0 ) {
+				const deleted = new Set( deletedIds );
+				if ( openRowId && deleted.has( normalizeRowId( openRowId ) ) ) {
 					runDetailTransition( { type: 'close' } );
 				}
+				forgetDeletedRows( deletedIds, {
+					clearSelection:
+						failedRows.length === 0 &&
+						( options.clearSelectionOnSuccess ??
+							nextRows.length > 1 ),
+				} );
 				refresh();
 				notifyDocumentTrashChanged();
 				notifyCollectionRowsChanged();
-			} catch ( apiError ) {
-				setRowActionError(
-					apiError?.message ??
-						__( 'Could not move row to Trash.', 'cortext' )
-				);
+			}
+
+			if ( failedRows.length > 0 ) {
+				let deleteErrorMessage;
+				if ( nextRows.length === 1 ) {
+					deleteErrorMessage = __(
+						'Could not move row to Trash.',
+						'cortext'
+					);
+				} else if ( failedRows.length === nextRows.length ) {
+					deleteErrorMessage = __(
+						'Could not move selected rows to Trash.',
+						'cortext'
+					);
+				} else {
+					deleteErrorMessage = sprintf(
+						/* translators: %d: number of rows that failed to move to Trash. */
+						_n(
+							'%d row could not be moved to Trash.',
+							'%d rows could not be moved to Trash.',
+							failedRows.length,
+							'cortext'
+						),
+						failedRows.length
+					);
+				}
+				setRowActionError( deleteErrorMessage );
 			}
 		},
-		[ openRowId, postType, refresh, runDetailTransition ]
+		[ forgetDeletedRows, openRowId, postType, refresh, runDetailTransition ]
 	);
+
+	const requestDeleteSelectedRows = useCallback( () => {
+		requestDeleteRows( selectedRows, { clearSelectionOnSuccess: true } );
+	}, [ requestDeleteRows, selectedRows ] );
 
 	const rowActions = useMemo( () => {
 		const actions = [];
@@ -833,16 +1303,20 @@ export default function CollectionDataViews( {
 			label: __( 'Trash', 'cortext' ),
 			icon: trash,
 			isDestructive: true,
+			supportsBulk: true,
 			context: 'single',
-			callback: ( items ) => trashRow( items?.[ 0 ] ),
+			callback: ( items ) =>
+				requestDeleteRows( items, {
+					clearSelectionOnSuccess: ( items?.length ?? 0 ) > 1,
+				} ),
 		} );
 		return actions;
 	}, [
 		duplicateRow,
 		isTableLayout,
 		openRowInMode,
+		requestDeleteRows,
 		savedRowDetailMode,
-		trashRow,
 	] );
 
 	const dataViewActions = rowActions;
@@ -928,7 +1402,9 @@ export default function CollectionDataViews( {
 		setDetailSaveError( null );
 		setPendingDetailTransition( null );
 		detailApiRef.current = null;
-	}, [ clearModeSurfaceTransition, collectionId ] );
+		selectionInteractionRef.current = null;
+		clearSelection();
+	}, [ clearModeSurfaceTransition, clearSelection, collectionId ] );
 
 	// Reconcile saved view state with the live schema whenever the field
 	// set changes: seed defaults on first render, then hand off to
@@ -1157,6 +1633,33 @@ export default function CollectionDataViews( {
 	const previousRowId = adjacentRowId( dataFiltered, openRowId, -1 );
 	const nextRowId = adjacentRowId( dataFiltered, openRowId, 1 );
 	let detailSurface = null;
+	const hasSelectionColumn = isTableLayout && dataFiltered.length > 0;
+	const hasVisibleRows = visibleRowIds.length > 0;
+	// tech-debt.md#36: DataViews has no table footer slot, so table bulk
+	// controls share the same portaled footer row as calculations.
+	const tableBulkActions =
+		isTableLayout && hasVisibleRows && selectedRowIds.length > 0 ? (
+			<DataViewsBulkSelectionControls
+				className="dataviews-bulk-actions-footer__container cortext-table-calculations__bulk-actions"
+				selectedIds={ selectedRowIds }
+				visibleIds={ visibleRowIds }
+				onClearSelection={ clearSelection }
+				onDeleteSelected={ requestDeleteSelectedRows }
+				onToggleVisibleSelection={ toggleVisibleRows }
+			/>
+		) : null;
+	const dataViewsFooter = (
+		<DataViewsSelectionFooter
+			enabled={ supportsRowSelection && ! isTableLayout }
+			selectedIds={ selectedRowIds }
+			visibleIds={ visibleRowIds }
+			totalItems={ activePaginationInfo?.totalItems ?? 0 }
+			totalPages={ activePaginationInfo?.totalPages ?? 0 }
+			onClearSelection={ clearSelection }
+			onDeleteSelected={ requestDeleteSelectedRows }
+			onToggleVisibleSelection={ toggleVisibleRows }
+		/>
+	);
 
 	if ( openRowId && postType && renderedRowDetailMode ) {
 		const detailView = (
@@ -1197,7 +1700,11 @@ export default function CollectionDataViews( {
 					data-row-detail-mode={ rowDetailMode }
 					data-row-detail-open={ openRowId ? 'true' : 'false' }
 				>
-					<div className="cortext-data-view" ref={ tableWrapperRef }>
+					<div
+						className="cortext-data-view"
+						ref={ tableWrapperRef }
+						onClickCapture={ captureSelectionIntent }
+					>
 						{ rowActionError && (
 							<Notice
 								status="error"
@@ -1218,7 +1725,15 @@ export default function CollectionDataViews( {
 							isLoading={ isLoading }
 							empty={ empty }
 							actions={ dataViewActions }
-						/>
+							{ ...( supportsRowSelection
+								? {
+										selection: selectedRowIds,
+										onChangeSelection,
+								  }
+								: {} ) }
+						>
+							<DataViewsChrome footer={ dataViewsFooter } />
+						</DataViews>
 						{ isTableLayout && (
 							<TableCalculationsFooter
 								wrapperRef={ tableWrapperRef }
@@ -1226,6 +1741,8 @@ export default function CollectionDataViews( {
 								fields={ availableFields }
 								data={ dataFilteredForCalculations }
 								onChangeView={ onChangeView }
+								hasSelectionColumn={ hasSelectionColumn }
+								bulkActions={ tableBulkActions }
 							/>
 						) }
 						{ isTableLayout && (

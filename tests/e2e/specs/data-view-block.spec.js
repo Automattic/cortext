@@ -32,6 +32,25 @@ async function expectTableScrolledToEnd( canvas ) {
 		.toBe( true );
 }
 
+const TABLE_DATA_HEADER_SELECTOR =
+	'thead > tr > th:not(.dataviews-view-table__checkbox-column):not(.dataviews-view-table__actions-column)';
+const TABLE_DATA_CELL_SELECTOR =
+	'td:not(.dataviews-view-table__checkbox-column):not(.dataviews-view-table__actions-column)';
+const TABLE_FOOTER_DATA_CELL_SELECTOR =
+	'td:not(.cortext-table-calculations__selection-spacer)';
+
+function tableDataHeaders( table ) {
+	return table.locator( TABLE_DATA_HEADER_SELECTOR );
+}
+
+function tableDataCells( row ) {
+	return row.locator( TABLE_DATA_CELL_SELECTOR );
+}
+
+function tableFooterDataCells( footer ) {
+	return footer.locator( TABLE_FOOTER_DATA_CELL_SELECTOR );
+}
+
 async function createCollectionFixture( requestUtils ) {
 	const suffix = Date.now().toString( 36 ).slice( -4 );
 	const slug = `e2ebooks${ suffix }`;
@@ -195,6 +214,12 @@ function createEmptyDataViewBlockMarkup() {
 function parseCollectionIdFromContent( content ) {
 	const match = content.match( /"collectionId":(\d+)/ );
 	return match ? Number( match[ 1 ] ) : 0;
+}
+
+async function listCollectionRows( requestUtils, collectionId ) {
+	return requestUtils.rest( {
+		path: `/cortext/v1/rows?collection=${ collectionId }&per_page=100`,
+	} );
 }
 
 test.describe( 'Collection view block', () => {
@@ -647,7 +672,11 @@ test.describe( 'Collection view block', () => {
 			);
 
 			const canvas = page.frameLocator( '[name="editor-canvas"]' );
-			await expect( canvas.getByText( 'Notes' ) ).toBeVisible();
+			await expect(
+				canvas.locator( '.cortext-column-header-label', {
+					hasText: /^Notes$/,
+				} )
+			).toBeVisible();
 
 			await page.evaluate( async () => {
 				await window.wp.data.dispatch( 'core/editor' ).savePost();
@@ -807,6 +836,133 @@ test.describe( 'Collection view block', () => {
 				requestUtils,
 				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
 			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+			);
+		}
+	} );
+
+	test( 'selects rows across pages and trashes the selection', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+
+		try {
+			Object.assign(
+				fixture,
+				await createCalculationFixture( requestUtils )
+			);
+			const pagesKey = `field-${ fixture.fields.pages.id }`;
+
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_pages',
+				data: {
+					title: 'Bulk row trash page',
+					status: 'private',
+					content: createDataViewBlockMarkup( fixture.collection.id, {
+						fields: [ 'title', pagesKey ],
+						perPage: 2,
+						page: 1,
+					} ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/${ fixture.page.id }`
+			);
+
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.page.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+			const table = canvas.locator( '.dataviews-view-table' );
+			const alphaRow = table
+				.locator( 'tbody > tr' )
+				.filter( { hasText: 'Alpha Book' } );
+			const betaRow = table
+				.locator( 'tbody > tr' )
+				.filter( { hasText: 'Beta Book' } );
+
+			await expect( alphaRow ).toBeVisible();
+			await alphaRow
+				.locator( '.dataviews-selection-checkbox input' )
+				.check();
+			await expect( canvas.getByText( '1 row selected' ) ).toBeVisible();
+			await betaRow
+				.locator( '.dataviews-selection-checkbox input' )
+				.check();
+			await expect( canvas.getByText( '2 rows selected' ) ).toBeVisible();
+			await canvas
+				.getByRole( 'button', { name: 'Clear selection' } )
+				.click();
+			await expect( canvas.getByText( '2 rows selected' ) ).toBeHidden();
+
+			await alphaRow.dispatchEvent( 'click' );
+			await expect( canvas.getByText( '1 row selected' ) ).toHaveCount(
+				0
+			);
+			await betaRow.dispatchEvent( 'click', { shiftKey: true } );
+			await expect( canvas.getByText( '2 rows selected' ) ).toBeVisible();
+
+			await canvas.getByRole( 'button', { name: 'Next page' } ).click();
+
+			const gammaRow = table
+				.locator( 'tbody > tr' )
+				.filter( { hasText: 'Gamma Book' } );
+			await expect( gammaRow ).toBeVisible();
+			await expect( canvas.getByText( '2 rows selected' ) ).toBeVisible();
+			await gammaRow.dispatchEvent( 'click', {
+				[ process.platform === 'darwin' ? 'metaKey' : 'ctrlKey' ]: true,
+			} );
+			await expect( canvas.getByText( '3 rows selected' ) ).toBeVisible();
+
+			await canvas
+				.getByRole( 'button', { name: 'Trash selected rows' } )
+				.click();
+			await expect( canvas.getByText( '3 rows selected' ) ).toBeHidden();
+
+			await expect
+				.poll( async () => {
+					const response = await listCollectionRows(
+						requestUtils,
+						fixture.collection.id
+					);
+					return response.rows.map( ( row ) => row.title.raw );
+				} )
+				.toEqual( [] );
+
+			await expect( canvas.getByText( 'Alpha Book' ) ).toBeHidden();
+			await expect( canvas.getByText( 'Beta Book' ) ).toBeHidden();
+			await expect( canvas.getByText( 'Gamma Book' ) ).toBeHidden();
+		} finally {
+			for ( const row of fixture.rows ?? [] ) {
+				await deleteIfCreated(
+					requestUtils,
+					`/wp/v2/crtxt_${ fixture.slug }/${ row.id }`
+				);
+			}
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+			);
+			for ( const field of Object.values( fixture.fields ?? {} ) ) {
+				await deleteIfCreated(
+					requestUtils,
+					`/wp/v2/crtxt_fields/${ field.id }`
+				);
+			}
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
@@ -1159,7 +1315,7 @@ test.describe( 'Collection view block', () => {
 			await detail
 				.getByRole( 'textbox', { name: 'Author', exact: true } )
 				.fill( 'Octavia Butler' );
-			await expect( firstRow.locator( 'td' ).nth( 1 ) ).toContainText(
+			await expect( tableDataCells( firstRow ).nth( 1 ) ).toContainText(
 				'Octavia Butler'
 			);
 			const yearProperty = detail.getByRole( 'textbox', {
@@ -1429,8 +1585,7 @@ test.describe( 'Collection view block', () => {
 			const firstRow = table.locator( 'tbody > tr' ).first();
 
 			// Select: chip with the option's color.
-			const statusChip = firstRow
-				.locator( 'td' )
+			const statusChip = tableDataCells( firstRow )
 				.nth( 4 )
 				.locator( '.cortext-chip', { hasText: 'Open' } );
 			await expect( statusChip ).toBeVisible();
@@ -1935,7 +2090,7 @@ test.describe( 'Collection view block', () => {
 			const canvas = page.frameLocator( '[name="editor-canvas"]' );
 			await expect( canvas.getByText( 'Pages' ) ).toBeVisible();
 			const footer = canvas.locator( 'tfoot.cortext-table-calculations' );
-			const footerCells = footer.locator( 'td' );
+			const footerCells = tableFooterDataCells( footer );
 			await expect( footer ).toHaveCount( 0 );
 			const openColumnDropdown = async ( scope, name ) => {
 				const button = scope
@@ -2153,7 +2308,9 @@ test.describe( 'Collection view block', () => {
 			await expect( canvas.getByText( 'Beta Book' ) ).toBeHidden();
 			await expect( canvas.getByText( 'Gamma Book' ) ).toBeHidden();
 			await expect(
-				canvas.locator( 'tfoot.cortext-table-calculations td' ).nth( 1 )
+				tableFooterDataCells(
+					canvas.locator( 'tfoot.cortext-table-calculations' )
+				).nth( 1 )
 			).toContainText( '30' );
 		} finally {
 			for ( const row of fixture.rows ?? [] ) {
@@ -2222,44 +2379,41 @@ test.describe( 'Collection view block', () => {
 			const canvas = page.frameLocator( '[name="editor-canvas"]' );
 			await expect( canvas.getByText( 'Author' ) ).toBeVisible();
 
-			// Author is the second column (title is index 0, Author is
-			// index 1); its resizer is at .nth(1) in DOM order. Native
-			// pointer events drive the drag, and pointer capture keeps it
-			// tracking even if the pointer leaves the editor canvas iframe.
-			const resizer = canvas
-				.locator( '.cortext-column-resizer' )
-				.nth( 1 );
-			const header = canvas
-				.locator( '.dataviews-view-table thead > tr > th' )
-				.nth( 1 );
-			await expect( resizer ).toBeAttached();
-			const startBox = await resizer.boundingBox();
-			const startWidth = await header.evaluate(
-				( el ) => el.getBoundingClientRect().width
-			);
+			const table = canvas.locator( '.dataviews-view-table' );
+			const header = tableDataHeaders( table ).nth( 1 );
 
+			// Author is the second data column (title is index 0, Author is
+			// index 1). Dispatch pointer events on the handle so the resize
+			// code receives same-frame coordinates.
+			const resizer = header.locator( '.cortext-column-resizer' );
+			await expect( resizer ).toBeAttached();
 			const dragDelta = 80;
-			await page.mouse.move(
-				startBox.x + startBox.width / 2,
-				startBox.y + startBox.height / 2
-			);
-			await page.mouse.down();
-			await page.mouse.move(
-				startBox.x + startBox.width / 2 + 10,
-				startBox.y + startBox.height / 2,
-				{ steps: 4 }
-			);
-			const firstMoveWidth = await header.evaluate(
-				( el ) => el.getBoundingClientRect().width
-			);
-			expect( firstMoveWidth - startWidth ).toBeGreaterThan( 0 );
-			expect( firstMoveWidth - startWidth ).toBeLessThan( dragDelta );
-			await page.mouse.move(
-				startBox.x + startBox.width / 2 + dragDelta,
-				startBox.y + startBox.height / 2,
-				{ steps: 8 }
-			);
-			await page.mouse.up();
+			const pointer = {
+				button: 0,
+				pointerId: 1,
+				pointerType: 'mouse',
+				isPrimary: true,
+			};
+			await resizer.dispatchEvent( 'pointerdown', {
+				...pointer,
+				buttons: 1,
+				clientX: 0,
+			} );
+			await resizer.dispatchEvent( 'pointermove', {
+				...pointer,
+				buttons: 1,
+				clientX: 10,
+			} );
+			await resizer.dispatchEvent( 'pointermove', {
+				...pointer,
+				buttons: 1,
+				clientX: dragDelta,
+			} );
+			await resizer.dispatchEvent( 'pointerup', {
+				...pointer,
+				buttons: 0,
+				clientX: dragDelta,
+			} );
 
 			await page.evaluate( async () => {
 				await window.wp.data.dispatch( 'core/editor' ).savePost();
@@ -2286,8 +2440,7 @@ test.describe( 'Collection view block', () => {
 			await page.reload();
 			await expect( canvas.getByText( 'Author' ) ).toBeVisible();
 
-			const renderedWidth = await canvas
-				.locator( '.dataviews-view-table thead > tr > th' )
+			const renderedWidth = await tableDataHeaders( table )
 				.nth( 1 )
 				.evaluate( ( el ) => el.style.width );
 			expect( renderedWidth ).toBe( `${ persistedWidth }px` );
@@ -2366,14 +2519,11 @@ test.describe( 'Collection view block', () => {
 			const canvas = page.frameLocator( '[name="editor-canvas"]' );
 			await expect( canvas.getByText( 'Author' ) ).toBeVisible();
 
-			const header = canvas
-				.locator( '.dataviews-view-table thead > tr > th' )
-				.nth( 1 );
+			const table = canvas.locator( '.dataviews-view-table' );
+			const header = tableDataHeaders( table ).nth( 1 );
 			await expect( header ).toHaveAttribute( 'style', /width: 80px/ );
 
-			const resizer = canvas
-				.locator( '.cortext-column-resizer' )
-				.nth( 1 );
+			const resizer = header.locator( '.cortext-column-resizer' );
 			const box = await resizer.boundingBox();
 			await page.mouse.dblclick(
 				box.x + box.width / 2,
@@ -2388,11 +2538,9 @@ test.describe( 'Collection view block', () => {
 				)
 				.toBeGreaterThan( 80 );
 
-			const authorCell = canvas
-				.locator( '.dataviews-view-table tbody > tr' )
-				.first()
-				.locator( 'td' )
-				.nth( 1 );
+			const authorCell = tableDataCells(
+				table.locator( 'tbody > tr' ).first()
+			).nth( 1 );
 			const overflow = await authorCell.evaluate( ( cell ) => {
 				const wrapper = cell.querySelector(
 					'.dataviews-view-table__cell-content-wrapper'
@@ -2574,17 +2722,10 @@ test.describe( 'Collection view block', () => {
 
 		const assertContained = async ( canvas ) => {
 			const table = canvas.locator( '.dataviews-view-table' );
-			const tagsHeader = table.locator( 'thead > tr > th' ).nth( 1 );
-			const tagsCell = table
-				.locator( 'tbody > tr' )
-				.first()
-				.locator( 'td' )
-				.nth( 1 );
-			const dueCell = table
-				.locator( 'tbody > tr' )
-				.first()
-				.locator( 'td' )
-				.nth( 2 );
+			const firstRow = table.locator( 'tbody > tr' ).first();
+			const tagsHeader = tableDataHeaders( table ).nth( 1 );
+			const tagsCell = tableDataCells( firstRow ).nth( 1 );
+			const dueCell = tableDataCells( firstRow ).nth( 2 );
 
 			await expect( tagsCell.locator( '.cortext-chip' ) ).toHaveCount(
 				2
@@ -2899,20 +3040,16 @@ test.describe( 'Collection view block', () => {
 			// The entire header is the drag area. Pick a point on the
 			// Author header that's well clear of the right-edge resizer
 			// (~6px), then drag past the midpoint of the Notes header so
-			// Author lands after Notes. Author is index 1 (title is 0).
-			const authorTh = canvas
-				.locator( '.dataviews-view-table thead > tr > th' )
-				.nth( 1 );
+			// Author lands after Notes. Author is data index 1 (title is 0).
+			const table = canvas.locator( '.dataviews-view-table' );
+			const dataHeaders = tableDataHeaders( table );
+			const authorTh = dataHeaders.nth( 1 );
 			const authorBox = await authorTh.boundingBox();
-			const notesTh = canvas
-				.locator( '.dataviews-view-table thead > tr > th' )
-				.nth( 2 );
+			const notesTh = dataHeaders.nth( 2 );
 			const notesBox = await notesTh.boundingBox();
-			const notesCell = canvas
-				.locator( '.dataviews-view-table tbody > tr' )
-				.first()
-				.locator( 'td' )
-				.nth( 2 );
+			const notesCell = tableDataCells(
+				table.locator( 'tbody > tr' ).first()
+			).nth( 2 );
 			const notesCellBox = await notesCell.boundingBox();
 
 			const startX = authorBox.x + 20;

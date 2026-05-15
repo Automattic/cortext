@@ -323,15 +323,19 @@ The create-field flow also has to reveal the new trailing column itself. It carr
 
 **Solution.** `Popover` needs a parent/child dismissal story: either close the whole stack when a click lands outside all related popovers, or expose enough event detail for a host popover to opt into that behavior without a document-level listener.
 
-## 36. Table calculations sit outside DataViews' table contract `[upstream, internal]`
+## 36. Table footer content lives outside DataViews' table contract `[upstream, internal]`
 
-**What.** DataViews renders the table, but it doesn't expose a table footer row, a per-column summary cell, or a "filtered rows before pagination" result. The calculation footer therefore finds the rendered `.dataviews-view-table`, watches for it with a `MutationObserver`, and portals a `<tfoot>` into the table after DataViews has already rendered. To keep results aligned with the current search/filter state but not the current page, `CollectionDataViews` also runs DataViews' `filterSortAndPaginate` helper a second time with `page` and `perPage` removed.
+**What.** DataViews owns the table markup, but it has no place for footer content: no footer-row slot, no per-column summary cell, no table-aligned bulk-action area, and no "filtered rows before pagination" result. The calculation footer has to find the rendered `.dataviews-view-table`, watch for it with a `MutationObserver`, and portal a `<tfoot>` into the table after DataViews renders.
 
-The state is ours too. `view.calculations` lives on the DataViews view object because embedded data-view blocks already persist that object, and named saved views do not exist yet. `normalizeView` prunes stale calculation entries when fields disappear or their type changes. That keeps the saved shape honest, but it is still Cortext state attached to a DataViews object that upstream knows nothing about.
+In table layout, bulk row actions use that same footer row. Selected-row controls and column summaries sit on one line, which is the right layout, but the plumbing is awkward. `CollectionDataViews` passes the table bulk controls into the portaled footer, and `index.scss` manages the checkbox-width spacer, overflow, and stacking so the buttons stay clickable without painting over the block selection outline. Grid still uses the composed DataViews footer because there is no table summary row to align with.
 
-**Where.** `src/components/TableCalculationsFooter.js` (table lookup, observer, `<tfoot>` portal), `src/components/CollectionDataViews.js` (second filtering pass and footer mount), `src/components/tableCalculations.js` (operation matrix and result formatting), and `src/components/dataViewColumns.js` (view cleanup).
+For calculations, we also need rows after search/filter but before pagination. DataViews does not hand that list back to consumers, so `CollectionDataViews` runs DataViews' `filterSortAndPaginate` helper a second time with `page` and `perPage` removed.
 
-**Solution.** Upstream DataViews could expose one of two shapes: a table `renderFooter` / `renderSummaryRow` slot, or a column-level summary API that receives the filtered, unpaginated rows. Either would let us drop the DOM lookup and portal. A separate helper that returns filtered rows before pagination would remove the second `filterSortAndPaginate` pass. Internally, saved named views should eventually make `calculations` part of Cortext's own saved view schema instead of just an extra key on embedded block state.
+Calculation state also stays in Cortext. `view.calculations` lives on the DataViews view object because embedded data-view blocks already persist that object, and named saved views do not exist yet. `normalizeView` prunes stale calculation entries when fields disappear or their type changes. That keeps the saved shape honest, but it is still Cortext state attached to a DataViews object that upstream knows nothing about.
+
+**Where.** `src/components/TableCalculationsFooter.js` (table lookup, observer, `<tfoot>` portal), `src/components/CollectionDataViews.js` (second filtering pass, table bulk controls, and footer mount), `src/index.scss` (footer-row alignment and overflow rules), `src/components/tableCalculations.js` (operation matrix and result formatting), and `src/components/dataViewColumns.js` (view cleanup).
+
+**Solution.** DataViews needs either a table `renderFooter` / `renderSummaryRow` slot, or a column-level summary API that gets the filtered, unpaginated rows and leaves space for table-level selection controls. Then we can drop the DOM lookup and portal. A helper that returns filtered rows before pagination would remove the second `filterSortAndPaginate` pass. Internally, saved named views should eventually make `calculations` part of Cortext's own saved view schema instead of just an extra key on embedded block state.
 
 ## 37. DataViews has no relation/reference field primitive `[upstream]`
 
@@ -450,3 +454,23 @@ The layer is still mostly read-only. Pages still go through the page tree and `c
 **Where.** `includes/Block/DataView.php` (render callback enqueue), `includes/Frontend/Assets.php` (page-level enqueue), `src/frontend.js` (single entry point for both concerns).
 
 **Solution.** Split `src/frontend.js` into two entry points: one for page chrome (`cortext-frontend`) and one for the DataView block (`cortext-data-view-view`). The block entry handles hydration and declares its own dependencies. The page entry stays minimal. Update `webpack.config.js` with the new entry point, and update `DataView.php` to enqueue the block-specific handle.
+
+## 51. DataViews selection is page-local `[upstream, internal]`
+
+**What.** DataViews accepts a controlled `selection`, but layouts only receive the IDs for rows in the current `data` array. Its built-in clicks are page-local too: table rows handle plain and modifier clicks, grid cards handle modifier clicks, and neither layout gives us shift-range selection across the rendered page. Cortext needs selected row IDs to survive pagination. It also needs the selected row objects later for bulk Trash actions and partial-failure cleanup.
+
+`CollectionDataViews` keeps the real selection state: selected IDs, a cache of selected row objects seen on previous pages, a shift-click anchor, and a capture-phase click-intent layer. That layer translates DataViews' visible-page selection changes into Cortext's persistent selection. The pure helpers in `dataViewSelection.js` keep the merge behavior testable. This works, but it is tied to DataViews layout class names and event order.
+
+**Where.** Selection state and `captureSelectionIntent` in `src/components/CollectionDataViews.js`, helper functions in `src/components/dataViewSelection.js`, and coverage in `tests/js/components/dataViewSelection.test.js` plus `tests/e2e/specs/data-view-block.spec.js`.
+
+**Solution.** DataViews could treat selection as a persistent ID set, with range selection and consistent modifier behavior across table and grid. It should not filter hidden IDs out of the controlled value before handing it to layouts. Bulk actions also need either all selected items, or an item resolver for selected IDs that are not on the current page. With that, Cortext can drop the row cache, click-intent capture, and most of `dataViewSelection.js`.
+
+## 52. Bulk row trash fans out through per-row REST calls `[internal, soft]`
+
+**What.** Bulk row trash still calls the same row REST delete endpoint as the single-row action. The client sends one `DELETE /wp/v2/<row post type>/<id>` request per selected row, capped at four concurrent requests by `allSettledWithConcurrency`. That cap keeps a large selection from flooding the server, and the `Promise.allSettled`-style result list keeps partial failures easy to handle.
+
+That is acceptable for the current DataView scale. It is not a real bulk operation, though. Moving 100 rows to Trash still means 100 REST writes, just in a small queue. There is no atomic all-or-nothing behavior, no server-side progress state, and no way to resume if the browser goes away mid-run.
+
+**Where.** `requestDeleteRows` in `src/components/CollectionDataViews.js`, the queue helper in `src/components/allSettledWithConcurrency.js`, and coverage in `tests/js/components/allSettledWithConcurrency.test.js`.
+
+**Solution.** If collections start moving large row sets to Trash, add a collection-row bulk trash endpoint or an async job endpoint with progress polling. That endpoint should own permission checks, trash order, partial-failure reporting, and cleanup. Then the DataView action can send selected IDs once instead of managing a client-side queue.
