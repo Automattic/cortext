@@ -434,3 +434,19 @@ The layer is still mostly read-only. Pages still go through the page tree and `c
 **Where.** `includes/Documents.php`, `includes/Rest/DocumentsController.php`, `includes/Rest/RecentsController.php`, `src/hooks/useDocuments.js`, `src/hooks/useTrashedDocuments.js`, `src/components/SidebarTrash.js`, `src/router/useResolveEntity.js`, `src/router/EntityRoute.js`, `src/hooks/documentTrashInvalidation.js`, and `src/hooks/rowInvalidation.js`.
 
 **Solution.** Keep `Cortext\Documents` as the cross-type reader, then move shared document behavior behind it one piece at a time: URL targets, invalidation, activity/recents, favorites, and trash refresh. Individual records can still use `core-data` or row endpoints where WordPress models them well. Cross-type views can stay under `/cortext/v1/documents`; shared document features should not rebuild the same page/row branching every time.
+
+## 49. Public page layout doesn't use WordPress align classes `[internal]`
+
+**What.** The public template constrains non-block content to 650 px via a blanket `max-width` on `.cortext-public-page__body > :not(.wp-block-cortext-data-view)`. The data-view block breaks out of that constraint by virtue of the exclusion. This is fragile — it doesn't honor `alignwide`, `alignfull`, or any other block alignment, and will break for other wide blocks. The proper fix is to adopt WordPress's `align*` layout classes and `theme.json` content/wide widths so blocks opt into breakout with standard markup rather than CSS exclusions.
+
+**Where.** `src/frontend.scss`, the `.cortext-public-page__body` rule with the FIXME comment.
+
+**Solution.** Use `wp_get_layout_style` or emit the `is-layout-constrained` class with `contentSize` / `wideSize` on the body wrapper, then add `alignwide` or `alignfull` to the data-view block's wrapper attributes in `DataView.php`. Remove the exclusion hack.
+
+## 50. DataView block shares a frontend bundle with page chrome `[internal]`
+
+**What.** The `cortext-frontend` script and style handle serves double duty: it hydrates the DataView block (React, DataViews, field renderers) and provides general page chrome (body font, content column, title styles). Both `Assets.php` and the render callback in `DataView.php` enqueue the same handle, creating a registration race where the first caller's dependency list wins and the second is silently ignored. The DataView block should provision its own script and style (e.g. `cortext-data-view-view`) via `viewScript`/`viewStyle` in `block.json` or its own dedicated handles in the render callback, so its dependencies (`wp-components`, `wp-api-fetch`, etc.) are self-contained. `cortext-frontend`, if it makes sense to exist, should only cover general concerns: page chrome, light/dark mode toggle, etc.
+
+**Where.** `includes/Block/DataView.php` (render callback enqueue), `includes/Frontend/Assets.php` (page-level enqueue), `src/frontend.js` (single entry point for both concerns).
+
+**Solution.** Split `src/frontend.js` into two entry points: one for page chrome (`cortext-frontend`) and one for the DataView block (`cortext-data-view-view`). The block entry handles hydration and declares its own dependencies. The page entry stays minimal. Update `webpack.config.js` with the new entry point, and update `DataView.php` to enqueue the block-specific handle.

@@ -10,9 +10,56 @@ concurrency:
     cancel-in-progress: true
 
 jobs:
+    changes:
+        name: Detect changed paths
+        runs-on: ubuntu-latest
+        outputs:
+            php_changed: ${{ steps.changed_paths.outputs.php_changed }}
+            js_changed: ${{ steps.changed_paths.outputs.js_changed }}
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - id: changed_paths
+              shell: bash
+              run: |
+                  set -euo pipefail
+
+                  if [ "${{ github.event_name }}" = "pull_request" ]; then
+                    base="${{ github.event.pull_request.base.sha }}"
+                    head="${{ github.event.pull_request.head.sha }}"
+                  else
+                    base="${{ github.event.before }}"
+                    head="${{ github.sha }}"
+                  fi
+
+                  if [ "$base" = "0000000000000000000000000000000000000000" ]; then
+                    changed_files="$(git diff-tree --no-commit-id --name-only -r "$head")"
+                  else
+                    changed_files="$(git diff --name-only "$base" "$head")"
+                  fi
+
+                  php_paths='^(\.github/workflows/unit-tests\.yml|composer\.(json|lock)|phpunit\.xml\.dist|cortext\.php|includes/|templates/|tests/php/)'
+                  js_paths='^(\.github/workflows/unit-tests\.yml|package\.json|pnpm-lock\.yaml|jest\.config\.js|src/|tests/js/)'
+
+                  if [ -n "$changed_files" ] && grep -Eq "$php_paths" <<< "$changed_files"; then
+                    echo "php_changed=true" >> "$GITHUB_OUTPUT"
+                  else
+                    echo "php_changed=false" >> "$GITHUB_OUTPUT"
+                  fi
+
+                  if [ -n "$changed_files" ] && grep -Eq "$js_paths" <<< "$changed_files"; then
+                    echo "js_changed=true" >> "$GITHUB_OUTPUT"
+                  else
+                    echo "js_changed=false" >> "$GITHUB_OUTPUT"
+                  fi
+
     php:
         name: PHP
         runs-on: ubuntu-latest
+        needs: changes
+        if: needs.changes.outputs.php_changed == 'true'
         steps:
             - uses: actions/checkout@v4
 
@@ -34,6 +81,8 @@ jobs:
     js:
         name: JavaScript
         runs-on: ubuntu-latest
+        needs: changes
+        if: needs.changes.outputs.js_changed == 'true'
         steps:
             - uses: actions/checkout@v4
 
