@@ -44,10 +44,11 @@ const ADD_FIELD_ID = '__add_field';
 // actions cell ever grows.
 const ROW_ACTIONS_CHROME_RESERVE = 48;
 // Half-height limit for a gap drop zone above or below the seam between
-// two rows. With no cap, a tall row produces a hitbox that reaches the
-// row's middle, so a drop halfway down still registers as a between-rows
-// drop. 24px feels easy to aim at and keeps the row body clear.
-const ROW_DROP_ZONE_MAX_SIDE = 24;
+// two rows. The cap needs to cover normal balanced/comfortable rows, or
+// their middle band has no droppable and the preview snaps back to the
+// source. Very tall rows still get capped so their body doesn't become one
+// huge between-rows target.
+const ROW_DROP_ZONE_MAX_SIDE = 40;
 const HOVER_SUPPRESSION_RELEASE_DELAY = 120;
 const FREEZE_SAFETY_TIMEOUT = 3000;
 
@@ -1025,18 +1026,27 @@ function linearRowGaps( renderedRows, activeRow ) {
 			: after.rect.top + after.rect.height;
 		const top = Math.max( rawTop, lineTop - ROW_DROP_ZONE_MAX_SIDE );
 		const bottom = Math.min( rawBottom, lineTop + ROW_DROP_ZONE_MAX_SIDE );
-		const left = Math.min(
-			after?.rect.left ?? anchor.rect.left,
-			before?.rect.left ?? anchor.rect.left
-		);
-		const right = Math.max(
-			after
-				? after.rect.left + after.rect.width
-				: anchor.rect.left + anchor.rect.width,
-			before
-				? before.rect.left + before.rect.width
-				: anchor.rect.left + anchor.rect.width
-		);
+		const tableContainerRect = anchor.el?.closest( '.dataviews-view-table' )
+			? rowViewportContainer( anchor.el )?.getBoundingClientRect?.()
+			: null;
+		const left =
+			tableContainerRect?.width > 0
+				? tableContainerRect.left
+				: Math.min(
+						after?.rect.left ?? anchor.rect.left,
+						before?.rect.left ?? anchor.rect.left
+				  );
+		const right =
+			tableContainerRect?.width > 0
+				? tableContainerRect.right
+				: Math.max(
+						after
+							? after.rect.left + after.rect.width
+							: anchor.rect.left + anchor.rect.width,
+						before
+							? before.rect.left + before.rect.width
+							: anchor.rect.left + anchor.rect.width
+				  );
 
 		gaps.push( {
 			index,

@@ -1901,10 +1901,12 @@ body:has(.cortext-canvas__identity-actions:hover) .cortext-canvas__identity-acti
 // own `tr td:last-child` rule, which also sets `padding-right: 48px`.
 .dataviews-view-table tr th.dataviews-view-table__actions-column,
 .dataviews-view-table tr td.dataviews-view-table__actions-column {
+	box-sizing: border-box;
 	width: $grid-unit-50 + $grid-unit-05;
 	min-width: $grid-unit-50 + $grid-unit-05;
 	max-width: $grid-unit-50 + $grid-unit-05;
-	padding-right: $grid-unit-05;
+	padding-right: 0;
+	padding-left: 0;
 }
 
 .dataviews-view-table th.dataviews-view-table__checkbox-column,
@@ -1923,6 +1925,66 @@ body:has(.cortext-canvas__identity-actions:hover) .cortext-canvas__identity-acti
 .dataviews-view-table th:first-child:not(.dataviews-view-table__checkbox-column),
 .dataviews-view-table td:first-child:not(.dataviews-view-table__checkbox-column) {
 	width: 280px;
+}
+
+// WordPress admin can load DataViews 6.0.0 alongside our bundled version. The
+// older sheet declares `padding-left: 48px` on the first td/th and `width: 1%`
+// on utility cells. Scope our table chrome to Cortext so load order cannot
+// widen the checkbox/actions columns or push the title column right.
+.cortext-data-view .dataviews-view-table tr td:first-child,
+.cortext-data-view .dataviews-view-table tr th:first-child {
+	padding-left: 24px;
+	padding-inline-start: 24px;
+}
+
+.cortext-data-view
+.dataviews-view-table
+tr
+td.dataviews-view-table__checkbox-column,
+.cortext-data-view
+.dataviews-view-table
+tr
+th.dataviews-view-table__checkbox-column,
+.cortext-data-view
+.dataviews-view-table
+tr
+td.dataviews-view-table__actions-column,
+.cortext-data-view
+.dataviews-view-table
+tr
+td.cortext-table-calculations__selection-spacer {
+	box-sizing: border-box;
+	width: 44px;
+	min-width: 44px;
+	max-width: 44px;
+	padding-left: 0;
+	padding-right: 0;
+	padding-inline-start: 0;
+	padding-inline-end: 0;
+}
+
+.cortext-data-view
+.dataviews-view-table
+.dataviews-view-table__checkbox-column
+.dataviews-view-table__cell-content-wrapper {
+	justify-content: center;
+}
+
+.cortext-data-view
+.dataviews-view-table
+tr
+td.dataviews-view-table__checkbox-column,
+.cortext-data-view
+.dataviews-view-table
+tr
+th.dataviews-view-table__checkbox-column {
+	padding-left: 8px;
+	padding-inline-start: 8px;
+}
+
+.cortext-data-view .dataviews-view-table thead th.dataviews-view-table__checkbox-column > .dataviews-view-table-selection-checkbox {
+	margin-left: 10px;
+	margin-inline-start: 10px;
 }
 
 // The add-field button is portaled into DataViews' actions column header.
@@ -4078,6 +4140,8 @@ body.cortext-row-detail-sidebar-resizing {
 				width: max-content;
 				min-height: $grid-unit-40;
 				margin-right: 0;
+				padding-left: 18px;
+				padding-inline-start: 18px;
 				padding-right: $grid-unit-20;
 			}
 
@@ -4314,8 +4378,11 @@ body.cortext-row-detail-sidebar-resizing {
 
 .cortext-data-view
 .dataviews-view-table
-.cortext-row-reorder-cell {
-	padding-left: 24px;
+tbody > tr > td.cortext-row-reorder-cell,
+.cortext-data-view
+.dataviews-view-table.has-compact-density
+tbody > tr > td.cortext-row-reorder-cell {
+	padding-left: 30px;
 }
 
 // Row reorder transitions are off at rest. The drop freeze applies transforms
@@ -4356,7 +4423,7 @@ body.cortext-row-reorder-no-transition .cortext-row-reorder-target {
 .cortext-row-drag-handle {
 	position: absolute;
 	top: 50%;
-	left: 2px;
+	left: 0;
 	width: 24px;
 	height: 24px;
 	padding: 0;
@@ -4364,12 +4431,12 @@ body.cortext-row-reorder-no-transition .cortext-row-reorder-target {
 	border-radius: 2px;
 	background-color: transparent;
 	background-image:
-		radial-gradient(circle at 8px 7px, currentcolor 1px, transparent 1.5px),
-		radial-gradient(circle at 14px 7px, currentcolor 1px, transparent 1.5px),
-		radial-gradient(circle at 8px 12px, currentcolor 1px, transparent 1.5px),
-		radial-gradient(circle at 14px 12px, currentcolor 1px, transparent 1.5px),
-		radial-gradient(circle at 8px 17px, currentcolor 1px, transparent 1.5px),
-		radial-gradient(circle at 14px 17px, currentcolor 1px, transparent 1.5px);
+		radial-gradient(circle at 6px 7px, currentcolor 1px, transparent 1.5px),
+		radial-gradient(circle at 12px 7px, currentcolor 1px, transparent 1.5px),
+		radial-gradient(circle at 6px 12px, currentcolor 1px, transparent 1.5px),
+		radial-gradient(circle at 12px 12px, currentcolor 1px, transparent 1.5px),
+		radial-gradient(circle at 6px 17px, currentcolor 1px, transparent 1.5px),
+		radial-gradient(circle at 12px 17px, currentcolor 1px, transparent 1.5px);
 	color: $gray-700;
 	cursor: grab;
 	opacity: 0.55;

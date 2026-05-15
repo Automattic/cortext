@@ -667,13 +667,91 @@ describe( 'DataViewRowReorder', () => {
 
 		expect( gapBetweenShortAndTall ).toHaveStyle( {
 			top: '20px',
-			height: '44px',
+			height: '60px',
 		} );
 		expect(
 			gapBetweenShortAndTall.style.getPropertyValue(
 				'--cortext-row-drop-line-top'
 			)
 		).toBe( '20px' );
+	} );
+
+	it( 'covers balanced row gaps without leaving a dead band', async () => {
+		await renderReorder( {}, { rowHeights: [ 64, 64, 64 ] } );
+
+		const gapBetweenBalancedRows = document.querySelectorAll(
+			'.cortext-row-drop-indicator--gap'
+		)[ 1 ];
+
+		expect( gapBetweenBalancedRows ).toHaveStyle( {
+			top: '32px',
+			height: '64px',
+		} );
+		expect(
+			gapBetweenBalancedRows.style.getPropertyValue(
+				'--cortext-row-drop-line-top'
+			)
+		).toBe( '32px' );
+	} );
+
+	it( 'uses the visible table wrapper width for gap hitboxes', async () => {
+		const wrapper = document.createElement( 'div' );
+		wrapper.className = 'dataviews-wrapper';
+		wrapper.innerHTML = `
+			<table class="dataviews-view-table">
+				<tbody>
+					<tr><td>One</td></tr>
+					<tr><td>Two</td></tr>
+					<tr><td>Three</td></tr>
+				</tbody>
+			</table>
+		`;
+		wrapper.getBoundingClientRect = () => ( {
+			top: 0,
+			left: 0,
+			width: 500,
+			height: 120,
+			right: 500,
+			bottom: 120,
+		} );
+		Array.from( wrapper.querySelectorAll( 'tr' ) ).forEach(
+			( row, index ) => {
+				const top = index * 40;
+				row.getClientRects = () => [ {} ];
+				row.getBoundingClientRect = () => ( {
+					top,
+					left: 44,
+					width: 320,
+					height: 40,
+					right: 364,
+					bottom: top + 40,
+				} );
+			}
+		);
+		document.body.appendChild( wrapper );
+
+		render(
+			<DataViewRowReorder
+				wrapperRef={ { current: wrapper } }
+				view={ { type: 'table', sort: null } }
+				onChangeView={ jest.fn() }
+				collectionId={ 7 }
+				rows={ rows }
+				onReordered={ jest.fn() }
+			/>
+		);
+		await waitFor( () =>
+			expect( screen.getByTestId( 'dnd-context' ) ).toBeInTheDocument()
+		);
+
+		const gapBetweenRows = document.querySelectorAll(
+			'.cortext-row-drop-indicator--gap'
+		)[ 1 ];
+
+		expect( gapBetweenRows ).toHaveStyle( {
+			left: '0px',
+			width: '500px',
+		} );
 	} );
 
 	it( 'displaces rows to open a gap while dragging upward', async () => {
