@@ -219,55 +219,31 @@ jobs:
 
             - name: Write benchmark summaries
               if: always()
-              env:
-                  BASE_REF: main
               run: |
                   mkdir -p artifacts
 
-                  args=(--current=artifacts/perf-bench.json)
-                  if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
-                    args+=(--base=artifacts/perf-bench-base.json --base-label="${BASE_REF:-base}")
-                  fi
-
-                  php .github/scripts/write-perf-bench-summary.php "${args[@]}" | tee artifacts/perf-bench-summary.md
-
-                  if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
-                    php .github/scripts/write-perf-bench-summary.php \
-                      --current=artifacts/perf-bench.json \
-                      --base=artifacts/perf-bench-base.json \
-                      --base-label=main \
-                      --comparison-only \
-                      --summary= > artifacts/perf-bench-comment-body.md
-                  fi
+                  php .github/scripts/write-perf-bench-summary.php --current=artifacts/perf-bench.json | tee artifacts/perf-bench-summary.md
 
                   if [ -s artifacts/perf-ui.json ]; then
-                    ui_args=(--current=artifacts/perf-ui.json)
-                    if [ "$GITHUB_EVENT_NAME" = "pull_request" ] && [ -s artifacts/perf-ui-base.json ]; then
-                      ui_args+=(--base=artifacts/perf-ui-base.json --base-label=main)
-                    fi
-
-                    php .github/scripts/write-perf-ui-summary.php "${ui_args[@]}" | tee artifacts/perf-ui-summary.md
+                    php .github/scripts/write-perf-ui-summary.php --current=artifacts/perf-ui.json | tee artifacts/perf-ui-summary.md
                   fi
 
-                  if [ "$GITHUB_EVENT_NAME" = "pull_request" ] && [ -s artifacts/perf-ui-summary.md ]; then
-                    {
-                      echo
-                      echo '<details>'
-                      echo '<summary>Show UI performance benchmark</summary>'
-                      echo
-                      cat artifacts/perf-ui-summary.md
-                      echo
-                      echo '</details>'
-                    } >> artifacts/perf-bench-comment-body.md
+            - name: Build PR comment body
+              if: always() && github.event_name == 'pull_request'
+              run: |
+                  mkdir -p artifacts
+
+                  comment_args=(
+                    --bench-current=artifacts/perf-bench.json
+                    --bench-base=artifacts/perf-bench-base.json
+                    --base-label=main
+                    --run-url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+                  )
+                  if [ -s artifacts/perf-ui.json ] && [ -s artifacts/perf-ui-base.json ]; then
+                    comment_args+=(--ui-current=artifacts/perf-ui.json --ui-base=artifacts/perf-ui-base.json)
                   fi
 
-                  if [ "$GITHUB_EVENT_NAME" = "pull_request" ] && [ -s artifacts/perf-bench-comment-body.md ]; then
-                    run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-                    {
-                      echo
-                      echo "_Full per-scenario numbers in the [job summary](${run_url})._"
-                    } >> artifacts/perf-bench-comment-body.md
-                  fi
+                  php .github/scripts/write-perf-comment.php "${comment_args[@]}" > artifacts/perf-bench-comment-body.md
 
             - name: Post PR benchmark comment
               if: always() && github.event_name == 'pull_request'
