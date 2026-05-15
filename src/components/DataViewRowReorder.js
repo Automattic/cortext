@@ -38,7 +38,16 @@ const ROW_DRAGGING_CLASS = 'cortext-row-dragging';
 const ROW_SUPPRESS_HOVER_CLASS = 'cortext-row-reorder-suppress-hover';
 const ROW_NO_TRANSITION_CLASS = 'cortext-row-reorder-no-transition';
 const ADD_FIELD_ID = '__add_field';
+// Width to reserve at the right of the preview for the sticky actions column.
+// DataViews' actions cell measures ~88px in practice; 48 is enough so the last
+// field never sits flush against the actions affordance, without leaving a
+// jarring empty strip on rows with short content. Bump this if DataViews ever
+// widens the actions chrome and the preview starts crowding it.
 const ROW_ACTIONS_CHROME_RESERVE = 48;
+// Maximum half-height of a gap drop zone above/below the seam between two
+// rows. Without this cap, tall rows produce gap hitboxes that span half the
+// row -- meaning a drop near the middle of the row would activate the gap.
+// 24px keeps the hitbox aimable but bounded.
 const ROW_DROP_ZONE_MAX_SIDE = 24;
 const HOVER_SUPPRESSION_RELEASE_DELAY = 120;
 const FREEZE_SAFETY_TIMEOUT = 3000;
@@ -156,6 +165,12 @@ function isCheckboxTableCell( cell ) {
 }
 
 function isActionsTableCell( cell ) {
+	// DataViews labels the actions column with the two upstream classes below.
+	// The third check (last cell containing a button) is a fallback for the
+	// brief moments when the column hasn't picked up its sticky modifier yet
+	// during re-renders, since the preview is built off the live DOM. Schema
+	// fields never render a bare `<button>` directly inside their `<td>` in
+	// this codebase, so the false-positive risk is bounded.
 	return (
 		cell.classList.contains( 'dataviews-view-table__actions-column' ) ||
 		cell.classList.contains(
