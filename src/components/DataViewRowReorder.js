@@ -26,7 +26,6 @@ import {
 } from '@dnd-kit/core';
 
 import RowDragHandle from './RowDragHandle';
-import { ROW_DROP_AFTER, ROW_DROP_BEFORE } from './row-reorder';
 
 const DRAG_ACTIVATION_DISTANCE = 5;
 const ROW_REORDER_NOTICE_ID = 'cortext-row-reorder-failed';
@@ -38,22 +37,20 @@ const ROW_DROP_GAP = 'gap';
 const ROW_DRAGGING_CLASS = 'cortext-row-dragging';
 const ROW_SUPPRESS_HOVER_CLASS = 'cortext-row-reorder-suppress-hover';
 const ROW_NO_TRANSITION_CLASS = 'cortext-row-reorder-no-transition';
+const ADD_FIELD_ID = '__add_field';
+const ROW_ACTIONS_CHROME_RESERVE = 48;
 const HOVER_SUPPRESSION_RELEASE_DELAY = 120;
 const FREEZE_SAFETY_TIMEOUT = 3000;
 
 // tech-debt.md#49: DataViews doesn't expose row refs or reorder hooks.
-// Keep the DOM selectors for this adapter in one place.
+// Keep the DOM selectors for this adapter in one place. Grid stays out for now;
+// card-to-card drops need a separate 2D design.
 const ROW_SELECTORS = {
 	table: '.dataviews-view-table tbody > tr',
 	list: [
 		'.dataviews-view-list__item',
 		'.dataviews-view-list li',
 		'.dataviews-view-list [role="row"]',
-	].join( ',' ),
-	grid: [
-		'.dataviews-view-grid__card',
-		'.dataviews-view-grid li',
-		'.dataviews-view-grid [role="gridcell"]',
 	].join( ',' ),
 };
 
@@ -78,6 +75,7 @@ function sameRowItems( a, b ) {
 				item.rect.width === b[ index ]?.rect.width &&
 				item.rect.height === b[ index ]?.rect.height &&
 				item.previewSignature === b[ index ]?.previewSignature &&
+				item.previewWidth === b[ index ]?.previewWidth &&
 				item.previewDensity === b[ index ]?.previewDensity
 		)
 	);
@@ -111,23 +109,81 @@ function rowRect( el ) {
 	};
 }
 
+function rowViewportContainer( rowElement ) {
+	return (
+		rowElement.closest( '.dataviews-wrapper' ) ??
+		rowElement.closest( '.cortext-data-view' )
+	);
+}
+
+function renderedRowRect( rowElement, layout ) {
+	const rect = rowRect( rowElement );
+	if ( layout !== 'table' ) {
+		return rect;
+	}
+
+	const containerRect =
+		rowViewportContainer( rowElement )?.getBoundingClientRect?.();
+	if ( ! containerRect?.width ) {
+		return rect;
+	}
+
+	const rowLeft = rect.left;
+	const rowRight = rect.left + rect.width;
+	const left = Math.max( rowLeft, Math.round( containerRect.left ) );
+	const right = Math.min( rowRight, Math.round( containerRect.right ) );
+
+	return {
+		...rect,
+		left: Math.round( left ),
+		width: Math.max( 0, Math.round( right - left ) ),
+	};
+}
+
 function normalizePreviewText( text ) {
 	return text.replace( /\s+/g, ' ' ).trim();
 }
 
-function tableDataCells( rowElement ) {
-	const cells = Array.from( rowElement.children ).filter( ( child ) =>
+function tableCells( rowElement ) {
+	return Array.from( rowElement.children ).filter( ( child ) =>
 		child.matches( 'td, th' )
-	);
-
-	return cells.filter(
-		( cell ) =>
-			! cell.classList.contains( 'dataviews-view-table__checkbox-column' )
 	);
 }
 
+function isCheckboxTableCell( cell ) {
+	return cell.classList.contains( 'dataviews-view-table__checkbox-column' );
+}
+
+function isActionsTableCell( cell ) {
+	return (
+		cell.classList.contains( 'dataviews-view-table__actions-column' ) ||
+		cell.classList.contains(
+			'dataviews-view-table__actions-column--sticky'
+		) ||
+		( cell === cell.parentElement?.lastElementChild &&
+			Boolean( cell.querySelector( 'button' ) ) )
+	);
+}
+
+function isUtilityTableCell( cell ) {
+	return isCheckboxTableCell( cell ) || isActionsTableCell( cell );
+}
+
+function visibleFieldCount( view ) {
+	if ( ! Array.isArray( view?.fields ) ) {
+		return null;
+	}
+
+	const count = view.fields.filter(
+		( fieldId ) => fieldId && fieldId !== ADD_FIELD_ID
+	).length;
+	return count > 0 ? count : null;
+}
+
 function tableHandleTarget( rowElement ) {
-	const cells = tableDataCells( rowElement );
+	const cells = tableCells( rowElement ).filter(
+		( cell ) => ! isUtilityTableCell( cell )
+	);
 
 	return cells[ 0 ] ?? rowElement.querySelector( 'td, th' ) ?? rowElement;
 }
@@ -147,21 +203,178 @@ function previewDensity( rowElement, view ) {
 		: 'balanced';
 }
 
-function rowPreviewCells( rowElement, layout, row ) {
+function rowPreviewCells( rowElement, layout, row, view ) {
 	const label = rowLabel( row );
 	if ( layout === 'table' ) {
-		const cells = tableDataCells( rowElement ).slice( 0, 4 );
+		const allCells = tableCells( rowElement );
+		const expectedFieldCount = visibleFieldCount( view );
+		const container = rowViewportContainer( rowElement );
+		const containerRect = container?.getBoundingClientRect() ?? null;
+		const intersectsViewport = ( rect ) => {
+			if ( ! containerRect ) {
+				return true;
+			}
+			return (
+				rect.right > containerRect.left &&
+				rect.left < containerRect.right
+			);
+		};
+		const measuredCells = allCells.map( ( cell ) => ( {
+			cell,
+			rect: cell.getBoundingClientRect(),
+			isCheckbox: isCheckboxTableCell( cell ),
+			isKnownActions: isActionsTableCell( cell ),
+		} ) );
+		const hasActionsChrome = measuredCells.some(
+			( info ) => info.isKnownActions
+		);
+		const actionsLeft = measuredCells.reduce( ( left, info ) => {
+			if (
+				info.isKnownActions &&
+				info.rect.width > 0 &&
+				intersectsViewport( info.rect )
+			) {
+				return Math.min( left, info.rect.left );
+			}
+			return left;
+		}, Infinity );
+		const hasTrailingUtilityCell =
+			expectedFieldCount !== null &&
+			measuredCells.filter(
+				( info ) =>
+					! info.isCheckbox &&
+					info.rect.width > 0 &&
+					intersectsViewport( info.rect )
+			).length > expectedFieldCount;
+		const reservedRight =
+			containerRect && ( hasActionsChrome || hasTrailingUtilityCell )
+				? containerRect.right - ROW_ACTIONS_CHROME_RESERVE
+				: containerRect?.right ?? Infinity;
+		const contentRight = Math.min(
+			reservedRight,
+			Number.isFinite( actionsLeft ) ? actionsLeft : Infinity
+		);
+		const contentLeft = containerRect?.left ?? -Infinity;
+		const fitsContentViewport = ( rect ) =>
+			rect.left >= contentLeft && rect.right <= contentRight;
 
-		return cells.length
-			? cells.map( ( cell ) => ( {
-					source: cell,
-					text: normalizePreviewText( cell.textContent ?? '' ),
-					width: Math.round( cell.getBoundingClientRect().width ),
-			  } ) )
-			: [ { text: label } ];
+		const clipToContainer = ( rect ) => {
+			if ( ! containerRect ) {
+				return {
+					left: Math.round( rect.left ),
+					right: Math.round( rect.right ),
+					width: Math.round( rect.width ),
+				};
+			}
+
+			const left = Math.round(
+				Math.max( rect.left, containerRect.left )
+			);
+			const right = Math.round(
+				Math.min( rect.right, containerRect.right )
+			);
+			return {
+				left,
+				right,
+				width: Math.max( 0, right - left ),
+			};
+		};
+
+		const cells = [];
+		let fieldCellsSeen = 0;
+		const fieldLimit = expectedFieldCount ?? Infinity;
+		for ( const info of measuredCells ) {
+			const { cell, rect, isCheckbox, isKnownActions } = info;
+			if ( rect.width <= 0 || ! intersectsViewport( rect ) ) {
+				continue;
+			}
+			const isField =
+				! isCheckbox && ! isKnownActions && fieldCellsSeen < fieldLimit;
+			if ( isField && ! fitsContentViewport( rect ) ) {
+				continue;
+			}
+			if (
+				! isField &&
+				! isCheckbox &&
+				! isKnownActions &&
+				! fitsContentViewport( rect )
+			) {
+				continue;
+			}
+			if ( isField ) {
+				fieldCellsSeen += 1;
+			}
+			const clipped = clipToContainer( rect );
+			if ( clipped.width <= 0 ) {
+				continue;
+			}
+			cells.push( {
+				cell,
+				rect,
+				clipped,
+				isCheckbox,
+				isActions: isKnownActions || ( ! isCheckbox && ! isField ),
+				isField,
+			} );
+		}
+
+		const previewCells = [];
+		let cursor = null;
+		let primaryAssigned = false;
+		for ( const info of cells ) {
+			const { left, right, width } = info.clipped;
+			if ( cursor !== null && left > cursor ) {
+				previewCells.push( {
+					width: left - cursor,
+					isSpacer: true,
+				} );
+			}
+
+			const isPrimary = info.isField && ! primaryAssigned;
+			if ( isPrimary ) {
+				primaryAssigned = true;
+			}
+			previewCells.push( {
+				source: info.cell,
+				text: normalizePreviewText( info.cell.textContent ?? '' ),
+				width,
+				isPrimary,
+				isCheckbox: info.isCheckbox,
+				isActions: info.isActions,
+			} );
+			cursor = cursor === null ? right : Math.max( cursor, right );
+		}
+		const previewRight =
+			containerRect && ( hasActionsChrome || hasTrailingUtilityCell )
+				? Math.round( containerRect.right )
+				: null;
+		if (
+			cursor !== null &&
+			previewRight !== null &&
+			previewRight > cursor
+		) {
+			previewCells.push( {
+				width: previewRight - cursor,
+				isSpacer: true,
+			} );
+		}
+
+		return previewCells.length ? previewCells : [ { text: label } ];
 	}
 
 	return [ { text: label } ];
+}
+
+function rowPreviewWidth( rowElement, layout, rect ) {
+	if ( layout === 'table' ) {
+		const container = rowViewportContainer( rowElement );
+		const width = container?.getBoundingClientRect?.().width;
+		if ( width > 0 ) {
+			return Math.round( width );
+		}
+	}
+
+	return Math.round( rect?.width ?? 0 ) || null;
 }
 
 function rowPreviewSignature( cells ) {
@@ -200,13 +413,21 @@ function normalizeClonedCellContent( node ) {
 function appendPlainPreviewContent( node, cells ) {
 	for ( const [ index, cell ] of cells.entries() ) {
 		const cellElement = node.ownerDocument.createElement( 'div' );
+		const isPrimary = cell.isPrimary ?? index === 0;
 		cellElement.className =
 			'cortext-row-drag-preview__cell' +
-			( index === 0 ? ' cortext-row-drag-preview__cell--primary' : '' );
+			( isPrimary ? ' cortext-row-drag-preview__cell--primary' : '' ) +
+			( cell.isCheckbox
+				? ' cortext-row-drag-preview__cell--checkbox'
+				: '' ) +
+			( cell.isActions
+				? ' cortext-row-drag-preview__cell--actions'
+				: '' ) +
+			( cell.isSpacer ? ' cortext-row-drag-preview__cell--spacer' : '' );
 		if ( cell.width ) {
-			cellElement.style.flexBasis = `${ cell.width }px`;
+			cellElement.style.flex = `0 0 ${ cell.width }px`;
 		}
-		if ( cell.source ) {
+		if ( cell.source && ! cell.isActions ) {
 			for ( const child of Array.from( cell.source.childNodes ) ) {
 				cellElement.appendChild( child.cloneNode( true ) );
 			}
@@ -215,7 +436,11 @@ function appendPlainPreviewContent( node, cells ) {
 			removeClonedIds( cellElement );
 			normalizeClonedCellContent( cellElement );
 		}
-		if ( ! normalizePreviewText( cellElement.textContent ?? '' ) ) {
+		if (
+			! cell.source &&
+			! cell.isSpacer &&
+			! normalizePreviewText( cellElement.textContent ?? '' )
+		) {
 			cellElement.textContent = cell.text;
 		}
 		node.appendChild( cellElement );
@@ -224,7 +449,14 @@ function appendPlainPreviewContent( node, cells ) {
 
 function RowDragPreview( { row } ) {
 	const previewRef = useRef( null );
-	const width = Math.min( Math.max( row.rect?.width ?? 320, 240 ), 720 );
+	// The table row can be much wider than the visible block because DataViews
+	// keeps scrolled-out cells in the DOM. Use the measured wrapper width when
+	// we have it, then fall back to the generated cells.
+	const cellsWidth = ( row.previewCells ?? [] ).reduce(
+		( width, cell ) => width + ( cell.width || 0 ),
+		0
+	);
+	const width = Math.max( row.previewWidth ?? cellsWidth, 240 );
 	const density = row.previewDensity ?? 'balanced';
 
 	useLayoutEffect( () => {
@@ -280,15 +512,16 @@ function findRenderedRows( wrapper, view, rows ) {
 			if ( ! el || ! row?.id ) {
 				return null;
 			}
-			const rect = rowRect( el );
+			const rect = renderedRowRect( el, layout );
 			const handleEl = handleTargetFor( el, layout );
-			const previewCells = rowPreviewCells( el, layout, row );
+			const previewCells = rowPreviewCells( el, layout, row, view );
 			return {
 				rowId: Number( row.id ),
 				index,
 				label: rowLabel( row ),
 				previewCells,
 				previewSignature: rowPreviewSignature( previewCells ),
+				previewWidth: rowPreviewWidth( el, layout, rect ),
 				previewDensity: previewDensity( el, view ),
 				el,
 				handleEl,
@@ -304,10 +537,11 @@ function useRenderedRows( wrapperRef, view, rows ) {
 	renderedRowsRef.current = renderedRows;
 	const decoratedRowsRef = useRef( [] );
 	const decoratedCellsRef = useRef( [] );
+	const isLinear = usesLinearGaps( view );
 
 	useEffect( () => {
 		const wrapper = wrapperRef.current;
-		if ( ! wrapper ) {
+		if ( ! wrapper || ! isLinear ) {
 			return undefined;
 		}
 
@@ -348,18 +582,39 @@ function useRenderedRows( wrapperRef, view, rows ) {
 		sync();
 		const observer = new window.MutationObserver( sync );
 		observer.observe( wrapper, { childList: true, subtree: true } );
+		const ResizeObserverConstructor =
+			wrapper.ownerDocument?.defaultView?.ResizeObserver;
+		const resizeObserver = ResizeObserverConstructor
+			? new ResizeObserverConstructor( sync )
+			: null;
+		resizeObserver?.observe( wrapper );
+		const dataviewsWrapper = wrapper.querySelector( '.dataviews-wrapper' );
+		if ( dataviewsWrapper ) {
+			resizeObserver?.observe( dataviewsWrapper );
+		}
 		wrapper.addEventListener( 'scroll', sync, true );
 		window.addEventListener( 'resize', sync );
 		window.addEventListener( 'scroll', sync, true );
 
+		// Leave decoration classes in place between subscriptions. Sort changes
+		// and refetches can re-run this effect during the drop freeze; removing
+		// `cortext-row-reorder-cell` here collapses the 24px handle padding for
+		// one frame. sync() handles rows that leave the set, and the unmount
+		// effect below does the final cleanup.
 		return () => {
 			if ( frame ) {
 				window.cancelAnimationFrame( frame );
 			}
 			observer.disconnect();
+			resizeObserver?.disconnect();
 			wrapper.removeEventListener( 'scroll', sync, true );
 			window.removeEventListener( 'resize', sync );
 			window.removeEventListener( 'scroll', sync, true );
+		};
+	}, [ wrapperRef, view, rows, isLinear ] );
+
+	useEffect( () => {
+		return () => {
 			for ( const el of decoratedRowsRef.current ) {
 				el.classList.remove( 'cortext-row-reorder-target' );
 			}
@@ -369,7 +624,7 @@ function useRenderedRows( wrapperRef, view, rows ) {
 			decoratedRowsRef.current = [];
 			decoratedCellsRef.current = [];
 		};
-	}, [ wrapperRef, view, rows ] );
+	}, [] );
 
 	return renderedRows;
 }
@@ -388,18 +643,7 @@ function parseDropData( over ) {
 			afterId: data.afterId ?? null,
 		};
 	}
-
-	if (
-		! data ||
-		! data.rowId ||
-		( data.zone !== ROW_DROP_BEFORE && data.zone !== ROW_DROP_AFTER )
-	) {
-		return null;
-	}
-	return {
-		rowId: data.rowId,
-		zone: data.zone,
-	};
+	return null;
 }
 
 function rowCollisionDetection( args ) {
@@ -411,25 +655,13 @@ function rowCollisionDetection( args ) {
 }
 
 function insertionIndexForDrop( ids, activeDrop ) {
-	if ( activeDrop?.type === ROW_DROP_GAP ) {
-		return activeDrop.insertionIndex >= 0 &&
-			activeDrop.insertionIndex <= ids.length
-			? activeDrop.insertionIndex
-			: null;
-	}
-
-	const targetId = Number( activeDrop?.rowId );
-	const targetIndex = ids.indexOf( targetId );
-	if (
-		! targetId ||
-		targetIndex === -1 ||
-		( activeDrop?.zone !== ROW_DROP_BEFORE &&
-			activeDrop?.zone !== ROW_DROP_AFTER )
-	) {
+	if ( activeDrop?.type !== ROW_DROP_GAP ) {
 		return null;
 	}
-
-	return activeDrop.zone === ROW_DROP_AFTER ? targetIndex + 1 : targetIndex;
+	return activeDrop.insertionIndex >= 0 &&
+		activeDrop.insertionIndex <= ids.length
+		? activeDrop.insertionIndex
+		: null;
 }
 
 function finalIndexForInsertion( insertionIndex, activeIndex, length ) {
@@ -796,45 +1028,6 @@ function RowGapDropZone( { gap, activeDrop } ) {
 	);
 }
 
-/*
- * Grid keeps the old before/after card targets for now. A true 2D gap model
- * needs a separate design pass.
- */
-function RowDropZone( { row, zone, activeDrop } ) {
-	const data = { rowId: row.rowId, zone };
-	const { setNodeRef, isOver } = useDroppable( {
-		id: `row-drop:${ row.rowId }:${ zone }`,
-		data,
-	} );
-	const isActive =
-		isOver ||
-		( activeDrop?.rowId === row.rowId && activeDrop?.zone === zone );
-	const top =
-		zone === ROW_DROP_BEFORE
-			? row.rect.top
-			: row.rect.top + row.rect.height / 2;
-	const height = Math.max( 8, row.rect.height / 2 );
-
-	return (
-		<div
-			ref={ setNodeRef }
-			className={
-				'cortext-row-drop-indicator ' +
-				`cortext-row-drop-indicator--${ zone }` +
-				( isActive ? ' is-active' : '' )
-			}
-			style={ {
-				position: 'fixed',
-				top: `${ top }px`,
-				left: `${ row.rect.left }px`,
-				width: `${ row.rect.width }px`,
-				height: `${ height }px`,
-			} }
-			aria-hidden="true"
-		/>
-	);
-}
-
 export default function DataViewRowReorder( {
 	wrapperRef,
 	view,
@@ -943,10 +1136,10 @@ export default function DataViewRowReorder( {
 		]
 	);
 
-	// Keep the dropped position frozen until the refetch brings back the new
-	// order, or until the safety timeout gives up. If transition suppression
-	// ends while the API is still in flight, a scroll, mutation observer tick,
-	// or view change can animate the transforms again and look like a flash.
+	// Hold the dropped position until the refetch confirms the new order.
+	// This order matters: remove the body class that enables row transitions
+	// before `useRowDisplacement` applies the placed transform. Otherwise the
+	// active row animates from its old position for one frame after drop.
 	const freezeDropState = useCallback(
 		( row, drop, expectedOrder ) => {
 			clearNoTransitionFrame();
@@ -1126,14 +1319,13 @@ export default function DataViewRowReorder( {
 		}
 	}, [ clearVisualState, rows, settlingOrder ] );
 
-	if ( renderedRows.length === 0 ) {
+	// Skip grid for now. In a 2D layout, dropping onto a card does not tell us
+	// exactly where the row should land.
+	if ( ! usesLinearGaps( view ) || renderedRows.length === 0 ) {
 		return null;
 	}
 
-	const renderLinearGaps = usesLinearGaps( view );
-	const rowGaps = renderLinearGaps
-		? linearRowGaps( renderedRows, activeRow )
-		: [];
+	const rowGaps = linearRowGaps( renderedRows, activeRow );
 
 	return (
 		<DndContext
@@ -1151,28 +1343,13 @@ export default function DataViewRowReorder( {
 					row={ row }
 				/>
 			) ) }
-			{ renderLinearGaps
-				? rowGaps.map( ( gap ) => (
-						<RowGapDropZone
-							key={ `gap:${ gap.index }` }
-							gap={ gap }
-							activeDrop={ activeDrop }
-						/>
-				  ) )
-				: renderedRows.flatMap( ( row ) => [
-						<RowDropZone
-							key={ `before:${ row.rowId }` }
-							row={ row }
-							zone={ ROW_DROP_BEFORE }
-							activeDrop={ activeDrop }
-						/>,
-						<RowDropZone
-							key={ `after:${ row.rowId }` }
-							row={ row }
-							zone={ ROW_DROP_AFTER }
-							activeDrop={ activeDrop }
-						/>,
-				  ] ) }
+			{ rowGaps.map( ( gap ) => (
+				<RowGapDropZone
+					key={ `gap:${ gap.index }` }
+					gap={ gap }
+					activeDrop={ activeDrop }
+				/>
+			) ) }
 			<DragOverlay
 				dropAnimation={ null }
 				zIndex={ ROW_DRAG_OVERLAY_Z_INDEX }
@@ -1187,7 +1364,7 @@ export default function DataViewRowReorder( {
 				>
 					<p>
 						{ __(
-							'This will clear the current sort and keep rows where you drop them.',
+							'Rows will stay where you dropped them, and the current sort will be cleared.',
 							'cortext'
 						) }
 					</p>

@@ -55,6 +55,7 @@ jest.mock( '@wordpress/notices', () => ( {
 
 let mockDndProps;
 let mockDraggableListeners;
+let mockResizeObserverInstances;
 jest.mock( '@dnd-kit/core', () => {
 	const { createElement } = require( '@wordpress/element' );
 
@@ -94,8 +95,9 @@ jest.mock( '@dnd-kit/core', () => {
 	};
 } );
 
+import { useDraggable } from '@dnd-kit/core';
+
 import DataViewRowReorder from '../../../src/components/DataViewRowReorder';
-import { ROW_DROP_AFTER } from '../../../src/components/row-reorder';
 
 const rows = [
 	{ id: 1, title: { raw: 'One' } },
@@ -107,8 +109,18 @@ beforeEach( () => {
 	mockApiFetch.mockReset();
 	mockApiFetch.mockResolvedValue( { reseeded: false } );
 	mockCreateErrorNotice.mockClear();
+	useDraggable.mockClear();
 	mockDndProps = null;
 	mockDraggableListeners = {};
+	mockResizeObserverInstances = [];
+	window.ResizeObserver = class {
+		constructor( callback ) {
+			this.callback = callback;
+			this.observe = jest.fn();
+			this.disconnect = jest.fn();
+			mockResizeObserverInstances.push( this );
+		}
+	};
 	window.requestAnimationFrame = ( callback ) => {
 		callback();
 		return 1;
@@ -149,6 +161,15 @@ function createWrapper() {
 	} );
 	document.body.appendChild( wrapper );
 	return wrapper;
+}
+
+function draggableDataFor( rowId ) {
+	return (
+		[ ...useDraggable.mock.calls ]
+			.reverse()
+			.find( ( [ options ] ) => options?.id === `row:${ rowId }` )?.[ 0 ]
+			?.data ?? { rowId, label: `Row ${ rowId }` }
+	);
 }
 
 async function renderReorder( props = {} ) {
@@ -329,6 +350,253 @@ describe( 'DataViewRowReorder', () => {
 		).toBeInTheDocument();
 	} );
 
+	it( 'builds the table preview from visible row cells and blank chrome', async () => {
+		// Mirrors the real DataViews DOM: a checkbox column, visible fields,
+		// off-screen cells that still exist in the table, and a sticky actions
+		// cell at the right edge. The preview should clone checkbox + field
+		// content, but keep sticky chrome as blank width so the row underneath
+		// never shows through.
+		const wrapper = document.createElement( 'div' );
+		wrapper.innerHTML = `
+			<div class="dataviews-wrapper">
+				<table class="dataviews-view-table">
+					<tbody>
+						<tr>
+							<td class="dataviews-view-table__checkbox-column"><input type="checkbox" /></td>
+							<td><span>Title</span></td>
+							<td><span>Status</span></td>
+							<td><span>Owner</span></td>
+							<td><span>Updated</span></td>
+							<td><span>Notes</span></td>
+							<td><span>Rock</span></td>
+							<td>0</td>
+							<td>Hidden description</td>
+							<td class="dataviews-view-table__actions-column dataviews-view-table__actions-column--sticky"><button type="button">0</button></td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+		`;
+		const dataviewsWrapper = wrapper.querySelector( '.dataviews-wrapper' );
+		// The dataviews-wrapper owns the scroll; cells past its right edge
+		// are scrolled out of view and should not appear in the preview.
+		dataviewsWrapper.getBoundingClientRect = () => ( {
+			top: 0,
+			left: 10,
+			width: 712,
+			height: 40,
+			right: 722,
+			bottom: 40,
+		} );
+		const rowElement = wrapper.querySelector( 'tr' );
+		rowElement.getClientRects = () => [ {} ];
+		rowElement.getBoundingClientRect = () => ( {
+			top: 0,
+			left: 10,
+			width: 1200,
+			height: 40,
+			right: 1210,
+			bottom: 40,
+		} );
+		const rects = [
+			[ 10, 32 ],
+			[ 42, 118 ],
+			[ 160, 122 ],
+			[ 282, 126 ],
+			[ 408, 130 ],
+			[ 538, 134 ],
+			[ 672, 90 ],
+			[ 760, 100 ],
+			[ 860, 200 ],
+			[ 682, 41 ],
+		];
+		rects.forEach( ( [ left, width ], index ) => {
+			const cell = rowElement.children[ index ];
+			cell.getBoundingClientRect = () => ( {
+				top: 0,
+				left,
+				width,
+				height: 40,
+				right: left + width,
+				bottom: 40,
+			} );
+		} );
+		document.body.appendChild( wrapper );
+
+		render(
+			<DataViewRowReorder
+				wrapperRef={ { current: wrapper } }
+				view={ {
+					type: 'table',
+					sort: null,
+					fields: [
+						'title',
+						'status',
+						'owner',
+						'updated',
+						'notes',
+						'genre',
+						'length',
+					],
+				} }
+				onChangeView={ jest.fn() }
+				collectionId={ 7 }
+				rows={ [ rows[ 0 ] ] }
+				onReordered={ jest.fn() }
+			/>
+		);
+		await waitFor( () =>
+			expect( screen.getByTestId( 'dnd-context' ) ).toBeInTheDocument()
+		);
+
+		act( () => {
+			mockDndProps.onDragStart( {
+				active: {
+					data: { current: draggableDataFor( 1 ) },
+				},
+			} );
+		} );
+
+		const preview = screen
+			.getByTestId( 'drag-overlay' )
+			.querySelector( '.cortext-row-drag-preview' );
+		const previewCells = preview.querySelectorAll(
+			'.cortext-row-drag-preview__cell'
+		);
+
+		expect( preview ).toHaveStyle( { width: '712px' } );
+		expect( previewCells ).toHaveLength( 8 );
+		expect( previewCells[ 0 ] ).toHaveClass(
+			'cortext-row-drag-preview__cell--checkbox'
+		);
+		expect( previewCells[ 0 ] ).toHaveStyle( { flex: '0 0 32px' } );
+		expect(
+			previewCells[ 0 ].querySelector( 'input[type="checkbox"]' )
+		).toBeInTheDocument();
+		expect( previewCells[ 1 ] ).toHaveClass(
+			'cortext-row-drag-preview__cell--primary'
+		);
+		expect( previewCells[ 1 ] ).toHaveStyle( { flex: '0 0 118px' } );
+		expect( previewCells[ 1 ] ).toHaveTextContent( 'Title' );
+		expect( previewCells[ 5 ] ).toHaveStyle( { flex: '0 0 134px' } );
+		expect( previewCells[ 5 ] ).toHaveTextContent( 'Notes' );
+		expect( previewCells[ 6 ] ).toHaveClass(
+			'cortext-row-drag-preview__cell--spacer'
+		);
+		expect( previewCells[ 6 ] ).toHaveStyle( { flex: '0 0 10px' } );
+		expect( previewCells[ 7 ] ).toHaveClass(
+			'cortext-row-drag-preview__cell--actions'
+		);
+		expect( previewCells[ 7 ] ).toHaveStyle( { flex: '0 0 40px' } );
+		expect( previewCells[ 7 ] ).toBeEmptyDOMElement();
+		expect( preview.querySelector( 'button' ) ).not.toBeInTheDocument();
+		expect( preview.textContent ).toContain( 'Notes' );
+		expect( preview.textContent ).not.toContain( 'Hidden description' );
+		expect( preview.textContent ).not.toContain( 'Rock' );
+		expect( preview.textContent ).not.toMatch( /^0|0$/ );
+	} );
+
+	it( 'remeasures rows after the embedded block is resized', async () => {
+		const originalRequestAnimationFrame = window.requestAnimationFrame;
+		const frames = [];
+		window.requestAnimationFrame = ( callback ) => {
+			frames.push( callback );
+			return frames.length;
+		};
+		const wrapper = document.createElement( 'div' );
+		wrapper.innerHTML = `
+			<div class="dataviews-wrapper">
+				<table class="dataviews-view-table">
+					<tbody>
+						<tr>
+							<td><span>Title</span></td>
+							<td><span>Author</span></td>
+							<td class="dataviews-view-table__actions-column"><button type="button">0</button></td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+		`;
+		const dataviewsWrapper = wrapper.querySelector( '.dataviews-wrapper' );
+		let wrapperWidth = 720;
+		dataviewsWrapper.getBoundingClientRect = () => ( {
+			top: 0,
+			left: 10,
+			width: wrapperWidth,
+			height: 40,
+			right: 10 + wrapperWidth,
+			bottom: 40,
+		} );
+		const rowElement = wrapper.querySelector( 'tr' );
+		rowElement.getClientRects = () => [ {} ];
+		rowElement.getBoundingClientRect = () => ( {
+			top: 0,
+			left: 10,
+			width: 1200,
+			height: 40,
+			right: 1210,
+			bottom: 40,
+		} );
+		[
+			[ 10, 280 ],
+			[ 290, 220 ],
+			[ 650, 80 ],
+		].forEach( ( [ left, width ], index ) => {
+			const cell = rowElement.children[ index ];
+			cell.getBoundingClientRect = () => ( {
+				top: 0,
+				left,
+				width,
+				height: 40,
+				right: left + width,
+				bottom: 40,
+			} );
+		} );
+		document.body.appendChild( wrapper );
+
+		render(
+			<DataViewRowReorder
+				wrapperRef={ { current: wrapper } }
+				view={ {
+					type: 'table',
+					sort: null,
+					fields: [ 'title', 'author' ],
+				} }
+				onChangeView={ jest.fn() }
+				collectionId={ 7 }
+				rows={ [ rows[ 0 ] ] }
+				onReordered={ jest.fn() }
+			/>
+		);
+		act( () => {
+			frames.splice( 0 ).forEach( ( callback ) => callback() );
+		} );
+		await waitFor( () =>
+			expect( draggableDataFor( 1 ).previewWidth ).toBe( 720 )
+		);
+
+		act( () => {
+			wrapperWidth = 420;
+			for ( const observer of mockResizeObserverInstances ) {
+				observer.callback();
+			}
+		} );
+		act( () => {
+			frames.splice( 0 ).forEach( ( callback ) => callback() );
+		} );
+
+		await waitFor( () =>
+			expect( draggableDataFor( 1 ).previewWidth ).toBe( 420 )
+		);
+		expect( draggableDataFor( 1 ).rect ).toEqual(
+			expect.objectContaining( {
+				left: 10,
+				width: 420,
+			} )
+		);
+		window.requestAnimationFrame = originalRequestAnimationFrame;
+	} );
+
 	it( 'mounts row drag handles inside the row cell', async () => {
 		await renderReorder();
 
@@ -434,6 +702,36 @@ describe( 'DataViewRowReorder', () => {
 		);
 	} );
 
+	it( 'keeps the placed transform unanimated after drop', async () => {
+		// Covers the drop flicker: the body class that enables row transitions
+		// must be gone before `freezeDropState` applies the placed transform.
+		mockApiFetch.mockReturnValueOnce( new Promise( () => {} ) );
+		await renderReorder();
+		const renderedTableRows = document.querySelectorAll( 'tr' );
+
+		dragStart( 1 );
+
+		// Drag-overs still animate while the row is moving.
+		expect( document.body ).toHaveClass( 'cortext-row-dragging' );
+
+		act( () => {
+			mockDndProps.onDragEnd( {
+				active: {
+					data: { current: { rowId: 1, label: 'Row 1' } },
+				},
+				over: {
+					data: { current: gapDrop( 3, null, 3 ) },
+				},
+			} );
+		} );
+
+		// After drop, the row keeps its placed transform but transitions are off.
+		expect( renderedTableRows[ 0 ] ).toHaveStyle( {
+			transform: 'translate3d(0, 80px, 0)',
+		} );
+		expect( document.body ).not.toHaveClass( 'cortext-row-dragging' );
+	} );
+
 	it( 'freezes the dropped position until refreshed row order renders', async () => {
 		let resolveRequest;
 		mockApiFetch.mockReturnValueOnce(
@@ -504,28 +802,8 @@ describe( 'DataViewRowReorder', () => {
 		);
 	} );
 
-	it( 'animates rows to their next grid position', async () => {
+	it( 'does not mount row reorder for grid layout yet', () => {
 		const wrapper = createWrapper();
-		wrapper.innerHTML = `
-			<ul class="dataviews-view-grid">
-				<li>One</li>
-				<li>Two</li>
-				<li>Three</li>
-			</ul>
-		`;
-		Array.from( wrapper.querySelectorAll( 'li' ) ).forEach(
-			( item, index ) => {
-				item.getClientRects = () => [ {} ];
-				item.getBoundingClientRect = () => ( {
-					top: index > 1 ? 50 : 0,
-					left: index % 2 === 0 ? 10 : 170,
-					width: 140,
-					height: 40,
-					right: index % 2 === 0 ? 150 : 310,
-					bottom: index > 1 ? 90 : 40,
-				} );
-			}
-		);
 		render(
 			<DataViewRowReorder
 				wrapperRef={ { current: wrapper } }
@@ -539,22 +817,7 @@ describe( 'DataViewRowReorder', () => {
 				onReordered={ jest.fn() }
 			/>
 		);
-		await waitFor( () =>
-			expect( screen.getByTestId( 'dnd-context' ) ).toBeInTheDocument()
-		);
-		const renderedGridRows = wrapper.querySelectorAll( 'li' );
-
-		dragStart( 1 );
-		dragOver( { rowId: 3, zone: ROW_DROP_AFTER } );
-
-		await waitFor( () =>
-			expect( renderedGridRows[ 1 ] ).toHaveStyle( {
-				transform: 'translate3d(-160px, 0, 0)',
-			} )
-		);
-		expect( renderedGridRows[ 2 ] ).toHaveStyle( {
-			transform: 'translate3d(160px, -50px, 0)',
-		} );
+		expect( screen.queryByTestId( 'dnd-context' ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'posts immediately when there is no explicit sort', async () => {
@@ -592,7 +855,7 @@ describe( 'DataViewRowReorder', () => {
 
 		expect(
 			screen.getByText(
-				'This will clear the current sort and keep rows where you drop them.'
+				'Rows will stay where you dropped them, and the current sort will be cleared.'
 			)
 		).toBeInTheDocument();
 		expect( mockApiFetch ).not.toHaveBeenCalled();
