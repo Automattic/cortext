@@ -2,12 +2,12 @@
 <?php
 declare(strict_types=1);
 
-$args         = parse_args( $argv );
-$current_path = $args['current'] ?? 'artifacts/perf-bench.json';
-$base_path    = $args['base'] ?? '';
-$base_label   = $args['base-label'] ?? 'base';
-$summary_path = $args['summary'] ?? getenv( 'GITHUB_STEP_SUMMARY' );
-$comparison_only = isset( $args['comparison-only'] ) && '0' !== $args['comparison-only'];
+$args                 = parse_args( $argv );
+$current_path         = $args['current'] ?? 'artifacts/perf-bench.json';
+$base_path            = $args['base'] ?? '';
+$base_label           = $args['base-label'] ?? 'base';
+$summary_path         = $args['summary'] ?? getenv( 'GITHUB_STEP_SUMMARY' );
+$comparison_only      = isset( $args['comparison-only'] ) && '0' !== $args['comparison-only'];
 $failures_only_metric = $args['failures-only-metric'] ?? '';
 
 if ( '' !== $failures_only_metric ) {
@@ -158,9 +158,9 @@ function extract_json_object( string $raw ): ?string {
 		if ( '"' === $char ) {
 			$in_string = true;
 		} elseif ( '{' === $char ) {
-			$depth++;
+			++$depth;
 		} elseif ( '}' === $char ) {
-			$depth--;
+			--$depth;
 			if ( 0 === $depth ) {
 				return substr( $raw, $json_start, $index - $json_start + 1 );
 			}
@@ -253,9 +253,9 @@ function benchmark_summary_lines( array $report ): array {
  * @return array<int,string>
  */
 function comparison_lines( array $current, string $base_path, string $base_label ): array {
-	$base = load_report( $base_path, "{$base_label} benchmark" );
+	$base               = load_report( $base_path, "{$base_label} benchmark" );
 	$escaped_base_label = escape_cell( $base_label );
-	$lines = array(
+	$lines              = array(
 		'## Performance vs ' . $escaped_base_label,
 		'',
 	);
@@ -272,8 +272,6 @@ function comparison_lines( array $current, string $base_path, string $base_label
 
 	$current_scenarios = is_array( $current['scenarios'] ?? null ) ? $current['scenarios'] : array();
 	$base_scenarios    = is_array( $base['report']['scenarios'] ?? null ) ? $base['report']['scenarios'] : array();
-	$rows              = array();
-	$change_summary    = empty_change_summary();
 	$metrics           = comparison_metric_definitions( $current_scenarios, $base_scenarios );
 
 	if ( count( $metrics ) === 0 ) {
@@ -281,38 +279,57 @@ function comparison_lines( array $current, string $base_path, string $base_label
 		return $lines;
 	}
 
+	$changed_rows  = array();
+	$unchanged     = 0;
+	$total_compared = 0;
+
 	foreach ( $current_scenarios as $scenario_id => $scenario ) {
 		if ( ! is_array( $scenario ) || ! isset( $base_scenarios[ $scenario_id ] ) || ! is_array( $base_scenarios[ $scenario_id ] ) ) {
 			continue;
 		}
 
-		$base_scenario = $base_scenarios[ $scenario_id ];
-		$scenario_summary = scenario_change_summary( $scenario, $base_scenario, $metrics );
-		$change_summary   = merge_change_summary( $change_summary, $scenario_summary );
+		++$total_compared;
 
-		$rows[] = array(
+		$bucketed = scenario_change_buckets( $scenario, $base_scenarios[ $scenario_id ], $metrics );
+		if ( ! $bucketed['has_changes'] ) {
+			++$unchanged;
+			continue;
+		}
+
+		$changed_rows[] = array(
 			escape_cell( $scenario['label'] ?? $scenario_id ),
-			scenario_takeaway( $scenario_summary ),
-			notable_changes_text( $scenario_summary ),
+			format_change_cell( $bucketed['timing'] ),
+			format_change_cell( $bucketed['deterministic'] ),
 		);
 	}
 
-	if ( count( $rows ) === 0 ) {
+	if ( 0 === $total_compared ) {
 		$lines[] = 'No shared scenarios to compare.';
 		return $lines;
 	}
 
-	$lines[] = comparison_summary_text( $change_summary );
+	if ( count( $changed_rows ) === 0 ) {
+		$lines[] = 'All ' . $total_compared . ' ' . pluralize( $total_compared, 'scenario' ) . ' within noise.';
+		return $lines;
+	}
+
+	$changed = count( $changed_rows );
+	$headline = $changed . ' of ' . $total_compared . ' ' . pluralize( $total_compared, 'scenario' ) . ' changed';
+	if ( $unchanged > 0 ) {
+		$headline .= '; ' . $unchanged . ' within noise';
+	}
+	$lines[] = $headline . '.';
+
 	$lines[] = '';
 	$lines[] = '<details>';
-	$lines[] = '<summary>Show scenario comparison table</summary>';
+	$lines[] = '<summary>Show changes</summary>';
 	$lines[] = '';
 
 	foreach (
 		markdown_table(
-			array( 'Scenario', 'Result', 'Notable changes' ),
+			array( 'Scenario', 'Timing', 'Deterministic' ),
 			array( 'left', 'left', 'left' ),
-			$rows
+			$changed_rows
 		) as $table_line
 	) {
 		$lines[] = $table_line;
@@ -321,114 +338,59 @@ function comparison_lines( array $current, string $base_path, string $base_label
 	$lines[] = '';
 	$lines[] = '</details>';
 	$lines[] = '';
-	$lines[] = '_Deltas <10% on p50/p95 may be runner noise; SQL counts and memory are deterministic._';
+	$lines[] = '_Timing deltas count when the change exceeds max(10%, 2x baseline MAD). SQL counts and memory are deterministic; any non-zero delta is counted._';
 
 	return $lines;
 }
 
 /**
- * Summarizes all metric changes for a single scenario.
+ * Buckets metric changes for one scenario into timing vs deterministic groups.
  *
- * @param array<string,mixed>                                $scenario      Current scenario.
- * @param array<string,mixed>                                $base_scenario Base scenario.
- * @param array<int,array{key:string,label:string,type:string}> $metrics    Comparable metrics.
- * @return array{total:int,better:int,worse:int,same:int,better_changes:array<int,string>,worse_changes:array<int,string>}
+ * @param array<string,mixed>                                   $scenario      Current scenario.
+ * @param array<string,mixed>                                   $base_scenario Base scenario.
+ * @param array<int,array{key:string,label:string,type:string}> $metrics       Comparable metrics.
+ * @return array{has_changes:bool,timing:array<int,string>,deterministic:array<int,string>}
  */
-function scenario_change_summary( array $scenario, array $base_scenario, array $metrics ): array {
-	$summary = empty_change_summary();
+function scenario_change_buckets( array $scenario, array $base_scenario, array $metrics ): array {
+	$timing        = array();
+	$deterministic = array();
 
 	foreach ( $metrics as $metric ) {
-		$current = $scenario[ $metric['key'] ] ?? null;
-		$base    = $base_scenario[ $metric['key'] ] ?? null;
-		$change  = metric_change_kind( $current, $base, $metric['type'] );
+		$current      = $scenario[ $metric['key'] ] ?? null;
+		$base         = $base_scenario[ $metric['key'] ] ?? null;
+		$baseline_mad = paired_baseline_mad( $metric['key'], $base_scenario );
+		$change       = metric_change_kind( $current, $base, $metric['type'], $baseline_mad );
 
-		if ( 'missing' === $change ) {
+		if ( 'missing' === $change || 'same' === $change ) {
 			continue;
 		}
 
-		++$summary['total'];
-
-		if ( 'same' === $change ) {
-			++$summary['same'];
-			continue;
+		$text = $metric['label'] . ' ' . short_delta_value( $current, $base, $metric['type'] );
+		if ( 'number' === $metric['type'] ) {
+			$timing[] = $text;
+		} else {
+			$deterministic[] = $text;
 		}
-
-		++$summary[ $change ];
-		$summary[ $change . '_changes' ][] = metric_change_text( $metric['label'], $current, $base, $metric['type'] );
 	}
 
-	return $summary;
+	return array(
+		'has_changes'   => count( $timing ) > 0 || count( $deterministic ) > 0,
+		'timing'        => $timing,
+		'deterministic' => $deterministic,
+	);
 }
 
 /**
- * Combines one scenario summary into the aggregate summary.
+ * Renders a list of change strings as a single comparison table cell.
  *
- * @param array{total:int,better:int,worse:int,same:int} $summary          Aggregate summary.
- * @param array{total:int,better:int,worse:int,same:int} $scenario_summary Scenario summary.
- * @return array{total:int,better:int,worse:int,same:int}
+ * @param array<int,string> $changes Change strings.
  */
-function merge_change_summary( array $summary, array $scenario_summary ): array {
-	foreach ( array( 'total', 'better', 'worse', 'same' ) as $key ) {
-		$summary[ $key ] += $scenario_summary[ $key ];
+function format_change_cell( array $changes ): string {
+	if ( count( $changes ) === 0 ) {
+		return '-';
 	}
 
-	return $summary;
-}
-
-/**
- * Formats the scenario-level result.
- *
- * @param array{better:int,worse:int} $summary Scenario summary.
- */
-function scenario_takeaway( array $summary ): string {
-	if ( 0 === $summary['better'] && 0 === $summary['worse'] ) {
-		return 'unchanged';
-	}
-
-	if ( $summary['better'] > 0 && 0 === $summary['worse'] ) {
-		return 'better';
-	}
-
-	if ( $summary['worse'] > 0 && 0 === $summary['better'] ) {
-		return 'worse';
-	}
-
-	if ( $summary['better'] > $summary['worse'] ) {
-		return 'mostly better';
-	}
-
-	if ( $summary['worse'] > $summary['better'] ) {
-		return 'mostly worse';
-	}
-
-	return 'mixed';
-}
-
-/**
- * Formats notable metric changes for one scenario.
- *
- * @param array{better_changes:array<int,string>,worse_changes:array<int,string>} $summary Scenario summary.
- */
-function notable_changes_text( array $summary ): string {
-	$parts = array();
-
-	if ( count( $summary['better_changes'] ) > 0 ) {
-		$parts[] = 'Better: ' . implode( ', ', $summary['better_changes'] );
-	}
-
-	if ( count( $summary['worse_changes'] ) > 0 ) {
-		$parts[] = 'Worse: ' . implode( ', ', $summary['worse_changes'] );
-	}
-
-	if ( count( $parts ) === 0 ) {
-		return 'No notable changes';
-	}
-
-	return implode( '<br>', array_map( 'escape_cell', $parts ) );
-}
-
-function metric_change_text( string $label, mixed $current, mixed $base, string $type ): string {
-	return $label . ' ' . short_delta_value( $current, $base, $type );
+	return implode( ', ', array_map( 'escape_cell', $changes ) );
 }
 
 /**
@@ -464,13 +426,85 @@ function comparison_metric_definitions( array $current_scenarios, array $base_sc
 
 /**
  * Checks whether a scenario value should be compared as a metric.
+ *
+ * Excludes metrics that would inflate the notable count without adding signal:
+ * - `runs` is the sample count, not a measurement.
+ * - `mad_ms` / `*_mad_ms` is the noise floor; used to scale the timing threshold,
+ *   not displayed.
+ * - `p95_ms` / `*_p95_ms` (timing) is too noisy with the iteration counts we run
+ *   in CI; p50 is the primary timing signal. SQL/memory p95 stay because they
+ *   are deterministic across iterations.
+ * - `sql_queries_p50` / `memory_bytes_p50` are redundant with their p95 siblings
+ *   (deterministic metrics produce the same value at every percentile).
  */
 function should_compare_metric( string $key, mixed $current, mixed $base ): bool {
-	if ( in_array( $key, array( 'runs' ), true ) ) {
+	if ( 'runs' === $key ) {
+		return false;
+	}
+
+	if ( is_timing_dispersion_key( $key ) ) {
+		return false;
+	}
+
+	if ( is_timing_p95_key( $key ) ) {
+		return false;
+	}
+
+	if ( 'sql_queries_p50' === $key || 'memory_bytes_p50' === $key ) {
+		return false;
+	}
+
+	// `total_p50_ms` duplicates the scenario's aggregate `p50_ms` in stepped
+	// scenarios. The per-step keys (`resolve_*`, `hydrate_*`, ...) still pass.
+	if ( 'total_p50_ms' === $key ) {
 		return false;
 	}
 
 	return is_numeric( $current ) && is_numeric( $base );
+}
+
+/**
+ * Identifies timing dispersion keys (`mad_ms`, `<step>_mad_ms`).
+ */
+function is_timing_dispersion_key( string $key ): bool {
+	return 'mad_ms' === $key || (bool) preg_match( '/_mad_ms$/', $key );
+}
+
+/**
+ * Identifies timing p95 keys (`p95_ms`, `<step>_p95_ms`).
+ *
+ * Deterministic p95 metrics (`sql_queries_p95`, `memory_bytes_p95`) do not match
+ * this pattern because they end in `_p95`, not `_p95_ms`.
+ */
+function is_timing_p95_key( string $key ): bool {
+	return 'p95_ms' === $key || (bool) preg_match( '/_p95_ms$/', $key );
+}
+
+/**
+ * Identifies timing p50 keys (`p50_ms`, `<step>_p50_ms`).
+ */
+function is_timing_p50_key( string $key ): bool {
+	return 'p50_ms' === $key || (bool) preg_match( '/_p50_ms$/', $key );
+}
+
+/**
+ * Returns the baseline MAD that pairs with a timing p50 metric, or null if not
+ * available. `p50_ms` pairs with `mad_ms`; `<step>_p50_ms` pairs with
+ * `<step>_mad_ms`.
+ *
+ * @param array<string,mixed> $base_scenario Base scenario report.
+ */
+function paired_baseline_mad( string $key, array $base_scenario ): ?float {
+	if ( ! is_timing_p50_key( $key ) ) {
+		return null;
+	}
+
+	$mad_key = 'p50_ms' === $key ? 'mad_ms' : preg_replace( '/_p50_ms$/', '_mad_ms', $key );
+	if ( ! is_string( $mad_key ) || ! isset( $base_scenario[ $mad_key ] ) || ! is_numeric( $base_scenario[ $mad_key ] ) ) {
+		return null;
+	}
+
+	return (float) $base_scenario[ $mad_key ];
 }
 
 /**
@@ -511,23 +545,7 @@ function metric_type( string $key ): string {
 	return 'number';
 }
 
-/**
- * Creates empty metric change counts.
- *
- * @return array{total:int,better:int,worse:int,same:int,better_changes:array<int,string>,worse_changes:array<int,string>}
- */
-function empty_change_summary(): array {
-	return array(
-		'total'          => 0,
-		'better'         => 0,
-		'worse'          => 0,
-		'same'           => 0,
-		'better_changes' => array(),
-		'worse_changes'  => array(),
-	);
-}
-
-function metric_change_kind( mixed $current, mixed $base, string $type ): string {
+function metric_change_kind( mixed $current, mixed $base, string $type, ?float $baseline_mad = null ): string {
 	if ( ! is_numeric( $current ) || ! is_numeric( $base ) ) {
 		return 'missing';
 	}
@@ -536,7 +554,7 @@ function metric_change_kind( mixed $current, mixed $base, string $type ): string
 	$base_float    = (float) $base;
 	$delta         = $current_float - $base_float;
 
-	if ( ! is_notable_metric_change( $delta, $base_float, $type ) ) {
+	if ( ! is_notable_metric_change( $delta, $base_float, $type, $baseline_mad ) ) {
 		return 'same';
 	}
 
@@ -560,13 +578,21 @@ function short_delta_value( mixed $current, mixed $base, string $type ): string 
 }
 
 /**
- * Checks whether a metric delta is large enough for the visible summary.
+ * Checks whether a metric delta is large enough to count as a notable change.
  *
- * @param float  $delta Metric delta.
- * @param float  $base  Base metric value.
- * @param string $type  Metric formatting type.
+ * Deterministic metrics (SQL counts, memory bytes) count any non-zero delta.
+ *
+ * Timing metrics use a 10% floor against the baseline value. When the baseline
+ * reported a MAD (median absolute deviation), the floor scales up to twice the
+ * baseline MAD relative to the median, which keeps natural per-run jitter out
+ * of the notable count for scenarios with high variance.
+ *
+ * @param float      $delta        Metric delta.
+ * @param float      $base         Base metric value.
+ * @param string     $type         Metric formatting type.
+ * @param float|null $baseline_mad Baseline MAD for the paired timing metric.
  */
-function is_notable_metric_change( float $delta, float $base, string $type ): bool {
+function is_notable_metric_change( float $delta, float $base, string $type, ?float $baseline_mad = null ): bool {
 	if ( 0.0 === $delta ) {
 		return false;
 	}
@@ -575,26 +601,16 @@ function is_notable_metric_change( float $delta, float $base, string $type ): bo
 		return true;
 	}
 
-	return 0.0 === $base || abs( $delta / $base ) >= 0.10;
-}
-
-/**
- * Formats the visible comparison summary.
- *
- * @param array{total:int,better:int,worse:int,same:int} $summary
- */
-function comparison_summary_text( array $summary ): string {
-	if ( 0 === $summary['total'] ) {
-		return 'Summary: no comparable metrics.';
+	if ( 0.0 === $base ) {
+		return true;
 	}
 
-	if ( 0 === $summary['better'] && 0 === $summary['worse'] ) {
-		return 'Summary: all ' . $summary['total'] . ' comparable ' . pluralize( $summary['total'], 'metric' ) . ' are unchanged or within noise.';
+	$threshold = 0.10;
+	if ( null !== $baseline_mad && $baseline_mad > 0.0 ) {
+		$threshold = max( $threshold, 2.0 * ( $baseline_mad / $base ) );
 	}
 
-	return 'Summary: ' . $summary['better'] . ' ' . pluralize( $summary['better'], 'metric' ) . ' notably better, '
-		. $summary['worse'] . ' ' . pluralize( $summary['worse'], 'metric' ) . ' notably worse, '
-		. $summary['same'] . ' ' . pluralize( $summary['same'], 'metric' ) . ' unchanged or within noise.';
+	return abs( $delta / $base ) >= $threshold;
 }
 
 function pluralize( int $count, string $singular ): string {
@@ -649,8 +665,8 @@ function signed_number( float $value, int $decimals ): string {
 }
 
 /**
- * @param array<int,string> $headers
- * @param array<int,string> $alignments
+ * @param array<int,string>            $headers
+ * @param array<int,string>            $alignments
  * @param array<int,array<int,string>> $rows
  * @return array<int,string>
  */
