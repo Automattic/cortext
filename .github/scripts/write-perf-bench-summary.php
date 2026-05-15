@@ -273,6 +273,13 @@ function comparison_lines( array $current, string $base_path, string $base_label
 	$current_scenarios = is_array( $current['scenarios'] ?? null ) ? $current['scenarios'] : array();
 	$base_scenarios    = is_array( $base['report']['scenarios'] ?? null ) ? $base['report']['scenarios'] : array();
 	$rows              = array();
+	$change_summary    = empty_change_summary();
+	$metrics           = array(
+		array( 'p50_ms', 'number' ),
+		array( 'p95_ms', 'number' ),
+		array( 'sql_queries_p95', 'integer' ),
+		array( 'memory_bytes_p95', 'memory' ),
+	);
 
 	foreach ( $current_scenarios as $scenario_id => $scenario ) {
 		if ( ! is_array( $scenario ) || ! isset( $base_scenarios[ $scenario_id ] ) || ! is_array( $base_scenarios[ $scenario_id ] ) ) {
@@ -280,7 +287,16 @@ function comparison_lines( array $current, string $base_path, string $base_label
 		}
 
 		$base_scenario = $base_scenarios[ $scenario_id ];
-		$rows[]        = array(
+		foreach ( $metrics as $metric ) {
+			$change_summary = add_metric_change(
+				$change_summary,
+				$scenario[ $metric[0] ] ?? null,
+				$base_scenario[ $metric[0] ] ?? null,
+				$metric[1]
+			);
+		}
+
+		$rows[] = array(
 			escape_cell( $scenario['label'] ?? $scenario_id ),
 			comparison_value( $scenario['p50_ms'] ?? null, $base_scenario['p50_ms'] ?? null, 'number' ),
 			comparison_value( $scenario['p95_ms'] ?? null, $base_scenario['p95_ms'] ?? null, 'number' ),
@@ -294,19 +310,116 @@ function comparison_lines( array $current, string $base_path, string $base_label
 		return $lines;
 	}
 
-	$lines = array_merge(
-		$lines,
+	$lines[] = comparison_summary_text( $change_summary );
+	$lines[] = '';
+	$lines[] = '<details>';
+	$lines[] = '<summary>Show metric comparison table</summary>';
+	$lines[] = '';
+
+	foreach (
 		markdown_table(
 			array( 'Scenario', 'p50 ms', 'p95 ms', 'SQL p95', 'Memory p95' ),
 			array( 'left', 'right', 'right', 'right', 'right' ),
 			$rows
-		)
-	);
+		) as $table_line
+	) {
+		$lines[] = $table_line;
+	}
 
+	$lines[] = '';
+	$lines[] = '</details>';
 	$lines[] = '';
 	$lines[] = '_Deltas <10% on p50/p95 may be runner noise; SQL counts and memory are deterministic._';
 
 	return $lines;
+}
+
+/**
+ * Creates empty metric change counts.
+ *
+ * @return array{total:int,better:int,worse:int,same:int}
+ */
+function empty_change_summary(): array {
+	return array(
+		'total'  => 0,
+		'better' => 0,
+		'worse'  => 0,
+		'same'   => 0,
+	);
+}
+
+/**
+ * Counts one comparable metric change.
+ *
+ * @param array{total:int,better:int,worse:int,same:int} $summary
+ * @param mixed                                          $current Current metric value.
+ * @param mixed                                          $base    Base metric value.
+ * @param string                                         $type    Metric formatting type.
+ * @return array{total:int,better:int,worse:int,same:int}
+ */
+function add_metric_change( array $summary, mixed $current, mixed $base, string $type ): array {
+	if ( ! is_numeric( $current ) || ! is_numeric( $base ) ) {
+		return $summary;
+	}
+
+	$current_float = (float) $current;
+	$base_float    = (float) $base;
+	$delta         = $current_float - $base_float;
+	$notable       = is_notable_metric_change( $delta, $base_float, $type );
+
+	++$summary['total'];
+
+	if ( ! $notable ) {
+		++$summary['same'];
+	} elseif ( $current_float < $base_float ) {
+		++$summary['better'];
+	} else {
+		++$summary['worse'];
+	}
+
+	return $summary;
+}
+
+/**
+ * Checks whether a metric delta is large enough for the visible summary.
+ *
+ * @param float  $delta Metric delta.
+ * @param float  $base  Base metric value.
+ * @param string $type  Metric formatting type.
+ */
+function is_notable_metric_change( float $delta, float $base, string $type ): bool {
+	if ( 0.0 === $delta ) {
+		return false;
+	}
+
+	if ( 'number' !== $type ) {
+		return true;
+	}
+
+	return 0.0 === $base || abs( $delta / $base ) >= 0.10;
+}
+
+/**
+ * Formats the visible comparison summary.
+ *
+ * @param array{total:int,better:int,worse:int,same:int} $summary
+ */
+function comparison_summary_text( array $summary ): string {
+	if ( 0 === $summary['total'] ) {
+		return 'Summary: no comparable metrics.';
+	}
+
+	if ( 0 === $summary['better'] && 0 === $summary['worse'] ) {
+		return 'Summary: all ' . $summary['total'] . ' comparable ' . pluralize( $summary['total'], 'metric' ) . ' are unchanged or within noise.';
+	}
+
+	return 'Summary: ' . $summary['better'] . ' ' . pluralize( $summary['better'], 'metric' ) . ' notably better, '
+		. $summary['worse'] . ' ' . pluralize( $summary['worse'], 'metric' ) . ' notably worse, '
+		. $summary['same'] . ' ' . pluralize( $summary['same'], 'metric' ) . ' unchanged or within noise.';
+}
+
+function pluralize( int $count, string $singular ): string {
+	return 1 === $count ? $singular : $singular . 's';
 }
 
 /**
