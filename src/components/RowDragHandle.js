@@ -1,4 +1,9 @@
-import { createPortal, useCallback, useMemo } from '@wordpress/element';
+import {
+	createPortal,
+	useCallback,
+	useLayoutEffect,
+	useMemo,
+} from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import { useDraggable } from '@dnd-kit/core';
 
@@ -31,12 +36,19 @@ export default function RowDragHandle( { row } ) {
 		},
 	} );
 
+	useLayoutEffect( () => {
+		if ( ! row.el ) {
+			return undefined;
+		}
+		setDraggableNodeRef( row.el );
+		return () => setDraggableNodeRef( null );
+	}, [ row.el, setDraggableNodeRef ] );
+
 	const setHandleRef = useCallback(
 		( node ) => {
-			setDraggableNodeRef( node );
 			setActivatorNodeRef( node );
 		},
-		[ setActivatorNodeRef, setDraggableNodeRef ]
+		[ setActivatorNodeRef ]
 	);
 
 	const stopClick = useCallback( ( event ) => {

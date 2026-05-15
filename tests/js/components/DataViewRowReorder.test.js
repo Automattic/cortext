@@ -55,6 +55,7 @@ jest.mock( '@wordpress/notices', () => ( {
 
 let mockDndProps;
 let mockDraggableListeners;
+let mockDraggableRefs;
 let mockResizeObserverInstances;
 jest.mock( '@dnd-kit/core', () => {
 	const { createElement } = require( '@wordpress/element' );
@@ -81,13 +82,20 @@ jest.mock( '@dnd-kit/core', () => {
 		pointerWithin: jest.fn(),
 		useSensor: jest.fn( () => ( {} ) ),
 		useSensors: jest.fn( ( ...sensors ) => sensors ),
-		useDraggable: jest.fn( () => ( {
-			attributes: {},
-			listeners: mockDraggableListeners,
-			setActivatorNodeRef: jest.fn(),
-			setNodeRef: jest.fn(),
-			isDragging: false,
-		} ) ),
+		useDraggable: jest.fn( ( options ) => {
+			const refs = {
+				setActivatorNodeRef: jest.fn(),
+				setNodeRef: jest.fn(),
+			};
+			mockDraggableRefs[ options.id ] = refs;
+			return {
+				attributes: {},
+				listeners: mockDraggableListeners,
+				setActivatorNodeRef: refs.setActivatorNodeRef,
+				setNodeRef: refs.setNodeRef,
+				isDragging: false,
+			};
+		} ),
 		useDroppable: jest.fn( () => ( {
 			setNodeRef: jest.fn(),
 			isOver: false,
@@ -112,6 +120,7 @@ beforeEach( () => {
 	useDraggable.mockClear();
 	mockDndProps = null;
 	mockDraggableListeners = {};
+	mockDraggableRefs = {};
 	mockResizeObserverInstances = [];
 	window.ResizeObserver = class {
 		constructor( callback ) {
@@ -608,6 +617,22 @@ describe( 'DataViewRowReorder', () => {
 		expect( handle.parentElement ).toHaveClass(
 			'cortext-row-reorder-cell'
 		);
+	} );
+
+	it( 'uses the row as the draggable node and the handle as the activator', async () => {
+		await renderReorder();
+
+		const handle = screen.getByRole( 'button', {
+			name: 'Reorder row: One',
+		} );
+		const renderedTableRows = document.querySelectorAll( 'tr' );
+
+		expect( mockDraggableRefs[ 'row:1' ].setNodeRef ).toHaveBeenCalledWith(
+			renderedTableRows[ 0 ]
+		);
+		expect(
+			mockDraggableRefs[ 'row:1' ].setActivatorNodeRef
+		).toHaveBeenCalledWith( handle );
 	} );
 
 	it( 'uses linear gap drop zones for table rows', async () => {
