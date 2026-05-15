@@ -1,15 +1,17 @@
 {
 	"name": "cortext-desktop",
 	"version": "0.0.1",
-	"description": "Cortext desktop app, Electron shell hosting the Cortext plugin via WordPress Playground.",
+	"description": "Cortext desktop app: Electron shell that runs Cortext on native PHP.",
 	"private": true,
 	"license": "GPL-2.0-or-later",
 	"main": "main.js",
 	"scripts": {
 		"start": "electron .",
-		"snapshot": "node scripts/build-snapshot.mjs"
+		"snapshot": "node scripts/build-snapshot.mjs",
+		"test:e2e": "playwright test"
 	},
 	"devDependencies": {
+		"@playwright/test": "^1.48.0",
 		"electron": "^33.2.0"
 	}
 }
