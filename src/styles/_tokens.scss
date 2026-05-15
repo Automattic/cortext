@@ -17,11 +17,6 @@
 	--cortext-scrollbar-thumb: rgba(0, 0, 0, 0.12);
 	--cortext-scrollbar-thumb-hover: rgba(0, 0, 0, 0.28);
 
-	// Default viewport height for the embedded data-view block. Fits a header,
-	// pagination row, footer, and roughly 10 compact rows; override this to
-	// give the block a different default.
-	--cortext-data-view-block-min-height: 640px;
-
 	// Option chip palette. Backgrounds are muted tints; foregrounds are a
 	// matching hue dark enough to read on the background. Names mirror
 	// `Cortext\OptionPalette::names()` and the JS `OPTION_COLOR_NAMES`

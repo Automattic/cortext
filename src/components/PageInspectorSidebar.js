@@ -52,6 +52,7 @@ import {
 	TRASHED_PAGES_QUERY,
 } from './page-queries';
 import { unlock } from '../lock-unlock';
+import { notifyDocumentTrashChanged } from '../hooks/documentTrashInvalidation';
 import { useFavorites } from '../hooks/useFavorites';
 import { useWorkspaceHome } from '../hooks/useWorkspaceHome';
 
@@ -530,6 +531,7 @@ function PageActionsPanel( { postId } ) {
 				POST_TYPE,
 				TRASHED_PAGES_QUERY,
 			] );
+			notifyDocumentTrashChanged();
 			try {
 				await setFavorites( ( current ) =>
 					filterFavoritesForTrashedPage( current, postId, pages )

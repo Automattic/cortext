@@ -1895,6 +1895,18 @@ body:has(.cortext-canvas__identity-actions:hover) .cortext-canvas__identity-acti
 	width: 200px;
 }
 
+// Keep the actions column only as wide as its kebab/`+` icon. Otherwise it
+// inherits the generic 200px cell width and pushes the last data column under
+// the sticky-right overlay. The `tr` keeps specificity tied with DataViews'
+// own `tr td:last-child` rule, which also sets `padding-right: 48px`.
+.dataviews-view-table tr th.dataviews-view-table__actions-column,
+.dataviews-view-table tr td.dataviews-view-table__actions-column {
+	width: $grid-unit-50 + $grid-unit-05;
+	min-width: $grid-unit-50 + $grid-unit-05;
+	max-width: $grid-unit-50 + $grid-unit-05;
+	padding-right: $grid-unit-05;
+}
+
 // Title carries the post name and tends to be longer than other
 // fields; give it more breathing room.
 .dataviews-view-table th:first-child,
@@ -1916,15 +1928,6 @@ body:has(.cortext-canvas__identity-actions:hover) .cortext-canvas__identity-acti
 	> .dataviews-view-table-header {
 		display: none;
 	}
-}
-
-// Regular cells get vertical centering from DataViews' inner wrapper.
-// The row-actions cell skips that wrapper, so center the kebab on the td.
-.cortext-data-view
-.dataviews-view-table
-tbody
-td.dataviews-view-table__actions-column {
-	vertical-align: middle;
 }
 
 // Custom field columns carry a marker that `ColumnHeaderActions`
@@ -4020,6 +4023,7 @@ body.cortext-row-detail-sidebar-resizing {
 		tr td {
 			overflow: hidden;
 			padding-block: 0;
+			vertical-align: middle;
 		}
 
 		// DataViews wraps each cell's render in a flex container that
@@ -4035,6 +4039,7 @@ body.cortext-row-detail-sidebar-resizing {
 			width: 100%;
 			min-width: 0;
 			max-width: 100%;
+			align-items: center;
 		}
 
 		tfoot.cortext-table-calculations {
@@ -4178,12 +4183,12 @@ body.cortext-row-detail-sidebar-resizing {
 	height: 100%;
 }
 
-// tech-debt.md#23: embedded block has no per-instance height attribute. Use
-// the shared token as a min-height so short collections still get a comfortable
-// viewport while long ones grow the block (and keep the footer in view) instead
-// of clipping. Width comes from Gutenberg's alignment.
+// Embedded blocks do not have a fixed-height parent. With the shared
+// `height: 100%`, the shell collapses and the table disappears. In block
+// mode, let content set the height until #23 gives authors an explicit
+// per-instance viewport.
 .wp-block-cortext-data-view .cortext-data-view-shell {
-	min-height: var(--cortext-data-view-block-min-height);
+	height: auto;
 }
 
 // Full-page mode wants the wrapper to fill a fixed-height parent and scroll
@@ -4192,6 +4197,22 @@ body.cortext-row-detail-sidebar-resizing {
 // shared `flex: 1 1 0` only here.
 .wp-block-cortext-data-view .cortext-data-view > .dataviews-wrapper {
 	flex: 0 0 auto;
+}
+
+// DataViews keeps pagination sticky for fixed-height surfaces. Embedded blocks
+// grow with their content, and the sticky layer can cover Gutenberg's selected
+// block outline, so keep the footer in normal flow here.
+.wp-block-cortext-data-view .dataviews-footer {
+	background-color: transparent;
+	position: static;
+	z-index: auto;
+}
+
+.block-editor-block-list__layout
+.block-editor-block-list__block[data-type="cortext/data-view"].is-selected::after,
+.block-editor-block-list__layout
+.block-editor-block-list__block[data-type="cortext/data-view"]:focus::after {
+	z-index: 10;
 }
 
 // Embedded blocks are width-constrained by the editor canvas. Letting relation

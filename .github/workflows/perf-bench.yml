@@ -3,7 +3,29 @@ name: Performance benchmark
 on:
     push:
         branches: [main]
+        paths:
+            - includes/CLI/**
+            - src/**
+            - tests/e2e/specs/perf-ui.spec.js
+            - .github/workflows/perf-bench.yml
+            - .github/scripts/write-perf-bench-summary.php
     pull_request:
+        branches: [main]
+        paths:
+            - includes/CLI/**
+            - src/**
+            - tests/e2e/specs/perf-ui.spec.js
+            - .github/workflows/perf-bench.yml
+            - .github/scripts/write-perf-bench-summary.php
+    workflow_dispatch:
+
+permissions:
+    actions: read
+    contents: read
+    issues: write
+
+env:
+    CORTEXT_PERF_UI: ${{ vars.CORTEXT_PERF_UI || '0' }}
 
 concurrency:
     group: ${{ github.workflow }}-${{ github.ref }}
@@ -17,6 +39,46 @@ jobs:
         steps:
             - uses: actions/checkout@v4
 
+            - name: Download main benchmark baseline
+              if: github.event_name == 'pull_request'
+              continue-on-error: true
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  REPOSITORY: ${{ github.repository }}
+              run: |
+                  set -euo pipefail
+
+                  mkdir -p artifacts/main-baseline
+                  run_id="$(gh run list \
+                    --repo "$REPOSITORY" \
+                    --workflow perf-bench.yml \
+                    --branch main \
+                    --status completed \
+                    --limit 1 \
+                    --json databaseId \
+                    --jq '.[0].databaseId // ""')"
+
+                  if [ -z "$run_id" ]; then
+                    echo "No completed main benchmark run found."
+                    exit 0
+                  fi
+
+                  if ! gh run download "$run_id" \
+                    --repo "$REPOSITORY" \
+                    --name perf-bench-main \
+                    --dir artifacts/main-baseline; then
+                    echo "No main benchmark artifact found."
+                    exit 0
+                  fi
+
+                  base_json="$(find artifacts/main-baseline -name 'perf-bench.json' -type f | head -n 1)"
+                  if [ -z "$base_json" ]; then
+                    echo "Main benchmark artifact had no perf-bench.json."
+                    exit 0
+                  fi
+
+                  cp "$base_json" artifacts/perf-bench-base.json
+
             - uses: shivammathur/setup-php@v2
               with:
                   php-version: '8.1'
@@ -28,8 +90,6 @@ jobs:
                   path: ~/.composer/cache
                   key: composer-${{ hashFiles('composer.lock') }}
 
-            - run: composer install --no-interaction --prefer-dist --no-dev
-
             - uses: pnpm/action-setup@v4
               with:
                   version: 11.0.8
@@ -39,6 +99,8 @@ jobs:
               with:
                   node-version: '24.15'
                   cache: 'pnpm'
+
+            - run: composer install --no-interaction --prefer-dist --no-dev
 
             - run: pnpm install --frozen-lockfile
 
@@ -67,198 +129,94 @@ jobs:
                     --fail-on-budget \
                     --pretty | tee artifacts/perf-bench.json
 
-            - name: Write benchmark summary
-              if: always()
+            - name: Run UI performance benchmark
+              if: github.event_name == 'workflow_dispatch' || env.CORTEXT_PERF_UI == '1'
+              env:
+                  # The benchmark workflow starts the dev wp-env, which serves WordPress on 8888.
+                  WP_BASE_URL: http://localhost:8888
               run: |
-                  if [ ! -s artifacts/perf-bench.json ]; then
-                    echo "The benchmark did not write any output."
-                    echo "The benchmark did not write any output." >> "$GITHUB_STEP_SUMMARY"
+                  set -euo pipefail
+
+                  if [ ! -f tests/e2e/specs/perf-ui.spec.js ]; then
+                    echo "No UI performance spec found."
                     exit 0
                   fi
 
-                  php <<'PHP'
-                  <?php
-                  $summary_path = getenv( 'GITHUB_STEP_SUMMARY' );
-                  $raw          = file_get_contents( 'artifacts/perf-bench.json' );
-                  $json_start   = strpos( $raw, '{' );
+                  pnpm exec playwright install --with-deps chromium
+                  pnpm run build
+                  pnpm exec wp-scripts test-playwright --config playwright.config.js tests/e2e/specs/perf-ui.spec.js
 
-                  if ( false === $json_start ) {
-                      $message = "The benchmark output did not include JSON.\n";
-                      echo $message;
-                      file_put_contents( $summary_path, $message, FILE_APPEND );
-                      exit( 0 );
-                  }
+            - name: Write benchmark summaries
+              if: always()
+              env:
+                  BASE_REF: main
+              run: |
+                  mkdir -p artifacts
 
-                  $json      = null;
-                  $depth     = 0;
-                  $in_string = false;
-                  $escaped   = false;
-                  $length    = strlen( $raw );
-                  for ( $index = $json_start; $index < $length; $index++ ) {
-                      $char = $raw[ $index ];
+                  args=(--current=artifacts/perf-bench.json)
+                  if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+                    args+=(--base=artifacts/perf-bench-base.json --base-label="${BASE_REF:-base}")
+                  fi
 
-                      if ( $in_string ) {
-                          if ( $escaped ) {
-                              $escaped = false;
-                          } elseif ( '\\' === $char ) {
-                              $escaped = true;
-                          } elseif ( '"' === $char ) {
-                              $in_string = false;
-                          }
-                          continue;
-                      }
+                  php .github/scripts/write-perf-bench-summary.php "${args[@]}" | tee artifacts/perf-bench-summary.md
 
-                      if ( '"' === $char ) {
-                          $in_string = true;
-                      } elseif ( '{' === $char ) {
-                          $depth++;
-                      } elseif ( '}' === $char ) {
-                          $depth--;
-                          if ( 0 === $depth ) {
-                              $json = substr( $raw, $json_start, $index - $json_start + 1 );
-                              break;
-                          }
-                      }
-                  }
+                  if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+                    php .github/scripts/write-perf-bench-summary.php \
+                      --current=artifacts/perf-bench.json \
+                      --base=artifacts/perf-bench-base.json \
+                      --base-label=main \
+                      --comparison-only \
+                      --summary= > artifacts/perf-bench-comment-body.md
+                  fi
 
-                  if ( null === $json ) {
-                      $message = "The benchmark JSON could not be found in the wp-env output.\n";
-                      echo $message;
-                      file_put_contents( $summary_path, $message, FILE_APPEND );
-                      exit( 0 );
-                  }
+            - name: Upload main benchmark baseline
+              if: always() && github.event_name == 'push'
+              uses: actions/upload-artifact@v4
+              with:
+                  name: perf-bench-main
+                  path: artifacts/perf-bench.json
+                  if-no-files-found: ignore
+                  retention-days: 90
 
-                  $report = json_decode( $json, true );
-                  if ( ! is_array( $report ) ) {
-                      $message = "The benchmark JSON could not be parsed: " . json_last_error_msg() . "\n";
-                      echo $message;
-                      file_put_contents( $summary_path, $message, FILE_APPEND );
-                      exit( 0 );
-                  }
+            - name: Post PR benchmark comment
+              if: always() && github.event_name == 'pull_request'
+              continue-on-error: true
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  PR_NUMBER: ${{ github.event.pull_request.number }}
+                  REPOSITORY: ${{ github.repository }}
+              run: |
+                  set -euo pipefail
 
-                  $escape = static function ( mixed $value ): string {
-                      return str_replace( array( '|', "\n", "\r" ), array( '\\|', ' ', ' ' ), (string) $value );
-                  };
-                  $number = static function ( mixed $value, int $decimals = 3 ): string {
-                      return is_numeric( $value ) ? number_format( (float) $value, $decimals, '.', '' ) : 'n/a';
-                  };
-                  $integer = static function ( mixed $value ): string {
-                      return is_numeric( $value ) ? (string) (int) $value : 'n/a';
-                  };
-                  $memory = static function ( mixed $value ): string {
-                      return is_numeric( $value ) ? number_format( (float) $value / 1048576, 1, '.', '' ) . ' MiB' : 'n/a';
-                  };
-                  $failure_value = static function ( string $metric, mixed $value ) use ( $number, $integer, $memory ): string {
-                      if ( 'memory_bytes_p95' === $metric ) {
-                          return $memory( $value );
-                      }
-                      if ( str_starts_with( $metric, 'sql_queries_' ) ) {
-                          return $integer( $value );
-                      }
-                      return $number( $value );
-                  };
-                  $markdown_table = static function ( array $headers, array $alignments, array $rows ): array {
-                      $widths = array_map( 'strlen', $headers );
+                  if [ ! -s artifacts/perf-bench-comment-body.md ]; then
+                    exit 0
+                  fi
 
-                      foreach ( $rows as $row ) {
-                          foreach ( $row as $index => $cell ) {
-                              $widths[ $index ] = max( $widths[ $index ] ?? 0, strlen( $cell ) );
-                          }
-                      }
+                  marker='<!-- cortext-perf-bench-comment -->'
+                  comment_file='artifacts/perf-bench-comment.md'
+                  {
+                    echo "$marker"
+                    cat artifacts/perf-bench-comment-body.md
+                  } > "$comment_file"
 
-                      foreach ( $widths as $index => $width ) {
-                          $widths[ $index ] = max( 3, $width );
-                      }
+                  comment_id="$(gh api "repos/$REPOSITORY/issues/$PR_NUMBER/comments" \
+                    --paginate \
+                    --jq '.[] | select(.user.type == "Bot" and (.body | contains("<!-- cortext-perf-bench-comment -->"))) | .id' \
+                    | tail -n 1)"
 
-                      $format_row = static function ( array $row ) use ( $alignments, $widths ): string {
-                          foreach ( $row as $index => $cell ) {
-                              $pad_type      = 'right' === ( $alignments[ $index ] ?? 'left' ) ? STR_PAD_LEFT : STR_PAD_RIGHT;
-                              $row[ $index ] = str_pad( $cell, $widths[ $index ], ' ', $pad_type );
-                          }
-
-                          return '| ' . implode( ' | ', $row ) . ' |';
-                      };
-
-                      $separator = array();
-                      foreach ( $widths as $index => $width ) {
-                          $separator[] = 'right' === ( $alignments[ $index ] ?? 'left' )
-                              ? str_repeat( '-', $width - 1 ) . ':'
-                              : str_repeat( '-', $width );
-                      }
-
-                      return array_merge(
-                          array( $format_row( $headers ), '| ' . implode( ' | ', $separator ) . ' |' ),
-                          array_map( $format_row, $rows )
-                      );
-                  };
-
-                  $iterations = is_array( $report['iterations'] ?? null ) ? $report['iterations'] : array();
-                  $lines      = array(
-                      '## Performance benchmark',
-                      '',
-                      '- Result: ' . ( ! empty( $report['passed'] ) ? 'passed' : 'failed' ),
-                      '- Total time: ' . $number( $report['elapsedMs'] ?? null ) . ' ms',
-                      '- Runs: ' . $integer( $iterations['measured'] ?? null ) . ' measured, ' . $integer( $iterations['warmup'] ?? null ) . ' warm-up',
-                      '',
-                  );
-
-                  $scenario_rows = array();
-                  foreach ( (array) ( $report['scenarios'] ?? array() ) as $scenario ) {
-                      $budget          = is_array( $scenario['budget'] ?? null ) ? $scenario['budget'] : array();
-                      $scenario_rows[] = array(
-                          ! empty( $scenario['passed'] ) ? 'pass' : 'fail',
-                          $escape( $scenario['label'] ?? '' ),
-                          $number( $scenario['p50_ms'] ?? null ),
-                          $number( $scenario['p95_ms'] ?? null ),
-                          $number( $budget['p95_ms'] ?? null ),
-                          $integer( $scenario['sql_queries_p50'] ?? null ),
-                          $integer( $scenario['sql_queries_p95'] ?? null ),
-                          $integer( $budget['sql_queries_p95'] ?? null ),
-                          $memory( $scenario['memory_bytes_p95'] ?? null ),
-                          $memory( $budget['memory_bytes_p95'] ?? null )
-                      );
-                  }
-                  $lines = array_merge(
-                      $lines,
-                      $markdown_table(
-                          array( 'Status', 'Scenario', 'p50 ms', 'p95 ms', 'p95 limit', 'SQL p50', 'SQL p95', 'SQL limit', 'Memory p95', 'Memory limit' ),
-                          array( 'left', 'left', 'right', 'right', 'right', 'right', 'right', 'right', 'right', 'right' ),
-                          $scenario_rows
-                      )
-                  );
-
-                  if ( ! empty( $report['failures'] ) ) {
-                      $lines[] = '';
-                      $lines[] = '### Budget misses';
-                      $lines[] = '';
-
-                      $failure_rows = array();
-                      foreach ( (array) $report['failures'] as $failure ) {
-                          $failure_rows[] = array(
-                              $escape( $failure['scenario'] ?? '' ),
-                              $escape( $failure['metric'] ?? '' ),
-                              $failure_value( (string) ( $failure['metric'] ?? '' ), $failure['actual'] ?? null ),
-                              $failure_value( (string) ( $failure['metric'] ?? '' ), $failure['budget'] ?? null )
-                          );
-                      }
-                      $lines = array_merge(
-                          $lines,
-                          $markdown_table(
-                              array( 'Scenario', 'Metric', 'Actual', 'Budget' ),
-                              array( 'left', 'left', 'right', 'right' ),
-                              $failure_rows
-                          )
-                      );
-                  }
-
-                  $output = implode( "\n", $lines ) . "\n";
-                  echo $output;
-                  file_put_contents( $summary_path, $output, FILE_APPEND );
-                  PHP
+                  if [ -n "$comment_id" ]; then
+                    gh api --method PATCH "repos/$REPOSITORY/issues/comments/$comment_id" \
+                      --field "body=@$comment_file" >/dev/null
+                  else
+                    gh api --method POST "repos/$REPOSITORY/issues/$PR_NUMBER/comments" \
+                      --field "body=@$comment_file" >/dev/null
+                  fi
 
             - if: failure()
               uses: actions/upload-artifact@v4
               with:
                   name: perf-bench
-                  path: artifacts/perf-bench.json
+                  path: |
+                      artifacts/perf-bench*.json
+                      playwright-report/
                   retention-days: 7

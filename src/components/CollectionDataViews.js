@@ -1,10 +1,5 @@
 import apiFetch from '@wordpress/api-fetch';
-import {
-	Button,
-	Notice,
-	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
-	__experimentalConfirmDialog as ConfirmDialog,
-} from '@wordpress/components';
+import { Button, Notice } from '@wordpress/components';
 import { DataViews } from '@wordpress/dataviews';
 import {
 	createContext,
@@ -19,7 +14,6 @@ import {
 import { __, sprintf } from '@wordpress/i18n';
 import { copy, plus, trash } from '@wordpress/icons';
 import { useNavigate } from '@wordpress/route';
-import { addQueryArgs } from '@wordpress/url';
 
 import DataViewColumnInteractions from './DataViewColumnInteractions';
 import EditableCell, { RowMutationContext } from './EditableCell';
@@ -52,6 +46,8 @@ import { toDataViewId, toRecordId } from '../hooks/fieldIds';
 import useCollectionRows from '../hooks/useCollectionRows';
 import { useRecents } from '../hooks/useRecents';
 import { elementsFromOptions } from '../hooks/optionElements';
+import { notifyDocumentTrashChanged } from '../hooks/documentTrashInvalidation';
+import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
 import { computeDocumentUri } from '../router/useResolveEntity';
 
 const DEFAULT_LAYOUTS = { table: { density: 'compact' }, grid: {}, list: {} };
@@ -728,7 +724,6 @@ export default function CollectionDataViews( {
 		[ isTableLayout, openRowId, requestOpenRow, savedRowDetailMode ]
 	);
 
-	const [ pendingDeleteRow, setPendingDeleteRow ] = useState( null );
 	const [ rowActionError, setRowActionError ] = useState( null );
 
 	const openRowInMode = useCallback(
@@ -780,47 +775,32 @@ export default function CollectionDataViews( {
 		[ collectionId, refresh, touchRecent ]
 	);
 
-	const requestDeleteRow = useCallback( ( row ) => {
-		if ( ! row?.id ) {
-			return;
-		}
-		setRowActionError( null );
-		setPendingDeleteRow( row );
-	}, [] );
-
-	const cancelDeleteRow = useCallback( () => {
-		setPendingDeleteRow( null );
-	}, [] );
-
-	const confirmDeleteRow = useCallback( async () => {
-		const row = pendingDeleteRow;
-		setPendingDeleteRow( null );
-		if ( ! row?.id || ! postType ) {
-			return;
-		}
-		try {
-			await apiFetch( {
-				path: addQueryArgs( `/wp/v2/${ postType }/${ row.id }`, {
-					force: true,
-				} ),
-				method: 'DELETE',
-			} );
-			if ( String( row.id ) === String( openRowId ) ) {
-				runDetailTransition( { type: 'close' } );
+	const trashRow = useCallback(
+		async ( row ) => {
+			if ( ! row?.id || ! postType ) {
+				return;
 			}
-			refresh();
-		} catch ( apiError ) {
-			setRowActionError(
-				apiError?.message ?? __( 'Could not delete row.', 'cortext' )
-			);
-		}
-	}, [
-		openRowId,
-		pendingDeleteRow,
-		postType,
-		refresh,
-		runDetailTransition,
-	] );
+			setRowActionError( null );
+			try {
+				await apiFetch( {
+					path: `/wp/v2/${ postType }/${ row.id }`,
+					method: 'DELETE',
+				} );
+				if ( String( row.id ) === String( openRowId ) ) {
+					runDetailTransition( { type: 'close' } );
+				}
+				refresh();
+				notifyDocumentTrashChanged();
+				notifyCollectionRowsChanged();
+			} catch ( apiError ) {
+				setRowActionError(
+					apiError?.message ??
+						__( 'Could not move row to Trash.', 'cortext' )
+				);
+			}
+		},
+		[ openRowId, postType, refresh, runDetailTransition ]
+	);
 
 	const rowActions = useMemo( () => {
 		const actions = [];
@@ -850,19 +830,19 @@ export default function CollectionDataViews( {
 		} );
 		actions.push( {
 			id: 'delete-row',
-			label: __( 'Delete', 'cortext' ),
+			label: __( 'Trash', 'cortext' ),
 			icon: trash,
 			isDestructive: true,
 			context: 'single',
-			callback: ( items ) => requestDeleteRow( items?.[ 0 ] ),
+			callback: ( items ) => trashRow( items?.[ 0 ] ),
 		} );
 		return actions;
 	}, [
 		duplicateRow,
 		isTableLayout,
 		openRowInMode,
-		requestDeleteRow,
 		savedRowDetailMode,
+		trashRow,
 	] );
 
 	const dataViewActions = rowActions;
@@ -1280,24 +1260,6 @@ export default function CollectionDataViews( {
 					</div>
 					{ detailSurface }
 				</div>
-				{ pendingDeleteRow && (
-					<ConfirmDialog
-						onConfirm={ confirmDeleteRow }
-						onCancel={ cancelDeleteRow }
-						confirmButtonText={ __( 'Delete', 'cortext' ) }
-					>
-						{ sprintf(
-							/* translators: %s: row title. */
-							__(
-								'Delete "%s"? This cannot be undone.',
-								'cortext'
-							),
-							pendingDeleteRow?.title?.rendered ||
-								pendingDeleteRow?.title?.raw ||
-								__( '(untitled)', 'cortext' )
-						) }
-					</ConfirmDialog>
-				) }
 			</OpenRowActionContext.Provider>
 		</RowMutationContext.Provider>
 	);
