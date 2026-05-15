@@ -18,9 +18,11 @@ $current_path = $args['current'] ?? 'artifacts/perf-ui.json';
 $summary_path = $args['summary'] ?? getenv( 'GITHUB_STEP_SUMMARY' );
 
 $output = build_output( $current_path );
+// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- CLI markdown output for GitHub summaries should stay unescaped.
 echo $output;
 
 if ( is_string( $summary_path ) && '' !== $summary_path ) {
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Standalone CI helper writes to GitHub's summary file outside WordPress.
 	file_put_contents( $summary_path, $output, FILE_APPEND );
 }
 
@@ -50,6 +52,7 @@ function build_output( string $current_path ): string {
 	if ( ! is_file( $current_path ) || 0 === filesize( $current_path ) ) {
 		return "UI performance run produced no output.\n";
 	}
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Reads a local artifact path in a standalone CI helper.
 	$raw = file_get_contents( $current_path );
 	if ( false === $raw ) {
 		return "Could not read UI performance output.\n";
