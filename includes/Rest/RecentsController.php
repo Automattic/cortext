@@ -9,9 +9,9 @@ declare( strict_types=1 );
 
 namespace Cortext\Rest;
 
+use Cortext\Documents;
 use Cortext\PostType\Collection;
 use Cortext\PostType\CollectionEntries;
-use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Page;
 use WP_Error;
 use WP_Post;
@@ -23,6 +23,12 @@ final class RecentsController {
 	private const NAMESPACE = 'cortext/v1';
 	private const META_KEY  = 'cortext_recents';
 	private const MAX_ITEMS = 5;
+
+	private Documents $documents;
+
+	public function __construct( ?Documents $documents = null ) {
+		$this->documents = $documents ?? new Documents();
+	}
 
 	public function register(): void {
 		add_action( 'rest_api_init', array( $this, 'register_routes' ) );
@@ -194,7 +200,7 @@ final class RecentsController {
 	}
 
 	/**
-	 * Formats a supported Cortext target into the recents response contract.
+	 * Formats a supported Cortext target for the recents response.
 	 *
 	 * @param string $kind Target kind.
 	 * @param int    $id Target post ID.
@@ -214,9 +220,9 @@ final class RecentsController {
 			return $this->format_row_target( $id, $collection_id );
 		}
 
-		$post = get_post( $id );
-		$type = 'page' === $kind ? Page::POST_TYPE : Collection::POST_TYPE;
-		if ( ! $post instanceof WP_Post || $type !== $post->post_type || 'trash' === $post->post_status ) {
+		$post          = get_post( $id );
+		$expected_type = 'page' === $kind ? Page::POST_TYPE : Collection::POST_TYPE;
+		if ( ! $post instanceof WP_Post || $expected_type !== $post->post_type || 'trash' === $post->post_status ) {
 			return new WP_Error(
 				'cortext_recents_not_found',
 				__( 'Recent target was not found.', 'cortext' ),
@@ -232,20 +238,20 @@ final class RecentsController {
 			);
 		}
 
-		$target = array(
+		if ( 'page' === $kind ) {
+			return $this->documents->format_document( $post ) ?? new WP_Error(
+				'cortext_recents_not_found',
+				__( 'Recent target was not found.', 'cortext' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		return array(
 			'kind'  => $kind,
 			'id'    => $id,
 			'title' => $this->post_title( $post ),
 			'path'  => $this->target_path( $post, $kind ),
 		);
-		if ( 'page' === $kind ) {
-			$icon = get_post_meta( $id, DocumentIdentity::META_KEY, true );
-			if ( is_string( $icon ) && '' !== $icon ) {
-				$target['icon'] = $icon;
-			}
-		}
-
-		return $target;
 	}
 
 	/**
@@ -301,19 +307,16 @@ final class RecentsController {
 			);
 		}
 
-		$collection_path = $this->target_path( $collection, 'collection' );
+		$document = $this->documents->format_document( $row );
+		if ( null === $document ) {
+			return new WP_Error(
+				'cortext_recents_not_found',
+				__( 'Recent target was not found.', 'cortext' ),
+				array( 'status' => 404 )
+			);
+		}
 
-		return array(
-			'kind'       => 'row',
-			'id'         => $row_id,
-			'title'      => $this->post_title( $row ),
-			'path'       => $collection_path,
-			'collection' => array(
-				'id'    => $collection_id,
-				'title' => $this->post_title( $collection ),
-				'path'  => $collection_path,
-			),
-		);
+		return $document;
 	}
 
 	private function post_title( WP_Post $post ): string {
