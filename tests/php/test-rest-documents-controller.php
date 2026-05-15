@@ -185,6 +185,7 @@ final class Test_Rest_Documents_Controller extends BaseTestCase {
 		// Trash lists carry trash metadata; excerpts are only for live
 		// document lists.
 		$this->assertArrayHasKey( 'meta', $by_id[ $page_id ] );
+		$this->assertArrayNotHasKey( 'excerpt', $by_id[ $page_id ] );
 	}
 
 	public function test_default_listing_excludes_trashed_documents(): void {

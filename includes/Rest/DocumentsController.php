@@ -130,7 +130,7 @@ final class DocumentsController {
 				'status'          => '' === $status ? null : $status,
 				'page'            => (int) $request->get_param( 'page' ),
 				'per_page'        => (int) $request->get_param( 'per_page' ),
-				'include_excerpt' => true,
+				'include_excerpt' => Documents::STATUS_TRASH !== $status,
 			)
 		);
 
