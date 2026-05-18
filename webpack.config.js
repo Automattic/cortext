@@ -2,6 +2,7 @@ const path = require( 'path' );
 const webpack = require( 'webpack' );
 const defaultConfig = require( '@wordpress/scripts/config/webpack.config' );
 const DependencyExtractionWebpackPlugin = require( '@wordpress/dependency-extraction-webpack-plugin' );
+const MiniCssExtractPlugin = require( 'mini-css-extract-plugin' );
 const { BundleAnalyzerPlugin } = require( 'webpack-bundle-analyzer' );
 
 // `@wordpress/route` is not yet registered as a WP core script handle, so
@@ -84,6 +85,19 @@ module.exports = {
 							return false;
 						}
 					},
+				} );
+			}
+			// Lazy CSS chunks (e.g. editor.css) need the same `?ver=...`
+			// cache buster the JS chunks get from output.chunkFilename
+			// above. Without this, webpack's runtime loads them as plain
+			// `editor.css`, so after a deploy the browser can pair fresh
+			// editor.js with a stale cached editor.css. wp-scripts' default
+			// MiniCssExtractPlugin instance only sets `filename`, so
+			// rebuild it with both options preserved.
+			if ( plugin instanceof MiniCssExtractPlugin ) {
+				return new MiniCssExtractPlugin( {
+					...plugin.options,
+					chunkFilename: '[name].css?ver=[contenthash]',
 				} );
 			}
 			return plugin;
