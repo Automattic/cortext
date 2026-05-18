@@ -54,6 +54,8 @@ export default function useAutosave( options = {} ) {
 	const lastSaveAtRef = useRef( 0 );
 	const savePromiseRef = useRef( null );
 	const savingWaitersRef = useRef( [] );
+	const prevIsSavingRef = useRef( isSaving );
+	const savingTargetRef = useRef( null );
 
 	const stateRef = useRef( {
 		isDirty,
@@ -208,9 +210,34 @@ export default function useAutosave( options = {} ) {
 	] );
 
 	useEffect( () => {
+		// tech-debt.md#40: the editor store keeps didSucceed/didFail as level signals, but
+		// the user-visible side effects below (status flip, Recents touch)
+		// are edges: they should fire once per save that *this hook ran*.
+		// Re-running the effect because recentTarget changed (the user opened
+		// a different row) must not re-fire success against a stale flag.
+		const wasSaving = prevIsSavingRef.current;
+		prevIsSavingRef.current = isSaving;
+
 		if ( isSaving ) {
+			if ( ! wasSaving ) {
+				// Latch the target at the moment the save starts. If the
+				// user switches to a different row before this save resolves,
+				// recentTarget will have moved on by completion time and we
+				// would otherwise mark the new row as recent.
+				savingTargetRef.current =
+					recentKind && recentId
+						? {
+								kind: recentKind,
+								id: recentId,
+								...( recentCollectionId
+									? { collectionId: recentCollectionId }
+									: {} ),
+						  }
+						: null;
+			}
 			setStatus( 'saving' );
 		} else if ( didFail ) {
+			savingTargetRef.current = null;
 			setStatus( 'error' );
 			// The toolbar no longer carries a save status, so a failed
 			// autosave needs its own way of reaching the user. Snackbar
@@ -219,16 +246,14 @@ export default function useAutosave( options = {} ) {
 				id: AUTOSAVE_ERROR_NOTICE_ID,
 				type: 'snackbar',
 			} );
-		} else if ( didSucceed ) {
+		} else if ( didSucceed && wasSaving ) {
+			const latchedTarget = savingTargetRef.current;
+			savingTargetRef.current = null;
 			setStatus( 'saved' );
 			setLastSavedAt( Date.now() );
 			removeNotice( AUTOSAVE_ERROR_NOTICE_ID );
-			if ( recentKind && recentId ) {
-				const target = { kind: recentKind, id: recentId };
-				if ( recentCollectionId ) {
-					target.collectionId = recentCollectionId;
-				}
-				touchRecent( target );
+			if ( latchedTarget ) {
+				touchRecent( latchedTarget );
 			}
 		}
 	}, [
