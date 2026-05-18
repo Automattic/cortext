@@ -437,7 +437,7 @@ describe( 'useAutosave: status', () => {
 	} );
 
 	it( 'touches the configured page recent after a successful save', () => {
-		setStoreState( { isSaving: true, currentPostId: 42 } );
+		setStoreState( { isSaving: false, currentPostId: 42 } );
 
 		const { rerender } = renderHook( () =>
 			useAutosave( {
@@ -445,6 +445,10 @@ describe( 'useAutosave: status', () => {
 			} )
 		);
 
+		act( () => {
+			setStoreState( { isSaving: true, currentPostId: 42 } );
+			rerender();
+		} );
 		act( () => {
 			setStoreState( {
 				isSaving: false,
@@ -461,7 +465,7 @@ describe( 'useAutosave: status', () => {
 	} );
 
 	it( 'touches the configured row recent after a successful save', () => {
-		setStoreState( { isSaving: true, currentPostId: 42 } );
+		setStoreState( { isSaving: false, currentPostId: 42 } );
 
 		const { rerender } = renderHook( () =>
 			useAutosave( {
@@ -469,6 +473,10 @@ describe( 'useAutosave: status', () => {
 			} )
 		);
 
+		act( () => {
+			setStoreState( { isSaving: true, currentPostId: 42 } );
+			rerender();
+		} );
 		act( () => {
 			setStoreState( {
 				isSaving: false,
@@ -503,6 +511,44 @@ describe( 'useAutosave: status', () => {
 		);
 
 		expect( mockTouchRecent ).not.toHaveBeenCalled();
+	} );
+
+	it( 'touches the recent target latched at save start, not the one swapped in mid-flight', () => {
+		// Edit row A → save starts → user opens row B before the save
+		// resolves. When the save lands, Recents must reflect A (which was
+		// actually saved), not B (which the parent has since swapped in).
+		const targetA = { kind: 'row', id: 1, collectionId: 9 };
+		const targetB = { kind: 'row', id: 2, collectionId: 9 };
+
+		setStoreState( { isSaving: false, currentPostId: 1 } );
+
+		const { rerender } = renderHook( ( props ) => useAutosave( props ), {
+			initialProps: { recentTarget: targetA },
+		} );
+
+		act( () => {
+			setStoreState( { isSaving: true, currentPostId: 1 } );
+			rerender( { recentTarget: targetA } );
+		} );
+
+		// Parent swaps in row B while the save for A is still in flight.
+		act( () => {
+			setStoreState( { isSaving: true, currentPostId: 1 } );
+			rerender( { recentTarget: targetB } );
+		} );
+
+		// Save for A resolves.
+		act( () => {
+			setStoreState( {
+				isSaving: false,
+				didSucceed: true,
+				currentPostId: 1,
+			} );
+			rerender( { recentTarget: targetB } );
+		} );
+
+		expect( mockTouchRecent ).toHaveBeenCalledTimes( 1 );
+		expect( mockTouchRecent ).toHaveBeenCalledWith( targetA );
 	} );
 
 	it( 'does not touch recent when recentTarget changes without an intervening save', () => {

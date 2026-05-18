@@ -55,6 +55,7 @@ export default function useAutosave( options = {} ) {
 	const savePromiseRef = useRef( null );
 	const savingWaitersRef = useRef( [] );
 	const prevIsSavingRef = useRef( isSaving );
+	const savingTargetRef = useRef( null );
 
 	const stateRef = useRef( {
 		isDirty,
@@ -218,8 +219,25 @@ export default function useAutosave( options = {} ) {
 		prevIsSavingRef.current = isSaving;
 
 		if ( isSaving ) {
+			if ( ! wasSaving ) {
+				// Latch the target at the moment the save starts. If the
+				// user switches to a different row before this save resolves,
+				// recentTarget will have moved on by completion time and we
+				// would otherwise mark the new row as recent.
+				savingTargetRef.current =
+					recentKind && recentId
+						? {
+								kind: recentKind,
+								id: recentId,
+								...( recentCollectionId
+									? { collectionId: recentCollectionId }
+									: {} ),
+						  }
+						: null;
+			}
 			setStatus( 'saving' );
 		} else if ( didFail ) {
+			savingTargetRef.current = null;
 			setStatus( 'error' );
 			// The toolbar no longer carries a save status, so a failed
 			// autosave needs its own way of reaching the user. Snackbar
@@ -229,15 +247,13 @@ export default function useAutosave( options = {} ) {
 				type: 'snackbar',
 			} );
 		} else if ( didSucceed && wasSaving ) {
+			const latchedTarget = savingTargetRef.current;
+			savingTargetRef.current = null;
 			setStatus( 'saved' );
 			setLastSavedAt( Date.now() );
 			removeNotice( AUTOSAVE_ERROR_NOTICE_ID );
-			if ( recentKind && recentId ) {
-				const target = { kind: recentKind, id: recentId };
-				if ( recentCollectionId ) {
-					target.collectionId = recentCollectionId;
-				}
-				touchRecent( target );
+			if ( latchedTarget ) {
+				touchRecent( latchedTarget );
 			}
 		}
 	}, [
