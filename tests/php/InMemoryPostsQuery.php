@@ -137,19 +137,19 @@ trait InMemoryPostsQuery {
 				}
 			);
 		} elseif ( $wants_search && '' === $orderby ) {
-			// Mirror WP_Query's `search_orderby_title`: when a search
-			// query is set and the caller does not pin `orderby`, items
-			// whose title contains the query rank above title-less hits.
-			// Modified-date DESC is the tiebreaker.
+			// Mirror the `posts_search_orderby` filter `Documents::list()`
+			// installs: title prefix wins over title contains, which wins
+			// over excerpt and content matches. Modified-date DESC is the
+			// tiebreaker.
 			$needle     = strtolower( trim( (string) $vars['s'] ) );
 			$candidates = array_values( $candidates );
 			usort(
 				$candidates,
 				function ( WP_Post $a, WP_Post $b ) use ( $needle ): int {
-					$score_a = $this->title_relevance_score( $a, $needle );
-					$score_b = $this->title_relevance_score( $b, $needle );
-					if ( $score_a !== $score_b ) {
-						return $score_b - $score_a;
+					$tier_a = $this->search_relevance_tier( $a, $needle );
+					$tier_b = $this->search_relevance_tier( $b, $needle );
+					if ( $tier_a !== $tier_b ) {
+						return $tier_a - $tier_b;
 					}
 					return strcmp(
 						(string) $b->post_modified_gmt,
@@ -194,32 +194,30 @@ trait InMemoryPostsQuery {
 	}
 
 	/**
-	 * Scores how well a post title matches a search query, used to sort
-	 * search results in the absence of an explicit `orderby`. A full-needle
-	 * hit ranks above per-term hits; both rank above 0.
+	 * Returns the tier (1-best, 5-worst) for a post against a search
+	 * needle. Matches the CASE expression `Documents::list()` registers via
+	 * the `posts_search_orderby` filter.
 	 */
-	private function title_relevance_score( WP_Post $post, string $needle ): int {
+	private function search_relevance_tier( WP_Post $post, string $needle ): int {
 		if ( '' === $needle ) {
-			return 0;
+			return 5;
 		}
 		$title = strtolower( (string) $post->post_title );
-		if ( false !== strpos( $title, $needle ) ) {
-			return 100;
+		if ( '' !== $title && str_starts_with( $title, $needle ) ) {
+			return 1;
 		}
-		$terms = preg_split( '/\s+/', $needle );
-		if ( ! is_array( $terms ) ) {
-			return 0;
+		if ( '' !== $title && false !== strpos( $title, $needle ) ) {
+			return 2;
 		}
-		$score = 0;
-		foreach ( $terms as $term ) {
-			if ( '' === $term ) {
-				continue;
-			}
-			if ( false !== strpos( $title, $term ) ) {
-				$score += 10;
-			}
+		$excerpt = strtolower( (string) $post->post_excerpt );
+		if ( '' !== $excerpt && false !== strpos( $excerpt, $needle ) ) {
+			return 3;
 		}
-		return $score;
+		$content = strtolower( (string) $post->post_content );
+		if ( '' !== $content && false !== strpos( $content, $needle ) ) {
+			return 4;
+		}
+		return 5;
 	}
 
 	/**

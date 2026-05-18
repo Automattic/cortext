@@ -475,6 +475,45 @@ final class Test_Documents extends BaseTestCase {
 		);
 	}
 
+	public function test_list_search_ranks_title_prefix_above_title_substring(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		// Page whose title CONTAINS the term but does not start with it,
+		// and that has been modified more recently.
+		$substring_match = $this->create_page(
+			array(
+				'post_title'        => 'Meeting notes',
+				'post_modified'     => '2025-06-01 00:00:00',
+				'post_modified_gmt' => '2025-06-01 00:00:00',
+			)
+		);
+		// Page whose title STARTS with the term, older.
+		$prefix_match = $this->create_page(
+			array(
+				'post_title'        => 'Terry Pratchett',
+				'post_modified'     => '2025-01-01 00:00:00',
+				'post_modified_gmt' => '2025-01-01 00:00:00',
+			)
+		);
+
+		$result = $this->documents->list( array( 'search' => 'te' ) );
+		$ids    = array_map(
+			static fn ( array $doc ): int => $doc['id'],
+			$result['documents']
+		);
+
+		$prefix_pos    = array_search( $prefix_match, $ids, true );
+		$substring_pos = array_search( $substring_match, $ids, true );
+
+		$this->assertNotFalse( $prefix_pos );
+		$this->assertNotFalse( $substring_pos );
+		$this->assertLessThan(
+			$substring_pos,
+			$prefix_pos,
+			'Title prefix match should rank above title substring match regardless of modified date.'
+		);
+	}
+
 	public function test_list_search_returns_pages_and_rows_in_one_pass(): void {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
 		$collection_id = $this->create_collection( 'projects', 'Projects' );

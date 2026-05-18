@@ -171,10 +171,18 @@ final class Documents {
 			add_filter( 'posts_search', $search_filter, 10, 2 );
 		}
 
+		$orderby_filter = $this->build_search_orderby_filter( $search, $post_types );
+		if ( null !== $orderby_filter ) {
+			add_filter( 'posts_search_orderby', $orderby_filter, 10, 2 );
+		}
+
 		$query = new WP_Query( $query_args );
 
 		if ( null !== $search_filter ) {
 			remove_filter( 'posts_search', $search_filter, 10 );
+		}
+		if ( null !== $orderby_filter ) {
+			remove_filter( 'posts_search_orderby', $orderby_filter, 10 );
 		}
 
 		$editable_ids = array_values(
@@ -573,5 +581,69 @@ final class Documents {
 		}
 
 		return ' AND ( ' . implode( ' AND ', $term_clauses ) . ' )';
+	}
+
+	/**
+	 * Returns a `posts_search_orderby` filter that ranks documents by where
+	 * the query lives in them. WP's default `search_orderby_title` for
+	 * single-term queries only distinguishes "title contains" vs "title
+	 * does not contain", so a recently edited document whose title happens
+	 * to include the term as a substring ties with one whose title starts
+	 * with it. For a palette the user expects the prefix match first.
+	 *
+	 * Tiers (ASC):
+	 *   1. title starts with the query
+	 *   2. title contains the query
+	 *   3. excerpt contains the query
+	 *   4. content contains the query
+	 *   5. everything else (rows that matched only by meta, etc.)
+	 *
+	 * Returns null for an empty search or when the WP_Query is not the one
+	 * `list()` is currently running.
+	 *
+	 * @param string   $search     Trimmed search string.
+	 * @param string[] $post_types Post types used by the WP_Query.
+	 */
+	private function build_search_orderby_filter( string $search, array $post_types ): ?callable {
+		if ( '' === $search ) {
+			return null;
+		}
+
+		$post_type_signature = $post_types;
+		sort( $post_type_signature );
+
+		return function (
+			string $search_orderby,
+			WP_Query $wp_query
+		) use (
+			$search,
+			$post_type_signature
+		): string {
+			$query_post_types = (array) $wp_query->get( 'post_type' );
+			sort( $query_post_types );
+			if ( $query_post_types !== $post_type_signature ) {
+				return $search_orderby;
+			}
+
+			global $wpdb;
+			$like_prefix   = $wpdb->esc_like( $search ) . '%';
+			$like_anywhere = '%' . $wpdb->esc_like( $search ) . '%';
+
+			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			return $wpdb->prepare(
+				"(CASE
+					WHEN {$wpdb->posts}.post_title LIKE %s THEN 1
+					WHEN {$wpdb->posts}.post_title LIKE %s THEN 2
+					WHEN {$wpdb->posts}.post_excerpt LIKE %s THEN 3
+					WHEN {$wpdb->posts}.post_content LIKE %s THEN 4
+					ELSE 5
+				END)",
+				$like_prefix,
+				$like_anywhere,
+				$like_anywhere,
+				$like_anywhere
+			);
+			// phpcs:enable
+		};
 	}
 }
