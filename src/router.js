@@ -13,6 +13,7 @@ import Sidebar from './components/Sidebar';
 import EntityRoute from './router/EntityRoute';
 import CommandPalette from './components/CommandPalette';
 import AlphaNoticeModal from './components/AlphaNoticeModal';
+import { DocumentPeekProvider } from './components/DocumentPeekProvider';
 import useSidebarLayout from './hooks/useSidebarLayout';
 import useAlphaNotice from './hooks/useAlphaNotice';
 import { FavoritesProvider } from './hooks/useFavorites';
@@ -70,27 +71,29 @@ function RootLayout() {
 			<WorkspaceHomeProvider>
 				<FavoritesProvider>
 					<RecentsProvider>
-						<div className="cortext-shell">
-							<Sidebar
-								collapsed={ collapsed }
-								width={ width }
-								onToggleCollapsed={ toggleCollapsed }
-								onWidthChange={ setWidth }
-							/>
-							<main
-								ref={ canvasRef }
-								className="cortext-shell__canvas"
-								tabIndex={ -1 }
-							>
-								<EntityRoute history={ router.history } />
-							</main>
-						</div>
-						<CommandPalette canvasRef={ canvasRef } />
-						{ alphaNotice.isOpen && (
-							<AlphaNoticeModal
-								onAcknowledge={ alphaNotice.acknowledge }
-							/>
-						) }
+						<DocumentPeekProvider>
+							<div className="cortext-shell">
+								<Sidebar
+									collapsed={ collapsed }
+									width={ width }
+									onToggleCollapsed={ toggleCollapsed }
+									onWidthChange={ setWidth }
+								/>
+								<main
+									ref={ canvasRef }
+									className="cortext-shell__canvas"
+									tabIndex={ -1 }
+								>
+									<EntityRoute history={ router.history } />
+								</main>
+							</div>
+							<CommandPalette canvasRef={ canvasRef } />
+							{ alphaNotice.isOpen && (
+								<AlphaNoticeModal
+									onAcknowledge={ alphaNotice.acknowledge }
+								/>
+							) }
+						</DocumentPeekProvider>
 					</RecentsProvider>
 				</FavoritesProvider>
 			</WorkspaceHomeProvider>
