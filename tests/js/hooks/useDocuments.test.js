@@ -26,7 +26,9 @@ it( 'fetches documents without filters', async () => {
 
 	await waitFor( () => expect( result.current.hasResolved ).toBe( true ) );
 
-	expect( apiFetch ).toHaveBeenCalledWith( { path: '/cortext/v1/documents' } );
+	expect( apiFetch ).toHaveBeenCalledWith( {
+		path: '/cortext/v1/documents',
+	} );
 	expect( result.current.documents ).toEqual( [ document ] );
 	expect( result.current.total ).toBe( 1 );
 	expect( result.current.error ).toBeNull();
@@ -70,11 +72,18 @@ it( 'refetches when the search term changes', async () => {
 } );
 
 it( 'keeps the last result visible while a refresh is in flight', async () => {
-	const document = { kind: 'page', id: 1, title: 'Cached', path: 'page/cached-1' };
+	const document = {
+		kind: 'page',
+		id: 1,
+		title: 'Cached',
+		path: 'page/cached-1',
+	};
 	apiFetch.mockResolvedValueOnce( { documents: [ document ], total: 1 } );
 
 	const { result } = renderHook( () => useDocuments() );
-	await waitFor( () => expect( result.current.documents ).toEqual( [ document ] ) );
+	await waitFor( () =>
+		expect( result.current.documents ).toEqual( [ document ] )
+	);
 
 	let resolveRefresh;
 	apiFetch.mockReturnValueOnce(
@@ -99,11 +108,18 @@ it( 'keeps the last result visible while a refresh is in flight', async () => {
 } );
 
 it( 'reports errors without dropping the previous result', async () => {
-	const document = { kind: 'page', id: 1, title: 'Cached', path: 'page/cached-1' };
+	const document = {
+		kind: 'page',
+		id: 1,
+		title: 'Cached',
+		path: 'page/cached-1',
+	};
 	apiFetch.mockResolvedValueOnce( { documents: [ document ], total: 1 } );
 
 	const { result } = renderHook( () => useDocuments() );
-	await waitFor( () => expect( result.current.documents ).toEqual( [ document ] ) );
+	await waitFor( () =>
+		expect( result.current.documents ).toEqual( [ document ] )
+	);
 
 	const error = new Error( 'nope' );
 	apiFetch.mockRejectedValueOnce( error );

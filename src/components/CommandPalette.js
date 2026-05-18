@@ -9,14 +9,18 @@ import {
 	RegistryProvider,
 	useDispatch,
 	useRegistry,
+	useSelect,
 } from '@wordpress/data';
 import { useNavigate } from '@tanstack/react-router';
 import { __, sprintf } from '@wordpress/i18n';
 import { home as homeIcon, listItem, table } from '@wordpress/icons';
-import { useCallback, useEffect, useMemo } from '@wordpress/element';
+import { useCallback, useEffect, useMemo, useState } from '@wordpress/element';
 
-import CortextCommandMenu from './CortextCommandMenu';
+import CortextCommandMenu, {
+	CommandDescriptionContext,
+} from './CortextCommandMenu';
 import PageIcon from './PageIcon';
+import useDocuments from '../hooks/useDocuments';
 import { useRecents } from '../hooks/useRecents';
 import { useWorkspaceHomePath } from '../hooks/useWorkspaceHomePath';
 
@@ -53,27 +57,47 @@ function focusCanvasAfterPaletteCloses( canvasRef ) {
 	}, 0 );
 }
 
-function recentCommandIcon( recent ) {
-	if ( recent?.kind === 'collection' ) {
+function documentCommandIcon( doc ) {
+	if ( doc?.kind === 'collection' ) {
 		return table;
 	}
-	if ( recent?.kind === 'row' ) {
+	if ( doc?.kind === 'row' ) {
 		return listItem;
 	}
-	return <PageIcon icon={ recent?.icon ?? '' } size={ 16 } />;
+	return <PageIcon icon={ doc?.icon ?? '' } size={ 16 } />;
 }
 
-function recentTitle( recent ) {
-	const title = recent?.title?.trim?.() || __( '(untitled)', 'cortext' );
-	if ( recent?.kind === 'row' && recent?.collection?.title ) {
+function documentTitle( doc ) {
+	const title = doc?.title?.trim?.() || __( '(untitled)', 'cortext' );
+	if ( doc?.kind === 'row' && doc?.collection?.title ) {
 		return sprintf(
 			/* translators: 1: row title, 2: collection title */
 			__( '%1$s in %2$s', 'cortext' ),
 			title,
-			recent.collection.title
+			doc.collection.title
 		);
 	}
 	return title;
+}
+
+function rowCollectionHint( doc ) {
+	if ( doc?.kind !== 'row' || ! doc?.collection?.title ) {
+		return '';
+	}
+	return sprintf(
+		/* translators: %s: parent collection title */
+		__( 'in %s', 'cortext' ),
+		doc.collection.title
+	);
+}
+
+function useDebouncedValue( value, delay ) {
+	const [ debounced, setDebounced ] = useState( value );
+	useEffect( () => {
+		const id = setTimeout( () => setDebounced( value ), delay );
+		return () => clearTimeout( id );
+	}, [ value, delay ] );
+	return debounced;
 }
 
 function HomeCommandRegistration( {
@@ -128,19 +152,107 @@ function RecentCommandRegistration( { canvasRef, recent } ) {
 
 	useCommand( {
 		name: `cortext/recent/${ recent.kind }-${ recent.id }`,
-		label: recentTitle( recent ),
+		label: documentTitle( recent ),
 		searchLabel: sprintf(
 			/* translators: %s: recent item title */
 			__( 'Open recent: %s', 'cortext' ),
-			recentTitle( recent )
+			documentTitle( recent )
 		),
 		context: DEFAULT_COMMAND_CONTEXT,
-		icon: recentCommandIcon( recent ),
+		icon: documentCommandIcon( recent ),
 		keywords: [ __( 'recent', 'cortext' ), recent.kind ],
 		disabled: ! recent.path,
 		callback: goToRecent,
 	} );
 	return null;
+}
+
+function documentDescription( doc ) {
+	if ( doc.kind === 'page' ) {
+		return doc.excerpt ?? '';
+	}
+	return rowCollectionHint( doc );
+}
+
+function DocumentCommandRegistration( { canvasRef, document, search } ) {
+	const navigate = useNavigate();
+	const goToDocument = useCallback(
+		( { close } ) => {
+			if ( document?.path ) {
+				navigate( {
+					to: '/$',
+					params: { _splat: document.path },
+				} );
+			}
+			close();
+			focusCanvasAfterPaletteCloses( canvasRef );
+		},
+		[ canvasRef, navigate, document?.path ]
+	);
+
+	useCommand( {
+		name: `cortext/document/${ document.kind }-${ document.id }`,
+		label: document.title?.trim?.() || __( '(untitled)', 'cortext' ),
+		context: DEFAULT_COMMAND_CONTEXT,
+		icon: documentCommandIcon( document ),
+		// Give cmdk the active search term so server-side body/meta matches stay
+		// visible even when the title does not include the query.
+		keywords: [ search, document.kind ],
+		disabled: ! document.path,
+		callback: goToDocument,
+	} );
+	return null;
+}
+
+function DocumentResultsRegistration( {
+	canvasRef,
+	search,
+	onPendingChange,
+	onDescriptionsChange,
+} ) {
+	const { documents, hasResolved } = useDocuments( {
+		search,
+		perPage: 10,
+	} );
+
+	useEffect( () => {
+		onPendingChange( ! hasResolved );
+		return () => onPendingChange( false );
+	}, [ hasResolved, onPendingChange ] );
+
+	useEffect( () => {
+		if ( ! hasResolved ) {
+			return undefined;
+		}
+		const map = new Map();
+		for ( const doc of documents ) {
+			const description = documentDescription( doc );
+			if ( description ) {
+				map.set(
+					`cortext/document/${ doc.kind }-${ doc.id }`,
+					description
+				);
+			}
+		}
+		onDescriptionsChange( map );
+		return () => onDescriptionsChange( new Map() );
+	}, [ documents, hasResolved, onDescriptionsChange ] );
+
+	// Skip stale results while a new search is loading. `useDocuments` keeps the
+	// last documents until the next response; registering them under the new
+	// query would let users open the wrong item.
+	if ( ! hasResolved ) {
+		return null;
+	}
+
+	return documents.map( ( doc ) => (
+		<DocumentCommandRegistration
+			key={ `${ doc.kind }:${ doc.id }` }
+			canvasRef={ canvasRef }
+			document={ doc }
+			search={ search }
+		/>
+	) );
 }
 
 function CommandPaletteContents( {
@@ -149,9 +261,24 @@ function CommandPaletteContents( {
 	isResolvingHomePath,
 } ) {
 	const { recents } = useRecents();
+	const [ search, setSearch ] = useState( '' );
+	const debouncedSearch = useDebouncedValue( search, 150 );
+	const [ isFetchingDocuments, setIsFetchingDocuments ] = useState( false );
+	const [ documentDescriptions, setDocumentDescriptions ] = useState(
+		() => new Map()
+	);
+	const isPaletteOpen = useSelect(
+		( select ) => select( commandsStore ).isOpen(),
+		[]
+	);
+
+	const isDebouncing = search !== debouncedSearch;
+	const shouldFetchDocuments = isPaletteOpen && Boolean( debouncedSearch );
+	const isDocumentSearchPending =
+		Boolean( search ) && ( isDebouncing || isFetchingDocuments );
 
 	return (
-		<>
+		<CommandDescriptionContext.Provider value={ documentDescriptions }>
 			<CommandPaletteOpenBridge />
 			<HomeCommandRegistration
 				canvasRef={ canvasRef }
@@ -165,8 +292,20 @@ function CommandPaletteContents( {
 					recent={ recent }
 				/>
 			) ) }
-			<CortextCommandMenu />
-		</>
+			{ shouldFetchDocuments && (
+				<DocumentResultsRegistration
+					canvasRef={ canvasRef }
+					search={ debouncedSearch }
+					onPendingChange={ setIsFetchingDocuments }
+					onDescriptionsChange={ setDocumentDescriptions }
+				/>
+			) }
+			<CortextCommandMenu
+				search={ search }
+				setSearch={ setSearch }
+				isDocumentSearchPending={ isDocumentSearchPending }
+			/>
+		</CommandDescriptionContext.Provider>
 	);
 }
 

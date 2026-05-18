@@ -6,6 +6,7 @@ import { store as preferencesStore } from '@wordpress/preferences';
 import { table } from '@wordpress/icons';
 
 import {
+	CommandDescriptionContext,
 	CommandIcon,
 	default as CortextCommandMenu,
 	splitPaletteCommands,
@@ -26,16 +27,33 @@ function createCommandPaletteRegistry() {
 }
 
 describe( 'splitPaletteCommands', () => {
-	it( 'separates Cortext recents from the rest of the palette commands', () => {
+	it( 'puts document results before recents and commands', () => {
 		const home = { name: 'cortext/home', label: 'Go to home' };
-		const page = { name: 'cortext/recent/page-7', label: 'Notes' };
-		const row = {
+		const recentPage = { name: 'cortext/recent/page-7', label: 'Notes' };
+		const recentRow = {
 			name: 'cortext/recent/row-12',
 			label: 'Ada Lovelace in People',
 		};
+		const docPage = {
+			name: 'cortext/document/page-42',
+			label: 'Roadmap',
+		};
+		const docRow = {
+			name: 'cortext/document/row-77',
+			label: 'Ship plan',
+		};
 
-		expect( splitPaletteCommands( [ home, page, row ] ) ).toEqual( {
-			recentCommands: [ page, row ],
+		expect(
+			splitPaletteCommands( [
+				home,
+				recentPage,
+				recentRow,
+				docPage,
+				docRow,
+			] )
+		).toEqual( {
+			documentCommands: [ docPage, docRow ],
+			recentCommands: [ recentPage, recentRow ],
 			commands: [ home ],
 		} );
 	} );
@@ -54,7 +72,7 @@ describe( 'CommandIcon', () => {
 describe( 'CortextCommandMenu', () => {
 	it( 'opens from the primary+k keyboard shortcut', async () => {
 		global.ResizeObserver = ResizeObserverMock;
-		Element.prototype.scrollIntoView = jest.fn();
+		window.Element.prototype.scrollIntoView = jest.fn();
 		const registry = createCommandPaletteRegistry();
 		registry.dispatch( commandsStore ).registerCommand( {
 			name: 'cortext/test',
@@ -89,5 +107,38 @@ describe( 'CortextCommandMenu', () => {
 			)
 		).toBeInTheDocument();
 		expect( screen.getByText( 'Test command' ) ).toBeInTheDocument();
+	} );
+
+	it( 'renders the description from CommandDescriptionContext for matching commands', async () => {
+		global.ResizeObserver = ResizeObserverMock;
+		window.Element.prototype.scrollIntoView = jest.fn();
+		const registry = createCommandPaletteRegistry();
+		registry.dispatch( commandsStore ).registerCommand( {
+			name: 'cortext/document/page-99',
+			label: 'Quarterly review',
+			context: 'root',
+			keywords: [ 'roadmap' ],
+			callback: jest.fn(),
+		} );
+		registry.dispatch( commandsStore ).open();
+
+		const descriptions = new Map( [
+			[ 'cortext/document/page-99', 'Plan for next quarter.' ],
+		] );
+
+		render(
+			<RegistryProvider value={ registry }>
+				<CommandDescriptionContext.Provider value={ descriptions }>
+					<CortextCommandMenu
+						search="roadmap"
+						setSearch={ () => {} }
+					/>
+				</CommandDescriptionContext.Provider>
+			</RegistryProvider>
+		);
+
+		expect(
+			await screen.findByText( 'Plan for next quarter.' )
+		).toBeInTheDocument();
 	} );
 } );
