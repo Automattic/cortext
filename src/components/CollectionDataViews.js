@@ -524,6 +524,7 @@ export default function CollectionDataViews( {
 		hasResolved: rowsResolved,
 		error: rowError,
 		refresh,
+		mutateRows,
 		queryMode,
 	} = useCollectionRows(
 		isResolving ? null : collectionId,
@@ -1744,6 +1745,8 @@ export default function CollectionDataViews( {
 							onChangeView={ onChangeView }
 							collectionId={ collectionId }
 							rows={ dataFiltered }
+							data={ data }
+							mutateRows={ mutateRows }
 							onReordered={ refresh }
 						/>
 						{ isTableLayout && (

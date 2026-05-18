@@ -189,6 +189,7 @@ async function renderReorder( props = {}, options = {} ) {
 	const wrapperRef = { current: createWrapper( options.rowHeights ) };
 	const onChangeView = jest.fn();
 	const onReordered = jest.fn();
+	const mutateRows = jest.fn();
 	const componentProps = {
 		wrapperRef,
 		view: {
@@ -198,6 +199,8 @@ async function renderReorder( props = {}, options = {} ) {
 		onChangeView,
 		collectionId: 7,
 		rows,
+		data: rows,
+		mutateRows,
 		onReordered,
 		...props,
 	};
@@ -208,6 +211,7 @@ async function renderReorder( props = {}, options = {} ) {
 	return {
 		onChangeView,
 		onReordered,
+		mutateRows,
 		wrapperRef,
 		rerender: ( nextProps = {} ) =>
 			renderResult.rerender(
@@ -844,85 +848,23 @@ describe( 'DataViewRowReorder', () => {
 		} );
 	} );
 
-	it( 'keeps the placed transform unanimated after drop', async () => {
-		// Covers the drop flicker: the body class that enables row transitions
-		// must be gone before `freezeDropState` applies the placed transform.
-		mockApiFetch.mockReturnValueOnce( new Promise( () => {} ) );
-		await renderReorder();
-		const renderedTableRows = document.querySelectorAll( 'tr' );
-
-		dragStart( 1 );
-
-		// Drag-overs still animate while the row is moving.
-		expect( document.body ).toHaveClass( 'cortext-row-dragging' );
-
-		act( () => {
-			mockDndProps.onDragEnd( {
-				active: {
-					data: { current: { rowId: 1, label: 'Row 1' } },
-				},
-				over: {
-					data: { current: gapDrop( 3, null, 3 ) },
-				},
-			} );
-		} );
-
-		// After drop, the row keeps its placed transform but transitions are off.
-		expect( renderedTableRows[ 0 ] ).toHaveStyle( {
-			transform: 'translate3d(0, 80px, 0)',
-		} );
-		expect( document.body ).not.toHaveClass( 'cortext-row-dragging' );
-	} );
-
-	it( 'freezes the dropped position until refreshed row order renders', async () => {
+	it( 'applies an optimistic reorder so the new order is visible immediately', async () => {
+		// `mutateRows` reorders `data` synchronously before the API responds.
+		// The component no longer freezes transforms; the DOM reorder via the
+		// parent's new `rows` prop is what the user sees.
 		let resolveRequest;
 		mockApiFetch.mockReturnValueOnce(
 			new Promise( ( resolve ) => {
 				resolveRequest = resolve;
 			} )
 		);
-		const { onReordered, rerender } = await renderReorder();
-		const renderedTableRows = document.querySelectorAll( 'tr' );
+		const { onReordered, mutateRows } = await renderReorder();
 
-		dragStart( 1 );
-		dragOver( gapDrop( 3, null, 3 ) );
+		dragEnd( 1, gapDrop( 3, null, 3 ) );
 
-		await waitFor( () =>
-			expect( renderedTableRows[ 1 ] ).toHaveStyle( {
-				transform: 'translate3d(0, -40px, 0)',
-			} )
-		);
-
-		act( () => {
-			mockDndProps.onDragEnd( {
-				active: {
-					data: {
-						current: { rowId: 1, label: 'Row 1' },
-					},
-				},
-				over: {
-					data: {
-						current: gapDrop( 3, null, 3 ),
-					},
-				},
-			} );
-		} );
-
-		expect( renderedTableRows[ 1 ] ).toHaveStyle( {
-			transform: 'translate3d(0, -40px, 0)',
-		} );
-		expect( renderedTableRows[ 2 ] ).toHaveStyle( {
-			transform: 'translate3d(0, -40px, 0)',
-		} );
-		expect( renderedTableRows[ 0 ] ).toHaveStyle( {
-			transform: 'translate3d(0, 80px, 0)',
-		} );
-		expect( renderedTableRows[ 0 ] ).toHaveClass(
-			'cortext-row-reorder-target--displaced'
-		);
-		expect( renderedTableRows[ 1 ] ).not.toHaveClass(
-			'cortext-row-reorder-target--active'
-		);
+		expect( mutateRows ).toHaveBeenCalledTimes( 1 );
+		const nextData = mutateRows.mock.calls[ 0 ][ 0 ];
+		expect( nextData.map( ( r ) => r.id ) ).toEqual( [ 2, 3, 1 ] );
 		expect( document.body ).not.toHaveClass( 'cortext-row-dragging' );
 		expect( onReordered ).not.toHaveBeenCalled();
 
@@ -931,17 +873,28 @@ describe( 'DataViewRowReorder', () => {
 			await Promise.resolve();
 		} );
 		expect( onReordered ).toHaveBeenCalledTimes( 1 );
+	} );
 
-		act( () => {
-			rerender( { rows: [ rows[ 1 ], rows[ 2 ], rows[ 0 ] ] } );
-		} );
+	it( 'reverts the optimistic mutation when the API rejects', async () => {
+		mockApiFetch.mockRejectedValueOnce( new Error( 'Nope' ) );
+		const { mutateRows, onReordered } = await renderReorder();
+
+		dragEnd( 1, gapDrop( 3, null, 3 ) );
 
 		await waitFor( () =>
-			expect( renderedTableRows[ 0 ].style.transform ).toBe( '' )
+			expect( mockCreateErrorNotice ).toHaveBeenCalledWith(
+				"Couldn't move the row.",
+				{
+					id: 'cortext-row-reorder-failed',
+					type: 'snackbar',
+				}
+			)
 		);
-		expect( renderedTableRows[ 0 ] ).not.toHaveClass(
-			'cortext-row-reorder-target--displaced'
-		);
+		// First call applies the optimistic reorder, second call rolls back to
+		// the snapshot we took before the mutation.
+		expect( mutateRows ).toHaveBeenCalledTimes( 2 );
+		expect( mutateRows.mock.calls[ 1 ][ 0 ] ).toBe( rows );
+		expect( onReordered ).not.toHaveBeenCalled();
 	} );
 
 	it( 'does not mount row reorder for grid layout yet', () => {
@@ -983,15 +936,14 @@ describe( 'DataViewRowReorder', () => {
 		expect( onReordered ).toHaveBeenCalledTimes( 1 );
 	} );
 
-	it( 'keeps sorted rows in place until the sort is cleared', async () => {
+	it( 'confirms before committing a reorder under an explicit sort', async () => {
 		const request = deferred();
 		mockApiFetch.mockReturnValueOnce( request.promise );
 		const view = {
 			type: 'table',
 			sort: { field: 'title', direction: 'asc' },
 		};
-		const { onChangeView } = await renderReorder( { view } );
-		const renderedTableRows = document.querySelectorAll( 'tr' );
+		const { onChangeView, mutateRows } = await renderReorder( { view } );
 
 		dragEnd( 3, gapDrop( 0, 1, null ) );
 
@@ -1001,53 +953,38 @@ describe( 'DataViewRowReorder', () => {
 			)
 		).toBeInTheDocument();
 		expect( mockApiFetch ).not.toHaveBeenCalled();
-		expect( renderedTableRows[ 0 ].style.transform ).toBe( '' );
-		expect( renderedTableRows[ 1 ].style.transform ).toBe( '' );
-		expect( renderedTableRows[ 2 ].style.transform ).toBe( '' );
-		expect( renderedTableRows[ 0 ] ).not.toHaveClass(
-			'cortext-row-reorder-target--displaced'
-		);
-		expect( renderedTableRows[ 2 ] ).not.toHaveClass(
-			'cortext-row-reorder-target--active'
-		);
+		expect( mutateRows ).not.toHaveBeenCalled();
+		expect( onChangeView ).not.toHaveBeenCalled();
+
 		fireEvent.click(
 			screen.getByRole( 'button', { name: 'Keep this order' } )
 		);
 
+		// Confirming clears the sort, runs the optimistic reorder, and posts.
 		await waitFor( () =>
 			expect( mockApiFetch ).toHaveBeenCalledTimes( 1 )
 		);
-		expect( onChangeView ).not.toHaveBeenCalled();
+		expect( onChangeView ).toHaveBeenCalledWith( {
+			type: 'table',
+			sort: null,
+		} );
+		expect( mutateRows ).toHaveBeenCalledTimes( 1 );
+		expect( mutateRows.mock.calls[ 0 ][ 0 ].map( ( r ) => r.id ) ).toEqual(
+			[ 3, 1, 2 ]
+		);
 		expect( mockApiFetch.mock.calls[ 0 ][ 0 ].data ).toEqual( {
 			before_id: 1,
 			after_id: null,
 			current_sort: { field: 'title', direction: 'asc' },
 		} );
-		expect( renderedTableRows[ 0 ] ).toHaveStyle( {
-			transform: 'translate3d(0, 40px, 0)',
-		} );
-		expect( renderedTableRows[ 1 ] ).toHaveStyle( {
-			transform: 'translate3d(0, 40px, 0)',
-		} );
-		expect( renderedTableRows[ 2 ] ).toHaveStyle( {
-			transform: 'translate3d(0, -80px, 0)',
-		} );
-		expect( renderedTableRows[ 2 ] ).not.toHaveClass(
-			'cortext-row-reorder-target--active'
-		);
-		expect( renderedTableRows[ 2 ] ).toHaveClass(
-			'cortext-row-reorder-target--displaced'
-		);
+
 		await act( async () => {
 			request.resolve( { reseeded: false } );
 			await request.promise;
 		} );
-		await waitFor( () =>
-			expect( onChangeView ).toHaveBeenCalledWith( {
-				type: 'table',
-				sort: null,
-			} )
-		);
+		// Server confirms; we don't need a second `onChangeView` because the
+		// sort was already cleared at commit time.
+		expect( onChangeView ).toHaveBeenCalledTimes( 1 );
 	} );
 
 	it( 'skips confirmation when there is no current sort', async () => {
@@ -1115,13 +1052,13 @@ describe( 'DataViewRowReorder', () => {
 		expect( onReordered ).not.toHaveBeenCalled();
 	} );
 
-	it( 'keeps the current sort when a confirmed reorder request fails', async () => {
+	it( 'restores the sort when a confirmed reorder request fails', async () => {
 		mockApiFetch.mockRejectedValueOnce( new Error( 'Nope' ) );
-		const view = {
-			type: 'table',
-			sort: { field: 'title', direction: 'asc' },
-		};
-		const { onChangeView, onReordered } = await renderReorder( { view } );
+		const sort = { field: 'title', direction: 'asc' };
+		const view = { type: 'table', sort };
+		const { onChangeView, onReordered, mutateRows } = await renderReorder( {
+			view,
+		} );
 
 		dragEnd( 3, gapDrop( 0, 1, null ) );
 		fireEvent.click(
@@ -1137,7 +1074,15 @@ describe( 'DataViewRowReorder', () => {
 				}
 			)
 		);
-		expect( onChangeView ).not.toHaveBeenCalled();
+		// onChangeView fires twice: first to clear the sort optimistically,
+		// then to restore the original sort when the request rejects.
+		expect( onChangeView ).toHaveBeenCalledTimes( 2 );
+		expect( onChangeView.mock.calls[ 0 ][ 0 ].sort ).toBeNull();
+		expect( onChangeView.mock.calls[ 1 ][ 0 ].sort ).toEqual( sort );
+		// The reorder is rolled back too: first mutation applies the move,
+		// second mutation restores the snapshot we took before it.
+		expect( mutateRows ).toHaveBeenCalledTimes( 2 );
+		expect( mutateRows.mock.calls[ 1 ][ 0 ] ).toBe( rows );
 		expect( onReordered ).not.toHaveBeenCalled();
 	} );
 

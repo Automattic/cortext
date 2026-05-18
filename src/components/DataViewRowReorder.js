@@ -50,7 +50,6 @@ const ROW_ACTIONS_CHROME_RESERVE = 48;
 // huge between-rows target.
 const ROW_DROP_ZONE_MAX_SIDE = 40;
 const HOVER_SUPPRESSION_RELEASE_DELAY = 120;
-const FREEZE_SAFETY_TIMEOUT = 3000;
 
 // tech-debt.md#49: DataViews doesn't expose row refs or reorder hooks.
 // Keep the DOM selectors for this adapter in one place. Grid stays out for now;
@@ -532,14 +531,6 @@ function RowDragPreview( { row } ) {
 	);
 }
 
-function renderedRowFor( renderedRows, row ) {
-	const rowId = Number( row?.rowId );
-	return (
-		renderedRows.find( ( renderedRow ) => renderedRow.rowId === rowId ) ??
-		row
-	);
-}
-
 function handleTargetFor( rowElement, layout ) {
 	return layout === 'table' ? tableHandleTarget( rowElement ) : rowElement;
 }
@@ -831,42 +822,41 @@ function reorderRequestForDrop( rows, rowId, activeDrop ) {
 	};
 }
 
-function expectedOrderAfterDrop( rows, rowId, activeDrop ) {
-	const ids = rowIds( rows );
-	const activeId = Number( rowId );
-	const activeIndex = ids.indexOf( activeId );
-	const insertionIndex = insertionIndexForDrop( ids, activeDrop );
-
-	if ( ! activeId || activeIndex === -1 || insertionIndex === null ) {
+// Optimistic reorder over the raw `data` array (not `dataFiltered`). `drop`
+// is the gap descriptor with `beforeId`/`afterId` referencing rows visible in
+// the filtered list. We insert next to whichever neighbour exists in `data`,
+// preserving rows the active filter hides. Falls through if either anchor is
+// missing from `data` (paginated edge case): the refetch will reconcile.
+function reorderDataByDrop( data, rowId, drop ) {
+	if ( ! Array.isArray( data ) || ! rowId || drop?.type !== ROW_DROP_GAP ) {
 		return null;
 	}
-
-	if (
-		insertionIndex === activeIndex ||
-		insertionIndex === activeIndex + 1
-	) {
+	const draggedId = Number( rowId );
+	const dragged = data.find( ( r ) => Number( r?.id ) === draggedId );
+	if ( ! dragged ) {
 		return null;
 	}
-
-	const nextIds = ids.filter( ( id ) => id !== activeId );
-	const finalIndex = Math.min(
-		nextIds.length,
-		Math.max(
-			0,
-			insertionIndex > activeIndex ? insertionIndex - 1 : insertionIndex
-		)
-	);
-	nextIds.splice( finalIndex, 0, activeId );
-	return nextIds;
-}
-
-function sameRowOrder( a, b ) {
-	return (
-		Array.isArray( a ) &&
-		Array.isArray( b ) &&
-		a.length === b.length &&
-		a.every( ( value, index ) => value === b[ index ] )
-	);
+	const without = data.filter( ( r ) => Number( r?.id ) !== draggedId );
+	const beforeId = drop.beforeId ? Number( drop.beforeId ) : null;
+	const afterId = drop.afterId ? Number( drop.afterId ) : null;
+	let insertAt;
+	if ( afterId ) {
+		const idx = without.findIndex( ( r ) => Number( r?.id ) === afterId );
+		insertAt = idx === -1 ? null : idx + 1;
+	} else if ( beforeId ) {
+		const idx = without.findIndex( ( r ) => Number( r?.id ) === beforeId );
+		insertAt = idx === -1 ? null : idx;
+	} else {
+		insertAt = null;
+	}
+	if ( insertAt === null ) {
+		return null;
+	}
+	return [
+		...without.slice( 0, insertAt ),
+		dragged,
+		...without.slice( insertAt ),
+	];
 }
 
 function clearRowDisplacements( elements ) {
@@ -882,12 +872,7 @@ function rowTransform( offset ) {
 	}, 0)`;
 }
 
-function useRowDisplacement(
-	renderedRows,
-	activeRow,
-	activeDrop,
-	{ showActiveRow = false } = {}
-) {
+function useRowDisplacement( renderedRows, activeRow, activeDrop ) {
 	const changedRowsRef = useRef( [] );
 	const frameRef = useRef( null );
 
@@ -903,7 +888,7 @@ function useRowDisplacement(
 			return;
 		}
 
-		const { activeId, activeOffset, offsets } = displacementForDrop(
+		const { activeId, offsets } = displacementForDrop(
 			renderedRows,
 			activeRow,
 			activeDrop
@@ -915,20 +900,9 @@ function useRowDisplacement(
 
 		for ( const row of renderedRows ) {
 			if ( row.rowId === activeId ) {
-				if ( showActiveRow ) {
-					row.el.classList.remove( ROW_ACTIVE_CLASS );
-					if ( activeOffset ) {
-						row.el.style.transform = rowTransform( activeOffset );
-						row.el.classList.add( ROW_DISPLACED_CLASS );
-					} else {
-						row.el.classList.remove( ROW_DISPLACED_CLASS );
-						row.el.style.removeProperty( 'transform' );
-					}
-				} else {
-					row.el.classList.add( ROW_ACTIVE_CLASS );
-					row.el.classList.remove( ROW_DISPLACED_CLASS );
-					row.el.style.removeProperty( 'transform' );
-				}
+				row.el.classList.add( ROW_ACTIVE_CLASS );
+				row.el.classList.remove( ROW_DISPLACED_CLASS );
+				row.el.style.removeProperty( 'transform' );
 				changedRows.push( row.el );
 				changedElements.add( row.el );
 			} else {
@@ -937,18 +911,11 @@ function useRowDisplacement(
 
 			const offset = offsets.get( row.rowId );
 			if ( offset ) {
-				if ( showActiveRow ) {
-					row.el.style.transform = rowTransform( offset );
-				} else {
-					if ( ! row.el.style.transform ) {
-						row.el.style.transform = 'translate3d(0, 0, 0)';
-						rowsNeedingFlush.push( row.el );
-					}
-					pendingTransforms.push( [
-						row.el,
-						rowTransform( offset ),
-					] );
+				if ( ! row.el.style.transform ) {
+					row.el.style.transform = 'translate3d(0, 0, 0)';
+					rowsNeedingFlush.push( row.el );
 				}
+				pendingTransforms.push( [ row.el, rowTransform( offset ) ] );
 				row.el.classList.add( ROW_DISPLACED_CLASS );
 				changedRows.push( row.el );
 				changedElements.add( row.el );
@@ -975,7 +942,7 @@ function useRowDisplacement(
 		}
 
 		changedRowsRef.current = changedRows;
-	}, [ activeDrop, activeRow, renderedRows, showActiveRow ] );
+	}, [ activeDrop, activeRow, renderedRows ] );
 
 	useEffect( () => {
 		return () => {
@@ -1110,6 +1077,8 @@ export default function DataViewRowReorder( {
 	onChangeView,
 	collectionId,
 	rows,
+	data,
+	mutateRows,
 	onReordered,
 } ) {
 	const renderedRows = useRenderedRows( wrapperRef, view, rows );
@@ -1117,14 +1086,10 @@ export default function DataViewRowReorder( {
 	const [ activeDrop, setActiveDrop ] = useState( null );
 	const [ visualRow, setVisualRow ] = useState( null );
 	const [ visualDrop, setVisualDrop ] = useState( null );
-	const [ visualShowActiveRow, setVisualShowActiveRow ] = useState( false );
-	const [ settlingOrder, setSettlingOrder ] = useState( null );
 	const [ pendingRequest, setPendingRequest ] = useState( null );
 	const [ isPosting, setIsPosting ] = useState( false );
 	const { createErrorNotice } = useDispatch( noticesStore );
-	useRowDisplacement( renderedRows, visualRow, visualDrop, {
-		showActiveRow: visualShowActiveRow,
-	} );
+	useRowDisplacement( renderedRows, visualRow, visualDrop );
 
 	const sensors = useSensors(
 		useSensor( PointerSensor, {
@@ -1137,13 +1102,31 @@ export default function DataViewRowReorder( {
 	viewRef.current = view;
 	const rowsRef = useRef( rows );
 	rowsRef.current = rows;
+	const dataRef = useRef( data );
+	dataRef.current = data;
+	const mutateRowsRef = useRef( mutateRows );
+	mutateRowsRef.current = mutateRows;
 	const hoverSuppressionTimeoutRef = useRef( null );
 	const noTransitionFrameRef = useRef( null );
-	const freezeSafetyTimeoutRef = useRef( null );
 	const onChangeViewRef = useRef( onChangeView );
 	onChangeViewRef.current = onChangeView;
 	const onReorderedRef = useRef( onReordered );
 	onReorderedRef.current = onReordered;
+
+	// The wrapper lives in the editor canvas iframe, but the rest of the
+	// component (and `document` itself) runs in the parent window. Body
+	// classes that gate row transitions and hover suppression must land
+	// in the iframe document so they share scope with the row elements;
+	// otherwise the CSS selector `body.cortext-row-dragging
+	// .cortext-row-reorder-target` never matches and rows snap instead
+	// of animating. Cache the resolved body so unmount cleanup can still
+	// reach the iframe body after `wrapperRef.current` clears.
+	const reorderBodyRef = useRef( null );
+	const getReorderBody = useCallback( () => {
+		const body = wrapperRef.current?.ownerDocument?.body ?? document.body;
+		reorderBodyRef.current = body;
+		return body;
+	}, [ wrapperRef ] );
 
 	const clearHoverSuppressionTimeout = useCallback( () => {
 		if ( hoverSuppressionTimeoutRef.current ) {
@@ -1159,87 +1142,48 @@ export default function DataViewRowReorder( {
 		}
 	}, [] );
 
-	const clearFreezeSafetyTimeout = useCallback( () => {
-		if ( freezeSafetyTimeoutRef.current ) {
-			window.clearTimeout( freezeSafetyTimeoutRef.current );
-			freezeSafetyTimeoutRef.current = null;
-		}
-	}, [] );
-
 	const suppressRowTransitionsOnce = useCallback( () => {
 		clearNoTransitionFrame();
-		document.body.classList.add(
+		getReorderBody().classList.add(
 			ROW_NO_TRANSITION_CLASS,
 			ROW_SUPPRESS_HOVER_CLASS
 		);
 		noTransitionFrameRef.current = window.requestAnimationFrame( () => {
 			noTransitionFrameRef.current = window.requestAnimationFrame( () => {
 				noTransitionFrameRef.current = null;
-				document.body.classList.remove( ROW_NO_TRANSITION_CLASS );
+				getReorderBody().classList.remove( ROW_NO_TRANSITION_CLASS );
 			} );
 		} );
-	}, [ clearNoTransitionFrame ] );
+	}, [ clearNoTransitionFrame, getReorderBody ] );
 
 	const suppressRowHover = useCallback( () => {
 		clearHoverSuppressionTimeout();
-		document.body.classList.add( ROW_SUPPRESS_HOVER_CLASS );
-	}, [ clearHoverSuppressionTimeout ] );
+		getReorderBody().classList.add( ROW_SUPPRESS_HOVER_CLASS );
+	}, [ clearHoverSuppressionTimeout, getReorderBody ] );
 
 	const releaseRowHover = useCallback( () => {
 		clearHoverSuppressionTimeout();
 		hoverSuppressionTimeoutRef.current = window.setTimeout( () => {
 			hoverSuppressionTimeoutRef.current = null;
-			document.body.classList.remove( ROW_SUPPRESS_HOVER_CLASS );
+			getReorderBody().classList.remove( ROW_SUPPRESS_HOVER_CLASS );
 		}, HOVER_SUPPRESSION_RELEASE_DELAY );
-	}, [ clearHoverSuppressionTimeout ] );
+	}, [ clearHoverSuppressionTimeout, getReorderBody ] );
 
 	const clearVisualState = useCallback(
 		( options = {} ) => {
-			clearFreezeSafetyTimeout();
 			if ( options.withoutTransition ) {
 				suppressRowTransitionsOnce();
 			}
 			setVisualRow( null );
 			setVisualDrop( null );
-			setVisualShowActiveRow( false );
-			setSettlingOrder( null );
 			releaseRowHover();
 		},
-		[
-			clearFreezeSafetyTimeout,
-			releaseRowHover,
-			suppressRowTransitionsOnce,
-		]
+		[ releaseRowHover, suppressRowTransitionsOnce ]
 	);
 
-	// Hold the dropped position until the refetch confirms the new order.
-	// The order of statements matters: drop the body class that enables row
-	// transitions before `useRowDisplacement` runs the placed transform.
-	// Leave it in and the active row animates from its old position for one
-	// frame after drop.
-	const freezeDropState = useCallback(
-		( row, drop, expectedOrder ) => {
-			clearNoTransitionFrame();
-			clearFreezeSafetyTimeout();
-			document.body.classList.add(
-				ROW_NO_TRANSITION_CLASS,
-				ROW_SUPPRESS_HOVER_CLASS
-			);
-			setActiveRow( null );
-			setActiveDrop( null );
-			setVisualRow( row );
-			setVisualDrop( drop );
-			setVisualShowActiveRow( true );
-			setSettlingOrder( expectedOrder );
-			document.body.classList.remove( ROW_DRAGGING_CLASS );
-			freezeSafetyTimeoutRef.current = window.setTimeout( () => {
-				freezeSafetyTimeoutRef.current = null;
-				clearVisualState( { withoutTransition: true } );
-			}, FREEZE_SAFETY_TIMEOUT );
-		},
-		[ clearFreezeSafetyTimeout, clearNoTransitionFrame, clearVisualState ]
-	);
-
+	// Posts the reorder to the server. On failure restores `data` from the
+	// snapshot taken before the optimistic mutation, and (if we cleared a
+	// non-manual sort to make the move visible) restores that sort too.
 	const performReorder = useCallback(
 		async ( request ) => {
 			if ( ! collectionId || ! request || isPosting ) {
@@ -1256,15 +1200,17 @@ export default function DataViewRowReorder( {
 						current_sort: request.currentSort ?? null,
 					},
 				} );
-				if ( request.clearSortOnSuccess ) {
-					onChangeViewRef.current( {
-						...( viewRef.current ?? {} ),
-						sort: null,
-					} );
-				}
 				onReorderedRef.current?.();
 			} catch {
-				clearVisualState( { withoutTransition: true } );
+				if ( request.previousData && mutateRowsRef.current ) {
+					mutateRowsRef.current( request.previousData );
+				}
+				if ( request.previousSort !== undefined ) {
+					onChangeViewRef.current( {
+						...( viewRef.current ?? {} ),
+						sort: request.previousSort,
+					} );
+				}
 				createErrorNotice( __( "Couldn't move the row.", 'cortext' ), {
 					id: ROW_REORDER_NOTICE_ID,
 					type: 'snackbar',
@@ -1273,7 +1219,7 @@ export default function DataViewRowReorder( {
 				setIsPosting( false );
 			}
 		},
-		[ clearVisualState, collectionId, createErrorNotice, isPosting ]
+		[ collectionId, createErrorNotice, isPosting ]
 	);
 
 	const onDragStart = useCallback(
@@ -1281,11 +1227,10 @@ export default function DataViewRowReorder( {
 			const row = event.active?.data?.current ?? null;
 			setActiveRow( row );
 			setVisualRow( row );
-			setVisualShowActiveRow( false );
 			suppressRowHover();
-			document.body.classList.add( ROW_DRAGGING_CLASS );
+			getReorderBody().classList.add( ROW_DRAGGING_CLASS );
 		},
-		[ suppressRowHover ]
+		[ suppressRowHover, getReorderBody ]
 	);
 
 	const onDragOver = useCallback( ( event ) => {
@@ -1299,9 +1244,43 @@ export default function DataViewRowReorder( {
 			setActiveRow( null );
 			setActiveDrop( null );
 			clearVisualState( options );
-			document.body.classList.remove( ROW_DRAGGING_CLASS );
+			getReorderBody().classList.remove( ROW_DRAGGING_CLASS );
 		},
-		[ clearVisualState ]
+		[ clearVisualState, getReorderBody ]
+	);
+
+	// Builds the request and applies an optimistic mutation so the user sees
+	// the new order before the API answers. If the active sort would hide the
+	// move (anything other than manual), pass it through the confirm dialog
+	// first; we clear the sort and snapshot it for rollback on failure.
+	const commitReorder = useCallback(
+		( request, { clearSort } = {} ) => {
+			const previousData = dataRef.current;
+			const previousSort = viewRef.current?.sort ?? null;
+			const nextData = reorderDataByDrop(
+				previousData,
+				request.rowId,
+				request.drop
+			);
+			if ( ! nextData || ! mutateRowsRef.current ) {
+				clearDragState( { withoutTransition: true } );
+				return;
+			}
+			clearDragState( { withoutTransition: true } );
+			mutateRowsRef.current( nextData );
+			if ( clearSort ) {
+				onChangeViewRef.current( {
+					...( viewRef.current ?? {} ),
+					sort: null,
+				} );
+			}
+			performReorder( {
+				...request,
+				previousData,
+				...( clearSort ? { previousSort } : {} ),
+			} );
+		},
+		[ clearDragState, performReorder ]
 	);
 
 	const onDragEnd = useCallback(
@@ -1318,29 +1297,17 @@ export default function DataViewRowReorder( {
 				return;
 			}
 
-			const row = renderedRowFor(
-				renderedRows,
-				event.active?.data?.current ?? null
-			);
 			const currentSort = viewRef.current?.sort ?? null;
-			const expectedOrder = expectedOrderAfterDrop(
-				rowsRef.current,
-				rowId,
-				drop
-			);
+			const hasExplicitSort =
+				Boolean( currentSort?.field ) &&
+				currentSort.field !== MANUAL_SORT_ID;
 			const request = {
 				rowId,
 				before_id: reorder.before_id,
 				after_id: reorder.after_id,
 				currentSort,
-				row,
 				drop,
-				expectedOrder,
-				clearSortOnSuccess: Boolean( currentSort?.field ),
 			};
-			const hasExplicitSort =
-				Boolean( currentSort?.field ) &&
-				currentSort.field !== MANUAL_SORT_ID;
 
 			if ( hasExplicitSort ) {
 				clearDragState( { withoutTransition: true } );
@@ -1348,10 +1315,9 @@ export default function DataViewRowReorder( {
 				return;
 			}
 
-			freezeDropState( row, drop, expectedOrder );
-			performReorder( request );
+			commitReorder( request, { clearSort: false } );
 		},
-		[ clearDragState, freezeDropState, performReorder, renderedRows ]
+		[ clearDragState, commitReorder ]
 	);
 
 	const onDragCancel = useCallback( () => {
@@ -1364,9 +1330,8 @@ export default function DataViewRowReorder( {
 		if ( ! request ) {
 			return;
 		}
-		freezeDropState( request.row, request.drop, request.expectedOrder );
-		performReorder( request );
-	}, [ freezeDropState, pendingRequest, performReorder ] );
+		commitReorder( request, { clearSort: true } );
+	}, [ commitReorder, pendingRequest ] );
 
 	const onCancelManualSort = useCallback( () => {
 		setPendingRequest( null );
@@ -1377,24 +1342,15 @@ export default function DataViewRowReorder( {
 		return () => {
 			clearHoverSuppressionTimeout();
 			clearNoTransitionFrame();
-			clearFreezeSafetyTimeout();
-			document.body.classList.remove(
+			// `wrapperRef.current` is likely null at unmount, so reach for
+			// the cached body the drag handlers used.
+			( reorderBodyRef.current ?? document.body ).classList.remove(
 				ROW_DRAGGING_CLASS,
 				ROW_SUPPRESS_HOVER_CLASS,
 				ROW_NO_TRANSITION_CLASS
 			);
 		};
-	}, [
-		clearFreezeSafetyTimeout,
-		clearHoverSuppressionTimeout,
-		clearNoTransitionFrame,
-	] );
-
-	useLayoutEffect( () => {
-		if ( sameRowOrder( rowIds( rows ), settlingOrder ) ) {
-			clearVisualState( { withoutTransition: true } );
-		}
-	}, [ clearVisualState, rows, settlingOrder ] );
+	}, [ clearHoverSuppressionTimeout, clearNoTransitionFrame ] );
 
 	// Skip grid for now. In a 2D layout, dropping onto a card does not tell us
 	// exactly where the row should land.

@@ -401,6 +401,21 @@ export default function useCollectionRows(
 		setRefreshKey( ( key ) => key + 1 );
 	}, [] );
 
+	// Lets callers reorder/replace `data` locally for optimistic updates.
+	// The next `refresh` (or any natural refetch) overwrites this with the
+	// server's truth, so callers don't have to undo their own change on
+	// success. They do have to revert on failure: `mutateRows(prevSnapshot)`.
+	const mutateRows = useCallback( ( updater ) => {
+		setState( ( prev ) => {
+			const nextData =
+				typeof updater === 'function' ? updater( prev.data ) : updater;
+			if ( nextData === prev.data ) {
+				return prev;
+			}
+			return { ...prev, data: nextData };
+		} );
+	}, [] );
+
 	useCollectionRowsInvalidation( collectionId, refresh );
 
 	useEffect( () => {
@@ -516,5 +531,10 @@ export default function useCollectionRows(
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [ collectionId, queryKey, refreshKey ] );
 
-	return { ...state, refresh, queryMode: queryPlan?.mode ?? 'client' };
+	return {
+		...state,
+		refresh,
+		mutateRows,
+		queryMode: queryPlan?.mode ?? 'client',
+	};
 }
