@@ -26,6 +26,9 @@ add_filter(
 		if ( $user_id ) {
 			return $user_id;
 		}
+		if ( function_exists( 'wp_installing' ) && wp_installing() ) {
+			return $user_id;
+		}
 		$admin = get_user_by( 'login', 'admin' );
 		return $admin ? $admin->ID : $user_id;
 	},
