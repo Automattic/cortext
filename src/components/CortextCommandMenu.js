@@ -1,4 +1,4 @@
-import { Command, useCommandState } from 'cmdk';
+import { Command, defaultFilter, useCommandState } from 'cmdk';
 
 import { Modal, TextHighlight } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
@@ -242,10 +242,24 @@ function PaletteGroups( { search } ) {
 	);
 }
 
+// cmdk re-scores and re-sorts every item on each keystroke. For server-side
+// search results (the documents group) that means the highlighted item can
+// hop around the list as the user types. Pin all document commands to a
+// constant score so cmdk keeps the server's order and stops shuffling them.
+// Non-document items still go through cmdk's default filter.
+function palettePinnedFilter( value, search, keywords ) {
+	if ( value.startsWith( 'document-' ) ) {
+		return 1;
+	}
+	return defaultFilter( value, search, keywords );
+}
+
 export default function CortextCommandMenu( {
 	search = '',
 	setSearch = () => {},
 	isDocumentSearchPending = false,
+	selectedValue,
+	onSelectedValueChange = () => {},
 } = {} ) {
 	const { registerShortcut } = useDispatch( keyboardShortcutsStore );
 	const { open, close } = useDispatch( commandsStore );
@@ -302,7 +316,13 @@ export default function CortextCommandMenu( {
 			contentLabel={ __( 'Command palette' ) }
 		>
 			<div className="commands-command-menu__container">
-				<Command label={ commandMenuLabel } loop>
+				<Command
+					label={ commandMenuLabel }
+					loop
+					filter={ palettePinnedFilter }
+					value={ selectedValue }
+					onValueChange={ onSelectedValueChange }
+				>
 					<div className="commands-command-menu__header">
 						<Icon
 							className="commands-command-menu__header-search-icon"

@@ -204,11 +204,20 @@ function DocumentCommandRegistration( { canvasRef, document, search } ) {
 	return null;
 }
 
+function firstDocumentValue( documents ) {
+	const first = documents[ 0 ];
+	if ( ! first ) {
+		return undefined;
+	}
+	return `document-cortext/document/${ first.kind }-${ first.id }`;
+}
+
 function DocumentResultsRegistration( {
 	canvasRef,
 	search,
 	onPendingChange,
 	onDescriptionsChange,
+	onDocumentsResolved,
 } ) {
 	const { documents, hasResolved, error } = useDocuments( {
 		search,
@@ -232,7 +241,8 @@ function DocumentResultsRegistration( {
 			return;
 		}
 		setLastResolvedSearch( search );
-	}, [ hasFreshDocuments, search ] );
+		onDocumentsResolved( firstDocumentValue( documents ) );
+	}, [ hasFreshDocuments, search, documents, onDocumentsResolved ] );
 
 	useEffect( () => {
 		if ( ! hasFreshDocuments ) {
@@ -282,6 +292,13 @@ function CommandPaletteContents( {
 	const [ documentDescriptions, setDocumentDescriptions ] = useState(
 		() => new Map()
 	);
+	// Controlled cmdk selection. When the first batch of documents arrives,
+	// anchor the selection on the first result so it doesn't sit on whatever
+	// recent/static command was selected before. After that cmdk owns the
+	// value: arrow-key moves, item unmounts (search refinement that drops
+	// the prior selection) and clicks all flow back here. Clearing the
+	// input resets the anchor so the next session starts fresh.
+	const [ selectedValue, setSelectedValue ] = useState();
 	const isPaletteOpen = useSelect(
 		( select ) => select( commandsStore ).isOpen(),
 		[]
@@ -291,6 +308,19 @@ function CommandPaletteContents( {
 	const shouldFetchDocuments = isPaletteOpen && Boolean( debouncedSearch );
 	const isDocumentSearchPending =
 		Boolean( search ) && ( isDebouncing || isFetchingDocuments );
+
+	useEffect( () => {
+		if ( ! search ) {
+			setSelectedValue( undefined );
+		}
+	}, [ search ] );
+
+	const handleDocumentsResolved = useCallback( ( firstValue ) => {
+		if ( ! firstValue ) {
+			return;
+		}
+		setSelectedValue( ( current ) => current ?? firstValue );
+	}, [] );
 
 	return (
 		<CommandDescriptionContext.Provider value={ documentDescriptions }>
@@ -313,12 +343,15 @@ function CommandPaletteContents( {
 					search={ debouncedSearch }
 					onPendingChange={ setIsFetchingDocuments }
 					onDescriptionsChange={ setDocumentDescriptions }
+					onDocumentsResolved={ handleDocumentsResolved }
 				/>
 			) }
 			<CortextCommandMenu
 				search={ search }
 				setSearch={ setSearch }
 				isDocumentSearchPending={ isDocumentSearchPending }
+				selectedValue={ selectedValue }
+				onSelectedValueChange={ setSelectedValue }
 			/>
 		</CommandDescriptionContext.Provider>
 	);

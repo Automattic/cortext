@@ -59,6 +59,8 @@ const mockMenu = {
 	setSearch: () => {},
 	isDocumentSearchPending: false,
 	descriptions: new Map(),
+	selectedValue: undefined,
+	onSelectedValueChange: () => {},
 };
 
 jest.mock( '../../../src/components/CortextCommandMenu', () => {
@@ -69,6 +71,8 @@ jest.mock( '../../../src/components/CortextCommandMenu', () => {
 		mockMenu.setSearch = props.setSearch;
 		mockMenu.isDocumentSearchPending = props.isDocumentSearchPending;
 		mockMenu.descriptions = useContext( CommandDescriptionContext );
+		mockMenu.selectedValue = props.selectedValue;
+		mockMenu.onSelectedValueChange = props.onSelectedValueChange;
 		return null;
 	};
 	return {
@@ -406,6 +410,69 @@ describe( 'CommandPalette document search', () => {
 		expect(
 			mockMenu.descriptions.get( 'cortext/document/page-1' )
 		).toBeTruthy();
+	} );
+
+	it( 'anchors the selection to the first document on first arrival, leaves later fetches alone, and clears on empty input', () => {
+		mockIsPaletteOpen = true;
+		mockUseDocuments.mockReturnValue( {
+			documents: [
+				{ kind: 'page', id: 42, title: 'Alice', path: 'alice-42' },
+				{ kind: 'row', id: 77, title: 'Bob', path: 'bob-77' },
+			],
+			total: 2,
+			isLoading: false,
+			hasResolved: true,
+			error: null,
+			refresh: jest.fn(),
+		} );
+
+		render( <CommandPalette canvasRef={ { current: null } } /> );
+
+		act( () => {
+			mockMenu.setSearch( 'ali' );
+		} );
+		act( () => {
+			jest.advanceTimersByTime( 150 );
+		} );
+
+		expect( mockMenu.selectedValue ).toBe(
+			'document-cortext/document/page-42'
+		);
+
+		// User (or cmdk) moves the selection. The next refinement must not
+		// jump back to the new first doc; cmdk owns the value from here.
+		act( () => {
+			mockMenu.onSelectedValueChange(
+				'document-cortext/document/row-77'
+			);
+		} );
+		mockUseDocuments.mockReturnValue( {
+			documents: [
+				{ kind: 'row', id: 99, title: 'Alicia', path: 'alicia-99' },
+				{ kind: 'page', id: 42, title: 'Alice', path: 'alice-42' },
+				{ kind: 'row', id: 77, title: 'Bob', path: 'bob-77' },
+			],
+			total: 3,
+			isLoading: false,
+			hasResolved: true,
+			error: null,
+			refresh: jest.fn(),
+		} );
+		act( () => {
+			mockMenu.setSearch( 'alic' );
+		} );
+		act( () => {
+			jest.advanceTimersByTime( 150 );
+		} );
+		expect( mockMenu.selectedValue ).toBe(
+			'document-cortext/document/row-77'
+		);
+
+		// Clearing the input drops the anchor so cmdk picks fresh next time.
+		act( () => {
+			mockMenu.setSearch( '' );
+		} );
+		expect( mockMenu.selectedValue ).toBeUndefined();
 	} );
 
 	it( 'keeps stale documents under the prior keyword when the new query fails', () => {

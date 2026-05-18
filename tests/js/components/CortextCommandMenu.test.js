@@ -141,4 +141,39 @@ describe( 'CortextCommandMenu', () => {
 			await screen.findByText( 'Plan for next quarter.' )
 		).toBeInTheDocument();
 	} );
+
+	it( 'keeps document commands visible even when the search does not match their label', async () => {
+		global.ResizeObserver = ResizeObserverMock;
+		window.Element.prototype.scrollIntoView = jest.fn();
+		const registry = createCommandPaletteRegistry();
+		// Register a doc whose label does not contain the search term and a
+		// non-doc that also does not match. Only the doc must survive cmdk's
+		// filter: the custom palette filter pins it to score 1.
+		registry.dispatch( commandsStore ).registerCommand( {
+			name: 'cortext/document/page-1',
+			label: 'Unrelated title',
+			context: 'root',
+			callback: jest.fn(),
+		} );
+		registry.dispatch( commandsStore ).registerCommand( {
+			name: 'cortext/other',
+			label: 'Also unrelated',
+			context: 'root',
+			callback: jest.fn(),
+		} );
+		registry.dispatch( commandsStore ).open();
+
+		render(
+			<RegistryProvider value={ registry }>
+				<CortextCommandMenu search="zzzz" setSearch={ () => {} } />
+			</RegistryProvider>
+		);
+
+		expect(
+			await screen.findByText( 'Unrelated title' )
+		).toBeInTheDocument();
+		expect(
+			screen.queryByText( 'Also unrelated' )
+		).not.toBeInTheDocument();
+	} );
 } );
