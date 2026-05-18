@@ -1,12 +1,11 @@
 import { Button, Modal, Notice, Spinner } from '@wordpress/components';
 import { useEntityRecord } from '@wordpress/core-data';
-import { useDispatch, useSelect } from '@wordpress/data';
-import { EditorProvider, store as editorStore } from '@wordpress/editor';
 import {
+	lazy,
+	Suspense,
 	useCallback,
 	useEffect,
 	useMemo,
-	useRef,
 	useState,
 } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
@@ -21,10 +20,18 @@ import {
 	unseen,
 } from '@wordpress/icons';
 
-import useAutosave from '../hooks/useAutosave';
-import EditorBody from './EditorBody';
-import RowProperties from './RowProperties';
-import { getRowDetailMode } from './rowDetailUtils';
+// The editor surface (EditorProvider + EditorBody + autosave + block
+// registration) lives in the `editor` chunk, shared with Canvas, so it
+// stays off the initial admin entry. The peek's chrome (toolbar, modal,
+// navigation) renders synchronously; only the inner pane stack suspends.
+// First open per session pays the chunk-fetch cost; subsequent opens are
+// instant. src/index.js warms the chunk on idle after first paint, so
+// most opens skip the fallback. See the longer note in EntityRoute.js for
+// why this does not also drop the WP editor script handles.
+const RowEditor = lazy( () =>
+	import( /* webpackChunkName: "editor" */ './RowEditor' )
+);
+import { getRowDetailMode, titleFromDetail } from './rowDetailUtils';
 
 export const ROW_DETAIL_MODE_ICONS = {
 	side: drawerRight,
@@ -78,121 +85,6 @@ function settleDetailPanes( panes ) {
 	return panes.filter( ( pane ) => pane.state !== 'covered' );
 }
 
-function DetailReadySignal( { detailKey, onReady } ) {
-	useEffect( () => {
-		onReady( detailKey );
-	}, [ detailKey, onReady ] );
-
-	return null;
-}
-
-const ROW_DETAIL_EDITOR_CSS = `
-	body {
-		background: #fff;
-	}
-
-	.editor-styles-wrapper {
-		box-sizing: border-box;
-		min-height: 100%;
-		padding: 24px 32px 48px;
-	}
-
-	.editor-styles-wrapper .wp-block-post-content {
-		margin-block-start: 0;
-	}
-
-	.editor-styles-wrapper > .block-editor-block-list__layout,
-	.editor-styles-wrapper .block-editor-block-list__layout.is-root-container {
-		min-height: 180px;
-	}
-
-	.editor-styles-wrapper .block-list-appender {
-		margin-top: 12px;
-	}
-`;
-
-const ROW_DETAIL_EXTRA_STYLES = [ { css: ROW_DETAIL_EDITOR_CSS } ];
-
-function RowTitleBridge( { isActive, fallback, onTitle } ) {
-	const editedTitle = useSelect(
-		( select ) => select( editorStore ).getEditedPostAttribute( 'title' ),
-		[]
-	);
-	useEffect( () => {
-		if ( ! isActive || ! onTitle ) {
-			return;
-		}
-		const next =
-			typeof editedTitle === 'string' && editedTitle !== ''
-				? editedTitle
-				: fallback;
-		onTitle( next );
-	}, [ editedTitle, fallback, isActive, onTitle ] );
-	return null;
-}
-
-function titleFromRow( row ) {
-	const title = row?.title;
-	if ( typeof title === 'string' ) {
-		return title;
-	}
-	return title?.raw ?? title?.rendered ?? '';
-}
-
-function titleFromDetail( detail ) {
-	if ( ! detail ) {
-		return '';
-	}
-	return titleFromRow( detail.record ) || titleFromRow( detail.row );
-}
-
-function RowAutosaveBridge( {
-	isActive = true,
-	onApi,
-	onSaved,
-	recentTarget,
-} ) {
-	const { status, lastSavedAt, flushNow, isDirty, isSaving } = useAutosave( {
-		debounceMs: 0,
-		minSaveIntervalMs: 0,
-		recentTarget,
-	} );
-	const { resetPost } = useDispatch( editorStore );
-	const discard = useCallback( () => resetPost(), [ resetPost ] );
-	const lastNotifiedSaveRef = useRef( null );
-	const autosaveStateRef = useRef( { isDirty, isSaving } );
-	autosaveStateRef.current = { isDirty, isSaving };
-	const hasPendingEdits = useCallback(
-		() =>
-			autosaveStateRef.current.isDirty ||
-			autosaveStateRef.current.isSaving,
-		[]
-	);
-
-	useEffect( () => {
-		if ( ! isActive ) {
-			return undefined;
-		}
-		onApi?.( { flushNow, discard, hasPendingEdits } );
-		return () => onApi?.( null );
-	}, [ discard, flushNow, hasPendingEdits, isActive, onApi ] );
-
-	useEffect( () => {
-		if (
-			! isActive ||
-			status !== 'saved' ||
-			! lastSavedAt ||
-			lastNotifiedSaveRef.current === lastSavedAt
-		) {
-			return;
-		}
-		lastNotifiedSaveRef.current = lastSavedAt;
-		onSaved?.();
-	}, [ isActive, lastSavedAt, onSaved, status ] );
-
-	return null;
-}
-
 export function ModeControl( { mode, onChangeMode } ) {
 	const modes = Object.keys( ROW_DETAIL_MODE_LABELS ).filter(
 		( nextMode ) => nextMode !== mode
@@ -213,60 +105,6 @@ export function ModeControl( { mode, onChangeMode } ) {
 					} }
 				/>
 			) ) }
-		</>
-	);
-}
-
-function DetailPaneContent( {
-	collectionId,
-	fields,
-	isActive,
-	isHidden,
-	isTitleActive,
-	onApi,
-	onRestored,
-	onSaved,
-	onTitle,
-	postType,
-	propertiesVisible,
-	row,
-	rowId,
-} ) {
-	const fallbackTitle = useMemo( () => titleFromRow( row ), [ row ] );
-	return (
-		<>
-			<RowAutosaveBridge
-				isActive={ isActive }
-				onApi={ onApi }
-				onSaved={ onSaved }
-				recentTarget={
-					rowId && collectionId
-						? { kind: 'row', id: rowId, collectionId }
-						: null
-				}
-			/>
-			<RowTitleBridge
-				isActive={ isTitleActive }
-				fallback={ fallbackTitle }
-				onTitle={ onTitle }
-			/>
-			{ /* tech-debt.md#41: this is shell-mounted until row
-			     properties are a locked document block. */ }
-			<RowProperties
-				fields={ fields }
-				row={ row }
-				visible={ propertiesVisible }
-			/>
-			<EditorBody
-				postId={ row?.id }
-				postType={ postType }
-				extraStyles={ ROW_DETAIL_EXTRA_STYLES }
-				onRestored={ onRestored }
-			/>
-			<div
-				aria-hidden={ isHidden ? true : undefined }
-				{ ...( isHidden ? { inert: '' } : {} ) }
-			/>
 		</>
 	);
 }
@@ -634,77 +472,78 @@ export default function RowDetailView( {
 				title={ displayTitle }
 			>
 				<div className="cortext-row-detail__pane-stack">
-					{ detailPanes.map( ( pane ) => {
-						const isCurrentPane =
-							pane.key === activeDetailKey &&
-							( pane.state === 'active' ||
-								pane.state === 'entering' );
-						const isHiddenPane =
-							pane.state === 'preparing' ||
-							pane.state === 'covered';
-						const isApiActive = isCurrentPane && ! isHiddenPane;
-						const isTitleActive =
-							! isHiddenPane &&
-							( pane.state === 'active' ||
-								pane.state === 'entering' );
-						const paneRow = {
-							...( pane.detail.row ?? {} ),
-							...pane.detail.record,
-							title:
-								pane.detail.record.title ??
-								pane.detail.row?.title,
-							meta:
-								pane.detail.record.meta ??
-								pane.detail.row?.meta,
-							cortext_hydrated_meta:
-								pane.detail.record.cortext_hydrated_meta ??
-								pane.detail.row?.cortext_hydrated_meta,
-						};
+					<Suspense
+						fallback={
+							<div className="cortext-row-detail__pane cortext-row-detail__pane--loading">
+								<Spinner />
+							</div>
+						}
+					>
+						{ detailPanes.map( ( pane ) => {
+							const isCurrentPane =
+								pane.key === activeDetailKey &&
+								( pane.state === 'active' ||
+									pane.state === 'entering' );
+							const isHiddenPane =
+								pane.state === 'preparing' ||
+								pane.state === 'covered';
+							const isApiActive = isCurrentPane && ! isHiddenPane;
+							const isTitleActive =
+								! isHiddenPane &&
+								( pane.state === 'active' ||
+									pane.state === 'entering' );
+							const paneRow = {
+								...( pane.detail.row ?? {} ),
+								...pane.detail.record,
+								title:
+									pane.detail.record.title ??
+									pane.detail.row?.title,
+								meta:
+									pane.detail.record.meta ??
+									pane.detail.row?.meta,
+								cortext_hydrated_meta:
+									pane.detail.record.cortext_hydrated_meta ??
+									pane.detail.row?.cortext_hydrated_meta,
+							};
 
-						return (
-							<div
-								key={ pane.key }
-								className="cortext-row-detail__pane"
-								data-state={ pane.state }
-								data-interactive={
-									isApiActive ? 'true' : 'false'
-								}
-								aria-hidden={ isHiddenPane ? true : undefined }
-								{ ...( isHiddenPane ? { inert: '' } : {} ) }
-								onAnimationEnd={ onPaneAnimationEnd }
-							>
-								<EditorProvider
-									post={ pane.detail.record }
-									settings={
-										window.cortextEditorSettings ?? {}
+							return (
+								<div
+									key={ pane.key }
+									className="cortext-row-detail__pane"
+									data-state={ pane.state }
+									data-interactive={
+										isApiActive ? 'true' : 'false'
 									}
-									useSubRegistry
+									aria-hidden={
+										isHiddenPane ? true : undefined
+									}
+									{ ...( isHiddenPane ? { inert: '' } : {} ) }
+									onAnimationEnd={ onPaneAnimationEnd }
 								>
-									<DetailReadySignal
+									<RowEditor
+										collectionId={ collectionId }
 										detailKey={ pane.key }
-										onReady={ onPaneReady }
-									/>
-									<DetailPaneContent
 										fields={ propertyFields }
 										isActive={ isApiActive }
 										isHidden={ isHiddenPane }
 										isTitleActive={ isTitleActive }
 										onApi={ onApi }
+										onPaneReady={ onPaneReady }
 										onRestored={ onRestored }
 										onSaved={ onSaved }
 										onTitle={ setDisplayTitle }
+										post={ pane.detail.record }
 										postType={ pane.detail.postType }
 										propertiesVisible={
 											arePropertiesVisible
 										}
-										collectionId={ collectionId }
 										row={ paneRow }
 										rowId={ pane.detail.rowId }
 									/>
-								</EditorProvider>
-							</div>
-						);
-					} ) }
+								</div>
+							);
+						} ) }
+					</Suspense>
 				</div>
 			</DetailShell>
 		);
