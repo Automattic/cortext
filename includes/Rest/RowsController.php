@@ -827,7 +827,7 @@ final class RowsController {
 	 *
 	 * @param int $row_id   Row post ID.
 	 * @param int $field_id Relation field post ID.
-	 * @return array<int,array{id:int,title:array{raw:string,rendered:string},collectionId:int,collectionSlug:string}>
+	 * @return array<int,array{id:int,slug:string,title:array{raw:string,rendered:string},collectionId:int,collectionSlug:string}>
 	 */
 	private function format_relation_value( int $row_id, int $field_id ): array {
 		$target_collection_id = (int) get_post_meta( $field_id, 'related_collection_id', true );
@@ -841,6 +841,7 @@ final class RowsController {
 			}
 			$refs[] = array(
 				'id'             => $target_id,
+				'slug'           => (string) $target->post_name,
 				'title'          => array(
 					'raw'      => $target->post_title,
 					'rendered' => $target->post_title,
