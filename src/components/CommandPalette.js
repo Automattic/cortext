@@ -14,7 +14,13 @@ import {
 import { useNavigate } from '@tanstack/react-router';
 import { __, sprintf } from '@wordpress/i18n';
 import { home as homeIcon, listItem, table } from '@wordpress/icons';
-import { useCallback, useEffect, useMemo, useState } from '@wordpress/element';
+import {
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useMemo,
+	useState,
+} from '@wordpress/element';
 
 import CortextCommandMenu, {
 	CommandDescriptionContext,
@@ -236,7 +242,13 @@ function DocumentResultsRegistration( {
 		return () => onPendingChange( false );
 	}, [ hasResolved, onPendingChange ] );
 
-	useEffect( () => {
+	// `useLayoutEffect` so the parent's controlled `selectedValue` gets
+	// pointed at the new first document in the same commit as the freshly
+	// mounted DocumentCommandRegistration children. With a plain
+	// `useEffect`, the user would see a frame where the new documents
+	// rendered without a visible highlight (cmdk's old pick is filtered
+	// out by the new query) before React flushed the selection update.
+	useLayoutEffect( () => {
 		if ( ! hasFreshDocuments ) {
 			return;
 		}
