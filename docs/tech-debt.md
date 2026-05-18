@@ -365,13 +365,15 @@ The user-facing placeholder is still Core's generic "Search commands and setting
 
 **Solution.** Reuse the relation picker in row detail and save relation changes through the row-field endpoint, not through generic post meta edits. Once DataViews has a real relation/reference field primitive (#37), there should be less custom wiring here.
 
-## 40. Autosave has to infer in-flight save completion `[upstream, soft]`
+## 40. Autosave has to infer save completion `[upstream, soft]`
 
 **What.** `savePost()` gives us a promise when Cortext starts the save. If a save is already running, though, Gutenberg only tells us about it through selectors like `isSavingPost()` and `didPostSaveRequestFail()`. There is no promise to await. `flushNow()` has to keep its own small list of waiters and release them when `isSaving` flips back to false.
 
-**Where.** `savePromiseRef`, `savingWaitersRef`, and `flushNow` in `src/hooks/useAutosave.js`.
+The same selector shape affects user-visible save side effects. `didPostSaveRequestSucceed()` and `didPostSaveRequestFail()` are level signals, not one-shot events. They can stay true after the save that set them, so mounting autosave on a different row or changing `recentTarget` can otherwise replay an old success into status and Recents. The hook tracks the previous `isSaving` value and only treats success as current when this hook observed the save finish.
 
-**Solution.** Gutenberg could expose the current save promise, or make `savePost()` return the in-flight promise when one already exists. Then Cortext could drop the waiter bookkeeping.
+**Where.** `savePromiseRef`, `savingWaitersRef`, `prevIsSavingRef`, `flushNow`, and the save-status effect in `src/hooks/useAutosave.js`.
+
+**Solution.** Gutenberg could expose the current save promise, make `savePost()` return the in-flight promise when one already exists, or expose per-save completion events/state keyed to a request. Then Cortext could drop the waiter bookkeeping and the local `isSaving` edge detection.
 
 ## 41. Favorite rows have their own sidebar-row shape `[internal, soft]`
 
