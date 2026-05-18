@@ -148,13 +148,21 @@ final class Documents {
 			'post_status'         => $statuses,
 			'fields'              => 'ids',
 			'posts_per_page'      => -1,
-			'orderby'             => 'modified',
-			'order'               => 'DESC',
 			'ignore_sticky_posts' => true,
 			'no_found_rows'       => true,
 		);
 
-		if ( '' !== $search ) {
+		if ( '' === $search ) {
+			// No search: most recently modified first.
+			$query_args['orderby'] = 'modified';
+			$query_args['order']   = 'DESC';
+		} else {
+			// With a search term, let `WP_Query` apply its
+			// `search_orderby_title` scoring so title hits bubble up before
+			// body/meta-only matches. The palette caps results to a small
+			// page, so ordering by modified date alone would arbitrarily
+			// hide the most relevant document when the recently-edited
+			// long tail happens to match.
 			$query_args['s'] = $search;
 		}
 

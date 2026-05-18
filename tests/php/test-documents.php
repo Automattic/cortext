@@ -436,6 +436,45 @@ final class Test_Documents extends BaseTestCase {
 		$this->assertNotContains( $select_row_id, $ids );
 	}
 
+	public function test_list_search_ranks_title_matches_above_body_matches(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		// Older page with the term in its title.
+		$title_match = $this->create_page(
+			array(
+				'post_title'        => 'Quarterly report',
+				'post_modified'     => '2025-01-01 00:00:00',
+				'post_modified_gmt' => '2025-01-01 00:00:00',
+			)
+		);
+		// Newer page whose title misses the term but body matches.
+		$body_match = $this->create_page(
+			array(
+				'post_title'        => 'Notes',
+				'post_content'      => 'Quarterly review notes for the team.',
+				'post_modified'     => '2025-06-01 00:00:00',
+				'post_modified_gmt' => '2025-06-01 00:00:00',
+			)
+		);
+
+		$result = $this->documents->list( array( 'search' => 'quarterly' ) );
+		$ids    = array_map(
+			static fn ( array $doc ): int => $doc['id'],
+			$result['documents']
+		);
+
+		$title_pos = array_search( $title_match, $ids, true );
+		$body_pos  = array_search( $body_match, $ids, true );
+
+		$this->assertNotFalse( $title_pos );
+		$this->assertNotFalse( $body_pos );
+		$this->assertLessThan(
+			$body_pos,
+			$title_pos,
+			'Title match should rank above body-only match even when the body-match document is newer.'
+		);
+	}
+
 	public function test_list_search_returns_pages_and_rows_in_one_pass(): void {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
 		$collection_id = $this->create_collection( 'projects', 'Projects' );

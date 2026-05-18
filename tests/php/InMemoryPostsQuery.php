@@ -136,6 +136,27 @@ trait InMemoryPostsQuery {
 					return 'ASC' === $direction ? -$cmp : $cmp;
 				}
 			);
+		} elseif ( $wants_search && '' === $orderby ) {
+			// Mirror WP_Query's `search_orderby_title`: when a search
+			// query is set and the caller does not pin `orderby`, items
+			// whose title contains the query rank above title-less hits.
+			// Modified-date DESC is the tiebreaker.
+			$needle     = strtolower( trim( (string) $vars['s'] ) );
+			$candidates = array_values( $candidates );
+			usort(
+				$candidates,
+				function ( WP_Post $a, WP_Post $b ) use ( $needle ): int {
+					$score_a = $this->title_relevance_score( $a, $needle );
+					$score_b = $this->title_relevance_score( $b, $needle );
+					if ( $score_a !== $score_b ) {
+						return $score_b - $score_a;
+					}
+					return strcmp(
+						(string) $b->post_modified_gmt,
+						(string) $a->post_modified_gmt
+					);
+				}
+			);
 		}
 
 		$candidates = array_values( $candidates );
@@ -170,6 +191,35 @@ trait InMemoryPostsQuery {
 			$out[] = new WP_Post( $row );
 		}
 		return $out;
+	}
+
+	/**
+	 * Scores how well a post title matches a search query, used to sort
+	 * search results in the absence of an explicit `orderby`. A full-needle
+	 * hit ranks above per-term hits; both rank above 0.
+	 */
+	private function title_relevance_score( WP_Post $post, string $needle ): int {
+		if ( '' === $needle ) {
+			return 0;
+		}
+		$title = strtolower( (string) $post->post_title );
+		if ( false !== strpos( $title, $needle ) ) {
+			return 100;
+		}
+		$terms = preg_split( '/\s+/', $needle );
+		if ( ! is_array( $terms ) ) {
+			return 0;
+		}
+		$score = 0;
+		foreach ( $terms as $term ) {
+			if ( '' === $term ) {
+				continue;
+			}
+			if ( false !== strpos( $title, $term ) ) {
+				$score += 10;
+			}
+		}
+		return $score;
 	}
 
 	/**
