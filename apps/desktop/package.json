@@ -8,6 +8,11 @@
 	"scripts": {
 		"start": "electron .",
 		"snapshot": "node scripts/build-snapshot.mjs",
+		"runtime:php": "node scripts/install-runtime.mjs php",
+		"runtime:franken": "node scripts/install-runtime.mjs franken",
+		"runtime:caddy": "node scripts/install-runtime.mjs caddy",
+		"bench:runtime": "node scripts/bench-runtime.mjs",
+		"test": "npm run test:e2e",
 		"test:e2e": "playwright test"
 	},
 	"devDependencies": {

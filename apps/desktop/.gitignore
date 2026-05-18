@@ -4,3 +4,6 @@ out
 snapshot.zip
 .snapshot-work
 .snapshot-cache
+.runtime-bench
+.runtime-cache
+runtime/bin

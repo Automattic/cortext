@@ -2,15 +2,7 @@
 
 Running log of significant design decisions. Newest first. Each entry captures *why* so future readers can evaluate whether the constraints still hold.
 
-## 2026-05-15 — Desktop app runs on native PHP, not Playground
-
-**Decision.** The Electron desktop app now starts the bundled site with `php -S` (PHP's built-in server) and a `wp-content/db.php` SQLite drop-in. It no longer starts `wp-playground-cli`. The build pipeline also downloads and installs WordPress directly (`wp core install`, plugin activation, seed data), so WordPress Playground is gone from both snapshot creation and runtime.
-
-**Why.** On the same machine and workspace, Playground REST endpoints took ~600-1000 ms per request. Native PHP took ~30-60 ms. Shell paint dropped from ~1 s to ~80 ms. With the seed dataset open in DataViews, that is the difference between "this needs work" and "this is fine".
-
-**Trade-off.** The desktop app now needs a working `php` binary on the host's PATH, and snapshot builds need `wp-cli` to run through that PHP. Bundled PHP per architecture is still future work.
-
-**Revisit when.** We bundle PHP, or another runtime gives us the same packaging story without giving up native-PHP performance.
+Desktop-specific runtime and packaging decisions live in `docs/desktop-decisions.md`.
 
 ## 2026-04-23 — Page URLs are id-based, slug is cosmetic
 

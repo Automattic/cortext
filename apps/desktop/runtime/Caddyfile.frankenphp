@@ -1,0 +1,15 @@
+{
+	admin off
+	auto_https off
+	persist_config off
+	storage file_system {$CORTEXT_CADDY_STORAGE}
+}
+
+http://127.0.0.1:{$CORTEXT_PORT} {
+	root * "{$CORTEXT_WORDPRESS_ROOT}"
+	encode zstd gzip
+	php_server {
+		root "{$CORTEXT_WORDPRESS_ROOT}"
+		worker worker.php {$CORTEXT_FRANKEN_WORKERS}
+	}
+}

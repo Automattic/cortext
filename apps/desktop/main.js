@@ -1,13 +1,16 @@
 const { app, BrowserWindow } = require( 'electron' );
-const { spawn, spawnSync } = require( 'child_process' );
+const { spawnSync } = require( 'child_process' );
 const path = require( 'path' );
 const fs = require( 'fs' );
+const {
+	DEFAULT_PORT: PORT,
+	startRuntime,
+	stopRuntime,
+} = require( './lib/runtime' );
 
-const PORT = 9402;
 const SNAPSHOT_ZIP = path.resolve( __dirname, 'snapshot.zip' );
 
-let phpProcess = null;
-let phpReady = null;
+let runtimeHandle = null;
 let quitting = false;
 
 function getSiteRoot() {
@@ -40,70 +43,6 @@ function ensureSiteFromSnapshot() {
 	return wordpressDir;
 }
 
-function startPhp( wordpressDir ) {
-	const routerPath = path.join( wordpressDir, 'router.php' );
-	if ( ! fs.existsSync( routerPath ) ) {
-		throw new Error(
-			`router.php not found at ${ routerPath }. The snapshot is missing runtime files.`
-		);
-	}
-	console.log(
-		`[cortext-desktop] starting PHP server (127.0.0.1:${ PORT }) against ${ wordpressDir }`
-	);
-	phpProcess = spawn(
-		'php',
-		[
-			'-S',
-			`127.0.0.1:${ PORT }`,
-			'-t',
-			wordpressDir,
-			routerPath,
-		],
-		{
-			stdio: [ 'ignore', 'pipe', 'pipe' ],
-		}
-	);
-
-	// PHP writes its "Development Server ... started" line to stderr after
-	// binding the port. Wait for that before loading the admin screen.
-	phpReady = new Promise( ( resolve, reject ) => {
-		const timer = setTimeout( () => {
-			reject( new Error( 'PHP server startup timed out (30s)' ) );
-		}, 30000 );
-		phpProcess.stdout.on( 'data', ( chunk ) => {
-			process.stdout.write( chunk );
-		} );
-		phpProcess.stderr.on( 'data', ( chunk ) => {
-			const text = chunk.toString();
-			process.stderr.write( text );
-			if (
-				text.includes( 'Development Server' ) &&
-				text.includes( 'started' )
-			) {
-				clearTimeout( timer );
-				resolve();
-			}
-		} );
-		phpProcess.once( 'exit', () => {
-			clearTimeout( timer );
-			reject( new Error( 'PHP server exited before reporting ready' ) );
-		} );
-	} );
-
-	phpProcess.on( 'exit', ( code ) => {
-		console.log( `[cortext-desktop] php exited (code=${ code })` );
-		if ( ! quitting ) {
-			app.quit();
-		}
-	} );
-}
-
-function stopPhp() {
-	if ( phpProcess && ! phpProcess.killed ) {
-		phpProcess.kill( 'SIGTERM' );
-	}
-}
-
 async function createWindow() {
 	const win = new BrowserWindow( {
 		width: 1280,
@@ -118,7 +57,7 @@ async function createWindow() {
 	await win.loadFile( path.resolve( __dirname, 'loading.html' ) );
 
 	try {
-		await phpReady;
+		await runtimeHandle.ready;
 		await win.loadURL(
 			`http://127.0.0.1:${ PORT }/wp-admin/admin.php?page=cortext`
 		);
@@ -134,7 +73,16 @@ async function createWindow() {
 app.whenReady().then( () => {
 	try {
 		const wordpressDir = ensureSiteFromSnapshot();
-		startPhp( wordpressDir );
+		runtimeHandle = startRuntime( {
+			appDir: __dirname,
+			wordpressDir,
+			runtimeStateDir: path.join( app.getPath( 'temp' ), 'cortext-desktop-runtime' ),
+			onUnexpectedExit: () => {
+				if ( ! quitting ) {
+					app.quit();
+				}
+			},
+		} );
 		createWindow();
 	} catch ( err ) {
 		console.error( '[cortext-desktop]', err );
@@ -144,7 +92,7 @@ app.whenReady().then( () => {
 
 app.on( 'window-all-closed', () => {
 	quitting = true;
-	stopPhp();
+	stopRuntime( runtimeHandle );
 	if ( process.platform !== 'darwin' ) {
 		app.quit();
 	}
@@ -152,5 +100,5 @@ app.on( 'window-all-closed', () => {
 
 app.on( 'before-quit', () => {
 	quitting = true;
-	stopPhp();
+	stopRuntime( runtimeHandle );
 } );

@@ -47,6 +47,43 @@ function run( cmd, opts = {} ) {
 	execSync( cmd, { stdio: 'inherit', ...opts } );
 }
 
+function shellQuote( value ) {
+	return `'${ String( value ).replace( /'/g, "'\\''" ) }'`;
+}
+
+function commandExists( command ) {
+	if ( command.includes( '/' ) ) {
+		return existsSync( command ) ? command : null;
+	}
+	const result = spawnSync( 'which', [ command ], {
+		stdio: [ 'ignore', 'pipe', 'ignore' ],
+		encoding: 'utf8',
+	} );
+	return result.status === 0 ? result.stdout.trim() : null;
+}
+
+function resolvePhpBin() {
+	const configured = process.env.CORTEXT_PHP_BIN;
+	if ( configured ) {
+		const resolved = commandExists( configured );
+		if ( resolved ) {
+			return resolved;
+		}
+		throw new Error( `CORTEXT_PHP_BIN points to a missing executable: ${ configured }` );
+	}
+	const bundled = resolve( RUNTIME_DIR, 'bin/php' );
+	if ( existsSync( bundled ) ) {
+		return bundled;
+	}
+	const fromPath = commandExists( 'php' );
+	if ( fromPath ) {
+		return fromPath;
+	}
+	throw new Error(
+		'Missing php. Install PHP 8.1+, set CORTEXT_PHP_BIN, or bundle apps/desktop/runtime/bin/php.'
+	);
+}
+
 // macOS `unzip` can exit 1 for warnings, including archives with stored
 // absolute paths. Callers verify the files they need after extraction.
 function unzipQuiet( zipPath, dest ) {
@@ -139,6 +176,10 @@ function buildWpConfig() {
 	lines.push(
 		"if ( ! defined( 'CORTEXT_DESKTOP' ) ) { define( 'CORTEXT_DESKTOP', true ); }"
 	);
+	lines.push(
+		"if ( ! defined( 'DISABLE_WP_CRON' ) ) { define( 'DISABLE_WP_CRON', true ); }"
+	);
+	lines.push( "$GLOBALS['cortext_desktop_request_start'] = microtime( true );" );
 	lines.push( "if ( ! defined( 'ABSPATH' ) ) { define( 'ABSPATH', __DIR__ . '/' ); }" );
 	lines.push( "require_once ABSPATH . 'wp-settings.php';" );
 	return lines.join( '\n' ) + '\n';
@@ -190,10 +231,14 @@ cpSync(
 console.log( '[snapshot] Installing Cortext plugin' );
 cpSync( STAGED_PLUGIN, resolve( pluginsDir, 'cortext' ), { recursive: true } );
 
-console.log( '[snapshot] Adding runtime files (router + mu-plugins)' );
+console.log( '[snapshot] Adding runtime files (router + worker + mu-plugins)' );
 cpSync(
 	resolve( RUNTIME_DIR, 'router.php' ),
 	resolve( SITE_DIR, 'router.php' )
+);
+cpSync(
+	resolve( RUNTIME_DIR, 'worker.php' ),
+	resolve( SITE_DIR, 'worker.php' )
 );
 const muPluginsDest = resolve( SITE_DIR, 'wp-content/mu-plugins' );
 mkdirSync( muPluginsDest, { recursive: true } );
@@ -207,9 +252,14 @@ writeFileSync( resolve( SITE_DIR, 'wp-config.php' ), buildWpConfig() );
 console.log( `[snapshot] Fetching wp-cli` );
 const wpCliPhar = resolve( CACHE_DIR, 'wp-cli.phar' );
 await ensureCachedDownload( WP_CLI_PHAR_URL, wpCliPhar );
+const PHP_BIN = resolvePhpBin();
 
 function wpCli( args ) {
-	run( `php "${ wpCliPhar }" --path="${ SITE_DIR }" ${ args }` );
+	run(
+		`${ shellQuote( PHP_BIN ) } ${ shellQuote( wpCliPhar ) } --path=${ shellQuote(
+			SITE_DIR
+		) } ${ args }`
+	);
 }
 
 console.log( '[snapshot] Installing WordPress' );
