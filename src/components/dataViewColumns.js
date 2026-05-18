@@ -10,6 +10,7 @@ import { sanitizeCalculations } from './tableCalculations';
 
 export const TITLE_FIELD_ID = 'title';
 export const GHOST_FIELD_ID = '__add_field';
+export const MANUAL_SORT_ID = 'manual';
 export const MAX_COLUMN_WIDTH = 640;
 
 // Per-type minimum widths. 32px is wide enough for a checkbox-sized

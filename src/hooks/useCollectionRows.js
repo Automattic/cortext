@@ -9,6 +9,7 @@ import { useCollectionRowsInvalidation } from './rowInvalidation';
 
 const CLIENT_PER_PAGE = 100;
 const CLIENT_PAGE_FETCH_CONCURRENCY = 4;
+const MANUAL_SORT_ID = 'manual';
 
 function serverFieldInfo( field ) {
 	return {
@@ -48,8 +49,18 @@ function isServerSupportedSort( sort, fieldInfo ) {
 	if ( ! sort?.field ) {
 		return true;
 	}
+	if ( sort.field === MANUAL_SORT_ID ) {
+		return true;
+	}
 	const info = fieldInfo.get( sort.field );
 	return info?.sortable === true;
+}
+
+function viewForServer( view ) {
+	if ( view?.sort?.field !== MANUAL_SORT_ID ) {
+		return view;
+	}
+	return { ...( view ?? {} ), sort: null };
 }
 
 function filterInfo( filter, fieldInfo ) {
@@ -268,7 +279,7 @@ export function buildQueryArgs( collectionId, view, fields = [] ) {
 		: { ...( view ?? {} ), sort: null };
 	return buildServerQueryArgs(
 		collectionId,
-		serverView,
+		viewForServer( serverView ),
 		serverFilterResult( view?.filters, fieldInfo ).filters
 	);
 }
@@ -320,7 +331,11 @@ export function buildQueryPlan(
 
 	return {
 		mode: 'server',
-		args: buildServerQueryArgs( collectionId, view, filterResult.filters ),
+		args: buildServerQueryArgs(
+			collectionId,
+			viewForServer( view ),
+			filterResult.filters
+		),
 	};
 }
 
@@ -384,6 +399,21 @@ export default function useCollectionRows(
 	// re-read. With rows in core-data this whole counter goes away.
 	const refresh = useCallback( () => {
 		setRefreshKey( ( key ) => key + 1 );
+	}, [] );
+
+	// Lets callers reorder/replace `data` locally for optimistic updates.
+	// The next `refresh` (or any natural refetch) overwrites this with the
+	// server's truth, so callers don't have to undo their own change on
+	// success. They do have to revert on failure: `mutateRows(prevSnapshot)`.
+	const mutateRows = useCallback( ( updater ) => {
+		setState( ( prev ) => {
+			const nextData =
+				typeof updater === 'function' ? updater( prev.data ) : updater;
+			if ( nextData === prev.data ) {
+				return prev;
+			}
+			return { ...prev, data: nextData };
+		} );
 	}, [] );
 
 	useCollectionRowsInvalidation( collectionId, refresh );
@@ -501,5 +531,10 @@ export default function useCollectionRows(
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [ collectionId, queryKey, refreshKey ] );
 
-	return { ...state, refresh, queryMode: queryPlan?.mode ?? 'client' };
+	return {
+		...state,
+		refresh,
+		mutateRows,
+		queryMode: queryPlan?.mode ?? 'client',
+	};
 }

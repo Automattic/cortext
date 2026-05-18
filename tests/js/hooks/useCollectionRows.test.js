@@ -776,6 +776,41 @@ describe( 'useCollectionRows', () => {
 		expect( args[ 'sort[direction]' ] ).toBeUndefined();
 	} );
 
+	it( 'treats manual sort as the default row order', () => {
+		const plan = buildQueryPlan(
+			7,
+			{
+				sort: { field: 'manual', direction: 'asc' },
+				page: 1,
+				perPage: 25,
+			},
+			baseFields
+		);
+
+		expect( plan.mode ).toBe( 'server' );
+		expect( plan.args[ 'sort[field]' ] ).toBeUndefined();
+		expect( plan.args[ 'sort[direction]' ] ).toBeUndefined();
+	} );
+
+	it( 'uses default row order in forced client mode fetches', () => {
+		const plan = buildQueryPlan(
+			7,
+			{
+				sort: { field: 'manual', direction: 'asc' },
+				page: 2,
+				perPage: 25,
+			},
+			baseFields,
+			{ forceClient: true }
+		);
+
+		expect( plan.mode ).toBe( 'client' );
+		expect( plan.args.page ).toBe( 1 );
+		expect( plan.args.per_page ).toBe( 100 );
+		expect( plan.args[ 'sort[field]' ] ).toBeUndefined();
+		expect( plan.args[ 'sort[direction]' ] ).toBeUndefined();
+	} );
+
 	it( 'supports forced paged client mode for relation pickers', async () => {
 		const view = {
 			type: 'table',

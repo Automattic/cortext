@@ -84,8 +84,16 @@ jest.mock( '../../../../src/lock-unlock', () => {
 	Menu.ItemLabel = ( { children } ) =>
 		createElement( 'span', null, children );
 	Menu.Popover = ( { children } ) => createElement( 'div', null, children );
-	Menu.RadioItem = ( { children } ) =>
-		createElement( 'button', null, children );
+	Menu.RadioItem = ( { checked, children, onChange } ) =>
+		createElement(
+			'button',
+			{
+				'aria-checked': checked ? 'true' : 'false',
+				onClick: onChange,
+				role: 'menuitemradio',
+			},
+			children
+		);
 	Menu.Separator = () => createElement( 'hr' );
 	Menu.TriggerButton = ( { children } ) =>
 		createElement( 'button', null, children );
@@ -120,7 +128,13 @@ import ColumnHeaderActions from '../../../../src/components/fields/ColumnHeaderA
 import { useEntityRecord } from '@wordpress/core-data';
 import { useCollectionFieldsContext } from '../../../../src/components/CollectionFieldsContext';
 
-function Harness( { collectionId, recordId, onFieldCreated = jest.fn() } ) {
+function Harness( {
+	collectionId,
+	onChangeView = jest.fn(),
+	recordId,
+	view,
+	onFieldCreated = jest.fn(),
+} ) {
 	return (
 		<div className="cortext-data-view">
 			<table>
@@ -137,8 +151,8 @@ function Harness( { collectionId, recordId, onFieldCreated = jest.fn() } ) {
 			</table>
 			<ColumnHeaderActions
 				collectionId={ collectionId }
-				view={ { fields: [] } }
-				onChangeView={ jest.fn() }
+				view={ view ?? { fields: [] } }
+				onChangeView={ onChangeView }
 				onFieldCreated={ onFieldCreated }
 			/>
 		</div>
@@ -173,6 +187,47 @@ describe( 'ColumnHeaderActions', () => {
 		await waitFor( () =>
 			expect( screen.queryByRole( 'dialog' ) ).not.toBeInTheDocument()
 		);
+	} );
+
+	it( 'clears checked sort items when the view sort is cleared', async () => {
+		const { rerender } = render(
+			<Harness
+				collectionId={ 5 }
+				recordId={ 77 }
+				view={ {
+					fields: [ 'field-77' ],
+					sort: { field: 'field-77', direction: 'asc' },
+				} }
+			/>
+		);
+
+		expect(
+			await screen.findByRole( 'menuitemradio', {
+				name: 'Sort ascending',
+			} )
+		).toHaveAttribute( 'aria-checked', 'true' );
+
+		rerender(
+			<Harness
+				collectionId={ 5 }
+				recordId={ 77 }
+				view={ {
+					fields: [ 'field-77' ],
+					sort: null,
+				} }
+			/>
+		);
+
+		expect(
+			await screen.findByRole( 'menuitemradio', {
+				name: 'Sort ascending',
+			} )
+		).toHaveAttribute( 'aria-checked', 'false' );
+		expect(
+			screen.getByRole( 'menuitemradio', {
+				name: 'Sort descending',
+			} )
+		).toHaveAttribute( 'aria-checked', 'false' );
 	} );
 
 	it( 'passes the created field out of the add-field dropdown', async () => {

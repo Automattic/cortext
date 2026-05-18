@@ -18,10 +18,10 @@ jest.mock( '@wordpress/components', () => {
 		onClick,
 		label,
 		disabled,
-		icon, // eslint-disable-line no-unused-vars
-		isDestructive, // eslint-disable-line no-unused-vars
-		variant, // eslint-disable-line no-unused-vars
-		size, // eslint-disable-line no-unused-vars
+		icon,
+		isDestructive,
+		variant,
+		size,
 		...rest
 	} ) =>
 		ReactLib.createElement(

@@ -147,6 +147,40 @@ final class RowsController {
 
 		register_rest_route(
 			self::NAMESPACE,
+			'/collections/(?P<collection_id>\d+)/rows/(?P<row_id>\d+)/reorder',
+			array(
+				array(
+					'methods'             => 'POST',
+					'callback'            => array( $this, 'reorder_row' ),
+					'permission_callback' => array( $this, 'can_edit_row' ),
+					'args'                => array(
+						'collection_id' => array(
+							'type'     => 'integer',
+							'required' => true,
+						),
+						'row_id'        => array(
+							'type'     => 'integer',
+							'required' => true,
+						),
+						'before_id'     => array(
+							'type'     => array( 'integer', 'null' ),
+							'required' => false,
+						),
+						'after_id'      => array(
+							'type'     => array( 'integer', 'null' ),
+							'required' => false,
+						),
+						'current_sort'  => array(
+							'type'     => array( 'object', 'null' ),
+							'required' => false,
+						),
+					),
+				),
+			)
+		);
+
+		register_rest_route(
+			self::NAMESPACE,
 			'/collections/(?P<collection_id>\d+)/rows/(?P<row_id>\d+)/duplicate',
 			array(
 				array(
@@ -476,6 +510,48 @@ final class RowsController {
 		);
 	}
 
+	public function reorder_row( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+		$collection_id = (int) $request->get_param( 'collection_id' );
+		$row_id        = (int) $request->get_param( 'row_id' );
+		$before_id     = $this->nullable_row_id_param( $request->get_param( 'before_id' ) );
+		$after_id      = $this->nullable_row_id_param( $request->get_param( 'after_id' ) );
+		$current_sort  = $request->get_param( 'current_sort' );
+		$current_sort  = is_array( $current_sort ) ? $current_sort : null;
+
+		if ( null === $before_id && null === $after_id ) {
+			return new WP_Error(
+				'cortext_reorder_neighbor_required',
+				__( 'Choose a position for the row.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$manual_order = new RowsManualOrder();
+		if (
+			! $manual_order->is_seeded( $collection_id ) &&
+			! array_key_exists( 'current_sort', $request->get_params() )
+		) {
+			return new WP_Error(
+				'cortext_reorder_current_sort_required',
+				__( 'Send the current sort before starting manual order.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$result = $manual_order->move_row(
+			$collection_id,
+			$row_id,
+			$before_id,
+			$after_id,
+			$current_sort
+		);
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		return new WP_REST_Response( $result, 200 );
+	}
+
 	/**
 	 * Duplicates a row. Copies the title as "Copy of %s", plus content, status,
 	 * document icon, featured media, and stored field values. Relation values
@@ -640,16 +716,21 @@ final class RowsController {
 
 		$sort = $request->get_param( 'sort' );
 		if ( ! is_array( $sort ) || empty( $sort['field'] ) ) {
-			// Default to oldest-first so newly created rows land at the
-			// bottom of the table.
-			$args['orderby'] = 'date';
-			$args['order']   = 'ASC';
+			$args['orderby'] = array(
+				'menu_order' => 'ASC',
+				'ID'         => 'ASC',
+			);
 		} else {
 			$direction = ( $sort['direction'] ?? 'asc' ) === 'desc' ? 'DESC' : 'ASC';
 
 			if ( 'title' === $sort['field'] ) {
 				$args['orderby'] = 'title';
 				$args['order']   = $direction;
+			} elseif ( 'manual' === $sort['field'] ) {
+				$args['orderby'] = array(
+					'menu_order' => 'ASC',
+					'ID'         => 'ASC',
+				);
 			} elseif ( 'created_at' === $sort['field'] ) {
 				$args['orderby'] = 'date';
 				$args['order']   = $direction;
@@ -663,6 +744,14 @@ final class RowsController {
 		}
 
 		return $args;
+	}
+
+	private function nullable_row_id_param( mixed $value ): ?int {
+		if ( null === $value || '' === $value ) {
+			return null;
+		}
+		$id = (int) $value;
+		return $id > 0 ? $id : null;
 	}
 
 	private function write_field_value( int $row_id, int $field_id, string $field_type, mixed $value ): void {
@@ -1398,16 +1487,18 @@ final class RowsController {
 	 *
 	 * @param WP_Post $collection Collection post.
 	 * @param string  $slug       Collection row post type suffix.
-	 * @return array{id:int,title:array{raw:string,rendered:string},slug:string}
+	 * @return array{id:int,title:array{raw:string,rendered:string},slug:string,manual_order_seeded:bool}
 	 */
 	private function collection_definition( WP_Post $collection, string $slug ): array {
+		$manual_order = new RowsManualOrder();
 		return array(
-			'id'    => $collection->ID,
-			'title' => array(
+			'id'                  => $collection->ID,
+			'title'               => array(
 				'raw'      => $collection->post_title,
 				'rendered' => $collection->post_title,
 			),
-			'slug'  => $slug,
+			'slug'                => $slug,
+			'manual_order_seeded' => $manual_order->is_seeded( $collection->ID ),
 		);
 	}
 

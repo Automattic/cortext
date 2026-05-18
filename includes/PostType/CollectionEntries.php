@@ -51,6 +51,13 @@ final class CollectionEntries {
 	 */
 	private static array $entry_collection_ids = array();
 
+	/**
+	 * Entry CPTs that already have the insert-order hook.
+	 *
+	 * @var array<string,true>
+	 */
+	private static array $menu_order_hooks = array();
+
 	public static function is_reserved_slug( string $slug ): bool {
 		return in_array( $slug, self::RESERVED_SLUGS, true );
 	}
@@ -474,6 +481,93 @@ final class CollectionEntries {
 		}
 
 		$this->register_field_meta( $post_type, $collection->ID );
+
+		if ( empty( self::$menu_order_hooks[ $post_type ] ) ) {
+			add_action( "save_post_{$post_type}", array( $this, 'assign_menu_order_on_insert' ), 10, 3 );
+			self::$menu_order_hooks[ $post_type ] = true;
+		}
+	}
+
+	public function assign_menu_order_on_insert( int $post_id, WP_Post $post, bool $update ): void {
+		if ( $update || wp_is_post_revision( $post_id ) || wp_is_post_autosave( $post_id ) ) {
+			return;
+		}
+
+		if ( ! str_starts_with( $post->post_type, self::CPT_PREFIX ) ) {
+			return;
+		}
+
+		if ( Collection::POST_TYPE === $post->post_type || Field::POST_TYPE === $post->post_type ) {
+			return;
+		}
+
+		$current = get_post( $post_id );
+		if ( ! $current instanceof WP_Post || 0 !== (int) $current->menu_order ) {
+			return;
+		}
+
+		$max_order = $this->max_menu_order_for_entry_post_type( $post->post_type, $post_id );
+
+		$this->update_entry_menu_order( $post_id, $max_order + 100 );
+	}
+
+	private function max_menu_order_for_entry_post_type( string $post_type, int $exclude_post_id ): int {
+		if ( $this->is_wordbless_active() ) {
+			$max_order = 0;
+			foreach ( \WorDBless\Posts::init()->posts as $existing ) {
+				if (
+					$post_type === $existing->post_type &&
+					(int) $existing->ID !== $exclude_post_id &&
+					in_array( $existing->post_status, array( 'draft', 'private', 'publish' ), true )
+				) {
+					$max_order = max( $max_order, (int) $existing->menu_order );
+				}
+			}
+			return $max_order;
+		}
+
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Reads one aggregate during insert without loading every row post.
+		return (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COALESCE(MAX(menu_order), 0)
+				FROM {$wpdb->posts}
+				WHERE post_type = %s
+				AND post_status IN ('draft', 'private', 'publish')
+				AND ID != %d",
+				$post_type,
+				$exclude_post_id
+			)
+		);
+	}
+
+	private function update_entry_menu_order( int $post_id, int $menu_order ): void {
+		if ( $this->is_wordbless_active() ) {
+			wp_update_post(
+				array(
+					'ID'         => $post_id,
+					'menu_order' => $menu_order,
+				)
+			);
+			return;
+		}
+
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Direct menu_order write during insert; avoids revision churn.
+		$wpdb->update(
+			$wpdb->posts,
+			array( 'menu_order' => $menu_order ),
+			array( 'ID' => $post_id ),
+			array( '%d' ),
+			array( '%d' )
+		);
+		clean_post_cache( $post_id );
+	}
+
+	private function is_wordbless_active(): bool {
+		return defined( 'WP_REPAIRING' ) && WP_REPAIRING && class_exists( '\WorDBless\Posts' );
 	}
 
 	private function register_field_meta( string $post_type, int $collection_id ): void {

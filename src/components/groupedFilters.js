@@ -1,6 +1,8 @@
 import { getDate } from '@wordpress/date';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
 
+const MANUAL_SORT_ID = 'manual';
+
 function isGroupFilter( filter ) {
 	return Boolean( filter?.relation || filter?.filters );
 }
@@ -274,8 +276,13 @@ function matchesFilters( item, filters, fieldMap ) {
 }
 
 export function filterSortAndPaginateWithGroups( data, view, fields ) {
+	const queryView =
+		view?.sort?.field === MANUAL_SORT_ID
+			? { ...( view ?? {} ), sort: null }
+			: view;
+
 	if ( ! hasGroupFilters( view?.filters ) ) {
-		return filterSortAndPaginate( data, view, fields );
+		return filterSortAndPaginate( data, queryView, fields );
 	}
 
 	const fieldMap = new Map( fields.map( ( field ) => [ field.id, field ] ) );
@@ -285,7 +292,7 @@ export function filterSortAndPaginateWithGroups( data, view, fields ) {
 
 	return filterSortAndPaginate(
 		filteredData,
-		{ ...( view ?? {} ), filters: [] },
+		{ ...( queryView ?? {} ), filters: [] },
 		fields
 	);
 }

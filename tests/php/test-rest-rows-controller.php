@@ -448,12 +448,17 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertSame( 10, $args['posts_per_page'] );
 		$this->assertSame( 2, $args['paged'] );
 		$this->assertArrayNotHasKey( 's', $args );
-		// Default sort: oldest-first so new rows land at the bottom.
-		$this->assertSame( 'date', $args['orderby'] );
-		$this->assertSame( 'ASC', $args['order'] );
+		$this->assertSame(
+			array(
+				'menu_order' => 'ASC',
+				'ID'         => 'ASC',
+			),
+			$args['orderby']
+		);
+		$this->assertArrayNotHasKey( 'order', $args );
 	}
 
-public function test_build_query_args_with_title_sort(): void {
+	public function test_build_query_args_with_title_sort(): void {
 		$fixture = $this->create_collection_fixture( 'bqat' );
 
 		$request = new WP_REST_Request( 'GET', '/cortext/v1/rows' );

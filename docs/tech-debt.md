@@ -439,7 +439,17 @@ The layer is still mostly read-only. Pages still go through the page tree and `c
 
 **Solution.** Keep `Cortext\Documents` as the cross-type reader, then move shared document behavior behind it one piece at a time: URL targets, invalidation, activity/recents, favorites, and trash refresh. Individual records can still use `core-data` or row endpoints where WordPress models them well. Cross-type views can stay under `/cortext/v1/documents`; shared document features should not rebuild the same page/row branching every time.
 
-## 49. Public page layout doesn't use WordPress align classes `[internal]`
+## 49. DataViews has no row reorder API `[upstream]`
+
+**What.** Manual order lives on the row posts, but DataViews doesn't give us row refs, drag handles, drop targets, or an `onReorder` hook. Cortext has to decorate the layouts after DataViews renders them: find rows by internal class selectors, match them to `rows` by visible index, portal dnd-kit handles into the first data cell, place fixed drop targets over row gaps, clone a few cells for the drag preview, and hold CSS transforms while the REST request and refetch finish.
+
+That makes row reorder sensitive to DataViews DOM changes: density classes, bulk-selection cells, fullscreen mode, block embedding, and scroll containers all matter. Grid still uses before/after card targets because a linear row gap doesn't map cleanly to a two-dimensional card layout. Fine for v1, but it is one more reason this belongs in a DataViews API instead of a DOM adapter.
+
+**Where.** `src/components/DataViewRowReorder.js`, `src/components/RowDragHandle.js`, the mount in `src/components/CollectionDataViews.js`, and the row-reorder rules in `src/index.scss`.
+
+**Solution.** DataViews could expose stable row ids/refs, a row-handle render prop, keyboard-aware reorder callbacks, a table/list gap model, and row preview/drop indicator hooks. Cortext would keep the REST/manual-order policy and drop the selectors, MutationObserver, portals, and transform bookkeeping.
+
+## 50. Public page layout doesn't use WordPress align classes `[internal]`
 
 **What.** The public template constrains non-block content to 650 px via a blanket `max-width` on `.cortext-public-page__body > :not(.wp-block-cortext-data-view)`. The data-view block breaks out of that constraint by virtue of the exclusion. This is fragile — it doesn't honor `alignwide`, `alignfull`, or any other block alignment, and will break for other wide blocks. The proper fix is to adopt WordPress's `align*` layout classes and `theme.json` content/wide widths so blocks opt into breakout with standard markup rather than CSS exclusions.
 
@@ -447,7 +457,7 @@ The layer is still mostly read-only. Pages still go through the page tree and `c
 
 **Solution.** Use `wp_get_layout_style` or emit the `is-layout-constrained` class with `contentSize` / `wideSize` on the body wrapper, then add `alignwide` or `alignfull` to the data-view block's wrapper attributes in `DataView.php`. Remove the exclusion hack.
 
-## 50. DataView block shares a frontend bundle with page chrome `[internal]`
+## 51. DataView block shares a frontend bundle with page chrome `[internal]`
 
 **What.** The `cortext-frontend` script and style handle serves double duty: it hydrates the DataView block (React, DataViews, field renderers) and provides general page chrome (body font, content column, title styles). Both `Assets.php` and the render callback in `DataView.php` enqueue the same handle, creating a registration race where the first caller's dependency list wins and the second is silently ignored. The DataView block should provision its own script and style (e.g. `cortext-data-view-view`) via `viewScript`/`viewStyle` in `block.json` or its own dedicated handles in the render callback, so its dependencies (`wp-components`, `wp-api-fetch`, etc.) are self-contained. `cortext-frontend`, if it makes sense to exist, should only cover general concerns: page chrome, light/dark mode toggle, etc.
 

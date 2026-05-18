@@ -62,6 +62,15 @@ final class RowsFilterQuery {
 				'operators'  => array(),
 				'system'     => true,
 			),
+			'manual'      => array(
+				'id'         => 0,
+				'key'        => 'manual',
+				'type'       => 'manual',
+				'sortable'   => true,
+				'filterable' => false,
+				'operators'  => array(),
+				'system'     => true,
+			),
 		);
 
 		foreach ( get_post_meta( $collection_id, 'fields', false ) as $raw_field_id ) {
