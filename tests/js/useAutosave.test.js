@@ -418,9 +418,18 @@ describe( 'useAutosave: status', () => {
 	} );
 
 	it( 'reports saved and captures lastSavedAt after a successful save', () => {
-		setStoreState( { didSucceed: true, currentPostId: 42 } );
+		setStoreState( { isSaving: true, currentPostId: 42 } );
 
-		const { result } = renderHook( () => useAutosave() );
+		const { result, rerender } = renderHook( () => useAutosave() );
+
+		act( () => {
+			setStoreState( {
+				isSaving: false,
+				didSucceed: true,
+				currentPostId: 42,
+			} );
+			rerender();
+		} );
 
 		expect( result.current.status ).toBe( 'saved' );
 		expect( typeof result.current.lastSavedAt ).toBe( 'number' );
@@ -428,13 +437,22 @@ describe( 'useAutosave: status', () => {
 	} );
 
 	it( 'touches the configured page recent after a successful save', () => {
-		setStoreState( { didSucceed: true, currentPostId: 42 } );
+		setStoreState( { isSaving: true, currentPostId: 42 } );
 
-		renderHook( () =>
+		const { rerender } = renderHook( () =>
 			useAutosave( {
 				recentTarget: { kind: 'page', id: 42 },
 			} )
 		);
+
+		act( () => {
+			setStoreState( {
+				isSaving: false,
+				didSucceed: true,
+				currentPostId: 42,
+			} );
+			rerender();
+		} );
 
 		expect( mockTouchRecent ).toHaveBeenCalledWith( {
 			kind: 'page',
@@ -443,7 +461,40 @@ describe( 'useAutosave: status', () => {
 	} );
 
 	it( 'touches the configured row recent after a successful save', () => {
-		setStoreState( { didSucceed: true, currentPostId: 42 } );
+		setStoreState( { isSaving: true, currentPostId: 42 } );
+
+		const { rerender } = renderHook( () =>
+			useAutosave( {
+				recentTarget: { kind: 'row', id: 42, collectionId: 9 },
+			} )
+		);
+
+		act( () => {
+			setStoreState( {
+				isSaving: false,
+				didSucceed: true,
+				currentPostId: 42,
+			} );
+			rerender();
+		} );
+
+		expect( mockTouchRecent ).toHaveBeenCalledWith( {
+			kind: 'row',
+			id: 42,
+			collectionId: 9,
+		} );
+	} );
+
+	it( 'does not touch recent when mounted with a stale didSucceed flag', () => {
+		// Simulates opening a different row while the editor store still
+		// reports the previous post's save as successful. Without a real
+		// isSaving transition observed by this hook, the success belongs to
+		// someone else and must not enter Recents.
+		setStoreState( {
+			isSaving: false,
+			didSucceed: true,
+			currentPostId: 42,
+		} );
 
 		renderHook( () =>
 			useAutosave( {
@@ -451,11 +502,29 @@ describe( 'useAutosave: status', () => {
 			} )
 		);
 
-		expect( mockTouchRecent ).toHaveBeenCalledWith( {
-			kind: 'row',
-			id: 42,
-			collectionId: 9,
+		expect( mockTouchRecent ).not.toHaveBeenCalled();
+	} );
+
+	it( 'does not touch recent when recentTarget changes without an intervening save', () => {
+		setStoreState( {
+			isSaving: false,
+			didSucceed: true,
+			currentPostId: 42,
 		} );
+
+		const { rerender } = renderHook( ( props ) => useAutosave( props ), {
+			initialProps: {
+				recentTarget: { kind: 'row', id: 1, collectionId: 9 },
+			},
+		} );
+
+		act( () => {
+			rerender( {
+				recentTarget: { kind: 'row', id: 2, collectionId: 9 },
+			} );
+		} );
+
+		expect( mockTouchRecent ).not.toHaveBeenCalled();
 	} );
 
 	it( 'reports error after a failed save', () => {
@@ -500,7 +569,11 @@ describe( 'useAutosave: status', () => {
 		const { rerender } = renderHook( () => useAutosave() );
 
 		act( () => {
-			setStoreState( { didFail: false, didSucceed: true } );
+			setStoreState( { isSaving: true, didFail: false } );
+			rerender();
+		} );
+		act( () => {
+			setStoreState( { isSaving: false, didSucceed: true } );
 			rerender();
 		} );
 

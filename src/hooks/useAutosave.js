@@ -54,6 +54,7 @@ export default function useAutosave( options = {} ) {
 	const lastSaveAtRef = useRef( 0 );
 	const savePromiseRef = useRef( null );
 	const savingWaitersRef = useRef( [] );
+	const prevIsSavingRef = useRef( isSaving );
 
 	const stateRef = useRef( {
 		isDirty,
@@ -208,6 +209,14 @@ export default function useAutosave( options = {} ) {
 	] );
 
 	useEffect( () => {
+		// The editor store keeps didSucceed/didFail as level signals, but
+		// the user-visible side effects below (status flip, Recents touch)
+		// are edges: they should fire once per save that *this hook ran*.
+		// Re-running the effect because recentTarget changed (the user opened
+		// a different row) must not re-fire success against a stale flag.
+		const wasSaving = prevIsSavingRef.current;
+		prevIsSavingRef.current = isSaving;
+
 		if ( isSaving ) {
 			setStatus( 'saving' );
 		} else if ( didFail ) {
@@ -219,7 +228,7 @@ export default function useAutosave( options = {} ) {
 				id: AUTOSAVE_ERROR_NOTICE_ID,
 				type: 'snackbar',
 			} );
-		} else if ( didSucceed ) {
+		} else if ( didSucceed && wasSaving ) {
 			setStatus( 'saved' );
 			setLastSavedAt( Date.now() );
 			removeNotice( AUTOSAVE_ERROR_NOTICE_ID );
