@@ -2,6 +2,7 @@ const path = require( 'path' );
 const webpack = require( 'webpack' );
 const defaultConfig = require( '@wordpress/scripts/config/webpack.config' );
 const DependencyExtractionWebpackPlugin = require( '@wordpress/dependency-extraction-webpack-plugin' );
+const { BundleAnalyzerPlugin } = require( 'webpack-bundle-analyzer' );
 
 // `@wordpress/route` is not yet registered as a WP core script handle, so
 // wp-scripts' default externalization would emit a missing `wp-route`
@@ -91,5 +92,22 @@ module.exports = {
 			/@wordpress[\\/]route[\\/]build-module[\\/]lock-unlock\.mjs$/,
 			routeLockUnlockShim
 		),
+		...( process.env.ANALYZE
+			? [
+					new BundleAnalyzerPlugin( {
+						analyzerMode: 'static',
+						openAnalyzer: false,
+						reportFilename: path.resolve(
+							__dirname,
+							'build/bundle-report.html'
+						),
+						generateStatsFile: true,
+						statsFilename: path.resolve(
+							__dirname,
+							'build/bundle-stats.json'
+						),
+					} ),
+			  ]
+			: [] ),
 	],
 };
