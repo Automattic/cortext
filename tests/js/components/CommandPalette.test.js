@@ -322,7 +322,7 @@ describe( 'CommandPalette document search', () => {
 		expect( mockMenu.isDocumentSearchPending ).toBe( false );
 	} );
 
-	it( 'does not register stale documents while a new query is loading', () => {
+	it( 'keeps stale documents under the prior keyword while a new query loads', () => {
 		mockIsPaletteOpen = true;
 		const staleDocs = [
 			{
@@ -382,19 +382,95 @@ describe( 'CommandPalette document search', () => {
 			jest.advanceTimersByTime( 150 );
 		} );
 
-		// The stale doc must NOT be re-registered with the new keyword.
+		const calls = mockUseCommand.mock.calls.map( ( [ c ] ) => c );
+
+		// The stale doc stays registered so the user does not see a flicker
+		// between keystrokes, but the keyword is the search that produced it
+		// — never the new query — so cmdk can filter it out on replacement.
 		expect(
-			mockUseCommand.mock.calls
-				.map( ( [ c ] ) => c )
-				.some(
-					( c ) =>
-						c.name === 'cortext/document/page-1' &&
-						c.keywords?.includes( 'second' )
-				)
+			calls.some(
+				( c ) =>
+					c.name === 'cortext/document/page-1' &&
+					c.keywords?.includes( 'first' )
+			)
+		).toBe( true );
+		expect(
+			calls.some(
+				( c ) =>
+					c.name === 'cortext/document/page-1' &&
+					c.keywords?.includes( 'second' )
+			)
 		).toBe( false );
 
-		// Description for the stale result is cleared too, so the next item
-		// rendered under the new query does not inherit an old hint.
-		expect( mockMenu.descriptions.size ).toBe( 0 );
+		// Descriptions stay populated so the second line does not flicker.
+		expect(
+			mockMenu.descriptions.get( 'cortext/document/page-1' )
+		).toBeTruthy();
+	} );
+
+	it( 'keeps stale documents under the prior keyword when the new query fails', () => {
+		mockIsPaletteOpen = true;
+		const staleDocs = [
+			{
+				kind: 'page',
+				id: 1,
+				title: 'Stale',
+				path: 'stale-1',
+				excerpt: 'old content',
+			},
+		];
+		mockUseDocuments.mockReturnValue( {
+			documents: staleDocs,
+			total: 1,
+			isLoading: false,
+			hasResolved: true,
+			error: null,
+			refresh: jest.fn(),
+		} );
+
+		render( <CommandPalette canvasRef={ { current: null } } /> );
+
+		act( () => {
+			mockMenu.setSearch( 'first' );
+		} );
+		act( () => {
+			jest.advanceTimersByTime( 150 );
+		} );
+
+		mockUseCommand.mockClear();
+
+		// Failed fetch: useDocuments resolves with hasResolved=true,
+		// keeps the previous documents, and exposes the error.
+		mockUseDocuments.mockReturnValue( {
+			documents: staleDocs,
+			total: 1,
+			isLoading: false,
+			hasResolved: true,
+			error: new Error( 'network' ),
+			refresh: jest.fn(),
+		} );
+
+		act( () => {
+			mockMenu.setSearch( 'second' );
+		} );
+		act( () => {
+			jest.advanceTimersByTime( 150 );
+		} );
+
+		const calls = mockUseCommand.mock.calls.map( ( [ c ] ) => c );
+		expect(
+			calls.some(
+				( c ) =>
+					c.name === 'cortext/document/page-1' &&
+					c.keywords?.includes( 'first' )
+			)
+		).toBe( true );
+		expect(
+			calls.some(
+				( c ) =>
+					c.name === 'cortext/document/page-1' &&
+					c.keywords?.includes( 'second' )
+			)
+		).toBe( false );
 	} );
 } );

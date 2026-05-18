@@ -210,10 +210,17 @@ function DocumentResultsRegistration( {
 	onPendingChange,
 	onDescriptionsChange,
 } ) {
-	const { documents, hasResolved } = useDocuments( {
+	const { documents, hasResolved, error } = useDocuments( {
 		search,
 		perPage: 10,
 	} );
+	const hasFreshDocuments = hasResolved && ! error;
+	// `useDocuments` keeps the previous documents while a refresh is in
+	// flight or after a failure. Tag the rendered commands with the search
+	// that actually produced them so cmdk filters them out naturally when
+	// the new query no longer matches, instead of unmounting and re-mounting
+	// (which would flicker every time the user refined their input).
+	const [ lastResolvedSearch, setLastResolvedSearch ] = useState( '' );
 
 	useEffect( () => {
 		onPendingChange( ! hasResolved );
@@ -221,7 +228,14 @@ function DocumentResultsRegistration( {
 	}, [ hasResolved, onPendingChange ] );
 
 	useEffect( () => {
-		if ( ! hasResolved ) {
+		if ( ! hasFreshDocuments ) {
+			return;
+		}
+		setLastResolvedSearch( search );
+	}, [ hasFreshDocuments, search ] );
+
+	useEffect( () => {
+		if ( ! hasFreshDocuments ) {
 			return undefined;
 		}
 		const map = new Map();
@@ -235,13 +249,14 @@ function DocumentResultsRegistration( {
 			}
 		}
 		onDescriptionsChange( map );
-		return () => onDescriptionsChange( new Map() );
-	}, [ documents, hasResolved, onDescriptionsChange ] );
+		return undefined;
+	}, [ documents, hasFreshDocuments, onDescriptionsChange ] );
 
-	// Skip stale results while a new search is loading. `useDocuments` keeps the
-	// last documents until the next response; registering them under the new
-	// query would let users open the wrong item.
-	if ( ! hasResolved ) {
+	useEffect( () => {
+		return () => onDescriptionsChange( new Map() );
+	}, [ onDescriptionsChange ] );
+
+	if ( ! lastResolvedSearch ) {
 		return null;
 	}
 
@@ -250,7 +265,7 @@ function DocumentResultsRegistration( {
 			key={ `${ doc.kind }:${ doc.id }` }
 			canvasRef={ canvasRef }
 			document={ doc }
-			search={ search }
+			search={ lastResolvedSearch }
 		/>
 	) );
 }
