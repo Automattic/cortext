@@ -96,11 +96,29 @@ final class Test_Documents extends BaseTestCase {
 		$this->assertSame( Documents::KIND_ROW, $document['kind'] );
 		$this->assertSame( $row_id, $document['id'] );
 		$this->assertSame( 'Ship the thing', $document['title'] );
-		$this->assertSame( "collection/projects-{$collection_id}", $document['path'] );
+		$this->assertSame( "ship-the-thing-{$row_id}", $document['path'] );
 		$this->assertSame( $collection_id, $document['collection']['id'] );
 		$this->assertSame( 'Projects', $document['collection']['title'] );
 		$this->assertSame( "collection/projects-{$collection_id}", $document['collection']['path'] );
 		$this->assertArrayNotHasKey( 'icon', $document );
+	}
+
+	public function test_find_row_without_slug_falls_back_to_bare_id(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$this->create_collection( 'projects', 'Projects' );
+		$row_id = (int) wp_insert_post(
+			array(
+				'post_type'   => 'crtxt_projects',
+				'post_status' => 'private',
+				'post_title'  => '',
+				'post_name'   => '',
+			)
+		);
+
+		$document = $this->documents->find( $row_id );
+
+		$this->assertNotNull( $document );
+		$this->assertSame( (string) $row_id, $document['path'] );
 	}
 
 	public function test_find_returns_null_for_non_document_post_type(): void {

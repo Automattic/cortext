@@ -275,8 +275,8 @@ final class Documents {
 			'kind'   => $kind,
 			'id'     => (int) $post->ID,
 			'title'  => $this->post_title( $post ),
-			'path'   => $collection instanceof WP_Post
-				? $this->collection_path( $collection )
+			'path'   => self::KIND_ROW === $kind
+				? $this->row_path( $post )
 				: $this->page_path( $post ),
 			'parent' => (int) $post->post_parent,
 		);
@@ -385,6 +385,11 @@ final class Documents {
 		$slug = trim( $post->post_name );
 		$tail = '' === $slug ? (string) $post->ID : "{$slug}-{$post->ID}";
 		return "page/{$tail}";
+	}
+
+	private function row_path( WP_Post $post ): string {
+		$slug = trim( $post->post_name );
+		return '' === $slug ? (string) $post->ID : "{$slug}-{$post->ID}";
 	}
 
 	private function collection_path( WP_Post $collection ): string {

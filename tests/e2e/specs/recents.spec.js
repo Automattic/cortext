@@ -223,7 +223,7 @@ test.describe( 'Sidebar recents', () => {
 		}
 	} );
 
-	test( 'records row edits and row recents open the parent collection', async ( {
+	test( 'records row edits and row recents open the row', async ( {
 		admin,
 		page,
 		requestUtils,
@@ -287,12 +287,10 @@ test.describe( 'Sidebar recents', () => {
 
 			await expect
 				.poll( () => appPath( page ) )
-				.toContain(
-					`/collection/${ fixture.slug }-${ fixture.collection.id }`
-				);
+				.toContain( `/${ fixture.entry.slug }-${ fixture.entry.id }` );
 			await expect(
 				page.locator(
-					'.cortext-workspace__pane[data-active="true"] .cortext-data-view'
+					'.cortext-workspace__pane[data-active="true"] .cortext-row-detail__frame'
 				)
 			).toBeVisible( { timeout: 15_000 } );
 		} finally {

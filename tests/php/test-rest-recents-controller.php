@@ -90,7 +90,7 @@ final class Test_Rest_Recents_Controller extends BaseTestCase {
 		$this->assertSame( 'row', $recents[0]['kind'] );
 		$this->assertSame( $row_id, $recents[0]['id'] );
 		$this->assertSame( 'Ada Lovelace', $recents[0]['title'] );
-		$this->assertSame( "collection/people-{$collection}", $recents[0]['path'] );
+		$this->assertSame( "ada-lovelace-{$row_id}", $recents[0]['path'] );
 		$this->assertSame( $collection, $recents[0]['collection']['id'] );
 		$this->assertSame( 'People', $recents[0]['collection']['title'] );
 		$this->assertSame( 'collection', $recents[1]['kind'] );
