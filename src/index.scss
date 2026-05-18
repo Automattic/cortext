@@ -2,10 +2,10 @@
 @use "@wordpress/base-styles/variables" as *;
 @use "./styles/tokens";
 
-// @wordpress/interface is a BUNDLED_PACKAGE (inlined into our JS) and WP
-// doesn't register a `wp-interface` style handle, so bundle its stylesheet.
-@use "../node_modules/@wordpress/interface/build-style/style.css";
-@use "../node_modules/@wordpress/editor/build-style/style.css" as editor;
+// @wordpress/interface and @wordpress/editor styles are only needed inside
+// the editor surface. They're imported from Canvas.js so mini-css-extract
+// emits them into the editor chunk's CSS file and skip the initial CSS
+// bundle on home and collection views.
 
 // tech-debt.md#38: wp-admin does not expose this handle on our screen, so
 // bundle the palette styles here.
@@ -1418,6 +1418,74 @@ body:has([data-type="cortext/document-icon"]:hover) .cortext-canvas__identity-ac
 body:has([data-type="cortext/document-icon"]:focus-within) .cortext-canvas__identity-action,
 body:has(.cortext-canvas__identity-actions:hover) .cortext-canvas__identity-action {
 	opacity: 1;
+}
+
+// Suspense fallback while the editor chunk loads on first document open.
+// Matches the editor's content-size and vertical rhythm so the swap to the
+// real Canvas doesn't reflow. Animation is intentionally subtle: a slow
+// pulse keeps it from competing with whatever lands next.
+.cortext-canvas-skeleton {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 auto;
+	min-height: 0;
+	padding-block: $grid-unit-40 $grid-unit-30;
+
+	&__title {
+		height: $grid-unit-50;
+		max-width: var(--wp--style--global--content-size, 840px);
+		width: 100%;
+		margin: 0 auto $grid-unit-30;
+		padding-inline: $grid-unit-20;
+		border-radius: var(--cortext-shell-radius);
+		background: var(--cortext-state-hover);
+		animation: cortext-canvas-skeleton-pulse 1.6s ease-in-out infinite;
+	}
+
+	&__body {
+		display: flex;
+		flex-direction: column;
+		gap: $grid-unit-20;
+		max-width: var(--wp--style--global--content-size, 840px);
+		width: 100%;
+		margin: 0 auto;
+		padding-inline: $grid-unit-20;
+	}
+
+	&__line {
+		height: $grid-unit-20;
+		border-radius: var(--cortext-shell-radius);
+		background: var(--cortext-state-hover);
+		animation: cortext-canvas-skeleton-pulse 1.6s ease-in-out infinite;
+
+		&--short {
+			width: 60%;
+		}
+
+		&--medium {
+			width: 80%;
+		}
+	}
+}
+
+@keyframes cortext-canvas-skeleton-pulse {
+
+	0%,
+	100% {
+		opacity: 1;
+	}
+
+	50% {
+		opacity: 0.55;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+	.cortext-canvas-skeleton__title,
+	.cortext-canvas-skeleton__line {
+		animation: none;
+	}
 }
 
 .cortext-data-view-picker__empty {

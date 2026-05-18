@@ -12,6 +12,15 @@ import { store as noticesStore } from '@wordpress/notices';
 import { chevronDown, chevronUp, cog, seen, unseen } from '@wordpress/icons';
 import { useCallback, useEffect, useState } from '@wordpress/element';
 
+// Editor-surface stylesheets. Imported via a sibling SCSS file (not
+// src/index.scss) so mini-css-extract emits them into the editor chunk's
+// CSS bundle, off the initial CSS path.
+import './Canvas.scss';
+
+// Registers core + Cortext blocks before any editor renders. Shared with
+// RowEditor so opening a row peek first (without a document open) still
+// gets the blocks registered.
+import './initEditor';
 import useAutosave from '../hooks/useAutosave';
 import { withViewTransition } from '../hooks/viewTransition';
 import { POST_TYPE } from './page-queries';

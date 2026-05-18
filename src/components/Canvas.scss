@@ -1,0 +1,7 @@
+// Editor-surface stylesheets, imported from Canvas.js so mini-css-extract
+// emits them into the editor lazy chunk instead of index.css. Routed
+// through SCSS @use rather than a JS CSS import because the packages'
+// exports field does not expose ./build-style/style.css.
+
+@use "../../node_modules/@wordpress/interface/build-style/style.css";
+@use "../../node_modules/@wordpress/editor/build-style/style.css" as editor;
