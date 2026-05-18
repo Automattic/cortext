@@ -14,6 +14,8 @@
  *     ascending", wait for sorted rows.
  *   - page_edit_ready: crtxt_page in Gutenberg until the editor is mounted.
  *   - command_palette_open: shell event to command palette mount.
+ *   - palette_search_ready: command palette search from typing to the first
+ *     document result from /cortext/v1/documents.
  *   - column_actions_open: column header trigger to visible menu.
  *   - column_rename_inline: open the column menu, choose "Rename", type a new
  *     name, press Enter, then wait for the save to finish.
@@ -318,6 +320,46 @@ test.describe( 'Cortext UI performance', () => {
 		await waitForCommandPaletteReady( page );
 
 		scenarios.command_palette_open = tag(
+			'surface',
+			await probe.snapshot( startedAt )
+		);
+	} );
+
+	test( 'palette_search_ready', async ( { admin, page } ) => {
+		const probe = await setupProbe( page );
+
+		await admin.visitAdminPage( 'admin.php', collection.adminQuery );
+		await waitForCollectionReady( page );
+
+		await page.evaluate( () => {
+			window.dispatchEvent( new Event( 'cortext:open-command-palette' ) );
+		} );
+		await waitForCommandPaletteReady( page );
+
+		const input = page.getByPlaceholder(
+			'Search pages, collections, and actions'
+		);
+
+		await probe.reset();
+		const responsePromise = page.waitForResponse(
+			( response ) =>
+				response.url().includes( '/cortext/v1/documents' ) &&
+				response.url().includes( 'search=' ),
+			{ timeout: READY_TIMEOUT_MS }
+		);
+		const startedAt = Date.now();
+
+		// "Perf" matches every seeded row in `perfmain`; the palette only shows
+		// 10 results, so the first visible option is enough.
+		await input.fill( 'Perf' );
+		await responsePromise;
+		await page
+			.getByRole( 'option' )
+			.first()
+			.waitFor( { state: 'visible', timeout: READY_TIMEOUT_MS } );
+		await waitForPaint( page );
+
+		scenarios.palette_search_ready = tag(
 			'surface',
 			await probe.snapshot( startedAt )
 		);
