@@ -290,7 +290,7 @@ test.describe( 'Sidebar recents', () => {
 				.toContain( `/${ fixture.entry.slug }-${ fixture.entry.id }` );
 			await expect(
 				page.locator(
-					'.cortext-workspace__pane[data-active="true"] .cortext-row-detail__frame'
+					'.cortext-workspace__pane[data-active="true"] .cortext-row-detail--canvas-properties'
 				)
 			).toBeVisible( { timeout: 15_000 } );
 		} finally {
