@@ -1,5 +1,5 @@
 import { __, sprintf } from '@wordpress/i18n';
-import { Button, Icon, Spinner } from '@wordpress/components';
+import { Button, Icon } from '@wordpress/components';
 import {
 	useCallback,
 	useEffect,
@@ -23,6 +23,7 @@ import {
 } from '@dnd-kit/sortable';
 
 import PageIcon from './PageIcon';
+import { SidebarListSkeleton } from './Skeleton';
 import { collectionTitle } from './CollectionRow';
 import { collectDescendants } from './pages-tree';
 import {
@@ -459,9 +460,7 @@ export default function SidebarFavorites( {
 	return (
 		<div className="cortext-sidebar__favorites">
 			{ isLoading ? (
-				<div className="cortext-sidebar__loading">
-					<Spinner />
-				</div>
+				<SidebarListSkeleton itemCount={ favorites.length || 3 } />
 			) : null }
 			{ isEmpty ? (
 				<p className="cortext-sidebar__empty cortext-sidebar__empty--inline">

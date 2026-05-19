@@ -73,6 +73,31 @@ export function SkeletonFieldRow( { valueWidth, className } ) {
 	);
 }
 
+// Sidebar list rows (Favorites, Trash, etc.) while the underlying entity
+// records resolve. The width pattern keeps the rows from looking like a
+// uniform stack of identical bars.
+const SIDEBAR_SKELETON_WIDTHS = [ '72%', '58%', '84%', '46%', '68%', '52%' ];
+
+export function SidebarListSkeleton( { itemCount = 5 } ) {
+	return (
+		<div className="cortext-sidebar-skeleton" aria-hidden="true">
+			{ Array.from( { length: itemCount } ).map( ( _, idx ) => (
+				<div key={ idx } className="cortext-sidebar-skeleton__row">
+					<SkeletonBlock className="cortext-sidebar-skeleton__icon" />
+					<SkeletonLine
+						className="cortext-sidebar-skeleton__label"
+						width={
+							SIDEBAR_SKELETON_WIDTHS[
+								idx % SIDEBAR_SKELETON_WIDTHS.length
+							]
+						}
+					/>
+				</div>
+			) ) }
+		</div>
+	);
+}
+
 // Roughly table-shaped rows shown while useCollectionRows fetches the
 // first page. Sized so the canvas pane stays the same height as it will
 // be once rows arrive, instead of growing from zero.

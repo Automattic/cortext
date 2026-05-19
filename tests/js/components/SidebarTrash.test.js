@@ -184,7 +184,7 @@ function makeDocumentsState( overrides = {} ) {
 }
 
 describe( 'SidebarTrash', () => {
-	it( 'shows a spinner while the trash query resolves', () => {
+	it( 'shows a skeleton while the trash query resolves', () => {
 		setTrashRecords( {
 			records: undefined,
 			hasResolved: false,
@@ -194,7 +194,7 @@ describe( 'SidebarTrash', () => {
 		const { container } = renderSidebarTrash();
 
 		expect(
-			container.querySelector( '.cortext-sidebar__loading' )
+			container.querySelector( '.cortext-sidebar-skeleton' )
 		).toBeTruthy();
 		expect(
 			container.querySelector( '.cortext-sidebar__empty' )

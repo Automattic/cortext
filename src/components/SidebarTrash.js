@@ -3,7 +3,6 @@ import { useDispatch } from '@wordpress/data';
 import { useCallback, useEffect, useMemo, useState } from '@wordpress/element';
 import {
 	Button,
-	Spinner,
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalConfirmDialog as ConfirmDialog,
 } from '@wordpress/components';
@@ -11,6 +10,7 @@ import apiFetch from '@wordpress/api-fetch';
 import { rotateLeft, trash } from '@wordpress/icons';
 
 import PageIcon from './PageIcon';
+import { SidebarListSkeleton } from './Skeleton';
 import {
 	ACTIVE_PAGES_QUERY,
 	POST_TYPE,
@@ -388,11 +388,7 @@ export default function SidebarTrash( {
 
 	return (
 		<>
-			{ isLoading && (
-				<div className="cortext-sidebar__loading">
-					<Spinner />
-				</div>
-			) }
+			{ isLoading && <SidebarListSkeleton itemCount={ 4 } /> }
 
 			{ ! isLoading && hasError && (
 				<div className="cortext-sidebar__error" role="alert">
