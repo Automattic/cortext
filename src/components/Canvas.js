@@ -384,11 +384,17 @@ export default function Canvas( {
 			requestedPost.id !== renderedPost.id )
 			? requestedPost
 			: null;
-	// Active for first-load (no rendered post yet) AND for cross-doc swaps
-	// where the current post is still visible while the new one loads.
-	const showProgress = useDelayedFlag(
-		! renderedPost || pendingPost !== null
+	// `pendingPost` only fires once the new record has resolved and is
+	// waiting for the editor to flush, which is too late on a slow network.
+	// Comparing the request props directly catches the whole window from
+	// "user clicked another page" until the displayed post catches up.
+	const isCrossDocNav = Boolean(
+		renderedPost &&
+			postId &&
+			( String( postId ) !== String( renderedPost.id ) ||
+				( postType && postType !== renderedPost.type ) )
 	);
+	const showProgress = useDelayedFlag( ! renderedPost || isCrossDocNav );
 	if ( ! renderedPost ) {
 		return (
 			<div className="cortext-canvas__loading cortext-canvas__loading--document">

@@ -23,8 +23,11 @@ export function buildFieldListQuery( fieldIds ) {
 // of `crtxt_field` post IDs in display order. Fetch those records, then
 // map each to a DataViews field. Row meta keys are `field-<post_id>`.
 export default function useCollectionFields( collectionId ) {
-	const { record: collection, isResolving: collectionResolving } =
-		useEntityRecord( 'postType', 'crtxt_collection', collectionId ?? 0 );
+	const {
+		record: collection,
+		isResolving: collectionResolving,
+		hasResolved: collectionHasResolved,
+	} = useEntityRecord( 'postType', 'crtxt_collection', collectionId ?? 0 );
 
 	const fieldIds = useMemo( () => {
 		const raw = collection?.meta?.fields;
@@ -107,11 +110,13 @@ export default function useCollectionFields( collectionId ) {
 		// fields for the current collection (`hasStableFieldsForCollection`),
 		// subsequent refetches (after a mutation that changes the field
 		// list) keep this false so the table doesn't unmount and remount.
-		// The collection 404 path stays handled because
-		// `collectionResolving` flips back to false on resolution failure.
+		// The collection 404 path stays handled because `hasResolved` flips
+		// to true on resolution failure too, dropping us back to the normal
+		// path so the invalid-collection notice renders.
 		isResolving:
 			Boolean( collectionId ) &&
-			( ( ! collection && collectionResolving ) ||
+			( ! collectionHasResolved ||
+				( ! collection && collectionResolving ) ||
 				( !! collection &&
 					fieldIds.length > 0 &&
 					! hasStableFieldsForCollection ) ),
