@@ -29,6 +29,7 @@ import {
 import { CurrentViewModeProvider } from './CurrentViewModeContext';
 import EditableCell, { RowMutationContext } from './EditableCell';
 import PageIcon from './PageIcon';
+import { CollectionRowsSkeleton } from './Skeleton';
 import allSettledWithConcurrency from './allSettledWithConcurrency';
 import { filterSortAndPaginateWithGroups } from './groupedFilters';
 import TableCalculationsFooter from './TableCalculationsFooter';
@@ -1523,6 +1524,13 @@ export default function CollectionDataViews( {
 							className="cortext-data-view"
 							ref={ tableWrapperRef }
 							onClickCapture={ captureSelectionIntent }
+							data-rows-loading={
+								isLoading &&
+								dataFiltered.length === 0 &&
+								isTableLayout
+									? 'true'
+									: undefined
+							}
 						>
 							{ rowActionError && (
 								<Notice
@@ -1533,6 +1541,18 @@ export default function CollectionDataViews( {
 									{ rowActionError }
 								</Notice>
 							) }
+							{ isLoading &&
+								dataFiltered.length === 0 &&
+								isTableLayout && (
+									<div className="cortext-data-view__rows-skeleton">
+										<CollectionRowsSkeleton
+											columnCount={
+												( view?.fields?.length ?? 0 ) +
+												1
+											}
+										/>
+									</div>
+								) }
 							<DataViews
 								data={ dataFiltered }
 								fields={ dataViewFields }

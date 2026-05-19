@@ -3941,6 +3941,34 @@ tr:has(.cortext-title-cell--is-opening)
 	animation-delay: 0.2s;
 }
 
+// Approximates a data view table while useCollectionRows fetches. Sits
+// inside .cortext-data-view as a sibling to <DataViews>; the surrounding
+// container handles vertical placement.
+.cortext-collection-skeleton {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	padding: $grid-unit-10 0;
+
+	&__row {
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-30;
+		padding: $grid-unit-15 $grid-unit-20;
+		border-bottom: $border-width solid var(--cortext-row-detail-border, #e9e9e7);
+	}
+
+	&__cell {
+		flex: 1 1 0;
+		min-width: 0;
+		height: 12px;
+	}
+
+	&__cell--first {
+		flex: 0 0 28%;
+	}
+}
+
 // Approximates the full-page editor layout so the canvas area doesn't
 // collapse and re-expand when the editor finishes mounting.
 .cortext-document-skeleton {
@@ -4222,6 +4250,19 @@ body.cortext-row-detail-sidebar-resizing {
 	flex-direction: column;
 	width: 100%;
 	min-width: 0;
+
+	// Sits over the dataviews-wrapper while the first page loads so the
+	// table area keeps roughly its eventual height. Offset assumes the
+	// DataViews header is around 56px tall; the skeleton's own borders
+	// soak up minor differences.
+	&__rows-skeleton {
+		position: absolute;
+		inset: 56px 0 0 0;
+		z-index: 1;
+		overflow: hidden;
+		background: var(--cortext-canvas-frame-surface, #fff);
+		pointer-events: none;
+	}
 
 	// Let the wrapper grow to fill whatever height the parent provides, so
 	// our footer sits below the table instead of getting pushed off by the

@@ -73,6 +73,37 @@ export function SkeletonFieldRow( { valueWidth, className } ) {
 	);
 }
 
+// Roughly table-shaped rows shown while useCollectionRows fetches the
+// first page. Sized so the canvas pane stays the same height as it will
+// be once rows arrive, instead of growing from zero.
+export function CollectionRowsSkeleton( { rowCount = 8, columnCount = 4 } ) {
+	const safeColumns = Math.max( 1, columnCount );
+	return (
+		<div className="cortext-collection-skeleton" aria-hidden="true">
+			{ Array.from( { length: rowCount } ).map( ( _, rowIndex ) => (
+				<div
+					key={ rowIndex }
+					className="cortext-collection-skeleton__row"
+				>
+					{ Array.from( { length: safeColumns } ).map(
+						( __, colIndex ) => (
+							<SkeletonLine
+								key={ colIndex }
+								className={ joinClassName(
+									'cortext-collection-skeleton__cell',
+									colIndex === 0
+										? 'cortext-collection-skeleton__cell--first'
+										: null
+								) }
+							/>
+						)
+					) }
+				</div>
+			) ) }
+		</div>
+	);
+}
+
 // Approximates the full-page editor's title-plus-content layout so the
 // canvas area keeps its size while useResolveDocument and the editor
 // mount. Cover and icon are intentionally omitted (most documents don't
