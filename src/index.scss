@@ -3928,7 +3928,7 @@ tr:has(.cortext-title-cell--is-opening)
 // Shared skeleton primitives — see src/components/Skeleton.js.
 .cortext-skeleton {
 	display: block;
-	background: rgba(0, 0, 0, 0.06);
+	background: var(--cortext-state-hover-strong, rgba(0, 0, 0, 0.09));
 	border-radius: 4px;
 	animation: cortext-skeleton-pulse 1.4s ease-in-out infinite;
 }
@@ -3992,7 +3992,7 @@ tr:has(.cortext-title-cell--is-opening)
 		align-items: center;
 		gap: $grid-unit-30;
 		padding: $grid-unit-15 $grid-unit-20;
-		border-bottom: $border-width solid var(--cortext-row-detail-border, #e9e9e7);
+		border-bottom: $border-width solid var(--cortext-chrome-border, #e0e0e0);
 	}
 
 	&__cell {
