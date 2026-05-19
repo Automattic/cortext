@@ -1,6 +1,6 @@
 <?php
 /**
- * Experimental FrankenPHP worker for the desktop runtime spike.
+ * Experimental FrankenPHP worker for the desktop runtime exploration.
  *
  * WordPress is not designed as a long-running worker. This file keeps core,
  * plugins, and autoloaders in memory, then re-enters the requested PHP script
