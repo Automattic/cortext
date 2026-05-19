@@ -2,12 +2,9 @@ import { createContext, useContext, useMemo } from '@wordpress/element';
 
 import useCollectionFields from '../hooks/useCollectionFields';
 
-// Cortext's bulk-first data convention applies inside this context: column
-// header actions, format popovers, and rename inputs read the field they
-// operate on through `useMappedField` below instead of `useEntityRecord` by
-// id. Bypassing the per-id resolver avoids a duplicate HTTP request for
-// each column on every menu open (gutenberg#19153). See
-// docs/architecture/shell.md for the wider convention.
+// Field menus should use this context for reads. The field list is already
+// loaded for the collection, and `useEntityRecord` would still kick off a
+// separate per-id request in core-data. See docs/architecture/shell.md.
 
 // Keep one field-schema read per collection. `useCollectionFields` latches the
 // last good field list, so sharing it here keeps the toolbar, inspector, table,
@@ -40,10 +37,8 @@ export function useCollectionFieldsContext() {
 	return ctx;
 }
 
-// Returns the mapped field (with `cortextType`, `cortextElements`,
-// `cortextFormat`, label, etc.) for a given crtxt_field record id, reading
-// from the provider's bulk-loaded fields. Returns null if the recordId is
-// not present in the active collection's field set.
+// Returns the mapped field for a crtxt_field record id, or null when that
+// field is not part of the active collection.
 export function useMappedField( recordId ) {
 	const { fields } = useCollectionFieldsContext();
 	return useMemo(

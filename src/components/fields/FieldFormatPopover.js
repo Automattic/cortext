@@ -829,9 +829,8 @@ export default function FieldFormatPopover( {
 	onMouseLeave,
 } ) {
 	const panelRef = useRef( null );
-	// Read the field from the collection's bulk-loaded fields. Writes still
-	// go through core-data so edits land in the same store the rest of the
-	// shell observes.
+	// Read from the collection field list. Saves still go through core-data,
+	// which keeps the rest of the shell on the same write path.
 	const field = useMappedField( recordId );
 	const { editEntityRecord, saveEditedEntityRecord } = useDispatch( 'core' );
 

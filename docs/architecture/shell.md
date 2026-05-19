@@ -19,17 +19,19 @@ The shell has two main work surfaces:
 
 The sidebar handles page navigation and nesting. Autosave is split between a client debounce and a small server-side revision throttle.
 
-## Data fetching: read entities from the canonical bulks
+## Data fetching: prefer existing bulk reads
 
-The shell keeps a small set of canonical bulk queries alive while it runs: active pages and collections (mounted by the sidebar), and the fields of the open collection (mounted by `CollectionFieldsProvider`). Components that need a single entity covered by one of those bulks should read it from the bulk instead of calling `useEntityRecord` by id. WordPress core-data's per-id resolver does not share resolution state with the bulk resolver ([gutenberg#19153](https://github.com/WordPress/gutenberg/issues/19153)), so calling `useEntityRecord` for a record the bulk has already cached still fires a fresh HTTP request. That tax is invisible on a normal Apache server but becomes painful in the Cortext desktop build, where every request pays the PHP-WASM cost.
+The shell already keeps a few bulk queries warm: active pages and collections from the sidebar, plus the open collection's fields from `CollectionFieldsProvider`. When a component needs one of those records, read it from the bulk instead of calling `useEntityRecord` by id.
 
-The shape of the convention:
+WordPress core-data tracks bulk and per-id resolvers separately ([gutenberg#19153](https://github.com/WordPress/gutenberg/issues/19153)), so a per-id read can make another HTTP request even when the record is already in the bulk cache. On the desktop build, that means paying the PHP-WASM startup cost again.
 
-- `useActivePages()` and `useCollections()` in `src/hooks/useEntityBulks.js` return the array plus a `get(id)` lookup against the canonical query.
+Current helpers:
+
+- `useActivePages()` and `useCollections()` in `src/hooks/useEntityBulks.js` return the array plus a `get(id)` lookup against the shared query.
 - `useMappedField(recordId)` in `src/components/CollectionFieldsContext.js` returns the parsed field record from the active collection.
 - Use `useEntityRecord` only for entities that are not covered by any bulk (rows inside a collection, media attachments) and for write paths (`editEntityRecord`/`saveEditedEntityRecord` still go through core-data).
 
-There is no fallback fetch when a bulk does not contain the requested id; the lookup returns null and the caller decides how to render that. Trashed entities and the brief first-paint race produce empty UI in the affected surface, which is acceptable because those routes do not render content either.
+The helpers do not fetch missing records. They return `null` (along with a `hasResolved` flag) and the caller decides what to show. The bulks cap at `per_page: 100`, so a record opened by direct URL or recents can fall outside them. Callers that must render for any valid id can pair the bulk read with a targeted `useEntityRecord` gated on `hasResolved`, the way `useBreadcrumbSegments` does.
 
 ## Current scope
 

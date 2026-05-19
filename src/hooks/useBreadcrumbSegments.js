@@ -10,6 +10,8 @@ import {
 	computeDocumentUri,
 } from '../router/useResolveEntity';
 
+const COLLECTION_POST_TYPE = 'crtxt_collection';
+
 // Prefer `title.raw` over `title.rendered`: WordPress runs rendered titles
 // through its formatting pipeline, so `&` becomes `&#038;` etc. React would
 // then show the literal entity text in the bar (we don't use
@@ -24,8 +26,8 @@ function titleOf( entity ) {
 
 // Returns the breadcrumb segments for the currently painted surface. Driven by
 // `paintedRoute` (from EntityRoute) rather than the URL so the breadcrumb
-// updates in lockstep with the document-actions Fill, so both sides of the
-// top bar describe the same entity even mid-navigation.
+// updates in lockstep with the document-actions Fill. During navigation, both
+// sides of the top bar should still describe the same entity.
 //
 // Document targets carry a `postType`. Pages (`crtxt_page`) contribute the
 // natural ancestor chain; rows (dynamic `crtxt_<slug>`) contribute their
@@ -47,14 +49,40 @@ export default function useBreadcrumbSegments( paintedRoute ) {
 		collectionId = paintedRoute.collectionId ?? null;
 	}
 
-	// Pages and collections come from the shell's canonical bulks. The chain
-	// traversal needs to walk parents by id, so we use `byId` directly
-	// instead of the `get` accessor.
-	const { byId: pagesById } = useActivePages();
-	const { get: getCollection } = useCollections();
+	// Pages and collections come from the shell's shared bulk reads. Page
+	// breadcrumbs walk parent ids, so use the map directly.
+	const { byId: pagesById, hasResolved: pagesResolved } = useActivePages();
+	const { get: getCollection, hasResolved: collectionsResolved } =
+		useCollections();
 
-	// Rows are not part of any bulk this hook owns (they live behind
-	// per-collection endpoints), so the row title still needs its own fetch.
+	// Bulks are capped at `per_page: 100`, but `useResolveDocument`/
+	// `useResolveCollection` can open any valid id via direct URL. When the
+	// current id isn't in the bulk after it resolves, fall back to a
+	// targeted `useEntityRecord` so the breadcrumb still renders. The
+	// `enabled` gate waits for `hasResolved` so the common case (id is in
+	// the bulk) never fires this fetch.
+	const pageMissingFromBulk =
+		pageId !== null && pagesResolved && ! pagesById.has( pageId );
+	const { record: fallbackPage } = useEntityRecord(
+		'postType',
+		PAGE_POST_TYPE,
+		pageId ?? 0,
+		{ enabled: pageMissingFromBulk }
+	);
+
+	const collectionMissingFromBulk =
+		collectionId !== null &&
+		collectionsResolved &&
+		! getCollection( collectionId );
+	const { record: fallbackCollection } = useEntityRecord(
+		'postType',
+		COLLECTION_POST_TYPE,
+		collectionId ?? 0,
+		{ enabled: collectionMissingFromBulk }
+	);
+
+	// Rows are behind per-collection endpoints, so the row title still needs
+	// its own fetch.
 	const { record: currentRow } = useEntityRecord(
 		'postType',
 		rowPostType ?? '',
@@ -84,7 +112,9 @@ export default function useBreadcrumbSegments( paintedRoute ) {
 
 	return useMemo( () => {
 		if ( pageId ) {
-			const head = pagesById.get( pageId );
+			const head =
+				pagesById.get( pageId ) ??
+				( fallbackPage?.id === pageId ? fallbackPage : null );
 			if ( ! head ) {
 				return [];
 			}
@@ -112,7 +142,11 @@ export default function useBreadcrumbSegments( paintedRoute ) {
 		}
 
 		if ( collectionId ) {
-			const collection = getCollection( collectionId );
+			const collection =
+				getCollection( collectionId ) ??
+				( fallbackCollection?.id === collectionId
+					? fallbackCollection
+					: null );
 			if ( ! collection ) {
 				return [];
 			}
@@ -150,6 +184,8 @@ export default function useBreadcrumbSegments( paintedRoute ) {
 		rowPostType,
 		pagesById,
 		getCollection,
+		fallbackPage,
+		fallbackCollection,
 		currentRow,
 		goToPage,
 		goToCollection,
