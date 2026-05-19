@@ -208,12 +208,10 @@ function DocumentCommandRegistration( { canvasRef, document } ) {
 	return null;
 }
 
-function firstDocumentValue( documents ) {
-	const first = documents[ 0 ];
-	if ( ! first ) {
-		return undefined;
-	}
-	return `document-cortext/document/${ first.kind }-${ first.id }`;
+function documentCommandValues( documents ) {
+	return documents.map(
+		( doc ) => `document-cortext/document/${ doc.kind }-${ doc.id }`
+	);
 }
 
 function DocumentResultsRegistration( {
@@ -251,7 +249,7 @@ function DocumentResultsRegistration( {
 			return;
 		}
 		setHasEverResolved( true );
-		onDocumentsResolved( firstDocumentValue( documents ) );
+		onDocumentsResolved( documentCommandValues( documents ) );
 	}, [ hasFreshDocuments, documents, onDocumentsResolved ] );
 
 	useEffect( () => {
@@ -339,11 +337,20 @@ function CommandPaletteContents( {
 		}
 	}, [ isPaletteOpen ] );
 
-	const handleDocumentsResolved = useCallback( ( firstValue ) => {
-		if ( ! firstValue ) {
+	const handleDocumentsResolved = useCallback( ( values ) => {
+		if ( values.length === 0 ) {
 			return;
 		}
-		setSelectedValue( ( current ) => current ?? firstValue );
+		setSelectedValue( ( current ) => {
+			// If the user's current selection survived into the new
+			// result set, keep it. Otherwise jump to the first new doc so
+			// the highlight does not blink off while cmdk's internal
+			// recovery is still scheduled.
+			if ( current && values.includes( current ) ) {
+				return current;
+			}
+			return values[ 0 ];
+		} );
 	}, [] );
 
 	return (

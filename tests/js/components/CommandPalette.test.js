@@ -458,6 +458,65 @@ describe( 'CommandPalette document search', () => {
 		expect( mockMenu.selectedValue ).toBeUndefined();
 	} );
 
+	it( 'moves the selection to the new first document when the previous pick is no longer in the results', () => {
+		mockIsPaletteOpen = true;
+		mockUseDocuments.mockReturnValue( {
+			documents: [
+				{ kind: 'page', id: 42, title: 'Alice', path: 'alice-42' },
+				{ kind: 'row', id: 77, title: 'Bob', path: 'bob-77' },
+			],
+			total: 2,
+			isLoading: false,
+			hasResolved: true,
+			error: null,
+			refresh: jest.fn(),
+		} );
+
+		render( <CommandPalette canvasRef={ { current: null } } /> );
+
+		act( () => {
+			mockMenu.setSearch( 'ali' );
+		} );
+		act( () => {
+			jest.advanceTimersByTime( 150 );
+		} );
+
+		// User arrows to the second doc.
+		act( () => {
+			mockMenu.onSelectedValueChange(
+				'document-cortext/document/row-77'
+			);
+		} );
+		expect( mockMenu.selectedValue ).toBe(
+			'document-cortext/document/row-77'
+		);
+
+		// Refinement returns a set that no longer contains row-77. The
+		// selection has to jump to the new first doc so cmdk does not show
+		// a frame with nothing highlighted.
+		mockUseDocuments.mockReturnValue( {
+			documents: [
+				{ kind: 'row', id: 99, title: 'Alicia', path: 'alicia-99' },
+				{ kind: 'page', id: 42, title: 'Alice', path: 'alice-42' },
+			],
+			total: 2,
+			isLoading: false,
+			hasResolved: true,
+			error: null,
+			refresh: jest.fn(),
+		} );
+		act( () => {
+			mockMenu.setSearch( 'alic' );
+		} );
+		act( () => {
+			jest.advanceTimersByTime( 150 );
+		} );
+
+		expect( mockMenu.selectedValue ).toBe(
+			'document-cortext/document/row-99'
+		);
+	} );
+
 	it( 'clears the input and the controlled selection when the palette closes', () => {
 		mockIsPaletteOpen = true;
 		mockUseDocuments.mockReturnValue( {
