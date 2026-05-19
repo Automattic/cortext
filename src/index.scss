@@ -1050,6 +1050,17 @@ body.cortext-sidebar-resizing {
 	}
 }
 
+// During the cross-fade both snapshots drop to ~50% opacity for a frame
+// or two. The pseudo overlay sits above the DOM, and the original canvas
+// element is hidden by the browser for the duration, so anything visible
+// through the snapshots' transparent pixels falls all the way through to
+// the user-agent background (which is black in dark mode). Pinning a
+// solid frame surface on the group covers that gap with the same color
+// the canvas paints natively.
+::view-transition-group(cortext-canvas) {
+	background: var(--cortext-canvas-frame-surface);
+}
+
 @media (prefers-reduced-motion: reduce) {
 
 	::view-transition-group(cortext-canvas),
