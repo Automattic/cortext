@@ -122,10 +122,13 @@ importers:
         version: 11.4.0(@types/node@20.19.39)
       '@wordpress/prettier-config':
         specifier: ^4.46.0
-        version: 4.46.0(prettier@3.8.3)
+        version: 4.46.0(wp-prettier@3.0.3)
       '@wordpress/scripts':
         specifier: ^32.0.0
         version: 32.0.0(@playwright/test@1.59.1)(@types/eslint@9.6.1)(@types/node@20.19.39)(@typescript-eslint/eslint-plugin@8.59.0(@typescript-eslint/parser@8.59.0(eslint@10.2.1)(typescript@6.0.3))(eslint@10.2.1)(typescript@6.0.3))(@typescript-eslint/parser@8.59.0(eslint@10.2.1)(typescript@6.0.3))(@wordpress/env@11.4.0(@types/node@20.19.39))(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(stylelint-scss@6.14.0(stylelint@16.26.1(typescript@6.0.3)))(type-fest@4.41.0)(typescript@6.0.3)
+      prettier:
+        specifier: npm:wp-prettier@3.0.3
+        version: wp-prettier@3.0.3
       react:
         specifier: 18.3.1
         version: 18.3.1
@@ -7094,11 +7097,6 @@ packages:
     resolution: {integrity: sha512-SxToR7P8Y2lWmv/kTzVLC1t/GDI2WGjMwNhLLE9qtH8Q13C+aEmuRlzDst4Up4s0Wc8sF2M+J57iB3cMLqftfg==}
     engines: {node: '>=6.0.0'}
 
-  prettier@3.8.3:
-    resolution: {integrity: sha512-7igPTM53cGHMW8xWuVTydi2KO233VFiTNyF5hLJqpilHfmn8C8gPf+PS7dUT64YcXFbiMGZxS9pCSxL/Dxm/Jw==}
-    engines: {node: '>=14'}
-    hasBin: true
-
   pretty-format@27.5.1:
     resolution: {integrity: sha512-Qb1gy5OrP5+zDf2Bvnzdl3jsTf1qXVMazbvCoKhtKqVs4/YK4ozX4gKQJJVyNe+cajNPn0KoC0MC3FUmaHWEmQ==}
     engines: {node: ^10.13.0 || ^12.13.0 || ^14.15.0 || >=15.0.0}
@@ -13381,9 +13379,9 @@ snapshots:
     dependencies:
       prettier: wp-prettier@3.0.3
 
-  '@wordpress/prettier-config@4.46.0(prettier@3.8.3)':
+  '@wordpress/prettier-config@4.46.0(wp-prettier@3.0.3)':
     dependencies:
-      prettier: 3.8.3
+      prettier: wp-prettier@3.0.3
 
   '@wordpress/primitives@4.45.0(react@18.3.1)':
     dependencies:
@@ -18077,8 +18075,6 @@ snapshots:
   prettier-linter-helpers@1.0.1:
     dependencies:
       fast-diff: 1.3.0
-
-  prettier@3.8.3: {}
 
   pretty-format@27.5.1:
     dependencies:

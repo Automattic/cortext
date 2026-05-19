@@ -7,6 +7,7 @@ node_modules/
 vendor/
 build/
 dist/
+wordpress/
 
 # Lockfiles
 package-lock.json

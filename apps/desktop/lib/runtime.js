@@ -42,7 +42,9 @@ function resolveExecutable( envName, bundledPath, commandName, installHint ) {
 		if ( fs.existsSync( configured ) || commandExists( configured ) ) {
 			return configured;
 		}
-		throw new Error( `${ envName } points to a missing executable: ${ configured }` );
+		throw new Error(
+			`${ envName } points to a missing executable: ${ configured }`
+		);
 	}
 	if ( bundledPath && fs.existsSync( bundledPath ) ) {
 		return bundledPath;
@@ -91,7 +93,9 @@ function configureObjectCacheDropIn( wordpressDir, appDir ) {
 
 	if ( process.env.CORTEXT_DESKTOP_OBJECT_CACHE === 'apcu' ) {
 		if ( ! fs.existsSync( sourcePath ) ) {
-			throw new Error( `APCu object-cache drop-in not found at ${ sourcePath }.` );
+			throw new Error(
+				`APCu object-cache drop-in not found at ${ sourcePath }.`
+			);
 		}
 		fs.copyFileSync( sourcePath, dropInPath );
 		return;
@@ -195,7 +199,10 @@ function addProcess( handle, name, command, args, options = {} ) {
 		console.log(
 			`[cortext-desktop] ${ name } exited (code=${ code }, signal=${ signal })`
 		);
-		if ( ! handle.stopping && typeof handle.onUnexpectedExit === 'function' ) {
+		if (
+			! handle.stopping &&
+			typeof handle.onUnexpectedExit === 'function'
+		) {
 			handle.onUnexpectedExit( name, code, signal );
 		}
 	} );
@@ -211,7 +218,9 @@ function waitForHttpReady( handle, port, timeoutMs = 30000 ) {
 		const timeout = setTimeout( () => {
 			fail(
 				new Error(
-					`Runtime startup timed out (${ timeoutMs / 1000 }s). Last failure: ${
+					`Runtime startup timed out (${
+						timeoutMs / 1000
+					}s). Last failure: ${
 						lastFailure ? String( lastFailure ) : 'no HTTP response'
 					}`
 				)
@@ -326,17 +335,11 @@ function startPhpCli( handle, wordpressDir, port, appDir, runtimeStateDir ) {
 	if ( workers ) {
 		phpEnv.PHP_CLI_SERVER_WORKERS = workers;
 	}
-	addProcess(
-		handle,
-		'php',
-		phpBin,
-		phpArgs,
-		{
-			cwd: wordpressDir,
-			env: phpEnv,
-			detached: Number.parseInt( workers || '1', 10 ) > 1,
-		}
-	);
+	addProcess( handle, 'php', phpBin, phpArgs, {
+		cwd: wordpressDir,
+		env: phpEnv,
+		detached: Number.parseInt( workers || '1', 10 ) > 1,
+	} );
 }
 
 function startFrankenPhp( handle, wordpressDir, port, appDir ) {
@@ -379,7 +382,9 @@ function startFrankenPhp( handle, wordpressDir, port, appDir ) {
 
 function writePhpFpmConfig( runtimeStateDir, wordpressDir ) {
 	fs.mkdirSync( runtimeStateDir, { recursive: true } );
-	const socketDir = fs.mkdtempSync( path.join( os.tmpdir(), 'cortext-fpm-' ) );
+	const socketDir = fs.mkdtempSync(
+		path.join( os.tmpdir(), 'cortext-fpm-' )
+	);
 	const socketPath = path.join( socketDir, 'fpm.sock' );
 	const configPath = path.join( runtimeStateDir, 'php-fpm.conf' );
 	const children = process.env.CORTEXT_PHP_FPM_CHILDREN || '2';
@@ -416,7 +421,13 @@ function writePhpFpmConfig( runtimeStateDir, wordpressDir ) {
 	return { configPath, socketDir, socketPath };
 }
 
-function startPhpFpmCaddy( handle, wordpressDir, port, appDir, runtimeStateDir ) {
+function startPhpFpmCaddy(
+	handle,
+	wordpressDir,
+	port,
+	appDir,
+	runtimeStateDir
+) {
 	const phpFpmBin = resolveExecutable(
 		'CORTEXT_PHP_FPM_BIN',
 		path.join( appDir, 'runtime/bin/php-fpm' ),
@@ -504,7 +515,9 @@ function stopRuntime( handle ) {
 		return;
 	}
 	handle.stopping = true;
-	for ( const { child, killProcessGroup } of [ ...handle.processes ].reverse() ) {
+	for ( const { child, killProcessGroup } of [
+		...handle.processes,
+	].reverse() ) {
 		if ( child && child.exitCode === null && child.signalCode === null ) {
 			try {
 				if ( killProcessGroup && child.pid ) {

@@ -23,16 +23,10 @@ const SNAPSHOT_PATH = path.join( APP_PATH, 'snapshot.zip' );
 function getUserDataPath() {
 	const home = os.homedir();
 	if ( process.platform === 'darwin' ) {
-		return path.join(
-			home,
-			'Library/Application Support/cortext-desktop'
-		);
+		return path.join( home, 'Library/Application Support/cortext-desktop' );
 	}
 	if ( process.platform === 'win32' ) {
-		return path.join(
-			process.env.APPDATA ?? home,
-			'cortext-desktop'
-		);
+		return path.join( process.env.APPDATA ?? home, 'cortext-desktop' );
 	}
 	return path.join(
 		process.env.XDG_CONFIG_HOME ?? path.join( home, '.config' ),

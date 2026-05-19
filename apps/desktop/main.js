@@ -32,13 +32,13 @@ function ensureSiteFromSnapshot() {
 	fs.mkdirSync( siteRoot, { recursive: true } );
 	// macOS `unzip` can exit 1 for warnings such as "stripped absolute path".
 	// Treat extraction as successful only if the WordPress files appear below.
-	spawnSync(
-		'unzip',
-		[ '-q', '-o', SNAPSHOT_ZIP, '-d', siteRoot ],
-		{ stdio: [ 'ignore', 'ignore', 'ignore' ] }
-	);
+	spawnSync( 'unzip', [ '-q', '-o', SNAPSHOT_ZIP, '-d', siteRoot ], {
+		stdio: [ 'ignore', 'ignore', 'ignore' ],
+	} );
 	if ( ! fs.existsSync( path.join( wordpressDir, 'index.php' ) ) ) {
-		throw new Error( `Snapshot extraction failed: ${ wordpressDir } is empty.` );
+		throw new Error(
+			`Snapshot extraction failed: ${ wordpressDir } is empty.`
+		);
 	}
 	return wordpressDir;
 }
@@ -76,7 +76,10 @@ app.whenReady().then( () => {
 		runtimeHandle = startRuntime( {
 			appDir: __dirname,
 			wordpressDir,
-			runtimeStateDir: path.join( app.getPath( 'temp' ), 'cortext-desktop-runtime' ),
+			runtimeStateDir: path.join(
+				app.getPath( 'temp' ),
+				'cortext-desktop-runtime'
+			),
 			onUnexpectedExit: () => {
 				if ( ! quitting ) {
 					app.quit();
