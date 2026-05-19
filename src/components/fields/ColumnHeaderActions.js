@@ -34,7 +34,10 @@ import ChangeFieldTypePopover from './ChangeFieldTypePopover';
 import EditOptionsPopover from './EditOptionsPopover';
 import FieldFormatPopover from './FieldFormatPopover';
 import RenameFieldInline from './RenameFieldInline';
-import { useCollectionFieldsContext } from '../CollectionFieldsContext';
+import {
+	useCollectionFieldsContext,
+	useMappedField,
+} from '../CollectionFieldsContext';
 import { TableCalculationPopover } from '../TableCalculationMenu';
 import {
 	useDeleteField,
@@ -202,14 +205,7 @@ function FieldActions( {
 	const duplicate = useDuplicateField( collectionId );
 	const remove = useDeleteField( collectionId );
 	const { fields } = useCollectionFieldsContext();
-	// `useCollectionFields` already mapped every column to a DataViews field
-	// that carries the type and parsed options. Reading from that context
-	// avoids the per-column `useEntityRecord` refetch that core-data fires
-	// even when the record is already in cache.
-	const mappedField = useMemo(
-		() => fields.find( ( f ) => f.recordId === recordId ) ?? null,
-		[ fields, recordId ]
-	);
+	const mappedField = useMappedField( recordId );
 	const fieldType = mappedField?.cortextType;
 	const canFormat = FORMATTABLE_TYPES.has( fieldType );
 	const supportsOptions = TYPES_WITH_OPTIONS.has( fieldType );
@@ -487,7 +483,6 @@ function FieldActions( {
 			<span className="cortext-column-header-actions">
 				<RenameFieldInline
 					recordId={ recordId }
-					initialTitle={ mappedField?.label ?? '' }
 					onDone={ () => setIsRenaming( false ) }
 				/>
 			</span>
@@ -677,7 +672,6 @@ function FieldActions( {
 			{ isFormatting && canFormat ? (
 				<FieldFormatPopover
 					recordId={ recordId }
-					field={ mappedField }
 					anchor={ formatItemRef.current }
 					focusOnMount={ shouldFocusFormat ? 'firstElement' : false }
 					onClose={ closeFormat }

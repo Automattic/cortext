@@ -1,19 +1,14 @@
 import { __ } from '@wordpress/i18n';
-import { useEntityRecord, useEntityRecords } from '@wordpress/core-data';
+import { useEntityRecord } from '@wordpress/core-data';
 import { useNavigate } from '@tanstack/react-router';
 import { useCallback, useMemo } from '@wordpress/element';
 
-import {
-	ACTIVE_PAGES_QUERY,
-	POST_TYPE as PAGE_POST_TYPE,
-} from '../components/page-queries';
-import { COLLECTION_QUERY } from '../collections';
+import { POST_TYPE as PAGE_POST_TYPE } from '../components/page-queries';
+import { useActivePages, useCollections } from './useEntityBulks';
 import {
 	computeCollectionUri,
 	computeDocumentUri,
 } from '../router/useResolveEntity';
-
-const COLLECTION_POST_TYPE = 'crtxt_collection';
 
 // Prefer `title.raw` over `title.rendered`: WordPress runs rendered titles
 // through its formatting pipeline, so `&` becomes `&#038;` etc. React would
@@ -29,8 +24,8 @@ function titleOf( entity ) {
 
 // Returns the breadcrumb segments for the currently painted surface. Driven by
 // `paintedRoute` (from EntityRoute) rather than the URL so the breadcrumb
-// updates in lockstep with the document-actions Fill — both sides of the top
-// bar describe the same entity even mid-navigation.
+// updates in lockstep with the document-actions Fill, so both sides of the
+// top bar describe the same entity even mid-navigation.
 //
 // Document targets carry a `postType`. Pages (`crtxt_page`) contribute the
 // natural ancestor chain; rows (dynamic `crtxt_<slug>`) contribute their
@@ -52,23 +47,11 @@ export default function useBreadcrumbSegments( paintedRoute ) {
 		collectionId = paintedRoute.collectionId ?? null;
 	}
 
-	// Pages and collections already arrive via the bulk queries below. The
-	// active page/collection for the current breadcrumb is read from those
-	// arrays (see `pagesById.get`/`collections.find` further down) instead of
-	// firing a per-id `useEntityRecord`, which would re-request a record the
-	// bulk has already cached. Core-data's per-id resolver does not share
-	// resolution state with the bulk resolver (WordPress/gutenberg#19153), so
-	// avoiding it is the cheapest way to dodge the duplicate request.
-	const { records: pages } = useEntityRecords(
-		'postType',
-		PAGE_POST_TYPE,
-		ACTIVE_PAGES_QUERY
-	);
-	const { records: collections } = useEntityRecords(
-		'postType',
-		COLLECTION_POST_TYPE,
-		COLLECTION_QUERY
-	);
+	// Pages and collections come from the shell's canonical bulks. The chain
+	// traversal needs to walk parents by id, so we use `byId` directly
+	// instead of the `get` accessor.
+	const { byId: pagesById } = useActivePages();
+	const { get: getCollection } = useCollections();
 
 	// Rows are not part of any bulk this hook owns (they live behind
 	// per-collection endpoints), so the row title still needs its own fetch.
@@ -101,9 +84,6 @@ export default function useBreadcrumbSegments( paintedRoute ) {
 
 	return useMemo( () => {
 		if ( pageId ) {
-			const pagesById = new Map(
-				( pages ?? [] ).map( ( p ) => [ p.id, p ] )
-			);
 			const head = pagesById.get( pageId );
 			if ( ! head ) {
 				return [];
@@ -132,9 +112,7 @@ export default function useBreadcrumbSegments( paintedRoute ) {
 		}
 
 		if ( collectionId ) {
-			const collection = ( collections ?? [] ).find(
-				( c ) => c.id === collectionId
-			);
+			const collection = getCollection( collectionId );
 			if ( ! collection ) {
 				return [];
 			}
@@ -170,8 +148,8 @@ export default function useBreadcrumbSegments( paintedRoute ) {
 		collectionId,
 		rowId,
 		rowPostType,
-		pages,
-		collections,
+		pagesById,
+		getCollection,
 		currentRow,
 		goToPage,
 		goToCollection,

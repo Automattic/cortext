@@ -11,6 +11,7 @@ import { forwardRef, useMemo, useRef } from '@wordpress/element';
 import { check, chevronRight } from '@wordpress/icons';
 
 import { useSubmenuPlacement } from '../../hooks/useSubmenuPlacement';
+import { useMappedField } from '../CollectionFieldsContext';
 import { FORMAT_COLORS, findFormatColor } from './formatColors';
 
 const FOCUSABLE_CONTROL_SELECTOR = [
@@ -820,7 +821,6 @@ function DateFormBody( {
 // tabbing enters the panel instead of moving to the next table column.
 export default function FieldFormatPopover( {
 	recordId,
-	field,
 	anchor,
 	focusOnMount = false,
 	onClose,
@@ -829,20 +829,17 @@ export default function FieldFormatPopover( {
 	onMouseLeave,
 } ) {
 	const panelRef = useRef( null );
-	// The caller passes the mapped field (from `useCollectionFields`) so we
-	// can read the type and parsed format without re-fetching the underlying
-	// crtxt_field record. Writes still go through core-data so edits land
-	// in the same store the rest of the shell observes.
+	// Read the field from the collection's bulk-loaded fields. Writes still
+	// go through core-data so edits land in the same store the rest of the
+	// shell observes.
+	const field = useMappedField( recordId );
 	const { editEntityRecord, saveEditedEntityRecord } = useDispatch( 'core' );
 
 	const type = field?.cortextType ?? 'text';
 	const isNumber = type === 'number';
 	const isDate = type === 'date' || type === 'datetime';
 
-	const initial = useMemo(
-		() => field?.cortextFormat ?? null,
-		[ field ]
-	);
+	const initial = useMemo( () => field?.cortextFormat ?? null, [ field ] );
 
 	const persist = async ( next ) => {
 		if ( ! field ) {

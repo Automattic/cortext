@@ -19,6 +19,18 @@ The shell has two main work surfaces:
 
 The sidebar handles page navigation and nesting. Autosave is split between a client debounce and a small server-side revision throttle.
 
+## Data fetching: read entities from the canonical bulks
+
+The shell keeps a small set of canonical bulk queries alive while it runs: active pages and collections (mounted by the sidebar), and the fields of the open collection (mounted by `CollectionFieldsProvider`). Components that need a single entity covered by one of those bulks should read it from the bulk instead of calling `useEntityRecord` by id. WordPress core-data's per-id resolver does not share resolution state with the bulk resolver ([gutenberg#19153](https://github.com/WordPress/gutenberg/issues/19153)), so calling `useEntityRecord` for a record the bulk has already cached still fires a fresh HTTP request. That tax is invisible on a normal Apache server but becomes painful in the Cortext desktop build, where every request pays the PHP-WASM cost.
+
+The shape of the convention:
+
+- `useActivePages()` and `useCollections()` in `src/hooks/useEntityBulks.js` return the array plus a `get(id)` lookup against the canonical query.
+- `useMappedField(recordId)` in `src/components/CollectionFieldsContext.js` returns the parsed field record from the active collection.
+- Use `useEntityRecord` only for entities that are not covered by any bulk (rows inside a collection, media attachments) and for write paths (`editEntityRecord`/`saveEditedEntityRecord` still go through core-data).
+
+There is no fallback fetch when a bulk does not contain the requested id; the lookup returns null and the caller decides how to render that. Trashed entities and the brief first-paint race produce empty UI in the affected surface, which is acceptable because those routes do not render content either.
+
 ## Current scope
 
 The shell supports pages, collections, embedded collection views, row details, relations, rollups, and basic public rendering for pages. Several editor edges are still prototype-quality, especially layout fidelity, concurrent editing, and bulk actions.

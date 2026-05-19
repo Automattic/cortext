@@ -3,12 +3,15 @@ import { TextControl } from '@wordpress/components';
 import { useEffect, useRef, useState } from '@wordpress/element';
 
 import { useRenameField } from '../../hooks/useFieldMutations';
+import { useMappedField } from '../CollectionFieldsContext';
 
-// Inline rename affordance. Shown in place of the column header label
-// while the user edits; commits on Enter or blur. The caller passes the
-// current title directly (already resolved upstream from
-// `useCollectionFields`), so this component does not fetch it again.
-export default function RenameFieldInline( { recordId, initialTitle = '', onDone } ) {
+// Inline rename affordance. Shown in place of the column header label while
+// the user edits; commits on Enter or blur. The current title is read from
+// the collection's bulk-loaded fields via `useMappedField` rather than via
+// `useEntityRecord`, so opening rename does not refetch the field record.
+export default function RenameFieldInline( { recordId, onDone } ) {
+	const mappedField = useMappedField( recordId );
+	const initialTitle = mappedField?.label ?? '';
 	const [ value, setValue ] = useState( initialTitle );
 	const inputRef = useRef( null );
 	const { run, isBusy } = useRenameField();
