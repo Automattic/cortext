@@ -1,6 +1,6 @@
 import { useEntityRecord } from '@wordpress/core-data';
 import { Icon, page as pageGlyph } from '@wordpress/icons';
-import { useMemo } from '@wordpress/element';
+import { useEffect, useMemo, useState } from '@wordpress/element';
 
 import PageIconWp from './PageIconWp';
 import useDelayedFlag from '../hooks/useDelayedFlag';
@@ -68,45 +68,54 @@ function ImageIcon( { id, size, alt, className } ) {
 		record?.media_details?.sizes?.thumbnail?.source_url ??
 		record?.source_url ??
 		null;
-	// Only paint the loading swatch if the fetch takes long enough to
-	// matter. Cache hits resolve before the timer fires, so a square skeleton
-	// never flashes in those.
-	const showLoadingSwatch = useDelayedFlag( ! src );
+	// Two-phase wait: we don't consider the icon ready until the REST
+	// record has the URL AND the browser has actually painted the image.
+	// Without the second phase the swatch unmounts the moment `src` is
+	// set, leaving an empty gap until the network fetch finishes.
+	const [ hasImagePainted, setHasImagePainted ] = useState( false );
+	useEffect( () => {
+		setHasImagePainted( false );
+	}, [ src ] );
+
+	const isLoading = ! src || ! hasImagePainted;
+	const showLoadingSwatch = useDelayedFlag( isLoading );
 	const classes = [ 'cortext-document-icon' ];
 	if ( className ) {
 		classes.push( className );
 	}
 
-	if ( ! src ) {
-		const loadingClasses = classes.concat(
-			'cortext-document-icon--image-loading'
-		);
-		if ( showLoadingSwatch ) {
-			loadingClasses.push(
-				'cortext-document-icon--image-loading-visible'
-			);
-		}
-		return (
-			<span
-				className={ loadingClasses.join( ' ' ) }
-				style={ { width: size, height: size } }
-				aria-hidden="true"
-			/>
-		);
-	}
+	const wrapperClasses = classes
+		.concat( 'cortext-document-icon--image-wrap' )
+		.join( ' ' );
+	const swatchClasses = [
+		'cortext-document-icon--image-loading',
+		showLoadingSwatch && 'cortext-document-icon--image-loading-visible',
+	]
+		.filter( Boolean )
+		.join( ' ' );
 
 	return (
-		<img
-			className={ classes
-				.concat( 'cortext-document-icon--image' )
-				.join( ' ' ) }
-			src={ src }
-			alt={ alt ?? '' }
-			width={ size }
-			height={ size }
-			loading="lazy"
-			decoding="async"
-		/>
+		<span
+			className={ wrapperClasses }
+			style={ { width: size, height: size } }
+		>
+			{ isLoading && (
+				<span className={ swatchClasses } aria-hidden="true" />
+			) }
+			{ src && (
+				<img
+					className="cortext-document-icon--image"
+					src={ src }
+					alt={ alt ?? '' }
+					width={ size }
+					height={ size }
+					loading="lazy"
+					decoding="async"
+					onLoad={ () => setHasImagePainted( true ) }
+					style={ { opacity: hasImagePainted ? 1 : 0 } }
+				/>
+			) }
+		</span>
 	);
 }
 

@@ -5132,13 +5132,34 @@ thead > tr > th {
 		border-radius: 3px;
 	}
 
+	// Wrapper around an image-type icon: stacks the skeleton swatch
+	// underneath the <img> so the swatch keeps the slot painted until
+	// the actual image bytes arrive, not just until the REST record
+	// returns a URL.
+	&--image-wrap {
+		position: relative;
+		display: inline-block;
+		flex: 0 0 auto;
+		vertical-align: middle;
+	}
+
+	&--image-wrap .cortext-document-icon--image {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+		transition: opacity 80ms ease-out;
+	}
+
 	// Reserves the icon slot the moment an image-type icon is parsed but
 	// before the media record resolves. Stays transparent for the first
 	// useDelayedFlag window so a cache hit never flashes a swatch; the
 	// `--visible` modifier paints the skeleton appearance once the wait
 	// crosses the threshold.
 	&--image-loading {
-		display: inline-block;
+		position: absolute;
+		inset: 0;
+		display: block;
 		border-radius: 3px;
 	}
 
