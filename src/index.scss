@@ -4048,7 +4048,7 @@ tr:has(.cortext-title-cell--is-opening)
 .cortext-canvas-progress {
 	position: relative;
 	width: 100%;
-	height: 2px;
+	height: 3px;
 	overflow: hidden;
 	background: transparent;
 	flex: 0 0 auto;
@@ -4060,10 +4060,9 @@ tr:has(.cortext-title-cell--is-opening)
 		left: -40%;
 		width: 40%;
 		height: 100%;
-		background: var(--cortext-text, #1e1e1e);
-		opacity: 0.55;
+		background: var(--wp-admin-theme-color, #007cba);
 		border-radius: 2px;
-		animation: cortext-canvas-progress-slide 1.6s ease-in-out infinite;
+		animation: cortext-canvas-progress-slide 1.4s ease-in-out infinite;
 	}
 }
 
