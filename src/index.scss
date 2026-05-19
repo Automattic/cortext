@@ -1341,6 +1341,18 @@ body.cortext-sidebar-resizing {
 		overflow: auto;
 	}
 
+	// Overlay shown during cross-doc navigation: the previous post stays
+	// visible (Canvas's hold pattern, to not lose unsaved edits), so the
+	// bar sits on top of it to signal "new content on the way".
+	&__pending-progress {
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		z-index: 5;
+		pointer-events: none;
+	}
+
 	// The trashed-page banner stacks above the BlockCanvas. Make the
 	// content slot a flex column so the canvas keeps its `height: 100%`
 	// behavior (it now fills the remaining space). Couples to a

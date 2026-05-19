@@ -377,7 +377,18 @@ export default function Canvas( {
 		} );
 	}, [ requestedPost ] );
 
-	const showProgress = useDelayedFlag( ! renderedPost );
+	const pendingPost =
+		renderedPost &&
+		requestedPost &&
+		( requestedPost.type !== renderedPost.type ||
+			requestedPost.id !== renderedPost.id )
+			? requestedPost
+			: null;
+	// Active for first-load (no rendered post yet) AND for cross-doc swaps
+	// where the current post is still visible while the new one loads.
+	const showProgress = useDelayedFlag(
+		! renderedPost || pendingPost !== null
+	);
 	if ( ! renderedPost ) {
 		return (
 			<div className="cortext-canvas__loading cortext-canvas__loading--document">
@@ -386,35 +397,35 @@ export default function Canvas( {
 		);
 	}
 
-	const pendingPost =
-		requestedPost &&
-		( requestedPost.type !== renderedPost.type ||
-			requestedPost.id !== renderedPost.id )
-			? requestedPost
-			: null;
-
 	return (
-		<EditorProvider
-			post={ renderedPost }
-			settings={ window.cortextEditorSettings ?? {} }
-			useSubRegistry={ useSubRegistry }
-		>
-			<CanvasEditor
+		<>
+			{ showProgress && (
+				<div className="cortext-canvas__pending-progress">
+					<CanvasProgressBar />
+				</div>
+			) }
+			<EditorProvider
 				post={ renderedPost }
-				postType={ renderedPost.type }
-				fields={ fields }
-				row={ row }
-				pendingPost={ pendingPost }
-				onSwitchPost={ setDisplayedPost }
-				onDisplayedPost={ onDisplayedPost }
-				isActive={ isActive }
-				topBarActions={ topBarActions }
-				notice={ notice }
-				onApi={ onApi }
-				onSaved={ onSaved }
-				onRestored={ onRestored }
-				recentTarget={ recentTarget }
-			/>
-		</EditorProvider>
+				settings={ window.cortextEditorSettings ?? {} }
+				useSubRegistry={ useSubRegistry }
+			>
+				<CanvasEditor
+					post={ renderedPost }
+					postType={ renderedPost.type }
+					fields={ fields }
+					row={ row }
+					pendingPost={ pendingPost }
+					onSwitchPost={ setDisplayedPost }
+					onDisplayedPost={ onDisplayedPost }
+					isActive={ isActive }
+					topBarActions={ topBarActions }
+					notice={ notice }
+					onApi={ onApi }
+					onSaved={ onSaved }
+					onRestored={ onRestored }
+					recentTarget={ recentTarget }
+				/>
+			</EditorProvider>
+		</>
 	);
 }
