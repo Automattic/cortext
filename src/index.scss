@@ -5132,10 +5132,26 @@ thead > tr > th {
 		border-radius: 3px;
 	}
 
+	// Reserves the icon slot the moment an image-type icon is parsed but
+	// before the media record resolves. Stays transparent for the first
+	// useDelayedFlag window so a cache hit never flashes a swatch; the
+	// `--visible` modifier paints the skeleton appearance once the wait
+	// crosses the threshold.
 	&--image-loading {
 		display: inline-block;
-		background: var(--cortext-chrome-border);
 		border-radius: 3px;
+	}
+
+	&--image-loading-visible {
+		background: var(--cortext-state-hover-strong, rgba(0, 0, 0, 0.09));
+		animation: cortext-skeleton-pulse 1.4s ease-in-out infinite;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+	.cortext-document-icon--image-loading-visible {
+		animation: none;
 	}
 }
 

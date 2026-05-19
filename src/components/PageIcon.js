@@ -3,6 +3,7 @@ import { Icon, page as pageGlyph } from '@wordpress/icons';
 import { useMemo } from '@wordpress/element';
 
 import PageIconWp from './PageIconWp';
+import useDelayedFlag from '../hooks/useDelayedFlag';
 
 // Three shapes are persisted in the cortext_document_icon meta:
 //   { type: 'emoji', value: '📘' }
@@ -67,17 +68,27 @@ function ImageIcon( { id, size, alt, className } ) {
 		record?.media_details?.sizes?.thumbnail?.source_url ??
 		record?.source_url ??
 		null;
+	// Only paint the loading swatch if the fetch takes long enough to
+	// matter. Cache hits resolve before the timer fires, so a square skeleton
+	// never flashes in those.
+	const showLoadingSwatch = useDelayedFlag( ! src );
 	const classes = [ 'cortext-document-icon' ];
 	if ( className ) {
 		classes.push( className );
 	}
 
 	if ( ! src ) {
+		const loadingClasses = classes.concat(
+			'cortext-document-icon--image-loading'
+		);
+		if ( showLoadingSwatch ) {
+			loadingClasses.push(
+				'cortext-document-icon--image-loading-visible'
+			);
+		}
 		return (
 			<span
-				className={ classes
-					.concat( 'cortext-document-icon--image-loading' )
-					.join( ' ' ) }
+				className={ loadingClasses.join( ' ' ) }
 				style={ { width: size, height: size } }
 				aria-hidden="true"
 			/>
