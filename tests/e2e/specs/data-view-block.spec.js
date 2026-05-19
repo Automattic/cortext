@@ -454,11 +454,14 @@ test.describe( 'Collection view block', () => {
 				.click();
 
 			await expect( canvas.getByText( 'Title' ) ).toBeVisible();
+			// The placeholder creates collections as inline by default, so
+			// the new collection renders inside this block but does not
+			// appear in the sidebar's Collections section.
 			await expect(
 				page
 					.locator( '.cortext-sidebar' )
 					.getByText( 'Inline Books', { exact: true } )
-			).toBeVisible();
+			).toBeHidden();
 
 			await page.evaluate( async () => {
 				await window.wp.data.dispatch( 'core/editor' ).savePost();
@@ -483,6 +486,7 @@ test.describe( 'Collection view block', () => {
 			} );
 			fixture.createdFieldIds = createdCollection.meta.fields || [];
 			expect( createdCollection.meta.slug ).toBe( 'inline-books' );
+			expect( createdCollection.meta.workspace_mode ).toBe( 'inline' );
 			expect( fixture.createdFieldIds ).toEqual( [] );
 
 			await page
