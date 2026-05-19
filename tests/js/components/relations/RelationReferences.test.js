@@ -1,20 +1,26 @@
 import { render, screen } from '@testing-library/react';
 
+const mockOpenDocument = jest.fn();
+jest.mock( '../../../../src/components/DocumentPeekProvider', () => ( {
+	useDocumentPeekActions: () => ( {
+		openDocument: mockOpenDocument,
+		closeDocument: jest.fn(),
+		requestMode: jest.fn(),
+	} ),
+} ) );
+
 import RelationReferences from '../../../../src/components/relations/RelationReferences';
 
+const FIXTURE = {
+	id: 12,
+	slug: 'ada-lovelace',
+	title: { raw: 'Ada Lovelace' },
+	collectionId: 7,
+	collectionSlug: 'people',
+};
+
 function renderReferences() {
-	return render(
-		<RelationReferences
-			value={ [
-				{
-					id: 12,
-					title: { raw: 'Ada Lovelace' },
-					collectionId: 7,
-					collectionSlug: 'people',
-				},
-			] }
-		/>
-	);
+	return render( <RelationReferences value={ [ FIXTURE ] } /> );
 }
 
 beforeEach( () => {
@@ -22,29 +28,25 @@ beforeEach( () => {
 		adminUrl: 'https://example.test/wp-admin/',
 		menuSlug: 'cortext',
 	};
-	delete window.cortextRouter;
+	mockOpenDocument.mockReset();
 } );
 
 describe( 'RelationReferences', () => {
-	it( 'renders references as collection links', () => {
+	it( 'renders references with the row URL as href', () => {
 		renderReferences();
 
 		const link = screen.getByRole( 'link', { name: 'Ada Lovelace' } );
 		expect( link ).toHaveAttribute(
 			'href',
-			'https://example.test/wp-admin/admin.php?page=cortext&p=%2Fcollection%2Fpeople-7'
+			'https://example.test/wp-admin/admin.php?page=cortext&p=%2Fada-lovelace-12'
 		);
 		expect( link ).toHaveAttribute( 'target', '_top' );
 	} );
 
-	it( 'uses the Cortext router for plain relation link clicks', () => {
-		window.cortextRouter = { navigate: jest.fn() };
-
+	it( 'opens the related row on plain click', () => {
 		renderReferences();
 
-		const anchor = screen.getByRole( 'link', {
-			name: 'Ada Lovelace',
-		} );
+		const anchor = screen.getByRole( 'link', { name: 'Ada Lovelace' } );
 		const click = new window.MouseEvent( 'click', {
 			bubbles: true,
 			cancelable: true,
@@ -53,9 +55,28 @@ describe( 'RelationReferences', () => {
 		anchor.dispatchEvent( click );
 
 		expect( click.defaultPrevented ).toBe( true );
-		expect( window.cortextRouter.navigate ).toHaveBeenCalledWith( {
-			to: '/$',
-			params: { _splat: 'collection/people-7' },
+		expect( mockOpenDocument ).toHaveBeenCalledWith( {
+			id: 12,
+			slug: 'ada-lovelace',
+			postType: 'crtxt_people',
+			collectionId: 7,
+			preferredMode: 'side',
 		} );
+	} );
+
+	it( 'leaves Cmd-click to the browser and does not open a peek', () => {
+		renderReferences();
+
+		const anchor = screen.getByRole( 'link', { name: 'Ada Lovelace' } );
+		const click = new window.MouseEvent( 'click', {
+			bubbles: true,
+			cancelable: true,
+			button: 0,
+			metaKey: true,
+		} );
+		anchor.dispatchEvent( click );
+
+		expect( click.defaultPrevented ).toBe( false );
+		expect( mockOpenDocument ).not.toHaveBeenCalled();
 	} );
 } );

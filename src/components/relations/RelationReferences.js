@@ -1,13 +1,13 @@
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { Icon, arrowUpRight } from '@wordpress/icons';
 
-import {
-	collectionHref,
-	navigateToCollection,
-	relationTitle,
-} from './relationUtils';
+import { relationTitle, rowHref, shouldUseNativeLink } from './relationUtils';
+import { useDocumentPeekActions } from '../DocumentPeekProvider';
+import { useCurrentViewMode } from '../CurrentViewModeContext';
 
 export default function RelationReferences( { value } ) {
+	const { openDocument } = useDocumentPeekActions();
+	const currentViewMode = useCurrentViewMode();
 	const refs = Array.isArray( value ) ? value : [ value ];
 	const populated = refs.filter( ( ref ) => ref && ref.id );
 	if ( populated.length === 0 ) {
@@ -22,11 +22,24 @@ export default function RelationReferences( { value } ) {
 					<a
 						key={ ref.id }
 						className="cortext-relation-ref"
-						href={ collectionHref( ref ) }
+						href={ rowHref( ref ) }
 						target="_top"
-						onClick={ ( event ) =>
-							navigateToCollection( event, ref )
-						}
+						onClick={ ( event ) => {
+							event.stopPropagation();
+							if ( shouldUseNativeLink( event ) ) {
+								return;
+							}
+							event.preventDefault();
+							openDocument( {
+								id: ref.id,
+								slug: ref.slug ?? '',
+								postType: ref.collectionSlug
+									? `crtxt_${ ref.collectionSlug }`
+									: null,
+								collectionId: ref.collectionId,
+								preferredMode: currentViewMode,
+							} );
+						} }
 					>
 						<Icon
 							className="cortext-relation-ref__icon"

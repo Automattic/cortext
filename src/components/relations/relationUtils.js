@@ -17,42 +17,7 @@ export function relationTitle( entry ) {
 	return entry?.title?.raw || entry?.title?.rendered || `#${ entry?.id }`;
 }
 
-export function collectionRoute( ref ) {
-	const collectionId = Number( ref?.collectionId );
-	if ( ! collectionId ) {
-		return '';
-	}
-	const slug = String( ref?.collectionSlug ?? '' ).trim();
-	const tail = slug ? `${ slug }-${ collectionId }` : String( collectionId );
-	return `collection/${ tail }`;
-}
-
-export function collectionHref( ref ) {
-	const route = collectionRoute( ref );
-	if ( ! route ) {
-		return '#';
-	}
-	const adminUrl = window.cortextSettings?.adminUrl ?? '/wp-admin/';
-	const menuSlug = window.cortextSettings?.menuSlug ?? 'cortext';
-	const base = adminUrl.endsWith( '/' ) ? adminUrl : `${ adminUrl }/`;
-	const params = new URLSearchParams();
-	params.set( 'page', menuSlug );
-	params.set( 'p', `/${ route }` );
-	return `${ base }admin.php?${ params.toString() }`;
-}
-
-function topWindow() {
-	try {
-		if ( window.parent && window.parent !== window ) {
-			return window.parent;
-		}
-	} catch {
-		return window;
-	}
-	return window;
-}
-
-function shouldUseNativeLink( event ) {
+export function shouldUseNativeLink( event ) {
 	return (
 		event.defaultPrevented ||
 		event.button !== 0 ||
@@ -63,27 +28,25 @@ function shouldUseNativeLink( event ) {
 	);
 }
 
-export function navigateToCollection( event, ref ) {
-	event.stopPropagation();
-	if ( shouldUseNativeLink( event ) ) {
-		return;
+export function rowRoute( ref ) {
+	const rowId = Number( ref?.id );
+	if ( ! rowId ) {
+		return '';
 	}
-	const route = collectionRoute( ref );
+	const slug = String( ref?.slug ?? '' ).trim();
+	return slug ? `${ slug }-${ rowId }` : String( rowId );
+}
+
+export function rowHref( ref ) {
+	const route = rowRoute( ref );
 	if ( ! route ) {
-		return;
+		return '#';
 	}
-	const targetWindow = topWindow();
-	const router = targetWindow?.cortextRouter;
-	if ( router?.navigate ) {
-		event.preventDefault();
-		router.navigate( {
-			to: '/$',
-			params: { _splat: route },
-		} );
-		return;
-	}
-	if ( targetWindow && targetWindow !== window ) {
-		event.preventDefault();
-		targetWindow.location.href = collectionHref( ref );
-	}
+	const adminUrl = window.cortextSettings?.adminUrl ?? '/wp-admin/';
+	const menuSlug = window.cortextSettings?.menuSlug ?? 'cortext';
+	const base = adminUrl.endsWith( '/' ) ? adminUrl : `${ adminUrl }/`;
+	const params = new URLSearchParams();
+	params.set( 'page', menuSlug );
+	params.set( 'p', `/${ route }` );
+	return `${ base }admin.php?${ params.toString() }`;
 }

@@ -627,6 +627,7 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$data = $response->get_data();
 		$ref  = $data['meta']["field-{$relation['source_id']}"][0];
 		$this->assertSame( $person_id, $ref['id'] );
+		$this->assertSame( get_post( $person_id )->post_name, $ref['slug'] );
 		$this->assertSame( 'Ada Lovelace', $ref['title']['raw'] );
 		$this->assertSame( $people_id, $ref['collectionId'] );
 		$this->assertSame( 'people-sync', $ref['collectionSlug'] );

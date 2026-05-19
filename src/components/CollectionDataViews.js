@@ -19,21 +19,21 @@ import {
 } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { closeSmall, copy, plus, trash } from '@wordpress/icons';
-import { useNavigate } from '@wordpress/route';
 
 import DataViewColumnInteractions from './DataViewColumnInteractions';
 import DataViewRowReorder from './DataViewRowReorder';
+import {
+	useDocumentPeekActions,
+	useDocumentPeekState,
+} from './DocumentPeekProvider';
+import { CurrentViewModeProvider } from './CurrentViewModeContext';
 import EditableCell, { RowMutationContext } from './EditableCell';
 import PageIcon from './PageIcon';
 import allSettledWithConcurrency from './allSettledWithConcurrency';
 import { filterSortAndPaginateWithGroups } from './groupedFilters';
 import TableCalculationsFooter from './TableCalculationsFooter';
 import ColumnHeaderActions from './fields/ColumnHeaderActions';
-import RowDetailView, {
-	ROW_DETAIL_MODE_ICONS,
-	ROW_DETAIL_MODE_LABELS,
-} from './RowDetailView';
-import { RowDetailSidebar } from './RowDetailSidebarSlot';
+import { ROW_DETAIL_MODE_ICONS, ROW_DETAIL_MODE_LABELS } from './RowDetailView';
 import {
 	GHOST_FIELD_ID,
 	MANUAL_SORT_ID,
@@ -44,11 +44,7 @@ import {
 	withNewlyVisibleFields,
 } from './dataViewColumns';
 import { scrollToEndQuickly } from './dataViewScroll';
-import {
-	adjacentRowId,
-	getRowDetailMode,
-	withRowDetailMode,
-} from './rowDetailUtils';
+import { getRowDetailMode, withRowDetailMode } from './rowDetailUtils';
 import {
 	applyVisibleSelectionChange,
 	mergeVisibleSelection,
@@ -67,7 +63,6 @@ import { useRecents } from '../hooks/useRecents';
 import { elementsFromOptions } from '../hooks/optionElements';
 import { notifyDocumentTrashChanged } from '../hooks/documentTrashInvalidation';
 import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
-import { computeDocumentUri } from '../router/useResolveEntity';
 
 const DEFAULT_LAYOUTS = { table: { density: 'compact' }, grid: {}, list: {} };
 const TITLE_LABEL = __( 'Title', 'cortext' );
@@ -81,20 +76,8 @@ const TITLE_FILTER_OPERATORS = [
 	'isEmpty',
 	'isNotEmpty',
 ];
-const ROW_DETAIL_SIDE_SURFACE_EXIT_MS = 300;
-const ROW_DETAIL_MODAL_ENTER_MS = 200;
-const ROW_DETAIL_SIDE_TO_MODAL_HANDOFF_MS =
-	ROW_DETAIL_SIDE_SURFACE_EXIT_MS - ROW_DETAIL_MODAL_ENTER_MS;
-
 function hasActiveCalculations( view ) {
 	return Object.values( view?.calculations ?? {} ).some( Boolean );
-}
-
-function prefersReducedMotion() {
-	return (
-		typeof window !== 'undefined' &&
-		window.matchMedia?.( '(prefers-reduced-motion: reduce)' ).matches
-	);
 }
 
 const OpenRowActionContext = createContext( {
@@ -491,7 +474,6 @@ export default function CollectionDataViews( {
 	revealFieldId = null,
 	onFieldRevealed,
 } ) {
-	const navigate = useNavigate();
 	const { fields, collection, slug, isResolving, fieldsResolved } =
 		useCollectionFieldsContext();
 	const { touchRecent } = useRecents();
@@ -945,152 +927,29 @@ export default function CollectionDataViews( {
 	// "saved view, leave it alone."
 	const knownFieldIdsRef = useRef( null );
 	const savedRowDetailMode = getRowDetailMode( view );
-	const rowDetailMode =
-		savedRowDetailMode === 'full' ? 'side' : savedRowDetailMode;
 	const postType = slug ? `crtxt_${ slug }` : null;
-	const detailApiRef = useRef( null );
-	const [ openRowId, setOpenRowId ] = useState( null );
-	const [ detailSaveError, setDetailSaveError ] = useState( null );
-	const [ pendingDetailTransition, setPendingDetailTransition ] =
-		useState( null );
-	const [ modeSurfaceTransition, setModeSurfaceTransition ] =
-		useState( null );
-	const modeSurfaceTransitionTimeoutRef = useRef( null );
-	const renderedRowDetailMode =
-		modeSurfaceTransition !== null
-			? modeSurfaceTransition.surfaceMode
-			: rowDetailMode;
-	const setDetailApi = useCallback( ( api ) => {
-		detailApiRef.current = api;
-	}, [] );
-	const clearModeSurfaceTransition = useCallback( () => {
-		if ( modeSurfaceTransitionTimeoutRef.current ) {
-			clearTimeout( modeSurfaceTransitionTimeoutRef.current );
-			modeSurfaceTransitionTimeoutRef.current = null;
-		}
-		setModeSurfaceTransition( null );
-	}, [] );
-	useEffect(
-		() => () => {
-			if ( modeSurfaceTransitionTimeoutRef.current ) {
-				clearTimeout( modeSurfaceTransitionTimeoutRef.current );
-			}
-		},
-		[]
-	);
-	const navigateToFullRow = useCallback(
-		( rowId ) => {
-			if ( ! rowId ) {
-				return;
-			}
-			// Full mode is the only row state that lives in the URL. Side
-			// and modal panes are local React state. `computeDocumentUri`
-			// gives pages and rows the same URL shape; the post type is
-			// resolved via the document locator on the way in.
-			const targetRow =
-				dataFiltered.find(
-					( candidate ) => String( candidate.id ) === String( rowId )
-				) ??
-				data.find(
-					( candidate ) => String( candidate.id ) === String( rowId )
-				) ??
-				null;
-			const splatPath = computeDocumentUri(
-				targetRow ?? { id: rowId, slug: '' }
-			);
-			navigate( {
-				to: '/$',
-				params: { _splat: splatPath },
-			} );
-		},
-		[ data, dataFiltered, navigate ]
-	);
+	const { openDocument, closeDocument } = useDocumentPeekActions();
+	const { peek } = useDocumentPeekState();
+	const openRowId = peek?.docId ?? null;
 
-	const openRow = useMemo( () => {
-		if ( ! openRowId ) {
-			return null;
-		}
-		const id = String( openRowId );
-		return (
-			dataFiltered.find( ( row ) => String( row.id ) === id ) ??
-			data.find( ( row ) => String( row.id ) === id ) ??
-			null
-		);
-	}, [ data, dataFiltered, openRowId ] );
-
-	const openFullRow = useCallback(
-		( rowId ) => {
-			if ( ! rowId ) {
-				return false;
-			}
-			navigateToFullRow( rowId );
-			return true;
-		},
-		[ navigateToFullRow ]
-	);
-
-	const applyDetailTransition = useCallback(
-		( transition, options = {} ) => {
-			setDetailSaveError( null );
-			setPendingDetailTransition( null );
-
-			if ( transition.type === 'close' ) {
-				clearModeSurfaceTransition();
-				setOpenRowId( null );
-			} else if ( transition.type === 'row' ) {
-				clearModeSurfaceTransition();
-				setOpenRowId( transition.rowId );
-			} else if ( transition.type === 'mode' ) {
+	// Keep the table's row context with the peek. The host uses it for
+	// next/previous, refresh, and writing mode changes back to this view. Refs
+	// keep row order current without replacing the source object each render.
+	const rowsRef = useRef( null );
+	rowsRef.current = dataFiltered;
+	const source = useMemo(
+		() => ( {
+			kind: 'collection',
+			collectionId,
+			getRowList: () => rowsRef.current ?? [],
+			refresh,
+			onModeChange: ( mode ) => {
 				onChangeViewRef.current(
-					withRowDetailMode( viewRef.current, transition.mode )
+					withRowDetailMode( viewRef.current, mode )
 				);
-			} else if ( transition.type === 'full' ) {
-				// Route change to a document URL; clear the local pane
-				// state so it doesn't flash on the way out.
-				clearModeSurfaceTransition();
-				setOpenRowId( null );
-				openFullRow( transition.rowId );
-			}
-			if ( options.refreshRows ) {
-				refresh();
-			}
-		},
-		[ clearModeSurfaceTransition, openFullRow, refresh ]
-	);
-
-	const runDetailTransition = useCallback(
-		async ( transition, options = {} ) => {
-			const api = detailApiRef.current;
-			setDetailSaveError( null );
-
-			if ( options.discard ) {
-				api?.discard?.();
-				applyDetailTransition( transition, { refreshRows: true } );
-				return true;
-			}
-
-			let shouldRefreshRows = false;
-			if ( api?.flushNow ) {
-				shouldRefreshRows = api.hasPendingEdits?.() ?? true;
-				const didSave = await api.flushNow();
-				if ( ! didSave ) {
-					setPendingDetailTransition( transition );
-					setDetailSaveError(
-						__(
-							'Row changes could not be saved. Retry or discard the pending edits to continue.',
-							'cortext'
-						)
-					);
-					return false;
-				}
-			}
-
-			applyDetailTransition( transition, {
-				refreshRows: shouldRefreshRows,
-			} );
-			return true;
-		},
-		[ applyDetailTransition ]
+			},
+		} ),
+		[ collectionId, refresh ]
 	);
 
 	const requestOpenRow = useCallback(
@@ -1101,12 +960,23 @@ export default function CollectionDataViews( {
 			if ( String( row.id ) === String( openRowId ) ) {
 				return;
 			}
-			runDetailTransition( {
-				type: savedRowDetailMode === 'full' ? 'full' : 'row',
-				rowId: row.id,
+			openDocument( {
+				id: row.id,
+				slug: row.slug ?? '',
+				postType,
+				collectionId,
+				preferredMode: savedRowDetailMode,
+				source,
 			} );
 		},
-		[ openRowId, runDetailTransition, savedRowDetailMode ]
+		[
+			collectionId,
+			openDocument,
+			openRowId,
+			postType,
+			savedRowDetailMode,
+			source,
+		]
 	);
 
 	const openRowActionContext = useMemo(
@@ -1126,19 +996,29 @@ export default function CollectionDataViews( {
 			if ( ! row?.id ) {
 				return;
 			}
-			if ( mode === 'full' ) {
-				runDetailTransition( { type: 'full', rowId: row.id } );
-				return;
-			}
-			// Store the chosen side/modal mode before opening. This matches
-			// the in-detail mode toggle: an explicit choice updates the
-			// user's preference.
-			if ( savedRowDetailMode !== mode ) {
+			// Save an explicit side/modal choice before opening. Full is a URL
+			// jump, not a saved "open rows like this" preference.
+			if ( mode !== 'full' && savedRowDetailMode !== mode ) {
 				onChangeView( withRowDetailMode( view, mode ) );
 			}
-			runDetailTransition( { type: 'row', rowId: row.id } );
+			openDocument( {
+				id: row.id,
+				slug: row.slug ?? '',
+				postType,
+				collectionId,
+				preferredMode: mode,
+				source,
+			} );
 		},
-		[ onChangeView, runDetailTransition, savedRowDetailMode, view ]
+		[
+			collectionId,
+			onChangeView,
+			openDocument,
+			postType,
+			savedRowDetailMode,
+			source,
+			view,
+		]
 	);
 
 	const duplicateRow = useCallback(
@@ -1228,7 +1108,7 @@ export default function CollectionDataViews( {
 			if ( deletedIds.length > 0 ) {
 				const deleted = new Set( deletedIds );
 				if ( openRowId && deleted.has( normalizeRowId( openRowId ) ) ) {
-					runDetailTransition( { type: 'close' } );
+					closeDocument();
 				}
 				forgetDeletedRows( deletedIds, {
 					clearSelection:
@@ -1268,7 +1148,7 @@ export default function CollectionDataViews( {
 				setRowActionError( deleteErrorMessage );
 			}
 		},
-		[ forgetDeletedRows, openRowId, postType, refresh, runDetailTransition ]
+		[ closeDocument, forgetDeletedRows, openRowId, postType, refresh ]
 	);
 
 	const requestDeleteSelectedRows = useCallback( () => {
@@ -1324,90 +1204,10 @@ export default function CollectionDataViews( {
 
 	const dataViewActions = rowActions;
 
-	const requestCloseDetail = useCallback(
-		() => runDetailTransition( { type: 'close' } ),
-		[ runDetailTransition ]
-	);
-
-	const requestAdjacentRow = useCallback(
-		( direction ) => {
-			const rowId = adjacentRowId( dataFiltered, openRowId, direction );
-			if ( rowId ) {
-				runDetailTransition( { type: 'row', rowId } );
-			}
-		},
-		[ dataFiltered, openRowId, runDetailTransition ]
-	);
-
-	const requestDetailMode = useCallback(
-		async ( mode ) => {
-			if ( mode === 'full' && openRowId ) {
-				clearModeSurfaceTransition();
-				runDetailTransition( { type: 'full', rowId: openRowId } );
-			} else if ( mode !== rowDetailMode ) {
-				if (
-					rowDetailMode === 'side' &&
-					mode === 'modal' &&
-					openRowId &&
-					! prefersReducedMotion()
-				) {
-					setModeSurfaceTransition( {
-						surfaceMode: 'side',
-					} );
-					const didSwitch = await runDetailTransition( {
-						type: 'mode',
-						mode,
-					} );
-					if ( ! didSwitch ) {
-						clearModeSurfaceTransition();
-						return;
-					}
-					setModeSurfaceTransition( {
-						surfaceMode: null,
-					} );
-					modeSurfaceTransitionTimeoutRef.current = setTimeout(
-						() => {
-							modeSurfaceTransitionTimeoutRef.current = null;
-							setModeSurfaceTransition( null );
-						},
-						ROW_DETAIL_SIDE_TO_MODAL_HANDOFF_MS
-					);
-					return;
-				}
-
-				clearModeSurfaceTransition();
-				runDetailTransition( { type: 'mode', mode } );
-			}
-		},
-		[
-			clearModeSurfaceTransition,
-			openRowId,
-			rowDetailMode,
-			runDetailTransition,
-		]
-	);
-
-	const retryPendingDetailTransition = useCallback( () => {
-		if ( pendingDetailTransition ) {
-			runDetailTransition( pendingDetailTransition );
-		}
-	}, [ pendingDetailTransition, runDetailTransition ] );
-
-	const discardPendingDetailTransition = useCallback( () => {
-		if ( pendingDetailTransition ) {
-			runDetailTransition( pendingDetailTransition, { discard: true } );
-		}
-	}, [ pendingDetailTransition, runDetailTransition ] );
-
 	useEffect( () => {
-		clearModeSurfaceTransition();
-		setOpenRowId( null );
-		setDetailSaveError( null );
-		setPendingDetailTransition( null );
-		detailApiRef.current = null;
 		selectionInteractionRef.current = null;
 		clearSelection();
-	}, [ clearModeSurfaceTransition, clearSelection, collectionId ] );
+	}, [ clearSelection, collectionId ] );
 
 	// Reconcile saved view state with the live schema whenever the field
 	// set changes: seed defaults on first render, then hand off to
@@ -1635,9 +1435,6 @@ export default function CollectionDataViews( {
 		);
 	}
 
-	const previousRowId = adjacentRowId( dataFiltered, openRowId, -1 );
-	const nextRowId = adjacentRowId( dataFiltered, openRowId, 1 );
-	let detailSurface = null;
 	const hasSelectionColumn = isTableLayout && dataFiltered.length > 0;
 	const hasVisibleRows = visibleRowIds.length > 0;
 	// tech-debt.md#36: DataViews has no table footer slot, so table bulk
@@ -1666,133 +1463,103 @@ export default function CollectionDataViews( {
 		/>
 	);
 
-	if ( openRowId && postType && renderedRowDetailMode ) {
-		const detailView = (
-			<RowDetailView
-				canGoNext={ Boolean( nextRowId ) }
-				canGoPrevious={ Boolean( previousRowId ) }
-				collectionId={ collectionId }
-				fields={ availableFields }
-				mode={ renderedRowDetailMode }
-				onApi={ setDetailApi }
-				onClose={ requestCloseDetail }
-				onDiscardPending={ discardPendingDetailTransition }
-				onModeChange={ requestDetailMode }
-				onNext={ () => requestAdjacentRow( 1 ) }
-				onPrevious={ () => requestAdjacentRow( -1 ) }
-				onRestored={ refresh }
-				onRetryPending={ retryPendingDetailTransition }
-				onSaved={ refresh }
-				postType={ postType }
-				row={ openRow }
-				rowId={ openRowId }
-				saveError={ detailSaveError }
-			/>
-		);
-		detailSurface =
-			renderedRowDetailMode === 'side' ? (
-				<RowDetailSidebar.Fill>{ detailView }</RowDetailSidebar.Fill>
-			) : (
-				detailView
-			);
-	}
-
 	return (
-		<RowMutationContext.Provider value={ mutationContext }>
-			<OpenRowActionContext.Provider value={ openRowActionContext }>
-				<div
-					className="cortext-data-view-shell"
-					data-row-detail-mode={ rowDetailMode }
-					data-row-detail-open={ openRowId ? 'true' : 'false' }
-				>
+		<CurrentViewModeProvider value={ savedRowDetailMode }>
+			<RowMutationContext.Provider value={ mutationContext }>
+				<OpenRowActionContext.Provider value={ openRowActionContext }>
 					<div
-						className="cortext-data-view"
-						ref={ tableWrapperRef }
-						onClickCapture={ captureSelectionIntent }
+						className="cortext-data-view-shell"
+						data-row-detail-mode={ savedRowDetailMode }
+						data-row-detail-open={ openRowId ? 'true' : 'false' }
 					>
-						{ rowActionError && (
-							<Notice
-								status="error"
-								isDismissible
-								onRemove={ () => setRowActionError( null ) }
-							>
-								{ rowActionError }
-							</Notice>
-						) }
-						<DataViews
-							data={ dataFiltered }
-							fields={ dataViewFields }
-							view={ view }
-							onChangeView={ onChangeView }
-							paginationInfo={ activePaginationInfo }
-							defaultLayouts={ DEFAULT_LAYOUTS }
-							getItemId={ ( item ) => String( item.id ) }
-							isLoading={ isLoading }
-							empty={ empty }
-							actions={ dataViewActions }
-							{ ...( supportsRowSelection
-								? {
-										selection: selectedRowIds,
-										onChangeSelection,
-								  }
-								: {} ) }
+						<div
+							className="cortext-data-view"
+							ref={ tableWrapperRef }
+							onClickCapture={ captureSelectionIntent }
 						>
-							<DataViewsChrome footer={ dataViewsFooter } />
-						</DataViews>
-						<DataViewRowReorder
-							wrapperRef={ tableWrapperRef }
-							view={ view }
-							onChangeView={ onChangeView }
-							collectionId={ collectionId }
-							rows={ dataFiltered }
-							data={ data }
-							mutateRows={ mutateRows }
-							onReordered={ refresh }
-						/>
-						{ isTableLayout && (
-							<TableCalculationsFooter
+							{ rowActionError && (
+								<Notice
+									status="error"
+									isDismissible
+									onRemove={ () => setRowActionError( null ) }
+								>
+									{ rowActionError }
+								</Notice>
+							) }
+							<DataViews
+								data={ dataFiltered }
+								fields={ dataViewFields }
+								view={ view }
+								onChangeView={ onChangeView }
+								paginationInfo={ activePaginationInfo }
+								defaultLayouts={ DEFAULT_LAYOUTS }
+								getItemId={ ( item ) => String( item.id ) }
+								isLoading={ isLoading }
+								empty={ empty }
+								actions={ dataViewActions }
+								{ ...( supportsRowSelection
+									? {
+											selection: selectedRowIds,
+											onChangeSelection,
+									  }
+									: {} ) }
+							>
+								<DataViewsChrome footer={ dataViewsFooter } />
+							</DataViews>
+							<DataViewRowReorder
 								wrapperRef={ tableWrapperRef }
 								view={ view }
-								fields={ availableFields }
-								data={ dataFilteredForCalculations }
 								onChangeView={ onChangeView }
-								hasSelectionColumn={ hasSelectionColumn }
-								bulkActions={ tableBulkActions }
-							/>
-						) }
-						{ isTableLayout && (
-							<DataViewColumnInteractions
-								wrapperRef={ tableWrapperRef }
-								view={ view }
-								fields={ availableFields }
-								onChangeView={ onChangeView }
-							/>
-						) }
-						{ isTableLayout && (
-							<ColumnHeaderActions
 								collectionId={ collectionId }
-								view={ view }
-								onChangeView={ onChangeView }
-								onFieldOptionsSaved={ updateFieldOptions }
-								onFieldCreated={ requestRevealCreatedField }
-								onRowsChanged={ refresh }
+								rows={ dataFiltered }
+								data={ data }
+								mutateRows={ mutateRows }
+								onReordered={ refresh }
 							/>
-						) }
-						{ /* tech-debt.md#7: DataViews has no footer slot, so the
+							{ isTableLayout && (
+								<TableCalculationsFooter
+									wrapperRef={ tableWrapperRef }
+									view={ view }
+									fields={ availableFields }
+									data={ dataFilteredForCalculations }
+									onChangeView={ onChangeView }
+									hasSelectionColumn={ hasSelectionColumn }
+									bulkActions={ tableBulkActions }
+								/>
+							) }
+							{ isTableLayout && (
+								<DataViewColumnInteractions
+									wrapperRef={ tableWrapperRef }
+									view={ view }
+									fields={ availableFields }
+									onChangeView={ onChangeView }
+								/>
+							) }
+							{ isTableLayout && (
+								<ColumnHeaderActions
+									collectionId={ collectionId }
+									view={ view }
+									onChangeView={ onChangeView }
+									onFieldOptionsSaved={ updateFieldOptions }
+									onFieldCreated={ requestRevealCreatedField }
+									onRowsChanged={ refresh }
+								/>
+							) }
+							{ /* tech-debt.md#7: DataViews has no footer slot, so the
 							   New-row affordance and its CSS layout sit outside the
 							   component instead of inside its layout chrome. */ }
-						<div className="cortext-data-view__footer">
-							<NewRowButton
-								slug={ slug }
-								view={ view }
-								fields={ fields }
-								onCreated={ onCreated }
-							/>
+							<div className="cortext-data-view__footer">
+								<NewRowButton
+									slug={ slug }
+									view={ view }
+									fields={ fields }
+									onCreated={ onCreated }
+								/>
+							</div>
 						</div>
 					</div>
-					{ detailSurface }
-				</div>
-			</OpenRowActionContext.Provider>
-		</RowMutationContext.Provider>
+				</OpenRowActionContext.Provider>
+			</RowMutationContext.Provider>
+		</CurrentViewModeProvider>
 	);
 }
