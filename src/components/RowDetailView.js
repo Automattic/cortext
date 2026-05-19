@@ -25,6 +25,7 @@ import useAutosave from '../hooks/useAutosave';
 import EditorBody from './EditorBody';
 import PageIcon from './PageIcon';
 import RowProperties from './RowProperties';
+import { SkeletonFieldRow } from './Skeleton';
 import { getRowDetailMode } from './rowDetailUtils';
 
 export const ROW_DETAIL_MODE_ICONS = {
@@ -428,22 +429,16 @@ function LoadingDetail( { onClose, row, fieldCount } ) {
 				</div>
 			</div>
 			<div className="cortext-row-detail__body cortext-row-detail__body--loading">
-				<ul
-					className="cortext-row-detail__loading-fields"
+				<div
+					className="cortext-row-detail__skeleton-fields"
 					aria-hidden="true"
 				>
 					{ Array.from( { length: skeletonRows } ).map(
 						( _, idx ) => (
-							<li
-								key={ idx }
-								className="cortext-row-detail__loading-field"
-							>
-								<span className="cortext-row-detail__loading-field-label" />
-								<span className="cortext-row-detail__loading-field-value" />
-							</li>
+							<SkeletonFieldRow key={ idx } />
 						)
 					) }
-				</ul>
+				</div>
 				<div
 					className="cortext-row-detail__loading-status"
 					role="status"

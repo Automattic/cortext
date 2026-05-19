@@ -3889,34 +3889,10 @@ tr:has(.cortext-title-cell--is-opening)
 		padding: $grid-unit-20 $grid-unit-30;
 	}
 
-	&__loading-fields {
+	&__skeleton-fields {
 		display: flex;
 		flex-direction: column;
 		gap: $grid-unit-15;
-		margin: 0;
-		padding: 0;
-		list-style: none;
-	}
-
-	&__loading-field {
-		display: grid;
-		grid-template-columns: minmax(96px, 140px) minmax(0, 1fr);
-		gap: $grid-unit-20;
-		align-items: center;
-	}
-
-	&__loading-field-label,
-	&__loading-field-value {
-		display: block;
-		height: 12px;
-		border-radius: 4px;
-		background: rgba(0, 0, 0, 0.06);
-		animation: cortext-row-detail-loading-pulse 1.4s ease-in-out infinite;
-	}
-
-	&__loading-field-value {
-		max-width: 280px;
-		animation-delay: 0.2s;
 	}
 
 	&__loading-status {
@@ -3927,15 +3903,38 @@ tr:has(.cortext-title-cell--is-opening)
 	}
 }
 
+// Shared skeleton primitives — see src/components/Skeleton.js.
+.cortext-skeleton {
+	display: block;
+	background: rgba(0, 0, 0, 0.06);
+	border-radius: 4px;
+	animation: cortext-skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+.cortext-skeleton--line {
+	height: 12px;
+}
+
+.cortext-skeleton-field {
+	display: grid;
+	grid-template-columns: minmax(96px, 140px) minmax(0, 1fr);
+	gap: $grid-unit-20;
+	align-items: center;
+}
+
+.cortext-skeleton-field__value {
+	max-width: 280px;
+	animation-delay: 0.2s;
+}
+
 @media (prefers-reduced-motion: reduce) {
 
-	.cortext-row-detail__loading-field-label,
-	.cortext-row-detail__loading-field-value {
+	.cortext-skeleton {
 		animation: none;
 	}
 }
 
-@keyframes cortext-row-detail-loading-pulse {
+@keyframes cortext-skeleton-pulse {
 
 	0%,
 	100% {
