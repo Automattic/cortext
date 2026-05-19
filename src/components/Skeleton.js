@@ -72,3 +72,28 @@ export function SkeletonFieldRow( { valueWidth, className } ) {
 		</div>
 	);
 }
+
+// Approximates the full-page editor's title-plus-content layout so the
+// canvas area keeps its size while useResolveDocument and the editor
+// mount. Cover and icon are intentionally omitted (most documents don't
+// have them and reserving space for both would create the opposite shift).
+export function DocumentSkeleton( { className } ) {
+	return (
+		<div
+			className={ joinClassName(
+				'cortext-document-skeleton',
+				className
+			) }
+			aria-hidden="true"
+		>
+			<SkeletonLine className="cortext-document-skeleton__title" />
+			<div className="cortext-document-skeleton__content">
+				<SkeletonLine />
+				<SkeletonLine className="cortext-document-skeleton__line--medium" />
+				<SkeletonLine className="cortext-document-skeleton__line--short" />
+				<SkeletonLine />
+				<SkeletonLine className="cortext-document-skeleton__line--medium" />
+			</div>
+		</div>
+	);
+}

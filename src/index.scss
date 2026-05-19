@@ -1319,6 +1319,14 @@ body.cortext-sidebar-resizing {
 		height: 100%;
 	}
 
+	// While the document/editor mounts we fill the canvas with a skeleton
+	// instead of a centered spinner so the layout matches what's coming.
+	&__loading--document {
+		align-items: stretch;
+		justify-content: flex-start;
+		overflow: auto;
+	}
+
 	// The trashed-page banner stacks above the BlockCanvas. Make the
 	// content slot a flex column so the canvas keeps its `height: 100%`
 	// behavior (it now fills the remaining space). Couples to a
@@ -3925,6 +3933,38 @@ tr:has(.cortext-title-cell--is-opening)
 .cortext-skeleton-field__value {
 	max-width: 280px;
 	animation-delay: 0.2s;
+}
+
+// Approximates the full-page editor layout so the canvas area doesn't
+// collapse and re-expand when the editor finishes mounting.
+.cortext-document-skeleton {
+	display: flex;
+	flex-direction: column;
+	gap: $grid-unit-30;
+	width: 100%;
+	max-width: 760px;
+	margin: 0 auto;
+	padding: $grid-unit-30 $grid-unit-40 $grid-unit-50;
+
+	&__title {
+		height: 32px;
+		width: 55%;
+		border-radius: 6px;
+	}
+
+	&__content {
+		display: flex;
+		flex-direction: column;
+		gap: $grid-unit-15;
+	}
+
+	&__line--medium {
+		width: 85%;
+	}
+
+	&__line--short {
+		width: 60%;
+	}
 }
 
 @media (prefers-reduced-motion: reduce) {

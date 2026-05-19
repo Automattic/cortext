@@ -7,7 +7,7 @@ import {
 	InterfaceSkeleton,
 	store as interfaceStore,
 } from '@wordpress/interface';
-import { Button, Disabled, SnackbarList, Spinner } from '@wordpress/components';
+import { Button, Disabled, SnackbarList } from '@wordpress/components';
 import { store as noticesStore } from '@wordpress/notices';
 import { chevronDown, chevronUp, cog, seen, unseen } from '@wordpress/icons';
 import { useCallback, useEffect, useState } from '@wordpress/element';
@@ -19,6 +19,7 @@ import EditorBody from './EditorBody';
 import PublishToggle from './PublishToggle';
 import { RowDetailSidebarSlot } from './RowDetailSidebarSlot';
 import RowProperties from './RowProperties';
+import { DocumentSkeleton } from './Skeleton';
 import { TopBarActionsFill } from './WorkspaceTopBar';
 import PageInspectorSidebar, {
 	BLOCK_INSPECTOR,
@@ -377,8 +378,8 @@ export default function Canvas( {
 
 	if ( ! renderedPost ) {
 		return (
-			<div className="cortext-canvas__loading">
-				<Spinner />
+			<div className="cortext-canvas__loading cortext-canvas__loading--document">
+				<DocumentSkeleton />
 			</div>
 		);
 	}

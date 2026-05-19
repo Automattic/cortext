@@ -17,6 +17,7 @@ import CollectionDataViews from '../components/CollectionDataViews';
 import { CollectionFieldsProvider } from '../components/CollectionFieldsContext';
 import { RowMutationContext } from '../components/EditableCell';
 import { RowDetailSidebarSlot } from '../components/RowDetailSidebarSlot';
+import { DocumentSkeleton } from '../components/Skeleton';
 import WorkspaceTopBar from '../components/WorkspaceTopBar';
 import {
 	ACTIVE_PAGES_QUERY,
@@ -93,8 +94,8 @@ function CollectionPane( { collectionId, onReady } ) {
 
 function LoadingPane() {
 	return (
-		<div className="cortext-canvas__loading">
-			<Spinner />
+		<div className="cortext-canvas__loading cortext-canvas__loading--document">
+			<DocumentSkeleton />
 		</div>
 	);
 }
