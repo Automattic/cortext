@@ -6,12 +6,10 @@ import {
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalNumberControl as NumberControl,
 } from '@wordpress/components';
-import { useEntityRecord } from '@wordpress/core-data';
 import { useDispatch } from '@wordpress/data';
 import { forwardRef, useMemo, useRef } from '@wordpress/element';
 import { check, chevronRight } from '@wordpress/icons';
 
-import { parseFormat } from '../../hooks/fieldMapping';
 import { useSubmenuPlacement } from '../../hooks/useSubmenuPlacement';
 import { FORMAT_COLORS, findFormatColor } from './formatColors';
 
@@ -822,6 +820,7 @@ function DateFormBody( {
 // tabbing enters the panel instead of moving to the next table column.
 export default function FieldFormatPopover( {
 	recordId,
+	field,
 	anchor,
 	focusOnMount = false,
 	onClose,
@@ -830,25 +829,23 @@ export default function FieldFormatPopover( {
 	onMouseLeave,
 } ) {
 	const panelRef = useRef( null );
-	const { record } = useEntityRecord( 'postType', 'crtxt_field', recordId );
+	// The caller passes the mapped field (from `useCollectionFields`) so we
+	// can read the type and parsed format without re-fetching the underlying
+	// crtxt_field record. Writes still go through core-data so edits land
+	// in the same store the rest of the shell observes.
 	const { editEntityRecord, saveEditedEntityRecord } = useDispatch( 'core' );
 
-	const type = record?.meta?.type ?? 'text';
+	const type = field?.cortextType ?? 'text';
 	const isNumber = type === 'number';
 	const isDate = type === 'date' || type === 'datetime';
 
 	const initial = useMemo(
-		() =>
-			parseFormat(
-				isNumber
-					? record?.meta?.number_format
-					: record?.meta?.date_format
-			),
-		[ isNumber, record ]
+		() => field?.cortextFormat ?? null,
+		[ field ]
 	);
 
 	const persist = async ( next ) => {
-		if ( ! record ) {
+		if ( ! field ) {
 			return;
 		}
 		const key = isNumber ? 'number_format' : 'date_format';
@@ -858,7 +855,7 @@ export default function FieldFormatPopover( {
 		await saveEditedEntityRecord( 'postType', 'crtxt_field', recordId );
 	};
 
-	if ( ! record || ( ! isNumber && ! isDate ) ) {
+	if ( ! field || ( ! isNumber && ! isDate ) ) {
 		return null;
 	}
 

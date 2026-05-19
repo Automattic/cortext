@@ -1,17 +1,14 @@
 import { __ } from '@wordpress/i18n';
 import { TextControl } from '@wordpress/components';
-import { useEntityRecord } from '@wordpress/core-data';
 import { useEffect, useRef, useState } from '@wordpress/element';
 
 import { useRenameField } from '../../hooks/useFieldMutations';
 
 // Inline rename affordance. Shown in place of the column header label
-// while the user edits; commits on Enter or blur. Reads the current title
-// from core-data so the input starts with the existing value, and reverts
-// (closes without saving) on Escape.
-export default function RenameFieldInline( { recordId, onDone } ) {
-	const { record } = useEntityRecord( 'postType', 'crtxt_field', recordId );
-	const initialTitle = record?.title?.raw ?? record?.title?.rendered ?? '';
+// while the user edits; commits on Enter or blur. The caller passes the
+// current title directly (already resolved upstream from
+// `useCollectionFields`), so this component does not fetch it again.
+export default function RenameFieldInline( { recordId, initialTitle = '', onDone } ) {
 	const [ value, setValue ] = useState( initialTitle );
 	const inputRef = useRef( null );
 	const { run, isBusy } = useRenameField();

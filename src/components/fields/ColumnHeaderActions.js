@@ -10,7 +10,6 @@ import {
 	__experimentalConfirmDialog as ConfirmDialog,
 } from '@wordpress/components';
 import { unlock } from '../../lock-unlock';
-import { useEntityRecord } from '@wordpress/core-data';
 import {
 	createPortal,
 	useCallback,
@@ -36,7 +35,6 @@ import EditOptionsPopover from './EditOptionsPopover';
 import FieldFormatPopover from './FieldFormatPopover';
 import RenameFieldInline from './RenameFieldInline';
 import { useCollectionFieldsContext } from '../CollectionFieldsContext';
-import { elementsFromOptions } from '../../hooks/fieldMapping';
 import { TableCalculationPopover } from '../TableCalculationMenu';
 import {
 	useDeleteField,
@@ -204,18 +202,22 @@ function FieldActions( {
 	const duplicate = useDuplicateField( collectionId );
 	const remove = useDeleteField( collectionId );
 	const { fields } = useCollectionFieldsContext();
-	const { record } = useEntityRecord( 'postType', 'crtxt_field', recordId );
-	const fieldType = record?.meta?.type;
+	// `useCollectionFields` already mapped every column to a DataViews field
+	// that carries the type and parsed options. Reading from that context
+	// avoids the per-column `useEntityRecord` refetch that core-data fires
+	// even when the record is already in cache.
+	const mappedField = useMemo(
+		() => fields.find( ( f ) => f.recordId === recordId ) ?? null,
+		[ fields, recordId ]
+	);
+	const fieldType = mappedField?.cortextType;
 	const canFormat = FORMATTABLE_TYPES.has( fieldType );
 	const supportsOptions = TYPES_WITH_OPTIONS.has( fieldType );
 	const canChangeType =
 		Boolean( fieldType ) && ! UNCONVERTIBLE_SOURCE_TYPES.has( fieldType );
 	const initialOptions = useMemo(
-		() =>
-			supportsOptions
-				? elementsFromOptions( record?.meta?.options ) || []
-				: [],
-		[ supportsOptions, record?.meta?.options ]
+		() => ( supportsOptions ? mappedField?.cortextElements ?? [] : [] ),
+		[ supportsOptions, mappedField ]
 	);
 
 	// Format submenu uses a hover-with-grace pattern: the panel stays
@@ -386,8 +388,7 @@ function FieldActions( {
 	}, [ isMenuOpen, closeMenu, hideMenuOnInteractOutside ] );
 
 	const dataViewId = `field-${ recordId }`;
-	const label =
-		record?.title?.raw || record?.title?.rendered || `#${ recordId }`;
+	const label = mappedField?.label || `#${ recordId }`;
 	const calculationField = useMemo(
 		() => ( {
 			id: dataViewId,
@@ -486,6 +487,7 @@ function FieldActions( {
 			<span className="cortext-column-header-actions">
 				<RenameFieldInline
 					recordId={ recordId }
+					initialTitle={ mappedField?.label ?? '' }
 					onDone={ () => setIsRenaming( false ) }
 				/>
 			</span>
@@ -675,6 +677,7 @@ function FieldActions( {
 			{ isFormatting && canFormat ? (
 				<FieldFormatPopover
 					recordId={ recordId }
+					field={ mappedField }
 					anchor={ formatItemRef.current }
 					focusOnMount={ shouldFocusFormat ? 'firstElement' : false }
 					onClose={ closeFormat }

@@ -52,6 +52,13 @@ export default function useBreadcrumbSegments( paintedRoute ) {
 		collectionId = paintedRoute.collectionId ?? null;
 	}
 
+	// Pages and collections already arrive via the bulk queries below. The
+	// active page/collection for the current breadcrumb is read from those
+	// arrays (see `pagesById.get`/`collections.find` further down) instead of
+	// firing a per-id `useEntityRecord`, which would re-request a record the
+	// bulk has already cached. Core-data's per-id resolver does not share
+	// resolution state with the bulk resolver (WordPress/gutenberg#19153), so
+	// avoiding it is the cheapest way to dodge the duplicate request.
 	const { records: pages } = useEntityRecords(
 		'postType',
 		PAGE_POST_TYPE,
@@ -63,16 +70,8 @@ export default function useBreadcrumbSegments( paintedRoute ) {
 		COLLECTION_QUERY
 	);
 
-	const { record: currentPage } = useEntityRecord(
-		'postType',
-		PAGE_POST_TYPE,
-		pageId ?? 0
-	);
-	const { record: currentCollection } = useEntityRecord(
-		'postType',
-		COLLECTION_POST_TYPE,
-		collectionId ?? 0
-	);
+	// Rows are not part of any bulk this hook owns (they live behind
+	// per-collection endpoints), so the row title still needs its own fetch.
 	const { record: currentRow } = useEntityRecord(
 		'postType',
 		rowPostType ?? '',
@@ -105,14 +104,9 @@ export default function useBreadcrumbSegments( paintedRoute ) {
 			const pagesById = new Map(
 				( pages ?? [] ).map( ( p ) => [ p.id, p ] )
 			);
-			const head =
-				pagesById.get( pageId ) ??
-				( currentPage?.id === pageId ? currentPage : null );
+			const head = pagesById.get( pageId );
 			if ( ! head ) {
 				return [];
-			}
-			if ( ! pagesById.has( pageId ) ) {
-				pagesById.set( head.id, head );
 			}
 
 			const chain = [];
@@ -138,14 +132,9 @@ export default function useBreadcrumbSegments( paintedRoute ) {
 		}
 
 		if ( collectionId ) {
-			const fromList = ( collections ?? [] ).find(
+			const collection = ( collections ?? [] ).find(
 				( c ) => c.id === collectionId
 			);
-			const collection =
-				fromList ??
-				( currentCollection?.id === collectionId
-					? currentCollection
-					: null );
 			if ( ! collection ) {
 				return [];
 			}
@@ -183,8 +172,6 @@ export default function useBreadcrumbSegments( paintedRoute ) {
 		rowPostType,
 		pages,
 		collections,
-		currentPage,
-		currentCollection,
 		currentRow,
 		goToPage,
 		goToCollection,
