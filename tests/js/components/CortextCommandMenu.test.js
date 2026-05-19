@@ -177,6 +177,38 @@ describe( 'CortextCommandMenu', () => {
 		).not.toBeInTheDocument();
 	} );
 
+	it( 'hides the commands group while the search input is non-empty', async () => {
+		global.ResizeObserver = ResizeObserverMock;
+		window.Element.prototype.scrollIntoView = jest.fn();
+		const registry = createCommandPaletteRegistry();
+		registry.dispatch( commandsStore ).registerCommand( {
+			name: 'cortext/home',
+			label: 'Go to home',
+			context: 'root',
+			callback: jest.fn(),
+		} );
+		registry.dispatch( commandsStore ).open();
+
+		const { rerender } = render(
+			<RegistryProvider value={ registry }>
+				<CortextCommandMenu search="" setSearch={ () => {} } />
+			</RegistryProvider>
+		);
+
+		// With no search, static commands render under "Suggestions".
+		expect( await screen.findByText( 'Go to home' ) ).toBeInTheDocument();
+
+		// Once the user starts typing, the commands group disappears so it
+		// cannot steal the selection from live document results.
+		rerender(
+			<RegistryProvider value={ registry }>
+				<CortextCommandMenu search="home" setSearch={ () => {} } />
+			</RegistryProvider>
+		);
+
+		expect( screen.queryByText( 'Go to home' ) ).not.toBeInTheDocument();
+	} );
+
 	it( 'hides the recent group while the search input is non-empty', async () => {
 		global.ResizeObserver = ResizeObserverMock;
 		window.Element.prototype.scrollIntoView = jest.fn();

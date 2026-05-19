@@ -226,14 +226,10 @@ function PaletteGroups( { search } ) {
 					/>
 				</Command.Group>
 			) }
-			{ commands.length > 0 && (
+			{ ! search && commands.length > 0 && (
 				<Command.Group
 					className="cortext-command-palette__group"
-					heading={
-						search
-							? __( 'Commands', 'cortext' )
-							: __( 'Suggestions', 'cortext' )
-					}
+					heading={ __( 'Suggestions', 'cortext' ) }
 				>
 					<CommandList commands={ commands } search={ search } />
 				</Command.Group>
