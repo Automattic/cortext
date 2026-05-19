@@ -67,7 +67,10 @@ function CollectionView( { collectionId, onReady } ) {
 			onReady={ onReady }
 			loading={
 				<div className="cortext-canvas__loading cortext-canvas__loading--collection">
-					<CollectionRowsSkeleton />
+					<CollectionRowsSkeleton
+						rowCount={ view?.perPage ?? 8 }
+						density={ view?.layout?.density ?? 'compact' }
+					/>
 				</div>
 			}
 			empty={

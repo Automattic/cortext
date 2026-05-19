@@ -642,7 +642,12 @@ export default function Edit( { attributes, setAttributes } ) {
 					onChangeView={ setView }
 					revealFieldId={ revealFieldId }
 					onFieldRevealed={ onFieldRevealed }
-					loading={ <CollectionRowsSkeleton /> }
+					loading={
+						<CollectionRowsSkeleton
+							rowCount={ view?.perPage ?? 8 }
+							density={ view?.layout?.density ?? 'compact' }
+						/>
+					}
 					invalid={
 						<Notice status="warning" isDismissible={ false }>
 							{ __(

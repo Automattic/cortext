@@ -1545,8 +1545,12 @@ export default function CollectionDataViews( {
 							{ showRowsSkeleton && (
 								<div className="cortext-data-view__rows-skeleton">
 									<CollectionRowsSkeleton
+										rowCount={ view?.perPage ?? 8 }
 										columnCount={
 											( view?.fields?.length ?? 0 ) + 1
+										}
+										density={
+											view?.layout?.density ?? 'compact'
 										}
 									/>
 								</div>

@@ -3980,7 +3980,10 @@ tr:has(.cortext-title-cell--is-opening)
 
 // Approximates a data view table while useCollectionRows fetches. Sits
 // inside .cortext-data-view as a sibling to <DataViews>; the surrounding
-// container handles vertical placement.
+// container handles vertical placement. Row heights mirror DataViews v6
+// per-density (see .cortext-data-view .dataviews-view-table rules
+// further down) so the skeleton occupies the eventual table height
+// closely and the page doesn't shift when rows arrive.
 .cortext-collection-skeleton {
 	display: flex;
 	flex-direction: column;
@@ -3991,8 +3994,17 @@ tr:has(.cortext-title-cell--is-opening)
 		display: flex;
 		align-items: center;
 		gap: $grid-unit-30;
-		padding: $grid-unit-15 $grid-unit-20;
+		padding: 0 $grid-unit-20;
+		height: $grid-unit-50 + 2 * $grid-unit-15; // 64 (balanced default)
 		border-bottom: $border-width solid var(--cortext-chrome-border, #e0e0e0);
+	}
+
+	&--compact &__row {
+		height: $grid-unit-50; // 40
+	}
+
+	&--comfortable &__row {
+		height: $grid-unit-50 + 2 * $grid-unit-20; // 72
 	}
 
 	&__cell {

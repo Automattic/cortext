@@ -100,12 +100,31 @@ export function SidebarListSkeleton( { itemCount = 5 } ) {
 
 // Roughly table-shaped rows shown while useCollectionRows fetches the
 // first page. Sized so the canvas pane stays the same height as it will
-// be once rows arrive, instead of growing from zero.
-export function CollectionRowsSkeleton( { rowCount = 8, columnCount = 4 } ) {
+// be once rows arrive, instead of growing from zero. Density mirrors
+// DataViews v6 row heights (compact 40px / balanced 64px / comfortable
+// 72px); the row count is capped because perPage of 25+ would paint a
+// skeleton longer than the viewport for no extra value.
+const COLLECTION_SKELETON_ROW_CAP = 15;
+
+export function CollectionRowsSkeleton( {
+	rowCount = 8,
+	columnCount = 4,
+	density = 'compact',
+} ) {
 	const safeColumns = Math.max( 1, columnCount );
+	const safeRows = Math.max(
+		1,
+		Math.min( rowCount, COLLECTION_SKELETON_ROW_CAP )
+	);
 	return (
-		<div className="cortext-collection-skeleton" aria-hidden="true">
-			{ Array.from( { length: rowCount } ).map( ( _, rowIndex ) => (
+		<div
+			className={ joinClassName(
+				'cortext-collection-skeleton',
+				`cortext-collection-skeleton--${ density }`
+			) }
+			aria-hidden="true"
+		>
+			{ Array.from( { length: safeRows } ).map( ( _, rowIndex ) => (
 				<div
 					key={ rowIndex }
 					className="cortext-collection-skeleton__row"
