@@ -1,18 +1,16 @@
 /**
  * Shared bulk queries for records the shell already lists.
  *
- * Several shell surfaces need the same records. The sidebar lists active pages
- * and collections, breadcrumbs walk page parents, and collection views read
- * fields. If each surface used `useEntityRecord`, core-data could still issue
- * per-id requests for records already present in a bulk response
- * (gutenberg#19153).
+ * Several shell surfaces use the same records: the sidebar lists pages and
+ * collections, breadcrumbs walk page parents, and collection views read fields.
+ * If each surface used `useEntityRecord`, core-data could still issue per-id
+ * requests for records already present in a bulk response (gutenberg#19153).
  *
  * Each helper returns the list plus a `get(id)` accessor and `hasResolved`.
- * Callers that need a single record by id should read `get`; if it returns
- * null and `hasResolved` is true, the id is genuinely outside the bulk
- * (capped at 100 records) and the caller may fall back to `useEntityRecord`
- * for that id only. Records outside these bulks, such as collection rows
- * and media attachments, still use `useEntityRecord` directly.
+ * Callers that need one record should try `get` first. If it returns null
+ * after `hasResolved`, the id is outside the 100-record bulk and the caller
+ * can fetch that id directly. Records outside these bulks, such as collection
+ * rows and media attachments, still use `useEntityRecord`.
  */
 
 import { useEntityRecords } from '@wordpress/core-data';

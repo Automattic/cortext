@@ -23,7 +23,7 @@ The sidebar handles page navigation and nesting. Autosave is split between a cli
 
 The shell already keeps a few bulk queries warm: active pages and collections from the sidebar, plus the open collection's fields from `CollectionFieldsProvider`. When a component needs one of those records, read it from the bulk instead of calling `useEntityRecord` by id.
 
-WordPress core-data tracks bulk and per-id resolvers separately ([gutenberg#19153](https://github.com/WordPress/gutenberg/issues/19153)), so a per-id read can make another HTTP request even when the record is already in the bulk cache. On the desktop build, that means paying the PHP-WASM startup cost again.
+WordPress core-data tracks bulk and per-id resolvers separately ([gutenberg#19153](https://github.com/WordPress/gutenberg/issues/19153)), so a per-id read can make another HTTP request even when the record is already in the bulk cache. The duplicate request grows with surfaces that render one cell per record, like a wide column header.
 
 Current helpers:
 
@@ -31,7 +31,7 @@ Current helpers:
 - `useMappedField(recordId)` in `src/components/CollectionFieldsContext.js` returns the parsed field record from the active collection.
 - Use `useEntityRecord` only for entities that are not covered by any bulk (rows inside a collection, media attachments) and for write paths (`editEntityRecord`/`saveEditedEntityRecord` still go through core-data).
 
-The helpers do not fetch missing records. They return `null` (along with a `hasResolved` flag) and the caller decides what to show. The bulks cap at `per_page: 100`, so a record opened by direct URL or recents can fall outside them. Callers that must render for any valid id can pair the bulk read with a targeted `useEntityRecord` gated on `hasResolved`, the way `useBreadcrumbSegments` does.
+The helpers do not fetch missing records. They return `null`, plus `hasResolved`, and the caller decides what to show. Because the bulk queries stop at `per_page: 100`, a record opened from a direct URL or a recent item may not be in the list. If the UI still needs to render that record, wait for `hasResolved`, then fall back to a targeted `useEntityRecord`; `useBreadcrumbSegments` uses that pattern.
 
 ## Current scope
 

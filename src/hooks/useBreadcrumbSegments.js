@@ -55,12 +55,10 @@ export default function useBreadcrumbSegments( paintedRoute ) {
 	const { get: getCollection, hasResolved: collectionsResolved } =
 		useCollections();
 
-	// Bulks are capped at `per_page: 100`, but `useResolveDocument`/
-	// `useResolveCollection` can open any valid id via direct URL. When the
-	// current id isn't in the bulk after it resolves, fall back to a
-	// targeted `useEntityRecord` so the breadcrumb still renders. The
-	// `enabled` gate waits for `hasResolved` so the common case (id is in
-	// the bulk) never fires this fetch.
+	// The bulk reads stop at 100 records, but direct URLs can open any valid
+	// page or collection. If the bulk has resolved and the current id still
+	// is not there, fetch that one record so the breadcrumb does not vanish.
+	// Waiting for `hasResolved` keeps the normal path from doing extra work.
 	const pageMissingFromBulk =
 		pageId !== null && pagesResolved && ! pagesById.has( pageId );
 	const { record: fallbackPage } = useEntityRecord(
