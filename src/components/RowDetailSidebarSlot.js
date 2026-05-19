@@ -56,10 +56,7 @@ function initialWidth() {
 	return clampWidth( Number.isFinite( stored ) ? stored : DEFAULT_WIDTH );
 }
 
-export function RowDetailSidebarSlot( {
-	fallback = null,
-	isFallbackActive = false,
-} ) {
+export function RowDetailSidebarSlot() {
 	const fills = useSlotFills( RowDetailSidebar.name );
 	const hasRowDetail = Boolean( fills?.length );
 	const [ isRendered, setIsRendered ] = useState( hasRowDetail );
@@ -202,14 +199,13 @@ export function RowDetailSidebarSlot( {
 	);
 
 	if ( ! isRendered ) {
-		return fallback;
+		return null;
 	}
 
 	const maxWidth = getMaxWidth();
 	const isClosing = ! hasRowDetail;
-	const shouldReserveFallback = Boolean( fallback && isFallbackActive );
 
-	const shell = (
+	return (
 		<div
 			className={
 				'cortext-row-detail-sidebar-shell' +
@@ -253,21 +249,4 @@ export function RowDetailSidebarSlot( {
 			) : null }
 		</div>
 	);
-
-	if ( shouldReserveFallback ) {
-		return (
-			<div className="cortext-row-detail-sidebar-handoff cortext-row-detail-sidebar-handoff--reserve">
-				<div
-					className="cortext-row-detail-sidebar-handoff__fallback"
-					aria-hidden={ hasRowDetail ? true : undefined }
-					{ ...( hasRowDetail ? { inert: '' } : {} ) }
-				>
-					{ fallback }
-				</div>
-				{ shell }
-			</div>
-		);
-	}
-
-	return shell;
 }

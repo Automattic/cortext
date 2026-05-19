@@ -17,7 +17,6 @@ import { withViewTransition } from '../hooks/viewTransition';
 import { POST_TYPE } from './page-queries';
 import EditorBody from './EditorBody';
 import PublishToggle from './PublishToggle';
-import { RowDetailSidebarSlot } from './RowDetailSidebarSlot';
 import RowProperties from './RowProperties';
 import { TopBarActionsFill } from './WorkspaceTopBar';
 import PageInspectorSidebar, {
@@ -188,15 +187,6 @@ function CanvasEditor( {
 	} );
 	const { resetPost } = useDispatch( editorStore );
 	const discard = useCallback( () => resetPost(), [ resetPost ] );
-	const isInspectorOpen = useSelect(
-		( select ) =>
-			isInspectorArea(
-				select( interfaceStore ).getActiveComplementaryArea(
-					INSPECTOR_SCOPE
-				)
-			),
-		[]
-	);
 	const isTrashed = post.status === 'trash';
 
 	useEffect( () => {
@@ -310,16 +300,7 @@ function CanvasEditor( {
 						/>
 					</>
 				}
-				sidebar={
-					isActive ? (
-						<RowDetailSidebarSlot
-							fallback={ <InspectorSidebarSlot /> }
-							isFallbackActive={ isInspectorOpen }
-						/>
-					) : (
-						<InspectorSidebarSlot />
-					)
-				}
+				sidebar={ <InspectorSidebarSlot /> }
 			/>
 			<PageInspectorSidebar postId={ post.id } postType={ postType } />
 		</>

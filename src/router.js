@@ -15,6 +15,7 @@ import CommandPalette from './components/CommandPalette';
 import AlphaNoticeModal from './components/AlphaNoticeModal';
 import { DocumentPeekProvider } from './components/DocumentPeekProvider';
 import DocumentPeekHost from './components/DocumentPeekHost';
+import { RowDetailSidebarSlot } from './components/RowDetailSidebarSlot';
 import useSidebarLayout from './hooks/useSidebarLayout';
 import useAlphaNotice from './hooks/useAlphaNotice';
 import { FavoritesProvider } from './hooks/useFavorites';
@@ -88,6 +89,7 @@ function RootLayout() {
 								>
 									<EntityRoute history={ router.history } />
 								</main>
+								<RowDetailSidebarSlot />
 							</div>
 							<CommandPalette canvasRef={ canvasRef } />
 							{ alphaNotice.isOpen && (

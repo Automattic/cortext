@@ -16,7 +16,6 @@ import Canvas from '../components/Canvas';
 import CollectionDataViews from '../components/CollectionDataViews';
 import { CollectionFieldsProvider } from '../components/CollectionFieldsContext';
 import { RowMutationContext } from '../components/EditableCell';
-import { RowDetailSidebarSlot } from '../components/RowDetailSidebarSlot';
 import WorkspaceTopBar from '../components/WorkspaceTopBar';
 import {
 	ACTIVE_PAGES_QUERY,
@@ -85,7 +84,6 @@ function CollectionPane( { collectionId, onReady } ) {
 						onReady={ onReady }
 					/>
 				</div>
-				<RowDetailSidebarSlot />
 			</div>
 		</CollectionFieldsProvider>
 	);
