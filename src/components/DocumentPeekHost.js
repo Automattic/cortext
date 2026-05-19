@@ -67,6 +67,12 @@ export default function DocumentPeekHost() {
 	const canGoPrevious = Boolean(
 		peek.source && adjacentRowId( rowList, peek.docId, -1 )
 	);
+	// Show the row from the table immediately so the panel can paint title
+	// and icon before useEntityRecord resolves. RowDetailView prefers `record`
+	// once it arrives, so this is only used by LoadingDetail.
+	const tentativeRow = rowList.find(
+		( candidate ) => String( candidate?.id ) === String( peek.docId )
+	);
 	const handleSaved = () => peek.source?.refresh?.();
 	const handleRestored = () => peek.source?.refresh?.();
 
@@ -88,7 +94,7 @@ export default function DocumentPeekHost() {
 				onRetryPending={ retryPendingTransition }
 				onSaved={ handleSaved }
 				postType={ peek.postType }
-				row={ undefined }
+				row={ tentativeRow }
 				rowId={ peek.docId }
 				saveError={ saveError }
 			/>

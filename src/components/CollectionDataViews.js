@@ -87,12 +87,40 @@ const OpenRowActionContext = createContext( {
 	requestOpenRow: null,
 } );
 
+// The peek panel needs the editor to mount before its content paints, which
+// is enough work that the row click otherwise feels unresponsive for the
+// first frames. Showing an "opening" highlight on the row immediately on
+// pointerdown gives the user feedback before the panel is ready.
+const OPENING_FEEDBACK_TIMEOUT_MS = 600;
+
 function TitleCell( { item } ) {
 	const { enabled, icon, openRowId, requestOpenRow } =
 		useContext( OpenRowActionContext );
 	const canOpenRow = Boolean( enabled && requestOpenRow );
 	const isOpenRow = canOpenRow && String( item?.id ) === String( openRowId );
 	const documentIcon = item?.meta?.cortext_document_icon ?? '';
+	const [ isOpening, setIsOpening ] = useState( false );
+	const openingTimeoutRef = useRef( null );
+
+	const clearOpeningTimeout = useCallback( () => {
+		if ( openingTimeoutRef.current ) {
+			clearTimeout( openingTimeoutRef.current );
+			openingTimeoutRef.current = null;
+		}
+	}, [] );
+
+	useEffect( () => clearOpeningTimeout, [ clearOpeningTimeout ] );
+
+	// Once the row is the open peek, the --is-open class takes over the
+	// highlight. Drop the transient opening state so it doesn't linger if the
+	// user closes the panel quickly.
+	useEffect( () => {
+		if ( isOpenRow && isOpening ) {
+			clearOpeningTimeout();
+			setIsOpening( false );
+		}
+	}, [ clearOpeningTimeout, isOpening, isOpenRow ] );
+
 	const openRow = useCallback(
 		( event ) => {
 			event.preventDefault();
@@ -100,6 +128,21 @@ function TitleCell( { item } ) {
 			requestOpenRow?.( item );
 		},
 		[ item, requestOpenRow ]
+	);
+	const handleOpenPointerDown = useCallback(
+		( event ) => {
+			event.stopPropagation();
+			if ( ! canOpenRow || isOpenRow ) {
+				return;
+			}
+			setIsOpening( true );
+			clearOpeningTimeout();
+			openingTimeoutRef.current = setTimeout( () => {
+				openingTimeoutRef.current = null;
+				setIsOpening( false );
+			}, OPENING_FEEDBACK_TIMEOUT_MS );
+		},
+		[ canOpenRow, clearOpeningTimeout, isOpenRow ]
 	);
 	const stopPropagation = useCallback( ( event ) => {
 		event.stopPropagation();
@@ -110,7 +153,10 @@ function TitleCell( { item } ) {
 			className={
 				'cortext-title-cell' +
 				( canOpenRow ? ' cortext-title-cell--with-open-action' : '' ) +
-				( isOpenRow ? ' cortext-title-cell--is-open' : '' )
+				( isOpenRow ? ' cortext-title-cell--is-open' : '' ) +
+				( isOpening && ! isOpenRow
+					? ' cortext-title-cell--is-opening'
+					: '' )
 			}
 		>
 			{ documentIcon ? (
@@ -136,6 +182,7 @@ function TitleCell( { item } ) {
 					variant="tertiary"
 					onClick={ openRow }
 					onMouseDown={ stopPropagation }
+					onPointerDown={ handleOpenPointerDown }
 				>
 					{ __( 'Open', 'cortext' ) }
 				</Button>

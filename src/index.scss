@@ -2289,6 +2289,11 @@ tr:hover
 .dataviews-view-table
 tbody
 tr:has(.cortext-title-cell--is-open)
+.cortext-title-cell__open.components-button,
+.cortext-data-view
+.dataviews-view-table
+tbody
+tr:has(.cortext-title-cell--is-opening)
 .cortext-title-cell__open.components-button {
 	opacity: 1;
 	pointer-events: auto;
@@ -2302,8 +2307,18 @@ tr:has(.cortext-title-cell--is-open),
 .dataviews-view-table
 tbody
 tr:has(.cortext-title-cell--is-open)
+.dataviews-view-table__actions-column--sticky,
+.cortext-data-view
+.dataviews-view-table
+tbody
+tr:has(.cortext-title-cell--is-opening),
+.cortext-data-view
+.dataviews-view-table
+tbody
+tr:has(.cortext-title-cell--is-opening)
 .dataviews-view-table__actions-column--sticky {
 	background-color: #f8f8f8;
+	transition: background-color 80ms ease-out;
 }
 
 .cortext-cell-readonly {
@@ -3845,6 +3860,90 @@ tr:has(.cortext-title-cell--is-open)
 	&__frame[data-properties-visible="false"] &__fields-indicator-wrap {
 		grid-template-rows: 1fr;
 		opacity: 1;
+	}
+
+	// Painted while useEntityRecord resolves and the editor mounts. The title
+	// and icon come from the table row, so the panel doesn't look empty for
+	// the first frames after a click.
+	&__frame--loading {
+
+		.cortext-row-detail__title {
+			display: flex;
+			align-items: center;
+			gap: $grid-unit-10;
+		}
+
+		.cortext-row-detail__title-icon {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			width: 24px;
+			height: 24px;
+		}
+	}
+
+	&__body--loading {
+		display: flex;
+		flex-direction: column;
+		gap: $grid-unit-20;
+		padding: $grid-unit-20 $grid-unit-30;
+	}
+
+	&__loading-fields {
+		display: flex;
+		flex-direction: column;
+		gap: $grid-unit-15;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	&__loading-field {
+		display: grid;
+		grid-template-columns: minmax(96px, 140px) minmax(0, 1fr);
+		gap: $grid-unit-20;
+		align-items: center;
+	}
+
+	&__loading-field-label,
+	&__loading-field-value {
+		display: block;
+		height: 12px;
+		border-radius: 4px;
+		background: rgba(0, 0, 0, 0.06);
+		animation: cortext-row-detail-loading-pulse 1.4s ease-in-out infinite;
+	}
+
+	&__loading-field-value {
+		max-width: 280px;
+		animation-delay: 0.2s;
+	}
+
+	&__loading-status {
+		display: flex;
+		justify-content: center;
+		padding: $grid-unit-20 0;
+		opacity: 0.6;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+	.cortext-row-detail__loading-field-label,
+	.cortext-row-detail__loading-field-value {
+		animation: none;
+	}
+}
+
+@keyframes cortext-row-detail-loading-pulse {
+
+	0%,
+	100% {
+		opacity: 1;
+	}
+
+	50% {
+		opacity: 0.55;
 	}
 }
 

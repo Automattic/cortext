@@ -23,6 +23,7 @@ import {
 
 import useAutosave from '../hooks/useAutosave';
 import EditorBody from './EditorBody';
+import PageIcon from './PageIcon';
 import RowProperties from './RowProperties';
 import { getRowDetailMode } from './rowDetailUtils';
 
@@ -385,17 +386,71 @@ function DetailShell( {
 	);
 }
 
-function LoadingDetail( { onClose } ) {
+// Paints the row's title and icon (taken from the list) plus a properties
+// skeleton while useEntityRecord resolves and the editor mounts. Keeps the
+// peek panel from looking empty during the first frames after a row click.
+function LoadingDetail( { onClose, row, fieldCount } ) {
+	const tentativeTitle = titleFromRow( row );
+	const documentIcon = row?.meta?.cortext_document_icon ?? '';
+	// Cap the placeholder rows so a collection with many fields doesn't paint
+	// a wall of grey lines. Six is enough to hint at the structure.
+	const skeletonRows = Math.max( 1, Math.min( fieldCount ?? 0, 6 ) );
+
 	return (
-		<div className="cortext-row-detail__frame">
+		<div className="cortext-row-detail__frame cortext-row-detail__frame--loading">
 			<div className="cortext-row-detail__header">
-				<Spinner />
-				<Button
-					icon={ closeSmall }
-					label={ __( 'Close', 'cortext' ) }
-					size="compact"
-					onClick={ onClose }
-				/>
+				<div
+					className="cortext-row-detail__toolbar"
+					role="toolbar"
+					aria-label={ __( 'Row detail tools', 'cortext' ) }
+				>
+					<div className="cortext-row-detail__toolbar-group cortext-row-detail__toolbar-group--end">
+						<Button
+							className="cortext-row-detail__toolbar-button cortext-row-detail__toolbar-button--close"
+							icon={ closeSmall }
+							label={ __( 'Close', 'cortext' ) }
+							onClick={ onClose }
+						/>
+					</div>
+				</div>
+				<div className="cortext-row-detail__identity">
+					<h2 className="cortext-row-detail__title">
+						{ documentIcon ? (
+							<span
+								className="cortext-row-detail__title-icon"
+								aria-hidden="true"
+							>
+								<PageIcon icon={ documentIcon } size={ 24 } />
+							</span>
+						) : null }
+						{ tentativeTitle || __( 'Untitled', 'cortext' ) }
+					</h2>
+				</div>
+			</div>
+			<div className="cortext-row-detail__body cortext-row-detail__body--loading">
+				<ul
+					className="cortext-row-detail__loading-fields"
+					aria-hidden="true"
+				>
+					{ Array.from( { length: skeletonRows } ).map(
+						( _, idx ) => (
+							<li
+								key={ idx }
+								className="cortext-row-detail__loading-field"
+							>
+								<span className="cortext-row-detail__loading-field-label" />
+								<span className="cortext-row-detail__loading-field-value" />
+							</li>
+						)
+					) }
+				</ul>
+				<div
+					className="cortext-row-detail__loading-status"
+					role="status"
+					aria-live="polite"
+				>
+					<Spinner />
+				</div>
 			</div>
 		</div>
 	);
@@ -615,7 +670,11 @@ export default function RowDetailView( {
 
 	const content =
 		! activeDetail && detailPanes.length === 0 ? (
-			<LoadingDetail onClose={ requestClose } />
+			<LoadingDetail
+				onClose={ requestClose }
+				row={ row }
+				fieldCount={ propertyFields.length }
+			/>
 		) : (
 			<DetailShell
 				arePropertiesVisible={ arePropertiesVisible }
