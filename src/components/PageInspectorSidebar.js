@@ -51,6 +51,7 @@ import {
 	POST_TYPE,
 	TRASHED_PAGES_QUERY,
 } from './page-queries';
+import { FULL_PAGE_COLLECTION_QUERY } from '../collections';
 import { unlock } from '../lock-unlock';
 import { notifyDocumentTrashChanged } from '../hooks/documentTrashInvalidation';
 import { useFavorites } from '../hooks/useFavorites';
@@ -456,6 +457,11 @@ function PageActionsPanel( { postId } ) {
 		POST_TYPE,
 		ACTIVE_PAGES_QUERY
 	);
+	const { records: collections = [] } = useEntityRecords(
+		'postType',
+		'crtxt_collection',
+		FULL_PAGE_COLLECTION_QUERY
+	);
 	const { home, setHome, isUpdating: isHomeUpdating } = useWorkspaceHome();
 	const {
 		favorites,
@@ -531,10 +537,22 @@ function PageActionsPanel( { postId } ) {
 				POST_TYPE,
 				TRASHED_PAGES_QUERY,
 			] );
+			// Page trash can also trash inline-owned and nested full-page
+			// collections, so refresh the full-page list now.
+			invalidateResolution( 'getEntityRecords', [
+				'postType',
+				'crtxt_collection',
+				FULL_PAGE_COLLECTION_QUERY,
+			] );
 			notifyDocumentTrashChanged();
 			try {
 				await setFavorites( ( current ) =>
-					filterFavoritesForTrashedPage( current, postId, pages )
+					filterFavoritesForTrashedPage(
+						current,
+						postId,
+						pages,
+						collections
+					)
 				);
 			} catch ( err ) {
 				setError(
@@ -555,6 +573,7 @@ function PageActionsPanel( { postId } ) {
 	}, [
 		invalidateResolution,
 		pages,
+		collections,
 		postId,
 		receiveEntityRecords,
 		setFavorites,

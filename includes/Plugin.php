@@ -19,6 +19,7 @@ use Cortext\Frontend\Assets;
 use Cortext\Frontend\Template;
 use Cortext\PostType\Collection;
 use Cortext\PostType\CollectionEntries;
+use Cortext\PostType\CollectionTrashCascade;
 use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Field;
 use Cortext\PostType\Page;
@@ -50,6 +51,7 @@ final class Plugin {
 		( new DocumentIdentity() )->register();
 		( new PageTrashCascade() )->register();
 		( new Collection() )->register();
+		( new CollectionTrashCascade() )->register();
 		( new Field() )->register();
 		( new CollectionEntries() )->register();
 		( new RevisionThrottle() )->register();

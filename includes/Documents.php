@@ -325,15 +325,15 @@ final class Documents {
 	 * @param string $post_type Post type slug.
 	 */
 	public function kind_for_post_type( string $post_type ): ?string {
+		// Only post types that opt into the document trait count here. That
+		// keeps `crtxt_field` and `crtxt_collection` out of row handling.
+		if ( ! post_type_supports( $post_type, 'cortext-document' ) ) {
+			return null;
+		}
 		if ( Page::POST_TYPE === $post_type ) {
 			return self::KIND_PAGE;
 		}
-		if ( str_starts_with( $post_type, CollectionEntries::CPT_PREFIX )
-			&& Collection::POST_TYPE !== $post_type
-		) {
-			return self::KIND_ROW;
-		}
-		return null;
+		return self::KIND_ROW;
 	}
 
 	/**

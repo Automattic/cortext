@@ -199,6 +199,14 @@ final class FavoritesController {
 			);
 		}
 
+		if ( 'collection' === $kind && Collection::is_inline( $id ) ) {
+			return new WP_Error(
+				'cortext_favorites_inline_collection',
+				__( 'Inline collections cannot be added to favorites.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+
 		if ( $require_edit && ! current_user_can( 'edit_post', $id ) ) {
 			return new WP_Error(
 				'cortext_favorites_forbidden',

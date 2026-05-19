@@ -281,6 +281,53 @@ final class Test_Rest_Favorites_Controller extends BaseTestCase {
 		$this->assertSame( 403, $response->get_status() );
 	}
 
+	public function test_rejects_favoriting_an_inline_collection(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$collection_id = $this->create_collection( 'hidden', 'Hidden' );
+		update_post_meta( $collection_id, Collection::MODE_META_KEY, Collection::MODE_INLINE );
+
+		$response = $this->set_favorites(
+			array(
+				array(
+					'kind' => 'collection',
+					'id'   => $collection_id,
+				),
+			)
+		);
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame(
+			'cortext_favorites_inline_collection',
+			$response->get_data()['code']
+		);
+	}
+
+	public function test_get_drops_stale_inline_collection_favorites(): void {
+		$user_id = $this->create_user( 'administrator' );
+		wp_set_current_user( $user_id );
+		$full_id   = $this->create_collection( 'visible', 'Visible' );
+		$inline_id = $this->create_collection( 'hidden', 'Hidden' );
+		update_post_meta( $full_id, Collection::MODE_META_KEY, Collection::MODE_FULL_PAGE );
+		update_post_meta( $inline_id, Collection::MODE_META_KEY, Collection::MODE_INLINE );
+
+		update_user_meta(
+			$user_id,
+			self::META_KEY,
+			array(
+				"collection:{$full_id}",
+				"collection:{$inline_id}",
+			)
+		);
+
+		$response = $this->get_favorites();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			array( $full_id ),
+			array_column( $response->get_data()['favorites'], 'id' )
+		);
+	}
+
 	private function get_favorites() {
 		$request = new WP_REST_Request( 'GET', '/cortext/v1/favorites' );
 		return rest_do_request( $request );

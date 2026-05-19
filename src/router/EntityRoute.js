@@ -343,6 +343,12 @@ export default function EntityRoute( { history } ) {
 			return;
 		}
 		if ( entity?.id === target.id ) {
+			// Inline collections do not have a workspace route. A pasted stale
+			// URL should land on Not Found instead of opening CollectionPane.
+			if ( entity?.meta?.workspace_mode === 'inline' ) {
+				dispatch( { type: 'COLLECTION_NOT_FOUND' } );
+				return;
+			}
 			dispatch( { type: 'COLLECTION_RESOLVED', id: entity.id } );
 			touchRecent( { kind: 'collection', id: entity.id } );
 			return;

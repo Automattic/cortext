@@ -41,7 +41,10 @@ final class Test_Post_Type_Collection extends BaseTestCase {
 		$object = get_post_type_object( Collection::POST_TYPE );
 		$this->assertNotNull( $object );
 
-		$this->assertFalse( $object->hierarchical, 'crtxt_collection is not hierarchical.' );
+		$this->assertTrue(
+			$object->hierarchical,
+			'crtxt_collection needs hierarchy so full-page collections can use parent/menu_order in the sidebar.'
+		);
 		$this->assertTrue( $object->show_in_rest, 'crtxt_collection must be show_in_rest for @wordpress/core-data.' );
 		$this->assertSame( 'crtxt_collections', $object->rest_base );
 		$this->assertFalse( $object->public );
@@ -56,6 +59,10 @@ final class Test_Post_Type_Collection extends BaseTestCase {
 
 		$this->assertTrue( post_type_supports( Collection::POST_TYPE, 'title' ) );
 		$this->assertTrue( post_type_supports( Collection::POST_TYPE, 'custom-fields' ) );
+		$this->assertTrue(
+			post_type_supports( Collection::POST_TYPE, 'page-attributes' ),
+			'page-attributes exposes parent/menu_order for sidebar nesting and drag/drop.'
+		);
 		$this->assertFalse( post_type_supports( Collection::POST_TYPE, 'editor' ), 'Collections are schema definitions, not documents.' );
 	}
 

@@ -16,13 +16,15 @@ Pair with [decisions.md](decisions.md) for choices we've made peace with and [ro
 
 ## 2. Rows aren't in `core-data`'s entity store `[internal]`
 
-Updated by [#80](https://github.com/priethor/cortext/pull/80) and #179.
+Updated by [#80](https://github.com/priethor/cortext/pull/80), #179, and #118.
 
 **What.** Rows still sit outside `core-data`. `useCollectionRows` owns fetch state, the `requestId` race guard, the manual `refresh()` counter, and the choice between server and client mode. #80 moved the normal table path to paged REST requests, then changed the fallback from one `per_page=-1` request to pages of 100 fetched with a small concurrency cap. #179 exposed the same gap from another angle: trashing or restoring a row can change relation chips and rollups in other open collections. Since there is no shared row store, the client fires small row and document-trash events, then lets open row queries and the sidebar Trash list refetch.
 
 The dynamic `crtxt_{slug}` post types already use `show_in_rest`, so `core-data` can probably discover them lazily. We have not wired rows through it yet. Mutations still POST directly with `apiFetch`, then ask the hook to refetch.
 
-**Where.** `src/hooks/useCollectionRows.js`, `src/hooks/rowInvalidation.js`, `src/hooks/documentTrashInvalidation.js`, and `src/hooks/useTrashedDocuments.js`, with call sites in `src/components/CollectionDataViews.js` (`saveRowField`, `onCreated`, row trash), `src/components/SidebarTrash.js`, `src/router/EntityRoute.js`, and forced client mode in `src/components/relations/RelationEditor.js`.
+Full-page collection creation hit the same schema-cache edge. A new collection registers a dynamic row CPT on the server, but `core-data` may already have cached `/wp/v2/types`. The sidebar and DataView block creator invalidate `getEntitiesConfig( 'postType' )` after creation so the next row `useEntityRecord` can see the new entity instead of waiting on a type it does not know about.
+
+**Where.** `src/hooks/useCollectionRows.js`, `src/hooks/rowInvalidation.js`, `src/hooks/documentTrashInvalidation.js`, and `src/hooks/useTrashedDocuments.js`, with call sites in `src/components/CollectionDataViews.js` (`saveRowField`, `onCreated`, row trash), `src/components/SidebarTrash.js`, `src/router/EntityRoute.js`, `src/blocks/data-view/edit.js`, and `src/components/Sidebar.js` (post-type entity-config invalidation after collection creation), plus forced client mode in `src/components/relations/RelationEditor.js`.
 
 **Solution.** Switch to `useEntityRecords('postType', \`crtxt_${slug}\`, query)` plus `saveEntityRecord` for writes once the remaining query shapes can be expressed there. `core-data` would then own caching, race protection, and post-mutation invalidation. Knock-on workarounds it deletes:
 
@@ -31,7 +33,7 @@ The dynamic `crtxt_{slug}` post types already use `show_in_rest`, so `core-data`
 - `onCreated` runs optimistic `lastPage = ceil((totalItems+1)/perPage)` arithmetic against possibly stale `paginationInfo`. With reactive pagination we'd watch `totalPages` in an effect.
 - The server/client planner becomes normal resolver queries instead of a local fetch policy.
 
-Worth a small spike before committing; `core-data`'s schema cache for rarely-changing post types is the only real risk.
+Worth a small spike before committing. Dynamic post-type discovery also needs a real answer: either `core-data` learns about new row CPTs after collection creation, or each collection-creation path keeps the post-type entity-config invalidation nearby.
 
 That does not mean every document-shaped query belongs in `core-data`. Single records and mutations should use the entity store when WordPress can model them. Cross-type product views, like Trash, can stay behind `/cortext/v1/documents/*` endpoints.
 
@@ -474,3 +476,13 @@ That is acceptable for the current DataView scale. It is not a real bulk operati
 **Where.** `requestDeleteRows` in `src/components/CollectionDataViews.js`, the queue helper in `src/components/allSettledWithConcurrency.js`, and coverage in `tests/js/components/allSettledWithConcurrency.test.js`.
 
 **Solution.** If collections start moving large row sets to Trash, add a collection-row bulk trash endpoint or an async job endpoint with progress polling. That endpoint should own permission checks, trash order, partial-failure reporting, and cleanup. Then the DataView action can send selected IDs once instead of managing a client-side queue.
+
+## 53. Workspace tree has no unified node model `[internal]`
+
+**What.** The sidebar builds its workspace tree from two REST lists: active pages (`crtxt_page`) and full-page collections (`crtxt_collection`). The shell joins them client-side by reading `post_parent`. That works for collections under pages, but row-owned collections and collections whose parent page is outside the loaded window fall back to the flat Collections section because there is no parent record to attach to. We also do not have one "workspace node" shape with `kind`, so each tree consumer has to branch on pages versus collections.
+
+Drag/drop and `menu_order` accounting across both types were added in #118 (`treeRecords` in `src/components/Sidebar.js`), but they still ride on the same client-side merge and need review around top-level collections and page-cycle guards. Lazy loading lives in RSM-1848. This note is about the missing shared model.
+
+**Where.** `ACTIVE_PAGES_QUERY` in `src/components/page-queries.js`, `FULL_PAGE_COLLECTION_QUERY` in `src/collections.js`, `nestedCollections` / `topLevelCollections` in `src/components/Sidebar.js`, the `renderCollectionRow` bridge in `src/components/PageRow.js`, and the `Collection::hierarchical` / `CollectionsController::validate_parent_document` setup on the PHP side.
+
+**Solution.** Add a workspace-tree REST endpoint that returns navigable nodes with `kind`, `id`, `parent`, `menu_order`, and visibility in one shape. Row-owned collections could then appear under their row, missing parents would not look top-level by accident, and page/collection branching would move out of every consumer.
