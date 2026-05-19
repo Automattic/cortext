@@ -6,7 +6,7 @@
  * and assert the REST calls SidebarTrash makes.
  */
 
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 
 // Stub @wordpress/components so the test does not transitively pull in
 // rich-text → block-editor → parsel-js (an ESM-only package the jest CJS
@@ -191,14 +191,25 @@ describe( 'SidebarTrash', () => {
 			status: 'RESOLVING',
 		} );
 
-		const { container } = renderSidebarTrash();
+		jest.useFakeTimers();
+		try {
+			const { container } = renderSidebarTrash();
 
-		expect(
-			container.querySelector( '.cortext-sidebar-skeleton' )
-		).toBeTruthy();
-		expect(
-			container.querySelector( '.cortext-sidebar__empty' )
-		).toBeFalsy();
+			// Skeletons are delayed so fast loads don't flicker; advance
+			// past the threshold to assert the loading visual.
+			act( () => {
+				jest.advanceTimersByTime( 200 );
+			} );
+
+			expect(
+				container.querySelector( '.cortext-sidebar-skeleton' )
+			).toBeTruthy();
+			expect(
+				container.querySelector( '.cortext-sidebar__empty' )
+			).toBeFalsy();
+		} finally {
+			jest.useRealTimers();
+		}
 	} );
 
 	it( 'shows the empty state when the trash is empty', () => {

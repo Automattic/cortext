@@ -13,6 +13,7 @@ import { chevronDown, chevronUp, cog, seen, unseen } from '@wordpress/icons';
 import { useCallback, useEffect, useState } from '@wordpress/element';
 
 import useAutosave from '../hooks/useAutosave';
+import useDelayedFlag from '../hooks/useDelayedFlag';
 import { withViewTransition } from '../hooks/viewTransition';
 import { POST_TYPE } from './page-queries';
 import EditorBody from './EditorBody';
@@ -376,10 +377,11 @@ export default function Canvas( {
 		} );
 	}, [ requestedPost ] );
 
+	const showLoadingSkeleton = useDelayedFlag( ! renderedPost );
 	if ( ! renderedPost ) {
 		return (
 			<div className="cortext-canvas__loading cortext-canvas__loading--document">
-				<DocumentSkeleton />
+				{ showLoadingSkeleton ? <DocumentSkeleton /> : null }
 			</div>
 		);
 	}

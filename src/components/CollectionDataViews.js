@@ -30,6 +30,7 @@ import { CurrentViewModeProvider } from './CurrentViewModeContext';
 import EditableCell, { RowMutationContext } from './EditableCell';
 import PageIcon from './PageIcon';
 import { CollectionRowsSkeleton } from './Skeleton';
+import useDelayedFlag from '../hooks/useDelayedFlag';
 import allSettledWithConcurrency from './allSettledWithConcurrency';
 import { filterSortAndPaginateWithGroups } from './groupedFilters';
 import TableCalculationsFooter from './TableCalculationsFooter';
@@ -568,6 +569,9 @@ export default function CollectionDataViews( {
 	const supportsRowSelection = isTableLayout || isGridLayout;
 	const isServerPaginated = queryMode === 'server';
 	const dataViewFields = availableFields;
+	const showRowsSkeleton = useDelayedFlag(
+		isLoading && data.length === 0 && isTableLayout
+	);
 
 	const tableWrapperRef = useRef( null );
 	const [ localRevealFieldId, setLocalRevealFieldId ] = useState( null );
@@ -1525,11 +1529,7 @@ export default function CollectionDataViews( {
 							ref={ tableWrapperRef }
 							onClickCapture={ captureSelectionIntent }
 							data-rows-loading={
-								isLoading &&
-								dataFiltered.length === 0 &&
-								isTableLayout
-									? 'true'
-									: undefined
+								showRowsSkeleton ? 'true' : undefined
 							}
 						>
 							{ rowActionError && (
@@ -1541,18 +1541,15 @@ export default function CollectionDataViews( {
 									{ rowActionError }
 								</Notice>
 							) }
-							{ isLoading &&
-								dataFiltered.length === 0 &&
-								isTableLayout && (
-									<div className="cortext-data-view__rows-skeleton">
-										<CollectionRowsSkeleton
-											columnCount={
-												( view?.fields?.length ?? 0 ) +
-												1
-											}
-										/>
-									</div>
-								) }
+							{ showRowsSkeleton && (
+								<div className="cortext-data-view__rows-skeleton">
+									<CollectionRowsSkeleton
+										columnCount={
+											( view?.fields?.length ?? 0 ) + 1
+										}
+									/>
+								</div>
+							) }
 							<DataViews
 								data={ dataFiltered }
 								fields={ dataViewFields }

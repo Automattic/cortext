@@ -45,6 +45,7 @@ import MediaPicker, { MediaUploadCheck } from './MediaPicker';
 import PageIcon from './PageIcon';
 import DocumentIdentityControls from './DocumentIdentityControls';
 import { SkeletonBlock } from './Skeleton';
+import useDelayedFlag from '../hooks/useDelayedFlag';
 import { filterFavoritesForTrashedPage } from './SidebarFavorites';
 import {
 	ACTIVE_PAGES_QUERY,
@@ -382,13 +383,14 @@ function PageFeaturedImageInspectorControls( { postId } ) {
 		media?.media_details?.sizes?.medium?.source_url ??
 		media?.source_url ??
 		null;
+	const showMediaSkeleton = useDelayedFlag( isResolvingMedia && ! src );
 	let featuredImagePreview = (
 		<span>{ __( 'Featured image is not available.', 'cortext' ) }</span>
 	);
 	if ( isResolvingMedia && ! src ) {
-		featuredImagePreview = (
+		featuredImagePreview = showMediaSkeleton ? (
 			<SkeletonBlock className="cortext-page-inspector__featured-image-skeleton" />
-		);
+		) : null;
 	} else if ( src ) {
 		featuredImagePreview = (
 			<img

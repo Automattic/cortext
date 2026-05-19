@@ -25,6 +25,7 @@ import {
 import PageIcon from './PageIcon';
 import { SidebarListSkeleton } from './Skeleton';
 import { collectionTitle } from './CollectionRow';
+import useDelayedFlag from '../hooks/useDelayedFlag';
 import { collectDescendants } from './pages-tree';
 import {
 	computeCollectionUri,
@@ -455,11 +456,12 @@ export default function SidebarFavorites( {
 	const isLoading =
 		isResolving ||
 		( hasFavorites && isResolvingItems && items.length === 0 );
+	const showSkeleton = useDelayedFlag( isLoading );
 	const isEmpty = ! isLoading && ! hasFavorites;
 
 	return (
 		<div className="cortext-sidebar__favorites">
-			{ isLoading ? (
+			{ isLoading && showSkeleton ? (
 				<SidebarListSkeleton itemCount={ favorites.length || 3 } />
 			) : null }
 			{ isEmpty ? (

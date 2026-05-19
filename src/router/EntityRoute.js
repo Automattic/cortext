@@ -18,6 +18,7 @@ import { CollectionFieldsProvider } from '../components/CollectionFieldsContext'
 import { RowMutationContext } from '../components/EditableCell';
 import { RowDetailSidebarSlot } from '../components/RowDetailSidebarSlot';
 import { DocumentSkeleton } from '../components/Skeleton';
+import useDelayedFlag from '../hooks/useDelayedFlag';
 import WorkspaceTopBar from '../components/WorkspaceTopBar';
 import {
 	ACTIVE_PAGES_QUERY,
@@ -92,10 +93,11 @@ function CollectionPane( { collectionId, onReady } ) {
 	);
 }
 
-function LoadingPane() {
+function LoadingPane( { active } ) {
+	const showSkeleton = useDelayedFlag( active );
 	return (
 		<div className="cortext-canvas__loading cortext-canvas__loading--document">
-			<DocumentSkeleton />
+			{ showSkeleton ? <DocumentSkeleton /> : null }
 		</div>
 	);
 }
@@ -510,7 +512,7 @@ export default function EntityRoute( { history } ) {
 					<NotFoundPane type="collection" />
 				</WorkspacePane>
 				<WorkspacePane active={ active.kind === 'loading' }>
-					<LoadingPane />
+					<LoadingPane active={ active.kind === 'loading' } />
 				</WorkspacePane>
 			</div>
 		</>

@@ -22,6 +22,7 @@ import {
 } from '@wordpress/icons';
 
 import useAutosave from '../hooks/useAutosave';
+import useDelayedFlag from '../hooks/useDelayedFlag';
 import EditorBody from './EditorBody';
 import PageIcon from './PageIcon';
 import RowProperties from './RowProperties';
@@ -663,14 +664,20 @@ export default function RowDetailView( {
 			String( activeDetail.rowId ) === String( rowId )
 	);
 
-	const content =
-		! activeDetail && detailPanes.length === 0 ? (
+	const isLoadingPane = ! activeDetail && detailPanes.length === 0;
+	const showLoadingDetail = useDelayedFlag( isLoadingPane );
+
+	let content;
+	if ( isLoadingPane ) {
+		content = showLoadingDetail ? (
 			<LoadingDetail
 				onClose={ requestClose }
 				row={ row }
 				fieldCount={ propertyFields.length }
 			/>
-		) : (
+		) : null;
+	} else {
+		content = (
 			<DetailShell
 				arePropertiesVisible={ arePropertiesVisible }
 				canGoNext={ canUseRowControls && canGoNext }
@@ -762,6 +769,7 @@ export default function RowDetailView( {
 				</div>
 			</DetailShell>
 		);
+	}
 
 	if ( normalizedMode === 'modal' ) {
 		return (
