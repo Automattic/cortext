@@ -258,11 +258,11 @@ describe( 'CommandPalette document search', () => {
 
 		expect( pageCommand ).toMatchObject( {
 			label: 'Roadmap',
-			keywords: [ 'quarterly', 'page' ],
+			keywords: [ 'page' ],
 		} );
 		expect( rowCommand ).toMatchObject( {
 			label: 'Ship the thing',
-			keywords: [ 'quarterly', 'row' ],
+			keywords: [ 'row' ],
 		} );
 		expect( mockMenu.descriptions.get( 'cortext/document/page-42' ) ).toBe(
 			'Quarterly themes for next half.'
@@ -326,7 +326,7 @@ describe( 'CommandPalette document search', () => {
 		expect( mockMenu.isDocumentSearchPending ).toBe( false );
 	} );
 
-	it( 'keeps stale documents under the prior keyword while a new query loads', () => {
+	it( 'keeps stale documents visible while the next query is in flight', () => {
 		mockIsPaletteOpen = true;
 		const staleDocs = [
 			{
@@ -355,21 +355,18 @@ describe( 'CommandPalette document search', () => {
 			jest.advanceTimersByTime( 150 );
 		} );
 
-		// Sanity check: the resolved doc is registered for the first search.
+		// Sanity check: the resolved doc is registered.
 		expect(
 			mockUseCommand.mock.calls
 				.map( ( [ c ] ) => c )
-				.some(
-					( c ) =>
-						c.name === 'cortext/document/page-1' &&
-						c.keywords?.includes( 'first' )
-				)
+				.some( ( c ) => c.name === 'cortext/document/page-1' )
 		).toBe( true );
 
 		mockUseCommand.mockClear();
 
 		// New query is in flight: useDocuments keeps the previous documents
-		// but flips hasResolved to false.
+		// but flips hasResolved to false. The stale doc stays registered so
+		// the user does not see a flicker between keystrokes.
 		mockUseDocuments.mockReturnValue( {
 			documents: staleDocs,
 			total: 1,
@@ -386,25 +383,11 @@ describe( 'CommandPalette document search', () => {
 			jest.advanceTimersByTime( 150 );
 		} );
 
-		const calls = mockUseCommand.mock.calls.map( ( [ c ] ) => c );
-
-		// The stale doc stays registered so the user does not see a flicker
-		// between keystrokes, but the keyword is the search that produced it
-		// — never the new query — so cmdk can filter it out on replacement.
 		expect(
-			calls.some(
-				( c ) =>
-					c.name === 'cortext/document/page-1' &&
-					c.keywords?.includes( 'first' )
-			)
+			mockUseCommand.mock.calls
+				.map( ( [ c ] ) => c )
+				.some( ( c ) => c.name === 'cortext/document/page-1' )
 		).toBe( true );
-		expect(
-			calls.some(
-				( c ) =>
-					c.name === 'cortext/document/page-1' &&
-					c.keywords?.includes( 'second' )
-			)
-		).toBe( false );
 
 		// Descriptions stay populated so the second line does not flicker.
 		expect(
@@ -475,7 +458,7 @@ describe( 'CommandPalette document search', () => {
 		expect( mockMenu.selectedValue ).toBeUndefined();
 	} );
 
-	it( 'keeps stale documents under the prior keyword when the new query fails', () => {
+	it( 'drops stale documents when the next query fails', () => {
 		mockIsPaletteOpen = true;
 		const staleDocs = [
 			{
@@ -507,7 +490,9 @@ describe( 'CommandPalette document search', () => {
 		mockUseCommand.mockClear();
 
 		// Failed fetch: useDocuments resolves with hasResolved=true,
-		// keeps the previous documents, and exposes the error.
+		// keeps the previous documents, and exposes the error. The
+		// palette must hide the stale list so the user does not navigate
+		// to a document that no longer matches their query.
 		mockUseDocuments.mockReturnValue( {
 			documents: staleDocs,
 			total: 1,
@@ -524,20 +509,10 @@ describe( 'CommandPalette document search', () => {
 			jest.advanceTimersByTime( 150 );
 		} );
 
-		const calls = mockUseCommand.mock.calls.map( ( [ c ] ) => c );
 		expect(
-			calls.some(
-				( c ) =>
-					c.name === 'cortext/document/page-1' &&
-					c.keywords?.includes( 'first' )
-			)
-		).toBe( true );
-		expect(
-			calls.some(
-				( c ) =>
-					c.name === 'cortext/document/page-1' &&
-					c.keywords?.includes( 'second' )
-			)
+			mockUseCommand.mock.calls
+				.map( ( [ c ] ) => c )
+				.some( ( c ) => c.name === 'cortext/document/page-1' )
 		).toBe( false );
 	} );
 } );

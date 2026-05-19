@@ -180,7 +180,7 @@ function documentDescription( doc ) {
 	return rowCollectionHint( doc );
 }
 
-function DocumentCommandRegistration( { canvasRef, document, search } ) {
+function DocumentCommandRegistration( { canvasRef, document } ) {
 	const navigate = useNavigate();
 	const goToDocument = useCallback(
 		( { close } ) => {
@@ -201,9 +201,7 @@ function DocumentCommandRegistration( { canvasRef, document, search } ) {
 		label: document.title?.trim?.() || __( '(untitled)', 'cortext' ),
 		context: DEFAULT_COMMAND_CONTEXT,
 		icon: documentCommandIcon( document ),
-		// Give cmdk the active search term so server-side body/meta matches stay
-		// visible even when the title does not include the query.
-		keywords: [ search, document.kind ],
+		keywords: [ document.kind ],
 		disabled: ! document.path,
 		callback: goToDocument,
 	} );
@@ -231,11 +229,11 @@ function DocumentResultsRegistration( {
 	} );
 	const hasFreshDocuments = hasResolved && ! error;
 	// `useDocuments` keeps the previous documents while a refresh is in
-	// flight or after a failure. Tag the rendered commands with the search
-	// that actually produced them so cmdk filters them out naturally when
-	// the new query no longer matches, instead of unmounting and re-mounting
-	// (which would flicker every time the user refined their input).
-	const [ lastResolvedSearch, setLastResolvedSearch ] = useState( '' );
+	// flight (intentional, to avoid flicker during refinement) and also on
+	// a failed fetch (which we explicitly hide below). Track whether we
+	// have ever resolved successfully so we don't render anything before
+	// the first response arrives.
+	const [ hasEverResolved, setHasEverResolved ] = useState( false );
 
 	useEffect( () => {
 		onPendingChange( ! hasResolved );
@@ -252,9 +250,9 @@ function DocumentResultsRegistration( {
 		if ( ! hasFreshDocuments ) {
 			return;
 		}
-		setLastResolvedSearch( search );
+		setHasEverResolved( true );
 		onDocumentsResolved( firstDocumentValue( documents ) );
-	}, [ hasFreshDocuments, search, documents, onDocumentsResolved ] );
+	}, [ hasFreshDocuments, documents, onDocumentsResolved ] );
 
 	useEffect( () => {
 		if ( ! hasFreshDocuments ) {
@@ -278,7 +276,10 @@ function DocumentResultsRegistration( {
 		return () => onDescriptionsChange( new Map() );
 	}, [ onDescriptionsChange ] );
 
-	if ( ! lastResolvedSearch ) {
+	// Hide everything until the first successful response, and drop the
+	// stale list whenever a fetch fails so the user does not navigate to a
+	// document that no longer matches their query.
+	if ( ! hasEverResolved || error ) {
 		return null;
 	}
 
@@ -287,7 +288,6 @@ function DocumentResultsRegistration( {
 			key={ `${ doc.kind }:${ doc.id }` }
 			canvasRef={ canvasRef }
 			document={ doc }
-			search={ lastResolvedSearch }
 		/>
 	) );
 }
