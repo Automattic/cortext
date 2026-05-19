@@ -327,6 +327,17 @@ function CommandPaletteContents( {
 		}
 	}, [ search ] );
 
+	// Reset the anchor whenever the palette closes so a value left over from
+	// the previous session (e.g. when a result callback called `close()`
+	// directly without going through `closeAndReset`) does not pin the
+	// highlight onto a recent that happens to share the title of a fresh
+	// search result.
+	useEffect( () => {
+		if ( ! isPaletteOpen ) {
+			setSelectedValue( undefined );
+		}
+	}, [ isPaletteOpen ] );
+
 	const handleDocumentsResolved = useCallback( ( firstValue ) => {
 		if ( ! firstValue ) {
 			return;
