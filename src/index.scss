@@ -1334,7 +1334,8 @@ body.cortext-sidebar-resizing {
 
 	// While the document/editor mounts we fill the canvas with a skeleton
 	// instead of a centered spinner so the layout matches what's coming.
-	&__loading--document {
+	&__loading--document,
+	&__loading--collection {
 		align-items: stretch;
 		justify-content: flex-start;
 		overflow: auto;

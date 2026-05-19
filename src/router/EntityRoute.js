@@ -1,5 +1,4 @@
 import { useNavigate, useParams } from '@tanstack/react-router';
-import { Spinner } from '@wordpress/components';
 import { useEntityRecords } from '@wordpress/core-data';
 import { useDispatch } from '@wordpress/data';
 import { __ } from '@wordpress/i18n';
@@ -17,7 +16,10 @@ import CollectionDataViews from '../components/CollectionDataViews';
 import { CollectionFieldsProvider } from '../components/CollectionFieldsContext';
 import { RowMutationContext } from '../components/EditableCell';
 import { RowDetailSidebarSlot } from '../components/RowDetailSidebarSlot';
-import { DocumentSkeleton } from '../components/Skeleton';
+import {
+	CollectionRowsSkeleton,
+	DocumentSkeleton,
+} from '../components/Skeleton';
 import useDelayedFlag from '../hooks/useDelayedFlag';
 import WorkspaceTopBar from '../components/WorkspaceTopBar';
 import {
@@ -64,8 +66,8 @@ function CollectionView( { collectionId, onReady } ) {
 			onChangeView={ setView }
 			onReady={ onReady }
 			loading={
-				<div className="cortext-canvas__loading">
-					<Spinner />
+				<div className="cortext-canvas__loading cortext-canvas__loading--collection">
+					<CollectionRowsSkeleton />
 				</div>
 			}
 			empty={

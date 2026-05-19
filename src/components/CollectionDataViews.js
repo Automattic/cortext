@@ -572,6 +572,7 @@ export default function CollectionDataViews( {
 	const showRowsSkeleton = useDelayedFlag(
 		isLoading && data.length === 0 && isTableLayout
 	);
+	const showFieldsLoading = useDelayedFlag( isResolving );
 
 	const tableWrapperRef = useRef( null );
 	const [ localRevealFieldId, setLocalRevealFieldId ] = useState( null );
@@ -1461,7 +1462,7 @@ export default function CollectionDataViews( {
 	}, [ isResolving, rowsResolved, rowError ] );
 
 	if ( isResolving ) {
-		return loading;
+		return showFieldsLoading ? loading : null;
 	}
 
 	if ( collectionId && ! collection ) {
