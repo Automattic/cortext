@@ -213,7 +213,7 @@ function PaletteGroups( { search } ) {
 					/>
 				</Command.Group>
 			) }
-			{ recentCommands.length > 0 && (
+			{ ! search && recentCommands.length > 0 && (
 				<Command.Group
 					className="cortext-command-palette__group cortext-command-palette__group--recent"
 					heading={ __( 'Recent', 'cortext' ) }

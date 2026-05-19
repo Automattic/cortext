@@ -176,4 +176,42 @@ describe( 'CortextCommandMenu', () => {
 			screen.queryByText( 'Also unrelated' )
 		).not.toBeInTheDocument();
 	} );
+
+	it( 'hides the recent group while the search input is non-empty', async () => {
+		global.ResizeObserver = ResizeObserverMock;
+		window.Element.prototype.scrollIntoView = jest.fn();
+		const registry = createCommandPaletteRegistry();
+		registry.dispatch( commandsStore ).registerCommand( {
+			name: 'cortext/recent/page-7',
+			label: 'Welcome to Cortext',
+			searchLabel: 'Open recent: Welcome to Cortext',
+			context: 'root',
+			keywords: [ 'recent', 'page' ],
+			callback: jest.fn(),
+		} );
+		registry.dispatch( commandsStore ).open();
+
+		const { rerender } = render(
+			<RegistryProvider value={ registry }>
+				<CortextCommandMenu search="" setSearch={ () => {} } />
+			</RegistryProvider>
+		);
+
+		// With no search, the recent group renders.
+		expect(
+			await screen.findByText( 'Welcome to Cortext' )
+		).toBeInTheDocument();
+
+		// As soon as the user types, the recent group is hidden so it
+		// cannot steal the selection from the live search results.
+		rerender(
+			<RegistryProvider value={ registry }>
+				<CortextCommandMenu search="welcome" setSearch={ () => {} } />
+			</RegistryProvider>
+		);
+
+		expect(
+			screen.queryByText( 'Welcome to Cortext' )
+		).not.toBeInTheDocument();
+	} );
 } );
