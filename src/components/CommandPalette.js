@@ -327,13 +327,14 @@ function CommandPaletteContents( {
 		}
 	}, [ search ] );
 
-	// Reset the anchor whenever the palette closes so a value left over from
-	// the previous session (e.g. when a result callback called `close()`
-	// directly without going through `closeAndReset`) does not pin the
-	// highlight onto a recent that happens to share the title of a fresh
-	// search result.
+	// Reset the input and the controlled selection whenever the palette
+	// closes, regardless of how it closed. Picking a result calls
+	// `close()` directly without going through `closeAndReset`, so without
+	// this the next open would land with a stale search string and a
+	// selection pinned to an item that may no longer be relevant.
 	useEffect( () => {
 		if ( ! isPaletteOpen ) {
+			setSearch( '' );
 			setSelectedValue( undefined );
 		}
 	}, [ isPaletteOpen ] );

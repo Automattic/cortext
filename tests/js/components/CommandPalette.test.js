@@ -458,6 +458,43 @@ describe( 'CommandPalette document search', () => {
 		expect( mockMenu.selectedValue ).toBeUndefined();
 	} );
 
+	it( 'clears the input and the controlled selection when the palette closes', () => {
+		mockIsPaletteOpen = true;
+		mockUseDocuments.mockReturnValue( {
+			documents: [ { kind: 'page', id: 1, title: 'Foo', path: 'foo-1' } ],
+			total: 1,
+			isLoading: false,
+			hasResolved: true,
+			error: null,
+			refresh: jest.fn(),
+		} );
+
+		const { rerender } = render(
+			<CommandPalette canvasRef={ { current: null } } />
+		);
+
+		act( () => {
+			mockMenu.setSearch( 'foo' );
+		} );
+		act( () => {
+			jest.advanceTimersByTime( 150 );
+		} );
+		expect( mockMenu.search ).toBe( 'foo' );
+		expect( mockMenu.selectedValue ).toBe(
+			'document-cortext/document/page-1'
+		);
+
+		// Simulate the palette closing after the user picked a result.
+		// `close()` from the command callback bypasses `closeAndReset`, so
+		// without the new cleanup the next open would start with the old
+		// search prepopulated.
+		mockIsPaletteOpen = false;
+		rerender( <CommandPalette canvasRef={ { current: null } } /> );
+
+		expect( mockMenu.search ).toBe( '' );
+		expect( mockMenu.selectedValue ).toBeUndefined();
+	} );
+
 	it( 'drops stale documents when the next query fails', () => {
 		mockIsPaletteOpen = true;
 		const staleDocs = [
