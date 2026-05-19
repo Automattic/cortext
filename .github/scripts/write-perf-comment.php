@@ -9,12 +9,16 @@
  *
  * Workload column (deterministic; any non-zero delta counts):
  * - bench backend: sql_queries_p95, memory_bytes_p95
- * - UI: rest_request_count
+ * - UI: no workload metric. rest_request_count stays in the per-run summary
+ *   because it can move by 1-4 requests at the same paint state.
  *
  * Timing column (noisy; threshold per metric):
  * - bench backend: p50_ms and per-step p50_ms, with threshold
  *   max(10%, 2x baseline MAD) when MAD is available.
- * - UI: ready_ms, rows_api_ms, long_task_total_ms, flat 15% threshold.
+ * - UI: ready_ms, rows_api_ms with threshold max(15%, 2x baseline MAD) when
+ *   the spec writes a _mad companion key.
+ *   long_task_total_ms stays in the per-run summary. It mostly tracks browser
+ *   GC and scheduler timing, not server work, so it should not flag scenarios.
  *
  * @package Cortext
  */
@@ -56,14 +60,23 @@ function parse_args( array $argv ): array {
 }
 
 function build_comment( string $bench_current_path, string $bench_base_path, string $ui_current_path, string $ui_base_path, string $base_label, string $run_url ): string {
-	$rows = array();
+	$rows               = array();
+	$missing_baselines  = array();
 
 	if ( '' !== $bench_current_path && '' !== $bench_base_path ) {
-		$rows = array_merge( $rows, collect_bench_rows( $bench_current_path, $bench_base_path ) );
+		if ( null === read_json( $bench_base_path ) ) {
+			$missing_baselines[] = 'backend';
+		} else {
+			$rows = array_merge( $rows, collect_bench_rows( $bench_current_path, $bench_base_path ) );
+		}
 	}
 
 	if ( '' !== $ui_current_path && '' !== $ui_base_path ) {
-		$rows = array_merge( $rows, collect_ui_rows( $ui_current_path, $ui_base_path ) );
+		if ( null === read_json( $ui_base_path ) ) {
+			$missing_baselines[] = 'UI';
+		} else {
+			$rows = array_merge( $rows, collect_ui_rows( $ui_current_path, $ui_base_path ) );
+		}
 	}
 
 	$workload_scenarios = 0;
@@ -77,8 +90,16 @@ function build_comment( string $bench_current_path, string $bench_base_path, str
 		}
 	}
 
-	$lines    = array( '## Performance vs ' . $base_label, '' );
-	$lines[]  = build_headline( $workload_scenarios, $timing_scenarios );
+	$lines = array( '## Performance vs ' . $base_label, '' );
+
+	if ( count( $missing_baselines ) > 0 ) {
+		// The baseline run failed or did not produce JSON. Say that directly
+		// instead of printing a comparison table with no useful comparison.
+		// The PR-side numbers still appear in the job summary.
+		$lines[] = 'Baseline data unavailable for ' . implode( ' and ', $missing_baselines ) . ' - comparison skipped. Re-run the workflow or check the baseline steps in the job log.';
+	} else {
+		$lines[] = build_headline( $workload_scenarios, $timing_scenarios );
+	}
 
 	if ( count( $rows ) > 0 ) {
 		$table_rows = array();
@@ -253,13 +274,12 @@ function collect_ui_rows( string $current_path, string $base_path ): array {
 		$workload_changes = array();
 		$timing_changes   = array();
 
-		$rest_change = workload_change( $scenario['rest_request_count'] ?? null, $base_scenario['rest_request_count'] ?? null );
-		if ( null !== $rest_change ) {
-			$workload_changes[] = $rest_change . ' REST ' . ( 1 === abs( (int) $rest_change ) ? 'request' : 'requests' );
-		}
-
-		foreach ( array( 'ready_ms' => 'ready', 'rows_api_ms' => 'rows API', 'long_task_total_ms' => 'long tasks' ) as $key => $label ) {
-			$change = ui_timing_change( $scenario[ $key ] ?? null, $base_scenario[ $key ] ?? null );
+		foreach ( array( 'ready_ms' => 'ready', 'rows_api_ms' => 'rows API' ) as $key => $label ) {
+			$change = ui_timing_change(
+				$scenario[ $key ] ?? null,
+				$base_scenario[ $key ] ?? null,
+				$base_scenario[ $key . '_mad' ] ?? null
+			);
 			if ( null !== $change ) {
 				$timing_changes[] = $label . ' ' . $change;
 			}
@@ -333,10 +353,16 @@ function bench_timing_change( mixed $current, mixed $base, mixed $baseline_mad )
 }
 
 /**
- * Returns the timing change text for a UI metric when |Δ| exceeds 15%. Null
- * when within noise or values missing.
+ * Returns the timing change text for a UI metric when |Δ| exceeds
+ * max(15%, 2x baseline MAD%). Null when values are missing or still inside
+ * the noise floor.
+ *
+ * When the spec aggregates samples (PERF_UI_ITERATIONS > 1), it writes a
+ * <metric>_mad companion. We use 2x MAD as the noise floor and only flag
+ * deltas above max(15%, 2*MAD/base*100%). Without MAD, we keep the flat 15%
+ * threshold used for a single reading.
  */
-function ui_timing_change( mixed $current, mixed $base ): ?string {
+function ui_timing_change( mixed $current, mixed $base, mixed $baseline_mad = null ): ?string {
 	if ( ! is_numeric( $current ) || ! is_numeric( $base ) ) {
 		return null;
 	}
@@ -345,7 +371,11 @@ function ui_timing_change( mixed $current, mixed $base ): ?string {
 		return null;
 	}
 	$delta_pct = ( (float) $current - $base_float ) / $base_float * 100.0;
-	if ( abs( $delta_pct ) < 15.0 ) {
+	$threshold = 15.0;
+	if ( is_numeric( $baseline_mad ) && (float) $baseline_mad > 0.0 ) {
+		$threshold = max( 15.0, 2.0 * (float) $baseline_mad / $base_float * 100.0 );
+	}
+	if ( abs( $delta_pct ) < $threshold ) {
 		return null;
 	}
 	return signed_number( $delta_pct, 1 ) . '%';

@@ -1,8 +1,11 @@
 /**
  * UI perf checks for Cortext.
  *
- * Skipped by default. Set CORTEXT_PERF_UI=1 to run them. At the end, the suite
- * writes `artifacts/perf-ui.json` so CI can save it for comparison runs.
+ * Skipped by default. Set CORTEXT_PERF_UI=1 to run them. The suite runs each
+ * scenario PERF_UI_ITERATIONS times (default 5, override with
+ * CORTEXT_PERF_UI_ITERATIONS) and reports p50 / p95 / MAD for each metric.
+ * It writes `artifacts/perf-ui.json` at the end so CI can save it for
+ * comparison runs.
  *
  * Scenarios:
  *   - collection_ready_basic: seeded collection open to first painted rows.
@@ -35,9 +38,89 @@ const READY_TIMEOUT_MS = 30_000;
 const ROWS_API_SEGMENT = '/cortext/v1/rows';
 const REST_SEGMENTS = [ '/cortext/v1/', '/wp/v2/', '/wp-json/' ];
 
+// Number of samples to collect for each scenario in one workflow run. CI
+// runners are noisy enough that n=1 can move by +/-50%. Override with
+// CORTEXT_PERF_UI_ITERATIONS for local debugging.
+const PERF_UI_ITERATIONS = Math.max(
+	1,
+	Number.parseInt( process.env.CORTEXT_PERF_UI_ITERATIONS ?? '5', 10 ) || 5
+);
+
 // Tag a measured scenario with the category the renderer groups it under.
 // Categories: collection_read, row, column, navigation, surface.
 const tag = ( category, metrics ) => ( { category, ...metrics } );
+
+// Nearest-rank percentile, matching includes/CLI/PerfBench.php::percentile so
+// JS and backend aggregates use the same method.
+function percentile( values, p ) {
+	if ( values.length === 0 ) {
+		return null;
+	}
+	const sorted = [ ...values ].sort( ( a, b ) => a - b );
+	const idx = Math.max(
+		0,
+		Math.min(
+			sorted.length - 1,
+			Math.ceil( ( p / 100 ) * sorted.length ) - 1
+		)
+	);
+	return sorted[ idx ];
+}
+
+// Median absolute deviation: the noise floor used by write-perf-comment.php
+// when it has enough UI samples.
+function mad( values ) {
+	if ( values.length === 0 ) {
+		return null;
+	}
+	const m = percentile( values, 50 );
+	return percentile(
+		values.map( ( v ) => Math.abs( v - m ) ),
+		50
+	);
+}
+
+// Collapse iteration samples into top-level p50 values for back-compat, plus
+// _p50 / _p95 / _mad / _n companions. Drop non-numeric samples per metric so
+// one missing reading does not spoil the rest.
+function aggregateScenario( samples ) {
+	const result = { iterations: samples.length };
+	if ( samples.length === 0 ) {
+		return result;
+	}
+	const keys = new Set();
+	for ( const sample of samples ) {
+		for ( const key of Object.keys( sample ) ) {
+			keys.add( key );
+		}
+	}
+	for ( const key of keys ) {
+		const numeric = samples
+			.map( ( s ) => s[ key ] )
+			.filter( ( v ) => typeof v === 'number' && Number.isFinite( v ) );
+		if ( numeric.length === 0 ) {
+			result[ key ] = null;
+			continue;
+		}
+		result[ key ] = percentile( numeric, 50 );
+		result[ `${ key }_p50` ] = percentile( numeric, 50 );
+		result[ `${ key }_p95` ] = percentile( numeric, 95 );
+		result[ `${ key }_mad` ] = mad( numeric );
+		result[ `${ key }_n` ] = numeric.length;
+	}
+	return result;
+}
+
+// Run the scenario body PERF_UI_ITERATIONS times. Reset the probe first so
+// each sample only includes its own requests and long tasks.
+async function runRepeated( probe, runOnce ) {
+	const samples = [];
+	for ( let i = 0; i < PERF_UI_ITERATIONS; i++ ) {
+		await probe.reset();
+		samples.push( await runOnce() );
+	}
+	return aggregateScenario( samples );
+}
 
 const PERF_PAGE_CONTENT =
 	'<!-- wp:heading -->\n<h2>Cortext perf page</h2>\n<!-- /wp:heading -->\n\n<!-- wp:paragraph -->\n<p>Filler paragraph one.</p>\n<!-- /wp:paragraph -->\n\n<!-- wp:paragraph -->\n<p>Filler paragraph two.</p>\n<!-- /wp:paragraph -->';
@@ -109,219 +192,268 @@ test.describe( 'Cortext UI performance', () => {
 	test( 'collection_ready_basic', async ( { admin, page } ) => {
 		const probe = await setupProbe( page );
 
-		const startedAt = Date.now();
-		await admin.visitAdminPage( 'admin.php', collection.adminQuery );
-		await waitForCollectionReady( page );
-
 		scenarios.collection_ready_basic = tag(
 			'collection_read',
-			await probe.snapshot( startedAt )
+			await runRepeated( probe, async () => {
+				const startedAt = Date.now();
+				await admin.visitAdminPage(
+					'admin.php',
+					collection.adminQuery
+				);
+				await waitForCollectionReady( page );
+				return probe.snapshot( startedAt );
+			} )
 		);
 	} );
 
 	test( 'collection_ready_rollups', async ( { admin, page } ) => {
 		const probe = await setupProbe( page );
 
-		await admin.visitAdminPage( 'admin.php', collection.adminQuery );
-		await waitForCollectionReady( page );
-
-		const previousFirstRow = await readFirstRowText( page );
-
-		await probe.reset();
-		const responsePromise = page.waitForResponse(
-			( response ) =>
-				response.url().includes( ROWS_API_SEGMENT ) &&
-				response.url().includes( 'page=3' ),
-			{ timeout: READY_TIMEOUT_MS }
-		);
-		const startedAt = Date.now();
-
-		await page.getByLabel( 'Current page' ).selectOption( '3' );
-		await responsePromise;
-		await waitForFirstRowChanged( page, previousFirstRow );
-		await waitForPaint( page );
-
 		scenarios.collection_ready_rollups = tag(
 			'collection_read',
-			await probe.snapshot( startedAt )
+			await runRepeated( probe, async () => {
+				await admin.visitAdminPage(
+					'admin.php',
+					collection.adminQuery
+				);
+				await waitForCollectionReady( page );
+
+				const previousFirstRow = await readFirstRowText( page );
+
+				await probe.reset();
+				const responsePromise = page.waitForResponse(
+					( response ) =>
+						response.url().includes( ROWS_API_SEGMENT ) &&
+						response.url().includes( 'page=3' ),
+					{ timeout: READY_TIMEOUT_MS }
+				);
+				const startedAt = Date.now();
+
+				await page.getByLabel( 'Current page' ).selectOption( '3' );
+				await responsePromise;
+				await waitForFirstRowChanged( page, previousFirstRow );
+				await waitForPaint( page );
+
+				return probe.snapshot( startedAt );
+			} )
 		);
 	} );
 
 	test( 'row_detail_ready', async ( { admin, page } ) => {
 		const probe = await setupProbe( page );
 
-		await admin.visitAdminPage( 'admin.php', collection.adminQuery );
-		await waitForCollectionReady( page );
-
-		await probe.reset();
-		const startedAt = Date.now();
-
-		await page.getByLabel( 'Open row' ).first().click( { force: true } );
-		await waitForRowDetailReady( page );
-
 		scenarios.row_detail_ready = tag(
 			'row',
-			await probe.snapshot( startedAt )
+			await runRepeated( probe, async () => {
+				await admin.visitAdminPage(
+					'admin.php',
+					collection.adminQuery
+				);
+				await waitForCollectionReady( page );
+
+				await probe.reset();
+				const startedAt = Date.now();
+
+				await page
+					.getByLabel( 'Open row' )
+					.first()
+					.click( { force: true } );
+				await waitForRowDetailReady( page );
+
+				return probe.snapshot( startedAt );
+			} )
 		);
 	} );
 
 	test( 'row_create_ready', async ( { admin, page } ) => {
 		const probe = await setupProbe( page );
 
-		await admin.visitAdminPage( 'admin.php', collection.adminQuery );
-		await waitForCollectionReady( page );
-
-		const previousCount = await readRowCount( page );
-
-		await probe.reset();
-		const createPromise = page.waitForResponse(
-			( response ) =>
-				response.request().method() === 'POST' &&
-				response.url().includes( `/wp/v2/crtxt_${ COLLECTION_SLUG }` ),
-			{ timeout: READY_TIMEOUT_MS }
-		);
-		const startedAt = Date.now();
-
-		await page.locator( '.cortext-data-view__new-row' ).click();
-		await createPromise;
-		await waitForRowCountChanged( page, previousCount );
-		await waitForPaint( page );
-
 		scenarios.row_create_ready = tag(
 			'row',
-			await probe.snapshot( startedAt )
+			await runRepeated( probe, async () => {
+				await admin.visitAdminPage(
+					'admin.php',
+					collection.adminQuery
+				);
+				await waitForCollectionReady( page );
+
+				const previousCount = await readRowCount( page );
+
+				await probe.reset();
+				const createPromise = page.waitForResponse(
+					( response ) =>
+						response.request().method() === 'POST' &&
+						response
+							.url()
+							.includes( `/wp/v2/crtxt_${ COLLECTION_SLUG }` ),
+					{ timeout: READY_TIMEOUT_MS }
+				);
+				const startedAt = Date.now();
+
+				await page.locator( '.cortext-data-view__new-row' ).click();
+				await createPromise;
+				await waitForRowCountChanged( page, previousCount );
+				await waitForPaint( page );
+
+				return probe.snapshot( startedAt );
+			} )
 		);
 	} );
 
 	test( 'sort_apply', async ( { admin, page } ) => {
 		const probe = await setupProbe( page );
 
-		await admin.visitAdminPage( 'admin.php', collection.adminQuery );
-		await waitForCollectionReady( page );
-
-		const previousFirstRow = await readFirstRowText( page );
-
-		await probe.reset();
-		const responsePromise = page.waitForResponse(
-			( response ) =>
-				response.url().includes( ROWS_API_SEGMENT ) &&
-				response.url().includes( 'sort' ),
-			{ timeout: READY_TIMEOUT_MS }
-		);
-		const startedAt = Date.now();
-
-		await page
-			.locator( 'button.dataviews-view-table-header-button' )
-			.first()
-			.click( { force: true } );
-		// Title rows are zero-padded "Perf Primary Row NNNNN", so ascending
-		// matches the default oldest-first order; descending swaps the first
-		// row from 00001 to 01250 and gives a stable readiness signal.
-		await page
-			.getByRole( 'menuitemradio', { name: 'Sort descending' } )
-			.click();
-		await responsePromise;
-		await waitForFirstRowChanged( page, previousFirstRow );
-		await waitForPaint( page );
-
 		scenarios.sort_apply = tag(
 			'collection_read',
-			await probe.snapshot( startedAt )
+			await runRepeated( probe, async () => {
+				await admin.visitAdminPage(
+					'admin.php',
+					collection.adminQuery
+				);
+				await waitForCollectionReady( page );
+
+				const previousFirstRow = await readFirstRowText( page );
+
+				await probe.reset();
+				const responsePromise = page.waitForResponse(
+					( response ) =>
+						response.url().includes( ROWS_API_SEGMENT ) &&
+						response.url().includes( 'sort' ),
+					{ timeout: READY_TIMEOUT_MS }
+				);
+				const startedAt = Date.now();
+
+				await page
+					.locator( 'button.dataviews-view-table-header-button' )
+					.first()
+					.click( { force: true } );
+				// Title rows are zero-padded "Perf Primary Row NNNNN", so
+				// ascending matches the default oldest-first order;
+				// descending swaps the first row from 00001 to 01250, which
+				// keeps the readiness signal stable across iterations.
+				await page
+					.getByRole( 'menuitemradio', { name: 'Sort descending' } )
+					.click();
+				await responsePromise;
+				await waitForFirstRowChanged( page, previousFirstRow );
+				await waitForPaint( page );
+
+				return probe.snapshot( startedAt );
+			} )
 		);
 	} );
 
 	test( 'page_edit_ready', async ( { admin, page } ) => {
 		const probe = await setupProbe( page );
 
-		const startedAt = Date.now();
-		await admin.visitAdminPage(
-			'admin.php',
-			`page=cortext&p=/${ perfPage.id }`
-		);
-		await waitForEditorReady( page, perfPage.id );
-
 		scenarios.page_edit_ready = tag(
 			'surface',
-			await probe.snapshot( startedAt )
+			await runRepeated( probe, async () => {
+				const startedAt = Date.now();
+				await admin.visitAdminPage(
+					'admin.php',
+					`page=cortext&p=/${ perfPage.id }`
+				);
+				await waitForEditorReady( page, perfPage.id );
+				return probe.snapshot( startedAt );
+			} )
 		);
 	} );
 
 	test( 'column_actions_open', async ( { admin, page } ) => {
 		const probe = await setupProbe( page );
 
-		await admin.visitAdminPage( 'admin.php', collection.adminQuery );
-		await waitForCollectionReady( page );
-
-		await probe.reset();
-		const startedAt = Date.now();
-
-		await page
-			.locator( 'button.cortext-column-header-trigger' )
-			.first()
-			.click( { force: true } );
-		await page
-			.getByRole( 'menu' )
-			.first()
-			.waitFor( { state: 'visible', timeout: READY_TIMEOUT_MS } );
-
 		scenarios.column_actions_open = tag(
 			'column',
-			await probe.snapshot( startedAt )
+			await runRepeated( probe, async () => {
+				await admin.visitAdminPage(
+					'admin.php',
+					collection.adminQuery
+				);
+				await waitForCollectionReady( page );
+
+				await probe.reset();
+				const startedAt = Date.now();
+
+				await page
+					.locator( 'button.cortext-column-header-trigger' )
+					.first()
+					.click( { force: true } );
+				await page.getByRole( 'menu' ).first().waitFor( {
+					state: 'visible',
+					timeout: READY_TIMEOUT_MS,
+				} );
+
+				return probe.snapshot( startedAt );
+			} )
 		);
 	} );
 
 	test( 'column_rename_inline', async ( { admin, page } ) => {
 		const probe = await setupProbe( page );
 
-		await admin.visitAdminPage( 'admin.php', collection.adminQuery );
-		await waitForCollectionReady( page );
-
-		await page
-			.locator( 'button.cortext-column-header-trigger' )
-			.first()
-			.click( { force: true } );
-		await page.getByRole( 'menuitem', { name: 'Rename' } ).click();
-		const renameInput = page.locator(
-			'.cortext-rename-field-inline input'
-		);
-		await renameInput.waitFor( {
-			state: 'visible',
-			timeout: READY_TIMEOUT_MS,
-		} );
-
-		await probe.reset();
-		const startedAt = Date.now();
-
-		await renameInput.fill( `Perf renamed ${ Date.now() }` );
-		await renameInput.press( 'Enter' );
-		await page
-			.locator( '.cortext-rename-field-inline' )
-			.waitFor( { state: 'hidden', timeout: READY_TIMEOUT_MS } );
-		await waitForPaint( page );
-
 		scenarios.column_rename_inline = tag(
 			'column',
-			await probe.snapshot( startedAt )
+			await runRepeated( probe, async () => {
+				await admin.visitAdminPage(
+					'admin.php',
+					collection.adminQuery
+				);
+				await waitForCollectionReady( page );
+
+				await page
+					.locator( 'button.cortext-column-header-trigger' )
+					.first()
+					.click( { force: true } );
+				await page.getByRole( 'menuitem', { name: 'Rename' } ).click();
+				const renameInput = page.locator(
+					'.cortext-rename-field-inline input'
+				);
+				await renameInput.waitFor( {
+					state: 'visible',
+					timeout: READY_TIMEOUT_MS,
+				} );
+
+				await probe.reset();
+				const startedAt = Date.now();
+
+				await renameInput.fill( `Perf renamed ${ Date.now() }` );
+				await renameInput.press( 'Enter' );
+				await page.locator( '.cortext-rename-field-inline' ).waitFor( {
+					state: 'hidden',
+					timeout: READY_TIMEOUT_MS,
+				} );
+				await waitForPaint( page );
+
+				return probe.snapshot( startedAt );
+			} )
 		);
 	} );
 
 	test( 'command_palette_open', async ( { admin, page } ) => {
 		const probe = await setupProbe( page );
 
-		await admin.visitAdminPage( 'admin.php', collection.adminQuery );
-		await waitForCollectionReady( page );
-
-		await probe.reset();
-		const startedAt = Date.now();
-
-		await page.evaluate( () => {
-			window.dispatchEvent( new Event( 'cortext:open-command-palette' ) );
-		} );
-		await waitForCommandPaletteReady( page );
-
 		scenarios.command_palette_open = tag(
 			'surface',
-			await probe.snapshot( startedAt )
+			await runRepeated( probe, async () => {
+				await admin.visitAdminPage(
+					'admin.php',
+					collection.adminQuery
+				);
+				await waitForCollectionReady( page );
+
+				await probe.reset();
+				const startedAt = Date.now();
+
+				await page.evaluate( () => {
+					window.dispatchEvent(
+						new Event( 'cortext:open-command-palette' )
+					);
+				} );
+				await waitForCommandPaletteReady( page );
+
+				return probe.snapshot( startedAt );
+			} )
 		);
 	} );
 
@@ -368,121 +500,147 @@ test.describe( 'Cortext UI performance', () => {
 	test( 'workspace_home_ready', async ( { admin, page } ) => {
 		const probe = await setupProbe( page );
 
-		const responsePromise = page.waitForResponse(
-			( response ) =>
-				response.url().includes( '/cortext/v1/workspace-home' ),
-			{ timeout: READY_TIMEOUT_MS }
-		);
-		const startedAt = Date.now();
-
-		await admin.visitAdminPage( 'admin.php', 'page=cortext' );
-		await responsePromise;
-		await page
-			.locator( '.cortext-sidebar' )
-			.first()
-			.waitFor( { state: 'visible', timeout: READY_TIMEOUT_MS } );
-		await waitForPaint( page );
-
 		scenarios.workspace_home_ready = tag(
 			'navigation',
-			await probe.snapshot( startedAt )
+			await runRepeated( probe, async () => {
+				const responsePromise = page.waitForResponse(
+					( response ) =>
+						response.url().includes( '/cortext/v1/workspace-home' ),
+					{ timeout: READY_TIMEOUT_MS }
+				);
+				const startedAt = Date.now();
+
+				await admin.visitAdminPage( 'admin.php', 'page=cortext' );
+				await responsePromise;
+				await page.locator( '.cortext-sidebar' ).first().waitFor( {
+					state: 'visible',
+					timeout: READY_TIMEOUT_MS,
+				} );
+				await waitForPaint( page );
+
+				return probe.snapshot( startedAt );
+			} )
 		);
 	} );
 
 	test( 'shell_navigation_warm', async ( { admin, page } ) => {
 		const probe = await setupProbe( page );
 
-		await admin.visitAdminPage( 'admin.php', collection.adminQuery );
-		await waitForCollectionReady( page );
-
-		const previousFirstRow = await readFirstRowText( page );
-
-		await probe.reset();
-		const responsePromise = page.waitForResponse(
-			( response ) =>
-				response.url().includes( ROWS_API_SEGMENT ) &&
-				! response.url().includes( `collection=${ collection.id }` ),
-			{ timeout: READY_TIMEOUT_MS }
-		);
-		const startedAt = Date.now();
-
-		await page
-			.locator( '.cortext-sidebar' )
-			.getByRole( 'button', { name: 'Perf Target 1', exact: true } )
-			.click();
-		await responsePromise;
-		await waitForFirstRowChanged( page, previousFirstRow );
-		await waitForPaint( page );
-
 		scenarios.shell_navigation_warm = tag(
 			'navigation',
-			await probe.snapshot( startedAt )
+			await runRepeated( probe, async () => {
+				await admin.visitAdminPage(
+					'admin.php',
+					collection.adminQuery
+				);
+				await waitForCollectionReady( page );
+
+				const previousFirstRow = await readFirstRowText( page );
+
+				await probe.reset();
+				const responsePromise = page.waitForResponse(
+					( response ) =>
+						response.url().includes( ROWS_API_SEGMENT ) &&
+						! response
+							.url()
+							.includes( `collection=${ collection.id }` ),
+					{ timeout: READY_TIMEOUT_MS }
+				);
+				const startedAt = Date.now();
+
+				await page
+					.locator( '.cortext-sidebar' )
+					.getByRole( 'button', {
+						name: 'Perf Target 1',
+						exact: true,
+					} )
+					.click();
+				await responsePromise;
+				await waitForFirstRowChanged( page, previousFirstRow );
+				await waitForPaint( page );
+
+				return probe.snapshot( startedAt );
+			} )
 		);
 	} );
 
 	test( 'search_rows_ready', async ( { admin, page } ) => {
 		const probe = await setupProbe( page );
 
-		await admin.visitAdminPage( 'admin.php', collection.adminQuery );
-		await waitForCollectionReady( page );
-
-		const previousFirstRow = await readFirstRowText( page );
-
-		await probe.reset();
-		const responsePromise = page.waitForResponse(
-			( response ) =>
-				response.url().includes( ROWS_API_SEGMENT ) &&
-				response.url().includes( 'search=' ),
-			{ timeout: READY_TIMEOUT_MS }
-		);
-		const startedAt = Date.now();
-
-		// Search for the last seeded row's suffix so the result set shrinks
-		// to one entry whose title differs from the unfiltered first row.
-		// 'Perf' would match every row and leave the first row unchanged.
-		await page.locator( '.dataviews-search input' ).fill( '01250' );
-		await responsePromise;
-		await waitForFirstRowChanged( page, previousFirstRow );
-		await waitForPaint( page );
-
 		scenarios.search_rows_ready = tag(
 			'collection_read',
-			await probe.snapshot( startedAt )
+			await runRepeated( probe, async () => {
+				await admin.visitAdminPage(
+					'admin.php',
+					collection.adminQuery
+				);
+				await waitForCollectionReady( page );
+
+				const previousFirstRow = await readFirstRowText( page );
+
+				await probe.reset();
+				const responsePromise = page.waitForResponse(
+					( response ) =>
+						response.url().includes( ROWS_API_SEGMENT ) &&
+						response.url().includes( 'search=' ),
+					{ timeout: READY_TIMEOUT_MS }
+				);
+				const startedAt = Date.now();
+
+				// Search for the last seeded row's suffix so the result set
+				// shrinks to one entry whose title differs from the
+				// unfiltered first row. 'Perf' would match every row and
+				// leave the first row unchanged.
+				await page.locator( '.dataviews-search input' ).fill( '01250' );
+				await responsePromise;
+				await waitForFirstRowChanged( page, previousFirstRow );
+				await waitForPaint( page );
+
+				return probe.snapshot( startedAt );
+			} )
 		);
 	} );
 
 	test( 'row_navigate_next', async ( { admin, page } ) => {
 		const probe = await setupProbe( page );
 
-		await admin.visitAdminPage( 'admin.php', collection.adminQuery );
-		await waitForCollectionReady( page );
-		await page.getByLabel( 'Open row' ).first().click( { force: true } );
-		await waitForRowDetailReady( page );
-
-		const previousTitle = await page
-			.locator( '.cortext-row-detail__title' )
-			.first()
-			.textContent();
-
-		await probe.reset();
-		const startedAt = Date.now();
-
-		await page.getByLabel( 'Row below' ).click();
-		await page.waitForFunction(
-			( prev ) => {
-				const el = document.querySelector(
-					'.cortext-row-detail__title'
-				);
-				return Boolean( el ) && el.textContent !== prev;
-			},
-			previousTitle,
-			{ timeout: READY_TIMEOUT_MS }
-		);
-		await waitForPaint( page );
-
 		scenarios.row_navigate_next = tag(
 			'row',
-			await probe.snapshot( startedAt )
+			await runRepeated( probe, async () => {
+				await admin.visitAdminPage(
+					'admin.php',
+					collection.adminQuery
+				);
+				await waitForCollectionReady( page );
+				await page
+					.getByLabel( 'Open row' )
+					.first()
+					.click( { force: true } );
+				await waitForRowDetailReady( page );
+
+				const previousTitle = await page
+					.locator( '.cortext-row-detail__title' )
+					.first()
+					.textContent();
+
+				await probe.reset();
+				const startedAt = Date.now();
+
+				await page.getByLabel( 'Row below' ).click();
+				await page.waitForFunction(
+					( prev ) => {
+						const el = document.querySelector(
+							'.cortext-row-detail__title'
+						);
+						return Boolean( el ) && el.textContent !== prev;
+					},
+					previousTitle,
+					{ timeout: READY_TIMEOUT_MS }
+				);
+				await waitForPaint( page );
+
+				return probe.snapshot( startedAt );
+			} )
 		);
 	} );
 } );
@@ -538,9 +696,18 @@ async function setupProbe( page ) {
 		},
 		async snapshot( startedAt ) {
 			const readyMs = Date.now() - startedAt;
-			const rowsCall = requests.find( ( entry ) =>
-				entry.url.includes( ROWS_API_SEGMENT )
-			);
+			// Median across captured /cortext/v1/rows responses in this
+			// window. The old "first matching" value was a single-event
+			// timing, so scenarios with several rows requests (pagination,
+			// shell nav) reported whichever fired first instead of the
+			// typical request.
+			const rowsDurations = requests
+				.filter(
+					( entry ) =>
+						entry.url.includes( ROWS_API_SEGMENT ) &&
+						typeof entry.duration === 'number'
+				)
+				.map( ( entry ) => entry.duration );
 			const tasks = await page.evaluate(
 				() => window.__cortextPerfLongTasks ?? []
 			);
@@ -548,7 +715,10 @@ async function setupProbe( page ) {
 
 			return {
 				ready_ms: readyMs,
-				rows_api_ms: rowsCall?.duration ?? null,
+				rows_api_ms:
+					rowsDurations.length > 0
+						? percentile( rowsDurations, 50 )
+						: null,
 				rest_request_count: requests.length,
 				long_task_total_ms: longTasks.reduce(
 					( total, duration ) => total + duration,
