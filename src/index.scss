@@ -18,6 +18,13 @@
 
 .commands-command-menu__container {
 
+	// cmdk only sets max-height on the list. Match it as min-height so the
+	// modal doesn't shrink to "No results found." (or the pending state)
+	// and back up to a full list. Mirrors the upstream max-height value.
+	[cmdk-root] > [cmdk-list] {
+		min-height: min(328px, 70vh - 48px);
+	}
+
 	.commands-command-menu__item {
 		display: flex;
 		align-items: center;
