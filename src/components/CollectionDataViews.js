@@ -1410,10 +1410,15 @@ export default function CollectionDataViews( {
 	] );
 
 	useEffect( () => {
-		if ( ! isResolving && rowsResolved ) {
+		// Signal ready as soon as fields have resolved so the entity route can
+		// cross-fade to this pane while the rows skeleton is still painted.
+		// Waiting for `rowsResolved` here used to defer the swap until the
+		// table was fully populated, which is exactly the window the skeleton
+		// is designed to cover.
+		if ( ! isResolving ) {
 			onReady?.( collectionId );
 		}
-	}, [ collectionId, isResolving, rowsResolved, onReady ] );
+	}, [ collectionId, isResolving, onReady ] );
 
 	// tech-debt.md#22: Gutenberg selects on any mousedown that bubbles up.
 	// Dragging the dataviews scrollbar lands in the gutter (offset past the
