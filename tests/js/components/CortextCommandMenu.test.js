@@ -6,6 +6,7 @@ import { store as preferencesStore } from '@wordpress/preferences';
 import { table } from '@wordpress/icons';
 
 import {
+	CommandDescriptionContext,
 	CommandIcon,
 	default as CortextCommandMenu,
 	splitPaletteCommands,
@@ -26,16 +27,33 @@ function createCommandPaletteRegistry() {
 }
 
 describe( 'splitPaletteCommands', () => {
-	it( 'separates Cortext recents from the rest of the palette commands', () => {
+	it( 'puts document results before recents and commands', () => {
 		const home = { name: 'cortext/home', label: 'Go to home' };
-		const page = { name: 'cortext/recent/page-7', label: 'Notes' };
-		const row = {
+		const recentPage = { name: 'cortext/recent/page-7', label: 'Notes' };
+		const recentRow = {
 			name: 'cortext/recent/row-12',
 			label: 'Ada Lovelace in People',
 		};
+		const docPage = {
+			name: 'cortext/document/page-42',
+			label: 'Roadmap',
+		};
+		const docRow = {
+			name: 'cortext/document/row-77',
+			label: 'Ship plan',
+		};
 
-		expect( splitPaletteCommands( [ home, page, row ] ) ).toEqual( {
-			recentCommands: [ page, row ],
+		expect(
+			splitPaletteCommands( [
+				home,
+				recentPage,
+				recentRow,
+				docPage,
+				docRow,
+			] )
+		).toEqual( {
+			documentCommands: [ docPage, docRow ],
+			recentCommands: [ recentPage, recentRow ],
 			commands: [ home ],
 		} );
 	} );
@@ -54,7 +72,7 @@ describe( 'CommandIcon', () => {
 describe( 'CortextCommandMenu', () => {
 	it( 'opens from the primary+k keyboard shortcut', async () => {
 		global.ResizeObserver = ResizeObserverMock;
-		Element.prototype.scrollIntoView = jest.fn();
+		window.Element.prototype.scrollIntoView = jest.fn();
 		const registry = createCommandPaletteRegistry();
 		registry.dispatch( commandsStore ).registerCommand( {
 			name: 'cortext/test',
@@ -89,5 +107,143 @@ describe( 'CortextCommandMenu', () => {
 			)
 		).toBeInTheDocument();
 		expect( screen.getByText( 'Test command' ) ).toBeInTheDocument();
+	} );
+
+	it( 'renders the description from CommandDescriptionContext for matching commands', async () => {
+		global.ResizeObserver = ResizeObserverMock;
+		window.Element.prototype.scrollIntoView = jest.fn();
+		const registry = createCommandPaletteRegistry();
+		registry.dispatch( commandsStore ).registerCommand( {
+			name: 'cortext/document/page-99',
+			label: 'Quarterly review',
+			context: 'root',
+			keywords: [ 'roadmap' ],
+			callback: jest.fn(),
+		} );
+		registry.dispatch( commandsStore ).open();
+
+		const descriptions = new Map( [
+			[ 'cortext/document/page-99', 'Plan for next quarter.' ],
+		] );
+
+		render(
+			<RegistryProvider value={ registry }>
+				<CommandDescriptionContext.Provider value={ descriptions }>
+					<CortextCommandMenu
+						search="roadmap"
+						setSearch={ () => {} }
+					/>
+				</CommandDescriptionContext.Provider>
+			</RegistryProvider>
+		);
+
+		expect(
+			await screen.findByText( 'Plan for next quarter.' )
+		).toBeInTheDocument();
+	} );
+
+	it( 'keeps document commands visible even when the search does not match their label', async () => {
+		global.ResizeObserver = ResizeObserverMock;
+		window.Element.prototype.scrollIntoView = jest.fn();
+		const registry = createCommandPaletteRegistry();
+		// Register a doc whose label does not contain the search term and a
+		// non-doc that also does not match. Only the doc must survive cmdk's
+		// filter: the custom palette filter pins it to score 1.
+		registry.dispatch( commandsStore ).registerCommand( {
+			name: 'cortext/document/page-1',
+			label: 'Unrelated title',
+			context: 'root',
+			callback: jest.fn(),
+		} );
+		registry.dispatch( commandsStore ).registerCommand( {
+			name: 'cortext/other',
+			label: 'Also unrelated',
+			context: 'root',
+			callback: jest.fn(),
+		} );
+		registry.dispatch( commandsStore ).open();
+
+		render(
+			<RegistryProvider value={ registry }>
+				<CortextCommandMenu search="zzzz" setSearch={ () => {} } />
+			</RegistryProvider>
+		);
+
+		expect(
+			await screen.findByText( 'Unrelated title' )
+		).toBeInTheDocument();
+		expect(
+			screen.queryByText( 'Also unrelated' )
+		).not.toBeInTheDocument();
+	} );
+
+	it( 'hides the commands group while the search input is non-empty', async () => {
+		global.ResizeObserver = ResizeObserverMock;
+		window.Element.prototype.scrollIntoView = jest.fn();
+		const registry = createCommandPaletteRegistry();
+		registry.dispatch( commandsStore ).registerCommand( {
+			name: 'cortext/home',
+			label: 'Go to home',
+			context: 'root',
+			callback: jest.fn(),
+		} );
+		registry.dispatch( commandsStore ).open();
+
+		const { rerender } = render(
+			<RegistryProvider value={ registry }>
+				<CortextCommandMenu search="" setSearch={ () => {} } />
+			</RegistryProvider>
+		);
+
+		// With no search, static commands render under "Suggestions".
+		expect( await screen.findByText( 'Go to home' ) ).toBeInTheDocument();
+
+		// Once the user starts typing, the commands group disappears so it
+		// cannot steal the selection from live document results.
+		rerender(
+			<RegistryProvider value={ registry }>
+				<CortextCommandMenu search="home" setSearch={ () => {} } />
+			</RegistryProvider>
+		);
+
+		expect( screen.queryByText( 'Go to home' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'hides the recent group while the search input is non-empty', async () => {
+		global.ResizeObserver = ResizeObserverMock;
+		window.Element.prototype.scrollIntoView = jest.fn();
+		const registry = createCommandPaletteRegistry();
+		registry.dispatch( commandsStore ).registerCommand( {
+			name: 'cortext/recent/page-7',
+			label: 'Welcome to Cortext',
+			searchLabel: 'Open recent: Welcome to Cortext',
+			context: 'root',
+			keywords: [ 'recent', 'page' ],
+			callback: jest.fn(),
+		} );
+		registry.dispatch( commandsStore ).open();
+
+		const { rerender } = render(
+			<RegistryProvider value={ registry }>
+				<CortextCommandMenu search="" setSearch={ () => {} } />
+			</RegistryProvider>
+		);
+
+		// With no search, the recent group renders.
+		expect(
+			await screen.findByText( 'Welcome to Cortext' )
+		).toBeInTheDocument();
+
+		// As soon as the user types, the recent group is hidden so it
+		// cannot steal the selection from the live search results.
+		rerender(
+			<RegistryProvider value={ registry }>
+				<CortextCommandMenu search="welcome" setSearch={ () => {} } />
+			</RegistryProvider>
+		);
+
+		expect(
+			screen.queryByText( 'Welcome to Cortext' )
+		).not.toBeInTheDocument();
 	} );
 } );

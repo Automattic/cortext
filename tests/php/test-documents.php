@@ -375,6 +375,203 @@ final class Test_Documents extends BaseTestCase {
 		$this->assertNotContains( $trashed_id, $ids );
 	}
 
+	public function test_list_search_matches_row_by_text_field(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$collection_id = $this->create_collection( 'projects', 'Projects' );
+		$status_field  = $this->create_collection_field( $collection_id, 'Status', 'text' );
+
+		$matching_id  = $this->create_row( 'crtxt_projects', 'First row' );
+		$unrelated_id = $this->create_row( 'crtxt_projects', 'Second row' );
+		update_post_meta( $matching_id, "field-{$status_field}", 'shipping today' );
+		update_post_meta( $unrelated_id, "field-{$status_field}", 'parked' );
+
+		$result = $this->documents->list( array( 'search' => 'shipping' ) );
+
+		$ids = array_map( static fn ( array $doc ): int => $doc['id'], $result['documents'] );
+		$this->assertContains( $matching_id, $ids );
+		$this->assertNotContains( $unrelated_id, $ids );
+	}
+
+	public function test_list_search_matches_row_by_email_and_url_fields(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$collection_id = $this->create_collection( 'contacts', 'Contacts' );
+		$email_field   = $this->create_collection_field( $collection_id, 'Email', 'email' );
+		$url_field     = $this->create_collection_field( $collection_id, 'Site', 'url' );
+
+		$email_match_id = $this->create_row( 'crtxt_contacts', 'Alice' );
+		$url_match_id   = $this->create_row( 'crtxt_contacts', 'Bob' );
+		$unrelated_id   = $this->create_row( 'crtxt_contacts', 'Carol' );
+		update_post_meta( $email_match_id, "field-{$email_field}", 'alice@example.org' );
+		update_post_meta( $url_match_id, "field-{$url_field}", 'https://acme.test/blog' );
+
+		$by_email = $this->documents->list( array( 'search' => 'example.org' ) );
+		$by_url   = $this->documents->list( array( 'search' => 'acme.test' ) );
+
+		$email_ids = array_map( static fn ( array $doc ): int => $doc['id'], $by_email['documents'] );
+		$url_ids   = array_map( static fn ( array $doc ): int => $doc['id'], $by_url['documents'] );
+
+		$this->assertContains( $email_match_id, $email_ids );
+		$this->assertNotContains( $unrelated_id, $email_ids );
+		$this->assertContains( $url_match_id, $url_ids );
+		$this->assertNotContains( $unrelated_id, $url_ids );
+	}
+
+	public function test_list_search_ignores_non_text_field_values(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$collection_id = $this->create_collection( 'projects', 'Projects' );
+		$count_field   = $this->create_collection_field( $collection_id, 'Count', 'number' );
+		$pick_field    = $this->create_collection_field( $collection_id, 'Pick', 'select' );
+
+		$number_row_id = $this->create_row( 'crtxt_projects', 'Numbers' );
+		$select_row_id = $this->create_row( 'crtxt_projects', 'Selects' );
+		update_post_meta( $number_row_id, "field-{$count_field}", '12345' );
+		update_post_meta( $select_row_id, "field-{$pick_field}", 'shipping' );
+
+		$result = $this->documents->list( array( 'search' => '12345' ) );
+		$ids    = array_map( static fn ( array $doc ): int => $doc['id'], $result['documents'] );
+		$this->assertNotContains( $number_row_id, $ids );
+
+		$result = $this->documents->list( array( 'search' => 'shipping' ) );
+		$ids    = array_map( static fn ( array $doc ): int => $doc['id'], $result['documents'] );
+		$this->assertNotContains( $select_row_id, $ids );
+	}
+
+	public function test_list_search_ranks_title_matches_above_body_matches(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		// Older page with the term in its title.
+		$title_match = $this->create_page(
+			array(
+				'post_title'        => 'Quarterly report',
+				'post_modified'     => '2025-01-01 00:00:00',
+				'post_modified_gmt' => '2025-01-01 00:00:00',
+			)
+		);
+		// Newer page whose title misses the term but body matches.
+		$body_match = $this->create_page(
+			array(
+				'post_title'        => 'Notes',
+				'post_content'      => 'Quarterly review notes for the team.',
+				'post_modified'     => '2025-06-01 00:00:00',
+				'post_modified_gmt' => '2025-06-01 00:00:00',
+			)
+		);
+
+		$result = $this->documents->list( array( 'search' => 'quarterly' ) );
+		$ids    = array_map(
+			static fn ( array $doc ): int => $doc['id'],
+			$result['documents']
+		);
+
+		$title_pos = array_search( $title_match, $ids, true );
+		$body_pos  = array_search( $body_match, $ids, true );
+
+		$this->assertNotFalse( $title_pos );
+		$this->assertNotFalse( $body_pos );
+		$this->assertLessThan(
+			$body_pos,
+			$title_pos,
+			'Title match should rank above body-only match even when the body-match document is newer.'
+		);
+	}
+
+	public function test_list_search_ranks_title_prefix_above_title_substring(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		// Page whose title CONTAINS the term but does not start with it,
+		// and that has been modified more recently.
+		$substring_match = $this->create_page(
+			array(
+				'post_title'        => 'Meeting notes',
+				'post_modified'     => '2025-06-01 00:00:00',
+				'post_modified_gmt' => '2025-06-01 00:00:00',
+			)
+		);
+		// Page whose title STARTS with the term, older.
+		$prefix_match = $this->create_page(
+			array(
+				'post_title'        => 'Terry Pratchett',
+				'post_modified'     => '2025-01-01 00:00:00',
+				'post_modified_gmt' => '2025-01-01 00:00:00',
+			)
+		);
+
+		$result = $this->documents->list( array( 'search' => 'te' ) );
+		$ids    = array_map(
+			static fn ( array $doc ): int => $doc['id'],
+			$result['documents']
+		);
+
+		$prefix_pos    = array_search( $prefix_match, $ids, true );
+		$substring_pos = array_search( $substring_match, $ids, true );
+
+		$this->assertNotFalse( $prefix_pos );
+		$this->assertNotFalse( $substring_pos );
+		$this->assertLessThan(
+			$substring_pos,
+			$prefix_pos,
+			'Title prefix match should rank above title substring match regardless of modified date.'
+		);
+	}
+
+	public function test_list_search_returns_pages_and_rows_in_one_pass(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$collection_id = $this->create_collection( 'projects', 'Projects' );
+		$status_field  = $this->create_collection_field( $collection_id, 'Status', 'text' );
+
+		$page_id = $this->create_page(
+			array(
+				'post_title'   => 'Notes',
+				'post_content' => 'Discussing the alpha launch this week.',
+			)
+		);
+		$row_id  = $this->create_row( 'crtxt_projects', 'Mobile rollout' );
+		update_post_meta( $row_id, "field-{$status_field}", 'alpha pilot' );
+
+		$result = $this->documents->list( array( 'search' => 'alpha' ) );
+
+		$ids = array_map( static fn ( array $doc ): int => $doc['id'], $result['documents'] );
+		$this->assertContains( $page_id, $ids );
+		$this->assertContains( $row_id, $ids );
+	}
+
+	public function test_list_search_requires_all_terms_to_match_somewhere(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$collection_id = $this->create_collection( 'projects', 'Projects' );
+		$status_field  = $this->create_collection_field( $collection_id, 'Status', 'text' );
+
+		$row_one = $this->create_row( 'crtxt_projects', 'Apollo' );
+		update_post_meta( $row_one, "field-{$status_field}", 'pilot' );
+
+		$row_two = $this->create_row( 'crtxt_projects', 'Apollo' );
+		update_post_meta( $row_two, "field-{$status_field}", 'frozen' );
+
+		$result = $this->documents->list( array( 'search' => 'apollo pilot' ) );
+		$ids    = array_map( static fn ( array $doc ): int => $doc['id'], $result['documents'] );
+
+		$this->assertContains( $row_one, $ids );
+		$this->assertNotContains( $row_two, $ids );
+	}
+
+	public function test_list_trash_still_finds_row_by_title(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$this->create_collection( 'projects', 'Projects' );
+		$kept_row_id    = $this->create_row( 'crtxt_projects', 'Keeper' );
+		$trashed_row_id = $this->create_row( 'crtxt_projects', 'Spaceship' );
+		wp_trash_post( $trashed_row_id );
+
+		$result = $this->documents->list(
+			array(
+				'status' => Documents::STATUS_TRASH,
+				'search' => 'spaceship',
+			)
+		);
+
+		$ids = array_map( static fn ( array $doc ): int => $doc['id'], $result['documents'] );
+		$this->assertContains( $trashed_row_id, $ids );
+		$this->assertNotContains( $kept_row_id, $ids );
+	}
+
 	public function test_format_document_returns_null_for_non_document_post_type(): void {
 		$post_id = (int) wp_insert_post(
 			array(
@@ -442,6 +639,21 @@ final class Test_Documents extends BaseTestCase {
 		$this->assertGreaterThan( 0, $id );
 
 		return (int) $id;
+	}
+
+	private function create_collection_field( int $collection_id, string $title, string $type ): int {
+		$field_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => $title,
+				'meta_input'  => array( 'type' => $type ),
+			)
+		);
+		$this->assertGreaterThan( 0, $field_id );
+		add_post_meta( $collection_id, 'fields', (string) $field_id );
+
+		return $field_id;
 	}
 
 	private function unregister_dynamic_collection_post_types(): void {

@@ -595,13 +595,27 @@ final class RowsFilterQuery {
 		);
 
 		if ( count( $text_keys ) > 0 ) {
-			$parts[] = $this->meta_key_in_like_sql( $text_keys, $like );
+			$parts[] = $this->meta_search_sql( $text_keys, $like );
 		}
 
 		return '( ' . implode( ' OR ', $parts ) . ' )';
 	}
 
-	private function meta_key_in_like_sql( array $keys, string $like ): string {
+	/**
+	 * Builds an `EXISTS` subquery for matching one of the given meta keys on
+	 * the current post. Returns an empty string when there are no keys.
+	 *
+	 * The caller should pass a LIKE pattern that is already wrapped in `%` and
+	 * escaped with `esc_like()`.
+	 *
+	 * @param string[] $keys Meta keys to scan, e.g. row text-like field keys.
+	 * @param string   $like Prepared LIKE pattern, e.g. `%foo%`.
+	 */
+	public function meta_search_sql( array $keys, string $like ): string {
+		if ( count( $keys ) === 0 ) {
+			return '';
+		}
+
 		global $wpdb;
 
 		$placeholders = implode( ', ', array_fill( 0, count( $keys ), '%s' ) );

@@ -17,11 +17,13 @@ declare( strict_types=1 );
 
 namespace Cortext;
 
+use Cortext\Fields\FieldTypeRegistry;
 use Cortext\PostType\Collection;
 use Cortext\PostType\CollectionEntries;
 use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Page;
 use Cortext\PostType\PageTrashCascade;
+use Cortext\Rest\RowsFilterQuery;
 use WP_Post;
 use WP_Query;
 
@@ -44,6 +46,12 @@ final class Documents {
 	 * @var array<string,?WP_Post>
 	 */
 	private array $collection_cache = array();
+
+	private RowsFilterQuery $rows_filter_query;
+
+	public function __construct( ?RowsFilterQuery $rows_filter_query = null ) {
+		$this->rows_filter_query = $rows_filter_query ?? new RowsFilterQuery();
+	}
 
 	/**
 	 * Returns every registered post type that opts into the `cortext-document`
@@ -140,17 +148,43 @@ final class Documents {
 			'post_status'         => $statuses,
 			'fields'              => 'ids',
 			'posts_per_page'      => -1,
-			'orderby'             => 'modified',
-			'order'               => 'DESC',
 			'ignore_sticky_posts' => true,
 			'no_found_rows'       => true,
 		);
 
-		if ( '' !== $search ) {
+		if ( '' === $search ) {
+			// No search: most recently modified first.
+			$query_args['orderby'] = 'modified';
+			$query_args['order']   = 'DESC';
+		} else {
+			// With a search term, let `WP_Query` apply its
+			// `search_orderby_title` scoring so title hits bubble up before
+			// body/meta-only matches. The palette caps results to a small
+			// page, so ordering by modified date alone would arbitrarily
+			// hide the most relevant document when the recently-edited
+			// long tail happens to match.
 			$query_args['s'] = $search;
 		}
 
-		$query        = new WP_Query( $query_args );
+		$search_filter = $this->build_search_filter( $search, $post_types );
+		if ( null !== $search_filter ) {
+			add_filter( 'posts_search', $search_filter, 10, 2 );
+		}
+
+		$orderby_filter = $this->build_search_orderby_filter( $search, $post_types );
+		if ( null !== $orderby_filter ) {
+			add_filter( 'posts_search_orderby', $orderby_filter, 10, 2 );
+		}
+
+		$query = new WP_Query( $query_args );
+
+		if ( null !== $search_filter ) {
+			remove_filter( 'posts_search', $search_filter, 10 );
+		}
+		if ( null !== $orderby_filter ) {
+			remove_filter( 'posts_search_orderby', $orderby_filter, 10 );
+		}
+
 		$editable_ids = array_values(
 			array_filter(
 				array_map( 'intval', $query->posts ),
@@ -428,5 +462,188 @@ final class Documents {
 		$rendered = trim( (string) $rendered );
 
 		return wp_trim_words( $rendered, 30, '…' );
+	}
+
+	/**
+	 * Returns a `posts_search` filter that lets row documents match text-like
+	 * field meta (text, email, url), not only title/content/excerpt. This
+	 * replaces WP's search clause, so split-term matching behaves the same way
+	 * it does in `/rows`.
+	 *
+	 * Returns null for an empty search, a page-only query, or row CPTs without
+	 * any text-like fields.
+	 *
+	 * @param string   $search     Trimmed search string.
+	 * @param string[] $post_types Post types used by the WP_Query.
+	 */
+	private function build_search_filter( string $search, array $post_types ): ?callable {
+		if ( '' === $search ) {
+			return null;
+		}
+
+		$row_text_keys_by_cpt = array();
+		foreach ( $post_types as $post_type ) {
+			if ( Page::POST_TYPE === $post_type ) {
+				continue;
+			}
+			$collection = $this->find_collection_by_row_post_type( $post_type );
+			if ( ! $collection instanceof WP_Post ) {
+				continue;
+			}
+
+			$schema = $this->rows_filter_query->field_schema_for( (int) $collection->ID );
+			$keys   = array();
+			foreach ( $schema as $field ) {
+				if ( empty( $field['system'] ) && FieldTypeRegistry::is_text_like( (string) $field['type'] ) ) {
+					$keys[] = (string) $field['key'];
+				}
+			}
+			if ( count( $keys ) > 0 ) {
+				$row_text_keys_by_cpt[ $post_type ] = $keys;
+			}
+		}
+
+		if ( count( $row_text_keys_by_cpt ) === 0 ) {
+			return null;
+		}
+
+		$post_type_signature = $post_types;
+		sort( $post_type_signature );
+
+		return function (
+			string $search_sql,
+			WP_Query $wp_query
+		) use (
+			$search,
+			$post_type_signature,
+			$row_text_keys_by_cpt
+		): string {
+			$query_post_types = (array) $wp_query->get( 'post_type' );
+			sort( $query_post_types );
+			if ( $query_post_types !== $post_type_signature ) {
+				return $search_sql;
+			}
+
+			return $this->build_documents_search_sql( $search, $row_text_keys_by_cpt );
+		};
+	}
+
+	/**
+	 * Builds the SQL used by the documents endpoint instead of WP_Query's
+	 * default search clause. Each search term must match somewhere. Pages use
+	 * title/content/excerpt; rows can also use their collection's text-like
+	 * field meta values.
+	 *
+	 * @param string                 $search               Search string.
+	 * @param array<string,string[]> $row_text_keys_by_cpt Row CPT to its text-like meta keys.
+	 */
+	private function build_documents_search_sql( string $search, array $row_text_keys_by_cpt ): string {
+		global $wpdb;
+
+		$terms = preg_split( '/\s+/', trim( $search ) );
+		$terms = is_array( $terms )
+			? array_values(
+				array_filter(
+					$terms,
+					static fn( $term ) => '' !== $term
+				)
+			)
+			: array();
+
+		if ( count( $terms ) === 0 ) {
+			return '';
+		}
+
+		$term_clauses = array();
+		foreach ( $terms as $term ) {
+			$like = '%' . $wpdb->esc_like( (string) $term ) . '%';
+
+			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$branches = array(
+				'( ' . $wpdb->prepare(
+					"{$wpdb->posts}.post_title LIKE %s OR {$wpdb->posts}.post_content LIKE %s OR {$wpdb->posts}.post_excerpt LIKE %s",
+					$like,
+					$like,
+					$like
+				) . ' )',
+			);
+
+			foreach ( $row_text_keys_by_cpt as $cpt => $keys ) {
+				$meta_sql = $this->rows_filter_query->meta_search_sql( $keys, $like );
+				if ( '' === $meta_sql ) {
+					continue;
+				}
+				$branches[] = '( ' . $wpdb->prepare( "{$wpdb->posts}.post_type = %s", $cpt ) . " AND {$meta_sql} )";
+			}
+			// phpcs:enable
+
+			$term_clauses[] = '( ' . implode( ' OR ', $branches ) . ' )';
+		}
+
+		return ' AND ( ' . implode( ' AND ', $term_clauses ) . ' )';
+	}
+
+	/**
+	 * Returns a `posts_search_orderby` filter that ranks documents by where
+	 * the query lives in them. WP's default `search_orderby_title` for
+	 * single-term queries only distinguishes "title contains" vs "title
+	 * does not contain", so a recently edited document whose title happens
+	 * to include the term as a substring ties with one whose title starts
+	 * with it. For a palette the user expects the prefix match first.
+	 *
+	 * Tiers (ASC):
+	 *   1. title starts with the query
+	 *   2. title contains the query
+	 *   3. excerpt contains the query
+	 *   4. content contains the query
+	 *   5. everything else (rows that matched only by meta, etc.)
+	 *
+	 * Returns null for an empty search or when the WP_Query is not the one
+	 * `list()` is currently running.
+	 *
+	 * @param string   $search     Trimmed search string.
+	 * @param string[] $post_types Post types used by the WP_Query.
+	 */
+	private function build_search_orderby_filter( string $search, array $post_types ): ?callable {
+		if ( '' === $search ) {
+			return null;
+		}
+
+		$post_type_signature = $post_types;
+		sort( $post_type_signature );
+
+		return function (
+			string $search_orderby,
+			WP_Query $wp_query
+		) use (
+			$search,
+			$post_type_signature
+		): string {
+			$query_post_types = (array) $wp_query->get( 'post_type' );
+			sort( $query_post_types );
+			if ( $query_post_types !== $post_type_signature ) {
+				return $search_orderby;
+			}
+
+			global $wpdb;
+			$like_prefix   = $wpdb->esc_like( $search ) . '%';
+			$like_anywhere = '%' . $wpdb->esc_like( $search ) . '%';
+
+			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			return $wpdb->prepare(
+				"(CASE
+					WHEN {$wpdb->posts}.post_title LIKE %s THEN 1
+					WHEN {$wpdb->posts}.post_title LIKE %s THEN 2
+					WHEN {$wpdb->posts}.post_excerpt LIKE %s THEN 3
+					WHEN {$wpdb->posts}.post_content LIKE %s THEN 4
+					ELSE 5
+				END)",
+				$like_prefix,
+				$like_anywhere,
+				$like_anywhere,
+				$like_anywhere
+			);
+			// phpcs:enable
+		};
 	}
 }
