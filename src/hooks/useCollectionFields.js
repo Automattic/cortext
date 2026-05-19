@@ -76,10 +76,23 @@ export default function useCollectionFields( collectionId ) {
 	// field) `fieldRecords` briefly returns an empty array; without this
 	// guard the sync would treat all custom fields as "removed" and
 	// strip them from `view.fields`.
+	//
+	// Records can be returned as stubs (`{ id }` only, no `title`) when
+	// they're referenced in the store by another caller but not yet
+	// hydrated. `mapField` falls back to `#${id}` for missing titles, so
+	// rendering on stubs flashes the field IDs in the column headers
+	// before the real names arrive. Require every record to carry a
+	// `title` payload before considering the fields list authoritative.
+	const fieldRecordsHydrated =
+		Array.isArray( fieldRecords ) &&
+		fieldRecords.length === fieldIds.length &&
+		fieldRecords.every( ( record ) => record?.title !== undefined );
 	const fieldsResolvedFlag =
 		fieldIds.length === 0
 			? Boolean( collection )
-			: ! fieldsResolving && Boolean( fieldsResolved );
+			: ! fieldsResolving &&
+			  Boolean( fieldsResolved ) &&
+			  fieldRecordsHydrated;
 
 	// Latch the last authoritative `fields` snapshot scoped to the
 	// collection that produced it. When the user adds or deletes a

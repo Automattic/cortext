@@ -1018,9 +1018,17 @@ body.cortext-sidebar-resizing {
 }
 
 // Skip the default root snapshot so the sidebar and top bar stay live
-// during the swap. Only the canvas opts in below.
+// during the swap. Only the canvas opts in below. The canvas frame
+// surface also lives here so the view-transition pseudo (which sits
+// above .cortext-root and can't see our shell tokens) has a fill
+// during the cross-fade; dark mode is matched via :has() below.
 :root {
 	view-transition-name: none;
+	--cortext-canvas-frame-surface-root: #{$white};
+}
+
+:root:has(.cortext-root[data-theme="dark"]) {
+	--cortext-canvas-frame-surface-root: #2a2a2a;
 }
 
 .cortext-shell__canvas {
@@ -1051,14 +1059,12 @@ body.cortext-sidebar-resizing {
 }
 
 // During the cross-fade both snapshots drop to ~50% opacity for a frame
-// or two. The pseudo overlay sits above the DOM, and the original canvas
-// element is hidden by the browser for the duration, so anything visible
-// through the snapshots' transparent pixels falls all the way through to
-// the user-agent background (which is black in dark mode). Pinning a
-// solid frame surface on the group covers that gap with the same color
-// the canvas paints natively.
+// or two. The pseudo overlay sits above the DOM and our shell-scoped CSS
+// vars don't reach it, so we read the canvas surface from the :root
+// declaration above. Without this the cross-fade's transparent midpoint
+// reveals the user-agent background (black in dark mode).
 ::view-transition-group(cortext-canvas) {
-	background: var(--cortext-canvas-frame-surface);
+	background: var(--cortext-canvas-frame-surface-root, #fff);
 }
 
 @media (prefers-reduced-motion: reduce) {
