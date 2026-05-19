@@ -1,10 +1,12 @@
 import { useNavigate } from '@tanstack/react-router';
-import { Button, Icon, Spinner } from '@wordpress/components';
+import { Button, Icon } from '@wordpress/components';
 import { useCallback, useLayoutEffect, useRef } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import { listItem, table } from '@wordpress/icons';
 
 import PageIcon from './PageIcon';
+import { SidebarListSkeleton } from './Skeleton';
+import useDelayedFlag from '../hooks/useDelayedFlag';
 import { useRecents } from '../hooks/useRecents';
 
 const RECENT_REPOSITION_OPTIONS = {
@@ -152,12 +154,12 @@ export default function SidebarRecents() {
 		}
 	}, [ isResolving, recents ] );
 
+	const showSkeleton = useDelayedFlag( isResolving && recents.length === 0 );
+
 	return (
 		<>
-			{ isResolving && recents.length === 0 && (
-				<div className="cortext-sidebar__loading">
-					<Spinner />
-				</div>
+			{ isResolving && recents.length === 0 && showSkeleton && (
+				<SidebarListSkeleton itemCount={ 3 } />
 			) }
 			{ ! isResolving && recents.length === 0 && (
 				<p className="cortext-sidebar__empty">
