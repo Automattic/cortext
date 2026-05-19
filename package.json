@@ -15,7 +15,7 @@
 		"dev": "wp-scripts start",
 		"build": "wp-scripts build",
 		"format": "wp-scripts format",
-		"format:check": "wp-scripts format --check",
+		"format:check": "prettier --check '**/*.{js,jsx,json,ts,tsx,yml,yaml}' --config .prettierrc.js --ignore-path .prettierignore",
 		"lint:js": "wp-scripts lint-js src",
 		"lint:php": "composer run phpcs",
 		"lint:style": "wp-scripts lint-style 'src/**/*.{css,pcss,scss}'",
@@ -45,6 +45,7 @@
 		"@wordpress/env": "^11.4.0",
 		"@wordpress/prettier-config": "^4.46.0",
 		"@wordpress/scripts": "^32.0.0",
+		"prettier": "npm:wp-prettier@3.0.3",
 		"react": "18.3.1",
 		"react-dom": "18.3.1"
 	},
