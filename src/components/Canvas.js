@@ -20,7 +20,7 @@ import EditorBody from './EditorBody';
 import PublishToggle from './PublishToggle';
 import { RowDetailSidebarSlot } from './RowDetailSidebarSlot';
 import RowProperties from './RowProperties';
-import { DocumentSkeleton } from './Skeleton';
+import { CanvasProgressBar } from './Skeleton';
 import { TopBarActionsFill } from './WorkspaceTopBar';
 import PageInspectorSidebar, {
 	BLOCK_INSPECTOR,
@@ -377,11 +377,11 @@ export default function Canvas( {
 		} );
 	}, [ requestedPost ] );
 
-	const showLoadingSkeleton = useDelayedFlag( ! renderedPost );
+	const showProgress = useDelayedFlag( ! renderedPost );
 	if ( ! renderedPost ) {
 		return (
 			<div className="cortext-canvas__loading cortext-canvas__loading--document">
-				{ showLoadingSkeleton ? <DocumentSkeleton /> : null }
+				{ showProgress ? <CanvasProgressBar /> : null }
 			</div>
 		);
 	}

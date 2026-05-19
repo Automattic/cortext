@@ -4006,35 +4006,49 @@ tr:has(.cortext-title-cell--is-opening)
 	}
 }
 
-// Approximates the full-page editor layout so the canvas area doesn't
-// collapse and re-expand when the editor finishes mounting.
-.cortext-document-skeleton {
-	display: flex;
-	flex-direction: column;
-	gap: $grid-unit-30;
+// Thin sliding bar at the top of the canvas while the route + editor
+// resolve. Sits in `.cortext-canvas__loading--document`, which is
+// stretched to the canvas frame so the bar can pin to the top.
+.cortext-canvas-progress {
+	position: relative;
 	width: 100%;
-	max-width: 760px;
-	margin: 0 auto;
-	padding: $grid-unit-30 $grid-unit-40 $grid-unit-50;
+	height: 2px;
+	overflow: hidden;
+	background: transparent;
+	flex: 0 0 auto;
 
-	&__title {
-		height: 32px;
-		width: 55%;
-		border-radius: 6px;
+	&::before {
+		content: "";
+		position: absolute;
+		top: 0;
+		left: -40%;
+		width: 40%;
+		height: 100%;
+		background: var(--cortext-text, #1e1e1e);
+		opacity: 0.55;
+		border-radius: 2px;
+		animation: cortext-canvas-progress-slide 1.6s ease-in-out infinite;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+	.cortext-canvas-progress::before {
+		animation: none;
+		left: 0;
+		width: 100%;
+		opacity: 0.25;
+	}
+}
+
+@keyframes cortext-canvas-progress-slide {
+
+	0% {
+		left: -40%;
 	}
 
-	&__content {
-		display: flex;
-		flex-direction: column;
-		gap: $grid-unit-15;
-	}
-
-	&__line--medium {
-		width: 85%;
-	}
-
-	&__line--short {
-		width: 60%;
+	100% {
+		left: 100%;
 	}
 }
 

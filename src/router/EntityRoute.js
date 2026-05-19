@@ -17,8 +17,8 @@ import { CollectionFieldsProvider } from '../components/CollectionFieldsContext'
 import { RowMutationContext } from '../components/EditableCell';
 import { RowDetailSidebarSlot } from '../components/RowDetailSidebarSlot';
 import {
+	CanvasProgressBar,
 	CollectionRowsSkeleton,
-	DocumentSkeleton,
 } from '../components/Skeleton';
 import useDelayedFlag from '../hooks/useDelayedFlag';
 import WorkspaceTopBar from '../components/WorkspaceTopBar';
@@ -96,10 +96,10 @@ function CollectionPane( { collectionId, onReady } ) {
 }
 
 function LoadingPane( { active } ) {
-	const showSkeleton = useDelayedFlag( active );
+	const showProgress = useDelayedFlag( active );
 	return (
 		<div className="cortext-canvas__loading cortext-canvas__loading--document">
-			{ showSkeleton ? <DocumentSkeleton /> : null }
+			{ showProgress ? <CanvasProgressBar /> : null }
 		</div>
 	);
 }

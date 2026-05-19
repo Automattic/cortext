@@ -129,27 +129,17 @@ export function CollectionRowsSkeleton( { rowCount = 8, columnCount = 4 } ) {
 	);
 }
 
-// Approximates the full-page editor's title-plus-content layout so the
-// canvas area keeps its size while useResolveDocument and the editor
-// mount. Cover and icon are intentionally omitted (most documents don't
-// have them and reserving space for both would create the opposite shift).
-export function DocumentSkeleton( { className } ) {
+// Thin indeterminate progress bar shown at the top of the canvas while
+// the entity route resolves and the editor mounts. Honest about the
+// uncertainty — a canvas document can be a page, a row, a fresh blank,
+// with or without cover and icon, so a skeleton that mimics one shape
+// inevitably misleads for the others. The bar just signals "working on
+// it" without promising structure.
+export function CanvasProgressBar( { className } ) {
 	return (
 		<div
-			className={ joinClassName(
-				'cortext-document-skeleton',
-				className
-			) }
+			className={ joinClassName( 'cortext-canvas-progress', className ) }
 			aria-hidden="true"
-		>
-			<SkeletonLine className="cortext-document-skeleton__title" />
-			<div className="cortext-document-skeleton__content">
-				<SkeletonLine />
-				<SkeletonLine className="cortext-document-skeleton__line--medium" />
-				<SkeletonLine className="cortext-document-skeleton__line--short" />
-				<SkeletonLine />
-				<SkeletonLine className="cortext-document-skeleton__line--medium" />
-			</div>
-		</div>
+		/>
 	);
 }
