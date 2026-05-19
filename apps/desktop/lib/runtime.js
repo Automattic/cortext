@@ -6,6 +6,8 @@ const path = require( 'path' );
 
 const DEFAULT_PORT = 9402;
 const DEFAULT_READY_PATH = '/wp-includes/images/blank.gif';
+const EXPLORATION_OBJECT_CACHE_MARKER =
+	'Cortext Desktop APCu object-cache exploration drop-in';
 
 function normalizeRuntime( runtime ) {
 	const value = ( runtime || 'php' ).toLowerCase();
@@ -66,6 +68,115 @@ function pipeProcessOutput( child ) {
 	child.stderr.on( 'data', ( chunk ) => {
 		process.stderr.write( chunk );
 	} );
+}
+
+function isEnabled( value ) {
+	return [ '1', 'true', 'yes', 'on' ].includes(
+		String( value || '' ).toLowerCase()
+	);
+}
+
+function addPhpIni( args, key, value ) {
+	args.push( '-d', `${ key }=${ value }` );
+}
+
+function ensureDir( dir ) {
+	fs.mkdirSync( dir, { recursive: true } );
+	return dir;
+}
+
+function configureObjectCacheDropIn( wordpressDir, appDir ) {
+	const dropInPath = path.join( wordpressDir, 'wp-content/object-cache.php' );
+	const sourcePath = path.join( appDir, 'runtime/object-cache-apcu.php' );
+
+	if ( process.env.CORTEXT_DESKTOP_OBJECT_CACHE === 'apcu' ) {
+		if ( ! fs.existsSync( sourcePath ) ) {
+			throw new Error( `APCu object-cache drop-in not found at ${ sourcePath }.` );
+		}
+		fs.copyFileSync( sourcePath, dropInPath );
+		return;
+	}
+
+	if ( ! fs.existsSync( dropInPath ) ) {
+		return;
+	}
+
+	const existing = fs.readFileSync( dropInPath, 'utf8' );
+	if ( existing.includes( EXPLORATION_OBJECT_CACHE_MARKER ) ) {
+		fs.rmSync( dropInPath, { force: true } );
+	}
+}
+
+function configurePreloadFiles( wordpressDir, appDir ) {
+	const files = [
+		[ 'preload.php', 'cortext-preload.php' ],
+		[ 'preload-manifest.php', 'cortext-preload-manifest.php' ],
+	];
+
+	for ( const [ sourceName, destName ] of files ) {
+		const source = path.join( appDir, 'runtime', sourceName );
+		if ( ! fs.existsSync( source ) ) {
+			throw new Error( `Preload file not found at ${ source }.` );
+		}
+		fs.copyFileSync( source, path.join( wordpressDir, destName ) );
+	}
+
+	return path.join( wordpressDir, 'cortext-preload.php' );
+}
+
+function phpCliIniArgs( wordpressDir, appDir, runtimeStateDir ) {
+	const args = [];
+	const needsOpcache =
+		isEnabled( process.env.CORTEXT_PHP_OPCACHE_FILE_CACHE ) ||
+		isEnabled( process.env.CORTEXT_PHP_PRELOAD ) ||
+		isEnabled( process.env.CORTEXT_PHP_JIT );
+
+	if ( needsOpcache ) {
+		addPhpIni( args, 'opcache.enable_cli', '1' );
+		addPhpIni( args, 'opcache.enable', '1' );
+		addPhpIni( args, 'opcache.validate_timestamps', '0' );
+	}
+
+	if ( isEnabled( process.env.CORTEXT_PHP_OPCACHE_FILE_CACHE ) ) {
+		const fileCacheDir = ensureDir(
+			path.join( runtimeStateDir, 'opcache-file-cache' )
+		);
+		addPhpIni( args, 'opcache.file_cache', fileCacheDir );
+		addPhpIni( args, 'opcache.file_cache_only', '0' );
+	}
+
+	if ( isEnabled( process.env.CORTEXT_PHP_PRELOAD ) ) {
+		const preloadPath = configurePreloadFiles( wordpressDir, appDir );
+		const markerPath = path.join(
+			ensureDir( runtimeStateDir ),
+			'preload-engagement.json'
+		);
+		process.env.CORTEXT_DESKTOP_PRELOAD_MARKER = markerPath;
+		addPhpIni( args, 'opcache.preload', preloadPath );
+	} else {
+		delete process.env.CORTEXT_DESKTOP_PRELOAD_MARKER;
+	}
+
+	if ( isEnabled( process.env.CORTEXT_PHP_JIT ) ) {
+		addPhpIni(
+			args,
+			'opcache.jit_buffer_size',
+			process.env.CORTEXT_PHP_JIT_BUFFER_SIZE || '64M'
+		);
+		addPhpIni(
+			args,
+			'opcache.jit',
+			process.env.CORTEXT_PHP_JIT_MODE || 'tracing'
+		);
+		addPhpIni( args, 'pcre.jit', '1' );
+	}
+
+	if ( process.env.CORTEXT_DESKTOP_OBJECT_CACHE === 'apcu' ) {
+		addPhpIni( args, 'apc.enabled', '1' );
+		addPhpIni( args, 'apc.enable_cli', '1' );
+	}
+
+	return args;
 }
 
 function addProcess( handle, name, command, args, options = {} ) {
@@ -184,7 +295,7 @@ function waitForHttpReady( handle, port, timeoutMs = 30000 ) {
 	} );
 }
 
-function startPhpCli( handle, wordpressDir, port, appDir ) {
+function startPhpCli( handle, wordpressDir, port, appDir, runtimeStateDir ) {
 	const phpBin = resolveExecutable(
 		'CORTEXT_PHP_BIN',
 		path.join( appDir, 'runtime/bin/php' ),
@@ -203,6 +314,14 @@ function startPhpCli( handle, wordpressDir, port, appDir ) {
 	const workers =
 		process.env.CORTEXT_PHP_CLI_SERVER_WORKERS ||
 		process.env.PHP_CLI_SERVER_WORKERS;
+	const phpArgs = [
+		...phpCliIniArgs( wordpressDir, appDir, runtimeStateDir ),
+		'-S',
+		`127.0.0.1:${ port }`,
+		'-t',
+		wordpressDir,
+		routerPath,
+	];
 	const phpEnv = { ...process.env };
 	if ( workers ) {
 		phpEnv.PHP_CLI_SERVER_WORKERS = workers;
@@ -211,7 +330,7 @@ function startPhpCli( handle, wordpressDir, port, appDir ) {
 		handle,
 		'php',
 		phpBin,
-		[ '-S', `127.0.0.1:${ port }`, '-t', wordpressDir, routerPath ],
+		phpArgs,
 		{
 			cwd: wordpressDir,
 			env: phpEnv,
@@ -366,8 +485,10 @@ function startRuntime( {
 		fs.mkdtempSync( path.join( os.tmpdir(), 'cortext-desktop-runtime-' ) );
 	handle.stateDir = stateDir;
 
+	configureObjectCacheDropIn( wordpressDir, appDir );
+
 	if ( normalized === 'php' ) {
-		startPhpCli( handle, wordpressDir, port, appDir );
+		startPhpCli( handle, wordpressDir, port, appDir, stateDir );
 	} else if ( normalized === 'franken' ) {
 		startFrankenPhp( handle, wordpressDir, port, appDir );
 	} else if ( normalized === 'php-fpm' ) {
