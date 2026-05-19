@@ -23,7 +23,21 @@ const FRANKENPHP_VERSION =
 	process.env.CORTEXT_FRANKENPHP_VERSION || 'v1.12.2';
 const CADDY_VERSION = process.env.CORTEXT_CADDY_VERSION || '2.11.3';
 
-const PHP_EXTENSIONS = [
+function isEnabled( value ) {
+	return [ '1', 'true', 'yes', 'on' ].includes(
+		String( value || '' ).toLowerCase()
+	);
+}
+
+const PHP_EXPERIMENTAL = isEnabled(
+	process.env.CORTEXT_STATIC_PHP_EXPERIMENTAL
+);
+const PHP_WITH_APCU =
+	PHP_EXPERIMENTAL || isEnabled( process.env.CORTEXT_STATIC_PHP_APCU );
+const PHP_WITH_JIT =
+	PHP_EXPERIMENTAL || isEnabled( process.env.CORTEXT_STATIC_PHP_JIT );
+
+const BASE_PHP_EXTENSIONS = [
 	'opcache',
 	'pdo',
 	'pdo_sqlite',
@@ -51,6 +65,14 @@ const PHP_EXTENSIONS = [
 	'calendar',
 	'exif',
 ];
+
+function phpExtensions() {
+	const extensions = [ ...BASE_PHP_EXTENSIONS ];
+	if ( PHP_WITH_APCU ) {
+		extensions.push( 'apcu' );
+	}
+	return extensions;
+}
 
 function readOptions() {
 	const options = {
@@ -82,7 +104,7 @@ function readOptions() {
 function platformKey() {
 	if ( process.platform !== 'darwin' ) {
 		throw new Error(
-			`Only macOS runtime artifacts are supported by this spike script. Current platform: ${ process.platform }.`
+			`Only macOS runtime artifacts are supported by this exploration script. Current platform: ${ process.platform }.`
 		);
 	}
 	if ( process.arch === 'arm64' ) {
@@ -232,7 +254,7 @@ function verifyPhp( phpBin ) {
 	const modules = output( phpBin, [ '-m' ] )
 		.split( '\n' )
 		.map( ( module ) => module.trim().toLowerCase() );
-	for ( const required of [
+	const requiredModules = [
 		'pdo',
 		'pdo_sqlite',
 		'sqlite3',
@@ -254,11 +276,35 @@ function verifyPhp( phpBin ) {
 		'ctype',
 		'iconv',
 		'zend opcache',
-	] ) {
+	];
+
+	if ( PHP_WITH_APCU ) {
+		requiredModules.push( 'apcu' );
+	}
+
+	for ( const required of requiredModules ) {
 		if ( ! modules.includes( required ) ) {
 			throw new Error( `Bundled PHP is missing required module: ${ required }` );
 		}
 	}
+
+	if ( PHP_WITH_JIT ) {
+		const jit = output( phpBin, [
+			'-d',
+			'opcache.enable_cli=1',
+			'-d',
+			'opcache.jit_buffer_size=16M',
+			'-d',
+			'opcache.jit=tracing',
+			'-r',
+			"echo json_encode(opcache_get_status(false)['jit'] ?? null);",
+		] );
+		const parsed = JSON.parse( jit || 'null' );
+		if ( ! parsed || parsed.enabled !== true ) {
+			throw new Error( 'Bundled PHP did not report enabled OPcache JIT.' );
+		}
+	}
+
 	console.log( output( phpBin, [ '-v' ] ).split( '\n' )[0] );
 }
 
@@ -285,7 +331,22 @@ async function installPhp( options ) {
 	}
 
 	if ( ! existsSync( builtPhp ) || options.rebuild ) {
-		const extensionList = PHP_EXTENSIONS.join( ',' );
+		const extensionList = phpExtensions().join( ',' );
+		const buildArgs = [ 'build', extensionList, '--build-cli' ];
+
+		if ( ! PHP_WITH_JIT ) {
+			buildArgs.push( '--disable-opcache-jit' );
+		}
+
+		buildArgs.push(
+			'-I',
+			'opcache.enable_cli=1',
+			'-I',
+			'opcache.validate_timestamps=0',
+			'-I',
+			'pcre.jit=1'
+		);
+
 		run(
 			spcBin,
 			[
@@ -298,20 +359,7 @@ async function installPhp( options ) {
 			{ cwd: spcDir }
 		);
 		run( spcBin, [ 'switch-php-version', PHP_VERSION ], { cwd: spcDir } );
-		run(
-			spcBin,
-			[
-				'build',
-				extensionList,
-				'--build-cli',
-				'--disable-opcache-jit',
-				'-I',
-				'opcache.enable_cli=1',
-				'-I',
-				'opcache.validate_timestamps=0',
-			],
-			{ cwd: spcDir }
-		);
+		run( spcBin, buildArgs, { cwd: spcDir } );
 	}
 
 	installExecutable( builtPhp, dest, true );

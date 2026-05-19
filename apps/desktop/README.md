@@ -16,7 +16,7 @@ over `PATH`.
 
 For this PR, either use a local PHP install or build the local runtime with
 `npm --prefix apps/desktop run runtime:php`. The signed app should ship that
-runtime. This spike stops short of wiring it into packaging.
+runtime. This exploration stops short of wiring it into packaging.
 
 ## Run it
 
@@ -69,7 +69,7 @@ window loads `http://127.0.0.1:9402/wp-admin/admin.php?page=cortext`.
 DevTools open by default. Set `CORTEXT_DEVTOOLS=0` to turn them off.
 Closing the window kills the PHP process.
 
-For runtime spikes, set `CORTEXT_RUNTIME` before launch:
+For runtime experiments, set `CORTEXT_RUNTIME` before launch:
 
 ```sh
 CORTEXT_RUNTIME=php npm --prefix apps/desktop start

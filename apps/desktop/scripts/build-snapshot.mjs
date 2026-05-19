@@ -231,7 +231,9 @@ cpSync(
 console.log( '[snapshot] Installing Cortext plugin' );
 cpSync( STAGED_PLUGIN, resolve( pluginsDir, 'cortext' ), { recursive: true } );
 
-console.log( '[snapshot] Adding runtime files (router + worker + mu-plugins)' );
+console.log(
+	'[snapshot] Adding runtime files (router + worker + preload + mu-plugins)'
+);
 cpSync(
 	resolve( RUNTIME_DIR, 'router.php' ),
 	resolve( SITE_DIR, 'router.php' )
@@ -239,6 +241,14 @@ cpSync(
 cpSync(
 	resolve( RUNTIME_DIR, 'worker.php' ),
 	resolve( SITE_DIR, 'worker.php' )
+);
+cpSync(
+	resolve( RUNTIME_DIR, 'preload.php' ),
+	resolve( SITE_DIR, 'cortext-preload.php' )
+);
+cpSync(
+	resolve( RUNTIME_DIR, 'preload-manifest.php' ),
+	resolve( SITE_DIR, 'cortext-preload-manifest.php' )
 );
 const muPluginsDest = resolve( SITE_DIR, 'wp-content/mu-plugins' );
 mkdirSync( muPluginsDest, { recursive: true } );
@@ -262,6 +272,30 @@ function wpCli( args ) {
 	);
 }
 
+function snapshotSeedCommands() {
+	const override = process.env.CORTEXT_DESKTOP_SEED_COMMANDS;
+	if ( override?.trim() ) {
+		return override
+			.split( /\r?\n/ )
+			.map( ( command ) => command.trim() )
+			.filter( Boolean );
+	}
+
+	const seedArgs = process.env.CORTEXT_DESKTOP_SEED_ARGS?.trim();
+	const commands = [ `cortext seed${ seedArgs ? ` ${ seedArgs }` : '' }` ];
+	const extra = process.env.CORTEXT_DESKTOP_EXTRA_SEED_COMMANDS;
+	if ( extra?.trim() ) {
+		commands.push(
+			...extra
+				.split( /\r?\n/ )
+				.map( ( command ) => command.trim() )
+				.filter( Boolean )
+		);
+	}
+
+	return commands;
+}
+
 console.log( '[snapshot] Installing WordPress' );
 wpCli(
 	'core install ' +
@@ -277,7 +311,10 @@ console.log( '[snapshot] Activating Cortext' );
 wpCli( 'plugin activate cortext' );
 
 console.log( '[snapshot] Seeding sample content' );
-wpCli( 'cortext seed' );
+for ( const seedCommand of snapshotSeedCommands() ) {
+	console.log( `[snapshot] Running seed command: wp ${ seedCommand }` );
+	wpCli( seedCommand );
+}
 
 console.log( '[snapshot] Zipping site' );
 rmSync( OUTFILE, { force: true } );

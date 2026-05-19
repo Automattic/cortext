@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: Cortext desktop timing
- * Description: Adds Server-Timing to desktop runtime responses for local spike measurements.
+ * Description: Adds Server-Timing to desktop runtime responses for local measurements.
  *
  * @package Cortext
  */
