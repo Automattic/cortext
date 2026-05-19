@@ -1224,6 +1224,12 @@ body.cortext-sidebar-resizing {
 		height: 100%;
 		object-fit: cover;
 	}
+
+	.cortext-page-inspector__featured-image-skeleton {
+		width: 100%;
+		height: 100%;
+		border-radius: 0;
+	}
 }
 
 .cortext-breadcrumbs {

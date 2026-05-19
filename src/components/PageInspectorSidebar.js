@@ -8,7 +8,6 @@ import {
 	Disabled,
 	Notice,
 	PanelBody,
-	Spinner,
 	privateApis as componentsPrivateApis,
 } from '@wordpress/components';
 import {
@@ -45,6 +44,7 @@ import apiFetch from '@wordpress/api-fetch';
 import MediaPicker, { MediaUploadCheck } from './MediaPicker';
 import PageIcon from './PageIcon';
 import DocumentIdentityControls from './DocumentIdentityControls';
+import { SkeletonBlock } from './Skeleton';
 import { filterFavoritesForTrashedPage } from './SidebarFavorites';
 import {
 	ACTIVE_PAGES_QUERY,
@@ -386,7 +386,9 @@ function PageFeaturedImageInspectorControls( { postId } ) {
 		<span>{ __( 'Featured image is not available.', 'cortext' ) }</span>
 	);
 	if ( isResolvingMedia && ! src ) {
-		featuredImagePreview = <Spinner />;
+		featuredImagePreview = (
+			<SkeletonBlock className="cortext-page-inspector__featured-image-skeleton" />
+		);
 	} else if ( src ) {
 		featuredImagePreview = (
 			<img
