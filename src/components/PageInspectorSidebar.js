@@ -388,7 +388,12 @@ function PageFeaturedImageInspectorControls( { postId } ) {
 		featuredImagePreview = <Spinner />;
 	} else if ( src ) {
 		featuredImagePreview = (
-			<img src={ src } alt={ media?.alt_text ?? '' } />
+			<img
+				src={ src }
+				alt={ media?.alt_text ?? '' }
+				loading="lazy"
+				decoding="async"
+			/>
 		);
 	}
 
