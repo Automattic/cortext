@@ -164,7 +164,21 @@ export default function EntityRoute( { history } ) {
 		mountedDocumentType,
 		displayedDocumentId,
 		mountedCollectionIds,
+		readyCollectionIds,
 	} = state;
+
+	// The reducer holds `active` on the previous pane until DOCUMENT_RESOLVED
+	// or COLLECTION_READY fires, so neither Canvas nor LoadingPane can tell
+	// they're in a navigation. Comparing the URL target to the displayed/ready
+	// snapshot is the only place that knows the new doc is on its way.
+	const isWorkspaceNavigating =
+		( target.kind === 'document' &&
+			target.id !== null &&
+			target.id !== displayedDocumentId ) ||
+		( target.kind === 'collection' &&
+			target.id !== null &&
+			! readyCollectionIds.has( target.id ) );
+	const showWorkspaceProgress = useDelayedFlag( isWorkspaceNavigating );
 
 	// Run the reducer ahead of time so we only wrap the dispatch when
 	// `active` actually flips. Otherwise every DOCUMENT_RESOLVED or
@@ -477,6 +491,11 @@ export default function EntityRoute( { history } ) {
 				paintedRoute={ paintedRoute }
 			/>
 			<div className="cortext-workspace">
+				{ showWorkspaceProgress && (
+					<div className="cortext-workspace__progress">
+						<CanvasProgressBar />
+					</div>
+				) }
 				{ editorCanvas !== null && (
 					<WorkspacePane active={ isDocumentActive } preservePaint>
 						{ isRow ? (

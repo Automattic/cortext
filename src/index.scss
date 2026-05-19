@@ -1063,6 +1063,18 @@ body.cortext-sidebar-resizing {
 	position: relative;
 	flex: 1 1 auto;
 	min-height: 0;
+
+	// Top progress bar shown while the URL has moved to a new doc/collection
+	// but the workspace still paints the previous one. Sits above all the
+	// panes so it's visible regardless of which one is currently active.
+	&__progress {
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		z-index: 10;
+		pointer-events: none;
+	}
 }
 
 .cortext-workspace__pane {
