@@ -24,6 +24,17 @@ function applyToRoot( resolved ) {
 	if ( typeof document !== 'undefined' && document.body ) {
 		document.body.setAttribute( 'data-cortext-theme', resolved );
 	}
+	// Stamp the canvas frame surface on html itself so the view-transition
+	// pseudo (which lives on the html element and can't see vars scoped to
+	// .cortext-root) has something to read for its background fill during
+	// the cross-fade. Without this dark mode flashes black through the
+	// transition's transparent midpoint.
+	if ( typeof document !== 'undefined' && document.documentElement ) {
+		document.documentElement.style.setProperty(
+			'--cortext-canvas-frame-surface-root',
+			resolved === 'dark' ? '#2a2a2a' : '#ffffff'
+		);
+	}
 }
 
 // Single source of truth for shell color scheme. The PHP bootstrap script
