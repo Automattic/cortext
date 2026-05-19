@@ -14,6 +14,7 @@ import EntityRoute from './router/EntityRoute';
 import CommandPalette from './components/CommandPalette';
 import AlphaNoticeModal from './components/AlphaNoticeModal';
 import { DocumentPeekProvider } from './components/DocumentPeekProvider';
+import DocumentPeekHost from './components/DocumentPeekHost';
 import useSidebarLayout from './hooks/useSidebarLayout';
 import useAlphaNotice from './hooks/useAlphaNotice';
 import { FavoritesProvider } from './hooks/useFavorites';
@@ -72,6 +73,7 @@ function RootLayout() {
 				<FavoritesProvider>
 					<RecentsProvider>
 						<DocumentPeekProvider>
+							<DocumentPeekHost />
 							<div className="cortext-shell">
 								<Sidebar
 									collapsed={ collapsed }

@@ -5,10 +5,9 @@ import {
 	normalizeRowDetailMode,
 } from './rowDetailUtils';
 
-// Exposes the row detail mode (side / modal / full) of the surface that
-// renders the consumer. The collection table provides its `view.rowDetailMode`;
-// an open peek provides its own mode. Relation chips read this to decide
-// `preferredMode` when opening a row.
+// Tracks the row detail mode for whichever row detail view renders a relation
+// chip. Tables pass `view.rowDetailMode`; an open peek passes its own mode, so
+// nested relation chips open rows in the same style.
 const CurrentViewModeContext = createContext( DEFAULT_ROW_DETAIL_MODE );
 
 export function CurrentViewModeProvider( { value, children } ) {

@@ -932,10 +932,9 @@ export default function CollectionDataViews( {
 	const { peek } = useDocumentPeekState();
 	const openRowId = peek?.docId ?? null;
 
-	// Source captured into the open peek so the host can drive next/prev,
-	// refresh after save, and persist mode changes back to this view. Reads
-	// `dataFiltered`/`view` through refs so the source survives re-renders
-	// and the host always sees the current row order.
+	// Keep the table's row context with the peek. The host uses it for
+	// next/previous, refresh, and writing mode changes back to this view. Refs
+	// keep row order current without replacing the source object each render.
 	const rowsRef = useRef( null );
 	rowsRef.current = dataFiltered;
 	const source = useMemo(
@@ -997,10 +996,8 @@ export default function CollectionDataViews( {
 			if ( ! row?.id ) {
 				return;
 			}
-			// Store the chosen side/modal mode before opening. This matches
-			// the in-detail mode toggle: an explicit choice updates the
-			// user's preference for this view. Skipped for full because full
-			// is URL-only, not a persisted "open rows like this" preference.
+			// Save an explicit side/modal choice before opening. Full is a URL
+			// jump, not a saved "open rows like this" preference.
 			if ( mode !== 'full' && savedRowDetailMode !== mode ) {
 				onChangeView( withRowDetailMode( view, mode ) );
 			}

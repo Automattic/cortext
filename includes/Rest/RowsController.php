@@ -27,12 +27,9 @@ final class RowsController {
 	}
 
 	public function register_routes(): void {
-		// Hydrate relation values and compute rollups in the standard
-		// `/wp/v2/<rest_base>/<id>` response for every row CPT, so peek and
-		// modal panes (which use `useEntityRecord`) see the same shape as
-		// the collection table feed at `/cortext/v1/rows`. Without this,
-		// `meta.field-<id>` for a relation field returns the raw stored
-		// IDs (strings), and rollups aren't computed at all.
+		// Add hydrated relations and rollups to the normal row CPT response.
+		// Peek/modal panes fetch rows with `useEntityRecord`; without this
+		// hook, relation meta is still raw stored IDs and rollups are missing.
 		foreach ( CollectionEntries::get_entry_post_types() as $entry_post_type ) {
 			add_filter(
 				"rest_prepare_{$entry_post_type}",
@@ -1108,11 +1105,9 @@ final class RowsController {
 	}
 
 	/**
-	 * Filters the standard WP REST response for a row post so it carries
-	 * hydrated relations and computed rollups, matching the shape exposed
-	 * by `/cortext/v1/rows`. Editor surfaces that fetch the row via
-	 * `useEntityRecord` (peek pane, modal pane, full document) then see
-	 * the same data the table sees, instead of raw stored IDs.
+	 * Adds hydrated relation values and rollups to the normal row REST
+	 * response. Row detail views fetch with `useEntityRecord`, so this
+	 * keeps them aligned with `/cortext/v1/rows`.
 	 *
 	 * @param WP_REST_Response $response The prepared response object.
 	 * @param WP_Post          $post     The post being prepared.
@@ -1135,12 +1130,9 @@ final class RowsController {
 
 		$data = $response->get_data();
 
-		// Hydrate the system fields (created_at / by, modified_at / by) the
-		// same way `format_row` does for the table feed, so the same field
-		// definitions render correctly in side peek, modal, and full page.
-		// Without this, full-page rows show "Empty" for those columns
-		// because the standard WP REST response only exposes `author` /
-		// `date_gmt` and they don't match the field getters' shape.
+		// Match `format_row` for system fields too. The normal WP response
+		// exposes `author` / `date_gmt`, which the row field getters do not
+		// read, so detail views would otherwise show "Empty".
 		$created_by_id       = (int) $post->post_author;
 		$modified_by_id      = (int) get_post_meta( $post->ID, '_modified_by', true );
 		$data['created_at']  = $this->format_gmt_date( $post->post_date_gmt );
@@ -1152,12 +1144,9 @@ final class RowsController {
 
 		$field_ids = $this->collection_field_ids( $collection->ID );
 		if ( count( $field_ids ) > 0 ) {
-			// Don't overwrite `meta` with hydrated values: those meta keys
-			// are registered as `string`, so a follow-up save that round-
-			// trips the hydrated objects back to the server gets rejected
-			// with 400 and loops the autosave. Surface the hydrated shape
-			// on a parallel `cortext_hydrated_meta` field instead, leaving
-			// the raw stored values intact for the save path.
+			// Keep hydrated values out of `meta`. Those keys are registered as
+			// strings; if autosave sends hydrated objects back, REST rejects the
+			// save with 400. `cortext_hydrated_meta` is read-only display data.
 			$hydrated = array();
 			foreach ( $field_ids as $field_id ) {
 				$field_type = (string) get_post_meta( $field_id, 'type', true );

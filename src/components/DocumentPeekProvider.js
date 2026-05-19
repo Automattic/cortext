@@ -10,34 +10,48 @@ import {
 } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 
-import RowDetailView from './RowDetailView';
-import { RowDetailSidebar } from './RowDetailSidebarSlot';
-import { CurrentViewModeProvider } from './CurrentViewModeContext';
 import {
 	DEFAULT_ROW_DETAIL_MODE,
-	adjacentRowId,
 	normalizeRowDetailMode,
 } from './rowDetailUtils';
-import useCollectionFields from '../hooks/useCollectionFields';
 import { rowRoute } from './relations/relationUtils';
 
-// Two contexts so consumers can subscribe narrowly: callers that only fire
-// actions (chips, "open row" buttons) re-render on every state change otherwise.
-const PeekActionsContext = createContext( null );
-const PeekStateContext = createContext( { peek: null } );
+// Split the contexts so callers don't rerender on state they do not use:
+// chips need actions, tables need peek state, and the host needs save and
+// transition hooks.
+//
+// The action and state contexts ship with safe defaults so that consumers
+// rendered outside the app shell (e.g. CollectionDataViews inside the block
+// editor preview of a data-view block) keep working: opening a row is a no-op
+// there, and there is no peek to read. Only the host hook requires the real
+// provider, since rendering the peek surface without it makes no sense.
+const NO_PEEK_ACTIONS = {
+	openDocument: () => {},
+	closeDocument: () => {},
+	requestMode: () => {},
+};
+const NO_PEEK_STATE = { peek: null };
+
+const PeekActionsContext = createContext( NO_PEEK_ACTIONS );
+const PeekStateContext = createContext( NO_PEEK_STATE );
+const PeekSurfaceContext = createContext( null );
 
 export function useDocumentPeekActions() {
-	const value = useContext( PeekActionsContext );
-	if ( ! value ) {
-		throw new Error(
-			'useDocumentPeekActions must be used inside DocumentPeekProvider'
-		);
-	}
-	return value;
+	return useContext( PeekActionsContext );
 }
 
 export function useDocumentPeekState() {
 	return useContext( PeekStateContext );
+}
+
+export function useDocumentPeekSurface() {
+	const value = useContext( PeekSurfaceContext );
+	if ( ! value ) {
+		throw new Error(
+			'useDocumentPeekSurface must be used inside DocumentPeekProvider'
+		);
+	}
+	return value;
 }
 
 const ROW_DETAIL_SIDE_SURFACE_EXIT_MS = 300;
@@ -52,26 +66,9 @@ function prefersReducedMotion() {
 	);
 }
 
-// EntityRoute prepends the same title field for full-page rows. Keeping the
-// shape identical so RowProperties/RowDetailView behave the same in both
-// surfaces.
-function withTitleField( fields ) {
-	return [
-		{
-			id: 'title',
-			label: __( 'Title', 'cortext' ),
-			cortextType: 'title',
-			editable: true,
-			getValue: ( { item } ) =>
-				item?.title?.raw ?? item?.title?.rendered ?? '',
-		},
-		...fields,
-	];
-}
-
-// Owns peek state at app scope so a peek opened from one collection survives
-// a route change to another. State lives here; the surface (side panel via
-// SlotFill, or center modal) is rendered alongside `children`.
+// Keep peek state at app scope. A row opened from one collection can stay open
+// while the route changes. DocumentPeekHost renders the heavy RowDetailView
+// stack separately, so action-only callers do not import it.
 export function DocumentPeekProvider( { children } ) {
 	const navigate = useNavigate();
 
@@ -81,15 +78,14 @@ export function DocumentPeekProvider( { children } ) {
 	const peekRef = useRef( peek );
 	peekRef.current = peek;
 
-	// Pending-save coordination. RowDetailView reports an API via onApi; we
-	// flush before swapping panes so partial edits don't get dropped on the
-	// floor when the user clicks another row or closes.
+	// RowDetailView exposes flush/discard through onApi. Run it before close or
+	// row switches so unsaved edits do not vanish.
 	const detailApiRef = useRef( null );
 	const [ pendingTransition, setPendingTransition ] = useState( null );
 	const [ saveError, setSaveError ] = useState( null );
 
-	// Side↔modal animation: while transitioning we keep painting the old
-	// surface for a few frames so it can slide out instead of popping.
+	// Side-to-modal animation: keep the old panel mounted briefly so it can
+	// slide out instead of disappearing.
 	const [ modeSurfaceTransition, setModeSurfaceTransition ] =
 		useState( null );
 	const modeSurfaceTransitionTimeoutRef = useRef( null );
@@ -147,9 +143,18 @@ export function DocumentPeekProvider( { children } ) {
 			const api = detailApiRef.current;
 			setSaveError( null );
 
+			// Capture the open peek's source before flushing. flushNow may
+			// resolve after RowDetailView has already unmounted (close / full),
+			// so its onSaved won't reach us. We trigger source.refresh here
+			// instead, with the same "only when there were pending edits"
+			// signal the old CDV runDetailTransition used.
+			const refreshAfterFlush = api?.hasPendingEdits?.() ?? false;
+			const sourceToRefresh = peekRef.current?.source ?? null;
+
 			if ( options.discard ) {
 				api?.discard?.();
 				applyTransition( transition );
+				sourceToRefresh?.refresh?.();
 				return true;
 			}
 
@@ -159,7 +164,7 @@ export function DocumentPeekProvider( { children } ) {
 					setPendingTransition( transition );
 					setSaveError(
 						__(
-							'Row changes could not be saved. Retry or discard the pending edits to continue.',
+							'Cortext could not save row changes. Retry or discard your edits to continue.',
 							'cortext'
 						)
 					);
@@ -168,6 +173,9 @@ export function DocumentPeekProvider( { children } ) {
 			}
 
 			applyTransition( transition );
+			if ( refreshAfterFlush ) {
+				sourceToRefresh?.refresh?.();
+			}
 			return true;
 		},
 		[ applyTransition ]
@@ -187,9 +195,8 @@ export function DocumentPeekProvider( { children } ) {
 			}
 			const current = peekRef.current;
 			const currentMode = current?.mode;
-			// Stickiness: a peek already open in side or modal keeps its mode
-			// even if the caller asks for a different one. The user's
-			// "preferred mode" only applies when nothing is open.
+			// If a side/modal peek is already open, reuse its mode. Caller
+			// preference only matters for the first open.
 			const isSticky = currentMode === 'side' || currentMode === 'modal';
 			const nextMode = isSticky
 				? currentMode
@@ -272,26 +279,30 @@ export function DocumentPeekProvider( { children } ) {
 		[ clearModeSurfaceTransition, runTransition ]
 	);
 
-	const goToAdjacent = useCallback(
+	const goToAdjacentDocument = useCallback(
 		( direction ) => {
 			const current = peekRef.current;
 			if ( ! current ) {
 				return;
 			}
 			const rows = current.source?.getRowList?.() ?? [];
-			const nextId = adjacentRowId( rows, current.docId, direction );
-			if ( ! nextId ) {
+			const idx = rows.findIndex(
+				( candidate ) =>
+					String( candidate?.id ) === String( current.docId )
+			);
+			if ( idx < 0 ) {
 				return;
 			}
-			const nextRow = rows.find(
-				( candidate ) => String( candidate?.id ) === String( nextId )
-			);
+			const nextRow = rows[ idx + direction ];
+			if ( ! nextRow?.id ) {
+				return;
+			}
 			runTransition( {
 				type: 'peek',
 				peek: {
 					...current,
-					docId: nextId,
-					slug: nextRow?.slug ?? '',
+					docId: nextRow.id,
+					slug: nextRow.slug ?? '',
 				},
 			} );
 		},
@@ -315,97 +326,32 @@ export function DocumentPeekProvider( { children } ) {
 		[ openDocument, closeDocument, requestMode ]
 	);
 	const state = useMemo( () => ( { peek } ), [ peek ] );
+	const surface = useMemo(
+		() => ( {
+			modeSurfaceTransition,
+			saveError,
+			setDetailApi,
+			goToAdjacentDocument,
+			retryPendingTransition,
+			discardPendingTransition,
+		} ),
+		[
+			modeSurfaceTransition,
+			saveError,
+			setDetailApi,
+			goToAdjacentDocument,
+			retryPendingTransition,
+			discardPendingTransition,
+		]
+	);
 
 	return (
 		<PeekActionsContext.Provider value={ actions }>
 			<PeekStateContext.Provider value={ state }>
-				{ children }
-				<DocumentPeekSurface
-					peek={ peek }
-					modeSurfaceTransition={ modeSurfaceTransition }
-					setDetailApi={ setDetailApi }
-					closeDocument={ closeDocument }
-					requestMode={ requestMode }
-					goToAdjacent={ goToAdjacent }
-					retryPendingTransition={ retryPendingTransition }
-					discardPendingTransition={ discardPendingTransition }
-					saveError={ saveError }
-				/>
+				<PeekSurfaceContext.Provider value={ surface }>
+					{ children }
+				</PeekSurfaceContext.Provider>
 			</PeekStateContext.Provider>
 		</PeekActionsContext.Provider>
-	);
-}
-
-// Rendered as a sibling of `children` so it can portal independently. Loads
-// the open peek's collection fields (when there is one) and hands off to
-// RowDetailView, which is the same component CDV used to mount inline.
-function DocumentPeekSurface( {
-	peek,
-	modeSurfaceTransition,
-	setDetailApi,
-	closeDocument,
-	requestMode,
-	goToAdjacent,
-	retryPendingTransition,
-	discardPendingTransition,
-	saveError,
-} ) {
-	const { fields: collectionFields } = useCollectionFields(
-		peek?.collectionId ?? null
-	);
-	const peekFields = useMemo( () => {
-		if ( ! peek || ! collectionFields ) {
-			return undefined;
-		}
-		return withTitleField( collectionFields );
-	}, [ peek, collectionFields ] );
-
-	const renderedMode = modeSurfaceTransition
-		? modeSurfaceTransition.surfaceMode
-		: peek?.mode;
-
-	if ( ! peek || ! peekFields || ! renderedMode ) {
-		return null;
-	}
-
-	const rowList = peek.source?.getRowList?.() ?? [];
-	const canGoNext = Boolean(
-		peek.source && adjacentRowId( rowList, peek.docId, 1 )
-	);
-	const canGoPrevious = Boolean(
-		peek.source && adjacentRowId( rowList, peek.docId, -1 )
-	);
-	const handleSaved = () => peek.source?.refresh?.();
-	const handleRestored = () => peek.source?.refresh?.();
-
-	const detailView = (
-		<CurrentViewModeProvider value={ peek.mode }>
-			<RowDetailView
-				canGoNext={ canGoNext }
-				canGoPrevious={ canGoPrevious }
-				collectionId={ peek.collectionId }
-				fields={ peekFields }
-				mode={ renderedMode }
-				onApi={ setDetailApi }
-				onClose={ closeDocument }
-				onDiscardPending={ discardPendingTransition }
-				onModeChange={ requestMode }
-				onNext={ () => goToAdjacent( 1 ) }
-				onPrevious={ () => goToAdjacent( -1 ) }
-				onRestored={ handleRestored }
-				onRetryPending={ retryPendingTransition }
-				onSaved={ handleSaved }
-				postType={ peek.postType }
-				row={ undefined }
-				rowId={ peek.docId }
-				saveError={ saveError }
-			/>
-		</CurrentViewModeProvider>
-	);
-
-	return renderedMode === 'side' ? (
-		<RowDetailSidebar.Fill>{ detailView }</RowDetailSidebar.Fill>
-	) : (
-		detailView
 	);
 }

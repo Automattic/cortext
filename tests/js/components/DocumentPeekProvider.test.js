@@ -1,40 +1,23 @@
 /**
- * Tests for the DocumentPeekProvider state machine: mode stickiness, full
- * navigation, close, and source-driven adjacent-row navigation.
+ * Tests for DocumentPeekProvider state: mode stickiness, full navigation,
+ * close, and adjacent-row navigation from the source row list.
  *
- * RowDetailView and the sidebar SlotFill are mocked away so the test only
- * exercises state transitions, not the actual surface render (that needs
- * core-data and an editor store, which is out of scope for these tests).
+ * DocumentPeekHost renders the panel/modal. These tests stay on the provider
+ * and mock useNavigate so full-mode transitions are visible.
  */
 
-import { act, render, renderHook } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 
 const mockNavigate = jest.fn();
 jest.mock( '@wordpress/route', () => ( {
 	useNavigate: () => mockNavigate,
 } ) );
 
-jest.mock( '../../../src/hooks/useCollectionFields', () => ( {
-	__esModule: true,
-	default: () => ( { fields: [], isResolving: false } ),
-} ) );
-
-jest.mock( '../../../src/components/RowDetailView', () => ( {
-	__esModule: true,
-	default: () => null,
-} ) );
-
-jest.mock( '../../../src/components/RowDetailSidebarSlot', () => ( {
-	RowDetailSidebar: {
-		Slot: () => null,
-		Fill: ( { children } ) => children,
-	},
-} ) );
-
 import {
 	DocumentPeekProvider,
 	useDocumentPeekActions,
 	useDocumentPeekState,
+	useDocumentPeekSurface,
 } from '../../../src/components/DocumentPeekProvider';
 
 function wrapper( { children } ) {
@@ -53,7 +36,7 @@ beforeEach( () => {
 } );
 
 describe( 'DocumentPeekProvider', () => {
-	it( 'opens a peek using the caller mode when nothing is open', async () => {
+	it( "opens a peek using the caller's mode when none is open", async () => {
 		const { result } = renderHook( useBoth, { wrapper } );
 
 		await act( async () => {
@@ -76,7 +59,7 @@ describe( 'DocumentPeekProvider', () => {
 		expect( mockNavigate ).not.toHaveBeenCalled();
 	} );
 
-	it( 'keeps the open peek mode even when the caller prefers another', async () => {
+	it( 'keeps the current peek mode when another caller prefers a different one', async () => {
 		const { result } = renderHook( useBoth, { wrapper } );
 
 		await act( async () => {
@@ -102,7 +85,7 @@ describe( 'DocumentPeekProvider', () => {
 		} );
 	} );
 
-	it( 'navigates to the row URL for full mode and leaves no peek', async () => {
+	it( 'navigates to the row URL in full mode and clears the peek', async () => {
 		const { result } = renderHook( useBoth, { wrapper } );
 
 		await act( async () => {
@@ -176,7 +159,7 @@ describe( 'DocumentPeekProvider', () => {
 		expect( result.current.state.peek?.docId ).toBe( 10 );
 	} );
 
-	it( 'requestMode for full navigates without losing the peek slug', async () => {
+	it( 'requestMode keeps the row slug when switching to full mode', async () => {
 		const { result } = renderHook( useBoth, { wrapper } );
 
 		await act( async () => {
@@ -199,16 +182,54 @@ describe( 'DocumentPeekProvider', () => {
 		expect( result.current.state.peek ).toBe( null );
 	} );
 
-	it( 'throws when actions are used outside the provider', () => {
-		const spy = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
-		expect( () => render( <ConsumerWithoutProvider /> ) ).toThrow(
-			/DocumentPeekProvider/
+	it( 'returns safe no-ops when actions are used outside the provider', () => {
+		// CollectionDataViews also mounts inside the block editor preview of a
+		// data-view block, which has no peek provider. Calling openDocument
+		// there should silently do nothing, not crash the editor.
+		const { result } = renderHook( () => useDocumentPeekActions() );
+		expect( () => result.current.openDocument( { id: 1 } ) ).not.toThrow();
+		expect( () => result.current.closeDocument() ).not.toThrow();
+		expect( () => result.current.requestMode( 'side' ) ).not.toThrow();
+	} );
+
+	it( 'reads peek=null when state is used outside the provider', () => {
+		const { result } = renderHook( () => useDocumentPeekState() );
+		expect( result.current.peek ).toBe( null );
+	} );
+
+	it( 'refreshes the source after a close that flushed pending edits', async () => {
+		const refresh = jest.fn();
+		const flushNow = jest.fn().mockResolvedValue( true );
+		const hasPendingEdits = jest.fn().mockReturnValue( true );
+		const { result } = renderHook(
+			() => ( {
+				actions: useDocumentPeekActions(),
+				surface: useDocumentPeekSurface(),
+			} ),
+			{ wrapper }
 		);
-		spy.mockRestore();
+
+		await act( async () => {
+			result.current.actions.openDocument( {
+				id: 1,
+				postType: 'crtxt_a',
+				collectionId: 1,
+				preferredMode: 'side',
+				source: { kind: 'collection', getRowList: () => [], refresh },
+			} );
+		} );
+		act( () => {
+			result.current.surface.setDetailApi( {
+				flushNow,
+				discard: jest.fn(),
+				hasPendingEdits,
+			} );
+		} );
+		await act( async () => {
+			await result.current.actions.closeDocument();
+		} );
+
+		expect( flushNow ).toHaveBeenCalled();
+		expect( refresh ).toHaveBeenCalled();
 	} );
 } );
-
-function ConsumerWithoutProvider() {
-	useDocumentPeekActions();
-	return null;
-}
