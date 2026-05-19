@@ -214,6 +214,54 @@ final class Test_Rest_Recents_Controller extends BaseTestCase {
 		);
 	}
 
+	public function test_rejects_touching_an_inline_collection_recent(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$collection_id = $this->create_collection( 'hidden', 'Hidden' );
+		update_post_meta( $collection_id, Collection::MODE_META_KEY, Collection::MODE_INLINE );
+
+		$response = $this->touch_recent( 'collection', $collection_id );
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame(
+			'cortext_recents_inline_collection',
+			$response->get_data()['code']
+		);
+	}
+
+	public function test_get_drops_stale_inline_collection_recents(): void {
+		$user_id = $this->create_user( 'administrator' );
+		wp_set_current_user( $user_id );
+		$full_id   = $this->create_collection( 'visible', 'Visible' );
+		$inline_id = $this->create_collection( 'hidden', 'Hidden' );
+		update_post_meta( $full_id, Collection::MODE_META_KEY, Collection::MODE_FULL_PAGE );
+		update_post_meta( $inline_id, Collection::MODE_META_KEY, Collection::MODE_INLINE );
+
+		update_user_meta(
+			$user_id,
+			self::META_KEY,
+			array(
+				array(
+					'kind'      => 'collection',
+					'id'        => $full_id,
+					'updatedAt' => gmdate( DATE_RFC3339 ),
+				),
+				array(
+					'kind'      => 'collection',
+					'id'        => $inline_id,
+					'updatedAt' => gmdate( DATE_RFC3339 ),
+				),
+			)
+		);
+
+		$response = $this->get_recents();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			array( $full_id ),
+			array_column( $response->get_data()['recents'], 'id' )
+		);
+	}
+
 	private function get_recents() {
 		$request = new WP_REST_Request( 'GET', '/cortext/v1/recents' );
 		return rest_do_request( $request );

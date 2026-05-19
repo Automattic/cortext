@@ -73,17 +73,37 @@ export function moveFavorite( favorites, activeId, overId ) {
 	return arrayMove( favorites, from, to );
 }
 
-export function filterFavoritesForTrashedPage( favorites, pageId, pages ) {
+export function filterFavoritesForTrashedPage(
+	favorites,
+	pageId,
+	pages,
+	collections = []
+) {
 	const trashedPageIds = new Set( [
 		Number( pageId ),
 		...collectDescendants( Number( pageId ), pages ),
 	] );
 
-	return favorites.filter(
-		( favorite ) =>
-			favorite.kind !== 'page' ||
-			! trashedPageIds.has( Number( favorite.id ) )
+	// The cascade also trashes full-page collections under these pages. Remove
+	// those favorites here. Inline owners are server-only, so the controller
+	// filters stale inline favorites on read.
+	const trashedCollectionIds = new Set(
+		( collections ?? [] )
+			.filter( ( collection ) =>
+				trashedPageIds.has( Number( collection.parent ?? 0 ) )
+			)
+			.map( ( collection ) => Number( collection.id ) )
 	);
+
+	return favorites.filter( ( favorite ) => {
+		if ( favorite.kind === 'page' ) {
+			return ! trashedPageIds.has( Number( favorite.id ) );
+		}
+		if ( favorite.kind === 'collection' ) {
+			return ! trashedCollectionIds.has( Number( favorite.id ) );
+		}
+		return true;
+	} );
 }
 
 export function resolveFavoriteItems( favorites, pages, collections ) {

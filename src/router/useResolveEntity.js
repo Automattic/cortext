@@ -142,8 +142,10 @@ export function useResolveCollection( id ) {
 			id,
 		} );
 
+		// EntityRoute needs `workspace_mode` so pasted inline collection URLs
+		// can resolve to Not Found.
 		apiFetch( {
-			path: `/wp/v2/${ COLLECTION_TYPE }s/${ id }?context=edit&_fields=id,slug`,
+			path: `/wp/v2/${ COLLECTION_TYPE }s/${ id }?context=edit&_fields=id,slug,meta`,
 		} )
 			.then( ( entity ) => {
 				if ( ! cancelled ) {

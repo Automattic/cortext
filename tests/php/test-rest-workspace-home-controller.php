@@ -173,6 +173,37 @@ final class Test_Rest_Workspace_Home_Controller extends BaseTestCase {
 		$this->assertSame( 403, $response->get_status() );
 	}
 
+	public function test_rejects_setting_inline_collection_as_home(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$collection_id = $this->create_collection( 'hidden' );
+		update_post_meta( $collection_id, Collection::MODE_META_KEY, Collection::MODE_INLINE );
+
+		$response = $this->set_home( 'collection', $collection_id );
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame(
+			'cortext_workspace_home_inline_collection',
+			$response->get_data()['code']
+		);
+	}
+
+	public function test_get_returns_null_when_stored_home_points_to_inline_collection(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$collection_id = $this->create_collection( 'visible' );
+		update_post_meta( $collection_id, Collection::MODE_META_KEY, Collection::MODE_FULL_PAGE );
+
+		$this->set_home( 'collection', $collection_id );
+
+		// Defensive case: if a stored home becomes inline, reads collapse to
+		// null instead of sending users to a missing route.
+		update_post_meta( $collection_id, Collection::MODE_META_KEY, Collection::MODE_INLINE );
+
+		$response = $this->get_home();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertNull( $response->get_data()['home'] );
+	}
+
 	private function get_home() {
 		$request = new WP_REST_Request( 'GET', '/cortext/v1/workspace-home' );
 		return rest_do_request( $request );

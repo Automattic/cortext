@@ -131,6 +131,14 @@ final class WorkspaceHomeController {
 			);
 		}
 
+		if ( 'collection' === $kind && Collection::is_inline( $id ) ) {
+			return new WP_Error(
+				'cortext_workspace_home_inline_collection',
+				__( 'Inline collections cannot be used as the workspace home.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+
 		if ( $require_edit && ! current_user_can( 'edit_post', $id ) ) {
 			return new WP_Error(
 				'cortext_workspace_home_forbidden',

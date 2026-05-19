@@ -53,6 +53,9 @@ export default function PageRow( {
 	// Drop targets must be off so dnd-kit's pointerWithin doesn't hit
 	// invisible descendants and route a drop to the wrong row.
 	isHidden = false,
+	// tech-debt.md#53: Sidebar owns collection actions, so PageRow receives a
+	// renderer for nested collection rows instead of rebuilding those callbacks.
+	renderCollectionRow,
 } ) {
 	const { page, children } = node;
 	const hasChildren = children.length > 0;
@@ -359,32 +362,46 @@ export default function PageRow( {
 					{ ...( isExpanded ? {} : { inert: '' } ) }
 				>
 					<ul className="cortext-sidebar__children">
-						{ children.map( ( child ) => (
-							<PageRow
-								key={ child.page.id }
-								node={ child }
-								depth={ depth + 1 }
-								selectedId={ selectedId }
-								expandedIds={ expandedIds }
-								draggedId={ draggedId }
-								activeDrop={ activeDrop }
-								onSelect={ onSelect }
-								onToggleExpand={ onToggleExpand }
-								onCreateChild={ onCreateChild }
-								onRename={ onRename }
-								onDuplicate={ onDuplicate }
-								onDelete={ onDelete }
-								isFavorite={ isFavorite }
-								isFavoriteDisabled={ isFavoriteDisabled }
-								onToggleFavorite={ onToggleFavorite }
-								onSetHome={ onSetHome }
-								home={ home }
-								isHomeUpdating={ isHomeUpdating }
-								autoRenameId={ autoRenameId }
-								onAutoRenameConsumed={ onAutoRenameConsumed }
-								isHidden={ isHidden || ! isExpanded }
-							/>
-						) ) }
+						{ children.map( ( child ) => {
+							if (
+								renderCollectionRow &&
+								child.page.type === 'crtxt_collection'
+							) {
+								return renderCollectionRow(
+									child.page,
+									depth + 1
+								);
+							}
+							return (
+								<PageRow
+									key={ child.page.id }
+									node={ child }
+									depth={ depth + 1 }
+									selectedId={ selectedId }
+									expandedIds={ expandedIds }
+									draggedId={ draggedId }
+									activeDrop={ activeDrop }
+									onSelect={ onSelect }
+									onToggleExpand={ onToggleExpand }
+									onCreateChild={ onCreateChild }
+									onRename={ onRename }
+									onDuplicate={ onDuplicate }
+									onDelete={ onDelete }
+									isFavorite={ isFavorite }
+									isFavoriteDisabled={ isFavoriteDisabled }
+									onToggleFavorite={ onToggleFavorite }
+									onSetHome={ onSetHome }
+									home={ home }
+									isHomeUpdating={ isHomeUpdating }
+									autoRenameId={ autoRenameId }
+									onAutoRenameConsumed={
+										onAutoRenameConsumed
+									}
+									isHidden={ isHidden || ! isExpanded }
+									renderCollectionRow={ renderCollectionRow }
+								/>
+							);
+						} ) }
 					</ul>
 				</div>
 			) }

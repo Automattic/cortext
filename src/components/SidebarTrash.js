@@ -16,6 +16,7 @@ import {
 	POST_TYPE,
 	TRASHED_PAGES_QUERY,
 } from './page-queries';
+import { FULL_PAGE_COLLECTION_QUERY } from '../collections';
 import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
 
 const EMPTY_TRASHED_DOCUMENTS_STATE = {
@@ -217,6 +218,13 @@ export default function SidebarTrash( {
 			'postType',
 			POST_TYPE,
 			TRASHED_PAGES_QUERY,
+		] );
+		// Restoring a page can also restore collections. Refresh the full-page
+		// list so they return to the sidebar.
+		invalidateResolution( 'getEntityRecords', [
+			'postType',
+			'crtxt_collection',
+			FULL_PAGE_COLLECTION_QUERY,
 		] );
 	}, [ invalidateResolution ] );
 

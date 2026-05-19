@@ -23,7 +23,8 @@ import {
 	ToolbarButton,
 } from '@wordpress/components';
 import { useEntityRecords } from '@wordpress/core-data';
-import { useDispatch } from '@wordpress/data';
+import { useDispatch, useSelect } from '@wordpress/data';
+import { store as editorStore } from '@wordpress/editor';
 import { useCallback, useState } from '@wordpress/element';
 import { store as interfaceStore } from '@wordpress/interface';
 import apiFetch from '@wordpress/api-fetch';
@@ -31,7 +32,7 @@ import { cog, plus, replace } from '@wordpress/icons';
 
 import CollectionDataViews from '../../components/CollectionDataViews';
 import AddFieldPopover from '../../components/fields/AddFieldPopover';
-import { COLLECTION_QUERY } from '../../collections';
+import { FULL_PAGE_COLLECTION_QUERY } from '../../collections';
 import { toDataViewId } from '../../hooks/fieldIds';
 import {
 	CollectionFieldsProvider,
@@ -89,10 +90,12 @@ function createDefaultView() {
 }
 
 function CollectionPicker( { selectedId = '', onSelect } ) {
+	// The picker only offers full-page collections. Inline collections belong
+	// to the block that created them.
 	const { records, isResolving, hasResolved } = useEntityRecords(
 		'postType',
 		'crtxt_collection',
-		COLLECTION_QUERY
+		FULL_PAGE_COLLECTION_QUERY
 	);
 
 	const hasCollections = Boolean( records?.length );
@@ -138,10 +141,18 @@ function CollectionPicker( { selectedId = '', onSelect } ) {
 
 function CollectionCreator( { onCreate } ) {
 	const [ title, setTitle ] = useState( '' );
+	const [ isFullPage, setIsFullPage ] = useState( false );
 	const [ isSaving, setIsSaving ] = useState( false );
 	const [ error, setError ] = useState( '' );
 	const { invalidateResolution } = useDispatch( 'core' );
 	const canCreate = title.trim() && ! isSaving;
+
+	// Inline collections need the current page as their owner. Full-page
+	// collections can use the same id as a sidebar parent.
+	const ownerPageId = useSelect(
+		( select ) => select( editorStore ).getCurrentPostId(),
+		[]
+	);
 
 	const createCollection = async () => {
 		if ( ! canCreate ) {
@@ -152,18 +163,33 @@ function CollectionCreator( { onCreate } ) {
 		setError( '' );
 
 		try {
+			const data = {
+				title: title.trim(),
+				mode: isFullPage ? 'full_page' : 'inline',
+			};
+			// The server handles `parent` by mode: inline owner meta for
+			// inline collections, post_parent for full-page collections.
+			if ( ownerPageId ) {
+				data.parent = ownerPageId;
+			}
 			const collection = await apiFetch( {
 				path: '/cortext/v1/collections',
 				method: 'POST',
-				data: {
-					title: title.trim(),
-				},
+				data,
 			} );
-			invalidateResolution( 'getEntityRecords', [
-				'postType',
-				'crtxt_collection',
-				COLLECTION_QUERY,
-			] );
+			// The picker reads the full-page query, so refresh it only when
+			// the new collection will show there.
+			if ( isFullPage ) {
+				invalidateResolution( 'getEntityRecords', [
+					'postType',
+					'crtxt_collection',
+					FULL_PAGE_COLLECTION_QUERY,
+				] );
+			}
+			// tech-debt.md#2: core-data may have cached `/wp/v2/types` before
+			// this collection registered its row CPT. Refresh the entity config
+			// so the next row detail lookup can find the new post type.
+			invalidateResolution( 'getEntitiesConfig', [ 'postType' ] );
 			onCreate( collection );
 		} catch ( apiError ) {
 			setError(
@@ -187,6 +213,16 @@ function CollectionCreator( { onCreate } ) {
 				value={ title }
 				onChange={ setTitle }
 				__next40pxDefaultSize
+				__nextHasNoMarginBottom
+			/>
+			<CheckboxControl
+				label={ __( 'Create as a full-page collection', 'cortext' ) }
+				help={ __(
+					'Full-page collections show in the sidebar and get their own workspace URL. Inline collections stay in this block.',
+					'cortext'
+				) }
+				checked={ isFullPage }
+				onChange={ setIsFullPage }
 				__nextHasNoMarginBottom
 			/>
 			<Button

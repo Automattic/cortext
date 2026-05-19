@@ -13,6 +13,12 @@ final class Collection {
 
 	public const POST_TYPE = 'crtxt_collection';
 
+	public const MODE_META_KEY         = 'workspace_mode';
+	public const INLINE_OWNER_META_KEY = '_cortext_inline_owner_page';
+
+	public const MODE_INLINE    = 'inline';
+	public const MODE_FULL_PAGE = 'full_page';
+
 	public function register(): void {
 		add_action( 'init', array( $this, 'register_post_type' ) );
 	}
@@ -39,8 +45,11 @@ final class Collection {
 				'show_in_rest'       => true,
 				'rest_base'          => 'crtxt_collections',
 				'has_archive'        => false,
-				'hierarchical'       => false,
-				'supports'           => array( 'title', 'custom-fields' ),
+				// Expose `post_parent` in REST for full-page collections.
+				// Inline collections keep `post_parent = 0`; their owner lives
+				// in `_cortext_inline_owner_page`.
+				'hierarchical'       => true,
+				'supports'           => array( 'title', 'custom-fields', 'page-attributes' ),
 				'capability_type'    => 'post',
 				'map_meta_cap'       => true,
 				'can_export'         => true,
@@ -49,6 +58,17 @@ final class Collection {
 		);
 
 		$this->register_meta();
+	}
+
+	/**
+	 * Whether the collection is inline. Missing meta means `full_page`, so
+	 * existing collections keep their sidebar behavior after the mode split.
+	 *
+	 * @param int $collection_id Collection post id.
+	 */
+	public static function is_inline( int $collection_id ): bool {
+		$mode = get_post_meta( $collection_id, self::MODE_META_KEY, true );
+		return self::MODE_INLINE === $mode;
 	}
 
 	private function register_meta(): void {
@@ -76,5 +96,37 @@ final class Collection {
 				)
 			);
 		}
+
+		// Readable via REST, but write-locked. Mode is set on creation only;
+		// changing it later is out of scope for this pass.
+		register_post_meta(
+			self::POST_TYPE,
+			self::MODE_META_KEY,
+			array(
+				'type'              => 'string',
+				'single'            => true,
+				'show_in_rest'      => true,
+				'sanitize_callback' => 'sanitize_text_field',
+				'auth_callback'     => static function () {
+					return false;
+				},
+			)
+		);
+
+		// Server-only. The editor does not need the owner id, and exposing it
+		// would make it easy to point an inline collection at the wrong page.
+		register_post_meta(
+			self::POST_TYPE,
+			self::INLINE_OWNER_META_KEY,
+			array(
+				'type'              => 'integer',
+				'single'            => true,
+				'show_in_rest'      => false,
+				'sanitize_callback' => 'absint',
+				'auth_callback'     => static function () {
+					return false;
+				},
+			)
+		);
 	}
 }

@@ -230,6 +230,16 @@ final class RecentsController {
 			);
 		}
 
+		// Inline collections do not have their own workspace route, so Recents
+		// should not point at them. Rows inside them are still valid recents.
+		if ( 'collection' === $kind && Collection::is_inline( $id ) ) {
+			return new WP_Error(
+				'cortext_recents_inline_collection',
+				__( 'Inline collections cannot be added to Recents.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+
 		if ( ! current_user_can( 'edit_post', $id ) ) {
 			return new WP_Error(
 				'cortext_recents_forbidden',

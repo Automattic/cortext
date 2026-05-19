@@ -12,6 +12,7 @@ namespace Cortext\Tests;
 use Cortext\PostType\Collection;
 use Cortext\PostType\CollectionEntries;
 use Cortext\PostType\Field;
+use Cortext\PostType\Page;
 use Cortext\Rest\CollectionsController;
 use WorDBless\BaseTestCase;
 use WP_REST_Request;
@@ -23,6 +24,7 @@ final class Test_Rest_Collections_Controller extends BaseTestCase {
 		parent::set_up();
 
 		$this->unregister_dynamic_collection_post_types();
+		( new Page() )->register_post_type();
 		( new Collection() )->register_post_type();
 		( new Field() )->register_post_type();
 
@@ -162,6 +164,356 @@ final class Test_Rest_Collections_Controller extends BaseTestCase {
 		$this->assertSame( 403, $response->get_status() );
 	}
 
+	public function test_defaults_workspace_mode_to_full_page_when_absent(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+
+		$response = $this->create_collection( array( 'title' => 'Default mode' ) );
+
+		$this->assertSame( 201, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertSame( Collection::MODE_FULL_PAGE, $data['mode'] );
+		$this->assertSame( 0, $data['parent'] );
+		$this->assertSame(
+			Collection::MODE_FULL_PAGE,
+			get_post_meta( (int) $data['id'], Collection::MODE_META_KEY, true )
+		);
+		$this->assertSame(
+			'',
+			(string) get_post_meta( (int) $data['id'], Collection::INLINE_OWNER_META_KEY, true ),
+			'Full-page collections without a parent should not store an inline owner.'
+		);
+		$this->assertSame( 0, (int) get_post( (int) $data['id'] )->post_parent );
+	}
+
+	public function test_creates_inline_collection_with_parent_document(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$page_id = $this->create_page();
+
+		$response = $this->create_collection(
+			array(
+				'title'  => 'Inline tasks',
+				'mode'   => Collection::MODE_INLINE,
+				'parent' => $page_id,
+			)
+		);
+
+		$this->assertSame( 201, $response->get_status() );
+
+		$data          = $response->get_data();
+		$collection_id = (int) $data['id'];
+		$this->assertSame( Collection::MODE_INLINE, $data['mode'] );
+		$this->assertSame( 0, $data['parent'], 'Inline collections report parent=0 even when they have an owner document.' );
+		$this->assertSame(
+			Collection::MODE_INLINE,
+			get_post_meta( $collection_id, Collection::MODE_META_KEY, true )
+		);
+		$this->assertSame(
+			$page_id,
+			(int) get_post_meta( $collection_id, Collection::INLINE_OWNER_META_KEY, true ),
+			'Inline collections record the owner page in meta, not post_parent.'
+		);
+		$this->assertSame( 0, (int) get_post( $collection_id )->post_parent );
+	}
+
+	public function test_creates_full_page_collection_nested_under_page(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$page_id = $this->create_page();
+
+		$response = $this->create_collection(
+			array(
+				'title'  => 'Books',
+				'mode'   => Collection::MODE_FULL_PAGE,
+				'parent' => $page_id,
+			)
+		);
+
+		$this->assertSame( 201, $response->get_status() );
+
+		$data          = $response->get_data();
+		$collection_id = (int) $data['id'];
+		$this->assertSame( Collection::MODE_FULL_PAGE, $data['mode'] );
+		$this->assertSame( $page_id, $data['parent'] );
+		$this->assertSame(
+			$page_id,
+			(int) get_post( $collection_id )->post_parent,
+			'Nested full-page collections use post_parent for the sidebar tree.'
+		);
+		$this->assertSame(
+			'',
+			(string) get_post_meta( $collection_id, Collection::INLINE_OWNER_META_KEY, true ),
+			'Full-page collections never store an inline owner.'
+		);
+	}
+
+	public function test_rejects_inline_collection_without_parent(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$response = $this->create_collection(
+			array(
+				'title' => 'Orphan inline',
+				'mode'  => Collection::MODE_INLINE,
+			)
+		);
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame(
+			'cortext_collection_parent_required',
+			$response->get_data()['code']
+		);
+	}
+
+	public function test_rejects_collection_with_nonexistent_parent(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$response = $this->create_collection(
+			array(
+				'title'  => 'Inline against ghost',
+				'mode'   => Collection::MODE_INLINE,
+				'parent' => 999999,
+			)
+		);
+
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame(
+			'cortext_collection_parent_not_found',
+			$response->get_data()['code']
+		);
+	}
+
+	public function test_rejects_when_user_cannot_edit_parent(): void {
+		$owner_id = $this->create_user( 'administrator' );
+		wp_set_current_user( $owner_id );
+		$page_id = $this->create_page(
+			array(
+				'post_author' => $owner_id,
+				'post_status' => 'private',
+			)
+		);
+
+		wp_set_current_user( $this->create_user( 'contributor' ) );
+
+		$response = $this->create_collection(
+			array(
+				'title'  => 'Inline I cannot host',
+				'mode'   => Collection::MODE_INLINE,
+				'parent' => $page_id,
+			)
+		);
+
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame(
+			'cortext_collection_parent_forbidden',
+			$response->get_data()['code']
+		);
+	}
+
+	public function test_rejects_non_document_parent(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$post_id = (int) wp_insert_post(
+			array(
+				'post_type'   => 'post',
+				'post_status' => 'publish',
+				'post_title'  => 'A regular post',
+			)
+		);
+
+		$response = $this->create_collection(
+			array(
+				'title'  => 'Bad parent',
+				'mode'   => Collection::MODE_FULL_PAGE,
+				'parent' => $post_id,
+			)
+		);
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame(
+			'cortext_collection_parent_invalid_type',
+			$response->get_data()['code']
+		);
+	}
+
+	public function test_query_filter_for_full_page_matches_explicit_full_page_or_missing_meta(): void {
+		// Missing mode means `full_page`, so existing collections stay in the
+		// sidebar after the inline/full-page split. The OR clause covers that
+		// fallback and excludes explicit inline collections.
+		$filtered = $this->filter_query_for_workspace_mode( Collection::MODE_FULL_PAGE );
+
+		$this->assertArrayHasKey( 'meta_query', $filtered );
+		$this->assertCount( 1, $filtered['meta_query'] );
+
+		$clause = $filtered['meta_query'][0];
+		$this->assertSame( 'OR', $clause['relation'] );
+		$this->assertSame(
+			array(
+				'key'     => Collection::MODE_META_KEY,
+				'value'   => Collection::MODE_FULL_PAGE,
+				'compare' => '=',
+			),
+			$clause[0]
+		);
+		$this->assertSame(
+			array(
+				'key'     => Collection::MODE_META_KEY,
+				'compare' => 'NOT EXISTS',
+			),
+			$clause[1]
+		);
+	}
+
+	public function test_query_filter_for_inline_matches_explicit_inline_only(): void {
+		$filtered = $this->filter_query_for_workspace_mode( Collection::MODE_INLINE );
+
+		$this->assertArrayHasKey( 'meta_query', $filtered );
+		$this->assertSame(
+			array(
+				array(
+					'key'     => Collection::MODE_META_KEY,
+					'value'   => Collection::MODE_INLINE,
+					'compare' => '=',
+				),
+			),
+			$filtered['meta_query']
+		);
+	}
+
+	public function test_query_filter_is_no_op_without_workspace_mode_param(): void {
+		$controller = new CollectionsController();
+		$request    = new \WP_REST_Request( 'GET', '/wp/v2/' . Collection::POST_TYPE . 's' );
+		$existing   = array( 'meta_query' => array( array( 'key' => 'something_else' ) ) );
+
+		$filtered = $controller->filter_collection_query( $existing, $request );
+
+		$this->assertSame( $existing, $filtered, 'The filter passes args through when workspace_mode is absent.' );
+	}
+
+	public function test_pre_insert_filter_rejects_setting_parent_on_inline_collection(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$page_id = $this->create_page();
+
+		$inline_id = wp_insert_post(
+			array(
+				'post_type'   => Collection::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Inline locked',
+				'meta_input'  => array(
+					'slug'                            => 'inline-locked',
+					Collection::MODE_META_KEY         => Collection::MODE_INLINE,
+					Collection::INLINE_OWNER_META_KEY => $page_id,
+				),
+			)
+		);
+		$this->assertIsInt( $inline_id );
+
+		$controller = new CollectionsController();
+		$request    = new WP_REST_Request(
+			'PATCH',
+			'/wp/v2/' . Collection::POST_TYPE . 's/' . $inline_id
+		);
+		$prepared              = new \stdClass();
+		$prepared->ID          = (int) $inline_id;
+		$prepared->post_parent = $page_id;
+
+		$result = $controller->validate_pre_insert( $prepared, $request );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'cortext_collection_inline_parent_locked', $result->get_error_code() );
+	}
+
+	public function test_pre_insert_filter_allows_setting_parent_on_full_page_collection(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$page_id = $this->create_page();
+
+		$full_id = wp_insert_post(
+			array(
+				'post_type'   => Collection::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Full page movable',
+				'meta_input'  => array(
+					'slug'                    => 'full-movable',
+					Collection::MODE_META_KEY => Collection::MODE_FULL_PAGE,
+				),
+			)
+		);
+		$this->assertIsInt( $full_id );
+
+		$controller = new CollectionsController();
+		$request    = new WP_REST_Request(
+			'PATCH',
+			'/wp/v2/' . Collection::POST_TYPE . 's/' . $full_id
+		);
+		$prepared              = new \stdClass();
+		$prepared->ID          = (int) $full_id;
+		$prepared->post_parent = $page_id;
+
+		$result = $controller->validate_pre_insert( $prepared, $request );
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( $prepared, $result );
+	}
+
+	public function test_pre_insert_filter_rejects_parent_change_to_non_document(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$post_id = (int) wp_insert_post(
+			array(
+				'post_type'   => 'post',
+				'post_status' => 'publish',
+				'post_title'  => 'Regular post',
+			)
+		);
+
+		$full_id = wp_insert_post(
+			array(
+				'post_type'   => Collection::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Full page',
+				'meta_input'  => array(
+					'slug'                    => 'full-bad-parent',
+					Collection::MODE_META_KEY => Collection::MODE_FULL_PAGE,
+				),
+			)
+		);
+
+		$controller = new CollectionsController();
+		$request    = new WP_REST_Request( 'PATCH', '/wp/v2/' . Collection::POST_TYPE . 's/' . $full_id );
+		$prepared              = new \stdClass();
+		$prepared->ID          = (int) $full_id;
+		$prepared->post_parent = $post_id;
+
+		$result = $controller->validate_pre_insert( $prepared, $request );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'cortext_collection_parent_invalid_type', $result->get_error_code() );
+	}
+
+	public function test_query_filter_preserves_existing_meta_query_clauses(): void {
+		$controller = new CollectionsController();
+		$request    = new \WP_REST_Request( 'GET', '/wp/v2/' . Collection::POST_TYPE . 's' );
+		$request->set_param( 'workspace_mode', Collection::MODE_FULL_PAGE );
+
+		$existing = array(
+			'meta_query' => array(
+				array(
+					'key'     => 'unrelated',
+					'value'   => 'thing',
+					'compare' => '=',
+				),
+			),
+		);
+
+		$filtered = $controller->filter_collection_query( $existing, $request );
+
+		$this->assertCount( 2, $filtered['meta_query'] );
+		$this->assertSame(
+			array(
+				'key'     => 'unrelated',
+				'value'   => 'thing',
+				'compare' => '=',
+			),
+			$filtered['meta_query'][0]
+		);
+	}
+
 	private function create_collection( array $body ) {
 		$request = new WP_REST_Request( 'POST', '/cortext/v1/collections' );
 		$request->set_body_params( $body );
@@ -177,6 +529,37 @@ final class Test_Rest_Collections_Controller extends BaseTestCase {
 				'role'       => $role,
 			)
 		);
+	}
+
+	private function create_page( array $args = array() ): int {
+		$defaults = array(
+			'post_type'   => Page::POST_TYPE,
+			'post_status' => 'private',
+			'post_title'  => 'Test page ' . wp_generate_uuid4(),
+		);
+
+		$id = wp_insert_post( array_merge( $defaults, $args ) );
+		$this->assertIsInt( $id );
+		$this->assertGreaterThan( 0, $id );
+
+		return (int) $id;
+	}
+
+	/**
+	 * Runs the controller's list-query filter for one workspace_mode value.
+	 * This is the contract used by the sidebar and DataView picker, so the
+	 * test checks it directly without going through WP_Query.
+	 *
+	 * @param string $mode Requested workspace_mode.
+	 *
+	 * @return array<string, mixed>
+	 */
+	private function filter_query_for_workspace_mode( string $mode ): array {
+		$controller = new CollectionsController();
+		$request    = new WP_REST_Request( 'GET', '/wp/v2/' . Collection::POST_TYPE . 's' );
+		$request->set_param( 'workspace_mode', $mode );
+
+		return $controller->filter_collection_query( array(), $request );
 	}
 
 	private function unregister_dynamic_collection_post_types(): void {
