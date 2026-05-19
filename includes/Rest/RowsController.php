@@ -914,24 +914,20 @@ final class RowsController {
 	}
 
 	/**
-	 * Reads the field type for a rollup target field.
+	 * Reads the field type for a rollup target field. Target fields share the
+	 * `field_types` cache with the rendering collection's fields; both are
+	 * just `field_id => type` and never disagree on the same ID.
 	 *
 	 * @param int                   $field_id Target field post ID.
 	 * @param RowFormatContext|null $ctx      Optional formatting context.
 	 */
 	private function target_field_type_for( int $field_id, ?RowFormatContext $ctx ): string {
-		if ( null !== $ctx ) {
-			if ( isset( $ctx->target_field_type[ $field_id ] ) ) {
-				return $ctx->target_field_type[ $field_id ];
-			}
-			if ( isset( $ctx->field_types[ $field_id ] ) ) {
-				$ctx->target_field_type[ $field_id ] = $ctx->field_types[ $field_id ];
-				return $ctx->target_field_type[ $field_id ];
-			}
+		if ( null !== $ctx && isset( $ctx->field_types[ $field_id ] ) ) {
+			return $ctx->field_types[ $field_id ];
 		}
 		$type = (string) get_post_meta( $field_id, 'type', true );
 		if ( null !== $ctx ) {
-			$ctx->target_field_type[ $field_id ] = $type;
+			$ctx->field_types[ $field_id ] = $type;
 		}
 		return $type;
 	}
