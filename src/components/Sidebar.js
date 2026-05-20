@@ -687,20 +687,21 @@ export default function Sidebar( {
 			// cached postType entity list needs to be refreshed before any
 			// row lookup hits the new slug.
 			invalidateResolution( 'getEntitiesConfig', [ 'postType' ] );
-			// Relation fields can't be cloned cleanly yet (creating the
-			// paired reverse field on the related collection is a follow-up),
-			// so the server returns them in `skipped_fields`. Surface a notice
-			// so the user knows the copy is missing those columns.
+			// Some fields can't be cloned: relations are not supported yet
+			// (creating the paired reverse field on the related collection
+			// is a follow-up), and the server also reports any field whose
+			// `wp_insert_post` failed. Surface a generic notice so the user
+			// knows the copy is missing columns.
 			const skipped = Array.isArray( created?.skipped_fields )
 				? created.skipped_fields
 				: [];
 			if ( skipped.length > 0 ) {
 				setDuplicateNotice(
 					sprintf(
-						/* translators: %d: number of relation fields the duplicate could not clone. */
+						/* translators: %d: number of fields that could not be copied to the new collection. */
 						_n(
-							'%d relation field was not copied. Recreate it in the new collection if you need it.',
-							'%d relation fields were not copied. Recreate them in the new collection if you need them.',
+							"%d field couldn't be copied to the new collection. Recreate it if you need it.",
+							"%d fields couldn't be copied to the new collection. Recreate them if you need them.",
 							skipped.length,
 							'cortext'
 						),

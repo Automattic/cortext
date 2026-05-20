@@ -1,5 +1,5 @@
 import { Button, Modal, TextControl } from '@wordpress/components';
-import { useRef, useState } from '@wordpress/element';
+import { useEffect, useRef, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 
 // A confirm dialog where the destructive button stays disabled until the
@@ -17,7 +17,15 @@ export default function TypeToConfirmDialog( {
 	isBusy = false,
 } ) {
 	const [ value, setValue ] = useState( '' );
-	const inputRef = useRef( null );
+	const inputWrapperRef = useRef( null );
+
+	// Focus the input as soon as the modal mounts so the user can start
+	// typing the confirmation phrase without an extra click. TextControl
+	// wraps its input, so reach in for the actual <input> element.
+	useEffect( () => {
+		const input = inputWrapperRef.current?.querySelector( 'input' );
+		input?.focus();
+	}, [] );
 
 	const matches = value.trim() === confirmPhrase.trim();
 	const submit = () => {
@@ -39,26 +47,27 @@ export default function TypeToConfirmDialog( {
 			size="small"
 		>
 			<p>{ message }</p>
-			<TextControl
-				ref={ inputRef }
-				__next40pxDefaultSize
-				__nextHasNoMarginBottom
-				label={ confirmPhrase }
-				hideLabelFromVision
-				placeholder={ confirmPhrase }
-				value={ value }
-				onChange={ setValue }
-				onKeyDown={ ( event ) => {
-					if ( event.key === 'Enter' && matches && ! isBusy ) {
-						event.preventDefault();
-						submit();
-					} else if ( event.key === 'Escape' && ! isBusy ) {
-						event.preventDefault();
-						onCancel();
-					}
-				} }
-				disabled={ isBusy }
-			/>
+			<div ref={ inputWrapperRef }>
+				<TextControl
+					__next40pxDefaultSize
+					__nextHasNoMarginBottom
+					label={ confirmPhrase }
+					hideLabelFromVision
+					placeholder={ confirmPhrase }
+					value={ value }
+					onChange={ setValue }
+					onKeyDown={ ( event ) => {
+						if ( event.key === 'Enter' && matches && ! isBusy ) {
+							event.preventDefault();
+							submit();
+						} else if ( event.key === 'Escape' && ! isBusy ) {
+							event.preventDefault();
+							onCancel();
+						}
+					} }
+					disabled={ isBusy }
+				/>
+			</div>
 			<div className="cortext-type-to-confirm__actions">
 				<Button
 					variant="tertiary"

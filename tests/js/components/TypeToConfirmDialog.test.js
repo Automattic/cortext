@@ -148,4 +148,10 @@ describe( 'TypeToConfirmDialog', () => {
 		).toBeDisabled();
 		expect( screen.getByRole( 'button', { name: 'Cancel' } ) ).toBeDisabled();
 	} );
+
+	it( 'auto-focuses the input when the dialog opens', () => {
+		renderDialog();
+
+		expect( screen.getByTestId( 'confirm-input' ) ).toHaveFocus();
+	} );
 } );
