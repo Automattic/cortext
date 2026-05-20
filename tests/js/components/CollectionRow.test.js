@@ -153,7 +153,9 @@ describe( 'CollectionRow', () => {
 			onRename,
 		} );
 
-		const input = container.querySelector( '.cortext-sidebar__rename input' );
+		const input = container.querySelector(
+			'.cortext-sidebar__rename input'
+		);
 		expect( input ).toBeTruthy();
 		expect( input.value ).toBe( 'Books' );
 		expect( onAutoRenameConsumed ).toHaveBeenCalled();
@@ -172,7 +174,9 @@ describe( 'CollectionRow', () => {
 			onRename,
 		} );
 
-		const input = container.querySelector( '.cortext-sidebar__rename input' );
+		const input = container.querySelector(
+			'.cortext-sidebar__rename input'
+		);
 		fireEvent.change( input, { target: { value: 'Albums' } } );
 		fireEvent.keyDown( input, { key: 'Escape' } );
 

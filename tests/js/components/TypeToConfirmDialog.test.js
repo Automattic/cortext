@@ -141,7 +141,9 @@ describe( 'TypeToConfirmDialog', () => {
 		expect(
 			screen.getByRole( 'button', { name: 'Delete permanently' } )
 		).toBeDisabled();
-		expect( screen.getByRole( 'button', { name: 'Cancel' } ) ).toBeDisabled();
+		expect(
+			screen.getByRole( 'button', { name: 'Cancel' } )
+		).toBeDisabled();
 	} );
 
 	it( 'focuses the input on open', () => {

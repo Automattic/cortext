@@ -850,9 +850,9 @@ describe( 'SidebarTrash', () => {
 		);
 
 		expect( screen.getByTestId( 'type-to-confirm' ) ).toBeInTheDocument();
-		expect( screen.getByTestId( 'type-to-confirm-phrase' ) ).toHaveTextContent(
-			'Library'
-		);
+		expect(
+			screen.getByTestId( 'type-to-confirm-phrase' )
+		).toHaveTextContent( 'Library' );
 	} );
 
 	it( 'uses the plain confirm dialog for pages and rows', () => {
@@ -865,7 +865,9 @@ describe( 'SidebarTrash', () => {
 		);
 
 		expect( screen.queryByTestId( 'type-to-confirm' ) ).toBeNull();
-		expect( screen.getByTestId( 'confirm-dialog-confirm' ) ).toBeInTheDocument();
+		expect(
+			screen.getByTestId( 'confirm-dialog-confirm' )
+		).toBeInTheDocument();
 	} );
 
 	it( 'falls back to nested items in the confirm when subpages and inline collections mix', () => {
