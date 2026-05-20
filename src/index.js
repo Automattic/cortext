@@ -14,14 +14,11 @@ if ( root ) {
 	// row click on a fresh session pays the fetch cost and briefly shows
 	// the Suspense fallback; with it, most navigations find the chunk
 	// already in memory. requestIdleCallback yields to anything the user
-	// initiates; the setTimeout fallback covers browsers without it.
+	// initiates; the setTimeout fallback covers browsers without it. A
+	// rejected import here only fails the idle job, and the real lazy
+	// import on first navigation will retry on its own.
 	const warmEditor = () =>
-		import(
-			/* webpackChunkName: "editor" */
-			'./components/Canvas'
-		).catch( () => {
-			// Network hiccup; the first real navigation will retry.
-		} );
+		import( /* webpackChunkName: "editor" */ './components/Canvas' );
 	if ( typeof window.requestIdleCallback === 'function' ) {
 		window.requestIdleCallback( warmEditor, { timeout: 4000 } );
 	} else {
