@@ -474,6 +474,37 @@ describe( 'SidebarTrash', () => {
 		} );
 	} );
 
+	it( 'navigates the canvas away when the open collection is permanent-deleted', async () => {
+		// Collection routes live in selectedCollectionId, not selectedId.
+		// Without checking both, the canvas would keep pointing at a deleted
+		// collection URL after the row clicks Delete permanently.
+		const onSelect = jest.fn();
+		setTrashRecords( {
+			records: [
+				makeCollection( {
+					id: 73,
+					path: 'collection/library-73',
+				} ),
+			],
+		} );
+		apiFetch.mockResolvedValue( { deleted: [ 73 ] } );
+
+		renderSidebarTrash( {
+			selectedId: null,
+			selectedCollectionId: 73,
+			onSelect,
+		} );
+
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Delete permanently' } )
+		);
+		clickConfirm();
+
+		await waitFor( () => {
+			expect( onSelect ).toHaveBeenCalledWith( null );
+		} );
+	} );
+
 	it( 'leaves the canvas alone when permanent-delete does not include the open page', async () => {
 		const onSelect = jest.fn();
 		setTrashRecords( { records: [ makePage( { id: 1 } ) ] } );

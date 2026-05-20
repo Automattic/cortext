@@ -165,6 +165,10 @@ function descendantLabel( rootKind, counts ) {
  * @param {number|null} props.selectedId            Currently-selected page id, used
  *                                                  to highlight a trashed document when
  *                                                  the canvas is showing it.
+ * @param {number|null} props.selectedCollectionId  Currently-selected collection id, so
+ *                                                  permanent delete can navigate away
+ *                                                  when the open collection (or one of
+ *                                                  its rows) is gone.
  * @param {Function}    props.onSelect              Opens a trashed document in
  *                                                  the canvas.
  * @param {Object}      props.trashedDocumentsState Trashed document query state.
@@ -172,6 +176,7 @@ function descendantLabel( rootKind, counts ) {
 export default function SidebarTrash( {
 	activePages,
 	selectedId,
+	selectedCollectionId = null,
 	onSelect,
 	trashedDocumentsState = EMPTY_TRASHED_DOCUMENTS_STATE,
 } ) {
@@ -329,12 +334,14 @@ export default function SidebarTrash( {
 				path: `/cortext/v1/documents/${ id }/permanent-delete`,
 				method: 'POST',
 			} );
-			// If the canvas was showing one of the deleted pages, navigate
-			// away. Without this `useEntityRecord` would return undefined
-			// and the canvas would spin forever (the page is genuinely gone
-			// now, not just trashed).
+			// If the canvas was showing one of the deleted documents,
+			// navigate away. Without this `useEntityRecord` would return
+			// undefined and the canvas would spin forever (the document is
+			// genuinely gone now, not just trashed). Collections track via
+			// `selectedCollectionId`, so check both.
 			const deletedIds = response?.deleted ?? [];
-			if ( selectedId && deletedIds.includes( selectedId ) ) {
+			const openId = selectedId ?? selectedCollectionId;
+			if ( openId && deletedIds.includes( openId ) ) {
 				onSelect( null );
 			}
 			if ( kind === 'row' ) {
@@ -361,6 +368,7 @@ export default function SidebarTrash( {
 		refreshRows,
 		refreshTrash,
 		selectedId,
+		selectedCollectionId,
 		onSelect,
 	] );
 

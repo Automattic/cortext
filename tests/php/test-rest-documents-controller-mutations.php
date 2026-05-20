@@ -304,6 +304,27 @@ final class Test_Rest_Documents_Controller_Mutations extends BaseTestCase {
 		$this->assertNull( get_post( $row_id ), 'Rows go with their collection on permanent delete.' );
 	}
 
+	public function test_permanent_delete_response_includes_cascaded_row_ids(): void {
+		// Without this, the sidebar can't tell that an open row from the
+		// deleted collection is gone and the canvas stays on a phantom URL.
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$collection_id = $this->create_full_page_collection( 'reported' );
+		$row_id        = $this->create_row_for_collection( 'reported' );
+		wp_trash_post( $collection_id );
+
+		$response = $this->permanent_delete( $collection_id );
+
+		$this->assertSame( 200, $response->get_status() );
+		$deleted = $response->get_data()['deleted'];
+		$this->assertContains( $collection_id, $deleted );
+		$this->assertContains(
+			$row_id,
+			$deleted,
+			'The response must list rows deleted by RowTrashCascade so the sidebar can navigate away from them.'
+		);
+	}
+
 	public function test_restore_skips_cascade_walk_for_flat_row_documents(): void {
 		// Row CPTs opt into cortext-document but have no hierarchy today, so
 		// restore should only return the row itself.
