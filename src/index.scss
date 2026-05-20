@@ -18,9 +18,9 @@
 
 .commands-command-menu__container {
 
-	// cmdk only sets max-height on the list. Match it as min-height so the
-	// modal doesn't shrink to "No results found." (or the pending state)
-	// and back up to a full list. Mirrors the upstream max-height value.
+	// cmdk only sets max-height on the list. Give it the same min-height so the
+	// modal does not collapse to "No results found." or a pending state, then
+	// jump back to a full list.
 	[cmdk-root] > [cmdk-list] {
 		min-height: min(328px, 70vh - 48px);
 	}
@@ -1017,11 +1017,10 @@ body.cortext-sidebar-resizing {
 	user-select: none;
 }
 
-// Skip the default root snapshot so the sidebar and top bar stay live
-// during the swap. Only the canvas opts in below. The canvas frame
-// surface also lives here so the view-transition pseudo (which sits
-// above .cortext-root and can't see our shell tokens) has a fill
-// during the cross-fade; dark mode is matched via :has() below.
+// Skip the default root snapshot so the sidebar and top bar stay live during
+// the swap. Only the canvas opts in below. The canvas surface also lives here
+// because the view-transition pseudo cannot read shell tokens from
+// .cortext-root; :has() handles dark mode.
 :root {
 	view-transition-name: none;
 	--cortext-canvas-frame-surface-root: #{$white};
@@ -1058,12 +1057,13 @@ body.cortext-sidebar-resizing {
 	}
 }
 
-// During the cross-fade both snapshots drop to ~50% opacity for a frame
-// or two. The pseudo overlay sits above the DOM and our shell-scoped CSS
-// vars don't reach it, so we read the canvas surface from the :root
-// declaration above. Without this the cross-fade's transparent midpoint
-// reveals the user-agent background (black in dark mode).
-::view-transition-group(cortext-canvas) {
+// During the cross-fade, both snapshots drop to about 50% opacity for a frame
+// or two. The pseudo overlay sits above the DOM, so read the canvas surface
+// from :root instead of exposing the user-agent background in the middle.
+::view-transition-group(cortext-canvas),
+::view-transition-image-pair(cortext-canvas),
+::view-transition-old(cortext-canvas),
+::view-transition-new(cortext-canvas) {
 	background: var(--cortext-canvas-frame-surface-root, #fff);
 }
 
@@ -1081,9 +1081,8 @@ body.cortext-sidebar-resizing {
 	flex: 1 1 auto;
 	min-height: 0;
 
-	// Top progress bar shown while the URL has moved to a new doc/collection
-	// but the workspace still paints the previous one. Sits above all the
-	// panes so it's visible regardless of which one is currently active.
+	// Top progress bar for the gap where the URL points at the next item but
+	// the workspace is still painting the previous pane.
 	&__progress {
 		position: absolute;
 		top: 0;
@@ -1092,6 +1091,10 @@ body.cortext-sidebar-resizing {
 		z-index: 10;
 		pointer-events: none;
 	}
+}
+
+.cortext-workspace[data-target-kind="collection"] {
+	background: $white;
 }
 
 .cortext-workspace__pane {
@@ -1114,11 +1117,17 @@ body.cortext-sidebar-resizing {
 	z-index: 1;
 }
 
+.cortext-workspace[data-target-kind="collection"]
+.cortext-workspace__pane[data-active="true"] {
+	background: $white;
+}
+
 .cortext-collection-pane {
 	position: relative;
 	display: flex;
 	height: 100%;
 	min-height: 0;
+	background: $white;
 }
 
 .cortext-topbar {
@@ -1361,8 +1370,8 @@ body.cortext-sidebar-resizing {
 		height: 100%;
 	}
 
-	// While the document/editor mounts we fill the canvas with a skeleton
-	// instead of a centered spinner so the layout matches what's coming.
+	// While the document or editor mounts, stretch the loading area so
+	// skeletons can occupy the same space as the incoming content.
 	&__loading--document,
 	&__loading--collection {
 		align-items: stretch;
@@ -1370,9 +1379,8 @@ body.cortext-sidebar-resizing {
 		overflow: auto;
 	}
 
-	// Overlay shown during cross-doc navigation: the previous post stays
-	// visible (Canvas's hold pattern, to not lose unsaved edits), so the
-	// bar sits on top of it to signal "new content on the way".
+	// Cross-document navigation keeps the previous post visible until autosave
+	// finishes. Put the progress bar over it while the next document loads.
 	&__pending-progress {
 		position: absolute;
 		top: 0;
@@ -1464,6 +1472,12 @@ body.cortext-sidebar-resizing {
 	}
 
 	&__table {
+		--cortext-canvas-frame-surface: #{$white};
+		--cortext-chrome-border: #{$gray-200};
+		--cortext-state-hover-strong: rgba(0, 0, 0, 0.09);
+		--cortext-text: #{$gray-900};
+		--cortext-text-muted: #{$gray-700};
+
 		// DataViews' `.dataviews-wrapper` is `height: 100%`, so the wrapper
 		// must have an explicit height or it falls back to 0 + internal
 		// scroll. Fill the canvas column: DataViews already owns the internal
@@ -3925,9 +3939,8 @@ tr:has(.cortext-title-cell--is-opening)
 		opacity: 1;
 	}
 
-	// Painted while useEntityRecord resolves and the editor mounts. The title
-	// and icon come from the table row, so the panel doesn't look empty for
-	// the first frames after a click.
+	// Loading frame for row detail. The title and icon come from the table row,
+	// so the panel does not open blank while useEntityRecord catches up.
 	&__frame--loading {
 
 		.cortext-row-detail__title {
@@ -3966,7 +3979,7 @@ tr:has(.cortext-title-cell--is-opening)
 	}
 }
 
-// Shared skeleton primitives — see src/components/Skeleton.js.
+// Shared skeleton pieces; see src/components/Skeleton.js.
 .cortext-skeleton {
 	display: block;
 	background: var(--cortext-state-hover-strong, rgba(0, 0, 0, 0.09));
@@ -3990,9 +4003,8 @@ tr:has(.cortext-title-cell--is-opening)
 	animation-delay: 0.2s;
 }
 
-// Sidebar list skeleton (Favorites, Trash, etc.). Matches the height of
-// the real rows so the sidebar's vertical layout stays put when items
-// resolve.
+// Sidebar list skeleton for Favorites, Trash, and similar lists. It matches
+// real row height so the sidebar does not jump when items arrive.
 .cortext-sidebar-skeleton {
 	display: flex;
 	flex-direction: column;
@@ -4019,12 +4031,9 @@ tr:has(.cortext-title-cell--is-opening)
 	}
 }
 
-// Approximates a data view table while useCollectionRows fetches. Sits
-// inside .cortext-data-view as a sibling to <DataViews>; the surrounding
-// container handles vertical placement. Row heights mirror DataViews v6
-// per-density (see .cortext-data-view .dataviews-view-table rules
-// further down) so the skeleton occupies the eventual table height
-// closely and the page doesn't shift when rows arrive.
+// tech-debt.md#54: table-shaped placeholder while useCollectionRows fetches.
+// It sits beside <DataViews>; the wrapper handles placement. Heights track the
+// DataViews v6 density rules below closely enough to keep the page steady.
 .cortext-collection-skeleton {
 	display: flex;
 	flex-direction: column;
@@ -4059,9 +4068,8 @@ tr:has(.cortext-title-cell--is-opening)
 	}
 }
 
-// Thin sliding bar at the top of the canvas while the route + editor
-// resolve. Sits in `.cortext-canvas__loading--document`, which is
-// stretched to the canvas frame so the bar can pin to the top.
+// Thin sliding bar while the route and editor resolve. The document loading
+// frame stretches to the canvas, so the bar can pin to the top.
 .cortext-canvas-progress {
 	position: relative;
 	width: 100%;
@@ -4354,16 +4362,16 @@ body.cortext-row-detail-sidebar-resizing {
 	width: 100%;
 	min-width: 0;
 
-	// Sits over the dataviews-wrapper while the first page loads so the
-	// table area keeps roughly its eventual height. Offset assumes the
-	// DataViews header is around 56px tall; the skeleton's own borders
-	// soak up minor differences.
+	// tech-debt.md#54: sit over the dataviews-wrapper while the first page
+	// loads and keep the table area near its final height. The offset tracks
+	// the DataViews header closely enough; the skeleton borders cover small
+	// differences.
 	&__rows-skeleton {
 		position: absolute;
 		inset: 56px 0 0 0;
 		z-index: 1;
 		overflow: hidden;
-		background: var(--cortext-canvas-frame-surface, #fff);
+		background: $white;
 		pointer-events: none;
 	}
 
@@ -4580,6 +4588,8 @@ body.cortext-row-detail-sidebar-resizing {
 
 .cortext-canvas__table .cortext-data-view-shell,
 .cortext-canvas__table .cortext-data-view {
+	background: $white;
+	color: var(--cortext-text);
 	height: 100%;
 }
 
@@ -5160,10 +5170,8 @@ thead > tr > th {
 		border-radius: 3px;
 	}
 
-	// Wrapper around an image-type icon: stacks the skeleton swatch
-	// underneath the <img> so the swatch keeps the slot painted until
-	// the actual image bytes arrive, not just until the REST record
-	// returns a URL.
+	// Wrapper for image icons. The swatch stays under the <img> until the image
+	// has actually loaded, not just until REST returns a URL.
 	&--image-wrap {
 		position: relative;
 		display: inline-block;
@@ -5179,11 +5187,9 @@ thead > tr > th {
 		transition: opacity 80ms ease-out;
 	}
 
-	// Reserves the icon slot the moment an image-type icon is parsed but
-	// before the media record resolves. Stays transparent for the first
-	// useDelayedFlag window so a cache hit never flashes a swatch; the
-	// `--visible` modifier paints the skeleton appearance once the wait
-	// crosses the threshold.
+	// Reserve the icon slot as soon as an image icon is parsed. Keep it
+	// transparent during the useDelayedFlag window so cache hits do not flash a
+	// swatch; `--visible` paints it after the wait crosses the threshold.
 	&--image-loading {
 		position: absolute;
 		inset: 0;
@@ -5647,3 +5653,26 @@ body.cortext-hide-block-settings-menu .block-editor-block-switcher {
 	animation: none;
 	opacity: 1;
 }
+
+/* stylelint-disable no-descending-specificity */
+.cortext-canvas__table .cortext-data-view {
+
+	> .dataviews-wrapper,
+	.dataviews__view-actions,
+	.dataviews-filters__container,
+	.dataviews-view-table,
+	.dataviews-view-table thead,
+	.dataviews-view-table thead tr,
+	.dataviews-view-table thead th {
+		background: $white;
+		background-color: $white;
+		color: var(--cortext-text, #1e1e1e);
+	}
+
+	.dataviews-view-table th,
+	.dataviews-view-table td {
+		border-color: $gray-200;
+		color: var(--cortext-text, #1e1e1e);
+	}
+}
+/* stylelint-enable no-descending-specificity */

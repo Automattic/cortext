@@ -388,14 +388,14 @@ function DetailShell( {
 	);
 }
 
-// Paints the row's title and icon (taken from the list) plus a properties
-// skeleton while useEntityRecord resolves and the editor mounts. Keeps the
-// peek panel from looking empty during the first frames after a row click.
+// While useEntityRecord and the editor catch up, show the row title and icon
+// from the list plus a properties skeleton. That keeps the peek panel from
+// opening as an empty box.
 function LoadingDetail( { onClose, row, fieldCount } ) {
 	const tentativeTitle = titleFromRow( row );
 	const documentIcon = row?.meta?.cortext_document_icon ?? '';
-	// Cap the placeholder rows so a collection with many fields doesn't paint
-	// a wall of grey lines. Six is enough to hint at the structure.
+	// Cap the placeholder rows so large collections do not fill the panel with
+	// grey lines. Six gives enough shape without crowding the pane.
 	const skeletonRows = Math.max( 1, Math.min( fieldCount ?? 0, 6 ) );
 
 	return (

@@ -384,10 +384,9 @@ export default function Canvas( {
 			requestedPost.id !== renderedPost.id )
 			? requestedPost
 			: null;
-	// `pendingPost` only fires once the new record has resolved and is
-	// waiting for the editor to flush, which is too late on a slow network.
-	// Comparing the request props directly catches the whole window from
-	// "user clicked another page" until the displayed post catches up.
+	// `pendingPost` is set only after the new record resolves, which can be
+	// too late on a slow network. Compare the requested post to the one still
+	// on screen so the progress bar covers the full wait after a click.
 	const isCrossDocNav = Boolean(
 		renderedPost &&
 			postId &&

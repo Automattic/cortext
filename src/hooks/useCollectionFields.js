@@ -77,12 +77,10 @@ export default function useCollectionFields( collectionId ) {
 	// guard the sync would treat all custom fields as "removed" and
 	// strip them from `view.fields`.
 	//
-	// Records can be returned as stubs (`{ id }` only, no `title`) when
-	// they're referenced in the store by another caller but not yet
-	// hydrated. `mapField` falls back to `#${id}` for missing titles, so
-	// rendering on stubs flashes the field IDs in the column headers
-	// before the real names arrive. Require every record to carry a
-	// `title` payload before considering the fields list authoritative.
+	// Core-data can hand back stubs (`{ id }` only) when another caller has
+	// referenced the records but not hydrated them. `mapField` falls back to
+	// `#${id}` without a title, which flashes raw field IDs in column headers.
+	// Wait until every record has a title payload.
 	const fieldRecordsHydrated =
 		Array.isArray( fieldRecords ) &&
 		fieldRecords.length === fieldIds.length &&
@@ -123,9 +121,8 @@ export default function useCollectionFields( collectionId ) {
 		// fields for the current collection (`hasStableFieldsForCollection`),
 		// subsequent refetches (after a mutation that changes the field
 		// list) keep this false so the table doesn't unmount and remount.
-		// The collection 404 path stays handled because `hasResolved` flips
-		// to true on resolution failure too, dropping us back to the normal
-		// path so the invalid-collection notice renders.
+		// A collection 404 still works: `hasResolved` flips to true on failure
+		// too, so the invalid-collection notice can render.
 		isResolving:
 			Boolean( collectionId ) &&
 			( ! collectionHasResolved ||

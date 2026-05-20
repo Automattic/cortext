@@ -89,10 +89,9 @@ const OpenRowActionContext = createContext( {
 	requestOpenRow: null,
 } );
 
-// The peek panel needs the editor to mount before its content paints, which
-// is enough work that the row click otherwise feels unresponsive for the
-// first frames. Showing an "opening" highlight on the row immediately on
-// pointerdown gives the user feedback before the panel is ready.
+// The peek panel waits for the editor before it can paint content. On slower
+// loads, that makes a row click feel dead for a beat, so pointerdown gives the
+// row a short "opening" state right away.
 const OPENING_FEEDBACK_TIMEOUT_MS = 600;
 
 function TitleCell( { item } ) {
@@ -113,9 +112,9 @@ function TitleCell( { item } ) {
 
 	useEffect( () => clearOpeningTimeout, [ clearOpeningTimeout ] );
 
-	// Once the row is the open peek, the --is-open class takes over the
-	// highlight. Drop the transient opening state so it doesn't linger if the
-	// user closes the panel quickly.
+	// Once this row owns the open peek, --is-open handles the highlight. Clear
+	// the short-lived opening state so it cannot hang around after a quick
+	// close.
 	useEffect( () => {
 		if ( isOpenRow && isOpening ) {
 			clearOpeningTimeout();
@@ -569,9 +568,9 @@ export default function CollectionDataViews( {
 	const supportsRowSelection = isTableLayout || isGridLayout;
 	const isServerPaginated = queryMode === 'server';
 	const dataViewFields = availableFields;
-	const showRowsSkeleton = useDelayedFlag(
-		isLoading && data.length === 0 && isTableLayout
-	);
+	const isRowsLoadingShell =
+		! rowsResolved && data.length === 0 && isTableLayout;
+	const showRowsSkeleton = useDelayedFlag( isRowsLoadingShell );
 	const showFieldsLoading = useDelayedFlag( isResolving );
 
 	const tableWrapperRef = useRef( null );
@@ -1410,11 +1409,9 @@ export default function CollectionDataViews( {
 	] );
 
 	useEffect( () => {
-		// Signal ready as soon as fields have resolved so the entity route can
-		// cross-fade to this pane while the rows skeleton is still painted.
-		// Waiting for `rowsResolved` here used to defer the swap until the
-		// table was fully populated, which is exactly the window the skeleton
-		// is designed to cover.
+		// Mark the pane ready once fields resolve. Rows can keep loading behind
+		// the skeleton; waiting for them here leaves the old pane on screen for
+		// too long.
 		if ( ! isResolving ) {
 			onReady?.( collectionId );
 		}
@@ -1535,7 +1532,7 @@ export default function CollectionDataViews( {
 							ref={ tableWrapperRef }
 							onClickCapture={ captureSelectionIntent }
 							data-rows-loading={
-								showRowsSkeleton ? 'true' : undefined
+								isRowsLoadingShell ? 'true' : undefined
 							}
 						>
 							{ rowActionError && (

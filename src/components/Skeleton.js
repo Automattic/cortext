@@ -1,10 +1,9 @@
 /**
- * Small skeleton primitives shared by loading states across Cortext.
+ * Small skeleton pieces shared by Cortext loading states.
  *
- * The goal is to reserve the same space the real content will occupy so
- * that when data arrives there's no layout shift. All primitives render
- * an `aria-hidden` element with a low-cost opacity pulse that respects
- * `prefers-reduced-motion`.
+ * They reserve the space the real content will use, so data arriving later
+ * does not shove the layout around. Each primitive is `aria-hidden` and uses
+ * a light opacity pulse that respects `prefers-reduced-motion`.
  */
 
 function toLength( value ) {
@@ -45,8 +44,8 @@ export function SkeletonBlock( {
 	);
 }
 
-// A horizontal bar; defaults to the title/label size. Width can be tuned
-// per use to vary the rhythm of stacked lines.
+// A horizontal bar. Callers can pass a width so stacked lines do not all look
+// identical.
 export function SkeletonLine( { className, ...rest } ) {
 	return (
 		<SkeletonBlock
@@ -56,8 +55,7 @@ export function SkeletonLine( { className, ...rest } ) {
 	);
 }
 
-// Label + value pair used wherever a list of properties is rendered while
-// loading (row peek, full-page document, inspector sidebars).
+// Label and value placeholders for property lists while they load.
 export function SkeletonFieldRow( { valueWidth, className } ) {
 	return (
 		<div
@@ -73,9 +71,8 @@ export function SkeletonFieldRow( { valueWidth, className } ) {
 	);
 }
 
-// Sidebar list rows (Favorites, Trash, etc.) while the underlying entity
-// records resolve. The width pattern keeps the rows from looking like a
-// uniform stack of identical bars.
+// Sidebar rows for Favorites, Trash, and similar lists. The width pattern keeps
+// the placeholder labels from lining up like identical bars.
 const SIDEBAR_SKELETON_WIDTHS = [ '72%', '58%', '84%', '46%', '68%', '52%' ];
 
 export function SidebarListSkeleton( { itemCount = 5 } ) {
@@ -98,12 +95,9 @@ export function SidebarListSkeleton( { itemCount = 5 } ) {
 	);
 }
 
-// Roughly table-shaped rows shown while useCollectionRows fetches the
-// first page. Sized so the canvas pane stays the same height as it will
-// be once rows arrive, instead of growing from zero. Density mirrors
-// DataViews v6 row heights (compact 40px / balanced 64px / comfortable
-// 72px); the row count is capped because perPage of 25+ would paint a
-// skeleton longer than the viewport for no extra value.
+// tech-debt.md#54: mirror DataViews row heights so the loading table does not
+// jump when real rows arrive. Cap the row count so perPage=25 does not draw
+// past the viewport.
 const COLLECTION_SKELETON_ROW_CAP = 15;
 
 export function CollectionRowsSkeleton( {
@@ -148,12 +142,9 @@ export function CollectionRowsSkeleton( {
 	);
 }
 
-// Thin indeterminate progress bar shown at the top of the canvas while
-// the entity route resolves and the editor mounts. Honest about the
-// uncertainty — a canvas document can be a page, a row, a fresh blank,
-// with or without cover and icon, so a skeleton that mimics one shape
-// inevitably misleads for the others. The bar just signals "working on
-// it" without promising structure.
+// Thin progress bar for route and editor loads. A document can be a page, row,
+// or blank draft, with or without cover and icon; a shaped skeleton would be
+// wrong often enough to be distracting.
 export function CanvasProgressBar( { className } ) {
 	return (
 		<div

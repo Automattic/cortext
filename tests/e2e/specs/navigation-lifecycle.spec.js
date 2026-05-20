@@ -147,7 +147,7 @@ test.describe( 'Navigation lifecycle', () => {
 		}
 	} );
 
-	test( 'preserves the mounted page canvas and waits for collection rows', async ( {
+	test( 'keeps the mounted page canvas while collection rows load', async ( {
 		admin,
 		page,
 		requestUtils,
@@ -248,14 +248,14 @@ test.describe( 'Navigation lifecycle', () => {
 
 			await expect(
 				page.locator(
-					'.cortext-workspace__pane[data-active="true"] .cortext-canvas'
+					'.cortext-workspace__pane[data-active="true"] .cortext-data-view[data-rows-loading="true"]'
 				)
 			).toBeVisible();
 			await expect(
 				page.locator(
-					'.cortext-workspace__pane[data-active="true"] .cortext-data-view'
+					'.cortext-workspace__pane[data-active="true"] .cortext-data-view__rows-skeleton'
 				)
-			).toHaveCount( 0 );
+			).toBeVisible();
 
 			releaseRows();
 

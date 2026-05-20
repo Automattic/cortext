@@ -498,3 +498,13 @@ Drag/drop and `menu_order` accounting look at both pages and collections through
 **Where.** `ACTIVE_PAGES_QUERY` in `src/components/page-queries.js`, `FULL_PAGE_COLLECTION_QUERY` in `src/collections.js`, `nestedCollections` / `topLevelCollections`, `treeRecords`, `handleDragOver`, and the shared `DndContext` in `src/components/Sidebar.js`, the `renderCollectionRow` bridge in `src/components/PageRow.js`, `CollectionRow`'s drag/drop zones, `computeDropTarget` in `src/components/pages-tree.js`, and the `Collection::hierarchical` / `CollectionsController::validate_parent_document` setup on the PHP side.
 
 **Solution.** Add a workspace-tree REST endpoint that returns navigable nodes with `kind`, `id`, `parent`, `menu_order`, and visibility in one shape. Row-owned collections could then appear under their row, missing parents would not look top-level by accident, and page/collection branching would move out of every consumer. The Collections section then becomes a view over the same model with the user's chosen filter, instead of a separate flat list.
+
+## 54. Loading table skeleton mirrors DataViews layout `[upstream, soft]`
+
+**What.** DataViews gives us no place to render placeholder rows inside its table. Cortext draws `CollectionRowsSkeleton` beside `<DataViews>` and lays it over the table body while the first page loads, otherwise the collection pane collapses and then jumps when rows arrive.
+
+The awkward part is the geometry. The skeleton copies DataViews row heights for compact, balanced, and comfortable density, and the overlay uses a fixed offset for the current DataViews header. Good enough for now, but if DataViews changes its density spacing or header markup, the loading table can drift away from the real one.
+
+**Where.** `CollectionRowsSkeleton` in `src/components/Skeleton.js`, the rows-skeleton mount in `src/components/CollectionDataViews.js`, the block editor loading state in `src/blocks/data-view/edit.js`, and the `.cortext-collection-skeleton` / `.cortext-data-view__rows-skeleton` rules in `src/index.scss`.
+
+**Solution.** DataViews exposes a table loading slot, or at least row-height and header-height CSS variables. Then Cortext can follow the table instead of copying its constants. Until then, keep the skeleton rules next to the DataViews table rules and treat visual drift after a DataViews upgrade as the tripwire.

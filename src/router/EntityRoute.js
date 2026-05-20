@@ -5,6 +5,7 @@ import { __ } from '@wordpress/i18n';
 import {
 	useCallback,
 	useEffect,
+	useLayoutEffect,
 	useMemo,
 	useReducer,
 	useRef,
@@ -16,10 +17,7 @@ import CollectionDataViews from '../components/CollectionDataViews';
 import { CollectionFieldsProvider } from '../components/CollectionFieldsContext';
 import { RowMutationContext } from '../components/EditableCell';
 import { RowDetailSidebarSlot } from '../components/RowDetailSidebarSlot';
-import {
-	CanvasProgressBar,
-	CollectionRowsSkeleton,
-} from '../components/Skeleton';
+import { CanvasProgressBar } from '../components/Skeleton';
 import useDelayedFlag from '../hooks/useDelayedFlag';
 import WorkspaceTopBar from '../components/WorkspaceTopBar';
 import {
@@ -65,14 +63,6 @@ function CollectionView( { collectionId, onReady } ) {
 			view={ view }
 			onChangeView={ setView }
 			onReady={ onReady }
-			loading={
-				<div className="cortext-canvas__loading cortext-canvas__loading--collection">
-					<CollectionRowsSkeleton
-						rowCount={ view?.perPage ?? 8 }
-						density={ view?.layout?.density ?? 'compact' }
-					/>
-				</div>
-			}
 			empty={
 				<span className="cortext-canvas__empty-text">
 					{ __( 'No entries yet.', 'cortext' ) }
@@ -167,10 +157,9 @@ export default function EntityRoute( { history } ) {
 		readyCollectionIds,
 	} = state;
 
-	// The reducer holds `active` on the previous pane until DOCUMENT_RESOLVED
-	// or COLLECTION_READY fires, so neither Canvas nor LoadingPane can tell
-	// they're in a navigation. Comparing the URL target to the displayed/ready
-	// snapshot is the only place that knows the new doc is on its way.
+	// Document navigations keep the previous pane visible until the next one
+	// can paint. Collections can activate before rows are ready, so compare the
+	// URL target with the displayed/ready snapshot here.
 	const isWorkspaceNavigating =
 		( target.kind === 'document' &&
 			target.id !== null &&
@@ -193,6 +182,15 @@ export default function EntityRoute( { history } ) {
 			before.active.kind !== after.active.kind ||
 			( before.active.id ?? null ) !== ( after.active.id ?? null );
 		if ( ! visualChanged ) {
+			rawDispatch( action );
+			return;
+		}
+		const touchesCollection =
+			action.target?.kind === 'collection' ||
+			before.active.kind === 'collection' ||
+			after.active.kind === 'collection' ||
+			action.type.startsWith( 'COLLECTION_' );
+		if ( touchesCollection ) {
 			rawDispatch( action );
 			return;
 		}
@@ -265,7 +263,7 @@ export default function EntityRoute( { history } ) {
 		];
 	}, [ rowCollectionSlug, rowFieldsState?.fields ] );
 
-	useEffect( () => {
+	useLayoutEffect( () => {
 		dispatch( { type: 'TARGET_CHANGED', target } );
 	}, [ target, dispatch ] );
 
@@ -490,7 +488,7 @@ export default function EntityRoute( { history } ) {
 				history={ history }
 				paintedRoute={ paintedRoute }
 			/>
-			<div className="cortext-workspace">
+			<div className="cortext-workspace" data-target-kind={ target.kind }>
 				{ showWorkspaceProgress && (
 					<div className="cortext-workspace__progress">
 						<CanvasProgressBar />

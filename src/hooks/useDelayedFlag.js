@@ -1,13 +1,12 @@
 import { useEffect, useState } from '@wordpress/element';
 
 /**
- * Returns true only after `active` has stayed true for `delayMs`. Resets
- * to false immediately when `active` flips back to false.
+ * Returns true only after `active` has stayed true for `delayMs`. Returns to
+ * false as soon as `active` does.
  *
- * Used to keep loading skeletons from flickering in and out when the work
- * they cover completes faster than the eye can register. Below ~100 ms a
- * user reads the transition as "instant" and a skeleton appearing for a
- * couple of frames feels worse than nothing.
+ * This keeps loading skeletons from flickering when the covered work finishes
+ * faster than a person can really notice. Under roughly 100 ms, a couple of
+ * skeleton frames feel worse than showing nothing.
  *
  * @param {boolean} active  Whether the underlying condition (e.g. loading)
  *                          is currently true.

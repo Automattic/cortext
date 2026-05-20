@@ -67,9 +67,8 @@ export default function DocumentPeekHost() {
 	const canGoPrevious = Boolean(
 		peek.source && adjacentRowId( rowList, peek.docId, -1 )
 	);
-	// Show the row from the table immediately so the panel can paint title
-	// and icon before useEntityRecord resolves. RowDetailView prefers `record`
-	// once it arrives, so this is only used by LoadingDetail.
+	// Use the table row until useEntityRecord catches up. That lets the
+	// loading pane show the title and icon instead of starting blank.
 	const tentativeRow = rowList.find(
 		( candidate ) => String( candidate?.id ) === String( peek.docId )
 	);
