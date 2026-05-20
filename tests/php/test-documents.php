@@ -127,7 +127,12 @@ final class Test_Documents extends BaseTestCase {
 
 	public function test_find_returns_inline_collection_with_owner_page(): void {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
-		$owner_id  = $this->create_page( array( 'post_title' => 'Quarterly review' ) );
+		$owner_id  = $this->create_page(
+			array(
+				'post_title' => 'Quarterly review',
+				'post_name'  => 'quarterly-review',
+			)
+		);
 		$inline_id = (int) wp_insert_post(
 			array(
 				'post_type'   => Collection::POST_TYPE,
@@ -154,6 +159,13 @@ final class Test_Documents extends BaseTestCase {
 		);
 		$this->assertSame( $owner_id, $document['owner']['id'] );
 		$this->assertSame( 'Quarterly review', $document['owner']['title'] );
+		// Inline collections have no workspace route of their own;
+		// clicking one in search/trash should land on the owner page,
+		// not bounce to Not Found through EntityRoute's inline guard.
+		$this->assertSame(
+			"page/quarterly-review-{$owner_id}",
+			$document['path']
+		);
 	}
 
 	public function test_list_can_filter_to_collections_only(): void {

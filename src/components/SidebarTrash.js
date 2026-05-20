@@ -9,6 +9,7 @@ import {
 } from '@wordpress/components';
 import apiFetch from '@wordpress/api-fetch';
 import { rotateLeft, trash } from '@wordpress/icons';
+import { useNavigate } from '@tanstack/react-router';
 
 import PageIcon from './PageIcon';
 import {
@@ -149,6 +150,7 @@ export default function SidebarTrash( {
 	onSelect,
 	trashedDocumentsState = EMPTY_TRASHED_DOCUMENTS_STATE,
 } ) {
+	const navigate = useNavigate();
 	const {
 		documents: trashedDocuments,
 		isLoading: isResolvingTrash,
@@ -484,7 +486,12 @@ export default function SidebarTrash( {
 										className="cortext-sidebar__title cortext-sidebar__trash-text"
 										variant="tertiary"
 										onClick={ () =>
-											onSelect( document.id, document )
+											navigate( {
+												to: '/$',
+												params: {
+													_splat: document.path,
+												},
+											} )
 										}
 									>
 										<span className="cortext-sidebar__trash-title">

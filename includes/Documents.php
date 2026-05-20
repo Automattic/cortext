@@ -330,11 +330,19 @@ final class Documents {
 			}
 		}
 
+		// Inline collections have no workspace route of their own. Set their
+		// path to the owner page so command palette results and trash-row
+		// clicks land on the page that contains them instead of bouncing to
+		// Not Found through `EntityRoute`'s inline-collection guard.
+		$path = $owner_page instanceof WP_Post
+			? $this->page_path( $owner_page )
+			: $this->document_path( $post, $kind );
+
 		$document = array(
 			'kind'   => $kind,
 			'id'     => (int) $post->ID,
 			'title'  => $this->post_title( $post ),
-			'path'   => $this->document_path( $post, $kind ),
+			'path'   => $path,
 			'parent' => (int) $post->post_parent,
 		);
 

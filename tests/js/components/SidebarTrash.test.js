@@ -85,8 +85,14 @@ jest.mock( '@wordpress/api-fetch', () => ( {
 	default: jest.fn(),
 } ) );
 
+jest.mock( '@tanstack/react-router', () => ( {
+	__esModule: true,
+	useNavigate: jest.fn(),
+} ) );
+
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
+import { useNavigate } from '@tanstack/react-router';
 
 import SidebarTrash from '../../../src/components/SidebarTrash';
 import {
@@ -100,12 +106,17 @@ const dispatchMocks = {
 	invalidateResolution: jest.fn(),
 };
 
+const navigateMock = jest.fn();
+
 beforeEach( () => {
 	useDispatch.mockReset();
 	apiFetch.mockReset();
+	useNavigate.mockReset();
 	dispatchMocks.deleteEntityRecord.mockReset();
 	dispatchMocks.invalidateResolution.mockReset();
+	navigateMock.mockReset();
 	useDispatch.mockReturnValue( dispatchMocks );
+	useNavigate.mockReturnValue( navigateMock );
 	trashState = makeDocumentsState();
 } );
 
@@ -551,23 +562,45 @@ describe( 'SidebarTrash', () => {
 		expect( screen.getByText( 'Stranded' ) ).toBeInTheDocument();
 	} );
 
-	it( 'calls onSelect when a trashed row title is clicked', () => {
-		const onSelect = jest.fn();
+	it( 'navigates to the document path when a trashed page title is clicked', () => {
 		const root = makePage( {
 			id: 42,
 			title: { rendered: 'Stranded', raw: 'Stranded' },
+			path: 'page/stranded-42',
 		} );
 
 		setTrashRecords( { records: [ root ] } );
 
-		renderSidebarTrash( { selectedId: null, onSelect } );
+		renderSidebarTrash( { selectedId: null } );
 
 		fireEvent.click( screen.getByText( 'Stranded' ) );
 
-		expect( onSelect ).toHaveBeenCalledWith(
-			42,
-			expect.objectContaining( { id: 42 } )
-		);
+		expect( navigateMock ).toHaveBeenCalledWith( {
+			to: '/$',
+			params: { _splat: 'page/stranded-42' },
+		} );
+	} );
+
+	it( 'navigates with the collection/ prefix when a trashed collection title is clicked', () => {
+		// Documents controller hands back the right path per kind. Without
+		// honoring it, the click would navigate to a bare id and mount the
+		// document Canvas instead of the CollectionPane.
+		const collection = makeCollection( {
+			id: 73,
+			title: { rendered: 'Library', raw: 'Library' },
+			path: 'collection/library-73',
+		} );
+
+		setTrashRecords( { records: [ collection ] } );
+
+		renderSidebarTrash();
+
+		fireEvent.click( screen.getByText( 'Library' ) );
+
+		expect( navigateMock ).toHaveBeenCalledWith( {
+			to: '/$',
+			params: { _splat: 'collection/library-73' },
+		} );
 	} );
 
 	it( 'renders a trashed full-page collection with no owner breadcrumb', () => {
