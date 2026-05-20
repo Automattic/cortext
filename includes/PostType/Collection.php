@@ -57,6 +57,11 @@ final class Collection {
 			)
 		);
 
+		// Collections share the document lifecycle: title, identity, trash,
+		// restore, permanent delete, command palette search. The DataView is
+		// their canvas; block-editor content support stays off for now.
+		DocumentIdentity::register_for_post_type( self::POST_TYPE );
+
 		$this->register_meta();
 	}
 

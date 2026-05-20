@@ -1103,6 +1103,7 @@ export default function Sidebar( {
 					<SidebarTrash
 						activePages={ pages }
 						selectedId={ selectedId }
+						selectedCollectionId={ selectedCollectionId }
 						onSelect={ onSelect }
 						trashedDocumentsState={ trashedDocumentsState }
 					/>

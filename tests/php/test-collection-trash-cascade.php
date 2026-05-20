@@ -220,6 +220,23 @@ final class Test_Collection_Trash_Cascade extends BaseTestCase {
 		);
 	}
 
+	public function test_trashing_a_collection_does_not_invoke_this_cascade(): void {
+		// Collections are documents themselves now, so wp_trash_post for a
+		// collection would otherwise trigger this cascade. The collection →
+		// row direction lives in RowTrashCascade, not here; this cascade
+		// stays as a no-op for collections.
+		$collection_id = $this->create_full_page_collection();
+
+		wp_trash_post( $collection_id );
+
+		$this->assertSame( 'trash', get_post_status( $collection_id ) );
+		$this->assertSame(
+			'',
+			(string) get_post_meta( $collection_id, CollectionTrashCascade::TRASHED_BY_OWNER_META_KEY, true ),
+			'A collection moving to Trash must not stamp itself with the owner-page marker.'
+		);
+	}
+
 	public function test_trashing_a_non_page_post_does_not_touch_owned_inline_collections(): void {
 		$post_id = wp_insert_post(
 			array(

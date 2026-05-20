@@ -85,8 +85,14 @@ jest.mock( '@wordpress/api-fetch', () => ( {
 	default: jest.fn(),
 } ) );
 
+jest.mock( '@tanstack/react-router', () => ( {
+	__esModule: true,
+	useNavigate: jest.fn(),
+} ) );
+
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
+import { useNavigate } from '@tanstack/react-router';
 
 import SidebarTrash from '../../../src/components/SidebarTrash';
 import {
@@ -100,12 +106,17 @@ const dispatchMocks = {
 	invalidateResolution: jest.fn(),
 };
 
+const navigateMock = jest.fn();
+
 beforeEach( () => {
 	useDispatch.mockReset();
 	apiFetch.mockReset();
+	useNavigate.mockReset();
 	dispatchMocks.deleteEntityRecord.mockReset();
 	dispatchMocks.invalidateResolution.mockReset();
+	navigateMock.mockReset();
 	useDispatch.mockReturnValue( dispatchMocks );
+	useNavigate.mockReturnValue( navigateMock );
 	trashState = makeDocumentsState();
 } );
 
@@ -167,6 +178,25 @@ function makeRow( overrides = {} ) {
 			title: { rendered: 'Books', raw: 'Books' },
 			...( collection ?? {} ),
 		},
+		...rest,
+	};
+}
+
+function makeCollection( overrides = {} ) {
+	const { meta, owner, ...rest } = overrides;
+	return {
+		id: 201,
+		type: 'crtxt_collection',
+		kind: 'collection',
+		title: { rendered: 'Tasks', raw: 'Tasks' },
+		parent: 0,
+		meta: {
+			cortext_document_icon: '',
+			_cortext_trashed_by_parent: 0,
+			_cortext_trashed_by_owner_page: 0,
+			...( meta ?? {} ),
+		},
+		...( owner !== undefined ? { owner } : {} ),
 		...rest,
 	};
 }
@@ -444,6 +474,37 @@ describe( 'SidebarTrash', () => {
 		} );
 	} );
 
+	it( 'navigates the canvas away when the open collection is permanent-deleted', async () => {
+		// Collection routes live in selectedCollectionId, not selectedId.
+		// Without checking both, the canvas would keep pointing at a deleted
+		// collection URL after the row clicks Delete permanently.
+		const onSelect = jest.fn();
+		setTrashRecords( {
+			records: [
+				makeCollection( {
+					id: 73,
+					path: 'collection/library-73',
+				} ),
+			],
+		} );
+		apiFetch.mockResolvedValue( { deleted: [ 73 ] } );
+
+		renderSidebarTrash( {
+			selectedId: null,
+			selectedCollectionId: 73,
+			onSelect,
+		} );
+
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Delete permanently' } )
+		);
+		clickConfirm();
+
+		await waitFor( () => {
+			expect( onSelect ).toHaveBeenCalledWith( null );
+		} );
+	} );
+
 	it( 'leaves the canvas alone when permanent-delete does not include the open page', async () => {
 		const onSelect = jest.fn();
 		setTrashRecords( { records: [ makePage( { id: 1 } ) ] } );
@@ -514,6 +575,50 @@ describe( 'SidebarTrash', () => {
 		).toHaveTextContent( '2 subpages' );
 	} );
 
+	it( 'shows a collection count when a trashed page owns only inline collections', () => {
+		const root = makePage( {
+			id: 1,
+			title: { rendered: 'Quarterly review', raw: 'Quarterly review' },
+		} );
+		const inline = makeCollection( {
+			id: 2,
+			title: { rendered: 'Action items', raw: 'Action items' },
+			meta: { _cortext_trashed_by_owner_page: 1 },
+		} );
+
+		setTrashRecords( { records: [ root, inline ] } );
+
+		const { container } = renderSidebarTrash();
+
+		expect(
+			container.querySelector( '.cortext-sidebar__breadcrumb' )
+		).toHaveTextContent( '1 collection' );
+	} );
+
+	it( 'falls back to nested items when a trashed page mixes subpages and inline collections', () => {
+		const root = makePage( {
+			id: 1,
+			title: { rendered: 'Quarterly review', raw: 'Quarterly review' },
+		} );
+		const subpage = makePage( {
+			id: 2,
+			parent: 1,
+			meta: { _cortext_trashed_by_parent: 1 },
+		} );
+		const inline = makeCollection( {
+			id: 3,
+			meta: { _cortext_trashed_by_owner_page: 1 },
+		} );
+
+		setTrashRecords( { records: [ root, subpage, inline ] } );
+
+		const { container } = renderSidebarTrash();
+
+		expect(
+			container.querySelector( '.cortext-sidebar__breadcrumb' )
+		).toHaveTextContent( '2 nested items' );
+	} );
+
 	it( 'promotes orphaned descendants (stale marker) back to roots', () => {
 		// Marker points at a parent no longer in Trash. It may have been
 		// permanently deleted by an older build or a different path; either
@@ -532,23 +637,133 @@ describe( 'SidebarTrash', () => {
 		expect( screen.getByText( 'Stranded' ) ).toBeInTheDocument();
 	} );
 
-	it( 'calls onSelect when a trashed row title is clicked', () => {
-		const onSelect = jest.fn();
+	it( 'navigates to the document path when a trashed page title is clicked', () => {
 		const root = makePage( {
 			id: 42,
 			title: { rendered: 'Stranded', raw: 'Stranded' },
+			path: 'page/stranded-42',
 		} );
 
 		setTrashRecords( { records: [ root ] } );
 
-		renderSidebarTrash( { selectedId: null, onSelect } );
+		renderSidebarTrash( { selectedId: null } );
 
 		fireEvent.click( screen.getByText( 'Stranded' ) );
 
-		expect( onSelect ).toHaveBeenCalledWith(
-			42,
-			expect.objectContaining( { id: 42 } )
+		expect( navigateMock ).toHaveBeenCalledWith( {
+			to: '/$',
+			params: { _splat: 'page/stranded-42' },
+		} );
+	} );
+
+	it( 'navigates with the collection/ prefix when a trashed collection title is clicked', () => {
+		// Documents controller hands back the right path per kind. Without
+		// honoring it, the click would navigate to a bare id and mount the
+		// document Canvas instead of the CollectionPane.
+		const collection = makeCollection( {
+			id: 73,
+			title: { rendered: 'Library', raw: 'Library' },
+			path: 'collection/library-73',
+		} );
+
+		setTrashRecords( { records: [ collection ] } );
+
+		renderSidebarTrash();
+
+		fireEvent.click( screen.getByText( 'Library' ) );
+
+		expect( navigateMock ).toHaveBeenCalledWith( {
+			to: '/$',
+			params: { _splat: 'collection/library-73' },
+		} );
+	} );
+
+	it( 'renders a trashed full-page collection with no owner breadcrumb', () => {
+		const collection = makeCollection( {
+			id: 33,
+			title: { rendered: 'Roadmap', raw: 'Roadmap' },
+		} );
+
+		setTrashRecords( { records: [ collection ] } );
+
+		const { container } = renderSidebarTrash();
+
+		expect( screen.getByText( 'Roadmap' ) ).toBeInTheDocument();
+		expect(
+			container.querySelector( '.cortext-sidebar__breadcrumb' )
+		).toBeFalsy();
+	} );
+
+	it( 'renders a trashed inline collection with its owner page in the breadcrumb', () => {
+		// Inline collection whose owner page is still active. The trash
+		// list surfaces the owner so users can tell similar inline tables
+		// apart.
+		const inline = makeCollection( {
+			id: 34,
+			title: { rendered: 'Action items', raw: 'Action items' },
+			owner: {
+				id: 99,
+				title: {
+					rendered: 'Quarterly review',
+					raw: 'Quarterly review',
+				},
+				path: 'page/quarterly-99',
+			},
+		} );
+
+		setTrashRecords( { records: [ inline ] } );
+
+		const { container } = renderSidebarTrash();
+
+		expect( screen.getByText( 'Action items' ) ).toBeInTheDocument();
+		expect(
+			container.querySelector( '.cortext-sidebar__breadcrumb' )
+		).toHaveTextContent( 'Quarterly review' );
+	} );
+
+	it( 'nests an inline collection under its owner page when both are in trash', () => {
+		// Page → inline collection cascade. The page is the root; the
+		// inline collection should fold under it instead of appearing as a
+		// second root entry.
+		const owner = makePage( {
+			id: 50,
+			title: { rendered: 'Sprint notes', raw: 'Sprint notes' },
+		} );
+		const inline = makeCollection( {
+			id: 51,
+			title: { rendered: 'Action items', raw: 'Action items' },
+			meta: { _cortext_trashed_by_owner_page: 50 },
+		} );
+
+		setTrashRecords( { records: [ owner, inline ] } );
+
+		renderSidebarTrash();
+
+		expect( screen.getByText( 'Sprint notes' ) ).toBeInTheDocument();
+		expect( screen.queryByText( 'Action items' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'announces collection rows in the permanent-delete confirmation', () => {
+		setTrashRecords( {
+			records: [
+				makeCollection( {
+					id: 60,
+					title: { rendered: 'Library', raw: 'Library' },
+				} ),
+			],
+		} );
+
+		renderSidebarTrash();
+
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Delete permanently' } )
 		);
+
+		expect(
+			screen.getByText(
+				"Permanently delete this collection and all its rows? You can't undo this."
+			)
+		).toBeInTheDocument();
 	} );
 
 	it( 'announces subtree size in the permanent-delete confirmation', () => {
@@ -573,6 +788,36 @@ describe( 'SidebarTrash', () => {
 		expect(
 			screen.getByText(
 				"Permanently delete this page and 1 subpage? You can't undo this."
+			)
+		).toBeInTheDocument();
+	} );
+
+	it( 'falls back to nested items in the confirm when subpages and inline collections mix', () => {
+		const root = makePage( {
+			id: 1,
+			title: { rendered: 'Workspace', raw: 'Workspace' },
+		} );
+		const subpage = makePage( {
+			id: 2,
+			parent: 1,
+			meta: { _cortext_trashed_by_parent: 1 },
+		} );
+		const inline = makeCollection( {
+			id: 3,
+			meta: { _cortext_trashed_by_owner_page: 1 },
+		} );
+
+		setTrashRecords( { records: [ root, subpage, inline ] } );
+
+		renderSidebarTrash();
+
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Delete permanently' } )
+		);
+
+		expect(
+			screen.getByText(
+				"Permanently delete this page and 2 nested items? You can't undo this."
 			)
 		).toBeInTheDocument();
 	} );

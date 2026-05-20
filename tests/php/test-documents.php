@@ -44,14 +44,18 @@ final class Test_Documents extends BaseTestCase {
 		parent::tear_down();
 	}
 
-	public function test_get_document_post_types_includes_pages_and_rows(): void {
+	public function test_get_document_post_types_includes_pages_rows_and_collections(): void {
 		$this->create_collection( 'projects', 'Projects' );
 
 		$post_types = $this->documents->get_document_post_types();
 
 		$this->assertContains( Page::POST_TYPE, $post_types );
 		$this->assertContains( 'crtxt_projects', $post_types );
-		$this->assertNotContains( Collection::POST_TYPE, $post_types );
+		$this->assertContains(
+			Collection::POST_TYPE,
+			$post_types,
+			'Collections share the document lifecycle as of the documents refactor.'
+		);
 		$this->assertNotContains( Field::POST_TYPE, $post_types );
 	}
 
@@ -101,6 +105,81 @@ final class Test_Documents extends BaseTestCase {
 		$this->assertSame( 'Projects', $document['collection']['title'] );
 		$this->assertSame( "collection/projects-{$collection_id}", $document['collection']['path'] );
 		$this->assertArrayNotHasKey( 'icon', $document );
+	}
+
+	public function test_find_returns_full_page_collection_document(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$collection_id = $this->create_collection( 'tasks', 'Tasks' );
+
+		$document = $this->documents->find( $collection_id );
+
+		$this->assertNotNull( $document );
+		$this->assertSame( Documents::KIND_COLLECTION, $document['kind'] );
+		$this->assertSame( $collection_id, $document['id'] );
+		$this->assertSame( 'Tasks', $document['title'] );
+		$this->assertSame( "collection/tasks-{$collection_id}", $document['path'] );
+		$this->assertArrayNotHasKey(
+			'owner',
+			$document,
+			'Full-page collections do not carry an owner; they are reachable on their own.'
+		);
+	}
+
+	public function test_find_returns_inline_collection_with_owner_page(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$owner_id  = $this->create_page(
+			array(
+				'post_title' => 'Quarterly review',
+				'post_name'  => 'quarterly-review',
+			)
+		);
+		$inline_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Collection::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Action items',
+				'meta_input'  => array(
+					'slug'                            => 'action-items',
+					Collection::MODE_META_KEY         => Collection::MODE_INLINE,
+					Collection::INLINE_OWNER_META_KEY => $owner_id,
+				),
+			)
+		);
+
+		$document = $this->documents->find( $inline_id );
+
+		$this->assertNotNull( $document );
+		$this->assertSame( Documents::KIND_COLLECTION, $document['kind'] );
+		$this->assertSame( $inline_id, $document['id'] );
+		$this->assertSame( 'Action items', $document['title'] );
+		$this->assertArrayHasKey(
+			'owner',
+			$document,
+			'Inline collections surface their owner page so command palette and trash can show breadcrumb context.'
+		);
+		$this->assertSame( $owner_id, $document['owner']['id'] );
+		$this->assertSame( 'Quarterly review', $document['owner']['title'] );
+		// Inline collections have no workspace route of their own;
+		// clicking one in search/trash should land on the owner page,
+		// not bounce to Not Found through EntityRoute's inline guard.
+		$this->assertSame(
+			"page/quarterly-review-{$owner_id}",
+			$document['path']
+		);
+	}
+
+	public function test_list_can_filter_to_collections_only(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$page_id       = $this->create_page( array( 'post_title' => 'Welcome' ) );
+		$collection_id = $this->create_collection( 'tasks', 'Tasks' );
+		$row_id        = $this->create_row( 'crtxt_tasks', 'First task' );
+
+		$collections_only = $this->documents->list( array( 'kind' => Documents::KIND_COLLECTION ) );
+
+		$ids = array_map( static fn ( array $doc ): int => $doc['id'], $collections_only['documents'] );
+		$this->assertContains( $collection_id, $ids );
+		$this->assertNotContains( $page_id, $ids );
+		$this->assertNotContains( $row_id, $ids );
 	}
 
 	public function test_find_row_without_slug_falls_back_to_bare_id(): void {
