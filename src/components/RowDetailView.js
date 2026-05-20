@@ -15,6 +15,7 @@ import {
 	closeSmall,
 	drawerRight,
 	fullscreen,
+	pin,
 	seen,
 	square,
 	unseen,
@@ -32,6 +33,24 @@ const RowEditor = lazy( () =>
 	import( /* webpackChunkName: "editor" */ './RowEditor' )
 );
 import { getRowDetailMode, titleFromDetail } from './rowDetailUtils';
+
+// Solid version of @wordpress/icons `pin` (which only ships outlined), so the
+// pressed state reads as filled.
+const pinFilled = (
+	<svg
+		xmlns="http://www.w3.org/2000/svg"
+		viewBox="0 0 24 24"
+		width="24"
+		height="24"
+		aria-hidden="true"
+		focusable="false"
+	>
+		<path
+			fill="currentColor"
+			d="m21.5 9.1-6.6-6.6-4.2 5.6c-1.2-.1-2.4.1-3.6.7-.1 0-.1.1-.2.1-.5.3-.9.6-1.2.9l3.7 3.7-5.7 5.7v1.1h1.1l5.7-5.7 3.7 3.7c.4-.4.7-.8.9-1.2.1-.1.1-.2.2-.3.6-1.1.8-2.4.6-3.6l5.6-4.1z"
+		/>
+	</svg>
+);
 
 export const ROW_DETAIL_MODE_ICONS = {
 	side: drawerRight,
@@ -113,6 +132,7 @@ function DetailShell( {
 	arePropertiesVisible,
 	children,
 	fields,
+	isPinned,
 	mode,
 	onClose,
 	onDiscardPending,
@@ -120,6 +140,7 @@ function DetailShell( {
 	onNext,
 	onPrevious,
 	onRetryPending,
+	onTogglePin,
 	saveError,
 	canGoNext,
 	canGoPrevious,
@@ -182,6 +203,21 @@ function DetailShell( {
 							onChangeMode={ onModeChange }
 						/>
 					</div>
+					{ mode === 'side' && onTogglePin ? (
+						<div className="cortext-row-detail__toolbar-group">
+							<Button
+								className="cortext-row-detail__toolbar-button cortext-row-detail__toolbar-button--icon"
+								icon={ isPinned ? pinFilled : pin }
+								isPressed={ isPinned }
+								label={
+									isPinned
+										? __( 'Unpin', 'cortext' )
+										: __( 'Pin', 'cortext' )
+								}
+								onClick={ onTogglePin }
+							/>
+						</div>
+					) : null }
 					<div className="cortext-row-detail__toolbar-group cortext-row-detail__toolbar-group--end">
 						<Button
 							className="cortext-row-detail__toolbar-button cortext-row-detail__toolbar-button--close"
@@ -244,6 +280,7 @@ export default function RowDetailView( {
 	canGoPrevious,
 	collectionId,
 	fields,
+	isPinned,
 	mode,
 	onApi,
 	onClose,
@@ -254,6 +291,7 @@ export default function RowDetailView( {
 	onRestored,
 	onRetryPending,
 	onSaved,
+	onTogglePin,
 	postType,
 	row,
 	rowId,
@@ -460,6 +498,7 @@ export default function RowDetailView( {
 				canGoNext={ canUseRowControls && canGoNext }
 				canGoPrevious={ canUseRowControls && canGoPrevious }
 				fields={ propertyFields }
+				isPinned={ isPinned }
 				mode={ normalizedMode }
 				onClose={ requestClose }
 				onDiscardPending={ onDiscardPending }
@@ -467,6 +506,7 @@ export default function RowDetailView( {
 				onNext={ onNext }
 				onPrevious={ onPrevious }
 				onRetryPending={ onRetryPending }
+				onTogglePin={ onTogglePin }
 				saveError={ canUseRowControls ? saveError : null }
 				setArePropertiesVisible={ setArePropertiesVisible }
 				title={ displayTitle }
