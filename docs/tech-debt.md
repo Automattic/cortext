@@ -511,8 +511,8 @@ The awkward part is the geometry. The skeleton copies DataViews row heights for 
 
 ## 55. View-transition target is too broad `[soft]`
 
-**What.** `.cortext-shell__canvas` carries `view-transition-name: cortext-canvas`, but the canvas contains both the topbar (chrome that doesn't change between routes) and the workspace (the actual content). The cross-fade therefore drags the topbar into the snapshot, and the backdrop fill we paint on the canvas group to keep dark mode from flashing black washes the topbar's warm surface to grey for a frame. The patch we shipped gives the topbar its own `view-transition-name: cortext-topbar` and silences its animation, so the navigator creates a transition piece just to discard it.
+**What.** `view-transition-name: cortext-canvas` lives on `.cortext-shell__canvas`, one level above the content that actually needs the fade. That pulls the topbar into the canvas snapshot. Since the canvas transition also paints a backdrop to cover dark-mode flashes, the topbar gets tinted for a frame. We work around it by naming the topbar separately and disabling that animation.
 
-**Where.** `.cortext-shell__canvas` and `.cortext-topbar` rules in `src/index.scss`, plus the `::view-transition-group/old/new(cortext-topbar) { animation: none }` block right next to the canvas group backdrop fix.
+**Where.** `src/index.scss`: `.cortext-shell__canvas`, `.cortext-topbar`, and the `cortext-topbar` view-transition pseudo rules next to the canvas backdrop rules.
 
-**Solution.** Move `view-transition-name` from `.cortext-shell__canvas` to `.cortext-workspace`. The topbar then sits outside the transition naturally, the backdrop fill applies only over the workspace, and the topbar opt-out (name + suppressed animation) goes away. Any future chrome added between shell-canvas and workspace stays out of the transition for free. The only thing lost is the option of cross-fading topbar text (title, breadcrumbs) along with the document swap; opt that back in per-element with its own name if desired.
+**Solution.** Put `view-transition-name: cortext-canvas` on `.cortext-workspace` instead. The topbar stays outside the fade, the backdrop only covers the workspace, and the `cortext-topbar` opt-out can be deleted. If the title or breadcrumbs need animation later, name those pieces directly.
