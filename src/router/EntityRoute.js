@@ -4,6 +4,8 @@ import { useEntityRecords } from '@wordpress/core-data';
 import { useDispatch } from '@wordpress/data';
 import { __ } from '@wordpress/i18n';
 import {
+	lazy,
+	Suspense,
 	useCallback,
 	useEffect,
 	useMemo,
@@ -12,7 +14,21 @@ import {
 	useState,
 } from '@wordpress/element';
 
-import Canvas from '../components/Canvas';
+// Lazy-loading Canvas keeps its Cortext subtree (publish toggle, page
+// inspector, autosave hook, snackbars, etc.) and the editor + interface
+// stylesheets off the initial JS/CSS bundles. The parallel split in
+// RowDetailView does the same for the row peek surface.
+//
+// This split does not change which WP core editor handles WP enqueues:
+// wp-editor, wp-block-editor, wp-block-library, and wp-blocks still ship
+// on every admin route because @wordpress/dependency-extraction-webpack-plugin
+// only emits one asset manifest per entry and folds in externals reached
+// through lazy chunks too. Those scripts are cached by WP and most sessions
+// open an editor at some point, so we accept the cost.
+const Canvas = lazy( () =>
+	import( /* webpackChunkName: "editor" */ '../components/Canvas' )
+);
+import CanvasSkeleton from '../components/CanvasSkeleton';
 import CollectionDataViews from '../components/CollectionDataViews';
 import { CollectionFieldsProvider } from '../components/CollectionFieldsContext';
 import { RowMutationContext } from '../components/EditableCell';
@@ -446,18 +462,18 @@ export default function EntityRoute( { history } ) {
 			: null;
 	const editorCanvas =
 		editorPostId !== null && editorPostType ? (
-			<Canvas
-				postId={ editorPostId }
-				postType={ editorPostType }
-				fields={ isRow ? rowFields : undefined }
-				row={
-					isRow ? documentResolution.entity ?? undefined : undefined
-				}
-				onDisplayedPost={ handleDocumentDisplayed }
-				isActive={ isDocumentActive }
-				onRestored={ onRestoreDocument }
-				recentTarget={ editorRecentTarget }
-			/>
+			<Suspense fallback={ <CanvasSkeleton /> }>
+				<Canvas
+					postId={ editorPostId }
+					postType={ editorPostType }
+					fields={ isRow ? rowFields : undefined }
+					row={ isRow ? documentResolution.entity : undefined }
+					onDisplayedPost={ handleDocumentDisplayed }
+					isActive={ isDocumentActive }
+					onRestored={ onRestoreDocument }
+					recentTarget={ editorRecentTarget }
+				/>
+			</Suspense>
 		) : null;
 
 	return (

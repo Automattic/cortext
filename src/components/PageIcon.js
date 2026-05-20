@@ -1,8 +1,15 @@
 import { useEntityRecord } from '@wordpress/core-data';
 import { Icon, page as pageGlyph } from '@wordpress/icons';
-import { useMemo } from '@wordpress/element';
+import { lazy, Suspense, useMemo } from '@wordpress/element';
 
-import PageIconWp from './PageIconWp';
+// PageIconWp does `import * as icons from '@wordpress/icons'` so it can look
+// glyphs up by name at runtime. That defeats tree-shaking and would pull the
+// entire icon set (~238 KiB) into the initial bundle. Lazy-load it: most
+// page icons are emoji/image, and pages that do use a wp glyph only trigger
+// the chunk download on first render.
+const PageIconWp = lazy( () =>
+	import( /* webpackChunkName: "page-icon-wp" */ './PageIconWp' )
+);
 
 // Three shapes are persisted in the cortext_document_icon meta:
 //   { type: 'emoji', value: '📘' }
@@ -164,7 +171,11 @@ export default function PageIcon( { icon, size = 16, alt, className } ) {
 				role={ alt ? 'img' : undefined }
 				aria-label={ alt }
 			>
-				<PageIconWp name={ parsed.name } size={ size } />
+				<Suspense
+					fallback={ <Icon icon={ pageGlyph } size={ size } /> }
+				>
+					<PageIconWp name={ parsed.name } size={ size } />
+				</Suspense>
 			</span>
 		);
 	}

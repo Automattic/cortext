@@ -1,3 +1,18 @@
+export function titleFromRow( row ) {
+	const title = row?.title;
+	if ( typeof title === 'string' ) {
+		return title;
+	}
+	return title?.raw ?? title?.rendered ?? '';
+}
+
+export function titleFromDetail( detail ) {
+	if ( ! detail ) {
+		return '';
+	}
+	return titleFromRow( detail.record ) || titleFromRow( detail.row );
+}
+
 export const ROW_DETAIL_MODES = [ 'side', 'modal', 'full' ];
 export const DEFAULT_ROW_DETAIL_MODE = 'side';
 
