@@ -79,12 +79,18 @@ export default function useCollectionFields( collectionId ) {
 	//
 	// Core-data can hand back stubs (`{ id }` only) when another caller has
 	// referenced the records but not hydrated them. `mapField` falls back to
-	// `#${id}` without a title, which flashes raw field IDs in column headers.
-	// Wait until every record has a title payload.
+	// `#${id}` when neither `title.raw` nor `title.rendered` resolves to a
+	// non-empty string, which flashes raw field IDs in column headers. Match
+	// that same condition so we hold the loading state until the title the
+	// table will actually paint has arrived.
 	const fieldRecordsHydrated =
 		Array.isArray( fieldRecords ) &&
 		fieldRecords.length === fieldIds.length &&
-		fieldRecords.every( ( record ) => record?.title !== undefined );
+		fieldRecords.every(
+			( record ) =>
+				Boolean( record?.title?.raw ) ||
+				Boolean( record?.title?.rendered )
+		);
 	const fieldsResolvedFlag =
 		fieldIds.length === 0
 			? Boolean( collection )
