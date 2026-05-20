@@ -463,11 +463,7 @@ export default function EntityRoute( { history } ) {
 					postId={ editorPostId }
 					postType={ editorPostType }
 					fields={ isRow ? rowFields : undefined }
-					row={
-						isRow
-							? documentResolution.entity ?? undefined
-							: undefined
-					}
+					row={ isRow ? documentResolution.entity : undefined }
 					onDisplayedPost={ handleDocumentDisplayed }
 					isActive={ isDocumentActive }
 					onRestored={ onRestoreDocument }
