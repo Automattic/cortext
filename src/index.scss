@@ -4050,16 +4050,20 @@ tr:has(.cortext-title-cell--is-opening)
 		align-items: center;
 		gap: $grid-unit-30;
 		padding: 0 $grid-unit-20;
-		height: $grid-unit-50 + 2 * $grid-unit-15; // 64 (balanced default)
+		// Fallbacks are required because the block-editor iframe doesn't
+		// inherit CSS variables scoped to .cortext-root. Without them the
+		// row collapses to the cell height (12px) and the skeleton stops
+		// looking like a table.
+		height: var(--cortext-data-view-row-height-balanced, #{$grid-unit-50 + 2 * $grid-unit-15});
 		border-bottom: $border-width solid var(--cortext-canvas-border, #e0e0e0);
 	}
 
 	&--compact &__row {
-		height: $grid-unit-50; // 40
+		height: var(--cortext-data-view-row-height-compact, #{$grid-unit-50});
 	}
 
 	&--comfortable &__row {
-		height: $grid-unit-50 + 2 * $grid-unit-20; // 72
+		height: var(--cortext-data-view-row-height-comfortable, #{$grid-unit-50 + 2 * $grid-unit-20});
 	}
 
 	&__cell {
@@ -4373,10 +4377,12 @@ body.cortext-row-detail-sidebar-resizing {
 	// differences.
 	&__rows-skeleton {
 		position: absolute;
-		inset: 56px 0 0 0;
+		// Iframe block editor doesn't inherit .cortext-root vars; fallback
+		// stops the overlay from collapsing to inset:0 inside the block.
+		inset: var(--cortext-data-view-header-height, 56px) 0 0 0;
 		z-index: 1;
 		overflow: hidden;
-		background: var(--cortext-canvas-surface);
+		background: var(--cortext-canvas-surface, #fff);
 		pointer-events: none;
 	}
 
@@ -4475,20 +4481,22 @@ body.cortext-row-detail-sidebar-resizing {
 			background: $gray-100;
 		}
 
+		// Fallbacks repeated for the block-editor iframe, which doesn't
+		// inherit the .cortext-root tokens.
 		.cortext-editable-cell__shell,
 		.cortext-cell-checkbox {
-			min-height: $grid-unit-50 + 2 * $grid-unit-15; // 64 (balanced)
+			min-height: var(--cortext-data-view-row-height-balanced, #{$grid-unit-50 + 2 * $grid-unit-15});
 		}
 
 		&.has-compact-density .cortext-editable-cell__shell,
 		&.has-compact-density .cortext-cell-checkbox {
-			min-height: $grid-unit-50; // 40 (compact, the editor's floor)
+			min-height: var(--cortext-data-view-row-height-compact, #{$grid-unit-50});
 			padding-block: 0;
 		}
 
 		&.has-comfortable-density .cortext-editable-cell__shell,
 		&.has-comfortable-density .cortext-cell-checkbox {
-			min-height: $grid-unit-50 + 2 * $grid-unit-20; // 72 (comfortable)
+			min-height: var(--cortext-data-view-row-height-comfortable, #{$grid-unit-50 + 2 * $grid-unit-20});
 		}
 	}
 
