@@ -72,6 +72,10 @@
 	// Hairline top-edge highlight on the active row to suggest a soft "lift".
 	--cortext-state-selected-highlight: rgba(255, 255, 255, 0.6);
 	--cortext-canvas-frame-surface: #{colors.$white};
+	// The document/table canvas itself. This stays light in dark mode until
+	// the editor canvas and DataViews have a real dark theme.
+	--cortext-canvas-surface: #{colors.$white};
+	--cortext-canvas-border: #{colors.$gray-200};
 	--cortext-chrome-border: #{colors.$gray-200};
 	--cortext-text: #{colors.$gray-900};
 	--cortext-text-muted: #{colors.$gray-700};
