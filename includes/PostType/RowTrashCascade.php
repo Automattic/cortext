@@ -33,31 +33,9 @@ final class RowTrashCascade {
 	}
 
 	public function register(): void {
-		add_action( 'init', array( $this, 'register_meta' ) );
 		add_action( 'wp_trash_post', array( $this, 'cascade_trash' ), 10, 1 );
 		add_action( 'untrashed_post', array( $this, 'cascade_restore' ), 10, 1 );
 		add_action( 'before_delete_post', array( $this, 'cascade_delete' ), 10, 1 );
-	}
-
-	public function register_meta(): void {
-		// The marker is registered on every entry CPT known at init.
-		// CPTs registered later (a new collection in the same request)
-		// read the marker by raw key in cascade_restore; missing the
-		// registration here only affects REST exposure.
-		foreach ( CollectionEntries::get_entry_post_types() as $post_type ) {
-			register_post_meta(
-				$post_type,
-				self::TRASHED_BY_OWNER_META_KEY,
-				array(
-					'type'          => 'integer',
-					'single'        => true,
-					'show_in_rest'  => false,
-					'auth_callback' => static function () {
-						return false;
-					},
-				)
-			);
-		}
 	}
 
 	/**

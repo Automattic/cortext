@@ -71,17 +71,25 @@ export function computeSidebarTrashRoots( trashedDocuments = [] ) {
 
 	const descendantCountById = new Map();
 	roots.forEach( ( root ) => {
-		let count = 0;
+		const counts = { pages: 0, collections: 0, total: 0 };
 		const stack = [ ...( childrenByMarker.get( root.id ) ?? [] ) ];
 		while ( stack.length ) {
 			const node = stack.pop();
-			count++;
+			counts.total++;
+			if ( node.kind === 'page' || node.type === POST_TYPE ) {
+				counts.pages++;
+			} else if (
+				node.kind === 'collection' ||
+				node.type === 'crtxt_collection'
+			) {
+				counts.collections++;
+			}
 			const kids = childrenByMarker.get( node.id );
 			if ( kids ) {
 				stack.push( ...kids );
 			}
 		}
-		descendantCountById.set( root.id, count );
+		descendantCountById.set( root.id, counts );
 	} );
 
 	return { roots, descendantCountById };
@@ -107,19 +115,36 @@ function documentKind( document ) {
 	return 'document';
 }
 
-function descendantLabel( kind, count ) {
-	if ( kind === 'page' ) {
-		return sprintf(
-			/* translators: %d: number of subpages */
-			_n( '%d subpage', '%d subpages', count, 'cortext' ),
-			count
-		);
+function descendantLabel( rootKind, counts ) {
+	// Mixed subtrees (page → subpage + page → owned inline collection) read
+	// as "%d nested items" so the wording stays honest. Pure subtrees keep
+	// the more specific noun.
+	if ( rootKind === 'page' ) {
+		if ( counts.pages > 0 && counts.collections === 0 ) {
+			return sprintf(
+				/* translators: %d: number of subpages */
+				_n( '%d subpage', '%d subpages', counts.pages, 'cortext' ),
+				counts.pages
+			);
+		}
+		if ( counts.collections > 0 && counts.pages === 0 ) {
+			return sprintf(
+				/* translators: %d: number of nested inline collections */
+				_n(
+					'%d collection',
+					'%d collections',
+					counts.collections,
+					'cortext'
+				),
+				counts.collections
+			);
+		}
 	}
 
 	return sprintf(
 		/* translators: %d: number of nested trashed documents */
-		_n( '%d nested item', '%d nested items', count, 'cortext' ),
-		count
+		_n( '%d nested item', '%d nested items', counts.total, 'cortext' ),
+		counts.total
 	);
 }
 
@@ -343,9 +368,14 @@ export default function SidebarTrash( {
 	const hasError = Boolean( trashError && ! hasTrashCache );
 	const hasItems = roots.length > 0;
 	const pendingKind = pendingDelete ? documentKind( pendingDelete ) : null;
-	const pendingDescendantCount = pendingDelete
-		? descendantCountById.get( pendingDelete.id ) ?? 0
-		: 0;
+	const pendingDescendantCounts = pendingDelete
+		? descendantCountById.get( pendingDelete.id ) ?? {
+				pages: 0,
+				collections: 0,
+				total: 0,
+		  }
+		: { pages: 0, collections: 0, total: 0 };
+	const pendingDescendantCount = pendingDescendantCounts.total;
 	const retryTrashFetch = useCallback( () => {
 		invalidateResolution( 'getEntityRecords', [
 			'postType',
@@ -375,16 +405,35 @@ export default function SidebarTrash( {
 			'cortext'
 		);
 	} else if ( pendingDescendantCount > 0 ) {
-		pendingDeleteMessage = sprintf(
-			/* translators: %d: number of subpages that will be deleted along with the page. */
-			_n(
-				"Permanently delete this page and %d subpage? You can't undo this.",
-				"Permanently delete this page and %d subpages? You can't undo this.",
-				pendingDescendantCount,
-				'cortext'
-			),
-			pendingDescendantCount
-		);
+		// Mixed subtrees (subpages + inline collections) use the generic
+		// "nested items" wording so the count stays correct without
+		// pretending an inline collection is a subpage.
+		if (
+			pendingDescendantCounts.pages > 0 &&
+			pendingDescendantCounts.collections === 0
+		) {
+			pendingDeleteMessage = sprintf(
+				/* translators: %d: number of subpages that will be deleted along with the page. */
+				_n(
+					"Permanently delete this page and %d subpage? You can't undo this.",
+					"Permanently delete this page and %d subpages? You can't undo this.",
+					pendingDescendantCounts.pages,
+					'cortext'
+				),
+				pendingDescendantCounts.pages
+			);
+		} else {
+			pendingDeleteMessage = sprintf(
+				/* translators: %d: number of nested trashed items deleted along with the page. */
+				_n(
+					"Permanently delete this page and %d nested item? You can't undo this.",
+					"Permanently delete this page and %d nested items? You can't undo this.",
+					pendingDescendantCount,
+					'cortext'
+				),
+				pendingDescendantCount
+			);
+		}
 	}
 	if ( pendingDescendantCount > 0 && pendingKind === 'row' ) {
 		pendingDeleteMessage = sprintf(
@@ -449,10 +498,15 @@ export default function SidebarTrash( {
 						const isSelected = selectedId === document.id;
 						const error =
 							rowError?.id === document.id ? rowError : null;
-						const descendantCount =
-							descendantCountById.get( document.id ) ?? 0;
-						const meta = descendantCount
-							? descendantLabel( kind, descendantCount )
+						const descendantCounts = descendantCountById.get(
+							document.id
+						) ?? {
+							pages: 0,
+							collections: 0,
+							total: 0,
+						};
+						const meta = descendantCounts.total
+							? descendantLabel( kind, descendantCounts )
 							: '';
 						const collectionTitle =
 							kind === 'row'

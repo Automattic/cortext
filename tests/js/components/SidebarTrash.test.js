@@ -544,6 +544,50 @@ describe( 'SidebarTrash', () => {
 		).toHaveTextContent( '2 subpages' );
 	} );
 
+	it( 'shows a collection count when a trashed page owns only inline collections', () => {
+		const root = makePage( {
+			id: 1,
+			title: { rendered: 'Quarterly review', raw: 'Quarterly review' },
+		} );
+		const inline = makeCollection( {
+			id: 2,
+			title: { rendered: 'Action items', raw: 'Action items' },
+			meta: { _cortext_trashed_by_owner_page: 1 },
+		} );
+
+		setTrashRecords( { records: [ root, inline ] } );
+
+		const { container } = renderSidebarTrash();
+
+		expect(
+			container.querySelector( '.cortext-sidebar__breadcrumb' )
+		).toHaveTextContent( '1 collection' );
+	} );
+
+	it( 'falls back to nested items when a trashed page mixes subpages and inline collections', () => {
+		const root = makePage( {
+			id: 1,
+			title: { rendered: 'Quarterly review', raw: 'Quarterly review' },
+		} );
+		const subpage = makePage( {
+			id: 2,
+			parent: 1,
+			meta: { _cortext_trashed_by_parent: 1 },
+		} );
+		const inline = makeCollection( {
+			id: 3,
+			meta: { _cortext_trashed_by_owner_page: 1 },
+		} );
+
+		setTrashRecords( { records: [ root, subpage, inline ] } );
+
+		const { container } = renderSidebarTrash();
+
+		expect(
+			container.querySelector( '.cortext-sidebar__breadcrumb' )
+		).toHaveTextContent( '2 nested items' );
+	} );
+
 	it( 'promotes orphaned descendants (stale marker) back to roots', () => {
 		// Marker points at a parent no longer in Trash. It may have been
 		// permanently deleted by an older build or a different path; either
@@ -713,6 +757,36 @@ describe( 'SidebarTrash', () => {
 		expect(
 			screen.getByText(
 				"Permanently delete this page and 1 subpage? You can't undo this."
+			)
+		).toBeInTheDocument();
+	} );
+
+	it( 'falls back to nested items in the confirm when subpages and inline collections mix', () => {
+		const root = makePage( {
+			id: 1,
+			title: { rendered: 'Workspace', raw: 'Workspace' },
+		} );
+		const subpage = makePage( {
+			id: 2,
+			parent: 1,
+			meta: { _cortext_trashed_by_parent: 1 },
+		} );
+		const inline = makeCollection( {
+			id: 3,
+			meta: { _cortext_trashed_by_owner_page: 1 },
+		} );
+
+		setTrashRecords( { records: [ root, subpage, inline ] } );
+
+		renderSidebarTrash();
+
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Delete permanently' } )
+		);
+
+		expect(
+			screen.getByText(
+				"Permanently delete this page and 2 nested items? You can't undo this."
 			)
 		).toBeInTheDocument();
 	} );
