@@ -661,7 +661,7 @@ body.cortext-fullscreen {
 		justify-content: center;
 		width: $grid-unit-30;
 		height: $grid-unit-30;
-		color: var(--cortext-text-muted);
+		color: var(--cortext-text);
 	}
 
 	&__icon.components-button {
@@ -1968,13 +1968,6 @@ body:has(.cortext-canvas__identity-actions:hover) .cortext-canvas__identity-acti
 .dataviews-view-table {
 	table-layout: fixed;
 	width: max-content;
-	// Mirror DataViews' inter-row separator under the last row, so the
-	// table has a clean visual end before the "+ New" footer button.
-	// Putting the border on the table (rather than the wrapper or the
-	// footer) keeps it pinned to the table's content width — narrower
-	// than the wrapper when columns fit, scrolling with the rest when
-	// they don't.
-	border-bottom: $border-width solid $gray-200;
 }
 
 .dataviews-view-table th,
@@ -5045,11 +5038,18 @@ thead > tr > th {
 // regardless of the chosen palette color or the surrounding text color
 // (which matters in dark mode). Forcing `currentcolor` on our own
 // component covers both the colored WP-icon variant and the fallback
-// page glyph in every surface.
-/* stylelint-disable-next-line no-descending-specificity */
-.cortext-document-icon svg {
+// page glyph in every surface. The sidebar's collection/recent/favorite
+// icon spans hit the same problem whenever they render a raw `<Icon>`
+// (collection glyphs, the row/table fallbacks in recents), so they share
+// this rule too.
+/* stylelint-disable no-descending-specificity */
+.cortext-document-icon svg,
+.cortext-sidebar__icon svg,
+.cortext-sidebar__favorite-icon svg,
+.cortext-sidebar__recent-icon svg {
 	fill: currentcolor;
 }
+/* stylelint-enable no-descending-specificity */
 
 // Hide the block kebab (more options) while a Cortext header block is
 // selected. The body class is toggled by HideHeaderBlockKebab in
