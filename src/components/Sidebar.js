@@ -368,6 +368,11 @@ export default function Sidebar( {
 	// tech-debt.md#53: collections with a loaded page parent appear under that
 	// page. Collections with no loaded page parent stay in the Collections
 	// section for now, including row-owned collections.
+	//
+	// Top-level collections are sorted explicitly. Without this, `useEntityRecords`
+	// returns them in whatever order core-data emits, which can shift after a
+	// `saveEntityRecord` update (rename) and reorder the sidebar list. Nested
+	// collections inherit the same menu_order/id sort through `buildTree`.
 	const { nestedCollections, topLevelCollections } = useMemo( () => {
 		const pageIds = new Set( pages.map( ( p ) => p.id ) );
 		const nested = [];
@@ -379,6 +384,14 @@ export default function Sidebar( {
 			} else {
 				topLevel.push( collection );
 			}
+		} );
+		topLevel.sort( ( a, b ) => {
+			const ao = a.menu_order || 0;
+			const bo = b.menu_order || 0;
+			if ( ao !== bo ) {
+				return ao - bo;
+			}
+			return a.id - b.id;
 		} );
 		return { nestedCollections: nested, topLevelCollections: topLevel };
 	}, [ pages, collections ] );
