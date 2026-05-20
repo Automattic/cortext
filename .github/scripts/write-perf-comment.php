@@ -29,15 +29,21 @@ require_once __DIR__ . '/perf-ui-scenario-labels.php';
 
 $args = parse_args( $argv );
 
-$bench_current = $args['bench-current'] ?? '';
-$bench_base    = $args['bench-base'] ?? '';
-$ui_current    = $args['ui-current'] ?? '';
-$ui_base       = $args['ui-base'] ?? '';
-$base_label    = $args['base-label'] ?? 'base';
-$run_url       = $args['run-url'] ?? '';
+$bench_current      = $args['bench-current'] ?? '';
+$bench_base         = $args['bench-base'] ?? '';
+$ui_current         = $args['ui-current'] ?? '';
+$ui_base            = $args['ui-base'] ?? '';
+$base_label         = $args['base-label'] ?? 'base';
+$run_url            = $args['run-url'] ?? '';
+$exit_on_regression = isset( $args['exit-on-regression'] );
 
+$result = build_comment( $bench_current, $bench_base, $ui_current, $ui_base, $base_label, $run_url );
 // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- CLI markdown output for GitHub PR comments stays unescaped.
-echo build_comment( $bench_current, $bench_base, $ui_current, $ui_base, $base_label, $run_url );
+echo $result['comment'];
+
+if ( $exit_on_regression && $result['has_regression'] ) {
+	exit( 1 );
+}
 
 /**
  * @param array<int,string> $argv
@@ -59,7 +65,10 @@ function parse_args( array $argv ): array {
 	return $args;
 }
 
-function build_comment( string $bench_current_path, string $bench_base_path, string $ui_current_path, string $ui_base_path, string $base_label, string $run_url ): string {
+/**
+ * @return array{comment:string,has_regression:bool}
+ */
+function build_comment( string $bench_current_path, string $bench_base_path, string $ui_current_path, string $ui_base_path, string $base_label, string $run_url ): array {
 	$rows               = array();
 	$missing_baselines  = array();
 
@@ -122,7 +131,29 @@ function build_comment( string $bench_current_path, string $bench_base_path, str
 		$lines[] = '_Full numbers in the [job summary](' . $run_url . ')._';
 	}
 
-	return implode( "\n", $lines ) . "\n";
+	return array(
+		'comment'        => implode( "\n", $lines ) . "\n",
+		'has_regression' => rows_have_regression( $rows ),
+	);
+}
+
+/**
+ * Returns true if any row has a positive (regression) delta in workload or
+ * timing. Improvements (delta with `-` prefix) don't count, so the workflow
+ * doesn't fail on a -20% timing or a -2 SQL queries change.
+ *
+ * @param array<int,array{label:string,workload:string,timing:string}> $rows
+ */
+function rows_have_regression( array $rows ): bool {
+	foreach ( $rows as $row ) {
+		if ( 1 === preg_match( '/\+\d/', $row['workload'] ) ) {
+			return true;
+		}
+		if ( 1 === preg_match( '/\+\d/', $row['timing'] ) ) {
+			return true;
+		}
+	}
+	return false;
 }
 
 function build_headline( int $workload_scenarios, int $timing_scenarios ): string {
