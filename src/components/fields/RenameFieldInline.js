@@ -1,17 +1,15 @@
 import { __ } from '@wordpress/i18n';
 import { TextControl } from '@wordpress/components';
-import { useEntityRecord } from '@wordpress/core-data';
 import { useEffect, useRef, useState } from '@wordpress/element';
 
 import { useRenameField } from '../../hooks/useFieldMutations';
+import { useMappedField } from '../CollectionFieldsContext';
 
-// Inline rename affordance. Shown in place of the column header label
-// while the user edits; commits on Enter or blur. Reads the current title
-// from core-data so the input starts with the existing value, and reverts
-// (closes without saving) on Escape.
+// Inline rename control for a column header. It starts from the collection's
+// mapped field data, so opening rename does not refetch the field record.
 export default function RenameFieldInline( { recordId, onDone } ) {
-	const { record } = useEntityRecord( 'postType', 'crtxt_field', recordId );
-	const initialTitle = record?.title?.raw ?? record?.title?.rendered ?? '';
+	const mappedField = useMappedField( recordId );
+	const initialTitle = mappedField?.label ?? '';
 	const [ value, setValue ] = useState( initialTitle );
 	const inputRef = useRef( null );
 	const { run, isBusy } = useRenameField();

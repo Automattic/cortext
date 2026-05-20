@@ -8,6 +8,7 @@ import {
 	POST_TYPE as PAGE_POST_TYPE,
 } from '../components/page-queries';
 import { COLLECTION_QUERY } from '../collections';
+import usePooledEntityRecord from './usePooledEntityRecord';
 import {
 	computeCollectionUri,
 	computeDocumentUri,
@@ -29,8 +30,8 @@ function titleOf( entity ) {
 
 // Returns the breadcrumb segments for the currently painted surface. Driven by
 // `paintedRoute` (from EntityRoute) rather than the URL so the breadcrumb
-// updates in lockstep with the document-actions Fill — both sides of the top
-// bar describe the same entity even mid-navigation.
+// updates in lockstep with the document-actions Fill. During navigation, both
+// sides of the top bar should still describe the same entity.
 //
 // Document targets carry a `postType`. Pages (`crtxt_page`) contribute the
 // natural ancestor chain; rows (dynamic `crtxt_<slug>`) contribute their
@@ -52,27 +53,40 @@ export default function useBreadcrumbSegments( paintedRoute ) {
 		collectionId = paintedRoute.collectionId ?? null;
 	}
 
-	const { records: pages } = useEntityRecords(
+	// Page breadcrumbs climb the parent chain, so they need the full active
+	// pages query. The local Map keeps each parent lookup constant-time
+	// instead of scanning the array per hop.
+	const { records: activePages } = useEntityRecords(
 		'postType',
 		PAGE_POST_TYPE,
 		ACTIVE_PAGES_QUERY
 	);
-	const { records: collections } = useEntityRecords(
-		'postType',
-		COLLECTION_POST_TYPE,
-		COLLECTION_QUERY
+	const pagesById = useMemo(
+		() =>
+			new Map(
+				( activePages ?? [] ).map( ( page ) => [ page.id, page ] )
+			),
+		[ activePages ]
 	);
 
-	const { record: currentPage } = useEntityRecord(
+	// The sidebar and collection picker already subscribe to these two
+	// queries, so reading through `usePooledEntityRecord` piggybacks on
+	// those subscriptions instead of firing a per-id resolver.
+	const { record: currentPage } = usePooledEntityRecord(
 		'postType',
 		PAGE_POST_TYPE,
-		pageId ?? 0
+		ACTIVE_PAGES_QUERY,
+		pageId
 	);
-	const { record: currentCollection } = useEntityRecord(
+	const { record: currentCollection } = usePooledEntityRecord(
 		'postType',
 		COLLECTION_POST_TYPE,
-		collectionId ?? 0
+		COLLECTION_QUERY,
+		collectionId
 	);
+
+	// Rows are behind per-collection endpoints, so the row title still needs
+	// its own fetch.
 	const { record: currentRow } = useEntityRecord(
 		'postType',
 		rowPostType ?? '',
@@ -102,21 +116,12 @@ export default function useBreadcrumbSegments( paintedRoute ) {
 
 	return useMemo( () => {
 		if ( pageId ) {
-			const pagesById = new Map(
-				( pages ?? [] ).map( ( p ) => [ p.id, p ] )
-			);
-			const head =
-				pagesById.get( pageId ) ??
-				( currentPage?.id === pageId ? currentPage : null );
-			if ( ! head ) {
+			if ( ! currentPage ) {
 				return [];
-			}
-			if ( ! pagesById.has( pageId ) ) {
-				pagesById.set( head.id, head );
 			}
 
 			const chain = [];
-			let cursor = head;
+			let cursor = currentPage;
 			const seen = new Set();
 			while ( cursor && ! seen.has( cursor.id ) ) {
 				seen.add( cursor.id );
@@ -138,23 +143,15 @@ export default function useBreadcrumbSegments( paintedRoute ) {
 		}
 
 		if ( collectionId ) {
-			const fromList = ( collections ?? [] ).find(
-				( c ) => c.id === collectionId
-			);
-			const collection =
-				fromList ??
-				( currentCollection?.id === collectionId
-					? currentCollection
-					: null );
-			if ( ! collection ) {
+			if ( ! currentCollection ) {
 				return [];
 			}
 			if ( rowId ) {
 				return [
 					{
-						key: `collection:${ collection.id }`,
-						label: titleOf( collection ),
-						onClick: () => goToCollection( collection ),
+						key: `collection:${ currentCollection.id }`,
+						label: titleOf( currentCollection ),
+						onClick: () => goToCollection( currentCollection ),
 						isCurrent: false,
 					},
 					{
@@ -167,8 +164,8 @@ export default function useBreadcrumbSegments( paintedRoute ) {
 			}
 			return [
 				{
-					key: `collection:${ collection.id }`,
-					label: titleOf( collection ),
+					key: `collection:${ currentCollection.id }`,
+					label: titleOf( currentCollection ),
 					onClick: null,
 					isCurrent: true,
 				},
@@ -181,8 +178,7 @@ export default function useBreadcrumbSegments( paintedRoute ) {
 		collectionId,
 		rowId,
 		rowPostType,
-		pages,
-		collections,
+		pagesById,
 		currentPage,
 		currentCollection,
 		currentRow,

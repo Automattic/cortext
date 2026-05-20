@@ -108,9 +108,20 @@ jest.mock( '../../../../src/hooks/useFieldMutations', () => ( {
 	useDuplicateField: () => ( { run: jest.fn() } ),
 } ) );
 
-jest.mock( '../../../../src/components/CollectionFieldsContext', () => ( {
-	useCollectionFieldsContext: jest.fn(),
-} ) );
+jest.mock( '../../../../src/components/CollectionFieldsContext', () => {
+	const useCollectionFieldsContext = jest.fn();
+	return {
+		useCollectionFieldsContext,
+		// Mirrors the real hook: look up a record id in the bulk-loaded fields
+		// the provider exposes. Tests configure the field list via
+		// `useCollectionFieldsContext.mockReturnValue` and this helper resolves
+		// from the same data.
+		useMappedField: ( recordId ) => {
+			const { fields = [] } = useCollectionFieldsContext() ?? {};
+			return fields.find( ( f ) => f.recordId === recordId ) ?? null;
+		},
+	};
+} );
 
 jest.mock( '../../../../src/components/fields/AddFieldPopover', () => ( {
 	__esModule: true,
