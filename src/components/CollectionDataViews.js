@@ -574,6 +574,11 @@ export default function CollectionDataViews( {
 	const showFieldsLoading = useDelayedFlag( isResolving );
 
 	const tableWrapperRef = useRef( null );
+	// Measure DataViews' real header to size the rows-skeleton overlay. The
+	// CSS fallback is 56px; once we have a real number we hand it back to
+	// the SCSS rule via an inline CSS variable on the shell. ResizeObserver
+	// catches the filters bar collapsing/expanding without a re-render.
+	const [ measuredHeaderHeight, setMeasuredHeaderHeight ] = useState( null );
 	const [ localRevealFieldId, setLocalRevealFieldId ] = useState( null );
 	const pendingRevealFieldId = revealFieldId ?? localRevealFieldId;
 	const requestRevealCreatedField = useCallback( ( created ) => {
@@ -1463,6 +1468,65 @@ export default function CollectionDataViews( {
 		return () => node.removeEventListener( 'mousedown', onMouseDown, true );
 	}, [ isResolving, rowsResolved, rowError ] );
 
+	useLayoutEffect( () => {
+		const wrapper = tableWrapperRef.current;
+		if ( ! wrapper || isResolving ) {
+			return undefined;
+		}
+		let cancelled = false;
+		let observer = null;
+		// Skeleton overlay needs to start where `tbody` does, not where the
+		// column headers do: the chrome above `tbody` also includes the
+		// search bar, view actions, and (when expanded) the filters strip.
+		// Measuring tbody position relative to the data-view shell covers
+		// everything above it in one shot.
+		const update = () => {
+			if ( cancelled ) {
+				return;
+			}
+			const tbody = wrapper.querySelector(
+				'.dataviews-view-table tbody'
+			);
+			if ( ! tbody ) {
+				return;
+			}
+			const wrapperTop = wrapper.getBoundingClientRect().top;
+			const tbodyTop = tbody.getBoundingClientRect().top;
+			const offset = tbodyTop - wrapperTop;
+			if ( offset > 0 ) {
+				setMeasuredHeaderHeight( Math.round( offset ) );
+			}
+		};
+		const attach = () => {
+			if ( cancelled ) {
+				return;
+			}
+			const tbody = wrapper.querySelector(
+				'.dataviews-view-table tbody'
+			);
+			if ( ! tbody ) {
+				// tbody can mount a frame later than this effect; retry.
+				window.requestAnimationFrame( attach );
+				return;
+			}
+			update();
+			if ( typeof window.ResizeObserver === 'function' ) {
+				observer = new window.ResizeObserver( update );
+				// Observing the wrapper catches both header chrome resizes
+				// (filters strip opening, view actions changing) and tbody
+				// movement.
+				observer.observe( wrapper );
+			}
+		};
+		attach();
+		return () => {
+			cancelled = true;
+			if ( observer ) {
+				observer.disconnect();
+			}
+		};
+	}, [ isResolving, isTableLayout ] );
+
 	if ( isResolving ) {
 		return showFieldsLoading ? loading : null;
 	}
@@ -1533,6 +1597,13 @@ export default function CollectionDataViews( {
 							onClickCapture={ captureSelectionIntent }
 							data-rows-loading={
 								isRowsLoadingShell ? 'true' : undefined
+							}
+							style={
+								measuredHeaderHeight
+									? {
+											'--cortext-data-view-header-height': `${ measuredHeaderHeight }px`,
+									  }
+									: undefined
 							}
 						>
 							{ rowActionError && (
