@@ -1067,6 +1067,16 @@ body.cortext-sidebar-resizing {
 	background: var(--cortext-canvas-frame-surface-root, #fff);
 }
 
+// The topbar is excluded from the canvas snapshot above, so its own pseudos
+// would otherwise still cross-fade in place. Snapshots are identical
+// before/after the swap, so silencing the animation makes the named transition
+// invisible.
+::view-transition-group(cortext-topbar),
+::view-transition-old(cortext-topbar),
+::view-transition-new(cortext-topbar) {
+	animation: none !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
 
 	::view-transition-group(cortext-canvas),
@@ -1141,6 +1151,11 @@ body.cortext-sidebar-resizing {
 	color: var(--cortext-text);
 	border-bottom: var(--cortext-shell-border-width) solid var(--cortext-chrome-border);
 	min-height: 0;
+	// Pull the topbar out of the canvas cross-fade so the backdrop the
+	// group paints during the swap doesn't wash its warm surface to grey.
+	// The snapshots are identical before/after, so the named transition
+	// stays invisible.
+	view-transition-name: cortext-topbar;
 
 	&__lead {
 		flex: 1 1 auto;
