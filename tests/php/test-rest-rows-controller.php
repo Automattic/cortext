@@ -870,6 +870,64 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertSame( 30.0, $restored['meta']["field-{$sum_id}"] );
 	}
 
+	public function test_format_row_with_context_matches_fallback_for_relations_and_rollups(): void {
+		$projects_id = $this->create_collection_with_slug( 'Projects', 'projectseq' );
+		$invoices_id = $this->create_collection_with_slug( 'Invoices', 'invoiceseq' );
+
+		$relation  = $this->create_relation_pair( $projects_id, $invoices_id );
+		$amount_id = $this->create_collection_field( $invoices_id, 'Amount', 'number' );
+		$count_id  = $this->create_rollup_field( $projects_id, 'Invoice count', $relation['source_id'], 0, 'count' );
+		$sum_id    = $this->create_rollup_field( $projects_id, 'Total', $relation['source_id'], $amount_id, 'sum' );
+
+		$project_id = $this->create_entry( 'crtxt_projectseq', 'Liberation' );
+		$invoice_a  = $this->create_entry( 'crtxt_invoiceseq', 'Invoice A' );
+		$invoice_b  = $this->create_entry( 'crtxt_invoiceseq', 'Invoice B' );
+		update_post_meta( $invoice_a, "field-{$amount_id}", '10' );
+		update_post_meta( $invoice_b, "field-{$amount_id}", '5' );
+		Relations::sync_relation_value( $project_id, $relation['source_id'], array( $invoice_a, $invoice_b ) );
+
+		$field_ids = array( $relation['source_id'], $count_id, $sum_id );
+
+		// Fallback path used by single-row responses.
+		$fallback_row = $this->invoke_format_row_with_fields( $project_id, $field_ids );
+
+		// Context path used by `/rows`.
+		$controller = new RowsController();
+		$ctx = new \Cortext\Rest\RowFormatContext();
+		$types_map = new \ReflectionMethod( $controller, 'field_types_map' );
+		$types_map->setAccessible( true );
+		$ctx->field_types = $types_map->invoke( $controller, $field_ids );
+
+		$multi_from = new \ReflectionMethod( $controller, 'multi_value_field_ids_from' );
+		$multi_from->setAccessible( true );
+		$multi_field_ids = $multi_from->invoke( $controller, $ctx->field_types );
+
+		$format = new \ReflectionMethod( $controller, 'format_row' );
+		$format->setAccessible( true );
+		$cached_row = $format->invoke(
+			$controller,
+			get_post( $project_id ),
+			$field_ids,
+			$multi_field_ids,
+			$ctx
+		);
+
+		$this->assertSame( 2, $cached_row['meta']["field-{$count_id}"] );
+		$this->assertSame( 15.0, $cached_row['meta']["field-{$sum_id}"] );
+		$this->assertSame( $fallback_row['meta'], $cached_row['meta'] );
+		$this->assertSame( $fallback_row['title'], $cached_row['title'] );
+
+		// Reuse the context once to catch accidental mutation during formatting.
+		$cached_again = $format->invoke(
+			$controller,
+			get_post( $project_id ),
+			$field_ids,
+			$multi_field_ids,
+			$ctx
+		);
+		$this->assertSame( $cached_row['meta'], $cached_again['meta'] );
+	}
+
 	// -- System field tests ---------------------------------------------
 
 	public function test_format_row_includes_system_fields(): void {
