@@ -1598,13 +1598,30 @@ export default function CollectionDataViews( {
 							data-rows-loading={
 								isRowsLoadingShell ? 'true' : undefined
 							}
-							style={
-								measuredHeaderHeight
-									? {
-											'--cortext-data-view-header-height': `${ measuredHeaderHeight }px`,
-									  }
-									: undefined
-							}
+							style={ ( () => {
+								const styles = {};
+								if ( measuredHeaderHeight ) {
+									styles[
+										'--cortext-data-view-header-height'
+									] = `${ measuredHeaderHeight }px`;
+								}
+								if ( isRowsLoadingShell ) {
+									// Keep the wrapper at skeleton height so
+									// the rows-skeleton overlay doesn't clip
+									// when DataViews mounts with an empty
+									// tbody. Capped at 15 to match the
+									// skeleton row cap.
+									styles[
+										'--cortext-data-view-loading-rows'
+									] = Math.max(
+										1,
+										Math.min( view?.perPage ?? 8, 15 )
+									);
+								}
+								return Object.keys( styles ).length > 0
+									? styles
+									: undefined;
+							} )() }
 						>
 							{ rowActionError && (
 								<Notice

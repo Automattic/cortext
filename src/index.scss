@@ -4386,6 +4386,15 @@ body.cortext-row-detail-sidebar-resizing {
 		pointer-events: none;
 	}
 
+	// Hold the table area at skeleton height while the first page loads.
+	// Without this DataViews mounts with an empty tbody and the wrapper
+	// collapses to the chrome height (~100px), which clips the absolute
+	// overlay to the first few rows and shifts everything below the table
+	// upward.
+	&[data-rows-loading="true"] {
+		min-height: calc(var(--cortext-data-view-header-height, 56px) + var(--cortext-data-view-loading-rows, 8) * var(--cortext-data-view-row-height-compact, 40px));
+	}
+
 	// Let the wrapper grow to fill whatever height the parent provides, so
 	// our footer sits below the table instead of getting pushed off by the
 	// wrapper's own `height: 100%`. Parents own the height per-context: the
