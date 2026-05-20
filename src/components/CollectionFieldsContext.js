@@ -14,11 +14,31 @@ const CollectionFieldsContext = createContext( null );
 export function CollectionFieldsProvider( { collectionId, children } ) {
 	const { fields, collection, slug, isResolving, fieldsResolved } =
 		useCollectionFields( collectionId );
+	// Index fields by record id once per update so `useMappedField` resolves
+	// in constant time regardless of column count.
+	const fieldsByRecordId = useMemo(
+		() => new Map( ( fields ?? [] ).map( ( f ) => [ f.recordId, f ] ) ),
+		[ fields ]
+	);
 	// `useCollectionFields` returns a fresh object each render. Memoize the
 	// context value so consumers do not re-render when the pieces are unchanged.
 	const value = useMemo(
-		() => ( { fields, collection, slug, isResolving, fieldsResolved } ),
-		[ fields, collection, slug, isResolving, fieldsResolved ]
+		() => ( {
+			fields,
+			fieldsByRecordId,
+			collection,
+			slug,
+			isResolving,
+			fieldsResolved,
+		} ),
+		[
+			fields,
+			fieldsByRecordId,
+			collection,
+			slug,
+			isResolving,
+			fieldsResolved,
+		]
 	);
 	return (
 		<CollectionFieldsContext.Provider value={ value }>
@@ -40,9 +60,6 @@ export function useCollectionFieldsContext() {
 // Returns the mapped field for a crtxt_field record id, or null when that
 // field is not part of the active collection.
 export function useMappedField( recordId ) {
-	const { fields } = useCollectionFieldsContext();
-	return useMemo(
-		() => fields.find( ( f ) => f.recordId === recordId ) ?? null,
-		[ fields, recordId ]
-	);
+	const { fieldsByRecordId } = useCollectionFieldsContext();
+	return fieldsByRecordId.get( recordId ) ?? null;
 }
