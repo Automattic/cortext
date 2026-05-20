@@ -53,9 +53,9 @@ export default function useBreadcrumbSegments( paintedRoute ) {
 		collectionId = paintedRoute.collectionId ?? null;
 	}
 
-	// Page breadcrumbs climb the parent chain, so they need the whole active
-	// pages query. Building the parents map locally keeps the lookup-by-id
-	// cost flat over the depth of the chain.
+	// Page breadcrumbs climb the parent chain, so they need the full active
+	// pages query. The local Map keeps each parent lookup constant-time
+	// instead of scanning the array per hop.
 	const { records: activePages } = useEntityRecords(
 		'postType',
 		PAGE_POST_TYPE,
@@ -69,10 +69,9 @@ export default function useBreadcrumbSegments( paintedRoute ) {
 		[ activePages ]
 	);
 
-	// Current page and current collection share core-data's queried-data
-	// cache with their sibling surfaces (sidebar, collection picker), so
-	// these calls reuse those subscriptions without firing per-id resolvers
-	// while the id is part of the query.
+	// The sidebar and collection picker already subscribe to these two
+	// queries, so reading through `usePooledEntityRecord` piggybacks on
+	// those subscriptions instead of firing a per-id resolver.
 	const { record: currentPage } = usePooledEntityRecord(
 		'postType',
 		PAGE_POST_TYPE,

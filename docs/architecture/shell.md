@@ -21,17 +21,17 @@ The sidebar handles page navigation and nesting. Autosave is split between a cli
 
 ## Data fetching: reuse queried records by id
 
-The shell already keeps a few queries warm: active pages and collections from the sidebar, plus the open collection's fields from `CollectionFieldsProvider`. When a component needs a single record that one of those queries already covers, it should read it through the shared query instead of calling `useEntityRecord` by id.
+Several surfaces already keep running queries: the sidebar fetches active pages and collections, and `CollectionFieldsProvider` fetches the open collection's fields. When another component needs one of those records by id, it should reuse the query rather than call `useEntityRecord` on its own.
 
-WordPress core-data tracks per-id and queried resolvers separately ([gutenberg#19153](https://github.com/WordPress/gutenberg/issues/19153)), so a per-id read can still hit the network even when the record is already in the queried-data cache. The duplicate request grows with surfaces that render one cell per record, like a wide column header.
+WordPress core-data tracks per-id and queried resolvers as different things ([gutenberg#19153](https://github.com/WordPress/gutenberg/issues/19153)). A per-id read can still hit the network even when the record sits in the queried-data cache, and that duplicate scales with the number of cells the UI renders.
 
-Current helpers:
+Three helpers cover it:
 
-- `usePooledEntityRecord( kind, name, query, id )` in `src/hooks/usePooledEntityRecord.js` returns `{ hasResolved, record }`. It reads the record from the queried-data cache when the id is part of `query`, and only falls back to a targeted `useEntityRecord` once the query has resolved without that id.
+- `usePooledEntityRecord( kind, name, query, id )` in `src/hooks/usePooledEntityRecord.js` returns `{ hasResolved, record }`. It reads from the queried-data cache and only falls back to `useEntityRecord` once the query has resolved without that id.
 - `useMappedField( recordId )` in `src/components/CollectionFieldsContext.js` returns the parsed field record from the active collection's query.
-- Use `useEntityRecord` directly for entities no query covers (rows inside a collection, media attachments) and for write paths (`editEntityRecord` / `saveEditedEntityRecord` still go through core-data).
+- `useEntityRecord` is still the right call for entities outside any active query (rows inside a collection, media attachments) and for writes.
 
-Queries stop at `per_page: 100`, so a record opened from a direct URL or a recent item can fall outside the list. The fallback inside `usePooledEntityRecord` covers that case without firing during the common path.
+Queries cap at `per_page: 100`. A record opened by direct URL or recent-item link can sit outside that window; the fallback inside `usePooledEntityRecord` covers it without firing on the common path.
 
 ## Current scope
 

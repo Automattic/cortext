@@ -1,19 +1,13 @@
 /**
- * Reads a single entity record by id, preferring an existing queried record
- * over a per-id resolver request.
+ * Reads one entity record by id. If the id is part of a query the shell
+ * already runs, the record comes from that shared subscription. If not,
+ * the hook only fetches it once the query has resolved without it.
  *
- * Many shell surfaces already subscribe to a queried list of records (active
- * pages, collections, etc.). When another component needs one record from
- * that same query, `useEntityRecord` would still fire its own request
- * because the per-id resolver tracks resolution separately from the queried
- * selector (gutenberg#19153). This hook hands back the record from the
- * shared query when possible, and only falls back to a targeted
- * `useEntityRecord` once the query has resolved without that id, so the
- * common path stays fetch-free.
- *
- * The `query` argument should be the same object identity used by the
- * sibling surfaces that own the queried subscription, so core-data
- * collapses the underlying network request.
+ * Why: core-data's per-id and queried resolvers track resolution separately
+ * (gutenberg#19153), so calling `useEntityRecord` for a record already in a
+ * queried response still fires another request. Routing single-record reads
+ * through this hook avoids that as long as the same `query` identity reaches
+ * sibling subscribers.
  */
 
 import { useEntityRecord, useEntityRecords } from '@wordpress/core-data';
