@@ -1094,7 +1094,7 @@ body.cortext-sidebar-resizing {
 }
 
 .cortext-workspace[data-target-kind="collection"] {
-	background: $white;
+	background: var(--cortext-canvas-surface);
 }
 
 .cortext-workspace__pane {
@@ -1119,7 +1119,7 @@ body.cortext-sidebar-resizing {
 
 .cortext-workspace[data-target-kind="collection"]
 .cortext-workspace__pane[data-active="true"] {
-	background: $white;
+	background: var(--cortext-canvas-surface);
 }
 
 .cortext-collection-pane {
@@ -1127,7 +1127,7 @@ body.cortext-sidebar-resizing {
 	display: flex;
 	height: 100%;
 	min-height: 0;
-	background: $white;
+	background: var(--cortext-canvas-surface);
 }
 
 .cortext-topbar {
@@ -1472,12 +1472,6 @@ body.cortext-sidebar-resizing {
 	}
 
 	&__table {
-		--cortext-canvas-frame-surface: #{$white};
-		--cortext-chrome-border: #{$gray-200};
-		--cortext-state-hover-strong: rgba(0, 0, 0, 0.09);
-		--cortext-text: #{$gray-900};
-		--cortext-text-muted: #{$gray-700};
-
 		// DataViews' `.dataviews-wrapper` is `height: 100%`, so the wrapper
 		// must have an explicit height or it falls back to 0 + internal
 		// scroll. Fill the canvas column: DataViews already owns the internal
@@ -4046,7 +4040,7 @@ tr:has(.cortext-title-cell--is-opening)
 		gap: $grid-unit-30;
 		padding: 0 $grid-unit-20;
 		height: $grid-unit-50 + 2 * $grid-unit-15; // 64 (balanced default)
-		border-bottom: $border-width solid var(--cortext-chrome-border, #e0e0e0);
+		border-bottom: $border-width solid var(--cortext-canvas-border, #e0e0e0);
 	}
 
 	&--compact &__row {
@@ -4371,7 +4365,7 @@ body.cortext-row-detail-sidebar-resizing {
 		inset: 56px 0 0 0;
 		z-index: 1;
 		overflow: hidden;
-		background: $white;
+		background: var(--cortext-canvas-surface);
 		pointer-events: none;
 	}
 
@@ -4588,8 +4582,6 @@ body.cortext-row-detail-sidebar-resizing {
 
 .cortext-canvas__table .cortext-data-view-shell,
 .cortext-canvas__table .cortext-data-view {
-	background: $white;
-	color: var(--cortext-text);
 	height: 100%;
 }
 
@@ -5653,26 +5645,3 @@ body.cortext-hide-block-settings-menu .block-editor-block-switcher {
 	animation: none;
 	opacity: 1;
 }
-
-/* stylelint-disable no-descending-specificity */
-.cortext-canvas__table .cortext-data-view {
-
-	> .dataviews-wrapper,
-	.dataviews__view-actions,
-	.dataviews-filters__container,
-	.dataviews-view-table,
-	.dataviews-view-table thead,
-	.dataviews-view-table thead tr,
-	.dataviews-view-table thead th {
-		background: $white;
-		background-color: $white;
-		color: var(--cortext-text, #1e1e1e);
-	}
-
-	.dataviews-view-table th,
-	.dataviews-view-table td {
-		border-color: $gray-200;
-		color: var(--cortext-text, #1e1e1e);
-	}
-}
-/* stylelint-enable no-descending-specificity */
