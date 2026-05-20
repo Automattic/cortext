@@ -333,6 +333,36 @@ final class Test_Rest_Collections_Controller extends BaseTestCase {
 		);
 	}
 
+	public function test_rejects_collection_parent_even_though_collections_are_documents(): void {
+		// Collections opt into the document trait now. Without an explicit
+		// guard, `validate_parent_document` would let this through and a
+		// user could nest a collection under another collection. Reject it.
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$parent_collection_response = $this->create_collection(
+			array(
+				'title' => 'Parent collection',
+				'mode'  => Collection::MODE_FULL_PAGE,
+			)
+		);
+		$this->assertSame( 201, $parent_collection_response->get_status() );
+		$parent_collection_id = (int) $parent_collection_response->get_data()['id'];
+
+		$response = $this->create_collection(
+			array(
+				'title'  => 'Child collection',
+				'mode'   => Collection::MODE_FULL_PAGE,
+				'parent' => $parent_collection_id,
+			)
+		);
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame(
+			'cortext_collection_parent_invalid_type',
+			$response->get_data()['code']
+		);
+	}
+
 	public function test_query_filter_for_full_page_matches_explicit_full_page_or_missing_meta(): void {
 		// Missing mode means `full_page`, so existing collections stay in the
 		// sidebar after the inline/full-page split. The OR clause covers that

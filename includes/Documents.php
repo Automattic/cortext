@@ -20,6 +20,7 @@ namespace Cortext;
 use Cortext\Fields\FieldTypeRegistry;
 use Cortext\PostType\Collection;
 use Cortext\PostType\CollectionEntries;
+use Cortext\PostType\CollectionTrashCascade;
 use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Page;
 use Cortext\PostType\PageTrashCascade;
@@ -29,8 +30,9 @@ use WP_Query;
 
 final class Documents {
 
-	public const KIND_PAGE = 'page';
-	public const KIND_ROW  = 'row';
+	public const KIND_PAGE       = 'page';
+	public const KIND_ROW        = 'row';
+	public const KIND_COLLECTION = 'collection';
 
 	public const STATUS_TRASH = 'trash';
 
@@ -268,11 +270,21 @@ final class Documents {
 			);
 		}
 
+		if ( self::KIND_COLLECTION === $kind ) {
+			return array_values(
+				array_filter(
+					$post_types,
+					static fn( string $post_type ): bool => Collection::POST_TYPE === $post_type
+				)
+			);
+		}
+
 		if ( self::KIND_ROW === $kind ) {
 			return array_values(
 				array_filter(
 					$post_types,
 					static fn( string $post_type ): bool => Page::POST_TYPE !== $post_type
+						&& Collection::POST_TYPE !== $post_type
 						&& str_starts_with( $post_type, CollectionEntries::CPT_PREFIX )
 				)
 			);
@@ -305,13 +317,24 @@ final class Documents {
 			return null;
 		}
 
+		// An inline collection's owner page is the breadcrumb users see in
+		// search and trash. Without it the collection feels like an unmoored
+		// row, since inline collections don't have a sidebar entry of their
+		// own.
+		$owner_page = null;
+		if ( self::KIND_COLLECTION === $kind && Collection::is_inline( (int) $post->ID ) ) {
+			$owner_id   = (int) get_post_meta( $post->ID, Collection::INLINE_OWNER_META_KEY, true );
+			$owner_post = $owner_id > 0 ? get_post( $owner_id ) : null;
+			if ( $owner_post instanceof WP_Post && Page::POST_TYPE === $owner_post->post_type ) {
+				$owner_page = $owner_post;
+			}
+		}
+
 		$document = array(
 			'kind'   => $kind,
 			'id'     => (int) $post->ID,
 			'title'  => $this->post_title( $post ),
-			'path'   => self::KIND_ROW === $kind
-				? $this->row_path( $post )
-				: $this->page_path( $post ),
+			'path'   => $this->document_path( $post, $kind ),
 			'parent' => (int) $post->post_parent,
 		);
 
@@ -320,7 +343,7 @@ final class Documents {
 		}
 
 		$icon = '';
-		if ( self::KIND_PAGE === $kind ) {
+		if ( self::KIND_PAGE === $kind || self::KIND_COLLECTION === $kind ) {
 			$icon = (string) get_post_meta( $post->ID, DocumentIdentity::META_KEY, true );
 			if ( '' !== $icon ) {
 				$document['icon'] = $icon;
@@ -335,15 +358,49 @@ final class Documents {
 			);
 		}
 
+		if ( $owner_page instanceof WP_Post ) {
+			$document['owner'] = array(
+				'id'    => (int) $owner_page->ID,
+				'title' => $this->post_title( $owner_page ),
+				'path'  => $this->page_path( $owner_page ),
+			);
+		}
+
 		if ( ! empty( $opts['include_trash_meta'] ) ) {
 			$document['modified_at'] = $this->format_gmt_date( $post->post_modified_gmt );
 			$document['meta']        = array(
 				'cortext_document_icon'    => $icon,
 				PageTrashCascade::META_KEY => (int) get_post_meta( $post->ID, PageTrashCascade::META_KEY, true ),
 			);
+			// Inline collections trashed alongside their owner page carry a
+			// separate marker. The sidebar uses it to nest them under the
+			// page's trash entry instead of listing them as siblings.
+			if ( self::KIND_COLLECTION === $kind ) {
+				$document['meta'][ CollectionTrashCascade::TRASHED_BY_OWNER_META_KEY ] = (int) get_post_meta(
+					$post->ID,
+					CollectionTrashCascade::TRASHED_BY_OWNER_META_KEY,
+					true
+				);
+			}
 		}
 
 		return $document;
+	}
+
+	/**
+	 * Routes a document to its URL path based on its kind.
+	 *
+	 * @param WP_Post $post Document post.
+	 * @param string  $kind Document kind constant.
+	 */
+	private function document_path( WP_Post $post, string $kind ): string {
+		if ( self::KIND_ROW === $kind ) {
+			return $this->row_path( $post );
+		}
+		if ( self::KIND_COLLECTION === $kind ) {
+			return $this->collection_path( $post );
+		}
+		return $this->page_path( $post );
 	}
 
 	private function format_gmt_date( string $mysql_gmt ): string {
@@ -360,12 +417,17 @@ final class Documents {
 	 */
 	public function kind_for_post_type( string $post_type ): ?string {
 		// Only post types that opt into the document trait count here. That
-		// keeps `crtxt_field` and `crtxt_collection` out of row handling.
+		// keeps `crtxt_field` out of document handling. `crtxt_collection`
+		// opts in too: collections are documents whose canvas is a DataView
+		// rather than block-editor content.
 		if ( ! post_type_supports( $post_type, 'cortext-document' ) ) {
 			return null;
 		}
 		if ( Page::POST_TYPE === $post_type ) {
 			return self::KIND_PAGE;
+		}
+		if ( Collection::POST_TYPE === $post_type ) {
+			return self::KIND_COLLECTION;
 		}
 		return self::KIND_ROW;
 	}

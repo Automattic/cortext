@@ -286,7 +286,14 @@ final class CollectionsController {
 			);
 		}
 
-		if ( null === $this->documents->kind_for_post_type( $parent->post_type ) ) {
+		// Collections are documents now, so `kind_for_post_type` alone would
+		// let a request nest a collection under another collection. Reject
+		// that explicitly: collections live under pages or rows, not under
+		// other collections.
+		if (
+			null === $this->documents->kind_for_post_type( $parent->post_type ) ||
+			Collection::POST_TYPE === $parent->post_type
+		) {
 			return new WP_Error(
 				'cortext_collection_parent_invalid_type',
 				__( 'Collections can only be placed under pages or rows.', 'cortext' ),

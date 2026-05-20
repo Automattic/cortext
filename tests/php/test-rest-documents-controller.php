@@ -11,6 +11,7 @@ namespace Cortext\Tests;
 
 use Cortext\PostType\Collection;
 use Cortext\PostType\CollectionEntries;
+use Cortext\PostType\CollectionTrashCascade;
 use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Field;
 use Cortext\PostType\Page;
@@ -171,6 +172,38 @@ final class Test_Rest_Documents_Controller extends BaseTestCase {
 		$this->assertSame( 'row', $row['kind'] );
 		$this->assertSame( $collection_id, $row['collection']['id'] );
 		$this->assertSame( 'Albums', $row['collection']['title'] );
+	}
+
+	public function test_status_trash_surfaces_owner_marker_on_inline_collections(): void {
+		// Without this marker in the response, the sidebar can't tell which
+		// inline collection was trashed by which page, so the inline entries
+		// would render as roots instead of nesting under their owner page.
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$owner_page = $this->create_page( array( 'post_title' => 'Owner' ) );
+		$inline_id  = (int) wp_insert_post(
+			array(
+				'post_type'   => Collection::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Action items',
+				'meta_input'  => array(
+					'slug'                                       => 'action-items',
+					Collection::MODE_META_KEY                    => Collection::MODE_INLINE,
+					Collection::INLINE_OWNER_META_KEY            => $owner_page,
+					CollectionTrashCascade::TRASHED_BY_OWNER_META_KEY => $owner_page,
+				),
+			)
+		);
+		wp_trash_post( $inline_id );
+
+		$response = $this->query( array( 'status' => 'trash' ) );
+
+		$by_id = array_column( $response->get_data()['documents'], null, 'id' );
+		$this->assertArrayHasKey( $inline_id, $by_id );
+		$this->assertSame(
+			$owner_page,
+			$by_id[ $inline_id ]['meta'][ CollectionTrashCascade::TRASHED_BY_OWNER_META_KEY ]
+		);
 	}
 
 	public function test_status_trash_excerpt_is_excluded(): void {

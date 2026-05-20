@@ -24,6 +24,7 @@ use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Field;
 use Cortext\PostType\Page;
 use Cortext\PostType\PageTrashCascade;
+use Cortext\PostType\RowTrashCascade;
 use Cortext\Rest\CollectionsController;
 use Cortext\Rest\DocumentLocatorController;
 use Cortext\Rest\DocumentsController;
@@ -52,6 +53,7 @@ final class Plugin {
 		( new PageTrashCascade() )->register();
 		( new Collection() )->register();
 		( new CollectionTrashCascade() )->register();
+		( new RowTrashCascade() )->register();
 		( new Field() )->register();
 		( new CollectionEntries() )->register();
 		( new RevisionThrottle() )->register();

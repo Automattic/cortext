@@ -302,6 +302,37 @@ final class Test_Rest_Favorites_Controller extends BaseTestCase {
 		);
 	}
 
+	public function test_get_drops_favorites_for_a_permanently_deleted_collection(): void {
+		// Self-heal contract: when a collection is force-deleted, the next
+		// favorites read filters its entry out via format_target's not-found
+		// branch. No eager scrub on delete is needed for correctness.
+		$user_id = $this->create_user( 'administrator' );
+		wp_set_current_user( $user_id );
+		$kept_id    = $this->create_collection( 'kept', 'Kept' );
+		$deleted_id = $this->create_collection( 'doomed', 'Doomed' );
+		update_post_meta( $kept_id, Collection::MODE_META_KEY, Collection::MODE_FULL_PAGE );
+		update_post_meta( $deleted_id, Collection::MODE_META_KEY, Collection::MODE_FULL_PAGE );
+
+		update_user_meta(
+			$user_id,
+			self::META_KEY,
+			array(
+				"collection:{$kept_id}",
+				"collection:{$deleted_id}",
+			)
+		);
+
+		wp_delete_post( $deleted_id, true );
+
+		$response = $this->get_favorites();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			array( $kept_id ),
+			array_column( $response->get_data()['favorites'], 'id' )
+		);
+	}
+
 	public function test_get_drops_stale_inline_collection_favorites(): void {
 		$user_id = $this->create_user( 'administrator' );
 		wp_set_current_user( $user_id );

@@ -171,6 +171,25 @@ function makeRow( overrides = {} ) {
 	};
 }
 
+function makeCollection( overrides = {} ) {
+	const { meta, owner, ...rest } = overrides;
+	return {
+		id: 201,
+		type: 'crtxt_collection',
+		kind: 'collection',
+		title: { rendered: 'Tasks', raw: 'Tasks' },
+		parent: 0,
+		meta: {
+			cortext_document_icon: '',
+			_cortext_trashed_by_parent: 0,
+			_cortext_trashed_by_owner_page: 0,
+			...( meta ?? {} ),
+		},
+		...( owner !== undefined ? { owner } : {} ),
+		...rest,
+	};
+}
+
 function makeDocumentsState( overrides = {} ) {
 	return {
 		documents: [],
@@ -549,6 +568,94 @@ describe( 'SidebarTrash', () => {
 			42,
 			expect.objectContaining( { id: 42 } )
 		);
+	} );
+
+	it( 'renders a trashed full-page collection with no owner breadcrumb', () => {
+		const collection = makeCollection( {
+			id: 33,
+			title: { rendered: 'Roadmap', raw: 'Roadmap' },
+		} );
+
+		setTrashRecords( { records: [ collection ] } );
+
+		const { container } = renderSidebarTrash();
+
+		expect( screen.getByText( 'Roadmap' ) ).toBeInTheDocument();
+		expect(
+			container.querySelector( '.cortext-sidebar__breadcrumb' )
+		).toBeFalsy();
+	} );
+
+	it( 'renders a trashed inline collection with its owner page in the breadcrumb', () => {
+		// Inline collection whose owner page is still active. The trash
+		// list surfaces the owner so users can tell similar inline tables
+		// apart.
+		const inline = makeCollection( {
+			id: 34,
+			title: { rendered: 'Action items', raw: 'Action items' },
+			owner: {
+				id: 99,
+				title: {
+					rendered: 'Quarterly review',
+					raw: 'Quarterly review',
+				},
+				path: 'page/quarterly-99',
+			},
+		} );
+
+		setTrashRecords( { records: [ inline ] } );
+
+		const { container } = renderSidebarTrash();
+
+		expect( screen.getByText( 'Action items' ) ).toBeInTheDocument();
+		expect(
+			container.querySelector( '.cortext-sidebar__breadcrumb' )
+		).toHaveTextContent( 'Quarterly review' );
+	} );
+
+	it( 'nests an inline collection under its owner page when both are in trash', () => {
+		// Page → inline collection cascade. The page is the root; the
+		// inline collection should fold under it instead of appearing as a
+		// second root entry.
+		const owner = makePage( {
+			id: 50,
+			title: { rendered: 'Sprint notes', raw: 'Sprint notes' },
+		} );
+		const inline = makeCollection( {
+			id: 51,
+			title: { rendered: 'Action items', raw: 'Action items' },
+			meta: { _cortext_trashed_by_owner_page: 50 },
+		} );
+
+		setTrashRecords( { records: [ owner, inline ] } );
+
+		renderSidebarTrash();
+
+		expect( screen.getByText( 'Sprint notes' ) ).toBeInTheDocument();
+		expect( screen.queryByText( 'Action items' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'announces collection rows in the permanent-delete confirmation', () => {
+		setTrashRecords( {
+			records: [
+				makeCollection( {
+					id: 60,
+					title: { rendered: 'Library', raw: 'Library' },
+				} ),
+			],
+		} );
+
+		renderSidebarTrash();
+
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Delete permanently' } )
+		);
+
+		expect(
+			screen.getByText(
+				"Permanently delete this collection and all its rows? You can't undo this."
+			)
+		).toBeInTheDocument();
 	} );
 
 	it( 'announces subtree size in the permanent-delete confirmation', () => {

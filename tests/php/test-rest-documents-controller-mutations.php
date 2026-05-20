@@ -14,8 +14,10 @@ declare( strict_types=1 );
 namespace Cortext\Tests;
 
 use Cortext\PostType\Collection;
+use Cortext\PostType\CollectionEntries;
 use Cortext\PostType\Page;
 use Cortext\PostType\PageTrashCascade;
+use Cortext\PostType\RowTrashCascade;
 use Cortext\Rest\DocumentsController;
 use WorDBless\BaseTestCase;
 use WP_REST_Request;
@@ -38,6 +40,7 @@ final class Test_Rest_Documents_Controller_Mutations extends BaseTestCase {
 		$this->install_in_memory_posts_query();
 
 		( new PageTrashCascade() )->register();
+		( new RowTrashCascade() )->register();
 
 		$GLOBALS['wp_rest_server'] = new WP_REST_Server();
 		( new DocumentsController() )->register();
@@ -271,6 +274,36 @@ final class Test_Rest_Documents_Controller_Mutations extends BaseTestCase {
 		$this->assertNull( get_post( $row_id ) );
 	}
 
+	public function test_restores_a_trashed_full_page_collection(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$collection_id = $this->create_full_page_collection( 'restorable' );
+		wp_trash_post( $collection_id );
+		$this->assertSame( 'trash', get_post_status( $collection_id ) );
+
+		$response = $this->restore( $collection_id );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertNotSame( 'trash', get_post_status( $collection_id ) );
+		$this->assertSame( array( $collection_id ), $response->get_data()['restored'] );
+	}
+
+	public function test_permanent_delete_removes_a_trashed_collection_and_its_rows(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$collection_id = $this->create_full_page_collection( 'wipeable' );
+		$row_id        = $this->create_row_for_collection( 'wipeable' );
+		wp_trash_post( $collection_id );
+
+		// After trash, the dynamic CPT may not be re-registered next request.
+		// Confirm the cascade still walks rows on permanent delete.
+		$response = $this->permanent_delete( $collection_id );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertNull( get_post( $collection_id ) );
+		$this->assertNull( get_post( $row_id ), 'Rows go with their collection on permanent delete.' );
+	}
+
 	public function test_restore_skips_cascade_walk_for_flat_row_documents(): void {
 		// Row CPTs opt into cortext-document but have no hierarchy today, so
 		// restore should only return the row itself.
@@ -331,6 +364,39 @@ final class Test_Rest_Documents_Controller_Mutations extends BaseTestCase {
 		);
 
 		$id = wp_insert_post( array_merge( $defaults, $args ) );
+		$this->assertIsInt( $id );
+		$this->assertGreaterThan( 0, $id );
+		return (int) $id;
+	}
+
+	private function create_full_page_collection( string $slug ): int {
+		$id = wp_insert_post(
+			array(
+				'post_type'   => Collection::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Collection ' . $slug,
+				'meta_input'  => array(
+					'slug'                    => $slug,
+					Collection::MODE_META_KEY => Collection::MODE_FULL_PAGE,
+				),
+			)
+		);
+		$this->assertIsInt( $id );
+		$this->assertGreaterThan( 0, $id );
+
+		( new CollectionEntries() )->register_for_collection( get_post( (int) $id ) );
+
+		return (int) $id;
+	}
+
+	private function create_row_for_collection( string $slug ): int {
+		$id = wp_insert_post(
+			array(
+				'post_type'   => CollectionEntries::CPT_PREFIX . $slug,
+				'post_status' => 'private',
+				'post_title'  => 'Row ' . wp_generate_uuid4(),
+			)
+		);
 		$this->assertIsInt( $id );
 		$this->assertGreaterThan( 0, $id );
 		return (int) $id;

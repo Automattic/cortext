@@ -60,7 +60,7 @@ final class DocumentsController {
 						'kind'     => array(
 							'type'    => 'string',
 							'default' => '',
-							'enum'    => array( '', Documents::KIND_PAGE, Documents::KIND_ROW ),
+							'enum'    => array( '', Documents::KIND_PAGE, Documents::KIND_ROW, Documents::KIND_COLLECTION ),
 						),
 						'status'   => array(
 							'type'    => 'string',

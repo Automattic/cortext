@@ -28,9 +28,11 @@ const EMPTY_TRASHED_DOCUMENTS_STATE = {
 	refresh: () => {},
 };
 
-// Keep this in sync with `PageTrashCascade::META_KEY`. The Trash endpoint sends
-// this marker for every document so the sidebar can find cascade roots.
-const MARKER_META = '_cortext_trashed_by_parent';
+// Keep these in sync with the PHP cascade marker meta keys. Trash entries
+// carry a marker pointing at the cascade root (page → subpage, page → owned
+// inline collection) so the sidebar can fold descendants under their root.
+const PARENT_MARKER_META = '_cortext_trashed_by_parent';
+const OWNER_PAGE_MARKER_META = '_cortext_trashed_by_owner_page';
 
 export function computeSidebarTrashRoots( trashedDocuments = [] ) {
 	const all = Array.isArray( trashedDocuments ) ? trashedDocuments : [];
@@ -39,8 +41,17 @@ export function computeSidebarTrashRoots( trashedDocuments = [] ) {
 	);
 	const childrenByMarker = new Map();
 
-	const markerOf = ( document ) =>
-		Number( document.meta?.[ MARKER_META ] ?? 0 );
+	const markerOf = ( document ) => {
+		const meta = document.meta ?? {};
+		// Pages → subpages share the original marker. Pages → owned inline
+		// collections use a different key, but both point at a parent page
+		// that's the cascade root.
+		const parent = Number( meta[ PARENT_MARKER_META ] ?? 0 );
+		if ( parent > 0 ) {
+			return parent;
+		}
+		return Number( meta[ OWNER_PAGE_MARKER_META ] ?? 0 );
+	};
 
 	all.forEach( ( document ) => {
 		const marker = markerOf( document );
@@ -86,7 +97,13 @@ function documentKind( document ) {
 	if ( document?.kind ) {
 		return document.kind;
 	}
-	return document?.type === POST_TYPE ? 'page' : 'document';
+	if ( document?.type === POST_TYPE ) {
+		return 'page';
+	}
+	if ( document?.type === 'crtxt_collection' ) {
+		return 'collection';
+	}
+	return 'document';
 }
 
 function descendantLabel( kind, count ) {
@@ -345,6 +362,11 @@ export default function SidebarTrash( {
 			"Permanently delete this row? You can't undo this.",
 			'cortext'
 		);
+	} else if ( pendingKind === 'collection' ) {
+		pendingDeleteMessage = __(
+			"Permanently delete this collection and all its rows? You can't undo this.",
+			'cortext'
+		);
 	} else if ( pendingKind === 'document' ) {
 		pendingDeleteMessage = __(
 			"Permanently delete this document? You can't undo this.",
@@ -437,6 +459,16 @@ export default function SidebarTrash( {
 										__( 'Collection', 'cortext' )
 								  )
 								: '';
+						// Inline collections that surface as roots (because
+						// their owner page is still active) show the owner's
+						// title so users can tell similar inline tables apart.
+						const ownerTitle =
+							kind === 'collection' && document.owner
+								? titleText(
+										document.owner?.title,
+										__( 'Page', 'cortext' )
+								  )
+								: '';
 						const rowClasses = [ 'cortext-sidebar__row' ];
 						if ( isSelected ) {
 							rowClasses.push( 'is-selected' );
@@ -467,6 +499,7 @@ export default function SidebarTrash( {
 										</span>
 										{ ( breadcrumb.length > 0 ||
 											collectionTitle ||
+											ownerTitle ||
 											meta ) && (
 											<span className="cortext-sidebar__breadcrumb">
 												{ breadcrumb.map(
@@ -497,6 +530,9 @@ export default function SidebarTrash( {
 														</span>
 													)
 												) }
+												{ ownerTitle && (
+													<span>{ ownerTitle }</span>
+												) }
 												{ collectionTitle && (
 													<span>
 														{ collectionTitle }
@@ -506,7 +542,8 @@ export default function SidebarTrash( {
 													<>
 														{ ( breadcrumb.length >
 															0 ||
-															collectionTitle ) && (
+															collectionTitle ||
+															ownerTitle ) && (
 															<span aria-hidden="true">
 																{ ' · ' }
 															</span>
