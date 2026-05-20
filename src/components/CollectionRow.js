@@ -55,8 +55,8 @@ export default function CollectionRow( {
 	const [ draftTitle, setDraftTitle ] = useState( '' );
 	const renameInputRef = useRef( null );
 
-	// Start rename automatically when the parent asks for it (new collection
-	// flow, or right after Duplicate).
+	// The parent sets `autoRenameId` after create or duplicate so this row
+	// opens its title editor as soon as it renders.
 	useEffect( () => {
 		if ( autoRenameId === collection.id ) {
 			setDraftTitle(
@@ -73,8 +73,8 @@ export default function CollectionRow( {
 		onAutoRenameConsumed,
 	] );
 
-	// Focus the rename input whenever rename mode is entered. TextControl
-	// doesn't forward refs to its input, so reach in for the actual input.
+	// TextControl keeps the real input inside its wrapper, so focus and select
+	// that inner input when rename mode opens.
 	useEffect( () => {
 		if ( isRenaming && renameInputRef.current ) {
 			const input = renameInputRef.current.querySelector( 'input' );

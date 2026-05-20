@@ -95,8 +95,9 @@ final class CollectionsController {
 		$id   = (int) $request->get_param( 'id' );
 		$post = get_post( $id );
 
-		// Return 404 ahead of the cap check so a missing collection reports
-		// "not found" instead of a generic 403, matching DocumentsController.
+		// Check existence before capabilities so a missing collection returns
+		// 404 instead of a generic permission failure. DocumentsController
+		// does the same.
 		if ( ! $post instanceof WP_Post || Collection::POST_TYPE !== $post->post_type ) {
 			return new WP_Error(
 				'cortext_collection_not_found',
@@ -209,12 +210,10 @@ final class CollectionsController {
 	}
 
 	/**
-	 * Clones a full-page collection's schema into a new collection. Rows are
-	 * not copied. Non-relation fields (including rollups) are cloned with their
-	 * meta intact; relation fields are skipped and returned in `skipped_fields`
-	 * so the caller can show a notice. Cloning relations involves creating a
-	 * paired reverse field on the related collection, which is its own
-	 * follow-up.
+	 * Copies a full-page collection's schema into a new collection. Rows stay
+	 * behind. Fields with local metadata are copied; relation fields come back
+	 * in `skipped_fields` because tech-debt.md#54 still needs the reverse-field
+	 * copy plan.
 	 *
 	 * @param WP_REST_Request $request Inbound REST request.
 	 */
@@ -233,7 +232,7 @@ final class CollectionsController {
 		if ( Collection::is_inline( $source_id ) ) {
 			return new WP_Error(
 				'cortext_collection_duplicate_inline_unsupported',
-				__( 'Inline collections cannot be duplicated from the workspace.', 'cortext' ),
+				__( "Inline collections can't be duplicated from the workspace.", 'cortext' ),
 				array( 'status' => 400 )
 			);
 		}
@@ -274,7 +273,7 @@ final class CollectionsController {
 			wp_delete_post( (int) $new_collection_id, true );
 			return new WP_Error(
 				'cortext_collection_create_failed',
-				__( 'Collection could not be created.', 'cortext' ),
+				__( 'Could not create the collection.', 'cortext' ),
 				array( 'status' => 500 )
 			);
 		}
@@ -286,7 +285,7 @@ final class CollectionsController {
 			wp_delete_post( (int) $new_collection_id, true );
 			return new WP_Error(
 				'cortext_collection_cpt_failed',
-				__( 'Collection rows could not be registered.', 'cortext' ),
+				__( 'Could not register rows for the collection.', 'cortext' ),
 				array( 'status' => 500 )
 			);
 		}
@@ -309,16 +308,15 @@ final class CollectionsController {
 	}
 
 	/**
-	 * Clones every non-relation field from the source collection into the
-	 * target and appends each new field id to the target's `meta.fields` in
-	 * source order. Relation fields are skipped and returned for the caller
-	 * to surface.
+	 * Copies non-relation fields into the new collection and appends each new
+	 * field id to `fields` in the original order. Relation fields are returned
+	 * as skipped so the caller can warn the user.
 	 *
 	 * @param int $source_collection_id Source collection post id.
 	 * @param int $target_collection_id Target (newly created) collection post id.
 	 *
 	 * @return array{0: array<string, int>, 1: array<int, array{id: int, title: string, reason: string}>}
-	 *               Field id map (source id string → new id) and skipped fields.
+	 *               Field id map (source id string => new id) and skipped fields.
 	 */
 	private function clone_fields( int $source_collection_id, int $target_collection_id ): array {
 		$source_field_ids = get_post_meta( $source_collection_id, 'fields', false );
@@ -357,6 +355,8 @@ final class CollectionsController {
 			}
 
 			$source_type = (string) get_post_meta( $source_field_id, 'type', true );
+			// tech-debt.md#54: skip relations until duplication can copy and
+			// remap the forward and reverse fields together.
 			if ( 'relation' === $source_type ) {
 				$skipped_fields[] = array(
 					'id'     => $source_field_id,
@@ -404,12 +404,11 @@ final class CollectionsController {
 	}
 
 	/**
-	 * Rewrites rollup meta on cloned fields whose source references land in
-	 * the cloned set. Rollups that point at relations or fields we skipped
-	 * keep pointing at the source ids; the user can re-target them by hand
-	 * if needed.
+	 * Rewrites rollup meta when the referenced field was copied too. If a
+	 * rollup points to a skipped relation, the old reference stays for now;
+	 * tech-debt.md#54 tracks the proper skip or remap behavior.
 	 *
-	 * @param array<string, int> $field_id_map Source field id (string) → new field id.
+	 * @param array<string, int> $field_id_map Source field id (string) => new field id.
 	 */
 	private function remap_rollup_references( array $field_id_map ): void {
 		foreach ( $field_id_map as $new_field_id ) {

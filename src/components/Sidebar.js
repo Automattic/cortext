@@ -683,25 +683,22 @@ export default function Sidebar( {
 				'crtxt_collection',
 				FULL_PAGE_COLLECTION_QUERY,
 			] );
-			// The new collection registers a new dynamic row CPT, so the
-			// cached postType entity list needs to be refreshed before any
-			// row lookup hits the new slug.
+			// A duplicate registers a fresh row CPT. Clear the cached post-type
+			// list before anything tries to read rows through the new slug.
 			invalidateResolution( 'getEntitiesConfig', [ 'postType' ] );
-			// Some fields can't be cloned: relations are not supported yet
-			// (creating the paired reverse field on the related collection
-			// is a follow-up), and the server also reports any field whose
-			// `wp_insert_post` failed. Surface a generic notice so the user
-			// knows the copy is missing columns.
+			// The server reports fields it did not copy. Relations are the
+			// common case for now (tech-debt.md#54), but failed field inserts
+			// come through the same channel.
 			const skipped = Array.isArray( created?.skipped_fields )
 				? created.skipped_fields
 				: [];
 			if ( skipped.length > 0 ) {
 				setDuplicateNotice(
 					sprintf(
-						/* translators: %d: number of fields that could not be copied to the new collection. */
+						/* translators: %d: number of fields skipped while duplicating a collection. */
 						_n(
-							"%d field couldn't be copied to the new collection. Recreate it if you need it.",
-							"%d fields couldn't be copied to the new collection. Recreate them if you need them.",
+							'%d field was not copied to the new collection. Add it again if you need it.',
+							'%d fields were not copied to the new collection. Add them again if you need them.',
 							skipped.length,
 							'cortext'
 						),
@@ -734,9 +731,8 @@ export default function Sidebar( {
 				FULL_PAGE_COLLECTION_QUERY,
 			] );
 			notifyDocumentTrashChanged();
-			// Drop the favorite for the trashed collection so the sidebar
-			// stops rendering a stale entry and so the next favorites PUT
-			// doesn't include an id the server now rejects as trashed.
+			// Remove the trashed collection from Favorites as well; otherwise
+			// the next Favorites save sends an id the server rejects.
 			try {
 				await setFavorites( ( current ) =>
 					filterFavoritesForTrashedCollection( current, id )
@@ -745,7 +741,7 @@ export default function Sidebar( {
 				setFavoritesError(
 					err?.message ??
 						__(
-							'Collection moved to Trash, but Favorites could not be updated.',
+							'Moved the collection to Trash, but could not update Favorites.',
 							'cortext'
 						)
 				);

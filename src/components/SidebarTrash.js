@@ -524,12 +524,10 @@ export default function SidebarTrash( {
 										__( 'Collection', 'cortext' )
 								  )
 								: '';
-						// Inline collections that surface as roots (because
-						// their owner page is still active) show the owner's
-						// title so users can tell similar inline tables apart.
-						// `document.owner` is only set by `format_document` for
-						// inline collections, so reading it is enough to drive
-						// the breadcrumb.
+						// Inline collections are the only trash items with an
+						// owner. Show that page title when the owner is still
+						// active so similar inline tables are easier to tell
+						// apart.
 						const ownerTitle = document.owner
 							? titleText(
 									document.owner?.title,
@@ -674,7 +672,10 @@ export default function SidebarTrash( {
 			{ pendingDelete !== null &&
 				( pendingKind === 'collection' ? (
 					<TypeToConfirmDialog
-						title={ __( 'Delete this collection?', 'cortext' ) }
+						title={ __(
+							'Delete collection permanently?',
+							'cortext'
+						) }
 						message={ pendingDeleteMessage }
 						confirmPhrase={ titleText(
 							pendingDelete.title,

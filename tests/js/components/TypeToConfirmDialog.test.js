@@ -1,12 +1,7 @@
-/**
- * Render and behavior tests for `src/components/TypeToConfirmDialog.js`.
- */
-
 import { fireEvent, render, screen } from '@testing-library/react';
 
-// Stub `@wordpress/components` so the Modal/TextControl/Button surface is
-// trivial to exercise. The component's logic (matching, key handling, enable
-// state) is what's under test, not the WP component internals.
+// Mock WP components so these tests stay focused on matching, keyboard
+// handling, and disabled state instead of component markup.
 jest.mock( '@wordpress/components', () => {
 	const ReactLib = require( 'react' );
 	const Modal = ( { children, title, onRequestClose } ) =>
@@ -65,7 +60,7 @@ function renderDialog( overrides = {} ) {
 }
 
 describe( 'TypeToConfirmDialog', () => {
-	it( 'keeps the confirm button disabled until the typed value matches', () => {
+	it( 'enables confirm only after the phrase matches', () => {
 		renderDialog();
 
 		const confirm = screen.getByRole( 'button', {
@@ -84,7 +79,7 @@ describe( 'TypeToConfirmDialog', () => {
 		expect( confirm ).toBeEnabled();
 	} );
 
-	it( 'calls onConfirm only when the typed value matches', () => {
+	it( 'does not confirm until the phrase matches', () => {
 		const { onConfirm } = renderDialog();
 
 		const confirm = screen.getByRole( 'button', {
@@ -101,7 +96,7 @@ describe( 'TypeToConfirmDialog', () => {
 		expect( onConfirm ).toHaveBeenCalledTimes( 1 );
 	} );
 
-	it( 'submits with Enter once the value matches', () => {
+	it( 'submits on Enter after the phrase matches', () => {
 		const { onConfirm } = renderDialog();
 
 		fireEvent.change( screen.getByTestId( 'confirm-input' ), {
@@ -124,7 +119,7 @@ describe( 'TypeToConfirmDialog', () => {
 		expect( onCancel ).toHaveBeenCalledTimes( 1 );
 	} );
 
-	it( 'treats surrounding whitespace as a match', () => {
+	it( 'ignores whitespace around the phrase', () => {
 		const { onConfirm } = renderDialog();
 
 		fireEvent.change( screen.getByTestId( 'confirm-input' ), {
@@ -137,7 +132,7 @@ describe( 'TypeToConfirmDialog', () => {
 		expect( onConfirm ).toHaveBeenCalledTimes( 1 );
 	} );
 
-	it( 'disables the input and buttons while isBusy is true', () => {
+	it( 'disables controls while busy', () => {
 		renderDialog( { isBusy: true } );
 
 		fireEvent.change( screen.getByTestId( 'confirm-input' ), {
@@ -149,7 +144,7 @@ describe( 'TypeToConfirmDialog', () => {
 		expect( screen.getByRole( 'button', { name: 'Cancel' } ) ).toBeDisabled();
 	} );
 
-	it( 'auto-focuses the input when the dialog opens', () => {
+	it( 'focuses the input on open', () => {
 		renderDialog();
 
 		expect( screen.getByTestId( 'confirm-input' ) ).toHaveFocus();

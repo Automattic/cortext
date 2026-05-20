@@ -831,10 +831,9 @@ describe( 'SidebarTrash', () => {
 		).toBeInTheDocument();
 	} );
 
-	it( 'uses the typed-name dialog when permanent-deleting a collection', () => {
-		// Collections force the user to type the title to confirm. Pages and
-		// rows keep the lighter ConfirmDialog because their delete is paired
-		// with restore via the same UI path.
+	it( 'uses the typed-name dialog when permanently deleting a collection', () => {
+		// Collections can contain rows, so they ask for the title before the
+		// final delete. Pages and rows keep the lighter confirm dialog.
 		setTrashRecords( {
 			records: [
 				makeCollection( {

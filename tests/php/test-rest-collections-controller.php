@@ -577,7 +577,7 @@ final class Test_Rest_Collections_Controller extends BaseTestCase {
 				'fields'         => 'ids',
 			)
 		);
-		$this->assertSame( array(), $row_ids, 'Duplicate must not carry rows over.' );
+		$this->assertSame( array(), $row_ids, 'Duplicating a collection should leave rows behind.' );
 	}
 
 	public function test_duplicate_skips_relation_fields_and_reports_them(): void {
@@ -603,7 +603,7 @@ final class Test_Rest_Collections_Controller extends BaseTestCase {
 		$this->assertSame( 'relation_unsupported', $data['skipped_fields'][0]['reason'] );
 
 		$new_field_ids = array_map( 'intval', get_post_meta( $data['id'], 'fields', false ) );
-		$this->assertCount( 1, $new_field_ids, 'Only the scalar field is cloned; the relation is left for a follow-up.' );
+		$this->assertCount( 1, $new_field_ids, 'The duplicate should keep the scalar field and skip the relation.' );
 		$this->assertSame( 'Copy of Label', get_post( $new_field_ids[0] )->post_title );
 	}
 
@@ -635,7 +635,7 @@ final class Test_Rest_Collections_Controller extends BaseTestCase {
 		$this->assertSame(
 			(string) $cloned_target,
 			(string) get_post_meta( $cloned_rollup, 'rollup_target_field_id', true ),
-			'Rollup references inside the cloned set should point at the new field ids.'
+			'Copied rollups should point at copied fields.'
 		);
 	}
 

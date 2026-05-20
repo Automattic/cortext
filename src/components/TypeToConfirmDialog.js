@@ -2,10 +2,8 @@ import { Button, Modal, TextControl } from '@wordpress/components';
 import { useEffect, useRef, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 
-// A confirm dialog where the destructive button stays disabled until the
-// user types the requested phrase (the target's title, typically). Built for
-// permanent-delete on collections; reusable for any high-blast-radius action
-// that needs a typed acknowledgement, not just a click.
+// Confirmation dialog for destructive actions that need a typed
+// acknowledgement, usually the target's title.
 export default function TypeToConfirmDialog( {
 	title,
 	message,
@@ -19,9 +17,8 @@ export default function TypeToConfirmDialog( {
 	const [ value, setValue ] = useState( '' );
 	const inputWrapperRef = useRef( null );
 
-	// Focus the input as soon as the modal mounts so the user can start
-	// typing the confirmation phrase without an extra click. TextControl
-	// wraps its input, so reach in for the actual <input> element.
+	// Put the cursor in the field on mount so the user can start typing.
+	// TextControl wraps the actual input, so reach into the wrapper.
 	useEffect( () => {
 		const input = inputWrapperRef.current?.querySelector( 'input' );
 		input?.focus();

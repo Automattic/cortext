@@ -4,13 +4,9 @@ import CollectionRow, {
 	collectionTitle,
 } from '../../../src/components/CollectionRow';
 
-// `@wordpress/components`'s Popover schedules positioning work that flushes
-// after the test body, so `@wordpress/jest-console` sees the resulting
-// "update not wrapped in act" warning when the next test renders and turns
-// it into a failure. The warning is benign here: each test renders a fresh
-// component and the leak is from the prior render's unmount. Silence
-// React's act warning specifically; let every other console.error still
-// fail the suite.
+// Popover positioning can finish after a test has already unmounted. Jest then
+// sees React's act warning during the next test and fails the suite. Ignore
+// only that warning; every other console.error should still fail.
 const originalError = console.error;
 beforeEach( () => {
 	jest.spyOn( console, 'error' ).mockImplementation( ( ...args ) => {
@@ -106,7 +102,7 @@ describe( 'CollectionRow', () => {
 		).toBeTruthy();
 	} );
 
-	it( 'shows Rename, Duplicate, and Move to Trash when their callbacks are provided', () => {
+	it( 'shows Rename, Duplicate, and Move to Trash when callbacks are provided', () => {
 		renderRow( {
 			onRename: jest.fn(),
 			onDuplicate: jest.fn(),
@@ -127,10 +123,9 @@ describe( 'CollectionRow', () => {
 		).toBeInTheDocument();
 	} );
 
-	it( 'hides destructive actions when their callbacks are not provided', () => {
-		// Inline collections (and other contexts that don't yet wire these
-		// actions) render the menu without Rename/Duplicate/Move to Trash.
-		// Confirm the menu skips items whose callback is undefined.
+	it( 'hides row actions when callbacks are missing', () => {
+		// Inline collections and other stripped-down contexts leave these
+		// callbacks unset, so the menu should leave those items out.
 		renderRow();
 		fireEvent.click(
 			screen.getByRole( 'button', { name: 'Actions for Books' } )
@@ -147,10 +142,9 @@ describe( 'CollectionRow', () => {
 		).toBeNull();
 	} );
 
-	it( 'auto-enters rename mode, commits on Enter, and consumes autoRenameId', () => {
-		// Exercises the inline rename UX without going through the Popover
-		// menu, which leaks act warnings into adjacent tests. The auto-rename
-		// path is the same code that the Rename menu item triggers.
+	it( 'opens rename mode from autoRenameId and commits on Enter', () => {
+		// Exercise inline rename without opening the Popover. The auto-rename
+		// path still uses the same editor as the Rename menu item.
 		const onAutoRenameConsumed = jest.fn();
 		const onRename = jest.fn();
 		const { container } = renderRow( {
