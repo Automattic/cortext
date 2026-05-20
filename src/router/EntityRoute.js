@@ -22,10 +22,10 @@ import {
 //
 // This split does not change which WP core editor handles WP enqueues:
 // wp-editor, wp-block-editor, wp-block-library, and wp-blocks still ship
-// on every admin route because the DEP plugin only emits one asset
-// manifest per entry and folds in externals reached through lazy chunks
-// too. Those scripts are cached by WP and most sessions open an editor
-// at some point, so we accept the cost.
+// on every admin route because @wordpress/dependency-extraction-webpack-plugin
+// only emits one asset manifest per entry and folds in externals reached
+// through lazy chunks too. Those scripts are cached by WP and most sessions
+// open an editor at some point, so we accept the cost.
 const Canvas = lazy( () =>
 	import( /* webpackChunkName: "editor" */ '../components/Canvas' )
 );
