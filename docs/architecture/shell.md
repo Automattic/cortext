@@ -19,19 +19,19 @@ The shell has two main work surfaces:
 
 The sidebar handles page navigation and nesting. Autosave is split between a client debounce and a small server-side revision throttle.
 
-## Data fetching: prefer existing bulk reads
+## Data fetching: reuse queried records by id
 
-The shell already keeps a few bulk queries warm: active pages and collections from the sidebar, plus the open collection's fields from `CollectionFieldsProvider`. When a component needs one of those records, read it from the bulk instead of calling `useEntityRecord` by id.
+The shell already keeps a few queries warm: active pages and collections from the sidebar, plus the open collection's fields from `CollectionFieldsProvider`. When a component needs a single record that one of those queries already covers, it should read it through the shared query instead of calling `useEntityRecord` by id.
 
-WordPress core-data tracks bulk and per-id resolvers separately ([gutenberg#19153](https://github.com/WordPress/gutenberg/issues/19153)), so a per-id read can make another HTTP request even when the record is already in the bulk cache. The duplicate request grows with surfaces that render one cell per record, like a wide column header.
+WordPress core-data tracks per-id and queried resolvers separately ([gutenberg#19153](https://github.com/WordPress/gutenberg/issues/19153)), so a per-id read can still hit the network even when the record is already in the queried-data cache. The duplicate request grows with surfaces that render one cell per record, like a wide column header.
 
 Current helpers:
 
-- `useActivePages()` and `useCollections()` in `src/hooks/useEntityBulks.js` return the array plus a `get(id)` lookup against the shared query.
-- `useMappedField(recordId)` in `src/components/CollectionFieldsContext.js` returns the parsed field record from the active collection.
-- Use `useEntityRecord` only for entities that are not covered by any bulk (rows inside a collection, media attachments) and for write paths (`editEntityRecord`/`saveEditedEntityRecord` still go through core-data).
+- `usePooledEntityRecord( kind, name, query, id )` in `src/hooks/usePooledEntityRecord.js` returns `{ hasResolved, record }`. It reads the record from the queried-data cache when the id is part of `query`, and only falls back to a targeted `useEntityRecord` once the query has resolved without that id.
+- `useMappedField( recordId )` in `src/components/CollectionFieldsContext.js` returns the parsed field record from the active collection's query.
+- Use `useEntityRecord` directly for entities no query covers (rows inside a collection, media attachments) and for write paths (`editEntityRecord` / `saveEditedEntityRecord` still go through core-data).
 
-The helpers do not fetch missing records. They return `null`, plus `hasResolved`, and the caller decides what to show. Because the bulk queries stop at `per_page: 100`, a record opened from a direct URL or a recent item may not be in the list. If the UI still needs to render that record, wait for `hasResolved`, then fall back to a targeted `useEntityRecord`; `useBreadcrumbSegments` uses that pattern.
+Queries stop at `per_page: 100`, so a record opened from a direct URL or a recent item can fall outside the list. The fallback inside `usePooledEntityRecord` covers that case without firing during the common path.
 
 ## Current scope
 

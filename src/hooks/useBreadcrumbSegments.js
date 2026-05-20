@@ -1,10 +1,14 @@
 import { __ } from '@wordpress/i18n';
-import { useEntityRecord } from '@wordpress/core-data';
+import { useEntityRecord, useEntityRecords } from '@wordpress/core-data';
 import { useNavigate } from '@tanstack/react-router';
 import { useCallback, useMemo } from '@wordpress/element';
 
-import { POST_TYPE as PAGE_POST_TYPE } from '../components/page-queries';
-import { useActivePages, useCollections } from './useEntityBulks';
+import {
+	ACTIVE_PAGES_QUERY,
+	POST_TYPE as PAGE_POST_TYPE,
+} from '../components/page-queries';
+import { COLLECTION_QUERY } from '../collections';
+import usePooledEntityRecord from './usePooledEntityRecord';
 import {
 	computeCollectionUri,
 	computeDocumentUri,
@@ -49,34 +53,37 @@ export default function useBreadcrumbSegments( paintedRoute ) {
 		collectionId = paintedRoute.collectionId ?? null;
 	}
 
-	// Pages and collections come from the shell's shared bulk reads. Page
-	// breadcrumbs walk parent ids, so use the map directly.
-	const { byId: pagesById, hasResolved: pagesResolved } = useActivePages();
-	const { get: getCollection, hasResolved: collectionsResolved } =
-		useCollections();
-
-	// The bulk reads stop at 100 records, but direct URLs can open any valid
-	// page or collection. If the bulk has resolved and the current id still
-	// is not there, fetch that one record so the breadcrumb does not vanish.
-	// Waiting for `hasResolved` keeps the normal path from doing extra work.
-	const pageMissingFromBulk =
-		pageId !== null && pagesResolved && ! pagesById.has( pageId );
-	const { record: fallbackPage } = useEntityRecord(
+	// Page breadcrumbs climb the parent chain, so they need the whole active
+	// pages query. Building the parents map locally keeps the lookup-by-id
+	// cost flat over the depth of the chain.
+	const { records: activePages } = useEntityRecords(
 		'postType',
 		PAGE_POST_TYPE,
-		pageId ?? 0,
-		{ enabled: pageMissingFromBulk }
+		ACTIVE_PAGES_QUERY
+	);
+	const pagesById = useMemo(
+		() =>
+			new Map(
+				( activePages ?? [] ).map( ( page ) => [ page.id, page ] )
+			),
+		[ activePages ]
 	);
 
-	const collectionMissingFromBulk =
-		collectionId !== null &&
-		collectionsResolved &&
-		! getCollection( collectionId );
-	const { record: fallbackCollection } = useEntityRecord(
+	// Current page and current collection share core-data's queried-data
+	// cache with their sibling surfaces (sidebar, collection picker), so
+	// these calls reuse those subscriptions without firing per-id resolvers
+	// while the id is part of the query.
+	const { record: currentPage } = usePooledEntityRecord(
+		'postType',
+		PAGE_POST_TYPE,
+		ACTIVE_PAGES_QUERY,
+		pageId
+	);
+	const { record: currentCollection } = usePooledEntityRecord(
 		'postType',
 		COLLECTION_POST_TYPE,
-		collectionId ?? 0,
-		{ enabled: collectionMissingFromBulk }
+		COLLECTION_QUERY,
+		collectionId
 	);
 
 	// Rows are behind per-collection endpoints, so the row title still needs
@@ -110,15 +117,12 @@ export default function useBreadcrumbSegments( paintedRoute ) {
 
 	return useMemo( () => {
 		if ( pageId ) {
-			const head =
-				pagesById.get( pageId ) ??
-				( fallbackPage?.id === pageId ? fallbackPage : null );
-			if ( ! head ) {
+			if ( ! currentPage ) {
 				return [];
 			}
 
 			const chain = [];
-			let cursor = head;
+			let cursor = currentPage;
 			const seen = new Set();
 			while ( cursor && ! seen.has( cursor.id ) ) {
 				seen.add( cursor.id );
@@ -140,20 +144,15 @@ export default function useBreadcrumbSegments( paintedRoute ) {
 		}
 
 		if ( collectionId ) {
-			const collection =
-				getCollection( collectionId ) ??
-				( fallbackCollection?.id === collectionId
-					? fallbackCollection
-					: null );
-			if ( ! collection ) {
+			if ( ! currentCollection ) {
 				return [];
 			}
 			if ( rowId ) {
 				return [
 					{
-						key: `collection:${ collection.id }`,
-						label: titleOf( collection ),
-						onClick: () => goToCollection( collection ),
+						key: `collection:${ currentCollection.id }`,
+						label: titleOf( currentCollection ),
+						onClick: () => goToCollection( currentCollection ),
 						isCurrent: false,
 					},
 					{
@@ -166,8 +165,8 @@ export default function useBreadcrumbSegments( paintedRoute ) {
 			}
 			return [
 				{
-					key: `collection:${ collection.id }`,
-					label: titleOf( collection ),
+					key: `collection:${ currentCollection.id }`,
+					label: titleOf( currentCollection ),
 					onClick: null,
 					isCurrent: true,
 				},
@@ -181,9 +180,8 @@ export default function useBreadcrumbSegments( paintedRoute ) {
 		rowId,
 		rowPostType,
 		pagesById,
-		getCollection,
-		fallbackPage,
-		fallbackCollection,
+		currentPage,
+		currentCollection,
 		currentRow,
 		goToPage,
 		goToCollection,
