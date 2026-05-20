@@ -4,6 +4,31 @@ import CollectionRow, {
 	collectionTitle,
 } from '../../../src/components/CollectionRow';
 
+// `@wordpress/components`'s Popover schedules positioning work that flushes
+// after the test body, so `@wordpress/jest-console` sees the resulting
+// "update not wrapped in act" warning when the next test renders and turns
+// it into a failure. The warning is benign here: each test renders a fresh
+// component and the leak is from the prior render's unmount. Silence
+// React's act warning specifically; let every other console.error still
+// fail the suite.
+const originalError = console.error;
+beforeEach( () => {
+	jest.spyOn( console, 'error' ).mockImplementation( ( ...args ) => {
+		const first = args[ 0 ];
+		if (
+			typeof first === 'string' &&
+			first.includes( 'inside a test was not wrapped in act' )
+		) {
+			return;
+		}
+		originalError( ...args );
+	} );
+} );
+
+afterEach( () => {
+	console.error.mockRestore?.();
+} );
+
 function makeCollection( overrides = {} ) {
 	return {
 		id: 7,
@@ -79,5 +104,87 @@ describe( 'CollectionRow', () => {
 				name: 'Remove from favorites',
 			} )
 		).toBeTruthy();
+	} );
+
+	it( 'shows Rename, Duplicate, and Move to Trash when their callbacks are provided', () => {
+		renderRow( {
+			onRename: jest.fn(),
+			onDuplicate: jest.fn(),
+			onTrash: jest.fn(),
+		} );
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Actions for Books' } )
+		);
+
+		expect(
+			screen.getByRole( 'menuitem', { name: 'Rename' } )
+		).toBeInTheDocument();
+		expect(
+			screen.getByRole( 'menuitem', { name: 'Duplicate' } )
+		).toBeInTheDocument();
+		expect(
+			screen.getByRole( 'menuitem', { name: 'Move to Trash' } )
+		).toBeInTheDocument();
+	} );
+
+	it( 'hides destructive actions when their callbacks are not provided', () => {
+		// Inline collections (and other contexts that don't yet wire these
+		// actions) render the menu without Rename/Duplicate/Move to Trash.
+		// Confirm the menu skips items whose callback is undefined.
+		renderRow();
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Actions for Books' } )
+		);
+
+		expect(
+			screen.queryByRole( 'menuitem', { name: 'Rename' } )
+		).toBeNull();
+		expect(
+			screen.queryByRole( 'menuitem', { name: 'Duplicate' } )
+		).toBeNull();
+		expect(
+			screen.queryByRole( 'menuitem', { name: 'Move to Trash' } )
+		).toBeNull();
+	} );
+
+	it( 'auto-enters rename mode, commits on Enter, and consumes autoRenameId', () => {
+		// Exercises the inline rename UX without going through the Popover
+		// menu, which leaks act warnings into adjacent tests. The auto-rename
+		// path is the same code that the Rename menu item triggers.
+		const onAutoRenameConsumed = jest.fn();
+		const onRename = jest.fn();
+		const { container } = renderRow( {
+			autoRenameId: 7,
+			onAutoRenameConsumed,
+			onRename,
+		} );
+
+		const input = container.querySelector( '.cortext-sidebar__rename input' );
+		expect( input ).toBeTruthy();
+		expect( input.value ).toBe( 'Books' );
+		expect( onAutoRenameConsumed ).toHaveBeenCalled();
+
+		fireEvent.change( input, { target: { value: 'Albums' } } );
+		fireEvent.keyDown( input, { key: 'Enter' } );
+
+		expect( onRename ).toHaveBeenCalledWith( 7, 'Albums' );
+	} );
+
+	it( 'cancels inline rename on Escape without calling onRename', () => {
+		const onRename = jest.fn();
+		const { container } = renderRow( {
+			autoRenameId: 7,
+			onAutoRenameConsumed: jest.fn(),
+			onRename,
+		} );
+
+		const input = container.querySelector( '.cortext-sidebar__rename input' );
+		fireEvent.change( input, { target: { value: 'Albums' } } );
+		fireEvent.keyDown( input, { key: 'Escape' } );
+
+		expect( onRename ).not.toHaveBeenCalled();
+		expect(
+			container.querySelector( '.cortext-sidebar__rename input' )
+		).toBeNull();
 	} );
 } );

@@ -390,50 +390,9 @@ export default function Sidebar( {
 	const [ draggedId, setDraggedId ] = useState( null );
 	const [ activeDrop, setActiveDrop ] = useState( null );
 	const [ autoRenameId, setAutoRenameId ] = useState( null );
+	const [ autoRenameCollectionId, setAutoRenameCollectionId ] =
+		useState( null );
 	const [ isTrashPanelOpen, setIsTrashPanelOpen ] = useState( false );
-
-	const renderCollectionRow = useCallback(
-		( collection, depth ) => (
-			<CollectionRow
-				key={ collection.id }
-				collection={ collection }
-				depth={ depth }
-				isSelected={ selectedCollectionId === collection.id }
-				isHome={
-					home?.kind === 'collection' && home.id === collection.id
-				}
-				isFavorite={ isCollectionFavorite( collection.id ) }
-				isFavoriteDisabled={ areFavoriteActionsDisabled }
-				isHomeUpdating={ isHomeUpdating }
-				onToggleFavorite={ ( id ) =>
-					toggleFavorite( 'collection', id )
-				}
-				onSetHome={ setCollectionHome }
-				onSelect={ () =>
-					navigate( {
-						to: '/$',
-						params: {
-							_splat: computeCollectionUri( collection ),
-						},
-					} )
-				}
-				draggedId={ draggedId }
-				activeDrop={ activeDrop }
-			/>
-		),
-		[
-			selectedCollectionId,
-			home,
-			isCollectionFavorite,
-			areFavoriteActionsDisabled,
-			isHomeUpdating,
-			toggleFavorite,
-			setCollectionHome,
-			navigate,
-			draggedId,
-			activeDrop,
-		]
-	);
 
 	const autoExpandTimerRef = useRef( null );
 	const trashCount = useMemo( () => {
@@ -698,6 +657,114 @@ export default function Sidebar( {
 			collections,
 			receiveEntityRecords,
 			setFavorites,
+		]
+	);
+
+	const renameCollection = useCallback(
+		async ( id, title ) => {
+			await saveEntityRecord( 'postType', 'crtxt_collection', {
+				id,
+				title,
+			} );
+		},
+		[ saveEntityRecord ]
+	);
+
+	const duplicateCollection = useCallback(
+		async ( id ) => {
+			const created = await apiFetch( {
+				path: `/cortext/v1/collections/${ id }/duplicate`,
+				method: 'POST',
+			} );
+			invalidateResolution( 'getEntityRecords', [
+				'postType',
+				'crtxt_collection',
+				FULL_PAGE_COLLECTION_QUERY,
+			] );
+			// The new collection registers a new dynamic row CPT, so the
+			// cached postType entity list needs to be refreshed before any
+			// row lookup hits the new slug.
+			invalidateResolution( 'getEntitiesConfig', [ 'postType' ] );
+			if ( created?.id ) {
+				setAutoRenameCollectionId( created.id );
+				navigate( {
+					to: '/$',
+					params: { _splat: computeCollectionUri( created ) },
+				} );
+			}
+		},
+		[ invalidateResolution, navigate ]
+	);
+
+	const trashCollection = useCallback(
+		async ( id ) => {
+			await apiFetch( {
+				path: `/wp/v2/crtxt_collections/${ id }`,
+				method: 'DELETE',
+			} );
+			invalidateResolution( 'getEntityRecords', [
+				'postType',
+				'crtxt_collection',
+				FULL_PAGE_COLLECTION_QUERY,
+			] );
+			notifyDocumentTrashChanged();
+			if ( selectedCollectionId === id ) {
+				navigate( { to: '/' } );
+			}
+			setIsTrashPanelOpen( true );
+		},
+		[ invalidateResolution, navigate, selectedCollectionId ]
+	);
+
+	const renderCollectionRow = useCallback(
+		( collection, depth ) => (
+			<CollectionRow
+				key={ collection.id }
+				collection={ collection }
+				depth={ depth }
+				isSelected={ selectedCollectionId === collection.id }
+				isHome={
+					home?.kind === 'collection' && home.id === collection.id
+				}
+				isFavorite={ isCollectionFavorite( collection.id ) }
+				isFavoriteDisabled={ areFavoriteActionsDisabled }
+				isHomeUpdating={ isHomeUpdating }
+				onToggleFavorite={ ( id ) =>
+					toggleFavorite( 'collection', id )
+				}
+				onSetHome={ setCollectionHome }
+				onSelect={ () =>
+					navigate( {
+						to: '/$',
+						params: {
+							_splat: computeCollectionUri( collection ),
+						},
+					} )
+				}
+				onRename={ renameCollection }
+				onDuplicate={ duplicateCollection }
+				onTrash={ trashCollection }
+				autoRenameId={ autoRenameCollectionId }
+				onAutoRenameConsumed={ () => setAutoRenameCollectionId( null ) }
+				draggedId={ draggedId }
+				activeDrop={ activeDrop }
+			/>
+		),
+		[
+			selectedCollectionId,
+			home,
+			isCollectionFavorite,
+			areFavoriteActionsDisabled,
+			isHomeUpdating,
+			toggleFavorite,
+			setCollectionHome,
+			navigate,
+			renameCollection,
+			duplicateCollection,
+			trashCollection,
+			autoRenameCollectionId,
+			draggedId,
+			activeDrop,
 		]
 	);
 

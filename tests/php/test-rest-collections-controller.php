@@ -516,6 +516,163 @@ final class Test_Rest_Collections_Controller extends BaseTestCase {
 		$this->assertSame( 'cortext_collection_parent_invalid_type', $result->get_error_code() );
 	}
 
+	public function test_duplicate_clones_schema_with_new_slug_and_owner(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$page_id = $this->create_page();
+		$source  = $this->create_full_page_collection(
+			'reports',
+			'Quarterly reports',
+			array( 'post_parent' => $page_id )
+		);
+		$this->attach_scalar_field( $source, 'Owner', 'text' );
+		$this->attach_scalar_field( $source, 'Date', 'date' );
+
+		$response = $this->duplicate_collection( $source );
+
+		$this->assertSame( 201, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertSame( 'Copy of Quarterly reports', $data['title'] );
+		$this->assertNotSame( 'reports', $data['slug'] );
+		$this->assertSame( $page_id, $data['parent'] );
+		$this->assertSame( Collection::MODE_FULL_PAGE, $data['mode'] );
+		$this->assertSame( array(), $data['skipped_fields'] );
+
+		$new_field_ids = array_map( 'intval', get_post_meta( $data['id'], 'fields', false ) );
+		$this->assertCount( 2, $new_field_ids );
+		$this->assertSame(
+			array( 'Copy of Owner', 'Copy of Date' ),
+			array_map(
+				static fn ( int $id ): string => get_post( $id )->post_title,
+				$new_field_ids
+			)
+		);
+	}
+
+	public function test_duplicate_does_not_copy_rows(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$source = $this->create_full_page_collection( 'archive', 'Archive' );
+		( new CollectionEntries() )->register_for_collection( get_post( $source ) );
+
+		wp_insert_post(
+			array(
+				'post_type'   => CollectionEntries::CPT_PREFIX . 'archive',
+				'post_status' => 'private',
+				'post_title'  => 'Row 1',
+			)
+		);
+
+		$response = $this->duplicate_collection( $source );
+
+		$this->assertSame( 201, $response->get_status() );
+		$new_slug = $response->get_data()['slug'];
+
+		( new CollectionEntries() )->register_for_collection( get_post( $response->get_data()['id'] ) );
+		$row_ids = get_posts(
+			array(
+				'post_type'      => CollectionEntries::CPT_PREFIX . $new_slug,
+				'post_status'    => 'any',
+				'posts_per_page' => -1,
+				'fields'         => 'ids',
+			)
+		);
+		$this->assertSame( array(), $row_ids, 'Duplicate must not carry rows over.' );
+	}
+
+	public function test_duplicate_skips_relation_fields_and_reports_them(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$source = $this->create_full_page_collection( 'links', 'Links' );
+		$relation_id = wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Linked',
+				'meta_input'  => array( 'type' => 'relation' ),
+			)
+		);
+		add_post_meta( $source, 'fields', (string) $relation_id );
+		$this->attach_scalar_field( $source, 'Label', 'text' );
+
+		$response = $this->duplicate_collection( $source );
+
+		$this->assertSame( 201, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertCount( 1, $data['skipped_fields'] );
+		$this->assertSame( 'relation_unsupported', $data['skipped_fields'][0]['reason'] );
+
+		$new_field_ids = array_map( 'intval', get_post_meta( $data['id'], 'fields', false ) );
+		$this->assertCount( 1, $new_field_ids, 'Only the scalar field is cloned; the relation is left for a follow-up.' );
+		$this->assertSame( 'Copy of Label', get_post( $new_field_ids[0] )->post_title );
+	}
+
+	public function test_duplicate_remaps_rollup_references_to_cloned_field_ids(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$source     = $this->create_full_page_collection( 'metrics', 'Metrics' );
+		$target_id  = $this->attach_scalar_field( $source, 'Score', 'number' );
+		$rollup_id  = wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Total',
+				'meta_input'  => array(
+					'type'                     => 'rollup',
+					'rollup_target_field_id'   => (string) $target_id,
+					'rollup_aggregator'        => 'sum',
+				),
+			)
+		);
+		add_post_meta( $source, 'fields', (string) $rollup_id );
+
+		$response = $this->duplicate_collection( $source );
+
+		$new_field_ids = array_map( 'intval', get_post_meta( $response->get_data()['id'], 'fields', false ) );
+		$cloned_target = $new_field_ids[0];
+		$cloned_rollup = $new_field_ids[1];
+
+		$this->assertSame(
+			(string) $cloned_target,
+			(string) get_post_meta( $cloned_rollup, 'rollup_target_field_id', true ),
+			'Rollup references inside the cloned set should point at the new field ids.'
+		);
+	}
+
+	public function test_duplicate_rejects_inline_collection(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$page_id   = $this->create_page();
+		$inline_id = wp_insert_post(
+			array(
+				'post_type'   => Collection::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Inline',
+				'meta_input'  => array(
+					'slug'                            => 'inline-only',
+					Collection::MODE_META_KEY         => Collection::MODE_INLINE,
+					Collection::INLINE_OWNER_META_KEY => $page_id,
+				),
+			)
+		);
+
+		$response = $this->duplicate_collection( (int) $inline_id );
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame(
+			'cortext_collection_duplicate_inline_unsupported',
+			$response->get_data()['code']
+		);
+	}
+
+	public function test_duplicate_returns_404_for_unknown_id(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$response = $this->duplicate_collection( 99999 );
+
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 'cortext_collection_not_found', $response->get_data()['code'] );
+	}
+
 	public function test_query_filter_preserves_existing_meta_query_clauses(): void {
 		$controller = new CollectionsController();
 		$request    = new \WP_REST_Request( 'GET', '/wp/v2/' . Collection::POST_TYPE . 's' );
@@ -549,6 +706,43 @@ final class Test_Rest_Collections_Controller extends BaseTestCase {
 		$request->set_body_params( $body );
 
 		return rest_do_request( $request );
+	}
+
+	private function duplicate_collection( int $collection_id ) {
+		$request = new WP_REST_Request( 'POST', '/cortext/v1/collections/' . $collection_id . '/duplicate' );
+		return rest_do_request( $request );
+	}
+
+	private function create_full_page_collection( string $slug, string $title, array $overrides = array() ): int {
+		$id = wp_insert_post(
+			array_merge(
+				array(
+					'post_type'   => Collection::POST_TYPE,
+					'post_status' => 'private',
+					'post_title'  => $title,
+					'meta_input'  => array(
+						'slug'                    => $slug,
+						Collection::MODE_META_KEY => Collection::MODE_FULL_PAGE,
+					),
+				),
+				$overrides
+			)
+		);
+		$this->assertIsInt( $id );
+		return (int) $id;
+	}
+
+	private function attach_scalar_field( int $collection_id, string $title, string $type ): int {
+		$field_id = wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => $title,
+				'meta_input'  => array( 'type' => $type ),
+			)
+		);
+		add_post_meta( $collection_id, 'fields', (string) $field_id );
+		return (int) $field_id;
 	}
 
 	private function create_user( string $role ): int {

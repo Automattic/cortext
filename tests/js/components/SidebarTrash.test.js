@@ -90,6 +90,45 @@ jest.mock( '@tanstack/react-router', () => ( {
 	useNavigate: jest.fn(),
 } ) );
 
+jest.mock( '../../../src/components/TypeToConfirmDialog', () => {
+	const ReactLib = require( 'react' );
+	return {
+		__esModule: true,
+		default: ( {
+			title,
+			message,
+			confirmPhrase,
+			confirmLabel,
+			onConfirm,
+			onCancel,
+		} ) =>
+			ReactLib.createElement(
+				'div',
+				{ role: 'dialog', 'data-testid': 'type-to-confirm' },
+				ReactLib.createElement( 'p', null, title ),
+				ReactLib.createElement( 'p', null, message ),
+				ReactLib.createElement(
+					'span',
+					{ 'data-testid': 'type-to-confirm-phrase' },
+					confirmPhrase
+				),
+				ReactLib.createElement(
+					'button',
+					{
+						onClick: onConfirm,
+						'data-testid': 'type-to-confirm-confirm',
+					},
+					confirmLabel
+				),
+				ReactLib.createElement(
+					'button',
+					{ onClick: onCancel },
+					'Cancel'
+				)
+			),
+	};
+} );
+
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 import { useNavigate } from '@tanstack/react-router';
@@ -498,7 +537,7 @@ describe( 'SidebarTrash', () => {
 		fireEvent.click(
 			screen.getByRole( 'button', { name: 'Delete permanently' } )
 		);
-		clickConfirm();
+		fireEvent.click( screen.getByTestId( 'type-to-confirm-confirm' ) );
 
 		await waitFor( () => {
 			expect( onSelect ).toHaveBeenCalledWith( null );
@@ -790,6 +829,44 @@ describe( 'SidebarTrash', () => {
 				"Permanently delete this page and 1 subpage? You can't undo this."
 			)
 		).toBeInTheDocument();
+	} );
+
+	it( 'uses the typed-name dialog when permanent-deleting a collection', () => {
+		// Collections force the user to type the title to confirm. Pages and
+		// rows keep the lighter ConfirmDialog because their delete is paired
+		// with restore via the same UI path.
+		setTrashRecords( {
+			records: [
+				makeCollection( {
+					id: 81,
+					title: { rendered: 'Library', raw: 'Library' },
+				} ),
+			],
+		} );
+
+		renderSidebarTrash();
+
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Delete permanently' } )
+		);
+
+		expect( screen.getByTestId( 'type-to-confirm' ) ).toBeInTheDocument();
+		expect( screen.getByTestId( 'type-to-confirm-phrase' ) ).toHaveTextContent(
+			'Library'
+		);
+	} );
+
+	it( 'uses the plain confirm dialog for pages and rows', () => {
+		setTrashRecords( { records: [ makePage( { id: 91 } ) ] } );
+
+		renderSidebarTrash();
+
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Delete permanently' } )
+		);
+
+		expect( screen.queryByTestId( 'type-to-confirm' ) ).toBeNull();
+		expect( screen.getByTestId( 'confirm-dialog-confirm' ) ).toBeInTheDocument();
 	} );
 
 	it( 'falls back to nested items in the confirm when subpages and inline collections mix', () => {

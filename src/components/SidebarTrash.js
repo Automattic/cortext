@@ -12,6 +12,7 @@ import { rotateLeft, trash } from '@wordpress/icons';
 import { useNavigate } from '@tanstack/react-router';
 
 import PageIcon from './PageIcon';
+import TypeToConfirmDialog from './TypeToConfirmDialog';
 import {
 	ACTIVE_PAGES_QUERY,
 	POST_TYPE,
@@ -668,7 +669,20 @@ export default function SidebarTrash( {
 				</ul>
 			) }
 
-			{ pendingDelete !== null && (
+			{ pendingDelete !== null && pendingKind === 'collection' && (
+				<TypeToConfirmDialog
+					title={ __( 'Delete this collection?', 'cortext' ) }
+					message={ pendingDeleteMessage }
+					confirmPhrase={ titleText(
+						pendingDelete.title,
+						__( '(untitled)', 'cortext' )
+					) }
+					confirmLabel={ __( 'Delete permanently', 'cortext' ) }
+					onConfirm={ confirmPermanentDelete }
+					onCancel={ () => setPendingDelete( null ) }
+				/>
+			) }
+			{ pendingDelete !== null && pendingKind !== 'collection' && (
 				<ConfirmDialog
 					onConfirm={ confirmPermanentDelete }
 					onCancel={ () => setPendingDelete( null ) }
