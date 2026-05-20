@@ -97,7 +97,6 @@ export default function PublishToggle() {
 			</Button>
 			{ isPublic && link ? (
 				<Button
-					variant="link"
 					className="cortext-publish-toggle__copy"
 					onClick={ copyLink }
 					size="compact"
