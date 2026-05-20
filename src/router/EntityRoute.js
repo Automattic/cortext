@@ -16,9 +16,8 @@ import {
 
 // Lazy-loading Canvas keeps its Cortext subtree (publish toggle, page
 // inspector, autosave hook, snackbars, etc.) and the editor + interface
-// stylesheets off the initial JS/CSS bundles. Together with the parallel
-// split in RowDetailView, this trimmed ~160 KiB JS and ~130 KiB CSS from
-// the initial entry on first measurement.
+// stylesheets off the initial JS/CSS bundles. The parallel split in
+// RowDetailView does the same for the row peek surface.
 //
 // This split does not change which WP core editor handles WP enqueues:
 // wp-editor, wp-block-editor, wp-block-library, and wp-blocks still ship
