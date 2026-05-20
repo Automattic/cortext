@@ -10,13 +10,11 @@ on:
             - .github/workflows/perf-bench.yml
             - .github/scripts/write-perf-bench-summary.php
             - .github/scripts/write-perf-ui-summary.php
-            - .github/scripts/write-perf-comment.php
     workflow_dispatch:
 
 permissions:
     actions: read
-    # Lets the workflow post commit comments after main pushes.
-    contents: write
+    contents: read
 
 concurrency:
     group: ${{ github.workflow }}-${{ github.ref }}
@@ -29,23 +27,6 @@ jobs:
         timeout-minutes: 40
         steps:
             - uses: actions/checkout@v4
-              with:
-                  # The job benchmarks HEAD and HEAD^ in the same runner.
-                  fetch-depth: 2
-
-            - name: Capture HEAD and HEAD^ SHAs
-              id: refs
-              run: |
-                  set -euo pipefail
-                  head_sha="$(git rev-parse HEAD)"
-                  echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
-                  if parent_sha="$(git rev-parse HEAD^ 2>/dev/null)"; then
-                    echo "parent_sha=$parent_sha" >> "$GITHUB_OUTPUT"
-                    echo "has_parent=true" >> "$GITHUB_OUTPUT"
-                  else
-                    echo "has_parent=false" >> "$GITHUB_OUTPUT"
-                    echo "No HEAD^ available; running HEAD only."
-                  fi
 
             - uses: shivammathur/setup-php@v2
               with:
@@ -68,15 +49,15 @@ jobs:
                   node-version: '24.15'
                   cache: 'pnpm'
 
-            - name: Install dependencies (HEAD)
+            - name: Install dependencies
               run: |
                   composer install --no-interaction --prefer-dist --no-dev
                   pnpm install --frozen-lockfile
 
-            - name: Start wp-env (HEAD)
+            - name: Start wp-env
               run: pnpm run env:start
 
-            - name: Seed dataset (HEAD)
+            - name: Seed dataset
               run: >
                   pnpm exec wp-env run cli wp cortext perf-seed
                   --reset
@@ -88,7 +69,7 @@ jobs:
                   --relations=1
                   --rollups=1
 
-            - name: Run backend benchmark (HEAD)
+            - name: Run backend benchmark
               run: |
                   set -euo pipefail
                   mkdir -p artifacts
@@ -123,7 +104,7 @@ jobs:
 
                   exit "$status"
 
-            - name: Run UI benchmark (HEAD)
+            - name: Run UI benchmark
               env:
                   CORTEXT_PERF_UI: '1'
                   # wp-env serves WordPress on 8888.
@@ -140,143 +121,14 @@ jobs:
                   pnpm run build
                   pnpm exec wp-scripts test-playwright --config playwright.config.js tests/e2e/specs/perf-ui.spec.js
 
-            - name: Destroy wp-env before HEAD^ pass
-              if: steps.refs.outputs.has_parent == 'true'
-              run: printf 'y\n' | pnpm exec wp-env destroy
-
-            - name: Check out HEAD^
-              if: steps.refs.outputs.has_parent == 'true'
-              run: git checkout --detach ${{ steps.refs.outputs.parent_sha }}
-
-            - name: Install dependencies (HEAD^)
-              if: steps.refs.outputs.has_parent == 'true'
-              run: |
-                  composer install --no-interaction --prefer-dist --no-dev
-                  pnpm install --frozen-lockfile
-
-            - name: Start wp-env (HEAD^)
-              if: steps.refs.outputs.has_parent == 'true'
-              run: pnpm run env:start
-
-            - name: Seed dataset (HEAD^)
-              if: steps.refs.outputs.has_parent == 'true'
-              run: >
-                  pnpm exec wp-env run cli wp cortext perf-seed
-                  --reset
-                  --force
-                  --collections=3
-                  --rows=1250
-                  --fields=8
-                  --wide-fields=40
-                  --relations=1
-                  --rollups=1
-
-            - name: Run backend benchmark (HEAD^)
-              if: steps.refs.outputs.has_parent == 'true'
-              continue-on-error: true
-              run: |
-                  set -euo pipefail
-                  mkdir -p artifacts
-                  pnpm exec wp-env run cli wp cortext perf-bench \
-                    --iterations=10 \
-                    --warmup=1 \
-                    --pretty | tee artifacts/perf-bench-base.json
-
-            - name: Run UI benchmark (HEAD^)
-              if: steps.refs.outputs.has_parent == 'true'
-              continue-on-error: true
-              env:
-                  CORTEXT_PERF_UI: '1'
-                  WP_BASE_URL: http://localhost:8888
-              run: |
-                  set -euo pipefail
-
-                  if [ ! -f tests/e2e/specs/perf-ui.spec.js ]; then
-                    echo "No UI performance spec found."
-                    exit 0
-                  fi
-
-                  pnpm exec playwright install --with-deps chromium
-                  pnpm run build
-                  set +e
-                  pnpm exec wp-scripts test-playwright --config playwright.config.js tests/e2e/specs/perf-ui.spec.js
-                  status="$?"
-                  set -e
-
-                  if [ -s artifacts/perf-ui.json ]; then
-                    mv artifacts/perf-ui.json artifacts/perf-ui-base.json
-                  fi
-
-                  exit "$status"
-
-            - name: Restore HEAD
-              if: steps.refs.outputs.has_parent == 'true'
-              run: git checkout --detach ${{ steps.refs.outputs.head_sha }}
-
             - name: Write benchmark summaries
               if: always()
               run: |
                   mkdir -p artifacts
-
                   php .github/scripts/write-perf-bench-summary.php --current=artifacts/perf-bench.json | tee artifacts/perf-bench-summary.md
-
                   if [ -s artifacts/perf-ui.json ]; then
                     php .github/scripts/write-perf-ui-summary.php --current=artifacts/perf-ui.json | tee artifacts/perf-ui-summary.md
                   fi
-
-            - name: Build commit comment body
-              id: comment_body
-              if: always() && steps.refs.outputs.has_parent == 'true'
-              run: |
-                  set +e
-                  mkdir -p artifacts
-
-                  comment_args=(
-                    --bench-current=artifacts/perf-bench.json
-                    --bench-base=artifacts/perf-bench-base.json
-                    --base-label="previous main commit"
-                    --run-url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-                  )
-                  if [ -s artifacts/perf-ui.json ] && [ -s artifacts/perf-ui-base.json ]; then
-                    comment_args+=(--ui-current=artifacts/perf-ui.json --ui-base=artifacts/perf-ui-base.json)
-                  fi
-
-                  php .github/scripts/write-perf-comment.php "${comment_args[@]}" --exit-on-regression > artifacts/perf-bench-comment-body.md
-                  status="$?"
-                  echo "regression_status=$status" >> "$GITHUB_OUTPUT"
-                  exit 0
-
-            - name: Post commit comment
-              if: always() && steps.refs.outputs.has_parent == 'true'
-              continue-on-error: true
-              env:
-                  GH_TOKEN: ${{ github.token }}
-                  REPOSITORY: ${{ github.repository }}
-                  HEAD_SHA: ${{ steps.refs.outputs.head_sha }}
-              run: |
-                  set -euo pipefail
-
-                  if [ ! -s artifacts/perf-bench-comment-body.md ]; then
-                    exit 0
-                  fi
-
-                  marker='<!-- cortext-perf-bench-comment -->'
-                  comment_file='artifacts/perf-bench-comment.md'
-                  {
-                    echo "$marker"
-                    cat artifacts/perf-bench-comment-body.md
-                  } > "$comment_file"
-
-                  if ! gh api --method POST "repos/$REPOSITORY/commits/$HEAD_SHA/comments" \
-                    --field "body=@$comment_file" >/dev/null; then
-                    echo "Could not post commit benchmark comment; skipping."
-                  fi
-
-            - name: Fail job if regression detected
-              if: steps.refs.outputs.has_parent == 'true' && steps.comment_body.outputs.regression_status != '0'
-              run: |
-                  echo "Comment script flagged a regression vs HEAD^. See the commit comment."
-                  exit 1
 
             - if: failure()
               uses: actions/upload-artifact@v4
