@@ -527,13 +527,15 @@ export default function SidebarTrash( {
 						// Inline collections that surface as roots (because
 						// their owner page is still active) show the owner's
 						// title so users can tell similar inline tables apart.
-						const ownerTitle =
-							kind === 'collection' && document.owner
-								? titleText(
-										document.owner?.title,
-										__( 'Page', 'cortext' )
-								  )
-								: '';
+						// `document.owner` is only set by `format_document` for
+						// inline collections, so reading it is enough to drive
+						// the breadcrumb.
+						const ownerTitle = document.owner
+							? titleText(
+									document.owner?.title,
+									__( 'Page', 'cortext' )
+							  )
+							: '';
 						const rowClasses = [ 'cortext-sidebar__row' ];
 						if ( isSelected ) {
 							rowClasses.push( 'is-selected' );
@@ -669,28 +671,31 @@ export default function SidebarTrash( {
 				</ul>
 			) }
 
-			{ pendingDelete !== null && pendingKind === 'collection' && (
-				<TypeToConfirmDialog
-					title={ __( 'Delete this collection?', 'cortext' ) }
-					message={ pendingDeleteMessage }
-					confirmPhrase={ titleText(
-						pendingDelete.title,
-						__( '(untitled)', 'cortext' )
-					) }
-					confirmLabel={ __( 'Delete permanently', 'cortext' ) }
-					onConfirm={ confirmPermanentDelete }
-					onCancel={ () => setPendingDelete( null ) }
-				/>
-			) }
-			{ pendingDelete !== null && pendingKind !== 'collection' && (
-				<ConfirmDialog
-					onConfirm={ confirmPermanentDelete }
-					onCancel={ () => setPendingDelete( null ) }
-					confirmButtonText={ __( 'Delete permanently', 'cortext' ) }
-				>
-					{ pendingDeleteMessage }
-				</ConfirmDialog>
-			) }
+			{ pendingDelete !== null &&
+				( pendingKind === 'collection' ? (
+					<TypeToConfirmDialog
+						title={ __( 'Delete this collection?', 'cortext' ) }
+						message={ pendingDeleteMessage }
+						confirmPhrase={ titleText(
+							pendingDelete.title,
+							__( '(untitled)', 'cortext' )
+						) }
+						confirmLabel={ __( 'Delete permanently', 'cortext' ) }
+						onConfirm={ confirmPermanentDelete }
+						onCancel={ () => setPendingDelete( null ) }
+					/>
+				) : (
+					<ConfirmDialog
+						onConfirm={ confirmPermanentDelete }
+						onCancel={ () => setPendingDelete( null ) }
+						confirmButtonText={ __(
+							'Delete permanently',
+							'cortext'
+						) }
+					>
+						{ pendingDeleteMessage }
+					</ConfirmDialog>
+				) ) }
 		</>
 	);
 }

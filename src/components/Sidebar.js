@@ -96,6 +96,7 @@ import PageRow from './PageRow';
 import { openCommandPalette } from './CommandPalette';
 import SidebarFavorites, {
 	favoriteKey,
+	filterFavoritesForTrashedCollection,
 	filterFavoritesForTrashedPage,
 } from './SidebarFavorites';
 import SidebarResizeHandle from './SidebarResizeHandle';
@@ -207,6 +208,7 @@ export default function Sidebar( {
 		[ activePrefix, activeTail ]
 	);
 	const [ favoritesError, setFavoritesError ] = useState( null );
+	const [ duplicateNotice, setDuplicateNotice ] = useState( null );
 	const areFavoriteActionsDisabled =
 		isResolvingFavorites || isUpdatingFavorites;
 	const { isSectionCollapsed, toggleSection } = useSidebarSections();
@@ -685,6 +687,29 @@ export default function Sidebar( {
 			// cached postType entity list needs to be refreshed before any
 			// row lookup hits the new slug.
 			invalidateResolution( 'getEntitiesConfig', [ 'postType' ] );
+			// Relation fields can't be cloned cleanly yet (creating the
+			// paired reverse field on the related collection is a follow-up),
+			// so the server returns them in `skipped_fields`. Surface a notice
+			// so the user knows the copy is missing those columns.
+			const skipped = Array.isArray( created?.skipped_fields )
+				? created.skipped_fields
+				: [];
+			if ( skipped.length > 0 ) {
+				setDuplicateNotice(
+					sprintf(
+						/* translators: %d: number of relation fields the duplicate could not clone. */
+						_n(
+							'%d relation field was not copied. Recreate it in the new collection if you need it.',
+							'%d relation fields were not copied. Recreate them in the new collection if you need them.',
+							skipped.length,
+							'cortext'
+						),
+						skipped.length
+					)
+				);
+			} else {
+				setDuplicateNotice( null );
+			}
 			if ( created?.id ) {
 				setAutoRenameCollectionId( created.id );
 				navigate( {
@@ -708,12 +733,28 @@ export default function Sidebar( {
 				FULL_PAGE_COLLECTION_QUERY,
 			] );
 			notifyDocumentTrashChanged();
+			// Drop the favorite for the trashed collection so the sidebar
+			// stops rendering a stale entry and so the next favorites PUT
+			// doesn't include an id the server now rejects as trashed.
+			try {
+				await setFavorites( ( current ) =>
+					filterFavoritesForTrashedCollection( current, id )
+				);
+			} catch ( err ) {
+				setFavoritesError(
+					err?.message ??
+						__(
+							'Collection moved to Trash, but Favorites could not be updated.',
+							'cortext'
+						)
+				);
+			}
 			if ( selectedCollectionId === id ) {
 				navigate( { to: '/' } );
 			}
 			setIsTrashPanelOpen( true );
 		},
-		[ invalidateResolution, navigate, selectedCollectionId ]
+		[ invalidateResolution, navigate, selectedCollectionId, setFavorites ]
 	);
 
 	const renderCollectionRow = useCallback(
@@ -983,6 +1024,14 @@ export default function Sidebar( {
 							onRemove={ () => setFavoritesError( null ) }
 						>
 							{ favoritesError }
+						</Notice>
+					) : null }
+					{ duplicateNotice ? (
+						<Notice
+							status="warning"
+							onRemove={ () => setDuplicateNotice( null ) }
+						>
+							{ duplicateNotice }
 						</Notice>
 					) : null }
 					<SidebarSection
