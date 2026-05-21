@@ -23,6 +23,7 @@ import './Canvas.scss';
 import './initEditor';
 import useAutosave from '../hooks/useAutosave';
 import useDelayedFlag from '../hooks/useDelayedFlag';
+import { withViewTransition } from '../hooks/viewTransition';
 import { POST_TYPE } from './page-queries';
 import EditorBody from './EditorBody';
 import PublishToggle from './PublishToggle';
@@ -223,7 +224,10 @@ function CanvasEditor( {
 		async function switchAfterSave() {
 			const didFlush = await flushNow();
 			if ( ! cancelled && didFlush ) {
-				onSwitchPost( pendingPost );
+				// Document-to-document swaps don't change EntityRoute's
+				// `active`, so the surface-level cross-fade can't see them.
+				// Trigger one here instead.
+				withViewTransition( () => onSwitchPost( pendingPost ) );
 			}
 		}
 

@@ -10,6 +10,7 @@ import {
 	useLayoutEffect,
 	useMemo,
 	useReducer,
+	useRef,
 	useState,
 } from '@wordpress/element';
 
@@ -41,6 +42,7 @@ import {
 } from '../components/page-queries';
 import { firstPageInTree } from '../components/pages-tree';
 import { COLLECTION_QUERY } from '../collections';
+import { withViewTransition } from '../hooks/viewTransition';
 import { useRecents } from '../hooks/useRecents';
 import { useWorkspaceHome } from '../hooks/useWorkspaceHome';
 import useCollectionFields from '../hooks/useCollectionFields';
@@ -181,7 +183,33 @@ export default function EntityRoute( { history } ) {
 			! readyCollectionIds.has( target.id ) );
 	const showWorkspaceProgress = useDelayedFlag( isWorkspaceNavigating );
 
-	const dispatch = rawDispatch;
+	// Run the reducer ahead of time so we only wrap the dispatch when
+	// `active` actually flips. Otherwise every DOCUMENT_RESOLVED or
+	// COLLECTION_RESOLVED would pin the canvas for the cross-fade
+	// duration even though nothing visible changed.
+	const stateRef = useRef( state );
+	stateRef.current = state;
+	const dispatch = useCallback( ( action ) => {
+		const before = stateRef.current;
+		const after = reducer( before, action );
+		const visualChanged =
+			before.active.kind !== after.active.kind ||
+			( before.active.id ?? null ) !== ( after.active.id ?? null );
+		if ( ! visualChanged ) {
+			rawDispatch( action );
+			return;
+		}
+		const touchesCollection =
+			action.target?.kind === 'collection' ||
+			before.active.kind === 'collection' ||
+			after.active.kind === 'collection' ||
+			action.type.startsWith( 'COLLECTION_' );
+		if ( touchesCollection ) {
+			rawDispatch( action );
+			return;
+		}
+		withViewTransition( () => rawDispatch( action ) );
+	}, [] );
 
 	const documentResolution = useResolveDocument(
 		target.kind === 'document' ? target.tail : ''
