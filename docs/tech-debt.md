@@ -385,13 +385,13 @@ The same selector shape affects user-visible save side effects. `didPostSaveRequ
 
 **Solution.** Extract a shared sidebar-row primitive with explicit slots for title navigation, drag handle, menu/actions, selected state, and shortcut-only rows. Then `PageRow`, `CollectionRow`, and `SidebarFavorites` can share the same interaction contract without reusing the wrong DOM shape for Favorites.
 
-## 42. Row properties need a real document block `[internal, important]`
+## 42. Frontend render for in-document row properties `[internal, important]`
 
-**What.** Important. Row documents now look much closer to pages in the editor, but their collection-field properties are still Cortext shell UI sitting above the block-editor iframe. That is fine for this pass: the form works, and full-page mode can hide it. It is not fine as the long-term publishing model. Because the properties sit outside `post_content`, public themes never see them through `the_content()`, and we cannot get the Notion order (cover, icon, title, properties, body) without another one-off surface. If rows can be published, this is the next architectural gap to close.
+**What.** Row properties now render inside the block-editor iframe, between the title and body, through the editor-only slot in `src/editor/filters/document-properties-slot.js`. The slot stays out of `post_content` because there is no per-row state to serialize, and exposing it as a block would give users a toolbar with nothing useful to edit. The missing piece is frontend output. Rows rendered through `the_content()` do not include their schema fields yet, so published rows currently show only body blocks.
 
-**Where.** `RowProperties` in `src/components/RowProperties.js`, mounted from `src/components/Canvas.js` for full-page row documents and `src/components/RowDetailView.js` for side/modal row detail. There is still no `cortext/document-properties` block or PHP render callback.
+**Where.** `src/components/InDocumentRowProperties.js` renders the editor slot. `src/components/DocumentPropertiesContext.js` passes `fields`, `fallbackRecord`, and `isVisible` from the current surface. `src/editor/filters/document-properties-slot.js` wraps the root `core/post-title` block so the slot can sit under the title. The schema accessor is `Cortext\Rest\RowsFilterQuery::field_schema_for( $collection_id )`; field values are formatted by `RowsController::format_typed_value()`.
 
-**Solution.** Build `cortext/document-properties` as a locked dynamic block, in the same family as `cortext/document-cover` and `cortext/document-icon`. Its `edit()` should reuse the row-property form inside the editor iframe. Its `render_callback` should read the row's collection schema and meta, then emit frontend HTML for public themes. The header-block insertion path should place it after cover/icon/title on row documents. The full-page hide/show control then becomes an editor visibility preference, not the source of truth for whether properties exist in the document.
+**Solution.** Add a `the_content` filter, or a row-template hook, that prints `<div class="cortext-document-properties">…</div>` before the body for rows whose collection has fields. Format values with `RowsController::format_typed_value()`. Share the same SCSS through `src/frontend.scss` so public markup uses the editor layout. While doing that work, decide whether row CPTs should become `publicly_queryable`; they are not today.
 
 ## 43. Row recents still target the parent collection `[internal]`
 
