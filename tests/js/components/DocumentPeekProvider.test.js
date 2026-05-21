@@ -167,7 +167,7 @@ describe( 'DocumentPeekProvider', () => {
 		expect( result.current.state.peek?.docId ).toBe( 10 );
 	} );
 
-	it( 'keeps a pinned side peek pinned while walking adjacent rows', async () => {
+	it( 'keeps the pin while moving to the next row', async () => {
 		const rows = [
 			{ id: 10, slug: 'first' },
 			{ id: 20, slug: 'second' },

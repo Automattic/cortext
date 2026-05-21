@@ -1711,7 +1711,7 @@ test.describe( 'Collection view block', () => {
 				method: 'POST',
 				path: '/wp/v2/crtxt_pages',
 				data: {
-					title: 'Pinned peek route target',
+					title: 'Pinned peek target',
 					status: 'private',
 				},
 			} );

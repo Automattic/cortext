@@ -1049,9 +1049,8 @@ body.cortext-sidebar-resizing {
 	}
 }
 
-// Keep the global side peek visually above canvas route transitions. Without
-// its own named layer, the canvas snapshot can briefly paint over the overlay,
-// which reads as the pinned peek closing and reopening.
+// The side peek lives outside the canvas. Give it its own transition layer so
+// the canvas cross-fade never flashes over it.
 ::view-transition-group(cortext-canvas) {
 	z-index: 1;
 }

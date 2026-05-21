@@ -78,9 +78,8 @@ export function DocumentPeekProvider( { children } ) {
 	const peekRef = useRef( peek );
 	peekRef.current = peek;
 
-	// In-memory pin. Resets when the peek closes or goes full-page. It
-	// survives side/modal flips and row switches that happen while pinned, so
-	// route navigation does not briefly drop the panel.
+	// The pin lives in memory. Closing the peek or opening it full-page clears
+	// it, but row-to-row moves keep it so a pinned peek stays put.
 	const [ isPinned, setIsPinned ] = useState( false );
 	const isPinnedRef = useRef( isPinned );
 	isPinnedRef.current = isPinned;
