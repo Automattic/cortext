@@ -105,11 +105,12 @@ body.cortext-fullscreen {
 }
 
 .cortext-shell {
+	--cortext-shell-sidebar-track-width: var(--cortext-sidebar-width);
+
+	position: relative;
+	isolation: isolate;
 	display: grid;
-	// The trailing `auto` track is reserved for the side peek panel
-	// (RowDetailSidebarSlot). It collapses to 0 when no peek is mounted and
-	// follows the panel's own width animation when it is.
-	grid-template-columns: var(--cortext-sidebar-width) minmax(0, 1fr) auto;
+	grid-template-columns: var(--cortext-shell-sidebar-track-width) minmax(0, 1fr);
 	height: 100vh;
 	transition: grid-template-columns 160ms ease;
 }
@@ -123,11 +124,12 @@ body.cortext-fullscreen {
 // Collapsed: pin to rail width but keep the saved expanded width on the
 // root, so toggling back restores it.
 .cortext-root[data-sidebar-collapsed="true"] .cortext-shell {
-	grid-template-columns: var(--cortext-sidebar-width-rail) minmax(0, 1fr) auto;
+	--cortext-shell-sidebar-track-width: var(--cortext-sidebar-width-rail);
 }
 
 .cortext-sidebar {
 	position: relative;
+	z-index: 3;
 	display: flex;
 	flex-direction: column;
 	background: var(--cortext-sidebar-surface);
@@ -1021,6 +1023,7 @@ body.cortext-sidebar-resizing {
 
 .cortext-shell__canvas {
 	position: relative;
+	z-index: 1;
 	overflow: hidden;
 	display: flex;
 	flex-direction: column;
@@ -1044,6 +1047,26 @@ body.cortext-sidebar-resizing {
 		inset: 0;
 		min-height: 0;
 	}
+}
+
+// The side peek lives outside the canvas. Give it its own transition layer so
+// the canvas cross-fade never flashes over it.
+::view-transition-group(cortext-canvas) {
+	z-index: 1;
+}
+
+::view-transition-group(cortext-row-detail-sidebar) {
+	z-index: 2;
+	animation: none;
+}
+
+::view-transition-old(cortext-row-detail-sidebar) {
+	display: none;
+}
+
+::view-transition-new(cortext-row-detail-sidebar) {
+	animation: none;
+	mix-blend-mode: normal;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -3926,18 +3949,22 @@ tr:has(.cortext-title-cell--is-open)
 }
 
 .cortext-row-detail-sidebar-shell {
-	position: relative;
+	position: absolute;
+	z-index: 2;
+	inset-block: 0;
+	inset-inline-end: 0;
 	flex: 0 0 var(--cortext-row-detail-sidebar-width, 560px);
 	width: var(--cortext-row-detail-sidebar-width, 560px);
 	height: 100%;
 	min-width: 0;
 	min-height: 0;
-	max-width: min(840px, 66vw);
+	max-width: min(840px, 66vw, calc(100% - var(--cortext-shell-sidebar-track-width)));
 	background: $white;
 	border-left: $border-width solid var(--cortext-row-detail-border, #e9e9e7);
 	box-shadow: -18px 0 36px rgba(0, 0, 0, 0.12);
 	overflow: hidden;
 	will-change: width;
+	view-transition-name: cortext-row-detail-sidebar;
 	animation:
 		cortext-row-detail-sidebar-open 300ms
 		cubic-bezier(0.6, 0, 0.4, 1) both;
@@ -5316,6 +5343,14 @@ body.cortext-hide-block-settings-menu .block-editor-block-switcher {
 		padding-top: 16px;
 		border-top: 1px solid #e0e0e0;
 	}
+}
+
+::view-transition-group(cortext-alpha-notice-overlay) {
+	z-index: 3;
+}
+
+::view-transition-group(cortext-alpha-notice-frame) {
+	z-index: 4;
 }
 
 ::view-transition-old(cortext-alpha-notice-overlay),

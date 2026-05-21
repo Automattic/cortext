@@ -78,9 +78,11 @@ export function DocumentPeekProvider( { children } ) {
 	const peekRef = useRef( peek );
 	peekRef.current = peek;
 
-	// In-memory pin. Resets when the peek closes or a different row opens.
-	// Survives side/modal flips so enlarging the peek doesn't drop it.
+	// The pin lives in memory. Closing the peek or opening it full-page clears
+	// it, but row-to-row moves keep it so a pinned peek stays put.
 	const [ isPinned, setIsPinned ] = useState( false );
+	const isPinnedRef = useRef( isPinned );
+	isPinnedRef.current = isPinned;
 
 	// RowDetailView exposes flush/discard through onApi. Run it before close or
 	// row switches so unsaved edits do not vanish.
@@ -127,7 +129,9 @@ export function DocumentPeekProvider( { children } ) {
 			} else if ( transition.type === 'peek' ) {
 				clearModeSurfaceTransition();
 				setPeek( transition.peek );
-				setIsPinned( false );
+				setIsPinned( ( current ) =>
+					transition.preservePin ? current : false
+				);
 			} else if ( transition.type === 'mode' ) {
 				setPeek( ( current ) =>
 					current ? { ...current, mode: transition.mode } : current
@@ -208,6 +212,7 @@ export function DocumentPeekProvider( { children } ) {
 			const nextMode = isSticky
 				? currentMode
 				: normalizeRowDetailMode( preferredMode );
+			const preservePin = isSticky && isPinnedRef.current;
 
 			if ( nextMode === 'full' ) {
 				const uri = rowRoute( { id, slug } );
@@ -219,6 +224,7 @@ export function DocumentPeekProvider( { children } ) {
 
 			runTransition( {
 				type: 'peek',
+				preservePin,
 				peek: {
 					docId: id,
 					slug,
@@ -306,6 +312,7 @@ export function DocumentPeekProvider( { children } ) {
 			}
 			runTransition( {
 				type: 'peek',
+				preservePin: true,
 				peek: {
 					...current,
 					docId: nextRow.id,

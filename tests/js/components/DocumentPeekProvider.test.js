@@ -31,6 +31,14 @@ function useBoth() {
 	};
 }
 
+function useHarness() {
+	return {
+		state: useDocumentPeekState(),
+		actions: useDocumentPeekActions(),
+		surface: useDocumentPeekSurface(),
+	};
+}
+
 beforeEach( () => {
 	mockNavigate.mockReset();
 } );
@@ -157,6 +165,38 @@ describe( 'DocumentPeekProvider', () => {
 		} );
 
 		expect( result.current.state.peek?.docId ).toBe( 10 );
+	} );
+
+	it( 'keeps the pin while moving to the next row', async () => {
+		const rows = [
+			{ id: 10, slug: 'first' },
+			{ id: 20, slug: 'second' },
+		];
+		const { result } = renderHook( useHarness, { wrapper } );
+
+		await act( async () => {
+			result.current.actions.openDocument( {
+				id: 10,
+				slug: 'first',
+				postType: 'crtxt_a',
+				collectionId: 1,
+				preferredMode: 'side',
+				source: { kind: 'collection', getRowList: () => rows },
+			} );
+		} );
+		act( () => {
+			result.current.surface.togglePin();
+		} );
+		await act( async () => {
+			result.current.surface.goToAdjacentDocument( 1 );
+		} );
+
+		expect( result.current.state.peek ).toMatchObject( {
+			docId: 20,
+			slug: 'second',
+			mode: 'side',
+		} );
+		expect( result.current.state.isPinned ).toBe( true );
 	} );
 
 	it( 'requestMode keeps the row slug when switching to full mode', async () => {
