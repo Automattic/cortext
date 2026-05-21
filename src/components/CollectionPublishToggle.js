@@ -7,7 +7,7 @@ import { store as coreStore, useEntityRecord } from '@wordpress/core-data';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { useCallback, useState } from '@wordpress/element';
 
-import { collectionTitle } from './CollectionRow';
+import { documentTitle as collectionTitle } from '../documents';
 import PublishToggle from './PublishToggle';
 import useCollectionDependentPages from '../hooks/useCollectionDependentPages';
 

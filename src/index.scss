@@ -497,6 +497,10 @@ body.cortext-fullscreen {
 		// Pin to the compact-size height of the title button and rename
 		// input so swapping between them doesn't bump the row.
 		height: $grid-unit-40;
+		// The row wrapper sets `--cortext-depth`. Multiply by the grid step
+		// here so the SCSS variable stays the single source of truth and
+		// nested rows line up with their parents.
+		padding-inline-start: calc(var(--cortext-depth, 0) * #{$grid-unit-20});
 		border-radius: var(--cortext-shell-radius);
 		cursor: grab;
 		user-select: none;
