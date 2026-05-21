@@ -26,7 +26,7 @@ import useDelayedFlag from '../hooks/useDelayedFlag';
 import { withViewTransition } from '../hooks/viewTransition';
 import { POST_TYPE } from './page-queries';
 import EditorBody from './EditorBody';
-import PublishToggle from './PublishToggle';
+import PagePublishToggle from './PagePublishToggle';
 import RowProperties from './RowProperties';
 import { CanvasProgressBar } from './Skeleton';
 import { TopBarActionsFill } from './WorkspaceTopBar';
@@ -94,7 +94,7 @@ function DocumentActions( {
 		<TopBarActionsFill>
 			<div className="cortext-document-actions">
 				{ topBarActions }
-				{ postType === POST_TYPE ? <PublishToggle /> : null }
+				{ postType === POST_TYPE ? <PagePublishToggle /> : null }
 				{ hasProperties ? (
 					<Button
 						className="cortext-document-actions__fields"
