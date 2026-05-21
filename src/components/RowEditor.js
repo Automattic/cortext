@@ -4,9 +4,9 @@
 // panel stay off the initial admin bundle. The row peek's chrome
 // (toolbar, modal frame, navigation buttons) lives in RowDetailView and
 // renders synchronously; only this inner stack suspends on first row open.
-import { useDispatch, useSelect } from '@wordpress/data';
+import { useDispatch } from '@wordpress/data';
 import { EditorProvider, store as editorStore } from '@wordpress/editor';
-import { useCallback, useEffect, useMemo, useRef } from '@wordpress/element';
+import { useCallback, useEffect, useRef } from '@wordpress/element';
 
 import useAutosave from '../hooks/useAutosave';
 // Registers core + Cortext blocks before any editor renders. Living here
@@ -15,9 +15,8 @@ import useAutosave from '../hooks/useAutosave';
 // bundle. The module is idempotent, so Canvas's copy of this import is
 // a no-op when RowEditor mounts second, or vice versa.
 import './initEditor';
+import { DocumentPropertiesProvider } from './DocumentPropertiesContext';
 import EditorBody from './EditorBody';
-import RowProperties from './RowProperties';
-import { titleFromRow } from './rowDetailUtils';
 
 const ROW_DETAIL_EDITOR_CSS = `
 	body {
@@ -51,24 +50,6 @@ function DetailReadySignal( { detailKey, onReady } ) {
 		onReady( detailKey );
 	}, [ detailKey, onReady ] );
 
-	return null;
-}
-
-function RowTitleBridge( { isActive, fallback, onTitle } ) {
-	const editedTitle = useSelect(
-		( select ) => select( editorStore ).getEditedPostAttribute( 'title' ),
-		[]
-	);
-	useEffect( () => {
-		if ( ! isActive || ! onTitle ) {
-			return;
-		}
-		const next =
-			typeof editedTitle === 'string' && editedTitle !== ''
-				? editedTitle
-				: fallback;
-		onTitle( next );
-	}, [ editedTitle, fallback, isActive, onTitle ] );
 	return null;
 }
 
@@ -124,17 +105,14 @@ function DetailPaneContent( {
 	fields,
 	isActive,
 	isHidden,
-	isTitleActive,
 	onApi,
 	onRestored,
 	onSaved,
-	onTitle,
 	postType,
 	propertiesVisible,
 	row,
 	rowId,
 } ) {
-	const fallbackTitle = useMemo( () => titleFromRow( row ), [ row ] );
 	return (
 		<>
 			<RowAutosaveBridge
@@ -147,24 +125,18 @@ function DetailPaneContent( {
 						: null
 				}
 			/>
-			<RowTitleBridge
-				isActive={ isTitleActive }
-				fallback={ fallbackTitle }
-				onTitle={ onTitle }
-			/>
-			{ /* tech-debt.md#41: this is shell-mounted until row
-			     properties are a locked document block. */ }
-			<RowProperties
+			<DocumentPropertiesProvider
 				fields={ fields }
-				row={ row }
-				visible={ propertiesVisible }
-			/>
-			<EditorBody
-				postId={ row?.id }
-				postType={ postType }
-				extraStyles={ ROW_DETAIL_EXTRA_STYLES }
-				onRestored={ onRestored }
-			/>
+				fallbackRecord={ row }
+				isVisible={ propertiesVisible }
+			>
+				<EditorBody
+					postId={ row?.id }
+					postType={ postType }
+					extraStyles={ ROW_DETAIL_EXTRA_STYLES }
+					onRestored={ onRestored }
+				/>
+			</DocumentPropertiesProvider>
 			<div
 				aria-hidden={ isHidden ? true : undefined }
 				{ ...( isHidden ? { inert: '' } : {} ) }
@@ -179,12 +151,10 @@ export default function RowEditor( {
 	fields,
 	isActive,
 	isHidden,
-	isTitleActive,
 	onApi,
 	onPaneReady,
 	onRestored,
 	onSaved,
-	onTitle,
 	post,
 	postType,
 	propertiesVisible,
@@ -206,11 +176,9 @@ export default function RowEditor( {
 				fields={ fields }
 				isActive={ isActive }
 				isHidden={ isHidden }
-				isTitleActive={ isTitleActive }
 				onApi={ onApi }
 				onRestored={ onRestored }
 				onSaved={ onSaved }
-				onTitle={ onTitle }
 				postType={ postType }
 				propertiesVisible={ propertiesVisible }
 				row={ row }

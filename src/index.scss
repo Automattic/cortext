@@ -106,9 +106,8 @@ body.cortext-fullscreen {
 
 .cortext-shell {
 	display: grid;
-	// The trailing `auto` track is reserved for the side peek panel
-	// (RowDetailSidebarSlot). It collapses to 0 when no peek is mounted and
-	// follows the panel's own width animation when it is.
+	// The trailing `auto` track holds the side peek panel. It collapses when no
+	// peek is mounted and follows the panel's width animation when one is open.
 	grid-template-columns: var(--cortext-sidebar-width) minmax(0, 1fr) auto;
 	height: 100vh;
 	transition: grid-template-columns 160ms ease;
@@ -3124,63 +3123,6 @@ tr:has(.cortext-title-cell--is-open)
 		width: 100%;
 	}
 
-	// `grid-template-rows: 1fr → 0fr` is the smoothly-animatable way to
-	// collapse a wrapper to its content's natural height. The body child
-	// hides via overflow: hidden; the chevron escapes the collapse via
-	// position: absolute so it stays visible over the cover when hidden.
-	&--canvas-properties {
-		position: relative;
-		display: grid;
-		flex: 0 0 auto;
-		width: 100%;
-		grid-template-rows: 1fr;
-		transition: grid-template-rows 0.22s ease;
-	}
-
-	&--canvas-properties-collapsed {
-		grid-template-rows: 0fr;
-	}
-
-	// Border on the body (not the wrapper) so it disappears with the
-	// content when collapsed; matches the toolbar's `__header`
-	// border-bottom in side / modal panes for visual consistency.
-	&__canvas-properties-body {
-		min-height: 0;
-		overflow: hidden;
-		border-bottom: $border-width solid $gray-200;
-	}
-
-	// Solid background pill so the chevron stays legible even when it
-	// floats over a dark cover image. The button itself is small; the
-	// pill keeps a constant contrast surface regardless of what's behind.
-	&__canvas-properties-toggle.components-button {
-		position: absolute;
-		top: $grid-unit-10;
-		left: $grid-unit-10;
-		z-index: 2;
-		background: rgba(255, 255, 255, 0.92);
-		color: $gray-900;
-		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
-		opacity: 0;
-		transition: opacity 0.12s ease, background-color 0.12s ease;
-
-		&:hover,
-		&:focus-visible {
-			background: $white;
-			color: $gray-900;
-		}
-	}
-
-	/* stylelint-disable no-descending-specificity */
-	&--canvas-properties:hover &__canvas-properties-toggle.components-button,
-	&__canvas-properties-toggle.components-button:focus-visible,
-	// When collapsed, the chevron is the only affordance, so keep it
-	// always visible (still tap to bring properties back).
-	&--canvas-properties-collapsed &__canvas-properties-toggle.components-button {
-		opacity: 1;
-	}
-	/* stylelint-enable no-descending-specificity */
-
 	&__frame {
 		display: flex;
 		flex-direction: column;
@@ -3922,6 +3864,27 @@ tr:has(.cortext-title-cell--is-open)
 	to {
 		opacity: 1;
 		transform: translateY(0);
+	}
+}
+
+// Row properties rendered under the title in the editor canvas. Start with the
+// base RowProperties styles, then apply the compact spacing needed here.
+.cortext-document-properties {
+
+	.cortext-row-detail__properties {
+		padding: 0;
+	}
+
+	.cortext-row-detail__property {
+		grid-template-columns: minmax(96px, 116px) minmax(0, 1fr);
+		gap: $grid-unit-10;
+		min-height: $grid-unit-30;
+		font-size: 14px;
+	}
+
+	.cortext-row-detail__property-label,
+	.cortext-row-detail__property-value {
+		font-size: 14px;
 	}
 }
 

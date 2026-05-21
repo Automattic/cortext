@@ -28,7 +28,7 @@
  *   - row_navigate_next: "Row below" click in full row detail to the next row.
  */
 
-const { test } = require( '@wordpress/e2e-test-utils-playwright' );
+const { expect, test } = require( '@wordpress/e2e-test-utils-playwright' );
 const fs = require( 'node:fs' );
 const path = require( 'node:path' );
 const { resolveCollectionAdminUrl } = require( '../perf-fixtures' );
@@ -618,25 +618,21 @@ test.describe( 'Cortext UI performance', () => {
 					.click( { force: true } );
 				await waitForRowDetailReady( page );
 
-				const previousTitle = await page
-					.locator( '.cortext-row-detail__title' )
-					.first()
-					.textContent();
+				// The title is now the locked `core/post-title` block inside
+				// the editor canvas iframe (RSM-2705).
+				const titleLocator = page
+					.frameLocator( '[name="editor-canvas"]' )
+					.locator( '[data-type="core/post-title"]' )
+					.first();
+				const previousTitle = await titleLocator.textContent();
 
 				await probe.reset();
 				const startedAt = Date.now();
 
 				await page.getByLabel( 'Row below' ).click();
-				await page.waitForFunction(
-					( prev ) => {
-						const el = document.querySelector(
-							'.cortext-row-detail__title'
-						);
-						return Boolean( el ) && el.textContent !== prev;
-					},
-					previousTitle,
-					{ timeout: READY_TIMEOUT_MS }
-				);
+				await expect( titleLocator ).not.toHaveText( previousTitle, {
+					timeout: READY_TIMEOUT_MS,
+				} );
 				await waitForPaint( page );
 
 				return probe.snapshot( startedAt );
@@ -792,8 +788,11 @@ async function waitForRowDetailReady( page ) {
 		.locator( '.cortext-row-detail__frame' )
 		.first()
 		.waitFor( { state: 'visible', timeout: READY_TIMEOUT_MS } );
+	// After RSM-2705, row detail waits for the locked post-title block inside
+	// the editor iframe.
 	await page
-		.locator( '.cortext-row-detail__title' )
+		.frameLocator( '[name="editor-canvas"]' )
+		.locator( '[data-type="core/post-title"]' )
 		.first()
 		.waitFor( { state: 'visible', timeout: READY_TIMEOUT_MS } );
 	await waitForPaint( page );
