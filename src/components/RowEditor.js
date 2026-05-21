@@ -160,6 +160,7 @@ function DetailPaneContent( {
 				visible={ propertiesVisible }
 			/>
 			<EditorBody
+				isActive={ isActive && ! isHidden }
 				postId={ row?.id }
 				postType={ postType }
 				extraStyles={ ROW_DETAIL_EXTRA_STYLES }

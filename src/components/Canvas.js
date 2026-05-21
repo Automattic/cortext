@@ -161,9 +161,10 @@ function HideHeaderBlockKebab() {
 	return null;
 }
 
-function VisualCanvas( { postId, postType, onReady, onRestored } ) {
+function VisualCanvas( { isActive, postId, postType, onReady, onRestored } ) {
 	return (
 		<EditorBody
+			isActive={ isActive }
 			postId={ postId }
 			postType={ postType }
 			onReady={ onReady }
@@ -304,6 +305,7 @@ function CanvasEditor( {
 							rowProperties
 						) }
 						<VisualCanvas
+							isActive={ isActive }
 							postId={ post.id }
 							postType={ postType }
 							onReady={ onDisplayedPost }
