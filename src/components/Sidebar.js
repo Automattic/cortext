@@ -703,7 +703,7 @@ export default function Sidebar( {
 	const duplicateCollection = useCallback(
 		async ( id ) => {
 			const created = await apiFetch( {
-				path: `/cortext/v1/collections/${ id }/duplicate`,
+				path: `/cortext/v1/documents/${ id }/duplicate`,
 				method: 'POST',
 			} );
 			invalidateResolution( 'getEntityRecords', [

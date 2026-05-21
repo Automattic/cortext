@@ -1,6 +1,7 @@
 <?php
 /**
- * Tests for Cortext\Rest\CollectionsController.
+ * Tests for collection REST behavior: create and duplicate routes on
+ * `DocumentsController`, plus query and pre-insert filters on `Collection`.
  *
  * @package Cortext
  */
@@ -13,23 +14,25 @@ use Cortext\PostType\Collection;
 use Cortext\PostType\CollectionEntries;
 use Cortext\PostType\Field;
 use Cortext\PostType\Page;
-use Cortext\Rest\CollectionsController;
+use Cortext\Rest\DocumentsController;
 use WorDBless\BaseTestCase;
 use WP_REST_Request;
 use WP_REST_Server;
 
-final class Test_Rest_Collections_Controller extends BaseTestCase {
+final class Test_Rest_Collections extends BaseTestCase {
 
 	public function set_up(): void {
 		parent::set_up();
 
 		$this->unregister_dynamic_collection_post_types();
 		( new Page() )->register_post_type();
-		( new Collection() )->register_post_type();
+		$collection = new Collection();
+		$collection->register_post_type();
+		$collection->register_rest_filters();
 		( new Field() )->register_post_type();
 
 		$GLOBALS['wp_rest_server'] = new WP_REST_Server();
-		( new CollectionsController() )->register();
+		( new DocumentsController() )->register();
 		do_action( 'rest_api_init' );
 	}
 
@@ -128,9 +131,7 @@ final class Test_Rest_Collections_Controller extends BaseTestCase {
 	}
 
 	public function test_normalizes_non_latin_slug_for_post_type_name(): void {
-		$method = new \ReflectionMethod( CollectionsController::class, 'unique_slug' );
-		$method->setAccessible( true );
-		$slug = $method->invoke( new CollectionsController(), '你好' );
+		$slug = Collection::unique_slug( '你好' );
 
 		$this->assertSame( 'e4bda0e5a5bd', $slug );
 		$this->assertLessThanOrEqual(
@@ -408,7 +409,7 @@ final class Test_Rest_Collections_Controller extends BaseTestCase {
 	}
 
 	public function test_query_filter_is_no_op_without_workspace_mode_param(): void {
-		$controller = new CollectionsController();
+		$controller = new Collection();
 		$request    = new \WP_REST_Request( 'GET', '/wp/v2/' . Collection::POST_TYPE . 's' );
 		$existing   = array( 'meta_query' => array( array( 'key' => 'something_else' ) ) );
 
@@ -435,7 +436,7 @@ final class Test_Rest_Collections_Controller extends BaseTestCase {
 		);
 		$this->assertIsInt( $inline_id );
 
-		$controller = new CollectionsController();
+		$controller = new Collection();
 		$request    = new WP_REST_Request(
 			'PATCH',
 			'/wp/v2/' . Collection::POST_TYPE . 's/' . $inline_id
@@ -467,7 +468,7 @@ final class Test_Rest_Collections_Controller extends BaseTestCase {
 		);
 		$this->assertIsInt( $full_id );
 
-		$controller = new CollectionsController();
+		$controller = new Collection();
 		$request    = new WP_REST_Request(
 			'PATCH',
 			'/wp/v2/' . Collection::POST_TYPE . 's/' . $full_id
@@ -504,7 +505,7 @@ final class Test_Rest_Collections_Controller extends BaseTestCase {
 			)
 		);
 
-		$controller = new CollectionsController();
+		$controller = new Collection();
 		$request    = new WP_REST_Request( 'PATCH', '/wp/v2/' . Collection::POST_TYPE . 's/' . $full_id );
 		$prepared              = new \stdClass();
 		$prepared->ID          = (int) $full_id;
@@ -670,11 +671,11 @@ final class Test_Rest_Collections_Controller extends BaseTestCase {
 		$response = $this->duplicate_collection( 99999 );
 
 		$this->assertSame( 404, $response->get_status() );
-		$this->assertSame( 'cortext_collection_not_found', $response->get_data()['code'] );
+		$this->assertSame( 'cortext_document_not_found', $response->get_data()['code'] );
 	}
 
 	public function test_query_filter_preserves_existing_meta_query_clauses(): void {
-		$controller = new CollectionsController();
+		$controller = new Collection();
 		$request    = new \WP_REST_Request( 'GET', '/wp/v2/' . Collection::POST_TYPE . 's' );
 		$request->set_param( 'workspace_mode', Collection::MODE_FULL_PAGE );
 
@@ -709,7 +710,7 @@ final class Test_Rest_Collections_Controller extends BaseTestCase {
 	}
 
 	private function duplicate_collection( int $collection_id ) {
-		$request = new WP_REST_Request( 'POST', '/cortext/v1/collections/' . $collection_id . '/duplicate' );
+		$request = new WP_REST_Request( 'POST', '/cortext/v1/documents/' . $collection_id . '/duplicate' );
 		return rest_do_request( $request );
 	}
 
@@ -770,20 +771,20 @@ final class Test_Rest_Collections_Controller extends BaseTestCase {
 	}
 
 	/**
-	 * Runs the controller's list-query filter for one workspace_mode value.
-	 * This is the contract used by the sidebar and DataView picker, so the
-	 * test checks it directly without going through WP_Query.
+	 * Runs the collection list-query filter for one workspace_mode value.
+	 * The sidebar and DataView picker depend on this behavior, so the test
+	 * checks it directly without going through WP_Query.
 	 *
 	 * @param string $mode Requested workspace_mode.
 	 *
 	 * @return array<string, mixed>
 	 */
 	private function filter_query_for_workspace_mode( string $mode ): array {
-		$controller = new CollectionsController();
+		$collection = new Collection();
 		$request    = new WP_REST_Request( 'GET', '/wp/v2/' . Collection::POST_TYPE . 's' );
 		$request->set_param( 'workspace_mode', $mode );
 
-		return $controller->filter_collection_query( array(), $request );
+		return $collection->filter_collection_query( array(), $request );
 	}
 
 	private function unregister_dynamic_collection_post_types(): void {
