@@ -38,6 +38,163 @@ const DOCUMENT_ICON_BLOCK = 'cortext/document-icon';
 const DOCUMENT_COVER_BLOCK = 'cortext/document-cover';
 const POST_TITLE_BLOCK = 'core/post-title';
 const LEGACY_HEADER_ACTIONS_BLOCK = 'cortext/page-header-actions';
+const ROOT_BLOCK_LIST = '';
+const DISABLE_HEADER_BOUNDARY_MOVE_UP_CLASS =
+	'cortext-disable-header-boundary-move-up';
+const DISABLED_BY_HEADER_BOUNDARY_ATTR =
+	'data-cortext-header-boundary-disabled';
+const HEADER_BOUNDARY_MOVE_UP_SELECTOR =
+	'.block-editor-block-mover-button.is-up-button';
+const activeHeaderBoundaryMoveUpGuards = new Set();
+const HEADER_BLOCK_NAMES = new Set( [
+	DOCUMENT_COVER_BLOCK,
+	DOCUMENT_ICON_BLOCK,
+	POST_TITLE_BLOCK,
+] );
+
+function isHeaderBlock( block ) {
+	return HEADER_BLOCK_NAMES.has( block?.name );
+}
+
+function syncHeaderBoundaryMoveUpClass() {
+	document.body.classList.toggle(
+		DISABLE_HEADER_BOUNDARY_MOVE_UP_CLASS,
+		activeHeaderBoundaryMoveUpGuards.size > 0
+	);
+}
+
+function syncHeaderBoundaryMoveUpButtons() {
+	const shouldDisable = activeHeaderBoundaryMoveUpGuards.size > 0;
+	document
+		.querySelectorAll( HEADER_BOUNDARY_MOVE_UP_SELECTOR )
+		.forEach( ( button ) => {
+			if ( ! ( button instanceof window.HTMLButtonElement ) ) {
+				return;
+			}
+
+			if ( shouldDisable ) {
+				if (
+					! button.hasAttribute( DISABLED_BY_HEADER_BOUNDARY_ATTR )
+				) {
+					button.setAttribute(
+						DISABLED_BY_HEADER_BOUNDARY_ATTR,
+						'true'
+					);
+					button.dataset.cortextPreviousDisabled = button.disabled
+						? 'true'
+						: 'false';
+					const previousAriaDisabled =
+						button.getAttribute( 'aria-disabled' );
+					if ( previousAriaDisabled !== null ) {
+						button.dataset.cortextPreviousAriaDisabled =
+							previousAriaDisabled;
+					} else {
+						delete button.dataset.cortextPreviousAriaDisabled;
+					}
+				}
+
+				button.disabled = true;
+				button.setAttribute( 'aria-disabled', 'true' );
+				return;
+			}
+
+			if ( ! button.hasAttribute( DISABLED_BY_HEADER_BOUNDARY_ATTR ) ) {
+				return;
+			}
+
+			button.disabled = button.dataset.cortextPreviousDisabled === 'true';
+			if (
+				Object.prototype.hasOwnProperty.call(
+					button.dataset,
+					'cortextPreviousAriaDisabled'
+				)
+			) {
+				button.setAttribute(
+					'aria-disabled',
+					button.dataset.cortextPreviousAriaDisabled
+				);
+			} else {
+				button.removeAttribute( 'aria-disabled' );
+			}
+			button.removeAttribute( DISABLED_BY_HEADER_BOUNDARY_ATTR );
+			delete button.dataset.cortextPreviousDisabled;
+			delete button.dataset.cortextPreviousAriaDisabled;
+		} );
+}
+
+function syncHeaderBoundaryMoveUpState() {
+	syncHeaderBoundaryMoveUpClass();
+	syncHeaderBoundaryMoveUpButtons();
+}
+
+function HeaderPrefixToolbarGuard( { isActive = true } ) {
+	const guardId = useRef( Symbol( DISABLE_HEADER_BOUNDARY_MOVE_UP_CLASS ) );
+	const shouldDisableMoveUp = useSelect(
+		( select ) => {
+			if ( ! isActive ) {
+				return false;
+			}
+			const store = select( blockEditorStore );
+			const blocks = store.getBlocks();
+			const selectedClientIds = store.getSelectedBlockClientIds();
+			const titleIndex = blocks.findIndex(
+				( block ) => block.name === POST_TITLE_BLOCK
+			);
+			if ( titleIndex < 0 || selectedClientIds.length === 0 ) {
+				return false;
+			}
+
+			const firstBodyIndex = blocks.findIndex(
+				( block, index ) =>
+					index > titleIndex &&
+					block.name !== LEGACY_HEADER_ACTIONS_BLOCK &&
+					! isHeaderBlock( block )
+			);
+			if ( firstBodyIndex < 0 ) {
+				return false;
+			}
+
+			const rootBlockIndexes = new Map(
+				blocks.map( ( block, index ) => [ block.clientId, index ] )
+			);
+			const selectedRootIndexes = selectedClientIds
+				.map( ( clientId ) => rootBlockIndexes.get( clientId ) )
+				.filter( ( index ) => typeof index === 'number' );
+			if ( selectedRootIndexes.length === 0 ) {
+				return false;
+			}
+
+			return Math.min( ...selectedRootIndexes ) === firstBodyIndex;
+		},
+		[ isActive ]
+	);
+
+	useEffect( () => {
+		const currentGuardId = guardId.current;
+		if ( shouldDisableMoveUp ) {
+			activeHeaderBoundaryMoveUpGuards.add( currentGuardId );
+		} else {
+			activeHeaderBoundaryMoveUpGuards.delete( currentGuardId );
+		}
+		syncHeaderBoundaryMoveUpState();
+		const observer = new window.MutationObserver(
+			syncHeaderBoundaryMoveUpButtons
+		);
+		if ( shouldDisableMoveUp ) {
+			observer.observe( document.body, {
+				childList: true,
+				subtree: true,
+			} );
+		}
+		return () => {
+			observer.disconnect();
+			activeHeaderBoundaryMoveUpGuards.delete( currentGuardId );
+			syncHeaderBoundaryMoveUpState();
+		};
+	}, [ shouldDisableMoveUp ] );
+
+	return null;
+}
 
 function DocumentIdentityActions( { postId, postType } ) {
 	const isInsertingCoverRef = useRef( false );
@@ -218,6 +375,9 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 		hasCover,
 		hasIcon,
 		hasTitle,
+		titleIndex,
+		bodyBlockBeforeTitleId,
+		shouldHideHeaderInsertionPoint,
 		duplicateHeaderIds,
 		legacyActionIds,
 		isTrashed,
@@ -225,6 +385,26 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 		const store = select( blockEditorStore );
 		const blocks = store.getBlocks();
 		const names = blocks.map( ( block ) => block.name );
+		const currentTitleIndex = names.indexOf( POST_TITLE_BLOCK );
+		let currentBodyBlockBeforeTitleId = null;
+		if ( currentTitleIndex > -1 ) {
+			for ( let index = currentTitleIndex - 1; index >= 0; index-- ) {
+				const block = blocks[ index ];
+				if (
+					block.name === LEGACY_HEADER_ACTIONS_BLOCK ||
+					isHeaderBlock( block )
+				) {
+					continue;
+				}
+				currentBodyBlockBeforeTitleId = block.clientId;
+				break;
+			}
+		}
+		const insertionPoint = store.getBlockInsertionPoint();
+		const insertionPointRootClientId =
+			insertionPoint?.rootClientId ?? ROOT_BLOCK_LIST;
+		const insertionPointIndex =
+			insertionPoint?.index ?? Number.POSITIVE_INFINITY;
 		const seenSingletons = new Set();
 		const duplicateIds = [];
 		blocks.forEach( ( block ) => {
@@ -246,6 +426,13 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 			hasCover: names.includes( DOCUMENT_COVER_BLOCK ),
 			hasIcon: names.includes( DOCUMENT_ICON_BLOCK ),
 			hasTitle: names.includes( POST_TITLE_BLOCK ),
+			titleIndex: currentTitleIndex,
+			bodyBlockBeforeTitleId: currentBodyBlockBeforeTitleId,
+			shouldHideHeaderInsertionPoint:
+				store.isBlockInsertionPointVisible() &&
+				currentTitleIndex > -1 &&
+				insertionPointRootClientId === ROOT_BLOCK_LIST &&
+				insertionPointIndex <= currentTitleIndex,
 			duplicateHeaderIds: duplicateIds,
 			legacyActionIds: blocks
 				.filter(
@@ -259,7 +446,9 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 	}, [] );
 	const {
 		insertBlocks,
+		moveBlocksToPosition,
 		removeBlock,
+		hideInsertionPoint,
 		updateBlockAttributes,
 		startTyping,
 		stopTyping,
@@ -281,6 +470,13 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 		removeBlock,
 		updateBlockAttributes,
 	] );
+
+	useLayoutEffect( () => {
+		if ( isTrashed || ! shouldHideHeaderInsertionPoint ) {
+			return;
+		}
+		hideInsertionPoint();
+	}, [ hideInsertionPoint, isTrashed, shouldHideHeaderInsertionPoint ] );
 
 	// useLayoutEffect rather than useEffect: we want the insertion to
 	// happen between render and paint so the user never sees the
@@ -335,13 +531,13 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 			);
 		}
 		if ( needsTitle ) {
-			const titleIndex =
+			const insertTitleIndex =
 				( featuredId > 0 ? 1 : 0 ) + ( iconMeta ? 1 : 0 );
 			insertBlocks(
 				createBlock( POST_TITLE_BLOCK, {
 					lock: { move: true, remove: true },
 				} ),
-				titleIndex,
+				insertTitleIndex,
 				undefined,
 				false
 			);
@@ -362,6 +558,46 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 		isTrashed,
 		startTyping,
 		stopTyping,
+	] );
+
+	useLayoutEffect( () => {
+		if (
+			isTrashed ||
+			! bodyBlockBeforeTitleId ||
+			titleIndex < 0 ||
+			duplicateHeaderIds.length > 0 ||
+			legacyActionIds.length > 0 ||
+			( featuredId > 0 && ! hasCover ) ||
+			( iconMeta && ! hasIcon ) ||
+			! hasTitle
+		) {
+			return;
+		}
+
+		startTyping();
+		moveBlocksToPosition(
+			[ bodyBlockBeforeTitleId ],
+			ROOT_BLOCK_LIST,
+			ROOT_BLOCK_LIST,
+			titleIndex
+		);
+
+		const handle = window.requestAnimationFrame( () => stopTyping() );
+		return () => window.cancelAnimationFrame( handle );
+	}, [
+		bodyBlockBeforeTitleId,
+		duplicateHeaderIds.length,
+		featuredId,
+		hasCover,
+		hasIcon,
+		hasTitle,
+		iconMeta,
+		isTrashed,
+		legacyActionIds.length,
+		moveBlocksToPosition,
+		startTyping,
+		stopTyping,
+		titleIndex,
 	] );
 
 	return null;
@@ -417,6 +653,7 @@ function CanvasReadyEffect( { postId, onReady } ) {
 }
 
 export default function EditorBody( {
+	isActive = true,
 	postId,
 	postType,
 	extraStyles,
@@ -446,6 +683,7 @@ export default function EditorBody( {
 					postType={ postType }
 				/>
 				<EnsureHeaderBlocks postId={ postId } postType={ postType } />
+				<HeaderPrefixToolbarGuard isActive={ isActive } />
 				<div className="cortext-canvas__editor">
 					<BlockList
 						className="wp-block-post-content is-layout-constrained has-global-padding"
