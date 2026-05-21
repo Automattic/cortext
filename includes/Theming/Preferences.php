@@ -68,9 +68,8 @@ final class Preferences {
 	if ( document.body ) {
 		document.body.setAttribute( 'data-cortext-theme', resolved );
 	}
-	// Mirror on html itself for the view-transition pseudo, which can't
-	// read vars scoped to #cortext-root. Matches the JS path in
-	// src/hooks/useColorScheme.js.
+	// Keep the fallback color on html too. View-transition pseudos cannot
+	// read vars scoped to #cortext-root, and the JS hook writes the same var.
 	if ( document.documentElement ) {
 		document.documentElement.style.setProperty(
 			'--cortext-canvas-frame-surface-root',

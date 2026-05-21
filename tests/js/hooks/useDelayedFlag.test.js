@@ -11,7 +11,7 @@ afterEach( () => {
 } );
 
 describe( 'useDelayedFlag', () => {
-	it( 'stays false until the delay elapses', () => {
+	it( 'waits out the delay before returning true', () => {
 		const { result } = renderHook( () => useDelayedFlag( true, 120 ) );
 
 		expect( result.current ).toBe( false );
@@ -27,7 +27,7 @@ describe( 'useDelayedFlag', () => {
 		expect( result.current ).toBe( true );
 	} );
 
-	it( 'never flips to true if the active flag clears first', () => {
+	it( 'stays false if active clears before the delay', () => {
 		const { result, rerender } = renderHook(
 			( { active } ) => useDelayedFlag( active, 120 ),
 			{ initialProps: { active: true } }
@@ -45,7 +45,7 @@ describe( 'useDelayedFlag', () => {
 		expect( result.current ).toBe( false );
 	} );
 
-	it( 'resets to false the moment active flips back', () => {
+	it( 'goes false immediately when active clears', () => {
 		const { result, rerender } = renderHook(
 			( { active } ) => useDelayedFlag( active, 120 ),
 			{ initialProps: { active: true } }

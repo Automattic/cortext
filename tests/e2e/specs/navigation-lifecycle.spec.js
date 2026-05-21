@@ -147,7 +147,7 @@ test.describe( 'Navigation lifecycle', () => {
 		}
 	} );
 
-	test( 'keeps the mounted page canvas while collection rows load', async ( {
+	test( 'keeps the current page canvas visible while collection rows load', async ( {
 		admin,
 		page,
 		requestUtils,

@@ -82,7 +82,7 @@ describe( 'EntityRoute reducer', () => {
 			expect( next.active ).toEqual( { kind: 'document', id: 1 } );
 		} );
 
-		it( 'switches to loading when navigating to a not-yet-ready collection', () => {
+		it( 'goes to loading for a collection that is not ready yet', () => {
 			const state = activate(
 				init( documentTarget( 1 ) ),
 				documentTarget( 1 )
@@ -269,7 +269,7 @@ describe( 'EntityRoute reducer', () => {
 	} );
 
 	describe( 'COLLECTION_RESOLVED', () => {
-		it( 'mounts and activates the collection before rows are ready', () => {
+		it( 'mounts the collection before row data is ready', () => {
 			let state = init( collectionTarget( 5 ) );
 			state = reducer( state, {
 				type: 'TARGET_CHANGED',
@@ -319,7 +319,7 @@ describe( 'EntityRoute reducer', () => {
 	} );
 
 	describe( 'pruning', () => {
-		it( 'drops the previous collection once the next collection activates', () => {
+		it( 'drops the previous collection after the next one activates', () => {
 			let state = activate(
 				init( collectionTarget( 5 ) ),
 				collectionTarget( 5 )

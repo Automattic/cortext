@@ -1,9 +1,9 @@
 /**
- * Small skeleton pieces shared by Cortext loading states.
+ * Shared loading placeholders for Cortext.
  *
- * They reserve the space the real content will use, so data arriving later
- * does not shove the layout around. Each primitive is `aria-hidden` and uses
- * a light opacity pulse that respects `prefers-reduced-motion`.
+ * They reserve the space real content will use, so late data does not shove
+ * the layout around. Each primitive is `aria-hidden` and uses a light opacity
+ * pulse that respects `prefers-reduced-motion`.
  */
 
 function toLength( value ) {
@@ -44,8 +44,7 @@ export function SkeletonBlock( {
 	);
 }
 
-// A horizontal bar. Callers can pass a width so stacked lines do not all look
-// identical.
+// Horizontal bar. Callers can pass a width so stacked lines do not all match.
 export function SkeletonLine( { className, ...rest } ) {
 	return (
 		<SkeletonBlock
@@ -71,8 +70,8 @@ export function SkeletonFieldRow( { valueWidth, className } ) {
 	);
 }
 
-// Sidebar rows for Favorites, Trash, and similar lists. The width pattern keeps
-// the placeholder labels from lining up like identical bars.
+// Sidebar rows for Favorites, Trash, and similar lists. Varied widths keep the
+// placeholder labels from lining up like identical bars.
 const SIDEBAR_SKELETON_WIDTHS = [ '72%', '58%', '84%', '46%', '68%', '52%' ];
 
 export function SidebarListSkeleton( { itemCount = 5 } ) {
@@ -95,9 +94,8 @@ export function SidebarListSkeleton( { itemCount = 5 } ) {
 	);
 }
 
-// tech-debt.md#54: mirror DataViews row heights so the loading table does not
-// jump when real rows arrive. Cap the row count so perPage=25 does not draw
-// past the viewport.
+// tech-debt.md#54: match DataViews row heights so the loading table holds the
+// same space as real rows. Cap the row count so perPage=25 stays reasonable.
 const COLLECTION_SKELETON_ROW_CAP = 15;
 
 export function CollectionRowsSkeleton( {
@@ -142,9 +140,9 @@ export function CollectionRowsSkeleton( {
 	);
 }
 
-// Thin progress bar for route and editor loads. A document can be a page, row,
-// or blank draft, with or without cover and icon; a shaped skeleton would be
-// wrong often enough to be distracting.
+// Thin progress bar for route and editor loads. Documents can be pages, rows,
+// or blank drafts, with or without covers and icons; a shaped skeleton would
+// be wrong often enough to distract.
 export function CanvasProgressBar( { className } ) {
 	return (
 		<div

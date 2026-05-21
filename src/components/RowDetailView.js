@@ -388,14 +388,14 @@ function DetailShell( {
 	);
 }
 
-// While useEntityRecord and the editor catch up, show the row title and icon
-// from the list plus a properties skeleton. That keeps the peek panel from
-// opening as an empty box.
+// While useEntityRecord and the editor spin up, reuse the row title and icon
+// from the list and show a properties skeleton. The peek panel should not open
+// as an empty box.
 function LoadingDetail( { onClose, row, fieldCount } ) {
 	const tentativeTitle = titleFromRow( row );
 	const documentIcon = row?.meta?.cortext_document_icon ?? '';
 	// Cap the placeholder rows so large collections do not fill the panel with
-	// grey lines. Six gives enough shape without crowding the pane.
+	// grey lines. Six gives the pane shape without crowding it.
 	const skeletonRows = Math.max( 1, Math.min( fieldCount ?? 0, 6 ) );
 
 	return (
@@ -404,7 +404,7 @@ function LoadingDetail( { onClose, row, fieldCount } ) {
 				<div
 					className="cortext-row-detail__toolbar"
 					role="toolbar"
-					aria-label={ __( 'Row detail tools', 'cortext' ) }
+					aria-label={ __( 'Row detail actions', 'cortext' ) }
 				>
 					<div className="cortext-row-detail__toolbar-group cortext-row-detail__toolbar-group--end">
 						<Button

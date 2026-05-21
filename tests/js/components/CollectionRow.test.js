@@ -50,9 +50,7 @@ describe( 'CollectionRow', () => {
 		const { container, props } = renderRow();
 		// dnd-kit gives the draggable wrapper button semantics, so there are
 		// two "Books" buttons here. Click the title button directly.
-		fireEvent.click(
-			container.querySelector( '.cortext-sidebar__title' )
-		);
+		fireEvent.click( container.querySelector( '.cortext-sidebar__title' ) );
 
 		expect( props.onSelect ).toHaveBeenCalledTimes( 1 );
 	} );

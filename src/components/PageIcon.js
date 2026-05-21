@@ -68,9 +68,9 @@ function ImageIcon( { id, size, alt, className } ) {
 		record?.media_details?.sizes?.thumbnail?.source_url ??
 		record?.source_url ??
 		null;
-	// Keep the swatch until both the media record has a URL and the browser has
-	// painted the image. Otherwise `src` appears first, the swatch disappears,
-	// and the icon slot goes empty while the image bytes load.
+	// Keep the swatch until REST has a URL and the browser has loaded it.
+	// Otherwise the swatch disappears first and the icon slot looks empty
+	// while the image bytes arrive.
 	const [ hasImagePainted, setHasImagePainted ] = useState( false );
 	useEffect( () => {
 		setHasImagePainted( false );

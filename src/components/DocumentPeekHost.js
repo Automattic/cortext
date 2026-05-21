@@ -67,8 +67,8 @@ export default function DocumentPeekHost() {
 	const canGoPrevious = Boolean(
 		peek.source && adjacentRowId( rowList, peek.docId, -1 )
 	);
-	// Use the table row until useEntityRecord catches up. That lets the
-	// loading pane show the title and icon instead of starting blank.
+	// Use the current table row as a stopgap while useEntityRecord catches up.
+	// The loading pane can show a title and icon instead of opening blank.
 	const tentativeRow = rowList.find(
 		( candidate ) => String( candidate?.id ) === String( peek.docId )
 	);

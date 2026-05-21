@@ -157,9 +157,9 @@ export default function EntityRoute( { history } ) {
 		readyCollectionIds,
 	} = state;
 
-	// Document navigations keep the previous pane visible until the next one
-	// can paint. Collections can activate before rows are ready, so compare the
-	// URL target with the displayed/ready snapshot here.
+	// Document navigations keep the previous pane visible until the next one can
+	// paint. Collections can activate before rows are ready, so compare the URL
+	// target with the displayed/ready snapshot here.
 	const isWorkspaceNavigating =
 		( target.kind === 'document' &&
 			target.id !== null &&

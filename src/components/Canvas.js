@@ -384,9 +384,9 @@ export default function Canvas( {
 			requestedPost.id !== renderedPost.id )
 			? requestedPost
 			: null;
-	// `pendingPost` is set only after the new record resolves, which can be
-	// too late on a slow network. Compare the requested post to the one still
-	// on screen so the progress bar covers the full wait after a click.
+	// `pendingPost` appears only after the next record resolves. On a slow
+	// network that is too late, so compare the requested post to the one still
+	// on screen and cover the whole wait after a click.
 	const isCrossDocNav = Boolean(
 		renderedPost &&
 			postId &&

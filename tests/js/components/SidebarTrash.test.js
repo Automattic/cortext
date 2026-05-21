@@ -6,7 +6,13 @@
  * and assert the REST calls SidebarTrash makes.
  */
 
-import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
+import {
+	act,
+	render,
+	screen,
+	fireEvent,
+	waitFor,
+} from '@testing-library/react';
 
 // Stub @wordpress/components so the test does not transitively pull in
 // rich-text → block-editor → parsel-js (an ESM-only package the jest CJS
@@ -184,7 +190,7 @@ function makeDocumentsState( overrides = {} ) {
 }
 
 describe( 'SidebarTrash', () => {
-	it( 'shows a skeleton while the trash query resolves', () => {
+	it( 'shows a skeleton when the trash query takes long enough', () => {
 		setTrashRecords( {
 			records: undefined,
 			hasResolved: false,
@@ -195,8 +201,8 @@ describe( 'SidebarTrash', () => {
 		try {
 			const { container } = renderSidebarTrash();
 
-			// Skeletons are delayed so fast loads don't flicker; advance
-			// past the threshold to assert the loading visual.
+			// Skeletons wait out fast loads; advance past the threshold before
+			// checking the loading visual.
 			act( () => {
 				jest.advanceTimersByTime( 200 );
 			} );
