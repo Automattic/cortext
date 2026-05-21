@@ -623,6 +623,146 @@ final class Documents {
 		return $collections[0] ?? null;
 	}
 
+	/**
+	 * Resolves a document target by id and returns the shape used by Favorites,
+	 * Recents, and Workspace Home. Those callers pass an id, and the documents
+	 * service handles kind lookup, validation, and formatting in one place.
+	 *
+	 * The kind comes from the post type. Row targets also need `context_id`
+	 * because rows are scoped to a parent collection.
+	 *
+	 * @param int   $id   Target document id.
+	 * @param array $opts {
+	 *     Optional. Validation options.
+	 *
+	 *     @type int  $context_id   Parent collection id for row targets. Defaults to 0.
+	 *     @type bool $require_edit Enforce `edit_post` capability. Defaults to true.
+	 * }
+	 * @return array<string,mixed>|WP_Error
+	 */
+	public function format_target( int $id, array $opts = array() ) {
+		$context_id   = isset( $opts['context_id'] ) ? (int) $opts['context_id'] : 0;
+		$require_edit = ! array_key_exists( 'require_edit', $opts ) || (bool) $opts['require_edit'];
+
+		if ( $id < 1 ) {
+			return $this->invalid_target_error();
+		}
+
+		$post = get_post( $id );
+		if ( ! $post instanceof WP_Post || self::STATUS_TRASH === $post->post_status ) {
+			return $this->target_not_found_error();
+		}
+
+		$kind = $this->kind_object_for_post_type( $post->post_type );
+		if ( null === $kind ) {
+			return $this->target_not_found_error();
+		}
+
+		if ( self::KIND_COLLECTION === $kind->id() && Collection::is_inline( $id ) ) {
+			return $this->inline_collection_target_error();
+		}
+
+		if ( self::KIND_ROW === $kind->id() ) {
+			$row_check = $this->validate_row_target( $post, $context_id, $require_edit );
+			if ( $row_check instanceof WP_Error ) {
+				return $row_check;
+			}
+			$document = $this->format_document( $post );
+			return $document ?? $this->target_not_found_error();
+		}
+
+		if ( $require_edit && ! current_user_can( 'edit_post', $id ) ) {
+			return $this->target_forbidden_error();
+		}
+
+		$target = array(
+			'kind'  => $kind->id(),
+			'id'    => $id,
+			'title' => $this->post_title( $post ),
+			'path'  => $kind->path_for( $post ),
+		);
+
+		if ( $kind->has_icon() ) {
+			$icon = (string) get_post_meta( $id, DocumentIdentity::META_KEY, true );
+			if ( '' !== $icon ) {
+				$target['icon'] = $icon;
+			}
+		}
+
+		return $target;
+	}
+
+	/**
+	 * Checks that a row belongs to the expected collection and that the caller
+	 * can edit both records. Rows live in dynamic CPTs, so the parent collection
+	 * is the permission anchor.
+	 *
+	 * @param WP_Post $row           Row post.
+	 * @param int     $collection_id Expected parent collection id.
+	 * @param bool    $require_edit  Enforce `edit_post` on both row and collection.
+	 */
+	private function validate_row_target( WP_Post $row, int $collection_id, bool $require_edit ): ?WP_Error {
+		if ( $collection_id < 1 ) {
+			return $this->invalid_target_error();
+		}
+
+		$collection = get_post( $collection_id );
+		if (
+			! $collection instanceof WP_Post
+			|| Collection::POST_TYPE !== $collection->post_type
+			|| self::STATUS_TRASH === $collection->post_status
+		) {
+			return $this->target_not_found_error();
+		}
+
+		$slug = get_post_meta( $collection_id, 'slug', true );
+		$slug = is_string( $slug ) ? trim( $slug ) : '';
+		if ( '' === $slug || CollectionEntries::CPT_PREFIX . $slug !== $row->post_type ) {
+			return $this->target_not_found_error();
+		}
+
+		if ( $require_edit
+			&& ( ! current_user_can( 'edit_post', $collection_id )
+				|| ! current_user_can( 'edit_post', $row->ID ) )
+		) {
+			return $this->target_forbidden_error();
+		}
+
+		return null;
+	}
+
+	private function invalid_target_error(): WP_Error {
+		return new WP_Error(
+			'cortext_document_target_invalid',
+			__( 'Target document is invalid.', 'cortext' ),
+			array( 'status' => 400 )
+		);
+	}
+
+	private function target_not_found_error(): WP_Error {
+		return new WP_Error(
+			'cortext_document_target_not_found',
+			__( 'Target document was not found.', 'cortext' ),
+			array( 'status' => 404 )
+		);
+	}
+
+	private function inline_collection_target_error(): WP_Error {
+		return new WP_Error(
+			'cortext_document_target_inline_collection',
+			__( 'Inline collections cannot be used as document targets.', 'cortext' ),
+			array( 'status' => 400 )
+		);
+	}
+
+	private function target_forbidden_error(): WP_Error {
+		return new WP_Error(
+			'cortext_document_target_forbidden',
+			__( 'You are not allowed to use this document target.', 'cortext' ),
+			array( 'status' => 403 )
+		);
+	}
+
 	private function post_title( WP_Post $post ): string {
 		$title = trim( $post->post_title );
 		return '' === $title ? __( '(untitled)', 'cortext' ) : $title;

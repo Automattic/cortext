@@ -116,7 +116,7 @@ final class Test_Rest_Workspace_Home_Controller extends BaseTestCase {
 
 		$this->assertSame( 404, $response->get_status() );
 		$this->assertSame(
-			'cortext_workspace_home_not_found',
+			'cortext_document_target_not_found',
 			$response->get_data()['code']
 		);
 	}
@@ -136,7 +136,7 @@ final class Test_Rest_Workspace_Home_Controller extends BaseTestCase {
 
 		$this->assertSame( 403, $response->get_status() );
 		$this->assertSame(
-			'cortext_workspace_home_forbidden',
+			'cortext_document_target_forbidden',
 			$response->get_data()['code']
 		);
 	}
@@ -182,7 +182,7 @@ final class Test_Rest_Workspace_Home_Controller extends BaseTestCase {
 
 		$this->assertSame( 400, $response->get_status() );
 		$this->assertSame(
-			'cortext_workspace_home_inline_collection',
+			'cortext_document_target_inline_collection',
 			$response->get_data()['code']
 		);
 	}

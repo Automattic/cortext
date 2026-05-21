@@ -9,10 +9,8 @@ declare( strict_types=1 );
 
 namespace Cortext\Rest;
 
-use Cortext\PostType\Collection;
-use Cortext\PostType\Page;
+use Cortext\Documents;
 use WP_Error;
-use WP_Post;
 use WP_REST_Request;
 use WP_REST_Response;
 
@@ -20,6 +18,17 @@ final class WorkspaceHomeController {
 
 	private const NAMESPACE = 'cortext/v1';
 	private const META_KEY  = 'cortext_workspace_home';
+
+	private const ALLOWED_KINDS = array(
+		Documents::KIND_PAGE,
+		Documents::KIND_COLLECTION,
+	);
+
+	private Documents $documents;
+
+	public function __construct( ?Documents $documents = null ) {
+		$this->documents = $documents ?? new Documents();
+	}
 
 	public function register(): void {
 		add_action( 'rest_api_init', array( $this, 'register_routes' ) );
@@ -43,7 +52,7 @@ final class WorkspaceHomeController {
 						'kind' => array(
 							'type'     => 'string',
 							'required' => true,
-							'enum'     => array( 'page', 'collection' ),
+							'enum'     => self::ALLOWED_KINDS,
 						),
 						'id'   => array(
 							'type'     => 'integer',
@@ -72,15 +81,14 @@ final class WorkspaceHomeController {
 	}
 
 	public function update_home( WP_REST_Request $request ): WP_REST_Response|WP_Error {
-		$kind = (string) $request->get_param( 'kind' );
-		$id   = (int) $request->get_param( 'id' );
+		$id = (int) $request->get_param( 'id' );
 
-		$home = $this->format_target( $kind, $id, true );
+		$home = $this->resolve_home_target( $id );
 		if ( is_wp_error( $home ) ) {
 			return $home;
 		}
 
-		update_user_meta( get_current_user_id(), self::META_KEY, "{$kind}:{$id}" );
+		update_user_meta( get_current_user_id(), self::META_KEY, "{$home['kind']}:{$home['id']}" );
 
 		return new WP_REST_Response(
 			array(
@@ -101,77 +109,36 @@ final class WorkspaceHomeController {
 			return null;
 		}
 
-		$home = $this->format_target( $parts[0], (int) $parts[1], true );
+		$home = $this->resolve_home_target( (int) $parts[1] );
 		return is_wp_error( $home ) ? null : $home;
 	}
 
 	/**
-	 * Formats a page or collection target into the shell route contract.
+	 * Resolves a workspace home target by id and returns the small wire shape
+	 * Home needs. The response keeps `{kind, id, path}` only; callers can read
+	 * title or icon from the matching document record when they need it.
 	 *
-	 * @param string $kind Target kind.
-	 * @param int    $id Target post ID.
-	 * @param bool   $require_edit Whether to enforce edit_post capability.
+	 * @param int $id Target document id.
 	 * @return array{kind:string,id:int,path:string}|WP_Error
 	 */
-	private function format_target( string $kind, int $id, bool $require_edit ) {
-		if ( ! in_array( $kind, array( 'page', 'collection' ), true ) || $id < 1 ) {
-			return new WP_Error(
-				'cortext_workspace_home_invalid_target',
-				__( 'Workspace home target is invalid.', 'cortext' ),
-				array( 'status' => 400 )
-			);
+	private function resolve_home_target( int $id ) {
+		$target = $this->documents->format_target( $id );
+		if ( is_wp_error( $target ) ) {
+			return $target;
 		}
 
-		$post = get_post( $id );
-		if ( ! $this->is_supported_target( $post, $kind ) ) {
+		if ( ! in_array( $target['kind'], self::ALLOWED_KINDS, true ) ) {
 			return new WP_Error(
-				'cortext_workspace_home_not_found',
-				__( 'Workspace home target was not found.', 'cortext' ),
+				'cortext_document_target_not_found',
+				__( 'Target document was not found.', 'cortext' ),
 				array( 'status' => 404 )
 			);
 		}
 
-		if ( 'collection' === $kind && Collection::is_inline( $id ) ) {
-			return new WP_Error(
-				'cortext_workspace_home_inline_collection',
-				__( 'Inline collections cannot be used as the workspace home.', 'cortext' ),
-				array( 'status' => 400 )
-			);
-		}
-
-		if ( $require_edit && ! current_user_can( 'edit_post', $id ) ) {
-			return new WP_Error(
-				'cortext_workspace_home_forbidden',
-				__( 'You are not allowed to use this target as your workspace home.', 'cortext' ),
-				array( 'status' => 403 )
-			);
-		}
-
 		return array(
-			'kind' => $kind,
-			'id'   => $id,
-			'path' => $this->target_path( $post, $kind ),
+			'kind' => $target['kind'],
+			'id'   => $target['id'],
+			'path' => $target['path'],
 		);
-	}
-
-	private function is_supported_target( ?WP_Post $post, string $kind ): bool {
-		if ( ! $post || 'trash' === $post->post_status ) {
-			return false;
-		}
-
-		$type = 'page' === $kind ? Page::POST_TYPE : Collection::POST_TYPE;
-		return $type === $post->post_type;
-	}
-
-	private function target_path( WP_Post $post, string $kind ): string {
-		if ( 'collection' === $kind ) {
-			$slug = get_post_meta( (int) $post->ID, 'slug', true );
-			$slug = is_string( $slug ) ? trim( $slug ) : '';
-		} else {
-			$slug = trim( $post->post_name );
-		}
-
-		$tail = '' === $slug ? (string) $post->ID : "{$slug}-{$post->ID}";
-		return "{$kind}/{$tail}";
 	}
 }

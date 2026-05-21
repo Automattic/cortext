@@ -196,7 +196,7 @@ final class Test_Rest_Favorites_Controller extends BaseTestCase {
 
 		$this->assertSame( 404, $response->get_status() );
 		$this->assertSame(
-			'cortext_favorites_not_found',
+			'cortext_document_target_not_found',
 			$response->get_data()['code']
 		);
 	}
@@ -223,7 +223,7 @@ final class Test_Rest_Favorites_Controller extends BaseTestCase {
 
 		$this->assertSame( 403, $response->get_status() );
 		$this->assertSame(
-			'cortext_favorites_forbidden',
+			'cortext_document_target_forbidden',
 			$response->get_data()['code']
 		);
 	}
@@ -297,7 +297,7 @@ final class Test_Rest_Favorites_Controller extends BaseTestCase {
 
 		$this->assertSame( 400, $response->get_status() );
 		$this->assertSame(
-			'cortext_favorites_inline_collection',
+			'cortext_document_target_inline_collection',
 			$response->get_data()['code']
 		);
 	}
