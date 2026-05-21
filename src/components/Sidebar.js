@@ -123,7 +123,9 @@ import {
 	parseSplatUri,
 } from '../router/useResolveEntity';
 import { FULL_PAGE_COLLECTION_QUERY } from '../collections';
-import useDelayedFlag from '../hooks/useDelayedFlag';
+import useDelayedFlag, {
+	SKELETON_MIN_VISIBLE_MS,
+} from '../hooks/useDelayedFlag';
 import { useFavorites } from '../hooks/useFavorites';
 import { useRecents } from '../hooks/useRecents';
 import useSidebarSections from '../hooks/useSidebarSections';
@@ -170,7 +172,9 @@ export default function Sidebar( {
 		isUpdating: isHomeUpdating,
 	} = useWorkspaceHomePath();
 	const showPagesSkeleton = useDelayedFlag(
-		isResolvingPages && pages.length === 0
+		isResolvingPages && pages.length === 0,
+		120,
+		SKELETON_MIN_VISIBLE_MS
 	);
 	const {
 		favorites,
@@ -387,7 +391,9 @@ export default function Sidebar( {
 	}, [ pages, collections ] );
 
 	const showCollectionsSkeleton = useDelayedFlag(
-		isResolvingCollections && topLevelCollections.length === 0
+		isResolvingCollections && topLevelCollections.length === 0,
+		120,
+		SKELETON_MIN_VISIBLE_MS
 	);
 
 	const tree = useMemo(

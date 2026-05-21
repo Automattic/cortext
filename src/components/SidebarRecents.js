@@ -6,7 +6,9 @@ import { listItem, table } from '@wordpress/icons';
 
 import PageIcon from './PageIcon';
 import { SidebarListSkeleton } from './Skeleton';
-import useDelayedFlag from '../hooks/useDelayedFlag';
+import useDelayedFlag, {
+	SKELETON_MIN_VISIBLE_MS,
+} from '../hooks/useDelayedFlag';
 import { useRecents } from '../hooks/useRecents';
 
 const RECENT_REPOSITION_OPTIONS = {
@@ -154,7 +156,11 @@ export default function SidebarRecents() {
 		}
 	}, [ isResolving, recents ] );
 
-	const showSkeleton = useDelayedFlag( isResolving && recents.length === 0 );
+	const showSkeleton = useDelayedFlag(
+		isResolving && recents.length === 0,
+		120,
+		SKELETON_MIN_VISIBLE_MS
+	);
 
 	return (
 		<>

@@ -16,7 +16,9 @@ import {
 	POST_TYPE,
 	TRASHED_PAGES_QUERY,
 } from './page-queries';
-import useDelayedFlag from '../hooks/useDelayedFlag';
+import useDelayedFlag, {
+	SKELETON_MIN_VISIBLE_MS,
+} from '../hooks/useDelayedFlag';
 import { FULL_PAGE_COLLECTION_QUERY } from '../collections';
 import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
 
@@ -322,7 +324,11 @@ export default function SidebarTrash( {
 	] );
 
 	const isLoading = isResolvingTrash && ! hasTrashCache;
-	const showSkeleton = useDelayedFlag( isLoading );
+	const showSkeleton = useDelayedFlag(
+		isLoading,
+		120,
+		SKELETON_MIN_VISIBLE_MS
+	);
 	const hasError = Boolean( trashError && ! hasTrashCache );
 	const hasItems = roots.length > 0;
 	const pendingKind = pendingDelete ? documentKind( pendingDelete ) : null;

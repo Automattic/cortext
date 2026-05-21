@@ -25,7 +25,9 @@ import {
 import PageIcon from './PageIcon';
 import { SidebarListSkeleton } from './Skeleton';
 import { collectionTitle } from './CollectionRow';
-import useDelayedFlag from '../hooks/useDelayedFlag';
+import useDelayedFlag, {
+	SKELETON_MIN_VISIBLE_MS,
+} from '../hooks/useDelayedFlag';
 import { collectDescendants } from './pages-tree';
 import {
 	computeCollectionUri,
@@ -456,7 +458,11 @@ export default function SidebarFavorites( {
 	const isLoading =
 		isResolving ||
 		( hasFavorites && isResolvingItems && items.length === 0 );
-	const showSkeleton = useDelayedFlag( isLoading );
+	const showSkeleton = useDelayedFlag(
+		isLoading,
+		120,
+		SKELETON_MIN_VISIBLE_MS
+	);
 	const isEmpty = ! isLoading && ! hasFavorites;
 
 	return (

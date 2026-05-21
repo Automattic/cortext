@@ -30,7 +30,9 @@ import { CurrentViewModeProvider } from './CurrentViewModeContext';
 import EditableCell, { RowMutationContext } from './EditableCell';
 import PageIcon from './PageIcon';
 import { CollectionRowsSkeleton } from './Skeleton';
-import useDelayedFlag from '../hooks/useDelayedFlag';
+import useDelayedFlag, {
+	SKELETON_MIN_VISIBLE_MS,
+} from '../hooks/useDelayedFlag';
 import allSettledWithConcurrency from './allSettledWithConcurrency';
 import { filterSortAndPaginateWithGroups } from './groupedFilters';
 import TableCalculationsFooter from './TableCalculationsFooter';
@@ -573,7 +575,11 @@ export default function CollectionDataViews( {
 	// so the user does not see three quick states: generic placeholder, empty
 	// DataViews chrome, then real rows.
 	const isShellLoading = isResolving || isRowsLoadingShell;
-	const showLoadingShell = useDelayedFlag( isShellLoading );
+	const showLoadingShell = useDelayedFlag(
+		isShellLoading,
+		120,
+		SKELETON_MIN_VISIBLE_MS
+	);
 
 	const tableWrapperRef = useRef( null );
 	const [ localRevealFieldId, setLocalRevealFieldId ] = useState( null );

@@ -22,7 +22,9 @@ import {
 } from '@wordpress/icons';
 
 import useAutosave from '../hooks/useAutosave';
-import useDelayedFlag from '../hooks/useDelayedFlag';
+import useDelayedFlag, {
+	SKELETON_MIN_VISIBLE_MS,
+} from '../hooks/useDelayedFlag';
 import EditorBody from './EditorBody';
 import PageIcon from './PageIcon';
 import RowProperties from './RowProperties';
@@ -665,7 +667,11 @@ export default function RowDetailView( {
 	);
 
 	const isLoadingPane = ! activeDetail && detailPanes.length === 0;
-	const showLoadingDetail = useDelayedFlag( isLoadingPane );
+	const showLoadingDetail = useDelayedFlag(
+		isLoadingPane,
+		120,
+		SKELETON_MIN_VISIBLE_MS
+	);
 
 	let content;
 	if ( isLoadingPane ) {
