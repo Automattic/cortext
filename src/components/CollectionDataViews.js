@@ -89,9 +89,9 @@ const OpenRowActionContext = createContext( {
 	requestOpenRow: null,
 } );
 
-// The peek panel waits for the editor before it can paint content. On slower
-// loads, that makes a row click feel dead for a beat, so pointerdown gives the
-// row a short "opening" state right away.
+// The peek panel cannot render until the editor is ready. On slower loads a
+// row click can feel like nothing happened, so pointerdown applies a short
+// "opening" state immediately.
 const OPENING_FEEDBACK_TIMEOUT_MS = 600;
 
 function TitleCell( { item } ) {
@@ -112,9 +112,8 @@ function TitleCell( { item } ) {
 
 	useEffect( () => clearOpeningTimeout, [ clearOpeningTimeout ] );
 
-	// Once this row owns the open peek, --is-open handles the highlight. Clear
-	// the short-lived opening state so it cannot hang around after a quick
-	// close.
+	// Once this row owns the open peek, --is-open handles the visual state.
+	// Drop the short-lived opening state so it cannot linger after a quick close.
 	useEffect( () => {
 		if ( isOpenRow && isOpening ) {
 			clearOpeningTimeout();
@@ -514,7 +513,6 @@ export default function CollectionDataViews( {
 	collectionId,
 	view,
 	onChangeView,
-	loading = null,
 	empty,
 	invalid,
 	error,
@@ -570,15 +568,14 @@ export default function CollectionDataViews( {
 	const dataViewFields = availableFields;
 	const isRowsLoadingShell =
 		! rowsResolved && data.length === 0 && isTableLayout;
-	const showRowsSkeleton = useDelayedFlag( isRowsLoadingShell );
-	const showFieldsLoading = useDelayedFlag( isResolving );
+	// Treat field loading and first-page row loading as one shell state. While
+	// either is still running, hide DataViews chrome and show the rows skeleton
+	// so the user does not see three quick states: generic placeholder, empty
+	// DataViews chrome, then real rows.
+	const isShellLoading = isResolving || isRowsLoadingShell;
+	const showLoadingShell = useDelayedFlag( isShellLoading );
 
 	const tableWrapperRef = useRef( null );
-	// Measure DataViews' real header to size the rows-skeleton overlay. The
-	// CSS fallback is 56px; once we have a real number we hand it back to
-	// the SCSS rule via an inline CSS variable on the shell. ResizeObserver
-	// catches the filters bar collapsing/expanding without a re-render.
-	const [ measuredHeaderHeight, setMeasuredHeaderHeight ] = useState( null );
 	const [ localRevealFieldId, setLocalRevealFieldId ] = useState( null );
 	const pendingRevealFieldId = revealFieldId ?? localRevealFieldId;
 	const requestRevealCreatedField = useCallback( ( created ) => {
@@ -1414,9 +1411,8 @@ export default function CollectionDataViews( {
 	] );
 
 	useEffect( () => {
-		// Mark the pane ready once fields resolve. Rows can keep loading behind
-		// the skeleton; waiting for them here leaves the old pane on screen for
-		// too long.
+		// Fields are enough to mount the pane. Rows can keep loading behind the
+		// skeleton; waiting for them leaves the old pane around too long.
 		if ( ! isResolving ) {
 			onReady?.( collectionId );
 		}
@@ -1468,70 +1464,7 @@ export default function CollectionDataViews( {
 		return () => node.removeEventListener( 'mousedown', onMouseDown, true );
 	}, [ isResolving, rowsResolved, rowError ] );
 
-	useLayoutEffect( () => {
-		const wrapper = tableWrapperRef.current;
-		if ( ! wrapper || isResolving ) {
-			return undefined;
-		}
-		let cancelled = false;
-		let observer = null;
-		// Skeleton overlay needs to start where `tbody` does, not where the
-		// column headers do: the chrome above `tbody` also includes the
-		// search bar, view actions, and (when expanded) the filters strip.
-		// Measuring tbody position relative to the data-view shell covers
-		// everything above it in one shot.
-		const update = () => {
-			if ( cancelled ) {
-				return;
-			}
-			const tbody = wrapper.querySelector(
-				'.dataviews-view-table tbody'
-			);
-			if ( ! tbody ) {
-				return;
-			}
-			const wrapperTop = wrapper.getBoundingClientRect().top;
-			const tbodyTop = tbody.getBoundingClientRect().top;
-			const offset = tbodyTop - wrapperTop;
-			if ( offset > 0 ) {
-				setMeasuredHeaderHeight( Math.round( offset ) );
-			}
-		};
-		const attach = () => {
-			if ( cancelled ) {
-				return;
-			}
-			const tbody = wrapper.querySelector(
-				'.dataviews-view-table tbody'
-			);
-			if ( ! tbody ) {
-				// tbody can mount a frame later than this effect; retry.
-				window.requestAnimationFrame( attach );
-				return;
-			}
-			update();
-			if ( typeof window.ResizeObserver === 'function' ) {
-				observer = new window.ResizeObserver( update );
-				// Observing the wrapper catches both header chrome resizes
-				// (filters strip opening, view actions changing) and tbody
-				// movement.
-				observer.observe( wrapper );
-			}
-		};
-		attach();
-		return () => {
-			cancelled = true;
-			if ( observer ) {
-				observer.disconnect();
-			}
-		};
-	}, [ isResolving, isTableLayout ] );
-
-	if ( isResolving ) {
-		return showFieldsLoading ? loading : null;
-	}
-
-	if ( collectionId && ! collection ) {
+	if ( ! isResolving && collectionId && ! collection ) {
 		return (
 			invalid ?? (
 				<p>
@@ -1544,7 +1477,7 @@ export default function CollectionDataViews( {
 		);
 	}
 
-	if ( rowError ) {
+	if ( ! isResolving && rowError ) {
 		return (
 			error ?? (
 				<p>
@@ -1595,33 +1528,35 @@ export default function CollectionDataViews( {
 							className="cortext-data-view"
 							ref={ tableWrapperRef }
 							onClickCapture={ captureSelectionIntent }
-							data-rows-loading={
-								isRowsLoadingShell ? 'true' : undefined
+							data-loading-shell={
+								isShellLoading ? 'true' : undefined
 							}
-							style={ ( () => {
-								const styles = {};
-								if ( measuredHeaderHeight ) {
-									styles[
-										'--cortext-data-view-header-height'
-									] = `${ measuredHeaderHeight }px`;
-								}
-								if ( isRowsLoadingShell ) {
-									// Keep the wrapper at skeleton height so
-									// the rows-skeleton overlay doesn't clip
-									// when DataViews mounts with an empty
-									// tbody. Capped at 15 to match the
-									// skeleton row cap.
-									styles[
-										'--cortext-data-view-loading-rows'
-									] = Math.max(
-										1,
-										Math.min( view?.perPage ?? 8, 15 )
-									);
-								}
-								return Object.keys( styles ).length > 0
-									? styles
-									: undefined;
-							} )() }
+							style={
+								isShellLoading
+									? {
+											// Hold the wrapper at skeleton
+											// height so content below does not
+											// jump when chrome and rows appear.
+											// Cap matches the skeleton row cap.
+											// Use the saved density too, so
+											// balanced and comfortable tables
+											// reserve enough room and do not
+											// clip the skeleton.
+											'--cortext-data-view-loading-rows':
+												Math.max(
+													1,
+													Math.min(
+														view?.perPage ?? 8,
+														15
+													)
+												),
+											'--cortext-data-view-loading-row-height': `var(--cortext-data-view-row-height-${
+												view?.layout?.density ??
+												'compact'
+											})`,
+									  }
+									: undefined
+							}
 						>
 							{ rowActionError && (
 								<Notice
@@ -1632,7 +1567,7 @@ export default function CollectionDataViews( {
 									{ rowActionError }
 								</Notice>
 							) }
-							{ showRowsSkeleton && (
+							{ showLoadingShell && (
 								<div className="cortext-data-view__rows-skeleton">
 									<CollectionRowsSkeleton
 										rowCount={ view?.perPage ?? 8 }
@@ -1645,76 +1580,90 @@ export default function CollectionDataViews( {
 									/>
 								</div>
 							) }
-							<DataViews
-								data={ dataFiltered }
-								fields={ dataViewFields }
-								view={ view }
-								onChangeView={ onChangeView }
-								paginationInfo={ activePaginationInfo }
-								defaultLayouts={ DEFAULT_LAYOUTS }
-								getItemId={ ( item ) => String( item.id ) }
-								isLoading={ isLoading }
-								empty={ empty }
-								actions={ dataViewActions }
-								{ ...( supportsRowSelection
-									? {
-											selection: selectedRowIds,
-											onChangeSelection,
-									  }
-									: {} ) }
-							>
-								<DataViewsChrome footer={ dataViewsFooter } />
-							</DataViews>
-							<DataViewRowReorder
-								wrapperRef={ tableWrapperRef }
-								view={ view }
-								onChangeView={ onChangeView }
-								collectionId={ collectionId }
-								rows={ dataFiltered }
-								data={ data }
-								mutateRows={ mutateRows }
-								onReordered={ refresh }
-							/>
-							{ isTableLayout && (
-								<TableCalculationsFooter
-									wrapperRef={ tableWrapperRef }
-									view={ view }
-									fields={ availableFields }
-									data={ dataFilteredForCalculations }
-									onChangeView={ onChangeView }
-									hasSelectionColumn={ hasSelectionColumn }
-									bulkActions={ tableBulkActions }
-								/>
+							{ ! isResolving && (
+								<>
+									<DataViews
+										data={ dataFiltered }
+										fields={ dataViewFields }
+										view={ view }
+										onChangeView={ onChangeView }
+										paginationInfo={ activePaginationInfo }
+										defaultLayouts={ DEFAULT_LAYOUTS }
+										getItemId={ ( item ) =>
+											String( item.id )
+										}
+										isLoading={ isLoading }
+										empty={ empty }
+										actions={ dataViewActions }
+										{ ...( supportsRowSelection
+											? {
+													selection: selectedRowIds,
+													onChangeSelection,
+											  }
+											: {} ) }
+									>
+										<DataViewsChrome
+											footer={ dataViewsFooter }
+										/>
+									</DataViews>
+									<DataViewRowReorder
+										wrapperRef={ tableWrapperRef }
+										view={ view }
+										onChangeView={ onChangeView }
+										collectionId={ collectionId }
+										rows={ dataFiltered }
+										data={ data }
+										mutateRows={ mutateRows }
+										onReordered={ refresh }
+									/>
+									{ isTableLayout && (
+										<TableCalculationsFooter
+											wrapperRef={ tableWrapperRef }
+											view={ view }
+											fields={ availableFields }
+											data={ dataFilteredForCalculations }
+											onChangeView={ onChangeView }
+											hasSelectionColumn={
+												hasSelectionColumn
+											}
+											bulkActions={ tableBulkActions }
+										/>
+									) }
+									{ isTableLayout && (
+										<DataViewColumnInteractions
+											wrapperRef={ tableWrapperRef }
+											view={ view }
+											fields={ availableFields }
+											onChangeView={ onChangeView }
+										/>
+									) }
+									{ isTableLayout && (
+										<ColumnHeaderActions
+											collectionId={ collectionId }
+											view={ view }
+											onChangeView={ onChangeView }
+											onFieldOptionsSaved={
+												updateFieldOptions
+											}
+											onFieldCreated={
+												requestRevealCreatedField
+											}
+											onRowsChanged={ refresh }
+										/>
+									) }
+									{ /* tech-debt.md#7: DataViews has no footer slot, so the
+									   New-row affordance and its CSS layout sit outside the
+									   component instead of inside its layout chrome. */ }
+									<div className="cortext-data-view__footer">
+										<NewRowButton
+											slug={ slug }
+											view={ view }
+											fields={ fields }
+											onCreated={ onCreated }
+										/>
+									</div>
+								</>
 							) }
-							{ isTableLayout && (
-								<DataViewColumnInteractions
-									wrapperRef={ tableWrapperRef }
-									view={ view }
-									fields={ availableFields }
-									onChangeView={ onChangeView }
-								/>
-							) }
-							{ isTableLayout && (
-								<ColumnHeaderActions
-									collectionId={ collectionId }
-									view={ view }
-									onChangeView={ onChangeView }
-									onFieldOptionsSaved={ updateFieldOptions }
-									onFieldCreated={ requestRevealCreatedField }
-									onRowsChanged={ refresh }
-								/>
-							) }
-							{ /* tech-debt.md#7: DataViews has no footer slot, so the
-							   New-row affordance and its CSS layout sit outside the
-							   component instead of inside its layout chrome. */ }
-							<div className="cortext-data-view__footer">
-								<NewRowButton
-									slug={ slug }
-									view={ view }
-									fields={ fields }
-									onCreated={ onCreated }
-								/>
-							</div>
 						</div>
 					</div>
 				</OpenRowActionContext.Provider>

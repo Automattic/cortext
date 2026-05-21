@@ -75,14 +75,11 @@
 	// Light canvas behind the editor iframe and full-page tables.
 	--cortext-canvas-surface: #{colors.$white};
 	--cortext-canvas-border: #{colors.$gray-200};
-	// DataViews table density heights. The skeleton mirrors these so the
-	// loading table occupies the same space the real rows will. Header height
-	// is a fallback; CollectionDataViews measures the real thead at runtime
-	// and overrides this on the data-view shell.
+	// DataViews table density heights. The skeleton uses these so the loading
+	// table holds the same space as the real rows.
 	--cortext-data-view-row-height-compact: #{variables.$grid-unit-50};
 	--cortext-data-view-row-height-balanced: #{variables.$grid-unit-50 + 2 * variables.$grid-unit-15};
 	--cortext-data-view-row-height-comfortable: #{variables.$grid-unit-50 + 2 * variables.$grid-unit-20};
-	--cortext-data-view-header-height: 56px;
 	--cortext-chrome-border: #{colors.$gray-200};
 	--cortext-text: #{colors.$gray-900};
 	--cortext-text-muted: #{colors.$gray-700};

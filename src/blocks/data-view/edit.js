@@ -31,7 +31,6 @@ import apiFetch from '@wordpress/api-fetch';
 import { cog, plus, replace } from '@wordpress/icons';
 
 import CollectionDataViews from '../../components/CollectionDataViews';
-import { CollectionRowsSkeleton } from '../../components/Skeleton';
 import AddFieldPopover from '../../components/fields/AddFieldPopover';
 import { FULL_PAGE_COLLECTION_QUERY } from '../../collections';
 import { toDataViewId } from '../../hooks/fieldIds';
@@ -642,12 +641,6 @@ export default function Edit( { attributes, setAttributes } ) {
 					onChangeView={ setView }
 					revealFieldId={ revealFieldId }
 					onFieldRevealed={ onFieldRevealed }
-					loading={
-						<CollectionRowsSkeleton
-							rowCount={ view?.perPage ?? 8 }
-							density={ view?.layout?.density ?? 'compact' }
-						/>
-					}
 					invalid={
 						<Notice status="warning" isDismissible={ false }>
 							{ __(

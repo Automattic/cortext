@@ -1017,10 +1017,10 @@ body.cortext-sidebar-resizing {
 	user-select: none;
 }
 
-// Skip the default root snapshot so the sidebar and top bar stay live during
-// the swap. Only the canvas opts in below. The canvas surface also lives here
-// because the view-transition pseudo cannot read shell tokens from
-// .cortext-root; :has() handles dark mode.
+// Leave the default root snapshot out so the sidebar and topbar stay live
+// during the swap. Only the canvas opts in below. The fallback canvas surface
+// also lives here because view-transition pseudos cannot read shell tokens
+// from .cortext-root; :has() handles dark mode.
 :root {
 	view-transition-name: none;
 	--cortext-canvas-frame-surface-root: #{$white};
@@ -1057,9 +1057,9 @@ body.cortext-sidebar-resizing {
 	}
 }
 
-// During the cross-fade, both snapshots drop to about 50% opacity for a frame
-// or two. The pseudo overlay sits above the DOM, so read the canvas surface
-// from :root instead of exposing the user-agent background in the middle.
+// During the cross-fade, both snapshots briefly dip to about 50% opacity. The
+// pseudo overlay sits above the DOM, so read the canvas surface from :root
+// instead of letting the user-agent background show through.
 ::view-transition-group(cortext-canvas),
 ::view-transition-image-pair(cortext-canvas),
 ::view-transition-old(cortext-canvas),
@@ -1067,8 +1067,8 @@ body.cortext-sidebar-resizing {
 	background: var(--cortext-canvas-frame-surface-root, #fff);
 }
 
-// The topbar is named only so we can cancel its canvas fade. Both snapshots
-// match, so skip the animation.
+// Name the topbar only so we can cancel its canvas fade. Both snapshots match,
+// so skip the animation.
 ::view-transition-group(cortext-topbar),
 ::view-transition-old(cortext-topbar),
 ::view-transition-new(cortext-topbar) {
@@ -1089,8 +1089,8 @@ body.cortext-sidebar-resizing {
 	flex: 1 1 auto;
 	min-height: 0;
 
-	// Top progress bar for the gap where the URL points at the next item but
-	// the workspace is still painting the previous pane.
+	// Progress bar for the gap where the URL points at the next item but the
+	// workspace is still painting the previous pane.
 	&__progress {
 		position: absolute;
 		top: 0;
@@ -1149,8 +1149,8 @@ body.cortext-sidebar-resizing {
 	color: var(--cortext-text);
 	border-bottom: var(--cortext-shell-border-width) solid var(--cortext-chrome-border);
 	min-height: 0;
-	// Keep this chrome out of the canvas fade; the canvas backdrop tints it
-	// for a frame otherwise.
+	// Keep this chrome out of the canvas fade; otherwise the canvas backdrop
+	// tints it for a frame.
 	view-transition-name: cortext-topbar;
 
 	&__lead {
@@ -1381,8 +1381,8 @@ body.cortext-sidebar-resizing {
 		height: 100%;
 	}
 
-	// While the document or editor mounts, stretch the loading area so
-	// skeletons can occupy the same space as the incoming content.
+	// While the document or editor mounts, stretch the loading area so the
+	// placeholder can occupy the same space as the incoming content.
 	&__loading--document,
 	&__loading--collection {
 		align-items: stretch;
@@ -3984,7 +3984,7 @@ tr:has(.cortext-title-cell--is-opening)
 	}
 }
 
-// Shared skeleton pieces; see src/components/Skeleton.js.
+// Shared loading placeholders; see src/components/Skeleton.js.
 .cortext-skeleton {
 	display: block;
 	background: var(--cortext-state-hover-strong, rgba(0, 0, 0, 0.09));
@@ -4008,7 +4008,7 @@ tr:has(.cortext-title-cell--is-opening)
 	animation-delay: 0.2s;
 }
 
-// Sidebar list skeleton for Favorites, Trash, and similar lists. It matches
+// Sidebar list skeleton for Favorites, Trash, and similar lists. It uses the
 // real row height so the sidebar does not jump when items arrive.
 .cortext-sidebar-skeleton {
 	display: flex;
@@ -4037,8 +4037,8 @@ tr:has(.cortext-title-cell--is-opening)
 }
 
 // tech-debt.md#54: table-shaped placeholder while useCollectionRows fetches.
-// It sits beside <DataViews>; the wrapper handles placement. Heights track the
-// DataViews v6 density rules below closely enough to keep the page steady.
+// It sits beside <DataViews>; the wrapper handles placement. Heights follow
+// the DataViews v6 density rules closely enough to keep the page steady.
 .cortext-collection-skeleton {
 	display: flex;
 	flex-direction: column;
@@ -4050,10 +4050,9 @@ tr:has(.cortext-title-cell--is-opening)
 		align-items: center;
 		gap: $grid-unit-30;
 		padding: 0 $grid-unit-20;
-		// Fallbacks are required because the block-editor iframe doesn't
-		// inherit CSS variables scoped to .cortext-root. Without them the
-		// row collapses to the cell height (12px) and the skeleton stops
-		// looking like a table.
+		// The block-editor iframe does not inherit CSS variables scoped to
+		// .cortext-root. Keep fallbacks here so rows do not collapse to the
+		// 12px cell height in the block.
 		height: var(--cortext-data-view-row-height-balanced, #{$grid-unit-50 + 2 * $grid-unit-15});
 		border-bottom: $border-width solid var(--cortext-canvas-border, #e0e0e0);
 	}
@@ -4371,28 +4370,25 @@ body.cortext-row-detail-sidebar-resizing {
 	width: 100%;
 	min-width: 0;
 
-	// tech-debt.md#54: sit over the dataviews-wrapper while the first page
-	// loads and keep the table area near its final height. The offset tracks
-	// the DataViews header closely enough; the skeleton borders cover small
-	// differences.
+	// tech-debt.md#54: cover the table area while the shell loads, so search,
+	// filters, header, and rows appear together instead of in two beats.
 	&__rows-skeleton {
 		position: absolute;
-		// Iframe block editor doesn't inherit .cortext-root vars; fallback
-		// stops the overlay from collapsing to inset:0 inside the block.
-		inset: var(--cortext-data-view-header-height, 56px) 0 0 0;
+		inset: 0;
 		z-index: 1;
 		overflow: hidden;
 		background: var(--cortext-canvas-surface, #fff);
 		pointer-events: none;
 	}
 
-	// Hold the table area at skeleton height while the first page loads.
-	// Without this DataViews mounts with an empty tbody and the wrapper
-	// collapses to the chrome height (~100px), which clips the absolute
-	// overlay to the first few rows and shifts everything below the table
-	// upward.
-	&[data-rows-loading="true"] {
-		min-height: calc(var(--cortext-data-view-header-height, 56px) + var(--cortext-data-view-loading-rows, 8) * var(--cortext-data-view-row-height-compact, 40px));
+	// During the shell load, hold the area at skeleton height so blocks below
+	// do not jump when chrome and rows appear. The matching wrapper/footer rule
+	// sits later to keep descending-specificity clean.
+	// `--cortext-data-view-loading-row-height` is set inline from
+	// `view.layout.density`, so balanced and comfortable tables reserve their
+	// real row height and the skeleton matches the incoming rows.
+	&[data-loading-shell="true"] {
+		min-height: calc(var(--cortext-data-view-loading-rows, 8) * var(--cortext-data-view-loading-row-height, var(--cortext-data-view-row-height-compact, 40px)));
 	}
 
 	// Let the wrapper grow to fill whatever height the parent provides, so
@@ -4490,7 +4486,7 @@ body.cortext-row-detail-sidebar-resizing {
 			background: $gray-100;
 		}
 
-		// Fallbacks repeated for the block-editor iframe, which doesn't
+		// Repeat the fallbacks for the block-editor iframe, which does not
 		// inherit the .cortext-root tokens.
 		.cortext-editable-cell__shell,
 		.cortext-cell-checkbox {
@@ -4524,6 +4520,14 @@ body.cortext-row-detail-sidebar-resizing {
 			background: $gray-100;
 			color: $gray-900;
 		}
+	}
+
+	// Loading shell hides DataViews chrome and the new-row footer so the rows
+	// skeleton stands alone. Keep this after the wrapper/footer rules above to
+	// satisfy descending-specificity.
+	&[data-loading-shell="true"] > .dataviews-wrapper,
+	&[data-loading-shell="true"] > &__footer {
+		display: none;
 	}
 }
 
@@ -5191,7 +5195,7 @@ thead > tr > th {
 	}
 
 	// Wrapper for image icons. The swatch stays under the <img> until the image
-	// has actually loaded, not just until REST returns a URL.
+	// has loaded; REST returning a URL is not enough.
 	&--image-wrap {
 		position: relative;
 		display: inline-block;
@@ -5209,7 +5213,7 @@ thead > tr > th {
 
 	// Reserve the icon slot as soon as an image icon is parsed. Keep it
 	// transparent during the useDelayedFlag window so cache hits do not flash a
-	// swatch; `--visible` paints it after the wait crosses the threshold.
+	// swatch; `--visible` paints it after the delay.
 	&--image-loading {
 		position: absolute;
 		inset: 0;

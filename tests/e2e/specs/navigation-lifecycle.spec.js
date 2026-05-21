@@ -248,7 +248,7 @@ test.describe( 'Navigation lifecycle', () => {
 
 			await expect(
 				page.locator(
-					'.cortext-workspace__pane[data-active="true"] .cortext-data-view[data-rows-loading="true"]'
+					'.cortext-workspace__pane[data-active="true"] .cortext-data-view[data-loading-shell="true"]'
 				)
 			).toBeVisible();
 			await expect(
