@@ -31,10 +31,13 @@ const Canvas = lazy( () =>
 import CanvasSkeleton from '../components/CanvasSkeleton';
 import CollectionDataViews from '../components/CollectionDataViews';
 import { CollectionFieldsProvider } from '../components/CollectionFieldsContext';
+import CollectionPublishToggle from '../components/CollectionPublishToggle';
 import { RowMutationContext } from '../components/EditableCell';
 import { CanvasProgressBar } from '../components/Skeleton';
 import useDelayedFlag from '../hooks/useDelayedFlag';
-import WorkspaceTopBar from '../components/WorkspaceTopBar';
+import WorkspaceTopBar, {
+	TopBarActionsFill,
+} from '../components/WorkspaceTopBar';
 import {
 	ACTIVE_PAGES_QUERY,
 	POST_TYPE,
@@ -87,9 +90,20 @@ function CollectionView( { collectionId, onReady } ) {
 	);
 }
 
-function CollectionPane( { collectionId, onReady } ) {
+function CollectionPane( { collectionId, isActive, onReady } ) {
 	return (
 		<CollectionFieldsProvider collectionId={ collectionId }>
+			{ /* Mirror Canvas's DocumentActions: only the active pane projects
+			    its publish toggle into the shared top bar slot. */ }
+			{ isActive ? (
+				<TopBarActionsFill>
+					<div className="cortext-document-actions">
+						<CollectionPublishToggle
+							collectionId={ collectionId }
+						/>
+					</div>
+				</TopBarActionsFill>
+			) : null }
 			<div className="cortext-collection-pane">
 				<div className="cortext-canvas__table">
 					<CollectionView
@@ -522,19 +536,19 @@ export default function EntityRoute( { history } ) {
 					</WorkspacePane>
 				) }
 
-				{ mountedCollectionIds.map( ( id ) => (
-					<WorkspacePane
-						key={ id }
-						active={
-							active.kind === 'collection' && active.id === id
-						}
-					>
-						<CollectionPane
-							collectionId={ id }
-							onReady={ handleCollectionReady }
-						/>
-					</WorkspacePane>
-				) ) }
+				{ mountedCollectionIds.map( ( id ) => {
+					const isActiveCollection =
+						active.kind === 'collection' && active.id === id;
+					return (
+						<WorkspacePane key={ id } active={ isActiveCollection }>
+							<CollectionPane
+								collectionId={ id }
+								isActive={ isActiveCollection }
+								onReady={ handleCollectionReady }
+							/>
+						</WorkspacePane>
+					);
+				} ) }
 
 				<WorkspacePane active={ active.kind === 'empty' }>
 					<EmptyState />
