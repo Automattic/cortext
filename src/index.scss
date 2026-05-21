@@ -5345,6 +5345,14 @@ body.cortext-hide-block-settings-menu .block-editor-block-switcher {
 	}
 }
 
+::view-transition-group(cortext-alpha-notice-overlay) {
+	z-index: 3;
+}
+
+::view-transition-group(cortext-alpha-notice-frame) {
+	z-index: 4;
+}
+
 ::view-transition-old(cortext-alpha-notice-overlay),
 ::view-transition-old(cortext-alpha-notice-frame) {
 	animation: none;
