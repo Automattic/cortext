@@ -451,7 +451,7 @@ final class CollectionEntries {
 		// a slug (e.g. duplicate seed entries) all contribute their field
 		// keys to the shared CPT instead of silently dropping at REST.
 		if ( ! post_type_exists( $post_type ) ) {
-			register_post_type(
+			DocumentTypeRegistrar::register(
 				$post_type,
 				array(
 					'labels'             => array(
@@ -476,8 +476,6 @@ final class CollectionEntries {
 					'delete_with_user'   => false,
 				)
 			);
-
-			DocumentIdentity::register_for_post_type( $post_type );
 		}
 
 		$this->register_field_meta( $post_type, $collection->ID );

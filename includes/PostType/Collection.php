@@ -24,7 +24,11 @@ final class Collection {
 	}
 
 	public function register_post_type(): void {
-		register_post_type(
+		// Collections use the shared document lifecycle: title, identity,
+		// trash, restore, permanent delete, and command palette search.
+		// DataView is their editing surface, so block-editor content support
+		// stays off for now.
+		DocumentTypeRegistrar::register(
 			self::POST_TYPE,
 			array(
 				'labels'             => array(
@@ -56,11 +60,6 @@ final class Collection {
 				'delete_with_user'   => false,
 			)
 		);
-
-		// Collections share the document lifecycle: title, identity, trash,
-		// restore, permanent delete, command palette search. The DataView is
-		// their canvas; block-editor content support stays off for now.
-		DocumentIdentity::register_for_post_type( self::POST_TYPE );
 
 		$this->register_meta();
 	}
