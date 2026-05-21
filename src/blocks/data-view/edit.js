@@ -165,15 +165,16 @@ function CollectionCreator( { onCreate } ) {
 		try {
 			const data = {
 				title: title.trim(),
+				status: 'private',
 				mode: isFullPage ? 'full_page' : 'inline',
 			};
-			// The server handles `parent` by mode: inline owner meta for
-			// inline collections, post_parent for full-page collections.
+			// The collection REST filter decides what `parent` means: inline
+			// owner meta for inline collections, post_parent for full-page ones.
 			if ( ownerPageId ) {
 				data.parent = ownerPageId;
 			}
 			const collection = await apiFetch( {
-				path: '/cortext/v1/collections',
+				path: '/wp/v2/crtxt_collections',
 				method: 'POST',
 				data,
 			} );

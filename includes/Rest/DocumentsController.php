@@ -21,7 +21,6 @@ use Cortext\Documents;
 use Cortext\PostType\Cascade\CollectionToRowTrashCascade;
 use Cortext\PostType\Cascade\DocumentToCollectionTrashCascade;
 use Cortext\PostType\Cascade\PageHierarchyTrashCascade;
-use Cortext\PostType\Collection;
 use Cortext\PostType\CollectionEntries;
 use Cortext\PostType\TrashCascadeEngine;
 use WP_Error;
@@ -133,36 +132,6 @@ final class DocumentsController {
 					'callback'            => array( $this, 'duplicate' ),
 					'permission_callback' => array( $this, 'can_duplicate' ),
 					'args'                => $id_arg,
-				),
-			)
-		);
-
-		// Collection create keeps the kind in the URL instead of the request
-		// body. Page create still uses `/wp/v2` through core-data.
-		register_rest_route(
-			self::NAMESPACE,
-			'/collections',
-			array(
-				array(
-					'methods'             => 'POST',
-					'callback'            => array( $this, 'create_collection' ),
-					'permission_callback' => array( $this, 'can_create' ),
-					'args'                => array(
-						'title'  => array(
-							'type'     => 'string',
-							'required' => true,
-						),
-						'mode'   => array(
-							'type'    => 'string',
-							'enum'    => array( Collection::MODE_INLINE, Collection::MODE_FULL_PAGE ),
-							'default' => Collection::MODE_FULL_PAGE,
-						),
-						'parent' => array(
-							'type'    => 'integer',
-							'minimum' => 0,
-							'default' => 0,
-						),
-					),
 				),
 			)
 		);
@@ -316,10 +285,6 @@ final class DocumentsController {
 		);
 	}
 
-	public function can_create(): bool {
-		return current_user_can( 'edit_posts' );
-	}
-
 	/**
 	 * Permission gate for duplicate. Mirrors `check_document_post` so a
 	 * missing document returns 404 before capability checks can turn it into
@@ -342,20 +307,6 @@ final class DocumentsController {
 		}
 
 		return current_user_can( 'edit_posts' ) && current_user_can( 'edit_post', $id );
-	}
-
-	public function create_collection( WP_REST_Request $request ): WP_REST_Response|WP_Error {
-		$result = $this->documents->create_collection(
-			(string) $request->get_param( 'title' ),
-			(string) $request->get_param( 'mode' ),
-			(int) $request->get_param( 'parent' )
-		);
-
-		if ( $result instanceof WP_Error ) {
-			return $result;
-		}
-
-		return new WP_REST_Response( $result, 201 );
 	}
 
 	public function duplicate( WP_REST_Request $request ): WP_REST_Response|WP_Error {

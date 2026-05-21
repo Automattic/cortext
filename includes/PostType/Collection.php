@@ -298,24 +298,27 @@ final class Collection {
 	 * @param WP_REST_Request $request  The inbound REST request.
 	 */
 	public function validate_pre_insert( $prepared, WP_REST_Request $request ) {
-		if ( ! isset( $prepared->post_parent ) ) {
-			return $prepared;
-		}
-
-		$next_parent = (int) $prepared->post_parent;
-
 		$existing_id = isset( $prepared->ID ) ? (int) $prepared->ID : 0;
-		$mode        = $existing_id > 0
-			? (string) get_post_meta( $existing_id, self::MODE_META_KEY, true )
-			: (string) $request->get_param( 'workspace_mode' );
+		$is_create   = 0 === $existing_id;
+		$mode        = $is_create
+			? self::normalize_mode( (string) $request->get_param( 'mode' ) )
+			: (string) get_post_meta( $existing_id, self::MODE_META_KEY, true );
 
-		if ( self::MODE_INLINE === $mode && $next_parent > 0 ) {
-			return new WP_Error(
-				'cortext_collection_inline_parent_locked',
-				__( 'Inline collections cannot be reparented. Their owner is set when they are created.', 'cortext' ),
-				array( 'status' => 400 )
-			);
+		// Read a client-supplied slug from the request before WP REST applies
+		// the rest of `meta`. On create we stamp it through meta_input so the
+		// row CPT registers against the same value the meta field stores.
+		// After that, slug is locked: WP REST's meta path is gated by the
+		// meta's `auth_callback`, and removing `meta.slug` from the request
+		// keeps it from being applied via the meta API regardless.
+		$request_meta   = $request->get_param( 'meta' );
+		$requested_slug = '';
+		if ( is_array( $request_meta ) && isset( $request_meta['slug'] ) ) {
+			$requested_slug = (string) $request_meta['slug'];
+			unset( $request_meta['slug'] );
+			$request->set_param( 'meta', $request_meta );
 		}
+
+		$next_parent = isset( $prepared->post_parent ) ? (int) $prepared->post_parent : 0;
 
 		if ( $next_parent > 0 ) {
 			$parent_error = $this->validate_parent_document( $next_parent );
@@ -324,7 +327,87 @@ final class Collection {
 			}
 		}
 
+		if ( self::MODE_INLINE === $mode ) {
+			if ( $is_create ) {
+				if ( $next_parent < 1 ) {
+					return new WP_Error(
+						'cortext_collection_inline_parent_required',
+						__( 'Inline collections need an owner document.', 'cortext' ),
+						array( 'status' => 400 )
+					);
+				}
+				// Inline collections keep their owner in meta. Leave post_parent
+				// at 0 so they stay out of the workspace tree.
+				$prepared->post_parent                     = 0;
+				$meta_input                                = isset( $prepared->meta_input ) && is_array( $prepared->meta_input )
+					? $prepared->meta_input
+					: array();
+				$meta_input[ self::INLINE_OWNER_META_KEY ] = $next_parent;
+				$prepared->meta_input                      = $meta_input;
+			} elseif ( $next_parent > 0 ) {
+				return new WP_Error(
+					'cortext_collection_inline_parent_locked',
+					__( 'Inline collections cannot be reparented. Their owner is set when they are created.', 'cortext' ),
+					array( 'status' => 400 )
+				);
+			}
+		}
+
+		if ( $is_create ) {
+			$title = isset( $prepared->post_title ) ? trim( (string) $prepared->post_title ) : '';
+			if ( '' === $title ) {
+				return new WP_Error(
+					'cortext_collection_title_required',
+					__( 'Collection name is required.', 'cortext' ),
+					array( 'status' => 400 )
+				);
+			}
+
+			// Mode and slug are read-only through the REST meta fields. Set them
+			// through meta_input on create; wp_insert_post can write them there,
+			// and the new collection needs both before its row CPT can exist.
+			$meta_input = isset( $prepared->meta_input ) && is_array( $prepared->meta_input )
+				? $prepared->meta_input
+				: array();
+
+			$meta_input[ self::MODE_META_KEY ] = $mode;
+
+			if ( empty( $meta_input['slug'] ) ) {
+				$slug_candidate = '' !== trim( $requested_slug )
+					? sanitize_key( $requested_slug )
+					: '';
+				if ( '' !== $slug_candidate ) {
+					if ( self::slug_taken( $slug_candidate, self::existing_slugs() ) ) {
+						return new WP_Error(
+							'cortext_collection_slug_taken',
+							__( 'Collection slug is already in use.', 'cortext' ),
+							array( 'status' => 400 )
+						);
+					}
+					$meta_input['slug'] = $slug_candidate;
+				} else {
+					$meta_input['slug'] = self::unique_slug( $title );
+				}
+			}
+
+			$prepared->meta_input = $meta_input;
+		}
+
 		return $prepared;
+	}
+
+	/**
+	 * Accepts the mode from a create request. Empty or unknown values fall back
+	 * to full-page, matching the old collection create route.
+	 *
+	 * @param string $mode Raw mode value from the request body.
+	 */
+	private static function normalize_mode( string $mode ): string {
+		$mode = trim( $mode );
+		if ( self::MODE_INLINE === $mode || self::MODE_FULL_PAGE === $mode ) {
+			return $mode;
+		}
+		return self::MODE_FULL_PAGE;
 	}
 
 	private function documents(): Documents {
@@ -335,30 +418,39 @@ final class Collection {
 	}
 
 	private function register_meta(): void {
-		$meta = array(
-			'slug'   => array(
-				'type'   => 'string',
-				'single' => true,
-			),
-			'fields' => array(
-				'type'   => 'string',
-				'single' => false,
-			),
+		// Slug is read-only through the REST meta API. `validate_pre_insert`
+		// reads a desired slug from the request body on create, validates it,
+		// and stamps the meta through meta_input before the row CPT
+		// registers. After that, the slug can't change without orphaning the
+		// CPT, so the REST meta path stays locked for updates.
+		register_post_meta(
+			self::POST_TYPE,
+			'slug',
+			array(
+				'type'              => 'string',
+				'single'            => true,
+				'show_in_rest'      => true,
+				'sanitize_callback' => 'sanitize_text_field',
+				'auth_callback'     => static function () {
+					return false;
+				},
+			)
 		);
 
-		foreach ( $meta as $key => $args ) {
-			register_post_meta(
-				self::POST_TYPE,
-				$key,
-				array_merge(
-					$args,
-					array(
-						'show_in_rest'      => true,
-						'sanitize_callback' => 'sanitize_text_field',
-					)
-				)
-			);
-		}
+		// Field membership is a flat list of field post ids. FieldsController
+		// owns the create/duplicate/delete paths, but the meta itself is the
+		// canonical attachment list and stays writable through REST for
+		// callers that manage attachment directly.
+		register_post_meta(
+			self::POST_TYPE,
+			'fields',
+			array(
+				'type'              => 'string',
+				'single'            => false,
+				'show_in_rest'      => true,
+				'sanitize_callback' => 'sanitize_text_field',
+			)
+		);
 
 		// Readable via REST, but write-locked. Mode is set on creation only;
 		// changing it later is out of scope for this pass.
