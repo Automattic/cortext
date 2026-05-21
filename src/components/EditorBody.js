@@ -64,6 +64,7 @@ function syncHeaderBoundaryMoveUpClass() {
 }
 
 function syncHeaderBoundaryMoveUpButtons() {
+	// tech-debt.md#56: Gutenberg does not expose boundary-aware mover state.
 	const shouldDisable = activeHeaderBoundaryMoveUpGuards.size > 0;
 	document
 		.querySelectorAll( HEADER_BOUNDARY_MOVE_UP_SELECTOR )

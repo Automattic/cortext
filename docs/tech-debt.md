@@ -516,3 +516,11 @@ The brittle bit is the sizing. The skeleton copies DataViews row heights for com
 **Where.** `CollectionRowsSkeleton` in `src/components/Skeleton.js`, the rows-skeleton mount in `src/components/CollectionDataViews.js`, and the `.cortext-collection-skeleton` / `.cortext-data-view__rows-skeleton` rules in `src/index.scss`.
 
 **Solution.** DataViews exposes a table loading slot, or at least row-height CSS variables. Then Cortext can follow the table instead of copying its constants. Until then, keep the skeleton rules next to the DataViews table rules and check for visual drift after DataViews upgrades.
+
+## 56. Block movers do not understand Cortext's header boundary `[upstream]`
+
+**What.** Gutenberg block locks keep cover, icon, and title from moving, but they do not stop other root blocks from being inserted or moved above that locked prefix. Cortext can repair the root order with block-editor store actions and can hide protected insertion points, but the first body block's "move up" button is still rendered by Gutenberg as if moving above the title were allowed. To leave the button visible but greyed out, Cortext watches the active root selection, finds `.block-editor-block-mover-button.is-up-button` when the toolbar mounts, and toggles `disabled` / `aria-disabled` itself. If Gutenberg renames that class or changes where the mover renders, the guard will need another pass.
+
+**Where.** `HeaderPrefixToolbarGuard`, `syncHeaderBoundaryMoveUpButtons`, and the header-prefix correction in `src/components/EditorBody.js`, with coverage in `tests/e2e/specs/editor-header-blocks.spec.js`.
+
+**Solution.** Gutenberg exposes a block-list boundary policy for root lists: a minimum insertion index, a minimum move target, and mover button state derived from that policy. Then Cortext can declare "body blocks start after the title" once and drop the toolbar DOM query, the mutation observer, and the local button-state restoration.
