@@ -18,3 +18,12 @@ export const TRASHED_PAGES_QUERY = {
 	status: 'trash',
 	context: 'edit',
 };
+
+// Used by the Published documents screen. Same shape as ACTIVE_PAGES_QUERY so
+// it deep-matches alongside it for invalidation when a page is published or
+// unpublished.
+export const PUBLISHED_PAGES_QUERY = {
+	per_page: 100,
+	status: 'publish',
+	context: 'edit',
+};

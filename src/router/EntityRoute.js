@@ -32,6 +32,7 @@ import CanvasSkeleton from '../components/CanvasSkeleton';
 import CollectionDataViews from '../components/CollectionDataViews';
 import { CollectionFieldsProvider } from '../components/CollectionFieldsContext';
 import { RowMutationContext } from '../components/EditableCell';
+import PublishedDocumentsPane from '../components/PublishedDocumentsPane';
 import { CanvasProgressBar } from '../components/Skeleton';
 import useDelayedFlag from '../hooks/useDelayedFlag';
 import WorkspaceTopBar from '../components/WorkspaceTopBar';
@@ -421,7 +422,8 @@ export default function EntityRoute( { history } ) {
 	} else if (
 		active.kind === 'empty' ||
 		active.kind === 'document-not-found' ||
-		active.kind === 'collection-not-found'
+		active.kind === 'collection-not-found' ||
+		active.kind === 'published'
 	) {
 		paintedRoute = { kind: active.kind };
 	}
@@ -536,6 +538,9 @@ export default function EntityRoute( { history } ) {
 					</WorkspacePane>
 				) ) }
 
+				<WorkspacePane active={ active.kind === 'published' }>
+					<PublishedDocumentsPane />
+				</WorkspacePane>
 				<WorkspacePane active={ active.kind === 'empty' }>
 					<EmptyState />
 				</WorkspacePane>

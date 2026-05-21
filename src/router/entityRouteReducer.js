@@ -1,10 +1,15 @@
-import { parseIdFromUri, parseSplatUri } from './useResolveEntity';
+import {
+	PUBLISHED_DOCUMENTS_URI,
+	parseIdFromUri,
+	parseSplatUri,
+} from './useResolveEntity';
 
 // A null id means the URL was malformed (e.g. /collection/foo).
 //
-// Two kinds in the splat:
+// Kinds in the splat:
 //   - `collection`: explicit `collection/<slug>-<id>` prefix. Collections
 //     are schema containers, not documents.
+//   - `published`: singleton splat for the Published documents screen.
 //   - `document`: anything else with an id. Pages and rows both fall here;
 //     the resolver discovers the actual post type via the document
 //     locator endpoint.
@@ -12,6 +17,9 @@ export function parseTarget( splat ) {
 	const { prefix, tail } = parseSplatUri( splat );
 	if ( prefix === 'collection' ) {
 		return { kind: 'collection', id: parseIdFromUri( tail ), tail };
+	}
+	if ( splat === PUBLISHED_DOCUMENTS_URI ) {
+		return { kind: 'published', tail: '' };
 	}
 	if ( ! splat ) {
 		return { kind: 'empty', tail: '' };
@@ -71,6 +79,8 @@ export function reducer( state, action ) {
 
 			if ( target.kind === 'empty' ) {
 				active = { kind: 'empty' };
+			} else if ( target.kind === 'published' ) {
+				active = { kind: 'published' };
 			} else if ( target.kind === 'document' ) {
 				if ( target.id === null ) {
 					active = { kind: 'document-not-found' };
@@ -189,6 +199,8 @@ export function init( target ) {
 	let active;
 	if ( target.kind === 'empty' ) {
 		active = { kind: 'empty' };
+	} else if ( target.kind === 'published' ) {
+		active = { kind: 'published' };
 	} else if ( target.kind === 'document' && target.id === null ) {
 		active = { kind: 'document-not-found' };
 	} else if ( target.kind === 'collection' && target.id === null ) {
