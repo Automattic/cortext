@@ -1,0 +1,20 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "cortext/document-properties",
+	"title": "Document properties",
+	"category": "widgets",
+	"icon": "list-view",
+	"description": "Schema-driven row properties between the title and the body. Reads the collection schema and per-row meta.",
+	"textdomain": "cortext",
+	"usesContext": [ "postId", "postType" ],
+	"supports": {
+		"html": false,
+		"reusable": false,
+		"multiple": false,
+		"inserter": false,
+		"customClassName": false,
+		"lock": false
+	},
+	"attributes": {}
+}

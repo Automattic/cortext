@@ -13,6 +13,7 @@ use Cortext\Admin\Screen;
 use Cortext\Block\DataView;
 use Cortext\Editor\DocumentCoverBlock;
 use Cortext\Editor\DocumentIconBlock;
+use Cortext\Editor\DocumentPropertiesBlock;
 use Cortext\Editor\PageHeaderActionsBlock;
 use Cortext\Editor\RevisionThrottle;
 use Cortext\Frontend\Assets;
@@ -69,6 +70,7 @@ final class Plugin {
 		( new RevisionThrottle() )->register();
 		( new DocumentIconBlock() )->register();
 		( new DocumentCoverBlock() )->register();
+		( new DocumentPropertiesBlock() )->register();
 		( new PageHeaderActionsBlock() )->register();
 		( new FavoritesController() )->register();
 		( new FieldsController() )->register();
