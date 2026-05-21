@@ -32,10 +32,12 @@ import {
 } from '@wordpress/element';
 
 import DocumentIdentityControls from './DocumentIdentityControls';
+import { useDocumentPropertiesContext } from './DocumentPropertiesContext';
 import MediaPicker, { MediaUploadCheck } from './MediaPicker';
 
 const DOCUMENT_ICON_BLOCK = 'cortext/document-icon';
 const DOCUMENT_COVER_BLOCK = 'cortext/document-cover';
+const DOCUMENT_PROPERTIES_BLOCK = 'cortext/document-properties';
 const POST_TITLE_BLOCK = 'core/post-title';
 const LEGACY_HEADER_ACTIONS_BLOCK = 'cortext/page-header-actions';
 const ROOT_BLOCK_LIST = '';
@@ -398,12 +400,18 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 		postId
 	);
 	const iconMeta = meta?.cortext_document_icon ?? '';
+	const propertiesCtx = useDocumentPropertiesContext();
+	const hasSchema =
+		Array.isArray( propertiesCtx?.fields ) &&
+		propertiesCtx.fields.length > 0;
 	const {
 		coverIndex,
+		titleIndex,
 		hasCover,
 		hasIcon,
 		hasTitle,
-		titleIndex,
+		hasProperties,
+		propertiesClientId,
 		bodyBlockBeforeTitleId,
 		shouldHideHeaderInsertionPoint,
 		duplicateHeaderIds,
@@ -439,7 +447,8 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 			if (
 				block.name !== DOCUMENT_COVER_BLOCK &&
 				block.name !== DOCUMENT_ICON_BLOCK &&
-				block.name !== POST_TITLE_BLOCK
+				block.name !== POST_TITLE_BLOCK &&
+				block.name !== DOCUMENT_PROPERTIES_BLOCK
 			) {
 				return;
 			}
@@ -449,12 +458,17 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 			}
 			seenSingletons.add( block.name );
 		} );
+		const propertiesBlock = blocks.find(
+			( block ) => block.name === DOCUMENT_PROPERTIES_BLOCK
+		);
 		return {
 			coverIndex: names.indexOf( DOCUMENT_COVER_BLOCK ),
+			titleIndex: names.indexOf( POST_TITLE_BLOCK ),
 			hasCover: names.includes( DOCUMENT_COVER_BLOCK ),
 			hasIcon: names.includes( DOCUMENT_ICON_BLOCK ),
 			hasTitle: names.includes( POST_TITLE_BLOCK ),
-			titleIndex: currentTitleIndex,
+			hasProperties: !! propertiesBlock,
+			propertiesClientId: propertiesBlock?.clientId ?? null,
 			bodyBlockBeforeTitleId: currentBodyBlockBeforeTitleId,
 			shouldHideHeaderInsertionPoint:
 				store.isBlockInsertionPointVisible() &&
@@ -491,10 +505,22 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 			updateBlockAttributes( clientId, { lock: {} } );
 			removeBlock( clientId, false );
 		} );
+
+		// Properties block lives only on rows whose collection has at
+		// least one field. When schema disappears (page surface, schema
+		// edits), strip the block so `post_content` doesn't keep an
+		// empty marker.
+		if ( hasProperties && ! hasSchema && propertiesClientId ) {
+			updateBlockAttributes( propertiesClientId, { lock: {} } );
+			removeBlock( propertiesClientId, false );
+		}
 	}, [
 		duplicateHeaderIds,
+		hasProperties,
+		hasSchema,
 		isTrashed,
 		legacyActionIds,
+		propertiesClientId,
 		removeBlock,
 		updateBlockAttributes,
 	] );
@@ -525,7 +551,13 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 		const needsCover = featuredId > 0 && ! hasCover;
 		const needsIcon = iconMeta && ! hasIcon;
 		const needsTitle = ! hasTitle;
-		if ( ! needsCover && ! needsIcon && ! needsTitle ) {
+		const needsProperties = hasSchema && ! hasProperties;
+		if (
+			! needsCover &&
+			! needsIcon &&
+			! needsTitle &&
+			! needsProperties
+		) {
 			return;
 		}
 
@@ -558,14 +590,30 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 				false
 			);
 		}
+		const computedTitleIndex =
+			( featuredId > 0 ? 1 : 0 ) + ( iconMeta ? 1 : 0 );
 		if ( needsTitle ) {
-			const insertTitleIndex =
-				( featuredId > 0 ? 1 : 0 ) + ( iconMeta ? 1 : 0 );
 			insertBlocks(
 				createBlock( POST_TITLE_BLOCK, {
 					lock: { move: true, remove: true },
 				} ),
-				insertTitleIndex,
+				computedTitleIndex,
+				undefined,
+				false
+			);
+		}
+		if ( needsProperties ) {
+			// If title was just inserted in this same pass, use the
+			// computed index. Otherwise the snapshot title index is the
+			// truth.
+			const insertAt = needsTitle
+				? computedTitleIndex + 1
+				: titleIndex + 1;
+			insertBlocks(
+				createBlock( DOCUMENT_PROPERTIES_BLOCK, {
+					lock: { move: true, remove: true },
+				} ),
+				insertAt,
 				undefined,
 				false
 			);
@@ -580,12 +628,15 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 		featuredId,
 		hasCover,
 		hasIcon,
+		hasProperties,
+		hasSchema,
 		hasTitle,
 		iconMeta,
 		insertBlocks,
 		isTrashed,
 		startTyping,
 		stopTyping,
+		titleIndex,
 	] );
 
 	useLayoutEffect( () => {

@@ -18,13 +18,6 @@
 
 .commands-command-menu__container {
 
-	// cmdk only sets max-height on the list. Give it the same min-height so the
-	// modal does not collapse to "No results found." or a pending state, then
-	// jump back to a full list.
-	[cmdk-root] > [cmdk-list] {
-		min-height: min(328px, 70vh - 48px);
-	}
-
 	.commands-command-menu__item {
 		display: flex;
 		align-items: center;
@@ -112,12 +105,10 @@ body.cortext-fullscreen {
 }
 
 .cortext-shell {
-	--cortext-shell-sidebar-track-width: var(--cortext-sidebar-width);
-
-	position: relative;
-	isolation: isolate;
 	display: grid;
-	grid-template-columns: var(--cortext-shell-sidebar-track-width) minmax(0, 1fr);
+	// The trailing `auto` track holds the side peek panel. It collapses when no
+	// peek is mounted and follows the panel's width animation when one is open.
+	grid-template-columns: var(--cortext-sidebar-width) minmax(0, 1fr) auto;
 	height: 100vh;
 	transition: grid-template-columns 160ms ease;
 }
@@ -131,12 +122,11 @@ body.cortext-fullscreen {
 // Collapsed: pin to rail width but keep the saved expanded width on the
 // root, so toggling back restores it.
 .cortext-root[data-sidebar-collapsed="true"] .cortext-shell {
-	--cortext-shell-sidebar-track-width: var(--cortext-sidebar-width-rail);
+	grid-template-columns: var(--cortext-sidebar-width-rail) minmax(0, 1fr) auto;
 }
 
 .cortext-sidebar {
 	position: relative;
-	z-index: 3;
 	display: flex;
 	flex-direction: column;
 	background: var(--cortext-sidebar-surface);
@@ -1022,22 +1012,14 @@ body.cortext-sidebar-resizing {
 	user-select: none;
 }
 
-// Leave the default root snapshot out so the sidebar and topbar stay live
-// during the swap. Only the canvas opts in below. The fallback canvas surface
-// also lives here because view-transition pseudos cannot read shell tokens
-// from .cortext-root; :has() handles dark mode.
+// Skip the default root snapshot so the sidebar and top bar stay live
+// during the swap. Only the canvas opts in below.
 :root {
 	view-transition-name: none;
-	--cortext-canvas-frame-surface-root: #{$white};
-}
-
-:root:has(.cortext-root[data-theme="dark"]) {
-	--cortext-canvas-frame-surface-root: #2a2a2a;
 }
 
 .cortext-shell__canvas {
 	position: relative;
-	z-index: 1;
 	overflow: hidden;
 	display: flex;
 	flex-direction: column;
@@ -1046,6 +1028,8 @@ body.cortext-sidebar-resizing {
 	// --cortext-canvas-frame-surface. The iframe interior is painted by the active
 	// block theme, not by this token.
 	background: var(--cortext-canvas-frame-surface);
+	// Named so the cross-fade is scoped to this column.
+	view-transition-name: cortext-canvas;
 
 	&:focus {
 		outline: none;
@@ -1061,38 +1045,6 @@ body.cortext-sidebar-resizing {
 	}
 }
 
-// During the cross-fade, both snapshots briefly dip to about 50% opacity. The
-// pseudo overlay sits above the DOM, so read the canvas surface from :root
-// instead of letting the user-agent background show through.
-::view-transition-group(cortext-canvas),
-::view-transition-image-pair(cortext-canvas),
-::view-transition-old(cortext-canvas),
-::view-transition-new(cortext-canvas) {
-	background: var(--cortext-canvas-frame-surface-root, #fff);
-}
-
-// Keep the canvas layer below the side peek so the canvas cross-fade never
-// flashes over the row-detail panel.
-::view-transition-group(cortext-canvas) {
-	z-index: 1;
-}
-
-// The side peek lives outside the canvas. Give it its own transition layer so
-// the canvas cross-fade never flashes over it.
-::view-transition-group(cortext-row-detail-sidebar) {
-	z-index: 2;
-	animation: none;
-}
-
-::view-transition-old(cortext-row-detail-sidebar) {
-	display: none;
-}
-
-::view-transition-new(cortext-row-detail-sidebar) {
-	animation: none;
-	mix-blend-mode: normal;
-}
-
 @media (prefers-reduced-motion: reduce) {
 
 	::view-transition-group(cortext-canvas),
@@ -1106,25 +1058,6 @@ body.cortext-sidebar-resizing {
 	position: relative;
 	flex: 1 1 auto;
 	min-height: 0;
-	// Cross-fade only the workspace, not the topbar or the side peek (both
-	// live outside this subtree). Scoping here keeps the canvas backdrop
-	// from tinting the topbar during a route change in dark mode.
-	view-transition-name: cortext-canvas;
-
-	// Progress bar for the gap where the URL points at the next item but the
-	// workspace is still painting the previous pane.
-	&__progress {
-		position: absolute;
-		top: 0;
-		left: 0;
-		right: 0;
-		z-index: 10;
-		pointer-events: none;
-	}
-}
-
-.cortext-workspace[data-target-kind="collection"] {
-	background: var(--cortext-canvas-surface);
 }
 
 .cortext-workspace__pane {
@@ -1147,17 +1080,11 @@ body.cortext-sidebar-resizing {
 	z-index: 1;
 }
 
-.cortext-workspace[data-target-kind="collection"]
-.cortext-workspace__pane[data-active="true"] {
-	background: var(--cortext-canvas-surface);
-}
-
 .cortext-collection-pane {
 	position: relative;
 	display: flex;
 	height: 100%;
 	min-height: 0;
-	background: var(--cortext-canvas-surface);
 }
 
 .cortext-topbar {
@@ -1299,12 +1226,6 @@ body.cortext-sidebar-resizing {
 		height: 100%;
 		object-fit: cover;
 	}
-
-	.cortext-page-inspector__featured-image-skeleton {
-		width: 100%;
-		height: 100%;
-		border-radius: 0;
-	}
 }
 
 .cortext-breadcrumbs {
@@ -1398,26 +1319,6 @@ body.cortext-sidebar-resizing {
 		justify-content: center;
 		color: var(--cortext-text-muted);
 		height: 100%;
-	}
-
-	// While the document or editor mounts, stretch the loading area so the
-	// placeholder can occupy the same space as the incoming content.
-	&__loading--document,
-	&__loading--collection {
-		align-items: stretch;
-		justify-content: flex-start;
-		overflow: auto;
-	}
-
-	// Cross-document navigation keeps the previous post visible until autosave
-	// finishes. Put the progress bar over it while the next document loads.
-	&__pending-progress {
-		position: absolute;
-		top: 0;
-		left: 0;
-		right: 0;
-		z-index: 5;
-		pointer-events: none;
 	}
 
 	// The trashed-page banner stacks above the BlockCanvas. Make the
@@ -2451,11 +2352,6 @@ tr:hover
 .dataviews-view-table
 tbody
 tr:has(.cortext-title-cell--is-open)
-.cortext-title-cell__open.components-button,
-.cortext-data-view
-.dataviews-view-table
-tbody
-tr:has(.cortext-title-cell--is-opening)
 .cortext-title-cell__open.components-button {
 	opacity: 1;
 	pointer-events: auto;
@@ -2469,18 +2365,8 @@ tr:has(.cortext-title-cell--is-open),
 .dataviews-view-table
 tbody
 tr:has(.cortext-title-cell--is-open)
-.dataviews-view-table__actions-column--sticky,
-.cortext-data-view
-.dataviews-view-table
-tbody
-tr:has(.cortext-title-cell--is-opening),
-.cortext-data-view
-.dataviews-view-table
-tbody
-tr:has(.cortext-title-cell--is-opening)
 .dataviews-view-table__actions-column--sticky {
 	background-color: #f8f8f8;
-	transition: background-color 80ms ease-out;
 }
 
 .cortext-cell-readonly {
@@ -3237,63 +3123,6 @@ tr:has(.cortext-title-cell--is-opening)
 		width: 100%;
 	}
 
-	// `grid-template-rows: 1fr → 0fr` is the smoothly-animatable way to
-	// collapse a wrapper to its content's natural height. The body child
-	// hides via overflow: hidden; the chevron escapes the collapse via
-	// position: absolute so it stays visible over the cover when hidden.
-	&--canvas-properties {
-		position: relative;
-		display: grid;
-		flex: 0 0 auto;
-		width: 100%;
-		grid-template-rows: 1fr;
-		transition: grid-template-rows 0.22s ease;
-	}
-
-	&--canvas-properties-collapsed {
-		grid-template-rows: 0fr;
-	}
-
-	// Border on the body (not the wrapper) so it disappears with the
-	// content when collapsed; matches the toolbar's `__header`
-	// border-bottom in side / modal panes for visual consistency.
-	&__canvas-properties-body {
-		min-height: 0;
-		overflow: hidden;
-		border-bottom: $border-width solid $gray-200;
-	}
-
-	// Solid background pill so the chevron stays legible even when it
-	// floats over a dark cover image. The button itself is small; the
-	// pill keeps a constant contrast surface regardless of what's behind.
-	&__canvas-properties-toggle.components-button {
-		position: absolute;
-		top: $grid-unit-10;
-		left: $grid-unit-10;
-		z-index: 2;
-		background: rgba(255, 255, 255, 0.92);
-		color: $gray-900;
-		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
-		opacity: 0;
-		transition: opacity 0.12s ease, background-color 0.12s ease;
-
-		&:hover,
-		&:focus-visible {
-			background: $white;
-			color: $gray-900;
-		}
-	}
-
-	/* stylelint-disable no-descending-specificity */
-	&--canvas-properties:hover &__canvas-properties-toggle.components-button,
-	&__canvas-properties-toggle.components-button:focus-visible,
-	// When collapsed, the chevron is the only affordance, so keep it
-	// always visible (still tap to bring properties back).
-	&--canvas-properties-collapsed &__canvas-properties-toggle.components-button {
-		opacity: 1;
-	}
-	/* stylelint-enable no-descending-specificity */
-
 	&__frame {
 		display: flex;
 		flex-direction: column;
@@ -4023,200 +3852,6 @@ tr:has(.cortext-title-cell--is-opening)
 		grid-template-rows: 1fr;
 		opacity: 1;
 	}
-
-	// Loading frame for row detail. The title and icon come from the table row,
-	// so the panel does not open blank while useEntityRecord catches up.
-	&__frame--loading {
-
-		.cortext-row-detail__title {
-			display: flex;
-			align-items: center;
-			gap: $grid-unit-10;
-		}
-
-		.cortext-row-detail__title-icon {
-			display: inline-flex;
-			align-items: center;
-			justify-content: center;
-			width: 24px;
-			height: 24px;
-		}
-	}
-
-	&__body--loading {
-		display: flex;
-		flex-direction: column;
-		gap: $grid-unit-20;
-		padding: $grid-unit-20 $grid-unit-30;
-	}
-
-	&__skeleton-fields {
-		display: flex;
-		flex-direction: column;
-		gap: $grid-unit-15;
-	}
-
-	&__loading-status {
-		display: flex;
-		justify-content: center;
-		padding: $grid-unit-20 0;
-		opacity: 0.6;
-	}
-}
-
-// Shared loading placeholders; see src/components/Skeleton.js.
-.cortext-skeleton {
-	display: block;
-	background: var(--cortext-state-hover-strong, rgba(0, 0, 0, 0.09));
-	border-radius: 4px;
-	animation: cortext-skeleton-pulse 1.4s ease-in-out infinite;
-}
-
-.cortext-skeleton--line {
-	height: 12px;
-}
-
-.cortext-skeleton-field {
-	display: grid;
-	grid-template-columns: minmax(96px, 140px) minmax(0, 1fr);
-	gap: $grid-unit-20;
-	align-items: center;
-}
-
-.cortext-skeleton-field__value {
-	max-width: 280px;
-	animation-delay: 0.2s;
-}
-
-// Sidebar list skeleton for Favorites, Trash, and similar lists. It uses the
-// real row height so the sidebar does not jump when items arrive.
-.cortext-sidebar-skeleton {
-	display: flex;
-	flex-direction: column;
-	padding: $grid-unit-10 0;
-
-	&__row {
-		display: flex;
-		align-items: center;
-		gap: $grid-unit-10;
-		height: $grid-unit-40;
-		padding: 0 $grid-unit-15;
-	}
-
-	&__icon {
-		flex: 0 0 16px;
-		width: 16px;
-		height: 16px;
-		border-radius: 3px;
-	}
-
-	&__label {
-		flex: 1 1 0;
-		min-width: 0;
-	}
-}
-
-// tech-debt.md#55: table-shaped placeholder while useCollectionRows fetches.
-// It sits beside <DataViews>; the wrapper handles placement. Heights follow
-// the DataViews v6 density rules closely enough to keep the page steady.
-.cortext-collection-skeleton {
-	display: flex;
-	flex-direction: column;
-	width: 100%;
-	padding: $grid-unit-10 0;
-
-	&__row {
-		display: flex;
-		align-items: center;
-		gap: $grid-unit-30;
-		padding: 0 $grid-unit-20;
-		// The block-editor iframe does not inherit CSS variables scoped to
-		// .cortext-root. Keep fallbacks here so rows do not collapse to the
-		// 12px cell height in the block.
-		height: var(--cortext-data-view-row-height-balanced, #{$grid-unit-50 + 2 * $grid-unit-15});
-		border-bottom: $border-width solid var(--cortext-canvas-border, #e0e0e0);
-	}
-
-	&--compact &__row {
-		height: var(--cortext-data-view-row-height-compact, #{$grid-unit-50});
-	}
-
-	&--comfortable &__row {
-		height: var(--cortext-data-view-row-height-comfortable, #{$grid-unit-50 + 2 * $grid-unit-20});
-	}
-
-	&__cell {
-		flex: 1 1 0;
-		min-width: 0;
-		height: 12px;
-	}
-
-	&__cell--first {
-		flex: 0 0 28%;
-	}
-}
-
-// Thin sliding bar while the route and editor resolve. The document loading
-// frame stretches to the canvas, so the bar can pin to the top.
-.cortext-canvas-progress {
-	position: relative;
-	width: 100%;
-	height: 3px;
-	overflow: hidden;
-	background: transparent;
-	flex: 0 0 auto;
-
-	&::before {
-		content: "";
-		position: absolute;
-		top: 0;
-		left: -40%;
-		width: 40%;
-		height: 100%;
-		background: var(--wp-admin-theme-color, #007cba);
-		border-radius: 2px;
-		animation: cortext-canvas-progress-slide 1.4s ease-in-out infinite;
-	}
-}
-
-@media (prefers-reduced-motion: reduce) {
-
-	.cortext-canvas-progress::before {
-		animation: none;
-		left: 0;
-		width: 100%;
-		opacity: 0.25;
-	}
-}
-
-@keyframes cortext-canvas-progress-slide {
-
-	0% {
-		left: -40%;
-	}
-
-	100% {
-		left: 100%;
-	}
-}
-
-@media (prefers-reduced-motion: reduce) {
-
-	.cortext-skeleton {
-		animation: none;
-	}
-}
-
-@keyframes cortext-skeleton-pulse {
-
-	0%,
-	100% {
-		opacity: 1;
-	}
-
-	50% {
-		opacity: 0.55;
-	}
 }
 
 @keyframes cortext-row-detail-pane-enter {
@@ -4232,23 +3867,40 @@ tr:has(.cortext-title-cell--is-opening)
 	}
 }
 
+// Row properties rendered under the title in the editor canvas. Start with the
+// base RowProperties styles, then apply the compact spacing needed here.
+.cortext-document-properties {
+
+	.cortext-row-detail__properties {
+		padding: 0;
+	}
+
+	.cortext-row-detail__property {
+		grid-template-columns: minmax(96px, 116px) minmax(0, 1fr);
+		gap: $grid-unit-10;
+		min-height: $grid-unit-30;
+		font-size: 14px;
+	}
+
+	.cortext-row-detail__property-label,
+	.cortext-row-detail__property-value {
+		font-size: 14px;
+	}
+}
+
 .cortext-row-detail-sidebar-shell {
-	position: absolute;
-	z-index: 2;
-	inset-block: 0;
-	inset-inline-end: 0;
+	position: relative;
 	flex: 0 0 var(--cortext-row-detail-sidebar-width, 560px);
 	width: var(--cortext-row-detail-sidebar-width, 560px);
 	height: 100%;
 	min-width: 0;
 	min-height: 0;
-	max-width: min(840px, 66vw, calc(100% - var(--cortext-shell-sidebar-track-width)));
+	max-width: min(840px, 66vw);
 	background: $white;
 	border-left: $border-width solid var(--cortext-row-detail-border, #e9e9e7);
 	box-shadow: -18px 0 36px rgba(0, 0, 0, 0.12);
 	overflow: hidden;
 	will-change: width;
-	view-transition-name: cortext-row-detail-sidebar;
 	animation:
 		cortext-row-detail-sidebar-open 300ms
 		cubic-bezier(0.6, 0, 0.4, 1) both;
@@ -4390,27 +4042,6 @@ body.cortext-row-detail-sidebar-resizing {
 	width: 100%;
 	min-width: 0;
 
-	// tech-debt.md#55: cover the table area while the shell loads, so search,
-	// filters, header, and rows appear together instead of in two beats.
-	&__rows-skeleton {
-		position: absolute;
-		inset: 0;
-		z-index: 1;
-		overflow: hidden;
-		background: var(--cortext-canvas-surface, #fff);
-		pointer-events: none;
-	}
-
-	// During the shell load, hold the area at skeleton height so blocks below
-	// do not jump when chrome and rows appear. The matching wrapper/footer rule
-	// sits later to keep descending-specificity clean.
-	// `--cortext-data-view-loading-row-height` is set inline from
-	// `view.layout.density`, so balanced and comfortable tables reserve their
-	// real row height and the skeleton matches the incoming rows.
-	&[data-loading-shell="true"] {
-		min-height: calc(var(--cortext-data-view-loading-rows, 8) * var(--cortext-data-view-loading-row-height, var(--cortext-data-view-row-height-compact, 40px)));
-	}
-
 	// Let the wrapper grow to fill whatever height the parent provides, so
 	// our footer sits below the table instead of getting pushed off by the
 	// wrapper's own `height: 100%`. Parents own the height per-context: the
@@ -4506,22 +4137,20 @@ body.cortext-row-detail-sidebar-resizing {
 			background: $gray-100;
 		}
 
-		// Repeat the fallbacks for the block-editor iframe, which does not
-		// inherit the .cortext-root tokens.
 		.cortext-editable-cell__shell,
 		.cortext-cell-checkbox {
-			min-height: var(--cortext-data-view-row-height-balanced, #{$grid-unit-50 + 2 * $grid-unit-15});
+			min-height: $grid-unit-50 + 2 * $grid-unit-15; // 64 (balanced)
 		}
 
 		&.has-compact-density .cortext-editable-cell__shell,
 		&.has-compact-density .cortext-cell-checkbox {
-			min-height: var(--cortext-data-view-row-height-compact, #{$grid-unit-50});
+			min-height: $grid-unit-50; // 40 (compact, the editor's floor)
 			padding-block: 0;
 		}
 
 		&.has-comfortable-density .cortext-editable-cell__shell,
 		&.has-comfortable-density .cortext-cell-checkbox {
-			min-height: var(--cortext-data-view-row-height-comfortable, #{$grid-unit-50 + 2 * $grid-unit-20});
+			min-height: $grid-unit-50 + 2 * $grid-unit-20; // 72 (comfortable)
 		}
 	}
 
@@ -4540,14 +4169,6 @@ body.cortext-row-detail-sidebar-resizing {
 			background: $gray-100;
 			color: $gray-900;
 		}
-	}
-
-	// Loading shell hides DataViews chrome and the new-row footer so the rows
-	// skeleton stands alone. Keep this after the wrapper/footer rules above to
-	// satisfy descending-specificity.
-	&[data-loading-shell="true"] > .dataviews-wrapper,
-	&[data-loading-shell="true"] > &__footer {
-		display: none;
 	}
 }
 
@@ -5214,43 +4835,10 @@ thead > tr > th {
 		border-radius: 3px;
 	}
 
-	// Wrapper for image icons. The swatch stays under the <img> until the image
-	// has loaded; REST returning a URL is not enough.
-	&--image-wrap {
-		position: relative;
-		display: inline-block;
-		flex: 0 0 auto;
-		vertical-align: middle;
-	}
-
-	&--image-wrap .cortext-document-icon--image {
-		position: absolute;
-		inset: 0;
-		width: 100%;
-		height: 100%;
-		transition: opacity 80ms ease-out;
-	}
-
-	// Reserve the icon slot as soon as an image icon is parsed. Keep it
-	// transparent during the useDelayedFlag window so cache hits do not flash a
-	// swatch; `--visible` paints it after the delay.
 	&--image-loading {
-		position: absolute;
-		inset: 0;
-		display: block;
+		display: inline-block;
+		background: var(--cortext-chrome-border);
 		border-radius: 3px;
-	}
-
-	&--image-loading-visible {
-		background: var(--cortext-state-hover-strong, rgba(0, 0, 0, 0.09));
-		animation: cortext-skeleton-pulse 1.4s ease-in-out infinite;
-	}
-}
-
-@media (prefers-reduced-motion: reduce) {
-
-	.cortext-document-icon--image-loading-visible {
-		animation: none;
 	}
 }
 
@@ -5273,14 +4861,6 @@ thead > tr > th {
 		width: 100%;
 		height: 100%;
 		object-fit: cover;
-		// Pair with the inline `opacity: hasImagePainted ? 1 : 0` on the
-		// img so the cover fades in instead of popping after the bytes
-		// decode. Reduced motion ignores the fade.
-		transition: opacity 180ms ease-out;
-
-		@media (prefers-reduced-motion: reduce) {
-			transition: none;
-		}
 	}
 
 	&__controls {
@@ -5710,14 +5290,6 @@ body.cortext-hide-parent-block-toolbar
 		padding-top: 16px;
 		border-top: 1px solid #e0e0e0;
 	}
-}
-
-::view-transition-group(cortext-alpha-notice-overlay) {
-	z-index: 3;
-}
-
-::view-transition-group(cortext-alpha-notice-frame) {
-	z-index: 4;
 }
 
 ::view-transition-old(cortext-alpha-notice-overlay),

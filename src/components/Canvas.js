@@ -7,9 +7,9 @@ import {
 	InterfaceSkeleton,
 	store as interfaceStore,
 } from '@wordpress/interface';
-import { Button, Disabled, SnackbarList } from '@wordpress/components';
+import { Button, SnackbarList, Spinner } from '@wordpress/components';
 import { store as noticesStore } from '@wordpress/notices';
-import { chevronDown, chevronUp, cog, seen, unseen } from '@wordpress/icons';
+import { cog, seen, unseen } from '@wordpress/icons';
 import { useCallback, useEffect, useState } from '@wordpress/element';
 
 // Editor-surface stylesheets. Imported via a sibling SCSS file (not
@@ -22,13 +22,11 @@ import './Canvas.scss';
 // gets the blocks registered.
 import './initEditor';
 import useAutosave from '../hooks/useAutosave';
-import useDelayedFlag from '../hooks/useDelayedFlag';
 import { withViewTransition } from '../hooks/viewTransition';
 import { POST_TYPE } from './page-queries';
+import { DocumentPropertiesProvider } from './DocumentPropertiesContext';
 import EditorBody from './EditorBody';
 import PublishToggle from './PublishToggle';
-import RowProperties from './RowProperties';
-import { CanvasProgressBar } from './Skeleton';
 import { TopBarActionsFill } from './WorkspaceTopBar';
 import PageInspectorSidebar, {
 	BLOCK_INSPECTOR,
@@ -199,7 +197,6 @@ function CanvasEditor( {
 	} );
 	const { resetPost } = useDispatch( editorStore );
 	const discard = useCallback( () => resetPost(), [ resetPost ] );
-	const isTrashed = post.status === 'trash';
 
 	useEffect( () => {
 		onApi?.( { flushNow, discard } );
@@ -253,34 +250,6 @@ function CanvasEditor( {
 		() => setArePropertiesVisible( ( current ) => ! current ),
 		[]
 	);
-	// tech-debt.md#41: row properties are shell chrome until they become a
-	// locked dynamic block with frontend rendering.
-	const rowProperties = hasProperties ? (
-		<div
-			className={
-				'cortext-row-detail cortext-row-detail--canvas-properties' +
-				( arePropertiesVisible
-					? ''
-					: ' cortext-row-detail--canvas-properties-collapsed' )
-			}
-		>
-			<Button
-				className="cortext-row-detail__canvas-properties-toggle"
-				icon={ arePropertiesVisible ? chevronUp : chevronDown }
-				size="small"
-				label={
-					arePropertiesVisible
-						? __( 'Hide fields', 'cortext' )
-						: __( 'Show fields', 'cortext' )
-				}
-				showTooltip
-				onClick={ togglePropertiesVisible }
-			/>
-			<div className="cortext-row-detail__canvas-properties-body">
-				<RowProperties fields={ fields } row={ row } />
-			</div>
-		</div>
-	) : null;
 
 	return (
 		<>
@@ -299,18 +268,19 @@ function CanvasEditor( {
 				content={
 					<>
 						{ notice }
-						{ isTrashed && rowProperties ? (
-							<Disabled>{ rowProperties }</Disabled>
-						) : (
-							rowProperties
-						) }
-						<VisualCanvas
-							isActive={ isActive }
-							postId={ post.id }
-							postType={ postType }
-							onReady={ onDisplayedPost }
-							onRestored={ onRestored }
-						/>
+						<DocumentPropertiesProvider
+							fields={ fields }
+							fallbackRecord={ row }
+							isVisible={ arePropertiesVisible }
+						>
+							<VisualCanvas
+								isActive={ isActive }
+								postId={ post.id }
+								postType={ postType }
+								onReady={ onDisplayedPost }
+								onRestored={ onRestored }
+							/>
+						</DocumentPropertiesProvider>
 					</>
 				}
 				sidebar={ <InspectorSidebarSlot /> }
@@ -369,60 +339,43 @@ export default function Canvas( {
 		} );
 	}, [ requestedPost ] );
 
+	if ( ! renderedPost ) {
+		return (
+			<div className="cortext-canvas__loading">
+				<Spinner />
+			</div>
+		);
+	}
+
 	const pendingPost =
-		renderedPost &&
 		requestedPost &&
 		( requestedPost.type !== renderedPost.type ||
 			requestedPost.id !== renderedPost.id )
 			? requestedPost
 			: null;
-	// `pendingPost` appears only after the next record resolves. On a slow
-	// network that is too late, so compare the requested post to the one still
-	// on screen and cover the whole wait after a click.
-	const isCrossDocNav = Boolean(
-		renderedPost &&
-			postId &&
-			( String( postId ) !== String( renderedPost.id ) ||
-				( postType && postType !== renderedPost.type ) )
-	);
-	const showProgress = useDelayedFlag( ! renderedPost || isCrossDocNav );
-	if ( ! renderedPost ) {
-		return (
-			<div className="cortext-canvas__loading cortext-canvas__loading--document">
-				{ showProgress ? <CanvasProgressBar /> : null }
-			</div>
-		);
-	}
 
 	return (
-		<>
-			{ showProgress && (
-				<div className="cortext-canvas__pending-progress">
-					<CanvasProgressBar />
-				</div>
-			) }
-			<EditorProvider
+		<EditorProvider
+			post={ renderedPost }
+			settings={ window.cortextEditorSettings ?? {} }
+			useSubRegistry={ useSubRegistry }
+		>
+			<CanvasEditor
 				post={ renderedPost }
-				settings={ window.cortextEditorSettings ?? {} }
-				useSubRegistry={ useSubRegistry }
-			>
-				<CanvasEditor
-					post={ renderedPost }
-					postType={ renderedPost.type }
-					fields={ fields }
-					row={ row }
-					pendingPost={ pendingPost }
-					onSwitchPost={ setDisplayedPost }
-					onDisplayedPost={ onDisplayedPost }
-					isActive={ isActive }
-					topBarActions={ topBarActions }
-					notice={ notice }
-					onApi={ onApi }
-					onSaved={ onSaved }
-					onRestored={ onRestored }
-					recentTarget={ recentTarget }
-				/>
-			</EditorProvider>
-		</>
+				postType={ renderedPost.type }
+				fields={ fields }
+				row={ row }
+				pendingPost={ pendingPost }
+				onSwitchPost={ setDisplayedPost }
+				onDisplayedPost={ onDisplayedPost }
+				isActive={ isActive }
+				topBarActions={ topBarActions }
+				notice={ notice }
+				onApi={ onApi }
+				onSaved={ onSaved }
+				onRestored={ onRestored }
+				recentTarget={ recentTarget }
+			/>
+		</EditorProvider>
 	);
 }
