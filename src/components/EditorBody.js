@@ -45,6 +45,11 @@ const DISABLED_BY_HEADER_BOUNDARY_ATTR =
 	'data-cortext-header-boundary-disabled';
 const HEADER_BOUNDARY_MOVE_UP_SELECTOR =
 	'.block-editor-block-mover-button.is-up-button';
+const HEADER_BOUNDARY_MOVE_UP_SCOPE_SELECTOR = [
+	'.block-editor-block-list__block-popover',
+	'.block-editor-block-contextual-toolbar',
+	'.block-editor-block-toolbar',
+].join( ',' );
 const activeHeaderBoundaryMoveUpGuards = new Set();
 const HEADER_BLOCK_NAMES = new Set( [
 	DOCUMENT_COVER_BLOCK,
@@ -63,72 +68,93 @@ function syncHeaderBoundaryMoveUpClass() {
 	);
 }
 
-function syncHeaderBoundaryMoveUpButtons() {
-	// tech-debt.md#56: Gutenberg does not expose boundary-aware mover state.
-	const shouldDisable = activeHeaderBoundaryMoveUpGuards.size > 0;
-	document
-		.querySelectorAll( HEADER_BOUNDARY_MOVE_UP_SELECTOR )
-		.forEach( ( button ) => {
-			if ( ! ( button instanceof window.HTMLButtonElement ) ) {
-				return;
-			}
+function getHeaderBoundaryMoveUpScopes( root ) {
+	if ( ! root ) {
+		return [];
+	}
 
-			if ( shouldDisable ) {
+	const scopes = [
+		...( root.matches?.( HEADER_BOUNDARY_MOVE_UP_SCOPE_SELECTOR )
+			? [ root ]
+			: [] ),
+		...root.querySelectorAll( HEADER_BOUNDARY_MOVE_UP_SCOPE_SELECTOR ),
+	];
+	return scopes.length > 0 ? scopes : [ root ];
+}
+
+function syncHeaderBoundaryMoveUpButtons( root, shouldDisable ) {
+	// tech-debt.md#56: Gutenberg does not expose boundary-aware mover state.
+	const ownerWindow = root?.ownerDocument?.defaultView ?? window;
+	getHeaderBoundaryMoveUpScopes( root ).forEach( ( scope ) => {
+		scope
+			.querySelectorAll( HEADER_BOUNDARY_MOVE_UP_SELECTOR )
+			.forEach( ( button ) => {
+				if ( ! ( button instanceof ownerWindow.HTMLButtonElement ) ) {
+					return;
+				}
+
+				if ( shouldDisable ) {
+					if (
+						! button.hasAttribute(
+							DISABLED_BY_HEADER_BOUNDARY_ATTR
+						)
+					) {
+						button.setAttribute(
+							DISABLED_BY_HEADER_BOUNDARY_ATTR,
+							'true'
+						);
+						button.dataset.cortextPreviousDisabled = button.disabled
+							? 'true'
+							: 'false';
+						const previousAriaDisabled =
+							button.getAttribute( 'aria-disabled' );
+						if ( previousAriaDisabled !== null ) {
+							button.dataset.cortextPreviousAriaDisabled =
+								previousAriaDisabled;
+						} else {
+							delete button.dataset.cortextPreviousAriaDisabled;
+						}
+					}
+
+					button.disabled = true;
+					button.setAttribute( 'aria-disabled', 'true' );
+					return;
+				}
+
 				if (
 					! button.hasAttribute( DISABLED_BY_HEADER_BOUNDARY_ATTR )
 				) {
-					button.setAttribute(
-						DISABLED_BY_HEADER_BOUNDARY_ATTR,
-						'true'
-					);
-					button.dataset.cortextPreviousDisabled = button.disabled
-						? 'true'
-						: 'false';
-					const previousAriaDisabled =
-						button.getAttribute( 'aria-disabled' );
-					if ( previousAriaDisabled !== null ) {
-						button.dataset.cortextPreviousAriaDisabled =
-							previousAriaDisabled;
-					} else {
-						delete button.dataset.cortextPreviousAriaDisabled;
-					}
+					return;
 				}
 
-				button.disabled = true;
-				button.setAttribute( 'aria-disabled', 'true' );
-				return;
-			}
-
-			if ( ! button.hasAttribute( DISABLED_BY_HEADER_BOUNDARY_ATTR ) ) {
-				return;
-			}
-
-			button.disabled = button.dataset.cortextPreviousDisabled === 'true';
-			if (
-				Object.prototype.hasOwnProperty.call(
-					button.dataset,
-					'cortextPreviousAriaDisabled'
-				)
-			) {
-				button.setAttribute(
-					'aria-disabled',
-					button.dataset.cortextPreviousAriaDisabled
-				);
-			} else {
-				button.removeAttribute( 'aria-disabled' );
-			}
-			button.removeAttribute( DISABLED_BY_HEADER_BOUNDARY_ATTR );
-			delete button.dataset.cortextPreviousDisabled;
-			delete button.dataset.cortextPreviousAriaDisabled;
-		} );
+				button.disabled =
+					button.dataset.cortextPreviousDisabled === 'true';
+				if (
+					Object.prototype.hasOwnProperty.call(
+						button.dataset,
+						'cortextPreviousAriaDisabled'
+					)
+				) {
+					button.setAttribute(
+						'aria-disabled',
+						button.dataset.cortextPreviousAriaDisabled
+					);
+				} else {
+					button.removeAttribute( 'aria-disabled' );
+				}
+				button.removeAttribute( DISABLED_BY_HEADER_BOUNDARY_ATTR );
+				delete button.dataset.cortextPreviousDisabled;
+				delete button.dataset.cortextPreviousAriaDisabled;
+			} );
+	} );
 }
 
-function syncHeaderBoundaryMoveUpState() {
+function syncHeaderBoundaryMoveUpState( root, shouldDisable ) {
 	syncHeaderBoundaryMoveUpClass();
-	syncHeaderBoundaryMoveUpButtons();
+	syncHeaderBoundaryMoveUpButtons( root, shouldDisable );
 }
 
-function HeaderPrefixToolbarGuard( { isActive = true } ) {
+function HeaderPrefixToolbarGuard( { isActive = true, toolbarRootRef } ) {
 	const guardId = useRef( Symbol( DISABLE_HEADER_BOUNDARY_MOVE_UP_CLASS ) );
 	const shouldDisableMoveUp = useSelect(
 		( select ) => {
@@ -172,17 +198,18 @@ function HeaderPrefixToolbarGuard( { isActive = true } ) {
 
 	useEffect( () => {
 		const currentGuardId = guardId.current;
+		const toolbarRoot = toolbarRootRef?.current;
 		if ( shouldDisableMoveUp ) {
 			activeHeaderBoundaryMoveUpGuards.add( currentGuardId );
 		} else {
 			activeHeaderBoundaryMoveUpGuards.delete( currentGuardId );
 		}
-		syncHeaderBoundaryMoveUpState();
-		const observer = new window.MutationObserver(
-			syncHeaderBoundaryMoveUpButtons
+		syncHeaderBoundaryMoveUpState( toolbarRoot, shouldDisableMoveUp );
+		const observer = new window.MutationObserver( () =>
+			syncHeaderBoundaryMoveUpButtons( toolbarRoot, shouldDisableMoveUp )
 		);
-		if ( shouldDisableMoveUp ) {
-			observer.observe( document.body, {
+		if ( shouldDisableMoveUp && toolbarRoot ) {
+			observer.observe( toolbarRoot, {
 				childList: true,
 				subtree: true,
 			} );
@@ -190,9 +217,9 @@ function HeaderPrefixToolbarGuard( { isActive = true } ) {
 		return () => {
 			observer.disconnect();
 			activeHeaderBoundaryMoveUpGuards.delete( currentGuardId );
-			syncHeaderBoundaryMoveUpState();
+			syncHeaderBoundaryMoveUpState( toolbarRoot, false );
 		};
-	}, [ shouldDisableMoveUp ] );
+	}, [ shouldDisableMoveUp, toolbarRootRef ] );
 
 	return null;
 }
@@ -669,6 +696,7 @@ export default function EditorBody( {
 		? [ ...( baseStyles ?? [] ), ...extraStyles ]
 		: baseStyles;
 	const [ layout ] = useSettings( 'layout' );
+	const blockCanvasRef = useRef( null );
 	const isTrashed = useSelect(
 		( select ) =>
 			select( editorStore ).getCurrentPostAttribute( 'status' ) ===
@@ -677,14 +705,17 @@ export default function EditorBody( {
 	);
 
 	const blockCanvas = (
-		<div className="cortext-canvas__block-canvas">
+		<div className="cortext-canvas__block-canvas" ref={ blockCanvasRef }>
 			<BlockCanvas height="100%" styles={ styles }>
 				<DocumentIdentityActions
 					postId={ postId }
 					postType={ postType }
 				/>
 				<EnsureHeaderBlocks postId={ postId } postType={ postType } />
-				<HeaderPrefixToolbarGuard isActive={ isActive } />
+				<HeaderPrefixToolbarGuard
+					isActive={ isActive }
+					toolbarRootRef={ blockCanvasRef }
+				/>
 				<div className="cortext-canvas__editor">
 					<BlockList
 						className="wp-block-post-content is-layout-constrained has-global-padding"

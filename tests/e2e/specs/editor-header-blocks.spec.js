@@ -223,11 +223,21 @@ async function expectMoveUpToolbarState( page, content, shouldBeEnabled ) {
 		)
 		.toBe( ! shouldBeEnabled );
 	await page.evaluate( () => {
+		const toolbarRoot = document.querySelector(
+			'.cortext-canvas__block-canvas'
+		);
+		if ( ! toolbarRoot ) {
+			throw new Error( 'Header guard toolbar root not found.' );
+		}
+		const probeRoot =
+			toolbarRoot.querySelector(
+				'.block-editor-block-list__block-popover, .block-editor-block-contextual-toolbar, .block-editor-block-toolbar'
+			) || toolbarRoot;
 		const button = document.createElement( 'button' );
 		button.className = 'block-editor-block-mover-button is-up-button';
 		button.dataset.testid = 'header-boundary-move-up-probe';
 		button.textContent = 'Move up';
-		document.body.appendChild( button );
+		probeRoot.appendChild( button );
 	} );
 	const upButton = page.locator(
 		'[data-testid="header-boundary-move-up-probe"]'
