@@ -516,11 +516,3 @@ The brittle bit is the sizing. The skeleton copies DataViews row heights for com
 **Where.** `CollectionRowsSkeleton` in `src/components/Skeleton.js`, the rows-skeleton mount in `src/components/CollectionDataViews.js`, and the `.cortext-collection-skeleton` / `.cortext-data-view__rows-skeleton` rules in `src/index.scss`.
 
 **Solution.** DataViews exposes a table loading slot, or at least row-height CSS variables. Then Cortext can follow the table instead of copying its constants. Until then, keep the skeleton rules next to the DataViews table rules and check for visual drift after DataViews upgrades.
-
-## 56. View-transition target is too broad `[soft]`
-
-**What.** `view-transition-name: cortext-canvas` lives on `.cortext-shell__canvas`, one level above the content that needs the fade. That pulls the topbar into the canvas snapshot. The canvas transition also paints a backdrop to cover dark-mode flashes, so the topbar gets tinted for a frame. For now we name the topbar separately and cancel its animation.
-
-**Where.** `src/index.scss`: `.cortext-shell__canvas`, `.cortext-topbar`, and the `cortext-topbar` view-transition pseudo rules next to the canvas backdrop rules.
-
-**Solution.** Put `view-transition-name: cortext-canvas` on `.cortext-workspace` instead. The topbar stays outside the fade, the backdrop only covers the workspace, and the `cortext-topbar` opt-out can go away. If the title or breadcrumbs need animation later, name those pieces directly.

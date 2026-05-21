@@ -1046,8 +1046,6 @@ body.cortext-sidebar-resizing {
 	// --cortext-canvas-frame-surface. The iframe interior is painted by the active
 	// block theme, not by this token.
 	background: var(--cortext-canvas-frame-surface);
-	// Named so the cross-fade is scoped to this column.
-	view-transition-name: cortext-canvas;
 
 	&:focus {
 		outline: none;
@@ -1079,14 +1077,6 @@ body.cortext-sidebar-resizing {
 	z-index: 1;
 }
 
-// Name the topbar only so we can cancel its canvas fade. Both snapshots match,
-// so skip the animation.
-::view-transition-group(cortext-topbar),
-::view-transition-old(cortext-topbar),
-::view-transition-new(cortext-topbar) {
-	animation: none !important;
-}
-
 // The side peek lives outside the canvas. Give it its own transition layer so
 // the canvas cross-fade never flashes over it.
 ::view-transition-group(cortext-row-detail-sidebar) {
@@ -1116,6 +1106,10 @@ body.cortext-sidebar-resizing {
 	position: relative;
 	flex: 1 1 auto;
 	min-height: 0;
+	// Cross-fade only the workspace, not the topbar or the side peek (both
+	// live outside this subtree). Scoping here keeps the canvas backdrop
+	// from tinting the topbar during a route change in dark mode.
+	view-transition-name: cortext-canvas;
 
 	// Progress bar for the gap where the URL points at the next item but the
 	// workspace is still painting the previous pane.
@@ -1177,9 +1171,6 @@ body.cortext-sidebar-resizing {
 	color: var(--cortext-text);
 	border-bottom: var(--cortext-shell-border-width) solid var(--cortext-chrome-border);
 	min-height: 0;
-	// Keep this chrome out of the canvas fade; otherwise the canvas backdrop
-	// tints it for a frame.
-	view-transition-name: cortext-topbar;
 
 	&__lead {
 		flex: 1 1 auto;
