@@ -2,13 +2,7 @@ import { __, _n, sprintf } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
 import { useEntityRecords } from '@wordpress/core-data';
 import { useDispatch, useSelect } from '@wordpress/data';
-import {
-	useState,
-	useMemo,
-	useRef,
-	useCallback,
-	useEffect,
-} from '@wordpress/element';
+import { useState, useMemo, useCallback, useEffect } from '@wordpress/element';
 import { Button, Icon, Notice } from '@wordpress/components';
 import { displayShortcut } from '@wordpress/keycodes';
 import {
@@ -80,16 +74,7 @@ const cortextMarkIcon = (
 		<circle cx="12" cy="10" r="0.9" fill="currentColor" />
 	</svg>
 );
-import {
-	DndContext,
-	DragOverlay,
-	PointerSensor,
-	KeyboardSensor,
-	useSensor,
-	useSensors,
-	pointerWithin,
-} from '@dnd-kit/core';
-import { useNavigate, useParams } from '@tanstack/react-router';
+import { DndContext, DragOverlay, pointerWithin } from '@dnd-kit/core';
 
 import CollectionRow from './CollectionRow';
 import PageRow from './PageRow';
@@ -105,24 +90,13 @@ import SidebarSection from './SidebarSection';
 import { SidebarListSkeleton } from './Skeleton';
 import SidebarTrash, { computeSidebarTrashRoots } from './SidebarTrash';
 import ThemeToggle from './ThemeToggle';
-import {
-	buildTree,
-	collectAncestorIds,
-	computeDropTarget,
-	isDescendantOf,
-	nextChildOrder,
-} from './pages-tree';
+import { nextChildOrder } from './pages-tree';
 import {
 	ACTIVE_PAGES_QUERY,
 	POST_TYPE,
 	TRASHED_PAGES_QUERY,
 } from './page-queries';
-import {
-	computeCollectionUri,
-	computeDocumentUri,
-	parseIdFromUri,
-	parseSplatUri,
-} from '../router/useResolveEntity';
+import { computeCollectionUri } from '../router/useResolveEntity';
 import { FULL_PAGE_COLLECTION_QUERY } from '../collections';
 import useDelayedFlag, {
 	SKELETON_MIN_VISIBLE_MS,
@@ -133,20 +107,9 @@ import useSidebarSections from '../hooks/useSidebarSections';
 import useTrashedDocuments from '../hooks/useTrashedDocuments';
 import { useWorkspaceHomePath } from '../hooks/useWorkspaceHomePath';
 import { notifyDocumentTrashChanged } from '../hooks/documentTrashInvalidation';
-
-const AUTO_EXPAND_DELAY = 700;
-
-function parseDropId( id ) {
-	if ( typeof id !== 'string' ) {
-		return null;
-	}
-	const [ zone, rest ] = id.split( ':' );
-	const pageId = Number( rest );
-	if ( ! pageId || ! [ 'before', 'inside', 'after' ].includes( zone ) ) {
-		return null;
-	}
-	return { zone, targetId: pageId };
-}
+import useSidebarDnd from './sidebar/useSidebarDnd';
+import useSidebarNavigation from './sidebar/useSidebarNavigation';
+import useSidebarTree from './sidebar/useSidebarTree';
 
 export default function Sidebar( {
 	collapsed = false,
@@ -186,9 +149,8 @@ export default function Sidebar( {
 	const { touchRecent } = useRecents();
 	const { saveEntityRecord, invalidateResolution, receiveEntityRecords } =
 		useDispatch( 'core' );
-	const navigate = useNavigate();
-	const params = useParams( { strict: false } );
-	const activeUri = params._splat ?? '';
+	const { navigate, selectedId, selectedCollectionId, onSelect, goHome } =
+		useSidebarNavigation( { pages, homePath } );
 	const adminUrl = window.cortextSettings?.adminUrl ?? '/wp-admin/';
 	const userName = window.cortextSettings?.userDisplayName ?? '';
 	const commandPaletteShortcut = displayShortcut.primary( 'k' );
@@ -200,78 +162,11 @@ export default function Sidebar( {
 		  )
 		: __( 'Cortext', 'cortext' );
 
-	const { prefix: activePrefix, tail: activeTail } = useMemo(
-		() => parseSplatUri( activeUri ),
-		[ activeUri ]
-	);
-	const selectedId = useMemo(
-		() =>
-			activePrefix === 'page' || activePrefix === null
-				? parseIdFromUri( activeTail )
-				: null,
-		[ activePrefix, activeTail ]
-	);
-	const selectedCollectionId = useMemo(
-		() =>
-			activePrefix === 'collection' ? parseIdFromUri( activeTail ) : null,
-		[ activePrefix, activeTail ]
-	);
 	const [ favoritesError, setFavoritesError ] = useState( null );
 	const [ duplicateNotice, setDuplicateNotice ] = useState( null );
 	const areFavoriteActionsDisabled =
 		isResolvingFavorites || isUpdatingFavorites;
 	const { isSectionCollapsed, toggleSection } = useSidebarSections();
-
-	// Keep the URL canonical: once autosave assigns a slug to the active
-	// page (draft → private promotion on first titled save), rewrite
-	// `?p=/42` to `?p=/about-us-42` via history.replace so the id remains
-	// authoritative while the visible URL reflects the latest title.
-	useEffect( () => {
-		if ( selectedId === null ) {
-			return;
-		}
-		const current = pages.find( ( p ) => p.id === selectedId );
-		if ( ! current ) {
-			return;
-		}
-		const canonical = computeDocumentUri( current );
-		if ( canonical !== activeUri ) {
-			navigate( {
-				to: '/$',
-				params: { _splat: canonical },
-				replace: true,
-			} );
-		}
-	}, [ selectedId, pages, activeUri, navigate ] );
-
-	// Callers that just created a record pass it as `pageHint` — after
-	// `await saveEntityRecord`, React hasn't re-rendered yet, so the closure's
-	// `pages` doesn't contain the new id. With id-based URLs we can build a
-	// usable URL from `{ id }` alone; the slug prefix is cosmetic.
-	const onSelect = useCallback(
-		( id, pageHint ) => {
-			if ( id === null || id === undefined ) {
-				navigate( { to: '/' } );
-				return;
-			}
-			const page = pageHint ??
-				pages.find( ( p ) => p.id === id ) ?? { id };
-			navigate( {
-				to: '/$',
-				params: { _splat: computeDocumentUri( page ) },
-			} );
-		},
-		[ navigate, pages ]
-	);
-	const goHome = useCallback( () => {
-		if ( ! homePath ) {
-			return;
-		}
-		navigate( {
-			to: '/$',
-			params: { _splat: homePath },
-		} );
-	}, [ homePath, navigate ] );
 	const toggleTrashPanel = useCallback( () => {
 		if ( collapsed ) {
 			setIsTrashPanelOpen( true );
@@ -374,36 +269,26 @@ export default function Sidebar( {
 		[ navigate, selectedCollectionId, selectedId ]
 	);
 
-	// tech-debt.md#53: collections with a loaded page parent appear under that
-	// page. Collections with no loaded page parent stay in the Collections
-	// section for now, including row-owned collections.
-	//
-	// Top-level collections are sorted explicitly. Without this, `useEntityRecords`
-	// returns them in whatever order core-data emits, which can shift after a
-	// `saveEntityRecord` update (rename) and reorder the sidebar list. Nested
-	// collections inherit the same menu_order/id sort through `buildTree`.
-	const { nestedCollections, topLevelCollections } = useMemo( () => {
-		const pageIds = new Set( pages.map( ( p ) => p.id ) );
-		const nested = [];
-		const topLevel = [];
-		( collections ?? [] ).forEach( ( collection ) => {
-			const parent = collection.parent ?? 0;
-			if ( parent && pageIds.has( parent ) ) {
-				nested.push( collection );
-			} else {
-				topLevel.push( collection );
-			}
+	const { topLevelCollections, tree, expandedIds, toggleExpand, expand } =
+		useSidebarTree( {
+			pages,
+			collections,
+			selectedId,
+			selectedCollectionId,
 		} );
-		topLevel.sort( ( a, b ) => {
-			const ao = a.menu_order || 0;
-			const bo = b.menu_order || 0;
-			if ( ao !== bo ) {
-				return ao - bo;
-			}
-			return a.id - b.id;
+
+	// `draggedId` and `activeDrop` flow into the per-row callbacks below, so
+	// the DnD hook has to resolve before any `useCallback` that lists them as
+	// deps. Otherwise their `const` bindings sit in the temporal dead zone
+	// when the callback's dep array is evaluated and React throws on render.
+	const { sensors, draggedId, draggedPage, activeDrop, handlers } =
+		useSidebarDnd( {
+			pages,
+			collections,
+			expandedIds,
+			expand,
+			saveEntityRecord,
 		} );
-		return { nestedCollections: nested, topLevelCollections: topLevel };
-	}, [ pages, collections ] );
 
 	const showCollectionsSkeleton = useDelayedFlag(
 		isResolvingCollections && topLevelCollections.length === 0,
@@ -411,20 +296,10 @@ export default function Sidebar( {
 		SKELETON_MIN_VISIBLE_MS
 	);
 
-	const tree = useMemo(
-		() => buildTree( [ ...pages, ...nestedCollections ] ),
-		[ pages, nestedCollections ]
-	);
-
-	const [ expandedIds, setExpandedIds ] = useState( () => new Set() );
-	const [ draggedId, setDraggedId ] = useState( null );
-	const [ activeDrop, setActiveDrop ] = useState( null );
 	const [ autoRenameId, setAutoRenameId ] = useState( null );
 	const [ autoRenameCollectionId, setAutoRenameCollectionId ] =
 		useState( null );
 	const [ isTrashPanelOpen, setIsTrashPanelOpen ] = useState( false );
-
-	const autoExpandTimerRef = useRef( null );
 	const trashCount = useMemo( () => {
 		if ( Array.isArray( trashedDocumentsState.documents ) ) {
 			return computeSidebarTrashRoots( trashedDocumentsState.documents )
@@ -449,40 +324,6 @@ export default function Sidebar( {
 	}
 
 	useEffect( () => {
-		let ancestorIds = [];
-		if ( selectedId !== null ) {
-			ancestorIds = collectAncestorIds( selectedId, pages );
-		} else if ( selectedCollectionId !== null ) {
-			// Direct links, Home, Favorites, and Recents should reveal nested
-			// collections instead of leaving them under a collapsed page.
-			const collection = ( collections ?? [] ).find(
-				( c ) => c.id === selectedCollectionId
-			);
-			const parent = Number( collection?.parent ?? 0 );
-			if ( parent > 0 ) {
-				ancestorIds = [
-					parent,
-					...collectAncestorIds( parent, pages ),
-				];
-			}
-		}
-		if ( ancestorIds.length === 0 ) {
-			return;
-		}
-		setExpandedIds( ( prev ) => {
-			let changed = false;
-			const next = new Set( prev );
-			ancestorIds.forEach( ( id ) => {
-				if ( ! next.has( id ) ) {
-					next.add( id );
-					changed = true;
-				}
-			} );
-			return changed ? next : prev;
-		} );
-	}, [ selectedId, selectedCollectionId, pages, collections ] );
-
-	useEffect( () => {
 		if ( collapsed ) {
 			setIsTrashPanelOpen( false );
 		}
@@ -499,29 +340,6 @@ export default function Sidebar( {
 		( id ) => getEntityRecord( 'postType', POST_TYPE, id ),
 		[ getEntityRecord ]
 	);
-
-	const toggleExpand = useCallback( ( id ) => {
-		setExpandedIds( ( prev ) => {
-			const next = new Set( prev );
-			if ( next.has( id ) ) {
-				next.delete( id );
-			} else {
-				next.add( id );
-			}
-			return next;
-		} );
-	}, [] );
-
-	const expand = useCallback( ( id ) => {
-		setExpandedIds( ( prev ) => {
-			if ( prev.has( id ) ) {
-				return prev;
-			}
-			const next = new Set( prev );
-			next.add( id );
-			return next;
-		} );
-	}, [] );
 
 	// --- Row actions -------------------------------------------------------
 
@@ -834,149 +652,7 @@ export default function Sidebar( {
 		]
 	);
 
-	// --- Drag and drop -----------------------------------------------------
-
-	const sensors = useSensors(
-		useSensor( PointerSensor, { activationConstraint: { distance: 5 } } ),
-		useSensor( KeyboardSensor )
-	);
-
-	const clearAutoExpandTimer = useCallback( () => {
-		if ( autoExpandTimerRef.current ) {
-			clearTimeout( autoExpandTimerRef.current );
-			autoExpandTimerRef.current = null;
-		}
-	}, [] );
-
-	// Drag/drop spans pages and full-page collections. Use the merged list so
-	// `menu_order` is calculated across both types, then save each record
-	// through its own REST endpoint.
-	const treeRecords = useMemo(
-		() => [ ...pages, ...( collections ?? [] ) ],
-		[ pages, collections ]
-	);
-
-	const handleDragStart = useCallback( ( { active } ) => {
-		const id = active?.data?.current?.pageId ?? null;
-		setDraggedId( id );
-	}, [] );
-
-	const handleDragOver = useCallback(
-		( { over } ) => {
-			const parsed = over ? parseDropId( over.id ) : null;
-			// Collections are leaves; only page moves need cycle checks.
-			const draggedIsPage =
-				treeRecords.find( ( r ) => r.id === draggedId )?.type ===
-				POST_TYPE;
-			if (
-				parsed &&
-				draggedId &&
-				( parsed.targetId === draggedId ||
-					// `treeRecords` (not `pages`) so the walk follows the
-					// `post_parent` chain through nested collections too.
-					// Otherwise dropping a page near a collection that
-					// hangs from one of its descendants would slip past
-					// the guard.
-					( draggedIsPage &&
-						isDescendantOf(
-							parsed.targetId,
-							draggedId,
-							treeRecords
-						) ) )
-			) {
-				setActiveDrop( null );
-				clearAutoExpandTimer();
-				return;
-			}
-			setActiveDrop( parsed );
-
-			// Auto-expand collapsed parent after hovering its "inside" zone.
-			clearAutoExpandTimer();
-			if ( parsed?.zone === 'inside' ) {
-				const target = pages.find( ( p ) => p.id === parsed.targetId );
-				const hasKids = treeRecords.some(
-					( r ) => ( r.parent || 0 ) === parsed.targetId
-				);
-				if (
-					target &&
-					hasKids &&
-					! expandedIds.has( parsed.targetId )
-				) {
-					autoExpandTimerRef.current = setTimeout( () => {
-						expand( parsed.targetId );
-					}, AUTO_EXPAND_DELAY );
-				}
-			}
-		},
-		[
-			draggedId,
-			pages,
-			treeRecords,
-			expandedIds,
-			expand,
-			clearAutoExpandTimer,
-		]
-	);
-
-	const handleDragEnd = useCallback(
-		async ( { over } ) => {
-			const parsed = over ? parseDropId( over.id ) : null;
-			const activeId = draggedId;
-			setDraggedId( null );
-			setActiveDrop( null );
-			clearAutoExpandTimer();
-
-			if ( ! parsed || ! activeId ) {
-				return;
-			}
-
-			const updates = computeDropTarget(
-				activeId,
-				parsed.targetId,
-				parsed.zone,
-				treeRecords
-			);
-			if ( ! updates ) {
-				return;
-			}
-
-			// Updates can touch both post types. Save each record through the
-			// endpoint that owns it.
-			await Promise.all(
-				updates.map( ( u ) => {
-					const record = treeRecords.find( ( r ) => r.id === u.id );
-					return saveEntityRecord(
-						'postType',
-						record?.type ?? POST_TYPE,
-						u
-					);
-				} )
-			);
-
-			if ( parsed.zone === 'inside' ) {
-				expand( parsed.targetId );
-			}
-		},
-		[
-			draggedId,
-			treeRecords,
-			saveEntityRecord,
-			expand,
-			clearAutoExpandTimer,
-		]
-	);
-
-	const handleDragCancel = useCallback( () => {
-		setDraggedId( null );
-		setActiveDrop( null );
-		clearAutoExpandTimer();
-	}, [ clearAutoExpandTimer ] );
-
 	// --- Render ------------------------------------------------------------
-
-	const draggedPage = draggedId
-		? pages.find( ( p ) => p.id === draggedId )
-		: null;
 
 	return (
 		<aside
@@ -1101,10 +777,10 @@ export default function Sidebar( {
 					<DndContext
 						sensors={ sensors }
 						collisionDetection={ pointerWithin }
-						onDragStart={ handleDragStart }
-						onDragOver={ handleDragOver }
-						onDragEnd={ handleDragEnd }
-						onDragCancel={ handleDragCancel }
+						onDragStart={ handlers.handleDragStart }
+						onDragOver={ handlers.handleDragOver }
+						onDragEnd={ handlers.handleDragEnd }
+						onDragCancel={ handlers.handleDragCancel }
 					>
 						<SidebarSection
 							id="pages"
