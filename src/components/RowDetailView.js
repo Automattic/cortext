@@ -32,7 +32,7 @@ import {
 const RowEditor = lazy( () =>
 	import( /* webpackChunkName: "editor" */ './RowEditor' )
 );
-import { getRowDetailMode, titleFromDetail } from './rowDetailUtils';
+import { getRowDetailMode } from './rowDetailUtils';
 
 // Solid version of @wordpress/icons `pin` (which only ships outlined), so the
 // pressed state reads as filled.
@@ -145,7 +145,6 @@ function DetailShell( {
 	canGoNext,
 	canGoPrevious,
 	setArePropertiesVisible,
-	title,
 } ) {
 	const fieldCountLabel = sprintf(
 		/* translators: %d: Number of row fields. */
@@ -226,11 +225,6 @@ function DetailShell( {
 							onClick={ onClose }
 						/>
 					</div>
-				</div>
-				<div className="cortext-row-detail__identity">
-					<h2 className="cortext-row-detail__title">
-						{ title || __( 'Untitled', 'cortext' ) }
-					</h2>
 				</div>
 			</div>
 			{ saveError ? (
@@ -332,9 +326,6 @@ export default function RowDetailView( {
 		( resolvedDetail?.postType === postType ? resolvedDetail : null );
 	const activeDetailKey = detailKeyFor( activeDetail );
 	const [ arePropertiesVisible, setArePropertiesVisible ] = useState( true );
-	const [ displayTitle, setDisplayTitle ] = useState( () =>
-		titleFromDetail( activeDetail )
-	);
 	const [ detailPanes, setDetailPanes ] = useState( () =>
 		activeDetail && activeDetailKey
 			? [
@@ -349,12 +340,6 @@ export default function RowDetailView( {
 	// RowProperties filters out TITLE_FIELD_ID itself (the locked post-title
 	// block above renders the title), so pass the full field list through.
 	const propertyFields = fields;
-
-	useEffect( () => {
-		if ( activeDetail ) {
-			setDisplayTitle( titleFromDetail( activeDetail ) );
-		}
-	}, [ activeDetail ] );
 
 	useEffect( () => {
 		if ( ! activeDetail || ! activeDetailKey ) {
@@ -509,7 +494,6 @@ export default function RowDetailView( {
 				onTogglePin={ onTogglePin }
 				saveError={ canUseRowControls ? saveError : null }
 				setArePropertiesVisible={ setArePropertiesVisible }
-				title={ displayTitle }
 			>
 				<div className="cortext-row-detail__pane-stack">
 					<Suspense
@@ -528,10 +512,6 @@ export default function RowDetailView( {
 								pane.state === 'preparing' ||
 								pane.state === 'covered';
 							const isApiActive = isCurrentPane && ! isHiddenPane;
-							const isTitleActive =
-								! isHiddenPane &&
-								( pane.state === 'active' ||
-									pane.state === 'entering' );
 							const paneRow = {
 								...( pane.detail.row ?? {} ),
 								...pane.detail.record,
@@ -566,12 +546,10 @@ export default function RowDetailView( {
 										fields={ propertyFields }
 										isActive={ isApiActive }
 										isHidden={ isHiddenPane }
-										isTitleActive={ isTitleActive }
 										onApi={ onApi }
 										onPaneReady={ onPaneReady }
 										onRestored={ onRestored }
 										onSaved={ onSaved }
-										onTitle={ setDisplayTitle }
 										post={ pane.detail.record }
 										postType={ pane.detail.postType }
 										propertiesVisible={
