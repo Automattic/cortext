@@ -26,7 +26,6 @@ use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Field;
 use Cortext\PostType\Page;
 use Cortext\PostType\TrashCascadeEngine;
-use Cortext\Rest\CollectionsController;
 use Cortext\Rest\DocumentLocatorController;
 use Cortext\Rest\DocumentsController;
 use Cortext\Rest\FavoritesController;
@@ -71,7 +70,6 @@ final class Plugin {
 		( new DocumentIconBlock() )->register();
 		( new DocumentCoverBlock() )->register();
 		( new PageHeaderActionsBlock() )->register();
-		( new CollectionsController() )->register();
 		( new FavoritesController() )->register();
 		( new FieldsController() )->register();
 		( new DocumentLocatorController() )->register();

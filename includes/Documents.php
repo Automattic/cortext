@@ -1,18 +1,18 @@
 <?php
 /**
- * Finds and lists Cortext documents.
+ * Public entry point for Cortext document operations.
  *
  * "Document" is the union of post types that opt into the `cortext-document`
  * trait: pages (`crtxt_page`), collections (`crtxt_collection`), and rows
- * (`crtxt_<slug>`). Code that needs all Cortext documents should use this
- * service instead of rebuilding the post-type list.
+ * (`crtxt_<slug>`). Code that needs to find, list, or mutate documents should
+ * call this service instead of branching on post types.
  *
- * Per-kind specifics (path, owner relation, icon presence) live in
- * `Cortext\Documents\DocumentKind` implementations, resolved through the
- * `KindRegistry` this service constructs by default.
+ * Kind-specific details, such as paths, owners, icons, and duplication, live
+ * in `Cortext\Documents\*` implementations. The default `KindRegistry`
+ * resolves those for callers outside the `Documents/` namespace.
  *
- * This service only reads; writes still go through `wp/v2` and the collection
- * row controllers.
+ * Listing, collection create, duplicate, restore, and permanent delete live
+ * here. Row CRUD still goes through the row REST controllers.
  *
  * @package Cortext
  */
@@ -21,6 +21,7 @@ declare( strict_types=1 );
 
 namespace Cortext;
 
+use Cortext\Documents\CollectionDuplicator;
 use Cortext\Documents\CollectionKind;
 use Cortext\Documents\DocumentKind;
 use Cortext\Documents\KindRegistry;
@@ -33,6 +34,7 @@ use Cortext\PostType\Collection;
 use Cortext\PostType\CollectionEntries;
 use Cortext\PostType\DocumentIdentity;
 use Cortext\Rest\RowsFilterQuery;
+use WP_Error;
 use WP_Post;
 use WP_Query;
 
@@ -80,6 +82,161 @@ final class Documents {
 		$registry->register( new CollectionKind() );
 		$registry->register( new RowKind( $this ) );
 		return $registry;
+	}
+
+	/**
+	 * Creates a collection. Inline collections store their owner in meta;
+	 * full-page collections use `post_parent`. The row CPT is registered
+	 * before returning so callers can use `restBase` right away.
+	 *
+	 * @param string $title     Collection title.
+	 * @param string $mode      Workspace mode (`inline` or `full_page`).
+	 * @param int    $parent_id Owner/parent document id. Required for inline mode.
+	 *
+	 * @return array{id: int, title: string, slug: string, restBase: string, mode: string, parent: int}|WP_Error
+	 */
+	public function create_collection( string $title, string $mode, int $parent_id ): array|WP_Error {
+		$title = trim( sanitize_text_field( $title ) );
+		if ( '' === $title ) {
+			return new WP_Error(
+				'cortext_collection_title_required',
+				__( 'Collection name is required.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		if ( Collection::MODE_INLINE === $mode && $parent_id < 1 ) {
+			return new WP_Error(
+				'cortext_collection_parent_required',
+				__( 'Inline collections need an owner document.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		if ( $parent_id > 0 ) {
+			$parent_error = ( new Collection() )->validate_parent_document( $parent_id );
+			if ( $parent_error instanceof WP_Error ) {
+				return $parent_error;
+			}
+		}
+
+		$slug = Collection::unique_slug( $title );
+
+		$meta_input = array(
+			'slug'                    => $slug,
+			Collection::MODE_META_KEY => $mode,
+		);
+
+		// Inline collections store their owner in meta. Full-page collections
+		// use post_parent so the sidebar can place them in the tree.
+		$post_parent = 0;
+		if ( Collection::MODE_INLINE === $mode ) {
+			$meta_input[ Collection::INLINE_OWNER_META_KEY ] = $parent_id;
+		} elseif ( $parent_id > 0 ) {
+			$post_parent = $parent_id;
+		}
+
+		$collection_id = wp_insert_post(
+			array(
+				'post_type'   => Collection::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => $title,
+				'post_parent' => $post_parent,
+				'meta_input'  => $meta_input,
+			),
+			true
+		);
+
+		if ( is_wp_error( $collection_id ) ) {
+			return $collection_id;
+		}
+
+		$collection = get_post( (int) $collection_id );
+		if ( ! $collection instanceof WP_Post ) {
+			wp_delete_post( (int) $collection_id, true );
+			return new WP_Error(
+				'cortext_collection_create_failed',
+				__( 'Collection could not be created.', 'cortext' ),
+				array( 'status' => 500 )
+			);
+		}
+
+		( new CollectionEntries() )->register_for_collection( $collection );
+
+		$rest_base = CollectionEntries::CPT_PREFIX . $slug;
+		if ( ! post_type_exists( $rest_base ) ) {
+			wp_delete_post( (int) $collection_id, true );
+			return new WP_Error(
+				'cortext_collection_cpt_failed',
+				__( 'Collection rows could not be registered.', 'cortext' ),
+				array( 'status' => 500 )
+			);
+		}
+
+		return array(
+			'id'       => (int) $collection_id,
+			'title'    => $title,
+			'slug'     => $slug,
+			'restBase' => $rest_base,
+			'mode'     => $mode,
+			'parent'   => Collection::MODE_INLINE === $mode ? 0 : $post_parent,
+		);
+	}
+
+	/**
+	 * Duplicates a document by id. The service resolves the kind from the
+	 * post type, so callers do not pass a kind.
+	 *
+	 * For now, only collections support duplication here. Page duplication
+	 * still goes through core-data's optimistic `saveEntityRecord` flow, and
+	 * row duplication still goes through `RowsController`.
+	 *
+	 * @param int $id Source document post id.
+	 *
+	 * @return array{id: int, title: string, slug: string, restBase: string, mode: string, parent: int, skipped_fields: array<int, array{id: int, title: string, reason: string}>}|WP_Error
+	 */
+	public function duplicate( int $id ): array|WP_Error {
+		$post = get_post( $id );
+		if ( ! $post instanceof WP_Post ) {
+			return new WP_Error(
+				'cortext_document_not_found',
+				__( 'Document not found.', 'cortext' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		$kind = $this->kind_object_for_post_type( $post->post_type );
+		if ( null === $kind ) {
+			return new WP_Error(
+				'cortext_document_not_found',
+				__( 'Document not found.', 'cortext' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		if ( 'collection' !== $kind->id() ) {
+			return new WP_Error(
+				'cortext_duplicate_unsupported',
+				__( 'Duplicating this document type is not supported through this endpoint.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$result = ( new CollectionDuplicator() )->duplicate( $post );
+		if ( $result instanceof WP_Error ) {
+			return $result;
+		}
+
+		$collection = $result['collection'];
+		return array(
+			'id'             => (int) $collection->ID,
+			'title'          => $collection->post_title,
+			'slug'           => $result['slug'],
+			'restBase'       => CollectionEntries::CPT_PREFIX . $result['slug'],
+			'mode'           => Collection::MODE_FULL_PAGE,
+			'parent'         => (int) $collection->post_parent,
+			'skipped_fields' => $result['skipped_fields'],
+		);
 	}
 
 	/**

@@ -12,9 +12,9 @@
 return array(
 	'wp-content/plugins/cortext/includes/Plugin.php',
 	'wp-content/plugins/cortext/includes/Documents.php',
+	'wp-content/plugins/cortext/includes/Documents/CollectionDuplicator.php',
 	'wp-content/plugins/cortext/includes/Relations.php',
 	'wp-content/plugins/cortext/includes/Block/DataView.php',
-	'wp-content/plugins/cortext/includes/Rest/CollectionsController.php',
 	'wp-content/plugins/cortext/includes/Rest/DocumentsController.php',
 	'wp-content/plugins/cortext/includes/Rest/FieldsController.php',
 	'wp-content/plugins/cortext/includes/Rest/RowsController.php',
