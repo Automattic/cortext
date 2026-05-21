@@ -9,7 +9,7 @@ import {
 	useCallback,
 	useEffect,
 } from '@wordpress/element';
-import { Button, Icon, Notice, Spinner } from '@wordpress/components';
+import { Button, Icon, Notice } from '@wordpress/components';
 import { displayShortcut } from '@wordpress/keycodes';
 import {
 	home as homeIcon,
@@ -102,6 +102,7 @@ import SidebarFavorites, {
 import SidebarResizeHandle from './SidebarResizeHandle';
 import SidebarRecents from './SidebarRecents';
 import SidebarSection from './SidebarSection';
+import { SidebarListSkeleton } from './Skeleton';
 import SidebarTrash, { computeSidebarTrashRoots } from './SidebarTrash';
 import ThemeToggle from './ThemeToggle';
 import {
@@ -123,6 +124,9 @@ import {
 	parseSplatUri,
 } from '../router/useResolveEntity';
 import { FULL_PAGE_COLLECTION_QUERY } from '../collections';
+import useDelayedFlag, {
+	SKELETON_MIN_VISIBLE_MS,
+} from '../hooks/useDelayedFlag';
 import { useFavorites } from '../hooks/useFavorites';
 import { useRecents } from '../hooks/useRecents';
 import useSidebarSections from '../hooks/useSidebarSections';
@@ -168,6 +172,11 @@ export default function Sidebar( {
 		isResolvingPages,
 		isUpdating: isHomeUpdating,
 	} = useWorkspaceHomePath();
+	const showPagesSkeleton = useDelayedFlag(
+		isResolvingPages && pages.length === 0,
+		120,
+		SKELETON_MIN_VISIBLE_MS
+	);
 	const {
 		favorites,
 		setFavorites,
@@ -395,6 +404,12 @@ export default function Sidebar( {
 		} );
 		return { nestedCollections: nested, topLevelCollections: topLevel };
 	}, [ pages, collections ] );
+
+	const showCollectionsSkeleton = useDelayedFlag(
+		isResolvingCollections && topLevelCollections.length === 0,
+		120,
+		SKELETON_MIN_VISIBLE_MS
+	);
 
 	const tree = useMemo(
 		() => buildTree( [ ...pages, ...nestedCollections ] ),
@@ -1106,11 +1121,11 @@ export default function Sidebar( {
 								/>
 							}
 						>
-							{ isResolvingPages && pages.length === 0 && (
-								<div className="cortext-sidebar__loading">
-									<Spinner />
-								</div>
-							) }
+							{ isResolvingPages &&
+								pages.length === 0 &&
+								showPagesSkeleton && (
+									<SidebarListSkeleton itemCount={ 5 } />
+								) }
 							{ ! isResolvingPages && pages.length === 0 && (
 								<p className="cortext-sidebar__empty">
 									{ __( 'No pages yet.', 'cortext' ) }
@@ -1181,10 +1196,9 @@ export default function Sidebar( {
 							}
 						>
 							{ isResolvingCollections &&
-								topLevelCollections.length === 0 && (
-									<div className="cortext-sidebar__loading">
-										<Spinner />
-									</div>
+								topLevelCollections.length === 0 &&
+								showCollectionsSkeleton && (
+									<SidebarListSkeleton itemCount={ 3 } />
 								) }
 							{ ! isResolvingCollections &&
 								topLevelCollections.length === 0 && (

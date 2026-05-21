@@ -23,8 +23,11 @@ export function buildFieldListQuery( fieldIds ) {
 // of `crtxt_field` post IDs in display order. Fetch those records, then
 // map each to a DataViews field. Row meta keys are `field-<post_id>`.
 export default function useCollectionFields( collectionId ) {
-	const { record: collection, isResolving: collectionResolving } =
-		useEntityRecord( 'postType', 'crtxt_collection', collectionId ?? 0 );
+	const {
+		record: collection,
+		isResolving: collectionResolving,
+		hasResolved: collectionHasResolved,
+	} = useEntityRecord( 'postType', 'crtxt_collection', collectionId ?? 0 );
 
 	const fieldIds = useMemo( () => {
 		const raw = collection?.meta?.fields;
@@ -73,10 +76,26 @@ export default function useCollectionFields( collectionId ) {
 	// field) `fieldRecords` briefly returns an empty array; without this
 	// guard the sync would treat all custom fields as "removed" and
 	// strip them from `view.fields`.
+	//
+	// Core-data can return stubs (`{ id }` only) when another caller has touched
+	// the records but has not hydrated them. `mapField` falls back to `#${id}`
+	// without `title.raw` or `title.rendered`, which flashes raw field IDs in
+	// column headers. Use the same check here and keep loading until the title
+	// the table will paint is available.
+	const fieldRecordsHydrated =
+		Array.isArray( fieldRecords ) &&
+		fieldRecords.length === fieldIds.length &&
+		fieldRecords.every(
+			( record ) =>
+				Boolean( record?.title?.raw ) ||
+				Boolean( record?.title?.rendered )
+		);
 	const fieldsResolvedFlag =
 		fieldIds.length === 0
 			? Boolean( collection )
-			: ! fieldsResolving && Boolean( fieldsResolved );
+			: ! fieldsResolving &&
+			  Boolean( fieldsResolved ) &&
+			  fieldRecordsHydrated;
 
 	// Latch the last authoritative `fields` snapshot scoped to the
 	// collection that produced it. When the user adds or deletes a
@@ -107,11 +126,12 @@ export default function useCollectionFields( collectionId ) {
 		// fields for the current collection (`hasStableFieldsForCollection`),
 		// subsequent refetches (after a mutation that changes the field
 		// list) keep this false so the table doesn't unmount and remount.
-		// The collection 404 path stays handled because
-		// `collectionResolving` flips back to false on resolution failure.
+		// Collection 404s still work: `hasResolved` flips to true on failure too,
+		// so the invalid-collection notice can render.
 		isResolving:
 			Boolean( collectionId ) &&
-			( ( ! collection && collectionResolving ) ||
+			( ! collectionHasResolved ||
+				( ! collection && collectionResolving ) ||
 				( !! collection &&
 					fieldIds.length > 0 &&
 					! hasStableFieldsForCollection ) ),

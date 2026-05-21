@@ -72,6 +72,14 @@
 	// Hairline top-edge highlight on the active row to suggest a soft "lift".
 	--cortext-state-selected-highlight: rgba(255, 255, 255, 0.6);
 	--cortext-canvas-frame-surface: #{colors.$white};
+	// Light canvas behind the editor iframe and full-page tables.
+	--cortext-canvas-surface: #{colors.$white};
+	--cortext-canvas-border: #{colors.$gray-200};
+	// DataViews table density heights. The skeleton uses these so the loading
+	// table holds the same space as the real rows.
+	--cortext-data-view-row-height-compact: #{variables.$grid-unit-50};
+	--cortext-data-view-row-height-balanced: #{variables.$grid-unit-50 + 2 * variables.$grid-unit-15};
+	--cortext-data-view-row-height-comfortable: #{variables.$grid-unit-50 + 2 * variables.$grid-unit-20};
 	--cortext-chrome-border: #{colors.$gray-200};
 	--cortext-text: #{colors.$gray-900};
 	--cortext-text-muted: #{colors.$gray-700};

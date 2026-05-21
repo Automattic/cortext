@@ -3,7 +3,6 @@ import { useDispatch } from '@wordpress/data';
 import { useCallback, useEffect, useMemo, useState } from '@wordpress/element';
 import {
 	Button,
-	Spinner,
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalConfirmDialog as ConfirmDialog,
 } from '@wordpress/components';
@@ -12,12 +11,16 @@ import { rotateLeft, trash } from '@wordpress/icons';
 import { useNavigate } from '@tanstack/react-router';
 
 import PageIcon from './PageIcon';
+import { SidebarListSkeleton } from './Skeleton';
 import TypeToConfirmDialog from './TypeToConfirmDialog';
 import {
 	ACTIVE_PAGES_QUERY,
 	POST_TYPE,
 	TRASHED_PAGES_QUERY,
 } from './page-queries';
+import useDelayedFlag, {
+	SKELETON_MIN_VISIBLE_MS,
+} from '../hooks/useDelayedFlag';
 import { FULL_PAGE_COLLECTION_QUERY } from '../collections';
 import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
 
@@ -374,6 +377,11 @@ export default function SidebarTrash( {
 	] );
 
 	const isLoading = isResolvingTrash && ! hasTrashCache;
+	const showSkeleton = useDelayedFlag(
+		isLoading,
+		120,
+		SKELETON_MIN_VISIBLE_MS
+	);
 	const hasError = Boolean( trashError && ! hasTrashCache );
 	const hasItems = roots.length > 0;
 	const pendingKind = pendingDelete ? documentKind( pendingDelete ) : null;
@@ -470,10 +478,8 @@ export default function SidebarTrash( {
 
 	return (
 		<>
-			{ isLoading && (
-				<div className="cortext-sidebar__loading">
-					<Spinner />
-				</div>
+			{ isLoading && showSkeleton && (
+				<SidebarListSkeleton itemCount={ 4 } />
 			) }
 
 			{ ! isLoading && hasError && (

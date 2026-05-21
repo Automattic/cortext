@@ -1,6 +1,14 @@
 import { useEntityRecord } from '@wordpress/core-data';
 import { Icon, page as pageGlyph } from '@wordpress/icons';
-import { lazy, Suspense, useMemo } from '@wordpress/element';
+import {
+	lazy,
+	Suspense,
+	useEffect,
+	useMemo,
+	useState,
+} from '@wordpress/element';
+
+import useDelayedFlag from '../hooks/useDelayedFlag';
 
 // PageIconWp does `import * as icons from '@wordpress/icons'` so it can look
 // glyphs up by name at runtime. That defeats tree-shaking and would pull the
@@ -74,35 +82,57 @@ function ImageIcon( { id, size, alt, className } ) {
 		record?.media_details?.sizes?.thumbnail?.source_url ??
 		record?.source_url ??
 		null;
+	// Keep the swatch until REST has a URL and the browser has loaded it.
+	// Otherwise the swatch disappears first and the icon slot looks empty
+	// while the image bytes arrive.
+	const [ hasImagePainted, setHasImagePainted ] = useState( false );
+	useEffect( () => {
+		setHasImagePainted( false );
+	}, [ src ] );
+
+	const isLoading = ! src || ! hasImagePainted;
+	const showLoadingSwatch = useDelayedFlag( isLoading );
 	const classes = [ 'cortext-document-icon' ];
 	if ( className ) {
 		classes.push( className );
 	}
 
-	if ( ! src ) {
-		return (
-			<span
-				className={ classes
-					.concat( 'cortext-document-icon--image-loading' )
-					.join( ' ' ) }
-				style={ { width: size, height: size } }
-				aria-hidden="true"
-			/>
-		);
-	}
+	const wrapperClasses = classes
+		.concat( 'cortext-document-icon--image-wrap' )
+		.join( ' ' );
+	const swatchClasses = [
+		'cortext-document-icon--image-loading',
+		showLoadingSwatch && 'cortext-document-icon--image-loading-visible',
+	]
+		.filter( Boolean )
+		.join( ' ' );
 
 	return (
-		<img
-			className={ classes
-				.concat( 'cortext-document-icon--image' )
-				.join( ' ' ) }
-			src={ src }
-			alt={ alt ?? '' }
-			width={ size }
-			height={ size }
-			loading="lazy"
-			decoding="async"
-		/>
+		<span
+			className={ wrapperClasses }
+			style={ { width: size, height: size } }
+		>
+			{ isLoading && (
+				<span className={ swatchClasses } aria-hidden="true" />
+			) }
+			{ src && (
+				<img
+					className="cortext-document-icon--image"
+					src={ src }
+					alt={ alt ?? '' }
+					width={ size }
+					height={ size }
+					loading="lazy"
+					decoding="async"
+					onLoad={ () => setHasImagePainted( true ) }
+					// Drop the swatch on a failed fetch too. Without this the
+					// swatch pulses forever for 404s or deleted media; we'd
+					// rather show the browser's broken-image fallback.
+					onError={ () => setHasImagePainted( true ) }
+					style={ { opacity: hasImagePainted ? 1 : 0 } }
+				/>
+			) }
+		</span>
 	);
 }
 

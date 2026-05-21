@@ -8,7 +8,6 @@ import {
 	Disabled,
 	Notice,
 	PanelBody,
-	Spinner,
 	privateApis as componentsPrivateApis,
 } from '@wordpress/components';
 import {
@@ -45,6 +44,10 @@ import apiFetch from '@wordpress/api-fetch';
 import MediaPicker, { MediaUploadCheck } from './MediaPicker';
 import PageIcon from './PageIcon';
 import DocumentIdentityControls from './DocumentIdentityControls';
+import { SkeletonBlock } from './Skeleton';
+import useDelayedFlag, {
+	SKELETON_MIN_VISIBLE_MS,
+} from '../hooks/useDelayedFlag';
 import { filterFavoritesForTrashedPage } from './SidebarFavorites';
 import {
 	ACTIVE_PAGES_QUERY,
@@ -382,11 +385,18 @@ function PageFeaturedImageInspectorControls( { postId } ) {
 		media?.media_details?.sizes?.medium?.source_url ??
 		media?.source_url ??
 		null;
+	const showMediaSkeleton = useDelayedFlag(
+		isResolvingMedia && ! src,
+		120,
+		SKELETON_MIN_VISIBLE_MS
+	);
 	let featuredImagePreview = (
 		<span>{ __( 'Featured image is not available.', 'cortext' ) }</span>
 	);
 	if ( isResolvingMedia && ! src ) {
-		featuredImagePreview = <Spinner />;
+		featuredImagePreview = showMediaSkeleton ? (
+			<SkeletonBlock className="cortext-page-inspector__featured-image-skeleton" />
+		) : null;
 	} else if ( src ) {
 		featuredImagePreview = (
 			<img

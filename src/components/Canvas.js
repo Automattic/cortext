@@ -7,7 +7,7 @@ import {
 	InterfaceSkeleton,
 	store as interfaceStore,
 } from '@wordpress/interface';
-import { Button, Disabled, SnackbarList, Spinner } from '@wordpress/components';
+import { Button, Disabled, SnackbarList } from '@wordpress/components';
 import { store as noticesStore } from '@wordpress/notices';
 import { chevronDown, chevronUp, cog, seen, unseen } from '@wordpress/icons';
 import { useCallback, useEffect, useState } from '@wordpress/element';
@@ -22,11 +22,13 @@ import './Canvas.scss';
 // gets the blocks registered.
 import './initEditor';
 import useAutosave from '../hooks/useAutosave';
+import useDelayedFlag from '../hooks/useDelayedFlag';
 import { withViewTransition } from '../hooks/viewTransition';
 import { POST_TYPE } from './page-queries';
 import EditorBody from './EditorBody';
 import PublishToggle from './PublishToggle';
 import RowProperties from './RowProperties';
+import { CanvasProgressBar } from './Skeleton';
 import { TopBarActionsFill } from './WorkspaceTopBar';
 import PageInspectorSidebar, {
 	BLOCK_INSPECTOR,
@@ -365,43 +367,60 @@ export default function Canvas( {
 		} );
 	}, [ requestedPost ] );
 
-	if ( ! renderedPost ) {
-		return (
-			<div className="cortext-canvas__loading">
-				<Spinner />
-			</div>
-		);
-	}
-
 	const pendingPost =
+		renderedPost &&
 		requestedPost &&
 		( requestedPost.type !== renderedPost.type ||
 			requestedPost.id !== renderedPost.id )
 			? requestedPost
 			: null;
+	// `pendingPost` appears only after the next record resolves. On a slow
+	// network that is too late, so compare the requested post to the one still
+	// on screen and cover the whole wait after a click.
+	const isCrossDocNav = Boolean(
+		renderedPost &&
+			postId &&
+			( String( postId ) !== String( renderedPost.id ) ||
+				( postType && postType !== renderedPost.type ) )
+	);
+	const showProgress = useDelayedFlag( ! renderedPost || isCrossDocNav );
+	if ( ! renderedPost ) {
+		return (
+			<div className="cortext-canvas__loading cortext-canvas__loading--document">
+				{ showProgress ? <CanvasProgressBar /> : null }
+			</div>
+		);
+	}
 
 	return (
-		<EditorProvider
-			post={ renderedPost }
-			settings={ window.cortextEditorSettings ?? {} }
-			useSubRegistry={ useSubRegistry }
-		>
-			<CanvasEditor
+		<>
+			{ showProgress && (
+				<div className="cortext-canvas__pending-progress">
+					<CanvasProgressBar />
+				</div>
+			) }
+			<EditorProvider
 				post={ renderedPost }
-				postType={ renderedPost.type }
-				fields={ fields }
-				row={ row }
-				pendingPost={ pendingPost }
-				onSwitchPost={ setDisplayedPost }
-				onDisplayedPost={ onDisplayedPost }
-				isActive={ isActive }
-				topBarActions={ topBarActions }
-				notice={ notice }
-				onApi={ onApi }
-				onSaved={ onSaved }
-				onRestored={ onRestored }
-				recentTarget={ recentTarget }
-			/>
-		</EditorProvider>
+				settings={ window.cortextEditorSettings ?? {} }
+				useSubRegistry={ useSubRegistry }
+			>
+				<CanvasEditor
+					post={ renderedPost }
+					postType={ renderedPost.type }
+					fields={ fields }
+					row={ row }
+					pendingPost={ pendingPost }
+					onSwitchPost={ setDisplayedPost }
+					onDisplayedPost={ onDisplayedPost }
+					isActive={ isActive }
+					topBarActions={ topBarActions }
+					notice={ notice }
+					onApi={ onApi }
+					onSaved={ onSaved }
+					onRestored={ onRestored }
+					recentTarget={ recentTarget }
+				/>
+			</EditorProvider>
+		</>
 	);
 }

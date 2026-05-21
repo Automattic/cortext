@@ -88,6 +88,8 @@ export function reducer( state, action ) {
 					state.readyCollectionIds.has( target.id )
 				) {
 					active = { kind: 'collection', id: target.id };
+				} else {
+					active = { kind: 'loading' };
 				}
 			}
 
@@ -146,10 +148,11 @@ export function reducer( state, action ) {
 			)
 				? state.mountedCollectionIds
 				: [ ...state.mountedCollectionIds, action.id ];
-			const next = { ...state, mountedCollectionIds };
-			if ( state.readyCollectionIds.has( action.id ) ) {
-				next.active = { kind: 'collection', id: action.id };
-			}
+			const next = {
+				...state,
+				mountedCollectionIds,
+				active: { kind: 'collection', id: action.id },
+			};
 			return pruneCollections( next );
 		}
 

@@ -1,5 +1,5 @@
 import { __, sprintf } from '@wordpress/i18n';
-import { Button, Icon, Spinner } from '@wordpress/components';
+import { Button, Icon } from '@wordpress/components';
 import {
 	useCallback,
 	useEffect,
@@ -23,7 +23,11 @@ import {
 } from '@dnd-kit/sortable';
 
 import PageIcon from './PageIcon';
+import { SidebarListSkeleton } from './Skeleton';
 import { collectionTitle } from './CollectionRow';
+import useDelayedFlag, {
+	SKELETON_MIN_VISIBLE_MS,
+} from '../hooks/useDelayedFlag';
 import { collectDescendants } from './pages-tree';
 import {
 	computeCollectionUri,
@@ -465,14 +469,17 @@ export default function SidebarFavorites( {
 	const isLoading =
 		isResolving ||
 		( hasFavorites && isResolvingItems && items.length === 0 );
+	const showSkeleton = useDelayedFlag(
+		isLoading,
+		120,
+		SKELETON_MIN_VISIBLE_MS
+	);
 	const isEmpty = ! isLoading && ! hasFavorites;
 
 	return (
 		<div className="cortext-sidebar__favorites">
-			{ isLoading ? (
-				<div className="cortext-sidebar__loading">
-					<Spinner />
-				</div>
+			{ isLoading && showSkeleton ? (
+				<SidebarListSkeleton itemCount={ favorites.length || 3 } />
 			) : null }
 			{ isEmpty ? (
 				<p className="cortext-sidebar__empty cortext-sidebar__empty--inline">

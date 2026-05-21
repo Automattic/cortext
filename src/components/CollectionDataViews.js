@@ -29,6 +29,10 @@ import {
 import { CurrentViewModeProvider } from './CurrentViewModeContext';
 import EditableCell, { RowMutationContext } from './EditableCell';
 import PageIcon from './PageIcon';
+import { CollectionRowsSkeleton } from './Skeleton';
+import useDelayedFlag, {
+	SKELETON_MIN_VISIBLE_MS,
+} from '../hooks/useDelayedFlag';
 import allSettledWithConcurrency from './allSettledWithConcurrency';
 import { filterSortAndPaginateWithGroups } from './groupedFilters';
 import TableCalculationsFooter from './TableCalculationsFooter';
@@ -87,12 +91,38 @@ const OpenRowActionContext = createContext( {
 	requestOpenRow: null,
 } );
 
+// The peek panel cannot render until the editor is ready. On slower loads a
+// row click can feel like nothing happened, so pointerdown applies a short
+// "opening" state immediately.
+const OPENING_FEEDBACK_TIMEOUT_MS = 600;
+
 function TitleCell( { item } ) {
 	const { enabled, icon, openRowId, requestOpenRow } =
 		useContext( OpenRowActionContext );
 	const canOpenRow = Boolean( enabled && requestOpenRow );
 	const isOpenRow = canOpenRow && String( item?.id ) === String( openRowId );
 	const documentIcon = item?.meta?.cortext_document_icon ?? '';
+	const [ isOpening, setIsOpening ] = useState( false );
+	const openingTimeoutRef = useRef( null );
+
+	const clearOpeningTimeout = useCallback( () => {
+		if ( openingTimeoutRef.current ) {
+			clearTimeout( openingTimeoutRef.current );
+			openingTimeoutRef.current = null;
+		}
+	}, [] );
+
+	useEffect( () => clearOpeningTimeout, [ clearOpeningTimeout ] );
+
+	// Once this row owns the open peek, --is-open handles the visual state.
+	// Drop the short-lived opening state so it cannot linger after a quick close.
+	useEffect( () => {
+		if ( isOpenRow && isOpening ) {
+			clearOpeningTimeout();
+			setIsOpening( false );
+		}
+	}, [ clearOpeningTimeout, isOpening, isOpenRow ] );
+
 	const openRow = useCallback(
 		( event ) => {
 			event.preventDefault();
@@ -100,6 +130,21 @@ function TitleCell( { item } ) {
 			requestOpenRow?.( item );
 		},
 		[ item, requestOpenRow ]
+	);
+	const handleOpenPointerDown = useCallback(
+		( event ) => {
+			event.stopPropagation();
+			if ( ! canOpenRow || isOpenRow ) {
+				return;
+			}
+			setIsOpening( true );
+			clearOpeningTimeout();
+			openingTimeoutRef.current = setTimeout( () => {
+				openingTimeoutRef.current = null;
+				setIsOpening( false );
+			}, OPENING_FEEDBACK_TIMEOUT_MS );
+		},
+		[ canOpenRow, clearOpeningTimeout, isOpenRow ]
 	);
 	const stopPropagation = useCallback( ( event ) => {
 		event.stopPropagation();
@@ -110,7 +155,10 @@ function TitleCell( { item } ) {
 			className={
 				'cortext-title-cell' +
 				( canOpenRow ? ' cortext-title-cell--with-open-action' : '' ) +
-				( isOpenRow ? ' cortext-title-cell--is-open' : '' )
+				( isOpenRow ? ' cortext-title-cell--is-open' : '' ) +
+				( isOpening && ! isOpenRow
+					? ' cortext-title-cell--is-opening'
+					: '' )
 			}
 		>
 			{ documentIcon ? (
@@ -136,6 +184,7 @@ function TitleCell( { item } ) {
 					variant="tertiary"
 					onClick={ openRow }
 					onMouseDown={ stopPropagation }
+					onPointerDown={ handleOpenPointerDown }
 				>
 					{ __( 'Open', 'cortext' ) }
 				</Button>
@@ -466,7 +515,6 @@ export default function CollectionDataViews( {
 	collectionId,
 	view,
 	onChangeView,
-	loading = null,
 	empty,
 	invalid,
 	error,
@@ -520,6 +568,18 @@ export default function CollectionDataViews( {
 	const supportsRowSelection = isTableLayout || isGridLayout;
 	const isServerPaginated = queryMode === 'server';
 	const dataViewFields = availableFields;
+	const isRowsLoadingShell =
+		! rowsResolved && data.length === 0 && isTableLayout;
+	// Treat field loading and first-page row loading as one shell state. While
+	// either is still running, hide DataViews chrome and show the rows skeleton
+	// so the user does not see three quick states: generic placeholder, empty
+	// DataViews chrome, then real rows.
+	const isShellLoading = isResolving || isRowsLoadingShell;
+	const showLoadingShell = useDelayedFlag(
+		isShellLoading,
+		120,
+		SKELETON_MIN_VISIBLE_MS
+	);
 
 	const tableWrapperRef = useRef( null );
 	const [ localRevealFieldId, setLocalRevealFieldId ] = useState( null );
@@ -1357,10 +1417,12 @@ export default function CollectionDataViews( {
 	] );
 
 	useEffect( () => {
-		if ( ! isResolving && rowsResolved ) {
+		// Fields are enough to mount the pane. Rows can keep loading behind the
+		// skeleton; waiting for them leaves the old pane around too long.
+		if ( ! isResolving ) {
 			onReady?.( collectionId );
 		}
-	}, [ collectionId, isResolving, rowsResolved, onReady ] );
+	}, [ collectionId, isResolving, onReady ] );
 
 	// tech-debt.md#22: Gutenberg selects on any mousedown that bubbles up.
 	// Dragging the dataviews scrollbar lands in the gutter (offset past the
@@ -1408,11 +1470,7 @@ export default function CollectionDataViews( {
 		return () => node.removeEventListener( 'mousedown', onMouseDown, true );
 	}, [ isResolving, rowsResolved, rowError ] );
 
-	if ( isResolving ) {
-		return loading;
-	}
-
-	if ( collectionId && ! collection ) {
+	if ( ! isResolving && collectionId && ! collection ) {
 		return (
 			invalid ?? (
 				<p>
@@ -1425,7 +1483,7 @@ export default function CollectionDataViews( {
 		);
 	}
 
-	if ( rowError ) {
+	if ( ! isResolving && rowError ) {
 		return (
 			error ?? (
 				<p>
@@ -1476,6 +1534,35 @@ export default function CollectionDataViews( {
 							className="cortext-data-view"
 							ref={ tableWrapperRef }
 							onClickCapture={ captureSelectionIntent }
+							data-loading-shell={
+								isShellLoading ? 'true' : undefined
+							}
+							style={
+								isShellLoading
+									? {
+											// Hold the wrapper at skeleton
+											// height so content below does not
+											// jump when chrome and rows appear.
+											// Cap matches the skeleton row cap.
+											// Use the saved density too, so
+											// balanced and comfortable tables
+											// reserve enough room and do not
+											// clip the skeleton.
+											'--cortext-data-view-loading-rows':
+												Math.max(
+													1,
+													Math.min(
+														view?.perPage ?? 8,
+														15
+													)
+												),
+											'--cortext-data-view-loading-row-height': `var(--cortext-data-view-row-height-${
+												view?.layout?.density ??
+												'compact'
+											})`,
+									  }
+									: undefined
+							}
 						>
 							{ rowActionError && (
 								<Notice
@@ -1486,76 +1573,103 @@ export default function CollectionDataViews( {
 									{ rowActionError }
 								</Notice>
 							) }
-							<DataViews
-								data={ dataFiltered }
-								fields={ dataViewFields }
-								view={ view }
-								onChangeView={ onChangeView }
-								paginationInfo={ activePaginationInfo }
-								defaultLayouts={ DEFAULT_LAYOUTS }
-								getItemId={ ( item ) => String( item.id ) }
-								isLoading={ isLoading }
-								empty={ empty }
-								actions={ dataViewActions }
-								{ ...( supportsRowSelection
-									? {
-											selection: selectedRowIds,
-											onChangeSelection,
-									  }
-									: {} ) }
-							>
-								<DataViewsChrome footer={ dataViewsFooter } />
-							</DataViews>
-							<DataViewRowReorder
-								wrapperRef={ tableWrapperRef }
-								view={ view }
-								onChangeView={ onChangeView }
-								collectionId={ collectionId }
-								rows={ dataFiltered }
-								data={ data }
-								mutateRows={ mutateRows }
-								onReordered={ refresh }
-							/>
-							{ isTableLayout && (
-								<TableCalculationsFooter
-									wrapperRef={ tableWrapperRef }
-									view={ view }
-									fields={ availableFields }
-									data={ dataFilteredForCalculations }
-									onChangeView={ onChangeView }
-									hasSelectionColumn={ hasSelectionColumn }
-									bulkActions={ tableBulkActions }
-								/>
+							{ showLoadingShell && (
+								<div className="cortext-data-view__rows-skeleton">
+									<CollectionRowsSkeleton
+										rowCount={ view?.perPage ?? 8 }
+										columnCount={
+											( view?.fields?.length ?? 0 ) + 1
+										}
+										density={
+											view?.layout?.density ?? 'compact'
+										}
+									/>
+								</div>
 							) }
-							{ isTableLayout && (
-								<DataViewColumnInteractions
-									wrapperRef={ tableWrapperRef }
-									view={ view }
-									fields={ availableFields }
-									onChangeView={ onChangeView }
-								/>
+							{ ! isResolving && (
+								<>
+									<DataViews
+										data={ dataFiltered }
+										fields={ dataViewFields }
+										view={ view }
+										onChangeView={ onChangeView }
+										paginationInfo={ activePaginationInfo }
+										defaultLayouts={ DEFAULT_LAYOUTS }
+										getItemId={ ( item ) =>
+											String( item.id )
+										}
+										isLoading={ isLoading }
+										empty={ empty }
+										actions={ dataViewActions }
+										{ ...( supportsRowSelection
+											? {
+													selection: selectedRowIds,
+													onChangeSelection,
+											  }
+											: {} ) }
+									>
+										<DataViewsChrome
+											footer={ dataViewsFooter }
+										/>
+									</DataViews>
+									<DataViewRowReorder
+										wrapperRef={ tableWrapperRef }
+										view={ view }
+										onChangeView={ onChangeView }
+										collectionId={ collectionId }
+										rows={ dataFiltered }
+										data={ data }
+										mutateRows={ mutateRows }
+										onReordered={ refresh }
+									/>
+									{ isTableLayout && (
+										<TableCalculationsFooter
+											wrapperRef={ tableWrapperRef }
+											view={ view }
+											fields={ availableFields }
+											data={ dataFilteredForCalculations }
+											onChangeView={ onChangeView }
+											hasSelectionColumn={
+												hasSelectionColumn
+											}
+											bulkActions={ tableBulkActions }
+										/>
+									) }
+									{ isTableLayout && (
+										<DataViewColumnInteractions
+											wrapperRef={ tableWrapperRef }
+											view={ view }
+											fields={ availableFields }
+											onChangeView={ onChangeView }
+										/>
+									) }
+									{ isTableLayout && (
+										<ColumnHeaderActions
+											collectionId={ collectionId }
+											view={ view }
+											onChangeView={ onChangeView }
+											onFieldOptionsSaved={
+												updateFieldOptions
+											}
+											onFieldCreated={
+												requestRevealCreatedField
+											}
+											onRowsChanged={ refresh }
+										/>
+									) }
+									{ /* tech-debt.md#7: DataViews has no footer slot, so the
+									   New-row affordance and its CSS layout sit outside the
+									   component instead of inside its layout chrome. */ }
+									<div className="cortext-data-view__footer">
+										<NewRowButton
+											slug={ slug }
+											view={ view }
+											fields={ fields }
+											onCreated={ onCreated }
+										/>
+									</div>
+								</>
 							) }
-							{ isTableLayout && (
-								<ColumnHeaderActions
-									collectionId={ collectionId }
-									view={ view }
-									onChangeView={ onChangeView }
-									onFieldOptionsSaved={ updateFieldOptions }
-									onFieldCreated={ requestRevealCreatedField }
-									onRowsChanged={ refresh }
-								/>
-							) }
-							{ /* tech-debt.md#7: DataViews has no footer slot, so the
-							   New-row affordance and its CSS layout sit outside the
-							   component instead of inside its layout chrome. */ }
-							<div className="cortext-data-view__footer">
-								<NewRowButton
-									slug={ slug }
-									view={ view }
-									fields={ fields }
-									onCreated={ onCreated }
-								/>
-							</div>
 						</div>
 					</div>
 				</OpenRowActionContext.Provider>

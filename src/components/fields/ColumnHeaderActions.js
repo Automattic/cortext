@@ -205,6 +205,11 @@ function FieldActions( {
 	const duplicate = useDuplicateField( collectionId );
 	const remove = useDeleteField( collectionId );
 	const { fields } = useCollectionFieldsContext();
+	// `useCollectionFields` already fetched these records with `context: 'edit'`
+	// and ran them through `mapField`. Read label/type/options from the cached
+	// field so the header skips `useEntityRecord`'s `default`-context resolver
+	// trip, which would otherwise flash `#${ recordId }` before the title
+	// arrives. See the tech-debt note in `useCollectionFields`.
 	const mappedField = useMappedField( recordId );
 	const fieldType = mappedField?.cortextType;
 	const canFormat = FORMATTABLE_TYPES.has( fieldType );

@@ -506,3 +506,13 @@ Drag/drop and `menu_order` accounting look at both pages and collections through
 **Where.** `CollectionsController::duplicate()`, `clone_fields()`, and `remap_rollup_references()` in `includes/Rest/CollectionsController.php`, plus the skipped-field notice in `src/components/Sidebar.js` and duplicate coverage in `tests/php/test-rest-collections-controller.php`.
 
 **Solution.** Add a relation-aware schema copy step. It should clone and remap the forward and reverse fields together, or skip every dependent field, including rollups that point at skipped relations. The duplicate should never carry references back to the source collection's fields. Once that exists, the sidebar notice can name the exact skipped field types instead of treating them all as generic missing columns.
+
+## 55. Loading table skeleton tracks DataViews layout `[upstream, soft]`
+
+**What.** DataViews does not give us a table-body loading slot. Cortext renders `CollectionRowsSkeleton` beside `<DataViews>` and covers the table while the first page loads; without that, the collection pane collapses and jumps when rows show up.
+
+The brittle bit is the sizing. The skeleton copies DataViews row heights for compact, balanced, and comfortable density. It lines up in the current build, but a DataViews density change could make the placeholder drift from the real table.
+
+**Where.** `CollectionRowsSkeleton` in `src/components/Skeleton.js`, the rows-skeleton mount in `src/components/CollectionDataViews.js`, and the `.cortext-collection-skeleton` / `.cortext-data-view__rows-skeleton` rules in `src/index.scss`.
+
+**Solution.** DataViews exposes a table loading slot, or at least row-height CSS variables. Then Cortext can follow the table instead of copying its constants. Until then, keep the skeleton rules next to the DataViews table rules and check for visual drift after DataViews upgrades.

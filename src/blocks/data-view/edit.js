@@ -641,7 +641,6 @@ export default function Edit( { attributes, setAttributes } ) {
 					onChangeView={ setView }
 					revealFieldId={ revealFieldId }
 					onFieldRevealed={ onFieldRevealed }
-					loading={ <Spinner /> }
 					invalid={
 						<Notice status="warning" isDismissible={ false }>
 							{ __(
