@@ -27,11 +27,11 @@ use Cortext\Documents\KindRegistry;
 use Cortext\Documents\PageKind;
 use Cortext\Documents\RowKind;
 use Cortext\Fields\FieldTypeRegistry;
+use Cortext\PostType\Cascade\DocumentToCollectionTrashCascade;
+use Cortext\PostType\Cascade\PageHierarchyTrashCascade;
 use Cortext\PostType\Collection;
 use Cortext\PostType\CollectionEntries;
-use Cortext\PostType\CollectionTrashCascade;
 use Cortext\PostType\DocumentIdentity;
-use Cortext\PostType\PageTrashCascade;
 use Cortext\Rest\RowsFilterQuery;
 use WP_Post;
 use WP_Query;
@@ -369,16 +369,16 @@ final class Documents {
 		if ( ! empty( $opts['include_trash_meta'] ) ) {
 			$document['modified_at'] = $this->format_gmt_date( $post->post_modified_gmt );
 			$document['meta']        = array(
-				'cortext_document_icon'    => $icon,
-				PageTrashCascade::META_KEY => (int) get_post_meta( $post->ID, PageTrashCascade::META_KEY, true ),
+				'cortext_document_icon'             => $icon,
+				PageHierarchyTrashCascade::META_KEY => (int) get_post_meta( $post->ID, PageHierarchyTrashCascade::META_KEY, true ),
 			);
 			// Inline collections trashed alongside their owner page carry a
 			// separate marker. The sidebar uses it to nest them under the
 			// page's trash entry instead of listing them as siblings.
 			if ( 'collection' === $kind->id() ) {
-				$document['meta'][ CollectionTrashCascade::TRASHED_BY_OWNER_META_KEY ] = (int) get_post_meta(
+				$document['meta'][ DocumentToCollectionTrashCascade::TRASHED_BY_OWNER_META_KEY ] = (int) get_post_meta(
 					$post->ID,
-					CollectionTrashCascade::TRASHED_BY_OWNER_META_KEY,
+					DocumentToCollectionTrashCascade::TRASHED_BY_OWNER_META_KEY,
 					true
 				);
 			}

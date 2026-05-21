@@ -59,8 +59,8 @@ final class Page {
 					'revisions',
 					'page-attributes',
 					// `meta` only appears in the REST schema when a CPT
-					// supports custom-fields; PageTrashCascade's marker meta
-					// (registered with `show_in_rest`) needs this so the
+					// supports custom-fields; the page hierarchy cascade's
+					// marker meta (registered with `show_in_rest`) needs this so the
 					// sidebar Trash filter can read it on the client.
 					'custom-fields',
 					// Document covers ride on the native featured image so REST
