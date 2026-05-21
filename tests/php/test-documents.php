@@ -14,8 +14,8 @@ use Cortext\PostType\Collection;
 use Cortext\PostType\CollectionEntries;
 use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Field;
+use Cortext\PostType\Cascade\PageHierarchyTrashCascade;
 use Cortext\PostType\Page;
-use Cortext\PostType\PageTrashCascade;
 use WorDBless\BaseTestCase;
 
 final class Test_Documents extends BaseTestCase {
@@ -438,7 +438,7 @@ final class Test_Documents extends BaseTestCase {
 
 		$by_id = array_column( $result['documents'], null, 'id' );
 		$this->assertArrayHasKey( 'meta', $by_id[ $trashed ] );
-		$this->assertArrayHasKey( PageTrashCascade::META_KEY, $by_id[ $trashed ]['meta'] );
+		$this->assertArrayHasKey( PageHierarchyTrashCascade::META_KEY, $by_id[ $trashed ]['meta'] );
 	}
 
 	public function test_list_excludes_trashed_documents(): void {

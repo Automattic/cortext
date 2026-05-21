@@ -4,7 +4,7 @@
  *
  * Read tests (GET /cortext/v1/documents) live in
  * test-rest-documents-controller.php; this file owns restore and
- * permanent-delete because they need the PageTrashCascade fixture.
+ * permanent-delete because they need the trash cascade engine fixture.
  *
  * @package Cortext
  */
@@ -13,11 +13,13 @@ declare( strict_types=1 );
 
 namespace Cortext\Tests;
 
+use Cortext\PostType\Cascade\CollectionToRowTrashCascade;
+use Cortext\PostType\Cascade\DocumentToCollectionTrashCascade;
+use Cortext\PostType\Cascade\PageHierarchyTrashCascade;
 use Cortext\PostType\Collection;
 use Cortext\PostType\CollectionEntries;
 use Cortext\PostType\Page;
-use Cortext\PostType\PageTrashCascade;
-use Cortext\PostType\RowTrashCascade;
+use Cortext\PostType\TrashCascadeEngine;
 use Cortext\Rest\DocumentsController;
 use WorDBless\BaseTestCase;
 use WP_REST_Request;
@@ -39,8 +41,13 @@ final class Test_Rest_Documents_Controller_Mutations extends BaseTestCase {
 
 		$this->install_in_memory_posts_query();
 
-		( new PageTrashCascade() )->register();
-		( new RowTrashCascade() )->register();
+		( new TrashCascadeEngine(
+			array(
+				new PageHierarchyTrashCascade(),
+				new DocumentToCollectionTrashCascade(),
+				new CollectionToRowTrashCascade( new CollectionEntries() ),
+			)
+		) )->register();
 
 		$GLOBALS['wp_rest_server'] = new WP_REST_Server();
 		( new DocumentsController() )->register();
@@ -321,7 +328,7 @@ final class Test_Rest_Documents_Controller_Mutations extends BaseTestCase {
 		$this->assertContains(
 			$row_id,
 			$deleted,
-			'The response must list rows deleted by RowTrashCascade so the sidebar can navigate away from them.'
+			'The response must list rows deleted by the collection-to-row cascade so the sidebar can navigate away from them.'
 		);
 	}
 

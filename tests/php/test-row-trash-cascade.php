@@ -1,6 +1,6 @@
 <?php
 /**
- * Tests for Cortext\PostType\RowTrashCascade.
+ * Tests for Cortext\PostType\Cascade\CollectionToRowTrashCascade.
  *
  * @package Cortext
  */
@@ -9,9 +9,10 @@ declare( strict_types=1 );
 
 namespace Cortext\Tests;
 
+use Cortext\PostType\Cascade\CollectionToRowTrashCascade;
 use Cortext\PostType\Collection;
 use Cortext\PostType\CollectionEntries;
-use Cortext\PostType\RowTrashCascade;
+use Cortext\PostType\TrashCascadeEngine;
 use WorDBless\BaseTestCase;
 
 final class Test_Row_Trash_Cascade extends BaseTestCase {
@@ -29,7 +30,7 @@ final class Test_Row_Trash_Cascade extends BaseTestCase {
 
 		$this->install_in_memory_posts_query();
 
-		( new RowTrashCascade() )->register();
+		( new TrashCascadeEngine( array( new CollectionToRowTrashCascade() ) ) )->register();
 	}
 
 	public function tear_down(): void {
@@ -52,7 +53,7 @@ final class Test_Row_Trash_Cascade extends BaseTestCase {
 			$this->assertSame( 'trash', get_post_status( $row_id ) );
 			$this->assertSame(
 				(string) $collection_id,
-				(string) get_post_meta( $row_id, RowTrashCascade::TRASHED_BY_OWNER_META_KEY, true ),
+				(string) get_post_meta( $row_id, CollectionToRowTrashCascade::TRASHED_BY_OWNER_META_KEY, true ),
 				'Each row trashed by the cascade carries the collection id as its owner marker.'
 			);
 		}
@@ -72,7 +73,7 @@ final class Test_Row_Trash_Cascade extends BaseTestCase {
 			$this->assertNotSame( 'trash', get_post_status( $row_id ), 'Cascade-trashed rows come back on restore.' );
 			$this->assertSame(
 				'',
-				(string) get_post_meta( $row_id, RowTrashCascade::TRASHED_BY_OWNER_META_KEY, true ),
+				(string) get_post_meta( $row_id, CollectionToRowTrashCascade::TRASHED_BY_OWNER_META_KEY, true ),
 				'Marker is cleared so a future cascade restore does not revive the row twice.'
 			);
 		}

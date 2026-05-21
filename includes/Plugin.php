@@ -17,14 +17,15 @@ use Cortext\Editor\PageHeaderActionsBlock;
 use Cortext\Editor\RevisionThrottle;
 use Cortext\Frontend\Assets;
 use Cortext\Frontend\Template;
+use Cortext\PostType\Cascade\CollectionToRowTrashCascade;
+use Cortext\PostType\Cascade\DocumentToCollectionTrashCascade;
+use Cortext\PostType\Cascade\PageHierarchyTrashCascade;
 use Cortext\PostType\Collection;
 use Cortext\PostType\CollectionEntries;
-use Cortext\PostType\CollectionTrashCascade;
 use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Field;
 use Cortext\PostType\Page;
-use Cortext\PostType\PageTrashCascade;
-use Cortext\PostType\RowTrashCascade;
+use Cortext\PostType\TrashCascadeEngine;
 use Cortext\Rest\CollectionsController;
 use Cortext\Rest\DocumentLocatorController;
 use Cortext\Rest\DocumentsController;
@@ -50,12 +51,22 @@ final class Plugin {
 		( new Screen() )->register();
 		( new Page() )->register();
 		( new DocumentIdentity() )->register();
-		( new PageTrashCascade() )->register();
 		( new Collection() )->register();
-		( new CollectionTrashCascade() )->register();
-		( new RowTrashCascade() )->register();
 		( new Field() )->register();
 		( new CollectionEntries() )->register();
+
+		// Single cascade engine: the same instance registers the WordPress
+		// hooks and answers `descendants_for_root` for the REST endpoints.
+		// Adding a new strategy in one place wires it everywhere.
+		$cascade_engine = new TrashCascadeEngine(
+			array(
+				new PageHierarchyTrashCascade(),
+				new DocumentToCollectionTrashCascade(),
+				new CollectionToRowTrashCascade( new CollectionEntries() ),
+			)
+		);
+		$cascade_engine->register();
+
 		( new RevisionThrottle() )->register();
 		( new DocumentIconBlock() )->register();
 		( new DocumentCoverBlock() )->register();
@@ -64,7 +75,7 @@ final class Plugin {
 		( new FavoritesController() )->register();
 		( new FieldsController() )->register();
 		( new DocumentLocatorController() )->register();
-		( new DocumentsController() )->register();
+		( new DocumentsController( null, $cascade_engine ) )->register();
 		( new RecentsController() )->register();
 		( new RowsController() )->register();
 		( new WorkspaceHomeController() )->register();

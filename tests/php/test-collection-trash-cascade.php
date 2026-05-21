@@ -1,6 +1,6 @@
 <?php
 /**
- * Tests for Cortext\PostType\CollectionTrashCascade.
+ * Tests for Cortext\PostType\Cascade\DocumentToCollectionTrashCascade.
  *
  * @package Cortext
  */
@@ -9,10 +9,11 @@ declare( strict_types=1 );
 
 namespace Cortext\Tests;
 
+use Cortext\PostType\Cascade\DocumentToCollectionTrashCascade;
 use Cortext\PostType\Collection;
 use Cortext\PostType\CollectionEntries;
-use Cortext\PostType\CollectionTrashCascade;
 use Cortext\PostType\Page;
+use Cortext\PostType\TrashCascadeEngine;
 use WorDBless\BaseTestCase;
 
 final class Test_Collection_Trash_Cascade extends BaseTestCase {
@@ -31,7 +32,7 @@ final class Test_Collection_Trash_Cascade extends BaseTestCase {
 
 		$this->install_in_memory_posts_query();
 
-		( new CollectionTrashCascade() )->register();
+		( new TrashCascadeEngine( array( new DocumentToCollectionTrashCascade() ) ) )->register();
 	}
 
 	public function tear_down(): void {
@@ -65,11 +66,11 @@ final class Test_Collection_Trash_Cascade extends BaseTestCase {
 		$this->assertSame( 'trash', get_post_status( $second ) );
 		$this->assertSame(
 			(string) $page_id,
-			(string) get_post_meta( $first, CollectionTrashCascade::TRASHED_BY_OWNER_META_KEY, true )
+			(string) get_post_meta( $first, DocumentToCollectionTrashCascade::TRASHED_BY_OWNER_META_KEY, true )
 		);
 		$this->assertSame(
 			(string) $page_id,
-			(string) get_post_meta( $second, CollectionTrashCascade::TRASHED_BY_OWNER_META_KEY, true )
+			(string) get_post_meta( $second, DocumentToCollectionTrashCascade::TRASHED_BY_OWNER_META_KEY, true )
 		);
 	}
 
@@ -93,7 +94,7 @@ final class Test_Collection_Trash_Cascade extends BaseTestCase {
 		);
 		$this->assertSame(
 			'',
-			(string) get_post_meta( $owned, CollectionTrashCascade::TRASHED_BY_OWNER_META_KEY, true ),
+			(string) get_post_meta( $owned, DocumentToCollectionTrashCascade::TRASHED_BY_OWNER_META_KEY, true ),
 			'Marker should be cleared on the revived collection so a later page-restore does not try to revive it twice.'
 		);
 	}
@@ -107,7 +108,7 @@ final class Test_Collection_Trash_Cascade extends BaseTestCase {
 		$this->assertSame( 'trash', get_post_status( $collection ) );
 		$this->assertSame(
 			'',
-			(string) get_post_meta( $collection, CollectionTrashCascade::TRASHED_BY_OWNER_META_KEY, true )
+			(string) get_post_meta( $collection, DocumentToCollectionTrashCascade::TRASHED_BY_OWNER_META_KEY, true )
 		);
 
 		// Trashing the owning page must not re-stamp the already-trashed collection.
@@ -115,7 +116,7 @@ final class Test_Collection_Trash_Cascade extends BaseTestCase {
 
 		$this->assertSame(
 			'',
-			(string) get_post_meta( $collection, CollectionTrashCascade::TRASHED_BY_OWNER_META_KEY, true )
+			(string) get_post_meta( $collection, DocumentToCollectionTrashCascade::TRASHED_BY_OWNER_META_KEY, true )
 		);
 	}
 
@@ -149,7 +150,7 @@ final class Test_Collection_Trash_Cascade extends BaseTestCase {
 		$this->assertNotSame( 'trash', get_post_status( $collection ) );
 		$this->assertSame(
 			'',
-			(string) get_post_meta( $collection, CollectionTrashCascade::TRASHED_BY_OWNER_META_KEY, true )
+			(string) get_post_meta( $collection, DocumentToCollectionTrashCascade::TRASHED_BY_OWNER_META_KEY, true )
 		);
 	}
 
@@ -162,7 +163,7 @@ final class Test_Collection_Trash_Cascade extends BaseTestCase {
 		$this->assertSame( 'trash', get_post_status( $collection ) );
 		$this->assertSame(
 			(string) $page_id,
-			(string) get_post_meta( $collection, CollectionTrashCascade::TRASHED_BY_OWNER_META_KEY, true )
+			(string) get_post_meta( $collection, DocumentToCollectionTrashCascade::TRASHED_BY_OWNER_META_KEY, true )
 		);
 	}
 
@@ -178,7 +179,7 @@ final class Test_Collection_Trash_Cascade extends BaseTestCase {
 		$this->assertNotSame( 'trash', get_post_status( $collection ) );
 		$this->assertSame(
 			'',
-			(string) get_post_meta( $collection, CollectionTrashCascade::TRASHED_BY_OWNER_META_KEY, true )
+			(string) get_post_meta( $collection, DocumentToCollectionTrashCascade::TRASHED_BY_OWNER_META_KEY, true )
 		);
 	}
 
@@ -216,15 +217,15 @@ final class Test_Collection_Trash_Cascade extends BaseTestCase {
 		$this->assertSame( 'trash', get_post_status( $collection ) );
 		$this->assertSame(
 			(string) $row_id,
-			(string) get_post_meta( $collection, CollectionTrashCascade::TRASHED_BY_OWNER_META_KEY, true )
+			(string) get_post_meta( $collection, DocumentToCollectionTrashCascade::TRASHED_BY_OWNER_META_KEY, true )
 		);
 	}
 
 	public function test_trashing_a_collection_does_not_invoke_this_cascade(): void {
 		// Collections are documents themselves now, so wp_trash_post for a
-		// collection would otherwise trigger this cascade. The collection →
-		// row direction lives in RowTrashCascade, not here; this cascade
-		// stays as a no-op for collections.
+		// collection would otherwise trigger this cascade. CollectionToRowTrashCascade
+		// owns collection rows, so this cascade stays as a no-op for
+		// collections.
 		$collection_id = $this->create_full_page_collection();
 
 		wp_trash_post( $collection_id );
@@ -232,7 +233,7 @@ final class Test_Collection_Trash_Cascade extends BaseTestCase {
 		$this->assertSame( 'trash', get_post_status( $collection_id ) );
 		$this->assertSame(
 			'',
-			(string) get_post_meta( $collection_id, CollectionTrashCascade::TRASHED_BY_OWNER_META_KEY, true ),
+			(string) get_post_meta( $collection_id, DocumentToCollectionTrashCascade::TRASHED_BY_OWNER_META_KEY, true ),
 			'A collection moving to Trash must not stamp itself with the owner-page marker.'
 		);
 	}

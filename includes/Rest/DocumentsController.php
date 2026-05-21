@@ -5,8 +5,8 @@
  * Lists every post type that opts into the `cortext-document` trait (pages
  * plus collection rows) from one endpoint, so callers do not need to rebuild
  * the post-type list. Also owns restore and permanent-delete for documents in
- * trash; both walk the `PageTrashCascade` marker chain so descendants come
- * along with their root.
+ * trash; both ask `TrashCascadeEngine` for the page hierarchy snapshot so
+ * descendants move with their root.
  *
  * Single-resource reads still go through `DocumentLocatorController` plus
  * `/wp/v2/<rest_base>/<id>`.
@@ -19,8 +19,12 @@ declare( strict_types=1 );
 namespace Cortext\Rest;
 
 use Cortext\Documents;
+use Cortext\PostType\Cascade\CollectionToRowTrashCascade;
+use Cortext\PostType\Cascade\DocumentToCollectionTrashCascade;
+use Cortext\PostType\Cascade\PageHierarchyTrashCascade;
+use Cortext\PostType\CollectionEntries;
 use Cortext\PostType\Page;
-use Cortext\PostType\PageTrashCascade;
+use Cortext\PostType\TrashCascadeEngine;
 use WP_Error;
 use WP_Post;
 use WP_REST_Request;
@@ -32,11 +36,17 @@ final class DocumentsController {
 
 	private Documents $documents;
 
-	private PageTrashCascade $cascade;
+	private TrashCascadeEngine $cascade;
 
-	public function __construct( ?Documents $documents = null, ?PageTrashCascade $cascade = null ) {
+	public function __construct( ?Documents $documents = null, ?TrashCascadeEngine $cascade = null ) {
 		$this->documents = $documents ?? new Documents();
-		$this->cascade   = $cascade ?? new PageTrashCascade();
+		$this->cascade   = $cascade ?? new TrashCascadeEngine(
+			array(
+				new PageHierarchyTrashCascade(),
+				new DocumentToCollectionTrashCascade(),
+				new CollectionToRowTrashCascade( new CollectionEntries() ),
+			)
+		);
 	}
 
 	public function register(): void {
@@ -226,8 +236,8 @@ final class DocumentsController {
 
 		// Hook deleted_post so the response includes every id that
 		// disappeared during this request: explicit page descendants, the
-		// document itself, and posts removed by other cascades (RowTrashCascade
-		// wipes a collection's rows on before_delete_post, for example).
+		// document itself, and posts removed by other cascades (collection
+		// rows or owned collections deleted on before_delete_post).
 		$deleted = array();
 		$capture = static function ( $deleted_post_id ) use ( &$deleted ): void {
 			$deleted[] = (int) $deleted_post_id;
@@ -235,8 +245,9 @@ final class DocumentsController {
 		add_action( 'deleted_post', $capture );
 
 		try {
-			// PageTrashCascade descendants are deleted leaves-first so WP's
-			// hierarchical-delete reparenting has nothing to do for any non-leaf.
+			// Page descendants are deleted leaves-first so WordPress's
+			// hierarchical delete reparenting has no non-leaf pages left to
+			// move.
 			$descendants = $this->cascade->descendants_for_root( $id );
 			foreach ( array_reverse( $descendants ) as $descendant_id ) {
 				wp_delete_post( $descendant_id, true );

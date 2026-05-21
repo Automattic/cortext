@@ -9,13 +9,13 @@ declare( strict_types=1 );
 
 namespace Cortext\Tests;
 
+use Cortext\PostType\Cascade\DocumentToCollectionTrashCascade;
+use Cortext\PostType\Cascade\PageHierarchyTrashCascade;
 use Cortext\PostType\Collection;
 use Cortext\PostType\CollectionEntries;
-use Cortext\PostType\CollectionTrashCascade;
 use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Field;
 use Cortext\PostType\Page;
-use Cortext\PostType\PageTrashCascade;
 use Cortext\Rest\DocumentsController;
 use WorDBless\BaseTestCase;
 use WP_REST_Request;
@@ -142,7 +142,7 @@ final class Test_Rest_Documents_Controller extends BaseTestCase {
 				'post_parent' => 123,
 				'meta_input'  => array(
 					DocumentIdentity::META_KEY => '{"type":"emoji","value":"P"}',
-					PageTrashCascade::META_KEY => '99',
+					PageHierarchyTrashCascade::META_KEY => '99',
 				),
 			)
 		);
@@ -165,7 +165,7 @@ final class Test_Rest_Documents_Controller extends BaseTestCase {
 		$page = $by_id[ $page_id ];
 		$this->assertSame( 'page', $page['kind'] );
 		$this->assertSame( 123, $page['parent'] );
-		$this->assertSame( 99, $page['meta'][ PageTrashCascade::META_KEY ] );
+		$this->assertSame( 99, $page['meta'][ PageHierarchyTrashCascade::META_KEY ] );
 		$this->assertSame( '{"type":"emoji","value":"P"}', $page['meta']['cortext_document_icon'] );
 
 		$row = $by_id[ $row_id ];
@@ -190,7 +190,7 @@ final class Test_Rest_Documents_Controller extends BaseTestCase {
 					'slug'                                       => 'action-items',
 					Collection::MODE_META_KEY                    => Collection::MODE_INLINE,
 					Collection::INLINE_OWNER_META_KEY            => $owner_page,
-					CollectionTrashCascade::TRASHED_BY_OWNER_META_KEY => $owner_page,
+					DocumentToCollectionTrashCascade::TRASHED_BY_OWNER_META_KEY => $owner_page,
 				),
 			)
 		);
@@ -202,7 +202,7 @@ final class Test_Rest_Documents_Controller extends BaseTestCase {
 		$this->assertArrayHasKey( $inline_id, $by_id );
 		$this->assertSame(
 			$owner_page,
-			$by_id[ $inline_id ]['meta'][ CollectionTrashCascade::TRASHED_BY_OWNER_META_KEY ]
+			$by_id[ $inline_id ]['meta'][ DocumentToCollectionTrashCascade::TRASHED_BY_OWNER_META_KEY ]
 		);
 	}
 
