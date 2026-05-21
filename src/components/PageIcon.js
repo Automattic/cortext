@@ -111,6 +111,10 @@ function ImageIcon( { id, size, alt, className } ) {
 					loading="lazy"
 					decoding="async"
 					onLoad={ () => setHasImagePainted( true ) }
+					// Drop the swatch on a failed fetch too. Without this the
+					// swatch pulses forever for 404s or deleted media; we'd
+					// rather show the browser's broken-image fallback.
+					onError={ () => setHasImagePainted( true ) }
 					style={ { opacity: hasImagePainted ? 1 : 0 } }
 				/>
 			) }
