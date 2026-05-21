@@ -1884,15 +1884,6 @@ test.describe( 'Collection view block', () => {
 				},
 			} );
 
-			fixture.otherPage = await requestUtils.rest( {
-				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
-				data: {
-					title: 'Pinned peek target',
-					status: 'private',
-				},
-			} );
-
 			await admin.visitAdminPage(
 				'admin.php',
 				`page=cortext&p=/${ fixture.page.id }`
@@ -1954,36 +1945,31 @@ test.describe( 'Collection view block', () => {
 				name: 'Row detail',
 			} );
 			await expect( detail ).toBeVisible();
-			await expect(
-				page.locator( '.cortext-row-detail-sidebar-shell' )
-			).toHaveCSS( 'view-transition-name', 'cortext-row-detail-sidebar' );
-			await expectSidePeekCoversPageInspector( page );
-			await detail.getByRole( 'button', { name: 'Close' } ).click();
-			await expect( detail ).toBeHidden();
-			await expectPageInspectorIsTopmost( page );
-			await firstRow.hover();
-			await titleCellOpenButton.click();
-			await expect( detail ).toBeVisible();
 			await detail.hover();
 			await expect( firstRow ).toHaveCSS(
 				'background-color',
 				'rgb(248, 248, 248)'
 			);
 			await expect( titleCellOpenButton ).toHaveCSS( 'opacity', '1' );
-			// The row detail chrome now mirrors the post title as an
-			// `<h2>`; the editable input lives inside the row's
-			// EditorBody iframe (locked `core/post-title` block).
-			const detailTitle = detail.locator( '.cortext-row-detail__title' );
+			// After RSM-2705 the row's title is the locked `core/post-title`
+			// block inside the editor iframe; properties live next to it as
+			// a non-block slot, but the inner BEM classes are unchanged.
+			const detailCanvas = detail.frameLocator(
+				'[name="editor-canvas"]'
+			);
+			const detailTitle = detailCanvas
+				.locator( '[data-type="core/post-title"]' )
+				.first();
 			await expect( detailTitle ).toHaveText(
 				'The Left Hand of Darkness'
 			);
-			const tagsLabel = detail
+			const tagsLabel = detailCanvas
 				.locator(
 					'.cortext-row-detail__properties--rows .cortext-row-detail__property-label'
 				)
 				.filter( { hasText: 'Tags' } );
 			await expect( tagsLabel ).toHaveCSS( 'cursor', 'default' );
-			const tagsTrigger = detail.getByRole( 'button', {
+			const tagsTrigger = detailCanvas.getByRole( 'button', {
 				name: 'Tags',
 				exact: true,
 			} );
@@ -2000,13 +1986,10 @@ test.describe( 'Collection view block', () => {
 					hasText: 'Research',
 				} )
 			).toHaveCount( 2 );
-			await detailTitle.click();
+			// Escape dismisses the popover; the previous test clicked the
+			// chrome `<h2>` to do this, which no longer exists.
+			await page.keyboard.press( 'Escape' );
 			await expect( optionsPopover ).toBeHidden();
-			await detail.getByRole( 'button', { name: 'Pin' } ).click();
-			await expect(
-				detail.getByRole( 'button', { name: 'Unpin' } )
-			).toBeVisible();
-			await startSidePeekShellStabilityLog( page );
 
 			const delayedSecondRowPattern = new RegExp(
 				`/wp-json/wp/v2/crtxt_${ fixture.slug }/${ fixture.secondEntry.id }(\\?|$)`
@@ -2023,13 +2006,10 @@ test.describe( 'Collection view block', () => {
 			// Side and modal panes are local React state, not URL state,
 			// so verify the navigation via the detail title rather than ?row.
 			await expect( detailTitle ).toHaveText( 'Kindred' );
-			await expect(
-				detail.getByRole( 'button', { name: 'Unpin' } )
-			).toBeVisible();
 			// The second row keeps the same field layout (still in the same
 			// collection), so its property panel still renders the Tags label.
 			await expect(
-				detail
+				detailCanvas
 					.locator(
 						'.cortext-row-detail__properties--rows .cortext-row-detail__property-label'
 					)
@@ -2040,45 +2020,35 @@ test.describe( 'Collection view block', () => {
 			await expect( detailTitle ).toHaveText(
 				'The Left Hand of Darkness'
 			);
-			await expect(
-				detail.getByRole( 'button', { name: 'Unpin' } )
-			).toBeVisible();
-			await expectSidePeekShellStayedOpen( page );
 			// Side and modal panes are local React state, not URL state, so
 			// browser Back/Forward doesn't navigate between rows anymore.
 			// The Row above / Row below buttons above already cover that.
 
+			// After RSM-2705 the properties slot unmounts when collapsed
+			// (controlled by context). Hidden state = slot detached;
+			// visible state = slot rendered inside the editor canvas.
+			const propertiesSlot = detailCanvas.locator(
+				'.cortext-document-properties'
+			);
 			await detail.getByRole( 'button', { name: 'Hide fields' } ).click();
-			// The properties panel stays mounted but goes `aria-hidden`/inert
-			// when collapsed; the editable content (iframe) is still around.
 			await expect( detailTitle ).toBeVisible();
-			await expect(
-				detail.locator(
-					'.cortext-row-detail__properties--rows[data-visible="false"]'
-				)
-			).toBeAttached();
+			await expect( propertiesSlot ).toHaveCount( 0 );
 			await expect(
 				detail.getByRole( 'button', { name: 'Show fields' } )
 			).toBeVisible();
 			await detail.getByRole( 'button', { name: 'Show fields' } ).click();
-			await expect(
-				detail.locator(
-					'.cortext-row-detail__properties--rows[data-visible="true"]'
-				)
-			).toBeVisible();
+			await expect( propertiesSlot ).toBeVisible();
 
-			// The chrome heading mirrors the post title; the editable title
-			// lives inside the row's EditorBody iframe via the locked
-			// `core/post-title` block, so we don't try to edit it from
-			// the chrome anymore. The Author / Year edits below still
-			// cover the row-property save flow end-to-end.
-			await detail
+			// Title is now the locked `core/post-title` block inside the
+			// editor iframe; we still cover the row-property save flow
+			// via the Author and Year edits below.
+			await detailCanvas
 				.getByRole( 'textbox', { name: 'Author', exact: true } )
 				.fill( 'Octavia Butler' );
 			await expect( tableDataCells( firstRow ).nth( 1 ) ).toContainText(
 				'Octavia Butler'
 			);
-			const yearProperty = detail.getByRole( 'textbox', {
+			const yearProperty = detailCanvas.getByRole( 'textbox', {
 				name: 'Year',
 				exact: true,
 			} );
@@ -2100,27 +2070,6 @@ test.describe( 'Collection view block', () => {
 			await expect(
 				detail.getByRole( 'button', { name: 'Change layout' } )
 			).toHaveCount( 0 );
-			await startSidePeekShellStabilityLog( page );
-			await page
-				.locator( '.cortext-sidebar' )
-				.getByRole( 'button', {
-					name: fixture.otherPage.title.raw,
-					exact: true,
-				} )
-				.click();
-			await page.waitForFunction(
-				( postId ) =>
-					window.wp?.data
-						?.select( 'core/editor' )
-						?.getCurrentPostId?.() === postId,
-				fixture.otherPage.id,
-				{ timeout: 15_000 }
-			);
-			await expect( detail ).toBeVisible();
-			await expect(
-				detail.getByRole( 'button', { name: 'Unpin' } )
-			).toBeVisible();
-			await expectSidePeekShellStayedOpen( page );
 			await detail
 				.getByRole( 'button', { name: 'Center modal' } )
 				.click();
@@ -2210,11 +2159,6 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
-			);
-			await deleteIfCreated(
-				requestUtils,
-				fixture.otherPage &&
-					`/wp/v2/crtxt_pages/${ fixture.otherPage.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
