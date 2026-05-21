@@ -5228,6 +5228,14 @@ thead > tr > th {
 		width: 100%;
 		height: 100%;
 		object-fit: cover;
+		// Pair with the inline `opacity: hasImagePainted ? 1 : 0` on the
+		// img so the cover fades in instead of popping after the bytes
+		// decode. Reduced motion ignores the fade.
+		transition: opacity 180ms ease-out;
+
+		@media (prefers-reduced-motion: reduce) {
+			transition: none;
+		}
 	}
 
 	&__controls {
