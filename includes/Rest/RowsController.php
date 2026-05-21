@@ -338,9 +338,11 @@ final class RowsController {
 		$where_parts  = array_values( array_filter( array( $filter_sql['where'], $search_where ) ) );
 		$where_sql    = count( $where_parts ) > 0 ? '( ' . implode( ' AND ', $where_parts ) . ' )' : '';
 
-		// Precompute which fields are multi-value so format_row does not
-		// re-fetch the field type for every row.
-		$multi_field_ids = $this->multi_value_field_ids( $field_ids );
+		// Keep row-formatting metadata local to this rows response. Passing the
+		// context through the helpers avoids stale state in CLI and test runs.
+		$ctx              = new RowFormatContext();
+		$ctx->field_types = $this->field_types_map( $field_ids );
+		$multi_field_ids  = $this->multi_value_field_ids_from( $ctx->field_types );
 
 		$query_args = $this->build_query_args( $request, $slug );
 		$scope      = new RowsQueryScope(
@@ -357,9 +359,16 @@ final class RowsController {
 		// running N+1 queries.
 		$this->prime_user_cache( $query->posts );
 
+		// Prime related rows once before formatting. Relation chips need post
+		// objects, and rollups need post meta.
+		$related_ids = $this->collect_related_row_ids( $query->posts, $field_ids, $ctx );
+		if ( count( $related_ids ) > 0 ) {
+			_prime_post_caches( $related_ids, false, true );
+		}
+
 		$rows = array_map(
-			function ( WP_Post $post ) use ( $field_ids, $multi_field_ids ) {
-				return $this->format_row( $post, $field_ids, $multi_field_ids );
+			function ( WP_Post $post ) use ( $field_ids, $multi_field_ids, $ctx ) {
+				return $this->format_row( $post, $field_ids, $multi_field_ids, $ctx );
 			},
 			$query->posts
 		);
@@ -822,16 +831,24 @@ final class RowsController {
 	/**
 	 * Formats resolved references for a relation field.
 	 *
-	 * @param int $row_id   Row post ID.
-	 * @param int $field_id Relation field post ID.
+	 * @param int                   $row_id   Row post ID.
+	 * @param int                   $field_id Relation field post ID.
+	 * @param RowFormatContext|null $ctx      Formatting context for rows responses.
 	 * @return array<int,array{id:int,slug:string,title:array{raw:string,rendered:string},collectionId:int,collectionSlug:string}>
 	 */
-	private function format_relation_value( int $row_id, int $field_id ): array {
-		$target_collection_id = (int) get_post_meta( $field_id, 'related_collection_id', true );
-		$target_slug          = (string) get_post_meta( $target_collection_id, 'slug', true );
-		$refs                 = array();
+	private function format_relation_value( int $row_id, int $field_id, ?RowFormatContext $ctx = null ): array {
+		$relation_meta        = $this->relation_field_meta_for( $field_id, $ctx );
+		$target_collection_id = $relation_meta['related_collection_id'];
+		$target_slug          = $relation_meta['target_slug'];
 
-		foreach ( $this->visible_relation_values( $row_id, $field_id ) as $target_id ) {
+		// Prime raw targets before filtering; the filter calls `get_post`.
+		$raw_ids = Relations::relation_values( $row_id, $field_id );
+		if ( count( $raw_ids ) > 0 ) {
+			_prime_post_caches( $raw_ids, false, true );
+		}
+
+		$refs = array();
+		foreach ( $this->visible_relation_values_from_ids( $raw_ids ) as $target_id ) {
 			$target = get_post( $target_id );
 			if ( ! $target instanceof WP_Post ) {
 				continue;
@@ -852,6 +869,70 @@ final class RowsController {
 	}
 
 	/**
+	 * Reads relation field config through the current formatting context.
+	 *
+	 * @param int                   $field_id Relation field post ID.
+	 * @param RowFormatContext|null $ctx      Optional formatting context.
+	 * @return array{related_collection_id: int, target_slug: string}
+	 */
+	private function relation_field_meta_for( int $field_id, ?RowFormatContext $ctx ): array {
+		if ( null !== $ctx && isset( $ctx->relation_field_meta[ $field_id ] ) ) {
+			return $ctx->relation_field_meta[ $field_id ];
+		}
+		$target_collection_id = (int) get_post_meta( $field_id, 'related_collection_id', true );
+		$entry                = array(
+			'related_collection_id' => $target_collection_id,
+			'target_slug'           => (string) get_post_meta( $target_collection_id, 'slug', true ),
+		);
+		if ( null !== $ctx ) {
+			$ctx->relation_field_meta[ $field_id ] = $entry;
+		}
+		return $entry;
+	}
+
+	/**
+	 * Reads rollup field config through the current formatting context.
+	 *
+	 * @param int                   $field_id Rollup field post ID.
+	 * @param RowFormatContext|null $ctx      Optional formatting context.
+	 * @return array{relation_field_id: int, target_field_id: int, aggregator: string}
+	 */
+	private function rollup_field_meta_for( int $field_id, ?RowFormatContext $ctx ): array {
+		if ( null !== $ctx && isset( $ctx->rollup_field_meta[ $field_id ] ) ) {
+			return $ctx->rollup_field_meta[ $field_id ];
+		}
+		$aggregator = (string) get_post_meta( $field_id, 'rollup_aggregator', true );
+		$entry      = array(
+			'relation_field_id' => (int) get_post_meta( $field_id, 'rollup_relation_field_id', true ),
+			'target_field_id'   => (int) get_post_meta( $field_id, 'rollup_target_field_id', true ),
+			'aggregator'        => '' === $aggregator ? 'count' : $aggregator,
+		);
+		if ( null !== $ctx ) {
+			$ctx->rollup_field_meta[ $field_id ] = $entry;
+		}
+		return $entry;
+	}
+
+	/**
+	 * Reads the field type for a rollup target field. Target fields share the
+	 * `field_types` cache with the rendering collection's fields; both are
+	 * just `field_id => type` and never disagree on the same ID.
+	 *
+	 * @param int                   $field_id Target field post ID.
+	 * @param RowFormatContext|null $ctx      Optional formatting context.
+	 */
+	private function target_field_type_for( int $field_id, ?RowFormatContext $ctx ): string {
+		if ( null !== $ctx && isset( $ctx->field_types[ $field_id ] ) ) {
+			return $ctx->field_types[ $field_id ];
+		}
+		$type = (string) get_post_meta( $field_id, 'type', true );
+		if ( null !== $ctx ) {
+			$ctx->field_types[ $field_id ] = $type;
+		}
+		return $type;
+	}
+
+	/**
 	 * Returns relation targets that should show up now. Trashed targets stay in
 	 * meta so restore can bring the relation back, but chips and rollups ignore
 	 * them while they are in Trash.
@@ -861,8 +942,21 @@ final class RowsController {
 	 * @return int[]
 	 */
 	private function visible_relation_values( int $row_id, int $field_id ): array {
+		return $this->visible_relation_values_from_ids(
+			Relations::relation_values( $row_id, $field_id )
+		);
+	}
+
+	/**
+	 * Filters trashed targets out of raw relation IDs. Callers can prime the
+	 * post cache first, before this method starts calling `get_post`.
+	 *
+	 * @param int[] $raw_ids Raw target IDs from `Relations::relation_values`.
+	 * @return int[]
+	 */
+	private function visible_relation_values_from_ids( array $raw_ids ): array {
 		$ids = array();
-		foreach ( Relations::relation_values( $row_id, $field_id ) as $target_id ) {
+		foreach ( $raw_ids as $target_id ) {
 			$target = get_post( $target_id );
 			if ( $target instanceof WP_Post && 'trash' !== $target->post_status ) {
 				$ids[] = $target_id;
@@ -871,15 +965,19 @@ final class RowsController {
 		return $ids;
 	}
 
-	private function compute_rollup_value( int $row_id, int $field_id ): mixed {
-		$relation_field_id = (int) get_post_meta( $field_id, 'rollup_relation_field_id', true );
-		$target_field_id   = (int) get_post_meta( $field_id, 'rollup_target_field_id', true );
-		$aggregator        = (string) get_post_meta( $field_id, 'rollup_aggregator', true );
-		if ( '' === $aggregator ) {
-			$aggregator = 'count';
+	private function compute_rollup_value( int $row_id, int $field_id, ?RowFormatContext $ctx = null ): mixed {
+		$rollup_meta       = $this->rollup_field_meta_for( $field_id, $ctx );
+		$relation_field_id = $rollup_meta['relation_field_id'];
+		$target_field_id   = $rollup_meta['target_field_id'];
+		$aggregator        = $rollup_meta['aggregator'];
+
+		// Prime raw targets before filtering or reading rollup values.
+		$raw_ids = Relations::relation_values( $row_id, $relation_field_id );
+		if ( count( $raw_ids ) > 0 ) {
+			_prime_post_caches( $raw_ids, false, true );
 		}
 
-		$related_ids = $this->visible_relation_values( $row_id, $relation_field_id );
+		$related_ids = $this->visible_relation_values_from_ids( $raw_ids );
 		if ( 'count' === $aggregator ) {
 			return count( $related_ids );
 		}
@@ -888,12 +986,12 @@ final class RowsController {
 		}
 
 		if ( in_array( $aggregator, array( 'show_original', 'show_unique' ), true ) ) {
-			$values = $this->rollup_values( $related_ids, $target_field_id );
+			$values = $this->rollup_values( $related_ids, $target_field_id, $ctx );
 			return 'show_unique' === $aggregator ? $this->unique_rollup_values( $values ) : $values;
 		}
 
 		if ( in_array( $aggregator, array( 'count_values', 'count_unique', 'empty', 'not_empty', 'percent_empty', 'percent_not_empty' ), true ) ) {
-			return $this->count_rollup_value( $related_ids, $target_field_id, $aggregator );
+			return $this->count_rollup_value( $related_ids, $target_field_id, $aggregator, $ctx );
 		}
 
 		if ( in_array( $aggregator, array( 'earliest', 'latest' ), true ) ) {
@@ -931,14 +1029,15 @@ final class RowsController {
 	/**
 	 * Returns flattened, non-empty values from related rows for a target field.
 	 *
-	 * @param int[] $row_ids         Related row IDs.
-	 * @param int   $target_field_id Rollup target field post ID.
+	 * @param int[]                 $row_ids         Related row IDs.
+	 * @param int                   $target_field_id Rollup target field post ID.
+	 * @param RowFormatContext|null $ctx             Optional formatting context.
 	 * @return array<int,mixed>
 	 */
-	private function rollup_values( array $row_ids, int $target_field_id ): array {
+	private function rollup_values( array $row_ids, int $target_field_id, ?RowFormatContext $ctx = null ): array {
 		$values = array();
 		foreach ( $row_ids as $row_id ) {
-			foreach ( $this->rollup_values_for_row( $row_id, $target_field_id ) as $value ) {
+			foreach ( $this->rollup_values_for_row( $row_id, $target_field_id, $ctx ) as $value ) {
 				$values[] = $value;
 			}
 		}
@@ -948,14 +1047,15 @@ final class RowsController {
 	/**
 	 * Returns flattened values for one related row.
 	 *
-	 * @param int $row_id          Related row ID.
-	 * @param int $target_field_id Rollup target field post ID.
+	 * @param int                   $row_id          Related row ID.
+	 * @param int                   $target_field_id Rollup target field post ID.
+	 * @param RowFormatContext|null $ctx             Optional formatting context.
 	 * @return array<int,mixed>
 	 */
-	private function rollup_values_for_row( int $row_id, int $target_field_id ): array {
-		$type = (string) get_post_meta( $target_field_id, 'type', true );
+	private function rollup_values_for_row( int $row_id, int $target_field_id, ?RowFormatContext $ctx = null ): array {
+		$type = $this->target_field_type_for( $target_field_id, $ctx );
 		if ( 'relation' === $type ) {
-			return $this->format_relation_value( $row_id, $target_field_id );
+			return $this->format_relation_value( $row_id, $target_field_id, $ctx );
 		}
 
 		$key = Relations::meta_key( $target_field_id );
@@ -995,22 +1095,23 @@ final class RowsController {
 	/**
 	 * Computes count and percent rollups.
 	 *
-	 * @param int[]  $row_ids         Related row IDs.
-	 * @param int    $target_field_id Rollup target field post ID.
-	 * @param string $aggregator      Rollup aggregator.
+	 * @param int[]                 $row_ids         Related row IDs.
+	 * @param int                   $target_field_id Rollup target field post ID.
+	 * @param string                $aggregator      Rollup aggregator.
+	 * @param RowFormatContext|null $ctx             Optional formatting context.
 	 */
-	private function count_rollup_value( array $row_ids, int $target_field_id, string $aggregator ): int|float {
+	private function count_rollup_value( array $row_ids, int $target_field_id, string $aggregator, ?RowFormatContext $ctx = null ): int|float {
 		$total = count( $row_ids );
 		if ( 'count_values' === $aggregator ) {
-			return count( $this->rollup_values( $row_ids, $target_field_id ) );
+			return count( $this->rollup_values( $row_ids, $target_field_id, $ctx ) );
 		}
 		if ( 'count_unique' === $aggregator ) {
-			return count( $this->unique_rollup_values( $this->rollup_values( $row_ids, $target_field_id ) ) );
+			return count( $this->unique_rollup_values( $this->rollup_values( $row_ids, $target_field_id, $ctx ) ) );
 		}
 
 		$not_empty = 0;
 		foreach ( $row_ids as $row_id ) {
-			if ( count( $this->rollup_values_for_row( $row_id, $target_field_id ) ) > 0 ) {
+			if ( count( $this->rollup_values_for_row( $row_id, $target_field_id, $ctx ) ) > 0 ) {
 				++$not_empty;
 			}
 		}
@@ -1088,20 +1189,88 @@ final class RowsController {
 	}
 
 	/**
+	 * Returns a map of field ID to field type, reading post meta once per field.
+	 *
+	 * @param int[] $field_ids Field post IDs.
+	 * @return array<int, string>
+	 */
+	private function field_types_map( array $field_ids ): array {
+		$types = array();
+		foreach ( $field_ids as $field_id ) {
+			$types[ $field_id ] = (string) get_post_meta( $field_id, 'type', true );
+		}
+		return $types;
+	}
+
+	/**
 	 * Returns the subset of field IDs whose type stores multiple values.
 	 *
 	 * @param int[] $field_ids All field IDs for the collection.
 	 * @return array<int, true> Keyed by field ID for fast lookup.
 	 */
 	private function multi_value_field_ids( array $field_ids ): array {
+		return $this->multi_value_field_ids_from( $this->field_types_map( $field_ids ) );
+	}
+
+	/**
+	 * Builds the multi-value map from field types that were already loaded.
+	 *
+	 * @param array<int, string> $field_types Field ID => type.
+	 * @return array<int, true>
+	 */
+	private function multi_value_field_ids_from( array $field_types ): array {
 		$multi = array();
-		foreach ( $field_ids as $field_id ) {
-			$field_type = (string) get_post_meta( $field_id, 'type', true );
+		foreach ( $field_types as $field_id => $field_type ) {
 			if ( 'multiselect' === $field_type || ( 'relation' === $field_type && Relations::relation_is_multiple( $field_id ) ) ) {
 				$multi[ $field_id ] = true;
 			}
 		}
 		return $multi;
+	}
+
+	/**
+	 * Collects raw related row IDs for the current page.
+	 *
+	 * @param WP_Post[]        $posts      Posts in the current page.
+	 * @param int[]            $field_ids  Collection field IDs.
+	 * @param RowFormatContext $ctx        Formatting context to reuse later.
+	 * @return int[] Deduplicated list of related row IDs.
+	 */
+	private function collect_related_row_ids( array $posts, array $field_ids, RowFormatContext $ctx ): array {
+		if ( count( $posts ) === 0 ) {
+			return array();
+		}
+
+		$relation_field_ids = array();
+		foreach ( $field_ids as $field_id ) {
+			$type = $ctx->field_types[ $field_id ] ?? '';
+			if ( 'relation' === $type ) {
+				$relation_field_ids[ $field_id ] = true;
+				// The formatter needs this config later, so load it now.
+				$this->relation_field_meta_for( $field_id, $ctx );
+				continue;
+			}
+			if ( 'rollup' === $type ) {
+				$rollup_meta = $this->rollup_field_meta_for( $field_id, $ctx );
+				if ( $rollup_meta['relation_field_id'] > 0 ) {
+					$relation_field_ids[ $rollup_meta['relation_field_id'] ] = true;
+				}
+			}
+		}
+
+		if ( count( $relation_field_ids ) === 0 ) {
+			return array();
+		}
+
+		$ids = array();
+		foreach ( $posts as $post ) {
+			foreach ( array_keys( $relation_field_ids ) as $relation_field_id ) {
+				foreach ( Relations::relation_values( $post->ID, $relation_field_id ) as $target_id ) {
+					$ids[ $target_id ] = true;
+				}
+			}
+		}
+		return array_keys( $ids );
 	}
 
 	/**
@@ -1199,21 +1368,22 @@ final class RowsController {
 	/**
 	 * Formats a single row post for the response.
 	 *
-	 * @param WP_Post         $post            Entry post object.
-	 * @param int[]           $field_ids       Valid field IDs for the collection.
-	 * @param array<int,true> $multi_field_ids Field IDs that are multi-value.
+	 * @param WP_Post               $post            Entry post object.
+	 * @param int[]                 $field_ids       Valid field IDs for the collection.
+	 * @param array<int,true>       $multi_field_ids Field IDs that are multi-value.
+	 * @param RowFormatContext|null $ctx             Formatting context for rows responses.
 	 * @return array
 	 */
-	private function format_row( WP_Post $post, array $field_ids, array $multi_field_ids ): array {
+	private function format_row( WP_Post $post, array $field_ids, array $multi_field_ids, ?RowFormatContext $ctx = null ): array {
 		$meta = array();
 		foreach ( $field_ids as $field_id ) {
 			$key        = "field-{$field_id}";
-			$field_type = (string) get_post_meta( $field_id, 'type', true );
+			$field_type = $ctx->field_types[ $field_id ] ?? (string) get_post_meta( $field_id, 'type', true );
 
 			if ( 'relation' === $field_type ) {
-				$meta[ $key ] = $this->format_relation_value( $post->ID, $field_id );
+				$meta[ $key ] = $this->format_relation_value( $post->ID, $field_id, $ctx );
 			} elseif ( 'rollup' === $field_type ) {
-				$meta[ $key ] = $this->compute_rollup_value( $post->ID, $field_id );
+				$meta[ $key ] = $this->compute_rollup_value( $post->ID, $field_id, $ctx );
 			} else {
 				$meta[ $key ] = $this->format_typed_value(
 					$post->ID,

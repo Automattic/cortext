@@ -8,9 +8,11 @@ import {
 } from '@wordpress/components';
 import apiFetch from '@wordpress/api-fetch';
 import { rotateLeft, trash } from '@wordpress/icons';
+import { useNavigate } from '@tanstack/react-router';
 
 import PageIcon from './PageIcon';
 import { SidebarListSkeleton } from './Skeleton';
+import TypeToConfirmDialog from './TypeToConfirmDialog';
 import {
 	ACTIVE_PAGES_QUERY,
 	POST_TYPE,
@@ -31,9 +33,11 @@ const EMPTY_TRASHED_DOCUMENTS_STATE = {
 	refresh: () => {},
 };
 
-// Keep this in sync with `PageTrashCascade::META_KEY`. The Trash endpoint sends
-// this marker for every document so the sidebar can find cascade roots.
-const MARKER_META = '_cortext_trashed_by_parent';
+// Keep these in sync with the PHP cascade marker meta keys. Trash entries
+// carry a marker pointing at the cascade root (page → subpage, page → owned
+// inline collection) so the sidebar can fold descendants under their root.
+const PARENT_MARKER_META = '_cortext_trashed_by_parent';
+const OWNER_PAGE_MARKER_META = '_cortext_trashed_by_owner_page';
 
 export function computeSidebarTrashRoots( trashedDocuments = [] ) {
 	const all = Array.isArray( trashedDocuments ) ? trashedDocuments : [];
@@ -42,8 +46,17 @@ export function computeSidebarTrashRoots( trashedDocuments = [] ) {
 	);
 	const childrenByMarker = new Map();
 
-	const markerOf = ( document ) =>
-		Number( document.meta?.[ MARKER_META ] ?? 0 );
+	const markerOf = ( document ) => {
+		const meta = document.meta ?? {};
+		// Pages → subpages share the original marker. Pages → owned inline
+		// collections use a different key, but both point at a parent page
+		// that's the cascade root.
+		const parent = Number( meta[ PARENT_MARKER_META ] ?? 0 );
+		if ( parent > 0 ) {
+			return parent;
+		}
+		return Number( meta[ OWNER_PAGE_MARKER_META ] ?? 0 );
+	};
 
 	all.forEach( ( document ) => {
 		const marker = markerOf( document );
@@ -62,17 +75,25 @@ export function computeSidebarTrashRoots( trashedDocuments = [] ) {
 
 	const descendantCountById = new Map();
 	roots.forEach( ( root ) => {
-		let count = 0;
+		const counts = { pages: 0, collections: 0, total: 0 };
 		const stack = [ ...( childrenByMarker.get( root.id ) ?? [] ) ];
 		while ( stack.length ) {
 			const node = stack.pop();
-			count++;
+			counts.total++;
+			if ( node.kind === 'page' || node.type === POST_TYPE ) {
+				counts.pages++;
+			} else if (
+				node.kind === 'collection' ||
+				node.type === 'crtxt_collection'
+			) {
+				counts.collections++;
+			}
 			const kids = childrenByMarker.get( node.id );
 			if ( kids ) {
 				stack.push( ...kids );
 			}
 		}
-		descendantCountById.set( root.id, count );
+		descendantCountById.set( root.id, counts );
 	} );
 
 	return { roots, descendantCountById };
@@ -89,22 +110,45 @@ function documentKind( document ) {
 	if ( document?.kind ) {
 		return document.kind;
 	}
-	return document?.type === POST_TYPE ? 'page' : 'document';
+	if ( document?.type === POST_TYPE ) {
+		return 'page';
+	}
+	if ( document?.type === 'crtxt_collection' ) {
+		return 'collection';
+	}
+	return 'document';
 }
 
-function descendantLabel( kind, count ) {
-	if ( kind === 'page' ) {
-		return sprintf(
-			/* translators: %d: number of subpages */
-			_n( '%d subpage', '%d subpages', count, 'cortext' ),
-			count
-		);
+function descendantLabel( rootKind, counts ) {
+	// Mixed subtrees (page → subpage + page → owned inline collection) read
+	// as "%d nested items" so the wording stays honest. Pure subtrees keep
+	// the more specific noun.
+	if ( rootKind === 'page' ) {
+		if ( counts.pages > 0 && counts.collections === 0 ) {
+			return sprintf(
+				/* translators: %d: number of subpages */
+				_n( '%d subpage', '%d subpages', counts.pages, 'cortext' ),
+				counts.pages
+			);
+		}
+		if ( counts.collections > 0 && counts.pages === 0 ) {
+			return sprintf(
+				/* translators: %d: number of nested inline collections */
+				_n(
+					'%d collection',
+					'%d collections',
+					counts.collections,
+					'cortext'
+				),
+				counts.collections
+			);
+		}
 	}
 
 	return sprintf(
 		/* translators: %d: number of nested trashed documents */
-		_n( '%d nested item', '%d nested items', count, 'cortext' ),
-		count
+		_n( '%d nested item', '%d nested items', counts.total, 'cortext' ),
+		counts.total
 	);
 }
 
@@ -125,6 +169,10 @@ function descendantLabel( kind, count ) {
  * @param {number|null} props.selectedId            Currently-selected page id, used
  *                                                  to highlight a trashed document when
  *                                                  the canvas is showing it.
+ * @param {number|null} props.selectedCollectionId  Currently-selected collection id, so
+ *                                                  permanent delete can navigate away
+ *                                                  when the open collection (or one of
+ *                                                  its rows) is gone.
  * @param {Function}    props.onSelect              Opens a trashed document in
  *                                                  the canvas.
  * @param {Object}      props.trashedDocumentsState Trashed document query state.
@@ -132,9 +180,11 @@ function descendantLabel( kind, count ) {
 export default function SidebarTrash( {
 	activePages,
 	selectedId,
+	selectedCollectionId = null,
 	onSelect,
 	trashedDocumentsState = EMPTY_TRASHED_DOCUMENTS_STATE,
 } ) {
+	const navigate = useNavigate();
 	const {
 		documents: trashedDocuments,
 		isLoading: isResolvingTrash,
@@ -288,12 +338,14 @@ export default function SidebarTrash( {
 				path: `/cortext/v1/documents/${ id }/permanent-delete`,
 				method: 'POST',
 			} );
-			// If the canvas was showing one of the deleted pages, navigate
-			// away. Without this `useEntityRecord` would return undefined
-			// and the canvas would spin forever (the page is genuinely gone
-			// now, not just trashed).
+			// If the canvas was showing one of the deleted documents,
+			// navigate away. Without this `useEntityRecord` would return
+			// undefined and the canvas would spin forever (the document is
+			// genuinely gone now, not just trashed). Collections track via
+			// `selectedCollectionId`, so check both.
 			const deletedIds = response?.deleted ?? [];
-			if ( selectedId && deletedIds.includes( selectedId ) ) {
+			const openId = selectedId ?? selectedCollectionId;
+			if ( openId && deletedIds.includes( openId ) ) {
 				onSelect( null );
 			}
 			if ( kind === 'row' ) {
@@ -320,6 +372,7 @@ export default function SidebarTrash( {
 		refreshRows,
 		refreshTrash,
 		selectedId,
+		selectedCollectionId,
 		onSelect,
 	] );
 
@@ -332,9 +385,14 @@ export default function SidebarTrash( {
 	const hasError = Boolean( trashError && ! hasTrashCache );
 	const hasItems = roots.length > 0;
 	const pendingKind = pendingDelete ? documentKind( pendingDelete ) : null;
-	const pendingDescendantCount = pendingDelete
-		? descendantCountById.get( pendingDelete.id ) ?? 0
-		: 0;
+	const pendingDescendantCounts = pendingDelete
+		? descendantCountById.get( pendingDelete.id ) ?? {
+				pages: 0,
+				collections: 0,
+				total: 0,
+		  }
+		: { pages: 0, collections: 0, total: 0 };
+	const pendingDescendantCount = pendingDescendantCounts.total;
 	const retryTrashFetch = useCallback( () => {
 		invalidateResolution( 'getEntityRecords', [
 			'postType',
@@ -353,22 +411,46 @@ export default function SidebarTrash( {
 			"Permanently delete this row? You can't undo this.",
 			'cortext'
 		);
+	} else if ( pendingKind === 'collection' ) {
+		pendingDeleteMessage = __(
+			"Permanently delete this collection and all its rows? You can't undo this.",
+			'cortext'
+		);
 	} else if ( pendingKind === 'document' ) {
 		pendingDeleteMessage = __(
 			"Permanently delete this document? You can't undo this.",
 			'cortext'
 		);
 	} else if ( pendingDescendantCount > 0 ) {
-		pendingDeleteMessage = sprintf(
-			/* translators: %d: number of subpages that will be deleted along with the page. */
-			_n(
-				"Permanently delete this page and %d subpage? You can't undo this.",
-				"Permanently delete this page and %d subpages? You can't undo this.",
-				pendingDescendantCount,
-				'cortext'
-			),
-			pendingDescendantCount
-		);
+		// Mixed subtrees (subpages + inline collections) use the generic
+		// "nested items" wording so the count stays correct without
+		// pretending an inline collection is a subpage.
+		if (
+			pendingDescendantCounts.pages > 0 &&
+			pendingDescendantCounts.collections === 0
+		) {
+			pendingDeleteMessage = sprintf(
+				/* translators: %d: number of subpages that will be deleted along with the page. */
+				_n(
+					"Permanently delete this page and %d subpage? You can't undo this.",
+					"Permanently delete this page and %d subpages? You can't undo this.",
+					pendingDescendantCounts.pages,
+					'cortext'
+				),
+				pendingDescendantCounts.pages
+			);
+		} else {
+			pendingDeleteMessage = sprintf(
+				/* translators: %d: number of nested trashed items deleted along with the page. */
+				_n(
+					"Permanently delete this page and %d nested item? You can't undo this.",
+					"Permanently delete this page and %d nested items? You can't undo this.",
+					pendingDescendantCount,
+					'cortext'
+				),
+				pendingDescendantCount
+			);
+		}
 	}
 	if ( pendingDescendantCount > 0 && pendingKind === 'row' ) {
 		pendingDeleteMessage = sprintf(
@@ -431,10 +513,15 @@ export default function SidebarTrash( {
 						const isSelected = selectedId === document.id;
 						const error =
 							rowError?.id === document.id ? rowError : null;
-						const descendantCount =
-							descendantCountById.get( document.id ) ?? 0;
-						const meta = descendantCount
-							? descendantLabel( kind, descendantCount )
+						const descendantCounts = descendantCountById.get(
+							document.id
+						) ?? {
+							pages: 0,
+							collections: 0,
+							total: 0,
+						};
+						const meta = descendantCounts.total
+							? descendantLabel( kind, descendantCounts )
 							: '';
 						const collectionTitle =
 							kind === 'row'
@@ -443,6 +530,16 @@ export default function SidebarTrash( {
 										__( 'Collection', 'cortext' )
 								  )
 								: '';
+						// Inline collections are the only trash items with an
+						// owner. Show that page title when the owner is still
+						// active so similar inline tables are easier to tell
+						// apart.
+						const ownerTitle = document.owner
+							? titleText(
+									document.owner?.title,
+									__( 'Page', 'cortext' )
+							  )
+							: '';
 						const rowClasses = [ 'cortext-sidebar__row' ];
 						if ( isSelected ) {
 							rowClasses.push( 'is-selected' );
@@ -458,7 +555,12 @@ export default function SidebarTrash( {
 										className="cortext-sidebar__title cortext-sidebar__trash-text"
 										variant="tertiary"
 										onClick={ () =>
-											onSelect( document.id, document )
+											navigate( {
+												to: '/$',
+												params: {
+													_splat: document.path,
+												},
+											} )
 										}
 									>
 										<span className="cortext-sidebar__trash-title">
@@ -473,6 +575,7 @@ export default function SidebarTrash( {
 										</span>
 										{ ( breadcrumb.length > 0 ||
 											collectionTitle ||
+											ownerTitle ||
 											meta ) && (
 											<span className="cortext-sidebar__breadcrumb">
 												{ breadcrumb.map(
@@ -503,6 +606,9 @@ export default function SidebarTrash( {
 														</span>
 													)
 												) }
+												{ ownerTitle && (
+													<span>{ ownerTitle }</span>
+												) }
 												{ collectionTitle && (
 													<span>
 														{ collectionTitle }
@@ -512,7 +618,8 @@ export default function SidebarTrash( {
 													<>
 														{ ( breadcrumb.length >
 															0 ||
-															collectionTitle ) && (
+															collectionTitle ||
+															ownerTitle ) && (
 															<span aria-hidden="true">
 																{ ' · ' }
 															</span>
@@ -568,15 +675,34 @@ export default function SidebarTrash( {
 				</ul>
 			) }
 
-			{ pendingDelete !== null && (
-				<ConfirmDialog
-					onConfirm={ confirmPermanentDelete }
-					onCancel={ () => setPendingDelete( null ) }
-					confirmButtonText={ __( 'Delete permanently', 'cortext' ) }
-				>
-					{ pendingDeleteMessage }
-				</ConfirmDialog>
-			) }
+			{ pendingDelete !== null &&
+				( pendingKind === 'collection' ? (
+					<TypeToConfirmDialog
+						title={ __(
+							'Delete collection permanently?',
+							'cortext'
+						) }
+						message={ pendingDeleteMessage }
+						confirmPhrase={ titleText(
+							pendingDelete.title,
+							__( '(untitled)', 'cortext' )
+						) }
+						confirmLabel={ __( 'Delete permanently', 'cortext' ) }
+						onConfirm={ confirmPermanentDelete }
+						onCancel={ () => setPendingDelete( null ) }
+					/>
+				) : (
+					<ConfirmDialog
+						onConfirm={ confirmPermanentDelete }
+						onCancel={ () => setPendingDelete( null ) }
+						confirmButtonText={ __(
+							'Delete permanently',
+							'cortext'
+						) }
+					>
+						{ pendingDeleteMessage }
+					</ConfirmDialog>
+				) ) }
 		</>
 	);
 }

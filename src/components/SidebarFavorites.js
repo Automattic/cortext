@@ -110,6 +110,17 @@ export function filterFavoritesForTrashedPage(
 	} );
 }
 
+export function filterFavoritesForTrashedCollection( favorites, collectionId ) {
+	const target = Number( collectionId );
+	return favorites.filter(
+		( favorite ) =>
+			! (
+				favorite.kind === 'collection' &&
+				Number( favorite.id ) === target
+			)
+	);
+}
+
 export function resolveFavoriteItems( favorites, pages, collections ) {
 	const pagesById = new Map( pages.map( ( page ) => [ page.id, page ] ) );
 	const collectionsById = new Map(

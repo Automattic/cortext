@@ -30,7 +30,7 @@ const NO_PEEK_ACTIONS = {
 	closeDocument: () => {},
 	requestMode: () => {},
 };
-const NO_PEEK_STATE = { peek: null };
+const NO_PEEK_STATE = { peek: null, isPinned: false };
 
 const PeekActionsContext = createContext( NO_PEEK_ACTIONS );
 const PeekStateContext = createContext( NO_PEEK_STATE );
@@ -78,6 +78,12 @@ export function DocumentPeekProvider( { children } ) {
 	const peekRef = useRef( peek );
 	peekRef.current = peek;
 
+	// The pin lives in memory. Closing the peek or opening it full-page clears
+	// it, but row-to-row moves keep it so a pinned peek stays put.
+	const [ isPinned, setIsPinned ] = useState( false );
+	const isPinnedRef = useRef( isPinned );
+	isPinnedRef.current = isPinned;
+
 	// RowDetailView exposes flush/discard through onApi. Run it before close or
 	// row switches so unsaved edits do not vanish.
 	const detailApiRef = useRef( null );
@@ -119,9 +125,13 @@ export function DocumentPeekProvider( { children } ) {
 			if ( transition.type === 'close' ) {
 				clearModeSurfaceTransition();
 				setPeek( null );
+				setIsPinned( false );
 			} else if ( transition.type === 'peek' ) {
 				clearModeSurfaceTransition();
 				setPeek( transition.peek );
+				setIsPinned( ( current ) =>
+					transition.preservePin ? current : false
+				);
 			} else if ( transition.type === 'mode' ) {
 				setPeek( ( current ) =>
 					current ? { ...current, mode: transition.mode } : current
@@ -129,6 +139,7 @@ export function DocumentPeekProvider( { children } ) {
 			} else if ( transition.type === 'full' ) {
 				clearModeSurfaceTransition();
 				setPeek( null );
+				setIsPinned( false );
 				navigate( {
 					to: '/$',
 					params: { _splat: transition.uri },
@@ -201,6 +212,7 @@ export function DocumentPeekProvider( { children } ) {
 			const nextMode = isSticky
 				? currentMode
 				: normalizeRowDetailMode( preferredMode );
+			const preservePin = isSticky && isPinnedRef.current;
 
 			if ( nextMode === 'full' ) {
 				const uri = rowRoute( { id, slug } );
@@ -212,6 +224,7 @@ export function DocumentPeekProvider( { children } ) {
 
 			runTransition( {
 				type: 'peek',
+				preservePin,
 				peek: {
 					docId: id,
 					slug,
@@ -299,6 +312,7 @@ export function DocumentPeekProvider( { children } ) {
 			}
 			runTransition( {
 				type: 'peek',
+				preservePin: true,
 				peek: {
 					...current,
 					docId: nextRow.id,
@@ -321,11 +335,15 @@ export function DocumentPeekProvider( { children } ) {
 		}
 	}, [ pendingTransition, runTransition ] );
 
+	const togglePin = useCallback( () => {
+		setIsPinned( ( current ) => ! current );
+	}, [] );
+
 	const actions = useMemo(
 		() => ( { openDocument, closeDocument, requestMode } ),
 		[ openDocument, closeDocument, requestMode ]
 	);
-	const state = useMemo( () => ( { peek } ), [ peek ] );
+	const state = useMemo( () => ( { peek, isPinned } ), [ peek, isPinned ] );
 	const surface = useMemo(
 		() => ( {
 			modeSurfaceTransition,
@@ -334,6 +352,7 @@ export function DocumentPeekProvider( { children } ) {
 			goToAdjacentDocument,
 			retryPendingTransition,
 			discardPendingTransition,
+			togglePin,
 		} ),
 		[
 			modeSurfaceTransition,
@@ -342,6 +361,7 @@ export function DocumentPeekProvider( { children } ) {
 			goToAdjacentDocument,
 			retryPendingTransition,
 			discardPendingTransition,
+			togglePin,
 		]
 	);
 

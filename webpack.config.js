@@ -2,6 +2,8 @@ const path = require( 'path' );
 const webpack = require( 'webpack' );
 const defaultConfig = require( '@wordpress/scripts/config/webpack.config' );
 const DependencyExtractionWebpackPlugin = require( '@wordpress/dependency-extraction-webpack-plugin' );
+const MiniCssExtractPlugin = require( 'mini-css-extract-plugin' );
+const { BundleAnalyzerPlugin } = require( 'webpack-bundle-analyzer' );
 
 // `@wordpress/route` is not yet registered as a WP core script handle, so
 // wp-scripts' default externalization would emit a missing `wp-route`
@@ -43,6 +45,28 @@ module.exports = {
 		chunkIds: 'named',
 		moduleIds: 'named',
 	},
+	// Scope wp-scripts' default 244 KiB asset-size warning to the initial
+	// entry. Intentional lazy chunks (emoji-mart data, icon library, the
+	// editor split, the icons vendor chunk pulled by PageIconWp) are gated
+	// behind user actions, so flagging them is noise that drowns out the
+	// warning when index.js actually regresses. Source maps are dev-only
+	// and never served to end users. RTL stylesheets are alternates for
+	// LTR ones (browsers load one per request, never both), so counting
+	// them toward the entrypoint sum double-bills the user's payload.
+	performance: {
+		hints: 'warning',
+		assetFilter: ( assetFilename ) => {
+			if ( assetFilename.endsWith( '.map' ) ) {
+				return false;
+			}
+			if ( assetFilename.endsWith( '-rtl.css' ) ) {
+				return false;
+			}
+			return ! /^(emoji-mart-data|emoji-mart-react|icon-library-picker|page-icon-wp|editor|vendors-.*icons)/.test(
+				assetFilename
+			);
+		},
+	},
 	plugins: [
 		...defaultConfig.plugins.map( ( plugin ) => {
 			if ( plugin instanceof DependencyExtractionWebpackPlugin ) {
@@ -63,11 +87,41 @@ module.exports = {
 					},
 				} );
 			}
+			// Lazy CSS chunks (e.g. editor.css) need the same `?ver=...`
+			// cache buster the JS chunks get from output.chunkFilename
+			// above. Without this, webpack's runtime loads them as plain
+			// `editor.css`, so after a deploy the browser can pair fresh
+			// editor.js with a stale cached editor.css. wp-scripts' default
+			// MiniCssExtractPlugin instance only sets `filename`, so
+			// rebuild it with both options preserved.
+			if ( plugin instanceof MiniCssExtractPlugin ) {
+				return new MiniCssExtractPlugin( {
+					...plugin.options,
+					chunkFilename: '[name].css?ver=[contenthash]',
+				} );
+			}
 			return plugin;
 		} ),
 		new webpack.NormalModuleReplacementPlugin(
 			/@wordpress[\\/]route[\\/]build-module[\\/]lock-unlock\.mjs$/,
 			routeLockUnlockShim
 		),
+		...( process.env.ANALYZE
+			? [
+					new BundleAnalyzerPlugin( {
+						analyzerMode: 'static',
+						openAnalyzer: false,
+						reportFilename: path.resolve(
+							__dirname,
+							'build/bundle-report.html'
+						),
+						generateStatsFile: true,
+						statsFilename: path.resolve(
+							__dirname,
+							'build/bundle-stats.json'
+						),
+					} ),
+			  ]
+			: [] ),
 	],
 };

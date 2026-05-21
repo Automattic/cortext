@@ -60,7 +60,7 @@ final class DocumentsController {
 						'kind'     => array(
 							'type'    => 'string',
 							'default' => '',
-							'enum'    => array( '', Documents::KIND_PAGE, Documents::KIND_ROW ),
+							'enum'    => array( '', Documents::KIND_PAGE, Documents::KIND_ROW, Documents::KIND_COLLECTION ),
 						),
 						'status'   => array(
 							'type'    => 'string',
@@ -224,29 +224,40 @@ final class DocumentsController {
 			);
 		}
 
-		// Record the subtree, then delete leaves-first so WP's
-		// hierarchical-delete reparenting has nothing to do for any non-leaf.
-		$descendants = $this->cascade->descendants_for_root( $id );
-
+		// Hook deleted_post so the response includes every id that
+		// disappeared during this request: explicit page descendants, the
+		// document itself, and posts removed by other cascades (RowTrashCascade
+		// wipes a collection's rows on before_delete_post, for example).
 		$deleted = array();
-		foreach ( array_reverse( $descendants ) as $descendant_id ) {
-			if ( wp_delete_post( $descendant_id, true ) ) {
-				$deleted[] = $descendant_id;
+		$capture = static function ( $deleted_post_id ) use ( &$deleted ): void {
+			$deleted[] = (int) $deleted_post_id;
+		};
+		add_action( 'deleted_post', $capture );
+
+		try {
+			// PageTrashCascade descendants are deleted leaves-first so WP's
+			// hierarchical-delete reparenting has nothing to do for any non-leaf.
+			$descendants = $this->cascade->descendants_for_root( $id );
+			foreach ( array_reverse( $descendants ) as $descendant_id ) {
+				wp_delete_post( $descendant_id, true );
 			}
+
+			$root_deleted = wp_delete_post( $id, true );
+		} finally {
+			remove_action( 'deleted_post', $capture );
 		}
 
-		if ( ! wp_delete_post( $id, true ) ) {
+		if ( ! $root_deleted ) {
 			return new WP_Error(
 				'cortext_document_delete_failed',
 				__( 'Document could not be deleted.', 'cortext' ),
 				array( 'status' => 500 )
 			);
 		}
-		$deleted[] = $id;
 
 		return new WP_REST_Response(
 			array(
-				'deleted' => $deleted,
+				'deleted' => array_values( array_unique( $deleted ) ),
 			),
 			200
 		);

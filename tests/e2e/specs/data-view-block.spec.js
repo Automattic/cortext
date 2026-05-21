@@ -51,6 +51,156 @@ function tableFooterDataCells( footer ) {
 	return footer.locator( TABLE_FOOTER_DATA_CELL_SELECTOR );
 }
 
+async function expectSidePeekCoversPageInspector( page ) {
+	await expect
+		.poll( async () =>
+			page.evaluate( () => {
+				const inspector = document.querySelector(
+					'.cortext-shell__canvas .cortext-workspace__pane[data-active="true"] .interface-interface-skeleton__sidebar'
+				);
+				const peek = document.querySelector(
+					'.cortext-row-detail-sidebar-shell:not(.cortext-row-detail-sidebar-shell--closing)'
+				);
+
+				if ( ! inspector || ! peek ) {
+					return false;
+				}
+
+				const inspectorRect = inspector.getBoundingClientRect();
+				const peekRect = peek.getBoundingClientRect();
+				const overlapLeft = Math.max(
+					inspectorRect.left,
+					peekRect.left
+				);
+				const overlapRight = Math.min(
+					inspectorRect.right,
+					peekRect.right
+				);
+				const overlapTop = Math.max( inspectorRect.top, peekRect.top );
+				const overlapBottom = Math.min(
+					inspectorRect.bottom,
+					peekRect.bottom
+				);
+
+				if (
+					overlapRight <= overlapLeft ||
+					overlapBottom <= overlapTop
+				) {
+					return false;
+				}
+
+				const topElement = document.elementFromPoint(
+					( overlapLeft + overlapRight ) / 2,
+					( overlapTop + overlapBottom ) / 2
+				);
+				return Boolean(
+					topElement?.closest( '.cortext-row-detail-sidebar-shell' )
+				);
+			} )
+		)
+		.toBe( true );
+}
+
+async function expectPageInspectorIsTopmost( page ) {
+	await expect
+		.poll( async () =>
+			page.evaluate( () => {
+				const inspector = document.querySelector(
+					'.cortext-shell__canvas .cortext-workspace__pane[data-active="true"] .interface-interface-skeleton__sidebar'
+				);
+
+				if ( ! inspector ) {
+					return false;
+				}
+
+				const rect = inspector.getBoundingClientRect();
+				const topElement = document.elementFromPoint(
+					( rect.left + rect.right ) / 2,
+					( rect.top + rect.bottom ) / 2
+				);
+				return Boolean(
+					topElement?.closest(
+						'.interface-interface-skeleton__sidebar'
+					)
+				);
+			} )
+		)
+		.toBe( true );
+}
+
+async function startSidePeekShellStabilityLog( page ) {
+	await page.evaluate( () => {
+		window.__cortextSidePeekShellEvents = [];
+		window.__cortextSidePeekShellCleanup?.();
+
+		const shell = document.querySelector(
+			'.cortext-row-detail-sidebar-shell'
+		);
+		const logEvent = ( eventName ) => {
+			window.__cortextSidePeekShellEvents.push( eventName );
+		};
+
+		if ( ! shell ) {
+			logEvent( 'missing' );
+			return;
+		}
+
+		const onAnimationStart = ( event ) => {
+			if (
+				event.target === shell &&
+				[
+					'cortext-row-detail-sidebar-open',
+					'cortext-row-detail-sidebar-close',
+				].includes( event.animationName )
+			) {
+				logEvent( event.animationName );
+			}
+		};
+		const observer = new window.MutationObserver( ( records ) => {
+			for ( const record of records ) {
+				if (
+					record.type === 'attributes' &&
+					shell.classList.contains(
+						'cortext-row-detail-sidebar-shell--closing'
+					) &&
+					! window.__cortextSidePeekShellEvents.includes(
+						'closing-class'
+					)
+				) {
+					logEvent( 'closing-class' );
+				}
+				for ( const node of record.removedNodes ) {
+					if ( node === shell || node.contains?.( shell ) ) {
+						logEvent( 'removed' );
+					}
+				}
+			}
+		} );
+
+		shell.addEventListener( 'animationstart', onAnimationStart );
+		observer.observe( shell, {
+			attributes: true,
+			attributeFilter: [ 'class' ],
+		} );
+		observer.observe( document.body, {
+			childList: true,
+			subtree: true,
+		} );
+
+		window.__cortextSidePeekShellCleanup = () => {
+			shell.removeEventListener( 'animationstart', onAnimationStart );
+			observer.disconnect();
+		};
+	} );
+}
+
+async function expectSidePeekShellStayedOpen( page ) {
+	await page.waitForTimeout( 450 );
+	expect(
+		await page.evaluate( () => window.__cortextSidePeekShellEvents ?? [] )
+	).toEqual( [] );
+}
+
 async function createCollectionFixture( requestUtils ) {
 	const suffix = Date.now().toString( 36 ).slice( -4 );
 	const slug = `e2ebooks${ suffix }`;
@@ -1557,6 +1707,15 @@ test.describe( 'Collection view block', () => {
 				},
 			} );
 
+			fixture.otherPage = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_pages',
+				data: {
+					title: 'Pinned peek target',
+					status: 'private',
+				},
+			} );
+
 			await admin.visitAdminPage(
 				'admin.php',
 				`page=cortext&p=/${ fixture.page.id }`
@@ -1618,6 +1777,16 @@ test.describe( 'Collection view block', () => {
 				name: 'Row detail',
 			} );
 			await expect( detail ).toBeVisible();
+			await expect(
+				page.locator( '.cortext-row-detail-sidebar-shell' )
+			).toHaveCSS( 'view-transition-name', 'cortext-row-detail-sidebar' );
+			await expectSidePeekCoversPageInspector( page );
+			await detail.getByRole( 'button', { name: 'Close' } ).click();
+			await expect( detail ).toBeHidden();
+			await expectPageInspectorIsTopmost( page );
+			await firstRow.hover();
+			await titleCellOpenButton.click();
+			await expect( detail ).toBeVisible();
 			await detail.hover();
 			await expect( firstRow ).toHaveCSS(
 				'background-color',
@@ -1656,6 +1825,11 @@ test.describe( 'Collection view block', () => {
 			).toHaveCount( 2 );
 			await detailTitle.click();
 			await expect( optionsPopover ).toBeHidden();
+			await detail.getByRole( 'button', { name: 'Pin' } ).click();
+			await expect(
+				detail.getByRole( 'button', { name: 'Unpin' } )
+			).toBeVisible();
+			await startSidePeekShellStabilityLog( page );
 
 			const delayedSecondRowPattern = new RegExp(
 				`/wp-json/wp/v2/crtxt_${ fixture.slug }/${ fixture.secondEntry.id }(\\?|$)`
@@ -1672,6 +1846,9 @@ test.describe( 'Collection view block', () => {
 			// Side and modal panes are local React state, not URL state,
 			// so verify the navigation via the detail title rather than ?row.
 			await expect( detailTitle ).toHaveText( 'Kindred' );
+			await expect(
+				detail.getByRole( 'button', { name: 'Unpin' } )
+			).toBeVisible();
 			// The second row keeps the same field layout (still in the same
 			// collection), so its property panel still renders the Tags label.
 			await expect(
@@ -1686,6 +1863,10 @@ test.describe( 'Collection view block', () => {
 			await expect( detailTitle ).toHaveText(
 				'The Left Hand of Darkness'
 			);
+			await expect(
+				detail.getByRole( 'button', { name: 'Unpin' } )
+			).toBeVisible();
+			await expectSidePeekShellStayedOpen( page );
 			// Side and modal panes are local React state, not URL state, so
 			// browser Back/Forward doesn't navigate between rows anymore.
 			// The Row above / Row below buttons above already cover that.
@@ -1742,6 +1923,27 @@ test.describe( 'Collection view block', () => {
 			await expect(
 				detail.getByRole( 'button', { name: 'Change layout' } )
 			).toHaveCount( 0 );
+			await startSidePeekShellStabilityLog( page );
+			await page
+				.locator( '.cortext-sidebar' )
+				.getByRole( 'button', {
+					name: fixture.otherPage.title.raw,
+					exact: true,
+				} )
+				.click();
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.otherPage.id,
+				{ timeout: 15_000 }
+			);
+			await expect( detail ).toBeVisible();
+			await expect(
+				detail.getByRole( 'button', { name: 'Unpin' } )
+			).toBeVisible();
+			await expectSidePeekShellStayedOpen( page );
 			await detail
 				.getByRole( 'button', { name: 'Center modal' } )
 				.click();
@@ -1831,6 +2033,11 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.otherPage &&
+					`/wp/v2/crtxt_pages/${ fixture.otherPage.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,

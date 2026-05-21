@@ -1,5 +1,12 @@
 import { __, sprintf } from '@wordpress/i18n';
-import { Button, Dropdown, MenuGroup, MenuItem } from '@wordpress/components';
+import {
+	Button,
+	Dropdown,
+	MenuGroup,
+	MenuItem,
+	TextControl,
+} from '@wordpress/components';
+import { useEffect, useRef, useState } from '@wordpress/element';
 import {
 	Icon,
 	customPostType,
@@ -31,6 +38,11 @@ export default function CollectionRow( {
 	onSelect,
 	onToggleFavorite,
 	onSetHome,
+	onRename,
+	onDuplicate,
+	onTrash,
+	autoRenameId = null,
+	onAutoRenameConsumed,
 	depth = 0,
 	draggedId = null,
 	activeDrop = null,
@@ -38,6 +50,60 @@ export default function CollectionRow( {
 } ) {
 	const title = collectionTitle( collection );
 	const isBeingDragged = draggedId === collection.id;
+
+	const [ isRenaming, setIsRenaming ] = useState( false );
+	const [ draftTitle, setDraftTitle ] = useState( '' );
+	const renameInputRef = useRef( null );
+
+	// The parent sets `autoRenameId` after create or duplicate so this row
+	// opens its title editor as soon as it renders.
+	useEffect( () => {
+		if ( autoRenameId === collection.id ) {
+			setDraftTitle(
+				collection.title?.raw ?? collection.title?.rendered ?? ''
+			);
+			setIsRenaming( true );
+			onAutoRenameConsumed?.();
+		}
+	}, [
+		autoRenameId,
+		collection.id,
+		collection.title?.raw,
+		collection.title?.rendered,
+		onAutoRenameConsumed,
+	] );
+
+	// TextControl keeps the real input inside its wrapper, so focus and select
+	// that inner input when rename mode opens.
+	useEffect( () => {
+		if ( isRenaming && renameInputRef.current ) {
+			const input = renameInputRef.current.querySelector( 'input' );
+			input?.focus();
+			input?.select();
+		}
+	}, [ isRenaming ] );
+
+	function commitRename() {
+		const next = draftTitle.trim();
+		if (
+			next &&
+			next !== ( collection.title?.raw ?? collection.title?.rendered )
+		) {
+			onRename?.( collection.id, next );
+		}
+		setIsRenaming( false );
+	}
+
+	function cancelRename() {
+		setIsRenaming( false );
+	}
+
+	function startRename() {
+		setDraftTitle(
+			collection.title?.raw ?? collection.title?.rendered ?? ''
+		);
+		setIsRenaming( true );
+	}
 
 	// Full-page collections move like pages. Sidebar looks up the dragged
 	// record later so it can PATCH the right post type.
@@ -104,15 +170,44 @@ export default function CollectionRow( {
 					<span className="cortext-sidebar__icon" aria-hidden="true">
 						<Icon icon={ customPostType } size={ 16 } />
 					</span>
-					<Button
-						className="cortext-sidebar__title"
-						size="compact"
-						variant="tertiary"
-						onClick={ onSelect }
-						isPressed={ isSelected }
-					>
-						{ title }
-					</Button>
+
+					{ isRenaming ? (
+						<div
+							ref={ renameInputRef }
+							className="cortext-sidebar__rename"
+						>
+							<TextControl
+								__next40pxDefaultSize
+								__nextHasNoMarginBottom
+								size="compact"
+								value={ draftTitle }
+								onChange={ setDraftTitle }
+								onBlur={ commitRename }
+								onKeyDown={ ( e ) => {
+									e.stopPropagation();
+									if ( e.key === 'Enter' ) {
+										e.preventDefault();
+										commitRename();
+									} else if ( e.key === 'Escape' ) {
+										e.preventDefault();
+										cancelRename();
+									}
+								} }
+								onPointerDown={ ( e ) => e.stopPropagation() }
+							/>
+						</div>
+					) : (
+						<Button
+							className="cortext-sidebar__title"
+							size="compact"
+							variant="tertiary"
+							onClick={ onSelect }
+							isPressed={ isSelected }
+						>
+							{ title }
+						</Button>
+					) }
+
 					<Dropdown
 						popoverProps={ { placement: 'bottom-end' } }
 						renderToggle={ ( { isOpen, onToggle } ) => (
@@ -162,6 +257,40 @@ export default function CollectionRow( {
 										? __( 'Home', 'cortext' )
 										: __( 'Set as home', 'cortext' ) }
 								</MenuItem>
+								{ onRename && (
+									<MenuItem
+										icon="edit"
+										onClick={ () => {
+											startRename();
+											onClose();
+										} }
+									>
+										{ __( 'Rename', 'cortext' ) }
+									</MenuItem>
+								) }
+								{ onDuplicate && (
+									<MenuItem
+										icon="admin-page"
+										onClick={ () => {
+											onDuplicate( collection.id );
+											onClose();
+										} }
+									>
+										{ __( 'Duplicate', 'cortext' ) }
+									</MenuItem>
+								) }
+								{ onTrash && (
+									<MenuItem
+										icon="trash"
+										isDestructive
+										onClick={ () => {
+											onTrash( collection.id );
+											onClose();
+										} }
+									>
+										{ __( 'Move to Trash', 'cortext' ) }
+									</MenuItem>
+								) }
 							</MenuGroup>
 						) }
 					/>

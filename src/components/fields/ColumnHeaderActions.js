@@ -34,7 +34,10 @@ import ChangeFieldTypePopover from './ChangeFieldTypePopover';
 import EditOptionsPopover from './EditOptionsPopover';
 import FieldFormatPopover from './FieldFormatPopover';
 import RenameFieldInline from './RenameFieldInline';
-import { useCollectionFieldsContext } from '../CollectionFieldsContext';
+import {
+	useCollectionFieldsContext,
+	useMappedField,
+} from '../CollectionFieldsContext';
 import { TableCalculationPopover } from '../TableCalculationMenu';
 import {
 	useDeleteField,
@@ -203,23 +206,19 @@ function FieldActions( {
 	const remove = useDeleteField( collectionId );
 	const { fields } = useCollectionFieldsContext();
 	// `useCollectionFields` already fetched these records with `context: 'edit'`
-	// and ran them through `mapField`. Read label/type/options from that cached
-	// field so we stay on one cache slot. Calling `useEntityRecord(...)` here
-	// would use the `default` context, start a second resolver trip, and briefly
-	// flash `#${ recordId }` in the header before the real title arrives. See
-	// the tech-debt note in `useCollectionFields`.
-	const fieldEntry = useMemo(
-		() => fields.find( ( f ) => f.cortextRecordId === recordId ) ?? null,
-		[ fields, recordId ]
-	);
-	const fieldType = fieldEntry?.cortextType;
+	// and ran them through `mapField`. Read label/type/options from the cached
+	// field so the header skips `useEntityRecord`'s `default`-context resolver
+	// trip, which would otherwise flash `#${ recordId }` before the title
+	// arrives. See the tech-debt note in `useCollectionFields`.
+	const mappedField = useMappedField( recordId );
+	const fieldType = mappedField?.cortextType;
 	const canFormat = FORMATTABLE_TYPES.has( fieldType );
 	const supportsOptions = TYPES_WITH_OPTIONS.has( fieldType );
 	const canChangeType =
 		Boolean( fieldType ) && ! UNCONVERTIBLE_SOURCE_TYPES.has( fieldType );
 	const initialOptions = useMemo(
-		() => ( supportsOptions ? fieldEntry?.cortextElements ?? [] : [] ),
-		[ supportsOptions, fieldEntry?.cortextElements ]
+		() => ( supportsOptions ? mappedField?.cortextElements ?? [] : [] ),
+		[ supportsOptions, mappedField ]
 	);
 
 	// Format submenu uses a hover-with-grace pattern: the panel stays
@@ -390,7 +389,7 @@ function FieldActions( {
 	}, [ isMenuOpen, closeMenu, hideMenuOnInteractOutside ] );
 
 	const dataViewId = `field-${ recordId }`;
-	const label = fieldEntry?.label || `#${ recordId }`;
+	const label = mappedField?.label || `#${ recordId }`;
 	const calculationField = useMemo(
 		() => ( {
 			id: dataViewId,

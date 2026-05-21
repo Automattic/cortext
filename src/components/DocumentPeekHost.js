@@ -1,5 +1,6 @@
 import { __ } from '@wordpress/i18n';
-import { useMemo } from '@wordpress/element';
+import { useEffect, useMemo, useRef } from '@wordpress/element';
+import { useParams } from '@tanstack/react-router';
 
 import RowDetailView from './RowDetailView';
 import { RowDetailSidebar } from './RowDetailSidebarSlot';
@@ -32,7 +33,7 @@ function withTitleField( fields ) {
 // root. Keeping this separate stops relation chips and collection cells from
 // importing RowDetailView and the editor stack.
 export default function DocumentPeekHost() {
-	const { peek } = useDocumentPeekState();
+	const { peek, isPinned } = useDocumentPeekState();
 	const { closeDocument, requestMode } = useDocumentPeekActions();
 	const {
 		modeSurfaceTransition,
@@ -41,7 +42,32 @@ export default function DocumentPeekHost() {
 		goToAdjacentDocument,
 		retryPendingTransition,
 		discardPendingTransition,
+		togglePin,
 	} = useDocumentPeekSurface();
+
+	// Side peeks close on route change unless pinned. Modal mode floats over
+	// the route, so it doesn't need the same gate.
+	const params = useParams( { strict: false } );
+	const splat = params?._splat ?? '';
+	const prevSplatRef = useRef( splat );
+	const peekStateRef = useRef( { peek, isPinned } );
+	peekStateRef.current = { peek, isPinned };
+	useEffect( () => {
+		const prev = prevSplatRef.current;
+		prevSplatRef.current = splat;
+		if ( prev === splat ) {
+			return;
+		}
+		const current = peekStateRef.current;
+		if ( ! current.peek || current.peek.mode !== 'side' ) {
+			return;
+		}
+		if ( current.isPinned ) {
+			return;
+		}
+		closeDocument();
+	}, [ splat, closeDocument ] );
+
 	const { fields: collectionFields } = useCollectionFields(
 		peek?.collectionId ?? null
 	);
@@ -82,6 +108,7 @@ export default function DocumentPeekHost() {
 				canGoPrevious={ canGoPrevious }
 				collectionId={ peek.collectionId }
 				fields={ peekFields }
+				isPinned={ isPinned }
 				mode={ renderedMode }
 				onApi={ setDetailApi }
 				onClose={ closeDocument }
@@ -92,6 +119,7 @@ export default function DocumentPeekHost() {
 				onRestored={ handleRestored }
 				onRetryPending={ retryPendingTransition }
 				onSaved={ handleSaved }
+				onTogglePin={ togglePin }
 				postType={ peek.postType }
 				row={ tentativeRow }
 				rowId={ peek.docId }

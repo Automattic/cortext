@@ -1,11 +1,13 @@
 <?php
 /**
- * Keeps collections in step with the document that owns or contains them.
+ * Trashes a collection when the document that owns or contains it is trashed.
  *
- * Inline collections follow `_cortext_inline_owner_page`. Full-page
- * collections follow `post_parent`. When a document goes to Trash, the marker
- * meta records which document moved the collection so restore only brings back
+ * Inline collections follow `_cortext_inline_owner_page`; full-page
+ * collections nested under a document follow `post_parent`. The marker meta
+ * records which document moved the collection so restore only revives
  * collections from that same cascade.
+ *
+ * The collection → row direction lives in `RowTrashCascade`.
  *
  * @package Cortext
  */
@@ -19,9 +21,8 @@ use Cortext\Documents;
 final class CollectionTrashCascade {
 
 	/**
-	 * Stores the document id that moved a collection to Trash. Collections
-	 * that were already trashed stay unmarked, so restore does not revive
-	 * unrelated items.
+	 * Document id that moved a collection to Trash. Collections already in
+	 * Trash stay unmarked, so restore does not revive unrelated items.
 	 */
 	public const TRASHED_BY_OWNER_META_KEY = '_cortext_trashed_by_owner_page';
 
@@ -59,7 +60,7 @@ final class CollectionTrashCascade {
 	 * @param int $post_id ID of the post about to be trashed.
 	 */
 	public function cascade_trash( int $post_id ): void {
-		if ( ! $this->is_document( $post_id ) ) {
+		if ( ! $this->is_owning_document( $post_id ) ) {
 			return;
 		}
 
@@ -75,7 +76,7 @@ final class CollectionTrashCascade {
 	 * @param int $post_id ID of the post that was just restored.
 	 */
 	public function cascade_restore( int $post_id ): void {
-		if ( ! $this->is_document( $post_id ) ) {
+		if ( ! $this->is_owning_document( $post_id ) ) {
 			return;
 		}
 
@@ -86,14 +87,14 @@ final class CollectionTrashCascade {
 	}
 
 	/**
-	 * Permanently deletes collections owned by the document. This checks both
+	 * Permanently deletes collections owned by the document. Checks both
 	 * active and trashed collections because a document may be force-deleted
 	 * after it has already been moved to Trash.
 	 *
 	 * @param int $post_id ID of the post about to be permanently deleted.
 	 */
 	public function cascade_delete( int $post_id ): void {
-		if ( ! $this->is_document( $post_id ) ) {
+		if ( ! $this->is_owning_document( $post_id ) ) {
 			return;
 		}
 
@@ -102,9 +103,19 @@ final class CollectionTrashCascade {
 		}
 	}
 
-	private function is_document( int $post_id ): bool {
+	/**
+	 * Whether the post is a document that can own collections (page or row).
+	 * Collections themselves are documents too, but they own rows, not other
+	 * collections; the collection → row direction lives in `RowTrashCascade`.
+	 *
+	 * @param int $post_id Candidate post id.
+	 */
+	private function is_owning_document( int $post_id ): bool {
 		$post_type = get_post_type( $post_id );
 		if ( ! is_string( $post_type ) || '' === $post_type ) {
+			return false;
+		}
+		if ( Collection::POST_TYPE === $post_type ) {
 			return false;
 		}
 		return null !== $this->documents->kind_for_post_type( $post_type );

@@ -2,10 +2,10 @@
 @use "@wordpress/base-styles/variables" as *;
 @use "./styles/tokens";
 
-// @wordpress/interface is a BUNDLED_PACKAGE (inlined into our JS) and WP
-// doesn't register a `wp-interface` style handle, so bundle its stylesheet.
-@use "../node_modules/@wordpress/interface/build-style/style.css";
-@use "../node_modules/@wordpress/editor/build-style/style.css" as editor;
+// @wordpress/interface and @wordpress/editor styles are only needed inside
+// the editor surface. They're imported from Canvas.js so mini-css-extract
+// emits them into the editor chunk's CSS file and skip the initial CSS
+// bundle on home and collection views.
 
 // tech-debt.md#38: wp-admin does not expose this handle on our screen, so
 // bundle the palette styles here.
@@ -112,8 +112,12 @@ body.cortext-fullscreen {
 }
 
 .cortext-shell {
+	--cortext-shell-sidebar-track-width: var(--cortext-sidebar-width);
+
+	position: relative;
+	isolation: isolate;
 	display: grid;
-	grid-template-columns: var(--cortext-sidebar-width) 1fr;
+	grid-template-columns: var(--cortext-shell-sidebar-track-width) minmax(0, 1fr);
 	height: 100vh;
 	transition: grid-template-columns 160ms ease;
 }
@@ -127,11 +131,12 @@ body.cortext-fullscreen {
 // Collapsed: pin to rail width but keep the saved expanded width on the
 // root, so toggling back restores it.
 .cortext-root[data-sidebar-collapsed="true"] .cortext-shell {
-	grid-template-columns: var(--cortext-sidebar-width-rail) 1fr;
+	--cortext-shell-sidebar-track-width: var(--cortext-sidebar-width-rail);
 }
 
 .cortext-sidebar {
 	position: relative;
+	z-index: 3;
 	display: flex;
 	flex-direction: column;
 	background: var(--cortext-sidebar-surface);
@@ -665,7 +670,7 @@ body.cortext-fullscreen {
 		justify-content: center;
 		width: $grid-unit-30;
 		height: $grid-unit-30;
-		color: var(--cortext-text-muted);
+		color: var(--cortext-text);
 	}
 
 	&__icon.components-button {
@@ -1032,6 +1037,7 @@ body.cortext-sidebar-resizing {
 
 .cortext-shell__canvas {
 	position: relative;
+	z-index: 1;
 	overflow: hidden;
 	display: flex;
 	flex-direction: column;
@@ -1067,12 +1073,34 @@ body.cortext-sidebar-resizing {
 	background: var(--cortext-canvas-frame-surface-root, #fff);
 }
 
+// Keep the canvas layer below the side peek so the canvas cross-fade never
+// flashes over the row-detail panel.
+::view-transition-group(cortext-canvas) {
+	z-index: 1;
+}
+
 // Name the topbar only so we can cancel its canvas fade. Both snapshots match,
 // so skip the animation.
 ::view-transition-group(cortext-topbar),
 ::view-transition-old(cortext-topbar),
 ::view-transition-new(cortext-topbar) {
 	animation: none !important;
+}
+
+// The side peek lives outside the canvas. Give it its own transition layer so
+// the canvas cross-fade never flashes over it.
+::view-transition-group(cortext-row-detail-sidebar) {
+	z-index: 2;
+	animation: none;
+}
+
+::view-transition-old(cortext-row-detail-sidebar) {
+	display: none;
+}
+
+::view-transition-new(cortext-row-detail-sidebar) {
+	animation: none;
+	mix-blend-mode: normal;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1516,6 +1544,74 @@ body:has([data-type="cortext/document-icon"]:hover) .cortext-canvas__identity-ac
 body:has([data-type="cortext/document-icon"]:focus-within) .cortext-canvas__identity-action,
 body:has(.cortext-canvas__identity-actions:hover) .cortext-canvas__identity-action {
 	opacity: 1;
+}
+
+// Suspense fallback while the editor chunk loads on first document open.
+// Matches the editor's content-size and vertical rhythm so the swap to the
+// real Canvas doesn't reflow. Animation is intentionally subtle: a slow
+// pulse keeps it from competing with whatever lands next.
+.cortext-canvas-skeleton {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 auto;
+	min-height: 0;
+	padding-block: $grid-unit-40 $grid-unit-30;
+
+	&__title {
+		height: $grid-unit-50;
+		max-width: var(--wp--style--global--content-size, 840px);
+		width: 100%;
+		margin: 0 auto $grid-unit-30;
+		padding-inline: $grid-unit-20;
+		border-radius: var(--cortext-shell-radius);
+		background: var(--cortext-state-hover);
+		animation: cortext-canvas-skeleton-pulse 1.6s ease-in-out infinite;
+	}
+
+	&__body {
+		display: flex;
+		flex-direction: column;
+		gap: $grid-unit-20;
+		max-width: var(--wp--style--global--content-size, 840px);
+		width: 100%;
+		margin: 0 auto;
+		padding-inline: $grid-unit-20;
+	}
+
+	&__line {
+		height: $grid-unit-20;
+		border-radius: var(--cortext-shell-radius);
+		background: var(--cortext-state-hover);
+		animation: cortext-canvas-skeleton-pulse 1.6s ease-in-out infinite;
+
+		&--short {
+			width: 60%;
+		}
+
+		&--medium {
+			width: 80%;
+		}
+	}
+}
+
+@keyframes cortext-canvas-skeleton-pulse {
+
+	0%,
+	100% {
+		opacity: 1;
+	}
+
+	50% {
+		opacity: 0.55;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+	.cortext-canvas-skeleton__title,
+	.cortext-canvas-skeleton__line {
+		animation: none;
+	}
 }
 
 .cortext-data-view-picker__empty {
@@ -1979,13 +2075,6 @@ body:has(.cortext-canvas__identity-actions:hover) .cortext-canvas__identity-acti
 .dataviews-view-table {
 	table-layout: fixed;
 	width: max-content;
-	// Mirror DataViews' inter-row separator under the last row, so the
-	// table has a clean visual end before the "+ New" footer button.
-	// Putting the border on the table (rather than the wrapper or the
-	// footer) keeps it pinned to the table's content width — narrower
-	// than the wrapper when columns fit, scrolling with the rest when
-	// they don't.
-	border-bottom: $border-width solid $gray-200;
 }
 
 .dataviews-view-table th,
@@ -4036,7 +4125,7 @@ tr:has(.cortext-title-cell--is-opening)
 	}
 }
 
-// tech-debt.md#54: table-shaped placeholder while useCollectionRows fetches.
+// tech-debt.md#55: table-shaped placeholder while useCollectionRows fetches.
 // It sits beside <DataViews>; the wrapper handles placement. Heights follow
 // the DataViews v6 density rules closely enough to keep the page steady.
 .cortext-collection-skeleton {
@@ -4153,18 +4242,22 @@ tr:has(.cortext-title-cell--is-opening)
 }
 
 .cortext-row-detail-sidebar-shell {
-	position: relative;
+	position: absolute;
+	z-index: 2;
+	inset-block: 0;
+	inset-inline-end: 0;
 	flex: 0 0 var(--cortext-row-detail-sidebar-width, 560px);
 	width: var(--cortext-row-detail-sidebar-width, 560px);
 	height: 100%;
 	min-width: 0;
 	min-height: 0;
-	max-width: min(840px, 66vw);
+	max-width: min(840px, 66vw, calc(100% - var(--cortext-shell-sidebar-track-width)));
 	background: $white;
 	border-left: $border-width solid var(--cortext-row-detail-border, #e9e9e7);
 	box-shadow: -18px 0 36px rgba(0, 0, 0, 0.12);
 	overflow: hidden;
 	will-change: width;
+	view-transition-name: cortext-row-detail-sidebar;
 	animation:
 		cortext-row-detail-sidebar-open 300ms
 		cubic-bezier(0.6, 0, 0.4, 1) both;
@@ -4201,70 +4294,6 @@ tr:has(.cortext-title-cell--is-opening)
 
 		&:focus-visible {
 			outline: none;
-		}
-	}
-}
-
-.cortext-collection-pane > .cortext-row-detail-sidebar-shell {
-	position: absolute;
-	inset-block: 0;
-	inset-inline-end: 0;
-	z-index: 8;
-}
-
-.cortext-row-detail-sidebar-handoff {
-	position: relative;
-	width: 100%;
-	height: 100%;
-	min-width: 0;
-	min-height: 0;
-	overflow: visible;
-
-	&__fallback {
-		width: 100%;
-		height: 100%;
-		min-height: 0;
-	}
-
-	&--reserve > .cortext-row-detail-sidebar-shell {
-		position: absolute;
-		inset-block: 0;
-		inset-inline-end: 0;
-		z-index: 2;
-	}
-}
-
-.cortext-canvas:has(.cortext-row-detail-sidebar-handoff--reserve) {
-
-	.interface-interface-skeleton__sidebar {
-		position: relative;
-		z-index: 8;
-		overflow: visible;
-	}
-}
-
-.cortext-canvas:has(.cortext-row-detail-sidebar-shell):not(
-:has(.cortext-row-detail-sidebar-handoff--reserve)
-) {
-
-	.interface-interface-skeleton__body {
-		position: relative;
-	}
-
-	.interface-interface-skeleton__sidebar {
-		position: absolute;
-		inset-block: 0;
-		inset-inline-end: 0;
-		z-index: 8;
-		width: auto;
-		min-width: 0;
-		max-width: none;
-		overflow: visible;
-		pointer-events: none;
-
-		.cortext-row-detail-sidebar-shell {
-			position: relative;
-			pointer-events: auto;
 		}
 	}
 }
@@ -4370,7 +4399,7 @@ body.cortext-row-detail-sidebar-resizing {
 	width: 100%;
 	min-width: 0;
 
-	// tech-debt.md#54: cover the table area while the shell loads, so search,
+	// tech-debt.md#55: cover the table area while the shell loads, so search,
 	// filters, header, and rows appear together instead of in two beats.
 	&__rows-skeleton {
 		position: absolute;
@@ -5393,11 +5422,18 @@ thead > tr > th {
 // regardless of the chosen palette color or the surrounding text color
 // (which matters in dark mode). Forcing `currentcolor` on our own
 // component covers both the colored WP-icon variant and the fallback
-// page glyph in every surface.
-/* stylelint-disable-next-line no-descending-specificity */
-.cortext-document-icon svg {
+// page glyph in every surface. The sidebar's collection/recent/favorite
+// icon spans hit the same problem whenever they render a raw `<Icon>`
+// (collection glyphs, the row/table fallbacks in recents), so they share
+// this rule too.
+/* stylelint-disable no-descending-specificity */
+.cortext-document-icon svg,
+.cortext-sidebar__icon svg,
+.cortext-sidebar__favorite-icon svg,
+.cortext-sidebar__recent-icon svg {
 	fill: currentcolor;
 }
+/* stylelint-enable no-descending-specificity */
 
 // Hide the block kebab (more options) while a Cortext header block is
 // selected. The body class is toggled by HideHeaderBlockKebab in
@@ -5664,6 +5700,14 @@ body.cortext-hide-block-settings-menu .block-editor-block-switcher {
 		padding-top: 16px;
 		border-top: 1px solid #e0e0e0;
 	}
+}
+
+::view-transition-group(cortext-alpha-notice-overlay) {
+	z-index: 3;
+}
+
+::view-transition-group(cortext-alpha-notice-frame) {
+	z-index: 4;
 }
 
 ::view-transition-old(cortext-alpha-notice-overlay),

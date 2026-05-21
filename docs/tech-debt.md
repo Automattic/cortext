@@ -499,7 +499,15 @@ Drag/drop and `menu_order` accounting look at both pages and collections through
 
 **Solution.** Add a workspace-tree REST endpoint that returns navigable nodes with `kind`, `id`, `parent`, `menu_order`, and visibility in one shape. Row-owned collections could then appear under their row, missing parents would not look top-level by accident, and page/collection branching would move out of every consumer. The Collections section then becomes a view over the same model with the user's chosen filter, instead of a separate flat list.
 
-## 54. Loading table skeleton tracks DataViews layout `[upstream, soft]`
+## 54. Collection duplication cannot clone relation schema `[internal]`
+
+**What.** Duplicating a full-page collection creates the new collection, registers its row CPT, and copies field posts that stand on their own. It skips relations because a relation is really a pair: the forward field plus the reverse field on another collection. A safe copy has to create or update both sides, keep the cardinality, and remap ids without touching the original relation. Until that exists, the REST response lists skipped fields and the sidebar tells the user the copy is missing columns. Rollups that read through a skipped relation belong in the same bucket; they are not useful until the copied schema has its own relation target.
+
+**Where.** `CollectionsController::duplicate()`, `clone_fields()`, and `remap_rollup_references()` in `includes/Rest/CollectionsController.php`, plus the skipped-field notice in `src/components/Sidebar.js` and duplicate coverage in `tests/php/test-rest-collections-controller.php`.
+
+**Solution.** Add a relation-aware schema copy step. It should clone and remap the forward and reverse fields together, or skip every dependent field, including rollups that point at skipped relations. The duplicate should never carry references back to the source collection's fields. Once that exists, the sidebar notice can name the exact skipped field types instead of treating them all as generic missing columns.
+
+## 55. Loading table skeleton tracks DataViews layout `[upstream, soft]`
 
 **What.** DataViews does not give us a table-body loading slot. Cortext renders `CollectionRowsSkeleton` beside `<DataViews>` and covers the table while the first page loads; without that, the collection pane collapses and jumps when rows show up.
 
@@ -509,7 +517,7 @@ The brittle bit is the sizing. The skeleton copies DataViews row heights for com
 
 **Solution.** DataViews exposes a table loading slot, or at least row-height CSS variables. Then Cortext can follow the table instead of copying its constants. Until then, keep the skeleton rules next to the DataViews table rules and check for visual drift after DataViews upgrades.
 
-## 55. View-transition target is too broad `[soft]`
+## 56. View-transition target is too broad `[soft]`
 
 **What.** `view-transition-name: cortext-canvas` lives on `.cortext-shell__canvas`, one level above the content that needs the fade. That pulls the topbar into the canvas snapshot. The canvas transition also paints a backdrop to cover dark-mode flashes, so the topbar gets tinted for a frame. For now we name the topbar separately and cancel its animation.
 

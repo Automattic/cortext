@@ -63,7 +63,19 @@ final class Test_Post_Type_Collection extends BaseTestCase {
 			post_type_supports( Collection::POST_TYPE, 'page-attributes' ),
 			'page-attributes exposes parent/menu_order for sidebar nesting and drag/drop.'
 		);
-		$this->assertFalse( post_type_supports( Collection::POST_TYPE, 'editor' ), 'Collections are schema definitions, not documents.' );
+		$this->assertFalse(
+			post_type_supports( Collection::POST_TYPE, 'editor' ),
+			"Collections do not need block-editor content yet. Their canvas is the DataView."
+		);
+	}
+
+	public function test_collections_opt_into_document_lifecycle(): void {
+		( new Collection() )->register_post_type();
+
+		$this->assertTrue(
+			post_type_supports( Collection::POST_TYPE, 'cortext-document' ),
+			'Collections share the document lifecycle (title, identity, trash, restore, search).'
+		);
 	}
 
 	public function test_meta_is_registered(): void {

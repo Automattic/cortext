@@ -3,9 +3,13 @@
  * Finds and lists Cortext documents.
  *
  * "Document" is the union of post types that opt into the `cortext-document`
- * trait: pages (`crtxt_page`) and collection rows (`crtxt_<slug>`). Code that
- * needs all Cortext documents should use this service instead of rebuilding the
- * post-type list.
+ * trait: pages (`crtxt_page`), collections (`crtxt_collection`), and rows
+ * (`crtxt_<slug>`). Code that needs all Cortext documents should use this
+ * service instead of rebuilding the post-type list.
+ *
+ * Per-kind specifics (path, owner relation, icon presence) live in
+ * `Cortext\Documents\DocumentKind` implementations, resolved through the
+ * `KindRegistry` this service constructs by default.
  *
  * This service only reads; writes still go through `wp/v2` and the collection
  * row controllers.
@@ -17,11 +21,16 @@ declare( strict_types=1 );
 
 namespace Cortext;
 
+use Cortext\Documents\CollectionKind;
+use Cortext\Documents\DocumentKind;
+use Cortext\Documents\KindRegistry;
+use Cortext\Documents\PageKind;
+use Cortext\Documents\RowKind;
 use Cortext\Fields\FieldTypeRegistry;
 use Cortext\PostType\Collection;
 use Cortext\PostType\CollectionEntries;
+use Cortext\PostType\CollectionTrashCascade;
 use Cortext\PostType\DocumentIdentity;
-use Cortext\PostType\Page;
 use Cortext\PostType\PageTrashCascade;
 use Cortext\Rest\RowsFilterQuery;
 use WP_Post;
@@ -29,8 +38,9 @@ use WP_Query;
 
 final class Documents {
 
-	public const KIND_PAGE = 'page';
-	public const KIND_ROW  = 'row';
+	public const KIND_PAGE       = 'page';
+	public const KIND_ROW        = 'row';
+	public const KIND_COLLECTION = 'collection';
 
 	public const STATUS_TRASH = 'trash';
 
@@ -49,8 +59,27 @@ final class Documents {
 
 	private RowsFilterQuery $rows_filter_query;
 
-	public function __construct( ?RowsFilterQuery $rows_filter_query = null ) {
+	private KindRegistry $kinds;
+
+	public function __construct(
+		?RowsFilterQuery $rows_filter_query = null,
+		?KindRegistry $kinds = null
+	) {
 		$this->rows_filter_query = $rows_filter_query ?? new RowsFilterQuery();
+		$this->kinds             = $kinds ?? $this->build_default_kind_registry();
+	}
+
+	/**
+	 * Builds the default kind registry. Page and collection kinds are
+	 * self-contained; row kind needs the documents service to resolve a row
+	 * CPT to its parent collection, so it receives `$this`.
+	 */
+	private function build_default_kind_registry(): KindRegistry {
+		$registry = new KindRegistry();
+		$registry->register( new PageKind() );
+		$registry->register( new CollectionKind() );
+		$registry->register( new RowKind( $this ) );
+		return $registry;
 	}
 
 	/**
@@ -253,32 +282,27 @@ final class Documents {
 	 * Narrows the post-type set based on the requested kind, or returns the
 	 * full document set when no kind is requested.
 	 *
-	 * @param string $kind Document kind (`page`, `row`, or empty for any).
+	 * @param string $kind Document kind id (`page`, `collection`, `row`), or empty for any.
 	 * @return string[]
 	 */
 	private function post_types_for_kind( string $kind ): array {
 		$post_types = $this->get_document_post_types();
 
-		if ( self::KIND_PAGE === $kind ) {
-			return array_values(
-				array_filter(
-					$post_types,
-					static fn( string $post_type ): bool => Page::POST_TYPE === $post_type
-				)
-			);
+		if ( '' === $kind ) {
+			return $post_types;
 		}
 
-		if ( self::KIND_ROW === $kind ) {
-			return array_values(
-				array_filter(
-					$post_types,
-					static fn( string $post_type ): bool => Page::POST_TYPE !== $post_type
-						&& str_starts_with( $post_type, CollectionEntries::CPT_PREFIX )
-				)
-			);
+		$target = $this->kinds->by_id( $kind );
+		if ( null === $target ) {
+			return array();
 		}
 
-		return $post_types;
+		return array_values(
+			array_filter(
+				$post_types,
+				static fn( string $post_type ): bool => $target->owns_post_type( $post_type )
+			)
+		);
 	}
 
 	/**
@@ -291,27 +315,33 @@ final class Documents {
 	 * @return array<string,mixed>|null
 	 */
 	public function format_document( WP_Post $post, array $opts = array() ): ?array {
-		$kind = $this->kind_for_post_type( $post->post_type );
+		$kind = $this->kind_object_for_post_type( $post->post_type );
 		if ( null === $kind ) {
 			return null;
 		}
 
-		$collection = self::KIND_ROW === $kind
-			? $this->find_collection_by_row_post_type( $post->post_type )
-			: null;
+		$owner_context = $kind->owner_context( $post );
 
-		if ( self::KIND_ROW === $kind && ! $collection instanceof WP_Post ) {
-			// A row without its parent collection cannot be opened in the UI.
+		// A row without its parent collection cannot be opened in the UI.
+		if ( 'row' === $kind->id() && null === $owner_context ) {
 			return null;
 		}
 
+		// Inline collections have no workspace route of their own; the kind
+		// context flags that and the owner's path replaces the document's.
+		$path = $kind->path_for( $post );
+		if ( $owner_context && $owner_context->use_as_document_path ) {
+			$owner_kind = $this->kinds->by_post_type( $owner_context->post->post_type );
+			if ( null !== $owner_kind ) {
+				$path = $owner_kind->path_for( $owner_context->post );
+			}
+		}
+
 		$document = array(
-			'kind'   => $kind,
+			'kind'   => $kind->id(),
 			'id'     => (int) $post->ID,
 			'title'  => $this->post_title( $post ),
-			'path'   => self::KIND_ROW === $kind
-				? $this->row_path( $post )
-				: $this->page_path( $post ),
+			'path'   => $path,
 			'parent' => (int) $post->post_parent,
 		);
 
@@ -320,18 +350,19 @@ final class Documents {
 		}
 
 		$icon = '';
-		if ( self::KIND_PAGE === $kind ) {
+		if ( $kind->has_icon() ) {
 			$icon = (string) get_post_meta( $post->ID, DocumentIdentity::META_KEY, true );
 			if ( '' !== $icon ) {
 				$document['icon'] = $icon;
 			}
 		}
 
-		if ( $collection instanceof WP_Post ) {
-			$document['collection'] = array(
-				'id'    => (int) $collection->ID,
-				'title' => $this->post_title( $collection ),
-				'path'  => $this->collection_path( $collection ),
+		if ( $owner_context ) {
+			$owner_kind                        = $this->kinds->by_post_type( $owner_context->post->post_type );
+			$document[ $owner_context->field ] = array(
+				'id'    => (int) $owner_context->post->ID,
+				'title' => $this->post_title( $owner_context->post ),
+				'path'  => null !== $owner_kind ? $owner_kind->path_for( $owner_context->post ) : '',
 			);
 		}
 
@@ -341,6 +372,16 @@ final class Documents {
 				'cortext_document_icon'    => $icon,
 				PageTrashCascade::META_KEY => (int) get_post_meta( $post->ID, PageTrashCascade::META_KEY, true ),
 			);
+			// Inline collections trashed alongside their owner page carry a
+			// separate marker. The sidebar uses it to nest them under the
+			// page's trash entry instead of listing them as siblings.
+			if ( 'collection' === $kind->id() ) {
+				$document['meta'][ CollectionTrashCascade::TRASHED_BY_OWNER_META_KEY ] = (int) get_post_meta(
+					$post->ID,
+					CollectionTrashCascade::TRASHED_BY_OWNER_META_KEY,
+					true
+				);
+			}
 		}
 
 		return $document;
@@ -352,22 +393,32 @@ final class Documents {
 	}
 
 	/**
-	 * Maps a post type to its document kind, or null when the post type is not
-	 * a Cortext document. Public so trash, breadcrumbs, and similar code can
-	 * branch on the same classification.
+	 * Maps a post type to its document kind id, or null when the post type
+	 * is not a Cortext document. Public so trash, breadcrumbs, and similar
+	 * code can branch on the same classification.
 	 *
 	 * @param string $post_type Post type slug.
 	 */
 	public function kind_for_post_type( string $post_type ): ?string {
 		// Only post types that opt into the document trait count here. That
-		// keeps `crtxt_field` and `crtxt_collection` out of row handling.
+		// keeps `crtxt_field` out of document handling.
 		if ( ! post_type_supports( $post_type, 'cortext-document' ) ) {
 			return null;
 		}
-		if ( Page::POST_TYPE === $post_type ) {
-			return self::KIND_PAGE;
+		return $this->kinds->by_post_type( $post_type )?->id();
+	}
+
+	/**
+	 * Resolves the kind object for a post type, or null when no kind claims
+	 * it. Internal helper for format_document and the listing search filter.
+	 *
+	 * @param string $post_type Post type slug.
+	 */
+	private function kind_object_for_post_type( string $post_type ): ?DocumentKind {
+		if ( ! post_type_supports( $post_type, 'cortext-document' ) ) {
+			return null;
 		}
-		return self::KIND_ROW;
+		return $this->kinds->by_post_type( $post_type );
 	}
 
 	/**
@@ -413,24 +464,6 @@ final class Documents {
 		);
 
 		return $collections[0] ?? null;
-	}
-
-	private function page_path( WP_Post $post ): string {
-		$slug = trim( $post->post_name );
-		$tail = '' === $slug ? (string) $post->ID : "{$slug}-{$post->ID}";
-		return "page/{$tail}";
-	}
-
-	private function row_path( WP_Post $post ): string {
-		$slug = trim( $post->post_name );
-		return '' === $slug ? (string) $post->ID : "{$slug}-{$post->ID}";
-	}
-
-	private function collection_path( WP_Post $collection ): string {
-		$slug = get_post_meta( (int) $collection->ID, 'slug', true );
-		$slug = is_string( $slug ) ? trim( $slug ) : '';
-		$tail = '' === $slug ? (string) $collection->ID : "{$slug}-{$collection->ID}";
-		return "collection/{$tail}";
 	}
 
 	private function post_title( WP_Post $post ): string {
@@ -483,7 +516,8 @@ final class Documents {
 
 		$row_text_keys_by_cpt = array();
 		foreach ( $post_types as $post_type ) {
-			if ( Page::POST_TYPE === $post_type ) {
+			$kind = $this->kind_object_for_post_type( $post_type );
+			if ( null === $kind || 'row' !== $kind->id() ) {
 				continue;
 			}
 			$collection = $this->find_collection_by_row_post_type( $post_type );

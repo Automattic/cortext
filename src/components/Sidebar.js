@@ -96,6 +96,7 @@ import PageRow from './PageRow';
 import { openCommandPalette } from './CommandPalette';
 import SidebarFavorites, {
 	favoriteKey,
+	filterFavoritesForTrashedCollection,
 	filterFavoritesForTrashedPage,
 } from './SidebarFavorites';
 import SidebarResizeHandle from './SidebarResizeHandle';
@@ -216,6 +217,7 @@ export default function Sidebar( {
 		[ activePrefix, activeTail ]
 	);
 	const [ favoritesError, setFavoritesError ] = useState( null );
+	const [ duplicateNotice, setDuplicateNotice ] = useState( null );
 	const areFavoriteActionsDisabled =
 		isResolvingFavorites || isUpdatingFavorites;
 	const { isSectionCollapsed, toggleSection } = useSidebarSections();
@@ -375,6 +377,11 @@ export default function Sidebar( {
 	// tech-debt.md#53: collections with a loaded page parent appear under that
 	// page. Collections with no loaded page parent stay in the Collections
 	// section for now, including row-owned collections.
+	//
+	// Top-level collections are sorted explicitly. Without this, `useEntityRecords`
+	// returns them in whatever order core-data emits, which can shift after a
+	// `saveEntityRecord` update (rename) and reorder the sidebar list. Nested
+	// collections inherit the same menu_order/id sort through `buildTree`.
 	const { nestedCollections, topLevelCollections } = useMemo( () => {
 		const pageIds = new Set( pages.map( ( p ) => p.id ) );
 		const nested = [];
@@ -386,6 +393,14 @@ export default function Sidebar( {
 			} else {
 				topLevel.push( collection );
 			}
+		} );
+		topLevel.sort( ( a, b ) => {
+			const ao = a.menu_order || 0;
+			const bo = b.menu_order || 0;
+			if ( ao !== bo ) {
+				return ao - bo;
+			}
+			return a.id - b.id;
 		} );
 		return { nestedCollections: nested, topLevelCollections: topLevel };
 	}, [ pages, collections ] );
@@ -405,50 +420,9 @@ export default function Sidebar( {
 	const [ draggedId, setDraggedId ] = useState( null );
 	const [ activeDrop, setActiveDrop ] = useState( null );
 	const [ autoRenameId, setAutoRenameId ] = useState( null );
+	const [ autoRenameCollectionId, setAutoRenameCollectionId ] =
+		useState( null );
 	const [ isTrashPanelOpen, setIsTrashPanelOpen ] = useState( false );
-
-	const renderCollectionRow = useCallback(
-		( collection, depth ) => (
-			<CollectionRow
-				key={ collection.id }
-				collection={ collection }
-				depth={ depth }
-				isSelected={ selectedCollectionId === collection.id }
-				isHome={
-					home?.kind === 'collection' && home.id === collection.id
-				}
-				isFavorite={ isCollectionFavorite( collection.id ) }
-				isFavoriteDisabled={ areFavoriteActionsDisabled }
-				isHomeUpdating={ isHomeUpdating }
-				onToggleFavorite={ ( id ) =>
-					toggleFavorite( 'collection', id )
-				}
-				onSetHome={ setCollectionHome }
-				onSelect={ () =>
-					navigate( {
-						to: '/$',
-						params: {
-							_splat: computeCollectionUri( collection ),
-						},
-					} )
-				}
-				draggedId={ draggedId }
-				activeDrop={ activeDrop }
-			/>
-		),
-		[
-			selectedCollectionId,
-			home,
-			isCollectionFavorite,
-			areFavoriteActionsDisabled,
-			isHomeUpdating,
-			toggleFavorite,
-			setCollectionHome,
-			navigate,
-			draggedId,
-			activeDrop,
-		]
-	);
 
 	const autoExpandTimerRef = useRef( null );
 	const trashCount = useMemo( () => {
@@ -716,6 +690,150 @@ export default function Sidebar( {
 		]
 	);
 
+	const renameCollection = useCallback(
+		async ( id, title ) => {
+			await saveEntityRecord( 'postType', 'crtxt_collection', {
+				id,
+				title,
+			} );
+		},
+		[ saveEntityRecord ]
+	);
+
+	const duplicateCollection = useCallback(
+		async ( id ) => {
+			const created = await apiFetch( {
+				path: `/cortext/v1/collections/${ id }/duplicate`,
+				method: 'POST',
+			} );
+			invalidateResolution( 'getEntityRecords', [
+				'postType',
+				'crtxt_collection',
+				FULL_PAGE_COLLECTION_QUERY,
+			] );
+			// A duplicate registers a fresh row CPT. Clear the cached post-type
+			// list before anything tries to read rows through the new slug.
+			invalidateResolution( 'getEntitiesConfig', [ 'postType' ] );
+			// The server reports fields it did not copy. Relations are the
+			// common case for now (tech-debt.md#54), but failed field inserts
+			// come through the same channel.
+			const skipped = Array.isArray( created?.skipped_fields )
+				? created.skipped_fields
+				: [];
+			if ( skipped.length > 0 ) {
+				setDuplicateNotice(
+					sprintf(
+						/* translators: %d: number of fields skipped while duplicating a collection. */
+						_n(
+							'%d field was not copied to the new collection. Add it again if you need it.',
+							'%d fields were not copied to the new collection. Add them again if you need them.',
+							skipped.length,
+							'cortext'
+						),
+						skipped.length
+					)
+				);
+			} else {
+				setDuplicateNotice( null );
+			}
+			if ( created?.id ) {
+				setAutoRenameCollectionId( created.id );
+				navigate( {
+					to: '/$',
+					params: { _splat: computeCollectionUri( created ) },
+				} );
+			}
+		},
+		[ invalidateResolution, navigate ]
+	);
+
+	const trashCollection = useCallback(
+		async ( id ) => {
+			await apiFetch( {
+				path: `/wp/v2/crtxt_collections/${ id }`,
+				method: 'DELETE',
+			} );
+			invalidateResolution( 'getEntityRecords', [
+				'postType',
+				'crtxt_collection',
+				FULL_PAGE_COLLECTION_QUERY,
+			] );
+			notifyDocumentTrashChanged();
+			// Remove the trashed collection from Favorites as well; otherwise
+			// the next Favorites save sends an id the server rejects.
+			try {
+				await setFavorites( ( current ) =>
+					filterFavoritesForTrashedCollection( current, id )
+				);
+			} catch ( err ) {
+				setFavoritesError(
+					err?.message ??
+						__(
+							'Moved the collection to Trash, but could not update Favorites.',
+							'cortext'
+						)
+				);
+			}
+			if ( selectedCollectionId === id ) {
+				navigate( { to: '/' } );
+			}
+			setIsTrashPanelOpen( true );
+		},
+		[ invalidateResolution, navigate, selectedCollectionId, setFavorites ]
+	);
+
+	const renderCollectionRow = useCallback(
+		( collection, depth ) => (
+			<CollectionRow
+				key={ collection.id }
+				collection={ collection }
+				depth={ depth }
+				isSelected={ selectedCollectionId === collection.id }
+				isHome={
+					home?.kind === 'collection' && home.id === collection.id
+				}
+				isFavorite={ isCollectionFavorite( collection.id ) }
+				isFavoriteDisabled={ areFavoriteActionsDisabled }
+				isHomeUpdating={ isHomeUpdating }
+				onToggleFavorite={ ( id ) =>
+					toggleFavorite( 'collection', id )
+				}
+				onSetHome={ setCollectionHome }
+				onSelect={ () =>
+					navigate( {
+						to: '/$',
+						params: {
+							_splat: computeCollectionUri( collection ),
+						},
+					} )
+				}
+				onRename={ renameCollection }
+				onDuplicate={ duplicateCollection }
+				onTrash={ trashCollection }
+				autoRenameId={ autoRenameCollectionId }
+				onAutoRenameConsumed={ () => setAutoRenameCollectionId( null ) }
+				draggedId={ draggedId }
+				activeDrop={ activeDrop }
+			/>
+		),
+		[
+			selectedCollectionId,
+			home,
+			isCollectionFavorite,
+			areFavoriteActionsDisabled,
+			isHomeUpdating,
+			toggleFavorite,
+			setCollectionHome,
+			navigate,
+			renameCollection,
+			duplicateCollection,
+			trashCollection,
+			autoRenameCollectionId,
+			draggedId,
+			activeDrop,
+		]
+	);
+
 	// --- Drag and drop -----------------------------------------------------
 
 	const sensors = useSensors(
@@ -933,6 +1051,14 @@ export default function Sidebar( {
 							{ favoritesError }
 						</Notice>
 					) : null }
+					{ duplicateNotice ? (
+						<Notice
+							status="warning"
+							onRemove={ () => setDuplicateNotice( null ) }
+						>
+							{ duplicateNotice }
+						</Notice>
+					) : null }
 					<SidebarSection
 						id="recents"
 						title={ __( 'Recents', 'cortext' ) }
@@ -1117,6 +1243,7 @@ export default function Sidebar( {
 					<SidebarTrash
 						activePages={ pages }
 						selectedId={ selectedId }
+						selectedCollectionId={ selectedCollectionId }
 						onSelect={ onSelect }
 						trashedDocumentsState={ trashedDocumentsState }
 					/>

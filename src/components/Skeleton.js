@@ -94,7 +94,7 @@ export function SidebarListSkeleton( { itemCount = 5 } ) {
 	);
 }
 
-// tech-debt.md#54: match DataViews row heights so the loading table holds the
+// tech-debt.md#55: match DataViews row heights so the loading table holds the
 // same space as real rows. Cap the row count so perPage=25 stays reasonable.
 const COLLECTION_SKELETON_ROW_CAP = 15;
 

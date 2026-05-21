@@ -4,6 +4,27 @@ import CollectionRow, {
 	collectionTitle,
 } from '../../../src/components/CollectionRow';
 
+// Popover positioning can finish after a test has already unmounted. Jest then
+// sees React's act warning during the next test and fails the suite. Ignore
+// only that warning; every other console.error should still fail.
+const originalError = console.error;
+beforeEach( () => {
+	jest.spyOn( console, 'error' ).mockImplementation( ( ...args ) => {
+		const first = args[ 0 ];
+		if (
+			typeof first === 'string' &&
+			first.includes( 'inside a test was not wrapped in act' )
+		) {
+			return;
+		}
+		originalError( ...args );
+	} );
+} );
+
+afterEach( () => {
+	console.error.mockRestore?.();
+} );
+
 function makeCollection( overrides = {} ) {
 	return {
 		id: 7,
@@ -79,5 +100,89 @@ describe( 'CollectionRow', () => {
 				name: 'Remove from favorites',
 			} )
 		).toBeTruthy();
+	} );
+
+	it( 'shows Rename, Duplicate, and Move to Trash when callbacks are provided', () => {
+		renderRow( {
+			onRename: jest.fn(),
+			onDuplicate: jest.fn(),
+			onTrash: jest.fn(),
+		} );
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Actions for Books' } )
+		);
+
+		expect(
+			screen.getByRole( 'menuitem', { name: 'Rename' } )
+		).toBeInTheDocument();
+		expect(
+			screen.getByRole( 'menuitem', { name: 'Duplicate' } )
+		).toBeInTheDocument();
+		expect(
+			screen.getByRole( 'menuitem', { name: 'Move to Trash' } )
+		).toBeInTheDocument();
+	} );
+
+	it( 'hides row actions when callbacks are missing', () => {
+		// Inline collections and other stripped-down contexts leave these
+		// callbacks unset, so the menu should leave those items out.
+		renderRow();
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Actions for Books' } )
+		);
+
+		expect(
+			screen.queryByRole( 'menuitem', { name: 'Rename' } )
+		).toBeNull();
+		expect(
+			screen.queryByRole( 'menuitem', { name: 'Duplicate' } )
+		).toBeNull();
+		expect(
+			screen.queryByRole( 'menuitem', { name: 'Move to Trash' } )
+		).toBeNull();
+	} );
+
+	it( 'opens rename mode from autoRenameId and commits on Enter', () => {
+		// Exercise inline rename without opening the Popover. The auto-rename
+		// path still uses the same editor as the Rename menu item.
+		const onAutoRenameConsumed = jest.fn();
+		const onRename = jest.fn();
+		const { container } = renderRow( {
+			autoRenameId: 7,
+			onAutoRenameConsumed,
+			onRename,
+		} );
+
+		const input = container.querySelector(
+			'.cortext-sidebar__rename input'
+		);
+		expect( input ).toBeTruthy();
+		expect( input.value ).toBe( 'Books' );
+		expect( onAutoRenameConsumed ).toHaveBeenCalled();
+
+		fireEvent.change( input, { target: { value: 'Albums' } } );
+		fireEvent.keyDown( input, { key: 'Enter' } );
+
+		expect( onRename ).toHaveBeenCalledWith( 7, 'Albums' );
+	} );
+
+	it( 'cancels inline rename on Escape without calling onRename', () => {
+		const onRename = jest.fn();
+		const { container } = renderRow( {
+			autoRenameId: 7,
+			onAutoRenameConsumed: jest.fn(),
+			onRename,
+		} );
+
+		const input = container.querySelector(
+			'.cortext-sidebar__rename input'
+		);
+		fireEvent.change( input, { target: { value: 'Albums' } } );
+		fireEvent.keyDown( input, { key: 'Escape' } );
+
+		expect( onRename ).not.toHaveBeenCalled();
+		expect(
+			container.querySelector( '.cortext-sidebar__rename input' )
+		).toBeNull();
 	} );
 } );

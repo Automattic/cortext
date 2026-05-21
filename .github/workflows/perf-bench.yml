@@ -10,44 +10,23 @@ on:
             - .github/workflows/perf-bench.yml
             - .github/scripts/write-perf-bench-summary.php
             - .github/scripts/write-perf-ui-summary.php
-    pull_request:
-        branches: [main]
-        paths:
-            - includes/CLI/**
-            - src/**
-            - tests/e2e/specs/perf-ui.spec.js
-            - .github/workflows/perf-bench.yml
-            - .github/scripts/write-perf-bench-summary.php
-            - .github/scripts/write-perf-ui-summary.php
     workflow_dispatch:
 
 permissions:
     actions: read
     contents: read
-    pull-requests: write
-
-env:
-    CORTEXT_PERF_UI: ${{ vars.CORTEXT_PERF_UI || '0' }}
 
 concurrency:
     group: ${{ github.workflow }}-${{ github.ref }}
     cancel-in-progress: true
 
 jobs:
-    performance-bench:
-        name: Performance benchmark
+    main-perf:
+        name: Performance benchmark on main
         runs-on: ubuntu-latest
         timeout-minutes: 40
         steps:
             - uses: actions/checkout@v4
-
-            - name: Capture PR HEAD and fetch main
-              if: github.event_name == 'pull_request'
-              id: refs
-              run: |
-                  set -euo pipefail
-                  echo "pr_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-                  git fetch origin main --depth=1
 
             - uses: shivammathur/setup-php@v2
               with:
@@ -70,80 +49,6 @@ jobs:
                   node-version: '24.15'
                   cache: 'pnpm'
 
-            - name: Check out main for baseline
-              if: github.event_name == 'pull_request'
-              run: git checkout --detach origin/main
-
-            - name: Install dependencies (baseline)
-              if: github.event_name == 'pull_request'
-              run: |
-                  composer install --no-interaction --prefer-dist --no-dev
-                  pnpm install --frozen-lockfile
-
-            - name: Start wp-env (baseline)
-              if: github.event_name == 'pull_request'
-              run: pnpm run env:start
-
-            - name: Seed dataset (baseline)
-              if: github.event_name == 'pull_request'
-              run: >
-                  pnpm exec wp-env run cli wp cortext perf-seed
-                  --reset
-                  --force
-                  --collections=3
-                  --rows=1250
-                  --fields=8
-                  --wide-fields=40
-                  --relations=1
-                  --rollups=1
-
-            - name: Run baseline benchmark
-              if: github.event_name == 'pull_request'
-              continue-on-error: true
-              run: |
-                  set -euo pipefail
-                  mkdir -p artifacts
-                  pnpm exec wp-env run cli wp cortext perf-bench \
-                    --iterations=10 \
-                    --warmup=1 \
-                    --pretty | tee artifacts/perf-bench-base.json
-
-            - name: Run baseline UI performance benchmark
-              if: github.event_name == 'pull_request'
-              continue-on-error: true
-              env:
-                  CORTEXT_PERF_UI: '1'
-                  # The benchmark workflow starts the dev wp-env, which serves WordPress on 8888.
-                  WP_BASE_URL: http://localhost:8888
-              run: |
-                  set -euo pipefail
-
-                  if [ ! -f tests/e2e/specs/perf-ui.spec.js ]; then
-                    echo "No UI performance spec found."
-                    exit 0
-                  fi
-
-                  pnpm exec playwright install --with-deps chromium
-                  pnpm run build
-                  set +e
-                  pnpm exec wp-scripts test-playwright --config playwright.config.js tests/e2e/specs/perf-ui.spec.js
-                  status="$?"
-                  set -e
-
-                  if [ -s artifacts/perf-ui.json ]; then
-                    mv artifacts/perf-ui.json artifacts/perf-ui-base.json
-                  fi
-
-                  exit "$status"
-
-            - name: Destroy wp-env between runs
-              if: github.event_name == 'pull_request'
-              run: printf 'y\n' | pnpm exec wp-env destroy
-
-            - name: Restore PR HEAD
-              if: github.event_name == 'pull_request'
-              run: git checkout --detach ${{ steps.refs.outputs.pr_sha }}
-
             - name: Install dependencies
               run: |
                   composer install --no-interaction --prefer-dist --no-dev
@@ -152,7 +57,7 @@ jobs:
             - name: Start wp-env
               run: pnpm run env:start
 
-            - name: Seed benchmark dataset
+            - name: Seed dataset
               run: >
                   pnpm exec wp-env run cli wp cortext perf-seed
                   --reset
@@ -164,7 +69,7 @@ jobs:
                   --relations=1
                   --rollups=1
 
-            - name: Run benchmark
+            - name: Run backend benchmark
               run: |
                   set -euo pipefail
                   mkdir -p artifacts
@@ -199,11 +104,10 @@ jobs:
 
                   exit "$status"
 
-            - name: Run UI performance benchmark
-              if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || env.CORTEXT_PERF_UI == '1'
+            - name: Run UI benchmark
               env:
                   CORTEXT_PERF_UI: '1'
-                  # The benchmark workflow starts the dev wp-env, which serves WordPress on 8888.
+                  # wp-env serves WordPress on 8888.
                   WP_BASE_URL: http://localhost:8888
               run: |
                   set -euo pipefail
@@ -221,69 +125,9 @@ jobs:
               if: always()
               run: |
                   mkdir -p artifacts
-
                   php .github/scripts/write-perf-bench-summary.php --current=artifacts/perf-bench.json | tee artifacts/perf-bench-summary.md
-
                   if [ -s artifacts/perf-ui.json ]; then
                     php .github/scripts/write-perf-ui-summary.php --current=artifacts/perf-ui.json | tee artifacts/perf-ui-summary.md
-                  fi
-
-            - name: Build PR comment body
-              if: always() && github.event_name == 'pull_request'
-              run: |
-                  mkdir -p artifacts
-
-                  comment_args=(
-                    --bench-current=artifacts/perf-bench.json
-                    --bench-base=artifacts/perf-bench-base.json
-                    --base-label=main
-                    --run-url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-                  )
-                  if [ -s artifacts/perf-ui.json ] && [ -s artifacts/perf-ui-base.json ]; then
-                    comment_args+=(--ui-current=artifacts/perf-ui.json --ui-base=artifacts/perf-ui-base.json)
-                  fi
-
-                  php .github/scripts/write-perf-comment.php "${comment_args[@]}" > artifacts/perf-bench-comment-body.md
-
-            - name: Post PR benchmark comment
-              if: always() && github.event_name == 'pull_request'
-              continue-on-error: true
-              env:
-                  GH_TOKEN: ${{ github.token }}
-                  PR_NUMBER: ${{ github.event.pull_request.number }}
-                  REPOSITORY: ${{ github.repository }}
-              run: |
-                  set -euo pipefail
-
-                  if [ ! -s artifacts/perf-bench-comment-body.md ]; then
-                    exit 0
-                  fi
-
-                  marker='<!-- cortext-perf-bench-comment -->'
-                  comment_file='artifacts/perf-bench-comment.md'
-                  {
-                    echo "$marker"
-                    cat artifacts/perf-bench-comment-body.md
-                  } > "$comment_file"
-
-                  if ! comment_id="$(gh api "repos/$REPOSITORY/issues/$PR_NUMBER/comments" \
-                    --paginate \
-                    --jq '.[] | select(.user.type == "Bot" and (.body | contains("<!-- cortext-perf-bench-comment -->"))) | .id' \
-                    | tail -n 1)"; then
-                    echo "Could not read existing PR benchmark comments; skipping comment."
-                    exit 0
-                  fi
-
-                  if [ -n "$comment_id" ]; then
-                    if ! gh api --method PATCH "repos/$REPOSITORY/issues/comments/$comment_id" \
-                      --field "body=@$comment_file" >/dev/null; then
-                      echo "Could not update PR benchmark comment; skipping comment."
-                    fi
-                  else
-                    if ! gh api --method POST "repos/$REPOSITORY/issues/$PR_NUMBER/comments" \
-                      --field "body=@$comment_file" >/dev/null; then
-                      echo "Could not create PR benchmark comment; skipping comment."
-                    fi
                   fi
 
             - if: failure()
@@ -292,5 +136,6 @@ jobs:
                   name: perf-bench
                   path: |
                       artifacts/perf-bench*.json
+                      artifacts/perf-ui*.json
                       playwright-report/
                   retention-days: 7

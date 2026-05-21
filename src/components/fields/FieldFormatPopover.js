@@ -6,13 +6,12 @@ import {
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalNumberControl as NumberControl,
 } from '@wordpress/components';
-import { useEntityRecord } from '@wordpress/core-data';
 import { useDispatch } from '@wordpress/data';
 import { forwardRef, useMemo, useRef } from '@wordpress/element';
 import { check, chevronRight } from '@wordpress/icons';
 
-import { parseFormat } from '../../hooks/fieldMapping';
 import { useSubmenuPlacement } from '../../hooks/useSubmenuPlacement';
+import { useMappedField } from '../CollectionFieldsContext';
 import { FORMAT_COLORS, findFormatColor } from './formatColors';
 
 const FOCUSABLE_CONTROL_SELECTOR = [
@@ -830,25 +829,19 @@ export default function FieldFormatPopover( {
 	onMouseLeave,
 } ) {
 	const panelRef = useRef( null );
-	const { record } = useEntityRecord( 'postType', 'crtxt_field', recordId );
+	// Read from the collection field list. Saves still go through core-data,
+	// which keeps the rest of the shell on the same write path.
+	const field = useMappedField( recordId );
 	const { editEntityRecord, saveEditedEntityRecord } = useDispatch( 'core' );
 
-	const type = record?.meta?.type ?? 'text';
+	const type = field?.cortextType ?? 'text';
 	const isNumber = type === 'number';
 	const isDate = type === 'date' || type === 'datetime';
 
-	const initial = useMemo(
-		() =>
-			parseFormat(
-				isNumber
-					? record?.meta?.number_format
-					: record?.meta?.date_format
-			),
-		[ isNumber, record ]
-	);
+	const initial = useMemo( () => field?.cortextFormat ?? null, [ field ] );
 
 	const persist = async ( next ) => {
-		if ( ! record ) {
+		if ( ! field ) {
 			return;
 		}
 		const key = isNumber ? 'number_format' : 'date_format';
@@ -858,7 +851,7 @@ export default function FieldFormatPopover( {
 		await saveEditedEntityRecord( 'postType', 'crtxt_field', recordId );
 	};
 
-	if ( ! record || ( ! isNumber && ! isDate ) ) {
+	if ( ! field || ( ! isNumber && ! isDate ) ) {
 		return null;
 	}
 
