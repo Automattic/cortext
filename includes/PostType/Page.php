@@ -18,7 +18,7 @@ final class Page {
 	}
 
 	public function register_post_type(): void {
-		register_post_type(
+		DocumentTypeRegistrar::register(
 			self::POST_TYPE,
 			array(
 				'labels'                => array(
@@ -74,7 +74,5 @@ final class Page {
 				'delete_with_user'      => false,
 			)
 		);
-
-		DocumentIdentity::register_for_post_type( self::POST_TYPE );
 	}
 }

@@ -3,10 +3,9 @@
  * Per-document icon (emoji or uploaded image) for any post type that opts into
  * the `cortext-document` capability.
  *
- * Each opted-in CPT calls `DocumentIdentity::register_for_post_type()` from its
- * own registration site, instead of this class iterating over post types at
- * `init`. That keeps page registration and dynamic row CPT registration on the
- * same code path and avoids any ordering dependency.
+ * `DocumentTypeRegistrar::register()` calls `register_for_post_type()` while
+ * registering each Cortext document post type. That keeps pages and dynamic
+ * row CPTs on the same path and avoids ordering assumptions.
  *
  * @package Cortext
  */
@@ -40,8 +39,9 @@ final class DocumentIdentity {
 
 	/**
 	 * Opts a post type into the `cortext-document` capability and registers the
-	 * document icon meta on it. Call from the post type's own registration site,
-	 * after `register_post_type()` has run for that type.
+	 * document icon meta on it. `DocumentTypeRegistrar::register()` calls this
+	 * right after `register_post_type()`; external callers should leave it
+	 * alone.
 	 *
 	 * @param string $post_type Post type slug.
 	 */
