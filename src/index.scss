@@ -1190,6 +1190,40 @@ body.cortext-sidebar-resizing {
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
+
+	&__na {
+		display: inline-flex;
+		align-items: center;
+		gap: $grid-unit-05;
+	}
+}
+
+.cortext-infotip {
+
+	&__trigger {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0;
+		margin: 0;
+		background: none;
+		border: 0;
+		color: var(--wp-components-color-foreground-muted, currentColor);
+		cursor: help;
+		border-radius: 2px;
+
+		&:focus-visible {
+			outline: 2px solid var(--wp-admin-theme-color, #3858e9);
+			outline-offset: 1px;
+		}
+	}
+
+	&__description {
+		max-width: 280px;
+		padding: $grid-unit-15;
+		font-size: 12px;
+		line-height: 1.4;
+	}
 }
 
 .cortext-topbar {

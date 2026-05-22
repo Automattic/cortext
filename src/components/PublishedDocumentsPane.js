@@ -16,6 +16,7 @@ import { DataViews, filterSortAndPaginate } from '@wordpress/dataviews';
 import { dateI18n, getSettings as getDateSettings } from '@wordpress/date';
 import { useNavigate } from '@tanstack/react-router';
 
+import Infotip from './Infotip';
 import PageIcon from './PageIcon';
 import {
 	POST_TYPE as PAGE_POST_TYPE,
@@ -64,6 +65,11 @@ function buildItems( pages, collections ) {
 	const items = [];
 	const untitled = __( '(untitled)', 'cortext' );
 
+	const pagesById = new Map();
+	for ( const page of pages ?? [] ) {
+		pagesById.set( page.id, page );
+	}
+
 	for ( const page of pages ?? [] ) {
 		items.push( {
 			key: `page-${ page.id }`,
@@ -79,6 +85,12 @@ function buildItems( pages, collections ) {
 	}
 
 	for ( const collection of collections ?? [] ) {
+		const mode = collection?.meta?.workspace_mode ?? '';
+		const ownerId = collection?.meta?._cortext_inline_owner_page ?? 0;
+		// Owner page may not be in `pages` when its status is draft/private
+		// while the inline collection is published. The render falls back to
+		// a title-less "Embedded in a page" in that case.
+		const ownerPage = ownerId ? pagesById.get( ownerId ) ?? null : null;
 		items.push( {
 			key: `collection-${ collection.id }`,
 			id: collection.id,
@@ -89,6 +101,8 @@ function buildItems( pages, collections ) {
 			link: '',
 			icon: collection?.meta?.cortext_document_icon ?? '',
 			source: collection,
+			workspaceMode: mode,
+			ownerPage,
 		} );
 	}
 
@@ -187,17 +201,60 @@ export default function PublishedDocumentsPane() {
 				enableGlobalSearch: false,
 				getValue: ( { item } ) => item.link,
 				render: ( { item } ) => {
-					if ( item.kind !== 'page' || ! item.link ) {
+					if ( item.kind === 'page' ) {
+						if ( ! item.link ) {
+							return (
+								<Text variant="muted">
+									{ __( 'N/A', 'cortext' ) }
+								</Text>
+							);
+						}
+						return (
+							<ExternalLink href={ item.link }>
+								{ __( 'View', 'cortext' ) }
+							</ExternalLink>
+						);
+					}
+					if ( item.workspaceMode !== 'inline' ) {
+						return (
+							<span className="cortext-published-pane__na">
+								<Text variant="muted">
+									{ __( 'N/A', 'cortext' ) }
+								</Text>
+								<Infotip
+									description={ __(
+										'While this collection does not have a URL, its data is nevertheless publicly accessible.',
+										'cortext'
+									) }
+								/>
+							</span>
+						);
+					}
+					if ( ! item.ownerPage ) {
 						return (
 							<Text variant="muted">
-								{ __( 'Embedded in pages', 'cortext' ) }
+								{ __( 'Embedded in a page', 'cortext' ) }
 							</Text>
 						);
 					}
+					const ownerTitle =
+						titleText( item.ownerPage ) ||
+						__( '(untitled)', 'cortext' );
 					return (
-						<ExternalLink href={ item.link }>
-							{ __( 'View', 'cortext' ) }
-						</ExternalLink>
+						<Text variant="muted">
+							{ __( 'Embedded in', 'cortext' ) }{ ' ' }
+							<Button
+								variant="link"
+								onClick={ () =>
+									openItem( {
+										kind: 'page',
+										source: item.ownerPage,
+									} )
+								}
+							>
+								{ ownerTitle }
+							</Button>
+						</Text>
 					);
 				},
 			},
