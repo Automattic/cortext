@@ -236,6 +236,40 @@ final class RowsFilterQuery {
 	}
 
 	/**
+	 * Puts exact title matches first when the request is an unsorted search.
+	 *
+	 * The relation picker only reads the first page before deciding whether to
+	 * show "Create row" for the typed title. Without this, a match on page 2+
+	 * could still make the picker offer a duplicate. Richer ranking can wait.
+	 *
+	 * @param array  $clauses WP_Query SQL clauses.
+	 * @param mixed  $sort    Sort request value; when present, this method is a no-op.
+	 * @param string $search  Raw search term from the request.
+	 * @return array
+	 */
+	public function apply_search_order_clauses( array $clauses, mixed $sort, string $search ): array {
+		if ( is_array( $sort ) && ! empty( $sort['field'] ) ) {
+			return $clauses;
+		}
+
+		$trimmed = trim( $search );
+		if ( '' === $trimmed ) {
+			return $clauses;
+		}
+
+		global $wpdb;
+
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$clauses['orderby'] = $wpdb->prepare(
+			"CASE WHEN LOWER({$wpdb->posts}.post_title) = LOWER(%s) THEN 0 ELSE 1 END ASC, {$wpdb->posts}.menu_order ASC, {$wpdb->posts}.ID ASC",
+			$trimmed
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+		return $clauses;
+	}
+
+	/**
 	 * Adds compiled filter JOINs and de-duplicates joined rows.
 	 *
 	 * WP_Query normally adds `GROUP BY posts.ID` when its own `meta_query`

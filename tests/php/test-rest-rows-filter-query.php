@@ -343,6 +343,43 @@ final class Test_Rest_Rows_Filter_Query extends BaseTestCase {
 		$this->assertSame( 'cortext_invalid_sort_field', $result->get_error_code() );
 	}
 
+	public function test_search_order_is_a_no_op_when_search_is_empty(): void {
+		$query   = new RowsFilterQuery();
+		$clauses = array( 'orderby' => 'wp_posts.menu_order ASC' );
+
+		$this->assertSame(
+			$clauses,
+			$query->apply_search_order_clauses( $clauses, null, '' )
+		);
+		$this->assertSame(
+			$clauses,
+			$query->apply_search_order_clauses( $clauses, null, '   ' )
+		);
+	}
+
+	public function test_search_order_is_a_no_op_when_explicit_sort_is_present(): void {
+		$query   = new RowsFilterQuery();
+		$clauses = array( 'orderby' => 'wp_posts.menu_order ASC' );
+		$sort    = array( 'field' => 'title', 'direction' => 'asc' );
+
+		$this->assertSame(
+			$clauses,
+			$query->apply_search_order_clauses( $clauses, $sort, 'alpha' )
+		);
+	}
+
+	public function test_search_order_prepends_exact_title_match_when_search_non_empty(): void {
+		$query   = new RowsFilterQuery();
+		$clauses = array( 'orderby' => 'wp_posts.menu_order ASC' );
+
+		$result = $query->apply_search_order_clauses( $clauses, null, '  Alpha  ' );
+
+		$this->assertStringContainsString( "CASE WHEN LOWER(", $result['orderby'] );
+		$this->assertStringContainsString( ".post_title) = LOWER('Alpha')", $result['orderby'] );
+		$this->assertStringContainsString( "menu_order ASC", $result['orderby'] );
+		$this->assertStringContainsString( ".ID ASC", $result['orderby'] );
+	}
+
 	private function create_collection_with_slug( string $title, string $slug ): int {
 		$collection_id = (int) wp_insert_post(
 			array(

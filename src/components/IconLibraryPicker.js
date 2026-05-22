@@ -3,6 +3,8 @@ import * as icons from '@wordpress/icons';
 import { Button, SearchControl } from '@wordpress/components';
 import { useMemo, useState } from '@wordpress/element';
 
+import { ICON_COLORS as NAMED_ICON_COLORS } from './iconColors';
+
 // Filter the package down to renderable icon components. `@wordpress/icons`
 // exports the `Icon` wrapper alongside the actual glyphs; the wrapper is a
 // function component while glyphs are JSX trees (object). We want only the
@@ -18,22 +20,13 @@ const ICON_NAMES = Object.entries( icons )
 	.map( ( [ name ] ) => name )
 	.sort();
 
-// Fixed named palette so the storage stays
-// validatable (PHP sanitize accepts only these names) and so the visual
-// language is consistent across the editor and frontend. `default` falls
-// back to currentColor, which means the icon picks up the surrounding
-// text color (works in both light and dark mode without extra tokens).
+// Picker palette: the shared named colors plus a `default` entry that maps
+// to `currentColor` so the icon picks up the surrounding text color (works
+// in light and dark without extra tokens). PHP sanitize accepts the named
+// values; `default` is represented as the absence of a stored color.
 const ICON_COLORS = [
 	{ name: 'default', label: __( 'Default', 'cortext' ), css: 'currentColor' },
-	{ name: 'gray', label: __( 'Gray', 'cortext' ), css: '#9ca3af' },
-	{ name: 'brown', label: __( 'Brown', 'cortext' ), css: '#92400e' },
-	{ name: 'orange', label: __( 'Orange', 'cortext' ), css: '#f97316' },
-	{ name: 'yellow', label: __( 'Yellow', 'cortext' ), css: '#eab308' },
-	{ name: 'green', label: __( 'Green', 'cortext' ), css: '#22c55e' },
-	{ name: 'blue', label: __( 'Blue', 'cortext' ), css: '#3b82f6' },
-	{ name: 'purple', label: __( 'Purple', 'cortext' ), css: '#a855f7' },
-	{ name: 'pink', label: __( 'Pink', 'cortext' ), css: '#ec4899' },
-	{ name: 'red', label: __( 'Red', 'cortext' ), css: '#ef4444' },
+	...NAMED_ICON_COLORS,
 ];
 
 const HumanizeName = ( name ) =>

@@ -1,11 +1,12 @@
 import { __, _n, sprintf } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
 import { useEntityRecords } from '@wordpress/core-data';
-import { useDispatch, useSelect } from '@wordpress/data';
+import { useDispatch } from '@wordpress/data';
 import { useState, useMemo, useCallback, useEffect } from '@wordpress/element';
 import { Button, Icon, Notice } from '@wordpress/components';
 import { displayShortcut } from '@wordpress/keycodes';
 import {
+	globe,
 	home as homeIcon,
 	plus,
 	search,
@@ -13,8 +14,9 @@ import {
 	wordpress,
 } from '@wordpress/icons';
 
-// Sidebar toggle: a panel outline with a left rail. The label carries the
-// state change, so the icon can stay the same.
+// Sidebar toggle: panel outline with a vertical accent on
+// the left side. Same icon for both states; the aria-label tells the
+// user what the toggle will do.
 const sidebarToggleIcon = (
 	<svg
 		xmlns="http://www.w3.org/2000/svg"
@@ -75,14 +77,8 @@ const cortextMarkIcon = (
 );
 import { DndContext, DragOverlay, pointerWithin } from '@dnd-kit/core';
 
-import CollectionRow from './CollectionRow';
-import PageRow from './PageRow';
 import { openCommandPalette } from './CommandPalette';
-import SidebarFavorites, {
-	favoriteKey,
-	filterFavoritesForTrashedCollection,
-	filterFavoritesForTrashedPage,
-} from './SidebarFavorites';
+import SidebarFavorites, { favoriteKey } from './SidebarFavorites';
 import SidebarResizeHandle from './SidebarResizeHandle';
 import SidebarRecents from './SidebarRecents';
 import SidebarSection from './SidebarSection';
@@ -90,25 +86,29 @@ import { SidebarListSkeleton } from './Skeleton';
 import SidebarTrash, { computeSidebarTrashRoots } from './SidebarTrash';
 import ThemeToggle from './ThemeToggle';
 import { nextChildOrder } from './pages-tree';
+import { POST_TYPE } from './page-queries';
 import {
-	ACTIVE_PAGES_QUERY,
-	POST_TYPE,
-	TRASHED_PAGES_QUERY,
-} from './page-queries';
-import { computeCollectionUri } from '../router/useResolveEntity';
+	PUBLISHED_DOCUMENTS_URI,
+	computeCollectionUri,
+} from '../router/useResolveEntity';
 import { FULL_PAGE_COLLECTION_QUERY } from '../collections';
 import useDelayedFlag, {
 	SKELETON_MIN_VISIBLE_MS,
 } from '../hooks/useDelayedFlag';
 import { useFavorites } from '../hooks/useFavorites';
-import { useRecents } from '../hooks/useRecents';
 import useSidebarSections from '../hooks/useSidebarSections';
 import useTrashedDocuments from '../hooks/useTrashedDocuments';
 import { useWorkspaceHomePath } from '../hooks/useWorkspaceHomePath';
-import { notifyDocumentTrashChanged } from '../hooks/documentTrashInvalidation';
+import {
+	DocumentsProvider,
+	favoriteIdentForRecord,
+	favoriteKeyForRecord,
+	useDocumentSelection,
+} from '../documents';
 import useSidebarDnd from './sidebar/useSidebarDnd';
 import useSidebarNavigation from './sidebar/useSidebarNavigation';
 import useSidebarTree from './sidebar/useSidebarTree';
+import DocumentRow from './sidebar/DocumentRow';
 
 export default function Sidebar( {
 	collapsed = false,
@@ -145,11 +145,15 @@ export default function Sidebar( {
 		isResolving: isResolvingFavorites,
 		isUpdating: isUpdatingFavorites,
 	} = useFavorites();
-	const { touchRecent } = useRecents();
-	const { saveEntityRecord, invalidateResolution, receiveEntityRecords } =
-		useDispatch( 'core' );
-	const { navigate, selectedId, selectedCollectionId, onSelect, goHome } =
-		useSidebarNavigation( { pages, homePath } );
+	const { saveEntityRecord, invalidateResolution } = useDispatch( 'core' );
+	const {
+		navigate,
+		activeUri,
+		selectedId,
+		selectedCollectionId,
+		onSelect,
+		goHome,
+	} = useSidebarNavigation( { pages, homePath } );
 	const adminUrl = window.cortextSettings?.adminUrl ?? '/wp-admin/';
 	const userName = window.cortextSettings?.userDisplayName ?? '';
 	const commandPaletteShortcut = displayShortcut.primary( 'k' );
@@ -166,6 +170,13 @@ export default function Sidebar( {
 	const areFavoriteActionsDisabled =
 		isResolvingFavorites || isUpdatingFavorites;
 	const { isSectionCollapsed, toggleSection } = useSidebarSections();
+	const goPublished = useCallback( () => {
+		navigate( {
+			to: '/$',
+			params: { _splat: PUBLISHED_DOCUMENTS_URI },
+		} );
+	}, [ navigate ] );
+	const isPublishedActive = activeUri === PUBLISHED_DOCUMENTS_URI;
 	const toggleTrashPanel = useCallback( () => {
 		if ( collapsed ) {
 			setIsTrashPanelOpen( true );
@@ -175,43 +186,32 @@ export default function Sidebar( {
 		setIsTrashPanelOpen( ( current ) => ! current );
 	}, [ collapsed, onToggleCollapsed ] );
 
-	const setPageHome = useCallback(
-		async ( id ) => {
-			try {
-				await setHome( { kind: 'page', id } );
-			} catch {}
-		},
-		[ setHome ]
-	);
-
-	const setCollectionHome = useCallback(
-		async ( id ) => {
-			try {
-				await setHome( { kind: 'collection', id } );
-			} catch {}
-		},
-		[ setHome ]
-	);
-
 	const favoriteKeys = useMemo(
 		() =>
 			new Set( favorites.map( ( favorite ) => favoriteKey( favorite ) ) ),
 		[ favorites ]
 	);
-	const isPageFavorite = useCallback(
-		( id ) => favoriteKeys.has( favoriteKey( { kind: 'page', id } ) ),
+	const isFavorite = useCallback(
+		( record ) => {
+			const key = favoriteKeyForRecord( record );
+			return key !== null && favoriteKeys.has( key );
+		},
 		[ favoriteKeys ]
 	);
-	const isCollectionFavorite = useCallback(
-		( id ) => favoriteKeys.has( favoriteKey( { kind: 'collection', id } ) ),
-		[ favoriteKeys ]
-	);
+	// `target` is either a raw record (from a row's menu) or an existing
+	// `{ kind, id }` favorite (from SidebarFavorites' remove button).
+	// `favoriteIdentForRecord` accepts both by reading `kind` directly or
+	// deriving it from `type`.
 	const toggleFavorite = useCallback(
-		async ( kind, id ) => {
+		async ( target ) => {
 			if ( areFavoriteActionsDisabled ) {
 				return;
 			}
-			const key = favoriteKey( { kind, id } );
+			const ident = favoriteIdentForRecord( target );
+			if ( ! ident ) {
+				return;
+			}
+			const key = favoriteKey( ident );
 			setFavoritesError( null );
 			try {
 				await setFavorites( ( current ) => {
@@ -222,7 +222,7 @@ export default function Sidebar( {
 						? current.filter(
 								( favorite ) => favoriteKey( favorite ) !== key
 						  )
-						: [ ...current, { kind, id } ];
+						: [ ...current, ident ];
 				} );
 			} catch ( err ) {
 				setFavoritesError(
@@ -253,7 +253,8 @@ export default function Sidebar( {
 	const selectFavorite = useCallback(
 		( favorite ) => {
 			if (
-				( favorite.kind === 'page' && favorite.id === selectedId ) ||
+				( ( favorite.kind === 'page' || favorite.kind === 'row' ) &&
+					favorite.id === selectedId ) ||
 				( favorite.kind === 'collection' &&
 					favorite.id === selectedCollectionId )
 			) {
@@ -276,8 +277,10 @@ export default function Sidebar( {
 			selectedCollectionId,
 		} );
 
-	// Row callbacks depend on draggedId and activeDrop, so resolve the DnD hook
-	// before those useCallback dep arrays are evaluated.
+	// `draggedId` and `activeDrop` flow into the per-row callbacks below, so
+	// the DnD hook has to resolve before any `useCallback` that lists them as
+	// deps. Otherwise their `const` bindings sit in the temporal dead zone
+	// when the callback's dep array is evaluated and React throws on render.
 	const { sensors, draggedId, draggedPage, activeDrop, handlers } =
 		useSidebarDnd( {
 			pages,
@@ -294,8 +297,6 @@ export default function Sidebar( {
 	);
 
 	const [ autoRenameId, setAutoRenameId ] = useState( null );
-	const [ autoRenameCollectionId, setAutoRenameCollectionId ] =
-		useState( null );
 	const [ isTrashPanelOpen, setIsTrashPanelOpen ] = useState( false );
 	const trashCount = useMemo( () => {
 		if ( Array.isArray( trashedDocumentsState.documents ) ) {
@@ -326,19 +327,8 @@ export default function Sidebar( {
 		}
 	}, [ collapsed ] );
 
-	const getEntityRecord = useSelect(
-		( select ) => select( 'core' ).getEntityRecord,
-		[]
-	);
-
-	// Duplicate and rename work from ids, so read the current record from
-	// core-data at action time.
-	const getRecordById = useCallback(
-		( id ) => getEntityRecord( 'postType', POST_TYPE, id ),
-		[ getEntityRecord ]
-	);
-
-	// Row actions.
+	// --- Create actions (kept here because they target the workspace, not
+	// an existing document, and they need autoRenameId + selection state).
 
 	const createRootPage = useCallback( async () => {
 		const created = await saveEntityRecord( 'postType', POST_TYPE, {
@@ -352,10 +342,11 @@ export default function Sidebar( {
 
 	const createRootCollection = useCallback( async () => {
 		const created = await apiFetch( {
-			path: '/cortext/v1/collections',
+			path: '/wp/v2/crtxt_collections',
 			method: 'POST',
 			data: {
 				title: __( 'Untitled', 'cortext' ),
+				status: 'private',
 				mode: 'full_page',
 			},
 		} );
@@ -364,8 +355,9 @@ export default function Sidebar( {
 			'crtxt_collection',
 			FULL_PAGE_COLLECTION_QUERY,
 		] );
-		// tech-debt.md#2: core-data may have cached `/wp/v2/types` before the
-		// collection registered its row CPT. Refresh entity config now.
+		// tech-debt.md#2: core-data may have cached `/wp/v2/types` before this
+		// collection registered its row CPT. Refresh the entity config so row
+		// lookups can find the new post type.
 		invalidateResolution( 'getEntitiesConfig', [ 'postType' ] );
 		if ( created?.id ) {
 			navigate( {
@@ -391,256 +383,69 @@ export default function Sidebar( {
 		[ saveEntityRecord, pages, expand, onSelect ]
 	);
 
-	// First rename promotes drafts to private, letting core regenerate
-	// post_name from the new title.
-	const renamePage = useCallback(
-		async ( id, title ) => {
-			const current = getRecordById( id );
-			const payload = { id, title };
-			if ( current?.status === 'draft' ) {
-				payload.status = 'private';
-			}
-			await saveEntityRecord( 'postType', POST_TYPE, payload );
-			await touchRecent( { kind: 'page', id } );
-		},
-		[ saveEntityRecord, getRecordById, touchRecent ]
-	);
+	// --- Per-row selection helpers --------------------------------------
 
-	const duplicatePage = useCallback(
-		async ( id ) => {
-			const source = getRecordById( id );
-			if ( ! source ) {
+	const { isSelected: isRowSelected, selectRecord: onRowSelect } =
+		useDocumentSelection( { selectedId, selectedCollectionId } );
+
+	const onSetRowHome = useCallback(
+		async ( record ) => {
+			const ident = favoriteIdentForRecord( record );
+			if ( ! ident ) {
 				return;
 			}
-			const sourceTitle =
-				source.title?.raw ?? source.title?.rendered ?? '';
-			const created = await saveEntityRecord( 'postType', POST_TYPE, {
-				status: 'private',
-				title: sourceTitle
-					? /* translators: %s: source page title */
-
-					  `${ sourceTitle } ${ __( '(copy)', 'cortext' ) }`
-					: __( 'Untitled (copy)', 'cortext' ),
-				content: source.content?.raw ?? '',
-				parent: source.parent || 0,
-				menu_order: ( source.menu_order || 0 ) + 1,
-			} );
-			if ( created?.id ) {
-				if ( source.parent ) {
-					expand( source.parent );
-				}
-				onSelect( created.id, created );
-			}
-		},
-		[ saveEntityRecord, getRecordById, expand, onSelect ]
-	);
-
-	// The server cascade trashes descendants too. Since Trash is reversible,
-	// keep the user on the trashed page and let the Trash panel handle restore.
-	//
-	// Avoid core-data's `deleteEntityRecord` here. It removes the current post
-	// before the canvas finishes its selection writes, which can crash
-	// core-data. The REST response still supplies the trashed record, and we
-	// put it back into core-data before refreshing active/trash queries.
-	const trashPage = useCallback(
-		async ( id ) => {
-			const deleted = await apiFetch( {
-				path: `/wp/v2/crtxt_pages/${ id }`,
-				method: 'DELETE',
-			} );
-			const trashed = deleted?.previous ?? deleted;
-			if ( trashed?.id ) {
-				receiveEntityRecords( 'postType', POST_TYPE, [ trashed ] );
-			}
-			invalidateResolution( 'getEntityRecords', [
-				'postType',
-				POST_TYPE,
-				ACTIVE_PAGES_QUERY,
-			] );
-			invalidateResolution( 'getEntityRecords', [
-				'postType',
-				POST_TYPE,
-				TRASHED_PAGES_QUERY,
-			] );
-			// A page can take inline-owned or nested full-page collections to
-			// Trash with it, so refresh the full-page list now.
-			invalidateResolution( 'getEntityRecords', [
-				'postType',
-				'crtxt_collection',
-				FULL_PAGE_COLLECTION_QUERY,
-			] );
-			notifyDocumentTrashChanged();
 			try {
-				await setFavorites( ( current ) =>
-					filterFavoritesForTrashedPage(
-						current,
-						id,
-						pages,
-						collections
-					)
-				);
-			} catch ( err ) {
-				setFavoritesError(
-					err?.message ??
-						__(
-							'Page moved to Trash, but Favorites could not be updated.',
-							'cortext'
-						)
-				);
-			}
-			setIsTrashPanelOpen( true );
+				await setHome( ident );
+			} catch {}
 		},
-		[
-			invalidateResolution,
-			pages,
-			collections,
-			receiveEntityRecords,
-			setFavorites,
-		]
+		[ setHome ]
 	);
 
-	const renameCollection = useCallback(
-		async ( id, title ) => {
-			await saveEntityRecord( 'postType', 'crtxt_collection', {
-				id,
-				title,
-			} );
+	const isRowHome = useCallback(
+		( record ) => {
+			if ( ! home ) {
+				return false;
+			}
+			return favoriteKey( home ) === favoriteKeyForRecord( record );
 		},
-		[ saveEntityRecord ]
+		[ home ]
 	);
 
-	const duplicateCollection = useCallback(
-		async ( id ) => {
-			const created = await apiFetch( {
-				path: `/cortext/v1/documents/${ id }/duplicate`,
-				method: 'POST',
-			} );
-			invalidateResolution( 'getEntityRecords', [
-				'postType',
-				'crtxt_collection',
-				FULL_PAGE_COLLECTION_QUERY,
-			] );
-			// A duplicate gets a fresh row CPT. Clear cached post types before
-			// anything reads rows through the new slug.
-			invalidateResolution( 'getEntitiesConfig', [ 'postType' ] );
-			// The server reports fields it skipped. Relations are the common
-			// case for now (tech-debt.md#54), but failed inserts use this too.
-			const skipped = Array.isArray( created?.skipped_fields )
-				? created.skipped_fields
-				: [];
-			if ( skipped.length > 0 ) {
-				setDuplicateNotice(
-					sprintf(
-						/* translators: %d: number of fields skipped while duplicating a collection. */
-						_n(
-							'%d field was not copied to the new collection. Add it again if you need it.',
-							'%d fields were not copied to the new collection. Add them again if you need them.',
-							skipped.length,
-							'cortext'
-						),
-						skipped.length
-					)
-				);
-			} else {
-				setDuplicateNotice( null );
-			}
-			if ( created?.id ) {
-				setAutoRenameCollectionId( created.id );
-				navigate( {
-					to: '/$',
-					params: { _splat: computeCollectionUri( created ) },
-				} );
-			}
-		},
-		[ invalidateResolution, navigate ]
-	);
-
-	const trashCollection = useCallback(
-		async ( id ) => {
-			await apiFetch( {
-				path: `/wp/v2/crtxt_collections/${ id }`,
-				method: 'DELETE',
-			} );
-			invalidateResolution( 'getEntityRecords', [
-				'postType',
-				'crtxt_collection',
-				FULL_PAGE_COLLECTION_QUERY,
-			] );
-			notifyDocumentTrashChanged();
-			// Remove trashed collections from Favorites so the next save does
-			// not send an id the server now rejects.
-			try {
-				await setFavorites( ( current ) =>
-					filterFavoritesForTrashedCollection( current, id )
-				);
-			} catch ( err ) {
-				setFavoritesError(
-					err?.message ??
-						__(
-							'Moved the collection to Trash, but could not update Favorites.',
-							'cortext'
-						)
-				);
-			}
-			if ( selectedCollectionId === id ) {
-				navigate( { to: '/' } );
-			}
-			setIsTrashPanelOpen( true );
-		},
-		[ invalidateResolution, navigate, selectedCollectionId, setFavorites ]
-	);
-
-	const renderCollectionRow = useCallback(
-		( collection, depth ) => (
-			<CollectionRow
-				key={ collection.id }
-				collection={ collection }
-				depth={ depth }
-				isSelected={ selectedCollectionId === collection.id }
-				isHome={
-					home?.kind === 'collection' && home.id === collection.id
-				}
-				isFavorite={ isCollectionFavorite( collection.id ) }
-				isFavoriteDisabled={ areFavoriteActionsDisabled }
-				isHomeUpdating={ isHomeUpdating }
-				onToggleFavorite={ ( id ) =>
-					toggleFavorite( 'collection', id )
-				}
-				onSetHome={ setCollectionHome }
-				onSelect={ () =>
-					navigate( {
-						to: '/$',
-						params: {
-							_splat: computeCollectionUri( collection ),
-						},
-					} )
-				}
-				onRename={ renameCollection }
-				onDuplicate={ duplicateCollection }
-				onTrash={ trashCollection }
-				autoRenameId={ autoRenameCollectionId }
-				onAutoRenameConsumed={ () => setAutoRenameCollectionId( null ) }
-				draggedId={ draggedId }
-				activeDrop={ activeDrop }
-			/>
-		),
-		[
+	// Feedback channel descriptors call into. The page tree and collection
+	// list stay out of here: the trash cascade now rides on the server
+	// response, so descriptors no longer need to walk them locally.
+	const documentsHandlers = useMemo(
+		() => ( {
 			selectedCollectionId,
-			home,
-			isCollectionFavorite,
-			areFavoriteActionsDisabled,
-			isHomeUpdating,
-			toggleFavorite,
-			setCollectionHome,
-			navigate,
-			renameCollection,
-			duplicateCollection,
-			trashCollection,
-			autoRenameCollectionId,
-			draggedId,
-			activeDrop,
-		]
+			expand,
+			onSelect,
+			onAutoRename: ( target ) => setAutoRenameId( target?.id ?? null ),
+			onAfterTrash: () => setIsTrashPanelOpen( true ),
+			onDuplicateNotice: setDuplicateNotice,
+			onFavoritesError: setFavoritesError,
+		} ),
+		[ selectedCollectionId, expand, onSelect ]
 	);
+
+	// Props shared by every DocumentRow. Keeping them together makes the Pages
+	// and Collections sections use the same selection, DnD, and menu behavior.
+	const rowChrome = {
+		expandedIds,
+		draggedId,
+		activeDrop,
+		isSelected: isRowSelected,
+		onSelect: onRowSelect,
+		onToggleExpand: toggleExpand,
+		onCreateChild: createChildPage,
+		isFavorite,
+		isFavoriteDisabled: areFavoriteActionsDisabled,
+		onToggleFavorite: toggleFavorite,
+		isHome: isRowHome,
+		onSetHome: onSetRowHome,
+		isHomeUpdating,
+		autoRenameId,
+		onAutoRenameConsumed: () => setAutoRenameId( null ),
+	};
 
 	// --- Render ------------------------------------------------------------
 
@@ -706,190 +511,184 @@ export default function Sidebar( {
 					<Icon icon={ homeIcon } size={ 16 } />
 					{ ! collapsed && <span>{ __( 'Home', 'cortext' ) }</span> }
 				</Button>
+				<Button
+					className="cortext-sidebar__quick-action cortext-sidebar__quick-action--published"
+					label={ __( 'Published documents', 'cortext' ) }
+					isPressed={ isPublishedActive }
+					onClick={ goPublished }
+				>
+					<Icon icon={ globe } size={ 16 } />
+					{ ! collapsed && (
+						<span>{ __( 'Published documents', 'cortext' ) }</span>
+					) }
+				</Button>
 			</div>
 			{ ! collapsed && (
-				<div className="cortext-sidebar__content">
-					{ favoritesError ? (
-						<Notice
-							status="error"
-							onRemove={ () => setFavoritesError( null ) }
-						>
-							{ favoritesError }
-						</Notice>
-					) : null }
-					{ duplicateNotice ? (
-						<Notice
-							status="warning"
-							onRemove={ () => setDuplicateNotice( null ) }
-						>
-							{ duplicateNotice }
-						</Notice>
-					) : null }
-					<SidebarSection
-						id="recents"
-						title={ __( 'Recents', 'cortext' ) }
-						isCollapsed={ isSectionCollapsed( 'recents' ) }
-						onToggle={ () => toggleSection( 'recents' ) }
-					>
-						<SidebarRecents />
-					</SidebarSection>
-
-					<SidebarSection
-						id="favorites"
-						title={ __( 'Favorites', 'cortext' ) }
-						isCollapsed={ isSectionCollapsed( 'favorites' ) }
-						onToggle={ () => toggleSection( 'favorites' ) }
-					>
-						<SidebarFavorites
-							favorites={ favorites }
-							pages={ pages }
-							collections={ collections ?? [] }
-							isResolving={ isResolvingFavorites }
-							isResolvingItems={
-								isResolvingPages || isResolvingCollections
-							}
-							isDisabled={ areFavoriteActionsDisabled }
-							onSelect={ selectFavorite }
-							onRemove={ ( favorite ) =>
-								toggleFavorite( favorite.kind, favorite.id )
-							}
-							onReorder={ reorderFavorites }
-						/>
-					</SidebarSection>
-
-					{ /* One DndContext covers pages and collections. Top-level
-					     collections live in their own section, but they still
-					     need the same drag/drop graph as the page tree. */ }
-					<DndContext
-						sensors={ sensors }
-						collisionDetection={ pointerWithin }
-						onDragStart={ handlers.handleDragStart }
-						onDragOver={ handlers.handleDragOver }
-						onDragEnd={ handlers.handleDragEnd }
-						onDragCancel={ handlers.handleDragCancel }
-					>
+				<DocumentsProvider { ...documentsHandlers }>
+					<div className="cortext-sidebar__content">
+						{ favoritesError ? (
+							<Notice
+								status="error"
+								onRemove={ () => setFavoritesError( null ) }
+							>
+								{ favoritesError }
+							</Notice>
+						) : null }
+						{ duplicateNotice ? (
+							<Notice
+								status="warning"
+								onRemove={ () => setDuplicateNotice( null ) }
+							>
+								{ duplicateNotice }
+							</Notice>
+						) : null }
 						<SidebarSection
-							id="pages"
-							title={ __( 'Pages', 'cortext' ) }
-							isCollapsed={ isSectionCollapsed( 'pages' ) }
-							onToggle={ () => toggleSection( 'pages' ) }
-							actions={
-								<Button
-									className="cortext-sidebar__section-action"
-									icon={ plus }
-									size="small"
-									label={ __( 'New page', 'cortext' ) }
-									onClick={ createRootPage }
-								/>
-							}
+							id="recents"
+							title={ __( 'Recents', 'cortext' ) }
+							isCollapsed={ isSectionCollapsed( 'recents' ) }
+							onToggle={ () => toggleSection( 'recents' ) }
 						>
-							{ isResolvingPages &&
-								pages.length === 0 &&
-								showPagesSkeleton && (
-									<SidebarListSkeleton itemCount={ 5 } />
-								) }
-							{ ! isResolvingPages && pages.length === 0 && (
-								<p className="cortext-sidebar__empty">
-									{ __( 'No pages yet.', 'cortext' ) }
-								</p>
-							) }
-
-							<ul className="cortext-sidebar__list">
-								{ tree.map( ( node ) => {
-									if (
-										node.page.type === 'crtxt_collection'
-									) {
-										return renderCollectionRow(
-											node.page,
-											0
-										);
-									}
-									return (
-										<PageRow
-											key={ node.page.id }
-											node={ node }
-											depth={ 0 }
-											selectedId={ selectedId }
-											expandedIds={ expandedIds }
-											draggedId={ draggedId }
-											activeDrop={ activeDrop }
-											onSelect={ onSelect }
-											onToggleExpand={ toggleExpand }
-											onCreateChild={ createChildPage }
-											onRename={ renamePage }
-											onDuplicate={ duplicatePage }
-											onDelete={ trashPage }
-											isFavorite={ isPageFavorite }
-											isFavoriteDisabled={
-												areFavoriteActionsDisabled
-											}
-											onToggleFavorite={ ( id ) =>
-												toggleFavorite( 'page', id )
-											}
-											onSetHome={ setPageHome }
-											home={ home }
-											isHomeUpdating={ isHomeUpdating }
-											autoRenameId={ autoRenameId }
-											onAutoRenameConsumed={ () =>
-												setAutoRenameId( null )
-											}
-											renderCollectionRow={
-												renderCollectionRow
-											}
-										/>
-									);
-								} ) }
-							</ul>
+							<SidebarRecents />
 						</SidebarSection>
 
 						<SidebarSection
-							id="collections"
-							title={ __( 'Collections', 'cortext' ) }
-							isCollapsed={ isSectionCollapsed( 'collections' ) }
-							onToggle={ () => toggleSection( 'collections' ) }
-							actions={
-								<Button
-									className="cortext-sidebar__section-action"
-									icon={ plus }
-									size="small"
-									label={ __( 'New collection', 'cortext' ) }
-									onClick={ createRootCollection }
-								/>
-							}
+							id="favorites"
+							title={ __( 'Favorites', 'cortext' ) }
+							isCollapsed={ isSectionCollapsed( 'favorites' ) }
+							onToggle={ () => toggleSection( 'favorites' ) }
 						>
-							{ isResolvingCollections &&
-								topLevelCollections.length === 0 &&
-								showCollectionsSkeleton && (
-									<SidebarListSkeleton itemCount={ 3 } />
-								) }
-							{ ! isResolvingCollections &&
-								topLevelCollections.length === 0 && (
+							<SidebarFavorites
+								favorites={ favorites }
+								pages={ pages }
+								collections={ collections ?? [] }
+								isResolving={ isResolvingFavorites }
+								isResolvingItems={
+									isResolvingPages || isResolvingCollections
+								}
+								isDisabled={ areFavoriteActionsDisabled }
+								onSelect={ selectFavorite }
+								onRemove={ toggleFavorite }
+								onReorder={ reorderFavorites }
+							/>
+						</SidebarSection>
+
+						{ /* One DndContext wraps both sections so top-level
+						     collections (rendered in the Collections section
+						     below) are part of the same drag/drop graph as
+						     the Pages tree. Without this, top-level
+						     collection rows would register their useDraggable
+						     / useDroppable hooks outside any provider and
+						     the gesture would never fire. */ }
+						<DndContext
+							sensors={ sensors }
+							collisionDetection={ pointerWithin }
+							onDragStart={ handlers.handleDragStart }
+							onDragOver={ handlers.handleDragOver }
+							onDragEnd={ handlers.handleDragEnd }
+							onDragCancel={ handlers.handleDragCancel }
+						>
+							<SidebarSection
+								id="pages"
+								title={ __( 'Pages', 'cortext' ) }
+								isCollapsed={ isSectionCollapsed( 'pages' ) }
+								onToggle={ () => toggleSection( 'pages' ) }
+								actions={
+									<Button
+										className="cortext-sidebar__section-action"
+										icon={ plus }
+										size="small"
+										label={ __( 'New page', 'cortext' ) }
+										onClick={ createRootPage }
+									/>
+								}
+							>
+								{ isResolvingPages &&
+									pages.length === 0 &&
+									showPagesSkeleton && (
+										<SidebarListSkeleton itemCount={ 5 } />
+									) }
+								{ ! isResolvingPages && pages.length === 0 && (
 									<p className="cortext-sidebar__empty">
-										{ __(
-											'No collections yet.',
-											'cortext'
-										) }
+										{ __( 'No pages yet.', 'cortext' ) }
 									</p>
 								) }
-							{ topLevelCollections.length > 0 && (
-								<ul className="cortext-sidebar__list">
-									{ topLevelCollections.map( ( collection ) =>
-										renderCollectionRow( collection, 0 )
-									) }
-								</ul>
-							) }
-						</SidebarSection>
 
-						<DragOverlay>
-							{ draggedPage ? (
-								<div className="cortext-sidebar__drag-preview">
-									{ draggedPage.title?.rendered?.trim() ||
-										__( '(untitled)', 'cortext' ) }
-								</div>
-							) : null }
-						</DragOverlay>
-					</DndContext>
-				</div>
+								<ul className="cortext-sidebar__list">
+									{ tree.map( ( node ) => (
+										<DocumentRow
+											key={ node.page.id }
+											record={ node.page }
+											childNodes={ node.children }
+											depth={ 0 }
+											{ ...rowChrome }
+										/>
+									) ) }
+								</ul>
+							</SidebarSection>
+
+							<SidebarSection
+								id="collections"
+								title={ __( 'Collections', 'cortext' ) }
+								isCollapsed={ isSectionCollapsed(
+									'collections'
+								) }
+								onToggle={ () =>
+									toggleSection( 'collections' )
+								}
+								actions={
+									<Button
+										className="cortext-sidebar__section-action"
+										icon={ plus }
+										size="small"
+										label={ __(
+											'New collection',
+											'cortext'
+										) }
+										onClick={ createRootCollection }
+									/>
+								}
+							>
+								{ isResolvingCollections &&
+									topLevelCollections.length === 0 &&
+									showCollectionsSkeleton && (
+										<SidebarListSkeleton itemCount={ 3 } />
+									) }
+								{ ! isResolvingCollections &&
+									topLevelCollections.length === 0 && (
+										<p className="cortext-sidebar__empty">
+											{ __(
+												'No collections yet.',
+												'cortext'
+											) }
+										</p>
+									) }
+								{ topLevelCollections.length > 0 && (
+									<ul className="cortext-sidebar__list">
+										{ topLevelCollections.map(
+											( collection ) => (
+												<DocumentRow
+													key={ collection.id }
+													record={ collection }
+													depth={ 0 }
+													{ ...rowChrome }
+												/>
+											)
+										) }
+									</ul>
+								) }
+							</SidebarSection>
+
+							<DragOverlay>
+								{ draggedPage ? (
+									<div className="cortext-sidebar__drag-preview">
+										{ draggedPage.title?.rendered?.trim() ||
+											__( '(untitled)', 'cortext' ) }
+									</div>
+								) : null }
+							</DragOverlay>
+						</DndContext>
+					</div>
+				</DocumentsProvider>
 			) }
 			{ ! collapsed && isTrashPanelOpen && (
 				<section

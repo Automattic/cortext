@@ -30,6 +30,9 @@ final class Test_Rest_Collections extends BaseTestCase {
 		$collection->register_post_type();
 		$collection->register_rest_filters();
 		( new Field() )->register_post_type();
+		// Register the save hook that gives a newly created collection its row
+		// CPT during the same request.
+		( new CollectionEntries() )->register();
 
 		$GLOBALS['wp_rest_server'] = new WP_REST_Server();
 		( new DocumentsController() )->register();
@@ -56,11 +59,9 @@ final class Test_Rest_Collections extends BaseTestCase {
 		$data          = $response->get_data();
 		$collection_id = (int) $data['id'];
 
-		$this->assertSame( 'project-tasks', $data['slug'] );
-		$this->assertSame( 'crtxt_project-tasks', $data['restBase'] );
+		$this->assertSame( 'project-tasks', get_post_meta( $collection_id, 'slug', true ) );
 		$this->assertTrue( post_type_exists( 'crtxt_project-tasks' ) );
 		$this->assertSame( 'Project Tasks', get_post( $collection_id )->post_title );
-		$this->assertSame( 'project-tasks', get_post_meta( $collection_id, 'slug', true ) );
 		$this->assertSame( array(), get_post_meta( $collection_id, 'fields', false ) );
 	}
 
@@ -83,13 +84,15 @@ final class Test_Rest_Collections extends BaseTestCase {
 			)
 		);
 
-		$data = $response->get_data();
+		$data          = $response->get_data();
+		$collection_id = (int) $data['id'];
+		$slug          = (string) get_post_meta( $collection_id, 'slug', true );
 
 		$this->assertSame( 201, $response->get_status() );
-		$this->assertSame( 'abcdefghijkl-2', $data['slug'] );
+		$this->assertSame( 'abcdefghijkl-2', $slug );
 		$this->assertLessThanOrEqual(
 			CollectionEntries::MAX_CPT_LEN,
-			strlen( CollectionEntries::CPT_PREFIX . $data['slug'] )
+			strlen( CollectionEntries::CPT_PREFIX . $slug )
 		);
 		$this->assertTrue( post_type_exists( 'crtxt_abcdefghijkl-2' ) );
 	}
@@ -109,9 +112,76 @@ final class Test_Rest_Collections extends BaseTestCase {
 		$collection_id = (int) $data['id'];
 
 		$this->assertSame( 201, $response->get_status() );
-		$this->assertSame( 'reading-list', $data['slug'] );
+		$this->assertSame( 'reading-list', get_post_meta( $collection_id, 'slug', true ) );
 		$this->assertSame( array(), get_post_meta( $collection_id, 'fields', false ) );
 		$this->assertTrue( post_type_exists( 'crtxt_reading-list' ) );
+	}
+
+	public function test_create_uses_meta_slug_from_request_when_valid(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+
+		$response = $this->create_collection(
+			array(
+				'title' => 'Reading List',
+				'meta'  => array( 'slug' => 'reads' ),
+			)
+		);
+
+		$data          = $response->get_data();
+		$collection_id = (int) $data['id'];
+
+		$this->assertSame( 201, $response->get_status() );
+		// The client picked the slug; the row CPT registers under it during
+		// save_post and the stored slug matches.
+		$this->assertSame( 'reads', get_post_meta( $collection_id, 'slug', true ) );
+		$this->assertTrue( post_type_exists( 'crtxt_reads' ) );
+	}
+
+	public function test_create_rejects_meta_slug_when_taken(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+		$this->create_collection(
+			array(
+				'title' => 'First',
+				'meta'  => array( 'slug' => 'overlap' ),
+			)
+		);
+
+		$response = $this->create_collection(
+			array(
+				'title' => 'Second',
+				'meta'  => array( 'slug' => 'overlap' ),
+			)
+		);
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame(
+			'cortext_collection_slug_taken',
+			$response->get_data()['code']
+		);
+	}
+
+	public function test_update_ignores_meta_slug_overwrite(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$create = $this->create_collection(
+			array(
+				'title' => 'Reading List',
+			)
+		);
+		$collection_id = (int) $create->get_data()['id'];
+		$original_slug = (string) get_post_meta( $collection_id, 'slug', true );
+
+		$request = new WP_REST_Request( 'POST', '/wp/v2/crtxt_collections/' . $collection_id );
+		$request->set_body_params(
+			array( 'meta' => array( 'slug' => 'hijacked' ) )
+		);
+		$response = rest_do_request( $request );
+
+		// `validate_pre_insert` drops `meta.slug` from the request before WP
+		// REST reaches the meta API, so the update succeeds and the stored
+		// slug stays put. The row CPT keeps pointing at the original value.
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( $original_slug, get_post_meta( $collection_id, 'slug', true ) );
+		$this->assertTrue( post_type_exists( 'crtxt_' . $original_slug ) );
 	}
 
 	public function test_auto_suffixes_reserved_slug(): void {
@@ -126,7 +196,7 @@ final class Test_Rest_Collections extends BaseTestCase {
 		$data = $response->get_data();
 
 		$this->assertSame( 201, $response->get_status() );
-		$this->assertSame( 'page-2', $data['slug'] );
+		$this->assertSame( 'page-2', get_post_meta( (int) $data['id'], 'slug', true ) );
 		$this->assertTrue( post_type_exists( 'crtxt_page-2' ) );
 	}
 
@@ -173,7 +243,6 @@ final class Test_Rest_Collections extends BaseTestCase {
 		$this->assertSame( 201, $response->get_status() );
 
 		$data = $response->get_data();
-		$this->assertSame( Collection::MODE_FULL_PAGE, $data['mode'] );
 		$this->assertSame( 0, $data['parent'] );
 		$this->assertSame(
 			Collection::MODE_FULL_PAGE,
@@ -203,7 +272,6 @@ final class Test_Rest_Collections extends BaseTestCase {
 
 		$data          = $response->get_data();
 		$collection_id = (int) $data['id'];
-		$this->assertSame( Collection::MODE_INLINE, $data['mode'] );
 		$this->assertSame( 0, $data['parent'], 'Inline collections report parent=0 even when they have an owner document.' );
 		$this->assertSame(
 			Collection::MODE_INLINE,
@@ -233,8 +301,11 @@ final class Test_Rest_Collections extends BaseTestCase {
 
 		$data          = $response->get_data();
 		$collection_id = (int) $data['id'];
-		$this->assertSame( Collection::MODE_FULL_PAGE, $data['mode'] );
 		$this->assertSame( $page_id, $data['parent'] );
+		$this->assertSame(
+			Collection::MODE_FULL_PAGE,
+			get_post_meta( $collection_id, Collection::MODE_META_KEY, true )
+		);
 		$this->assertSame(
 			$page_id,
 			(int) get_post( $collection_id )->post_parent,
@@ -259,7 +330,7 @@ final class Test_Rest_Collections extends BaseTestCase {
 
 		$this->assertSame( 400, $response->get_status() );
 		$this->assertSame(
-			'cortext_collection_parent_required',
+			'cortext_collection_inline_parent_required',
 			$response->get_data()['code']
 		);
 	}
@@ -275,11 +346,11 @@ final class Test_Rest_Collections extends BaseTestCase {
 			)
 		);
 
-		$this->assertSame( 404, $response->get_status() );
-		$this->assertSame(
-			'cortext_collection_parent_not_found',
-			$response->get_data()['code']
-		);
+		$this->assertSame( 400, $response->get_status() );
+		// Core validates `parent` before our pre-insert filter runs. A missing
+		// parent therefore comes back as `rest_post_invalid_id`, not our
+		// collection-specific code.
+		$this->assertSame( 'rest_post_invalid_id', $response->get_data()['code'] );
 	}
 
 	public function test_rejects_when_user_cannot_edit_parent(): void {
@@ -297,6 +368,9 @@ final class Test_Rest_Collections extends BaseTestCase {
 		$response = $this->create_collection(
 			array(
 				'title'  => 'Inline I cannot host',
+				// Contributors cannot create private collections. Use draft so
+				// this test reaches the parent permission check.
+				'status' => 'draft',
 				'mode'   => Collection::MODE_INLINE,
 				'parent' => $page_id,
 			)
@@ -703,8 +777,13 @@ final class Test_Rest_Collections extends BaseTestCase {
 	}
 
 	private function create_collection( array $body ) {
-		$request = new WP_REST_Request( 'POST', '/cortext/v1/collections' );
-		$request->set_body_params( $body );
+		$request = new WP_REST_Request( 'POST', '/wp/v2/crtxt_collections' );
+		$request->set_body_params(
+			array_merge(
+				array( 'status' => 'private' ),
+				$body
+			)
+		);
 
 		return rest_do_request( $request );
 	}

@@ -23,6 +23,7 @@ use Cortext\PostType\Cascade\DocumentToCollectionTrashCascade;
 use Cortext\PostType\Cascade\PageHierarchyTrashCascade;
 use Cortext\PostType\Collection;
 use Cortext\PostType\CollectionEntries;
+use Cortext\PostType\Page;
 use Cortext\PostType\TrashCascadeEngine;
 use WP_Error;
 use WP_Post;
@@ -137,32 +138,15 @@ final class DocumentsController {
 			)
 		);
 
-		// Collections use this Cortext route so mode and parent are explicit.
-		// Pages still go through `/wp/v2` via core-data.
 		register_rest_route(
 			self::NAMESPACE,
-			'/collections',
+			'/documents/(?P<id>\d+)/dependent-pages',
 			array(
 				array(
-					'methods'             => 'POST',
-					'callback'            => array( $this, 'create_collection' ),
-					'permission_callback' => array( $this, 'can_create' ),
-					'args'                => array(
-						'title'  => array(
-							'type'     => 'string',
-							'required' => true,
-						),
-						'mode'   => array(
-							'type'    => 'string',
-							'enum'    => array( Collection::MODE_INLINE, Collection::MODE_FULL_PAGE ),
-							'default' => Collection::MODE_FULL_PAGE,
-						),
-						'parent' => array(
-							'type'    => 'integer',
-							'minimum' => 0,
-							'default' => 0,
-						),
-					),
+					'methods'             => 'GET',
+					'callback'            => array( $this, 'dependent_pages' ),
+					'permission_callback' => array( $this, 'can_list_dependent_pages' ),
+					'args'                => $id_arg,
 				),
 			)
 		);
@@ -316,10 +300,6 @@ final class DocumentsController {
 		);
 	}
 
-	public function can_create(): bool {
-		return current_user_can( 'edit_posts' );
-	}
-
 	/**
 	 * Permission gate for duplicate. Mirrors `check_document_post` so a
 	 * missing document returns 404 before capability checks can turn it into
@@ -344,20 +324,6 @@ final class DocumentsController {
 		return current_user_can( 'edit_posts' ) && current_user_can( 'edit_post', $id );
 	}
 
-	public function create_collection( WP_REST_Request $request ): WP_REST_Response|WP_Error {
-		$result = $this->documents->create_collection(
-			(string) $request->get_param( 'title' ),
-			(string) $request->get_param( 'mode' ),
-			(int) $request->get_param( 'parent' )
-		);
-
-		if ( $result instanceof WP_Error ) {
-			return $result;
-		}
-
-		return new WP_REST_Response( $result, 201 );
-	}
-
 	public function duplicate( WP_REST_Request $request ): WP_REST_Response|WP_Error {
 		$result = $this->documents->duplicate( (int) $request->get_param( 'id' ) );
 
@@ -366,6 +332,135 @@ final class DocumentsController {
 		}
 
 		return new WP_REST_Response( $result, 201 );
+	}
+
+	/**
+	 * Permission gate for dependent-pages. Only collections have block-level
+	 * dependents to enumerate; for any other document kind return 404 so the
+	 * caller cannot probe id existence by capability.
+	 *
+	 * @param WP_REST_Request $request Incoming REST request.
+	 *
+	 * @return bool|WP_Error
+	 */
+	public function can_list_dependent_pages( WP_REST_Request $request ) {
+		$id   = (int) $request->get_param( 'id' );
+		$post = get_post( $id );
+
+		if ( ! $post instanceof WP_Post || Collection::POST_TYPE !== $post->post_type ) {
+			return new WP_Error(
+				'cortext_document_not_found',
+				__( 'Document not found.', 'cortext' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		return current_user_can( 'edit_posts' );
+	}
+
+	/**
+	 * Returns the public pages containing a `cortext/data-view` block
+	 * referencing this collection.
+	 *
+	 * @see CollectionPublishToggle for use case.
+	 *
+	 * For speed, search in two stages:
+	 *
+	 * 1. Match `"collectionId":%d,` or `"collectionId":%d}` in post_content.
+	 *    This rules out prefix collisions (e.g. id 12 matching
+	 *    `"collectionId":123`).
+	 *
+	 * 2. Run matching posts through `parse_blocks` to remove any false
+	 *    positives (e.g. the fragment appearing inside a string value).
+	 *
+	 * @param WP_REST_Request $request Inbound request.
+	 */
+	public function dependent_pages( WP_REST_Request $request ): WP_REST_Response {
+		$collection_id = (int) $request->get_param( 'id' );
+
+		global $wpdb;
+
+		$prefix       = sprintf( '"collectionId":%d', $collection_id );
+		$needle_comma = '%' . $wpdb->esc_like( $prefix . ',' ) . '%';
+		$needle_brace = '%' . $wpdb->esc_like( $prefix . '}' ) . '%';
+
+		// An arbitrarily high LIMIT on SELECT, just to be safe. We never
+		// expect it to be hit, because it would either mean that the same
+		// collection is embedded in way too many different pages (at which
+		// point it's irrelevant to the user whether we can list them all), or
+		// it would mean that there are impossibly many false positives (such
+		// as the string `"collectionId":123,` as plain text in post content).
+		//
+		// Let's not stress too much over this.
+		$limit = 200;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$candidate_ids = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT ID FROM {$wpdb->posts}
+				WHERE post_type = %s
+					AND post_status = 'publish'
+					AND ( post_content LIKE %s OR post_content LIKE %s )
+				LIMIT %d",
+				Page::POST_TYPE,
+				$needle_comma,
+				$needle_brace,
+				$limit
+			)
+		);
+
+		$matches = array();
+		foreach ( $candidate_ids as $candidate_id ) {
+			$post = get_post( (int) $candidate_id );
+			if ( ! $post instanceof WP_Post ) {
+				continue;
+			}
+			if ( ! self::content_depends_on_collection( $post->post_content, $collection_id ) ) {
+				continue;
+			}
+			$link      = get_permalink( $post );
+			$matches[] = array(
+				'id'    => (int) $post->ID,
+				'title' => $post->post_title,
+				'link'  => false === $link ? null : $link,
+			);
+		}
+
+		return new WP_REST_Response( $matches );
+	}
+
+	/**
+	 * Walks parsed blocks looking for a cortext/data-view with the given
+	 * collectionId in its attrs.
+	 *
+	 * @param string $content       Serialized block content.
+	 * @param int    $collection_id Collection to match.
+	 */
+	private static function content_depends_on_collection( string $content, int $collection_id ): bool {
+		// FIXME: parse_blocks does not follow dynamic block references — synced
+		// patterns (core/block), reusable blocks, and any future template-part-
+		// style indirection won't be walked. Pages that depend on the collection
+		// only through one of those will be missed.
+		$found = false;
+		$walk  = static function ( array $blocks ) use ( &$walk, $collection_id, &$found ): void {
+			foreach ( $blocks as $block ) {
+				if (
+					( $block['blockName'] ?? null ) === 'cortext/data-view'
+					&& (int) ( $block['attrs']['collectionId'] ?? 0 ) === $collection_id
+				) {
+					$found = true;
+					return;
+				}
+				if ( ! empty( $block['innerBlocks'] ) ) {
+					$walk( $block['innerBlocks'] );
+					if ( $found ) {
+						return;
+					}
+				}
+			}
+		};
+		$walk( parse_blocks( $content ) );
+		return $found;
 	}
 
 	/**

@@ -37,6 +37,18 @@ final class CollectionToRowTrashCascade extends BaseCascadeStrategy {
 		return Collection::POST_TYPE === get_post_type( $post_id );
 	}
 
+	/**
+	 * Rows trashed alongside their collection. The engine combines this with
+	 * page and collection descendants so the REST trash response can report
+	 * the full subtree in one list.
+	 *
+	 * @param int $root_id Collection post id.
+	 * @return int[]
+	 */
+	public function descendants_for_root( int $root_id ): array {
+		return $this->trashed_child_ids_tagged_with( $root_id );
+	}
+
 	protected function active_child_ids( int $owner_id ): array {
 		$post_type = $this->row_post_type_for( $owner_id );
 		if ( null === $post_type ) {

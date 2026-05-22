@@ -1,23 +1,35 @@
 import { __, sprintf } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
 import { Button, Dropdown, Spinner } from '@wordpress/components';
-import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
+import {
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from '@wordpress/element';
 import { Icon, closeSmall, plus } from '@wordpress/icons';
 
 import useCollectionRows from '../../hooks/useCollectionRows';
+import useCollectionRowsByIds from '../../hooks/useCollectionRowsByIds';
+import useDebouncedValue from '../../hooks/useDebouncedValue';
 import { useRecents } from '../../hooks/useRecents';
 import { relationIds, relationTitle } from './relationUtils';
 
-const RELATION_PICKER_VIEW = {
-	type: 'table',
-	fields: [],
-	sort: null,
-	filters: [],
-	perPage: 25,
-	page: 1,
-	search: '',
-	layout: {},
-};
+const RELATION_PICKER_PER_PAGE = 25;
+const SCROLL_LOAD_MORE_THRESHOLD_PX = 80;
+const SEARCH_DEBOUNCE_MS = 150;
+
+function hasResolvedTitle( entry ) {
+	return Boolean( entry?.title?.raw || entry?.title?.rendered );
+}
+
+function mergeRowsById( previous, incoming ) {
+	const merged = new Map();
+	previous.forEach( ( row ) => merged.set( row.id, row ) );
+	incoming.forEach( ( row ) => merged.set( row.id, row ) );
+	return Array.from( merged.values() );
+}
 
 export default function RelationEditor( {
 	value,
@@ -27,52 +39,109 @@ export default function RelationEditor( {
 	label,
 } ) {
 	const [ search, setSearch ] = useState( '' );
+	const debouncedSearch = useDebouncedValue( search, SEARCH_DEBOUNCE_MS );
+	const [ page, setPage ] = useState( 1 );
+	const [ accumulatedRows, setAccumulatedRows ] = useState( [] );
 	const [ isCreating, setIsCreating ] = useState( false );
 	const [ createError, setCreateError ] = useState( '' );
 	const searchRef = useRef( null );
 	const { touchRecent } = useRecents();
 	const selectedIds = useMemo( () => relationIds( value ), [ value ] );
+	const currentRefs = useMemo(
+		() => ( Array.isArray( value ) ? value : [ value ] ),
+		[ value ]
+	);
 	const targetCollectionId = Number( relation?.targetCollectionId );
 	const isMultiple = relation?.multiple !== false;
+
+	const pickerView = useMemo(
+		() => ( {
+			type: 'table',
+			fields: [],
+			sort: null,
+			filters: [],
+			perPage: RELATION_PICKER_PER_PAGE,
+			page,
+			search: debouncedSearch,
+			layout: {},
+		} ),
+		[ page, debouncedSearch ]
+	);
+
 	const {
 		data,
 		isLoading,
+		paginationInfo,
 		refresh: refreshTargetRows,
-	} = useCollectionRows(
-		targetCollectionId || null,
-		RELATION_PICKER_VIEW,
-		[],
-		{ forceClient: true }
-	);
-	const createTitle = search.trim();
+	} = useCollectionRows( targetCollectionId || null, pickerView, [] );
 
-	const rows = useMemo( () => {
-		const term = search.trim().toLowerCase();
-		if ( ! term ) {
-			return data;
+	// Start over at page 1 when the search or target changes. Keep the old
+	// rows visible under the spinner until the new query lands, so the picker
+	// does not flash empty while typing.
+	useEffect( () => {
+		setPage( 1 );
+	}, [ debouncedSearch, targetCollectionId ] );
+
+	useEffect( () => {
+		// While loading, useCollectionRows still returns the previous query's
+		// data. Do not let that stale page replace the accumulated list.
+		if ( isLoading ) {
+			return;
 		}
-		return data.filter( ( row ) =>
-			( row.title?.raw || row.title?.rendered || '' )
-				.toLowerCase()
-				.includes( term )
-		);
-	}, [ data, search ] );
+		if ( page === 1 ) {
+			setAccumulatedRows( data );
+			return;
+		}
+		setAccumulatedRows( ( previous ) => mergeRowsById( previous, data ) );
+	}, [ data, page, isLoading ] );
+
+	// Some saved relation refs are just IDs. Fetch labels for those only; row
+	// CPT responses usually already include titles.
+	const unresolvedIds = useMemo(
+		() =>
+			selectedIds.filter( ( id ) => {
+				const ref = currentRefs.find(
+					( entry ) => Number( entry?.id ) === id
+				);
+				return ! hasResolvedTitle( ref );
+			} ),
+		[ selectedIds, currentRefs ]
+	);
+	const { rows: byIdRows } = useCollectionRowsByIds(
+		targetCollectionId || null,
+		unresolvedIds
+	);
+
 	const selectedRefs = useMemo( () => {
-		const currentRefs = Array.isArray( value ) ? value : [ value ];
-		return selectedIds.map(
-			( id ) =>
-				data.find( ( row ) => row.id === id ) ||
-				currentRefs.find( ( ref ) => Number( ref?.id ) === id ) || {
-					id,
-				}
-		);
-	}, [ data, selectedIds, value ] );
-	const unselectedRows = rows.filter(
+		return selectedIds.map( ( id ) => {
+			const fromValue = currentRefs.find(
+				( entry ) => Number( entry?.id ) === id
+			);
+			if ( hasResolvedTitle( fromValue ) ) {
+				return fromValue;
+			}
+			const fromById = byIdRows.find( ( row ) => row.id === id );
+			if ( fromById ) {
+				return fromById;
+			}
+			const fromData = accumulatedRows.find( ( row ) => row.id === id );
+			if ( fromData ) {
+				return fromData;
+			}
+			return fromValue || { id };
+		} );
+	}, [ selectedIds, currentRefs, byIdRows, accumulatedRows ] );
+
+	const unselectedRows = accumulatedRows.filter(
 		( row ) => ! selectedIds.includes( row.id )
 	);
+	const createTitle = search.trim();
+	const debouncedCreateTitle = debouncedSearch.trim();
+	const isSearchSettled = createTitle === debouncedCreateTitle;
 	const hasExactMatch =
+		isSearchSettled &&
 		createTitle.length > 0 &&
-		data.some(
+		accumulatedRows.some(
 			( row ) =>
 				relationTitle( row ).trim().toLowerCase() ===
 				createTitle.toLowerCase()
@@ -80,8 +149,28 @@ export default function RelationEditor( {
 	const canCreate =
 		targetCollectionId > 0 &&
 		createTitle.length > 0 &&
+		isSearchSettled &&
 		! isLoading &&
 		! hasExactMatch;
+
+	const totalPages = paginationInfo?.totalPages ?? 1;
+	const canLoadMore = page < totalPages;
+
+	const handleScroll = useCallback(
+		( event ) => {
+			if ( isLoading || ! canLoadMore ) {
+				return;
+			}
+			const node = event.currentTarget;
+			if (
+				node.scrollTop + node.clientHeight >=
+				node.scrollHeight - SCROLL_LOAD_MORE_THRESHOLD_PX
+			) {
+				setPage( ( previous ) => previous + 1 );
+			}
+		},
+		[ isLoading, canLoadMore ]
+	);
 
 	const commit = async ( nextIds ) => {
 		await onSave( nextIds );
@@ -186,7 +275,10 @@ export default function RelationEditor( {
 				</Button>
 			) }
 			renderContent={ ( { onClose } ) => (
-				<div className="cortext-relation-edit">
+				<div
+					className="cortext-relation-edit"
+					onScroll={ handleScroll }
+				>
 					<div className="cortext-relation-edit__searchbar">
 						<input
 							ref={ searchRef }
@@ -236,7 +328,7 @@ export default function RelationEditor( {
 						<div className="cortext-relation-edit__section-label">
 							{ __( 'Rows', 'cortext' ) }
 						</div>
-						{ isLoading ? (
+						{ isLoading && accumulatedRows.length === 0 ? (
 							<div className="cortext-relation-edit__loading">
 								<Spinner />
 							</div>
@@ -248,27 +340,29 @@ export default function RelationEditor( {
 									: __( 'No rows', 'cortext' ) }
 							</div>
 						) : null }
-						{ ! isLoading &&
-							unselectedRows.map( ( row ) => (
-								<button
-									key={ row.id }
-									type="button"
-									className="cortext-relation-edit__row"
-									onMouseDown={ keepSearchFocused }
-									onClick={ async () => {
-										const shouldClose = await toggle(
-											row.id
-										);
-										if ( shouldClose ) {
-											onClose();
-										}
-									} }
-								>
-									<span className="cortext-relation-edit__row-title">
-										{ relationTitle( row ) }
-									</span>
-								</button>
-							) ) }
+						{ unselectedRows.map( ( row ) => (
+							<button
+								key={ row.id }
+								type="button"
+								className="cortext-relation-edit__row"
+								onMouseDown={ keepSearchFocused }
+								onClick={ async () => {
+									const shouldClose = await toggle( row.id );
+									if ( shouldClose ) {
+										onClose();
+									}
+								} }
+							>
+								<span className="cortext-relation-edit__row-title">
+									{ relationTitle( row ) }
+								</span>
+							</button>
+						) ) }
+						{ isLoading && accumulatedRows.length > 0 ? (
+							<div className="cortext-relation-edit__loading cortext-relation-edit__loading--more">
+								<Spinner />
+							</div>
+						) : null }
 						{ canCreate ? (
 							<button
 								type="button"

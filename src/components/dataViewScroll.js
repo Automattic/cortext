@@ -11,11 +11,16 @@ function isAtScrollEnd( scrollLeft, target ) {
 
 export function scrollToEndQuickly( wrapper, options = {} ) {
 	const maxScroll = wrapper.scrollWidth - wrapper.clientWidth;
-	if ( maxScroll <= 0 ) {
+	const trackEnd = options.trackEnd === true;
+	if ( maxScroll <= 0 && ! trackEnd ) {
 		return;
 	}
 	const isRtl = window.getComputedStyle( wrapper ).direction === 'rtl';
-	const target = isRtl ? -maxScroll : maxScroll;
+	const endTarget = () => {
+		const currentMaxScroll = wrapper.scrollWidth - wrapper.clientWidth;
+		return isRtl ? -currentMaxScroll : currentMaxScroll;
+	};
+	const target = endTarget();
 	const start = wrapper.scrollLeft;
 	if ( options.snapIfAtEnd ) {
 		if ( isAtScrollEnd( start, target ) ) {
@@ -35,7 +40,7 @@ export function scrollToEndQuickly( wrapper, options = {} ) {
 	}
 
 	const distance = target - start;
-	if ( distance === 0 ) {
+	if ( distance === 0 && ! trackEnd ) {
 		return;
 	}
 
@@ -45,9 +50,13 @@ export function scrollToEndQuickly( wrapper, options = {} ) {
 
 	const animate = ( now ) => {
 		const progress = Math.min( 1, ( now - startedAt ) / duration );
-		wrapper.scrollLeft = start + distance * easeOutCubic( progress );
+		const currentTarget = endTarget();
+		wrapper.scrollLeft =
+			start + ( currentTarget - start ) * easeOutCubic( progress );
 		if ( progress < 1 ) {
 			window.requestAnimationFrame( animate );
+		} else {
+			wrapper.scrollLeft = currentTarget;
 		}
 	};
 	window.requestAnimationFrame( animate );

@@ -1063,10 +1063,12 @@ final class PerfBench {
 		$target_row_ids        = array_map( 'intval', $manifest['target_row_ids'] );
 		$relation_count        = min( self::RELATION_TARGETS, intdiv( count( $target_row_ids ), 2 ) );
 		$primary_field_ids     = array_map( 'intval', $manifest['fields']['primary']['scalar_field_ids'] ?? array() );
+		$rollup_field_ids      = array_map( 'intval', $manifest['fields']['primary']['rollup_field_ids'] ?? array() );
 		$number_field_id       = $primary_field_ids[1] ?? 0;
 		$select_field_id       = $primary_field_ids[2] ?? 0;
 		$tags_field_id         = $primary_field_ids[3] ?? 0;
 		$date_field_id         = $primary_field_ids[5] ?? 0;
+		$primary_rollup_id     = $rollup_field_ids[0] ?? 0;
 
 		if ( $relation_field_id < 1 || $relation_count < 1 ) {
 			throw new RuntimeException( 'The benchmark dataset does not include enough relation targets.' );
@@ -1228,10 +1230,11 @@ final class PerfBench {
 					)
 				),
 			),
-			// Page 3 has the densest relation set, which makes rollup cost
-			// easier to see than it is in the page 1 baseline.
-			'rows_rollup_heavy'       => array(
-				'label' => 'Load rows with heavy rollups',
+			// Page 3 sits in the heavy-rollup slice. Keep the normal response
+			// and the rollup-only projection side by side so regressions show up
+			// in either path.
+			'rows_rollup_heavy_full'  => array(
+				'label' => 'Load heavy rollup rows (all fields)',
 				'run'   => fn() => $this->rest_request(
 					'GET',
 					'/cortext/v1/rows',
@@ -1239,6 +1242,21 @@ final class PerfBench {
 						'collection' => $primary_collection_id,
 						'page'       => 3,
 						'per_page'   => self::PAGE_SIZE,
+					)
+				),
+			),
+			'rows_rollup_heavy'       => array(
+				'label' => 'Load heavy rollup rows (rollup field)',
+				'run'   => fn() => $this->rest_request(
+					'GET',
+					'/cortext/v1/rows',
+					array(
+						'collection' => $primary_collection_id,
+						'page'       => 3,
+						'per_page'   => self::PAGE_SIZE,
+						'fields'     => $primary_rollup_id > 0
+							? array( "field-{$primary_rollup_id}" )
+							: array(),
 					)
 				),
 			),

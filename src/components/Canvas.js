@@ -6,8 +6,7 @@ import {
 	InterfaceSkeleton,
 	store as interfaceStore,
 } from '@wordpress/interface';
-import { Button, SnackbarList, Spinner } from '@wordpress/components';
-import { store as noticesStore } from '@wordpress/notices';
+import { Button } from '@wordpress/components';
 import { cog, seen, unseen } from '@wordpress/icons';
 import { useCallback, useEffect, useState } from '@wordpress/element';
 
@@ -21,11 +20,13 @@ import './Canvas.scss';
 // gets the blocks registered.
 import './initEditor';
 import useAutosave from '../hooks/useAutosave';
+import useDelayedFlag from '../hooks/useDelayedFlag';
 import { withViewTransition } from '../hooks/viewTransition';
 import { POST_TYPE } from './page-queries';
 import { DocumentPropertiesProvider } from './DocumentPropertiesContext';
 import EditorBody from './EditorBody';
-import PublishToggle from './PublishToggle';
+import PagePublishToggle from './PagePublishToggle';
+import { CanvasProgressBar } from './Skeleton';
 import { TopBarActionsFill } from './WorkspaceTopBar';
 import PageInspectorSidebar, {
 	INSPECTOR_SCOPE,
@@ -33,26 +34,6 @@ import PageInspectorSidebar, {
 	PAGE_INSPECTOR,
 	isInspectorArea,
 } from './PageInspectorSidebar';
-
-// Show only Cortext snackbars, such as autosave failures. Core's save notice is
-// noisy in this autosave-heavy editor, so we keep notices with our prefix.
-function CortextSnackbars() {
-	const notices = useSelect(
-		( select ) =>
-			select( noticesStore )
-				.getNotices()
-				.filter(
-					( n ) =>
-						n.type === 'snackbar' &&
-						typeof n.id === 'string' &&
-						n.id.startsWith( 'cortext-' )
-				),
-		[]
-	);
-	const { removeNotice } = useDispatch( noticesStore );
-
-	return <SnackbarList notices={ notices } onRemove={ removeNotice } />;
-}
 
 function DocumentActions( {
 	isActive,
@@ -89,7 +70,7 @@ function DocumentActions( {
 		<TopBarActionsFill>
 			<div className="cortext-document-actions">
 				{ topBarActions }
-				{ postType === POST_TYPE ? <PublishToggle /> : null }
+				{ postType === POST_TYPE ? <PagePublishToggle /> : null }
 				{ hasProperties ? (
 					<Button
 						className="cortext-document-actions__fields"
@@ -222,10 +203,12 @@ function CanvasEditor( {
 			collectionId={ collectionId }
 			fields={ fields }
 			fallbackRecord={ row }
-			// During a document switch, the provider already has the next row's
-			// fields while the editor still shows the previous post. Pause the
-			// header-block sync so it does not remove the outgoing row's
-			// properties block right before `flushNow()` saves.
+			// While a document switch is in flight (`pendingPost` set),
+			// the provider already carries the destination's fields but
+			// the editor still renders the previous post. Pausing the
+			// header-block lifecycle here keeps `EnsureHeaderBlocks` from
+			// deleting `cortext/document-properties` from the outgoing
+			// row right before `flushNow()` saves that deletion.
 			isResolving={ !! pendingPost }
 			isVisible={ arePropertiesVisible }
 			onToggleVisible={ togglePropertiesVisible }
@@ -238,7 +221,6 @@ function CanvasEditor( {
 				arePropertiesVisible={ arePropertiesVisible }
 				onTogglePropertiesVisible={ togglePropertiesVisible }
 			/>
-			<CortextSnackbars />
 			<InterfaceSkeleton
 				className="cortext-canvas"
 				content={
@@ -310,44 +292,61 @@ export default function Canvas( {
 		} );
 	}, [ requestedPost ] );
 
-	if ( ! renderedPost ) {
-		return (
-			<div className="cortext-canvas__loading">
-				<Spinner />
-			</div>
-		);
-	}
-
 	const pendingPost =
+		renderedPost &&
 		requestedPost &&
 		( requestedPost.type !== renderedPost.type ||
 			requestedPost.id !== renderedPost.id )
 			? requestedPost
 			: null;
+	// `pendingPost` appears only after the next record resolves. On a slow
+	// network that is too late, so compare the requested post to the one still
+	// on screen and cover the whole wait after a click.
+	const isCrossDocNav = Boolean(
+		renderedPost &&
+			postId &&
+			( String( postId ) !== String( renderedPost.id ) ||
+				( postType && postType !== renderedPost.type ) )
+	);
+	const showProgress = useDelayedFlag( ! renderedPost || isCrossDocNav );
+	if ( ! renderedPost ) {
+		return (
+			<div className="cortext-canvas__loading cortext-canvas__loading--document">
+				{ showProgress ? <CanvasProgressBar /> : null }
+			</div>
+		);
+	}
 
 	return (
-		<EditorProvider
-			post={ renderedPost }
-			settings={ window.cortextEditorSettings ?? {} }
-			useSubRegistry={ useSubRegistry }
-		>
-			<CanvasEditor
+		<>
+			{ showProgress && (
+				<div className="cortext-canvas__pending-progress">
+					<CanvasProgressBar />
+				</div>
+			) }
+			<EditorProvider
 				post={ renderedPost }
-				postType={ renderedPost.type }
-				collectionId={ collectionId }
-				fields={ fields }
-				row={ row }
-				pendingPost={ pendingPost }
-				onSwitchPost={ setDisplayedPost }
-				onDisplayedPost={ onDisplayedPost }
-				isActive={ isActive }
-				topBarActions={ topBarActions }
-				notice={ notice }
-				onApi={ onApi }
-				onSaved={ onSaved }
-				onRestored={ onRestored }
-				recentTarget={ recentTarget }
-			/>
-		</EditorProvider>
+				settings={ window.cortextEditorSettings ?? {} }
+				useSubRegistry={ useSubRegistry }
+			>
+				<CanvasEditor
+					post={ renderedPost }
+					postType={ renderedPost.type }
+					collectionId={ collectionId }
+					fields={ fields }
+					row={ row }
+					pendingPost={ pendingPost }
+					onSwitchPost={ setDisplayedPost }
+					onDisplayedPost={ onDisplayedPost }
+					isActive={ isActive }
+					topBarActions={ topBarActions }
+					notice={ notice }
+					onApi={ onApi }
+					onSaved={ onSaved }
+					onRestored={ onRestored }
+					recentTarget={ recentTarget }
+				/>
+			</EditorProvider>
+		</>
 	);
 }

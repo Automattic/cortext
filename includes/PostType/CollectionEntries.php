@@ -65,8 +65,21 @@ final class CollectionEntries {
 	public function register(): void {
 		add_action( 'init', array( $this, 'register_all' ), 20 );
 		add_action( 'save_post', array( $this, 'record_modified_by' ), 10, 2 );
+		// Collections created after init still need their row CPT before the
+		// REST response returns, so hook the collection save path too.
+		add_action( 'save_post_' . Collection::POST_TYPE, array( $this, 'register_on_save' ), 5, 2 );
 		add_action( 'before_delete_post', array( $this, 'cleanup_after_field_delete' ), 10, 2 );
 		add_action( 'before_delete_post', array( $this, 'cleanup_after_entry_delete' ), 10, 2 );
+	}
+
+	public function register_on_save( int $post_id, \WP_Post $post ): void {
+		// Autosaves and revisions fire their own save_post events. Ignore them
+		// so only the saved collection registers the row CPT.
+		if ( wp_is_post_autosave( $post_id ) || wp_is_post_revision( $post_id ) ) {
+			return;
+		}
+
+		$this->register_for_collection( $post );
 	}
 
 	/**

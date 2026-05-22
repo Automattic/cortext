@@ -1,4 +1,8 @@
-import { reducer, init } from '../../src/router/entityRouteReducer';
+import {
+	parseTarget,
+	reducer,
+	init,
+} from '../../src/router/entityRouteReducer';
 
 const emptyTarget = { kind: 'empty', tail: '' };
 const documentTarget = ( id ) => ( {
@@ -11,6 +15,7 @@ const collectionTarget = ( id ) => ( {
 	id,
 	tail: `${ id }`,
 } );
+const publishedTarget = { kind: 'published', tail: '' };
 
 const PAGE_TYPE = 'crtxt_page';
 
@@ -32,9 +37,28 @@ function activate( state, target, options = {} ) {
 }
 
 describe( 'EntityRoute reducer', () => {
+	describe( 'parseTarget', () => {
+		it( 'maps a bare `published` splat to the published kind', () => {
+			expect( parseTarget( 'published' ) ).toEqual( {
+				kind: 'published',
+				tail: '',
+			} );
+		} );
+
+		it( 'does not match `published/<anything>` (falls through to document)', () => {
+			expect( parseTarget( 'published/foo' ).kind ).toBe( 'document' );
+		} );
+	} );
+
 	describe( 'init', () => {
 		it( 'starts an empty target on the empty pane', () => {
 			expect( init( emptyTarget ).active ).toEqual( { kind: 'empty' } );
+		} );
+
+		it( 'starts a published target on the published pane', () => {
+			expect( init( publishedTarget ).active ).toEqual( {
+				kind: 'published',
+			} );
 		} );
 
 		it( 'starts a document target as loading', () => {
@@ -118,6 +142,18 @@ describe( 'EntityRoute reducer', () => {
 			state = activate( state, documentTarget( 1 ) );
 			// The previous collection is pruned once the document activates.
 			expect( state.mountedCollectionIds ).toEqual( [] );
+		} );
+
+		it( 'switches to published immediately', () => {
+			const state = activate(
+				init( documentTarget( 1 ) ),
+				documentTarget( 1 )
+			);
+			const next = reducer( state, {
+				type: 'TARGET_CHANGED',
+				target: publishedTarget,
+			} );
+			expect( next.active ).toEqual( { kind: 'published' } );
 		} );
 
 		it( 'switches to empty immediately', () => {

@@ -1,13 +1,18 @@
 import { scrollToEndQuickly } from '../../../src/components/dataViewScroll';
 
-function makeScroller( { direction = 'ltr', scrollLeft = 0 } = {} ) {
+function makeScroller( {
+	direction = 'ltr',
+	scrollLeft = 0,
+	scrollWidth = 800,
+	clientWidth = 200,
+} = {} ) {
 	const wrapper = document.createElement( 'div' );
 	Object.defineProperty( wrapper, 'clientWidth', {
-		value: 200,
+		value: clientWidth,
 		configurable: true,
 	} );
 	Object.defineProperty( wrapper, 'scrollWidth', {
-		value: 800,
+		value: scrollWidth,
 		configurable: true,
 	} );
 	wrapper.scrollLeft = scrollLeft;
@@ -84,5 +89,28 @@ describe( 'scrollToEndQuickly', () => {
 		expect( wrapper.scrollLeft ).toBe( 800 );
 		expect( wrapper.dataset.cortextRevealAtEnd ).toBeUndefined();
 		expect( window.requestAnimationFrame ).not.toHaveBeenCalled();
+	} );
+
+	it( 'keeps chasing the end while the table grows', () => {
+		window.matchMedia = jest.fn( () => ( { matches: false } ) );
+		const now = jest
+			.spyOn( window.performance, 'now' )
+			.mockReturnValue( 0 );
+		let frame;
+		window.requestAnimationFrame = jest.fn( ( callback ) => {
+			frame = callback;
+			return 1;
+		} );
+		const wrapper = makeScroller( { scrollWidth: 200 } );
+
+		scrollToEndQuickly( wrapper, { trackEnd: true } );
+		Object.defineProperty( wrapper, 'scrollWidth', {
+			value: 500,
+			configurable: true,
+		} );
+		frame( 180 );
+
+		expect( wrapper.scrollLeft ).toBe( 300 );
+		now.mockRestore();
 	} );
 } );
