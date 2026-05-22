@@ -24,6 +24,7 @@ final class RowsQueryScope {
 	private string $where_sql;
 	private string $join_sql;
 	private mixed $sort;
+	private string $search;
 	private array $field_schema;
 	private RowsFilterQuery $row_query;
 
@@ -32,13 +33,15 @@ final class RowsQueryScope {
 		array $field_schema,
 		string $where_sql,
 		string $join_sql,
-		mixed $sort
+		mixed $sort,
+		string $search = ''
 	) {
 		$this->row_query    = $row_query;
 		$this->field_schema = $field_schema;
 		$this->where_sql    = $where_sql;
 		$this->join_sql     = $join_sql;
 		$this->sort         = $sort;
+		$this->search       = $search;
 		$this->token        = uniqid( 'cortext_rows_', true );
 	}
 
@@ -64,7 +67,8 @@ final class RowsQueryScope {
 				return $clauses;
 			}
 			$clauses = $this->row_query->apply_filter_join_clauses( $clauses, $this->join_sql );
-			return $this->row_query->apply_sort_clauses( $clauses, $this->sort, $this->field_schema );
+			$clauses = $this->row_query->apply_sort_clauses( $clauses, $this->sort, $this->field_schema );
+			return $this->row_query->apply_search_order_clauses( $clauses, $this->sort, $this->search );
 		};
 
 		add_filter( 'posts_where', $where_callback, 10, 2 );

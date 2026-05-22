@@ -596,6 +596,141 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertSame( 400, $filter_response->get_status() );
 	}
 
+	// -- include[] tests ------------------------------------------------
+
+	public function test_sanitize_include_param_dedupes_drops_zero_and_normalizes(): void {
+		$controller = new RowsController();
+		$method     = new \ReflectionMethod( $controller, 'sanitize_include_param' );
+
+		$this->assertSame(
+			array( 5, 10 ),
+			$method->invoke( $controller, array( 0, 5, 5, 10, '10', '0' ) )
+		);
+		$this->assertSame( array(), $method->invoke( $controller, array() ) );
+		$this->assertSame( array(), $method->invoke( $controller, array( 0, '0', 0 ) ) );
+		$this->assertSame( array(), $method->invoke( $controller, 'not-an-array' ) );
+	}
+
+	public function test_validate_include_param_rejects_more_than_100_ids(): void {
+		$controller = new RowsController();
+		$method     = new \ReflectionMethod( $controller, 'validate_include_param' );
+
+		$this->assertTrue( $method->invoke( $controller, range( 1, 100 ) ) );
+
+		$result = $method->invoke( $controller, range( 1, 101 ) );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 400, $result->get_error_data()['status'] );
+	}
+
+	public function test_build_query_args_sets_post_in_when_include_provided(): void {
+		$fixture = $this->create_collection_fixture( 'bqainc', 'text' );
+
+		$request = new WP_REST_Request( 'GET', '/cortext/v1/rows' );
+		$request->set_query_params(
+			array(
+				'collection' => $fixture['collection_id'],
+				'include'    => array( 11, 22, 33 ),
+			)
+		);
+		$request->set_default_params(
+			array(
+				'per_page' => 25,
+				'page'     => 1,
+				'search'   => '',
+				'sort'     => null,
+				'filters'  => array(),
+				'include'  => array(),
+			)
+		);
+
+		$controller = new RowsController();
+		$method     = new \ReflectionMethod( $controller, 'build_query_args' );
+
+		$args = $method->invoke( $controller, $request, 'bqainc' );
+
+		$this->assertArrayHasKey( 'post__in', $args );
+		$this->assertSame( array( 11, 22, 33 ), $args['post__in'] );
+	}
+
+	public function test_build_query_args_omits_post_in_when_include_absent(): void {
+		$fixture = $this->create_collection_fixture( 'bqanoinc', 'text' );
+
+		$request = new WP_REST_Request( 'GET', '/cortext/v1/rows' );
+		$request->set_query_params(
+			array(
+				'collection' => $fixture['collection_id'],
+			)
+		);
+		$request->set_default_params(
+			array(
+				'per_page' => 25,
+				'page'     => 1,
+				'search'   => '',
+				'sort'     => null,
+				'filters'  => array(),
+				'include'  => array(),
+			)
+		);
+
+		$controller = new RowsController();
+		$method     = new \ReflectionMethod( $controller, 'build_query_args' );
+
+		$args = $method->invoke( $controller, $request, 'bqanoinc' );
+
+		$this->assertArrayNotHasKey( 'post__in', $args );
+	}
+
+	public function test_query_rows_short_circuits_when_include_is_empty_after_sanitize(): void {
+		// A buggy caller passing only zeros must not get page 1 of the whole
+		// collection as a consolation prize. The endpoint should return the
+		// empty payload exactly once the sanitizer leaves include empty.
+		wp_set_current_user( $this->create_user( 'author' ) );
+		$fixture = $this->create_collection_fixture( 'inczero', 'text' );
+
+		$response = $this->query_rows(
+			array(
+				'collection' => $fixture['collection_id'],
+				'include'    => array( 0, 0, '0' ),
+			)
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertSame( array(), $data['rows'] );
+		$this->assertSame( 0, $data['total'] );
+		$this->assertSame( 0, $data['totalPages'] );
+		$this->assertArrayHasKey( 'collection', $data );
+		$this->assertArrayHasKey( 'fields', $data );
+	}
+
+	public function test_query_rows_rejects_include_with_more_than_100_ids(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+		$fixture = $this->create_collection_fixture( 'inccap', 'text' );
+
+		$response = $this->query_rows(
+			array(
+				'collection' => $fixture['collection_id'],
+				'include'    => range( 1, 101 ),
+			)
+		);
+
+		$this->assertSame( 400, $response->get_status() );
+	}
+
+	public function test_query_rows_edit_context_with_include_requires_edit_posts(): void {
+		wp_set_current_user( $this->create_user( 'subscriber' ) );
+
+		$response = $this->query_rows(
+			array(
+				'collection' => 1,
+				'include'    => array( 1, 2 ),
+				'context'    => 'edit',
+			)
+		);
+
+		$this->assertSame( 403, $response->get_status() );
+	}
+
 	// -- Relation and rollup tests --------------------------------------
 
 	public function test_update_row_field_syncs_relation_from_source_and_reverse(): void {

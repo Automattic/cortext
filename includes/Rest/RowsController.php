@@ -81,6 +81,13 @@ final class RowsController {
 							'type'    => 'array',
 							'default' => array(),
 						),
+						'include'    => array(
+							'type'              => 'array',
+							'default'           => array(),
+							'items'             => array( 'type' => 'integer' ),
+							'sanitize_callback' => array( $this, 'sanitize_include_param' ),
+							'validate_callback' => array( $this, 'validate_include_param' ),
+						),
 						'context'    => array(
 							'type'    => 'string',
 							'default' => 'view',
@@ -313,6 +320,25 @@ final class RowsController {
 		$slug      = (string) get_post_meta( $collection->ID, 'slug', true );
 		$field_ids = $this->collection_field_ids( $collection->ID );
 
+		// `include` requested but empty after sanitization (e.g. `include[]=0`):
+		// short-circuit to an empty response. Falling through would return page 1
+		// of the whole collection, which is the opposite of what the caller asked
+		// for. Picker by-ID lookup never sends empty ids in practice; this is the
+		// safer contract for any future caller.
+		$query_params = $request->get_query_params();
+		if ( array_key_exists( 'include', $query_params ) && count( (array) $request->get_param( 'include' ) ) === 0 ) {
+			return new WP_REST_Response(
+				array(
+					'rows'       => array(),
+					'total'      => 0,
+					'totalPages' => 0,
+					'collection' => $this->collection_definition( $collection, $slug ),
+					'fields'     => $this->field_definitions( $field_ids ),
+				),
+				200
+			);
+		}
+
 		$row_query    = new RowsFilterQuery();
 		$field_schema = $row_query->field_schema_for( $collection_id );
 
@@ -350,7 +376,8 @@ final class RowsController {
 			$field_schema,
 			$where_sql,
 			$filter_sql['join'],
-			$request->get_param( 'sort' )
+			$request->get_param( 'sort' ),
+			(string) $request->get_param( 'search' )
 		);
 		$query      = $scope->run( $query_args );
 
@@ -720,6 +747,15 @@ final class RowsController {
 			'paged'          => (int) $request->get_param( 'page' ),
 		);
 
+		$include = (array) $request->get_param( 'include' );
+		if ( count( $include ) > 0 ) {
+			// Caller uses the by-ID response as a Map<id, row>, not an ordered
+			// list. Intentionally do NOT set `orderby => 'post__in'`; the default
+			// menu_order / ID order is fine and avoids forcing every caller to
+			// care about input order.
+			$args['post__in'] = $include;
+		}
+
 		$sort = $request->get_param( 'sort' );
 		if ( ! is_array( $sort ) || empty( $sort['field'] ) ) {
 			$args['orderby'] = array(
@@ -750,6 +786,63 @@ final class RowsController {
 		}
 
 		return $args;
+	}
+
+	/**
+	 * Normalizes the `include` query param to a clean list of post IDs.
+	 *
+	 * Drops non-positive entries, dedupes, and re-indexes. Empty input is fine;
+	 * the controller short-circuits empty-after-sanitize requests rather than
+	 * silently falling through to a default-page query.
+	 *
+	 * @param mixed $value Raw `include` param.
+	 * @return int[]
+	 */
+	public function sanitize_include_param( mixed $value ): array {
+		if ( ! is_array( $value ) ) {
+			return array();
+		}
+
+		$ids = array();
+		foreach ( $value as $item ) {
+			$id = absint( $item );
+			if ( $id > 0 ) {
+				$ids[] = $id;
+			}
+		}
+
+		return array_values( array_unique( $ids ) );
+	}
+
+	/**
+	 * Caps the `include` list at the same per_page ceiling as the rest of the
+	 * endpoint, so a single request never asks for more than 100 IDs at once.
+	 *
+	 * WP REST runs `validate_callback` before `sanitize_callback`, so the
+	 * value here is the raw client input. The cap therefore applies to the
+	 * raw item count, which is stricter than necessary if many entries would
+	 * dedupe — fine for our use case and avoids a separate sanitize-then-
+	 * validate dance.
+	 *
+	 * @param mixed $value Raw `include` value from the request.
+	 * @return true|WP_Error
+	 */
+	public function validate_include_param( mixed $value ): bool|WP_Error {
+		if ( ! is_array( $value ) ) {
+			return new WP_Error(
+				'rest_invalid_param',
+				__( 'The include parameter must be an array of IDs.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+		if ( count( $value ) > 100 ) {
+			return new WP_Error(
+				'cortext_include_too_many',
+				__( 'Cannot resolve more than 100 rows by ID in a single request.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+		return true;
 	}
 
 	private function nullable_row_id_param( mixed $value ): ?int {
