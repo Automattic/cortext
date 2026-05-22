@@ -1,10 +1,10 @@
 /**
  * Tests for `src/documents/favorites.js`.
  *
- * The DataView row menu passes raw row records from `/wp/v2/{cpt}` into
- * `favoriteIdentForRecord` and `favoriteKeyForRecord`. Those records have
- * `type: 'crtxt_<slug>'` and no `kind`, so the helpers need to resolve them
- * as rows from the post type.
+ * The DataView row menu passes row records from `/cortext/v1/rows` into
+ * `favoriteIdentForRecord` and `favoriteKeyForRecord`. That endpoint already
+ * sets `kind: 'row'`. The `type: 'crtxt_<slug>'` shape from `/wp/v2/{cpt}`
+ * still has to resolve too, in case anything reaches the helpers from there.
  */
 
 import {
@@ -38,6 +38,21 @@ describe( 'favoriteIdentForRecord', () => {
 			kind: 'row',
 			id: 4,
 		} );
+	} );
+
+	it( 'resolves a row record in the cortext rows endpoint shape', () => {
+		// `/cortext/v1/rows` returns `kind` but no `type`. This is what the
+		// DataView row menu actually receives, so it has to resolve from
+		// `kind` alone.
+		expect(
+			favoriteIdentForRecord( {
+				kind: 'row',
+				id: 9,
+				title: { raw: 'A row', rendered: 'A row' },
+				status: 'publish',
+				meta: {},
+			} )
+		).toEqual( { kind: 'row', id: 9 } );
 	} );
 
 	it( 'returns null when a record has no usable kind', () => {
