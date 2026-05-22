@@ -67,8 +67,15 @@ export default function CollectionPublishToggle( { collectionId } ) {
 					style={ { maxWidth: '40rem' } }
 					onConfirm={ confirmUnpublish }
 					onCancel={ () => setIsConfirming( false ) }
-					confirmButtonText={ __( 'Unpublish anyway', 'cortext' ) }
+					confirmButtonText={ __( 'Unpublish', 'cortext' ) }
 				>
+					<h2>
+						{ sprintf(
+							/* translators: %s: collection title */
+							__( 'Unpublish collection "%s"?', 'cortext' ),
+							collectionTitle( record )
+						) }
+					</h2>
 					{ isLoading && (
 						<p>
 							{ __(
@@ -87,16 +94,6 @@ export default function CollectionPublishToggle( { collectionId } ) {
 					) }
 					{ dependentPages && dependentPages.length > 0 && (
 						<>
-							<h2>
-								{ sprintf(
-									/* translators: %s: collection title */
-									__(
-										'Unpublish collection "%s"?',
-										'cortext'
-									),
-									collectionTitle( record )
-								) }
-							</h2>
 							<p>
 								{ __(
 									'The following pages are currently public and depend on this collection.',
