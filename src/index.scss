@@ -1082,6 +1082,34 @@ body.cortext-sidebar-resizing {
 	z-index: 1;
 }
 
+@keyframes cortext-hold-old-canvas {
+
+	0%,
+	99% {
+		opacity: 1;
+	}
+
+	100% {
+		opacity: 0;
+	}
+}
+
+// Page-to-page swaps rebuild the editor while the route stays on the same
+// pane. Keep the old snapshot above the new one so the frame never peeks
+// through.
+:root[data-cortext-view-transition="hold-old-canvas"]::view-transition-old(cortext-canvas) {
+	animation: cortext-hold-old-canvas 2500ms step-end both;
+	mix-blend-mode: normal;
+	z-index: 2;
+}
+
+:root[data-cortext-view-transition="hold-old-canvas"]::view-transition-new(cortext-canvas) {
+	animation: none;
+	mix-blend-mode: normal;
+	opacity: 1;
+	z-index: 1;
+}
+
 // The side peek lives outside the canvas. Give it its own transition layer so
 // the canvas cross-fade never flashes over it.
 ::view-transition-group(cortext-row-detail-sidebar) {
