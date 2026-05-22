@@ -1518,11 +1518,30 @@ body.cortext-sidebar-resizing {
 		pointer-events: none;
 	}
 
-	// The trashed-page banner stacks above the BlockCanvas. Make the
-	// content slot a flex column so the canvas keeps its `height: 100%`
-	// behavior (it now fills the remaining space). Couples to a
-	// Gutenberg-internal class; revisit if `@wordpress/interface` ever
-	// exposes a slot for a notice region above the content.
+	// Gutenberg uses a left box-shadow as the inspector divider. In Cortext it
+	// reads like a stray focus line next to the canvas, so remove it here.
+	.interface-interface-skeleton__sidebar {
+		box-shadow: none;
+	}
+
+	// The inspector has only Page and Block tabs, but @wordpress/components can
+	// still flag the tab list as horizontally overflowing after a click. Its
+	// edge fade washes out the Page tab, so disable the mask for this header.
+	.editor-sidebar__panel-tabs [role="tablist"][aria-orientation="horizontal"].is-overflowing-first,
+	.editor-sidebar__panel-tabs [role="tablist"][aria-orientation="horizontal"].is-overflowing-last,
+	.editor-sidebar__panel-tabs [role="tablist"][aria-orientation="horizontal"].is-overflowing-first.is-overflowing-last {
+		-webkit-mask-image: none;
+		mask-image: none;
+	}
+
+	// The trashed-page notice sits above BlockCanvas. Make the skeleton body
+	// own a fixed frame while the iframe handles document scrolling; otherwise
+	// an outer scrollbar can appear between the canvas and inspector.
+	.interface-interface-skeleton__body,
+	.interface-interface-skeleton__content {
+		overflow: hidden;
+	}
+
 	.interface-interface-skeleton__content {
 		position: relative;
 		display: flex;
