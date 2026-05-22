@@ -24,7 +24,7 @@ import {
 
 import PageIcon from './PageIcon';
 import { SidebarListSkeleton } from './Skeleton';
-import { collectionTitle } from './CollectionRow';
+import { documentTitle } from '../documents';
 import useDelayedFlag, {
 	SKELETON_MIN_VISIBLE_MS,
 } from '../hooks/useDelayedFlag';
@@ -44,10 +44,6 @@ function transformToString( transform ) {
 	}
 	const { x = 0, y = 0, scaleX = 1, scaleY = 1 } = transform;
 	return `translate3d(${ x }px, ${ y }px, 0) scaleX(${ scaleX }) scaleY(${ scaleY })`;
-}
-
-function pageTitle( page ) {
-	return page.title?.rendered?.trim() || __( '(untitled)', 'cortext' );
 }
 
 function favoriteTitle( favorite, fallback ) {
@@ -155,7 +151,7 @@ export function resolveFavoriteItems( favorites, pages, collections ) {
 					sortableId: key,
 					record: page,
 					title: page
-						? pageTitle( page )
+						? documentTitle( page )
 						: favoriteTitle( favorite, __( 'Page', 'cortext' ) ),
 					path: page ? computeDocumentUri( page ) : favorite.path,
 					icon: page
@@ -177,7 +173,7 @@ export function resolveFavoriteItems( favorites, pages, collections ) {
 					sortableId: key,
 					record: collection,
 					title: collection
-						? collectionTitle( collection )
+						? documentTitle( collection )
 						: favoriteTitle(
 								favorite,
 								__( 'Collection', 'cortext' )
