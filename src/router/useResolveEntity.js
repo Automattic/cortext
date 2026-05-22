@@ -195,6 +195,13 @@ export function computeCollectionUri( entity ) {
 	return `collection/${ tail }`;
 }
 
+// Singleton splat for the Published documents screen. The route reducer
+// matches the splat exactly; trailing segments fall through to the document
+// resolver and end up at "not found".
+//
+// FIXME: I don't like this constant
+export const PUBLISHED_DOCUMENTS_URI = 'published';
+
 // Strips the prefix from a splat URI and returns { prefix, tail }.
 export function parseSplatUri( uri ) {
 	const slash = ( uri ?? '' ).indexOf( '/' );

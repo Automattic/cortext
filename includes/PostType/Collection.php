@@ -468,15 +468,17 @@ final class Collection {
 			)
 		);
 
-		// Server-only. The editor does not need the owner id, and exposing it
-		// would make it easy to point an inline collection at the wrong page.
+		// Read-only via REST: the Published documents pane resolves the owner
+		// page title for inline collections. Writes stay blocked by
+		// `auth_callback` and by `validate_pre_insert` in CollectionsController,
+		// which rejects re-parenting attempts on inline collections.
 		register_post_meta(
 			self::POST_TYPE,
 			self::INLINE_OWNER_META_KEY,
 			array(
 				'type'              => 'integer',
 				'single'            => true,
-				'show_in_rest'      => false,
+				'show_in_rest'      => true,
 				'sanitize_callback' => 'absint',
 				'auth_callback'     => static function () {
 					return false;
