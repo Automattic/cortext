@@ -37,6 +37,9 @@ const COLLECTION_SLUG = 'perfmain';
 const READY_TIMEOUT_MS = 30_000;
 const ROWS_API_SEGMENT = '/cortext/v1/rows';
 const REST_SEGMENTS = [ '/cortext/v1/', '/wp/v2/', '/wp-json/' ];
+const ACTIVE_COLLECTION_VIEW_SELECTOR =
+	'.cortext-workspace__pane[data-active="true"] .cortext-data-view';
+const DATA_VIEW_ROW_SELECTOR = 'tbody tr.dataviews-view-table__row';
 
 // Number of samples to collect for each scenario in one workflow run. CI
 // runners are noisy enough that n=1 can move by +/-50%. Override with
@@ -254,7 +257,7 @@ test.describe( 'Cortext UI performance', () => {
 				await probe.reset();
 				const startedAt = Date.now();
 
-				await page
+				await activeCollectionView( page )
 					.getByLabel( 'Open row' )
 					.first()
 					.click( { force: true } );
@@ -290,7 +293,9 @@ test.describe( 'Cortext UI performance', () => {
 				);
 				const startedAt = Date.now();
 
-				await page.locator( '.cortext-data-view__new-row' ).click();
+				await activeCollectionView( page )
+					.locator( '.cortext-data-view__new-row' )
+					.click();
 				await createPromise;
 				await waitForRowCountChanged( page, previousCount );
 				await waitForPaint( page );
@@ -323,7 +328,7 @@ test.describe( 'Cortext UI performance', () => {
 				);
 				const startedAt = Date.now();
 
-				await page
+				await activeCollectionView( page )
 					.locator( 'button.dataviews-view-table-header-button' )
 					.first()
 					.click( { force: true } );
@@ -375,7 +380,7 @@ test.describe( 'Cortext UI performance', () => {
 				await probe.reset();
 				const startedAt = Date.now();
 
-				await page
+				await activeCollectionView( page )
 					.locator( 'button.cortext-column-header-trigger' )
 					.first()
 					.click( { force: true } );
@@ -401,7 +406,7 @@ test.describe( 'Cortext UI performance', () => {
 				);
 				await waitForCollectionReady( page );
 
-				await page
+				await activeCollectionView( page )
 					.locator( 'button.cortext-column-header-trigger' )
 					.first()
 					.click( { force: true } );
@@ -587,11 +592,12 @@ test.describe( 'Cortext UI performance', () => {
 				);
 				const startedAt = Date.now();
 
-				// Search for the last seeded row's suffix so the result set
-				// shrinks to one entry whose title differs from the
-				// unfiltered first row. 'Perf' would match every row and
-				// leave the first row unchanged.
-				await page.locator( '.dataviews-search input' ).fill( '01250' );
+				// Use the last seeded row's suffix. That narrows the table to
+				// one row, so the first row actually changes; 'Perf' matches
+				// every seeded row.
+				await activeCollectionView( page )
+					.locator( '.dataviews-search input' )
+					.fill( '01250' );
 				await responsePromise;
 				await waitForFirstRowChanged( page, previousFirstRow );
 				await waitForPaint( page );
@@ -612,7 +618,7 @@ test.describe( 'Cortext UI performance', () => {
 					collection.adminQuery
 				);
 				await waitForCollectionReady( page );
-				await page
+				await activeCollectionView( page )
 					.getByLabel( 'Open row' )
 					.first()
 					.click( { force: true } );
@@ -733,56 +739,62 @@ async function setupProbe( page ) {
 	};
 }
 
+function activeCollectionView( page ) {
+	return page.locator( ACTIVE_COLLECTION_VIEW_SELECTOR ).first();
+}
+
+function activeCollectionRows( page ) {
+	return activeCollectionView( page ).locator( DATA_VIEW_ROW_SELECTOR );
+}
+
 async function waitForCollectionReady( page ) {
-	await page
-		.locator( '.cortext-data-view .dataviews-wrapper' )
-		.first()
+	const dataView = activeCollectionView( page );
+
+	await dataView
+		.locator( '.dataviews-wrapper' )
 		.waitFor( { state: 'visible', timeout: READY_TIMEOUT_MS } );
-	await page
-		.locator( 'tbody tr.dataviews-view-table__row' )
+	await activeCollectionRows( page )
 		.first()
 		.waitFor( { state: 'visible', timeout: READY_TIMEOUT_MS } );
 	await waitForPaint( page );
 }
 
 async function readFirstRowText( page ) {
-	return page.evaluate(
-		() =>
-			document.querySelector( 'tbody tr.dataviews-view-table__row' )
-				?.textContent ?? null
-	);
+	return activeCollectionRows( page ).first().textContent();
 }
 
 async function readRowCount( page ) {
-	return page.evaluate(
-		() =>
-			document.querySelectorAll( 'tbody tr.dataviews-view-table__row' )
-				.length
-	);
+	return activeCollectionRows( page ).count();
 }
 
 async function waitForFirstRowChanged( page, previousText ) {
 	await page.waitForFunction(
-		( prev ) => {
-			const row = document.querySelector(
-				'tbody tr.dataviews-view-table__row'
-			);
-			return Boolean( row ) && row.textContent !== prev;
+		( { rootSelector, rowSelector, previous } ) => {
+			const root = document.querySelector( rootSelector );
+			const row = root?.querySelector( rowSelector );
+			return Boolean( row ) && row.textContent !== previous;
 		},
-		previousText,
+		{
+			rootSelector: ACTIVE_COLLECTION_VIEW_SELECTOR,
+			rowSelector: DATA_VIEW_ROW_SELECTOR,
+			previous: previousText,
+		},
 		{ timeout: READY_TIMEOUT_MS }
 	);
 }
 
 async function waitForRowCountChanged( page, previousCount ) {
 	await page.waitForFunction(
-		( prev ) => {
-			const count = document.querySelectorAll(
-				'tbody tr.dataviews-view-table__row'
-			).length;
-			return count !== prev && count > 0;
+		( { rootSelector, rowSelector, previous } ) => {
+			const root = document.querySelector( rootSelector );
+			const count = root?.querySelectorAll( rowSelector ).length ?? 0;
+			return count !== previous && count > 0;
 		},
-		previousCount,
+		{
+			rootSelector: ACTIVE_COLLECTION_VIEW_SELECTOR,
+			rowSelector: DATA_VIEW_ROW_SELECTOR,
+			previous: previousCount,
+		},
 		{ timeout: READY_TIMEOUT_MS }
 	);
 }
