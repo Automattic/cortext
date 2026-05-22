@@ -7,8 +7,7 @@ import {
 	InterfaceSkeleton,
 	store as interfaceStore,
 } from '@wordpress/interface';
-import { Button, Disabled, SnackbarList } from '@wordpress/components';
-import { store as noticesStore } from '@wordpress/notices';
+import { Button, Disabled } from '@wordpress/components';
 import { chevronDown, chevronUp, cog, seen, unseen } from '@wordpress/icons';
 import { useCallback, useEffect, useState } from '@wordpress/element';
 
@@ -26,7 +25,7 @@ import useDelayedFlag from '../hooks/useDelayedFlag';
 import { withViewTransition } from '../hooks/viewTransition';
 import { POST_TYPE } from './page-queries';
 import EditorBody from './EditorBody';
-import PublishToggle from './PublishToggle';
+import PagePublishToggle from './PagePublishToggle';
 import RowProperties from './RowProperties';
 import { CanvasProgressBar } from './Skeleton';
 import { TopBarActionsFill } from './WorkspaceTopBar';
@@ -37,28 +36,6 @@ import PageInspectorSidebar, {
 	PAGE_INSPECTOR,
 	isInspectorArea,
 } from './PageInspectorSidebar';
-
-// Renders only Cortext-owned snackbars (the autosave failure toast). The
-// editor store also dispatches its own "Post updated" success notice on every
-// save; in an autosave-silent UI those would fire constantly, so we filter to
-// notices we tagged ourselves.
-function CortextSnackbars() {
-	const notices = useSelect(
-		( select ) =>
-			select( noticesStore )
-				.getNotices()
-				.filter(
-					( n ) =>
-						n.type === 'snackbar' &&
-						typeof n.id === 'string' &&
-						n.id.startsWith( 'cortext-' )
-				),
-		[]
-	);
-	const { removeNotice } = useDispatch( noticesStore );
-
-	return <SnackbarList notices={ notices } onRemove={ removeNotice } />;
-}
 
 function DocumentActions( {
 	isActive,
@@ -94,7 +71,7 @@ function DocumentActions( {
 		<TopBarActionsFill>
 			<div className="cortext-document-actions">
 				{ topBarActions }
-				{ postType === POST_TYPE ? <PublishToggle /> : null }
+				{ postType === POST_TYPE ? <PagePublishToggle /> : null }
 				{ hasProperties ? (
 					<Button
 						className="cortext-document-actions__fields"
@@ -292,7 +269,6 @@ function CanvasEditor( {
 				arePropertiesVisible={ arePropertiesVisible }
 				onTogglePropertiesVisible={ togglePropertiesVisible }
 			/>
-			<CortextSnackbars />
 			<HideHeaderBlockKebab />
 			<InterfaceSkeleton
 				className="cortext-canvas"
