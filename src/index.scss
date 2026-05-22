@@ -4234,10 +4234,18 @@ tr:has(.cortext-title-cell--is-opening)
 		left: -40%;
 		width: 40%;
 		height: 100%;
+		// Sits on the canvas frame, which goes dark with the shell.
+		// Accent-contrast keeps the bar visible against `#2a2a2a`; the
+		// override below applies inside `.cortext-root` so the cascade
+		// picks the right value automatically.
 		background: var(--cortext-accent);
 		border-radius: 2px;
 		animation: cortext-canvas-progress-slide 1.4s ease-in-out infinite;
 	}
+}
+
+.cortext-root[data-theme="dark"] .cortext-canvas-progress::before {
+	background: var(--cortext-accent-contrast);
 }
 
 @media (prefers-reduced-motion: reduce) {
