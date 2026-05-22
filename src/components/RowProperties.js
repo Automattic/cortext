@@ -413,15 +413,13 @@ function PropertyControl( {
  * block editor. This is intentionally not serialized yet; see
  * tech-debt.md#41 for the block-backed version needed for frontend rendering.
  *
- * @param {Object}  props
- * @param {Array}   props.fields    The collection field definitions for this row.
- * @param {Object}  [props.row]     Optional fallback row record (used for
- *                                  read-only fields that aren't tracked by the
- *                                  editor store, e.g. relations and rollups).
- * @param {boolean} [props.visible] When false, the panel renders inert (kept
- *                                  for cross-mode visibility toggles).
+ * @param {Object} props
+ * @param {Array}  props.fields The collection field definitions for this row.
+ * @param {Object} [props.row]  Optional fallback row record (used for
+ *                              read-only fields that aren't tracked by the
+ *                              editor store, e.g. relations and rollups).
  */
-export default function RowProperties( { fields, row, visible = true } ) {
+export default function RowProperties( { fields, row } ) {
 	const { editPost } = useDispatch( editorStore );
 	const { optionOverrides, updateFieldOptions, refreshRows } =
 		useContext( RowMutationContext );
@@ -494,9 +492,6 @@ export default function RowProperties( { fields, row, visible = true } ) {
 	return (
 		<div
 			className="cortext-row-detail__properties cortext-row-detail__properties--rows"
-			data-visible={ visible ? 'true' : 'false' }
-			aria-hidden={ visible ? undefined : true }
-			{ ...( visible ? {} : { inert: '' } ) }
 			aria-label={ fieldCountLabel }
 		>
 			{ propertyFields.map( ( field ) => {

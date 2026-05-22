@@ -22,17 +22,6 @@ import {
 	unseen,
 } from '@wordpress/icons';
 
-import useDelayedFlag, {
-	SKELETON_MIN_VISIBLE_MS,
-} from '../hooks/useDelayedFlag';
-import PageIcon from './PageIcon';
-import { SkeletonFieldRow } from './Skeleton';
-import {
-	getRowDetailMode,
-	titleFromDetail,
-	titleFromRow,
-} from './rowDetailUtils';
-
 // The editor surface (EditorProvider + EditorBody + autosave + block
 // registration) lives in the `editor` chunk, shared with Canvas, so it
 // stays off the initial admin entry. The peek's chrome (toolbar, modal,
@@ -44,6 +33,7 @@ import {
 const RowEditor = lazy( () =>
 	import( /* webpackChunkName: "editor" */ './RowEditor' )
 );
+import { getRowDetailMode } from './rowDetailUtils';
 
 // Solid version of @wordpress/icons `pin` (which only ships outlined), so the
 // pressed state reads as filled.
@@ -157,7 +147,6 @@ function DetailShell( {
 	canGoNext,
 	canGoPrevious,
 	setArePropertiesVisible,
-	title,
 } ) {
 	const fieldCountLabel = sprintf(
 		/* translators: %d: Number of row fields. */
@@ -239,11 +228,6 @@ function DetailShell( {
 						/>
 					</div>
 				</div>
-				<div className="cortext-row-detail__identity">
-					<h2 className="cortext-row-detail__title">
-						{ title || __( 'Untitled', 'cortext' ) }
-					</h2>
-				</div>
 			</div>
 			{ saveError ? (
 				<Notice
@@ -271,65 +255,17 @@ function DetailShell( {
 	);
 }
 
-// While useEntityRecord and the editor spin up, reuse the row title and icon
-// from the list and show a properties skeleton. The peek panel should not open
-// as an empty box.
-function LoadingDetail( { onClose, row, fieldCount } ) {
-	const tentativeTitle = titleFromRow( row );
-	const documentIcon = row?.meta?.cortext_document_icon ?? '';
-	// Cap the placeholder rows so large collections do not fill the panel with
-	// grey lines. Six gives the pane shape without crowding it.
-	const skeletonRows = Math.max( 1, Math.min( fieldCount ?? 0, 6 ) );
-
+function LoadingDetail( { onClose } ) {
 	return (
-		<div className="cortext-row-detail__frame cortext-row-detail__frame--loading">
+		<div className="cortext-row-detail__frame">
 			<div className="cortext-row-detail__header">
-				<div
-					className="cortext-row-detail__toolbar"
-					role="toolbar"
-					aria-label={ __( 'Row detail actions', 'cortext' ) }
-				>
-					<div className="cortext-row-detail__toolbar-group cortext-row-detail__toolbar-group--end">
-						<Button
-							className="cortext-row-detail__toolbar-button cortext-row-detail__toolbar-button--close"
-							icon={ closeSmall }
-							label={ __( 'Close', 'cortext' ) }
-							onClick={ onClose }
-						/>
-					</div>
-				</div>
-				<div className="cortext-row-detail__identity">
-					<h2 className="cortext-row-detail__title">
-						{ documentIcon ? (
-							<span
-								className="cortext-row-detail__title-icon"
-								aria-hidden="true"
-							>
-								<PageIcon icon={ documentIcon } size={ 24 } />
-							</span>
-						) : null }
-						{ tentativeTitle || __( 'Untitled', 'cortext' ) }
-					</h2>
-				</div>
-			</div>
-			<div className="cortext-row-detail__body cortext-row-detail__body--loading">
-				<div
-					className="cortext-row-detail__skeleton-fields"
-					aria-hidden="true"
-				>
-					{ Array.from( { length: skeletonRows } ).map(
-						( _, idx ) => (
-							<SkeletonFieldRow key={ idx } />
-						)
-					) }
-				</div>
-				<div
-					className="cortext-row-detail__loading-status"
-					role="status"
-					aria-live="polite"
-				>
-					<Spinner />
-				</div>
+				<Spinner />
+				<Button
+					icon={ closeSmall }
+					label={ __( 'Close', 'cortext' ) }
+					size="compact"
+					onClick={ onClose }
+				/>
 			</div>
 		</div>
 	);
@@ -405,8 +341,9 @@ export default function RowDetailView( {
 		( resolvedDetail?.postType === postType ? resolvedDetail : null );
 	const activeDetailKey = detailKeyFor( activeDetail );
 	const [ arePropertiesVisible, setArePropertiesVisible ] = useState( true );
-	const [ displayTitle, setDisplayTitle ] = useState( () =>
-		titleFromDetail( activeDetail )
+	const togglePropertiesVisible = useCallback(
+		() => setArePropertiesVisible( ( current ) => ! current ),
+		[]
 	);
 	const [ detailPanes, setDetailPanes ] = useState( () =>
 		activeDetail && activeDetailKey
@@ -422,12 +359,6 @@ export default function RowDetailView( {
 	// RowProperties filters out TITLE_FIELD_ID itself (the locked post-title
 	// block above renders the title), so pass the full field list through.
 	const propertyFields = fields;
-
-	useEffect( () => {
-		if ( activeDetail ) {
-			setDisplayTitle( titleFromDetail( activeDetail ) );
-		}
-	}, [ activeDetail ] );
 
 	useEffect( () => {
 		if ( ! activeDetail || ! activeDetailKey ) {
@@ -562,24 +493,10 @@ export default function RowDetailView( {
 			String( activeDetail.rowId ) === String( rowId )
 	);
 
-	const isLoadingPane = ! activeDetail && detailPanes.length === 0;
-	const showLoadingDetail = useDelayedFlag(
-		isLoadingPane,
-		120,
-		SKELETON_MIN_VISIBLE_MS
-	);
-
-	let content;
-	if ( isLoadingPane ) {
-		content = showLoadingDetail ? (
-			<LoadingDetail
-				onClose={ requestClose }
-				row={ row }
-				fieldCount={ propertyFields.length }
-			/>
-		) : null;
-	} else {
-		content = (
+	const content =
+		! activeDetail && detailPanes.length === 0 ? (
+			<LoadingDetail onClose={ requestClose } />
+		) : (
 			<DetailShell
 				arePropertiesVisible={ arePropertiesVisible }
 				canGoNext={ canUseRowControls && canGoNext }
@@ -596,7 +513,6 @@ export default function RowDetailView( {
 				onTogglePin={ onTogglePin }
 				saveError={ canUseRowControls ? saveError : null }
 				setArePropertiesVisible={ setArePropertiesVisible }
-				title={ displayTitle }
 			>
 				<div className="cortext-row-detail__pane-stack">
 					<Suspense
@@ -615,10 +531,6 @@ export default function RowDetailView( {
 								pane.state === 'preparing' ||
 								pane.state === 'covered';
 							const isApiActive = isCurrentPane && ! isHiddenPane;
-							const isTitleActive =
-								! isHiddenPane &&
-								( pane.state === 'active' ||
-									pane.state === 'entering' );
 							const paneRow = {
 								...( pane.detail.row ?? {} ),
 								...pane.detail.record,
@@ -653,16 +565,17 @@ export default function RowDetailView( {
 										fields={ propertyFields }
 										isActive={ isApiActive }
 										isHidden={ isHiddenPane }
-										isTitleActive={ isTitleActive }
 										onApi={ onApi }
 										onPaneReady={ onPaneReady }
 										onRestored={ onRestored }
 										onSaved={ onSaved }
-										onTitle={ setDisplayTitle }
 										post={ pane.detail.record }
 										postType={ pane.detail.postType }
 										propertiesVisible={
 											arePropertiesVisible
+										}
+										onTogglePropertiesVisible={
+											togglePropertiesVisible
 										}
 										row={ paneRow }
 										rowId={ pane.detail.rowId }
@@ -674,7 +587,6 @@ export default function RowDetailView( {
 				</div>
 			</DetailShell>
 		);
-	}
 
 	if ( normalizedMode === 'modal' ) {
 		return (

@@ -6,11 +6,13 @@ const { test, expect } = require( '@wordpress/e2e-test-utils-playwright' );
 
 const DOCUMENT_ICON_BLOCK = 'cortext/document-icon';
 const DOCUMENT_COVER_BLOCK = 'cortext/document-cover';
+const DOCUMENT_PROPERTIES_BLOCK = 'cortext/document-properties';
 const POST_TITLE_BLOCK = 'core/post-title';
 const HEADER_BLOCK_NAMES = [
 	DOCUMENT_COVER_BLOCK,
 	DOCUMENT_ICON_BLOCK,
 	POST_TITLE_BLOCK,
+	DOCUMENT_PROPERTIES_BLOCK,
 ];
 const EXPECTED_HEADER_PREFIX = [ DOCUMENT_ICON_BLOCK, POST_TITLE_BLOCK ];
 const BODY_A = 'Header guard body A';
@@ -268,18 +270,21 @@ async function expectProtectedInsertionPointHidden( page ) {
 		.toBe( false );
 }
 
-async function expectInsertionPointAllowedAfterTitle( page ) {
-	const allowedIndex = await page.evaluate( () => {
+async function expectInsertionPointAllowedAfterHeader( page ) {
+	const allowedIndex = await page.evaluate( ( headerNames ) => {
 		const blocks = window.wp.data.select( 'core/block-editor' ).getBlocks();
-		const titleIndex = blocks.findIndex(
-			( block ) => block.name === 'core/post-title'
-		);
-		const index = titleIndex + 1;
+		let lastHeaderIndex = -1;
+		blocks.forEach( ( block, idx ) => {
+			if ( headerNames.includes( block.name ) ) {
+				lastHeaderIndex = idx;
+			}
+		} );
+		const index = lastHeaderIndex + 1;
 		window.wp.data
 			.dispatch( 'core/block-editor' )
 			.showInsertionPoint( '', index );
 		return index;
-	} );
+	}, HEADER_BLOCK_NAMES );
 	await expect
 		.poll( () =>
 			page.evaluate( () => {
@@ -321,7 +326,7 @@ async function exerciseHeaderGuard( page ) {
 	await expectMoveUpToolbarState( page, INSERTED_BODY, true );
 
 	await expectProtectedInsertionPointHidden( page );
-	await expectInsertionPointAllowedAfterTitle( page );
+	await expectInsertionPointAllowedAfterHeader( page );
 }
 
 async function createRowFixture( requestUtils ) {

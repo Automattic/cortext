@@ -2,13 +2,12 @@ import { __ } from '@wordpress/i18n';
 import { useEntityRecord } from '@wordpress/core-data';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { EditorProvider, store as editorStore } from '@wordpress/editor';
-import { store as blockEditorStore } from '@wordpress/block-editor';
 import {
 	InterfaceSkeleton,
 	store as interfaceStore,
 } from '@wordpress/interface';
-import { Button, Disabled } from '@wordpress/components';
-import { chevronDown, chevronUp, cog, seen, unseen } from '@wordpress/icons';
+import { Button } from '@wordpress/components';
+import { cog, seen, unseen } from '@wordpress/icons';
 import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
 
 // Editor-surface stylesheets. Imported via a sibling SCSS file (not
@@ -24,13 +23,12 @@ import useAutosave from '../hooks/useAutosave';
 import useDelayedFlag from '../hooks/useDelayedFlag';
 import { withViewTransition } from '../hooks/viewTransition';
 import { POST_TYPE } from './page-queries';
+import { DocumentPropertiesProvider } from './DocumentPropertiesContext';
 import EditorBody from './EditorBody';
 import PagePublishToggle from './PagePublishToggle';
-import RowProperties from './RowProperties';
 import { CanvasProgressBar } from './Skeleton';
 import { TopBarActionsFill } from './WorkspaceTopBar';
 import PageInspectorSidebar, {
-	BLOCK_INSPECTOR,
 	INSPECTOR_SCOPE,
 	InspectorSidebarSlot,
 	PAGE_INSPECTOR,
@@ -56,8 +54,9 @@ function DocumentActions( {
 			),
 		[]
 	);
-	const defaultInspector =
-		postType === POST_TYPE ? PAGE_INSPECTOR : BLOCK_INSPECTOR;
+	// Pages and rows both open the document tab first: page metadata for pages,
+	// row properties for rows. Block details stay in the second tab.
+	const defaultInspector = PAGE_INSPECTOR;
 
 	// Canvas stays mounted across route changes (preservePaint keeps the
 	// editor iframe warm). Suppress the Fill when this page isn't the active
@@ -106,38 +105,6 @@ function DocumentActions( {
 	);
 }
 
-// While one of our locked header blocks is selected, hide core's block
-// settings menu (the "kebab"). Its items (Cut, Copy, Add before/after,
-// Lock, Hide, Create pattern, etc.) make no sense on a fixed-position
-// singleton block, and there's no per-block API to filter individual
-// items. The contextual toolbar lives in the parent document while the
-// block itself is in the BlockCanvas iframe, so :has() can't bridge the
-// boundary; toggling a body class here lets a plain CSS rule do the work.
-function HideHeaderBlockKebab() {
-	const selectedName = useSelect( ( select ) => {
-		const store = select( blockEditorStore );
-		const clientId = store.getSelectedBlockClientId();
-		return clientId ? store.getBlockName( clientId ) : null;
-	}, [] );
-
-	useEffect( () => {
-		const isHeader =
-			selectedName === 'cortext/document-cover' ||
-			selectedName === 'cortext/document-icon';
-		document.body.classList.toggle(
-			'cortext-hide-block-settings-menu',
-			isHeader
-		);
-		return () => {
-			document.body.classList.remove(
-				'cortext-hide-block-settings-menu'
-			);
-		};
-	}, [ selectedName ] );
-
-	return null;
-}
-
 function VisualCanvas( {
 	featuredMedia,
 	isActive,
@@ -170,6 +137,7 @@ function documentKey( postType, postId ) {
 function CanvasEditor( {
 	post,
 	postType,
+	collectionId,
 	fields,
 	row,
 	pendingPost,
@@ -193,7 +161,6 @@ function CanvasEditor( {
 	} );
 	const { resetPost } = useDispatch( editorStore );
 	const discard = useCallback( () => resetPost(), [ resetPost ] );
-	const isTrashed = post.status === 'trash';
 
 	useEffect( () => {
 		onApi?.( { flushNow, discard } );
@@ -254,37 +221,22 @@ function CanvasEditor( {
 		() => setArePropertiesVisible( ( current ) => ! current ),
 		[]
 	);
-	// tech-debt.md#41: row properties are shell chrome until they become a
-	// locked dynamic block with frontend rendering.
-	const rowProperties = hasProperties ? (
-		<div
-			className={
-				'cortext-row-detail cortext-row-detail--canvas-properties' +
-				( arePropertiesVisible
-					? ''
-					: ' cortext-row-detail--canvas-properties-collapsed' )
-			}
-		>
-			<Button
-				className="cortext-row-detail__canvas-properties-toggle"
-				icon={ arePropertiesVisible ? chevronUp : chevronDown }
-				size="small"
-				label={
-					arePropertiesVisible
-						? __( 'Hide fields', 'cortext' )
-						: __( 'Show fields', 'cortext' )
-				}
-				showTooltip
-				onClick={ togglePropertiesVisible }
-			/>
-			<div className="cortext-row-detail__canvas-properties-body">
-				<RowProperties fields={ fields } row={ row } />
-			</div>
-		</div>
-	) : null;
 
 	return (
-		<>
+		<DocumentPropertiesProvider
+			collectionId={ collectionId }
+			fields={ fields }
+			fallbackRecord={ row }
+			// While a document switch is in flight (`pendingPost` set),
+			// the provider already carries the destination's fields but
+			// the editor still renders the previous post. Pausing the
+			// header-block lifecycle here keeps `EnsureHeaderBlocks` from
+			// deleting `cortext/document-properties` from the outgoing
+			// row right before `flushNow()` saves that deletion.
+			isResolving={ !! pendingPost }
+			isVisible={ arePropertiesVisible }
+			onToggleVisible={ togglePropertiesVisible }
+		>
 			<DocumentActions
 				isActive={ isActive }
 				postType={ postType }
@@ -293,17 +245,11 @@ function CanvasEditor( {
 				arePropertiesVisible={ arePropertiesVisible }
 				onTogglePropertiesVisible={ togglePropertiesVisible }
 			/>
-			<HideHeaderBlockKebab />
 			<InterfaceSkeleton
 				className="cortext-canvas"
 				content={
 					<>
 						{ notice }
-						{ isTrashed && rowProperties ? (
-							<Disabled>{ rowProperties }</Disabled>
-						) : (
-							rowProperties
-						) }
 						<VisualCanvas
 							featuredMedia={ post.featured_media }
 							isActive={ isActive }
@@ -317,13 +263,14 @@ function CanvasEditor( {
 				sidebar={ <InspectorSidebarSlot /> }
 			/>
 			<PageInspectorSidebar postId={ post.id } postType={ postType } />
-		</>
+		</DocumentPropertiesProvider>
 	);
 }
 
 export default function Canvas( {
 	postId,
 	postType = POST_TYPE,
+	collectionId,
 	fields,
 	row,
 	onDisplayedPost,
@@ -471,6 +418,7 @@ export default function Canvas( {
 				<CanvasEditor
 					post={ renderedPost }
 					postType={ renderedPost.type ?? postType }
+					collectionId={ collectionId }
 					fields={ fields }
 					row={ row }
 					pendingPost={ pendingPost }

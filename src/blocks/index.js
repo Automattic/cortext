@@ -3,4 +3,5 @@
 import './data-view';
 import './document-icon';
 import './document-cover';
+import './document-properties';
 import './page-header-actions';

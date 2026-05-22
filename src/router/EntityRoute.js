@@ -524,6 +524,7 @@ export default function EntityRoute( { history } ) {
 				<Canvas
 					postId={ editorPostId }
 					postType={ editorPostType }
+					collectionId={ isRow ? rowParentCollectionId : undefined }
 					fields={ isRow ? rowFields : undefined }
 					row={ isRow ? documentResolution.entity : undefined }
 					onDisplayedPost={ handleDocumentDisplayed }

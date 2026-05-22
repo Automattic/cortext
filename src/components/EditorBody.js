@@ -32,11 +32,13 @@ import {
 } from '@wordpress/element';
 
 import DocumentIdentityControls from './DocumentIdentityControls';
+import { useDocumentPropertiesContext } from './DocumentPropertiesContext';
 import MediaPicker, { MediaUploadCheck } from './MediaPicker';
 import afterNextPaint from '../hooks/afterNextPaint';
 
 const DOCUMENT_ICON_BLOCK = 'cortext/document-icon';
 const DOCUMENT_COVER_BLOCK = 'cortext/document-cover';
+const DOCUMENT_PROPERTIES_BLOCK = 'cortext/document-properties';
 const POST_TITLE_BLOCK = 'core/post-title';
 const LEGACY_HEADER_ACTIONS_BLOCK = 'cortext/page-header-actions';
 const ROOT_BLOCK_LIST = '';
@@ -56,6 +58,7 @@ const HEADER_BLOCK_NAMES = new Set( [
 	DOCUMENT_COVER_BLOCK,
 	DOCUMENT_ICON_BLOCK,
 	POST_TITLE_BLOCK,
+	DOCUMENT_PROPERTIES_BLOCK,
 ] );
 const CANVAS_READY_IMAGE_TIMEOUT = 8000;
 
@@ -400,12 +403,24 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 		postId
 	);
 	const iconMeta = meta?.cortext_document_icon ?? '';
+	const propertiesCtx = useDocumentPropertiesContext();
+	// During a Canvas document switch, the provider can move to the next row
+	// before the editor does. Treat that moment as "schema unknown" so the
+	// header sync does not edit the outgoing post.
+	const propertiesContextStable = ! propertiesCtx?.isResolving;
+	const hasSchema =
+		propertiesContextStable &&
+		Array.isArray( propertiesCtx?.fields ) &&
+		propertiesCtx.fields.length > 0;
 	const {
 		coverIndex,
+		titleIndex,
 		hasCover,
 		hasIcon,
 		hasTitle,
-		titleIndex,
+		hasProperties,
+		propertiesClientId,
+		headerEndIndex,
 		bodyBlockBeforeTitleId,
 		shouldHideHeaderInsertionPoint,
 		duplicateHeaderIds,
@@ -416,9 +431,21 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 		const blocks = store.getBlocks();
 		const names = blocks.map( ( block ) => block.name );
 		const currentTitleIndex = names.indexOf( POST_TITLE_BLOCK );
+		const currentPropertiesIndex = names.indexOf(
+			DOCUMENT_PROPERTIES_BLOCK
+		);
+		// The header zone runs from the start of the block list through the
+		// last installed header block: cover, icon, title, then properties.
+		// Body blocks dropped there get moved after the header. Use max() so
+		// a degenerate state where properties sits before title still treats
+		// title as the header boundary instead of underestimating it.
+		const currentHeaderEndIndex = Math.max(
+			currentTitleIndex,
+			currentPropertiesIndex
+		);
 		let currentBodyBlockBeforeTitleId = null;
-		if ( currentTitleIndex > -1 ) {
-			for ( let index = currentTitleIndex - 1; index >= 0; index-- ) {
+		if ( currentHeaderEndIndex > -1 ) {
+			for ( let index = currentHeaderEndIndex - 1; index >= 0; index-- ) {
 				const block = blocks[ index ];
 				if (
 					block.name === LEGACY_HEADER_ACTIONS_BLOCK ||
@@ -441,7 +468,8 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 			if (
 				block.name !== DOCUMENT_COVER_BLOCK &&
 				block.name !== DOCUMENT_ICON_BLOCK &&
-				block.name !== POST_TITLE_BLOCK
+				block.name !== POST_TITLE_BLOCK &&
+				block.name !== DOCUMENT_PROPERTIES_BLOCK
 			) {
 				return;
 			}
@@ -451,18 +479,24 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 			}
 			seenSingletons.add( block.name );
 		} );
+		const propertiesBlock = blocks.find(
+			( block ) => block.name === DOCUMENT_PROPERTIES_BLOCK
+		);
 		return {
 			coverIndex: names.indexOf( DOCUMENT_COVER_BLOCK ),
+			titleIndex: currentTitleIndex,
 			hasCover: names.includes( DOCUMENT_COVER_BLOCK ),
 			hasIcon: names.includes( DOCUMENT_ICON_BLOCK ),
 			hasTitle: names.includes( POST_TITLE_BLOCK ),
-			titleIndex: currentTitleIndex,
+			hasProperties: !! propertiesBlock,
+			propertiesClientId: propertiesBlock?.clientId ?? null,
+			headerEndIndex: currentHeaderEndIndex,
 			bodyBlockBeforeTitleId: currentBodyBlockBeforeTitleId,
 			shouldHideHeaderInsertionPoint:
 				store.isBlockInsertionPointVisible() &&
-				currentTitleIndex > -1 &&
+				currentHeaderEndIndex > -1 &&
 				insertionPointRootClientId === ROOT_BLOCK_LIST &&
-				insertionPointIndex <= currentTitleIndex,
+				insertionPointIndex <= currentHeaderEndIndex,
 			duplicateHeaderIds: duplicateIds,
 			legacyActionIds: blocks
 				.filter(
@@ -493,10 +527,27 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 			updateBlockAttributes( clientId, { lock: {} } );
 			removeBlock( clientId, false );
 		} );
+
+		// Keep the properties block only on rows whose collection has fields.
+		// If schema disappears, remove the block so post_content does not keep
+		// an empty marker. Skip this while the provider is switching rows.
+		if (
+			propertiesContextStable &&
+			hasProperties &&
+			! hasSchema &&
+			propertiesClientId
+		) {
+			updateBlockAttributes( propertiesClientId, { lock: {} } );
+			removeBlock( propertiesClientId, false );
+		}
 	}, [
 		duplicateHeaderIds,
+		hasProperties,
+		hasSchema,
 		isTrashed,
 		legacyActionIds,
+		propertiesClientId,
+		propertiesContextStable,
 		removeBlock,
 		updateBlockAttributes,
 	] );
@@ -527,7 +578,13 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 		const needsCover = featuredId > 0 && ! hasCover;
 		const needsIcon = iconMeta && ! hasIcon;
 		const needsTitle = ! hasTitle;
-		if ( ! needsCover && ! needsIcon && ! needsTitle ) {
+		const needsProperties = hasSchema && ! hasProperties;
+		if (
+			! needsCover &&
+			! needsIcon &&
+			! needsTitle &&
+			! needsProperties
+		) {
 			return;
 		}
 
@@ -560,14 +617,33 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 				false
 			);
 		}
+		const computedTitleIndex =
+			( featuredId > 0 ? 1 : 0 ) + ( iconMeta ? 1 : 0 );
 		if ( needsTitle ) {
-			const insertTitleIndex =
-				( featuredId > 0 ? 1 : 0 ) + ( iconMeta ? 1 : 0 );
 			insertBlocks(
 				createBlock( POST_TITLE_BLOCK, {
 					lock: { move: true, remove: true },
 				} ),
-				insertTitleIndex,
+				computedTitleIndex,
+				undefined,
+				false
+			);
+		}
+		if ( needsProperties ) {
+			// The properties block sits directly after the title. Legacy rows
+			// can still have body blocks before the title, so the canonical
+			// index would put properties before that misplaced title. Anchor on
+			// the snapshot `titleIndex`, shifted by any cover/icon inserted
+			// above it. If this pass also inserts the title, the snapshot cannot
+			// help yet, so use the canonical index.
+			const anchorTitleIndex = needsTitle
+				? computedTitleIndex
+				: titleIndex + ( needsCover ? 1 : 0 ) + ( needsIcon ? 1 : 0 );
+			insertBlocks(
+				createBlock( DOCUMENT_PROPERTIES_BLOCK, {
+					lock: { move: true, remove: true },
+				} ),
+				anchorTitleIndex + 1,
 				undefined,
 				false
 			);
@@ -582,24 +658,28 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 		featuredId,
 		hasCover,
 		hasIcon,
+		hasProperties,
+		hasSchema,
 		hasTitle,
 		iconMeta,
 		insertBlocks,
 		isTrashed,
 		startTyping,
 		stopTyping,
+		titleIndex,
 	] );
 
 	useLayoutEffect( () => {
 		if (
 			isTrashed ||
 			! bodyBlockBeforeTitleId ||
-			titleIndex < 0 ||
+			headerEndIndex < 0 ||
 			duplicateHeaderIds.length > 0 ||
 			legacyActionIds.length > 0 ||
 			( featuredId > 0 && ! hasCover ) ||
 			( iconMeta && ! hasIcon ) ||
-			! hasTitle
+			! hasTitle ||
+			( hasSchema && ! hasProperties )
 		) {
 			return;
 		}
@@ -609,7 +689,7 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 			[ bodyBlockBeforeTitleId ],
 			ROOT_BLOCK_LIST,
 			ROOT_BLOCK_LIST,
-			titleIndex
+			headerEndIndex
 		);
 
 		const handle = window.requestAnimationFrame( () => stopTyping() );
@@ -620,15 +700,48 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 		featuredId,
 		hasCover,
 		hasIcon,
+		hasProperties,
+		hasSchema,
 		hasTitle,
+		headerEndIndex,
 		iconMeta,
 		isTrashed,
 		legacyActionIds.length,
 		moveBlocksToPosition,
 		startTyping,
 		stopTyping,
-		titleIndex,
 	] );
+
+	return null;
+}
+
+// Hide core's block settings menu while a locked header block is selected.
+// Those menu items do not fit fixed singleton blocks, and core does not expose
+// a per-block filter. The toolbar and iframe live in separate documents, so a
+// body class is the simplest hook for CSS. Mounting this here keeps Canvas and
+// RowEditor on the same path.
+function HideHeaderBlockKebab() {
+	const selectedName = useSelect( ( select ) => {
+		const store = select( blockEditorStore );
+		const clientId = store.getSelectedBlockClientId();
+		return clientId ? store.getBlockName( clientId ) : null;
+	}, [] );
+
+	useEffect( () => {
+		const isHeader =
+			selectedName === DOCUMENT_COVER_BLOCK ||
+			selectedName === DOCUMENT_ICON_BLOCK ||
+			selectedName === DOCUMENT_PROPERTIES_BLOCK;
+		document.body.classList.toggle(
+			'cortext-hide-block-settings-menu',
+			isHeader
+		);
+		return () => {
+			document.body.classList.remove(
+				'cortext-hide-block-settings-menu'
+			);
+		};
+	}, [ selectedName ] );
 
 	return null;
 }
@@ -899,6 +1012,7 @@ export default function EditorBody( {
 					postType={ postType }
 				/>
 				<EnsureHeaderBlocks postId={ postId } postType={ postType } />
+				<HideHeaderBlockKebab />
 				<HeaderPrefixToolbarGuard
 					isActive={ isActive }
 					toolbarRootRef={ blockCanvasRef }

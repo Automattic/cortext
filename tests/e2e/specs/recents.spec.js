@@ -292,9 +292,11 @@ test.describe( 'Sidebar recents', () => {
 			await expect
 				.poll( () => appPath( page ) )
 				.toContain( `/${ fixture.entry.slug }-${ fixture.entry.id }` );
+			// Row properties now render inside the editor canvas, so the active
+			// canvas is the row-open signal.
 			await expect(
 				page.locator(
-					'.cortext-workspace__pane[data-active="true"] .cortext-row-detail--canvas-properties'
+					'.cortext-workspace__pane[data-active="true"] .cortext-canvas'
 				)
 			).toBeVisible( { timeout: 15_000 } );
 		} finally {
