@@ -774,7 +774,7 @@ test.describe( 'Navigation lifecycle', () => {
 			await expectRouteViewTransition(
 				page,
 				'document to collection',
-				''
+				'hold-old-canvas'
 			);
 			await dataViewPaint;
 
@@ -798,7 +798,7 @@ test.describe( 'Navigation lifecycle', () => {
 			await expectRouteViewTransition(
 				page,
 				'collection to document',
-				''
+				'hold-old-canvas'
 			);
 			await expect( pagePane ).toHaveAttribute( 'data-active', 'true' );
 			const canvasAfterCollection = await page

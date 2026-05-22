@@ -231,7 +231,9 @@ export default function EntityRoute( { history } ) {
 			return;
 		}
 		if ( isContentPane( before.active ) && isContentPane( after.active ) ) {
-			withViewTransition( () => rawDispatch( action ) );
+			withViewTransition( () => rawDispatch( action ), {
+				mode: 'hold-old-canvas',
+			} );
 			return;
 		}
 		const touchesCollection =
