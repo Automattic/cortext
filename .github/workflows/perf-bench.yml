@@ -24,6 +24,7 @@ jobs:
     main-perf:
         name: Performance benchmark on main
         runs-on: ubuntu-latest
+        continue-on-error: true
         timeout-minutes: 40
         steps:
             - uses: actions/checkout@v4
@@ -130,7 +131,8 @@ jobs:
                     php .github/scripts/write-perf-ui-summary.php --current=artifacts/perf-ui.json | tee artifacts/perf-ui-summary.md
                   fi
 
-            - if: failure()
+            - name: Save benchmark artifacts
+              if: always()
               uses: actions/upload-artifact@v4
               with:
                   name: perf-bench
