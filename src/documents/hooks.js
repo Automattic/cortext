@@ -25,8 +25,6 @@ import { getDescriptor } from './descriptors';
 const DocumentsContext = createContext( null );
 
 export function DocumentsProvider( {
-	pages,
-	collections,
 	selectedCollectionId = null,
 	expand,
 	onSelect,
@@ -38,8 +36,6 @@ export function DocumentsProvider( {
 } ) {
 	const value = useMemo(
 		() => ( {
-			pages,
-			collections,
 			selectedCollectionId,
 			expand,
 			onSelect,
@@ -49,8 +45,6 @@ export function DocumentsProvider( {
 			onFavoritesError,
 		} ),
 		[
-			pages,
-			collections,
 			selectedCollectionId,
 			expand,
 			onSelect,

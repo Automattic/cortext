@@ -411,11 +411,11 @@ export default function Sidebar( {
 		[ home ]
 	);
 
-	// Descriptors need the sidebar lists plus a few feedback callbacks.
+	// Feedback channel descriptors call into. The page tree and collection
+	// list stay out of here: the trash cascade now rides on the server
+	// response, so descriptors no longer need to walk them locally.
 	const documentsHandlers = useMemo(
 		() => ( {
-			pages,
-			collections,
 			selectedCollectionId,
 			expand,
 			onSelect,
@@ -424,7 +424,7 @@ export default function Sidebar( {
 			onDuplicateNotice: setDuplicateNotice,
 			onFavoritesError: setFavoritesError,
 		} ),
-		[ pages, collections, selectedCollectionId, expand, onSelect ]
+		[ selectedCollectionId, expand, onSelect ]
 	);
 
 	// Props shared by every DocumentRow. Keeping them together makes the Pages

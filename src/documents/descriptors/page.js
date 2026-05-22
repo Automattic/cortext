@@ -2,7 +2,6 @@ import { __ } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
 
 import { POST_TYPE } from '../../components/page-queries';
-import { collectDescendants } from '../../components/pages-tree';
 import { computeDocumentUri } from '../../router/useResolveEntity';
 import { notifyDocumentTrashChanged } from '../../hooks/documentTrashInvalidation';
 import { cascadeFavorites } from '../favorites';
@@ -10,8 +9,8 @@ import { afterPageTrash, applyInvalidationPack } from '../invalidation';
 
 /**
  * Page actions used by the sidebar. Pages are hierarchical, can own child
- * pages, and can have their own icon. Trash still computes the affected page
- * and collection ids locally until the server returns that list.
+ * pages, and can have their own icon. The REST trash response carries the
+ * cascade ids so the favorites cleanup does not need a local page tree walk.
  */
 const pageDescriptor = {
 	features: {
@@ -75,24 +74,23 @@ const pageDescriptor = {
 		}
 		applyInvalidationPack( ctx.invalidateResolution, afterPageTrash );
 		notifyDocumentTrashChanged();
-		// Cascade the local trash set into Favorites: the page itself, its
-		// descendants, and any inline collections owned by those pages. The
-		// server can replace this with an authoritative list later without
-		// changing the favorites filter step.
-		const trashedPageIds = new Set( [
-			Number( record.id ),
-			...collectDescendants( Number( record.id ), ctx.pages ?? [] ),
-		] );
-		const trashedCollectionIds = new Set(
-			( ctx.collections ?? [] )
-				.filter( ( collection ) =>
-					trashedPageIds.has( Number( collection.parent ?? 0 ) )
-				)
-				.map( ( collection ) => Number( collection.id ) )
-		);
+		// The server returns the cascade alongside the trashed page: child
+		// pages plus any inline collections that came with them. The favorites
+		// cleanup just consumes that list, so the page tree never has to be
+		// walked on the client.
+		const cascade = deleted?.cascade_deleted ?? {};
 		await cascadeFavorites(
 			ctx,
-			{ page: trashedPageIds, collection: trashedCollectionIds },
+			{
+				page: new Set( [
+					Number( record.id ),
+					...( cascade.pages ?? [] ).map( Number ),
+				] ),
+				collection: new Set(
+					( cascade.collections ?? [] ).map( Number )
+				),
+				row: new Set( ( cascade.rows ?? [] ).map( Number ) ),
+			},
 			__(
 				'Page moved to Trash, but Favorites could not be updated.',
 				'cortext'
