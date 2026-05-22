@@ -524,3 +524,13 @@ The brittle bit is the sizing. The skeleton copies DataViews row heights for com
 **Where.** `HeaderPrefixToolbarGuard`, `syncHeaderBoundaryMoveUpButtons`, and the header-prefix correction in `src/components/EditorBody.js`, with coverage in `tests/e2e/specs/editor-header-blocks.spec.js`.
 
 **Solution.** Gutenberg exposes a block-list boundary policy for root lists: a minimum insertion index, a minimum move target, and mover button state derived from that policy. Then Cortext can declare "body blocks start after the title" once and drop the toolbar DOM query, the mutation observer, and the local button-state restoration.
+
+## 57. Row detail toolbars rely on local editor-surface isolation `[upstream, soft]`
+
+**What.** Row peek and modal now keep their toolbars separate from the parent page editor. The fix is local and covered by e2e: each row editor gets its own `SlotFillProvider`, the row surface says it has no block inspector, and the parent page toolbar is hidden while peek/modal owns the screen.
+
+The only reason this stays in the debt log is the plumbing. Gutenberg's toolbar path still runs through `BlockControls`, SlotFill, and portaled popovers, and there is no clean public primitive for saying "this nested editor owns its toolbar and inspector." Cortext avoids the unsafe inspector entrypoint instead of building a row-scoped inspector in this pass. Normal row block toolbar actions still work.
+
+**Where.** `src/components/RowEditor.js` (`SlotFillProvider` and `EditorSurfaceProvider`), `src/components/EditorSurfaceContext.js`, `src/blocks/data-view/edit.js` (`hasBlockInspector` around the DataView toolbar button), `src/components/RowDetailView.js` (body class while side/modal is open), and `src/index.scss` (parent canvas toolbar hiding).
+
+**Solution.** If Gutenberg grows editor-instance-scoped `BlockControls`, toolbar popovers, and `InspectorControls`, Cortext can drop the local `SlotFillProvider`, the `hasBlockInspector` context, and the parent-toolbar body class. If row peek/modal needs block settings before that exists upstream, build a row-scoped inspector deliberately rather than routing those actions to the parent inspector.
