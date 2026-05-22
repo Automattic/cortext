@@ -106,7 +106,7 @@ describe( 'EntityRoute reducer', () => {
 			expect( next.active ).toEqual( { kind: 'document', id: 1 } );
 		} );
 
-		it( 'goes to loading for a collection that is not ready yet', () => {
+		it( 'preserves paint when navigating to a collection that is not ready yet', () => {
 			const state = activate(
 				init( documentTarget( 1 ) ),
 				documentTarget( 1 )
@@ -116,7 +116,21 @@ describe( 'EntityRoute reducer', () => {
 				target: collectionTarget( 5 ),
 			} );
 			expect( next.target ).toEqual( collectionTarget( 5 ) );
-			expect( next.active ).toEqual( { kind: 'loading' } );
+			expect( next.active ).toEqual( { kind: 'document', id: 1 } );
+		} );
+
+		it( 'preserves the previous collection until the next collection mounts', () => {
+			const state = activate(
+				init( collectionTarget( 5 ) ),
+				collectionTarget( 5 )
+			);
+			const next = reducer( state, {
+				type: 'TARGET_CHANGED',
+				target: collectionTarget( 7 ),
+			} );
+			expect( next.target ).toEqual( collectionTarget( 7 ) );
+			expect( next.active ).toEqual( { kind: 'collection', id: 5 } );
+			expect( next.mountedCollectionIds ).toEqual( [ 5 ] );
 		} );
 
 		it( 'reactivates a document that is already mounted and displayed', () => {
@@ -316,6 +330,20 @@ describe( 'EntityRoute reducer', () => {
 			expect( state.active ).toEqual( { kind: 'collection', id: 5 } );
 		} );
 
+		it( 'preserves the active content pane until collection rows are ready', () => {
+			let state = activate(
+				init( documentTarget( 1 ) ),
+				documentTarget( 1 )
+			);
+			state = reducer( state, {
+				type: 'TARGET_CHANGED',
+				target: collectionTarget( 5 ),
+			} );
+			state = reducer( state, { type: 'COLLECTION_RESOLVED', id: 5 } );
+			expect( state.mountedCollectionIds ).toEqual( [ 5 ] );
+			expect( state.active ).toEqual( { kind: 'document', id: 1 } );
+		} );
+
 		it( 'ignores a resolution for a different target', () => {
 			const state = activate(
 				init( collectionTarget( 5 ) ),
@@ -365,7 +393,7 @@ describe( 'EntityRoute reducer', () => {
 				target: collectionTarget( 7 ),
 			} );
 			state = reducer( state, { type: 'COLLECTION_RESOLVED', id: 7 } );
-			expect( state.mountedCollectionIds ).toEqual( [ 7 ] );
+			expect( state.mountedCollectionIds ).toEqual( [ 5, 7 ] );
 			state = reducer( state, { type: 'COLLECTION_READY', id: 7 } );
 			expect( state.mountedCollectionIds ).toEqual( [ 7 ] );
 		} );

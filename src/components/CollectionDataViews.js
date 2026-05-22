@@ -33,6 +33,7 @@ import { CollectionRowsSkeleton } from './Skeleton';
 import useDelayedFlag, {
 	SKELETON_MIN_VISIBLE_MS,
 } from '../hooks/useDelayedFlag';
+import afterNextPaint from '../hooks/afterNextPaint';
 import allSettledWithConcurrency from './allSettledWithConcurrency';
 import { filterSortAndPaginateWithGroups } from './groupedFilters';
 import TableCalculationsFooter from './TableCalculationsFooter';
@@ -575,11 +576,12 @@ export default function CollectionDataViews( {
 	// so the user does not see three quick states: generic placeholder, empty
 	// DataViews chrome, then real rows.
 	const isShellLoading = isResolving || isRowsLoadingShell;
-	const showLoadingShell = useDelayedFlag(
+	const holdLoadingShell = useDelayedFlag(
 		isShellLoading,
-		120,
+		0,
 		SKELETON_MIN_VISIBLE_MS
 	);
+	const showLoadingShell = isShellLoading || holdLoadingShell;
 
 	const tableWrapperRef = useRef( null );
 	const [ localRevealFieldId, setLocalRevealFieldId ] = useState( null );
@@ -986,6 +988,7 @@ export default function CollectionDataViews( {
 	// for fields the user just created. `null` on first run signals
 	// "saved view, leave it alone."
 	const knownFieldIdsRef = useRef( null );
+	const previousVisibleFieldsRef = useRef( null );
 	const savedRowDetailMode = getRowDetailMode( view );
 	const postType = slug ? `crtxt_${ slug }` : null;
 	const { openDocument, closeDocument } = useDocumentPeekActions();
@@ -1366,7 +1369,8 @@ export default function CollectionDataViews( {
 			! isTableLayout ||
 			! pendingRevealFieldId ||
 			isResolving ||
-			! fieldsResolved
+			! fieldsResolved ||
+			showLoadingShell
 		) {
 			return undefined;
 		}
@@ -1424,16 +1428,71 @@ export default function CollectionDataViews( {
 		localRevealFieldId,
 		onFieldRevealed,
 		pendingRevealFieldId,
+		showLoadingShell,
+		view?.fields,
+	] );
+
+	useLayoutEffect( () => {
+		const currentFields = [ ...( view?.fields ?? [] ) ];
+		const previousFields = previousVisibleFieldsRef.current;
+		if ( ! previousFields ) {
+			if ( fieldsResolved && ! isResolving && ! showLoadingShell ) {
+				previousVisibleFieldsRef.current = currentFields;
+			}
+			return;
+		}
+		if (
+			! isTableLayout ||
+			isResolving ||
+			! fieldsResolved ||
+			showLoadingShell
+		) {
+			return;
+		}
+
+		const lastFieldId = currentFields[ currentFields.length - 1 ];
+		const addedAtEnd =
+			currentFields.length > previousFields.length &&
+			lastFieldId &&
+			! previousFields.includes( lastFieldId );
+		if ( addedAtEnd ) {
+			setLocalRevealFieldId( lastFieldId );
+			const wrapper =
+				tableWrapperRef.current?.querySelector( '.dataviews-wrapper' );
+			if ( wrapper ) {
+				scrollToEndQuickly( wrapper, { trackEnd: true } );
+			}
+		}
+		previousVisibleFieldsRef.current = currentFields;
+	}, [
+		fieldsResolved,
+		isResolving,
+		isTableLayout,
+		showLoadingShell,
 		view?.fields,
 	] );
 
 	useEffect( () => {
-		// Fields are enough to mount the pane. Rows can keep loading behind the
-		// skeleton; waiting for them leaves the old pane around too long.
-		if ( ! isResolving ) {
-			onReady?.( collectionId );
+		// If this collection is mounting behind an already-painted pane, keep the
+		// old pane active until the first row request finishes. Otherwise the route
+		// can reveal an empty DataViews shell. Row errors count as ready so the
+		// error can render.
+		if ( isResolving || ( ! rowsResolved && ! rowError ) ) {
+			return undefined;
 		}
-	}, [ collectionId, isResolving, onReady ] );
+
+		let cancelled = false;
+		async function signalReady() {
+			await afterNextPaint();
+			if ( ! cancelled ) {
+				onReady?.( collectionId );
+			}
+		}
+		signalReady();
+		return () => {
+			cancelled = true;
+		};
+	}, [ collectionId, isResolving, onReady, rowError, rowsResolved ] );
 
 	// tech-debt.md#22: Gutenberg selects on any mousedown that bubbles up.
 	// Dragging the dataviews scrollbar lands in the gutter (offset past the
@@ -1546,10 +1605,10 @@ export default function CollectionDataViews( {
 							ref={ tableWrapperRef }
 							onClickCapture={ captureSelectionIntent }
 							data-loading-shell={
-								isShellLoading ? 'true' : undefined
+								showLoadingShell ? 'true' : undefined
 							}
 							style={
-								isShellLoading
+								showLoadingShell
 									? {
 											// Hold the wrapper at skeleton
 											// height so content below does not

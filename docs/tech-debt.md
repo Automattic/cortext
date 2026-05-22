@@ -527,3 +527,13 @@ The only reason this stays in the debt log is the plumbing. Gutenberg's toolbar 
 **Where.** `src/components/RowEditor.js` (`SlotFillProvider` and `EditorSurfaceProvider`), `src/components/EditorSurfaceContext.js`, `src/blocks/data-view/edit.js` (`hasBlockInspector` around the DataView toolbar button), `src/components/RowDetailView.js` (body class while side/modal is open), and `src/index.scss` (parent canvas toolbar hiding).
 
 **Solution.** If Gutenberg grows editor-instance-scoped `BlockControls`, toolbar popovers, and `InspectorControls`, Cortext can drop the local `SlotFillProvider`, the `hasBlockInspector` context, and the parent-toolbar body class. If row peek/modal needs block settings before that exists upstream, build a row-scoped inspector deliberately rather than routing those actions to the parent inspector.
+
+## 58. Page transitions hold a browser snapshot by hand `[upstream, internal, soft]`
+
+**What.** Page-to-page navigation rebuilds the editor provider inside the same workspace pane. A normal View Transition cross-fade can expose the empty editor frame while Gutenberg, cover media, and the editor iframe catch up. Cortext now keeps the old `cortext-canvas` snapshot above the new one until the new editor says it has painted, then fades the old snapshot away. That requires a `data-cortext-view-transition` mode on `:root`, custom `::view-transition-*` CSS, a long-running hold animation, and promise plumbing around `startViewTransition()` because the browser update callback may run after `withViewTransition()` has already returned.
+
+This is acceptable for now and covered by e2e, but it is still a timing bridge between React state, Gutenberg editor readiness, iframe image decode, and the browser's View Transitions lifecycle. Any future transition refactor should preserve the "old canvas stays visible until the new canvas has painted" contract before touching this code.
+
+**Where.** `withViewTransition` in `src/hooks/viewTransition.js`, the `hold-old-canvas` / `reveal-old-canvas` rules in `src/index.scss`, document switching in `src/components/Canvas.js`, editor readiness in `src/components/EditorBody.js`, and the navigation lifecycle coverage in `tests/e2e/specs/navigation-lifecycle.spec.js`.
+
+**Solution.** If the View Transitions API gets a first-class hold/release hook, or Gutenberg exposes a reliable editor-surface "painted" signal for document swaps, replace the mode flag and long CSS hold animation with that primitive. Until then, keep the hold/reveal logic small, keep page-to-page swaps inside `Canvas`, and keep the cover/image readiness test as the tripwire.

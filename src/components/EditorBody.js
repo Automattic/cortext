@@ -20,7 +20,7 @@ import {
 } from '@wordpress/block-editor';
 import { createBlock } from '@wordpress/blocks';
 import { Button, Disabled, Notice } from '@wordpress/components';
-import { useEntityProp } from '@wordpress/core-data';
+import { useEntityProp, useEntityRecord } from '@wordpress/core-data';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
 import { __ } from '@wordpress/i18n';
@@ -34,6 +34,7 @@ import {
 import DocumentIdentityControls from './DocumentIdentityControls';
 import { useDocumentPropertiesContext } from './DocumentPropertiesContext';
 import MediaPicker, { MediaUploadCheck } from './MediaPicker';
+import afterNextPaint from '../hooks/afterNextPaint';
 
 const DOCUMENT_ICON_BLOCK = 'cortext/document-icon';
 const DOCUMENT_COVER_BLOCK = 'cortext/document-cover';
@@ -59,6 +60,7 @@ const HEADER_BLOCK_NAMES = new Set( [
 	POST_TITLE_BLOCK,
 	DOCUMENT_PROPERTIES_BLOCK,
 ] );
+const CANVAS_READY_IMAGE_TIMEOUT = 8000;
 
 function isHeaderBlock( block ) {
 	return HEADER_BLOCK_NAMES.has( block?.name );
@@ -785,15 +787,200 @@ function TrashedNotice( { postId, postType, onRestored } ) {
 	);
 }
 
-function CanvasReadyEffect( { postId, onReady } ) {
-	useEffect( () => {
-		onReady?.( postId );
-	}, [ postId, onReady ] );
+function coverSource( media ) {
+	return (
+		media?.media_details?.sizes?.large?.source_url ??
+		media?.source_url ??
+		null
+	);
+}
+
+function waitForImageReady( image ) {
+	const ownerWindow = image.ownerDocument?.defaultView ?? window;
+	const isLoaded = image.complete && image.naturalWidth > 0;
+	const waitForLoad = isLoaded
+		? Promise.resolve()
+		: new Promise( ( resolve ) => {
+				const cleanup = () => {
+					ownerWindow.clearTimeout( timeoutId );
+					image.removeEventListener( 'load', cleanup );
+					image.removeEventListener( 'error', cleanup );
+					resolve();
+				};
+				const timeoutId = ownerWindow.setTimeout(
+					cleanup,
+					CANVAS_READY_IMAGE_TIMEOUT
+				);
+				image.addEventListener( 'load', cleanup, { once: true } );
+				image.addEventListener( 'error', cleanup, { once: true } );
+		  } );
+
+	return waitForLoad.then( () => image.decode?.().catch( () => {} ) );
+}
+
+function imageMatchesSource( image, expectedSource ) {
+	if ( ! expectedSource ) {
+		return true;
+	}
+	return (
+		image.currentSrc === expectedSource ||
+		image.src === expectedSource ||
+		image.getAttribute( 'src' ) === expectedSource
+	);
+}
+
+function findCoverImage( ownerDocument, expectedSource ) {
+	const images = [
+		...ownerDocument.querySelectorAll(
+			'.cortext-document-cover-block__image'
+		),
+	];
+	if ( expectedSource ) {
+		return (
+			images.find( ( image ) =>
+				imageMatchesSource( image, expectedSource )
+			) ?? null
+		);
+	}
+	return images[ 0 ] ?? null;
+}
+
+function waitForCoverImageNode( ownerDocument, expectedSource ) {
+	const existing = findCoverImage( ownerDocument, expectedSource );
+	if ( existing ) {
+		return Promise.resolve( existing );
+	}
+	const ownerWindow = ownerDocument.defaultView ?? window;
+	const MutationObserver = ownerWindow.MutationObserver;
+	if ( ! MutationObserver ) {
+		return Promise.resolve( null );
+	}
+	return new Promise( ( resolve ) => {
+		const cleanup = ( image = null ) => {
+			ownerWindow.clearTimeout( timeoutId );
+			observer.disconnect();
+			resolve( image );
+		};
+		const observer = new MutationObserver( () => {
+			const image = findCoverImage( ownerDocument, expectedSource );
+			if ( image ) {
+				cleanup( image );
+			}
+		} );
+		const timeoutId = ownerWindow.setTimeout(
+			() => cleanup(),
+			CANVAS_READY_IMAGE_TIMEOUT
+		);
+		observer.observe( ownerDocument.documentElement, {
+			attributeFilter: [ 'src' ],
+			attributes: true,
+			childList: true,
+			subtree: true,
+		} );
+	} );
+}
+
+async function waitForCriticalImages( canvasRoot, expectedCoverSource ) {
+	const iframe = canvasRoot?.querySelector( 'iframe' );
+	const ownerDocument = iframe?.contentDocument ?? canvasRoot?.ownerDocument;
+	if ( ! ownerDocument ) {
+		return;
+	}
+	const coverImage = await waitForCoverImageNode(
+		ownerDocument,
+		expectedCoverSource
+	);
+	if ( coverImage ) {
+		await waitForImageReady( coverImage );
+	}
+}
+
+function CanvasReadyEffect( {
+	featuredMedia,
+	postId,
+	postType,
+	canvasRootRef,
+	onReady,
+} ) {
+	const [ featuredId ] = useEntityProp(
+		'postType',
+		postType,
+		'featured_media',
+		postId
+	);
+	const [ meta ] = useEntityProp( 'postType', postType, 'meta', postId );
+	const numericFeaturedId = Number( featuredId ?? featuredMedia ) || 0;
+	const needsCover = numericFeaturedId > 0;
+	const needsIcon = Boolean( meta?.cortext_document_icon );
+	const {
+		record: coverMedia,
+		isResolving: isResolvingCoverMedia,
+		hasResolved: hasResolvedCoverMedia,
+	} = useEntityRecord( 'root', 'media', numericFeaturedId, {
+		enabled: needsCover,
+	} );
+	const src = coverSource( coverMedia );
+	const { hasCover, hasIcon, hasTitle } = useSelect( ( select ) => {
+		const blocks = select( blockEditorStore ).getBlocks();
+		return {
+			hasCover: blocks.some(
+				( block ) => block.name === DOCUMENT_COVER_BLOCK
+			),
+			hasIcon: blocks.some(
+				( block ) => block.name === DOCUMENT_ICON_BLOCK
+			),
+			hasTitle: blocks.some(
+				( block ) => block.name === POST_TITLE_BLOCK
+			),
+		};
+	}, [] );
+	const isCoverRecordReady =
+		! needsCover ||
+		Boolean( src ) ||
+		( ! isResolvingCoverMedia && hasResolvedCoverMedia );
+	const areHeaderBlocksReady =
+		hasTitle &&
+		( ! needsCover || hasCover ) &&
+		( ! needsIcon || hasIcon ) &&
+		isCoverRecordReady;
+
+	useLayoutEffect( () => {
+		if ( ! areHeaderBlocksReady ) {
+			return undefined;
+		}
+
+		let cancelled = false;
+		async function signalReady() {
+			if ( needsCover && src ) {
+				await waitForCriticalImages( canvasRootRef.current, src );
+			}
+			await afterNextPaint(
+				canvasRootRef.current?.ownerDocument?.defaultView
+			);
+			if ( ! cancelled ) {
+				onReady?.( postId, postType );
+			}
+		}
+		signalReady();
+		return () => {
+			cancelled = true;
+		};
+	}, [
+		areHeaderBlocksReady,
+		canvasRootRef,
+		featuredMedia,
+		needsCover,
+		onReady,
+		postId,
+		postType,
+		src,
+	] );
 
 	return null;
 }
 
 export default function EditorBody( {
+	featuredMedia,
 	isActive = true,
 	postId,
 	postType,
@@ -836,7 +1023,13 @@ export default function EditorBody( {
 						layout={ { type: 'constrained', ...layout } }
 					/>
 				</div>
-				<CanvasReadyEffect postId={ postId } onReady={ onReady } />
+				<CanvasReadyEffect
+					featuredMedia={ featuredMedia }
+					postId={ postId }
+					postType={ postType }
+					canvasRootRef={ blockCanvasRef }
+					onReady={ onReady }
+				/>
 			</BlockCanvas>
 		</div>
 	);
