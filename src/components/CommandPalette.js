@@ -26,6 +26,7 @@ import CortextCommandMenu, {
 	CommandDescriptionContext,
 } from './CortextCommandMenu';
 import PageIcon from './PageIcon';
+import useDebouncedValue from '../hooks/useDebouncedValue';
 import useDocuments from '../hooks/useDocuments';
 import { useRecents } from '../hooks/useRecents';
 import { useWorkspaceHomePath } from '../hooks/useWorkspaceHomePath';
@@ -95,15 +96,6 @@ function rowCollectionHint( doc ) {
 		__( 'in %s', 'cortext' ),
 		doc.collection.title
 	);
-}
-
-function useDebouncedValue( value, delay ) {
-	const [ debounced, setDebounced ] = useState( value );
-	useEffect( () => {
-		const id = setTimeout( () => setDebounced( value ), delay );
-		return () => clearTimeout( id );
-	}, [ value, delay ] );
-	return debounced;
 }
 
 function HomeCommandRegistration( {

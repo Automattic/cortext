@@ -81,6 +81,13 @@ final class RowsController {
 							'type'    => 'array',
 							'default' => array(),
 						),
+						'include'    => array(
+							'type'              => 'array',
+							'default'           => array(),
+							'items'             => array( 'type' => 'integer' ),
+							'sanitize_callback' => array( $this, 'sanitize_include_param' ),
+							'validate_callback' => array( $this, 'validate_include_param' ),
+						),
 						'fields'     => array(
 							'type'    => 'array',
 							'default' => null,
@@ -322,6 +329,24 @@ final class RowsController {
 			? $this->filter_requested_field_ids( $requested_fields, $field_ids )
 			: $field_ids;
 
+		// If `include` was sent but sanitizes to an empty list, return no rows.
+		// Falling through would return page 1 of the collection, which is not
+		// what the caller asked for. The picker does not send empty ID lists,
+		// but future callers might.
+		$query_params = $request->get_query_params();
+		if ( array_key_exists( 'include', $query_params ) && count( (array) $request->get_param( 'include' ) ) === 0 ) {
+			return new WP_REST_Response(
+				array(
+					'rows'       => array(),
+					'total'      => 0,
+					'totalPages' => 0,
+					'collection' => $this->collection_definition( $collection, $slug ),
+					'fields'     => $this->field_definitions( $field_ids ),
+				),
+				200
+			);
+		}
+
 		$row_query    = new RowsFilterQuery();
 		$field_schema = $row_query->field_schema_for( $collection_id );
 
@@ -359,7 +384,8 @@ final class RowsController {
 			$field_schema,
 			$where_sql,
 			$filter_sql['join'],
-			$request->get_param( 'sort' )
+			$request->get_param( 'sort' ),
+			(string) $request->get_param( 'search' )
 		);
 		$query      = $scope->run( $query_args );
 
@@ -758,6 +784,14 @@ final class RowsController {
 			'paged'          => (int) $request->get_param( 'page' ),
 		);
 
+		$include = (array) $request->get_param( 'include' );
+		if ( count( $include ) > 0 ) {
+			// The by-ID response is read as a Map<id, row>, not an ordered list.
+			// Keep the default menu_order / ID order so callers do not start
+			// depending on the order of the include array.
+			$args['post__in'] = $include;
+		}
+
 		$sort = $request->get_param( 'sort' );
 		if ( ! is_array( $sort ) || empty( $sort['field'] ) ) {
 			$args['orderby'] = array(
@@ -788,6 +822,59 @@ final class RowsController {
 		}
 
 		return $args;
+	}
+
+	/**
+	 * Cleans the `include` query param into a list of post IDs.
+	 *
+	 * Drops non-positive values, removes duplicates, and re-indexes. Empty
+	 * input is allowed; the controller handles it before running the query.
+	 *
+	 * @param mixed $value Raw `include` param.
+	 * @return int[]
+	 */
+	public function sanitize_include_param( mixed $value ): array {
+		if ( ! is_array( $value ) ) {
+			return array();
+		}
+
+		$ids = array();
+		foreach ( $value as $item ) {
+			$id = absint( $item );
+			if ( $id > 0 ) {
+				$ids[] = $id;
+			}
+		}
+
+		return array_values( array_unique( $ids ) );
+	}
+
+	/**
+	 * Caps `include` at the same per_page ceiling as the rest of the endpoint.
+	 *
+	 * WP REST runs `validate_callback` before `sanitize_callback`, so the
+	 * value here is the raw client input. The cap applies before deduping, so
+	 * it can reject a noisy request that would shrink below 100 after sanitize.
+	 *
+	 * @param mixed $value Raw `include` value from the request.
+	 * @return true|WP_Error
+	 */
+	public function validate_include_param( mixed $value ): bool|WP_Error {
+		if ( ! is_array( $value ) ) {
+			return new WP_Error(
+				'rest_invalid_param',
+				__( 'Pass include as an array of row IDs.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+		if ( count( $value ) > 100 ) {
+			return new WP_Error(
+				'cortext_include_too_many',
+				__( 'You can resolve up to 100 rows by ID at a time.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+		return true;
 	}
 
 	private function nullable_row_id_param( mixed $value ): ?int {
