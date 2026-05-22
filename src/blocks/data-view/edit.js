@@ -168,8 +168,8 @@ function CollectionCreator( { onCreate } ) {
 				title: title.trim(),
 				mode: isFullPage ? 'full_page' : 'inline',
 			};
-			// The server handles `parent` by mode: inline owner meta for
-			// inline collections, post_parent for full-page collections.
+			// `parent` means owner meta for inline collections and
+			// post_parent for full-page collections.
 			if ( ownerPageId ) {
 				data.parent = ownerPageId;
 			}

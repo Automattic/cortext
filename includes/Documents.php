@@ -85,9 +85,10 @@ final class Documents {
 	}
 
 	/**
-	 * Creates a collection. Inline collections store their owner in meta;
-	 * full-page collections use `post_parent`. The row CPT is registered
-	 * before returning so callers can use `restBase` right away.
+	 * Creates a collection and registers its row CPT before returning.
+	 *
+	 * Inline collections keep their owner in meta. Full-page collections use
+	 * `post_parent`, which lets the sidebar place them in the tree.
 	 *
 	 * @param string $title     Collection title.
 	 * @param string $mode      Workspace mode (`inline` or `full_page`).
@@ -127,8 +128,8 @@ final class Documents {
 			Collection::MODE_META_KEY => $mode,
 		);
 
-		// Inline collections store their owner in meta. Full-page collections
-		// use post_parent so the sidebar can place them in the tree.
+		// Inline collections stay out of the tree; full-page collections use
+		// post_parent so they can be nested in the sidebar.
 		$post_parent = 0;
 		if ( Collection::MODE_INLINE === $mode ) {
 			$meta_input[ Collection::INLINE_OWNER_META_KEY ] = $parent_id;

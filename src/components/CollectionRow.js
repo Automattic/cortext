@@ -17,7 +17,7 @@ import {
 } from '@wordpress/icons';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 
-const GRID_UNIT = 20; // matches $grid-unit-20 in index.scss
+const GRID_UNIT = 20; // Matches $grid-unit-20 in index.scss.
 
 export function collectionTitle( collection ) {
 	return (
@@ -55,8 +55,8 @@ export default function CollectionRow( {
 	const [ draftTitle, setDraftTitle ] = useState( '' );
 	const renameInputRef = useRef( null );
 
-	// The parent sets `autoRenameId` after create or duplicate so this row
-	// opens its title editor as soon as it renders.
+	// New and duplicated collections enter rename mode as soon as their row
+	// renders.
 	useEffect( () => {
 		if ( autoRenameId === collection.id ) {
 			setDraftTitle(
@@ -73,8 +73,8 @@ export default function CollectionRow( {
 		onAutoRenameConsumed,
 	] );
 
-	// TextControl keeps the real input inside its wrapper, so focus and select
-	// that inner input when rename mode opens.
+	// TextControl keeps the input inside its wrapper, so reach in once rename
+	// mode opens.
 	useEffect( () => {
 		if ( isRenaming && renameInputRef.current ) {
 			const input = renameInputRef.current.querySelector( 'input' );
@@ -105,8 +105,8 @@ export default function CollectionRow( {
 		setIsRenaming( true );
 	}
 
-	// Full-page collections move like pages. Sidebar looks up the dragged
-	// record later so it can PATCH the right post type.
+	// Full-page collections move like pages. Sidebar resolves the dragged
+	// record later and PATCHes the right post type.
 	const {
 		attributes,
 		listeners,
@@ -116,8 +116,8 @@ export default function CollectionRow( {
 		data: { pageId: collection.id },
 	} );
 
-	// Collections are leaves in the sidebar, so only before/after drops are
-	// offered. The REST guard would reject inside drops too.
+	// Collections are leaves, so the row only offers before/after drop zones.
+	// The REST guard rejects inside drops as well.
 	const dropBefore = useDroppable( {
 		id: `before:${ collection.id }`,
 		data: { zone: 'before', pageId: collection.id },
@@ -295,7 +295,7 @@ export default function CollectionRow( {
 						) }
 					/>
 
-					{ /* Two row overlays handle before/after drops. */ }
+					{ /* Before/after drop targets share the row height. */ }
 					<div
 						ref={ dropBefore.setNodeRef }
 						className="cortext-sidebar__drop-zone cortext-sidebar__drop-zone--before cortext-sidebar__drop-zone--half"

@@ -2,11 +2,10 @@
 /**
  * Server-side registration for the `cortext/document-properties` block.
  *
- * The render callback returns an empty string for now: the public-page
- * pipeline for rows is tracked in tech-debt #42 and will fill this in
- * once row CPTs become publicly reachable. The block is registered now
- * so the editor-side block exists in `post_content` and the eventual
- * public render slots in without further JS plumbing.
+ * The render callback is empty for now. tech-debt #42 tracks the public row
+ * markup, including how row CPTs should be reached on the frontend. Register
+ * the block now so rows already store it in `post_content`; the server render
+ * can be filled in later without changing editor wiring.
  *
  * @package Cortext
  */
@@ -44,8 +43,8 @@ final class DocumentPropertiesBlock {
 	}
 
 	/**
-	 * Frontend render placeholder. Returns an empty string until the row
-	 * public-render follow-up fills it in.
+	 * Frontend render placeholder. Rows keep this block in `post_content`;
+	 * tech-debt #42 will add the public markup.
 	 *
 	 * @param array  $attributes Block attributes (unused).
 	 * @param string $content    Inner HTML (none; block is dynamic).

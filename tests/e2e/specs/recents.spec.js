@@ -288,9 +288,8 @@ test.describe( 'Sidebar recents', () => {
 			await expect
 				.poll( () => appPath( page ) )
 				.toContain( `/${ fixture.entry.slug }-${ fixture.entry.id }` );
-			// Row detail used to expose this chrome strip. After RSM-2705, row
-			// properties live in the editor canvas, so the canvas itself is the
-			// "row open" signal.
+			// Row properties now render inside the editor canvas, so the active
+			// canvas is the row-open signal.
 			await expect(
 				page.locator(
 					'.cortext-workspace__pane[data-active="true"] .cortext-canvas'

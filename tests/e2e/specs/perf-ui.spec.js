@@ -618,8 +618,7 @@ test.describe( 'Cortext UI performance', () => {
 					.click( { force: true } );
 				await waitForRowDetailReady( page );
 
-				// The title is now the locked `core/post-title` block inside
-				// the editor canvas iframe (RSM-2705).
+				// Row navigation is ready when the iframe title block changes.
 				const titleLocator = page
 					.frameLocator( '[name="editor-canvas"]' )
 					.locator( '[data-type="core/post-title"]' )
@@ -788,8 +787,7 @@ async function waitForRowDetailReady( page ) {
 		.locator( '.cortext-row-detail__frame' )
 		.first()
 		.waitFor( { state: 'visible', timeout: READY_TIMEOUT_MS } );
-	// After RSM-2705, row detail waits for the locked post-title block inside
-	// the editor iframe.
+	// Row detail is not ready until the iframe has rendered the title block.
 	await page
 		.frameLocator( '[name="editor-canvas"]' )
 		.locator( '[data-type="core/post-title"]' )

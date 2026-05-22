@@ -5,7 +5,7 @@
 	"title": "Document properties",
 	"category": "widgets",
 	"icon": "list-view",
-	"description": "Schema-driven row properties between the title and the body. Reads the collection schema and per-row meta.",
+	"description": "Row properties shown between the title and body, using the collection schema and row meta.",
 	"textdomain": "cortext",
 	"usesContext": [ "postId", "postType" ],
 	"supports": {

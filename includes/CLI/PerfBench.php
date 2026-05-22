@@ -1228,8 +1228,8 @@ final class PerfBench {
 					)
 				),
 			),
-			// Page 3 has even more related rows. That makes rollup computation
-			// visible instead of blending into the page 1 baseline.
+			// Page 3 has the densest relation set, which makes rollup cost
+			// easier to see than it is in the page 1 baseline.
 			'rows_rollup_heavy'       => array(
 				'label' => 'Load rows with heavy rollups',
 				'run'   => fn() => $this->rest_request(

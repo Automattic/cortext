@@ -1951,9 +1951,9 @@ test.describe( 'Collection view block', () => {
 				'rgb(248, 248, 248)'
 			);
 			await expect( titleCellOpenButton ).toHaveCSS( 'opacity', '1' );
-			// After RSM-2705 the row's title is the locked `core/post-title`
-			// block inside the editor iframe; properties live next to it as
-			// a non-block slot, but the inner BEM classes are unchanged.
+			// The row title now lives in the locked `core/post-title` block
+			// inside the editor iframe. Properties sit next to it in the
+			// `cortext/document-properties` block.
 			const detailCanvas = detail.frameLocator(
 				'[name="editor-canvas"]'
 			);
@@ -1986,8 +1986,8 @@ test.describe( 'Collection view block', () => {
 					hasText: 'Research',
 				} )
 			).toHaveCount( 2 );
-			// Escape dismisses the popover; the previous test clicked the
-			// chrome `<h2>` to do this, which no longer exists.
+			// There is no chrome heading to click anymore; Escape closes the
+			// popover without touching the editor selection.
 			await page.keyboard.press( 'Escape' );
 			await expect( optionsPopover ).toBeHidden();
 
@@ -2006,8 +2006,7 @@ test.describe( 'Collection view block', () => {
 			// Side and modal panes are local React state, not URL state,
 			// so verify the navigation via the detail title rather than ?row.
 			await expect( detailTitle ).toHaveText( 'Kindred' );
-			// The second row keeps the same field layout (still in the same
-			// collection), so its property panel still renders the Tags label.
+			// Same collection, same fields, so Tags should still be present.
 			await expect(
 				detailCanvas
 					.locator(
@@ -2024,24 +2023,26 @@ test.describe( 'Collection view block', () => {
 			// browser Back/Forward doesn't navigate between rows anymore.
 			// The Row above / Row below buttons above already cover that.
 
-			// After RSM-2705 the properties slot unmounts when collapsed
-			// (controlled by context). Hidden state = slot detached;
-			// visible state = slot rendered inside the editor canvas.
+			// Hiding fields keeps the block selectable as a collapsed stub.
 			const propertiesSlot = detailCanvas.locator(
 				'.cortext-document-properties'
 			);
 			await detail.getByRole( 'button', { name: 'Hide fields' } ).click();
 			await expect( detailTitle ).toBeVisible();
-			await expect( propertiesSlot ).toHaveCount( 0 );
+			await expect( propertiesSlot ).toHaveClass(
+				/cortext-document-properties--collapsed/
+			);
 			await expect(
 				detail.getByRole( 'button', { name: 'Show fields' } )
 			).toBeVisible();
 			await detail.getByRole( 'button', { name: 'Show fields' } ).click();
 			await expect( propertiesSlot ).toBeVisible();
+			await expect( propertiesSlot ).not.toHaveClass(
+				/cortext-document-properties--collapsed/
+			);
 
-			// Title is now the locked `core/post-title` block inside the
-			// editor iframe; we still cover the row-property save flow
-			// via the Author and Year edits below.
+			// Title edits live in the iframe title block; Author and Year still
+			// cover the row-property save path.
 			await detailCanvas
 				.getByRole( 'textbox', { name: 'Author', exact: true } )
 				.fill( 'Octavia Butler' );

@@ -19,14 +19,12 @@ import { useDraggable, useDroppable } from '@dnd-kit/core';
 
 import PageIcon from './PageIcon';
 
-const GRID_UNIT = 20; // matches $grid-unit-20 in index.scss
+const GRID_UNIT = 20; // Matches $grid-unit-20 in index.scss.
 
-// A single page in the sidebar tree plus its rendered subtree.
+// A page row in the sidebar tree, including its rendered children.
 //
-// Three overlay strips per row (top 25% / middle 50% / bottom 25%) act as
-// separate droppables. dnd-kit hit-tests their bounding boxes during a drag,
-// so we can leave pointer-events off them and not interfere with normal
-// clicks when nothing is being dragged.
+// Three overlay strips per row act as separate drop targets. dnd-kit checks
+// their boxes during a drag, while pointer-events stay off for normal clicks.
 export default function PageRow( {
 	node,
 	depth,
@@ -48,13 +46,11 @@ export default function PageRow( {
 	isHomeUpdating = false,
 	autoRenameId, // page id that should immediately enter rename mode
 	onAutoRenameConsumed,
-	// True when an ancestor is collapsed: this row and its subtree are
-	// visually clipped but stay mounted for the expand/collapse animation.
-	// Drop targets must be off so dnd-kit's pointerWithin doesn't hit
-	// invisible descendants and route a drop to the wrong row.
+	// Ancestor is collapsed: keep the row mounted for animation, but disable
+	// drop targets so pointerWithin does not hit invisible descendants.
 	isHidden = false,
-	// tech-debt.md#53: Sidebar owns collection actions, so PageRow receives a
-	// renderer for nested collection rows instead of rebuilding those callbacks.
+	// tech-debt.md#53: Sidebar owns collection actions, so nested collection
+	// rows are rendered by a callback from the parent.
 	renderCollectionRow,
 } ) {
 	const { page, children } = node;
@@ -71,7 +67,7 @@ export default function PageRow( {
 	const renameInputRef = useRef( null );
 	const iconMeta = page.meta?.cortext_document_icon ?? '';
 
-	// Start rename automatically if the parent asked for it (new page flow).
+	// New pages enter rename mode as soon as their row renders.
 	useEffect( () => {
 		if ( autoRenameId === page.id ) {
 			setDraftTitle( page.title?.raw ?? page.title?.rendered ?? '' );
@@ -86,9 +82,8 @@ export default function PageRow( {
 		onAutoRenameConsumed,
 	] );
 
-	// Focus the rename input whenever rename mode is entered. The ref sits on
-	// the wrapper div (TextControl doesn't forward refs to its input), so we
-	// have to reach in for the actual input element.
+	// TextControl does not forward refs to its input, so focus the inner input
+	// after rename mode opens.
 	useEffect( () => {
 		if ( isRenaming && renameInputRef.current ) {
 			const input = renameInputRef.current.querySelector( 'input' );
@@ -97,7 +92,7 @@ export default function PageRow( {
 		}
 	}, [ isRenaming ] );
 
-	// --- Drag source ---
+	// Drag source.
 	const {
 		attributes,
 		listeners,
@@ -107,7 +102,7 @@ export default function PageRow( {
 		data: { pageId: page.id },
 	} );
 
-	// --- Drop zones (three strips overlaying the row) ---
+	// Drop zones.
 	const dropBefore = useDroppable( {
 		id: `before:${ page.id }`,
 		data: { zone: 'before', pageId: page.id },
@@ -333,8 +328,7 @@ export default function PageRow( {
 						) }
 					/>
 
-					{ /* Drop zones overlay the row. pointer-events are off
-					     so they don't block clicks when idle. */ }
+					{ /* Drop zones cover the row but stay click-through. */ }
 					<div
 						ref={ dropBefore.setNodeRef }
 						className="cortext-sidebar__drop-zone cortext-sidebar__drop-zone--before"

@@ -376,8 +376,8 @@ final class Collection {
 			)
 		);
 
-		// Server-only. The editor does not need the owner id, and exposing it
-		// would make it easy to point an inline collection at the wrong page.
+		// Server-only. The editor does not need the owner id, and leaving it
+		// writable would let an inline collection drift to the wrong page.
 		register_post_meta(
 			self::POST_TYPE,
 			self::INLINE_OWNER_META_KEY,

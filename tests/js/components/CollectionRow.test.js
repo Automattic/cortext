@@ -4,9 +4,8 @@ import CollectionRow, {
 	collectionTitle,
 } from '../../../src/components/CollectionRow';
 
-// Popover positioning can finish after a test has already unmounted. Jest then
-// sees React's act warning during the next test and fails the suite. Ignore
-// only that warning; every other console.error should still fail.
+// Popover positioning can finish after unmount and trip React's act warning in
+// the next test. Silence that one warning only.
 const originalError = console.error;
 beforeEach( () => {
 	jest.spyOn( console, 'error' ).mockImplementation( ( ...args ) => {
@@ -69,8 +68,8 @@ describe( 'CollectionRow', () => {
 
 	it( 'calls onSelect when the title is clicked', () => {
 		const { container, props } = renderRow();
-		// dnd-kit gives the draggable wrapper button semantics, so there are
-		// two "Books" buttons here. Click the title button directly.
+		// dnd-kit adds button semantics to the draggable wrapper, so click the
+		// title button directly.
 		fireEvent.click( container.querySelector( '.cortext-sidebar__title' ) );
 
 		expect( props.onSelect ).toHaveBeenCalledTimes( 1 );
@@ -124,8 +123,8 @@ describe( 'CollectionRow', () => {
 	} );
 
 	it( 'hides row actions when callbacks are missing', () => {
-		// Inline collections and other stripped-down contexts leave these
-		// callbacks unset, so the menu should leave those items out.
+		// Inline collections do not expose row actions, so those callbacks are
+		// absent and the menu should stay shorter.
 		renderRow();
 		fireEvent.click(
 			screen.getByRole( 'button', { name: 'Actions for Books' } )
@@ -143,8 +142,8 @@ describe( 'CollectionRow', () => {
 	} );
 
 	it( 'opens rename mode from autoRenameId and commits on Enter', () => {
-		// Exercise inline rename without opening the Popover. The auto-rename
-		// path still uses the same editor as the Rename menu item.
+		// Exercise inline rename without opening the Popover. Auto-rename uses
+		// the same input as the Rename menu item.
 		const onAutoRenameConsumed = jest.fn();
 		const onRename = jest.fn();
 		const { container } = renderRow( {

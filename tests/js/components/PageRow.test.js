@@ -1,10 +1,8 @@
 /**
- * Render + props-contract tests for `src/components/PageRow.js`:
- * title rendering, depth indentation, chevron/placeholder, selection and
- * drag/drop CSS class wiring, title-click selection, and the auto-rename
- * flow triggered by `autoRenameId`. DnD interaction itself is not simulated —
- * `PageRow` is wrapped in a `DndContext` only so `useDraggable`/`useDroppable`
- * don't throw.
+ * Props-contract tests for `src/components/PageRow.js`: title rendering,
+ * indentation, chevrons, selection classes, drag/drop classes, title clicks,
+ * and auto-rename. DnD itself is not simulated; DndContext is only here so
+ * `useDraggable` and `useDroppable` can mount.
  */
 
 import { render, fireEvent, screen } from '@testing-library/react';

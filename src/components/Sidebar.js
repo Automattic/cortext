@@ -13,9 +13,8 @@ import {
 	wordpress,
 } from '@wordpress/icons';
 
-// Sidebar toggle: panel outline with a vertical accent on
-// the left side. Same icon for both states; the aria-label tells the
-// user what the toggle will do.
+// Sidebar toggle: a panel outline with a left rail. The label carries the
+// state change, so the icon can stay the same.
 const sidebarToggleIcon = (
 	<svg
 		xmlns="http://www.w3.org/2000/svg"
@@ -277,10 +276,8 @@ export default function Sidebar( {
 			selectedCollectionId,
 		} );
 
-	// `draggedId` and `activeDrop` flow into the per-row callbacks below, so
-	// the DnD hook has to resolve before any `useCallback` that lists them as
-	// deps. Otherwise their `const` bindings sit in the temporal dead zone
-	// when the callback's dep array is evaluated and React throws on render.
+	// Row callbacks depend on draggedId and activeDrop, so resolve the DnD hook
+	// before those useCallback dep arrays are evaluated.
 	const { sensors, draggedId, draggedPage, activeDrop, handlers } =
 		useSidebarDnd( {
 			pages,
@@ -334,14 +331,14 @@ export default function Sidebar( {
 		[]
 	);
 
-	// Pull the source record straight from core-data for id-based actions like
-	// Duplicate and Rename.
+	// Duplicate and rename work from ids, so read the current record from
+	// core-data at action time.
 	const getRecordById = useCallback(
 		( id ) => getEntityRecord( 'postType', POST_TYPE, id ),
 		[ getEntityRecord ]
 	);
 
-	// --- Row actions -------------------------------------------------------
+	// Row actions.
 
 	const createRootPage = useCallback( async () => {
 		const created = await saveEntityRecord( 'postType', POST_TYPE, {
@@ -367,9 +364,8 @@ export default function Sidebar( {
 			'crtxt_collection',
 			FULL_PAGE_COLLECTION_QUERY,
 		] );
-		// tech-debt.md#2: core-data may have cached `/wp/v2/types` before this
-		// collection registered its row CPT. Refresh the entity config so row
-		// lookups can find the new post type.
+		// tech-debt.md#2: core-data may have cached `/wp/v2/types` before the
+		// collection registered its row CPT. Refresh entity config now.
 		invalidateResolution( 'getEntitiesConfig', [ 'postType' ] );
 		if ( created?.id ) {
 			navigate( {
@@ -395,8 +391,8 @@ export default function Sidebar( {
 		[ saveEntityRecord, pages, expand, onSelect ]
 	);
 
-	// First rename promotes draft to private so core regenerates post_name
-	// from the new title via wp_unique_post_slug(sanitize_title(...)).
+	// First rename promotes drafts to private, letting core regenerate
+	// post_name from the new title.
 	const renamePage = useCallback(
 		async ( id, title ) => {
 			const current = getRecordById( id );
@@ -439,18 +435,13 @@ export default function Sidebar( {
 		[ saveEntityRecord, getRecordById, expand, onSelect ]
 	);
 
-	// Soft-delete: the server-side cascade trashes descendants. Trash is
-	// reversible (the user can restore from the Trash panel), so no
-	// confirmation. The editor stays on the trashed page so the user can
-	// review what they trashed before deciding whether to restore.
+	// The server cascade trashes descendants too. Since Trash is reversible,
+	// keep the user on the trashed page and let the Trash panel handle restore.
 	//
-	// Do not use core-data's `deleteEntityRecord` for this soft-delete path:
-	// it removes the current post from the raw record store before the canvas
-	// has finished its block-editor selection writes, which can crash core-data.
-	// Calling REST directly is intentional here, not a generic trash pattern:
-	// the REST response is still the source of truth, and we immediately put
-	// the returned trashed record back into core-data so the editor can keep
-	// rendering the page while the active/trash queries refresh below.
+	// Avoid core-data's `deleteEntityRecord` here. It removes the current post
+	// before the canvas finishes its selection writes, which can crash
+	// core-data. The REST response still supplies the trashed record, and we
+	// put it back into core-data before refreshing active/trash queries.
 	const trashPage = useCallback(
 		async ( id ) => {
 			const deleted = await apiFetch( {
@@ -471,8 +462,8 @@ export default function Sidebar( {
 				POST_TYPE,
 				TRASHED_PAGES_QUERY,
 			] );
-			// Page trash can also trash inline-owned and nested full-page
-			// collections, so refresh the full-page list now.
+			// A page can take inline-owned or nested full-page collections to
+			// Trash with it, so refresh the full-page list now.
 			invalidateResolution( 'getEntityRecords', [
 				'postType',
 				'crtxt_collection',
@@ -529,12 +520,11 @@ export default function Sidebar( {
 				'crtxt_collection',
 				FULL_PAGE_COLLECTION_QUERY,
 			] );
-			// A duplicate registers a fresh row CPT. Clear the cached post-type
-			// list before anything tries to read rows through the new slug.
+			// A duplicate gets a fresh row CPT. Clear cached post types before
+			// anything reads rows through the new slug.
 			invalidateResolution( 'getEntitiesConfig', [ 'postType' ] );
-			// The server reports fields it did not copy. Relations are the
-			// common case for now (tech-debt.md#54), but failed field inserts
-			// come through the same channel.
+			// The server reports fields it skipped. Relations are the common
+			// case for now (tech-debt.md#54), but failed inserts use this too.
 			const skipped = Array.isArray( created?.skipped_fields )
 				? created.skipped_fields
 				: [];
@@ -577,8 +567,8 @@ export default function Sidebar( {
 				FULL_PAGE_COLLECTION_QUERY,
 			] );
 			notifyDocumentTrashChanged();
-			// Remove the trashed collection from Favorites as well; otherwise
-			// the next Favorites save sends an id the server rejects.
+			// Remove trashed collections from Favorites so the next save does
+			// not send an id the server now rejects.
 			try {
 				await setFavorites( ( current ) =>
 					filterFavoritesForTrashedCollection( current, id )
@@ -767,13 +757,9 @@ export default function Sidebar( {
 						/>
 					</SidebarSection>
 
-					{ /* One DndContext wraps both sections so top-level
-					     collections (rendered in the Collections section
-					     below) are part of the same drag/drop graph as
-					     the Pages tree. Without this, top-level
-					     collection rows would register their useDraggable
-					     / useDroppable hooks outside any provider and
-					     the gesture would never fire. */ }
+					{ /* One DndContext covers pages and collections. Top-level
+					     collections live in their own section, but they still
+					     need the same drag/drop graph as the page tree. */ }
 					<DndContext
 						sensors={ sensors }
 						collisionDetection={ pointerWithin }

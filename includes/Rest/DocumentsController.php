@@ -137,8 +137,8 @@ final class DocumentsController {
 			)
 		);
 
-		// Collection create keeps the kind in the URL instead of the request
-		// body. Page create still uses `/wp/v2` through core-data.
+		// Collections use this Cortext route so mode and parent are explicit.
+		// Pages still go through `/wp/v2` via core-data.
 		register_rest_route(
 			self::NAMESPACE,
 			'/collections',

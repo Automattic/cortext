@@ -8,8 +8,7 @@ import { useCallback, useState } from '@wordpress/element';
 import { globe, lock } from '@wordpress/icons';
 
 /**
- * Walks the block tree and returns unique collectionId values from all
- * cortext/data-view blocks.
+ * Walks the block tree and returns each collection used by cortext/data-view.
  *
  * @param {Array} blocks Block list to walk.
  * @return {number[]} Unique collection IDs.
@@ -50,8 +49,8 @@ export default function PublishToggle() {
 	const isPublic = status === 'publish';
 
 	const toggle = useCallback( async () => {
-		// Publishing the page also publishes any referenced collections
-		// so their rows become publicly queryable.
+		// Publish collections used by DataView blocks along with the page, so
+		// their rows are available to the frontend render.
 		if ( ! isPublic ) {
 			const collectionIds = getCollectionIds( blocks );
 			await Promise.all(
@@ -76,7 +75,7 @@ export default function PublishToggle() {
 		}
 	}, [ link ] );
 
-	// Don't show the toggle for draft pages (no title yet).
+	// Hide the toggle for draft pages until they have a title.
 	if ( status === 'draft' ) {
 		return null;
 	}
