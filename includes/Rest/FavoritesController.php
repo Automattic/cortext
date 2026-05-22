@@ -22,6 +22,7 @@ final class FavoritesController {
 	private const ALLOWED_KINDS = array(
 		Documents::KIND_PAGE,
 		Documents::KIND_COLLECTION,
+		Documents::KIND_ROW,
 	);
 
 	private Documents $documents;
@@ -55,11 +56,15 @@ final class FavoritesController {
 							'items'    => array(
 								'type'       => 'object',
 								'properties' => array(
-									'kind' => array(
+									'kind'         => array(
 										'type' => 'string',
 										'enum' => self::ALLOWED_KINDS,
 									),
-									'id'   => array(
+									'id'           => array(
+										'type'    => 'integer',
+										'minimum' => 1,
+									),
+									'collectionId' => array(
 										'type'    => 'integer',
 										'minimum' => 1,
 									),
@@ -108,12 +113,16 @@ final class FavoritesController {
 				);
 			}
 
-			$id = isset( $favorite['id'] ) ? (int) $favorite['id'] : 0;
+			$id            = isset( $favorite['id'] ) ? (int) $favorite['id'] : 0;
+			$collection_id = isset( $favorite['collectionId'] ) ? (int) $favorite['collectionId'] : 0;
 			if ( isset( $seen[ $id ] ) ) {
 				continue;
 			}
 
-			$target = $this->documents->format_target( $id );
+			$target = $this->documents->format_target(
+				$id,
+				array( 'context_id' => $collection_id )
+			);
 			if ( is_wp_error( $target ) ) {
 				return $target;
 			}
@@ -127,7 +136,7 @@ final class FavoritesController {
 			}
 
 			$seen[ $id ] = true;
-			$stored[]    = "{$target['kind']}:{$target['id']}";
+			$stored[]    = $this->stored_entry_for_target( $target );
 			$formatted[] = $target;
 		}
 
@@ -147,15 +156,19 @@ final class FavoritesController {
 			return array();
 		}
 
-		$out  = array();
-		$seen = array();
+		$out   = array();
+		$valid = array();
+		$seen  = array();
 		foreach ( $raw as $entry ) {
-			$id = $this->stored_entry_id( $entry );
-			if ( $id < 1 || isset( $seen[ $id ] ) ) {
+			$parsed = $this->parse_stored_entry( $entry );
+			if ( null === $parsed || isset( $seen[ $parsed['id'] ] ) ) {
 				continue;
 			}
 
-			$target = $this->documents->format_target( $id );
+			$target = $this->documents->format_target(
+				$parsed['id'],
+				array( 'context_id' => $parsed['collectionId'] )
+			);
 			if ( is_wp_error( $target ) ) {
 				continue;
 			}
@@ -164,26 +177,79 @@ final class FavoritesController {
 				continue;
 			}
 
-			$seen[ $id ] = true;
-			$out[]       = $target;
+			$seen[ $parsed['id'] ] = true;
+			$valid[]               = $entry;
+			$out[]                 = $target;
+		}
+
+		// Keep storage matched to what we can still resolve. Otherwise the next
+		// save may replay a stale favorite and fail the whole update.
+		if ( count( $valid ) !== count( $raw ) ) {
+			update_user_meta( $user_id, self::META_KEY, $valid );
 		}
 
 		return $out;
 	}
 
-	private function stored_entry_id( mixed $entry ): int {
+	/**
+	 * Stores a favorite in the user's saved format. Pages and collections keep
+	 * the old `"kind:id"` string; rows use an array because their id needs the
+	 * parent collection id too.
+	 *
+	 * @param array<string,mixed> $target Formatted document target.
+	 * @return string|array{kind:string,id:int,collectionId:int}
+	 */
+	private function stored_entry_for_target( array $target ): string|array {
+		$kind = (string) $target['kind'];
+		$id   = (int) $target['id'];
+		if ( Documents::KIND_ROW !== $kind ) {
+			return "{$kind}:{$id}";
+		}
+
+		return array(
+			'kind'         => $kind,
+			'id'           => $id,
+			'collectionId' => isset( $target['collection']['id'] )
+				? (int) $target['collection']['id']
+				: 0,
+		);
+	}
+
+	/**
+	 * Turns a saved favorite back into the `{id, collectionId}` pair
+	 * `format_target` expects. Bad entries are skipped when favorites are read.
+	 *
+	 * @param mixed $entry Raw stored entry: a string for pages/collections, or an
+	 *                     array for rows.
+	 * @return array{id:int,collectionId:int}|null
+	 */
+	private function parse_stored_entry( mixed $entry ): ?array {
 		if ( is_string( $entry ) ) {
 			$parts = explode( ':', $entry, 2 );
 			if ( 2 !== count( $parts ) ) {
-				return 0;
+				return null;
 			}
-			return (int) $parts[1];
+			$id = (int) $parts[1];
+			return $id > 0
+				? array(
+					'id'           => $id,
+					'collectionId' => 0,
+				)
+				: null;
 		}
 
 		if ( is_array( $entry ) && isset( $entry['id'] ) ) {
-			return (int) $entry['id'];
+			$id = (int) $entry['id'];
+			return $id > 0
+				? array(
+					'id'           => $id,
+					'collectionId' => isset( $entry['collectionId'] )
+						? (int) $entry['collectionId']
+						: 0,
+				)
+				: null;
 		}
 
-		return 0;
+		return null;
 	}
 }

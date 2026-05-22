@@ -225,7 +225,7 @@ export default function Sidebar( {
 		[ favoriteKeys ]
 	);
 	const toggleFavorite = useCallback(
-		async ( kind, id ) => {
+		async ( kind, id, extra = {} ) => {
 			if ( areFavoriteActionsDisabled ) {
 				return;
 			}
@@ -240,7 +240,7 @@ export default function Sidebar( {
 						? current.filter(
 								( favorite ) => favoriteKey( favorite ) !== key
 						  )
-						: [ ...current, { kind, id } ];
+						: [ ...current, { kind, id, ...extra } ];
 				} );
 			} catch ( err ) {
 				setFavoritesError(
@@ -271,7 +271,8 @@ export default function Sidebar( {
 	const selectFavorite = useCallback(
 		( favorite ) => {
 			if (
-				( favorite.kind === 'page' && favorite.id === selectedId ) ||
+				( ( favorite.kind === 'page' || favorite.kind === 'row' ) &&
+					favorite.id === selectedId ) ||
 				( favorite.kind === 'collection' &&
 					favorite.id === selectedCollectionId )
 			) {

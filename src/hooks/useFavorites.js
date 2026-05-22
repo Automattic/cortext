@@ -15,11 +15,19 @@ function normalizeFavorite( favorite ) {
 	if ( ! favorite || ! favorite.kind || ! favorite.id ) {
 		return null;
 	}
-	return {
+	const normalized = {
 		...favorite,
 		kind: favorite.kind,
 		id: Number( favorite.id ),
 	};
+	// Keep a row's collection id around for the next save. Optimistic writes send
+	// `collectionId`; reads send it inside `collection`.
+	const collectionId =
+		favorite.collectionId ?? favorite.collection?.id ?? null;
+	if ( collectionId ) {
+		normalized.collectionId = Number( collectionId );
+	}
+	return normalized;
 }
 
 function normalizeFavorites( favorites ) {
@@ -35,7 +43,9 @@ function areFavoritesEqual( a, b ) {
 	}
 	return a.every(
 		( favorite, index ) =>
-			favorite.kind === b[ index ]?.kind && favorite.id === b[ index ]?.id
+			favorite.kind === b[ index ]?.kind &&
+			favorite.id === b[ index ]?.id &&
+			( favorite.collectionId ?? 0 ) === ( b[ index ]?.collectionId ?? 0 )
 	);
 }
 
