@@ -289,25 +289,14 @@ final class Test_Rest_Favorites_Controller extends BaseTestCase {
 	public function test_get_prunes_a_row_favorite_whose_row_was_trashed(): void {
 		$user_id = $this->create_user( 'administrator' );
 		wp_set_current_user( $user_id );
-		$collection_id = $this->create_collection( 'people', 'People' );
-		$kept_row      = $this->create_row( 'crtxt_people', 'Kept' );
-		$trashed_row   = $this->create_row( 'crtxt_people', 'Trashed' );
+		$this->create_collection( 'people', 'People' );
+		$kept_row    = $this->create_row( 'crtxt_people', 'Kept' );
+		$trashed_row = $this->create_row( 'crtxt_people', 'Trashed' );
 
 		update_user_meta(
 			$user_id,
 			self::META_KEY,
-			array(
-				array(
-					'kind'         => 'row',
-					'id'           => $kept_row,
-					'collectionId' => $collection_id,
-				),
-				array(
-					'kind'         => 'row',
-					'id'           => $trashed_row,
-					'collectionId' => $collection_id,
-				),
-			)
+			array( "row:{$kept_row}", "row:{$trashed_row}" )
 		);
 
 		wp_trash_post( $trashed_row );
@@ -319,13 +308,41 @@ final class Test_Rest_Favorites_Controller extends BaseTestCase {
 			array_column( $response->get_data()['favorites'], 'id' )
 		);
 		$this->assertSame(
+			array( "row:{$kept_row}" ),
+			get_user_meta( $user_id, self::META_KEY, true )
+		);
+	}
+
+	public function test_get_migrates_legacy_row_favorite_array_shape(): void {
+		// Older builds stored row favorites as arrays carrying the parent
+		// collection id. The read should accept that shape and rewrite it as
+		// the canonical `"row:id"` string so the next save uses the new shape.
+		$user_id = $this->create_user( 'administrator' );
+		wp_set_current_user( $user_id );
+		$collection_id = $this->create_collection( 'people', 'People' );
+		$row_id        = $this->create_row( 'crtxt_people', 'Ada Lovelace' );
+
+		update_user_meta(
+			$user_id,
+			self::META_KEY,
 			array(
 				array(
 					'kind'         => 'row',
-					'id'           => $kept_row,
+					'id'           => $row_id,
 					'collectionId' => $collection_id,
 				),
-			),
+			)
+		);
+
+		$response = $this->get_favorites();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			array( $row_id ),
+			array_column( $response->get_data()['favorites'], 'id' )
+		);
+		$this->assertSame(
+			array( "row:{$row_id}" ),
 			get_user_meta( $user_id, self::META_KEY, true )
 		);
 	}
@@ -367,9 +384,8 @@ final class Test_Rest_Favorites_Controller extends BaseTestCase {
 		$set_response = $this->set_favorites(
 			array(
 				array(
-					'kind'         => 'row',
-					'id'           => $row_id,
-					'collectionId' => $collection_id,
+					'kind' => 'row',
+					'id'   => $row_id,
 				),
 			)
 		);
@@ -381,44 +397,17 @@ final class Test_Rest_Favorites_Controller extends BaseTestCase {
 		$this->assertSame( 'row', $favorites[0]['kind'] );
 		$this->assertSame( $row_id, $favorites[0]['id'] );
 		$this->assertSame( 'Ada Lovelace', $favorites[0]['title'] );
+		// The parent collection comes out of the response — the server resolves
+		// it from the row's CPT, so the client never has to send it.
 		$this->assertSame( $collection_id, $favorites[0]['collection']['id'] );
 		$this->assertSame( 'People', $favorites[0]['collection']['title'] );
 		$this->assertSame(
 			$favorites,
 			$get_response->get_data()['favorites']
 		);
-		// Row favorites carry their collection id. Page and collection favorites
-		// keep the old `"kind:id"` string.
 		$this->assertSame(
-			array(
-				array(
-					'kind'         => 'row',
-					'id'           => $row_id,
-					'collectionId' => $collection_id,
-				),
-			),
+			array( "row:{$row_id}" ),
 			get_user_meta( get_current_user_id(), self::META_KEY, true )
-		);
-	}
-
-	public function test_rejects_a_row_favorite_without_its_collection(): void {
-		wp_set_current_user( $this->create_user( 'administrator' ) );
-		$this->create_collection( 'people', 'People' );
-		$row_id = $this->create_row( 'crtxt_people', 'Ada Lovelace' );
-
-		$response = $this->set_favorites(
-			array(
-				array(
-					'kind' => 'row',
-					'id'   => $row_id,
-				),
-			)
-		);
-
-		$this->assertSame( 400, $response->get_status() );
-		$this->assertSame(
-			'cortext_document_target_invalid',
-			$response->get_data()['code']
 		);
 	}
 
