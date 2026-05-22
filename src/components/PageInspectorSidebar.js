@@ -28,7 +28,7 @@ import {
 	useEffect,
 	useState,
 } from '@wordpress/element';
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import {
 	home as homeIcon,
 	starEmpty,
@@ -41,6 +41,8 @@ import {
 } from '@wordpress/interface';
 import apiFetch from '@wordpress/api-fetch';
 
+import DocumentPropertiesActions from './DocumentPropertiesActions';
+import { useDocumentPropertiesContext } from './DocumentPropertiesContext';
 import MediaPicker, { MediaUploadCheck } from './MediaPicker';
 import PageIcon from './PageIcon';
 import DocumentIdentityControls from './DocumentIdentityControls';
@@ -74,14 +76,10 @@ export function InspectorSidebarSlot( props ) {
 	return <ComplementaryArea.Slot scope={ INSPECTOR_SCOPE } { ...props } />;
 }
 
-function InspectorTabsHeader( { supportsPageInspector } ) {
-	const tabs = supportsPageInspector
-		? [
-				{ id: PAGE_INSPECTOR, label: __( 'Page', 'cortext' ) },
-				{ id: BLOCK_INSPECTOR, label: __( 'Block', 'cortext' ) },
-		  ]
-		: [ { id: BLOCK_INSPECTOR, label: __( 'Block', 'cortext' ) } ];
-
+function InspectorTabsHeader( { tabs } ) {
+	if ( tabs.length === 0 ) {
+		return null;
+	}
 	return (
 		<Tabs.TabList>
 			{ tabs.map( ( tab ) => (
@@ -101,7 +99,7 @@ function InspectorComplementaryArea( {
 	children,
 	identifier,
 	isActiveByDefault,
-	supportsPageInspector,
+	tabs,
 	title,
 } ) {
 	const tabsContextValue = useContext( Tabs.Context );
@@ -118,9 +116,7 @@ function InspectorComplementaryArea( {
 			headerClassName="editor-sidebar__panel-tabs"
 			header={
 				<Tabs.Context.Provider value={ tabsContextValue }>
-					<InspectorTabsHeader
-						supportsPageInspector={ supportsPageInspector }
-					/>
+					<InspectorTabsHeader tabs={ tabs } />
 				</Tabs.Context.Provider>
 			}
 		>
@@ -661,12 +657,46 @@ function PageInspectorContent( { postId } ) {
 	);
 }
 
+// Row inspector for property actions. Values stay in the document block; the
+// sidebar handles visibility and field creation.
+function RowInspectorContent() {
+	return (
+		<div className="cortext-row-inspector">
+			<DocumentPropertiesActions />
+		</div>
+	);
+}
+
 function InspectorFrame( { children, isTrashed } ) {
 	return isTrashed ? <Disabled>{ children }</Disabled> : children;
 }
 
 export default function PageInspectorSidebar( { postId, postType } ) {
-	const supportsPageInspector = postType === POST_TYPE;
+	const isPage = postType === POST_TYPE;
+	const propertiesCtx = useDocumentPropertiesContext();
+	const collectionId = propertiesCtx?.collectionId;
+	const { record: collection } = useEntityRecord(
+		'postType',
+		'crtxt_collection',
+		collectionId || 0
+	);
+	const collectionTitle = (
+		collection?.title?.rendered ||
+		collection?.title?.raw ||
+		''
+	).trim();
+	let documentTabLabel;
+	if ( isPage ) {
+		documentTabLabel = __( 'Page', 'cortext' );
+	} else if ( collectionTitle ) {
+		documentTabLabel = sprintf(
+			/* translators: %s: collection name (e.g. "Books Item") */
+			__( '%s Item', 'cortext' ),
+			collectionTitle
+		);
+	} else {
+		documentTabLabel = __( 'Collection Item', 'cortext' );
+	}
 	const isTrashed = useSelect(
 		( select ) =>
 			select( editorStore ).getCurrentPostAttribute( 'status' ) ===
@@ -680,15 +710,28 @@ export default function PageInspectorSidebar( { postId, postType } ) {
 			),
 		[]
 	);
-	const selectedTabId = isInspectorArea( activeArea )
-		? activeArea
-		: PAGE_INSPECTOR;
+	// Show the Block tab only when a regular block is selected. With no block
+	// selected it only adds a placeholder, and the properties block already
+	// exposes the same controls as the Row tab.
+	const showBlockTab = useSelect( ( select ) => {
+		const store = select( blockEditorStore );
+		const clientId = store.getSelectedBlockClientId();
+		if ( ! clientId ) {
+			return false;
+		}
+		return store.getBlockName( clientId ) !== 'cortext/document-properties';
+	}, [] );
+	const selectedTabId =
+		isInspectorArea( activeArea ) &&
+		( showBlockTab || activeArea !== BLOCK_INSPECTOR )
+			? activeArea
+			: PAGE_INSPECTOR;
 	const { enableComplementaryArea } = useDispatch( interfaceStore );
 	useEffect( () => {
-		if ( ! supportsPageInspector && activeArea === PAGE_INSPECTOR ) {
-			enableComplementaryArea( INSPECTOR_SCOPE, BLOCK_INSPECTOR );
+		if ( ! showBlockTab && activeArea === BLOCK_INSPECTOR ) {
+			enableComplementaryArea( INSPECTOR_SCOPE, PAGE_INSPECTOR );
 		}
-	}, [ activeArea, enableComplementaryArea, supportsPageInspector ] );
+	}, [ activeArea, enableComplementaryArea, showBlockTab ] );
 	const selectTab = useCallback(
 		( nextTabId ) => {
 			if ( isInspectorArea( nextTabId ) ) {
@@ -698,22 +741,12 @@ export default function PageInspectorSidebar( { postId, postType } ) {
 		[ enableComplementaryArea ]
 	);
 
-	if ( ! supportsPageInspector ) {
-		return (
-			<ComplementaryArea
-				scope={ INSPECTOR_SCOPE }
-				identifier={ BLOCK_INSPECTOR }
-				title={ __( 'Block', 'cortext' ) }
-				closeLabel={ __( 'Close inspector', 'cortext' ) }
-				isPinnable={ false }
-				isActiveByDefault
-			>
-				<InspectorFrame isTrashed={ isTrashed }>
-					<BlockInspector />
-				</InspectorFrame>
-			</ComplementaryArea>
-		);
-	}
+	const tabs = showBlockTab
+		? [
+				{ id: PAGE_INSPECTOR, label: documentTabLabel },
+				{ id: BLOCK_INSPECTOR, label: __( 'Block', 'cortext' ) },
+		  ]
+		: [ { id: PAGE_INSPECTOR, label: documentTabLabel } ];
 
 	return (
 		<Tabs
@@ -723,23 +756,29 @@ export default function PageInspectorSidebar( { postId, postType } ) {
 		>
 			<InspectorComplementaryArea
 				identifier={ PAGE_INSPECTOR }
-				title={ __( 'Page', 'cortext' ) }
+				title={ documentTabLabel }
 				isActiveByDefault
-				supportsPageInspector={ supportsPageInspector }
+				tabs={ tabs }
 			>
 				<InspectorFrame isTrashed={ isTrashed }>
-					<PageInspectorContent postId={ postId } />
+					{ isPage ? (
+						<PageInspectorContent postId={ postId } />
+					) : (
+						<RowInspectorContent />
+					) }
 				</InspectorFrame>
 			</InspectorComplementaryArea>
-			<InspectorComplementaryArea
-				identifier={ BLOCK_INSPECTOR }
-				title={ __( 'Block', 'cortext' ) }
-				supportsPageInspector={ supportsPageInspector }
-			>
-				<InspectorFrame isTrashed={ isTrashed }>
-					<BlockInspector />
-				</InspectorFrame>
-			</InspectorComplementaryArea>
+			{ showBlockTab && (
+				<InspectorComplementaryArea
+					identifier={ BLOCK_INSPECTOR }
+					title={ __( 'Block', 'cortext' ) }
+					tabs={ tabs }
+				>
+					<InspectorFrame isTrashed={ isTrashed }>
+						<BlockInspector />
+					</InspectorFrame>
+				</InspectorComplementaryArea>
+			) }
 		</Tabs>
 	);
 }
