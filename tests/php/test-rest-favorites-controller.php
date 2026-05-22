@@ -10,7 +10,9 @@ declare( strict_types=1 );
 namespace Cortext\Tests;
 
 use Cortext\PostType\Collection;
+use Cortext\PostType\CollectionEntries;
 use Cortext\PostType\DocumentIdentity;
+use Cortext\PostType\Field;
 use Cortext\PostType\Page;
 use Cortext\Rest\FavoritesController;
 use WorDBless\BaseTestCase;
@@ -19,13 +21,17 @@ use WP_REST_Server;
 
 final class Test_Rest_Favorites_Controller extends BaseTestCase {
 
+	use InMemoryPostsQuery;
+
 	private const META_KEY = 'cortext_favorites';
 
 	public function set_up(): void {
 		parent::set_up();
 
+		$this->unregister_dynamic_collection_post_types();
 		( new Page() )->register_post_type();
 		( new Collection() )->register_post_type();
+		$this->install_in_memory_posts_query();
 
 		$GLOBALS['wp_rest_server'] = new WP_REST_Server();
 		( new FavoritesController() )->register();
@@ -33,6 +39,7 @@ final class Test_Rest_Favorites_Controller extends BaseTestCase {
 	}
 
 	public function tear_down(): void {
+		$this->uninstall_in_memory_posts_query();
 		wp_set_current_user( 0 );
 		parent::tear_down();
 	}
@@ -48,7 +55,7 @@ final class Test_Rest_Favorites_Controller extends BaseTestCase {
 
 	public function test_sets_and_reads_page_and_collection_favorites_in_order(): void {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
-		$page_id       = $this->create_page(
+		$page_id   = $this->create_page(
 			array(
 				'post_name'  => 'daily-notes',
 				'post_title' => 'Daily Notes',
@@ -271,6 +278,56 @@ final class Test_Rest_Favorites_Controller extends BaseTestCase {
 			array( $valid_page ),
 			array_column( $response->get_data()['favorites'], 'id' )
 		);
+		// Keep storage pruned too. Otherwise the next save can replay a stale
+		// favorite and fail before it writes the valid ones.
+		$this->assertSame(
+			array( "page:{$valid_page}" ),
+			get_user_meta( $user_id, self::META_KEY, true )
+		);
+	}
+
+	public function test_get_prunes_a_row_favorite_whose_row_was_trashed(): void {
+		$user_id = $this->create_user( 'administrator' );
+		wp_set_current_user( $user_id );
+		$collection_id = $this->create_collection( 'people', 'People' );
+		$kept_row      = $this->create_row( 'crtxt_people', 'Kept' );
+		$trashed_row   = $this->create_row( 'crtxt_people', 'Trashed' );
+
+		update_user_meta(
+			$user_id,
+			self::META_KEY,
+			array(
+				array(
+					'kind'         => 'row',
+					'id'           => $kept_row,
+					'collectionId' => $collection_id,
+				),
+				array(
+					'kind'         => 'row',
+					'id'           => $trashed_row,
+					'collectionId' => $collection_id,
+				),
+			)
+		);
+
+		wp_trash_post( $trashed_row );
+		$response = $this->get_favorites();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			array( $kept_row ),
+			array_column( $response->get_data()['favorites'], 'id' )
+		);
+		$this->assertSame(
+			array(
+				array(
+					'kind'         => 'row',
+					'id'           => $kept_row,
+					'collectionId' => $collection_id,
+				),
+			),
+			get_user_meta( $user_id, self::META_KEY, true )
+		);
 	}
 
 	public function test_requires_edit_posts_capability(): void {
@@ -298,6 +355,69 @@ final class Test_Rest_Favorites_Controller extends BaseTestCase {
 		$this->assertSame( 400, $response->get_status() );
 		$this->assertSame(
 			'cortext_document_target_inline_collection',
+			$response->get_data()['code']
+		);
+	}
+
+	public function test_sets_and_reads_row_favorites(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$collection_id = $this->create_collection( 'people', 'People' );
+		$row_id        = $this->create_row( 'crtxt_people', 'Ada Lovelace' );
+
+		$set_response = $this->set_favorites(
+			array(
+				array(
+					'kind'         => 'row',
+					'id'           => $row_id,
+					'collectionId' => $collection_id,
+				),
+			)
+		);
+		$get_response = $this->get_favorites();
+
+		$this->assertSame( 200, $set_response->get_status() );
+		$favorites = $set_response->get_data()['favorites'];
+		$this->assertCount( 1, $favorites );
+		$this->assertSame( 'row', $favorites[0]['kind'] );
+		$this->assertSame( $row_id, $favorites[0]['id'] );
+		$this->assertSame( 'Ada Lovelace', $favorites[0]['title'] );
+		$this->assertSame( $collection_id, $favorites[0]['collection']['id'] );
+		$this->assertSame( 'People', $favorites[0]['collection']['title'] );
+		$this->assertSame(
+			$favorites,
+			$get_response->get_data()['favorites']
+		);
+		// Row favorites carry their collection id. Page and collection favorites
+		// keep the old `"kind:id"` string.
+		$this->assertSame(
+			array(
+				array(
+					'kind'         => 'row',
+					'id'           => $row_id,
+					'collectionId' => $collection_id,
+				),
+			),
+			get_user_meta( get_current_user_id(), self::META_KEY, true )
+		);
+	}
+
+	public function test_rejects_a_row_favorite_without_its_collection(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$this->create_collection( 'people', 'People' );
+		$row_id = $this->create_row( 'crtxt_people', 'Ada Lovelace' );
+
+		$response = $this->set_favorites(
+			array(
+				array(
+					'kind' => 'row',
+					'id'   => $row_id,
+				),
+			)
+		);
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame(
+			'cortext_document_target_invalid',
 			$response->get_data()['code']
 		);
 	}
@@ -410,6 +530,34 @@ final class Test_Rest_Favorites_Controller extends BaseTestCase {
 		);
 		$this->assertIsInt( $id );
 		$this->assertGreaterThan( 0, $id );
+
+		( new CollectionEntries() )->register_for_collection( get_post( (int) $id ) );
+
 		return (int) $id;
+	}
+
+	private function create_row( string $post_type, string $title ): int {
+		$id = wp_insert_post(
+			array(
+				'post_type'   => $post_type,
+				'post_status' => 'private',
+				'post_title'  => $title,
+			)
+		);
+		$this->assertIsInt( $id );
+		$this->assertGreaterThan( 0, $id );
+
+		return (int) $id;
+	}
+
+	private function unregister_dynamic_collection_post_types(): void {
+		foreach ( get_post_types() as $post_type ) {
+			if (
+				str_starts_with( $post_type, CollectionEntries::CPT_PREFIX ) &&
+				! in_array( $post_type, array( Page::POST_TYPE, Collection::POST_TYPE, Field::POST_TYPE ), true )
+			) {
+				unregister_post_type( $post_type );
+			}
+		}
 	}
 }

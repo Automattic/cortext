@@ -220,8 +220,9 @@ body.cortext-fullscreen {
 		background: var(--cortext-control-hover-surface);
 	}
 
-	&__quick-action--home.components-button:hover:not(:disabled),
-	&__quick-action--home.components-button:focus:not(:disabled) {
+	&__quick-actions > .components-button:hover:not(:disabled),
+	&__quick-actions > .components-button:focus:not(:disabled),
+	&__quick-actions > .components-button.is-pressed {
 		background: var(--cortext-state-hover);
 		color: var(--cortext-text-strong);
 	}
@@ -1158,6 +1159,71 @@ body.cortext-sidebar-resizing {
 	height: 100%;
 	min-height: 0;
 	background: var(--cortext-canvas-surface);
+}
+
+.cortext-published-pane {
+	flex: 1 1 auto;
+	min-height: 0;
+	height: 100%;
+	padding: $grid-unit-30 $grid-unit-40;
+	overflow: auto;
+
+	&__title.components-button {
+		display: inline-flex;
+		align-items: center;
+		gap: $grid-unit-05;
+		padding: 0;
+		height: auto;
+		min-height: 0;
+		text-align: start;
+	}
+
+	&__title-icon {
+		display: inline-flex;
+		align-items: center;
+		flex: 0 0 auto;
+	}
+
+	&__title-text {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	&__na {
+		display: inline-flex;
+		align-items: center;
+		gap: $grid-unit-05;
+	}
+}
+
+.cortext-infotip {
+
+	&__trigger {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0;
+		margin: 0;
+		background: none;
+		border: 0;
+		color: var(--wp-components-color-foreground-muted, currentColor);
+		cursor: help;
+		border-radius: 2px;
+
+		&:focus-visible {
+			outline: 2px solid var(--wp-admin-theme-color, #3858e9);
+			outline-offset: 1px;
+		}
+	}
+
+	&__description {
+		max-width: 280px;
+		padding: $grid-unit-15;
+		font-size: 12px;
+		line-height: 1.4;
+	}
 }
 
 .cortext-topbar {

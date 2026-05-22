@@ -870,4 +870,119 @@ describe( 'useCollectionRows', () => {
 		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 2 ) );
 		expect( lastRequestPath() ).toContain( 'collection=7' );
 	} );
+
+	it( 'serializes visible fields in a stable order', () => {
+		const args = buildQueryArgs(
+			7,
+			{
+				fields: [ 'title', 'field-20', 'field-10' ],
+			},
+			baseFields
+		);
+
+		// Sorting keeps the request key stable when columns move.
+		expect( args[ 'fields[0]' ] ).toBe( 'field-10' );
+		expect( args[ 'fields[1]' ] ).toBe( 'field-20' );
+		expect( args[ 'fields[2]' ] ).toBe( 'title' );
+	} );
+
+	it( 'omits fields[] when every custom field is visible', () => {
+		// This is the auto-seeded default: title plus every custom field.
+		// Asking the server for the same set would only change the request key
+		// when the seeder writes view.fields.
+		const allCustomFields = baseFields
+			.filter( ( f ) => /^field-/.test( f.id ) )
+			.map( ( f ) => f.id );
+		const args = buildQueryArgs(
+			7,
+			{ fields: [ 'title', ...allCustomFields ] },
+			baseFields
+		);
+
+		expect( args[ 'fields[0]' ] ).toBeUndefined();
+	} );
+
+	it( 'omits fields[] while view.fields is empty or missing', () => {
+		const emptyArgs = buildQueryArgs( 7, { fields: [] }, baseFields );
+		const missingArgs = buildQueryArgs( 7, {}, baseFields );
+
+		expect( emptyArgs[ 'fields[0]' ] ).toBeUndefined();
+		expect( missingArgs[ 'fields[0]' ] ).toBeUndefined();
+	} );
+
+	it( 'does not project client mode requests because local filters need every column', () => {
+		const plan = buildQueryPlan(
+			7,
+			{
+				fields: [ 'title', 'field-10' ],
+				filters: [
+					{
+						field: 'field-30',
+						operator: 'contains',
+						value: 'unsupported',
+					},
+				],
+			},
+			baseFields
+		);
+
+		expect( plan.mode ).toBe( 'client' );
+		expect( plan.args[ 'fields[0]' ] ).toBeUndefined();
+	} );
+
+	it( 'refetches when the visible fields change', async () => {
+		const initialView = {
+			type: 'table',
+			fields: [ 'title' ],
+			page: 1,
+			perPage: 25,
+		};
+		const nextView = {
+			type: 'table',
+			fields: [ 'title', 'field-10' ],
+			page: 1,
+			perPage: 25,
+		};
+
+		const { rerender } = renderHook(
+			( { view } ) => useCollectionRows( 7, view, baseFields ),
+			{ initialProps: { view: initialView } }
+		);
+
+		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 1 ) );
+		expect( lastRequestPath() ).toContain( 'fields[0]=title' );
+		expect( lastRequestPath() ).not.toContain( 'fields[1]' );
+
+		rerender( { view: nextView } );
+
+		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 2 ) );
+		expect( lastRequestPath() ).toContain( 'fields[0]=field-10' );
+		expect( lastRequestPath() ).toContain( 'fields[1]=title' );
+	} );
+
+	it( 'does not refetch for a column reorder', async () => {
+		const initialView = {
+			type: 'table',
+			fields: [ 'title', 'field-10', 'field-20' ],
+			page: 1,
+			perPage: 25,
+		};
+		const reorderedView = {
+			...initialView,
+			fields: [ 'field-20', 'title', 'field-10' ],
+		};
+
+		const { rerender } = renderHook(
+			( { view } ) => useCollectionRows( 7, view, baseFields ),
+			{ initialProps: { view: initialView } }
+		);
+
+		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 1 ) );
+
+		rerender( { view: reorderedView } );
+
+		// A reorder only changes the table layout, not the request.
+		await new Promise( ( r ) => setTimeout( r, 30 ) );
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+	} );
 } );

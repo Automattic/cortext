@@ -6,6 +6,7 @@ import { useState, useMemo, useCallback, useEffect } from '@wordpress/element';
 import { Button, Icon, Notice } from '@wordpress/components';
 import { displayShortcut } from '@wordpress/keycodes';
 import {
+	globe,
 	home as homeIcon,
 	plus,
 	search,
@@ -96,7 +97,10 @@ import {
 	POST_TYPE,
 	TRASHED_PAGES_QUERY,
 } from './page-queries';
-import { computeCollectionUri } from '../router/useResolveEntity';
+import {
+	PUBLISHED_DOCUMENTS_URI,
+	computeCollectionUri,
+} from '../router/useResolveEntity';
 import { FULL_PAGE_COLLECTION_QUERY } from '../collections';
 import useDelayedFlag, {
 	SKELETON_MIN_VISIBLE_MS,
@@ -149,8 +153,14 @@ export default function Sidebar( {
 	const { touchRecent } = useRecents();
 	const { saveEntityRecord, invalidateResolution, receiveEntityRecords } =
 		useDispatch( 'core' );
-	const { navigate, selectedId, selectedCollectionId, onSelect, goHome } =
-		useSidebarNavigation( { pages, homePath } );
+	const {
+		navigate,
+		activeUri,
+		selectedId,
+		selectedCollectionId,
+		onSelect,
+		goHome,
+	} = useSidebarNavigation( { pages, homePath } );
 	const adminUrl = window.cortextSettings?.adminUrl ?? '/wp-admin/';
 	const userName = window.cortextSettings?.userDisplayName ?? '';
 	const commandPaletteShortcut = displayShortcut.primary( 'k' );
@@ -167,6 +177,13 @@ export default function Sidebar( {
 	const areFavoriteActionsDisabled =
 		isResolvingFavorites || isUpdatingFavorites;
 	const { isSectionCollapsed, toggleSection } = useSidebarSections();
+	const goPublished = useCallback( () => {
+		navigate( {
+			to: '/$',
+			params: { _splat: PUBLISHED_DOCUMENTS_URI },
+		} );
+	}, [ navigate ] );
+	const isPublishedActive = activeUri === PUBLISHED_DOCUMENTS_URI;
 	const toggleTrashPanel = useCallback( () => {
 		if ( collapsed ) {
 			setIsTrashPanelOpen( true );
@@ -208,7 +225,7 @@ export default function Sidebar( {
 		[ favoriteKeys ]
 	);
 	const toggleFavorite = useCallback(
-		async ( kind, id ) => {
+		async ( kind, id, extra = {} ) => {
 			if ( areFavoriteActionsDisabled ) {
 				return;
 			}
@@ -223,7 +240,7 @@ export default function Sidebar( {
 						? current.filter(
 								( favorite ) => favoriteKey( favorite ) !== key
 						  )
-						: [ ...current, { kind, id } ];
+						: [ ...current, { kind, id, ...extra } ];
 				} );
 			} catch ( err ) {
 				setFavoritesError(
@@ -254,7 +271,8 @@ export default function Sidebar( {
 	const selectFavorite = useCallback(
 		( favorite ) => {
 			if (
-				( favorite.kind === 'page' && favorite.id === selectedId ) ||
+				( ( favorite.kind === 'page' || favorite.kind === 'row' ) &&
+					favorite.id === selectedId ) ||
 				( favorite.kind === 'collection' &&
 					favorite.id === selectedCollectionId )
 			) {
@@ -716,6 +734,17 @@ export default function Sidebar( {
 				>
 					<Icon icon={ homeIcon } size={ 16 } />
 					{ ! collapsed && <span>{ __( 'Home', 'cortext' ) }</span> }
+				</Button>
+				<Button
+					className="cortext-sidebar__quick-action cortext-sidebar__quick-action--published"
+					label={ __( 'Published documents', 'cortext' ) }
+					isPressed={ isPublishedActive }
+					onClick={ goPublished }
+				>
+					<Icon icon={ globe } size={ 16 } />
+					{ ! collapsed && (
+						<span>{ __( 'Published documents', 'cortext' ) }</span>
+					) }
 				</Button>
 			</div>
 			{ ! collapsed && (
