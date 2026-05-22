@@ -341,6 +341,10 @@ export default function RowDetailView( {
 		( resolvedDetail?.postType === postType ? resolvedDetail : null );
 	const activeDetailKey = detailKeyFor( activeDetail );
 	const [ arePropertiesVisible, setArePropertiesVisible ] = useState( true );
+	const togglePropertiesVisible = useCallback(
+		() => setArePropertiesVisible( ( current ) => ! current ),
+		[]
+	);
 	const [ detailPanes, setDetailPanes ] = useState( () =>
 		activeDetail && activeDetailKey
 			? [
@@ -569,6 +573,9 @@ export default function RowDetailView( {
 										postType={ pane.detail.postType }
 										propertiesVisible={
 											arePropertiesVisible
+										}
+										onTogglePropertiesVisible={
+											togglePropertiesVisible
 										}
 										row={ paneRow }
 										rowId={ pane.detail.rowId }

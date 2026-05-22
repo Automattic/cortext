@@ -110,6 +110,7 @@ function DetailPaneContent( {
 	onApi,
 	onRestored,
 	onSaved,
+	onTogglePropertiesVisible,
 	postType,
 	propertiesVisible,
 	row,
@@ -128,9 +129,11 @@ function DetailPaneContent( {
 				}
 			/>
 			<DocumentPropertiesProvider
+				collectionId={ collectionId }
 				fields={ fields }
 				fallbackRecord={ row }
 				isVisible={ propertiesVisible }
+				onToggleVisible={ onTogglePropertiesVisible }
 			>
 				<EditorBody
 					isActive={ isActive && ! isHidden }
@@ -158,6 +161,7 @@ export default function RowEditor( {
 	onPaneReady,
 	onRestored,
 	onSaved,
+	onTogglePropertiesVisible,
 	post,
 	postType,
 	propertiesVisible,
@@ -186,6 +190,7 @@ export default function RowEditor( {
 						onApi={ onApi }
 						onRestored={ onRestored }
 						onSaved={ onSaved }
+						onTogglePropertiesVisible={ onTogglePropertiesVisible }
 						postType={ postType }
 						propertiesVisible={ propertiesVisible }
 						row={ row }

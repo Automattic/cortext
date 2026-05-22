@@ -2,7 +2,6 @@ import { __ } from '@wordpress/i18n';
 import { useEntityRecord } from '@wordpress/core-data';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { EditorProvider, store as editorStore } from '@wordpress/editor';
-import { store as blockEditorStore } from '@wordpress/block-editor';
 import {
 	InterfaceSkeleton,
 	store as interfaceStore,
@@ -29,17 +28,14 @@ import EditorBody from './EditorBody';
 import PublishToggle from './PublishToggle';
 import { TopBarActionsFill } from './WorkspaceTopBar';
 import PageInspectorSidebar, {
-	BLOCK_INSPECTOR,
 	INSPECTOR_SCOPE,
 	InspectorSidebarSlot,
 	PAGE_INSPECTOR,
 	isInspectorArea,
 } from './PageInspectorSidebar';
 
-// Renders only Cortext-owned snackbars (the autosave failure toast). The
-// editor store also dispatches its own "Post updated" success notice on every
-// save; in an autosave-silent UI those would fire constantly, so we filter to
-// notices we tagged ourselves.
+// Show only Cortext snackbars, such as autosave failures. Core's save notice is
+// noisy in this autosave-heavy editor, so we keep notices with our prefix.
 function CortextSnackbars() {
 	const notices = useSelect(
 		( select ) =>
@@ -77,8 +73,9 @@ function DocumentActions( {
 			),
 		[]
 	);
-	const defaultInspector =
-		postType === POST_TYPE ? PAGE_INSPECTOR : BLOCK_INSPECTOR;
+	// Pages and rows both open the document tab first: page metadata for pages,
+	// row properties for rows. Block details stay in the second tab.
+	const defaultInspector = PAGE_INSPECTOR;
 
 	// Canvas stays mounted across route changes (preservePaint keeps the
 	// editor iframe warm). Suppress the Fill when this page isn't the active
@@ -127,38 +124,6 @@ function DocumentActions( {
 	);
 }
 
-// While one of our locked header blocks is selected, hide core's block
-// settings menu (the "kebab"). Its items (Cut, Copy, Add before/after,
-// Lock, Hide, Create pattern, etc.) make no sense on a fixed-position
-// singleton block, and there's no per-block API to filter individual
-// items. The contextual toolbar lives in the parent document while the
-// block itself is in the BlockCanvas iframe, so :has() can't bridge the
-// boundary; toggling a body class here lets a plain CSS rule do the work.
-function HideHeaderBlockKebab() {
-	const selectedName = useSelect( ( select ) => {
-		const store = select( blockEditorStore );
-		const clientId = store.getSelectedBlockClientId();
-		return clientId ? store.getBlockName( clientId ) : null;
-	}, [] );
-
-	useEffect( () => {
-		const isHeader =
-			selectedName === 'cortext/document-cover' ||
-			selectedName === 'cortext/document-icon';
-		document.body.classList.toggle(
-			'cortext-hide-block-settings-menu',
-			isHeader
-		);
-		return () => {
-			document.body.classList.remove(
-				'cortext-hide-block-settings-menu'
-			);
-		};
-	}, [ selectedName ] );
-
-	return null;
-}
-
 function VisualCanvas( { isActive, postId, postType, onReady, onRestored } ) {
 	return (
 		<EditorBody
@@ -174,6 +139,7 @@ function VisualCanvas( { isActive, postId, postType, onReady, onRestored } ) {
 function CanvasEditor( {
 	post,
 	postType,
+	collectionId,
 	fields,
 	row,
 	pendingPost,
@@ -252,7 +218,18 @@ function CanvasEditor( {
 	);
 
 	return (
-		<>
+		<DocumentPropertiesProvider
+			collectionId={ collectionId }
+			fields={ fields }
+			fallbackRecord={ row }
+			// During a document switch, the provider already has the next row's
+			// fields while the editor still shows the previous post. Pause the
+			// header-block sync so it does not remove the outgoing row's
+			// properties block right before `flushNow()` saves.
+			isResolving={ !! pendingPost }
+			isVisible={ arePropertiesVisible }
+			onToggleVisible={ togglePropertiesVisible }
+		>
 			<DocumentActions
 				isActive={ isActive }
 				postType={ postType }
@@ -262,37 +239,31 @@ function CanvasEditor( {
 				onTogglePropertiesVisible={ togglePropertiesVisible }
 			/>
 			<CortextSnackbars />
-			<HideHeaderBlockKebab />
 			<InterfaceSkeleton
 				className="cortext-canvas"
 				content={
 					<>
 						{ notice }
-						<DocumentPropertiesProvider
-							fields={ fields }
-							fallbackRecord={ row }
-							isVisible={ arePropertiesVisible }
-						>
-							<VisualCanvas
-								isActive={ isActive }
-								postId={ post.id }
-								postType={ postType }
-								onReady={ onDisplayedPost }
-								onRestored={ onRestored }
-							/>
-						</DocumentPropertiesProvider>
+						<VisualCanvas
+							isActive={ isActive }
+							postId={ post.id }
+							postType={ postType }
+							onReady={ onDisplayedPost }
+							onRestored={ onRestored }
+						/>
 					</>
 				}
 				sidebar={ <InspectorSidebarSlot /> }
 			/>
 			<PageInspectorSidebar postId={ post.id } postType={ postType } />
-		</>
+		</DocumentPropertiesProvider>
 	);
 }
 
 export default function Canvas( {
 	postId,
 	postType = POST_TYPE,
+	collectionId,
 	fields,
 	row,
 	onDisplayedPost,
@@ -363,6 +334,7 @@ export default function Canvas( {
 			<CanvasEditor
 				post={ renderedPost }
 				postType={ renderedPost.type }
+				collectionId={ collectionId }
 				fields={ fields }
 				row={ row }
 				pendingPost={ pendingPost }
