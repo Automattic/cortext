@@ -16,10 +16,8 @@ jest.mock( '../../../../src/hooks/useCollectionRowsByIds', () => ( {
 	default: jest.fn(),
 } ) );
 
-// Make the debounce a no-op for the picker tests by default. We mock the
-// hook (not fake timers) so the Popover from @wordpress/components can keep
-// its real positioning effects, which jest-console would otherwise flag as
-// unwrapped act() updates.
+// Keep debounce out of most picker tests. Mocking the hook lets Popover keep
+// its real positioning effects without jest-console reporting act() noise.
 jest.mock( '../../../../src/hooks/useDebouncedValue', () => ( {
 	__esModule: true,
 	default: jest.fn( ( value ) => value ),
@@ -48,8 +46,8 @@ function mockRowsResponse( overrides = {} ) {
 }
 
 async function flushPopoverEffects() {
-	// Popover schedules positioning work that finishes after the test's
-	// synchronous body. Flush it so the act() warning doesn't surface.
+	// Popover schedules positioning work after render. Flush it before the
+	// test ends so act() warnings stay quiet.
 	await act( async () => {} );
 }
 
@@ -84,7 +82,7 @@ describe( 'RelationEditor', () => {
 
 		expect( useCollectionRows ).toHaveBeenCalled();
 		const lastCall = useCollectionRows.mock.calls.at( -1 );
-		// Args: (collectionId, view, fields). No options arg => server mode.
+		// Args: (collectionId, view, fields). No fourth arg means server mode.
 		expect( lastCall[ 0 ] ).toBe( 9 );
 		expect( lastCall[ 1 ] ).toEqual(
 			expect.objectContaining( {
@@ -178,7 +176,7 @@ describe( 'RelationEditor', () => {
 		await flushPopoverEffects();
 	} );
 
-	it( 'shows resolved labels for selected ids returned by the by-id hook', async () => {
+	it( 'shows by-id labels for selected rows', async () => {
 		useCollectionRowsByIds.mockReturnValue( {
 			rows: [ { id: 22, title: { raw: 'Ada Lovelace' } } ],
 			isLoading: false,
@@ -195,8 +193,7 @@ describe( 'RelationEditor', () => {
 			/>
 		);
 
-		// At least one pill renders the resolved title rather than the
-		// `#22` fallback.
+		// At least one pill should show the title, not the `#22` fallback.
 		expect( screen.getAllByText( 'Ada Lovelace' ).length ).toBeGreaterThan(
 			0
 		);
@@ -204,7 +201,7 @@ describe( 'RelationEditor', () => {
 	} );
 
 	it( 'hides "Create row" while the debounced search has not caught up', async () => {
-		// Pin debounced output to '' so search ('New Row') !== debouncedSearch.
+		// Pin the debounced value so search ('New Row') stays unsettled.
 		useDebouncedValue.mockImplementation( () => '' );
 
 		render(
@@ -275,10 +272,8 @@ describe( 'RelationEditor', () => {
 		expect( screen.getByText( 'Alpha' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Beta' ) ).toBeInTheDocument();
 
-		// Simulate the transient state during a search change: a fetch is in
-		// flight and useCollectionRows is still returning its prior data plus
-		// isLoading=true. The accumulate effect must not collapse the visible
-		// list to whatever stale data is in flight.
+		// During a search change, useCollectionRows can return stale data while
+		// loading. The visible list should keep the last settled rows.
 		mockRowsResponse( {
 			data: [ { id: 99, title: { raw: 'Stale' } } ],
 			paginationInfo: { totalItems: 1, totalPages: 1 },

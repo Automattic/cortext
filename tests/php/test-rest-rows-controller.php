@@ -681,9 +681,8 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 	}
 
 	public function test_query_rows_short_circuits_when_include_is_empty_after_sanitize(): void {
-		// A buggy caller passing only zeros must not get page 1 of the whole
-		// collection as a consolation prize. The endpoint should return the
-		// empty payload exactly once the sanitizer leaves include empty.
+		// A caller that passes only zeros should get no rows, not page 1 of the
+		// collection after the sanitizer strips the values.
 		wp_set_current_user( $this->create_user( 'author' ) );
 		$fixture = $this->create_collection_fixture( 'inczero', 'text' );
 

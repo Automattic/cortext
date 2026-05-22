@@ -236,15 +236,11 @@ final class RowsFilterQuery {
 	}
 
 	/**
-	 * Floats exact-title matches to the top when the request has no explicit
-	 * sort and a non-empty search term.
+	 * Puts exact title matches first when the request is an unsorted search.
 	 *
-	 * The relation picker reads only the first page of search results to
-	 * decide whether the "Create row" affordance can offer to create a row
-	 * with the typed title. Without this, an exact match buried on page 2+
-	 * would let the picker offer to create a duplicate. This is the minimum
-	 * ordering needed for that correctness; richer ranking (title prefix,
-	 * substring, text-field, recency) is left for a follow-up.
+	 * The relation picker only reads the first page before deciding whether to
+	 * show "Create row" for the typed title. Without this, a match on page 2+
+	 * could still make the picker offer a duplicate. Richer ranking can wait.
 	 *
 	 * @param array  $clauses WP_Query SQL clauses.
 	 * @param mixed  $sort    Sort request value; when present, this method is a no-op.

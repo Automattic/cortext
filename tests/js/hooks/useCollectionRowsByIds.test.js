@@ -100,13 +100,13 @@ describe( 'useCollectionRowsByIds', () => {
 	} );
 
 	it( 'chunks more than 100 ids into parallel requests', async () => {
-		// Two batches: 100 + 50.
+		// Two requests: 100 IDs, then 50.
 		const firstBatchIds = Array.from( { length: 100 }, ( _, i ) => i + 1 );
 		const secondBatchIds = Array.from( { length: 50 }, ( _, i ) => i + 101 );
 		const allIds = [ ...firstBatchIds, ...secondBatchIds ];
 
 		apiFetch.mockImplementation( ( { path } ) => {
-			// Distinguish batches by whether include[100] is present.
+			// The second batch starts its include list at 101.
 			if ( decodeURIComponent( path ).includes( 'include[0]=101' ) ) {
 				return Promise.resolve( rowsResponseFor( secondBatchIds ) );
 			}
@@ -155,7 +155,7 @@ describe( 'useCollectionRowsByIds', () => {
 		await waitFor( () => expect( result.current.isLoading ).toBe( false ) );
 		expect( result.current.rows ).toEqual( [] );
 
-		// In-flight response from the [1,2] request lands after the clear.
+		// The [1,2] response lands after the clear.
 		await act( async () => {
 			resolveFirst( rowsResponseFor( [ 1, 2 ] ) );
 		} );
@@ -181,7 +181,7 @@ describe( 'useCollectionRowsByIds', () => {
 		rerender( { ids: [ 9 ] } );
 		await waitFor( () => expect( result.current.isLoading ).toBe( false ) );
 
-		// Stale first response lands after the second request resolves.
+		// The first response lands after the second request resolves.
 		await act( async () => {
 			resolveFirst( rowsResponseFor( [ 1 ] ) );
 		} );

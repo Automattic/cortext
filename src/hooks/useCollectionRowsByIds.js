@@ -26,22 +26,19 @@ function buildIncludeArgs( collectionId, ids ) {
 }
 
 /**
- * Resolves a set of rows by ID without paging through their collection. The
- * picker uses this to render the labels of already-selected relations even
- * when those rows do not appear in the current search results.
+ * Fetches rows by ID without walking the whole collection. The picker uses
+ * this for selected relation labels that are outside the current search page.
  *
- * Chunks at the endpoint's 100-row ceiling so larger selections fan out into
- * parallel requests. A `requestIdRef` cancels stale results when the id list
- * changes rapidly.
+ * Splits large selections at the endpoint's 100-row limit and ignores stale
+ * responses when the ID list changes quickly.
  *
  * @param {number|null} collectionId Target collection ID.
  * @param {number[]}    ids          Row IDs to resolve.
  * @return {{ rows: object[], isLoading: boolean, error: Error|null }} Resolved rows and request status.
  */
 export default function useCollectionRowsByIds( collectionId, ids ) {
-	// Copy before sorting so we never mutate the caller's array. Sort
-	// numerically so the request URLs come out in natural order; the default
-	// .sort() is lexicographic and would shuffle e.g. [1, 2, 10] to [1, 10, 2].
+	// Sort a copy so the caller's array is left alone. Numeric sort keeps the
+	// request URLs readable; default .sort() would put 10 before 2.
 	const idsKey = useMemo(
 		() =>
 			JSON.stringify(
@@ -59,10 +56,8 @@ export default function useCollectionRowsByIds( collectionId, ids ) {
 
 	useEffect( () => {
 		const parsed = JSON.parse( idsKey );
-		// Always bump the request id, even on the no-fetch branch. Otherwise
-		// an earlier in-flight request would still see `requestId ===
-		// requestIdRef.current` when it resolves and write stale rows back
-		// over the empty state we just set.
+		// Bump the request id even when there is nothing to fetch, so an older
+		// response cannot write rows back after we have cleared the state.
 		const requestId = ++requestIdRef.current;
 		if ( ! collectionId || parsed.length === 0 ) {
 			setState( { rows: [], isLoading: false, error: null } );

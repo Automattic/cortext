@@ -320,11 +320,10 @@ final class RowsController {
 		$slug      = (string) get_post_meta( $collection->ID, 'slug', true );
 		$field_ids = $this->collection_field_ids( $collection->ID );
 
-		// `include` requested but empty after sanitization (e.g. `include[]=0`):
-		// short-circuit to an empty response. Falling through would return page 1
-		// of the whole collection, which is the opposite of what the caller asked
-		// for. Picker by-ID lookup never sends empty ids in practice; this is the
-		// safer contract for any future caller.
+		// If `include` was sent but sanitizes to an empty list, return no rows.
+		// Falling through would return page 1 of the collection, which is not
+		// what the caller asked for. The picker does not send empty ID lists,
+		// but future callers might.
 		$query_params = $request->get_query_params();
 		if ( array_key_exists( 'include', $query_params ) && count( (array) $request->get_param( 'include' ) ) === 0 ) {
 			return new WP_REST_Response(
@@ -749,10 +748,9 @@ final class RowsController {
 
 		$include = (array) $request->get_param( 'include' );
 		if ( count( $include ) > 0 ) {
-			// Caller uses the by-ID response as a Map<id, row>, not an ordered
-			// list. Intentionally do NOT set `orderby => 'post__in'`; the default
-			// menu_order / ID order is fine and avoids forcing every caller to
-			// care about input order.
+			// The by-ID response is read as a Map<id, row>, not an ordered list.
+			// Keep the default menu_order / ID order so callers do not start
+			// depending on the order of the include array.
 			$args['post__in'] = $include;
 		}
 
@@ -789,11 +787,10 @@ final class RowsController {
 	}
 
 	/**
-	 * Normalizes the `include` query param to a clean list of post IDs.
+	 * Cleans the `include` query param into a list of post IDs.
 	 *
-	 * Drops non-positive entries, dedupes, and re-indexes. Empty input is fine;
-	 * the controller short-circuits empty-after-sanitize requests rather than
-	 * silently falling through to a default-page query.
+	 * Drops non-positive values, removes duplicates, and re-indexes. Empty
+	 * input is allowed; the controller handles it before running the query.
 	 *
 	 * @param mixed $value Raw `include` param.
 	 * @return int[]
@@ -815,14 +812,11 @@ final class RowsController {
 	}
 
 	/**
-	 * Caps the `include` list at the same per_page ceiling as the rest of the
-	 * endpoint, so a single request never asks for more than 100 IDs at once.
+	 * Caps `include` at the same per_page ceiling as the rest of the endpoint.
 	 *
 	 * WP REST runs `validate_callback` before `sanitize_callback`, so the
-	 * value here is the raw client input. The cap therefore applies to the
-	 * raw item count, which is stricter than necessary if many entries would
-	 * dedupe — fine for our use case and avoids a separate sanitize-then-
-	 * validate dance.
+	 * value here is the raw client input. The cap applies before deduping, so
+	 * it can reject a noisy request that would shrink below 100 after sanitize.
 	 *
 	 * @param mixed $value Raw `include` value from the request.
 	 * @return true|WP_Error
@@ -831,14 +825,14 @@ final class RowsController {
 		if ( ! is_array( $value ) ) {
 			return new WP_Error(
 				'rest_invalid_param',
-				__( 'The include parameter must be an array of IDs.', 'cortext' ),
+				__( 'Pass include as an array of row IDs.', 'cortext' ),
 				array( 'status' => 400 )
 			);
 		}
 		if ( count( $value ) > 100 ) {
 			return new WP_Error(
 				'cortext_include_too_many',
-				__( 'Cannot resolve more than 100 rows by ID in a single request.', 'cortext' ),
+				__( 'You can resolve up to 100 rows by ID at a time.', 'cortext' ),
 				array( 'status' => 400 )
 			);
 		}

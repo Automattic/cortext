@@ -75,21 +75,16 @@ export default function RelationEditor( {
 		refresh: refreshTargetRows,
 	} = useCollectionRows( targetCollectionId || null, pickerView, [] );
 
-	// Reset paging whenever the effective search or target changes. The
-	// accumulate effect below picks up the new page-1 data once
-	// useCollectionRows resolves the new query. We deliberately do not clear
-	// accumulated rows here so the previous results stay visible (under a
-	// loading spinner) until the new query resolves, rather than flashing
-	// an empty state.
+	// Start over at page 1 when the search or target changes. Keep the old
+	// rows visible under the spinner until the new query lands, so the picker
+	// does not flash empty while typing.
 	useEffect( () => {
 		setPage( 1 );
 	}, [ debouncedSearch, targetCollectionId ] );
 
 	useEffect( () => {
-		// Skip while a fetch is in flight. useCollectionRows preserves the
-		// previous query's data during loading, and a search-change that also
-		// resets `page` from > 1 to 1 would otherwise collapse the multi-page
-		// accumulated list down to that stale data until the new fetch lands.
+		// While loading, useCollectionRows still returns the previous query's
+		// data. Do not let that stale page replace the accumulated list.
 		if ( isLoading ) {
 			return;
 		}
@@ -100,9 +95,8 @@ export default function RelationEditor( {
 		setAccumulatedRows( ( previous ) => mergeRowsById( previous, data ) );
 	}, [ data, page, isLoading ] );
 
-	// Resolve labels for selected rows whose value-side ref is just an id.
-	// In the common editor case the row CPT response hydrates titles upstream,
-	// so unresolvedIds is empty and this hook makes no request.
+	// Some saved relation refs are just IDs. Fetch labels for those only; row
+	// CPT responses usually already include titles.
 	const unresolvedIds = useMemo(
 		() =>
 			selectedIds.filter( ( id ) => {
