@@ -411,9 +411,9 @@ export default function Sidebar( {
 		[ home ]
 	);
 
-	// Feedback channel descriptors call into. The page tree and collection
-	// list stay out of here: the trash cascade now rides on the server
-	// response, so descriptors no longer need to walk them locally.
+	// Callbacks for document descriptors. The page tree and collection list
+	// stay out of this: trash cascades now come from the server response, so
+	// descriptors do not need to walk local trees.
 	const documentsHandlers = useMemo(
 		() => ( {
 			selectedCollectionId,
@@ -688,27 +688,27 @@ export default function Sidebar( {
 							</DragOverlay>
 						</DndContext>
 					</div>
+					{ isTrashPanelOpen && (
+						<section
+							id="cortext-sidebar-trash-panel"
+							className="cortext-sidebar__trash-panel"
+							aria-label={ __( 'Trash', 'cortext' ) }
+						>
+							<div className="cortext-sidebar__trash-panel-header">
+								<h2 className="cortext-sidebar__section-title">
+									{ __( 'Trash', 'cortext' ) }
+								</h2>
+							</div>
+							<SidebarTrash
+								activePages={ pages }
+								selectedId={ selectedId }
+								selectedCollectionId={ selectedCollectionId }
+								onSelect={ onSelect }
+								trashedDocumentsState={ trashedDocumentsState }
+							/>
+						</section>
+					) }
 				</DocumentsProvider>
-			) }
-			{ ! collapsed && isTrashPanelOpen && (
-				<section
-					id="cortext-sidebar-trash-panel"
-					className="cortext-sidebar__trash-panel"
-					aria-label={ __( 'Trash', 'cortext' ) }
-				>
-					<div className="cortext-sidebar__trash-panel-header">
-						<h2 className="cortext-sidebar__section-title">
-							{ __( 'Trash', 'cortext' ) }
-						</h2>
-					</div>
-					<SidebarTrash
-						activePages={ pages }
-						selectedId={ selectedId }
-						selectedCollectionId={ selectedCollectionId }
-						onSelect={ onSelect }
-						trashedDocumentsState={ trashedDocumentsState }
-					/>
-				</section>
 			) }
 			<div className="cortext-sidebar__footer">
 				<div className="cortext-sidebar__footer-group cortext-sidebar__footer-group--navigation">
