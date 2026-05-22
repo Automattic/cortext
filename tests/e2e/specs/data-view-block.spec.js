@@ -1990,6 +1990,14 @@ test.describe( 'Collection view block', () => {
 			// popover without touching the editor selection.
 			await page.keyboard.press( 'Escape' );
 			await expect( optionsPopover ).toBeHidden();
+			// Pin so the side peek survives row navigation; unpinned peeks
+			// dismiss on certain interactions and the navigation assertions
+			// below would race against the dialog closing.
+			await detail.getByRole( 'button', { name: 'Pin' } ).click();
+			await expect(
+				detail.getByRole( 'button', { name: 'Unpin' } )
+			).toBeVisible();
+			await startSidePeekShellStabilityLog( page );
 
 			const delayedSecondRowPattern = new RegExp(
 				`/wp-json/wp/v2/crtxt_${ fixture.slug }/${ fixture.secondEntry.id }(\\?|$)`
@@ -2019,6 +2027,7 @@ test.describe( 'Collection view block', () => {
 			await expect( detailTitle ).toHaveText(
 				'The Left Hand of Darkness'
 			);
+			await expectSidePeekShellStayedOpen( page );
 			// Side and modal panes are local React state, not URL state, so
 			// browser Back/Forward doesn't navigate between rows anymore.
 			// The Row above / Row below buttons above already cover that.
