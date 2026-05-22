@@ -1,9 +1,9 @@
 /**
- * Render and behavior tests for `src/components/SidebarTrash.js`.
+ * Tests for `src/components/SidebarTrash.js`.
  *
  * Mocks `@wordpress/core-data`, `@wordpress/data`, and `@wordpress/api-fetch`
  * so each case can drive the trash query state, capture dispatched actions,
- * and assert the REST calls SidebarTrash makes.
+ * and check the REST calls SidebarTrash makes.
  */
 
 import {
@@ -14,9 +14,8 @@ import {
 	waitFor,
 } from '@testing-library/react';
 
-// Stub @wordpress/components so the test does not transitively pull in
-// rich-text → block-editor → parsel-js (an ESM-only package the jest CJS
-// transformer chokes on).
+// Stub @wordpress/components so Jest does not pull in rich-text →
+// block-editor → parsel-js, an ESM-only package the CJS transformer chokes on.
 jest.mock( '@wordpress/components', () => {
 	const ReactLib = require( 'react' );
 	const Button = ( {
@@ -96,6 +95,19 @@ jest.mock( '@tanstack/react-router', () => ( {
 	useNavigate: jest.fn(),
 } ) );
 
+// useDocumentActions builds its context through useFavorites and useRecents.
+// SidebarTrash does not call either one directly, so stub them instead of
+// mounting the real providers.
+jest.mock( '../../../src/hooks/useFavorites', () => ( {
+	__esModule: true,
+	useFavorites: () => ( { setFavorites: jest.fn() } ),
+} ) );
+
+jest.mock( '../../../src/hooks/useRecents', () => ( {
+	__esModule: true,
+	useRecents: () => ( { touchRecent: jest.fn() } ),
+} ) );
+
 jest.mock( '../../../src/components/TypeToConfirmDialog', () => {
 	const ReactLib = require( 'react' );
 	return {
@@ -140,11 +152,13 @@ import apiFetch from '@wordpress/api-fetch';
 import { useNavigate } from '@tanstack/react-router';
 
 import SidebarTrash from '../../../src/components/SidebarTrash';
+import { DocumentsProvider } from '../../../src/documents';
 import {
 	ACTIVE_PAGES_QUERY,
 	POST_TYPE,
 	TRASHED_PAGES_QUERY,
 } from '../../../src/components/page-queries';
+import { DOCUMENT_TRASH_CHANGED_EVENT } from '../../../src/hooks/documentTrashInvalidation';
 
 const dispatchMocks = {
 	deleteEntityRecord: jest.fn(),
@@ -152,6 +166,8 @@ const dispatchMocks = {
 };
 
 const navigateMock = jest.fn();
+
+let trashRefreshListener;
 
 beforeEach( () => {
 	useDispatch.mockReset();
@@ -163,6 +179,21 @@ beforeEach( () => {
 	useDispatch.mockReturnValue( dispatchMocks );
 	useNavigate.mockReturnValue( navigateMock );
 	trashState = makeDocumentsState();
+	// In production, `useTrashedDocuments` listens for this event and refreshes.
+	// Tests inject `trashState` directly, so wire the listener by hand for
+	// descriptors that emit it.
+	trashRefreshListener = () => trashState.refresh?.();
+	window.addEventListener(
+		DOCUMENT_TRASH_CHANGED_EVENT,
+		trashRefreshListener
+	);
+} );
+
+afterEach( () => {
+	window.removeEventListener(
+		DOCUMENT_TRASH_CHANGED_EVENT,
+		trashRefreshListener
+	);
 } );
 
 let trashState;
@@ -182,11 +213,13 @@ function setTrashRecords( {
 
 function renderSidebarTrash( props = {} ) {
 	return render(
-		<SidebarTrash
-			activePages={ [] }
-			trashedDocumentsState={ trashState }
-			{ ...props }
-		/>
+		<DocumentsProvider>
+			<SidebarTrash
+				activePages={ [] }
+				trashedDocumentsState={ trashState }
+				{ ...props }
+			/>
+		</DocumentsProvider>
 	);
 }
 
@@ -311,10 +344,12 @@ describe( 'SidebarTrash', () => {
 			status: 'RESOLVING',
 		} );
 		rerender(
-			<SidebarTrash
-				activePages={ [] }
-				trashedDocumentsState={ trashState }
-			/>
+			<DocumentsProvider>
+				<SidebarTrash
+					activePages={ [] }
+					trashedDocumentsState={ trashState }
+				/>
+			</DocumentsProvider>
 		);
 
 		expect( screen.queryByTestId( 'spinner' ) ).not.toBeInTheDocument();
@@ -675,6 +710,30 @@ describe( 'SidebarTrash', () => {
 		).toHaveTextContent( '2 nested items' );
 	} );
 
+	it( 'shows the cascade count beside a row that owns a trashed collection', () => {
+		// `DocumentToCollectionTrashCascade` applies to any document that owns
+		// a collection, rows included. The owned collection points back at the
+		// row via `_cortext_trashed_by_owner_page`, so the row should surface
+		// the nested-item badge.
+		const row = makeRow( {
+			id: 17,
+			title: { rendered: 'Sprint 12', raw: 'Sprint 12' },
+		} );
+		const ownedCollection = makeCollection( {
+			id: 22,
+			title: { rendered: 'Tasks', raw: 'Tasks' },
+			meta: { _cortext_trashed_by_owner_page: 17 },
+		} );
+
+		setTrashRecords( { records: [ row, ownedCollection ] } );
+
+		const { container } = renderSidebarTrash();
+
+		expect(
+			container.querySelector( '.cortext-sidebar__breadcrumb' )
+		).toHaveTextContent( '1 nested item' );
+	} );
+
 	it( 'promotes orphaned descendants (stale marker) back to roots', () => {
 		// Marker points at a parent no longer in Trash. It may have been
 		// permanently deleted by an older build or a different path; either
@@ -799,7 +858,7 @@ describe( 'SidebarTrash', () => {
 		expect( screen.queryByText( 'Action items' ) ).not.toBeInTheDocument();
 	} );
 
-	it( 'announces collection rows in the permanent-delete confirmation', () => {
+	it( 'mentions collection rows in the permanent-delete confirmation', () => {
 		setTrashRecords( {
 			records: [
 				makeCollection( {
@@ -822,7 +881,7 @@ describe( 'SidebarTrash', () => {
 		).toBeInTheDocument();
 	} );
 
-	it( 'announces subtree size in the permanent-delete confirmation', () => {
+	it( 'mentions subtree size in the permanent-delete confirmation', () => {
 		const root = makePage( {
 			id: 1,
 			title: { rendered: 'Workspace', raw: 'Workspace' },
@@ -850,7 +909,7 @@ describe( 'SidebarTrash', () => {
 
 	it( 'uses the typed-name dialog when permanently deleting a collection', () => {
 		// Collections can contain rows, so they ask for the title before the
-		// final delete. Pages and rows keep the lighter confirm dialog.
+		// final delete. Pages and rows use the lighter confirm dialog.
 		setTrashRecords( {
 			records: [
 				makeCollection( {
