@@ -164,6 +164,10 @@ const ROW_MUTATION_DEFAULT = {
 	refreshRows: () => {},
 };
 
+function isContentPane( active ) {
+	return active.kind === 'document' || active.kind === 'collection';
+}
+
 export default function EntityRoute( { history } ) {
 	const params = useParams( { strict: false } );
 	const navigate = useNavigate();
@@ -187,9 +191,9 @@ export default function EntityRoute( { history } ) {
 		readyCollectionIds,
 	} = state;
 
-	// Document navigations keep the previous pane visible until the next one can
-	// paint. Collections can activate before rows are ready, so compare the URL
-	// target with the displayed/ready snapshot here.
+	// Documents keep the previous pane visible until the new editor has painted.
+	// Collections have their own ready signal after rows load, so compare the URL
+	// target with the displayed/ready state here.
 	const isWorkspaceNavigating =
 		( target.kind === 'document' &&
 			target.id !== null &&
@@ -199,10 +203,9 @@ export default function EntityRoute( { history } ) {
 			! readyCollectionIds.has( target.id ) );
 	const showWorkspaceProgress = useDelayedFlag( isWorkspaceNavigating );
 
-	// Run the reducer ahead of time so we only wrap the dispatch when
-	// `active` actually flips. Otherwise every DOCUMENT_RESOLVED or
-	// COLLECTION_RESOLVED would pin the canvas for the cross-fade
-	// duration even though nothing visible changed.
+	// Peek at the reducer result before dispatching. We only need a transition
+	// when `active` changes; wrapping every resolve action would pin the canvas
+	// even when the visible pane stayed put.
 	const stateRef = useRef( state );
 	stateRef.current = state;
 	const dispatch = useCallback( ( action ) => {
@@ -213,6 +216,24 @@ export default function EntityRoute( { history } ) {
 			( before.active.id ?? null ) !== ( after.active.id ?? null );
 		if ( ! visualChanged ) {
 			rawDispatch( action );
+			return;
+		}
+		// Canvas owns page-to-page swaps because it can hold the old editor
+		// snapshot until the new EditorProvider is ready. Letting EntityRoute start
+		// another transition on DOCUMENT_DISPLAYED makes Chrome skip one and
+		// exposes the canvas frame near the end of the loader.
+		if (
+			action.type === 'DOCUMENT_DISPLAYED' &&
+			before.active.kind === 'document' &&
+			after.active.kind === 'document'
+		) {
+			rawDispatch( action );
+			return;
+		}
+		if ( isContentPane( before.active ) && isContentPane( after.active ) ) {
+			withViewTransition( () => rawDispatch( action ), {
+				mode: 'hold-old-canvas',
+			} );
 			return;
 		}
 		const touchesCollection =
