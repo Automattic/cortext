@@ -1164,6 +1164,92 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		}
 	}
 
+	public function test_fields_param_is_registered_on_rows_route(): void {
+		$routes = rest_get_server()->get_routes();
+		$args   = $routes['/cortext/v1/rows'][0]['args'];
+
+		$this->assertArrayHasKey( 'fields', $args );
+		$this->assertSame( 'array', $args['fields']['type'] );
+		$this->assertNull( $args['fields']['default'] );
+	}
+
+	// tech-debt.md#9: WorDBless cannot run the full rows query, so these
+	// projection checks stay at the route/schema and formatter layers.
+	public function test_filter_requested_field_ids_keeps_collection_field_keys(): void {
+		$result = $this->invoke_filter_requested_field_ids(
+			array( 'field-11', 'field-33', 'title', 'created_at', 'field-99', 'garbage', '', 42, null ),
+			array( 11, 22, 33 )
+		);
+
+		$this->assertSame( array( 11, 33 ), $result );
+	}
+
+	public function test_filter_requested_field_ids_returns_empty_for_unknown_keys(): void {
+		$result = $this->invoke_filter_requested_field_ids(
+			array( 'field-99', 'garbage', 'title' ),
+			array( 11, 22 )
+		);
+
+		$this->assertSame( array(), $result );
+	}
+
+	public function test_filter_requested_field_ids_deduplicates_repeated_keys(): void {
+		$result = $this->invoke_filter_requested_field_ids(
+			array( 'field-11', 'field-22', 'field-11' ),
+			array( 11, 22 )
+		);
+
+		$this->assertSame( array( 11, 22 ), $result );
+	}
+
+	public function test_format_row_omits_fields_outside_projection(): void {
+		$collection_id = $this->create_collection_with_slug( 'Subset', 'subset' );
+		$field_a       = $this->create_collection_field( $collection_id, 'A', 'text' );
+		$field_b       = $this->create_collection_field( $collection_id, 'B', 'number' );
+
+		$row_id = $this->create_entry( 'crtxt_subset', 'Row' );
+		update_post_meta( $row_id, "field-{$field_a}", 'hello' );
+		update_post_meta( $row_id, "field-{$field_b}", '42' );
+
+		// No projection: both fields are present.
+		$full = $this->invoke_format_row_with_fields( $row_id, array( $field_a, $field_b ) );
+		$this->assertArrayHasKey( "field-{$field_a}", $full['meta'] );
+		$this->assertArrayHasKey( "field-{$field_b}", $full['meta'] );
+
+		// Projected rows include the requested meta and still keep system fields.
+		$subset = $this->invoke_format_row_with_fields( $row_id, array( $field_b ) );
+		$this->assertArrayNotHasKey( "field-{$field_a}", $subset['meta'] );
+		$this->assertArrayHasKey( "field-{$field_b}", $subset['meta'] );
+		$this->assertArrayHasKey( 'cortext_document_icon', $subset['meta'] );
+		$this->assertArrayHasKey( 'title', $subset );
+		$this->assertArrayHasKey( 'created_at', $subset );
+		$this->assertArrayHasKey( 'modified_at', $subset );
+		$this->assertArrayHasKey( 'created_by', $subset );
+		$this->assertArrayHasKey( 'modified_by', $subset );
+	}
+
+	public function test_rollup_projection_does_not_include_source_fields(): void {
+		$projects_id = $this->create_collection_with_slug( 'Projects', 'proj-fp' );
+		$invoices_id = $this->create_collection_with_slug( 'Invoices', 'inv-fp' );
+
+		$relation  = $this->create_relation_pair( $projects_id, $invoices_id );
+		$amount_id = $this->create_collection_field( $invoices_id, 'Amount', 'number' );
+		$sum_id    = $this->create_rollup_field( $projects_id, 'Total', $relation['source_id'], $amount_id, 'sum' );
+
+		$project_id = $this->create_entry( 'crtxt_proj-fp', 'Project' );
+		$invoice_a  = $this->create_entry( 'crtxt_inv-fp', 'A' );
+		$invoice_b  = $this->create_entry( 'crtxt_inv-fp', 'B' );
+		update_post_meta( $invoice_a, "field-{$amount_id}", '10' );
+		update_post_meta( $invoice_b, "field-{$amount_id}", '5' );
+		Relations::sync_relation_value( $project_id, $relation['source_id'], array( $invoice_a, $invoice_b ) );
+
+		$row = $this->invoke_format_row_with_fields( $project_id, array( $sum_id ) );
+
+		$this->assertSame( 15.0, $row['meta']["field-{$sum_id}"] );
+		$this->assertArrayNotHasKey( "field-{$relation['source_id']}", $row['meta'] );
+		$this->assertArrayNotHasKey( "field-{$amount_id}", $row['meta'] );
+	}
+
 	public function test_build_query_args_with_created_at_sort(): void {
 		$fixture = $this->create_collection_fixture( 'bqact' );
 
@@ -1408,6 +1494,18 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 			$field_ids,
 			array()
 		);
+	}
+
+	/**
+	 * @param int[] $field_ids
+	 * @return int[]
+	 */
+	private function invoke_filter_requested_field_ids( array $requested, array $field_ids ): array {
+		$controller = new RowsController();
+		$method     = new \ReflectionMethod( $controller, 'filter_requested_field_ids' );
+		$method->setAccessible( true );
+
+		return $method->invoke( $controller, $requested, $field_ids );
 	}
 
 	private function invoke_build_query_args( int $collection_id, string $slug, array $sort ): array {
