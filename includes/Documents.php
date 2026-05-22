@@ -529,20 +529,18 @@ final class Documents {
 	 * Recents, and Workspace Home. Those callers pass an id, and the documents
 	 * service handles kind lookup, validation, and formatting in one place.
 	 *
-	 * The kind comes from the post type. Row targets also need `context_id`
-	 * because rows are scoped to a parent collection.
+	 * The kind comes from the post type. Rows resolve their parent collection
+	 * from the dynamic CPT that stores them.
 	 *
 	 * @param int   $id   Target document id.
 	 * @param array $opts {
 	 *     Optional. Validation options.
 	 *
-	 *     @type int  $context_id   Parent collection id for row targets. Defaults to 0.
 	 *     @type bool $require_edit Enforce `edit_post` capability. Defaults to true.
 	 * }
 	 * @return array<string,mixed>|WP_Error
 	 */
 	public function format_target( int $id, array $opts = array() ) {
-		$context_id   = isset( $opts['context_id'] ) ? (int) $opts['context_id'] : 0;
 		$require_edit = ! array_key_exists( 'require_edit', $opts ) || (bool) $opts['require_edit'];
 
 		if ( $id < 1 ) {
@@ -564,7 +562,7 @@ final class Documents {
 		}
 
 		if ( self::KIND_ROW === $kind->id() ) {
-			$row_check = $this->validate_row_target( $post, $context_id, $require_edit );
+			$row_check = $this->validate_row_target( $post, $require_edit );
 			if ( $row_check instanceof WP_Error ) {
 				return $row_check;
 			}
@@ -594,36 +592,25 @@ final class Documents {
 	}
 
 	/**
-	 * Checks that a row belongs to the expected collection and that the caller
-	 * can edit both records. Rows live in dynamic CPTs, so the parent collection
-	 * is the permission anchor.
+	 * Resolves a row's parent collection from its CPT and runs the permission
+	 * check. The CPT already names the collection (`crtxt_<slug>`), so callers
+	 * do not pass a separate collection id; the lookup is cached for the
+	 * service instance.
 	 *
-	 * @param WP_Post $row           Row post.
-	 * @param int     $collection_id Expected parent collection id.
-	 * @param bool    $require_edit  Enforce `edit_post` on both row and collection.
+	 * @param WP_Post $row          Row post.
+	 * @param bool    $require_edit Enforce `edit_post` on both row and collection.
 	 */
-	private function validate_row_target( WP_Post $row, int $collection_id, bool $require_edit ): ?WP_Error {
-		if ( $collection_id < 1 ) {
-			return $this->invalid_target_error();
-		}
-
-		$collection = get_post( $collection_id );
+	private function validate_row_target( WP_Post $row, bool $require_edit ): ?WP_Error {
+		$collection = $this->find_collection_by_row_post_type( $row->post_type );
 		if (
 			! $collection instanceof WP_Post
-			|| Collection::POST_TYPE !== $collection->post_type
 			|| self::STATUS_TRASH === $collection->post_status
 		) {
 			return $this->target_not_found_error();
 		}
 
-		$slug = get_post_meta( $collection_id, 'slug', true );
-		$slug = is_string( $slug ) ? trim( $slug ) : '';
-		if ( '' === $slug || CollectionEntries::CPT_PREFIX . $slug !== $row->post_type ) {
-			return $this->target_not_found_error();
-		}
-
 		if ( $require_edit
-			&& ( ! current_user_can( 'edit_post', $collection_id )
+			&& ( ! current_user_can( 'edit_post', $collection->ID )
 				|| ! current_user_can( 'edit_post', $row->ID ) )
 		) {
 			return $this->target_forbidden_error();
