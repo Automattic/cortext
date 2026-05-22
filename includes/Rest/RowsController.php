@@ -81,6 +81,11 @@ final class RowsController {
 							'type'    => 'array',
 							'default' => array(),
 						),
+						'fields'     => array(
+							'type'    => 'array',
+							'default' => null,
+							'items'   => array( 'type' => 'string' ),
+						),
 						'context'    => array(
 							'type'    => 'string',
 							'default' => 'view',
@@ -310,8 +315,12 @@ final class RowsController {
 			return $collection;
 		}
 
-		$slug      = (string) get_post_meta( $collection->ID, 'slug', true );
-		$field_ids = $this->collection_field_ids( $collection->ID );
+		$slug                = (string) get_post_meta( $collection->ID, 'slug', true );
+		$field_ids           = $this->collection_field_ids( $collection->ID );
+		$requested_fields    = $request->get_param( 'fields' );
+		$formatted_field_ids = is_array( $requested_fields )
+			? $this->filter_requested_field_ids( $requested_fields, $field_ids )
+			: $field_ids;
 
 		$row_query    = new RowsFilterQuery();
 		$field_schema = $row_query->field_schema_for( $collection_id );
@@ -341,7 +350,7 @@ final class RowsController {
 		// Keep row-formatting metadata local to this rows response. Passing the
 		// context through the helpers avoids stale state in CLI and test runs.
 		$ctx              = new RowFormatContext();
-		$ctx->field_types = $this->field_types_map( $field_ids );
+		$ctx->field_types = $this->field_types_map( $formatted_field_ids );
 		$multi_field_ids  = $this->multi_value_field_ids_from( $ctx->field_types );
 
 		$query_args = $this->build_query_args( $request, $slug );
@@ -361,14 +370,14 @@ final class RowsController {
 
 		// Prime related rows once before formatting. Relation chips need post
 		// objects, and rollups need post meta.
-		$related_ids = $this->collect_related_row_ids( $query->posts, $field_ids, $ctx );
+		$related_ids = $this->collect_related_row_ids( $query->posts, $formatted_field_ids, $ctx );
 		if ( count( $related_ids ) > 0 ) {
 			_prime_post_caches( $related_ids, false, true );
 		}
 
 		$rows = array_map(
-			function ( WP_Post $post ) use ( $field_ids, $multi_field_ids, $ctx ) {
-				return $this->format_row( $post, $field_ids, $multi_field_ids, $ctx );
+			function ( WP_Post $post ) use ( $formatted_field_ids, $multi_field_ids, $ctx ) {
+				return $this->format_row( $post, $formatted_field_ids, $multi_field_ids, $ctx );
 			},
 			$query->posts
 		);
@@ -703,6 +712,35 @@ final class RowsController {
 	private function collection_field_ids( int $collection_id ): array {
 		$raw = get_post_meta( $collection_id, 'fields', false );
 		return array_map( 'intval', $raw );
+	}
+
+	/**
+	 * Filters a requested `fields[]` list down to this collection's live fields.
+	 *
+	 * Saved views may send system columns or field IDs that no longer exist.
+	 * `format_row` only accepts custom field IDs, so keep only live `field-<n>`
+	 * keys.
+	 *
+	 * @param array $requested Raw `fields[]` request value.
+	 * @param int[] $field_ids Collection field IDs.
+	 * @return int[] Field IDs to format for each row.
+	 */
+	private function filter_requested_field_ids( array $requested, array $field_ids ): array {
+		$available = array_flip( $field_ids );
+		$kept      = array();
+		foreach ( $requested as $entry ) {
+			if ( ! is_string( $entry ) ) {
+				continue;
+			}
+			if ( ! preg_match( '/^field-(\d+)$/', $entry, $matches ) ) {
+				continue;
+			}
+			$id = (int) $matches[1];
+			if ( isset( $available[ $id ] ) ) {
+				$kept[ $id ] = $id;
+			}
+		}
+		return array_values( $kept );
 	}
 
 	/**

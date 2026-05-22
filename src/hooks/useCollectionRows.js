@@ -280,11 +280,34 @@ export function buildQueryArgs( collectionId, view, fields = [] ) {
 	return buildServerQueryArgs(
 		collectionId,
 		viewForServer( serverView ),
-		serverFilterResult( view?.filters, fieldInfo ).filters
+		serverFilterResult( view?.filters, fieldInfo ).filters,
+		fields
 	);
 }
 
-function buildServerQueryArgs( collectionId, view, filters = [] ) {
+// Builds the fields[] projection for the server. Return null when sending it
+// would not trim the row payload: before the visibility seeder fills
+// `view.fields`, or after it has selected every custom field. We keep the
+// request key the same for both states so seeding does not cause a second fetch.
+// Sorting also keeps column reorders from changing the key.
+function projectedFields( view, fields ) {
+	if ( ! Array.isArray( view?.fields ) || view.fields.length === 0 ) {
+		return null;
+	}
+	const requested = new Set( view.fields );
+	const customFieldIds = fields
+		.filter( ( f ) => typeof f?.id === 'string' && /^field-/.test( f.id ) )
+		.map( ( f ) => f.id );
+	const skipsCustomField = customFieldIds.some(
+		( id ) => ! requested.has( id )
+	);
+	if ( ! skipsCustomField ) {
+		return null;
+	}
+	return [ ...view.fields ].sort();
+}
+
+function buildServerQueryArgs( collectionId, view, filters = [], fields = [] ) {
 	const args = {
 		collection: collectionId,
 		page: pageNumber( view?.page ),
@@ -304,6 +327,13 @@ function buildServerQueryArgs( collectionId, view, filters = [] ) {
 	filters.forEach( ( filter, i ) => {
 		addFilterArgs( args, `filters[${ i }]`, filter );
 	} );
+
+	const projection = projectedFields( view, fields );
+	if ( projection ) {
+		projection.forEach( ( key, i ) => {
+			args[ `fields[${ i }]` ] = key;
+		} );
+	}
 
 	return args;
 }
@@ -334,7 +364,8 @@ export function buildQueryPlan(
 		args: buildServerQueryArgs(
 			collectionId,
 			viewForServer( view ),
-			filterResult.filters
+			filterResult.filters,
+			fields
 		),
 	};
 }

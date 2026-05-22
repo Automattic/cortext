@@ -36,8 +36,13 @@
 			"sql_queries_p95": 280,
 			"memory_bytes_p95": 8388608
 		},
-		"rows_rollup_heavy": {
+		"rows_rollup_heavy_full": {
 			"p95_ms": 200,
+			"sql_queries_p95": 280,
+			"memory_bytes_p95": 8388608
+		},
+		"rows_rollup_heavy": {
+			"p95_ms": 80,
 			"sql_queries_p95": 280,
 			"memory_bytes_p95": 8388608
 		},
