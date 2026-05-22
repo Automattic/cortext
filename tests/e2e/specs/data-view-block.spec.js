@@ -201,6 +201,72 @@ async function expectSidePeekShellStayedOpen( page ) {
 	).toEqual( [] );
 }
 
+async function selectParentDataViewBlock( page ) {
+	await page.evaluate( () => {
+		const dataViewBlock = window.wp.data
+			.select( 'core/block-editor' )
+			.getBlocks()
+			.find( ( block ) => block.name === 'cortext/data-view' );
+		if ( ! dataViewBlock ) {
+			throw new Error( 'Could not find the DataView block.' );
+		}
+		window.wp.data
+			.dispatch( 'core/block-editor' )
+			.selectBlock( dataViewBlock.clientId );
+	} );
+}
+
+async function getParentDataViewAttributes( page ) {
+	return page.evaluate( () => {
+		const dataViewBlock = window.wp.data
+			.select( 'core/block-editor' )
+			.getBlocks()
+			.find( ( block ) => block.name === 'cortext/data-view' );
+		if ( ! dataViewBlock ) {
+			throw new Error( 'Could not find the DataView block.' );
+		}
+		return JSON.parse( JSON.stringify( dataViewBlock.attributes ) );
+	} );
+}
+
+async function expectRowToolbarIsolated( page, detail, blockText ) {
+	const rowCanvas = detail.frameLocator( 'iframe[name="editor-canvas"]' );
+	const rowBlock = rowCanvas.getByText( blockText, { exact: true } ).first();
+	await expect( rowBlock ).toBeVisible();
+	await rowBlock.click();
+	await rowBlock.press( 'Alt+F10' );
+
+	const rowToolbar = detail.locator(
+		'.block-editor-block-contextual-toolbar'
+	);
+	await expect( rowToolbar ).toBeVisible();
+	await expect(
+		page.locator( '.cortext-shell__canvas .block-editor-block-popover' )
+	).toBeHidden();
+	await expect(
+		page.getByRole( 'button', { name: 'Change collection' } )
+	).toHaveCount( 0 );
+	await expect(
+		page.getByRole( 'button', { name: 'Add field', exact: true } )
+	).toHaveCount( 0 );
+	await expect(
+		page.getByRole( 'button', { name: 'View settings' } )
+	).toHaveCount( 0 );
+
+	const optionsButton = rowToolbar.getByRole( 'button', {
+		name: 'Options',
+	} );
+	await expect( optionsButton ).toBeVisible();
+	await optionsButton.click();
+	const copyMenuItem = page
+		.locator( '.components-popover .components-menu-item__button' )
+		.filter( { hasText: 'Copy' } )
+		.first();
+	await expect( copyMenuItem ).toBeVisible();
+	await expect( copyMenuItem ).toContainText( 'Copy' );
+	await page.keyboard.press( 'Escape' );
+}
+
 async function createCollectionFixture( requestUtils ) {
 	const suffix = Date.now().toString( 36 ).slice( -4 );
 	const slug = `e2ebooks${ suffix }`;
@@ -1591,6 +1657,117 @@ test.describe( 'Collection view block', () => {
 				.toBe( 'U. K. Le Guin' );
 
 			await expect( canvas.getByText( 'U. K. Le Guin' ) ).toBeVisible();
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				fixture.entry &&
+					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+			);
+		}
+	} );
+
+	test( 'row detail toolbar stays separate from the parent DataView toolbar', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+		const rowBodyText = 'Body text for the toolbar check';
+
+		try {
+			Object.assign(
+				fixture,
+				await createCollectionFixture( requestUtils )
+			);
+
+			fixture.entry = await requestUtils.rest( {
+				method: 'POST',
+				path: `/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`,
+				data: {
+					content: `<!-- wp:paragraph --><p>${ rowBodyText }</p><!-- /wp:paragraph -->`,
+				},
+			} );
+
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_pages',
+				data: {
+					title: 'Row toolbar test page',
+					status: 'private',
+					content: createDataViewBlockMarkup( fixture.collection.id ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/${ fixture.page.id }`
+			);
+
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.page.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page
+				.getByRole( 'region', { name: 'Content' } )
+				.frameLocator( 'iframe[name="editor-canvas"]' );
+			await expect(
+				canvas.getByText( 'The Left Hand of Darkness' )
+			).toBeVisible();
+
+			await selectParentDataViewBlock( page );
+			const beforeAttributes = await getParentDataViewAttributes( page );
+
+			const firstRow = canvas
+				.locator( '.cortext-data-view tbody tr' )
+				.first();
+			const titleCellOpenButton = canvas
+				.locator( '.cortext-title-cell__open' )
+				.first();
+			await firstRow.hover();
+			await titleCellOpenButton.click();
+
+			const detail = page.getByRole( 'dialog', {
+				name: 'Row detail',
+			} );
+			await expect( detail ).toBeVisible();
+			await selectParentDataViewBlock( page );
+			await expectRowToolbarIsolated( page, detail, rowBodyText );
+			const afterSideAttributes =
+				await getParentDataViewAttributes( page );
+			expect( afterSideAttributes ).toEqual( beforeAttributes );
+
+			await detail
+				.getByRole( 'button', { name: 'Center modal' } )
+				.click();
+			const modalDetail = page.locator(
+				'.components-modal__frame.cortext-row-detail-modal'
+			);
+			await expect( modalDetail ).toBeVisible();
+			await selectParentDataViewBlock( page );
+			const beforeModalAttributes =
+				await getParentDataViewAttributes( page );
+			await expectRowToolbarIsolated( page, modalDetail, rowBodyText );
+
+			const afterAttributes = await getParentDataViewAttributes( page );
+			expect( afterAttributes ).toEqual( beforeModalAttributes );
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
