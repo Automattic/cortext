@@ -988,6 +988,7 @@ export default function CollectionDataViews( {
 	// for fields the user just created. `null` on first run signals
 	// "saved view, leave it alone."
 	const knownFieldIdsRef = useRef( null );
+	const previousVisibleFieldsRef = useRef( null );
 	const savedRowDetailMode = getRowDetailMode( view );
 	const postType = slug ? `crtxt_${ slug }` : null;
 	const { openDocument, closeDocument } = useDocumentPeekActions();
@@ -1368,7 +1369,8 @@ export default function CollectionDataViews( {
 			! isTableLayout ||
 			! pendingRevealFieldId ||
 			isResolving ||
-			! fieldsResolved
+			! fieldsResolved ||
+			showLoadingShell
 		) {
 			return undefined;
 		}
@@ -1426,6 +1428,47 @@ export default function CollectionDataViews( {
 		localRevealFieldId,
 		onFieldRevealed,
 		pendingRevealFieldId,
+		showLoadingShell,
+		view?.fields,
+	] );
+
+	useLayoutEffect( () => {
+		const currentFields = [ ...( view?.fields ?? [] ) ];
+		const previousFields = previousVisibleFieldsRef.current;
+		if ( ! previousFields ) {
+			if ( fieldsResolved && ! isResolving && ! showLoadingShell ) {
+				previousVisibleFieldsRef.current = currentFields;
+			}
+			return;
+		}
+		if (
+			! isTableLayout ||
+			isResolving ||
+			! fieldsResolved ||
+			showLoadingShell
+		) {
+			return;
+		}
+
+		const lastFieldId = currentFields[ currentFields.length - 1 ];
+		const addedAtEnd =
+			currentFields.length > previousFields.length &&
+			lastFieldId &&
+			! previousFields.includes( lastFieldId );
+		if ( addedAtEnd ) {
+			setLocalRevealFieldId( lastFieldId );
+			const wrapper =
+				tableWrapperRef.current?.querySelector( '.dataviews-wrapper' );
+			if ( wrapper ) {
+				scrollToEndQuickly( wrapper, { trackEnd: true } );
+			}
+		}
+		previousVisibleFieldsRef.current = currentFields;
+	}, [
+		fieldsResolved,
+		isResolving,
+		isTableLayout,
+		showLoadingShell,
 		view?.fields,
 	] );
 

@@ -1,7 +1,7 @@
-function prefersReducedMotion() {
+function prefersReducedMotion( ownerWindow = window ) {
 	return (
-		typeof window !== 'undefined' &&
-		window.matchMedia?.( '(prefers-reduced-motion: reduce)' ).matches
+		typeof ownerWindow !== 'undefined' &&
+		ownerWindow.matchMedia?.( '(prefers-reduced-motion: reduce)' ).matches
 	);
 }
 
@@ -10,12 +10,13 @@ function isAtScrollEnd( scrollLeft, target ) {
 }
 
 export function scrollToEndQuickly( wrapper, options = {} ) {
+	const ownerWindow = wrapper.ownerDocument?.defaultView ?? window;
 	const maxScroll = wrapper.scrollWidth - wrapper.clientWidth;
 	const trackEnd = options.trackEnd === true;
 	if ( maxScroll <= 0 && ! trackEnd ) {
 		return;
 	}
-	const isRtl = window.getComputedStyle( wrapper ).direction === 'rtl';
+	const isRtl = ownerWindow.getComputedStyle( wrapper ).direction === 'rtl';
 	const endTarget = () => {
 		const currentMaxScroll = wrapper.scrollWidth - wrapper.clientWidth;
 		return isRtl ? -currentMaxScroll : currentMaxScroll;
@@ -34,7 +35,7 @@ export function scrollToEndQuickly( wrapper, options = {} ) {
 		wrapper.scrollLeft = target;
 		return;
 	}
-	if ( prefersReducedMotion() ) {
+	if ( prefersReducedMotion( ownerWindow ) ) {
 		wrapper.scrollLeft = target;
 		return;
 	}
@@ -45,8 +46,17 @@ export function scrollToEndQuickly( wrapper, options = {} ) {
 	}
 
 	const duration = 180;
-	const startedAt = window.performance.now();
+	const startedAt = ownerWindow.performance.now();
 	const easeOutCubic = ( t ) => 1 - Math.pow( 1 - t, 3 );
+	const settleUntil = trackEnd ? startedAt + 5000 : 0;
+
+	const settleAtEnd = () => {
+		wrapper.scrollLeft = endTarget();
+		if ( ownerWindow.performance.now() >= settleUntil ) {
+			return;
+		}
+		ownerWindow.requestAnimationFrame( settleAtEnd );
+	};
 
 	const animate = ( now ) => {
 		const progress = Math.min( 1, ( now - startedAt ) / duration );
@@ -54,10 +64,10 @@ export function scrollToEndQuickly( wrapper, options = {} ) {
 		wrapper.scrollLeft =
 			start + ( currentTarget - start ) * easeOutCubic( progress );
 		if ( progress < 1 ) {
-			window.requestAnimationFrame( animate );
+			ownerWindow.requestAnimationFrame( animate );
 		} else {
-			wrapper.scrollLeft = currentTarget;
+			settleAtEnd();
 		}
 	};
-	window.requestAnimationFrame( animate );
+	ownerWindow.requestAnimationFrame( animate );
 }
