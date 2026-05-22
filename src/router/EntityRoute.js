@@ -35,6 +35,7 @@ import CollectionPublishToggle from '../components/CollectionPublishToggle';
 import { RowMutationContext } from '../components/EditableCell';
 import { CanvasProgressBar } from '../components/Skeleton';
 import useDelayedFlag from '../hooks/useDelayedFlag';
+import CortextSnackbars from '../components/CortextSnackbars';
 import WorkspaceTopBar, {
 	TopBarActionsFill,
 } from '../components/WorkspaceTopBar';
@@ -565,6 +566,7 @@ export default function EntityRoute( { history } ) {
 					<LoadingPane active={ active.kind === 'loading' } />
 				</WorkspacePane>
 			</div>
+			<CortextSnackbars />
 		</>
 	);
 }

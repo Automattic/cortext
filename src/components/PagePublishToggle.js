@@ -1,10 +1,14 @@
+import { __ } from '@wordpress/i18n';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
 import { store as blockEditorStore } from '@wordpress/block-editor';
 import { store as coreStore } from '@wordpress/core-data';
+import { store as noticesStore } from '@wordpress/notices';
 import { useCallback } from '@wordpress/element';
 
 import PublishToggle from './PublishToggle';
+
+const PUBLISH_ERROR_NOTICE_ID = 'cortext-page-publish-error';
 
 /**
  * Walks the block tree and returns unique collectionId values from all
@@ -34,6 +38,7 @@ function getCollectionIds( blocks ) {
 export default function PagePublishToggle() {
 	const { editPost, savePost } = useDispatch( editorStore );
 	const { saveEntityRecord } = useDispatch( coreStore );
+	const { createErrorNotice, removeNotice } = useDispatch( noticesStore );
 	const { status, link, isSaving, blocks } = useSelect( ( select ) => {
 		const editor = select( editorStore );
 		return {
@@ -52,19 +57,41 @@ export default function PagePublishToggle() {
 		// — collections stay as they are.
 		if ( ! isPublic ) {
 			const collectionIds = getCollectionIds( blocks );
-			await Promise.all(
+
+			const results = await Promise.allSettled(
 				collectionIds.map( ( id ) =>
-					saveEntityRecord( 'postType', 'crtxt_collection', {
-						id,
-						status: 'publish',
-					} )
+					saveEntityRecord(
+						'postType',
+						'crtxt_collection',
+						{ id, status: 'publish' },
+						{ throwOnError: true }
+					)
 				)
 			);
+			if ( results.some( ( r ) => r.status === 'rejected' ) ) {
+				createErrorNotice(
+					__(
+						"Couldn't publish referenced collections. The page was not published.",
+						'cortext'
+					),
+					{ id: PUBLISH_ERROR_NOTICE_ID, type: 'snackbar' }
+				);
+				return;
+			}
+			removeNotice( PUBLISH_ERROR_NOTICE_ID );
 		}
 
 		editPost( { status: isPublic ? 'private' : 'publish' } );
 		savePost();
-	}, [ editPost, savePost, saveEntityRecord, isPublic, blocks ] );
+	}, [
+		editPost,
+		savePost,
+		saveEntityRecord,
+		createErrorNotice,
+		removeNotice,
+		isPublic,
+		blocks,
+	] );
 
 	// Hide the toggle for draft pages (no title yet).
 	if ( status === 'draft' ) {
