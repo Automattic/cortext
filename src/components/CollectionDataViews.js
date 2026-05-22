@@ -1389,7 +1389,7 @@ export default function CollectionDataViews( {
 					return false;
 				}
 			}
-			scrollToEndQuickly( wrapper );
+			scrollToEndQuickly( wrapper, { trackEnd: true } );
 			if ( localRevealFieldId === pendingRevealFieldId ) {
 				setLocalRevealFieldId( null );
 			}
@@ -1401,10 +1401,21 @@ export default function CollectionDataViews( {
 			return undefined;
 		}
 
-		const frame = window.requestAnimationFrame( reveal );
+		let frame = 0;
+		let attempts = 0;
+		const retryReveal = () => {
+			if ( reveal() || attempts >= 30 ) {
+				return;
+			}
+			attempts += 1;
+			frame = window.requestAnimationFrame( retryReveal );
+		};
+		frame = window.requestAnimationFrame( retryReveal );
 
 		return () => {
-			window.cancelAnimationFrame( frame );
+			if ( frame ) {
+				window.cancelAnimationFrame( frame );
+			}
 		};
 	}, [
 		fieldsResolved,

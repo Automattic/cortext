@@ -13,13 +13,20 @@ use Cortext\PostType\Collection;
 
 final class DataView {
 
+	public const BLOCK_NAME = 'cortext/data-view';
+
 	public function register(): void {
 		add_action( 'init', array( $this, 'register_block' ) );
 	}
 
 	public function register_block(): void {
+		$block_path = CORTEXT_PATH . 'build/blocks/data-view';
+		if ( ! is_readable( $block_path . '/block.json' ) ) {
+			$block_path = CORTEXT_PATH . 'src/blocks/data-view';
+		}
+
 		register_block_type(
-			CORTEXT_PATH . 'build/blocks/data-view',
+			$block_path,
 			array(
 				'render_callback' => array( $this, 'render' ),
 			)
