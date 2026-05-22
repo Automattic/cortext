@@ -18,6 +18,21 @@
 	--cortext-scrollbar-thumb: rgba(0, 0, 0, 0.12);
 	--cortext-scrollbar-thumb-hover: rgba(0, 0, 0, 0.28);
 
+	// Cortext-owned product accent. WordPress blue stays available through
+	// WP component variables, but shell chrome should not inherit it as the
+	// default brand color. Lives at `:root` so popovers and the editor
+	// iframe (both outside `.cortext-root`) can still resolve it; that's
+	// also why focus rings inside Cortext popovers can drop the
+	// `var(--wp-admin-theme-color, ...)` fallback they used to need.
+	--cortext-accent: #0a1530;
+	--cortext-accent-contrast: #5ad9ff;
+
+	// Destructive signal. Same value as WP's destructive red so the visual
+	// stays familiar; the `-strong` variant is for hover/active states.
+	// Lives at `:root` so popover-mounted destructive items can reach it.
+	--cortext-danger: #cc1818;
+	--cortext-danger-strong: #b32d2e;
+
 	// Option chip palette. Backgrounds are muted tints; foregrounds are a
 	// matching hue dark enough to read on the background. Names mirror
 	// `Cortext\OptionPalette::names()` and the JS `OPTION_COLOR_NAMES`
@@ -86,12 +101,6 @@
 	--cortext-text-muted: #{colors.$gray-700};
 	--cortext-text-strong: #{colors.$gray-900};
 	--cortext-shadow-color: rgba(0, 0, 0, 0.12);
-
-	// Cortext-owned product accent. WordPress blue stays available through
-	// WP component variables, but shell chrome should not inherit it as the
-	// default brand color.
-	--cortext-accent: #0a1530;
-	--cortext-accent-contrast: #5ad9ff;
 
 	// Shell buttons. These map onto @wordpress/components buttons only inside
 	// Cortext-owned chrome, not globally in wp-admin or inside the iframe.
