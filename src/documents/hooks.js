@@ -7,17 +7,12 @@ import {
 import { useDispatch } from '@wordpress/data';
 import { useNavigate } from '@tanstack/react-router';
 
-import {
-	computeCollectionUri,
-	computeDocumentUri,
-} from '../router/useResolveEntity';
 import { useFavorites } from '../hooks/useFavorites';
 import { useRecents } from '../hooks/useRecents';
 import { documentTitle } from './title';
 import { iconForRecord } from './icons';
 import { kindFromRecord } from './kinds';
 import { getDescriptor } from './descriptors';
-import { filterFavoritesByDeletedIds } from './favorites';
 
 /**
  * Sidebar-scoped context for document actions. The provider supplies the data
@@ -179,8 +174,10 @@ export function useDocumentRecord( record ) {
 }
 
 /**
- * Selection and navigation helpers for sidebar rows. They hide the page versus
- * collection route differences from `DocumentRow`.
+ * Selection and navigation helpers for sidebar rows. Pages and collections
+ * each have their own selected-id prop; the active route can only ever set
+ * one, so collapsing them into a single id is safe and keeps the comparison
+ * record-agnostic. Navigation comes from the descriptor so kinds stay opaque.
  *
  * @param {Object}  args
  * @param {?number} args.selectedId           Active page id, or `null`.
@@ -189,25 +186,19 @@ export function useDocumentRecord( record ) {
  */
 export function useDocumentSelection( { selectedId, selectedCollectionId } ) {
 	const navigate = useNavigate();
+	const selectedRecordId = selectedCollectionId ?? selectedId ?? null;
 
 	const isSelected = useCallback(
-		( record ) => {
-			const kind = kindFromRecord( record );
-			if ( kind === 'collection' ) {
-				return selectedCollectionId === record.id;
-			}
-			return selectedId === record.id;
-		},
-		[ selectedId, selectedCollectionId ]
+		( record ) => record.id === selectedRecordId,
+		[ selectedRecordId ]
 	);
 
 	const selectRecord = useCallback(
 		( record ) => {
-			const kind = kindFromRecord( record );
-			const uri =
-				kind === 'collection'
-					? computeCollectionUri( record )
-					: computeDocumentUri( record );
+			const uri = descriptorFor( record ).uri?.( record );
+			if ( ! uri ) {
+				return;
+			}
 			navigate( { to: '/$', params: { _splat: uri } } );
 		},
 		[ navigate ]
@@ -216,21 +207,6 @@ export function useDocumentSelection( { selectedId, selectedCollectionId } ) {
 	return useMemo(
 		() => ( { isSelected, selectRecord } ),
 		[ isSelected, selectRecord ]
-	);
-}
-
-/**
- * Favorites cleanup helper for trash flows. Callers pass the ids that were
- * removed, grouped by document kind.
- */
-export function useTrashCascadeEffects() {
-	return useMemo(
-		() => ( {
-			filterFavoritesAfterTrash( favorites, deletedIds ) {
-				return filterFavoritesByDeletedIds( favorites, deletedIds );
-			},
-		} ),
-		[]
 	);
 }
 

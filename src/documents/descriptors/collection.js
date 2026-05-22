@@ -3,7 +3,7 @@ import apiFetch from '@wordpress/api-fetch';
 
 import { computeCollectionUri } from '../../router/useResolveEntity';
 import { notifyDocumentTrashChanged } from '../../hooks/documentTrashInvalidation';
-import { filterFavoritesByDeletedIds } from '../favorites';
+import { cascadeFavorites } from '../favorites';
 import {
 	afterCollectionDuplicate,
 	afterCollectionTrash,
@@ -20,6 +20,10 @@ const collectionDescriptor = {
 		hierarchy: false,
 		canCreateChild: false,
 		hasOwnIcon: false,
+	},
+
+	uri( record ) {
+		return computeCollectionUri( record );
 	},
 
 	async rename( record, title, ctx ) {
@@ -79,20 +83,14 @@ const collectionDescriptor = {
 		// For now, Favorites only needs to drop the collection itself. Keep the
 		// same data shape as page trash so server-provided ids can replace this
 		// local set later.
-		const deletedIds = { collection: new Set( [ Number( record.id ) ] ) };
-		try {
-			await ctx.setFavorites( ( current ) =>
-				filterFavoritesByDeletedIds( current, deletedIds )
-			);
-		} catch ( err ) {
-			ctx.onFavoritesError?.(
-				err?.message ??
-					__(
-						'Moved the collection to Trash, but could not update Favorites.',
-						'cortext'
-					)
-			);
-		}
+		await cascadeFavorites(
+			ctx,
+			{ collection: new Set( [ Number( record.id ) ] ) },
+			__(
+				'Moved the collection to Trash, but could not update Favorites.',
+				'cortext'
+			)
+		);
 		if ( ctx.selectedCollectionId === record.id ) {
 			ctx.navigate?.( { to: '/' } );
 		}

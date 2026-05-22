@@ -10,7 +10,10 @@ export {
 	useDocumentActions,
 	useDocumentRecord,
 	useDocumentSelection,
-	useTrashCascadeEffects,
 } from './hooks';
 export { documentTitle } from './title';
-export { favoriteIdentForRecord, favoriteKeyForRecord } from './favorites';
+export {
+	favoriteIdentForRecord,
+	favoriteKeyForRecord,
+	filterFavoritesByDeletedIds,
+} from './favorites';

@@ -3,8 +3,9 @@ import apiFetch from '@wordpress/api-fetch';
 
 import { POST_TYPE } from '../../components/page-queries';
 import { collectDescendants } from '../../components/pages-tree';
+import { computeDocumentUri } from '../../router/useResolveEntity';
 import { notifyDocumentTrashChanged } from '../../hooks/documentTrashInvalidation';
-import { filterFavoritesByDeletedIds } from '../favorites';
+import { cascadeFavorites } from '../favorites';
 import { afterPageTrash, applyInvalidationPack } from '../invalidation';
 
 /**
@@ -17,6 +18,10 @@ const pageDescriptor = {
 		hierarchy: true,
 		canCreateChild: true,
 		hasOwnIcon: true,
+	},
+
+	uri( record ) {
+		return computeDocumentUri( record );
 	},
 
 	// First rename of a draft promotes status to private so core regenerates
@@ -70,44 +75,31 @@ const pageDescriptor = {
 		}
 		applyInvalidationPack( ctx.invalidateResolution, afterPageTrash );
 		notifyDocumentTrashChanged();
-		await dropCascadedFavorites( record.id, ctx );
+		// Cascade the local trash set into Favorites: the page itself, its
+		// descendants, and any inline collections owned by those pages. The
+		// server can replace this with an authoritative list later without
+		// changing the favorites filter step.
+		const trashedPageIds = new Set( [
+			Number( record.id ),
+			...collectDescendants( Number( record.id ), ctx.pages ?? [] ),
+		] );
+		const trashedCollectionIds = new Set(
+			( ctx.collections ?? [] )
+				.filter( ( collection ) =>
+					trashedPageIds.has( Number( collection.parent ?? 0 ) )
+				)
+				.map( ( collection ) => Number( collection.id ) )
+		);
+		await cascadeFavorites(
+			ctx,
+			{ page: trashedPageIds, collection: trashedCollectionIds },
+			__(
+				'Page moved to Trash, but Favorites could not be updated.',
+				'cortext'
+			)
+		);
 		ctx.onAfterTrash?.( { kind: 'page', record } );
 	},
 };
-
-// Compute the trash ids locally for now: the page, its descendants, and any
-// inline collections owned by those pages. A later server response can replace
-// this local set without changing the favorite filtering step.
-async function dropCascadedFavorites( pageId, ctx ) {
-	const trashedPageIds = new Set( [
-		Number( pageId ),
-		...collectDescendants( Number( pageId ), ctx.pages ?? [] ),
-	] );
-	const trashedCollectionIds = new Set(
-		( ctx.collections ?? [] )
-			.filter( ( collection ) =>
-				trashedPageIds.has( Number( collection.parent ?? 0 ) )
-			)
-			.map( ( collection ) => Number( collection.id ) )
-	);
-	const deletedIds = {
-		page: trashedPageIds,
-		collection: trashedCollectionIds,
-	};
-
-	try {
-		await ctx.setFavorites( ( current ) =>
-			filterFavoritesByDeletedIds( current, deletedIds )
-		);
-	} catch ( err ) {
-		ctx.onFavoritesError?.(
-			err?.message ??
-				__(
-					'Page moved to Trash, but Favorites could not be updated.',
-					'cortext'
-				)
-		);
-	}
-}
 
 export default pageDescriptor;

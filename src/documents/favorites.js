@@ -59,3 +59,21 @@ export function filterFavoritesByDeletedIds( favorites, deletedIds ) {
 		return ! idsForKind.has( Number( favorite.id ) );
 	} );
 }
+
+/**
+ * Run the favorites cleanup shared by every trash flow: filter out the
+ * cascade ids and surface any setFavorites failure through `onFavoritesError`.
+ *
+ * @param {Object}                      ctx             Descriptor context with `setFavorites` and `onFavoritesError`.
+ * @param {Object<string, Set<number>>} deletedIds      Cascade ids keyed by kind.
+ * @param {string}                      fallbackMessage Message used when the error has no own.
+ */
+export async function cascadeFavorites( ctx, deletedIds, fallbackMessage ) {
+	try {
+		await ctx.setFavorites( ( current ) =>
+			filterFavoritesByDeletedIds( current, deletedIds )
+		);
+	} catch ( err ) {
+		ctx.onFavoritesError?.( err?.message ?? fallbackMessage );
+	}
+}
