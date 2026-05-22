@@ -37,8 +37,7 @@ async function expectColumnRevealed( canvas, columnHeader ) {
 			const headerLeft = headerBox.x;
 			const headerRight = headerBox.x + headerBox.width;
 			return (
-				headerLeft >= wrapperLeft - 2 &&
-				headerRight <= wrapperRight + 2
+				headerLeft >= wrapperLeft - 2 && headerRight <= wrapperRight + 2
 			);
 		} )
 		.toBe( true );
