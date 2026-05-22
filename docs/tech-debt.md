@@ -394,14 +394,6 @@ The same selector shape affects user-visible save side effects. `didPostSaveRequ
 
 **Solution.** Build `cortext/document-properties` as a locked dynamic block, in the same family as `cortext/document-cover` and `cortext/document-icon`. Its `edit()` should reuse the row-property form inside the editor iframe. Its `render_callback` should read the row's collection schema and meta, then emit frontend HTML for public themes. The header-block insertion path should place it after cover/icon/title on row documents. The full-page hide/show control then becomes an editor visibility preference, not the source of truth for whether properties exist in the document.
 
-## 43. Row recents still target the parent collection `[internal]`
-
-**What.** Recents stores row identity (`kind: row`, row id, and parent collection id), but the response still sends the parent collection as the clickable path. Row documents now have their own document URLs, so this is only a first-pass fallback: it gets the user back to the right table, but not directly into the row document they touched. The stored identity is enough to improve the target without changing the saved meta shape.
-
-**Where.** Row handling in `includes/Rest/RecentsController.php`, row clicks in `src/components/SidebarRecents.js`, recent row commands in `src/components/CommandPalette.js`, and the row-recents e2e coverage in `tests/e2e/specs/recents.spec.js`.
-
-**Solution.** Have row recents return the row document path, or give recents a route target shape instead of a single path string. That target should use the same document URL helper as row detail and relations, so sidebar recents and palette recents open the row directly instead of stopping at the parent collection.
-
 ## 44. Recents tracking is wired at each call site `[internal]`
 
 **What.** There is no workspace activity layer. Each surface that counts as a visit or edit calls `touchRecent` itself: route resolution, page autosave, sidebar rename, row field save, row creation, and relation-created rows. That makes the behavior easy to understand right now, but future write paths can forget to update recents unless the reviewer knows to look for it.
@@ -438,7 +430,7 @@ The same selector shape affects user-visible save side effects. `didPostSaveRequ
 
 **What.** Pages and collection rows both opt into `cortext-document`, and there is now a shared reader: `Cortext\Documents`, `GET /cortext/v1/documents`, `useDocuments`, trash listing, and recents formatting all use the same document shape. That removes the old one-off trash enumerator and gives cross-type search/list code one place to start.
 
-The layer is still mostly read-only. Pages still go through the page tree and `core-data`, rows still go through `useCollectionRows`, and restore/delete still fan out into page-tree refresh, row-query invalidation, collection context refresh, and Trash refresh. Favorites, routing, URL targets, and activity tracking also still ask "page or row?" in places that should only need "document." Relation chips now open row documents, but that path still uses local row URL helpers (`rowRoute` / `rowHref`) and needs `slug` in relation responses. The document layer does not own those row targets yet. Row documents in recents still route back to their parent collection (#43), so the document shape carries a path, but not always the final document target users expect.
+The layer is still mostly read-only. Pages still go through the page tree and `core-data`, rows still go through `useCollectionRows`, and restore/delete still fan out into page-tree refresh, row-query invalidation, collection context refresh, and Trash refresh. Favorites and recents now use the document service for row paths, but routing, URL targets, and activity tracking still ask "page or row?" in places that should only need "document." Relation chips now open row documents, but that path still uses local row URL helpers (`rowRoute` / `rowHref`) and needs `slug` in relation responses. The document layer does not own those row targets yet.
 
 **Where.** `includes/Documents.php`, `includes/Rest/DocumentsController.php`, `includes/Rest/RecentsController.php`, relation slug hydration in `includes/Rest/RowsController.php`, `src/hooks/useDocuments.js`, `src/hooks/useTrashedDocuments.js`, `src/components/SidebarTrash.js`, `src/router/useResolveEntity.js`, `src/router/EntityRoute.js`, `rowRoute` / `rowHref` in `src/components/relations/relationUtils.js`, `src/hooks/documentTrashInvalidation.js`, and `src/hooks/rowInvalidation.js`.
 
