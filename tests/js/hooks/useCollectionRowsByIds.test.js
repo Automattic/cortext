@@ -27,9 +27,7 @@ function rowsResponseFor( ids ) {
 
 describe( 'useCollectionRowsByIds', () => {
 	it( 'does not fetch when ids is empty', async () => {
-		const { result } = renderHook( () =>
-			useCollectionRowsByIds( 42, [] )
-		);
+		const { result } = renderHook( () => useCollectionRowsByIds( 42, [] ) );
 
 		expect( apiFetch ).not.toHaveBeenCalled();
 		expect( result.current.rows ).toEqual( [] );
@@ -74,9 +72,7 @@ describe( 'useCollectionRowsByIds', () => {
 
 		renderHook( () => useCollectionRowsByIds( 42, ids ) );
 
-		await waitFor( () =>
-			expect( apiFetch ).toHaveBeenCalledTimes( 1 )
-		);
+		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 1 ) );
 
 		expect( ids ).toEqual( snapshot );
 	} );
@@ -89,9 +85,7 @@ describe( 'useCollectionRowsByIds', () => {
 			{ initialProps: { ids: [ 1, 2, 3 ] } }
 		);
 
-		await waitFor( () =>
-			expect( apiFetch ).toHaveBeenCalledTimes( 1 )
-		);
+		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 1 ) );
 
 		rerender( { ids: [ 3, 2, 1 ] } );
 		await act( async () => {} );
@@ -102,7 +96,10 @@ describe( 'useCollectionRowsByIds', () => {
 	it( 'chunks more than 100 ids into parallel requests', async () => {
 		// Two requests: 100 IDs, then 50.
 		const firstBatchIds = Array.from( { length: 100 }, ( _, i ) => i + 1 );
-		const secondBatchIds = Array.from( { length: 50 }, ( _, i ) => i + 101 );
+		const secondBatchIds = Array.from(
+			{ length: 50 },
+			( _, i ) => i + 101
+		);
 		const allIds = [ ...firstBatchIds, ...secondBatchIds ];
 
 		apiFetch.mockImplementation( ( { path } ) => {
