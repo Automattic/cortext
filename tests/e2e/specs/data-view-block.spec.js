@@ -19,16 +19,27 @@ async function deleteIfCreated( requestUtils, path ) {
 	}
 }
 
-async function expectTableScrolledToEnd( canvas ) {
+async function expectColumnRevealed( canvas, columnHeader ) {
 	const wrapper = canvas
 		.locator( '.cortext-data-view > .dataviews-wrapper' )
 		.first();
 	await expect
-		.poll( async () =>
-			wrapper.evaluate(
-				( el ) => el.scrollLeft + el.clientWidth >= el.scrollWidth - 2
-			)
-		)
+		.poll( async () => {
+			const [ wrapperBox, headerBox ] = await Promise.all( [
+				wrapper.boundingBox(),
+				columnHeader.boundingBox(),
+			] );
+			if ( ! wrapperBox || ! headerBox ) {
+				return false;
+			}
+			const wrapperLeft = wrapperBox.x;
+			const wrapperRight = wrapperBox.x + wrapperBox.width;
+			const headerLeft = headerBox.x;
+			const headerRight = headerBox.x + headerBox.width;
+			return (
+				headerLeft >= wrapperLeft - 2 && headerRight <= wrapperRight + 2
+			);
+		} )
 		.toBe( true );
 }
 
@@ -4026,7 +4037,7 @@ test.describe( 'Collection view block', () => {
 				name: /Notes/,
 			} );
 			await expect( notesHeader ).toBeVisible();
-			await expectTableScrolledToEnd( canvas );
+			await expectColumnRevealed( canvas, notesHeader );
 
 			// `getByRole('button', { name })` would match both the visible
 			// combined-dropdown trigger (text label) and the transparent
@@ -4099,10 +4110,11 @@ test.describe( 'Collection view block', () => {
 				.getByRole( 'button', { name: 'Text', exact: true } )
 				.click();
 
-			await expect(
-				canvas.getByRole( 'columnheader', { name: /Tags/ } )
-			).toBeVisible();
-			await expectTableScrolledToEnd( canvas );
+			const tagsHeader = canvas.getByRole( 'columnheader', {
+				name: /Tags/,
+			} );
+			await expect( tagsHeader ).toBeVisible();
+			await expectColumnRevealed( canvas, tagsHeader );
 
 			// 6. Title's column doesn't get the schema-action takeover —
 			//    its `<th>` keeps DataViews' built-in trigger and has no

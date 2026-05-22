@@ -65,6 +65,10 @@ function pruneCollections( state ) {
 	return { ...state, mountedCollectionIds, readyCollectionIds };
 }
 
+function isContentPane( active ) {
+	return active.kind === 'document' || active.kind === 'collection';
+}
+
 // `target` follows the URL; `active` is what we're painting. They diverge
 // during transitions: the old pane keeps painting until the new one is ready,
 // then `active` flips.
@@ -98,6 +102,8 @@ export function reducer( state, action ) {
 					state.readyCollectionIds.has( target.id )
 				) {
 					active = { kind: 'collection', id: target.id };
+				} else if ( isContentPane( state.active ) ) {
+					active = state.active;
 				} else {
 					active = { kind: 'loading' };
 				}
@@ -161,8 +167,10 @@ export function reducer( state, action ) {
 			const next = {
 				...state,
 				mountedCollectionIds,
-				active: { kind: 'collection', id: action.id },
 			};
+			if ( ! isContentPane( state.active ) ) {
+				next.active = { kind: 'collection', id: action.id };
+			}
 			return pruneCollections( next );
 		}
 

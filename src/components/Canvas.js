@@ -9,7 +9,7 @@ import {
 } from '@wordpress/interface';
 import { Button, Disabled } from '@wordpress/components';
 import { chevronDown, chevronUp, cog, seen, unseen } from '@wordpress/icons';
-import { useCallback, useEffect, useState } from '@wordpress/element';
+import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
 
 // Editor-surface stylesheets. Imported via a sibling SCSS file (not
 // src/index.scss) so mini-css-extract emits them into the editor chunk's
@@ -138,9 +138,17 @@ function HideHeaderBlockKebab() {
 	return null;
 }
 
-function VisualCanvas( { isActive, postId, postType, onReady, onRestored } ) {
+function VisualCanvas( {
+	featuredMedia,
+	isActive,
+	postId,
+	postType,
+	onReady,
+	onRestored,
+} ) {
 	return (
 		<EditorBody
+			featuredMedia={ featuredMedia }
 			isActive={ isActive }
 			postId={ postId }
 			postType={ postType }
@@ -148,6 +156,15 @@ function VisualCanvas( { isActive, postId, postType, onReady, onRestored } ) {
 			onRestored={ onRestored }
 		/>
 	);
+}
+
+const CANVAS_SWITCH_READY_TIMEOUT = 8000;
+
+function documentKey( postType, postId ) {
+	if ( ! postType || postId === null || postId === undefined ) {
+		return null;
+	}
+	return `${ postType }:${ postId }`;
 }
 
 function CanvasEditor( {
@@ -202,10 +219,16 @@ function CanvasEditor( {
 		async function switchAfterSave() {
 			const didFlush = await flushNow();
 			if ( ! cancelled && didFlush ) {
-				// Document-to-document swaps don't change EntityRoute's
-				// `active`, so the surface-level cross-fade can't see them.
-				// Trigger one here instead.
-				withViewTransition( () => onSwitchPost( pendingPost ) );
+				if ( ! isActive ) {
+					onSwitchPost( pendingPost );
+					return;
+				}
+				// EntityRoute's `active` value does not move for page-to-page
+				// swaps. Start the transition here and keep the old snapshot up
+				// while the next editor render settles.
+				withViewTransition( () => onSwitchPost( pendingPost ), {
+					mode: 'hold-old-canvas',
+				} );
 			}
 		}
 
@@ -219,6 +242,7 @@ function CanvasEditor( {
 		post.id,
 		post.type,
 		flushNow,
+		isActive,
 		isDirty,
 		isSaving,
 		onSwitchPost,
@@ -281,9 +305,10 @@ function CanvasEditor( {
 							rowProperties
 						) }
 						<VisualCanvas
+							featuredMedia={ post.featured_media }
 							isActive={ isActive }
 							postId={ post.id }
-							postType={ postType }
+							postType={ post.type ?? postType }
 							onReady={ onDisplayedPost }
 							onRestored={ onRestored }
 						/>
@@ -317,11 +342,10 @@ export default function Canvas( {
 		postId
 	);
 	const [ displayedPost, setDisplayedPost ] = useState( null );
-	// Keep the previously-rendered post mounted (any type) until CanvasEditor's
-	// pendingPost effect flushes unsaved edits and explicitly swaps. Falling
-	// back to `requestedPost` on type mismatch would re-mount the editor
-	// immediately and drop in-flight edits on cross-type navigation
-	// (page → row, row → page).
+	const pendingDisplayResolversRef = useRef( new Map() );
+	// Keep the last rendered post mounted until CanvasEditor has flushed edits
+	// and chosen the next post. Falling back to `requestedPost` on a type change
+	// would remount the editor at once and could drop edits mid-navigation.
 	const renderedPost = displayedPost ?? requestedPost;
 
 	useEffect( () => {
@@ -339,11 +363,73 @@ export default function Canvas( {
 			) {
 				return requestedPost;
 			}
-			// Different document (any axis): hold so the editor can flush
-			// before the swap; CanvasEditor calls setDisplayedPost itself.
+			// Different document or type: keep the current editor up. CanvasEditor
+			// will flush edits and switch posts explicitly.
 			return current;
 		} );
 	}, [ requestedPost ] );
+
+	useEffect( () => {
+		const pendingDisplayResolvers = pendingDisplayResolversRef.current;
+		return () => {
+			pendingDisplayResolvers.forEach( ( pending ) => {
+				window.clearTimeout( pending.timeoutId );
+				pending.resolve();
+			} );
+			pendingDisplayResolvers.clear();
+		};
+	}, [] );
+
+	const handleDisplayedPost = useCallback(
+		( id, type ) => {
+			const key = documentKey( type, id );
+			const pending = key
+				? pendingDisplayResolversRef.current.get( key )
+				: null;
+			if ( pending ) {
+				window.clearTimeout( pending.timeoutId );
+				pendingDisplayResolversRef.current.delete( key );
+				pending.resolve();
+			}
+			onDisplayedPost?.( id );
+		},
+		[ onDisplayedPost ]
+	);
+
+	const switchDisplayedPost = useCallback(
+		( nextPost ) => {
+			const key = documentKey( nextPost?.type ?? postType, nextPost?.id );
+			const readyPromise = new Promise( ( resolve ) => {
+				if ( ! key || typeof window === 'undefined' ) {
+					resolve();
+					return;
+				}
+
+				const existing = pendingDisplayResolversRef.current.get( key );
+				if ( existing ) {
+					window.clearTimeout( existing.timeoutId );
+					existing.resolve();
+				}
+
+				const pending = { resolve, timeoutId: null };
+				pending.timeoutId = window.setTimeout( () => {
+					if (
+						pendingDisplayResolversRef.current.get( key ) !==
+						pending
+					) {
+						return;
+					}
+					pendingDisplayResolversRef.current.delete( key );
+					resolve();
+				}, CANVAS_SWITCH_READY_TIMEOUT );
+				pendingDisplayResolversRef.current.set( key, pending );
+			} );
+
+			setDisplayedPost( nextPost );
+			return readyPromise;
+		},
+		[ postType ]
+	);
 
 	const pendingPost =
 		renderedPost &&
@@ -352,9 +438,9 @@ export default function Canvas( {
 			requestedPost.id !== renderedPost.id )
 			? requestedPost
 			: null;
-	// `pendingPost` appears only after the next record resolves. On a slow
-	// network that is too late, so compare the requested post to the one still
-	// on screen and cover the whole wait after a click.
+	// `pendingPost` only exists once the next record has resolved. On a slow
+	// request, compare the URL target with the post still on screen so the
+	// progress bar covers the whole click-to-paint gap.
 	const isCrossDocNav = Boolean(
 		renderedPost &&
 			postId &&
@@ -384,12 +470,12 @@ export default function Canvas( {
 			>
 				<CanvasEditor
 					post={ renderedPost }
-					postType={ renderedPost.type }
+					postType={ renderedPost.type ?? postType }
 					fields={ fields }
 					row={ row }
 					pendingPost={ pendingPost }
-					onSwitchPost={ setDisplayedPost }
-					onDisplayedPost={ onDisplayedPost }
+					onSwitchPost={ switchDisplayedPost }
+					onDisplayedPost={ handleDisplayedPost }
 					isActive={ isActive }
 					topBarActions={ topBarActions }
 					notice={ notice }
