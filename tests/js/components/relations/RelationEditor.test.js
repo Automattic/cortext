@@ -1,10 +1,30 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+	act,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+} from '@testing-library/react';
 
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 jest.mock( '../../../../src/hooks/useCollectionRows', () => ( {
 	__esModule: true,
 	default: jest.fn(),
 } ) );
+jest.mock( '../../../../src/hooks/useCollectionRowsByIds', () => ( {
+	__esModule: true,
+	default: jest.fn(),
+} ) );
+
+// Make the debounce a no-op for the picker tests by default. We mock the
+// hook (not fake timers) so the Popover from @wordpress/components can keep
+// its real positioning effects, which jest-console would otherwise flag as
+// unwrapped act() updates.
+jest.mock( '../../../../src/hooks/useDebouncedValue', () => ( {
+	__esModule: true,
+	default: jest.fn( ( value ) => value ),
+} ) );
+
 const mockTouchRecent = jest.fn();
 jest.mock( '../../../../src/hooks/useRecents', () => ( {
 	useRecents: () => ( { touchRecent: mockTouchRecent } ),
@@ -13,28 +33,77 @@ jest.mock( '../../../../src/hooks/useRecents', () => ( {
 import apiFetch from '@wordpress/api-fetch';
 import RelationEditor from '../../../../src/components/relations/RelationEditor';
 import useCollectionRows from '../../../../src/hooks/useCollectionRows';
+import useCollectionRowsByIds from '../../../../src/hooks/useCollectionRowsByIds';
+import useDebouncedValue from '../../../../src/hooks/useDebouncedValue';
+
+function mockRowsResponse( overrides = {} ) {
+	useCollectionRows.mockReturnValue( {
+		data: [],
+		collection: null,
+		paginationInfo: { totalItems: 0, totalPages: 1 },
+		isLoading: false,
+		refresh: jest.fn(),
+		...overrides,
+	} );
+}
+
+async function flushPopoverEffects() {
+	// Popover schedules positioning work that finishes after the test's
+	// synchronous body. Flush it so the act() warning doesn't surface.
+	await act( async () => {} );
+}
 
 beforeEach( () => {
 	apiFetch.mockReset();
 	mockTouchRecent.mockReset();
-	useCollectionRows.mockReturnValue( {
-		data: [],
-		collection: null,
+	useDebouncedValue.mockImplementation( ( value ) => value );
+	mockRowsResponse();
+	useCollectionRowsByIds.mockReturnValue( {
+		rows: [],
 		isLoading: false,
-		refresh: jest.fn(),
+		error: null,
 	} );
 } );
 
 describe( 'RelationEditor', () => {
-	it( 'saves selected target row ids from the relation picker', async () => {
-		useCollectionRows.mockReturnValue( {
+	it( 'queries the rows endpoint in server mode (no forceClient)', async () => {
+		mockRowsResponse( {
+			data: [ { id: 22, title: { raw: 'Ada Lovelace' } } ],
+			collection: { title: { raw: 'People' } },
+		} );
+
+		render(
+			<RelationEditor
+				value={ [] }
+				relation={ { targetCollectionId: 9, multiple: true } }
+				onSave={ jest.fn() }
+				onCancel={ jest.fn() }
+				label="Assignee"
+			/>
+		);
+
+		expect( useCollectionRows ).toHaveBeenCalled();
+		const lastCall = useCollectionRows.mock.calls.at( -1 );
+		// Args: (collectionId, view, fields). No options arg => server mode.
+		expect( lastCall[ 0 ] ).toBe( 9 );
+		expect( lastCall[ 1 ] ).toEqual(
+			expect.objectContaining( {
+				type: 'table',
+				page: 1,
+				search: '',
+				perPage: 25,
+			} )
+		);
+		expect( lastCall[ 3 ] ).toBeUndefined();
+		await flushPopoverEffects();
+	} );
+
+	it( 'saves the selected target row id when a row is clicked', async () => {
+		mockRowsResponse( {
 			data: [
 				{ id: 22, title: { raw: 'Ada Lovelace' } },
 				{ id: 33, title: { raw: 'Grace Hopper' } },
 			],
-			collection: { title: { raw: 'People' } },
-			isLoading: false,
-			refresh: jest.fn(),
 		} );
 		const onSave = jest.fn().mockResolvedValue( true );
 
@@ -48,30 +117,194 @@ describe( 'RelationEditor', () => {
 			/>
 		);
 
-		const option = screen.getByText( 'Ada Lovelace' );
-		const mouseDown = new window.MouseEvent( 'mousedown', {
-			bubbles: true,
-			cancelable: true,
-		} );
-		option.dispatchEvent( mouseDown );
-		expect( mouseDown.defaultPrevented ).toBe( true );
-		fireEvent.click( option );
+		fireEvent.click( screen.getByText( 'Ada Lovelace' ) );
 
 		await waitFor( () => expect( onSave ).toHaveBeenCalledWith( [ 22 ] ) );
-		expect( useCollectionRows ).toHaveBeenCalledWith(
-			9,
-			expect.objectContaining( { type: 'table' } ),
-			[],
-			{ forceClient: true }
+	} );
+
+	it( 'sends the search term to the server view', async () => {
+		render(
+			<RelationEditor
+				value={ [] }
+				relation={ { targetCollectionId: 9, multiple: true } }
+				onSave={ jest.fn() }
+				onCancel={ jest.fn() }
+				label="Assignee"
+			/>
 		);
+
+		fireEvent.change( screen.getByLabelText( 'Search rows' ), {
+			target: { value: 'abc' },
+		} );
+
+		const view = useCollectionRows.mock.calls.at( -1 )[ 1 ];
+		expect( view.search ).toBe( 'abc' );
+		// Page resets to 1 whenever the effective search changes.
+		expect( view.page ).toBe( 1 );
+		await flushPopoverEffects();
+	} );
+
+	it( 'does not fetch labels by id when the value already has titles', async () => {
+		render(
+			<RelationEditor
+				value={ [ { id: 22, title: { raw: 'Ada Lovelace' } } ] }
+				relation={ { targetCollectionId: 9, multiple: true } }
+				onSave={ jest.fn() }
+				onCancel={ jest.fn() }
+				label="Assignee"
+			/>
+		);
+
+		const lastCall = useCollectionRowsByIds.mock.calls.at( -1 );
+		expect( lastCall[ 0 ] ).toBe( 9 );
+		expect( lastCall[ 1 ] ).toEqual( [] );
+		await flushPopoverEffects();
+	} );
+
+	it( 'fetches labels by id when the value carries only ids', async () => {
+		render(
+			<RelationEditor
+				value={ [ { id: 22 }, { id: 33 } ] }
+				relation={ { targetCollectionId: 9, multiple: true } }
+				onSave={ jest.fn() }
+				onCancel={ jest.fn() }
+				label="Assignee"
+			/>
+		);
+
+		const lastCall = useCollectionRowsByIds.mock.calls.at( -1 );
+		expect( lastCall[ 0 ] ).toBe( 9 );
+		expect( lastCall[ 1 ] ).toEqual( [ 22, 33 ] );
+		await flushPopoverEffects();
+	} );
+
+	it( 'shows resolved labels for selected ids returned by the by-id hook', async () => {
+		useCollectionRowsByIds.mockReturnValue( {
+			rows: [ { id: 22, title: { raw: 'Ada Lovelace' } } ],
+			isLoading: false,
+			error: null,
+		} );
+
+		render(
+			<RelationEditor
+				value={ [ { id: 22 } ] }
+				relation={ { targetCollectionId: 9, multiple: true } }
+				onSave={ jest.fn() }
+				onCancel={ jest.fn() }
+				label="Assignee"
+			/>
+		);
+
+		// At least one pill renders the resolved title rather than the
+		// `#22` fallback.
+		expect( screen.getAllByText( 'Ada Lovelace' ).length ).toBeGreaterThan(
+			0
+		);
+		await flushPopoverEffects();
+	} );
+
+	it( 'hides "Create row" while the debounced search has not caught up', async () => {
+		// Pin debounced output to '' so search ('New Row') !== debouncedSearch.
+		useDebouncedValue.mockImplementation( () => '' );
+
+		render(
+			<RelationEditor
+				value={ [] }
+				relation={ { targetCollectionId: 9, multiple: true } }
+				onSave={ jest.fn() }
+				onCancel={ jest.fn() }
+				label="Assignee"
+			/>
+		);
+
+		fireEvent.change( screen.getByLabelText( 'Search rows' ), {
+			target: { value: 'New Row' },
+		} );
+
+		expect(
+			screen.queryByRole( 'button', { name: 'Create row "New Row"' } )
+		).toBeNull();
+		await flushPopoverEffects();
+	} );
+
+	it( 'hides "Create row" when an exact-title match exists in results', async () => {
+		mockRowsResponse( {
+			data: [ { id: 5, title: { raw: 'Exact Match' } } ],
+		} );
+
+		render(
+			<RelationEditor
+				value={ [] }
+				relation={ { targetCollectionId: 9, multiple: true } }
+				onSave={ jest.fn() }
+				onCancel={ jest.fn() }
+				label="Assignee"
+			/>
+		);
+
+		fireEvent.change( screen.getByLabelText( 'Search rows' ), {
+			target: { value: 'Exact Match' },
+		} );
+
+		expect(
+			screen.queryByRole( 'button', { name: 'Create row "Exact Match"' } )
+		).toBeNull();
+		await flushPopoverEffects();
+	} );
+
+	it( 'preserves accumulated rows while a new fetch is in flight', async () => {
+		mockRowsResponse( {
+			data: [
+				{ id: 1, title: { raw: 'Alpha' } },
+				{ id: 2, title: { raw: 'Beta' } },
+			],
+			paginationInfo: { totalItems: 2, totalPages: 1 },
+			isLoading: false,
+		} );
+
+		const { rerender } = render(
+			<RelationEditor
+				value={ [] }
+				relation={ { targetCollectionId: 9, multiple: true } }
+				onSave={ jest.fn() }
+				onCancel={ jest.fn() }
+				label="Assignee"
+			/>
+		);
+
+		expect( screen.getByText( 'Alpha' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Beta' ) ).toBeInTheDocument();
+
+		// Simulate the transient state during a search change: a fetch is in
+		// flight and useCollectionRows is still returning its prior data plus
+		// isLoading=true. The accumulate effect must not collapse the visible
+		// list to whatever stale data is in flight.
+		mockRowsResponse( {
+			data: [ { id: 99, title: { raw: 'Stale' } } ],
+			paginationInfo: { totalItems: 1, totalPages: 1 },
+			isLoading: true,
+		} );
+
+		rerender(
+			<RelationEditor
+				value={ [] }
+				relation={ { targetCollectionId: 9, multiple: true } }
+				onSave={ jest.fn() }
+				onCancel={ jest.fn() }
+				label="Assignee"
+			/>
+		);
+
+		expect( screen.getByText( 'Alpha' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Beta' ) ).toBeInTheDocument();
+		expect( screen.queryByText( 'Stale' ) ).toBeNull();
+		await flushPopoverEffects();
 	} );
 
 	it( 'creates a missing target row from the relation picker', async () => {
 		const refreshTargetRows = jest.fn();
-		useCollectionRows.mockReturnValue( {
-			data: [],
+		mockRowsResponse( {
 			collection: { title: { raw: 'People' } },
-			isLoading: false,
 			refresh: refreshTargetRows,
 		} );
 		apiFetch.mockResolvedValue( { id: 44, title: { raw: 'New Ada' } } );
@@ -90,6 +323,7 @@ describe( 'RelationEditor', () => {
 		fireEvent.change( screen.getByLabelText( 'Search rows' ), {
 			target: { value: 'New Ada' },
 		} );
+
 		fireEvent.click(
 			screen.getByRole( 'button', { name: 'Create row "New Ada"' } )
 		);
@@ -108,5 +342,6 @@ describe( 'RelationEditor', () => {
 			collectionId: 9,
 		} );
 		expect( refreshTargetRows ).toHaveBeenCalled();
+		await flushPopoverEffects();
 	} );
 } );
