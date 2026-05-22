@@ -7,6 +7,7 @@
 import { useDispatch, useSelect } from '@wordpress/data';
 import { EditorProvider, store as editorStore } from '@wordpress/editor';
 import { useCallback, useEffect, useMemo, useRef } from '@wordpress/element';
+import { SlotFillProvider } from '@wordpress/components';
 
 import useAutosave from '../hooks/useAutosave';
 // Registers core + Cortext blocks before any editor renders. Living here
@@ -15,6 +16,7 @@ import useAutosave from '../hooks/useAutosave';
 // bundle. The module is idempotent, so Canvas's copy of this import is
 // a no-op when RowEditor mounts second, or vice versa.
 import './initEditor';
+import { EditorSurfaceProvider } from './EditorSurfaceContext';
 import EditorBody from './EditorBody';
 import RowProperties from './RowProperties';
 import { titleFromRow } from './rowDetailUtils';
@@ -198,25 +200,31 @@ export default function RowEditor( {
 			settings={ window.cortextEditorSettings ?? {} }
 			useSubRegistry
 		>
-			<DetailReadySignal
-				detailKey={ detailKey }
-				onReady={ onPaneReady }
-			/>
-			<DetailPaneContent
-				collectionId={ collectionId }
-				fields={ fields }
-				isActive={ isActive }
-				isHidden={ isHidden }
-				isTitleActive={ isTitleActive }
-				onApi={ onApi }
-				onRestored={ onRestored }
-				onSaved={ onSaved }
-				onTitle={ onTitle }
-				postType={ postType }
-				propertiesVisible={ propertiesVisible }
-				row={ row }
-				rowId={ rowId }
-			/>
+			{ /* tech-debt.md#57: row detail owns these SlotFills while
+			     peek/modal are open. */ }
+			<SlotFillProvider>
+				<EditorSurfaceProvider hasBlockInspector={ false }>
+					<DetailReadySignal
+						detailKey={ detailKey }
+						onReady={ onPaneReady }
+					/>
+					<DetailPaneContent
+						collectionId={ collectionId }
+						fields={ fields }
+						isActive={ isActive }
+						isHidden={ isHidden }
+						isTitleActive={ isTitleActive }
+						onApi={ onApi }
+						onRestored={ onRestored }
+						onSaved={ onSaved }
+						onTitle={ onTitle }
+						postType={ postType }
+						propertiesVisible={ propertiesVisible }
+						row={ row }
+						rowId={ rowId }
+					/>
+				</EditorSurfaceProvider>
+			</SlotFillProvider>
 		</EditorProvider>
 	);
 }
