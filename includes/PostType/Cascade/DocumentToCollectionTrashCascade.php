@@ -40,6 +40,18 @@ final class DocumentToCollectionTrashCascade extends BaseCascadeStrategy {
 		return post_type_supports( $post_type, 'cortext-document' );
 	}
 
+	/**
+	 * Inline collections trashed alongside the owner show up here. The engine
+	 * combines this with descendant pages from the hierarchy strategy so the
+	 * REST trash response can report the full cascade in one list.
+	 *
+	 * @param int $root_id Owner document id (a page or a row).
+	 * @return int[]
+	 */
+	public function descendants_for_root( int $root_id ): array {
+		return $this->trashed_child_ids_tagged_with( $root_id );
+	}
+
 	protected function active_child_ids( int $owner_id ): array {
 		$statuses = array( 'publish', 'private', 'draft', 'pending', 'future', 'auto-draft' );
 		return $this->dedupe_ids(
