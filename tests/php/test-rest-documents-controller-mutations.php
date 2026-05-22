@@ -281,6 +281,42 @@ final class Test_Rest_Documents_Controller_Mutations extends BaseTestCase {
 		$this->assertNull( get_post( $row_id ) );
 	}
 
+	public function test_trash_response_lists_cascade_deleted_pages_and_collections(): void {
+		// The sidebar uses this list to drop favorites without re-walking the
+		// page tree. Without it, the client carries that knowledge.
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$parent_id     = $this->create_page();
+		$child_id      = $this->create_page( array( 'post_parent' => $parent_id ) );
+		$grandchild_id = $this->create_page( array( 'post_parent' => $child_id ) );
+
+		$inline_collection_id = wp_insert_post(
+			array(
+				'post_type'   => Collection::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Inline owned by parent',
+				'meta_input'  => array(
+					Collection::MODE_META_KEY         => Collection::MODE_INLINE,
+					Collection::INLINE_OWNER_META_KEY => $parent_id,
+				),
+			)
+		);
+
+		$request = new WP_REST_Request( 'DELETE', '/wp/v2/crtxt_pages/' . $parent_id );
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertArrayHasKey( 'cascade_deleted', $data );
+		$this->assertContains( $child_id, $data['cascade_deleted']['pages'] );
+		$this->assertContains( $grandchild_id, $data['cascade_deleted']['pages'] );
+		$this->assertContains(
+			$inline_collection_id,
+			$data['cascade_deleted']['collections'],
+			'Inline collections owned by the trashed page belong in the cascade response.'
+		);
+	}
+
 	public function test_restores_a_trashed_full_page_collection(): void {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
 
