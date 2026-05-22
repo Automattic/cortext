@@ -106,6 +106,13 @@ export function filterFavoritesForTrashedPage(
 		if ( favorite.kind === 'collection' ) {
 			return ! trashedCollectionIds.has( Number( favorite.id ) );
 		}
+		if ( favorite.kind === 'row' ) {
+			// A trashed page may take owned collections with it. If this row
+			// belonged to one of them, remove its favorite too.
+			return ! trashedCollectionIds.has(
+				Number( favorite.collectionId )
+			);
+		}
 		return true;
 	} );
 }
@@ -115,8 +122,10 @@ export function filterFavoritesForTrashedCollection( favorites, collectionId ) {
 	return favorites.filter(
 		( favorite ) =>
 			! (
-				favorite.kind === 'collection' &&
-				Number( favorite.id ) === target
+				( favorite.kind === 'collection' &&
+					Number( favorite.id ) === target ) ||
+				( favorite.kind === 'row' &&
+					Number( favorite.collectionId ) === target )
 			)
 	);
 }
@@ -176,6 +185,23 @@ export function resolveFavoriteItems( favorites, pages, collections ) {
 					path: collection
 						? computeCollectionUri( collection )
 						: favorite.path,
+				};
+			}
+
+			if ( favorite.kind === 'row' ) {
+				// Rows come from the server, not the sidebar tree. Use the title
+				// and path already returned with the favorite.
+				if ( ! favorite.path ) {
+					return null;
+				}
+				const key = favoriteKey( favorite );
+				return {
+					...favorite,
+					id,
+					key,
+					sortableId: key,
+					title: favoriteTitle( favorite, __( 'Row', 'cortext' ) ),
+					path: favorite.path,
 				};
 			}
 
