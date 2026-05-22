@@ -5447,6 +5447,17 @@ body.cortext-hide-block-settings-menu .block-editor-block-switcher {
 	display: none;
 }
 
+// tech-debt.md#57: while row peek/modal owns the surface, keep the page
+// canvas toolbar out of sight so only row toolbar actions are reachable.
+body.cortext-hide-parent-block-toolbar
+.cortext-shell__canvas
+.cortext-workspace__pane[data-active="true"]
+.cortext-canvas.interface-interface-skeleton
+.cortext-canvas__block-canvas
+.block-editor-block-popover {
+	display: none;
+}
+
 .cortext-icon-library {
 	display: flex;
 	flex-direction: column;

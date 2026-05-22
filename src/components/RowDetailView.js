@@ -5,6 +5,7 @@ import {
 	Suspense,
 	useCallback,
 	useEffect,
+	useLayoutEffect,
 	useMemo,
 	useState,
 } from '@wordpress/element';
@@ -76,6 +77,7 @@ export const ROW_DETAIL_MODE_LABELS = {
 const ROW_DETAIL_MODAL_CLOSE_MS = 240;
 const ROW_DETAIL_SWITCH_MS = 180;
 const ROW_DETAIL_SWITCH_FALLBACK_MS = ROW_DETAIL_SWITCH_MS + 100;
+const HIDE_PARENT_BLOCK_TOOLBAR_CLASS = 'cortext-hide-parent-block-toolbar';
 
 function delay( duration ) {
 	return new Promise( ( resolve ) => {
@@ -383,6 +385,19 @@ export default function RowDetailView( {
 		if ( normalizedMode !== 'modal' ) {
 			setIsModalClosing( false );
 		}
+	}, [ normalizedMode ] );
+
+	useLayoutEffect( () => {
+		if ( normalizedMode !== 'side' && normalizedMode !== 'modal' ) {
+			return undefined;
+		}
+
+		// tech-debt.md#57: while row detail owns the surface, keep the
+		// still-selected page block toolbar out of sight.
+		document.body.classList.add( HIDE_PARENT_BLOCK_TOOLBAR_CLASS );
+		return () => {
+			document.body.classList.remove( HIDE_PARENT_BLOCK_TOOLBAR_CLASS );
+		};
 	}, [ normalizedMode ] );
 
 	const activeDetail =

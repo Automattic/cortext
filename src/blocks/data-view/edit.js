@@ -32,6 +32,7 @@ import { cog, plus, replace } from '@wordpress/icons';
 
 import CollectionDataViews from '../../components/CollectionDataViews';
 import AddFieldPopover from '../../components/fields/AddFieldPopover';
+import { useEditorSurface } from '../../components/EditorSurfaceContext';
 import { FULL_PAGE_COLLECTION_QUERY } from '../../collections';
 import { toDataViewId } from '../../hooks/fieldIds';
 import {
@@ -243,6 +244,7 @@ function CollectionToolbarControl( {
 	onFieldCreated,
 } ) {
 	const { collection, isResolving } = useCollectionFieldsContext();
+	const { hasBlockInspector } = useEditorSurface();
 	const { enableComplementaryArea } = useDispatch( interfaceStore );
 
 	const isCollectionValid = ! isResolving && collectionId && collection;
@@ -297,16 +299,20 @@ function CollectionToolbarControl( {
 					) }
 				/>
 			) }
-			<ToolbarButton
-				icon={ cog }
-				label={ __( 'View settings', 'cortext' ) }
-				onClick={ () =>
-					enableComplementaryArea(
-						'cortext',
-						'cortext/block-inspector'
-					)
-				}
-			/>
+			{ /* tech-debt.md#57: peek/modal hide the parent inspector
+			     entrypoint until there is a row-scoped one. */ }
+			{ hasBlockInspector ? (
+				<ToolbarButton
+					icon={ cog }
+					label={ __( 'View settings', 'cortext' ) }
+					onClick={ () =>
+						enableComplementaryArea(
+							'cortext',
+							'cortext/block-inspector'
+						)
+					}
+				/>
+			) : null }
 		</BlockControls>
 	);
 }
