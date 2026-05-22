@@ -2004,7 +2004,13 @@ test.describe( 'Collection view block', () => {
 			);
 			const delaySecondRow = async ( route ) => {
 				await page.waitForTimeout( 350 );
-				await route.continue();
+				try {
+					await route.continue();
+				} catch {
+					// Route may already be handled if the navigation moved on
+					// before the timeout elapsed. The assertions below verify
+					// what matters either way.
+				}
 			};
 			await page.route( delayedSecondRowPattern, delaySecondRow );
 			await detail.getByRole( 'button', { name: 'Row below' } ).click();
@@ -2036,15 +2042,25 @@ test.describe( 'Collection view block', () => {
 			const propertiesSlot = detailCanvas.locator(
 				'.cortext-document-properties'
 			);
-			await detail.getByRole( 'button', { name: 'Hide fields' } ).click();
+			// The properties block also exposes a Hide/Show fields toolbar
+			// button. Scope to the row-detail toolbar so the locator stays
+			// unambiguous regardless of editor selection.
+			const rowDetailToolbar = detail.getByRole( 'toolbar', {
+				name: 'Row detail tools',
+			} );
+			await rowDetailToolbar
+				.getByRole( 'button', { name: 'Hide fields' } )
+				.click();
 			await expect( detailTitle ).toBeVisible();
 			await expect( propertiesSlot ).toHaveClass(
 				/cortext-document-properties--collapsed/
 			);
 			await expect(
-				detail.getByRole( 'button', { name: 'Show fields' } )
+				rowDetailToolbar.getByRole( 'button', { name: 'Show fields' } )
 			).toBeVisible();
-			await detail.getByRole( 'button', { name: 'Show fields' } ).click();
+			await rowDetailToolbar
+				.getByRole( 'button', { name: 'Show fields' } )
+				.click();
 			await expect( propertiesSlot ).toBeVisible();
 			await expect( propertiesSlot ).not.toHaveClass(
 				/cortext-document-properties--collapsed/
