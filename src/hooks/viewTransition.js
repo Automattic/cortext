@@ -9,6 +9,8 @@ function prefersReducedMotion() {
 }
 
 let activeTransition = null;
+const HOLD_OLD_CANVAS_MODE = 'hold-old-canvas';
+const REVEAL_OLD_CANVAS_MODE = 'reveal-old-canvas';
 
 function setTransitionMode( mode ) {
 	const root = document.documentElement;
@@ -42,27 +44,41 @@ export function withViewTransition( updater, options = {} ) {
 	setTransitionMode( options.mode );
 	let tx;
 	let updaterResult;
+	let resolveUpdaterResult;
+	const updaterResultReady = new Promise( ( resolve ) => {
+		resolveUpdaterResult = resolve;
+	} );
 	try {
 		tx = document.startViewTransition( () => {
-			flushSync( () => {
-				updaterResult = updater();
-			} );
+			try {
+				flushSync( () => {
+					updaterResult = updater();
+				} );
+			} finally {
+				resolveUpdaterResult( updaterResult );
+			}
 		} );
 	} catch ( error ) {
 		setTransitionMode( null );
 		throw error;
 	}
 	activeTransition = tx;
-	if (
-		options.mode === 'hold-old-canvas' &&
-		updaterResult &&
-		typeof updaterResult.then === 'function'
-	) {
-		updaterResult
-			.catch( () => {} )
-			.finally( () => {
-				tx.skipTransition?.();
-			} );
+	if ( options.mode === HOLD_OLD_CANVAS_MODE ) {
+		// tech-debt.md#58: the View Transition callback can run after this
+		// function returns, so wait for the updater result before revealing.
+		const reveal = () => {
+			if ( activeTransition === tx ) {
+				setTransitionMode( REVEAL_OLD_CANVAS_MODE );
+			}
+		};
+		updaterResultReady
+			.then( ( result ) => {
+				if ( result && typeof result.then === 'function' ) {
+					return result.catch( () => {} );
+				}
+				return tx.ready.catch( () => {} );
+			} )
+			.finally( reveal );
 	}
 	tx.finished
 		.catch( () => {} )

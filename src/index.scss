@@ -1094,16 +1094,36 @@ body.cortext-sidebar-resizing {
 	}
 }
 
-// Page-to-page swaps rebuild the editor while the route stays on the same
-// pane. Keep the old snapshot above the new one so the frame never peeks
-// through.
-:root[data-cortext-view-transition="hold-old-canvas"]::view-transition-old(cortext-canvas) {
-	animation: cortext-hold-old-canvas 2500ms step-end both;
+@keyframes cortext-reveal-old-canvas {
+
+	from {
+		opacity: 1;
+	}
+
+	to {
+		opacity: 0;
+	}
+}
+
+// tech-debt.md#58: Page-to-page swaps rebuild the editor while the route
+// stays on the same pane. Keep the old snapshot above the new one until the
+// new editor has painted, then fade it away.
+:root[data-cortext-view-transition="hold-old-canvas"]::view-transition-old(cortext-canvas),
+:root[data-cortext-view-transition="reveal-old-canvas"]::view-transition-old(cortext-canvas) {
 	mix-blend-mode: normal;
 	z-index: 2;
 }
 
-:root[data-cortext-view-transition="hold-old-canvas"]::view-transition-new(cortext-canvas) {
+:root[data-cortext-view-transition="hold-old-canvas"]::view-transition-old(cortext-canvas) {
+	animation: cortext-hold-old-canvas 30s step-end both;
+}
+
+:root[data-cortext-view-transition="reveal-old-canvas"]::view-transition-old(cortext-canvas) {
+	animation: cortext-reveal-old-canvas 180ms ease-out both;
+}
+
+:root[data-cortext-view-transition="hold-old-canvas"]::view-transition-new(cortext-canvas),
+:root[data-cortext-view-transition="reveal-old-canvas"]::view-transition-new(cortext-canvas) {
 	animation: none;
 	mix-blend-mode: normal;
 	opacity: 1;
