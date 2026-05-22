@@ -1,0 +1,25 @@
+@use "@wordpress/base-styles/colors" as *;
+@use "@wordpress/base-styles/variables" as *;
+
+// Format MenuItem dresses up like a submenu trigger: chevron on the
+// right, no "ellipsis" suffix that suggests a modal.
+.cortext-column-header-actions__submenu-item {
+
+	.components-menu-item__item {
+		flex: 1 1 auto;
+	}
+}
+
+// Replaces the `isDestructive` red text we used to get from MenuItem.
+// The new Menu.Item from privateApis has no destructive variant, so
+// the visual signal for "Delete" has to be applied here. Ariakit
+// flips the row to the neutral active color above, which keeps the row
+// readable without leaking the destructive color into hover.
+.cortext-column-header-actions__destructive-item:not([data-active-item="true"]) {
+	color: var(--cortext-danger);
+}
+
+.cortext-column-header-actions {
+	display: inline-flex;
+	align-items: center;
+}

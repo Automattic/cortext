@@ -1,0 +1,164 @@
+@use "@wordpress/base-styles/colors" as *;
+@use "@wordpress/base-styles/variables" as *;
+
+// Shared loading placeholders; see src/components/Skeleton.js.
+.cortext-skeleton {
+	display: block;
+	background: var(--cortext-state-hover-strong, rgba(0, 0, 0, 0.09));
+	border-radius: 4px;
+	animation: cortext-skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+.cortext-skeleton--line {
+	height: 12px;
+}
+
+.cortext-skeleton-field {
+	display: grid;
+	grid-template-columns: minmax(96px, 140px) minmax(0, 1fr);
+	gap: $grid-unit-20;
+	align-items: center;
+}
+
+.cortext-skeleton-field__value {
+	max-width: 280px;
+	animation-delay: 0.2s;
+}
+
+// Sidebar list skeleton for Favorites, Trash, and similar lists. It uses the
+// real row height so the sidebar does not jump when items arrive.
+.cortext-sidebar-skeleton {
+	display: flex;
+	flex-direction: column;
+	padding: $grid-unit-10 0;
+
+	&__row {
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-10;
+		height: $grid-unit-40;
+		padding: 0 $grid-unit-15;
+	}
+
+	&__icon {
+		flex: 0 0 16px;
+		width: 16px;
+		height: 16px;
+		border-radius: 3px;
+	}
+
+	&__label {
+		flex: 1 1 0;
+		min-width: 0;
+	}
+}
+
+// tech-debt.md#55: table-shaped placeholder while useCollectionRows fetches.
+// It sits beside <DataViews>; the wrapper handles placement. Heights follow
+// the DataViews v6 density rules closely enough to keep the page steady.
+.cortext-collection-skeleton {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	padding: $grid-unit-10 0;
+
+	&__row {
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-30;
+		padding: 0 $grid-unit-20;
+		// The block-editor iframe does not inherit CSS variables scoped to
+		// .cortext-root. Keep fallbacks here so rows do not collapse to the
+		// 12px cell height in the block.
+		height: var(--cortext-data-view-row-height-balanced, #{$grid-unit-50 + 2 * $grid-unit-15});
+		border-bottom: $border-width solid var(--cortext-canvas-border, #e0e0e0);
+	}
+
+	&--compact &__row {
+		height: var(--cortext-data-view-row-height-compact, #{$grid-unit-50});
+	}
+
+	&--comfortable &__row {
+		height: var(--cortext-data-view-row-height-comfortable, #{$grid-unit-50 + 2 * $grid-unit-20});
+	}
+
+	&__cell {
+		flex: 1 1 0;
+		min-width: 0;
+		height: 12px;
+	}
+
+	&__cell--first {
+		flex: 0 0 28%;
+	}
+}
+
+// Thin sliding bar while the route and editor resolve. Lives here (not in
+// Canvas.scss) because CanvasProgressBar is exported from Skeleton.js and
+// can render while the lazy editor chunk is still loading; the bar must
+// be in the initial CSS bundle for that.
+.cortext-canvas-progress {
+	position: relative;
+	width: 100%;
+	height: 3px;
+	overflow: hidden;
+	background: transparent;
+	flex: 0 0 auto;
+
+	&::before {
+		content: "";
+		position: absolute;
+		top: 0;
+		left: -40%;
+		width: 40%;
+		height: 100%;
+		// Sits on the canvas frame, which goes dark with the shell.
+		// Accent-contrast keeps the bar visible against `#2a2a2a`; the
+		// override below applies inside `.cortext-root` so the cascade
+		// picks the right value automatically.
+		background: var(--cortext-accent);
+		border-radius: 2px;
+		animation: cortext-canvas-progress-slide 1.4s ease-in-out infinite;
+	}
+}
+
+.cortext-root[data-theme="dark"] .cortext-canvas-progress::before {
+	background: var(--cortext-accent-contrast);
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+	.cortext-skeleton {
+		animation: none;
+	}
+
+	.cortext-canvas-progress::before {
+		animation: none;
+		left: 0;
+		width: 100%;
+		opacity: 0.25;
+	}
+}
+
+@keyframes cortext-skeleton-pulse {
+
+	0%,
+	100% {
+		opacity: 1;
+	}
+
+	50% {
+		opacity: 0.55;
+	}
+}
+
+@keyframes cortext-canvas-progress-slide {
+
+	0% {
+		left: -40%;
+	}
+
+	100% {
+		left: 100%;
+	}
+}

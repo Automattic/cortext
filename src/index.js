@@ -1,7 +1,8 @@
 import { createRoot } from '@wordpress/element';
 
-import { router, RouterProvider } from './router';
 import './index.scss';
+
+import { router, RouterProvider } from './router';
 
 const root = document.getElementById( 'cortext-root' );
 if ( root ) {

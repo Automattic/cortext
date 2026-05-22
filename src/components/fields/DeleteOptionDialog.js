@@ -6,6 +6,8 @@ import {
 } from '@wordpress/components';
 import { useEffect, useMemo, useState } from '@wordpress/element';
 
+import './DeleteOptionDialog.scss';
+
 import { useOptionUsage } from '../../hooks/useFieldMutations';
 
 const ACTION_CLEAR = 'clear';

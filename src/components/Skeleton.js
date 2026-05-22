@@ -6,6 +6,8 @@
  * pulse that respects `prefers-reduced-motion`.
  */
 
+import './Skeleton.scss';
+
 function toLength( value ) {
 	if ( value === undefined || value === null ) {
 		return undefined;

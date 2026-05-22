@@ -21,6 +21,8 @@ import {
 	typography,
 } from '@wordpress/icons';
 
+import './AddFieldPopover.scss';
+
 import { COLLECTION_QUERY } from '../../collections';
 import { buildFieldListQuery } from '../../hooks/useCollectionFields';
 import { useCollectionFieldsContext } from '../CollectionFieldsContext';

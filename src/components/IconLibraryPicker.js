@@ -3,6 +3,8 @@ import * as icons from '@wordpress/icons';
 import { Button, SearchControl } from '@wordpress/components';
 import { useMemo, useState } from '@wordpress/element';
 
+import './IconLibraryPicker.scss';
+
 import { ICON_COLORS as NAMED_ICON_COLORS } from './iconColors';
 
 // Filter the package down to renderable icon components. `@wordpress/icons`

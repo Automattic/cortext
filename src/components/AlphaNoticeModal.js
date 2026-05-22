@@ -8,6 +8,8 @@ import { useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { Icon, backup, bug, comment } from '@wordpress/icons';
 
+import './AlphaNoticeModal.scss';
+
 const REPO_URL = 'https://github.com/Automattic/cortext';
 
 export default function AlphaNoticeModal( { onAcknowledge } ) {

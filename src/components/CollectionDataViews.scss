@@ -1,0 +1,1099 @@
+@use "@wordpress/base-styles/colors" as *;
+@use "@wordpress/base-styles/variables" as *;
+
+.cortext-collection-pane {
+	position: relative;
+	display: flex;
+	height: 100%;
+	min-height: 0;
+	background: var(--cortext-canvas-surface);
+}
+
+// Marker spans live inside DataViews' header trigger button. Zero-size
+// and aria-hidden so they never receive focus or contribute to the
+// column width; the portal layer in `ColumnHeaderActions` finds them by
+// their `data-cortext-*-marker` attribute and projects a sibling button
+// into the owning <th>.
+.cortext-column-header-marker {
+	display: inline-block;
+	width: 0;
+	height: 0;
+	overflow: hidden;
+}
+
+// DataViews ships a `table-layout: auto; width: 100%` table. Auto
+// layout sizes each column based on the content of every column, so
+// adding or deleting a field reflows every existing column. Switch
+// to fixed layout with content-width sizing and explicit per-cell
+// widths, so column count stops affecting the surviving columns'
+// widths and the table grows to its natural content width.
+// `.cortext-data-view > .dataviews-wrapper` declares `overflow: auto`
+// itself, so horizontal scroll kicks in once columns exceed the wrapper.
+.dataviews-view-table {
+	table-layout: fixed;
+	width: max-content;
+}
+
+.dataviews-view-table th,
+.dataviews-view-table td {
+	width: 200px;
+}
+
+// Keep the actions column only as wide as its kebab/`+` icon. Otherwise it
+// inherits the generic 200px cell width and pushes the last data column under
+// the sticky-right overlay. The `tr` keeps specificity tied with DataViews'
+// own `tr td:last-child` rule, which also sets `padding-right: 48px`.
+.dataviews-view-table tr th.dataviews-view-table__actions-column,
+.dataviews-view-table tr td.dataviews-view-table__actions-column {
+	box-sizing: border-box;
+	width: $grid-unit-50 + $grid-unit-05;
+	min-width: $grid-unit-50 + $grid-unit-05;
+	max-width: $grid-unit-50 + $grid-unit-05;
+	padding-right: 0;
+	padding-left: 0;
+}
+
+.dataviews-view-table th.dataviews-view-table__checkbox-column,
+.dataviews-view-table td.dataviews-view-table__checkbox-column,
+.dataviews-view-table td.cortext-table-calculations__selection-spacer {
+	width: 44px;
+	min-width: 44px;
+	max-width: 44px;
+}
+
+// Title carries the post name and tends to be longer than other
+// fields; give it more breathing room.
+.dataviews-view-table th.dataviews-view-table__checkbox-column + th,
+.dataviews-view-table td.dataviews-view-table__checkbox-column + td,
+.dataviews-view-table td.cortext-table-calculations__selection-spacer + td,
+.dataviews-view-table th:first-child:not(.dataviews-view-table__checkbox-column),
+.dataviews-view-table td:first-child:not(.dataviews-view-table__checkbox-column) {
+	width: 280px;
+}
+
+// WordPress admin can load DataViews 6.0.0 alongside our bundled version. The
+// older sheet declares `padding-left: 48px` on the first td/th and `width: 1%`
+// on utility cells. Scope our table chrome to Cortext so load order cannot
+// widen the checkbox/actions columns or push the title column right.
+.cortext-data-view .dataviews-view-table tr td:first-child,
+.cortext-data-view .dataviews-view-table tr th:first-child {
+	padding-left: 24px;
+	padding-inline-start: 24px;
+}
+
+.cortext-data-view
+.dataviews-view-table
+tr
+td.dataviews-view-table__checkbox-column,
+.cortext-data-view
+.dataviews-view-table
+tr
+th.dataviews-view-table__checkbox-column,
+.cortext-data-view
+.dataviews-view-table
+tr
+td.dataviews-view-table__actions-column,
+.cortext-data-view
+.dataviews-view-table
+tr
+td.cortext-table-calculations__selection-spacer {
+	box-sizing: border-box;
+	width: 44px;
+	min-width: 44px;
+	max-width: 44px;
+	padding-left: 0;
+	padding-right: 0;
+	padding-inline-start: 0;
+	padding-inline-end: 0;
+}
+
+.cortext-data-view
+.dataviews-view-table
+.dataviews-view-table__checkbox-column
+.dataviews-view-table__cell-content-wrapper {
+	justify-content: center;
+}
+
+.cortext-data-view
+.dataviews-view-table
+tr
+td.dataviews-view-table__checkbox-column,
+.cortext-data-view
+.dataviews-view-table
+tr
+th.dataviews-view-table__checkbox-column {
+	padding-left: 8px;
+	padding-inline-start: 8px;
+}
+
+.cortext-data-view .dataviews-view-table thead th.dataviews-view-table__checkbox-column > .dataviews-view-table-selection-checkbox {
+	margin-left: 10px;
+	margin-inline-start: 10px;
+}
+
+// The add-field button is portaled into DataViews' actions column header.
+// Hide the built-in "Actions" label; the row kebabs already explain the
+// column. The header cell needs its own sticky-right rule because the sticky
+// `<thead>` can otherwise break horizontal stickiness in some browsers.
+// `!important` matches DataViews' own tied-specificity sticky rule.
+.dataviews-view-table thead th.dataviews-view-table__actions-column {
+	position: sticky !important;
+	right: 0 !important;
+	z-index: 3;
+	background-color: #fff;
+
+	> .dataviews-view-table-header {
+		display: none;
+	}
+}
+
+// Custom field columns carry a marker that `ColumnHeaderActions`
+// portals our trigger into. We hide DataViews' built-in trigger on
+// those <th>s and replace it with a single combined dropdown (Sort /
+// Move / Hide / Rename / Duplicate / Delete). Title and system fields
+// don't have a marker, so their built-in triggers stay visible.
+// `tech-debt.md#16` covers the upstream gap that forces this takeover.
+.dataviews-view-table
+th:has(.cortext-column-header-marker)
+.dataviews-view-table-header-button:not(.cortext-column-header-trigger) {
+	display: none;
+}
+
+// `DataViewColumnInteractions` portals a transparent drag handle over
+// each <th> with `z-index: 1`, which intercepts pointer events and
+// keeps `.dataviews-view-table-header-button:hover` from ever firing.
+// Hang the hover state off the <th> instead so the cell as a whole
+// reads as a clickable affordance (and the gray shows through any
+// transparent overlay above it).
+.cortext-data-view .dataviews-view-table thead > tr > th:hover {
+	background-color: $gray-100;
+}
+
+// DataViews' :has(...) overrides only narrow the th padding-left on
+// non-first-child header cells (4px in default density, 0 in compact).
+// With `table-layout: auto` the column shrinks to match the th, but
+// our `table-layout: fixed` (above) sets the column to `max(th, td)`
+// of `width + padding`, so a td with full padding-left forces the
+// whole column wider than the th. Mirror the th's padding-left on the
+// tds so column widths follow the header.
+.cortext-data-view .dataviews-view-table tbody > tr > td:not(:first-child) {
+	padding-left: 4px;
+}
+
+.cortext-data-view
+.dataviews-view-table.has-compact-density
+tbody > tr > td:not(:first-child) {
+	padding-left: 0;
+}
+
+.cortext-rename-field-inline .components-base-control {
+	margin-bottom: 0;
+	min-width: 140px;
+}
+
+.cortext-collection-chooser {
+	display: grid;
+	gap: $grid-unit-05;
+	width: min(100%, 420px);
+}
+
+.cortext-collection-chooser__item.components-button {
+	justify-content: flex-start;
+	min-height: 36px;
+	overflow: hidden;
+	text-align: start;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	width: 100%;
+}
+
+// tech-debt.md#5: DataViews uses a real <table>. Cortext switches it to
+// `table-layout: fixed` for predictable resizing, but the display shell
+// still anchors cell layout while editors mount. To keep the column from
+// reflowing when an editor mounts, we always render the display shell and
+// overlay the editor on top via position: absolute.
+// Absolutely-positioned children don't contribute to their parent's
+// intrinsic size, so the table never sees the editor's wider min-content.
+// The shell's min-height is also pinned to 40px to match
+// __next40pxDefaultSize, so opening an editor doesn't bump row height.
+.cortext-editable-cell {
+	position: relative;
+	width: 100%;
+	min-width: 0;
+	box-sizing: border-box;
+
+	&__shell {
+		cursor: pointer;
+		// 40px matches the height of the editor controls
+		// (TextControl/NumberControl/SelectControl with __next40pxDefaultSize),
+		// so opening a cell doesn't bump the row height.
+		min-height: $grid-unit-50;
+		padding: $grid-unit-05;
+		border-radius: 2px;
+		display: flex;
+		flex-direction: column;
+		justify-content: center;
+		// `min-width: 0` lets the shell shrink below its content's intrinsic
+		// width inside the table's flex container, so narrow columns can
+		// truncate instead of forcing the column wider.
+		min-width: 0;
+		overflow: hidden;
+
+		&:hover,
+		&:focus-visible {
+			background: $gray-100;
+			outline: none;
+		}
+	}
+
+	// Wrap text content with an ellipsis when the column is narrower than
+	// the cell value. Chip/link displays carry their own truncation
+	// (`.cortext-chip` already sets text-overflow), so this rule only ever
+	// has to handle plain text content.
+	&__display {
+		display: block;
+		min-width: 0;
+		max-width: 100%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+
+		// Multiselect renders `.cortext-chips` (a wrap-enabled flex
+		// container). If it ever appears inside this display span, the
+		// `nowrap` above would
+		// keep the chips on a single line and let them overflow into the
+		// next column, so swap to normal wrapping when chips are present
+		// and let `flex-wrap` do its job.
+		&:has(> .cortext-chips) {
+			white-space: normal;
+		}
+	}
+
+	// Hide the shell visually while editing but keep its layout space, so
+	// the column width stays anchored to the display state.
+	&--editing &__shell {
+		visibility: hidden;
+	}
+
+	&__overlay {
+		position: absolute;
+		inset: 0;
+		z-index: 1;
+		// Transparent: editor controls (TextControl, NumberControl) bring
+		// their own background; the dropdown trigger Buttons should read
+		// as cell text against the row's natural background.
+		background: transparent;
+		display: flex;
+		flex-direction: column;
+		justify-content: center;
+
+		// Editor controls fill the overlay's width.
+		> * {
+			width: 100%;
+			min-width: 0;
+			max-width: 100%;
+		}
+
+		// Dropdown's internal wrapper isn't a direct child, so target it
+		// explicitly so select / date triggers don't snap to label width.
+		.components-dropdown {
+			width: 100%;
+		}
+	}
+
+	// Dropdown trigger buttons (select / date / multiselect pickers) read
+	// as cell values rather than tertiary links. Without the override
+	// they pick up the WordPress link styling (blue text, hover underline),
+	// which looks out of place inside the table.
+	.cortext-select-edit__toggle.components-button,
+	.cortext-date-edit__toggle.components-button,
+	.cortext-multiselect-edit__toggle.components-button,
+	.cortext-relation-edit__toggle.components-button {
+		width: 100%;
+		height: 100%;
+		justify-content: flex-start;
+		align-items: center;
+		padding-inline: $grid-unit-05;
+		overflow: hidden;
+		color: inherit;
+		font-weight: inherit;
+		text-decoration: none;
+		background: transparent;
+		box-shadow: none;
+
+		&:hover:not(:disabled),
+		&:focus:not(:disabled) {
+			color: inherit;
+			background: transparent;
+			box-shadow: none;
+			text-decoration: none;
+		}
+	}
+
+	&__error {
+		color: var(--cortext-danger);
+		font-size: 12px;
+		margin-top: $grid-unit-05;
+	}
+}
+
+.cortext-title-cell {
+	// Fill the td so the cell's selection / hover background paints the
+	// whole column slot, even when another cell stretches the row.
+	display: flex;
+	align-items: center;
+	width: 100%;
+	height: 100%;
+	min-width: 0;
+	max-width: 100%;
+	border-radius: 2px;
+	box-sizing: border-box;
+
+	&__icon {
+		display: inline-flex;
+		flex: 0 0 auto;
+		line-height: 0;
+	}
+
+	&--with-open-action {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		align-items: center;
+		gap: $grid-unit-05;
+		padding-inline-end: $grid-unit-10;
+
+		.cortext-editable-cell {
+			min-width: 0;
+			max-width: 100%;
+		}
+
+		// When the row has a document icon, slot it before the editable
+		// cell so the leading column shows: icon, title, open-button.
+		&:has(.cortext-title-cell__icon) {
+			grid-template-columns: auto minmax(0, 1fr) auto;
+		}
+	}
+
+	&__open.components-button {
+		justify-self: end;
+		width: auto;
+		min-width: 0;
+		height: 28px;
+		min-height: 28px;
+		padding: 0 $grid-unit-10;
+		border: $border-width solid transparent;
+		color: $gray-700;
+		font-size: 12px;
+		line-height: 1;
+		box-sizing: border-box;
+		opacity: 0;
+		pointer-events: none;
+
+		&:hover,
+		&:focus-visible {
+			border-color: $gray-300;
+			color: $gray-900;
+		}
+	}
+}
+
+.cortext-title-cell:focus-within,
+.cortext-title-cell--with-open-action:hover {
+	background: $gray-100;
+}
+
+.cortext-title-cell:focus-within .cortext-title-cell__open.components-button,
+.cortext-data-view
+.dataviews-view-table
+tbody
+tr:hover
+.cortext-title-cell__open.components-button,
+.cortext-data-view
+.dataviews-view-table
+tbody
+tr:has(.cortext-title-cell--is-open)
+.cortext-title-cell__open.components-button,
+.cortext-data-view
+.dataviews-view-table
+tbody
+tr:has(.cortext-title-cell--is-opening)
+.cortext-title-cell__open.components-button {
+	opacity: 1;
+	pointer-events: auto;
+}
+
+.cortext-data-view
+.dataviews-view-table
+tbody
+tr:has(.cortext-title-cell--is-open),
+.cortext-data-view
+.dataviews-view-table
+tbody
+tr:has(.cortext-title-cell--is-open)
+.dataviews-view-table__actions-column--sticky,
+.cortext-data-view
+.dataviews-view-table
+tbody
+tr:has(.cortext-title-cell--is-opening),
+.cortext-data-view
+.dataviews-view-table
+tbody
+tr:has(.cortext-title-cell--is-opening)
+.dataviews-view-table__actions-column--sticky {
+	background-color: #f8f8f8;
+	transition: background-color 80ms ease-out;
+}
+
+.cortext-cell-readonly {
+	color: $gray-700;
+}
+
+.cortext-cell-link {
+	display: inline-block;
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	vertical-align: middle;
+	color: var(--cortext-accent);
+	text-decoration: underline;
+	text-underline-offset: 2px;
+
+	&:hover,
+	&:focus {
+		text-decoration: none;
+	}
+}
+
+.cortext-relation-refs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: $grid-unit-05;
+	width: 100%;
+	min-width: 0;
+	max-width: 100%;
+	overflow: hidden;
+}
+
+.cortext-relation-ref,
+.cortext-relation-ref-more,
+.cortext-relation-edit__toggle-ref,
+.cortext-relation-edit__selected-pill {
+	display: inline-flex;
+	align-items: center;
+	max-width: 100%;
+	min-width: 0;
+	height: $grid-unit-30;
+	border-radius: $grid-unit-30;
+	background: $gray-100;
+	color: $gray-900;
+	font-size: $default-font-size;
+	line-height: 1;
+	white-space: nowrap;
+}
+
+.cortext-relation-ref,
+.cortext-relation-ref-more,
+.cortext-relation-edit__toggle-ref {
+	padding: 0 $grid-unit-10;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.cortext-relation-ref-more {
+	display: none;
+	flex: 0 0 auto;
+	color: $gray-700;
+}
+
+.cortext-relation-ref {
+	gap: $grid-unit-05;
+	text-decoration: none;
+
+	&:hover,
+	&:focus {
+		background: $gray-200;
+		box-shadow: none;
+		color: $gray-900;
+		outline: 0;
+		text-decoration: none;
+	}
+
+	&:focus-visible {
+		outline: 0;
+		box-shadow: inset 0 0 0 2px var(--cortext-accent);
+	}
+}
+
+.cortext-relation-ref__icon {
+	flex: 0 0 auto;
+	width: 14px;
+	height: 14px;
+	color: $gray-700;
+}
+
+.cortext-relation-ref__title {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.cortext-relation-edit-popover .components-popover__content {
+	padding: $grid-unit-05;
+}
+
+.cortext-relation-edit {
+	width: min(320px, calc(100vw - 32px));
+	max-height: min(380px, calc(100vh - 120px));
+	overflow: auto;
+
+	&__searchbar {
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-10;
+		padding: $grid-unit-05;
+	}
+
+	&__search {
+		flex: 1 1 auto;
+		min-width: 0;
+		height: $grid-unit-40;
+		padding: 0 $grid-unit-10;
+		border: $border-width solid $gray-200;
+		border-radius: 4px;
+		background: transparent;
+		font-size: 13px;
+		line-height: 20px;
+		width: 100%;
+
+		&:focus {
+			border-color: $gray-700;
+			box-shadow: none;
+			outline: 0;
+		}
+	}
+
+	&__section {
+		padding: $grid-unit-05;
+
+		& + & {
+			border-top: $border-width solid $gray-200;
+		}
+	}
+
+	&__section-label {
+		margin: $grid-unit-05 $grid-unit-05 $grid-unit-05;
+		color: $gray-700;
+		font-size: 11px;
+		font-weight: 600;
+		letter-spacing: 0.5px;
+		text-transform: uppercase;
+	}
+
+	&__selected-list {
+		display: flex;
+		flex-wrap: wrap;
+		gap: $grid-unit-05;
+		padding: 0 $grid-unit-05 $grid-unit-05;
+	}
+
+	&__selected-pill {
+		gap: $grid-unit-05;
+		padding: 0 $grid-unit-05 0 $grid-unit-10;
+	}
+
+	&__toggle-refs {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: $grid-unit-05;
+		width: 100%;
+		max-width: 100%;
+		min-width: 0;
+		overflow: hidden;
+	}
+
+	&__selected-title {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	&__row {
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-10;
+		width: 100%;
+		min-height: $grid-unit-40;
+		padding: $grid-unit-05 $grid-unit-10;
+		border: 0;
+		border-radius: 4px;
+		background: transparent;
+		color: $gray-900;
+		text-align: start;
+		cursor: pointer;
+
+		&:hover,
+		&:focus-visible {
+			background: $gray-100;
+		}
+
+		&:focus-visible {
+			outline: 2px solid var(--cortext-accent);
+			outline-offset: -1px;
+		}
+
+		&:disabled {
+			cursor: default;
+			opacity: 0.5;
+		}
+	}
+
+	&__row-icon {
+		flex: 0 0 auto;
+		color: $gray-700;
+	}
+
+	&__row-title {
+		flex: 1 1 auto;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-size: 13px;
+		font-weight: 400;
+	}
+
+	&__remove.components-button {
+		flex: 0 0 auto;
+		width: 22px;
+		min-width: 22px;
+		height: 22px;
+		padding: 0;
+		border: 0;
+		border-radius: $grid-unit-30;
+		background: transparent;
+		box-shadow: none;
+		color: $gray-700;
+
+		&:hover:not(:disabled),
+		&:focus:not(:disabled) {
+			background: $gray-200;
+			box-shadow: none;
+		}
+	}
+
+	&__loading {
+		display: flex;
+		justify-content: center;
+		padding: $grid-unit-15;
+	}
+
+	&__empty {
+		padding: $grid-unit-10;
+		color: $gray-700;
+		font-size: 13px;
+	}
+
+	&__error {
+		padding: $grid-unit-05 $grid-unit-10;
+		color: var(--cortext-danger);
+		font-size: 12px;
+	}
+}
+
+.cortext-cell-check {
+	color: $gray-900;
+}
+
+// "Show as" cell visuals for number fields. Bar/ring share a value
+// label so users can read the precise number alongside the visual; the
+// visual sizes itself to fit the column's intrinsic width without
+// reflowing other cells.
+.cortext-cell-bar {
+	display: inline-flex;
+	align-items: center;
+	gap: $grid-unit-10;
+	width: 100%;
+	color: var(--wp-admin-theme-color, $gray-900);
+
+	&__track {
+		flex: 1 1 auto;
+		min-width: 40px;
+		max-width: 120px;
+		height: 6px;
+		border-radius: 999px;
+		background: $gray-200;
+		overflow: hidden;
+	}
+
+	&__fill {
+		display: block;
+		height: 100%;
+		background: currentcolor;
+	}
+
+	&__label {
+		flex: 0 0 auto;
+		color: $gray-900;
+		font-variant-numeric: tabular-nums;
+	}
+}
+
+.cortext-cell-ring {
+	display: inline-flex;
+	align-items: center;
+	gap: $grid-unit-10;
+	color: var(--wp-admin-theme-color, $gray-900);
+
+	&__svg {
+		width: 18px;
+		height: 18px;
+		flex: 0 0 auto;
+	}
+
+	&__track {
+		stroke: $gray-200;
+	}
+
+	&__fill {
+		stroke: currentcolor;
+	}
+
+	&__label {
+		color: $gray-900;
+		font-variant-numeric: tabular-nums;
+	}
+}
+
+// Checkbox cells skip the shell/overlay dance because the input is
+// always rendered (no display vs editor distinction). Keep the same row
+// height as editable cells for visual consistency.
+.cortext-cell-checkbox {
+	min-height: $grid-unit-50;
+	padding-block: $grid-unit-05;
+	padding-inline: 0;
+	border-radius: 2px;
+	width: 100%;
+	box-sizing: border-box;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+// In compact density we zero the cell's `padding-left` (so columns hug their
+// content) but keep upstream's `padding-right: 8px`. The offset doesn't show
+// for left-aligned content, but a centered checkbox in a narrow column ends
+// up visibly shifted. Symmetric inline padding on body cells that hold a
+// checkbox puts the centered input back over the cell's geometric center.
+/* stylelint-disable-next-line no-descending-specificity */
+.cortext-data-view .dataviews-view-table tbody td:has(.cortext-cell-checkbox) {
+	padding-inline: 0;
+}
+
+.cortext-multiselect-edit {
+
+	&__popover {
+		display: grid;
+		gap: $grid-unit-10;
+		padding: $grid-unit-15;
+		min-width: 280px;
+	}
+}
+
+.cortext-select-edit__placeholder {
+	color: $gray-700;
+}
+
+.cortext-data-view-shell {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	min-height: 0;
+	background: $white;
+	// The shell paints a light surface even in dark mode, so the dark-theme
+	// scrollbar thumb (near-white, set on `.cortext-root[data-theme="dark"]`)
+	// disappears against it. Pin the scrollbar tokens to their light values
+	// here so the horizontal scrollbar on wide tables is visible.
+	--cortext-scrollbar-thumb: rgba(0, 0, 0, 0.12);
+	--cortext-scrollbar-thumb-hover: rgba(0, 0, 0, 0.28);
+
+	> .cortext-data-view {
+		flex: 1 1 auto;
+		min-width: 0;
+		min-height: 0;
+	}
+}
+
+/* stylelint-disable-next-line no-descending-specificity */
+.cortext-data-view {
+	position: relative; // anchor for the column drop indicator
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	min-width: 0;
+
+	// tech-debt.md#55: cover the table area while the shell loads, so search,
+	// filters, header, and rows appear together instead of in two beats.
+	&__rows-skeleton {
+		position: absolute;
+		inset: 0;
+		z-index: 1;
+		overflow: hidden;
+		background: var(--cortext-canvas-surface, #fff);
+		pointer-events: none;
+	}
+
+	// During the shell load, hold the area at skeleton height so blocks below
+	// do not jump when chrome and rows appear. The matching wrapper/footer rule
+	// sits later to keep descending-specificity clean.
+	// `--cortext-data-view-loading-row-height` is set inline from
+	// `view.layout.density`, so balanced and comfortable tables reserve their
+	// real row height and the skeleton matches the incoming rows.
+	&[data-loading-shell="true"] {
+		min-height: calc(var(--cortext-data-view-loading-rows, 8) * var(--cortext-data-view-loading-row-height, var(--cortext-data-view-row-height-compact, 40px)));
+	}
+
+	// Let the wrapper grow to fill whatever height the parent provides, so
+	// our footer sits below the table instead of getting pushed off by the
+	// wrapper's own `height: 100%`. Parents own the height per-context: the
+	// canvas pane fills the viewport, the block sets a min-height.
+	> .dataviews-wrapper {
+		height: auto;
+		width: 100%;
+		flex: 1 1 0;
+		min-width: 0;
+		min-height: 0;
+		// Own the scroll layer instead of relying on DataViews's upstream
+		// default. Wide tables were not getting a horizontal scrollbar.
+		overflow: auto;
+	}
+
+	.dataviews__view-actions:has(.dataviews-filters__visibility-toggle[aria-expanded="false"]) + .dataviews-filters__container {
+		display: none;
+	}
+
+	// DataViews paints row height via td `padding-block` per density, but
+	// our shell's hover/edit background lives on the shell, so the gray
+	// floated inside the row instead of filling it. Zero the td's
+	// padding-block to make the shell own the row, then replicate
+	// DataViews's per-density row heights on the shell (and the checkbox
+	// cell, which shares the shell's dimensions). Headers (`<th>`) keep
+	// their padding so they still breathe. Balanced and comfortable mirror
+	// DataViews v6's td `padding-block` (12 and 16); compact is
+	// intentionally tighter than DataViews's default (4 -> 0) so the row
+	// matches the 40px editor floor and gets closer to a compact
+	// density. See tech-debt.md#5.
+	.dataviews-view-table {
+		table-layout: fixed;
+
+		/* stylelint-disable-next-line no-descending-specificity */
+		tr td {
+			overflow: hidden;
+			padding-block: 0;
+			vertical-align: middle;
+		}
+
+		// DataViews wraps each cell's render in a flex container that
+		// shrinks to the content's intrinsic width, so the hover/focus
+		// background on the editable shell only painted under the text
+		// instead of the whole cell. Force the wrapper to fill the td so
+		// every cell hovers edge-to-edge regardless of content length. The
+		// min/max reset also overrides DataViews's upstream 15ch floor, which
+		// otherwise lets narrow resized columns paint into their neighbors.
+		/* stylelint-disable-next-line no-descending-specificity */
+		tbody .dataviews-view-table__cell-content-wrapper {
+			box-sizing: border-box;
+			width: 100%;
+			min-width: 0;
+			max-width: 100%;
+			align-items: center;
+		}
+
+		tfoot.cortext-table-calculations {
+			/* stylelint-disable-next-line no-descending-specificity */
+			td {
+				padding: 0;
+				border-top: $border-width solid $gray-200;
+				border-bottom: 0;
+				background: $white;
+				color: $gray-700;
+				vertical-align: middle;
+			}
+
+			td.cortext-table-calculations__selection-spacer {
+				overflow: visible;
+			}
+
+			.cortext-table-calculations__bulk-actions {
+				position: relative;
+				z-index: 3;
+				width: max-content;
+				min-height: $grid-unit-40;
+				margin-right: 0;
+				padding-left: 18px;
+				padding-inline-start: 18px;
+				padding-right: $grid-unit-20;
+			}
+
+			.dataviews-bulk-actions-footer__item-count {
+				white-space: nowrap;
+			}
+		}
+
+		// When wrapped chips make one cell taller, neighboring editable
+		// shells keep their fixed density height. Paint the td hover/focus
+		// state too so the affordance covers the full row height.
+		tbody > tr > td:has(.cortext-editable-cell):hover,
+		tbody > tr > td:has(.cortext-editable-cell__shell:focus-visible) {
+			background: $gray-100;
+		}
+
+		// Repeat the fallbacks for the block-editor iframe, which does not
+		// inherit the .cortext-root tokens.
+		.cortext-editable-cell__shell,
+		.cortext-cell-checkbox {
+			min-height: var(--cortext-data-view-row-height-balanced, #{$grid-unit-50 + 2 * $grid-unit-15});
+		}
+
+		&.has-compact-density .cortext-editable-cell__shell,
+		&.has-compact-density .cortext-cell-checkbox {
+			min-height: var(--cortext-data-view-row-height-compact, #{$grid-unit-50});
+			padding-block: 0;
+		}
+
+		&.has-comfortable-density .cortext-editable-cell__shell,
+		&.has-comfortable-density .cortext-cell-checkbox {
+			min-height: var(--cortext-data-view-row-height-comfortable, #{$grid-unit-50 + 2 * $grid-unit-20});
+		}
+	}
+
+	&__footer {
+		flex: 0 0 auto;
+		padding: $grid-unit-05 $grid-unit-10;
+	}
+
+	&__new-row.components-button {
+		justify-content: flex-start;
+		width: 100%;
+		color: $gray-700;
+		text-decoration: none;
+
+		&:hover:not(:disabled) {
+			background: $gray-100;
+			color: $gray-900;
+		}
+	}
+
+	// Loading shell hides DataViews chrome and the new-row footer so the rows
+	// skeleton stands alone. Keep this after the wrapper/footer rules above to
+	// satisfy descending-specificity.
+	&[data-loading-shell="true"] > .dataviews-wrapper,
+	&[data-loading-shell="true"] > &__footer {
+		display: none;
+	}
+}
+
+// Per-context heights. The shared rules above stay context-agnostic; each
+// render path provides its own height.
+
+.cortext-canvas__table .cortext-data-view-shell,
+.cortext-canvas__table .cortext-data-view {
+	height: 100%;
+}
+
+// Embedded blocks do not have a fixed-height parent. With the shared
+// `height: 100%`, the shell collapses and the table disappears. In block
+// mode, let content set the height until #23 gives authors an explicit
+// per-instance viewport.
+.wp-block-cortext-data-view .cortext-data-view-shell {
+	height: auto;
+}
+
+// Full-page mode wants the wrapper to fill a fixed-height parent and scroll
+// internally; block mode wants the wrapper to take its content size so the
+// block grows with the table instead of clipping the footer. Override the
+// shared `flex: 1 1 0` only here.
+.wp-block-cortext-data-view .cortext-data-view > .dataviews-wrapper {
+	flex: 0 0 auto;
+}
+
+// DataViews keeps pagination sticky for fixed-height surfaces. Embedded blocks
+// grow with their content, and the sticky layer can cover Gutenberg's selected
+// block outline, so keep the footer in normal flow here.
+.wp-block-cortext-data-view .dataviews-footer {
+	background-color: transparent;
+	position: static;
+	z-index: auto;
+}
+
+.block-editor-block-list__layout
+.block-editor-block-list__block[data-type="cortext/data-view"].is-selected::after,
+.block-editor-block-list__layout
+.block-editor-block-list__block[data-type="cortext/data-view"]:focus::after {
+	z-index: 10;
+}
+
+// Embedded blocks are width-constrained by the editor canvas. Letting relation
+// chips wrap in offscreen columns makes the entire row taller, which makes the
+// visible columns feel padded and cramped. Keep relation cells to one line in
+// block mode; the full collection view can still wrap chips.
+.wp-block-cortext-data-view {
+
+	.cortext-relation-refs,
+	.cortext-relation-edit__toggle-refs {
+		flex-wrap: nowrap;
+	}
+
+	.cortext-relation-ref,
+	.cortext-relation-edit__toggle-ref {
+		flex: 0 0 auto;
+	}
+
+	.cortext-relation-ref:nth-of-type(n + 3) {
+		display: none;
+	}
+
+	.cortext-relation-ref-more {
+		display: inline-flex;
+	}
+}
+
+// tech-debt.md#15: The resizer and dnd-kit drag handle are portaled into each
+// `<th>` rendered by `@wordpress/dataviews`, so the th needs a position anchor.
+/* stylelint-disable-next-line no-descending-specificity */
+.cortext-data-view .dataviews-view-table thead > tr > th {
+	position: relative;
+	cursor: pointer;
+
+	// The library renders the column label as a button that fills the th
+	// and brings its own `cursor: pointer`. Inherit the th's pointer so
+	// the entire header (including the drag handle overlay) reads as
+	// clickable. The dropdown is the main affordance; drag still works
+	// via mousedown on the drag handle. The resizer's
+	// `cursor: col-resize` (below) wins at the right edge.
+	/* stylelint-disable-next-line no-descending-specificity */
+	.dataviews-view-table-header-button {
+		cursor: inherit;
+		max-width: 100%;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+
+		> * {
+			min-width: 0;
+		}
+
+		.cortext-column-header-label {
+			display: block;
+			min-width: 0;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+	}
+}

@@ -10,6 +10,8 @@ import { useDispatch } from '@wordpress/data';
 import { forwardRef, useMemo, useRef } from '@wordpress/element';
 import { check, chevronRight } from '@wordpress/icons';
 
+import './FieldFormatPopover.scss';
+
 import { useSubmenuPlacement } from '../../hooks/useSubmenuPlacement';
 import { useMappedField } from '../CollectionFieldsContext';
 import { FORMAT_COLORS, findFormatColor } from './formatColors';

@@ -1,0 +1,58 @@
+@use "@wordpress/base-styles/colors" as *;
+@use "@wordpress/base-styles/variables" as *;
+
+.cortext-option-menu__colors {
+	padding: $grid-unit-05 0;
+	border-top: 1px solid $gray-200;
+}
+
+.cortext-option-menu__colors-label {
+	font-size: 11px;
+	font-weight: 500;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+	color: $gray-700;
+	padding: $grid-unit-05 $grid-unit-10;
+}
+
+.cortext-option-menu__color-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.cortext-option-menu__color-item {
+	display: flex;
+	align-items: center;
+	gap: $grid-unit-10;
+	width: 100%;
+	padding: $grid-unit-05 $grid-unit-10;
+	border: 0;
+	background: transparent;
+	text-align: start;
+	font-size: 13px;
+	color: $gray-900;
+	cursor: pointer;
+
+	&:hover {
+		background: $gray-100;
+	}
+
+	&:focus-visible {
+		outline: 2px solid var(--cortext-accent, #3858e9);
+		outline-offset: -2px;
+	}
+}
+
+.cortext-option-menu__color-check {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 18px;
+	height: 18px;
+	flex: 0 0 auto;
+}
+
+.cortext-option-menu__color-label {
+	flex: 1 1 auto;
+}
