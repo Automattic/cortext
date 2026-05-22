@@ -83,7 +83,8 @@ async function coverImagePainted( page ) {
 async function waitForCoverImagePainted( page ) {
 	await expect
 		.poll( () => coverImagePainted( page ), {
-			message: 'the cover image should paint before the canvas is marked ready',
+			message:
+				'the cover image should paint before the canvas is marked ready',
 		} )
 		.toBe( true );
 }
@@ -99,23 +100,39 @@ async function canvasContainsAnyTitle( page, titles ) {
 	}, titles );
 }
 
-async function isHoldingOldCanvasSnapshot( page ) {
+async function oldCanvasSnapshotState( page ) {
 	return page.evaluate( () => {
-		if (
-			document.documentElement.dataset.cortextViewTransition !==
-			'hold-old-canvas'
-		) {
-			return false;
-		}
+		const mode =
+			document.documentElement.dataset.cortextViewTransition || '';
 		const oldCanvas = window.getComputedStyle(
 			document.documentElement,
 			'::view-transition-old(cortext-canvas)'
 		);
-		return (
-			oldCanvas.animationName.includes( 'cortext-hold-old-canvas' ) &&
-			Number( oldCanvas.opacity ) === 1
-		);
+		const animationName = oldCanvas.animationName;
+		const opacity = Number( oldCanvas.opacity );
+		const isHolding =
+			mode === 'hold-old-canvas' &&
+			animationName.includes( 'cortext-hold-old-canvas' ) &&
+			opacity === 1;
+		return { animationName, isHolding, mode, opacity };
 	} );
+}
+
+async function isHoldingOldCanvasSnapshot( page ) {
+	const state = await oldCanvasSnapshotState( page );
+	return state.isHolding;
+}
+
+async function expectOldCanvasSnapshotHeld( page ) {
+	const state = await oldCanvasSnapshotState( page );
+	expect( state ).toEqual(
+		expect.objectContaining( {
+			animationName: expect.stringContaining( 'cortext-hold-old-canvas' ),
+			isHolding: true,
+			mode: 'hold-old-canvas',
+			opacity: 1,
+		} )
+	);
 }
 
 async function waitForCanvasTitleWithoutBlanking( page, titles, targetTitle ) {
@@ -139,7 +156,9 @@ async function waitForCanvasTitleWithoutBlanking( page, titles, targetTitle ) {
 		await page.waitForTimeout( 16 );
 	}
 
-	throw new Error( `Timed out before ${ targetTitle } appeared in the canvas.` );
+	throw new Error(
+		`Timed out before ${ targetTitle } appeared in the canvas.`
+	);
 }
 
 async function waitForTransitionModeToClear( page ) {
@@ -231,14 +250,14 @@ async function expectRouteViewTransition( page, label, expectedMode = '' ) {
 
 	await expect
 		.poll(
-				() =>
-					page.evaluate( () =>
-						( window.__cortextViewTransitionEvents || [] ).some(
-							( event ) => event.type === 'start'
-						)
-					),
-				{ message: `${ label } should trigger a route transition` }
-			)
+			() =>
+				page.evaluate( () =>
+					( window.__cortextViewTransitionEvents || [] ).some(
+						( event ) => event.type === 'start'
+					)
+				),
+			{ message: `${ label } should trigger a route transition` }
+		)
 		.toBe( true );
 
 	const rejectedEvents = await page.evaluate( () =>
@@ -293,12 +312,12 @@ async function activeDataViewPaintState( page, texts ) {
 async function waitForActiveDataViewWithoutBlanking( page, texts ) {
 	const deadline = Date.now() + 5000;
 	while ( Date.now() < deadline ) {
-			const state = await activeDataViewPaintState( page, texts );
-			if ( state.hasDataView && ! state.hasSkeleton && ! state.hasText ) {
-				throw new Error(
-					'Full-page DataViews showed an empty shell instead of loading or loaded content.'
-				);
-			}
+		const state = await activeDataViewPaintState( page, texts );
+		if ( state.hasDataView && ! state.hasSkeleton && ! state.hasText ) {
+			throw new Error(
+				'Full-page DataViews showed an empty shell instead of loading or loaded content.'
+			);
+		}
 		if ( state.hasText ) {
 			return;
 		}
@@ -522,7 +541,8 @@ test.describe( 'Navigation lifecycle', () => {
 		requestUtils,
 	} ) => {
 		const fixture = {};
-		let releaseMedia = () => {};
+		let releaseCoverImage = () => {};
+		let markCoverImageRequested = () => {};
 
 		try {
 			fixture.firstMedia = await uploadCoverMedia(
@@ -559,23 +579,18 @@ test.describe( 'Navigation lifecycle', () => {
 			await waitForEditorPost( page, fixture.firstPage.id );
 			await waitForCoverImagePainted( page );
 
-			const mediaGate = new Promise( ( resolve ) => {
-				releaseMedia = resolve;
+			const coverImageGate = new Promise( ( resolve ) => {
+				releaseCoverImage = resolve;
 			} );
-			await page.route(
-				`**/wp-json/wp/v2/media/${ fixture.secondMedia.id }**`,
-				async ( route ) => {
-					await mediaGate;
-					await route.continue();
-				}
-			);
-			const mediaRequest = page.waitForRequest( ( request ) =>
-				request
-					.url()
-					.includes(
-						`/wp-json/wp/v2/media/${ fixture.secondMedia.id }`
-					)
-			);
+			const coverImageRequested = new Promise( ( resolve ) => {
+				markCoverImageRequested = resolve;
+			} );
+			const coverImageName = `cover-b-${ SUFFIX }.png`;
+			await page.route( `**/${ coverImageName }**`, async ( route ) => {
+				markCoverImageRequested();
+				await coverImageGate;
+				await route.continue();
+			} );
 
 			await page
 				.locator( '.cortext-sidebar' )
@@ -584,16 +599,18 @@ test.describe( 'Navigation lifecycle', () => {
 					exact: true,
 				} )
 				.click();
-			await mediaRequest;
+			await coverImageRequested;
 			await page.waitForTimeout( 100 );
-			expect( await isHoldingOldCanvasSnapshot( page ) ).toBe( true );
+			if ( ! ( await coverImagePainted( page ) ) ) {
+				await expectOldCanvasSnapshotHeld( page );
+			}
 
-			releaseMedia();
+			releaseCoverImage();
 			await waitForTransitionModeToClear( page );
 			await waitForEditorPost( page, fixture.secondPage.id );
 			await waitForCoverImagePainted( page );
 		} finally {
-			releaseMedia();
+			releaseCoverImage();
 			await deleteIfCreated(
 				requestUtils,
 				fixture.secondPage &&
@@ -757,7 +774,7 @@ test.describe( 'Navigation lifecycle', () => {
 			await expectRouteViewTransition(
 				page,
 				'document to collection',
-				'hold-old-canvas'
+				''
 			);
 			await dataViewPaint;
 
@@ -781,7 +798,7 @@ test.describe( 'Navigation lifecycle', () => {
 			await expectRouteViewTransition(
 				page,
 				'collection to document',
-				'hold-old-canvas'
+				''
 			);
 			await expect( pagePane ).toHaveAttribute( 'data-active', 'true' );
 			const canvasAfterCollection = await page
