@@ -366,8 +366,12 @@ final class DocumentsController {
 	 *
 	 * For speed, search in two stages:
 	 *
-	 * 1. Match the JSON fragment `"collectionId":%d` in post_content
-	 * 2. Run matching posts through `parse_blocks` to remove false positives
+	 * 1. Match `"collectionId":%d,` or `"collectionId":%d}` in post_content.
+	 *    This rules out prefix collisions (e.g. id 12 matching
+	 *    `"collectionId":123`).
+	 *
+	 * 2. Run matching posts through `parse_blocks` to remove any false
+	 *    positives (e.g. the fragment appearing inside a string value).
 	 *
 	 * @param WP_REST_Request $request Inbound request.
 	 */
@@ -376,7 +380,19 @@ final class DocumentsController {
 
 		global $wpdb;
 
-		$needle = '%' . $wpdb->esc_like( sprintf( '"collectionId":%d', $collection_id ) ) . '%';
+		$prefix       = sprintf( '"collectionId":%d', $collection_id );
+		$needle_comma = '%' . $wpdb->esc_like( $prefix . ',' ) . '%';
+		$needle_brace = '%' . $wpdb->esc_like( $prefix . '}' ) . '%';
+
+		// An arbitrarily high LIMIT on SELECT, just to be safe. We never
+		// expect it to be hit, because it would either mean that the same
+		// collection is embedded in way too many different pages (at which
+		// point it's irrelevant to the user whether we can list them all), or
+		// it would mean that there are impossibly many false positives (such
+		// as the string `"collectionId":123,` as plain text in post content).
+		//
+		// Let's not stress too much over this.
+		$limit = 200;
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$candidate_ids = $wpdb->get_col(
@@ -384,10 +400,12 @@ final class DocumentsController {
 				"SELECT ID FROM {$wpdb->posts}
 				WHERE post_type = %s
 					AND post_status = 'publish'
-					AND post_content LIKE %s
-				LIMIT 200",
+					AND ( post_content LIKE %s OR post_content LIKE %s )
+				LIMIT %d",
 				Page::POST_TYPE,
-				$needle
+				$needle_comma,
+				$needle_brace,
+				$limit
 			)
 		);
 
