@@ -51,19 +51,15 @@ final class RecentsController {
 					'callback'            => array( $this, 'touch_recent' ),
 					'permission_callback' => array( $this, 'can_read' ),
 					'args'                => array(
-						'kind'         => array(
+						'kind' => array(
 							'type'     => 'string',
 							'required' => true,
 							'enum'     => self::ALLOWED_KINDS,
 						),
-						'id'           => array(
+						'id'   => array(
 							'type'     => 'integer',
 							'required' => true,
 							'minimum'  => 1,
-						),
-						'collectionId' => array(
-							'type'    => 'integer',
-							'minimum' => 1,
 						),
 					),
 				),
@@ -85,13 +81,9 @@ final class RecentsController {
 	}
 
 	public function touch_recent( WP_REST_Request $request ): WP_REST_Response|WP_Error {
-		$id            = (int) $request->get_param( 'id' );
-		$collection_id = (int) $request->get_param( 'collectionId' );
+		$id = (int) $request->get_param( 'id' );
 
-		$target = $this->documents->format_target(
-			$id,
-			array( 'context_id' => $collection_id )
-		);
+		$target = $this->documents->format_target( $id );
 		if ( is_wp_error( $target ) ) {
 			return $target;
 		}
@@ -109,9 +101,6 @@ final class RecentsController {
 			'id'        => $target['id'],
 			'updatedAt' => gmdate( DATE_RFC3339 ),
 		);
-		if ( Documents::KIND_ROW === $target['kind'] ) {
-			$item['collectionId'] = $collection_id;
-		}
 
 		$items = array( $item );
 		$key   = $this->recent_key( $item );
@@ -147,10 +136,7 @@ final class RecentsController {
 		$valid    = array();
 
 		foreach ( $items as $item ) {
-			$target = $this->documents->format_target(
-				$item['id'],
-				array( 'context_id' => $item['collectionId'] ?? 0 )
-			);
+			$target = $this->documents->format_target( $item['id'] );
 			if ( is_wp_error( $target ) ) {
 				continue;
 			}
@@ -171,7 +157,7 @@ final class RecentsController {
 	 * Reads normalized stored recent items.
 	 *
 	 * @param int $user_id User ID.
-	 * @return array<int,array{kind:string,id:int,updatedAt:string,collectionId?:int}>
+	 * @return array<int,array{kind:string,id:int,updatedAt:string}>
 	 */
 	private function read_stored_items( int $user_id ): array {
 		$raw = get_user_meta( $user_id, self::META_KEY, true );
@@ -190,21 +176,13 @@ final class RecentsController {
 				continue;
 			}
 
-			$stored = array(
+			$items[] = array(
 				'kind'      => $kind,
 				'id'        => $id,
 				'updatedAt' => isset( $item['updatedAt'] ) && is_string( $item['updatedAt'] )
 					? $item['updatedAt']
 					: gmdate( DATE_RFC3339 ),
 			);
-			if ( Documents::KIND_ROW === $kind ) {
-				$collection_id = isset( $item['collectionId'] ) ? (int) $item['collectionId'] : 0;
-				if ( $collection_id < 1 ) {
-					continue;
-				}
-				$stored['collectionId'] = $collection_id;
-			}
-			$items[] = $stored;
 		}
 
 		return array_slice( $items, 0, self::MAX_ITEMS );
