@@ -1,11 +1,11 @@
 import { act, render, screen } from '@testing-library/react';
 
 import SidebarFavorites, {
-	favoriteKey,
 	filterFavoritesForTrashedPage,
 	moveFavorite,
 	resolveFavoriteItems,
 } from '../../../src/components/SidebarFavorites';
+import { favoriteKey } from '../../../src/documents';
 
 function renderFavorites( props = {} ) {
 	return render(

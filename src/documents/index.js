@@ -14,6 +14,7 @@ export {
 } from './hooks';
 export { documentTitle } from './title';
 export {
+	favoriteKey,
 	favoriteIdentForRecord,
 	favoriteKeyForRecord,
 	filterFavoritesByDeletedIds,

@@ -78,7 +78,7 @@ const cortextMarkIcon = (
 import { DndContext, DragOverlay, pointerWithin } from '@dnd-kit/core';
 
 import { openCommandPalette } from './CommandPalette';
-import SidebarFavorites, { favoriteKey } from './SidebarFavorites';
+import SidebarFavorites from './SidebarFavorites';
 import SidebarResizeHandle from './SidebarResizeHandle';
 import SidebarRecents from './SidebarRecents';
 import SidebarSection from './SidebarSection';
@@ -102,6 +102,7 @@ import { useWorkspaceHomePath } from '../hooks/useWorkspaceHomePath';
 import {
 	DocumentsProvider,
 	favoriteIdentForRecord,
+	favoriteKey,
 	favoriteKeyForRecord,
 	useDocumentSelection,
 	useFavoriteToggle,

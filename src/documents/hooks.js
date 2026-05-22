@@ -11,9 +11,12 @@ import { __ } from '@wordpress/i18n';
 
 import { useFavorites } from '../hooks/useFavorites';
 import { useRecents } from '../hooks/useRecents';
-import { favoriteKey } from '../components/SidebarFavorites';
 import { documentTitle } from './title';
-import { favoriteIdentForRecord, favoriteKeyForRecord } from './favorites';
+import {
+	favoriteKey,
+	favoriteIdentForRecord,
+	favoriteKeyForRecord,
+} from './favorites';
 import { iconForRecord } from './icons';
 import { kindFromRecord } from './kinds';
 import { getDescriptor } from './descriptors';
