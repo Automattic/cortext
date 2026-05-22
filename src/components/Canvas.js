@@ -138,9 +138,17 @@ function HideHeaderBlockKebab() {
 	return null;
 }
 
-function VisualCanvas( { isActive, postId, postType, onReady, onRestored } ) {
+function VisualCanvas( {
+	featuredMedia,
+	isActive,
+	postId,
+	postType,
+	onReady,
+	onRestored,
+} ) {
 	return (
 		<EditorBody
+			featuredMedia={ featuredMedia }
 			isActive={ isActive }
 			postId={ postId }
 			postType={ postType }
@@ -150,7 +158,7 @@ function VisualCanvas( { isActive, postId, postType, onReady, onRestored } ) {
 	);
 }
 
-const CANVAS_SWITCH_READY_TIMEOUT = 2500;
+const CANVAS_SWITCH_READY_TIMEOUT = 8000;
 
 function documentKey( postType, postId ) {
 	if ( ! postType || postId === null || postId === undefined ) {
@@ -297,9 +305,10 @@ function CanvasEditor( {
 							rowProperties
 						) }
 						<VisualCanvas
+							featuredMedia={ post.featured_media }
 							isActive={ isActive }
 							postId={ post.id }
-							postType={ postType }
+							postType={ post.type ?? postType }
 							onReady={ onDisplayedPost }
 							onRestored={ onRestored }
 						/>
@@ -387,36 +396,40 @@ export default function Canvas( {
 		[ onDisplayedPost ]
 	);
 
-	const switchDisplayedPost = useCallback( ( nextPost ) => {
-		const key = documentKey( nextPost?.type, nextPost?.id );
-		const readyPromise = new Promise( ( resolve ) => {
-			if ( ! key || typeof window === 'undefined' ) {
-				resolve();
-				return;
-			}
-
-			const existing = pendingDisplayResolversRef.current.get( key );
-			if ( existing ) {
-				window.clearTimeout( existing.timeoutId );
-				existing.resolve();
-			}
-
-			const pending = { resolve, timeoutId: null };
-			pending.timeoutId = window.setTimeout( () => {
-				if (
-					pendingDisplayResolversRef.current.get( key ) !== pending
-				) {
+	const switchDisplayedPost = useCallback(
+		( nextPost ) => {
+			const key = documentKey( nextPost?.type ?? postType, nextPost?.id );
+			const readyPromise = new Promise( ( resolve ) => {
+				if ( ! key || typeof window === 'undefined' ) {
+					resolve();
 					return;
 				}
-				pendingDisplayResolversRef.current.delete( key );
-				resolve();
-			}, CANVAS_SWITCH_READY_TIMEOUT );
-			pendingDisplayResolversRef.current.set( key, pending );
-		} );
 
-		setDisplayedPost( nextPost );
-		return readyPromise;
-	}, [] );
+				const existing = pendingDisplayResolversRef.current.get( key );
+				if ( existing ) {
+					window.clearTimeout( existing.timeoutId );
+					existing.resolve();
+				}
+
+				const pending = { resolve, timeoutId: null };
+				pending.timeoutId = window.setTimeout( () => {
+					if (
+						pendingDisplayResolversRef.current.get( key ) !==
+						pending
+					) {
+						return;
+					}
+					pendingDisplayResolversRef.current.delete( key );
+					resolve();
+				}, CANVAS_SWITCH_READY_TIMEOUT );
+				pendingDisplayResolversRef.current.set( key, pending );
+			} );
+
+			setDisplayedPost( nextPost );
+			return readyPromise;
+		},
+		[ postType ]
+	);
 
 	const pendingPost =
 		renderedPost &&
@@ -457,7 +470,7 @@ export default function Canvas( {
 			>
 				<CanvasEditor
 					post={ renderedPost }
-					postType={ renderedPost.type }
+					postType={ renderedPost.type ?? postType }
 					fields={ fields }
 					row={ row }
 					pendingPost={ pendingPost }
