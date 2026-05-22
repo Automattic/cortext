@@ -355,10 +355,11 @@ export default function Sidebar( {
 
 	const createRootCollection = useCallback( async () => {
 		const created = await apiFetch( {
-			path: '/cortext/v1/collections',
+			path: '/wp/v2/crtxt_collections',
 			method: 'POST',
 			data: {
 				title: __( 'Untitled', 'cortext' ),
+				status: 'private',
 				mode: 'full_page',
 			},
 		} );

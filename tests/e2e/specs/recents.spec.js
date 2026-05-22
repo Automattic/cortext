@@ -158,8 +158,12 @@ test.describe( 'Sidebar recents', () => {
 			} );
 			collection = await requestUtils.rest( {
 				method: 'POST',
-				path: '/cortext/v1/collections',
-				data: { title: collectionTitle },
+				path: '/wp/v2/crtxt_collections',
+				data: {
+					title: collectionTitle,
+					status: 'private',
+					mode: 'full_page',
+				},
 			} );
 
 			await admin.visitAdminPage(

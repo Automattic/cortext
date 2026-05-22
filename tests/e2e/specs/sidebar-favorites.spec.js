@@ -161,8 +161,12 @@ test.describe( 'Sidebar favorites', () => {
 			} );
 			collection = await requestUtils.rest( {
 				method: 'POST',
-				path: '/cortext/v1/collections',
-				data: { title: COLLECTION_TITLE },
+				path: '/wp/v2/crtxt_collections',
+				data: {
+					title: COLLECTION_TITLE,
+					status: 'private',
+					mode: 'full_page',
+				},
 			} );
 			await requestUtils.rest( {
 				method: 'PUT',
