@@ -144,9 +144,11 @@ final class Test_Rest_Recents_Controller extends BaseTestCase {
 				'post_title'  => 'Regular post',
 			)
 		);
+		$this->create_collection( 'people', 'People' );
+		$row_id = $this->create_row( 'crtxt_people', 'Ada Lovelace' );
 
 		$invalid_type           = $this->touch_recent( 'page', $post_id );
-		$row_missing_collection = $this->touch_recent( 'row', 999 );
+		$row_missing_collection = $this->touch_recent( 'row', $row_id );
 
 		$owner_id = $this->create_user( 'administrator' );
 		wp_set_current_user( $owner_id );
@@ -162,6 +164,10 @@ final class Test_Rest_Recents_Controller extends BaseTestCase {
 
 		$this->assertSame( 404, $invalid_type->get_status() );
 		$this->assertSame( 400, $row_missing_collection->get_status() );
+		$this->assertSame(
+			'cortext_document_target_invalid',
+			$row_missing_collection->get_data()['code']
+		);
 		$this->assertSame( 403, $forbidden->get_status() );
 	}
 
@@ -223,7 +229,7 @@ final class Test_Rest_Recents_Controller extends BaseTestCase {
 
 		$this->assertSame( 400, $response->get_status() );
 		$this->assertSame(
-			'cortext_recents_inline_collection',
+			'cortext_document_target_inline_collection',
 			$response->get_data()['code']
 		);
 	}

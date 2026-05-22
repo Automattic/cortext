@@ -10,11 +10,7 @@ declare( strict_types=1 );
 namespace Cortext\Rest;
 
 use Cortext\Documents;
-use Cortext\PostType\Collection;
-use Cortext\PostType\CollectionEntries;
-use Cortext\PostType\Page;
 use WP_Error;
-use WP_Post;
 use WP_REST_Request;
 use WP_REST_Response;
 
@@ -23,6 +19,12 @@ final class RecentsController {
 	private const NAMESPACE = 'cortext/v1';
 	private const META_KEY  = 'cortext_recents';
 	private const MAX_ITEMS = 5;
+
+	private const ALLOWED_KINDS = array(
+		Documents::KIND_PAGE,
+		Documents::KIND_COLLECTION,
+		Documents::KIND_ROW,
+	);
 
 	private Documents $documents;
 
@@ -52,7 +54,7 @@ final class RecentsController {
 						'kind'         => array(
 							'type'     => 'string',
 							'required' => true,
-							'enum'     => array( 'page', 'collection', 'row' ),
+							'enum'     => self::ALLOWED_KINDS,
 						),
 						'id'           => array(
 							'type'     => 'integer',
@@ -83,21 +85,31 @@ final class RecentsController {
 	}
 
 	public function touch_recent( WP_REST_Request $request ): WP_REST_Response|WP_Error {
-		$kind          = (string) $request->get_param( 'kind' );
 		$id            = (int) $request->get_param( 'id' );
 		$collection_id = (int) $request->get_param( 'collectionId' );
 
-		$target = $this->format_target( $kind, $id, $collection_id );
+		$target = $this->documents->format_target(
+			$id,
+			array( 'context_id' => $collection_id )
+		);
 		if ( is_wp_error( $target ) ) {
 			return $target;
 		}
 
+		if ( ! in_array( $target['kind'], self::ALLOWED_KINDS, true ) ) {
+			return new WP_Error(
+				'cortext_document_target_not_found',
+				__( 'Target document was not found.', 'cortext' ),
+				array( 'status' => 404 )
+			);
+		}
+
 		$item = array(
-			'kind'      => $kind,
-			'id'        => $id,
+			'kind'      => $target['kind'],
+			'id'        => $target['id'],
 			'updatedAt' => gmdate( DATE_RFC3339 ),
 		);
-		if ( 'row' === $kind ) {
+		if ( Documents::KIND_ROW === $target['kind'] ) {
 			$item['collectionId'] = $collection_id;
 		}
 
@@ -135,10 +147,9 @@ final class RecentsController {
 		$valid    = array();
 
 		foreach ( $items as $item ) {
-			$target = $this->format_target(
-				$item['kind'],
+			$target = $this->documents->format_target(
 				$item['id'],
-				$item['collectionId'] ?? 0
+				array( 'context_id' => $item['collectionId'] ?? 0 )
 			);
 			if ( is_wp_error( $target ) ) {
 				continue;
@@ -175,7 +186,7 @@ final class RecentsController {
 			}
 			$kind = isset( $item['kind'] ) ? (string) $item['kind'] : '';
 			$id   = isset( $item['id'] ) ? (int) $item['id'] : 0;
-			if ( ! in_array( $kind, array( 'page', 'collection', 'row' ), true ) || $id < 1 ) {
+			if ( ! in_array( $kind, self::ALLOWED_KINDS, true ) || $id < 1 ) {
 				continue;
 			}
 
@@ -186,7 +197,7 @@ final class RecentsController {
 					? $item['updatedAt']
 					: gmdate( DATE_RFC3339 ),
 			);
-			if ( 'row' === $kind ) {
+			if ( Documents::KIND_ROW === $kind ) {
 				$collection_id = isset( $item['collectionId'] ) ? (int) $item['collectionId'] : 0;
 				if ( $collection_id < 1 ) {
 					continue;
@@ -200,158 +211,13 @@ final class RecentsController {
 	}
 
 	/**
-	 * Formats a supported Cortext target for the recents response.
+	 * Dedupe key for a stored recent item. The post id is enough because a post
+	 * can only belong to one kind; older entries may carry a stale kind label,
+	 * but the id still points to the same target.
 	 *
-	 * @param string $kind Target kind.
-	 * @param int    $id Target post ID.
-	 * @param int    $collection_id Parent collection ID for row targets.
-	 * @return array<string,mixed>|WP_Error
-	 */
-	private function format_target( string $kind, int $id, int $collection_id = 0 ) {
-		if ( ! in_array( $kind, array( 'page', 'collection', 'row' ), true ) || $id < 1 ) {
-			return new WP_Error(
-				'cortext_recents_invalid_target',
-				__( 'Recent target is invalid.', 'cortext' ),
-				array( 'status' => 400 )
-			);
-		}
-
-		if ( 'row' === $kind ) {
-			return $this->format_row_target( $id, $collection_id );
-		}
-
-		$post          = get_post( $id );
-		$expected_type = 'page' === $kind ? Page::POST_TYPE : Collection::POST_TYPE;
-		if ( ! $post instanceof WP_Post || $expected_type !== $post->post_type || 'trash' === $post->post_status ) {
-			return new WP_Error(
-				'cortext_recents_not_found',
-				__( 'Recent target was not found.', 'cortext' ),
-				array( 'status' => 404 )
-			);
-		}
-
-		// Inline collections do not have their own workspace route, so Recents
-		// should not point at them. Rows inside them are still valid recents.
-		if ( 'collection' === $kind && Collection::is_inline( $id ) ) {
-			return new WP_Error(
-				'cortext_recents_inline_collection',
-				__( 'Inline collections cannot be added to Recents.', 'cortext' ),
-				array( 'status' => 400 )
-			);
-		}
-
-		if ( ! current_user_can( 'edit_post', $id ) ) {
-			return new WP_Error(
-				'cortext_recents_forbidden',
-				__( 'You are not allowed to use this target as a recent item.', 'cortext' ),
-				array( 'status' => 403 )
-			);
-		}
-
-		if ( 'page' === $kind ) {
-			return $this->documents->format_document( $post ) ?? new WP_Error(
-				'cortext_recents_not_found',
-				__( 'Recent target was not found.', 'cortext' ),
-				array( 'status' => 404 )
-			);
-		}
-
-		return array(
-			'kind'  => $kind,
-			'id'    => $id,
-			'title' => $this->post_title( $post ),
-			'path'  => $this->target_path( $post, $kind ),
-		);
-	}
-
-	/**
-	 * Formats a collection row target.
-	 *
-	 * @param int $row_id Row post ID.
-	 * @param int $collection_id Parent collection post ID.
-	 * @return array<string,mixed>|WP_Error
-	 */
-	private function format_row_target( int $row_id, int $collection_id ) {
-		if ( $collection_id < 1 ) {
-			return new WP_Error(
-				'cortext_recents_row_collection_required',
-				__( 'Recent row target requires a collection.', 'cortext' ),
-				array( 'status' => 400 )
-			);
-		}
-
-		$collection = get_post( $collection_id );
-		if (
-			! $collection instanceof WP_Post ||
-			Collection::POST_TYPE !== $collection->post_type ||
-			'trash' === $collection->post_status
-		) {
-			return new WP_Error(
-				'cortext_recents_collection_not_found',
-				__( 'Recent row collection was not found.', 'cortext' ),
-				array( 'status' => 404 )
-			);
-		}
-
-		$slug = get_post_meta( $collection_id, 'slug', true );
-		$slug = is_string( $slug ) ? trim( $slug ) : '';
-		$row  = get_post( $row_id );
-		if (
-			'' === $slug ||
-			! $row instanceof WP_Post ||
-			CollectionEntries::CPT_PREFIX . $slug !== $row->post_type ||
-			'trash' === $row->post_status
-		) {
-			return new WP_Error(
-				'cortext_recents_not_found',
-				__( 'Recent target was not found.', 'cortext' ),
-				array( 'status' => 404 )
-			);
-		}
-
-		if ( ! current_user_can( 'edit_post', $collection_id ) || ! current_user_can( 'edit_post', $row_id ) ) {
-			return new WP_Error(
-				'cortext_recents_forbidden',
-				__( 'You are not allowed to use this target as a recent item.', 'cortext' ),
-				array( 'status' => 403 )
-			);
-		}
-
-		$document = $this->documents->format_document( $row );
-		if ( null === $document ) {
-			return new WP_Error(
-				'cortext_recents_not_found',
-				__( 'Recent target was not found.', 'cortext' ),
-				array( 'status' => 404 )
-			);
-		}
-
-		return $document;
-	}
-
-	private function post_title( WP_Post $post ): string {
-		$title = trim( $post->post_title );
-		return '' === $title ? __( '(untitled)', 'cortext' ) : $title;
-	}
-
-	private function target_path( WP_Post $post, string $kind ): string {
-		if ( 'collection' === $kind ) {
-			$slug = get_post_meta( (int) $post->ID, 'slug', true );
-			$slug = is_string( $slug ) ? trim( $slug ) : '';
-		} else {
-			$slug = trim( $post->post_name );
-		}
-
-		$tail = '' === $slug ? (string) $post->ID : "{$slug}-{$post->ID}";
-		return "{$kind}/{$tail}";
-	}
-
-	/**
-	 * Builds the stable dedupe key for a stored recent item.
-	 *
-	 * @param array{kind:string,id:int} $item Recent item.
+	 * @param array{id:int} $item Recent item.
 	 */
 	private function recent_key( array $item ): string {
-		return "{$item['kind']}:{$item['id']}";
+		return (string) $item['id'];
 	}
 }
