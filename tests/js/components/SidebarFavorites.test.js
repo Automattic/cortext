@@ -98,6 +98,26 @@ describe( 'SidebarFavorites helpers', () => {
 		);
 	} );
 
+	it( 'drops row favorites whose collection fell with the trashed page', () => {
+		// Trashing page 1 cascades into collection 5 (nested under it).
+		// Row 6 lives in that collection, so its favorite must come out of the
+		// list too; otherwise the next save would replay a now-trashed row.
+		const favorites = [
+			{ kind: 'page', id: 1 },
+			{ kind: 'row', id: 6, collection: { id: 5 } },
+			{ kind: 'row', id: 7, collection: { id: 9 } },
+		];
+		const pages = [ { id: 1, parent: 0 } ];
+		const collections = [
+			{ id: 5, parent: 1 },
+			{ id: 9, parent: 0 },
+		];
+
+		expect(
+			filterFavoritesForTrashedPage( favorites, 1, pages, collections )
+		).toEqual( [ { kind: 'row', id: 7, collection: { id: 9 } } ] );
+	} );
+
 	it( 'resolves page and collection favorites from loaded records', () => {
 		const items = resolveFavoriteItems(
 			[

@@ -103,10 +103,10 @@ export function filterFavoritesForTrashedPage(
 			return ! trashedCollectionIds.has( Number( favorite.id ) );
 		}
 		if ( favorite.kind === 'row' ) {
-			// A trashed page may take owned collections with it. If this row
-			// belonged to one of them, remove its favorite too.
+			// Rows fall with their parent collection. The favorite carries the
+			// owner inline (`collection.id`), set by `format_target` on read.
 			return ! trashedCollectionIds.has(
-				Number( favorite.collectionId )
+				Number( favorite.collection?.id )
 			);
 		}
 		return true;
@@ -121,7 +121,7 @@ export function filterFavoritesForTrashedCollection( favorites, collectionId ) {
 				( favorite.kind === 'collection' &&
 					Number( favorite.id ) === target ) ||
 				( favorite.kind === 'row' &&
-					Number( favorite.collectionId ) === target )
+					Number( favorite.collection?.id ) === target )
 			)
 	);
 }
