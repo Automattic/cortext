@@ -419,7 +419,6 @@ function PickerBody( {
 					<button
 						type="button"
 						className="cortext-document-identity-popover__remove"
-						style={ { color: '#d63638' } }
 						onClick={ () => persist( '' ) }
 					>
 						{ __( 'Remove', 'cortext' ) }

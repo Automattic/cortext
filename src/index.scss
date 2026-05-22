@@ -880,7 +880,7 @@ body.cortext-fullscreen {
 		margin: 0;
 		padding: 0 $grid-unit-05;
 		font-size: 11px;
-		color: #cc1818;
+		color: var(--cortext-danger);
 	}
 
 	// Modeled on `.cortext-column-resizer` so both resizers feel the same.
@@ -2110,7 +2110,7 @@ body:has(.cortext-canvas__identity-actions:hover) .cortext-canvas__identity-acti
 // flips the row to the neutral active color above, which keeps the row
 // readable without leaking the destructive color into hover.
 .cortext-column-header-actions__destructive-item:not([data-active-item="true"]) {
-	color: var(--wp-components-color-destructive, #cc1818);
+	color: var(--cortext-danger);
 }
 
 // Marker spans live inside DataViews' header trigger button. Zero-size
@@ -2440,7 +2440,7 @@ tbody > tr > td:not(:first-child) {
 	}
 
 	&__error {
-		color: #cc1818;
+		color: var(--cortext-danger);
 		font-size: 12px;
 		margin-top: $grid-unit-05;
 	}
@@ -2808,7 +2808,7 @@ tr:has(.cortext-title-cell--is-opening)
 
 	&__error {
 		padding: $grid-unit-05 $grid-unit-10;
-		color: #cc1818;
+		color: var(--cortext-danger);
 		font-size: 12px;
 	}
 }
@@ -5700,13 +5700,13 @@ body.cortext-hide-parent-block-toolbar
 			background: transparent;
 			border: 0;
 			cursor: pointer;
-			color: #d63638 !important;
+			color: var(--cortext-danger) !important;
 			font-size: 13px;
 			font-weight: 500;
 
 			&:hover,
 			&:focus {
-				color: #b32d2e !important;
+				color: var(--cortext-danger-strong) !important;
 			}
 		}
 
