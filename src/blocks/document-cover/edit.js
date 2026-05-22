@@ -8,7 +8,6 @@ import {
 import MediaPicker, { MediaUploadCheck } from '../../components/MediaPicker';
 import { useEntityProp, useEntityRecord } from '@wordpress/core-data';
 import { useDispatch, useSelect } from '@wordpress/data';
-import { useEffect, useState } from '@wordpress/element';
 import { createBlock } from '@wordpress/blocks';
 import {
 	Button,
@@ -80,14 +79,6 @@ export default function Edit( { context, clientId } ) {
 		media?.media_details?.sizes?.large?.source_url ??
 		media?.source_url ??
 		null;
-
-	// Fade the cover in once the bytes have actually decoded. Without this the
-	// image pops in cold against the canvas, especially on page-to-page nav
-	// where the new cover lands a beat after the iframe re-parses blocks.
-	const [ hasImagePainted, setHasImagePainted ] = useState( false );
-	useEffect( () => {
-		setHasImagePainted( false );
-	}, [ src ] );
 
 	const ensureIconBlock = () => {
 		if ( hasIconBlock || ! clientId ) {
@@ -186,9 +177,6 @@ export default function Edit( { context, clientId } ) {
 						// after the editor swaps documents.
 						loading="eager"
 						decoding="async"
-						onLoad={ () => setHasImagePainted( true ) }
-						onError={ () => setHasImagePainted( true ) }
-						style={ { opacity: hasImagePainted ? 1 : 0 } }
 					/>
 				) }
 				<div className="cortext-document-cover-block__controls">
