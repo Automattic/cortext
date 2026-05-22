@@ -880,7 +880,7 @@ body.cortext-fullscreen {
 		margin: 0;
 		padding: 0 $grid-unit-05;
 		font-size: 11px;
-		color: #cc1818;
+		color: var(--cortext-danger);
 	}
 
 	// Modeled on `.cortext-column-resizer` so both resizers feel the same.
@@ -1217,7 +1217,7 @@ body.cortext-sidebar-resizing {
 		border-radius: 2px;
 
 		&:focus-visible {
-			outline: 2px solid var(--wp-admin-theme-color, #3858e9);
+			outline: 2px solid var(--cortext-accent);
 			outline-offset: 1px;
 		}
 	}
@@ -1739,7 +1739,7 @@ body:has(.cortext-canvas__identity-actions:hover) .cortext-canvas__identity-acti
 		}
 
 		&:focus-visible {
-			outline: 2px solid var(--wp-admin-theme-color, $gray-700);
+			outline: 2px solid var(--cortext-accent);
 			outline-offset: -1px;
 		}
 
@@ -1811,7 +1811,7 @@ body:has(.cortext-canvas__identity-actions:hover) .cortext-canvas__identity-acti
 		}
 
 		&:focus-visible {
-			outline: 2px solid var(--wp-admin-theme-color, $gray-700);
+			outline: 2px solid var(--cortext-accent);
 			outline-offset: -1px;
 		}
 
@@ -1859,7 +1859,7 @@ body:has(.cortext-canvas__identity-actions:hover) .cortext-canvas__identity-acti
 		}
 
 		&:focus-visible {
-			outline: 2px solid var(--wp-admin-theme-color, $gray-700);
+			outline: 2px solid var(--cortext-accent);
 			outline-offset: -1px;
 		}
 	}
@@ -1933,13 +1933,13 @@ body:has(.cortext-canvas__identity-actions:hover) .cortext-canvas__identity-acti
 		}
 
 		&:focus-visible {
-			outline: 2px solid var(--wp-admin-theme-color, $gray-700);
+			outline: 2px solid var(--cortext-accent);
 			outline-offset: -1px;
 		}
 
 		&.is-selected {
-			border-color: var(--wp-admin-theme-color, $gray-700);
-			color: var(--wp-admin-theme-color, $gray-900);
+			border-color: var(--cortext-accent);
+			color: var(--cortext-accent);
 		}
 	}
 
@@ -2053,12 +2053,12 @@ body:has(.cortext-canvas__identity-actions:hover) .cortext-canvas__identity-acti
 		}
 
 		&:focus-visible {
-			outline: 2px solid var(--wp-admin-theme-color, $gray-700);
+			outline: 2px solid var(--cortext-accent);
 			outline-offset: -1px;
 		}
 
 		&.is-selected {
-			color: var(--wp-admin-theme-color, $gray-900);
+			color: var(--cortext-accent);
 		}
 	}
 
@@ -2110,7 +2110,7 @@ body:has(.cortext-canvas__identity-actions:hover) .cortext-canvas__identity-acti
 // flips the row to the neutral active color above, which keeps the row
 // readable without leaking the destructive color into hover.
 .cortext-column-header-actions__destructive-item:not([data-active-item="true"]) {
-	color: var(--wp-components-color-destructive, #cc1818);
+	color: var(--cortext-danger);
 }
 
 // Marker spans live inside DataViews' header trigger button. Zero-size
@@ -2440,7 +2440,7 @@ tbody > tr > td:not(:first-child) {
 	}
 
 	&__error {
-		color: #cc1818;
+		color: var(--cortext-danger);
 		font-size: 12px;
 		margin-top: $grid-unit-05;
 	}
@@ -2564,7 +2564,7 @@ tr:has(.cortext-title-cell--is-opening)
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	vertical-align: middle;
-	color: var(--wp-admin-theme-color);
+	color: var(--cortext-accent);
 	text-decoration: underline;
 	text-underline-offset: 2px;
 
@@ -2630,7 +2630,7 @@ tr:has(.cortext-title-cell--is-opening)
 
 	&:focus-visible {
 		outline: 0;
-		box-shadow: inset 0 0 0 2px var(--wp-admin-theme-color, $gray-700);
+		box-shadow: inset 0 0 0 2px var(--cortext-accent);
 	}
 }
 
@@ -2750,7 +2750,7 @@ tr:has(.cortext-title-cell--is-opening)
 		}
 
 		&:focus-visible {
-			outline: 2px solid var(--wp-admin-theme-color, $gray-700);
+			outline: 2px solid var(--cortext-accent);
 			outline-offset: -1px;
 		}
 
@@ -2808,7 +2808,7 @@ tr:has(.cortext-title-cell--is-opening)
 
 	&__error {
 		padding: $grid-unit-05 $grid-unit-10;
-		color: #cc1818;
+		color: var(--cortext-danger);
 		font-size: 12px;
 	}
 }
@@ -3282,15 +3282,6 @@ tr:has(.cortext-title-cell--is-opening)
 
 .cortext-row-detail,
 .cortext-row-detail-modal {
-	--cortext-row-detail-text: #37352f;
-	--cortext-row-detail-muted: #787774;
-	--cortext-row-detail-border: #e9e9e7;
-	--cortext-row-detail-hover-surface: #f7f6f3;
-	--cortext-row-detail-pressed-surface: #ebeae6;
-	--cortext-row-detail-field-inset: 56px;
-	--cortext-row-detail-toolbar-button-size: #{$grid-unit-40};
-	--cortext-row-detail-toolbar-button-padding: #{$grid-unit-10};
-
 	font-size: 13px;
 	line-height: 1.4;
 }
@@ -3577,7 +3568,7 @@ tr:has(.cortext-title-cell--is-opening)
 		&:focus,
 		&:focus-visible {
 			background: transparent;
-			box-shadow: inset 0 0 0 1px var(--wp-admin-theme-color);
+			box-shadow: inset 0 0 0 1px var(--cortext-accent);
 		}
 	}
 
@@ -3596,7 +3587,7 @@ tr:has(.cortext-title-cell--is-opening)
 	input.cortext-row-detail__title-input:focus,
 	input.cortext-row-detail__title-input:focus-visible {
 		background: transparent;
-		box-shadow: inset 0 0 0 1px var(--wp-admin-theme-color);
+		box-shadow: inset 0 0 0 1px var(--cortext-accent);
 	}
 
 	/* stylelint-disable no-descending-specificity */
@@ -3844,8 +3835,8 @@ tr:has(.cortext-title-cell--is-opening)
 			}
 
 			&:focus {
-				border-color: var(--wp-admin-theme-color);
-				box-shadow: 0 0 0 1px var(--wp-admin-theme-color);
+				border-color: var(--cortext-accent);
+				box-shadow: 0 0 0 1px var(--cortext-accent);
 			}
 		}
 
@@ -3864,7 +3855,7 @@ tr:has(.cortext-title-cell--is-opening)
 			position: absolute;
 			inset: 0 -6px;
 			border-radius: 4px;
-			box-shadow: inset 0 0 0 1px var(--wp-admin-theme-color);
+			box-shadow: inset 0 0 0 1px var(--cortext-accent);
 			pointer-events: none;
 		}
 	}
@@ -4243,10 +4234,18 @@ tr:has(.cortext-title-cell--is-opening)
 		left: -40%;
 		width: 40%;
 		height: 100%;
-		background: var(--wp-admin-theme-color, #007cba);
+		// Sits on the canvas frame, which goes dark with the shell.
+		// Accent-contrast keeps the bar visible against `#2a2a2a`; the
+		// override below applies inside `.cortext-root` so the cascade
+		// picks the right value automatically.
+		background: var(--cortext-accent);
 		border-radius: 2px;
 		animation: cortext-canvas-progress-slide 1.4s ease-in-out infinite;
 	}
+}
+
+.cortext-root[data-theme="dark"] .cortext-canvas-progress::before {
+	background: var(--cortext-accent-contrast);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -4350,7 +4349,7 @@ tr:has(.cortext-title-cell--is-opening)
 
 		&:hover::after,
 		&:focus-visible::after {
-			background: var(--wp-admin-theme-color);
+			background: var(--cortext-accent);
 		}
 
 		&:focus-visible {
@@ -4875,7 +4874,7 @@ body.cortext-row-reorder-no-transition .cortext-row-reorder-target {
 
 .cortext-row-drag-handle:focus-visible {
 	opacity: 1;
-	outline: 2px solid var(--wp-admin-theme-color);
+	outline: 2px solid var(--cortext-accent);
 	outline-offset: 1px;
 }
 
@@ -4899,7 +4898,7 @@ body.cortext-row-dragging .cortext-row-drop-indicator {
 	right: 0;
 	left: 0;
 	top: 0;
-	border-top: 2px solid var(--wp-admin-theme-color);
+	border-top: 2px solid var(--cortext-accent);
 	opacity: 0;
 }
 
@@ -4925,7 +4924,7 @@ body.cortext-row-dragging .cortext-row-drop-indicator {
 	max-width: calc(100vw - 48px);
 	background: $white;
 	box-shadow:
-		inset 3px 0 0 var(--wp-admin-theme-color),
+		inset 3px 0 0 var(--cortext-accent),
 		inset 0 0 0 $border-width $gray-200,
 		0 2px 8px rgba(0, 0, 0, 0.12);
 	border-radius: 2px;
@@ -5077,7 +5076,7 @@ div[role="row"]:not(.is-selected).is-hovered
 		right: 0;
 		width: 3px;
 		height: 100%;
-		background: var(--wp-admin-theme-color);
+		background: var(--cortext-accent);
 		opacity: 0;
 		transition: opacity 100ms ease;
 	}
@@ -5096,7 +5095,7 @@ body.cortext-column-resizing {
 .cortext-column-drop-indicator {
 	position: absolute;
 	width: 2px;
-	background: var(--wp-admin-theme-color);
+	background: var(--cortext-accent);
 	pointer-events: none;
 	z-index: 3;
 	transform: translateX(-1px);
@@ -5709,13 +5708,13 @@ body.cortext-hide-parent-block-toolbar
 			background: transparent;
 			border: 0;
 			cursor: pointer;
-			color: #d63638 !important;
+			color: var(--cortext-danger) !important;
 			font-size: 13px;
 			font-weight: 500;
 
 			&:hover,
 			&:focus {
-				color: #b32d2e !important;
+				color: var(--cortext-danger-strong) !important;
 			}
 		}
 
@@ -5763,7 +5762,7 @@ body.cortext-hide-parent-block-toolbar
 		display: inline-flex;
 		flex-shrink: 0;
 		margin-top: 2px;
-		color: var(--wp-admin-theme-color, #007cba);
+		color: var(--cortext-accent);
 	}
 
 	&__repo {

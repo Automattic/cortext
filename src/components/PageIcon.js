@@ -9,6 +9,7 @@ import {
 } from '@wordpress/element';
 
 import useDelayedFlag from '../hooks/useDelayedFlag';
+import { ICON_COLOR_BY_NAME } from './iconColors';
 
 // PageIconWp does `import * as icons from '@wordpress/icons'` so it can look
 // glyphs up by name at runtime. That defeats tree-shaking and would pull the
@@ -24,17 +25,6 @@ const PageIconWp = lazy( () =>
 //   { type: 'image', id: 123 }
 //   { type: 'wp', name: 'home', color?: 'red' }
 // Anything else (empty meta, parse error) falls through to the page glyph.
-const WP_ICON_COLORS = {
-	gray: '#9ca3af',
-	brown: '#92400e',
-	orange: '#f97316',
-	yellow: '#eab308',
-	green: '#22c55e',
-	blue: '#3b82f6',
-	purple: '#a855f7',
-	pink: '#ec4899',
-	red: '#ef4444',
-};
 
 export function parsePageIcon( raw ) {
 	if ( ! raw ) {
@@ -64,7 +54,7 @@ export function parsePageIcon( raw ) {
 		) {
 			const color =
 				typeof decoded.color === 'string' &&
-				WP_ICON_COLORS[ decoded.color ]
+				ICON_COLOR_BY_NAME[ decoded.color ]
 					? decoded.color
 					: null;
 			return { type: 'wp', name: decoded.name, color };
@@ -189,7 +179,7 @@ export default function PageIcon( { icon, size = 16, alt, className } ) {
 
 	if ( parsed.type === 'wp' ) {
 		const colorStyle = parsed.color
-			? { color: WP_ICON_COLORS[ parsed.color ] }
+			? { color: ICON_COLOR_BY_NAME[ parsed.color ] }
 			: undefined;
 		return (
 			<span
