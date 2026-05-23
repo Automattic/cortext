@@ -1,6 +1,7 @@
 import { __, _n, sprintf } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
 
+import PageIcon from '../../components/PageIcon';
 import { POST_TYPE } from '../../components/page-queries';
 import { computeDocumentUri } from '../../router/useResolveEntity';
 import { notifyDocumentTrashChanged } from '../../hooks/documentTrashInvalidation';
@@ -17,6 +18,16 @@ const pageDescriptor = {
 		hierarchy: true,
 		canCreateChild: true,
 		hasOwnIcon: true,
+	},
+
+	kindLabel: __( 'Page', 'cortext' ),
+
+	// Compact-list icon used in Recents and similar surfaces. Pages keep
+	// their own glyph; falling back to the default PageIcon shape when
+	// nothing is set.
+	listIcon( record, size = 16 ) {
+		const icon = record?.icon ?? record?.meta?.cortext_document_icon ?? '';
+		return <PageIcon icon={ icon } size={ size } />;
 	},
 
 	uri( record ) {
