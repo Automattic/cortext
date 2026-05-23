@@ -1,15 +1,14 @@
 import { useNavigate } from '@tanstack/react-router';
-import { Button, Icon } from '@wordpress/components';
+import { Button } from '@wordpress/components';
 import { useCallback, useLayoutEffect, useRef } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
-import { listItem, table } from '@wordpress/icons';
 
-import PageIcon from './PageIcon';
 import { SidebarListSkeleton } from './Skeleton';
 import useDelayedFlag, {
 	SKELETON_MIN_VISIBLE_MS,
 } from '../hooks/useDelayedFlag';
 import { useRecents } from '../hooks/useRecents';
+import { useDocumentRecord } from '../documents';
 
 const RECENT_REPOSITION_OPTIONS = {
 	duration: 180,
@@ -47,53 +46,72 @@ function runNodeAnimation( node, keyframes, options ) {
 	node.animate( keyframes, options );
 }
 
-function kindLabel( kind ) {
-	if ( kind === 'collection' ) {
-		return __( 'Collection', 'cortext' );
-	}
-	if ( kind === 'row' ) {
-		return __( 'Row', 'cortext' );
-	}
-	return __( 'Page', 'cortext' );
-}
-
-function recentTitle( recent ) {
+/**
+ * Single row in the recents list. Pulls display copy through
+ * `useDocumentRecord` so this component stays kind-blind: the descriptor
+ * decides the icon and the type label, and the row formats the title with
+ * the collection context when the record carries one (i.e. rows).
+ *
+ * @param {Object}   props
+ * @param {Object}   props.recent     Recent activity record from the server.
+ * @param {Function} props.setNodeRef Ref setter used by the FLIP animation.
+ * @param {Function} props.onSelect   Navigate to the recent's path.
+ */
+function SidebarRecentsRow( { recent, setNodeRef, onSelect } ) {
+	const { listIcon, kindLabel } = useDocumentRecord( recent );
 	const title = recent?.title?.trim?.() || __( '(untitled)', 'cortext' );
-	if ( recent?.kind === 'row' && recent?.collection?.title ) {
-		return sprintf(
-			/* translators: 1: row title, 2: collection title */
-			__( '%1$s in %2$s', 'cortext' ),
-			title,
-			recent.collection.title
-		);
-	}
-	return title;
-}
+	const contextTitle = recent?.collection?.title?.trim?.() ?? '';
 
-function recentAriaLabel( recent ) {
-	const title = recent?.title?.trim?.() || __( '(untitled)', 'cortext' );
-	if ( recent?.kind === 'row' && recent?.collection?.title ) {
-		return sprintf(
-			/* translators: 1: row title, 2: collection title */
-			__( 'Recent row: %1$s in %2$s', 'cortext' ),
-			title,
-			recent.collection.title
-		);
-	}
-	return sprintf(
-		/* translators: 1: recent item type, 2: recent item title */
-		__( 'Recent %1$s: %2$s', 'cortext' ),
-		kindLabel( recent?.kind ).toLowerCase(),
-		title
+	const displayTitle = contextTitle
+		? sprintf(
+				/* translators: 1: row title, 2: collection title */
+				__( '%1$s in %2$s', 'cortext' ),
+				title,
+				contextTitle
+		  )
+		: title;
+
+	const ariaLabel = contextTitle
+		? sprintf(
+				/* translators: 1: row title, 2: collection title */
+				__( 'Recent row: %1$s in %2$s', 'cortext' ),
+				title,
+				contextTitle
+		  )
+		: sprintf(
+				/* translators: 1: recent item type, 2: recent item title */
+				__( 'Recent %1$s: %2$s', 'cortext' ),
+				kindLabel.toLowerCase(),
+				title
+		  );
+
+	return (
+		<li
+			ref={ setNodeRef }
+			className="cortext-sidebar__node cortext-sidebar__recent-node"
+		>
+			<div className="cortext-sidebar__row">
+				<span
+					className="cortext-sidebar__recent-icon"
+					aria-hidden="true"
+				>
+					{ listIcon?.() }
+				</span>
+				<Button
+					className="cortext-sidebar__title cortext-sidebar__recent-title"
+					size="compact"
+					variant="tertiary"
+					onClick={ ( event ) => {
+						event.currentTarget.blur();
+						onSelect( recent );
+					} }
+					aria-label={ ariaLabel }
+				>
+					{ displayTitle }
+				</Button>
+			</div>
+		</li>
 	);
-}
-
-function RecentIcon( { recent } ) {
-	if ( recent?.kind === 'page' ) {
-		return <PageIcon icon={ recent.icon ?? '' } size={ 16 } />;
-	}
-	const icon = recent?.kind === 'row' ? listItem : table;
-	return <Icon icon={ icon } size={ 16 } />;
 }
 
 export default function SidebarRecents() {
@@ -111,6 +129,19 @@ export default function SidebarRecents() {
 			}
 		},
 		[]
+	);
+
+	const onSelectRecent = useCallback(
+		( recent ) => {
+			if ( ! recent.path ) {
+				return;
+			}
+			navigate( {
+				to: '/$',
+				params: { _splat: recent.path },
+			} );
+		},
+		[ navigate ]
 	);
 
 	useLayoutEffect( () => {
@@ -177,40 +208,12 @@ export default function SidebarRecents() {
 					{ recents.map( ( recent ) => {
 						const key = recentKey( recent );
 						return (
-							<li
+							<SidebarRecentsRow
 								key={ key }
-								ref={ setRecentNodeRef( key ) }
-								className="cortext-sidebar__node cortext-sidebar__recent-node"
-							>
-								<div className="cortext-sidebar__row">
-									<span
-										className="cortext-sidebar__recent-icon"
-										aria-hidden="true"
-									>
-										<RecentIcon recent={ recent } />
-									</span>
-									<Button
-										className="cortext-sidebar__title cortext-sidebar__recent-title"
-										size="compact"
-										variant="tertiary"
-										onClick={ ( event ) => {
-											event.currentTarget.blur();
-											if ( ! recent.path ) {
-												return;
-											}
-											navigate( {
-												to: '/$',
-												params: {
-													_splat: recent.path,
-												},
-											} );
-										} }
-										aria-label={ recentAriaLabel( recent ) }
-									>
-										{ recentTitle( recent ) }
-									</Button>
-								</div>
-							</li>
+								recent={ recent }
+								setNodeRef={ setRecentNodeRef( key ) }
+								onSelect={ onSelectRecent }
+							/>
 						);
 					} ) }
 				</ul>
