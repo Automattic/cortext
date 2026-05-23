@@ -536,6 +536,10 @@ export default function CollectionDataViews( {
 	const { fields, collection, slug, isResolving, fieldsResolved } =
 		useCollectionFieldsContext();
 	const { touchRecent } = useRecents();
+	// Field IDs known on the previous sync. Drives the auto-show path
+	// for fields the user just created. `null` on first run signals
+	// "saved view, leave it alone."
+	const knownFieldIdsRef = useRef( null );
 
 	const availableFields = useMemo(
 		() => [ TITLE_FIELD, ...fields ],
@@ -552,8 +556,27 @@ export default function CollectionDataViews( {
 		const validIds = new Set( availableFields.map( ( f ) => f.id ) );
 		const currentFilters = view?.filters ?? [];
 		const nextFilters = pruneFiltersForFields( currentFilters, validIds );
-		if ( nextFilters !== currentFilters ) {
-			return { ...view, filters: nextFilters };
+		const currentFields = Array.isArray( view?.fields ) ? view.fields : [];
+		const previouslyKnown = knownFieldIdsRef.current;
+		const newlyVisibleFields =
+			previouslyKnown && currentFields.length > 0
+				? availableFields
+						.filter(
+							( field ) =>
+								isDefaultVisibleField( field ) &&
+								! previouslyKnown.has( field.id ) &&
+								! currentFields.includes( field.id )
+						)
+						.map( ( field ) => field.id )
+				: [];
+		if ( nextFilters !== currentFilters || newlyVisibleFields.length > 0 ) {
+			return {
+				...view,
+				filters: nextFilters,
+				...( newlyVisibleFields.length > 0
+					? { fields: [ ...currentFields, ...newlyVisibleFields ] }
+					: {} ),
+			};
 		}
 		return view;
 	}, [ view, availableFields, isResolving ] );
@@ -994,10 +1017,6 @@ export default function CollectionDataViews( {
 	viewRef.current = view;
 	const onChangeViewRef = useRef( onChangeView );
 	onChangeViewRef.current = onChangeView;
-	// Field IDs known on the previous sync. Drives the auto-show path
-	// for fields the user just created. `null` on first run signals
-	// "saved view, leave it alone."
-	const knownFieldIdsRef = useRef( null );
 	const previousVisibleFieldsRef = useRef( null );
 	const savedRowDetailMode = getRowDetailMode( view );
 	const postType = slug ? `crtxt_${ slug }` : null;
