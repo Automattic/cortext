@@ -158,8 +158,7 @@ function RecentCommandRegistration( { canvasRef, recent } ) {
 }
 
 function documentDescription( doc ) {
-	// Excerpt wins when present (today only pages carry one). Otherwise show
-	// the parent collection for records that have one (rows).
+	// Pages can provide an excerpt. Rows use their parent collection as the hint.
 	return doc?.excerpt?.trim?.() || collectionHint( doc );
 }
 

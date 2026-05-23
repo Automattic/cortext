@@ -157,6 +157,8 @@ export default function Sidebar( {
 		onSelect,
 		goHome,
 	} = useSidebarNavigation( { pages, homePath } );
+	const { isSelected: isRowSelected, selectRecord: onRowSelect } =
+		useDocumentSelection( { selectedId, selectedCollectionId } );
 	const adminUrl = window.cortextSettings?.adminUrl ?? '/wp-admin/';
 	const userName = window.cortextSettings?.userDisplayName ?? '';
 	const commandPaletteShortcut = displayShortcut.primary( 'k' );
@@ -211,12 +213,9 @@ export default function Sidebar( {
 	);
 	const selectFavorite = useCallback(
 		( favorite ) => {
-			if (
-				( ( favorite.kind === 'page' || favorite.kind === 'row' ) &&
-					favorite.id === selectedId ) ||
-				( favorite.kind === 'collection' &&
-					favorite.id === selectedCollectionId )
-			) {
+			// Use `isRowSelected` as the shared selected-state check. Post IDs
+			// are globally unique, so the same id cannot point at two documents.
+			if ( isRowSelected( favorite ) ) {
 				return false;
 			}
 			navigate( {
@@ -225,7 +224,7 @@ export default function Sidebar( {
 			} );
 			return true;
 		},
-		[ navigate, selectedCollectionId, selectedId ]
+		[ isRowSelected, navigate ]
 	);
 
 	const { topLevelCollections, tree, expandedIds, toggleExpand, expand } =
@@ -343,9 +342,6 @@ export default function Sidebar( {
 	);
 
 	// --- Per-row selection helpers --------------------------------------
-
-	const { isSelected: isRowSelected, selectRecord: onRowSelect } =
-		useDocumentSelection( { selectedId, selectedCollectionId } );
 
 	const onSetRowHome = useCallback(
 		async ( record ) => {
