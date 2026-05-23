@@ -35,6 +35,7 @@ import {
 } from './EditableCell';
 import { TITLE_FIELD_ID } from './dataViewColumns';
 import EditOptionsPopover from './fields/EditOptionsPopover';
+import { FieldTypeIcon } from './fields/fieldTypes';
 import { toRecordId } from '../hooks/fieldIds';
 import {
 	isRowDetailFieldEditable,
@@ -65,6 +66,13 @@ function ReadOnlyProperty( { value, type, elements, format } ) {
 function OptionPropertyValue( { value, type, elements } ) {
 	const display = formatDisplay( value, type, { elements } );
 	return display === '' ? emptyLabel() : display;
+}
+
+function isCollectionField( field ) {
+	return (
+		field?.id?.startsWith?.( 'field-' ) &&
+		Boolean( field.cortextRecordId ?? field.recordId )
+	);
 }
 
 function SelectPropertyControl( {
@@ -515,7 +523,15 @@ export default function RowProperties( { fields, row } ) {
 						}
 					>
 						<div className="cortext-row-detail__property-label">
-							{ field.label }
+							{ isCollectionField( field ) ? (
+								<FieldTypeIcon
+									type={ type }
+									className="cortext-row-detail__property-type-icon"
+								/>
+							) : null }
+							<span className="cortext-row-detail__property-label-text">
+								{ field.label }
+							</span>
 						</div>
 						<div className="cortext-row-detail__property-value">
 							{ isEditable ? (

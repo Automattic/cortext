@@ -30,13 +30,16 @@
 // `.cortext-data-view > .dataviews-wrapper` declares `overflow: auto`
 // itself, so horizontal scroll kicks in once columns exceed the wrapper.
 .dataviews-view-table {
+	--cortext-table-column-default-width: 200px;
+	--cortext-table-field-header-icon-chrome: calc(var(--cortext-field-type-icon-size, 16px) + #{$grid-unit-05});
+
 	table-layout: fixed;
 	width: max-content;
 }
 
 .dataviews-view-table th,
 .dataviews-view-table td {
-	width: 200px;
+	width: var(--cortext-table-column-default-width);
 }
 
 // Keep the actions column only as wide as its kebab/`+` icon. Otherwise it
@@ -69,6 +72,14 @@
 .dataviews-view-table th:first-child:not(.dataviews-view-table__checkbox-column),
 .dataviews-view-table td:first-child:not(.dataviews-view-table__checkbox-column) {
 	width: 280px;
+}
+
+// Field headers include the type icon before the label. Add that chrome to
+// the default field width so the text column does not feel squeezed.
+.cortext-data-view
+.dataviews-view-table
+:where(th:has(.cortext-column-header-marker):not(:first-child):not(.dataviews-view-table__checkbox-column + th)) {
+	width: calc(var(--cortext-table-column-default-width) + var(--cortext-table-field-header-icon-chrome));
 }
 
 // WordPress admin can load DataViews 6.0.0 alongside our bundled version. The

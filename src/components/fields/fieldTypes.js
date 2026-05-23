@@ -12,6 +12,8 @@ import {
 	typography,
 } from '@wordpress/icons';
 
+import './fieldTypes.scss';
+
 // Inline SVG for the "number" type. `@wordpress/icons` doesn't ship a
 // numeric glyph that reads as "single number" (formatListNumbered looks
 // like an ordered list), so we draw a `#` at the same stroke weight.

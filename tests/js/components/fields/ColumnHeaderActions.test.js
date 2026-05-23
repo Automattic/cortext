@@ -241,6 +241,36 @@ describe( 'ColumnHeaderActions', () => {
 		).toHaveAttribute( 'aria-checked', 'false' );
 	} );
 
+	it( 'shows the field type icon in custom column headers', async () => {
+		useCollectionFieldsContext.mockReturnValue( {
+			fields: [
+				{
+					id: 'field-77',
+					recordId: 77,
+					label: 'Amount',
+					cortextType: 'number',
+				},
+			],
+		} );
+
+		const { container } = render(
+			<Harness
+				collectionId={ 5 }
+				recordId={ 77 }
+				view={ { fields: [ 'field-77' ] } }
+			/>
+		);
+
+		expect(
+			await screen.findByRole( 'button', { name: 'Amount' } )
+		).toBeInTheDocument();
+		expect(
+			container.querySelector(
+				'.cortext-column-header-type-icon[data-cortext-field-type="number"]'
+			)
+		).toBeInTheDocument();
+	} );
+
 	it( 'passes the created field out of the add-field dropdown', async () => {
 		const onFieldCreated = jest.fn();
 		render(
