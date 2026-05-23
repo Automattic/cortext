@@ -13,7 +13,7 @@ import {
 } from '@wordpress/data';
 import { useNavigate } from '@tanstack/react-router';
 import { __, sprintf } from '@wordpress/i18n';
-import { home as homeIcon, listItem, table } from '@wordpress/icons';
+import { home as homeIcon } from '@wordpress/icons';
 import {
 	useCallback,
 	useEffect,
@@ -25,11 +25,11 @@ import {
 import CortextCommandMenu, {
 	CommandDescriptionContext,
 } from './CortextCommandMenu';
-import PageIcon from './PageIcon';
 import useDebouncedValue from '../hooks/useDebouncedValue';
 import useDocuments from '../hooks/useDocuments';
 import { useRecents } from '../hooks/useRecents';
 import { useWorkspaceHomePath } from '../hooks/useWorkspaceHomePath';
+import { listIconForRecord } from '../documents';
 
 const OPEN_COMMAND_PALETTE_EVENT = 'cortext:open-command-palette';
 const DEFAULT_COMMAND_CONTEXT = 'root';
@@ -64,37 +64,29 @@ function focusCanvasAfterPaletteCloses( canvasRef ) {
 	}, 0 );
 }
 
-function documentCommandIcon( doc ) {
-	if ( doc?.kind === 'collection' ) {
-		return table;
-	}
-	if ( doc?.kind === 'row' ) {
-		return listItem;
-	}
-	return <PageIcon icon={ doc?.icon ?? '' } size={ 16 } />;
-}
-
 function documentTitle( doc ) {
 	const title = doc?.title?.trim?.() || __( '(untitled)', 'cortext' );
-	if ( doc?.kind === 'row' && doc?.collection?.title ) {
-		return sprintf(
-			/* translators: 1: row title, 2: collection title */
-			__( '%1$s in %2$s', 'cortext' ),
-			title,
-			doc.collection.title
-		);
+	const collectionTitle = doc?.collection?.title?.trim?.();
+	if ( ! collectionTitle ) {
+		return title;
 	}
-	return title;
+	return sprintf(
+		/* translators: 1: row title, 2: collection title */
+		__( '%1$s in %2$s', 'cortext' ),
+		title,
+		collectionTitle
+	);
 }
 
-function rowCollectionHint( doc ) {
-	if ( doc?.kind !== 'row' || ! doc?.collection?.title ) {
+function collectionHint( doc ) {
+	const collectionTitle = doc?.collection?.title?.trim?.();
+	if ( ! collectionTitle ) {
 		return '';
 	}
 	return sprintf(
 		/* translators: %s: parent collection title */
 		__( 'in %s', 'cortext' ),
-		doc.collection.title
+		collectionTitle
 	);
 }
 
@@ -157,7 +149,7 @@ function RecentCommandRegistration( { canvasRef, recent } ) {
 			documentTitle( recent )
 		),
 		context: DEFAULT_COMMAND_CONTEXT,
-		icon: documentCommandIcon( recent ),
+		icon: listIconForRecord( recent ),
 		keywords: [ __( 'recent', 'cortext' ), recent.kind ],
 		disabled: ! recent.path,
 		callback: goToRecent,
@@ -166,10 +158,9 @@ function RecentCommandRegistration( { canvasRef, recent } ) {
 }
 
 function documentDescription( doc ) {
-	if ( doc.kind === 'page' ) {
-		return doc.excerpt ?? '';
-	}
-	return rowCollectionHint( doc );
+	// Excerpt wins when present (today only pages carry one). Otherwise show
+	// the parent collection for records that have one (rows).
+	return doc?.excerpt?.trim?.() || collectionHint( doc );
 }
 
 function DocumentCommandRegistration( { canvasRef, document } ) {
@@ -192,7 +183,7 @@ function DocumentCommandRegistration( { canvasRef, document } ) {
 		name: `cortext/document/${ document.kind }-${ document.id }`,
 		label: document.title?.trim?.() || __( '(untitled)', 'cortext' ),
 		context: DEFAULT_COMMAND_CONTEXT,
-		icon: documentCommandIcon( document ),
+		icon: listIconForRecord( document ),
 		keywords: [ document.kind ],
 		disabled: ! document.path,
 		callback: goToDocument,
