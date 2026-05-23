@@ -1,10 +1,12 @@
 import {
 	DEFAULT_MIN_WIDTH,
+	FIELD_HEADER_ICON_CHROME,
 	MAX_COLUMN_WIDTH,
 	MIN_WIDTHS,
 	TITLE_FIELD_ID,
 	clampWidth,
 	getMinWidth,
+	hasFieldTypeHeaderIcon,
 	isDefaultVisibleField,
 	normalizeView,
 	pruneFiltersForFields,
@@ -31,6 +33,30 @@ describe( 'getMinWidth', () => {
 	it( 'uses a compact default floor', () => {
 		expect( DEFAULT_MIN_WIDTH ).toBe( 32 );
 	} );
+
+	it( 'adds icon chrome only for custom field headers', () => {
+		expect( getMinWidth( 'text', 'field-10' ) ).toBe(
+			DEFAULT_MIN_WIDTH + FIELD_HEADER_ICON_CHROME
+		);
+		expect( getMinWidth( 'date', 'field-10' ) ).toBe(
+			MIN_WIDTHS.date + FIELD_HEADER_ICON_CHROME
+		);
+		expect( getMinWidth( 'date', 'created_at' ) ).toBe(
+			MIN_WIDTHS.date
+		);
+		expect( getMinWidth( 'title', TITLE_FIELD_ID ) ).toBe(
+			MIN_WIDTHS.title
+		);
+	} );
+} );
+
+describe( 'hasFieldTypeHeaderIcon', () => {
+	it( 'matches only user-created collection field ids', () => {
+		expect( hasFieldTypeHeaderIcon( 'field-10' ) ).toBe( true );
+		expect( hasFieldTypeHeaderIcon( TITLE_FIELD_ID ) ).toBe( false );
+		expect( hasFieldTypeHeaderIcon( 'created_at' ) ).toBe( false );
+		expect( hasFieldTypeHeaderIcon( undefined ) ).toBe( false );
+	} );
 } );
 
 describe( 'clampWidth', () => {
@@ -54,6 +80,15 @@ describe( 'clampWidth', () => {
 
 	it( 'uses the default floor when no type is provided', () => {
 		expect( clampWidth( 10 ) ).toBe( DEFAULT_MIN_WIDTH );
+	} );
+
+	it( 'includes header icon chrome in the floor for custom fields', () => {
+		expect( clampWidth( 10, 'text', 'field-10' ) ).toBe(
+			DEFAULT_MIN_WIDTH + FIELD_HEADER_ICON_CHROME
+		);
+		expect( clampWidth( 10, 'datetime', 'created_at' ) ).toBe(
+			MIN_WIDTHS.datetime
+		);
 	} );
 } );
 
@@ -382,7 +417,7 @@ describe( 'withColumnWidth', () => {
 		const next = withColumnWidth( view, 'field-1', 220, 'text' );
 		expect( next.layout.styles[ 'field-1' ] ).toEqual( {
 			width: 220,
-			minWidth: DEFAULT_MIN_WIDTH,
+			minWidth: DEFAULT_MIN_WIDTH + FIELD_HEADER_ICON_CHROME,
 			maxWidth: 220,
 		} );
 	} );
@@ -390,12 +425,12 @@ describe( 'withColumnWidth', () => {
 	it( 'lets short-content columns commit a smaller width than the title', () => {
 		const view = { layout: { density: 'compact' } };
 		const text = withColumnWidth( view, 'field-t', 10, 'text' );
-		const title = withColumnWidth( view, 'field-title', 10, 'title' );
+		const title = withColumnWidth( view, TITLE_FIELD_ID, 10, 'title' );
 		expect( text.layout.styles[ 'field-t' ].width ).toBeLessThan(
-			title.layout.styles[ 'field-title' ].width
+			title.layout.styles[ TITLE_FIELD_ID ].width
 		);
 		expect( text.layout.styles[ 'field-t' ].width ).toBe(
-			DEFAULT_MIN_WIDTH
+			DEFAULT_MIN_WIDTH + FIELD_HEADER_ICON_CHROME
 		);
 	} );
 
