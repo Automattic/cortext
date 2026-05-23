@@ -24,6 +24,7 @@ export default function ChangeFieldTypePopover( {
 	recordId,
 	currentType,
 	onClose,
+	onTypeChanged,
 } ) {
 	const [ pending, setPending ] = useState( null );
 	const commit = useChangeFieldType( collectionId );
@@ -40,6 +41,7 @@ export default function ChangeFieldTypePopover( {
 		setPending( targetType );
 		try {
 			await commit.run( recordId, targetType );
+			onTypeChanged?.( targetType );
 			onClose?.();
 		} catch {
 			// Keep the popover open so the inline error stays visible.

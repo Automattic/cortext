@@ -786,6 +786,7 @@ function FieldActions( {
 					recordId={ recordId }
 					currentType={ fieldType }
 					onClose={ () => setIsChangingType( false ) }
+					onTypeChanged={ onRowsChanged }
 				/>
 			) : null }
 		</span>
