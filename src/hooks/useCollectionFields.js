@@ -122,16 +122,16 @@ export default function useCollectionFields( collectionId ) {
 		collection: collection ?? null,
 		slug: collection?.meta?.slug ?? null,
 		// True while either the collection or the field list is still on
-		// its first resolution for this collection. Once we've latched
-		// fields for the current collection (`hasStableFieldsForCollection`),
+		// its first resolution for this collection. Once we have a cached
+		// collection record and have latched fields for this collection,
 		// subsequent refetches (after a mutation that changes the field
 		// list) keep this false so the table doesn't unmount and remount.
 		// Collection 404s still work: `hasResolved` flips to true on failure too,
 		// so the invalid-collection notice can render.
 		isResolving:
 			Boolean( collectionId ) &&
-			( ! collectionHasResolved ||
-				( ! collection && collectionResolving ) ||
+			( ( ! collection &&
+				( collectionResolving || ! collectionHasResolved ) ) ||
 				( !! collection &&
 					fieldIds.length > 0 &&
 					! hasStableFieldsForCollection ) ),
