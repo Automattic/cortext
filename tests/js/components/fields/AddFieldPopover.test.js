@@ -73,6 +73,17 @@ beforeEach( () => {
 } );
 
 describe( 'AddFieldPopover rollup config', () => {
+	it( 'shows type icons in the picker', () => {
+		render( <AddFieldPopover collectionId={ 5 } /> );
+
+		const numberButton = screen.getByRole( 'button', { name: 'Number' } );
+		expect(
+			numberButton.querySelector(
+				'.cortext-add-field-popover__type-icon[data-cortext-field-type="number"]'
+			)
+		).toBeInTheDocument();
+	} );
+
 	it( 'orders rollup controls as relation, target property, then calculate', async () => {
 		render( <AddFieldPopover collectionId={ 5 } /> );
 
