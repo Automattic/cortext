@@ -22,12 +22,6 @@
 		pointer-events: none;
 	}
 
-	// Gutenberg uses a left box-shadow as the inspector divider. In Cortext it
-	// reads like a stray focus line next to the canvas, so remove it here.
-	.interface-interface-skeleton__sidebar {
-		box-shadow: none;
-	}
-
 	// The inspector has only Page and Block tabs, but @wordpress/components can
 	// still flag the tab list as horizontally overflowing after a click. Its
 	// edge fade washes out the Page tab, so disable the mask for this header.
