@@ -10,13 +10,7 @@
  */
 
 import apiFetch from '@wordpress/api-fetch';
-import {
-	Button,
-	CheckboxControl,
-	DateTimePicker,
-	Dropdown,
-	Popover,
-} from '@wordpress/components';
+import { Button, CheckboxControl } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
 import {
@@ -46,16 +40,17 @@ import {
 } from '@dnd-kit/sortable';
 
 import {
+	DateEditor,
 	RowMutationContext,
-	dateOnlyValue,
+	SelectEditor,
 	formatDisplay,
 } from './EditableCell';
 import { TITLE_FIELD_ID } from './dataViewColumns';
 import FieldActionsMenu from './fields/FieldActionsMenu';
-import EditOptionsPopover from './fields/EditOptionsPopover';
 import { FieldTypeIcon, SystemFieldIcon } from './fields/fieldTypes';
 import { hasSystemFieldIcon } from './fields/systemFieldIconIds';
 import Infotip from './Infotip';
+import MultiselectEdit from './MultiselectEdit';
 import { toRecordId } from '../hooks/fieldIds';
 import { elementsFromOptions } from '../hooks/optionElements';
 import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
@@ -87,11 +82,6 @@ function ReadOnlyProperty( { value, type, elements, format } ) {
 	);
 }
 
-function OptionPropertyValue( { value, type, elements } ) {
-	const display = formatDisplay( value, type, { elements } );
-	return display === '' ? emptyLabel() : display;
-}
-
 function isCollectionField( field ) {
 	return (
 		field?.id?.startsWith?.( 'field-' ) &&
@@ -103,169 +93,12 @@ function hasInternalFieldIcon( field ) {
 	return hasSystemFieldIcon( field?.id );
 }
 
-function SelectPropertyControl( {
-	field,
-	value,
-	elements,
-	onChange,
-	onOptionsSaved,
-	onRowsChanged,
-} ) {
-	const [ anchor, setAnchor ] = useState( null );
-	const [ isOpen, setIsOpen ] = useState( false );
-	const close = useCallback( () => setIsOpen( false ), [] );
-	const recordId = field.cortextRecordId ?? toRecordId( field.id );
-
-	return (
-		<>
-			<Button
-				ref={ setAnchor }
-				className="cortext-row-detail__property-trigger"
-				variant="tertiary"
-				onClick={ () => setIsOpen( true ) }
-				aria-expanded={ isOpen }
-				aria-label={ field.label }
-			>
-				<OptionPropertyValue
-					value={ value }
-					type="select"
-					elements={ elements }
-				/>
-			</Button>
-			{ isOpen && anchor ? (
-				<Popover
-					anchor={ anchor }
-					placement="bottom-start"
-					onClose={ close }
-					focusOnMount="firstElement"
-				>
-					<EditOptionsPopover
-						recordId={ recordId }
-						fieldType="select"
-						initialOptions={ elements ?? [] }
-						value={ value }
-						onOptionsSaved={ onOptionsSaved }
-						onRowsChanged={ onRowsChanged }
-						onRequestClose={ close }
-						onPick={ async ( next ) => {
-							onChange( next );
-							close();
-						} }
-					/>
-				</Popover>
-			) : null }
-		</>
-	);
-}
-
-function MultiselectPropertyControl( {
-	field,
-	value,
-	elements,
-	onChange,
-	onOptionsSaved,
-	onRowsChanged,
-} ) {
-	const [ anchor, setAnchor ] = useState( null );
-	const [ isOpen, setIsOpen ] = useState( false );
-	const close = useCallback( () => setIsOpen( false ), [] );
-	const recordId = field.cortextRecordId ?? toRecordId( field.id );
-	const current = useMemo(
-		() => ( Array.isArray( value ) ? value : [] ),
-		[ value ]
-	);
-	const handlePick = useCallback(
-		( optionValue ) => {
-			const next = current.includes( optionValue )
-				? current.filter( ( item ) => item !== optionValue )
-				: [ ...current, optionValue ];
-			onChange( next );
-		},
-		[ current, onChange ]
-	);
-
-	return (
-		<>
-			<Button
-				ref={ setAnchor }
-				className="cortext-row-detail__property-trigger"
-				variant="tertiary"
-				onClick={ () => setIsOpen( true ) }
-				aria-expanded={ isOpen }
-				aria-label={ field.label }
-			>
-				<OptionPropertyValue
-					value={ current }
-					type="multiselect"
-					elements={ elements }
-				/>
-			</Button>
-			{ isOpen && anchor ? (
-				<Popover
-					anchor={ anchor }
-					placement="bottom-start"
-					onClose={ close }
-					focusOnMount="firstElement"
-				>
-					<EditOptionsPopover
-						recordId={ recordId }
-						fieldType="multiselect"
-						initialOptions={ elements ?? [] }
-						value={ current }
-						onOptionsSaved={ onOptionsSaved }
-						onRowsChanged={ onRowsChanged }
-						onRequestClose={ close }
-						onPick={ handlePick }
-					/>
-				</Popover>
-			) : null }
-		</>
-	);
-}
-
 function relationConfigForField( field ) {
 	return {
 		targetCollectionId:
 			field.relation?.targetCollectionId ?? field.relatedCollectionId,
 		multiple: field.relation?.multiple ?? field.relationMultiple ?? true,
 	};
-}
-
-function DatePropertyControl( { field, value, type, onChange } ) {
-	const display = value
-		? formatDisplay( value, type, { format: field.cortextFormat } )
-		: __( 'Empty', 'cortext' );
-
-	return (
-		<Dropdown
-			popoverProps={ { placement: 'bottom-start' } }
-			renderToggle={ ( { isOpen, onToggle } ) => (
-				<Button
-					className="cortext-row-detail__property-trigger"
-					variant="tertiary"
-					onClick={ onToggle }
-					aria-expanded={ isOpen }
-					aria-label={ field.label }
-				>
-					{ display }
-				</Button>
-			) }
-			renderContent={ () => (
-				<div className="cortext-row-detail__date-popover">
-					<DateTimePicker
-						currentDate={ value || null }
-						onChange={ ( next ) =>
-							onChange(
-								type === 'date' ? dateOnlyValue( next ) : next
-							)
-						}
-						is12Hour={ field.cortextFormat?.hour12 ?? true }
-						aria-label={ field.label }
-					/>
-				</div>
-			) }
-		/>
-	);
 }
 
 function EditablePropertyText( { label, inputMode, value, onChange } ) {
@@ -494,37 +327,56 @@ function PropertyControl( {
 
 	if ( type === 'select' ) {
 		return (
-			<SelectPropertyControl
-				field={ field }
+			<SelectEditor
+				recordId={ field.cortextRecordId ?? toRecordId( field.id ) }
 				value={ value }
 				elements={ elements }
-				onChange={ onChange }
+				onCommit={ ( next ) => {
+					onChange( next );
+					return true;
+				} }
 				onOptionsSaved={ onOptionsSaved }
 				onRowsChanged={ onRowsChanged }
+				label={ label }
+				defaultOpen={ false }
+				triggerClassName="cortext-row-detail__property-trigger cortext-select-edit__toggle"
+				placeholder={ __( 'Empty', 'cortext' ) }
 			/>
 		);
 	}
 
 	if ( type === 'multiselect' ) {
 		return (
-			<MultiselectPropertyControl
-				field={ field }
-				value={ value }
+			<MultiselectEdit
+				recordId={ field.cortextRecordId ?? toRecordId( field.id ) }
+				value={ Array.isArray( value ) ? value : [] }
 				elements={ elements }
-				onChange={ onChange }
+				onSave={ onChange }
 				onOptionsSaved={ onOptionsSaved }
 				onRowsChanged={ onRowsChanged }
+				label={ label }
+				defaultOpen={ false }
+				triggerClassName="cortext-row-detail__property-trigger cortext-multiselect-edit__toggle"
 			/>
 		);
 	}
 
 	if ( type === 'date' || type === 'datetime' ) {
 		return (
-			<DatePropertyControl
-				field={ field }
+			<DateEditor
 				value={ value }
 				type={ type }
-				onChange={ onChange }
+				format={ field.cortextFormat }
+				onCommit={ ( next ) => {
+					onChange( next );
+					return true;
+				} }
+				label={ label }
+				defaultOpen={ false }
+				triggerClassName="cortext-row-detail__property-trigger cortext-date-edit__toggle"
+				emptyLabel={ __( 'Empty', 'cortext' ) }
+				contentClassName="cortext-row-detail__date-popover"
+				closeOnCommit={ false }
 			/>
 		);
 	}
