@@ -33,6 +33,10 @@ import {
 
 import DocumentIdentityControls from './DocumentIdentityControls';
 import { useDocumentPropertiesContext } from './DocumentPropertiesContext';
+import {
+	getCanvasOwnerBlockName,
+	getCanvasOwnerInitialAttributes,
+} from './CanvasOwnerInspector';
 import MediaPicker, { MediaUploadCheck } from './MediaPicker';
 import afterNextPaint from '../hooks/afterNextPaint';
 
@@ -54,7 +58,7 @@ const HEADER_BOUNDARY_MOVE_UP_SCOPE_SELECTOR = [
 	'.block-editor-block-toolbar',
 ].join( ',' );
 const activeHeaderBoundaryMoveUpGuards = new Set();
-const HEADER_BLOCK_NAMES = new Set( [
+const DEFAULT_HEADER_BLOCK_NAMES = new Set( [
 	DOCUMENT_COVER_BLOCK,
 	DOCUMENT_ICON_BLOCK,
 	POST_TITLE_BLOCK,
@@ -62,8 +66,17 @@ const HEADER_BLOCK_NAMES = new Set( [
 ] );
 const CANVAS_READY_IMAGE_TIMEOUT = 8000;
 
-function isHeaderBlock( block ) {
-	return HEADER_BLOCK_NAMES.has( block?.name );
+// Some post types add an owner block to the reserved header/body prefix.
+function getHeaderBlockNames( postType ) {
+	const ownerName = getCanvasOwnerBlockName( postType );
+	if ( ! ownerName ) {
+		return DEFAULT_HEADER_BLOCK_NAMES;
+	}
+	return new Set( [ ...DEFAULT_HEADER_BLOCK_NAMES, ownerName ] );
+}
+
+function isHeaderBlock( block, postType ) {
+	return getHeaderBlockNames( postType ).has( block?.name );
 }
 
 function syncHeaderBoundaryMoveUpClass() {
@@ -159,7 +172,11 @@ function syncHeaderBoundaryMoveUpState( root, shouldDisable ) {
 	syncHeaderBoundaryMoveUpButtons( root, shouldDisable );
 }
 
-function HeaderPrefixToolbarGuard( { isActive = true, toolbarRootRef } ) {
+function HeaderPrefixToolbarGuard( {
+	isActive = true,
+	postType,
+	toolbarRootRef,
+} ) {
 	const guardId = useRef( Symbol( DISABLE_HEADER_BOUNDARY_MOVE_UP_CLASS ) );
 	const shouldDisableMoveUp = useSelect(
 		( select ) => {
@@ -180,7 +197,7 @@ function HeaderPrefixToolbarGuard( { isActive = true, toolbarRootRef } ) {
 				( block, index ) =>
 					index > titleIndex &&
 					block.name !== LEGACY_HEADER_ACTIONS_BLOCK &&
-					! isHeaderBlock( block )
+					! isHeaderBlock( block, postType )
 			);
 			if ( firstBodyIndex < 0 ) {
 				return false;
@@ -198,7 +215,7 @@ function HeaderPrefixToolbarGuard( { isActive = true, toolbarRootRef } ) {
 
 			return Math.min( ...selectedRootIndexes ) === firstBodyIndex;
 		},
-		[ isActive ]
+		[ isActive, postType ]
 	);
 
 	useEffect( () => {
@@ -412,6 +429,7 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 		propertiesContextStable &&
 		Array.isArray( propertiesCtx?.fields ) &&
 		propertiesCtx.fields.length > 0;
+	const ownerBlockName = getCanvasOwnerBlockName( postType );
 	const {
 		coverIndex,
 		titleIndex,
@@ -419,6 +437,7 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 		hasIcon,
 		hasTitle,
 		hasProperties,
+		hasOwner,
 		propertiesClientId,
 		headerEndIndex,
 		bodyBlockBeforeTitleId,
@@ -426,88 +445,102 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 		duplicateHeaderIds,
 		legacyActionIds,
 		isTrashed,
-	} = useSelect( ( select ) => {
-		const store = select( blockEditorStore );
-		const blocks = store.getBlocks();
-		const names = blocks.map( ( block ) => block.name );
-		const currentTitleIndex = names.indexOf( POST_TITLE_BLOCK );
-		const currentPropertiesIndex = names.indexOf(
-			DOCUMENT_PROPERTIES_BLOCK
-		);
-		// The header zone runs from the start of the block list through the
-		// last installed header block: cover, icon, title, then properties.
-		// Body blocks dropped there get moved after the header. Use max() so
-		// a degenerate state where properties sits before title still treats
-		// title as the header boundary instead of underestimating it.
-		const currentHeaderEndIndex = Math.max(
-			currentTitleIndex,
-			currentPropertiesIndex
-		);
-		let currentBodyBlockBeforeTitleId = null;
-		if ( currentHeaderEndIndex > -1 ) {
-			for ( let index = currentHeaderEndIndex - 1; index >= 0; index-- ) {
-				const block = blocks[ index ];
-				if (
-					block.name === LEGACY_HEADER_ACTIONS_BLOCK ||
-					isHeaderBlock( block )
+	} = useSelect(
+		( select ) => {
+			const store = select( blockEditorStore );
+			const blocks = store.getBlocks();
+			const names = blocks.map( ( block ) => block.name );
+			const currentTitleIndex = names.indexOf( POST_TITLE_BLOCK );
+			const currentPropertiesIndex = names.indexOf(
+				DOCUMENT_PROPERTIES_BLOCK
+			);
+			const currentOwnerIndex = ownerBlockName
+				? names.indexOf( ownerBlockName )
+				: -1;
+			// The protected prefix ends at the last installed header block:
+			// cover, icon, title, properties, or the owner block. max() keeps
+			// strange legacy order from shrinking that boundary.
+			const currentHeaderEndIndex = Math.max(
+				currentTitleIndex,
+				currentPropertiesIndex,
+				currentOwnerIndex
+			);
+			let currentBodyBlockBeforeTitleId = null;
+			if ( currentHeaderEndIndex > -1 ) {
+				for (
+					let index = currentHeaderEndIndex - 1;
+					index >= 0;
+					index--
 				) {
-					continue;
+					const block = blocks[ index ];
+					if (
+						block.name === LEGACY_HEADER_ACTIONS_BLOCK ||
+						isHeaderBlock( block, postType )
+					) {
+						continue;
+					}
+					currentBodyBlockBeforeTitleId = block.clientId;
+					break;
 				}
-				currentBodyBlockBeforeTitleId = block.clientId;
-				break;
 			}
-		}
-		const insertionPoint = store.getBlockInsertionPoint();
-		const insertionPointRootClientId =
-			insertionPoint?.rootClientId ?? ROOT_BLOCK_LIST;
-		const insertionPointIndex =
-			insertionPoint?.index ?? Number.POSITIVE_INFINITY;
-		const seenSingletons = new Set();
-		const duplicateIds = [];
-		blocks.forEach( ( block ) => {
-			if (
-				block.name !== DOCUMENT_COVER_BLOCK &&
-				block.name !== DOCUMENT_ICON_BLOCK &&
-				block.name !== POST_TITLE_BLOCK &&
-				block.name !== DOCUMENT_PROPERTIES_BLOCK
-			) {
-				return;
-			}
-			if ( seenSingletons.has( block.name ) ) {
-				duplicateIds.push( block.clientId );
-				return;
-			}
-			seenSingletons.add( block.name );
-		} );
-		const propertiesBlock = blocks.find(
-			( block ) => block.name === DOCUMENT_PROPERTIES_BLOCK
-		);
-		return {
-			coverIndex: names.indexOf( DOCUMENT_COVER_BLOCK ),
-			titleIndex: currentTitleIndex,
-			hasCover: names.includes( DOCUMENT_COVER_BLOCK ),
-			hasIcon: names.includes( DOCUMENT_ICON_BLOCK ),
-			hasTitle: names.includes( POST_TITLE_BLOCK ),
-			hasProperties: !! propertiesBlock,
-			propertiesClientId: propertiesBlock?.clientId ?? null,
-			headerEndIndex: currentHeaderEndIndex,
-			bodyBlockBeforeTitleId: currentBodyBlockBeforeTitleId,
-			shouldHideHeaderInsertionPoint:
-				store.isBlockInsertionPointVisible() &&
-				currentHeaderEndIndex > -1 &&
-				insertionPointRootClientId === ROOT_BLOCK_LIST &&
-				insertionPointIndex <= currentHeaderEndIndex,
-			duplicateHeaderIds: duplicateIds,
-			legacyActionIds: blocks
-				.filter(
-					( block ) => block.name === LEGACY_HEADER_ACTIONS_BLOCK
-				)
-				.map( ( block ) => block.clientId ),
-			isTrashed:
-				select( editorStore ).getCurrentPostAttribute( 'status' ) ===
-				'trash',
-		};
-	}, [] );
+			const insertionPoint = store.getBlockInsertionPoint();
+			const insertionPointRootClientId =
+				insertionPoint?.rootClientId ?? ROOT_BLOCK_LIST;
+			const insertionPointIndex =
+				insertionPoint?.index ?? Number.POSITIVE_INFINITY;
+			const seenSingletons = new Set();
+			const duplicateIds = [];
+			blocks.forEach( ( block ) => {
+				if (
+					block.name !== DOCUMENT_COVER_BLOCK &&
+					block.name !== DOCUMENT_ICON_BLOCK &&
+					block.name !== POST_TITLE_BLOCK &&
+					block.name !== DOCUMENT_PROPERTIES_BLOCK &&
+					block.name !== ownerBlockName
+				) {
+					return;
+				}
+				if ( seenSingletons.has( block.name ) ) {
+					duplicateIds.push( block.clientId );
+					return;
+				}
+				seenSingletons.add( block.name );
+			} );
+			const propertiesBlock = blocks.find(
+				( block ) => block.name === DOCUMENT_PROPERTIES_BLOCK
+			);
+			return {
+				coverIndex: names.indexOf( DOCUMENT_COVER_BLOCK ),
+				titleIndex: currentTitleIndex,
+				hasCover: names.includes( DOCUMENT_COVER_BLOCK ),
+				hasIcon: names.includes( DOCUMENT_ICON_BLOCK ),
+				hasTitle: names.includes( POST_TITLE_BLOCK ),
+				hasProperties: !! propertiesBlock,
+				hasOwner: ownerBlockName
+					? names.includes( ownerBlockName )
+					: true,
+				propertiesClientId: propertiesBlock?.clientId ?? null,
+				headerEndIndex: currentHeaderEndIndex,
+				bodyBlockBeforeTitleId: currentBodyBlockBeforeTitleId,
+				shouldHideHeaderInsertionPoint:
+					store.isBlockInsertionPointVisible() &&
+					currentHeaderEndIndex > -1 &&
+					insertionPointRootClientId === ROOT_BLOCK_LIST &&
+					insertionPointIndex <= currentHeaderEndIndex,
+				duplicateHeaderIds: duplicateIds,
+				legacyActionIds: blocks
+					.filter(
+						( block ) => block.name === LEGACY_HEADER_ACTIONS_BLOCK
+					)
+					.map( ( block ) => block.clientId ),
+				isTrashed:
+					select( editorStore ).getCurrentPostAttribute(
+						'status'
+					) === 'trash',
+			};
+		},
+		[ ownerBlockName, postType ]
+	);
 	const {
 		insertBlocks,
 		moveBlocksToPosition,
@@ -579,11 +612,13 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 		const needsIcon = iconMeta && ! hasIcon;
 		const needsTitle = ! hasTitle;
 		const needsProperties = hasSchema && ! hasProperties;
+		const needsOwner = !! ownerBlockName && ! hasOwner;
 		if (
 			! needsCover &&
 			! needsIcon &&
 			! needsTitle &&
-			! needsProperties
+			! needsProperties &&
+			! needsOwner
 		) {
 			return;
 		}
@@ -648,6 +683,20 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 				false
 			);
 		}
+		if ( needsOwner ) {
+			// The owner block is the body. Add it last so it follows whatever
+			// header repairs this pass just made.
+			const ownerAttributes = getCanvasOwnerInitialAttributes(
+				postType,
+				postId
+			);
+			insertBlocks(
+				createBlock( ownerBlockName, ownerAttributes ?? {} ),
+				undefined,
+				undefined,
+				false
+			);
+		}
 
 		// Release the typing flag on the next frame, after the moving
 		// animation has been decided (and skipped) for this render pass.
@@ -658,12 +707,16 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 		featuredId,
 		hasCover,
 		hasIcon,
+		hasOwner,
 		hasProperties,
 		hasSchema,
 		hasTitle,
 		iconMeta,
 		insertBlocks,
 		isTrashed,
+		ownerBlockName,
+		postId,
+		postType,
 		startTyping,
 		stopTyping,
 		titleIndex,
@@ -720,7 +773,8 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 // a per-block filter. The toolbar and iframe live in separate documents, so a
 // body class is the simplest hook for CSS. Mounting this here keeps Canvas and
 // RowEditor on the same path.
-function HideHeaderBlockKebab() {
+function HideHeaderBlockKebab( { postType } ) {
+	const ownerBlockName = getCanvasOwnerBlockName( postType );
 	const selectedName = useSelect( ( select ) => {
 		const store = select( blockEditorStore );
 		const clientId = store.getSelectedBlockClientId();
@@ -731,7 +785,8 @@ function HideHeaderBlockKebab() {
 		const isHeader =
 			selectedName === DOCUMENT_COVER_BLOCK ||
 			selectedName === DOCUMENT_ICON_BLOCK ||
-			selectedName === DOCUMENT_PROPERTIES_BLOCK;
+			selectedName === DOCUMENT_PROPERTIES_BLOCK ||
+			( !! ownerBlockName && selectedName === ownerBlockName );
 		document.body.classList.toggle(
 			'cortext-hide-block-settings-menu',
 			isHeader
@@ -741,7 +796,7 @@ function HideHeaderBlockKebab() {
 				'cortext-hide-block-settings-menu'
 			);
 		};
-	}, [ selectedName ] );
+	}, [ ownerBlockName, selectedName ] );
 
 	return null;
 }
@@ -1012,12 +1067,22 @@ export default function EditorBody( {
 					postType={ postType }
 				/>
 				<EnsureHeaderBlocks postId={ postId } postType={ postType } />
-				<HideHeaderBlockKebab />
+				<HideHeaderBlockKebab postType={ postType } />
 				<HeaderPrefixToolbarGuard
 					isActive={ isActive }
+					postType={ postType }
 					toolbarRootRef={ blockCanvasRef }
 				/>
-				<div className="cortext-canvas__editor">
+				<div
+					className={ [
+						'cortext-canvas__editor',
+						getCanvasOwnerBlockName( postType )
+							? 'cortext-canvas__editor--owner'
+							: '',
+					]
+						.filter( Boolean )
+						.join( ' ' ) }
+				>
 					<BlockList
 						className="wp-block-post-content is-layout-constrained has-global-padding"
 						layout={ { type: 'constrained', ...layout } }

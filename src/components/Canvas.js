@@ -23,6 +23,7 @@ import useAutosave from '../hooks/useAutosave';
 import useDelayedFlag from '../hooks/useDelayedFlag';
 import { withViewTransition } from '../hooks/viewTransition';
 import { POST_TYPE } from './page-queries';
+import CollectionPublishToggle from './CollectionPublishToggle';
 import { DocumentPropertiesProvider } from './DocumentPropertiesContext';
 import EditorBody from './EditorBody';
 import PagePublishToggle from './PagePublishToggle';
@@ -37,6 +38,7 @@ import PageInspectorSidebar, {
 
 function DocumentActions( {
 	isActive,
+	postId,
 	postType,
 	topBarActions,
 	hasProperties,
@@ -70,7 +72,10 @@ function DocumentActions( {
 		<TopBarActionsFill>
 			<div className="cortext-document-actions">
 				{ topBarActions }
-				{ postType === POST_TYPE ? <PagePublishToggle /> : null }
+				{ postType === POST_TYPE && <PagePublishToggle /> }
+				{ postType === 'crtxt_collection' && (
+					<CollectionPublishToggle collectionId={ postId } />
+				) }
 				{ hasProperties ? (
 					<Button
 						className="cortext-document-actions__fields"
@@ -239,6 +244,7 @@ function CanvasEditor( {
 		>
 			<DocumentActions
 				isActive={ isActive }
+				postId={ post.id }
 				postType={ postType }
 				topBarActions={ topBarActions }
 				hasProperties={ hasProperties }

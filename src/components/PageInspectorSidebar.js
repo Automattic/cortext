@@ -41,6 +41,9 @@ import {
 } from '@wordpress/interface';
 import apiFetch from '@wordpress/api-fetch';
 
+import CanvasOwnerInspector, {
+	useIsCanvasOwnerSelected,
+} from './CanvasOwnerInspector';
 import DocumentPropertiesActions from './DocumentPropertiesActions';
 import { useDocumentPropertiesContext } from './DocumentPropertiesContext';
 import MediaPicker, { MediaUploadCheck } from './MediaPicker';
@@ -183,8 +186,8 @@ function InspectorToolGroup( { label, children } ) {
 	);
 }
 
-function PageIconInspectorControls( { postId } ) {
-	const [ meta ] = useEntityProp( 'postType', POST_TYPE, 'meta', postId );
+function PageIconInspectorControls( { postId, postType } ) {
+	const [ meta ] = useEntityProp( 'postType', postType, 'meta', postId );
 	const iconMeta = meta?.cortext_document_icon ?? '';
 	const { coverIndex, hasCoverBlock, iconBlockId } = useSelect(
 		( select ) => {
@@ -249,14 +252,20 @@ function PageIconInspectorControls( { postId } ) {
 		setIsRemoving( true );
 		try {
 			removeIconBlock();
-			editEntityRecord( 'postType', POST_TYPE, postId, {
+			editEntityRecord( 'postType', postType, postId, {
 				meta: { cortext_document_icon: '' },
 			} );
-			await saveEditedEntityRecord( 'postType', POST_TYPE, postId );
+			await saveEditedEntityRecord( 'postType', postType, postId );
 		} finally {
 			setIsRemoving( false );
 		}
-	}, [ editEntityRecord, postId, removeIconBlock, saveEditedEntityRecord ] );
+	}, [
+		editEntityRecord,
+		postId,
+		postType,
+		removeIconBlock,
+		saveEditedEntityRecord,
+	] );
 
 	return (
 		<InspectorToolGroup label={ __( 'Icon', 'cortext' ) }>
@@ -271,7 +280,7 @@ function PageIconInspectorControls( { postId } ) {
 				) : null }
 				<DocumentIdentityControls
 					postId={ postId }
-					postType={ POST_TYPE }
+					postType={ postType }
 					currentIcon={ iconMeta }
 					onAfterSave={ syncIconBlock }
 					renderToggle={ ( { onToggle } ) => (
@@ -303,10 +312,10 @@ function PageIconInspectorControls( { postId } ) {
 	);
 }
 
-function PageFeaturedImageInspectorControls( { postId } ) {
+function PageFeaturedImageInspectorControls( { postId, postType } ) {
 	const [ featuredId, setFeaturedId ] = useEntityProp(
 		'postType',
-		POST_TYPE,
+		postType,
 		'featured_media',
 		postId
 	);
@@ -357,12 +366,18 @@ function PageFeaturedImageInspectorControls( { postId } ) {
 			try {
 				ensureCoverBlock();
 				setFeaturedId( picked.id );
-				await saveEditedEntityRecord( 'postType', POST_TYPE, postId );
+				await saveEditedEntityRecord( 'postType', postType, postId );
 			} finally {
 				setIsSaving( false );
 			}
 		},
-		[ ensureCoverBlock, postId, saveEditedEntityRecord, setFeaturedId ]
+		[
+			ensureCoverBlock,
+			postId,
+			postType,
+			saveEditedEntityRecord,
+			setFeaturedId,
+		]
 	);
 
 	const removeFeaturedImage = useCallback( async () => {
@@ -370,11 +385,17 @@ function PageFeaturedImageInspectorControls( { postId } ) {
 		try {
 			removeCoverBlock();
 			setFeaturedId( 0 );
-			await saveEditedEntityRecord( 'postType', POST_TYPE, postId );
+			await saveEditedEntityRecord( 'postType', postType, postId );
 		} finally {
 			setIsSaving( false );
 		}
-	}, [ postId, removeCoverBlock, saveEditedEntityRecord, setFeaturedId ] );
+	}, [
+		postId,
+		postType,
+		removeCoverBlock,
+		saveEditedEntityRecord,
+		setFeaturedId,
+	] );
 
 	const src =
 		media?.media_details?.sizes?.thumbnail?.source_url ??
@@ -449,12 +470,18 @@ function PageFeaturedImageInspectorControls( { postId } ) {
 	);
 }
 
-function PageIdentityInspectorPanel( { postId } ) {
+function PageIdentityInspectorPanel( { postId, postType, title } ) {
 	return (
-		<PanelBody title={ __( 'Page identity', 'cortext' ) } initialOpen>
+		<PanelBody title={ title } initialOpen>
 			<div className="cortext-page-inspector__tools">
-				<PageIconInspectorControls postId={ postId } />
-				<PageFeaturedImageInspectorControls postId={ postId } />
+				<PageIconInspectorControls
+					postId={ postId }
+					postType={ postType }
+				/>
+				<PageFeaturedImageInspectorControls
+					postId={ postId }
+					postType={ postType }
+				/>
 			</div>
 		</PanelBody>
 	);
@@ -649,10 +676,29 @@ function PageActionsPanel( { postId } ) {
 function PageInspectorContent( { postId } ) {
 	return (
 		<div className="cortext-page-inspector">
-			<PageIdentityInspectorPanel postId={ postId } />
+			<PageIdentityInspectorPanel
+				postId={ postId }
+				postType={ POST_TYPE }
+				title={ __( 'Page identity', 'cortext' ) }
+			/>
 			<PageLinkPanel />
 			<PageAttributesInspectorPanel />
 			<PageActionsPanel postId={ postId } />
+		</div>
+	);
+}
+
+// Collection inspector: identity controls, then the owner data-view panels.
+function CollectionInspectorContent( { postId, postType } ) {
+	return (
+		<div className="cortext-page-inspector">
+			<PageIdentityInspectorPanel
+				postId={ postId }
+				postType={ postType }
+				title={ __( 'Collection identity', 'cortext' ) }
+			/>
+			<PageLinkPanel />
+			<CanvasOwnerInspector.Slot />
 		</div>
 	);
 }
@@ -673,26 +719,40 @@ function InspectorFrame( { children, isTrashed } ) {
 
 export default function PageInspectorSidebar( { postId, postType } ) {
 	const isPage = postType === POST_TYPE;
+	const isCollection = postType === 'crtxt_collection';
 	const propertiesCtx = useDocumentPropertiesContext();
-	const collectionId = propertiesCtx?.collectionId;
-	const { record: collection } = useEntityRecord(
+	const rowCollectionId = propertiesCtx?.collectionId;
+	const { record: rowCollection } = useEntityRecord(
 		'postType',
 		'crtxt_collection',
-		collectionId || 0
+		rowCollectionId || 0
 	);
-	const collectionTitle = (
-		collection?.title?.rendered ||
-		collection?.title?.raw ||
+	const { record: ownedCollection } = useEntityRecord(
+		'postType',
+		'crtxt_collection',
+		isCollection ? postId : 0
+	);
+	const rowCollectionTitle = (
+		rowCollection?.title?.rendered ||
+		rowCollection?.title?.raw ||
+		''
+	).trim();
+	const ownedCollectionTitle = (
+		ownedCollection?.title?.rendered ||
+		ownedCollection?.title?.raw ||
 		''
 	).trim();
 	let documentTabLabel;
 	if ( isPage ) {
 		documentTabLabel = __( 'Page', 'cortext' );
-	} else if ( collectionTitle ) {
+	} else if ( isCollection ) {
+		documentTabLabel =
+			ownedCollectionTitle || __( 'Collection', 'cortext' );
+	} else if ( rowCollectionTitle ) {
 		documentTabLabel = sprintf(
 			/* translators: %s: collection name (e.g. "Books Item") */
 			__( '%s Item', 'cortext' ),
-			collectionTitle
+			rowCollectionTitle
 		);
 	} else {
 		documentTabLabel = __( 'Collection Item', 'cortext' );
@@ -710,17 +770,25 @@ export default function PageInspectorSidebar( { postId, postType } ) {
 			),
 		[]
 	);
-	// Show the Block tab only when a regular block is selected. With no block
-	// selected it only adds a placeholder, and the properties block already
-	// exposes the same controls as the Row tab.
-	const showBlockTab = useSelect( ( select ) => {
-		const store = select( blockEditorStore );
-		const clientId = store.getSelectedBlockClientId();
-		if ( ! clientId ) {
-			return false;
-		}
-		return store.getBlockName( clientId ) !== 'cortext/document-properties';
-	}, [] );
+	// Hide empty/redundant Block tabs: no selection, document-properties, or
+	// the canvas owner whose panels already live in the Page tab.
+	const isCanvasOwnerSelected = useIsCanvasOwnerSelected( postType, postId );
+	const showBlockTab = useSelect(
+		( select ) => {
+			const store = select( blockEditorStore );
+			const clientId = store.getSelectedBlockClientId();
+			if ( ! clientId ) {
+				return false;
+			}
+			if ( isCanvasOwnerSelected ) {
+				return false;
+			}
+			return (
+				store.getBlockName( clientId ) !== 'cortext/document-properties'
+			);
+		},
+		[ isCanvasOwnerSelected ]
+	);
 	const selectedTabId =
 		isInspectorArea( activeArea ) &&
 		( showBlockTab || activeArea !== BLOCK_INSPECTOR )
@@ -761,11 +829,14 @@ export default function PageInspectorSidebar( { postId, postType } ) {
 				tabs={ tabs }
 			>
 				<InspectorFrame isTrashed={ isTrashed }>
-					{ isPage ? (
-						<PageInspectorContent postId={ postId } />
-					) : (
-						<RowInspectorContent />
+					{ isPage && <PageInspectorContent postId={ postId } /> }
+					{ isCollection && (
+						<CollectionInspectorContent
+							postId={ postId }
+							postType={ postType }
+						/>
 					) }
+					{ ! isPage && ! isCollection && <RowInspectorContent /> }
 				</InspectorFrame>
 			</InspectorComplementaryArea>
 			{ showBlockTab && (

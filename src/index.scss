@@ -5575,6 +5575,28 @@ body.cortext-hide-block-settings-menu .block-editor-block-switcher {
 	display: none;
 }
 
+// Owner canvases lock the body to one block. Hide the normal appender; cover
+// and icon insertion still goes through DocumentIdentityActions.
+.cortext-canvas__editor--owner .block-editor-default-block-appender,
+.cortext-canvas__editor--owner .block-editor-block-list__layout > .block-list-appender {
+	display: none;
+}
+
+// The owner data-view is the canvas body, so selection outlines and adjacent
+// inserters are just noise. Keep the toolbar; "Add field" still lives there.
+.cortext-canvas__editor .wp-block.is-document-owner {
+
+	&.is-selected::before,
+	&.is-hovered::before {
+		display: none;
+	}
+}
+
+.cortext-canvas__editor
+.block-editor-block-list__layout > .block-editor-block-list__block.is-document-owner + .block-editor-block-list__insertion-point {
+	display: none;
+}
+
 // tech-debt.md#57: while row peek/modal owns the surface, keep the page
 // canvas toolbar out of sight so only row toolbar actions are reachable.
 body.cortext-hide-parent-block-toolbar

@@ -7,6 +7,7 @@
 	"icon": "database",
 	"description": "Displays a Cortext collection's rows as a table, grid, or list.",
 	"textdomain": "cortext",
+	"usesContext": [ "postId", "postType" ],
 	"supports": {
 		"html": false,
 		"reusable": false,
