@@ -491,7 +491,6 @@ function PropertyLabel( {
 					</span>
 				</span>
 			}
-			renamingPrefix={ icon }
 			onFieldOptionsSaved={ onFieldOptionsSaved }
 			onFieldFormatSaved={ onFieldFormatSaved }
 			onRowsChanged={ onRowsChanged }
