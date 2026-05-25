@@ -80,7 +80,7 @@ const cortextMarkIcon = (
 import { DndContext, DragOverlay, pointerWithin } from '@dnd-kit/core';
 
 import { openCommandPalette } from './CommandPalette';
-import SidebarFavorites, { favoriteKey } from './SidebarFavorites';
+import SidebarFavorites from './SidebarFavorites';
 import SidebarResizeHandle from './SidebarResizeHandle';
 import SidebarRecents from './SidebarRecents';
 import SidebarSection from './SidebarSection';
@@ -104,8 +104,10 @@ import { useWorkspaceHomePath } from '../hooks/useWorkspaceHomePath';
 import {
 	DocumentsProvider,
 	favoriteIdentForRecord,
+	favoriteKey,
 	favoriteKeyForRecord,
 	useDocumentSelection,
+	useFavoriteToggle,
 } from '../documents';
 import useSidebarDnd from './sidebar/useSidebarDnd';
 import useSidebarNavigation from './sidebar/useSidebarNavigation';
@@ -145,7 +147,6 @@ export default function Sidebar( {
 		favorites,
 		setFavorites,
 		isResolving: isResolvingFavorites,
-		isUpdating: isUpdatingFavorites,
 	} = useFavorites();
 	const { saveEntityRecord, invalidateResolution } = useDispatch( 'core' );
 	const {
@@ -169,8 +170,11 @@ export default function Sidebar( {
 
 	const [ favoritesError, setFavoritesError ] = useState( null );
 	const [ duplicateNotice, setDuplicateNotice ] = useState( null );
-	const areFavoriteActionsDisabled =
-		isResolvingFavorites || isUpdatingFavorites;
+	const {
+		isFavorite,
+		toggle: toggleFavorite,
+		disabled: areFavoriteActionsDisabled,
+	} = useFavoriteToggle( { onError: setFavoritesError } );
 	const { isSectionCollapsed, toggleSection } = useSidebarSections();
 	const goPublished = useCallback( () => {
 		navigate( {
@@ -188,53 +192,6 @@ export default function Sidebar( {
 		setIsTrashPanelOpen( ( current ) => ! current );
 	}, [ collapsed, onToggleCollapsed ] );
 
-	const favoriteKeys = useMemo(
-		() =>
-			new Set( favorites.map( ( favorite ) => favoriteKey( favorite ) ) ),
-		[ favorites ]
-	);
-	const isFavorite = useCallback(
-		( record ) => {
-			const key = favoriteKeyForRecord( record );
-			return key !== null && favoriteKeys.has( key );
-		},
-		[ favoriteKeys ]
-	);
-	// `target` is either a raw record (from a row's menu) or an existing
-	// `{ kind, id }` favorite (from SidebarFavorites' remove button).
-	// `favoriteIdentForRecord` accepts both by reading `kind` directly or
-	// deriving it from `type`.
-	const toggleFavorite = useCallback(
-		async ( target ) => {
-			if ( areFavoriteActionsDisabled ) {
-				return;
-			}
-			const ident = favoriteIdentForRecord( target );
-			if ( ! ident ) {
-				return;
-			}
-			const key = favoriteKey( ident );
-			setFavoritesError( null );
-			try {
-				await setFavorites( ( current ) => {
-					const exists = current.some(
-						( favorite ) => favoriteKey( favorite ) === key
-					);
-					return exists
-						? current.filter(
-								( favorite ) => favoriteKey( favorite ) !== key
-						  )
-						: [ ...current, ident ];
-				} );
-			} catch ( err ) {
-				setFavoritesError(
-					err?.message ??
-						__( 'Could not update favorites.', 'cortext' )
-				);
-			}
-		},
-		[ areFavoriteActionsDisabled, setFavorites ]
-	);
 	const reorderFavorites = useCallback(
 		async ( next ) => {
 			if ( areFavoriteActionsDisabled ) {
