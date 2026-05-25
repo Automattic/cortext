@@ -17,7 +17,7 @@ import {
 	favoriteIdentForRecord,
 	favoriteKeyForRecord,
 } from './favorites';
-import { iconForRecord } from './icons';
+import { iconForRecord, listIconForRecord } from './icons';
 import { kindFromRecord } from './kinds';
 import { getDescriptor } from './descriptors';
 
@@ -199,9 +199,7 @@ export function useDocumentRecord( record ) {
 	const descriptor = getDescriptor( kind );
 	const title = documentTitle( record );
 	const icon = iconForRecord( record, kind );
-	const listIcon = descriptor.listIcon
-		? ( size ) => descriptor.listIcon( record, size )
-		: null;
+	const listIcon = ( size ) => listIconForRecord( record, size );
 	return {
 		kind,
 		title,

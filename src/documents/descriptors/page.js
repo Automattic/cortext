@@ -22,12 +22,10 @@ const pageDescriptor = {
 
 	kindLabel: __( 'Page', 'cortext' ),
 
-	// Compact-list icon used in Recents and similar surfaces. Pages keep
-	// their own glyph; falling back to the default PageIcon shape when
-	// nothing is set.
-	listIcon( record, size = 16 ) {
-		const icon = record?.icon ?? record?.meta?.cortext_document_icon ?? '';
-		return <PageIcon icon={ icon } size={ size } />;
+	// Compact-list fallback glyph for pages with no custom icon. Custom icons
+	// take precedence and are rendered by `useDocumentRecord` directly.
+	fallbackListIcon( size = 16 ) {
+		return <PageIcon icon="" size={ size } />;
 	},
 
 	uri( record ) {

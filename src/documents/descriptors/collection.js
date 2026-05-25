@@ -1,6 +1,5 @@
 import { __, _n, sprintf } from '@wordpress/i18n';
-import { Icon } from '@wordpress/components';
-import { table } from '@wordpress/icons';
+import { Icon, table } from '@wordpress/icons';
 import apiFetch from '@wordpress/api-fetch';
 
 import { computeCollectionUri } from '../../router/useResolveEntity';
@@ -26,7 +25,7 @@ const collectionDescriptor = {
 
 	kindLabel: __( 'Collection', 'cortext' ),
 
-	listIcon( record, size = 16 ) {
+	fallbackListIcon( size = 16 ) {
 		return <Icon icon={ table } size={ size } />;
 	},
 
