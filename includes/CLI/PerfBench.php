@@ -1510,6 +1510,13 @@ final class PerfBench {
 				$relation_target_id
 			);
 		}
+		$this->assert_materialization_rest_read_parity(
+			$primary_collection_id,
+			$number_field_id,
+			$select_field_id,
+			$date_field_id,
+			$filter_minimum
+		);
 
 		$write_row_ids       = array_slice( $primary_row_ids, 0, min( self::MIGRATION_CAP_ROWS, count( $primary_row_ids ) ) );
 		$single_write_row_id = $write_row_ids[0] ?? $primary_row_ids[0];
@@ -1620,9 +1627,10 @@ final class PerfBench {
 				'label' => 'Field values: sidecar whole-collection count',
 				'run'   => fn() => $index->count_text_value( $primary_collection_id, $select_field_id, 'stable' ),
 			),
-			'mat_filter_response_sanity_postmeta'    => array(
-				'label' => 'Field values: postmeta filter plus REST response',
-				'run'   => fn() => $this->rest_request(
+			'mat_filter_response_postmeta'           => array(
+				'label' => 'Field values: REST filter response, sidecar off',
+				'run'   => fn() => $this->rest_request_with_field_value_index(
+					false,
 					'GET',
 					'/cortext/v1/rows',
 					array(
@@ -1633,8 +1641,92 @@ final class PerfBench {
 					)
 				),
 			),
-			'mat_filter_response_sanity_sidecar'     => array(
-				'label' => 'Field values: sidecar IDs plus REST response',
+			'mat_filter_response_sidecar'            => array(
+				'label' => 'Field values: REST filter response, sidecar on',
+				'run'   => fn() => $this->rest_request_with_field_value_index(
+					true,
+					'GET',
+					'/cortext/v1/rows',
+					array(
+						'collection' => $primary_collection_id,
+						'page'       => 1,
+						'per_page'   => 50,
+						'filters'    => $this->materialization_filter_tree( $number_field_id, $select_field_id, $filter_minimum ),
+					)
+				),
+			),
+			'mat_sort_response_postmeta'             => array(
+				'label' => 'Field values: REST date sort response, sidecar off',
+				'run'   => fn() => $this->rest_request_with_field_value_index(
+					false,
+					'GET',
+					'/cortext/v1/rows',
+					array(
+						'collection' => $primary_collection_id,
+						'page'       => 1,
+						'per_page'   => 50,
+						'sort'       => array(
+							'field'     => Relations::meta_key( $date_field_id ),
+							'direction' => 'asc',
+						),
+					)
+				),
+			),
+			'mat_sort_response_sidecar'              => array(
+				'label' => 'Field values: REST date sort response, sidecar on',
+				'run'   => fn() => $this->rest_request_with_field_value_index(
+					true,
+					'GET',
+					'/cortext/v1/rows',
+					array(
+						'collection' => $primary_collection_id,
+						'page'       => 1,
+						'per_page'   => 50,
+						'sort'       => array(
+							'field'     => Relations::meta_key( $date_field_id ),
+							'direction' => 'asc',
+						),
+					)
+				),
+			),
+			'mat_sort_filtered_response_postmeta'    => array(
+				'label' => 'Field values: REST filtered date sort response, sidecar off',
+				'run'   => fn() => $this->rest_request_with_field_value_index(
+					false,
+					'GET',
+					'/cortext/v1/rows',
+					array(
+						'collection' => $primary_collection_id,
+						'page'       => 1,
+						'per_page'   => 50,
+						'filters'    => $this->materialization_filter_tree( $number_field_id, $select_field_id, $filter_minimum ),
+						'sort'       => array(
+							'field'     => Relations::meta_key( $date_field_id ),
+							'direction' => 'asc',
+						),
+					)
+				),
+			),
+			'mat_sort_filtered_response_sidecar'     => array(
+				'label' => 'Field values: REST filtered date sort response, sidecar on',
+				'run'   => fn() => $this->rest_request_with_field_value_index(
+					true,
+					'GET',
+					'/cortext/v1/rows',
+					array(
+						'collection' => $primary_collection_id,
+						'page'       => 1,
+						'per_page'   => 50,
+						'filters'    => $this->materialization_filter_tree( $number_field_id, $select_field_id, $filter_minimum ),
+						'sort'       => array(
+							'field'     => Relations::meta_key( $date_field_id ),
+							'direction' => 'asc',
+						),
+					)
+				),
+			),
+			'mat_filter_response_include_sidecar'    => array(
+				'label' => 'Field values: sidecar ID lookup followed by REST include response',
 				'run'   => fn() => $this->rest_request(
 					'GET',
 					'/cortext/v1/rows',
@@ -1793,6 +1885,77 @@ final class PerfBench {
 		if ( $postmeta_relation !== $sidecar_relation ) {
 			throw new RuntimeException( 'Postmeta and sidecar returned different IDs for the relation lookup scenario.' );
 		}
+	}
+
+	private function assert_materialization_rest_read_parity(
+		int $collection_id,
+		int $number_field_id,
+		int $select_field_id,
+		int $date_field_id,
+		float $filter_minimum
+	): void {
+		$filter_params = array(
+			'collection' => $collection_id,
+			'page'       => 1,
+			'per_page'   => 50,
+			'filters'    => $this->materialization_filter_tree( $number_field_id, $select_field_id, $filter_minimum ),
+		);
+		$this->assert_rest_rows_parity( $filter_params, 'REST filter response' );
+
+		$sort_params = array(
+			'collection' => $collection_id,
+			'page'       => 1,
+			'per_page'   => 50,
+			'sort'       => array(
+				'field'     => Relations::meta_key( $date_field_id ),
+				'direction' => 'asc',
+			),
+		);
+		$this->assert_rest_rows_parity( $sort_params, 'REST date sort response' );
+
+		$filtered_sort_params         = $filter_params;
+		$filtered_sort_params['sort'] = $sort_params['sort'];
+		$this->assert_rest_rows_parity( $filtered_sort_params, 'REST filtered date sort response' );
+	}
+
+	/**
+	 * Checks that the postmeta and sidecar REST paths return the same page.
+	 *
+	 * @param array<string,mixed> $params REST request params.
+	 * @param string              $label  Scenario label for errors.
+	 * @throws RuntimeException When the responses differ.
+	 */
+	private function assert_rest_rows_parity( array $params, string $label ): void {
+		$postmeta = $this->rest_request_with_field_value_index( false, 'GET', '/cortext/v1/rows', $params );
+		$sidecar  = $this->rest_request_with_field_value_index( true, 'GET', '/cortext/v1/rows', $params );
+
+		if ( ! is_array( $postmeta ) || ! is_array( $sidecar ) ) {
+			throw new RuntimeException( esc_html( "{$label} parity check did not return response arrays." ) );
+		}
+
+		$postmeta_ids = $this->rest_row_ids( $postmeta );
+		$sidecar_ids  = $this->rest_row_ids( $sidecar );
+		if (
+			$postmeta_ids !== $sidecar_ids
+			|| (int) ( $postmeta['total'] ?? -1 ) !== (int) ( $sidecar['total'] ?? -2 )
+			|| (int) ( $postmeta['totalPages'] ?? -1 ) !== (int) ( $sidecar['totalPages'] ?? -2 )
+		) {
+			throw new RuntimeException( esc_html( "Postmeta and sidecar returned different rows for {$label}." ) );
+		}
+	}
+
+	/**
+	 * Gets row IDs from a rows REST response.
+	 *
+	 * @param array<string,mixed> $response Rows REST response payload.
+	 * @return int[]
+	 */
+	private function rest_row_ids( array $response ): array {
+		$rows = isset( $response['rows'] ) && is_array( $response['rows'] ) ? $response['rows'] : array();
+		return array_map(
+			static fn( mixed $row ): int => is_array( $row ) ? (int) ( $row['id'] ?? 0 ) : 0,
+			$rows
+		);
 	}
 
 	private function materialization_text_field_ids( array $manifest, string $slug ): array {
@@ -2344,6 +2507,30 @@ final class PerfBench {
 		}
 
 		return $response->get_data();
+	}
+
+	/**
+	 * Runs a REST request with the field-value index forced on or off.
+	 *
+	 * @param bool                $enabled Whether this request can use the field-value index.
+	 * @param string              $method  HTTP method.
+	 * @param string              $route   REST route.
+	 * @param array<string,mixed> $params  REST params.
+	 * @return mixed
+	 */
+	private function rest_request_with_field_value_index( bool $enabled, string $method, string $route, array $params ): mixed {
+		$disable_sidecar = static fn(): bool => false;
+		if ( ! $enabled ) {
+			add_filter( 'cortext_field_values_index_enabled', $disable_sidecar );
+		}
+
+		try {
+			return $this->rest_request( $method, $route, $params );
+		} finally {
+			if ( ! $enabled ) {
+				remove_filter( 'cortext_field_values_index_enabled', $disable_sidecar );
+			}
+		}
 	}
 
 	/**
