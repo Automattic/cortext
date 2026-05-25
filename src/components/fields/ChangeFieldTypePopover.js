@@ -2,6 +2,8 @@ import { __ } from '@wordpress/i18n';
 import { Icon, Notice, Popover } from '@wordpress/components';
 import { useMemo, useState } from '@wordpress/element';
 
+import './ChangeFieldTypePopover.scss';
+
 import { FIELD_TYPES } from './AddFieldPopover';
 import { useChangeFieldType } from '../../hooks/useFieldMutations';
 

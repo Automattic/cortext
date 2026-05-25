@@ -20,6 +20,8 @@ import {
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { closeSmall, copy, plus, trash } from '@wordpress/icons';
 
+import './CollectionDataViews.scss';
+
 import DataViewColumnInteractions from './DataViewColumnInteractions';
 import DataViewRowReorder from './DataViewRowReorder';
 import {

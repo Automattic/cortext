@@ -16,6 +16,8 @@ import { DataViews, filterSortAndPaginate } from '@wordpress/dataviews';
 import { dateI18n, getSettings as getDateSettings } from '@wordpress/date';
 import { useNavigate } from '@tanstack/react-router';
 
+import './PublishedDocumentsPane.scss';
+
 import Infotip from './Infotip';
 import PageIcon from './PageIcon';
 import {

@@ -25,6 +25,8 @@ import {
 	useSensors,
 } from '@dnd-kit/core';
 
+import './DataViewRowReorder.scss';
+
 import RowDragHandle from './RowDragHandle';
 
 const DRAG_ACTIVATION_DISTANCE = 5;

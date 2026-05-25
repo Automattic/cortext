@@ -14,6 +14,9 @@ import {
 // live. `MediaUpload` from @wordpress/{media-utils, block-editor} both
 // dereference `window.wp.media`, which is undefined inside the
 // BlockCanvas iframe.
+
+import './DocumentIdentityControls.scss';
+
 import MediaPicker, { MediaUploadCheck } from './MediaPicker';
 
 import PageIcon from './PageIcon';

@@ -1,0 +1,1010 @@
+@use "@wordpress/base-styles/colors" as *;
+@use "@wordpress/base-styles/variables" as *;
+
+.cortext-row-detail,
+.cortext-row-detail-modal {
+	font-size: 13px;
+	line-height: 1.4;
+}
+
+.cortext-row-detail {
+	z-index: 2;
+	min-width: 0;
+	min-height: 0;
+	background: $white;
+	color: var(--cortext-row-detail-text);
+
+	&--full {
+		flex: 1 1 auto;
+		width: 100%;
+	}
+
+	// `grid-template-rows: 1fr → 0fr` is the smoothly-animatable way to
+	// collapse a wrapper to its content's natural height. The body child
+	// hides via overflow: hidden; the chevron escapes the collapse via
+	// position: absolute so it stays visible over the cover when hidden.
+	&--canvas-properties {
+		position: relative;
+		display: grid;
+		flex: 0 0 auto;
+		width: 100%;
+		grid-template-rows: 1fr;
+		transition: grid-template-rows 0.22s ease;
+	}
+
+	&--canvas-properties-collapsed {
+		grid-template-rows: 0fr;
+	}
+
+	// Border on the body (not the wrapper) so it disappears with the
+	// content when collapsed; matches the toolbar's `__header`
+	// border-bottom in side / modal panes for visual consistency.
+	&__canvas-properties-body {
+		min-height: 0;
+		overflow: hidden;
+		border-bottom: $border-width solid $gray-200;
+	}
+
+	// Solid background pill so the chevron stays legible even when it
+	// floats over a dark cover image. The button itself is small; the
+	// pill keeps a constant contrast surface regardless of what's behind.
+	&__canvas-properties-toggle.components-button {
+		position: absolute;
+		top: $grid-unit-10;
+		left: $grid-unit-10;
+		z-index: 2;
+		background: rgba(255, 255, 255, 0.92);
+		color: $gray-900;
+		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+		opacity: 0;
+		transition: opacity 0.12s ease, background-color 0.12s ease;
+
+		&:hover,
+		&:focus-visible {
+			background: $white;
+			color: $gray-900;
+		}
+	}
+
+	/* stylelint-disable no-descending-specificity */
+	&--canvas-properties:hover &__canvas-properties-toggle.components-button,
+	&__canvas-properties-toggle.components-button:focus-visible,
+	// When collapsed, the chevron is the only affordance, so keep it
+	// always visible (still tap to bring properties back).
+	&--canvas-properties-collapsed &__canvas-properties-toggle.components-button {
+		opacity: 1;
+	}
+	/* stylelint-enable no-descending-specificity */
+
+	&__frame {
+		display: flex;
+		flex-direction: column;
+		height: 100%;
+		min-height: 0;
+		background: $white;
+		color: var(--cortext-row-detail-text);
+	}
+
+	&__pane-stack {
+		position: relative;
+		flex: 1 1 auto;
+		width: 100%;
+		height: 100%;
+		min-height: 0;
+		overflow: hidden;
+		overflow: clip;
+		background: $white;
+	}
+
+	&__pane {
+		position: absolute;
+		inset: 0;
+		z-index: 1;
+		display: flex;
+		flex-direction: column;
+		width: 100%;
+		height: 100%;
+		min-height: 0;
+		background: $white;
+		opacity: 1;
+		transform: translateY(0);
+		will-change: opacity, transform;
+
+		&[data-state="active"] {
+			z-index: 2;
+		}
+
+		&[data-state="covered"] {
+			z-index: 2;
+			pointer-events: none;
+		}
+
+		&[data-state="preparing"] {
+			visibility: hidden;
+			opacity: 0;
+			pointer-events: none;
+		}
+
+		&[data-interactive="false"] {
+			pointer-events: none;
+		}
+
+		&[data-state="entering"] {
+			z-index: 3;
+			animation:
+				cortext-row-detail-pane-enter 180ms
+				cubic-bezier(0.6, 0, 0.4, 1) both;
+		}
+	}
+
+	&--side,
+	&--modal {
+
+		.cortext-row-detail__pane-stack {
+			flex: 1 1 auto;
+			height: 100%;
+			min-height: 320px;
+			overflow: visible;
+		}
+
+		.cortext-row-detail__pane {
+			position: relative;
+			inset: auto;
+			height: 100%;
+			min-height: 320px;
+		}
+
+		.cortext-row-detail__pane[data-state="covered"],
+		.cortext-row-detail__pane[data-state="preparing"],
+		.cortext-row-detail__pane[data-state="entering"] {
+			position: absolute;
+			inset: 0;
+			height: 100%;
+			min-height: 100%;
+		}
+	}
+
+	&--modal {
+		width: 100%;
+		height: 100%;
+
+		.cortext-row-detail__pane-stack,
+		.cortext-row-detail__pane {
+			min-height: 420px;
+		}
+	}
+
+	&__properties-shell {
+		position: relative;
+		min-width: 0;
+	}
+
+	&__property-value-stack {
+		position: relative;
+		width: 100%;
+		min-height: 30px;
+	}
+
+	&__property-value-pane {
+		position: relative;
+		z-index: 2;
+		display: flex;
+		align-items: center;
+		width: 100%;
+		min-height: 30px;
+		background: transparent;
+		opacity: 1;
+		transform: translateY(0);
+		will-change: opacity, transform;
+
+		&[data-state="covered"] {
+			position: absolute;
+			inset: 0;
+			z-index: 1;
+			pointer-events: none;
+		}
+
+		&[data-state="preparing"] {
+			position: absolute;
+			inset: 0;
+			visibility: hidden;
+			opacity: 0;
+			pointer-events: none;
+		}
+
+		&[data-interactive="false"] {
+			pointer-events: none;
+		}
+
+		&[data-state="entering"] {
+			z-index: 3;
+			animation:
+				cortext-row-detail-pane-enter 180ms
+				cubic-bezier(0.6, 0, 0.4, 1) both;
+		}
+	}
+
+	&__header {
+		display: flex;
+		flex: 0 0 auto;
+		flex-direction: column;
+		align-items: stretch;
+		gap: $grid-unit-10;
+		padding:
+			$grid-unit-15 var(--cortext-row-detail-field-inset)
+			$grid-unit-10;
+		border-bottom: $border-width solid $gray-200;
+		background: $white;
+	}
+
+	&__identity {
+		flex: 1 1 auto;
+		min-width: 0;
+	}
+
+	&__title-slot {
+		min-width: 0;
+	}
+
+	&__title {
+		overflow: hidden;
+		margin: 0;
+		color: var(--cortext-row-detail-text);
+		font-size: 18px;
+		font-weight: 600;
+		line-height: 1.3;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	&__title-input {
+		appearance: none;
+		display: block;
+		overflow: hidden;
+		width: 100%;
+		min-width: 0;
+		margin: 0;
+		padding: 0 2px;
+		border: 0;
+		border-radius: 4px;
+		box-sizing: border-box;
+		outline: 0;
+		background: transparent;
+		box-shadow: none;
+		color: inherit;
+		cursor: text;
+		font: inherit;
+		line-height: inherit;
+		text-overflow: ellipsis;
+
+		&::placeholder {
+			color: var(--cortext-row-detail-muted);
+			opacity: 1;
+		}
+
+		&:hover {
+			background: var(--cortext-row-detail-hover-surface);
+		}
+
+		&:focus,
+		&:focus-visible {
+			background: transparent;
+			box-shadow: inset 0 0 0 1px var(--cortext-accent);
+		}
+	}
+
+	input.cortext-row-detail__title-input,
+	input.cortext-row-detail__title-input:hover,
+	input.cortext-row-detail__title-input:focus,
+	input.cortext-row-detail__title-input:focus-visible {
+		border: 0;
+		outline: 0;
+	}
+
+	input.cortext-row-detail__title-input:hover {
+		background: var(--cortext-row-detail-hover-surface);
+	}
+
+	input.cortext-row-detail__title-input:focus,
+	input.cortext-row-detail__title-input:focus-visible {
+		background: transparent;
+		box-shadow: inset 0 0 0 1px var(--cortext-accent);
+	}
+
+	/* stylelint-disable no-descending-specificity */
+	&__toolbar {
+		display: flex;
+		flex: 0 0 auto;
+		align-items: center;
+		gap: $grid-unit-05;
+		flex-wrap: wrap;
+		min-height: $grid-unit-40;
+
+		.components-dropdown {
+			display: flex;
+			min-width: 0;
+		}
+	}
+
+	&__toolbar-group {
+		display: flex;
+		align-items: center;
+		gap: 2px;
+		min-width: 0;
+
+		&::after {
+			content: "";
+			display: block;
+			width: $border-width;
+			height: $grid-unit-20;
+			margin-inline: $grid-unit-05 0;
+			background: var(--cortext-row-detail-border);
+		}
+
+		&:last-child::after {
+			display: none;
+		}
+
+		&--end {
+			margin-left: auto;
+		}
+	}
+
+	&__toolbar-button.components-button {
+		display: inline-flex;
+		align-items: center;
+		min-width: var(--cortext-row-detail-toolbar-button-size);
+		height: var(--cortext-row-detail-toolbar-button-size);
+		justify-content: center;
+		gap: $grid-unit-05;
+		padding: 0 var(--cortext-row-detail-toolbar-button-padding);
+		border-radius: 4px;
+		box-shadow: none;
+		color: var(--cortext-row-detail-muted);
+		font-weight: 400;
+		line-height: 1;
+
+		&:focus:not(:focus-visible) {
+			box-shadow: none;
+			outline: none;
+		}
+
+		&:hover:not(:disabled),
+		&:focus-visible:not(:disabled) {
+			background: var(--cortext-row-detail-hover-surface);
+			box-shadow: none;
+			color: var(--cortext-row-detail-text);
+		}
+
+		&.is-pressed {
+			background: transparent;
+			color: var(--cortext-row-detail-muted);
+		}
+
+		&:disabled,
+		&[aria-disabled="true"] {
+			background: transparent;
+			box-shadow: none;
+			color: #b9b7b1;
+			cursor: default;
+			opacity: 0.45;
+		}
+
+		svg {
+			display: block;
+			flex: 0 0 auto;
+			width: 20px;
+			height: 20px;
+			fill: currentcolor;
+		}
+	}
+
+	&__toolbar-button--icon.components-button {
+		width: var(--cortext-row-detail-toolbar-button-size);
+		padding: 0;
+	}
+
+	&__toolbar-button--close.components-button {
+		width: var(--cortext-row-detail-toolbar-button-size);
+		min-width: var(--cortext-row-detail-toolbar-button-size);
+		padding: 0;
+	}
+	/* stylelint-enable no-descending-specificity */
+
+	&__notice {
+		flex: 0 0 auto;
+		margin: $grid-unit-10 $grid-unit-20 0;
+	}
+
+	&__body {
+		display: flex;
+		flex: 1 1 auto;
+		flex-direction: column;
+		min-height: 0;
+		overflow: auto;
+	}
+
+	&__properties-region,
+	&__fields-indicator-wrap {
+		display: grid;
+		flex: 0 0 auto;
+		overflow: hidden;
+		transition:
+			grid-template-rows 180ms ease,
+			opacity 140ms ease;
+	}
+
+	&__properties-region {
+		grid-template-rows: 1fr;
+		opacity: 1;
+	}
+
+	&__properties-region-inner,
+	&__fields-indicator-inner {
+		min-height: 0;
+		overflow: hidden;
+	}
+
+	&__properties {
+		display: flex;
+		flex: 0 0 auto;
+		flex-direction: column;
+		gap: 2px;
+		padding: $grid-unit-20 var(--cortext-row-detail-field-inset) $grid-unit-10;
+	}
+
+	&__properties[data-visible="false"] {
+		display: none;
+	}
+
+	&__fields-indicator-wrap {
+		grid-template-rows: 0fr;
+		opacity: 0;
+	}
+
+	&__fields-indicator-inner {
+		padding: 0 var(--cortext-row-detail-field-inset);
+	}
+
+	&__fields-indicator {
+		display: inline-flex;
+		align-items: center;
+		gap: $grid-unit-05;
+		height: 30px;
+		min-height: 30px;
+		margin-top: $grid-unit-10;
+		padding: 0 2px;
+		background: transparent;
+		color: var(--cortext-row-detail-muted);
+		font-size: 12px;
+		font-weight: 400;
+	}
+
+	&__property {
+		display: grid;
+		grid-template-columns: minmax(104px, 136px) minmax(0, 1fr);
+		align-items: start;
+		gap: $grid-unit-15;
+		min-width: 0;
+		min-height: $grid-unit-40;
+		padding: 2px $grid-unit-05;
+		border-radius: 4px;
+
+		&:hover {
+			background: var(--cortext-row-detail-hover-surface);
+		}
+
+		.components-base-control {
+			width: 100%;
+			margin-bottom: 0;
+		}
+
+		.components-base-control__field {
+			margin-bottom: 0;
+		}
+
+		.components-dropdown {
+			width: 100%;
+		}
+
+		.components-checkbox-control__input-container {
+			margin-top: 7px;
+		}
+	}
+
+	&__property-label {
+		overflow: hidden;
+		padding-top: 8px;
+		color: var(--cortext-row-detail-muted);
+		cursor: default;
+		font-size: 12px;
+		font-weight: 400;
+		line-height: 1.3;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	&__property-value {
+		position: relative;
+		min-width: 0;
+		color: var(--cortext-row-detail-text);
+
+		.components-base-control,
+		.components-base-control__field,
+		.components-input-control,
+		.components-input-control__container {
+			min-height: 30px;
+		}
+
+		.components-text-control__input,
+		.components-select-control__input,
+		.components-input-control__input {
+			width: 100%;
+			min-height: 30px;
+			height: 30px;
+			padding: 0;
+			border-color: transparent;
+			border-radius: 4px;
+			background: transparent;
+			box-shadow: none;
+			font: inherit;
+			color: inherit;
+
+			&:hover {
+				background: transparent;
+				border-color: transparent;
+			}
+
+			&:focus {
+				border-color: var(--cortext-accent);
+				box-shadow: 0 0 0 1px var(--cortext-accent);
+			}
+		}
+
+		.components-input-control__backdrop {
+			border-color: transparent;
+			box-shadow: none;
+		}
+
+		.components-checkbox-control__input-container {
+			margin-right: 0;
+		}
+
+		&:has(.cortext-row-detail__property-editable-text:focus)::after,
+		&:has(.cortext-row-detail__property-trigger:focus-visible)::after {
+			content: "";
+			position: absolute;
+			inset: 0 -6px;
+			border-radius: 4px;
+			box-shadow: inset 0 0 0 1px var(--cortext-accent);
+			pointer-events: none;
+		}
+	}
+
+	&__readonly {
+		display: flex;
+		align-items: center;
+		min-height: 30px;
+		padding: 0;
+		border: 0;
+		background: transparent;
+		color: var(--cortext-row-detail-text);
+	}
+
+	&__empty-value {
+		color: var(--cortext-row-detail-muted);
+	}
+
+	&__property--readonly {
+		color: var(--cortext-row-detail-muted);
+		cursor: default;
+
+		.cortext-row-detail__property-label,
+		.cortext-row-detail__property-value,
+		.cortext-row-detail__readonly {
+			color: inherit;
+			cursor: inherit;
+		}
+	}
+
+	&__property-editable-text {
+		appearance: none;
+		display: block;
+		width: 100%;
+		height: 30px;
+		min-height: 30px;
+		margin: 0;
+		padding: 0;
+		border: 0;
+		border-radius: 4px;
+		box-sizing: border-box;
+		outline: 0;
+		background: transparent;
+		box-shadow: none;
+		color: var(--cortext-row-detail-text);
+		cursor: text;
+		font: inherit;
+		line-height: 1.4;
+
+		&::placeholder {
+			color: var(--cortext-row-detail-muted);
+			opacity: 1;
+		}
+
+		&:focus::placeholder {
+			opacity: 0;
+		}
+
+		&:focus {
+			outline: 0;
+		}
+	}
+
+	input.cortext-row-detail__property-editable-text,
+	input.cortext-row-detail__property-editable-text:hover,
+	input.cortext-row-detail__property-editable-text:focus,
+	input.cortext-row-detail__property-editable-text:focus-visible {
+		appearance: none;
+		width: 100%;
+		height: 30px;
+		min-height: 30px;
+		margin: 0;
+		padding: 0;
+		border: 0;
+		border-radius: 4px;
+		box-sizing: border-box;
+		outline: 0;
+		background: transparent;
+		background-color: transparent;
+		box-shadow: none;
+		color: var(--cortext-row-detail-text);
+		cursor: text;
+		font: inherit;
+		line-height: 1.4;
+	}
+
+	&__property-trigger.components-button {
+		align-items: center;
+		justify-content: flex-start;
+		width: 100%;
+		height: auto;
+		min-height: 30px;
+		padding: 0;
+		border-radius: 4px;
+		background: transparent;
+		box-shadow: none;
+		color: var(--cortext-row-detail-text);
+		font-weight: 400;
+		text-align: left;
+		text-decoration: none;
+		white-space: normal;
+
+		&:hover:not(:disabled),
+		&:focus:not(:disabled) {
+			background: transparent;
+			box-shadow: none;
+			color: var(--cortext-row-detail-text);
+			text-decoration: none;
+		}
+
+		&:focus-visible:not(:disabled) {
+			outline: 0;
+		}
+
+		.cortext-chips {
+			align-items: center;
+		}
+	}
+
+	&__date-popover {
+		min-width: 280px;
+		padding: $grid-unit-15;
+	}
+
+	&__content-editor {
+		flex: 1 1 420px;
+		min-height: 360px;
+		margin: $grid-unit-10 0 0;
+		background: $white;
+		border-top: $border-width solid var(--cortext-row-detail-border);
+		box-sizing: border-box;
+		overflow: visible;
+	}
+
+	&__content-editor iframe {
+		border: 0;
+		background: $white;
+	}
+
+	// EditorBody mounts a `cortext-canvas__visual` wrapper inside row detail
+	// panes after the row properties chrome. Give the iframe a real height
+	// without pushing the properties into the block-editor iframe. The
+	// border-top mirrors the toolbar's border-bottom (`__header`) so the
+	// divider above and below the properties form match.
+	.cortext-canvas__visual {
+		display: flex;
+		flex: 1 1 420px;
+		flex-direction: column;
+		min-height: 360px;
+		background: $white;
+		border-top: $border-width solid $gray-200;
+		box-sizing: border-box;
+		overflow: visible;
+	}
+
+	.cortext-canvas__block-canvas {
+		display: flex;
+		flex: 1 1 auto;
+		min-height: 0;
+	}
+
+	.cortext-canvas__block-canvas > div {
+		flex: 1 1 auto;
+		min-height: 0;
+	}
+
+	.cortext-canvas__block-canvas iframe {
+		border: 0;
+		background: $white;
+	}
+
+	&--side {
+		--cortext-row-detail-field-inset: 48px;
+		--cortext-row-detail-toolbar-button-size: 34px;
+		--cortext-row-detail-toolbar-button-padding: #{$grid-unit-05};
+
+		flex: 1 1 auto;
+		width: 100%;
+		height: 100%;
+
+		.cortext-row-detail__header {
+			gap: $grid-unit-10;
+			padding:
+				$grid-unit-15 var(--cortext-row-detail-field-inset)
+				$grid-unit-10;
+		}
+
+		.cortext-row-detail__toolbar {
+			gap: 2px;
+		}
+
+		.cortext-row-detail__toolbar-group::after {
+			margin-inline: $grid-unit-05;
+		}
+
+		.cortext-row-detail__properties {
+			gap: 2px;
+			padding: $grid-unit-15 var(--cortext-row-detail-field-inset);
+		}
+
+		.cortext-row-detail__fields-indicator-inner {
+			padding: 0 var(--cortext-row-detail-field-inset);
+		}
+
+		.cortext-row-detail__property {
+			grid-template-columns: minmax(96px, 116px) minmax(0, 1fr);
+			gap: $grid-unit-10;
+		}
+
+		.cortext-row-detail__content-editor {
+			min-height: 320px;
+			margin-top: $grid-unit-10;
+		}
+	}
+
+	&__frame[data-properties-visible="false"] &__content-editor {
+		margin-top: 0;
+	}
+
+	&__frame[data-properties-visible="false"] &__properties-region {
+		grid-template-rows: 0fr;
+		opacity: 0;
+	}
+
+	&__frame[data-properties-visible="false"] &__fields-indicator-wrap {
+		grid-template-rows: 1fr;
+		opacity: 1;
+	}
+
+	// Loading frame for row detail. The title and icon come from the table row,
+	// so the panel does not open blank while useEntityRecord catches up.
+	&__frame--loading {
+
+		.cortext-row-detail__title {
+			display: flex;
+			align-items: center;
+			gap: $grid-unit-10;
+		}
+
+		.cortext-row-detail__title-icon {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			width: 24px;
+			height: 24px;
+		}
+	}
+
+	&__body--loading {
+		display: flex;
+		flex-direction: column;
+		gap: $grid-unit-20;
+		padding: $grid-unit-20 $grid-unit-30;
+	}
+
+	&__skeleton-fields {
+		display: flex;
+		flex-direction: column;
+		gap: $grid-unit-15;
+	}
+
+	&__loading-status {
+		display: flex;
+		justify-content: center;
+		padding: $grid-unit-20 0;
+		opacity: 0.6;
+	}
+}
+
+@keyframes cortext-row-detail-pane-enter {
+
+	from {
+		opacity: 0;
+		transform: translateY(4px);
+	}
+
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+.cortext-row-detail-sidebar-shell {
+	position: absolute;
+	z-index: 2;
+	inset-block: 0;
+	inset-inline-end: 0;
+	flex: 0 0 var(--cortext-row-detail-sidebar-width, 560px);
+	width: var(--cortext-row-detail-sidebar-width, 560px);
+	height: 100%;
+	min-width: 0;
+	min-height: 0;
+	max-width: min(840px, 66vw, calc(100% - var(--cortext-shell-sidebar-track-width)));
+	background: $white;
+	border-left: $border-width solid var(--cortext-row-detail-border, #e9e9e7);
+	box-shadow: -18px 0 36px rgba(0, 0, 0, 0.12);
+	overflow: hidden;
+	will-change: width;
+	view-transition-name: cortext-row-detail-sidebar;
+	animation:
+		cortext-row-detail-sidebar-open 300ms
+		cubic-bezier(0.6, 0, 0.4, 1) both;
+
+	&--closing {
+		pointer-events: none;
+		animation-name: cortext-row-detail-sidebar-close;
+	}
+
+	&__resize-handle {
+		position: absolute;
+		z-index: 3;
+		top: 0;
+		bottom: 0;
+		left: -5px;
+		width: 10px;
+		cursor: col-resize;
+		touch-action: none;
+
+		&::after {
+			content: "";
+			position: absolute;
+			top: 0;
+			bottom: 0;
+			left: 4px;
+			width: $border-width;
+			background: transparent;
+		}
+
+		&:hover::after,
+		&:focus-visible::after {
+			background: var(--cortext-accent);
+		}
+
+		&:focus-visible {
+			outline: none;
+		}
+	}
+}
+
+.cortext-row-detail-sidebar {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	height: 100%;
+	min-height: 0;
+	overflow: hidden;
+
+	> .cortext-row-detail {
+		flex: 1 1 auto;
+	}
+}
+
+body.cortext-row-detail-sidebar-resizing {
+	cursor: col-resize;
+	user-select: none;
+}
+
+@keyframes cortext-row-detail-sidebar-open {
+
+	from {
+		flex-basis: 0;
+		width: 0;
+	}
+
+	to {
+		flex-basis: var(--cortext-row-detail-sidebar-width, 560px);
+		width: var(--cortext-row-detail-sidebar-width, 560px);
+	}
+}
+
+@keyframes cortext-row-detail-sidebar-close {
+
+	from {
+		flex-basis: var(--cortext-row-detail-sidebar-width, 560px);
+		width: var(--cortext-row-detail-sidebar-width, 560px);
+	}
+
+	to {
+		flex-basis: 0;
+		width: 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+	.cortext-row-detail__pane[data-state="entering"],
+	.cortext-row-detail__pane[data-state="covered"],
+	.cortext-row-detail__property-value-pane[data-state="entering"],
+	.cortext-row-detail__property-value-pane[data-state="covered"] {
+		animation: none;
+	}
+
+	.cortext-row-detail-sidebar-shell {
+		animation: none;
+	}
+}
+
+.cortext-row-detail-modal {
+	width: min(960px, calc(100vw - 48px));
+	height: min(820px, calc(100vh - 48px));
+	border-radius: 6px;
+	box-shadow: 0 18px 48px rgba(0, 0, 0, 0.22);
+	overflow: hidden;
+
+	&--closing {
+		pointer-events: none;
+	}
+
+	.components-modal__content {
+		display: flex;
+		flex-direction: column;
+		height: 100%;
+		min-height: 0;
+		margin-top: 0;
+		padding: 0;
+
+		> div {
+			display: flex;
+			flex: 1 1 auto;
+			flex-direction: column;
+			min-height: 0;
+		}
+	}
+
+	.cortext-row-detail__header {
+		gap: $grid-unit-15;
+		padding:
+			$grid-unit-20 var(--cortext-row-detail-field-inset)
+			$grid-unit-15;
+	}
+}

@@ -14,6 +14,8 @@ import {
 	wordpress,
 } from '@wordpress/icons';
 
+import './Sidebar.scss';
+
 // Sidebar toggle: panel outline with a vertical accent on
 // the left side. Same icon for both states; the aria-label tells the
 // user what the toggle will do.

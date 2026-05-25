@@ -1,0 +1,81 @@
+@use "@wordpress/base-styles/colors" as *;
+@use "@wordpress/base-styles/variables" as *;
+
+// Page cover: full-width banner image with hover-revealed controls. The
+// wrapper class lives on both the editor (useBlockProps in edit.js) and
+// the frontend (PHP render_callback), so styling applies in both
+// contexts. Width isn't set here so core's `alignfull` keeps its
+// breakout margins. The wrapper owns the banner height, so the cover
+// keeps its slot before the media record has finished loading on first
+// open. Without this the wrapper collapsed to
+// 0 height while `useEntityRecord` was still resolving, then expanded
+// when the image arrived, pushing everything below it down.
+.cortext-document-cover-block {
+	position: relative;
+	height: clamp(140px, 26vh, 260px);
+
+	&__image,
+	img {
+		display: block;
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+	}
+
+	&__controls {
+		position: absolute;
+		top: $grid-unit-10;
+		right: $grid-unit-10;
+		display: flex;
+		align-items: flex-start;
+		gap: $grid-unit-05;
+		opacity: 0;
+		transition: opacity 0.12s ease;
+
+		// Cortext chrome over the cover image: opaque shell surface so the
+		// buttons stay readable on dark covers, with Cortext color tokens
+		// instead of WP's heavier secondary-button styling. The Cortext
+		// tokens are scoped to `.cortext-root`, which doesn't extend into
+		// the editor iframe, so each var gets a plain fallback.
+		/* stylelint-disable no-descending-specificity */
+		.components-button {
+			background: var(--cortext-shell-surface, #fff);
+			color: var(--cortext-button-text, #1e1e1e);
+			box-shadow: 0 0 0 var(--cortext-shell-border-width, 1px) var(--cortext-chrome-border, rgba(0, 0, 0, 0.12));
+
+			// Opaque hover fallback: the default Cortext hover surface is a
+			// translucent wash, which works fine on the shell but lets the
+			// cover image bleed through here and tank the text contrast.
+			&:hover:not(:disabled),
+			&:focus:not(:disabled) {
+				background: var(--cortext-button-hover-surface, #ebeae6);
+				color: var(--cortext-button-text, #1e1e1e);
+				box-shadow: 0 0 0 var(--cortext-shell-border-width, 1px) var(--cortext-chrome-border, rgba(0, 0, 0, 0.12));
+			}
+		}
+
+		.components-dropdown {
+			display: flex;
+			align-items: flex-start;
+		}
+		/* stylelint-enable no-descending-specificity */
+	}
+
+	&:hover &__controls,
+	&:focus-within &__controls {
+		opacity: 1;
+	}
+}
+
+// Cover overlap: when the icon sits right after the cover, pull
+// the block itself up so the title follows the visual icon position
+// instead of leaving a reserved blank row below the cover.
+/* stylelint-disable no-descending-specificity */
+.cortext-document-cover-block + .cortext-document-icon-block,
+[data-type="cortext/document-cover"] + [data-type="cortext/document-icon"] {
+	position: relative;
+	z-index: 1;
+	margin-block-start: -28px;
+	margin-block-end: 0;
+}
+/* stylelint-enable no-descending-specificity */

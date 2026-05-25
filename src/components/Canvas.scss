@@ -1,3 +1,6 @@
+@use "@wordpress/base-styles/colors" as *;
+@use "@wordpress/base-styles/variables" as *;
+
 // Editor-surface stylesheets, imported from Canvas.js so mini-css-extract
 // emits them into the editor lazy chunk instead of index.css. Routed
 // through SCSS @use rather than a JS CSS import because the packages'
@@ -5,3 +8,72 @@
 
 @use "../../node_modules/@wordpress/interface/build-style/style.css";
 @use "../../node_modules/@wordpress/editor/build-style/style.css" as editor;
+
+.cortext-canvas {
+
+	// Cross-document navigation keeps the previous post visible until autosave
+	// finishes. Put the progress bar over it while the next document loads.
+	&__pending-progress {
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		z-index: 5;
+		pointer-events: none;
+	}
+
+	// The inspector has only Page and Block tabs, but @wordpress/components can
+	// still flag the tab list as horizontally overflowing after a click. Its
+	// edge fade washes out the Page tab, so disable the mask for this header.
+	.editor-sidebar__panel-tabs [role="tablist"][aria-orientation="horizontal"].is-overflowing-first,
+	.editor-sidebar__panel-tabs [role="tablist"][aria-orientation="horizontal"].is-overflowing-last,
+	.editor-sidebar__panel-tabs [role="tablist"][aria-orientation="horizontal"].is-overflowing-first.is-overflowing-last {
+		-webkit-mask-image: none;
+		mask-image: none;
+	}
+
+	// The trashed-page notice sits above BlockCanvas. Make the skeleton body
+	// own a fixed frame while the iframe handles document scrolling; otherwise
+	// an outer scrollbar can appear between the canvas and inspector.
+	.interface-interface-skeleton__body,
+	.interface-interface-skeleton__content {
+		overflow: hidden;
+	}
+
+	.interface-interface-skeleton__content {
+		position: relative;
+		display: flex;
+		flex-direction: column;
+		min-height: 0;
+	}
+
+	&__visual {
+		display: flex;
+		flex-direction: column;
+		flex: 1 1 auto;
+		min-height: 0;
+	}
+
+	&__block-canvas {
+		flex: 1 1 auto;
+		min-height: 0;
+	}
+
+	&__notice.components-notice {
+		flex: 0 0 auto;
+		margin: 0;
+		border-radius: 0;
+	}
+
+	// `<Disabled>` already neutralises pointer events for the trashed
+	// canvas; the muted opacity is the visual cue that editing is locked.
+	// `<Disabled>` itself renders a plain div, so make it a flex column so
+	// the inner `__visual` wrapper still receives a height.
+	&__locked {
+		display: flex;
+		flex-direction: column;
+		flex: 1 1 auto;
+		min-height: 0;
+		opacity: 0.7;
+	}
+}

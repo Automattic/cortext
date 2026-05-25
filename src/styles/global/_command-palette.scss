@@ -1,0 +1,39 @@
+@use "@wordpress/base-styles/colors" as *;
+@use "@wordpress/base-styles/variables" as *;
+
+.commands-command-menu__container {
+
+	// cmdk only sets max-height on the list. Give it the same min-height so the
+	// modal does not collapse to "No results found." or a pending state, then
+	// jump back to a full list.
+	[cmdk-root] > [cmdk-list] {
+		min-height: min(328px, 70vh - 48px);
+	}
+
+	.commands-command-menu__item {
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-10;
+		width: 100%;
+	}
+
+	.commands-command-menu__item-main {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+		flex: 1;
+	}
+
+	.commands-command-menu__item-description {
+		color: var(--cortext-text-muted, #757575);
+		font-size: 12px;
+		line-height: 1.3;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.cortext-command-palette__group + .cortext-command-palette__group [cmdk-group-heading] {
+		border-top: var(--cortext-shell-border-width, 1px) solid var(--cortext-chrome-border, #e0e0e0);
+	}
+}

@@ -1,0 +1,33 @@
+// Thin scrollbars with an alpha thumb that tints up on hover. Unscoped so
+// it reaches the block-editor iframe too (the iframe document has no
+// `.cortext-root` ancestor). Our CSS only loads in cortext-owned contexts,
+// so the global rules don't leak.
+*,
+*::before,
+*::after {
+	scrollbar-width: thin;
+	scrollbar-color: var(--cortext-scrollbar-thumb) var(--cortext-scrollbar-track);
+}
+
+::-webkit-scrollbar {
+	width: var(--cortext-scrollbar-size);
+	height: var(--cortext-scrollbar-size);
+}
+
+::-webkit-scrollbar-track {
+	background: var(--cortext-scrollbar-track);
+}
+
+::-webkit-scrollbar-thumb {
+	background-color: var(--cortext-scrollbar-thumb);
+	border-radius: 999px;
+	transition: background-color 120ms ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background-color: var(--cortext-scrollbar-thumb-hover);
+}
+
+::-webkit-scrollbar-corner {
+	background: transparent;
+}

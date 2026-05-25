@@ -3,6 +3,8 @@ import { __ } from '@wordpress/i18n';
 import { chevronLeft, chevronRight } from '@wordpress/icons';
 import { useCallback, useEffect, useState } from '@wordpress/element';
 
+import './WorkspaceTopBar.scss';
+
 import Breadcrumbs from './Breadcrumbs';
 
 const SLOT_NAME = 'CortextTopBarActions';

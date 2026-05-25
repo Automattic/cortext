@@ -1,3 +1,5 @@
+import './CanvasSkeleton.scss';
+
 // Suspense fallback while the editor chunk loads on the first document
 // open. Mimics the editor's vertical rhythm (centered title strip + a few
 // content lines) so the swap to the real editor doesn't reflow the pane.

@@ -8,6 +8,8 @@ import {
 	useState,
 } from '@wordpress/element';
 
+import './PageIcon.scss';
+
 import useDelayedFlag from '../hooks/useDelayedFlag';
 import { ICON_COLOR_BY_NAME } from './iconColors';
 

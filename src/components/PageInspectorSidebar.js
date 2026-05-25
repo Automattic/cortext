@@ -41,6 +41,8 @@ import {
 } from '@wordpress/interface';
 import apiFetch from '@wordpress/api-fetch';
 
+import './PageInspectorSidebar.scss';
+
 import DocumentPropertiesActions from './DocumentPropertiesActions';
 import { useDocumentPropertiesContext } from './DocumentPropertiesContext';
 import MediaPicker, { MediaUploadCheck } from './MediaPicker';
