@@ -49,6 +49,7 @@ import {
 	formatDisplay,
 } from './EditableCell';
 import { TITLE_FIELD_ID } from './dataViewColumns';
+import FieldActionsMenu from './fields/FieldActionsMenu';
 import EditOptionsPopover from './fields/EditOptionsPopover';
 import { FieldTypeIcon, SystemFieldIcon } from './fields/fieldTypes';
 import { hasSystemFieldIcon } from './fields/systemFieldIconIds';
@@ -436,6 +437,53 @@ function PropertyControl( {
 	);
 }
 
+function PropertyLabel( {
+	collectionId,
+	field,
+	onFieldOptionsSaved,
+	onRowsChanged,
+} ) {
+	const recordId = field.cortextRecordId ?? toRecordId( field.id );
+	if ( ! collectionId || ! recordId ) {
+		return (
+			<span className="cortext-row-detail__property-label-text">
+				{ field.label }
+			</span>
+		);
+	}
+
+	const configureLabel = sprintf(
+		/* translators: %s: Field label. */
+		__( 'Configure %s field', 'cortext' ),
+		field.label
+	);
+
+	return (
+		<FieldActionsMenu
+			recordId={ recordId }
+			collectionId={ collectionId }
+			field={ field }
+			className="cortext-row-detail__property-label-actions"
+			triggerButton={
+				<Button
+					className="cortext-row-detail__property-label-button"
+					variant="tertiary"
+					label={ configureLabel }
+				/>
+			}
+			triggerContent={
+				<span className="cortext-row-detail__property-label-content">
+					<span className="cortext-row-detail__property-label-text">
+						{ field.label }
+					</span>
+				</span>
+			}
+			onFieldOptionsSaved={ onFieldOptionsSaved }
+			onRowsChanged={ onRowsChanged }
+		/>
+	);
+}
+
 function transformToString( transform ) {
 	if ( ! transform ) {
 		return undefined;
@@ -446,6 +494,7 @@ function transformToString( transform ) {
 
 function RowProperty( {
 	canReorderLayout,
+	collectionId,
 	data,
 	field,
 	isDragging,
@@ -511,9 +560,14 @@ function RowProperty( {
 						/>
 					) : null }
 				</span>
-				<span className="cortext-row-detail__property-label-text">
-					{ field.label }
-				</span>
+				<PropertyLabel
+					collectionId={ collectionId }
+					field={ field }
+					onFieldOptionsSaved={ ( targetRecordId, nextOptions ) =>
+						updateFieldOptions?.( targetRecordId, nextOptions )
+					}
+					onRowsChanged={ refreshRows }
+				/>
 			</div>
 			<div className="cortext-row-detail__property-value">
 				{ isEditable ? (
@@ -577,7 +631,12 @@ function SortableRowProperty( props ) {
  * block editor. This is intentionally not serialized yet; see
  * tech-debt.md#42 for the block-backed version needed for frontend rendering.
  */
-export default function RowProperties( { fields, onLayoutReorder, row } ) {
+export default function RowProperties( {
+	collectionId,
+	fields,
+	onLayoutReorder,
+	row,
+} ) {
 	const { editPost } = useDispatch( editorStore );
 	const { optionOverrides, updateFieldOptions, refreshRows } =
 		useContext( RowMutationContext );
@@ -678,6 +737,7 @@ export default function RowProperties( { fields, onLayoutReorder, row } ) {
 				canReorderLayout ? (
 					<SortableRowProperty
 						key={ field.id }
+						collectionId={ collectionId }
 						data={ data }
 						field={ field }
 						optionOverrides={ optionOverrides }
@@ -689,6 +749,7 @@ export default function RowProperties( { fields, onLayoutReorder, row } ) {
 					<RowProperty
 						key={ field.id }
 						canReorderLayout={ false }
+						collectionId={ collectionId }
 						data={ data }
 						field={ field }
 						optionOverrides={ optionOverrides }

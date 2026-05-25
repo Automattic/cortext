@@ -1982,12 +1982,55 @@ test.describe( 'Collection view block', () => {
 			await expect( detailTitle ).toHaveText(
 				'The Left Hand of Darkness'
 			);
+			const authorLabelButton = detailCanvas.getByRole( 'button', {
+				name: 'Configure Author field',
+			} );
+			await expect( authorLabelButton ).toHaveCSS( 'cursor', 'pointer' );
+			await authorLabelButton.click();
+			await expect(
+				detailCanvas.getByRole( 'menuitem', {
+					name: /Change type/,
+				} )
+			).toBeVisible();
+			await page.keyboard.press( 'Escape' );
+			const yearLabelButton = detailCanvas.getByRole( 'button', {
+				name: 'Configure Year field',
+			} );
+			await expect( yearLabelButton ).toHaveCSS( 'cursor', 'pointer' );
+			await yearLabelButton.click();
+			await expect(
+				detailCanvas.getByRole( 'menuitem', {
+					name: 'Edit field',
+				} )
+			).toBeVisible();
+			await expect(
+				detailCanvas.getByRole( 'menuitem', {
+					name: /Change type/,
+				} )
+			).toBeVisible();
+			await page.keyboard.press( 'Escape' );
 			const tagsLabel = detailCanvas
 				.locator(
 					'.cortext-row-detail__properties--rows .cortext-row-detail__property-label'
 				)
 				.filter( { hasText: 'Tags' } );
-			await expect( tagsLabel ).toHaveCSS( 'cursor', 'default' );
+			await expect( tagsLabel ).toBeVisible();
+			const tagsLabelButton = detailCanvas.getByRole( 'button', {
+				name: 'Configure Tags field',
+			} );
+			await expect( tagsLabelButton ).toHaveCSS( 'cursor', 'pointer' );
+			await tagsLabelButton.click();
+			await expect(
+				detailCanvas.getByRole( 'menuitem', {
+					name: 'Edit options',
+				} )
+			).toBeVisible();
+			await expect(
+				detailCanvas.getByRole( 'menuitem', {
+					name: /Change type/,
+				} )
+			).toBeVisible();
+			await page.keyboard.press( 'Escape' );
 			const tagsTrigger = detailCanvas.getByRole( 'button', {
 				name: 'Tags',
 				exact: true,
