@@ -170,6 +170,10 @@ jest.mock( '../../../../src/components/fields/FieldFormatPopover', () => ( {
 	),
 } ) );
 
+jest.mock( '../../../../src/components/TableCalculationMenu', () => ( {
+	TableCalculationPopover: () => <div data-testid="calculation-popover" />,
+} ) );
+
 jest.mock( '../../../../src/components/EditableCell', () => {
 	const { createContext } = require( '@wordpress/element' );
 
@@ -467,6 +471,49 @@ describe( 'ColumnHeaderActions', () => {
 		expect(
 			screen.getByRole( 'button', { name: 'Change type…' } )
 		).toBeInTheDocument();
+	} );
+
+	it( 'keeps table header submenus mutually exclusive', async () => {
+		useCollectionFieldsContext.mockReturnValue( {
+			fields: [
+				{
+					id: 'field-77',
+					recordId: 77,
+					label: 'Score',
+					cortextType: 'number',
+				},
+			],
+		} );
+
+		render( <Harness collectionId={ 5 } recordId={ 77 } /> );
+
+		const editField = await screen.findByRole( 'button', {
+			name: 'Edit field',
+		} );
+		const calculate = screen.getByRole( 'button', {
+			name: 'Calculate',
+		} );
+
+		fireEvent.click( editField );
+		expect(
+			screen.getByRole( 'button', { name: 'Save mock format' } )
+		).toBeInTheDocument();
+
+		fireEvent.click( calculate );
+		expect(
+			screen.getByTestId( 'calculation-popover' )
+		).toBeInTheDocument();
+		expect(
+			screen.queryByRole( 'button', { name: 'Save mock format' } )
+		).not.toBeInTheDocument();
+
+		fireEvent.click( editField );
+		expect(
+			screen.getByRole( 'button', { name: 'Save mock format' } )
+		).toBeInTheDocument();
+		expect(
+			screen.queryByTestId( 'calculation-popover' )
+		).not.toBeInTheDocument();
 	} );
 
 	it( 'shows change type for plain text fields', async () => {

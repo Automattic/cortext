@@ -52,6 +52,7 @@ export default function FieldActionsMenu( {
 	triggerContent,
 	onFieldOptionsSaved,
 	onFieldFormatSaved,
+	onOpenFormat,
 	onRowsChanged,
 	onCloseMenu,
 	renderBetweenConfigAndLifecycle,
@@ -126,10 +127,11 @@ export default function FieldActionsMenu( {
 	const openFormat = useCallback(
 		( focus = false ) => {
 			cancelClose();
+			onOpenFormat?.();
 			setShouldFocusFormat( focus );
 			setIsFormatting( true );
 		},
-		[ cancelClose ]
+		[ cancelClose, onOpenFormat ]
 	);
 	useEffect( () => () => cancelClose(), [ cancelClose ] );
 
@@ -245,6 +247,7 @@ export default function FieldActionsMenu( {
 	const menuContext = {
 		Menu,
 		closeMenu,
+		closeFormat,
 		label,
 		fieldType,
 		scheduleClose,

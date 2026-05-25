@@ -217,7 +217,7 @@ function FieldActions( {
 	useEffect( () => () => cancelClose(), [ cancelClose ] );
 
 	const openCalculationFromKeyboard = useCallback(
-		( event ) => {
+		( event, beforeOpen ) => {
 			if (
 				! [ 'ArrowRight', 'Enter', ' ', 'Spacebar' ].includes(
 					event.key
@@ -227,6 +227,7 @@ function FieldActions( {
 			}
 			event.preventDefault();
 			event.stopPropagation();
+			beforeOpen?.();
 			openCalculation( true );
 		},
 		[ openCalculation ]
@@ -316,16 +317,24 @@ function FieldActions( {
 	}, [ onChangeView, view, dataViewId, visibleFields ] );
 
 	const renderViewGroup = useCallback(
-		( { Menu, closeMenu } ) => (
+		( { Menu, closeMenu, closeFormat } ) => (
 			<Menu.Group key={ `sort-${ dataViewId }-${ sortMenuKey }` }>
 				<Menu.Item
 					ref={ calculationItemRef }
 					className="cortext-column-header-actions__submenu-item"
 					hideOnClick={ false }
 					suffix={ <Icon icon={ chevronRight } size={ 18 } /> }
-					onClick={ () => openCalculation() }
-					onKeyDown={ openCalculationFromKeyboard }
-					onMouseEnter={ () => openCalculation() }
+					onClick={ () => {
+						closeFormat?.();
+						openCalculation();
+					} }
+					onKeyDown={ ( event ) =>
+						openCalculationFromKeyboard( event, closeFormat )
+					}
+					onMouseEnter={ () => {
+						closeFormat?.();
+						openCalculation();
+					} }
 					onMouseLeave={ scheduleClose }
 				>
 					<Menu.ItemLabel>
@@ -442,6 +451,7 @@ function FieldActions( {
 				}
 				onFieldOptionsSaved={ onFieldOptionsSaved }
 				onFieldFormatSaved={ onFieldFormatSaved }
+				onOpenFormat={ closeCalculation }
 				onRowsChanged={ onRowsChanged }
 				onCloseMenu={ closeCalculation }
 				renderBetweenConfigAndLifecycle={ renderViewGroup }
