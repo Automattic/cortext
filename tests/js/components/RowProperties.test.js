@@ -23,7 +23,7 @@ jest.mock( '@wordpress/components', () => {
 					...props,
 					ref,
 					type: 'button',
-					'aria-label': label,
+					'aria-label': label ?? props[ 'aria-label' ],
 					onClick,
 				},
 				children ?? label
