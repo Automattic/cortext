@@ -690,7 +690,7 @@ function PageInspectorContent( { postId } ) {
 	);
 }
 
-// Collection inspector: identity controls, then the owner data-view panels.
+// Collection inspector: identity controls first, then the owner data-view panels.
 function CollectionInspectorContent( { postId, postType } ) {
 	return (
 		<div className="cortext-page-inspector">
@@ -772,8 +772,9 @@ export default function PageInspectorSidebar( { postId, postType } ) {
 			),
 		[]
 	);
-	// Hide empty/redundant Block tabs: no selection, document-properties, or
-	// the canvas owner whose panels already live in the Page tab.
+	// Hide Block tabs that would be empty or redundant: no selection,
+	// document-properties, or the canvas owner whose panels already live in the
+	// document tab.
 	const isCanvasOwnerSelected = useIsCanvasOwnerSelected( postType, postId );
 	const showBlockTab = useSelect(
 		( select ) => {

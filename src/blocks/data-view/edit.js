@@ -94,8 +94,8 @@ function createDefaultView() {
 }
 
 function CollectionPicker( { selectedId = '', onSelect } ) {
-	// The picker only offers full-page collections. Inline collections belong
-	// to the block that created them.
+	// The picker only lists full-page collections. Inline collections stay with
+	// the block that created them.
 	const { records, isResolving, hasResolved } = useEntityRecords(
 		'postType',
 		'crtxt_collection',
@@ -151,8 +151,8 @@ function CollectionCreator( { onCreate } ) {
 	const { invalidateResolution } = useDispatch( 'core' );
 	const canCreate = title.trim() && ! isSaving;
 
-	// Inline collections need the current page as their owner. Full-page
-	// collections can use the same id as a sidebar parent.
+	// Inline collections need the current page as owner. Full-page collections
+	// can use that same id as their sidebar parent.
 	const ownerPageId = useSelect(
 		( select ) => select( editorStore ).getCurrentPostId(),
 		[]
@@ -172,8 +172,8 @@ function CollectionCreator( { onCreate } ) {
 				status: 'private',
 				mode: isFullPage ? 'full_page' : 'inline',
 			};
-			// The collection REST filter decides what `parent` means: inline
-			// owner meta for inline collections, post_parent for full-page ones.
+			// The REST filter maps `parent` to owner meta for inline
+			// collections, or to post_parent for full-page collections.
 			if ( ownerPageId ) {
 				data.parent = ownerPageId;
 			}
@@ -182,8 +182,8 @@ function CollectionCreator( { onCreate } ) {
 				method: 'POST',
 				data,
 			} );
-			// The picker reads the full-page query, so refresh it only when
-			// the new collection will show there.
+			// The picker reads the full-page query, so refresh only when the
+			// new collection can appear there.
 			if ( isFullPage ) {
 				invalidateResolution( 'getEntityRecords', [
 					'postType',
@@ -223,7 +223,7 @@ function CollectionCreator( { onCreate } ) {
 			<CheckboxControl
 				label={ __( 'Create as a full-page collection', 'cortext' ) }
 				help={ __(
-					'Full-page collections show in the sidebar and get their own workspace URL. Inline collections stay in this block.',
+					'Full-page collections appear in the sidebar and get their own workspace URL. Inline collections stay inside this block.',
 					'cortext'
 				) }
 				checked={ isFullPage }
@@ -308,7 +308,7 @@ function CollectionToolbarControl( {
 			) }
 			{ /* tech-debt.md#57: peek/modal hide the parent inspector
 			     button until there is a row-scoped one. Owner blocks open
-			     the Page tab, where their panels are slotted. */ }
+			     the document tab, where their panels are slotted. */ }
 			{ ( hasBlockInspector || isOwner ) && (
 				<ToolbarButton
 					icon={ cog }
@@ -401,8 +401,8 @@ function CollectionInspectorControls( {
 		onChangeView( { ...view, fields: nextFields } );
 	};
 
-	// When the data-view owns a collection canvas, its panels move to the Page
-	// tab, it cannot switch collections, and Canvas owns the width.
+	// When the data-view owns a collection canvas, its panels move to the
+	// document tab, it cannot switch collections, and Canvas owns the width.
 	const Wrapper = isOwner ? CanvasOwnerInspector : InspectorControls;
 	const fieldsPanelInitialOpen = isOwner;
 

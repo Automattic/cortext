@@ -1,7 +1,7 @@
 <?php
 /**
- * One-shot migration for full-page collections that predate the locked
- * data-view body block.
+ * One-shot migration for full-page collections created before the locked
+ * data-view body existed.
  *
  * @package Cortext
  */
@@ -20,7 +20,7 @@ final class CollectionContentBackfill {
 
 	/**
 	 * Runs once, but only marks complete after the loop finishes. If a request
-	 * dies halfway through, the next one can pick up the remaining collections.
+	 * stops halfway through, the next one can pick up the remaining collections.
 	 *
 	 * Also flushes rewrite rules because this release gives collections public
 	 * permalinks, and plugin upgrades do not run the activation hook.
@@ -64,7 +64,7 @@ final class CollectionContentBackfill {
 				continue;
 			}
 
-			// A bad post should not stop the rest of the migration.
+			// One bad post should not stop the rest of the migration.
 			try {
 				wp_update_post(
 					array(

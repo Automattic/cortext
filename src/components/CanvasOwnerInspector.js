@@ -3,7 +3,7 @@ import { store as blockEditorStore } from '@wordpress/block-editor';
 import { useSelect } from '@wordpress/data';
 
 // Maps a Canvas post type to its one allowed body block. Owner blocks join the
-// header set, hide the Block tab, fill the Page tab below, and lose the usual
+// header set, hide the Block tab, fill the document tab, and drop the usual
 // block chrome. See tech-debt.md#59.
 //
 // `matches` lets the data-view block disambiguate the owned instance from any
@@ -75,7 +75,7 @@ export function useIsCanvasOwnerSelected( postType, postId ) {
 const { Fill, Slot } = createSlotFill( 'CortextCanvasOwnerInspector' );
 
 // The owner block still declares inspector panels in edit(); PageInspectorSidebar
-// decides where to show them.
+// decides which tab shows them.
 export default function CanvasOwnerInspector( { children } ) {
 	return <Fill>{ children }</Fill>;
 }

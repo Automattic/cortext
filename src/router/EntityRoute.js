@@ -414,7 +414,7 @@ export default function EntityRoute( { history } ) {
 			return;
 		}
 		if ( entity?.id === target.id ) {
-			// Inline collections do not have a workspace route. A pasted stale
+			// Inline collections do not have a workspace route. A stale pasted
 			// URL should land on Not Found instead of opening Canvas.
 			if ( entity?.meta?.workspace_mode === 'inline' ) {
 				dispatch( { type: 'DOCUMENT_NOT_FOUND', id: target.id } );
@@ -452,7 +452,7 @@ export default function EntityRoute( { history } ) {
 	// Fill uses, so both sides of the top bar update together.
 	let paintedRoute = { kind: 'unresolved' };
 	if ( active.kind === 'document' && displayedDocumentId !== null ) {
-		// Canvas mounts collections as documents; breadcrumbs still want the
+		// Canvas mounts collections as documents; breadcrumbs still use the
 		// collection route shape.
 		paintedRoute =
 			mountedDocumentType === 'crtxt_collection'

@@ -336,7 +336,7 @@ body.cortext-hide-block-settings-menu .block-editor-block-switcher {
 }
 
 // tech-debt.md#59: owner canvases lock the body to one block. Hide the normal
-// appender. Cover and icon insertion still goes through
+// appender; cover and icon insertion still goes through
 // DocumentIdentityActions.
 .cortext-canvas__editor--owner .block-editor-default-block-appender,
 .cortext-canvas__editor--owner .block-editor-block-list__layout > .block-list-appender {
@@ -344,7 +344,7 @@ body.cortext-hide-block-settings-menu .block-editor-block-switcher {
 }
 
 // The owner data-view is the canvas body, so selection outlines and adjacent
-// inserters are just noise. Keep the toolbar; "Add field" still lives there.
+// inserters only add noise. Keep the toolbar; "Add field" still lives there.
 .cortext-canvas__editor .wp-block.is-document-owner {
 
 	&.is-selected::before,

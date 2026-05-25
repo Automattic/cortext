@@ -52,7 +52,7 @@ final class Test_Post_Type_Collection extends BaseTestCase {
 		$this->assertFalse( $object->show_in_menu );
 		$this->assertTrue(
 			$object->publicly_queryable,
-			'Published full-page collections should render on the public site.'
+			'Published full-page collections should render at public URLs.'
 		);
 		$this->assertFalse( $object->has_archive );
 	}
@@ -68,11 +68,11 @@ final class Test_Post_Type_Collection extends BaseTestCase {
 		);
 		$this->assertTrue(
 			post_type_supports( Collection::POST_TYPE, 'editor' ),
-			'Full-page collections use Canvas, with the locked data-view block as the body.'
+			'Full-page collections use Canvas, with a locked data-view block as the body.'
 		);
 		$this->assertTrue(
 			post_type_supports( Collection::POST_TYPE, 'thumbnail' ),
-			'Collections share the page cover flow.'
+			'Collections share the same cover flow as pages.'
 		);
 		$this->assertTrue( post_type_supports( Collection::POST_TYPE, 'revisions' ) );
 	}

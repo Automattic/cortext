@@ -142,7 +142,7 @@ export function useResolveCollection( id ) {
 			id,
 		} );
 
-		// EntityRoute needs `workspace_mode` to reject inline URLs and `type`
+		// EntityRoute needs `workspace_mode` to reject inline URLs, and `type`
 		// to mount Canvas.
 		apiFetch( {
 			path: `/wp/v2/${ COLLECTION_TYPE }s/${ id }?context=edit&_fields=id,slug,type,meta`,
@@ -187,7 +187,7 @@ export function computeDocumentUri( entity ) {
 
 // Builds a collection URL segment with the explicit `collection/` prefix.
 // Collections still keep their own URL prefix, even though full-page
-// collections now render through Canvas.
+// collections now render in Canvas.
 export function computeCollectionUri( entity ) {
 	const slug = typeof entity?.slug === 'string' ? entity.slug.trim() : '';
 	const tail = slug ? `${ slug }-${ entity.id }` : `${ entity.id }`;

@@ -1,14 +1,12 @@
 /**
- * Shared editor body for Cortext documents (pages and rows). Runs inside
+ * Shared editor body for Cortext documents (pages, collections, and rows). Runs inside
  * an existing `EditorProvider` and renders the block-editor-owned document
- * body: cover -> icon -> locked title -> block content. Owns
- * the trash banner, the identity affordances that
- * live above the title, and the layout effect that keeps the locked
- * header blocks present in `post_content`.
+ * body: cover -> icon -> locked title -> block content. Owns the trash banner,
+ * the identity controls above the title, and the layout effect that keeps the
+ * locked header blocks present in `post_content`.
  *
- * Mounted by `Canvas`'s `VisualCanvas` (full-page documents) and by
- * `RowDetailView` (side peek and modal panes), so the editor surface
- * is identical across all three row open modes.
+ * Mounted by `Canvas`'s `VisualCanvas` for full-page documents and by
+ * `RowDetailView` for side peek and modal panes.
  */
 
 import apiFetch from '@wordpress/api-fetch';
@@ -684,8 +682,8 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 			);
 		}
 		if ( needsOwner ) {
-			// The owner block is the body. Add it last so it follows whatever
-			// header repairs this pass just made.
+			// The owner block is the body. Add it last so it follows any
+			// header repairs made in this pass.
 			const ownerAttributes = getCanvasOwnerInitialAttributes(
 				postType,
 				postId

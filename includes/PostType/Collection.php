@@ -28,15 +28,14 @@ final class Collection {
 	public function register(): void {
 		add_action( 'init', array( $this, 'register_post_type' ) );
 		add_action( 'rest_api_init', array( $this, 'register_rest_filters' ) );
-		// The owner data-view points at this post ID, so it has to land after
-		// insert. EditorBody still repairs old or empty content. See
-		// tech-debt.md#59.
+		// The owner data-view needs the new post ID, so seed it after insert.
+		// EditorBody still repairs old or empty content. See tech-debt.md#59.
 		add_action( 'wp_after_insert_post', array( $this, 'maybe_seed_data_view_block' ), 10, 3 );
 	}
 
 	public function register_post_type(): void {
-		// Collections use the document lifecycle. Full-page ones also use
-		// Canvas: cover/icon in the editor, body locked to the data-view block.
+		// Collections use the document lifecycle. Full-page collections also
+		// open in Canvas, with cover/icon controls and a data-view body.
 		DocumentTypeRegistrar::register(
 			self::POST_TYPE,
 			array(
@@ -110,8 +109,8 @@ final class Collection {
 	}
 
 	/**
-	 * Serialized markup for the locked data-view block a full-page collection
-	 * uses as its body. Creation and backfill share this builder.
+	 * Serialized markup for the locked data-view block used as a full-page
+	 * collection's body. Creation and backfill share this builder.
 	 *
 	 * @param int $collection_id Collection post id the block points at.
 	 */
@@ -137,8 +136,8 @@ final class Collection {
 	}
 
 	/**
-	 * Appends the locked data-view block to a new full-page collection. Skip
-	 * updates, inline collections, and content that already has the block.
+	 * Adds the locked data-view block to a new full-page collection. Updates,
+	 * inline collections, and content that already has the block are left alone.
 	 *
 	 * @param int      $post_id Post id.
 	 * @param \WP_Post $post    Post object.
@@ -271,9 +270,9 @@ final class Collection {
 			);
 		}
 
-		// Collections are documents now, so `kind_for_post_type` alone would
-		// allow collection-under-collection nesting. Keep collections under
-		// pages or rows instead.
+		// Collections are documents now, so `kind_for_post_type` would also
+		// allow collection-under-collection nesting. Keep them under pages or
+		// rows instead.
 		if (
 			null === $this->documents()->kind_for_post_type( $parent->post_type ) ||
 			self::POST_TYPE === $parent->post_type
@@ -381,8 +380,8 @@ final class Collection {
 		// keeps it from being applied via the meta API regardless.
 		//
 		// core-data posts the whole meta object when saving unrelated fields.
-		// Strip write-locked keys so an icon-only save does not fail on
-		// unchanged `workspace_mode` or inline-owner meta.
+		// Strip write-locked keys so an icon-only save does not trip over an
+		// unchanged `workspace_mode` or inline-owner value.
 		$request_meta   = $request->get_param( 'meta' );
 		$requested_slug = '';
 		if ( is_array( $request_meta ) ) {
