@@ -241,7 +241,7 @@ describe( 'EntityRoute reducer', () => {
 			expect( next ).toBe( state );
 		} );
 
-		it( 'ignores a resolution when the target is no longer a document', () => {
+		it( 'ignores a stale resolution from a previous target id', () => {
 			let state = activate(
 				init( documentTarget( 1 ) ),
 				documentTarget( 1 )
@@ -257,6 +257,23 @@ describe( 'EntityRoute reducer', () => {
 			} );
 			expect( next ).toBe( state );
 		} );
+
+		it( 'mounts a full-page collection as a Canvas document', () => {
+			let state = init( collectionTarget( 7 ) );
+			state = reducer( state, {
+				type: 'TARGET_CHANGED',
+				target: collectionTarget( 7 ),
+			} );
+			state = reducer( state, {
+				type: 'DOCUMENT_RESOLVED',
+				id: 7,
+				postType: 'crtxt_collection',
+			} );
+			expect( state.mountedDocumentId ).toBe( 7 );
+			expect( state.mountedDocumentType ).toBe( 'crtxt_collection' );
+			state = reducer( state, { type: 'DOCUMENT_DISPLAYED', id: 7 } );
+			expect( state.active ).toEqual( { kind: 'document', id: 7 } );
+		} );
 	} );
 
 	describe( 'DOCUMENT_NOT_FOUND', () => {
@@ -266,20 +283,33 @@ describe( 'EntityRoute reducer', () => {
 				type: 'TARGET_CHANGED',
 				target: documentTarget( 99 ),
 			} );
-			state = reducer( state, { type: 'DOCUMENT_NOT_FOUND' } );
+			state = reducer( state, { type: 'DOCUMENT_NOT_FOUND', id: 99 } );
 			expect( state.active ).toEqual( { kind: 'document-not-found' } );
 		} );
 
-		it( 'is ignored when the target is no longer a document', () => {
+		it( 'activates collection-not-found on a collection target', () => {
+			let state = init( collectionTarget( 5 ) );
+			state = reducer( state, {
+				type: 'TARGET_CHANGED',
+				target: collectionTarget( 5 ),
+			} );
+			state = reducer( state, { type: 'DOCUMENT_NOT_FOUND', id: 5 } );
+			expect( state.active ).toEqual( { kind: 'collection-not-found' } );
+		} );
+
+		it( 'is ignored when the not-found id does not match the current target', () => {
 			let state = activate(
 				init( documentTarget( 1 ) ),
 				documentTarget( 1 )
 			);
 			state = reducer( state, {
 				type: 'TARGET_CHANGED',
-				target: collectionTarget( 5 ),
+				target: documentTarget( 2 ),
 			} );
-			const next = reducer( state, { type: 'DOCUMENT_NOT_FOUND' } );
+			const next = reducer( state, {
+				type: 'DOCUMENT_NOT_FOUND',
+				id: 1,
+			} );
 			expect( next ).toBe( state );
 		} );
 	} );

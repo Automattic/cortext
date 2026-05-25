@@ -188,19 +188,14 @@ export default function EntityRoute( { history } ) {
 		mountedDocumentType,
 		displayedDocumentId,
 		mountedCollectionIds,
-		readyCollectionIds,
 	} = state;
 
-	// Documents keep the previous pane visible until the new editor has painted.
-	// Collections have their own ready signal after rows load, so compare the URL
-	// target with the displayed/ready state here.
+	// Keep the old pane up until the next Canvas has painted. Collections now
+	// use that path too.
 	const isWorkspaceNavigating =
-		( target.kind === 'document' &&
-			target.id !== null &&
-			target.id !== displayedDocumentId ) ||
-		( target.kind === 'collection' &&
-			target.id !== null &&
-			! readyCollectionIds.has( target.id ) );
+		( target.kind === 'document' || target.kind === 'collection' ) &&
+		target.id !== null &&
+		target.id !== displayedDocumentId;
 	const showWorkspaceProgress = useDelayedFlag( isWorkspaceNavigating );
 
 	// Peek at the reducer result before dispatching. We only need a transition
@@ -274,7 +269,12 @@ export default function EntityRoute( { history } ) {
 		if ( ! mountedDocumentType ) {
 			return null;
 		}
-		if ( mountedDocumentType === POST_TYPE ) {
+		// Pages and collections are standalone documents. Only dynamic row
+		// CPTs need a parent collection lookup.
+		if (
+			mountedDocumentType === POST_TYPE ||
+			mountedDocumentType === 'crtxt_collection'
+		) {
 			return null;
 		}
 		return mountedDocumentType.startsWith( 'crtxt_' )
@@ -372,7 +372,7 @@ export default function EntityRoute( { history } ) {
 			return;
 		}
 		if ( ! isResolving && notFound ) {
-			dispatch( { type: 'DOCUMENT_NOT_FOUND' } );
+			dispatch( { type: 'DOCUMENT_NOT_FOUND', id: target.id } );
 		}
 	}, [ target, documentResolution, dispatch, touchRecent ] );
 
@@ -415,17 +415,22 @@ export default function EntityRoute( { history } ) {
 		}
 		if ( entity?.id === target.id ) {
 			// Inline collections do not have a workspace route. A pasted stale
-			// URL should land on Not Found instead of opening CollectionPane.
+			// URL should land on Not Found instead of opening Canvas.
 			if ( entity?.meta?.workspace_mode === 'inline' ) {
-				dispatch( { type: 'COLLECTION_NOT_FOUND' } );
+				dispatch( { type: 'DOCUMENT_NOT_FOUND', id: target.id } );
 				return;
 			}
-			dispatch( { type: 'COLLECTION_RESOLVED', id: entity.id } );
+			// Full-page collections are Canvas documents with a data-view body.
+			dispatch( {
+				type: 'DOCUMENT_RESOLVED',
+				id: entity.id,
+				postType: entity.type,
+			} );
 			touchRecent( { kind: 'collection', id: entity.id } );
 			return;
 		}
 		if ( ! isResolving && notFound ) {
-			dispatch( { type: 'COLLECTION_NOT_FOUND' } );
+			dispatch( { type: 'DOCUMENT_NOT_FOUND', id: target.id } );
 		}
 	}, [ target, collectionResolution, dispatch, touchRecent ] );
 
@@ -447,12 +452,17 @@ export default function EntityRoute( { history } ) {
 	// Fill uses, so both sides of the top bar update together.
 	let paintedRoute = { kind: 'unresolved' };
 	if ( active.kind === 'document' && displayedDocumentId !== null ) {
-		paintedRoute = {
-			kind: 'document',
-			id: displayedDocumentId,
-			postType: mountedDocumentType,
-			collectionId: rowParentCollectionId,
-		};
+		// Canvas mounts collections as documents; breadcrumbs still want the
+		// collection route shape.
+		paintedRoute =
+			mountedDocumentType === 'crtxt_collection'
+				? { kind: 'collection', id: displayedDocumentId }
+				: {
+						kind: 'document',
+						id: displayedDocumentId,
+						postType: mountedDocumentType,
+						collectionId: rowParentCollectionId,
+				  };
 	} else if ( active.kind === 'collection' ) {
 		paintedRoute = { kind: 'collection', id: active.id };
 	} else if (

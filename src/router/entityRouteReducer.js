@@ -98,6 +98,12 @@ export function reducer( state, action ) {
 				if ( target.id === null ) {
 					active = { kind: 'collection-not-found' };
 				} else if (
+					state.mountedDocumentId === target.id &&
+					state.displayedDocumentId === target.id
+				) {
+					// Already mounted as Canvas; nothing to wait for.
+					active = { kind: 'document', id: target.id };
+				} else if (
 					state.mountedCollectionIds.includes( target.id ) &&
 					state.readyCollectionIds.has( target.id )
 				) {
@@ -113,8 +119,10 @@ export function reducer( state, action ) {
 		}
 
 		case 'DOCUMENT_RESOLVED': {
+			// Full-page collections resolve into the same Canvas mount path.
 			if (
-				state.target.kind !== 'document' ||
+				( state.target.kind !== 'document' &&
+					state.target.kind !== 'collection' ) ||
 				state.target.id !== action.id
 			) {
 				return state;
@@ -131,19 +139,29 @@ export function reducer( state, action ) {
 		}
 
 		case 'DOCUMENT_NOT_FOUND': {
-			if ( state.target.kind !== 'document' ) {
+			if (
+				( state.target.kind !== 'document' &&
+					state.target.kind !== 'collection' ) ||
+				state.target.id !== action.id
+			) {
 				return state;
 			}
+			// Keep Not Found copy matched to the URL kind.
+			const notFoundKind =
+				state.target.kind === 'collection'
+					? 'collection-not-found'
+					: 'document-not-found';
 			return pruneCollections( {
 				...state,
-				active: { kind: 'document-not-found' },
+				active: { kind: notFoundKind },
 			} );
 		}
 
 		case 'DOCUMENT_DISPLAYED': {
 			const next = { ...state, displayedDocumentId: action.id };
 			if (
-				state.target.kind === 'document' &&
+				( state.target.kind === 'document' ||
+					state.target.kind === 'collection' ) &&
 				state.target.id === action.id &&
 				state.mountedDocumentId === action.id
 			) {
