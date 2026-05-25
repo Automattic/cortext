@@ -1,9 +1,11 @@
 import {
 	adjacentRowId,
 	getRowDetailMode,
+	isRowDetailFieldEditable,
 	isValidNumberDraft,
 	normalizeRowDetailMode,
 	parseNumberPropertyValue,
+	rowDetailDisplayFieldType,
 	splitPropertyPatch,
 	valueForField,
 	withRowDetailMode,
@@ -112,6 +114,31 @@ describe( 'valueForField', () => {
 		).toBe( relation );
 	} );
 
+	it( 'uses hydrated relation values even when relation properties are editable', () => {
+		const relation = [
+			{
+				id: 123,
+				title: { raw: 'Target row', rendered: 'Target row' },
+			},
+		];
+
+		expect(
+			valueForField(
+				{
+					id: 'field-7',
+					cortextFieldType: 'relation',
+					editable: true,
+					relatedCollectionId: 55,
+				},
+				{
+					meta: { 'field-7': [ '123' ] },
+					hydratedMeta: { 'field-7': relation },
+					editContext: { collectionId: 44, rowId: 99 },
+				}
+			)
+		).toBe( relation );
+	} );
+
 	it( 'uses hydrated rollup values for readonly rollup properties', () => {
 		expect(
 			valueForField(
@@ -142,6 +169,76 @@ describe( 'valueForField', () => {
 				}
 			)
 		).toBe( 'raw value' );
+	} );
+} );
+
+describe( 'row detail field editability', () => {
+	it( 'requires row, collection, and target context before editing relations', () => {
+		const relationField = {
+			id: 'field-7',
+			cortextFieldType: 'relation',
+			editable: true,
+			relatedCollectionId: 55,
+		};
+
+		expect( isRowDetailFieldEditable( relationField ) ).toBe( false );
+		expect(
+			isRowDetailFieldEditable( relationField, {
+				collectionId: 44,
+				rowId: 99,
+			} )
+		).toBe( true );
+		expect(
+			isRowDetailFieldEditable(
+				{ ...relationField, relatedCollectionId: undefined },
+				{ collectionId: 44, rowId: 99 }
+			)
+		).toBe( false );
+	} );
+
+	it( 'keeps normal editable field behavior unchanged', () => {
+		expect(
+			isRowDetailFieldEditable( {
+				id: 'field-9',
+				cortextFieldType: 'text',
+				editable: true,
+			} )
+		).toBe( true );
+		expect(
+			isRowDetailFieldEditable( {
+				id: 'field-10',
+				cortextFieldType: 'rollup',
+				editable: false,
+			} )
+		).toBe( false );
+	} );
+} );
+
+describe( 'row detail display field types', () => {
+	it( 'maps date range rollups to the range display formatter', () => {
+		expect(
+			rowDetailDisplayFieldType( {
+				id: 'field-10',
+				cortextFieldType: 'rollup',
+				rollupAggregator: 'date_range',
+			} )
+		).toBe( 'rollup-date-range' );
+		expect(
+			rowDetailDisplayFieldType( {
+				id: 'field-11',
+				cortextFieldType: 'rollup',
+				cortextFormat: { rollup_aggregator: 'date_range' },
+			} )
+		).toBe( 'rollup-date-range' );
+	} );
+
+	it( 'leaves other field types alone', () => {
+		expect(
+			rowDetailDisplayFieldType( {
+				id: 'field-9',
+				cortextFieldType: 'number',
+			} )
+		).toBe( 'number' );
 	} );
 } );
 

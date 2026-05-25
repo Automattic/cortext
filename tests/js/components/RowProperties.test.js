@@ -1,25 +1,63 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import {
+	act,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+} from '@testing-library/react';
 
 let mockDndProps;
 
+const mockEditPost = jest.fn();
+const mockRelationEditorProps = [];
+
+jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 jest.mock( '@wordpress/components', () => {
 	const { createElement, forwardRef } = require( '@wordpress/element' );
 
-	const Button = forwardRef( ( { children, ...props }, ref ) =>
-		createElement( 'button', { ...props, ref, type: 'button' }, children )
+	const Button = forwardRef(
+		( { children, label, onClick, ...props }, ref ) =>
+			createElement(
+				'button',
+				{
+					...props,
+					ref,
+					type: 'button',
+					'aria-label': label,
+					onClick,
+				},
+				children ?? label
+			)
 	);
 	Button.displayName = 'Button';
 
 	return {
 		__esModule: true,
 		Button,
-		CheckboxControl: () => createElement( 'input', { type: 'checkbox' } ),
+		CheckboxControl: ( { checked, onChange, ...props } ) =>
+			createElement( 'input', {
+				...props,
+				type: 'checkbox',
+				checked,
+				onChange: ( event ) => onChange?.( event.target.checked ),
+			} ),
 		DateTimePicker: () => createElement( 'div', null ),
-		Dropdown: () => createElement( 'div', null ),
+		Dropdown: ( { renderToggle, renderContent } ) =>
+			createElement(
+				'div',
+				null,
+				renderToggle?.( { isOpen: false, onToggle: jest.fn() } ),
+				renderContent?.( { onClose: jest.fn() } )
+			),
 		Icon: () => createElement( 'span', { 'data-testid': 'wp-icon' } ),
+		Notice: ( { children } ) => createElement( 'div', null, children ),
 		Popover: ( { children } ) => createElement( 'div', null, children ),
+		Spinner: () => createElement( 'div', null, 'Loading' ),
+		TextControl: ( props ) => createElement( 'input', props ),
 		VisuallyHidden: ( { children } ) =>
 			createElement( 'span', null, children ),
+		__experimentalNumberControl: ( props ) =>
+			createElement( 'input', props ),
 	};
 } );
 
@@ -113,14 +151,36 @@ jest.mock( '../../../src/components/EditableCell', () => {
 	};
 } );
 
+jest.mock( '../../../src/components/relations/RelationEditor', () => ( {
+	__esModule: true,
+	default: ( props ) => {
+		mockRelationEditorProps.push( props );
+		const titles = ( Array.isArray( props.value ) ? props.value : [] )
+			.map(
+				( ref ) => ref?.title?.raw || ref?.title?.rendered || ref?.id
+			)
+			.join( ', ' );
+		return (
+			<button type="button" onClick={ () => props.onSave( [ 456 ] ) }>
+				{ titles || props.label }
+			</button>
+		);
+	},
+} ) );
+
+import apiFetch from '@wordpress/api-fetch';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { RowMutationContext } from '../../../src/components/EditableCell';
 import RowProperties from '../../../src/components/RowProperties';
+import { COLLECTION_ROWS_CHANGED_EVENT } from '../../../src/hooks/rowInvalidation';
 
 describe( 'RowProperties', () => {
 	beforeEach( () => {
 		mockDndProps = null;
-		useDispatch.mockReturnValue( { editPost: jest.fn() } );
+		apiFetch.mockReset();
+		mockEditPost.mockReset();
+		mockRelationEditorProps.length = 0;
+		useDispatch.mockReturnValue( { editPost: mockEditPost } );
 		useSelect.mockReturnValue( {
 			title: 'Current title',
 			meta: { 'field-7': 'Open' },
@@ -343,5 +403,92 @@ describe( 'RowProperties', () => {
 		expect(
 			screen.queryByRole( 'button', { name: 'About Status' } )
 		).not.toBeInTheDocument();
+	} );
+
+	it( 'edits relation fields through the row endpoint and refreshes local display', async () => {
+		const refreshRows = jest.fn();
+		const onRowsChanged = jest.fn();
+		window.addEventListener( COLLECTION_ROWS_CHANGED_EVENT, onRowsChanged );
+		apiFetch.mockResolvedValue( {
+			id: 99,
+			title: { raw: 'Source row', rendered: 'Source row' },
+			meta: {
+				'field-7': [
+					{
+						id: 456,
+						title: { raw: 'Grace Hopper' },
+					},
+				],
+			},
+		} );
+		useSelect.mockReturnValue( {
+			title: 'Source row',
+			meta: { 'field-7': [ '123' ] },
+			hydratedMeta: {
+				'field-7': [
+					{
+						id: 123,
+						title: { raw: 'Ada Lovelace' },
+					},
+				],
+			},
+		} );
+
+		render(
+			<RowMutationContext.Provider value={ { refreshRows } }>
+				<RowProperties
+					collectionId={ 44 }
+					row={ { id: 99 } }
+					fields={ [
+						{
+							id: 'field-7',
+							label: 'Assignee',
+							cortextFieldType: 'relation',
+							editable: true,
+							relatedCollectionId: 55,
+							relationMultiple: true,
+						},
+					] }
+				/>
+			</RowMutationContext.Provider>
+		);
+
+		expect(
+			screen.getByRole( 'button', { name: 'Ada Lovelace' } )
+		).toBeInTheDocument();
+		expect( mockRelationEditorProps.at( -1 ) ).toEqual(
+			expect.objectContaining( {
+				defaultOpen: false,
+				relation: { targetCollectionId: 55, multiple: true },
+			} )
+		);
+
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Ada Lovelace' } )
+		);
+
+		await waitFor( () =>
+			expect( apiFetch ).toHaveBeenCalledWith( {
+				path: '/cortext/v1/collections/44/rows/99',
+				method: 'POST',
+				data: {
+					field: 'field-7',
+					value: [ 456 ],
+				},
+			} )
+		);
+		await screen.findByRole( 'button', { name: 'Grace Hopper' } );
+		expect( refreshRows ).toHaveBeenCalled();
+		expect( onRowsChanged ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				detail: { collectionId: 44 },
+			} )
+		);
+		expect( mockEditPost ).not.toHaveBeenCalled();
+
+		window.removeEventListener(
+			COLLECTION_ROWS_CHANGED_EVENT,
+			onRowsChanged
+		);
 	} );
 } );
