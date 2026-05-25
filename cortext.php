@@ -45,12 +45,14 @@ register_activation_hook(
 	__FILE__,
 	static function () {
 		( new \Cortext\PostType\Page() )->register_post_type();
+		( new \Cortext\FieldValues\FieldValueIndex() )->activate();
 		flush_rewrite_rules();
 	}
 );
 
 if ( defined( 'WP_CLI' ) && WP_CLI ) {
 	\WP_CLI::add_command( 'cortext seed', \Cortext\CLI\SeedDummyCollections::class );
+	\WP_CLI::add_command( 'cortext field-values', \Cortext\CLI\FieldValues::class );
 	\WP_CLI::add_command( 'cortext perf-seed', array( \Cortext\CLI\PerfBench::class, 'seed' ) );
 	\WP_CLI::add_command( 'cortext perf-bench', array( \Cortext\CLI\PerfBench::class, 'bench' ) );
 }
