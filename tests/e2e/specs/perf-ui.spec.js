@@ -37,8 +37,12 @@ const COLLECTION_SLUG = 'perfmain';
 const READY_TIMEOUT_MS = 30_000;
 const ROWS_API_SEGMENT = '/cortext/v1/rows';
 const REST_SEGMENTS = [ '/cortext/v1/', '/wp/v2/', '/wp-json/' ];
-const ACTIVE_COLLECTION_VIEW_SELECTOR =
-	'.cortext-workspace__pane[data-active="true"] .cortext-data-view';
+const ACTIVE_WORKSPACE_PANE_SELECTOR =
+	'.cortext-workspace__pane[data-active="true"]';
+const ACTIVE_WORKSPACE_CANVAS_FRAME_SELECTOR = `${ ACTIVE_WORKSPACE_PANE_SELECTOR } iframe[name="editor-canvas"]`;
+const ROW_DETAIL_CANVAS_FRAME_SELECTOR =
+	'.cortext-row-detail__pane[data-interactive="true"] iframe[name="editor-canvas"]';
+const ACTIVE_COLLECTION_VIEW_SELECTOR = '.cortext-data-view';
 const DATA_VIEW_ROW_SELECTOR = 'tbody tr.dataviews-view-table__row';
 
 // Number of samples to collect for each scenario in one workflow run. CI
@@ -220,21 +224,24 @@ test.describe( 'Cortext UI performance', () => {
 					collection.adminQuery
 				);
 				await waitForCollectionReady( page );
-
-				const previousFirstRow = await readFirstRowText( page );
+				await clearCollectionSearch( page );
 
 				await probe.reset();
+				const pageSelect =
+					activeCollectionCanvas( page ).getByLabel( 'Current page' );
+				const targetPage =
+					( await pageSelect.inputValue() ) === '3' ? '4' : '3';
 				const responsePromise = page.waitForResponse(
 					( response ) =>
 						response.url().includes( ROWS_API_SEGMENT ) &&
-						response.url().includes( 'page=3' ),
+						response.url().includes( `page=${ targetPage }` ),
 					{ timeout: READY_TIMEOUT_MS }
 				);
 				const startedAt = Date.now();
 
-				await page.getByLabel( 'Current page' ).selectOption( '3' );
+				await pageSelect.selectOption( targetPage );
 				await responsePromise;
-				await waitForFirstRowChanged( page, previousFirstRow );
+				await waitForCollectionReady( page );
 				await waitForPaint( page );
 
 				return probe.snapshot( startedAt );
@@ -280,8 +287,6 @@ test.describe( 'Cortext UI performance', () => {
 				);
 				await waitForCollectionReady( page );
 
-				const previousCount = await readRowCount( page );
-
 				await probe.reset();
 				const createPromise = page.waitForResponse(
 					( response ) =>
@@ -297,7 +302,7 @@ test.describe( 'Cortext UI performance', () => {
 					.locator( '.cortext-data-view__new-row' )
 					.click();
 				await createPromise;
-				await waitForRowCountChanged( page, previousCount );
+				await waitForCollectionReady( page );
 				await waitForPaint( page );
 
 				return probe.snapshot( startedAt );
@@ -317,30 +322,38 @@ test.describe( 'Cortext UI performance', () => {
 				);
 				await waitForCollectionReady( page );
 
-				const previousFirstRow = await readFirstRowText( page );
-
 				await probe.reset();
-				const responsePromise = page.waitForResponse(
-					( response ) =>
-						response.url().includes( ROWS_API_SEGMENT ) &&
-						response.url().includes( 'sort' ),
-					{ timeout: READY_TIMEOUT_MS }
-				);
 				const startedAt = Date.now();
 
 				await activeCollectionView( page )
 					.locator( 'button.dataviews-view-table-header-button' )
 					.first()
 					.click( { force: true } );
-				// Title rows are zero-padded "Perf Primary Row NNNNN", so
-				// ascending matches the default oldest-first order;
-				// descending swaps the first row from 00001 to 01250, which
-				// keeps the readiness signal stable across iterations.
-				await page
-					.getByRole( 'menuitemradio', { name: 'Sort descending' } )
+
+				const canvas = activeCollectionCanvas( page );
+				const sortDescending = canvas.getByRole( 'menuitemradio', {
+					name: 'Sort descending',
+				} );
+				const isDescending =
+					( await sortDescending.getAttribute( 'aria-checked' ) ) ===
+					'true';
+				const nextDirection = isDescending ? 'asc' : 'desc';
+				const nextLabel = isDescending
+					? 'Sort ascending'
+					: 'Sort descending';
+				const responsePromise = page.waitForResponse(
+					( response ) =>
+						response.url().includes( ROWS_API_SEGMENT ) &&
+						response.url().includes( 'sort' ) &&
+						response.url().includes( nextDirection ),
+					{ timeout: READY_TIMEOUT_MS }
+				);
+
+				await canvas
+					.getByRole( 'menuitemradio', { name: nextLabel } )
 					.click();
 				await responsePromise;
-				await waitForFirstRowChanged( page, previousFirstRow );
+				await waitForCollectionReady( page );
 				await waitForPaint( page );
 
 				return probe.snapshot( startedAt );
@@ -384,10 +397,13 @@ test.describe( 'Cortext UI performance', () => {
 					.locator( 'button.cortext-column-header-trigger' )
 					.first()
 					.click( { force: true } );
-				await page.getByRole( 'menu' ).first().waitFor( {
-					state: 'visible',
-					timeout: READY_TIMEOUT_MS,
-				} );
+				await activeCollectionCanvas( page )
+					.getByRole( 'menu' )
+					.first()
+					.waitFor( {
+						state: 'visible',
+						timeout: READY_TIMEOUT_MS,
+					} );
 
 				return probe.snapshot( startedAt );
 			} )
@@ -410,8 +426,11 @@ test.describe( 'Cortext UI performance', () => {
 					.locator( 'button.cortext-column-header-trigger' )
 					.first()
 					.click( { force: true } );
-				await page.getByRole( 'menuitem', { name: 'Rename' } ).click();
-				const renameInput = page.locator(
+				const canvas = activeCollectionCanvas( page );
+				await canvas
+					.getByRole( 'menuitem', { name: 'Rename' } )
+					.click();
+				const renameInput = canvas.locator(
 					'.cortext-rename-field-inline input'
 				);
 				await renameInput.waitFor( {
@@ -424,10 +443,12 @@ test.describe( 'Cortext UI performance', () => {
 
 				await renameInput.fill( `Perf renamed ${ Date.now() }` );
 				await renameInput.press( 'Enter' );
-				await page.locator( '.cortext-rename-field-inline' ).waitFor( {
-					state: 'hidden',
-					timeout: READY_TIMEOUT_MS,
-				} );
+				await canvas
+					.locator( '.cortext-rename-field-inline' )
+					.waitFor( {
+						state: 'hidden',
+						timeout: READY_TIMEOUT_MS,
+					} );
 				await waitForPaint( page );
 
 				return probe.snapshot( startedAt );
@@ -618,26 +639,39 @@ test.describe( 'Cortext UI performance', () => {
 					collection.adminQuery
 				);
 				await waitForCollectionReady( page );
+				await clearCollectionSearch( page );
 				await activeCollectionView( page )
 					.getByLabel( 'Open row' )
 					.first()
 					.click( { force: true } );
 				await waitForRowDetailReady( page );
 
-				// Row navigation is ready when the iframe title block changes.
-				const titleLocator = page
-					.frameLocator( '[name="editor-canvas"]' )
+				// Seeded perf rows can expose an empty editor title while still
+				// navigating correctly. The remounted title block is the stable
+				// signal that the row-detail iframe has switched rows.
+				const titleLocator = rowDetailCanvas( page )
 					.locator( '[data-type="core/post-title"]' )
 					.first();
-				const previousTitle = await titleLocator.textContent();
+				const previousTitleBlock =
+					await titleLocator.getAttribute( 'data-block' );
 
 				await probe.reset();
+				const responsePromise = page.waitForResponse(
+					( response ) =>
+						response
+							.url()
+							.includes( `/wp/v2/crtxt_${ COLLECTION_SLUG }/` ),
+					{ timeout: READY_TIMEOUT_MS }
+				);
 				const startedAt = Date.now();
 
 				await page.getByLabel( 'Row below' ).click();
-				await expect( titleLocator ).not.toHaveText( previousTitle, {
-					timeout: READY_TIMEOUT_MS,
-				} );
+				await responsePromise;
+				await expect
+					.poll( () => titleLocator.getAttribute( 'data-block' ), {
+						timeout: READY_TIMEOUT_MS,
+					} )
+					.not.toBe( previousTitleBlock );
 				await waitForPaint( page );
 
 				return probe.snapshot( startedAt );
@@ -680,14 +714,38 @@ async function setupProbe( page ) {
 	} );
 
 	const resetLongTasks = async () => {
-		try {
-			await page.evaluate( () => {
-				window.__cortextPerfLongTasks = [];
-			} );
-		} catch {
-			// Before first navigation, there may not be a document yet. The init
-			// script sets the array on the next one.
-		}
+		await Promise.all(
+			page.frames().map( async ( frame ) => {
+				try {
+					await frame.evaluate( () => {
+						window.__cortextPerfLongTasks = [];
+					} );
+				} catch {
+					// Frames can detach while navigating between iterations.
+				}
+			} )
+		);
+	};
+
+	const readLongTasks = async () => {
+		const taskLists = await Promise.all(
+			page.frames().map( async ( frame ) => {
+				try {
+					return await frame.evaluate(
+						() => window.__cortextPerfLongTasks ?? []
+					);
+				} catch {
+					return [];
+				}
+			} )
+		);
+
+		return taskLists
+			.flat()
+			.filter(
+				( duration ) =>
+					typeof duration === 'number' && Number.isFinite( duration )
+			);
 	};
 
 	return {
@@ -709,10 +767,7 @@ async function setupProbe( page ) {
 						typeof entry.duration === 'number'
 				)
 				.map( ( entry ) => entry.duration );
-			const tasks = await page.evaluate(
-				() => window.__cortextPerfLongTasks ?? []
-			);
-			const longTasks = Array.isArray( tasks ) ? tasks : [];
+			const longTasks = await readLongTasks();
 
 			return {
 				ready_ms: readyMs,
@@ -734,8 +789,18 @@ async function setupProbe( page ) {
 	};
 }
 
+function activeCollectionCanvas( page ) {
+	return page.frameLocator( ACTIVE_WORKSPACE_CANVAS_FRAME_SELECTOR );
+}
+
+function rowDetailCanvas( page ) {
+	return page.frameLocator( ROW_DETAIL_CANVAS_FRAME_SELECTOR );
+}
+
 function activeCollectionView( page ) {
-	return page.locator( ACTIVE_COLLECTION_VIEW_SELECTOR ).first();
+	return activeCollectionCanvas( page )
+		.locator( ACTIVE_COLLECTION_VIEW_SELECTOR )
+		.first();
 }
 
 function activeCollectionRows( page ) {
@@ -758,40 +823,36 @@ async function readFirstRowText( page ) {
 	return activeCollectionRows( page ).first().textContent();
 }
 
-async function readRowCount( page ) {
-	return activeCollectionRows( page ).count();
-}
-
 async function waitForFirstRowChanged( page, previousText ) {
-	await page.waitForFunction(
-		( { rootSelector, rowSelector, previous } ) => {
-			const root = document.querySelector( rootSelector );
-			const row = root?.querySelector( rowSelector );
-			return Boolean( row ) && row.textContent !== previous;
-		},
-		{
-			rootSelector: ACTIVE_COLLECTION_VIEW_SELECTOR,
-			rowSelector: DATA_VIEW_ROW_SELECTOR,
-			previous: previousText,
-		},
-		{ timeout: READY_TIMEOUT_MS }
-	);
+	await expect
+		.poll(
+			async () => {
+				const row = activeCollectionRows( page ).first();
+				return ( await row.count() ) > 0
+					? row.textContent()
+					: previousText;
+			},
+			{ timeout: READY_TIMEOUT_MS }
+		)
+		.not.toBe( previousText );
 }
 
-async function waitForRowCountChanged( page, previousCount ) {
-	await page.waitForFunction(
-		( { rootSelector, rowSelector, previous } ) => {
-			const root = document.querySelector( rootSelector );
-			const count = root?.querySelectorAll( rowSelector ).length ?? 0;
-			return count !== previous && count > 0;
-		},
-		{
-			rootSelector: ACTIVE_COLLECTION_VIEW_SELECTOR,
-			rowSelector: DATA_VIEW_ROW_SELECTOR,
-			previous: previousCount,
-		},
+async function clearCollectionSearch( page ) {
+	const searchInput = activeCollectionView( page ).locator(
+		'.dataviews-search input'
+	);
+	const value = await searchInput.inputValue();
+	if ( value === '' ) {
+		return;
+	}
+
+	const responsePromise = page.waitForResponse(
+		( response ) => response.url().includes( ROWS_API_SEGMENT ),
 		{ timeout: READY_TIMEOUT_MS }
 	);
+	await searchInput.fill( '' );
+	await responsePromise;
+	await waitForCollectionReady( page );
 }
 
 async function waitForRowDetailReady( page ) {
@@ -799,9 +860,8 @@ async function waitForRowDetailReady( page ) {
 		.locator( '.cortext-row-detail__frame' )
 		.first()
 		.waitFor( { state: 'visible', timeout: READY_TIMEOUT_MS } );
-	// Row detail is not ready until the iframe has rendered the title block.
-	await page
-		.frameLocator( '[name="editor-canvas"]' )
+	// Row detail is not ready until its own iframe has rendered the title block.
+	await rowDetailCanvas( page )
 		.locator( '[data-type="core/post-title"]' )
 		.first()
 		.waitFor( { state: 'visible', timeout: READY_TIMEOUT_MS } );
@@ -828,12 +888,20 @@ async function waitForEditorReady( page, postId ) {
 }
 
 async function waitForPaint( page ) {
-	await page.evaluate(
-		() =>
-			new Promise( ( resolve ) => {
-				window.requestAnimationFrame( () =>
-					window.requestAnimationFrame( resolve )
+	await Promise.all(
+		page.frames().map( async ( frame ) => {
+			try {
+				await frame.evaluate(
+					() =>
+						new Promise( ( resolve ) => {
+							window.requestAnimationFrame( () =>
+								window.requestAnimationFrame( resolve )
+							);
+						} )
 				);
-			} )
+			} catch {
+				// A frame can detach during route changes; other frames still paint.
+			}
+		} )
 	);
 }
