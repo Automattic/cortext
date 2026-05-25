@@ -17,7 +17,7 @@ import {
 	favoriteIdentForRecord,
 	favoriteKeyForRecord,
 } from './favorites';
-import { iconForRecord } from './icons';
+import { iconForRecord, listIconForRecord } from './icons';
 import { kindFromRecord } from './kinds';
 import { getDescriptor } from './descriptors';
 
@@ -179,12 +179,17 @@ export function useDocumentActions() {
 }
 
 /**
- * Resolve the display data for a record: kind, title, icon, feature flags, and
- * trash-list copy such as descendant labels, confirmation text, and error
- * messages. Components should prefer this over their own kind checks.
+ * Resolve the display data for a record: kind, title, icons, feature flags,
+ * the localized kind label, and the trash-list copy (descendant labels,
+ * confirmation text, error messages). Components should prefer these over
+ * their own kind checks.
  *
+ * `listIcon` is the compact-list glyph (Recents, Favorites, Palette); the
+ * sidebar tree's identity icon stays on `icon`. `kindLabel` is the localized
+ * noun ("Page", "Collection", "Row") for aria labels and similar copy.
  * `descendantLabel` and `permanentDeleteConfirmation` take the cascade counts
- * (`{ pages, collections, total }`) and return localized copy for that subtree.
+ * (`{ pages, collections, total }`) and return the localized copy for that
+ * subtree.
  *
  * @param {Object} record Document record (page, collection, or row).
  * @return {Object} Display attributes.
@@ -194,10 +199,13 @@ export function useDocumentRecord( record ) {
 	const descriptor = getDescriptor( kind );
 	const title = documentTitle( record );
 	const icon = iconForRecord( record, kind );
+	const listIcon = ( size ) => listIconForRecord( record, size );
 	return {
 		kind,
 		title,
 		icon,
+		listIcon,
+		kindLabel: descriptor.kindLabel ?? '',
 		features: descriptor.features,
 		descendantLabel: ( counts ) =>
 			descriptor.descendantLabel?.( counts ) ?? '',

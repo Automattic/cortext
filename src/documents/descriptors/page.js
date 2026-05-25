@@ -1,6 +1,7 @@
 import { __, _n, sprintf } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
 
+import PageIcon from '../../components/PageIcon';
 import { POST_TYPE } from '../../components/page-queries';
 import { computeDocumentUri } from '../../router/useResolveEntity';
 import { notifyDocumentTrashChanged } from '../../hooks/documentTrashInvalidation';
@@ -17,6 +18,14 @@ const pageDescriptor = {
 		hierarchy: true,
 		canCreateChild: true,
 		hasOwnIcon: true,
+	},
+
+	kindLabel: __( 'Page', 'cortext' ),
+
+	// Compact-list fallback glyph for pages with no custom icon. Custom icons
+	// take precedence and are rendered by `useDocumentRecord` directly.
+	fallbackListIcon( size = 16 ) {
+		return <PageIcon icon="" size={ size } />;
 	},
 
 	uri( record ) {

@@ -19,8 +19,10 @@ jest.mock( '@wordpress/components', () => ( {
 } ) );
 
 jest.mock( '@wordpress/icons', () => ( {
+	customPostType: 'custom-post-type',
 	listItem: 'list-item',
 	table: 'table',
+	Icon: ( { icon } ) => <span data-testid={ `icon-${ icon }` } />,
 } ) );
 
 jest.mock( '../../../src/components/PageIcon', () => () => (
@@ -42,6 +44,25 @@ function pageRecent( id, title ) {
 		id,
 		title,
 		path: `page/${ title.toLowerCase() }-${ id }`,
+	};
+}
+
+function rowRecent( id, title, collectionTitle ) {
+	return {
+		kind: 'row',
+		id,
+		title,
+		path: `collection/books/${ title.toLowerCase() }-${ id }`,
+		collection: { id: 12, title: collectionTitle, slug: 'books' },
+	};
+}
+
+function collectionRecent( id, title ) {
+	return {
+		kind: 'collection',
+		id,
+		title,
+		path: `collection/${ title.toLowerCase() }-${ id }`,
 	};
 }
 
@@ -120,5 +141,50 @@ describe( 'SidebarRecents animation', () => {
 			params: { _splat: 'page/alpha-1' },
 		} );
 		blurSpy.mockRestore();
+	} );
+
+	it( 'shows a row recent with its collection in the title', () => {
+		mockRecents = [ rowRecent( 7, 'War and Peace', 'Books' ) ];
+
+		render( <SidebarRecents /> );
+
+		expect(
+			screen.getByText( 'War and Peace in Books' )
+		).toBeInTheDocument();
+		expect(
+			screen.getByRole( 'button', {
+				name: 'Recent row: War and Peace in Books',
+			} )
+		).toBeInTheDocument();
+	} );
+
+	it( 'shows a collection recent with the table icon', () => {
+		mockRecents = [ collectionRecent( 33, 'Library' ) ];
+
+		const { container } = render( <SidebarRecents /> );
+
+		expect(
+			screen.getByRole( 'button', { name: 'Recent collection: Library' } )
+		).toBeInTheDocument();
+		expect(
+			container.querySelector( '[data-testid="icon-table"]' )
+		).toBeInTheDocument();
+	} );
+
+	it( 'shows a row recent with its custom icon when set', () => {
+		// A row that has a `cortext_document_icon` stored renders that glyph
+		// instead of the generic list-item fallback.
+		const row = rowRecent( 11, 'Ada Lovelace', 'People' );
+		row.icon = JSON.stringify( { type: 'wp', name: 'people' } );
+		mockRecents = [ row ];
+
+		const { container } = render( <SidebarRecents /> );
+
+		expect(
+			container.querySelector( '[data-testid="page-icon"]' )
+		).toBeInTheDocument();
+		expect(
+			container.querySelector( '[data-testid="icon-list-item"]' )
+		).toBeNull();
 	} );
 } );
