@@ -45,6 +45,7 @@ register_activation_hook(
 	__FILE__,
 	static function () {
 		( new \Cortext\PostType\Page() )->register_post_type();
+		( new \Cortext\PostType\Collection() )->register_post_type();
 		flush_rewrite_rules();
 	}
 );

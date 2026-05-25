@@ -50,7 +50,10 @@ final class Test_Post_Type_Collection extends BaseTestCase {
 		$this->assertFalse( $object->public );
 		$this->assertTrue( $object->show_ui );
 		$this->assertFalse( $object->show_in_menu );
-		$this->assertFalse( $object->publicly_queryable );
+		$this->assertTrue(
+			$object->publicly_queryable,
+			'Published full-page collections should render on the public site.'
+		);
 		$this->assertFalse( $object->has_archive );
 	}
 
@@ -63,10 +66,15 @@ final class Test_Post_Type_Collection extends BaseTestCase {
 			post_type_supports( Collection::POST_TYPE, 'page-attributes' ),
 			'page-attributes exposes parent/menu_order for sidebar nesting and drag/drop.'
 		);
-		$this->assertFalse(
+		$this->assertTrue(
 			post_type_supports( Collection::POST_TYPE, 'editor' ),
-			"Collections do not need block-editor content yet. Their canvas is the DataView."
+			'Full-page collections use Canvas, with the locked data-view block as the body.'
 		);
+		$this->assertTrue(
+			post_type_supports( Collection::POST_TYPE, 'thumbnail' ),
+			'Collections share the page cover flow.'
+		);
+		$this->assertTrue( post_type_supports( Collection::POST_TYPE, 'revisions' ) );
 	}
 
 	public function test_collections_opt_into_document_lifecycle(): void {

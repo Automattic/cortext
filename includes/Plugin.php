@@ -22,6 +22,7 @@ use Cortext\PostType\Cascade\CollectionToRowTrashCascade;
 use Cortext\PostType\Cascade\DocumentToCollectionTrashCascade;
 use Cortext\PostType\Cascade\PageHierarchyTrashCascade;
 use Cortext\PostType\Collection;
+use Cortext\PostType\CollectionContentBackfill;
 use Cortext\PostType\CollectionEntries;
 use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Field;
@@ -52,6 +53,7 @@ final class Plugin {
 		( new Page() )->register();
 		( new DocumentIdentity() )->register();
 		( new Collection() )->register();
+		( new CollectionContentBackfill() )->register();
 		( new Field() )->register();
 		( new CollectionEntries() )->register();
 

@@ -28,13 +28,15 @@ final class Collection {
 	public function register(): void {
 		add_action( 'init', array( $this, 'register_post_type' ) );
 		add_action( 'rest_api_init', array( $this, 'register_rest_filters' ) );
+		// The owner data-view points at this post ID, so it has to land after
+		// insert. EditorBody still repairs old or empty content. See
+		// tech-debt.md#59.
+		add_action( 'wp_after_insert_post', array( $this, 'maybe_seed_data_view_block' ), 10, 3 );
 	}
 
 	public function register_post_type(): void {
-		// Collections use the shared document lifecycle: title, identity,
-		// trash, restore, permanent delete, and command palette search.
-		// DataView is their editing surface, so block-editor content support
-		// stays off for now.
+		// Collections use the document lifecycle. Full-page ones also use
+		// Canvas: cover/icon in the editor, body locked to the data-view block.
 		DocumentTypeRegistrar::register(
 			self::POST_TYPE,
 			array(
@@ -50,17 +52,27 @@ final class Collection {
 					'all_items'     => __( 'All Collections', 'cortext' ),
 				),
 				'public'             => false,
-				'publicly_queryable' => false,
+				// Published collections can render on the front end; editing
+				// still happens in the Cortext shell.
+				'publicly_queryable' => true,
 				'show_ui'            => true,
 				'show_in_menu'       => false,
 				'show_in_rest'       => true,
 				'rest_base'          => 'crtxt_collections',
 				'has_archive'        => false,
+				'rewrite'            => array( 'slug' => 'cortext-collection' ),
 				// Expose `post_parent` in REST for full-page collections.
 				// Inline collections keep `post_parent = 0`; their owner lives
 				// in `_cortext_inline_owner_page`.
 				'hierarchical'       => true,
-				'supports'           => array( 'title', 'custom-fields', 'page-attributes' ),
+				'supports'           => array(
+					'title',
+					'editor',
+					'thumbnail',
+					'revisions',
+					'custom-fields',
+					'page-attributes',
+				),
 				'capability_type'    => 'post',
 				'map_meta_cap'       => true,
 				'can_export'         => true,
@@ -95,6 +107,63 @@ final class Collection {
 	public static function is_inline( int $collection_id ): bool {
 		$mode = get_post_meta( $collection_id, self::MODE_META_KEY, true );
 		return self::MODE_INLINE === $mode;
+	}
+
+	/**
+	 * Serialized markup for the locked data-view block a full-page collection
+	 * uses as its body. Creation and backfill share this builder.
+	 *
+	 * @param int $collection_id Collection post id the block points at.
+	 */
+	public static function build_data_view_block_markup( int $collection_id ): string {
+		return serialize_blocks(
+			array(
+				array(
+					'blockName'    => 'cortext/data-view',
+					'attrs'        => array(
+						'collectionId' => $collection_id,
+						'align'        => 'full',
+						'lock'         => array(
+							'move'   => true,
+							'remove' => true,
+						),
+					),
+					'innerBlocks'  => array(),
+					'innerHTML'    => '',
+					'innerContent' => array(),
+				),
+			)
+		);
+	}
+
+	/**
+	 * Appends the locked data-view block to a new full-page collection. Skip
+	 * updates, inline collections, and content that already has the block.
+	 *
+	 * @param int      $post_id Post id.
+	 * @param \WP_Post $post    Post object.
+	 * @param bool     $update  True on subsequent saves.
+	 */
+	public function maybe_seed_data_view_block( int $post_id, \WP_Post $post, bool $update ): void {
+		if ( $update ) {
+			return;
+		}
+		if ( self::POST_TYPE !== $post->post_type ) {
+			return;
+		}
+		if ( self::is_inline( $post_id ) ) {
+			return;
+		}
+		if ( str_contains( (string) $post->post_content, '<!-- wp:cortext/data-view' ) ) {
+			return;
+		}
+
+		wp_update_post(
+			array(
+				'ID'           => $post_id,
+				'post_content' => $post->post_content . self::build_data_view_block_markup( $post_id ),
+			)
+		);
 	}
 
 	/**
@@ -310,11 +379,21 @@ final class Collection {
 		// After that, slug is locked: WP REST's meta path is gated by the
 		// meta's `auth_callback`, and removing `meta.slug` from the request
 		// keeps it from being applied via the meta API regardless.
+		//
+		// core-data posts the whole meta object when saving unrelated fields.
+		// Strip write-locked keys so an icon-only save does not fail on
+		// unchanged `workspace_mode` or inline-owner meta.
 		$request_meta   = $request->get_param( 'meta' );
 		$requested_slug = '';
-		if ( is_array( $request_meta ) && isset( $request_meta['slug'] ) ) {
-			$requested_slug = (string) $request_meta['slug'];
-			unset( $request_meta['slug'] );
+		if ( is_array( $request_meta ) ) {
+			if ( isset( $request_meta['slug'] ) ) {
+				$requested_slug = (string) $request_meta['slug'];
+				unset( $request_meta['slug'] );
+			}
+			unset(
+				$request_meta[ self::MODE_META_KEY ],
+				$request_meta[ self::INLINE_OWNER_META_KEY ]
+			);
 			$request->set_param( 'meta', $request_meta );
 		}
 
@@ -470,8 +549,8 @@ final class Collection {
 
 		// Read-only via REST: the Published documents pane resolves the owner
 		// page title for inline collections. Writes stay blocked by
-		// `auth_callback` and by `validate_pre_insert` in CollectionsController,
-		// which rejects re-parenting attempts on inline collections.
+		// `auth_callback` and by `validate_pre_insert` above, which rejects
+		// re-parenting attempts on inline collections.
 		register_post_meta(
 			self::POST_TYPE,
 			self::INLINE_OWNER_META_KEY,
