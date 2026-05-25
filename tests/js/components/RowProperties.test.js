@@ -1,4 +1,6 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
+
+let mockDndProps;
 
 jest.mock( '@wordpress/components', () => {
 	const { createElement, forwardRef } = require( '@wordpress/element' );
@@ -28,6 +30,51 @@ jest.mock( '@wordpress/editor', () => ( {
 	store: 'editor-store',
 } ) );
 
+jest.mock( '@dnd-kit/core', () => {
+	const { createElement } = require( '@wordpress/element' );
+
+	return {
+		__esModule: true,
+		DndContext: ( props ) => {
+			mockDndProps = props;
+			return createElement(
+				'div',
+				{ 'data-testid': 'dnd-context' },
+				props.children
+			);
+		},
+		KeyboardSensor: jest.fn(),
+		PointerSensor: jest.fn(),
+		closestCenter: jest.fn(),
+		useSensor: jest.fn( () => ( {} ) ),
+		useSensors: jest.fn( ( ...sensors ) => sensors ),
+	};
+} );
+
+jest.mock( '@dnd-kit/sortable', () => {
+	const { createElement } = require( '@wordpress/element' );
+
+	return {
+		__esModule: true,
+		SortableContext: ( props ) =>
+			createElement(
+				'div',
+				{ 'data-testid': 'sortable-context' },
+				props.children
+			),
+		sortableKeyboardCoordinates: jest.fn(),
+		useSortable: jest.fn( () => ( {
+			attributes: {},
+			isDragging: false,
+			listeners: {},
+			setNodeRef: jest.fn(),
+			transform: null,
+			transition: undefined,
+		} ) ),
+		verticalListSortingStrategy: {},
+	};
+} );
+
 jest.mock( '../../../src/components/EditableCell', () => {
 	const { createContext } = require( '@wordpress/element' );
 
@@ -45,6 +92,7 @@ import RowProperties from '../../../src/components/RowProperties';
 
 describe( 'RowProperties', () => {
 	beforeEach( () => {
+		mockDndProps = null;
 		useDispatch.mockReturnValue( { editPost: jest.fn() } );
 		useSelect.mockReturnValue( {
 			title: 'Current title',
@@ -100,5 +148,48 @@ describe( 'RowProperties', () => {
 			)
 		).toBeInTheDocument();
 		expect( screen.queryByText( 'Title' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'uses the label icon chip as a drag handle for layout order', () => {
+		const onLayoutReorder = jest.fn();
+		render(
+			<RowProperties
+				fields={ [
+					{
+						id: 'field-7',
+						label: 'Status',
+						cortextFieldType: 'text',
+						cortextRecordId: 7,
+						editable: true,
+					},
+					{
+						id: 'created_at',
+						label: 'Created',
+						cortextFieldType: 'datetime',
+						editable: false,
+						getValue: () => '2026-05-23T10:00:00',
+					},
+				] }
+				onLayoutReorder={ onLayoutReorder }
+				row={ {} }
+			/>
+		);
+
+		expect(
+			screen.getAllByRole( 'button', { name: 'Reorder property' } )
+		).toHaveLength( 2 );
+		expect( screen.getByTestId( 'dnd-context' ) ).toBeInTheDocument();
+
+		act( () => {
+			mockDndProps.onDragEnd( {
+				active: { id: 'created_at' },
+				over: { id: 'field-7' },
+			} );
+		} );
+
+		expect( onLayoutReorder ).toHaveBeenCalledWith(
+			'created_at',
+			'field-7'
+		);
 	} );
 } );

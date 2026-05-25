@@ -274,9 +274,11 @@ function LoadingDetail( { onClose } ) {
 }
 
 export default function RowDetailView( {
+	allFields,
 	canGoNext,
 	canGoPrevious,
 	collectionId,
+	detailLayoutEntries,
 	fields,
 	isPinned,
 	mode,
@@ -361,6 +363,7 @@ export default function RowDetailView( {
 	// RowProperties filters out TITLE_FIELD_ID itself (the locked post-title
 	// block above renders the title), so pass the full field list through.
 	const propertyFields = fields;
+	const allPropertyFields = allFields ?? fields;
 
 	useEffect( () => {
 		if ( ! activeDetail || ! activeDetailKey ) {
@@ -575,6 +578,10 @@ export default function RowDetailView( {
 										collectionId={ collectionId }
 										detailKey={ pane.key }
 										fields={ propertyFields }
+										allFields={ allPropertyFields }
+										detailLayoutEntries={
+											detailLayoutEntries
+										}
 										isActive={ isApiActive }
 										isHidden={ isHiddenPane }
 										onApi={ onApi }

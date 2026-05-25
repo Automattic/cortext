@@ -144,6 +144,8 @@ function CanvasEditor( {
 	postType,
 	collectionId,
 	fields,
+	allFields,
+	detailLayoutEntries,
 	row,
 	pendingPost,
 	onSwitchPost,
@@ -231,6 +233,8 @@ function CanvasEditor( {
 		<DocumentPropertiesProvider
 			collectionId={ collectionId }
 			fields={ fields }
+			allFields={ allFields }
+			detailLayoutEntries={ detailLayoutEntries }
 			fallbackRecord={ row }
 			// While a document switch is in flight (`pendingPost` set),
 			// the provider already carries the destination's fields but
@@ -278,6 +282,8 @@ export default function Canvas( {
 	postType = POST_TYPE,
 	collectionId,
 	fields,
+	allFields,
+	detailLayoutEntries,
 	row,
 	onDisplayedPost,
 	isActive,
@@ -426,6 +432,8 @@ export default function Canvas( {
 					postType={ renderedPost.type ?? postType }
 					collectionId={ collectionId }
 					fields={ fields }
+					allFields={ allFields }
+					detailLayoutEntries={ detailLayoutEntries }
 					row={ row }
 					pendingPost={ pendingPost }
 					onSwitchPost={ switchDisplayedPost }

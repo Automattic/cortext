@@ -17,8 +17,9 @@ final class Collection {
 
 	public const POST_TYPE = 'crtxt_collection';
 
-	public const MODE_META_KEY         = 'workspace_mode';
-	public const INLINE_OWNER_META_KEY = '_cortext_inline_owner_page';
+	public const MODE_META_KEY          = 'workspace_mode';
+	public const INLINE_OWNER_META_KEY  = '_cortext_inline_owner_page';
+	public const DETAIL_LAYOUT_META_KEY = 'detail_layout';
 
 	public const MODE_INLINE    = 'inline';
 	public const MODE_FULL_PAGE = 'full_page';
@@ -558,6 +559,44 @@ final class Collection {
 			)
 		);
 
+		register_post_meta(
+			self::POST_TYPE,
+			self::DETAIL_LAYOUT_META_KEY,
+			array(
+				'type'              => 'object',
+				'single'            => true,
+				'show_in_rest'      => array(
+					'schema' => array(
+						'type'                 => 'object',
+						'properties'           => array(
+							'fields' => array(
+								'type'    => 'array',
+								'items'   => array(
+									'type'                 => 'object',
+									'properties'           => array(
+										'field'   => array(
+											'type' => 'string',
+										),
+										'visible' => array(
+											'type' => 'boolean',
+										),
+									),
+									'required'             => array( 'field', 'visible' ),
+									'additionalProperties' => false,
+								),
+								'default' => array(),
+							),
+						),
+						'additionalProperties' => false,
+					),
+				),
+				'sanitize_callback' => array( self::class, 'sanitize_detail_layout' ),
+				'auth_callback'     => static function ( $allowed, $meta_key, $post_id ): bool {
+					return current_user_can( 'edit_post', (int) $post_id );
+				},
+			)
+		);
+
 		// Readable via REST, but write-locked. Mode is set on creation only;
 		// changing it later is out of scope for this pass.
 		register_post_meta(
@@ -590,6 +629,64 @@ final class Collection {
 					return false;
 				},
 			)
+		);
+	}
+
+	/**
+	 * Cleans up the saved row-detail layout for a collection.
+	 *
+	 * @param mixed $value Incoming REST/meta value.
+	 * @return array{fields: array<int, array{field: string, visible: bool}>}
+	 */
+	public static function sanitize_detail_layout( $value ): array {
+		if ( is_object( $value ) ) {
+			$value = (array) $value;
+		}
+
+		if ( ! is_array( $value ) ) {
+			return array( 'fields' => array() );
+		}
+
+		$raw_fields = isset( $value['fields'] ) && is_array( $value['fields'] )
+			? $value['fields']
+			: array();
+
+		$seen   = array();
+		$fields = array();
+
+		foreach ( $raw_fields as $entry ) {
+			if ( is_object( $entry ) ) {
+				$entry = (array) $entry;
+			}
+
+			if ( ! is_array( $entry ) || ! isset( $entry['field'] ) ) {
+				continue;
+			}
+
+			$field = sanitize_text_field( (string) $entry['field'] );
+			if ( '' === $field || isset( $seen[ $field ] ) || ! self::is_detail_layout_field_id( $field ) ) {
+				continue;
+			}
+
+			$fields[]       = array(
+				'field'   => $field,
+				'visible' => isset( $entry['visible'] ) ? rest_sanitize_boolean( $entry['visible'] ) : true,
+			);
+			$seen[ $field ] = true;
+		}
+
+		return array( 'fields' => $fields );
+	}
+
+	private static function is_detail_layout_field_id( string $field ): bool {
+		if ( 1 === preg_match( '/^field-[1-9][0-9]*$/', $field ) ) {
+			return true;
+		}
+
+		return in_array(
+			$field,
+			array( 'created_at', 'created_by', 'modified_at', 'modified_by' ),
+			true
 		);
 	}
 }

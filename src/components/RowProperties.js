@@ -1,7 +1,7 @@
 /**
  * Property panel for a row document. Renders one row per collection field
  * with the right edit affordance for that field type. Mounted by row detail
- * chrome and full-page row chrome for now; see tech-debt.md#41 for the
+ * chrome and full-page row chrome for now; see tech-debt.md#42 for the
  * follow-up that turns this into a locked document block.
  *
  * Reads the post's edited title and meta from `editorStore` so the live
@@ -27,6 +27,21 @@ import {
 	useState,
 } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
+import { dragHandle } from '@wordpress/icons';
+import {
+	DndContext,
+	KeyboardSensor,
+	PointerSensor,
+	closestCenter,
+	useSensor,
+	useSensors,
+} from '@dnd-kit/core';
+import {
+	SortableContext,
+	sortableKeyboardCoordinates,
+	useSortable,
+	verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
 
 import {
 	RowMutationContext,
@@ -421,21 +436,157 @@ function PropertyControl( {
 	);
 }
 
-/**
+function transformToString( transform ) {
+	if ( ! transform ) {
+		return undefined;
+	}
+	const { x = 0, y = 0, scaleX = 1, scaleY = 1 } = transform;
+	return `translate3d(${ x }px, ${ y }px, 0) scaleX(${ scaleX }) scaleY(${ scaleY })`;
+}
+
+function RowProperty( {
+	canReorderLayout,
+	data,
+	field,
+	isDragging,
+	optionOverrides,
+	refreshRows,
+	reorderAttributes,
+	reorderListeners,
+	rowRef,
+	rowStyle,
+	update,
+	updateFieldOptions,
+} ) {
+	const isEditable = isRowDetailFieldEditable( field );
+	const value = valueForField( field, data );
+	const type = fieldType( field );
+	const elements =
+		optionOverrides?.[ field.id ] ??
+		field.cortextElements ??
+		field.elements ??
+		[];
+	let propertyIcon = null;
+	if ( isCollectionField( field ) ) {
+		propertyIcon = (
+			<FieldTypeIcon
+				type={ type }
+				className="cortext-row-detail__property-type-icon"
+			/>
+		);
+	} else if ( hasInternalFieldIcon( field ) ) {
+		propertyIcon = (
+			<SystemFieldIcon
+				fieldId={ field.id }
+				className="cortext-row-detail__property-type-icon"
+			/>
+		);
+	}
+
+	return (
+		<div
+			ref={ rowRef }
+			style={ rowStyle }
+			className={
+				'cortext-row-detail__property' +
+				( isEditable
+					? ' cortext-row-detail__property--editable'
+					: ' cortext-row-detail__property--readonly' ) +
+				( isDragging ? ' is-dragging' : '' )
+			}
+		>
+			<div className="cortext-row-detail__property-label">
+				<span className="cortext-row-detail__property-label-icon-slot">
+					{ propertyIcon }
+					{ canReorderLayout ? (
+						<Button
+							className="cortext-row-detail__property-layout-chip"
+							aria-label={ __( 'Reorder property', 'cortext' ) }
+							icon={ dragHandle }
+							label={ __( 'Reorder property', 'cortext' ) }
+							size="small"
+							variant="tertiary"
+							{ ...reorderAttributes }
+							{ ...reorderListeners }
+						/>
+					) : null }
+				</span>
+				<span className="cortext-row-detail__property-label-text">
+					{ field.label }
+				</span>
+			</div>
+			<div className="cortext-row-detail__property-value">
+				{ isEditable ? (
+					<PropertyControl
+						field={ field }
+						value={ value }
+						elements={ elements }
+						onChange={ ( next ) =>
+							update( { [ field.id ]: next } )
+						}
+						onOptionsSaved={ ( nextOptions ) =>
+							updateFieldOptions?.(
+								field.cortextRecordId ?? toRecordId( field.id ),
+								nextOptions
+							)
+						}
+						onRowsChanged={ refreshRows }
+					/>
+				) : (
+					<ReadOnlyProperty
+						value={ value }
+						type={ type }
+						elements={ elements }
+						format={ field.cortextFormat }
+					/>
+				) }
+			</div>
+		</div>
+	);
+}
+
+function SortableRowProperty( props ) {
+	const {
+		attributes,
+		isDragging,
+		listeners,
+		setNodeRef,
+		transform,
+		transition,
+	} = useSortable( { id: props.field.id } );
+	const style = {
+		transform: transformToString( transform ),
+		transition,
+	};
+
+	return (
+		<RowProperty
+			{ ...props }
+			canReorderLayout
+			isDragging={ isDragging }
+			reorderAttributes={ attributes }
+			reorderListeners={ listeners }
+			rowRef={ setNodeRef }
+			rowStyle={ style }
+		/>
+	);
+}
+
+/*
  * Renders the row's collection-field properties as document chrome above the
  * block editor. This is intentionally not serialized yet; see
- * tech-debt.md#41 for the block-backed version needed for frontend rendering.
- *
- * @param {Object} props
- * @param {Array}  props.fields The collection field definitions for this row.
- * @param {Object} [props.row]  Optional fallback row record (used for
- *                              read-only fields that aren't tracked by the
- *                              editor store, e.g. relations and rollups).
+ * tech-debt.md#42 for the block-backed version needed for frontend rendering.
  */
-export default function RowProperties( { fields, row } ) {
+export default function RowProperties( { fields, onLayoutReorder, row } ) {
 	const { editPost } = useDispatch( editorStore );
 	const { optionOverrides, updateFieldOptions, refreshRows } =
 		useContext( RowMutationContext );
+	const sensors = useSensors(
+		useSensor( PointerSensor, { activationConstraint: { distance: 4 } } ),
+		useSensor( KeyboardSensor, {
+			coordinateGetter: sortableKeyboardCoordinates,
+		} )
+	);
 
 	// The locked `core/post-title` block above already exposes the title;
 	// duplicating it as a property row would give the user two edit surfaces
@@ -491,6 +642,22 @@ export default function RowProperties( { fields, row } ) {
 		},
 		[ editPost ]
 	);
+	const canReorderLayout =
+		typeof onLayoutReorder === 'function' && propertyFields.length > 1;
+	const sortableIds = useMemo(
+		() => propertyFields.map( ( field ) => field.id ),
+		[ propertyFields ]
+	);
+	const handleDragEnd = useCallback(
+		( event ) => {
+			const { active, over } = event;
+			if ( ! over || active.id === over.id ) {
+				return;
+			}
+			onLayoutReorder?.( active.id, over.id );
+		},
+		[ onLayoutReorder ]
+	);
 
 	if ( propertyFields.length === 0 ) {
 		return null;
@@ -502,83 +669,54 @@ export default function RowProperties( { fields, row } ) {
 		propertyFields.length
 	);
 
-	return (
+	const rows = (
 		<div
 			className="cortext-row-detail__properties cortext-row-detail__properties--rows"
 			aria-label={ fieldCountLabel }
 		>
-			{ propertyFields.map( ( field ) => {
-				const isEditable = isRowDetailFieldEditable( field );
-				const value = valueForField( field, data );
-				const type = fieldType( field );
-				const elements =
-					optionOverrides?.[ field.id ] ??
-					field.cortextElements ??
-					field.elements ??
-					[];
-				let propertyIcon = null;
-				if ( isCollectionField( field ) ) {
-					propertyIcon = (
-						<FieldTypeIcon
-							type={ type }
-							className="cortext-row-detail__property-type-icon"
-						/>
-					);
-				} else if ( hasInternalFieldIcon( field ) ) {
-					propertyIcon = (
-						<SystemFieldIcon
-							fieldId={ field.id }
-							className="cortext-row-detail__property-type-icon"
-						/>
-					);
-				}
-
-				return (
-					<div
+			{ propertyFields.map( ( field ) =>
+				canReorderLayout ? (
+					<SortableRowProperty
 						key={ field.id }
-						className={
-							'cortext-row-detail__property' +
-							( isEditable
-								? ' cortext-row-detail__property--editable'
-								: ' cortext-row-detail__property--readonly' )
-						}
-					>
-						<div className="cortext-row-detail__property-label">
-							{ propertyIcon }
-							<span className="cortext-row-detail__property-label-text">
-								{ field.label }
-							</span>
-						</div>
-						<div className="cortext-row-detail__property-value">
-							{ isEditable ? (
-								<PropertyControl
-									field={ field }
-									value={ value }
-									elements={ elements }
-									onChange={ ( next ) =>
-										update( { [ field.id ]: next } )
-									}
-									onOptionsSaved={ ( nextOptions ) =>
-										updateFieldOptions?.(
-											field.cortextRecordId ??
-												toRecordId( field.id ),
-											nextOptions
-										)
-									}
-									onRowsChanged={ refreshRows }
-								/>
-							) : (
-								<ReadOnlyProperty
-									value={ value }
-									type={ type }
-									elements={ elements }
-									format={ field.cortextFormat }
-								/>
-							) }
-						</div>
-					</div>
-				);
-			} ) }
+						data={ data }
+						field={ field }
+						optionOverrides={ optionOverrides }
+						refreshRows={ refreshRows }
+						update={ update }
+						updateFieldOptions={ updateFieldOptions }
+					/>
+				) : (
+					<RowProperty
+						key={ field.id }
+						canReorderLayout={ false }
+						data={ data }
+						field={ field }
+						optionOverrides={ optionOverrides }
+						refreshRows={ refreshRows }
+						update={ update }
+						updateFieldOptions={ updateFieldOptions }
+					/>
+				)
+			) }
 		</div>
+	);
+
+	if ( ! canReorderLayout ) {
+		return rows;
+	}
+
+	return (
+		<DndContext
+			sensors={ sensors }
+			collisionDetection={ closestCenter }
+			onDragEnd={ handleDragEnd }
+		>
+			<SortableContext
+				items={ sortableIds }
+				strategy={ verticalListSortingStrategy }
+			>
+				{ rows }
+			</SortableContext>
+		</DndContext>
 	);
 }

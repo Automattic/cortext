@@ -298,7 +298,7 @@ export default function EntityRoute( { history } ) {
 	}, [ rowCollectionSlug, workspaceCollections ] );
 	const rowFieldsState = useCollectionFields( rowParentCollectionId );
 	const rowFields = useMemo( () => {
-		if ( ! rowCollectionSlug || ! rowFieldsState?.fields ) {
+		if ( ! rowCollectionSlug || ! rowFieldsState?.detailFields ) {
 			return undefined;
 		}
 		return [
@@ -310,9 +310,25 @@ export default function EntityRoute( { history } ) {
 				getValue: ( { item } ) =>
 					item?.title?.raw ?? item?.title?.rendered ?? '',
 			},
-			...rowFieldsState.fields,
+			...rowFieldsState.detailFields,
 		];
-	}, [ rowCollectionSlug, rowFieldsState?.fields ] );
+	}, [ rowCollectionSlug, rowFieldsState?.detailFields ] );
+	const rowAllFields = useMemo( () => {
+		if ( ! rowCollectionSlug || ! rowFieldsState?.allDetailFields ) {
+			return undefined;
+		}
+		return [
+			{
+				id: 'title',
+				label: __( 'Title', 'cortext' ),
+				cortextType: 'title',
+				editable: true,
+				getValue: ( { item } ) =>
+					item?.title?.raw ?? item?.title?.rendered ?? '',
+			},
+			...rowFieldsState.allDetailFields,
+		];
+	}, [ rowCollectionSlug, rowFieldsState?.allDetailFields ] );
 
 	useLayoutEffect( () => {
 		dispatch( { type: 'TARGET_CHANGED', target } );
@@ -550,6 +566,10 @@ export default function EntityRoute( { history } ) {
 					postType={ editorPostType }
 					collectionId={ isRow ? rowParentCollectionId : undefined }
 					fields={ isRow ? rowFields : undefined }
+					allFields={ isRow ? rowAllFields : undefined }
+					detailLayoutEntries={
+						isRow ? rowFieldsState.detailLayoutEntries : undefined
+					}
 					row={ isRow ? documentResolution.entity : undefined }
 					onDisplayedPost={ handleDocumentDisplayed }
 					isActive={ isDocumentActive }

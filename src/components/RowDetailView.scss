@@ -477,6 +477,85 @@
 		display: none;
 	}
 
+	.cortext-detail-layout-editor {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		padding: $grid-unit-20 var(--cortext-row-detail-field-inset) $grid-unit-10;
+	}
+
+	.cortext-detail-layout-editor__row {
+		display: grid;
+		grid-template-columns: 28px minmax(0, 1fr) 28px;
+		align-items: center;
+		gap: $grid-unit-05;
+		min-width: 0;
+		min-height: 34px;
+		padding: 2px $grid-unit-05;
+		border-radius: 4px;
+		color: var(--cortext-row-detail-text);
+
+		&:hover {
+			background: var(--cortext-row-detail-hover-surface);
+		}
+
+		&.is-hidden {
+			color: var(--cortext-row-detail-muted);
+		}
+	}
+
+	.cortext-detail-layout-editor__handle,
+	.cortext-detail-layout-editor__visibility.components-button {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 28px;
+		min-width: 28px;
+		height: 28px;
+		min-height: 28px;
+		padding: 0;
+		border: 0;
+		border-radius: 4px;
+		background: transparent;
+		box-shadow: none;
+		color: var(--cortext-row-detail-muted);
+	}
+
+	.cortext-detail-layout-editor__handle {
+		cursor: grab;
+
+		&:active {
+			cursor: grabbing;
+		}
+
+	}
+
+	.cortext-detail-layout-editor__handle:hover,
+	.cortext-detail-layout-editor__handle:focus-visible,
+	.cortext-detail-layout-editor__visibility.components-button:hover,
+	.cortext-detail-layout-editor__visibility.components-button:focus-visible {
+		background: var(--cortext-row-detail-pressed-surface);
+		box-shadow: none;
+		color: var(--cortext-row-detail-text);
+	}
+
+	.cortext-detail-layout-editor__label {
+		overflow: hidden;
+		font-size: 13px;
+		font-weight: 400;
+		line-height: 1.4;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.cortext-detail-layout-editor__empty,
+	.cortext-document-properties__empty {
+		margin: 0;
+		padding: $grid-unit-20 var(--cortext-row-detail-field-inset) $grid-unit-10;
+		color: var(--cortext-row-detail-muted);
+		font-size: 12px;
+	}
+
 	&__fields-indicator-wrap {
 		grid-template-rows: 0fr;
 		opacity: 0;
@@ -514,6 +593,11 @@
 			background: var(--cortext-row-detail-hover-surface);
 		}
 
+		&.is-dragging {
+			background: var(--cortext-row-detail-pressed-surface);
+			box-shadow: 0 0 0 $border-width var(--cortext-row-detail-border);
+		}
+
 		.components-base-control {
 			width: 100%;
 			margin-bottom: 0;
@@ -547,8 +631,71 @@
 		white-space: nowrap;
 	}
 
+	&__property-label-icon-slot {
+		position: relative;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		flex: 0 0 16px;
+		width: 16px;
+		height: 16px;
+	}
+
 	&__property-type-icon {
 		--cortext-field-type-icon-size: 14px;
+
+		transition: opacity 120ms ease;
+	}
+
+	&__property-layout-chip.components-button {
+		position: absolute;
+		inset: 50% auto auto 50%;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 22px;
+		min-width: 22px;
+		height: 18px;
+		min-height: 18px;
+		padding: 0;
+		border-radius: $grid-unit-30;
+		background: var(--cortext-row-detail-pressed-surface);
+		box-shadow: none;
+		color: var(--cortext-row-detail-muted);
+		cursor: grab;
+		opacity: 0;
+		pointer-events: none;
+		transform: translate(-50%, -50%);
+		transition:
+			background 120ms ease,
+			color 120ms ease,
+			opacity 120ms ease;
+
+		&:hover {
+			background: var(--cortext-row-detail-hover-surface);
+			box-shadow: none;
+			color: var(--cortext-row-detail-text);
+		}
+
+		&:active {
+			cursor: grabbing;
+		}
+
+		svg {
+			width: 16px;
+			height: 16px;
+		}
+	}
+
+	&__property:hover &__property-layout-chip,
+	&__property:focus-within &__property-layout-chip {
+		opacity: 1;
+		pointer-events: auto;
+	}
+
+	&__property:hover &__property-type-icon,
+	&__property:focus-within &__property-type-icon {
+		opacity: 0;
 	}
 
 	&__property-label-text {
