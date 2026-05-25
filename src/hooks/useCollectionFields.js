@@ -2,6 +2,7 @@ import { useMemo, useRef } from '@wordpress/element';
 import { useEntityRecord, useEntityRecords } from '@wordpress/core-data';
 
 import { mapField, systemFields } from './fieldMapping';
+import { normalizeDetailLayout } from './detailLayout';
 
 // Shared field-list query shape. Exported so mutation hooks can invalidate
 // the exact resolver used here without copy-pasting the parameters and
@@ -116,9 +117,16 @@ export default function useCollectionFields( collectionId ) {
 	const fields = hasStableFieldsForCollection
 		? stableRef.current.fields
 		: liveFields;
+	const detailLayout = useMemo(
+		() => normalizeDetailLayout( fields, collection?.meta?.detail_layout ),
+		[ fields, collection?.meta?.detail_layout ]
+	);
 
 	return {
 		fields,
+		detailFields: detailLayout.fields,
+		allDetailFields: detailLayout.allFields,
+		detailLayoutEntries: detailLayout.entries,
 		collection: collection ?? null,
 		slug: collection?.meta?.slug ?? null,
 		// True only for the first load of this collection or its field list.

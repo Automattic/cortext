@@ -10,6 +10,8 @@ const DocumentPropertiesContext = createContext( null );
 export function DocumentPropertiesProvider( {
 	collectionId,
 	fields,
+	allFields,
+	detailLayoutEntries,
 	fallbackRecord,
 	isResolving = false,
 	isVisible = true,
@@ -20,6 +22,8 @@ export function DocumentPropertiesProvider( {
 		() => ( {
 			collectionId,
 			fields,
+			allFields,
+			detailLayoutEntries,
 			fallbackRecord,
 			isResolving,
 			isVisible,
@@ -28,6 +32,8 @@ export function DocumentPropertiesProvider( {
 		[
 			collectionId,
 			fields,
+			allFields,
+			detailLayoutEntries,
 			fallbackRecord,
 			isResolving,
 			isVisible,

@@ -98,6 +98,8 @@ function DetailPaneContent( {
 	collectionId,
 	detailKey,
 	fields,
+	allFields,
+	detailLayoutEntries,
 	isActive,
 	isHidden,
 	onApi,
@@ -130,6 +132,8 @@ function DetailPaneContent( {
 			<DocumentPropertiesProvider
 				collectionId={ collectionId }
 				fields={ fields }
+				allFields={ allFields }
+				detailLayoutEntries={ detailLayoutEntries }
 				fallbackRecord={ row }
 				isVisible={ propertiesVisible }
 				onToggleVisible={ onTogglePropertiesVisible }
@@ -155,6 +159,8 @@ export default function RowEditor( {
 	collectionId,
 	detailKey,
 	fields,
+	allFields,
+	detailLayoutEntries,
 	isActive,
 	isHidden,
 	onApi,
@@ -182,6 +188,8 @@ export default function RowEditor( {
 						collectionId={ collectionId }
 						detailKey={ detailKey }
 						fields={ fields }
+						allFields={ allFields }
+						detailLayoutEntries={ detailLayoutEntries }
 						isActive={ isActive }
 						isHidden={ isHidden }
 						onApi={ onApi }

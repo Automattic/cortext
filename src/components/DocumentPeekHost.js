@@ -68,15 +68,23 @@ export default function DocumentPeekHost() {
 		closeDocument();
 	}, [ splat, closeDocument ] );
 
-	const { fields: collectionFields } = useCollectionFields(
-		peek?.collectionId ?? null
-	);
+	const {
+		detailFields: collectionDetailFields,
+		allDetailFields: collectionAllDetailFields,
+		detailLayoutEntries,
+	} = useCollectionFields( peek?.collectionId ?? null );
 	const peekFields = useMemo( () => {
-		if ( ! peek || ! collectionFields ) {
+		if ( ! peek || ! collectionDetailFields ) {
 			return undefined;
 		}
-		return withTitleField( collectionFields );
-	}, [ peek, collectionFields ] );
+		return withTitleField( collectionDetailFields );
+	}, [ peek, collectionDetailFields ] );
+	const peekAllFields = useMemo( () => {
+		if ( ! peek || ! collectionAllDetailFields ) {
+			return undefined;
+		}
+		return withTitleField( collectionAllDetailFields );
+	}, [ peek, collectionAllDetailFields ] );
 
 	const renderedMode = modeSurfaceTransition
 		? modeSurfaceTransition.surfaceMode
@@ -104,9 +112,11 @@ export default function DocumentPeekHost() {
 	const detailView = (
 		<CurrentViewModeProvider value={ peek.mode }>
 			<RowDetailView
+				allFields={ peekAllFields }
 				canGoNext={ canGoNext }
 				canGoPrevious={ canGoPrevious }
 				collectionId={ peek.collectionId }
+				detailLayoutEntries={ detailLayoutEntries }
 				fields={ peekFields }
 				isPinned={ isPinned }
 				mode={ renderedMode }

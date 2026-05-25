@@ -12,8 +12,16 @@ import useCollectionFields from '../hooks/useCollectionFields';
 const CollectionFieldsContext = createContext( null );
 
 export function CollectionFieldsProvider( { collectionId, children } ) {
-	const { fields, collection, slug, isResolving, fieldsResolved } =
-		useCollectionFields( collectionId );
+	const {
+		fields,
+		detailFields,
+		allDetailFields,
+		detailLayoutEntries,
+		collection,
+		slug,
+		isResolving,
+		fieldsResolved,
+	} = useCollectionFields( collectionId );
 	// Index fields by record id once per update so `useMappedField` resolves
 	// in constant time regardless of column count.
 	const fieldsByRecordId = useMemo(
@@ -25,6 +33,9 @@ export function CollectionFieldsProvider( { collectionId, children } ) {
 	const value = useMemo(
 		() => ( {
 			fields,
+			detailFields,
+			allDetailFields,
+			detailLayoutEntries,
 			fieldsByRecordId,
 			collection,
 			slug,
@@ -33,6 +44,9 @@ export function CollectionFieldsProvider( { collectionId, children } ) {
 		} ),
 		[
 			fields,
+			detailFields,
+			allDetailFields,
+			detailLayoutEntries,
 			fieldsByRecordId,
 			collection,
 			slug,
