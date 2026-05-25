@@ -405,9 +405,9 @@ final class FieldValueReadQuery {
 		$parts = array();
 		$args  = array();
 		foreach ( $values as $string ) {
-			$parts[] = '(fvf_PLACEHOLDER.value_text = %s AND fvf_PLACEHOLDER.value_text_length = %d)';
+			$parts[] = '(fvf_PLACEHOLDER.value_text = %s AND fvf_PLACEHOLDER.value_text_length <= %d)';
 			$args[]  = $string;
-			$args[]  = strlen( $string );
+			$args[]  = self::TEXT_INDEX_LENGTH;
 		}
 
 		return array(
@@ -423,8 +423,8 @@ final class FieldValueReadQuery {
 		}
 
 		return array(
-			'sql'  => 'fvf_PLACEHOLDER.value_text = %s AND fvf_PLACEHOLDER.value_text_length = %d',
-			'args' => array( $string, strlen( $string ) ),
+			'sql'  => 'fvf_PLACEHOLDER.value_text = %s AND fvf_PLACEHOLDER.value_text_length <= %d',
+			'args' => array( $string, self::TEXT_INDEX_LENGTH ),
 		);
 	}
 

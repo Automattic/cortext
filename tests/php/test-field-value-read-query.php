@@ -215,6 +215,20 @@ final class Test_Field_Value_Read_Query extends BaseTestCase {
 		);
 	}
 
+	public function test_exact_text_predicate_only_rejects_truncated_index_values(): void {
+		$query  = new FieldValueReadQuery();
+		$method = new \ReflectionMethod( $query, 'text_exact_predicate' );
+		$method->setAccessible( true );
+
+		$predicate = $method->invoke( $query, 'Cafe' );
+
+		$this->assertSame(
+			'fvf_PLACEHOLDER.value_text = %s AND fvf_PLACEHOLDER.value_text_length <= %d',
+			$predicate['sql']
+		);
+		$this->assertSame( array( 'Cafe', 191 ), $predicate['args'] );
+	}
+
 	public function test_title_only_queries_stay_on_postmeta_path_but_can_combine_with_indexed_sort(): void {
 		$query  = new FieldValueReadQuery();
 		$schema = $this->field_schema();
