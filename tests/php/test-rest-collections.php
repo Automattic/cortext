@@ -162,7 +162,7 @@ final class Test_Rest_Collections extends BaseTestCase {
 
 	public function test_update_ignores_meta_slug_overwrite(): void {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
-		$create = $this->create_collection(
+		$create        = $this->create_collection(
 			array(
 				'title' => 'Reading List',
 			)
@@ -182,6 +182,121 @@ final class Test_Rest_Collections extends BaseTestCase {
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( $original_slug, get_post_meta( $collection_id, 'slug', true ) );
 		$this->assertTrue( post_type_exists( 'crtxt_' . $original_slug ) );
+	}
+
+	public function test_updates_detail_layout_meta_through_rest(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$create        = $this->create_collection(
+			array(
+				'title' => 'Reading List',
+			)
+		);
+		$collection_id = (int) $create->get_data()['id'];
+
+		$request = new WP_REST_Request( 'POST', '/wp/v2/crtxt_collections/' . $collection_id );
+		$request->set_body_params(
+			array(
+				'meta' => array(
+					Collection::DETAIL_LAYOUT_META_KEY => array(
+						'fields' => array(
+							array(
+								'field'   => 'field-12',
+								'visible' => false,
+							),
+							array(
+								'field'   => 'created_at',
+								'visible' => true,
+							),
+							array(
+								'field'   => 'field-12',
+								'visible' => true,
+							),
+							array(
+								'field'   => 'title',
+								'visible' => true,
+							),
+						),
+					),
+				),
+			)
+		);
+
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			array(
+				'fields' => array(
+					array(
+						'field'   => 'field-12',
+						'visible' => false,
+					),
+					array(
+						'field'   => 'created_at',
+						'visible' => true,
+					),
+				),
+			),
+			get_post_meta( $collection_id, Collection::DETAIL_LAYOUT_META_KEY, true )
+		);
+	}
+
+	public function test_detail_layout_meta_allows_explicit_empty_layout(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$create        = $this->create_collection(
+			array(
+				'title' => 'Empty Layout',
+			)
+		);
+		$collection_id = (int) $create->get_data()['id'];
+
+		$request = new WP_REST_Request( 'POST', '/wp/v2/crtxt_collections/' . $collection_id );
+		$request->set_body_params(
+			array(
+				'meta' => array(
+					Collection::DETAIL_LAYOUT_META_KEY => array(
+						'fields' => array(),
+					),
+				),
+			)
+		);
+
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			array( 'fields' => array() ),
+			get_post_meta( $collection_id, Collection::DETAIL_LAYOUT_META_KEY, true )
+		);
+	}
+
+	public function test_detail_layout_meta_requires_collection_edit_permission(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$create        = $this->create_collection( array( 'title' => 'Private Layout' ) );
+		$collection_id = (int) $create->get_data()['id'];
+
+		wp_set_current_user( $this->create_user( 'subscriber' ) );
+
+		$request = new WP_REST_Request( 'POST', '/wp/v2/crtxt_collections/' . $collection_id );
+		$request->set_body_params(
+			array(
+				'meta' => array(
+					Collection::DETAIL_LAYOUT_META_KEY => array(
+						'fields' => array(
+							array(
+								'field'   => 'field-12',
+								'visible' => false,
+							),
+						),
+					),
+				),
+			)
+		);
+
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( '', get_post_meta( $collection_id, Collection::DETAIL_LAYOUT_META_KEY, true ) );
 	}
 
 	public function test_auto_suffixes_reserved_slug(): void {

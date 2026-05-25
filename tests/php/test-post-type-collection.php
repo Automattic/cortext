@@ -93,5 +93,71 @@ final class Test_Post_Type_Collection extends BaseTestCase {
 
 		$this->assertArrayHasKey( 'slug', $registered );
 		$this->assertArrayHasKey( 'fields', $registered );
+		$this->assertArrayHasKey( Collection::DETAIL_LAYOUT_META_KEY, $registered );
+		$this->assertSame( 'object', $registered[ Collection::DETAIL_LAYOUT_META_KEY ]['type'] );
+		$this->assertTrue( $registered[ Collection::DETAIL_LAYOUT_META_KEY ]['single'] );
+	}
+
+	public function test_sanitize_detail_layout_keeps_order_and_supported_ids(): void {
+		$layout = Collection::sanitize_detail_layout(
+			array(
+				'fields' => array(
+					array(
+						'field'   => 'field-12',
+						'visible' => true,
+					),
+					array(
+						'field'   => 'created_at',
+						'visible' => false,
+					),
+					array(
+						'field'   => 'field-12',
+						'visible' => false,
+					),
+					array(
+						'field'   => 'title',
+						'visible' => true,
+					),
+					array(
+						'field'   => 'field-0',
+						'visible' => true,
+					),
+					array(
+						'field' => 'modified_by',
+					),
+				),
+			)
+		);
+
+		$this->assertSame(
+			array(
+				'fields' => array(
+					array(
+						'field'   => 'field-12',
+						'visible' => true,
+					),
+					array(
+						'field'   => 'created_at',
+						'visible' => false,
+					),
+					array(
+						'field'   => 'modified_by',
+						'visible' => true,
+					),
+				),
+			),
+			$layout
+		);
+	}
+
+	public function test_sanitize_detail_layout_allows_explicit_empty_layout(): void {
+		$this->assertSame(
+			array( 'fields' => array() ),
+			Collection::sanitize_detail_layout( array( 'fields' => array() ) )
+		);
+		$this->assertSame(
+			array( 'fields' => array() ),
+			Collection::sanitize_detail_layout( 'not an object' )
+		);
 	}
 }
