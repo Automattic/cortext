@@ -73,11 +73,13 @@ function useDocumentsContext() {
 }
 
 /**
- * Bind descriptor actions to the current dispatcher, navigation, and UI
- * callbacks. Returns async `rename`, `duplicate`, and `trash` functions.
+ * Bind descriptor actions to the current dispatcher, router, and UI callbacks.
+ * Returns async `rename`, `duplicate`, `trash`, `restore`, and
+ * `permanentDelete` functions.
  *
- * `duplicate` resolves to the created record; descriptors handle the usual
- * post-create selection or notice work themselves.
+ * `duplicate` resolves to the created record and `permanentDelete` resolves
+ * to the REST response (with the deleted ids) so callers can react to it.
+ * Descriptors own the per-kind refresh logic.
  */
 export function useDocumentActions() {
 	const docCtx = useDocumentsContext();
@@ -141,18 +143,44 @@ export function useDocumentActions() {
 		[ ctx ]
 	);
 
+	const restore = useCallback(
+		async ( record ) => {
+			const descriptor = descriptorFor( record );
+			if ( ! descriptor.restore ) {
+				return;
+			}
+			return descriptor.restore( record, ctx );
+		},
+		[ ctx ]
+	);
+
+	const permanentDelete = useCallback(
+		async ( record ) => {
+			const descriptor = descriptorFor( record );
+			if ( ! descriptor.permanentDelete ) {
+				return undefined;
+			}
+			return descriptor.permanentDelete( record, ctx );
+		},
+		[ ctx ]
+	);
+
 	return useMemo(
-		() => ( { rename, duplicate, trash } ),
-		[ rename, duplicate, trash ]
+		() => ( { rename, duplicate, trash, restore, permanentDelete } ),
+		[ rename, duplicate, trash, restore, permanentDelete ]
 	);
 }
 
 /**
- * Resolve the display bits for a record: kind, title, icon, and feature flags.
- * Components should prefer the feature flags over their own kind checks.
+ * Resolve the display data for a record: kind, title, icon, feature flags, and
+ * trash-list copy such as descendant labels, confirmation text, and error
+ * messages. Components should prefer this over their own kind checks.
+ *
+ * `descendantLabel` and `permanentDeleteConfirmation` take the cascade counts
+ * (`{ pages, collections, total }`) and return localized copy for that subtree.
  *
  * @param {Object} record Document record (page, collection, or row).
- * @return {Object} `{ kind, title, icon, features }` display attributes.
+ * @return {Object} Display attributes.
  */
 export function useDocumentRecord( record ) {
 	const kind = kindFromRecord( record );
@@ -164,6 +192,13 @@ export function useDocumentRecord( record ) {
 		title,
 		icon,
 		features: descriptor.features,
+		descendantLabel: ( counts ) =>
+			descriptor.descendantLabel?.( counts ) ?? '',
+		permanentDeleteConfirmation: ( counts ) =>
+			descriptor.permanentDeleteConfirmation?.( counts ) ?? null,
+		restoreErrorMessage: descriptor.restoreErrorMessage ?? '',
+		permanentDeleteErrorMessage:
+			descriptor.permanentDeleteErrorMessage ?? '',
 	};
 }
 

@@ -1,4 +1,4 @@
-import { __ } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
 
 import { POST_TYPE } from '../../components/page-queries';
@@ -8,9 +8,9 @@ import { cascadeFavorites } from '../favorites';
 import { afterPageTrash, applyInvalidationPack } from '../invalidation';
 
 /**
- * Page actions used by the sidebar. Pages are hierarchical, can own child
- * pages, and can have their own icon. The REST trash response carries the
- * cascade ids so the favorites cleanup does not need a local page tree walk.
+ * Page actions used by the sidebar. Pages can have child pages and their own
+ * icon. The REST trash response includes the cascade ids, so Favorites can be
+ * cleaned up without walking the page tree in the client.
  */
 const pageDescriptor = {
 	features: {
@@ -74,10 +74,9 @@ const pageDescriptor = {
 		}
 		applyInvalidationPack( ctx.invalidateResolution, afterPageTrash );
 		notifyDocumentTrashChanged();
-		// The server returns the cascade alongside the trashed page: child
-		// pages plus any inline collections that came with them. The favorites
-		// cleanup just consumes that list, so the page tree never has to be
-		// walked on the client.
+		// The server returns the cascade with the trashed page: child pages plus
+		// any inline collections that came with them. Favorites can use that
+		// list directly instead of walking the page tree in the client.
 		const cascade = deleted?.cascade_deleted ?? {};
 		await cascadeFavorites(
 			ctx,
@@ -97,6 +96,103 @@ const pageDescriptor = {
 			)
 		);
 		ctx.onAfterTrash?.( { kind: 'page', record } );
+	},
+
+	async restore( record, ctx ) {
+		await apiFetch( {
+			path: `/cortext/v1/documents/${ record.id }/restore`,
+			method: 'POST',
+		} );
+		applyInvalidationPack( ctx.invalidateResolution, afterPageTrash );
+		notifyDocumentTrashChanged();
+	},
+
+	// Return the REST response so the caller can navigate away if the open page
+	// is in `deleted`. The server prunes favorites that still point at deleted
+	// pages on the next read, so there is no client cleanup here.
+	async permanentDelete( record, ctx ) {
+		const response = await apiFetch( {
+			path: `/cortext/v1/documents/${ record.id }/permanent-delete`,
+			method: 'POST',
+		} );
+		applyInvalidationPack( ctx.invalidateResolution, afterPageTrash );
+		notifyDocumentTrashChanged();
+		return response;
+	},
+
+	restoreErrorMessage: __( 'Could not restore page.', 'cortext' ),
+
+	permanentDeleteErrorMessage: __( 'Could not delete page.', 'cortext' ),
+
+	descendantLabel( counts ) {
+		// Mixed subtrees (subpages + owned inline collections) use
+		// "%d nested items". Pure subtrees keep the more specific noun.
+		if ( counts.pages > 0 && counts.collections === 0 ) {
+			return sprintf(
+				/* translators: %d: number of subpages */
+				_n( '%d subpage', '%d subpages', counts.pages, 'cortext' ),
+				counts.pages
+			);
+		}
+		if ( counts.collections > 0 && counts.pages === 0 ) {
+			return sprintf(
+				/* translators: %d: number of nested inline collections */
+				_n(
+					'%d collection',
+					'%d collections',
+					counts.collections,
+					'cortext'
+				),
+				counts.collections
+			);
+		}
+		return sprintf(
+			/* translators: %d: number of nested trashed documents */
+			_n( '%d nested item', '%d nested items', counts.total, 'cortext' ),
+			counts.total
+		);
+	},
+
+	permanentDeleteConfirmation( counts ) {
+		const total = counts?.total ?? 0;
+		const title = __( 'Permanently delete page?', 'cortext' );
+		if ( total === 0 ) {
+			return {
+				title,
+				message: __(
+					"Permanently delete this page? You can't undo this.",
+					'cortext'
+				),
+			};
+		}
+		if ( counts.pages > 0 && counts.collections === 0 ) {
+			return {
+				title,
+				message: sprintf(
+					/* translators: %d: number of subpages that will be deleted along with the page. */
+					_n(
+						"Permanently delete this page and %d subpage? You can't undo this.",
+						"Permanently delete this page and %d subpages? You can't undo this.",
+						counts.pages,
+						'cortext'
+					),
+					counts.pages
+				),
+			};
+		}
+		return {
+			title,
+			message: sprintf(
+				/* translators: %d: number of nested trashed items deleted along with the page. */
+				_n(
+					"Permanently delete this page and %d nested item? You can't undo this.",
+					"Permanently delete this page and %d nested items? You can't undo this.",
+					total,
+					'cortext'
+				),
+				total
+			),
+		};
 	},
 };
 

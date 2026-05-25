@@ -12,8 +12,8 @@ import {
 
 /**
  * Collection actions used by the sidebar. Collections are leaves in the tree,
- * so their rows expose before/after drops only. Duplication stays on the
- * documents endpoint because the server copies the schema and rows together.
+ * so their rows only expose before/after drops. Duplication stays on the
+ * documents endpoint because the server copies both schema and rows.
  */
 const collectionDescriptor = {
 	features: {
@@ -81,7 +81,7 @@ const collectionDescriptor = {
 		applyInvalidationPack( ctx.invalidateResolution, afterCollectionTrash );
 		notifyDocumentTrashChanged();
 		// For now, Favorites only needs to drop the collection itself. Keep the
-		// same data shape as page trash so server-provided ids can replace this
+		// same shape as page trash so server-provided ids can replace this
 		// local set later.
 		await cascadeFavorites(
 			ctx,
@@ -95,6 +95,45 @@ const collectionDescriptor = {
 			ctx.navigate?.( { to: '/' } );
 		}
 		ctx.onAfterTrash?.( { kind: 'collection', record } );
+	},
+
+	async restore( record, ctx ) {
+		await apiFetch( {
+			path: `/cortext/v1/documents/${ record.id }/restore`,
+			method: 'POST',
+		} );
+		applyInvalidationPack( ctx.invalidateResolution, afterCollectionTrash );
+		notifyDocumentTrashChanged();
+	},
+
+	async permanentDelete( record, ctx ) {
+		const response = await apiFetch( {
+			path: `/cortext/v1/documents/${ record.id }/permanent-delete`,
+			method: 'POST',
+		} );
+		applyInvalidationPack( ctx.invalidateResolution, afterCollectionTrash );
+		notifyDocumentTrashChanged();
+		return response;
+	},
+
+	restoreErrorMessage: __( 'Could not restore collection.', 'cortext' ),
+
+	permanentDeleteErrorMessage: __(
+		'Could not delete collection.',
+		'cortext'
+	),
+
+	// Collections may contain rows that are not shown in Trash, so say so and
+	// ask for the title before final delete.
+	permanentDeleteConfirmation() {
+		return {
+			title: __( 'Permanently delete collection?', 'cortext' ),
+			message: __(
+				"Permanently delete this collection and all its rows? You can't undo this.",
+				'cortext'
+			),
+			requireTypeToConfirm: true,
+		};
 	},
 };
 
