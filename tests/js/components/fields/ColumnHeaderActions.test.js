@@ -1,5 +1,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
+const mockDeleteRun = jest.fn();
+const mockDuplicateRun = jest.fn();
+
 jest.mock( '@wordpress/components', () => {
 	const {
 		createElement,
@@ -104,8 +107,8 @@ jest.mock( '../../../../src/lock-unlock', () => {
 } );
 
 jest.mock( '../../../../src/hooks/useFieldMutations', () => ( {
-	useDeleteField: () => ( { run: jest.fn() } ),
-	useDuplicateField: () => ( { run: jest.fn() } ),
+	useDeleteField: () => ( { run: mockDeleteRun } ),
+	useDuplicateField: () => ( { run: mockDuplicateRun } ),
 } ) );
 
 jest.mock( '../../../../src/components/CollectionFieldsContext', () => {
@@ -131,6 +134,12 @@ jest.mock( '../../../../src/components/fields/AddFieldPopover', () => ( {
 			<button type="button" onClick={ () => onCreate?.( { id: 123 } ) }>
 				Create mock field
 			</button>
+			<button
+				type="button"
+				onClick={ () => onCreate?.( { id: 124, type: 'rollup' } ) }
+			>
+				Create mock rollup
+			</button>
 		</div>
 	),
 } ) );
@@ -145,6 +154,7 @@ function Harness( {
 	recordId,
 	view,
 	onFieldCreated = jest.fn(),
+	onRowsChanged = jest.fn(),
 } ) {
 	return (
 		<div className="cortext-data-view">
@@ -165,6 +175,7 @@ function Harness( {
 				view={ view ?? { fields: [] } }
 				onChangeView={ onChangeView }
 				onFieldCreated={ onFieldCreated }
+				onRowsChanged={ onRowsChanged }
 			/>
 		</div>
 	);
@@ -172,6 +183,8 @@ function Harness( {
 
 describe( 'ColumnHeaderActions', () => {
 	beforeEach( () => {
+		jest.clearAllMocks();
+		mockDuplicateRun.mockResolvedValue( { id: 88, type: 'text' } );
 		useCollectionFieldsContext.mockReturnValue( { fields: [] } );
 		useEntityRecord.mockReturnValue( {
 			record: {
@@ -290,6 +303,54 @@ describe( 'ColumnHeaderActions', () => {
 		await waitFor( () =>
 			expect( screen.queryByRole( 'dialog' ) ).not.toBeInTheDocument()
 		);
+	} );
+
+	it( 'refreshes rows when a created field is a rollup', async () => {
+		const onRowsChanged = jest.fn();
+		render(
+			<Harness collectionId={ 5 } onRowsChanged={ onRowsChanged } />
+		);
+
+		fireEvent.click(
+			await screen.findByRole( 'button', { name: 'Add field' } )
+		);
+		fireEvent.click(
+			screen.getByRole( 'button', {
+				name: 'Create mock rollup',
+			} )
+		);
+
+		expect( onRowsChanged ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'refreshes rows when duplicating a rollup field', async () => {
+		mockDuplicateRun.mockResolvedValue( { id: 88, type: 'rollup' } );
+		const onRowsChanged = jest.fn();
+		useCollectionFieldsContext.mockReturnValue( {
+			fields: [
+				{
+					id: 'field-77',
+					recordId: 77,
+					label: 'Invoice total',
+					cortextType: 'rollup',
+				},
+			],
+		} );
+
+		render(
+			<Harness
+				collectionId={ 5 }
+				recordId={ 77 }
+				onRowsChanged={ onRowsChanged }
+			/>
+		);
+
+		fireEvent.click(
+			await screen.findByRole( 'button', { name: 'Duplicate' } )
+		);
+
+		await waitFor( () => expect( onRowsChanged ).toHaveBeenCalled() );
+		expect( mockDuplicateRun ).toHaveBeenCalledWith( 77 );
 	} );
 
 	it( 'warns when deleting a field will also delete dependent rollups', async () => {
