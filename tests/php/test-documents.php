@@ -107,6 +107,23 @@ final class Test_Documents extends BaseTestCase {
 		$this->assertArrayNotHasKey( 'icon', $document );
 	}
 
+	public function test_find_returns_row_icon_when_set(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$icon = wp_json_encode(
+			array(
+				'type' => 'wp',
+				'name' => 'people',
+			)
+		);
+		$this->create_collection( 'projects', 'Projects' );
+		$row_id = $this->create_row( 'crtxt_projects', 'Ada Lovelace' );
+		update_post_meta( $row_id, DocumentIdentity::META_KEY, $icon );
+
+		$document = $this->documents->find( $row_id );
+
+		$this->assertSame( $icon, $document['icon'] );
+	}
+
 	public function test_find_returns_full_page_collection_document(): void {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
 		$collection_id = $this->create_collection( 'tasks', 'Tasks' );
