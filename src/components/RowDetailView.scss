@@ -589,12 +589,14 @@
 	&__property {
 		display: grid;
 		grid-template-columns: minmax(104px, 136px) minmax(0, 1fr);
-		align-items: start;
+		align-items: stretch;
 		gap: $grid-unit-15;
+		width: 100%;
 		min-width: 0;
 		min-height: $grid-unit-40;
 		padding: 2px $grid-unit-05;
 		border-radius: 4px;
+		box-sizing: border-box;
 
 		&:hover {
 			background: var(--cortext-row-detail-hover-surface);
@@ -857,13 +859,16 @@
 	}
 
 	&__readonly {
-		display: flex;
-		align-items: center;
+		display: block;
+		box-sizing: border-box;
 		min-height: 30px;
-		padding: 0;
+		padding: 5px 0;
 		border: 0;
 		background: transparent;
 		color: var(--cortext-row-detail-text);
+		line-height: 1.4;
+		overflow-wrap: anywhere;
+		white-space: normal;
 	}
 
 	&__empty-value {
@@ -969,6 +974,48 @@
 		.cortext-chips {
 			align-items: center;
 		}
+	}
+
+	&__property-value .cortext-relation-edit__toggle.components-button {
+		height: auto;
+		min-height: $grid-unit-30;
+		padding: 0;
+		overflow: visible;
+		color: var(--cortext-row-detail-text);
+		background: transparent;
+		box-shadow: none;
+		font-weight: 400;
+		text-align: left;
+		text-decoration: none;
+
+		&:hover:not(:disabled),
+		&:focus:not(:disabled),
+		&:focus-visible:not(:disabled) {
+			color: var(--cortext-row-detail-text);
+			background: transparent;
+			box-shadow: none;
+			outline: 0;
+			text-decoration: none;
+		}
+	}
+
+	&__property-value .cortext-relation-edit__toggle-refs {
+		flex-wrap: wrap;
+		align-items: center;
+		gap: $grid-unit-05;
+		width: 100%;
+		min-width: 0;
+		overflow: visible;
+	}
+
+	&__property-value .cortext-relation-edit__toggle-ref {
+		flex: 0 1 auto;
+		max-width: 100%;
+		min-width: 0;
+		height: 24px;
+		padding: 0 $grid-unit-10;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 
 	&__date-popover {
