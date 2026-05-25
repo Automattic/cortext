@@ -506,13 +506,13 @@ The brittle bit is the sizing. The skeleton copies DataViews row heights for com
 
 **Solution.** DataViews exposes a table loading slot, or at least row-height CSS variables. Then Cortext can follow the table instead of copying its constants. Until then, keep the skeleton rules next to the DataViews table rules and check for visual drift after DataViews upgrades.
 
-## 56. Block movers do not understand Cortext's header boundary `[upstream]`
+## 56. Block editor controls do not understand Cortext's header boundary `[upstream]`
 
-**What.** Gutenberg block locks keep cover, icon, and title from moving, but they do not stop other root blocks from being inserted or moved above that locked prefix. Cortext can repair the root order with block-editor store actions and can hide protected insertion points, but the first body block's "move up" button is still rendered by Gutenberg as if moving above the title were allowed. To leave the button visible but greyed out, Cortext watches the active root selection, finds `.block-editor-block-mover-button.is-up-button` when the toolbar mounts, and toggles `disabled` / `aria-disabled` itself. If Gutenberg renames that class or changes where the mover renders, the guard will need another pass.
+**What.** Gutenberg block locks keep cover, icon, title, and row properties from moving, but the root list still has no idea that Cortext's body starts after those blocks. Cortext repairs bad order with block-editor store actions and hides protected insertion points, but two bits of Gutenberg UI still leak through. First, the first body block gets a live "move up" button even though moving it above the title would be wrong; Cortext waits for the toolbar, finds `.block-editor-block-mover-button.is-up-button`, and sets `disabled` / `aria-disabled` itself. Second, Gutenberg only shows the default empty-body appender when the whole root list is empty. A row with title/properties and no body is not empty by that test, so Cortext supplies its own first-block prompt after the header. If Gutenberg renames mover classes or changes the appender contract, this code needs another pass.
 
-**Where.** `HeaderPrefixToolbarGuard`, `syncHeaderBoundaryMoveUpButtons`, and the header-prefix correction in `src/components/EditorBody.js`, with coverage in `tests/e2e/specs/editor-header-blocks.spec.js`.
+**Where.** `HeaderPrefixToolbarGuard`, `syncHeaderBoundaryMoveUpButtons`, `HeaderAwareRootAppender`, and the header-prefix correction in `src/components/EditorBody.js`, with coverage in `tests/e2e/specs/editor-header-blocks.spec.js` and `tests/e2e/specs/data-view-block.spec.js`.
 
-**Solution.** Gutenberg exposes a block-list boundary policy for root lists: a minimum insertion index, a minimum move target, and mover button state derived from that policy. Then Cortext can declare "body blocks start after the title" once and drop the toolbar DOM query, the mutation observer, and the local button-state restoration.
+**Solution.** Gutenberg exposes a block-list boundary policy for root lists: a minimum insertion index, a minimum move target, empty-body detection that ignores locked chrome, and mover/appender state from that same boundary. Then Cortext can declare "body blocks start after the title/properties prefix" once and drop the toolbar DOM query, the mutation observer, the local button-state restoration, and the custom root appender.
 
 ## 57. Row detail toolbars rely on local editor-surface isolation `[upstream, soft]`
 

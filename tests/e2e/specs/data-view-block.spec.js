@@ -2232,6 +2232,112 @@ test.describe( 'Collection view block', () => {
 		}
 	} );
 
+	test( 'shows the default body prompt below row properties when the row body is empty', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+
+		try {
+			Object.assign(
+				fixture,
+				await createCollectionFixture( requestUtils )
+			);
+
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_pages',
+				data: {
+					title: 'Empty row body prompt page',
+					status: 'private',
+					content: createDataViewBlockMarkup( fixture.collection.id ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/${ fixture.page.id }`
+			);
+
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.page.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page
+				.getByRole( 'region', { name: 'Content' } )
+				.frameLocator( 'iframe[name="editor-canvas"]' );
+			const firstRow = canvas
+				.locator( '.cortext-data-view tbody tr' )
+				.first();
+			const openRowButton = canvas
+				.locator( '.cortext-title-cell__open' )
+				.first();
+			await firstRow.hover();
+			await openRowButton.click();
+
+			const detail = page.getByRole( 'dialog', {
+				name: 'Row detail',
+			} );
+			await expect( detail ).toBeVisible();
+
+			const detailCanvas = activeRowDetailCanvas( detail );
+			const propertiesSlot = detailCanvas.locator(
+				'.cortext-document-properties'
+			);
+			const prompt = detailCanvas.locator(
+				'.block-editor-default-block-appender.has-visible-prompt .block-editor-default-block-appender__content'
+			);
+
+			await expect( propertiesSlot ).toBeVisible();
+			await expect( prompt ).toContainText( 'Type / to choose a block' );
+			await expect
+				.poll( async () => {
+					const [ propertiesBox, promptBox ] = await Promise.all( [
+						propertiesSlot.boundingBox(),
+						prompt.boundingBox(),
+					] );
+					if ( ! propertiesBox || ! promptBox ) {
+						return false;
+					}
+					return (
+						promptBox.y >=
+						propertiesBox.y + propertiesBox.height - 2
+					);
+				} )
+				.toBe( true );
+
+			await prompt.click();
+			await expect(
+				detailCanvas.locator( '[data-type="core/paragraph"]' )
+			).toHaveCount( 1 );
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				fixture.entry &&
+					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+			);
+		}
+	} );
+
 	test( 'renders typed cells for url, checkbox, number, select, and multiselect', async ( {
 		admin,
 		page,

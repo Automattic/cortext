@@ -13,6 +13,7 @@ import apiFetch from '@wordpress/api-fetch';
 import {
 	BlockCanvas,
 	BlockList,
+	Inserter,
 	store as blockEditorStore,
 	useSettings,
 } from '@wordpress/block-editor';
@@ -22,6 +23,7 @@ import { useEntityProp, useEntityRecord } from '@wordpress/core-data';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
 import { __ } from '@wordpress/i18n';
+import { ENTER, SPACE } from '@wordpress/keycodes';
 import {
 	useEffect,
 	useLayoutEffect,
@@ -76,6 +78,13 @@ function getHeaderBlockNames( postType ) {
 
 function isHeaderBlock( block, postType ) {
 	return getHeaderBlockNames( postType ).has( block?.name );
+}
+
+function isHeaderChromeBlock( block, postType ) {
+	return (
+		block?.name === LEGACY_HEADER_ACTIONS_BLOCK ||
+		isHeaderBlock( block, postType )
+	);
 }
 
 function syncHeaderBoundaryMoveUpClass() {
@@ -822,6 +831,70 @@ function HideHeaderBlockKebab( { postType } ) {
 	return null;
 }
 
+function HeaderAwareRootAppender( { postType } ) {
+	// tech-debt.md#56: Gutenberg's root appender only treats a fully empty
+	// root list as empty. Cortext's locked header blocks are chrome, so the
+	// body still needs a first-block prompt after them.
+	const { bodyEmpty, insertionIndex } = useSelect(
+		( select ) => {
+			const blocks = select( blockEditorStore ).getBlocks();
+			const headerEndIndex = blocks.reduce(
+				( lastIndex, block, index ) =>
+					isHeaderChromeBlock( block, postType ) ? index : lastIndex,
+				-1
+			);
+			return {
+				bodyEmpty:
+					blocks.length > 0 &&
+					blocks.every( ( block ) =>
+						isHeaderChromeBlock( block, postType )
+					),
+				insertionIndex: headerEndIndex + 1,
+			};
+		},
+		[ postType ]
+	);
+	const { insertDefaultBlock, startTyping } = useDispatch( blockEditorStore );
+
+	if ( ! bodyEmpty ) {
+		return null;
+	}
+
+	const onAppend = () => {
+		insertDefaultBlock( undefined, ROOT_BLOCK_LIST, insertionIndex );
+		startTyping();
+	};
+
+	return (
+		<div className="block-editor-default-block-appender has-visible-prompt">
+			<p
+				tabIndex="0"
+				// Match core's default appender semantics so focusing the
+				// prompt immediately creates the first editable body block.
+				// eslint-disable-next-line jsx-a11y/no-noninteractive-element-to-interactive-role
+				role="button"
+				aria-label={ __( 'Add default block', 'cortext' ) }
+				className="block-editor-default-block-appender__content"
+				onKeyDown={ ( event ) => {
+					if ( ENTER === event.keyCode || SPACE === event.keyCode ) {
+						onAppend();
+					}
+				} }
+				onClick={ onAppend }
+				onFocus={ onAppend }
+			>
+				{ __( 'Type / to choose a block', 'cortext' ) }
+			</p>
+			<Inserter
+				rootClientId={ ROOT_BLOCK_LIST }
+				position="bottom right"
+				isAppender
+				__experimentalIsQuick
+			/>
+		</div>
+	);
+}
+
 function TrashedNotice( { postId, postType, onRestored } ) {
 	const [ isRestoring, setIsRestoring ] = useState( false );
 	const [ error, setError ] = useState( null );
@@ -1079,6 +1152,24 @@ export default function EditorBody( {
 			'trash',
 		[]
 	);
+	const shouldUseHeaderAwareAppender = useSelect(
+		( select ) => {
+			if ( getCanvasOwnerBlockName( postType ) ) {
+				return false;
+			}
+			const blocks = select( blockEditorStore ).getBlocks();
+			return (
+				blocks.length > 0 &&
+				blocks.every( ( block ) =>
+					isHeaderChromeBlock( block, postType )
+				)
+			);
+		},
+		[ postType ]
+	);
+	const renderAppender = shouldUseHeaderAwareAppender
+		? () => <HeaderAwareRootAppender postType={ postType } />
+		: undefined;
 
 	const blockCanvas = (
 		<div className="cortext-canvas__block-canvas" ref={ blockCanvasRef }>
@@ -1107,6 +1198,7 @@ export default function EditorBody( {
 					<BlockList
 						className="wp-block-post-content is-layout-constrained has-global-padding"
 						layout={ { type: 'constrained', ...layout } }
+						renderAppender={ renderAppender }
 					/>
 				</div>
 				<CanvasReadyEffect
