@@ -8,7 +8,7 @@ import {
 	useRef,
 	useState,
 } from '@wordpress/element';
-import { Icon, closeSmall, plus } from '@wordpress/icons';
+import { Icon, chevronDown, closeSmall, plus } from '@wordpress/icons';
 
 import useCollectionRows from '../../hooks/useCollectionRows';
 import useCollectionRowsByIds from '../../hooks/useCollectionRowsByIds';
@@ -271,8 +271,15 @@ export default function RelationEditor( {
 							) ) }
 						</span>
 					) : (
-						__( 'Select rows…', 'cortext' )
+						<span className="cortext-relation-edit__toggle-placeholder">
+							{ __( 'Select rows…', 'cortext' ) }
+						</span>
 					) }
+					<Icon
+						icon={ chevronDown }
+						size={ 16 }
+						className="cortext-relation-edit__toggle-chevron"
+					/>
 				</Button>
 			) }
 			renderContent={ ( { onClose } ) => (

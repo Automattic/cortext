@@ -1005,12 +1005,19 @@
 	}
 
 	&__property-value .cortext-relation-edit__toggle-refs {
+		flex: 1 1 auto;
 		flex-wrap: wrap;
 		align-items: center;
 		gap: $grid-unit-05;
-		width: 100%;
+		width: auto;
 		min-width: 0;
 		overflow: visible;
+	}
+
+	&__property-value .cortext-relation-edit__toggle-chevron {
+		align-self: center;
+		margin-left: $grid-unit-05;
+		color: var(--cortext-row-detail-muted);
 	}
 
 	&__property-value .cortext-relation-edit__toggle-ref {
