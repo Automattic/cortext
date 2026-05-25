@@ -39,6 +39,19 @@ function matchesOwner( postType, block, postId ) {
 	return entry.matches ? entry.matches( block, postId ) : true;
 }
 
+// Finds the canvas-owner block instance among root blocks. The reconciler
+// uses this so a foreign data-view (pointing at a different collection) does
+// not satisfy the "owner present" check and skip seeding.
+export function findCanvasOwnerBlock( blocks, postType, postId ) {
+	if ( ! Array.isArray( blocks ) || ! getCanvasOwnerBlockName( postType ) ) {
+		return null;
+	}
+	return (
+		blocks.find( ( block ) => matchesOwner( postType, block, postId ) ) ??
+		null
+	);
+}
+
 // Is this block the current document's owner?
 export function useIsCanvasOwnerBlock( clientId, postType, postId ) {
 	return useSelect(

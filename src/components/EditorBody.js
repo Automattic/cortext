@@ -32,6 +32,7 @@ import {
 import DocumentIdentityControls from './DocumentIdentityControls';
 import { useDocumentPropertiesContext } from './DocumentPropertiesContext';
 import {
+	findCanvasOwnerBlock,
 	getCanvasOwnerBlockName,
 	getCanvasOwnerInitialAttributes,
 } from './CanvasOwnerInspector';
@@ -515,7 +516,7 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 				hasTitle: names.includes( POST_TITLE_BLOCK ),
 				hasProperties: !! propertiesBlock,
 				hasOwner: ownerBlockName
-					? names.includes( ownerBlockName )
+					? !! findCanvasOwnerBlock( blocks, postType, postId )
 					: true,
 				propertiesClientId: propertiesBlock?.clientId ?? null,
 				headerEndIndex: currentHeaderEndIndex,
@@ -537,7 +538,7 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 					) === 'trash',
 			};
 		},
-		[ ownerBlockName, postType ]
+		[ ownerBlockName, postId, postType ]
 	);
 	const {
 		insertBlocks,

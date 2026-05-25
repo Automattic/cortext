@@ -109,6 +109,34 @@ final class Collection {
 	}
 
 	/**
+	 * Whether `$post_content` already carries a `cortext/data-view` block
+	 * pointing at `$collection_id`. A foreign data-view (one that targets a
+	 * different collection) does not count, so creation and backfill still
+	 * seed the self-referencing owner block.
+	 *
+	 * @param string $post_content  Stored post content.
+	 * @param int    $collection_id Collection post id to match against.
+	 */
+	public static function has_owner_data_view_block( string $post_content, int $collection_id ): bool {
+		if ( '' === $post_content || ! str_contains( $post_content, '<!-- wp:cortext/data-view' ) ) {
+			return false;
+		}
+
+		foreach ( parse_blocks( $post_content ) as $block ) {
+			if ( 'cortext/data-view' !== ( $block['blockName'] ?? '' ) ) {
+				continue;
+			}
+			$attr_id = isset( $block['attrs']['collectionId'] )
+				? (int) $block['attrs']['collectionId']
+				: 0;
+			if ( $attr_id === $collection_id ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * Serialized markup for the locked data-view block used as a full-page
 	 * collection's body. Creation and backfill share this builder.
 	 *
@@ -153,7 +181,7 @@ final class Collection {
 		if ( self::is_inline( $post_id ) ) {
 			return;
 		}
-		if ( str_contains( (string) $post->post_content, '<!-- wp:cortext/data-view' ) ) {
+		if ( self::has_owner_data_view_block( (string) $post->post_content, $post_id ) ) {
 			return;
 		}
 
