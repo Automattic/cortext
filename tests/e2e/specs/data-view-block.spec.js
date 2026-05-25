@@ -893,16 +893,20 @@ test.describe( 'Collection view block', () => {
 				`page=cortext&p=/collection/${ fixture.slug }-${ fixture.collection.id }`
 			);
 
-			await expect( page.getByText( 'Alpha Manual' ) ).toBeVisible( {
+			// Full-page collections render through Canvas, so the table sits
+			// inside the BlockCanvas iframe; scope locators accordingly.
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+
+			await expect( canvas.getByText( 'Alpha Manual' ) ).toBeVisible( {
 				timeout: 15_000,
 			} );
 			await expect(
-				page.locator( '.cortext-row-drag-handle' )
+				canvas.locator( '.cortext-row-drag-handle' )
 			).toHaveCount( 3 );
-			const dataViewBox = await page
+			const dataViewBox = await canvas
 				.locator( '.cortext-data-view' )
 				.boundingBox();
-			const handleBox = await page
+			const handleBox = await canvas
 				.getByRole( 'button', {
 					name: 'Reorder row: Alpha Manual',
 				} )
@@ -913,7 +917,7 @@ test.describe( 'Collection view block', () => {
 			await expect
 				.poll( async () =>
 					Number(
-						await page
+						await canvas
 							.getByRole( 'button', {
 								name: 'Reorder row: Alpha Manual',
 							} )
@@ -2143,11 +2147,16 @@ test.describe( 'Collection view block', () => {
 			await expect
 				.poll( () => new URL( page.url() ).searchParams.get( 'row' ) )
 				.toBeNull();
-			// The breadcrumb's collection link now navigates to the
-			// collection's own management surface, which renders the same
-			// DataViews table directly (no editor iframe).
+			// The breadcrumb's collection link navigates to the collection's
+			// own canvas. Full-page collections now render inside the
+			// BlockCanvas iframe, so the row trigger lives there too.
+			const collectionCanvas = page.frameLocator(
+				'[name="editor-canvas"]'
+			);
 			await expect(
-				page.getByRole( 'button', { name: 'Open row' } ).first()
+				collectionCanvas
+					.getByRole( 'button', { name: 'Open row' } )
+					.first()
 			).toBeAttached();
 
 			await expect
