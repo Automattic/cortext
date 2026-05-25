@@ -3,8 +3,9 @@ import {
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalConfirmDialog as ConfirmDialog,
 } from '@wordpress/components';
-import { store as coreStore, useEntityRecord } from '@wordpress/core-data';
+import { useEntityRecord } from '@wordpress/core-data';
 import { useDispatch, useSelect } from '@wordpress/data';
+import { store as editorStore } from '@wordpress/editor';
 import { useCallback, useState } from '@wordpress/element';
 
 import { documentTitle as collectionTitle } from '../documents';
@@ -14,23 +15,23 @@ import useCollectionDependentPages from '../hooks/useCollectionDependentPages';
 const COLLECTION_POST_TYPE = 'crtxt_collection';
 
 export default function CollectionPublishToggle( { collectionId } ) {
+	// Keep useEntityRecord for the dialog title. Publish/unpublish goes through
+	// editorStore so dirty title, cover, and data-view edits flush with status.
 	const { record } = useEntityRecord(
 		'postType',
 		COLLECTION_POST_TYPE,
 		collectionId
 	);
-	const { saveEntityRecord } = useDispatch( coreStore );
-	const isSaving = useSelect(
-		( select ) =>
-			select( coreStore ).isSavingEntityRecord(
-				'postType',
-				COLLECTION_POST_TYPE,
-				collectionId
-			),
-		[ collectionId ]
-	);
+	const { editPost, savePost } = useDispatch( editorStore );
+	const { status, isSaving } = useSelect( ( select ) => {
+		const editor = select( editorStore );
+		return {
+			status: editor.getEditedPostAttribute( 'status' ),
+			isSaving: editor.isSavingPost(),
+		};
+	}, [] );
 
-	const isPublic = record?.status === 'publish';
+	const isPublic = status === 'publish';
 
 	const [ isConfirming, setIsConfirming ] = useState( false );
 	const { isLoading, dependentPages, error } = useCollectionDependentPages(
@@ -39,11 +40,9 @@ export default function CollectionPublishToggle( { collectionId } ) {
 	);
 
 	const toggle = useCallback( () => {
-		saveEntityRecord( 'postType', COLLECTION_POST_TYPE, {
-			id: collectionId,
-			status: isPublic ? 'private' : 'publish',
-		} );
-	}, [ saveEntityRecord, collectionId, isPublic ] );
+		editPost( { status: isPublic ? 'private' : 'publish' } );
+		savePost();
+	}, [ editPost, savePost, isPublic ] );
 
 	const confirmUnpublish = useCallback( () => {
 		setIsConfirming( false );

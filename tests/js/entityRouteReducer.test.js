@@ -25,6 +25,7 @@ function activate( state, target, options = {} ) {
 	if ( target.kind === 'document' && target.id !== null ) {
 		next = reducer( next, {
 			type: 'DOCUMENT_RESOLVED',
+			kind: 'document',
 			id: target.id,
 			postType,
 		} );
@@ -205,6 +206,7 @@ describe( 'EntityRoute reducer', () => {
 			state = reducer( state, { type: 'DOCUMENT_DISPLAYED', id: 1 } );
 			state = reducer( state, {
 				type: 'DOCUMENT_RESOLVED',
+				kind: 'document',
 				id: 1,
 				postType: PAGE_TYPE,
 			} );
@@ -221,6 +223,7 @@ describe( 'EntityRoute reducer', () => {
 			} );
 			state = reducer( state, {
 				type: 'DOCUMENT_RESOLVED',
+				kind: 'document',
 				id: 1,
 				postType: PAGE_TYPE,
 			} );
@@ -235,13 +238,14 @@ describe( 'EntityRoute reducer', () => {
 			);
 			const next = reducer( state, {
 				type: 'DOCUMENT_RESOLVED',
+				kind: 'document',
 				id: 99,
 				postType: PAGE_TYPE,
 			} );
 			expect( next ).toBe( state );
 		} );
 
-		it( 'ignores a resolution when the target is no longer a document', () => {
+		it( 'ignores a stale resolution from a previous target id', () => {
 			let state = activate(
 				init( documentTarget( 1 ) ),
 				documentTarget( 1 )
@@ -252,10 +256,47 @@ describe( 'EntityRoute reducer', () => {
 			} );
 			const next = reducer( state, {
 				type: 'DOCUMENT_RESOLVED',
+				kind: 'document',
 				id: 1,
 				postType: PAGE_TYPE,
 			} );
 			expect( next ).toBe( state );
+		} );
+
+		it( 'ignores a same-id resolution from a different kind', () => {
+			// Post IDs are reused across post types in WordPress, so an id
+			// match alone could let a stale page resolution apply to a same-id
+			// collection target. The kind check rejects it.
+			let state = init( collectionTarget( 42 ) );
+			state = reducer( state, {
+				type: 'TARGET_CHANGED',
+				target: collectionTarget( 42 ),
+			} );
+			const next = reducer( state, {
+				type: 'DOCUMENT_RESOLVED',
+				kind: 'document',
+				id: 42,
+				postType: PAGE_TYPE,
+			} );
+			expect( next ).toBe( state );
+		} );
+
+		it( 'mounts a full-page collection as a Canvas document', () => {
+			let state = init( collectionTarget( 7 ) );
+			state = reducer( state, {
+				type: 'TARGET_CHANGED',
+				target: collectionTarget( 7 ),
+			} );
+			state = reducer( state, {
+				type: 'DOCUMENT_RESOLVED',
+				kind: 'collection',
+				id: 7,
+				postType: 'crtxt_collection',
+			} );
+			expect( state.mountedDocumentId ).toBe( 7 );
+			expect( state.mountedDocumentType ).toBe( 'crtxt_collection' );
+			state = reducer( state, { type: 'DOCUMENT_DISPLAYED', id: 7 } );
+			expect( state.active ).toEqual( { kind: 'document', id: 7 } );
 		} );
 	} );
 
@@ -266,20 +307,56 @@ describe( 'EntityRoute reducer', () => {
 				type: 'TARGET_CHANGED',
 				target: documentTarget( 99 ),
 			} );
-			state = reducer( state, { type: 'DOCUMENT_NOT_FOUND' } );
+			state = reducer( state, {
+				type: 'DOCUMENT_NOT_FOUND',
+				kind: 'document',
+				id: 99,
+			} );
 			expect( state.active ).toEqual( { kind: 'document-not-found' } );
 		} );
 
-		it( 'is ignored when the target is no longer a document', () => {
+		it( 'activates collection-not-found on a collection target', () => {
+			let state = init( collectionTarget( 5 ) );
+			state = reducer( state, {
+				type: 'TARGET_CHANGED',
+				target: collectionTarget( 5 ),
+			} );
+			state = reducer( state, {
+				type: 'DOCUMENT_NOT_FOUND',
+				kind: 'collection',
+				id: 5,
+			} );
+			expect( state.active ).toEqual( { kind: 'collection-not-found' } );
+		} );
+
+		it( 'is ignored when the not-found id does not match the current target', () => {
 			let state = activate(
 				init( documentTarget( 1 ) ),
 				documentTarget( 1 )
 			);
 			state = reducer( state, {
 				type: 'TARGET_CHANGED',
-				target: collectionTarget( 5 ),
+				target: documentTarget( 2 ),
 			} );
-			const next = reducer( state, { type: 'DOCUMENT_NOT_FOUND' } );
+			const next = reducer( state, {
+				type: 'DOCUMENT_NOT_FOUND',
+				kind: 'document',
+				id: 1,
+			} );
+			expect( next ).toBe( state );
+		} );
+
+		it( 'is ignored when the not-found kind does not match the current target', () => {
+			let state = init( collectionTarget( 42 ) );
+			state = reducer( state, {
+				type: 'TARGET_CHANGED',
+				target: collectionTarget( 42 ),
+			} );
+			const next = reducer( state, {
+				type: 'DOCUMENT_NOT_FOUND',
+				kind: 'document',
+				id: 42,
+			} );
 			expect( next ).toBe( state );
 		} );
 	} );
@@ -293,6 +370,7 @@ describe( 'EntityRoute reducer', () => {
 			} );
 			state = reducer( state, {
 				type: 'DOCUMENT_RESOLVED',
+				kind: 'document',
 				id: 1,
 				postType: PAGE_TYPE,
 			} );
@@ -415,6 +493,7 @@ describe( 'EntityRoute reducer', () => {
 			expect( state.active ).toEqual( { kind: 'loading' } );
 			state = reducer( state, {
 				type: 'DOCUMENT_RESOLVED',
+				kind: 'document',
 				id: 1,
 				postType: PAGE_TYPE,
 			} );

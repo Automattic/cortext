@@ -30,6 +30,9 @@ import { store as interfaceStore } from '@wordpress/interface';
 import apiFetch from '@wordpress/api-fetch';
 import { cog, plus, replace } from '@wordpress/icons';
 
+import CanvasOwnerInspector, {
+	useIsCanvasOwnerBlock,
+} from '../../components/CanvasOwnerInspector';
 import CollectionDataViews from '../../components/CollectionDataViews';
 import AddFieldPopover from '../../components/fields/AddFieldPopover';
 import { useEditorSurface } from '../../components/EditorSurfaceContext';
@@ -91,8 +94,8 @@ function createDefaultView() {
 }
 
 function CollectionPicker( { selectedId = '', onSelect } ) {
-	// The picker only offers full-page collections. Inline collections belong
-	// to the block that created them.
+	// The picker only lists full-page collections. Inline collections stay with
+	// the block that created them.
 	const { records, isResolving, hasResolved } = useEntityRecords(
 		'postType',
 		'crtxt_collection',
@@ -148,8 +151,8 @@ function CollectionCreator( { onCreate } ) {
 	const { invalidateResolution } = useDispatch( 'core' );
 	const canCreate = title.trim() && ! isSaving;
 
-	// Inline collections need the current page as their owner. Full-page
-	// collections can use the same id as a sidebar parent.
+	// Inline collections need the current page as owner. Full-page collections
+	// can use that same id as their sidebar parent.
 	const ownerPageId = useSelect(
 		( select ) => select( editorStore ).getCurrentPostId(),
 		[]
@@ -169,8 +172,8 @@ function CollectionCreator( { onCreate } ) {
 				status: 'private',
 				mode: isFullPage ? 'full_page' : 'inline',
 			};
-			// The collection REST filter decides what `parent` means: inline
-			// owner meta for inline collections, post_parent for full-page ones.
+			// The REST filter maps `parent` to owner meta for inline
+			// collections, or to post_parent for full-page collections.
 			if ( ownerPageId ) {
 				data.parent = ownerPageId;
 			}
@@ -179,8 +182,8 @@ function CollectionCreator( { onCreate } ) {
 				method: 'POST',
 				data,
 			} );
-			// The picker reads the full-page query, so refresh it only when
-			// the new collection will show there.
+			// The picker reads the full-page query, so refresh only when the
+			// new collection can appear there.
 			if ( isFullPage ) {
 				invalidateResolution( 'getEntityRecords', [
 					'postType',
@@ -220,7 +223,7 @@ function CollectionCreator( { onCreate } ) {
 			<CheckboxControl
 				label={ __( 'Create as a full-page collection', 'cortext' ) }
 				help={ __(
-					'Full-page collections show in the sidebar and get their own workspace URL. Inline collections stay in this block.',
+					'Full-page collections appear in the sidebar and get their own workspace URL. Inline collections stay inside this block.',
 					'cortext'
 				) }
 				checked={ isFullPage }
@@ -241,6 +244,7 @@ function CollectionCreator( { onCreate } ) {
 
 function CollectionToolbarControl( {
 	collectionId,
+	isOwner,
 	onSelect,
 	onFieldCreated,
 } ) {
@@ -252,29 +256,31 @@ function CollectionToolbarControl( {
 
 	return (
 		<BlockControls group="other">
-			<Dropdown
-				contentClassName="cortext-data-view-toolbar-popover"
-				popoverProps={ { placement: 'bottom-start' } }
-				renderToggle={ ( { isOpen, onToggle } ) => (
-					<ToolbarButton
-						icon={ replace }
-						label={ __( 'Change collection', 'cortext' ) }
-						onClick={ onToggle }
-						isPressed={ isOpen }
-					/>
-				) }
-				renderContent={ ( { onClose } ) => (
-					<div className="cortext-data-view-toolbar-popover__content">
-						<CollectionPicker
-							selectedId={ collectionId }
-							onSelect={ ( id ) => {
-								onSelect( id );
-								onClose();
-							} }
+			{ ! isOwner && (
+				<Dropdown
+					contentClassName="cortext-data-view-toolbar-popover"
+					popoverProps={ { placement: 'bottom-start' } }
+					renderToggle={ ( { isOpen, onToggle } ) => (
+						<ToolbarButton
+							icon={ replace }
+							label={ __( 'Change collection', 'cortext' ) }
+							onClick={ onToggle }
+							isPressed={ isOpen }
 						/>
-					</div>
-				) }
-			/>
+					) }
+					renderContent={ ( { onClose } ) => (
+						<div className="cortext-data-view-toolbar-popover__content">
+							<CollectionPicker
+								selectedId={ collectionId }
+								onSelect={ ( id ) => {
+									onSelect( id );
+									onClose();
+								} }
+							/>
+						</div>
+					) }
+				/>
+			) }
 			{ isCollectionValid && (
 				<Dropdown
 					contentClassName="cortext-data-view-toolbar-popover"
@@ -301,19 +307,22 @@ function CollectionToolbarControl( {
 				/>
 			) }
 			{ /* tech-debt.md#57: peek/modal hide the parent inspector
-			     entrypoint until there is a row-scoped one. */ }
-			{ hasBlockInspector ? (
+			     button until there is a row-scoped one. Owner blocks open
+			     the document tab, where their panels are slotted. */ }
+			{ ( hasBlockInspector || isOwner ) && (
 				<ToolbarButton
 					icon={ cog }
 					label={ __( 'View settings', 'cortext' ) }
 					onClick={ () =>
 						enableComplementaryArea(
 							'cortext',
-							'cortext/block-inspector'
+							isOwner
+								? 'cortext/page-inspector'
+								: 'cortext/block-inspector'
 						)
 					}
 				/>
-			) : null }
+			) }
 		</BlockControls>
 	);
 }
@@ -322,6 +331,7 @@ function CollectionInspectorControls( {
 	collectionId,
 	view,
 	align,
+	isOwner,
 	onSelect,
 	onChangeView,
 	onChangeAlign,
@@ -391,39 +401,46 @@ function CollectionInspectorControls( {
 		onChangeView( { ...view, fields: nextFields } );
 	};
 
+	// When the data-view owns a collection canvas, its panels move to the
+	// document tab, it cannot switch collections, and Canvas owns the width.
+	const Wrapper = isOwner ? CanvasOwnerInspector : InspectorControls;
+	const fieldsPanelInitialOpen = isOwner;
+
 	return (
-		<InspectorControls>
-			<PanelBody title={ __( 'Collection', 'cortext' ) }>
-				<Dropdown
-					contentClassName="cortext-data-view-toolbar-popover"
-					popoverProps={ { placement: 'left-start' } }
-					renderToggle={ ( { isOpen, onToggle } ) => (
-						<Button
-							variant="secondary"
-							icon={ replace }
-							onClick={ onToggle }
-							aria-expanded={ isOpen }
-							__next40pxDefaultSize
-						>
-							{ __( 'Change collection', 'cortext' ) }
-						</Button>
-					) }
-					renderContent={ ( { onClose } ) => (
-						<div className="cortext-data-view-toolbar-popover__content">
-							<CollectionPicker
-								selectedId={ collectionId }
-								onSelect={ ( id ) => {
-									onSelect( id );
-									onClose();
-								} }
-							/>
-						</div>
-					) }
-				/>
-			</PanelBody>
+		<Wrapper>
+			{ ! isOwner && (
+				<PanelBody title={ __( 'Collection', 'cortext' ) }>
+					<Dropdown
+						contentClassName="cortext-data-view-toolbar-popover"
+						popoverProps={ { placement: 'left-start' } }
+						renderToggle={ ( { isOpen, onToggle } ) => (
+							<Button
+								variant="secondary"
+								icon={ replace }
+								onClick={ onToggle }
+								aria-expanded={ isOpen }
+								__next40pxDefaultSize
+							>
+								{ __( 'Change collection', 'cortext' ) }
+							</Button>
+						) }
+						renderContent={ ( { onClose } ) => (
+							<div className="cortext-data-view-toolbar-popover__content">
+								<CollectionPicker
+									selectedId={ collectionId }
+									onSelect={ ( id ) => {
+										onSelect( id );
+										onClose();
+									} }
+								/>
+							</div>
+						) }
+					/>
+				</PanelBody>
+			) }
 			<PanelBody
 				title={ __( 'Fields', 'cortext' ) }
-				initialOpen={ false }
+				initialOpen={ fieldsPanelInitialOpen }
 			>
 				{ isCollectionValid && (
 					<>
@@ -480,22 +497,24 @@ function CollectionInspectorControls( {
 			<PanelBody title={ __( 'View', 'cortext' ) } initialOpen={ false }>
 				{ isCollectionValid && (
 					<>
-						<ToggleGroupControl
-							label={ __( 'Width', 'cortext' ) }
-							value={ align ?? '' }
-							onChange={ onChangeAlign }
-							isBlock
-							__next40pxDefaultSize
-							__nextHasNoMarginBottom
-						>
-							{ WIDTH_OPTIONS.map( ( option ) => (
-								<ToggleGroupControlOption
-									key={ option.value || 'default' }
-									value={ option.value }
-									label={ option.label }
-								/>
-							) ) }
-						</ToggleGroupControl>
+						{ ! isOwner && (
+							<ToggleGroupControl
+								label={ __( 'Width', 'cortext' ) }
+								value={ align ?? '' }
+								onChange={ onChangeAlign }
+								isBlock
+								__next40pxDefaultSize
+								__nextHasNoMarginBottom
+							>
+								{ WIDTH_OPTIONS.map( ( option ) => (
+									<ToggleGroupControlOption
+										key={ option.value || 'default' }
+										value={ option.value }
+										label={ option.label }
+									/>
+								) ) }
+							</ToggleGroupControl>
+						) }
 						<SelectControl
 							label={ __( 'Density', 'cortext' ) }
 							value={ view?.layout?.density ?? 'compact' }
@@ -552,13 +571,25 @@ function CollectionInspectorControls( {
 					</>
 				) }
 			</PanelBody>
-		</InspectorControls>
+		</Wrapper>
 	);
 }
 
-export default function Edit( { attributes, setAttributes } ) {
+export default function Edit( {
+	attributes,
+	clientId,
+	context,
+	setAttributes,
+} ) {
 	const { collectionId, view, align } = attributes;
-	const blockProps = useBlockProps();
+	const isOwner = useIsCanvasOwnerBlock(
+		clientId,
+		context?.postType,
+		context?.postId
+	);
+	const blockProps = useBlockProps( {
+		className: isOwner ? 'is-document-owner' : undefined,
+	} );
 	const [ revealFieldId, setRevealFieldId ] = useState( null );
 
 	const setView = useCallback(
@@ -630,6 +661,7 @@ export default function Edit( { attributes, setAttributes } ) {
 			<div { ...blockProps }>
 				<CollectionToolbarControl
 					collectionId={ collectionId }
+					isOwner={ isOwner }
 					onSelect={ onSelectCollection }
 					onFieldCreated={ onFieldCreated }
 				/>
@@ -637,6 +669,7 @@ export default function Edit( { attributes, setAttributes } ) {
 					collectionId={ collectionId }
 					view={ view }
 					align={ align }
+					isOwner={ isOwner }
 					onSelect={ onSelectCollection }
 					onChangeView={ setView }
 					onChangeAlign={ setAlign }

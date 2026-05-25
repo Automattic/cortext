@@ -193,10 +193,11 @@ test.describe( 'Sidebar recents', () => {
 				'admin.php',
 				`page=cortext&p=/collection/${ collection.slug }-${ collection.id }`
 			);
+			// Full-page collections render inside the BlockCanvas iframe.
 			await expect(
-				page.locator(
-					'.cortext-workspace__pane[data-active="true"] .cortext-data-view'
-				)
+				page
+					.frameLocator( '[name="editor-canvas"]' )
+					.locator( '.cortext-data-view' )
 			).toBeVisible( { timeout: 15_000 } );
 			await expect(
 				sidebar.getByRole( 'button', {
