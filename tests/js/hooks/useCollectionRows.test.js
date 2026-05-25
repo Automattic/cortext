@@ -1028,7 +1028,9 @@ describe( 'useCollectionRows', () => {
 			{ initialProps: { view: initialView, fields: baseFields } }
 		);
 
-		await waitFor( () => expect( result.current.hasResolved ).toBe( true ) );
+		await waitFor( () =>
+			expect( result.current.hasResolved ).toBe( true )
+		);
 		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
 		expect( lastRequestPath() ).toContain( 'fields[0]=field-10' );
 		expect( lastRequestPath() ).toContain( 'fields[1]=title' );
@@ -1069,7 +1071,9 @@ describe( 'useCollectionRows', () => {
 			{ initialProps: { view: initialView, fields: baseFields } }
 		);
 
-		await waitFor( () => expect( result.current.hasResolved ).toBe( true ) );
+		await waitFor( () =>
+			expect( result.current.hasResolved ).toBe( true )
+		);
 		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
 
 		rerender( { view: nextView, fields: nextFields } );

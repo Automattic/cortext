@@ -68,9 +68,7 @@ describe( 'ChangeFieldTypePopover', () => {
 			/>
 		);
 
-		fireEvent.click(
-			screen.getByRole( 'button', { name: 'Checkbox' } )
-		);
+		fireEvent.click( screen.getByRole( 'button', { name: 'Checkbox' } ) );
 
 		await waitFor( () =>
 			expect( mockRun ).toHaveBeenCalledWith( 77, 'checkbox' )
@@ -92,9 +90,7 @@ describe( 'ChangeFieldTypePopover', () => {
 			/>
 		);
 
-		fireEvent.click(
-			screen.getByRole( 'button', { name: 'Checkbox' } )
-		);
+		fireEvent.click( screen.getByRole( 'button', { name: 'Checkbox' } ) );
 
 		await waitFor( () => expect( mockRun ).toHaveBeenCalled() );
 		expect( onTypeChanged ).not.toHaveBeenCalled();
