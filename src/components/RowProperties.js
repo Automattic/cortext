@@ -273,6 +273,7 @@ function EditablePropertyText( { label, inputMode, value, onChange } ) {
 		value === null || value === undefined ? '' : String( value );
 	const [ draft, setDraft ] = useState( textValue );
 	const [ isFocused, setIsFocused ] = useState( false );
+	const controlRef = useRef( null );
 
 	useEffect( () => {
 		if ( ! isFocused ) {
@@ -280,13 +281,25 @@ function EditablePropertyText( { label, inputMode, value, onChange } ) {
 		}
 	}, [ isFocused, textValue ] );
 
+	useEffect( () => {
+		if ( ! controlRef.current ) {
+			return;
+		}
+		controlRef.current.style.height = '30px';
+		controlRef.current.style.height = `${ Math.max(
+			30,
+			controlRef.current.scrollHeight
+		) }px`;
+	}, [ draft ] );
+
 	return (
-		<input
+		<textarea
 			aria-label={ label }
+			ref={ controlRef }
 			className="cortext-row-detail__property-editable-text"
 			inputMode={ inputMode }
 			placeholder={ isFocused ? '' : __( 'Empty', 'cortext' ) }
-			type="text"
+			rows={ 1 }
 			value={ draft }
 			onBlur={ () => setIsFocused( false ) }
 			onChange={ ( event ) => {

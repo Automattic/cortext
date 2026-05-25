@@ -891,10 +891,9 @@
 		appearance: none;
 		display: block;
 		width: 100%;
-		height: 30px;
 		min-height: 30px;
 		margin: 0;
-		padding: 0;
+		padding: 5px 0;
 		border: 0;
 		border-radius: 4px;
 		box-sizing: border-box;
@@ -905,6 +904,10 @@
 		cursor: text;
 		font: inherit;
 		line-height: 1.4;
+		overflow: hidden;
+		overflow-wrap: anywhere;
+		resize: none;
+		white-space: normal;
 
 		&::placeholder {
 			color: var(--cortext-row-detail-muted);
@@ -977,6 +980,8 @@
 	}
 
 	&__property-value .cortext-relation-edit__toggle.components-button {
+		justify-content: flex-start;
+		width: 100%;
 		height: auto;
 		min-height: $grid-unit-30;
 		padding: 0;
