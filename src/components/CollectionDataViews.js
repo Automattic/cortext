@@ -536,9 +536,9 @@ export default function CollectionDataViews( {
 	const { fields, collection, slug, isResolving, fieldsResolved } =
 		useCollectionFieldsContext();
 	const { touchRecent } = useRecents();
-	// Field IDs known on the previous sync. Drives the auto-show path
-	// for fields the user just created. `null` on first run signals
-	// "saved view, leave it alone."
+	// Field IDs from the last schema sync. We use this to auto-show fields
+	// the user just created. `null` on first run means the saved view should
+	// stay untouched.
 	const knownFieldIdsRef = useRef( null );
 
 	const availableFields = useMemo(
