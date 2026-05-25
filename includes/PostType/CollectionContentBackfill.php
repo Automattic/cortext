@@ -12,32 +12,38 @@ namespace Cortext\PostType;
 
 final class CollectionContentBackfill {
 
-	private const OPTION_KEY = 'cortext_collection_data_view_backfill_v1';
+	private const OPTION_KEY               = 'cortext_collection_data_view_backfill_v1';
+	private const REWRITE_FLUSH_OPTION_KEY = 'cortext_collection_rewrite_flush_v1';
 
 	public function register(): void {
 		add_action( 'init', array( $this, 'maybe_run' ), 20 );
 	}
 
 	/**
-	 * Runs once, gated by an option. The option is only marked when every
-	 * collection that needed updating was updated successfully; a failure
-	 * leaves it unset so the next request retries the stragglers. Already
-	 * seeded collections short-circuit via has_owner_data_view_block, so
-	 * the retry only repeats what failed.
+	 * Two one-shot tasks gated by their own options:
 	 *
-	 * Also flushes rewrite rules because this release gives collections public
-	 * permalinks, and plugin upgrades do not run the activation hook.
+	 * - The data-view backfill loop. Marks complete only when every collection
+	 *   that needed updating was updated successfully. A failure leaves the
+	 *   option unset so the next request retries the stragglers. Already seeded
+	 *   collections short-circuit via has_owner_data_view_block, so the retry
+	 *   only repeats what failed.
+	 * - The rewrite-rules flush. Marks complete after the first run regardless
+	 *   of backfill success; rewrites need refreshing because this release
+	 *   gives collections public permalinks and plugin upgrades do not run the
+	 *   activation hook. Sharing an option with the backfill would re-run a
+	 *   slow .htaccess rewrite on every request as long as one collection's
+	 *   wp_update_post kept failing.
 	 */
 	public function maybe_run(): void {
-		if ( get_option( self::OPTION_KEY ) ) {
-			return;
+		if ( ! get_option( self::OPTION_KEY ) ) {
+			if ( $this->backfill() ) {
+				update_option( self::OPTION_KEY, time(), false );
+			}
 		}
 
-		$succeeded = $this->backfill();
-		flush_rewrite_rules( false );
-
-		if ( $succeeded ) {
-			update_option( self::OPTION_KEY, time(), false );
+		if ( ! get_option( self::REWRITE_FLUSH_OPTION_KEY ) ) {
+			flush_rewrite_rules( false );
+			update_option( self::REWRITE_FLUSH_OPTION_KEY, time(), false );
 		}
 	}
 
