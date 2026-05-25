@@ -167,6 +167,7 @@ function FieldActions( {
 	const [ shouldFocusCalculation, setShouldFocusCalculation ] =
 		useState( false );
 	const calculationItemRef = useRef( null );
+	const closeFieldMenuRef = useRef( null );
 	const closeTimerRef = useRef( null );
 	// `useCollectionFields` already fetched these records with `context: 'edit'`
 	// and ran them through `mapField`. Read label/type/options from the cached
@@ -238,6 +239,13 @@ function FieldActions( {
 		window.requestAnimationFrame( () => {
 			calculationItemRef.current?.focus();
 		} );
+	}, [ closeCalculation ] );
+	const closeFieldMenu = useCallback( () => {
+		if ( closeFieldMenuRef.current ) {
+			closeFieldMenuRef.current();
+			return;
+		}
+		closeCalculation();
 	}, [ closeCalculation ] );
 
 	const label = effectiveField?.label || `#${ recordId }`;
@@ -449,6 +457,7 @@ function FieldActions( {
 						) : null }
 					</span>
 				}
+				closeMenuRef={ closeFieldMenuRef }
 				onFieldOptionsSaved={ onFieldOptionsSaved }
 				onFieldFormatSaved={ onFieldFormatSaved }
 				onOpenFormat={ closeCalculation }
@@ -473,7 +482,7 @@ function FieldActions( {
 								calculation
 							)
 						);
-						closeCalculation();
+						closeFieldMenu();
 					} }
 					onClose={ closeCalculationAndFocusTrigger }
 					onMouseEnter={ () => openCalculation() }

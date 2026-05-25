@@ -51,6 +51,7 @@ export default function FieldActionsMenu( {
 	triggerButton,
 	triggerContent,
 	renamingPrefix,
+	closeMenuRef,
 	onFieldOptionsSaved,
 	onFieldFormatSaved,
 	onOpenFormat,
@@ -149,6 +150,18 @@ export default function FieldActionsMenu( {
 		setIsMenuOpen( false );
 		onCloseMenu?.();
 	}, [ cancelClose, onCloseMenu ] );
+
+	useEffect( () => {
+		if ( ! closeMenuRef ) {
+			return undefined;
+		}
+		closeMenuRef.current = closeMenu;
+		return () => {
+			if ( closeMenuRef.current === closeMenu ) {
+				closeMenuRef.current = null;
+			}
+		};
+	}, [ closeMenu, closeMenuRef ] );
 
 	const closeFormatAndFocusTrigger = useCallback( () => {
 		closeFormat();
