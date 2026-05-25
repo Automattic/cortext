@@ -127,6 +127,7 @@ describe( 'SidebarFavorites helpers', () => {
 			[
 				{
 					id: 1,
+					type: 'crtxt_page',
 					slug: 'hello',
 					title: { rendered: 'Hello', raw: 'Hello' },
 				},
@@ -134,6 +135,7 @@ describe( 'SidebarFavorites helpers', () => {
 			[
 				{
 					id: 2,
+					type: 'crtxt_collection',
 					slug: 'books',
 					title: { rendered: 'Books', raw: 'Books' },
 				},

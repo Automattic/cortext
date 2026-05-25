@@ -194,6 +194,40 @@ final class Test_CLI_Perf_Bench extends BaseTestCase {
 		$this->assertSame( 'p95_ms', $result['failures'][0]['metric'] );
 	}
 
+	public function test_scenario_filter_limits_run_to_matching_ids(): void {
+		$method = ( new \ReflectionClass( PerfBench::class ) )->getMethod( 'filter_scenarios' );
+		$method->setAccessible( true );
+
+		$scenarios = array(
+			'rows_page_1'                   => array(
+				'label' => 'Rows page 1',
+				'run'   => static fn() => null,
+			),
+			'mat_single_write_postmeta'     => array(
+				'label' => 'Single postmeta write',
+				'run'   => static fn() => null,
+			),
+			'mat_single_write_sidecar'      => array(
+				'label' => 'Single sidecar write',
+				'run'   => static fn() => null,
+			),
+			'mat_filter_two_fields_sidecar' => array(
+				'label' => 'Sidecar filter',
+				'run'   => static fn() => null,
+			),
+		);
+
+		$filtered = $method->invoke( new PerfBench(), $scenarios, 'mat_single' );
+
+		$this->assertSame(
+			array(
+				'mat_single_write_postmeta',
+				'mat_single_write_sidecar',
+			),
+			array_keys( $filtered )
+		);
+	}
+
 	public function test_seed_dataset_creates_small_deterministic_fixture(): void {
 		wp_set_current_user( $this->create_admin_user() );
 

@@ -13,6 +13,8 @@ export {
 	useFavoriteToggle,
 } from './hooks';
 export { documentTitle } from './title';
+export { listIconForRecord } from './icons';
+export { documentUri } from './uri';
 export {
 	favoriteKey,
 	favoriteIdentForRecord,

@@ -1,4 +1,5 @@
 import { __, _n, sprintf } from '@wordpress/i18n';
+import { Icon, listItem } from '@wordpress/icons';
 import apiFetch from '@wordpress/api-fetch';
 
 import { notifyCollectionRowsChanged } from '../../hooks/rowInvalidation';
@@ -17,6 +18,12 @@ const rowDescriptor = {
 		hierarchy: false,
 		canCreateChild: false,
 		hasOwnIcon: false,
+	},
+
+	kindLabel: __( 'Row', 'cortext' ),
+
+	fallbackListIcon( size = 16 ) {
+		return <Icon icon={ listItem } size={ size } />;
 	},
 
 	async restore( record ) {

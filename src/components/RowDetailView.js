@@ -353,7 +353,7 @@ export default function RowDetailView( {
 					{
 						key: activeDetailKey,
 						detail: activeDetail,
-						state: 'active',
+						state: 'preparing',
 					},
 			  ]
 			: []
@@ -403,7 +403,7 @@ export default function RowDetailView( {
 				{
 					key: activeDetailKey,
 					detail: activeDetail,
-					state: visiblePanes.length ? 'preparing' : 'active',
+					state: 'preparing',
 				},
 			];
 		} );
@@ -494,6 +494,9 @@ export default function RowDetailView( {
 			activePane.state !== 'covered' &&
 			String( activeDetail.rowId ) === String( rowId )
 	);
+	const isWaitingForFirstPane =
+		detailPanes.length > 0 &&
+		! detailPanes.some( ( pane ) => pane.state !== 'preparing' );
 
 	const content =
 		! activeDetail && detailPanes.length === 0 ? (
@@ -517,11 +520,18 @@ export default function RowDetailView( {
 				setArePropertiesVisible={ setArePropertiesVisible }
 			>
 				<div className="cortext-row-detail__pane-stack">
+					{ isWaitingForFirstPane ? (
+						<div className="cortext-row-detail__pane cortext-row-detail__pane--loading">
+							<Spinner />
+						</div>
+					) : null }
 					<Suspense
 						fallback={
-							<div className="cortext-row-detail__pane cortext-row-detail__pane--loading">
-								<Spinner />
-							</div>
+							isWaitingForFirstPane ? null : (
+								<div className="cortext-row-detail__pane cortext-row-detail__pane--loading">
+									<Spinner />
+								</div>
+							)
 						}
 					>
 						{ detailPanes.map( ( pane ) => {

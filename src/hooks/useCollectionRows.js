@@ -338,6 +338,73 @@ function buildServerQueryArgs( collectionId, view, filters = [], fields = [] ) {
 	return args;
 }
 
+function customSchemaFieldIds( fields = [] ) {
+	return fields
+		.map( ( field ) => field?.id )
+		.filter( ( id ) => typeof id === 'string' && /^field-/.test( id ) );
+}
+
+function projectionValues( args = {} ) {
+	return Object.keys( args )
+		.filter( ( key ) => /^fields\[\d+\]$/.test( key ) )
+		.sort(
+			( a, b ) =>
+				Number( a.match( /\d+/ )?.[ 0 ] ?? 0 ) -
+				Number( b.match( /\d+/ )?.[ 0 ] ?? 0 )
+		)
+		.map( ( key ) => args[ key ] );
+}
+
+function argsWithoutProjection( args = {} ) {
+	return Object.fromEntries(
+		Object.entries( args ).filter(
+			( [ key ] ) => ! /^fields\[\d+\]$/.test( key )
+		)
+	);
+}
+
+function sameArgsExceptProjection( a, b ) {
+	return (
+		JSON.stringify( argsWithoutProjection( a ) ) ===
+		JSON.stringify( argsWithoutProjection( b ) )
+	);
+}
+
+function isNewFieldProjectionExpansion( previous, next ) {
+	if (
+		! previous ||
+		previous.collectionId !== next.collectionId ||
+		previous.mode !== next.mode ||
+		previous.refreshKey !== next.refreshKey ||
+		! sameArgsExceptProjection( previous.args, next.args )
+	) {
+		return false;
+	}
+
+	const previousProjection = projectionValues( previous.args );
+	const nextProjection = projectionValues( next.args );
+	if (
+		previousProjection.length === 0 ||
+		nextProjection.length <= previousProjection.length
+	) {
+		return false;
+	}
+
+	const previousProjected = new Set( previousProjection );
+	const nextProjected = new Set( nextProjection );
+	if ( previousProjection.some( ( id ) => ! nextProjected.has( id ) ) ) {
+		return false;
+	}
+
+	const previousFieldIds = new Set( previous.fieldIds );
+	const addedProjectionIds = nextProjection.filter(
+		( id ) => ! previousProjected.has( id )
+	);
+	return addedProjectionIds.every(
+		( id ) => /^field-/.test( id ) && ! previousFieldIds.has( id )
+	);
+}
+
 export function buildQueryPlan(
 	collectionId,
 	view,
@@ -370,23 +437,6 @@ export function buildQueryPlan(
 	};
 }
 
-function schemaSignature( fields = [] ) {
-	return fields
-		.map(
-			( field ) =>
-				`${ field.id }:${ field.recordId ?? '' }:${
-					field.cortextType ?? ''
-				}:${ field.sortable === true ? '1' : '0' }:${
-					field.filterable === true ? '1' : '0'
-				}:${
-					Array.isArray( field.operators )
-						? field.operators.join( ',' )
-						: '?'
-				}`
-		)
-		.join( '|' );
-}
-
 function totalPagesNumber( value ) {
 	const number = Number( value );
 	return Number.isFinite( number ) && number >= 1 ? Math.floor( number ) : 1;
@@ -414,14 +464,16 @@ export default function useCollectionRows(
 	} );
 	const [ refreshKey, setRefreshKey ] = useState( 0 );
 
+	const stateRef = useRef( state );
+	stateRef.current = state;
 	const requestIdRef = useRef( 0 );
+	const querySnapshotRef = useRef( null );
 	const queryPlan = collectionId
 		? buildQueryPlan( collectionId, view, fields, options )
 		: null;
 	const queryKey = collectionId
 		? JSON.stringify( {
 				args: queryPlan.args,
-				schema: schemaSignature( fields ),
 				mode: queryPlan.mode,
 		  } )
 		: null;
@@ -451,6 +503,7 @@ export default function useCollectionRows(
 
 	useEffect( () => {
 		if ( ! collectionId ) {
+			querySnapshotRef.current = null;
 			setState( {
 				data: [],
 				collection: null,
@@ -462,8 +515,34 @@ export default function useCollectionRows(
 			return undefined;
 		}
 
-		const requestId = ++requestIdRef.current;
 		const activeQueryPlan = queryPlan;
+		const nextSnapshot = {
+			collectionId,
+			mode: activeQueryPlan.mode,
+			args: activeQueryPlan.args,
+			fieldIds: customSchemaFieldIds( fields ),
+			refreshKey,
+		};
+		const canReuseRows =
+			stateRef.current.hasResolved &&
+			isNewFieldProjectionExpansion(
+				querySnapshotRef.current,
+				nextSnapshot
+			);
+		querySnapshotRef.current = nextSnapshot;
+
+		if ( canReuseRows ) {
+			requestIdRef.current += 1;
+			setState( ( prev ) => ( {
+				...prev,
+				isLoading: false,
+				hasResolved: true,
+				error: null,
+			} ) );
+			return undefined;
+		}
+
+		const requestId = ++requestIdRef.current;
 
 		setState( ( prev ) => ( {
 			...prev,

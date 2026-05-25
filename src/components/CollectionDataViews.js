@@ -74,7 +74,8 @@ import { dataViewsFilterByForType } from '../hooks/fieldMapping';
 import { toDataViewId, toRecordId } from '../hooks/fieldIds';
 import useCollectionRows from '../hooks/useCollectionRows';
 import { useRecents } from '../hooks/useRecents';
-import { useFavoriteToggle } from '../documents';
+import { filterFavoritesByDeletedIds, useFavoriteToggle } from '../documents';
+import { useFavorites } from '../hooks/useFavorites';
 import { elementsFromOptions } from '../hooks/optionElements';
 import { notifyDocumentTrashChanged } from '../hooks/documentTrashInvalidation';
 import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
@@ -536,6 +537,10 @@ export default function CollectionDataViews( {
 	const { fields, collection, slug, isResolving, fieldsResolved } =
 		useCollectionFieldsContext();
 	const { touchRecent } = useRecents();
+	// Field IDs from the last schema sync. We use this to auto-show fields
+	// the user just created. `null` on first run means the saved view should
+	// stay untouched.
+	const knownFieldIdsRef = useRef( null );
 
 	const availableFields = useMemo(
 		() => [ TITLE_FIELD, ...fields ],
@@ -552,8 +557,27 @@ export default function CollectionDataViews( {
 		const validIds = new Set( availableFields.map( ( f ) => f.id ) );
 		const currentFilters = view?.filters ?? [];
 		const nextFilters = pruneFiltersForFields( currentFilters, validIds );
-		if ( nextFilters !== currentFilters ) {
-			return { ...view, filters: nextFilters };
+		const currentFields = Array.isArray( view?.fields ) ? view.fields : [];
+		const previouslyKnown = knownFieldIdsRef.current;
+		const newlyVisibleFields =
+			previouslyKnown && currentFields.length > 0
+				? availableFields
+						.filter(
+							( field ) =>
+								isDefaultVisibleField( field ) &&
+								! previouslyKnown.has( field.id ) &&
+								! currentFields.includes( field.id )
+						)
+						.map( ( field ) => field.id )
+				: [];
+		if ( nextFilters !== currentFilters || newlyVisibleFields.length > 0 ) {
+			return {
+				...view,
+				filters: nextFilters,
+				...( newlyVisibleFields.length > 0
+					? { fields: [ ...currentFields, ...newlyVisibleFields ] }
+					: {} ),
+			};
 		}
 		return view;
 	}, [ view, availableFields, isResolving ] );
@@ -994,10 +1018,6 @@ export default function CollectionDataViews( {
 	viewRef.current = view;
 	const onChangeViewRef = useRef( onChangeView );
 	onChangeViewRef.current = onChangeView;
-	// Field IDs known on the previous sync. Drives the auto-show path
-	// for fields the user just created. `null` on first run signals
-	// "saved view, leave it alone."
-	const knownFieldIdsRef = useRef( null );
 	const previousVisibleFieldsRef = useRef( null );
 	const savedRowDetailMode = getRowDetailMode( view );
 	const postType = slug ? `crtxt_${ slug }` : null;
@@ -1069,6 +1089,7 @@ export default function CollectionDataViews( {
 		toggle: toggleRowFavorite,
 		disabled: areFavoriteActionsDisabled,
 	} = useFavoriteToggle( { onError: setRowActionError } );
+	const { setFavorites } = useFavorites();
 
 	const openRowInMode = useCallback(
 		( row, mode ) => {
@@ -1198,6 +1219,15 @@ export default function CollectionDataViews( {
 				refresh();
 				notifyDocumentTrashChanged();
 				notifyCollectionRowsChanged();
+				// Prune favorites for the rows we just trashed. The server cleans
+				// stale entries on the next read, but doing it here keeps the next
+				// favorites PUT from sending these row ids back.
+				setFavorites( ( current ) =>
+					filterFavoritesByDeletedIds( current, { row: deleted } )
+				).catch( () => {
+					// Keep this quiet. The next favorites read asks the server to
+					// prune stale rows anyway.
+				} );
 			}
 
 			if ( failedRows.length > 0 ) {
@@ -1227,7 +1257,14 @@ export default function CollectionDataViews( {
 				setRowActionError( deleteErrorMessage );
 			}
 		},
-		[ closeDocument, forgetDeletedRows, openRowId, postType, refresh ]
+		[
+			closeDocument,
+			forgetDeletedRows,
+			openRowId,
+			postType,
+			refresh,
+			setFavorites,
+		]
 	);
 
 	const requestDeleteSelectedRows = useCallback( () => {

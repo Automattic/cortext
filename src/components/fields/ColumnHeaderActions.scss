@@ -23,3 +23,27 @@
 	display: inline-flex;
 	align-items: center;
 }
+
+.cortext-data-view .dataviews-view-table thead > tr > th {
+
+	.dataviews-view-table-header-button {
+
+		.cortext-column-header-content {
+			display: flex;
+			align-items: center;
+			gap: $grid-unit-05;
+			min-width: 0;
+			max-width: 100%;
+		}
+
+		.cortext-column-header-type-icon {
+			color: $gray-700;
+			transform: translateY(1px);
+		}
+
+		.cortext-column-header-sort-indicator {
+			flex: 0 0 auto;
+			color: $gray-700;
+		}
+	}
+}

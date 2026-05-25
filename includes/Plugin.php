@@ -16,6 +16,7 @@ use Cortext\Editor\DocumentIconBlock;
 use Cortext\Editor\DocumentPropertiesBlock;
 use Cortext\Editor\PageHeaderActionsBlock;
 use Cortext\Editor\RevisionThrottle;
+use Cortext\FieldValues\FieldValueIndex;
 use Cortext\Frontend\Assets;
 use Cortext\Frontend\Template;
 use Cortext\PostType\Cascade\CollectionToRowTrashCascade;
@@ -56,6 +57,7 @@ final class Plugin {
 		( new CollectionContentBackfill() )->register();
 		( new Field() )->register();
 		( new CollectionEntries() )->register();
+		( new FieldValueIndex() )->register();
 
 		// Single cascade engine: the same instance registers the WordPress
 		// hooks and answers `descendants_for_root` for the REST endpoints.

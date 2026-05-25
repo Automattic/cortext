@@ -523,6 +523,16 @@ describe( 'systemFields', () => {
 		expect( byId( 'modified_by' ).type ).toBe( 'text' );
 	} );
 
+	it( 'renders system icons in their table headers', () => {
+		const { container } = render( byId( 'modified_at' ).header );
+		expect(
+			container.querySelector(
+				'.cortext-column-header-system-icon[data-cortext-system-field="modified_at"]'
+			)
+		).toBeInTheDocument();
+		expect( container.textContent ).toContain( 'Last edited' );
+	} );
+
 	it( 'reads each value from the row payload', () => {
 		const item = {
 			created_at: '2026-04-30T09:48:54+00:00',

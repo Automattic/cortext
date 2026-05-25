@@ -35,6 +35,7 @@ import AddFieldPopover from './AddFieldPopover';
 import ChangeFieldTypePopover from './ChangeFieldTypePopover';
 import EditOptionsPopover from './EditOptionsPopover';
 import FieldFormatPopover from './FieldFormatPopover';
+import { FieldTypeIcon } from './fieldTypes';
 import RenameFieldInline from './RenameFieldInline';
 import {
 	useCollectionFieldsContext,
@@ -173,6 +174,7 @@ export default function ColumnHeaderActions( {
 					<AddFieldTrigger
 						collectionId={ collectionId }
 						onFieldCreated={ onFieldCreated }
+						onRowsChanged={ onRowsChanged }
 					/>,
 					target.th,
 					`${ target.key }-${ collectionId }`
@@ -514,14 +516,23 @@ function FieldActions( {
 						/>
 					}
 				>
-					<span className="cortext-column-header-label">
-						{ label }
-					</span>
-					{ isSorted ? (
-						<span aria-hidden="true">
-							{ sortDirection === 'asc' ? ' ↑' : ' ↓' }
+					<span className="cortext-column-header-content">
+						<FieldTypeIcon
+							type={ fieldType }
+							className="cortext-column-header-type-icon"
+						/>
+						<span className="cortext-column-header-label">
+							{ label }
 						</span>
-					) : null }
+						{ isSorted ? (
+							<span
+								className="cortext-column-header-sort-indicator"
+								aria-hidden="true"
+							>
+								{ sortDirection === 'asc' ? '↑' : '↓' }
+							</span>
+						) : null }
+					</span>
 				</Menu.TriggerButton>
 				<Menu.Popover
 					className="cortext-field-actions-popover"
@@ -654,7 +665,11 @@ function FieldActions( {
 							prefix={ <Icon icon={ copy } /> }
 							onClick={ async () => {
 								try {
-									await duplicate.run( recordId );
+									const duplicated =
+										await duplicate.run( recordId );
+									if ( duplicated?.type === 'rollup' ) {
+										onRowsChanged?.();
+									}
 								} catch {
 									// surfaced via duplicate.error.
 								}
@@ -770,17 +785,15 @@ function FieldActions( {
 					collectionId={ collectionId }
 					recordId={ recordId }
 					currentType={ fieldType }
-					onClose={ () => {
-						setIsChangingType( false );
-						onRowsChanged?.();
-					} }
+					onClose={ () => setIsChangingType( false ) }
+					onTypeChanged={ onRowsChanged }
 				/>
 			) : null }
 		</span>
 	);
 }
 
-function AddFieldTrigger( { collectionId, onFieldCreated } ) {
+function AddFieldTrigger( { collectionId, onFieldCreated, onRowsChanged } ) {
 	return (
 		<span className="cortext-column-header-actions cortext-column-header-actions--add">
 			<Dropdown
@@ -801,6 +814,9 @@ function AddFieldTrigger( { collectionId, onFieldCreated } ) {
 							collectionId={ collectionId }
 							onCreate={ ( created ) => {
 								onFieldCreated?.( created );
+								if ( created?.type === 'rollup' ) {
+									onRowsChanged?.();
+								}
 								onClose();
 							} }
 						/>

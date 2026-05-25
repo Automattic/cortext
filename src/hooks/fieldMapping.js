@@ -8,6 +8,7 @@ import {
 } from '@wordpress/components';
 
 import EditableCell from '../components/EditableCell';
+import { SystemFieldIcon } from '../components/fields/fieldTypes';
 import { elementsFromOptions } from './optionElements';
 
 // Re-export for existing call sites. The implementation lives in
@@ -147,6 +148,18 @@ function buildRender( id, type, label, elements, format, relation ) {
 
 function HeaderLabel( { children } ) {
 	return <span className="cortext-column-header-label">{ children }</span>;
+}
+
+function SystemHeaderLabel( { fieldId, children } ) {
+	return (
+		<span className="cortext-column-header-content">
+			<SystemFieldIcon
+				fieldId={ fieldId }
+				className="cortext-column-header-type-icon cortext-column-header-system-icon"
+			/>
+			<span className="cortext-column-header-label">{ children }</span>
+		</span>
+	);
 }
 
 function rollupTargetFormat( meta ) {
@@ -359,6 +372,11 @@ export function systemFields() {
 		{
 			id: 'created_at',
 			label: __( 'Created', 'cortext' ),
+			header: (
+				<SystemHeaderLabel fieldId="created_at">
+					{ __( 'Created', 'cortext' ) }
+				</SystemHeaderLabel>
+			),
 			type: 'datetime',
 			cortextType: 'datetime',
 			...SERVER_SORT_ONLY,
@@ -374,6 +392,11 @@ export function systemFields() {
 		{
 			id: 'created_by',
 			label: __( 'Created by', 'cortext' ),
+			header: (
+				<SystemHeaderLabel fieldId="created_by">
+					{ __( 'Created by', 'cortext' ) }
+				</SystemHeaderLabel>
+			),
 			type: 'text',
 			cortextType: 'text',
 			...NOT_SERVER_QUERYABLE,
@@ -389,6 +412,11 @@ export function systemFields() {
 		{
 			id: 'modified_at',
 			label: __( 'Last edited', 'cortext' ),
+			header: (
+				<SystemHeaderLabel fieldId="modified_at">
+					{ __( 'Last edited', 'cortext' ) }
+				</SystemHeaderLabel>
+			),
 			type: 'datetime',
 			cortextType: 'datetime',
 			...SERVER_SORT_ONLY,
@@ -404,6 +432,11 @@ export function systemFields() {
 		{
 			id: 'modified_by',
 			label: __( 'Last edited by', 'cortext' ),
+			header: (
+				<SystemHeaderLabel fieldId="modified_by">
+					{ __( 'Last edited by', 'cortext' ) }
+				</SystemHeaderLabel>
+			),
 			type: 'text',
 			cortextType: 'text',
 			...NOT_SERVER_QUERYABLE,

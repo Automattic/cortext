@@ -828,15 +828,15 @@ describe( 'useCollectionRows', () => {
 		expect( lastRequestPath() ).toContain( 'per_page=100' );
 	} );
 
-	it( 'refetches rows when the visible schema gains a rollup field', async () => {
+	it( 'does not refetch rows when the schema gains a scalar field', async () => {
 		const view = { type: 'table', filters: [], page: 1, perPage: 25 };
 		const initialFields = [
 			{ id: 'title', cortextType: 'title' },
-			{ id: 'field-10', recordId: 10, cortextType: 'relation' },
+			{ id: 'field-10', recordId: 10, cortextType: 'text' },
 		];
 		const nextFields = [
 			...initialFields,
-			{ id: 'field-20', recordId: 20, cortextType: 'rollup' },
+			{ id: 'field-20', recordId: 20, cortextType: 'number' },
 		];
 
 		const { rerender } = renderHook(
@@ -848,12 +848,52 @@ describe( 'useCollectionRows', () => {
 
 		rerender( { fields: nextFields } );
 
-		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 2 ) );
-		expect( apiFetch ).toHaveBeenLastCalledWith(
-			expect.objectContaining( {
-				path: expect.stringContaining( 'collection=7' ),
-			} )
+		await new Promise( ( r ) => setTimeout( r, 30 ) );
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'refetches when schema capabilities change the query plan', async () => {
+		const view = {
+			type: 'table',
+			filters: [],
+			sort: { field: 'field-10', direction: 'asc' },
+			page: 1,
+			perPage: 25,
+		};
+		const unsupportedSortFields = [
+			{
+				id: 'field-10',
+				recordId: 10,
+				cortextType: 'relation',
+				sortable: false,
+				filterable: false,
+				operators: [],
+			},
+		];
+		const supportedSortFields = [
+			{
+				id: 'field-10',
+				recordId: 10,
+				cortextType: 'text',
+				sortable: true,
+				filterable: true,
+				operators: textOperators,
+			},
+		];
+
+		const { rerender, result } = renderHook(
+			( { fields } ) => useCollectionRows( 7, view, fields ),
+			{ initialProps: { fields: unsupportedSortFields } }
 		);
+
+		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 1 ) );
+		expect( result.current.queryMode ).toBe( 'client' );
+
+		rerender( { fields: supportedSortFields } );
+
+		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 2 ) );
+		expect( result.current.queryMode ).toBe( 'server' );
+		expect( lastRequestPath() ).toContain( 'sort[field]=field-10' );
 	} );
 
 	it( 'refetches rows when a global row invalidation event fires', async () => {
@@ -958,6 +998,97 @@ describe( 'useCollectionRows', () => {
 		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 2 ) );
 		expect( lastRequestPath() ).toContain( 'fields[0]=field-10' );
 		expect( lastRequestPath() ).toContain( 'fields[1]=title' );
+	} );
+
+	it( 'reuses rows when adding a newly-created field to the projection', async () => {
+		const initialView = {
+			type: 'table',
+			fields: [ 'title', 'field-10' ],
+			page: 1,
+			perPage: 25,
+		};
+		const nextView = {
+			...initialView,
+			fields: [ 'title', 'field-10', 'field-70' ],
+		};
+		const nextFields = [
+			...baseFields,
+			{
+				id: 'field-70',
+				recordId: 70,
+				cortextType: 'text',
+				sortable: true,
+				filterable: true,
+				operators: textOperators,
+			},
+		];
+
+		const { result, rerender } = renderHook(
+			( { view, fields } ) => useCollectionRows( 7, view, fields ),
+			{ initialProps: { view: initialView, fields: baseFields } }
+		);
+
+		await waitFor( () =>
+			expect( result.current.hasResolved ).toBe( true )
+		);
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+		expect( lastRequestPath() ).toContain( 'fields[0]=field-10' );
+		expect( lastRequestPath() ).toContain( 'fields[1]=title' );
+
+		rerender( { view: nextView, fields: nextFields } );
+
+		await new Promise( ( r ) => setTimeout( r, 30 ) );
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+		expect( result.current.isLoading ).toBe( false );
+		expect( result.current.hasResolved ).toBe( true );
+	} );
+
+	it( 'includes a newly-created projected field on the next explicit refresh', async () => {
+		const initialView = {
+			type: 'table',
+			fields: [ 'title', 'field-10' ],
+			page: 1,
+			perPage: 25,
+		};
+		const nextView = {
+			...initialView,
+			fields: [ 'title', 'field-10', 'field-70' ],
+		};
+		const nextFields = [
+			...baseFields,
+			{
+				id: 'field-70',
+				recordId: 70,
+				cortextType: 'text',
+				sortable: true,
+				filterable: true,
+				operators: textOperators,
+			},
+		];
+
+		const { result, rerender } = renderHook(
+			( { view, fields } ) => useCollectionRows( 7, view, fields ),
+			{ initialProps: { view: initialView, fields: baseFields } }
+		);
+
+		await waitFor( () =>
+			expect( result.current.hasResolved ).toBe( true )
+		);
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+
+		rerender( { view: nextView, fields: nextFields } );
+
+		await new Promise( ( r ) => setTimeout( r, 30 ) );
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+
+		act( () => {
+			result.current.refresh();
+		} );
+
+		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 2 ) );
+		expect( lastRequestPath() ).toContain( 'fields[0]=field-10' );
+		expect( lastRequestPath() ).toContain( 'fields[1]=field-70' );
+		expect( lastRequestPath() ).toContain( 'fields[2]=title' );
 	} );
 
 	it( 'does not refetch for a column reorder', async () => {

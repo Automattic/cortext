@@ -47,7 +47,11 @@ final class RowKind implements DocumentKind {
 	}
 
 	public function has_icon(): bool {
-		return false;
+		// Rows carry the same `cortext_document_icon` meta as pages (registered
+		// via `DocumentTypeRegistrar` on every document CPT). The DataView
+		// title cell already renders that glyph; favorites and recents pick
+		// it up through `Documents::format_target`.
+		return true;
 	}
 
 	public function owner_context( WP_Post $post ): ?KindOwnerContext {

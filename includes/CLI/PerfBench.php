@@ -9,6 +9,8 @@ declare( strict_types=1 );
 
 namespace Cortext\CLI;
 
+use Cortext\FieldValues\FieldValueIndex;
+use Cortext\FieldValues\FieldValueStore;
 use Cortext\PostType\Collection;
 use Cortext\PostType\CollectionEntries;
 use Cortext\PostType\Field;
@@ -135,6 +137,13 @@ final class PerfBench {
 	 * [--fail-on-budget]
 	 * : Exit with an error when a scenario exceeds its budget.
 	 *
+	 * [--suite=<suite>]
+	 * : Suite to run. Use "default" for CI budget checks or "materialization"
+	 * for field-value index work. Default: default.
+	 *
+	 * [--scenario=<pattern>]
+	 * : Run only scenario IDs containing this text.
+	 *
 	 * [--pretty]
 	 * : Pretty-print JSON.
 	 *
@@ -154,13 +163,15 @@ final class PerfBench {
 		$bench       = new self();
 		$iterations  = self::flag_int( $assoc_args, 'iterations', self::DEFAULT_ITERATIONS, 1 );
 		$warmup      = self::flag_int( $assoc_args, 'warmup', self::DEFAULT_WARMUP, 0 );
+		$suite       = (string) ( $assoc_args['suite'] ?? 'default' );
+		$scenario    = isset( $assoc_args['scenario'] ) ? (string) $assoc_args['scenario'] : '';
 		$budget_path = self::normalize_local_path(
 			(string) ( $assoc_args['budget'] ?? CORTEXT_PATH . 'includes/CLI/perf-budgets.json' )
 		);
 		$budget      = $bench->load_budget( $budget_path );
 
 		try {
-			$result = $bench->run_benchmark( $iterations, $warmup, $budget, $budget_path );
+			$result = $bench->run_benchmark( $iterations, $warmup, $budget, $budget_path, $suite, $scenario );
 		} catch ( RuntimeException $exception ) {
 			\WP_CLI::error( $exception->getMessage() );
 			return;
@@ -288,17 +299,40 @@ final class PerfBench {
 		$previous_suspend = wp_suspend_cache_invalidation( true );
 		wp_defer_term_counting( true );
 		wp_defer_comment_counting( true );
+		FieldValueIndex::suspend_sync();
 
 		try {
 			$manifest = $this->create_dataset( $config, $seed_user_id );
 		} finally {
+			FieldValueIndex::resume_sync();
 			wp_defer_comment_counting( false );
 			wp_defer_term_counting( false );
 			wp_suspend_cache_invalidation( $previous_suspend );
 		}
 
+		$this->rebuild_seeded_field_value_index( $manifest );
 		update_option( self::DATASET_OPTION, $manifest, false );
 		return $manifest;
+	}
+
+	/**
+	 * Bulk seeding writes postmeta first, then rebuilds the sidecar once.
+	 *
+	 * @param array<string,mixed> $manifest Dataset manifest.
+	 */
+	private function rebuild_seeded_field_value_index( array $manifest ): void {
+		$index = new FieldValueIndex();
+		if ( ! $index->install() ) {
+			return;
+		}
+
+		$this->register_dataset_collections( $manifest );
+		foreach ( $manifest['collections'] ?? array() as $collection ) {
+			$collection_id = (int) ( $collection['id'] ?? 0 );
+			if ( $collection_id > 0 ) {
+				$index->rebuild_collection( $collection_id );
+			}
+		}
 	}
 
 	/**
@@ -308,10 +342,12 @@ final class PerfBench {
 	 * @param int                 $warmup     Warm-up iterations.
 	 * @param array<string,mixed> $budget     Budget config.
 	 * @param string              $budget_path Budget file path.
+	 * @param string              $suite      Benchmark suite.
+	 * @param string              $scenario_filter Scenario ID filter.
 	 * @return array<string,mixed> Benchmark report.
 	 * @throws RuntimeException When the dataset is missing or a scenario fails.
 	 */
-	public function run_benchmark( int $iterations, int $warmup, array $budget, string $budget_path = 'includes/CLI/perf-budgets.json' ): array {
+	public function run_benchmark( int $iterations, int $warmup, array $budget, string $budget_path = 'includes/CLI/perf-budgets.json', string $suite = 'default', string $scenario_filter = '' ): array {
 		$started_at = hrtime( true );
 		$manifest   = get_option( self::DATASET_OPTION );
 		if ( ! is_array( $manifest ) || ! $this->manifest_is_usable( $manifest ) ) {
@@ -323,20 +359,40 @@ final class PerfBench {
 		$this->ensure_rest_routes();
 		wp_set_current_user( $this->default_seed_user_id() );
 
-		if ( count( $manifest['primary_row_ids'] ?? array() ) < self::PAGE_50_ROWS ) {
-			throw new RuntimeException( 'The benchmark needs at least 1250 primary rows for page 50.' );
+		if ( 'default' === $suite ) {
+			if ( count( $manifest['primary_row_ids'] ?? array() ) < self::PAGE_50_ROWS ) {
+				throw new RuntimeException( 'The benchmark needs at least 1250 primary rows for page 50.' );
+			}
+			if ( count( $manifest['migration_row_ids'] ?? array() ) < self::MIGRATION_CAP_ROWS ) {
+				throw new RuntimeException( 'The benchmark needs at least 1000 primary rows for the migration scenario.' );
+			}
+			if ( (int) ( $manifest['wide_collection_id'] ?? 0 ) < 1 || count( $manifest['wide_row_ids'] ?? array() ) < self::PAGE_SIZE ) {
+				throw new RuntimeException( 'The benchmark needs a third collection for the wide schema scenario.' );
+			}
+			$scenarios = $this->scenario_callbacks( $manifest );
+		} elseif ( 'materialization' === $suite ) {
+			if ( count( $manifest['primary_row_ids'] ?? array() ) < 10000 ) {
+				throw new RuntimeException( 'The materialization suite needs at least 10000 primary rows. Seed with `wp cortext perf-seed --reset --force --collections=1 --rows=10000 --relations=0 --rollups=0` or larger.' );
+			}
+			$scenarios = $this->materialization_scenario_callbacks( $manifest );
+		} else {
+			throw new RuntimeException( esc_html( "Unknown benchmark suite: {$suite}." ) );
 		}
-		if ( count( $manifest['migration_row_ids'] ?? array() ) < self::MIGRATION_CAP_ROWS ) {
-			throw new RuntimeException( 'The benchmark needs at least 1000 primary rows for the migration scenario.' );
-		}
-		if ( (int) ( $manifest['wide_collection_id'] ?? 0 ) < 1 || count( $manifest['wide_row_ids'] ?? array() ) < self::PAGE_SIZE ) {
-			throw new RuntimeException( 'The benchmark needs a third collection for the wide schema scenario.' );
-		}
-
-		$scenarios = $this->scenario_callbacks( $manifest );
+		$scenarios = $this->filter_scenarios( $scenarios, $scenario_filter );
 		$summaries = array();
 
 		foreach ( $scenarios as $name => $scenario ) {
+			if ( ! empty( $scenario['single'] ) ) {
+				if ( isset( $scenario['prepare'] ) && is_callable( $scenario['prepare'] ) ) {
+					$scenario['prepare']();
+				}
+				$summaries[ $name ] = array_merge(
+					array( 'label' => (string) $scenario['label'] ),
+					self::summarize_samples( array( $this->measure( $scenario['run'] ) ) )
+				);
+				continue;
+			}
+
 			if ( isset( $scenario['steps'] ) && is_array( $scenario['steps'] ) ) {
 				$summaries[ $name ] = $this->run_stepped_scenario( $scenario, $warmup, $iterations );
 				continue;
@@ -365,7 +421,9 @@ final class PerfBench {
 
 		return array(
 			'version'          => 1,
-			'seed_config_hash' => self::benchmark_config_hash( $manifest, $budget_path ),
+			'suite'            => $suite,
+			'scenarioFilter'   => $scenario_filter,
+			'seed_config_hash' => self::benchmark_config_hash( $manifest, $budget_path, $suite ),
 			'elapsedMs'        => self::elapsed_ms( $started_at ),
 			'dataset'          => self::public_dataset_summary( $manifest ),
 			'iterations'       => array(
@@ -376,6 +434,35 @@ final class PerfBench {
 			'failures'         => $budget_result['failures'],
 			'scenarios'        => $budget_result['scenarios'],
 		);
+	}
+
+	/**
+	 * Limits a benchmark run to matching scenario IDs.
+	 *
+	 * @param array<string,array<string,mixed>> $scenarios Scenario callbacks.
+	 * @param string                            $filter    Scenario ID substring.
+	 * @return array<string,array<string,mixed>>
+	 * @throws RuntimeException When no scenarios match.
+	 */
+	private function filter_scenarios( array $scenarios, string $filter ): array {
+		$filter = trim( $filter );
+		if ( '' === $filter ) {
+			return $scenarios;
+		}
+
+		$matches = array();
+
+		foreach ( $scenarios as $name => $scenario ) {
+			if ( str_contains( $name, $filter ) ) {
+				$matches[ $name ] = $scenario;
+			}
+		}
+
+		if ( count( $matches ) === 0 ) {
+			throw new RuntimeException( esc_html( "No benchmark scenarios matched: {$filter}." ) );
+		}
+
+		return $matches;
 	}
 
 	/**
@@ -463,6 +550,7 @@ final class PerfBench {
 		$wide_scalar_count = (int) ( $config['wide_fields'] ?? self::DEFAULT_WIDE_FIELDS );
 		$field_map         = $this->create_fields( $collections, (int) $config['fields'], $wide_scalar_count, (int) $config['relations'], (int) $config['rollups'] );
 		$row_map           = $this->create_rows( $collections, $field_map, (int) $config['rows'], $seed_user_id );
+		$target_collection = $collections[1] ?? null;
 
 		$manifest = array(
 			'seed'                  => self::DATASET_SEED,
@@ -473,7 +561,7 @@ final class PerfBench {
 			'primary_collection_id' => $collections[0]['id'],
 			'primary_slug'          => $collections[0]['slug'],
 			'primary_row_ids'       => $row_map[ $collections[0]['slug'] ],
-			'target_row_ids'        => $row_map[ $collections[1]['slug'] ] ?? array(),
+			'target_row_ids'        => is_array( $target_collection ) ? ( $row_map[ $target_collection['slug'] ] ?? array() ) : array(),
 			'wide_collection_id'    => is_array( $wide_collection ) ? (int) $wide_collection['id'] : 0,
 			'wide_slug'             => is_array( $wide_collection ) ? (string) $wide_collection['slug'] : '',
 			'wide_row_ids'          => is_array( $wide_collection ) ? ( $row_map[ $wide_collection['slug'] ] ?? array() ) : array(),
@@ -1018,6 +1106,7 @@ final class PerfBench {
 			}
 		}
 
+		FieldValueIndex::flush_runtime_caches();
 		delete_option( self::DATASET_OPTION );
 	}
 
@@ -1357,6 +1446,770 @@ final class PerfBench {
 	}
 
 	/**
+	 * Builds the field-value materialization benchmarks.
+	 *
+	 * The default suite measures full REST workflows. This suite times the
+	 * SQL/ID phase first, because hydration can hide the index cost. The
+	 * sidecar response check still hydrates through the existing REST include
+	 * path; it is not a production read path.
+	 *
+	 * @param array<string,mixed> $manifest Dataset manifest.
+	 * @return array<string,array{label:string,prepare?:callable,run:callable,single?:bool}>
+	 * @throws RuntimeException When the sidecar table cannot be prepared or verified.
+	 */
+	private function materialization_scenario_callbacks( array $manifest ): array {
+		$primary_collection_id = (int) $manifest['primary_collection_id'];
+		$primary_slug          = (string) $manifest['primary_slug'];
+		$primary_row_ids       = array_map( 'intval', $manifest['primary_row_ids'] );
+		$target_row_ids        = array_map( 'intval', $manifest['target_row_ids'] ?? array() );
+		$primary_field_ids     = array_map( 'intval', $manifest['fields']['primary']['scalar_field_ids'] ?? array() );
+		$relation_field_id     = (int) ( $manifest['relation_field_id'] ?? 0 );
+		$number_field_id       = $primary_field_ids[1] ?? 0;
+		$select_field_id       = $primary_field_ids[2] ?? 0;
+		$date_field_id         = $primary_field_ids[5] ?? 0;
+		$text_field_ids        = $this->materialization_text_field_ids( $manifest, $primary_slug );
+		$relation_target_id    = count( $target_row_ids ) > 0 ? $target_row_ids[ min( 59, count( $target_row_ids ) - 1 ) ] : 0;
+		$search_term           = 'Value 6 / 99';
+		$filter_minimum        = 9500.0;
+
+		if ( min( $primary_collection_id, $number_field_id, $select_field_id, $date_field_id ) < 1 || count( $text_field_ids ) === 0 ) {
+			throw new RuntimeException( 'The materialization suite needs number, select, and date fields on the primary collection.' );
+		}
+
+		$index = new FieldValueIndex();
+		if ( ! $index->install() ) {
+			throw new RuntimeException( 'This host cannot use the field-value index table, so the materialization suite cannot run.' );
+		}
+		$index->rebuild_collection( $primary_collection_id );
+
+		$this->assert_materialization_parity(
+			$index,
+			$primary_collection_id,
+			$primary_slug,
+			$number_field_id,
+			$select_field_id,
+			$date_field_id,
+			$filter_minimum
+		);
+		$this->assert_materialization_search_parity(
+			$index,
+			$primary_collection_id,
+			$primary_slug,
+			$text_field_ids,
+			$search_term,
+			$number_field_id,
+			$select_field_id,
+			$filter_minimum
+		);
+		if ( $relation_field_id > 0 && $relation_target_id > 0 ) {
+			$this->assert_materialization_relation_parity(
+				$index,
+				$primary_collection_id,
+				$primary_slug,
+				$relation_field_id,
+				$relation_target_id
+			);
+		}
+
+		$write_row_ids       = array_slice( $primary_row_ids, 0, min( self::MIGRATION_CAP_ROWS, count( $primary_row_ids ) ) );
+		$single_write_row_id = $write_row_ids[0] ?? $primary_row_ids[0];
+
+		$scenarios = array(
+			'mat_filter_two_fields_postmeta'         => array(
+				'label' => 'Field values: postmeta two-field filter IDs',
+				'run'   => fn() => $this->postmeta_filter_ids(
+					$primary_collection_id,
+					$primary_slug,
+					$number_field_id,
+					$filter_minimum,
+					$select_field_id,
+					'stable',
+					50
+				),
+			),
+			'mat_filter_two_fields_sidecar'          => array(
+				'label' => 'Field values: sidecar two-field filter IDs',
+				'run'   => fn() => $index->query_two_field_filter_ids(
+					$primary_collection_id,
+					$number_field_id,
+					$filter_minimum,
+					$select_field_id,
+					'stable',
+					50
+				),
+			),
+			'mat_sort_date_postmeta'                 => array(
+				'label' => 'Field values: postmeta date sort IDs',
+				'run'   => fn() => $this->postmeta_date_sort_ids( $primary_slug, $date_field_id, 50 ),
+			),
+			'mat_sort_date_sidecar'                  => array(
+				'label' => 'Field values: sidecar date sort IDs',
+				'run'   => fn() => $index->query_date_sort_ids( $primary_collection_id, $date_field_id, 50 ),
+			),
+			'mat_sort_date_filtered_postmeta'        => array(
+				'label' => 'Field values: postmeta filtered date sort IDs',
+				'run'   => fn() => $this->postmeta_date_sort_filtered_ids(
+					$primary_slug,
+					$date_field_id,
+					$number_field_id,
+					$filter_minimum,
+					$select_field_id,
+					'stable',
+					50
+				),
+			),
+			'mat_sort_date_filtered_sidecar'         => array(
+				'label' => 'Field values: sidecar filtered date sort IDs',
+				'run'   => fn() => $index->query_date_sort_filtered_ids(
+					$primary_collection_id,
+					$date_field_id,
+					$number_field_id,
+					$filter_minimum,
+					$select_field_id,
+					'stable',
+					50
+				),
+			),
+			'mat_search_text_postmeta'               => array(
+				'label' => 'Field values: postmeta text search IDs',
+				'run'   => fn() => $this->postmeta_text_search_ids( $primary_slug, $text_field_ids, $search_term, 50 ),
+			),
+			'mat_search_text_sidecar'                => array(
+				'label' => 'Field values: sidecar text search IDs',
+				'run'   => fn() => $index->query_text_search_ids( $primary_collection_id, $text_field_ids, $search_term, 50 ),
+			),
+			'mat_search_text_filtered_postmeta'      => array(
+				'label' => 'Field values: postmeta filtered text search IDs',
+				'run'   => fn() => $this->postmeta_text_search_filtered_ids(
+					$primary_slug,
+					$text_field_ids,
+					$search_term,
+					$number_field_id,
+					$filter_minimum,
+					$select_field_id,
+					'stable',
+					50
+				),
+			),
+			'mat_search_text_filtered_sidecar'       => array(
+				'label' => 'Field values: sidecar filtered text search IDs',
+				'run'   => fn() => $index->query_text_search_filtered_ids(
+					$primary_collection_id,
+					$text_field_ids,
+					$search_term,
+					$number_field_id,
+					$filter_minimum,
+					$select_field_id,
+					'stable',
+					50
+				),
+			),
+			'mat_rollup_sum_postmeta'                => array(
+				'label' => 'Field values: postmeta whole-collection sum',
+				'run'   => fn() => $this->postmeta_sum_number( $primary_slug, $number_field_id ),
+			),
+			'mat_rollup_sum_sidecar'                 => array(
+				'label' => 'Field values: sidecar whole-collection sum',
+				'run'   => fn() => $index->aggregate_number( $primary_collection_id, $number_field_id, 'sum' ),
+			),
+			'mat_rollup_count_postmeta'              => array(
+				'label' => 'Field values: postmeta whole-collection count',
+				'run'   => fn() => $this->postmeta_count_text( $primary_slug, $select_field_id, 'stable' ),
+			),
+			'mat_rollup_count_sidecar'               => array(
+				'label' => 'Field values: sidecar whole-collection count',
+				'run'   => fn() => $index->count_text_value( $primary_collection_id, $select_field_id, 'stable' ),
+			),
+			'mat_filter_response_sanity_postmeta'    => array(
+				'label' => 'Field values: postmeta filter plus REST response',
+				'run'   => fn() => $this->rest_request(
+					'GET',
+					'/cortext/v1/rows',
+					array(
+						'collection' => $primary_collection_id,
+						'page'       => 1,
+						'per_page'   => 50,
+						'filters'    => $this->materialization_filter_tree( $number_field_id, $select_field_id, $filter_minimum ),
+					)
+				),
+			),
+			'mat_filter_response_sanity_sidecar'     => array(
+				'label' => 'Field values: sidecar IDs plus REST response',
+				'run'   => fn() => $this->rest_request(
+					'GET',
+					'/cortext/v1/rows',
+					array(
+						'collection' => $primary_collection_id,
+						'include'    => $index->query_two_field_filter_ids(
+							$primary_collection_id,
+							$number_field_id,
+							$filter_minimum,
+							$select_field_id,
+							'stable',
+							50
+						),
+						'per_page'   => 50,
+					)
+				),
+			),
+			'mat_write_incremental_postmeta'         => array(
+				'label'   => 'Field values: postmeta 1000 sequential updates',
+				'prepare' => fn() => $this->prepare_materialization_writes( $write_row_ids, $number_field_id, 1000.0, $index, false ),
+				'run'     => fn() => $this->run_materialization_writes( $write_row_ids, $number_field_id, 2000.0, $index, false ),
+			),
+			'mat_write_incremental_sidecar'          => array(
+				'label'   => 'Field values: postmeta and sidecar 1000 sequential updates',
+				'prepare' => fn() => $this->prepare_materialization_writes( $write_row_ids, $number_field_id, 1000.0, $index, true ),
+				'run'     => fn() => $this->run_materialization_writes( $write_row_ids, $number_field_id, 2000.0, $index, true ),
+			),
+			'mat_write_sidecar_only'                 => array(
+				'label'   => 'Field values: sidecar reindex for 1000 updates',
+				'prepare' => fn() => $this->prepare_materialization_writes( $write_row_ids, $number_field_id, 2000.0, $index, false ),
+				'run'     => fn() => $this->run_materialization_sidecar_writes( $write_row_ids, $number_field_id, $index ),
+			),
+			'mat_write_sidecar_known_value'          => array(
+				'label'   => 'Field values: sidecar known-value 1000 updates',
+				'prepare' => fn() => $this->prepare_materialization_writes( $write_row_ids, $number_field_id, 3000.0, $index, false ),
+				'run'     => fn() => $this->run_materialization_sidecar_known_writes( $write_row_ids, $number_field_id, 4000.0, $primary_collection_id, $index ),
+			),
+			'mat_write_store_sidecar'                => array(
+				'label'   => 'Field values: FieldValueStore 1000 updates',
+				'prepare' => fn() => $this->prepare_materialization_writes( $write_row_ids, $number_field_id, 4000.0, $index, true ),
+				'run'     => fn() => $this->run_materialization_store_writes( $write_row_ids, $number_field_id, 5000.0, $primary_collection_id, $index ),
+			),
+			'mat_single_write_postmeta'              => array(
+				'label'   => 'Field values: single postmeta scalar update',
+				'prepare' => fn() => $this->prepare_materialization_writes( array( $single_write_row_id ), $number_field_id, 6000.0, $index, false ),
+				'run'     => fn() => $this->run_materialization_single_postmeta_write( $single_write_row_id, $number_field_id, 7000.0 ),
+			),
+			'mat_single_write_store_sidecar'         => array(
+				'label'   => 'Field values: single FieldValueStore scalar update',
+				'prepare' => fn() => $this->prepare_materialization_writes( array( $single_write_row_id ), $number_field_id, 7000.0, $index, true ),
+				'run'     => fn() => $this->run_materialization_store_writes( array( $single_write_row_id ), $number_field_id, 8000.0, $primary_collection_id, $index ),
+			),
+			'mat_single_rest_write_sidecar_disabled' => array(
+				'label'   => 'Field values: REST scalar update with sidecar off',
+				'prepare' => fn() => $this->prepare_materialization_writes( array( $single_write_row_id ), $number_field_id, 8000.0, $index, true ),
+				'run'     => fn() => $this->run_materialization_rest_write( $primary_collection_id, $single_write_row_id, $number_field_id, 9000.0, false ),
+			),
+			'mat_single_rest_write_sidecar_enabled'  => array(
+				'label'   => 'Field values: REST scalar update with sidecar on',
+				'prepare' => fn() => $this->prepare_materialization_writes( array( $single_write_row_id ), $number_field_id, 9000.0, $index, true ),
+				'run'     => fn() => $this->run_materialization_rest_write( $primary_collection_id, $single_write_row_id, $number_field_id, 10000.0, true ),
+			),
+			'mat_rebuild_full'                       => array(
+				'label'  => 'Field values: full sidecar rebuild',
+				'single' => true,
+				'run'    => fn() => $index->rebuild_collection( $primary_collection_id ),
+			),
+		);
+
+		if ( $relation_field_id > 0 && $relation_target_id > 0 ) {
+			$scenarios['mat_relation_contains_postmeta'] = array(
+				'label' => 'Field values: postmeta relation lookup IDs',
+				'run'   => fn() => $this->postmeta_relation_contains_ids( $primary_slug, $relation_field_id, $relation_target_id, 50 ),
+			);
+			$scenarios['mat_relation_contains_sidecar']  = array(
+				'label' => 'Field values: sidecar relation lookup IDs',
+				'run'   => fn() => $index->query_relation_contains_ids( $primary_collection_id, $relation_field_id, $relation_target_id, 50 ),
+			);
+		}
+
+		return $scenarios;
+	}
+
+	private function assert_materialization_parity(
+		FieldValueIndex $index,
+		int $collection_id,
+		string $slug,
+		int $number_field_id,
+		int $select_field_id,
+		int $date_field_id,
+		float $filter_minimum
+	): void {
+		$postmeta_filter = $this->postmeta_filter_ids( $collection_id, $slug, $number_field_id, $filter_minimum, $select_field_id, 'stable', 50 );
+		$sidecar_filter  = $index->query_two_field_filter_ids( $collection_id, $number_field_id, $filter_minimum, $select_field_id, 'stable', 50 );
+		if ( $postmeta_filter !== $sidecar_filter ) {
+			throw new RuntimeException( 'Postmeta and sidecar returned different IDs for the two-field filter scenario.' );
+		}
+
+		$postmeta_sort = $this->postmeta_date_sort_ids( $slug, $date_field_id, 50 );
+		$sidecar_sort  = $index->query_date_sort_ids( $collection_id, $date_field_id, 50 );
+		if ( $postmeta_sort !== $sidecar_sort ) {
+			throw new RuntimeException( 'Postmeta and sidecar returned different IDs for the date sort scenario.' );
+		}
+
+		$postmeta_filtered_sort = $this->postmeta_date_sort_filtered_ids( $slug, $date_field_id, $number_field_id, $filter_minimum, $select_field_id, 'stable', 50 );
+		$sidecar_filtered_sort  = $index->query_date_sort_filtered_ids( $collection_id, $date_field_id, $number_field_id, $filter_minimum, $select_field_id, 'stable', 50 );
+		if ( $postmeta_filtered_sort !== $sidecar_filtered_sort ) {
+			throw new RuntimeException( 'Postmeta and sidecar returned different IDs for the filtered date sort scenario.' );
+		}
+
+		$postmeta_sum = $this->postmeta_sum_number( $slug, $number_field_id );
+		$sidecar_sum  = $index->aggregate_number( $collection_id, $number_field_id, 'sum' );
+		if ( abs( (float) $postmeta_sum - (float) $sidecar_sum ) > 0.001 ) {
+			throw new RuntimeException( 'Postmeta and sidecar returned different sums.' );
+		}
+
+		$postmeta_count = $this->postmeta_count_text( $slug, $select_field_id, 'stable' );
+		$sidecar_count  = $index->count_text_value( $collection_id, $select_field_id, 'stable' );
+		if ( $postmeta_count !== $sidecar_count ) {
+			throw new RuntimeException( 'Postmeta and sidecar returned different counts.' );
+		}
+	}
+
+	private function assert_materialization_search_parity(
+		FieldValueIndex $index,
+		int $collection_id,
+		string $slug,
+		array $field_ids,
+		string $term,
+		int $number_field_id,
+		int $select_field_id,
+		float $filter_minimum
+	): void {
+		$postmeta_search = $this->postmeta_text_search_ids( $slug, $field_ids, $term, 50 );
+		$sidecar_search  = $index->query_text_search_ids( $collection_id, $field_ids, $term, 50 );
+		if ( $postmeta_search !== $sidecar_search ) {
+			throw new RuntimeException( 'Postmeta and sidecar returned different IDs for the text search scenario.' );
+		}
+
+		$postmeta_filtered_search = $this->postmeta_text_search_filtered_ids( $slug, $field_ids, $term, $number_field_id, $filter_minimum, $select_field_id, 'stable', 50 );
+		$sidecar_filtered_search  = $index->query_text_search_filtered_ids( $collection_id, $field_ids, $term, $number_field_id, $filter_minimum, $select_field_id, 'stable', 50 );
+		if ( $postmeta_filtered_search !== $sidecar_filtered_search ) {
+			throw new RuntimeException( 'Postmeta and sidecar returned different IDs for the filtered text search scenario.' );
+		}
+	}
+
+	private function assert_materialization_relation_parity(
+		FieldValueIndex $index,
+		int $collection_id,
+		string $slug,
+		int $field_id,
+		int $target_row_id
+	): void {
+		$postmeta_relation = $this->postmeta_relation_contains_ids( $slug, $field_id, $target_row_id, 50 );
+		$sidecar_relation  = $index->query_relation_contains_ids( $collection_id, $field_id, $target_row_id, 50 );
+		if ( $postmeta_relation !== $sidecar_relation ) {
+			throw new RuntimeException( 'Postmeta and sidecar returned different IDs for the relation lookup scenario.' );
+		}
+	}
+
+	private function materialization_text_field_ids( array $manifest, string $slug ): array {
+		$fields = $manifest['fields']['collections'][ $slug ] ?? array();
+		if ( ! is_array( $fields ) ) {
+			return array();
+		}
+
+		$field_ids = array();
+		foreach ( $fields as $field ) {
+			if ( ! is_array( $field ) ) {
+				continue;
+			}
+			if ( in_array( (string) ( $field['type'] ?? '' ), array( 'text', 'email', 'url' ), true ) ) {
+				$field_ids[] = (int) ( $field['id'] ?? 0 );
+			}
+		}
+
+		return array_values( array_filter( $field_ids ) );
+	}
+
+	private function postmeta_filter_ids(
+		int $collection_id,
+		string $slug,
+		int $number_field_id,
+		float $minimum,
+		int $select_field_id,
+		string $select_value,
+		int $limit
+	): array {
+		unset( $collection_id );
+		global $wpdb;
+
+		$post_type  = CollectionEntries::CPT_PREFIX . $slug;
+		$number_key = Relations::meta_key( $number_field_id );
+		$select_key = Relations::meta_key( $select_field_id );
+
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Benchmark times the raw postmeta ID lookup.
+		$ids = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT p.ID
+				FROM {$wpdb->posts} AS p
+				INNER JOIN {$wpdb->postmeta} AS n ON n.post_id = p.ID AND n.meta_key = %s
+				INNER JOIN {$wpdb->postmeta} AS s ON s.post_id = p.ID AND s.meta_key = %s
+				WHERE p.post_type = %s
+				AND p.post_status IN ('draft', 'private', 'publish')
+				AND CAST(n.meta_value AS DECIMAL(20,6)) > %f
+				AND s.meta_value = %s
+				ORDER BY p.ID ASC
+				LIMIT %d",
+				$number_key,
+				$select_key,
+				$post_type,
+				$minimum,
+				$select_value,
+				$limit
+			)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+		return array_map( 'intval', $ids );
+	}
+
+	private function postmeta_text_search_ids( string $slug, array $field_ids, string $term, int $limit ): array {
+		$field_keys = array_map(
+			static fn( int $field_id ): string => Relations::meta_key( $field_id ),
+			array_values( array_filter( array_map( 'intval', $field_ids ) ) )
+		);
+		if ( count( $field_keys ) === 0 ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		$post_type    = CollectionEntries::CPT_PREFIX . $slug;
+		$placeholders = implode( ', ', array_fill( 0, count( $field_keys ), '%s' ) );
+		$like         = '%' . $wpdb->esc_like( $term ) . '%';
+		$args         = array_merge( $field_keys, array( $post_type, $like, $limit ) );
+
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Benchmark times the raw postmeta text search lookup.
+		$ids = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT DISTINCT p.ID
+				FROM {$wpdb->posts} AS p
+				INNER JOIN {$wpdb->postmeta} AS pm ON pm.post_id = p.ID AND pm.meta_key IN ({$placeholders})
+				WHERE p.post_type = %s
+				AND p.post_status IN ('draft', 'private', 'publish')
+				AND pm.meta_value LIKE %s
+				ORDER BY p.ID ASC
+				LIMIT %d",
+				...$args
+			)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
+
+		return array_map( 'intval', $ids );
+	}
+
+	private function postmeta_text_search_filtered_ids(
+		string $slug,
+		array $field_ids,
+		string $term,
+		int $number_field_id,
+		float $minimum,
+		int $select_field_id,
+		string $select_value,
+		int $limit
+	): array {
+		$field_keys = array_map(
+			static fn( int $field_id ): string => Relations::meta_key( $field_id ),
+			array_values( array_filter( array_map( 'intval', $field_ids ) ) )
+		);
+		if ( count( $field_keys ) === 0 ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		$post_type    = CollectionEntries::CPT_PREFIX . $slug;
+		$number_key   = Relations::meta_key( $number_field_id );
+		$select_key   = Relations::meta_key( $select_field_id );
+		$placeholders = implode( ', ', array_fill( 0, count( $field_keys ), '%s' ) );
+		$like         = '%' . $wpdb->esc_like( $term ) . '%';
+		$args         = array_merge( $field_keys, array( $number_key, $select_key, $post_type, $like, $minimum, $select_value, $limit ) );
+
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Benchmark times the raw postmeta filtered text search lookup.
+		$ids = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT DISTINCT p.ID
+				FROM {$wpdb->posts} AS p
+				INNER JOIN {$wpdb->postmeta} AS pm ON pm.post_id = p.ID AND pm.meta_key IN ({$placeholders})
+				INNER JOIN {$wpdb->postmeta} AS n ON n.post_id = p.ID AND n.meta_key = %s
+				INNER JOIN {$wpdb->postmeta} AS s ON s.post_id = p.ID AND s.meta_key = %s
+				WHERE p.post_type = %s
+				AND p.post_status IN ('draft', 'private', 'publish')
+				AND pm.meta_value LIKE %s
+				AND CAST(n.meta_value AS DECIMAL(20,6)) > %f
+				AND s.meta_value = %s
+				ORDER BY p.ID ASC
+				LIMIT %d",
+				...$args
+			)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
+
+		return array_map( 'intval', $ids );
+	}
+
+	private function postmeta_date_sort_ids( string $slug, int $date_field_id, int $limit ): array {
+		global $wpdb;
+
+		$post_type = CollectionEntries::CPT_PREFIX . $slug;
+		$date_key  = Relations::meta_key( $date_field_id );
+
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Benchmark times the raw postmeta sort lookup.
+		$ids = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT p.ID
+				FROM {$wpdb->posts} AS p
+				INNER JOIN {$wpdb->postmeta} AS d ON d.post_id = p.ID AND d.meta_key = %s
+				WHERE p.post_type = %s
+				AND p.post_status IN ('draft', 'private', 'publish')
+				AND d.meta_value != ''
+				ORDER BY d.meta_value ASC, p.ID ASC
+				LIMIT %d",
+				$date_key,
+				$post_type,
+				$limit
+			)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+		return array_map( 'intval', $ids );
+	}
+
+	private function postmeta_date_sort_filtered_ids(
+		string $slug,
+		int $date_field_id,
+		int $number_field_id,
+		float $minimum,
+		int $select_field_id,
+		string $select_value,
+		int $limit
+	): array {
+		global $wpdb;
+
+		$post_type  = CollectionEntries::CPT_PREFIX . $slug;
+		$date_key   = Relations::meta_key( $date_field_id );
+		$number_key = Relations::meta_key( $number_field_id );
+		$select_key = Relations::meta_key( $select_field_id );
+
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Benchmark times the raw postmeta filtered sort lookup.
+		$ids = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT p.ID
+				FROM {$wpdb->posts} AS p
+				INNER JOIN {$wpdb->postmeta} AS d ON d.post_id = p.ID AND d.meta_key = %s
+				INNER JOIN {$wpdb->postmeta} AS n ON n.post_id = p.ID AND n.meta_key = %s
+				INNER JOIN {$wpdb->postmeta} AS s ON s.post_id = p.ID AND s.meta_key = %s
+				WHERE p.post_type = %s
+				AND p.post_status IN ('draft', 'private', 'publish')
+				AND d.meta_value != ''
+				AND CAST(n.meta_value AS DECIMAL(20,6)) > %f
+				AND s.meta_value = %s
+				ORDER BY d.meta_value ASC, p.ID ASC
+				LIMIT %d",
+				$date_key,
+				$number_key,
+				$select_key,
+				$post_type,
+				$minimum,
+				$select_value,
+				$limit
+			)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+		return array_map( 'intval', $ids );
+	}
+
+	private function postmeta_relation_contains_ids( string $slug, int $relation_field_id, int $target_row_id, int $limit ): array {
+		global $wpdb;
+
+		$post_type = CollectionEntries::CPT_PREFIX . $slug;
+		$key       = Relations::meta_key( $relation_field_id );
+
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Benchmark times the raw postmeta relation lookup.
+		$ids = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT p.ID
+				FROM {$wpdb->posts} AS p
+				INNER JOIN {$wpdb->postmeta} AS r ON r.post_id = p.ID AND r.meta_key = %s
+				WHERE p.post_type = %s
+				AND p.post_status IN ('draft', 'private', 'publish')
+				AND r.meta_value = %s
+				ORDER BY p.ID ASC
+				LIMIT %d",
+				$key,
+				$post_type,
+				(string) $target_row_id,
+				$limit
+			)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+		return array_map( 'intval', $ids );
+	}
+
+	private function postmeta_sum_number( string $slug, int $field_id ): float {
+		global $wpdb;
+
+		$post_type = CollectionEntries::CPT_PREFIX . $slug;
+		$key       = Relations::meta_key( $field_id );
+
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Benchmark times the raw postmeta aggregate lookup.
+		return (float) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COALESCE(SUM(CAST(pm.meta_value AS DECIMAL(20,4))), 0)
+				FROM {$wpdb->posts} AS p
+				INNER JOIN {$wpdb->postmeta} AS pm ON pm.post_id = p.ID AND pm.meta_key = %s
+				WHERE p.post_type = %s
+				AND p.post_status IN ('draft', 'private', 'publish')",
+				$key,
+				$post_type
+			)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	}
+
+	private function postmeta_count_text( string $slug, int $field_id, string $value ): int {
+		global $wpdb;
+
+		$post_type = CollectionEntries::CPT_PREFIX . $slug;
+		$key       = Relations::meta_key( $field_id );
+
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Benchmark times the raw postmeta aggregate lookup.
+		return (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COUNT(DISTINCT p.ID)
+				FROM {$wpdb->posts} AS p
+				INNER JOIN {$wpdb->postmeta} AS pm ON pm.post_id = p.ID AND pm.meta_key = %s
+				WHERE p.post_type = %s
+				AND p.post_status IN ('draft', 'private', 'publish')
+				AND pm.meta_value = %s",
+				$key,
+				$post_type,
+				$value
+			)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	}
+
+	private function materialization_filter_tree( int $number_field_id, int $select_field_id, float $minimum ): array {
+		return array(
+			array(
+				'relation' => 'AND',
+				'filters'  => array(
+					array(
+						'field'    => Relations::meta_key( $number_field_id ),
+						'operator' => 'greaterThan',
+						'value'    => (string) $minimum,
+					),
+					array(
+						'field'    => Relations::meta_key( $select_field_id ),
+						'operator' => 'is',
+						'value'    => 'stable',
+					),
+				),
+			),
+		);
+	}
+
+	private function prepare_materialization_writes( array $row_ids, int $field_id, float $base_value, FieldValueIndex $index, bool $sync_index ): void {
+		FieldValueIndex::suspend_sync();
+		try {
+			foreach ( array_values( $row_ids ) as $offset => $row_id ) {
+				update_post_meta( (int) $row_id, Relations::meta_key( $field_id ), (string) ( $base_value + $offset ) );
+			}
+		} finally {
+			FieldValueIndex::resume_sync();
+		}
+
+		if ( $sync_index ) {
+			foreach ( $row_ids as $row_id ) {
+				$index->index_row_field( (int) $row_id, $field_id );
+			}
+		}
+	}
+
+	private function run_materialization_writes( array $row_ids, int $field_id, float $base_value, FieldValueIndex $index, bool $sync_index ): int {
+		FieldValueIndex::suspend_sync();
+		try {
+			foreach ( array_values( $row_ids ) as $offset => $row_id ) {
+				update_post_meta( (int) $row_id, Relations::meta_key( $field_id ), (string) ( $base_value + $offset ) );
+			}
+		} finally {
+			FieldValueIndex::resume_sync();
+		}
+
+		if ( $sync_index ) {
+			foreach ( $row_ids as $row_id ) {
+				$index->index_row_field( (int) $row_id, $field_id );
+			}
+		}
+
+		return count( $row_ids );
+	}
+
+	private function run_materialization_sidecar_writes( array $row_ids, int $field_id, FieldValueIndex $index ): int {
+		foreach ( $row_ids as $row_id ) {
+			$index->index_row_field( (int) $row_id, $field_id );
+		}
+
+		return count( $row_ids );
+	}
+
+	private function run_materialization_single_postmeta_write( int $row_id, int $field_id, float $value ): int {
+		FieldValueIndex::suspend_sync();
+		try {
+			update_post_meta( $row_id, Relations::meta_key( $field_id ), (string) $value );
+		} finally {
+			FieldValueIndex::resume_sync();
+		}
+
+		return 1;
+	}
+
+	private function run_materialization_sidecar_known_writes( array $row_ids, int $field_id, float $base_value, int $collection_id, FieldValueIndex $index ): int {
+		foreach ( array_values( $row_ids ) as $offset => $row_id ) {
+			$index->index_known_value( (int) $row_id, $field_id, 'number', (string) ( $base_value + $offset ), $collection_id, 'private' );
+		}
+
+		return count( $row_ids );
+	}
+
+	private function run_materialization_rest_write( int $collection_id, int $row_id, int $field_id, float $value, bool $sidecar_enabled ): mixed {
+		$disable_sidecar = static fn(): bool => false;
+		if ( ! $sidecar_enabled ) {
+			add_filter( 'cortext_field_values_index_enabled', $disable_sidecar );
+		}
+
+		try {
+			return $this->rest_request(
+				'POST',
+				"/cortext/v1/collections/{$collection_id}/rows/{$row_id}",
+				array(
+					'collection_id' => $collection_id,
+					'row_id'        => $row_id,
+					'field'         => Relations::meta_key( $field_id ),
+					'value'         => (string) $value,
+				)
+			);
+		} finally {
+			if ( ! $sidecar_enabled ) {
+				remove_filter( 'cortext_field_values_index_enabled', $disable_sidecar );
+			}
+		}
+	}
+
+	private function run_materialization_store_writes( array $row_ids, int $field_id, float $base_value, int $collection_id, FieldValueIndex $index ): int {
+		$store = new FieldValueStore( $index );
+		foreach ( array_values( $row_ids ) as $offset => $row_id ) {
+			$store->write_value( (int) $row_id, $field_id, 'number', (string) ( $base_value + $offset ), $collection_id, 'private' );
+		}
+
+		return count( $row_ids );
+	}
+
+	/**
 	 * Builds the summary for a scenario split into steps. User-facing latency
 	 * is the sum of step latencies, SQL queries are summed, and memory uses the
 	 * highest step peak. Per-step fields only expose latency; SQL and memory
@@ -1636,8 +2489,9 @@ final class PerfBench {
 	 *
 	 * @param array<string,mixed> $manifest    Dataset manifest.
 	 * @param string              $budget_path Budget file path.
+	 * @param string              $suite       Benchmark suite.
 	 */
-	private static function benchmark_config_hash( array $manifest, string $budget_path ): string {
+	private static function benchmark_config_hash( array $manifest, string $budget_path, string $suite = 'default' ): string {
 		$config = isset( $manifest['config'] ) && is_array( $manifest['config'] )
 			? self::normalize_int_map( $manifest['config'] )
 			: array();
@@ -1646,6 +2500,7 @@ final class PerfBench {
 			(string) wp_json_encode(
 				array(
 					'seed'        => (string) ( $manifest['seed'] ?? self::DATASET_SEED ),
+					'suite'       => $suite,
 					'seed_args'   => $config,
 					'budget_path' => self::relative_local_path( $budget_path ),
 				),
