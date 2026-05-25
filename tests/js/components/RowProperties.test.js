@@ -241,9 +241,12 @@ describe( 'RowProperties', () => {
 			</RowMutationContext.Provider>
 		);
 
-		expect( screen.getByRole( 'textbox', { name: 'Score' } ) ).toHaveValue(
-			'$42'
-		);
+		const score = screen.getByRole( 'textbox', { name: 'Score' } );
+		expect( score ).toHaveValue( '$42' );
+
+		fireEvent.focus( score );
+
+		expect( score ).toHaveValue( '42' );
 	} );
 
 	it( 'shows rich number displays until the value is edited', () => {

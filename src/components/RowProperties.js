@@ -22,6 +22,7 @@ import {
 	useCallback,
 	useContext,
 	useEffect,
+	useLayoutEffect,
 	useMemo,
 	useRef,
 	useState,
@@ -313,7 +314,7 @@ function EditableNumberPropertyText( { label, value, format, onChange } ) {
 		}
 	}, [ isFocused, textValue, value ] );
 
-	useEffect( () => {
+	useLayoutEffect( () => {
 		if ( isFocused ) {
 			inputRef.current?.focus();
 			inputRef.current?.select();
@@ -381,7 +382,11 @@ function EditableNumberPropertyText( { label, value, format, onChange } ) {
 				setDraft( committedTextRef.current );
 			} }
 			onChange={ ( event ) => commitDraft( event.currentTarget.value ) }
-			onFocus={ () => {
+			onFocus={ ( event ) => {
+				// The resting value may include formatting (for example
+				// thousands separators). Swap the DOM value immediately so
+				// keyboard input after focus edits the raw number.
+				event.currentTarget.value = textValue;
 				setDraft( textValue );
 				setIsFocused( true );
 			} }
