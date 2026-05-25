@@ -47,10 +47,8 @@ function runNodeAnimation( node, keyframes, options ) {
 }
 
 /**
- * Single row in the recents list. Pulls display copy through
- * `useDocumentRecord` so this component stays kind-blind: the descriptor
- * decides the icon and the type label, and the row formats the title with
- * the collection context when the record carries one (i.e. rows).
+ * One item in Recents. The descriptor supplies the icon and type label, while
+ * this row only adds collection context when the recent item is a row.
  *
  * @param {Object}   props
  * @param {Object}   props.recent     Recent activity record from the server.

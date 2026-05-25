@@ -158,7 +158,7 @@ describe( 'SidebarRecents animation', () => {
 		).toBeInTheDocument();
 	} );
 
-	it( 'shows a collection recent with the table glyph', () => {
+	it( 'shows a collection recent with the table icon', () => {
 		mockRecents = [ collectionRecent( 33, 'Library' ) ];
 
 		const { container } = render( <SidebarRecents /> );
@@ -169,5 +169,22 @@ describe( 'SidebarRecents animation', () => {
 		expect(
 			container.querySelector( '[data-testid="icon-table"]' )
 		).toBeInTheDocument();
+	} );
+
+	it( 'shows a row recent with its custom icon when set', () => {
+		// A row that has a `cortext_document_icon` stored renders that glyph
+		// instead of the generic list-item fallback.
+		const row = rowRecent( 11, 'Ada Lovelace', 'People' );
+		row.icon = JSON.stringify( { type: 'wp', name: 'people' } );
+		mockRecents = [ row ];
+
+		const { container } = render( <SidebarRecents /> );
+
+		expect(
+			container.querySelector( '[data-testid="page-icon"]' )
+		).toBeInTheDocument();
+		expect(
+			container.querySelector( '[data-testid="icon-list-item"]' )
+		).toBeNull();
 	} );
 } );
