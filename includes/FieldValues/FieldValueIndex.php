@@ -26,7 +26,7 @@ final class FieldValueIndex {
 	public const STATUS_STALE       = 'stale';
 	public const STATUS_DISABLED    = 'disabled';
 
-	private const SCHEMA_VERSION         = 1;
+	private const SCHEMA_VERSION         = 2;
 	private const STATUS_OPTION          = 'cortext_field_values_index_status';
 	private const STATUS_ERROR_OPTION    = 'cortext_field_values_index_error';
 	private const SCHEMA_VERSION_OPTION  = 'cortext_field_values_schema_version';
@@ -398,14 +398,15 @@ final class FieldValueIndex {
 		$rows        = array();
 		foreach ( $this->normalized_value_rows( $field_id, $field_type, $value, $post_status ) as $row ) {
 			$rows[] = array(
-				'row_id'        => $row_id,
-				'collection_id' => $collection_id,
-				'field_id'      => $row['field_id'],
-				'value_seq'     => $row['value_seq'],
-				'value_text'    => $row['value_text'],
-				'value_number'  => $row['value_number'],
-				'value_date'    => $row['value_date'],
-				'post_status'   => $row['post_status'],
+				'row_id'            => $row_id,
+				'collection_id'     => $collection_id,
+				'field_id'          => $row['field_id'],
+				'value_seq'         => $row['value_seq'],
+				'value_text'        => $row['value_text'],
+				'value_text_length' => $row['value_text_length'],
+				'value_number'      => $row['value_number'],
+				'value_date'        => $row['value_date'],
+				'post_status'       => $row['post_status'],
 			);
 		}
 
@@ -433,7 +434,7 @@ final class FieldValueIndex {
 			$result = $wpdb->replace(
 				$this->table_name(),
 				$rows[0],
-				array( '%d', '%d', '%d', '%d', '%s', '%f', '%s', '%s' )
+				array( '%d', '%d', '%d', '%d', '%s', '%d', '%f', '%s', '%s' )
 			);
 			if ( false === $result ) {
 				$this->mark_stale( __( 'Cortext could not write to the field-value index.', 'cortext' ) );
@@ -460,7 +461,7 @@ final class FieldValueIndex {
 			$result = $wpdb->insert(
 				$this->table_name(),
 				$row,
-				array( '%d', '%d', '%d', '%d', '%s', '%f', '%s', '%s' )
+				array( '%d', '%d', '%d', '%d', '%s', '%d', '%f', '%s', '%s' )
 			);
 			if ( false === $result ) {
 				$this->mark_stale( __( 'Cortext could not write to the field-value index.', 'cortext' ) );
@@ -873,12 +874,13 @@ final class FieldValueIndex {
 			}
 
 			$rows[] = array(
-				'field_id'     => $field_id,
-				'value_seq'    => $seq,
-				'value_text'   => substr( $text, 0, self::TEXT_INDEX_LENGTH ),
-				'value_number' => $number,
-				'value_date'   => $date,
-				'post_status'  => $post_status,
+				'field_id'          => $field_id,
+				'value_seq'         => $seq,
+				'value_text'        => substr( $text, 0, self::TEXT_INDEX_LENGTH ),
+				'value_text_length' => strlen( $text ),
+				'value_number'      => $number,
+				'value_date'        => $date,
+				'post_status'       => $post_status,
 			);
 			++$seq;
 		}
@@ -900,11 +902,12 @@ final class FieldValueIndex {
 			field_id bigint(20) unsigned NOT NULL,
 			value_seq smallint(5) unsigned NOT NULL DEFAULT 0,
 			value_text varchar(191) DEFAULT NULL,
-			value_number decimal(20,4) DEFAULT NULL,
+			value_text_length int(10) unsigned DEFAULT NULL,
+			value_number decimal(20,6) DEFAULT NULL,
 			value_date datetime DEFAULT NULL,
 			post_status varchar(20) NOT NULL DEFAULT 'publish',
 			PRIMARY KEY  (row_id, field_id, value_seq),
-			KEY collection_field_text (collection_id, field_id, value_text, row_id),
+			KEY collection_field_text_len (collection_id, field_id, value_text, value_text_length, row_id),
 			KEY collection_field_number (collection_id, field_id, value_number, row_id),
 			KEY collection_field_date (collection_id, field_id, value_date, row_id),
 			KEY collection_row (collection_id, row_id)
@@ -1023,14 +1026,15 @@ final class FieldValueIndex {
 
 		foreach ( $this->normalized_value_rows( $field_id, $field_type, $stored, $post_status ) as $row ) {
 			$rows[] = array(
-				'row_id'        => $row_id,
-				'collection_id' => $collection_id,
-				'field_id'      => $row['field_id'],
-				'value_seq'     => $row['value_seq'],
-				'value_text'    => $row['value_text'],
-				'value_number'  => $row['value_number'],
-				'value_date'    => $row['value_date'],
-				'post_status'   => $row['post_status'],
+				'row_id'            => $row_id,
+				'collection_id'     => $collection_id,
+				'field_id'          => $row['field_id'],
+				'value_seq'         => $row['value_seq'],
+				'value_text'        => $row['value_text'],
+				'value_text_length' => $row['value_text_length'],
+				'value_number'      => $row['value_number'],
+				'value_date'        => $row['value_date'],
+				'post_status'       => $row['post_status'],
 			);
 		}
 

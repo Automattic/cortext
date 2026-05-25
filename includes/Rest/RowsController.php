@@ -10,6 +10,7 @@ declare( strict_types=1 );
 namespace Cortext\Rest;
 
 use Cortext\Fields\FieldTypeConverter;
+use Cortext\FieldValues\FieldValueReadQuery;
 use Cortext\FieldValues\FieldValueStore;
 use Cortext\PostType\Collection;
 use Cortext\PostType\CollectionEntries;
@@ -369,7 +370,8 @@ final class RowsController {
 			return $filter_sql;
 		}
 
-		$search_where = $row_query->compile_search( (string) $request->get_param( 'search' ), $field_schema );
+		$search       = (string) $request->get_param( 'search' );
+		$search_where = $row_query->compile_search( $search, $field_schema );
 		$where_parts  = array_values( array_filter( array( $filter_sql['where'], $search_where ) ) );
 		$where_sql    = count( $where_parts ) > 0 ? '( ' . implode( ' AND ', $where_parts ) . ' )' : '';
 
@@ -379,25 +381,48 @@ final class RowsController {
 		$ctx->field_types = $this->field_types_map( $formatted_field_ids );
 		$multi_field_ids  = $this->multi_value_field_ids_from( $ctx->field_types );
 
-		$query_args = $this->build_query_args( $request, $slug );
-		$scope      = new RowsQueryScope(
-			$row_query,
+		$post_type      = CollectionEntries::CPT_PREFIX . $slug;
+		$sidecar_result = ( new FieldValueReadQuery() )->query_rows(
+			$collection_id,
+			$post_type,
 			$field_schema,
-			$where_sql,
-			$filter_sql['join'],
+			$request->get_param( 'filters' ),
 			$request->get_param( 'sort' ),
-			(string) $request->get_param( 'search' )
+			$search,
+			array_key_exists( 'include', $query_params ),
+			(int) $request->get_param( 'page' ),
+			(int) $request->get_param( 'per_page' )
 		);
-		$query      = $scope->run( $query_args );
+
+		if ( null !== $sidecar_result ) {
+			$posts       = $sidecar_result['posts'];
+			$total       = $sidecar_result['total'];
+			$total_pages = $sidecar_result['totalPages'];
+		} else {
+			$query_args = $this->build_query_args( $request, $slug );
+			$scope      = new RowsQueryScope(
+				$row_query,
+				$field_schema,
+				$where_sql,
+				$filter_sql['join'],
+				$request->get_param( 'sort' ),
+				$search
+			);
+			$query      = $scope->run( $query_args );
+
+			$posts       = $query->posts;
+			$total       = (int) $query->found_posts;
+			$total_pages = (int) $query->max_num_pages;
+		}
 
 		// Prime the user object cache once before mapping rows so per-row
 		// display name lookups in format_row hit the cache instead of
 		// running N+1 queries.
-		$this->prime_user_cache( $query->posts );
+		$this->prime_user_cache( $posts );
 
 		// Prime related rows once before formatting. Relation chips need post
 		// objects, and rollups need post meta.
-		$related_ids = $this->collect_related_row_ids( $query->posts, $formatted_field_ids, $ctx );
+		$related_ids = $this->collect_related_row_ids( $posts, $formatted_field_ids, $ctx );
 		if ( count( $related_ids ) > 0 ) {
 			_prime_post_caches( $related_ids, false, true );
 		}
@@ -406,7 +431,7 @@ final class RowsController {
 			function ( WP_Post $post ) use ( $formatted_field_ids, $multi_field_ids, $ctx ) {
 				return $this->format_row( $post, $formatted_field_ids, $multi_field_ids, $ctx );
 			},
-			$query->posts
+			$posts
 		);
 
 		$fields = $this->field_definitions( $field_ids );
@@ -414,8 +439,8 @@ final class RowsController {
 		return new WP_REST_Response(
 			array(
 				'rows'       => $rows,
-				'total'      => (int) $query->found_posts,
-				'totalPages' => (int) $query->max_num_pages,
+				'total'      => $total,
+				'totalPages' => $total_pages,
 				'collection' => $this->collection_definition( $collection, $slug ),
 				'fields'     => $fields,
 			),

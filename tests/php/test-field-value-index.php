@@ -41,6 +41,7 @@ final class Test_Field_Value_Index extends BaseTestCase {
 		$this->assertSame( '42.50', $number[0]['value_text'] );
 		$this->assertSame( '2026-05-23 00:00:00', $date[0]['value_date'] );
 		$this->assertSame( 191, strlen( $text[0]['value_text'] ) );
+		$this->assertSame( 220, $text[0]['value_text_length'] );
 	}
 
 	public function test_normalizes_multivalue_rows_with_stable_sequence(): void {
@@ -73,7 +74,7 @@ final class Test_Field_Value_Index extends BaseTestCase {
 		$reflection = new \ReflectionClass( FieldValueIndex::class );
 
 		update_option( 'cortext_field_values_index_status', FieldValueIndex::STATUS_READY, false );
-		update_option( 'cortext_field_values_schema_version', 1, false );
+		update_option( 'cortext_field_values_schema_version', 2, false );
 
 		$table_cache = $reflection->getProperty( 'table_exists_cache' );
 		$table_cache->setAccessible( true );
@@ -94,6 +95,20 @@ final class Test_Field_Value_Index extends BaseTestCase {
 			),
 			$pending['101:202']
 		);
+	}
+
+	public function test_ready_index_with_old_schema_cannot_read(): void {
+		$index      = new FieldValueIndex();
+		$reflection = new \ReflectionClass( FieldValueIndex::class );
+
+		update_option( 'cortext_field_values_index_status', FieldValueIndex::STATUS_READY, false );
+		update_option( 'cortext_field_values_schema_version', 1, false );
+
+		$table_cache = $reflection->getProperty( 'table_exists_cache' );
+		$table_cache->setAccessible( true );
+		$table_cache->setValue( null, array( $index->table_name() => true ) );
+
+		$this->assertFalse( $index->can_read() );
 	}
 
 	public function test_index_can_be_disabled_with_option_and_filter(): void {
