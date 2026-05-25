@@ -1,0 +1,78 @@
+@use "@wordpress/base-styles/colors" as *;
+@use "@wordpress/base-styles/variables" as *;
+
+// Opt the alpha notice out of root view transitions. Without this, the
+// initial `withViewTransition` dispatch in EntityRoute snapshots the whole
+// document (modal portal included) and the cross-fade makes the modal
+// visibly blink on first load. Named layers keep the overlay and frame out
+// of the root cross-fade; stable old/new opacity keeps the modal still
+// during the transition.
+.cortext-alpha-notice-overlay {
+	view-transition-name: cortext-alpha-notice-overlay;
+}
+
+.cortext-alpha-notice {
+	view-transition-name: cortext-alpha-notice-frame;
+
+	&__intro {
+		margin-top: 0;
+	}
+
+	&__list {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+	}
+
+	&__list li {
+		display: flex;
+		align-items: flex-start;
+		gap: 12px;
+		margin: 0;
+	}
+
+	&__icon {
+		display: inline-flex;
+		flex-shrink: 0;
+		margin-top: 2px;
+		color: var(--cortext-accent);
+	}
+
+	&__repo {
+		margin-top: 20px;
+		margin-bottom: 0;
+	}
+
+	&__footer {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 16px;
+		margin-top: 24px;
+		padding-top: 16px;
+		border-top: 1px solid #e0e0e0;
+	}
+}
+
+::view-transition-group(cortext-alpha-notice-overlay) {
+	z-index: 3;
+}
+
+::view-transition-group(cortext-alpha-notice-frame) {
+	z-index: 4;
+}
+
+::view-transition-old(cortext-alpha-notice-overlay),
+::view-transition-old(cortext-alpha-notice-frame) {
+	animation: none;
+	opacity: 0;
+}
+
+::view-transition-new(cortext-alpha-notice-overlay),
+::view-transition-new(cortext-alpha-notice-frame) {
+	animation: none;
+	opacity: 1;
+}

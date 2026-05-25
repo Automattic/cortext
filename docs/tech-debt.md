@@ -10,7 +10,7 @@ Pair with [decisions.md](decisions.md) for choices we've made peace with and [ro
 
 **What.** DataViews v6 ships display layouts and a separate `DataForm` for editing, but no way to make a table cell editable in place. So we mount our own editor from `field.render` (a display renderer in the docs, but the only seam we have), keep edit state per cell, and route saves back through a `RowMutationContext` since `field.render` only gets `{ item }`. Tab and Shift+Tab between cells live in the same layer: editors intercept Tab, ask the parent for the next editable cell via `requestNext`, and the target cell pops open via the `editRequest` channel that also handles auto-focusing the title cell of a fresh row.
 
-**Where.** `src/components/EditableCell.js`, `RowMutationContext` and `requestNext` in `src/components/CollectionDataViews.js`, plus a sliver of `src/index.scss`.
+**Where.** `src/components/EditableCell.js`, `RowMutationContext` and `requestNext` in `src/components/CollectionDataViews.js`, plus a sliver of `src/components/CollectionDataViews.scss`.
 
 **Solution.** What we'd want upstream: an `editable` mode on the table layout that uses each field's `Edit` per cell, an `onSaveItem(item, changes)` prop on `<DataViews>`, native cell-to-cell keyboard navigation, and a layout contract for "this control is rendered inline." With those, `RowMutationContext`, `requestNext`, most of `EditableCell`, and the layout couplings tracked in #5 all go away. It's the biggest entry on this page (~530 lines of `EditableCell` plus context wiring and the navigation walker). File a Gutenberg issue with the use case and proposed shape; `docs/roadmap.md` lists upstream issues as a stretch success metric.
 
@@ -72,7 +72,7 @@ The cost is another split support matrix. The client checks field type, operator
 - **Row height pin.** The shell's `min-height` is hardcoded to 40px to match `__next40pxDefaultSize`, the height of TextControl/NumberControl/SelectControl with the modern WP size flag. If WP changes the default control height, the pin desyncs and rows jitter again.
 - **Density mirror.** DataViews paints row height via the td's `padding-block`, varied per density (`has-compact-density` / `has-comfortable-density`). The shell's hover/edit highlight lives on the shell itself, so the gray floated inside the larger row instead of covering it. We zero the td's `padding-block` so the shell becomes the row, then replicate DataViews's per-density row heights via `min-height` overrides on the shell (and `.cortext-cell-checkbox`, which shares the shell's dimensions). Balanced and comfortable mirror DataViews v6 exactly (12 / 16); compact is intentionally tighter than the upstream default (4 -> 0) so the row matches the 40px editor floor, and that's the density we set as the project default in `createDefaultView` and `DEFAULT_LAYOUTS`. If upstream bumps the balanced/comfortable paddings, those two row heights silently desync until we update the numbers.
 
-**Where.** `src/components/EditableCell.js` and the `.cortext-editable-cell`, `.cortext-cell-checkbox`, and `.cortext-data-view .dataviews-view-table` rules in `src/index.scss`.
+**Where.** `src/components/EditableCell.js` and the `.cortext-editable-cell`, `.cortext-cell-checkbox`, and `.cortext-data-view .dataviews-view-table` rules in `src/components/CollectionDataViews.scss`.
 
 **Solution.** All three go away if DataViews lands inline editing (#1) and exposes a layout contract for cells (or a CSS variable for cell padding the shell can hook into). Until then the overlay is a clean enough pattern to keep, the height pin is one CSS line worth maintaining, and the density mirror is the price of painting hover/edit highlights edge to edge. Worth tracking separately so the next person editing the cell layout knows the constraints rather than re-deriving them.
 
@@ -88,7 +88,7 @@ The cost is another split support matrix. The client checks field type, operator
 
 **What.** The "+ New" affordance lives in our own div outside `<DataViews>`, with a small CSS layer to make the wrapper flex correctly around DataViews' default `height: 100%`. `<DataViews>` has a `header` slot but no symmetric footer.
 
-**Where.** `src/components/CollectionDataViews.js` (`cortext-data-view__footer` div), `src/index.scss` (`.cortext-data-view` flex layout).
+**Where.** `src/components/CollectionDataViews.js` (`cortext-data-view__footer` div) and `src/components/CollectionDataViews.scss` (`.cortext-data-view` flex layout).
 
 **Solution.** More "tidy up later" than tech debt: switch to DataViews free composition (already supported via `children`) and lay out `<DataViews.Layout />` and `<DataViews.Pagination />` ourselves. Free composition works today; an upstream `footer` prop would just be neater. This is separate from table-internal footer rows for calculations; see #36 for that harder gap.
 
@@ -158,7 +158,7 @@ Relations and list-style rollups now keep sorting disabled. Scalar rollups can s
 
 Double-click autofit is the trickiest piece. With no measurement hook upstream, we clone the cell into a hidden subtree that has to recreate every ancestor that affects layout: a `.cortext-data-view` wrapper for our scoped overrides, a real `<tbody>` or `<thead>` for upstream's tbody-scoped rules, an append next to the live `.dataviews-wrapper` for font inheritance, and `display: block` on the wrapper so flex sizing on the parent doesn't push the measurement around. Then the persisted width subtracts the cell's own padding and border (we read border-box, write content-box), and a 2px buffer absorbs proportional-digit rounding so `2007` doesn't clip where `1939` fits. Each ancestor and constant is a place the live DOM can drift away from us.
 
-**Where.** `src/components/DataViewColumnInteractions.js`, `src/components/dataViewColumns.js`, the `DataViewColumnInteractions` mount in `src/components/CollectionDataViews.js`, and the column affordance / table wrapper rules in `src/index.scss`.
+**Where.** `src/components/DataViewColumnInteractions.js`, `src/components/dataViewColumns.js`, the `DataViewColumnInteractions` mount in `src/components/CollectionDataViews.js`, and the column affordance / table wrapper rules in `src/components/DataViewColumnInteractions.scss` and `src/components/CollectionDataViews.scss`.
 
 **Solution.** Upstream DataViews could expose table-column APIs that cover `onChangeFields`, `onChangeColumnStyle`, resize handle rendering, per-field min/max widths, double-click autofit, drag overlay/insertion affordances, and stable header/cell slots or refs. If DataViews owned that layer, Cortext could drop the portal/DOM-query adapter, the wrapper min-width overrides, most of the dnd-kit column glue, the cloned-measurement gymnastics, and the direct DOM mutation used for live resize feedback.
 
@@ -166,7 +166,7 @@ Double-click autofit is the trickiest piece. With no measurement hook upstream, 
 
 **What.** DataViews' column-header dropdown (Sort / Add filter / Move / Hide) is a closed list — there's no `field.menuItems` to inject Rename / Duplicate / Delete or Calculate. To keep a single dropdown per column, we hide DataViews' built-in trigger on custom-field `<th>`s via CSS and portal our own combined trigger in (Sort / Move / Hide *plus* field management and table calculations). Title and system fields keep the built-in trigger. Main's drag-handle click-forward (`DataViewColumnInteractions`) iterates header buttons and skips `display: none` ones via `offsetParent`, so it lands on whichever trigger is visible. Filter is intentionally absent — Cortext doesn't surface column-level filters in the header.
 
-**Where.** `src/components/fields/ColumnHeaderActions.js` (combined dropdown), `src/index.scss` (`.dataviews-view-table th:has(.cortext-column-header-marker) > .dataviews-view-table-header-button { display: none }`), `src/components/DataViewColumnInteractions.js` (visible-button click forward).
+**Where.** `src/components/fields/ColumnHeaderActions.js` (combined dropdown), `src/components/CollectionDataViews.scss` (`.dataviews-view-table th:has(.cortext-column-header-marker) > .dataviews-view-table-header-button { display: none }`), `src/components/DataViewColumnInteractions.js` (visible-button click forward).
 
 **Risk.** Re-implementing Sort / Move / Hide ourselves means new DataViews items in those menus won't show up here automatically. Calculation controls add one more reason this custom menu has to stay in lockstep with DataViews. If main's drag handle stops calling `.click()` on the header trigger, the column-name click-to-open behavior would need a different forward.
 
@@ -178,7 +178,7 @@ Double-click autofit is the trickiest piece. With no measurement hook upstream, 
 
 The create-field flow also has to reveal the new trailing column itself. It carries the created field ID back to `CollectionDataViews`, waits until the field marker exists in the rendered header, then scrolls `.dataviews-wrapper` to the right edge. The interaction feels right, but it still depends on DataViews' DOM shape.
 
-**Where.** `src/components/fields/ColumnHeaderActions.js` (actions-column lookup and portal), `src/components/CollectionDataViews.js` and `src/components/dataViewScroll.js` (created-field reveal and `.dataviews-wrapper` scroll), `src/index.scss` (`.dataviews-view-table__actions-column` overrides), and the legacy `__add_field` cleanup in `src/components/CollectionDataViews.js`.
+**Where.** `src/components/fields/ColumnHeaderActions.js` (actions-column lookup and portal), `src/components/CollectionDataViews.js` and `src/components/dataViewScroll.js` (created-field reveal and `.dataviews-wrapper` scroll), `src/components/CollectionDataViews.scss` (`.dataviews-view-table__actions-column` overrides), and the legacy `__add_field` cleanup in `src/components/CollectionDataViews.js`.
 
 **Solution.** DataViews exposes a trailing table-header slot, an add-column slot, or a header action area separate from per-row actions, plus refs for the table scroll wrapper and rendered headers. Then the portal targets a real extension point, the reveal code stops querying DataViews DOM, the sticky/header-label CSS disappears, and `__add_field` stays only as migration cleanup for old saved views.
 
@@ -202,7 +202,7 @@ The create-field flow also has to reveal the new trailing column itself. It carr
 
 **What.** DataViews ships `table-layout: auto; width: 100%` plus per-cell padding rules. We flip to `table-layout: fixed; width: max-content` with explicit per-cell widths so adding or removing a field doesn't reflow every other column. We also override the actions-column header so the add-field button stays pinned beside the row kebabs. The table sizes to its content and scrolls horizontally on overflow. Depends on DataViews' class names and selector specificity staying put.
 
-**Where.** `src/index.scss`, around the `.dataviews-view-table` block.
+**Where.** `src/components/CollectionDataViews.scss`, around the `.dataviews-view-table` block.
 
 **Solution.** A `tableLayout` (or similar) prop on DataViews so consumers can pick between "auto with redistribution" and "fixed with content-sized columns", plus per-field `width` hints so columns can be pinned without overriding DataViews CSS.
 
@@ -226,7 +226,7 @@ The create-field flow also has to reveal the new trailing column itself. It carr
 
 **What.** The `cortext/data-view` block exposes `align` (default / wide / full) for width but nothing for height. For now the block sizes to its content: short tables fit their rows, long tables grow with the page, and empty blocks fall back to DataViews' no-results state. That default is easy to understand, but authors still can't say "show 10 rows and scroll the rest." A long table stretches the document.
 
-**Where.** `src/blocks/data-view/block.json` (no `height` attribute today). The block-mode size rule lives in `src/index.scss` next to the `.wp-block-cortext-data-view .cortext-data-view > .dataviews-wrapper` override.
+**Where.** `src/blocks/data-view/block.json` (no `height` attribute today). The block-mode size rule lives in `src/components/CollectionDataViews.scss` next to the `.wp-block-cortext-data-view .cortext-data-view > .dataviews-wrapper` override.
 
 **Solution.** Add a `height` (or "rows visible") attribute to the block with an inspector control, and clamp the shell to that value when set. A density-aware default would help, but the per-block control is the part that matters.
 
@@ -250,7 +250,7 @@ The create-field flow also has to reveal the new trailing column itself. It carr
 
 **What.** The page-row rename uses `<TextControl size="compact" __next40pxDefaultSize>`, which should produce a 32px input matching the 32px row. It doesn't, on its own: the wrapping `BaseControl > field > InputControl > container` chain still contributes vertical space, so opening rename used to bump the row a few pixels. The fix pins `height` / `min-height` / `max-height` to `$grid-unit-40` and zeroes `padding-block` on every layer in that chain (`.components-base-control`, `.components-base-control__field`, `.components-input-control`, `.components-input-control__container`, `.components-input-control__input`). It works, but it couples Cortext to WP component-internal class names. If WP refactors `TextControl` (renames a class, drops a wrapper, restructures the DOM), the input loses its height pin and the row starts bumping again, silently.
 
-**Where.** The `&__rename` block in `src/index.scss`. The e2e test `keeps the rename input inside the page row height` in `tests/e2e/specs/sidebar-layout.spec.js` is the tripwire: it asserts the input never overflows the row's bounding rect, so a WP-internals refactor would surface there before reaching production.
+**Where.** The `&__rename` block in `src/components/Sidebar.scss`. The e2e test `keeps the rename input inside the page row height` in `tests/e2e/specs/sidebar-layout.spec.js` is the tripwire: it asserts the input never overflows the row's bounding rect, so a WP-internals refactor would surface there before reaching production.
 
 **Solution.** Either WP exposes a "fit-the-row" size for `TextControl` (or a CSS variable hook for input height), or we replace the rename `TextControl` with a plain `<input>` styled to match the row. The plain input is the more reliable path: drops the WP-internals coupling, but adds a small amount of styling and accessibility plumbing we currently get for free. Worth doing the day this test fails on a WP bump.
 
@@ -266,7 +266,7 @@ The create-field flow also has to reveal the new trailing column itself. It carr
 
 **What.** The legacy `MenuItem` from `@wordpress/components` accepted `isDestructive` and rendered the row in red. The new privateApis `Menu.Item` dropped that prop without a replacement (verified in `node_modules/@wordpress/components/build-types/menu/types.d.ts` against `ItemProps`). For the Delete column action we paint the red ourselves with a className and one CSS rule, scoped to inactive rows so the focus/hover highlight overrides it.
 
-**Where.** The Delete `Menu.Item` in `src/components/fields/ColumnHeaderActions.js` and `.cortext-column-header-actions__destructive-item` in `src/index.scss`.
+**Where.** The Delete `Menu.Item` in `src/components/fields/ColumnHeaderActions.js` and `.cortext-column-header-actions__destructive-item` in `src/components/fields/ColumnHeaderActions.scss`.
 
 **Solution.** Add `isDestructive` (or a `variant: 'destructive'`) to `Menu.Item` upstream. One-line change here once it ships.
 
@@ -304,11 +304,11 @@ The create-field flow also has to reveal the new trailing column itself. It carr
 
 ## 33. Frontend stylesheet doesn't carry the cover/icon rules `[internal]`
 
-**What.** `.cortext-document-cover-block` and `.cortext-document-icon` rules live in `src/index.scss`, which only builds to the admin shell bundle. The PHP `render_callback`s emit the same wrapper classes for the public frontend, but `src/frontend.scss` has no matching rules, so on a public `crtxt_page` the cover banner renders at intrinsic image size and the icon block falls back to inline-default layout.
+**What.** The PHP `render_callback`s emit `.cortext-document-cover-block`, `.cortext-document-icon-block`, and `.cortext-document-icon` markup on public pages, but their CSS still doesn't load there. Since the shell-style split, the admin/editor rules live in block edit partials and `PageIcon.scss`; `src/frontend.scss` still has none. On a public `crtxt_page`, the cover image renders at intrinsic size and the icon block falls back to inline layout.
 
-**Where.** `src/index.scss` (cover/icon block rules) versus `src/frontend.scss` (no matching rules), enqueued by the public template.
+**Where.** `src/blocks/document-cover/edit.scss`, `src/blocks/document-icon/edit.scss`, and `src/components/PageIcon.scss` versus `src/frontend.scss`, plus the PHP render callbacks in `includes/Editor/DocumentCoverBlock.php` and `includes/Editor/DocumentIconBlock.php`.
 
-**Solution.** Extract the cover/icon block rules into a partial both stylesheets `@use`, so admin and frontend stay in sync without copy-paste drift. The shell-only chrome (hover replace/remove, picker popovers) stays in `index.scss`; only the persisted block markup needs to be shared.
+**Solution.** Extract the persisted cover/icon markup rules into a shared partial that both admin/editor and frontend stylesheets `@use`. Keep editor-only chrome, such as hover replace/remove controls and picker popovers, in the block edit partials.
 
 ## 34. WP-icon variant renders blank on the public frontend `[internal]`
 
@@ -330,13 +330,13 @@ The create-field flow also has to reveal the new trailing column itself. It carr
 
 **What.** DataViews owns the table markup, but it has no place for footer content: no footer-row slot, no per-column summary cell, no table-aligned bulk-action area, and no "filtered rows before pagination" result. The calculation footer has to find the rendered `.dataviews-view-table`, watch for it with a `MutationObserver`, and portal a `<tfoot>` into the table after DataViews renders.
 
-In table layout, bulk row actions use that same footer row. Selected-row controls and column summaries sit on one line, which is the right layout, but the plumbing is awkward. `CollectionDataViews` passes the table bulk controls into the portaled footer, and `index.scss` manages the checkbox-width spacer, overflow, and stacking so the buttons stay clickable without painting over the block selection outline. Grid still uses the composed DataViews footer because there is no table summary row to align with.
+In table layout, bulk row actions use that same footer row. Selected-row controls and column summaries sit on one line, which is the right layout, but the plumbing is awkward. `CollectionDataViews` passes the table bulk controls into the portaled footer, and `CollectionDataViews.scss` manages the checkbox-width spacer, overflow, and stacking so the buttons stay clickable without painting over the block selection outline. Grid still uses the composed DataViews footer because there is no table summary row to align with.
 
 For calculations, we also need rows after search/filter but before pagination. DataViews does not hand that list back to consumers, so `CollectionDataViews` runs DataViews' `filterSortAndPaginate` helper a second time with `page` and `perPage` removed.
 
 Calculation state also stays in Cortext. `view.calculations` lives on the DataViews view object because embedded data-view blocks already persist that object, and named saved views do not exist yet. `normalizeView` prunes stale calculation entries when fields disappear or their type changes. That keeps the saved shape honest, but it is still Cortext state attached to a DataViews object that upstream knows nothing about.
 
-**Where.** `src/components/TableCalculationsFooter.js` (table lookup, observer, `<tfoot>` portal), `src/components/CollectionDataViews.js` (second filtering pass, table bulk controls, and footer mount), `src/index.scss` (footer-row alignment and overflow rules), `src/components/tableCalculations.js` (operation matrix and result formatting), and `src/components/dataViewColumns.js` (view cleanup).
+**Where.** `src/components/TableCalculationsFooter.js` (table lookup, observer, `<tfoot>` portal), `src/components/CollectionDataViews.js` (second filtering pass, table bulk controls, and footer mount), `src/components/CollectionDataViews.scss` (footer-row alignment and overflow rules), `src/components/tableCalculations.js` (operation matrix and result formatting), and `src/components/dataViewColumns.js` (view cleanup).
 
 **Solution.** DataViews needs either a table `renderFooter` / `renderSummaryRow` slot, or a column-level summary API that gets the filtered, unpaginated rows and leaves space for table-level selection controls. Then we can drop the DOM lookup and portal. A helper that returns filtered rows before pagination would remove the second `filterSortAndPaginate` pass. Internally, saved named views should eventually make `calculations` part of Cortext's own saved view schema instead of just an extra key on embedded block state.
 
@@ -344,7 +344,7 @@ Calculation state also stays in Cortext. `view.calculations` lives on the DataVi
 
 **What.** Relation fields store row post IDs, but the UI behaves like a reference field: search rows in another collection, pick one or many, create a missing row, show row chips, and open the row from the chip. DataViews has no `relation` / `reference` field type and DataForm has no async record picker that accepts a target entity/query and cardinality. Cortext maps relations to the closest DataViews metadata type, carries relation-specific metadata on the field object, renders relation chips from `field.render`, ships a custom picker that pages and searches `/cortext/v1/rows`, and routes chip clicks through its own peek state. The picker also asks REST to put exact title matches on the first page, so "Create row" does not offer a duplicate just because the match would otherwise sit later in the results. The picker, chip rendering, and open action are still local Cortext code.
 
-**Where.** `mapField` / `buildRender` in `src/hooks/fieldMapping.js`, `src/components/relations/RelationEditor.js`, `src/hooks/useCollectionRowsByIds.js`, `RowsController`'s `include` handling, `RowsFilterQuery::apply_search_order_clauses()`, `src/components/relations/RelationReferences.js`, `src/components/relations/relationUtils.js`, `src/components/DocumentPeekProvider.js`, `src/components/DocumentPeekHost.js`, `src/components/CurrentViewModeContext.js`, relation setup in `src/components/fields/AddFieldPopover.js`, and the `.cortext-relation-*` rules in `src/index.scss`.
+**Where.** `mapField` / `buildRender` in `src/hooks/fieldMapping.js`, `src/components/relations/RelationEditor.js`, `src/hooks/useCollectionRowsByIds.js`, `RowsController`'s `include` handling, `RowsFilterQuery::apply_search_order_clauses()`, `src/components/relations/RelationReferences.js`, `src/components/relations/relationUtils.js`, `src/components/DocumentPeekProvider.js`, `src/components/DocumentPeekHost.js`, `src/components/CurrentViewModeContext.js`, relation setup in `src/components/fields/AddFieldPopover.js`, and the `.cortext-relation-*` rules in `src/components/CollectionDataViews.scss`.
 
 **Solution.** Upstream DataViews/DataForm (or shared WP components) could expose a generic reference field/control: target entity config, single vs multi cardinality, async search with a selected-record resolver, optional create-new button, token/chip rendering hooks, and a supported action slot for opening or navigating to referenced records. Cortext would still own the backend relation sync and reverse-field semantics, but could drop most of the custom picker, chip, search-order guard, and open-action code and stop smuggling relation metadata through DataViews field objects.
 
@@ -356,7 +356,7 @@ The awkward bit is `CortextCommandMenu`. `@wordpress/commands` has a built-in "R
 
 The user-facing placeholder is still Core's generic "Search commands and settings" string too. Fine for this slice, but it will feel off once the palette grows into actual Cortext search.
 
-**Where.** `src/components/CommandPalette.js`, `src/components/CortextCommandMenu.js`, the `canvasRef` passed from `src/router.js`, `dequeue_core_command_palette` in `includes/Admin/Screen.php`, and the `@wordpress/commands` stylesheet import and Cortext command-menu overrides in `src/index.scss`.
+**Where.** `src/components/CommandPalette.js`, `src/components/CortextCommandMenu.js`, the `canvasRef` passed from `src/router.js`, `dequeue_core_command_palette` in `includes/Admin/Screen.php`, the `@wordpress/commands` stylesheet import in `src/index.scss`, and Cortext command-menu overrides in `src/styles/global/_command-palette.scss`.
 
 **Solution.** Upstream could make app-owned palettes less ad hoc: a scoped command registry or namespace API, a supported way for full-screen admin apps to opt out of Core's admin palette, a custom input label, an explicit focus-return target or after-close callback, and a group/section API for registered commands or command loaders. With those, Cortext could keep registering commands through `@wordpress/commands`, render workspace recents through an upstream extension point, and drop the local menu renderer plus most of this shell-specific wiring.
 
@@ -382,7 +382,7 @@ The same selector shape affects user-visible save side effects. `didPostSaveRequ
 
 **What.** Favorites look like sidebar rows, but they are not normal page-tree rows. They are shortcuts, they should never show the active selection state, and they are sortable only inside the Favorites section. Sharing the whole row as both a navigation button and a dnd-kit sortable handle made clicks repaint the hover state and feel like a flash. The current row splits those jobs: the icon is the drag handle, the title is a plain navigation button, and the star is the remove action. It works, but it means Favorites carry a small custom row shape alongside `PageRow` and `CollectionRow`.
 
-**Where.** `src/components/SidebarFavorites.js`, plus the `.cortext-sidebar__favorite-*` rules in `src/index.scss`.
+**Where.** `src/components/SidebarFavorites.js`, plus the `.cortext-sidebar__favorite-*` rules in `src/components/Sidebar.scss` and `src/styles/global/_shell-root.scss`.
 
 **Solution.** Extract a shared sidebar-row primitive with explicit slots for title navigation, drag handle, menu/actions, selected state, and shortcut-only rows. Then `PageRow`, `CollectionRow`, and `SidebarFavorites` can share the same interaction contract without reusing the wrong DOM shape for Favorites.
 
@@ -432,9 +432,9 @@ The same selector shape affects user-visible save side effects. `didPostSaveRequ
 
 The layer is still thin. Pages use the page tree and `core-data`. Full-page collections mount in Canvas, but keep `collection/` URLs and collection-shaped recents. Rows still use `useCollectionRows`. Restore/delete still fan out through page-tree refresh, row invalidation, collection context refresh, and Trash refresh. Favorites and recents use the document service for row paths, but routing, URL targets, and activity tracking still ask "page, collection, or row?" where they should only need "document." Relation chips open row documents, but still depend on local row URL helpers (`rowRoute` / `rowHref`) and `slug` in relation responses.
 
-**Where.** `includes/Documents.php`, `includes/PostType/Collection.php`, `includes/Rest/DocumentsController.php`, `includes/Rest/RecentsController.php`, relation slug hydration in `includes/Rest/RowsController.php`, `src/components/Canvas.js`, `src/hooks/useDocuments.js`, `src/hooks/useTrashedDocuments.js`, `src/components/SidebarTrash.js`, `src/router/useResolveEntity.js`, `src/router/EntityRoute.js`, `src/router/entityRouteReducer.js`, `rowRoute` / `rowHref` in `src/components/relations/relationUtils.js`, `src/hooks/documentTrashInvalidation.js`, and `src/hooks/rowInvalidation.js`.
+**Where.** `includes/Documents.php`, `includes/PostType/Collection.php`, `includes/Rest/DocumentsController.php`, `includes/Rest/RecentsController.php`, relation slug hydration and row `kind` output in `includes/Rest/RowsController.php`, `src/components/Canvas.js`, `src/documents/favorites.js`, `useFavoriteToggle` in `src/documents/hooks.js`, `src/hooks/useDocuments.js`, `src/hooks/useTrashedDocuments.js`, `src/components/SidebarTrash.js`, `src/router/useResolveEntity.js`, `src/router/EntityRoute.js`, `src/router/entityRouteReducer.js`, `rowRoute` / `rowHref` in `src/components/relations/relationUtils.js`, `src/hooks/documentTrashInvalidation.js`, and `src/hooks/rowInvalidation.js`.
 
-**Solution.** Keep `Cortext\Documents` as the cross-type reader, then move shared document behavior behind it one piece at a time: URL targets, invalidation, activity/recents, favorites, and trash refresh. Individual records can still use `core-data` or row endpoints where WordPress models them well. Cross-type views can stay under `/cortext/v1/documents`; shared document features should not rebuild the same page/row branching every time.
+**Solution.** Keep `Cortext\Documents` as the cross-type reader, then move shared document behavior behind it one piece at a time: URL targets, invalidation, activity/recents, and trash refresh. Individual records can still use `core-data` or row endpoints where WordPress models them well. Cross-type views can stay under `/cortext/v1/documents`; shared document features should not rebuild the same page/row branching every time.
 
 ## 49. DataViews has no row reorder API `[upstream]`
 
@@ -442,7 +442,7 @@ The layer is still thin. Pages use the page tree and `core-data`. Full-page coll
 
 That makes row reorder sensitive to DataViews DOM changes: density classes, bulk-selection cells, fullscreen mode, block embedding, and scroll containers all matter. Grid still uses before/after card targets because a linear row gap doesn't map cleanly to a two-dimensional card layout. Fine for v1, but it is one more reason this belongs in a DataViews API instead of a DOM adapter.
 
-**Where.** `src/components/DataViewRowReorder.js`, `src/components/RowDragHandle.js`, the mount in `src/components/CollectionDataViews.js`, and the row-reorder rules in `src/index.scss`.
+**Where.** `src/components/DataViewRowReorder.js`, `src/components/RowDragHandle.js`, the mount in `src/components/CollectionDataViews.js`, and the row-reorder rules in `src/components/DataViewRowReorder.scss`.
 
 **Solution.** DataViews could expose stable row ids/refs, a row-handle render prop, keyboard-aware reorder callbacks, a table/list gap model, and row preview/drop indicator hooks. Cortext would keep the REST/manual-order policy and drop the selectors, MutationObserver, portals, and transform bookkeeping.
 
@@ -506,7 +506,7 @@ Drag/drop and `menu_order` accounting look at both pages and collections through
 
 The brittle bit is the sizing. The skeleton copies DataViews row heights for compact, balanced, and comfortable density. It lines up in the current build, but a DataViews density change could make the placeholder drift from the real table.
 
-**Where.** `CollectionRowsSkeleton` in `src/components/Skeleton.js`, the rows-skeleton mount in `src/components/CollectionDataViews.js`, and the `.cortext-collection-skeleton` / `.cortext-data-view__rows-skeleton` rules in `src/index.scss`.
+**Where.** `CollectionRowsSkeleton` in `src/components/Skeleton.js`, the rows-skeleton mount in `src/components/CollectionDataViews.js`, and the `.cortext-collection-skeleton` / `.cortext-data-view__rows-skeleton` rules in `src/components/Skeleton.scss` and `src/components/CollectionDataViews.scss`.
 
 **Solution.** DataViews exposes a table loading slot, or at least row-height CSS variables. Then Cortext can follow the table instead of copying its constants. Until then, keep the skeleton rules next to the DataViews table rules and check for visual drift after DataViews upgrades.
 
@@ -524,7 +524,7 @@ The brittle bit is the sizing. The skeleton copies DataViews row heights for com
 
 The only reason this stays in the debt log is the plumbing. Gutenberg's toolbar path still runs through `BlockControls`, SlotFill, and portaled popovers, and there is no clean public primitive for saying "this nested editor owns its toolbar and inspector." Cortext avoids the unsafe inspector entrypoint instead of building a row-scoped inspector in this pass. Normal row block toolbar actions still work.
 
-**Where.** `src/components/RowEditor.js` (`SlotFillProvider` and `EditorSurfaceProvider`), `src/components/EditorSurfaceContext.js`, `src/blocks/data-view/edit.js` (`hasBlockInspector` around the DataView toolbar button), `src/components/RowDetailView.js` (body class while side/modal is open), and `src/index.scss` (parent canvas toolbar hiding).
+**Where.** `src/components/RowEditor.js` (`SlotFillProvider` and `EditorSurfaceProvider`), `src/components/EditorSurfaceContext.js`, `src/blocks/data-view/edit.js` (`hasBlockInspector` around the DataView toolbar button), `src/components/RowDetailView.js` (body class while side/modal is open), and `src/styles/global/_shell-root.scss` (parent canvas toolbar hiding).
 
 **Solution.** If Gutenberg grows editor-instance-scoped `BlockControls`, toolbar popovers, and `InspectorControls`, Cortext can drop the local `SlotFillProvider`, the `hasBlockInspector` context, and the parent-toolbar body class. If row peek/modal needs block settings before that exists upstream, build a row-scoped inspector deliberately rather than routing those actions to the parent inspector.
 
@@ -542,6 +542,6 @@ This is acceptable for now and covered by e2e, but it is still a timing bridge b
 
 **What.** A full-page collection needs a locked `cortext/data-view` block whose `collectionId` is the collection post's own ID. WordPress and Gutenberg do not have a dynamic CPT template that can fill that ID after insert and then treat the block as the only allowed body block. Cortext patches the gap in a few places: PHP seeds the serialized block after insert, a one-shot backfill catches older collections, the editor adds the block if content is still empty, CSS hides body appenders and owner-block chrome, a SlotFill moves the data-view panels into the Collection tab, and the block hides "Change collection" so the owner cannot point away from itself.
 
-**Where.** `Collection::build_data_view_block_markup()` and `Collection::maybe_seed_data_view_block()` in `includes/PostType/Collection.php`, `includes/PostType/CollectionContentBackfill.php`, `src/components/CanvasOwnerInspector.js`, owner-block handling in `src/components/EditorBody.js`, `src/blocks/data-view/edit.js`, `src/components/PageInspectorSidebar.js`, and the owner rules in `src/index.scss`.
+**Where.** `Collection::build_data_view_block_markup()` and `Collection::maybe_seed_data_view_block()` in `includes/PostType/Collection.php`, `includes/PostType/CollectionContentBackfill.php`, `src/components/CanvasOwnerInspector.js`, owner-block handling in `src/components/EditorBody.js`, `src/blocks/data-view/edit.js`, `src/components/PageInspectorSidebar.js`, and the owner rules in `src/styles/global/_shell-root.scss`.
 
 **Solution.** Replace this with a real owner-block primitive: either an upstream dynamic block-template hook or a local body-owner contract. It should derive attributes from the current post, lock the body to that block, own inserter/chrome/inspector policy, and keep public serialization predictable. Then the post-insert seed, migration, editor fallback, SlotFill routing, and owner CSS can shrink or disappear.

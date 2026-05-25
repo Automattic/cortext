@@ -1,0 +1,39 @@
+@use "@wordpress/base-styles/colors" as *;
+@use "@wordpress/base-styles/variables" as *;
+
+.cortext-published-pane {
+	flex: 1 1 auto;
+	min-height: 0;
+	height: 100%;
+	padding: $grid-unit-30 $grid-unit-40;
+	overflow: auto;
+
+	&__title.components-button {
+		display: inline-flex;
+		align-items: center;
+		gap: $grid-unit-05;
+		padding: 0;
+		height: auto;
+		min-height: 0;
+		text-align: start;
+	}
+
+	&__title-icon {
+		display: inline-flex;
+		align-items: center;
+		flex: 0 0 auto;
+	}
+
+	&__title-text {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	&__na {
+		display: inline-flex;
+		align-items: center;
+		gap: $grid-unit-05;
+	}
+}

@@ -1,0 +1,92 @@
+@use "@wordpress/base-styles/colors" as *;
+@use "@wordpress/base-styles/variables" as *;
+
+.cortext-column-drag-handle {
+	position: absolute;
+	inset: 0 8px 0 0;
+	padding: 0;
+	border: 0;
+	cursor: inherit;
+	background: transparent;
+	z-index: 1;
+}
+
+.cortext-column-resizer {
+	position: absolute;
+	top: 0;
+	right: 0;
+	width: 8px;
+	height: 100%;
+	cursor: col-resize;
+	z-index: 2;
+	touch-action: none;
+
+	// 3px line on hover and during resize. Sits flush against the right
+	// edge of the th so adjacent columns don't paint over it.
+	&::after {
+		content: "";
+		position: absolute;
+		top: 0;
+		right: 0;
+		width: 3px;
+		height: 100%;
+		background: var(--cortext-accent);
+		opacity: 0;
+		transition: opacity 100ms ease;
+	}
+
+	&:hover::after,
+	.cortext-column-resizing > &::after {
+		opacity: 1;
+	}
+}
+
+body.cortext-column-resizing {
+	cursor: col-resize;
+	user-select: none;
+}
+
+.cortext-column-drop-indicator {
+	position: absolute;
+	width: 2px;
+	background: var(--cortext-accent);
+	pointer-events: none;
+	z-index: 3;
+	transform: translateX(-1px);
+}
+
+.cortext-column-drag-preview {
+	padding: $grid-unit-05 $grid-unit-15;
+	background: $white;
+	border: $border-width solid $gray-200;
+	border-radius: 2px;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+	font-size: 13px;
+	max-width: 240px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.cortext-column-reorder-preview {
+	transition: transform 120ms ease;
+}
+
+.cortext-column-drag-source {
+	opacity: 0.45;
+}
+
+body.cortext-column-dragging {
+	cursor: grabbing;
+	user-select: none;
+}
+
+// While a drag is active, the header reads as `grabbing` (overriding the
+// per-th `grab` set above). The header-button inherits its cursor from
+// the th (rule above), so this single override carries through.
+body.cortext-column-dragging
+.cortext-data-view
+.dataviews-view-table
+thead > tr > th {
+	cursor: grabbing;
+}

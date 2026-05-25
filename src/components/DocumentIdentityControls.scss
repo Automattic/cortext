@@ -1,0 +1,103 @@
+@use "@wordpress/base-styles/colors" as *;
+@use "@wordpress/base-styles/variables" as *;
+
+.cortext-document-identity-popover-content {
+	min-width: 320px;
+
+	.cortext-document-identity-popover {
+		position: relative;
+		display: flex;
+		flex-direction: column;
+
+		&__busy {
+			position: absolute;
+			inset: 0;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			background: rgba(255, 255, 255, 0.6);
+			z-index: 2;
+		}
+
+		&__loading {
+			min-height: 320px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+		}
+
+		&__upload {
+			display: flex;
+			flex-direction: column;
+			gap: $grid-unit-10;
+			padding: $grid-unit-15;
+		}
+
+		&__hint {
+			font-size: 12px;
+			color: var(--cortext-text-muted);
+			margin: 0;
+		}
+
+		// Custom tab row: tab buttons sized to content, Remove sits
+		// immediately after the last tab (no padding pushing it to the
+		// right edge of the popover).
+		&__tabs {
+			display: flex;
+			align-items: center;
+			gap: $grid-unit-05;
+			padding: 0 $grid-unit-10;
+			border-bottom: 1px solid var(--cortext-chrome-border, rgba(0, 0, 0, 0.1));
+		}
+
+		&__tab {
+			height: 40px;
+			padding: 0 $grid-unit-10;
+			background: transparent;
+			border: 0;
+			cursor: pointer;
+			color: var(--cortext-text-muted, #757575);
+			font-size: 13px;
+			font-weight: 500;
+			position: relative;
+
+			&:hover {
+				color: var(--cortext-text, #1e1e1e);
+			}
+
+			&.is-active {
+				color: var(--cortext-text, #1e1e1e);
+
+				&::after {
+					content: "";
+					position: absolute;
+					left: $grid-unit-10;
+					right: $grid-unit-10;
+					bottom: -1px;
+					height: 2px;
+					background: var(--cortext-accent, #3858e9);
+				}
+			}
+		}
+
+		&__remove {
+			height: 40px;
+			padding: 0 $grid-unit-10;
+			background: transparent;
+			border: 0;
+			cursor: pointer;
+			color: var(--cortext-danger) !important;
+			font-size: 13px;
+			font-weight: 500;
+
+			&:hover,
+			&:focus {
+				color: var(--cortext-danger-strong) !important;
+			}
+		}
+
+		&__panel {
+			padding: 0;
+		}
+	}
+}

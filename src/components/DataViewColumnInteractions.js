@@ -17,6 +17,8 @@ import {
 	useSensors,
 } from '@dnd-kit/core';
 
+import './DataViewColumnInteractions.scss';
+
 import {
 	GHOST_FIELD_ID,
 	MAX_COLUMN_WIDTH,

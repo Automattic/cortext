@@ -10,9 +10,11 @@ export {
 	useDocumentActions,
 	useDocumentRecord,
 	useDocumentSelection,
+	useFavoriteToggle,
 } from './hooks';
 export { documentTitle } from './title';
 export {
+	favoriteKey,
 	favoriteIdentForRecord,
 	favoriteKeyForRecord,
 	filterFavoritesByDeletedIds,

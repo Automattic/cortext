@@ -1,4 +1,4 @@
-import { __, sprintf, _n } from '@wordpress/i18n';
+import { __ } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
 import { useCallback, useEffect, useMemo, useState } from '@wordpress/element';
 import {
@@ -6,23 +6,17 @@ import {
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalConfirmDialog as ConfirmDialog,
 } from '@wordpress/components';
-import apiFetch from '@wordpress/api-fetch';
 import { rotateLeft, trash } from '@wordpress/icons';
 import { useNavigate } from '@tanstack/react-router';
 
 import PageIcon from './PageIcon';
 import { SidebarListSkeleton } from './Skeleton';
 import TypeToConfirmDialog from './TypeToConfirmDialog';
-import {
-	ACTIVE_PAGES_QUERY,
-	POST_TYPE,
-	TRASHED_PAGES_QUERY,
-} from './page-queries';
+import { POST_TYPE, TRASHED_PAGES_QUERY } from './page-queries';
 import useDelayedFlag, {
 	SKELETON_MIN_VISIBLE_MS,
 } from '../hooks/useDelayedFlag';
-import { FULL_PAGE_COLLECTION_QUERY } from '../collections';
-import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
+import { useDocumentActions, useDocumentRecord } from '../documents';
 
 const EMPTY_TRASHED_DOCUMENTS_STATE = {
 	documents: [],
@@ -33,9 +27,9 @@ const EMPTY_TRASHED_DOCUMENTS_STATE = {
 	refresh: () => {},
 };
 
-// Keep these in sync with the PHP cascade marker meta keys. Trash entries
-// carry a marker pointing at the cascade root (page → subpage, page → owned
-// inline collection) so the sidebar can fold descendants under their root.
+// These mirror the PHP cascade marker meta keys. Trash entries point back to
+// the cascade root (page → subpage, page → owned inline collection), which lets
+// the sidebar show one row for the whole trashed group.
 const PARENT_MARKER_META = '_cortext_trashed_by_parent';
 const OWNER_PAGE_MARKER_META = '_cortext_trashed_by_owner_page';
 
@@ -48,9 +42,8 @@ export function computeSidebarTrashRoots( trashedDocuments = [] ) {
 
 	const markerOf = ( document ) => {
 		const meta = document.meta ?? {};
-		// Pages → subpages share the original marker. Pages → owned inline
-		// collections use a different key, but both point at a parent page
-		// that's the cascade root.
+		// Pages → subpages and pages → owned inline collections use different
+		// marker keys, but both point at the same kind of root: a parent page.
 		const parent = Number( meta[ PARENT_MARKER_META ] ?? 0 );
 		if ( parent > 0 ) {
 			return parent;
@@ -106,62 +99,230 @@ function titleText( title, fallback ) {
 	return title?.rendered?.trim() || title?.raw?.trim() || fallback;
 }
 
-function documentKind( document ) {
-	if ( document?.kind ) {
-		return document.kind;
+function buildBreadcrumb( record, ancestorById ) {
+	const ancestors = [];
+	let current = record.parent ? ancestorById.get( record.parent ) : null;
+	const seen = new Set( [ record.id ] );
+	while ( current && ! seen.has( current.id ) ) {
+		seen.add( current.id );
+		ancestors.unshift( {
+			id: current.id,
+			title:
+				current.title?.rendered?.trim() ||
+				__( '(untitled)', 'cortext' ),
+			icon: current.meta?.cortext_document_icon ?? '',
+		} );
+		current = current.parent ? ancestorById.get( current.parent ) : null;
 	}
-	if ( document?.type === POST_TYPE ) {
-		return 'page';
-	}
-	if ( document?.type === 'crtxt_collection' ) {
-		return 'collection';
-	}
-	return 'document';
+	return ancestors;
 }
 
-function descendantLabel( rootKind, counts ) {
-	// Mixed subtrees (page → subpage + page → owned inline collection) read
-	// as "%d nested items" so the wording stays honest. Pure subtrees keep
-	// the more specific noun.
-	if ( rootKind === 'page' ) {
-		if ( counts.pages > 0 && counts.collections === 0 ) {
-			return sprintf(
-				/* translators: %d: number of subpages */
-				_n( '%d subpage', '%d subpages', counts.pages, 'cortext' ),
-				counts.pages
-			);
-		}
-		if ( counts.collections > 0 && counts.pages === 0 ) {
-			return sprintf(
-				/* translators: %d: number of nested inline collections */
-				_n(
-					'%d collection',
-					'%d collections',
-					counts.collections,
-					'cortext'
-				),
-				counts.collections
-			);
-		}
+const EMPTY_COUNTS = Object.freeze( { pages: 0, collections: 0, total: 0 } );
+
+/**
+ * One row in the trash list. Display copy comes from `useDocumentRecord`, so
+ * the parent component does not need kind checks.
+ *
+ * @param {Object}                         props
+ * @param {Object}                         props.record           Trashed document record.
+ * @param {Object}                         props.descendantCounts Cascade counts for this root.
+ * @param {Map<number, Object>}            props.ancestorById     Lookup map for breadcrumb walking.
+ * @param {boolean}                        props.isSelected       Whether the canvas is currently showing this document.
+ * @param {boolean}                        props.isBusy           Restore or delete in flight for this row.
+ * @param {?{id: number, message: string}} props.error            Per-row error to display under the row.
+ * @param {Function}                       props.onRestore        Parent callback `(record, restoreErrorMessage)`.
+ * @param {Function}                       props.onRequestDelete  Parent callback `(record)` to open the confirm dialog.
+ */
+function SidebarTrashRow( {
+	record,
+	descendantCounts,
+	ancestorById,
+	isSelected,
+	isBusy,
+	error,
+	onRestore,
+	onRequestDelete,
+} ) {
+	const navigate = useNavigate();
+	const { title, features, descendantLabel, restoreErrorMessage } =
+		useDocumentRecord( record );
+
+	const breadcrumb = features.hierarchy
+		? buildBreadcrumb( record, ancestorById )
+		: [];
+	const documentIcon = record.meta?.cortext_document_icon ?? '';
+	const collectionTitle = record.collection?.id
+		? titleText( record.collection?.title, __( 'Collection', 'cortext' ) )
+		: '';
+	// Inline collections are the only trash items with an owner. If that page
+	// is still active, show its title so similar inline tables are easier to
+	// tell apart.
+	const ownerTitle = record.owner
+		? titleText( record.owner?.title, __( 'Page', 'cortext' ) )
+		: '';
+	const meta = descendantCounts.total
+		? descendantLabel( descendantCounts )
+		: '';
+
+	const handleRestore = useCallback( () => {
+		onRestore( record, restoreErrorMessage );
+	}, [ onRestore, record, restoreErrorMessage ] );
+
+	const handleRequestDelete = useCallback( () => {
+		onRequestDelete( record );
+	}, [ onRequestDelete, record ] );
+
+	const rowClasses = [ 'cortext-sidebar__row' ];
+	if ( isSelected ) {
+		rowClasses.push( 'is-selected' );
 	}
 
-	return sprintf(
-		/* translators: %d: number of nested trashed documents */
-		_n( '%d nested item', '%d nested items', counts.total, 'cortext' ),
-		counts.total
+	return (
+		<li className="cortext-sidebar__node cortext-sidebar__trash-row">
+			<div className={ rowClasses.join( ' ' ) }>
+				<Button
+					className="cortext-sidebar__title cortext-sidebar__trash-text"
+					variant="tertiary"
+					onClick={ () =>
+						navigate( {
+							to: '/$',
+							params: { _splat: record.path },
+						} )
+					}
+				>
+					<span className="cortext-sidebar__trash-title">
+						<PageIcon
+							icon={ documentIcon }
+							size={ 14 }
+							className="cortext-sidebar__trash-title-icon"
+						/>
+						<span className="cortext-sidebar__trash-title-text">
+							{ title }
+						</span>
+					</span>
+					{ ( breadcrumb.length > 0 ||
+						collectionTitle ||
+						ownerTitle ||
+						meta ) && (
+						<span className="cortext-sidebar__breadcrumb">
+							{ breadcrumb.map( ( crumb, index ) => (
+								<span
+									key={ crumb.id }
+									className="cortext-sidebar__breadcrumb-crumb"
+								>
+									<PageIcon icon={ crumb.icon } size={ 12 } />
+									<span>{ crumb.title }</span>
+									{ index < breadcrumb.length - 1 && (
+										<span
+											className="cortext-sidebar__breadcrumb-sep"
+											aria-hidden="true"
+										>
+											{ ' / ' }
+										</span>
+									) }
+								</span>
+							) ) }
+							{ ownerTitle && <span>{ ownerTitle }</span> }
+							{ collectionTitle && (
+								<span>{ collectionTitle }</span>
+							) }
+							{ meta && (
+								<>
+									{ ( breadcrumb.length > 0 ||
+										collectionTitle ||
+										ownerTitle ) && (
+										<span aria-hidden="true">
+											{ ' · ' }
+										</span>
+									) }
+									<span>{ meta }</span>
+								</>
+							) }
+						</span>
+					) }
+				</Button>
+				<div className="cortext-sidebar__trash-actions">
+					<Button
+						size="small"
+						icon={ rotateLeft }
+						label={ __( 'Restore', 'cortext' ) }
+						disabled={ isBusy }
+						onClick={ handleRestore }
+					/>
+					<Button
+						size="small"
+						icon={ trash }
+						isDestructive
+						label={ __( 'Delete permanently', 'cortext' ) }
+						disabled={ isBusy }
+						onClick={ handleRequestDelete }
+					/>
+				</div>
+			</div>
+			{ error && (
+				<p className="cortext-sidebar__row-error" role="alert">
+					{ error.message }
+				</p>
+			) }
+		</li>
+	);
+}
+
+/**
+ * Confirmation for permanent delete. The descriptor decides whether this can
+ * use a plain confirm dialog or needs the typed-name flow.
+ *
+ * @param {Object}   props
+ * @param {Object}   props.record    Trashed record pending delete.
+ * @param {Object}   props.counts    Cascade counts for the pending root.
+ * @param {Function} props.onConfirm Parent callback `(record, permanentDeleteErrorMessage)`.
+ * @param {Function} props.onCancel  Closes the dialog without deleting.
+ */
+function SidebarTrashConfirmDialog( { record, counts, onConfirm, onCancel } ) {
+	const { title, permanentDeleteConfirmation, permanentDeleteErrorMessage } =
+		useDocumentRecord( record );
+	const dialogConfig = permanentDeleteConfirmation( counts ) ?? {
+		title: '',
+		message: '',
+	};
+
+	const handleConfirm = useCallback( () => {
+		onConfirm( record, permanentDeleteErrorMessage );
+	}, [ onConfirm, record, permanentDeleteErrorMessage ] );
+
+	if ( dialogConfig.requireTypeToConfirm ) {
+		return (
+			<TypeToConfirmDialog
+				title={ dialogConfig.title }
+				message={ dialogConfig.message }
+				confirmPhrase={ title }
+				confirmLabel={ __( 'Delete permanently', 'cortext' ) }
+				onConfirm={ handleConfirm }
+				onCancel={ onCancel }
+			/>
+		);
+	}
+
+	return (
+		<ConfirmDialog
+			onConfirm={ handleConfirm }
+			onCancel={ onCancel }
+			confirmButtonText={ __( 'Delete permanently', 'cortext' ) }
+		>
+			{ dialogConfig.message }
+		</ConfirmDialog>
 	);
 }
 
 /**
  * Sidebar Trash for Cortext documents.
  *
- * Trash shows cascade roots. Children that were trashed with a parent are
- * restored or deleted with that parent. If a marker points to a parent that is
- * no longer in Trash, the orphan still appears so it can be recovered.
+ * Trash shows cascade roots. Children trashed with a parent are restored or
+ * deleted with that parent. If a marker points to a parent that is no longer
+ * in Trash, the orphan still appears so it can be recovered.
  *
- * Mutations use the document Trash endpoints. Pages also refresh the page tree;
- * rows notify collection queries because relation chips and rollups can change
- * outside the row's own collection.
+ * Restore and permanent delete go through the descriptors, keeping per-kind
+ * refreshes and error copy out of this component.
  *
  * @param {Object}      props
  * @param {Array}       props.activePages           Active page records for
@@ -184,7 +345,6 @@ export default function SidebarTrash( {
 	onSelect,
 	trashedDocumentsState = EMPTY_TRASHED_DOCUMENTS_STATE,
 } ) {
-	const navigate = useNavigate();
 	const {
 		documents: trashedDocuments,
 		isLoading: isResolvingTrash,
@@ -193,6 +353,7 @@ export default function SidebarTrash( {
 	} = trashedDocumentsState;
 
 	const { invalidateResolution } = useDispatch( 'core' );
+	const { restore, permanentDelete } = useDocumentActions();
 
 	const [ pendingDelete, setPendingDelete ] = useState( null );
 	const [ rowError, setRowError ] = useState( null );
@@ -236,145 +397,52 @@ export default function SidebarTrash( {
 		[ visibleTrashed ]
 	);
 
-	const buildBreadcrumb = useCallback(
-		( document ) => {
-			const ancestors = [];
-			let current = document.parent
-				? ancestorById.get( document.parent )
-				: null;
-			const seen = new Set( [ document.id ] );
-			while ( current && ! seen.has( current.id ) ) {
-				seen.add( current.id );
-				ancestors.unshift( {
-					id: current.id,
-					title:
-						current.title?.rendered?.trim() ||
-						__( '(untitled)', 'cortext' ),
-					icon: current.meta?.cortext_document_icon ?? '',
-				} );
-				current = current.parent
-					? ancestorById.get( current.parent )
-					: null;
-			}
-			return ancestors;
-		},
-		[ ancestorById ]
-	);
-
-	const refreshQueries = useCallback( () => {
-		invalidateResolution( 'getEntityRecords', [
-			'postType',
-			POST_TYPE,
-			ACTIVE_PAGES_QUERY,
-		] );
-		invalidateResolution( 'getEntityRecords', [
-			'postType',
-			POST_TYPE,
-			TRASHED_PAGES_QUERY,
-		] );
-		// Restoring a page can also restore collections. Refresh the full-page
-		// list so they return to the sidebar.
-		invalidateResolution( 'getEntityRecords', [
-			'postType',
-			'crtxt_collection',
-			FULL_PAGE_COLLECTION_QUERY,
-		] );
-	}, [ invalidateResolution ] );
-
-	const refreshTrash = useCallback( () => {
-		trashedDocumentsState.refresh?.();
-	}, [ trashedDocumentsState ] );
-
-	const refreshRows = useCallback( () => {
-		notifyCollectionRowsChanged();
-		refreshTrash();
-	}, [ refreshTrash ] );
-
-	const restore = useCallback(
-		async ( item ) => {
-			const { id } = item;
-			const kind = documentKind( item );
+	const handleRestore = useCallback(
+		async ( record, restoreErrorMessage ) => {
 			setRowError( null );
-			setBusyId( id );
+			setBusyId( record.id );
 			try {
-				await apiFetch( {
-					path: `/cortext/v1/documents/${ id }/restore`,
-					method: 'POST',
-				} );
-				if ( kind === 'row' ) {
-					refreshRows( item );
-				} else {
-					refreshQueries();
-					refreshTrash();
-				}
+				await restore( record );
 			} catch ( error ) {
 				setRowError( {
-					id,
-					message:
-						error?.message ??
-						( kind === 'row'
-							? __( 'Could not restore row.', 'cortext' )
-							: __( 'Could not restore page.', 'cortext' ) ),
+					id: record.id,
+					message: error?.message ?? restoreErrorMessage,
 				} );
 			} finally {
 				setBusyId( null );
 			}
 		},
-		[ refreshQueries, refreshRows, refreshTrash ]
+		[ restore ]
 	);
 
-	const confirmPermanentDelete = useCallback( async () => {
-		const item = pendingDelete;
-		setPendingDelete( null );
-		if ( ! item?.id ) {
-			return;
-		}
-		const { id } = item;
-		const kind = documentKind( item );
-		setRowError( null );
-		setBusyId( id );
-		try {
-			const response = await apiFetch( {
-				path: `/cortext/v1/documents/${ id }/permanent-delete`,
-				method: 'POST',
-			} );
-			// If the canvas was showing one of the deleted documents,
-			// navigate away. Without this `useEntityRecord` would return
-			// undefined and the canvas would spin forever (the document is
-			// genuinely gone now, not just trashed). Collections track via
-			// `selectedCollectionId`, so check both.
-			const deletedIds = response?.deleted ?? [];
-			const openId = selectedId ?? selectedCollectionId;
-			if ( openId && deletedIds.includes( openId ) ) {
-				onSelect( null );
+	const handlePermanentDelete = useCallback(
+		async ( record, permanentDeleteErrorMessage ) => {
+			setPendingDelete( null );
+			setRowError( null );
+			setBusyId( record.id );
+			try {
+				const response = await permanentDelete( record );
+				const deletedIds = response?.deleted ?? [];
+				// If the canvas was showing one of the deleted documents, move
+				// away from it. Otherwise `useEntityRecord` returns undefined
+				// and the canvas keeps spinning because the document is gone,
+				// not just trashed. Collections track via `selectedCollectionId`,
+				// so check both ids.
+				const openId = selectedId ?? selectedCollectionId;
+				if ( openId && deletedIds.includes( openId ) ) {
+					onSelect( null );
+				}
+			} catch ( error ) {
+				setRowError( {
+					id: record.id,
+					message: error?.message ?? permanentDeleteErrorMessage,
+				} );
+			} finally {
+				setBusyId( null );
 			}
-			if ( kind === 'row' ) {
-				refreshRows( item );
-			} else {
-				refreshQueries();
-				refreshTrash();
-			}
-		} catch ( error ) {
-			setRowError( {
-				id,
-				message:
-					error?.message ??
-					( kind === 'row'
-						? __( 'Could not delete row.', 'cortext' )
-						: __( 'Could not delete page.', 'cortext' ) ),
-			} );
-		} finally {
-			setBusyId( null );
-		}
-	}, [
-		pendingDelete,
-		refreshQueries,
-		refreshRows,
-		refreshTrash,
-		selectedId,
-		selectedCollectionId,
-		onSelect,
-	] );
+		},
+		[ permanentDelete, selectedId, selectedCollectionId, onSelect ]
+	);
 
 	const isLoading = isResolvingTrash && ! hasTrashCache;
 	const showSkeleton = useDelayedFlag(
@@ -384,97 +452,15 @@ export default function SidebarTrash( {
 	);
 	const hasError = Boolean( trashError && ! hasTrashCache );
 	const hasItems = roots.length > 0;
-	const pendingKind = pendingDelete ? documentKind( pendingDelete ) : null;
-	const pendingDescendantCounts = pendingDelete
-		? descendantCountById.get( pendingDelete.id ) ?? {
-				pages: 0,
-				collections: 0,
-				total: 0,
-		  }
-		: { pages: 0, collections: 0, total: 0 };
-	const pendingDescendantCount = pendingDescendantCounts.total;
+
 	const retryTrashFetch = useCallback( () => {
 		invalidateResolution( 'getEntityRecords', [
 			'postType',
 			POST_TYPE,
 			TRASHED_PAGES_QUERY,
 		] );
-		refreshTrash();
-	}, [ invalidateResolution, refreshTrash ] );
-
-	let pendingDeleteMessage = __(
-		"Permanently delete this page? You can't undo this.",
-		'cortext'
-	);
-	if ( pendingKind === 'row' ) {
-		pendingDeleteMessage = __(
-			"Permanently delete this row? You can't undo this.",
-			'cortext'
-		);
-	} else if ( pendingKind === 'collection' ) {
-		pendingDeleteMessage = __(
-			"Permanently delete this collection and all its rows? You can't undo this.",
-			'cortext'
-		);
-	} else if ( pendingKind === 'document' ) {
-		pendingDeleteMessage = __(
-			"Permanently delete this document? You can't undo this.",
-			'cortext'
-		);
-	} else if ( pendingDescendantCount > 0 ) {
-		// Mixed subtrees (subpages + inline collections) use the generic
-		// "nested items" wording so the count stays correct without
-		// pretending an inline collection is a subpage.
-		if (
-			pendingDescendantCounts.pages > 0 &&
-			pendingDescendantCounts.collections === 0
-		) {
-			pendingDeleteMessage = sprintf(
-				/* translators: %d: number of subpages that will be deleted along with the page. */
-				_n(
-					"Permanently delete this page and %d subpage? You can't undo this.",
-					"Permanently delete this page and %d subpages? You can't undo this.",
-					pendingDescendantCounts.pages,
-					'cortext'
-				),
-				pendingDescendantCounts.pages
-			);
-		} else {
-			pendingDeleteMessage = sprintf(
-				/* translators: %d: number of nested trashed items deleted along with the page. */
-				_n(
-					"Permanently delete this page and %d nested item? You can't undo this.",
-					"Permanently delete this page and %d nested items? You can't undo this.",
-					pendingDescendantCount,
-					'cortext'
-				),
-				pendingDescendantCount
-			);
-		}
-	}
-	if ( pendingDescendantCount > 0 && pendingKind === 'row' ) {
-		pendingDeleteMessage = sprintf(
-			/* translators: %d: number of nested items that will be deleted along with the row. */
-			_n(
-				"Permanently delete this row and %d nested item? You can't undo this.",
-				"Permanently delete this row and %d nested items? You can't undo this.",
-				pendingDescendantCount,
-				'cortext'
-			),
-			pendingDescendantCount
-		);
-	} else if ( pendingDescendantCount > 0 && pendingKind === 'document' ) {
-		pendingDeleteMessage = sprintf(
-			/* translators: %d: number of nested items that will be deleted along with the document. */
-			_n(
-				"Permanently delete this document and %d nested item? You can't undo this.",
-				"Permanently delete this document and %d nested items? You can't undo this.",
-				pendingDescendantCount,
-				'cortext'
-			),
-			pendingDescendantCount
-		);
-	}
+		trashedDocumentsState.refresh?.();
+	}, [ invalidateResolution, trashedDocumentsState ] );
 
 	return (
 		<>
@@ -499,210 +485,38 @@ export default function SidebarTrash( {
 
 			{ ! isLoading && ! hasError && hasItems && (
 				<ul className="cortext-sidebar__list cortext-sidebar__trash-list">
-					{ roots.map( ( document ) => {
-						const kind = documentKind( document );
-						const title = titleText(
-							document.title,
-							__( '(untitled)', 'cortext' )
-						);
-						const breadcrumb =
-							kind === 'page' ? buildBreadcrumb( document ) : [];
-						const documentIcon =
-							document.meta?.cortext_document_icon ?? '';
-						const isBusy = busyId === document.id;
-						const isSelected = selectedId === document.id;
-						const error =
-							rowError?.id === document.id ? rowError : null;
-						const descendantCounts = descendantCountById.get(
-							document.id
-						) ?? {
-							pages: 0,
-							collections: 0,
-							total: 0,
-						};
-						const meta = descendantCounts.total
-							? descendantLabel( kind, descendantCounts )
-							: '';
-						const collectionTitle =
-							kind === 'row'
-								? titleText(
-										document.collection?.title,
-										__( 'Collection', 'cortext' )
-								  )
-								: '';
-						// Inline collections are the only trash items with an
-						// owner. Show that page title when the owner is still
-						// active so similar inline tables are easier to tell
-						// apart.
-						const ownerTitle = document.owner
-							? titleText(
-									document.owner?.title,
-									__( 'Page', 'cortext' )
-							  )
-							: '';
-						const rowClasses = [ 'cortext-sidebar__row' ];
-						if ( isSelected ) {
-							rowClasses.push( 'is-selected' );
-						}
-
-						return (
-							<li
-								key={ document.id }
-								className="cortext-sidebar__node cortext-sidebar__trash-row"
-							>
-								<div className={ rowClasses.join( ' ' ) }>
-									<Button
-										className="cortext-sidebar__title cortext-sidebar__trash-text"
-										variant="tertiary"
-										onClick={ () =>
-											navigate( {
-												to: '/$',
-												params: {
-													_splat: document.path,
-												},
-											} )
-										}
-									>
-										<span className="cortext-sidebar__trash-title">
-											<PageIcon
-												icon={ documentIcon }
-												size={ 14 }
-												className="cortext-sidebar__trash-title-icon"
-											/>
-											<span className="cortext-sidebar__trash-title-text">
-												{ title }
-											</span>
-										</span>
-										{ ( breadcrumb.length > 0 ||
-											collectionTitle ||
-											ownerTitle ||
-											meta ) && (
-											<span className="cortext-sidebar__breadcrumb">
-												{ breadcrumb.map(
-													( crumb, index ) => (
-														<span
-															key={ crumb.id }
-															className="cortext-sidebar__breadcrumb-crumb"
-														>
-															<PageIcon
-																icon={
-																	crumb.icon
-																}
-																size={ 12 }
-															/>
-															<span>
-																{ crumb.title }
-															</span>
-															{ index <
-																breadcrumb.length -
-																	1 && (
-																<span
-																	className="cortext-sidebar__breadcrumb-sep"
-																	aria-hidden="true"
-																>
-																	{ ' / ' }
-																</span>
-															) }
-														</span>
-													)
-												) }
-												{ ownerTitle && (
-													<span>{ ownerTitle }</span>
-												) }
-												{ collectionTitle && (
-													<span>
-														{ collectionTitle }
-													</span>
-												) }
-												{ meta && (
-													<>
-														{ ( breadcrumb.length >
-															0 ||
-															collectionTitle ||
-															ownerTitle ) && (
-															<span aria-hidden="true">
-																{ ' · ' }
-															</span>
-														) }
-														<span>{ meta }</span>
-													</>
-												) }
-											</span>
-										) }
-									</Button>
-									<div className="cortext-sidebar__trash-actions">
-										<Button
-											size="small"
-											icon={ rotateLeft }
-											label={ __( 'Restore', 'cortext' ) }
-											disabled={ isBusy }
-											onClick={ () =>
-												restore( {
-													...document,
-													kind,
-												} )
-											}
-										/>
-										<Button
-											size="small"
-											icon={ trash }
-											isDestructive
-											label={ __(
-												'Delete permanently',
-												'cortext'
-											) }
-											disabled={ isBusy }
-											onClick={ () =>
-												setPendingDelete( {
-													...document,
-													kind,
-												} )
-											}
-										/>
-									</div>
-								</div>
-								{ error && (
-									<p
-										className="cortext-sidebar__row-error"
-										role="alert"
-									>
-										{ error.message }
-									</p>
-								) }
-							</li>
-						);
-					} ) }
+					{ roots.map( ( record ) => (
+						<SidebarTrashRow
+							key={ record.id }
+							record={ record }
+							descendantCounts={
+								descendantCountById.get( record.id ) ??
+								EMPTY_COUNTS
+							}
+							ancestorById={ ancestorById }
+							isSelected={ selectedId === record.id }
+							isBusy={ busyId === record.id }
+							error={
+								rowError?.id === record.id ? rowError : null
+							}
+							onRestore={ handleRestore }
+							onRequestDelete={ setPendingDelete }
+						/>
+					) ) }
 				</ul>
 			) }
 
-			{ pendingDelete !== null &&
-				( pendingKind === 'collection' ? (
-					<TypeToConfirmDialog
-						title={ __(
-							'Delete collection permanently?',
-							'cortext'
-						) }
-						message={ pendingDeleteMessage }
-						confirmPhrase={ titleText(
-							pendingDelete.title,
-							__( '(untitled)', 'cortext' )
-						) }
-						confirmLabel={ __( 'Delete permanently', 'cortext' ) }
-						onConfirm={ confirmPermanentDelete }
-						onCancel={ () => setPendingDelete( null ) }
-					/>
-				) : (
-					<ConfirmDialog
-						onConfirm={ confirmPermanentDelete }
-						onCancel={ () => setPendingDelete( null ) }
-						confirmButtonText={ __(
-							'Delete permanently',
-							'cortext'
-						) }
-					>
-						{ pendingDeleteMessage }
-					</ConfirmDialog>
-				) ) }
+			{ pendingDelete !== null && (
+				<SidebarTrashConfirmDialog
+					record={ pendingDelete }
+					counts={
+						descendantCountById.get( pendingDelete.id ) ??
+						EMPTY_COUNTS
+					}
+					onConfirm={ handlePermanentDelete }
+					onCancel={ () => setPendingDelete( null ) }
+				/>
+			) }
 		</>
 	);
 }

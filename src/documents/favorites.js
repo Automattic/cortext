@@ -1,5 +1,8 @@
-import { favoriteKey } from '../components/SidebarFavorites';
 import { kindFromRecord } from './kinds';
+
+export function favoriteKey( favorite ) {
+	return `favorite:${ favorite.kind }:${ Number( favorite.id ) }`;
+}
 
 /**
  * Resolve the favorites key for a record. Favorites are stored as `{ kind, id }`

@@ -1,0 +1,260 @@
+@use "@wordpress/base-styles/colors" as *;
+@use "@wordpress/base-styles/variables" as *;
+
+// Cascading format submenu. The outer popover sits beside the column
+// dropdown; each row is a button that anchors a third-level flyout for
+// picking a value. The visual is intentionally tight (240px panel) so it
+// reads as a continuation of the parent menu rather than a modal.
+.cortext-format-submenu {
+
+	&__panel {
+		min-width: 240px;
+		padding: $grid-unit-05;
+	}
+
+	&__row {
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-10;
+		width: 100%;
+		padding: $grid-unit-10 $grid-unit-15;
+		border: 0;
+		border-radius: 4px;
+		background: transparent;
+		text-align: start;
+		font-size: 13px;
+		color: $gray-900;
+		cursor: pointer;
+
+		&:hover,
+		&.is-open,
+		&.is-selected {
+			background: $gray-100;
+		}
+
+		&:focus-visible {
+			outline: 2px solid var(--cortext-accent);
+			outline-offset: -1px;
+		}
+	}
+
+	&__row-label {
+		flex: 1 1 auto;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	&__row-value {
+		flex: 0 0 auto;
+		color: $gray-700;
+		font-size: 12px;
+	}
+
+	&__row-chevron {
+		width: 1.5em;
+		height: 1.5em;
+		flex: 0 0 auto;
+		color: $gray-700;
+	}
+
+	&__note {
+		margin: $grid-unit-10 $grid-unit-15 $grid-unit-05;
+		padding: 0;
+		font-size: 11px;
+		color: $gray-700;
+	}
+
+	&__section {
+		padding: $grid-unit-10 $grid-unit-15 $grid-unit-05;
+	}
+
+	&__section-title {
+		display: block;
+		margin-bottom: $grid-unit-10;
+		font-size: 11px;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.4px;
+		color: $gray-700;
+	}
+
+	&__tiles {
+		display: grid;
+		grid-template-columns: repeat(3, 1fr);
+		gap: $grid-unit-05;
+	}
+
+	&__tile {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: $grid-unit-05;
+		padding: $grid-unit-10 $grid-unit-05;
+		min-height: 56px;
+		border: $border-width solid $gray-200;
+		border-radius: 4px;
+		background: transparent;
+		font-size: 11px;
+		color: $gray-900;
+		cursor: pointer;
+		transition: border-color 0.1s ease, background-color 0.1s ease;
+
+		&:hover {
+			background: $gray-100;
+		}
+
+		&:focus-visible {
+			outline: 2px solid var(--cortext-accent);
+			outline-offset: -1px;
+		}
+
+		&.is-selected {
+			border-color: var(--cortext-accent);
+			color: var(--cortext-accent);
+		}
+	}
+
+	&__tile-preview {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 20px;
+		color: currentcolor;
+	}
+
+	&__tile-preview-number {
+		font-weight: 600;
+		font-size: 14px;
+	}
+
+	&__tile-preview-bar {
+		width: 40px;
+		height: 6px;
+		fill: currentcolor;
+	}
+
+	&__tile-preview-ring {
+		width: 20px;
+		height: 20px;
+		stroke: currentcolor;
+	}
+
+	&__tile-label {
+		line-height: 1;
+	}
+
+	// Inline-control rows: same row geometry as the chevron rows but the
+	// right side hosts a small input or toggle instead of a value plus
+	// chevron. Keeps the panel visually coherent across row kinds.
+	&__inline-row {
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-10;
+		padding: $grid-unit-05 $grid-unit-15;
+	}
+
+	&__input {
+		flex: 0 0 auto;
+		width: 80px;
+
+		input {
+			text-align: end;
+		}
+	}
+
+	&__toggle {
+		flex: 0 0 auto;
+		margin: 0;
+	}
+
+	&__visual-config {
+		display: grid;
+		gap: 2px;
+		margin-top: $grid-unit-05;
+		padding-top: $grid-unit-05;
+		border-top: $border-width solid $gray-200;
+	}
+
+	&__swatch {
+		display: inline-block;
+		width: 14px;
+		height: 14px;
+		border-radius: 3px;
+		flex: 0 0 auto;
+	}
+
+	&__color-value {
+		display: inline-flex;
+		align-items: center;
+		gap: $grid-unit-05;
+	}
+
+	&__flyout {
+
+		.components-popover__content {
+			min-width: 200px;
+			padding: $grid-unit-05;
+		}
+	}
+
+	&__list {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		max-height: 320px;
+		overflow-y: auto;
+	}
+
+	&__list-item {
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-05;
+		width: 100%;
+		padding: $grid-unit-05 $grid-unit-10;
+		border: 0;
+		border-radius: 4px;
+		background: transparent;
+		text-align: start;
+		font-size: 13px;
+		color: $gray-900;
+		cursor: pointer;
+
+		&:hover {
+			background: $gray-100;
+		}
+
+		&:focus-visible {
+			outline: 2px solid var(--cortext-accent);
+			outline-offset: -1px;
+		}
+
+		&.is-selected {
+			color: var(--cortext-accent);
+		}
+	}
+
+	&__list-check {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 18px;
+		height: 18px;
+		flex: 0 0 auto;
+	}
+}
+
+// The parent column menu uses WP's private Menu, whose hover state is the
+// admin accent color. Cortext's sibling flyouts use neutral rows, so scope the
+// parent menu to the same treatment instead of making the children blue.
+.cortext-field-actions-popover {
+
+	[role="menuitem"][data-active-item]:not([data-focus-visible]):not([aria-disabled="true"]),
+	[role="menuitemradio"][data-active-item]:not([data-focus-visible]):not([aria-disabled="true"]),
+	[role="menuitemcheckbox"][data-active-item]:not([data-focus-visible]):not([aria-disabled="true"]) {
+		background-color: $gray-100;
+		color: $gray-900;
+	}
+}

@@ -1,0 +1,201 @@
+@use "@wordpress/base-styles/colors" as *;
+@use "@wordpress/base-styles/variables" as *;
+
+.cortext-edit-options-popover {
+	display: grid;
+	gap: $grid-unit-10;
+	padding: $grid-unit-15;
+	width: 320px;
+
+	&__header {
+		font-size: 11px;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+		color: $gray-700;
+	}
+
+	&__empty {
+		margin: 0;
+		color: $gray-700;
+		font-style: italic;
+	}
+
+	&__list {
+		display: grid;
+		gap: 2px;
+	}
+
+	&__row {
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-05;
+		padding: 2px;
+		border-radius: 2px;
+
+		&:hover {
+			background: $gray-100;
+		}
+	}
+
+	&__handle {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: $grid-unit-20;
+		height: $grid-unit-30;
+		cursor: grab;
+		background: transparent;
+		border: 0;
+		color: $gray-600;
+		padding: 0;
+		flex-shrink: 0;
+
+		&:active {
+			cursor: grabbing;
+		}
+	}
+
+	&__row-chip {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		align-items: center;
+		overflow: hidden;
+	}
+
+	&__pick {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		align-items: center;
+		background: transparent;
+		border: 0;
+		padding: 2px 0;
+		cursor: pointer;
+		text-align: start;
+
+		&:focus-visible {
+			outline: 2px solid var(--cortext-accent, #3858e9);
+			outline-offset: 1px;
+			border-radius: 2px;
+		}
+	}
+
+	&__row.is-selected &__pick {
+		font-weight: 600;
+	}
+
+	&__more {
+		flex-shrink: 0;
+	}
+
+	&__token-input {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: $grid-unit-05;
+		padding: $grid-unit-05;
+		border: 1px solid $gray-300;
+		border-radius: 2px;
+		background: $white;
+		min-height: $grid-unit-30;
+		cursor: text;
+
+		&:focus-within {
+			border-color: var(--cortext-accent, #3858e9);
+			box-shadow: 0 0 0 1px var(--cortext-accent, #3858e9);
+		}
+	}
+
+	// Higher specificity than wp-admin's `input[type="text"]` defaults
+	// (which paint a border + box-shadow). The wrapper carries the
+	// border/focus state; the input itself stays invisible so it reads
+	// as part of the same surface as the chips beside it. A tiny basis
+	// and explicit zero width override wp-admin's native input sizing so
+	// the cursor stays beside the trailing chip until the row is truly
+	// full.
+	input.cortext-edit-options-popover__token-input-field {
+		flex: 1 1 8px;
+		width: 0;
+		min-width: 8px;
+		border: 0;
+		outline: 0;
+		box-shadow: none;
+		background: transparent;
+		padding: 2px;
+		margin: 0;
+		font-size: 13px;
+		color: inherit;
+		min-height: $grid-unit-30 - 4px;
+		appearance: none;
+
+		&:focus,
+		&:focus-visible {
+			border: 0;
+			outline: 0;
+			box-shadow: none;
+		}
+
+		&::placeholder {
+			color: $gray-700;
+		}
+	}
+
+	&__create {
+
+		.components-menu-item__item {
+			display: inline-flex;
+			align-items: center;
+			gap: $grid-unit-05;
+			flex: 1 1 auto;
+		}
+	}
+
+	&__create-label {
+		color: $gray-700;
+	}
+
+	&__add {
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-05;
+	}
+
+	// Per-option config menu: rename input,
+	// Delete, then a vertical list of named colors.
+	&__menu {
+		width: 220px;
+	}
+
+	&__menu-popover {
+		padding: 0;
+	}
+
+	&__menu-rename {
+		padding: $grid-unit-10 $grid-unit-10 $grid-unit-05;
+	}
+
+	&__color-item {
+
+		.components-menu-items__item-icon {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+		}
+	}
+
+	&__swatch-square {
+		display: block;
+		width: 16px;
+		height: 16px;
+		border-radius: 3px;
+		border: 1px solid rgba(0, 0, 0, 0.08);
+
+		// Mirrors `.cortext-chip--neutral` so the picker preview matches
+		// the rendered chip when "Default" is selected.
+		&--default {
+			background: $gray-700;
+		}
+	}
+}

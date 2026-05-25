@@ -1528,6 +1528,10 @@ final class RowsController {
 
 		return array(
 			'id'          => $post->ID,
+			// `kind` keeps the row self-describing on the wire. Without it,
+			// JS helpers like `kindFromRecord` see no `type` either (the
+			// cortext endpoint trims that) and would fall back to `null`.
+			'kind'        => 'row',
 			'title'       => array(
 				'raw'      => $post->post_title,
 				'rendered' => $post->post_title,

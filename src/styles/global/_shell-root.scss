@@ -1,0 +1,370 @@
+@use "@wordpress/base-styles/colors" as *;
+@use "@wordpress/base-styles/variables" as *;
+
+// Hide wp-admin chrome on the Cortext screen. The React shell is
+// `position: fixed; inset: 0`, so admin scaffolding (toolbar, sidebar,
+// footer) would only matter where it has its own `position: fixed` and a
+// higher z-index: #wpadminbar and #adminmenumain. Hide them so
+// they don't paint on top of the canvas; #wpfooter joins the same rule
+// to keep the React DevTools panel uncluttered.
+body.cortext-fullscreen {
+
+	#wpadminbar,
+	#adminmenumain,
+	#wpfooter {
+		display: none;
+	}
+}
+
+.cortext-root {
+	position: fixed;
+	inset: 0;
+	background: var(--cortext-shell-surface);
+	color: var(--cortext-text);
+	font-family: var(--cortext-shell-font-family);
+	font-size: var(--cortext-shell-font-size);
+}
+
+.cortext-shell {
+	--cortext-shell-sidebar-track-width: var(--cortext-sidebar-width);
+
+	position: relative;
+	isolation: isolate;
+	display: grid;
+	grid-template-columns: var(--cortext-shell-sidebar-track-width) minmax(0, 1fr);
+	height: 100vh;
+	transition: grid-template-columns 160ms ease;
+}
+
+// Skip the transition while the drag/keyboard nudge is live so the grid
+// tracks the input frame for frame.
+.cortext-root[data-sidebar-resizing="true"] .cortext-shell {
+	transition: none;
+}
+
+// Collapsed: pin to rail width but keep the saved expanded width on the
+// root, so toggling back restores it.
+.cortext-root[data-sidebar-collapsed="true"] .cortext-shell {
+	--cortext-shell-sidebar-track-width: var(--cortext-sidebar-width-rail);
+}
+
+// Shell column that frames the canvas iframe. Lives in the initial bundle
+// because home and collection routes render this container before the
+// editor chunk is loaded; keeping the flex/height/overflow here means the
+// column reserves its slot from the first paint instead of waiting for
+// the editor chunk. Follows the shell theme via
+// --cortext-canvas-frame-surface; the iframe interior is painted by the
+// active block theme, not by this token.
+.cortext-shell__canvas {
+	position: relative;
+	z-index: 1;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	background: var(--cortext-canvas-frame-surface);
+
+	&:focus {
+		outline: none;
+	}
+
+	// InterfaceSkeleton defaults to `position: fixed` at >= 782px, which would
+	// escape our grid and overlap the page-list sidebar. Scope it to fill just
+	// our canvas column instead.
+	.interface-interface-skeleton {
+		position: absolute !important;
+		inset: 0;
+		min-height: 0;
+	}
+}
+
+// @wordpress/components buttons inherit Cortext shell tokens only in chrome
+// that Cortext owns. The editor iframe, inspector, and block toolbars keep
+// Gutenberg's own component styling.
+.cortext-sidebar,
+.cortext-topbar,
+.cortext-canvas__identity-actions {
+	/* stylelint-disable-next-line no-descending-specificity */
+	.components-button {
+		border-radius: var(--cortext-shell-radius);
+
+		// WP components paints a 1.5px accent ring on `:focus:not(:active)`,
+		// which fires on click as well as keyboard nav. Inside chrome that
+		// already has hover/pressed/selected backgrounds, that ring reads
+		// as a stray line at the edge of each button (visible alongside
+		// the chevron / title / kebab in a hovered tree row). Drop it for
+		// click; keep `:focus-visible` so keyboard nav still has a focus
+		// indicator.
+		&:focus:not(:focus-visible) {
+			box-shadow: none;
+			outline: none;
+		}
+	}
+
+	/* stylelint-disable-next-line no-descending-specificity */
+	.components-button:not(.is-primary) {
+		background: var(--cortext-button-surface);
+		color: var(--cortext-button-text);
+
+		// Skip pressed buttons: their .is-pressed rule below paints both
+		// background and text-strong, and we don't want hover/focus to revert
+		// either back to the default tier. Unpressed buttons brighten to
+		// strong on hover/focus so the icon/label pops alongside the overlay.
+		&:not(.is-pressed):hover:not(:disabled),
+		&:not(.is-pressed):focus-visible:not(:disabled) {
+			background: var(--cortext-button-hover-surface);
+			color: var(--cortext-text-strong);
+		}
+	}
+
+	.cortext-document-actions__settings.components-button:not(.is-primary):not(.is-pressed):hover:not(:disabled, [aria-disabled="true"]) {
+		background: var(--cortext-state-hover-strong, var(--cortext-button-hover-surface));
+		color: var(--cortext-text-strong);
+	}
+
+	.components-button.is-pressed {
+		// Strong text/icon so the toggled-on state pops, matching the sidebar
+		// selected row and the breadcrumb is-current treatment.
+		color: var(--cortext-text-strong);
+		background: var(--cortext-button-pressed-surface);
+
+		// Selectors match WP's own .is-pressed:hover specificity (which would
+		// otherwise flip the background to solid #1e1e1e); ours wins by source
+		// order and gives pressed chrome a stronger hover state.
+		/* stylelint-disable-next-line no-descending-specificity */
+		&:hover:not(:disabled, [aria-disabled="true"]) {
+			background: var(--cortext-state-selected-hover);
+			color: var(--cortext-text-strong);
+		}
+	}
+
+	// Keep hover/focus/pressed from painting only the inner title/action
+	// button, which makes the row look split into separate cells (or, with
+	// alpha overlays, visibly doubles the fill on the button). The row itself
+	// handles every state's background.
+	/* stylelint-disable no-descending-specificity */
+	.cortext-sidebar__row .components-button:not(.is-primary):hover:not(:disabled),
+	.cortext-sidebar__row .components-button:not(.is-primary):focus:not(:disabled),
+	.cortext-sidebar__row .components-button.is-pressed,
+	.cortext-sidebar__row .components-button.is-pressed:hover:not(:disabled, [aria-disabled="true"]) {
+		background: transparent;
+	}
+	/* stylelint-enable no-descending-specificity */
+
+	// Title text brightens whenever the row is hovered, focused, or selected.
+	// Lives in this block so its specificity sits above the button :hover/:focus
+	// color rule above (which would otherwise pin the title to default text).
+	.cortext-sidebar__row:hover .cortext-sidebar__title.components-button,
+	.cortext-sidebar__row:focus-within .cortext-sidebar__title.components-button,
+	.cortext-sidebar__row:hover .cortext-sidebar__favorite-title,
+	.cortext-sidebar__row:focus-within .cortext-sidebar__favorite-title,
+	.cortext-sidebar__row.is-selected .cortext-sidebar__title.components-button {
+		color: var(--cortext-text-strong);
+	}
+
+	.components-button.is-primary {
+		background: var(--cortext-button-primary-surface);
+		box-shadow: inset 0 0 0 var(--cortext-shell-border-width) var(--cortext-button-primary-surface);
+		color: var(--cortext-button-primary-text);
+
+		&:hover:not(:disabled),
+		&:focus:not(:disabled) {
+			background: var(--cortext-button-primary-hover-surface);
+			box-shadow: inset 0 0 0 var(--cortext-shell-border-width) var(--cortext-button-primary-hover-surface);
+			color: var(--cortext-button-primary-text);
+		}
+	}
+
+	.components-button svg {
+		fill: currentcolor;
+	}
+
+	.dashicon,
+	.dashicons {
+		color: var(--cortext-button-text);
+	}
+}
+
+// Loading and empty states for the canvas column. EntityRoute renders these
+// on collection routes and during route resolution, before (or instead of)
+// mounting the lazy editor chunk, so the styles have to live in the initial
+// CSS bundle.
+.cortext-canvas__loading,
+.cortext-canvas__empty {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	color: var(--cortext-text-muted);
+	height: 100%;
+}
+
+// While the document or editor mounts, stretch the loading area so the
+// placeholder can occupy the same space as the incoming content.
+.cortext-canvas__loading--document,
+.cortext-canvas__loading--collection {
+	align-items: stretch;
+	justify-content: flex-start;
+	overflow: auto;
+}
+
+.cortext-canvas__empty-text {
+	color: $gray-700;
+	text-align: center;
+	padding: $grid-unit-30 0;
+}
+
+// Wrapper that hosts DataViews on a full-page collection route. DataViews
+// needs an explicit height on its parent or its inner scroll collapses to
+// 0; we fill the canvas column.
+.cortext-canvas__table {
+	position: relative;
+	flex: 1 1 auto;
+	min-width: 0;
+	height: 100%;
+	overflow: hidden;
+	background: transparent;
+	color: $gray-900;
+}
+
+.cortext-canvas__table .cortext-canvas__loading {
+	color: $gray-700;
+}
+
+// Identity-action affordances render inside the BlockCanvas iframe via
+// EditorBody, so their layout + reveal-on-hover rules have to live in the
+// eagerly-enqueued admin bundle (BlockCanvas auto-loads index.css into the
+// iframe; the lazy editor chunk never reaches it).
+.cortext-canvas__identity-actions {
+	display: flex;
+	align-items: center;
+	gap: $grid-unit-05;
+	max-width: var(--wp--style--global--content-size, 840px);
+	width: 100%;
+	margin: $grid-unit-10 auto $grid-unit-10;
+	padding: 0 $grid-unit-20;
+
+	.components-dropdown {
+		display: flex;
+		align-items: center;
+	}
+
+	.cortext-canvas__identity-action {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		opacity: 0;
+		min-width: 0;
+		height: $grid-unit-40;
+		padding: 0 $grid-unit-10;
+		line-height: 20px;
+		transition:
+			opacity 0.12s ease,
+			background-color 0.12s ease,
+			box-shadow 0.12s ease;
+
+		&:hover,
+		&:focus-visible {
+			opacity: 1;
+		}
+	}
+
+	&:focus-within .cortext-canvas__identity-action {
+		opacity: 1;
+	}
+}
+
+// Reveal editor-only page identity actions when the user is working in the
+// page header, rather than when they discover the hidden actions row itself.
+// These nodes live inside BlockCanvas, so target the iframe document body.
+body:has([data-type="core/post-title"]:hover) .cortext-canvas__identity-action,
+body:has([data-type="core/post-title"]:focus-within) .cortext-canvas__identity-action,
+body:has([data-type="cortext/document-icon"]:hover) .cortext-canvas__identity-action,
+body:has([data-type="cortext/document-icon"]:focus-within) .cortext-canvas__identity-action,
+body:has(.cortext-canvas__identity-actions:hover) .cortext-canvas__identity-action {
+	opacity: 1;
+}
+
+/* stylelint-disable no-descending-specificity */
+.cortext-canvas__identity-actions .cortext-canvas__identity-action.components-button {
+	background: transparent;
+	box-shadow: none;
+	color: var(--cortext-button-text, #1e1e1e);
+}
+
+.cortext-canvas__identity-actions .cortext-canvas__identity-action.components-button:not(.is-primary):hover:not(:disabled),
+.cortext-canvas__identity-actions .cortext-canvas__identity-action.components-button:not(.is-primary):focus:not(:disabled),
+.cortext-canvas__identity-actions .cortext-canvas__identity-action.components-button:not(.is-primary):focus-visible {
+	background: var(--cortext-button-hover-surface, rgba(0, 0, 0, 0.06));
+	background-color: var(--cortext-button-hover-surface, rgba(0, 0, 0, 0.06));
+	box-shadow: none;
+	color: var(--cortext-button-text, #1e1e1e);
+}
+/* stylelint-enable no-descending-specificity */
+
+// `@wordpress/icons` SVGs don't carry an explicit `fill="currentColor"`.
+// Inside the editor iframe the canvas stylesheet provides one globally,
+// so the named-color palette flowed through. The shell document has no
+// such global, so the sidebar tree rendered every glyph in pure black
+// regardless of the chosen palette color or the surrounding text color
+// (which matters in dark mode). Forcing `currentcolor` on our own
+// component covers both the colored WP-icon variant and the fallback
+// page glyph in every surface. The sidebar's collection/recent/favorite
+// icon spans hit the same problem whenever they render a raw `<Icon>`
+// (collection glyphs, the row/table fallbacks in recents), so they share
+// this rule too.
+/* stylelint-disable no-descending-specificity */
+.cortext-document-icon svg,
+.cortext-sidebar__icon svg,
+.cortext-sidebar__favorite-icon svg,
+.cortext-sidebar__recent-icon svg {
+	fill: currentcolor;
+}
+/* stylelint-enable no-descending-specificity */
+
+// Hide the block kebab (more options) while a Cortext header block is
+// selected. The body class is toggled by HideHeaderBlockKebab in
+// Canvas.js. The long comment there explains why a JS hook beats CSS
+// :has() here. We hide several adjacent wrappers because core's toolbar
+// keeps a placeholder slot around the kebab even when it's empty.
+body.cortext-hide-block-settings-menu .block-editor-block-settings-menu,
+body.cortext-hide-block-settings-menu .block-editor-block-toolbar > .block-editor-block-settings-menu,
+body.cortext-hide-block-settings-menu .components-toolbar-group:has(> .block-editor-block-settings-menu),
+body.cortext-hide-block-settings-menu .block-editor-block-toolbar__group-collapsible-toolbar,
+body.cortext-hide-block-settings-menu .block-editor-block-switcher {
+	display: none;
+}
+
+// tech-debt.md#59: owner canvases lock the body to one block. Hide the normal
+// appender. Cover and icon insertion still goes through
+// DocumentIdentityActions.
+.cortext-canvas__editor--owner .block-editor-default-block-appender,
+.cortext-canvas__editor--owner .block-editor-block-list__layout > .block-list-appender {
+	display: none;
+}
+
+// The owner data-view is the canvas body, so selection outlines and adjacent
+// inserters are just noise. Keep the toolbar; "Add field" still lives there.
+.cortext-canvas__editor .wp-block.is-document-owner {
+
+	&.is-selected::before,
+	&.is-hovered::before {
+		display: none;
+	}
+}
+
+.cortext-canvas__editor
+.block-editor-block-list__layout > .block-editor-block-list__block.is-document-owner + .block-editor-block-list__insertion-point {
+	display: none;
+}
+
+// tech-debt.md#57: while row peek/modal owns the surface, keep the page
+// canvas toolbar out of sight so only row toolbar actions are reachable.
+body.cortext-hide-parent-block-toolbar
+.cortext-shell__canvas
+.cortext-workspace__pane[data-active="true"]
+.cortext-canvas.interface-interface-skeleton
+.cortext-canvas__block-canvas
+.block-editor-block-popover {
+	display: none;
+}

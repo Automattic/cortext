@@ -3,6 +3,8 @@ import { useMemo, useRef } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { check, chevronRight } from '@wordpress/icons';
 
+import './TableCalculationMenu.scss';
+
 import { useSubmenuPlacement } from '../hooks/useSubmenuPlacement';
 import {
 	CALCULATION_LABELS,

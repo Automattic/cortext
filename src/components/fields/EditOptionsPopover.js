@@ -29,6 +29,8 @@ import {
 	verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 
+import './EditOptionsPopover.scss';
+
 import Chip from './Chip';
 import OptionMenu from './OptionMenu';
 import { isOptionColorName, pickNextOptionColor } from './optionPalette';

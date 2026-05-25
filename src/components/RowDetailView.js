@@ -22,6 +22,8 @@ import {
 	unseen,
 } from '@wordpress/icons';
 
+import './RowDetailView.scss';
+
 // The editor surface (EditorProvider + EditorBody + autosave + block
 // registration) lives in the `editor` chunk, shared with Canvas, so it
 // stays off the initial admin entry. The peek's chrome (toolbar, modal,

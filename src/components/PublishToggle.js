@@ -3,6 +3,8 @@ import { Button } from '@wordpress/components';
 import { useCallback, useState } from '@wordpress/element';
 import { globe, lock } from '@wordpress/icons';
 
+import './PublishToggle.scss';
+
 /**
  * Presentational publish toggle. Source-agnostic so it can be reused for
  * pages (editor store) and collections (core-data) by thin wrappers.

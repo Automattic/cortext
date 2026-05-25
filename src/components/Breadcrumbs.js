@@ -1,6 +1,8 @@
 import { __ } from '@wordpress/i18n';
 import { Fragment } from '@wordpress/element';
 
+import './Breadcrumbs.scss';
+
 import useBreadcrumbSegments from '../hooks/useBreadcrumbSegments';
 
 // Truncate once the bar would carry more than this many segments. A

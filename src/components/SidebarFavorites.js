@@ -24,7 +24,7 @@ import {
 
 import PageIcon from './PageIcon';
 import { SidebarListSkeleton } from './Skeleton';
-import { documentTitle } from '../documents';
+import { documentTitle, favoriteKey } from '../documents';
 import useDelayedFlag, {
 	SKELETON_MIN_VISIBLE_MS,
 } from '../hooks/useDelayedFlag';
@@ -48,10 +48,6 @@ function transformToString( transform ) {
 
 function favoriteTitle( favorite, fallback ) {
 	return favorite.title?.trim?.() || fallback;
-}
-
-export function favoriteKey( favorite ) {
-	return `favorite:${ favorite.kind }:${ Number( favorite.id ) }`;
 }
 
 export function moveFavorite( favorites, activeId, overId ) {

@@ -3,6 +3,8 @@ import { Icon, MenuGroup, MenuItem, TextControl } from '@wordpress/components';
 import { useEffect, useRef, useState } from '@wordpress/element';
 import { check, trash } from '@wordpress/icons';
 
+import './OptionMenu.scss';
+
 import {
 	OPTION_COLOR_NAMES,
 	optionColorVars,

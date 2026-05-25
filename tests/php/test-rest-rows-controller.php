@@ -369,6 +369,7 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$row = $method->invoke( $controller, get_post( $post_id ), array( $field_id ), array() );
 
 		$this->assertSame( $post_id, $row['id'] );
+		$this->assertSame( 'row', $row['kind'] );
 		$this->assertSame( 'My Entry', $row['title']['raw'] );
 		$this->assertSame( 'publish', $row['status'] );
 		$this->assertSame( 'hello', $row['meta']["field-{$field_id}"] );

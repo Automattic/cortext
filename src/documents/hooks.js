@@ -7,9 +7,16 @@ import {
 import { useDispatch } from '@wordpress/data';
 import { useNavigate } from '@tanstack/react-router';
 
+import { __ } from '@wordpress/i18n';
+
 import { useFavorites } from '../hooks/useFavorites';
 import { useRecents } from '../hooks/useRecents';
 import { documentTitle } from './title';
+import {
+	favoriteKey,
+	favoriteIdentForRecord,
+	favoriteKeyForRecord,
+} from './favorites';
 import { iconForRecord } from './icons';
 import { kindFromRecord } from './kinds';
 import { getDescriptor } from './descriptors';
@@ -73,11 +80,13 @@ function useDocumentsContext() {
 }
 
 /**
- * Bind descriptor actions to the current dispatcher, navigation, and UI
- * callbacks. Returns async `rename`, `duplicate`, and `trash` functions.
+ * Bind descriptor actions to the current dispatcher, router, and UI callbacks.
+ * Returns async `rename`, `duplicate`, `trash`, `restore`, and
+ * `permanentDelete` functions.
  *
- * `duplicate` resolves to the created record; descriptors handle the usual
- * post-create selection or notice work themselves.
+ * `duplicate` resolves to the created record and `permanentDelete` resolves
+ * to the REST response (with the deleted ids) so callers can react to it.
+ * Descriptors own the per-kind refresh logic.
  */
 export function useDocumentActions() {
 	const docCtx = useDocumentsContext();
@@ -141,18 +150,44 @@ export function useDocumentActions() {
 		[ ctx ]
 	);
 
+	const restore = useCallback(
+		async ( record ) => {
+			const descriptor = descriptorFor( record );
+			if ( ! descriptor.restore ) {
+				return;
+			}
+			return descriptor.restore( record, ctx );
+		},
+		[ ctx ]
+	);
+
+	const permanentDelete = useCallback(
+		async ( record ) => {
+			const descriptor = descriptorFor( record );
+			if ( ! descriptor.permanentDelete ) {
+				return undefined;
+			}
+			return descriptor.permanentDelete( record, ctx );
+		},
+		[ ctx ]
+	);
+
 	return useMemo(
-		() => ( { rename, duplicate, trash } ),
-		[ rename, duplicate, trash ]
+		() => ( { rename, duplicate, trash, restore, permanentDelete } ),
+		[ rename, duplicate, trash, restore, permanentDelete ]
 	);
 }
 
 /**
- * Resolve the display bits for a record: kind, title, icon, and feature flags.
- * Components should prefer the feature flags over their own kind checks.
+ * Resolve the display data for a record: kind, title, icon, feature flags, and
+ * trash-list copy such as descendant labels, confirmation text, and error
+ * messages. Components should prefer this over their own kind checks.
+ *
+ * `descendantLabel` and `permanentDeleteConfirmation` take the cascade counts
+ * (`{ pages, collections, total }`) and return localized copy for that subtree.
  *
  * @param {Object} record Document record (page, collection, or row).
- * @return {Object} `{ kind, title, icon, features }` display attributes.
+ * @return {Object} Display attributes.
  */
 export function useDocumentRecord( record ) {
 	const kind = kindFromRecord( record );
@@ -164,7 +199,90 @@ export function useDocumentRecord( record ) {
 		title,
 		icon,
 		features: descriptor.features,
+		descendantLabel: ( counts ) =>
+			descriptor.descendantLabel?.( counts ) ?? '',
+		permanentDeleteConfirmation: ( counts ) =>
+			descriptor.permanentDeleteConfirmation?.( counts ) ?? null,
+		restoreErrorMessage: descriptor.restoreErrorMessage ?? '',
+		permanentDeleteErrorMessage:
+			descriptor.permanentDeleteErrorMessage ?? '',
 	};
+}
+
+/**
+ * Toggle "favorite" on any document record. Hides the favorites bookkeeping
+ * the sidebar and DataView were each doing inline: building the `{kind,id}`
+ * ident, maintaining a key set, and rewriting the favorites list around it.
+ *
+ * Errors surface through `onError` so each caller can attach them to its own
+ * notice. The hook clears the previous error before every attempt, so passing
+ * `null` to the caller's setter is part of the contract.
+ *
+ * @param {Object}   [options]
+ * @param {Function} [options.onError] Called with a message (or `null`) when a
+ *                                     toggle attempt fails or is retried.
+ * @return {{isFavorite: Function, toggle: Function, disabled: boolean}} Helpers
+ *                                                                       bound
+ *                                                                       to the
+ *                                                                       current
+ *                                                                       favorites
+ *                                                                       state.
+ */
+export function useFavoriteToggle( { onError } = {} ) {
+	const { favorites, isResolving, isUpdating, setFavorites } = useFavorites();
+
+	const favoriteKeys = useMemo(
+		() =>
+			new Set( favorites.map( ( favorite ) => favoriteKey( favorite ) ) ),
+		[ favorites ]
+	);
+
+	const disabled = isResolving || isUpdating;
+
+	const isFavorite = useCallback(
+		( record ) => {
+			const key = favoriteKeyForRecord( record );
+			return key !== null && favoriteKeys.has( key );
+		},
+		[ favoriteKeys ]
+	);
+
+	const toggle = useCallback(
+		async ( record ) => {
+			if ( disabled ) {
+				return;
+			}
+			const ident = favoriteIdentForRecord( record );
+			if ( ! ident ) {
+				return;
+			}
+			const key = favoriteKey( ident );
+			onError?.( null );
+			try {
+				await setFavorites( ( current ) => {
+					const exists = current.some(
+						( favorite ) => favoriteKey( favorite ) === key
+					);
+					return exists
+						? current.filter(
+								( favorite ) => favoriteKey( favorite ) !== key
+						  )
+						: [ ...current, ident ];
+				} );
+			} catch ( err ) {
+				onError?.(
+					err?.message ??
+						__( 'Could not update favorites.', 'cortext' )
+				);
+			}
+		},
+		[ disabled, onError, setFavorites ]
+	);
+
+	return useMemo(
+		() => ( { isFavorite, toggle, disabled } ),
+		[ isFavorite, toggle, disabled ]
+	);
 }
 
 /**

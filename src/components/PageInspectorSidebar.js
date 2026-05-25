@@ -44,6 +44,8 @@ import apiFetch from '@wordpress/api-fetch';
 import CanvasOwnerInspector, {
 	useIsCanvasOwnerSelected,
 } from './CanvasOwnerInspector';
+import './PageInspectorSidebar.scss';
+
 import DocumentPropertiesActions from './DocumentPropertiesActions';
 import { useDocumentPropertiesContext } from './DocumentPropertiesContext';
 import MediaPicker, { MediaUploadCheck } from './MediaPicker';

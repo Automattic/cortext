@@ -9,7 +9,6 @@ import {
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalConfirmDialog as ConfirmDialog,
 } from '@wordpress/components';
-import { unlock } from '../../lock-unlock';
 import {
 	createPortal,
 	useCallback,
@@ -29,6 +28,9 @@ import {
 	unseen,
 } from '@wordpress/icons';
 
+import './ColumnHeaderActions.scss';
+
+import { unlock } from '../../lock-unlock';
 import AddFieldPopover from './AddFieldPopover';
 import ChangeFieldTypePopover from './ChangeFieldTypePopover';
 import EditOptionsPopover from './EditOptionsPopover';

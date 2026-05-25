@@ -1,0 +1,63 @@
+@use "@wordpress/base-styles/colors" as *;
+@use "@wordpress/base-styles/variables" as *;
+
+// "Change type" popover. The action commits immediately because row values
+// stay on disk and switching back restores what the user had before.
+.cortext-change-field-type-popover {
+
+	&__body {
+		display: grid;
+		gap: $grid-unit-10;
+		padding: $grid-unit-15;
+		width: 320px;
+	}
+
+	&__title {
+		font-size: 11px;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+		color: $gray-700;
+	}
+
+	&__grid {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: $grid-unit-05;
+	}
+
+	&__type-button {
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-10;
+		padding: $grid-unit-10;
+		border: $border-width solid $gray-200;
+		border-radius: 4px;
+		background: transparent;
+		text-align: start;
+		font-size: 13px;
+		color: $gray-900;
+		cursor: pointer;
+		transition: background-color 0.1s ease, border-color 0.1s ease;
+
+		&:disabled {
+			cursor: not-allowed;
+			opacity: 0.5;
+		}
+
+		&:focus-visible {
+			outline: 2px solid var(--cortext-accent);
+			outline-offset: -1px;
+		}
+
+		&:hover:not(:disabled) {
+			background: $gray-100;
+			border-color: $gray-700;
+		}
+	}
+
+	&__type-icon {
+		flex: 0 0 auto;
+		color: $gray-700;
+	}
+}

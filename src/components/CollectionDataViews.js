@@ -18,7 +18,16 @@ import {
 	useState,
 } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
-import { closeSmall, copy, plus, trash } from '@wordpress/icons';
+import {
+	closeSmall,
+	copy,
+	plus,
+	starEmpty,
+	starFilled,
+	trash,
+} from '@wordpress/icons';
+
+import './CollectionDataViews.scss';
 
 import DataViewColumnInteractions from './DataViewColumnInteractions';
 import DataViewRowReorder from './DataViewRowReorder';
@@ -65,6 +74,7 @@ import { dataViewsFilterByForType } from '../hooks/fieldMapping';
 import { toDataViewId, toRecordId } from '../hooks/fieldIds';
 import useCollectionRows from '../hooks/useCollectionRows';
 import { useRecents } from '../hooks/useRecents';
+import { useFavoriteToggle } from '../documents';
 import { elementsFromOptions } from '../hooks/optionElements';
 import { notifyDocumentTrashChanged } from '../hooks/documentTrashInvalidation';
 import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
@@ -1054,6 +1064,12 @@ export default function CollectionDataViews( {
 
 	const [ rowActionError, setRowActionError ] = useState( null );
 
+	const {
+		isFavorite: isRowFavorite,
+		toggle: toggleRowFavorite,
+		disabled: areFavoriteActionsDisabled,
+	} = useFavoriteToggle( { onError: setRowActionError } );
+
 	const openRowInMode = useCallback(
 		( row, mode ) => {
 			if ( ! row?.id ) {
@@ -1245,6 +1261,24 @@ export default function CollectionDataViews( {
 			callback: ( items ) => duplicateRow( items?.[ 0 ] ),
 		} );
 		actions.push( {
+			id: 'add-row-to-favorites',
+			label: __( 'Add to favorites', 'cortext' ),
+			icon: starEmpty,
+			context: 'single',
+			disabled: areFavoriteActionsDisabled,
+			isEligible: ( item ) => ! isRowFavorite( item ),
+			callback: ( items ) => toggleRowFavorite( items?.[ 0 ] ),
+		} );
+		actions.push( {
+			id: 'remove-row-from-favorites',
+			label: __( 'Remove from favorites', 'cortext' ),
+			icon: starFilled,
+			context: 'single',
+			disabled: areFavoriteActionsDisabled,
+			isEligible: ( item ) => isRowFavorite( item ),
+			callback: ( items ) => toggleRowFavorite( items?.[ 0 ] ),
+		} );
+		actions.push( {
 			id: 'delete-row',
 			label: __( 'Trash', 'cortext' ),
 			icon: trash,
@@ -1258,11 +1292,14 @@ export default function CollectionDataViews( {
 		} );
 		return actions;
 	}, [
+		areFavoriteActionsDisabled,
 		duplicateRow,
+		isRowFavorite,
 		isTableLayout,
 		openRowInMode,
 		requestDeleteRows,
 		savedRowDetailMode,
+		toggleRowFavorite,
 	] );
 
 	const dataViewActions = rowActions;
