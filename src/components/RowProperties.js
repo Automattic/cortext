@@ -304,6 +304,38 @@ function EditableNumberPropertyText( { label, value, format, onChange } ) {
 		typeof formattedDisplay === 'string' ? formattedDisplay : textValue;
 	const hasRichDisplay =
 		formattedDisplay !== '' && typeof formattedDisplay !== 'string';
+	const showRawInputValue = useCallback(
+		( input ) => {
+			input.value = textValue;
+			setDraft( textValue );
+			setIsFocused( true );
+		},
+		[ textValue ]
+	);
+	const focusRawInputValue = useCallback(
+		( input ) => {
+			showRawInputValue( input );
+			input.focus();
+			input.select();
+		},
+		[ showRawInputValue ]
+	);
+	const handleInputInteractionStart = useCallback(
+		( event ) => {
+			event.stopPropagation();
+			if (
+				! isFocused ||
+				event.currentTarget.ownerDocument.activeElement !==
+					event.currentTarget
+			) {
+				focusRawInputValue( event.currentTarget );
+			}
+		},
+		[ focusRawInputValue, isFocused ]
+	);
+	const stopInputPropagation = useCallback( ( event ) => {
+		event.stopPropagation();
+	}, [] );
 
 	useEffect( () => {
 		committedTextRef.current = textValue;
@@ -348,7 +380,10 @@ function EditableNumberPropertyText( { label, value, format, onChange } ) {
 			<Button
 				className="cortext-row-detail__property-trigger"
 				variant="tertiary"
-				onClick={ () => {
+				onMouseDown={ stopInputPropagation }
+				onPointerDown={ stopInputPropagation }
+				onClick={ ( event ) => {
+					event.stopPropagation();
 					setDraft( textValue );
 					setIsFocused( true );
 				} }
@@ -368,6 +403,7 @@ function EditableNumberPropertyText( { label, value, format, onChange } ) {
 			placeholder={ isFocused ? '' : __( 'Empty', 'cortext' ) }
 			type="text"
 			value={ isFocused ? draft : formattedValue }
+			onClick={ stopInputPropagation }
 			onBlur={ () => {
 				setIsFocused( false );
 				const parsed = parseNumberPropertyValue( draft );
@@ -382,13 +418,13 @@ function EditableNumberPropertyText( { label, value, format, onChange } ) {
 				setDraft( committedTextRef.current );
 			} }
 			onChange={ ( event ) => commitDraft( event.currentTarget.value ) }
+			onMouseDown={ handleInputInteractionStart }
+			onPointerDown={ handleInputInteractionStart }
 			onFocus={ ( event ) => {
 				// The resting value may include formatting (for example
 				// thousands separators). Swap the DOM value immediately so
 				// keyboard input after focus edits the raw number.
-				event.currentTarget.value = textValue;
-				setDraft( textValue );
-				setIsFocused( true );
+				showRawInputValue( event.currentTarget );
 			} }
 		/>
 	);

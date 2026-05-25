@@ -2172,13 +2172,14 @@ test.describe( 'Collection view block', () => {
 				exact: true,
 			} );
 			await yearProperty.click();
-			await page.keyboard.press( 'ControlOrMeta+A' );
-			await page.keyboard.press( 'Backspace' );
-			await page.keyboard.type( '20a6' );
+			await expect( yearProperty ).toBeFocused();
+			await yearProperty.press( 'ControlOrMeta+A' );
+			await yearProperty.press( 'Backspace' );
+			await yearProperty.pressSequentially( '20a6' );
 			await expect( yearProperty ).toHaveValue( '206' );
-			await page.keyboard.press( 'ControlOrMeta+A' );
-			await page.keyboard.press( 'Backspace' );
-			await page.keyboard.type( '2026' );
+			await yearProperty.press( 'ControlOrMeta+A' );
+			await yearProperty.press( 'Backspace' );
+			await yearProperty.pressSequentially( '2026' );
 
 			await expect(
 				detail.getByRole( 'button', { name: 'Center modal' } )

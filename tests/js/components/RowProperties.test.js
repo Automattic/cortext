@@ -244,8 +244,9 @@ describe( 'RowProperties', () => {
 		const score = screen.getByRole( 'textbox', { name: 'Score' } );
 		expect( score ).toHaveValue( '$42' );
 
-		fireEvent.focus( score );
+		fireEvent.mouseDown( score );
 
+		expect( score ).toHaveFocus();
 		expect( score ).toHaveValue( '42' );
 	} );
 
