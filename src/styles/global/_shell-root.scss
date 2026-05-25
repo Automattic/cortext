@@ -343,13 +343,25 @@ body.cortext-hide-block-settings-menu .block-editor-block-switcher {
 	display: none;
 }
 
-// The owner data-view is the canvas body, so selection outlines and adjacent
-// inserters only add noise. Keep the toolbar; "Add field" still lives there.
-.cortext-canvas__editor .wp-block.is-document-owner {
+// The owner data-view IS the canvas body, not an embed. Strip every flavor of
+// block-editor selection chrome (pseudo outlines, focus rings, hover halo) so
+// it reads as integrated document content. Keep the toolbar; "Add field"
+// still lives there.
+.cortext-canvas__editor
+.block-editor-block-list__block[data-type="cortext/data-view"].is-document-owner {
 
-	&.is-selected::before,
-	&.is-hovered::before {
+	&::before,
+	&::after {
 		display: none;
+	}
+
+	&.is-selected,
+	&.has-child-selected,
+	&.is-hovered,
+	&:focus,
+	&:focus-within {
+		outline: none;
+		box-shadow: none;
 	}
 }
 
