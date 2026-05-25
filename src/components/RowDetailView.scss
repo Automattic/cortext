@@ -621,6 +621,8 @@
 		}
 
 		.components-checkbox-control__input-container {
+			width: 16px;
+			height: 16px;
 			margin-top: 7px;
 		}
 	}
@@ -816,6 +818,12 @@
 
 		.components-checkbox-control__input-container {
 			margin-right: 0;
+		}
+
+		.components-checkbox-control__input[type="checkbox"],
+		.components-checkbox-control__checked {
+			width: 16px;
+			height: 16px;
 		}
 
 		&:has(.cortext-row-detail__property-editable-text:focus)::after,
