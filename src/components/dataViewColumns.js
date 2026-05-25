@@ -7,6 +7,7 @@
  */
 
 import { sanitizeCalculations } from './tableCalculations';
+import { hasSystemFieldIcon } from './fields/systemFieldIconIds';
 
 export const TITLE_FIELD_ID = 'title';
 export const GHOST_FIELD_ID = '__add_field';
@@ -35,13 +36,16 @@ export function isDefaultVisibleField( field ) {
 	return Boolean( field?.editable || field?.recordId );
 }
 
-export function hasFieldTypeHeaderIcon( fieldId ) {
-	return typeof fieldId === 'string' && fieldId.startsWith( 'field-' );
+export function hasFieldHeaderIcon( fieldId ) {
+	return (
+		( typeof fieldId === 'string' && fieldId.startsWith( 'field-' ) ) ||
+		hasSystemFieldIcon( fieldId )
+	);
 }
 
 export function getMinWidth( fieldType, fieldId ) {
 	const baseMinWidth = MIN_WIDTHS[ fieldType ] ?? DEFAULT_MIN_WIDTH;
-	return hasFieldTypeHeaderIcon( fieldId )
+	return hasFieldHeaderIcon( fieldId )
 		? baseMinWidth + FIELD_HEADER_ICON_CHROME
 		: baseMinWidth;
 }

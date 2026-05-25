@@ -78,7 +78,10 @@
 // the default field width so the text column does not feel squeezed.
 .cortext-data-view
 .dataviews-view-table
-:where(th:has(.cortext-column-header-marker):not(:first-child):not(.dataviews-view-table__checkbox-column + th)) {
+:where(
+	th:has(.cortext-column-header-marker):not(:first-child):not(.dataviews-view-table__checkbox-column + th),
+	th:has(.cortext-column-header-system-icon):not(:first-child):not(.dataviews-view-table__checkbox-column + th)
+) {
 	width: calc(var(--cortext-table-column-default-width) + var(--cortext-table-field-header-icon-chrome));
 }
 

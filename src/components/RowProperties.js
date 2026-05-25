@@ -35,7 +35,8 @@ import {
 } from './EditableCell';
 import { TITLE_FIELD_ID } from './dataViewColumns';
 import EditOptionsPopover from './fields/EditOptionsPopover';
-import { FieldTypeIcon } from './fields/fieldTypes';
+import { FieldTypeIcon, SystemFieldIcon } from './fields/fieldTypes';
+import { hasSystemFieldIcon } from './fields/systemFieldIconIds';
 import { toRecordId } from '../hooks/fieldIds';
 import {
 	isRowDetailFieldEditable,
@@ -73,6 +74,10 @@ function isCollectionField( field ) {
 		field?.id?.startsWith?.( 'field-' ) &&
 		Boolean( field.cortextRecordId ?? field.recordId )
 	);
+}
+
+function hasInternalFieldIcon( field ) {
+	return hasSystemFieldIcon( field?.id );
 }
 
 function SelectPropertyControl( {
@@ -511,6 +516,22 @@ export default function RowProperties( { fields, row } ) {
 					field.cortextElements ??
 					field.elements ??
 					[];
+				let propertyIcon = null;
+				if ( isCollectionField( field ) ) {
+					propertyIcon = (
+						<FieldTypeIcon
+							type={ type }
+							className="cortext-row-detail__property-type-icon"
+						/>
+					);
+				} else if ( hasInternalFieldIcon( field ) ) {
+					propertyIcon = (
+						<SystemFieldIcon
+							fieldId={ field.id }
+							className="cortext-row-detail__property-type-icon"
+						/>
+					);
+				}
 
 				return (
 					<div
@@ -523,12 +544,7 @@ export default function RowProperties( { fields, row } ) {
 						}
 					>
 						<div className="cortext-row-detail__property-label">
-							{ isCollectionField( field ) ? (
-								<FieldTypeIcon
-									type={ type }
-									className="cortext-row-detail__property-type-icon"
-								/>
-							) : null }
+							{ propertyIcon }
 							<span className="cortext-row-detail__property-label-text">
 								{ field.label }
 							</span>

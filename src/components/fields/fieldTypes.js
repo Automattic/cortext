@@ -8,11 +8,15 @@ import {
 	formatListBullets,
 	globe,
 	link,
+	pencil,
+	postAuthor,
 	tag,
 	typography,
 } from '@wordpress/icons';
 
 import './fieldTypes.scss';
+
+import { hasSystemFieldIcon } from './systemFieldIconIds';
 
 // Inline SVG for the "number" type. `@wordpress/icons` doesn't ship a
 // numeric glyph that reads as "single number" (formatListNumbered looks
@@ -102,6 +106,33 @@ export function FieldTypeIcon( { type, className = '' } ) {
 			aria-hidden="true"
 		>
 			<Icon icon={ definition.icon } />
+		</span>
+	);
+}
+
+const SYSTEM_FIELD_ICONS = {
+	created_at: calendar,
+	created_by: postAuthor,
+	modified_at: pencil,
+	modified_by: postAuthor,
+};
+
+export function SystemFieldIcon( { fieldId, className = '' } ) {
+	if ( ! hasSystemFieldIcon( fieldId ) ) {
+		return null;
+	}
+	const icon = SYSTEM_FIELD_ICONS[ fieldId ];
+	if ( ! icon ) {
+		return null;
+	}
+
+	return (
+		<span
+			className={ `cortext-field-type-icon ${ className }`.trim() }
+			data-cortext-system-field={ fieldId }
+			aria-hidden="true"
+		>
+			<Icon icon={ icon } />
 		</span>
 	);
 }

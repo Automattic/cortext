@@ -53,7 +53,7 @@ describe( 'RowProperties', () => {
 		} );
 	} );
 
-	it( 'shows field type icons for collection fields only', () => {
+	it( 'shows icons for collection and internal fields, but not title', () => {
 		render(
 			<RowProperties
 				fields={ [
@@ -95,8 +95,10 @@ describe( 'RowProperties', () => {
 			.getByText( 'Created' )
 			.closest( '.cortext-row-detail__property-label' );
 		expect(
-			createdLabel.querySelector( '.cortext-field-type-icon' )
-		).toBeNull();
+			createdLabel.querySelector(
+				'.cortext-row-detail__property-type-icon[data-cortext-system-field="created_at"]'
+			)
+		).toBeInTheDocument();
 		expect( screen.queryByText( 'Title' ) ).not.toBeInTheDocument();
 	} );
 } );

@@ -6,7 +6,7 @@ import {
 	TITLE_FIELD_ID,
 	clampWidth,
 	getMinWidth,
-	hasFieldTypeHeaderIcon,
+	hasFieldHeaderIcon,
 	isDefaultVisibleField,
 	normalizeView,
 	pruneFiltersForFields,
@@ -34,7 +34,7 @@ describe( 'getMinWidth', () => {
 		expect( DEFAULT_MIN_WIDTH ).toBe( 32 );
 	} );
 
-	it( 'adds icon chrome only for custom field headers', () => {
+	it( 'adds icon chrome for field headers with icons', () => {
 		expect( getMinWidth( 'text', 'field-10' ) ).toBe(
 			DEFAULT_MIN_WIDTH + FIELD_HEADER_ICON_CHROME
 		);
@@ -42,7 +42,7 @@ describe( 'getMinWidth', () => {
 			MIN_WIDTHS.date + FIELD_HEADER_ICON_CHROME
 		);
 		expect( getMinWidth( 'date', 'created_at' ) ).toBe(
-			MIN_WIDTHS.date
+			MIN_WIDTHS.date + FIELD_HEADER_ICON_CHROME
 		);
 		expect( getMinWidth( 'title', TITLE_FIELD_ID ) ).toBe(
 			MIN_WIDTHS.title
@@ -50,12 +50,13 @@ describe( 'getMinWidth', () => {
 	} );
 } );
 
-describe( 'hasFieldTypeHeaderIcon', () => {
-	it( 'matches only user-created collection field ids', () => {
-		expect( hasFieldTypeHeaderIcon( 'field-10' ) ).toBe( true );
-		expect( hasFieldTypeHeaderIcon( TITLE_FIELD_ID ) ).toBe( false );
-		expect( hasFieldTypeHeaderIcon( 'created_at' ) ).toBe( false );
-		expect( hasFieldTypeHeaderIcon( undefined ) ).toBe( false );
+describe( 'hasFieldHeaderIcon', () => {
+	it( 'matches custom fields and icon-bearing system fields', () => {
+		expect( hasFieldHeaderIcon( 'field-10' ) ).toBe( true );
+		expect( hasFieldHeaderIcon( 'created_at' ) ).toBe( true );
+		expect( hasFieldHeaderIcon( 'modified_by' ) ).toBe( true );
+		expect( hasFieldHeaderIcon( TITLE_FIELD_ID ) ).toBe( false );
+		expect( hasFieldHeaderIcon( undefined ) ).toBe( false );
 	} );
 } );
 
@@ -82,12 +83,12 @@ describe( 'clampWidth', () => {
 		expect( clampWidth( 10 ) ).toBe( DEFAULT_MIN_WIDTH );
 	} );
 
-	it( 'includes header icon chrome in the floor for custom fields', () => {
+	it( 'includes header icon chrome in the floor for icon-bearing fields', () => {
 		expect( clampWidth( 10, 'text', 'field-10' ) ).toBe(
 			DEFAULT_MIN_WIDTH + FIELD_HEADER_ICON_CHROME
 		);
 		expect( clampWidth( 10, 'datetime', 'created_at' ) ).toBe(
-			MIN_WIDTHS.datetime
+			MIN_WIDTHS.datetime + FIELD_HEADER_ICON_CHROME
 		);
 	} );
 } );
