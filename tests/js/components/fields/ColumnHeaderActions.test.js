@@ -158,6 +158,27 @@ jest.mock( '../../../../src/components/fields/AddFieldPopover', () => ( {
 	),
 } ) );
 
+jest.mock( '../../../../src/components/fields/FieldFormatPopover', () => ( {
+	__esModule: true,
+	default: ( { onSaved } ) => (
+		<button
+			type="button"
+			onClick={ () => onSaved?.( { style: 'comma' } ) }
+		>
+			Save mock format
+		</button>
+	),
+} ) );
+
+jest.mock( '../../../../src/components/EditableCell', () => {
+	const { createContext } = require( '@wordpress/element' );
+
+	return {
+		__esModule: true,
+		RowMutationContext: createContext( { formatOverrides: {} } ),
+	};
+} );
+
 import ColumnHeaderActions from '../../../../src/components/fields/ColumnHeaderActions';
 import { useEntityRecord } from '@wordpress/core-data';
 import { useCollectionFieldsContext } from '../../../../src/components/CollectionFieldsContext';
@@ -168,6 +189,7 @@ function Harness( {
 	recordId,
 	view,
 	onFieldCreated = jest.fn(),
+	onFieldFormatSaved = jest.fn(),
 	onRowsChanged = jest.fn(),
 } ) {
 	return (
@@ -189,6 +211,7 @@ function Harness( {
 				view={ view ?? { fields: [] } }
 				onChangeView={ onChangeView }
 				onFieldCreated={ onFieldCreated }
+				onFieldFormatSaved={ onFieldFormatSaved }
 				onRowsChanged={ onRowsChanged }
 			/>
 		</div>
@@ -514,6 +537,42 @@ describe( 'ColumnHeaderActions', () => {
 		await waitFor( () =>
 			expect( mockDuplicateFieldRun ).toHaveBeenCalledWith( 77 )
 		);
+		expect( onRowsChanged ).toHaveBeenCalled();
+	} );
+
+	it( 'stores format changes and refreshes rows from the shared field menu', async () => {
+		const onFieldFormatSaved = jest.fn();
+		const onRowsChanged = jest.fn();
+		useCollectionFieldsContext.mockReturnValue( {
+			fields: [
+				{
+					id: 'field-77',
+					recordId: 77,
+					label: 'Score',
+					cortextType: 'number',
+				},
+			],
+		} );
+
+		render(
+			<Harness
+				collectionId={ 5 }
+				recordId={ 77 }
+				onFieldFormatSaved={ onFieldFormatSaved }
+				onRowsChanged={ onRowsChanged }
+			/>
+		);
+
+		fireEvent.click(
+			await screen.findByRole( 'button', { name: 'Edit field' } )
+		);
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Save mock format' } )
+		);
+
+		expect( onFieldFormatSaved ).toHaveBeenCalledWith( 77, {
+			style: 'comma',
+		} );
 		expect( onRowsChanged ).toHaveBeenCalled();
 	} );
 } );

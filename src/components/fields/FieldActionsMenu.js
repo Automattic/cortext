@@ -51,6 +51,7 @@ export default function FieldActionsMenu( {
 	triggerButton,
 	triggerContent,
 	onFieldOptionsSaved,
+	onFieldFormatSaved,
 	onRowsChanged,
 	onCloseMenu,
 	renderBetweenConfigAndLifecycle,
@@ -70,7 +71,21 @@ export default function FieldActionsMenu( {
 	const remove = useDeleteField( collectionId );
 	const { fields } = useCollectionFieldsContext();
 	const mappedField = useMappedField( recordId );
-	const activeField = mappedField ?? field ?? null;
+	const activeField = useMemo( () => {
+		const source = mappedField ?? field ?? null;
+		if ( ! source || ! field ) {
+			return source;
+		}
+		return {
+			...source,
+			...( field.cortextElements !== undefined
+				? { cortextElements: field.cortextElements }
+				: {} ),
+			...( field.cortextFormat !== undefined
+				? { cortextFormat: field.cortextFormat }
+				: {} ),
+		};
+	}, [ field, mappedField ] );
 	const label = activeField?.label || `#${ recordId }`;
 	const fieldType =
 		activeField?.cortextType ??
@@ -359,6 +374,10 @@ export default function FieldActionsMenu( {
 					focusOnMount={ shouldFocusFormat ? 'firstElement' : false }
 					onClose={ closeFormat }
 					onCloseWithFocus={ closeFormatAndFocusTrigger }
+					onSaved={ ( nextFormat ) => {
+						onFieldFormatSaved?.( recordId, nextFormat );
+						onRowsChanged?.();
+					} }
 					onMouseEnter={ () => openFormat() }
 					onMouseLeave={ scheduleClose }
 				/>

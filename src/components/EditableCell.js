@@ -60,6 +60,8 @@ export const RowMutationContext = createContext( {
 	requestNext: () => {},
 	optionOverrides: {},
 	updateFieldOptions: () => {},
+	formatOverrides: {},
+	updateFieldFormat: () => {},
 	refreshRows: () => {},
 } );
 
@@ -746,6 +748,7 @@ export default function EditableCell( {
 		requestNext,
 		optionOverrides,
 		updateFieldOptions,
+		formatOverrides,
 		refreshRows,
 	} = useContext( RowMutationContext );
 	const [ isEditing, setIsEditing ] = useState( false );
@@ -758,9 +761,13 @@ export default function EditableCell( {
 		? getValue( { item } )
 		: item?.meta?.[ fieldId ] ?? null;
 	const effectiveElements = optionOverrides?.[ fieldId ] ?? elements;
+	const effectiveFormat =
+		formatOverrides?.[ fieldId ] !== undefined
+			? formatOverrides[ fieldId ]
+			: format;
 	const display = formatDisplay( value, fieldType, {
 		elements: effectiveElements,
-		format,
+		format: effectiveFormat,
 		relation,
 	} );
 
@@ -932,7 +939,7 @@ export default function EditableCell( {
 				<DateEditor
 					value={ value }
 					type={ fieldType }
-					format={ format }
+					format={ effectiveFormat }
 					onCommit={ commit }
 					onCancel={ closeEditor }
 					label={ label }

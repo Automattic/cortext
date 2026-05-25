@@ -4,6 +4,7 @@ import { Button, Dropdown, Icon } from '@wordpress/components';
 import {
 	createPortal,
 	useCallback,
+	useContext,
 	useEffect,
 	useMemo,
 	useRef,
@@ -22,6 +23,7 @@ import './ColumnHeaderActions.scss';
 import AddFieldPopover from './AddFieldPopover';
 import FieldActionsMenu from './FieldActionsMenu';
 import { FieldTypeIcon } from './fieldTypes';
+import { RowMutationContext } from '../EditableCell';
 import { useMappedField } from '../CollectionFieldsContext';
 import { TableCalculationPopover } from '../TableCalculationMenu';
 import { GHOST_FIELD_ID, TITLE_FIELD_ID } from '../dataViewColumns';
@@ -45,6 +47,7 @@ export default function ColumnHeaderActions( {
 	view,
 	onChangeView,
 	onFieldOptionsSaved,
+	onFieldFormatSaved,
 	onFieldCreated,
 	onRowsChanged,
 } ) {
@@ -130,6 +133,7 @@ export default function ColumnHeaderActions( {
 							view={ view }
 							onChangeView={ onChangeView }
 							onFieldOptionsSaved={ onFieldOptionsSaved }
+							onFieldFormatSaved={ onFieldFormatSaved }
 							onRowsChanged={ onRowsChanged }
 						/>,
 						target.th,
@@ -156,6 +160,7 @@ function FieldActions( {
 	view,
 	onChangeView,
 	onFieldOptionsSaved,
+	onFieldFormatSaved,
 	onRowsChanged,
 } ) {
 	const [ isCalculating, setIsCalculating ] = useState( false );
@@ -169,7 +174,16 @@ function FieldActions( {
 	// trip, which would otherwise flash `#${ recordId }` before the title
 	// arrives. See the tech-debt note in `useCollectionFields`.
 	const mappedField = useMappedField( recordId );
-	const fieldType = mappedField?.cortextType;
+	const { formatOverrides } = useContext( RowMutationContext );
+	const dataViewId = `field-${ recordId }`;
+	const formatOverride = formatOverrides?.[ dataViewId ];
+	const effectiveField = useMemo( () => {
+		if ( ! mappedField || formatOverride === undefined ) {
+			return mappedField;
+		}
+		return { ...mappedField, cortextFormat: formatOverride };
+	}, [ formatOverride, mappedField ] );
+	const fieldType = effectiveField?.cortextType;
 
 	// Match the field-format submenu: leave a small grace window while the
 	// pointer crosses the gap between the row and the flyout.
@@ -225,8 +239,7 @@ function FieldActions( {
 		} );
 	}, [ closeCalculation ] );
 
-	const dataViewId = `field-${ recordId }`;
-	const label = mappedField?.label || `#${ recordId }`;
+	const label = effectiveField?.label || `#${ recordId }`;
 	const calculationField = useMemo(
 		() => ( {
 			id: dataViewId,
@@ -399,7 +412,7 @@ function FieldActions( {
 			<FieldActionsMenu
 				recordId={ recordId }
 				collectionId={ collectionId }
-				field={ mappedField }
+				field={ effectiveField }
 				className="cortext-column-header-actions"
 				menuKey={ `menu-${ dataViewId }-${ sortMenuKey }` }
 				triggerButton={
@@ -428,6 +441,7 @@ function FieldActions( {
 					</span>
 				}
 				onFieldOptionsSaved={ onFieldOptionsSaved }
+				onFieldFormatSaved={ onFieldFormatSaved }
 				onRowsChanged={ onRowsChanged }
 				onCloseMenu={ closeCalculation }
 				renderBetweenConfigAndLifecycle={ renderViewGroup }

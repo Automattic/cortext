@@ -2003,6 +2003,37 @@ test.describe( 'Collection view block', () => {
 					name: 'Edit field',
 				} )
 			).toBeVisible();
+			await detailCanvas
+				.getByRole( 'menuitem', {
+					name: 'Edit field',
+				} )
+				.click();
+			const formatPanel = page.locator( '.cortext-format-submenu' );
+			await expect( formatPanel ).toBeVisible();
+			await formatPanel
+				.getByRole( 'button', { name: /Number format/ } )
+				.click();
+			await page
+				.locator( '.cortext-format-submenu__flyout' )
+				.getByRole( 'menuitemradio', {
+					name: 'Number with commas',
+				} )
+				.click();
+			await expect
+				.poll( async () => {
+					const updatedField = await requestUtils.rest( {
+						path: `/wp/v2/crtxt_fields/${ fixture.yearField.id }`,
+						params: { context: 'edit' },
+					} );
+					return updatedField?.meta?.number_format ?? '';
+				} )
+				.toContain( 'comma' );
+			await expect(
+				detailCanvas.getByRole( 'textbox', {
+					name: 'Year',
+					exact: true,
+				} )
+			).toHaveValue( '1,969' );
 			await expect(
 				detailCanvas.getByRole( 'menuitem', {
 					name: /Change type/,
