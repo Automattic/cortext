@@ -644,8 +644,23 @@
 	&__property-label-actions {
 		display: inline-flex;
 		align-items: center;
+		gap: $grid-unit-05;
+		width: 100%;
 		min-width: 0;
 		max-width: 100%;
+
+		.cortext-field-actions__renaming-prefix {
+			display: inline-flex;
+			flex: 0 0 auto;
+			align-items: center;
+			color: var(--cortext-row-detail-muted);
+		}
+
+		.cortext-rename-field-inline {
+			display: block;
+			flex: 1 1 auto;
+			min-width: 0;
+		}
 	}
 
 	&__property-label-button.components-button {
@@ -802,6 +817,35 @@
 			border-radius: 4px;
 			box-shadow: inset 0 0 0 1px var(--cortext-accent);
 			pointer-events: none;
+		}
+	}
+
+	&__property-label-actions .cortext-rename-field-inline .components-base-control,
+	&__property-label-actions .cortext-rename-field-inline .components-base-control__field {
+		width: 100%;
+		min-width: 0;
+		margin-bottom: 0;
+	}
+
+	&__property-label-actions
+	.cortext-rename-field-inline
+	input.components-text-control__input[type="text"] {
+		width: 100%;
+		height: 22px;
+		min-height: 22px;
+		padding: 0 2px;
+		border-color: transparent;
+		border-radius: 3px;
+		background: transparent;
+		box-shadow: none;
+		color: var(--cortext-row-detail-text);
+		font: inherit;
+		line-height: 1.3;
+
+		&:focus {
+			border-color: transparent;
+			background: $white;
+			box-shadow: inset 0 0 0 1px var(--cortext-accent);
 		}
 	}
 

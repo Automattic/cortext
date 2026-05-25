@@ -50,6 +50,7 @@ export default function FieldActionsMenu( {
 	menuKey,
 	triggerButton,
 	triggerContent,
+	renamingPrefix,
 	onFieldOptionsSaved,
 	onFieldFormatSaved,
 	onOpenFormat,
@@ -258,6 +259,11 @@ export default function FieldActionsMenu( {
 	if ( isRenaming ) {
 		return (
 			<span className={ className }>
+				{ renamingPrefix ? (
+					<span className="cortext-field-actions__renaming-prefix">
+						{ renamingPrefix }
+					</span>
+				) : null }
 				<RenameFieldInline
 					recordId={ recordId }
 					initialTitle={ label }
