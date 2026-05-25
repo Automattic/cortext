@@ -161,10 +161,7 @@ jest.mock( '../../../../src/components/fields/AddFieldPopover', () => ( {
 jest.mock( '../../../../src/components/fields/FieldFormatPopover', () => ( {
 	__esModule: true,
 	default: ( { onSaved } ) => (
-		<button
-			type="button"
-			onClick={ () => onSaved?.( { style: 'comma' } ) }
-		>
+		<button type="button" onClick={ () => onSaved?.( { style: 'comma' } ) }>
 			Save mock format
 		</button>
 	),
