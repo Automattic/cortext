@@ -158,8 +158,10 @@ function RecentCommandRegistration( { canvasRef, recent } ) {
 }
 
 function documentDescription( doc ) {
-	// Pages can provide an excerpt. Rows use their parent collection as the hint.
-	return doc?.excerpt?.trim?.() || collectionHint( doc );
+	// Rows ship their parent collection on `doc.collection` so identical row
+	// titles in the search results stay disambiguated. Pages and collections
+	// have no parent on the wire and fall back to the search excerpt.
+	return collectionHint( doc ) || doc?.excerpt?.trim?.() || '';
 }
 
 function DocumentCommandRegistration( { canvasRef, document } ) {
