@@ -4,6 +4,16 @@ Running log of significant design decisions. Newest first. Each entry captures *
 
 Desktop-specific runtime and packaging decisions live in `docs/desktop-decisions.md`.
 
+## 2026-05-23 — Field values stay in postmeta while the sidecar proves itself
+
+**Decision.** Row field values still live in `wp_postmeta`. Cortext can also maintain a derived `cortext_field_values` table for row `field-*` values. If the host can create the table and the index is enabled, Cortext installs it and schedules a background rebuild/verify. Production reads stay on postmeta until the materialization benchmark shows at least a 10x filter or sort win at 50K rows without unacceptable write cost. The index covers row values only; collection schema, field definitions, column order, options, relation config, and rollup config stay in collection/field posts and postmeta.
+
+**Why.** WordPress REST, the editor, external plugins, and ad-hoc scripts already know how to work with row values in postmeta. The sidecar lets us test indexed filters, sorts, and aggregate reads without making custom table support mandatory. If table creation fails, sync drifts, or a host disables the feature through `cortext_field_values_index_enabled`, Cortext can fall back to the postmeta path.
+
+**Trade-off.** The index adds operational work: schema install, cron rebuild, verification, stale/ready status, hook-based sync, and extra writes. Keeping postmeta as the source of truth also means sidecar-owned storage would need a separate migration later, after the compatibility story is proven.
+
+**Revisit when.** The materialization suite in `wp cortext perf-bench --suite=materialization` shows a 10x+ filter or sort win at 50K rows, or when real row filters/sorts exceed the documented p95 gate and postmeta becomes the bottleneck.
+
 ## 2026-04-23 — Page URLs are id-based, slug is cosmetic
 
 **Decision.** Page URLs encode the post id as the authoritative identifier: `?page=cortext&p=/<slug>-<id>` (e.g. `?p=/about-us-42`), falling back to `?p=/<id>` when the slug is empty. `src/router/useResolveEntity.js` extracts the trailing digits via `parseIdFromUri` and fetches `GET /wp/v2/crtxt_pages/<id>?context=edit`. The slug prefix is cosmetic. When autosave assigns a real slug, `Sidebar` rewrites the URL via `history.replace` so the visible URL reflects the latest title.

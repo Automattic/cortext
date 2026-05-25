@@ -10,6 +10,7 @@ declare( strict_types=1 );
 namespace Cortext\Rest;
 
 use Cortext\Fields\FieldTypeConverter;
+use Cortext\FieldValues\FieldValueStore;
 use Cortext\PostType\Collection;
 use Cortext\PostType\CollectionEntries;
 use Cortext\Relations;
@@ -535,7 +536,7 @@ final class RowsController {
 				return $synced;
 			}
 		} else {
-			$this->write_field_value( $row_id, $field_id, $field_type, $value );
+			$this->write_field_value( $row_id, $field_id, $field_type, $value, $collection_id, $row->post_status );
 		}
 
 		$touch = wp_update_post( array( 'ID' => $row_id ), true );
@@ -885,72 +886,8 @@ final class RowsController {
 		return $id > 0 ? $id : null;
 	}
 
-	private function write_field_value( int $row_id, int $field_id, string $field_type, mixed $value ): void {
-		$key = Relations::meta_key( $field_id );
-
-		if ( 'multiselect' === $field_type ) {
-			delete_post_meta( $row_id, $key );
-			$entries = is_array( $value ) ? $value : array( $value );
-			foreach ( $entries as $entry ) {
-				$text = sanitize_text_field( (string) $entry );
-				if ( '' !== $text ) {
-					add_post_meta( $row_id, $key, $text );
-				}
-			}
-			return;
-		}
-
-		if ( null === $value || '' === $value ) {
-			delete_post_meta( $row_id, $key );
-			return;
-		}
-
-		// A single-value edit should clear leftover multi-row values first.
-		// Otherwise `update_post_meta` updates only row 0 and stale chips can
-		// come back after another type change.
-		$existing = get_post_meta( $row_id, $key, false );
-		if ( is_array( $existing ) && count( $existing ) > 1 ) {
-			delete_post_meta( $row_id, $key );
-		}
-
-		if ( 'number' === $field_type ) {
-			update_post_meta( $row_id, $key, is_numeric( $value ) ? (float) $value : $value );
-			return;
-		}
-
-		if ( 'checkbox' === $field_type ) {
-			update_post_meta( $row_id, $key, (bool) $value );
-			return;
-		}
-
-		if ( 'date' === $field_type || 'datetime' === $field_type ) {
-			update_post_meta( $row_id, $key, $this->normalize_date_field_value( $value, $field_type ) );
-			return;
-		}
-
-		update_post_meta( $row_id, $key, sanitize_text_field( (string) $value ) );
-	}
-
-	private function normalize_date_field_value( mixed $value, string $field_type ): string {
-		$text = trim( (string) $value );
-		if ( '' === $text ) {
-			return '';
-		}
-
-		if ( preg_match( '/^(\d{4}-\d{2}-\d{2})/', $text, $matches ) ) {
-			if ( 'date' === $field_type ) {
-				return $matches[1];
-			}
-			$timestamp = strtotime( $text );
-			return false === $timestamp ? sanitize_text_field( $text ) : gmdate( DATE_RFC3339, $timestamp );
-		}
-
-		$timestamp = strtotime( $text );
-		if ( false === $timestamp ) {
-			return sanitize_text_field( $text );
-		}
-
-		return 'date' === $field_type ? gmdate( 'Y-m-d', $timestamp ) : gmdate( DATE_RFC3339, $timestamp );
+	private function write_field_value( int $row_id, int $field_id, string $field_type, mixed $value, ?int $collection_id = null, ?string $post_status = null ): void {
+		( new FieldValueStore() )->write_value( $row_id, $field_id, $field_type, $value, $collection_id, $post_status );
 	}
 
 	/**
