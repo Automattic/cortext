@@ -7,9 +7,13 @@ import { useMappedField } from '../CollectionFieldsContext';
 
 // Inline rename control for a column header. It starts from the collection's
 // mapped field data, so opening rename does not refetch the field record.
-export default function RenameFieldInline( { recordId, onDone } ) {
+export default function RenameFieldInline( {
+	recordId,
+	initialTitle: fallbackTitle = '',
+	onDone,
+} ) {
 	const mappedField = useMappedField( recordId );
-	const initialTitle = mappedField?.label ?? '';
+	const initialTitle = mappedField?.label ?? fallbackTitle;
 	const [ value, setValue ] = useState( initialTitle );
 	const inputRef = useRef( null );
 	const { run, isBusy } = useRenameField();

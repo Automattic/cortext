@@ -823,6 +823,7 @@ function DateFormBody( {
 // tabbing enters the panel instead of moving to the next table column.
 export default function FieldFormatPopover( {
 	recordId,
+	field: fallbackField,
 	anchor,
 	focusOnMount = false,
 	onClose,
@@ -833,10 +834,11 @@ export default function FieldFormatPopover( {
 	const panelRef = useRef( null );
 	// Read from the collection field list. Saves still go through core-data,
 	// which keeps the rest of the shell on the same write path.
-	const field = useMappedField( recordId );
+	const field = useMappedField( recordId ) ?? fallbackField;
 	const { editEntityRecord, saveEditedEntityRecord } = useDispatch( 'core' );
 
-	const type = field?.cortextType ?? 'text';
+	const type =
+		field?.cortextType ?? field?.cortextFieldType ?? field?.type ?? 'text';
 	const isNumber = type === 'number';
 	const isDate = type === 'date' || type === 'datetime';
 

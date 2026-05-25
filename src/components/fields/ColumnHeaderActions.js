@@ -1,14 +1,6 @@
 /* global MutationObserver */
-import { __, sprintf } from '@wordpress/i18n';
-import {
-	Button,
-	Dropdown,
-	Icon,
-	Popover,
-	privateApis as componentsPrivateApis,
-	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
-	__experimentalConfirmDialog as ConfirmDialog,
-} from '@wordpress/components';
+import { __ } from '@wordpress/i18n';
+import { Button, Dropdown, Icon } from '@wordpress/components';
 import {
 	createPortal,
 	useCallback,
@@ -21,45 +13,19 @@ import {
 	arrowLeft,
 	arrowRight,
 	chevronRight,
-	copy,
-	pencil,
 	plus,
-	trash,
 	unseen,
 } from '@wordpress/icons';
 
 import './ColumnHeaderActions.scss';
 
-import { unlock } from '../../lock-unlock';
 import AddFieldPopover from './AddFieldPopover';
-import ChangeFieldTypePopover from './ChangeFieldTypePopover';
-import EditOptionsPopover from './EditOptionsPopover';
-import FieldFormatPopover from './FieldFormatPopover';
+import FieldActionsMenu from './FieldActionsMenu';
 import { FieldTypeIcon } from './fieldTypes';
-import RenameFieldInline from './RenameFieldInline';
-import {
-	useCollectionFieldsContext,
-	useMappedField,
-} from '../CollectionFieldsContext';
+import { useMappedField } from '../CollectionFieldsContext';
 import { TableCalculationPopover } from '../TableCalculationMenu';
-import {
-	useDeleteField,
-	useDuplicateField,
-} from '../../hooks/useFieldMutations';
 import { GHOST_FIELD_ID, TITLE_FIELD_ID } from '../dataViewColumns';
 import { withColumnCalculation } from '../tableCalculations';
-
-const TYPES_WITH_OPTIONS = new Set( [ 'select', 'multiselect' ] );
-const { Menu } = unlock( componentsPrivateApis );
-
-const FORMATTABLE_TYPES = new Set( [ 'number', 'date', 'datetime' ] );
-
-// The server rejects conversions for these types, so hide the action up front.
-const UNCONVERTIBLE_SOURCE_TYPES = new Set( [
-	'relation',
-	'rollup',
-	'formula',
-] );
 
 // Projects Cortext controls into DataViews' table header:
 //
@@ -192,23 +158,11 @@ function FieldActions( {
 	onFieldOptionsSaved,
 	onRowsChanged,
 } ) {
-	const [ isRenaming, setIsRenaming ] = useState( false );
-	const [ isMenuOpen, setIsMenuOpen ] = useState( false );
-	const [ isFormatting, setIsFormatting ] = useState( false );
-	const [ isEditingOptions, setIsEditingOptions ] = useState( false );
-	const [ isChangingType, setIsChangingType ] = useState( false );
 	const [ isCalculating, setIsCalculating ] = useState( false );
-	const [ shouldFocusFormat, setShouldFocusFormat ] = useState( false );
 	const [ shouldFocusCalculation, setShouldFocusCalculation ] =
 		useState( false );
-	const [ confirmDelete, setConfirmDelete ] = useState( false );
-	const formatItemRef = useRef( null );
 	const calculationItemRef = useRef( null );
 	const closeTimerRef = useRef( null );
-	const optionsAnchorRef = useRef( null );
-	const duplicate = useDuplicateField( collectionId );
-	const remove = useDeleteField( collectionId );
-	const { fields } = useCollectionFieldsContext();
 	// `useCollectionFields` already fetched these records with `context: 'edit'`
 	// and ran them through `mapField`. Read label/type/options from the cached
 	// field so the header skips `useEntityRecord`'s `default`-context resolver
@@ -216,19 +170,9 @@ function FieldActions( {
 	// arrives. See the tech-debt note in `useCollectionFields`.
 	const mappedField = useMappedField( recordId );
 	const fieldType = mappedField?.cortextType;
-	const canFormat = FORMATTABLE_TYPES.has( fieldType );
-	const supportsOptions = TYPES_WITH_OPTIONS.has( fieldType );
-	const canChangeType =
-		Boolean( fieldType ) && ! UNCONVERTIBLE_SOURCE_TYPES.has( fieldType );
-	const initialOptions = useMemo(
-		() => ( supportsOptions ? mappedField?.cortextElements ?? [] : [] ),
-		[ supportsOptions, mappedField ]
-	);
 
-	// Format submenu uses a hover-with-grace pattern: the panel stays
-	// visible while the cursor is over either the trigger row or the
-	// panel itself. The grace timer absorbs the dead pixels between them
-	// so the user doesn't lose the panel by overshooting on the way over.
+	// Match the field-format submenu: leave a small grace window while the
+	// pointer crosses the gap between the row and the flyout.
 	const cancelClose = useCallback( () => {
 		if ( closeTimerRef.current ) {
 			clearTimeout( closeTimerRef.current );
@@ -238,56 +182,25 @@ function FieldActions( {
 	const scheduleClose = useCallback( () => {
 		cancelClose();
 		closeTimerRef.current = setTimeout( () => {
-			setIsFormatting( false );
 			setIsCalculating( false );
-			setShouldFocusFormat( false );
 			setShouldFocusCalculation( false );
 			closeTimerRef.current = null;
 		}, 180 );
 	}, [ cancelClose ] );
-	const openFormat = useCallback(
-		( focus = false ) => {
-			cancelClose();
-			setIsCalculating( false );
-			setShouldFocusFormat( focus );
-			setShouldFocusCalculation( false );
-			setIsFormatting( true );
-		},
-		[ cancelClose ]
-	);
-	useEffect( () => () => cancelClose(), [ cancelClose ] );
-
-	const closeMenu = useCallback( () => {
-		cancelClose();
-		setIsFormatting( false );
-		setIsCalculating( false );
-		setShouldFocusFormat( false );
-		setShouldFocusCalculation( false );
-		setIsMenuOpen( false );
-	}, [ cancelClose ] );
-
-	const closeFormat = useCallback( () => {
-		cancelClose();
-		setIsFormatting( false );
-		setShouldFocusFormat( false );
-	}, [ cancelClose ] );
-
 	const closeCalculation = useCallback( () => {
-		cancelClose();
 		setIsCalculating( false );
 		setShouldFocusCalculation( false );
+		cancelClose();
 	}, [ cancelClose ] );
-
 	const openCalculation = useCallback(
 		( focus = false ) => {
 			cancelClose();
-			setIsFormatting( false );
-			setShouldFocusFormat( false );
 			setShouldFocusCalculation( focus );
 			setIsCalculating( true );
 		},
 		[ cancelClose ]
 	);
+	useEffect( () => () => cancelClose(), [ cancelClose ] );
 
 	const openCalculationFromKeyboard = useCallback(
 		( event ) => {
@@ -305,92 +218,12 @@ function FieldActions( {
 		[ openCalculation ]
 	);
 
-	const closeFormatAndFocusTrigger = useCallback( () => {
-		closeFormat();
-		window.requestAnimationFrame( () => {
-			formatItemRef.current?.focus();
-		} );
-	}, [ closeFormat ] );
-
 	const closeCalculationAndFocusTrigger = useCallback( () => {
 		closeCalculation();
 		window.requestAnimationFrame( () => {
 			calculationItemRef.current?.focus();
 		} );
 	}, [ closeCalculation ] );
-
-	const openFormatFromKeyboard = useCallback(
-		( event ) => {
-			if (
-				! [ 'ArrowRight', 'Enter', ' ', 'Spacebar' ].includes(
-					event.key
-				)
-			) {
-				return;
-			}
-			event.preventDefault();
-			event.stopPropagation();
-			openFormat( true );
-		},
-		[ openFormat ]
-	);
-
-	const onMenuOpenChange = useCallback(
-		( nextOpen ) => {
-			if ( nextOpen ) {
-				setIsMenuOpen( true );
-			} else {
-				closeMenu();
-			}
-		},
-		[ closeMenu ]
-	);
-
-	// Keep Ariakit from auto-hiding the menu when the user interacts
-	// with the format popover or one of its third-level flyouts.
-	const hideMenuOnInteractOutside = useCallback( ( event ) => {
-		const target = event.target;
-		if ( target && typeof target.closest === 'function' ) {
-			if (
-				target.closest( '.cortext-format-submenu' ) ||
-				target.closest( '.cortext-format-submenu__flyout' ) ||
-				target.closest( '.cortext-table-calculation-submenu' )
-			) {
-				return false;
-			}
-		}
-		return true;
-	}, [] );
-
-	// When this component renders inside an iframe (e.g. the Gutenberg
-	// canvas), Ariakit's outside-click listener only fires for events in
-	// the iframe document. Clicks on the editor chrome (sidebar, header)
-	// happen on the parent document, so without an extra listener there
-	// the menu stays open until the user clicks back into the canvas.
-	useEffect( () => {
-		if ( ! isMenuOpen ) {
-			return undefined;
-		}
-		let parentDoc;
-		try {
-			if ( window.parent && window.parent !== window ) {
-				parentDoc = window.parent.document;
-			}
-		} catch {
-			parentDoc = undefined;
-		}
-		if ( ! parentDoc || parentDoc === document ) {
-			return undefined;
-		}
-		const onParentMouseDown = ( event ) => {
-			if ( hideMenuOnInteractOutside( event ) ) {
-				closeMenu();
-			}
-		};
-		parentDoc.addEventListener( 'mousedown', onParentMouseDown );
-		return () =>
-			parentDoc.removeEventListener( 'mousedown', onParentMouseDown );
-	}, [ isMenuOpen, closeMenu, hideMenuOnInteractOutside ] );
 
 	const dataViewId = `field-${ recordId }`;
 	const label = mappedField?.label || `#${ recordId }`;
@@ -411,16 +244,6 @@ function FieldActions( {
 	const isSorted = sortField === dataViewId;
 	const sortMenuKey = isSorted ? sortDirection : 'none';
 	const sortRadioGroupName = `cortext-column-sort-${ recordId }-${ sortMenuKey }`;
-	const dependentRollups = useMemo(
-		() =>
-			fields.filter(
-				( field ) =>
-					field.cortextType === 'rollup' &&
-					( field.rollupRelationFieldId === recordId ||
-						field.rollupTargetFieldId === recordId )
-			),
-		[ fields, recordId ]
-	);
 
 	// Move only touches data fields. Title stays pinned, and the legacy
 	// ghost id is ignored if an older saved view still has it.
@@ -479,43 +302,113 @@ function FieldActions( {
 		onChangeView( { ...view, fields: next } );
 	}, [ onChangeView, view, dataViewId, visibleFields ] );
 
-	const onConfirmDelete = useCallback( async () => {
-		try {
-			await remove.run( recordId );
-		} finally {
-			setConfirmDelete( false );
-		}
-	}, [ remove, recordId ] );
+	const renderViewGroup = useCallback(
+		( { Menu, closeMenu } ) => (
+			<Menu.Group key={ `sort-${ dataViewId }-${ sortMenuKey }` }>
+				<Menu.Item
+					ref={ calculationItemRef }
+					className="cortext-column-header-actions__submenu-item"
+					hideOnClick={ false }
+					suffix={ <Icon icon={ chevronRight } size={ 18 } /> }
+					onClick={ () => openCalculation() }
+					onKeyDown={ openCalculationFromKeyboard }
+					onMouseEnter={ () => openCalculation() }
+					onMouseLeave={ scheduleClose }
+				>
+					<Menu.ItemLabel>
+						{ __( 'Calculate', 'cortext' ) }
+					</Menu.ItemLabel>
+				</Menu.Item>
+				<Menu.RadioItem
+					name={ sortRadioGroupName }
+					value="asc"
+					checked={ isSorted && sortDirection === 'asc' }
+					hideOnClick
+					onChange={ () => dispatchSort( 'asc' ) }
+				>
+					<Menu.ItemLabel>
+						{ __( 'Sort ascending', 'cortext' ) }
+					</Menu.ItemLabel>
+				</Menu.RadioItem>
+				<Menu.RadioItem
+					name={ sortRadioGroupName }
+					value="desc"
+					checked={ isSorted && sortDirection === 'desc' }
+					hideOnClick
+					onChange={ () => dispatchSort( 'desc' ) }
+				>
+					<Menu.ItemLabel>
+						{ __( 'Sort descending', 'cortext' ) }
+					</Menu.ItemLabel>
+				</Menu.RadioItem>
+				<Menu.Item
+					prefix={ <Icon icon={ unseen } /> }
+					onClick={ () => {
+						dispatchHide();
+						closeMenu();
+					} }
+				>
+					<Menu.ItemLabel>
+						{ __( 'Hide column', 'cortext' ) }
+					</Menu.ItemLabel>
+				</Menu.Item>
+			</Menu.Group>
+		),
+		[
+			dataViewId,
+			dispatchHide,
+			dispatchSort,
+			isSorted,
+			openCalculation,
+			openCalculationFromKeyboard,
+			scheduleClose,
+			sortDirection,
+			sortMenuKey,
+			sortRadioGroupName,
+		]
+	);
 
-	if ( isRenaming ) {
-		return (
-			<span className="cortext-column-header-actions">
-				<RenameFieldInline
-					recordId={ recordId }
-					onDone={ () => setIsRenaming( false ) }
-				/>
-			</span>
-		);
-	}
+	const renderLifecyclePrefix = useCallback(
+		( { Menu } ) => (
+			<>
+				<Menu.Item
+					prefix={ <Icon icon={ arrowLeft } /> }
+					disabled={ ! canMoveLeft }
+					onClick={ () => dispatchMove( -1 ) }
+				>
+					<Menu.ItemLabel>
+						{ __( 'Move left', 'cortext' ) }
+					</Menu.ItemLabel>
+				</Menu.Item>
+				<Menu.Item
+					prefix={ <Icon icon={ arrowRight } /> }
+					disabled={ ! canMoveRight }
+					onClick={ () => dispatchMove( 1 ) }
+				>
+					<Menu.ItemLabel>
+						{ __( 'Move right', 'cortext' ) }
+					</Menu.ItemLabel>
+				</Menu.Item>
+			</>
+		),
+		[ canMoveLeft, canMoveRight, dispatchMove ]
+	);
 
 	return (
-		<span
-			className="cortext-column-header-actions"
-			ref={ optionsAnchorRef }
-		>
-			<Menu
-				key={ `menu-${ dataViewId }-${ sortMenuKey }` }
-				open={ isMenuOpen }
-				onOpenChange={ onMenuOpenChange }
-			>
-				<Menu.TriggerButton
-					render={
-						<Button
-							className="dataviews-view-table-header-button cortext-column-header-trigger"
-							variant="tertiary"
-						/>
-					}
-				>
+		<>
+			<FieldActionsMenu
+				recordId={ recordId }
+				collectionId={ collectionId }
+				field={ mappedField }
+				className="cortext-column-header-actions"
+				menuKey={ `menu-${ dataViewId }-${ sortMenuKey }` }
+				triggerButton={
+					<Button
+						className="dataviews-view-table-header-button cortext-column-header-trigger"
+						variant="tertiary"
+					/>
+				}
+				triggerContent={
 					<span className="cortext-column-header-content">
 						<FieldTypeIcon
 							type={ fieldType }
@@ -533,175 +426,13 @@ function FieldActions( {
 							</span>
 						) : null }
 					</span>
-				</Menu.TriggerButton>
-				<Menu.Popover
-					className="cortext-field-actions-popover"
-					modal={ false }
-					portal
-					hideOnInteractOutside={ hideMenuOnInteractOutside }
-					style={ { minWidth: '240px' } }
-				>
-					{ /* Property-config group: edit how the column
-					     itself is defined. Keeps field actions grouped by
-					     section (Edit property / Change type). */ }
-					<Menu.Group>
-						<Menu.Item
-							prefix={ <Icon icon={ pencil } /> }
-							onClick={ () => setIsRenaming( true ) }
-						>
-							<Menu.ItemLabel>
-								{ __( 'Rename', 'cortext' ) }
-							</Menu.ItemLabel>
-						</Menu.Item>
-						{ canFormat ? (
-							<Menu.Item
-								ref={ formatItemRef }
-								className="cortext-column-header-actions__submenu-item"
-								hideOnClick={ false }
-								suffix={
-									<Icon icon={ chevronRight } size={ 18 } />
-								}
-								onClick={ () => openFormat() }
-								onKeyDown={ openFormatFromKeyboard }
-								onMouseEnter={ () => openFormat() }
-								onMouseLeave={ scheduleClose }
-							>
-								<Menu.ItemLabel>
-									{ __( 'Edit field', 'cortext' ) }
-								</Menu.ItemLabel>
-							</Menu.Item>
-						) : null }
-						{ supportsOptions ? (
-							<Menu.Item
-								onClick={ () => setIsEditingOptions( true ) }
-							>
-								<Menu.ItemLabel>
-									{ __( 'Edit options', 'cortext' ) }
-								</Menu.ItemLabel>
-							</Menu.Item>
-						) : null }
-						{ canChangeType ? (
-							<Menu.Item
-								onClick={ () => setIsChangingType( true ) }
-							>
-								<Menu.ItemLabel>
-									{ __( 'Change type…', 'cortext' ) }
-								</Menu.ItemLabel>
-							</Menu.Item>
-						) : null }
-					</Menu.Group>
-					<Menu.Separator />
-					{ /* View group: keep sort/hide actions together. */ }
-					<Menu.Group key={ `sort-${ dataViewId }-${ sortMenuKey }` }>
-						<Menu.Item
-							ref={ calculationItemRef }
-							className="cortext-column-header-actions__submenu-item"
-							hideOnClick={ false }
-							suffix={
-								<Icon icon={ chevronRight } size={ 18 } />
-							}
-							onClick={ () => openCalculation() }
-							onKeyDown={ openCalculationFromKeyboard }
-							onMouseEnter={ () => openCalculation() }
-							onMouseLeave={ scheduleClose }
-						>
-							<Menu.ItemLabel>
-								{ __( 'Calculate', 'cortext' ) }
-							</Menu.ItemLabel>
-						</Menu.Item>
-						<Menu.RadioItem
-							name={ sortRadioGroupName }
-							value="asc"
-							checked={ isSorted && sortDirection === 'asc' }
-							hideOnClick
-							onChange={ () => dispatchSort( 'asc' ) }
-						>
-							<Menu.ItemLabel>
-								{ __( 'Sort ascending', 'cortext' ) }
-							</Menu.ItemLabel>
-						</Menu.RadioItem>
-						<Menu.RadioItem
-							name={ sortRadioGroupName }
-							value="desc"
-							checked={ isSorted && sortDirection === 'desc' }
-							hideOnClick
-							onChange={ () => dispatchSort( 'desc' ) }
-						>
-							<Menu.ItemLabel>
-								{ __( 'Sort descending', 'cortext' ) }
-							</Menu.ItemLabel>
-						</Menu.RadioItem>
-						<Menu.Item
-							prefix={ <Icon icon={ unseen } /> }
-							onClick={ dispatchHide }
-						>
-							<Menu.ItemLabel>
-								{ __( 'Hide column', 'cortext' ) }
-							</Menu.ItemLabel>
-						</Menu.Item>
-					</Menu.Group>
-					<Menu.Separator />
-					{ /* Column-lifecycle group: move, duplicate, delete. */ }
-					<Menu.Group>
-						<Menu.Item
-							prefix={ <Icon icon={ arrowLeft } /> }
-							disabled={ ! canMoveLeft }
-							onClick={ () => dispatchMove( -1 ) }
-						>
-							<Menu.ItemLabel>
-								{ __( 'Move left', 'cortext' ) }
-							</Menu.ItemLabel>
-						</Menu.Item>
-						<Menu.Item
-							prefix={ <Icon icon={ arrowRight } /> }
-							disabled={ ! canMoveRight }
-							onClick={ () => dispatchMove( 1 ) }
-						>
-							<Menu.ItemLabel>
-								{ __( 'Move right', 'cortext' ) }
-							</Menu.ItemLabel>
-						</Menu.Item>
-						<Menu.Item
-							prefix={ <Icon icon={ copy } /> }
-							onClick={ async () => {
-								try {
-									const duplicated =
-										await duplicate.run( recordId );
-									if ( duplicated?.type === 'rollup' ) {
-										onRowsChanged?.();
-									}
-								} catch {
-									// surfaced via duplicate.error.
-								}
-							} }
-						>
-							<Menu.ItemLabel>
-								{ __( 'Duplicate', 'cortext' ) }
-							</Menu.ItemLabel>
-						</Menu.Item>
-						<Menu.Item
-							className="cortext-column-header-actions__destructive-item"
-							prefix={ <Icon icon={ trash } /> }
-							onClick={ () => setConfirmDelete( true ) }
-						>
-							<Menu.ItemLabel>
-								{ __( 'Delete', 'cortext' ) }
-							</Menu.ItemLabel>
-						</Menu.Item>
-					</Menu.Group>
-				</Menu.Popover>
-			</Menu>
-			{ isFormatting && canFormat ? (
-				<FieldFormatPopover
-					recordId={ recordId }
-					anchor={ formatItemRef.current }
-					focusOnMount={ shouldFocusFormat ? 'firstElement' : false }
-					onClose={ closeFormat }
-					onCloseWithFocus={ closeFormatAndFocusTrigger }
-					onMouseEnter={ () => openFormat() }
-					onMouseLeave={ scheduleClose }
-				/>
-			) : null }
+				}
+				onFieldOptionsSaved={ onFieldOptionsSaved }
+				onRowsChanged={ onRowsChanged }
+				onCloseMenu={ closeCalculation }
+				renderBetweenConfigAndLifecycle={ renderViewGroup }
+				renderLifecyclePrefix={ renderLifecyclePrefix }
+			/>
 			{ isCalculating ? (
 				<TableCalculationPopover
 					anchor={ calculationItemRef.current }
@@ -718,78 +449,14 @@ function FieldActions( {
 								calculation
 							)
 						);
-						closeMenu();
+						closeCalculation();
 					} }
 					onClose={ closeCalculationAndFocusTrigger }
 					onMouseEnter={ () => openCalculation() }
 					onMouseLeave={ scheduleClose }
 				/>
 			) : null }
-			{ confirmDelete ? (
-				<ConfirmDialog
-					onConfirm={ onConfirmDelete }
-					onCancel={ () => setConfirmDelete( false ) }
-					confirmButtonText={ __( 'Delete', 'cortext' ) }
-				>
-					<p>
-						{ __(
-							'Delete this field? Existing values for this field will be removed from every entry.',
-							'cortext'
-						) }
-					</p>
-					{ dependentRollups.length > 0 ? (
-						<p>
-							{ dependentRollups.length === 1
-								? __(
-										'This will also delete 1 rollup that depends on it:',
-										'cortext'
-								  )
-								: sprintf(
-										/* translators: %d: number of dependent rollup fields */
-										__(
-											'This will also delete %d rollups that depend on it:',
-											'cortext'
-										),
-										dependentRollups.length
-								  ) }{ ' ' }
-							{ dependentRollups
-								.map( ( field ) => field.label )
-								.join( ', ' ) }
-						</p>
-					) : null }
-				</ConfirmDialog>
-			) : null }
-			{ isEditingOptions && supportsOptions ? (
-				<Popover
-					anchor={ optionsAnchorRef.current }
-					placement="bottom-start"
-					onClose={ () => setIsEditingOptions( false ) }
-					focusOnMount="firstElement"
-					className="cortext-edit-options-popover-host"
-				>
-					<EditOptionsPopover
-						recordId={ recordId }
-						fieldType={ fieldType }
-						initialOptions={ initialOptions }
-						onOptionsSaved={ ( nextOptions ) =>
-							onFieldOptionsSaved?.( recordId, nextOptions )
-						}
-						onRowsChanged={ onRowsChanged }
-						onRequestClose={ () => setIsEditingOptions( false ) }
-					/>
-				</Popover>
-			) : null }
-			{ isChangingType && canChangeType ? (
-				<ChangeFieldTypePopover
-					anchor={ optionsAnchorRef.current }
-					collectionId={ collectionId }
-					recordId={ recordId }
-					currentType={ fieldType }
-					onClose={ () => setIsChangingType( false ) }
-					onTypeChanged={ onRowsChanged }
-				/>
-			) : null }
-		</span>
+		</>
 	);
 }
 
