@@ -47,14 +47,6 @@ const ROW_DETAIL_EDITOR_CSS = `
 
 const ROW_DETAIL_EXTRA_STYLES = [ { css: ROW_DETAIL_EDITOR_CSS } ];
 
-function DetailReadySignal( { detailKey, onReady } ) {
-	useEffect( () => {
-		onReady( detailKey );
-	}, [ detailKey, onReady ] );
-
-	return null;
-}
-
 function RowAutosaveBridge( {
 	isActive = true,
 	onApi,
@@ -104,10 +96,12 @@ function RowAutosaveBridge( {
 
 function DetailPaneContent( {
 	collectionId,
+	detailKey,
 	fields,
 	isActive,
 	isHidden,
 	onApi,
+	onPaneReady,
 	onRestored,
 	onSaved,
 	onTogglePropertiesVisible,
@@ -116,6 +110,11 @@ function DetailPaneContent( {
 	row,
 	rowId,
 } ) {
+	const handleReady = useCallback(
+		() => onPaneReady( detailKey ),
+		[ detailKey, onPaneReady ]
+	);
+
 	return (
 		<>
 			<RowAutosaveBridge
@@ -140,6 +139,7 @@ function DetailPaneContent( {
 					postId={ row?.id }
 					postType={ postType }
 					extraStyles={ ROW_DETAIL_EXTRA_STYLES }
+					onReady={ handleReady }
 					onRestored={ onRestored }
 				/>
 			</DocumentPropertiesProvider>
@@ -178,16 +178,14 @@ export default function RowEditor( {
 			     peek/modal are open. */ }
 			<SlotFillProvider>
 				<EditorSurfaceProvider hasBlockInspector={ false }>
-					<DetailReadySignal
-						detailKey={ detailKey }
-						onReady={ onPaneReady }
-					/>
 					<DetailPaneContent
 						collectionId={ collectionId }
+						detailKey={ detailKey }
 						fields={ fields }
 						isActive={ isActive }
 						isHidden={ isHidden }
 						onApi={ onApi }
+						onPaneReady={ onPaneReady }
 						onRestored={ onRestored }
 						onSaved={ onSaved }
 						onTogglePropertiesVisible={ onTogglePropertiesVisible }

@@ -240,8 +240,14 @@ async function getParentDataViewAttributes( page ) {
 	} );
 }
 
+function activeRowDetailCanvas( detail ) {
+	return detail
+		.locator( '.cortext-row-detail__pane[data-interactive="true"]' )
+		.frameLocator( 'iframe[name="editor-canvas"]' );
+}
+
 async function expectRowToolbarIsolated( page, detail, blockText ) {
-	const rowCanvas = detail.frameLocator( 'iframe[name="editor-canvas"]' );
+	const rowCanvas = activeRowDetailCanvas( detail );
 	const rowBlock = rowCanvas.getByText( blockText, { exact: true } ).first();
 	await expect( rowBlock ).toBeVisible();
 	await rowBlock.click();
@@ -1965,9 +1971,7 @@ test.describe( 'Collection view block', () => {
 			// The row title now lives in the locked `core/post-title` block
 			// inside the editor iframe. Properties sit next to it in the
 			// `cortext/document-properties` block.
-			const detailCanvas = detail.frameLocator(
-				'[name="editor-canvas"]'
-			);
+			const detailCanvas = activeRowDetailCanvas( detail );
 			const detailTitle = detailCanvas
 				.locator( '[data-type="core/post-title"]' )
 				.first();
