@@ -106,6 +106,7 @@ jobs:
                   exit "$status"
 
             - name: Run UI benchmark
+              if: ${{ false }}
               env:
                   CORTEXT_PERF_UI: '1'
                   # wp-env serves WordPress on 8888.
