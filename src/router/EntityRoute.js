@@ -363,6 +363,7 @@ export default function EntityRoute( { history } ) {
 		if ( entity?.id === target.id ) {
 			dispatch( {
 				type: 'DOCUMENT_RESOLVED',
+				kind: 'document',
 				id: entity.id,
 				postType: entity.type,
 			} );
@@ -372,7 +373,11 @@ export default function EntityRoute( { history } ) {
 			return;
 		}
 		if ( ! isResolving && notFound ) {
-			dispatch( { type: 'DOCUMENT_NOT_FOUND', id: target.id } );
+			dispatch( {
+				type: 'DOCUMENT_NOT_FOUND',
+				kind: 'document',
+				id: target.id,
+			} );
 		}
 	}, [ target, documentResolution, dispatch, touchRecent ] );
 
@@ -417,12 +422,17 @@ export default function EntityRoute( { history } ) {
 			// Inline collections do not have a workspace route. A stale pasted
 			// URL should land on Not Found instead of opening Canvas.
 			if ( entity?.meta?.workspace_mode === 'inline' ) {
-				dispatch( { type: 'DOCUMENT_NOT_FOUND', id: target.id } );
+				dispatch( {
+					type: 'DOCUMENT_NOT_FOUND',
+					kind: 'collection',
+					id: target.id,
+				} );
 				return;
 			}
 			// Full-page collections are Canvas documents with a data-view body.
 			dispatch( {
 				type: 'DOCUMENT_RESOLVED',
+				kind: 'collection',
 				id: entity.id,
 				postType: entity.type,
 			} );
@@ -430,7 +440,11 @@ export default function EntityRoute( { history } ) {
 			return;
 		}
 		if ( ! isResolving && notFound ) {
-			dispatch( { type: 'DOCUMENT_NOT_FOUND', id: target.id } );
+			dispatch( {
+				type: 'DOCUMENT_NOT_FOUND',
+				kind: 'collection',
+				id: target.id,
+			} );
 		}
 	}, [ target, collectionResolution, dispatch, touchRecent ] );
 

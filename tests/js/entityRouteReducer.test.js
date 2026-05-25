@@ -25,6 +25,7 @@ function activate( state, target, options = {} ) {
 	if ( target.kind === 'document' && target.id !== null ) {
 		next = reducer( next, {
 			type: 'DOCUMENT_RESOLVED',
+			kind: 'document',
 			id: target.id,
 			postType,
 		} );
@@ -205,6 +206,7 @@ describe( 'EntityRoute reducer', () => {
 			state = reducer( state, { type: 'DOCUMENT_DISPLAYED', id: 1 } );
 			state = reducer( state, {
 				type: 'DOCUMENT_RESOLVED',
+				kind: 'document',
 				id: 1,
 				postType: PAGE_TYPE,
 			} );
@@ -221,6 +223,7 @@ describe( 'EntityRoute reducer', () => {
 			} );
 			state = reducer( state, {
 				type: 'DOCUMENT_RESOLVED',
+				kind: 'document',
 				id: 1,
 				postType: PAGE_TYPE,
 			} );
@@ -235,6 +238,7 @@ describe( 'EntityRoute reducer', () => {
 			);
 			const next = reducer( state, {
 				type: 'DOCUMENT_RESOLVED',
+				kind: 'document',
 				id: 99,
 				postType: PAGE_TYPE,
 			} );
@@ -252,7 +256,26 @@ describe( 'EntityRoute reducer', () => {
 			} );
 			const next = reducer( state, {
 				type: 'DOCUMENT_RESOLVED',
+				kind: 'document',
 				id: 1,
+				postType: PAGE_TYPE,
+			} );
+			expect( next ).toBe( state );
+		} );
+
+		it( 'ignores a same-id resolution from a different kind', () => {
+			// Post IDs are reused across post types in WordPress, so an id
+			// match alone could let a stale page resolution apply to a same-id
+			// collection target. The kind check rejects it.
+			let state = init( collectionTarget( 42 ) );
+			state = reducer( state, {
+				type: 'TARGET_CHANGED',
+				target: collectionTarget( 42 ),
+			} );
+			const next = reducer( state, {
+				type: 'DOCUMENT_RESOLVED',
+				kind: 'document',
+				id: 42,
 				postType: PAGE_TYPE,
 			} );
 			expect( next ).toBe( state );
@@ -266,6 +289,7 @@ describe( 'EntityRoute reducer', () => {
 			} );
 			state = reducer( state, {
 				type: 'DOCUMENT_RESOLVED',
+				kind: 'collection',
 				id: 7,
 				postType: 'crtxt_collection',
 			} );
@@ -283,7 +307,11 @@ describe( 'EntityRoute reducer', () => {
 				type: 'TARGET_CHANGED',
 				target: documentTarget( 99 ),
 			} );
-			state = reducer( state, { type: 'DOCUMENT_NOT_FOUND', id: 99 } );
+			state = reducer( state, {
+				type: 'DOCUMENT_NOT_FOUND',
+				kind: 'document',
+				id: 99,
+			} );
 			expect( state.active ).toEqual( { kind: 'document-not-found' } );
 		} );
 
@@ -293,7 +321,11 @@ describe( 'EntityRoute reducer', () => {
 				type: 'TARGET_CHANGED',
 				target: collectionTarget( 5 ),
 			} );
-			state = reducer( state, { type: 'DOCUMENT_NOT_FOUND', id: 5 } );
+			state = reducer( state, {
+				type: 'DOCUMENT_NOT_FOUND',
+				kind: 'collection',
+				id: 5,
+			} );
 			expect( state.active ).toEqual( { kind: 'collection-not-found' } );
 		} );
 
@@ -308,7 +340,22 @@ describe( 'EntityRoute reducer', () => {
 			} );
 			const next = reducer( state, {
 				type: 'DOCUMENT_NOT_FOUND',
+				kind: 'document',
 				id: 1,
+			} );
+			expect( next ).toBe( state );
+		} );
+
+		it( 'is ignored when the not-found kind does not match the current target', () => {
+			let state = init( collectionTarget( 42 ) );
+			state = reducer( state, {
+				type: 'TARGET_CHANGED',
+				target: collectionTarget( 42 ),
+			} );
+			const next = reducer( state, {
+				type: 'DOCUMENT_NOT_FOUND',
+				kind: 'document',
+				id: 42,
 			} );
 			expect( next ).toBe( state );
 		} );
@@ -323,6 +370,7 @@ describe( 'EntityRoute reducer', () => {
 			} );
 			state = reducer( state, {
 				type: 'DOCUMENT_RESOLVED',
+				kind: 'document',
 				id: 1,
 				postType: PAGE_TYPE,
 			} );
@@ -445,6 +493,7 @@ describe( 'EntityRoute reducer', () => {
 			expect( state.active ).toEqual( { kind: 'loading' } );
 			state = reducer( state, {
 				type: 'DOCUMENT_RESOLVED',
+				kind: 'document',
 				id: 1,
 				postType: PAGE_TYPE,
 			} );

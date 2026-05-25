@@ -120,9 +120,11 @@ export function reducer( state, action ) {
 
 		case 'DOCUMENT_RESOLVED': {
 			// Full-page collections resolve into the same Canvas mount path.
+			// `kind` discriminates document vs collection because WordPress
+			// post IDs are reused across post types, so an id match alone
+			// can let a stale page resolution apply to a same-id collection.
 			if (
-				( state.target.kind !== 'document' &&
-					state.target.kind !== 'collection' ) ||
+				state.target.kind !== action.kind ||
 				state.target.id !== action.id
 			) {
 				return state;
@@ -140,8 +142,7 @@ export function reducer( state, action ) {
 
 		case 'DOCUMENT_NOT_FOUND': {
 			if (
-				( state.target.kind !== 'document' &&
-					state.target.kind !== 'collection' ) ||
+				state.target.kind !== action.kind ||
 				state.target.id !== action.id
 			) {
 				return state;
