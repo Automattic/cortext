@@ -37,9 +37,22 @@ export function rowDetailFieldType( field ) {
 	return field.cortextFieldType ?? field.type ?? 'text';
 }
 
-export function isRowDetailFieldEditable( field ) {
-	if ( rowDetailFieldType( field ) === 'relation' ) {
-		return false;
+function hasRelationEditContext( field, context = {} ) {
+	const targetCollectionId =
+		field.relation?.targetCollectionId ?? field.relatedCollectionId;
+	return Boolean(
+		context.collectionId && context.rowId && targetCollectionId
+	);
+}
+
+export function isRowDetailFieldEditable( field, context = {} ) {
+	const type = rowDetailFieldType( field );
+	if ( type === 'relation' ) {
+		return Boolean(
+			field.editable &&
+				field.id?.startsWith?.( 'field-' ) &&
+				hasRelationEditContext( field, context )
+		);
 	}
 
 	return (
@@ -48,13 +61,34 @@ export function isRowDetailFieldEditable( field ) {
 	);
 }
 
+export function rowDetailDisplayFieldType( field ) {
+	const type = rowDetailFieldType( field );
+	if (
+		type === 'rollup' &&
+		( field.rollupAggregator ?? field.cortextFormat?.rollup_aggregator ) ===
+			'date_range'
+	) {
+		return 'rollup-date-range';
+	}
+	return type;
+}
+
 export function valueForField( field, data ) {
 	if ( field.id === 'title' ) {
 		return data.title ?? '';
 	}
 	if ( field.id?.startsWith?.( 'field-' ) ) {
 		if (
-			! isRowDetailFieldEditable( field ) &&
+			rowDetailFieldType( field ) === 'relation' &&
+			Object.prototype.hasOwnProperty.call(
+				data.hydratedMeta ?? {},
+				field.id
+			)
+		) {
+			return data.hydratedMeta[ field.id ] ?? null;
+		}
+		if (
+			! isRowDetailFieldEditable( field, data.editContext ) &&
 			Object.prototype.hasOwnProperty.call(
 				data.hydratedMeta ?? {},
 				field.id

@@ -37,6 +37,7 @@ export default function RelationEditor( {
 	onSave,
 	onCancel,
 	label,
+	defaultOpen = true,
 } ) {
 	const [ search, setSearch ] = useState( '' );
 	const debouncedSearch = useDebouncedValue( search, SEARCH_DEBOUNCE_MS );
@@ -244,7 +245,7 @@ export default function RelationEditor( {
 
 	return (
 		<Dropdown
-			defaultOpen
+			defaultOpen={ defaultOpen }
 			onClose={ onCancel }
 			popoverProps={ {
 				placement: 'bottom-start',

@@ -9,6 +9,7 @@
  * any field changes that flow through autosave.
  */
 
+import apiFetch from '@wordpress/api-fetch';
 import {
 	Button,
 	CheckboxControl,
@@ -57,14 +58,17 @@ import { hasSystemFieldIcon } from './fields/systemFieldIconIds';
 import Infotip from './Infotip';
 import { toRecordId } from '../hooks/fieldIds';
 import { elementsFromOptions } from '../hooks/optionElements';
+import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
 import {
 	isRowDetailFieldEditable,
 	isValidNumberDraft,
 	parseNumberPropertyValue,
+	rowDetailDisplayFieldType as displayFieldType,
 	rowDetailFieldType as fieldType,
 	splitPropertyPatch,
 	valueForField,
 } from './rowDetailUtils';
+import RelationEditor from './relations/RelationEditor';
 
 function emptyLabel() {
 	return (
@@ -217,6 +221,14 @@ function MultiselectPropertyControl( {
 			) : null }
 		</>
 	);
+}
+
+function relationConfigForField( field ) {
+	return {
+		targetCollectionId:
+			field.relation?.targetCollectionId ?? field.relatedCollectionId,
+		multiple: field.relation?.multiple ?? field.relationMultiple ?? true,
+	};
 }
 
 function DatePropertyControl( { field, value, type, onChange } ) {
@@ -435,7 +447,9 @@ function PropertyControl( {
 	field,
 	value,
 	elements,
+	relation,
 	onChange,
+	onRelationChange,
 	onOptionsSaved,
 	onRowsChanged,
 } ) {
@@ -498,6 +512,19 @@ function PropertyControl( {
 				value={ value }
 				type={ type }
 				onChange={ onChange }
+			/>
+		);
+	}
+
+	if ( type === 'relation' ) {
+		return (
+			<RelationEditor
+				value={ Array.isArray( value ) ? value : [] }
+				relation={ relation }
+				onSave={ onRelationChange }
+				onCancel={ () => {} }
+				label={ label }
+				defaultOpen={ false }
 			/>
 		);
 	}
@@ -606,12 +633,17 @@ function RowProperty( {
 	reorderAttributes,
 	reorderListeners,
 	rowRef,
+	rowId,
 	rowStyle,
 	update,
+	updateRelation,
 } ) {
-	const isEditable = isRowDetailFieldEditable( field );
+	const relation = relationConfigForField( field );
+	const editContext = { collectionId, rowId };
+	const isEditable = isRowDetailFieldEditable( field, editContext );
 	const value = valueForField( field, data );
 	const type = fieldType( field );
+	const displayType = displayFieldType( field );
 	const elements =
 		localOptionOverrides?.[ field.id ] ??
 		optionOverrides?.[ field.id ] ??
@@ -692,8 +724,12 @@ function RowProperty( {
 						field={ displayField }
 						value={ value }
 						elements={ elements }
+						relation={ relation }
 						onChange={ ( next ) =>
 							update( { [ field.id ]: next } )
+						}
+						onRelationChange={ ( next ) =>
+							updateRelation( field.id, next )
 						}
 						onOptionsSaved={ ( nextOptions ) =>
 							handleFieldOptionsSaved(
@@ -706,7 +742,7 @@ function RowProperty( {
 				) : (
 					<ReadOnlyProperty
 						value={ value }
-						type={ type }
+						type={ displayType }
 						elements={ elements }
 						format={ format }
 					/>
@@ -747,6 +783,14 @@ function SortableRowProperty( props ) {
  * Renders the row's collection-field properties as document chrome above the
  * block editor. This is intentionally not serialized yet; see
  * tech-debt.md#42 for the block-backed version needed for frontend rendering.
+ *
+ * @param {Object}   props
+ * @param {number}   props.collectionId The row's parent collection ID.
+ * @param {Array}    props.fields       The collection field definitions for this row.
+ * @param {Function} props.onLayoutReorder Callback used for inline row-property reordering.
+ * @param {Object}   [props.row]        Optional fallback row record (used for
+ *                                      read-only fields that aren't tracked by the
+ *                                      editor store, e.g. relations and rollups).
  */
 export default function RowProperties( {
 	collectionId,
@@ -787,12 +831,18 @@ export default function RowProperties( {
 		},
 		[ updateFieldFormat ]
 	);
+	const [ savedRow, setSavedRow ] = useState( null );
+	const rowId = savedRow?.id ?? row?.id;
 	const sensors = useSensors(
 		useSensor( PointerSensor, { activationConstraint: { distance: 4 } } ),
 		useSensor( KeyboardSensor, {
 			coordinateGetter: sortableKeyboardCoordinates,
 		} )
 	);
+
+	useEffect( () => {
+		setSavedRow( null );
+	}, [ row?.id ] );
 
 	// The locked `core/post-title` block above already exposes the title;
 	// duplicating it as a property row would give the user two edit surfaces
@@ -821,16 +871,27 @@ export default function RowProperties( {
 			hydratedMeta && Object.keys( hydratedMeta ).length > 0
 				? hydratedMeta
 				: null;
+		const fallbackHydratedMeta = row?.cortext_hydrated_meta ?? {};
+		const savedHydratedMeta = savedRow?.meta ?? {};
 		return {
-			row,
+			row: savedRow ?? row,
 			title:
 				typeof title === 'string'
 					? title
-					: row?.title?.raw ?? row?.title?.rendered ?? '',
-			meta: meta ?? {},
-			hydratedMeta: storeHydratedMeta ?? row?.cortext_hydrated_meta ?? {},
+					: savedRow?.title?.raw ??
+					  savedRow?.title?.rendered ??
+					  row?.title?.raw ??
+					  row?.title?.rendered ??
+					  '',
+			meta: { ...( savedRow?.meta ?? {} ), ...( meta ?? {} ) },
+			hydratedMeta: {
+				...( storeHydratedMeta ?? {} ),
+				...fallbackHydratedMeta,
+				...savedHydratedMeta,
+			},
+			editContext: { collectionId, rowId },
 		};
-	}, [ hydratedMeta, meta, row, title ] );
+	}, [ collectionId, hydratedMeta, meta, row, rowId, savedRow, title ] );
 
 	const update = useCallback(
 		( patch ) => {
@@ -865,6 +926,27 @@ export default function RowProperties( {
 		[ onLayoutReorder ]
 	);
 
+	const updateRelation = useCallback(
+		async ( fieldId, next ) => {
+			if ( ! collectionId || ! rowId ) {
+				return null;
+			}
+			const updated = await apiFetch( {
+				path: `/cortext/v1/collections/${ collectionId }/rows/${ rowId }`,
+				method: 'POST',
+				data: {
+					field: fieldId,
+					value: next,
+				},
+			} );
+			setSavedRow( updated );
+			refreshRows?.();
+			notifyCollectionRowsChanged( collectionId );
+			return updated;
+		},
+		[ collectionId, refreshRows, rowId ]
+	);
+
 	if ( propertyFields.length === 0 ) {
 		return null;
 	}
@@ -894,7 +976,9 @@ export default function RowProperties( {
 						localOptionOverrides={ localOptionOverrides }
 						optionOverrides={ optionOverrides }
 						refreshRows={ refreshRows }
+						rowId={ rowId }
 						update={ update }
+						updateRelation={ updateRelation }
 					/>
 				) : (
 					<RowProperty
@@ -910,7 +994,9 @@ export default function RowProperties( {
 						localOptionOverrides={ localOptionOverrides }
 						optionOverrides={ optionOverrides }
 						refreshRows={ refreshRows }
+						rowId={ rowId }
 						update={ update }
+						updateRelation={ updateRelation }
 					/>
 				)
 			) }
