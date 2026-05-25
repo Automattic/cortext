@@ -288,17 +288,21 @@ function EditablePropertyText( { label, inputMode, value, onChange } ) {
 function EditableNumberPropertyText( { label, value, format, onChange } ) {
 	const textValue =
 		value === null || value === undefined ? '' : String( value );
+	const inputRef = useRef( null );
 	const committedTextRef = useRef( textValue );
 	const committedValueRef = useRef( value ?? null );
 	const [ draft, setDraft ] = useState( textValue );
 	const [ isFocused, setIsFocused ] = useState( false );
-	const formattedValue = useMemo( () => {
+	const formattedDisplay = useMemo( () => {
 		if ( textValue === '' || ! format ) {
 			return textValue;
 		}
-		const display = formatDisplay( value, 'number', { format } );
-		return typeof display === 'string' ? display : textValue;
+		return formatDisplay( value, 'number', { format } );
 	}, [ format, textValue, value ] );
+	const formattedValue =
+		typeof formattedDisplay === 'string' ? formattedDisplay : textValue;
+	const hasRichDisplay =
+		formattedDisplay !== '' && typeof formattedDisplay !== 'string';
 
 	useEffect( () => {
 		committedTextRef.current = textValue;
@@ -308,6 +312,13 @@ function EditableNumberPropertyText( { label, value, format, onChange } ) {
 			setDraft( textValue );
 		}
 	}, [ isFocused, textValue, value ] );
+
+	useEffect( () => {
+		if ( isFocused ) {
+			inputRef.current?.focus();
+			inputRef.current?.select();
+		}
+	}, [ isFocused ] );
 
 	const commitDraft = useCallback(
 		( nextDraft ) => {
@@ -331,8 +342,25 @@ function EditableNumberPropertyText( { label, value, format, onChange } ) {
 		[ onChange ]
 	);
 
+	if ( hasRichDisplay && ! isFocused ) {
+		return (
+			<Button
+				className="cortext-row-detail__property-trigger"
+				variant="tertiary"
+				onClick={ () => {
+					setDraft( textValue );
+					setIsFocused( true );
+				} }
+				aria-label={ label }
+			>
+				{ formattedDisplay }
+			</Button>
+		);
+	}
+
 	return (
 		<input
+			ref={ inputRef }
 			aria-label={ label }
 			className="cortext-row-detail__property-editable-text"
 			inputMode="decimal"
