@@ -801,7 +801,10 @@ test.describe( 'Navigation lifecycle', () => {
 			await expect( activeCollection ).toBeVisible();
 			await expect( activeCollection ).toContainText( ENTRY_TITLE );
 
-			await expect( pagePane ).toHaveAttribute( 'data-active', 'false' );
+			// Pages and collections share the Canvas pane now, so the pane
+			// stays active through the swap; the document inside the iframe
+			// is what changes.
+			await expect( pagePane ).toHaveAttribute( 'data-active', 'true' );
 			await expect( pagePane ).toHaveCSS( 'visibility', 'visible' );
 
 			await resetViewTransitionProbe( page );
