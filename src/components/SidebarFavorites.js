@@ -1,5 +1,5 @@
 import { __, sprintf } from '@wordpress/i18n';
-import { Button, Icon } from '@wordpress/components';
+import { Button } from '@wordpress/components';
 import {
 	useCallback,
 	useEffect,
@@ -7,7 +7,7 @@ import {
 	useRef,
 	useState,
 } from '@wordpress/element';
-import { customPostType, starFilled } from '@wordpress/icons';
+import { starFilled } from '@wordpress/icons';
 import {
 	DndContext,
 	PointerSensor,
@@ -22,17 +22,17 @@ import {
 	verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 
-import PageIcon from './PageIcon';
 import { SidebarListSkeleton } from './Skeleton';
-import { documentTitle, favoriteKey } from '../documents';
+import {
+	documentTitle,
+	documentUri,
+	favoriteKey,
+	useDocumentRecord,
+} from '../documents';
 import useDelayedFlag, {
 	SKELETON_MIN_VISIBLE_MS,
 } from '../hooks/useDelayedFlag';
 import { collectDescendants } from './pages-tree';
-import {
-	computeCollectionUri,
-	computeDocumentUri,
-} from '../router/useResolveEntity';
 import { whenViewTransitionsSettled } from '../hooks/viewTransition';
 
 const FAVORITE_ADD_ANIMATION_MS = 220;
@@ -44,10 +44,6 @@ function transformToString( transform ) {
 	}
 	const { x = 0, y = 0, scaleX = 1, scaleY = 1 } = transform;
 	return `translate3d(${ x }px, ${ y }px, 0) scaleX(${ scaleX }) scaleY(${ scaleY })`;
-}
-
-function favoriteTitle( favorite, fallback ) {
-	return favorite.title?.trim?.() || fallback;
 }
 
 export function moveFavorite( favorites, activeId, overId ) {
@@ -123,81 +119,40 @@ export function filterFavoritesForTrashedCollection( favorites, collectionId ) {
 }
 
 export function resolveFavoriteItems( favorites, pages, collections ) {
-	const pagesById = new Map( pages.map( ( page ) => [ page.id, page ] ) );
-	const collectionsById = new Map(
-		( collections ?? [] ).map( ( collection ) => [
-			collection.id,
-			collection,
-		] )
+	// One lookup keyed by `<kind>:<id>` so the resolver does not have to
+	// branch on kind. Rows are never in here (they don't ride the sidebar
+	// tree) and fall through to the stored favorite shape below.
+	const recordsByKey = new Map();
+	( pages ?? [] ).forEach( ( page ) =>
+		recordsByKey.set( favoriteKey( { kind: 'page', id: page.id } ), page )
+	);
+	( collections ?? [] ).forEach( ( collection ) =>
+		recordsByKey.set(
+			favoriteKey( { kind: 'collection', id: collection.id } ),
+			collection
+		)
 	);
 
 	return favorites
 		.map( ( favorite ) => {
-			const id = Number( favorite.id );
-			if ( favorite.kind === 'page' ) {
-				const page = pagesById.get( id );
-				if ( ! page && ! favorite.path ) {
-					return null;
-				}
-				const key = favoriteKey( favorite );
-				return {
-					...favorite,
-					id,
-					key,
-					sortableId: key,
-					record: page,
-					title: page
-						? documentTitle( page )
-						: favoriteTitle( favorite, __( 'Page', 'cortext' ) ),
-					path: page ? computeDocumentUri( page ) : favorite.path,
-					icon: page
-						? page.meta?.cortext_document_icon ?? ''
-						: favorite.icon ?? '',
-				};
+			const key = favoriteKey( favorite );
+			const record = recordsByKey.get( key );
+
+			if ( ! record && ! favorite.path ) {
+				return null;
 			}
 
-			if ( favorite.kind === 'collection' ) {
-				const collection = collectionsById.get( id );
-				if ( ! collection && ! favorite.path ) {
-					return null;
-				}
-				const key = favoriteKey( favorite );
-				return {
-					...favorite,
-					id,
-					key,
-					sortableId: key,
-					record: collection,
-					title: collection
-						? documentTitle( collection )
-						: favoriteTitle(
-								favorite,
-								__( 'Collection', 'cortext' )
-						  ),
-					path: collection
-						? computeCollectionUri( collection )
-						: favorite.path,
-				};
-			}
-
-			if ( favorite.kind === 'row' ) {
-				// Rows come from the server, not the sidebar tree. Use the title
-				// and path already returned with the favorite.
-				if ( ! favorite.path ) {
-					return null;
-				}
-				const key = favoriteKey( favorite );
-				return {
-					...favorite,
-					id,
-					key,
-					sortableId: key,
-					title: favoriteTitle( favorite, __( 'Row', 'cortext' ) ),
-					path: favorite.path,
-				};
-			}
-
-			return null;
+			return {
+				...favorite,
+				id: Number( favorite.id ),
+				key,
+				sortableId: key,
+				record,
+				title: documentTitle( record ?? favorite ),
+				path: ( record && documentUri( record ) ) || favorite.path,
+				icon:
+					record?.meta?.cortext_document_icon ?? favorite.icon ?? '',
+			};
 		} )
 		.filter( Boolean );
 }
@@ -233,15 +188,8 @@ function mergeDisplayFavorites( currentDisplay, nextFavorites, removingKeys ) {
 	return merged;
 }
 
-function FavoriteIcon( { item } ) {
-	if ( item.kind === 'page' ) {
-		return <PageIcon icon={ item.icon ?? '' } size={ 16 } />;
-	}
-
-	return <Icon icon={ customPostType } size={ 16 } />;
-}
-
 function SortableFavoriteRow( { item, isDisabled, onSelect, onRemove } ) {
+	const { listIcon } = useDocumentRecord( item );
 	const {
 		attributes,
 		listeners,
@@ -301,7 +249,7 @@ function SortableFavoriteRow( { item, isDisabled, onSelect, onRemove } ) {
 					className="cortext-sidebar__favorite-icon"
 					aria-hidden="true"
 				>
-					<FavoriteIcon item={ item } />
+					{ listIcon?.() }
 				</span>
 				<button
 					type="button"
