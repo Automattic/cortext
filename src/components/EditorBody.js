@@ -494,8 +494,7 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 					block.name !== DOCUMENT_COVER_BLOCK &&
 					block.name !== DOCUMENT_ICON_BLOCK &&
 					block.name !== POST_TITLE_BLOCK &&
-					block.name !== DOCUMENT_PROPERTIES_BLOCK &&
-					block.name !== ownerBlockName
+					block.name !== DOCUMENT_PROPERTIES_BLOCK
 				) {
 					return;
 				}
@@ -505,6 +504,29 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 				}
 				seenSingletons.add( block.name );
 			} );
+			// The owner block is keyed on attribute match, not just name, so
+			// a foreign data-view (pointing at another collection) isn't a
+			// duplicate of the self-referencing owner. If we name-deduped
+			// here, the dedup pass would drop the owner whenever a foreign
+			// data-view came first and the insertion pass would re-add it
+			// on the next render, leaving the document dirty forever.
+			if ( ownerBlockName ) {
+				let ownerSeen = false;
+				blocks.forEach( ( block ) => {
+					if ( block.name !== ownerBlockName ) {
+						return;
+					}
+					const attrId = Number( block.attributes?.collectionId );
+					if ( attrId !== Number( postId ) ) {
+						return;
+					}
+					if ( ownerSeen ) {
+						duplicateIds.push( block.clientId );
+						return;
+					}
+					ownerSeen = true;
+				} );
+			}
 			const propertiesBlock = blocks.find(
 				( block ) => block.name === DOCUMENT_PROPERTIES_BLOCK
 			);
