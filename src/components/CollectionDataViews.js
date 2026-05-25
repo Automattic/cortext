@@ -74,7 +74,8 @@ import { dataViewsFilterByForType } from '../hooks/fieldMapping';
 import { toDataViewId, toRecordId } from '../hooks/fieldIds';
 import useCollectionRows from '../hooks/useCollectionRows';
 import { useRecents } from '../hooks/useRecents';
-import { useFavoriteToggle } from '../documents';
+import { filterFavoritesByDeletedIds, useFavoriteToggle } from '../documents';
+import { useFavorites } from '../hooks/useFavorites';
 import { elementsFromOptions } from '../hooks/optionElements';
 import { notifyDocumentTrashChanged } from '../hooks/documentTrashInvalidation';
 import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
@@ -1088,6 +1089,7 @@ export default function CollectionDataViews( {
 		toggle: toggleRowFavorite,
 		disabled: areFavoriteActionsDisabled,
 	} = useFavoriteToggle( { onError: setRowActionError } );
+	const { setFavorites } = useFavorites();
 
 	const openRowInMode = useCallback(
 		( row, mode ) => {
@@ -1217,6 +1219,15 @@ export default function CollectionDataViews( {
 				refresh();
 				notifyDocumentTrashChanged();
 				notifyCollectionRowsChanged();
+				// Prune favorites for the rows we just trashed. The server cleans
+				// stale entries on the next read, but doing it here keeps the next
+				// favorites PUT from sending these row ids back.
+				setFavorites( ( current ) =>
+					filterFavoritesByDeletedIds( current, { row: deleted } )
+				).catch( () => {
+					// Keep this quiet. The next favorites read asks the server to
+					// prune stale rows anyway.
+				} );
 			}
 
 			if ( failedRows.length > 0 ) {
@@ -1246,7 +1257,14 @@ export default function CollectionDataViews( {
 				setRowActionError( deleteErrorMessage );
 			}
 		},
-		[ closeDocument, forgetDeletedRows, openRowId, postType, refresh ]
+		[
+			closeDocument,
+			forgetDeletedRows,
+			openRowId,
+			postType,
+			refresh,
+			setFavorites,
+		]
 	);
 
 	const requestDeleteSelectedRows = useCallback( () => {
