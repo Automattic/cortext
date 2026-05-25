@@ -35,6 +35,7 @@ import AddFieldPopover from './AddFieldPopover';
 import ChangeFieldTypePopover from './ChangeFieldTypePopover';
 import EditOptionsPopover from './EditOptionsPopover';
 import FieldFormatPopover from './FieldFormatPopover';
+import { FieldTypeIcon } from './fieldTypes';
 import RenameFieldInline from './RenameFieldInline';
 import {
 	useCollectionFieldsContext,
@@ -514,14 +515,23 @@ function FieldActions( {
 						/>
 					}
 				>
-					<span className="cortext-column-header-label">
-						{ label }
-					</span>
-					{ isSorted ? (
-						<span aria-hidden="true">
-							{ sortDirection === 'asc' ? ' ↑' : ' ↓' }
+					<span className="cortext-column-header-content">
+						<FieldTypeIcon
+							type={ fieldType }
+							className="cortext-column-header-type-icon"
+						/>
+						<span className="cortext-column-header-label">
+							{ label }
 						</span>
-					) : null }
+						{ isSorted ? (
+							<span
+								className="cortext-column-header-sort-indicator"
+								aria-hidden="true"
+							>
+								{ sortDirection === 'asc' ? '↑' : '↓' }
+							</span>
+						) : null }
+					</span>
 				</Menu.TriggerButton>
 				<Menu.Popover
 					className="cortext-field-actions-popover"

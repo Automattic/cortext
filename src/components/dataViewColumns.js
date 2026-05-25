@@ -7,6 +7,7 @@
  */
 
 import { sanitizeCalculations } from './tableCalculations';
+import { hasSystemFieldIcon } from './fields/systemFieldIconIds';
 
 export const TITLE_FIELD_ID = 'title';
 export const GHOST_FIELD_ID = '__add_field';
@@ -23,6 +24,10 @@ export const MIN_WIDTHS = {
 	datetime: 64,
 };
 export const DEFAULT_MIN_WIDTH = 32;
+export const FIELD_HEADER_ICON_WIDTH = 16;
+export const FIELD_HEADER_ICON_GAP = 4;
+export const FIELD_HEADER_ICON_CHROME =
+	FIELD_HEADER_ICON_WIDTH + FIELD_HEADER_ICON_GAP;
 
 // Default view seeding should show user-created collection fields even
 // when a field is read-only, as with rollups. System fields stay hidden
@@ -31,14 +36,24 @@ export function isDefaultVisibleField( field ) {
 	return Boolean( field?.editable || field?.recordId );
 }
 
-export function getMinWidth( fieldType ) {
-	return MIN_WIDTHS[ fieldType ] ?? DEFAULT_MIN_WIDTH;
+export function hasFieldHeaderIcon( fieldId ) {
+	return (
+		( typeof fieldId === 'string' && fieldId.startsWith( 'field-' ) ) ||
+		hasSystemFieldIcon( fieldId )
+	);
+}
+
+export function getMinWidth( fieldType, fieldId ) {
+	const baseMinWidth = MIN_WIDTHS[ fieldType ] ?? DEFAULT_MIN_WIDTH;
+	return hasFieldHeaderIcon( fieldId )
+		? baseMinWidth + FIELD_HEADER_ICON_CHROME
+		: baseMinWidth;
 }
 
 // Clamp a width into the per-type [min, max] range used at write time
 // (resize drag). Falls back to the per-type min for non-finite input.
-export function clampWidth( width, fieldType ) {
-	const min = getMinWidth( fieldType );
+export function clampWidth( width, fieldType, fieldId ) {
+	const min = getMinWidth( fieldType, fieldId );
 	const value = Number( width );
 	if ( ! Number.isFinite( value ) ) {
 		return min;
@@ -261,14 +276,14 @@ export function withNewlyVisibleFields(
 // the library reads. We pin `maxWidth` to the user's chosen width too, so the
 // saved shape remains defensive if DataViews changes its table sizing again.
 export function withColumnWidth( view, fieldId, width, fieldType ) {
-	const clamped = clampWidth( width, fieldType );
+	const clamped = clampWidth( width, fieldType, fieldId );
 	const layout = view?.layout ?? {};
 	const styles = layout.styles ?? {};
 	const previous = styles[ fieldId ] ?? {};
 	const nextEntry = {
 		...previous,
 		width: clamped,
-		minWidth: getMinWidth( fieldType ),
+		minWidth: getMinWidth( fieldType, fieldId ),
 		maxWidth: clamped,
 	};
 	return {

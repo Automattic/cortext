@@ -1,10 +1,10 @@
 import { __ } from '@wordpress/i18n';
-import { Icon, Notice, Popover } from '@wordpress/components';
+import { Notice, Popover } from '@wordpress/components';
 import { useMemo, useState } from '@wordpress/element';
 
 import './ChangeFieldTypePopover.scss';
 
-import { FIELD_TYPES } from './AddFieldPopover';
+import { FIELD_TYPES, FieldTypeIcon } from './fieldTypes';
 import { useChangeFieldType } from '../../hooks/useFieldMutations';
 
 // These types depend on other fields or collections, so we do not offer them
@@ -69,8 +69,8 @@ export default function ChangeFieldTypePopover( {
 							disabled={ commit.isBusy }
 							aria-busy={ pending === option.value }
 						>
-							<Icon
-								icon={ option.icon }
+							<FieldTypeIcon
+								type={ option.value }
 								className="cortext-change-field-type-popover__type-icon"
 							/>
 							<span>{ option.label }</span>

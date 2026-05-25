@@ -220,12 +220,16 @@ function measureCellNaturalWidth( cell ) {
 	return Math.max( 0, bbox.width - chrome );
 }
 
-function getAutoFitColumnWidth( headerEl, fieldType ) {
+function getAutoFitColumnWidth( headerEl, fieldType, fieldId ) {
 	const cells = [ headerEl, ...getColumnBodyCells( headerEl ) ];
 	const naturalWidth = Math.max(
 		...cells.map( ( cell ) => measureCellNaturalWidth( cell ) )
 	);
-	return clampWidth( naturalWidth + AUTOFIT_PADDING_BUFFER, fieldType );
+	return clampWidth(
+		naturalWidth + AUTOFIT_PADDING_BUFFER,
+		fieldType,
+		fieldId
+	);
 }
 
 function applyColumnWidth( headerEl, width ) {
@@ -480,7 +484,7 @@ function ColumnResizer( { fieldId, fieldType, headerEl, view, onChangeView } ) {
 	}, [] );
 
 	const autoFitColumn = useCallback( () => {
-		const nextWidth = getAutoFitColumnWidth( headerEl, fieldType );
+		const nextWidth = getAutoFitColumnWidth( headerEl, fieldType, fieldId );
 		applyColumnWidth( headerEl, nextWidth );
 		onChangeView( withColumnWidth( view, fieldId, nextWidth, fieldType ) );
 	}, [ fieldId, fieldType, headerEl, onChangeView, view ] );
@@ -510,7 +514,7 @@ function ColumnResizer( { fieldId, fieldType, headerEl, view, onChangeView } ) {
 			const startX = event.clientX;
 			const startWidth = getColumnStyleWidth( headerEl );
 			const handle = event.currentTarget;
-			const minWidth = getMinWidth( fieldType );
+			const minWidth = getMinWidth( fieldType, fieldId );
 			// Pointer capture re-targets pointermove/pointerup for this
 			// pointerId to the handle, even if the pointer leaves the iframe
 			// or the viewport. Without it, dragging past the editor canvas
