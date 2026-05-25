@@ -646,6 +646,14 @@ export default function CollectionDataViews( {
 			[ fieldId ]: elements,
 		} ) );
 	}, [] );
+	const [ formatOverrides, setFormatOverrides ] = useState( {} );
+	const updateFieldFormat = useCallback( ( recordId, nextFormat ) => {
+		const fieldId = `field-${ recordId }`;
+		setFormatOverrides( ( current ) => ( {
+			...current,
+			[ fieldId ]: nextFormat ?? null,
+		} ) );
+	}, [] );
 
 	// Editable, currently-visible columns in the order DataViews renders
 	// them. Drives Tab/Shift+Tab cell-to-cell navigation. See
@@ -954,6 +962,8 @@ export default function CollectionDataViews( {
 			requestNext,
 			optionOverrides,
 			updateFieldOptions,
+			formatOverrides,
+			updateFieldFormat,
 			refreshRows: refresh,
 		} ),
 		[
@@ -963,6 +973,8 @@ export default function CollectionDataViews( {
 			requestNext,
 			optionOverrides,
 			updateFieldOptions,
+			formatOverrides,
+			updateFieldFormat,
 			refresh,
 		]
 	);
@@ -1036,13 +1048,15 @@ export default function CollectionDataViews( {
 			collectionId,
 			getRowList: () => rowsRef.current ?? [],
 			refresh,
+			updateFieldOptions,
+			updateFieldFormat,
 			onModeChange: ( mode ) => {
 				onChangeViewRef.current(
 					withRowDetailMode( viewRef.current, mode )
 				);
 			},
 		} ),
-		[ collectionId, refresh ]
+		[ collectionId, refresh, updateFieldFormat, updateFieldOptions ]
 	);
 
 	const requestOpenRow = useCallback(
@@ -1794,6 +1808,9 @@ export default function CollectionDataViews( {
 											onChangeView={ onChangeView }
 											onFieldOptionsSaved={
 												updateFieldOptions
+											}
+											onFieldFormatSaved={
+												updateFieldFormat
 											}
 											onFieldCreated={
 												requestRevealCreatedField

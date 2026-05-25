@@ -26,13 +26,13 @@ Full-page collection creation hit the same schema-cache edge. A new collection r
 
 **Where.** `src/hooks/useCollectionRows.js`, `src/hooks/useCollectionRowsByIds.js`, `src/hooks/rowInvalidation.js`, `src/hooks/documentTrashInvalidation.js`, and `src/hooks/useTrashedDocuments.js`, with call sites in `src/components/CollectionDataViews.js` (`saveRowField`, `onCreated`, row trash), `src/components/SidebarTrash.js`, `src/router/EntityRoute.js`, `src/blocks/data-view/edit.js`, `src/components/Sidebar.js` (post-type entity-config invalidation after collection creation), and `src/components/relations/RelationEditor.js` (paged target-row search and selected-row label lookup).
 
-**Solution.** Switch to `useEntityRecords('postType', \`crtxt_${slug}\`, query)` plus `saveEntityRecord` for writes once the remaining query shapes can be expressed there. `core-data` would then own caching, race protection, and post-mutation invalidation. Knock-on workarounds it deletes:
+**Solution.** Switch to `useEntityRecords('postType', \`crtxt\_${slug}\`, query)`plus`saveEntityRecord`for writes once the remaining query shapes can be expressed there.`core-data` would then own caching, race protection, and post-mutation invalidation. Knock-on workarounds it deletes:
 
-- The `refresh()` handles and invalidation events exist only because rows aren't reactive.
-- Half of `RowMutationContext` (also driven by #1) exists because cells can't reach a `core-data` store that isn't there.
-- `onCreated` runs optimistic `lastPage = ceil((totalItems+1)/perPage)` arithmetic against possibly stale `paginationInfo`. With reactive pagination we'd watch `totalPages` in an effect.
-- The server/client planner becomes normal resolver queries instead of a local fetch policy.
-- Relation label lookup becomes a normal entity-record resolver instead of a one-off include query.
+-   The `refresh()` handles and invalidation events exist only because rows aren't reactive.
+-   Half of `RowMutationContext` (also driven by #1) exists because cells can't reach a `core-data` store that isn't there.
+-   `onCreated` runs optimistic `lastPage = ceil((totalItems+1)/perPage)` arithmetic against possibly stale `paginationInfo`. With reactive pagination we'd watch `totalPages` in an effect.
+-   The server/client planner becomes normal resolver queries instead of a local fetch policy.
+-   Relation label lookup becomes a normal entity-record resolver instead of a one-off include query.
 
 Worth a small spike before committing. Dynamic post-type discovery also needs a real answer: either `core-data` learns about new row CPTs after collection creation, or each collection-creation path keeps the post-type entity-config invalidation nearby.
 
@@ -68,9 +68,9 @@ The cost is another split support matrix. The client checks field type, operator
 
 **What.** Three small but real internal mechanisms exist because DataViews doesn't have an inline-edit contract (#1):
 
-- **Column anchoring via overlay.** DataViews renders an actual `<table>`; Cortext switches it to `table-layout: fixed` so resize widths behave as real column constraints instead of intrinsic-size hints. Mounting an editor inline would still change the column's content sizing and row geometry. We always render the display shell and overlay the editor on top via `position: absolute`, so the table only sees the display state while the editor is open.
-- **Row height pin.** The shell's `min-height` is hardcoded to 40px to match `__next40pxDefaultSize`, the height of TextControl/NumberControl/SelectControl with the modern WP size flag. If WP changes the default control height, the pin desyncs and rows jitter again.
-- **Density mirror.** DataViews paints row height via the td's `padding-block`, varied per density (`has-compact-density` / `has-comfortable-density`). The shell's hover/edit highlight lives on the shell itself, so the gray floated inside the larger row instead of covering it. We zero the td's `padding-block` so the shell becomes the row, then replicate DataViews's per-density row heights via `min-height` overrides on the shell (and `.cortext-cell-checkbox`, which shares the shell's dimensions). Balanced and comfortable mirror DataViews v6 exactly (12 / 16); compact is intentionally tighter than the upstream default (4 -> 0) so the row matches the 40px editor floor, and that's the density we set as the project default in `createDefaultView` and `DEFAULT_LAYOUTS`. If upstream bumps the balanced/comfortable paddings, those two row heights silently desync until we update the numbers.
+-   **Column anchoring via overlay.** DataViews renders an actual `<table>`; Cortext switches it to `table-layout: fixed` so resize widths behave as real column constraints instead of intrinsic-size hints. Mounting an editor inline would still change the column's content sizing and row geometry. We always render the display shell and overlay the editor on top via `position: absolute`, so the table only sees the display state while the editor is open.
+-   **Row height pin.** The shell's `min-height` is hardcoded to 40px to match `__next40pxDefaultSize`, the height of TextControl/NumberControl/SelectControl with the modern WP size flag. If WP changes the default control height, the pin desyncs and rows jitter again.
+-   **Density mirror.** DataViews paints row height via the td's `padding-block`, varied per density (`has-compact-density` / `has-comfortable-density`). The shell's hover/edit highlight lives on the shell itself, so the gray floated inside the larger row instead of covering it. We zero the td's `padding-block` so the shell becomes the row, then replicate DataViews's per-density row heights via `min-height` overrides on the shell (and `.cortext-cell-checkbox`, which shares the shell's dimensions). Balanced and comfortable mirror DataViews v6 exactly (12 / 16); compact is intentionally tighter than the upstream default (4 -> 0) so the row matches the 40px editor floor, and that's the density we set as the project default in `createDefaultView` and `DEFAULT_LAYOUTS`. If upstream bumps the balanced/comfortable paddings, those two row heights silently desync until we update the numbers.
 
 **Where.** `src/components/EditableCell.js` and the `.cortext-editable-cell`, `.cortext-cell-checkbox`, and `.cortext-data-view .dataviews-view-table` rules in `src/components/CollectionDataViews.scss`.
 
@@ -164,9 +164,9 @@ Double-click autofit is the trickiest piece. With no measurement hook upstream, 
 
 ## 16. DataViews has no per-column menu-item slot `[upstream, soft]`
 
-**What.** DataViews' column-header dropdown (Sort / Add filter / Move / Hide) is a closed list — there's no `field.menuItems` to inject Rename / Duplicate / Delete or Calculate. To keep a single dropdown per column, we hide DataViews' built-in trigger on custom-field `<th>`s via CSS and portal our own combined trigger in (Sort / Move / Hide *plus* field management and table calculations). Title and system fields keep the built-in trigger. Main's drag-handle click-forward (`DataViewColumnInteractions`) iterates header buttons and skips `display: none` ones via `offsetParent`, so it lands on whichever trigger is visible. Filter is intentionally absent — Cortext doesn't surface column-level filters in the header.
+**What.** DataViews' column-header dropdown (Sort / Add filter / Move / Hide) is a closed list — there's no `field.menuItems` to inject Rename / Duplicate / Delete or Calculate. To keep a single dropdown per column, we hide DataViews' built-in trigger on custom-field `<th>`s via CSS and portal our own combined trigger in (Sort / Move / Hide _plus_ field management and table calculations). Title and system fields keep the built-in trigger. Main's drag-handle click-forward (`DataViewColumnInteractions`) iterates header buttons and skips `display: none` ones via `offsetParent`, so it lands on whichever trigger is visible. Filter is intentionally absent — Cortext doesn't surface column-level filters in the header.
 
-**Where.** `src/components/fields/ColumnHeaderActions.js` (combined dropdown), `src/components/CollectionDataViews.scss` (`.dataviews-view-table th:has(.cortext-column-header-marker) > .dataviews-view-table-header-button { display: none }`), `src/components/DataViewColumnInteractions.js` (visible-button click forward).
+**Where.** `src/components/fields/ColumnHeaderActions.js` (table-only items and the header portal), `src/components/fields/FieldActionsMenu.js` (the shared field actions), `src/components/CollectionDataViews.scss` (`.dataviews-view-table th:has(.cortext-column-header-marker) > .dataviews-view-table-header-button { display: none }`), and `src/components/DataViewColumnInteractions.js` (visible-button click forward).
 
 **Risk.** Re-implementing Sort / Move / Hide ourselves means new DataViews items in those menus won't show up here automatically. Calculation controls add one more reason this custom menu has to stay in lockstep with DataViews. If main's drag handle stops calling `.click()` on the header trigger, the column-name click-to-open behavior would need a different forward.
 
@@ -182,21 +182,21 @@ The create-field flow also has to reveal the new trailing column itself. It carr
 
 **Solution.** DataViews exposes a trailing table-header slot, an add-column slot, or a header action area separate from per-row actions, plus refs for the table scroll wrapper and rendered headers. Then the portal targets a real extension point, the reveal code stops querying DataViews DOM, the sticky/header-label CSS disappears, and `__add_field` stays only as migration cleanup for old saved views.
 
-## 18. Field management is table-layout only `[internal]`
+## 18. Field management still needs a panel outside the table `[internal]`
 
-**What.** Rename / Duplicate / Delete only show up in the table-layout column-header kebab. Grid and list layouts have no schema actions. Users there can still create fields via the toolbar Add field button, but they have to switch to table to manage existing fields.
+**What.** Field actions now live in one shared menu, but there is still no collection-level field manager. Table users get the menu from column headers. Row-detail users get it from clickable property labels. Grid and list users can manage fields only after opening a row; those layouts still have no direct "Manage fields" entry point.
 
-**Where.** `ColumnHeaderActions` mounts only when `view.type === 'table'` (`src/components/CollectionDataViews.js`).
+**Where.** `src/components/fields/FieldActionsMenu.js` (shared field actions), `src/components/fields/ColumnHeaderActions.js` (table-header trigger), `src/components/RowProperties.js` and `src/blocks/document-properties/edit.js` (row-property labels and field snapshot context). `ColumnHeaderActions` still mounts only when `view.type === 'table'` (`src/components/CollectionDataViews.js`).
 
 **Solution.** A toolbar "Manage fields" panel listing every custom field with per-row rename / duplicate / delete, available in every layout.
 
 ## 19. Select / multi-select fields ship with no options `[internal]`
 
-**What.** Add field creates the field immediately when you click a type — there's no second step for type-specific config. For select / multi-select that means the column starts empty; users have to add options via wp-admin or by re-saving through REST.
+**What.** Add field creates the field as soon as you click a type; there is no second step for type-specific setup. For select / multi-select, the column starts with no options. Users can add options from the shared field menu, but the create flow still leaves them with an empty property first.
 
-**Where.** `src/components/fields/AddFieldPopover.js` (no options input). The REST route already accepts an `options` array; the UI just doesn't surface it.
+**Where.** `src/components/fields/AddFieldPopover.js` (no options input), plus the after-creation path in `src/components/fields/FieldActionsMenu.js` and `src/components/fields/EditOptionsPopover.js`. The REST route already accepts an `options` array; the create UI just doesn't expose it.
 
-**Solution.** A field-edit dialog from the column kebab (next to Rename / Duplicate / Delete) with an options editor — one-per-line textarea, or a chip list with colors. Until then, options live in wp-admin or REST.
+**Solution.** Add a setup step during field creation, or open the options editor immediately after creating a select / multi-select field. Until then, users fix empty select fields through the shared field menu.
 
 ## 20. Table layout overrides couple to DataViews internals `[upstream, soft]`
 
@@ -256,35 +256,35 @@ The create-field flow also has to reveal the new trailing column itself. It carr
 
 ## 27. `Menu` outside-click only watches one document `[upstream]`
 
-**What.** WP's `Menu` (privateApis, Ariakit underneath) only sees clicks on the document the popover renders in. The `cortext/data-view` block renders inside Gutenberg's editor iframe, so clicks on the editor sidebar or top toolbar never reach Ariakit and the column dropdown stays open until the user clicks back into the canvas. We add a `mousedown` listener on `window.parent.document` while the menu is open and short-circuit when there isn't a parent (the Cortext admin isn't in an iframe).
+**What.** WP's `Menu` (privateApis, Ariakit underneath) only sees clicks on the document where the popover renders. The `cortext/data-view` block and row properties render inside Gutenberg's editor iframe, so clicks on the editor sidebar or top toolbar never reach Ariakit. Without a fallback, the field menu stays open until the user clicks back into the canvas. We add a `mousedown` listener on `window.parent.document` while the menu is open and skip it when there is no parent document (the Cortext admin is not in an iframe).
 
-**Where.** The `useEffect` block in `FieldActions` in `src/components/fields/ColumnHeaderActions.js`.
+**Where.** The `useEffect` block in `src/components/fields/FieldActionsMenu.js`, used by table column headers and row-property label menus.
 
 **Solution.** Either Ariakit grows a way to register extra documents for outside-click detection, or WP's wrapper does it for us. We drop the listener once that ships.
 
 ## 28. `Menu.Item` has no destructive variant `[upstream]`
 
-**What.** The legacy `MenuItem` from `@wordpress/components` accepted `isDestructive` and rendered the row in red. The new privateApis `Menu.Item` dropped that prop without a replacement (verified in `node_modules/@wordpress/components/build-types/menu/types.d.ts` against `ItemProps`). For the Delete column action we paint the red ourselves with a className and one CSS rule, scoped to inactive rows so the focus/hover highlight overrides it.
+**What.** The legacy `MenuItem` from `@wordpress/components` accepted `isDestructive` and rendered the row in red. The new privateApis `Menu.Item` dropped that prop without a replacement (verified in `node_modules/@wordpress/components/build-types/menu/types.d.ts` against `ItemProps`). For the Delete field action we paint the red ourselves with a className and one CSS rule, scoped to inactive rows so the focus/hover highlight overrides it.
 
-**Where.** The Delete `Menu.Item` in `src/components/fields/ColumnHeaderActions.js` and `.cortext-column-header-actions__destructive-item` in `src/components/fields/ColumnHeaderActions.scss`.
+**Where.** The Delete `Menu.Item` in `src/components/fields/FieldActionsMenu.js` and `.cortext-column-header-actions__destructive-item` in `src/components/fields/ColumnHeaderActions.scss`.
 
 **Solution.** Add `isDestructive` (or a `variant: 'destructive'`) to `Menu.Item` upstream. One-line change here once it ships.
 
 ## 29. `Menu.Popover` doesn't portal by default `[upstream]`
 
-**What.** Without `portal` set, `Menu.Popover` renders inline at its mount point. Our column trigger lives inside a `<th>` whose `text-transform: uppercase` cascades into the menu items and turns every label into ALL CAPS. We pass `portal` explicitly. Most popovers in the system portal by default; this one doesn't.
+**What.** Without `portal`, `Menu.Popover` renders inline at its mount point. The table-header trigger lives inside a `<th>` whose `text-transform: uppercase` cascades into the menu items and turns every label into ALL CAPS. The shared field menu passes `portal` explicitly, so table headers and row-property labels use the same code. Most popovers in the system portal by default; this one doesn't.
 
-**Where.** The `<Menu.Popover portal …>` in `src/components/fields/ColumnHeaderActions.js`.
+**Where.** The `<Menu.Popover portal …>` in `src/components/fields/FieldActionsMenu.js`.
 
 **Solution.** Flip the default upstream. Trivial PR.
 
 ## 30. `Menu` submenus only accept menu primitives `[upstream]`
 
-**What.** `Menu.SubmenuTriggerItem` opens a nested `Menu.Popover`, but the popover's children have to be `Menu.Item` / `Menu.Group` / `Menu.Separator`. Our "Edit field" submenu has tile previews (Number / Bar / Ring), labelled rows with right-anchored values, and three more popovers for format, color, and time choices. The Calculate submenu is simpler, but it still needs the same hover bridge so it feels like the adjacent Edit field menu. None of that fits the menu-primitive contract cleanly, so these panels stay as sibling popovers, we run the hover-with-grace bridge ourselves, and the parent menu's `hideOnInteractOutside` filter ignores clicks landing in `.cortext-format-submenu`, `.cortext-format-submenu__flyout`, or `.cortext-table-calculation-submenu`.
+**What.** `Menu.SubmenuTriggerItem` opens a nested `Menu.Popover`, but that popover only accepts `Menu.Item` / `Menu.Group` / `Menu.Separator` children. Our "Edit field" submenu has tile previews (Number / Bar / Ring), labelled rows with right-anchored values, and three more popovers for format, color, and time choices. The Calculate submenu is simpler, but it still needs the same hover bridge so it feels like the adjacent Edit field menu. These panels do not fit the menu primitive cleanly, so they stay as sibling popovers. We run the hover bridge ourselves, and the parent menu ignores outside-clicks that land in `.cortext-format-submenu`, `.cortext-format-submenu__flyout`, or `.cortext-table-calculation-submenu`.
 
-**Where.** `openFormat` / `openCalculation` / `scheduleClose` and `hideMenuOnInteractOutside` in `src/components/fields/ColumnHeaderActions.js`. `FieldFormatPopover` and its flyouts in `src/components/fields/FieldFormatPopover.js`. `TableCalculationMenu` and its flyouts in `src/components/TableCalculationMenu.js`.
+**Where.** `openFormat`, `scheduleClose`, and `hideMenuOnInteractOutside` in `src/components/fields/FieldActionsMenu.js`; `openCalculation` / `scheduleClose` in `src/components/fields/ColumnHeaderActions.js`; `FieldFormatPopover` and its flyouts in `src/components/fields/FieldFormatPopover.js`; `TableCalculationMenu` and its flyouts in `src/components/TableCalculationMenu.js`.
 
-**Solution.** An arbitrary-content submenu variant in WP's `Menu` (or upstream Ariakit) would let these panels mount as real submenus, with outside-click and focus management owned by the library. Until then the manual bridge stays.
+**Solution.** A WP `Menu` submenu that accepts arbitrary content would let these panels mount as real submenus, with outside-click and focus management owned by the library. Until then the manual bridge stays.
 
 ## 31. Block editor has no non-serialized before/after block chrome slot `[upstream]`
 

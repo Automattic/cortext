@@ -19,6 +19,7 @@ import './initEditor';
 import { DocumentPropertiesProvider } from './DocumentPropertiesContext';
 import { EditorSurfaceProvider } from './EditorSurfaceContext';
 import EditorBody from './EditorBody';
+import { RowMutationContext } from './EditableCell';
 
 const ROW_DETAIL_EDITOR_CSS = `
 	body {
@@ -102,6 +103,7 @@ function DetailPaneContent( {
 	detailLayoutEntries,
 	isActive,
 	isHidden,
+	mutationContext,
 	onApi,
 	onPaneReady,
 	onRestored,
@@ -117,6 +119,27 @@ function DetailPaneContent( {
 		[ detailKey, onPaneReady ]
 	);
 
+	const content = (
+		<DocumentPropertiesProvider
+			collectionId={ collectionId }
+			fields={ fields }
+			allFields={ allFields }
+			detailLayoutEntries={ detailLayoutEntries }
+			fallbackRecord={ row }
+			isVisible={ propertiesVisible }
+			onToggleVisible={ onTogglePropertiesVisible }
+		>
+			<EditorBody
+				isActive={ isActive && ! isHidden }
+				postId={ row?.id }
+				postType={ postType }
+				extraStyles={ ROW_DETAIL_EXTRA_STYLES }
+				onReady={ handleReady }
+				onRestored={ onRestored }
+			/>
+		</DocumentPropertiesProvider>
+	);
+
 	return (
 		<>
 			<RowAutosaveBridge
@@ -129,24 +152,13 @@ function DetailPaneContent( {
 						: null
 				}
 			/>
-			<DocumentPropertiesProvider
-				collectionId={ collectionId }
-				fields={ fields }
-				allFields={ allFields }
-				detailLayoutEntries={ detailLayoutEntries }
-				fallbackRecord={ row }
-				isVisible={ propertiesVisible }
-				onToggleVisible={ onTogglePropertiesVisible }
-			>
-				<EditorBody
-					isActive={ isActive && ! isHidden }
-					postId={ row?.id }
-					postType={ postType }
-					extraStyles={ ROW_DETAIL_EXTRA_STYLES }
-					onReady={ handleReady }
-					onRestored={ onRestored }
-				/>
-			</DocumentPropertiesProvider>
+			{ mutationContext ? (
+				<RowMutationContext.Provider value={ mutationContext }>
+					{ content }
+				</RowMutationContext.Provider>
+			) : (
+				content
+			) }
 			<div
 				aria-hidden={ isHidden ? true : undefined }
 				{ ...( isHidden ? { inert: '' } : {} ) }
@@ -163,6 +175,7 @@ export default function RowEditor( {
 	detailLayoutEntries,
 	isActive,
 	isHidden,
+	mutationContext,
 	onApi,
 	onPaneReady,
 	onRestored,
@@ -192,6 +205,7 @@ export default function RowEditor( {
 						detailLayoutEntries={ detailLayoutEntries }
 						isActive={ isActive }
 						isHidden={ isHidden }
+						mutationContext={ mutationContext }
 						onApi={ onApi }
 						onPaneReady={ onPaneReady }
 						onRestored={ onRestored }

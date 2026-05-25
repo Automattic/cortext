@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 
 let mockDndProps;
 
@@ -75,19 +75,37 @@ jest.mock( '@dnd-kit/sortable', () => {
 	};
 } );
 
+jest.mock( '../../../src/components/fields/FieldActionsMenu', () => ( {
+	__esModule: true,
+	default: ( { triggerContent } ) => <span>{ triggerContent }</span>,
+} ) );
+
 jest.mock( '../../../src/components/EditableCell', () => {
-	const { createContext } = require( '@wordpress/element' );
+	const { createContext, createElement } = require( '@wordpress/element' );
 
 	return {
 		__esModule: true,
 		default: () => null,
 		RowMutationContext: createContext( {} ),
 		dateOnlyValue: ( value ) => value,
-		formatDisplay: ( value ) => ( value ? String( value ) : '' ),
+		formatDisplay: ( value, type, options = {} ) => {
+			if ( type === 'number' && options.format?.style === 'currency' ) {
+				return `$${ value }`;
+			}
+			if ( type === 'number' && options.format?.display === 'rich' ) {
+				return createElement(
+					'span',
+					{ 'data-testid': 'rich-number-display' },
+					`Rich ${ value }`
+				);
+			}
+			return value ? String( value ) : '';
+		},
 	};
 } );
 
 import { useDispatch, useSelect } from '@wordpress/data';
+import { RowMutationContext } from '../../../src/components/EditableCell';
 import RowProperties from '../../../src/components/RowProperties';
 
 describe( 'RowProperties', () => {
@@ -190,6 +208,87 @@ describe( 'RowProperties', () => {
 		expect( onLayoutReorder ).toHaveBeenCalledWith(
 			'created_at',
 			'field-7'
+		);
+	} );
+
+	it( 'uses format overrides for number properties', () => {
+		useSelect.mockReturnValue( {
+			title: 'Current title',
+			meta: { 'field-7': 42 },
+			hydratedMeta: {},
+		} );
+
+		render(
+			<RowMutationContext.Provider
+				value={ {
+					formatOverrides: {
+						'field-7': { style: 'currency', currency: 'USD' },
+					},
+				} }
+			>
+				<RowProperties
+					fields={ [
+						{
+							id: 'field-7',
+							label: 'Score',
+							cortextFieldType: 'number',
+							cortextRecordId: 7,
+							editable: true,
+						},
+					] }
+					row={ {} }
+				/>
+			</RowMutationContext.Provider>
+		);
+
+		const score = screen.getByRole( 'textbox', { name: 'Score' } );
+		expect( score ).toHaveValue( '$42' );
+
+		fireEvent.mouseDown( score );
+
+		expect( score ).toHaveFocus();
+		expect( score ).toHaveValue( '42' );
+	} );
+
+	it( 'shows rich number displays until the value is edited', () => {
+		useSelect.mockReturnValue( {
+			title: 'Current title',
+			meta: { 'field-7': 42 },
+			hydratedMeta: {},
+		} );
+
+		render(
+			<RowMutationContext.Provider
+				value={ {
+					formatOverrides: {
+						'field-7': { style: 'plain', display: 'rich' },
+					},
+				} }
+			>
+				<RowProperties
+					fields={ [
+						{
+							id: 'field-7',
+							label: 'Score',
+							cortextFieldType: 'number',
+							cortextRecordId: 7,
+							editable: true,
+						},
+					] }
+					row={ {} }
+				/>
+			</RowMutationContext.Provider>
+		);
+
+		const trigger = screen.getByRole( 'button', { name: 'Score' } );
+		expect( screen.getByTestId( 'rich-number-display' ) ).toHaveTextContent(
+			'Rich 42'
+		);
+
+		fireEvent.click( trigger );
+
+		expect( screen.getByRole( 'textbox', { name: 'Score' } ) ).toHaveValue(
+			'42'
 		);
 	} );
 } );

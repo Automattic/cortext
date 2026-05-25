@@ -1,5 +1,11 @@
 import { __ } from '@wordpress/i18n';
-import { useEffect, useMemo, useRef } from '@wordpress/element';
+import {
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from '@wordpress/element';
 import { useParams } from '@tanstack/react-router';
 
 import RowDetailView from './RowDetailView';
@@ -10,6 +16,7 @@ import {
 	useDocumentPeekState,
 	useDocumentPeekSurface,
 } from './DocumentPeekProvider';
+import { elementsFromOptions } from '../hooks/optionElements';
 import useCollectionFields from '../hooks/useCollectionFields';
 import { adjacentRowId } from './rowDetailUtils';
 
@@ -52,6 +59,56 @@ export default function DocumentPeekHost() {
 	const prevSplatRef = useRef( splat );
 	const peekStateRef = useRef( { peek, isPinned } );
 	peekStateRef.current = { peek, isPinned };
+	const [ optionOverrides, setOptionOverrides ] = useState( {} );
+	const [ formatOverrides, setFormatOverrides ] = useState( {} );
+
+	useEffect( () => {
+		setOptionOverrides( {} );
+		setFormatOverrides( {} );
+	}, [ peek?.collectionId ] );
+
+	const updateFieldOptions = useCallback( ( recordId, nextOptions ) => {
+		const fieldId = `field-${ recordId }`;
+		const elements = elementsFromOptions( nextOptions ) || [];
+		setOptionOverrides( ( current ) => ( {
+			...current,
+			[ fieldId ]: elements,
+		} ) );
+		peekStateRef.current.peek?.source?.updateFieldOptions?.(
+			recordId,
+			nextOptions
+		);
+	}, [] );
+	const updateFieldFormat = useCallback( ( recordId, nextFormat ) => {
+		const fieldId = `field-${ recordId }`;
+		setFormatOverrides( ( current ) => ( {
+			...current,
+			[ fieldId ]: nextFormat ?? null,
+		} ) );
+		peekStateRef.current.peek?.source?.updateFieldFormat?.(
+			recordId,
+			nextFormat
+		);
+	}, [] );
+	const refreshRows = useCallback( () => {
+		peekStateRef.current.peek?.source?.refresh?.();
+	}, [] );
+	const mutationContext = useMemo(
+		() => ( {
+			optionOverrides,
+			updateFieldOptions,
+			formatOverrides,
+			updateFieldFormat,
+			refreshRows,
+		} ),
+		[
+			optionOverrides,
+			updateFieldOptions,
+			formatOverrides,
+			updateFieldFormat,
+			refreshRows,
+		]
+	);
 	useEffect( () => {
 		const prev = prevSplatRef.current;
 		prevSplatRef.current = splat;
@@ -120,6 +177,7 @@ export default function DocumentPeekHost() {
 				fields={ peekFields }
 				isPinned={ isPinned }
 				mode={ renderedMode }
+				mutationContext={ mutationContext }
 				onApi={ setDetailApi }
 				onClose={ closeDocument }
 				onDiscardPending={ discardPendingTransition }

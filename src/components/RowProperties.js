@@ -22,6 +22,7 @@ import {
 	useCallback,
 	useContext,
 	useEffect,
+	useLayoutEffect,
 	useMemo,
 	useRef,
 	useState,
@@ -49,10 +50,12 @@ import {
 	formatDisplay,
 } from './EditableCell';
 import { TITLE_FIELD_ID } from './dataViewColumns';
+import FieldActionsMenu from './fields/FieldActionsMenu';
 import EditOptionsPopover from './fields/EditOptionsPopover';
 import { FieldTypeIcon, SystemFieldIcon } from './fields/fieldTypes';
 import { hasSystemFieldIcon } from './fields/systemFieldIconIds';
 import { toRecordId } from '../hooks/fieldIds';
+import { elementsFromOptions } from '../hooks/optionElements';
 import {
 	isRowDetailFieldEditable,
 	isValidNumberDraft,
@@ -283,13 +286,56 @@ function EditablePropertyText( { label, inputMode, value, onChange } ) {
 	);
 }
 
-function EditableNumberPropertyText( { label, value, onChange } ) {
+function EditableNumberPropertyText( { label, value, format, onChange } ) {
 	const textValue =
 		value === null || value === undefined ? '' : String( value );
+	const inputRef = useRef( null );
 	const committedTextRef = useRef( textValue );
 	const committedValueRef = useRef( value ?? null );
 	const [ draft, setDraft ] = useState( textValue );
 	const [ isFocused, setIsFocused ] = useState( false );
+	const formattedDisplay = useMemo( () => {
+		if ( textValue === '' || ! format ) {
+			return textValue;
+		}
+		return formatDisplay( value, 'number', { format } );
+	}, [ format, textValue, value ] );
+	const formattedValue =
+		typeof formattedDisplay === 'string' ? formattedDisplay : textValue;
+	const hasRichDisplay =
+		formattedDisplay !== '' && typeof formattedDisplay !== 'string';
+	const showRawInputValue = useCallback(
+		( input ) => {
+			input.value = textValue;
+			setDraft( textValue );
+			setIsFocused( true );
+		},
+		[ textValue ]
+	);
+	const focusRawInputValue = useCallback(
+		( input ) => {
+			showRawInputValue( input );
+			input.focus();
+			input.select();
+		},
+		[ showRawInputValue ]
+	);
+	const handleInputInteractionStart = useCallback(
+		( event ) => {
+			event.stopPropagation();
+			if (
+				! isFocused ||
+				event.currentTarget.ownerDocument.activeElement !==
+					event.currentTarget
+			) {
+				focusRawInputValue( event.currentTarget );
+			}
+		},
+		[ focusRawInputValue, isFocused ]
+	);
+	const stopInputPropagation = useCallback( ( event ) => {
+		event.stopPropagation();
+	}, [] );
 
 	useEffect( () => {
 		committedTextRef.current = textValue;
@@ -299,6 +345,13 @@ function EditableNumberPropertyText( { label, value, onChange } ) {
 			setDraft( textValue );
 		}
 	}, [ isFocused, textValue, value ] );
+
+	useLayoutEffect( () => {
+		if ( isFocused ) {
+			inputRef.current?.focus();
+			inputRef.current?.select();
+		}
+	}, [ isFocused ] );
 
 	const commitDraft = useCallback(
 		( nextDraft ) => {
@@ -322,14 +375,35 @@ function EditableNumberPropertyText( { label, value, onChange } ) {
 		[ onChange ]
 	);
 
+	if ( hasRichDisplay && ! isFocused ) {
+		return (
+			<Button
+				className="cortext-row-detail__property-trigger"
+				variant="tertiary"
+				onMouseDown={ stopInputPropagation }
+				onPointerDown={ stopInputPropagation }
+				onClick={ ( event ) => {
+					event.stopPropagation();
+					setDraft( textValue );
+					setIsFocused( true );
+				} }
+				aria-label={ label }
+			>
+				{ formattedDisplay }
+			</Button>
+		);
+	}
+
 	return (
 		<input
+			ref={ inputRef }
 			aria-label={ label }
 			className="cortext-row-detail__property-editable-text"
 			inputMode="decimal"
 			placeholder={ isFocused ? '' : __( 'Empty', 'cortext' ) }
 			type="text"
-			value={ draft }
+			value={ isFocused ? draft : formattedValue }
+			onClick={ stopInputPropagation }
 			onBlur={ () => {
 				setIsFocused( false );
 				const parsed = parseNumberPropertyValue( draft );
@@ -344,7 +418,14 @@ function EditableNumberPropertyText( { label, value, onChange } ) {
 				setDraft( committedTextRef.current );
 			} }
 			onChange={ ( event ) => commitDraft( event.currentTarget.value ) }
-			onFocus={ () => setIsFocused( true ) }
+			onMouseDown={ handleInputInteractionStart }
+			onPointerDown={ handleInputInteractionStart }
+			onFocus={ ( event ) => {
+				// The resting value may include formatting (for example
+				// thousands separators). Swap the DOM value immediately so
+				// keyboard input after focus edits the raw number.
+				showRawInputValue( event.currentTarget );
+			} }
 		/>
 	);
 }
@@ -377,6 +458,7 @@ function PropertyControl( {
 			<EditableNumberPropertyText
 				label={ label }
 				value={ value }
+				format={ field.cortextFormat }
 				onChange={ onChange }
 			/>
 		);
@@ -436,6 +518,55 @@ function PropertyControl( {
 	);
 }
 
+function PropertyLabel( {
+	collectionId,
+	field,
+	onFieldOptionsSaved,
+	onFieldFormatSaved,
+	onRowsChanged,
+} ) {
+	const recordId = field.cortextRecordId ?? toRecordId( field.id );
+	if ( ! collectionId || ! recordId ) {
+		return (
+			<span className="cortext-row-detail__property-label-text">
+				{ field.label }
+			</span>
+		);
+	}
+
+	const configureLabel = sprintf(
+		/* translators: %s: Field label. */
+		__( 'Configure %s field', 'cortext' ),
+		field.label
+	);
+
+	return (
+		<FieldActionsMenu
+			recordId={ recordId }
+			collectionId={ collectionId }
+			field={ field }
+			className="cortext-row-detail__property-label-actions"
+			triggerButton={
+				<Button
+					className="cortext-row-detail__property-label-button"
+					variant="tertiary"
+					label={ configureLabel }
+				/>
+			}
+			triggerContent={
+				<span className="cortext-row-detail__property-label-content">
+					<span className="cortext-row-detail__property-label-text">
+						{ field.label }
+					</span>
+				</span>
+			}
+			onFieldOptionsSaved={ onFieldOptionsSaved }
+			onFieldFormatSaved={ onFieldFormatSaved }
+			onRowsChanged={ onRowsChanged }
+		/>
+	);
+}
+
 function transformToString( transform ) {
 	if ( ! transform ) {
 		return undefined;
@@ -446,9 +577,15 @@ function transformToString( transform ) {
 
 function RowProperty( {
 	canReorderLayout,
+	collectionId,
 	data,
 	field,
+	formatOverrides,
+	handleFieldFormatSaved,
+	handleFieldOptionsSaved,
 	isDragging,
+	localFormatOverrides,
+	localOptionOverrides,
 	optionOverrides,
 	refreshRows,
 	reorderAttributes,
@@ -456,16 +593,31 @@ function RowProperty( {
 	rowRef,
 	rowStyle,
 	update,
-	updateFieldOptions,
 } ) {
 	const isEditable = isRowDetailFieldEditable( field );
 	const value = valueForField( field, data );
 	const type = fieldType( field );
 	const elements =
+		localOptionOverrides?.[ field.id ] ??
 		optionOverrides?.[ field.id ] ??
 		field.cortextElements ??
 		field.elements ??
 		[];
+	let format = field.cortextFormat;
+	if ( formatOverrides?.[ field.id ] !== undefined ) {
+		format = formatOverrides[ field.id ];
+	}
+	if ( localFormatOverrides?.[ field.id ] !== undefined ) {
+		format = localFormatOverrides[ field.id ];
+	}
+	const displayField =
+		elements !== field.cortextElements || format !== field.cortextFormat
+			? {
+					...field,
+					cortextElements: elements,
+					cortextFormat: format,
+			  }
+			: field;
 	let propertyIcon = null;
 	if ( isCollectionField( field ) ) {
 		propertyIcon = (
@@ -511,21 +663,25 @@ function RowProperty( {
 						/>
 					) : null }
 				</span>
-				<span className="cortext-row-detail__property-label-text">
-					{ field.label }
-				</span>
+				<PropertyLabel
+					collectionId={ collectionId }
+					field={ displayField }
+					onFieldOptionsSaved={ handleFieldOptionsSaved }
+					onFieldFormatSaved={ handleFieldFormatSaved }
+					onRowsChanged={ refreshRows }
+				/>
 			</div>
 			<div className="cortext-row-detail__property-value">
 				{ isEditable ? (
 					<PropertyControl
-						field={ field }
+						field={ displayField }
 						value={ value }
 						elements={ elements }
 						onChange={ ( next ) =>
 							update( { [ field.id ]: next } )
 						}
 						onOptionsSaved={ ( nextOptions ) =>
-							updateFieldOptions?.(
+							handleFieldOptionsSaved(
 								field.cortextRecordId ?? toRecordId( field.id ),
 								nextOptions
 							)
@@ -537,7 +693,7 @@ function RowProperty( {
 						value={ value }
 						type={ type }
 						elements={ elements }
-						format={ field.cortextFormat }
+						format={ format }
 					/>
 				) }
 			</div>
@@ -577,10 +733,45 @@ function SortableRowProperty( props ) {
  * block editor. This is intentionally not serialized yet; see
  * tech-debt.md#42 for the block-backed version needed for frontend rendering.
  */
-export default function RowProperties( { fields, onLayoutReorder, row } ) {
+export default function RowProperties( {
+	collectionId,
+	fields,
+	onLayoutReorder,
+	row,
+} ) {
 	const { editPost } = useDispatch( editorStore );
-	const { optionOverrides, updateFieldOptions, refreshRows } =
-		useContext( RowMutationContext );
+	const {
+		optionOverrides,
+		updateFieldOptions,
+		formatOverrides,
+		updateFieldFormat,
+		refreshRows,
+	} = useContext( RowMutationContext );
+	const [ localOptionOverrides, setLocalOptionOverrides ] = useState( {} );
+	const [ localFormatOverrides, setLocalFormatOverrides ] = useState( {} );
+	const handleFieldOptionsSaved = useCallback(
+		( recordId, nextOptions ) => {
+			const fieldId = `field-${ recordId }`;
+			const elements = elementsFromOptions( nextOptions ) || [];
+			setLocalOptionOverrides( ( current ) => ( {
+				...current,
+				[ fieldId ]: elements,
+			} ) );
+			updateFieldOptions?.( recordId, nextOptions );
+		},
+		[ updateFieldOptions ]
+	);
+	const handleFieldFormatSaved = useCallback(
+		( recordId, nextFormat ) => {
+			const fieldId = `field-${ recordId }`;
+			setLocalFormatOverrides( ( current ) => ( {
+				...current,
+				[ fieldId ]: nextFormat ?? null,
+			} ) );
+			updateFieldFormat?.( recordId, nextFormat );
+		},
+		[ updateFieldFormat ]
+	);
 	const sensors = useSensors(
 		useSensor( PointerSensor, { activationConstraint: { distance: 4 } } ),
 		useSensor( KeyboardSensor, {
@@ -678,23 +869,33 @@ export default function RowProperties( { fields, onLayoutReorder, row } ) {
 				canReorderLayout ? (
 					<SortableRowProperty
 						key={ field.id }
+						collectionId={ collectionId }
 						data={ data }
 						field={ field }
+						formatOverrides={ formatOverrides }
+						handleFieldFormatSaved={ handleFieldFormatSaved }
+						handleFieldOptionsSaved={ handleFieldOptionsSaved }
+						localFormatOverrides={ localFormatOverrides }
+						localOptionOverrides={ localOptionOverrides }
 						optionOverrides={ optionOverrides }
 						refreshRows={ refreshRows }
 						update={ update }
-						updateFieldOptions={ updateFieldOptions }
 					/>
 				) : (
 					<RowProperty
 						key={ field.id }
 						canReorderLayout={ false }
+						collectionId={ collectionId }
 						data={ data }
 						field={ field }
+						formatOverrides={ formatOverrides }
+						handleFieldFormatSaved={ handleFieldFormatSaved }
+						handleFieldOptionsSaved={ handleFieldOptionsSaved }
+						localFormatOverrides={ localFormatOverrides }
+						localOptionOverrides={ localOptionOverrides }
 						optionOverrides={ optionOverrides }
 						refreshRows={ refreshRows }
 						update={ update }
-						updateFieldOptions={ updateFieldOptions }
 					/>
 				)
 			) }

@@ -1982,12 +1982,86 @@ test.describe( 'Collection view block', () => {
 			await expect( detailTitle ).toHaveText(
 				'The Left Hand of Darkness'
 			);
+			const authorLabelButton = detailCanvas.getByRole( 'button', {
+				name: 'Configure Author field',
+			} );
+			await expect( authorLabelButton ).toHaveCSS( 'cursor', 'pointer' );
+			await authorLabelButton.click();
+			await expect(
+				detailCanvas.getByRole( 'menuitem', {
+					name: /Change type/,
+				} )
+			).toBeVisible();
+			await page.keyboard.press( 'Escape' );
+			const yearLabelButton = detailCanvas.getByRole( 'button', {
+				name: 'Configure Year field',
+			} );
+			await expect( yearLabelButton ).toHaveCSS( 'cursor', 'pointer' );
+			await yearLabelButton.click();
+			await expect(
+				detailCanvas.getByRole( 'menuitem', {
+					name: 'Edit field',
+				} )
+			).toBeVisible();
+			await detailCanvas
+				.getByRole( 'menuitem', {
+					name: 'Edit field',
+				} )
+				.click();
+			const formatPanel = page.locator( '.cortext-format-submenu' );
+			await expect( formatPanel ).toBeVisible();
+			await formatPanel
+				.getByRole( 'button', { name: /Number format/ } )
+				.click();
+			await page
+				.locator( '.cortext-format-submenu__flyout' )
+				.getByRole( 'menuitemradio', {
+					name: 'Number with commas',
+				} )
+				.click();
+			await expect
+				.poll( async () => {
+					const updatedField = await requestUtils.rest( {
+						path: `/wp/v2/crtxt_fields/${ fixture.yearField.id }`,
+						params: { context: 'edit' },
+					} );
+					return updatedField?.meta?.number_format ?? '';
+				} )
+				.toContain( 'comma' );
+			await expect(
+				detailCanvas.getByRole( 'textbox', {
+					name: 'Year',
+					exact: true,
+				} )
+			).toHaveValue( '1,969' );
+			await expect(
+				detailCanvas.getByRole( 'menuitem', {
+					name: /Change type/,
+				} )
+			).toBeVisible();
+			await page.keyboard.press( 'Escape' );
 			const tagsLabel = detailCanvas
 				.locator(
 					'.cortext-row-detail__properties--rows .cortext-row-detail__property-label'
 				)
 				.filter( { hasText: 'Tags' } );
-			await expect( tagsLabel ).toHaveCSS( 'cursor', 'default' );
+			await expect( tagsLabel ).toBeVisible();
+			const tagsLabelButton = detailCanvas.getByRole( 'button', {
+				name: 'Configure Tags field',
+			} );
+			await expect( tagsLabelButton ).toHaveCSS( 'cursor', 'pointer' );
+			await tagsLabelButton.click();
+			await expect(
+				detailCanvas.getByRole( 'menuitem', {
+					name: 'Edit options',
+				} )
+			).toBeVisible();
+			await expect(
+				detailCanvas.getByRole( 'menuitem', {
+					name: /Change type/,
+				} )
+			).toBeVisible();
+			await page.keyboard.press( 'Escape' );
 			const tagsTrigger = detailCanvas.getByRole( 'button', {
 				name: 'Tags',
 				exact: true,
@@ -2098,13 +2172,14 @@ test.describe( 'Collection view block', () => {
 				exact: true,
 			} );
 			await yearProperty.click();
-			await page.keyboard.press( 'ControlOrMeta+A' );
-			await page.keyboard.press( 'Backspace' );
-			await page.keyboard.type( '20a6' );
+			await expect( yearProperty ).toBeFocused();
+			await yearProperty.press( 'ControlOrMeta+A' );
+			await yearProperty.press( 'Backspace' );
+			await yearProperty.pressSequentially( '20a6' );
 			await expect( yearProperty ).toHaveValue( '206' );
-			await page.keyboard.press( 'ControlOrMeta+A' );
-			await page.keyboard.press( 'Backspace' );
-			await page.keyboard.type( '2026' );
+			await yearProperty.press( 'ControlOrMeta+A' );
+			await yearProperty.press( 'Backspace' );
+			await yearProperty.pressSequentially( '2026' );
 
 			await expect(
 				detail.getByRole( 'button', { name: 'Center modal' } )

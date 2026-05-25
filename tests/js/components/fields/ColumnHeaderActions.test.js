@@ -1,7 +1,10 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
-const mockDeleteRun = jest.fn();
-const mockDuplicateRun = jest.fn();
+const mockDeleteFieldRun = jest.fn();
+const mockDuplicateFieldRun = jest.fn();
+const mockFlushFieldRecord = jest.fn();
+const mockUpdateFieldOptionsRun = jest.fn();
+const mockChangeFieldTypeRun = jest.fn();
 
 jest.mock( '@wordpress/components', () => {
 	const {
@@ -107,8 +110,19 @@ jest.mock( '../../../../src/lock-unlock', () => {
 } );
 
 jest.mock( '../../../../src/hooks/useFieldMutations', () => ( {
-	useDeleteField: () => ( { run: mockDeleteRun } ),
-	useDuplicateField: () => ( { run: mockDuplicateRun } ),
+	useChangeFieldType: () => ( {
+		run: mockChangeFieldTypeRun,
+		isBusy: false,
+		error: null,
+	} ),
+	useDeleteField: () => ( { run: mockDeleteFieldRun } ),
+	useDuplicateField: () => ( { run: mockDuplicateFieldRun } ),
+	useFlushFieldRecord: () => mockFlushFieldRecord,
+	useUpdateFieldOptions: () => ( {
+		run: mockUpdateFieldOptionsRun,
+		isBusy: false,
+		error: null,
+	} ),
 } ) );
 
 jest.mock( '../../../../src/components/CollectionFieldsContext', () => {
@@ -144,6 +158,28 @@ jest.mock( '../../../../src/components/fields/AddFieldPopover', () => ( {
 	),
 } ) );
 
+jest.mock( '../../../../src/components/fields/FieldFormatPopover', () => ( {
+	__esModule: true,
+	default: ( { onSaved } ) => (
+		<button type="button" onClick={ () => onSaved?.( { style: 'comma' } ) }>
+			Save mock format
+		</button>
+	),
+} ) );
+
+jest.mock( '../../../../src/components/TableCalculationMenu', () => ( {
+	TableCalculationPopover: () => <div data-testid="calculation-popover" />,
+} ) );
+
+jest.mock( '../../../../src/components/EditableCell', () => {
+	const { createContext } = require( '@wordpress/element' );
+
+	return {
+		__esModule: true,
+		RowMutationContext: createContext( { formatOverrides: {} } ),
+	};
+} );
+
 import ColumnHeaderActions from '../../../../src/components/fields/ColumnHeaderActions';
 import { useEntityRecord } from '@wordpress/core-data';
 import { useCollectionFieldsContext } from '../../../../src/components/CollectionFieldsContext';
@@ -154,6 +190,7 @@ function Harness( {
 	recordId,
 	view,
 	onFieldCreated = jest.fn(),
+	onFieldFormatSaved = jest.fn(),
 	onRowsChanged = jest.fn(),
 } ) {
 	return (
@@ -175,6 +212,7 @@ function Harness( {
 				view={ view ?? { fields: [] } }
 				onChangeView={ onChangeView }
 				onFieldCreated={ onFieldCreated }
+				onFieldFormatSaved={ onFieldFormatSaved }
 				onRowsChanged={ onRowsChanged }
 			/>
 		</div>
@@ -184,7 +222,6 @@ function Harness( {
 describe( 'ColumnHeaderActions', () => {
 	beforeEach( () => {
 		jest.clearAllMocks();
-		mockDuplicateRun.mockResolvedValue( { id: 88, type: 'text' } );
 		useCollectionFieldsContext.mockReturnValue( { fields: [] } );
 		useEntityRecord.mockReturnValue( {
 			record: {
@@ -324,7 +361,7 @@ describe( 'ColumnHeaderActions', () => {
 	} );
 
 	it( 'refreshes rows when duplicating a rollup field', async () => {
-		mockDuplicateRun.mockResolvedValue( { id: 88, type: 'rollup' } );
+		mockDuplicateFieldRun.mockResolvedValue( { id: 88, type: 'rollup' } );
 		const onRowsChanged = jest.fn();
 		useCollectionFieldsContext.mockReturnValue( {
 			fields: [
@@ -350,7 +387,7 @@ describe( 'ColumnHeaderActions', () => {
 		);
 
 		await waitFor( () => expect( onRowsChanged ).toHaveBeenCalled() );
-		expect( mockDuplicateRun ).toHaveBeenCalledWith( 77 );
+		expect( mockDuplicateFieldRun ).toHaveBeenCalledWith( 77 );
 	} );
 
 	it( 'warns when deleting a field will also delete dependent rollups', async () => {
@@ -386,5 +423,200 @@ describe( 'ColumnHeaderActions', () => {
 			)
 		).toBeInTheDocument();
 		expect( screen.getByText( /Invoice total/ ) ).toBeInTheDocument();
+	} );
+
+	it( 'shows select field options in the shared field menu', async () => {
+		useCollectionFieldsContext.mockReturnValue( {
+			fields: [
+				{
+					id: 'field-77',
+					recordId: 77,
+					label: 'Tags',
+					cortextType: 'multiselect',
+					cortextElements: [],
+				},
+			],
+		} );
+
+		render( <Harness collectionId={ 5 } recordId={ 77 } /> );
+
+		expect(
+			await screen.findByRole( 'button', { name: 'Edit options' } )
+		).toBeInTheDocument();
+		expect(
+			screen.getByRole( 'button', { name: 'Change type…' } )
+		).toBeInTheDocument();
+	} );
+
+	it( 'shows format controls for number fields', async () => {
+		useCollectionFieldsContext.mockReturnValue( {
+			fields: [
+				{
+					id: 'field-77',
+					recordId: 77,
+					label: 'Year',
+					cortextType: 'number',
+				},
+			],
+		} );
+
+		render( <Harness collectionId={ 5 } recordId={ 77 } /> );
+
+		expect(
+			await screen.findByRole( 'button', { name: 'Edit field' } )
+		).toBeInTheDocument();
+		expect(
+			screen.getByRole( 'button', { name: 'Change type…' } )
+		).toBeInTheDocument();
+	} );
+
+	it( 'keeps table header submenus mutually exclusive', async () => {
+		useCollectionFieldsContext.mockReturnValue( {
+			fields: [
+				{
+					id: 'field-77',
+					recordId: 77,
+					label: 'Score',
+					cortextType: 'number',
+				},
+			],
+		} );
+
+		render( <Harness collectionId={ 5 } recordId={ 77 } /> );
+
+		const editField = await screen.findByRole( 'button', {
+			name: 'Edit field',
+		} );
+		const calculate = screen.getByRole( 'button', {
+			name: 'Calculate',
+		} );
+
+		fireEvent.click( editField );
+		expect(
+			screen.getByRole( 'button', { name: 'Save mock format' } )
+		).toBeInTheDocument();
+
+		fireEvent.click( calculate );
+		expect(
+			screen.getByTestId( 'calculation-popover' )
+		).toBeInTheDocument();
+		expect(
+			screen.queryByRole( 'button', { name: 'Save mock format' } )
+		).not.toBeInTheDocument();
+
+		fireEvent.click( editField );
+		expect(
+			screen.getByRole( 'button', { name: 'Save mock format' } )
+		).toBeInTheDocument();
+		expect(
+			screen.queryByTestId( 'calculation-popover' )
+		).not.toBeInTheDocument();
+	} );
+
+	it( 'shows change type for plain text fields', async () => {
+		useCollectionFieldsContext.mockReturnValue( {
+			fields: [
+				{
+					id: 'field-77',
+					recordId: 77,
+					label: 'Author',
+					cortextType: 'text',
+				},
+			],
+		} );
+
+		render( <Harness collectionId={ 5 } recordId={ 77 } /> );
+
+		expect(
+			await screen.findByRole( 'button', { name: 'Change type…' } )
+		).toBeInTheDocument();
+	} );
+
+	it( 'hides change type for relation fields', async () => {
+		useCollectionFieldsContext.mockReturnValue( {
+			fields: [
+				{
+					id: 'field-77',
+					recordId: 77,
+					label: 'Invoices',
+					cortextType: 'relation',
+				},
+			],
+		} );
+
+		render( <Harness collectionId={ 5 } recordId={ 77 } /> );
+
+		await screen.findByRole( 'button', { name: 'Rename' } );
+		expect(
+			screen.queryByRole( 'button', { name: 'Change type…' } )
+		).not.toBeInTheDocument();
+	} );
+
+	it( 'duplicates fields and refreshes rows from the shared field menu', async () => {
+		const onRowsChanged = jest.fn();
+		useCollectionFieldsContext.mockReturnValue( {
+			fields: [
+				{
+					id: 'field-77',
+					recordId: 77,
+					label: 'Author',
+					cortextType: 'text',
+				},
+			],
+		} );
+		mockDuplicateFieldRun.mockResolvedValue( { id: 88 } );
+
+		render(
+			<Harness
+				collectionId={ 5 }
+				recordId={ 77 }
+				onRowsChanged={ onRowsChanged }
+			/>
+		);
+
+		fireEvent.click(
+			await screen.findByRole( 'button', { name: 'Duplicate' } )
+		);
+
+		await waitFor( () =>
+			expect( mockDuplicateFieldRun ).toHaveBeenCalledWith( 77 )
+		);
+		expect( onRowsChanged ).toHaveBeenCalled();
+	} );
+
+	it( 'stores format changes and refreshes rows from the shared field menu', async () => {
+		const onFieldFormatSaved = jest.fn();
+		const onRowsChanged = jest.fn();
+		useCollectionFieldsContext.mockReturnValue( {
+			fields: [
+				{
+					id: 'field-77',
+					recordId: 77,
+					label: 'Score',
+					cortextType: 'number',
+				},
+			],
+		} );
+
+		render(
+			<Harness
+				collectionId={ 5 }
+				recordId={ 77 }
+				onFieldFormatSaved={ onFieldFormatSaved }
+				onRowsChanged={ onRowsChanged }
+			/>
+		);
+
+		fireEvent.click(
+			await screen.findByRole( 'button', { name: 'Edit field' } )
+		);
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Save mock format' } )
+		);
+
+		expect( onFieldFormatSaved ).toHaveBeenCalledWith( 77, {
+			style: 'comma',
+		} );
+		expect( onRowsChanged ).toHaveBeenCalled();
 	} );
 } );

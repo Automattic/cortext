@@ -18,6 +18,7 @@ import { check, closeSmall, pencil, seen, unseen } from '@wordpress/icons';
 import DetailLayoutEditor from '../../components/DetailLayoutEditor';
 import DocumentPropertiesActions from '../../components/DocumentPropertiesActions';
 import RowProperties from '../../components/RowProperties';
+import { CollectionFieldsSnapshotProvider } from '../../components/CollectionFieldsContext';
 import { TITLE_FIELD_ID } from '../../components/dataViewColumns';
 import { useDocumentPropertiesContext } from '../../components/DocumentPropertiesContext';
 import {
@@ -302,15 +303,32 @@ export default function Edit() {
 					/>
 				) : (
 					<>
-						<RowProperties
-							fields={ inlineLayoutFields }
-							onLayoutReorder={
-								canEditLayout && ! isSavingLayout
-									? handleInlineLayoutReorder
-									: undefined
-							}
-							row={ fallbackRecord }
-						/>
+						{ collectionId ? (
+							<CollectionFieldsSnapshotProvider
+								fields={ layoutFields }
+							>
+								<RowProperties
+									collectionId={ collectionId }
+									fields={ inlineLayoutFields }
+									onLayoutReorder={
+										canEditLayout && ! isSavingLayout
+											? handleInlineLayoutReorder
+											: undefined
+									}
+									row={ fallbackRecord }
+								/>
+							</CollectionFieldsSnapshotProvider>
+						) : (
+							<RowProperties
+								fields={ inlineLayoutFields }
+								onLayoutReorder={
+									canEditLayout && ! isSavingLayout
+										? handleInlineLayoutReorder
+										: undefined
+								}
+								row={ fallbackRecord }
+							/>
+						) }
 						{ visiblePropertyFields.length === 0 ? (
 							<p className="cortext-document-properties__empty">
 								{ __( 'No visible properties.', 'cortext' ) }

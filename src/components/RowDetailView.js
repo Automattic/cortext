@@ -282,6 +282,7 @@ export default function RowDetailView( {
 	fields,
 	isPinned,
 	mode,
+	mutationContext,
 	onApi,
 	onClose,
 	onDiscardPending,
@@ -584,6 +585,7 @@ export default function RowDetailView( {
 										}
 										isActive={ isApiActive }
 										isHidden={ isHiddenPane }
+										mutationContext={ mutationContext }
 										onApi={ onApi }
 										onPaneReady={ onPaneReady }
 										onRestored={ onRestored }

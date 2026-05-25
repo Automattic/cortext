@@ -161,6 +161,8 @@ function WorkspacePane( { active, preservePaint = false, children } ) {
 const ROW_MUTATION_DEFAULT = {
 	optionOverrides: {},
 	updateFieldOptions: () => {},
+	formatOverrides: {},
+	updateFieldFormat: () => {},
 	refreshRows: () => {},
 };
 

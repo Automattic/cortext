@@ -823,20 +823,30 @@ function DateFormBody( {
 // tabbing enters the panel instead of moving to the next table column.
 export default function FieldFormatPopover( {
 	recordId,
+	field: fallbackField,
 	anchor,
 	focusOnMount = false,
 	onClose,
 	onCloseWithFocus,
+	onSaved,
 	onMouseEnter,
 	onMouseLeave,
 } ) {
 	const panelRef = useRef( null );
 	// Read from the collection field list. Saves still go through core-data,
 	// which keeps the rest of the shell on the same write path.
-	const field = useMappedField( recordId );
-	const { editEntityRecord, saveEditedEntityRecord } = useDispatch( 'core' );
+	const mappedField = useMappedField( recordId );
+	const field = useMemo( () => {
+		const source = mappedField ?? fallbackField ?? null;
+		if ( ! source || fallbackField?.cortextFormat === undefined ) {
+			return source;
+		}
+		return { ...source, cortextFormat: fallbackField.cortextFormat };
+	}, [ fallbackField, mappedField ] );
+	const { saveEntityRecord } = useDispatch( 'core' );
 
-	const type = field?.cortextType ?? 'text';
+	const type =
+		field?.cortextType ?? field?.cortextFieldType ?? field?.type ?? 'text';
 	const isNumber = type === 'number';
 	const isDate = type === 'date' || type === 'datetime';
 
@@ -847,10 +857,11 @@ export default function FieldFormatPopover( {
 			return;
 		}
 		const key = isNumber ? 'number_format' : 'date_format';
-		editEntityRecord( 'postType', 'crtxt_field', recordId, {
+		onSaved?.( next ?? null );
+		await saveEntityRecord( 'postType', 'crtxt_field', {
+			id: recordId,
 			meta: { [ key ]: next ? JSON.stringify( next ) : '' },
 		} );
-		await saveEditedEntityRecord( 'postType', 'crtxt_field', recordId );
 	};
 
 	if ( ! field || ( ! isNumber && ! isDate ) ) {
@@ -907,7 +918,6 @@ export default function FieldFormatPopover( {
 		event.stopPropagation();
 		onCloseWithFocus();
 	};
-
 	return (
 		<Popover
 			anchor={ anchor }
