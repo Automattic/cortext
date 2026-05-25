@@ -36,7 +36,7 @@ defined( 'ABSPATH' ) || exit;
 			// See tech-debt.md#32.
 			?>
 			<h1 class="cortext-public-page__title"><?php the_title(); ?></h1>
-			<div class="cortext-public-page__body">
+			<div class="cortext-public-page__body is-layout-constrained">
 				<?php the_content(); ?>
 			</div>
 		</article>

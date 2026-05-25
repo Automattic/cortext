@@ -36,10 +36,17 @@
 .cortext-public-page__body {
 	font-size: 1rem;
 
-	// FIXME honor alignwide, alignfull, etc. (tech-debt.md#50)
-	> :not(.wp-block-cortext-data-view) {
-		margin: auto;
-		max-width: 650px;
+	> * {
+		margin-inline: auto;
+		max-width: var(--wp--style--global--content-size);
+	}
+
+	> .alignwide {
+		max-width: var(--wp--style--global--wide-size);
+	}
+
+	> .alignfull {
+		max-width: none;
 	}
 }
 
