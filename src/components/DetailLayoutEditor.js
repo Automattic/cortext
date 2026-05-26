@@ -43,31 +43,37 @@ function SortableDetailField( { field, visible, onToggle } ) {
 				( visible ? '' : ' is-hidden' )
 			}
 		>
-			<button
-				type="button"
-				className="cortext-detail-layout-editor__handle"
-				aria-label={ __( 'Reorder property', 'cortext' ) }
-				{ ...attributes }
-				{ ...listeners }
-			>
-				<Icon icon={ dragHandle } size={ 18 } />
-			</button>
-			<span className="cortext-detail-layout-editor__label">
-				{ field.label }
-			</span>
-			<Button
-				className="cortext-detail-layout-editor__visibility"
-				icon={ visible ? seen : unseen }
-				label={
-					visible
-						? __( 'Hide property', 'cortext' )
-						: __( 'Show property', 'cortext' )
-				}
-				isPressed={ visible }
-				size="small"
-				variant="tertiary"
-				onClick={ onToggle }
-			/>
+			<div className="cortext-detail-layout-editor__label">
+				<span className="cortext-detail-layout-editor__handle-slot">
+					<button
+						type="button"
+						className="cortext-detail-layout-editor__handle"
+						aria-label={ __( 'Reorder property', 'cortext' ) }
+						{ ...attributes }
+						{ ...listeners }
+					>
+						<Icon icon={ dragHandle } size={ 16 } />
+					</button>
+				</span>
+				<span className="cortext-detail-layout-editor__label-text">
+					{ field.label }
+				</span>
+			</div>
+			<div className="cortext-detail-layout-editor__value">
+				<Button
+					className="cortext-detail-layout-editor__visibility"
+					icon={ visible ? seen : unseen }
+					label={
+						visible
+							? __( 'Hide property', 'cortext' )
+							: __( 'Show property', 'cortext' )
+					}
+					isPressed={ visible }
+					size="small"
+					variant="tertiary"
+					onClick={ onToggle }
+				/>
+			</div>
 		</div>
 	);
 }
