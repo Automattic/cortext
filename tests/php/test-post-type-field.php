@@ -74,6 +74,8 @@ final class Test_Post_Type_Field extends BaseTestCase {
 
 		$this->assertArrayHasKey( 'type', $registered );
 		$this->assertArrayHasKey( 'options', $registered );
+		$this->assertArrayHasKey( 'description', $registered );
+		$this->assertArrayHasKey( 'default_value', $registered );
 		$this->assertArrayHasKey( 'number_format', $registered );
 		$this->assertArrayHasKey( 'expression', $registered );
 	}
@@ -117,6 +119,38 @@ final class Test_Post_Type_Field extends BaseTestCase {
 				'operators'  => array( 'is', 'isNot', 'isAny', 'isNone' ),
 			),
 			$data['cortext_capabilities']
+		);
+	}
+
+	public function test_rest_response_exposes_sanitized_description_and_default(): void {
+		$field_post_type = new Field();
+		$field_post_type->register_post_type();
+
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$field_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Status',
+				'meta_input'  => array( 'type' => 'text' ),
+			)
+		);
+		update_post_meta( $field_id, 'description', "Use <b>plain</b> text.\nSecond line." );
+		update_post_meta( $field_id, 'default_value', '{"mode":"value","value":"<b>Draft</b>"}' );
+
+		$GLOBALS['wp_rest_server'] = new WP_REST_Server();
+		do_action( 'rest_api_init' );
+
+		$request = new WP_REST_Request( 'GET', "/wp/v2/crtxt_fields/{$field_id}" );
+		$request->set_param( 'context', 'edit' );
+		$response = rest_get_server()->dispatch( $request );
+		$data     = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( "Use plain text.\nSecond line.", $data['meta']['description'] );
+		$this->assertSame(
+			'{"mode":"value","value":"Draft"}',
+			$data['meta']['default_value']
 		);
 	}
 

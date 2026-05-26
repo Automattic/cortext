@@ -9,6 +9,7 @@ declare( strict_types=1 );
 
 namespace Cortext\PostType;
 
+use Cortext\Fields\FieldDefaults;
 use Cortext\Fields\FieldTypeRegistry;
 
 final class Field {
@@ -125,6 +126,28 @@ final class Field {
 				)
 			);
 		}
+
+		register_post_meta(
+			self::POST_TYPE,
+			'description',
+			array(
+				'type'              => 'string',
+				'single'            => true,
+				'show_in_rest'      => true,
+				'sanitize_callback' => 'sanitize_textarea_field',
+			)
+		);
+
+		register_post_meta(
+			self::POST_TYPE,
+			FieldDefaults::META_KEY,
+			array(
+				'type'              => 'string',
+				'single'            => true,
+				'show_in_rest'      => true,
+				'sanitize_callback' => array( FieldDefaults::class, 'sanitize_meta_value' ),
+			)
+		);
 
 		register_post_meta(
 			self::POST_TYPE,
