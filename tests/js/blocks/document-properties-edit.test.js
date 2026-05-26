@@ -102,6 +102,17 @@ jest.mock( '../../../src/components/RowProperties', () => ( {
 						<button
 							type="button"
 							onClick={ () =>
+								onLayoutReorder(
+									'field-10',
+									'cortext-row-properties-hidden-drop-target'
+								)
+							}
+						>
+							Drag Author to hidden start
+						</button>
+						<button
+							type="button"
+							onClick={ () =>
 								onLayoutReorder( 'field-11', 'field-10' )
 							}
 						>
@@ -112,6 +123,7 @@ jest.mock( '../../../src/components/RowProperties', () => ( {
 			</div>
 		);
 	},
+	HIDDEN_PROPERTIES_DROP_TARGET: 'cortext-row-properties-hidden-drop-target',
 } ) );
 
 jest.mock( '../../../src/components/DocumentPropertiesContext', () => ( {
@@ -249,6 +261,42 @@ describe( 'document-properties Edit layout mode', () => {
 								{ field: 'created_at', visible: true },
 								{ field: 'field-11', visible: false },
 								{ field: 'field-10', visible: false },
+							],
+						},
+					},
+				},
+				{ throwOnError: true }
+			)
+		);
+	} );
+
+	it( 'hides fields dropped on the hidden group separator', async () => {
+		render( <Edit /> );
+
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Edit layout' } )
+		);
+		fireEvent.click(
+			screen.getByRole( 'button', {
+				name: 'Drag Author to hidden start',
+			} )
+		);
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Save layout' } )
+		);
+
+		await waitFor( () =>
+			expect( mockSaveEntityRecord ).toHaveBeenCalledWith(
+				'postType',
+				'crtxt_collection',
+				{
+					id: 77,
+					meta: {
+						detail_layout: {
+							fields: [
+								{ field: 'created_at', visible: true },
+								{ field: 'field-10', visible: false },
+								{ field: 'field-11', visible: false },
 							],
 						},
 					},

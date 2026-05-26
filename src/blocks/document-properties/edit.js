@@ -23,7 +23,9 @@ import {
 import { check, closeSmall, pencil, seen, unseen } from '@wordpress/icons';
 
 import DocumentPropertiesActions from '../../components/DocumentPropertiesActions';
-import RowProperties from '../../components/RowProperties';
+import RowProperties, {
+	HIDDEN_PROPERTIES_DROP_TARGET,
+} from '../../components/RowProperties';
 import { CollectionFieldsSnapshotProvider } from '../../components/CollectionFieldsContext';
 import { TITLE_FIELD_ID } from '../../components/dataViewColumns';
 import { useDocumentPropertiesContext } from '../../components/DocumentPropertiesContext';
@@ -250,16 +252,28 @@ export default function Edit() {
 			const from = draftLayoutEntries.findIndex(
 				( entry ) => entry.field === activeField
 			);
-			const to = draftLayoutEntries.findIndex(
-				( entry ) => entry.field === overField
-			);
-			if ( from < 0 || to < 0 || from === to ) {
+			const isHiddenGroupDrop =
+				overField === HIDDEN_PROPERTIES_DROP_TARGET;
+			const to = isHiddenGroupDrop
+				? draftLayoutEntries.findIndex(
+						( entry ) => entry.visible === false
+				  )
+				: draftLayoutEntries.findIndex(
+						( entry ) => entry.field === overField
+				  );
+			if (
+				from < 0 ||
+				to < 0 ||
+				( from === to && ! isHiddenGroupDrop )
+			) {
 				return;
 			}
 			const shouldHideActive =
-				draftLayoutEntries[ from ]?.visible !== false &&
-				draftLayoutEntries[ to ]?.visible === false;
+				isHiddenGroupDrop ||
+				( draftLayoutEntries[ from ]?.visible !== false &&
+					draftLayoutEntries[ to ]?.visible === false );
 			const shouldShowActive =
+				! isHiddenGroupDrop &&
 				draftLayoutEntries[ from ]?.visible === false &&
 				draftLayoutEntries[ to ]?.visible !== false;
 			const nextEntries = [ ...draftLayoutEntries ];
@@ -270,7 +284,8 @@ export default function Edit() {
 			} else if ( shouldShowActive ) {
 				nextMoved = { ...moved, visible: true };
 			}
-			nextEntries.splice( to, 0, nextMoved );
+			const insertAt = isHiddenGroupDrop && from < to ? to - 1 : to;
+			nextEntries.splice( insertAt, 0, nextMoved );
 			setDraftEntries( nextEntries );
 		},
 		[ draftLayoutEntries ]

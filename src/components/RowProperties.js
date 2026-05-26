@@ -31,6 +31,7 @@ import {
 	closestCenter,
 	useSensor,
 	useSensors,
+	useDroppable,
 } from '@dnd-kit/core';
 import {
 	SortableContext,
@@ -66,6 +67,9 @@ import {
 } from './rowDetailUtils';
 import RelationEditor from './relations/RelationEditor';
 
+export const HIDDEN_PROPERTIES_DROP_TARGET =
+	'cortext-row-properties-hidden-drop-target';
+
 function emptyLabel() {
 	return (
 		<span className="cortext-row-detail__empty-value">
@@ -79,6 +83,20 @@ function ReadOnlyProperty( { value, type, elements, format } ) {
 	return (
 		<div className="cortext-row-detail__readonly">
 			{ display === '' ? emptyLabel() : display }
+		</div>
+	);
+}
+
+function HiddenPropertiesSeparator() {
+	const { setNodeRef } = useDroppable( {
+		id: HIDDEN_PROPERTIES_DROP_TARGET,
+	} );
+	return (
+		<div
+			ref={ setNodeRef }
+			className="cortext-row-detail__property-hidden-separator"
+		>
+			<span>{ __( 'Hidden fields', 'cortext' ) }</span>
 		</div>
 	);
 }
@@ -596,11 +614,7 @@ function RowProperty( {
 				( isDragging ? ' is-dragging' : '' )
 			}
 		>
-			{ showHiddenSeparator ? (
-				<div className="cortext-row-detail__property-hidden-separator">
-					<span>{ __( 'Hidden fields', 'cortext' ) }</span>
-				</div>
-			) : null }
+			{ showHiddenSeparator ? <HiddenPropertiesSeparator /> : null }
 			<div className="cortext-row-detail__property-label">
 				<span className="cortext-row-detail__property-label-icon-slot">
 					{ canReorderLayout ? (

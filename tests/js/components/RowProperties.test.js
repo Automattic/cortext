@@ -88,6 +88,9 @@ jest.mock( '@dnd-kit/core', () => {
 		closestCenter: jest.fn(),
 		useSensor: jest.fn( () => ( {} ) ),
 		useSensors: jest.fn( ( ...sensors ) => sensors ),
+		useDroppable: jest.fn( () => ( {
+			setNodeRef: jest.fn(),
+		} ) ),
 	};
 } );
 
