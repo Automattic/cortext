@@ -122,6 +122,7 @@ function DetailPaneContent( {
 	const content = (
 		<DocumentPropertiesProvider
 			collectionId={ collectionId }
+			rowId={ rowId ?? row?.id }
 			fields={ fields }
 			allFields={ allFields }
 			detailLayoutEntries={ detailLayoutEntries }

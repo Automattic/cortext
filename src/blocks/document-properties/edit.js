@@ -41,6 +41,7 @@ export default function Edit() {
 	const ctx = useDocumentPropertiesContext();
 	const {
 		collectionId = null,
+		rowId = null,
 		fields = [],
 		allFields,
 		detailLayoutEntries,
@@ -356,6 +357,7 @@ export default function Edit() {
 											? handleInlineLayoutReorder
 											: undefined
 									}
+									rowId={ rowId }
 									row={ fallbackRecord }
 								/>
 							</CollectionFieldsSnapshotProvider>
@@ -367,6 +369,7 @@ export default function Edit() {
 										? handleInlineLayoutReorder
 										: undefined
 								}
+								rowId={ rowId }
 								row={ fallbackRecord }
 							/>
 						) }

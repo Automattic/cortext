@@ -232,6 +232,7 @@ function CanvasEditor( {
 	return (
 		<DocumentPropertiesProvider
 			collectionId={ collectionId }
+			rowId={ row?.id ?? post.id }
 			fields={ fields }
 			allFields={ allFields }
 			detailLayoutEntries={ detailLayoutEntries }

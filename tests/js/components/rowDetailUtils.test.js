@@ -194,6 +194,16 @@ describe( 'row detail field editing', () => {
 				{ collectionId: 44, rowId: 99 }
 			)
 		).toBe( false );
+		expect(
+			isRowDetailFieldEditable(
+				{
+					...relationField,
+					relatedCollectionId: undefined,
+					meta: { related_collection_id: '55' },
+				},
+				{ collectionId: 44, rowId: 99 }
+			)
+		).toBe( true );
 	} );
 
 	it( 'keeps existing editable field behavior', () => {

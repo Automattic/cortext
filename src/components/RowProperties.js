@@ -58,6 +58,7 @@ import {
 	isRowDetailFieldEditable,
 	isValidNumberDraft,
 	parseNumberPropertyValue,
+	relationTargetCollectionId,
 	rowDetailDisplayFieldType as displayFieldType,
 	rowDetailFieldType as fieldType,
 	splitPropertyPatch,
@@ -95,8 +96,7 @@ function hasInternalFieldIcon( field ) {
 
 function relationConfigForField( field ) {
 	return {
-		targetCollectionId:
-			field.relation?.targetCollectionId ?? field.relatedCollectionId,
+		targetCollectionId: relationTargetCollectionId( field ),
 		multiple: field.relation?.multiple ?? field.relationMultiple ?? true,
 	};
 }
@@ -653,6 +653,7 @@ function SortableRowProperty( props ) {
  * @param {number}   props.collectionId The row's parent collection ID.
  * @param {Array}    props.fields       Fields shown for this row.
  * @param {Function} props.onLayoutReorder Reorders fields from the row properties list.
+ * @param {number}   [props.rowId]      The current row ID.
  * @param {Object}   [props.row]        Fallback row record for values outside editor state,
  *                                      such as relations and rollups.
  */
@@ -661,6 +662,7 @@ export default function RowProperties( {
 	fields,
 	onLayoutReorder,
 	row,
+	rowId: providedRowId,
 } ) {
 	const { editPost } = useDispatch( editorStore );
 	const {
@@ -696,7 +698,7 @@ export default function RowProperties( {
 		[ updateFieldFormat ]
 	);
 	const [ savedRow, setSavedRow ] = useState( null );
-	const rowId = savedRow?.id ?? row?.id;
+	const rowId = savedRow?.id ?? providedRowId ?? row?.id;
 	const sensors = useSensors(
 		useSensor( PointerSensor, { activationConstraint: { distance: 4 } } ),
 		useSensor( KeyboardSensor, {

@@ -37,9 +37,19 @@ export function rowDetailFieldType( field ) {
 	return field.cortextFieldType ?? field.type ?? 'text';
 }
 
+export function relationTargetCollectionId( field ) {
+	const rawTarget =
+		field.relation?.targetCollectionId ??
+		field.relatedCollectionId ??
+		field.meta?.related_collection_id;
+	const targetCollectionId = Number( rawTarget );
+	return Number.isFinite( targetCollectionId ) && targetCollectionId > 0
+		? targetCollectionId
+		: null;
+}
+
 function hasRelationEditContext( field, context = {} ) {
-	const targetCollectionId =
-		field.relation?.targetCollectionId ?? field.relatedCollectionId;
+	const targetCollectionId = relationTargetCollectionId( field );
 	return Boolean(
 		context.collectionId && context.rowId && targetCollectionId
 	);

@@ -9,6 +9,7 @@ const DocumentPropertiesContext = createContext( null );
 
 export function DocumentPropertiesProvider( {
 	collectionId,
+	rowId,
 	fields,
 	allFields,
 	detailLayoutEntries,
@@ -21,6 +22,7 @@ export function DocumentPropertiesProvider( {
 	const value = useMemo(
 		() => ( {
 			collectionId,
+			rowId,
 			fields,
 			allFields,
 			detailLayoutEntries,
@@ -31,6 +33,7 @@ export function DocumentPropertiesProvider( {
 		} ),
 		[
 			collectionId,
+			rowId,
 			fields,
 			allFields,
 			detailLayoutEntries,

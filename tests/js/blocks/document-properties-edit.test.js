@@ -4,6 +4,7 @@ let mockContext;
 let mockCanEdit;
 let mockIsSaving;
 let mockSaveEntityRecord;
+let mockRowPropertiesProps;
 
 jest.mock( '@wordpress/block-editor', () => ( {
 	__esModule: true,
@@ -74,25 +75,29 @@ jest.mock( '../../../src/components/DocumentPropertiesActions', () => ( {
 
 jest.mock( '../../../src/components/RowProperties', () => ( {
 	__esModule: true,
-	default: ( { fields, onLayoutReorder } ) => (
-		<div data-testid="row-properties">
-			{ fields
-				.filter( ( field ) => field.id !== 'title' )
-				.map( ( field ) => (
-					<span key={ field.id }>{ field.label }</span>
-				) ) }
-			{ onLayoutReorder ? (
-				<button
-					type="button"
-					onClick={ () =>
-						onLayoutReorder( 'created_at', 'field-10' )
-					}
-				>
-					Drag Created before Author
-				</button>
-			) : null }
-		</div>
-	),
+	default: ( props ) => {
+		mockRowPropertiesProps = props;
+		const { fields, onLayoutReorder } = props;
+		return (
+			<div data-testid="row-properties">
+				{ fields
+					.filter( ( field ) => field.id !== 'title' )
+					.map( ( field ) => (
+						<span key={ field.id }>{ field.label }</span>
+					) ) }
+				{ onLayoutReorder ? (
+					<button
+						type="button"
+						onClick={ () =>
+							onLayoutReorder( 'created_at', 'field-10' )
+						}
+					>
+						Drag Created before Author
+					</button>
+				) : null }
+			</div>
+		);
+	},
 } ) );
 
 jest.mock( '../../../src/components/DocumentPropertiesContext', () => ( {
@@ -112,8 +117,10 @@ beforeEach( () => {
 	mockCanEdit = true;
 	mockIsSaving = false;
 	mockSaveEntityRecord = jest.fn().mockResolvedValue( {} );
+	mockRowPropertiesProps = null;
 	mockContext = {
 		collectionId: 77,
+		rowId: 123,
 		fields,
 		allFields: fields,
 		detailLayoutEntries: [
@@ -162,6 +169,17 @@ describe( 'document-properties Edit layout mode', () => {
 				},
 				{ throwOnError: true }
 			)
+		);
+	} );
+
+	it( 'passes row save context to row properties', () => {
+		render( <Edit /> );
+
+		expect( mockRowPropertiesProps ).toEqual(
+			expect.objectContaining( {
+				collectionId: 77,
+				rowId: 123,
+			} )
 		);
 	} );
 

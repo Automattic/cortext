@@ -491,4 +491,46 @@ describe( 'RowProperties', () => {
 			onRowsChanged
 		);
 	} );
+
+	it( 'uses the explicit row id to enable editable relations', () => {
+		useSelect.mockReturnValue( {
+			title: 'Source row',
+			meta: { 'field-7': [ '123' ] },
+			hydratedMeta: {
+				'field-7': [
+					{
+						id: 123,
+						title: { raw: 'Ada Lovelace' },
+					},
+				],
+			},
+		} );
+
+		render(
+			<RowProperties
+				collectionId={ 44 }
+				row={ {} }
+				rowId={ 99 }
+				fields={ [
+					{
+						id: 'field-7',
+						label: 'Assignee',
+						cortextFieldType: 'relation',
+						editable: true,
+						relatedCollectionId: 55,
+						relationMultiple: true,
+					},
+				] }
+			/>
+		);
+
+		expect( mockRelationEditorProps.at( -1 ) ).toEqual(
+			expect.objectContaining( {
+				relation: { targetCollectionId: 55, multiple: true },
+			} )
+		);
+		expect(
+			screen.getByRole( 'button', { name: 'Ada Lovelace' } )
+		).toBeInTheDocument();
+	} );
 } );
