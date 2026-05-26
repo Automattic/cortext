@@ -690,6 +690,12 @@
 		height: 18px;
 	}
 
+	&__property-label-icon-slot::before {
+		content: "";
+		position: absolute;
+		inset: -6px 0 -6px -26px;
+	}
+
 	&__property-label-actions {
 		display: inline-flex;
 		align-items: center;
@@ -805,8 +811,15 @@
 		pointer-events: auto;
 	}
 
+	&__property-layout-chip:hover,
+	&__property-layout-chip:focus-visible {
+		opacity: 1;
+		pointer-events: auto;
+	}
+
 	&__property:hover &__property-layout-chip,
-	&__property:focus-within &__property-layout-chip {
+	&__property:focus-within &__property-layout-chip,
+	&__property-label-icon-slot:hover &__property-layout-chip {
 		opacity: 1;
 		pointer-events: auto;
 	}
