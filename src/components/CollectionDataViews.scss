@@ -260,6 +260,16 @@ tbody > tr > td:not(:first-child) {
 		}
 	}
 
+	&__content {
+		display: block;
+		min-width: 0;
+		max-width: 100%;
+	}
+
+	&__edit-indicator {
+		display: none;
+	}
+
 	// Wrap text content with an ellipsis when the column is narrower than
 	// the cell value. Chip/link displays carry their own truncation
 	// (`.cortext-chip` already sets text-overflow), so this rule only ever
@@ -460,6 +470,15 @@ tr:has(.cortext-title-cell--is-opening)
 
 .cortext-cell-readonly {
 	color: $gray-700;
+}
+
+.cortext-title-cell .cortext-cell-readonly {
+	display: block;
+	min-width: 0;
+	overflow: hidden;
+	color: inherit;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 .cortext-cell-link {
@@ -850,8 +869,8 @@ tr:has(.cortext-title-cell--is-opening)
 	width: 100%;
 	min-width: 0;
 
-	// tech-debt.md#55: cover the table area while the shell loads, so search,
-	// filters, header, and rows appear together instead of in two beats.
+	// tech-debt.md#55: hold the layout area while rows load, so search,
+	// filters, header, and rows/cards appear together.
 	&__rows-skeleton {
 		position: absolute;
 		inset: 0;
@@ -999,6 +1018,29 @@ tr:has(.cortext-title-cell--is-opening)
 		&:hover:not(:disabled) {
 			background: $gray-100;
 			color: $gray-900;
+		}
+	}
+
+	&__state {
+		display: grid;
+		align-content: center;
+		min-height: 180px;
+		padding: $grid-unit-30;
+		color: $gray-700;
+		text-align: center;
+	}
+
+	.dataviews-no-results,
+	.dataviews-loading {
+		display: grid;
+		align-content: center;
+		min-height: 160px;
+		padding: $grid-unit-30;
+		color: $gray-700;
+		text-align: center;
+
+		p {
+			margin: 0;
 		}
 	}
 

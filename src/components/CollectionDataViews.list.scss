@@ -1,0 +1,74 @@
+@use "@wordpress/base-styles/colors" as *;
+@use "@wordpress/base-styles/variables" as *;
+
+.cortext-data-view {
+
+	.dataviews-view-list {
+		display: flex;
+		flex-direction: column;
+		gap: $grid-unit-05;
+		padding: $grid-unit-10 $grid-unit-20 $grid-unit-20;
+	}
+
+	.dataviews-view-list [role="row"] {
+		border: $border-width solid transparent;
+		border-radius: 6px;
+		border-bottom-color: $gray-200;
+
+		&:hover,
+		&:focus-within,
+		&.is-selected {
+			border-color: $gray-300;
+			background: $gray-100;
+		}
+	}
+
+	.dataviews-view-list__item-wrapper {
+		padding: $grid-unit-15;
+	}
+
+	.dataviews-view-list__field-wrapper {
+		min-width: 0;
+		width: 100%;
+	}
+
+	.dataviews-view-list__item-actions {
+		margin-left: auto;
+		flex: 0 0 auto;
+	}
+
+	.dataviews-view-list__fields {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+		gap: $grid-unit-10 $grid-unit-30;
+		width: 100%;
+	}
+
+	.dataviews-view-list__field {
+		display: grid;
+		grid-template-columns: minmax(72px, max-content) minmax(0, 1fr);
+		gap: $grid-unit-10;
+		align-items: baseline;
+		min-width: 0;
+	}
+
+	.dataviews-view-list__field-label.components-visually-hidden {
+		position: static !important;
+		width: auto !important;
+		height: auto !important;
+		margin: 0 !important;
+		overflow: visible !important;
+		clip: auto !important;
+		clip-path: none !important;
+		white-space: normal !important;
+		color: $gray-700;
+		font-size: 12px;
+		line-height: 1.4;
+	}
+
+	.dataviews-view-list__field-value {
+		min-width: 0;
+		color: $gray-900;
+		overflow-wrap: anywhere;
+	}
+}

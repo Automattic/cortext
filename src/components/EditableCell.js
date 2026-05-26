@@ -19,7 +19,7 @@ import {
 	useRef,
 	useState,
 } from '@wordpress/element';
-import { Icon, check } from '@wordpress/icons';
+import { Icon, check, pencil } from '@wordpress/icons';
 
 import MultiselectEdit from './MultiselectEdit';
 import Chip from './fields/Chip';
@@ -50,6 +50,7 @@ function siteLocale() {
 // the cell could call `saveEntityRecord` directly.
 export const RowMutationContext = createContext( {
 	saveRowField: null,
+	canEditCells: true,
 	// `{ rowId, fieldId }` of the cell that should pop into edit mode.
 	// Set by the parent when a new row is created (open the title) or
 	// when Tab navigation hops between cells.
@@ -496,12 +497,22 @@ function CellShell( { children, onActivate, ariaLabel, className, disabled } ) {
 			aria-label={ ariaLabel }
 			aria-hidden={ disabled }
 		>
-			{ isText ? (
-				<span className="cortext-editable-cell__display">
-					{ children }
-				</span>
-			) : (
-				children
+			<span className="cortext-editable-cell__content">
+				{ isText ? (
+					<span className="cortext-editable-cell__display">
+						{ children }
+					</span>
+				) : (
+					children
+				) }
+			</span>
+			{ ! disabled && (
+				<Icon
+					className="cortext-editable-cell__edit-indicator"
+					icon={ pencil }
+					size={ 14 }
+					aria-hidden="true"
+				/>
 			) }
 		</div>
 	);
@@ -743,6 +754,7 @@ export default function EditableCell( {
 } ) {
 	const {
 		saveRowField,
+		canEditCells,
 		editRequest,
 		clearEditRequest,
 		requestNext,
@@ -781,6 +793,7 @@ export default function EditableCell( {
 			editRequest?.rowId === rowId &&
 			editRequest?.fieldId === fieldId &&
 			! readOnly &&
+			canEditCells &&
 			saveRowField;
 		if ( ! targeted ) {
 			return;
@@ -801,12 +814,13 @@ export default function EditableCell( {
 		editRequest,
 		isEditing,
 		readOnly,
+		canEditCells,
 		saveRowField,
 		fieldType,
 		clearEditRequest,
 	] );
 
-	if ( readOnly || ! saveRowField ) {
+	if ( readOnly || ! canEditCells || ! saveRowField ) {
 		return <span className="cortext-cell-readonly">{ display }</span>;
 	}
 

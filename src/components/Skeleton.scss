@@ -53,9 +53,9 @@
 	}
 }
 
-// tech-debt.md#55: table-shaped placeholder while useCollectionRows fetches.
-// It sits beside <DataViews>; the wrapper handles placement. Heights follow
-// the DataViews v6 density rules closely enough to keep the page steady.
+// tech-debt.md#55: placeholder shaped like the active layout while
+// useCollectionRows fetches. It sits beside <DataViews>; the wrapper handles
+// placement. Heights track DataViews v6 closely enough to keep the page steady.
 .cortext-collection-skeleton {
 	display: flex;
 	flex-direction: column;
@@ -90,6 +90,50 @@
 
 	&__cell--first {
 		flex: 0 0 28%;
+	}
+
+	&--list &__row {
+		height: auto;
+		min-height: var(--cortext-data-view-row-height-balanced, #{$grid-unit-50 + 2 * $grid-unit-15});
+		align-items: flex-start;
+		padding-block: $grid-unit-15;
+	}
+
+	&--grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+		gap: $grid-unit-20;
+		padding: $grid-unit-20;
+	}
+
+	&__card {
+		display: grid;
+		gap: $grid-unit-15;
+		min-height: 168px;
+		padding: $grid-unit-20;
+		border: $border-width solid var(--cortext-canvas-border, #e0e0e0);
+		border-radius: 6px;
+		background: var(--cortext-canvas-surface, #fff);
+	}
+
+	&__card-title {
+		width: 72%;
+		height: 16px;
+	}
+
+	&__card-field {
+		display: grid;
+		grid-template-columns: 72px minmax(0, 1fr);
+		gap: $grid-unit-15;
+		align-items: center;
+	}
+
+	&__card-label {
+		opacity: 0.65;
+	}
+
+	&__card-value {
+		width: 82%;
 	}
 }
 
