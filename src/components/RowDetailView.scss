@@ -654,10 +654,6 @@
 			box-shadow: 0 0 0 $border-width var(--cortext-row-detail-border);
 		}
 
-		&.is-dropping-into-hidden {
-			opacity: 0;
-		}
-
 		.components-base-control {
 			width: 100%;
 			margin-bottom: 0;
@@ -973,28 +969,6 @@
 		&.is-over {
 			border-color: var(--cortext-row-detail-muted);
 			background: var(--cortext-row-detail-pressed-surface);
-		}
-	}
-
-	&__property-hidden-dropzone-preview {
-		display: grid;
-		grid-template-columns: minmax(104px, 136px) minmax(0, 1fr);
-		align-items: center;
-		gap: $grid-unit-15;
-		width: 100%;
-		min-height: $grid-unit-30;
-		padding: 0;
-		border-radius: 4px;
-		background: transparent;
-		color: var(--cortext-row-detail-muted);
-		font-size: 12px;
-		line-height: 1.3;
-
-		span {
-			min-width: 0;
-			overflow: hidden;
-			text-overflow: ellipsis;
-			white-space: nowrap;
 		}
 	}
 

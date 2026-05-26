@@ -650,7 +650,7 @@ describe( 'RowProperties', () => {
 		).toHaveClass( 'is-over' );
 	} );
 
-	it( 'previews the dragged row inside the hidden fields drop zone', () => {
+	it( 'does not render a static row preview inside the hidden fields drop zone', () => {
 		const { container } = render(
 			<RowProperties
 				isLayoutEditing
@@ -675,23 +675,19 @@ describe( 'RowProperties', () => {
 			/>
 		);
 
-		act( () => {
-			mockDndProps.onDragOver( {
-				active: { id: 'field-7' },
-				over: { id: HIDDEN_PROPERTIES_DROP_TARGET },
-			} );
-		} );
-
+		expect(
+			container.querySelectorAll( '.cortext-row-detail__property' )
+		).toHaveLength( 2 );
 		expect(
 			container.querySelector(
 				'.cortext-row-detail__property-hidden-dropzone-preview'
 			)
-		).toHaveTextContent( 'Status' );
+		).not.toBeInTheDocument();
 		expect(
 			container.querySelector(
 				'.cortext-row-detail__property.is-dropping-into-hidden'
 			)
-		).toBeInTheDocument();
+		).not.toBeInTheDocument();
 	} );
 
 	it( 'prefers the hidden fields drop zone under the pointer', () => {
