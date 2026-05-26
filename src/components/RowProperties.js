@@ -1,8 +1,8 @@
 /**
  * Property panel for a row document. Renders one row per collection field
  * with the right edit affordance for that field type. Mounted by row detail
- * chrome and full-page row chrome for now; see tech-debt.md#42 for the
- * follow-up that turns this into a locked document block.
+ * chrome and by the locked document-properties editor block; see
+ * tech-debt.md#42 for the remaining public-rendering follow-up.
  *
  * Reads the post's edited title and meta from `editorStore` so the live
  * values stay in sync with the locked `core/post-title` block above and
@@ -848,7 +848,7 @@ function SortableRowProperty( props ) {
 /*
  * Renders the row's collection-field properties as document chrome above the
  * block editor. This is intentionally not serialized yet; see
- * tech-debt.md#42 for the block-backed version needed for frontend rendering.
+ * tech-debt.md#42 for the frontend rendering follow-up.
  *
  * @param {Object}   props
  * @param {number}   props.collectionId The row's parent collection ID.
