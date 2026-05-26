@@ -982,7 +982,7 @@
 		pointer-events: none;
 
 		&:hover {
-			background: var(--cortext-row-detail-bg, #fff);
+			background: var(--cortext-row-detail-hover-surface);
 		}
 	}
 
