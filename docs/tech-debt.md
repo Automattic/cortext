@@ -290,7 +290,7 @@ The create-field flow also has to reveal the new trailing column itself. It carr
 
 **What.** Document identity actions ("Add icon" / "Add cover") are editor chrome, but the ideal visual placement is immediately before the document title inside the block canvas. Persisting an actions block put UI into post content, while portalling controls into the iframe coupled us to BlockList DOM and block hover/selection behavior. The current compromise renders editor-only actions from the canvas shell, outside the persisted `BlockList`, and inserts only the real dynamic blocks (`cortext/document-icon`, `cortext/document-cover`) into content.
 
-**Where.** `DocumentIdentityActions` and `EnsureHeaderBlocks` in `src/components/EditorBody.js`; legacy no-op registration in `includes/Editor/PageHeaderActionsBlock.php`.
+**Where.** `DocumentIdentityActions` and `EnsureHeaderBlocks` in `src/components/EditorBody.js`.
 
 **Solution.** Gutenberg could expose a non-serialized block chrome slot/fill, e.g. "before/after this block" keyed by `clientId`, block name, and root list. Fills would participate in editor layout and focus order but stay out of block order, list view, serialization, copy/paste, movers, undo history as content, and frontend rendering. Cortext could then render the identity actions before the root `core/post-title` without storing a fake block or querying iframe DOM.
 

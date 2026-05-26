@@ -30,10 +30,8 @@ final class DocumentIdentity {
 	public const META_KEY = 'cortext_document_icon';
 
 	public function register(): void {
-		// Bake the locked title block into post_content on create so it
-		// exists from the very first render. Also strip the legacy
-		// editor-only page-header-actions block on every save; those
-		// actions are now transient editor chrome.
+		// Add the locked title block on create so the first editor render
+		// already has it.
 		add_filter( 'wp_insert_post_data', array( $this, 'prepend_header_blocks' ), 10, 2 );
 	}
 
@@ -95,9 +93,8 @@ final class DocumentIdentity {
 	}
 
 	/**
-	 * Prepends the locked title block to post_content when a new
-	 * cortext document is created, unless it's already present. Updates only
-	 * strip the legacy editor-only actions block.
+	 * Adds the locked title block to new Cortext documents unless the content
+	 * already has one. Updates return unchanged.
 	 *
 	 * @param array $data    Slashed post data about to be inserted.
 	 * @param array $postarr Original input passed to wp_insert_post.
@@ -108,17 +105,14 @@ final class DocumentIdentity {
 			return $data;
 		}
 
-		$content              = (string) ( $data['post_content'] ?? '' );
-		$data['post_content'] = $this->strip_legacy_header_actions( $content );
-
 		// Only prepend the title on create; updates always carry an `ID`.
 		if ( ! empty( $postarr['ID'] ) ) {
 			return $data;
 		}
 
-		$content = (string) $data['post_content'];
+		$content = (string) ( $data['post_content'] ?? '' );
 		// Already has the title marker? Leave it alone; the seeder
-		// pre-prepends it, and other paths might too.
+		// may have added it first, and other paths might too.
 		if (
 			str_contains( $content, '<!-- wp:post-title' ) ||
 			str_contains( $content, '<!-- wp:core/post-title' )
@@ -129,33 +123,6 @@ final class DocumentIdentity {
 		$data['post_content'] = wp_slash( self::header_blocks_markup() ) . $content;
 
 		return $data;
-	}
-
-	private function strip_legacy_header_actions( string $content ): string {
-		if ( ! str_contains( $content, '<!-- wp:cortext/page-header-actions' ) ) {
-			return $content;
-		}
-
-		$blocks = parse_blocks( wp_unslash( $content ) );
-		$blocks = $this->filter_legacy_header_actions( $blocks );
-
-		return wp_slash( serialize_blocks( $blocks ) );
-	}
-
-	private function filter_legacy_header_actions( array $blocks ): array {
-		$filtered = array();
-
-		foreach ( $blocks as $block ) {
-			if ( 'cortext/page-header-actions' === ( $block['blockName'] ?? null ) ) {
-				continue;
-			}
-			if ( ! empty( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] ) ) {
-				$block['innerBlocks'] = $this->filter_legacy_header_actions( $block['innerBlocks'] );
-			}
-			$filtered[] = $block;
-		}
-
-		return $filtered;
 	}
 
 	/**
