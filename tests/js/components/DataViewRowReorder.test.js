@@ -680,6 +680,23 @@ describe( 'DataViewRowReorder', () => {
 		).toBe( '20px' );
 	} );
 
+	it( 'extends edge gap hitboxes beyond the first and last rows', async () => {
+		await renderReorder( {}, { rowHeights: [ 40, 40, 40 ] } );
+
+		const gaps = document.querySelectorAll(
+			'.cortext-row-drop-indicator--gap'
+		);
+
+		expect( gaps[ 0 ] ).toHaveStyle( {
+			top: '-40px',
+			height: '60px',
+		} );
+		expect( gaps[ 3 ] ).toHaveStyle( {
+			top: '100px',
+			height: '60px',
+		} );
+	} );
+
 	it( 'covers balanced row gaps without leaving a dead band', async () => {
 		await renderReorder( {}, { rowHeights: [ 64, 64, 64 ] } );
 
