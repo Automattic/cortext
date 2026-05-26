@@ -626,6 +626,8 @@
 	}
 
 	&__property {
+		--cortext-row-detail-layout-affordance-color: var(--cortext-row-detail-muted);
+
 		display: grid;
 		grid-template-columns: minmax(104px, 136px) minmax(0, 1fr);
 		align-items: stretch;
@@ -673,7 +675,7 @@
 		min-width: 0;
 		min-height: $grid-unit-30;
 		overflow: visible;
-		color: var(--cortext-row-detail-muted);
+		color: var(--cortext-row-detail-layout-affordance-color);
 		cursor: default;
 		font-size: 12px;
 		font-weight: 400;
@@ -757,6 +759,7 @@
 	&__property-type-icon {
 		--cortext-field-type-icon-size: 14px;
 
+		color: var(--cortext-row-detail-layout-affordance-color);
 		transition: opacity 120ms ease;
 	}
 
@@ -774,7 +777,7 @@
 		border-radius: $grid-unit-30;
 		background: transparent;
 		box-shadow: none;
-		color: var(--cortext-row-detail-muted);
+		color: var(--cortext-row-detail-layout-affordance-color);
 		cursor: grab;
 		opacity: 0;
 		pointer-events: none;
@@ -809,6 +812,10 @@
 	&__property--layout-editing &__property-layout-chip {
 		opacity: 1;
 		pointer-events: auto;
+	}
+
+	&__property--layout-editing {
+		--cortext-row-detail-layout-affordance-color: var(--cortext-row-detail-text);
 	}
 
 	&__property-layout-chip:hover,
@@ -977,7 +984,7 @@
 	}
 
 	&__property--readonly {
-		color: var(--cortext-row-detail-muted);
+		color: var(--cortext-row-detail-layout-affordance-color);
 		cursor: default;
 
 		.cortext-row-detail__property-label,
@@ -1004,13 +1011,13 @@
 		border-radius: 4px;
 		background: transparent;
 		box-shadow: none;
-		color: var(--cortext-row-detail-muted);
+		color: var(--cortext-row-detail-layout-affordance-color);
 		opacity: 0.62;
 
 		&.is-pressed {
 			background: transparent;
 			box-shadow: none;
-			color: var(--cortext-row-detail-muted);
+			color: var(--cortext-row-detail-layout-affordance-color);
 		}
 
 		&:hover:not(:disabled),
