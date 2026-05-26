@@ -201,6 +201,10 @@ export function computeCollectionUri( entity ) {
 // FIXME: I don't like this constant
 export const PUBLISHED_DOCUMENTS_URI = 'published';
 
+// Singleton splat for the Import screen, matched exactly like
+// PUBLISHED_DOCUMENTS_URI above.
+export const IMPORT_URI = 'import';
+
 // Strips the prefix from a splat URI and returns { prefix, tail }.
 export function parseSplatUri( uri ) {
 	const slash = ( uri ?? '' ).indexOf( '/' );

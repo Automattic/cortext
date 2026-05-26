@@ -11,6 +11,7 @@ import {
 	plus,
 	search,
 	trash as trashIcon,
+	upload,
 	wordpress,
 } from '@wordpress/icons';
 
@@ -90,6 +91,7 @@ import ThemeToggle from './ThemeToggle';
 import { nextChildOrder } from './pages-tree';
 import { POST_TYPE } from './page-queries';
 import {
+	IMPORT_URI,
 	PUBLISHED_DOCUMENTS_URI,
 	computeCollectionUri,
 } from '../router/useResolveEntity';
@@ -185,6 +187,13 @@ export default function Sidebar( {
 		} );
 	}, [ navigate ] );
 	const isPublishedActive = activeUri === PUBLISHED_DOCUMENTS_URI;
+	const goImport = useCallback( () => {
+		navigate( {
+			to: '/$',
+			params: { _splat: IMPORT_URI },
+		} );
+	}, [ navigate ] );
+	const isImportActive = activeUri === IMPORT_URI;
 	const toggleTrashPanel = useCallback( () => {
 		if ( collapsed ) {
 			setIsTrashPanelOpen( true );
@@ -475,6 +484,17 @@ export default function Sidebar( {
 					<Icon icon={ globe } size={ 16 } />
 					{ ! collapsed && (
 						<span>{ __( 'Published documents', 'cortext' ) }</span>
+					) }
+				</Button>
+				<Button
+					className="cortext-sidebar__quick-action cortext-sidebar__quick-action--import"
+					label={ __( 'Import', 'cortext' ) }
+					isPressed={ isImportActive }
+					onClick={ goImport }
+				>
+					<Icon icon={ upload } size={ 16 } />
+					{ ! collapsed && (
+						<span>{ __( 'Import', 'cortext' ) }</span>
 					) }
 				</Button>
 			</div>

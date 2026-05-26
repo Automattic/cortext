@@ -33,6 +33,7 @@ import CollectionDataViews from '../components/CollectionDataViews';
 import { CollectionFieldsProvider } from '../components/CollectionFieldsContext';
 import CollectionPublishToggle from '../components/CollectionPublishToggle';
 import { RowMutationContext } from '../components/EditableCell';
+import ImportPane from '../components/ImportPane';
 import PublishedDocumentsPane from '../components/PublishedDocumentsPane';
 import { CanvasProgressBar } from '../components/Skeleton';
 import useDelayedFlag from '../hooks/useDelayedFlag';
@@ -483,7 +484,8 @@ export default function EntityRoute( { history } ) {
 		active.kind === 'empty' ||
 		active.kind === 'document-not-found' ||
 		active.kind === 'collection-not-found' ||
-		active.kind === 'published'
+		active.kind === 'published' ||
+		active.kind === 'import'
 	) {
 		paintedRoute = { kind: active.kind };
 	}
@@ -601,6 +603,9 @@ export default function EntityRoute( { history } ) {
 
 				<WorkspacePane active={ active.kind === 'published' }>
 					<PublishedDocumentsPane />
+				</WorkspacePane>
+				<WorkspacePane active={ active.kind === 'import' }>
+					<ImportPane />
 				</WorkspacePane>
 				<WorkspacePane active={ active.kind === 'empty' }>
 					<EmptyState />

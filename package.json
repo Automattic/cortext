@@ -45,6 +45,7 @@
 		"@wordpress/env": "^11.4.0",
 		"@wordpress/prettier-config": "^4.46.0",
 		"@wordpress/scripts": "^32.0.0",
+		"dotenv": "^17.4.2",
 		"prettier": "npm:wp-prettier@3.0.3",
 		"react": "18.3.1",
 		"react-dom": "18.3.1",

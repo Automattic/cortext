@@ -33,6 +33,7 @@ use Cortext\Rest\DocumentLocatorController;
 use Cortext\Rest\DocumentsController;
 use Cortext\Rest\FavoritesController;
 use Cortext\Rest\FieldsController;
+use Cortext\Rest\NotionImportController;
 use Cortext\Rest\RecentsController;
 use Cortext\Rest\RowsController;
 use Cortext\Rest\WorkspaceHomeController;
@@ -83,6 +84,7 @@ final class Plugin {
 		( new RecentsController() )->register();
 		( new RowsController() )->register();
 		( new WorkspaceHomeController() )->register();
+		( new NotionImportController() )->register();
 		( new Template() )->register();
 		( new Assets() )->register();
 		( new DataView() )->register();
