@@ -786,6 +786,13 @@
 		padding: 0;
 		border-radius: $grid-unit-30;
 		background: transparent;
+		background-image:
+			radial-gradient(circle at 6px 7px, currentcolor 1px, transparent 1.5px),
+			radial-gradient(circle at 12px 7px, currentcolor 1px, transparent 1.5px),
+			radial-gradient(circle at 6px 12px, currentcolor 1px, transparent 1.5px),
+			radial-gradient(circle at 12px 12px, currentcolor 1px, transparent 1.5px),
+			radial-gradient(circle at 6px 17px, currentcolor 1px, transparent 1.5px),
+			radial-gradient(circle at 12px 17px, currentcolor 1px, transparent 1.5px);
 		box-shadow: none;
 		color: var(--cortext-row-detail-layout-affordance-color);
 		cursor: grab;
@@ -814,8 +821,7 @@
 		}
 
 		svg {
-			width: 20px;
-			height: 20px;
+			display: none;
 		}
 	}
 
