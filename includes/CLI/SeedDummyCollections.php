@@ -22,7 +22,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 
 	private const WORKSPACE_HOME_META_KEY = 'cortext_workspace_home';
 	private const FAVORITES_META_KEY      = 'cortext_favorites';
-	private const PAGE_CONTENT_VERSION    = 'rich-connected-seed-2026-05-07-no-about-cover';
+	private const PAGE_CONTENT_VERSION    = 'rich-connected-seed-2026-05-26-albums-grid';
 	private const ENTRY_CONTENT_VERSION   = 'rich-connected-row-seed-2026-05-07';
 
 	private bool $seed_full_dataset = false;
@@ -3482,7 +3482,14 @@ final class SeedDummyCollections extends WP_CLI_Command {
 					array(
 						$this->paragraph( 'The music cluster adds a denser relationship graph: albums belong to artists and labels, while tracks belong to albums and feed album-level rollups.' ),
 						$this->heading( 'Albums and tracks', 2 ),
-						$this->data_view_block( $collection_ids['albums'] ?? 0 ),
+						$this->data_view_block(
+							$collection_ids['albums'] ?? 0,
+							array(
+								'type'       => 'grid',
+								'perPage'    => 12,
+								'mediaField' => 'cover',
+							)
+						),
 						$this->data_view_block( $collection_ids['tracks'] ?? 0 ),
 						$this->heading( 'Artists and labels', 2 ),
 						$this->data_view_block( $collection_ids['musicians'] ?? 0 ),
@@ -4523,10 +4530,11 @@ final class SeedDummyCollections extends WP_CLI_Command {
 
 	/**
 	 * Attaches a bundled cover image to a row when one is provided in
-	 * `seed-assets/covers/<slug>-<title-slug>.jpg`. Covers are opt-in per
-	 * row (no live fetch), so add a file under that path to give a row a
-	 * featured image. Skips rows that already have `_thumbnail_id`, so a
-	 * manually-set cover survives a reseed.
+	 * `seed-assets/covers/<slug>-<title-slug>.jpg`. A few album rows also use
+	 * their bundled album-art icon when there is no separate cover asset or
+	 * requested live cover. That gives the seeded grid a mix of covered and
+	 * uncovered cards while still working offline. Skips rows that already
+	 * have `_thumbnail_id`, so a manually-set cover survives a reseed.
 	 *
 	 * @param int    $entry_id        Row post ID.
 	 * @param string $collection_slug Source collection slug.
@@ -4552,10 +4560,12 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		}
 
 		if ( ! $this->fetch_real_images ) {
+			$this->maybe_apply_album_icon_as_row_cover( $entry_id, $collection_slug, $title );
 			return;
 		}
 		$url = $this->real_cover_url( $collection_slug, $title );
 		if ( null === $url ) {
+			$this->maybe_apply_album_icon_as_row_cover( $entry_id, $collection_slug, $title );
 			return;
 		}
 		$cover_id = $this->ensure_attachment_from_url( $url );
@@ -4563,6 +4573,36 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			update_post_meta( $entry_id, '_thumbnail_id', $cover_id );
 			$source = false !== strpos( $url, 'openlibrary.org' ) ? 'open-library' : 'cover-art-archive';
 			WP_CLI::log( sprintf( '  Cover (%s) attached to entry %d.', $source, $entry_id ) );
+			return;
+		}
+
+		$this->maybe_apply_album_icon_as_row_cover( $entry_id, $collection_slug, $title );
+	}
+
+	private function maybe_apply_album_icon_as_row_cover( int $entry_id, string $collection_slug, string $title ): void {
+		if ( 'albums' !== sanitize_title( $collection_slug ) ) {
+			return;
+		}
+
+		$covered_album_keys = array(
+			'abbey-road',
+			'the-dark-side-of-the-moon',
+			'purple-rain',
+			'save-rock-and-roll',
+		);
+		if ( ! in_array( sanitize_title( $title ), $covered_album_keys, true ) ) {
+			return;
+		}
+
+		$path = $this->bundle_icon_path( $collection_slug, $title );
+		if ( ! file_exists( $path ) ) {
+			return;
+		}
+
+		$cover_id = $this->ensure_attachment_from_path( $path );
+		if ( $cover_id > 0 ) {
+			update_post_meta( $entry_id, '_thumbnail_id', $cover_id );
+			WP_CLI::log( sprintf( '  Cover (album icon bundle) attached to entry %d.', $entry_id ) );
 		}
 	}
 
@@ -4738,32 +4778,82 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		};
 	}
 
-	private function data_view_block( int $collection_id ): string {
+	private function data_view_block( int $collection_id, array $view_overrides = array() ): string {
 		if ( $collection_id <= 0 ) {
 			return '';
 		}
 
 		$styles = $this->data_view_layout_styles( $collection_id );
 
-		$attributes = array(
-			'collectionId' => $collection_id,
-			'view'         => array(
-				'type'    => 'table',
-				'fields'  => array(),
-				'sort'    => null,
-				'filters' => array(),
-				'perPage' => 25,
-				'page'    => 1,
-				'search'  => '',
-				'layout'  => array(
+		$view = array(
+			'type'          => 'table',
+			'fields'        => array(),
+			'sort'          => null,
+			'filters'       => array(),
+			'calculations'  => array(),
+			'perPage'       => 25,
+			'page'          => 1,
+			'search'        => '',
+			'layout'        => array(
+				'density' => 'compact',
+			),
+			'layoutByType'  => array(
+				'table' => array(
 					'density' => 'compact',
 				),
+				'grid'  => array(),
+				'list'  => array(),
 			),
+			'fieldsByType'  => array(
+				'grid' => array(),
+				'list' => array(),
+			),
+			'rowDetailMode' => 'side',
 		);
 
 		if ( $styles ) {
-			$attributes['view']['layout']['styles'] = $styles;
+			$view['layout']['styles']                = $styles;
+			$view['layoutByType']['table']['styles'] = $styles;
 		}
+
+		if ( $view_overrides ) {
+			$layout_by_type_overrides = isset( $view_overrides['layoutByType'] ) && is_array( $view_overrides['layoutByType'] )
+				? $view_overrides['layoutByType']
+				: array();
+			$fields_by_type_overrides = isset( $view_overrides['fieldsByType'] ) && is_array( $view_overrides['fieldsByType'] )
+				? $view_overrides['fieldsByType']
+				: array();
+			unset( $view_overrides['layoutByType'], $view_overrides['fieldsByType'] );
+
+			$view = array_merge( $view, $view_overrides );
+			if ( $layout_by_type_overrides ) {
+				$view['layoutByType'] = array_replace( $view['layoutByType'], $layout_by_type_overrides );
+			}
+			if ( $fields_by_type_overrides ) {
+				$view['fieldsByType'] = array_replace( $view['fieldsByType'], $fields_by_type_overrides );
+			}
+		}
+
+		$type = 'table';
+		if ( isset( $view['type'] ) && in_array( $view['type'], array( 'table', 'grid', 'list' ), true ) ) {
+			$type = $view['type'];
+		}
+
+		$view['type'] = $type;
+
+		if ( ! isset( $view['layoutByType'][ $type ] ) || ! is_array( $view['layoutByType'][ $type ] ) ) {
+			$view['layoutByType'][ $type ] = array();
+		}
+		$view['layout'] = $view['layoutByType'][ $type ];
+
+		if ( 'grid' === $type && empty( $view['mediaField'] ) ) {
+			$view['mediaField'] = 'cover';
+		}
+
+		$attributes = array(
+			'collectionId' => $collection_id,
+			'view'         => $view,
+		);
 
 		return sprintf(
 			'<!-- wp:cortext/data-view %s /-->',
