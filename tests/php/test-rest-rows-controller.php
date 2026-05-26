@@ -188,6 +188,47 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertSame( 'Provided', get_post_meta( $row_id, "field-{$field_id}", true ) );
 	}
 
+	public function test_explicit_empty_multiselect_meta_wins_over_field_default(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+		$collection_id = $this->create_collection_with_slug( 'Empty Multi Defaults', 'emptymultidefs' );
+		$field_id      = $this->create_collection_field(
+			$collection_id,
+			'Tags',
+			'multiselect',
+			array(
+				'options' => wp_json_encode(
+					array(
+						array(
+							'value' => 'a',
+							'label' => 'A',
+						),
+					)
+				),
+			)
+		);
+		update_post_meta( $field_id, 'default_value', '{"mode":"value","value":["a"]}' );
+
+		$GLOBALS['wp_rest_server'] = new WP_REST_Server();
+		( new RowsController() )->register();
+		do_action( 'rest_api_init' );
+
+		$request = new WP_REST_Request( 'POST', '/wp/v2/crtxt_emptymultidefs' );
+		$request->set_body_params(
+			array(
+				'status' => 'private',
+				'title'  => 'Empty tags row',
+				'meta'   => array(
+					"field-{$field_id}" => array(),
+				),
+			)
+		);
+		$response = rest_do_request( $request );
+		$this->assertSame( 201, $response->get_status() );
+
+		$row_id = (int) $response->get_data()['id'];
+		$this->assertSame( array(), get_post_meta( $row_id, "field-{$field_id}", false ) );
+	}
+
 	public function test_query_rows_includes_collection_metadata(): void {
 		wp_set_current_user( $this->create_user( 'author' ) );
 		$fixture = $this->create_collection_fixture( 'rowmeta', 'text' );

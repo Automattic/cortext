@@ -171,13 +171,15 @@ final class FieldDefaults {
 	/**
 	 * Applies all supported defaults for a collection to one newly-created row.
 	 *
-	 * @param int $collection_id Collection post id.
-	 * @param int $row_id        Row post id.
+	 * @param int      $collection_id      Collection post id.
+	 * @param int      $row_id             Row post id.
+	 * @param string[] $explicit_meta_keys Field meta keys explicitly provided during creation.
 	 */
-	public static function apply_to_row( int $collection_id, int $row_id ): void {
-		$field_ids = array_map( 'intval', get_post_meta( $collection_id, 'fields', false ) );
-		$store     = new FieldValueStore();
-		$status    = (string) get_post_status( $row_id );
+	public static function apply_to_row( int $collection_id, int $row_id, array $explicit_meta_keys = array() ): void {
+		$field_ids          = array_map( 'intval', get_post_meta( $collection_id, 'fields', false ) );
+		$explicit_meta_keys = array_fill_keys( array_map( 'strval', $explicit_meta_keys ), true );
+		$store              = new FieldValueStore();
+		$status             = (string) get_post_status( $row_id );
 
 		foreach ( $field_ids as $field_id ) {
 			$type = (string) get_post_meta( $field_id, 'type', true );
@@ -186,6 +188,10 @@ final class FieldDefaults {
 			}
 
 			$key = Relations::meta_key( $field_id );
+			if ( isset( $explicit_meta_keys[ $key ] ) ) {
+				continue;
+			}
+
 			if ( count( get_metadata( 'post', $row_id, $key, false ) ) > 0 ) {
 				continue;
 			}

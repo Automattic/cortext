@@ -382,6 +382,30 @@ final class CollectionEntries {
 	}
 
 	/**
+	 * Returns a set of field meta keys that use multi-row post meta storage.
+	 *
+	 * @param string $post_type Entry post type.
+	 * @return array<string,bool>
+	 */
+	private function multi_value_meta_keys_for_entry_post_type( string $post_type ): array {
+		$collection_id = $this->collection_id_for_entry_post_type( $post_type );
+		if ( $collection_id < 1 ) {
+			return array();
+		}
+
+		$keys = array();
+		foreach ( get_post_meta( $collection_id, 'fields', false ) as $field_id ) {
+			$field_id = (int) $field_id;
+			$type     = (string) get_post_meta( $field_id, 'type', true );
+			if ( 'multiselect' === $type || ( 'relation' === $type && Relations::relation_is_multiple( $field_id ) ) ) {
+				$keys[ Relations::meta_key( $field_id ) ] = true;
+			}
+		}
+
+		return $keys;
+	}
+
+	/**
 	 * Records the current user as the last editor of an entry.
 	 *
 	 * WordPress core stores `post_modified` (timestamp) but not who edited.
@@ -508,9 +532,40 @@ final class CollectionEntries {
 		}
 
 		if ( empty( self::$default_hooks[ $post_type ] ) ) {
+			add_filter( "rest_pre_insert_{$post_type}", array( $this, 'prepare_meta_for_defaults_before_rest_insert' ), 10, 2 );
 			add_action( "rest_after_insert_{$post_type}", array( $this, 'apply_defaults_after_rest_insert' ), 10, 3 );
 			self::$default_hooks[ $post_type ] = true;
 		}
+	}
+
+	/**
+	 * Tracks explicit creation meta and removes empty multi-value fields before core REST deletes them.
+	 *
+	 * @param object          $prepared_post Prepared post object.
+	 * @param WP_REST_Request $request       REST request.
+	 */
+	public function prepare_meta_for_defaults_before_rest_insert( object $prepared_post, WP_REST_Request $request ): object {
+		if ( ! empty( $prepared_post->ID ) || ! empty( $prepared_post->id ) ) {
+			return $prepared_post;
+		}
+
+		$meta = $request->get_param( 'meta' );
+		if ( ! is_array( $meta ) ) {
+			return $prepared_post;
+		}
+
+		$explicit_meta_keys = array_keys( $meta );
+		$multi_meta_keys    = $this->multi_value_meta_keys_for_entry_post_type( (string) $prepared_post->post_type );
+		foreach ( $meta as $key => $value ) {
+			if ( array() === $value && isset( $multi_meta_keys[ (string) $key ] ) ) {
+				unset( $meta[ $key ] );
+			}
+		}
+
+		$request->set_param( 'meta', $meta );
+		$request->set_param( '_cortext_explicit_meta_keys', $explicit_meta_keys );
+
+		return $prepared_post;
 	}
 
 	public function apply_defaults_after_rest_insert( WP_Post $post, WP_REST_Request $request, bool $creating ): void {
@@ -523,7 +578,13 @@ final class CollectionEntries {
 			return;
 		}
 
-		FieldDefaults::apply_to_row( $collection_id, (int) $post->ID );
+		$explicit_meta_keys = $request->get_param( '_cortext_explicit_meta_keys' );
+		if ( ! is_array( $explicit_meta_keys ) ) {
+			$meta               = $request->get_param( 'meta' );
+			$explicit_meta_keys = is_array( $meta ) ? array_keys( $meta ) : array();
+		}
+
+		FieldDefaults::apply_to_row( $collection_id, (int) $post->ID, $explicit_meta_keys );
 	}
 
 	public function assign_menu_order_on_insert( int $post_id, WP_Post $post, bool $update ): void {
