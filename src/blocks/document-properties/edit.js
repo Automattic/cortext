@@ -22,7 +22,6 @@ import {
 } from '@wordpress/element';
 import { check, closeSmall, pencil, seen, unseen } from '@wordpress/icons';
 
-import DetailLayoutEditor from '../../components/DetailLayoutEditor';
 import DocumentPropertiesActions from '../../components/DocumentPropertiesActions';
 import RowProperties from '../../components/RowProperties';
 import { CollectionFieldsSnapshotProvider } from '../../components/CollectionFieldsContext';
@@ -220,6 +219,53 @@ export default function Edit() {
 				: visibleFields,
 		[ currentEntries, layoutFields, optimisticEntries, visibleFields ]
 	);
+	const draftLayoutEntries = draftEntries ?? currentEntries;
+	const draftLayoutFields = useMemo( () => {
+		const fieldsById = new Map(
+			layoutFields.map( ( field ) => [ field.id, field ] )
+		);
+		return draftLayoutEntries
+			.map( ( entry ) => {
+				const field = fieldsById.get( entry.field );
+				return field
+					? {
+							...field,
+							cortextDetailVisible: entry.visible !== false,
+					  }
+					: null;
+			} )
+			.filter( Boolean );
+	}, [ draftLayoutEntries, layoutFields ] );
+	const handleDraftLayoutReorder = useCallback(
+		( activeField, overField ) => {
+			const from = draftLayoutEntries.findIndex(
+				( entry ) => entry.field === activeField
+			);
+			const to = draftLayoutEntries.findIndex(
+				( entry ) => entry.field === overField
+			);
+			if ( from < 0 || to < 0 || from === to ) {
+				return;
+			}
+			const nextEntries = [ ...draftLayoutEntries ];
+			const [ moved ] = nextEntries.splice( from, 1 );
+			nextEntries.splice( to, 0, moved );
+			setDraftEntries( nextEntries );
+		},
+		[ draftLayoutEntries ]
+	);
+	const handleDraftLayoutVisibilityToggle = useCallback(
+		( fieldId ) => {
+			setDraftEntries(
+				draftLayoutEntries.map( ( entry ) =>
+					entry.field === fieldId
+						? { ...entry, visible: entry.visible === false }
+						: entry
+				)
+			);
+		},
+		[ draftLayoutEntries ]
+	);
 	useLayoutEffect( () => {
 		if ( ! isEditingLayout ) {
 			rememberPropertiesHeight();
@@ -230,6 +276,21 @@ export default function Edit() {
 		rememberPropertiesHeight,
 		visiblePropertyFields.length,
 	] );
+	const propertyFieldsForDisplay = isEditingLayout
+		? draftLayoutFields
+		: inlineLayoutFields;
+	let layoutReorderHandler;
+	if ( isEditingLayout ) {
+		layoutReorderHandler = handleDraftLayoutReorder;
+	} else if ( canEditLayout && ! isSavingLayout ) {
+		layoutReorderHandler = handleInlineLayoutReorder;
+	}
+	const layoutVisibilityHandler = isEditingLayout
+		? handleDraftLayoutVisibilityToggle
+		: undefined;
+	const showEmptyProperties =
+		! isEditingLayout && visiblePropertyFields.length === 0;
+
 	if ( ! ctx || isResolving || layoutPropertyFields.length === 0 ) {
 		return null;
 	}
@@ -328,58 +389,51 @@ export default function Edit() {
 						{ saveError }
 					</Notice>
 				) : null }
-				{ isEditingLayout ? (
-					<div
-						className="cortext-document-properties__layout-editor-wrap"
-						style={
-							layoutEditorMinHeight
-								? { minHeight: layoutEditorMinHeight }
-								: undefined
-						}
-					>
-						<DetailLayoutEditor
-							entries={ draftEntries ?? currentEntries }
+				<div
+					ref={ propertiesContentRef }
+					className={
+						isEditingLayout
+							? 'cortext-document-properties__layout-editor-wrap'
+							: undefined
+					}
+					style={
+						isEditingLayout && layoutEditorMinHeight
+							? { minHeight: layoutEditorMinHeight }
+							: undefined
+					}
+				>
+					{ collectionId ? (
+						<CollectionFieldsSnapshotProvider
 							fields={ layoutFields }
-							onChange={ setDraftEntries }
-						/>
-					</div>
-				) : (
-					<div ref={ propertiesContentRef }>
-						{ collectionId ? (
-							<CollectionFieldsSnapshotProvider
-								fields={ layoutFields }
-							>
-								<RowProperties
-									collectionId={ collectionId }
-									fields={ inlineLayoutFields }
-									onLayoutReorder={
-										canEditLayout && ! isSavingLayout
-											? handleInlineLayoutReorder
-											: undefined
-									}
-									rowId={ rowId }
-									row={ fallbackRecord }
-								/>
-							</CollectionFieldsSnapshotProvider>
-						) : (
+						>
 							<RowProperties
-								fields={ inlineLayoutFields }
-								onLayoutReorder={
-									canEditLayout && ! isSavingLayout
-										? handleInlineLayoutReorder
-										: undefined
+								collectionId={ collectionId }
+								fields={ propertyFieldsForDisplay }
+								isLayoutEditing={ isEditingLayout }
+								onLayoutReorder={ layoutReorderHandler }
+								onLayoutVisibilityToggle={
+									layoutVisibilityHandler
 								}
 								rowId={ rowId }
 								row={ fallbackRecord }
 							/>
-						) }
-						{ visiblePropertyFields.length === 0 ? (
-							<p className="cortext-document-properties__empty">
-								{ __( 'No visible properties.', 'cortext' ) }
-							</p>
-						) : null }
-					</div>
-				) }
+						</CollectionFieldsSnapshotProvider>
+					) : (
+						<RowProperties
+							fields={ propertyFieldsForDisplay }
+							isLayoutEditing={ isEditingLayout }
+							onLayoutReorder={ layoutReorderHandler }
+							onLayoutVisibilityToggle={ layoutVisibilityHandler }
+							rowId={ rowId }
+							row={ fallbackRecord }
+						/>
+					) }
+					{ showEmptyProperties ? (
+						<p className="cortext-document-properties__empty">
+							{ __( 'No visible properties.', 'cortext' ) }
+						</p>
+					) : null }
+				</div>
 			</div>
 		</>
 	);

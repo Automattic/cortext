@@ -49,25 +49,6 @@ jest.mock( '@wordpress/data', () => ( {
 		} ) ),
 } ) );
 
-jest.mock( '../../../src/components/DetailLayoutEditor', () => ( {
-	__esModule: true,
-	default: ( { onChange } ) => (
-		<div data-testid="detail-layout-editor">
-			<button
-				type="button"
-				onClick={ () =>
-					onChange( [
-						{ field: 'created_at', visible: false },
-						{ field: 'field-10', visible: true },
-					] )
-				}
-			>
-				Apply draft
-			</button>
-		</div>
-	),
-} ) );
-
 jest.mock( '../../../src/components/DocumentPropertiesActions', () => ( {
 	__esModule: true,
 	default: () => null,
@@ -77,7 +58,12 @@ jest.mock( '../../../src/components/RowProperties', () => ( {
 	__esModule: true,
 	default: ( props ) => {
 		mockRowPropertiesProps = props;
-		const { fields, onLayoutReorder } = props;
+		const {
+			fields,
+			isLayoutEditing,
+			onLayoutReorder,
+			onLayoutVisibilityToggle,
+		} = props;
 		return (
 			<div data-testid="row-properties">
 				{ fields
@@ -93,6 +79,16 @@ jest.mock( '../../../src/components/RowProperties', () => ( {
 						}
 					>
 						Drag Created before Author
+					</button>
+				) : null }
+				{ isLayoutEditing && onLayoutVisibilityToggle ? (
+					<button
+						type="button"
+						onClick={ () =>
+							onLayoutVisibilityToggle( 'created_at' )
+						}
+					>
+						Hide Created
 					</button>
 				) : null }
 			</div>
@@ -146,7 +142,12 @@ describe( 'document-properties Edit layout mode', () => {
 			screen.getByRole( 'button', { name: 'Edit layout' } )
 		);
 		fireEvent.click(
-			screen.getByRole( 'button', { name: 'Apply draft' } )
+			screen.getByRole( 'button', {
+				name: 'Drag Created before Author',
+			} )
+		);
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Hide Created' } )
 		);
 		fireEvent.click(
 			screen.getByRole( 'button', { name: 'Save layout' } )
@@ -190,7 +191,7 @@ describe( 'document-properties Edit layout mode', () => {
 			screen.getByRole( 'button', { name: 'Edit layout' } )
 		);
 		fireEvent.click(
-			screen.getByRole( 'button', { name: 'Apply draft' } )
+			screen.getByRole( 'button', { name: 'Hide Created' } )
 		);
 		fireEvent.click(
 			screen.getByRole( 'button', { name: 'Cancel layout changes' } )
@@ -279,6 +280,9 @@ describe( 'document-properties Edit layout mode', () => {
 		expect( await screen.findByRole( 'alert' ) ).toHaveTextContent(
 			'No permission to save.'
 		);
-		expect( screen.getByTestId( 'detail-layout-editor' ) ).toBeVisible();
+		expect( screen.getByTestId( 'row-properties' ) ).toBeVisible();
+		expect( mockRowPropertiesProps ).toEqual(
+			expect.objectContaining( { isLayoutEditing: true } )
+		);
 	} );
 } );

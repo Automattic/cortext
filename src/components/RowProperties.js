@@ -23,7 +23,7 @@ import {
 	useState,
 } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
-import { dragHandle } from '@wordpress/icons';
+import { dragHandle, seen, unseen } from '@wordpress/icons';
 import {
 	DndContext,
 	KeyboardSensor,
@@ -490,9 +490,11 @@ function RowProperty( {
 	formatOverrides,
 	handleFieldFormatSaved,
 	handleFieldOptionsSaved,
+	isLayoutEditing,
 	isDragging,
 	localFormatOverrides,
 	localOptionOverrides,
+	onLayoutVisibilityToggle,
 	optionOverrides,
 	refreshRows,
 	reorderAttributes,
@@ -509,6 +511,7 @@ function RowProperty( {
 	const value = valueForField( field, data );
 	const type = fieldType( field );
 	const displayType = displayFieldType( field );
+	const isVisibleInLayout = field.cortextDetailVisible !== false;
 	const elements =
 		localOptionOverrides?.[ field.id ] ??
 		optionOverrides?.[ field.id ] ??
@@ -546,6 +549,35 @@ function RowProperty( {
 			/>
 		);
 	}
+	let propertyValue = (
+		<ReadOnlyProperty
+			value={ value }
+			type={ displayType }
+			elements={ elements }
+			format={ format }
+		/>
+	);
+	if ( ! isLayoutEditing && isEditable ) {
+		propertyValue = (
+			<PropertyControl
+				field={ displayField }
+				value={ value }
+				elements={ elements }
+				relation={ relation }
+				onChange={ ( next ) => update( { [ field.id ]: next } ) }
+				onRelationChange={ ( next ) =>
+					updateRelation( field.id, next )
+				}
+				onOptionsSaved={ ( nextOptions ) =>
+					handleFieldOptionsSaved(
+						field.cortextRecordId ?? toRecordId( field.id ),
+						nextOptions
+					)
+				}
+				onRowsChanged={ refreshRows }
+			/>
+		);
+	}
 
 	return (
 		<div
@@ -556,12 +588,15 @@ function RowProperty( {
 				( isEditable
 					? ' cortext-row-detail__property--editable'
 					: ' cortext-row-detail__property--readonly' ) +
+				( isLayoutEditing
+					? ' cortext-row-detail__property--layout-editing'
+					: '' ) +
+				( isVisibleInLayout ? '' : ' is-hidden' ) +
 				( isDragging ? ' is-dragging' : '' )
 			}
 		>
 			<div className="cortext-row-detail__property-label">
 				<span className="cortext-row-detail__property-label-icon-slot">
-					{ propertyIcon }
 					{ canReorderLayout ? (
 						<Button
 							className="cortext-row-detail__property-layout-chip"
@@ -574,6 +609,7 @@ function RowProperty( {
 							{ ...reorderListeners }
 						/>
 					) : null }
+					{ propertyIcon }
 				</span>
 				<PropertyLabel
 					collectionId={ collectionId }
@@ -584,34 +620,24 @@ function RowProperty( {
 				/>
 			</div>
 			<div className="cortext-row-detail__property-value">
-				{ isEditable ? (
-					<PropertyControl
-						field={ displayField }
-						value={ value }
-						elements={ elements }
-						relation={ relation }
-						onChange={ ( next ) =>
-							update( { [ field.id ]: next } )
+				<div className="cortext-row-detail__property-value-content">
+					{ propertyValue }
+				</div>
+				{ isLayoutEditing ? (
+					<Button
+						className="cortext-row-detail__property-visibility"
+						icon={ isVisibleInLayout ? seen : unseen }
+						label={
+							isVisibleInLayout
+								? __( 'Hide property', 'cortext' )
+								: __( 'Show property', 'cortext' )
 						}
-						onRelationChange={ ( next ) =>
-							updateRelation( field.id, next )
-						}
-						onOptionsSaved={ ( nextOptions ) =>
-							handleFieldOptionsSaved(
-								field.cortextRecordId ?? toRecordId( field.id ),
-								nextOptions
-							)
-						}
-						onRowsChanged={ refreshRows }
+						isPressed={ isVisibleInLayout }
+						size="small"
+						variant="tertiary"
+						onClick={ () => onLayoutVisibilityToggle?.( field.id ) }
 					/>
-				) : (
-					<ReadOnlyProperty
-						value={ value }
-						type={ displayType }
-						elements={ elements }
-						format={ format }
-					/>
-				) }
+				) : null }
 			</div>
 		</div>
 	);
@@ -652,7 +678,9 @@ function SortableRowProperty( props ) {
  * @param {Object}   props
  * @param {number}   props.collectionId The row's parent collection ID.
  * @param {Array}    props.fields       Fields shown for this row.
+ * @param {boolean}  props.isLayoutEditing Whether fields are being shown/hidden.
  * @param {Function} props.onLayoutReorder Reorders fields from the row properties list.
+ * @param {Function} props.onLayoutVisibilityToggle Toggles a field in the draft layout.
  * @param {number}   [props.rowId]      The current row ID.
  * @param {Object}   [props.row]        Fallback row record for values outside editor state,
  *                                      such as relations and rollups.
@@ -660,7 +688,9 @@ function SortableRowProperty( props ) {
 export default function RowProperties( {
 	collectionId,
 	fields,
+	isLayoutEditing = false,
 	onLayoutReorder,
+	onLayoutVisibilityToggle,
 	row,
 	rowId: providedRowId,
 } ) {
@@ -838,8 +868,10 @@ export default function RowProperties( {
 						formatOverrides={ formatOverrides }
 						handleFieldFormatSaved={ handleFieldFormatSaved }
 						handleFieldOptionsSaved={ handleFieldOptionsSaved }
+						isLayoutEditing={ isLayoutEditing }
 						localFormatOverrides={ localFormatOverrides }
 						localOptionOverrides={ localOptionOverrides }
+						onLayoutVisibilityToggle={ onLayoutVisibilityToggle }
 						optionOverrides={ optionOverrides }
 						refreshRows={ refreshRows }
 						rowId={ rowId }
@@ -856,8 +888,10 @@ export default function RowProperties( {
 						formatOverrides={ formatOverrides }
 						handleFieldFormatSaved={ handleFieldFormatSaved }
 						handleFieldOptionsSaved={ handleFieldOptionsSaved }
+						isLayoutEditing={ isLayoutEditing }
 						localFormatOverrides={ localFormatOverrides }
 						localOptionOverrides={ localOptionOverrides }
+						onLayoutVisibilityToggle={ onLayoutVisibilityToggle }
 						optionOverrides={ optionOverrides }
 						refreshRows={ refreshRows }
 						rowId={ rowId }

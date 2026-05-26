@@ -756,7 +756,7 @@
 
 	&__property-layout-chip.components-button {
 		position: absolute;
-		inset: 50% auto auto 50%;
+		inset: 50% calc(100% + #{$grid-unit-05}) auto auto;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
@@ -772,7 +772,7 @@
 		cursor: grab;
 		opacity: 0;
 		pointer-events: none;
-		transform: translate(-50%, -50%);
+		transform: translateY(-50%);
 		transition:
 			background 120ms ease,
 			color 120ms ease,
@@ -801,15 +801,15 @@
 		}
 	}
 
-	&__property:hover &__property-layout-chip,
-	&__property:focus-within &__property-layout-chip {
+	&__property--layout-editing &__property-layout-chip {
 		opacity: 1;
 		pointer-events: auto;
 	}
 
-	&__property:hover &__property-type-icon,
-	&__property:focus-within &__property-type-icon {
-		opacity: 0;
+	&__property:hover &__property-layout-chip,
+	&__property:focus-within &__property-layout-chip {
+		opacity: 1;
+		pointer-events: auto;
 	}
 
 	&__property-label-text {
@@ -821,6 +821,9 @@
 
 	&__property-value {
 		position: relative;
+		display: flex;
+		align-items: flex-start;
+		gap: $grid-unit-05;
 		min-width: 0;
 		color: var(--cortext-row-detail-text);
 
@@ -882,6 +885,21 @@
 		}
 	}
 
+	&__property-value-content {
+		flex: 1 1 auto;
+		min-width: 0;
+	}
+
+	&__property--layout-editing &__property-value-content {
+		opacity: 0.08;
+		pointer-events: none;
+		user-select: none;
+	}
+
+	&__property--layout-editing.is-hidden &__property-value-content {
+		opacity: 0.04;
+	}
+
 	&__property-label-actions .cortext-rename-field-inline .components-base-control,
 	&__property-label-actions .cortext-rename-field-inline .components-base-control__field {
 		width: 100%;
@@ -937,6 +955,31 @@
 		.cortext-row-detail__readonly {
 			color: inherit;
 			cursor: inherit;
+		}
+	}
+
+	&__property-visibility.components-button {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		flex: 0 0 $grid-unit-30;
+		width: $grid-unit-30;
+		min-width: $grid-unit-30;
+		height: $grid-unit-30;
+		min-height: $grid-unit-30;
+		margin: 0;
+		padding: 0;
+		border: 0;
+		border-radius: 4px;
+		background: transparent;
+		box-shadow: none;
+		color: var(--cortext-row-detail-muted);
+
+		&:hover:not(:disabled),
+		&:focus-visible:not(:disabled) {
+			background: var(--cortext-row-detail-pressed-surface);
+			box-shadow: none;
+			color: var(--cortext-row-detail-text);
 		}
 	}
 
