@@ -768,7 +768,7 @@
 		border-radius: $grid-unit-30;
 		background: transparent;
 		box-shadow: none;
-		color: var(--cortext-row-detail-layout-control-color, var(--cortext-row-detail-muted));
+		color: var(--cortext-row-detail-muted);
 		cursor: grab;
 		opacity: 0;
 		pointer-events: none;
@@ -803,12 +803,6 @@
 	&__property--layout-editing &__property-layout-chip {
 		opacity: 1;
 		pointer-events: auto;
-	}
-
-	&__property--layout-editing {
-		--cortext-row-detail-layout-control-color: currentcolor;
-
-		color: var(--cortext-row-detail-text);
 	}
 
 	&__property:hover &__property-layout-chip,
@@ -901,6 +895,28 @@
 		opacity: 0.12;
 	}
 
+	&__property-hidden-separator {
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-10;
+		min-height: $grid-unit-30;
+		margin: $grid-unit-05 0 0;
+		padding: 0 $grid-unit-05;
+		color: var(--cortext-row-detail-muted);
+		font-size: 11px;
+		font-weight: 400;
+		line-height: 1.3;
+		text-transform: none;
+
+		&::before,
+		&::after {
+			content: "";
+			flex: 1 1 auto;
+			height: $border-width;
+			background: var(--cortext-row-detail-border);
+		}
+	}
+
 	&__property-label-actions .cortext-rename-field-inline .components-base-control,
 	&__property-label-actions .cortext-rename-field-inline .components-base-control__field {
 		width: 100%;
@@ -947,7 +963,7 @@
 		color: var(--cortext-row-detail-muted);
 	}
 
-	&__property--readonly:not(.cortext-row-detail__property--layout-editing) {
+	&__property--readonly {
 		color: var(--cortext-row-detail-muted);
 		cursor: default;
 
@@ -975,13 +991,13 @@
 		border-radius: 4px;
 		background: transparent;
 		box-shadow: none;
-		color: var(--cortext-row-detail-layout-control-color, var(--cortext-row-detail-muted));
+		color: var(--cortext-row-detail-muted);
 		opacity: 0.62;
 
 		&.is-pressed {
 			background: transparent;
 			box-shadow: none;
-			color: var(--cortext-row-detail-layout-control-color, var(--cortext-row-detail-muted));
+			color: var(--cortext-row-detail-muted);
 		}
 
 		&:hover:not(:disabled),

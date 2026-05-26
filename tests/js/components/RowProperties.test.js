@@ -16,7 +16,7 @@ jest.mock( '@wordpress/components', () => {
 	const { createElement, forwardRef } = require( '@wordpress/element' );
 
 	const Button = forwardRef(
-		( { children, label, onClick, ...props }, ref ) =>
+		( { children, isPressed, label, onClick, ...props }, ref ) =>
 			createElement(
 				'button',
 				{
@@ -532,5 +532,34 @@ describe( 'RowProperties', () => {
 		expect(
 			screen.getByRole( 'button', { name: 'Ada Lovelace' } )
 		).toBeInTheDocument();
+	} );
+
+	it( 'separates hidden fields while editing the layout', () => {
+		render(
+			<RowProperties
+				isLayoutEditing
+				fields={ [
+					{
+						id: 'field-7',
+						label: 'Status',
+						cortextFieldType: 'text',
+						editable: true,
+						cortextDetailVisible: true,
+					},
+					{
+						id: 'field-8',
+						label: 'Archived',
+						cortextFieldType: 'text',
+						editable: true,
+						cortextDetailVisible: false,
+					},
+				] }
+				row={ {} }
+			/>
+		);
+
+		expect( screen.getByText( 'Hidden fields' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Status' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Archived' ) ).toBeInTheDocument();
 	} );
 } );
