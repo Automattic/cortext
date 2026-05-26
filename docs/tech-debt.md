@@ -26,13 +26,13 @@ Full-page collection creation hit the same schema-cache edge. A new collection r
 
 **Where.** `src/hooks/useCollectionRows.js`, `src/hooks/useCollectionRowsByIds.js`, `src/hooks/rowInvalidation.js`, `src/hooks/documentTrashInvalidation.js`, and `src/hooks/useTrashedDocuments.js`, with call sites in `src/components/CollectionDataViews.js` (`saveRowField`, `onCreated`, row trash), `src/components/SidebarTrash.js`, `src/router/EntityRoute.js`, `src/blocks/data-view/edit.js`, `src/components/Sidebar.js` (post-type entity-config invalidation after collection creation), and `src/components/relations/RelationEditor.js` (paged target-row search and selected-row label lookup).
 
-**Solution.** Switch to `useEntityRecords('postType', \`crtxt\_${slug}\`, query)`plus`saveEntityRecord`for writes once the remaining query shapes can be expressed there.`core-data` would then own caching, race protection, and post-mutation invalidation. Knock-on workarounds it deletes:
+**Solution.** Switch to `useEntityRecords('postType', \`crtxt_${slug}\`, query)` plus `saveEntityRecord` for writes once the remaining query shapes can be expressed there. `core-data` would then own caching, race protection, and post-mutation invalidation. Knock-on workarounds it deletes:
 
--   The `refresh()` handles and invalidation events exist only because rows aren't reactive.
--   Half of `RowMutationContext` (also driven by #1) exists because cells can't reach a `core-data` store that isn't there.
--   `onCreated` runs optimistic `lastPage = ceil((totalItems+1)/perPage)` arithmetic against possibly stale `paginationInfo`. With reactive pagination we'd watch `totalPages` in an effect.
--   The server/client planner becomes normal resolver queries instead of a local fetch policy.
--   Relation label lookup becomes a normal entity-record resolver instead of a one-off include query.
+- The `refresh()` handles and invalidation events exist only because rows aren't reactive.
+- Half of `RowMutationContext` (also driven by #1) exists because cells can't reach a `core-data` store that isn't there.
+- `onCreated` still runs optimistic `lastPage = ceil((totalItems+1)/perPage)` arithmetic for unconstrained views. With reactive pagination we'd watch `totalPages` instead of guessing.
+- The server/client planner becomes normal resolver queries instead of a local fetch policy.
+- Relation label lookup becomes a normal entity-record resolver instead of a one-off include query.
 
 Worth a small spike before committing. Dynamic post-type discovery also needs a real answer: either `core-data` learns about new row CPTs after collection creation, or each collection-creation path keeps the post-type entity-config invalidation nearby.
 

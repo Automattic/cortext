@@ -48,6 +48,7 @@ import {
 	adaptViewForDataViews,
 	mergeDataViewsChange,
 } from './dataViewAdapter';
+import { nextViewAfterRowCreated } from './dataViewCreation';
 import { filterSortAndPaginateWithGroups } from './groupedFilters';
 import TableCalculationsFooter from './TableCalculationsFooter';
 import ColumnHeaderActions from './fields/ColumnHeaderActions';
@@ -579,29 +580,19 @@ export default function CollectionDataViews( {
 
 	const onCreated = useCallback(
 		( created ) => {
-			// Without an explicit sort, rows use their stored order and new
-			// rows append to the end. Move to the last page before refreshing
-			// so the new row is visible instead of sending the user back to
-			// page 1. With a user-chosen sort, the new row could land anywhere;
-			// refresh in place and leave the view alone.
+			// In an unconstrained view, rows append to the stored order, so the
+			// new row belongs on the last page. Search, filters, and explicit
+			// sorts make that guess unsafe; refresh in place instead.
 			//
 			// tech-debt.md#2: lastPage arithmetic is optimistic against
 			// possibly stale paginationInfo. With rows in core-data this
 			// becomes a useEffect on totalPages.
-			const hasExplicitSort = Boolean( view?.sort?.field );
-			if ( ! hasExplicitSort ) {
-				const perPage = view?.perPage ?? 25;
-				const expectedTotal =
-					( activePaginationInfo?.totalItems ?? 0 ) + 1;
-				const lastPage = Math.max(
-					1,
-					Math.ceil( expectedTotal / perPage )
-				);
-				if ( ( view?.page ?? 1 ) !== lastPage ) {
-					onChangeView( { ...view, page: lastPage } );
-				} else {
-					refresh();
-				}
+			const nextView = nextViewAfterRowCreated(
+				view,
+				activePaginationInfo
+			);
+			if ( nextView !== view ) {
+				onChangeView( nextView );
 			} else {
 				refresh();
 			}

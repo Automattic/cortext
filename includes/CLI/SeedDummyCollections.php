@@ -3486,7 +3486,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 							$collection_ids['albums'] ?? 0,
 							array(
 								'type'       => 'grid',
-								'perPage'    => 12,
+								'perPage'    => 25,
 								'mediaField' => 'cover',
 							)
 						),
