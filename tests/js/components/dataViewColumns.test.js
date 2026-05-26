@@ -329,6 +329,107 @@ describe( 'normalizeView', () => {
 		expect( next.layout.density ).toBe( 'compact' );
 	} );
 
+	it( 'prunes stale display field ids', () => {
+		const view = {
+			...baseView(),
+			titleField: TITLE_FIELD_ID,
+			mediaField: 'field-removed',
+			descriptionField: 'field-1',
+		};
+		const next = normalizeView(
+			view,
+			new Set( [ TITLE_FIELD_ID, 'field-1' ] )
+		);
+
+		expect( next.titleField ).toBe( TITLE_FIELD_ID );
+		expect( next.descriptionField ).toBe( 'field-1' );
+		expect( next.mediaField ).toBeUndefined();
+	} );
+
+	it( 'prunes stale grid badge fields', () => {
+		const view = {
+			...baseView(),
+			type: 'grid',
+			layout: {
+				previewSize: 290,
+				badgeFields: [ 'field-1', 'field-removed' ],
+			},
+		};
+		const next = normalizeView(
+			view,
+			new Set( [ TITLE_FIELD_ID, 'field-1' ] )
+		);
+
+		expect( next.layout ).toEqual( {
+			previewSize: 290,
+			badgeFields: [ 'field-1' ],
+		} );
+	} );
+
+	it( 'prunes stale fields from layoutByType buckets', () => {
+		const view = {
+			...baseView(),
+			layoutByType: {
+				table: {
+					density: 'compact',
+					styles: {
+						'field-1': { width: 200 },
+						'field-removed': { width: 240 },
+					},
+				},
+				grid: {
+					previewSize: 290,
+					badgeFields: [ 'field-1', 'field-removed' ],
+				},
+				list: {},
+				gallery: { something: 'ignored' },
+			},
+		};
+		const next = normalizeView(
+			view,
+			new Set( [ TITLE_FIELD_ID, 'field-1' ] )
+		);
+
+		expect( next.layoutByType ).toEqual( {
+			table: {
+				density: 'compact',
+				styles: {
+					'field-1': { width: 200 },
+				},
+			},
+			grid: {
+				previewSize: 290,
+				badgeFields: [ 'field-1' ],
+			},
+			list: {},
+		} );
+	} );
+
+	it( 'prunes stale fields from fieldsByType buckets', () => {
+		const view = {
+			...baseView(),
+			fieldsByType: {
+				grid: [
+					'field-1',
+					TITLE_FIELD_ID,
+					'field-removed',
+					'field-1',
+				],
+				list: [ 'field-removed' ],
+				table: [ 'field-1' ],
+			},
+		};
+		const next = normalizeView(
+			view,
+			new Set( [ TITLE_FIELD_ID, 'field-1' ] )
+		);
+
+		expect( next.fieldsByType ).toEqual( {
+			grid: [ 'field-1' ],
+			list: [],
+		} );
+	} );
+
 	it( 'keeps calculations for hidden fields that still exist', () => {
 		const view = {
 			...baseView(),

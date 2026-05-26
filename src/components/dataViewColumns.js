@@ -8,8 +8,16 @@
 
 import { sanitizeCalculations } from './tableCalculations';
 import { hasSystemFieldIcon } from './fields/systemFieldIconIds';
+import {
+	DISPLAY_FIELD_KEYS,
+	sanitizeDisplayFieldKeys,
+	sanitizeFieldsByType,
+	sanitizeLayoutByType,
+	sanitizeLayoutForFields,
+} from './dataViewViewState';
 
 export const TITLE_FIELD_ID = 'title';
+export const COVER_FIELD_ID = 'cover';
 export const GHOST_FIELD_ID = '__add_field';
 export const MANUAL_SORT_ID = 'manual';
 export const MAX_COLUMN_WIDTH = 640;
@@ -59,23 +67,6 @@ export function clampWidth( width, fieldType, fieldId ) {
 		return min;
 	}
 	return Math.max( min, Math.min( MAX_COLUMN_WIDTH, Math.round( value ) ) );
-}
-
-// Sanitize-only clamp used by normalizeView when reading persisted widths.
-// Guards numeric widths against negatives or absurd values from a hand-edited
-// block attribute, but preserves CSS string widths supported by DataViews
-// (for example `240px` or `20ch`). It also doesn't enforce per-type minimums
-// — those evolve over time and shouldn't quietly rewrite saves on render.
-function sanitizeWidth( width ) {
-	if ( typeof width === 'string' ) {
-		return width;
-	}
-
-	const value = Number( width );
-	if ( ! Number.isFinite( value ) ) {
-		return 0;
-	}
-	return Math.max( 0, Math.min( MAX_COLUMN_WIDTH, Math.round( value ) ) );
 }
 
 function sameShallowObject( a, b ) {
@@ -149,29 +140,20 @@ export function normalizeView( view, validIds, options = {} ) {
 	}
 
 	const layout = view?.layout ?? {};
-	const styles = layout.styles ?? {};
-	const nextStyles = {};
-	let stylesChanged = false;
-	for ( const id of Object.keys( styles ) ) {
-		if ( ! validSet.has( id ) ) {
-			stylesChanged = true;
-			continue;
-		}
-		const entry = styles[ id ];
-		if ( ! entry || typeof entry !== 'object' ) {
-			stylesChanged = true;
-			continue;
-		}
-		const next = { ...entry };
-		if ( entry.width !== undefined ) {
-			const clamped = sanitizeWidth( entry.width );
-			if ( clamped !== entry.width ) {
-				stylesChanged = true;
-			}
-			next.width = clamped;
-		}
-		nextStyles[ id ] = next;
-	}
+	const layoutResult = sanitizeLayoutForFields( layout, validSet, {
+		maxColumnWidth: MAX_COLUMN_WIDTH,
+	} );
+	const layoutByTypeResult = sanitizeLayoutByType(
+		view?.layoutByType,
+		validSet,
+		{ maxColumnWidth: MAX_COLUMN_WIDTH }
+	);
+	const fieldsByTypeResult = sanitizeFieldsByType(
+		view?.fieldsByType,
+		validSet,
+		{ titleId: TITLE_FIELD_ID }
+	);
+	const displayFieldResult = sanitizeDisplayFieldKeys( view, validSet );
 
 	const fieldsChanged =
 		currentFields.length !== nextFields.length ||
@@ -195,23 +177,43 @@ export function normalizeView( view, validIds, options = {} ) {
 	const calculationsChanged =
 		( rawCalculations !== undefined && ! hasCalculationObject ) ||
 		! sameShallowObject( currentCalculations, nextCalculations );
+	const layoutChanged =
+		layoutResult.changed ||
+		layoutByTypeResult.changed ||
+		fieldsByTypeResult.changed ||
+		displayFieldResult.changed;
 
-	if ( ! fieldsChanged && ! stylesChanged && ! calculationsChanged ) {
+	if ( ! fieldsChanged && ! layoutChanged && ! calculationsChanged ) {
 		return view;
-	}
-
-	const nextLayout = { ...layout };
-	if ( Object.keys( nextStyles ).length > 0 ) {
-		nextLayout.styles = nextStyles;
-	} else {
-		delete nextLayout.styles;
 	}
 
 	const nextView = {
 		...view,
 		fields: nextFields,
-		layout: nextLayout,
+		layout: layoutResult.layout,
 	};
+	for ( const key of DISPLAY_FIELD_KEYS ) {
+		if (
+			Object.prototype.hasOwnProperty.call(
+				displayFieldResult.values,
+				key
+			)
+		) {
+			nextView[ key ] = displayFieldResult.values[ key ];
+		} else {
+			delete nextView[ key ];
+		}
+	}
+	if ( layoutByTypeResult.layoutByType !== undefined ) {
+		nextView.layoutByType = layoutByTypeResult.layoutByType;
+	} else {
+		delete nextView.layoutByType;
+	}
+	if ( fieldsByTypeResult.fieldsByType !== undefined ) {
+		nextView.fieldsByType = fieldsByTypeResult.fieldsByType;
+	} else {
+		delete nextView.fieldsByType;
+	}
 	if ( Object.keys( nextCalculations ).length > 0 ) {
 		nextView.calculations = nextCalculations;
 	} else {

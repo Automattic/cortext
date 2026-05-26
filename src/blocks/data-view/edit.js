@@ -89,6 +89,15 @@ function createDefaultView() {
 		page: 1,
 		search: '',
 		layout: { density: 'compact' },
+		layoutByType: {
+			table: { density: 'compact' },
+			grid: {},
+			list: {},
+		},
+		fieldsByType: {
+			grid: [],
+			list: [],
+		},
 		rowDetailMode: 'side',
 	};
 }
@@ -344,6 +353,10 @@ function CollectionInspectorControls( {
 	} = useCollectionFieldsContext();
 	const isCollectionValid = ! isResolving && collectionId && collection;
 	const visibleFieldIds = view?.fields ?? [];
+	const tableLayout = {
+		...( view?.layoutByType?.table ?? {} ),
+		...( view?.type === 'table' ? view?.layout ?? {} : {} ),
+	};
 
 	// Checked fields follow the table order. Unchecked fields keep schema order.
 	const visibleFieldsInOrder = visibleFieldIds
@@ -517,14 +530,24 @@ function CollectionInspectorControls( {
 						) }
 						<SelectControl
 							label={ __( 'Density', 'cortext' ) }
-							value={ view?.layout?.density ?? 'compact' }
+							value={ tableLayout.density ?? 'compact' }
 							options={ DENSITY_OPTIONS }
 							onChange={ ( density ) =>
 								onChangeView( {
 									...view,
-									layout: {
-										...( view?.layout ?? {} ),
-										density,
+									layout:
+										view?.type === 'table'
+											? {
+													...( view?.layout ?? {} ),
+													density,
+											  }
+											: view?.layout,
+									layoutByType: {
+										...( view?.layoutByType ?? {} ),
+										table: {
+											...tableLayout,
+											density,
+										},
 									},
 								} )
 							}

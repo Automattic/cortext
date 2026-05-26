@@ -287,14 +287,18 @@ export function buildQueryArgs( collectionId, view, fields = [] ) {
 
 // Builds the fields[] projection for the server. Return null when sending it
 // would not trim the row payload: before the visibility seeder fills
-// `view.fields`, or after it has selected every custom field. We keep the
-// request key the same for both states so seeding does not cause a second fetch.
+// `view.fields`, or after it has selected every custom field. Grid/list can
+// request layout-specific fields without adding them to the table columns.
 // Sorting also keeps column reorders from changing the key.
 function projectedFields( view, fields ) {
 	if ( ! Array.isArray( view?.fields ) || view.fields.length === 0 ) {
 		return null;
 	}
 	const requested = new Set( view.fields );
+	const activeLayoutFields = view?.fieldsByType?.[ view?.type ];
+	if ( Array.isArray( activeLayoutFields ) ) {
+		activeLayoutFields.forEach( ( id ) => requested.add( id ) );
+	}
 	const customFieldIds = fields
 		.filter( ( f ) => typeof f?.id === 'string' && /^field-/.test( f.id ) )
 		.map( ( f ) => f.id );
@@ -304,7 +308,7 @@ function projectedFields( view, fields ) {
 	if ( ! skipsCustomField ) {
 		return null;
 	}
-	return [ ...view.fields ].sort();
+	return [ ...requested ].sort();
 }
 
 function buildServerQueryArgs( collectionId, view, filters = [], fields = [] ) {
