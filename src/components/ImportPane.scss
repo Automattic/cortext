@@ -2,11 +2,14 @@
 @use "@wordpress/base-styles/variables" as *;
 
 .cortext-import-pane {
+	box-sizing: border-box;
 	flex: 1 1 auto;
 	min-height: 0;
 	height: 100%;
-	padding: $grid-unit-30 $grid-unit-40;
-	margin-block-end: $grid-unit-40;
+	// Padding stays inside the scroll box; together with `border-box`
+	// above, `height: 100%` matches the parent exactly and the bottom of
+	// the scroll content stays reachable.
+	padding: $grid-unit-30 $grid-unit-40 $grid-unit-40;
 	overflow: auto;
 
 	> * + * {
