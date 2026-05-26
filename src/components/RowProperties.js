@@ -593,6 +593,7 @@ function RowProperty( {
 	handleFieldOptionsSaved,
 	isLayoutEditing,
 	isDragging,
+	isCollapsedForHiddenDrop,
 	localFormatOverrides,
 	localOptionOverrides,
 	onLayoutVisibilityToggle,
@@ -693,7 +694,10 @@ function RowProperty( {
 					? ' cortext-row-detail__property--layout-editing'
 					: '' ) +
 				( isVisibleInLayout ? '' : ' is-hidden' ) +
-				( isDragging ? ' is-dragging' : '' )
+				( isDragging ? ' is-dragging' : '' ) +
+				( isCollapsedForHiddenDrop
+					? ' is-collapsed-for-hidden-drop'
+					: '' )
 			}
 		>
 			<div className="cortext-row-detail__property-label">
@@ -806,6 +810,7 @@ export default function RowProperties( {
 	const [ localOptionOverrides, setLocalOptionOverrides ] = useState( {} );
 	const [ localFormatOverrides, setLocalFormatOverrides ] = useState( {} );
 	const [ activeLayoutFieldId, setActiveLayoutFieldId ] = useState( null );
+	const [ activeLayoutOverId, setActiveLayoutOverId ] = useState( null );
 	const handleFieldOptionsSaved = useCallback(
 		( recordId, nextOptions ) => {
 			const fieldId = `field-${ recordId }`;
@@ -911,6 +916,10 @@ export default function RowProperties( {
 		typeof onLayoutReorder === 'function' && propertyFields.length > 1;
 	const handleDragStart = useCallback( ( event ) => {
 		setActiveLayoutFieldId( event.active?.id ?? null );
+		setActiveLayoutOverId( null );
+	}, [] );
+	const handleDragOver = useCallback( ( event ) => {
+		setActiveLayoutOverId( event.over?.id ?? null );
 	}, [] );
 	const sortableIds = useMemo( () => {
 		const ids = propertyFields.flatMap( ( field, index ) => {
@@ -928,6 +937,7 @@ export default function RowProperties( {
 		( event ) => {
 			const { active, over } = event;
 			setActiveLayoutFieldId( null );
+			setActiveLayoutOverId( null );
 			if ( ! over || active.id === over.id ) {
 				return;
 			}
@@ -937,6 +947,7 @@ export default function RowProperties( {
 	);
 	const handleDragCancel = useCallback( () => {
 		setActiveLayoutFieldId( null );
+		setActiveLayoutOverId( null );
 	}, [] );
 
 	const updateRelation = useCallback(
@@ -985,6 +996,11 @@ export default function RowProperties( {
 				formatOverrides={ formatOverrides }
 				handleFieldFormatSaved={ handleFieldFormatSaved }
 				handleFieldOptionsSaved={ handleFieldOptionsSaved }
+				isCollapsedForHiddenDrop={
+					! hasHiddenFields &&
+					field.id === activeLayoutFieldId &&
+					activeLayoutOverId === HIDDEN_PROPERTIES_DROP_TARGET
+				}
 				isLayoutEditing={ isLayoutEditing }
 				localFormatOverrides={ localFormatOverrides }
 				localOptionOverrides={ localOptionOverrides }
@@ -1005,6 +1021,7 @@ export default function RowProperties( {
 				formatOverrides={ formatOverrides }
 				handleFieldFormatSaved={ handleFieldFormatSaved }
 				handleFieldOptionsSaved={ handleFieldOptionsSaved }
+				isCollapsedForHiddenDrop={ false }
 				isLayoutEditing={ isLayoutEditing }
 				localFormatOverrides={ localFormatOverrides }
 				localOptionOverrides={ localOptionOverrides }
@@ -1056,6 +1073,7 @@ export default function RowProperties( {
 			collisionDetection={ rowPropertiesCollisionDetection }
 			onDragCancel={ handleDragCancel }
 			onDragEnd={ handleDragEnd }
+			onDragOver={ handleDragOver }
 			onDragStart={ handleDragStart }
 		>
 			<SortableContext

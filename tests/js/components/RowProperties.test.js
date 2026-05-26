@@ -767,6 +767,48 @@ describe( 'RowProperties', () => {
 		);
 	} );
 
+	it( 'collapses the source row over the empty hidden fields drop zone', () => {
+		const { container } = render(
+			<RowProperties
+				isLayoutEditing
+				fields={ [
+					{
+						id: 'field-7',
+						label: 'Status',
+						cortextFieldType: 'text',
+						editable: true,
+						cortextDetailVisible: true,
+					},
+					{
+						id: 'field-8',
+						label: 'Owner',
+						cortextFieldType: 'text',
+						editable: true,
+						cortextDetailVisible: true,
+					},
+				] }
+				onLayoutReorder={ jest.fn() }
+				row={ {} }
+			/>
+		);
+
+		act( () => {
+			mockDndProps.onDragStart( {
+				active: { id: 'field-7' },
+			} );
+			mockDndProps.onDragOver( {
+				active: { id: 'field-7' },
+				over: { id: HIDDEN_PROPERTIES_DROP_TARGET },
+			} );
+		} );
+
+		expect(
+			container.querySelector(
+				'.cortext-row-detail__property.is-collapsed-for-hidden-drop'
+			)
+		).toHaveTextContent( 'Status' );
+	} );
+
 	it( 'prefers the hidden fields drop zone under the pointer', () => {
 		const hiddenCollision = { id: HIDDEN_PROPERTIES_DROP_TARGET };
 		const fallbackCollision = { id: 'field-8' };
