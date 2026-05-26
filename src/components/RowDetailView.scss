@@ -977,7 +977,7 @@
 
 	&__property-drag-overlay {
 		background: var(--cortext-row-detail-bg, #fff);
-		box-shadow: 0 0 0 $border-width var(--cortext-row-detail-border);
+		box-shadow: inset 0 0 0 $border-width var(--cortext-row-detail-border);
 		color: var(--cortext-row-detail-text);
 		pointer-events: none;
 
