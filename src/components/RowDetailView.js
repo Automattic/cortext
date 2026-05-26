@@ -16,6 +16,7 @@ import {
 	closeSmall,
 	drawerRight,
 	fullscreen,
+	pencil,
 	pin,
 	seen,
 	square,
@@ -144,6 +145,7 @@ function DetailShell( {
 	onNext,
 	onPrevious,
 	onRetryPending,
+	onRequestLayoutEdit,
 	onTogglePin,
 	saveError,
 	canGoNext,
@@ -182,6 +184,12 @@ function DetailShell( {
 									( current ) => ! current
 								)
 							}
+						/>
+						<Button
+							className="cortext-row-detail__toolbar-button cortext-row-detail__toolbar-button--icon"
+							icon={ pencil }
+							label={ __( 'Edit layout', 'cortext' ) }
+							onClick={ onRequestLayoutEdit }
 						/>
 					</div>
 					<div className="cortext-row-detail__toolbar-group">
@@ -346,10 +354,15 @@ export default function RowDetailView( {
 		( resolvedDetail?.postType === postType ? resolvedDetail : null );
 	const activeDetailKey = detailKeyFor( activeDetail );
 	const [ arePropertiesVisible, setArePropertiesVisible ] = useState( true );
+	const [ layoutEditRequest, setLayoutEditRequest ] = useState( 0 );
 	const togglePropertiesVisible = useCallback(
 		() => setArePropertiesVisible( ( current ) => ! current ),
 		[]
 	);
+	const requestLayoutEdit = useCallback( () => {
+		setArePropertiesVisible( true );
+		setLayoutEditRequest( ( current ) => current + 1 );
+	}, [] );
 	const [ detailPanes, setDetailPanes ] = useState( () =>
 		activeDetail && activeDetailKey
 			? [
@@ -518,6 +531,7 @@ export default function RowDetailView( {
 				onModeChange={ onModeChange }
 				onNext={ onNext }
 				onPrevious={ onPrevious }
+				onRequestLayoutEdit={ requestLayoutEdit }
 				onRetryPending={ onRetryPending }
 				onTogglePin={ onTogglePin }
 				saveError={ canUseRowControls ? saveError : null }
@@ -585,6 +599,9 @@ export default function RowDetailView( {
 										}
 										isActive={ isApiActive }
 										isHidden={ isHiddenPane }
+										layoutEditRequest={
+											isApiActive ? layoutEditRequest : 0
+										}
 										mutationContext={ mutationContext }
 										onApi={ onApi }
 										onPaneReady={ onPaneReady }

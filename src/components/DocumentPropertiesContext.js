@@ -16,6 +16,7 @@ export function DocumentPropertiesProvider( {
 	fallbackRecord,
 	isResolving = false,
 	isVisible = true,
+	layoutEditRequest = 0,
 	onToggleVisible,
 	children,
 } ) {
@@ -29,6 +30,7 @@ export function DocumentPropertiesProvider( {
 			fallbackRecord,
 			isResolving,
 			isVisible,
+			layoutEditRequest,
 			onToggleVisible,
 		} ),
 		[
@@ -40,6 +42,7 @@ export function DocumentPropertiesProvider( {
 			fallbackRecord,
 			isResolving,
 			isVisible,
+			layoutEditRequest,
 			onToggleVisible,
 		]
 	);

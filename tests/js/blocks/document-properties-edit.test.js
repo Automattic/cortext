@@ -158,6 +158,7 @@ beforeEach( () => {
 		fallbackRecord: { id: 123 },
 		isResolving: false,
 		isVisible: true,
+		layoutEditRequest: 0,
 		onToggleVisible: jest.fn(),
 	};
 } );
@@ -215,6 +216,35 @@ describe( 'document-properties Edit layout mode', () => {
 				rowId: 123,
 			} )
 		);
+	} );
+
+	it( 'enters layout editing from a toolbar request', async () => {
+		const { rerender } = render( <Edit /> );
+
+		mockContext = { ...mockContext, layoutEditRequest: 1 };
+		rerender( <Edit /> );
+
+		expect(
+			await screen.findByRole( 'button', { name: 'Save layout' } )
+		).toBeInTheDocument();
+		expect( mockRowPropertiesProps ).toEqual(
+			expect.objectContaining( { isLayoutEditing: true } )
+		);
+	} );
+
+	it( 'shows properties before editing from a toolbar request', async () => {
+		const onToggleVisible = jest.fn();
+		mockContext = {
+			...mockContext,
+			isVisible: false,
+			layoutEditRequest: 1,
+			onToggleVisible,
+		};
+
+		render( <Edit /> );
+
+		await screen.findByRole( 'button', { name: 'Save layout' } );
+		expect( onToggleVisible ).toHaveBeenCalled();
 	} );
 
 	it( 'shows hidden fields at the end while editing layout', () => {

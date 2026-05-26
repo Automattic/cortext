@@ -7,7 +7,7 @@ import {
 	store as interfaceStore,
 } from '@wordpress/interface';
 import { Button } from '@wordpress/components';
-import { cog, seen, unseen } from '@wordpress/icons';
+import { cog, pencil, seen, unseen } from '@wordpress/icons';
 import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
 
 // Editor-surface stylesheets. Imported via a sibling SCSS file (not
@@ -43,6 +43,7 @@ function DocumentActions( {
 	topBarActions,
 	hasProperties,
 	arePropertiesVisible,
+	onEditPropertiesLayout,
 	onTogglePropertiesVisible,
 } ) {
 	const { enableComplementaryArea, disableComplementaryArea } =
@@ -77,18 +78,27 @@ function DocumentActions( {
 					<CollectionPublishToggle collectionId={ postId } />
 				) }
 				{ hasProperties ? (
-					<Button
-						className="cortext-document-actions__fields"
-						icon={ arePropertiesVisible ? unseen : seen }
-						size="compact"
-						label={
-							arePropertiesVisible
-								? __( 'Hide fields', 'cortext' )
-								: __( 'Show fields', 'cortext' )
-						}
-						isPressed={ arePropertiesVisible }
-						onClick={ onTogglePropertiesVisible }
-					/>
+					<>
+						<Button
+							className="cortext-document-actions__fields"
+							icon={ arePropertiesVisible ? unseen : seen }
+							size="compact"
+							label={
+								arePropertiesVisible
+									? __( 'Hide fields', 'cortext' )
+									: __( 'Show fields', 'cortext' )
+							}
+							isPressed={ arePropertiesVisible }
+							onClick={ onTogglePropertiesVisible }
+						/>
+						<Button
+							className="cortext-document-actions__fields"
+							icon={ pencil }
+							size="compact"
+							label={ __( 'Edit layout', 'cortext' ) }
+							onClick={ onEditPropertiesLayout }
+						/>
+					</>
 				) : null }
 				<Button
 					className="cortext-document-actions__settings"
@@ -224,10 +234,15 @@ function CanvasEditor( {
 
 	const hasProperties = Array.isArray( fields ) && fields.length > 0;
 	const [ arePropertiesVisible, setArePropertiesVisible ] = useState( true );
+	const [ layoutEditRequest, setLayoutEditRequest ] = useState( 0 );
 	const togglePropertiesVisible = useCallback(
 		() => setArePropertiesVisible( ( current ) => ! current ),
 		[]
 	);
+	const requestPropertiesLayoutEdit = useCallback( () => {
+		setArePropertiesVisible( true );
+		setLayoutEditRequest( ( current ) => current + 1 );
+	}, [] );
 
 	return (
 		<DocumentPropertiesProvider
@@ -245,6 +260,7 @@ function CanvasEditor( {
 			// row right before `flushNow()` saves that deletion.
 			isResolving={ !! pendingPost }
 			isVisible={ arePropertiesVisible }
+			layoutEditRequest={ layoutEditRequest }
 			onToggleVisible={ togglePropertiesVisible }
 		>
 			<DocumentActions
@@ -254,6 +270,7 @@ function CanvasEditor( {
 				topBarActions={ topBarActions }
 				hasProperties={ hasProperties }
 				arePropertiesVisible={ arePropertiesVisible }
+				onEditPropertiesLayout={ requestPropertiesLayoutEdit }
 				onTogglePropertiesVisible={ togglePropertiesVisible }
 			/>
 			<InterfaceSkeleton

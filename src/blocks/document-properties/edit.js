@@ -57,6 +57,7 @@ export default function Edit() {
 		fallbackRecord,
 		isResolving = false,
 		isVisible: contextIsVisible = true,
+		layoutEditRequest = 0,
 		onToggleVisible,
 	} = ctx ?? {};
 	const isVisible = contextIsVisible !== false;
@@ -67,6 +68,7 @@ export default function Edit() {
 		useState( null );
 	const [ saveError, setSaveError ] = useState( null );
 	const propertiesContentRef = useRef( null );
+	const lastLayoutEditRequestRef = useRef( 0 );
 	const { saveEntityRecord } = useDispatch( coreStore );
 	// RowProperties still expects the row-detail ancestor used by its nested
 	// SCSS rules. The collapsed stub does not render RowProperties, so it can
@@ -148,6 +150,28 @@ export default function Edit() {
 		setSaveError( null );
 		setIsEditingLayout( true );
 	}, [ currentEntries, optimisticEntries, rememberPropertiesHeight ] );
+	useEffect( () => {
+		if (
+			! layoutEditRequest ||
+			lastLayoutEditRequestRef.current === layoutEditRequest ||
+			isResolving ||
+			! canEditLayout
+		) {
+			return;
+		}
+		lastLayoutEditRequestRef.current = layoutEditRequest;
+		if ( ! isVisible && onToggleVisible ) {
+			onToggleVisible();
+		}
+		startEditingLayout();
+	}, [
+		canEditLayout,
+		isResolving,
+		isVisible,
+		layoutEditRequest,
+		onToggleVisible,
+		startEditingLayout,
+	] );
 	const cancelEditingLayout = useCallback( () => {
 		setDraftEntries( null );
 		setSaveError( null );
