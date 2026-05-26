@@ -106,6 +106,7 @@ function DetailPaneContent( {
 	layoutEditRequest,
 	mutationContext,
 	onApi,
+	onLayoutEditingChange,
 	onPaneReady,
 	onRestored,
 	onSaved,
@@ -130,6 +131,7 @@ function DetailPaneContent( {
 			fallbackRecord={ row }
 			isVisible={ propertiesVisible }
 			layoutEditRequest={ layoutEditRequest }
+			onLayoutEditingChange={ onLayoutEditingChange }
 			onToggleVisible={ onTogglePropertiesVisible }
 		>
 			<EditorBody
@@ -181,6 +183,7 @@ export default function RowEditor( {
 	layoutEditRequest,
 	mutationContext,
 	onApi,
+	onLayoutEditingChange,
 	onPaneReady,
 	onRestored,
 	onSaved,
@@ -212,6 +215,7 @@ export default function RowEditor( {
 						layoutEditRequest={ layoutEditRequest }
 						mutationContext={ mutationContext }
 						onApi={ onApi }
+						onLayoutEditingChange={ onLayoutEditingChange }
 						onPaneReady={ onPaneReady }
 						onRestored={ onRestored }
 						onSaved={ onSaved }

@@ -58,6 +58,7 @@ export default function Edit() {
 		isResolving = false,
 		isVisible: contextIsVisible = true,
 		layoutEditRequest = 0,
+		onLayoutEditingChange,
 		onToggleVisible,
 	} = ctx ?? {};
 	const isVisible = contextIsVisible !== false;
@@ -131,6 +132,9 @@ export default function Edit() {
 			setDraftEntries( null );
 		}
 	}, [ isEditingLayout ] );
+	useEffect( () => {
+		onLayoutEditingChange?.( isEditingLayout );
+	}, [ isEditingLayout, onLayoutEditingChange ] );
 	const rememberPropertiesHeight = useCallback( () => {
 		const height =
 			propertiesContentRef.current?.getBoundingClientRect?.().height;
@@ -150,6 +154,11 @@ export default function Edit() {
 		setSaveError( null );
 		setIsEditingLayout( true );
 	}, [ currentEntries, optimisticEntries, rememberPropertiesHeight ] );
+	const cancelEditingLayout = useCallback( () => {
+		setDraftEntries( null );
+		setSaveError( null );
+		setIsEditingLayout( false );
+	}, [] );
 	useEffect( () => {
 		if (
 			! layoutEditRequest ||
@@ -163,20 +172,21 @@ export default function Edit() {
 		if ( ! isVisible && onToggleVisible ) {
 			onToggleVisible();
 		}
+		if ( isEditingLayout ) {
+			cancelEditingLayout();
+			return;
+		}
 		startEditingLayout();
 	}, [
+		cancelEditingLayout,
 		canEditLayout,
 		isResolving,
+		isEditingLayout,
 		isVisible,
 		layoutEditRequest,
 		onToggleVisible,
 		startEditingLayout,
 	] );
-	const cancelEditingLayout = useCallback( () => {
-		setDraftEntries( null );
-		setSaveError( null );
-		setIsEditingLayout( false );
-	}, [] );
 	const handleInlineLayoutReorder = useCallback(
 		async ( activeField, overField ) => {
 			if ( ! collectionId ) {

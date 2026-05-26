@@ -159,6 +159,7 @@ beforeEach( () => {
 		isResolving: false,
 		isVisible: true,
 		layoutEditRequest: 0,
+		onLayoutEditingChange: jest.fn(),
 		onToggleVisible: jest.fn(),
 	};
 } );
@@ -229,6 +230,47 @@ describe( 'document-properties Edit layout mode', () => {
 		).toBeInTheDocument();
 		expect( mockRowPropertiesProps ).toEqual(
 			expect.objectContaining( { isLayoutEditing: true } )
+		);
+	} );
+
+	it( 'reports layout editing changes to the toolbar', async () => {
+		const onLayoutEditingChange = jest.fn();
+		mockContext = { ...mockContext, onLayoutEditingChange };
+		render( <Edit /> );
+
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Edit layout' } )
+		);
+
+		await waitFor( () =>
+			expect( onLayoutEditingChange ).toHaveBeenCalledWith( true )
+		);
+
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Cancel layout changes' } )
+		);
+
+		await waitFor( () =>
+			expect( onLayoutEditingChange ).toHaveBeenCalledWith( false )
+		);
+	} );
+
+	it( 'toggles layout editing off from a second toolbar request', async () => {
+		const { rerender } = render( <Edit /> );
+
+		mockContext = { ...mockContext, layoutEditRequest: 1 };
+		rerender( <Edit /> );
+
+		await screen.findByRole( 'button', { name: 'Save layout' } );
+
+		mockContext = { ...mockContext, layoutEditRequest: 2 };
+		rerender( <Edit /> );
+
+		expect(
+			await screen.findByRole( 'button', { name: 'Edit layout' } )
+		).toBeInTheDocument();
+		expect( mockRowPropertiesProps ).toEqual(
+			expect.objectContaining( { isLayoutEditing: false } )
 		);
 	} );
 

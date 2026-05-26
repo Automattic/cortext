@@ -17,6 +17,7 @@ export function DocumentPropertiesProvider( {
 	isResolving = false,
 	isVisible = true,
 	layoutEditRequest = 0,
+	onLayoutEditingChange,
 	onToggleVisible,
 	children,
 } ) {
@@ -31,6 +32,7 @@ export function DocumentPropertiesProvider( {
 			isResolving,
 			isVisible,
 			layoutEditRequest,
+			onLayoutEditingChange,
 			onToggleVisible,
 		} ),
 		[
@@ -43,6 +45,7 @@ export function DocumentPropertiesProvider( {
 			isResolving,
 			isVisible,
 			layoutEditRequest,
+			onLayoutEditingChange,
 			onToggleVisible,
 		]
 	);

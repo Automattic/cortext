@@ -138,6 +138,7 @@ function DetailShell( {
 	children,
 	fields,
 	isPinned,
+	isPropertiesLayoutEditing,
 	mode,
 	onClose,
 	onDiscardPending,
@@ -188,7 +189,12 @@ function DetailShell( {
 						<Button
 							className="cortext-row-detail__toolbar-button cortext-row-detail__toolbar-button--icon"
 							icon={ pencil }
-							label={ __( 'Edit layout', 'cortext' ) }
+							label={
+								isPropertiesLayoutEditing
+									? __( 'Stop editing layout', 'cortext' )
+									: __( 'Edit layout', 'cortext' )
+							}
+							isPressed={ isPropertiesLayoutEditing }
 							onClick={ onRequestLayoutEdit }
 						/>
 					</div>
@@ -354,15 +360,19 @@ export default function RowDetailView( {
 		( resolvedDetail?.postType === postType ? resolvedDetail : null );
 	const activeDetailKey = detailKeyFor( activeDetail );
 	const [ arePropertiesVisible, setArePropertiesVisible ] = useState( true );
+	const [ isPropertiesLayoutEditing, setIsPropertiesLayoutEditing ] =
+		useState( false );
 	const [ layoutEditRequest, setLayoutEditRequest ] = useState( 0 );
 	const togglePropertiesVisible = useCallback(
 		() => setArePropertiesVisible( ( current ) => ! current ),
 		[]
 	);
 	const requestLayoutEdit = useCallback( () => {
-		setArePropertiesVisible( true );
+		if ( ! isPropertiesLayoutEditing ) {
+			setArePropertiesVisible( true );
+		}
 		setLayoutEditRequest( ( current ) => current + 1 );
-	}, [] );
+	}, [ isPropertiesLayoutEditing ] );
 	const [ detailPanes, setDetailPanes ] = useState( () =>
 		activeDetail && activeDetailKey
 			? [
@@ -525,6 +535,7 @@ export default function RowDetailView( {
 				canGoPrevious={ canUseRowControls && canGoPrevious }
 				fields={ propertyFields }
 				isPinned={ isPinned }
+				isPropertiesLayoutEditing={ isPropertiesLayoutEditing }
 				mode={ normalizedMode }
 				onClose={ requestClose }
 				onDiscardPending={ onDiscardPending }
@@ -604,6 +615,11 @@ export default function RowDetailView( {
 										}
 										mutationContext={ mutationContext }
 										onApi={ onApi }
+										onLayoutEditingChange={
+											isApiActive
+												? setIsPropertiesLayoutEditing
+												: undefined
+										}
 										onPaneReady={ onPaneReady }
 										onRestored={ onRestored }
 										onSaved={ onSaved }

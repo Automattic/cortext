@@ -43,6 +43,7 @@ function DocumentActions( {
 	topBarActions,
 	hasProperties,
 	arePropertiesVisible,
+	isPropertiesLayoutEditing,
 	onEditPropertiesLayout,
 	onTogglePropertiesVisible,
 } ) {
@@ -95,7 +96,12 @@ function DocumentActions( {
 							className="cortext-document-actions__fields"
 							icon={ pencil }
 							size="compact"
-							label={ __( 'Edit layout', 'cortext' ) }
+							label={
+								isPropertiesLayoutEditing
+									? __( 'Stop editing layout', 'cortext' )
+									: __( 'Edit layout', 'cortext' )
+							}
+							isPressed={ isPropertiesLayoutEditing }
 							onClick={ onEditPropertiesLayout }
 						/>
 					</>
@@ -234,15 +240,19 @@ function CanvasEditor( {
 
 	const hasProperties = Array.isArray( fields ) && fields.length > 0;
 	const [ arePropertiesVisible, setArePropertiesVisible ] = useState( true );
+	const [ isPropertiesLayoutEditing, setIsPropertiesLayoutEditing ] =
+		useState( false );
 	const [ layoutEditRequest, setLayoutEditRequest ] = useState( 0 );
 	const togglePropertiesVisible = useCallback(
 		() => setArePropertiesVisible( ( current ) => ! current ),
 		[]
 	);
 	const requestPropertiesLayoutEdit = useCallback( () => {
-		setArePropertiesVisible( true );
+		if ( ! isPropertiesLayoutEditing ) {
+			setArePropertiesVisible( true );
+		}
 		setLayoutEditRequest( ( current ) => current + 1 );
-	}, [] );
+	}, [ isPropertiesLayoutEditing ] );
 
 	return (
 		<DocumentPropertiesProvider
@@ -261,6 +271,7 @@ function CanvasEditor( {
 			isResolving={ !! pendingPost }
 			isVisible={ arePropertiesVisible }
 			layoutEditRequest={ layoutEditRequest }
+			onLayoutEditingChange={ setIsPropertiesLayoutEditing }
 			onToggleVisible={ togglePropertiesVisible }
 		>
 			<DocumentActions
@@ -270,6 +281,7 @@ function CanvasEditor( {
 				topBarActions={ topBarActions }
 				hasProperties={ hasProperties }
 				arePropertiesVisible={ arePropertiesVisible }
+				isPropertiesLayoutEditing={ isPropertiesLayoutEditing }
 				onEditPropertiesLayout={ requestPropertiesLayoutEdit }
 				onTogglePropertiesVisible={ togglePropertiesVisible }
 			/>
