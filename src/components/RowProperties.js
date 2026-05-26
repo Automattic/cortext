@@ -651,11 +651,10 @@ function SortableRowProperty( props ) {
  *
  * @param {Object}   props
  * @param {number}   props.collectionId The row's parent collection ID.
- * @param {Array}    props.fields       The collection field definitions for this row.
- * @param {Function} props.onLayoutReorder Callback used for inline row-property reordering.
- * @param {Object}   [props.row]        Optional fallback row record (used for
- *                                      read-only fields that aren't tracked by the
- *                                      editor store, e.g. relations and rollups).
+ * @param {Array}    props.fields       Fields shown for this row.
+ * @param {Function} props.onLayoutReorder Reorders fields from the row properties list.
+ * @param {Object}   [props.row]        Fallback row record for values outside editor state,
+ *                                      such as relations and rollups.
  */
 export default function RowProperties( {
 	collectionId,

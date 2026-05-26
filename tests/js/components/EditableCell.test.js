@@ -63,7 +63,7 @@ describe( 'formatDisplay', () => {
 			expect( out ).toContain( '14:30' );
 		} );
 
-		it( 'formats rollup date ranges from object values', () => {
+		it( 'formats date range rollups from object values', () => {
 			expect(
 				formatDisplay(
 					{ start: '2026-05-01', end: '2026-05-03' },

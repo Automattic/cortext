@@ -405,7 +405,7 @@ describe( 'RowProperties', () => {
 		).not.toBeInTheDocument();
 	} );
 
-	it( 'edits relation fields through the row endpoint and refreshes local display', async () => {
+	it( 'saves relation edits through the row endpoint and updates the displayed chip', async () => {
 		const refreshRows = jest.fn();
 		const onRowsChanged = jest.fn();
 		window.addEventListener( COLLECTION_ROWS_CHANGED_EVENT, onRowsChanged );

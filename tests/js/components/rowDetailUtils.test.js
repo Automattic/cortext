@@ -114,7 +114,7 @@ describe( 'valueForField', () => {
 		).toBe( relation );
 	} );
 
-	it( 'uses hydrated relation values even when relation properties are editable', () => {
+	it( 'reads hydrated relation values while relation properties are editable', () => {
 		const relation = [
 			{
 				id: 123,
@@ -172,8 +172,8 @@ describe( 'valueForField', () => {
 	} );
 } );
 
-describe( 'row detail field editability', () => {
-	it( 'requires row, collection, and target context before editing relations', () => {
+describe( 'row detail field editing', () => {
+	it( 'requires row, collection, and target context to edit relations', () => {
 		const relationField = {
 			id: 'field-7',
 			cortextFieldType: 'relation',
@@ -196,7 +196,7 @@ describe( 'row detail field editability', () => {
 		).toBe( false );
 	} );
 
-	it( 'keeps normal editable field behavior unchanged', () => {
+	it( 'keeps existing editable field behavior', () => {
 		expect(
 			isRowDetailFieldEditable( {
 				id: 'field-9',
@@ -215,7 +215,7 @@ describe( 'row detail field editability', () => {
 } );
 
 describe( 'row detail display field types', () => {
-	it( 'maps date range rollups to the range display formatter', () => {
+	it( 'maps date range rollups to the range formatter', () => {
 		expect(
 			rowDetailDisplayFieldType( {
 				id: 'field-10',
@@ -232,7 +232,7 @@ describe( 'row detail display field types', () => {
 		).toBe( 'rollup-date-range' );
 	} );
 
-	it( 'leaves other field types alone', () => {
+	it( 'keeps other field types unchanged', () => {
 		expect(
 			rowDetailDisplayFieldType( {
 				id: 'field-9',
