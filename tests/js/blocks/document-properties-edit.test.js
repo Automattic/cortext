@@ -176,7 +176,7 @@ beforeEach( () => {
 } );
 
 describe( 'document-properties Edit layout mode', () => {
-	it( 'keeps layout edits in draft until Save persists collection meta', async () => {
+	it( 'saves layout edits when fields move or change visibility', async () => {
 		render( <Edit /> );
 
 		expect( screen.getByTestId( 'row-properties' ) ).toHaveTextContent(
@@ -191,15 +191,15 @@ describe( 'document-properties Edit layout mode', () => {
 				name: 'Drag Created before Author',
 			} )
 		);
+		await waitFor( () =>
+			expect( mockSaveEntityRecord ).toHaveBeenCalledTimes( 1 )
+		);
 		fireEvent.click(
 			screen.getByRole( 'button', { name: 'Hide Created' } )
 		);
-		fireEvent.click(
-			screen.getByRole( 'button', { name: 'Save layout' } )
-		);
 
 		await waitFor( () =>
-			expect( mockSaveEntityRecord ).toHaveBeenCalledWith(
+			expect( mockSaveEntityRecord ).toHaveBeenLastCalledWith(
 				'postType',
 				'crtxt_collection',
 				{
@@ -237,7 +237,9 @@ describe( 'document-properties Edit layout mode', () => {
 		rerender( <Edit /> );
 
 		expect(
-			await screen.findByRole( 'button', { name: 'Save layout' } )
+			await screen.findByRole( 'button', {
+				name: 'Stop editing layout',
+			} )
 		).toBeInTheDocument();
 		expect( mockRowPropertiesProps ).toEqual(
 			expect.objectContaining( { isLayoutEditing: true } )
@@ -258,7 +260,7 @@ describe( 'document-properties Edit layout mode', () => {
 		);
 
 		fireEvent.click(
-			screen.getByRole( 'button', { name: 'Cancel layout changes' } )
+			screen.getByRole( 'button', { name: 'Stop editing layout' } )
 		);
 
 		await waitFor( () =>
@@ -272,7 +274,7 @@ describe( 'document-properties Edit layout mode', () => {
 		mockContext = { ...mockContext, layoutEditRequest: 1 };
 		rerender( <Edit /> );
 
-		await screen.findByRole( 'button', { name: 'Save layout' } );
+		await screen.findByRole( 'button', { name: 'Stop editing layout' } );
 
 		mockContext = { ...mockContext, layoutEditRequest: 2 };
 		rerender( <Edit /> );
@@ -294,10 +296,17 @@ describe( 'document-properties Edit layout mode', () => {
 			onToggleVisible,
 		};
 
-		render( <Edit /> );
+		const { rerender } = render( <Edit /> );
 
-		await screen.findByRole( 'button', { name: 'Save layout' } );
-		expect( onToggleVisible ).toHaveBeenCalled();
+		await waitFor( () => expect( onToggleVisible ).toHaveBeenCalled() );
+		mockContext = { ...mockContext, isVisible: true };
+		rerender( <Edit /> );
+
+		expect(
+			await screen.findByRole( 'button', {
+				name: 'Stop editing layout',
+			} )
+		).toBeInTheDocument();
 	} );
 
 	it( 'shows hidden fields at the end while editing layout', () => {
@@ -327,9 +336,6 @@ describe( 'document-properties Edit layout mode', () => {
 		);
 		fireEvent.click(
 			screen.getByRole( 'button', { name: 'Drag Author to hidden' } )
-		);
-		fireEvent.click(
-			screen.getByRole( 'button', { name: 'Save layout' } )
 		);
 
 		await waitFor( () =>
@@ -363,9 +369,6 @@ describe( 'document-properties Edit layout mode', () => {
 			screen.getByRole( 'button', {
 				name: 'Drag Author to hidden start',
 			} )
-		);
-		fireEvent.click(
-			screen.getByRole( 'button', { name: 'Save layout' } )
 		);
 
 		await waitFor( () =>
@@ -408,9 +411,6 @@ describe( 'document-properties Edit layout mode', () => {
 				name: 'Drag Author to hidden start',
 			} )
 		);
-		fireEvent.click(
-			screen.getByRole( 'button', { name: 'Save layout' } )
-		);
 
 		await waitFor( () =>
 			expect( mockSaveEntityRecord ).toHaveBeenCalledWith(
@@ -441,9 +441,6 @@ describe( 'document-properties Edit layout mode', () => {
 		);
 		fireEvent.click(
 			screen.getByRole( 'button', { name: 'Drag Hidden to visible' } )
-		);
-		fireEvent.click(
-			screen.getByRole( 'button', { name: 'Save layout' } )
 		);
 
 		await waitFor( () =>
@@ -478,9 +475,6 @@ describe( 'document-properties Edit layout mode', () => {
 				name: 'Drag Hidden to visible end',
 			} )
 		);
-		fireEvent.click(
-			screen.getByRole( 'button', { name: 'Save layout' } )
-		);
 
 		await waitFor( () =>
 			expect( mockSaveEntityRecord ).toHaveBeenCalledWith(
@@ -503,7 +497,7 @@ describe( 'document-properties Edit layout mode', () => {
 		);
 	} );
 
-	it( 'cancels draft edits without saving', () => {
+	it( 'stops layout editing without rolling back saved changes', async () => {
 		render( <Edit /> );
 
 		fireEvent.click(
@@ -513,14 +507,19 @@ describe( 'document-properties Edit layout mode', () => {
 			screen.getByRole( 'button', { name: 'Hide Created' } )
 		);
 		fireEvent.click(
-			screen.getByRole( 'button', { name: 'Cancel layout changes' } )
+			screen.getByRole( 'button', { name: 'Stop editing layout' } )
 		);
 
-		expect( mockSaveEntityRecord ).not.toHaveBeenCalled();
+		await waitFor( () =>
+			expect( mockSaveEntityRecord ).toHaveBeenCalled()
+		);
 		expect( screen.getByTestId( 'row-properties' ) ).toBeInTheDocument();
+		expect( mockRowPropertiesProps ).toEqual(
+			expect.objectContaining( { isLayoutEditing: false } )
+		);
 	} );
 
-	it( 'saves direct row drag reorder without entering Save/Cancel mode', async () => {
+	it( 'saves direct row drag reorder without entering layout editing', async () => {
 		render( <Edit /> );
 
 		expect( screen.getByTestId( 'row-properties' ) ).toHaveTextContent(
@@ -594,7 +593,7 @@ describe( 'document-properties Edit layout mode', () => {
 			screen.getByRole( 'button', { name: 'Edit layout' } )
 		);
 		fireEvent.click(
-			screen.getByRole( 'button', { name: 'Save layout' } )
+			screen.getByRole( 'button', { name: 'Hide Created' } )
 		);
 
 		expect( await screen.findByRole( 'alert' ) ).toHaveTextContent(

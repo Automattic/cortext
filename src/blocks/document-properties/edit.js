@@ -20,7 +20,7 @@ import {
 	useRef,
 	useState,
 } from '@wordpress/element';
-import { check, closeSmall, pencil, seen, unseen } from '@wordpress/icons';
+import { pencil, seen, unseen } from '@wordpress/icons';
 
 import DocumentPropertiesActions from '../../components/DocumentPropertiesActions';
 import RowProperties, {
@@ -43,6 +43,41 @@ function entriesWithHiddenLast( entries ) {
 	];
 }
 
+function reorderDetailLayoutEntries( entries, activeField, overField ) {
+	const safeEntries = Array.isArray( entries ) ? entries : [];
+	const from = safeEntries.findIndex(
+		( entry ) => entry.field === activeField
+	);
+	const isHiddenGroupDrop = overField === HIDDEN_PROPERTIES_DROP_TARGET;
+	const firstHiddenIndex = safeEntries.findIndex(
+		( entry ) => entry.visible === false
+	);
+	let to = safeEntries.findIndex( ( entry ) => entry.field === overField );
+	if ( isHiddenGroupDrop ) {
+		to = firstHiddenIndex === -1 ? safeEntries.length : firstHiddenIndex;
+	}
+	if ( from < 0 || to < 0 || ( from === to && ! isHiddenGroupDrop ) ) {
+		return safeEntries;
+	}
+	const activeIsHidden = safeEntries[ from ]?.visible === false;
+	const overIsHidden = safeEntries[ to ]?.visible === false;
+	const shouldHideActive =
+		! activeIsHidden && ( isHiddenGroupDrop || overIsHidden );
+	const shouldShowActive =
+		activeIsHidden && ( isHiddenGroupDrop || ! overIsHidden );
+	const nextEntries = [ ...safeEntries ];
+	const [ moved ] = nextEntries.splice( from, 1 );
+	let nextMoved = moved;
+	if ( shouldHideActive ) {
+		nextMoved = { ...moved, visible: false };
+	} else if ( shouldShowActive ) {
+		nextMoved = { ...moved, visible: true };
+	}
+	const insertAt = isHiddenGroupDrop && from < to ? to - 1 : to;
+	nextEntries.splice( insertAt, 0, nextMoved );
+	return nextEntries;
+}
+
 // Row documents show collection properties between the title and body. Canvas
 // and RowEditor provide the fields and fallback row record; pages and rows
 // without fields return null.
@@ -63,7 +98,6 @@ export default function Edit() {
 	} = ctx ?? {};
 	const isVisible = contextIsVisible !== false;
 	const [ isEditingLayout, setIsEditingLayout ] = useState( false );
-	const [ draftEntries, setDraftEntries ] = useState( null );
 	const [ optimisticEntries, setOptimisticEntries ] = useState( null );
 	const [ layoutEditorMinHeight, setLayoutEditorMinHeight ] =
 		useState( null );
@@ -128,10 +162,8 @@ export default function Edit() {
 		[ detailLayoutEntries, layoutPropertyFields ]
 	);
 	useEffect( () => {
-		if ( ! isEditingLayout ) {
-			setDraftEntries( null );
-		}
-	}, [ isEditingLayout ] );
+		setOptimisticEntries( null );
+	}, [ collectionId, rowId ] );
 	useEffect( () => {
 		onLayoutEditingChange?.( isEditingLayout );
 	}, [ isEditingLayout, onLayoutEditingChange ] );
@@ -147,18 +179,20 @@ export default function Edit() {
 		);
 	}, [] );
 	const startEditingLayout = useCallback( () => {
-		const entries = optimisticEntries ?? currentEntries;
 		rememberPropertiesHeight();
-		setOptimisticEntries( null );
-		setDraftEntries( entries );
 		setSaveError( null );
 		setIsEditingLayout( true );
-	}, [ currentEntries, optimisticEntries, rememberPropertiesHeight ] );
-	const cancelEditingLayout = useCallback( () => {
-		setDraftEntries( null );
-		setSaveError( null );
+	}, [ rememberPropertiesHeight ] );
+	const stopEditingLayout = useCallback( () => {
 		setIsEditingLayout( false );
 	}, [] );
+	const toggleEditingLayout = useCallback( () => {
+		if ( isEditingLayout ) {
+			stopEditingLayout();
+			return;
+		}
+		startEditingLayout();
+	}, [ isEditingLayout, startEditingLayout, stopEditingLayout ] );
 	useEffect( () => {
 		if (
 			! layoutEditRequest ||
@@ -173,12 +207,11 @@ export default function Edit() {
 			onToggleVisible();
 		}
 		if ( isEditingLayout ) {
-			cancelEditingLayout();
+			stopEditingLayout();
 			return;
 		}
 		startEditingLayout();
 	}, [
-		cancelEditingLayout,
 		canEditLayout,
 		isResolving,
 		isEditingLayout,
@@ -186,21 +219,14 @@ export default function Edit() {
 		layoutEditRequest,
 		onToggleVisible,
 		startEditingLayout,
+		stopEditingLayout,
 	] );
-	const handleInlineLayoutReorder = useCallback(
-		async ( activeField, overField ) => {
+	const saveLayoutEntries = useCallback(
+		async ( nextEntries ) => {
 			if ( ! collectionId ) {
 				return;
 			}
-			const baseEntries = optimisticEntries ?? currentEntries;
-			const nextEntries = reorderVisibleDetailEntries(
-				baseEntries,
-				activeField,
-				overField
-			);
-			if ( nextEntries === baseEntries ) {
-				return;
-			}
+			const previousOptimisticEntries = optimisticEntries;
 			setOptimisticEntries( nextEntries );
 			setSaveError( null );
 			try {
@@ -216,44 +242,31 @@ export default function Edit() {
 					},
 					{ throwOnError: true }
 				);
-				setOptimisticEntries( null );
 			} catch ( error ) {
-				setOptimisticEntries( null );
+				setOptimisticEntries( previousOptimisticEntries );
 				setSaveError(
 					error?.message ??
 						__( 'Could not save the row detail layout.', 'cortext' )
 				);
 			}
 		},
-		[ collectionId, currentEntries, optimisticEntries, saveEntityRecord ]
+		[ collectionId, optimisticEntries, saveEntityRecord ]
 	);
-	const saveLayout = useCallback( async () => {
-		if ( ! collectionId ) {
-			return;
-		}
-		setSaveError( null );
-		try {
-			await saveEntityRecord(
-				'postType',
-				'crtxt_collection',
-				{
-					id: collectionId,
-					meta: {
-						detail_layout: detailLayoutMetaFromEntries(
-							draftEntries ?? currentEntries
-						),
-					},
-				},
-				{ throwOnError: true }
+	const handleInlineLayoutReorder = useCallback(
+		( activeField, overField ) => {
+			const baseEntries = optimisticEntries ?? currentEntries;
+			const nextEntries = reorderVisibleDetailEntries(
+				baseEntries,
+				activeField,
+				overField
 			);
-			setIsEditingLayout( false );
-		} catch ( error ) {
-			setSaveError(
-				error?.message ??
-					__( 'Could not save the row detail layout.', 'cortext' )
-			);
-		}
-	}, [ collectionId, currentEntries, draftEntries, saveEntityRecord ] );
+			if ( nextEntries === baseEntries ) {
+				return;
+			}
+			saveLayoutEntries( nextEntries );
+		},
+		[ currentEntries, optimisticEntries, saveLayoutEntries ]
+	);
 	const inlineLayoutFields = useMemo(
 		() =>
 			optimisticEntries
@@ -264,12 +277,12 @@ export default function Edit() {
 				: visibleFields,
 		[ currentEntries, layoutFields, optimisticEntries, visibleFields ]
 	);
-	const draftLayoutEntries = draftEntries ?? currentEntries;
-	const draftLayoutFields = useMemo( () => {
+	const layoutEntries = optimisticEntries ?? currentEntries;
+	const layoutEditingFields = useMemo( () => {
 		const fieldsById = new Map(
 			layoutFields.map( ( field ) => [ field.id, field ] )
 		);
-		return entriesWithHiddenLast( draftLayoutEntries )
+		return entriesWithHiddenLast( layoutEntries )
 			.map( ( entry ) => {
 				const field = fieldsById.get( entry.field );
 				return field
@@ -280,65 +293,31 @@ export default function Edit() {
 					: null;
 			} )
 			.filter( Boolean );
-	}, [ draftLayoutEntries, layoutFields ] );
-	const handleDraftLayoutReorder = useCallback(
+	}, [ layoutEntries, layoutFields ] );
+	const handleLayoutEditReorder = useCallback(
 		( activeField, overField ) => {
-			const from = draftLayoutEntries.findIndex(
-				( entry ) => entry.field === activeField
+			const nextEntries = reorderDetailLayoutEntries(
+				layoutEntries,
+				activeField,
+				overField
 			);
-			const isHiddenGroupDrop =
-				overField === HIDDEN_PROPERTIES_DROP_TARGET;
-			const firstHiddenIndex = draftLayoutEntries.findIndex(
-				( entry ) => entry.visible === false
-			);
-			let to = draftLayoutEntries.findIndex(
-				( entry ) => entry.field === overField
-			);
-			if ( isHiddenGroupDrop ) {
-				to =
-					firstHiddenIndex === -1
-						? draftLayoutEntries.length
-						: firstHiddenIndex;
-			}
-			if (
-				from < 0 ||
-				to < 0 ||
-				( from === to && ! isHiddenGroupDrop )
-			) {
+			if ( nextEntries === layoutEntries ) {
 				return;
 			}
-			const activeIsHidden =
-				draftLayoutEntries[ from ]?.visible === false;
-			const overIsHidden = draftLayoutEntries[ to ]?.visible === false;
-			const shouldHideActive =
-				! activeIsHidden && ( isHiddenGroupDrop || overIsHidden );
-			const shouldShowActive =
-				activeIsHidden && ( isHiddenGroupDrop || ! overIsHidden );
-			const nextEntries = [ ...draftLayoutEntries ];
-			const [ moved ] = nextEntries.splice( from, 1 );
-			let nextMoved = moved;
-			if ( shouldHideActive ) {
-				nextMoved = { ...moved, visible: false };
-			} else if ( shouldShowActive ) {
-				nextMoved = { ...moved, visible: true };
-			}
-			const insertAt = isHiddenGroupDrop && from < to ? to - 1 : to;
-			nextEntries.splice( insertAt, 0, nextMoved );
-			setDraftEntries( nextEntries );
+			saveLayoutEntries( nextEntries );
 		},
-		[ draftLayoutEntries ]
+		[ layoutEntries, saveLayoutEntries ]
 	);
-	const handleDraftLayoutVisibilityToggle = useCallback(
+	const handleLayoutVisibilityToggle = useCallback(
 		( fieldId ) => {
-			setDraftEntries(
-				draftLayoutEntries.map( ( entry ) =>
-					entry.field === fieldId
-						? { ...entry, visible: entry.visible === false }
-						: entry
-				)
+			const nextEntries = layoutEntries.map( ( entry ) =>
+				entry.field === fieldId
+					? { ...entry, visible: entry.visible === false }
+					: entry
 			);
+			saveLayoutEntries( nextEntries );
 		},
-		[ draftLayoutEntries ]
+		[ layoutEntries, saveLayoutEntries ]
 	);
 	useLayoutEffect( () => {
 		if ( ! isEditingLayout ) {
@@ -351,16 +330,16 @@ export default function Edit() {
 		visiblePropertyFields.length,
 	] );
 	const propertyFieldsForDisplay = isEditingLayout
-		? draftLayoutFields
+		? layoutEditingFields
 		: inlineLayoutFields;
 	let layoutReorderHandler;
 	if ( isEditingLayout ) {
-		layoutReorderHandler = handleDraftLayoutReorder;
+		layoutReorderHandler = handleLayoutEditReorder;
 	} else if ( canEditLayout && ! isSavingLayout ) {
 		layoutReorderHandler = handleInlineLayoutReorder;
 	}
 	const layoutVisibilityHandler = isEditingLayout
-		? handleDraftLayoutVisibilityToggle
+		? handleLayoutVisibilityToggle
 		: undefined;
 	const showEmptyProperties =
 		! isEditingLayout && visiblePropertyFields.length === 0;
@@ -371,47 +350,33 @@ export default function Edit() {
 
 	const blockControls = (
 		<BlockControls>
-			{ isEditingLayout ? (
+			{ onToggleVisible ? (
 				<ToolbarGroup>
 					<ToolbarButton
-						icon={ check }
-						label={ __( 'Save layout', 'cortext' ) }
-						disabled={ isSavingLayout }
-						onClick={ saveLayout }
-					/>
-					<ToolbarButton
-						icon={ closeSmall }
-						label={ __( 'Cancel layout changes', 'cortext' ) }
-						disabled={ isSavingLayout }
-						onClick={ cancelEditingLayout }
+						icon={ isVisible ? unseen : seen }
+						label={
+							isVisible
+								? __( 'Hide fields', 'cortext' )
+								: __( 'Show fields', 'cortext' )
+						}
+						onClick={ onToggleVisible }
 					/>
 				</ToolbarGroup>
-			) : (
-				<>
-					{ onToggleVisible ? (
-						<ToolbarGroup>
-							<ToolbarButton
-								icon={ isVisible ? unseen : seen }
-								label={
-									isVisible
-										? __( 'Hide fields', 'cortext' )
-										: __( 'Show fields', 'cortext' )
-								}
-								onClick={ onToggleVisible }
-							/>
-						</ToolbarGroup>
-					) : null }
-					{ canEditLayout && isVisible ? (
-						<ToolbarGroup>
-							<ToolbarButton
-								icon={ pencil }
-								label={ __( 'Edit layout', 'cortext' ) }
-								onClick={ startEditingLayout }
-							/>
-						</ToolbarGroup>
-					) : null }
-				</>
-			) }
+			) : null }
+			{ canEditLayout && isVisible ? (
+				<ToolbarGroup>
+					<ToolbarButton
+						icon={ pencil }
+						label={
+							isEditingLayout
+								? __( 'Stop editing layout', 'cortext' )
+								: __( 'Edit layout', 'cortext' )
+						}
+						isPressed={ isEditingLayout }
+						onClick={ toggleEditingLayout }
+					/>
+				</ToolbarGroup>
+			) : null }
 		</BlockControls>
 	);
 	const inspectorControls = (
