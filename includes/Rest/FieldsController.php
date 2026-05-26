@@ -9,6 +9,7 @@ declare( strict_types=1 );
 
 namespace Cortext\Rest;
 
+use Cortext\Fields\FieldDefaults;
 use Cortext\Fields\FieldTypeConverter;
 use Cortext\Fields\FieldTypeRegistry;
 use Cortext\OptionPalette;
@@ -356,6 +357,10 @@ final class FieldsController {
 			$copy_request->set_param( 'relation_multiple', Relations::relation_is_multiple( $field_id ) );
 			$copy_request->set_param( 'reverse_multiple', $reverse_id > 0 ? Relations::relation_is_multiple( $reverse_id ) : true );
 			$copy_request->set_param( 'reverse_title', $reverse_title );
+			$copy_request->set_param( 'description', (string) get_post_meta( $field_id, 'description', true ) );
+			if ( $reverse_id > 0 ) {
+				$copy_request->set_param( 'reverse_description', (string) get_post_meta( $reverse_id, 'description', true ) );
+			}
 			return $this->create_relation( $copy_request, $collection_id, $copy_title, (string) $field_id );
 		}
 
@@ -363,6 +368,8 @@ final class FieldsController {
 		foreach (
 			array(
 				'type',
+				'description',
+				FieldDefaults::META_KEY,
 				'options',
 				'number_format',
 				'date_format',
@@ -439,6 +446,7 @@ final class FieldsController {
 		}
 
 		update_post_meta( $field_id, 'options', wp_json_encode( $normalized ) );
+		$this->reconcile_option_default( $field_id, $type, $normalized, is_array( $migrations ) ? $migrations : array() );
 
 		return new WP_REST_Response(
 			array(
@@ -536,6 +544,7 @@ final class FieldsController {
 			);
 		}
 
+		delete_post_meta( $field_id, FieldDefaults::META_KEY );
 		update_post_meta( $field_id, 'type', $target_type );
 
 		return new WP_REST_Response(
@@ -653,6 +662,72 @@ final class FieldsController {
 			return array();
 		}
 		return $this->normalize_options( $decoded );
+	}
+
+	/**
+	 * Keeps select defaults aligned with option edits.
+	 *
+	 * @param int                             $field_id   Field post ID.
+	 * @param string                          $type       Field type.
+	 * @param array<int,array<string,string>> $options    Normalized option list.
+	 * @param array<int,array<string,string>> $migrations Option value migrations.
+	 */
+	private function reconcile_option_default( int $field_id, string $type, array $options, array $migrations ): void {
+		if ( ! in_array( $type, array( 'select', 'multiselect' ), true ) ) {
+			return;
+		}
+
+		$config = FieldDefaults::normalize(
+			get_post_meta( $field_id, FieldDefaults::META_KEY, true ),
+			$type,
+			null
+		);
+		if ( null === $config || 'value' !== $config['mode'] ) {
+			return;
+		}
+
+		$valid_values = array_column( $options, 'value' );
+		$values       = 'multiselect' === $type
+			? (array) $config['value']
+			: array( (string) $config['value'] );
+
+		foreach ( $migrations as $migration ) {
+			$from   = isset( $migration['from'] ) ? (string) $migration['from'] : '';
+			$action = isset( $migration['action'] ) ? (string) $migration['action'] : '';
+			$to     = isset( $migration['to'] ) ? (string) $migration['to'] : '';
+			if ( '' === $from || ! in_array( $action, array( 'clear', 'replace' ), true ) ) {
+				continue;
+			}
+			$next = array();
+			foreach ( $values as $value ) {
+				if ( $value !== $from ) {
+					$next[] = $value;
+					continue;
+				}
+				if ( 'replace' === $action ) {
+					$next[] = $to;
+				}
+			}
+			$values = array_values( array_unique( $next ) );
+		}
+
+		$values = array_values(
+			array_filter(
+				$values,
+				static fn( string $value ): bool => in_array( $value, $valid_values, true )
+			)
+		);
+
+		if ( count( $values ) === 0 ) {
+			delete_post_meta( $field_id, FieldDefaults::META_KEY );
+			return;
+		}
+
+		$next_config = array(
+			'mode'  => 'value',
+			'value' => 'multiselect' === $type ? $values : $values[0],
+		);
+		update_post_meta( $field_id, FieldDefaults::META_KEY, FieldDefaults::encode( $next_config ) );
 	}
 
 	/**
@@ -781,6 +856,8 @@ final class FieldsController {
 		$reverse_multiple_param = $request->get_param( 'reverse_multiple' );
 		$source_multiple        = null === $source_multiple_param ? true : Relations::is_truthy( $source_multiple_param );
 		$reverse_multiple       = null === $reverse_multiple_param ? true : Relations::is_truthy( $reverse_multiple_param );
+		$source_description     = sanitize_textarea_field( (string) $request->get_param( 'description' ) );
+		$reverse_description    = sanitize_textarea_field( (string) $request->get_param( 'reverse_description' ) );
 
 		$source_meta  = array(
 			'type'                  => 'relation',
@@ -792,6 +869,12 @@ final class FieldsController {
 			'related_collection_id' => (string) $collection_id,
 			'relation_multiple'     => $reverse_multiple ? '1' : '0',
 		);
+		if ( '' !== $source_description ) {
+			$source_meta['description'] = $source_description;
+		}
+		if ( '' !== $reverse_description ) {
+			$reverse_meta['description'] = $reverse_description;
+		}
 
 		$source_id = $this->insert_and_attach_id( $collection_id, $title, $source_meta, $insert_after_id );
 		if ( is_wp_error( $source_id ) ) {
