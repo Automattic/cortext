@@ -820,9 +820,6 @@
 
 	&__property-value {
 		position: relative;
-		display: flex;
-		align-items: flex-start;
-		gap: $grid-unit-05;
 		min-width: 0;
 		color: var(--cortext-row-detail-text);
 
@@ -885,7 +882,6 @@
 	}
 
 	&__property-value-content {
-		flex: 1 1 auto;
 		min-width: 0;
 	}
 
@@ -958,10 +954,11 @@
 	}
 
 	&__property-visibility.components-button {
+		position: absolute;
+		inset: 0 0 auto auto;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		flex: 0 0 $grid-unit-30;
 		width: $grid-unit-30;
 		min-width: $grid-unit-30;
 		height: $grid-unit-30;
