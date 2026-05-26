@@ -789,7 +789,7 @@
 		min-height: 24px;
 		padding: 0;
 		border-radius: $grid-unit-30;
-		background: transparent;
+		background-color: transparent;
 		background-image:
 			radial-gradient(circle at 6px 7px, currentcolor 1px, transparent 1.5px),
 			radial-gradient(circle at 12px 7px, currentcolor 1px, transparent 1.5px),
@@ -807,15 +807,12 @@
 			color 120ms ease,
 			opacity 120ms ease;
 
-		&:hover {
-			background: transparent;
-			box-shadow: none;
-			color: var(--cortext-row-detail-text);
-		}
-
-		&:focus-visible {
+		&:hover,
+		&:focus,
+		&:focus-visible,
+		&:active {
 			outline: 0;
-			background: transparent;
+			background-color: transparent;
 			box-shadow: none;
 			color: var(--cortext-row-detail-text);
 		}
