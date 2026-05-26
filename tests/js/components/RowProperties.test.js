@@ -18,6 +18,8 @@ jest.mock( '@wordpress/components', () => {
 		Dropdown: () => createElement( 'div', null ),
 		Icon: () => createElement( 'span', { 'data-testid': 'wp-icon' } ),
 		Popover: ( { children } ) => createElement( 'div', null, children ),
+		VisuallyHidden: ( { children } ) =>
+			createElement( 'span', null, children ),
 	};
 } );
 
@@ -77,7 +79,14 @@ jest.mock( '@dnd-kit/sortable', () => {
 
 jest.mock( '../../../src/components/fields/FieldActionsMenu', () => ( {
 	__esModule: true,
-	default: ( { triggerContent } ) => <span>{ triggerContent }</span>,
+	default: ( { field, triggerContent } ) => (
+		<span>
+			{ triggerContent }
+			{ field?.description ? (
+				<button type="button">{ `About ${ field.label }` }</button>
+			) : null }
+		</span>
+	),
 } ) );
 
 jest.mock( '../../../src/components/EditableCell', () => {
@@ -290,5 +299,27 @@ describe( 'RowProperties', () => {
 		expect( screen.getByRole( 'textbox', { name: 'Score' } ) ).toHaveValue(
 			'42'
 		);
+	} );
+
+	it( 'shows field description help on row property labels', () => {
+		render(
+			<RowProperties
+				fields={ [
+					{
+						id: 'field-7',
+						label: 'Status',
+						description: 'Pick the current workflow state.',
+						cortextFieldType: 'text',
+						cortextRecordId: 7,
+						editable: true,
+					},
+				] }
+				row={ {} }
+			/>
+		);
+
+		expect(
+			screen.getByRole( 'button', { name: 'About Status' } )
+		).toBeInTheDocument();
 	} );
 } );

@@ -157,7 +157,7 @@ function SortableOptionRow( {
 	);
 }
 
-// Unified options popover used by both the column-header "Edit options"
+// Unified options popover used by both the column-header "Manage choices"
 // surface and the cell editor. When `onPick` is provided, the chip area
 // of each row becomes a click target that commits the option as the
 // cell's value; without `onPick` it is just a label and rows are pure
@@ -270,7 +270,7 @@ export default function EditOptionsPopover( {
 				const savedOptions = Array.isArray( result?.options )
 					? result.options
 					: nextOptions;
-				onOptionsSaved?.( savedOptions );
+				onOptionsSaved?.( savedOptions, migration );
 				if ( migration ) {
 					onRowsChanged?.();
 				}

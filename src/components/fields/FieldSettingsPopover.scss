@@ -1,0 +1,105 @@
+@use "@wordpress/base-styles/variables" as *;
+@use "@wordpress/base-styles/colors" as *;
+
+.cortext-field-settings-popover {
+
+	&__panel {
+		display: grid;
+		gap: $grid-unit-15;
+		width: 360px;
+		padding: $grid-unit-15;
+	}
+
+	&__fieldset {
+		padding: 0;
+		margin: 0;
+		border: 0;
+
+		legend {
+			margin-bottom: $grid-unit-10;
+			font-size: 11px;
+			font-weight: 500;
+			text-transform: uppercase;
+		}
+	}
+
+	&__label {
+		font-size: 11px;
+		font-weight: 500;
+		text-transform: uppercase;
+	}
+
+	&__control-heading {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: $grid-unit-10;
+		margin-bottom: $grid-unit-10;
+	}
+
+	&__clear-default.components-button {
+		height: $grid-unit-30;
+		color: $gray-700;
+
+		&.is-pressed {
+			color: $white;
+			background: var(--cortext-accent, #3858e9);
+		}
+	}
+
+	&__segmented {
+		display: flex;
+		flex-wrap: wrap;
+		gap: $grid-unit-05;
+
+		.components-button {
+			height: $grid-unit-30;
+			box-shadow: inset 0 0 0 1px $gray-300;
+
+			&.is-pressed {
+				background: var(--cortext-accent, #3858e9);
+				color: $white;
+				box-shadow: none;
+			}
+		}
+	}
+
+	&__scalar-default {
+		display: grid;
+		gap: $grid-unit-05;
+	}
+
+	&__value-trigger.components-button {
+		width: 100%;
+		justify-content: flex-start;
+		color: inherit;
+		box-shadow: inset 0 0 0 1px $gray-300;
+
+		&:hover:not(:disabled),
+		&:focus:not(:disabled) {
+			color: inherit;
+			box-shadow: inset 0 0 0 1px var(--cortext-accent, #3858e9);
+		}
+	}
+
+	&__empty-value {
+		color: $gray-700;
+	}
+
+	&__date-picker {
+		padding: $grid-unit-15;
+	}
+
+	&__options-default {
+
+		.cortext-edit-options-popover {
+			width: auto;
+			padding: 0;
+		}
+	}
+
+	&__saving {
+		font-size: 12px;
+		color: $gray-700;
+	}
+}

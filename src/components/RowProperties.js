@@ -54,6 +54,7 @@ import FieldActionsMenu from './fields/FieldActionsMenu';
 import EditOptionsPopover from './fields/EditOptionsPopover';
 import { FieldTypeIcon, SystemFieldIcon } from './fields/fieldTypes';
 import { hasSystemFieldIcon } from './fields/systemFieldIconIds';
+import Infotip from './Infotip';
 import { toRecordId } from '../hooks/fieldIds';
 import { elementsFromOptions } from '../hooks/optionElements';
 import {
@@ -528,9 +529,22 @@ function PropertyLabel( {
 	const recordId = field.cortextRecordId ?? toRecordId( field.id );
 	if ( ! collectionId || ! recordId ) {
 		return (
-			<span className="cortext-row-detail__property-label-text">
-				{ field.label }
-			</span>
+			<>
+				<span className="cortext-row-detail__property-label-text">
+					{ field.label }
+				</span>
+				{ field.description ? (
+					<Infotip
+						description={ field.description }
+						label={ sprintf(
+							/* translators: %s: field label */
+							__( 'About %s', 'cortext' ),
+							field.label
+						) }
+						placement="bottom"
+					/>
+				) : null }
+			</>
 		);
 	}
 

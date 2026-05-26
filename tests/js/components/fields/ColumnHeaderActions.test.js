@@ -5,6 +5,7 @@ const mockDuplicateFieldRun = jest.fn();
 const mockFlushFieldRecord = jest.fn();
 const mockUpdateFieldOptionsRun = jest.fn();
 const mockChangeFieldTypeRun = jest.fn();
+const mockSaveEntityRecord = jest.fn();
 
 jest.mock( '@wordpress/components', () => {
 	const {
@@ -18,6 +19,7 @@ jest.mock( '@wordpress/components', () => {
 			{
 				children,
 				icon,
+				isBusy,
 				isPressed,
 				label,
 				onClick,
@@ -63,20 +65,88 @@ jest.mock( '@wordpress/components', () => {
 
 	const Passthrough = ( { children } ) =>
 		createElement( 'div', null, children );
+	const TextControl = ( { label, value = '', onBlur, onChange } ) =>
+		createElement(
+			'label',
+			null,
+			label,
+			createElement( 'input', {
+				'aria-label': label,
+				value,
+				onChange: ( event ) => onChange?.( event.target.value ),
+				onBlur,
+			} )
+		);
+	const TextareaControl = ( { label, value = '', onBlur, onChange } ) =>
+		createElement(
+			'label',
+			null,
+			label,
+			createElement( 'textarea', {
+				'aria-label': label,
+				value,
+				onChange: ( event ) => onChange?.( event.target.value ),
+				onBlur,
+			} )
+		);
+	const SelectControl = ( { label, value = '', options = [], onChange } ) =>
+		createElement(
+			'label',
+			null,
+			label,
+			createElement(
+				'select',
+				{
+					'aria-label': label,
+					value,
+					onChange: ( event ) => onChange?.( event.target.value ),
+				},
+				options.map( ( option ) =>
+					createElement(
+						'option',
+						{ key: option.value, value: option.value },
+						option.label
+					)
+				)
+			)
+		);
+	const CheckboxControl = ( { label, checked = false, onChange } ) =>
+		createElement(
+			'label',
+			null,
+			createElement( 'input', {
+				type: 'checkbox',
+				checked,
+				onChange: ( event ) => onChange?.( event.target.checked ),
+			} ),
+			label
+		);
 
 	return {
 		__esModule: true,
 		Button,
+		CheckboxControl,
 		Dropdown,
 		Icon: () => null,
+		Notice: Passthrough,
 		Popover: Passthrough,
+		SelectControl,
+		TextControl,
+		TextareaControl,
+		VisuallyHidden: ( { children } ) =>
+			createElement( 'span', null, children ),
 		privateApis: {},
 		__experimentalConfirmDialog: Passthrough,
+		__experimentalNumberControl: TextControl,
 	};
 } );
 
 jest.mock( '@wordpress/core-data', () => ( {
 	useEntityRecord: jest.fn(),
+} ) );
+
+jest.mock( '@wordpress/data', () => ( {
+	useDispatch: () => ( { saveEntityRecord: mockSaveEntityRecord } ),
 } ) );
 
 jest.mock( '../../../../src/lock-unlock', () => {
@@ -118,6 +188,7 @@ jest.mock( '../../../../src/hooks/useFieldMutations', () => ( {
 	useDeleteField: () => ( { run: mockDeleteFieldRun } ),
 	useDuplicateField: () => ( { run: mockDuplicateFieldRun } ),
 	useFlushFieldRecord: () => mockFlushFieldRecord,
+	useOptionUsage: () => ( { run: jest.fn().mockResolvedValue( 0 ) } ),
 	useUpdateFieldOptions: () => ( {
 		run: mockUpdateFieldOptionsRun,
 		isBusy: false,
@@ -222,6 +293,9 @@ function Harness( {
 describe( 'ColumnHeaderActions', () => {
 	beforeEach( () => {
 		jest.clearAllMocks();
+		mockDuplicateFieldRun.mockResolvedValue( { id: 88, type: 'text' } );
+		mockSaveEntityRecord.mockResolvedValue( { id: 77 } );
+		mockUpdateFieldOptionsRun.mockResolvedValue( { options: [] } );
 		useCollectionFieldsContext.mockReturnValue( { fields: [] } );
 		useEntityRecord.mockReturnValue( {
 			record: {
@@ -319,6 +393,216 @@ describe( 'ColumnHeaderActions', () => {
 				'.cortext-column-header-type-icon[data-cortext-field-type="number"]'
 			)
 		).toBeInTheDocument();
+		expect(
+			screen.getByRole( 'button', { name: 'Format' } )
+		).toBeInTheDocument();
+		expect(
+			screen.queryByRole( 'button', { name: 'Edit field' } )
+		).not.toBeInTheDocument();
+	} );
+
+	it( 'shows field descriptions in custom column headers', async () => {
+		useCollectionFieldsContext.mockReturnValue( {
+			fields: [
+				{
+					id: 'field-77',
+					recordId: 77,
+					label: 'Amount',
+					description: 'Expected invoice total.',
+					cortextType: 'number',
+				},
+			],
+		} );
+
+		render(
+			<Harness
+				collectionId={ 5 }
+				recordId={ 77 }
+				view={ { fields: [ 'field-77' ] } }
+			/>
+		);
+
+		expect(
+			await screen.findByRole( 'button', {
+				name: 'About Amount',
+			} )
+		).toBeInTheDocument();
+	} );
+
+	it( 'saves field descriptions and defaults from field settings', async () => {
+		useCollectionFieldsContext.mockReturnValue( {
+			fields: [
+				{
+					id: 'field-77',
+					recordId: 77,
+					label: 'Status',
+					description: '',
+					cortextType: 'text',
+					cortextDefaultConfig: null,
+				},
+			],
+		} );
+
+		render(
+			<Harness
+				collectionId={ 5 }
+				recordId={ 77 }
+				view={ { fields: [ 'field-77' ] } }
+			/>
+		);
+
+		fireEvent.click(
+			await screen.findByRole( 'button', { name: 'Field settings' } )
+		);
+		fireEvent.change( screen.getByLabelText( 'Description' ), {
+			target: { value: 'How editors should fill this field.' },
+		} );
+		fireEvent.blur( screen.getByLabelText( 'Description' ) );
+
+		await waitFor( () =>
+			expect( mockSaveEntityRecord ).toHaveBeenCalledWith(
+				'postType',
+				'crtxt_field',
+				{
+					id: 77,
+					meta: {
+						description: 'How editors should fill this field.',
+					},
+				}
+			)
+		);
+
+		expect(
+			screen.queryByRole( 'button', { name: 'Clear default' } )
+		).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole( 'button', { name: 'Cancel' } )
+		).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole( 'button', { name: 'Save' } )
+		).not.toBeInTheDocument();
+		expect(
+			screen.getByRole( 'button', { name: 'No default' } )
+		).toHaveAttribute( 'aria-pressed', 'true' );
+
+		const defaultInput = screen.getByLabelText( 'Default value' );
+		fireEvent.change( defaultInput, {
+			target: { value: 'Draft' },
+		} );
+		expect(
+			screen.getByRole( 'button', { name: 'No default' } )
+		).toHaveAttribute( 'aria-pressed', 'false' );
+		fireEvent.blur( defaultInput );
+
+		await waitFor( () =>
+			expect( mockSaveEntityRecord ).toHaveBeenCalledWith(
+				'postType',
+				'crtxt_field',
+				{
+					id: 77,
+					meta: {
+						default_value:
+							'{"mode":"value","value":"Draft"}',
+					},
+				}
+			)
+		);
+	} );
+
+	it( 'uses the option picker for select defaults', async () => {
+		useCollectionFieldsContext.mockReturnValue( {
+			fields: [
+				{
+					id: 'field-77',
+					recordId: 77,
+					label: 'Status',
+					description: '',
+					cortextType: 'select',
+					cortextElements: [
+						{
+							value: 'todo',
+							label: 'To do',
+							color: 'blue',
+						},
+					],
+					cortextDefaultConfig: null,
+				},
+			],
+		} );
+
+		render(
+			<Harness
+				collectionId={ 5 }
+				recordId={ 77 }
+				view={ { fields: [ 'field-77' ] } }
+			/>
+		);
+
+		fireEvent.click(
+			await screen.findByRole( 'button', { name: 'Field settings' } )
+		);
+
+		expect(
+			screen.queryByRole( 'combobox', { name: 'Default' } )
+		).not.toBeInTheDocument();
+		expect(
+			screen.getByRole( 'textbox', { name: 'Search or create option' } )
+		).toBeInTheDocument();
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'To do' } ) );
+
+		await waitFor( () =>
+			expect( mockSaveEntityRecord ).toHaveBeenCalledWith(
+				'postType',
+				'crtxt_field',
+				{
+					id: 77,
+					meta: {
+						default_value:
+							'{"mode":"value","value":"todo"}',
+					},
+				}
+			)
+		);
+	} );
+
+	it( 'hides default controls for unsupported field types', async () => {
+		useCollectionFieldsContext.mockReturnValue( {
+			fields: [
+				{
+					id: 'field-77',
+					recordId: 77,
+					label: 'Assignee',
+					description: '',
+					cortextType: 'relation',
+					cortextDefaultConfig: null,
+				},
+			],
+		} );
+
+		render(
+			<Harness
+				collectionId={ 5 }
+				recordId={ 77 }
+				view={ { fields: [ 'field-77' ] } }
+			/>
+		);
+
+		fireEvent.click(
+			await screen.findByRole( 'button', { name: 'Field settings' } )
+		);
+
+		expect( screen.getByLabelText( 'Description' ) ).toBeInTheDocument();
+		expect( screen.queryByLabelText( 'Default' ) ).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole( 'button', { name: 'Clear default' } )
+		).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole( 'button', { name: 'Cancel' } )
+		).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole( 'button', { name: 'Save' } )
+		).not.toBeInTheDocument();
 	} );
 
 	it( 'passes the created field out of the add-field dropdown', async () => {
@@ -441,7 +725,7 @@ describe( 'ColumnHeaderActions', () => {
 		render( <Harness collectionId={ 5 } recordId={ 77 } /> );
 
 		expect(
-			await screen.findByRole( 'button', { name: 'Edit options' } )
+			await screen.findByRole( 'button', { name: 'Manage choices' } )
 		).toBeInTheDocument();
 		expect(
 			screen.getByRole( 'button', { name: 'Change type…' } )
@@ -463,7 +747,7 @@ describe( 'ColumnHeaderActions', () => {
 		render( <Harness collectionId={ 5 } recordId={ 77 } /> );
 
 		expect(
-			await screen.findByRole( 'button', { name: 'Edit field' } )
+			await screen.findByRole( 'button', { name: 'Format' } )
 		).toBeInTheDocument();
 		expect(
 			screen.getByRole( 'button', { name: 'Change type…' } )
@@ -484,14 +768,14 @@ describe( 'ColumnHeaderActions', () => {
 
 		render( <Harness collectionId={ 5 } recordId={ 77 } /> );
 
-		const editField = await screen.findByRole( 'button', {
-			name: 'Edit field',
+		const format = await screen.findByRole( 'button', {
+			name: 'Format',
 		} );
 		const calculate = screen.getByRole( 'button', {
 			name: 'Calculate',
 		} );
 
-		fireEvent.click( editField );
+		fireEvent.click( format );
 		expect(
 			screen.getByRole( 'button', { name: 'Save mock format' } )
 		).toBeInTheDocument();
@@ -504,7 +788,7 @@ describe( 'ColumnHeaderActions', () => {
 			screen.queryByRole( 'button', { name: 'Save mock format' } )
 		).not.toBeInTheDocument();
 
-		fireEvent.click( editField );
+		fireEvent.click( format );
 		expect(
 			screen.getByRole( 'button', { name: 'Save mock format' } )
 		).toBeInTheDocument();
@@ -608,7 +892,7 @@ describe( 'ColumnHeaderActions', () => {
 		);
 
 		fireEvent.click(
-			await screen.findByRole( 'button', { name: 'Edit field' } )
+			await screen.findByRole( 'button', { name: 'Format' } )
 		);
 		fireEvent.click(
 			screen.getByRole( 'button', { name: 'Save mock format' } )
