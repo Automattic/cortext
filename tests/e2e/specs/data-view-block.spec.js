@@ -2000,12 +2000,12 @@ test.describe( 'Collection view block', () => {
 			await yearLabelButton.click();
 			await expect(
 				detailCanvas.getByRole( 'menuitem', {
-					name: 'Edit field',
+					name: 'Format',
 				} )
 			).toBeVisible();
 			await detailCanvas
 				.getByRole( 'menuitem', {
-					name: 'Edit field',
+					name: 'Format',
 				} )
 				.click();
 			const formatPanel = page.locator( '.cortext-format-submenu' );
@@ -2053,7 +2053,7 @@ test.describe( 'Collection view block', () => {
 			await tagsLabelButton.click();
 			await expect(
 				detailCanvas.getByRole( 'menuitem', {
-					name: 'Edit options',
+					name: 'Manage choices',
 				} )
 			).toBeVisible();
 			await expect(
@@ -2699,10 +2699,11 @@ test.describe( 'Collection view block', () => {
 				name: 'Rename',
 			} );
 			const editFieldItem = canvas.getByRole( 'menuitem', {
-				name: 'Edit field',
+				name: 'Format',
 			} );
 			await expect( renameItem ).toBeFocused();
 
+			await page.keyboard.press( 'ArrowDown' );
 			await page.keyboard.press( 'ArrowDown' );
 			await expect( editFieldItem ).toBeFocused();
 

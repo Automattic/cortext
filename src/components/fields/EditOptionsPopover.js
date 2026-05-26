@@ -270,7 +270,11 @@ export default function EditOptionsPopover( {
 				const savedOptions = Array.isArray( result?.options )
 					? result.options
 					: nextOptions;
-				onOptionsSaved?.( savedOptions, migration );
+				if ( migration ) {
+					onOptionsSaved?.( savedOptions, migration );
+				} else {
+					onOptionsSaved?.( savedOptions );
+				}
 				if ( migration ) {
 					onRowsChanged?.();
 				}

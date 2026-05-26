@@ -501,8 +501,7 @@ describe( 'ColumnHeaderActions', () => {
 				{
 					id: 77,
 					meta: {
-						default_value:
-							'{"mode":"value","value":"Draft"}',
+						default_value: '{"mode":"value","value":"Draft"}',
 					},
 				}
 			)
@@ -558,8 +557,7 @@ describe( 'ColumnHeaderActions', () => {
 				{
 					id: 77,
 					meta: {
-						default_value:
-							'{"mode":"value","value":"todo"}',
+						default_value: '{"mode":"value","value":"todo"}',
 					},
 				}
 			)
