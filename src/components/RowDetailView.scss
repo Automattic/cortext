@@ -654,6 +654,10 @@
 			box-shadow: 0 0 0 $border-width var(--cortext-row-detail-border);
 		}
 
+		&.is-dropping-into-hidden {
+			opacity: 0;
+		}
+
 		.components-base-control {
 			width: 100%;
 			margin-bottom: 0;
@@ -951,7 +955,7 @@
 		margin: 0 $grid-unit-05 $grid-unit-05;
 		border: $border-width dashed var(--cortext-row-detail-border);
 		border-radius: $radius-small;
-		background: color-mix(in srgb, var(--cortext-row-detail-bg) 70%, transparent);
+		background: color-mix(in srgb, var(--cortext-row-detail-bg, #fff) 70%, transparent);
 		transition:
 			background-color 120ms ease,
 			border-color 120ms ease;
@@ -960,6 +964,19 @@
 			border-color: var(--cortext-row-detail-muted);
 			background: var(--cortext-row-detail-pressed-surface);
 		}
+	}
+
+	&__property-hidden-dropzone-preview {
+		display: flex;
+		align-items: center;
+		min-height: $grid-unit-30;
+		padding: 0 $grid-unit-10;
+		border-radius: 4px;
+		background: var(--cortext-row-detail-bg, #fff);
+		box-shadow: 0 0 0 $border-width var(--cortext-row-detail-border);
+		color: var(--cortext-row-detail-text);
+		font-size: 12px;
+		line-height: 1.3;
 	}
 
 	&__property-label-actions .cortext-rename-field-inline .components-base-control,

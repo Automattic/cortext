@@ -97,7 +97,7 @@ function ReadOnlyProperty( { value, type, elements, format } ) {
 	);
 }
 
-function EmptyHiddenPropertiesDropZone() {
+function EmptyHiddenPropertiesDropZone( { previewField } ) {
 	const { isOver, setNodeRef } = useDroppable( {
 		id: HIDDEN_PROPERTIES_DROP_TARGET,
 	} );
@@ -113,7 +113,13 @@ function EmptyHiddenPropertiesDropZone() {
 					( isOver ? ' is-over' : '' )
 				}
 				aria-label={ __( 'Hidden fields drop zone', 'cortext' ) }
-			/>
+			>
+				{ previewField ? (
+					<div className="cortext-row-detail__property-hidden-dropzone-preview">
+						<span>{ previewField.label }</span>
+					</div>
+				) : null }
+			</div>
 		</>
 	);
 }
@@ -546,6 +552,7 @@ function RowProperty( {
 	handleFieldOptionsSaved,
 	isLayoutEditing,
 	isDragging,
+	isDroppingIntoHidden,
 	localFormatOverrides,
 	localOptionOverrides,
 	onLayoutVisibilityToggle,
@@ -646,7 +653,8 @@ function RowProperty( {
 					? ' cortext-row-detail__property--layout-editing'
 					: '' ) +
 				( isVisibleInLayout ? '' : ' is-hidden' ) +
-				( isDragging ? ' is-dragging' : '' )
+				( isDragging ? ' is-dragging' : '' ) +
+				( isDroppingIntoHidden ? ' is-dropping-into-hidden' : '' )
 			}
 		>
 			<div className="cortext-row-detail__property-label">
@@ -758,6 +766,8 @@ export default function RowProperties( {
 	} = useContext( RowMutationContext );
 	const [ localOptionOverrides, setLocalOptionOverrides ] = useState( {} );
 	const [ localFormatOverrides, setLocalFormatOverrides ] = useState( {} );
+	const [ hiddenDropPreviewFieldId, setHiddenDropPreviewFieldId ] =
+		useState( null );
 	const handleFieldOptionsSaved = useCallback(
 		( recordId, nextOptions ) => {
 			const fieldId = `field-${ recordId }`;
@@ -876,6 +886,7 @@ export default function RowProperties( {
 	const handleDragEnd = useCallback(
 		( event ) => {
 			const { active, over } = event;
+			setHiddenDropPreviewFieldId( null );
 			if ( ! over || active.id === over.id ) {
 				return;
 			}
@@ -883,6 +894,15 @@ export default function RowProperties( {
 		},
 		[ onLayoutReorder ]
 	);
+	const handleDragOver = useCallback( ( event ) => {
+		const { active, over } = event;
+		setHiddenDropPreviewFieldId(
+			over?.id === HIDDEN_PROPERTIES_DROP_TARGET ? active.id : null
+		);
+	}, [] );
+	const handleDragCancel = useCallback( () => {
+		setHiddenDropPreviewFieldId( null );
+	}, [] );
 
 	const updateRelation = useCallback(
 		async ( fieldId, next ) => {
@@ -928,6 +948,7 @@ export default function RowProperties( {
 				handleFieldFormatSaved={ handleFieldFormatSaved }
 				handleFieldOptionsSaved={ handleFieldOptionsSaved }
 				isLayoutEditing={ isLayoutEditing }
+				isDroppingIntoHidden={ field.id === hiddenDropPreviewFieldId }
 				localFormatOverrides={ localFormatOverrides }
 				localOptionOverrides={ localOptionOverrides }
 				onLayoutVisibilityToggle={ onLayoutVisibilityToggle }
@@ -948,6 +969,7 @@ export default function RowProperties( {
 				handleFieldFormatSaved={ handleFieldFormatSaved }
 				handleFieldOptionsSaved={ handleFieldOptionsSaved }
 				isLayoutEditing={ isLayoutEditing }
+				isDroppingIntoHidden={ field.id === hiddenDropPreviewFieldId }
 				localFormatOverrides={ localFormatOverrides }
 				localOptionOverrides={ localOptionOverrides }
 				onLayoutVisibilityToggle={ onLayoutVisibilityToggle }
@@ -983,6 +1005,9 @@ export default function RowProperties( {
 			{ isLayoutEditing && ! hasHiddenFields ? (
 				<EmptyHiddenPropertiesDropZone
 					key={ HIDDEN_PROPERTIES_DROP_TARGET }
+					previewField={ propertyFields.find(
+						( field ) => field.id === hiddenDropPreviewFieldId
+					) }
 				/>
 			) : null }
 		</div>
@@ -996,7 +1021,9 @@ export default function RowProperties( {
 		<DndContext
 			sensors={ sensors }
 			collisionDetection={ rowPropertiesCollisionDetection }
+			onDragCancel={ handleDragCancel }
 			onDragEnd={ handleDragEnd }
+			onDragOver={ handleDragOver }
 		>
 			<SortableContext
 				items={ sortableIds }
