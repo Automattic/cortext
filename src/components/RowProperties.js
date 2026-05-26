@@ -229,11 +229,19 @@ function EditablePropertyText( { label, inputMode, value, onChange } ) {
 			value={ draft }
 			onBlur={ () => setIsFocused( false ) }
 			onChange={ ( event ) => {
-				const next = event.currentTarget.value;
+				const next = event.currentTarget.value.replace(
+					/[\r\n]+/g,
+					' '
+				);
 				setDraft( next );
 				onChange( next );
 			} }
 			onFocus={ () => setIsFocused( true ) }
+			onKeyDown={ ( event ) => {
+				if ( event.key === 'Enter' ) {
+					event.preventDefault();
+				}
+			} }
 		/>
 	);
 }

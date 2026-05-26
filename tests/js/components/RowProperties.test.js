@@ -1,5 +1,6 @@
 import {
 	act,
+	createEvent,
 	fireEvent,
 	render,
 	screen,
@@ -298,6 +299,40 @@ describe( 'RowProperties', () => {
 			'created_at',
 			'field-7'
 		);
+	} );
+
+	it( 'keeps text-like properties single-line while using a textarea', () => {
+		render(
+			<RowProperties
+				fields={ [
+					{
+						id: 'field-7',
+						label: 'Website',
+						cortextFieldType: 'url',
+						editable: true,
+					},
+				] }
+				row={ {} }
+			/>
+		);
+
+		const input = screen.getByRole( 'textbox', { name: 'Website' } );
+		const enter = createEvent.keyDown( input, {
+			key: 'Enter',
+			code: 'Enter',
+		} );
+		fireEvent( input, enter );
+
+		expect( enter.defaultPrevented ).toBe( true );
+
+		fireEvent.change( input, {
+			target: { value: 'https://example.com\nbad' },
+		} );
+
+		expect( input ).toHaveValue( 'https://example.com bad' );
+		expect( mockEditPost ).toHaveBeenCalledWith( {
+			meta: { 'field-7': 'https://example.com bad' },
+		} );
 	} );
 
 	it( 'uses format overrides for number properties', () => {
