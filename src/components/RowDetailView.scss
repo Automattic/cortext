@@ -1191,6 +1191,7 @@
 	}
 
 	&__property-value .cortext-relation-edit__toggle-refs {
+		display: flex;
 		flex: 1 1 auto;
 		flex-wrap: wrap;
 		align-items: center;
@@ -1207,7 +1208,8 @@
 	}
 
 	&__property-value .cortext-relation-edit__toggle-ref {
-		display: block;
+		display: inline-flex;
+		align-items: center;
 		box-sizing: border-box;
 		flex: 0 1 auto;
 		max-width: 100%;
