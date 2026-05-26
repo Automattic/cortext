@@ -936,6 +936,11 @@
 			height: $border-width;
 			background: var(--cortext-row-detail-border);
 		}
+
+		&--empty {
+			min-height: $grid-unit-40;
+			margin-top: $grid-unit-10;
+		}
 	}
 
 	&__property-label-actions .cortext-rename-field-inline .components-base-control,

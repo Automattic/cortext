@@ -87,7 +87,7 @@ function ReadOnlyProperty( { value, type, elements, format } ) {
 	);
 }
 
-function HiddenPropertiesSeparator() {
+function HiddenPropertiesSeparator( { isEmpty = false } ) {
 	const { setNodeRef, transform, transition } = useSortable( {
 		id: HIDDEN_PROPERTIES_DROP_TARGET,
 	} );
@@ -99,7 +99,12 @@ function HiddenPropertiesSeparator() {
 		<div
 			ref={ setNodeRef }
 			style={ style }
-			className="cortext-row-detail__property-hidden-separator"
+			className={
+				'cortext-row-detail__property-hidden-separator' +
+				( isEmpty
+					? ' cortext-row-detail__property-hidden-separator--empty'
+					: '' )
+			}
 		>
 			<span>{ __( 'Hidden fields', 'cortext' ) }</span>
 		</div>
@@ -830,19 +835,24 @@ export default function RowProperties( {
 	);
 	const canReorderLayout =
 		typeof onLayoutReorder === 'function' && propertyFields.length > 1;
-	const sortableIds = useMemo(
-		() =>
-			propertyFields.flatMap( ( field, index ) => {
-				const startsHiddenGroup =
-					isLayoutEditing &&
-					field.cortextDetailVisible === false &&
-					propertyFields[ index - 1 ]?.cortextDetailVisible !== false;
-				return startsHiddenGroup
-					? [ HIDDEN_PROPERTIES_DROP_TARGET, field.id ]
-					: [ field.id ];
-			} ),
-		[ isLayoutEditing, propertyFields ]
+	const hasHiddenFields = propertyFields.some(
+		( field ) => field.cortextDetailVisible === false
 	);
+	const sortableIds = useMemo( () => {
+		const ids = propertyFields.flatMap( ( field, index ) => {
+			const startsHiddenGroup =
+				isLayoutEditing &&
+				field.cortextDetailVisible === false &&
+				propertyFields[ index - 1 ]?.cortextDetailVisible !== false;
+			return startsHiddenGroup
+				? [ HIDDEN_PROPERTIES_DROP_TARGET, field.id ]
+				: [ field.id ];
+		} );
+		if ( isLayoutEditing && ! hasHiddenFields ) {
+			ids.push( HIDDEN_PROPERTIES_DROP_TARGET );
+		}
+		return ids;
+	}, [ hasHiddenFields, isLayoutEditing, propertyFields ] );
 	const handleDragEnd = useCallback(
 		( event ) => {
 			const { active, over } = event;
@@ -947,6 +957,12 @@ export default function RowProperties( {
 					</Fragment>
 				);
 			} ) }
+			{ isLayoutEditing && ! hasHiddenFields ? (
+				<HiddenPropertiesSeparator
+					key={ HIDDEN_PROPERTIES_DROP_TARGET }
+					isEmpty
+				/>
+			) : null }
 		</div>
 	);
 

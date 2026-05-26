@@ -565,4 +565,40 @@ describe( 'RowProperties', () => {
 		expect( screen.getByText( 'Status' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Archived' ) ).toBeInTheDocument();
 	} );
+
+	it( 'keeps a hidden fields drop zone while no fields are hidden', () => {
+		render(
+			<RowProperties
+				isLayoutEditing
+				fields={ [
+					{
+						id: 'field-7',
+						label: 'Status',
+						cortextFieldType: 'text',
+						editable: true,
+						cortextDetailVisible: true,
+					},
+					{
+						id: 'field-8',
+						label: 'Owner',
+						cortextFieldType: 'text',
+						editable: true,
+						cortextDetailVisible: true,
+					},
+				] }
+				onLayoutReorder={ jest.fn() }
+				row={ {} }
+			/>
+		);
+
+		const separator = screen
+			.getByText( 'Hidden fields' )
+			.closest( '.cortext-row-detail__property-hidden-separator' );
+
+		expect( separator ).toHaveClass(
+			'cortext-row-detail__property-hidden-separator--empty'
+		);
+		expect( screen.getByText( 'Status' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Owner' ) ).toBeInTheDocument();
+	} );
 } );
