@@ -90,6 +90,7 @@ jest.mock( '@dnd-kit/core', () => {
 		useSensor: jest.fn( () => ( {} ) ),
 		useSensors: jest.fn( ( ...sensors ) => sensors ),
 		useDroppable: jest.fn( () => ( {
+			isOver: false,
 			setNodeRef: jest.fn(),
 		} ) ),
 	};
@@ -174,7 +175,7 @@ jest.mock( '../../../src/components/relations/RelationEditor', () => ( {
 
 import apiFetch from '@wordpress/api-fetch';
 import { useDispatch, useSelect } from '@wordpress/data';
-import { closestCenter, pointerWithin } from '@dnd-kit/core';
+import { closestCenter, pointerWithin, useDroppable } from '@dnd-kit/core';
 import { RowMutationContext } from '../../../src/components/EditableCell';
 import RowProperties, {
 	HIDDEN_PROPERTIES_DROP_TARGET,
@@ -187,6 +188,10 @@ describe( 'RowProperties', () => {
 		apiFetch.mockReset();
 		closestCenter.mockReset();
 		pointerWithin.mockReset();
+		useDroppable.mockReturnValue( {
+			isOver: false,
+			setNodeRef: jest.fn(),
+		} );
 		mockEditPost.mockReset();
 		mockRelationEditorProps.length = 0;
 		useDispatch.mockReturnValue( { editPost: mockEditPost } );
@@ -608,6 +613,41 @@ describe( 'RowProperties', () => {
 		);
 		expect( screen.getByText( 'Status' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Owner' ) ).toBeInTheDocument();
+	} );
+
+	it( 'highlights the hidden fields drop zone while dragging over it', () => {
+		useDroppable.mockReturnValue( {
+			isOver: true,
+			setNodeRef: jest.fn(),
+		} );
+
+		render(
+			<RowProperties
+				isLayoutEditing
+				fields={ [
+					{
+						id: 'field-7',
+						label: 'Status',
+						cortextFieldType: 'text',
+						editable: true,
+						cortextDetailVisible: true,
+					},
+					{
+						id: 'field-8',
+						label: 'Owner',
+						cortextFieldType: 'text',
+						editable: true,
+						cortextDetailVisible: true,
+					},
+				] }
+				onLayoutReorder={ jest.fn() }
+				row={ {} }
+			/>
+		);
+
+		expect(
+			screen.getByLabelText( 'Hidden fields drop zone' )
+		).toHaveClass( 'is-over' );
 	} );
 
 	it( 'prefers the hidden fields drop zone under the pointer', () => {

@@ -98,7 +98,7 @@ function ReadOnlyProperty( { value, type, elements, format } ) {
 }
 
 function EmptyHiddenPropertiesDropZone() {
-	const { setNodeRef } = useDroppable( {
+	const { isOver, setNodeRef } = useDroppable( {
 		id: HIDDEN_PROPERTIES_DROP_TARGET,
 	} );
 	return (
@@ -108,7 +108,10 @@ function EmptyHiddenPropertiesDropZone() {
 			</div>
 			<div
 				ref={ setNodeRef }
-				className="cortext-row-detail__property-hidden-dropzone"
+				className={
+					'cortext-row-detail__property-hidden-dropzone' +
+					( isOver ? ' is-over' : '' )
+				}
 				aria-label={ __( 'Hidden fields drop zone', 'cortext' ) }
 			/>
 		</>

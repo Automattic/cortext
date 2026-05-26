@@ -952,6 +952,14 @@
 		border: $border-width dashed var(--cortext-row-detail-border);
 		border-radius: $radius-small;
 		background: color-mix(in srgb, var(--cortext-row-detail-bg) 70%, transparent);
+		transition:
+			background-color 120ms ease,
+			border-color 120ms ease;
+
+		&.is-over {
+			border-color: var(--cortext-row-detail-muted);
+			background: var(--cortext-row-detail-pressed-surface);
+		}
 	}
 
 	&__property-label-actions .cortext-rename-field-inline .components-base-control,
