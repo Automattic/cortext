@@ -86,8 +86,8 @@ function DocumentActions( {
 							size="compact"
 							label={
 								arePropertiesVisible
-									? __( 'Hide fields', 'cortext' )
-									: __( 'Show fields', 'cortext' )
+									? __( 'Hide properties', 'cortext' )
+									: __( 'Show properties', 'cortext' )
 							}
 							isPressed={ arePropertiesVisible }
 							onClick={ onTogglePropertiesVisible }
@@ -98,8 +98,8 @@ function DocumentActions( {
 							size="compact"
 							label={
 								isPropertiesLayoutEditing
-									? __( 'Stop editing layout', 'cortext' )
-									: __( 'Edit layout', 'cortext' )
+									? __( 'Done editing properties', 'cortext' )
+									: __( 'Edit properties', 'cortext' )
 							}
 							isPressed={ isPropertiesLayoutEditing }
 							onClick={ onEditPropertiesLayout }

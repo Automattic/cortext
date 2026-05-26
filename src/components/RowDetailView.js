@@ -177,8 +177,8 @@ function DetailShell( {
 							icon={ arePropertiesVisible ? unseen : seen }
 							label={
 								arePropertiesVisible
-									? __( 'Hide fields', 'cortext' )
-									: __( 'Show fields', 'cortext' )
+									? __( 'Hide properties', 'cortext' )
+									: __( 'Show properties', 'cortext' )
 							}
 							onClick={ () =>
 								setArePropertiesVisible(
@@ -191,8 +191,8 @@ function DetailShell( {
 							icon={ pencil }
 							label={
 								isPropertiesLayoutEditing
-									? __( 'Stop editing layout', 'cortext' )
-									: __( 'Edit layout', 'cortext' )
+									? __( 'Done editing properties', 'cortext' )
+									: __( 'Edit properties', 'cortext' )
 							}
 							isPressed={ isPropertiesLayoutEditing }
 							onClick={ onRequestLayoutEdit }

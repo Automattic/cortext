@@ -34,8 +34,8 @@ export default function DocumentPropertiesActions() {
 						__next40pxDefaultSize
 					>
 						{ isVisible
-							? __( 'Hide fields', 'cortext' )
-							: __( 'Show fields', 'cortext' ) }
+							? __( 'Hide properties', 'cortext' )
+							: __( 'Show properties', 'cortext' ) }
 					</Button>
 				) }
 				{ collectionId && (

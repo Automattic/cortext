@@ -660,7 +660,7 @@ describe( 'RowProperties', () => {
 			/>
 		);
 
-		expect( screen.getByText( 'Hidden fields' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Hidden properties' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Status' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Archived' ) ).toBeInTheDocument();
 	} );
@@ -691,9 +691,11 @@ describe( 'RowProperties', () => {
 		);
 
 		const separator = screen
-			.getByText( 'Hidden fields' )
+			.getByText( 'Hidden properties' )
 			.closest( '.cortext-row-detail__property-hidden-separator' );
-		const dropzone = screen.getByLabelText( 'Hidden fields drop zone' );
+		const dropzone = screen.getByLabelText(
+			'Drop properties here to hide them'
+		);
 
 		expect( separator ).toBeInTheDocument();
 		expect( dropzone ).toHaveClass(
@@ -734,7 +736,7 @@ describe( 'RowProperties', () => {
 		);
 
 		expect(
-			screen.getByLabelText( 'Hidden fields drop zone' )
+			screen.getByLabelText( 'Drop properties here to hide them' )
 		).toHaveClass( 'is-over' );
 	} );
 

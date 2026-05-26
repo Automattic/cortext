@@ -274,7 +274,7 @@ export default function Edit() {
 				setOptimisticEntries( previousOptimisticEntries );
 				setSaveError(
 					error?.message ??
-						__( 'Could not save the row detail layout.', 'cortext' )
+						__( 'Could not save the property layout.', 'cortext' )
 				);
 			}
 		},
@@ -391,8 +391,8 @@ export default function Edit() {
 						icon={ isVisible ? unseen : seen }
 						label={
 							isVisible
-								? __( 'Hide fields', 'cortext' )
-								: __( 'Show fields', 'cortext' )
+								? __( 'Hide properties', 'cortext' )
+								: __( 'Show properties', 'cortext' )
 						}
 						onClick={ onToggleVisible }
 					/>
@@ -404,8 +404,8 @@ export default function Edit() {
 						icon={ pencil }
 						label={
 							isEditingLayout
-								? __( 'Stop editing layout', 'cortext' )
-								: __( 'Edit layout', 'cortext' )
+								? __( 'Done editing properties', 'cortext' )
+								: __( 'Edit properties', 'cortext' )
 						}
 						isPressed={ isEditingLayout }
 						onClick={ toggleEditingLayout }
@@ -504,7 +504,7 @@ export default function Edit() {
 					) }
 					{ showEmptyProperties ? (
 						<p className="cortext-document-properties__empty">
-							{ __( 'No visible properties.', 'cortext' ) }
+							{ __( 'No properties shown.', 'cortext' ) }
 						</p>
 					) : null }
 				</div>

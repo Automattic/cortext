@@ -1,8 +1,8 @@
 /**
- * Property panel for a row document. Renders one row per collection field
- * with the right edit affordance for that field type. Mounted by row detail
- * chrome and by the locked document-properties editor block; see
- * tech-debt.md#42 for the remaining public-rendering follow-up.
+ * Property panel for a row document. It renders one row per collection field
+ * with the edit control that matches the field type. Row detail chrome and the
+ * locked document-properties editor block both mount this; see tech-debt.md#42
+ * for the remaining public-rendering work.
  *
  * Reads the post's edited title and meta from `editorStore` so the live
  * values stay in sync with the locked `core/post-title` block above and
@@ -105,7 +105,7 @@ function EmptyHiddenPropertiesDropZone() {
 	return (
 		<>
 			<div className="cortext-row-detail__property-hidden-separator">
-				<span>{ __( 'Hidden fields', 'cortext' ) }</span>
+				<span>{ __( 'Hidden properties', 'cortext' ) }</span>
 			</div>
 			<div
 				ref={ setNodeRef }
@@ -113,7 +113,10 @@ function EmptyHiddenPropertiesDropZone() {
 					'cortext-row-detail__property-hidden-dropzone' +
 					( isOver ? ' is-over' : '' )
 				}
-				aria-label={ __( 'Hidden fields drop zone', 'cortext' ) }
+				aria-label={ __(
+					'Drop properties here to hide them',
+					'cortext'
+				) }
 			/>
 		</>
 	);
@@ -210,7 +213,7 @@ function HiddenPropertiesSeparator() {
 			style={ style }
 			className="cortext-row-detail__property-hidden-separator"
 		>
-			<span>{ __( 'Hidden fields', 'cortext' ) }</span>
+			<span>{ __( 'Hidden properties', 'cortext' ) }</span>
 		</div>
 	);
 }
@@ -848,14 +851,14 @@ function SortableRowProperty( props ) {
 /*
  * Renders the row's collection-field properties as document chrome above the
  * block editor. This is intentionally not serialized yet; see
- * tech-debt.md#42 for the frontend rendering follow-up.
+ * tech-debt.md#42 for the frontend rendering work.
  *
  * @param {Object}   props
  * @param {number}   props.collectionId The row's parent collection ID.
  * @param {Array}    props.fields       Fields shown for this row.
- * @param {boolean}  props.isLayoutEditing Whether fields are being shown/hidden.
- * @param {Function} props.onLayoutReorder Reorders fields from the row properties list.
- * @param {Function} props.onLayoutVisibilityToggle Toggles a field in the draft layout.
+ * @param {boolean}  props.isLayoutEditing Whether the user is arranging properties.
+ * @param {Function} props.onLayoutReorder Reorders fields from the properties list.
+ * @param {Function} props.onLayoutVisibilityToggle Shows or hides a field in the layout.
  * @param {number}   [props.rowId]      The current row ID.
  * @param {Object}   [props.row]        Fallback row record for values outside editor state,
  *                                      such as relations and rollups.

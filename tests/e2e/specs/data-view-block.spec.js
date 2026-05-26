@@ -2135,24 +2135,26 @@ test.describe( 'Collection view block', () => {
 			const propertiesSlot = detailCanvas.locator(
 				'.cortext-document-properties'
 			);
-			// The properties block also exposes a Hide/Show fields toolbar
+			// The properties block also exposes a Hide/Show properties toolbar
 			// button. Scope to the row-detail toolbar so the locator stays
 			// unambiguous regardless of editor selection.
 			const rowDetailToolbar = detail.getByRole( 'toolbar', {
 				name: 'Row detail tools',
 			} );
 			await rowDetailToolbar
-				.getByRole( 'button', { name: 'Hide fields' } )
+				.getByRole( 'button', { name: 'Hide properties' } )
 				.click();
 			await expect( detailTitle ).toBeVisible();
 			await expect( propertiesSlot ).toHaveClass(
 				/cortext-document-properties--collapsed/
 			);
 			await expect(
-				rowDetailToolbar.getByRole( 'button', { name: 'Show fields' } )
+				rowDetailToolbar.getByRole( 'button', {
+					name: 'Show properties',
+				} )
 			).toBeVisible();
 			await rowDetailToolbar
-				.getByRole( 'button', { name: 'Show fields' } )
+				.getByRole( 'button', { name: 'Show properties' } )
 				.click();
 			await expect( propertiesSlot ).toBeVisible();
 			await expect( propertiesSlot ).not.toHaveClass(
