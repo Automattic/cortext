@@ -256,9 +256,15 @@ export default function Edit() {
 			if ( from < 0 || to < 0 || from === to ) {
 				return;
 			}
+			const shouldHideActive =
+				draftLayoutEntries[ from ]?.visible !== false &&
+				draftLayoutEntries[ to ]?.visible === false;
 			const nextEntries = [ ...draftLayoutEntries ];
 			const [ moved ] = nextEntries.splice( from, 1 );
-			nextEntries.splice( to, 0, moved );
+			const nextMoved = shouldHideActive
+				? { ...moved, visible: false }
+				: moved;
+			nextEntries.splice( to, 0, nextMoved );
 			setDraftEntries( nextEntries );
 		},
 		[ draftLayoutEntries ]
