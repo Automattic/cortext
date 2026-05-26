@@ -322,4 +322,26 @@ describe( 'RowProperties', () => {
 			screen.getByRole( 'button', { name: 'About Status' } )
 		).toBeInTheDocument();
 	} );
+
+	it( 'does not show whitespace-only field descriptions', () => {
+		render(
+			<RowProperties
+				fields={ [
+					{
+						id: 'field-7',
+						label: 'Status',
+						description: '   ',
+						cortextFieldType: 'text',
+						cortextRecordId: 7,
+						editable: true,
+					},
+				] }
+				row={ {} }
+			/>
+		);
+
+		expect(
+			screen.queryByRole( 'button', { name: 'About Status' } )
+		).not.toBeInTheDocument();
+	} );
 } );

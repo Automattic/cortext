@@ -527,15 +527,16 @@ function PropertyLabel( {
 	onRowsChanged,
 } ) {
 	const recordId = field.cortextRecordId ?? toRecordId( field.id );
+	const description = field.description?.trim() ?? '';
 	if ( ! collectionId || ! recordId ) {
 		return (
 			<>
 				<span className="cortext-row-detail__property-label-text">
 					{ field.label }
 				</span>
-				{ field.description ? (
+				{ description ? (
 					<Infotip
-						description={ field.description }
+						description={ description }
 						label={ sprintf(
 							/* translators: %s: field label */
 							__( 'About %s', 'cortext' ),
