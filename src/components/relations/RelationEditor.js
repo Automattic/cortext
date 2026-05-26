@@ -8,7 +8,13 @@ import {
 	useRef,
 	useState,
 } from '@wordpress/element';
-import { Icon, chevronDown, closeSmall, plus } from '@wordpress/icons';
+import {
+	Icon,
+	arrowUpRight,
+	chevronDown,
+	closeSmall,
+	plus,
+} from '@wordpress/icons';
 
 import useCollectionRows from '../../hooks/useCollectionRows';
 import useCollectionRowsByIds from '../../hooks/useCollectionRowsByIds';
@@ -266,7 +272,13 @@ export default function RelationEditor( {
 									key={ ref.id }
 									className="cortext-relation-edit__toggle-ref"
 								>
-									{ relationTitle( ref ) }
+									<Icon
+										className="cortext-relation-ref__icon"
+										icon={ arrowUpRight }
+									/>
+									<span className="cortext-relation-ref__title">
+										{ relationTitle( ref ) }
+									</span>
 								</span>
 							) ) }
 						</span>
