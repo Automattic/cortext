@@ -137,6 +137,7 @@ export default function ImportEntriesTable( { collection, entries } ) {
 		( f ) => f.type === 'title'
 	)?.id;
 	const [ previewRow, setPreviewRow ] = useState( null );
+	const [ previewMode, setPreviewMode ] = useState( 'side' );
 
 	const actions = useMemo(
 		() => [
@@ -222,6 +223,8 @@ export default function ImportEntriesTable( { collection, entries } ) {
 				<ImportRowPreview
 					collection={ collection }
 					row={ previewRow }
+					mode={ previewMode }
+					onModeChange={ setPreviewMode }
 					onClose={ () => setPreviewRow( null ) }
 				/>
 			) }
