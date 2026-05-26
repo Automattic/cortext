@@ -108,6 +108,7 @@ const fields = [
 	{ id: 'field-10', label: 'Author' },
 	{ id: 'created_at', label: 'Created' },
 ];
+const allFields = [ ...fields, { id: 'field-11', label: 'Hidden field' } ];
 
 beforeEach( () => {
 	mockCanEdit = true;
@@ -118,10 +119,11 @@ beforeEach( () => {
 		collectionId: 77,
 		rowId: 123,
 		fields,
-		allFields: fields,
+		allFields,
 		detailLayoutEntries: [
 			{ field: 'field-10', visible: true },
 			{ field: 'created_at', visible: true },
+			{ field: 'field-11', visible: false },
 		],
 		fallbackRecord: { id: 123 },
 		isResolving: false,
@@ -164,6 +166,7 @@ describe( 'document-properties Edit layout mode', () => {
 							fields: [
 								{ field: 'created_at', visible: false },
 								{ field: 'field-10', visible: true },
+								{ field: 'field-11', visible: false },
 							],
 						},
 					},
@@ -182,6 +185,25 @@ describe( 'document-properties Edit layout mode', () => {
 				rowId: 123,
 			} )
 		);
+	} );
+
+	it( 'does not expand layout editing with fields hidden before editing', () => {
+		render( <Edit /> );
+
+		expect( screen.getByTestId( 'row-properties' ) ).not.toHaveTextContent(
+			'Hidden field'
+		);
+
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Edit layout' } )
+		);
+
+		expect( screen.getByTestId( 'row-properties' ) ).not.toHaveTextContent(
+			'Hidden field'
+		);
+		expect(
+			mockRowPropertiesProps.fields.map( ( field ) => field.id )
+		).toEqual( [ 'field-10', 'created_at' ] );
 	} );
 
 	it( 'cancels draft edits without saving', () => {
@@ -232,6 +254,7 @@ describe( 'document-properties Edit layout mode', () => {
 							fields: [
 								{ field: 'created_at', visible: true },
 								{ field: 'field-10', visible: true },
+								{ field: 'field-11', visible: false },
 							],
 						},
 					},

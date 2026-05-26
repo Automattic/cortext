@@ -53,6 +53,7 @@ export default function Edit() {
 	const [ isEditingLayout, setIsEditingLayout ] = useState( false );
 	const [ draftEntries, setDraftEntries ] = useState( null );
 	const [ optimisticEntries, setOptimisticEntries ] = useState( null );
+	const [ layoutEditFieldIds, setLayoutEditFieldIds ] = useState( null );
 	const [ layoutEditorMinHeight, setLayoutEditorMinHeight ] =
 		useState( null );
 	const [ saveError, setSaveError ] = useState( null );
@@ -117,6 +118,7 @@ export default function Edit() {
 	useEffect( () => {
 		if ( ! isEditingLayout ) {
 			setDraftEntries( null );
+			setLayoutEditFieldIds( null );
 		}
 	}, [ isEditingLayout ] );
 	const rememberPropertiesHeight = useCallback( () => {
@@ -131,9 +133,15 @@ export default function Edit() {
 		);
 	}, [] );
 	const startEditingLayout = useCallback( () => {
+		const entries = optimisticEntries ?? currentEntries;
 		rememberPropertiesHeight();
 		setOptimisticEntries( null );
-		setDraftEntries( optimisticEntries ?? currentEntries );
+		setDraftEntries( entries );
+		setLayoutEditFieldIds(
+			entries
+				.filter( ( entry ) => entry.visible !== false )
+				.map( ( entry ) => entry.field )
+		);
 		setSaveError( null );
 		setIsEditingLayout( true );
 	}, [ currentEntries, optimisticEntries, rememberPropertiesHeight ] );
@@ -224,7 +232,13 @@ export default function Edit() {
 		const fieldsById = new Map(
 			layoutFields.map( ( field ) => [ field.id, field ] )
 		);
+		const editFieldIds = layoutEditFieldIds
+			? new Set( layoutEditFieldIds )
+			: null;
 		return draftLayoutEntries
+			.filter(
+				( entry ) => ! editFieldIds || editFieldIds.has( entry.field )
+			)
 			.map( ( entry ) => {
 				const field = fieldsById.get( entry.field );
 				return field
@@ -235,7 +249,7 @@ export default function Edit() {
 					: null;
 			} )
 			.filter( Boolean );
-	}, [ draftLayoutEntries, layoutFields ] );
+	}, [ draftLayoutEntries, layoutEditFieldIds, layoutFields ] );
 	const handleDraftLayoutReorder = useCallback(
 		( activeField, overField ) => {
 			const from = draftLayoutEntries.findIndex(
