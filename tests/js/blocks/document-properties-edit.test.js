@@ -99,6 +99,14 @@ jest.mock( '../../../src/components/RowProperties', () => ( {
 						>
 							Drag Author to hidden
 						</button>
+						<button
+							type="button"
+							onClick={ () =>
+								onLayoutReorder( 'field-11', 'field-10' )
+							}
+						>
+							Drag Hidden to visible
+						</button>
 					</>
 				) : null }
 			</div>
@@ -241,6 +249,40 @@ describe( 'document-properties Edit layout mode', () => {
 								{ field: 'created_at', visible: true },
 								{ field: 'field-11', visible: false },
 								{ field: 'field-10', visible: false },
+							],
+						},
+					},
+				},
+				{ throwOnError: true }
+			)
+		);
+	} );
+
+	it( 'shows fields dragged out of the hidden group', async () => {
+		render( <Edit /> );
+
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Edit layout' } )
+		);
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Drag Hidden to visible' } )
+		);
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Save layout' } )
+		);
+
+		await waitFor( () =>
+			expect( mockSaveEntityRecord ).toHaveBeenCalledWith(
+				'postType',
+				'crtxt_collection',
+				{
+					id: 77,
+					meta: {
+						detail_layout: {
+							fields: [
+								{ field: 'field-11', visible: true },
+								{ field: 'field-10', visible: true },
+								{ field: 'created_at', visible: true },
 							],
 						},
 					},

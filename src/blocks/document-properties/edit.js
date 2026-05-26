@@ -259,11 +259,17 @@ export default function Edit() {
 			const shouldHideActive =
 				draftLayoutEntries[ from ]?.visible !== false &&
 				draftLayoutEntries[ to ]?.visible === false;
+			const shouldShowActive =
+				draftLayoutEntries[ from ]?.visible === false &&
+				draftLayoutEntries[ to ]?.visible !== false;
 			const nextEntries = [ ...draftLayoutEntries ];
 			const [ moved ] = nextEntries.splice( from, 1 );
-			const nextMoved = shouldHideActive
-				? { ...moved, visible: false }
-				: moved;
+			let nextMoved = moved;
+			if ( shouldHideActive ) {
+				nextMoved = { ...moved, visible: false };
+			} else if ( shouldShowActive ) {
+				nextMoved = { ...moved, visible: true };
+			}
 			nextEntries.splice( to, 0, nextMoved );
 			setDraftEntries( nextEntries );
 		},
