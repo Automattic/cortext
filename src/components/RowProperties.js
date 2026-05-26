@@ -14,7 +14,6 @@ import { Button, CheckboxControl } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
 import {
-	Fragment,
 	useCallback,
 	useContext,
 	useEffect,
@@ -503,6 +502,7 @@ function RowProperty( {
 	rowRef,
 	rowId,
 	rowStyle,
+	showHiddenSeparator,
 	update,
 	updateRelation,
 } ) {
@@ -596,6 +596,11 @@ function RowProperty( {
 				( isDragging ? ' is-dragging' : '' )
 			}
 		>
+			{ showHiddenSeparator ? (
+				<div className="cortext-row-detail__property-hidden-separator">
+					<span>{ __( 'Hidden fields', 'cortext' ) }</span>
+				</div>
+			) : null }
 			<div className="cortext-row-detail__property-label">
 				<span className="cortext-row-detail__property-label-icon-slot">
 					{ canReorderLayout ? (
@@ -853,7 +858,7 @@ export default function RowProperties( {
 		_n( '%d field', '%d fields', propertyFields.length, 'cortext' ),
 		propertyFields.length
 	);
-	const renderProperty = ( field ) =>
+	const renderProperty = ( field, showHiddenSeparator = false ) =>
 		canReorderLayout ? (
 			<SortableRowProperty
 				key={ field.id }
@@ -870,6 +875,7 @@ export default function RowProperties( {
 				optionOverrides={ optionOverrides }
 				refreshRows={ refreshRows }
 				rowId={ rowId }
+				showHiddenSeparator={ showHiddenSeparator }
 				update={ update }
 				updateRelation={ updateRelation }
 			/>
@@ -890,6 +896,7 @@ export default function RowProperties( {
 				optionOverrides={ optionOverrides }
 				refreshRows={ refreshRows }
 				rowId={ rowId }
+				showHiddenSeparator={ showHiddenSeparator }
 				update={ update }
 				updateRelation={ updateRelation }
 			/>
@@ -905,18 +912,7 @@ export default function RowProperties( {
 					isLayoutEditing &&
 					field.cortextDetailVisible === false &&
 					propertyFields[ index - 1 ]?.cortextDetailVisible !== false;
-				return (
-					<Fragment key={ field.id }>
-						{ startsHiddenGroup ? (
-							<div className="cortext-row-detail__property-hidden-separator">
-								<span>
-									{ __( 'Hidden fields', 'cortext' ) }
-								</span>
-							</div>
-						) : null }
-						{ renderProperty( field ) }
-					</Fragment>
-				);
+				return renderProperty( field, startsHiddenGroup );
 			} ) }
 		</div>
 	);

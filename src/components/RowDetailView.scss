@@ -917,6 +917,7 @@
 
 	&__property-hidden-separator {
 		display: flex;
+		grid-column: 1 / -1;
 		align-items: center;
 		gap: $grid-unit-10;
 		min-height: $grid-unit-30;
