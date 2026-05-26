@@ -122,6 +122,8 @@ final class CollectionDuplicator {
 
 		$meta_whitelist = array(
 			'type',
+			'description',
+			'default_value',
 			'options',
 			'number_format',
 			'date_format',

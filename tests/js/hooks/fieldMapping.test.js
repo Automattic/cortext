@@ -113,6 +113,22 @@ describe( 'mapField', () => {
 		expect( mapped.operators ).toEqual( [ 'is', 'isAny' ] );
 	} );
 
+	it( 'carries field descriptions and parsed defaults', () => {
+		const mapped = mapField(
+			baseField( {
+				type: 'number',
+				description: 'Expected invoice total.',
+				default_value: '{"mode":"value","value":12.5}',
+			} )
+		);
+
+		expect( mapped.description ).toBe( 'Expected invoice total.' );
+		expect( mapped.cortextDefaultConfig ).toEqual( {
+			mode: 'value',
+			value: 12.5,
+		} );
+	} );
+
 	it( 'configures DataViews text filters from UI-supported server operators', () => {
 		const mapped = mapField( {
 			...baseField( { type: 'text' } ),

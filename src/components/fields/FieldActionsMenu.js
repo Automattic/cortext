@@ -15,16 +15,18 @@ import {
 	useRef,
 	useState,
 } from '@wordpress/element';
-import { chevronRight, copy, pencil, trash } from '@wordpress/icons';
+import { chevronRight, cog, copy, pencil, trash } from '@wordpress/icons';
 
 import ChangeFieldTypePopover from './ChangeFieldTypePopover';
 import EditOptionsPopover from './EditOptionsPopover';
 import FieldFormatPopover from './FieldFormatPopover';
+import FieldSettingsPopover from './FieldSettingsPopover';
 import RenameFieldInline from './RenameFieldInline';
 import {
 	useCollectionFieldsContext,
 	useMappedField,
 } from '../CollectionFieldsContext';
+import Infotip from '../Infotip';
 import {
 	useDeleteField,
 	useDuplicateField,
@@ -64,6 +66,7 @@ export default function FieldActionsMenu( {
 	const [ isMenuOpen, setIsMenuOpen ] = useState( false );
 	const [ isFormatting, setIsFormatting ] = useState( false );
 	const [ isEditingOptions, setIsEditingOptions ] = useState( false );
+	const [ isEditingSettings, setIsEditingSettings ] = useState( false );
 	const [ isChangingType, setIsChangingType ] = useState( false );
 	const [ shouldFocusFormat, setShouldFocusFormat ] = useState( false );
 	const [ confirmDelete, setConfirmDelete ] = useState( false );
@@ -90,6 +93,7 @@ export default function FieldActionsMenu( {
 		};
 	}, [ field, mappedField ] );
 	const label = activeField?.label || `#${ recordId }`;
+	const description = activeField?.description?.trim() ?? '';
 	const fieldType =
 		activeField?.cortextType ??
 		activeField?.cortextFieldType ??
@@ -302,6 +306,17 @@ export default function FieldActionsMenu( {
 				>
 					{ triggerContent ?? label }
 				</Menu.TriggerButton>
+				{ description ? (
+					<Infotip
+						description={ description }
+						label={ sprintf(
+							/* translators: %s: field label */
+							__( 'About %s', 'cortext' ),
+							label
+						) }
+						placement="bottom"
+					/>
+				) : null }
 				{ /* tech-debt.md#29: portal avoids table-header text
 				     transform leaking into the menu. */ }
 				<Menu.Popover
@@ -320,6 +335,14 @@ export default function FieldActionsMenu( {
 								{ __( 'Rename', 'cortext' ) }
 							</Menu.ItemLabel>
 						</Menu.Item>
+						<Menu.Item
+							prefix={ <Icon icon={ cog } /> }
+							onClick={ () => setIsEditingSettings( true ) }
+						>
+							<Menu.ItemLabel>
+								{ __( 'Field settings', 'cortext' ) }
+							</Menu.ItemLabel>
+						</Menu.Item>
 						{ canFormat ? (
 							<Menu.Item
 								ref={ formatItemRef }
@@ -334,7 +357,7 @@ export default function FieldActionsMenu( {
 								onMouseLeave={ scheduleClose }
 							>
 								<Menu.ItemLabel>
-									{ __( 'Edit field', 'cortext' ) }
+									{ __( 'Format', 'cortext' ) }
 								</Menu.ItemLabel>
 							</Menu.Item>
 						) : null }
@@ -343,7 +366,7 @@ export default function FieldActionsMenu( {
 								onClick={ () => setIsEditingOptions( true ) }
 							>
 								<Menu.ItemLabel>
-									{ __( 'Edit options', 'cortext' ) }
+									{ __( 'Manage choices', 'cortext' ) }
 								</Menu.ItemLabel>
 							</Menu.Item>
 						) : null }
@@ -457,6 +480,15 @@ export default function FieldActionsMenu( {
 						onRequestClose={ () => setIsEditingOptions( false ) }
 					/>
 				</Popover>
+			) : null }
+			{ isEditingSettings ? (
+				<FieldSettingsPopover
+					recordId={ recordId }
+					anchor={ optionsAnchorRef.current }
+					onFieldOptionsSaved={ onFieldOptionsSaved }
+					onRowsChanged={ onRowsChanged }
+					onClose={ () => setIsEditingSettings( false ) }
+				/>
 			) : null }
 			{ isChangingType && canChangeType ? (
 				<ChangeFieldTypePopover

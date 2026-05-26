@@ -9,6 +9,7 @@ import {
 
 import EditableCell from '../components/EditableCell';
 import { SystemFieldIcon } from '../components/fields/fieldTypes';
+import { parseDefaultConfig } from './fieldDefaults';
 import { elementsFromOptions } from './optionElements';
 
 // Re-export for existing call sites. The implementation lives in
@@ -466,6 +467,12 @@ export function mapField( field ) {
 			? field.meta?.rollup_target_options
 			: field.meta?.options
 	);
+	const description = field.meta?.description ?? '';
+	const defaultConfig = parseDefaultConfig(
+		field.meta?.default_value,
+		type,
+		elements
+	);
 	let format;
 	if ( type === 'number' ) {
 		format = parseFormat( field.meta?.number_format );
@@ -494,6 +501,7 @@ export function mapField( field ) {
 	const base = {
 		id,
 		label,
+		description,
 		recordId: field.id,
 		cortextType: type,
 		sortable: capabilities.sortable === true,
@@ -527,6 +535,7 @@ export function mapField( field ) {
 		cortextFieldType: type,
 		cortextElements: elements,
 		cortextFormat: format,
+		cortextDefaultConfig: defaultConfig,
 		cortextRecordId: field.id,
 	};
 

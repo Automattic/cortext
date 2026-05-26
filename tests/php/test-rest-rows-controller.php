@@ -71,6 +71,164 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertArrayHasKey( "field-{$fixture['field_id']}", $data['meta'] );
 	}
 
+	public function test_create_row_applies_field_defaults(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+		$collection_id = $this->create_collection_with_slug( 'Defaults', 'defaults' );
+
+		$text_id = $this->create_collection_field( $collection_id, 'Notes', 'text' );
+		update_post_meta( $text_id, 'default_value', '{"mode":"value","value":"Draft"}' );
+
+		$number_id = $this->create_collection_field( $collection_id, 'Score', 'number' );
+		update_post_meta( $number_id, 'default_value', '{"mode":"value","value":12.5}' );
+
+		$date_id = $this->create_collection_field( $collection_id, 'Due', 'date' );
+		update_post_meta( $date_id, 'default_value', '{"mode":"today"}' );
+
+		$datetime_id = $this->create_collection_field( $collection_id, 'Start', 'datetime' );
+		update_post_meta( $datetime_id, 'default_value', '{"mode":"today"}' );
+
+		$checkbox_id = $this->create_collection_field( $collection_id, 'Done', 'checkbox' );
+		update_post_meta( $checkbox_id, 'default_value', '{"mode":"value","value":true}' );
+
+		$select_id = $this->create_collection_field(
+			$collection_id,
+			'Status',
+			'select',
+			array(
+				'options' => wp_json_encode(
+					array(
+						array(
+							'value' => 'todo',
+							'label' => 'To do',
+						),
+					)
+				),
+			)
+		);
+		update_post_meta( $select_id, 'default_value', '{"mode":"value","value":"todo"}' );
+
+		$tags_id = $this->create_collection_field(
+			$collection_id,
+			'Tags',
+			'multiselect',
+			array(
+				'options' => wp_json_encode(
+					array(
+						array(
+							'value' => 'a',
+							'label' => 'A',
+						),
+						array(
+							'value' => 'b',
+							'label' => 'B',
+						),
+					)
+				),
+			)
+		);
+		update_post_meta( $tags_id, 'default_value', '{"mode":"value","value":["a","b"]}' );
+
+		$response = $this->create_row( $collection_id, 'With defaults' );
+		$row_id   = (int) $response->get_data()['id'];
+
+		$this->assertSame( 201, $response->get_status() );
+		$this->assertSame( 'Draft', get_post_meta( $row_id, "field-{$text_id}", true ) );
+		$this->assertEquals( 12.5, (float) get_post_meta( $row_id, "field-{$number_id}", true ) );
+		$this->assertSame( wp_date( 'Y-m-d' ), get_post_meta( $row_id, "field-{$date_id}", true ) );
+		$this->assertMatchesRegularExpression( '/^\d{4}-\d{2}-\d{2}T/', (string) get_post_meta( $row_id, "field-{$datetime_id}", true ) );
+		$this->assertTrue( Relations::is_truthy( get_post_meta( $row_id, "field-{$checkbox_id}", true ) ) );
+		$this->assertSame( 'todo', get_post_meta( $row_id, "field-{$select_id}", true ) );
+		$this->assertSame( array( 'a', 'b' ), get_post_meta( $row_id, "field-{$tags_id}", false ) );
+	}
+
+	public function test_setting_default_does_not_change_existing_rows(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+		$collection_id = $this->create_collection_with_slug( 'Existing Defaults', 'exdefs' );
+		$field_id      = $this->create_collection_field( $collection_id, 'Notes', 'text' );
+		$existing_id   = (int) wp_insert_post(
+			array(
+				'post_type'   => 'crtxt_exdefs',
+				'post_status' => 'private',
+				'post_title'  => 'Existing row',
+			)
+		);
+
+		update_post_meta( $field_id, 'default_value', '{"mode":"value","value":"Draft"}' );
+		$new_response = $this->create_row( $collection_id, 'New row' );
+		$new_id       = (int) $new_response->get_data()['id'];
+
+		$this->assertSame( array(), get_post_meta( $existing_id, "field-{$field_id}", false ) );
+		$this->assertSame( 'Draft', get_post_meta( $new_id, "field-{$field_id}", true ) );
+	}
+
+	public function test_explicit_creation_meta_wins_over_field_default(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+		$collection_id = $this->create_collection_with_slug( 'Explicit Defaults', 'expdefs' );
+		$field_id      = $this->create_collection_field( $collection_id, 'Notes', 'text' );
+		update_post_meta( $field_id, 'default_value', '{"mode":"value","value":"Default"}' );
+
+		$GLOBALS['wp_rest_server'] = new WP_REST_Server();
+		( new RowsController() )->register();
+		do_action( 'rest_api_init' );
+
+		$request = new WP_REST_Request( 'POST', '/wp/v2/crtxt_expdefs' );
+		$request->set_body_params(
+			array(
+				'status' => 'private',
+				'title'  => 'Explicit row',
+				'meta'   => array(
+					"field-{$field_id}" => 'Provided',
+				),
+			)
+		);
+		$response = rest_do_request( $request );
+		$row_id   = (int) $response->get_data()['id'];
+
+		$this->assertSame( 201, $response->get_status() );
+		$this->assertSame( 'Provided', get_post_meta( $row_id, "field-{$field_id}", true ) );
+	}
+
+	public function test_explicit_empty_multiselect_meta_wins_over_field_default(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+		$collection_id = $this->create_collection_with_slug( 'Empty Multi Defaults', 'emptymultidefs' );
+		$field_id      = $this->create_collection_field(
+			$collection_id,
+			'Tags',
+			'multiselect',
+			array(
+				'options' => wp_json_encode(
+					array(
+						array(
+							'value' => 'a',
+							'label' => 'A',
+						),
+					)
+				),
+			)
+		);
+		update_post_meta( $field_id, 'default_value', '{"mode":"value","value":["a"]}' );
+
+		$GLOBALS['wp_rest_server'] = new WP_REST_Server();
+		( new RowsController() )->register();
+		do_action( 'rest_api_init' );
+
+		$request = new WP_REST_Request( 'POST', '/wp/v2/crtxt_emptymultidefs' );
+		$request->set_body_params(
+			array(
+				'status' => 'private',
+				'title'  => 'Empty tags row',
+				'meta'   => array(
+					"field-{$field_id}" => array(),
+				),
+			)
+		);
+		$response = rest_do_request( $request );
+		$this->assertSame( 201, $response->get_status() );
+
+		$row_id = (int) $response->get_data()['id'];
+		$this->assertSame( array(), get_post_meta( $row_id, "field-{$field_id}", false ) );
+	}
+
 	public function test_query_rows_includes_collection_metadata(): void {
 		wp_set_current_user( $this->create_user( 'author' ) );
 		$fixture = $this->create_collection_fixture( 'rowmeta', 'text' );
@@ -305,6 +463,21 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertSame( $fixture['field_id'], $fields[0]['id'] );
 		$this->assertSame( 'number', $fields[0]['type'] );
 		$this->assertSame( 'Score', $fields[0]['label'] );
+		$this->assertSame( '', $fields[0]['description'] );
+	}
+
+	public function test_field_definitions_include_descriptions(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+
+		$fixture = $this->create_collection_fixture( 'fdesc', 'text' );
+		update_post_meta( $fixture['field_id'], 'description', 'Use this for editor notes.' );
+
+		$response = $this->query_rows( array( 'collection' => $fixture['collection_id'] ) );
+
+		$data   = $response->get_data();
+		$fields = $data['fields'];
+		$this->assertCount( 1, $fields );
+		$this->assertSame( 'Use this for editor notes.', $fields[0]['description'] );
 	}
 
 	public function test_field_definitions_include_options(): void {

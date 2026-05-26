@@ -9,6 +9,7 @@ declare( strict_types=1 );
 
 namespace Cortext\Rest;
 
+use Cortext\Fields\FieldDefaults;
 use Cortext\Fields\FieldTypeConverter;
 use Cortext\FieldValues\FieldValueReadQuery;
 use Cortext\FieldValues\FieldValueStore;
@@ -487,6 +488,8 @@ final class RowsController {
 				array( 'status' => 500 )
 			);
 		}
+
+		FieldDefaults::apply_to_row( $collection_id, (int) $row_id );
 
 		$field_ids       = $this->collection_field_ids( $collection_id );
 		$multi_field_ids = $this->multi_value_field_ids( $field_ids );
@@ -1757,7 +1760,7 @@ final class RowsController {
 	 * Builds lightweight field definitions for the response.
 	 *
 	 * @param int[] $field_ids Field post IDs.
-	 * @return array<int, array{id: int, label: string, type: string}>
+	 * @return array<int, array{id: int, label: string, type: string, description: string, options: string|null}>
 	 */
 	private function field_definitions( array $field_ids ): array {
 		$definitions = array();
@@ -1770,10 +1773,11 @@ final class RowsController {
 			$options = get_post_meta( $field_id, 'options', true );
 
 			$definitions[] = array(
-				'id'      => $field_id,
-				'label'   => $field->post_title,
-				'type'    => $type,
-				'options' => empty( $options ) ? null : $options,
+				'id'          => $field_id,
+				'label'       => $field->post_title,
+				'type'        => $type,
+				'description' => (string) get_post_meta( $field_id, 'description', true ),
+				'options'     => empty( $options ) ? null : $options,
 			);
 		}
 		return $definitions;
