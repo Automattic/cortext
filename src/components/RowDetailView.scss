@@ -805,6 +805,10 @@
 		pointer-events: auto;
 	}
 
+	&__property--layout-editing &__property-label {
+		color: var(--cortext-row-detail-text);
+	}
+
 	&__property:hover &__property-layout-chip,
 	&__property:focus-within &__property-layout-chip {
 		opacity: 1;
