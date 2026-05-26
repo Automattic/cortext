@@ -399,8 +399,14 @@
 		}
 
 		&.is-pressed {
-			background: transparent;
-			color: var(--cortext-row-detail-muted);
+			background: var(--cortext-row-detail-pressed-surface);
+			color: var(--cortext-row-detail-text);
+		}
+
+		&.is-pressed:hover:not(:disabled),
+		&.is-pressed:focus-visible:not(:disabled) {
+			background: var(--cortext-row-detail-pressed-surface);
+			color: var(--cortext-row-detail-text);
 		}
 
 		&:disabled,
