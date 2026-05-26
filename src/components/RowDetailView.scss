@@ -937,20 +937,15 @@
 			background: var(--cortext-row-detail-border);
 		}
 
-		&--empty {
-			justify-content: center;
-			min-height: $grid-unit-40;
-			margin-top: $grid-unit-10;
-			border: $border-width dashed var(--cortext-row-detail-border);
-			border-radius: $radius-small;
-			background: color-mix(in srgb, var(--cortext-row-detail-bg) 70%, transparent);
-			color: var(--cortext-row-detail-muted);
+	}
 
-			&::before,
-			&::after {
-				display: none;
-			}
-		}
+	&__property-hidden-dropzone {
+		grid-column: 1 / -1;
+		min-height: $grid-unit-40;
+		margin: 0 $grid-unit-05 $grid-unit-05;
+		border: $border-width dashed var(--cortext-row-detail-border);
+		border-radius: $radius-small;
+		background: color-mix(in srgb, var(--cortext-row-detail-bg) 70%, transparent);
 	}
 
 	&__property-label-actions .cortext-rename-field-inline .components-base-control,

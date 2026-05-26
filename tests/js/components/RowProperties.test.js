@@ -594,9 +594,11 @@ describe( 'RowProperties', () => {
 		const separator = screen
 			.getByText( 'Hidden fields' )
 			.closest( '.cortext-row-detail__property-hidden-separator' );
+		const dropzone = screen.getByLabelText( 'Hidden fields drop zone' );
 
-		expect( separator ).toHaveClass(
-			'cortext-row-detail__property-hidden-separator--empty'
+		expect( separator ).toBeInTheDocument();
+		expect( dropzone ).toHaveClass(
+			'cortext-row-detail__property-hidden-dropzone'
 		);
 		expect( screen.getByText( 'Status' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Owner' ) ).toBeInTheDocument();

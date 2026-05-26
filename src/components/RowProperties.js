@@ -95,16 +95,26 @@ function HiddenPropertiesSeparator( { isEmpty = false } ) {
 		transform: transformToString( transform ),
 		transition,
 	};
+	if ( isEmpty ) {
+		return (
+			<>
+				<div className="cortext-row-detail__property-hidden-separator">
+					<span>{ __( 'Hidden fields', 'cortext' ) }</span>
+				</div>
+				<div
+					ref={ setNodeRef }
+					style={ style }
+					className="cortext-row-detail__property-hidden-dropzone"
+					aria-label={ __( 'Hidden fields drop zone', 'cortext' ) }
+				/>
+			</>
+		);
+	}
 	return (
 		<div
 			ref={ setNodeRef }
 			style={ style }
-			className={
-				'cortext-row-detail__property-hidden-separator' +
-				( isEmpty
-					? ' cortext-row-detail__property-hidden-separator--empty'
-					: '' )
-			}
+			className="cortext-row-detail__property-hidden-separator"
 		>
 			<span>{ __( 'Hidden fields', 'cortext' ) }</span>
 		</div>
