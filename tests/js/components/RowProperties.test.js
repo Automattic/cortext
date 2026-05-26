@@ -805,7 +805,10 @@ describe( 'RowProperties', () => {
 
 		act( () => {
 			mockDndProps.onDragStart( {
-				active: { id: 'field-7' },
+				active: {
+					id: 'field-7',
+					rect: { current: { initial: { width: 512 } } },
+				},
 			} );
 		} );
 
@@ -820,6 +823,11 @@ describe( 'RowProperties', () => {
 				.getByTestId( 'drag-overlay' )
 				.querySelector( '.cortext-row-detail__property-layout-chip' )
 		).toBeInTheDocument();
+		expect(
+			screen
+				.getByTestId( 'drag-overlay' )
+				.querySelector( '.cortext-row-detail__property-drag-overlay' )
+		).toHaveStyle( { width: '512px' } );
 	} );
 
 	it( 'ignores stale sortable dragging after the layout drag ends', () => {

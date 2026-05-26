@@ -976,11 +976,14 @@
 	}
 
 	&__property-drag-overlay {
-		width: min(360px, calc(100vw - #{$grid-unit-40}));
 		background: var(--cortext-row-detail-bg, #fff);
 		box-shadow: 0 0 0 $border-width var(--cortext-row-detail-border);
 		color: var(--cortext-row-detail-text);
 		pointer-events: none;
+
+		&:hover {
+			background: var(--cortext-row-detail-bg, #fff);
+		}
 	}
 
 	&__property-label-actions .cortext-rename-field-inline .components-base-control,

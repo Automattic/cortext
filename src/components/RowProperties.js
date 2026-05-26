@@ -126,6 +126,7 @@ function RowPropertyDragOverlay( {
 	localFormatOverrides,
 	localOptionOverrides,
 	optionOverrides,
+	width,
 } ) {
 	if ( ! field ) {
 		return null;
@@ -163,7 +164,10 @@ function RowPropertyDragOverlay( {
 		);
 	}
 	return (
-		<div className="cortext-row-detail__property cortext-row-detail__property--layout-editing cortext-row-detail__property-drag-overlay">
+		<div
+			className="cortext-row-detail__property cortext-row-detail__property--layout-editing cortext-row-detail__property-drag-overlay"
+			style={ width ? { width } : undefined }
+		>
 			<div className="cortext-row-detail__property-label">
 				<span className="cortext-row-detail__property-label-icon-slot">
 					<span
@@ -858,6 +862,8 @@ export default function RowProperties( {
 	const [ localFormatOverrides, setLocalFormatOverrides ] = useState( {} );
 	const [ activeLayoutFieldId, setActiveLayoutFieldId ] = useState( null );
 	const [ activeLayoutOverId, setActiveLayoutOverId ] = useState( null );
+	const [ activeLayoutOverlayWidth, setActiveLayoutOverlayWidth ] =
+		useState( null );
 	const propertiesRef = useRef( null );
 	const handleFieldOptionsSaved = useCallback(
 		( recordId, nextOptions ) => {
@@ -965,6 +971,11 @@ export default function RowProperties( {
 	const handleDragStart = useCallback( ( event ) => {
 		setActiveLayoutFieldId( event.active?.id ?? null );
 		setActiveLayoutOverId( null );
+		setActiveLayoutOverlayWidth(
+			event.active?.rect?.current?.initial?.width ??
+				propertiesRef.current?.getBoundingClientRect?.().width ??
+				null
+		);
 	}, [] );
 	const handleDragOver = useCallback( ( event ) => {
 		setActiveLayoutOverId( event.over?.id ?? null );
@@ -986,6 +997,7 @@ export default function RowProperties( {
 			const { active, over } = event;
 			setActiveLayoutFieldId( null );
 			setActiveLayoutOverId( null );
+			setActiveLayoutOverlayWidth( null );
 			blurActiveLayoutChip( propertiesRef.current );
 			if ( ! over || active.id === over.id ) {
 				return;
@@ -997,6 +1009,7 @@ export default function RowProperties( {
 	const handleDragCancel = useCallback( () => {
 		setActiveLayoutFieldId( null );
 		setActiveLayoutOverId( null );
+		setActiveLayoutOverlayWidth( null );
 		blurActiveLayoutChip( propertiesRef.current );
 	}, [] );
 
@@ -1142,6 +1155,7 @@ export default function RowProperties( {
 					localFormatOverrides={ localFormatOverrides }
 					localOptionOverrides={ localOptionOverrides }
 					optionOverrides={ optionOverrides }
+					width={ activeLayoutOverlayWidth }
 				/>
 			</DragOverlay>
 		</DndContext>
