@@ -12,7 +12,14 @@ import {
 } from '@wordpress/components';
 import { store as coreStore } from '@wordpress/core-data';
 import { useDispatch, useSelect } from '@wordpress/data';
-import { useCallback, useEffect, useMemo, useState } from '@wordpress/element';
+import {
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useMemo,
+	useRef,
+	useState,
+} from '@wordpress/element';
 import { check, closeSmall, pencil, seen, unseen } from '@wordpress/icons';
 
 import DetailLayoutEditor from '../../components/DetailLayoutEditor';
@@ -46,7 +53,10 @@ export default function Edit() {
 	const [ isEditingLayout, setIsEditingLayout ] = useState( false );
 	const [ draftEntries, setDraftEntries ] = useState( null );
 	const [ optimisticEntries, setOptimisticEntries ] = useState( null );
+	const [ layoutEditorMinHeight, setLayoutEditorMinHeight ] =
+		useState( null );
 	const [ saveError, setSaveError ] = useState( null );
+	const propertiesContentRef = useRef( null );
 	const { saveEntityRecord } = useDispatch( coreStore );
 	// RowProperties still expects the row-detail ancestor used by its nested
 	// SCSS rules. The collapsed stub does not render RowProperties, so it can
@@ -109,12 +119,24 @@ export default function Edit() {
 			setDraftEntries( null );
 		}
 	}, [ isEditingLayout ] );
+	const rememberPropertiesHeight = useCallback( () => {
+		const height =
+			propertiesContentRef.current?.getBoundingClientRect?.().height;
+		if ( ! height ) {
+			return;
+		}
+		const nextHeight = Math.ceil( height );
+		setLayoutEditorMinHeight( ( current ) =>
+			current === nextHeight ? current : nextHeight
+		);
+	}, [] );
 	const startEditingLayout = useCallback( () => {
+		rememberPropertiesHeight();
 		setOptimisticEntries( null );
 		setDraftEntries( optimisticEntries ?? currentEntries );
 		setSaveError( null );
 		setIsEditingLayout( true );
-	}, [ currentEntries, optimisticEntries ] );
+	}, [ currentEntries, optimisticEntries, rememberPropertiesHeight ] );
 	const cancelEditingLayout = useCallback( () => {
 		setDraftEntries( null );
 		setSaveError( null );
@@ -197,6 +219,16 @@ export default function Edit() {
 				: visibleFields,
 		[ currentEntries, layoutFields, optimisticEntries, visibleFields ]
 	);
+	useLayoutEffect( () => {
+		if ( ! isEditingLayout ) {
+			rememberPropertiesHeight();
+		}
+	}, [
+		inlineLayoutFields,
+		isEditingLayout,
+		rememberPropertiesHeight,
+		visiblePropertyFields.length,
+	] );
 	if ( ! ctx || isResolving || layoutPropertyFields.length === 0 ) {
 		return null;
 	}
@@ -296,13 +328,22 @@ export default function Edit() {
 					</Notice>
 				) : null }
 				{ isEditingLayout ? (
-					<DetailLayoutEditor
-						entries={ draftEntries ?? currentEntries }
-						fields={ layoutFields }
-						onChange={ setDraftEntries }
-					/>
+					<div
+						className="cortext-document-properties__layout-editor-wrap"
+						style={
+							layoutEditorMinHeight
+								? { minHeight: layoutEditorMinHeight }
+								: undefined
+						}
+					>
+						<DetailLayoutEditor
+							entries={ draftEntries ?? currentEntries }
+							fields={ layoutFields }
+							onChange={ setDraftEntries }
+						/>
+					</div>
 				) : (
-					<>
+					<div ref={ propertiesContentRef }>
 						{ collectionId ? (
 							<CollectionFieldsSnapshotProvider
 								fields={ layoutFields }
@@ -334,7 +375,7 @@ export default function Edit() {
 								{ __( 'No visible properties.', 'cortext' ) }
 							</p>
 						) : null }
-					</>
+					</div>
 				) }
 			</div>
 		</>
