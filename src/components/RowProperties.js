@@ -119,11 +119,33 @@ function EmptyHiddenPropertiesDropZone() {
 	);
 }
 
-function RowPropertyDragOverlay( { field } ) {
+function RowPropertyDragOverlay( {
+	data,
+	field,
+	formatOverrides,
+	localFormatOverrides,
+	localOptionOverrides,
+	optionOverrides,
+} ) {
 	if ( ! field ) {
 		return null;
 	}
 	const type = fieldType( field );
+	const displayType = displayFieldType( field );
+	const value = valueForField( field, data );
+	const elements =
+		localOptionOverrides?.[ field.id ] ??
+		optionOverrides?.[ field.id ] ??
+		field.cortextElements ??
+		field.elements ??
+		[];
+	let format = field.cortextFormat;
+	if ( formatOverrides?.[ field.id ] !== undefined ) {
+		format = formatOverrides[ field.id ];
+	}
+	if ( localFormatOverrides?.[ field.id ] !== undefined ) {
+		format = localFormatOverrides[ field.id ];
+	}
 	let propertyIcon = null;
 	if ( isCollectionField( field ) ) {
 		propertyIcon = (
@@ -141,9 +163,13 @@ function RowPropertyDragOverlay( { field } ) {
 		);
 	}
 	return (
-		<div className="cortext-row-detail__property cortext-row-detail__property-drag-overlay">
+		<div className="cortext-row-detail__property cortext-row-detail__property--layout-editing cortext-row-detail__property-drag-overlay">
 			<div className="cortext-row-detail__property-label">
 				<span className="cortext-row-detail__property-label-icon-slot">
+					<span
+						className="cortext-row-detail__property-layout-chip components-button"
+						aria-hidden="true"
+					/>
 					{ propertyIcon }
 				</span>
 				<span className="cortext-row-detail__property-label-content">
@@ -152,7 +178,16 @@ function RowPropertyDragOverlay( { field } ) {
 					</span>
 				</span>
 			</div>
-			<div className="cortext-row-detail__property-value" />
+			<div className="cortext-row-detail__property-value">
+				<div className="cortext-row-detail__property-value-content">
+					<ReadOnlyProperty
+						value={ value }
+						type={ displayType }
+						elements={ elements }
+						format={ format }
+					/>
+				</div>
+			</div>
 		</div>
 	);
 }
@@ -707,7 +742,6 @@ function RowProperty( {
 							className="cortext-row-detail__property-layout-chip"
 							aria-label={ __( 'Reorder property', 'cortext' ) }
 							icon={ dragHandle }
-							label={ __( 'Reorder property', 'cortext' ) }
 							size="small"
 							variant="tertiary"
 							{ ...reorderAttributes }
@@ -1086,7 +1120,14 @@ export default function RowProperties( {
 				{ rows }
 			</SortableContext>
 			<DragOverlay dropAnimation={ null }>
-				<RowPropertyDragOverlay field={ activeLayoutField } />
+				<RowPropertyDragOverlay
+					data={ data }
+					field={ activeLayoutField }
+					formatOverrides={ formatOverrides }
+					localFormatOverrides={ localFormatOverrides }
+					localOptionOverrides={ localOptionOverrides }
+					optionOverrides={ optionOverrides }
+				/>
 			</DragOverlay>
 		</DndContext>
 	);

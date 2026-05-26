@@ -774,6 +774,14 @@ describe( 'RowProperties', () => {
 		expect( screen.getByTestId( 'drag-overlay' ) ).toHaveTextContent(
 			'Status'
 		);
+		expect( screen.getByTestId( 'drag-overlay' ) ).toHaveTextContent(
+			'Open'
+		);
+		expect(
+			screen
+				.getByTestId( 'drag-overlay' )
+				.querySelector( '.cortext-row-detail__property-layout-chip' )
+		).toBeInTheDocument();
 	} );
 
 	it( 'ignores stale sortable dragging after the layout drag ends', () => {
