@@ -310,6 +310,44 @@ describe( 'RowProperties', () => {
 		);
 	} );
 
+	it( 'blurs the drag handle when layout dragging ends', () => {
+		render(
+			<RowProperties
+				fields={ [
+					{
+						id: 'field-7',
+						label: 'Status',
+						cortextFieldType: 'text',
+						editable: true,
+					},
+					{
+						id: 'field-8',
+						label: 'Owner',
+						cortextFieldType: 'text',
+						editable: true,
+					},
+				] }
+				onLayoutReorder={ jest.fn() }
+				row={ {} }
+			/>
+		);
+
+		const handle = screen.getAllByRole( 'button', {
+			name: 'Reorder property',
+		} )[ 0 ];
+		handle.focus();
+		expect( handle ).toHaveFocus();
+
+		act( () => {
+			mockDndProps.onDragEnd( {
+				active: { id: 'field-7' },
+				over: { id: 'field-8' },
+			} );
+		} );
+
+		expect( handle ).not.toHaveFocus();
+	} );
+
 	it( 'keeps text-like properties single-line while using a textarea', () => {
 		render(
 			<RowProperties

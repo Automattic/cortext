@@ -618,6 +618,17 @@ function transformToString( transform ) {
 	return `translate3d(${ x }px, ${ y }px, 0) scaleX(${ scaleX }) scaleY(${ scaleY })`;
 }
 
+function blurActiveLayoutChip( node ) {
+	const activeElement = node?.ownerDocument?.activeElement;
+	if (
+		activeElement?.classList?.contains(
+			'cortext-row-detail__property-layout-chip'
+		)
+	) {
+		activeElement.blur();
+	}
+}
+
 function RowProperty( {
 	canReorderLayout,
 	collectionId,
@@ -847,6 +858,7 @@ export default function RowProperties( {
 	const [ localFormatOverrides, setLocalFormatOverrides ] = useState( {} );
 	const [ activeLayoutFieldId, setActiveLayoutFieldId ] = useState( null );
 	const [ activeLayoutOverId, setActiveLayoutOverId ] = useState( null );
+	const propertiesRef = useRef( null );
 	const handleFieldOptionsSaved = useCallback(
 		( recordId, nextOptions ) => {
 			const fieldId = `field-${ recordId }`;
@@ -974,6 +986,7 @@ export default function RowProperties( {
 			const { active, over } = event;
 			setActiveLayoutFieldId( null );
 			setActiveLayoutOverId( null );
+			blurActiveLayoutChip( propertiesRef.current );
 			if ( ! over || active.id === over.id ) {
 				return;
 			}
@@ -984,6 +997,7 @@ export default function RowProperties( {
 	const handleDragCancel = useCallback( () => {
 		setActiveLayoutFieldId( null );
 		setActiveLayoutOverId( null );
+		blurActiveLayoutChip( propertiesRef.current );
 	}, [] );
 
 	const updateRelation = useCallback(
@@ -1073,6 +1087,7 @@ export default function RowProperties( {
 
 	const rows = (
 		<div
+			ref={ propertiesRef }
 			className="cortext-row-detail__properties cortext-row-detail__properties--rows"
 			aria-label={ fieldCountLabel }
 		>
