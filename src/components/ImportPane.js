@@ -97,6 +97,18 @@ export default function ImportPane() {
 		[ loadCollection ]
 	);
 
+	// No-op for now — wiring the per-collection Import button before the
+	// import pipeline exists. Logs so the test can verify the click
+	// reached the right callback with the right collection.
+	const importCollection = useCallback( ( collection ) => {
+		// eslint-disable-next-line no-console
+		console.log(
+			'[cortext] Import collection (no-op):',
+			collection.id,
+			collection.title
+		);
+	}, [] );
+
 	const handleSaveKey = ( nextKey ) => {
 		window.localStorage.setItem( NOTION_KEY_STORAGE, nextKey );
 		setIsChangingKey( false );
@@ -136,6 +148,7 @@ export default function ImportPane() {
 						onRetry={ handleRetry }
 						selectedId={ selectedId }
 						onSelect={ selectCollection }
+						onImport={ importCollection }
 						collectionData={ collectionData }
 					/>
 				</>
@@ -149,6 +162,7 @@ function ImportBody( {
 	onRetry,
 	selectedId,
 	onSelect,
+	onImport,
 	collectionData,
 } ) {
 	if ( state.status === 'pending' ) {
@@ -200,6 +214,7 @@ function ImportBody( {
 					collections={ collections }
 					selectedId={ selectedId }
 					onSelect={ onSelect }
+					onImport={ onImport }
 				/>
 			</section>
 			{ selected && (
@@ -215,7 +230,7 @@ function ImportBody( {
 	);
 }
 
-function CollectionsList( { collections, selectedId, onSelect } ) {
+function CollectionsList( { collections, selectedId, onSelect, onImport } ) {
 	if ( collections.length === 0 ) {
 		return (
 			<Text variant="muted">
@@ -241,6 +256,14 @@ function CollectionsList( { collections, selectedId, onSelect } ) {
 							c.fields.length
 						) }
 					</Text>
+					<Button
+						className="cortext-import-collections__import"
+						variant="secondary"
+						size="compact"
+						onClick={ () => onImport( c ) }
+					>
+						{ __( 'Import', 'cortext' ) }
+					</Button>
 				</li>
 			) ) }
 		</ul>

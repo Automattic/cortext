@@ -36,11 +36,12 @@
 
 	&__item {
 		display: flex;
-		align-items: baseline;
+		align-items: center;
 		gap: $grid-unit-15;
 		padding: $grid-unit-05 0;
 
-		.components-button {
+		.components-button[variant="link"],
+		.components-button.is-link {
 			padding: 0;
 			height: auto;
 			min-height: 0;
@@ -49,6 +50,10 @@
 		.components-button[aria-pressed="true"] {
 			font-weight: 600;
 		}
+	}
+
+	&__import.components-button {
+		margin-inline-start: auto;
 	}
 }
 
