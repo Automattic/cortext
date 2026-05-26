@@ -30,6 +30,7 @@ import {
 	KeyboardSensor,
 	PointerSensor,
 	closestCenter,
+	pointerWithin,
 	useDroppable,
 	useSensor,
 	useSensors,
@@ -70,6 +71,14 @@ import RelationEditor from './relations/RelationEditor';
 
 export const HIDDEN_PROPERTIES_DROP_TARGET =
 	'cortext-row-properties-hidden-drop-target';
+
+function rowPropertiesCollisionDetection( args ) {
+	const pointerCollisions = pointerWithin( args );
+	const hiddenDropTarget = pointerCollisions.find(
+		( collision ) => collision.id === HIDDEN_PROPERTIES_DROP_TARGET
+	);
+	return hiddenDropTarget ? [ hiddenDropTarget ] : closestCenter( args );
+}
 
 function emptyLabel() {
 	return (
@@ -983,7 +992,7 @@ export default function RowProperties( {
 	return (
 		<DndContext
 			sensors={ sensors }
-			collisionDetection={ closestCenter }
+			collisionDetection={ rowPropertiesCollisionDetection }
 			onDragEnd={ handleDragEnd }
 		>
 			<SortableContext

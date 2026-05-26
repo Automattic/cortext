@@ -86,6 +86,7 @@ jest.mock( '@dnd-kit/core', () => {
 		KeyboardSensor: jest.fn(),
 		PointerSensor: jest.fn(),
 		closestCenter: jest.fn(),
+		pointerWithin: jest.fn(),
 		useSensor: jest.fn( () => ( {} ) ),
 		useSensors: jest.fn( ( ...sensors ) => sensors ),
 		useDroppable: jest.fn( () => ( {
@@ -173,14 +174,19 @@ jest.mock( '../../../src/components/relations/RelationEditor', () => ( {
 
 import apiFetch from '@wordpress/api-fetch';
 import { useDispatch, useSelect } from '@wordpress/data';
+import { closestCenter, pointerWithin } from '@dnd-kit/core';
 import { RowMutationContext } from '../../../src/components/EditableCell';
-import RowProperties from '../../../src/components/RowProperties';
+import RowProperties, {
+	HIDDEN_PROPERTIES_DROP_TARGET,
+} from '../../../src/components/RowProperties';
 import { COLLECTION_ROWS_CHANGED_EVENT } from '../../../src/hooks/rowInvalidation';
 
 describe( 'RowProperties', () => {
 	beforeEach( () => {
 		mockDndProps = null;
 		apiFetch.mockReset();
+		closestCenter.mockReset();
+		pointerWithin.mockReset();
 		mockEditPost.mockReset();
 		mockRelationEditorProps.length = 0;
 		useDispatch.mockReturnValue( { editPost: mockEditPost } );
@@ -602,5 +608,41 @@ describe( 'RowProperties', () => {
 		);
 		expect( screen.getByText( 'Status' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Owner' ) ).toBeInTheDocument();
+	} );
+
+	it( 'prefers the hidden fields drop zone under the pointer', () => {
+		const hiddenCollision = { id: HIDDEN_PROPERTIES_DROP_TARGET };
+		const fallbackCollision = { id: 'field-8' };
+		pointerWithin.mockReturnValue( [ hiddenCollision ] );
+		closestCenter.mockReturnValue( [ fallbackCollision ] );
+
+		render(
+			<RowProperties
+				isLayoutEditing
+				fields={ [
+					{
+						id: 'field-7',
+						label: 'Status',
+						cortextFieldType: 'text',
+						editable: true,
+						cortextDetailVisible: true,
+					},
+					{
+						id: 'field-8',
+						label: 'Owner',
+						cortextFieldType: 'text',
+						editable: true,
+						cortextDetailVisible: true,
+					},
+				] }
+				onLayoutReorder={ jest.fn() }
+				row={ {} }
+			/>
+		);
+
+		expect(
+			mockDndProps.collisionDetection( { droppableContainers: [] } )
+		).toEqual( [ hiddenCollision ] );
+		expect( closestCenter ).not.toHaveBeenCalled();
 	} );
 } );
