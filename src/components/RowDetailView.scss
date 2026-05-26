@@ -650,6 +650,7 @@
 		}
 
 		&.is-dragging {
+			opacity: 0;
 			background: var(--cortext-row-detail-pressed-surface);
 			box-shadow: 0 0 0 $border-width var(--cortext-row-detail-border);
 		}
@@ -970,6 +971,14 @@
 			border-color: var(--cortext-row-detail-muted);
 			background: var(--cortext-row-detail-pressed-surface);
 		}
+	}
+
+	&__property-drag-overlay {
+		width: min(360px, calc(100vw - #{$grid-unit-40}));
+		background: var(--cortext-row-detail-bg, #fff);
+		box-shadow: 0 0 0 $border-width var(--cortext-row-detail-border);
+		color: var(--cortext-row-detail-text);
+		pointer-events: none;
 	}
 
 	&__property-label-actions .cortext-rename-field-inline .components-base-control,

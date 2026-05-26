@@ -27,6 +27,7 @@ import { __, _n, sprintf } from '@wordpress/i18n';
 import { dragHandle, seen, unseen } from '@wordpress/icons';
 import {
 	DndContext,
+	DragOverlay,
 	KeyboardSensor,
 	PointerSensor,
 	closestCenter,
@@ -115,6 +116,44 @@ function EmptyHiddenPropertiesDropZone() {
 				aria-label={ __( 'Hidden fields drop zone', 'cortext' ) }
 			/>
 		</>
+	);
+}
+
+function RowPropertyDragOverlay( { field } ) {
+	if ( ! field ) {
+		return null;
+	}
+	const type = fieldType( field );
+	let propertyIcon = null;
+	if ( isCollectionField( field ) ) {
+		propertyIcon = (
+			<FieldTypeIcon
+				type={ type }
+				className="cortext-row-detail__property-type-icon"
+			/>
+		);
+	} else if ( hasInternalFieldIcon( field ) ) {
+		propertyIcon = (
+			<SystemFieldIcon
+				fieldId={ field.id }
+				className="cortext-row-detail__property-type-icon"
+			/>
+		);
+	}
+	return (
+		<div className="cortext-row-detail__property cortext-row-detail__property-drag-overlay">
+			<div className="cortext-row-detail__property-label">
+				<span className="cortext-row-detail__property-label-icon-slot">
+					{ propertyIcon }
+				</span>
+				<span className="cortext-row-detail__property-label-content">
+					<span className="cortext-row-detail__property-label-text">
+						{ field.label }
+					</span>
+				</span>
+			</div>
+			<div className="cortext-row-detail__property-value" />
+		</div>
 	);
 }
 
@@ -758,6 +797,7 @@ export default function RowProperties( {
 	} = useContext( RowMutationContext );
 	const [ localOptionOverrides, setLocalOptionOverrides ] = useState( {} );
 	const [ localFormatOverrides, setLocalFormatOverrides ] = useState( {} );
+	const [ activeLayoutFieldId, setActiveLayoutFieldId ] = useState( null );
 	const handleFieldOptionsSaved = useCallback(
 		( recordId, nextOptions ) => {
 			const fieldId = `field-${ recordId }`;
@@ -861,6 +901,9 @@ export default function RowProperties( {
 	);
 	const canReorderLayout =
 		typeof onLayoutReorder === 'function' && propertyFields.length > 1;
+	const handleDragStart = useCallback( ( event ) => {
+		setActiveLayoutFieldId( event.active?.id ?? null );
+	}, [] );
 	const sortableIds = useMemo( () => {
 		const ids = propertyFields.flatMap( ( field, index ) => {
 			const startsHiddenGroup =
@@ -876,6 +919,7 @@ export default function RowProperties( {
 	const handleDragEnd = useCallback(
 		( event ) => {
 			const { active, over } = event;
+			setActiveLayoutFieldId( null );
 			if ( ! over || active.id === over.id ) {
 				return;
 			}
@@ -883,6 +927,9 @@ export default function RowProperties( {
 		},
 		[ onLayoutReorder ]
 	);
+	const handleDragCancel = useCallback( () => {
+		setActiveLayoutFieldId( null );
+	}, [] );
 
 	const updateRelation = useCallback(
 		async ( fieldId, next ) => {
@@ -912,6 +959,9 @@ export default function RowProperties( {
 	const hasHiddenFields = propertyFields.some(
 		( field ) => field.cortextDetailVisible === false
 	);
+	const activeLayoutField = activeLayoutFieldId
+		? propertyFields.find( ( field ) => field.id === activeLayoutFieldId )
+		: null;
 	const fieldCountLabel = sprintf(
 		/* translators: %d: Number of row fields. */
 		_n( '%d field', '%d fields', propertyFields.length, 'cortext' ),
@@ -996,7 +1046,9 @@ export default function RowProperties( {
 		<DndContext
 			sensors={ sensors }
 			collisionDetection={ rowPropertiesCollisionDetection }
+			onDragCancel={ handleDragCancel }
 			onDragEnd={ handleDragEnd }
+			onDragStart={ handleDragStart }
 		>
 			<SortableContext
 				items={ sortableIds }
@@ -1004,6 +1056,9 @@ export default function RowProperties( {
 			>
 				{ rows }
 			</SortableContext>
+			<DragOverlay dropAnimation={ null }>
+				<RowPropertyDragOverlay field={ activeLayoutField } />
+			</DragOverlay>
 		</DndContext>
 	);
 }

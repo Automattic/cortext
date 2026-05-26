@@ -83,6 +83,12 @@ jest.mock( '@dnd-kit/core', () => {
 				props.children
 			);
 		},
+		DragOverlay: ( props ) =>
+			createElement(
+				'div',
+				{ 'data-testid': 'drag-overlay' },
+				props.children
+			),
 		KeyboardSensor: jest.fn(),
 		PointerSensor: jest.fn(),
 		closestCenter: jest.fn(),
@@ -688,6 +694,42 @@ describe( 'RowProperties', () => {
 				'.cortext-row-detail__property.is-dropping-into-hidden'
 			)
 		).not.toBeInTheDocument();
+	} );
+
+	it( 'uses a drag overlay for row property layout drags', () => {
+		render(
+			<RowProperties
+				isLayoutEditing
+				fields={ [
+					{
+						id: 'field-7',
+						label: 'Status',
+						cortextFieldType: 'text',
+						editable: true,
+						cortextDetailVisible: true,
+					},
+					{
+						id: 'field-8',
+						label: 'Owner',
+						cortextFieldType: 'text',
+						editable: true,
+						cortextDetailVisible: true,
+					},
+				] }
+				onLayoutReorder={ jest.fn() }
+				row={ {} }
+			/>
+		);
+
+		act( () => {
+			mockDndProps.onDragStart( {
+				active: { id: 'field-7' },
+			} );
+		} );
+
+		expect( screen.getByTestId( 'drag-overlay' ) ).toHaveTextContent(
+			'Status'
+		);
 	} );
 
 	it( 'prefers the hidden fields drop zone under the pointer', () => {
