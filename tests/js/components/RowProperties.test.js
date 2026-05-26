@@ -183,6 +183,7 @@ jest.mock( '../../../src/components/relations/RelationEditor', () => ( {
 import apiFetch from '@wordpress/api-fetch';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { closestCenter, pointerWithin, useDroppable } from '@dnd-kit/core';
+import { useSortable } from '@dnd-kit/sortable';
 import { RowMutationContext } from '../../../src/components/EditableCell';
 import RowProperties, {
 	HIDDEN_PROPERTIES_DROP_TARGET,
@@ -198,6 +199,14 @@ describe( 'RowProperties', () => {
 		useDroppable.mockReturnValue( {
 			isOver: false,
 			setNodeRef: jest.fn(),
+		} );
+		useSortable.mockReturnValue( {
+			attributes: {},
+			isDragging: false,
+			listeners: {},
+			setNodeRef: jest.fn(),
+			transform: null,
+			transition: undefined,
 		} );
 		mockEditPost.mockReset();
 		mockRelationEditorProps.length = 0;
@@ -765,6 +774,47 @@ describe( 'RowProperties', () => {
 		expect( screen.getByTestId( 'drag-overlay' ) ).toHaveTextContent(
 			'Status'
 		);
+	} );
+
+	it( 'ignores stale sortable dragging after the layout drag ends', () => {
+		useSortable.mockReturnValue( {
+			attributes: {},
+			isDragging: true,
+			listeners: {},
+			setNodeRef: jest.fn(),
+			transform: null,
+			transition: undefined,
+		} );
+
+		const { container } = render(
+			<RowProperties
+				fields={ [
+					{
+						id: 'field-7',
+						label: 'Status',
+						cortextFieldType: 'text',
+						editable: true,
+					},
+					{
+						id: 'field-8',
+						label: 'Owner',
+						cortextFieldType: 'text',
+						editable: true,
+					},
+				] }
+				onLayoutReorder={ jest.fn() }
+				row={ {} }
+			/>
+		);
+
+		expect(
+			container.querySelector(
+				'.cortext-row-detail__property.is-dragging'
+			)
+		).not.toBeInTheDocument();
+		expect(
+			screen.getByRole( 'textbox', { name: 'Status' } )
+		).toBeVisible();
 	} );
 
 	it( 'collapses the source row over the empty hidden fields drop zone', () => {

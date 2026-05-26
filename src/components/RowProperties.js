@@ -766,7 +766,9 @@ function SortableRowProperty( props ) {
 		<RowProperty
 			{ ...props }
 			canReorderLayout
-			isDragging={ isDragging }
+			isDragging={
+				isDragging && props.activeLayoutFieldId === props.field.id
+			}
 			reorderAttributes={ attributes }
 			reorderListeners={ listeners }
 			rowRef={ setNodeRef }
@@ -993,6 +995,7 @@ export default function RowProperties( {
 				collectionId={ collectionId }
 				data={ data }
 				field={ field }
+				activeLayoutFieldId={ activeLayoutFieldId }
 				formatOverrides={ formatOverrides }
 				handleFieldFormatSaved={ handleFieldFormatSaved }
 				handleFieldOptionsSaved={ handleFieldOptionsSaved }
