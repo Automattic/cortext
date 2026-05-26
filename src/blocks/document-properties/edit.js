@@ -302,14 +302,13 @@ export default function Edit() {
 			) {
 				return;
 			}
+			const activeIsHidden =
+				draftLayoutEntries[ from ]?.visible === false;
+			const overIsHidden = draftLayoutEntries[ to ]?.visible === false;
 			const shouldHideActive =
-				isHiddenGroupDrop ||
-				( draftLayoutEntries[ from ]?.visible !== false &&
-					draftLayoutEntries[ to ]?.visible === false );
+				! activeIsHidden && ( isHiddenGroupDrop || overIsHidden );
 			const shouldShowActive =
-				! isHiddenGroupDrop &&
-				draftLayoutEntries[ from ]?.visible === false &&
-				draftLayoutEntries[ to ]?.visible !== false;
+				activeIsHidden && ( isHiddenGroupDrop || ! overIsHidden );
 			const nextEntries = [ ...draftLayoutEntries ];
 			const [ moved ] = nextEntries.splice( from, 1 );
 			let nextMoved = moved;

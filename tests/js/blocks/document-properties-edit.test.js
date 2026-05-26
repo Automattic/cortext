@@ -118,6 +118,17 @@ jest.mock( '../../../src/components/RowProperties', () => ( {
 						>
 							Drag Hidden to visible
 						</button>
+						<button
+							type="button"
+							onClick={ () =>
+								onLayoutReorder(
+									'field-11',
+									'cortext-row-properties-hidden-drop-target'
+								)
+							}
+						>
+							Drag Hidden to visible end
+						</button>
 					</>
 				) : null }
 			</div>
@@ -403,6 +414,42 @@ describe( 'document-properties Edit layout mode', () => {
 								{ field: 'field-11', visible: true },
 								{ field: 'field-10', visible: true },
 								{ field: 'created_at', visible: true },
+							],
+						},
+					},
+				},
+				{ throwOnError: true }
+			)
+		);
+	} );
+
+	it( 'shows hidden fields dropped at the end of the visible group', async () => {
+		render( <Edit /> );
+
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Edit layout' } )
+		);
+		fireEvent.click(
+			screen.getByRole( 'button', {
+				name: 'Drag Hidden to visible end',
+			} )
+		);
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Save layout' } )
+		);
+
+		await waitFor( () =>
+			expect( mockSaveEntityRecord ).toHaveBeenCalledWith(
+				'postType',
+				'crtxt_collection',
+				{
+					id: 77,
+					meta: {
+						detail_layout: {
+							fields: [
+								{ field: 'field-10', visible: true },
+								{ field: 'created_at', visible: true },
+								{ field: 'field-11', visible: true },
 							],
 						},
 					},
