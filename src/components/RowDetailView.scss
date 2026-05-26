@@ -768,7 +768,7 @@
 		border-radius: $grid-unit-30;
 		background: transparent;
 		box-shadow: none;
-		color: var(--cortext-row-detail-muted);
+		color: var(--cortext-row-detail-layout-control-color, var(--cortext-row-detail-muted));
 		cursor: grab;
 		opacity: 0;
 		pointer-events: none;
@@ -805,7 +805,9 @@
 		pointer-events: auto;
 	}
 
-	&__property--layout-editing &__property-label {
+	&__property--layout-editing {
+		--cortext-row-detail-layout-control-color: currentcolor;
+
 		color: var(--cortext-row-detail-text);
 	}
 
@@ -945,7 +947,7 @@
 		color: var(--cortext-row-detail-muted);
 	}
 
-	&__property--readonly {
+	&__property--readonly:not(.cortext-row-detail__property--layout-editing) {
 		color: var(--cortext-row-detail-muted);
 		cursor: default;
 
@@ -973,13 +975,13 @@
 		border-radius: 4px;
 		background: transparent;
 		box-shadow: none;
-		color: var(--cortext-row-detail-muted);
+		color: var(--cortext-row-detail-layout-control-color, var(--cortext-row-detail-muted));
 		opacity: 0.62;
 
 		&.is-pressed {
 			background: transparent;
 			box-shadow: none;
-			color: var(--cortext-row-detail-muted);
+			color: var(--cortext-row-detail-layout-control-color, var(--cortext-row-detail-muted));
 		}
 
 		&:hover:not(:disabled),
