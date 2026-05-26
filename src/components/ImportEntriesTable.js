@@ -12,7 +12,7 @@ import {
 } from '@wordpress/components';
 import { DataViews, filterSortAndPaginate } from '@wordpress/dataviews';
 import { dateI18n, getSettings as getDateSettings } from '@wordpress/date';
-import { seen } from '@wordpress/icons';
+import { seen, upload } from '@wordpress/icons';
 
 import ImportRowPreview from './ImportRowPreview';
 
@@ -138,6 +138,11 @@ export default function ImportEntriesTable( { collection, entries } ) {
 	)?.id;
 	const [ previewRow, setPreviewRow ] = useState( null );
 	const [ previewMode, setPreviewMode ] = useState( 'side' );
+	// Default to "everything selected" so the user can hit Import once to
+	// bring the whole collection in.
+	const [ selection, setSelection ] = useState( () =>
+		entries.map( ( e ) => e.id )
+	);
 
 	const actions = useMemo(
 		() => [
@@ -151,6 +156,22 @@ export default function ImportEntriesTable( { collection, entries } ) {
 					if ( item ) {
 						setPreviewRow( item );
 					}
+				},
+			},
+			{
+				id: 'import',
+				label: __( 'Import', 'cortext' ),
+				icon: upload,
+				isPrimary: true,
+				supportsBulk: true,
+				callback: ( items ) => {
+					// No-op for now — wiring up the UI shape before the
+					// real import pipeline exists.
+					// eslint-disable-next-line no-console
+					console.log(
+						'[cortext] Import (no-op):',
+						items.map( ( i ) => i.id )
+					);
 				},
 			},
 		],
@@ -213,6 +234,8 @@ export default function ImportEntriesTable( { collection, entries } ) {
 				defaultLayouts={ DEFAULT_LAYOUTS }
 				getItemId={ ( item ) => item.id }
 				actions={ actions }
+				selection={ selection }
+				onChangeSelection={ setSelection }
 				empty={
 					<Text variant="muted">
 						{ __( 'No rows in this collection.', 'cortext' ) }

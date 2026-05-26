@@ -267,6 +267,9 @@ function CollectionPanel( { collection, data } ) {
 	}
 	return (
 		<ImportEntriesTable
+			// Force a fresh table per collection so initial selection
+			// (and any other state) resets when the user switches.
+			key={ collection.id }
 			collection={ collection }
 			entries={ data.entries }
 		/>
