@@ -288,13 +288,18 @@ export default function Edit() {
 			);
 			const isHiddenGroupDrop =
 				overField === HIDDEN_PROPERTIES_DROP_TARGET;
-			const to = isHiddenGroupDrop
-				? draftLayoutEntries.findIndex(
-						( entry ) => entry.visible === false
-				  )
-				: draftLayoutEntries.findIndex(
-						( entry ) => entry.field === overField
-				  );
+			const firstHiddenIndex = draftLayoutEntries.findIndex(
+				( entry ) => entry.visible === false
+			);
+			let to = draftLayoutEntries.findIndex(
+				( entry ) => entry.field === overField
+			);
+			if ( isHiddenGroupDrop ) {
+				to =
+					firstHiddenIndex === -1
+						? draftLayoutEntries.length
+						: firstHiddenIndex;
+			}
 			if (
 				from < 0 ||
 				to < 0 ||
