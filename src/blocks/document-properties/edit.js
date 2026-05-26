@@ -33,6 +33,14 @@ import {
 	reorderVisibleDetailEntries,
 } from '../../hooks/detailLayout';
 
+function entriesWithHiddenLast( entries ) {
+	const safeEntries = Array.isArray( entries ) ? entries : [];
+	return [
+		...safeEntries.filter( ( entry ) => entry?.visible !== false ),
+		...safeEntries.filter( ( entry ) => entry?.visible === false ),
+	];
+}
+
 // Row documents show collection properties between the title and body. Canvas
 // and RowEditor provide the fields and fallback row record; pages and rows
 // without fields return null.
@@ -53,7 +61,6 @@ export default function Edit() {
 	const [ isEditingLayout, setIsEditingLayout ] = useState( false );
 	const [ draftEntries, setDraftEntries ] = useState( null );
 	const [ optimisticEntries, setOptimisticEntries ] = useState( null );
-	const [ layoutEditFieldIds, setLayoutEditFieldIds ] = useState( null );
 	const [ layoutEditorMinHeight, setLayoutEditorMinHeight ] =
 		useState( null );
 	const [ saveError, setSaveError ] = useState( null );
@@ -118,7 +125,6 @@ export default function Edit() {
 	useEffect( () => {
 		if ( ! isEditingLayout ) {
 			setDraftEntries( null );
-			setLayoutEditFieldIds( null );
 		}
 	}, [ isEditingLayout ] );
 	const rememberPropertiesHeight = useCallback( () => {
@@ -137,11 +143,6 @@ export default function Edit() {
 		rememberPropertiesHeight();
 		setOptimisticEntries( null );
 		setDraftEntries( entries );
-		setLayoutEditFieldIds(
-			entries
-				.filter( ( entry ) => entry.visible !== false )
-				.map( ( entry ) => entry.field )
-		);
 		setSaveError( null );
 		setIsEditingLayout( true );
 	}, [ currentEntries, optimisticEntries, rememberPropertiesHeight ] );
@@ -232,13 +233,7 @@ export default function Edit() {
 		const fieldsById = new Map(
 			layoutFields.map( ( field ) => [ field.id, field ] )
 		);
-		const editFieldIds = layoutEditFieldIds
-			? new Set( layoutEditFieldIds )
-			: null;
-		return draftLayoutEntries
-			.filter(
-				( entry ) => ! editFieldIds || editFieldIds.has( entry.field )
-			)
+		return entriesWithHiddenLast( draftLayoutEntries )
 			.map( ( entry ) => {
 				const field = fieldsById.get( entry.field );
 				return field
@@ -249,7 +244,7 @@ export default function Edit() {
 					: null;
 			} )
 			.filter( Boolean );
-	}, [ draftLayoutEntries, layoutEditFieldIds, layoutFields ] );
+	}, [ draftLayoutEntries, layoutFields ] );
 	const handleDraftLayoutReorder = useCallback(
 		( activeField, overField ) => {
 			const from = draftLayoutEntries.findIndex(

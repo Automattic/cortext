@@ -187,7 +187,7 @@ describe( 'document-properties Edit layout mode', () => {
 		);
 	} );
 
-	it( 'does not expand layout editing with fields hidden before editing', () => {
+	it( 'shows hidden fields at the end while editing layout', () => {
 		render( <Edit /> );
 
 		expect( screen.getByTestId( 'row-properties' ) ).not.toHaveTextContent(
@@ -198,12 +198,12 @@ describe( 'document-properties Edit layout mode', () => {
 			screen.getByRole( 'button', { name: 'Edit layout' } )
 		);
 
-		expect( screen.getByTestId( 'row-properties' ) ).not.toHaveTextContent(
+		expect( screen.getByTestId( 'row-properties' ) ).toHaveTextContent(
 			'Hidden field'
 		);
 		expect(
 			mockRowPropertiesProps.fields.map( ( field ) => field.id )
-		).toEqual( [ 'field-10', 'created_at' ] );
+		).toEqual( [ 'field-10', 'created_at', 'field-11' ] );
 	} );
 
 	it( 'cancels draft edits without saving', () => {
