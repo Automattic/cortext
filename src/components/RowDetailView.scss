@@ -766,7 +766,7 @@
 		min-height: 18px;
 		padding: 0;
 		border-radius: $grid-unit-30;
-		background: var(--cortext-row-detail-pressed-surface);
+		background: transparent;
 		box-shadow: none;
 		color: var(--cortext-row-detail-muted);
 		cursor: grab;
@@ -774,20 +774,19 @@
 		pointer-events: none;
 		transform: translateY(-50%);
 		transition:
-			background 120ms ease,
 			color 120ms ease,
 			opacity 120ms ease;
 
 		&:hover {
-			background: var(--cortext-row-detail-hover-surface);
+			background: transparent;
 			box-shadow: none;
 			color: var(--cortext-row-detail-text);
 		}
 
 		&:focus-visible {
 			outline: 0;
-			background: var(--cortext-row-detail-pressed-surface);
-			box-shadow: 0 0 0 $border-width var(--cortext-accent);
+			background: transparent;
+			box-shadow: none;
 			color: var(--cortext-row-detail-text);
 		}
 
@@ -891,13 +890,13 @@
 	}
 
 	&__property--layout-editing &__property-value-content {
-		opacity: 0.08;
+		opacity: 0.22;
 		pointer-events: none;
 		user-select: none;
 	}
 
 	&__property--layout-editing.is-hidden &__property-value-content {
-		opacity: 0.04;
+		opacity: 0.12;
 	}
 
 	&__property-label-actions .cortext-rename-field-inline .components-base-control,
@@ -974,12 +973,20 @@
 		background: transparent;
 		box-shadow: none;
 		color: var(--cortext-row-detail-muted);
+		opacity: 0.62;
+
+		&.is-pressed {
+			background: transparent;
+			box-shadow: none;
+			color: var(--cortext-row-detail-muted);
+		}
 
 		&:hover:not(:disabled),
 		&:focus-visible:not(:disabled) {
-			background: var(--cortext-row-detail-pressed-surface);
+			background: transparent;
 			box-shadow: none;
 			color: var(--cortext-row-detail-text);
+			opacity: 0.82;
 		}
 	}
 
