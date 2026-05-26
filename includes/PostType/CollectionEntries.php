@@ -13,9 +13,11 @@ declare( strict_types=1 );
 
 namespace Cortext\PostType;
 
+use Cortext\Fields\FieldDefaults;
 use Cortext\Fields\FieldTypeRegistry;
 use Cortext\Relations;
 use WP_Post;
+use WP_REST_Request;
 
 final class CollectionEntries {
 
@@ -57,6 +59,13 @@ final class CollectionEntries {
 	 * @var array<string,true>
 	 */
 	private static array $menu_order_hooks = array();
+
+	/**
+	 * Entry CPTs that already have the row-default REST hook.
+	 *
+	 * @var array<string,true>
+	 */
+	private static array $default_hooks = array();
 
 	public static function is_reserved_slug( string $slug ): bool {
 		return in_array( $slug, self::RESERVED_SLUGS, true );
@@ -497,6 +506,24 @@ final class CollectionEntries {
 			add_action( "save_post_{$post_type}", array( $this, 'assign_menu_order_on_insert' ), 10, 3 );
 			self::$menu_order_hooks[ $post_type ] = true;
 		}
+
+		if ( empty( self::$default_hooks[ $post_type ] ) ) {
+			add_action( "rest_after_insert_{$post_type}", array( $this, 'apply_defaults_after_rest_insert' ), 10, 3 );
+			self::$default_hooks[ $post_type ] = true;
+		}
+	}
+
+	public function apply_defaults_after_rest_insert( WP_Post $post, WP_REST_Request $request, bool $creating ): void {
+		if ( ! $creating ) {
+			return;
+		}
+
+		$collection_id = $this->collection_id_for_entry_post_type( $post->post_type );
+		if ( $collection_id < 1 ) {
+			return;
+		}
+
+		FieldDefaults::apply_to_row( $collection_id, (int) $post->ID );
 	}
 
 	public function assign_menu_order_on_insert( int $post_id, WP_Post $post, bool $update ): void {
