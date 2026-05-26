@@ -603,6 +603,25 @@ describe( 'document-properties Edit layout mode', () => {
 		);
 	} );
 
+	it( 'keeps the direct drag handle mounted while layout is saving', () => {
+		mockIsSaving = true;
+		render( <Edit /> );
+
+		expect(
+			screen.getByRole( 'button', {
+				name: 'Drag Created before Author',
+			} )
+		).toBeInTheDocument();
+
+		fireEvent.click(
+			screen.getByRole( 'button', {
+				name: 'Drag Created before Author',
+			} )
+		);
+
+		expect( mockSaveEntityRecord ).not.toHaveBeenCalled();
+	} );
+
 	it( 'rolls back direct row drag reorder when saving fails', async () => {
 		mockSaveEntityRecord.mockRejectedValueOnce(
 			new Error( 'Could not update layout.' )

@@ -282,6 +282,9 @@ export default function Edit() {
 	);
 	const handleInlineLayoutReorder = useCallback(
 		( activeField, overField ) => {
+			if ( isSavingLayout ) {
+				return;
+			}
 			const baseEntries = reconcileOptimisticEntries(
 				optimisticEntries,
 				currentEntries
@@ -296,7 +299,7 @@ export default function Edit() {
 			}
 			saveLayoutEntries( nextEntries );
 		},
-		[ currentEntries, optimisticEntries, saveLayoutEntries ]
+		[ currentEntries, isSavingLayout, optimisticEntries, saveLayoutEntries ]
 	);
 	const layoutEntries = useMemo(
 		() => reconcileOptimisticEntries( optimisticEntries, currentEntries ),
@@ -367,7 +370,7 @@ export default function Edit() {
 	let layoutReorderHandler;
 	if ( isEditingLayout ) {
 		layoutReorderHandler = handleLayoutEditReorder;
-	} else if ( canEditLayout && ! isSavingLayout ) {
+	} else if ( canEditLayout ) {
 		layoutReorderHandler = handleInlineLayoutReorder;
 	}
 	const layoutVisibilityHandler = isEditingLayout
