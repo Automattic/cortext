@@ -30,6 +30,7 @@ import {
 	KeyboardSensor,
 	PointerSensor,
 	closestCenter,
+	useDroppable,
 	useSensor,
 	useSensors,
 } from '@dnd-kit/core';
@@ -87,7 +88,25 @@ function ReadOnlyProperty( { value, type, elements, format } ) {
 	);
 }
 
-function HiddenPropertiesSeparator( { isEmpty = false } ) {
+function EmptyHiddenPropertiesDropZone() {
+	const { setNodeRef } = useDroppable( {
+		id: HIDDEN_PROPERTIES_DROP_TARGET,
+	} );
+	return (
+		<>
+			<div className="cortext-row-detail__property-hidden-separator">
+				<span>{ __( 'Hidden fields', 'cortext' ) }</span>
+			</div>
+			<div
+				ref={ setNodeRef }
+				className="cortext-row-detail__property-hidden-dropzone"
+				aria-label={ __( 'Hidden fields drop zone', 'cortext' ) }
+			/>
+		</>
+	);
+}
+
+function HiddenPropertiesSeparator() {
 	const { setNodeRef, transform, transition } = useSortable( {
 		id: HIDDEN_PROPERTIES_DROP_TARGET,
 	} );
@@ -95,21 +114,6 @@ function HiddenPropertiesSeparator( { isEmpty = false } ) {
 		transform: transformToString( transform ),
 		transition,
 	};
-	if ( isEmpty ) {
-		return (
-			<>
-				<div className="cortext-row-detail__property-hidden-separator">
-					<span>{ __( 'Hidden fields', 'cortext' ) }</span>
-				</div>
-				<div
-					ref={ setNodeRef }
-					style={ style }
-					className="cortext-row-detail__property-hidden-dropzone"
-					aria-label={ __( 'Hidden fields drop zone', 'cortext' ) }
-				/>
-			</>
-		);
-	}
 	return (
 		<div
 			ref={ setNodeRef }
@@ -845,9 +849,6 @@ export default function RowProperties( {
 	);
 	const canReorderLayout =
 		typeof onLayoutReorder === 'function' && propertyFields.length > 1;
-	const hasHiddenFields = propertyFields.some(
-		( field ) => field.cortextDetailVisible === false
-	);
 	const sortableIds = useMemo( () => {
 		const ids = propertyFields.flatMap( ( field, index ) => {
 			const startsHiddenGroup =
@@ -858,11 +859,8 @@ export default function RowProperties( {
 				? [ HIDDEN_PROPERTIES_DROP_TARGET, field.id ]
 				: [ field.id ];
 		} );
-		if ( isLayoutEditing && ! hasHiddenFields ) {
-			ids.push( HIDDEN_PROPERTIES_DROP_TARGET );
-		}
 		return ids;
-	}, [ hasHiddenFields, isLayoutEditing, propertyFields ] );
+	}, [ isLayoutEditing, propertyFields ] );
 	const handleDragEnd = useCallback(
 		( event ) => {
 			const { active, over } = event;
@@ -899,6 +897,9 @@ export default function RowProperties( {
 		return null;
 	}
 
+	const hasHiddenFields = propertyFields.some(
+		( field ) => field.cortextDetailVisible === false
+	);
 	const fieldCountLabel = sprintf(
 		/* translators: %d: Number of row fields. */
 		_n( '%d field', '%d fields', propertyFields.length, 'cortext' ),
@@ -968,9 +969,8 @@ export default function RowProperties( {
 				);
 			} ) }
 			{ isLayoutEditing && ! hasHiddenFields ? (
-				<HiddenPropertiesSeparator
+				<EmptyHiddenPropertiesDropZone
 					key={ HIDDEN_PROPERTIES_DROP_TARGET }
-					isEmpty
 				/>
 			) : null }
 		</div>
