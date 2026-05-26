@@ -557,7 +557,7 @@ function RowProperty( {
 			format={ format }
 		/>
 	);
-	if ( ! isLayoutEditing && isEditable ) {
+	if ( isEditable ) {
 		propertyValue = (
 			<PropertyControl
 				field={ displayField }
