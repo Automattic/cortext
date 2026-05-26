@@ -409,12 +409,7 @@ describe( 'normalizeView', () => {
 		const view = {
 			...baseView(),
 			fieldsByType: {
-				grid: [
-					'field-1',
-					TITLE_FIELD_ID,
-					'field-removed',
-					'field-1',
-				],
+				grid: [ 'field-1', TITLE_FIELD_ID, 'field-removed', 'field-1' ],
 				list: [ 'field-removed' ],
 				table: [ 'field-1' ],
 			},

@@ -168,13 +168,10 @@ describe( 'dataViewAdapter', () => {
 			type: 'list',
 			layout: canonicalView.layoutByType.list,
 		};
-		const listCanonical = mergeDataViewsChange(
-			previousListView,
-			{
-				...adaptViewForDataViews( previousListView ),
-				fields: [ 'field-2' ],
-			}
-		);
+		const listCanonical = mergeDataViewsChange( previousListView, {
+			...adaptViewForDataViews( previousListView ),
+			fields: [ 'field-2' ],
+		} );
 
 		expect( listCanonical.fields ).toEqual( [
 			'title',
