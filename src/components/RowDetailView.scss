@@ -651,8 +651,6 @@
 
 		&.is-dragging {
 			opacity: 0;
-			background: var(--cortext-row-detail-pressed-surface);
-			box-shadow: 0 0 0 $border-width var(--cortext-row-detail-border);
 		}
 
 		&.is-collapsed-for-hidden-drop {
