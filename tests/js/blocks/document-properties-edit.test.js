@@ -359,6 +359,49 @@ describe( 'document-properties Edit layout mode', () => {
 		);
 	} );
 
+	it( 'uses the displayed hidden-last order when saving layout drags', async () => {
+		mockContext = {
+			...mockContext,
+			detailLayoutEntries: [
+				{ field: 'field-10', visible: true },
+				{ field: 'field-11', visible: false },
+				{ field: 'created_at', visible: true },
+			],
+		};
+		render( <Edit /> );
+
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Edit layout' } )
+		);
+		expect(
+			mockRowPropertiesProps.fields.map( ( field ) => field.id )
+		).toEqual( [ 'field-10', 'created_at', 'field-11' ] );
+
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Drag Author to hidden' } )
+		);
+
+		await waitFor( () =>
+			expect( mockSaveEntityRecord ).toHaveBeenCalledWith(
+				'postType',
+				'crtxt_collection',
+				{
+					id: 77,
+					meta: {
+						detail_layout: {
+							fields: [
+								{ field: 'created_at', visible: true },
+								{ field: 'field-11', visible: false },
+								{ field: 'field-10', visible: false },
+							],
+						},
+					},
+				},
+				{ throwOnError: true }
+			)
+		);
+	} );
+
 	it( 'hides fields dropped on the hidden group separator', async () => {
 		render( <Edit /> );
 
@@ -580,6 +623,38 @@ describe( 'document-properties Edit layout mode', () => {
 		);
 		expect( screen.getByTestId( 'row-properties' ) ).toHaveTextContent(
 			'AuthorCreated'
+		);
+	} );
+
+	it( 'keeps new fields visible after an optimistic layout save', async () => {
+		const { rerender } = render( <Edit /> );
+
+		fireEvent.click(
+			screen.getByRole( 'button', {
+				name: 'Drag Created before Author',
+			} )
+		);
+
+		await waitFor( () =>
+			expect( mockSaveEntityRecord ).toHaveBeenCalled()
+		);
+
+		const reviewerField = { id: 'field-12', label: 'Reviewer' };
+		mockContext = {
+			...mockContext,
+			fields: [ ...fields, reviewerField ],
+			allFields: [ ...allFields, reviewerField ],
+			detailLayoutEntries: [
+				{ field: 'field-10', visible: true },
+				{ field: 'created_at', visible: true },
+				{ field: 'field-11', visible: false },
+				{ field: 'field-12', visible: true },
+			],
+		};
+		rerender( <Edit /> );
+
+		expect( screen.getByTestId( 'row-properties' ) ).toHaveTextContent(
+			'Reviewer'
 		);
 	} );
 

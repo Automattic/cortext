@@ -43,6 +43,34 @@ function entriesWithHiddenLast( entries ) {
 	];
 }
 
+function reconcileOptimisticEntries( optimisticEntries, currentEntries ) {
+	if ( ! Array.isArray( optimisticEntries ) ) {
+		return currentEntries;
+	}
+	const currentByField = new Map(
+		( Array.isArray( currentEntries ) ? currentEntries : [] ).map(
+			( entry ) => [ entry.field, entry ]
+		)
+	);
+	const optimisticFields = new Set();
+	const reconciledEntries = optimisticEntries.filter( ( entry ) => {
+		if (
+			! currentByField.has( entry.field ) ||
+			optimisticFields.has( entry.field )
+		) {
+			return false;
+		}
+		optimisticFields.add( entry.field );
+		return true;
+	} );
+	for ( const entry of currentByField.values() ) {
+		if ( ! optimisticFields.has( entry.field ) ) {
+			reconciledEntries.push( entry );
+		}
+	}
+	return reconciledEntries;
+}
+
 function reorderDetailLayoutEntries( entries, activeField, overField ) {
 	const safeEntries = Array.isArray( entries ) ? entries : [];
 	const from = safeEntries.findIndex(
@@ -254,7 +282,10 @@ export default function Edit() {
 	);
 	const handleInlineLayoutReorder = useCallback(
 		( activeField, overField ) => {
-			const baseEntries = optimisticEntries ?? currentEntries;
+			const baseEntries = reconcileOptimisticEntries(
+				optimisticEntries,
+				currentEntries
+			);
 			const nextEntries = reorderVisibleDetailEntries(
 				baseEntries,
 				activeField,
@@ -267,17 +298,17 @@ export default function Edit() {
 		},
 		[ currentEntries, optimisticEntries, saveLayoutEntries ]
 	);
+	const layoutEntries = useMemo(
+		() => reconcileOptimisticEntries( optimisticEntries, currentEntries ),
+		[ currentEntries, optimisticEntries ]
+	);
 	const inlineLayoutFields = useMemo(
 		() =>
 			optimisticEntries
-				? detailFieldsFromEntries(
-						layoutFields,
-						optimisticEntries ?? currentEntries
-				  )
+				? detailFieldsFromEntries( layoutFields, layoutEntries )
 				: visibleFields,
-		[ currentEntries, layoutFields, optimisticEntries, visibleFields ]
+		[ layoutEntries, layoutFields, optimisticEntries, visibleFields ]
 	);
-	const layoutEntries = optimisticEntries ?? currentEntries;
 	const layoutEditingFields = useMemo( () => {
 		const fieldsById = new Map(
 			layoutFields.map( ( field ) => [ field.id, field ] )
@@ -296,12 +327,13 @@ export default function Edit() {
 	}, [ layoutEntries, layoutFields ] );
 	const handleLayoutEditReorder = useCallback(
 		( activeField, overField ) => {
+			const visibleOrderEntries = entriesWithHiddenLast( layoutEntries );
 			const nextEntries = reorderDetailLayoutEntries(
-				layoutEntries,
+				visibleOrderEntries,
 				activeField,
 				overField
 			);
-			if ( nextEntries === layoutEntries ) {
+			if ( nextEntries === visibleOrderEntries ) {
 				return;
 			}
 			saveLayoutEntries( nextEntries );
