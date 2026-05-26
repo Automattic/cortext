@@ -45,7 +45,6 @@ const DOCUMENT_ICON_BLOCK = 'cortext/document-icon';
 const DOCUMENT_COVER_BLOCK = 'cortext/document-cover';
 const DOCUMENT_PROPERTIES_BLOCK = 'cortext/document-properties';
 const POST_TITLE_BLOCK = 'core/post-title';
-const LEGACY_HEADER_ACTIONS_BLOCK = 'cortext/page-header-actions';
 const ROOT_BLOCK_LIST = '';
 const DISABLE_HEADER_BOUNDARY_MOVE_UP_CLASS =
 	'cortext-disable-header-boundary-move-up';
@@ -81,10 +80,7 @@ function isHeaderBlock( block, postType ) {
 }
 
 function isHeaderChromeBlock( block, postType ) {
-	return (
-		block?.name === LEGACY_HEADER_ACTIONS_BLOCK ||
-		isHeaderBlock( block, postType )
-	);
+	return isHeaderBlock( block, postType );
 }
 
 function syncHeaderBoundaryMoveUpClass() {
@@ -203,9 +199,7 @@ function HeaderPrefixToolbarGuard( {
 
 			const firstBodyIndex = blocks.findIndex(
 				( block, index ) =>
-					index > titleIndex &&
-					block.name !== LEGACY_HEADER_ACTIONS_BLOCK &&
-					! isHeaderBlock( block, postType )
+					index > titleIndex && ! isHeaderBlock( block, postType )
 			);
 			if ( firstBodyIndex < 0 ) {
 				return false;
@@ -451,7 +445,6 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 		bodyBlockBeforeTitleId,
 		shouldHideHeaderInsertionPoint,
 		duplicateHeaderIds,
-		legacyActionIds,
 		isTrashed,
 	} = useSelect(
 		( select ) => {
@@ -481,10 +474,7 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 					index--
 				) {
 					const block = blocks[ index ];
-					if (
-						block.name === LEGACY_HEADER_ACTIONS_BLOCK ||
-						isHeaderBlock( block, postType )
-					) {
+					if ( isHeaderBlock( block, postType ) ) {
 						continue;
 					}
 					currentBodyBlockBeforeTitleId = block.clientId;
@@ -558,11 +548,6 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 					insertionPointRootClientId === ROOT_BLOCK_LIST &&
 					insertionPointIndex <= currentHeaderEndIndex,
 				duplicateHeaderIds: duplicateIds,
-				legacyActionIds: blocks
-					.filter(
-						( block ) => block.name === LEGACY_HEADER_ACTIONS_BLOCK
-					)
-					.map( ( block ) => block.clientId ),
 				isTrashed:
 					select( editorStore ).getCurrentPostAttribute(
 						'status'
@@ -586,7 +571,7 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 			return;
 		}
 
-		[ ...legacyActionIds, ...duplicateHeaderIds ].forEach( ( clientId ) => {
+		duplicateHeaderIds.forEach( ( clientId ) => {
 			updateBlockAttributes( clientId, { lock: {} } );
 			removeBlock( clientId, false );
 		} );
@@ -608,7 +593,6 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 		hasProperties,
 		hasSchema,
 		isTrashed,
-		legacyActionIds,
 		propertiesClientId,
 		propertiesContextStable,
 		removeBlock,
@@ -758,7 +742,6 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 			! bodyBlockBeforeTitleId ||
 			headerEndIndex < 0 ||
 			duplicateHeaderIds.length > 0 ||
-			legacyActionIds.length > 0 ||
 			( featuredId > 0 && ! hasCover ) ||
 			( iconMeta && ! hasIcon ) ||
 			! hasTitle ||
@@ -789,7 +772,6 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 		headerEndIndex,
 		iconMeta,
 		isTrashed,
-		legacyActionIds.length,
 		moveBlocksToPosition,
 		startTyping,
 		stopTyping,
