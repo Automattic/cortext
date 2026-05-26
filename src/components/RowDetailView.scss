@@ -496,7 +496,7 @@
 		align-items: center;
 		gap: $grid-unit-05;
 		min-width: 0;
-		min-height: 34px;
+		min-height: $grid-unit-40;
 		padding: 2px $grid-unit-05;
 		border-radius: 4px;
 		color: var(--cortext-row-detail-text);
