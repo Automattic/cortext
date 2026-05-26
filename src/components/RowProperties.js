@@ -14,6 +14,7 @@ import { Button, CheckboxControl } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
 import {
+	Fragment,
 	useCallback,
 	useContext,
 	useEffect,
@@ -31,7 +32,6 @@ import {
 	closestCenter,
 	useSensor,
 	useSensors,
-	useDroppable,
 } from '@dnd-kit/core';
 import {
 	SortableContext,
@@ -88,12 +88,17 @@ function ReadOnlyProperty( { value, type, elements, format } ) {
 }
 
 function HiddenPropertiesSeparator() {
-	const { setNodeRef } = useDroppable( {
+	const { setNodeRef, transform, transition } = useSortable( {
 		id: HIDDEN_PROPERTIES_DROP_TARGET,
 	} );
+	const style = {
+		transform: transformToString( transform ),
+		transition,
+	};
 	return (
 		<div
 			ref={ setNodeRef }
+			style={ style }
 			className="cortext-row-detail__property-hidden-separator"
 		>
 			<span>{ __( 'Hidden fields', 'cortext' ) }</span>
@@ -520,7 +525,6 @@ function RowProperty( {
 	rowRef,
 	rowId,
 	rowStyle,
-	showHiddenSeparator,
 	update,
 	updateRelation,
 } ) {
@@ -614,7 +618,6 @@ function RowProperty( {
 				( isDragging ? ' is-dragging' : '' )
 			}
 		>
-			{ showHiddenSeparator ? <HiddenPropertiesSeparator /> : null }
 			<div className="cortext-row-detail__property-label">
 				<span className="cortext-row-detail__property-label-icon-slot">
 					{ canReorderLayout ? (
@@ -828,8 +831,17 @@ export default function RowProperties( {
 	const canReorderLayout =
 		typeof onLayoutReorder === 'function' && propertyFields.length > 1;
 	const sortableIds = useMemo(
-		() => propertyFields.map( ( field ) => field.id ),
-		[ propertyFields ]
+		() =>
+			propertyFields.flatMap( ( field, index ) => {
+				const startsHiddenGroup =
+					isLayoutEditing &&
+					field.cortextDetailVisible === false &&
+					propertyFields[ index - 1 ]?.cortextDetailVisible !== false;
+				return startsHiddenGroup
+					? [ HIDDEN_PROPERTIES_DROP_TARGET, field.id ]
+					: [ field.id ];
+			} ),
+		[ isLayoutEditing, propertyFields ]
 	);
 	const handleDragEnd = useCallback(
 		( event ) => {
@@ -872,7 +884,7 @@ export default function RowProperties( {
 		_n( '%d field', '%d fields', propertyFields.length, 'cortext' ),
 		propertyFields.length
 	);
-	const renderProperty = ( field, showHiddenSeparator = false ) =>
+	const renderProperty = ( field ) =>
 		canReorderLayout ? (
 			<SortableRowProperty
 				key={ field.id }
@@ -889,7 +901,6 @@ export default function RowProperties( {
 				optionOverrides={ optionOverrides }
 				refreshRows={ refreshRows }
 				rowId={ rowId }
-				showHiddenSeparator={ showHiddenSeparator }
 				update={ update }
 				updateRelation={ updateRelation }
 			/>
@@ -910,7 +921,6 @@ export default function RowProperties( {
 				optionOverrides={ optionOverrides }
 				refreshRows={ refreshRows }
 				rowId={ rowId }
-				showHiddenSeparator={ showHiddenSeparator }
 				update={ update }
 				updateRelation={ updateRelation }
 			/>
@@ -926,7 +936,16 @@ export default function RowProperties( {
 					isLayoutEditing &&
 					field.cortextDetailVisible === false &&
 					propertyFields[ index - 1 ]?.cortextDetailVisible !== false;
-				return renderProperty( field, startsHiddenGroup );
+				return (
+					<Fragment key={ field.id }>
+						{ startsHiddenGroup ? (
+							<HiddenPropertiesSeparator
+								key={ HIDDEN_PROPERTIES_DROP_TARGET }
+							/>
+						) : null }
+						{ renderProperty( field ) }
+					</Fragment>
+				);
 			} ) }
 		</div>
 	);
