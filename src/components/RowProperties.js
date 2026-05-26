@@ -633,6 +633,24 @@ function blurActiveLayoutChip( node ) {
 	}
 }
 
+function measuredElementWidth( node ) {
+	const width = node?.getBoundingClientRect?.().width;
+	return Number.isFinite( width ) && width > 0 ? width : null;
+}
+
+function findPropertyElement( container, fieldId ) {
+	if ( ! container || ! fieldId ) {
+		return null;
+	}
+	return (
+		Array.from(
+			container.querySelectorAll( '[data-cortext-property-id]' )
+		).find(
+			( node ) => node.dataset.cortextPropertyId === String( fieldId )
+		) ?? null
+	);
+}
+
 function RowProperty( {
 	canReorderLayout,
 	collectionId,
@@ -735,6 +753,7 @@ function RowProperty( {
 		<div
 			ref={ rowRef }
 			style={ rowStyle }
+			data-cortext-property-id={ field.id }
 			className={
 				'cortext-row-detail__property' +
 				( isEditable
@@ -969,12 +988,17 @@ export default function RowProperties( {
 	const canReorderLayout =
 		typeof onLayoutReorder === 'function' && propertyFields.length > 1;
 	const handleDragStart = useCallback( ( event ) => {
-		setActiveLayoutFieldId( event.active?.id ?? null );
+		const activeFieldId = event.active?.id ?? null;
+		const activeProperty = findPropertyElement(
+			propertiesRef.current,
+			activeFieldId
+		);
+		setActiveLayoutFieldId( activeFieldId );
 		setActiveLayoutOverId( null );
 		setActiveLayoutOverlayWidth(
-			event.active?.rect?.current?.initial?.width ??
-				propertiesRef.current?.getBoundingClientRect?.().width ??
-				null
+			measuredElementWidth( activeProperty ) ??
+				event.active?.rect?.current?.initial?.width ??
+				measuredElementWidth( propertiesRef.current )
 		);
 	}, [] );
 	const handleDragOver = useCallback( ( event ) => {

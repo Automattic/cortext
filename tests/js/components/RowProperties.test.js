@@ -779,7 +779,7 @@ describe( 'RowProperties', () => {
 	} );
 
 	it( 'uses a drag overlay for row property layout drags', () => {
-		render(
+		const { container } = render(
 			<RowProperties
 				isLayoutEditing
 				fields={ [
@@ -802,6 +802,9 @@ describe( 'RowProperties', () => {
 				row={ {} }
 			/>
 		);
+		container.querySelector(
+			'[data-cortext-property-id="field-7"]'
+		).getBoundingClientRect = jest.fn( () => ( { width: 384 } ) );
 
 		act( () => {
 			mockDndProps.onDragStart( {
@@ -827,7 +830,7 @@ describe( 'RowProperties', () => {
 			screen
 				.getByTestId( 'drag-overlay' )
 				.querySelector( '.cortext-row-detail__property-drag-overlay' )
-		).toHaveStyle( { width: '512px' } );
+		).toHaveStyle( { width: '384px' } );
 	} );
 
 	it( 'ignores stale sortable dragging after the layout drag ends', () => {
