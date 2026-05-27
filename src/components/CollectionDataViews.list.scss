@@ -269,4 +269,35 @@ $list-row-open-background: #f3f3f3;
 		box-shadow: inset 0 0 0 1px $gray-300;
 		color: $gray-700;
 	}
+
+	@media (min-width: 782px) {
+
+		.dataviews-view-list__field-wrapper {
+			display: grid !important;
+			grid-template-columns: minmax(160px, 1fr) minmax(0, max-content) auto;
+			column-gap: $grid-unit-20;
+			align-items: center;
+		}
+
+		.dataviews-view-list__field-wrapper > .components-h-stack {
+			display: contents;
+		}
+
+		.dataviews-view-list .dataviews-title-field {
+			grid-column: 1;
+		}
+
+		.dataviews-view-list__fields {
+			grid-column: 2;
+			justify-content: flex-end;
+			width: auto;
+			max-width: min(620px, 54vw);
+			margin-top: 0;
+		}
+
+		.dataviews-view-list__item-actions {
+			grid-column: 3;
+			margin-left: 0;
+		}
+	}
 }
