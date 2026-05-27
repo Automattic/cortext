@@ -380,6 +380,12 @@ async function getParentDataViewAttributes( page ) {
 	} );
 }
 
+function activeNamedView( attributes ) {
+	return attributes.view_list?.find(
+		( entry ) => entry.slug === attributes.active_view
+	)?.view;
+}
+
 function activeRowDetailCanvas( detail ) {
 	return detail
 		.locator( '.cortext-row-detail__pane[data-interactive="true"]' )
@@ -649,6 +655,29 @@ function createOwnerDataViewBlockMarkup( collectionId, viewOverrides = {} ) {
 	return `<!-- wp:cortext/data-view ${ JSON.stringify( attributes ) } /-->`;
 }
 
+function createNamedDataViewBlockMarkup( collectionId, viewConfig ) {
+	const activeView =
+		viewConfig.view_list.find(
+			( view ) => view.slug === viewConfig.active_view
+		) || viewConfig.view_list[ 0 ];
+	const attributes = {
+		collectionId,
+		default_view: viewConfig.default_view,
+		default_layouts: viewConfig.default_layouts,
+		active_view: viewConfig.active_view,
+		view_list: viewConfig.view_list,
+		view: activeView.view,
+	};
+
+	return `<!-- wp:cortext/data-view ${ JSON.stringify( attributes ) } /-->`;
+}
+
+function columnHeaderLabel( scope, label ) {
+	return scope
+		.locator( '.cortext-column-header-label' )
+		.filter( { hasText: new RegExp( `^${ label }$` ) } );
+}
+
 function createEmptyDataViewBlockMarkup() {
 	return '<!-- wp:cortext/data-view /-->';
 }
@@ -866,6 +895,8 @@ test.describe( 'Collection view block', () => {
 			expect( saved.content.raw ).toContain(
 				`"collectionId":${ fixture.collection.id }`
 			);
+			expect( saved.content.raw ).toContain( '"active_view":"default"' );
+			expect( saved.content.raw ).toContain( '"view_list"' );
 			expect( saved.content.raw ).toContain(
 				`"field-${ fixture.field.id }"`
 			);
@@ -885,6 +916,434 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
+			);
+		}
+	} );
+
+	test( 'switches and persists independent named views in inline blocks', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+
+		try {
+			Object.assign(
+				fixture,
+				await createCollectionFixture( requestUtils )
+			);
+
+			const fieldKey = `field-${ fixture.field.id }`;
+			const viewConfig = {
+				default_view: {
+					type: 'table',
+					fields: [],
+					sort: null,
+					filters: [],
+					calculations: {},
+					perPage: 25,
+					layout: { density: 'compact' },
+					rowDetailMode: 'side',
+				},
+				default_layouts: {
+					table: { layout: { density: 'compact' } },
+					grid: { layout: { previewSize: 230 } },
+					list: {},
+				},
+				active_view: 'default',
+				view_list: [
+					{
+						slug: 'default',
+						title: 'Authors',
+						view: {
+							type: 'table',
+							fields: [ 'title', fieldKey ],
+							sort: { field: fieldKey, direction: 'asc' },
+							filters: [],
+							calculations: {},
+							perPage: 25,
+							search: 'Le Guin',
+							layout: {
+								density: 'compact',
+								styles: {
+									[ fieldKey ]: { width: 260 },
+								},
+							},
+							rowDetailMode: 'side',
+						},
+					},
+					{
+						slug: 'view-1',
+						title: 'Titles',
+						view: {
+							type: 'table',
+							fields: [ 'title' ],
+							sort: null,
+							filters: [],
+							calculations: {},
+							perPage: 25,
+							layout: { density: 'compact' },
+							rowDetailMode: 'modal',
+						},
+					},
+				],
+			};
+
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: 'Named inline views page',
+					status: 'private',
+					content: createNamedDataViewBlockMarkup(
+						fixture.collection.id,
+						viewConfig
+					),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/${ fixture.page.id }`
+			);
+
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.page.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+			await expect(
+				canvas.getByRole( 'tab', { name: 'Authors' } )
+			).toHaveAttribute( 'aria-selected', 'true' );
+			await expect( columnHeaderLabel( canvas, 'Author' ) ).toBeVisible();
+			await expect(
+				canvas.getByText( 'Ursula K. Le Guin' )
+			).toBeVisible();
+
+			await canvas.getByRole( 'tab', { name: 'Titles' } ).click();
+			await expect(
+				canvas.getByRole( 'tab', { name: 'Titles' } )
+			).toHaveAttribute( 'aria-selected', 'true' );
+			await expect(
+				columnHeaderLabel( canvas, 'Author' )
+			).not.toBeVisible();
+
+			await canvas
+				.getByRole( 'button', { name: 'Actions for Titles' } )
+				.click();
+			await page.getByLabel( 'View name' ).fill( 'Short list' );
+			await page.getByRole( 'button', { name: 'Rename' } ).click();
+			await expect(
+				canvas.getByRole( 'tab', { name: 'Short list' } )
+			).toHaveAttribute( 'aria-selected', 'true' );
+
+			await canvas
+				.getByRole( 'button', { name: 'Actions for Short list' } )
+				.click();
+			await page.getByRole( 'menuitem', { name: 'Duplicate' } ).click();
+			await expect(
+				canvas.getByRole( 'tab', { name: 'Short list copy' } )
+			).toHaveAttribute( 'aria-selected', 'true' );
+
+			await canvas
+				.getByRole( 'button', {
+					name: 'Actions for Short list copy',
+				} )
+				.click();
+			await page.getByRole( 'menuitem', { name: 'Delete' } ).click();
+			await expect(
+				canvas.getByRole( 'tab', { name: 'Short list copy' } )
+			).toHaveCount( 0 );
+
+			await canvas
+				.getByRole( 'button', { name: 'Actions for Short list' } )
+				.click();
+			await page.getByRole( 'menuitem', { name: 'Move left' } ).click();
+			const tabs = canvas.locator( '.cortext-collection-view-bar__tab' );
+			await expect( tabs.nth( 0 ) ).toContainText( 'Short list' );
+			await expect( tabs.nth( 1 ) ).toContainText( 'Authors' );
+
+			await page.evaluate( async () => {
+				await window.wp.data.dispatch( 'core/editor' ).savePost();
+			} );
+			await page.waitForFunction(
+				() => ! window.wp.data.select( 'core/editor' ).isSavingPost()
+			);
+
+			const saved = await requestUtils.rest( {
+				path: `/wp/v2/crtxt_documents/${ fixture.page.id }`,
+				params: { context: 'edit' },
+			} );
+			expect( saved.content.raw ).toContain( '"active_view":"view-1"' );
+			expect( saved.content.raw.indexOf( '"Short list"' ) ).toBeLessThan(
+				saved.content.raw.indexOf( '"Authors"' )
+			);
+			expect( saved.content.raw ).toContain( fieldKey );
+
+			await page.reload();
+			await expect(
+				canvas.getByRole( 'tab', { name: 'Short list' } )
+			).toHaveAttribute( 'aria-selected', 'true' );
+			await expect(
+				columnHeaderLabel( canvas, 'Author' )
+			).not.toBeVisible();
+
+			await canvas.getByRole( 'tab', { name: 'Authors' } ).click();
+			await expect( columnHeaderLabel( canvas, 'Author' ) ).toBeVisible();
+			await expect(
+				canvas.getByText( 'Ursula K. Le Guin' )
+			).toBeVisible();
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				fixture.entry && `/wp/v2/crtxt_documents/${ fixture.entry.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
+			);
+		}
+	} );
+
+	test( 'opens rows with the row detail mode of the active named view', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+
+		try {
+			Object.assign(
+				fixture,
+				await createCollectionFixture( requestUtils )
+			);
+
+			const fieldKey = `field-${ fixture.field.id }`;
+			const namedView = ( slug, title, rowDetailMode ) => ( {
+				slug,
+				title,
+				view: {
+					type: 'table',
+					fields: [ 'title', fieldKey ],
+					sort: null,
+					filters: [],
+					perPage: 25,
+					layout: { density: 'compact' },
+					rowDetailMode,
+				},
+			} );
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: 'Named views row detail page',
+					status: 'private',
+					content: createNamedDataViewBlockMarkup(
+						fixture.collection.id,
+						{
+							active_view: 'default',
+							view_list: [
+								namedView( 'default', 'Peek', 'side' ),
+								namedView( 'view-1', 'Focus', 'modal' ),
+							],
+						}
+					),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/${ fixture.page.id }`
+			);
+
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+			const row = dataViewTableRow( canvas, 'The Left Hand of Darkness' );
+			const modalDetail = page.locator(
+				'.components-modal__frame.cortext-row-detail-modal'
+			);
+			const openRow = async () => {
+				await expect( row ).toBeVisible( { timeout: 15_000 } );
+				await row.hover();
+				await row.locator( '.cortext-title-cell__open' ).click();
+			};
+
+			await openRow();
+			const sideDetail = page.getByRole( 'dialog', { name: 'Detail' } );
+			await expect( sideDetail ).toBeVisible();
+			await expect( modalDetail ).toHaveCount( 0 );
+			await sideDetail
+				.getByRole( 'button', { name: 'Close' } )
+				.first()
+				.click();
+			await expect( sideDetail ).toBeHidden();
+
+			await canvas.getByRole( 'tab', { name: 'Focus' } ).click();
+			await expect(
+				canvas.getByRole( 'tab', { name: 'Focus' } )
+			).toHaveAttribute( 'aria-selected', 'true' );
+			await openRow();
+			await expect( modalDetail ).toBeVisible();
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				fixture.entry && `/wp/v2/crtxt_documents/${ fixture.entry.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
+			);
+		}
+	} );
+
+	test( 'persists full-page named views through the collection views endpoint', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+
+		try {
+			Object.assign(
+				fixture,
+				await createCollectionFixture( requestUtils )
+			);
+
+			const fieldKey = `field-${ fixture.field.id }`;
+			await requestUtils.rest( {
+				method: 'PUT',
+				path: `/cortext/v1/collections/${ fixture.collection.id }/views`,
+				data: {
+					active_view: 'default',
+					view_list: [
+						{
+							slug: 'default',
+							title: 'Full authors',
+							view: {
+								type: 'table',
+								fields: [ 'title', fieldKey ],
+								sort: null,
+								filters: [],
+								calculations: {},
+								perPage: 25,
+								layout: { density: 'compact' },
+								rowDetailMode: 'side',
+							},
+						},
+						{
+							slug: 'view-1',
+							title: 'Full titles',
+							view: {
+								type: 'table',
+								fields: [ 'title' ],
+								sort: null,
+								filters: [],
+								calculations: {},
+								perPage: 25,
+								layout: { density: 'compact' },
+								rowDetailMode: 'modal',
+							},
+						},
+					],
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/${ fixture.collection.slug }-${ fixture.collection.id }`
+			);
+
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.collection.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+			await expect(
+				canvas.getByRole( 'tab', { name: 'Full authors' } )
+			).toHaveAttribute( 'aria-selected', 'true', { timeout: 15_000 } );
+			await expect( columnHeaderLabel( canvas, 'Author' ) ).toBeVisible();
+
+			await canvas.getByRole( 'tab', { name: 'Full titles' } ).click();
+			await expect(
+				canvas.getByRole( 'tab', { name: 'Full titles' } )
+			).toHaveAttribute( 'aria-selected', 'true' );
+			await expect(
+				columnHeaderLabel( canvas, 'Author' )
+			).not.toBeVisible();
+
+			await canvas
+				.getByRole( 'button', { name: 'Actions for Full titles' } )
+				.click();
+			await page.getByLabel( 'View name' ).fill( 'Short full list' );
+			await page.keyboard.press( 'Tab' );
+			await expect(
+				canvas.getByRole( 'tab', { name: 'Short full list' } )
+			).toHaveAttribute( 'aria-selected', 'true' );
+			await expect
+				.poll( async () => {
+					const stored = await requestUtils.rest( {
+						path: `/cortext/v1/collections/${ fixture.collection.id }/views`,
+					} );
+					return {
+						activeView: stored.active_view,
+						activeTitle:
+							stored.view_list.find(
+								( view ) => view.slug === stored.active_view
+							)?.title ?? '',
+					};
+				} )
+				.toEqual( {
+					activeView: 'view-1',
+					activeTitle: 'Short full list',
+				} );
+
+			await page.reload();
+			await expect(
+				canvas.getByRole( 'tab', { name: 'Short full list' } )
+			).toHaveAttribute( 'aria-selected', 'true', { timeout: 15_000 } );
+			await expect(
+				columnHeaderLabel( canvas, 'Author' )
+			).not.toBeVisible();
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				fixture.entry && `/wp/v2/crtxt_documents/${ fixture.entry.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
@@ -1430,8 +1889,9 @@ test.describe( 'Collection view block', () => {
 					const attributes =
 						await getParentDataViewAttributes( page );
 					return {
-						active: attributes.view?.layout?.density,
-						stored: attributes.view?.layoutByType?.grid?.density,
+						active: activeNamedView( attributes )?.layout?.density,
+						stored: activeNamedView( attributes )?.layoutByType
+							?.grid?.density,
 					};
 				} )
 				.toEqual( { active: 'comfortable', stored: 'comfortable' } );
@@ -1472,8 +1932,9 @@ test.describe( 'Collection view block', () => {
 					const attributes =
 						await getParentDataViewAttributes( page );
 					return {
-						active: attributes.view?.layout?.density,
-						stored: attributes.view?.layoutByType?.grid?.density,
+						active: activeNamedView( attributes )?.layout?.density,
+						stored: activeNamedView( attributes )?.layoutByType
+							?.grid?.density,
 					};
 				} )
 				.toEqual( { active: 'comfortable', stored: 'comfortable' } );
@@ -2277,13 +2738,22 @@ test.describe( 'Collection view block', () => {
 						window.wp.data
 							.dispatch( 'core/block-editor' )
 							.updateBlockAttributes( block.clientId, {
-								view: {
-									...block.attributes.view,
-									sort: {
-										field: 'title',
-										direction: 'asc',
-									},
-								},
+								view_list: block.attributes.view_list.map(
+									( entry ) =>
+										entry.slug ===
+										block.attributes.active_view
+											? {
+													...entry,
+													view: {
+														...entry.view,
+														sort: {
+															field: 'title',
+															direction: 'asc',
+														},
+													},
+											  }
+											: entry
+								),
 							} );
 					} );
 					await expect
@@ -3174,7 +3644,7 @@ test.describe( 'Collection view block', () => {
 
 			await expect( canvas.getByText( 'No results' ) ).toBeVisible();
 			await expect(
-				canvas.getByRole( 'button', { name: 'New' } )
+				canvas.getByRole( 'button', { name: 'New', exact: true } )
 			).toBeVisible();
 
 			// The placeholder creates the collection document immediately and
@@ -6087,27 +6557,21 @@ test.describe( 'Collection view block', () => {
 				)
 				.toBeGreaterThan( initialRenderedWidth + 100 );
 
-			await page.evaluate( async () => {
-				await window.wp.data.dispatch( 'core/editor' ).savePost();
-			} );
-			await page.waitForFunction(
-				() => ! window.wp.data.select( 'core/editor' ).isSavingPost()
-			);
-
-			const saved = await requestUtils.rest( {
-				path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
-				params: { context: 'edit' },
-			} );
-			const widthMatch = saved.content.raw.match(
-				new RegExp( `"${ fieldKey }":\\{[^}]*"width":(\\d+)` )
-			);
-			expect( widthMatch ).not.toBeNull();
-			expect( Number( widthMatch[ 1 ] ) ).toBeGreaterThan( 80 );
-			const maxWidthMatch = saved.content.raw.match(
-				new RegExp( `"${ fieldKey }":\\{[^}]*"maxWidth":(\\d+)` )
-			);
-			expect( maxWidthMatch ).not.toBeNull();
-			expect( Number( maxWidthMatch[ 1 ] ) ).toBe( 1200 );
+			// Full-page collections keep their views in collection meta, saved
+			// through the collection views endpoint rather than post content.
+			const storedStyle = async () => {
+				const stored = await requestUtils.rest( {
+					path: `/cortext/v1/collections/${ fixture.collection.id }/views`,
+				} );
+				return (
+					activeNamedView( stored )?.layout?.styles?.[ fieldKey ] ??
+					{}
+				);
+			};
+			await expect
+				.poll( async () => ( await storedStyle() ).width ?? 0 )
+				.toBeGreaterThan( 80 );
+			expect( ( await storedStyle() ).maxWidth ).toBe( 1200 );
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
