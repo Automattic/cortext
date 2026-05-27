@@ -3,6 +3,8 @@ import { useDispatch } from '@wordpress/data';
 import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
 import {
 	Button,
+	Card,
+	CardBody,
 	Notice,
 	Spinner,
 	TextControl,
@@ -382,19 +384,31 @@ function CollectionCard( { collection, job, isSelected, onSelect, onImport } ) {
 	const processed = job?.processed ?? 0;
 
 	let statusLine = null;
-	if ( processed && ( status === 'running' || status === 'done' ) ) {
-		statusLine =
-			status === 'running'
-				? sprintf(
-						/* translators: %d: rows processed */
-						__( 'Importing %d rows…', 'cortext' ),
-						processed
-				  )
-				: sprintf(
-						/* translators: %d: rows processed */
-						__( '%d rows imported.', 'cortext' ),
-						processed
-				  );
+	switch ( status ) {
+		case 'error':
+			statusLine = __( 'Import failed.', 'cortext' );
+			break;
+
+		case 'running':
+			if ( processed ) {
+				statusLine = sprintf(
+					/* translators: %d: rows processed */
+					__( 'Importing %d rows…', 'cortext' ),
+					processed
+				);
+			}
+			break;
+
+		case 'done':
+			if ( processed ) {
+				statusLine = sprintf(
+					/* translators: %d: rows processed */
+					__( '%d rows imported.', 'cortext' ),
+					processed
+				);
+			}
+
+			break;
 	}
 
 	const openTo =
@@ -455,40 +469,49 @@ function CollectionCard( { collection, job, isSelected, onSelect, onImport } ) {
 	}
 
 	return (
-		<li className="cortext-import-collections__card" data-status={ status }>
-			<div className="cortext-import-collections__card-row">
-				<Button
-					className="cortext-import-collections__card-title"
-					variant="link"
-					onClick={ () => onSelect( collection.id ) }
-					aria-pressed={ isSelected }
-				>
-					{ collection.title || __( '(untitled)', 'cortext' ) }
-				</Button>
-				{ statusLine && (
-					<Text
-						variant="muted"
-						className="cortext-import-collections__card-status"
-					>
-						{ statusLine }
-					</Text>
-				) }
-				<div className="cortext-import-collections__card-action">
-					{ actionButton }
-				</div>
-			</div>
-			{ status === 'error' && job?.message && (
-				<Text
-					variant="muted"
-					className="cortext-import-collections__card-error"
-				>
-					{ sprintf(
-						/* translators: %s: upstream error message */
-						__( 'Error: %s', 'cortext' ),
-						job.message
+		<li className="cortext-import-collections__item" data-status={ status }>
+			<Card size="small">
+				<CardBody>
+					<div className="cortext-import-collections__card-row">
+						<HStack>
+							<Button
+								className="cortext-import-collections__card-title"
+								variant="link"
+								onClick={ () => onSelect( collection.id ) }
+								aria-pressed={ isSelected }
+							>
+								{ collection.title ||
+									__( '(untitled)', 'cortext' ) }
+							</Button>
+							<HStack expanded={ false }>
+								{ statusLine && (
+									<Text
+										variant="muted"
+										className="cortext-import-collections__card-status"
+									>
+										{ statusLine }
+									</Text>
+								) }
+								<div className="cortext-import-collections__card-action">
+									{ actionButton }
+								</div>
+							</HStack>
+						</HStack>
+					</div>
+					{ status === 'error' && job?.message && (
+						<Text
+							variant="muted"
+							className="cortext-import-collections__card-error"
+						>
+							{ sprintf(
+								/* translators: %s: upstream error message */
+								__( 'Error: %s', 'cortext' ),
+								job.message
+							) }
+						</Text>
 					) }
-				</Text>
-			) }
+				</CardBody>
+			</Card>
 		</li>
 	);
 }

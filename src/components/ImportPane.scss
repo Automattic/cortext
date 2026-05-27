@@ -37,17 +37,6 @@
 	flex-direction: column;
 	gap: $grid-unit-20;
 
-	&__card {
-		border: 1px solid $gray-200;
-		border-radius: 6px;
-		padding: $grid-unit-20 $grid-unit-30;
-		background: #fff;
-	}
-
-	&__card[data-status="error"] {
-		border-color: $alert-red;
-	}
-
 	&__card-row {
 		display: flex;
 		align-items: center;
