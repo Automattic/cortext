@@ -363,6 +363,7 @@ export default function RowDetailView( {
 	const [ isPropertiesLayoutEditing, setIsPropertiesLayoutEditing ] =
 		useState( false );
 	const [ layoutEditRequest, setLayoutEditRequest ] = useState( 0 );
+	const [ layoutEditRequestKey, setLayoutEditRequestKey ] = useState( null );
 	const togglePropertiesVisible = useCallback(
 		() => setArePropertiesVisible( ( current ) => ! current ),
 		[]
@@ -371,8 +372,9 @@ export default function RowDetailView( {
 		if ( ! isPropertiesLayoutEditing ) {
 			setArePropertiesVisible( true );
 		}
+		setLayoutEditRequestKey( activeDetailKey );
 		setLayoutEditRequest( ( current ) => current + 1 );
-	}, [ isPropertiesLayoutEditing ] );
+	}, [ activeDetailKey, isPropertiesLayoutEditing ] );
 	const [ detailPanes, setDetailPanes ] = useState( () =>
 		activeDetail && activeDetailKey
 			? [
@@ -435,6 +437,11 @@ export default function RowDetailView( {
 			];
 		} );
 	}, [ activeDetail, activeDetailKey ] );
+
+	useEffect( () => {
+		setIsPropertiesLayoutEditing( false );
+		setLayoutEditRequestKey( null );
+	}, [ activeDetailKey ] );
 
 	const onPaneReady = useCallback( ( readyKey ) => {
 		setDetailPanes( ( current ) => {
@@ -611,7 +618,10 @@ export default function RowDetailView( {
 										isActive={ isApiActive }
 										isHidden={ isHiddenPane }
 										layoutEditRequest={
-											isApiActive ? layoutEditRequest : 0
+											isApiActive &&
+											pane.key === layoutEditRequestKey
+												? layoutEditRequest
+												: 0
 										}
 										mutationContext={ mutationContext }
 										onApi={ onApi }
