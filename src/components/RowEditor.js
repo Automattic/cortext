@@ -103,11 +103,13 @@ function DetailPaneContent( {
 	detailLayoutEntries,
 	isActive,
 	isHidden,
+	isPropertiesLayoutEditing,
 	layoutEditRequest,
 	mutationContext,
 	onApi,
 	onLayoutEditingChange,
 	onPaneReady,
+	onRequestLayoutEdit,
 	onRestored,
 	onSaved,
 	onTogglePropertiesVisible,
@@ -130,8 +132,10 @@ function DetailPaneContent( {
 			detailLayoutEntries={ detailLayoutEntries }
 			fallbackRecord={ row }
 			isVisible={ propertiesVisible }
+			isLayoutEditing={ isPropertiesLayoutEditing }
 			layoutEditRequest={ layoutEditRequest }
 			onLayoutEditingChange={ onLayoutEditingChange }
+			onRequestLayoutEdit={ onRequestLayoutEdit }
 			onToggleVisible={ onTogglePropertiesVisible }
 		>
 			<EditorBody
@@ -180,11 +184,13 @@ export default function RowEditor( {
 	detailLayoutEntries,
 	isActive,
 	isHidden,
+	isPropertiesLayoutEditing,
 	layoutEditRequest,
 	mutationContext,
 	onApi,
 	onLayoutEditingChange,
 	onPaneReady,
+	onRequestLayoutEdit,
 	onRestored,
 	onSaved,
 	onTogglePropertiesVisible,
@@ -212,11 +218,13 @@ export default function RowEditor( {
 						detailLayoutEntries={ detailLayoutEntries }
 						isActive={ isActive }
 						isHidden={ isHidden }
+						isPropertiesLayoutEditing={ isPropertiesLayoutEditing }
 						layoutEditRequest={ layoutEditRequest }
 						mutationContext={ mutationContext }
 						onApi={ onApi }
 						onLayoutEditingChange={ onLayoutEditingChange }
 						onPaneReady={ onPaneReady }
+						onRequestLayoutEdit={ onRequestLayoutEdit }
 						onRestored={ onRestored }
 						onSaved={ onSaved }
 						onTogglePropertiesVisible={ onTogglePropertiesVisible }

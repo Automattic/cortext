@@ -617,6 +617,11 @@ export default function RowDetailView( {
 										}
 										isActive={ isApiActive }
 										isHidden={ isHiddenPane }
+										isPropertiesLayoutEditing={
+											isApiActive
+												? isPropertiesLayoutEditing
+												: false
+										}
 										layoutEditRequest={
 											isApiActive &&
 											pane.key === layoutEditRequestKey
@@ -628,6 +633,11 @@ export default function RowDetailView( {
 										onLayoutEditingChange={
 											isApiActive
 												? setIsPropertiesLayoutEditing
+												: undefined
+										}
+										onRequestLayoutEdit={
+											isApiActive
+												? requestLayoutEdit
 												: undefined
 										}
 										onPaneReady={ onPaneReady }

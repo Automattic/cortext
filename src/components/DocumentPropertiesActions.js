@@ -1,6 +1,6 @@
 import { Button, Dropdown, PanelBody } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
-import { plus, seen, unseen } from '@wordpress/icons';
+import { pencil, plus, seen, unseen } from '@wordpress/icons';
 
 import AddFieldPopover from './fields/AddFieldPopover';
 import { CollectionFieldsProvider } from './CollectionFieldsContext';
@@ -14,8 +14,15 @@ export default function DocumentPropertiesActions() {
 	if ( ! ctx ) {
 		return null;
 	}
-	const { collectionId, fields, isResolving, isVisible, onToggleVisible } =
-		ctx;
+	const {
+		collectionId,
+		fields,
+		isLayoutEditing,
+		isResolving,
+		isVisible,
+		onRequestLayoutEdit,
+		onToggleVisible,
+	} = ctx;
 	if ( isResolving ) {
 		return null;
 	}
@@ -36,6 +43,19 @@ export default function DocumentPropertiesActions() {
 						{ isVisible
 							? __( 'Collapse properties', 'cortext' )
 							: __( 'Expand properties', 'cortext' ) }
+					</Button>
+				) }
+				{ onRequestLayoutEdit && hasFields && (
+					<Button
+						variant="secondary"
+						icon={ pencil }
+						isPressed={ isLayoutEditing }
+						onClick={ onRequestLayoutEdit }
+						__next40pxDefaultSize
+					>
+						{ isLayoutEditing
+							? __( 'Done editing properties', 'cortext' )
+							: __( 'Edit properties', 'cortext' ) }
 					</Button>
 				) }
 				{ collectionId && (

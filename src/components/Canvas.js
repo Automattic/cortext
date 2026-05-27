@@ -270,8 +270,10 @@ function CanvasEditor( {
 			// row right before `flushNow()` saves that deletion.
 			isResolving={ !! pendingPost }
 			isVisible={ arePropertiesVisible }
+			isLayoutEditing={ isPropertiesLayoutEditing }
 			layoutEditRequest={ layoutEditRequest }
 			onLayoutEditingChange={ setIsPropertiesLayoutEditing }
+			onRequestLayoutEdit={ requestPropertiesLayoutEdit }
 			onToggleVisible={ togglePropertiesVisible }
 		>
 			<DocumentActions
