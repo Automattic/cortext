@@ -91,6 +91,9 @@ export default function DataViewNewRowButton( {
 				'cortext-data-view__new-row' +
 				( presentation === 'grid-card'
 					? ' cortext-data-view__new-row-card'
+					: '' ) +
+				( presentation === 'list-row'
+					? ' cortext-data-view__new-row-list'
 					: '' )
 			}
 			variant="tertiary"

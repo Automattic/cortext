@@ -553,7 +553,7 @@ export default function CollectionDataViews( {
 	const mutationContext = useMemo(
 		() => ( {
 			saveRowField,
-			canEditCells: isTableLayout || isGridLayout,
+			canEditCells: isTableLayout || isGridLayout || isListLayout,
 			editRequest,
 			clearEditRequest,
 			requestNext,
@@ -566,6 +566,7 @@ export default function CollectionDataViews( {
 		[
 			saveRowField,
 			isGridLayout,
+			isListLayout,
 			isTableLayout,
 			editRequest,
 			clearEditRequest,
@@ -673,7 +674,7 @@ export default function CollectionDataViews( {
 
 	const openRowActionContext = useMemo(
 		() => ( {
-			enabled: isTableLayout || isGridLayout,
+			enabled: isTableLayout || isGridLayout || isListLayout,
 			icon: ROW_DETAIL_MODE_ICONS[ savedRowDetailMode ],
 			openRowId,
 			requestOpenRow,
@@ -681,6 +682,7 @@ export default function CollectionDataViews( {
 		} ),
 		[
 			isGridLayout,
+			isListLayout,
 			isTableLayout,
 			openRowId,
 			requestOpenRow,
@@ -689,7 +691,13 @@ export default function CollectionDataViews( {
 	);
 	const handleDataViewClick = useCallback(
 		( event ) => {
-			if ( ! isGridLayout || event.defaultPrevented ) {
+			let clickLayout = null;
+			if ( isGridLayout ) {
+				clickLayout = 'grid';
+			} else if ( isListLayout ) {
+				clickLayout = 'list';
+			}
+			if ( ! clickLayout || event.defaultPrevented ) {
 				return;
 			}
 			if (
@@ -712,7 +720,7 @@ export default function CollectionDataViews( {
 			const rowInfo = findDataViewItemFromEvent(
 				event,
 				tableWrapperRef.current,
-				'grid',
+				clickLayout,
 				dataFilteredInRenderOrder
 			);
 			if ( ! rowInfo?.row ) {
@@ -720,7 +728,12 @@ export default function CollectionDataViews( {
 			}
 			requestOpenRow( rowInfo.row );
 		},
-		[ dataFilteredInRenderOrder, isGridLayout, requestOpenRow ]
+		[
+			dataFilteredInRenderOrder,
+			isGridLayout,
+			isListLayout,
+			requestOpenRow,
+		]
 	);
 	const handleDataViewClickCapture = useCallback(
 		( event ) => {
@@ -921,9 +934,8 @@ export default function CollectionDataViews( {
 
 	const rowActions = useMemo( () => {
 		const actions = [];
-		// List and grid get one primary Open action, matching the saved
-		// detail mode. Table already has the inline Open button in the title
-		// cell, so these actions stay inside the menu there.
+		// The row itself opens in grid/list, and table has the inline Open
+		// button in the title cell. Keep the mode choices in the row menu.
 		for ( const mode of [ 'side', 'modal', 'full' ] ) {
 			actions.push( {
 				id: `open-in-${ mode }`,
@@ -933,7 +945,6 @@ export default function CollectionDataViews( {
 					ROW_DETAIL_MODE_LABELS[ mode ]
 				),
 				icon: ROW_DETAIL_MODE_ICONS[ mode ],
-				isPrimary: ! isTableLayout && mode === savedRowDetailMode,
 				context: 'single',
 				callback: ( items ) => openRowInMode( items?.[ 0 ], mode ),
 			} );
@@ -980,10 +991,8 @@ export default function CollectionDataViews( {
 		areFavoriteActionsDisabled,
 		duplicateRow,
 		isRowFavorite,
-		isTableLayout,
 		openRowInMode,
 		requestDeleteRows,
-		savedRowDetailMode,
 		toggleRowFavorite,
 	] );
 
@@ -1333,6 +1342,9 @@ export default function CollectionDataViews( {
 							data-grid-card-clickable={
 								isGridLayout ? 'true' : undefined
 							}
+							data-list-row-clickable={
+								isListLayout ? 'true' : undefined
+							}
 							data-loading-shell={
 								showLoadingShell ? 'true' : undefined
 							}
@@ -1474,12 +1486,24 @@ export default function CollectionDataViews( {
 									   outside DataViews because there is no append
 									   slot in the layout chrome. */ }
 									{ ! isGridLayout && (
-										<div className="cortext-data-view__footer">
+										<div
+											className={
+												'cortext-data-view__footer' +
+												( isListLayout
+													? ' cortext-data-view__footer--list'
+													: '' )
+											}
+										>
 											<DataViewNewRowButton
 												slug={ slug }
 												view={ view }
 												fields={ fields }
 												onCreated={ onCreated }
+												presentation={
+													isListLayout
+														? 'list-row'
+														: 'footer'
+												}
 											/>
 										</div>
 									) }
