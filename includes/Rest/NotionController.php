@@ -88,6 +88,22 @@ final class NotionController {
 				),
 			)
 		);
+
+		register_rest_route(
+			self::NAMESPACE,
+			'/notion/import/(?P<job_id>[a-zA-Z0-9_-]+)/finish',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( $this, 'finish' ),
+				'permission_callback' => array( $this, 'can_import' ),
+				'args'                => array(
+					'job_id' => array(
+						'type'     => 'string',
+						'required' => true,
+					),
+				),
+			)
+		);
 	}
 
 	public function can_import(): bool {
@@ -261,6 +277,44 @@ final class NotionController {
 		$this->save_job( $job_id, $job );
 
 		return $this->job_response( $job_id, $job );
+	}
+
+	// -----------------------------------------------------------------
+	// /import/{job_id}/finish
+	// -----------------------------------------------------------------
+
+	/**
+	 * POST /cortext/v1/notion/import/{job_id}/finish
+	 *
+	 * Best-effort cleanup: deletes the job record once the client has
+	 * observed the terminal state. Only allowed on non-running jobs to
+	 * avoid discarding mid-flight cursor state. A 404 means the job is
+	 * already gone, which the client should treat as success.
+	 *
+	 * @param WP_REST_Request $request Incoming request.
+	 */
+	public function finish( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+		$job_id = (string) $request->get_param( 'job_id' );
+		$job    = $this->load_job( $job_id );
+		if ( null === $job ) {
+			return new WP_Error(
+				'cortext_notion_import_job_not_found',
+				__( 'Import job not found.', 'cortext' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		if ( 'running' === $job['status'] ) {
+			return new WP_Error(
+				'cortext_notion_import_job_running',
+				__( 'Cannot finish a running import.', 'cortext' ),
+				array( 'status' => 409 )
+			);
+		}
+
+		delete_option( self::JOB_OPTION_PREFIX . $job_id );
+
+		return new WP_REST_Response( array( 'finished' => true ), 200 );
 	}
 
 	// -----------------------------------------------------------------

@@ -39,6 +39,18 @@ function tickImport( key, jobId ) {
 	} );
 }
 
+// POST /cortext/v1/notion/import/{jobId}/finish — drops the persisted
+// job record once the client has observed the terminal state.
+function finishImport( key, jobId ) {
+	return apiFetch( {
+		path: `/cortext/v1/notion/import/${ encodeURIComponent(
+			jobId
+		) }/finish`,
+		method: 'POST',
+		headers: { 'X-Notion-Key': key },
+	} );
+}
+
 /**
  * Run an import end-to-end: start, then tick until done. `onProgress`
  * is invoked after every tick with the latest `{ processed, status,
@@ -61,5 +73,10 @@ export async function runImport( key, dataSourceId, onProgress ) {
 		state = await tickImport( key, state.job_id );
 		onProgress?.( state );
 	}
+
+	// Best-effort cleanup: failure here doesn't change the import
+	// outcome — we still resolve with the terminal state.
+	finishImport( key, state.job_id ).catch( () => {} );
+
 	return state;
 }
