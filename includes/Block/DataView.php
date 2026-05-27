@@ -13,6 +13,8 @@ defined( 'ABSPATH' ) || exit;
 
 use Cortext\Frontend\Assets;
 use Cortext\PostType\Document;
+use Cortext\Rest\CollectionsController;
+use WP_Block;
 
 final class DataView {
 
@@ -42,12 +44,13 @@ final class DataView {
 	 * Outputs a container div with the block attributes as inline JSON.
 	 * The frontend JS hydrates an interactive DataViews instance into it.
 	 *
-	 * @param array  $attributes Block attributes.
-	 * @param string $content    Inner block content (unused).
+	 * @param array         $attributes Block attributes.
+	 * @param string        $content    Inner block content (unused).
+	 * @param WP_Block|null $block      Block instance, for the post context.
 	 * @return string HTML output.
 	 */
-	// phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed
-	public function render( array $attributes, string $content ): string {
+	// phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundBeforeLastUsed
+	public function render( array $attributes, string $content, ?WP_Block $block = null ): string {
 		$collection_id = $attributes['collectionId'] ?? 0;
 		if ( ! $collection_id ) {
 			return '';
@@ -69,7 +72,7 @@ final class DataView {
 		$init_data = wp_json_encode(
 			array(
 				'collectionId' => $collection_id,
-				'view'         => $attributes['view'] ?? array(),
+				'view'         => $this->public_view( $attributes, $block ),
 			),
 			JSON_HEX_TAG | JSON_HEX_AMP
 		);
@@ -83,5 +86,27 @@ final class DataView {
 			$wrapper_attributes,
 			$init_data
 		);
+	}
+
+	/**
+	 * The view a visitor sees: the active named view. The collection's owner
+	 * block keeps its views in collection meta; other blocks keep them in
+	 * their attributes. Blocks saved before named views fall back to their
+	 * single `view` attribute.
+	 *
+	 * @param array         $attributes Block attributes.
+	 * @param WP_Block|null $block      Block instance, for the post context.
+	 * @return array
+	 */
+	private function public_view( array $attributes, ?WP_Block $block ): array {
+		$collection_id = (int) $attributes['collectionId'];
+		$post_id       = (int) ( $block->context['postId'] ?? 0 );
+		$controller    = new CollectionsController();
+
+		$view = $collection_id === $post_id
+			? $controller->stored_active_view( $collection_id )
+			: $controller->active_view_from_config( $attributes );
+
+		return $view ?? $attributes['view'] ?? array();
 	}
 }

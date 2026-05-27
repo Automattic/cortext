@@ -237,6 +237,18 @@ final class Document {
 				},
 			)
 		);
+
+		// Named collection views go through Cortext's collection-views
+		// endpoint, not the generic post meta REST path. Keep the stored value
+		// private so there is only one write API for this config.
+		register_post_meta(
+			self::POST_TYPE,
+			'cortext_view_config',
+			array(
+				'type'   => 'string',
+				'single' => true,
+			)
+		);
 	}
 
 	/**

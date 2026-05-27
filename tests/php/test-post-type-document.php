@@ -161,6 +161,15 @@ final class Test_Post_Type_Document extends BaseTestCase {
 		);
 	}
 
+	public function test_register_collection_meta_registers_private_view_config(): void {
+		( new Document() )->register_collection_meta();
+
+		$registered = get_registered_meta_keys( 'post', Document::POST_TYPE );
+		$this->assertArrayHasKey( 'cortext_view_config', $registered );
+		$this->assertTrue( $registered['cortext_view_config']['single'] );
+		$this->assertEmpty( $registered['cortext_view_config']['show_in_rest'] ?? false );
+	}
+
 	public function test_defines_trait_rest_field_reports_collection_state(): void {
 		( new Document() )->register_rest_fields();
 

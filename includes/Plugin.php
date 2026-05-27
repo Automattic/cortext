@@ -30,6 +30,7 @@ use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Field;
 use Cortext\PostType\TrashCascade;
 use Cortext\Rest\BacklinksController;
+use Cortext\Rest\CollectionsController;
 use Cortext\Rest\DocumentLocatorController;
 use Cortext\Rest\DocumentsController;
 use Cortext\Rest\ExperimentsController;
@@ -83,6 +84,7 @@ final class Plugin {
 		( new FavoritesController() )->register();
 		( new FieldsController() )->register();
 		( new BacklinksController() )->register();
+		( new CollectionsController() )->register();
 		( new DocumentLocatorController() )->register();
 		( new DocumentsController( null, $trash_cascade, $archive_cascade ) )->register();
 		( new ExperimentsController() )->register();
