@@ -428,6 +428,11 @@ export function formatDisplay( value, type, options = {} ) {
 	}
 
 	if ( type === 'relation' ) {
+		const refs = Array.isArray( value ) ? value : [ value ];
+		const hasReference = refs.some( ( ref ) => ref && ref.id );
+		if ( ! hasReference ) {
+			return '';
+		}
 		return <RelationReferences value={ value } />;
 	}
 

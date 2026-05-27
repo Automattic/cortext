@@ -402,6 +402,14 @@ describe( 'formatDisplay', () => {
 			expect( screen.queryByText( 'LP' ) ).toBeNull();
 		} );
 	} );
+
+	describe( 'relation', () => {
+		it( 'returns the empty string when no relation references are present', () => {
+			expect( formatDisplay( [], 'relation' ) ).toBe( '' );
+			expect( formatDisplay( [ null ], 'relation' ) ).toBe( '' );
+			expect( formatDisplay( { id: 0 }, 'relation' ) ).toBe( '' );
+		} );
+	} );
 } );
 
 describe( 'dateOnlyValue', () => {
