@@ -38,7 +38,7 @@ export default function DocumentPropertiesActions() {
 				{ onToggleVisible && hasFields && (
 					<Button
 						className="cortext-document-properties-actions__button"
-						variant="tertiary"
+						variant="secondary"
 						icon={ isVisible ? unseen : seen }
 						onClick={ onToggleVisible }
 						__next40pxDefaultSize
@@ -51,7 +51,7 @@ export default function DocumentPropertiesActions() {
 				{ onRequestLayoutEdit && hasFields && (
 					<Button
 						className="cortext-document-properties-actions__button"
-						variant="tertiary"
+						variant="secondary"
 						icon={ pencil }
 						isPressed={ isLayoutEditing }
 						onClick={ onRequestLayoutEdit }
@@ -68,7 +68,7 @@ export default function DocumentPropertiesActions() {
 						renderToggle={ ( { isOpen, onToggle } ) => (
 							<Button
 								className="cortext-document-properties-actions__button"
-								variant="tertiary"
+								variant="secondary"
 								icon={ plus }
 								isPressed={ isOpen }
 								onClick={ onToggle }
