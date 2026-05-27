@@ -50,32 +50,28 @@ $list-row-open-background: #f3f3f3;
 	.dataviews-view-list div[role="row"] {
 		position: relative;
 		margin: 0;
-		border: $border-width solid transparent;
-		border-bottom-color: $gray-200;
-		border-radius: 6px;
+		border: 0;
+		border-bottom: $border-width solid $gray-200;
+		border-radius: 0;
 		color: $gray-900;
 		background: transparent;
 		transition:
 			background-color 120ms ease,
-			border-color 120ms ease,
 			box-shadow 120ms ease;
 
 		&:hover,
 		&.is-hovered,
 		&:focus-within {
-			border-color: $gray-300;
 			background: $list-row-hover-background;
 			color: $gray-900;
 		}
 
 		&.is-selected {
-			border-color: $gray-300;
 			background: $list-row-hover-background;
 		}
 
 		&:has(.cortext-title-cell--is-open),
 		&:has(.cortext-title-cell--is-opening) {
-			border-color: var(--cortext-accent);
 			background: $list-row-open-background;
 			box-shadow: inset 3px 0 0 var(--cortext-accent);
 		}
