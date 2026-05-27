@@ -17,7 +17,7 @@ import {
 
 import './ImportPane.scss';
 import ImportEntriesTable from './ImportEntriesTable';
-import { extractAll, extractCollection } from './notionImport';
+import { extractAll, extractCollection, runImport } from './notionImport';
 
 const NOTION_KEY_STORAGE = 'cortext.notionKey';
 
@@ -30,6 +30,12 @@ export default function ImportPane() {
 	const [ state, setState ] = useState( { status: 'pending' } );
 	const [ selectedId, setSelectedId ] = useState( null );
 	const [ collectionData, setCollectionData ] = useState( {} );
+	// Per-collection import progress, keyed by Notion data-source id:
+	// { status: 'idle'|'running'|'done'|'error', processed: 0, message?, collection_id? }
+	const [ importJobs, setImportJobs ] = useState( {} );
+	// Mirrors which import is currently running so the Import button
+	// can disable itself without racing the state update.
+	const importsInFlightRef = useRef( new Set() );
 	// Tracks which collection ids have an in-flight fetch so a fast
 	// double-click on the same link doesn't kick off two parallel loads.
 	const inflightRef = useRef( new Set() );
@@ -43,7 +49,9 @@ export default function ImportPane() {
 		setState( { status: 'loading' } );
 		setSelectedId( null );
 		setCollectionData( {} );
+		setImportJobs( {} );
 		inflightRef.current = new Set();
+		importsInFlightRef.current = new Set();
 
 		extractAll( key )
 			.then( ( payload ) => {
@@ -97,17 +105,67 @@ export default function ImportPane() {
 		[ loadCollection ]
 	);
 
-	// No-op for now — wiring the per-collection Import button before the
-	// import pipeline exists. Logs so the test can verify the click
-	// reached the right callback with the right collection.
-	const importCollection = useCallback( ( collection ) => {
-		// eslint-disable-next-line no-console
-		console.log(
-			'[cortext] Import collection (no-op):',
-			collection.id,
-			collection.title
-		);
-	}, [] );
+	// Run the server-side import for one collection. The client orchestrates
+	// the start → tick loop and surfaces progress per Notion data-source id.
+	// Multiple collections can be imported in parallel; double-clicks on the
+	// same row are guarded by `importsInFlightRef`.
+	const importCollection = useCallback(
+		( collection ) => {
+			if ( ! key || ! collection?.id ) {
+				return;
+			}
+			if ( importsInFlightRef.current.has( collection.id ) ) {
+				return;
+			}
+			importsInFlightRef.current.add( collection.id );
+
+			setImportJobs( ( prev ) => ( {
+				...prev,
+				[ collection.id ]: {
+					status: 'running',
+					processed: 0,
+					message: null,
+				},
+			} ) );
+
+			runImport( key, collection.id, ( progress ) => {
+				setImportJobs( ( prev ) => ( {
+					...prev,
+					[ collection.id ]: {
+						status: progress.status === 'done' ? 'done' : 'running',
+						processed: progress.processed ?? 0,
+						collection_id: progress.collection_id,
+						message: null,
+					},
+				} ) );
+			} )
+				.then( ( final ) => {
+					setImportJobs( ( prev ) => ( {
+						...prev,
+						[ collection.id ]: {
+							status: 'done',
+							processed: final.processed ?? 0,
+							collection_id: final.collection_id,
+							message: null,
+						},
+					} ) );
+				} )
+				.catch( ( err ) => {
+					setImportJobs( ( prev ) => ( {
+						...prev,
+						[ collection.id ]: {
+							status: 'error',
+							processed: prev[ collection.id ]?.processed ?? 0,
+							message: err?.message ?? String( err ),
+						},
+					} ) );
+				} )
+				.finally( () => {
+					importsInFlightRef.current.delete( collection.id );
+				} );
+		},
+		[ key ]
+	);
 
 	const handleSaveKey = ( nextKey ) => {
 		window.localStorage.setItem( NOTION_KEY_STORAGE, nextKey );
@@ -149,6 +207,7 @@ export default function ImportPane() {
 						selectedId={ selectedId }
 						onSelect={ selectCollection }
 						onImport={ importCollection }
+						importJobs={ importJobs }
 						collectionData={ collectionData }
 					/>
 				</>
@@ -163,6 +222,7 @@ function ImportBody( {
 	selectedId,
 	onSelect,
 	onImport,
+	importJobs,
 	collectionData,
 } ) {
 	if ( state.status === 'pending' ) {
@@ -215,6 +275,7 @@ function ImportBody( {
 					selectedId={ selectedId }
 					onSelect={ onSelect }
 					onImport={ onImport }
+					importJobs={ importJobs }
 				/>
 			</section>
 			{ selected && (
@@ -230,7 +291,13 @@ function ImportBody( {
 	);
 }
 
-function CollectionsList( { collections, selectedId, onSelect, onImport } ) {
+function CollectionsList( {
+	collections,
+	selectedId,
+	onSelect,
+	onImport,
+	importJobs,
+} ) {
 	if ( collections.length === 0 ) {
 		return (
 			<Text variant="muted">
@@ -240,33 +307,82 @@ function CollectionsList( { collections, selectedId, onSelect, onImport } ) {
 	}
 	return (
 		<ul className="cortext-import-collections">
-			{ collections.map( ( c ) => (
-				<li key={ c.id } className="cortext-import-collections__item">
-					<Button
-						variant="link"
-						onClick={ () => onSelect( c.id ) }
-						aria-pressed={ selectedId === c.id }
+			{ collections.map( ( c ) => {
+				const job = importJobs?.[ c.id ];
+				return (
+					<li
+						key={ c.id }
+						className="cortext-import-collections__item"
 					>
-						{ c.title || __( '(untitled)', 'cortext' ) }
-					</Button>
-					<Text variant="muted">
-						{ sprintf(
-							/* translators: %d: number of fields in the collection schema */
-							__( '%d fields', 'cortext' ),
-							c.fields.length
-						) }
-					</Text>
-					<Button
-						className="cortext-import-collections__import"
-						variant="secondary"
-						size="compact"
-						onClick={ () => onImport( c ) }
-					>
-						{ __( 'Import', 'cortext' ) }
-					</Button>
-				</li>
-			) ) }
+						<Button
+							variant="link"
+							onClick={ () => onSelect( c.id ) }
+							aria-pressed={ selectedId === c.id }
+						>
+							{ c.title || __( '(untitled)', 'cortext' ) }
+						</Button>
+						<Text variant="muted">
+							{ sprintf(
+								/* translators: %d: number of fields in the collection schema */
+								__( '%d fields', 'cortext' ),
+								c.fields.length
+							) }
+						</Text>
+						<ImportButton
+							className="cortext-import-collections__import"
+							job={ job }
+							onClick={ () => onImport( c ) }
+						/>
+					</li>
+				);
+			} ) }
 		</ul>
+	);
+}
+
+function ImportButton( { job, className, onClick } ) {
+	const status = job?.status ?? 'idle';
+	const processed = job?.processed ?? 0;
+
+	let label;
+	switch ( status ) {
+		case 'running':
+			label = processed
+				? sprintf(
+						/* translators: %d: number of rows imported so far */
+						__( 'Importing — %d', 'cortext' ),
+						processed
+				  )
+				: __( 'Importing…', 'cortext' );
+			break;
+		case 'done':
+			label = sprintf(
+				/* translators: %d: total rows imported */
+				__( 'Imported (%d) — Import again', 'cortext' ),
+				processed
+			);
+			break;
+		case 'error':
+			label = __( 'Failed — retry', 'cortext' );
+			break;
+		default:
+			label = __( 'Import', 'cortext' );
+	}
+
+	return (
+		<Button
+			className={ className }
+			variant={ status === 'error' ? 'primary' : 'secondary' }
+			size="compact"
+			onClick={ onClick }
+			disabled={ status === 'running' }
+			aria-busy={ status === 'running' }
+			label={
+				status === 'error' && job?.message ? job.message : undefined
+			}
+		>
+			{ label }
+		</Button>
 	);
 }
 

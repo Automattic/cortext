@@ -306,3 +306,71 @@ export async function extractCollection( key, dataSourceId ) {
 	const rawEntries = await fetchEntries( key, dataSourceId );
 	return { entries: rawEntries.map( transformEntry ) };
 }
+
+// ---------------------------------------------------------------------
+// Server-side import (the real write path)
+// ---------------------------------------------------------------------
+//
+// Three small helpers wrapping the new `cortext/v1/notion/import/*`
+// routes. The orchestration is intentionally client-driven: PHP per
+// call stays well under any timeout, the client loops `tick` until
+// done, and progress is whatever the server reports back.
+
+/**
+ * POST /cortext/v1/notion/import/start — creates the Cortext
+ * collection + fields and returns a job id the client can tick.
+ *
+ * @param {string} key          Notion integration key.
+ * @param {string} dataSourceId The data source to import.
+ * @return {Promise<Object>}    `{ job_id, collection_id, status, processed, has_more }`.
+ */
+export function startImport( key, dataSourceId ) {
+	return apiFetch( {
+		path: '/cortext/v1/notion/import/start',
+		method: 'POST',
+		headers: { 'X-Notion-Key': key },
+		data: { data_source_id: dataSourceId },
+	} );
+}
+
+/**
+ * POST /cortext/v1/notion/import/{jobId}/tick — pulls and writes one
+ * batch of rows. Caller is responsible for looping until
+ * `has_more === false`.
+ *
+ * @param {string} key   Notion integration key.
+ * @param {string} jobId Job id from `startImport`.
+ * @return {Promise<Object>} `{ job_id, processed, has_more, status, message }`.
+ */
+export function tickImport( key, jobId ) {
+	return apiFetch( {
+		path: `/cortext/v1/notion/import/${ encodeURIComponent( jobId ) }/tick`,
+		method: 'POST',
+		headers: { 'X-Notion-Key': key },
+	} );
+}
+
+/**
+ * Run an import end-to-end: start, then tick until done. `onProgress`
+ * is invoked after every tick with the latest `{ processed, status,
+ * has_more, collection_id }`. Resolves with the final state, or
+ * rejects with the first error encountered (the partial collection
+ * stays behind in Cortext — per the v1 "always new copy" decision the
+ * user can re-run from scratch).
+ *
+ * @param {string}   key          Notion integration key.
+ * @param {string}   dataSourceId The data source to import.
+ * @param {Function} onProgress   Optional progress callback.
+ * @return {Promise<Object>}      Terminal job state.
+ */
+export async function runImport( key, dataSourceId, onProgress ) {
+	const started = await startImport( key, dataSourceId );
+	onProgress?.( started );
+
+	let state = started;
+	while ( state.has_more ) {
+		state = await tickImport( key, state.job_id );
+		onProgress?.( state );
+	}
+	return state;
+}
