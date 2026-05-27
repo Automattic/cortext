@@ -30,42 +30,38 @@ const COLLECTION_POST_TYPE = 'crtxt_collection';
 const NOTION_KEY_STORAGE = 'cortext.notionKey';
 
 export default function ImportPane() {
-	const [ key, setKey ] = useState( () =>
+	/*
+	 * Notion API key management
+	 */
+
+	const [ notionApiKey, setNotionApiKey ] = useState( () =>
 		window.localStorage.getItem( NOTION_KEY_STORAGE )
 	);
-	const [ isChangingKey, setIsChangingKey ] = useState( false );
-	const [ retryToken, setRetryToken ] = useState( 0 );
-	const [ state, setState ] = useState( { status: 'pending' } );
+
+	const [ isChangingNotionApiKey, setIsChangingNotionApiKey ] =
+		useState( false );
+
+	// Drop stale per-card import progress whenever the key changes.
+	useEffect( () => {
+		setImportJobs( {} );
+	}, [ notionApiKey ] );
+
+	/*
+	 * Extract available Notion collections
+	 */
+
+	const {
+		data: collections,
+		isResolving: isResolvingCollections,
+		hasResolved: hasResolvedCollections,
+		error: collectionResolutionError,
+		retry: forceResolveCollections,
+	} = useExtractNotionCollections( notionApiKey );
+
 	// Per-collection import progress, keyed by Notion data-source id:
 	// { status: 'idle'|'running'|'done'|'error', processed: 0, message?, collection_id? }
 	const [ importJobs, setImportJobs ] = useState( {} );
 	const { invalidateResolution } = useDispatch( 'core' );
-
-	useEffect( () => {
-		if ( ! key ) {
-			setState( { status: 'no-key' } );
-			return undefined;
-		}
-		let cancelled = false;
-		setState( { status: 'loading' } );
-		setImportJobs( {} );
-
-		extractCollections( key )
-			.then( ( { collections } ) => {
-				if ( ! cancelled ) {
-					setState( { status: 'loaded', collections } );
-				}
-			} )
-			.catch( ( err ) => {
-				if ( ! cancelled ) {
-					setState( { status: 'error', message: err.message } );
-				}
-			} );
-
-		return () => {
-			cancelled = true;
-		};
-	}, [ key, retryToken ] );
 
 	// Run the server-side import for one collection. The client orchestrates
 	// the start → tick loop and surfaces progress per Notion data-source id.
@@ -73,7 +69,7 @@ export default function ImportPane() {
 	// state (Importing… / Open / Try again) is the lock against re-entry.
 	const importCollection = useCallback(
 		( collection ) => {
-			if ( ! key || ! collection?.id ) {
+			if ( ! notionApiKey || ! collection?.id ) {
 				return;
 			}
 
@@ -110,7 +106,7 @@ export default function ImportPane() {
 				] );
 			};
 
-			runImport( key, collection.id, ( progress ) => {
+			runImport( notionApiKey, collection.id, ( progress ) => {
 				refreshSidebarOnce( progress );
 				setImportJobs( ( prev ) => ( {
 					...prev,
@@ -156,19 +152,22 @@ export default function ImportPane() {
 					} ) );
 				} );
 		},
-		[ key, invalidateResolution ]
+		[ notionApiKey, invalidateResolution ]
 	);
 
 	const handleSaveKey = ( nextKey ) => {
 		window.localStorage.setItem( NOTION_KEY_STORAGE, nextKey );
-		setIsChangingKey( false );
-		setKey( nextKey );
+		setIsChangingNotionApiKey( false );
+		setNotionApiKey( nextKey );
 	};
-	const handleChangeKey = () => setIsChangingKey( true );
-	const handleCancelChangeKey = () => setIsChangingKey( false );
-	const handleRetry = () => setRetryToken( ( n ) => n + 1 );
+	const handleChangeKey = () => setIsChangingNotionApiKey( true );
+	const handleCancelChangeKey = () => setIsChangingNotionApiKey( false );
+	const handleRetry = () => {
+		setImportJobs( {} );
+		forceResolveCollections();
+	};
 
-	const showForm = ! key || isChangingKey;
+	const showForm = ! notionApiKey || isChangingNotionApiKey;
 
 	return (
 		<div className="cortext-import-pane">
@@ -184,7 +183,9 @@ export default function ImportPane() {
 			{ showForm ? (
 				<NoKeyForm
 					onSave={ handleSaveKey }
-					onCancel={ key ? handleCancelChangeKey : undefined }
+					onCancel={
+						notionApiKey ? handleCancelChangeKey : undefined
+					}
 				/>
 			) : (
 				<>
@@ -194,7 +195,10 @@ export default function ImportPane() {
 						</Button>
 					</HStack>
 					<ImportBody
-						state={ state }
+						collections={ collections }
+						isResolving={ isResolvingCollections }
+						hasResolved={ hasResolvedCollections }
+						error={ collectionResolutionError }
 						onRetry={ handleRetry }
 						onImport={ importCollection }
 						importJobs={ importJobs }
@@ -205,15 +209,20 @@ export default function ImportPane() {
 	);
 }
 
-function ImportBody( { state, onRetry, onImport, importJobs } ) {
-	if ( state.status === 'pending' ) {
-		return <Spinner />;
-	}
-	if ( state.status === 'error' ) {
+function ImportBody( {
+	collections,
+	isResolving,
+	hasResolved,
+	error,
+	onRetry,
+	onImport,
+	importJobs,
+} ) {
+	if ( hasResolved && error ) {
 		return (
 			<VStack spacing={ 3 } alignment="left">
 				<Notice status="error" isDismissible={ false }>
-					{ state.message }
+					{ error }
 				</Notice>
 				<Button variant="primary" onClick={ onRetry }>
 					{ __( 'Retry', 'cortext' ) }
@@ -221,7 +230,7 @@ function ImportBody( { state, onRetry, onImport, importJobs } ) {
 			</VStack>
 		);
 	}
-	if ( state.status === 'loading' ) {
+	if ( isResolving || ! hasResolved ) {
 		return (
 			<HStack justify="flex-start" expanded={ false }>
 				<Spinner />
@@ -231,8 +240,6 @@ function ImportBody( { state, onRetry, onImport, importJobs } ) {
 			</HStack>
 		);
 	}
-
-	const { collections } = state;
 
 	return (
 		<VStack spacing={ 6 }>
@@ -464,4 +471,69 @@ function NoKeyForm( { onSave, onCancel } ) {
 			</VStack>
 		</form>
 	);
+}
+
+// Resolves the Notion collections reachable with `key`. Shape echoes
+// `useQuerySelect`: `data` is the collections array once resolved, and
+// `(hasResolved && error)` indicates a terminal failure.
+function useExtractNotionCollections( key ) {
+	const [ retryToken, setRetryToken ] = useState( 0 );
+	const [ resolution, setResolution ] = useState( () => ( {
+		isResolving: !! key,
+		hasResolved: false,
+		data: null,
+		error: null,
+	} ) );
+
+	useEffect( () => {
+		if ( ! key ) {
+			setResolution( {
+				isResolving: false,
+				hasResolved: false,
+				data: null,
+				error: null,
+			} );
+			return undefined;
+		}
+
+		let cancelled = false;
+		setResolution( {
+			isResolving: true,
+			hasResolved: false,
+			data: null,
+			error: null,
+		} );
+
+		extractCollections( key )
+			.then( ( { collections } ) => {
+				if ( ! cancelled ) {
+					setResolution( {
+						isResolving: false,
+						hasResolved: true,
+						data: collections,
+						error: null,
+					} );
+				}
+			} )
+			.catch( ( err ) => {
+				if ( ! cancelled ) {
+					setResolution( {
+						isResolving: false,
+						hasResolved: true,
+						data: null,
+						error: err?.message ?? String( err ),
+					} );
+				}
+			} );
+
+		return () => {
+			cancelled = true;
+		};
+	}, [ key, retryToken ] );
+
+	const retry = useCallback( () => {
+		setRetryToken( ( n ) => n + 1 );
+	}, [] );
+
+	return { ...resolution, retry };
 }
