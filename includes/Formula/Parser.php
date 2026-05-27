@@ -36,7 +36,7 @@ final class Parser {
 		if ( 'eof' !== $this->peek()['type'] ) {
 			throw new FormulaParseError(
 				'cortext_formula_unexpected_token',
-				__( 'Remove the extra text after the formula.', 'cortext' )
+				__( 'Remove the extra text after the formula ends.', 'cortext' )
 			);
 		}
 		return $node;
@@ -128,7 +128,7 @@ final class Parser {
 				'cortext_formula_unknown_identifier',
 				sprintf(
 					/* translators: %s: unknown formula identifier. */
-					__( 'Unknown formula name: %s', 'cortext' ),
+					__( 'We don\'t recognize %s in formulas.', 'cortext' ),
 					$name
 				)
 			);

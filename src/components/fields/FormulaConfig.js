@@ -54,7 +54,7 @@ const FUNCTION_COMPLETIONS = [
 		insertText: 'prop("")',
 		caretOffset: 'prop("'.length,
 		type: 'alias',
-		description: __( 'Alias for field().', 'cortext' ),
+		description: __( 'Works the same as field().', 'cortext' ),
 	},
 	{
 		label: 'concat',
@@ -94,7 +94,7 @@ const FUNCTION_COMPLETIONS = [
 		insertText: 'contains(, )',
 		caretOffset: 'contains('.length,
 		type: 'checkbox',
-		description: __( 'Check if text contains a match.', 'cortext' ),
+		description: __( 'Check whether text contains a match.', 'cortext' ),
 	},
 	{
 		label: 'if',
@@ -102,7 +102,7 @@ const FUNCTION_COMPLETIONS = [
 		insertText: 'if(, , )',
 		caretOffset: 'if('.length,
 		type: 'same type',
-		description: __( 'Return one of two values.', 'cortext' ),
+		description: __( 'Choose one of two values.', 'cortext' ),
 	},
 	{
 		label: 'now',
@@ -701,7 +701,7 @@ function FormulaReference() {
 				/>
 				<FormulaReferenceRow
 					code={ 'prop("Price")' }
-					text={ __( 'Alias for field().', 'cortext' ) }
+					text={ __( 'Works the same as field().', 'cortext' ) }
 				/>
 				<FormulaReferenceRow
 					code={ 'field("Title")' }
@@ -712,7 +712,7 @@ function FormulaReference() {
 				/>
 				<p>
 					{ __(
-						'You can use single-value fields, formulas, and built-in fields. Multi-select, relation, and rollup fields are not available in v0.',
+						'Use single-value fields, formulas, and built-in fields. Multi-select, relation, and rollup fields are not available in v0.',
 						'cortext'
 					) }
 				</p>
@@ -774,7 +774,10 @@ function FormulaReference() {
 				/>
 				<FormulaReferenceRow
 					code={ 'contains(text, search)' }
-					text={ __( 'Check if text contains a match.', 'cortext' ) }
+					text={ __(
+						'Check whether text contains a match.',
+						'cortext'
+					) }
 				/>
 			</FormulaReferenceSection>
 			<FormulaReferenceSection title={ __( 'Conditionals', 'cortext' ) }>

@@ -62,7 +62,7 @@ final class Functions {
 				'cortext_formula_unknown_function',
 				sprintf(
 					/* translators: %s: formula function name. */
-					__( 'Unknown formula function: %s', 'cortext' ),
+					__( 'Unknown function: %s', 'cortext' ),
 					$name
 				)
 			),
@@ -114,7 +114,7 @@ final class Functions {
 			),
 			default => throw new FormulaEvalError(
 				'cortext_formula_unknown_function',
-				__( 'This formula uses an unknown function.', 'cortext' )
+				__( 'This formula calls an unknown function.', 'cortext' )
 			),
 		};
 	}
@@ -180,7 +180,7 @@ final class Functions {
 					'cortext_formula_type_mismatch',
 					sprintf(
 						/* translators: 1: function name, 2: argument number, 3: expected type. */
-						__( '%1$s() argument %2$d needs a %3$s value.', 'cortext' ),
+						__( 'Value %2$d in %1$s() must be %3$s.', 'cortext' ),
 						$name,
 						$index + 1,
 						$type
@@ -212,7 +212,7 @@ final class Functions {
 		if ( $args[1]['type'] !== $args[2]['type'] ) {
 			throw new FormulaParseError(
 				'cortext_formula_mixed_if',
-				__( 'Both if() results must use the same type in v0.', 'cortext' )
+				__( 'The then and else values in if() must use the same type in v0.', 'cortext' )
 			);
 		}
 		return array(

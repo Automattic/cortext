@@ -176,7 +176,7 @@ final class Lexer {
 				'cortext_formula_invalid_character',
 				sprintf(
 					/* translators: %s: invalid formula character. */
-					__( 'This character is not supported in formulas: %s', 'cortext' ),
+					__( 'Formulas cannot use this character: %s', 'cortext' ),
 					$char
 				)
 			);

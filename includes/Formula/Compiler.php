@@ -177,7 +177,7 @@ final class Compiler {
 		if ( 'number' !== $arg['type'] ) {
 			throw new FormulaParseError(
 				'cortext_formula_type_mismatch',
-				__( 'Use unary minus with a number.', 'cortext' )
+				__( 'The minus sign can only be used with a number.', 'cortext' )
 			);
 		}
 		return array(
@@ -289,7 +289,7 @@ final class Compiler {
 		if ( 1 !== count( $args ) || 'literal' !== ( $args[0]['node'] ?? '' ) || 'text' !== ( $args[0]['type'] ?? '' ) ) {
 			throw new FormulaParseError(
 				'cortext_formula_invalid_prop',
-				__( 'Use one quoted field name, like field("Price"). prop() works too.', 'cortext' )
+				__( 'Use a quoted field name, like field("Price"). prop("Price") works too.', 'cortext' )
 			);
 		}
 
@@ -338,7 +338,7 @@ final class Compiler {
 				'cortext_formula_unknown_prop',
 				sprintf(
 					/* translators: %s: referenced field name. */
-					__( 'Formula field not found: %s', 'cortext' ),
+					__( 'No field named %s was found.', 'cortext' ),
 					$name
 				)
 			);
@@ -366,7 +366,7 @@ final class Compiler {
 		if ( $field['multiple'] || in_array( $field['type'], array( 'relation', 'rollup' ), true ) ) {
 			throw new FormulaParseError(
 				'cortext_formula_unsupported_target_type',
-				__( 'Formulas can only use single-value fields in v0. Multi-select, relation, and rollup fields are not available yet.', 'cortext' )
+				__( 'For now, formulas can only use single-value fields. Multi-select, relation, and rollup fields are not available yet.', 'cortext' )
 			);
 		}
 
@@ -424,7 +424,7 @@ final class Compiler {
 			if ( isset( $visiting[ $field_id ] ) ) {
 				throw new FormulaParseError(
 					'cortext_formula_cycle',
-					__( 'These formula references create a loop.', 'cortext' )
+					__( 'These formula references loop back on themselves.', 'cortext' )
 				);
 			}
 			$visiting[ $field_id ] = true;
@@ -432,7 +432,7 @@ final class Compiler {
 				if ( (int) $dep_id === $self_field_id && $field_id !== $self_field_id ) {
 					throw new FormulaParseError(
 						'cortext_formula_cycle',
-						__( 'These formula references create a loop.', 'cortext' )
+						__( 'These formula references loop back on themselves.', 'cortext' )
 					);
 				}
 				if ( isset( $graph[ (int) $dep_id ] ) ) {

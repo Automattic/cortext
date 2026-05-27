@@ -89,7 +89,7 @@ final class Evaluator {
 		if ( 'number' !== $value['type'] ) {
 			throw new FormulaEvalError(
 				'cortext_formula_type_mismatch',
-				__( 'Use unary minus with a number.', 'cortext' )
+				__( 'The minus sign can only be used with a number.', 'cortext' )
 			);
 		}
 		return array(
