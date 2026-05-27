@@ -165,7 +165,7 @@ $list-row-open-background: #f3f3f3;
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: $grid-unit-05 $grid-unit-15;
+		gap: $grid-unit-05 $grid-unit-10;
 		width: 100%;
 		margin-top: $grid-unit-05;
 		color: $gray-700;
@@ -181,7 +181,7 @@ $list-row-open-background: #f3f3f3;
 
 	.dataviews-view-list__field-value {
 		min-width: 0;
-		color: $gray-900;
+		color: $gray-700;
 		line-height: 1.5;
 		overflow-wrap: anywhere;
 	}
