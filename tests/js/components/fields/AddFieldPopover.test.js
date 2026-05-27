@@ -84,13 +84,13 @@ describe( 'AddFieldPopover rollup config', () => {
 		).toBeInTheDocument();
 	} );
 
-	it( 'orders rollup controls as relation, target property, then calculate', async () => {
+	it( 'orders rollup controls as relation, target field, then calculate', async () => {
 		render( <AddFieldPopover collectionId={ 5 } /> );
 
 		fireEvent.click( screen.getByRole( 'button', { name: 'Rollup' } ) );
 
 		const relation = await screen.findByLabelText( 'Relation' );
-		const target = screen.getByLabelText( 'Target property' );
+		const target = screen.getByLabelText( 'Target field' );
 		const calculate = screen.getByLabelText( 'Calculate' );
 		const controls = screen.getAllByRole( 'combobox' );
 
@@ -105,7 +105,7 @@ describe( 'AddFieldPopover rollup config', () => {
 		fireEvent.click( screen.getByRole( 'button', { name: 'Rollup' } ) );
 
 		await waitFor( () =>
-			expect( screen.getByLabelText( 'Target property' ) ).toHaveValue(
+			expect( screen.getByLabelText( 'Target field' ) ).toHaveValue(
 				'88'
 			)
 		);
@@ -131,7 +131,7 @@ describe( 'AddFieldPopover rollup config', () => {
 		fireEvent.click( screen.getByRole( 'button', { name: 'Rollup' } ) );
 
 		await waitFor( () =>
-			expect( screen.getByLabelText( 'Target property' ) ).toHaveValue(
+			expect( screen.getByLabelText( 'Target field' ) ).toHaveValue(
 				'88'
 			)
 		);
@@ -155,7 +155,7 @@ describe( 'AddFieldPopover rollup config', () => {
 		);
 	} );
 
-	it( 'creates Count all rollups without a target property', async () => {
+	it( 'creates Count all rollups without a target field', async () => {
 		targetFields = [];
 		render( <AddFieldPopover collectionId={ 5 } /> );
 
@@ -198,13 +198,13 @@ describe( 'AddFieldPopover rollup config', () => {
 
 		fireEvent.click( screen.getByRole( 'button', { name: 'Rollup' } ) );
 
-		await screen.findByLabelText( 'Target property' );
+		await screen.findByLabelText( 'Target field' );
 		expect( screen.queryByRole( 'option', { name: 'Sum' } ) ).toBeNull();
 		expect(
 			screen.queryByRole( 'option', { name: 'Latest date' } )
 		).toBeNull();
 
-		fireEvent.change( screen.getByLabelText( 'Target property' ), {
+		fireEvent.change( screen.getByLabelText( 'Target field' ), {
 			target: { value: '88' },
 		} );
 
@@ -231,12 +231,12 @@ describe( 'AddFieldPopover rollup config', () => {
 
 		fireEvent.click( screen.getByRole( 'button', { name: 'Rollup' } ) );
 
-		await screen.findByLabelText( 'Target property' );
+		await screen.findByLabelText( 'Target field' );
 		expect(
 			screen.queryByRole( 'option', { name: 'Earliest date' } )
 		).toBeNull();
 
-		fireEvent.change( screen.getByLabelText( 'Target property' ), {
+		fireEvent.change( screen.getByLabelText( 'Target field' ), {
 			target: { value: '89' },
 		} );
 
