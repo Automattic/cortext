@@ -5,6 +5,12 @@
 
 import apiFetch from '@wordpress/api-fetch';
 
+// Consecutive ticks during which `processed` stays flat while the
+// server still claims `has_more`. One such page is plausible (e.g. a
+// Notion view that returns zero results on a page); two in a row likely
+// means an infinite loop and we'd rather fail loud.
+const MAX_STALLED_TICKS = 2;
+
 /**
  * GET /cortext/v1/notion/collections — every data source reachable
  * with the given key, as `{ id, title }`. Used to populate the Import
@@ -69,8 +75,29 @@ export async function runImport( key, dataSourceId, onProgress ) {
 	onProgress?.( started );
 
 	let state = started;
+	let stalledTicks = 0;
 	while ( state.has_more ) {
-		state = await tickImport( key, state.job_id );
+		const next = await tickImport( key, state.job_id );
+
+		// A tick that left `processed` unchanged while still claiming
+		// `has_more` is a stall signal: either the server didn't fetch
+		// new rows from Notion, or `import_rows` inserted zero. One
+		// such page can happen; consecutive stalls almost certainly
+		// mean a runaway loop, so we bail.
+		if ( next.has_more && next.processed === state.processed ) {
+			stalledTicks += 1;
+			if ( stalledTicks >= MAX_STALLED_TICKS ) {
+				throw new Error(
+					`Import stalled: ${ stalledTicks } consecutive ticks ` +
+						'left the processed count unchanged while the ' +
+						'server still reports more rows. Aborting.'
+				);
+			}
+		} else {
+			stalledTicks = 0;
+		}
+
+		state = next;
 		onProgress?.( state );
 	}
 
