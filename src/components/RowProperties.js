@@ -250,6 +250,19 @@ function EditablePropertyText( { label, inputMode, value, onChange } ) {
 	const [ draft, setDraft ] = useState( textValue );
 	const [ isFocused, setIsFocused ] = useState( false );
 	const controlRef = useRef( null );
+	const resizeControl = useCallback( () => {
+		const control = controlRef.current;
+		if ( ! control ) {
+			return;
+		}
+		const width =
+			control.getBoundingClientRect?.().width ?? control.clientWidth;
+		control.style.height = '30px';
+		if ( ! Number.isFinite( width ) || width < 24 ) {
+			return;
+		}
+		control.style.height = `${ Math.max( 30, control.scrollHeight ) }px`;
+	}, [] );
 
 	useEffect( () => {
 		if ( ! isFocused ) {
@@ -257,16 +270,39 @@ function EditablePropertyText( { label, inputMode, value, onChange } ) {
 		}
 	}, [ isFocused, textValue ] );
 
-	useEffect( () => {
-		if ( ! controlRef.current ) {
-			return;
+	useLayoutEffect( () => {
+		resizeControl();
+	}, [ draft, resizeControl ] );
+
+	useLayoutEffect( () => {
+		const control = controlRef.current;
+		if (
+			! control ||
+			typeof window === 'undefined' ||
+			typeof window.ResizeObserver === 'undefined'
+		) {
+			return undefined;
 		}
-		controlRef.current.style.height = '30px';
-		controlRef.current.style.height = `${ Math.max(
-			30,
-			controlRef.current.scrollHeight
-		) }px`;
-	}, [ draft ] );
+		let frame = null;
+		const scheduleResize = () => {
+			if ( frame ) {
+				window.cancelAnimationFrame( frame );
+			}
+			frame = window.requestAnimationFrame( () => {
+				frame = null;
+				resizeControl();
+			} );
+		};
+		const observer = new window.ResizeObserver( scheduleResize );
+		observer.observe( control );
+		scheduleResize();
+		return () => {
+			observer.disconnect();
+			if ( frame ) {
+				window.cancelAnimationFrame( frame );
+			}
+		};
+	}, [ resizeControl ] );
 
 	return (
 		<textarea

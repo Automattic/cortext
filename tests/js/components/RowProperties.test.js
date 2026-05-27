@@ -385,6 +385,91 @@ describe( 'RowProperties', () => {
 		} );
 	} );
 
+	it( 'remeasures text properties after the side peek width settles', () => {
+		const originalResizeObserver = window.ResizeObserver;
+		const originalRequestAnimationFrame = window.requestAnimationFrame;
+		const originalCancelAnimationFrame = window.cancelAnimationFrame;
+		let resizeCallback;
+		let width = 0;
+		let scrollHeight = 999;
+		const rectSpy = jest
+			.spyOn( window.HTMLElement.prototype, 'getBoundingClientRect' )
+			.mockImplementation( () => ( {
+				width,
+				height: 0,
+				top: 0,
+				right: width,
+				bottom: 0,
+				left: 0,
+				x: 0,
+				y: 0,
+				toJSON: () => {},
+			} ) );
+		const scrollHeightDescriptor = Object.getOwnPropertyDescriptor(
+			window.HTMLTextAreaElement.prototype,
+			'scrollHeight'
+		);
+		Object.defineProperty(
+			window.HTMLTextAreaElement.prototype,
+			'scrollHeight',
+			{
+				configurable: true,
+				get: () => scrollHeight,
+			}
+		);
+		window.ResizeObserver = jest.fn( ( callback ) => {
+			resizeCallback = callback;
+			return {
+				disconnect: jest.fn(),
+				observe: jest.fn(),
+			};
+		} );
+		window.requestAnimationFrame = jest.fn( ( callback ) => {
+			callback();
+			return 1;
+		} );
+		window.cancelAnimationFrame = jest.fn();
+
+		try {
+			render(
+				<RowProperties
+					fields={ [
+						{
+							id: 'field-7',
+							label: 'Notes',
+							cortextFieldType: 'text',
+							editable: true,
+						},
+					] }
+					row={ {} }
+				/>
+			);
+
+			const input = screen.getByRole( 'textbox', { name: 'Notes' } );
+			expect( input.style.height ).toBe( '30px' );
+
+			width = 320;
+			scrollHeight = 42;
+			act( () => resizeCallback() );
+
+			expect( input.style.height ).toBe( '42px' );
+		} finally {
+			rectSpy.mockRestore();
+			if ( scrollHeightDescriptor ) {
+				Object.defineProperty(
+					window.HTMLTextAreaElement.prototype,
+					'scrollHeight',
+					scrollHeightDescriptor
+				);
+			} else {
+				delete window.HTMLTextAreaElement.prototype.scrollHeight;
+			}
+			window.ResizeObserver = originalResizeObserver;
+			window.requestAnimationFrame = originalRequestAnimationFrame;
+			window.cancelAnimationFrame = originalCancelAnimationFrame;
+		}
+	} );
+
 	it( 'uses format overrides for number properties', () => {
 		useSelect.mockReturnValue( {
 			title: 'Current title',
