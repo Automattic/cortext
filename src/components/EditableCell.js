@@ -624,7 +624,7 @@ function TextLikeEditor( {
 // (creating an option, picking a color in the per-option submenu).
 // `Popover` here lets the parent unmount it explicitly when editing
 // ends, while still closing on outside click + Escape via `onClose`.
-function SelectEditor( {
+export function SelectEditor( {
 	value,
 	elements,
 	onCommit,
@@ -635,8 +635,12 @@ function SelectEditor( {
 	onTab,
 	recordId,
 	label,
+	defaultOpen = true,
+	triggerClassName = 'cortext-select-edit__toggle',
+	placeholder = __( 'Select…', 'cortext' ),
 } ) {
 	const [ anchor, setAnchor ] = useState( null );
+	const [ isOpen, setIsOpen ] = useState( defaultOpen );
 	const items = useMemo( () => elements ?? [], [ elements ] );
 	const labelFor = useMemo( () => {
 		const map = new Map( items.map( ( e ) => [ e.value, e.label ] ) );
@@ -654,9 +658,14 @@ function SelectEditor( {
 		/>
 	) : (
 		<span className="cortext-select-edit__placeholder">
-			{ __( 'Select…', 'cortext' ) }
+			{ placeholder }
 		</span>
 	);
+
+	const close = () => {
+		setIsOpen( false );
+		onCancel?.();
+	};
 
 	const handleTriggerKeyDown = ( event ) => {
 		if ( event.key === 'Tab' && onTab ) {
@@ -670,18 +679,19 @@ function SelectEditor( {
 			<Button
 				ref={ setAnchor }
 				variant="tertiary"
-				className="cortext-select-edit__toggle"
+				className={ triggerClassName }
+				onClick={ () => setIsOpen( true ) }
 				onKeyDown={ handleTriggerKeyDown }
-				aria-expanded
+				aria-expanded={ isOpen }
 				aria-label={ label }
 			>
 				{ triggerContent }
 			</Button>
-			{ anchor ? (
+			{ isOpen && anchor ? (
 				<Popover
 					anchor={ anchor }
 					placement="bottom-start"
-					onClose={ onCancel }
+					onClose={ close }
 					focusOnMount="firstElement"
 				>
 					<EditOptionsPopover
@@ -694,7 +704,7 @@ function SelectEditor( {
 						onRequestClose={ onRequestClose }
 						onPick={ async ( next ) => {
 							await onCommit( next );
-							onCancel();
+							close();
 						} }
 					/>
 				</Popover>
@@ -703,32 +713,45 @@ function SelectEditor( {
 	);
 }
 
-function DateEditor( { value, type, format, onCommit, onCancel, label } ) {
+export function DateEditor( {
+	value,
+	type,
+	format,
+	onCommit,
+	onCancel,
+	label,
+	defaultOpen = true,
+	triggerClassName = 'cortext-date-edit__toggle',
+	emptyLabel = __( 'Pick a date…', 'cortext' ),
+	contentClassName = 'cortext-editable-cell__date',
+	closeOnCommit = true,
+} ) {
 	return (
 		<Dropdown
-			defaultOpen
+			defaultOpen={ defaultOpen }
 			onClose={ onCancel }
 			renderToggle={ ( { isOpen, onToggle } ) => (
 				<Button
 					variant="tertiary"
-					className="cortext-date-edit__toggle"
+					className={ triggerClassName }
 					onClick={ onToggle }
 					aria-expanded={ isOpen }
+					aria-label={ label }
 				>
 					{ value
 						? formatDisplay( value, type, { format } )
-						: __( 'Pick a date…', 'cortext' ) }
+						: emptyLabel }
 				</Button>
 			) }
 			renderContent={ ( { onClose } ) => (
-				<div className="cortext-editable-cell__date">
+				<div className={ contentClassName }>
 					<DateTimePicker
 						currentDate={ value || null }
 						onChange={ async ( next ) => {
 							const didSave = await onCommit(
 								type === 'date' ? dateOnlyValue( next ) : next
 							);
-							if ( didSave ) {
+							if ( closeOnCommit && didSave ) {
 								onClose();
 							}
 						} }

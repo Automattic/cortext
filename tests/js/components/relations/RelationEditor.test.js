@@ -200,6 +200,36 @@ describe( 'RelationEditor', () => {
 		await flushPopoverEffects();
 	} );
 
+	it( 'keeps the relation icon in selected toggle chips', async () => {
+		useCollectionRowsByIds.mockReturnValue( {
+			rows: [ { id: 22, title: { raw: 'Ada Lovelace' } } ],
+			isLoading: false,
+			error: null,
+		} );
+
+		const { container } = render(
+			<RelationEditor
+				value={ [ { id: 22 } ] }
+				relation={ { targetCollectionId: 9, multiple: true } }
+				onSave={ jest.fn() }
+				onCancel={ jest.fn() }
+				label="Assignee"
+				defaultOpen={ false }
+			/>
+		);
+
+		const chip = container.querySelector(
+			'.cortext-relation-edit__toggle-ref'
+		);
+		expect(
+			chip.querySelector( '.cortext-relation-ref__icon' )
+		).toBeInTheDocument();
+		expect(
+			chip.querySelector( '.cortext-relation-ref__title' )
+		).toHaveTextContent( 'Ada Lovelace' );
+		await flushPopoverEffects();
+	} );
+
 	it( 'hides "Create row" while the debounced search has not caught up', async () => {
 		// Pin the debounced value so search ('New Row') stays unsettled.
 		useDebouncedValue.mockImplementation( () => '' );

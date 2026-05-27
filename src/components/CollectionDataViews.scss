@@ -508,6 +508,18 @@ tr:has(.cortext-title-cell--is-opening)
 	overflow: hidden;
 }
 
+.cortext-relation-edit__toggle-refs,
+.cortext-relation-edit__toggle-placeholder {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.cortext-relation-edit__toggle-chevron {
+	flex: 0 0 auto;
+	margin-left: $grid-unit-05;
+	color: $gray-700;
+}
+
 .cortext-relation-ref,
 .cortext-relation-ref-more,
 .cortext-relation-edit__toggle-ref,

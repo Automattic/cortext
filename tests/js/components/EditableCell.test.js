@@ -62,6 +62,21 @@ describe( 'formatDisplay', () => {
 			} );
 			expect( out ).toContain( '14:30' );
 		} );
+
+		it( 'formats date range rollups from object values', () => {
+			expect(
+				formatDisplay(
+					{ start: '2026-05-01', end: '2026-05-03' },
+					'rollup-date-range',
+					{
+						format: {
+							style: 'us',
+							rollup_target_type: 'date',
+						},
+					}
+				)
+			).toBe( '05/01/2026 - 05/03/2026' );
+		} );
 	} );
 
 	describe( 'number', () => {
