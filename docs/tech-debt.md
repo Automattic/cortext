@@ -362,13 +362,13 @@ The user-facing placeholder is still Core's generic "Search commands and setting
 
 ## 39. Row properties editing has its own dnd layer `[internal, soft]`
 
-**What.** Row properties now have an in-place editor of their own: drag handles beside labels, a hidden-properties separator, an empty drop zone for hiding properties, and a drag overlay that has to match the row width so chips wrap the same way while dragging. This is separate from the DataViews row reorder adapter (#49) because it reorders fields in `detail_layout`, not rows in a table.
+**What.** Row properties now edit their layout inline. The UI has drag handles beside labels, a `Hidden properties` divider, an empty drop target for hiding properties, and a drag overlay sized to the row so relation chips wrap the same way while dragging. This cannot reuse the DataViews row reorder adapter (#49): it writes `detail_layout`, not table row order.
 
-The code is small enough to keep local, but it is still a hand-built dnd surface. It measures the dragged row, keeps dnd-kit state from leaking back into the source row, blurs the handle after drop, and has special handling for the empty hidden section. Future changes to row-property spacing, chip wrapping, or dnd-kit overlays should check this path before assuming the table reorder behavior applies here.
+Keep this local for now, but treat it as custom drag-and-drop code. It measures the dragged row, stops stale dnd-kit state from showing on the source row, blurs the handle after drop, and special-cases the empty hidden section. Before changing row-property spacing, chip wrapping, or dnd-kit overlays, check this path instead of assuming the table behavior applies.
 
-**Where.** `src/components/RowProperties.js` owns the `DndContext`, `DragOverlay`, hidden-property target, and layout reorder callbacks. `src/components/RowDetailView.scss` owns the row-property drag handle, source-row hiding, overlay sizing, and hidden-drop-zone visuals. `src/blocks/document-properties/edit.js` maps those drag events into `detail_layout` saves.
+**Where.** `src/components/RowProperties.js` owns the `DndContext`, `DragOverlay`, hidden-property target, and layout reorder callbacks. `src/components/RowDetailView.scss` handles the drag handle, source-row hiding, overlay sizing, and hidden-drop-zone visuals. `src/blocks/document-properties/edit.js` maps the drag events into `detail_layout` saves.
 
-**Solution.** Extract a small property-list layout primitive if another surface needs the same "visible properties plus hidden section" behavior. Otherwise keep this local until Gutenberg or DataViews exposes a field-list reorder primitive that includes hidden items and a real drop-zone API. At that point RowProperties could keep only the `detail_layout` save policy.
+**Solution.** If another surface needs the same visible/hidden property list, extract a small shared primitive. Otherwise keep the code here until Gutenberg or DataViews exposes a field-list reorder primitive with hidden items and drop zones. Then RowProperties can shrink to the `detail_layout` save policy.
 
 ## 40. Autosave has to infer save completion `[upstream, soft]`
 
@@ -390,11 +390,11 @@ The same selector shape affects user-visible save side effects. `didPostSaveRequ
 
 ## 42. Public render for in-document row properties `[internal, important]`
 
-Updated by #119 and this row-properties polish pass.
+Updated by #119 and this PR.
 
-**What.** Row properties now sit inside the block-editor iframe, between the title and body. They are a locked `cortext/document-properties` block, and `EnsureHeaderBlocks` keeps that block in place when the row's collection has fields. In the editor, the block renders `<RowProperties>` and reads `fields` from `DocumentPropertiesProvider`. The editor also owns inline property layout editing, relation saves, hidden-property ordering, and the collapsed/visible state for the properties block. On the PHP side the block is registered, but its `render_callback` still returns an empty string. Published rows rendered through `the_content()` therefore show body blocks only, without their schema fields.
+**What.** Row properties now live inside the block-editor iframe, between the title and body. They are a locked `cortext/document-properties` block, and `EnsureHeaderBlocks` keeps that block in place when the row's collection has fields. In the editor, the block renders `<RowProperties>` and reads `fields` from `DocumentPropertiesProvider`. This PR also puts inline layout editing, relation saves, hidden-property ordering, and the collapsed/visible state on the editor side. On the PHP side the block is registered, but its `render_callback` still returns an empty string. Published rows rendered through `the_content()` therefore show body blocks only, without their schema fields.
 
-The row-detail layout setting makes that future render a little less mechanical. `detail_layout` now decides which properties appear and in what order. PHP cannot just print every field in schema order; it has to do the same cleanup as the editor: drop stale entries, append new fields as visible, keep hidden properties hidden, and leave `title` to `core/post-title`.
+The row-detail layout setting means public rendering cannot just print every field in schema order. PHP has to follow the same cleanup as the editor: drop stale entries, append new fields as visible, keep hidden properties hidden, and leave `title` to `core/post-title`.
 
 **Where.** `src/blocks/document-properties/{block.json,edit.js,index.js}` defines the editor block. `includes/Editor/DocumentPropertiesBlock.php` registers it on the server with the placeholder `render_callback`. `src/components/DocumentPropertiesContext.js` passes `fields`, `allFields`, `detailLayoutEntries`, `fallbackRecord`, `rowId`, visibility state, and layout-edit requests from Canvas or RowEditor. `src/components/RowProperties.js` renders the editor-only property surface and relation controls. `src/components/EditorBody.js` (`EnsureHeaderBlocks`) inserts the block after the title when schema exists and removes it when schema disappears. `detail_layout` is registered in `includes/PostType/Collection.php`; the editor normalizes it in `src/hooks/detailLayout.js` and threads it through `src/hooks/useCollectionFields.js`. The schema accessor is `Cortext\Rest\RowsFilterQuery::field_schema_for( $collection_id )`; field values are formatted by `RowsController::format_typed_value()`.
 

@@ -422,8 +422,8 @@ export default function Edit() {
 
 	if ( ! isVisible ) {
 		// Keep the hidden block selectable and give users a quick way to show
-		// fields again. Match RowProperties by excluding the synthetic title
-		// field from the count.
+		// properties again. Match RowProperties by excluding the synthetic
+		// title property from the count.
 		const visibleFieldCount = visiblePropertyFields.length;
 		const label = sprintf(
 			/* translators: %d: number of hidden property fields. */
@@ -504,7 +504,7 @@ export default function Edit() {
 					) }
 					{ showEmptyProperties ? (
 						<p className="cortext-document-properties__empty">
-							{ __( 'No properties shown.', 'cortext' ) }
+							{ __( 'No properties are visible.', 'cortext' ) }
 						</p>
 					) : null }
 				</div>
