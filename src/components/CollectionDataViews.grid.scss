@@ -96,6 +96,8 @@ $grid-card-content-hover-background: #f3f3f3;
 
 	.dataviews-view-grid__card {
 		position: relative;
+		display: flex;
+		flex-direction: column;
 		box-sizing: border-box;
 		height: 100%;
 		min-height: var(--cortext-grid-card-height, 220px);
@@ -160,17 +162,6 @@ $grid-card-content-hover-background: #f3f3f3;
 		.cortext-title-cell {
 			gap: $grid-unit-10;
 		}
-
-		.cortext-title-cell__icon {
-			align-items: center;
-			justify-content: center;
-			width: 16px;
-			height: 16px;
-		}
-
-		.cortext-document-icon--emoji {
-			transform: translateY(-1px);
-		}
 	}
 
 	.dataviews-view-grid__fields {
@@ -182,6 +173,10 @@ $grid-card-content-hover-background: #f3f3f3;
 		justify-content: flex-start;
 		min-height: $grid-unit-20 + $grid-unit-05;
 		text-align: start;
+	}
+
+	.dataviews-view-grid__field:has(.cortext-editable-cell__shell--empty) {
+		display: none;
 	}
 
 	.dataviews-view-grid__field-name {
@@ -266,6 +261,7 @@ $grid-card-content-hover-background: #f3f3f3;
 	}
 
 	.dataviews-view-grid__card > .components-v-stack {
+		flex: 1 1 auto;
 		order: 2;
 		width: 100%;
 		min-width: 0;

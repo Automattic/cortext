@@ -92,6 +92,12 @@ function hasActiveCalculations( view ) {
 }
 
 const BULK_DELETE_CONCURRENCY = 4;
+// tech-debt.md#61: DataViews ties list focus to its own selection. Cortext
+// uses blank-row clicks and keyboard activation to open the row instead.
+const EMPTY_DATA_VIEW_SELECTION = [];
+const LIST_ROW_EMPTY_CLICK_TARGET_SELECTOR = '.dataviews-view-list__item';
+const LIST_ROW_SELECTOR = '.dataviews-view-list > [role="row"]';
+const ignoreDataViewsSelectionChange = () => {};
 
 export default function CollectionDataViews( {
 	collectionId,
@@ -391,6 +397,31 @@ export default function CollectionDataViews( {
 		},
 		[ supportsRowSelection, updateSelectedRowIds, visibleRowIds ]
 	);
+	const dataViewsSelectionProps = useMemo( () => {
+		if ( supportsRowSelection ) {
+			return {
+				selection: selectedRowIds,
+				onChangeSelection,
+			};
+		}
+
+		// DataViews list keeps an internal selected row when uncontrolled.
+		// Cortext uses list clicks for row open / cell edit, so keep selection
+		// controlled and empty in this layout.
+		if ( isListLayout ) {
+			return {
+				selection: EMPTY_DATA_VIEW_SELECTION,
+				onChangeSelection: ignoreDataViewsSelectionChange,
+			};
+		}
+
+		return {};
+	}, [
+		isListLayout,
+		onChangeSelection,
+		selectedRowIds,
+		supportsRowSelection,
+	] );
 
 	const clearSelection = useCallback( () => {
 		setSelectedRowIds( [] );
@@ -550,10 +581,18 @@ export default function CollectionDataViews( {
 		[ collectionId, refresh, touchRecent ]
 	);
 
+	let dataViewLayoutType = 'table';
+	if ( isGridLayout ) {
+		dataViewLayoutType = 'grid';
+	}
+	if ( isListLayout ) {
+		dataViewLayoutType = 'list';
+	}
 	const mutationContext = useMemo(
 		() => ( {
 			saveRowField,
-			canEditCells: isTableLayout || isGridLayout,
+			canEditCells: isTableLayout || isGridLayout || isListLayout,
+			layoutType: dataViewLayoutType,
 			editRequest,
 			clearEditRequest,
 			requestNext,
@@ -565,7 +604,9 @@ export default function CollectionDataViews( {
 		} ),
 		[
 			saveRowField,
+			dataViewLayoutType,
 			isGridLayout,
+			isListLayout,
 			isTableLayout,
 			editRequest,
 			clearEditRequest,
@@ -673,7 +714,7 @@ export default function CollectionDataViews( {
 
 	const openRowActionContext = useMemo(
 		() => ( {
-			enabled: isTableLayout || isGridLayout,
+			enabled: isTableLayout || isGridLayout || isListLayout,
 			icon: ROW_DETAIL_MODE_ICONS[ savedRowDetailMode ],
 			openRowId,
 			requestOpenRow,
@@ -681,6 +722,7 @@ export default function CollectionDataViews( {
 		} ),
 		[
 			isGridLayout,
+			isListLayout,
 			isTableLayout,
 			openRowId,
 			requestOpenRow,
@@ -689,7 +731,13 @@ export default function CollectionDataViews( {
 	);
 	const handleDataViewClick = useCallback(
 		( event ) => {
-			if ( ! isGridLayout || event.defaultPrevented ) {
+			let clickLayout = null;
+			if ( isGridLayout ) {
+				clickLayout = 'grid';
+			} else if ( isListLayout ) {
+				clickLayout = 'list';
+			}
+			if ( ! clickLayout || event.defaultPrevented ) {
 				return;
 			}
 			if (
@@ -712,7 +760,7 @@ export default function CollectionDataViews( {
 			const rowInfo = findDataViewItemFromEvent(
 				event,
 				tableWrapperRef.current,
-				'grid',
+				clickLayout,
 				dataFilteredInRenderOrder
 			);
 			if ( ! rowInfo?.row ) {
@@ -720,7 +768,132 @@ export default function CollectionDataViews( {
 			}
 			requestOpenRow( rowInfo.row );
 		},
-		[ dataFilteredInRenderOrder, isGridLayout, requestOpenRow ]
+		[
+			dataFilteredInRenderOrder,
+			isGridLayout,
+			isListLayout,
+			requestOpenRow,
+		]
+	);
+	const handleDataViewPointerDownCapture = useCallback(
+		( event ) => {
+			if ( ! isListLayout || event.defaultPrevented ) {
+				return;
+			}
+			if ( event.button !== undefined && event.button !== 0 ) {
+				return;
+			}
+			if (
+				event.metaKey ||
+				event.ctrlKey ||
+				event.shiftKey ||
+				event.altKey
+			) {
+				return;
+			}
+			const target = event.target;
+			if ( ! target?.closest ) {
+				return;
+			}
+			if (
+				target.closest( INTERACTIVE_DATA_VIEW_ITEM_IGNORE_SELECTOR )
+			) {
+				return;
+			}
+			if ( ! target.closest( LIST_ROW_EMPTY_CLICK_TARGET_SELECTOR ) ) {
+				return;
+			}
+			const rowInfo = findDataViewItemFromEvent(
+				event,
+				tableWrapperRef.current,
+				'list',
+				dataFilteredInRenderOrder
+			);
+			if ( ! rowInfo?.row ) {
+				return;
+			}
+			event.preventDefault();
+			event.stopPropagation();
+			requestOpenRow( rowInfo.row );
+		},
+		[ dataFilteredInRenderOrder, isListLayout, requestOpenRow ]
+	);
+	const handleDataViewKeyDownCapture = useCallback(
+		( event ) => {
+			if ( ! isListLayout || event.defaultPrevented ) {
+				return;
+			}
+			const target = event.target;
+			if (
+				! target?.closest ||
+				! target.matches?.( LIST_ROW_EMPTY_CLICK_TARGET_SELECTOR )
+			) {
+				return;
+			}
+
+			const wrapper = tableWrapperRef.current;
+			const rowElement = target.closest( LIST_ROW_SELECTOR );
+			if (
+				! wrapper ||
+				! rowElement ||
+				! wrapper.contains( rowElement )
+			) {
+				return;
+			}
+
+			if ( event.key === 'Enter' || event.key === ' ' ) {
+				const rowInfo = findDataViewItemFromEvent(
+					event,
+					wrapper,
+					'list',
+					dataFilteredInRenderOrder
+				);
+				if ( ! rowInfo?.row ) {
+					return;
+				}
+				event.preventDefault();
+				event.stopPropagation();
+				requestOpenRow( rowInfo.row );
+				return;
+			}
+
+			const renderedRows = Array.from(
+				wrapper.querySelectorAll( LIST_ROW_SELECTOR )
+			);
+			const currentIndex = renderedRows.indexOf( rowElement );
+			if ( currentIndex < 0 ) {
+				return;
+			}
+
+			let nextIndex = null;
+			if ( event.key === 'ArrowDown' ) {
+				nextIndex = Math.min(
+					currentIndex + 1,
+					renderedRows.length - 1
+				);
+			} else if ( event.key === 'ArrowUp' ) {
+				nextIndex = Math.max( currentIndex - 1, 0 );
+			} else if ( event.key === 'Home' ) {
+				nextIndex = 0;
+			} else if ( event.key === 'End' ) {
+				nextIndex = renderedRows.length - 1;
+			}
+
+			if ( nextIndex === null || nextIndex === currentIndex ) {
+				return;
+			}
+			const nextTarget = renderedRows[ nextIndex ]?.querySelector(
+				LIST_ROW_EMPTY_CLICK_TARGET_SELECTOR
+			);
+			if ( ! nextTarget ) {
+				return;
+			}
+
+			event.preventDefault();
+			event.stopPropagation();
+			nextTarget.focus();
+		},
+		[ dataFilteredInRenderOrder, isListLayout, requestOpenRow ]
 	);
 	const handleDataViewClickCapture = useCallback(
 		( event ) => {
@@ -921,9 +1094,8 @@ export default function CollectionDataViews( {
 
 	const rowActions = useMemo( () => {
 		const actions = [];
-		// List and grid get one primary Open action, matching the saved
-		// detail mode. Table already has the inline Open button in the title
-		// cell, so these actions stay inside the menu there.
+		// The row itself opens in grid/list, and table has the inline Open
+		// button in the title cell. Keep the mode choices in the row menu.
 		for ( const mode of [ 'side', 'modal', 'full' ] ) {
 			actions.push( {
 				id: `open-in-${ mode }`,
@@ -933,7 +1105,6 @@ export default function CollectionDataViews( {
 					ROW_DETAIL_MODE_LABELS[ mode ]
 				),
 				icon: ROW_DETAIL_MODE_ICONS[ mode ],
-				isPrimary: ! isTableLayout && mode === savedRowDetailMode,
 				context: 'single',
 				callback: ( items ) => openRowInMode( items?.[ 0 ], mode ),
 			} );
@@ -980,10 +1151,8 @@ export default function CollectionDataViews( {
 		areFavoriteActionsDisabled,
 		duplicateRow,
 		isRowFavorite,
-		isTableLayout,
 		openRowInMode,
 		requestDeleteRows,
-		savedRowDetailMode,
 		toggleRowFavorite,
 	] );
 
@@ -1329,9 +1498,16 @@ export default function CollectionDataViews( {
 						<div
 							className="cortext-data-view"
 							ref={ tableWrapperRef }
+							onPointerDownCapture={
+								handleDataViewPointerDownCapture
+							}
+							onKeyDownCapture={ handleDataViewKeyDownCapture }
 							onClickCapture={ handleDataViewClickCapture }
 							data-grid-card-clickable={
 								isGridLayout ? 'true' : undefined
+							}
+							data-list-row-clickable={
+								isListLayout ? 'true' : undefined
 							}
 							data-loading-shell={
 								showLoadingShell ? 'true' : undefined
@@ -1401,12 +1577,7 @@ export default function CollectionDataViews( {
 										isLoading={ isLoading }
 										empty={ empty }
 										actions={ dataViewActions }
-										{ ...( supportsRowSelection
-											? {
-													selection: selectedRowIds,
-													onChangeSelection,
-											  }
-											: {} ) }
+										{ ...dataViewsSelectionProps }
 									>
 										<DataViewsChrome
 											footer={ dataViewsFooter }
@@ -1474,12 +1645,24 @@ export default function CollectionDataViews( {
 									   outside DataViews because there is no append
 									   slot in the layout chrome. */ }
 									{ ! isGridLayout && (
-										<div className="cortext-data-view__footer">
+										<div
+											className={
+												'cortext-data-view__footer' +
+												( isListLayout
+													? ' cortext-data-view__footer--list'
+													: '' )
+											}
+										>
 											<DataViewNewRowButton
 												slug={ slug }
 												view={ view }
 												fields={ fields }
 												onCreated={ onCreated }
+												presentation={
+													isListLayout
+														? 'list-row'
+														: 'footer'
+												}
 											/>
 										</div>
 									) }

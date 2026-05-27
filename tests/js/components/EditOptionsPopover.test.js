@@ -299,6 +299,26 @@ describe( 'EditOptionsPopover', () => {
 		expect( onPick ).toHaveBeenCalledWith( 'stale' );
 	} );
 
+	it( 'uses a compact picker without selected token chips', () => {
+		render(
+			<EditOptionsPopover
+				recordId={ 7 }
+				fieldType="multiselect"
+				initialOptions={ [ { value: 'known', label: 'Known' } ] }
+				value={ [ 'known' ] }
+				variant="compact"
+				onPick={ jest.fn() }
+			/>
+		);
+
+		expect(
+			screen.getByPlaceholderText( 'Search options' )
+		).toBeInTheDocument();
+		expect(
+			screen.queryByRole( 'button', { name: 'Remove' } )
+		).not.toBeInTheDocument();
+	} );
+
 	it( 'does not pick a newly-created option when saving it fails', async () => {
 		const onPick = jest.fn();
 		mockUpdateRun.mockRejectedValueOnce( new Error( 'nope' ) );

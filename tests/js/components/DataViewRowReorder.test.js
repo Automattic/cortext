@@ -176,6 +176,57 @@ function createWrapper( heights = [ 40, 40, 40 ] ) {
 	return wrapper;
 }
 
+function createListWrapper( heights = [ 88, 88, 88 ] ) {
+	const wrapper = document.createElement( 'div' );
+	wrapper.innerHTML = `
+		<div class="dataviews-view-list">
+			<div role="row">
+				<div class="dataviews-view-list__item-wrapper">
+					<div role="gridcell">
+						<button class="dataviews-view-list__item" type="button"></button>
+					</div>
+					<div class="dataviews-view-list__field-wrapper">One</div>
+				</div>
+			</div>
+			<div role="row">
+				<div class="dataviews-view-list__item-wrapper">
+					<div role="gridcell">
+						<button class="dataviews-view-list__item" type="button"></button>
+					</div>
+					<div class="dataviews-view-list__field-wrapper">Two</div>
+				</div>
+			</div>
+			<div role="row">
+				<div class="dataviews-view-list__item-wrapper">
+					<div role="gridcell">
+						<button class="dataviews-view-list__item" type="button"></button>
+					</div>
+					<div class="dataviews-view-list__field-wrapper">Three</div>
+				</div>
+			</div>
+		</div>
+	`;
+	let top = 0;
+	Array.from( wrapper.querySelectorAll( '[role="row"]' ) ).forEach(
+		( row, index ) => {
+			const height = heights[ index ] ?? 88;
+			const rowTop = top;
+			top += height;
+			row.getClientRects = () => [ {} ];
+			row.getBoundingClientRect = () => ( {
+				top: rowTop,
+				left: 10,
+				width: 520,
+				height,
+				right: 530,
+				bottom: rowTop + height,
+			} );
+		}
+	);
+	document.body.appendChild( wrapper );
+	return wrapper;
+}
+
 function draggableDataFor( rowId ) {
 	return (
 		[ ...useDraggable.mock.calls ]
@@ -312,6 +363,55 @@ function dragOver( drop ) {
 }
 
 describe( 'DataViewRowReorder', () => {
+	it( 'decorates outer list rows, not the internal DataViews buttons', async () => {
+		const wrapper = createListWrapper();
+
+		render(
+			<DataViewRowReorder
+				wrapperRef={ { current: wrapper } }
+				view={ {
+					type: 'list',
+					sort: null,
+				} }
+				onChangeView={ jest.fn() }
+				collectionId={ 7 }
+				rows={ rows }
+				onReordered={ jest.fn() }
+			/>
+		);
+
+		await waitFor( () =>
+			expect( screen.getByTestId( 'dnd-context' ) ).toBeInTheDocument()
+		);
+		await waitFor( () =>
+			expect( useDraggable ).toHaveBeenCalledTimes( 3 )
+		);
+
+		const listRows = wrapper.querySelectorAll(
+			'.dataviews-view-list > [role="row"]'
+		);
+		const itemButtons = wrapper.querySelectorAll(
+			'.dataviews-view-list__item'
+		);
+		expect( listRows ).toHaveLength( 3 );
+		expect( itemButtons ).toHaveLength( 3 );
+		expect( listRows[ 0 ] ).toHaveClass( 'cortext-row-reorder-target' );
+		expect( listRows[ 1 ] ).toHaveClass( 'cortext-row-reorder-target' );
+		expect( listRows[ 2 ] ).toHaveClass( 'cortext-row-reorder-target' );
+		expect( itemButtons[ 0 ] ).not.toHaveClass(
+			'cortext-row-reorder-target'
+		);
+		expect( itemButtons[ 1 ] ).not.toHaveClass(
+			'cortext-row-reorder-target'
+		);
+		expect( itemButtons[ 2 ] ).not.toHaveClass(
+			'cortext-row-reorder-target'
+		);
+		const handles = screen.getAllByLabelText( /^Reorder row:/ );
+		expect( handles ).toHaveLength( 3 );
+		expect( handles[ 0 ] ).toHaveAttribute( 'tabindex', '-1' );
+	} );
+
 	it( 'shows a row preview while dragging', async () => {
 		await renderReorder();
 

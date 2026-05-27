@@ -20,7 +20,7 @@ function primeRowHoverSuppression() {
 	}, HOVER_SUPPRESSION_PRIME_TIMEOUT );
 }
 
-export default function RowDragHandle( { row } ) {
+export default function RowDragHandle( { row, keyboardFocusable = true } ) {
 	const {
 		attributes,
 		listeners,
@@ -116,7 +116,7 @@ export default function RowDragHandle( { row } ) {
 			onTouchStart={ stopInteractionStart }
 			{ ...attributes }
 			role="button"
-			tabIndex={ 0 }
+			tabIndex={ keyboardFocusable ? 0 : -1 }
 			{ ...guardedListeners }
 		/>,
 		row.handleEl

@@ -8,7 +8,7 @@ Pair with [decisions.md](decisions.md) for choices we've made peace with and [ro
 
 ## 1. DataViews has no inline cell editing `[upstream]`
 
-**What.** DataViews v6 can render values and edit them through a separate `DataForm`, but it cannot turn a rendered value into an inline editor. Cortext mounts its own editor from `field.render` (documented as a display renderer, but the only hook available), keeps edit state per cell, and sends saves through `RowMutationContext` because `field.render` only receives `{ item }`. Tab and Shift+Tab live in the same layer: editors catch Tab, ask the parent for the next editable cell through `requestNext`, and the target cell opens through the same `editRequest` channel used to focus the title cell in a fresh row. Table and grid opt into that editing surface. List stays read-only until we design row/value editing for it on purpose.
+**What.** DataViews v6 can render values and edit them through a separate `DataForm`, but it cannot turn a rendered value into an inline editor. Cortext mounts its own editor from `field.render` (documented as a display renderer, but the only hook available), keeps edit state per cell, and sends saves through `RowMutationContext` because `field.render` only receives `{ item }`. Tab and Shift+Tab live in the same layer: editors catch Tab, ask the parent for the next editable cell through `requestNext`, and the target cell opens through the same `editRequest` channel used to focus the title cell in a fresh row. Table, grid, and list use that surface when a visible field supports it.
 
 **Where.** `src/components/EditableCell.js`, `RowMutationContext` and `requestNext` in `src/components/CollectionDataViews.js`, plus a sliver of `src/components/CollectionDataViews.scss`.
 
@@ -553,3 +553,13 @@ This is fine for the baseline, but block attributes and public DataViews state n
 **Where.** `src/components/dataViewAdapter.js`, `src/components/dataViewViewState.js`, `normalizeView` in `src/components/dataViewColumns.js`, the DataViews mounts in `src/components/CollectionDataViews.js` and `src/components/PublicDataView.js`, and the data-view block attributes in `src/blocks/data-view/block.json`.
 
 **Solution.** If DataViews adds native per-layout settings, map to those instead of carrying separate buckets. If Cortext saved views become their own schema, move `layoutByType` / `fieldsByType` there and treat DataViews' `view` as a render adapter only. Until one of those exists, keep this adapter small and covered by round-trip tests.
+
+## 61. DataViews list lacks row-open and compact metadata hooks `[upstream, soft]`
+
+**What.** DataViews list is close enough to use, but it does not expose the pieces Cortext needs for the list we want: opening a row from the blank part of the row, keeping focus without a selected-row state, showing metadata as a compact inline run, and placing "+ New" as the last row. Cortext keeps the native layout and fills those gaps locally. The list gets an empty controlled selection, capture-phase pointer and keyboard handlers for row open, CSS that reshapes DataViews' title/media/field/action DOM, and a footer button styled like a row.
+
+That keeps us out of a custom React layout for now, but it depends on DataViews markup and event timing. The parts to watch are the `.dataviews-view-list > [role="row"]` lookup, `.dataviews-view-list__item` as the focus/open target, and the CSS grid/contents overrides that put title, metadata, media, and actions on one row.
+
+**Where.** List open/focus handling in `src/components/CollectionDataViews.js`, list row lookup in `src/components/dataViewItemLookup.js`, list reorder decoration in `src/components/DataViewRowReorder.js`, `DataViewNewRowButton`'s `list-row` presentation, and the list rules in `src/components/CollectionDataViews.list.scss`.
+
+**Solution.** DataViews could make this cleaner with row activation/focus hooks, a way to disable selected-row state without losing focus, a compact metadata list variant, and an append-row/item slot. With those, Cortext could drop the capture-phase list handlers, the empty-selection shim, most list DOM selectors, and the CSS reshaping. If the native list never grows that shape, write a small Cortext list layout instead of piling more CSS on DataViews internals.

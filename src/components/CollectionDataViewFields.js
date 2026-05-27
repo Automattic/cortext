@@ -109,7 +109,7 @@ function TitleCell( { item } ) {
 		>
 			{ documentIcon ? (
 				<span className="cortext-title-cell__icon" aria-hidden="true">
-					<PageIcon icon={ documentIcon } size={ 16 } />
+					<PageIcon icon={ documentIcon } />
 				</span>
 			) : null }
 			<EditableCell

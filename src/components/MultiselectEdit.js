@@ -32,6 +32,7 @@ export default function MultiselectEdit( {
 	label,
 	defaultOpen = true,
 	triggerClassName = 'cortext-multiselect-edit__toggle',
+	popoverVariant = 'default',
 } ) {
 	const [ anchor, setAnchor ] = useState( null );
 	const [ isOpen, setIsOpen ] = useState( defaultOpen );
@@ -105,6 +106,7 @@ export default function MultiselectEdit( {
 						fieldType="multiselect"
 						initialOptions={ items }
 						value={ current }
+						variant={ popoverVariant }
 						onOptionsSaved={ onOptionsSaved }
 						onRowsChanged={ onRowsChanged }
 						onRequestClose={ onRequestClose }

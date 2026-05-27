@@ -22,7 +22,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 
 	private const WORKSPACE_HOME_META_KEY = 'cortext_workspace_home';
 	private const FAVORITES_META_KEY      = 'cortext_favorites';
-	private const PAGE_CONTENT_VERSION    = 'rich-connected-seed-2026-05-26-albums-grid';
+	private const PAGE_CONTENT_VERSION    = 'rich-connected-seed-2026-05-27-music-list-fields';
 	private const ENTRY_CONTENT_VERSION   = 'rich-connected-row-seed-2026-05-07';
 
 	private bool $seed_full_dataset = false;
@@ -3485,15 +3485,43 @@ final class SeedDummyCollections extends WP_CLI_Command {
 						$this->data_view_block(
 							$collection_ids['albums'] ?? 0,
 							array(
-								'type'       => 'grid',
-								'perPage'    => 25,
-								'mediaField' => 'cover',
+								'type'         => 'grid',
+								'perPage'      => 25,
+								'mediaField'   => 'cover',
+								'fieldsByType' => array(
+									'grid' => $this->data_view_field_ids_by_titles(
+										$collection_ids['albums'] ?? 0,
+										array( 'Artist', 'Year', 'Genre', 'Format' )
+									),
+								),
 							)
 						),
 						$this->data_view_block( $collection_ids['tracks'] ?? 0 ),
 						$this->heading( 'Artists and labels', 2 ),
-						$this->data_view_block( $collection_ids['musicians'] ?? 0 ),
-						$this->data_view_block( $collection_ids['labels'] ?? 0 ),
+						$this->data_view_block(
+							$collection_ids['musicians'] ?? 0,
+							array(
+								'type'         => 'list',
+								'fieldsByType' => array(
+									'list' => $this->data_view_field_ids_by_titles(
+										$collection_ids['musicians'] ?? 0,
+										array( 'Country', 'Genres', 'Album count' )
+									),
+								),
+							)
+						),
+						$this->data_view_block(
+							$collection_ids['labels'] ?? 0,
+							array(
+								'type'         => 'list',
+								'fieldsByType' => array(
+									'list' => $this->data_view_field_ids_by_titles(
+										$collection_ids['labels'] ?? 0,
+										array( 'Country', 'Focus', 'Release count' )
+									),
+								),
+							)
+						),
 					)
 				),
 			),
@@ -4859,6 +4887,30 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			'<!-- wp:cortext/data-view %s /-->',
 			wp_json_encode( $attributes )
 		);
+	}
+
+	/**
+	 * Returns DataViews field ids for visible list/grid fields by seeded title.
+	 *
+	 * @param int      $collection_id Collection post ID.
+	 * @param string[] $titles        Field titles, in display order.
+	 * @return string[]
+	 */
+	private function data_view_field_ids_by_titles( int $collection_id, array $titles ): array {
+		if ( $collection_id <= 0 ) {
+			return array();
+		}
+
+		$by_title = $this->attached_fields_by_title( $collection_id );
+		$ids      = array();
+		foreach ( $titles as $title ) {
+			$title = (string) $title;
+			if ( isset( $by_title[ $title ] ) ) {
+				$ids[] = 'field-' . (int) $by_title[ $title ];
+			}
+		}
+
+		return array_values( array_unique( $ids ) );
 	}
 
 	/**
