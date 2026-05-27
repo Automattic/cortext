@@ -6,7 +6,7 @@ const GRID_CARD_SELECTOR = '.dataviews-view-grid__card';
 const LIST_ROW_SELECTOR = '.dataviews-view-list > [role="row"]';
 
 export const INTERACTIVE_DATA_VIEW_ITEM_IGNORE_SELECTOR =
-	'button, a, input, textarea, select, [contenteditable="true"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], .components-button, .cortext-editable-cell';
+	'button, a, input, textarea, select, [contenteditable="true"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], .components-button, .cortext-editable-cell, .cortext-row-drag-handle';
 
 export function findDataViewItemFromEvent( event, wrapper, layout, rows ) {
 	const target = event.target;

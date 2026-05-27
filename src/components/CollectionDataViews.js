@@ -92,6 +92,12 @@ function hasActiveCalculations( view ) {
 }
 
 const BULK_DELETE_CONCURRENCY = 4;
+// tech-debt.md#61: DataViews ties list focus to its own selection. Cortext
+// uses blank-row clicks and keyboard activation to open the row instead.
+const EMPTY_DATA_VIEW_SELECTION = [];
+const LIST_ROW_EMPTY_CLICK_TARGET_SELECTOR = '.dataviews-view-list__item';
+const LIST_ROW_SELECTOR = '.dataviews-view-list > [role="row"]';
+const ignoreDataViewsSelectionChange = () => {};
 
 export default function CollectionDataViews( {
 	collectionId,
@@ -391,6 +397,31 @@ export default function CollectionDataViews( {
 		},
 		[ supportsRowSelection, updateSelectedRowIds, visibleRowIds ]
 	);
+	const dataViewsSelectionProps = useMemo( () => {
+		if ( supportsRowSelection ) {
+			return {
+				selection: selectedRowIds,
+				onChangeSelection,
+			};
+		}
+
+		// DataViews list keeps an internal selected row when uncontrolled.
+		// Cortext uses list clicks for row open / cell edit, so keep selection
+		// controlled and empty in this layout.
+		if ( isListLayout ) {
+			return {
+				selection: EMPTY_DATA_VIEW_SELECTION,
+				onChangeSelection: ignoreDataViewsSelectionChange,
+			};
+		}
+
+		return {};
+	}, [
+		isListLayout,
+		onChangeSelection,
+		selectedRowIds,
+		supportsRowSelection,
+	] );
 
 	const clearSelection = useCallback( () => {
 		setSelectedRowIds( [] );
@@ -734,6 +765,126 @@ export default function CollectionDataViews( {
 			isListLayout,
 			requestOpenRow,
 		]
+	);
+	const handleDataViewPointerDownCapture = useCallback(
+		( event ) => {
+			if ( ! isListLayout || event.defaultPrevented ) {
+				return;
+			}
+			if ( event.button !== undefined && event.button !== 0 ) {
+				return;
+			}
+			if (
+				event.metaKey ||
+				event.ctrlKey ||
+				event.shiftKey ||
+				event.altKey
+			) {
+				return;
+			}
+			const target = event.target;
+			if ( ! target?.closest ) {
+				return;
+			}
+			if (
+				target.closest( INTERACTIVE_DATA_VIEW_ITEM_IGNORE_SELECTOR )
+			) {
+				return;
+			}
+			if ( ! target.closest( LIST_ROW_EMPTY_CLICK_TARGET_SELECTOR ) ) {
+				return;
+			}
+			const rowInfo = findDataViewItemFromEvent(
+				event,
+				tableWrapperRef.current,
+				'list',
+				dataFilteredInRenderOrder
+			);
+			if ( ! rowInfo?.row ) {
+				return;
+			}
+			event.preventDefault();
+			event.stopPropagation();
+			requestOpenRow( rowInfo.row );
+		},
+		[ dataFilteredInRenderOrder, isListLayout, requestOpenRow ]
+	);
+	const handleDataViewKeyDownCapture = useCallback(
+		( event ) => {
+			if ( ! isListLayout || event.defaultPrevented ) {
+				return;
+			}
+			const target = event.target;
+			if (
+				! target?.closest ||
+				! target.matches?.( LIST_ROW_EMPTY_CLICK_TARGET_SELECTOR )
+			) {
+				return;
+			}
+
+			const wrapper = tableWrapperRef.current;
+			const rowElement = target.closest( LIST_ROW_SELECTOR );
+			if (
+				! wrapper ||
+				! rowElement ||
+				! wrapper.contains( rowElement )
+			) {
+				return;
+			}
+
+			if ( event.key === 'Enter' || event.key === ' ' ) {
+				const rowInfo = findDataViewItemFromEvent(
+					event,
+					wrapper,
+					'list',
+					dataFilteredInRenderOrder
+				);
+				if ( ! rowInfo?.row ) {
+					return;
+				}
+				event.preventDefault();
+				event.stopPropagation();
+				requestOpenRow( rowInfo.row );
+				return;
+			}
+
+			const renderedRows = Array.from(
+				wrapper.querySelectorAll( LIST_ROW_SELECTOR )
+			);
+			const currentIndex = renderedRows.indexOf( rowElement );
+			if ( currentIndex < 0 ) {
+				return;
+			}
+
+			let nextIndex = null;
+			if ( event.key === 'ArrowDown' ) {
+				nextIndex = Math.min(
+					currentIndex + 1,
+					renderedRows.length - 1
+				);
+			} else if ( event.key === 'ArrowUp' ) {
+				nextIndex = Math.max( currentIndex - 1, 0 );
+			} else if ( event.key === 'Home' ) {
+				nextIndex = 0;
+			} else if ( event.key === 'End' ) {
+				nextIndex = renderedRows.length - 1;
+			}
+
+			if ( nextIndex === null || nextIndex === currentIndex ) {
+				return;
+			}
+			const nextTarget = renderedRows[ nextIndex ]?.querySelector(
+				LIST_ROW_EMPTY_CLICK_TARGET_SELECTOR
+			);
+			if ( ! nextTarget ) {
+				return;
+			}
+
+			event.preventDefault();
+			event.stopPropagation();
+			nextTarget.focus();
+		},
+		[ dataFilteredInRenderOrder, isListLayout, requestOpenRow ]
 	);
 	const handleDataViewClickCapture = useCallback(
 		( event ) => {
@@ -1338,6 +1489,10 @@ export default function CollectionDataViews( {
 						<div
 							className="cortext-data-view"
 							ref={ tableWrapperRef }
+							onPointerDownCapture={
+								handleDataViewPointerDownCapture
+							}
+							onKeyDownCapture={ handleDataViewKeyDownCapture }
 							onClickCapture={ handleDataViewClickCapture }
 							data-grid-card-clickable={
 								isGridLayout ? 'true' : undefined
@@ -1413,12 +1568,7 @@ export default function CollectionDataViews( {
 										isLoading={ isLoading }
 										empty={ empty }
 										actions={ dataViewActions }
-										{ ...( supportsRowSelection
-											? {
-													selection: selectedRowIds,
-													onChangeSelection,
-											  }
-											: {} ) }
+										{ ...dataViewsSelectionProps }
 									>
 										<DataViewsChrome
 											footer={ dataViewsFooter }

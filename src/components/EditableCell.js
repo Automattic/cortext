@@ -98,6 +98,8 @@ function FieldError( { message } ) {
 // http(s) URLs. Anything else (relative paths, mailto:, plain strings) is
 // rendered as text so we never produce a broken link.
 const URL_PATTERN = /^https?:\/\//i;
+const NESTED_DISPLAY_INTERACTIVE_SELECTOR =
+	'a, button, input, textarea, select, [contenteditable="true"], [role="button"]';
 
 // Clamp decimals to a sane range; Intl.NumberFormat throws above 100.
 function clampDecimals( decimals ) {
@@ -478,12 +480,41 @@ function CellShell( { children, onActivate, ariaLabel, className, disabled } ) {
 	// nowrap` above `flex-wrap: wrap` chips made multiselect cells overflow
 	// into adjacent columns.
 	const isText = typeof children === 'string';
+	const activateFromNestedInteractive = ( event ) => {
+		if ( disabled ) {
+			return;
+		}
+		const target = event.target;
+		const nestedInteractive = target?.closest?.(
+			NESTED_DISPLAY_INTERACTIVE_SELECTOR
+		);
+		if (
+			! nestedInteractive ||
+			nestedInteractive === event.currentTarget ||
+			! event.currentTarget.contains( nestedInteractive )
+		) {
+			return;
+		}
+		event.preventDefault();
+		event.stopPropagation();
+		onActivate();
+	};
 	return (
 		<div
 			role={ disabled ? undefined : 'button' }
 			tabIndex={ disabled ? -1 : 0 }
 			className={ className }
+			onClickCapture={ activateFromNestedInteractive }
 			onClick={ disabled ? undefined : onActivate }
+			onKeyDownCapture={
+				disabled
+					? undefined
+					: ( event ) => {
+							if ( event.key === 'Enter' || event.key === ' ' ) {
+								activateFromNestedInteractive( event );
+							}
+					  }
+			}
 			onKeyDown={
 				disabled
 					? undefined

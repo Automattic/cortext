@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 
 import {
 	dateOnlyValue,
@@ -436,5 +436,36 @@ describe( 'EditableCell option overrides', () => {
 		);
 
 		expect( screen.getByText( 'High' ) ).toHaveClass( 'cortext-chip--red' );
+	} );
+
+	it( 'starts editing when a displayed link is clicked', () => {
+		render(
+			<RowMutationContext.Provider
+				value={ {
+					saveRowField: jest.fn(),
+					canEditCells: true,
+				} }
+			>
+				<EditableCell
+					item={ {
+						id: 1,
+						meta: { website: 'https://example.com/path' },
+					} }
+					fieldId="website"
+					fieldType="url"
+					label="Website"
+				/>
+			</RowMutationContext.Provider>
+		);
+
+		fireEvent.click(
+			screen.getByRole( 'link', {
+				name: 'https://example.com/path',
+			} )
+		);
+
+		expect(
+			screen.getByRole( 'textbox', { name: 'Website' } )
+		).toHaveValue( 'https://example.com/path' );
 	} );
 } );
