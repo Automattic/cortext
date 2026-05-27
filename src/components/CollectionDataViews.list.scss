@@ -292,6 +292,12 @@ $list-row-open-background: #f3f3f3;
 		max-width: 100%;
 	}
 
+	.dataviews-view-list__field-value .cortext-editable-cell__overlay:has(.cortext-editable-cell__compact-input) {
+		right: -$grid-unit-05;
+		width: calc(100% + #{$grid-unit-20});
+		max-width: none;
+	}
+
 	.dataviews-view-list__field-value .cortext-editable-cell__overlay .components-base-control,
 	.dataviews-view-list__field-value .cortext-editable-cell__overlay .components-base-control__field {
 		width: 100%;
@@ -352,6 +358,17 @@ $list-row-open-background: #f3f3f3;
 		background-color: $gray-100;
 		box-shadow: none;
 		color: $gray-700;
+	}
+
+	.dataviews-view-list__field-value .cortext-multiselect-edit__toggle .cortext-chips {
+		flex-wrap: nowrap;
+		width: auto;
+		overflow: hidden;
+	}
+
+	.dataviews-view-list__field-value .cortext-select-edit__toggle .cortext-chip,
+	.dataviews-view-list__field-value .cortext-multiselect-edit__toggle .cortext-chip {
+		flex: 0 0 auto;
 	}
 
 	@media (min-width: 600px) {
