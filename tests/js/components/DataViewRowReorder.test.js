@@ -363,7 +363,7 @@ function dragOver( drop ) {
 }
 
 describe( 'DataViewRowReorder', () => {
-	it( 'uses the outer list rows and skips the internal DataViews item buttons', async () => {
+	it( 'decorates outer list rows, not the internal DataViews buttons', async () => {
 		const wrapper = createListWrapper();
 
 		render(
@@ -407,7 +407,9 @@ describe( 'DataViewRowReorder', () => {
 		expect( itemButtons[ 2 ] ).not.toHaveClass(
 			'cortext-row-reorder-target'
 		);
-		expect( screen.getAllByLabelText( /^Reorder row:/ ) ).toHaveLength( 3 );
+		const handles = screen.getAllByLabelText( /^Reorder row:/ );
+		expect( handles ).toHaveLength( 3 );
+		expect( handles[ 0 ] ).toHaveAttribute( 'tabindex', '-1' );
 	} );
 
 	it( 'shows a row preview while dragging', async () => {

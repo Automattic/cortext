@@ -5,6 +5,8 @@ $list-row-hover-background: #f8f8f8;
 $list-row-open-background: #f3f3f3;
 
 .cortext-data-view {
+	// tech-debt.md#61: DataViews has no compact metadata list variant, so this
+	// file reshapes its current list DOM for Cortext's baseline.
 
 	&__footer--list {
 		padding: 0 $grid-unit-20 $grid-unit-20;
@@ -16,7 +18,6 @@ $list-row-open-background: #f3f3f3;
 		min-height: $grid-unit-60;
 		padding: $grid-unit-15 $grid-unit-20;
 		border: $border-width solid transparent;
-		border-bottom-color: $gray-200;
 		border-radius: 6px;
 		color: $gray-700;
 		text-align: start;
@@ -51,7 +52,6 @@ $list-row-open-background: #f3f3f3;
 		position: relative;
 		margin: 0;
 		border: 0;
-		border-bottom: $border-width solid $gray-200;
 		border-radius: 0;
 		color: $gray-900;
 		background: transparent;
@@ -61,7 +61,7 @@ $list-row-open-background: #f3f3f3;
 
 		&:hover,
 		&.is-hovered,
-		&:focus-within {
+		&:has(:focus-visible) {
 			background: $list-row-hover-background;
 			color: $gray-900;
 		}
@@ -73,7 +73,6 @@ $list-row-open-background: #f3f3f3;
 		&:has(.cortext-title-cell--is-open),
 		&:has(.cortext-title-cell--is-opening) {
 			background: $list-row-open-background;
-			box-shadow: inset 3px 0 0 var(--cortext-accent);
 		}
 	}
 
@@ -81,12 +80,21 @@ $list-row-open-background: #f3f3f3;
 		cursor: pointer;
 	}
 
-	.dataviews-view-list__item-wrapper {
+	.dataviews-view-list div[role="row"]:not(:hover):not(.is-hovered):not(:has(.cortext-title-cell--is-open)):not(:has(.cortext-title-cell--is-opening)):focus-within:not(:has(:focus-visible)) {
+		background: transparent;
+		color: $gray-900;
+	}
+
+	.dataviews-view-list div[role="row"] .dataviews-view-list__item-wrapper {
 		position: relative;
 		box-sizing: border-box;
 		width: 100%;
 		min-width: 0;
-		padding: $grid-unit-15 $grid-unit-20;
+		padding: $grid-unit-10 $grid-unit-20;
+	}
+
+	.dataviews-view-list div[role="row"]:has(.cortext-row-drag-handle) .dataviews-view-list__item-wrapper {
+		padding-left: var(--cortext-row-drag-content-offset);
 	}
 
 	.dataviews-view-list__item-wrapper > .components-h-stack {
@@ -100,19 +108,29 @@ $list-row-open-background: #f3f3f3;
 		z-index: 0;
 	}
 
+	.dataviews-view-list .dataviews-title-field .cortext-title-cell {
+		gap: $grid-unit-10;
+		min-height: $grid-unit-30;
+	}
+
 	.dataviews-view-list__media-wrapper {
-		width: $grid-unit-60;
-		height: $grid-unit-60;
+		display: block;
+		flex: 0 0 $grid-unit-30;
+		width: $grid-unit-30;
+		height: $grid-unit-30;
 		border-radius: 4px;
-		background: $white;
+		background: transparent;
+		overflow: hidden;
+	}
+
+	.dataviews-view-list__media-wrapper img {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
 	}
 
 	.dataviews-view-list__media-wrapper::after {
 		border-radius: 4px;
-	}
-
-	.dataviews-view-list__media-wrapper:not(:has(img)) {
-		display: none;
 	}
 
 	.dataviews-view-list__field-wrapper {
@@ -138,15 +156,17 @@ $list-row-open-background: #f3f3f3;
 		color: $gray-900;
 	}
 
-	.dataviews-view-list .dataviews-title-field .cortext-title-cell {
-		gap: $grid-unit-10;
-	}
-
 	.dataviews-view-list__item-actions {
 		position: relative;
 		z-index: 2;
 		flex: 0 0 auto;
 		margin-left: auto;
+	}
+
+	.dataviews-view-list div[role="row"] .dataviews-view-list__item-actions > :not(:last-child) {
+		flex: 0 0 0;
+		width: 0;
+		overflow: hidden;
 	}
 
 	.dataviews-view-list__item-actions .components-button {
@@ -211,7 +231,7 @@ $list-row-open-background: #f3f3f3;
 		max-width: 100%;
 		vertical-align: top;
 		min-height: $grid-unit-30;
-		padding: 0 $grid-unit-30 0 $grid-unit-05;
+		padding: 0 $grid-unit-05;
 		border-radius: 4px;
 		box-shadow: inset 0 0 0 1px transparent;
 		transition:
@@ -231,22 +251,7 @@ $list-row-open-background: #f3f3f3;
 	}
 
 	.dataviews-view-list__field-value .cortext-editable-cell__edit-indicator {
-		position: absolute;
-		top: 50%;
-		right: $grid-unit-05;
-		display: block;
-		color: $gray-700;
-		opacity: 0;
-		transform: translateY(-50%);
-		transition:
-			color 120ms ease,
-			opacity 120ms ease;
-	}
-
-	.dataviews-view-list__field-value .cortext-editable-cell__shell:hover .cortext-editable-cell__edit-indicator,
-	.dataviews-view-list__field-value .cortext-editable-cell__shell:focus-visible .cortext-editable-cell__edit-indicator {
-		color: $gray-900;
-		opacity: 1;
+		display: none;
 	}
 
 	.dataviews-view-list__field-value .cortext-editable-cell__display {
@@ -256,13 +261,12 @@ $list-row-open-background: #f3f3f3;
 	.dataviews-view-list .cortext-relation-ref,
 	.dataviews-view-list .cortext-relation-ref-more,
 	.dataviews-view-list .cortext-chip {
-		box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
-		box-shadow: inset 0 0 0 1px color-mix(in oklch, currentcolor 20%, transparent);
+		box-shadow: none;
 	}
 
 	.dataviews-view-list .cortext-chip--neutral {
 		background-color: $gray-100;
-		box-shadow: inset 0 0 0 1px $gray-300;
+		box-shadow: none;
 		color: $gray-700;
 	}
 
