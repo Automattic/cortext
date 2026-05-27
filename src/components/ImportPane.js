@@ -1,6 +1,6 @@
 import { __, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
-import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
+import { useCallback, useEffect, useState } from '@wordpress/element';
 import {
 	Button,
 	Card,
@@ -39,9 +39,6 @@ export default function ImportPane() {
 	// Per-collection import progress, keyed by Notion data-source id:
 	// { status: 'idle'|'running'|'done'|'error', processed: 0, message?, collection_id? }
 	const [ importJobs, setImportJobs ] = useState( {} );
-	// Mirrors which import is currently running so the Import button
-	// can disable itself without racing the state update.
-	const importsInFlightRef = useRef( new Set() );
 	const { invalidateResolution } = useDispatch( 'core' );
 
 	useEffect( () => {
@@ -52,7 +49,6 @@ export default function ImportPane() {
 		let cancelled = false;
 		setState( { status: 'loading' } );
 		setImportJobs( {} );
-		importsInFlightRef.current = new Set();
 
 		extractAll( key )
 			.then( ( payload ) => {
@@ -73,17 +69,13 @@ export default function ImportPane() {
 
 	// Run the server-side import for one collection. The client orchestrates
 	// the start → tick loop and surfaces progress per Notion data-source id.
-	// Multiple collections can be imported in parallel; double-clicks on the
-	// same row are guarded by `importsInFlightRef`.
+	// Multiple collections can be imported in parallel; the per-card button
+	// state (Importing… / Open / Try again) is the lock against re-entry.
 	const importCollection = useCallback(
 		( collection ) => {
 			if ( ! key || ! collection?.id ) {
 				return;
 			}
-			if ( importsInFlightRef.current.has( collection.id ) ) {
-				return;
-			}
-			importsInFlightRef.current.add( collection.id );
 
 			setImportJobs( ( prev ) => ( {
 				...prev,
@@ -162,9 +154,6 @@ export default function ImportPane() {
 							message: err?.message ?? String( err ),
 						},
 					} ) );
-				} )
-				.finally( () => {
-					importsInFlightRef.current.delete( collection.id );
 				} );
 		},
 		[ key, invalidateResolution ]
