@@ -163,7 +163,7 @@ $list-row-open-background: #f3f3f3;
 
 	.dataviews-view-list__fields {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+		grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
 		gap: $grid-unit-05 $grid-unit-30;
 		width: 100%;
 		margin-top: $grid-unit-05;
@@ -172,25 +172,8 @@ $list-row-open-background: #f3f3f3;
 	}
 
 	.dataviews-view-list__field {
-		display: grid;
-		grid-template-columns: minmax(84px, max-content) minmax(0, 1fr);
-		gap: $grid-unit-10;
-		align-items: baseline;
+		display: block;
 		min-width: 0;
-	}
-
-	.dataviews-view-list__field-label.components-visually-hidden {
-		position: static !important;
-		width: auto !important;
-		height: auto !important;
-		margin: 0 !important;
-		overflow: visible !important;
-		clip: auto !important;
-		clip-path: none !important;
-		white-space: normal !important;
-		color: $gray-700;
-		font-size: 12px;
-		line-height: 1.5;
 	}
 
 	.dataviews-view-list__field-value {
