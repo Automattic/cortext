@@ -391,8 +391,8 @@ export default function Edit() {
 						icon={ isVisible ? unseen : seen }
 						label={
 							isVisible
-								? __( 'Hide properties', 'cortext' )
-								: __( 'Show properties', 'cortext' )
+								? __( 'Collapse properties', 'cortext' )
+								: __( 'Expand properties', 'cortext' )
 						}
 						onClick={ onToggleVisible }
 					/>
@@ -426,10 +426,10 @@ export default function Edit() {
 		// title property from the count.
 		const visibleFieldCount = visiblePropertyFields.length;
 		const label = sprintf(
-			/* translators: %d: number of hidden property fields. */
+			/* translators: %d: number of collapsed properties. */
 			_n(
-				'%d property hidden',
-				'%d properties hidden',
+				'%d property collapsed',
+				'%d properties collapsed',
 				visibleFieldCount,
 				'cortext'
 			),

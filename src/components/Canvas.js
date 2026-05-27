@@ -86,8 +86,8 @@ function DocumentActions( {
 							size="compact"
 							label={
 								arePropertiesVisible
-									? __( 'Hide properties', 'cortext' )
-									: __( 'Show properties', 'cortext' )
+									? __( 'Collapse properties', 'cortext' )
+									: __( 'Expand properties', 'cortext' )
 							}
 							isPressed={ arePropertiesVisible }
 							onClick={ onTogglePropertiesVisible }

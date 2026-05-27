@@ -177,8 +177,8 @@ function DetailShell( {
 							icon={ arePropertiesVisible ? unseen : seen }
 							label={
 								arePropertiesVisible
-									? __( 'Hide properties', 'cortext' )
-									: __( 'Show properties', 'cortext' )
+									? __( 'Collapse properties', 'cortext' )
+									: __( 'Expand properties', 'cortext' )
 							}
 							onClick={ () =>
 								setArePropertiesVisible(
