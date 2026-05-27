@@ -170,10 +170,6 @@ export default function ImportPane() {
 						...( prev[ collection.id ] ?? {} ),
 						status: progress.status === 'done' ? 'done' : 'running',
 						processed: progress.processed ?? 0,
-						total:
-							progress.total ??
-							prev[ collection.id ]?.total ??
-							null,
 						collection_id:
 							progress.collection_id ??
 							prev[ collection.id ]?.collection_id,
@@ -191,10 +187,6 @@ export default function ImportPane() {
 							...( prev[ collection.id ] ?? {} ),
 							status: 'done',
 							processed: final.processed ?? 0,
-							total:
-								final.total ??
-								prev[ collection.id ]?.total ??
-								null,
 							collection_id:
 								final.collection_id ??
 								prev[ collection.id ]?.collection_id,
