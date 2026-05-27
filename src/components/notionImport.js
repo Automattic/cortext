@@ -1,15 +1,9 @@
-// Client-side extractor for the Notion → Cortext importer. Drives the
-// Notion API through `cortext/v1/notion/proxy`.
+// Client-side helpers for the Notion → Cortext importer.
 //
-// Two stages, deliberately split:
-//   - `extractAll` is cheap: one `/search` paginated call that returns
-//     every reachable data source with its schema inline. We use it to
-//     populate the Collections list as soon as the screen mounts.
-//   - `extractCollection` is the per-collection fetch: rows for one data
-//     source on demand, the moment a user picks it from the list.
-//
-// Splitting it this way keeps the upfront cost flat (independent of
-// workspace size), and pushes the rest of the I/O behind user intent.
+// `extractAll` populates the Collections list: one paginated `/search`
+// call that returns every reachable data source with its schema inline.
+// The actual row import runs server-side via `runImport`, which loops
+// the `/cortext/v1/notion/import/{start,tick}` routes.
 
 import apiFetch from '@wordpress/api-fetch';
 
@@ -72,38 +66,6 @@ function fetchAllDataSources( key ) {
 			filter: { value: 'data_source', property: 'object' },
 			page_size: 100,
 			...( cursor && { start_cursor: cursor } ),
-		} )
-	);
-}
-
-function fetchEntries( key, dataSourceId ) {
-	return paginate( ( cursor ) =>
-		notion( key, 'POST', `/data_sources/${ dataSourceId }/query`, {
-			...( cursor && { start_cursor: cursor } ),
-		} )
-	);
-}
-
-// Page block tree, for any future row-detail surface. Recursively walks
-// children (toggles, columns, callouts, …) so callers receive the full
-// document.
-export async function fetchPageBlocks( key, blockId ) {
-	const children = await paginate( ( cursor ) =>
-		notion(
-			key,
-			'GET',
-			`/blocks/${ blockId }/children?page_size=100${
-				cursor ? `&start_cursor=${ cursor }` : ''
-			}`
-		)
-	);
-	return Promise.all(
-		children.map( async ( block ) => {
-			if ( block.has_children ) {
-				const nested = await fetchPageBlocks( key, block.id );
-				return { ...block, children: nested };
-			}
-			return block;
 		} )
 	);
 }
@@ -179,73 +141,10 @@ function transformSchema( rawProperties ) {
 	);
 }
 
-function cellValue( prop ) {
-	switch ( prop.type ) {
-		case 'title':
-			return prop.title.map( ( t ) => t.plain_text ).join( '' );
-		case 'rich_text':
-			return prop.rich_text.map( ( t ) => t.plain_text ).join( '' );
-		case 'number':
-			return prop.number ?? null;
-		case 'select':
-			return prop.select?.name ?? null;
-		case 'multi_select':
-			return prop.multi_select.map( ( s ) => s.name );
-		case 'status':
-			return prop.status?.name ?? null;
-		case 'date':
-			return prop.date?.start ?? null;
-		case 'checkbox':
-			return prop.checkbox;
-		case 'url':
-			return prop.url ?? null;
-		case 'email':
-			return prop.email ?? null;
-		case 'phone_number':
-			return prop.phone_number ?? null;
-		case 'people':
-			return prop.people.map( ( p ) => ( {
-				id: p.id,
-				name: p.name ?? null,
-			} ) );
-		case 'relation':
-			// IDs only — the importer resolves them through the global
-			// entry-id map once every entry has been created.
-			return prop.relation.map( ( r ) => r.id );
-		case 'formula':
-			return prop.formula[ prop.formula.type ] ?? null;
-		case 'rollup': {
-			const r = prop.rollup;
-			if ( r.type === 'array' ) {
-				return r.array;
-			}
-			if ( r.type === 'number' ) {
-				return r.number ?? null;
-			}
-			return null;
-		}
-		default:
-			return null;
-	}
-}
-
-function transformEntry( raw ) {
-	const values = {};
-	let title = '';
-	for ( const prop of Object.values( raw.properties ) ) {
-		const propId = decodeURIComponent( prop.id );
-		values[ propId ] = cellValue( prop );
-		if ( prop.type === 'title' ) {
-			title = values[ propId ];
-		}
-	}
-	return { id: raw.id, title, values };
-}
-
 /**
  * Cheap upfront pass: one paginated `/search` returns every data source
- * the integration can reach, with schema inline. No entries, no views —
- * those come later via `extractCollection`.
+ * the integration can reach, with schema inline. Used to populate the
+ * collections list — row import runs server-side, see `runImport`.
  *
  * @param {string} key Notion integration key.
  * @return {Promise<{extracted_at: string, collections: Array}>} The
@@ -278,7 +177,7 @@ export async function extractAll( key ) {
 				}
 			}
 		}
-		const title = rawDb.title?.[ 0 ]?.plain_text;
+		const title = rawDb.title?.[ 0 ]?.plain_text ?? '';
 		return {
 			id: rawDb.id,
 			slug: slugify( title ),
@@ -292,19 +191,6 @@ export async function extractAll( key ) {
 		extracted_at: new Date().toISOString(),
 		collections,
 	};
-}
-
-/**
- * On-demand: fetch the rows for one collection. Called when the user
- * picks a collection from the list.
- *
- * @param {string} key          Notion integration key.
- * @param {string} dataSourceId The collection's data source id.
- * @return {Promise<{entries: Array}>} The transformed rows.
- */
-export async function extractCollection( key, dataSourceId ) {
-	const rawEntries = await fetchEntries( key, dataSourceId );
-	return { entries: rawEntries.map( transformEntry ) };
 }
 
 // ---------------------------------------------------------------------

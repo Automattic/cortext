@@ -21,8 +21,7 @@ import {
 import { useNavigate } from '@tanstack/react-router';
 
 import './ImportPane.scss';
-import ImportEntriesTable from './ImportEntriesTable';
-import { extractAll, extractCollection, runImport } from './notionImport';
+import { extractAll, runImport } from './notionImport';
 import { COLLECTION_QUERY, FULL_PAGE_COLLECTION_QUERY } from '../collections';
 import { computeCollectionUri } from '../router/useResolveEntity';
 
@@ -37,8 +36,6 @@ export default function ImportPane() {
 	const [ isChangingKey, setIsChangingKey ] = useState( false );
 	const [ retryToken, setRetryToken ] = useState( 0 );
 	const [ state, setState ] = useState( { status: 'pending' } );
-	const [ selectedId, setSelectedId ] = useState( null );
-	const [ collectionData, setCollectionData ] = useState( {} );
 	// Per-collection import progress, keyed by Notion data-source id:
 	// { status: 'idle'|'running'|'done'|'error', processed: 0, message?, collection_id? }
 	const [ importJobs, setImportJobs ] = useState( {} );
@@ -46,9 +43,6 @@ export default function ImportPane() {
 	// can disable itself without racing the state update.
 	const importsInFlightRef = useRef( new Set() );
 	const { invalidateResolution } = useDispatch( 'core' );
-	// Tracks which collection ids have an in-flight fetch so a fast
-	// double-click on the same link doesn't kick off two parallel loads.
-	const inflightRef = useRef( new Set() );
 
 	useEffect( () => {
 		if ( ! key ) {
@@ -57,10 +51,7 @@ export default function ImportPane() {
 		}
 		let cancelled = false;
 		setState( { status: 'loading' } );
-		setSelectedId( null );
-		setCollectionData( {} );
 		setImportJobs( {} );
-		inflightRef.current = new Set();
 		importsInFlightRef.current = new Set();
 
 		extractAll( key )
@@ -79,41 +70,6 @@ export default function ImportPane() {
 			cancelled = true;
 		};
 	}, [ key, retryToken ] );
-
-	const loadCollection = useCallback(
-		( id ) => {
-			if ( ! key || ! id || inflightRef.current.has( id ) ) {
-				return;
-			}
-			inflightRef.current.add( id );
-			setCollectionData( ( prev ) => ( {
-				...prev,
-				[ id ]: { status: 'loading' },
-			} ) );
-			extractCollection( key, id )
-				.then( ( { entries } ) => {
-					setCollectionData( ( prev ) => ( {
-						...prev,
-						[ id ]: { status: 'loaded', entries },
-					} ) );
-				} )
-				.catch( ( err ) => {
-					setCollectionData( ( prev ) => ( {
-						...prev,
-						[ id ]: { status: 'error', message: err.message },
-					} ) );
-				} );
-		},
-		[ key ]
-	);
-
-	const selectCollection = useCallback(
-		( id ) => {
-			setSelectedId( id );
-			loadCollection( id );
-		},
-		[ loadCollection ]
-	);
 
 	// Run the server-side import for one collection. The client orchestrates
 	// the start → tick loop and surfaces progress per Notion data-source id.
@@ -251,11 +207,8 @@ export default function ImportPane() {
 					<ImportBody
 						state={ state }
 						onRetry={ handleRetry }
-						selectedId={ selectedId }
-						onSelect={ selectCollection }
 						onImport={ importCollection }
 						importJobs={ importJobs }
-						collectionData={ collectionData }
 					/>
 				</>
 			) }
@@ -263,15 +216,7 @@ export default function ImportPane() {
 	);
 }
 
-function ImportBody( {
-	state,
-	onRetry,
-	selectedId,
-	onSelect,
-	onImport,
-	importJobs,
-	collectionData,
-} ) {
+function ImportBody( { state, onRetry, onImport, importJobs } ) {
 	if ( state.status === 'pending' ) {
 		return <Spinner />;
 	}
@@ -299,10 +244,6 @@ function ImportBody( {
 	}
 
 	const { collections } = state.payload;
-	const selected = selectedId
-		? collections.find( ( c ) => c.id === selectedId ) ?? null
-		: null;
-	const selectedData = selectedId ? collectionData[ selectedId ] : null;
 
 	return (
 		<VStack spacing={ 6 }>
@@ -319,32 +260,15 @@ function ImportBody( {
 				</Heading>
 				<CollectionsList
 					collections={ collections }
-					selectedId={ selectedId }
-					onSelect={ onSelect }
 					onImport={ onImport }
 					importJobs={ importJobs }
 				/>
 			</section>
-			{ selected && (
-				<section className="cortext-import-pane__section">
-					<Heading level={ 3 }>{ selected.title }</Heading>
-					<CollectionPanel
-						collection={ selected }
-						data={ selectedData }
-					/>
-				</section>
-			) }
 		</VStack>
 	);
 }
 
-function CollectionsList( {
-	collections,
-	selectedId,
-	onSelect,
-	onImport,
-	importJobs,
-} ) {
+function CollectionsList( { collections, onImport, importJobs } ) {
 	if ( collections.length === 0 ) {
 		return (
 			<Text variant="muted">
@@ -359,8 +283,6 @@ function CollectionsList( {
 					key={ c.id }
 					collection={ c }
 					job={ importJobs?.[ c.id ] }
-					isSelected={ selectedId === c.id }
-					onSelect={ onSelect }
 					onImport={ onImport }
 				/>
 			) ) }
@@ -370,7 +292,7 @@ function CollectionsList( {
 
 // One row in the collections list — title + status + action. Renders as
 // a card; error state adds an extra line below for the message.
-function CollectionCard( { collection, job, isSelected, onSelect, onImport } ) {
+function CollectionCard( { collection, job, onImport } ) {
 	const navigate = useNavigate();
 	const status = job?.status ?? 'idle';
 	const processed = job?.processed ?? 0;
@@ -466,15 +388,10 @@ function CollectionCard( { collection, job, isSelected, onSelect, onImport } ) {
 				<CardBody>
 					<div className="cortext-import-collections__card-row">
 						<HStack>
-							<Button
-								className="cortext-import-collections__card-title"
-								variant="link"
-								onClick={ () => onSelect( collection.id ) }
-								aria-pressed={ isSelected }
-							>
+							<Text className="cortext-import-collections__card-title">
 								{ collection.title ||
 									__( '(untitled)', 'cortext' ) }
-							</Button>
+							</Text>
 							<HStack expanded={ false }>
 								{ statusLine && (
 									<Text
@@ -505,35 +422,6 @@ function CollectionCard( { collection, job, isSelected, onSelect, onImport } ) {
 				</CardBody>
 			</Card>
 		</li>
-	);
-}
-
-function CollectionPanel( { collection, data } ) {
-	if ( ! data || data.status === 'loading' ) {
-		return (
-			<HStack justify="flex-start" expanded={ false }>
-				<Spinner />
-				<Text variant="muted">
-					{ __( 'Loading rows…', 'cortext' ) }
-				</Text>
-			</HStack>
-		);
-	}
-	if ( data.status === 'error' ) {
-		return (
-			<Notice status="error" isDismissible={ false }>
-				{ data.message }
-			</Notice>
-		);
-	}
-	return (
-		<ImportEntriesTable
-			// Force a fresh table per collection so initial selection
-			// (and any other state) resets when the user switches.
-			key={ collection.id }
-			collection={ collection }
-			entries={ data.entries }
-		/>
 	);
 }
 
