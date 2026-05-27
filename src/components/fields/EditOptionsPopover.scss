@@ -7,6 +7,12 @@
 	padding: $grid-unit-15;
 	width: 320px;
 
+	&--compact {
+		gap: $grid-unit-05;
+		width: 240px;
+		padding: $grid-unit-10;
+	}
+
 	&__header {
 		font-size: 11px;
 		font-weight: 600;
@@ -130,6 +136,16 @@
 		min-height: $grid-unit-30 - 4px;
 		appearance: none;
 
+		.cortext-edit-options-popover--compact & {
+			flex-basis: auto;
+			width: 100%;
+			min-width: 0;
+			min-height: $grid-unit-30 - 2px;
+			padding: 0;
+			font-size: 12px;
+			line-height: 1.4;
+		}
+
 		&:focus,
 		&:focus-visible {
 			border: 0;
@@ -140,6 +156,23 @@
 		&::placeholder {
 			color: $gray-700;
 		}
+	}
+
+	&--compact &__token-input {
+		flex-wrap: nowrap;
+		min-height: $grid-unit-30;
+		padding: 0 $grid-unit-10;
+		border-color: $gray-300;
+		border-radius: 4px;
+
+		&:focus-within {
+			border-color: $gray-400;
+			box-shadow: none;
+		}
+	}
+
+	&--compact &__row {
+		padding: 1px;
 	}
 
 	&__create {

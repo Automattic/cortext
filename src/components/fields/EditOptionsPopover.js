@@ -175,6 +175,7 @@ export default function EditOptionsPopover( {
 	fieldType,
 	initialOptions,
 	value,
+	variant = 'default',
 	onPick,
 	onOptionsSaved,
 	onRowsChanged,
@@ -218,6 +219,7 @@ export default function EditOptionsPopover( {
 
 	const isPickMode = typeof onPick === 'function';
 	const isMultiselect = fieldType === 'multiselect';
+	const isCompact = variant === 'compact';
 
 	useEffect( () => {
 		if ( ! openMenuValue || typeof onRequestClose !== 'function' ) {
@@ -417,6 +419,9 @@ export default function EditOptionsPopover( {
 	const inputPrompt = isPickMode
 		? __( 'Search or create option', 'cortext' )
 		: __( 'Add option', 'cortext' );
+	const inputPlaceholder = isCompact
+		? __( 'Search options', 'cortext' )
+		: inputPrompt;
 
 	const handleCreateAndPick = async () => {
 		const created = await handleAdd();
@@ -430,7 +435,13 @@ export default function EditOptionsPopover( {
 	};
 
 	return (
-		<div className="cortext-edit-options-popover" ref={ popoverRef }>
+		<div
+			className={
+				'cortext-edit-options-popover' +
+				( isCompact ? ' cortext-edit-options-popover--compact' : '' )
+			}
+			ref={ popoverRef }
+		>
 			{ update.error ? (
 				<Notice status="error" isDismissible={ false }>
 					{ update.error?.message ||
@@ -440,7 +451,9 @@ export default function EditOptionsPopover( {
 			<div
 				className={
 					'cortext-edit-options-popover__token-input' +
-					( selectedOptions.length === 0 ? ' is-empty' : '' )
+					( isCompact || selectedOptions.length === 0
+						? ' is-empty'
+						: '' )
 				}
 				onPointerDown={ ( event ) => {
 					if ( event.target === event.currentTarget ) {
@@ -448,21 +461,24 @@ export default function EditOptionsPopover( {
 					}
 				} }
 			>
-				{ selectedOptions.map( ( opt ) => (
-					<Chip
-						key={ opt.value }
-						label={ opt.label }
-						color={ opt.color }
-						onRemove={ () => handleRemoveSelected( opt.value ) }
-					/>
-				) ) }
+				{ ! isCompact &&
+					selectedOptions.map( ( opt ) => (
+						<Chip
+							key={ opt.value }
+							label={ opt.label }
+							color={ opt.color }
+							onRemove={ () => handleRemoveSelected( opt.value ) }
+						/>
+					) ) }
 				<input
 					ref={ searchInputRef }
 					type="text"
 					className="cortext-edit-options-popover__token-input-field"
 					value={ search }
 					placeholder={
-						selectedOptions.length > 0 ? '' : inputPrompt
+						! isCompact && selectedOptions.length > 0
+							? ''
+							: inputPlaceholder
 					}
 					aria-label={ inputPrompt }
 					onChange={ ( event ) => setSearch( event.target.value ) }
@@ -477,6 +493,7 @@ export default function EditOptionsPopover( {
 							return;
 						}
 						if (
+							! isCompact &&
 							event.key === 'Backspace' &&
 							search === '' &&
 							selectedOptions.length > 0

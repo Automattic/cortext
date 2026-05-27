@@ -303,12 +303,28 @@ $list-row-open-background: #f3f3f3;
 	.dataviews-view-list__field-value .cortext-editable-cell__overlay input[type="url"],
 	.dataviews-view-list__field-value .cortext-editable-cell__overlay input[type="number"] {
 		width: 100%;
+		box-sizing: border-box;
 		height: $grid-unit-30;
 		min-height: $grid-unit-30;
 		min-width: 0;
-		padding-block: 0;
 		font-size: inherit;
 		line-height: 1.4;
+	}
+
+	.dataviews-view-list__field-value .cortext-editable-cell__compact-input {
+		border: $border-width solid var(--cortext-accent);
+		border-radius: 2px;
+		background: $white;
+		box-shadow: none;
+		color: $gray-900;
+		font: inherit;
+		padding: 0 $grid-unit-05;
+
+		&:focus {
+			border-color: var(--cortext-accent);
+			box-shadow: none;
+			outline: 0;
+		}
 	}
 
 	.dataviews-view-list__field-value .cortext-editable-cell__overlay .components-dropdown {

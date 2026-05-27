@@ -581,10 +581,18 @@ export default function CollectionDataViews( {
 		[ collectionId, refresh, touchRecent ]
 	);
 
+	let dataViewLayoutType = 'table';
+	if ( isGridLayout ) {
+		dataViewLayoutType = 'grid';
+	}
+	if ( isListLayout ) {
+		dataViewLayoutType = 'list';
+	}
 	const mutationContext = useMemo(
 		() => ( {
 			saveRowField,
 			canEditCells: isTableLayout || isGridLayout || isListLayout,
+			layoutType: dataViewLayoutType,
 			editRequest,
 			clearEditRequest,
 			requestNext,
@@ -596,6 +604,7 @@ export default function CollectionDataViews( {
 		} ),
 		[
 			saveRowField,
+			dataViewLayoutType,
 			isGridLayout,
 			isListLayout,
 			isTableLayout,

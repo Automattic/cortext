@@ -51,6 +51,7 @@ function siteLocale() {
 export const RowMutationContext = createContext( {
 	saveRowField: null,
 	canEditCells: true,
+	layoutType: 'table',
 	// `{ rowId, fieldId }` of the cell that should pop into edit mode.
 	// Set by the parent when a new row is created (open the title) or
 	// when Tab navigation hops between cells.
@@ -579,6 +580,7 @@ function TextLikeEditor( {
 	onTab,
 	shouldAutoFocus,
 	label,
+	compact = false,
 } ) {
 	const [ local, setLocal ] = useState( value ?? '' );
 	const inputRef = useRef( null );
@@ -616,6 +618,22 @@ function TextLikeEditor( {
 	};
 
 	if ( type === 'number' ) {
+		if ( compact ) {
+			return (
+				<input
+					ref={ inputRef }
+					className="cortext-editable-cell__compact-input"
+					type="text"
+					inputMode="decimal"
+					value={ local ?? '' }
+					onChange={ ( event ) => setLocal( event.target.value ) }
+					onBlur={ commit }
+					onKeyDown={ handleKeyDown }
+					aria-label={ label }
+				/>
+			);
+		}
+
 		// `spinControls="none"` drops both NumberControl's custom spin
 		// buttons (the default "custom" mode renders them as a suffix
 		// inside the input, which widens the cell on focus) and the
@@ -631,6 +649,21 @@ function TextLikeEditor( {
 				label={ label }
 				hideLabelFromVision
 				__next40pxDefaultSize
+			/>
+		);
+	}
+
+	if ( compact ) {
+		return (
+			<input
+				ref={ inputRef }
+				className="cortext-editable-cell__compact-input"
+				value={ local ?? '' }
+				onChange={ ( event ) => setLocal( event.target.value ) }
+				onBlur={ commit }
+				onKeyDown={ handleKeyDown }
+				type={ inputTypeFor( type ) }
+				aria-label={ label }
 			/>
 		);
 	}
@@ -674,6 +707,7 @@ export function SelectEditor( {
 	defaultOpen = true,
 	triggerClassName = 'cortext-select-edit__toggle',
 	placeholder = __( 'Select…', 'cortext' ),
+	popoverVariant = 'default',
 } ) {
 	const [ anchor, setAnchor ] = useState( null );
 	const [ isOpen, setIsOpen ] = useState( defaultOpen );
@@ -735,6 +769,7 @@ export function SelectEditor( {
 						fieldType="select"
 						initialOptions={ items }
 						value={ value }
+						variant={ popoverVariant }
 						onOptionsSaved={ onOptionsSaved }
 						onRowsChanged={ onRowsChanged }
 						onRequestClose={ onRequestClose }
@@ -817,6 +852,7 @@ export default function EditableCell( {
 		editRequest,
 		clearEditRequest,
 		requestNext,
+		layoutType,
 		optionOverrides,
 		updateFieldOptions,
 		formatOverrides,
@@ -841,6 +877,7 @@ export default function EditableCell( {
 		format: effectiveFormat,
 		relation,
 	} );
+	const isListLayout = layoutType === 'list';
 
 	// Open this cell when the parent targets it via editRequest (new-row
 	// title auto-open, Tab navigation, etc.), then clear the request so
@@ -971,6 +1008,7 @@ export default function EditableCell( {
 					onRequestClose={ closeEditor }
 					onCancel={ closeEditor }
 					label={ label }
+					popoverVariant={ isListLayout ? 'compact' : 'default' }
 				/>
 			);
 		} else if ( fieldType === 'relation' ) {
@@ -1005,6 +1043,7 @@ export default function EditableCell( {
 						requestNext?.( rowId, fieldId, direction )
 					}
 					label={ label }
+					popoverVariant={ isListLayout ? 'compact' : 'default' }
 				/>
 			);
 		} else if ( fieldType === 'date' || fieldType === 'datetime' ) {
@@ -1033,6 +1072,7 @@ export default function EditableCell( {
 					}
 					shouldAutoFocus
 					label={ label }
+					compact={ isListLayout }
 				/>
 			);
 		}
