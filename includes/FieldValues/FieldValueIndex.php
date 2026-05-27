@@ -1075,8 +1075,8 @@ final class FieldValueIndex {
 			return array();
 		}
 
-		$key         = Relations::meta_key( $field_id );
 		$field_type  = FieldTypeRegistry::effective_type_for_field( $field_id, $raw_field_type );
+		$key         = Relations::meta_key( $field_id );
 		$is_multiple = 'multiselect' === $raw_field_type || ( 'relation' === $raw_field_type && Relations::relation_is_multiple( $field_id ) );
 		$stored      = get_post_meta( $row_id, $key, ! $is_multiple );
 		$post_status = (string) get_post_status( $row_id );
