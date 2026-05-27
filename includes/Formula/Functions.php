@@ -81,7 +81,7 @@ final class Functions {
 				'type'  => 'text',
 			),
 			'length' => array(
-				'value' => strlen( self::to_text( $args[0] ?? array( 'value' => '' ) ) ),
+				'value' => mb_strlen( self::to_text( $args[0] ?? array( 'value' => '' ) ), 'UTF-8' ),
 				'type'  => 'number',
 			),
 			'upper' => array(
@@ -348,7 +348,7 @@ final class Functions {
 				'MM'   => 'm',
 				'DD'   => 'd',
 				'mm'   => 'i',
-				'h'    => 'G',
+				'h'    => 'g',
 				'A'    => 'A',
 				'D'    => 'j',
 				'Y'    => 'Y',

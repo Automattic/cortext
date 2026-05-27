@@ -154,11 +154,39 @@ final class Evaluator {
 	 * @return array{value:mixed,type:string}
 	 */
 	private function evaluate_call( array $node, WP_Post $row ): array {
+		if ( 'if' === (string) ( $node['name'] ?? '' ) ) {
+			return $this->evaluate_if_call( $node, $row );
+		}
+
 		$args = array_map(
 			fn( array $arg ): array => $this->evaluate_node( $arg, $row ),
 			(array) $node['args']
 		);
 		return Functions::evaluate( (string) $node['name'], $args );
+	}
+
+	/**
+	 * @param array<string,mixed> $node
+	 * @return array{value:mixed,type:string}
+	 */
+	private function evaluate_if_call( array $node, WP_Post $row ): array {
+		$args = array_values( (array) ( $node['args'] ?? array() ) );
+		if ( 3 !== count( $args ) ) {
+			throw new FormulaEvalError(
+				'cortext_formula_invalid_arity',
+				__( 'if() needs condition, then, and else values.', 'cortext' )
+			);
+		}
+
+		$condition = $this->evaluate_node( (array) $args[0], $row );
+		$branch    = ! empty( $condition['value'] ) ? $args[1] : $args[2];
+		$result    = $this->evaluate_node( (array) $branch, $row );
+		$type      = (string) ( $node['type'] ?? $result['type'] );
+
+		return array(
+			'value' => $result['value'] ?? null,
+			'type'  => '' !== $type ? $type : (string) $result['type'],
+		);
 	}
 
 	/**
