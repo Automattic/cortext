@@ -11,6 +11,7 @@ namespace Cortext\FieldValues;
 
 defined( 'ABSPATH' ) || exit;
 
+use Cortext\Fields\FieldTypeRegistry;
 use Cortext\PostType\Document;
 use Cortext\PostType\Field;
 use Cortext\Taxonomy\TraitTaxonomy;
@@ -1069,13 +1070,14 @@ final class FieldValueIndex {
 	}
 
 	private function index_rows_for_row_field( int $row_id, int $field_id, int $collection_id ): array {
-		$field_type = (string) get_post_meta( $field_id, 'type', true );
-		if ( '' === $field_type || 'rollup' === $field_type ) {
+		$raw_field_type = (string) get_post_meta( $field_id, 'type', true );
+		if ( '' === $raw_field_type || 'rollup' === $raw_field_type ) {
 			return array();
 		}
 
 		$key         = Relations::meta_key( $field_id );
-		$is_multiple = 'multiselect' === $field_type || ( 'relation' === $field_type && Relations::relation_is_multiple( $field_id ) );
+		$field_type  = FieldTypeRegistry::effective_type_for_field( $field_id, $raw_field_type );
+		$is_multiple = 'multiselect' === $raw_field_type || ( 'relation' === $raw_field_type && Relations::relation_is_multiple( $field_id ) );
 		$stored      = get_post_meta( $row_id, $key, ! $is_multiple );
 		$post_status = (string) get_post_status( $row_id );
 		$rows        = array();

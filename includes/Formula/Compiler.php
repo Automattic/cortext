@@ -14,6 +14,7 @@ namespace Cortext\Formula;
 // phpcs:disable WordPress.Security.EscapeOutput.ExceptionNotEscaped
 
 use Cortext\Fields\FieldTypeRegistry;
+use Cortext\PostType\Document;
 use Cortext\PostType\Field;
 use Cortext\Relations;
 use WP_Post;
@@ -67,7 +68,7 @@ final class Compiler {
 	 */
 	private function collection_field_map( int $collection_id, array $formula_overrides = array() ): array {
 		$map = array();
-		foreach ( get_post_meta( $collection_id, 'fields', false ) as $raw_field_id ) {
+		foreach ( Document::collection_field_ids( $collection_id ) as $raw_field_id ) {
 			$field_id = (int) $raw_field_id;
 			$field    = get_post( $field_id );
 			if ( ! $field instanceof WP_Post || Field::POST_TYPE !== $field->post_type ) {
@@ -406,7 +407,7 @@ final class Compiler {
 		}
 
 		$graph = array( $self_field_id => $deps );
-		foreach ( get_post_meta( $collection_id, 'fields', false ) as $raw_field_id ) {
+		foreach ( Document::collection_field_ids( $collection_id ) as $raw_field_id ) {
 			$field_id = (int) $raw_field_id;
 			if ( $field_id < 1 || $field_id === $self_field_id || 'formula' !== (string) get_post_meta( $field_id, 'type', true ) ) {
 				continue;

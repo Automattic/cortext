@@ -12,9 +12,9 @@ namespace Cortext\Formula;
 // phpcs:disable Generic.Commenting.DocComment.MissingShort
 // phpcs:disable Squiz.Commenting.FunctionComment.MissingParamTag,Squiz.Commenting.FunctionComment.ParamNameNoMatch,Squiz.Commenting.FunctionComment.IncorrectTypeHint,Squiz.Commenting.FunctionCommentThrowTag.Missing,Squiz.Commenting.FunctionComment.SpacingAfterParamType
 
-use Cortext\PostType\Collection;
-use Cortext\PostType\CollectionEntries;
+use Cortext\PostType\Document;
 use Cortext\Relations;
+use Cortext\Taxonomy\TraitTaxonomy;
 use WP_Post;
 
 final class Materializer {
@@ -33,7 +33,7 @@ final class Materializer {
 	}
 
 	public static function collection_has_volatile_formula( int $collection_id ): bool {
-		foreach ( get_post_meta( $collection_id, 'fields', false ) as $raw_field_id ) {
+		foreach ( Document::collection_field_ids( $collection_id ) as $raw_field_id ) {
 			$field_id = (int) $raw_field_id;
 			if (
 				$field_id > 0 &&
@@ -93,7 +93,7 @@ final class Materializer {
 	 */
 	private static function formula_field_ids_in_order( int $collection_id ): array {
 		$field_ids = array();
-		foreach ( get_post_meta( $collection_id, 'fields', false ) as $raw_field_id ) {
+		foreach ( Document::collection_field_ids( $collection_id ) as $raw_field_id ) {
 			$field_id = (int) $raw_field_id;
 			if ( $field_id > 0 && 'formula' === (string) get_post_meta( $field_id, 'type', true ) ) {
 				$field_ids[] = $field_id;
@@ -134,15 +134,11 @@ final class Materializer {
 	 */
 	private static function row_ids_for_collection( int $collection_id ): array {
 		$collection = get_post( $collection_id );
-		if ( ! $collection instanceof WP_Post || Collection::POST_TYPE !== $collection->post_type ) {
+		if ( ! $collection instanceof WP_Post || ! Document::is_collection_post( $collection ) ) {
 			return array();
 		}
-		$slug = (string) get_post_meta( $collection_id, 'slug', true );
-		if ( '' === $slug ) {
-			return array();
-		}
-		$post_type = CollectionEntries::CPT_PREFIX . $slug;
-		if ( ! post_type_exists( $post_type ) ) {
+		$term_id = TraitTaxonomy::term_id_for_trait( $collection_id );
+		if ( $term_id < 1 ) {
 			return array();
 		}
 		if ( self::is_wordbless_active() ) {
@@ -150,10 +146,13 @@ final class Materializer {
 			foreach ( \WorDBless\Posts::init()->posts as $post ) {
 				if (
 					is_object( $post ) &&
-					$post_type === $post->post_type &&
+					Document::POST_TYPE === $post->post_type &&
 					in_array( $post->post_status, array( 'draft', 'pending', 'private', 'publish', 'future', 'inherit' ), true )
 				) {
-					$ids[] = (int) $post->ID;
+					$term_ids = wp_get_object_terms( (int) $post->ID, TraitTaxonomy::TAXONOMY, array( 'fields' => 'ids' ) );
+					if ( is_array( $term_ids ) && in_array( $term_id, array_map( 'intval', $term_ids ), true ) ) {
+						$ids[] = (int) $post->ID;
+					}
 				}
 			}
 			return $ids;
@@ -162,10 +161,17 @@ final class Materializer {
 			'intval',
 			get_posts(
 				array(
-					'post_type'      => $post_type,
+					'post_type'      => Document::POST_TYPE,
 					'post_status'    => array( 'draft', 'pending', 'private', 'publish', 'future', 'inherit' ),
 					'posts_per_page' => -1,
 					'fields'         => 'ids',
+					'tax_query'      => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
+						array(
+							'taxonomy' => TraitTaxonomy::TAXONOMY,
+							'field'    => 'term_id',
+							'terms'    => array( $term_id ),
+						),
+					),
 				)
 			)
 		);

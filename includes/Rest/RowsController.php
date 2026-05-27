@@ -22,6 +22,7 @@ defined( 'ABSPATH' ) || exit;
 use Cortext\Fields\FieldDefaults;
 use Cortext\Fields\FieldTypeConverter;
 use Cortext\FieldValues\FieldValueReadQuery;
+use Cortext\Formula\Materializer as FormulaMaterializer;
 use Cortext\PostType\Document;
 use Cortext\Relations;
 use Cortext\Taxonomy\TraitTaxonomy;
@@ -226,6 +227,10 @@ final class RowsController {
 		$where_parts  = array_values( array_filter( array( $filter_sql['where'], $search_where ) ) );
 		$where_sql    = count( $where_parts ) > 0 ? '( ' . implode( ' AND ', $where_parts ) . ' )' : '';
 
+		if ( $this->query_needs_volatile_formula_materialization( $collection_id, $request ) ) {
+			FormulaMaterializer::recompute_collection( $collection_id );
+		}
+
 		// Keep row-formatting metadata local to this rows response. Passing the
 		// context through the helpers avoids stale state in CLI and test runs.
 		$ctx              = new RowFormatContext();
@@ -266,6 +271,8 @@ final class RowsController {
 			$total       = (int) $query->found_posts;
 			$total_pages = (int) $query->max_num_pages;
 		}
+
+		FormulaMaterializer::recompute_posts( $collection_id, $posts );
 
 		// Prime the user object cache once before mapping rows so per-row
 		// display name lookups in format_row hit the cache instead of
@@ -963,6 +970,8 @@ final class RowsController {
 
 		$field_ids = Document::collection_field_ids( $collection->ID );
 		if ( count( $field_ids ) > 0 ) {
+			FormulaMaterializer::recompute_row( $collection->ID, $post->ID );
+
 			// Keep hydrated values out of `meta`. Those keys are registered as
 			// strings; if autosave sends hydrated objects back, REST rejects the
 			// save with 400. `cortext_hydrated_meta` is read-only display data.
@@ -975,6 +984,13 @@ final class RowsController {
 					$hydrated[ $key ] = $this->format_relation_value( $post->ID, $field_id );
 				} elseif ( 'rollup' === $field_type ) {
 					$hydrated[ $key ] = $this->compute_rollup_value( $post->ID, $field_id );
+				} elseif ( 'formula' === $field_type ) {
+					$hydrated[ $key ] = $this->format_typed_value(
+						$post->ID,
+						$field_id,
+						$this->formula_result_type_for( $field_id ),
+						false
+					);
 				}
 			}
 
@@ -1031,6 +1047,13 @@ final class RowsController {
 				$meta[ $key ] = $this->format_relation_value( $post->ID, $field_id, $ctx );
 			} elseif ( 'rollup' === $field_type ) {
 				$meta[ $key ] = $this->compute_rollup_value( $post->ID, $field_id, $ctx );
+			} elseif ( 'formula' === $field_type ) {
+				$meta[ $key ] = $this->format_typed_value(
+					$post->ID,
+					$field_id,
+					$this->formula_result_type_for( $field_id ),
+					false
+				);
 			} else {
 				$meta[ $key ] = $this->format_typed_value(
 					$post->ID,
@@ -1216,6 +1239,54 @@ final class RowsController {
 		return $stored;
 	}
 
+	private function formula_result_type_for( int $field_id ): string {
+		$type = (string) get_post_meta( $field_id, 'formula_result_type', true );
+		return in_array( $type, array( 'text', 'number', 'date', 'datetime', 'checkbox' ), true ) ? $type : 'text';
+	}
+
+	private function query_needs_volatile_formula_materialization( int $collection_id, WP_REST_Request $request ): bool {
+		if ( ! FormulaMaterializer::collection_has_volatile_formula( $collection_id ) ) {
+			return false;
+		}
+
+		$sort = $request->get_param( 'sort' );
+		if ( is_array( $sort ) && $this->field_key_is_volatile_formula( (string) ( $sort['field'] ?? '' ) ) ) {
+			return true;
+		}
+
+		return $this->filters_include_volatile_formula( $request->get_param( 'filters' ) );
+	}
+
+	private function filters_include_volatile_formula( mixed $filters ): bool {
+		if ( ! is_array( $filters ) ) {
+			return false;
+		}
+
+		if ( isset( $filters['field'] ) && $this->field_key_is_volatile_formula( (string) $filters['field'] ) ) {
+			return true;
+		}
+
+		foreach ( $filters as $filter ) {
+			if ( is_array( $filter ) && $this->filters_include_volatile_formula( $filter ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private function field_key_is_volatile_formula( string $field_key ): bool {
+		if ( ! str_starts_with( $field_key, 'field-' ) ) {
+			return false;
+		}
+
+		$field_id = $this->field_id_from_key( $field_key );
+		return (
+			$field_id > 0 &&
+			'formula' === (string) get_post_meta( $field_id, 'type', true ) &&
+			'1' === (string) get_post_meta( $field_id, 'formula_is_volatile', true )
+		);
+	}
+
 	/**
 	 * Reads valid values for a select or multiselect field.
 	 *
@@ -1328,7 +1399,7 @@ final class RowsController {
 	 * Builds lightweight field definitions for the response.
 	 *
 	 * @param int[] $field_ids Field post IDs.
-	 * @return array<int, array{id: int, label: string, type: string, description: string, options: string|null}>
+	 * @return array<int, array{id: int, label: string, type: string, description: string, options: string|null, formulaResultType: ?string}>
 	 */
 	private function field_definitions( array $field_ids ): array {
 		$definitions = array();
@@ -1341,11 +1412,12 @@ final class RowsController {
 			$options = get_post_meta( $field_id, 'options', true );
 
 			$definitions[] = array(
-				'id'          => $field_id,
-				'label'       => $field->post_title,
-				'type'        => $type,
-				'description' => (string) get_post_meta( $field_id, 'description', true ),
-				'options'     => empty( $options ) ? null : $options,
+				'id'                => $field_id,
+				'label'             => $field->post_title,
+				'type'              => $type,
+				'description'       => (string) get_post_meta( $field_id, 'description', true ),
+				'options'           => empty( $options ) ? null : $options,
+				'formulaResultType' => 'formula' === $type ? $this->formula_result_type_for( $field_id ) : null,
 			);
 		}
 		return $definitions;

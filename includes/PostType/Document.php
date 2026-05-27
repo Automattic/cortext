@@ -23,6 +23,7 @@ defined( 'ABSPATH' ) || exit;
 use Cortext\Documents;
 use Cortext\Fields\FieldTypeRegistry;
 use Cortext\FieldValues\FieldValueIndex;
+use Cortext\Formula\Materializer as FormulaMaterializer;
 use Cortext\Relations;
 use Cortext\Taxonomy\TraitTaxonomy;
 use WP_Error;
@@ -101,9 +102,9 @@ final class Document {
 	 * Trims `field-<id>` meta in the REST response to the document's own
 	 * collection. `field-<id>` is registered on every `crtxt_document`, so
 	 * without this trim the response carries every collection's fields on every
-	 * document. A row keeps its collection's writable fields. Rollups stay out
-	 * of `meta` because they are computed and read-only, exposed in
-	 * `cortext_hydrated_meta`. Pages and collections keep no field values.
+	 * document. A row keeps its collection's writable fields. Rollups and
+	 * formulas stay out of `meta` because they are computed and read-only,
+	 * exposed in `cortext_hydrated_meta`. Pages and collections keep no field values.
 	 * Schema and identity meta stay.
 	 *
 	 * @param \WP_REST_Response $response Prepared response.
@@ -120,7 +121,8 @@ final class Document {
 		$trait_post = ( new Documents() )->find_trait_for_document( $post );
 		if ( $trait_post instanceof WP_Post ) {
 			foreach ( self::collection_field_ids( (int) $trait_post->ID ) as $field_id ) {
-				if ( 'rollup' === (string) get_post_meta( $field_id, 'type', true ) ) {
+				$field_type = (string) get_post_meta( $field_id, 'type', true );
+				if ( in_array( $field_type, array( 'rollup', 'formula' ), true ) ) {
 					continue;
 				}
 				$allowed[ 'field-' . $field_id ] = true;
@@ -480,7 +482,7 @@ final class Document {
 		foreach ( $field_ids as $field_id ) {
 			$type     = (string) get_post_meta( (int) $field_id, 'type', true );
 			$wp_meta  = FieldTypeRegistry::exists( $type )
-				? FieldTypeRegistry::wp_meta_type( $type )
+				? FieldTypeRegistry::wp_meta_type_for_field( (int) $field_id, $type )
 				: 'string';
 			$is_multi = in_array( $type, array( 'multiselect', 'relation' ), true );
 			// Relation values are row IDs. Storing them as numeric strings in
@@ -494,7 +496,7 @@ final class Document {
 			$config = array(
 				'type'         => $wp_meta,
 				'single'       => ! $is_multi,
-				'show_in_rest' => true,
+				'show_in_rest' => 'formula' !== $type,
 			);
 			if ( 'string' === $wp_meta ) {
 				$config['sanitize_callback'] = 'sanitize_text_field';
@@ -580,16 +582,17 @@ final class Document {
 		if ( ! is_array( $meta ) || count( $meta ) === 0 ) {
 			return $prepared_post;
 		}
-		// Rollups are computed and read-only, exposed in `cortext_hydrated_meta`.
-		// Drop any rollup `field-<id>` from the write, so a stray one (stale
-		// client, hand-built request) is ignored instead of failing the whole
-		// save.
+		// Rollups and formulas are computed and read-only, exposed in
+		// `cortext_hydrated_meta`. Drop any computed `field-<id>` from the
+		// write, so a stray one (stale client, hand-built request) is ignored
+		// instead of failing the whole save.
 		foreach ( $meta as $key => $_value ) {
 			if ( ! is_string( $key ) || ! str_starts_with( $key, 'field-' ) ) {
 				continue;
 			}
 			$field_id = (int) substr( $key, 6 );
-			if ( $field_id > 0 && 'rollup' === (string) get_post_meta( $field_id, 'type', true ) ) {
+			$field_type = $field_id > 0 ? (string) get_post_meta( $field_id, 'type', true ) : '';
+			if ( in_array( $field_type, array( 'rollup', 'formula' ), true ) ) {
 				unset( $meta[ $key ] );
 			}
 		}
@@ -676,9 +679,6 @@ final class Document {
 
 		$meta     = $request->get_param( 'meta' );
 		$has_meta = is_array( $meta ) && count( $meta ) > 0;
-		if ( ! $has_meta && count( $relation_field_ids ) === 0 ) {
-			return;
-		}
 		$trait = ( new Documents() )->find_trait_for_document( $post );
 		if ( ! $trait instanceof WP_Post ) {
 			return;
@@ -717,7 +717,7 @@ final class Document {
 					continue;
 				}
 				$field_type = (string) get_post_meta( $field_id, 'type', true );
-				if ( '' === $field_type || 'rollup' === $field_type ) {
+				if ( '' === $field_type || in_array( $field_type, array( 'rollup', 'formula' ), true ) ) {
 					continue;
 				}
 				$index->index_row_field( $row_id, $field_id, $collection_id );
@@ -730,6 +730,13 @@ final class Document {
 		// doesn't return stale results after a relation update.
 		foreach ( $relation_field_ids as $field_id ) {
 			$index->index_row_field( $row_id, $field_id, $collection_id );
+		}
+
+		FormulaMaterializer::recompute_row( $collection_id, $row_id );
+		foreach ( self::collection_field_ids( $collection_id ) as $field_id ) {
+			if ( 'formula' === (string) get_post_meta( $field_id, 'type', true ) ) {
+				$index->index_row_field( $row_id, $field_id, $collection_id );
+			}
 		}
 	}
 
