@@ -684,4 +684,6 @@ This is fine while collections are small and formulas are few. It becomes the wr
 
 **Where.** `includes/Formula/Materializer.php`, formula refresh calls in `includes/PostType/Document.php`, `includes/Rest/RowsController.php`, and `includes/Rest/FieldsController.php`, plus formula indexing in `includes/FieldValues/FieldValueIndex.php`.
 
-**Solution.** Keep materialized row meta, but make refresh narrower. Row writes should recompute only formulas that depend on the changed field, in dependency order. Formula create/update can mark affected rows dirty and process them in batches instead of blocking the request on the whole collection. Volatile formulas need either a short-lived refresh window or a query path that can evaluate the volatile value without rewriting every row first. Once that exists, the collection-wide recompute calls can shrink to repair tools and migrations.
+**Solution.** For non-volatile formulas, keep materialized row meta as the source of truth and make refresh narrower. Row writes should recompute only formulas that depend on the changed field, in dependency order. Formula create/update can mark affected rows dirty and process them in batches instead of blocking the request on the whole collection.
+
+For volatile formulas, treat materialized meta as a cache rather than the source of truth. Define explicit refresh points, with view load as the obvious baseline, and document the staleness contract. Once that exists, collection-wide recompute calls can shrink to those refresh points plus repair tools and migrations.
