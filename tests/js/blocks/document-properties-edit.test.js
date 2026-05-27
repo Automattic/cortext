@@ -175,7 +175,7 @@ beforeEach( () => {
 	};
 } );
 
-describe( 'document-properties Edit properties mode', () => {
+describe( 'document-properties Customize properties mode', () => {
 	it( 'saves layout edits when fields move or change visibility', async () => {
 		render( <Edit /> );
 
@@ -184,7 +184,7 @@ describe( 'document-properties Edit properties mode', () => {
 		);
 
 		fireEvent.click(
-			screen.getByRole( 'button', { name: 'Edit properties' } )
+			screen.getByRole( 'button', { name: 'Customize properties' } )
 		);
 		fireEvent.click(
 			screen.getByRole( 'button', {
@@ -238,7 +238,7 @@ describe( 'document-properties Edit properties mode', () => {
 
 		expect(
 			await screen.findByRole( 'button', {
-				name: 'Done editing properties',
+				name: 'Done customizing',
 			} )
 		).toBeInTheDocument();
 		expect( mockRowPropertiesProps ).toEqual(
@@ -252,7 +252,7 @@ describe( 'document-properties Edit properties mode', () => {
 		render( <Edit /> );
 
 		fireEvent.click(
-			screen.getByRole( 'button', { name: 'Edit properties' } )
+			screen.getByRole( 'button', { name: 'Customize properties' } )
 		);
 
 		await waitFor( () =>
@@ -260,7 +260,7 @@ describe( 'document-properties Edit properties mode', () => {
 		);
 
 		fireEvent.click(
-			screen.getByRole( 'button', { name: 'Done editing properties' } )
+			screen.getByRole( 'button', { name: 'Done customizing' } )
 		);
 
 		await waitFor( () =>
@@ -275,14 +275,16 @@ describe( 'document-properties Edit properties mode', () => {
 		rerender( <Edit /> );
 
 		await screen.findByRole( 'button', {
-			name: 'Done editing properties',
+			name: 'Done customizing',
 		} );
 
 		mockContext = { ...mockContext, layoutEditRequest: 2 };
 		rerender( <Edit /> );
 
 		expect(
-			await screen.findByRole( 'button', { name: 'Edit properties' } )
+			await screen.findByRole( 'button', {
+				name: 'Customize properties',
+			} )
 		).toBeInTheDocument();
 		expect( mockRowPropertiesProps ).toEqual(
 			expect.objectContaining( { isLayoutEditing: false } )
@@ -306,7 +308,7 @@ describe( 'document-properties Edit properties mode', () => {
 
 		expect(
 			await screen.findByRole( 'button', {
-				name: 'Done editing properties',
+				name: 'Done customizing',
 			} )
 		).toBeInTheDocument();
 	} );
@@ -319,7 +321,7 @@ describe( 'document-properties Edit properties mode', () => {
 		);
 
 		fireEvent.click(
-			screen.getByRole( 'button', { name: 'Edit properties' } )
+			screen.getByRole( 'button', { name: 'Customize properties' } )
 		);
 
 		expect( screen.getByTestId( 'row-properties' ) ).toHaveTextContent(
@@ -334,7 +336,7 @@ describe( 'document-properties Edit properties mode', () => {
 		render( <Edit /> );
 
 		fireEvent.click(
-			screen.getByRole( 'button', { name: 'Edit properties' } )
+			screen.getByRole( 'button', { name: 'Customize properties' } )
 		);
 		fireEvent.click(
 			screen.getByRole( 'button', { name: 'Drag Author to hidden' } )
@@ -373,7 +375,7 @@ describe( 'document-properties Edit properties mode', () => {
 		render( <Edit /> );
 
 		fireEvent.click(
-			screen.getByRole( 'button', { name: 'Edit properties' } )
+			screen.getByRole( 'button', { name: 'Customize properties' } )
 		);
 		expect(
 			mockRowPropertiesProps.fields.map( ( field ) => field.id )
@@ -408,7 +410,7 @@ describe( 'document-properties Edit properties mode', () => {
 		render( <Edit /> );
 
 		fireEvent.click(
-			screen.getByRole( 'button', { name: 'Edit properties' } )
+			screen.getByRole( 'button', { name: 'Customize properties' } )
 		);
 		fireEvent.click(
 			screen.getByRole( 'button', {
@@ -449,7 +451,7 @@ describe( 'document-properties Edit properties mode', () => {
 		render( <Edit /> );
 
 		fireEvent.click(
-			screen.getByRole( 'button', { name: 'Edit properties' } )
+			screen.getByRole( 'button', { name: 'Customize properties' } )
 		);
 		fireEvent.click(
 			screen.getByRole( 'button', {
@@ -482,7 +484,7 @@ describe( 'document-properties Edit properties mode', () => {
 		render( <Edit /> );
 
 		fireEvent.click(
-			screen.getByRole( 'button', { name: 'Edit properties' } )
+			screen.getByRole( 'button', { name: 'Customize properties' } )
 		);
 		fireEvent.click(
 			screen.getByRole( 'button', { name: 'Drag Hidden to visible' } )
@@ -513,7 +515,7 @@ describe( 'document-properties Edit properties mode', () => {
 		render( <Edit /> );
 
 		fireEvent.click(
-			screen.getByRole( 'button', { name: 'Edit properties' } )
+			screen.getByRole( 'button', { name: 'Customize properties' } )
 		);
 		fireEvent.click(
 			screen.getByRole( 'button', {
@@ -546,13 +548,13 @@ describe( 'document-properties Edit properties mode', () => {
 		render( <Edit /> );
 
 		fireEvent.click(
-			screen.getByRole( 'button', { name: 'Edit properties' } )
+			screen.getByRole( 'button', { name: 'Customize properties' } )
 		);
 		fireEvent.click(
 			screen.getByRole( 'button', { name: 'Hide Created' } )
 		);
 		fireEvent.click(
-			screen.getByRole( 'button', { name: 'Done editing properties' } )
+			screen.getByRole( 'button', { name: 'Done customizing' } )
 		);
 
 		await waitFor( () =>
@@ -686,7 +688,7 @@ describe( 'document-properties Edit properties mode', () => {
 		render( <Edit /> );
 
 		fireEvent.click(
-			screen.getByRole( 'button', { name: 'Edit properties' } )
+			screen.getByRole( 'button', { name: 'Customize properties' } )
 		);
 		fireEvent.click(
 			screen.getByRole( 'button', { name: 'Hide Created' } )

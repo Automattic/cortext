@@ -98,8 +98,8 @@ function DocumentActions( {
 							size="compact"
 							label={
 								isPropertiesLayoutEditing
-									? __( 'Done editing properties', 'cortext' )
-									: __( 'Edit properties', 'cortext' )
+									? __( 'Done customizing', 'cortext' )
+									: __( 'Customize properties', 'cortext' )
 							}
 							isPressed={ isPropertiesLayoutEditing }
 							onClick={ onEditPropertiesLayout }

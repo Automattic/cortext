@@ -58,8 +58,8 @@ export default function DocumentPropertiesActions() {
 						__next40pxDefaultSize
 					>
 						{ isLayoutEditing
-							? __( 'Done editing properties', 'cortext' )
-							: __( 'Edit properties', 'cortext' ) }
+							? __( 'Done customizing', 'cortext' )
+							: __( 'Customize properties', 'cortext' ) }
 					</Button>
 				) }
 				{ collectionId && (

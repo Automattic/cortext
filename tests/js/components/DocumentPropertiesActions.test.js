@@ -47,7 +47,7 @@ describe( 'DocumentPropertiesActions', () => {
 		);
 
 		fireEvent.click(
-			screen.getByRole( 'button', { name: 'Edit properties' } )
+			screen.getByRole( 'button', { name: 'Customize properties' } )
 		);
 
 		expect( onRequestLayoutEdit ).toHaveBeenCalledTimes( 1 );
@@ -67,7 +67,7 @@ describe( 'DocumentPropertiesActions', () => {
 		);
 
 		expect(
-			screen.getByRole( 'button', { name: 'Done editing properties' } )
+			screen.getByRole( 'button', { name: 'Done customizing' } )
 		).toHaveAttribute( 'aria-pressed', 'true' );
 	} );
 } );

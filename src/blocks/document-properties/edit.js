@@ -404,8 +404,8 @@ export default function Edit() {
 						icon={ pencil }
 						label={
 							isEditingLayout
-								? __( 'Done editing properties', 'cortext' )
-								: __( 'Edit properties', 'cortext' )
+								? __( 'Done customizing', 'cortext' )
+								: __( 'Customize properties', 'cortext' )
 						}
 						isPressed={ isEditingLayout }
 						onClick={ toggleEditingLayout }
