@@ -42,7 +42,7 @@ $list-row-open-background: #f3f3f3;
 	.dataviews-view-list {
 		display: flex;
 		flex-direction: column;
-		gap: $grid-unit-05;
+		gap: 0;
 		margin: 0;
 		padding: $grid-unit-10 $grid-unit-20 $grid-unit-10;
 	}
@@ -115,6 +115,10 @@ $list-row-open-background: #f3f3f3;
 		border-radius: 4px;
 	}
 
+	.dataviews-view-list__media-wrapper:not(:has(img)) {
+		display: none;
+	}
+
 	.dataviews-view-list__field-wrapper {
 		min-width: 0;
 		width: 100%;
@@ -177,6 +181,10 @@ $list-row-open-background: #f3f3f3;
 		flex: 0 1 auto;
 		min-width: 0;
 		max-width: 100%;
+	}
+
+	.dataviews-view-list__field:has(.cortext-editable-cell__shell--empty) {
+		display: none;
 	}
 
 	.dataviews-view-list__field-value {
