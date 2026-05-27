@@ -130,6 +130,8 @@ final class Importer {
 			}
 			$err = $this->create_field( (int) $collection_id, $slug, (string) $name, $prop );
 			if ( is_wp_error( $err ) ) {
+				// FIXME: This needs better handling. Any previously created
+				// fields need to be cleaned up too.
 				wp_delete_post( (int) $collection_id, true );
 				return $err;
 			}
