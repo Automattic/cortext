@@ -6,6 +6,8 @@ import AddFieldPopover from './fields/AddFieldPopover';
 import { CollectionFieldsProvider } from './CollectionFieldsContext';
 import { useDocumentPropertiesContext } from './DocumentPropertiesContext';
 
+import './DocumentPropertiesActions.scss';
+
 // Row-property actions shown in both the Row inspector tab and the block
 // inspector. Values are edited in the document block; this panel handles
 // visibility and field creation.
@@ -35,7 +37,8 @@ export default function DocumentPropertiesActions() {
 			<div className="cortext-document-properties-actions">
 				{ onToggleVisible && hasFields && (
 					<Button
-						variant="secondary"
+						className="cortext-document-properties-actions__button"
+						variant="tertiary"
 						icon={ isVisible ? unseen : seen }
 						onClick={ onToggleVisible }
 						__next40pxDefaultSize
@@ -47,7 +50,8 @@ export default function DocumentPropertiesActions() {
 				) }
 				{ onRequestLayoutEdit && hasFields && (
 					<Button
-						variant="secondary"
+						className="cortext-document-properties-actions__button"
+						variant="tertiary"
 						icon={ pencil }
 						isPressed={ isLayoutEditing }
 						onClick={ onRequestLayoutEdit }
@@ -63,8 +67,10 @@ export default function DocumentPropertiesActions() {
 						popoverProps={ { placement: 'bottom-start' } }
 						renderToggle={ ( { isOpen, onToggle } ) => (
 							<Button
-								variant="secondary"
+								className="cortext-document-properties-actions__button"
+								variant="tertiary"
 								icon={ plus }
+								isPressed={ isOpen }
 								onClick={ onToggle }
 								aria-expanded={ isOpen }
 								__next40pxDefaultSize

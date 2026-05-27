@@ -1,0 +1,27 @@
+@use "@wordpress/base-styles/variables" as *;
+
+.cortext-document-properties-actions {
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	gap: $grid-unit-05;
+}
+
+.cortext-document-properties-actions__button.components-button {
+	width: 100%;
+	justify-content: flex-start;
+	color: var(--cortext-button-text);
+	box-shadow: none;
+
+	&:hover:not(:disabled, [aria-disabled="true"]),
+	&.is-pressed,
+	&[aria-pressed="true"] {
+		color: var(--cortext-text-strong);
+		background: var(--cortext-button-hover-surface);
+	}
+
+	&.is-pressed,
+	&[aria-pressed="true"] {
+		background: var(--cortext-button-pressed-surface);
+	}
+}
