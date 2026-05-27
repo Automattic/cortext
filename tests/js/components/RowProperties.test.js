@@ -8,6 +8,7 @@ import {
 } from '@testing-library/react';
 
 let mockDndProps;
+let mockSortableContextProps;
 
 const mockEditPost = jest.fn();
 const mockRelationEditorProps = [];
@@ -109,6 +110,7 @@ jest.mock( '@dnd-kit/sortable', () => {
 	return {
 		__esModule: true,
 		SortableContext: ( props ) =>
+			( mockSortableContextProps = props ) &&
 			createElement(
 				'div',
 				{ 'data-testid': 'sortable-context' },
@@ -193,6 +195,7 @@ import { COLLECTION_ROWS_CHANGED_EVENT } from '../../../src/hooks/rowInvalidatio
 describe( 'RowProperties', () => {
 	beforeEach( () => {
 		mockDndProps = null;
+		mockSortableContextProps = null;
 		apiFetch.mockReset();
 		closestCenter.mockReset();
 		pointerWithin.mockReset();
@@ -696,8 +699,13 @@ describe( 'RowProperties', () => {
 		const dropzone = screen.getByLabelText(
 			'Drop properties here to hide them'
 		);
+		const wrapper = dropzone.closest(
+			'.cortext-row-detail__property-hidden-dropzone-wrap'
+		);
 
 		expect( separator ).toBeInTheDocument();
+		expect( wrapper ).toContainElement( separator );
+		expect( wrapper ).toContainElement( dropzone );
 		expect( dropzone ).toHaveClass(
 			'cortext-row-detail__property-hidden-dropzone'
 		);
@@ -738,6 +746,40 @@ describe( 'RowProperties', () => {
 		expect(
 			screen.getByLabelText( 'Drop properties here to hide them' )
 		).toHaveClass( 'is-over' );
+	} );
+
+	it( 'keeps the empty hidden fields drop zone out of sortable layout shifts', () => {
+		render(
+			<RowProperties
+				isLayoutEditing
+				fields={ [
+					{
+						id: 'field-7',
+						label: 'Status',
+						cortextFieldType: 'text',
+						editable: true,
+						cortextDetailVisible: true,
+					},
+					{
+						id: 'field-8',
+						label: 'Owner',
+						cortextFieldType: 'text',
+						editable: true,
+						cortextDetailVisible: true,
+					},
+				] }
+				onLayoutReorder={ jest.fn() }
+				row={ {} }
+			/>
+		);
+
+		expect( mockSortableContextProps.items ).toEqual( [
+			'field-7',
+			'field-8',
+		] );
+		expect(
+			screen.getByLabelText( 'Drop properties here to hide them' )
+		).toBeInTheDocument();
 	} );
 
 	it( 'does not render a static row preview inside the hidden fields drop zone', () => {
@@ -876,8 +918,92 @@ describe( 'RowProperties', () => {
 		).toBeVisible();
 	} );
 
-	it( 'collapses the source row over the empty hidden fields drop zone', () => {
+	it( 'parks the source row space before the empty hidden fields drop zone', () => {
+		useSortable.mockImplementation( ( { id } ) => ( {
+			attributes: {},
+			isDragging: id === 'field-7',
+			listeners: {},
+			setNodeRef: jest.fn(),
+			transform: { x: 0, y: id === 'field-7' ? 40 : -40 },
+			transition: 'transform 200ms ease',
+		} ) );
+
 		const { container } = render(
+			<RowProperties
+				isLayoutEditing
+				fields={ [
+					{
+						id: 'field-7',
+						label: 'Status',
+						cortextFieldType: 'text',
+						editable: true,
+						cortextDetailVisible: true,
+					},
+					{
+						id: 'field-8',
+						label: 'Owner',
+						cortextFieldType: 'text',
+						editable: true,
+						cortextDetailVisible: true,
+					},
+				] }
+				onLayoutReorder={ jest.fn() }
+				row={ {} }
+			/>
+		);
+		container.querySelector(
+			'[data-cortext-property-id="field-7"]'
+		).getBoundingClientRect = jest.fn( () => ( {
+			height: 48,
+			width: 320,
+		} ) );
+
+		act( () => {
+			mockDndProps.onDragStart( {
+				active: { id: 'field-7' },
+			} );
+			mockDndProps.onDragOver( {
+				active: { id: 'field-7' },
+				over: { id: HIDDEN_PROPERTIES_DROP_TARGET },
+			} );
+		} );
+
+		const collapsed = container.querySelector(
+			'.cortext-row-detail__property.is-collapsed-for-hidden-drop'
+		);
+		expect( collapsed ).toHaveTextContent( 'Status' );
+		expect( collapsed ).toHaveStyle( { transition: 'none' } );
+		expect( collapsed.style.transform ).toBe( '' );
+		const nextRow = container.querySelector(
+			'[data-cortext-property-id="field-8"]'
+		);
+		expect( nextRow ).toHaveStyle( { transition: 'none' } );
+		expect( nextRow.style.transform ).toBe( '' );
+		const placeholder = container.querySelector(
+			'.cortext-row-detail__property-hidden-placeholder'
+		);
+		const wrapper = screen
+			.getByLabelText( 'Drop properties here to hide them' )
+			.closest( '.cortext-row-detail__property-hidden-dropzone-wrap' );
+		const separator = screen
+			.getByText( 'Hidden properties' )
+			.closest( '.cortext-row-detail__property-hidden-separator' );
+		expect( placeholder ).toHaveStyle( { height: '48px' } );
+		expect( wrapper ).toContainElement( placeholder );
+		expect( placeholder.nextElementSibling ).toBe( separator );
+	} );
+
+	it( 'does not animate the row after dropping it into an empty hidden fields zone', () => {
+		useSortable.mockImplementation( ( { id } ) => ( {
+			attributes: {},
+			isDragging: false,
+			listeners: {},
+			setNodeRef: jest.fn(),
+			transform: id === 'field-7' ? { x: 0, y: -120 } : null,
+			transition: id === 'field-7' ? 'transform 200ms ease' : undefined,
+		} ) );
+
+		const { container, rerender } = render(
 			<RowProperties
 				isLayoutEditing
 				fields={ [
@@ -909,13 +1035,50 @@ describe( 'RowProperties', () => {
 				active: { id: 'field-7' },
 				over: { id: HIDDEN_PROPERTIES_DROP_TARGET },
 			} );
+			mockDndProps.onDragEnd( {
+				active: { id: 'field-7' },
+				over: { id: HIDDEN_PROPERTIES_DROP_TARGET },
+			} );
 		} );
 
+		rerender(
+			<RowProperties
+				isLayoutEditing
+				fields={ [
+					{
+						id: 'field-8',
+						label: 'Owner',
+						cortextFieldType: 'text',
+						editable: true,
+						cortextDetailVisible: true,
+					},
+					{
+						id: 'field-7',
+						label: 'Status',
+						cortextFieldType: 'text',
+						editable: true,
+						cortextDetailVisible: false,
+					},
+				] }
+				onLayoutReorder={ jest.fn() }
+				row={ {} }
+			/>
+		);
+
+		const hiddenRow = container.querySelector(
+			'[data-cortext-property-id="field-7"]'
+		);
+		expect( hiddenRow ).toHaveStyle( { transition: 'none' } );
+		expect( hiddenRow.style.transform ).toBe( '' );
 		expect(
-			container.querySelector(
-				'.cortext-row-detail__property.is-collapsed-for-hidden-drop'
-			)
-		).toHaveTextContent( 'Status' );
+			useSortable.mock.calls
+				.find(
+					( [ options ] ) =>
+						options.id === 'field-7' &&
+						typeof options.animateLayoutChanges === 'function'
+				)?.[ 0 ]
+				.animateLayoutChanges()
+		).toBe( false );
 	} );
 
 	it( 'prefers the hidden fields drop zone under the pointer', () => {

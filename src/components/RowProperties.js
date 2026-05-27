@@ -98,17 +98,25 @@ function ReadOnlyProperty( { value, type, elements, format } ) {
 	);
 }
 
-function EmptyHiddenPropertiesDropZone() {
+function EmptyHiddenPropertiesDropZone( { placeholderHeight } ) {
 	const { isOver, setNodeRef } = useDroppable( {
 		id: HIDDEN_PROPERTIES_DROP_TARGET,
 	} );
 	return (
-		<>
+		<div
+			ref={ setNodeRef }
+			className="cortext-row-detail__property-hidden-dropzone-wrap"
+		>
+			{ placeholderHeight ? (
+				<div
+					className="cortext-row-detail__property-hidden-placeholder"
+					style={ { height: placeholderHeight } }
+				/>
+			) : null }
 			<div className="cortext-row-detail__property-hidden-separator">
 				<span>{ __( 'Hidden properties', 'cortext' ) }</span>
 			</div>
 			<div
-				ref={ setNodeRef }
 				className={
 					'cortext-row-detail__property-hidden-dropzone' +
 					( isOver ? ' is-over' : '' )
@@ -118,7 +126,7 @@ function EmptyHiddenPropertiesDropZone() {
 					'cortext'
 				) }
 			/>
-		</>
+		</div>
 	);
 }
 
@@ -625,6 +633,10 @@ function transformToString( transform ) {
 	return `translate3d(${ x }px, ${ y }px, 0) scaleX(${ scaleX }) scaleY(${ scaleY })`;
 }
 
+function skipSortableLayoutAnimation() {
+	return false;
+}
+
 function blurActiveLayoutChip( node ) {
 	const activeElement = node?.ownerDocument?.activeElement;
 	if (
@@ -639,6 +651,11 @@ function blurActiveLayoutChip( node ) {
 function measuredElementWidth( node ) {
 	const width = node?.getBoundingClientRect?.().width;
 	return Number.isFinite( width ) && width > 0 ? width : null;
+}
+
+function measuredElementHeight( node ) {
+	const height = node?.getBoundingClientRect?.().height;
+	return Number.isFinite( height ) && height > 0 ? height : null;
 }
 
 function findPropertyElement( container, fieldId ) {
@@ -820,6 +837,8 @@ function RowProperty( {
 }
 
 function SortableRowProperty( props ) {
+	const shouldSuppressDropAnimation =
+		props.suppressDropAnimation && ! props.activeLayoutFieldId;
 	const {
 		attributes,
 		isDragging,
@@ -827,10 +846,21 @@ function SortableRowProperty( props ) {
 		setNodeRef,
 		transform,
 		transition,
-	} = useSortable( { id: props.field.id } );
+	} = useSortable( {
+		id: props.field.id,
+		animateLayoutChanges: shouldSuppressDropAnimation
+			? skipSortableLayoutAnimation
+			: undefined,
+	} );
+	const shouldDisableHiddenDropMotion =
+		props.isDroppingIntoEmptyHiddenDrop || props.isCollapsedForHiddenDrop;
+	const shouldDisableMotion =
+		shouldDisableHiddenDropMotion || shouldSuppressDropAnimation;
 	const style = {
-		transform: transformToString( transform ),
-		transition,
+		transform: shouldDisableMotion
+			? undefined
+			: transformToString( transform ),
+		transition: shouldDisableMotion ? 'none' : transition,
 	};
 
 	return (
@@ -886,6 +916,12 @@ export default function RowProperties( {
 	const [ activeLayoutOverId, setActiveLayoutOverId ] = useState( null );
 	const [ activeLayoutOverlayWidth, setActiveLayoutOverlayWidth ] =
 		useState( null );
+	const [ activeLayoutPlaceholderHeight, setActiveLayoutPlaceholderHeight ] =
+		useState( null );
+	const [
+		suppressedDropAnimationFieldId,
+		setSuppressedDropAnimationFieldId,
+	] = useState( null );
 	const propertiesRef = useRef( null );
 	const handleFieldOptionsSaved = useCallback(
 		( recordId, nextOptions ) => {
@@ -998,17 +1034,23 @@ export default function RowProperties( {
 		);
 		setActiveLayoutFieldId( activeFieldId );
 		setActiveLayoutOverId( null );
+		setSuppressedDropAnimationFieldId( null );
 		setActiveLayoutOverlayWidth(
 			measuredElementWidth( activeProperty ) ??
 				event.active?.rect?.current?.initial?.width ??
 				measuredElementWidth( propertiesRef.current )
+		);
+		setActiveLayoutPlaceholderHeight(
+			measuredElementHeight( activeProperty ) ??
+				event.active?.rect?.current?.initial?.height ??
+				null
 		);
 	}, [] );
 	const handleDragOver = useCallback( ( event ) => {
 		setActiveLayoutOverId( event.over?.id ?? null );
 	}, [] );
 	const sortableIds = useMemo( () => {
-		const ids = propertyFields.flatMap( ( field, index ) => {
+		return propertyFields.flatMap( ( field, index ) => {
 			const startsHiddenGroup =
 				isLayoutEditing &&
 				field.cortextDetailVisible === false &&
@@ -1017,26 +1059,37 @@ export default function RowProperties( {
 				? [ HIDDEN_PROPERTIES_DROP_TARGET, field.id ]
 				: [ field.id ];
 		} );
-		return ids;
 	}, [ isLayoutEditing, propertyFields ] );
 	const handleDragEnd = useCallback(
 		( event ) => {
 			const { active, over } = event;
+			const droppedIntoEmptyHidden =
+				isLayoutEditing &&
+				over?.id === HIDDEN_PROPERTIES_DROP_TARGET &&
+				! propertyFields.some(
+					( field ) => field.cortextDetailVisible === false
+				);
 			setActiveLayoutFieldId( null );
 			setActiveLayoutOverId( null );
 			setActiveLayoutOverlayWidth( null );
+			setActiveLayoutPlaceholderHeight( null );
+			setSuppressedDropAnimationFieldId(
+				droppedIntoEmptyHidden ? active?.id ?? null : null
+			);
 			blurActiveLayoutChip( propertiesRef.current );
 			if ( ! over || active.id === over.id ) {
 				return;
 			}
 			onLayoutReorder?.( active.id, over.id );
 		},
-		[ onLayoutReorder ]
+		[ isLayoutEditing, onLayoutReorder, propertyFields ]
 	);
 	const handleDragCancel = useCallback( () => {
 		setActiveLayoutFieldId( null );
 		setActiveLayoutOverId( null );
 		setActiveLayoutOverlayWidth( null );
+		setActiveLayoutPlaceholderHeight( null );
+		setSuppressedDropAnimationFieldId( null );
 		blurActiveLayoutChip( propertiesRef.current );
 	}, [] );
 
@@ -1071,6 +1124,11 @@ export default function RowProperties( {
 	const activeLayoutField = activeLayoutFieldId
 		? propertyFields.find( ( field ) => field.id === activeLayoutFieldId )
 		: null;
+	const isDroppingIntoEmptyHidden =
+		isLayoutEditing &&
+		! hasHiddenFields &&
+		activeLayoutFieldId &&
+		activeLayoutOverId === HIDDEN_PROPERTIES_DROP_TARGET;
 	const fieldCountLabel = sprintf(
 		/* translators: %d: Number of row fields. */
 		_n( '%d field', '%d fields', propertyFields.length, 'cortext' ),
@@ -1088,10 +1146,10 @@ export default function RowProperties( {
 				handleFieldFormatSaved={ handleFieldFormatSaved }
 				handleFieldOptionsSaved={ handleFieldOptionsSaved }
 				isCollapsedForHiddenDrop={
-					! hasHiddenFields &&
-					field.id === activeLayoutFieldId &&
-					activeLayoutOverId === HIDDEN_PROPERTIES_DROP_TARGET
+					isDroppingIntoEmptyHidden &&
+					field.id === activeLayoutFieldId
 				}
+				isDroppingIntoEmptyHiddenDrop={ isDroppingIntoEmptyHidden }
 				isLayoutEditing={ isLayoutEditing }
 				localFormatOverrides={ localFormatOverrides }
 				localOptionOverrides={ localOptionOverrides }
@@ -1099,6 +1157,9 @@ export default function RowProperties( {
 				optionOverrides={ optionOverrides }
 				refreshRows={ refreshRows }
 				rowId={ rowId }
+				suppressDropAnimation={
+					suppressedDropAnimationFieldId === field.id
+				}
 				update={ update }
 				updateRelation={ updateRelation }
 			/>
@@ -1150,6 +1211,11 @@ export default function RowProperties( {
 			{ isLayoutEditing && ! hasHiddenFields ? (
 				<EmptyHiddenPropertiesDropZone
 					key={ HIDDEN_PROPERTIES_DROP_TARGET }
+					placeholderHeight={
+						isDroppingIntoEmptyHidden
+							? activeLayoutPlaceholderHeight
+							: null
+					}
 				/>
 			) : null }
 		</div>
