@@ -41,7 +41,7 @@ final class NotionImportJobsController {
 	private const NOTION_BASE       = 'https://api.notion.com/v1';
 	private const NOTION_VER        = '2026-03-11';
 	private const TIMEOUT_SECS      = 15;
-	private const TICK_PAGE_SIZE    = 25;
+	private const TICK_PAGE_SIZE    = 3;
 	private const JOB_OPTION_PREFIX = 'cortext_notion_import_';
 
 	public function register(): void {
@@ -139,26 +139,18 @@ final class NotionImportJobsController {
 		$this->save_job(
 			$job_id,
 			array(
-				'collection_id'  => (int) $collection_id,
-				'data_source_id' => $data_source_id,
-				'cursor'         => null,
-				'processed'      => 0,
-				'status'         => 'running',
-				'message'        => null,
-				'started_at'     => time(),
+				'collection_id'   => (int) $collection_id,
+				'collection_slug' => (string) get_post_meta( (int) $collection_id, 'slug', true ),
+				'data_source_id'  => $data_source_id,
+				'cursor'          => null,
+				'processed'       => 0,
+				'status'          => 'running',
+				'message'         => null,
+				'started_at'      => time(),
 			)
 		);
 
-		return new WP_REST_Response(
-			array(
-				'job_id'        => $job_id,
-				'collection_id' => (int) $collection_id,
-				'status'        => 'running',
-				'processed'     => 0,
-				'has_more'      => true,
-			),
-			200
-		);
+		return $this->job_response( $job_id, $this->load_job( $job_id ) );
 	}
 
 	// -----------------------------------------------------------------
@@ -238,12 +230,13 @@ final class NotionImportJobsController {
 	private function job_response( string $job_id, array $job ): WP_REST_Response {
 		return new WP_REST_Response(
 			array(
-				'job_id'        => $job_id,
-				'collection_id' => (int) $job['collection_id'],
-				'processed'     => (int) $job['processed'],
-				'status'        => (string) $job['status'],
-				'has_more'      => 'running' === $job['status'],
-				'message'       => $job['message'] ?? null,
+				'job_id'          => $job_id,
+				'collection_id'   => (int) $job['collection_id'],
+				'collection_slug' => (string) ( $job['collection_slug'] ?? '' ),
+				'processed'       => (int) $job['processed'],
+				'status'          => (string) $job['status'],
+				'has_more'        => 'running' === $job['status'],
+				'message'         => $job['message'] ?? null,
 			),
 			200
 		);

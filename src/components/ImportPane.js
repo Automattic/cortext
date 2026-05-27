@@ -1,4 +1,5 @@
 import { __, sprintf } from '@wordpress/i18n';
+import { useDispatch } from '@wordpress/data';
 import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
 import {
 	Button,
@@ -15,9 +16,15 @@ import {
 	__experimentalVStack as VStack,
 } from '@wordpress/components';
 
+import { useNavigate } from '@tanstack/react-router';
+
 import './ImportPane.scss';
 import ImportEntriesTable from './ImportEntriesTable';
 import { extractAll, extractCollection, runImport } from './notionImport';
+import { COLLECTION_QUERY, FULL_PAGE_COLLECTION_QUERY } from '../collections';
+import { computeCollectionUri } from '../router/useResolveEntity';
+
+const COLLECTION_POST_TYPE = 'crtxt_collection';
 
 const NOTION_KEY_STORAGE = 'cortext.notionKey';
 
@@ -36,6 +43,7 @@ export default function ImportPane() {
 	// Mirrors which import is currently running so the Import button
 	// can disable itself without racing the state update.
 	const importsInFlightRef = useRef( new Set() );
+	const { invalidateResolution } = useDispatch( 'core' );
 	// Tracks which collection ids have an in-flight fetch so a fast
 	// double-click on the same link doesn't kick off two parallel loads.
 	const inflightRef = useRef( new Set() );
@@ -128,13 +136,48 @@ export default function ImportPane() {
 				},
 			} ) );
 
+			// Refresh the workspace sidebar as soon as the new Cortext
+			// collection exists. The first onProgress fires right after
+			// `/import/start` returns, which is when the collection
+			// post is in the DB. We only need to invalidate once;
+			// subsequent ticks only add rows under a different CPT, not
+			// new `crtxt_collection` posts.
+			let sidebarInvalidated = false;
+			const refreshSidebarOnce = ( progress ) => {
+				if ( sidebarInvalidated || ! progress.collection_id ) {
+					return;
+				}
+				sidebarInvalidated = true;
+				invalidateResolution( 'getEntityRecords', [
+					'postType',
+					COLLECTION_POST_TYPE,
+					FULL_PAGE_COLLECTION_QUERY,
+				] );
+				invalidateResolution( 'getEntityRecords', [
+					'postType',
+					COLLECTION_POST_TYPE,
+					COLLECTION_QUERY,
+				] );
+			};
+
 			runImport( key, collection.id, ( progress ) => {
+				refreshSidebarOnce( progress );
 				setImportJobs( ( prev ) => ( {
 					...prev,
 					[ collection.id ]: {
+						...( prev[ collection.id ] ?? {} ),
 						status: progress.status === 'done' ? 'done' : 'running',
 						processed: progress.processed ?? 0,
-						collection_id: progress.collection_id,
+						total:
+							progress.total ??
+							prev[ collection.id ]?.total ??
+							null,
+						collection_id:
+							progress.collection_id ??
+							prev[ collection.id ]?.collection_id,
+						collection_slug:
+							progress.collection_slug ??
+							prev[ collection.id ]?.collection_slug,
 						message: null,
 					},
 				} ) );
@@ -143,9 +186,19 @@ export default function ImportPane() {
 					setImportJobs( ( prev ) => ( {
 						...prev,
 						[ collection.id ]: {
+							...( prev[ collection.id ] ?? {} ),
 							status: 'done',
 							processed: final.processed ?? 0,
-							collection_id: final.collection_id,
+							total:
+								final.total ??
+								prev[ collection.id ]?.total ??
+								null,
+							collection_id:
+								final.collection_id ??
+								prev[ collection.id ]?.collection_id,
+							collection_slug:
+								final.collection_slug ??
+								prev[ collection.id ]?.collection_slug,
 							message: null,
 						},
 					} ) );
@@ -164,7 +217,7 @@ export default function ImportPane() {
 					importsInFlightRef.current.delete( collection.id );
 				} );
 		},
-		[ key ]
+		[ key, invalidateResolution ]
 	);
 
 	const handleSaveKey = ( nextKey ) => {
@@ -307,82 +360,136 @@ function CollectionsList( {
 	}
 	return (
 		<ul className="cortext-import-collections">
-			{ collections.map( ( c ) => {
-				const job = importJobs?.[ c.id ];
-				return (
-					<li
-						key={ c.id }
-						className="cortext-import-collections__item"
-					>
-						<Button
-							variant="link"
-							onClick={ () => onSelect( c.id ) }
-							aria-pressed={ selectedId === c.id }
-						>
-							{ c.title || __( '(untitled)', 'cortext' ) }
-						</Button>
-						<Text variant="muted">
-							{ sprintf(
-								/* translators: %d: number of fields in the collection schema */
-								__( '%d fields', 'cortext' ),
-								c.fields.length
-							) }
-						</Text>
-						<ImportButton
-							className="cortext-import-collections__import"
-							job={ job }
-							onClick={ () => onImport( c ) }
-						/>
-					</li>
-				);
-			} ) }
+			{ collections.map( ( c ) => (
+				<CollectionCard
+					key={ c.id }
+					collection={ c }
+					job={ importJobs?.[ c.id ] }
+					isSelected={ selectedId === c.id }
+					onSelect={ onSelect }
+					onImport={ onImport }
+				/>
+			) ) }
 		</ul>
 	);
 }
 
-function ImportButton( { job, className, onClick } ) {
+// One row in the collections list — title + status + action. Renders as
+// a card; error state adds an extra line below for the message.
+function CollectionCard( { collection, job, isSelected, onSelect, onImport } ) {
+	const navigate = useNavigate();
 	const status = job?.status ?? 'idle';
 	const processed = job?.processed ?? 0;
 
-	let label;
-	switch ( status ) {
-		case 'running':
-			label = processed
+	let statusLine = null;
+	if ( processed && ( status === 'running' || status === 'done' ) ) {
+		statusLine =
+			status === 'running'
 				? sprintf(
-						/* translators: %d: number of rows imported so far */
-						__( 'Importing — %d', 'cortext' ),
+						/* translators: %d: rows processed */
+						__( 'Importing %d rows…', 'cortext' ),
 						processed
 				  )
-				: __( 'Importing…', 'cortext' );
-			break;
-		case 'done':
-			label = sprintf(
-				/* translators: %d: total rows imported */
-				__( 'Imported (%d) — Import again', 'cortext' ),
-				processed
-			);
-			break;
-		case 'error':
-			label = __( 'Failed — retry', 'cortext' );
-			break;
-		default:
-			label = __( 'Import', 'cortext' );
+				: sprintf(
+						/* translators: %d: rows processed */
+						__( '%d rows imported.', 'cortext' ),
+						processed
+				  );
+	}
+
+	const openTo =
+		job?.collection_id && job?.collection_slug
+			? computeCollectionUri( {
+					id: job.collection_id,
+					slug: job.collection_slug,
+			  } )
+			: null;
+
+	// Pick the one button that fits the current state.
+	let actionButton;
+	if ( status === 'running' ) {
+		actionButton = (
+			<Button variant="secondary" size="compact" disabled aria-busy>
+				{ __( 'Importing…', 'cortext' ) }
+			</Button>
+		);
+	} else if ( status === 'done' ) {
+		actionButton = (
+			<Button
+				variant="primary"
+				size="compact"
+				disabled={ ! openTo }
+				onClick={
+					openTo
+						? () =>
+								navigate( {
+									to: '/$',
+									params: { _splat: openTo },
+								} )
+						: undefined
+				}
+			>
+				{ __( 'Open', 'cortext' ) }
+			</Button>
+		);
+	} else if ( status === 'error' ) {
+		actionButton = (
+			<Button
+				variant="primary"
+				size="compact"
+				onClick={ () => onImport( collection ) }
+			>
+				{ __( 'Try again', 'cortext' ) }
+			</Button>
+		);
+	} else {
+		actionButton = (
+			<Button
+				variant="secondary"
+				size="compact"
+				onClick={ () => onImport( collection ) }
+			>
+				{ __( 'Import', 'cortext' ) }
+			</Button>
+		);
 	}
 
 	return (
-		<Button
-			className={ className }
-			variant={ status === 'error' ? 'primary' : 'secondary' }
-			size="compact"
-			onClick={ onClick }
-			disabled={ status === 'running' }
-			aria-busy={ status === 'running' }
-			label={
-				status === 'error' && job?.message ? job.message : undefined
-			}
-		>
-			{ label }
-		</Button>
+		<li className="cortext-import-collections__card" data-status={ status }>
+			<div className="cortext-import-collections__card-row">
+				<Button
+					className="cortext-import-collections__card-title"
+					variant="link"
+					onClick={ () => onSelect( collection.id ) }
+					aria-pressed={ isSelected }
+				>
+					{ collection.title || __( '(untitled)', 'cortext' ) }
+				</Button>
+				{ statusLine && (
+					<Text
+						variant="muted"
+						className="cortext-import-collections__card-status"
+					>
+						{ statusLine }
+					</Text>
+				) }
+				<div className="cortext-import-collections__card-action">
+					{ actionButton }
+				</div>
+			</div>
+			{ status === 'error' && job?.message && (
+				<Text
+					variant="muted"
+					className="cortext-import-collections__card-error"
+				>
+					{ sprintf(
+						/* translators: %s: upstream error message */
+						__( 'Error: %s', 'cortext' ),
+						job.message
+					) }
+				</Text>
+			) }
+		</li>
 	);
 }
 
