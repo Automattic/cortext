@@ -46,9 +46,7 @@ describe( 'DocumentPropertiesActions', () => {
 			</DocumentPropertiesProvider>
 		);
 
-		fireEvent.click(
-			screen.getByRole( 'button', { name: 'Customize properties' } )
-		);
+		fireEvent.click( screen.getByRole( 'button', { name: 'Customize' } ) );
 
 		expect( onRequestLayoutEdit ).toHaveBeenCalledTimes( 1 );
 	} );

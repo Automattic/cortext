@@ -44,8 +44,8 @@ export default function DocumentPropertiesActions() {
 						__next40pxDefaultSize
 					>
 						{ isVisible
-							? __( 'Collapse properties', 'cortext' )
-							: __( 'Expand properties', 'cortext' ) }
+							? __( 'Collapse', 'cortext' )
+							: __( 'Expand', 'cortext' ) }
 					</Button>
 				) }
 				{ onRequestLayoutEdit && hasFields && (
@@ -59,7 +59,7 @@ export default function DocumentPropertiesActions() {
 					>
 						{ isLayoutEditing
 							? __( 'Done customizing', 'cortext' )
-							: __( 'Customize properties', 'cortext' ) }
+							: __( 'Customize', 'cortext' ) }
 					</Button>
 				) }
 				{ collectionId && (
@@ -75,7 +75,7 @@ export default function DocumentPropertiesActions() {
 								aria-expanded={ isOpen }
 								__next40pxDefaultSize
 							>
-								{ __( 'Add field', 'cortext' ) }
+								{ __( 'Add property', 'cortext' ) }
 							</Button>
 						) }
 						renderContent={ ( { onClose } ) => (
