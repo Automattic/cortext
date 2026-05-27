@@ -266,7 +266,7 @@ $list-row-open-background: #f3f3f3;
 		color: $gray-700;
 	}
 
-	@media (min-width: 782px) {
+	@media (min-width: 600px) {
 
 		.dataviews-view-list__field-wrapper {
 			display: grid !important;
@@ -281,18 +281,27 @@ $list-row-open-background: #f3f3f3;
 
 		.dataviews-view-list .dataviews-title-field {
 			grid-column: 1;
+			grid-row: 1;
 		}
 
 		.dataviews-view-list__fields {
 			grid-column: 2;
+			grid-row: 1;
+			flex-wrap: nowrap;
 			justify-content: flex-end;
 			width: auto;
 			max-width: min(620px, 54vw);
 			margin-top: 0;
+			overflow: hidden;
+		}
+
+		.dataviews-view-list__field-value .cortext-editable-cell__display {
+			white-space: nowrap;
 		}
 
 		.dataviews-view-list__item-actions {
 			grid-column: 3;
+			grid-row: 1;
 			margin-left: 0;
 		}
 	}
