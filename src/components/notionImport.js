@@ -199,15 +199,8 @@ export async function extractCollections( key ) {
 // call stays well under any timeout, the client loops `tick` until
 // done, and progress is whatever the server reports back.
 
-/**
- * POST /cortext/v1/notion/import/start — creates the Cortext
- * collection + fields and returns a job id the client can tick.
- *
- * @param {string} key          Notion integration key.
- * @param {string} dataSourceId The data source to import.
- * @return {Promise<Object>}    `{ job_id, collection_id, status, processed, has_more }`.
- */
-export function startImport( key, dataSourceId ) {
+// POST /cortext/v1/notion/import/start — creates the Cortext collection.
+function startImport( key, dataSourceId ) {
 	return apiFetch( {
 		path: '/cortext/v1/notion/import/start',
 		method: 'POST',
@@ -216,16 +209,8 @@ export function startImport( key, dataSourceId ) {
 	} );
 }
 
-/**
- * POST /cortext/v1/notion/import/{jobId}/tick — pulls and writes one
- * batch of rows. Caller is responsible for looping until
- * `has_more === false`.
- *
- * @param {string} key   Notion integration key.
- * @param {string} jobId Job id from `startImport`.
- * @return {Promise<Object>} `{ job_id, processed, has_more, status, message }`.
- */
-export function tickImport( key, jobId ) {
+// POST /cortext/v1/notion/import/{jobId}/tick — writes one batch of rows.
+function tickImport( key, jobId ) {
 	return apiFetch( {
 		path: `/cortext/v1/notion/import/${ encodeURIComponent( jobId ) }/tick`,
 		method: 'POST',

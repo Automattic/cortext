@@ -123,34 +123,16 @@ export default function ImportPane() {
 						message: null,
 					},
 				} ) );
-			} )
-				.then( ( final ) => {
-					setImportJobs( ( prev ) => ( {
-						...prev,
-						[ collection.id ]: {
-							...( prev[ collection.id ] ?? {} ),
-							status: 'done',
-							processed: final.processed ?? 0,
-							collection_id:
-								final.collection_id ??
-								prev[ collection.id ]?.collection_id,
-							collection_slug:
-								final.collection_slug ??
-								prev[ collection.id ]?.collection_slug,
-							message: null,
-						},
-					} ) );
-				} )
-				.catch( ( err ) => {
-					setImportJobs( ( prev ) => ( {
-						...prev,
-						[ collection.id ]: {
-							status: 'error',
-							processed: prev[ collection.id ]?.processed ?? 0,
-							message: err?.message ?? String( err ),
-						},
-					} ) );
-				} );
+			} ).catch( ( err ) => {
+				setImportJobs( ( prev ) => ( {
+					...prev,
+					[ collection.id ]: {
+						status: 'error',
+						processed: prev[ collection.id ]?.processed ?? 0,
+						message: err?.message ?? String( err ),
+					},
+				} ) );
+			} );
 		},
 		[ notionApiKey, invalidateResolution ]
 	);
