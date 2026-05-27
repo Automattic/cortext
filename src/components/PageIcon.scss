@@ -23,6 +23,15 @@
 		border-radius: 3px;
 	}
 
+	&--fallback svg,
+	&--wp svg {
+		width: var(--cortext-page-icon-glyph-size);
+		min-width: var(--cortext-page-icon-glyph-size);
+		height: var(--cortext-page-icon-glyph-size);
+		flex: 0 0 var(--cortext-page-icon-glyph-size);
+		max-width: none;
+	}
+
 	// Wrapper for image icons. The swatch stays under the <img> until the image
 	// has loaded; REST returning a URL is not enough.
 	&--image-wrap {

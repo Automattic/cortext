@@ -21,6 +21,9 @@ import { ICON_COLOR_BY_NAME } from './iconColors';
 const PageIconWp = lazy( () =>
 	import( /* webpackChunkName: "page-icon-wp" */ './PageIconWp' )
 );
+const DEFAULT_PAGE_ICON_SIZE = 16;
+const EMOJI_VISUAL_SCALE = 0.875;
+const GLYPH_VISUAL_SCALE = 1.4;
 
 // Three shapes are persisted in the cortext_document_icon meta:
 //   { type: 'emoji', value: '📘' }
@@ -128,9 +131,22 @@ function ImageIcon( { id, size, alt, className } ) {
 	);
 }
 
-export default function PageIcon( { icon, size = 16, alt, className } ) {
+export default function PageIcon( {
+	icon,
+	size = DEFAULT_PAGE_ICON_SIZE,
+	alt,
+	className,
+} ) {
 	const parsed = useMemo( () => parsePageIcon( icon ), [ icon ] );
 	const classes = [ 'cortext-document-icon' ];
+	const numericSize = typeof size === 'number' ? size : parseFloat( size );
+	const hasNumericSize = Number.isFinite( numericSize );
+	const emojiSize = hasNumericSize
+		? Math.max( Math.round( numericSize * EMOJI_VISUAL_SCALE ), 1 )
+		: size;
+	const glyphSize = hasNumericSize
+		? Math.round( numericSize * GLYPH_VISUAL_SCALE )
+		: size;
 	// `display: inline-flex` is the load-bearing bit: spans are inline by
 	// default, so width/height get ignored and the emoji variant ends up
 	// sized by `font-size * line-height` — taller than the SVG-based
@@ -145,6 +161,11 @@ export default function PageIcon( { icon, size = 16, alt, className } ) {
 		height: size,
 		lineHeight: 1,
 	};
+	const glyphBoxStyle = {
+		...boxStyle,
+		'--cortext-page-icon-glyph-size':
+			typeof glyphSize === 'number' ? `${ glyphSize }px` : glyphSize,
+	};
 	if ( className ) {
 		classes.push( className );
 	}
@@ -155,10 +176,10 @@ export default function PageIcon( { icon, size = 16, alt, className } ) {
 				className={ classes
 					.concat( 'cortext-document-icon--fallback' )
 					.join( ' ' ) }
-				style={ boxStyle }
+				style={ glyphBoxStyle }
 				aria-hidden="true"
 			>
-				<Icon icon={ pageGlyph } size={ size } />
+				<Icon icon={ pageGlyph } size={ glyphSize } />
 			</span>
 		);
 	}
@@ -169,7 +190,7 @@ export default function PageIcon( { icon, size = 16, alt, className } ) {
 				className={ classes
 					.concat( 'cortext-document-icon--emoji' )
 					.join( ' ' ) }
-				style={ { ...boxStyle, fontSize: size } }
+				style={ { ...boxStyle, fontSize: emojiSize } }
 				aria-hidden={ alt ? undefined : 'true' }
 				role={ alt ? 'img' : undefined }
 				aria-label={ alt }
@@ -188,15 +209,15 @@ export default function PageIcon( { icon, size = 16, alt, className } ) {
 				className={ classes
 					.concat( 'cortext-document-icon--wp' )
 					.join( ' ' ) }
-				style={ { ...boxStyle, ...colorStyle } }
+				style={ { ...glyphBoxStyle, ...colorStyle } }
 				aria-hidden={ alt ? undefined : 'true' }
 				role={ alt ? 'img' : undefined }
 				aria-label={ alt }
 			>
 				<Suspense
-					fallback={ <Icon icon={ pageGlyph } size={ size } /> }
+					fallback={ <Icon icon={ pageGlyph } size={ glyphSize } /> }
 				>
-					<PageIconWp name={ parsed.name } size={ size } />
+					<PageIconWp name={ parsed.name } size={ glyphSize } />
 				</Suspense>
 			</span>
 		);
