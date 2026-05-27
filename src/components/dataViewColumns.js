@@ -124,26 +124,37 @@ export function pruneFiltersForFields( filters, validIds ) {
 }
 
 // Saved views can outlive their fields. Clean stale references here so a
-// deleted field cannot break rendering or disable view interactions. Sort and
-// filters stay with their callers because each has extra validity rules.
+// deleted field cannot break rendering or disable view interactions: fields,
+// sort, filters, grouping, layout styles, and calculations.
 export function normalizeView( view, validIds, options = {} ) {
 	const titleId = options.titleId ?? TITLE_FIELD_ID;
 	const validSet =
 		validIds instanceof Set ? validIds : new Set( validIds ?? [] );
+	let referenceSet = validSet;
+	if ( options.referenceIds ) {
+		referenceSet =
+			options.referenceIds instanceof Set
+				? options.referenceIds
+				: new Set( options.referenceIds );
+	}
 
 	const currentFields = Array.isArray( view?.fields ) ? view.fields : [];
 	let nextFields = currentFields.filter( ( id ) => validSet.has( id ) );
-	if ( validSet.has( titleId ) && ! nextFields.includes( titleId ) ) {
+	if (
+		options.ensureTitle !== false &&
+		validSet.has( titleId ) &&
+		! nextFields.includes( titleId )
+	) {
 		nextFields = [ titleId, ...nextFields ];
 	}
 
 	const layout = view?.layout ?? {};
-	const layoutResult = sanitizeLayoutForFields( layout, validSet, {
+	const layoutResult = sanitizeLayoutForFields( layout, referenceSet, {
 		maxColumnWidth: MAX_COLUMN_WIDTH,
 	} );
 	const layoutByTypeResult = sanitizeLayoutByType(
 		view?.layoutByType,
-		validSet,
+		referenceSet,
 		{ maxColumnWidth: MAX_COLUMN_WIDTH }
 	);
 	const fieldsByTypeResult = sanitizeFieldsByType(
@@ -151,14 +162,40 @@ export function normalizeView( view, validIds, options = {} ) {
 		validSet,
 		{ titleId: TITLE_FIELD_ID }
 	);
-	const displayFieldResult = sanitizeDisplayFieldKeys( view, validSet );
+	const displayFieldResult = sanitizeDisplayFieldKeys( view, referenceSet );
 
 	const fieldsChanged =
 		currentFields.length !== nextFields.length ||
 		currentFields.some( ( id, i ) => id !== nextFields[ i ] );
-	const groupByField = view?.groupBy?.field;
-	const groupByChanged =
-		groupByField !== undefined && ! validSet.has( groupByField );
+	const currentSort = view?.sort ?? null;
+	let nextSort = currentSort;
+	let sortChanged = false;
+	if (
+		currentSort &&
+		typeof currentSort === 'object' &&
+		currentSort.field !== MANUAL_SORT_ID &&
+		! referenceSet.has( currentSort.field )
+	) {
+		nextSort = null;
+		sortChanged = true;
+	}
+	const currentFilters = Array.isArray( view?.filters ) ? view.filters : [];
+	const nextFilters = pruneFiltersForFields( currentFilters, referenceSet );
+	const filtersChanged = nextFilters !== currentFilters;
+	const nextGroupByField =
+		view?.groupByField && referenceSet.has( view.groupByField )
+			? view.groupByField
+			: undefined;
+	const groupByFieldChanged = view?.groupByField !== nextGroupByField;
+	const currentGroupBy =
+		view?.groupBy && typeof view.groupBy === 'object'
+			? view.groupBy
+			: undefined;
+	const nextGroupBy =
+		currentGroupBy?.field && ! referenceSet.has( currentGroupBy.field )
+			? undefined
+			: currentGroupBy;
+	const groupByChanged = currentGroupBy !== nextGroupBy;
 	const rawCalculations = view?.calculations;
 	const hasCalculationObject =
 		rawCalculations &&
@@ -168,11 +205,13 @@ export function normalizeView( view, validIds, options = {} ) {
 	const nextCalculations = Array.isArray( options.fields )
 		? sanitizeCalculations(
 				currentCalculations,
-				options.fields.filter( ( field ) => validSet.has( field.id ) )
+				options.fields.filter( ( field ) =>
+					referenceSet.has( field.id )
+				)
 		  )
 		: Object.fromEntries(
 				Object.entries( currentCalculations ).filter( ( [ id ] ) =>
-					validSet.has( id )
+					referenceSet.has( id )
 				)
 		  );
 	const calculationsChanged =
@@ -198,8 +237,11 @@ export function normalizeView( view, validIds, options = {} ) {
 	if (
 		! fieldsChanged &&
 		! layoutChanged &&
-		! calculationsChanged &&
-		! groupByChanged
+		! sortChanged &&
+		! filtersChanged &&
+		! groupByFieldChanged &&
+		! groupByChanged &&
+		! calculationsChanged
 	) {
 		return view;
 	}
@@ -207,6 +249,8 @@ export function normalizeView( view, validIds, options = {} ) {
 	const nextView = {
 		...view,
 		fields: nextFields,
+		sort: nextSort,
+		filters: nextFilters,
 		layout: layoutResult.layout,
 	};
 	for ( const key of DISPLAY_FIELD_KEYS ) {
@@ -228,9 +272,6 @@ export function normalizeView( view, validIds, options = {} ) {
 		delete nextView.infiniteScrollEnabled;
 		delete nextView.startPosition;
 	}
-	if ( groupByChanged ) {
-		delete nextView.groupBy;
-	}
 	if ( layoutByTypeResult.layoutByType !== undefined ) {
 		nextView.layoutByType = layoutByTypeResult.layoutByType;
 	} else {
@@ -240,6 +281,16 @@ export function normalizeView( view, validIds, options = {} ) {
 		nextView.fieldsByType = fieldsByTypeResult.fieldsByType;
 	} else {
 		delete nextView.fieldsByType;
+	}
+	if ( nextGroupByField ) {
+		nextView.groupByField = nextGroupByField;
+	} else {
+		delete nextView.groupByField;
+	}
+	if ( nextGroupBy ) {
+		nextView.groupBy = nextGroupBy;
+	} else {
+		delete nextView.groupBy;
 	}
 	if ( Object.keys( nextCalculations ).length > 0 ) {
 		nextView.calculations = nextCalculations;

@@ -1,6 +1,7 @@
 import {
 	DEFAULT_MIN_WIDTH,
 	FIELD_HEADER_ICON_CHROME,
+	GHOST_FIELD_ID,
 	MAX_COLUMN_WIDTH,
 	MIN_WIDTHS,
 	TITLE_FIELD_ID,
@@ -257,6 +258,16 @@ describe( 'normalizeView', () => {
 		expect( next.fields[ 0 ] ).toBe( TITLE_FIELD_ID );
 	} );
 
+	it( 'can prune fields without forcing the title id', () => {
+		const view = { ...baseView(), fields: [ 'field-removed' ] };
+		const next = normalizeView(
+			view,
+			new Set( [ TITLE_FIELD_ID, 'field-1' ] ),
+			{ ensureTitle: false }
+		);
+		expect( next.fields ).toEqual( [] );
+	} );
+
 	it( 'prunes layout.styles entries for fields that no longer exist', () => {
 		const view = {
 			...baseView(),
@@ -501,6 +512,73 @@ describe( 'normalizeView', () => {
 			grid: [ 'field-1' ],
 			list: [],
 		} );
+	} );
+
+	it( 'drops sort, filters, and grouping that reference removed fields', () => {
+		const view = {
+			...baseView(),
+			sort: { field: 'field-removed', direction: 'asc' },
+			filters: [
+				{ field: 'field-1', operator: 'is', value: 'keep' },
+				{ field: 'field-removed', operator: 'is', value: 'drop' },
+			],
+			groupByField: 'field-removed',
+			groupBy: { field: 'field-removed' },
+		};
+		const next = normalizeView(
+			view,
+			new Set( [ TITLE_FIELD_ID, 'field-1' ] )
+		);
+
+		expect( next.sort ).toBeNull();
+		expect( next.filters ).toEqual( [
+			{ field: 'field-1', operator: 'is', value: 'keep' },
+		] );
+		expect( next.groupByField ).toBeUndefined();
+		expect( next.groupBy ).toBeUndefined();
+	} );
+
+	it( 'can preserve synthetic visible fields without treating them as data references', () => {
+		const view = {
+			...baseView(),
+			fields: [ TITLE_FIELD_ID, GHOST_FIELD_ID ],
+			sort: { field: GHOST_FIELD_ID, direction: 'asc' },
+			filters: [ { field: GHOST_FIELD_ID, operator: 'is', value: 'x' } ],
+			groupByField: GHOST_FIELD_ID,
+			groupBy: { field: GHOST_FIELD_ID },
+			calculations: { [ GHOST_FIELD_ID ]: 'count' },
+		};
+		const next = normalizeView(
+			view,
+			new Set( [ TITLE_FIELD_ID, GHOST_FIELD_ID ] ),
+			{
+				fields: [ { id: TITLE_FIELD_ID, cortextType: 'title' } ],
+				referenceIds: new Set( [ TITLE_FIELD_ID ] ),
+			}
+		);
+		expect( next.fields ).toEqual( [ TITLE_FIELD_ID, GHOST_FIELD_ID ] );
+		expect( next.sort ).toBeNull();
+		expect( next.filters ).toEqual( [] );
+		expect( next.groupByField ).toBeUndefined();
+		expect( next.groupBy ).toBeUndefined();
+		expect( next.calculations ).toBeUndefined();
+	} );
+
+	it( 'preserves sort, filters, grouping, and row detail mode for live fields', () => {
+		const view = {
+			...baseView(),
+			sort: { field: 'field-1', direction: 'asc' },
+			filters: [ { field: 'field-1', operator: 'is', value: 'keep' } ],
+			groupByField: 'field-1',
+			groupBy: { field: 'field-1' },
+			rowDetailMode: 'modal',
+		};
+		const next = normalizeView(
+			view,
+			new Set( [ TITLE_FIELD_ID, 'field-1', 'field-2' ] )
+		);
+		expect( next ).toBe( view );
+		expect( next.rowDetailMode ).toBe( 'modal' );
 	} );
 
 	it( 'keeps calculations for hidden fields that still exist', () => {
