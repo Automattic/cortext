@@ -115,7 +115,7 @@ final class Compiler {
 		if ( $depth > self::MAX_AST_DEPTH ) {
 			throw new FormulaParseError(
 				'cortext_formula_too_deep',
-				__( 'Formula is nested too deeply.', 'cortext' )
+				__( 'This formula is nested too deeply.', 'cortext' )
 			);
 		}
 
@@ -123,7 +123,7 @@ final class Compiler {
 		if ( $count > self::MAX_AST_NODES ) {
 			throw new FormulaParseError(
 				'cortext_formula_too_complex',
-				__( 'Formula is too complex.', 'cortext' )
+				__( 'This formula is too complex.', 'cortext' )
 			);
 		}
 
@@ -163,7 +163,7 @@ final class Compiler {
 			'call' => $this->resolve_call( $node, $field_map, $self_field_id, $previous_refs ),
 			default => throw new FormulaParseError(
 				'cortext_formula_invalid_ast',
-				__( 'Formula could not be parsed.', 'cortext' )
+				__( 'We couldn\'t read this formula.', 'cortext' )
 			),
 		};
 	}
@@ -177,7 +177,7 @@ final class Compiler {
 		if ( 'number' !== $arg['type'] ) {
 			throw new FormulaParseError(
 				'cortext_formula_type_mismatch',
-				__( 'Unary minus needs a number.', 'cortext' )
+				__( 'Use unary minus with a number.', 'cortext' )
 			);
 		}
 		return array(
@@ -208,7 +208,7 @@ final class Compiler {
 			if ( ! $this->comparable_types( $left['type'], $right['type'] ) ) {
 				throw new FormulaParseError(
 					'cortext_formula_type_mismatch',
-					__( 'Comparison values must have compatible types.', 'cortext' )
+					__( 'Compare values of the same kind.', 'cortext' )
 				);
 			}
 			$type = 'checkbox';
@@ -217,7 +217,7 @@ final class Compiler {
 		} elseif ( 'number' !== $left['type'] || 'number' !== $right['type'] ) {
 			throw new FormulaParseError(
 				'cortext_formula_type_mismatch',
-				__( 'Math operators need numbers.', 'cortext' )
+				__( 'Math operators only work with numbers.', 'cortext' )
 			);
 		}
 
@@ -289,7 +289,7 @@ final class Compiler {
 		if ( 1 !== count( $args ) || 'literal' !== ( $args[0]['node'] ?? '' ) || 'text' !== ( $args[0]['type'] ?? '' ) ) {
 			throw new FormulaParseError(
 				'cortext_formula_invalid_prop',
-				__( 'field() needs one quoted field name. prop() works as an alias.', 'cortext' )
+				__( 'Use one quoted field name, like field("Price"). prop() works too.', 'cortext' )
 			);
 		}
 
@@ -338,7 +338,7 @@ final class Compiler {
 				'cortext_formula_unknown_prop',
 				sprintf(
 					/* translators: %s: referenced field name. */
-					__( 'Unknown field in formula: %s', 'cortext' ),
+					__( 'Formula field not found: %s', 'cortext' ),
 					$name
 				)
 			);
@@ -349,7 +349,7 @@ final class Compiler {
 				'cortext_formula_ambiguous_prop',
 				sprintf(
 					/* translators: %s: referenced field name. */
-					__( 'More than one field is named %s.', 'cortext' ),
+					__( 'More than one field is named %s. Rename one or use a unique field.', 'cortext' ),
 					$name
 				)
 			);
@@ -360,13 +360,13 @@ final class Compiler {
 		if ( $field_id === $self_field_id ) {
 			throw new FormulaParseError(
 				'cortext_formula_self_reference',
-				__( 'A formula cannot reference itself.', 'cortext' )
+				__( 'A formula cannot use itself.', 'cortext' )
 			);
 		}
 		if ( $field['multiple'] || in_array( $field['type'], array( 'relation', 'rollup' ), true ) ) {
 			throw new FormulaParseError(
 				'cortext_formula_unsupported_target_type',
-				__( 'Formulas cannot reference multi-value, relation, or rollup fields in v0.', 'cortext' )
+				__( 'Formulas can only use single-value fields in v0. Multi-select, relation, and rollup fields are not available yet.', 'cortext' )
 			);
 		}
 
@@ -424,7 +424,7 @@ final class Compiler {
 			if ( isset( $visiting[ $field_id ] ) ) {
 				throw new FormulaParseError(
 					'cortext_formula_cycle',
-					__( 'Formula references loop back on themselves.', 'cortext' )
+					__( 'These formula references create a loop.', 'cortext' )
 				);
 			}
 			$visiting[ $field_id ] = true;
@@ -432,7 +432,7 @@ final class Compiler {
 				if ( (int) $dep_id === $self_field_id && $field_id !== $self_field_id ) {
 					throw new FormulaParseError(
 						'cortext_formula_cycle',
-						__( 'Formula references loop back on themselves.', 'cortext' )
+						__( 'These formula references create a loop.', 'cortext' )
 					);
 				}
 				if ( isset( $graph[ (int) $dep_id ] ) ) {

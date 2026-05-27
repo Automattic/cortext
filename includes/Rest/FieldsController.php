@@ -376,7 +376,7 @@ final class FieldsController {
 		if ( $collection_id < 1 ) {
 			return new WP_Error(
 				'cortext_field_collection_missing',
-				__( 'Could not find this field\'s collection.', 'cortext' ),
+				__( 'We couldn\'t find this field\'s collection.', 'cortext' ),
 				array( 'status' => 400 )
 			);
 		}
@@ -681,7 +681,7 @@ final class FieldsController {
 			if ( $trait_term_id < 1 ) {
 				return new WP_Error(
 					'cortext_field_collection_missing',
-					__( 'Could not find this field\'s collection.', 'cortext' ),
+					__( 'We couldn\'t find this field\'s collection.', 'cortext' ),
 					array( 'status' => 400 )
 				);
 			}
@@ -1162,7 +1162,7 @@ final class FieldsController {
 					'cortext_formula_dependent_invalid',
 					sprintf(
 						/* translators: 1: dependent formula field title, 2: formula error message. */
-						__( '"%1$s" would break after this change: %2$s', 'cortext' ),
+						__( 'Changing this would break "%1$s": %2$s', 'cortext' ),
 						$title,
 						$compiled->get_error_message()
 					),

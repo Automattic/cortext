@@ -114,21 +114,29 @@ final class Functions {
 			),
 			default => throw new FormulaEvalError(
 				'cortext_formula_unknown_function',
-				__( 'Formula references an unknown function.', 'cortext' )
+				__( 'This formula uses an unknown function.', 'cortext' )
 			),
 		};
 	}
 
 	private static function require_min_arity( string $name, int $actual, int $minimum, string $return_type ): string {
 		if ( $actual < $minimum ) {
-			throw new FormulaParseError(
-				'cortext_formula_invalid_arity',
-				sprintf(
-					/* translators: 1: function name, 2: minimum argument count. */
-					__( '%1$s() needs at least %2$d argument(s).', 'cortext' ),
+			$message = 1 === $minimum
+				? sprintf(
+					/* translators: %s: function name. */
+					__( '%s() needs at least one value.', 'cortext' ),
+					$name
+				)
+				: sprintf(
+					/* translators: 1: function name, 2: minimum value count. */
+					__( '%1$s() needs at least %2$d values.', 'cortext' ),
 					$name,
 					$minimum
-				)
+				);
+
+			throw new FormulaParseError(
+				'cortext_formula_invalid_arity',
+				$message
 			);
 		}
 		return $return_type;
@@ -140,14 +148,29 @@ final class Functions {
 	 */
 	private static function require_types( string $name, array $args, array $expected, string $return_type ): string {
 		if ( count( $args ) !== count( $expected ) ) {
+			$expected_count = count( $expected );
+			$message        = match ( $expected_count ) {
+				0 => sprintf(
+					/* translators: %s: function name. */
+					__( '%s() does not take any values.', 'cortext' ),
+					$name
+				),
+				1 => sprintf(
+					/* translators: %s: function name. */
+					__( '%s() needs one value.', 'cortext' ),
+					$name
+				),
+				default => sprintf(
+					/* translators: 1: function name, 2: value count. */
+					__( '%1$s() needs %2$d values.', 'cortext' ),
+					$name,
+					$expected_count
+				),
+			};
+
 			throw new FormulaParseError(
 				'cortext_formula_invalid_arity',
-				sprintf(
-					/* translators: 1: function name, 2: argument count. */
-					__( '%1$s() needs %2$d argument(s).', 'cortext' ),
-					$name,
-					count( $expected )
-				)
+				$message
 			);
 		}
 
@@ -177,19 +200,19 @@ final class Functions {
 		if ( 3 !== count( $args ) ) {
 			throw new FormulaParseError(
 				'cortext_formula_invalid_arity',
-				__( 'if() needs 3 arguments.', 'cortext' )
+				__( 'if() needs condition, then, and else values.', 'cortext' )
 			);
 		}
 		if ( ! self::type_matches( (string) $args[0]['type'], 'checkbox' ) ) {
 			throw new FormulaParseError(
 				'cortext_formula_type_mismatch',
-				__( 'if() condition must be true or false.', 'cortext' )
+				__( 'The if() condition must be true or false.', 'cortext' )
 			);
 		}
 		if ( $args[1]['type'] !== $args[2]['type'] ) {
 			throw new FormulaParseError(
 				'cortext_formula_mixed_if',
-				__( 'Both if() branches must return the same type in v0.', 'cortext' )
+				__( 'Both if() results must use the same type in v0.', 'cortext' )
 			);
 		}
 		return array(
@@ -205,7 +228,7 @@ final class Functions {
 		if ( 3 !== count( $args ) ) {
 			throw new FormulaParseError(
 				'cortext_formula_invalid_arity',
-				__( 'dateBetween() needs 3 arguments.', 'cortext' )
+				__( 'dateBetween() needs two dates and a unit.', 'cortext' )
 			);
 		}
 		if ( ! self::type_matches( (string) $args[0]['type'], 'date' ) || ! self::type_matches( (string) $args[1]['type'], 'date' ) ) {
@@ -217,7 +240,7 @@ final class Functions {
 		if ( 'text' !== $args[2]['type'] ) {
 			throw new FormulaParseError(
 				'cortext_formula_type_mismatch',
-				__( 'dateBetween() unit must be text.', 'cortext' )
+				__( 'The dateBetween() unit must be text, like "days".', 'cortext' )
 			);
 		}
 		return 'number';
@@ -230,7 +253,7 @@ final class Functions {
 		if ( 2 !== count( $args ) ) {
 			throw new FormulaParseError(
 				'cortext_formula_invalid_arity',
-				__( 'formatDate() needs 2 arguments.', 'cortext' )
+				__( 'formatDate() needs a date and a format.', 'cortext' )
 			);
 		}
 		if ( ! self::type_matches( (string) $args[0]['type'], 'date' ) || 'text' !== $args[1]['type'] ) {

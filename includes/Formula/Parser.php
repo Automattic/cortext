@@ -36,7 +36,7 @@ final class Parser {
 		if ( 'eof' !== $this->peek()['type'] ) {
 			throw new FormulaParseError(
 				'cortext_formula_unexpected_token',
-				__( 'There is extra text after the formula.', 'cortext' )
+				__( 'Remove the extra text after the formula.', 'cortext' )
 			);
 		}
 		return $node;
@@ -115,7 +115,7 @@ final class Parser {
 				}
 				$this->consume_punct(
 					')',
-					__( 'Function call is missing a closing parenthesis.', 'cortext' )
+					__( 'Add the closing parenthesis for this function.', 'cortext' )
 				);
 				return array(
 					'node' => 'call',
@@ -146,14 +146,14 @@ final class Parser {
 			$node = $this->parse_expression();
 			$this->consume_punct(
 				')',
-				__( 'Grouped formula is missing a closing parenthesis.', 'cortext' )
+				__( 'Add the closing parenthesis for this group.', 'cortext' )
 			);
 			return $node;
 		}
 
 		throw new FormulaParseError(
 			'cortext_formula_unexpected_token',
-			__( 'Unexpected formula syntax.', 'cortext' )
+			__( 'This formula has unexpected syntax.', 'cortext' )
 		);
 	}
 

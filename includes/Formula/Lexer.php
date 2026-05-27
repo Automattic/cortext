@@ -31,7 +31,7 @@ final class Lexer {
 		if ( $length > self::MAX_EXPRESSION_LENGTH ) {
 			throw new FormulaParseError(
 				'cortext_formula_too_long',
-				__( 'Formula is too long.', 'cortext' )
+				__( 'This formula is too long.', 'cortext' )
 			);
 		}
 
@@ -176,7 +176,7 @@ final class Lexer {
 				'cortext_formula_invalid_character',
 				sprintf(
 					/* translators: %s: invalid formula character. */
-					__( 'Unsupported character in formula: %s', 'cortext' ),
+					__( 'This character is not supported in formulas: %s', 'cortext' ),
 					$char
 				)
 			);
@@ -202,7 +202,7 @@ final class Lexer {
 		if ( count( $tokens ) > self::MAX_TOKENS ) {
 			throw new FormulaParseError(
 				'cortext_formula_too_complex',
-				__( 'Formula is too complex.', 'cortext' )
+				__( 'This formula is too complex.', 'cortext' )
 			);
 		}
 	}
@@ -211,7 +211,7 @@ final class Lexer {
 		if ( strlen( $value ) > self::MAX_STRING_LENGTH ) {
 			throw new FormulaParseError(
 				'cortext_formula_string_too_long',
-				__( 'Text value is too long.', 'cortext' )
+				__( 'This text value is too long.', 'cortext' )
 			);
 		}
 	}

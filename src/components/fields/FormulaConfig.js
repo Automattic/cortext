@@ -46,7 +46,7 @@ const FUNCTION_COMPLETIONS = [
 		insertText: 'field("")',
 		caretOffset: 'field("'.length,
 		type: 'field',
-		description: __( 'Use a field value.', 'cortext' ),
+		description: __( 'Use a value from this row.', 'cortext' ),
 	},
 	{
 		label: 'prop',
@@ -54,7 +54,7 @@ const FUNCTION_COMPLETIONS = [
 		insertText: 'prop("")',
 		caretOffset: 'prop("'.length,
 		type: 'alias',
-		description: __( 'Same as field().', 'cortext' ),
+		description: __( 'Alias for field().', 'cortext' ),
 	},
 	{
 		label: 'concat',
@@ -62,7 +62,7 @@ const FUNCTION_COMPLETIONS = [
 		insertText: 'concat()',
 		caretOffset: 'concat('.length,
 		type: 'text',
-		description: __( 'Join values together.', 'cortext' ),
+		description: __( 'Join values.', 'cortext' ),
 	},
 	{
 		label: 'length',
@@ -78,7 +78,7 @@ const FUNCTION_COMPLETIONS = [
 		insertText: 'upper()',
 		caretOffset: 'upper('.length,
 		type: 'text',
-		description: __( 'Convert text to uppercase.', 'cortext' ),
+		description: __( 'Make text uppercase.', 'cortext' ),
 	},
 	{
 		label: 'lower',
@@ -86,7 +86,7 @@ const FUNCTION_COMPLETIONS = [
 		insertText: 'lower()',
 		caretOffset: 'lower('.length,
 		type: 'text',
-		description: __( 'Convert text to lowercase.', 'cortext' ),
+		description: __( 'Make text lowercase.', 'cortext' ),
 	},
 	{
 		label: 'contains',
@@ -94,7 +94,7 @@ const FUNCTION_COMPLETIONS = [
 		insertText: 'contains(, )',
 		caretOffset: 'contains('.length,
 		type: 'checkbox',
-		description: __( 'Check whether text contains a match.', 'cortext' ),
+		description: __( 'Check if text contains a match.', 'cortext' ),
 	},
 	{
 		label: 'if',
@@ -102,7 +102,7 @@ const FUNCTION_COMPLETIONS = [
 		insertText: 'if(, , )',
 		caretOffset: 'if('.length,
 		type: 'same type',
-		description: __( 'Choose between two values.', 'cortext' ),
+		description: __( 'Return one of two values.', 'cortext' ),
 	},
 	{
 		label: 'now',
@@ -110,7 +110,7 @@ const FUNCTION_COMPLETIONS = [
 		insertText: 'now()',
 		caretOffset: 'now()'.length,
 		type: 'datetime',
-		description: __( 'The current date and time.', 'cortext' ),
+		description: __( 'Current date and time.', 'cortext' ),
 	},
 	{
 		label: 'dateBetween',
@@ -118,7 +118,7 @@ const FUNCTION_COMPLETIONS = [
 		insertText: 'dateBetween(, , "days")',
 		caretOffset: 'dateBetween('.length,
 		type: 'number',
-		description: __( 'Time between two dates.', 'cortext' ),
+		description: __( 'Difference between two dates.', 'cortext' ),
 	},
 	{
 		label: 'formatDate',
@@ -126,7 +126,7 @@ const FUNCTION_COMPLETIONS = [
 		insertText: 'formatDate(, "YYYY-MM-DD")',
 		caretOffset: 'formatDate('.length,
 		type: 'text',
-		description: __( 'Show a date in a format.', 'cortext' ),
+		description: __( 'Format a date as text.', 'cortext' ),
 	},
 ];
 
@@ -461,7 +461,7 @@ export default function FormulaConfig( {
 		} catch ( apiError ) {
 			onError?.(
 				apiError?.message ||
-					__( 'Could not save the formula.', 'cortext' )
+					__( "We couldn't save the formula.", 'cortext' )
 			);
 		}
 	};
@@ -701,7 +701,7 @@ function FormulaReference() {
 				/>
 				<FormulaReferenceRow
 					code={ 'prop("Price")' }
-					text={ __( 'Same as field().', 'cortext' ) }
+					text={ __( 'Alias for field().', 'cortext' ) }
 				/>
 				<FormulaReferenceRow
 					code={ 'field("Title")' }
@@ -712,7 +712,7 @@ function FormulaReference() {
 				/>
 				<p>
 					{ __(
-						'You can reference single-value fields and other formulas. Multi-select, relation, and rollup fields are not supported in v0.',
+						'You can use single-value fields, formulas, and built-in fields. Multi-select, relation, and rollup fields are not available in v0.',
 						'cortext'
 					) }
 				</p>
@@ -738,11 +738,14 @@ function FormulaReference() {
 			<FormulaReferenceSection title={ __( 'Operators', 'cortext' ) }>
 				<FormulaReferenceRow
 					code={ '+  -  *  /' }
-					text={ __( 'Do math. + also joins text.', 'cortext' ) }
+					text={ __(
+						'Use +, -, *, and /. The + operator also joins text.',
+						'cortext'
+					) }
 				/>
 				<FormulaReferenceRow
 					code={ '( ... )' }
-					text={ __( 'Control evaluation order.', 'cortext' ) }
+					text={ __( 'Group parts of a formula.', 'cortext' ) }
 				/>
 				<FormulaReferenceRow
 					code={ '=  ==  !=  >  <  >=  <=' }
@@ -755,7 +758,7 @@ function FormulaReference() {
 			<FormulaReferenceSection title={ __( 'Text', 'cortext' ) }>
 				<FormulaReferenceRow
 					code={ 'concat(a, b, ...)' }
-					text={ __( 'Join values together.', 'cortext' ) }
+					text={ __( 'Join values.', 'cortext' ) }
 				/>
 				<FormulaReferenceRow
 					code={ 'length(text)' }
@@ -763,25 +766,22 @@ function FormulaReference() {
 				/>
 				<FormulaReferenceRow
 					code={ 'upper(text)' }
-					text={ __( 'Convert text to uppercase.', 'cortext' ) }
+					text={ __( 'Make text uppercase.', 'cortext' ) }
 				/>
 				<FormulaReferenceRow
 					code={ 'lower(text)' }
-					text={ __( 'Convert text to lowercase.', 'cortext' ) }
+					text={ __( 'Make text lowercase.', 'cortext' ) }
 				/>
 				<FormulaReferenceRow
 					code={ 'contains(text, search)' }
-					text={ __(
-						'Check whether text contains a match.',
-						'cortext'
-					) }
+					text={ __( 'Check if text contains a match.', 'cortext' ) }
 				/>
 			</FormulaReferenceSection>
 			<FormulaReferenceSection title={ __( 'Conditionals', 'cortext' ) }>
 				<FormulaReferenceRow
 					code={ 'if(condition, then, else)' }
 					text={ __(
-						'Both branches must return the same type in v0.',
+						'The then and else values must use the same type in v0.',
 						'cortext'
 					) }
 				/>
@@ -789,19 +789,19 @@ function FormulaReference() {
 			<FormulaReferenceSection title={ __( 'Dates', 'cortext' ) }>
 				<FormulaReferenceRow
 					code={ 'now()' }
-					text={ __( 'The current date and time.', 'cortext' ) }
+					text={ __( 'Current date and time.', 'cortext' ) }
 				/>
 				<FormulaReferenceRow
 					code={ 'dateBetween(a, b, "days")' }
 					text={ __(
-						'Time between two dates. Units: minutes, hours, days, weeks, months, years.',
+						'Difference between two dates. Units: minutes, hours, days, weeks, months, years.',
 						'cortext'
 					) }
 				/>
 				<FormulaReferenceRow
 					code={ 'formatDate(d, "YYYY-MM-DD")' }
 					text={ __(
-						'Show a date in a format. Tokens: YYYY, Y, MMMM, MMM, MM, DD, D, h, mm, A.',
+						'Format a date as text. Tokens: YYYY, Y, MMMM, MMM, MM, DD, D, h, mm, A.',
 						'cortext'
 					) }
 				/>

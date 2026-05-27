@@ -43,7 +43,7 @@ final class Evaluator {
 			'call' => $this->evaluate_call( $node, $row ),
 			default => throw new FormulaEvalError(
 				'cortext_formula_invalid_ast',
-				__( 'Formula could not be evaluated.', 'cortext' )
+				__( 'We couldn\'t calculate this formula.', 'cortext' )
 			),
 		};
 	}
@@ -89,7 +89,7 @@ final class Evaluator {
 		if ( 'number' !== $value['type'] ) {
 			throw new FormulaEvalError(
 				'cortext_formula_type_mismatch',
-				__( 'Unary minus needs a number.', 'cortext' )
+				__( 'Use unary minus with a number.', 'cortext' )
 			);
 		}
 		return array(
@@ -124,7 +124,7 @@ final class Evaluator {
 		if ( 'number' !== $left['type'] || 'number' !== $right['type'] ) {
 			throw new FormulaEvalError(
 				'cortext_formula_type_mismatch',
-				__( 'Math operators need numbers.', 'cortext' )
+				__( 'Math operators only work with numbers.', 'cortext' )
 			);
 		}
 
@@ -133,7 +133,7 @@ final class Evaluator {
 		if ( '/' === $operator && 0.0 === $b ) {
 			throw new FormulaEvalError(
 				'cortext_formula_divide_by_zero',
-				__( 'Cannot divide by zero.', 'cortext' )
+				__( 'You cannot divide by zero.', 'cortext' )
 			);
 		}
 
