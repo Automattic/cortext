@@ -8,11 +8,11 @@ Pair with [decisions.md](decisions.md) for choices we've made peace with and [ro
 
 ## 1. DataViews has no inline cell editing `[upstream]`
 
-**What.** DataViews v6 ships display layouts and a separate `DataForm` for editing, but no way to make a table cell editable in place. So we mount our own editor from `field.render` (a display renderer in the docs, but the only seam we have), keep edit state per cell, and route saves back through a `RowMutationContext` since `field.render` only gets `{ item }`. Tab and Shift+Tab between cells live in the same layer: editors intercept Tab, ask the parent for the next editable cell via `requestNext`, and the target cell pops open via the `editRequest` channel that also handles auto-focusing the title cell of a fresh row.
+**What.** DataViews v6 can render values and edit them through a separate `DataForm`, but it cannot turn a rendered value into an inline editor. Cortext mounts its own editor from `field.render` (documented as a display renderer, but the only hook available), keeps edit state per cell, and sends saves through `RowMutationContext` because `field.render` only receives `{ item }`. Tab and Shift+Tab live in the same layer: editors catch Tab, ask the parent for the next editable cell through `requestNext`, and the target cell opens through the same `editRequest` channel used to focus the title cell in a fresh row. Table and grid opt into that editing surface. List stays read-only until we design row/value editing for it on purpose.
 
 **Where.** `src/components/EditableCell.js`, `RowMutationContext` and `requestNext` in `src/components/CollectionDataViews.js`, plus a sliver of `src/components/CollectionDataViews.scss`.
 
-**Solution.** What we'd want upstream: an `editable` mode on the table layout that uses each field's `Edit` per cell, an `onSaveItem(item, changes)` prop on `<DataViews>`, native cell-to-cell keyboard navigation, and a layout contract for "this control is rendered inline." With those, `RowMutationContext`, `requestNext`, most of `EditableCell`, and the layout couplings tracked in #5 all go away. It's the biggest entry on this page (~530 lines of `EditableCell` plus context wiring and the navigation walker). File a Gutenberg issue with the use case and proposed shape; `docs/roadmap.md` lists upstream issues as a stretch success metric.
+**Solution.** Upstream would need an `editable` mode on DataViews layouts that uses each field's `Edit` per value, an `onSaveItem(item, changes)` prop on `<DataViews>`, native cell-to-cell keyboard navigation where the layout supports it, and a documented path for controls rendered inline. That would remove `RowMutationContext`, `requestNext`, most of `EditableCell`, and the layout couplings tracked in #5. This is still the largest workaround on the page: roughly 530 lines of `EditableCell`, plus context wiring and the navigation walker. File a Gutenberg issue with the use case and proposed API; `docs/roadmap.md` lists upstream issues as a stretch success metric.
 
 ## 2. Rows aren't in `core-data`'s entity store `[internal]`
 
@@ -26,13 +26,13 @@ Full-page collection creation hit the same schema-cache edge. A new collection r
 
 **Where.** `src/hooks/useCollectionRows.js`, `src/hooks/useCollectionRowsByIds.js`, `src/hooks/rowInvalidation.js`, `src/hooks/documentTrashInvalidation.js`, and `src/hooks/useTrashedDocuments.js`, with call sites in `src/components/CollectionDataViews.js` (`saveRowField`, `onCreated`, row trash), `src/components/SidebarTrash.js`, `src/router/EntityRoute.js`, `src/blocks/data-view/edit.js`, `src/components/Sidebar.js` (post-type entity-config invalidation after collection creation), and `src/components/relations/RelationEditor.js` (paged target-row search and selected-row label lookup).
 
-**Solution.** Switch to `useEntityRecords('postType', \`crtxt\_${slug}\`, query)`plus`saveEntityRecord`for writes once the remaining query shapes can be expressed there.`core-data` would then own caching, race protection, and post-mutation invalidation. Knock-on workarounds it deletes:
+**Solution.** Switch to `useEntityRecords('postType', \`crtxt_${slug}\`, query)` plus `saveEntityRecord` for writes once the remaining query shapes can be expressed there. `core-data` would then own caching, race protection, and post-mutation invalidation. Knock-on workarounds it deletes:
 
--   The `refresh()` handles and invalidation events exist only because rows aren't reactive.
--   Half of `RowMutationContext` (also driven by #1) exists because cells can't reach a `core-data` store that isn't there.
--   `onCreated` runs optimistic `lastPage = ceil((totalItems+1)/perPage)` arithmetic against possibly stale `paginationInfo`. With reactive pagination we'd watch `totalPages` in an effect.
--   The server/client planner becomes normal resolver queries instead of a local fetch policy.
--   Relation label lookup becomes a normal entity-record resolver instead of a one-off include query.
+- The `refresh()` handles and invalidation events exist only because rows aren't reactive.
+- Half of `RowMutationContext` (also driven by #1) exists because cells can't reach a `core-data` store that isn't there.
+- `onCreated` still runs optimistic `lastPage = ceil((totalItems+1)/perPage)` arithmetic for unconstrained views. With reactive pagination we'd watch `totalPages` instead of guessing.
+- The server/client planner becomes normal resolver queries instead of a local fetch policy.
+- Relation label lookup becomes a normal entity-record resolver instead of a one-off include query.
 
 Worth a small spike before committing. Dynamic post-type discovery also needs a real answer: either `core-data` learns about new row CPTs after collection creation, or each collection-creation path keeps the post-type entity-config invalidation nearby.
 
@@ -84,13 +84,13 @@ The cost is another split support matrix. The client checks field type, operator
 
 **Solution.** A `multiselect` dataform-control upstream that DataForm and a future inline-edit mode (#1) resolve from `Edit: 'multiselect'`. It would need hooks for custom option rendering and option management, not just a token input, otherwise Cortext would still need the picker.
 
-## 7. DataViews has no `footer` slot `[upstream, soft]`
+## 7. DataViews has no footer or layout append slot `[upstream, soft]`
 
-**What.** The "+ New" affordance lives in our own div outside `<DataViews>`, with a small CSS layer to make the wrapper flex correctly around DataViews' default `height: 100%`. `<DataViews>` has a `header` slot but no symmetric footer.
+**What.** DataViews has nowhere to put "+ New" at the bottom of a layout. Table and list use a Cortext footer just outside `<DataViews>`, with a small CSS layer to keep the wrapper working around DataViews' default `height: 100%`. Grid is trickier: the button needs to sit with the cards, so Cortext finds the rendered `.dataviews-view-grid` node and portals `DataViewNewRowButton` into it. Empty grid views use a local grid shell until DataViews renders a real grid node.
 
-**Where.** `src/components/CollectionDataViews.js` (`cortext-data-view__footer` div) and `src/components/CollectionDataViews.scss` (`.cortext-data-view` flex layout).
+**Where.** `DataViewNewRowButton` in `src/components/DataViewNewRowButton.js`, `GridNewRowPortal` in `src/components/GridNewRowPortal.js`, the footer mount in `src/components/CollectionDataViews.js`, and the `.cortext-data-view__footer` / `.cortext-data-view__new-row-card` rules in `src/components/CollectionDataViews.scss` and `src/components/CollectionDataViews.grid.scss`.
 
-**Solution.** More "tidy up later" than tech debt: switch to DataViews free composition (already supported via `children`) and lay out `<DataViews.Layout />` and `<DataViews.Pagination />` ourselves. Free composition works today; an upstream `footer` prop would just be neater. This is separate from table-internal footer rows for calculations; see #36 for that harder gap.
+**Solution.** For table and list, switch fully to DataViews free composition (already supported through `children`) and lay out `<DataViews.Layout />` and `<DataViews.Pagination />` ourselves. For grid, DataViews needs an append-item or empty-item slot, or a layout hook that can place a card after the data items without a DOM lookup. This is separate from table footer rows for calculations; see #36 for that harder gap.
 
 ## 8. `CheckboxControl` ignores `hideLabelFromVision` `[upstream]`
 
@@ -496,15 +496,15 @@ Drag/drop and `menu_order` accounting look at both pages and collections through
 
 **Solution.** Add a relation-aware schema copy step. It should clone and remap the forward and reverse fields together, or skip every dependent field, including rollups that point at skipped relations. The duplicate should never carry references back to the source collection's fields. Once that exists, the sidebar notice can name the exact skipped field types instead of treating them all as generic missing columns.
 
-## 55. Loading table skeleton tracks DataViews layout `[upstream, soft]`
+## 55. Loading collection skeletons track DataViews layouts `[upstream, soft]`
 
-**What.** DataViews does not give us a table-body loading slot. Cortext renders `CollectionRowsSkeleton` beside `<DataViews>` and covers the table while the first page loads; without that, the collection pane collapses and jumps when rows show up.
+**What.** DataViews has no loading slot for individual layouts. Cortext renders `CollectionRowsSkeleton` beside `<DataViews>` while the first page loads; without it, the collection pane collapses and jumps when rows arrive. The placeholder now has table/list row variants and a grid card variant, so switching layouts does not briefly show the wrong shape.
 
-The brittle bit is the sizing. The skeleton copies DataViews row heights for compact, balanced, and comfortable density. It lines up in the current build, but a DataViews density change could make the placeholder drift from the real table.
+The brittle part is sizing. The table/list skeleton copies DataViews row heights for compact, balanced, and comfortable density. The grid skeleton copies Cortext's card min size and spacing, which sit on top of DataViews' grid classes. The two match in the current build, but a DataViews density or markup change could make the placeholder drift from the real view.
 
 **Where.** `CollectionRowsSkeleton` in `src/components/Skeleton.js`, the rows-skeleton mount in `src/components/CollectionDataViews.js`, and the `.cortext-collection-skeleton` / `.cortext-data-view__rows-skeleton` rules in `src/components/Skeleton.scss` and `src/components/CollectionDataViews.scss`.
 
-**Solution.** DataViews exposes a table loading slot, or at least row-height CSS variables. Then Cortext can follow the table instead of copying its constants. Until then, keep the skeleton rules next to the DataViews table rules and check for visual drift after DataViews upgrades.
+**Solution.** DataViews exposes a loading slot per layout, or at least row/card size CSS variables. Cortext could then follow the active layout instead of copying its constants. Until then, keep the skeleton rules next to the DataViews layout rules and check for visual drift after DataViews upgrades.
 
 ## 56. Block editor controls do not understand Cortext's header boundary `[upstream]`
 
@@ -541,3 +541,13 @@ This is acceptable for now and covered by e2e, but it is still a timing bridge b
 **Where.** `Collection::build_data_view_block_markup()` and `Collection::maybe_seed_data_view_block()` in `includes/PostType/Collection.php`, `includes/PostType/CollectionContentBackfill.php`, `src/components/CanvasOwnerInspector.js`, owner-block handling in `src/components/EditorBody.js`, `src/blocks/data-view/edit.js`, `src/components/PageInspectorSidebar.js`, and the owner rules in `src/styles/global/_shell-root.scss`.
 
 **Solution.** Replace this with a direct owner-block path: either an upstream dynamic block-template hook or a local body-owner contract. It should read attributes from the current post, lock the body to that block, own inserter/chrome/inspector policy, and keep public serialization predictable. Then the post-insert seed, backfill, editor fallback, SlotFill routing, and owner CSS can shrink or disappear.
+
+## 60. DataViews view state has one active layout shape `[internal, soft]`
+
+**What.** DataViews emits one active `view` shape: one `type`, one `fields` array, and one `layout` object. Cortext needs layout switches to preserve table columns, grid/list display fields, density, card media settings, and query state without one layout overwriting another. The adapter stores Cortext-owned buckets (`layoutByType` and `fieldsByType`) beside the DataViews view, hydrates the active layout before render, and merges DataViews changes back into the canonical view after each change.
+
+This is fine for the baseline, but block attributes and public DataViews state now carry keys upstream does not know about. When a new layout setting is added, the adapter, normalizer, and public renderer all need to move together.
+
+**Where.** `src/components/dataViewAdapter.js`, `src/components/dataViewViewState.js`, `normalizeView` in `src/components/dataViewColumns.js`, the DataViews mounts in `src/components/CollectionDataViews.js` and `src/components/PublicDataView.js`, and the data-view block attributes in `src/blocks/data-view/block.json`.
+
+**Solution.** If DataViews adds native per-layout settings, map to those instead of carrying separate buckets. If Cortext saved views become their own schema, move `layoutByType` / `fieldsByType` there and treat DataViews' `view` as a render adapter only. Until one of those exists, keep this adapter small and covered by round-trip tests.

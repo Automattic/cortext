@@ -21,6 +21,22 @@ const TITLE_FIELD = {
 	render: ( { item } ) => item?.title?.rendered ?? '',
 };
 
+const COVER_FIELD = {
+	id: 'cover',
+	label: __( 'Cover', 'cortext' ),
+	type: 'media',
+	enableGlobalSearch: false,
+	enableSorting: false,
+	getValue: ( { item } ) => item?.cover?.url ?? '',
+	render: ( { item } ) => {
+		const cover = item?.cover;
+		if ( ! cover?.url ) {
+			return null;
+		}
+		return <img src={ cover.url } alt={ cover.alt ?? '' } loading="lazy" />;
+	},
+};
+
 const SYSTEM_FIELDS = [
 	{
 		id: 'created_at',
@@ -117,5 +133,5 @@ function mapPublicField( fieldDef ) {
  */
 export function buildPublicFields( fieldDefs ) {
 	const customFields = fieldDefs.map( mapPublicField );
-	return [ TITLE_FIELD, ...customFields, ...SYSTEM_FIELDS ];
+	return [ TITLE_FIELD, COVER_FIELD, ...customFields, ...SYSTEM_FIELDS ];
 }

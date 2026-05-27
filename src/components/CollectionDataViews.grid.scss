@@ -1,0 +1,345 @@
+@use "@wordpress/base-styles/colors" as *;
+@use "@wordpress/base-styles/variables" as *;
+
+$grid-card-background: $white;
+$grid-card-content-background: #f8f8f8;
+$grid-card-content-hover-background: #f3f3f3;
+
+.cortext-data-view
+.dataviews-view-grid__card:hover
+.cortext-title-cell__open.components-button,
+.cortext-data-view
+.dataviews-view-grid__card:focus-within
+.cortext-title-cell__open.components-button {
+	opacity: 1;
+	pointer-events: auto;
+}
+
+.cortext-data-view {
+
+	&__grid-new-row {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(var(--cortext-grid-card-min, 240px), 1fr));
+		grid-auto-rows: minmax(var(--cortext-grid-card-height, 220px), auto);
+		gap: $grid-unit-20;
+		padding: 0 $grid-unit-20 $grid-unit-20;
+	}
+
+	&__new-row-card-wrapper {
+		box-sizing: border-box;
+		height: 100%;
+		min-height: var(--cortext-grid-card-height, 220px);
+		min-width: 0;
+		order: 1;
+	}
+
+	&__new-row-card.components-button {
+		align-items: center;
+		flex-direction: column;
+		gap: $grid-unit-05;
+		justify-content: center;
+		width: 100%;
+		height: 100%;
+		min-height: var(--cortext-grid-card-height, 220px);
+		padding: $grid-unit-20;
+		border: $border-width solid $gray-200;
+		border-radius: 6px;
+		background: $white;
+		color: $gray-700;
+		text-align: center;
+		text-decoration: none;
+		transition:
+			background-color 120ms ease,
+			border-color 120ms ease,
+			box-shadow 120ms ease,
+			transform 120ms ease;
+
+		&.has-icon.has-text {
+			justify-content: center;
+			padding: $grid-unit-20;
+		}
+
+		&:focus-visible,
+		&:hover:not(:disabled) {
+			border-color: $gray-300;
+			background: $gray-100;
+			color: $gray-900;
+			box-shadow:
+				0 1px 2px rgba(0, 0, 0, 0.06),
+				0 0 0 1px rgba(0, 0, 0, 0.02);
+		}
+
+		&:active:not(:disabled) {
+			transform: translateY(1px);
+			box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.03);
+		}
+	}
+
+	&__cover-image {
+		display: block;
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+	}
+
+	.dataviews-view-grid {
+		grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+		grid-template-rows: none;
+		grid-auto-rows: minmax(var(--cortext-grid-card-height, 220px), auto);
+		grid-auto-flow: row;
+		gap: $grid-unit-20;
+		row-gap: $grid-unit-20;
+		column-gap: $grid-unit-20;
+		padding: $grid-unit-20;
+		align-items: stretch;
+	}
+
+	.dataviews-view-grid__card {
+		position: relative;
+		box-sizing: border-box;
+		height: 100%;
+		min-height: var(--cortext-grid-card-height, 220px);
+		min-width: 0;
+		order: 0;
+		overflow: hidden;
+		padding: 0;
+		border: $border-width solid $gray-200;
+		border-radius: 6px;
+		background: $grid-card-background;
+		transition:
+			background-color 120ms ease,
+			border-color 120ms ease,
+			box-shadow 120ms ease,
+			transform 120ms ease;
+
+		[data-grid-card-clickable="true"] & {
+			cursor: pointer;
+		}
+
+		&:hover,
+		&:focus-within {
+			border-color: $gray-400;
+			background: $grid-card-background;
+			box-shadow:
+				0 2px 8px rgba(0, 0, 0, 0.08),
+				0 0 0 1px rgba(0, 0, 0, 0.03);
+		}
+
+		&:active {
+			box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.03);
+		}
+
+		&:has(.cortext-title-cell--is-open),
+		&:has(.cortext-title-cell--is-opening) {
+			border-color: var(--cortext-accent);
+			background: $grid-card-background;
+			box-shadow:
+				0 2px 8px rgba(0, 0, 0, 0.08),
+				0 0 0 1px var(--cortext-accent);
+		}
+	}
+
+	.dataviews-view-grid .dataviews-view-grid__card .dataviews-view-grid__title-actions {
+		gap: $grid-unit-10;
+		align-items: center;
+		order: 1;
+		width: 100%;
+		box-sizing: border-box;
+		padding: $grid-unit-15 $grid-unit-20 $grid-unit-05;
+		border-bottom: 0;
+		background: $grid-card-content-background;
+		transition: background-color 120ms ease;
+	}
+
+	.dataviews-view-grid__title-field {
+		flex: 1 1 0;
+		min-width: 0;
+		font-weight: 500;
+		color: $gray-900;
+
+		.cortext-title-cell {
+			gap: $grid-unit-10;
+		}
+
+		.cortext-title-cell__icon {
+			align-items: center;
+			justify-content: center;
+			width: 16px;
+			height: 16px;
+		}
+
+		.cortext-document-icon--emoji {
+			transform: translateY(-1px);
+		}
+	}
+
+	.dataviews-view-grid__fields {
+		padding-top: $grid-unit-05;
+	}
+
+	.dataviews-view-grid__field {
+		align-items: baseline;
+		justify-content: flex-start;
+		min-height: $grid-unit-20 + $grid-unit-05;
+		text-align: start;
+	}
+
+	.dataviews-view-grid__field-name {
+		display: none;
+	}
+
+	.dataviews-view-grid__field-value {
+		flex: 1 1 auto;
+		width: 100%;
+		min-width: 0;
+		color: $gray-900;
+		line-height: 1.4;
+		overflow-wrap: anywhere;
+		text-align: start;
+	}
+
+	.dataviews-view-grid__field-value .cortext-editable-cell {
+		width: 100%;
+	}
+
+	.dataviews-view-grid__field-value .cortext-editable-cell > :first-child {
+		min-height: $grid-unit-30;
+		padding: 0 $grid-unit-30 0 $grid-unit-05;
+		border-radius: 4px;
+		box-shadow: inset 0 0 0 1px transparent;
+		position: relative;
+		transition:
+			background-color 120ms ease,
+			box-shadow 120ms ease;
+	}
+
+	.dataviews-view-grid__field-value .cortext-editable-cell__shell:hover {
+		background: transparent;
+		box-shadow: inset 0 0 0 1px transparent;
+	}
+
+	.dataviews-view-grid__field-value .cortext-editable-cell__shell:focus-visible {
+		background: transparent;
+		box-shadow: inset 0 0 0 1px var(--cortext-accent);
+		outline: none;
+	}
+
+	.dataviews-view-grid__field-value .cortext-editable-cell__edit-indicator {
+		position: absolute;
+		top: 50%;
+		right: $grid-unit-05;
+		display: block;
+		color: $gray-700;
+		opacity: 0;
+		transform: translateY(-50%);
+		transition:
+			color 120ms ease,
+			opacity 120ms ease;
+	}
+
+	.dataviews-view-grid__field-value .cortext-editable-cell__shell:hover .cortext-editable-cell__edit-indicator,
+	.dataviews-view-grid__field-value .cortext-editable-cell__shell:focus-visible .cortext-editable-cell__edit-indicator {
+		color: $gray-900;
+		opacity: 1;
+	}
+
+	.dataviews-view-grid__field-value .cortext-editable-cell__display {
+		white-space: normal;
+	}
+
+	.dataviews-view-grid .cortext-relation-ref,
+	.dataviews-view-grid .cortext-relation-ref-more,
+	.dataviews-view-grid .cortext-chip {
+		box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+		box-shadow: inset 0 0 0 1px color-mix(in oklch, currentcolor 20%, transparent);
+	}
+
+	.dataviews-view-grid .cortext-chip--neutral {
+		background-color: $gray-100;
+		box-shadow: inset 0 0 0 1px $gray-300;
+		color: $gray-700;
+	}
+
+	.dataviews-view-grid__badge-fields {
+		justify-content: flex-start;
+		padding-top: $grid-unit-05;
+	}
+
+	.dataviews-view-grid__card > .components-v-stack {
+		order: 2;
+		width: 100%;
+		min-width: 0;
+		box-sizing: border-box;
+		padding: $grid-unit-10 $grid-unit-20 $grid-unit-15;
+		background: $grid-card-content-background;
+		transition: background-color 120ms ease;
+	}
+
+	.dataviews-view-grid__card:hover .dataviews-view-grid__title-actions,
+	.dataviews-view-grid__card:focus-within .dataviews-view-grid__title-actions,
+	.dataviews-view-grid__card:hover > .components-v-stack,
+	.dataviews-view-grid__card:focus-within > .components-v-stack {
+		background: $grid-card-content-hover-background;
+	}
+
+	.dataviews-view-grid__media {
+		position: relative;
+		order: 0;
+		width: 100%;
+		height: auto;
+		min-height: 0;
+		aspect-ratio: 16 / 9;
+		background: $white;
+		border-radius: 0;
+		overflow: hidden;
+
+		img {
+			display: block;
+			border-radius: 0;
+		}
+
+		&::after {
+			display: none;
+		}
+	}
+
+	.dataviews-view-grid__media .cortext-data-view__cover-image {
+		border-radius: 0;
+	}
+
+	.dataviews-view-grid__title-actions .components-button {
+		color: $gray-700;
+
+		&:hover,
+		&:focus-visible {
+			background: $gray-100;
+			color: $gray-900;
+		}
+	}
+
+	.dataviews-view-grid__title-actions .dataviews-all-actions-button.components-button {
+		display: inline-flex;
+		flex: 0 0 auto;
+		align-items: center;
+		justify-content: center;
+		width: $grid-unit-40;
+		min-width: $grid-unit-40;
+		height: $grid-unit-40;
+		margin-inline-start: $grid-unit-10;
+		border-radius: 4px;
+		background: transparent;
+		box-shadow: none;
+		opacity: 1;
+
+		svg {
+			color: currentcolor;
+			fill: currentcolor;
+		}
+
+		&:hover,
+		&:focus-visible {
+			background: $gray-100;
+			box-shadow: none;
+		}
+	}
+}

@@ -993,8 +993,12 @@ function linearRowGaps( renderedRows, activeRow ) {
 		const lineTop = before
 			? before.rect.top
 			: after.rect.top + after.rect.height;
-		const top = Math.max( rawTop, lineTop - ROW_DROP_ZONE_MAX_SIDE );
-		const bottom = Math.min( rawBottom, lineTop + ROW_DROP_ZONE_MAX_SIDE );
+		const top = after
+			? Math.max( rawTop, lineTop - ROW_DROP_ZONE_MAX_SIDE )
+			: lineTop - ROW_DROP_ZONE_MAX_SIDE;
+		const bottom = before
+			? Math.min( rawBottom, lineTop + ROW_DROP_ZONE_MAX_SIDE )
+			: lineTop + ROW_DROP_ZONE_MAX_SIDE;
 		const tableContainerRect = anchor.el?.closest( '.dataviews-view-table' )
 			? rowViewportContainer( anchor.el )?.getBoundingClientRect?.()
 			: null;

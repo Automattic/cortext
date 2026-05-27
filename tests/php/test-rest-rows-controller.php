@@ -545,6 +545,8 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertSame( 'row', $row['kind'] );
 		$this->assertSame( 'My Entry', $row['title']['raw'] );
 		$this->assertSame( 'publish', $row['status'] );
+		$this->assertSame( 0, $row['featured_media'] );
+		$this->assertNull( $row['cover'] );
 		$this->assertSame( 'hello', $row['meta']["field-{$field_id}"] );
 	}
 
@@ -1534,6 +1536,8 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertArrayHasKey( 'modified_at', $subset );
 		$this->assertArrayHasKey( 'created_by', $subset );
 		$this->assertArrayHasKey( 'modified_by', $subset );
+		$this->assertArrayHasKey( 'featured_media', $subset );
+		$this->assertArrayHasKey( 'cover', $subset );
 	}
 
 	public function test_rollup_projection_does_not_include_source_fields(): void {

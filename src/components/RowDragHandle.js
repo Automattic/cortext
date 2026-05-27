@@ -100,8 +100,7 @@ export default function RowDragHandle( { row } ) {
 	}
 
 	return createPortal(
-		<button
-			type="button"
+		<span
 			ref={ setHandleRef }
 			className="cortext-row-drag-handle"
 			aria-label={ sprintf(
@@ -112,9 +111,12 @@ export default function RowDragHandle( { row } ) {
 			data-dragging={ isDragging ? 'true' : 'false' }
 			onClick={ stopClick }
 			onFocus={ stopPropagation }
+			onKeyDown={ stopPropagation }
 			onMouseDown={ stopInteractionStart }
 			onTouchStart={ stopInteractionStart }
 			{ ...attributes }
+			role="button"
+			tabIndex={ 0 }
 			{ ...guardedListeners }
 		/>,
 		row.handleEl

@@ -926,6 +926,25 @@ describe( 'useCollectionRows', () => {
 		expect( args[ 'fields[2]' ] ).toBe( 'title' );
 	} );
 
+	it( 'includes active layout fields in the server projection', () => {
+		const args = buildQueryArgs(
+			7,
+			{
+				type: 'grid',
+				fields: [ 'title', 'field-20' ],
+				fieldsByType: {
+					grid: [ 'field-10' ],
+					list: [],
+				},
+			},
+			baseFields
+		);
+
+		expect( args[ 'fields[0]' ] ).toBe( 'field-10' );
+		expect( args[ 'fields[1]' ] ).toBe( 'field-20' );
+		expect( args[ 'fields[2]' ] ).toBe( 'title' );
+	} );
+
 	it( 'omits fields[] when every custom field is visible', () => {
 		// This is the auto-seeded default: title plus every custom field.
 		// Asking the server for the same set would only change the request key

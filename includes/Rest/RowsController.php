@@ -1490,23 +1490,40 @@ final class RowsController {
 
 		$created_by_id  = (int) $post->post_author;
 		$modified_by_id = (int) get_post_meta( $post->ID, '_modified_by', true );
+		$cover_id       = (int) get_post_thumbnail_id( $post );
+		$cover          = null;
+		if ( $cover_id > 0 ) {
+			$cover_src = wp_get_attachment_image_src( $cover_id, 'large' );
+			if ( ! is_array( $cover_src ) ) {
+				$cover_src = wp_get_attachment_image_src( $cover_id, 'full' );
+			}
+			if ( is_array( $cover_src ) && ! empty( $cover_src[0] ) ) {
+				$cover = array(
+					'id'  => $cover_id,
+					'url' => $cover_src[0],
+					'alt' => (string) get_post_meta( $cover_id, '_wp_attachment_image_alt', true ),
+				);
+			}
+		}
 
 		return array(
-			'id'          => $post->ID,
+			'id'             => $post->ID,
 			// `kind` keeps the row self-describing on the wire. Without it,
 			// JS helpers like `kindFromRecord` see no `type` either (the
 			// cortext endpoint trims that) and would fall back to `null`.
-			'kind'        => 'row',
-			'title'       => array(
+			'kind'           => 'row',
+			'title'          => array(
 				'raw'      => $post->post_title,
 				'rendered' => $post->post_title,
 			),
-			'status'      => $post->post_status,
-			'created_at'  => $this->format_gmt_date( $post->post_date_gmt ),
-			'modified_at' => $this->format_gmt_date( $post->post_modified_gmt ),
-			'created_by'  => $this->display_name_for( $created_by_id ),
-			'modified_by' => $this->display_name_for( $modified_by_id > 0 ? $modified_by_id : $created_by_id ),
-			'meta'        => $meta,
+			'status'         => $post->post_status,
+			'created_at'     => $this->format_gmt_date( $post->post_date_gmt ),
+			'modified_at'    => $this->format_gmt_date( $post->post_modified_gmt ),
+			'created_by'     => $this->display_name_for( $created_by_id ),
+			'modified_by'    => $this->display_name_for( $modified_by_id > 0 ? $modified_by_id : $created_by_id ),
+			'featured_media' => $cover_id,
+			'cover'          => $cover,
+			'meta'           => $meta,
 		);
 	}
 

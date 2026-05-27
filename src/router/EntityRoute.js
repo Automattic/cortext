@@ -71,6 +71,15 @@ const DEFAULT_VIEW = {
 	page: 1,
 	search: '',
 	layout: {},
+	layoutByType: {
+		table: { density: 'compact' },
+		grid: {},
+		list: {},
+	},
+	fieldsByType: {
+		grid: [],
+		list: [],
+	},
 	rowDetailMode: 'side',
 };
 

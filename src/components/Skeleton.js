@@ -96,24 +96,56 @@ export function SidebarListSkeleton( { itemCount = 5 } ) {
 	);
 }
 
-// tech-debt.md#55: match DataViews row heights so the loading table holds the
-// same space as real rows. Cap the row count so perPage=25 stays reasonable.
+// tech-debt.md#55: keep loading placeholders close to the real row/card shapes.
+// Cap the count so perPage=25 does not paint an oversized skeleton.
 const COLLECTION_SKELETON_ROW_CAP = 15;
 
 export function CollectionRowsSkeleton( {
 	rowCount = 8,
 	columnCount = 4,
 	density = 'compact',
+	layout = 'table',
 } ) {
 	const safeColumns = Math.max( 1, columnCount );
 	const safeRows = Math.max(
 		1,
 		Math.min( rowCount, COLLECTION_SKELETON_ROW_CAP )
 	);
+	if ( layout === 'grid' ) {
+		return (
+			<div
+				className="cortext-collection-skeleton cortext-collection-skeleton--grid"
+				aria-hidden="true"
+			>
+				{ Array.from( { length: Math.min( safeRows, 9 ) } ).map(
+					( _, cardIndex ) => (
+						<div
+							key={ cardIndex }
+							className="cortext-collection-skeleton__card"
+						>
+							<SkeletonLine className="cortext-collection-skeleton__card-title" />
+							{ Array.from( {
+								length: Math.min( safeColumns, 4 ),
+							} ).map( ( __, fieldIndex ) => (
+								<div
+									key={ fieldIndex }
+									className="cortext-collection-skeleton__card-field"
+								>
+									<SkeletonLine className="cortext-collection-skeleton__card-label" />
+									<SkeletonLine className="cortext-collection-skeleton__card-value" />
+								</div>
+							) ) }
+						</div>
+					)
+				) }
+			</div>
+		);
+	}
 	return (
 		<div
 			className={ joinClassName(
 				'cortext-collection-skeleton',
+				layout === 'list' ? 'cortext-collection-skeleton--list' : null,
 				`cortext-collection-skeleton--${ density }`
 			) }
 			aria-hidden="true"
