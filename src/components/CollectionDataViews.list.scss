@@ -162,9 +162,10 @@ $list-row-open-background: #f3f3f3;
 	}
 
 	.dataviews-view-list__fields {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-		gap: $grid-unit-05 $grid-unit-30;
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: $grid-unit-05 $grid-unit-15;
 		width: 100%;
 		margin-top: $grid-unit-05;
 		color: $gray-700;
@@ -172,8 +173,10 @@ $list-row-open-background: #f3f3f3;
 	}
 
 	.dataviews-view-list__field {
-		display: block;
+		display: flex;
+		flex: 0 1 auto;
 		min-width: 0;
+		max-width: 100%;
 	}
 
 	.dataviews-view-list__field-value {
