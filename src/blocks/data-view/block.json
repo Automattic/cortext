@@ -53,6 +53,18 @@
 				},
 				"rowDetailMode": "side"
 			}
+		},
+		"default_view": {
+			"type": "object"
+		},
+		"default_layouts": {
+			"type": "object"
+		},
+		"view_list": {
+			"type": "array"
+		},
+		"active_view": {
+			"type": "string"
 		}
 	}
 }

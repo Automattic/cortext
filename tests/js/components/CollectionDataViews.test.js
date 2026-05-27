@@ -1371,6 +1371,63 @@ describe( 'CollectionDataViews with DataViews 18', () => {
 	} );
 } );
 
+describe( 'CollectionDataViews switching saved views', () => {
+	beforeEach( () => {
+		mockDataViews.mockClear();
+		useCollectionFieldsContext.mockReturnValue( collectionFieldState );
+		useCollectionRows.mockReturnValue( collectionRowsState() );
+	} );
+
+	it( 'seeds columns for a saved view that has none', () => {
+		const onChangeView = jest.fn();
+		const { rerender } = render(
+			<CollectionDataViews
+				collectionId={ 7 }
+				view={ tableView }
+				viewKey="default"
+				onChangeView={ onChangeView }
+			/>
+		);
+		onChangeView.mockClear();
+
+		rerender(
+			<CollectionDataViews
+				collectionId={ 7 }
+				view={ { ...tableView, fields: [] } }
+				viewKey="view-1"
+				onChangeView={ onChangeView }
+			/>
+		);
+
+		expect( onChangeView ).toHaveBeenCalled();
+		expect( onChangeView.mock.calls.at( -1 )[ 0 ].fields ).toEqual( [
+			'title',
+			'field-11',
+		] );
+	} );
+
+	it( 'only treats extra columns as new within the same saved view', () => {
+		const onFieldRevealed = jest.fn();
+		const renderView = ( fields, viewKey ) => (
+			<CollectionDataViews
+				collectionId={ 7 }
+				view={ { ...tableView, fields } }
+				viewKey={ viewKey }
+				onChangeView={ jest.fn() }
+				onFieldRevealed={ onFieldRevealed }
+			/>
+		);
+
+		const { rerender } = render( renderView( [ 'title' ], 'narrow' ) );
+		rerender( renderView( [ 'title', 'cover' ], 'wide' ) );
+		expect( onFieldRevealed ).not.toHaveBeenCalled();
+
+		rerender( renderView( [ 'title' ], 'wide' ) );
+		rerender( renderView( [ 'title', 'cover' ], 'wide' ) );
+		expect( onFieldRevealed ).toHaveBeenCalledWith( 'cover' );
+	} );
+} );
+
 describe( 'scrollToEndQuickly', () => {
 	let matchMedia;
 	let requestAnimationFrame;

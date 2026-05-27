@@ -35,7 +35,11 @@ const ENDPOINT_DEFAULT = {
 		layout: { density: 'compact' },
 		rowDetailMode: 'side',
 	},
-	default_layouts: { table: { density: 'compact' }, grid: [], list: [] },
+	default_layouts: {
+		table: { layout: { density: 'compact' } },
+		grid: { layout: { previewSize: 230 } },
+		list: [],
+	},
 	active_view: 'default',
 	view_list: [
 		{
@@ -64,10 +68,10 @@ describe( 'collection view config', () => {
 		const viewConfig = normalizeViewConfig( null, { legacyView } );
 
 		expect( viewConfig.active_view ).toBe( 'default' );
-		expect( viewConfig.default_view.search ).toBeUndefined();
+		expect( viewConfig.default_view.search ).toBe( '' );
 		expect( viewConfig.view_list ).toHaveLength( 1 );
 		expect( viewConfig.view_list[ 0 ].title ).toBe( 'Table' );
-		expect( viewConfig.view_list[ 0 ].view.search ).toBeUndefined();
+		expect( viewConfig.view_list[ 0 ].view.search ).toBe( 'books' );
 		expect( viewConfig.view_list[ 0 ].view.rowDetailMode ).toBe( 'modal' );
 		expect( viewConfig.default_view ).toEqual(
 			createDefaultViewConfig().default_view
@@ -111,7 +115,12 @@ describe( 'collection view config', () => {
 
 		expect( response.view_list[ 0 ].view.calculations ).toEqual( [] );
 		expect( normalized.view_list[ 0 ].view.calculations ).toEqual( {} );
-		expect( normalized.default_layouts.grid ).toEqual( {} );
+		expect( response.default_layouts.list ).toEqual( [] );
+		expect( normalized.default_layouts ).toEqual( {
+			table: { layout: { density: 'compact' } },
+			grid: { layout: { previewSize: 230 } },
+			list: {},
+		} );
 		expect( normalized.view_list[ 0 ].view.layoutByType.list ).toEqual(
 			{}
 		);
@@ -183,8 +192,8 @@ describe( 'collection view config', () => {
 			createDefaultView( { search: 'active only' } )
 		);
 
-		expect( next.view_list[ 0 ].view.search ).toBeUndefined();
-		expect( next.view_list[ 1 ].view.search ).toBeUndefined();
+		expect( next.view_list[ 0 ].view.search ).toBe( '' );
+		expect( next.view_list[ 1 ].view.search ).toBe( 'active only' );
 		expect( getActiveView( next ).fields ).toEqual( [] );
 	} );
 
@@ -254,7 +263,7 @@ describe( 'collection view config', () => {
 		expect( next.active_view ).toBe( 'view-1' );
 	} );
 
-	it( 'strips runtime query state before storage', () => {
+	it( 'keeps search but strips the current page before storage', () => {
 		const next = prepareViewConfigForStorage(
 			updateActiveView(
 				createDefaultViewConfig(),
@@ -267,11 +276,11 @@ describe( 'collection view config', () => {
 		);
 
 		expect( next.view_list[ 0 ].view.page ).toBeUndefined();
-		expect( next.view_list[ 0 ].view.search ).toBeUndefined();
+		expect( next.view_list[ 0 ].view.search ).toBe( 'draft' );
 		expect( next.view_list[ 0 ].view.rowDetailMode ).toBe( 'full' );
 	} );
 
-	it( 'treats runtime-only page and search changes as the same stored config', () => {
+	it( 'treats page-only changes as the same stored config', () => {
 		const viewConfig = updateActiveView(
 			createDefaultViewConfig(),
 			createDefaultView( { fields: [ 'title' ] } )
@@ -284,13 +293,24 @@ describe( 'collection view config', () => {
 					view: {
 						...viewConfig.view_list[ 0 ].view,
 						page: 4,
-						search: 'runtime',
 					},
 				},
 			],
 		};
 
 		expect( viewConfigsEqual( viewConfig, runtimeOnly ) ).toBe( true );
+		expect(
+			viewConfigsEqual(
+				viewConfig,
+				updateActiveView(
+					viewConfig,
+					createDefaultView( {
+						fields: [ 'title' ],
+						search: 'saved',
+					} )
+				)
+			)
+		).toBe( false );
 	} );
 
 	it( 'normalizes all view configs against the live fields', () => {

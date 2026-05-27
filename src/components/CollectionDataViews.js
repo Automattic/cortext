@@ -130,7 +130,12 @@ const ignoreDataViewsSelectionChange = () => {};
 export default function CollectionDataViews( {
 	collectionId,
 	view,
+	// Identifies which saved view `view` is. Changing it means a different
+	// view, not an edit to the current one.
+	viewKey,
 	onChangeView,
+	defaultLayouts = DEFAULT_LAYOUTS,
+	header,
 	empty,
 	invalid,
 	error,
@@ -181,31 +186,7 @@ export default function CollectionDataViews( {
 			return view;
 		}
 		const validIds = new Set( availableFields.map( ( f ) => f.id ) );
-		const currentFilters = view?.filters ?? [];
-		const nextFilters = pruneFiltersForFields( currentFilters, validIds );
-		const currentFields = Array.isArray( view?.fields ) ? view.fields : [];
-		const previouslyKnown = knownFieldIdsRef.current;
-		const newlyVisibleFields =
-			previouslyKnown && currentFields.length > 0
-				? availableFields
-						.filter(
-							( field ) =>
-								isDefaultVisibleField( field ) &&
-								! previouslyKnown.has( field.id ) &&
-								! currentFields.includes( field.id )
-						)
-						.map( ( field ) => field.id )
-				: [];
-		if ( nextFilters !== currentFilters || newlyVisibleFields.length > 0 ) {
-			return {
-				...view,
-				filters: nextFilters,
-				...( newlyVisibleFields.length > 0
-					? { fields: [ ...currentFields, ...newlyVisibleFields ] }
-					: {} ),
-			};
-		}
-		return view;
+		return normalizeView( view, validIds, { fields: availableFields } );
 	}, [ view, availableFields, isResolving ] );
 
 	const {
@@ -1507,7 +1488,7 @@ export default function CollectionDataViews( {
 	}, [ clearSelection, collectionId ] );
 
 	// Reconcile saved view state with the live schema whenever the field
-	// set changes: seed defaults on first render, then hand off to
+	// set or the saved view changes: seed defaults for a view without columns, then hand off to
 	// `normalizeView` for fields/styles cleanup (drop entries for fields
 	// that no longer exist, clamp persisted widths, pin title in fields).
 	// Sort and filters keep their own per-key reconciliation here because
@@ -1594,6 +1575,7 @@ export default function CollectionDataViews( {
 		isResolving,
 		fieldsResolved,
 		pendingRevealFieldId,
+		viewKey,
 	] );
 
 	useLayoutEffect( () => {
@@ -1669,13 +1651,19 @@ export default function CollectionDataViews( {
 
 	useLayoutEffect( () => {
 		const currentFields = [ ...( view?.fields ?? [] ) ];
-		const previousFields = previousVisibleFieldsRef.current;
-		if ( ! previousFields ) {
+		const previous = previousVisibleFieldsRef.current;
+		// A different saved view brings its own columns; only compare columns
+		// within the same view.
+		if ( ! previous || previous.viewKey !== viewKey ) {
 			if ( fieldsResolved && ! isResolving && ! showLoadingShell ) {
-				previousVisibleFieldsRef.current = currentFields;
+				previousVisibleFieldsRef.current = {
+					viewKey,
+					fields: currentFields,
+				};
 			}
 			return;
 		}
+		const previousFields = previous.fields;
 		if (
 			! isTableLayout ||
 			isResolving ||
@@ -1693,13 +1681,14 @@ export default function CollectionDataViews( {
 		if ( addedAtEnd ) {
 			setLocalRevealFieldId( lastFieldId );
 		}
-		previousVisibleFieldsRef.current = currentFields;
+		previousVisibleFieldsRef.current = { viewKey, fields: currentFields };
 	}, [
 		fieldsResolved,
 		isResolving,
 		isTableLayout,
 		showLoadingShell,
 		view?.fields,
+		viewKey,
 	] );
 
 	useEffect( () => {
@@ -2027,7 +2016,7 @@ export default function CollectionDataViews( {
 										view={ dataViewsView }
 										onChangeView={ onDataViewsChange }
 										paginationInfo={ activePaginationInfo }
-										defaultLayouts={ DEFAULT_LAYOUTS }
+										defaultLayouts={ defaultLayouts }
 										getItemId={ ( item ) =>
 											String( item.id )
 										}
@@ -2038,6 +2027,7 @@ export default function CollectionDataViews( {
 									>
 										<DataViewsChrome
 											footer={ dataViewsFooter }
+											header={ header }
 										/>
 									</DataViews>
 									{ isGridLayout && (

@@ -9,7 +9,7 @@ import { useMemo } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { archive, closeSmall, trash } from '@wordpress/icons';
 
-export function DataViewsChrome( { footer } ) {
+export function DataViewsChrome( { footer, header } ) {
 	return (
 		<>
 			<HStack
@@ -18,6 +18,7 @@ export function DataViewsChrome( { footer } ) {
 				className="dataviews__view-actions"
 				spacing={ 1 }
 			>
+				{ header }
 				<HStack
 					justify="start"
 					expanded={ false }

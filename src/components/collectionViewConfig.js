@@ -1,10 +1,10 @@
 import { __, sprintf } from '@wordpress/i18n';
 
+import { DEFAULT_GRID_PREVIEW_SIZE, DEFAULT_LAYOUTS } from './dataViewAdapter';
 import { normalizeView } from './dataViewColumns';
 
 export const DEFAULT_VIEW_SLUG = 'default';
 export const DEFAULT_VIEW_TITLE = __( 'Table', 'cortext' );
-const DEFAULT_RUNTIME_STATE = { page: 1, search: '' };
 
 export function createDefaultView( overrides = {} ) {
 	return {
@@ -12,20 +12,28 @@ export function createDefaultView( overrides = {} ) {
 		fields: [],
 		sort: null,
 		filters: [],
+		search: '',
 		calculations: {},
 		perPage: 25,
 		layout: { density: 'compact' },
+		layoutByType: {
+			table: { density: 'compact' },
+			grid: { previewSize: DEFAULT_GRID_PREVIEW_SIZE },
+			list: {},
+		},
+		fieldsByType: {
+			grid: [],
+			list: [],
+		},
 		rowDetailMode: 'side',
 		...overrides,
 	};
 }
 
+// Same shape as DataViews `defaultLayouts` and core's entity view config:
+// each entry is the partial view applied when switching to that layout.
 export function createDefaultLayouts() {
-	return {
-		table: { density: 'compact' },
-		grid: {},
-		list: {},
-	};
+	return cloneValue( DEFAULT_LAYOUTS );
 }
 
 function cloneValue( value ) {
@@ -98,41 +106,28 @@ function mergeView( defaultView, view ) {
 	};
 }
 
+function toPage( value ) {
+	const page = Number( value ?? 1 );
+	return Number.isFinite( page ) && page > 0 ? page : 1;
+}
+
+// The current page is the only view state that is not saved: every view
+// opens on its first page. Search is part of the saved view.
 export function stripViewRuntimeState( view ) {
 	if ( ! isPlainObject( view ) ) {
 		return view;
 	}
 	const next = { ...view };
 	delete next.page;
-	delete next.search;
 	return next;
 }
 
 export function getViewRuntimeState( view ) {
-	const page = Number( view?.page ?? DEFAULT_RUNTIME_STATE.page );
-	return {
-		page: Number.isFinite( page ) && page > 0 ? page : 1,
-		search:
-			typeof view?.search === 'string'
-				? view.search
-				: DEFAULT_RUNTIME_STATE.search,
-	};
+	return { page: toPage( view?.page ) };
 }
 
 export function applyViewRuntimeState( view, runtimeState = {} ) {
-	const runtime = {
-		...getViewRuntimeState( view ),
-		...runtimeState,
-	};
-	const page = Number( runtime.page );
-	return {
-		...view,
-		page: Number.isFinite( page ) && page > 0 ? page : 1,
-		search:
-			typeof runtime.search === 'string'
-				? runtime.search
-				: DEFAULT_RUNTIME_STATE.search,
-	};
+	return { ...view, page: toPage( runtimeState.page ?? view?.page ) };
 }
 
 export function nextViewSlug( viewList = [] ) {
@@ -206,7 +201,16 @@ export function normalizeViewConfig( rawViewConfig, options = {} ) {
 		)
 	);
 	const defaultLayouts = isPlainObject( rawViewConfig?.default_layouts )
-		? withObjectValues( cloneValue( rawViewConfig.default_layouts ) )
+		? Object.fromEntries(
+				Object.entries(
+					withObjectValues(
+						cloneValue( rawViewConfig.default_layouts )
+					)
+				).map( ( [ type, entry ] ) => [
+					type,
+					normalizeObjectShapes( entry ),
+				] )
+		  )
 		: createDefaultLayouts();
 	const viewList = [];
 	const usedSlugs = new Set();

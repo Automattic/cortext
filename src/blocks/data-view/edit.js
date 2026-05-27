@@ -18,12 +18,13 @@ import {
 	PanelBody,
 	Placeholder,
 	SelectControl,
+	Spinner,
 	TextControl,
 	ToolbarButton,
 } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
-import { useCallback, useState } from '@wordpress/element';
+import { useCallback, useEffect, useMemo, useState } from '@wordpress/element';
 import { store as interfaceStore } from '@wordpress/interface';
 import { cog, link, plus, replace, table } from '@wordpress/icons';
 
@@ -31,12 +32,13 @@ import CanvasOwnerInspector, {
 	useIsCanvasOwnerBlock,
 } from '../../components/CanvasOwnerInspector';
 import { useCanvasReadySignals } from '../../components/CanvasReadyContext';
-import CollectionDataViews from '../../components/CollectionDataViews';
+import CollectionViewSurface from '../../components/CollectionViewSurface';
 import AddFieldPopover from '../../components/fields/AddFieldPopover';
 import CollectionPicker from './CollectionPicker';
 import { useEditorSurface } from '../../components/EditorSurfaceContext';
 import { useCreateCollectionDocument } from '../../documents';
 import { toDataViewId } from '../../hooks/fieldIds';
+import useCollectionViews from '../../hooks/useCollectionViews';
 import {
 	CollectionFieldsProvider,
 	useCollectionFieldsContext,
@@ -48,7 +50,11 @@ import {
 	ROW_DETAIL_MODE_ICONS,
 	ROW_DETAIL_MODE_LABELS,
 } from '../../components/rowDetailUtils';
-import { DEFAULT_GRID_PREVIEW_SIZE } from '../../components/dataViewAdapter';
+import {
+	createDefaultViewConfig,
+	normalizeViewConfig,
+	shouldSeedViewConfigFromLegacyView,
+} from '../../components/collectionViewConfig';
 
 const DENSITY_OPTIONS = [
 	{ value: 'compact', label: __( 'Compact', 'cortext' ) },
@@ -75,30 +81,6 @@ const ROW_DETAIL_OPTIONS = ROW_DETAIL_MODES.map( ( mode ) => ( {
 	value: mode,
 	label: ROW_DETAIL_MODE_LABELS[ mode ],
 } ) );
-
-function createDefaultView() {
-	return {
-		type: 'table',
-		fields: [],
-		sort: null,
-		filters: [],
-		calculations: {},
-		perPage: 25,
-		page: 1,
-		search: '',
-		layout: { density: 'compact' },
-		layoutByType: {
-			table: { density: 'compact' },
-			grid: { previewSize: DEFAULT_GRID_PREVIEW_SIZE },
-			list: {},
-		},
-		fieldsByType: {
-			grid: [],
-			list: [],
-		},
-		rowDetailMode: 'side',
-	};
-}
 
 function CollectionCreator( { onCreate } ) {
 	const [ title, setTitle ] = useState( '' );
@@ -519,7 +501,16 @@ export default function Edit( {
 	context,
 	setAttributes,
 } ) {
-	const { collectionId, view, align, intent } = attributes;
+	const {
+		collectionId,
+		view,
+		align,
+		intent,
+		default_view: defaultView,
+		default_layouts: defaultLayouts,
+		view_list: viewList,
+		active_view: activeView,
+	} = attributes;
 	const isOwner = useIsCanvasOwnerBlock(
 		clientId,
 		context?.postType,
@@ -537,10 +528,56 @@ export default function Edit( {
 		className: isOwner ? 'is-document-owner' : undefined,
 	} );
 	const [ revealFieldId, setRevealFieldId ] = useState( null );
+	const attributeViewConfig = useMemo(
+		() => ( {
+			default_view: defaultView,
+			default_layouts: defaultLayouts,
+			active_view: activeView,
+			view_list: viewList,
+		} ),
+		[ activeView, defaultLayouts, defaultView, viewList ]
+	);
+	const {
+		viewConfig: ownerViewConfig,
+		isLoading: ownerViewsLoading,
+		hasResolved: ownerViewsResolved,
+		error: ownerViewsError,
+		saveError: ownerSaveError,
+		saveViewConfig: saveOwnerViewConfig,
+	} = useCollectionViews( isOwner ? collectionId : null );
+	const migratedOwnerViewConfig = useMemo( () => {
+		if (
+			isOwner &&
+			ownerViewsResolved &&
+			shouldSeedViewConfigFromLegacyView( ownerViewConfig, view )
+		) {
+			return createDefaultViewConfig( view );
+		}
+		return ownerViewConfig;
+	}, [ isOwner, ownerViewConfig, ownerViewsResolved, view ] );
+	const viewConfig = isOwner ? migratedOwnerViewConfig : attributeViewConfig;
+	const isOwnerViewsLoading =
+		isOwner && ownerViewsLoading && ! ownerViewsResolved;
+	const hasOwnerViewsError = isOwner && Boolean( ownerViewsError );
 
-	const setView = useCallback(
-		( next ) => setAttributes( { view: next } ),
-		[ setAttributes ]
+	const setViewConfig = useCallback(
+		( next ) => {
+			const normalized = normalizeViewConfig( next, {
+				legacyView: view,
+			} );
+			if ( isOwner ) {
+				return saveOwnerViewConfig( normalized );
+			}
+			setAttributes( {
+				default_view: normalized.default_view,
+				default_layouts: normalized.default_layouts,
+				active_view: normalized.active_view,
+				view_list: normalized.view_list,
+				view: undefined,
+			} );
+			return normalized;
+		},
+		[ isOwner, saveOwnerViewConfig, setAttributes, view ]
 	);
 
 	const setAlign = useCallback(
@@ -554,12 +591,18 @@ export default function Edit( {
 	// attributes and survives remounts (the canvas reconciles blocks on load),
 	// keeping the chosen mode.
 	const selectCollection = useCallback(
-		( id ) =>
+		( id ) => {
+			const nextViewConfig = createDefaultViewConfig();
 			setAttributes( {
 				collectionId: id,
-				view: createDefaultView(),
+				default_view: nextViewConfig.default_view,
+				default_layouts: nextViewConfig.default_layouts,
+				active_view: nextViewConfig.active_view,
+				view_list: nextViewConfig.view_list,
+				view: undefined,
 				intent: undefined,
-			} ),
+			} );
+		},
 		[ setAttributes ]
 	);
 
@@ -591,6 +634,14 @@ export default function Edit( {
 		},
 		[ isOwner, signalCollectionReady ]
 	);
+
+	// Without views there is no data view to report ready, and the canvas
+	// would keep waiting on it instead of showing the error.
+	useEffect( () => {
+		if ( hasOwnerViewsError ) {
+			onCollectionReady( collectionId );
+		}
+	}, [ collectionId, hasOwnerViewsError, onCollectionReady ] );
 
 	if ( ! collectionId ) {
 		const isLinkMode = intent === 'link-existing';
@@ -632,6 +683,71 @@ export default function Edit( {
 		);
 	}
 
+	let dataViewContent;
+	if ( isOwnerViewsLoading ) {
+		dataViewContent = (
+			<div className="cortext-data-view-shell">
+				<div className="cortext-data-view__state">
+					<Spinner />
+				</div>
+			</div>
+		);
+	} else if ( hasOwnerViewsError ) {
+		dataViewContent = (
+			<Notice status="error" isDismissible={ false }>
+				{ __( 'Collection views could not be loaded.', 'cortext' ) }
+			</Notice>
+		);
+	} else {
+		dataViewContent = (
+			<CollectionViewSurface
+				collectionId={ collectionId }
+				viewConfig={ viewConfig }
+				legacyView={ view }
+				onChangeViewConfig={ setViewConfig }
+				saveError={ isOwner ? ownerSaveError : null }
+				onReady={ isOwner ? onCollectionReady : undefined }
+				surfaceFocusRequest={ isOwner ? surfaceFocusRequest : null }
+				isEditorSurfaceDisplayed={ isOwner && isEditorSurfaceDisplayed }
+				isSurfaceFocusPending={ isOwner && isSurfaceFocusPending }
+				isSurfaceFocusReadOnly={ isOwner && isSurfaceFocusReadOnly }
+				completeSurfaceFocus={
+					isOwner ? completeSurfaceFocus : undefined
+				}
+				revealFieldId={ revealFieldId }
+				onFieldRevealed={ onFieldRevealed }
+				renderViewControls={ ( {
+					view: activeNamedView,
+					onChangeView,
+				} ) => (
+					<CollectionInspectorControls
+						collectionId={ collectionId }
+						view={ activeNamedView }
+						align={ align }
+						isOwner={ isOwner }
+						onSelect={ onSelectCollection }
+						onChangeView={ onChangeView }
+						onChangeAlign={ setAlign }
+						onFieldCreated={ onFieldCreated }
+					/>
+				) }
+				invalid={
+					<Notice status="warning" isDismissible={ false }>
+						{ __(
+							'This collection is no longer available. Choose another collection.',
+							'cortext'
+						) }
+					</Notice>
+				}
+				error={
+					<Notice status="error" isDismissible={ false }>
+						{ __( 'Could not load documents.', 'cortext' ) }
+					</Notice>
+				}
+			/>
+		);
+	}
+
 	return (
 		<CollectionFieldsProvider collectionId={ collectionId }>
 			<div { ...blockProps }>
@@ -641,46 +757,7 @@ export default function Edit( {
 					onSelect={ onSelectCollection }
 					onFieldCreated={ onFieldCreated }
 				/>
-				<CollectionInspectorControls
-					collectionId={ collectionId }
-					view={ view }
-					align={ align }
-					isOwner={ isOwner }
-					onSelect={ onSelectCollection }
-					onChangeView={ setView }
-					onChangeAlign={ setAlign }
-					onFieldCreated={ onFieldCreated }
-				/>
-				<CollectionDataViews
-					collectionId={ collectionId }
-					view={ view }
-					onChangeView={ setView }
-					onReady={ isOwner ? onCollectionReady : undefined }
-					surfaceFocusRequest={ isOwner ? surfaceFocusRequest : null }
-					isEditorSurfaceDisplayed={
-						isOwner && isEditorSurfaceDisplayed
-					}
-					isSurfaceFocusPending={ isOwner && isSurfaceFocusPending }
-					isSurfaceFocusReadOnly={ isOwner && isSurfaceFocusReadOnly }
-					completeSurfaceFocus={
-						isOwner ? completeSurfaceFocus : undefined
-					}
-					revealFieldId={ revealFieldId }
-					onFieldRevealed={ onFieldRevealed }
-					invalid={
-						<Notice status="warning" isDismissible={ false }>
-							{ __(
-								'This collection is no longer available. Choose another collection.',
-								'cortext'
-							) }
-						</Notice>
-					}
-					error={
-						<Notice status="error" isDismissible={ false }>
-							{ __( 'Could not load documents.', 'cortext' ) }
-						</Notice>
-					}
-				/>
+				{ dataViewContent }
 			</div>
 		</CollectionFieldsProvider>
 	);
