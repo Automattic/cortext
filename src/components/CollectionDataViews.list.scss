@@ -1,52 +1,179 @@
 @use "@wordpress/base-styles/colors" as *;
 @use "@wordpress/base-styles/variables" as *;
 
+$list-row-hover-background: #f8f8f8;
+$list-row-open-background: #f3f3f3;
+
 .cortext-data-view {
+
+	&__footer--list {
+		padding: 0 $grid-unit-20 $grid-unit-20;
+	}
+
+	&__new-row-list.components-button {
+		justify-content: flex-start;
+		width: 100%;
+		min-height: $grid-unit-60;
+		padding: $grid-unit-15 $grid-unit-20;
+		border: $border-width solid transparent;
+		border-bottom-color: $gray-200;
+		border-radius: 6px;
+		color: $gray-700;
+		text-align: start;
+		transition:
+			background-color 120ms ease,
+			border-color 120ms ease,
+			color 120ms ease;
+
+		&.has-icon.has-text {
+			justify-content: flex-start;
+			padding: $grid-unit-15 $grid-unit-20;
+		}
+
+		&:focus-visible,
+		&:hover:not(:disabled) {
+			border-color: $gray-300;
+			background: $list-row-hover-background;
+			color: $gray-900;
+			box-shadow: none;
+		}
+	}
 
 	.dataviews-view-list {
 		display: flex;
 		flex-direction: column;
 		gap: $grid-unit-05;
-		padding: $grid-unit-10 $grid-unit-20 $grid-unit-20;
+		margin: 0;
+		padding: $grid-unit-10 $grid-unit-20 $grid-unit-10;
 	}
 
-	.dataviews-view-list [role="row"] {
+	.dataviews-view-list div[role="row"] {
+		position: relative;
+		margin: 0;
 		border: $border-width solid transparent;
-		border-radius: 6px;
 		border-bottom-color: $gray-200;
+		border-radius: 6px;
+		color: $gray-900;
+		background: transparent;
+		transition:
+			background-color 120ms ease,
+			border-color 120ms ease,
+			box-shadow 120ms ease;
 
 		&:hover,
-		&:focus-within,
+		&.is-hovered,
+		&:focus-within {
+			border-color: $gray-300;
+			background: $list-row-hover-background;
+			color: $gray-900;
+		}
+
 		&.is-selected {
 			border-color: $gray-300;
-			background: $gray-100;
+			background: $list-row-hover-background;
+		}
+
+		&:has(.cortext-title-cell--is-open),
+		&:has(.cortext-title-cell--is-opening) {
+			border-color: var(--cortext-accent);
+			background: $list-row-open-background;
+			box-shadow: inset 3px 0 0 var(--cortext-accent);
 		}
 	}
 
+	&[data-list-row-clickable="true"] .dataviews-view-list div[role="row"] {
+		cursor: pointer;
+	}
+
 	.dataviews-view-list__item-wrapper {
-		padding: $grid-unit-15;
+		position: relative;
+		box-sizing: border-box;
+		width: 100%;
+		min-width: 0;
+		padding: $grid-unit-15 $grid-unit-20;
+	}
+
+	.dataviews-view-list__item-wrapper > .components-h-stack {
+		position: relative;
+		z-index: 1;
+		width: 100%;
+		min-width: 0;
+	}
+
+	.dataviews-view-list__item {
+		z-index: 0;
+	}
+
+	.dataviews-view-list__media-wrapper {
+		width: $grid-unit-60;
+		height: $grid-unit-60;
+		border-radius: 4px;
+		background: $white;
+	}
+
+	.dataviews-view-list__media-wrapper::after {
+		border-radius: 4px;
 	}
 
 	.dataviews-view-list__field-wrapper {
 		min-width: 0;
 		width: 100%;
+		min-height: 0;
+		flex: 1 1 auto;
+	}
+
+	.dataviews-view-list__field-wrapper > .components-h-stack {
+		width: 100%;
+		min-width: 0;
+		gap: $grid-unit-10;
+		align-items: center;
+	}
+
+	.dataviews-view-list .dataviews-title-field {
+		flex: 1 1 auto;
+		min-width: 0;
+		min-height: $grid-unit-30;
+		line-height: 1.4;
+		font-weight: 500;
+		color: $gray-900;
+	}
+
+	.dataviews-view-list .dataviews-title-field .cortext-title-cell {
+		gap: $grid-unit-10;
 	}
 
 	.dataviews-view-list__item-actions {
-		margin-left: auto;
+		position: relative;
+		z-index: 2;
 		flex: 0 0 auto;
+		margin-left: auto;
+	}
+
+	.dataviews-view-list__item-actions .components-button {
+		border-radius: 4px;
+		color: $gray-700;
+
+		&:hover,
+		&:focus-visible {
+			background: $gray-100;
+			color: $gray-900;
+			box-shadow: none;
+		}
 	}
 
 	.dataviews-view-list__fields {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-		gap: $grid-unit-10 $grid-unit-30;
+		grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+		gap: $grid-unit-05 $grid-unit-30;
 		width: 100%;
+		margin-top: $grid-unit-05;
+		color: $gray-700;
+		font-size: 12px;
 	}
 
 	.dataviews-view-list__field {
 		display: grid;
-		grid-template-columns: minmax(72px, max-content) minmax(0, 1fr);
+		grid-template-columns: minmax(84px, max-content) minmax(0, 1fr);
 		gap: $grid-unit-10;
 		align-items: baseline;
 		min-width: 0;
@@ -63,12 +190,89 @@
 		white-space: normal !important;
 		color: $gray-700;
 		font-size: 12px;
-		line-height: 1.4;
+		line-height: 1.5;
 	}
 
 	.dataviews-view-list__field-value {
 		min-width: 0;
 		color: $gray-900;
+		line-height: 1.5;
 		overflow-wrap: anywhere;
+	}
+
+	.dataviews-view-list div[role="row"].is-selected .dataviews-title-field,
+	.dataviews-view-list div[role="row"].is-selected .dataviews-view-list__fields,
+	.dataviews-view-list div[role="row"]:not(.is-selected):hover .dataviews-title-field,
+	.dataviews-view-list div[role="row"]:not(.is-selected):hover .dataviews-view-list__fields,
+	.dataviews-view-list div[role="row"]:not(.is-selected).is-hovered .dataviews-title-field,
+	.dataviews-view-list div[role="row"]:not(.is-selected).is-hovered .dataviews-view-list__fields,
+	.dataviews-view-list div[role="row"]:not(.is-selected):focus-within .dataviews-title-field,
+	.dataviews-view-list div[role="row"]:not(.is-selected):focus-within .dataviews-view-list__fields {
+		color: $gray-900;
+	}
+
+	.dataviews-view-list__field-value .cortext-editable-cell {
+		width: 100%;
+	}
+
+	.dataviews-view-list__field-value .cortext-editable-cell > :first-child {
+		position: relative;
+		display: inline-flex;
+		max-width: 100%;
+		vertical-align: top;
+		min-height: $grid-unit-30;
+		padding: 0 $grid-unit-30 0 $grid-unit-05;
+		border-radius: 4px;
+		box-shadow: inset 0 0 0 1px transparent;
+		transition:
+			background-color 120ms ease,
+			box-shadow 120ms ease;
+	}
+
+	.dataviews-view-list__field-value .cortext-editable-cell__shell:hover {
+		background: transparent;
+		box-shadow: inset 0 0 0 1px transparent;
+	}
+
+	.dataviews-view-list__field-value .cortext-editable-cell__shell:focus-visible {
+		background: transparent;
+		box-shadow: inset 0 0 0 1px var(--cortext-accent);
+		outline: none;
+	}
+
+	.dataviews-view-list__field-value .cortext-editable-cell__edit-indicator {
+		position: absolute;
+		top: 50%;
+		right: $grid-unit-05;
+		display: block;
+		color: $gray-700;
+		opacity: 0;
+		transform: translateY(-50%);
+		transition:
+			color 120ms ease,
+			opacity 120ms ease;
+	}
+
+	.dataviews-view-list__field-value .cortext-editable-cell__shell:hover .cortext-editable-cell__edit-indicator,
+	.dataviews-view-list__field-value .cortext-editable-cell__shell:focus-visible .cortext-editable-cell__edit-indicator {
+		color: $gray-900;
+		opacity: 1;
+	}
+
+	.dataviews-view-list__field-value .cortext-editable-cell__display {
+		white-space: normal;
+	}
+
+	.dataviews-view-list .cortext-relation-ref,
+	.dataviews-view-list .cortext-relation-ref-more,
+	.dataviews-view-list .cortext-chip {
+		box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+		box-shadow: inset 0 0 0 1px color-mix(in oklch, currentcolor 20%, transparent);
+	}
+
+	.dataviews-view-list .cortext-chip--neutral {
+		background-color: $gray-100;
+		box-shadow: inset 0 0 0 1px $gray-300;
+		color: $gray-700;
 	}
 }
