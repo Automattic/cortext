@@ -20,6 +20,7 @@ use WP_Post;
 final class Materializer {
 
 	public static function recompute_collection( int $collection_id ): void {
+		// tech-debt.md#td-formula-materialized-values: v0 keeps formula output fresh with synchronous materialization.
 		foreach ( self::row_ids_for_collection( $collection_id ) as $row_id ) {
 			self::recompute_row( $collection_id, $row_id );
 		}

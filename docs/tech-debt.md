@@ -674,3 +674,14 @@ The rows endpoint is still the hard case. `RowsController` unit tests cover rout
 **Where.** `Document::register_field_meta` in `includes/PostType/Document.php`.
 
 **Solution.** Call `update_meta_cache( 'post', $field_ids )` once before the foreach so the subsequent `get_post_meta` calls are cache hits. The field-id list is already in memory from the preceding `get_posts`, so the warmup is a one-liner.
+<a id="td-formula-materialized-values"></a>
+
+**Formula values materialize synchronously.**
+
+**What.** Formula output is stored in the same `field-<id>` row meta as normal fields. That keeps rows, exports, filters, sorts, and the field-value index reading one canonical value, but it means Cortext has to keep that stored value fresh. In v0, it does that synchronously: all formulas on a row after row writes, visible rows after list reads, and every row in the collection after a formula is created or edited. Volatile formulas such as `now()` get one extra refresh only when a request sorts or filters by that volatile formula, because SQL and the sidecar index read the materialized meta.
+
+This is fine while collections are small and formulas are few. It becomes the wrong shape for large tables with several dependent formulas, or for sorting thousands of rows by something like `dateBetween(now(), field("Created"), "days")`. The code stores dependency ids already, but it does not yet use them as a dirty graph or background job plan.
+
+**Where.** `includes/Formula/Materializer.php`, formula refresh calls in `includes/PostType/Document.php`, `includes/Rest/RowsController.php`, and `includes/Rest/FieldsController.php`, plus formula indexing in `includes/FieldValues/FieldValueIndex.php`.
+
+**Solution.** Keep materialized row meta, but make refresh narrower. Row writes should recompute only formulas that depend on the changed field, in dependency order. Formula create/update can mark affected rows dirty and process them in batches instead of blocking the request on the whole collection. Volatile formulas need either a short-lived refresh window or a query path that can evaluate the volatile value without rewriting every row first. Once that exists, the collection-wide recompute calls can shrink to repair tools and migrations.

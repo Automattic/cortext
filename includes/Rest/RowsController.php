@@ -227,6 +227,7 @@ final class RowsController {
 		$where_parts  = array_values( array_filter( array( $filter_sql['where'], $search_where ) ) );
 		$where_sql    = count( $where_parts ) > 0 ? '( ' . implode( ' AND ', $where_parts ) . ' )' : '';
 
+		// tech-debt.md#td-formula-materialized-values: volatile formula sort/filter reads materialized meta.
 		if ( $this->query_needs_volatile_formula_materialization( $collection_id, $request ) ) {
 			FormulaMaterializer::recompute_collection( $collection_id );
 		}
