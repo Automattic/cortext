@@ -22,7 +22,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 
 	private const WORKSPACE_HOME_META_KEY = 'cortext_workspace_home';
 	private const FAVORITES_META_KEY      = 'cortext_favorites';
-	private const PAGE_CONTENT_VERSION    = 'rich-connected-seed-2026-05-26-albums-grid';
+	private const PAGE_CONTENT_VERSION    = 'rich-connected-seed-2026-05-27-task-list';
 	private const ENTRY_CONTENT_VERSION   = 'rich-connected-row-seed-2026-05-07';
 
 	private bool $seed_full_dataset = false;
@@ -3305,7 +3305,12 @@ final class SeedDummyCollections extends WP_CLI_Command {
 							)
 						),
 						$this->data_view_block( $collection_ids['projects'] ?? 0 ),
-						$this->data_view_block( $collection_ids['tasks'] ?? 0 ),
+						$this->data_view_block(
+							$collection_ids['tasks'] ?? 0,
+							array(
+								'type' => 'list',
+							)
+						),
 						$this->data_view_block( $collection_ids['people'] ?? 0 ),
 					)
 				),
