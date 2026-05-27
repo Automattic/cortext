@@ -103,8 +103,8 @@
 		cursor: text;
 
 		&:focus-within {
-			border-color: var(--cortext-accent, #3858e9);
-			box-shadow: 0 0 0 1px var(--cortext-accent, #3858e9);
+			border-color: $gray-400;
+			box-shadow: inset 0 0 0 1px $gray-400;
 		}
 	}
 

@@ -226,7 +226,10 @@ $list-row-open-background: #f3f3f3;
 	}
 
 	.dataviews-view-list__field-value .cortext-editable-cell {
+		display: inline-block;
 		width: auto;
+		max-width: 100%;
+		vertical-align: top;
 	}
 
 	.dataviews-view-list__field-value .cortext-editable-cell > :first-child {
@@ -278,20 +281,20 @@ $list-row-open-background: #f3f3f3;
 		flex-direction: row;
 		align-items: center;
 		justify-content: flex-start;
-		width: auto;
+		width: 100%;
 		min-width: 0;
-		max-width: min(320px, 48vw);
+		max-width: 100%;
 		transform: translateY(-50%);
 	}
 
 	.dataviews-view-list__field-value .cortext-editable-cell__overlay > * {
-		width: auto;
+		width: 100%;
 		max-width: 100%;
 	}
 
 	.dataviews-view-list__field-value .cortext-editable-cell__overlay .components-base-control,
 	.dataviews-view-list__field-value .cortext-editable-cell__overlay .components-base-control__field {
-		width: min(180px, 48vw);
+		width: 100%;
 		max-width: 100%;
 	}
 
@@ -299,15 +302,17 @@ $list-row-open-background: #f3f3f3;
 	.dataviews-view-list__field-value .cortext-editable-cell__overlay input[type="email"],
 	.dataviews-view-list__field-value .cortext-editable-cell__overlay input[type="url"],
 	.dataviews-view-list__field-value .cortext-editable-cell__overlay input[type="number"] {
+		width: 100%;
 		height: $grid-unit-30;
 		min-height: $grid-unit-30;
+		min-width: 0;
 		padding-block: 0;
 		font-size: inherit;
 		line-height: 1.4;
 	}
 
 	.dataviews-view-list__field-value .cortext-editable-cell__overlay .components-dropdown {
-		width: auto;
+		width: 100%;
 		max-width: 100%;
 	}
 
@@ -315,9 +320,9 @@ $list-row-open-background: #f3f3f3;
 	.dataviews-view-list__field-value .cortext-date-edit__toggle.components-button,
 	.dataviews-view-list__field-value .cortext-multiselect-edit__toggle.components-button,
 	.dataviews-view-list__field-value .cortext-relation-edit__toggle.components-button {
-		width: auto;
+		width: 100%;
 		min-width: 0;
-		max-width: min(320px, 48vw);
+		max-width: 100%;
 		height: $grid-unit-30;
 	}
 
