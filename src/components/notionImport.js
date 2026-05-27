@@ -1,9 +1,10 @@
 // Client-side helpers for the Notion → Cortext importer.
 //
-// `extractAll` populates the Collections list: one paginated `/search`
-// call that returns every reachable data source with its schema inline.
-// The actual row import runs server-side via `runImport`, which loops
-// the `/cortext/v1/notion/import/{start,tick}` routes.
+// `extractCollections` populates the Collections list: one paginated
+// `/search` call that returns every reachable data source with its
+// schema inline. The actual row import runs server-side via
+// `runImport`, which loops the `/cortext/v1/notion/import/{start,tick}`
+// routes.
 
 import apiFetch from '@wordpress/api-fetch';
 
@@ -147,10 +148,9 @@ function transformSchema( rawProperties ) {
  * collections list — row import runs server-side, see `runImport`.
  *
  * @param {string} key Notion integration key.
- * @return {Promise<{extracted_at: string, collections: Array}>} The
- *   extraction timestamp and the list of collections.
+ * @return {Promise<{collections: Array}>} The list of collections.
  */
-export async function extractAll( key ) {
+export async function extractCollections( key ) {
 	const rawDataSources = await fetchAllDataSources( key );
 
 	// Build the parent-db → data-source-ids map from the inline /search
@@ -187,10 +187,7 @@ export async function extractAll( key ) {
 		};
 	} );
 
-	return {
-		extracted_at: new Date().toISOString(),
-		collections,
-	};
+	return { collections };
 }
 
 // ---------------------------------------------------------------------

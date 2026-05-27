@@ -10,7 +10,7 @@ network calls.
 
 The current prototype client assembles the payload in two stages:
 
-- `extractAll(key)` — one paginated `/search` returns every collection it can reach,
+- `extractCollections(key)` — one paginated `/search` returns every collection it can reach,
   with its schema inline. Cheap, runs on screen mount.
 - `extractCollection(key, id)` — fetches the entries for one collection on demand,
   when the user picks it from the list. Defers the heavy I/O until intent is shown.
@@ -22,7 +22,6 @@ stages were merged for export.
 
 ```json
 {
-  "extracted_at": "2026-04-19T12:00:00Z",
   "collections": [ /* CollectionObject[] */ ]
 }
 ```
@@ -133,7 +132,6 @@ pass.
 
 ```json
 {
-  "extracted_at": "2026-04-19T12:00:00Z",
   "collections": [
     {
       "id":                 "3468bd85-3edc-803a-aa0d-eeb72fb159cc",

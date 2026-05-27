@@ -21,7 +21,7 @@ import {
 import { useNavigate } from '@tanstack/react-router';
 
 import './ImportPane.scss';
-import { extractAll, runImport } from './notionImport';
+import { extractCollections, runImport } from './notionImport';
 import { COLLECTION_QUERY, FULL_PAGE_COLLECTION_QUERY } from '../collections';
 import { computeCollectionUri } from '../router/useResolveEntity';
 
@@ -50,10 +50,10 @@ export default function ImportPane() {
 		setState( { status: 'loading' } );
 		setImportJobs( {} );
 
-		extractAll( key )
-			.then( ( payload ) => {
+		extractCollections( key )
+			.then( ( { collections } ) => {
 				if ( ! cancelled ) {
-					setState( { status: 'loaded', payload } );
+					setState( { status: 'loaded', collections } );
 				}
 			} )
 			.catch( ( err ) => {
@@ -232,7 +232,7 @@ function ImportBody( { state, onRetry, onImport, importJobs } ) {
 		);
 	}
 
-	const { collections } = state.payload;
+	const { collections } = state;
 
 	return (
 		<VStack spacing={ 6 }>

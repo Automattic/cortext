@@ -41,7 +41,7 @@ final class NotionImportJobsController {
 	private const NOTION_BASE       = 'https://api.notion.com/v1';
 	private const NOTION_VER        = '2026-03-11';
 	private const TIMEOUT_SECS      = 15;
-	private const TICK_PAGE_SIZE    = 3;
+	private const TICK_PAGE_SIZE    = 3; // FIXME: Low value during testing
 	private const JOB_OPTION_PREFIX = 'cortext_notion_import_';
 
 	public function register(): void {
