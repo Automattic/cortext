@@ -1,6 +1,6 @@
 {
 	"name": "cortext",
-	"version": "0.0.1",
+	"version": "0.1.0",
 	"description": "Knowledge base inside WordPress.",
 	"engines": {
 		"node": "^24.15",
