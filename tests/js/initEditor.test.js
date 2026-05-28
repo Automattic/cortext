@@ -92,7 +92,10 @@ describe( 'ALLOWED_BLOCK_TYPES', () => {
 
 	it( 'allows social-link blocks', () => {
 		expect( ALLOWED_BLOCK_TYPES ).toEqual(
-			expect.arrayContaining( [ 'core/social-link', 'core/social-links' ] )
+			expect.arrayContaining( [
+				'core/social-link',
+				'core/social-links',
+			] )
 		);
 	} );
 
