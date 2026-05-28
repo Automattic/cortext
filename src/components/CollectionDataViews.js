@@ -921,7 +921,7 @@ export default function CollectionDataViews( {
 
 	const rowActions = useMemo( () => {
 		const actions = [];
-		// List and grid get one primary Open action, matching the saved
+		// List and grid show one primary Open action that matches the saved
 		// detail mode. Table already has the inline Open button in the title
 		// cell, so these actions stay inside the menu there.
 		for ( const mode of [ 'side', 'modal', 'full' ] ) {
