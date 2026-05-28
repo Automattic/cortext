@@ -79,7 +79,7 @@ test.describe( 'Workspace home', () => {
 		try {
 			homePage = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: PAGE_HOME_TITLE,
 					status: 'private',
@@ -87,7 +87,7 @@ test.describe( 'Workspace home', () => {
 			} );
 			otherPage = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: OTHER_PAGE_TITLE,
 					status: 'private',
@@ -149,11 +149,11 @@ test.describe( 'Workspace home', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				otherPage && `/wp/v2/crtxt_pages/${ otherPage.id }`
+				otherPage && `/wp/v2/crtxt_documents/${ otherPage.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
-				homePage && `/wp/v2/crtxt_pages/${ homePage.id }`
+				homePage && `/wp/v2/crtxt_documents/${ homePage.id }`
 			);
 		}
 	} );
@@ -215,7 +215,7 @@ test.describe( 'Workspace home', () => {
 		try {
 			fallback = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: FALLBACK_TITLE,
 					status: 'private',
@@ -224,7 +224,7 @@ test.describe( 'Workspace home', () => {
 			} );
 			deletedHome = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: DELETED_HOME_TITLE,
 					status: 'private',
@@ -249,11 +249,11 @@ test.describe( 'Workspace home', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				deletedHome && `/wp/v2/crtxt_pages/${ deletedHome.id }`
+				deletedHome && `/wp/v2/crtxt_documents/${ deletedHome.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
-				fallback && `/wp/v2/crtxt_pages/${ fallback.id }`
+				fallback && `/wp/v2/crtxt_documents/${ fallback.id }`
 			);
 		}
 	} );

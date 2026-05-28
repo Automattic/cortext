@@ -364,7 +364,7 @@ test.describe( 'editor header blocks', () => {
 		try {
 			createdPage = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: 'E2E Header Guard Page',
 					status: 'private',
@@ -382,7 +382,7 @@ test.describe( 'editor header blocks', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				createdPage && `/wp/v2/crtxt_pages/${ createdPage.id }`
+				createdPage && `/wp/v2/crtxt_documents/${ createdPage.id }`
 			);
 		}
 	} );

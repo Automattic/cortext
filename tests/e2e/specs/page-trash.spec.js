@@ -20,7 +20,7 @@ async function deleteIfCreated( requestUtils, id ) {
 	try {
 		await requestUtils.rest( {
 			method: 'DELETE',
-			path: `/wp/v2/crtxt_pages/${ id }`,
+			path: `/wp/v2/crtxt_documents/${ id }`,
 			params: { force: true },
 		} );
 	} catch ( _error ) {
@@ -40,12 +40,12 @@ test.describe( 'Page trash flow', () => {
 		try {
 			parent = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: { title: PARENT_TITLE, status: 'private' },
 			} );
 			child = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: CHILD_TITLE,
 					status: 'private',

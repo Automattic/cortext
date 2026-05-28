@@ -55,7 +55,7 @@ test.describe( 'Command palette search', () => {
 		try {
 			seededPage = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: pageTitle,
 					status: 'private',
@@ -81,7 +81,7 @@ test.describe( 'Command palette search', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				seededPage && `/wp/v2/crtxt_pages/${ seededPage.id }`
+				seededPage && `/wp/v2/crtxt_documents/${ seededPage.id }`
 			);
 		}
 	} );

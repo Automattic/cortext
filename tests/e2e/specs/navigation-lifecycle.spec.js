@@ -353,12 +353,12 @@ test.describe( 'Navigation lifecycle', () => {
 		try {
 			fixture.firstPage = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: { title: HISTORY_FIRST_PAGE_TITLE, status: 'private' },
 			} );
 			fixture.secondPage = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: { title: HISTORY_SECOND_PAGE_TITLE, status: 'private' },
 			} );
 			fixture.slug = `e2ehist${ SUFFIX }`;
@@ -441,12 +441,12 @@ test.describe( 'Navigation lifecycle', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.secondPage &&
-					`/wp/v2/crtxt_pages/${ fixture.secondPage.id }`
+					`/wp/v2/crtxt_documents/${ fixture.secondPage.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
 				fixture.firstPage &&
-					`/wp/v2/crtxt_pages/${ fixture.firstPage.id }`
+					`/wp/v2/crtxt_documents/${ fixture.firstPage.id }`
 			);
 		}
 	} );
@@ -462,7 +462,7 @@ test.describe( 'Navigation lifecycle', () => {
 		try {
 			fixture.firstPage = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: NO_FLASH_FIRST_PAGE_TITLE,
 					status: 'private',
@@ -470,7 +470,7 @@ test.describe( 'Navigation lifecycle', () => {
 			} );
 			fixture.secondPage = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: NO_FLASH_SECOND_PAGE_TITLE,
 					status: 'private',
@@ -540,12 +540,12 @@ test.describe( 'Navigation lifecycle', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.secondPage &&
-					`/wp/v2/crtxt_pages/${ fixture.secondPage.id }`
+					`/wp/v2/crtxt_documents/${ fixture.secondPage.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
 				fixture.firstPage &&
-					`/wp/v2/crtxt_pages/${ fixture.firstPage.id }`
+					`/wp/v2/crtxt_documents/${ fixture.firstPage.id }`
 			);
 		}
 	} );
@@ -570,7 +570,7 @@ test.describe( 'Navigation lifecycle', () => {
 			);
 			fixture.firstPage = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: COVER_FIRST_PAGE_TITLE,
 					status: 'private',
@@ -579,7 +579,7 @@ test.describe( 'Navigation lifecycle', () => {
 			} );
 			fixture.secondPage = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: COVER_SECOND_PAGE_TITLE,
 					status: 'private',
@@ -629,12 +629,12 @@ test.describe( 'Navigation lifecycle', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.secondPage &&
-					`/wp/v2/crtxt_pages/${ fixture.secondPage.id }`
+					`/wp/v2/crtxt_documents/${ fixture.secondPage.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
 				fixture.firstPage &&
-					`/wp/v2/crtxt_pages/${ fixture.firstPage.id }`
+					`/wp/v2/crtxt_documents/${ fixture.firstPage.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
@@ -660,12 +660,12 @@ test.describe( 'Navigation lifecycle', () => {
 		try {
 			fixture.firstPage = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: { title: FIRST_PAGE_TITLE, status: 'private' },
 			} );
 			fixture.secondPage = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: { title: SECOND_PAGE_TITLE, status: 'private' },
 			} );
 			fixture.slug = `e2elife${ SUFFIX }`;
@@ -843,12 +843,12 @@ test.describe( 'Navigation lifecycle', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.secondPage &&
-					`/wp/v2/crtxt_pages/${ fixture.secondPage.id }`
+					`/wp/v2/crtxt_documents/${ fixture.secondPage.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
 				fixture.firstPage &&
-					`/wp/v2/crtxt_pages/${ fixture.firstPage.id }`
+					`/wp/v2/crtxt_documents/${ fixture.firstPage.id }`
 			);
 		}
 	} );

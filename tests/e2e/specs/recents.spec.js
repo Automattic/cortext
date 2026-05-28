@@ -150,7 +150,7 @@ test.describe( 'Sidebar recents', () => {
 		try {
 			recentPage = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: pageTitle,
 					status: 'private',
@@ -223,7 +223,7 @@ test.describe( 'Sidebar recents', () => {
 			);
 			await deleteIfCreated(
 				requestUtils,
-				recentPage && `/wp/v2/crtxt_pages/${ recentPage.id }`
+				recentPage && `/wp/v2/crtxt_documents/${ recentPage.id }`
 			);
 		}
 	} );
@@ -243,7 +243,7 @@ test.describe( 'Sidebar recents', () => {
 
 			fixture.page = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: 'Row recent test page',
 					status: 'private',
@@ -308,7 +308,7 @@ test.describe( 'Sidebar recents', () => {
 			);
 			await deleteIfCreated(
 				requestUtils,
-				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,

@@ -153,7 +153,7 @@ test.describe( 'Sidebar favorites', () => {
 		try {
 			createdPage = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: PAGE_TITLE,
 					status: 'private',
@@ -238,7 +238,7 @@ test.describe( 'Sidebar favorites', () => {
 			);
 			await deleteIfCreated(
 				requestUtils,
-				createdPage && `/wp/v2/crtxt_pages/${ createdPage.id }`
+				createdPage && `/wp/v2/crtxt_documents/${ createdPage.id }`
 			);
 		}
 	} );
@@ -254,7 +254,7 @@ test.describe( 'Sidebar favorites', () => {
 		try {
 			createdPage = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: `${ PAGE_TITLE } Flash`,
 					status: 'private',
@@ -262,7 +262,7 @@ test.describe( 'Sidebar favorites', () => {
 			} );
 			otherPage = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: `${ PAGE_TITLE } Flash Target`,
 					status: 'private',
@@ -350,11 +350,11 @@ test.describe( 'Sidebar favorites', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				otherPage && `/wp/v2/crtxt_pages/${ otherPage.id }`
+				otherPage && `/wp/v2/crtxt_documents/${ otherPage.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
-				createdPage && `/wp/v2/crtxt_pages/${ createdPage.id }`
+				createdPage && `/wp/v2/crtxt_documents/${ createdPage.id }`
 			);
 		}
 	} );
