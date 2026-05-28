@@ -1126,7 +1126,32 @@ export default function EditorBody( {
 	const styles = extraStyles
 		? [ ...( baseStyles ?? [] ), ...extraStyles ]
 		: baseStyles;
-	const [ layout ] = useSettings( 'layout' );
+	const { themeSupportsLayout, hasRootPaddingAwareAlignments } = useSelect(
+		( select ) => {
+			const settings = select( blockEditorStore ).getSettings();
+			return {
+				themeSupportsLayout: settings.supportsLayout,
+				hasRootPaddingAwareAlignments:
+					settings.__experimentalFeatures
+						?.useRootPaddingAwareAlignments,
+			};
+		},
+		[]
+	);
+	const [ globalLayoutSettings ] = useSettings( 'layout' );
+	// Match @wordpress/editor's visual-editor fallback. Themes with layout
+	// support get the constrained post-content canvas; classic themes keep the
+	// default flow layout.
+	const canvasLayout = themeSupportsLayout
+		? { type: 'constrained', ...globalLayoutSettings }
+		: { type: 'default' };
+	const canvasClassName = [
+		'wp-block-post-content',
+		themeSupportsLayout ? 'is-layout-constrained' : 'is-layout-flow',
+		hasRootPaddingAwareAlignments ? 'has-global-padding' : '',
+	]
+		.filter( Boolean )
+		.join( ' ' );
 	const blockCanvasRef = useRef( null );
 	const isTrashed = useSelect(
 		( select ) =>
@@ -1178,8 +1203,8 @@ export default function EditorBody( {
 						.join( ' ' ) }
 				>
 					<BlockList
-						className="wp-block-post-content is-layout-constrained has-global-padding"
-						layout={ { type: 'constrained', ...layout } }
+						className={ canvasClassName }
+						layout={ canvasLayout }
 						renderAppender={ renderAppender }
 					/>
 				</div>
