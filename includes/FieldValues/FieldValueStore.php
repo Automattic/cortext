@@ -34,13 +34,13 @@ final class FieldValueStore {
 		$key = Relations::meta_key( $field_id );
 
 		if ( 'multiselect' === $field_type ) {
-			$this->delete_row_meta( $row_id, $key );
+			$this->delete_document_meta( $row_id, $key );
 			$entries = is_array( $value ) ? $value : array( $value );
 			$stored  = array();
 			foreach ( $entries as $entry ) {
 				$text = sanitize_text_field( (string) $entry );
 				if ( '' !== $text ) {
-					$this->add_row_meta( $row_id, $key, $text );
+					$this->add_document_meta( $row_id, $key, $text );
 					$stored[] = $text;
 				}
 			}
@@ -48,48 +48,48 @@ final class FieldValueStore {
 		}
 
 		if ( null === $value || '' === $value ) {
-			$this->delete_row_meta( $row_id, $key );
+			$this->delete_document_meta( $row_id, $key );
 			return null;
 		}
 
 		$existing = get_post_meta( $row_id, $key, false );
 		if ( is_array( $existing ) && count( $existing ) > 1 ) {
-			$this->delete_row_meta( $row_id, $key );
+			$this->delete_document_meta( $row_id, $key );
 		}
 
 		if ( 'number' === $field_type ) {
 			$stored = is_numeric( $value ) ? (float) $value : $value;
-			$this->update_row_meta( $row_id, $key, $stored );
+			$this->update_document_meta( $row_id, $key, $stored );
 			return $stored;
 		}
 
 		if ( 'checkbox' === $field_type ) {
 			$stored = (bool) $value;
-			$this->update_row_meta( $row_id, $key, $stored );
+			$this->update_document_meta( $row_id, $key, $stored );
 			return $stored;
 		}
 
 		if ( 'date' === $field_type || 'datetime' === $field_type ) {
 			$stored = $this->normalize_date_field_value( $value, $field_type );
-			$this->update_row_meta( $row_id, $key, $stored );
+			$this->update_document_meta( $row_id, $key, $stored );
 			return $stored;
 		}
 
 		$stored = sanitize_text_field( (string) $value );
-		$this->update_row_meta( $row_id, $key, $stored );
+		$this->update_document_meta( $row_id, $key, $stored );
 		return $stored;
 	}
 
-	private function update_row_meta( int $row_id, string $key, mixed $value ): void {
-		update_metadata( 'post', $row_id, $key, $value );
+	private function update_document_meta( int $document_id, string $key, mixed $value ): void {
+		update_metadata( 'post', $document_id, $key, $value );
 	}
 
-	private function add_row_meta( int $row_id, string $key, mixed $value ): void {
-		add_metadata( 'post', $row_id, $key, $value );
+	private function add_document_meta( int $document_id, string $key, mixed $value ): void {
+		add_metadata( 'post', $document_id, $key, $value );
 	}
 
-	private function delete_row_meta( int $row_id, string $key ): void {
-		delete_metadata( 'post', $row_id, $key );
+	private function delete_document_meta( int $document_id, string $key ): void {
+		delete_metadata( 'post', $document_id, $key );
 	}
 
 	private function normalize_date_field_value( mixed $value, string $field_type ): string {

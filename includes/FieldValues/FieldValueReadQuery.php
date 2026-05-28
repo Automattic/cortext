@@ -9,6 +9,9 @@ declare( strict_types=1 );
 
 namespace Cortext\FieldValues;
 
+use Cortext\PostType\Document;
+use Cortext\Relations;
+use Cortext\Taxonomy\TraitTaxonomy;
 use WP_Post;
 
 final class FieldValueReadQuery {
@@ -35,7 +38,7 @@ final class FieldValueReadQuery {
 	 * @param bool   $has_include  Whether the request includes include[].
 	 */
 	public function supports_query( array $field_schema, mixed $filters, mixed $sort, string $search = '', bool $has_include = false ): bool {
-		return null !== $this->build_plan( 1, 'crtxt_preview', $field_schema, $filters, $sort, $search, $has_include );
+		return null !== $this->build_plan( 1, 0, $field_schema, $filters, $sort, $search, $has_include );
 	}
 
 	/**
@@ -44,12 +47,11 @@ final class FieldValueReadQuery {
 	 * Returns null when the index is unavailable, or when the request needs the
 	 * postmeta path to keep the existing behaviour.
 	 *
-	 * @param int    $collection_id Collection post ID.
-	 * @param string $post_type     Row custom post type.
+	 * @param int    $collection_id Collection (trait) post ID.
 	 * @param array  $field_schema  Field schema from RowsFilterQuery::field_schema_for().
 	 * @param mixed  $filters       Raw REST filters parameter.
 	 * @param mixed  $sort          Raw REST sort parameter.
-	 * @param string $search        Raw REST search parameter.
+	 * @param string $search       Raw REST search parameter.
 	 * @param bool   $has_include   Whether the request includes include[].
 	 * @param int    $page          One-based page number.
 	 * @param int    $per_page      Rows per page.
@@ -57,7 +59,6 @@ final class FieldValueReadQuery {
 	 */
 	public function query_rows(
 		int $collection_id,
-		string $post_type,
 		array $field_schema,
 		mixed $filters,
 		mixed $sort,
@@ -70,7 +71,12 @@ final class FieldValueReadQuery {
 			return null;
 		}
 
-		$plan = $this->build_plan( $collection_id, $post_type, $field_schema, $filters, $sort, $search, $has_include );
+		$trait_term_id = Relations::trait_term_id_for_collection( $collection_id );
+		if ( $trait_term_id < 1 ) {
+			return null;
+		}
+
+		$plan = $this->build_plan( $collection_id, $trait_term_id, $field_schema, $filters, $sort, $search, $has_include );
 		if ( null === $plan ) {
 			return null;
 		}
@@ -81,7 +87,7 @@ final class FieldValueReadQuery {
 
 	private function build_plan(
 		int $collection_id,
-		string $post_type,
+		int $trait_term_id,
 		array $field_schema,
 		mixed $filters,
 		mixed $sort,
@@ -94,15 +100,25 @@ final class FieldValueReadQuery {
 
 		global $wpdb;
 
+		$where = array(
+			$wpdb->prepare( 'p.post_type = %s', Document::POST_TYPE ),
+			"p.post_status IN ('draft', 'private', 'publish')",
+		);
+		$joins = array();
+
+		if ( $trait_term_id > 0 ) {
+			$joins[] = "INNER JOIN {$wpdb->term_relationships} AS tr_doc ON tr_doc.object_id = p.ID";
+			$joins[] = "INNER JOIN {$wpdb->term_taxonomy} AS tt_doc ON tt_doc.term_taxonomy_id = tr_doc.term_taxonomy_id";
+			$where[] = $wpdb->prepare( 'tt_doc.taxonomy = %s', TraitTaxonomy::TAXONOMY );
+			$where[] = $wpdb->prepare( 'tt_doc.term_id = %d', $trait_term_id );
+		}
+
 		$plan = array(
 			'from'       => "{$wpdb->posts} AS p",
-			'where'      => array(
-				$wpdb->prepare( 'p.post_type = %s', $post_type ),
-				"p.post_status IN ('draft', 'private', 'publish')",
-			),
-			'joins'      => array(),
+			'where'      => $where,
+			'joins'      => $joins,
 			'orderby'    => 'p.menu_order ASC, p.ID ASC',
-			'post_type'  => $post_type,
+			'post_type'  => Document::POST_TYPE,
 			'uses_index' => false,
 		);
 

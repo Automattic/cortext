@@ -9,7 +9,7 @@ declare( strict_types=1 );
 
 namespace Cortext\Frontend;
 
-use Cortext\PostType\Page;
+use Cortext\PostType\Document;
 
 final class Assets {
 
@@ -18,7 +18,7 @@ final class Assets {
 	}
 
 	public function enqueue(): void {
-		if ( ! is_singular( Page::POST_TYPE ) ) {
+		if ( ! is_singular( Document::POST_TYPE ) ) {
 			return;
 		}
 
