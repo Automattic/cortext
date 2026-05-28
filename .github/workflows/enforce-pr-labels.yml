@@ -23,7 +23,7 @@ jobs:
               with:
                   mode: exactly
                   count: 1
-                  labels: '^type:'
+                  labels: '^(type: enhancement|type: bug|type: docs|type: tooling|type: code quality)$'
                   use_regex: true
                   add_comment: true
                   message: |
