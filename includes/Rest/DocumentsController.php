@@ -512,9 +512,11 @@ final class DocumentsController {
 				"SELECT ID FROM {$wpdb->posts}
 				WHERE post_type = %s
 					AND post_status = 'publish'
+					AND ID != %d
 					AND ( post_content LIKE %s OR post_content LIKE %s )
 				LIMIT %d",
 				Document::POST_TYPE,
+				$collection_id,
 				$needle_comma,
 				$needle_brace,
 				$limit
