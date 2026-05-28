@@ -40,7 +40,6 @@ function DocumentActions( {
 	postId,
 	topBarActions,
 	hasProperties,
-	isRow,
 	arePropertiesVisible,
 	onTogglePropertiesVisible,
 } ) {
@@ -71,10 +70,7 @@ function DocumentActions( {
 		<TopBarActionsFill>
 			<div className="cortext-document-actions">
 				{ topBarActions }
-				{ /* Rows live inside their collection's data view, so they
-				     don't get their own publish URL. The toggle only makes
-				     sense for pages and collections. */ }
-				{ ! isRow && <DocumentPublishToggle postId={ postId } /> }
+				<DocumentPublishToggle postId={ postId } />
 				{ hasProperties ? (
 					<Button
 						className="cortext-document-actions__fields"
@@ -253,7 +249,6 @@ function CanvasEditor( {
 				postId={ post.id }
 				topBarActions={ topBarActions }
 				hasProperties={ hasProperties }
-				isRow={ hasTrait && ! hasFields }
 				arePropertiesVisible={ arePropertiesVisible }
 				onTogglePropertiesVisible={ togglePropertiesVisible }
 			/>
