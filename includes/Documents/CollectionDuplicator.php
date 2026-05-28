@@ -2,7 +2,7 @@
 /**
  * Duplicates a full-page collection's schema into a new collection. Rows are
  * not copied. Fields with local metadata are copied; relation fields are
- * reported in `skipped_fields` until tech-debt.md#54 handles reverse-field
+ * reported in `skipped_fields` until tech-debt.md#td-collection-duplication-relations handles reverse-field
  * copies.
  *
  * Internal to the Documents layer. `Documents::duplicate()` is the public
@@ -153,7 +153,7 @@ final class CollectionDuplicator {
 			}
 
 			$source_type = (string) get_post_meta( $source_field_id, 'type', true );
-			// tech-debt.md#54: skip relations until duplication can copy and
+			// tech-debt.md#td-collection-duplication-relations: skip relations until duplication can copy and
 			// remap the forward and reverse fields together.
 			if ( 'relation' === $source_type ) {
 				$skipped_fields[] = array(
@@ -204,7 +204,7 @@ final class CollectionDuplicator {
 	/**
 	 * Rewrites rollup meta when the referenced field was copied too. If a
 	 * rollup points to a skipped relation, the old reference stays for now;
-	 * tech-debt.md#54 tracks the remaining skip/remap work.
+	 * tech-debt.md#td-collection-duplication-relations tracks the remaining skip/remap work.
 	 *
 	 * @param array<string, int> $field_id_map Source field id (string) => new field id.
 	 */

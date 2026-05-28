@@ -1,6 +1,6 @@
 import { COVER_FIELD_ID, TITLE_FIELD_ID } from './dataViewColumns';
 
-// tech-debt.md#60: DataViews only carries the active layout shape. Cortext keeps
+// tech-debt.md#td-dataviews-view-state-shape: DataViews only carries the active layout shape. Cortext keeps
 // per-layout buckets and hydrates the active shape before rendering.
 export const DATA_VIEW_LAYOUT_TYPES = [ 'table', 'grid', 'list' ];
 export const DATA_VIEW_FIELD_LAYOUT_TYPES = [ 'grid', 'list' ];

@@ -1374,7 +1374,7 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 
 	// Multi-author flow through the REST endpoint isn't testable in
 	// WorDBless: `wp_insert_post` works via the object cache but
-	// `WP_Query` SQL returns zero results (tech-debt.md#9). The
+	// `WP_Query` SQL returns zero results (tech-debt.md#td-wordbless-row-coverage). The
 	// `test_format_row_resolves_distinct_modified_by` test above
 	// already covers display-name resolution for distinct users at the
 	// `format_row` layer; the full REST flow is exercised in e2e.
@@ -1483,7 +1483,7 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertNull( $args['fields']['default'] );
 	}
 
-	// tech-debt.md#9: WorDBless cannot run the full rows query, so these
+	// tech-debt.md#td-wordbless-row-coverage: WorDBless cannot run the full rows query, so these
 	// projection checks stay at the route/schema and formatter layers.
 	public function test_filter_requested_field_ids_keeps_collection_field_keys(): void {
 		$result = $this->invoke_filter_requested_field_ids(

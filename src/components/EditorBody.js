@@ -105,7 +105,7 @@ function getHeaderBoundaryMoveUpScopes( root ) {
 }
 
 function syncHeaderBoundaryMoveUpButtons( root, shouldDisable ) {
-	// tech-debt.md#56: Gutenberg does not expose boundary-aware mover state.
+	// tech-debt.md#td-gutenberg-header-boundary: Gutenberg does not expose boundary-aware mover state.
 	const ownerWindow = root?.ownerDocument?.defaultView ?? window;
 	getHeaderBoundaryMoveUpScopes( root ).forEach( ( scope ) => {
 		scope
@@ -814,7 +814,7 @@ function HideHeaderBlockKebab( { postType } ) {
 }
 
 function HeaderAwareRootAppender( { postType } ) {
-	// tech-debt.md#56: Gutenberg's root appender only treats a fully empty
+	// tech-debt.md#td-gutenberg-header-boundary: Gutenberg's root appender only treats a fully empty
 	// root list as empty. Cortext's locked header blocks are chrome, so the
 	// body still needs a first-block prompt after them.
 	const { bodyEmpty, insertionIndex } = useSelect(

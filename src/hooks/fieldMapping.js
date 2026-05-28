@@ -363,7 +363,7 @@ function checkboxFieldValue( item, id ) {
 // default-hidden, addable like any other field. Sort is enabled only on
 // the timestamps — sort on display-value
 // properties (Person, Relation, Rollup) is an open architectural
-// decision shared with relations and rollups (tech-debt.md#14).
+// decision shared with relations and rollups (tech-debt.md#td-display-value-sort).
 export function systemFields() {
 	const formatDate = ( value ) =>
 		value ? dateI18n( 'M j, Y g:i a', value ) : '';
@@ -517,7 +517,7 @@ export function mapField( field ) {
 		// `ColumnHeaderActions` queries the DOM for it and portals our
 		// combined-dropdown trigger into the owning <th>; DataViews'
 		// built-in trigger is hidden via CSS on marker-bearing columns
-		// (tech-debt.md#16). Skipping the label here avoids leaking
+		// (tech-debt.md#td-dataviews-header-extension-slots). Skipping the label here avoids leaking
 		// duplicate text into the th's accessible/text content.
 		header: (
 			<HeaderLabel>
@@ -546,7 +546,7 @@ export function mapField( field ) {
 	// UI). We pick the closest honest type rather than the prettiest one:
 	// decimals go through 'integer' with DataViews' integer-only
 	// validator disabled because there's no exact number type
-	// (tech-debt.md#10), url goes through 'text', and multiselect goes
+	// (tech-debt.md#td-dataviews-fieldtype-union), url goes through 'text', and multiselect goes
 	// through 'array' so DataViews understands the value cardinality.
 	switch ( type ) {
 		case 'number':

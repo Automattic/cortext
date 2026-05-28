@@ -1,7 +1,7 @@
 // Parses stored option records into the DataViews `elements` shape.
 // Accepts a string shorthand (`'red'` becomes `{ value: 'red', label: 'red' }`)
 // or `{ value, label, color? }`. `color` is an optional palette name (or
-// legacy CSS color) the chip renderer reads -- tech-debt.md#11: DataViews's
+// legacy CSS color) the chip renderer reads -- tech-debt.md#td-dataviews-option-color: DataViews's
 // `Option` type doesn't declare `color`, but it tolerates extra keys on
 // element entries.
 //

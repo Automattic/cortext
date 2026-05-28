@@ -120,7 +120,7 @@ export default function Sidebar( {
 	onToggleCollapsed,
 	onWidthChange,
 } ) {
-	// tech-debt.md#53: this tree still comes from flat REST lists capped at
+	// tech-debt.md#td-workspace-tree-no-unified-model: this tree still comes from flat REST lists capped at
 	// `per_page: 100`. The follow-up is lazy loading or a paged tree endpoint.
 	const { records: collections, isResolving: isResolvingCollections } =
 		useEntityRecords(
@@ -313,7 +313,7 @@ export default function Sidebar( {
 			'crtxt_collection',
 			FULL_PAGE_COLLECTION_QUERY,
 		] );
-		// tech-debt.md#2: core-data may have cached `/wp/v2/types` before this
+		// tech-debt.md#td-rows-not-in-core-data: core-data may have cached `/wp/v2/types` before this
 		// collection registered its row CPT. Refresh the entity config so row
 		// lookups can find the new post type.
 		invalidateResolution( 'getEntitiesConfig', [ 'postType' ] );

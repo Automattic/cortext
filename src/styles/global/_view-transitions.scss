@@ -53,7 +53,8 @@
 	}
 }
 
-// tech-debt.md#58: Page-to-page swaps rebuild the editor while the route
+// tech-debt.md#td-page-transitions-snapshot: Page-to-page swaps rebuild
+// the editor while the route
 // stays on the same pane. Keep the old snapshot above the new one until the
 // new editor has painted, then fade it away.
 :root[data-cortext-view-transition="hold-old-canvas"]::view-transition-old(cortext-canvas),

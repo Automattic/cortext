@@ -96,7 +96,7 @@ export function SidebarListSkeleton( { itemCount = 5 } ) {
 	);
 }
 
-// tech-debt.md#55: keep loading placeholders close to the real row/card shapes.
+// tech-debt.md#td-dataviews-loading-skeletons: keep loading placeholders close to the real row/card shapes.
 // Cap the count so perPage=25 does not paint an oversized skeleton.
 const COLLECTION_SKELETON_ROW_CAP = 15;
 

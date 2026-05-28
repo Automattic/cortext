@@ -42,10 +42,10 @@ function siteLocale() {
 	return wpLocale.replace( '_', '-' );
 }
 
-// tech-debt.md#1: DataViews v6 has no inline cell editing in any layout,
+// tech-debt.md#td-dataviews-inline-editing: DataViews v6 has no inline cell editing in any layout,
 // so we mount this component from `field.render` (a display renderer in
 // the docs) and treat the click-to-edit + commit/cancel state as our own.
-// tech-debt.md#2: the save callback comes through context because
+// tech-debt.md#td-rows-not-in-core-data: the save callback comes through context because
 // `field.render` only receives `{ item }`. Once rows live in core-data
 // the cell could call `saveEntityRecord` directly.
 export const RowMutationContext = createContext( {
@@ -971,7 +971,7 @@ export default function EditableCell( {
 					checked={ Boolean( value ) }
 					onChange={ ( next ) => commit( next ) }
 					disabled={ isSaving }
-					// tech-debt.md#8: CheckboxControl renders its `label`
+					// tech-debt.md#td-checkboxcontrol-hide-label: CheckboxControl renders its `label`
 					// prop visibly regardless of hideLabelFromVision, so we
 					// pass aria-label to keep screen readers labelled
 					// without doubling the column header text.

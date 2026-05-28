@@ -37,7 +37,8 @@
 	}
 
 	.cortext-infotip__trigger {
-		// tech-debt.md#16: this help affordance is portaled beside our
+		// tech-debt.md#td-dataviews-header-extension-slots: this help
+		// affordance is portaled beside our
 		// replacement header trigger. It must sit above the transparent
 		// drag handle until DataViews exposes a header accessory slot.
 		position: relative;

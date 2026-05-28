@@ -5,8 +5,9 @@ $list-row-hover-background: #f8f8f8;
 $list-row-open-background: #f3f3f3;
 
 .cortext-data-view {
-	// tech-debt.md#61: DataViews has no compact metadata list variant, so this
-	// file reshapes its current list DOM for Cortext's baseline.
+	// tech-debt.md#td-dataviews-list-row-hooks: DataViews has no compact
+	// metadata list variant, so this file reshapes its current list DOM
+	// for Cortext's baseline.
 
 	&__footer--list {
 		padding: 0 $grid-unit-20 $grid-unit-20;

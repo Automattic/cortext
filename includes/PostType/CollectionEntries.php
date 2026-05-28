@@ -164,8 +164,8 @@ final class CollectionEntries {
 		// ID for a `crtxt_field` post, so any postmeta row keyed
 		// `field-<that-id>` belongs to a Cortext entry by construction.
 		// A scoped SQL JOIN would tighten the scope on paper but
-		// WorDBless (the test mock — see tech-debt.md#9) can't simulate
-		// it; tracked as tech-debt.md#21.
+		// WorDBless (the test mock — see tech-debt.md#td-wordbless-row-coverage) can't simulate
+		// it; tracked as tech-debt.md#td-field-meta-global-delete.
 		delete_post_meta_by_key( "field-{$post_id}" );
 
 		// Defensive: remove the field's string ID from any collection's

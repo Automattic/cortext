@@ -466,7 +466,7 @@ export default function AddFieldPopover( { collectionId, onCreate } ) {
 			// Select / multi-select fields are created without
 			// pre-defined options. Options can be edited via wp-admin
 			// today; a future field-edit dialog will bring it inline
-			// (tech-debt.md#18).
+			// (tech-debt.md#td-field-management-panel).
 			const created = await run( {
 				title: trimmed || fallback,
 				type: chosenType,

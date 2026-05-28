@@ -4,7 +4,7 @@ import DataViewNewRowButton from './DataViewNewRowButton';
 
 const GRID_VIEW_SELECTOR = '.dataviews-view-grid';
 
-// tech-debt.md#7: DataViews has no grid append-card slot, so rows with data use
+// tech-debt.md#td-dataviews-layout-slots: DataViews has no grid append-card slot, so rows with data use
 // a portal into the rendered grid.
 export default function GridNewRowPortal( {
 	wrapperRef,

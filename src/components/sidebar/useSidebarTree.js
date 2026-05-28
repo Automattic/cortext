@@ -5,7 +5,7 @@ import { buildTree, collectAncestorIds } from '../pages-tree';
 // Pages and full-page collections share one tree. Collections with a loaded
 // page parent appear under that page. Collections without a loaded page
 // parent stay in the Collections section, including row-owned collections
-// for now (tech-debt.md#53).
+// for now (tech-debt.md#td-workspace-tree-no-unified-model).
 //
 // Sort top-level collections here. Otherwise `useEntityRecords` returns
 // whatever order core-data emits, which can shift after a rename and reorder

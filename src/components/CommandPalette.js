@@ -1,4 +1,4 @@
-// tech-debt.md#38: use WordPress' palette UI, but keep it on a local
+// tech-debt.md#td-command-palette-host-glue: use WordPress' palette UI, but keep it on a local
 // registry so core/wp-admin commands do not show up in Cortext.
 
 import { store as commandsStore, useCommand } from '@wordpress/commands';

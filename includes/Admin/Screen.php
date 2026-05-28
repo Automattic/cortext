@@ -28,7 +28,7 @@ final class Screen {
 	public function register(): void {
 		add_action( 'admin_menu', array( $this, 'register_menu' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
-		// tech-debt.md#38: core adds this late; run after it so this
+		// tech-debt.md#td-command-palette-host-glue: core adds this late; run after it so this
 		// screen only has one palette.
 		add_action( 'admin_enqueue_scripts', array( $this, 'dequeue_core_command_palette' ), 100 );
 		add_filter( 'admin_body_class', array( $this, 'add_body_class' ) );
@@ -167,7 +167,7 @@ final class Screen {
 			return;
 		}
 
-		// tech-debt.md#38: Cortext has its own palette here, so drop core's
+		// tech-debt.md#td-command-palette-host-glue: Cortext has its own palette here, so drop core's
 		// wp-admin palette before global commands leak into the app.
 		wp_dequeue_script( 'wp-core-commands' );
 	}

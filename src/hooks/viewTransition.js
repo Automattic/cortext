@@ -64,7 +64,7 @@ export function withViewTransition( updater, options = {} ) {
 	}
 	activeTransition = tx;
 	if ( options.mode === HOLD_OLD_CANVAS_MODE ) {
-		// tech-debt.md#58: the View Transition callback can run after this
+		// tech-debt.md#td-page-transitions-snapshot: the View Transition callback can run after this
 		// function returns, so wait for the updater result before revealing.
 		const reveal = () => {
 			if ( activeTransition === tx ) {

@@ -53,7 +53,7 @@ const ROW_ACTIONS_CHROME_RESERVE = 48;
 const ROW_DROP_ZONE_MAX_SIDE = 40;
 const HOVER_SUPPRESSION_RELEASE_DELAY = 120;
 
-// tech-debt.md#49: DataViews doesn't expose row refs or reorder hooks.
+// tech-debt.md#td-dataviews-row-reorder: DataViews doesn't expose row refs or reorder hooks.
 // Keep the DOM selectors for this adapter in one place. Grid stays out for now;
 // card-to-card drops need a separate 2D design.
 const ROW_SELECTORS = {
