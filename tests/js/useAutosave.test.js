@@ -441,7 +441,7 @@ describe( 'useAutosave: status', () => {
 
 		const { rerender } = renderHook( () =>
 			useAutosave( {
-				recentTarget: { kind: 'page', id: 42 },
+				recentTarget: { id: 42 },
 			} )
 		);
 
@@ -459,7 +459,6 @@ describe( 'useAutosave: status', () => {
 		} );
 
 		expect( mockTouchRecent ).toHaveBeenCalledWith( {
-			kind: 'page',
 			id: 42,
 		} );
 	} );
@@ -469,7 +468,7 @@ describe( 'useAutosave: status', () => {
 
 		const { rerender } = renderHook( () =>
 			useAutosave( {
-				recentTarget: { kind: 'row', id: 42, collectionId: 9 },
+				recentTarget: { id: 42, collectionId: 9 },
 			} )
 		);
 
@@ -487,7 +486,6 @@ describe( 'useAutosave: status', () => {
 		} );
 
 		expect( mockTouchRecent ).toHaveBeenCalledWith( {
-			kind: 'row',
 			id: 42,
 			collectionId: 9,
 		} );
@@ -506,7 +504,7 @@ describe( 'useAutosave: status', () => {
 
 		renderHook( () =>
 			useAutosave( {
-				recentTarget: { kind: 'row', id: 42, collectionId: 9 },
+				recentTarget: { id: 42, collectionId: 9 },
 			} )
 		);
 
@@ -517,8 +515,8 @@ describe( 'useAutosave: status', () => {
 		// Edit row A → save starts → user opens row B before the save
 		// resolves. When the save lands, Recents must reflect A (which was
 		// actually saved), not B (which the parent has since swapped in).
-		const targetA = { kind: 'row', id: 1, collectionId: 9 };
-		const targetB = { kind: 'row', id: 2, collectionId: 9 };
+		const targetA = { id: 1, collectionId: 9 };
+		const targetB = { id: 2, collectionId: 9 };
 
 		setStoreState( { isSaving: false, currentPostId: 1 } );
 
@@ -560,13 +558,13 @@ describe( 'useAutosave: status', () => {
 
 		const { rerender } = renderHook( ( props ) => useAutosave( props ), {
 			initialProps: {
-				recentTarget: { kind: 'row', id: 1, collectionId: 9 },
+				recentTarget: { id: 1, collectionId: 9 },
 			},
 		} );
 
 		act( () => {
 			rerender( {
-				recentTarget: { kind: 'row', id: 2, collectionId: 9 },
+				recentTarget: { id: 2, collectionId: 9 },
 			} );
 		} );
 

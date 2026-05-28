@@ -133,7 +133,7 @@ describe( 'useCollectionRows', () => {
 
 		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 1 ) );
 		expect( result.current.queryMode ).toBe( 'server' );
-		expect( lastRequestPath() ).toContain( 'collection=7' );
+		expect( lastRequestPath() ).toContain( 'trait=7' );
 		expect( lastRequestPath() ).toContain( 'page=2' );
 		expect( lastRequestPath() ).toContain( 'per_page=50' );
 	} );
@@ -908,7 +908,7 @@ describe( 'useCollectionRows', () => {
 		} );
 
 		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 2 ) );
-		expect( lastRequestPath() ).toContain( 'collection=7' );
+		expect( lastRequestPath() ).toContain( 'trait=7' );
 	} );
 
 	it( 'serializes visible fields in a stable order', () => {

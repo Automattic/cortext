@@ -21,7 +21,6 @@ import apiFetch from '@wordpress/api-fetch';
  * same small shape as recents and trash, with an optional excerpt for search.
  *
  * @typedef {Object} CortextDocument
- * @property {'page'|'row'}              kind         Document kind.
  * @property {number}                    id           Post id.
  * @property {string}                    title        Plain-text title.
  * @property {string}                    path         Splat path for navigation.
@@ -38,15 +37,13 @@ function readNumber( value, fallback ) {
 }
 
 /**
- * Fetches Cortext documents (pages and collection rows) from the shared
- * document endpoint. The loading state matches the old trash hook shape.
+ * Fetches Cortext documents from the shared document endpoint.
  *
- * @param {Object}          [options]
- * @param {string}          [options.search]  Free-text search string.
- * @param {'page'|'row'|''} [options.kind]    Filter to a specific document kind.
- * @param {'trash'|''}      [options.status]  Pass `'trash'` for the sidebar Trash view.
- * @param {number}          [options.page]    1-based page number.
- * @param {number}          [options.perPage] Page size, clamped server-side to 100.
+ * @param {Object}     [options]
+ * @param {string}     [options.search]  Free-text search string.
+ * @param {'trash'|''} [options.status]  Pass `'trash'` for the sidebar Trash view.
+ * @param {number}     [options.page]    1-based page number.
+ * @param {number}     [options.perPage] Page size, clamped server-side to 100.
  *
  * @return {{
  *   documents: CortextDocument[],
@@ -60,7 +57,6 @@ function readNumber( value, fallback ) {
 export default function useDocuments( options = {} ) {
 	const {
 		search = '',
-		kind = '',
 		status = '',
 		page = 1,
 		perPage = DEFAULT_PER_PAGE,
@@ -85,9 +81,6 @@ export default function useDocuments( options = {} ) {
 		if ( search ) {
 			params.set( 'search', search );
 		}
-		if ( kind ) {
-			params.set( 'kind', kind );
-		}
 		if ( status ) {
 			params.set( 'status', status );
 		}
@@ -99,7 +92,7 @@ export default function useDocuments( options = {} ) {
 		}
 		const qs = params.toString();
 		return qs ? `?${ qs }` : '';
-	}, [ search, kind, status, page, perPage ] );
+	}, [ search, status, page, perPage ] );
 
 	useEffect( () => {
 		const requestId = ++requestIdRef.current;

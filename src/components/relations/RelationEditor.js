@@ -95,8 +95,8 @@ export default function RelationEditor( {
 		setAccumulatedRows( ( previous ) => mergeRowsById( previous, data ) );
 	}, [ data, page, isLoading ] );
 
-	// Some saved relation refs are just IDs. Fetch labels for those only; row
-	// CPT responses usually already include titles.
+	// Some saved relation refs are just IDs. Fetch labels for those only;
+	// `/cortext/v1/rows` responses usually already include titles.
 	const unresolvedIds = useMemo(
 		() =>
 			selectedIds.filter( ( id ) => {
@@ -202,9 +202,13 @@ export default function RelationEditor( {
 		setCreateError( '' );
 		try {
 			const created = await apiFetch( {
-				path: `/cortext/v1/collections/${ targetCollectionId }/rows`,
+				path: '/wp/v2/crtxt_documents',
 				method: 'POST',
-				data: { title: createTitle },
+				data: {
+					title: createTitle,
+					status: 'private',
+					cortext_trait: targetCollectionId,
+				},
 			} );
 			const createdId = Number( created?.id );
 			if ( ! createdId ) {
@@ -213,7 +217,6 @@ export default function RelationEditor( {
 				);
 			}
 			touchRecent( {
-				kind: 'row',
 				id: createdId,
 				collectionId: targetCollectionId,
 			} );

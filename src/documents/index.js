@@ -1,8 +1,5 @@
 /**
- * Public API for sidebar document helpers.
- *
- * Components outside this folder should use these hooks and helpers instead
- * of importing descriptors directly.
+ * Public API for document helpers shared across the sidebar and editor blocks.
  */
 
 export {
@@ -12,6 +9,7 @@ export {
 	useDocumentSelection,
 	useFavoriteToggle,
 } from './hooks';
+export { useCreateDocument } from './actions';
 export { documentTitle } from './title';
 export { listIconForRecord } from './icons';
 export { documentUri } from './uri';

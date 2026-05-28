@@ -20,18 +20,18 @@ export function buildFieldListQuery( fieldIds ) {
 	return { include: fieldIds, ...FIELD_LIST_QUERY_BASE };
 }
 
-// Reads a collection's fields from main's contract: `meta.fields` is an array
-// of `crtxt_field` post IDs in display order. Fetch those records, then
+// Reads a collection's fields from `meta.cortext_fields`: an array of
+// `crtxt_field` post IDs in display order. Fetch those records, then
 // map each to a DataViews field. Row meta keys are `field-<post_id>`.
 export default function useCollectionFields( collectionId ) {
 	const {
 		record: collection,
 		isResolving: collectionResolving,
 		hasResolved: collectionHasResolved,
-	} = useEntityRecord( 'postType', 'crtxt_collection', collectionId ?? 0 );
+	} = useEntityRecord( 'postType', 'crtxt_document', collectionId ?? 0 );
 
 	const fieldIds = useMemo( () => {
-		const raw = collection?.meta?.fields;
+		const raw = collection?.meta?.cortext_fields;
 		if ( ! Array.isArray( raw ) ) {
 			return [];
 		}
@@ -100,7 +100,7 @@ export default function useCollectionFields( collectionId ) {
 
 	// Latch the last authoritative `fields` snapshot scoped to the
 	// collection that produced it. When the user adds or deletes a
-	// field, `meta.fields` changes, the `useEntityRecords` query gets
+	// field, `meta.cortext_fields` changes, the `useEntityRecords` query gets
 	// a new `include`, and core-data's `hasResolved` flips back to
 	// false until that query settles. Storing the previous fields keeps
 	// `dataViewFields` populated through the transient and lets
@@ -118,8 +118,12 @@ export default function useCollectionFields( collectionId ) {
 		? stableRef.current.fields
 		: liveFields;
 	const detailLayout = useMemo(
-		() => normalizeDetailLayout( fields, collection?.meta?.detail_layout ),
-		[ fields, collection?.meta?.detail_layout ]
+		() =>
+			normalizeDetailLayout(
+				fields,
+				collection?.meta?.cortext_detail_layout
+			),
+		[ fields, collection?.meta?.cortext_detail_layout ]
 	);
 
 	return {
@@ -128,7 +132,7 @@ export default function useCollectionFields( collectionId ) {
 		allDetailFields: detailLayout.allFields,
 		detailLayoutEntries: detailLayout.entries,
 		collection: collection ?? null,
-		slug: collection?.meta?.slug ?? null,
+		slug: collection?.slug ?? null,
 		// True only for the first load of this collection or its field list.
 		// After we have the collection and a latched field list, schema
 		// refetches stay quiet so the table doesn't unmount and remount.

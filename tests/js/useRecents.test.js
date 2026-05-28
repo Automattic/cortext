@@ -32,10 +32,9 @@ beforeEach( () => {
 describe( 'useRecents', () => {
 	it( 'fetches recents on mount', async () => {
 		const recent = {
-			kind: 'page',
 			id: 7,
 			title: 'Notes',
-			path: 'page/notes-7',
+			path: 'notes-7',
 			updatedAt: '2026-05-07T12:00:00+00:00',
 		};
 		apiFetch.mockResolvedValueOnce( { recents: [ recent ] } );
@@ -54,10 +53,9 @@ describe( 'useRecents', () => {
 
 	it( 'touches a recent and replaces state from the response', async () => {
 		const recent = {
-			kind: 'collection',
 			id: 9,
 			title: 'Books',
-			path: 'collection/books-9',
+			path: 'books-9',
 			updatedAt: '2026-05-07T12:00:00+00:00',
 		};
 		apiFetch
@@ -70,16 +68,13 @@ describe( 'useRecents', () => {
 		);
 
 		await act( async () => {
-			await result.current.touchRecent( {
-				kind: 'collection',
-				id: 9,
-			} );
+			await result.current.touchRecent( { id: 9 } );
 		} );
 
 		expect( apiFetch ).toHaveBeenLastCalledWith( {
 			path: '/cortext/v1/recents',
 			method: 'POST',
-			data: { kind: 'collection', id: 9 },
+			data: { id: 9 },
 		} );
 		expect( result.current.recents ).toEqual( [ recent ] );
 	} );
@@ -88,10 +83,9 @@ describe( 'useRecents', () => {
 		const initialFetch = createDeferred();
 		const touch = createDeferred();
 		const recent = {
-			kind: 'page',
 			id: 7,
 			title: 'Notes',
-			path: 'page/notes-7',
+			path: 'notes-7',
 			updatedAt: '2026-05-07T12:00:00+00:00',
 		};
 		apiFetch
@@ -102,10 +96,7 @@ describe( 'useRecents', () => {
 
 		let touchResponse;
 		act( () => {
-			touchResponse = result.current.touchRecent( {
-				kind: 'page',
-				id: 7,
-			} );
+			touchResponse = result.current.touchRecent( { id: 7 } );
 		} );
 
 		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 2 ) );
@@ -129,10 +120,9 @@ describe( 'useRecents', () => {
 
 	it( 'swallows touch failures without clearing existing recents', async () => {
 		const recent = {
-			kind: 'page',
 			id: 7,
 			title: 'Notes',
-			path: 'page/notes-7',
+			path: 'notes-7',
 			updatedAt: '2026-05-07T12:00:00+00:00',
 		};
 		apiFetch
@@ -146,10 +136,7 @@ describe( 'useRecents', () => {
 
 		let response;
 		await act( async () => {
-			response = await result.current.touchRecent( {
-				kind: 'page',
-				id: 7,
-			} );
+			response = await result.current.touchRecent( { id: 7 } );
 		} );
 
 		expect( response ).toBeNull();
@@ -161,17 +148,15 @@ describe( 'useRecents', () => {
 		const firstTouch = createDeferred();
 		const secondTouch = createDeferred();
 		const firstRecent = {
-			kind: 'page',
 			id: 1,
 			title: 'First',
-			path: 'page/first-1',
+			path: 'first-1',
 			updatedAt: '2026-05-07T12:00:00+00:00',
 		};
 		const secondRecent = {
-			kind: 'page',
 			id: 2,
 			title: 'Second',
-			path: 'page/second-2',
+			path: 'second-2',
 			updatedAt: '2026-05-07T12:01:00+00:00',
 		};
 		apiFetch
@@ -187,23 +172,17 @@ describe( 'useRecents', () => {
 		let firstResponse;
 		let secondResponse;
 		act( () => {
-			firstResponse = result.current.touchRecent( {
-				kind: 'page',
-				id: 1,
-			} );
+			firstResponse = result.current.touchRecent( { id: 1 } );
 		} );
 		act( () => {
-			secondResponse = result.current.touchRecent( {
-				kind: 'page',
-				id: 2,
-			} );
+			secondResponse = result.current.touchRecent( { id: 2 } );
 		} );
 
 		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 2 ) );
 		expect( apiFetch ).toHaveBeenLastCalledWith( {
 			path: '/cortext/v1/recents',
 			method: 'POST',
-			data: { kind: 'page', id: 1 },
+			data: { id: 1 },
 		} );
 		expect( result.current.isUpdating ).toBe( true );
 
@@ -216,7 +195,7 @@ describe( 'useRecents', () => {
 		expect( apiFetch ).toHaveBeenLastCalledWith( {
 			path: '/cortext/v1/recents',
 			method: 'POST',
-			data: { kind: 'page', id: 2 },
+			data: { id: 2 },
 		} );
 
 		await act( async () => {
@@ -232,10 +211,9 @@ describe( 'useRecents', () => {
 
 	it( 'keeps equivalent recents state stable when only timestamps change', async () => {
 		const recent = {
-			kind: 'page',
 			id: 7,
 			title: 'Notes',
-			path: 'page/notes-7',
+			path: 'notes-7',
 			updatedAt: '2026-05-07T12:00:00+00:00',
 		};
 		apiFetch
@@ -256,10 +234,7 @@ describe( 'useRecents', () => {
 		const recentsBeforeTouch = result.current.recents;
 
 		await act( async () => {
-			await result.current.touchRecent( {
-				kind: 'page',
-				id: 7,
-			} );
+			await result.current.touchRecent( { id: 7 } );
 		} );
 
 		expect( result.current.recents ).toBe( recentsBeforeTouch );

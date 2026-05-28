@@ -12,12 +12,11 @@ import {
 const FavoritesContext = createContext( null );
 
 function normalizeFavorite( favorite ) {
-	if ( ! favorite || ! favorite.kind || ! favorite.id ) {
+	if ( ! favorite || ! favorite.id ) {
 		return null;
 	}
 	return {
 		...favorite,
-		kind: favorite.kind,
 		id: Number( favorite.id ),
 	};
 }
@@ -33,10 +32,7 @@ function areFavoritesEqual( a, b ) {
 	if ( a.length !== b.length ) {
 		return false;
 	}
-	return a.every(
-		( favorite, index ) =>
-			favorite.kind === b[ index ]?.kind && favorite.id === b[ index ]?.id
-	);
+	return a.every( ( favorite, index ) => favorite.id === b[ index ]?.id );
 }
 
 export function FavoritesProvider( { children } ) {

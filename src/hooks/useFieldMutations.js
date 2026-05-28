@@ -13,9 +13,8 @@ import { elementsFromOptions } from './optionElements';
 // uses core-data's `saveEntityRecord` so the cached `useEntityRecords`
 // resolver in `useCollectionFields` re-renders without manual list
 // invalidation. Delete uses `deleteEntityRecord`; the server-side
-// `before_delete_post` hook in `CollectionEntries` handles entry-meta
-// cleanup, and the collection record is invalidated so its `meta.fields`
-// refreshes.
+// `before_delete_post` hook handles entry-meta cleanup, and the collection
+// record is invalidated so its `meta.cortext_fields` refreshes.
 
 function useMutationState() {
 	const [ isBusy, setIsBusy ] = useState( false );
@@ -28,13 +27,13 @@ function useFieldListInvalidation() {
 	return useCallback(
 		( collectionId ) => {
 			// Invalidate the collection record only. After it refetches,
-			// `meta.fields` carries the new ID and `useCollectionFields`
+			// `meta.cortext_fields` carries the new ID and `useCollectionFields`
 			// passes a different `include` to `useEntityRecords`. That
 			// new query is uncached, so the field list refetches without
 			// us touching the (impossible-to-target) old resolver.
 			invalidateResolution( 'getEntityRecord', [
 				'postType',
-				'crtxt_collection',
+				'crtxt_document',
 				collectionId,
 			] );
 		},
@@ -316,11 +315,11 @@ export function useDeleteField( collectionId ) {
 					throw new Error( 'cortext_delete_failed' );
 				}
 				// The server `before_delete_post` hook removed the field's
-				// string ID from the collection's `meta.fields`; refetch the
+				// string ID from the collection's `meta.cortext_fields`; refetch the
 				// collection so the local view reflects that.
 				invalidateResolution( 'getEntityRecord', [
 					'postType',
-					'crtxt_collection',
+					'crtxt_document',
 					collectionId,
 				] );
 				return result;

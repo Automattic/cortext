@@ -11,7 +11,6 @@ import {
 	useMemo,
 	useReducer,
 	useRef,
-	useState,
 } from '@wordpress/element';
 
 // Lazy-loading Canvas keeps its Cortext subtree (publish toggle, page
@@ -29,24 +28,18 @@ const Canvas = lazy( () =>
 	import( /* webpackChunkName: "editor" */ '../components/Canvas' )
 );
 import CanvasSkeleton from '../components/CanvasSkeleton';
-import CollectionDataViews from '../components/CollectionDataViews';
-import { CollectionFieldsProvider } from '../components/CollectionFieldsContext';
-import CollectionPublishToggle from '../components/CollectionPublishToggle';
 import { RowMutationContext } from '../components/EditableCell';
 import PublishedDocumentsPane from '../components/PublishedDocumentsPane';
 import { CanvasProgressBar } from '../components/Skeleton';
 import useDelayedFlag from '../hooks/useDelayedFlag';
 import CortextSnackbars from '../components/CortextSnackbars';
-import WorkspaceTopBar, {
-	TopBarActionsFill,
-} from '../components/WorkspaceTopBar';
+import WorkspaceTopBar from '../components/WorkspaceTopBar';
 import {
 	ACTIVE_PAGES_QUERY,
 	POST_TYPE,
 	TRASHED_PAGES_QUERY,
 } from '../components/page-queries';
 import { firstPageInTree } from '../components/pages-tree';
-import { COLLECTION_QUERY } from '../collections';
 import { withViewTransition } from '../hooks/viewTransition';
 import { useRecents } from '../hooks/useRecents';
 import { useWorkspaceHome } from '../hooks/useWorkspaceHome';
@@ -54,69 +47,8 @@ import useCollectionFields from '../hooks/useCollectionFields';
 import { notifyDocumentTrashChanged } from '../hooks/documentTrashInvalidation';
 import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
 import EmptyState from './EmptyState';
-import {
-	computeDocumentUri,
-	useResolveCollection,
-	useResolveDocument,
-} from './useResolveEntity';
+import { computeDocumentUri, useResolveDocument } from './useResolveEntity';
 import { init, parseTarget, reducer } from './entityRouteReducer';
-
-const DEFAULT_VIEW = {
-	type: 'table',
-	fields: [],
-	sort: null,
-	filters: [],
-	calculations: {},
-	perPage: 25,
-	page: 1,
-	search: '',
-	layout: {},
-	rowDetailMode: 'side',
-};
-
-function CollectionView( { collectionId, onReady } ) {
-	const [ view, setView ] = useState( DEFAULT_VIEW );
-
-	return (
-		<CollectionDataViews
-			collectionId={ collectionId }
-			view={ view }
-			onChangeView={ setView }
-			onReady={ onReady }
-			empty={
-				<span className="cortext-canvas__empty-text">
-					{ __( 'No entries yet.', 'cortext' ) }
-				</span>
-			}
-		/>
-	);
-}
-
-function CollectionPane( { collectionId, isActive, onReady } ) {
-	return (
-		<CollectionFieldsProvider collectionId={ collectionId }>
-			{ /* Mirror Canvas's DocumentActions: only the active pane projects
-			    its publish toggle into the shared top bar slot. */ }
-			{ isActive ? (
-				<TopBarActionsFill>
-					<div className="cortext-document-actions">
-						<CollectionPublishToggle
-							collectionId={ collectionId }
-						/>
-					</div>
-				</TopBarActionsFill>
-			) : null }
-			<div className="cortext-collection-pane">
-				<div className="cortext-canvas__table">
-					<CollectionView
-						collectionId={ collectionId }
-						onReady={ onReady }
-					/>
-				</div>
-			</div>
-		</CollectionFieldsProvider>
-	);
-}
 
 function LoadingPane( { active } ) {
 	const showProgress = useDelayedFlag( active );
@@ -127,14 +59,10 @@ function LoadingPane( { active } ) {
 	);
 }
 
-function NotFoundPane( { type } ) {
-	const copy =
-		type === 'collection'
-			? __( "That collection doesn't exist.", 'cortext' )
-			: __( "That document doesn't exist.", 'cortext' );
+function NotFoundPane() {
 	return (
 		<div className="cortext-canvas__empty">
-			<p>{ copy }</p>
+			<p>{ __( "That document doesn't exist.", 'cortext' ) }</p>
 		</div>
 	);
 }
@@ -165,7 +93,7 @@ const ROW_MUTATION_DEFAULT = {
 };
 
 function isContentPane( active ) {
-	return active.kind === 'document' || active.kind === 'collection';
+	return active.kind === 'document';
 }
 
 export default function EntityRoute( { history } ) {
@@ -182,18 +110,11 @@ export default function EntityRoute( { history } ) {
 	);
 
 	const [ state, rawDispatch ] = useReducer( reducer, target, init );
-	const {
-		active,
-		mountedDocumentId,
-		mountedDocumentType,
-		displayedDocumentId,
-		mountedCollectionIds,
-	} = state;
+	const { active, mountedDocumentId, displayedDocumentId } = state;
 
-	// Keep the old pane up until the next Canvas has painted. Collections now
-	// use that path too.
+	// Keep the old pane up until the next Canvas has painted.
 	const isWorkspaceNavigating =
-		( target.kind === 'document' || target.kind === 'collection' ) &&
+		target.kind === 'document' &&
 		target.id !== null &&
 		target.id !== displayedDocumentId;
 	const showWorkspaceProgress = useDelayedFlag( isWorkspaceNavigating );
@@ -213,10 +134,11 @@ export default function EntityRoute( { history } ) {
 			rawDispatch( action );
 			return;
 		}
-		// Canvas owns page-to-page swaps because it can hold the old editor
-		// snapshot until the new EditorProvider is ready. Letting EntityRoute start
-		// another transition on DOCUMENT_DISPLAYED makes Chrome skip one and
-		// exposes the canvas frame near the end of the loader.
+		// Canvas owns document-to-document swaps because it can hold the old
+		// editor snapshot until the new EditorProvider is ready. Letting
+		// EntityRoute start another transition on DOCUMENT_DISPLAYED makes
+		// Chrome skip one and exposes the canvas frame near the end of the
+		// loader.
 		if (
 			action.type === 'DOCUMENT_DISPLAYED' &&
 			before.active.kind === 'document' &&
@@ -231,74 +153,22 @@ export default function EntityRoute( { history } ) {
 			} );
 			return;
 		}
-		const touchesCollection =
-			action.target?.kind === 'collection' ||
-			before.active.kind === 'collection' ||
-			after.active.kind === 'collection' ||
-			action.type.startsWith( 'COLLECTION_' );
-		if ( touchesCollection ) {
-			rawDispatch( action );
-			return;
-		}
 		withViewTransition( () => rawDispatch( action ) );
 	}, [] );
 
 	const documentResolution = useResolveDocument(
 		target.kind === 'document' ? target.tail : ''
 	);
-	const collectionResolution = useResolveCollection(
-		target.kind === 'collection' ? target.id : null
-	);
 
 	// For document targets that turn out to be rows, we still need the
 	// row's collection field schema (rendered as the property panel). The
-	// resolver hands us the post type; the parent collection comes from
-	// matching its `meta.slug` against the post type's `crtxt_<slug>`
-	// suffix.
-	//
-	// Note: the row CPT slug is `meta.slug`, not the collection's
-	// `post_name`. They diverge because `meta.slug` is truncated to the
-	// CPT-prefix budget (see CollectionEntries::MAX_CPT_LEN). REST's
-	// `?slug=` filter is `post_name__in`, which is the wrong field, and
-	// the default status filter is `publish` while collections are
-	// created `private`. So we reuse the workspace-wide `COLLECTION_QUERY`
-	// (already covers draft/private/publish) and match `meta.slug`
-	// client-side, which mirrors `CollectionEntries::collection_id_for_entry_post_type`
-	// on the PHP side.
-	const rowCollectionSlug = useMemo( () => {
-		if ( ! mountedDocumentType ) {
-			return null;
-		}
-		// Pages and collections are standalone documents. Only dynamic row
-		// CPTs need a parent collection lookup.
-		if (
-			mountedDocumentType === POST_TYPE ||
-			mountedDocumentType === 'crtxt_collection'
-		) {
-			return null;
-		}
-		return mountedDocumentType.startsWith( 'crtxt_' )
-			? mountedDocumentType.slice( 'crtxt_'.length )
-			: null;
-	}, [ mountedDocumentType ] );
-	const { records: workspaceCollections } = useEntityRecords(
-		'postType',
-		'crtxt_collection',
-		COLLECTION_QUERY,
-		{ enabled: Boolean( rowCollectionSlug ) }
-	);
-	const rowParentCollectionId = useMemo( () => {
-		if ( ! rowCollectionSlug || ! workspaceCollections ) {
-			return null;
-		}
-		const match = workspaceCollections.find(
-			( collection ) => collection?.meta?.slug === rowCollectionSlug
-		);
-		return match?.id ?? null;
-	}, [ rowCollectionSlug, workspaceCollections ] );
+	// resolver hands us the trait ids the document belongs to. Today only
+	// the first trait drives the row peek's parent collection; multi-trait
+	// UX can use the rest later.
+	const rowParentCollectionId = documentResolution.traitIds?.[ 0 ] ?? null;
 	const rowFieldsState = useCollectionFields( rowParentCollectionId );
 	const rowFields = useMemo( () => {
-		if ( ! rowCollectionSlug || ! rowFieldsState?.detailFields ) {
+		if ( ! rowParentCollectionId || ! rowFieldsState?.detailFields ) {
 			return undefined;
 		}
 		return [
@@ -312,9 +182,9 @@ export default function EntityRoute( { history } ) {
 			},
 			...rowFieldsState.detailFields,
 		];
-	}, [ rowCollectionSlug, rowFieldsState?.detailFields ] );
+	}, [ rowParentCollectionId, rowFieldsState?.detailFields ] );
 	const rowAllFields = useMemo( () => {
-		if ( ! rowCollectionSlug || ! rowFieldsState?.allDetailFields ) {
+		if ( ! rowParentCollectionId || ! rowFieldsState?.allDetailFields ) {
 			return undefined;
 		}
 		return [
@@ -328,7 +198,7 @@ export default function EntityRoute( { history } ) {
 			},
 			...rowFieldsState.allDetailFields,
 		];
-	}, [ rowCollectionSlug, rowFieldsState?.allDetailFields ] );
+	}, [ rowParentCollectionId, rowFieldsState?.allDetailFields ] );
 
 	useLayoutEffect( () => {
 		dispatch( { type: 'TARGET_CHANGED', target } );
@@ -379,19 +249,19 @@ export default function EntityRoute( { history } ) {
 		if ( entity?.id === target.id ) {
 			dispatch( {
 				type: 'DOCUMENT_RESOLVED',
-				kind: 'document',
 				id: entity.id,
-				postType: entity.type,
 			} );
-			if ( entity.type === POST_TYPE ) {
-				touchRecent( { kind: 'page', id: entity.id } );
+			// Rows touch recents in the row-specific effect below, which has
+			// the parent collection id ready as breadcrumb context. Everything
+			// else (pages, collections) just records the open document by id.
+			if ( ( documentResolution.traitIds?.length ?? 0 ) === 0 ) {
+				touchRecent( { id: entity.id } );
 			}
 			return;
 		}
 		if ( ! isResolving && notFound ) {
 			dispatch( {
 				type: 'DOCUMENT_NOT_FOUND',
-				kind: 'document',
 				id: target.id,
 			} );
 		}
@@ -402,13 +272,11 @@ export default function EntityRoute( { history } ) {
 			target.kind !== 'document' ||
 			target.id === null ||
 			mountedDocumentId !== target.id ||
-			mountedDocumentType === POST_TYPE ||
 			! rowParentCollectionId
 		) {
 			return;
 		}
 		touchRecent( {
-			kind: 'row',
 			id: target.id,
 			collectionId: rowParentCollectionId,
 		} );
@@ -416,53 +284,9 @@ export default function EntityRoute( { history } ) {
 		target.kind,
 		target.id,
 		mountedDocumentId,
-		mountedDocumentType,
 		rowParentCollectionId,
 		touchRecent,
 	] );
-
-	useEffect( () => {
-		if ( target.kind !== 'collection' || target.id === null ) {
-			return;
-		}
-		const {
-			entity,
-			isResolving,
-			notFound,
-			id: resolvedFor,
-		} = collectionResolution;
-		if ( resolvedFor !== target.id ) {
-			return;
-		}
-		if ( entity?.id === target.id ) {
-			// Inline collections do not have a workspace route. A stale pasted
-			// URL should land on Not Found instead of opening Canvas.
-			if ( entity?.meta?.workspace_mode === 'inline' ) {
-				dispatch( {
-					type: 'DOCUMENT_NOT_FOUND',
-					kind: 'collection',
-					id: target.id,
-				} );
-				return;
-			}
-			// Full-page collections are Canvas documents with a data-view body.
-			dispatch( {
-				type: 'DOCUMENT_RESOLVED',
-				kind: 'collection',
-				id: entity.id,
-				postType: entity.type,
-			} );
-			touchRecent( { kind: 'collection', id: entity.id } );
-			return;
-		}
-		if ( ! isResolving && notFound ) {
-			dispatch( {
-				type: 'DOCUMENT_NOT_FOUND',
-				kind: 'collection',
-				id: target.id,
-			} );
-		}
-	}, [ target, collectionResolution, dispatch, touchRecent ] );
 
 	const handleDocumentDisplayed = useCallback(
 		( id ) => {
@@ -471,38 +295,13 @@ export default function EntityRoute( { history } ) {
 		[ dispatch ]
 	);
 
-	const handleCollectionReady = useCallback(
-		( id ) => {
-			dispatch( { type: 'COLLECTION_READY', id } );
-		},
-		[ dispatch ]
-	);
-
 	// Drives the breadcrumb from the same paint state the document-actions
-	// Fill uses, so both sides of the top bar update together.
-	let paintedRoute = { kind: 'unresolved' };
-	if ( active.kind === 'document' && displayedDocumentId !== null ) {
-		// Canvas mounts collections as documents; breadcrumbs still use the
-		// collection route shape.
-		paintedRoute =
-			mountedDocumentType === 'crtxt_collection'
-				? { kind: 'collection', id: displayedDocumentId }
-				: {
-						kind: 'document',
-						id: displayedDocumentId,
-						postType: mountedDocumentType,
-						collectionId: rowParentCollectionId,
-				  };
-	} else if ( active.kind === 'collection' ) {
-		paintedRoute = { kind: 'collection', id: active.id };
-	} else if (
-		active.kind === 'empty' ||
-		active.kind === 'document-not-found' ||
-		active.kind === 'collection-not-found' ||
-		active.kind === 'published'
-	) {
-		paintedRoute = { kind: active.kind };
-	}
+	// Fill uses, so both sides of the top bar update together. Null when no
+	// document is mounted (loading, empty, not found, published).
+	const paintedDocumentId =
+		active.kind === 'document' && displayedDocumentId !== null
+			? displayedDocumentId
+			: null;
 
 	const isDocumentActive = active.kind === 'document';
 	// Mount Canvas whenever a document is mounted, not only when it's the
@@ -512,8 +311,7 @@ export default function EntityRoute( { history } ) {
 	// `DOCUMENT_DISPLAYED` until it renders, and `active` can't flip to
 	// `document` until that dispatch arrives.
 	const editorPostId = mountedDocumentId;
-	const editorPostType = mountedDocumentType;
-	const isRow = Boolean( editorPostId ) && Boolean( rowCollectionSlug );
+	const isRow = Boolean( editorPostId ) && Boolean( rowParentCollectionId );
 
 	const { invalidateResolution, receiveEntityRecords } =
 		useDispatch( 'core' );
@@ -553,17 +351,16 @@ export default function EntityRoute( { history } ) {
 	const editorRecentTarget =
 		isRow && editorPostId !== null && rowParentCollectionId
 			? {
-					kind: 'row',
 					id: editorPostId,
 					collectionId: rowParentCollectionId,
 			  }
 			: null;
 	const editorCanvas =
-		editorPostId !== null && editorPostType ? (
+		editorPostId !== null ? (
 			<Suspense fallback={ <CanvasSkeleton /> }>
 				<Canvas
 					postId={ editorPostId }
-					postType={ editorPostType }
+					postType={ POST_TYPE }
 					collectionId={ isRow ? rowParentCollectionId : undefined }
 					fields={ isRow ? rowFields : undefined }
 					allFields={ isRow ? rowAllFields : undefined }
@@ -583,7 +380,7 @@ export default function EntityRoute( { history } ) {
 		<>
 			<WorkspaceTopBar
 				history={ history }
-				paintedRoute={ paintedRoute }
+				paintedDocumentId={ paintedDocumentId }
 			/>
 			<div className="cortext-workspace" data-target-kind={ target.kind }>
 				{ showWorkspaceProgress && (
@@ -604,21 +401,6 @@ export default function EntityRoute( { history } ) {
 						) }
 					</WorkspacePane>
 				) }
-
-				{ mountedCollectionIds.map( ( id ) => {
-					const isActiveCollection =
-						active.kind === 'collection' && active.id === id;
-					return (
-						<WorkspacePane key={ id } active={ isActiveCollection }>
-							<CollectionPane
-								collectionId={ id }
-								isActive={ isActiveCollection }
-								onReady={ handleCollectionReady }
-							/>
-						</WorkspacePane>
-					);
-				} ) }
-
 				<WorkspacePane active={ active.kind === 'published' }>
 					<PublishedDocumentsPane />
 				</WorkspacePane>
@@ -626,12 +408,7 @@ export default function EntityRoute( { history } ) {
 					<EmptyState />
 				</WorkspacePane>
 				<WorkspacePane active={ active.kind === 'document-not-found' }>
-					<NotFoundPane type="document" />
-				</WorkspacePane>
-				<WorkspacePane
-					active={ active.kind === 'collection-not-found' }
-				>
-					<NotFoundPane type="collection" />
+					<NotFoundPane />
 				</WorkspacePane>
 				<WorkspacePane active={ active.kind === 'loading' }>
 					<LoadingPane active={ active.kind === 'loading' } />

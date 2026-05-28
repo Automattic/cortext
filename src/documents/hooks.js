@@ -18,16 +18,26 @@ import {
 	favoriteKeyForRecord,
 } from './favorites';
 import { iconForRecord, listIconForRecord } from './icons';
-import { kindFromRecord } from './kinds';
-import { getDescriptor } from './descriptors';
+import { documentFeatures } from './capabilities';
+import {
+	documentLabel,
+	descendantLabel,
+	permanentDeleteConfirmation,
+	permanentDeleteErrorMessage,
+	restoreErrorMessage,
+} from './labels';
+import {
+	renameDocument,
+	duplicateDocument,
+	trashDocument,
+	restoreDocument,
+	permanentlyDeleteDocument,
+} from './actions';
 
 /**
  * Sidebar-scoped context for document actions. The provider supplies the data
- * and callbacks descriptors need: pages/collections for trash cleanup,
- * navigation helpers, and UI notices.
- *
- * Components should use the hooks below instead of reading this context
- * directly.
+ * and callbacks the actions need: navigation helpers, UI notices, and the
+ * trash-cleanup error handler.
  */
 const DocumentsContext = createContext( null );
 
@@ -80,13 +90,10 @@ function useDocumentsContext() {
 }
 
 /**
- * Bind descriptor actions to the current dispatcher, router, and UI callbacks.
- * Returns async `rename`, `duplicate`, `trash`, `restore`, and
- * `permanentDelete` functions.
+ * Bind action functions to the current dispatcher, router, and UI callbacks.
  *
  * `duplicate` resolves to the created record and `permanentDelete` resolves
  * to the REST response (with the deleted ids) so callers can react to it.
- * Descriptors own the per-kind refresh logic.
  */
 export function useDocumentActions() {
 	const docCtx = useDocumentsContext();
@@ -118,123 +125,69 @@ export function useDocumentActions() {
 	);
 
 	const rename = useCallback(
-		async ( record, title ) => {
-			const descriptor = descriptorFor( record );
-			if ( ! descriptor.rename ) {
-				return;
-			}
-			return descriptor.rename( record, title, ctx );
-		},
+		async ( record, title ) => renameDocument( record, title, ctx ),
 		[ ctx ]
 	);
 
 	const duplicate = useCallback(
-		async ( record ) => {
-			const descriptor = descriptorFor( record );
-			if ( ! descriptor.duplicate ) {
-				return undefined;
-			}
-			return descriptor.duplicate( record, ctx );
-		},
+		async ( record ) => duplicateDocument( record, ctx ),
 		[ ctx ]
 	);
 
 	const trash = useCallback(
-		async ( record ) => {
-			const descriptor = descriptorFor( record );
-			if ( ! descriptor.trash ) {
-				return;
-			}
-			return descriptor.trash( record, ctx );
-		},
+		async ( record ) => trashDocument( record, ctx ),
 		[ ctx ]
 	);
 
 	const restore = useCallback(
-		async ( record ) => {
-			const descriptor = descriptorFor( record );
-			if ( ! descriptor.restore ) {
-				return;
-			}
-			return descriptor.restore( record, ctx );
-		},
+		async ( record ) => restoreDocument( record, ctx ),
 		[ ctx ]
 	);
 
 	const permanentDelete = useCallback(
-		async ( record ) => {
-			const descriptor = descriptorFor( record );
-			if ( ! descriptor.permanentDelete ) {
-				return undefined;
-			}
-			return descriptor.permanentDelete( record, ctx );
-		},
+		async ( record ) => permanentlyDeleteDocument( record, ctx ),
 		[ ctx ]
 	);
 
 	return useMemo(
-		() => ( { rename, duplicate, trash, restore, permanentDelete } ),
+		() => ( {
+			rename,
+			duplicate,
+			trash,
+			restore,
+			permanentDelete,
+		} ),
 		[ rename, duplicate, trash, restore, permanentDelete ]
 	);
 }
 
 /**
- * Resolve the display data for a record: kind, title, icons, feature flags,
- * the localized kind label, and the trash-list copy (descendant labels,
- * confirmation text, error messages). Components should prefer these over
- * their own kind checks.
+ * Display data for a record: title, icons, feature flags, localized labels,
+ * and trash-list copy.
  *
- * `listIcon` is the compact-list glyph (Recents, Favorites, Palette); the
- * sidebar tree's identity icon stays on `icon`. `kindLabel` is the localized
- * noun ("Page", "Collection", "Row") for aria labels and similar copy.
- * `descendantLabel` and `permanentDeleteConfirmation` take the cascade counts
- * (`{ pages, collections, total }`) and return the localized copy for that
- * subtree.
- *
- * @param {Object} record Document record (page, collection, or row).
- * @return {Object} Display attributes.
+ * @param {Object} record Document record.
  */
 export function useDocumentRecord( record ) {
-	const kind = kindFromRecord( record );
-	const descriptor = getDescriptor( kind );
-	const title = documentTitle( record );
-	const icon = iconForRecord( record, kind );
-	const listIcon = ( size ) => listIconForRecord( record, size );
 	return {
-		kind,
-		title,
-		icon,
-		listIcon,
-		kindLabel: descriptor.kindLabel ?? '',
-		features: descriptor.features,
-		descendantLabel: ( counts ) =>
-			descriptor.descendantLabel?.( counts ) ?? '',
+		title: documentTitle( record ),
+		icon: iconForRecord( record ),
+		listIcon: ( size ) => listIconForRecord( record, size ),
+		kindLabel: documentLabel( record ),
+		features: documentFeatures( record ),
+		descendantLabel: ( counts ) => descendantLabel( counts ),
 		permanentDeleteConfirmation: ( counts ) =>
-			descriptor.permanentDeleteConfirmation?.( counts ) ?? null,
-		restoreErrorMessage: descriptor.restoreErrorMessage ?? '',
-		permanentDeleteErrorMessage:
-			descriptor.permanentDeleteErrorMessage ?? '',
+			permanentDeleteConfirmation( record, counts ),
+		restoreErrorMessage: restoreErrorMessage( record ),
+		permanentDeleteErrorMessage: permanentDeleteErrorMessage( record ),
 	};
 }
 
 /**
- * Toggle "favorite" on any document record. Hides the favorites bookkeeping
- * the sidebar and DataView were each doing inline: building the `{kind,id}`
- * ident, maintaining a key set, and rewriting the favorites list around it.
- *
- * Errors surface through `onError` so each caller can attach them to its own
- * notice. The hook clears the previous error before every attempt, so passing
- * `null` to the caller's setter is part of the contract.
+ * Toggle "favorite" on any document record.
  *
  * @param {Object}   [options]
  * @param {Function} [options.onError] Called with a message (or `null`) when a
  *                                     toggle attempt fails or is retried.
- * @return {{isFavorite: Function, toggle: Function, disabled: boolean}} Helpers
- *                                                                       bound
- *                                                                       to the
- *                                                                       current
- *                                                                       favorites
- *                                                                       state.
  */
 export function useFavoriteToggle( { onError } = {} ) {
 	const { favorites, isResolving, isUpdating, setFavorites } = useFavorites();
@@ -294,15 +247,11 @@ export function useFavoriteToggle( { onError } = {} ) {
 }
 
 /**
- * Selection and navigation helpers for sidebar rows. Pages and collections
- * each have their own selected-id prop; the active route can only ever set
- * one, so collapsing them into a single id is safe and keeps the comparison
- * record-agnostic. Navigation comes from the descriptor so kinds stay opaque.
+ * Selection and navigation helpers for sidebar rows.
  *
  * @param {Object}  args
  * @param {?number} args.selectedId           Active page id, or `null`.
  * @param {?number} args.selectedCollectionId Active collection id, or `null`.
- * @return {{isSelected: Function, selectRecord: Function}} Memoised helpers.
  */
 export function useDocumentSelection( { selectedId, selectedCollectionId } ) {
 	const navigate = useNavigate();
@@ -315,11 +264,13 @@ export function useDocumentSelection( { selectedId, selectedCollectionId } ) {
 
 	const selectRecord = useCallback(
 		( record ) => {
-			const uri = descriptorFor( record ).uri?.( record );
-			if ( ! uri ) {
+			if ( ! record?.id ) {
 				return;
 			}
-			navigate( { to: '/$', params: { _splat: uri } } );
+			navigate( {
+				to: '/$',
+				params: { _splat: `${ record.slug ?? '' }-${ record.id }` },
+			} );
 		},
 		[ navigate ]
 	);
@@ -328,8 +279,4 @@ export function useDocumentSelection( { selectedId, selectedCollectionId } ) {
 		() => ( { isSelected, selectRecord } ),
 		[ isSelected, selectRecord ]
 	);
-}
-
-function descriptorFor( record ) {
-	return getDescriptor( kindFromRecord( record ) );
 }

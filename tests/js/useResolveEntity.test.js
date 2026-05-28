@@ -13,7 +13,6 @@ jest.mock( '@wordpress/api-fetch', () => ( {
 
 import apiFetch from '@wordpress/api-fetch';
 import {
-	computeCollectionUri,
 	computeDocumentUri,
 	parseIdFromUri,
 	useResolveDocument,
@@ -56,6 +55,7 @@ describe( 'useResolveDocument', () => {
 
 		expect( result.current ).toEqual( {
 			entity: null,
+			traitIds: [],
 			isResolving: false,
 			notFound: false,
 			id: null,
@@ -72,6 +72,7 @@ describe( 'useResolveDocument', () => {
 
 		expect( result.current ).toEqual( {
 			entity: null,
+			traitIds: [],
 			isResolving: false,
 			notFound: true,
 			id: null,
@@ -83,15 +84,16 @@ describe( 'useResolveDocument', () => {
 		apiFetch
 			.mockResolvedValueOnce( {
 				id: 42,
-				type: 'crtxt_page',
-				rest_base: 'crtxt_pages',
+				type: 'crtxt_document',
+				rest_base: 'crtxt_documents',
 				slug: 'about-us',
+				trait_ids: [],
 			} )
 			.mockResolvedValueOnce( {
 				id: 42,
 				slug: 'about-us',
 				parent: 0,
-				type: 'crtxt_page',
+				type: 'crtxt_document',
 			} );
 
 		const { result } = renderHook( () =>
@@ -106,37 +108,37 @@ describe( 'useResolveDocument', () => {
 		expect( apiFetch.mock.calls[ 0 ][ 0 ].path ).toBe(
 			'/cortext/v1/documents/42'
 		);
-		// Pages register rest_base `crtxt_pages`, so fetching with the
-		// post_type `crtxt_page` would 404. The resolver must use rest_base.
 		expect( apiFetch.mock.calls[ 1 ][ 0 ].path ).toMatch(
-			/\/wp\/v2\/crtxt_pages\/42(?:\?|$)/
+			/\/wp\/v2\/crtxt_documents\/42(?:\?|$)/
 		);
 		expect( result.current ).toEqual( {
 			entity: {
 				id: 42,
 				slug: 'about-us',
 				parent: 0,
-				type: 'crtxt_page',
+				type: 'crtxt_document',
 			},
+			traitIds: [],
 			isResolving: false,
 			notFound: false,
 			id: 42,
 		} );
 	} );
 
-	it( 'resolves a row by discovering its dynamic CPT', async () => {
+	it( 'exposes the parent trait ids for rows', async () => {
 		apiFetch
 			.mockResolvedValueOnce( {
 				id: 96,
-				type: 'crtxt_projects',
-				rest_base: 'crtxt_projects',
+				type: 'crtxt_document',
+				rest_base: 'crtxt_documents',
 				slug: 'demo-workspace',
+				trait_ids: [ 7 ],
 			} )
 			.mockResolvedValueOnce( {
 				id: 96,
 				slug: 'demo-workspace',
 				parent: 0,
-				type: 'crtxt_projects',
+				type: 'crtxt_document',
 			} );
 
 		const { result } = renderHook( () =>
@@ -148,9 +150,9 @@ describe( 'useResolveDocument', () => {
 		);
 
 		expect( apiFetch.mock.calls[ 1 ][ 0 ].path ).toMatch(
-			/\/wp\/v2\/crtxt_projects\/96(?:\?|$)/
+			/\/wp\/v2\/crtxt_documents\/96(?:\?|$)/
 		);
-		expect( result.current.entity?.type ).toBe( 'crtxt_projects' );
+		expect( result.current.traitIds ).toEqual( [ 7 ] );
 	} );
 
 	it( 'sets notFound when the locator rejects (id unknown or not a document)', async () => {
@@ -173,8 +175,9 @@ describe( 'useResolveDocument', () => {
 		apiFetch
 			.mockResolvedValueOnce( {
 				id: 42,
-				type: 'crtxt_page',
-				rest_base: 'crtxt_pages',
+				type: 'crtxt_document',
+				rest_base: 'crtxt_documents',
+				trait_ids: [],
 				slug: 'about-us',
 			} )
 			.mockRejectedValueOnce( new Error( 'no record' ) );
@@ -195,15 +198,16 @@ describe( 'useResolveDocument', () => {
 		apiFetch
 			.mockResolvedValueOnce( {
 				id: 42,
-				type: 'crtxt_page',
-				rest_base: 'crtxt_pages',
+				type: 'crtxt_document',
+				rest_base: 'crtxt_documents',
+				trait_ids: [],
 				slug: '',
 			} )
 			.mockResolvedValueOnce( {
 				id: 42,
 				slug: '',
 				parent: 0,
-				type: 'crtxt_page',
+				type: 'crtxt_document',
 			} );
 
 		const { result, rerender } = renderHook(
@@ -241,17 +245,5 @@ describe( 'computeDocumentUri', () => {
 
 	it( 'treats whitespace-only slugs as empty', () => {
 		expect( computeDocumentUri( { id: 7, slug: '   ' } ) ).toBe( '7' );
-	} );
-} );
-
-describe( 'computeCollectionUri', () => {
-	it( 'prefixes with `collection/` and includes the slug', () => {
-		expect( computeCollectionUri( { id: 3, slug: 'books' } ) ).toBe(
-			'collection/books-3'
-		);
-	} );
-
-	it( 'falls back to bare id when slug is missing', () => {
-		expect( computeCollectionUri( { id: 3 } ) ).toBe( 'collection/3' );
 	} );
 } );
