@@ -85,10 +85,7 @@ describe( 'useFavorites', () => {
 			path: '/cortext/v1/favorites',
 			method: 'PUT',
 			data: {
-				favorites: [
-					{ id: 1, path: 'page/one-1' },
-					{ id: 2 },
-				],
+				favorites: [ { id: 1, path: 'page/one-1' }, { id: 2 } ],
 			},
 		} );
 	} );
@@ -116,9 +113,7 @@ describe( 'useFavorites', () => {
 		let firstPromise;
 		let secondPromise;
 		await act( async () => {
-			firstPromise = result.current.setFavorites( [
-				{ id: 1 },
-			] );
+			firstPromise = result.current.setFavorites( [ { id: 1 } ] );
 			secondPromise = result.current.setFavorites( ( current ) => [
 				...current,
 				{ id: 2 },
@@ -136,10 +131,7 @@ describe( 'useFavorites', () => {
 		} );
 		await expect( firstPromise ).rejects.toThrow( 'first failed' );
 		await waitFor( () => {
-			expect( putCalls ).toEqual( [
-				[ { id: 1 } ],
-				[ { id: 2 } ],
-			] );
+			expect( putCalls ).toEqual( [ [ { id: 1 } ], [ { id: 2 } ] ] );
 		} );
 
 		await act( async () => {
@@ -149,8 +141,6 @@ describe( 'useFavorites', () => {
 			await secondPromise;
 		} );
 
-		expect( result.current.favorites ).toEqual( [
-			{ id: 2 },
-		] );
+		expect( result.current.favorites ).toEqual( [ { id: 2 } ] );
 	} );
 } );

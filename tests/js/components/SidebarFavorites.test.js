@@ -52,9 +52,9 @@ describe( 'SidebarFavorites helpers', () => {
 	it( 'moves favorites by sortable id', () => {
 		const favorites = [ { id: 1 }, { id: 2 }, { id: 3 } ];
 
-		expect(
-			moveFavorite( favorites, 'favorite:3', 'favorite:1' )
-		).toEqual( [ { id: 3 }, { id: 1 }, { id: 2 } ] );
+		expect( moveFavorite( favorites, 'favorite:3', 'favorite:1' ) ).toEqual(
+			[ { id: 3 }, { id: 1 }, { id: 2 } ]
+		);
 	} );
 
 	it( 'returns the same list for no-op or unknown moves', () => {
@@ -83,9 +83,9 @@ describe( 'SidebarFavorites helpers', () => {
 			{ id: 4, parent: 0 },
 		];
 
-		expect(
-			filterFavoritesForTrashedPage( favorites, 1, pages )
-		).toEqual( [ { id: 4 }, { id: 5 } ] );
+		expect( filterFavoritesForTrashedPage( favorites, 1, pages ) ).toEqual(
+			[ { id: 4 }, { id: 5 } ]
+		);
 	} );
 
 	it( 'drops row favorites whose collection fell with the trashed page', () => {

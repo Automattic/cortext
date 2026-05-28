@@ -870,7 +870,8 @@ test.describe( 'Collection view block', () => {
 				}
 				await deleteIfCreated(
 					requestUtils,
-					fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
+					fixture.page &&
+						`/wp/v2/crtxt_documents/${ fixture.page.id }`
 				);
 				await deleteIfCreated(
 					requestUtils,

@@ -347,7 +347,9 @@ test.describe( 'Sidebar layout controls', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				fixture.page ? `/wp/v2/crtxt_documents/${ fixture.page.id }` : null
+				fixture.page
+					? `/wp/v2/crtxt_documents/${ fixture.page.id }`
+					: null
 			);
 		}
 	} );
@@ -501,7 +503,9 @@ test.describe( 'Sidebar layout controls', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				fixture.page ? `/wp/v2/crtxt_documents/${ fixture.page.id }` : null
+				fixture.page
+					? `/wp/v2/crtxt_documents/${ fixture.page.id }`
+					: null
 			);
 		}
 	} );
@@ -717,7 +721,9 @@ test.describe( 'Sidebar layout controls', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				fixture.page ? `/wp/v2/crtxt_documents/${ fixture.page.id }` : null
+				fixture.page
+					? `/wp/v2/crtxt_documents/${ fixture.page.id }`
+					: null
 			);
 		}
 	} );

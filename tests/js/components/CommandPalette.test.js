@@ -167,9 +167,7 @@ describe( 'CommandPalette recents', () => {
 
 		const command = mockUseCommand.mock.calls
 			.map( ( [ registered ] ) => registered )
-			.find(
-				( registered ) => registered.name === 'cortext/recent/9'
-			);
+			.find( ( registered ) => registered.name === 'cortext/recent/9' );
 
 		command.callback( { close } );
 
@@ -409,16 +407,12 @@ describe( 'CommandPalette document search', () => {
 			jest.advanceTimersByTime( 150 );
 		} );
 
-		expect( mockMenu.selectedValue ).toBe(
-			'document-cortext/document/42'
-		);
+		expect( mockMenu.selectedValue ).toBe( 'document-cortext/document/42' );
 
 		// User (or cmdk) moves the selection. The next refinement must not
 		// jump back to the new first doc; cmdk owns the value from here.
 		act( () => {
-			mockMenu.onSelectedValueChange(
-				'document-cortext/document/77'
-			);
+			mockMenu.onSelectedValueChange( 'document-cortext/document/77' );
 		} );
 		mockUseDocuments.mockReturnValue( {
 			documents: [
@@ -438,9 +432,7 @@ describe( 'CommandPalette document search', () => {
 		act( () => {
 			jest.advanceTimersByTime( 150 );
 		} );
-		expect( mockMenu.selectedValue ).toBe(
-			'document-cortext/document/77'
-		);
+		expect( mockMenu.selectedValue ).toBe( 'document-cortext/document/77' );
 
 		// Clearing the input drops the anchor so cmdk picks fresh next time.
 		act( () => {
@@ -474,13 +466,9 @@ describe( 'CommandPalette document search', () => {
 
 		// User arrows to the second doc.
 		act( () => {
-			mockMenu.onSelectedValueChange(
-				'document-cortext/document/77'
-			);
+			mockMenu.onSelectedValueChange( 'document-cortext/document/77' );
 		} );
-		expect( mockMenu.selectedValue ).toBe(
-			'document-cortext/document/77'
-		);
+		expect( mockMenu.selectedValue ).toBe( 'document-cortext/document/77' );
 
 		// Refinement returns a set that no longer contains 77. The
 		// selection has to jump to the new first doc so cmdk does not show
@@ -503,9 +491,7 @@ describe( 'CommandPalette document search', () => {
 			jest.advanceTimersByTime( 150 );
 		} );
 
-		expect( mockMenu.selectedValue ).toBe(
-			'document-cortext/document/99'
-		);
+		expect( mockMenu.selectedValue ).toBe( 'document-cortext/document/99' );
 	} );
 
 	it( 'clears the input and the controlled selection when the palette closes', () => {
@@ -530,9 +516,7 @@ describe( 'CommandPalette document search', () => {
 			jest.advanceTimersByTime( 150 );
 		} );
 		expect( mockMenu.search ).toBe( 'foo' );
-		expect( mockMenu.selectedValue ).toBe(
-			'document-cortext/document/1'
-		);
+		expect( mockMenu.selectedValue ).toBe( 'document-cortext/document/1' );
 
 		// Simulate the palette closing after the user picked a result.
 		// `close()` from the command callback bypasses `closeAndReset`, so

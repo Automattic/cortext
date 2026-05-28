@@ -96,7 +96,8 @@ test.describe( 'Public page rendering', () => {
 				} finally {
 					await deleteIfCreated(
 						requestUtils,
-						createdPage && `/wp/v2/crtxt_documents/${ createdPage.id }`
+						createdPage &&
+							`/wp/v2/crtxt_documents/${ createdPage.id }`
 					);
 				}
 			}

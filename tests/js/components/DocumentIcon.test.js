@@ -22,7 +22,9 @@ jest.mock( '../../../src/components/DocumentIconWp', () => ( {
 
 import { useEntityRecord } from '@wordpress/core-data';
 
-import DocumentIcon, { parsePageIcon } from '../../../src/components/DocumentIcon';
+import DocumentIcon, {
+	parsePageIcon,
+} from '../../../src/components/DocumentIcon';
 
 const DEFAULT_SLOT_SIZE = '16px';
 const DEFAULT_GLYPH_SIZE = '22px';

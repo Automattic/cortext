@@ -103,7 +103,10 @@ describe( 'useCreateDocument', () => {
 			.fn()
 			.mockResolvedValue( { id: 11, slug: 'about' } );
 		const invalidateResolution = jest.fn();
-		useDispatch.mockReturnValue( { saveEntityRecord, invalidateResolution } );
+		useDispatch.mockReturnValue( {
+			saveEntityRecord,
+			invalidateResolution,
+		} );
 
 		const { result } = renderHook( () => useCreateDocument() );
 
@@ -127,7 +130,10 @@ describe( 'useCreateDocument', () => {
 	it( 'defaults input to an empty object', async () => {
 		const saveEntityRecord = jest.fn().mockResolvedValue( { id: 5 } );
 		const invalidateResolution = jest.fn();
-		useDispatch.mockReturnValue( { saveEntityRecord, invalidateResolution } );
+		useDispatch.mockReturnValue( {
+			saveEntityRecord,
+			invalidateResolution,
+		} );
 
 		const { result } = renderHook( () => useCreateDocument() );
 
