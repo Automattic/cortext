@@ -75,7 +75,7 @@ async function createCollectionFixture( requestUtils ) {
 
 	const collection = await requestUtils.rest( {
 		method: 'POST',
-		path: '/wp/v2/crtxt_collections',
+		path: '/wp/v2/crtxt_traits',
 		data: {
 			title: collectionTitle,
 			status: 'private',
@@ -95,7 +95,7 @@ async function createCollectionFixture( requestUtils ) {
 
 	await requestUtils.rest( {
 		method: 'POST',
-		path: `/wp/v2/crtxt_collections/${ collection.id }`,
+		path: `/wp/v2/crtxt_traits/${ collection.id }`,
 		data: {
 			meta: { fields: [ String( field.id ) ] },
 		},
@@ -158,7 +158,7 @@ test.describe( 'Sidebar recents', () => {
 			} );
 			collection = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_collections',
+				path: '/wp/v2/crtxt_traits',
 				data: {
 					title: collectionTitle,
 					status: 'private',
@@ -219,7 +219,7 @@ test.describe( 'Sidebar recents', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				collection && `/wp/v2/crtxt_collections/${ collection.id }`
+				collection && `/wp/v2/crtxt_traits/${ collection.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
@@ -317,7 +317,7 @@ test.describe( 'Sidebar recents', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_traits/${ fixture.collection.id }`
 			);
 		}
 	} );

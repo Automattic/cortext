@@ -161,7 +161,7 @@ test.describe( 'Sidebar favorites', () => {
 			} );
 			collection = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_collections',
+				path: '/wp/v2/crtxt_traits',
 				data: {
 					title: COLLECTION_TITLE,
 					status: 'private',
@@ -234,7 +234,7 @@ test.describe( 'Sidebar favorites', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				collection && `/wp/v2/crtxt_collections/${ collection.id }`
+				collection && `/wp/v2/crtxt_traits/${ collection.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
@@ -273,14 +273,8 @@ test.describe( 'Sidebar favorites', () => {
 				path: '/cortext/v1/favorites',
 				data: {
 					favorites: [
-						{
-							kind: 'page',
-							id: createdPage.id,
-						},
-						{
-							kind: 'page',
-							id: otherPage.id,
-						},
+						{ id: createdPage.id },
+						{ id: otherPage.id },
 					],
 				},
 			} );

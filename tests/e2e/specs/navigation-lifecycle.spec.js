@@ -364,7 +364,7 @@ test.describe( 'Navigation lifecycle', () => {
 			fixture.slug = `e2ehist${ SUFFIX }`;
 			fixture.collection = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_collections',
+				path: '/wp/v2/crtxt_traits',
 				data: {
 					title: HISTORY_COLLECTION_TITLE,
 					status: 'private',
@@ -436,7 +436,7 @@ test.describe( 'Navigation lifecycle', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_traits/${ fixture.collection.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
@@ -671,7 +671,7 @@ test.describe( 'Navigation lifecycle', () => {
 			fixture.slug = `e2elife${ SUFFIX }`;
 			fixture.collection = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_collections',
+				path: '/wp/v2/crtxt_traits',
 				data: {
 					title: COLLECTION_TITLE,
 					status: 'private',
@@ -725,7 +725,7 @@ test.describe( 'Navigation lifecycle', () => {
 				releaseCollection = resolve;
 			} );
 			await page.route(
-				`**/wp-json/wp/v2/crtxt_collections/${ fixture.collection.id }**`,
+				`**/wp-json/wp/v2/crtxt_traits/${ fixture.collection.id }**`,
 				async ( route ) => {
 					await collectionGate;
 					await route.continue();
@@ -735,7 +735,7 @@ test.describe( 'Navigation lifecycle', () => {
 				request
 					.url()
 					.includes(
-						`/wp-json/wp/v2/crtxt_collections/${ fixture.collection.id }`
+						`/wp-json/wp/v2/crtxt_traits/${ fixture.collection.id }`
 					)
 			);
 			const rowsGate = new Promise( ( resolve ) => {
@@ -838,7 +838,7 @@ test.describe( 'Navigation lifecycle', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_traits/${ fixture.collection.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,

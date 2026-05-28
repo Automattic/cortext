@@ -100,7 +100,7 @@ test.describe( 'Command palette search', () => {
 		try {
 			fixture.collection = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_collections',
+				path: '/wp/v2/crtxt_traits',
 				data: {
 					title: collectionTitle,
 					status: 'private',
@@ -140,7 +140,7 @@ test.describe( 'Command palette search', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_traits/${ fixture.collection.id }`
 			);
 		}
 	} );

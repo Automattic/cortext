@@ -15,7 +15,7 @@
  *   - row_create_ready: New row click through POST and rendered row.
  *   - sort_apply: open the first column header menu, choose "Sort
  *     ascending", wait for sorted rows.
- *   - page_edit_ready: crtxt_page in Gutenberg until the editor is mounted.
+ *   - page_edit_ready: page document in Gutenberg until the editor is mounted.
  *   - command_palette_open: shell event to command palette mount.
  *   - palette_search_ready: command palette search from typing to the first
  *     document result from /cortext/v1/documents.
@@ -154,7 +154,7 @@ test.describe( 'Cortext UI performance', () => {
 
 		perfPage = await requestUtils.rest( {
 			method: 'POST',
-			path: '/wp/v2/crtxt_pages',
+			path: '/wp/v2/crtxt_documents',
 			data: {
 				title: 'Cortext perf page',
 				status: 'private',
@@ -168,7 +168,7 @@ test.describe( 'Cortext UI performance', () => {
 			try {
 				await requestUtils.rest( {
 					method: 'DELETE',
-					path: `/wp/v2/crtxt_pages/${ perfPage.id }`,
+					path: `/wp/v2/crtxt_documents/${ perfPage.id }`,
 					params: { force: true },
 				} );
 			} catch {

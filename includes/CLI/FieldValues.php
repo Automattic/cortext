@@ -10,9 +10,9 @@ declare( strict_types=1 );
 namespace Cortext\CLI;
 
 use Cortext\FieldValues\FieldValueIndex;
-use Cortext\PostType\Collection;
-use Cortext\PostType\CollectionEntries;
+use Cortext\PostType\Document;
 use Cortext\PostType\Field;
+use Cortext\Taxonomy\TraitTaxonomy;
 
 final class FieldValues {
 
@@ -72,7 +72,6 @@ final class FieldValues {
 		unset( $args );
 
 		$this->ensure_post_types();
-		( new CollectionEntries() )->register_all();
 
 		$index          = new FieldValueIndex();
 		$collection_ids = $this->collection_ids_from_args( $assoc_args );
@@ -123,7 +122,6 @@ final class FieldValues {
 		unset( $args );
 
 		$this->ensure_post_types();
-		( new CollectionEntries() )->register_all();
 
 		$index   = new FieldValueIndex();
 		$passed  = true;
@@ -146,11 +144,14 @@ final class FieldValues {
 	}
 
 	private function ensure_post_types(): void {
-		if ( ! post_type_exists( Collection::POST_TYPE ) ) {
-			( new Collection() )->register_post_type();
+		if ( ! post_type_exists( Document::POST_TYPE ) ) {
+			( new Document() )->register_post_type();
 		}
 		if ( ! post_type_exists( Field::POST_TYPE ) ) {
 			( new Field() )->register_post_type();
+		}
+		if ( ! taxonomy_exists( TraitTaxonomy::TAXONOMY ) ) {
+			( new TraitTaxonomy() )->register_taxonomy();
 		}
 	}
 
@@ -164,10 +165,16 @@ final class FieldValues {
 			'intval',
 			get_posts(
 				array(
-					'post_type'      => Collection::POST_TYPE,
+					'post_type'      => Document::POST_TYPE,
 					'post_status'    => array( 'draft', 'private', 'publish' ),
 					'fields'         => 'ids',
 					'posts_per_page' => -1,
+					'meta_query'     => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+						array(
+							'key'     => 'cortext_fields',
+							'compare' => 'EXISTS',
+						),
+					),
 				)
 			)
 		);

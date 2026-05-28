@@ -290,7 +290,7 @@ async function createCollectionFixture( requestUtils ) {
 
 	const collection = await requestUtils.rest( {
 		method: 'POST',
-		path: '/wp/v2/crtxt_collections',
+		path: '/wp/v2/crtxt_traits',
 		data: {
 			title: `E2E Books ${ suffix }`,
 			status: 'private',
@@ -310,7 +310,7 @@ async function createCollectionFixture( requestUtils ) {
 
 	await requestUtils.rest( {
 		method: 'POST',
-		path: `/wp/v2/crtxt_collections/${ collection.id }`,
+		path: `/wp/v2/crtxt_traits/${ collection.id }`,
 		data: {
 			meta: { fields: [ String( field.id ) ] },
 		},
@@ -337,7 +337,7 @@ async function createCalculationFixture( requestUtils ) {
 
 	const collection = await requestUtils.rest( {
 		method: 'POST',
-		path: '/wp/v2/crtxt_collections',
+		path: '/wp/v2/crtxt_traits',
 		data: {
 			title: `E2E Calculations ${ suffix }`,
 			status: 'private',
@@ -365,7 +365,7 @@ async function createCalculationFixture( requestUtils ) {
 
 	await requestUtils.rest( {
 		method: 'POST',
-		path: `/wp/v2/crtxt_collections/${ collection.id }`,
+		path: `/wp/v2/crtxt_traits/${ collection.id }`,
 		data: {
 			meta: {
 				fields: Object.values( fields ).map( ( field ) =>
@@ -426,7 +426,7 @@ async function createManualOrderFixture( requestUtils ) {
 
 	const collection = await requestUtils.rest( {
 		method: 'POST',
-		path: '/wp/v2/crtxt_collections',
+		path: '/wp/v2/crtxt_traits',
 		data: {
 			title: `E2E Order ${ suffix }`,
 			status: 'private',
@@ -647,7 +647,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_traits/${ fixture.collection.id }`
 			);
 		}
 	} );
@@ -875,7 +875,7 @@ test.describe( 'Collection view block', () => {
 				await deleteIfCreated(
 					requestUtils,
 					fixture.collection &&
-						`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+						`/wp/v2/crtxt_traits/${ fixture.collection.id }`
 				);
 			}
 		} );
@@ -948,7 +948,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_traits/${ fixture.collection.id }`
 			);
 		}
 	} );
@@ -1040,7 +1040,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_traits/${ fixture.collection.id }`
 			);
 		}
 	} );
@@ -1089,9 +1089,8 @@ test.describe( 'Collection view block', () => {
 				.click();
 
 			await expect( canvas.getByText( 'Title' ) ).toBeVisible();
-			// The placeholder creates collections as inline by default, so
-			// the new collection renders inside this block but does not
-			// appear in the sidebar's Collections section.
+			// The placeholder nests the new collection under the current
+			// page, so it never shows up at the top of the sidebar tree.
 			await expect(
 				page
 					.locator( '.cortext-sidebar' )
@@ -1116,7 +1115,7 @@ test.describe( 'Collection view block', () => {
 			expect( fixture.createdCollectionId ).toBeGreaterThan( 0 );
 
 			const createdCollection = await requestUtils.rest( {
-				path: `/wp/v2/crtxt_collections/${ fixture.createdCollectionId }`,
+				path: `/wp/v2/crtxt_traits/${ fixture.createdCollectionId }`,
 				params: { context: 'edit' },
 			} );
 			fixture.createdFieldIds = createdCollection.meta.fields || [];
@@ -1170,7 +1169,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_traits/${ fixture.collection.id }`
 			);
 			if ( fixture.createdFieldIds ) {
 				for ( const fieldId of fixture.createdFieldIds ) {
@@ -1183,7 +1182,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.createdCollectionId &&
-					`/wp/v2/crtxt_collections/${ fixture.createdCollectionId }`
+					`/wp/v2/crtxt_traits/${ fixture.createdCollectionId }`
 			);
 		}
 	} );
@@ -1202,7 +1201,7 @@ test.describe( 'Collection view block', () => {
 
 			fixture.collection = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_collections',
+				path: '/wp/v2/crtxt_traits',
 				data: {
 					title: `Cleanup ${ suffix }`,
 					status: 'private',
@@ -1232,7 +1231,7 @@ test.describe( 'Collection view block', () => {
 
 			await requestUtils.rest( {
 				method: 'POST',
-				path: `/wp/v2/crtxt_collections/${ fixture.collection.id }`,
+				path: `/wp/v2/crtxt_traits/${ fixture.collection.id }`,
 				data: {
 					meta: {
 						fields: [
@@ -1290,7 +1289,7 @@ test.describe( 'Collection view block', () => {
 
 			await requestUtils.rest( {
 				method: 'POST',
-				path: `/wp/v2/crtxt_collections/${ fixture.collection.id }`,
+				path: `/wp/v2/crtxt_traits/${ fixture.collection.id }`,
 				data: {
 					meta: { fields: [ String( fixture.fieldB.id ) ] },
 				},
@@ -1356,7 +1355,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_traits/${ fixture.collection.id }`
 			);
 		}
 	} );
@@ -1478,7 +1477,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_traits/${ fixture.collection.id }`
 			);
 		}
 	} );
@@ -1605,7 +1604,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_traits/${ fixture.collection.id }`
 			);
 		}
 	} );
@@ -1695,7 +1694,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_traits/${ fixture.collection.id }`
 			);
 		}
 	} );
@@ -1806,7 +1805,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_traits/${ fixture.collection.id }`
 			);
 		}
 	} );
@@ -1856,7 +1855,7 @@ test.describe( 'Collection view block', () => {
 
 			await requestUtils.rest( {
 				method: 'POST',
-				path: `/wp/v2/crtxt_collections/${ fixture.collection.id }`,
+				path: `/wp/v2/crtxt_traits/${ fixture.collection.id }`,
 				data: {
 					meta: {
 						fields: [
@@ -2227,7 +2226,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_traits/${ fixture.collection.id }`
 			);
 		}
 	} );
@@ -2246,7 +2245,7 @@ test.describe( 'Collection view block', () => {
 
 			fixture.collection = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_collections',
+				path: '/wp/v2/crtxt_traits',
 				data: {
 					title: `Typed cells ${ suffix }`,
 					status: 'private',
@@ -2282,7 +2281,7 @@ test.describe( 'Collection view block', () => {
 
 			await requestUtils.rest( {
 				method: 'POST',
-				path: `/wp/v2/crtxt_collections/${ fixture.collection.id }`,
+				path: `/wp/v2/crtxt_traits/${ fixture.collection.id }`,
 				data: {
 					meta: {
 						fields: fixture.fieldIds.map( String ),
@@ -2419,7 +2418,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_traits/${ fixture.collection.id }`
 			);
 		}
 	} );
@@ -2438,7 +2437,7 @@ test.describe( 'Collection view block', () => {
 
 			fixture.collection = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_collections',
+				path: '/wp/v2/crtxt_traits',
 				data: {
 					title: `Format keyboard ${ suffix }`,
 					status: 'private',
@@ -2458,7 +2457,7 @@ test.describe( 'Collection view block', () => {
 
 			await requestUtils.rest( {
 				method: 'POST',
-				path: `/wp/v2/crtxt_collections/${ fixture.collection.id }`,
+				path: `/wp/v2/crtxt_traits/${ fixture.collection.id }`,
 				data: {
 					meta: { fields: [ String( fixture.field.id ) ] },
 				},
@@ -2589,7 +2588,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_traits/${ fixture.collection.id }`
 			);
 		}
 	} );
@@ -2608,7 +2607,7 @@ test.describe( 'Collection view block', () => {
 
 			fixture.collection = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_collections',
+				path: '/wp/v2/crtxt_traits',
 				data: {
 					title: `System fields ${ suffix }`,
 					status: 'private',
@@ -2628,7 +2627,7 @@ test.describe( 'Collection view block', () => {
 
 			await requestUtils.rest( {
 				method: 'POST',
-				path: `/wp/v2/crtxt_collections/${ fixture.collection.id }`,
+				path: `/wp/v2/crtxt_traits/${ fixture.collection.id }`,
 				data: {
 					meta: { fields: [ String( fixture.field.id ) ] },
 				},
@@ -2721,7 +2720,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_traits/${ fixture.collection.id }`
 			);
 		}
 	} );
@@ -2813,7 +2812,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_traits/${ fixture.collection.id }`
 			);
 		}
 	} );
@@ -3027,7 +3026,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_traits/${ fixture.collection.id }`
 			);
 		}
 	} );
@@ -3112,7 +3111,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_traits/${ fixture.collection.id }`
 			);
 		}
 	} );
@@ -3241,7 +3240,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_traits/${ fixture.collection.id }`
 			);
 		}
 	} );
@@ -3345,7 +3344,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_traits/${ fixture.collection.id }`
 			);
 		}
 	} );
@@ -3364,7 +3363,7 @@ test.describe( 'Collection view block', () => {
 
 			fixture.collection = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_collections',
+				path: '/wp/v2/crtxt_traits',
 				data: {
 					title: `Header ellipsis ${ suffix }`,
 					status: 'private',
@@ -3385,7 +3384,7 @@ test.describe( 'Collection view block', () => {
 
 			await requestUtils.rest( {
 				method: 'POST',
-				path: `/wp/v2/crtxt_collections/${ fixture.collection.id }`,
+				path: `/wp/v2/crtxt_traits/${ fixture.collection.id }`,
 				data: { meta: { fields: [ String( field.id ) ] } },
 			} );
 
@@ -3488,7 +3487,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_traits/${ fixture.collection.id }`
 			);
 		}
 	} );
@@ -3589,7 +3588,7 @@ test.describe( 'Collection view block', () => {
 
 			fixture.collection = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_collections',
+				path: '/wp/v2/crtxt_traits',
 				data: {
 					title: `Resize overlap ${ suffix }`,
 					status: 'private',
@@ -3619,7 +3618,7 @@ test.describe( 'Collection view block', () => {
 
 			await requestUtils.rest( {
 				method: 'POST',
-				path: `/wp/v2/crtxt_collections/${ fixture.collection.id }`,
+				path: `/wp/v2/crtxt_traits/${ fixture.collection.id }`,
 				data: {
 					meta: { fields: fixture.fieldIds.map( String ) },
 				},
@@ -3718,7 +3717,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_traits/${ fixture.collection.id }`
 			);
 		}
 	} );
@@ -3737,7 +3736,7 @@ test.describe( 'Collection view block', () => {
 
 			fixture.collection = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_collections',
+				path: '/wp/v2/crtxt_traits',
 				data: {
 					title: `Reorder ${ suffix }`,
 					status: 'private',
@@ -3760,7 +3759,7 @@ test.describe( 'Collection view block', () => {
 
 			await requestUtils.rest( {
 				method: 'POST',
-				path: `/wp/v2/crtxt_collections/${ fixture.collection.id }`,
+				path: `/wp/v2/crtxt_traits/${ fixture.collection.id }`,
 				data: {
 					meta: { fields: fixture.fieldIds.map( String ) },
 				},
@@ -3936,7 +3935,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_traits/${ fixture.collection.id }`
 			);
 		}
 	} );
@@ -4128,7 +4127,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_traits/${ fixture.collection.id }`
 			);
 		}
 	} );

@@ -334,7 +334,7 @@ async function createRowFixture( requestUtils ) {
 	const slug = `e2ehdr${ suffix }`;
 	const collection = await requestUtils.rest( {
 		method: 'POST',
-		path: '/wp/v2/crtxt_collections',
+		path: '/wp/v2/crtxt_traits',
 		data: {
 			title: `E2E Header Collection ${ suffix }`,
 			status: 'private',
@@ -409,7 +409,7 @@ test.describe( 'editor header blocks', () => {
 			);
 			await deleteIfCreated(
 				requestUtils,
-				fixture && `/wp/v2/crtxt_collections/${ fixture.collection.id }`
+				fixture && `/wp/v2/crtxt_traits/${ fixture.collection.id }`
 			);
 		}
 	} );

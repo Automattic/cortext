@@ -1,7 +1,7 @@
 /**
  * E2E tests for public page rendering.
  *
- * A published crtxt_page should be reachable at /cortext/{slug}/ by an
+ * A published page document should be reachable at /cortext/{slug}/ by an
  * unauthenticated visitor; a private page should 404.
  */
 
@@ -37,7 +37,7 @@ test.describe( 'Public page rendering', () => {
 		try {
 			createdPage = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title,
 					status: 'publish',
@@ -59,7 +59,7 @@ test.describe( 'Public page rendering', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				createdPage && `/wp/v2/crtxt_pages/${ createdPage.id }`
+				createdPage && `/wp/v2/crtxt_documents/${ createdPage.id }`
 			);
 		}
 	} );
@@ -77,7 +77,7 @@ test.describe( 'Public page rendering', () => {
 				try {
 					createdPage = await requestUtils.rest( {
 						method: 'POST',
-						path: '/wp/v2/crtxt_pages',
+						path: '/wp/v2/crtxt_documents',
 						data: {
 							title: `Private page ${ suffix }`,
 							status: 'private',
@@ -96,7 +96,7 @@ test.describe( 'Public page rendering', () => {
 				} finally {
 					await deleteIfCreated(
 						requestUtils,
-						createdPage && `/wp/v2/crtxt_pages/${ createdPage.id }`
+						createdPage && `/wp/v2/crtxt_documents/${ createdPage.id }`
 					);
 				}
 			}

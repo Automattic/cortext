@@ -168,7 +168,7 @@ test.describe( 'Workspace home', () => {
 		try {
 			collection = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_collections',
+				path: '/wp/v2/crtxt_traits',
 				data: {
 					title: COLLECTION_HOME_TITLE,
 					status: 'private',
@@ -199,7 +199,7 @@ test.describe( 'Workspace home', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				collection && `/wp/v2/crtxt_collections/${ collection.id }`
+				collection && `/wp/v2/crtxt_traits/${ collection.id }`
 			);
 		}
 	} );
@@ -234,11 +234,11 @@ test.describe( 'Workspace home', () => {
 			await requestUtils.rest( {
 				method: 'PUT',
 				path: '/cortext/v1/workspace-home',
-				data: { kind: 'page', id: deletedHome.id },
+				data: { id: deletedHome.id },
 			} );
 			await requestUtils.rest( {
 				method: 'DELETE',
-				path: `/wp/v2/crtxt_pages/${ deletedHome.id }`,
+				path: `/wp/v2/crtxt_documents/${ deletedHome.id }`,
 			} );
 
 			await admin.visitAdminPage( 'admin.php', 'page=cortext' );

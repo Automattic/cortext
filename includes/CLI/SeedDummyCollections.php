@@ -9,12 +9,11 @@ declare( strict_types=1 );
 
 namespace Cortext\CLI;
 
-use Cortext\PostType\Collection;
-use Cortext\PostType\CollectionEntries;
-use Cortext\PostType\Field;
+use Cortext\PostType\Document;
 use Cortext\PostType\DocumentIdentity;
-use Cortext\PostType\Page;
+use Cortext\PostType\Field;
 use Cortext\Relations;
+use Cortext\Taxonomy\TraitTaxonomy;
 use WP_CLI;
 use WP_CLI_Command;
 
@@ -22,7 +21,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 
 	private const WORKSPACE_HOME_META_KEY = 'cortext_workspace_home';
 	private const FAVORITES_META_KEY      = 'cortext_favorites';
-	private const PAGE_CONTENT_VERSION    = 'rich-connected-seed-2026-05-07-no-about-cover';
+	private const PAGE_CONTENT_VERSION    = 'rich-connected-seed-2026-05-27-fields-v2';
 	private const ENTRY_CONTENT_VERSION   = 'rich-connected-row-seed-2026-05-07';
 
 	private bool $seed_full_dataset = false;
@@ -151,10 +150,77 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		}
 
 		$workspace_page_id = $this->seed_pages( $collection_ids );
+		$this->nest_collections_under_pages( $collection_ids );
 		$this->seed_workspace_home( $seed_user_id, $workspace_page_id );
 		$this->seed_favorites( $seed_user_id, $workspace_page_id );
 
 		WP_CLI::success( 'Seeding complete.' );
+	}
+
+	/**
+	 * Anchors seeded collections under a thematic page so the sidebar tree
+	 * shows them as children instead of as top-level siblings. Matches what
+	 * the data-view block's `CollectionCreator` does when a user creates a
+	 * collection from inside a page (sets `post_parent` to that page).
+	 *
+	 * @param array<string,int> $collection_ids Collection IDs keyed by slug.
+	 */
+	private function nest_collections_under_pages( array $collection_ids ): void {
+		$map = array(
+			'projects'   => 'Scratch Notes',
+			'tasks'      => 'Scratch Notes',
+			'people'     => 'Scratch Notes',
+			'books'      => 'Library',
+			'authors'    => 'Library',
+			'publishers' => 'Library',
+			'albums'     => 'Music Catalog',
+			'tracks'     => 'Music Catalog',
+			'musicians'  => 'Music Catalog',
+			'labels'     => 'Music Catalog',
+		);
+
+		$page_ids = array();
+		foreach ( array_unique( array_values( $map ) ) as $page_title ) {
+			$page_ids[ $page_title ] = $this->find_top_level_page_id( $page_title );
+		}
+
+		foreach ( $map as $slug => $page_title ) {
+			$collection_id = (int) ( $collection_ids[ $slug ] ?? 0 );
+			$parent_id     = (int) ( $page_ids[ $page_title ] ?? 0 );
+			if ( $collection_id < 1 || $parent_id < 1 ) {
+				continue;
+			}
+			$collection = get_post( $collection_id );
+			if ( ! $collection instanceof \WP_Post || (int) $collection->post_parent === $parent_id ) {
+				continue;
+			}
+			wp_update_post(
+				array(
+					'ID'          => $collection_id,
+					'post_parent' => $parent_id,
+				)
+			);
+		}
+	}
+
+	/**
+	 * Looks up a seeded top-level page by title. Returns 0 when no match,
+	 * which `nest_collections_under_pages` treats as "skip".
+	 *
+	 * @param string $title Page title.
+	 */
+	private function find_top_level_page_id( string $title ): int {
+		$ids = get_posts(
+			array(
+				'post_type'   => Document::POST_TYPE,
+				'post_status' => array( 'draft', 'private', 'publish' ),
+				'post_parent' => 0,
+				'title'       => $title,
+				'numberposts' => 1,
+				'fields'      => 'ids',
+			)
+		);
+		return $ids ? (int) $ids[0] : 0;
 	}
 
 	/**
@@ -3548,7 +3614,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		foreach ( $candidate_titles as $candidate_title ) {
 			$existing = get_posts(
 				array(
-					'post_type'   => Page::POST_TYPE,
+					'post_type'   => Document::POST_TYPE,
 					'post_status' => array( 'draft', 'private', 'publish' ),
 					'post_parent' => $parent_id,
 					'title'       => $candidate_title,
@@ -3585,7 +3651,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		} else {
 			$page_id = wp_insert_post(
 				array(
-					'post_type'    => Page::POST_TYPE,
+					'post_type'    => Document::POST_TYPE,
 					'post_status'  => 'private',
 					'post_title'   => $node['title'],
 					'post_parent'  => $parent_id,
@@ -3693,11 +3759,13 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			return false;
 		}
 
-		$post_type = 'page' === $parts[0]
-			? Page::POST_TYPE
-			: ( 'collection' === $parts[0] ? Collection::POST_TYPE : null );
-
-		return null !== $post_type && $post_type === $post->post_type;
+		if ( 'page' === $parts[0] ) {
+			return Document::POST_TYPE === $post->post_type && ! Document::is_collection( $id );
+		}
+		if ( 'collection' === $parts[0] ) {
+			return Document::is_collection_post( $post );
+		}
+		return false;
 	}
 
 	/**
@@ -3768,7 +3836,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	private function find_seeded_page_id( string $title ): int {
 		$pages = get_posts(
 			array(
-				'post_type'   => Page::POST_TYPE,
+				'post_type'   => Document::POST_TYPE,
 				'post_status' => array( 'draft', 'private', 'publish' ),
 				'title'       => $title,
 				'numberposts' => 1,
@@ -4774,9 +4842,11 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	/**
 	 * Builds default table column widths for seeded data-view blocks.
 	 *
-	 * This mirrors the persisted shape used by double-click auto-fit in the
-	 * UI, but uses server-side heuristics because the exact browser
-	 * measurement depends on rendered DOM.
+	 * Heuristics use field title and type cues so demo collections paint with
+	 * comfortable widths out of the box (Title 260, Notes/Description 360,
+	 * pluralized relations 280, rollups by aggregator family, etc). Lives in
+	 * the seeder because it is demo presentation, not part of the document
+	 * model.
 	 *
 	 * @param int $collection_id Collection ID.
 	 * @return array<string,array{width:int,minWidth:int,maxWidth:int}>
@@ -4786,7 +4856,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			'title' => $this->data_view_width_style( 'Title', 'title' ),
 		);
 
-		foreach ( get_post_meta( $collection_id, 'fields', false ) as $field_id ) {
+		foreach ( get_post_meta( $collection_id, 'cortext_fields', false ) as $field_id ) {
 			$field_id = (int) $field_id;
 			$field    = get_post( $field_id );
 			if ( ! $field || Field::POST_TYPE !== $field->post_type ) {
@@ -4882,8 +4952,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	}
 
 	private function seed_collection( array $spec ): int {
-		$slug      = $spec['slug'];
-		$entry_cpt = CollectionEntries::CPT_PREFIX . $slug;
+		$slug = $spec['slug'];
 
 		// 1. Find or create collection. `get_posts` defaults to `post_status:
 		// publish`, but our seeded collections are private; without an
@@ -4891,10 +4960,10 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		// seeder accumulates duplicate collections sharing a slug.
 		$existing = get_posts(
 			array(
-				'post_type'   => Collection::POST_TYPE,
+				'post_type'   => Document::POST_TYPE,
 				'post_status' => array( 'draft', 'private', 'publish' ),
 				// phpcs:ignore WordPress.DB.SlowDBQuery
-				'meta_key'    => 'slug',
+				'meta_key'    => 'cortext_seed_slug',
 				// phpcs:ignore WordPress.DB.SlowDBQuery
 				'meta_value'  => $slug,
 				'numberposts' => 1,
@@ -4907,7 +4976,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		} else {
 			$collection_id = wp_insert_post(
 				array(
-					'post_type'   => Collection::POST_TYPE,
+					'post_type'   => Document::POST_TYPE,
 					'post_title'  => $spec['title'],
 					'post_status' => 'private',
 				),
@@ -4918,21 +4987,18 @@ final class SeedDummyCollections extends WP_CLI_Command {
 				WP_CLI::error( "Failed to create collection '{$spec['title']}': " . $collection_id->get_error_message() );
 			}
 
-			update_post_meta( $collection_id, 'slug', $slug );
+			update_post_meta( $collection_id, 'cortext_seed_slug', $slug );
 			WP_CLI::log( "Created collection '{$spec['title']}' (ID {$collection_id})." );
 		}
 
-		// 2. Ensure entry CPT is registered for this request.
-		if ( ! post_type_exists( $entry_cpt ) ) {
-			( new CollectionEntries() )->register_for_collection( get_post( $collection_id ) );
-			WP_CLI::log( "Registered CPT '{$entry_cpt}'." );
-		}
+		// In the universal-document model rows live in `crtxt_document`, which
+		// the plugin registers on init; no per-collection CPT registration is
+		// needed here.
 
 		// 3. Find or create fields, attach to collection.
 		$existing_field_ids = $this->remove_seeded_icon_field(
 			$collection_id,
-			$entry_cpt,
-			get_post_meta( $collection_id, 'fields', false )
+			get_post_meta( $collection_id, 'cortext_fields', false )
 		);
 		$field_ids          = array();
 		$field_types        = array();
@@ -4984,7 +5050,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			if ( null !== $number_format ) {
 				update_post_meta( $field_id, 'number_format', wp_json_encode( $number_format ) );
 			}
-			add_post_meta( $collection_id, 'fields', $field_id );
+			add_post_meta( $collection_id, 'cortext_fields', $field_id );
 			$field_ids[ $title ] = $field_id;
 			WP_CLI::log( "Created field '{$title}' (ID {$field_id}, type: {$type})." );
 		}
@@ -4993,10 +5059,10 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		foreach ( $field_ids as $title => $field_id ) {
 			$type = $field_types[ $title ];
 			register_post_meta(
-				$entry_cpt,
+				Document::POST_TYPE,
 				"field-{$field_id}",
 				array(
-					'type'         => CollectionEntries::wp_meta_type_for( $type ),
+					'type'         => \Cortext\Fields\FieldTypeRegistry::wp_meta_type( $type ),
 					'single'       => 'multiselect' !== $type,
 					'show_in_rest' => true,
 				)
@@ -5004,12 +5070,20 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		}
 
 		// 5. Insert entries that don't already exist (matched by title).
-		$existing_entries = get_posts(
+		$collection_term_id = Relations::trait_term_id_for_collection( (int) $collection_id );
+		$existing_entries   = get_posts(
 			array(
-				'post_type'   => $entry_cpt,
+				'post_type'   => Document::POST_TYPE,
 				'post_status' => 'any',
 				'numberposts' => -1,
 				'fields'      => 'ids',
+				'tax_query'   => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
+					array(
+						'taxonomy' => TraitTaxonomy::TAXONOMY,
+						'field'    => 'term_id',
+						'terms'    => array( $collection_term_id ),
+					),
+				),
 			)
 		);
 
@@ -5034,7 +5108,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 
 			$entry_id = wp_insert_post(
 				array(
-					'post_type'    => $entry_cpt,
+					'post_type'    => Document::POST_TYPE,
 					'post_title'   => $entry['title'],
 					'post_status'  => 'private',
 					'post_content' => $entry_content,
@@ -5044,6 +5118,11 @@ final class SeedDummyCollections extends WP_CLI_Command {
 
 			if ( is_wp_error( $entry_id ) ) {
 				WP_CLI::error( "Failed to create entry '{$entry['title']}': " . $entry_id->get_error_message() );
+			}
+
+			$trait_term_id = Relations::trait_term_id_for_collection( (int) $collection_id );
+			if ( $trait_term_id > 0 ) {
+				wp_set_object_terms( (int) $entry_id, array( $trait_term_id ), TraitTaxonomy::TAXONOMY );
 			}
 
 			update_post_meta( (int) $entry_id, '_cortext_seed_entry_content_version', self::ENTRY_CONTENT_VERSION );
@@ -5078,12 +5157,11 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	/**
 	 * Removes the old visible seeded Icon field from a collection.
 	 *
-	 * @param int    $collection_id Collection post ID.
-	 * @param string $entry_cpt     Collection entry post type.
-	 * @param array  $field_ids     Attached field IDs.
+	 * @param int   $collection_id Collection post ID.
+	 * @param array $field_ids     Attached field IDs.
 	 * @return array Remaining attached field IDs.
 	 */
-	private function remove_seeded_icon_field( int $collection_id, string $entry_cpt, array $field_ids ): array {
+	private function remove_seeded_icon_field( int $collection_id, array $field_ids ): array {
 		$removed = 0;
 
 		foreach ( $field_ids as $field_id ) {
@@ -5093,8 +5171,8 @@ final class SeedDummyCollections extends WP_CLI_Command {
 				continue;
 			}
 
-			delete_post_meta( $collection_id, 'fields', $field_id );
-			if ( post_type_exists( $entry_cpt ) ) {
+			delete_post_meta( $collection_id, 'cortext_fields', $field_id );
+			if ( post_type_exists( Document::POST_TYPE ) ) {
 				delete_post_meta_by_key( "field-{$field_id}" );
 			}
 			wp_delete_post( $field_id, true );
@@ -5105,7 +5183,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			WP_CLI::log( sprintf( 'Removed %d seeded Icon field(s).', $removed ) );
 		}
 
-		return get_post_meta( $collection_id, 'fields', false );
+		return get_post_meta( $collection_id, 'cortext_fields', false );
 	}
 
 	private function update_entry_content( int $entry_id, string $content ): void {
@@ -5336,7 +5414,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		$source_titles  = array_fill_keys( $titles_by_slug[ $source_slug ] ?? array(), true );
 
 		$target_collection_id = (int) get_post_meta( $field_id, 'related_collection_id', true );
-		$target_slug          = $target_collection_id > 0 ? (string) get_post_meta( $target_collection_id, 'slug', true ) : '';
+		$target_slug          = $target_collection_id > 0 ? (string) get_post_meta( $target_collection_id, 'cortext_seed_slug', true ) : '';
 		$target_titles        = array_fill_keys( $titles_by_slug[ $target_slug ] ?? array(), true );
 
 		if ( ! $source_titles || ! $target_titles ) {
@@ -5921,7 +5999,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	private function ensure_field_post( int $collection_id, string $title ): int {
 		$field_id = $this->find_attached_field(
 			$title,
-			get_post_meta( $collection_id, 'fields', false )
+			get_post_meta( $collection_id, 'cortext_fields', false )
 		);
 
 		if ( $field_id ) {
@@ -5941,7 +6019,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			WP_CLI::error( "Failed to create field '{$title}': " . $field_id->get_error_message() );
 		}
 
-		add_post_meta( $collection_id, 'fields', (string) $field_id );
+		add_post_meta( $collection_id, 'cortext_fields', (string) $field_id );
 		WP_CLI::log( "Created field '{$title}' (ID {$field_id})." );
 
 		return (int) $field_id;
@@ -5981,9 +6059,9 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			}
 		}
 
-		delete_post_meta( $collection_id, 'fields' );
+		delete_post_meta( $collection_id, 'cortext_fields' );
 		foreach ( $ordered_ids as $field_id ) {
-			add_post_meta( $collection_id, 'fields', (string) $field_id );
+			add_post_meta( $collection_id, 'cortext_fields', (string) $field_id );
 		}
 	}
 
@@ -6131,7 +6209,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	 */
 	private function attached_fields_by_title( int $collection_id ): array {
 		$fields = array();
-		foreach ( get_post_meta( $collection_id, 'fields', false ) as $field_id ) {
+		foreach ( get_post_meta( $collection_id, 'cortext_fields', false ) as $field_id ) {
 			$field = get_post( (int) $field_id );
 			if ( $field && Field::POST_TYPE === $field->post_type ) {
 				$fields[ $field->post_title ] = (int) $field->ID;
@@ -6161,7 +6239,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		}
 
 		$target_collection_id = (int) get_post_meta( $field_id, 'related_collection_id', true );
-		$target_slug          = (string) get_post_meta( $target_collection_id, 'slug', true );
+		$target_slug          = (string) get_post_meta( $target_collection_id, 'cortext_seed_slug', true );
 		$target_ids           = array();
 
 		foreach ( $target_titles as $target_title ) {
@@ -6190,14 +6268,40 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			return 0;
 		}
 
-		$entry_cpt = CollectionEntries::CPT_PREFIX . $collection_slug;
-		$entries   = get_posts(
+		$collections = get_posts(
 			array(
-				'post_type'   => $entry_cpt,
+				'post_type'   => Document::POST_TYPE,
+				'post_status' => array( 'draft', 'private', 'publish' ),
+				// phpcs:ignore WordPress.DB.SlowDBQuery
+				'meta_key'    => 'cortext_seed_slug',
+				// phpcs:ignore WordPress.DB.SlowDBQuery
+				'meta_value'  => $collection_slug,
+				'numberposts' => 1,
+				'fields'      => 'ids',
+			)
+		);
+		if ( ! $collections ) {
+			return 0;
+		}
+		$term_id = Relations::trait_term_id_for_collection( (int) $collections[0] );
+		if ( $term_id < 1 ) {
+			return 0;
+		}
+
+		$entries = get_posts(
+			array(
+				'post_type'   => Document::POST_TYPE,
 				'post_status' => array( 'draft', 'private', 'publish' ),
 				'title'       => $title,
 				'numberposts' => 1,
 				'fields'      => 'ids',
+				'tax_query'   => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
+					array(
+						'taxonomy' => TraitTaxonomy::TAXONOMY,
+						'field'    => 'term_id',
+						'terms'    => array( $term_id ),
+					),
+				),
 			)
 		);
 
@@ -6205,36 +6309,42 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	}
 
 	private function register_collection_entries( int $collection_id ): void {
-		$collection = get_post( $collection_id );
-		if ( $collection ) {
-			( new CollectionEntries() )->register_for_collection( $collection );
-		}
+		// No-op in the universal-document model. The single `crtxt_document`
+		// CPT is registered on `init`; rows are assigned to a collection via
+		// the `crtxt_trait` taxonomy.
+		unset( $collection_id );
 	}
 
 	private function reset(): void {
 		// 1. Delete entries for each collection.
 		$collections = get_posts(
 			array(
-				'post_type'   => Collection::POST_TYPE,
+				'post_type'   => Document::POST_TYPE,
 				'post_status' => 'any',
 				'numberposts' => -1,
+				'meta_query'  => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+					array(
+						'key'     => 'cortext_fields',
+						'compare' => 'EXISTS',
+					),
+				),
 			)
 		);
 
 		foreach ( $collections as $collection ) {
-			$slug      = get_post_meta( $collection->ID, 'slug', true );
-			$entry_cpt = CollectionEntries::CPT_PREFIX . $slug;
-
-			if ( ! post_type_exists( $entry_cpt ) ) {
-				( new CollectionEntries() )->register_for_collection( $collection );
-			}
-
 			$entries = get_posts(
 				array(
-					'post_type'   => $entry_cpt,
+					'post_type'   => Document::POST_TYPE,
 					'post_status' => 'any',
 					'numberposts' => -1,
 					'fields'      => 'ids',
+					'tax_query'   => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
+						array(
+							'taxonomy' => TraitTaxonomy::TAXONOMY,
+							'field'    => 'term_id',
+							'terms'    => array( Relations::trait_term_id_for_collection( (int) $collection->ID ) ),
+						),
+					),
 				)
 			);
 
@@ -6278,7 +6388,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		// excludes internal statuses like 'trash', so list them explicitly.
 		$pages = get_posts(
 			array(
-				'post_type'   => Page::POST_TYPE,
+				'post_type'   => Document::POST_TYPE,
 				'post_status' => array( 'draft', 'private', 'publish', 'pending', 'future', 'trash' ),
 				'numberposts' => -1,
 				'fields'      => 'ids',

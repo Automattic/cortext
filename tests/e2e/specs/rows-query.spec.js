@@ -61,7 +61,7 @@ async function createRowsQueryFixture( requestUtils ) {
 
 	const collection = await requestUtils.rest( {
 		method: 'POST',
-		path: '/wp/v2/crtxt_collections',
+		path: '/wp/v2/crtxt_traits',
 		data: {
 			title: `E2E Rows ${ suffix }`,
 			status: 'private',
@@ -79,7 +79,7 @@ async function createRowsQueryFixture( requestUtils ) {
 
 	await requestUtils.rest( {
 		method: 'POST',
-		path: `/wp/v2/crtxt_collections/${ collection.id }`,
+		path: `/wp/v2/crtxt_traits/${ collection.id }`,
 		data: {
 			meta: {
 				fields: Object.values( fields ).map( ( field ) =>
@@ -228,7 +228,7 @@ test.describe( 'rows endpoint server query', () => {
 				}
 				await deleteIfCreated(
 					requestUtils,
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_traits/${ fixture.collection.id }`
 				);
 			}
 		}
