@@ -178,14 +178,14 @@ export default function ImportPane() {
 				<>
 					<HStack justify="flex-start">
 						<Button variant="secondary" onClick={ handleChangeKey }>
-							{ __( 'Change key', 'cortext' ) }
+							{ __( 'Change Notion token', 'cortext' ) }
 						</Button>
 						<Button
 							variant="secondary"
 							isDestructive={ true }
 							onClick={ handleForgetKey }
 						>
-							{ __( 'Forget key', 'cortext' ) }
+							{ __( 'Forget token', 'cortext' ) }
 						</Button>
 					</HStack>
 					<ImportBody
@@ -429,14 +429,14 @@ function NoKeyForm( { onSave, onCancel } ) {
 			<VStack spacing={ 4 } alignment="left">
 				<Text>
 					{ __(
-						'Paste your Notion integration token to begin. The key is stored in this browser only.',
+						'Paste your Notion connection token to begin. The token is stored in this browser only.',
 						'cortext'
 					) }
 				</Text>
 				<TextControl
 					__next40pxDefaultSize
 					__nextHasNoMarginBottom
-					label={ __( 'Notion integration token', 'cortext' ) }
+					label={ __( 'Notion connection token', 'cortext' ) }
 					type="password"
 					value={ value }
 					onChange={ setValue }
