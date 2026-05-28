@@ -603,6 +603,61 @@ final class Test_Documents extends BaseTestCase {
 		$this->assertNull( $this->documents->format_document( $post ) );
 	}
 
+	public function test_format_document_with_trash_meta_exposes_collection_and_row_shape(): void {
+		// The sidebar Trash panel reads `cortext_fields` and `crtxt_trait`
+		// from the formatted payload to distinguish collections from rows.
+		// Page documents come back with empty arrays; collections expose
+		// their field ids; rows expose their trait term id.
+		$page_id = (int) wp_insert_post(
+			array(
+				'post_type'   => \Cortext\PostType\Document::POST_TYPE,
+				'post_status' => 'trash',
+				'post_title'  => 'A trashed page',
+			)
+		);
+
+		$collection_id = (int) wp_insert_post(
+			array(
+				'post_type'   => \Cortext\PostType\Document::POST_TYPE,
+				'post_status' => 'trash',
+				'post_title'  => 'A trashed collection',
+			)
+		);
+		add_post_meta( $collection_id, 'cortext_fields', '42' );
+
+		$row_id = (int) wp_insert_post(
+			array(
+				'post_type'   => \Cortext\PostType\Document::POST_TYPE,
+				'post_status' => 'trash',
+				'post_title'  => 'A trashed row',
+			)
+		);
+		$term_id = \Cortext\Taxonomy\TraitTaxonomy::term_id_for_trait( $collection_id );
+		wp_set_object_terms( $row_id, array( $term_id ), \Cortext\Taxonomy\TraitTaxonomy::TAXONOMY );
+
+		$page = $this->documents->format_document(
+			get_post( $page_id ),
+			array( 'include_trash_meta' => true )
+		);
+		$collection = $this->documents->format_document(
+			get_post( $collection_id ),
+			array( 'include_trash_meta' => true )
+		);
+		$row = $this->documents->format_document(
+			get_post( $row_id ),
+			array( 'include_trash_meta' => true )
+		);
+
+		$this->assertSame( array(), $page['meta']['cortext_fields'] );
+		$this->assertSame( array(), $page['crtxt_trait'] );
+
+		$this->assertSame( array( 42 ), $collection['meta']['cortext_fields'] );
+		$this->assertSame( array(), $collection['crtxt_trait'] );
+
+		$this->assertSame( array(), $row['meta']['cortext_fields'] );
+		$this->assertSame( array( $term_id ), $row['crtxt_trait'] );
+	}
+
 	private function create_user( string $role ): int {
 		return (int) wp_insert_user(
 			array(

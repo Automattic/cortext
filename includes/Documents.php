@@ -320,8 +320,17 @@ final class Documents {
 
 		if ( ! empty( $opts['include_trash_meta'] ) ) {
 			$document['modified_at'] = $this->format_gmt_date( $post->post_modified_gmt );
+			// `crtxt_trait` and `cortext_fields` carry the row vs collection
+			// shape. The sidebar's Trash panel reads them via the frontend
+			// `hasFields`/`hasTrait` helpers to pick the right label, icon, and
+			// cascade-count copy; without them every trashed document looks
+			// like a page.
+			$document['crtxt_trait'] = array_values(
+				array_map( 'intval', wp_get_object_terms( $post->ID, TraitTaxonomy::TAXONOMY, array( 'fields' => 'ids' ) ) )
+			);
 			$document['meta']        = array(
 				'cortext_document_icon'              => $icon,
+				'cortext_fields'                     => Document::collection_field_ids( (int) $post->ID ),
 				TrashCascade::PARENT_MARKER_META     => (int) get_post_meta( $post->ID, TrashCascade::PARENT_MARKER_META, true ),
 				TrashCascade::COLLECTION_MARKER_META => (int) get_post_meta( $post->ID, TrashCascade::COLLECTION_MARKER_META, true ),
 			);
