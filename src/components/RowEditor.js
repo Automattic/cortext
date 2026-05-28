@@ -15,7 +15,7 @@ import useAutosave from '../hooks/useAutosave';
 // block sources and the registerCoreBlocks call site off the initial
 // bundle. The module is idempotent, so Canvas's copy of this import is
 // a no-op when RowEditor mounts second, or vice versa.
-import './initEditor';
+import { getEditorSettings } from './initEditor';
 import { DocumentPropertiesProvider } from './DocumentPropertiesContext';
 import { EditorSurfaceProvider } from './EditorSurfaceContext';
 import EditorBody from './EditorBody';
@@ -203,7 +203,7 @@ export default function RowEditor( {
 	return (
 		<EditorProvider
 			post={ post }
-			settings={ window.cortextEditorSettings ?? {} }
+			settings={ getEditorSettings() }
 			useSubRegistry
 		>
 			{ /* tech-debt.md#57: row detail owns these SlotFills while
