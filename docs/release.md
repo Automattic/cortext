@@ -74,6 +74,10 @@ fails if a ready PR has zero `type:*` labels or more than one.
 
 ## Changelog preview
 
+By default, release notes are the public changelog. They include user-facing
+enhancements and bug fixes, and leave docs, tooling, and code quality changes
+out of the published notes.
+
 Preview the changelog locally:
 
 ```bash
@@ -86,5 +90,11 @@ Save the changelog locally:
 pnpm run release:notes -- --milestone 0.1.0 --version 0.1.0 --strict > .context/release-notes-0.1.0.md
 ```
 
-Use `--strict` before drafting a release. It fails if any included PR is missing
-a `type:*` label or has more than one.
+Preview the full milestone changelog when you want an internal audit:
+
+```bash
+pnpm run release:notes -- --milestone 0.1.0 --version 0.1.0 --strict --full
+```
+
+Use `--strict` before drafting a release. It fails if any milestone PR is
+missing a `type:*` label or has more than one.

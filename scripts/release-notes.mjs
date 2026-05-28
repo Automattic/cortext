@@ -9,6 +9,8 @@ const TYPE_LABELS = new Map( [
 	[ 'type: code quality', 'Code quality' ],
 ] );
 
+const PUBLIC_TYPE_LABELS = new Set( [ 'type: enhancement', 'type: bug' ] );
+
 const TYPE_ORDER = [
 	'Enhancements',
 	'Bug fixes',
@@ -24,6 +26,7 @@ function parseArgs() {
 		milestone: '',
 		version: '',
 		strict: false,
+		full: false,
 	};
 
 	for ( let i = 0; i < args.length; i++ ) {
@@ -46,6 +49,10 @@ function parseArgs() {
 		}
 		if ( arg === '--strict' ) {
 			options.strict = true;
+			continue;
+		}
+		if ( arg === '--full' ) {
+			options.full = true;
 			continue;
 		}
 		throw new Error( `Unknown or incomplete argument: ${ arg }` );
@@ -99,6 +106,21 @@ function getTypeLabels( pr ) {
 		.filter( ( name ) => TYPE_LABELS.has( name.toLowerCase() ) );
 }
 
+function getIncludedTypeLabels( options ) {
+	if ( options.full ) {
+		return new Set( TYPE_LABELS.keys() );
+	}
+	return PUBLIC_TYPE_LABELS;
+}
+
+function getTypeOrder( includedTypeLabels ) {
+	return TYPE_ORDER.filter( ( section ) =>
+		Array.from( includedTypeLabels ).some(
+			( typeLabel ) => TYPE_LABELS.get( typeLabel ) === section
+		)
+	);
+}
+
 function formatPr( pr ) {
 	const title = sentence( normalizeTitle( pr.title ) );
 	return `- ${ title } ([#${ pr.number }](${ pr.html_url || pr.url }))`;
@@ -147,7 +169,10 @@ async function main() {
 		.sort( ( a, b ) => a.number - b.number );
 
 	const errors = [];
-	const grouped = new Map( TYPE_ORDER.map( ( type ) => [ type, [] ] ) );
+	const includedTypeLabels = getIncludedTypeLabels( options );
+	const typeOrder = getTypeOrder( includedTypeLabels );
+	const grouped = new Map( typeOrder.map( ( type ) => [ type, [] ] ) );
+	const includedPullRequests = [];
 
 	for ( const pr of pullRequests ) {
 		const typeLabels = getTypeLabels( pr );
@@ -160,8 +185,14 @@ async function main() {
 			continue;
 		}
 
-		const section = TYPE_LABELS.get( typeLabels[ 0 ].toLowerCase() );
+		const typeLabel = typeLabels[ 0 ].toLowerCase();
+		if ( ! includedTypeLabels.has( typeLabel ) ) {
+			continue;
+		}
+
+		const section = TYPE_LABELS.get( typeLabel );
 		grouped.get( section ).push( pr );
+		includedPullRequests.push( pr );
 	}
 
 	if ( errors.length && options.strict ) {
@@ -177,8 +208,12 @@ async function main() {
 
 	if ( ! pullRequests.length ) {
 		notes += 'No pull requests were found for this milestone.\n';
+	} else if ( ! includedPullRequests.length ) {
+		notes += options.full
+			? 'No release note entries were found for this milestone.\n'
+			: 'No public changelog entries were found for this milestone.\n';
 	} else {
-		for ( const section of TYPE_ORDER ) {
+		for ( const section of typeOrder ) {
 			const prs = grouped.get( section );
 			if ( ! prs.length ) {
 				continue;
@@ -190,7 +225,7 @@ async function main() {
 
 	const contributors = [
 		...new Set(
-			pullRequests
+			includedPullRequests
 				.map( ( pr ) => pr.user?.login )
 				.filter( Boolean )
 				.filter( ( login ) => ! login.endsWith( '[bot]' ) )
