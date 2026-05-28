@@ -9,19 +9,36 @@ declare( strict_types=1 );
 
 namespace Cortext\Tests;
 
+use Cortext\PostType\Document;
 use Cortext\PostType\DocumentIdentity;
-use Cortext\PostType\Page;
 use Cortext\Rest\DocumentLocatorController;
+use Cortext\Taxonomy\TraitTaxonomy;
 use WorDBless\BaseTestCase;
 use WP_REST_Request;
 use WP_REST_Server;
 
 final class Test_Rest_Document_Locator_Controller extends BaseTestCase {
 
+	use InMemoryTermStore;
+
 	public function set_up(): void {
 		parent::set_up();
 
-		( new Page() )->register_post_type();
+		( new Document() )->register_post_type();
+		// Document::register_post_type opts in via DocumentTypeRegistrar,
+		// which calls register_for_post_type. In tests we call
+		// register_post_type directly, so wire up cortext-document support
+		// here for the `DocumentLocatorController::check_document_post`
+		// permission gate.
+		DocumentIdentity::register_for_post_type( Document::POST_TYPE );
+		( new TraitTaxonomy() )->register_taxonomy();
+		$trait_taxonomy = new TraitTaxonomy();
+		add_action( 'added_post_meta', array( $trait_taxonomy, 'sync_term_on_meta_change' ), 10, 4 );
+		add_action( 'updated_post_meta', array( $trait_taxonomy, 'sync_term_on_meta_change' ), 10, 4 );
+		add_action( 'deleted_post_meta', array( $trait_taxonomy, 'sync_term_on_meta_change' ), 10, 4 );
+		add_action( 'before_delete_post', array( $trait_taxonomy, 'sync_term_on_delete' ), 10, 2 );
+
+		$this->install_in_memory_term_store();
 
 		$GLOBALS['wp_rest_server'] = new WP_REST_Server();
 		( new DocumentLocatorController() )->register();
@@ -29,6 +46,7 @@ final class Test_Rest_Document_Locator_Controller extends BaseTestCase {
 	}
 
 	public function tear_down(): void {
+		$this->uninstall_in_memory_term_store();
 		wp_set_current_user( 0 );
 		parent::tear_down();
 	}
@@ -38,7 +56,7 @@ final class Test_Rest_Document_Locator_Controller extends BaseTestCase {
 
 		$page_id = (int) wp_insert_post(
 			array(
-				'post_type'   => Page::POST_TYPE,
+				'post_type'   => Document::POST_TYPE,
 				'post_status' => 'publish',
 				'post_title'  => 'About us',
 				'post_name'   => 'about-us',
@@ -48,50 +66,12 @@ final class Test_Rest_Document_Locator_Controller extends BaseTestCase {
 		$response = $this->locate( $page_id );
 
 		$this->assertSame( 200, $response->get_status() );
-		// Pages have rest_base `crtxt_pages` but post_type `crtxt_page`,
-		// so the locator returns rest_base separately for the JS resolver
-		// to build `/wp/v2/crtxt_pages/<id>` correctly.
-		$this->assertSame(
-			array(
-				'id'        => $page_id,
-				'type'      => Page::POST_TYPE,
-				'rest_base' => 'crtxt_pages',
-				'slug'      => 'about-us',
-			),
-			$response->get_data()
-		);
-	}
-
-	public function test_returns_dynamic_post_type_for_row_documents(): void {
-		wp_set_current_user( $this->create_user( 'administrator' ) );
-
-		$row_post_type = 'crtxt_widgets';
-		register_post_type(
-			$row_post_type,
-			array(
-				'public'       => false,
-				'show_in_rest' => true,
-				'rest_base'    => $row_post_type,
-				'supports'     => array( 'title', 'editor' ),
-			)
-		);
-		DocumentIdentity::register_for_post_type( $row_post_type );
-
-		$row_id = (int) wp_insert_post(
-			array(
-				'post_type'   => $row_post_type,
-				'post_status' => 'publish',
-				'post_title'  => 'A widget',
-				'post_name'   => 'a-widget',
-			)
-		);
-
-		$response = $this->locate( $row_id );
-
-		$this->assertSame( 200, $response->get_status() );
-		$this->assertSame( $row_post_type, $response->get_data()['type'] );
-		$this->assertSame( $row_post_type, $response->get_data()['rest_base'] );
-		$this->assertSame( 'a-widget', $response->get_data()['slug'] );
+		$data = $response->get_data();
+		$this->assertSame( $page_id, $data['id'] );
+		$this->assertSame( Document::POST_TYPE, $data['type'] );
+		$this->assertSame( 'crtxt_documents', $data['rest_base'] );
+		$this->assertSame( 'about-us', $data['slug'] );
+		$this->assertSame( array(), $data['trait_ids'] );
 	}
 
 	public function test_404s_for_unknown_id(): void {

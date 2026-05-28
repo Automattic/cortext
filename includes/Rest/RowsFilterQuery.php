@@ -73,7 +73,7 @@ final class RowsFilterQuery {
 			),
 		);
 
-		foreach ( get_post_meta( $collection_id, 'fields', false ) as $raw_field_id ) {
+		foreach ( get_post_meta( $collection_id, 'cortext_fields', false ) as $raw_field_id ) {
 			$field_id = (int) $raw_field_id;
 			if ( $field_id < 1 ) {
 				continue;

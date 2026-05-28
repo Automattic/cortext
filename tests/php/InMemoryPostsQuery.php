@@ -21,7 +21,8 @@ declare( strict_types=1 );
 namespace Cortext\Tests;
 
 use Cortext\Fields\FieldTypeRegistry;
-use Cortext\PostType\CollectionEntries;
+use Cortext\PostType\Document;
+use Cortext\Taxonomy\TraitTaxonomy;
 use WorDBless\Posts as WorDBlessPosts;
 use WP_Post;
 use WP_Query;
@@ -52,6 +53,8 @@ trait InMemoryPostsQuery {
 
 		$wants_parent_filter   = ! empty( $vars['post_parent'] );
 		$wants_meta_filter     = ! empty( $vars['meta_key'] );
+		$wants_meta_query      = ! empty( $vars['meta_query'] ) && is_array( $vars['meta_query'] );
+		$wants_tax_query       = ! empty( $vars['tax_query'] ) && is_array( $vars['tax_query'] );
 		$wants_post_type_query = ! empty( $vars['post_type'] ) && 'any' !== $vars['post_type'];
 		$wants_search          = isset( $vars['s'] ) && '' !== (string) $vars['s'];
 		$statuses              = (array) ( $vars['post_status'] ?? array() );
@@ -60,6 +63,8 @@ trait InMemoryPostsQuery {
 		if (
 			! $wants_parent_filter &&
 			! $wants_meta_filter &&
+			! $wants_meta_query &&
+			! $wants_tax_query &&
 			! $wants_post_type_query &&
 			! $wants_search &&
 			! $wants_trash_query
@@ -101,6 +106,20 @@ trait InMemoryPostsQuery {
 			);
 		}
 
+		if ( $wants_meta_query ) {
+			$candidates = array_filter(
+				$candidates,
+				fn( WP_Post $post ): bool => $this->matches_meta_query( $post, (array) $vars['meta_query'] )
+			);
+		}
+
+		if ( $wants_tax_query ) {
+			$candidates = array_filter(
+				$candidates,
+				fn( WP_Post $post ): bool => $this->matches_tax_query( $post, (array) $vars['tax_query'] )
+			);
+		}
+
 		if ( $wants_search ) {
 			$terms      = preg_split( '/\s+/', strtolower( trim( (string) $vars['s'] ) ) );
 			$terms      = is_array( $terms )
@@ -124,7 +143,12 @@ trait InMemoryPostsQuery {
 			);
 		}
 
-		$orderby = (string) ( $vars['orderby'] ?? '' );
+		$orderby = $vars['orderby'] ?? '';
+		// `WP_Query` accepts arrays like `[ 'menu_order' => 'ASC', 'ID' => 'ASC' ]`.
+		// We don't try to mirror multi-key ordering here; only the simple
+		// string forms get applied, anything else falls through to the
+		// insertion order.
+		$orderby = is_string( $orderby ) ? $orderby : '';
 		if ( in_array( $orderby, array( 'modified', 'date' ), true ) ) {
 			$direction  = strtoupper( (string) ( $vars['order'] ?? 'DESC' ) );
 			$field      = 'modified' === $orderby ? 'post_modified_gmt' : 'post_date_gmt';
@@ -234,11 +258,11 @@ trait InMemoryPostsQuery {
 			return true;
 		}
 
-		if ( ! str_starts_with( $post->post_type, CollectionEntries::CPT_PREFIX ) ) {
+		if ( Document::POST_TYPE !== $post->post_type ) {
 			return false;
 		}
 
-		foreach ( $this->text_like_field_keys_for_row_post_type( $post->post_type ) as $meta_key ) {
+		foreach ( $this->text_like_field_keys_for_document() as $meta_key ) {
 			$value = strtolower( (string) get_post_meta( (int) $post->ID, $meta_key, true ) );
 			if ( false !== strpos( $value, $needle ) ) {
 				return true;
@@ -249,43 +273,140 @@ trait InMemoryPostsQuery {
 	}
 
 	/**
-	 * Finds the text-like (`text`, `email`, `url`) field meta keys for a row
-	 * CPT from its parent collection's `fields` meta.
+	 * Evaluates a subset of `meta_query` clauses against an in-memory post.
+	 * Supports `EXISTS`, `NOT EXISTS`, and `=` comparisons; ignores nested
+	 * arrays. Used by `Documents::list()` and the cascade strategies.
 	 *
-	 * @param string $post_type Row post type.
+	 * @param WP_Post $post        Candidate.
+	 * @param array   $meta_query  meta_query clauses.
+	 */
+	private function matches_meta_query( WP_Post $post, array $meta_query ): bool {
+		foreach ( $meta_query as $key => $clause ) {
+			if ( 'relation' === $key || ! is_array( $clause ) ) {
+				continue;
+			}
+			$meta_key = (string) ( $clause['key'] ?? '' );
+			if ( '' === $meta_key ) {
+				continue;
+			}
+			$compare = strtoupper( (string) ( $clause['compare'] ?? '=' ) );
+			$values  = get_post_meta( (int) $post->ID, $meta_key, false );
+			$has_any = is_array( $values ) && count( $values ) > 0;
+
+			if ( 'EXISTS' === $compare ) {
+				if ( ! $has_any ) {
+					return false;
+				}
+				continue;
+			}
+			if ( 'NOT EXISTS' === $compare ) {
+				if ( $has_any ) {
+					return false;
+				}
+				continue;
+			}
+			$expected = (string) ( $clause['value'] ?? '' );
+			$matched  = false;
+			foreach ( (array) $values as $value ) {
+				if ( (string) $value === $expected ) {
+					$matched = true;
+					break;
+				}
+			}
+			if ( ! $matched ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Evaluates a subset of `tax_query` clauses for the `crtxt_trait`
+	 * taxonomy. Supports `EXISTS`, `NOT EXISTS`, and a `term_id` membership
+	 * test. The trait term slug is the collection document id, so a
+	 * candidate document is a row when at least one trait term is attached
+	 * to it. Term relationships are derived from `wp_get_object_terms`,
+	 * which `wp_set_object_terms` writes through WP's standard taxonomy
+	 * machinery and WorDBless backs in memory.
+	 *
+	 * @param WP_Post $post      Candidate.
+	 * @param array   $tax_query tax_query clauses.
+	 */
+	private function matches_tax_query( WP_Post $post, array $tax_query ): bool {
+		foreach ( $tax_query as $key => $clause ) {
+			if ( 'relation' === $key || ! is_array( $clause ) ) {
+				continue;
+			}
+			$taxonomy = (string) ( $clause['taxonomy'] ?? '' );
+			if ( TraitTaxonomy::TAXONOMY !== $taxonomy ) {
+				continue;
+			}
+			$compare = strtoupper( (string) ( $clause['operator'] ?? 'IN' ) );
+			$terms   = wp_get_object_terms(
+				(int) $post->ID,
+				TraitTaxonomy::TAXONOMY,
+				array( 'fields' => 'ids' )
+			);
+			$has_any = is_array( $terms ) && count( $terms ) > 0;
+
+			if ( 'EXISTS' === $compare ) {
+				if ( ! $has_any ) {
+					return false;
+				}
+				continue;
+			}
+			if ( 'NOT EXISTS' === $compare ) {
+				if ( $has_any ) {
+					return false;
+				}
+				continue;
+			}
+			$expected = array_map( 'intval', (array) ( $clause['terms'] ?? array() ) );
+			$matched  = false;
+			foreach ( (array) $terms as $term_id ) {
+				if ( in_array( (int) $term_id, $expected, true ) ) {
+					$matched = true;
+					break;
+				}
+			}
+			if ( ! $matched ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Finds the text-like (`text`, `email`, `url`) field meta keys defined
+	 * across every collection document in the in-memory store. WorDBless
+	 * does not back the term relationships needed to scope rows to one
+	 * trait, so the test shim widens the search to every text-like field on
+	 * the workspace; this matches the production behaviour where
+	 * `Documents::collect_row_text_keys` aggregates the union of field keys.
+	 *
 	 * @return string[]
 	 */
-	private function text_like_field_keys_for_row_post_type( string $post_type ): array {
-		$slug = substr( $post_type, strlen( CollectionEntries::CPT_PREFIX ) );
-		if ( '' === $slug ) {
-			return array();
-		}
-
-		$collection_id = 0;
-		foreach ( $this->all_in_memory_posts() as $candidate ) {
-			if ( 'crtxt_collection' !== $candidate->post_type ) {
-				continue;
-			}
-			if ( (string) get_post_meta( (int) $candidate->ID, 'slug', true ) === $slug ) {
-				$collection_id = (int) $candidate->ID;
-				break;
-			}
-		}
-		if ( 0 === $collection_id ) {
-			return array();
-		}
-
+	private function text_like_field_keys_for_document(): array {
 		$keys = array();
-		foreach ( get_post_meta( $collection_id, 'fields', false ) as $raw_field_id ) {
-			$field_id = (int) $raw_field_id;
-			if ( $field_id < 1 ) {
+		foreach ( $this->all_in_memory_posts() as $candidate ) {
+			if ( Document::POST_TYPE !== $candidate->post_type ) {
 				continue;
 			}
-			$type = (string) get_post_meta( $field_id, 'type', true );
-			if ( FieldTypeRegistry::is_text_like( $type ) ) {
-				$keys[] = "field-{$field_id}";
+			$field_ids = get_post_meta( (int) $candidate->ID, 'cortext_fields', false );
+			if ( ! is_array( $field_ids ) || count( $field_ids ) === 0 ) {
+				continue;
+			}
+			foreach ( $field_ids as $raw_field_id ) {
+				$field_id = (int) $raw_field_id;
+				if ( $field_id < 1 ) {
+					continue;
+				}
+				$type = (string) get_post_meta( $field_id, 'type', true );
+				if ( FieldTypeRegistry::is_text_like( $type ) ) {
+					$keys[ "field-{$field_id}" ] = true;
+				}
 			}
 		}
-		return $keys;
+		return array_keys( $keys );
 	}
 }

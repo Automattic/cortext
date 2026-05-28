@@ -19,12 +19,6 @@ final class FavoritesController {
 	private const NAMESPACE = 'cortext/v1';
 	private const META_KEY  = 'cortext_favorites';
 
-	private const ALLOWED_KINDS = array(
-		Documents::KIND_PAGE,
-		Documents::KIND_COLLECTION,
-		Documents::KIND_ROW,
-	);
-
 	private Documents $documents;
 
 	public function __construct( ?Documents $documents = null ) {
@@ -56,11 +50,7 @@ final class FavoritesController {
 							'items'    => array(
 								'type'       => 'object',
 								'properties' => array(
-									'kind' => array(
-										'type' => 'string',
-										'enum' => self::ALLOWED_KINDS,
-									),
-									'id'   => array(
+									'id' => array(
 										'type'    => 'integer',
 										'minimum' => 1,
 									),
@@ -119,16 +109,8 @@ final class FavoritesController {
 				return $target;
 			}
 
-			if ( ! in_array( $target['kind'], self::ALLOWED_KINDS, true ) ) {
-				return new WP_Error(
-					'cortext_document_target_not_found',
-					__( 'Target document was not found.', 'cortext' ),
-					array( 'status' => 404 )
-				);
-			}
-
 			$seen[ $id ] = true;
-			$stored[]    = "{$target['kind']}:{$target['id']}";
+			$stored[]    = (int) $target['id'];
 			$formatted[] = $target;
 		}
 
@@ -162,14 +144,11 @@ final class FavoritesController {
 				continue;
 			}
 
-			if ( ! in_array( $target['kind'], self::ALLOWED_KINDS, true ) ) {
-				continue;
-			}
-
 			$seen[ $id ] = true;
-			// Re-normalise to the canonical `"kind:id"` shape on read so older
-			// row entries stored as arrays migrate forward on first access.
-			$valid[] = "{$target['kind']}:{$target['id']}";
+			// Re-normalise to the canonical bare-id shape on read so older
+			// `kind:id` strings and `{kind, id}` arrays migrate forward on the
+			// next access.
+			$valid[] = (int) $target['id'];
 			$out[]   = $target;
 		}
 
@@ -183,15 +162,21 @@ final class FavoritesController {
 	}
 
 	/**
-	 * Reads the document id out of a stored favorite. Strings are the canonical
-	 * `"kind:id"` shape; arrays come from older storage (when row favorites
-	 * carried a `collectionId`) and are accepted for lazy migration on the
-	 * next read.
+	 * Reads the document id out of a stored favorite. Integers are the
+	 * canonical shape; strings (`"kind:id"`) and arrays (older row favorites
+	 * with `collectionId`) are accepted for lazy migration on the next read.
 	 *
 	 * @param mixed $entry Raw stored entry.
 	 */
 	private function stored_entry_id( mixed $entry ): int {
+		if ( is_int( $entry ) ) {
+			return $entry;
+		}
+
 		if ( is_string( $entry ) ) {
+			if ( ctype_digit( $entry ) ) {
+				return (int) $entry;
+			}
 			$parts = explode( ':', $entry, 2 );
 			if ( 2 !== count( $parts ) ) {
 				return 0;

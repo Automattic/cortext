@@ -9,8 +9,9 @@ declare( strict_types=1 );
 
 namespace Cortext\Rest;
 
-use Cortext\PostType\Collection;
-use Cortext\PostType\CollectionEntries;
+use Cortext\PostType\Document;
+use Cortext\Relations;
+use Cortext\Taxonomy\TraitTaxonomy;
 use WP_Error;
 use WP_Post;
 
@@ -59,12 +60,12 @@ final class RowsManualOrder {
 			);
 		}
 
-		$post_type = $this->entry_post_type( $collection_id );
-		if ( is_wp_error( $post_type ) ) {
-			return $post_type;
+		$trait_term_id = $this->trait_term_id( $collection_id );
+		if ( is_wp_error( $trait_term_id ) ) {
+			return $trait_term_id;
 		}
 
-		$row = $this->row_in_collection( $row_id, $post_type );
+		$row = $this->row_in_collection( $row_id, $collection_id );
 		if ( is_wp_error( $row ) ) {
 			return $row;
 		}
@@ -81,11 +82,11 @@ final class RowsManualOrder {
 			$reseeded      = true;
 		}
 
-		$before = null === $before_id ? null : $this->row_in_collection( $before_id, $post_type );
+		$before = null === $before_id ? null : $this->row_in_collection( $before_id, $collection_id );
 		if ( is_wp_error( $before ) ) {
 			return $before;
 		}
-		$after = null === $after_id ? null : $this->row_in_collection( $after_id, $post_type );
+		$after = null === $after_id ? null : $this->row_in_collection( $after_id, $collection_id );
 		if ( is_wp_error( $after ) ) {
 			return $after;
 		}
@@ -108,11 +109,11 @@ final class RowsManualOrder {
 			}
 			$reseeded = true;
 
-			$before = null === $before_id ? null : $this->row_in_collection( $before_id, $post_type );
+			$before = null === $before_id ? null : $this->row_in_collection( $before_id, $collection_id );
 			if ( is_wp_error( $before ) ) {
 				return $before;
 			}
-			$after = null === $after_id ? null : $this->row_in_collection( $after_id, $post_type );
+			$after = null === $after_id ? null : $this->row_in_collection( $after_id, $collection_id );
 			if ( is_wp_error( $after ) ) {
 				return $after;
 			}
@@ -209,9 +210,9 @@ final class RowsManualOrder {
 		return ! empty( $current_sort['field'] ) && 'manual' !== $current_sort['field'];
 	}
 
-	private function entry_post_type( int $collection_id ): string|WP_Error {
+	private function trait_term_id( int $collection_id ): int|WP_Error {
 		$collection = get_post( $collection_id );
-		if ( ! $collection instanceof WP_Post || Collection::POST_TYPE !== $collection->post_type ) {
+		if ( ! $collection instanceof WP_Post || ! Document::is_collection_post( $collection ) ) {
 			return new WP_Error(
 				'cortext_collection_not_found',
 				__( 'Collection not found.', 'cortext' ),
@@ -219,22 +220,25 @@ final class RowsManualOrder {
 			);
 		}
 
-		$slug      = (string) get_post_meta( $collection_id, 'slug', true );
-		$post_type = CollectionEntries::CPT_PREFIX . $slug;
-		if ( '' === $slug || ! post_type_exists( $post_type ) ) {
+		$term_id = Relations::trait_term_id_for_collection( $collection_id );
+		if ( $term_id < 1 ) {
 			return new WP_Error(
 				'cortext_collection_not_registered',
-				__( 'Collection row type is not registered.', 'cortext' ),
+				__( 'Collection mirror term is not registered.', 'cortext' ),
 				array( 'status' => 404 )
 			);
 		}
 
-		return $post_type;
+		return $term_id;
 	}
 
-	private function row_in_collection( int $row_id, string $post_type ): WP_Post|WP_Error {
+	private function row_in_collection( int $row_id, int $collection_id ): WP_Post|WP_Error {
 		$row = get_post( $row_id );
-		if ( ! $row instanceof WP_Post || $post_type !== $row->post_type ) {
+		if (
+			! $row instanceof WP_Post
+			|| Document::POST_TYPE !== $row->post_type
+			|| ! Relations::document_belongs_to_collection( $row_id, $collection_id )
+		) {
 			return new WP_Error(
 				'cortext_row_not_found',
 				__( 'Row not found.', 'cortext' ),
@@ -287,9 +291,9 @@ final class RowsManualOrder {
 	 * @return int[]|WP_Error
 	 */
 	private function row_ids_for_sort( int $collection_id, ?array $sort ): array|WP_Error {
-		$post_type = $this->entry_post_type( $collection_id );
-		if ( is_wp_error( $post_type ) ) {
-			return $post_type;
+		$trait_term_id = $this->trait_term_id( $collection_id );
+		if ( is_wp_error( $trait_term_id ) ) {
+			return $trait_term_id;
 		}
 
 		$row_query    = new RowsFilterQuery();
@@ -299,16 +303,23 @@ final class RowsManualOrder {
 			return $validation;
 		}
 
-		$wordbless_ids = $this->wordbless_row_ids_for_sort( $post_type, $sort, $field_schema );
+		$wordbless_ids = $this->wordbless_row_ids_for_sort( $trait_term_id, $sort, $field_schema );
 		if ( null !== $wordbless_ids ) {
 			return $wordbless_ids;
 		}
 
 		$args = array(
-			'post_type'      => $post_type,
+			'post_type'      => Document::POST_TYPE,
 			'post_status'    => array( 'draft', 'private', 'publish' ),
 			'posts_per_page' => -1,
 			'no_found_rows'  => true,
+			'tax_query'      => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
+				array(
+					'taxonomy' => TraitTaxonomy::TAXONOMY,
+					'field'    => 'term_id',
+					'terms'    => array( $trait_term_id ),
+				),
+			),
 		);
 
 		if ( ! is_array( $sort ) || empty( $sort['field'] ) ) {
@@ -351,12 +362,12 @@ final class RowsManualOrder {
 	 * WorDBless can fetch single posts but does not run WP_Query. Keep this
 	 * fallback here so production keeps using WP_Query.
 	 *
-	 * @param string     $post_type    Entry CPT.
-	 * @param array|null $sort         Sort object.
-	 * @param array      $field_schema Field schema.
+	 * @param int        $trait_term_id Mirror term id for the trait.
+	 * @param array|null $sort          Sort object.
+	 * @param array      $field_schema  Field schema.
 	 * @return int[]|null
 	 */
-	private function wordbless_row_ids_for_sort( string $post_type, ?array $sort, array $field_schema ): ?array {
+	private function wordbless_row_ids_for_sort( int $trait_term_id, ?array $sort, array $field_schema ): ?array {
 		if ( ! $this->is_wordbless_active() ) {
 			return null;
 		}
@@ -366,8 +377,9 @@ final class RowsManualOrder {
 			array_filter(
 				$store->posts,
 				static fn( $post ) =>
-					$post_type === $post->post_type &&
-					in_array( $post->post_status, array( 'draft', 'private', 'publish' ), true )
+					Document::POST_TYPE === $post->post_type &&
+					in_array( $post->post_status, array( 'draft', 'private', 'publish' ), true ) &&
+					has_term( $trait_term_id, TraitTaxonomy::TAXONOMY, (int) $post->ID )
 			)
 		);
 

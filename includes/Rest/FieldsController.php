@@ -12,10 +12,10 @@ namespace Cortext\Rest;
 use Cortext\Fields\FieldTypeConverter;
 use Cortext\Fields\FieldTypeRegistry;
 use Cortext\OptionPalette;
-use Cortext\PostType\Collection;
-use Cortext\PostType\CollectionEntries;
+use Cortext\PostType\Document;
 use Cortext\PostType\Field;
 use Cortext\Relations;
+use Cortext\Taxonomy\TraitTaxonomy;
 use WP_Error;
 use WP_Post;
 use WP_REST_Request;
@@ -252,7 +252,11 @@ final class FieldsController {
 	public function can_edit_collection( WP_REST_Request $request ): bool|WP_Error {
 		$collection_id = (int) $request->get_param( 'collection_id' );
 		$collection    = get_post( $collection_id );
-		if ( ! $collection instanceof WP_Post || Collection::POST_TYPE !== $collection->post_type ) {
+		// `create` accepts a `crtxt_document` that does not yet carry
+		// `cortext_fields`: the first field is what promotes it to a
+		// collection. Strict "is_collection" checks belong inside handlers that
+		// need an already-built schema (e.g. `duplicate`, relation targets).
+		if ( ! $collection instanceof WP_Post || Document::POST_TYPE !== $collection->post_type ) {
 			return new WP_Error(
 				'cortext_collection_not_found',
 				__( 'Collection not found.', 'cortext' ),
@@ -278,7 +282,9 @@ final class FieldsController {
 	public function create( WP_REST_Request $request ): WP_REST_Response|WP_Error {
 		$collection_id = (int) $request->get_param( 'collection_id' );
 
-		$collection_or_error = $this->require_collection( $collection_id );
+		// Loose check: the document only needs to exist; adding the first
+		// field is what promotes it to a collection.
+		$collection_or_error = $this->require_collection_document( $collection_id );
 		if ( is_wp_error( $collection_or_error ) ) {
 			return $collection_or_error;
 		}
@@ -329,8 +335,8 @@ final class FieldsController {
 			);
 		}
 
-		$existing_ids = $this->collection_field_ids( $collection_id );
-		if ( ! in_array( (string) $field_id, $existing_ids, true ) ) {
+		$existing_ids = Document::collection_field_ids( $collection_id );
+		if ( ! in_array( $field_id, $existing_ids, true ) ) {
 			return new WP_Error(
 				'cortext_field_not_in_collection',
 				__( 'Field does not belong to this collection.', 'cortext' ),
@@ -560,8 +566,8 @@ final class FieldsController {
 	 */
 	private function collect_option_tokens( int $field_id, string $target_type, ?array $row_ids_override = null ): array|WP_Error {
 		if ( null === $row_ids_override ) {
-			$post_type = $this->row_post_type_for_field( $field_id );
-			if ( null === $post_type ) {
+			$trait_term_id = $this->trait_term_id_for_field( $field_id );
+			if ( $trait_term_id < 1 ) {
 				return new WP_Error(
 					'cortext_field_collection_missing',
 					__( 'Field collection could not be determined.', 'cortext' ),
@@ -570,10 +576,17 @@ final class FieldsController {
 			}
 			$row_ids = get_posts(
 				array(
-					'post_type'      => $post_type,
+					'post_type'      => Document::POST_TYPE,
 					'post_status'    => array( 'draft', 'pending', 'private', 'publish', 'future', 'inherit' ),
 					'posts_per_page' => -1,
 					'fields'         => 'ids',
+					'tax_query'      => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
+						array(
+							'taxonomy' => TraitTaxonomy::TAXONOMY,
+							'field'    => 'term_id',
+							'terms'    => array( $trait_term_id ),
+						),
+					),
 				)
 			);
 		} else {
@@ -609,32 +622,30 @@ final class FieldsController {
 	 *
 	 * @param int $field_id Field post ID to resolve.
 	 */
-	private function row_post_type_for_field( int $field_id ): ?string {
+	/**
+	 * Resolves the mirror term id for the trait that owns the given field,
+	 * or 0 when the field is not attached to any trait.
+	 *
+	 * @param int $field_id Field post id.
+	 */
+	private function trait_term_id_for_field( int $field_id ): int {
 		$field_id_str = (string) $field_id;
 
-		// Try collections already registered in this request first. This avoids
-		// an extra query in the common path and keeps tests simple.
-		foreach ( CollectionEntries::known_collection_ids() as $collection_id ) {
-			$ids = array_map( 'strval', get_post_meta( (int) $collection_id, 'fields', false ) );
-			if ( in_array( $field_id_str, $ids, true ) ) {
-				return Relations::entry_post_type_for_collection( (int) $collection_id );
-			}
-		}
-
-		// Fall back to postmeta for collections not registered yet.
+		// Reverse lookup: which collection's `cortext_fields` meta references
+		// this field?
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- field→collection reverse lookup; bounded by a single matching row.
 		$collection_id = (int) $wpdb->get_var(
 			$wpdb->prepare(
 				"SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = %s AND meta_value = %s LIMIT 1",
-				'fields',
+				'cortext_fields',
 				$field_id_str
 			)
 		);
 		if ( $collection_id < 1 ) {
-			return null;
+			return 0;
 		}
-		return Relations::entry_post_type_for_collection( $collection_id );
+		return Relations::trait_term_id_for_collection( $collection_id );
 	}
 
 	/**
@@ -677,46 +688,44 @@ final class FieldsController {
 		$is_multivalue = 'multiselect' === $type;
 		$touched       = 0;
 
-		foreach ( CollectionEntries::get_entry_post_types() as $post_type ) {
-			$row_ids = get_posts(
-				array(
-					'post_type'      => $post_type,
-					'post_status'    => array( 'draft', 'pending', 'private', 'publish', 'future', 'inherit' ),
-					'posts_per_page' => -1,
-					'fields'         => 'ids',
-					// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- bounded migration over Cortext rows.
-					'meta_query'     => array(
-						array(
-							'key'     => $meta_key,
-							'value'   => $from,
-							'compare' => '=',
-						),
+		$row_ids = get_posts(
+			array(
+				'post_type'      => Document::POST_TYPE,
+				'post_status'    => array( 'draft', 'pending', 'private', 'publish', 'future', 'inherit' ),
+				'posts_per_page' => -1,
+				'fields'         => 'ids',
+				// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- bounded migration over Cortext rows.
+				'meta_query'     => array(
+					array(
+						'key'     => $meta_key,
+						'value'   => $from,
+						'compare' => '=',
 					),
-				)
-			);
+				),
+			)
+		);
 
-			foreach ( $row_ids as $row_id ) {
-				$row_id = (int) $row_id;
-				if ( 'clear' === $action ) {
-					if ( delete_post_meta( $row_id, $meta_key, $from ) ) {
-						++$touched;
-					}
-					continue;
+		foreach ( $row_ids as $row_id ) {
+			$row_id = (int) $row_id;
+			if ( 'clear' === $action ) {
+				if ( delete_post_meta( $row_id, $meta_key, $from ) ) {
+					++$touched;
 				}
+				continue;
+			}
 
-				// Replace branch.
-				if ( $is_multivalue ) {
-					$existing = get_post_meta( $row_id, $meta_key, false );
-					$has_to   = is_array( $existing ) && in_array( $to, $existing, true );
-					if ( delete_post_meta( $row_id, $meta_key, $from ) ) {
-						++$touched;
-					}
-					if ( ! $has_to ) {
-						add_post_meta( $row_id, $meta_key, $to );
-					}
-				} elseif ( update_post_meta( $row_id, $meta_key, $to ) ) {
-						++$touched;
+			// Replace branch.
+			if ( $is_multivalue ) {
+				$existing = get_post_meta( $row_id, $meta_key, false );
+				$has_to   = is_array( $existing ) && in_array( $to, $existing, true );
+				if ( delete_post_meta( $row_id, $meta_key, $from ) ) {
+					++$touched;
 				}
+				if ( ! $has_to ) {
+					add_post_meta( $row_id, $meta_key, $to );
+				}
+			} elseif ( update_post_meta( $row_id, $meta_key, $to ) ) {
+					++$touched;
 			}
 		}
 
@@ -725,27 +734,23 @@ final class FieldsController {
 
 	private function count_rows_with_value( int $field_id, string $value ): int {
 		$meta_key = "field-{$field_id}";
-		$count    = 0;
-		foreach ( CollectionEntries::get_entry_post_types() as $post_type ) {
-			$row_ids = get_posts(
-				array(
-					'post_type'      => $post_type,
-					'post_status'    => array( 'draft', 'pending', 'private', 'publish', 'future', 'inherit' ),
-					'posts_per_page' => -1,
-					'fields'         => 'ids',
-					// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- bounded count over Cortext rows.
-					'meta_query'     => array(
-						array(
-							'key'     => $meta_key,
-							'value'   => $value,
-							'compare' => '=',
-						),
+		$row_ids  = get_posts(
+			array(
+				'post_type'      => Document::POST_TYPE,
+				'post_status'    => array( 'draft', 'pending', 'private', 'publish', 'future', 'inherit' ),
+				'posts_per_page' => -1,
+				'fields'         => 'ids',
+				// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- bounded count over Cortext rows.
+				'meta_query'     => array(
+					array(
+						'key'     => $meta_key,
+						'value'   => $value,
+						'compare' => '=',
 					),
-				)
-			);
-			$count += count( $row_ids );
-		}
-		return $count;
+				),
+			)
+		);
+		return count( $row_ids );
 	}
 
 	private function create_relation(
@@ -904,8 +909,8 @@ final class FieldsController {
 			);
 		}
 
-		$collection_fields = $this->collection_field_ids( $collection_id );
-		if ( ! in_array( (string) $relation_field_id, $collection_fields, true ) ) {
+		$collection_fields = Document::collection_field_ids( $collection_id );
+		if ( ! in_array( $relation_field_id, $collection_fields, true ) ) {
 			return new WP_Error(
 				'cortext_rollup_relation_invalid',
 				__( 'Rollup source relation must belong to this collection.', 'cortext' ),
@@ -932,8 +937,8 @@ final class FieldsController {
 		}
 
 		$target_collection_id = (int) get_post_meta( $relation_field_id, 'related_collection_id', true );
-		$target_fields        = $this->collection_field_ids( $target_collection_id );
-		if ( ! in_array( (string) $target_field_id, $target_fields, true ) ) {
+		$target_fields        = Document::collection_field_ids( $target_collection_id );
+		if ( ! in_array( $target_field_id, $target_fields, true ) ) {
 			return new WP_Error(
 				'cortext_rollup_target_invalid',
 				__( 'Rollup target field must belong to the related collection.', 'cortext' ),
@@ -1035,11 +1040,6 @@ final class FieldsController {
 			);
 		}
 
-		$collection = get_post( $collection_id );
-		if ( $collection instanceof WP_Post ) {
-			( new CollectionEntries() )->register_for_collection( $collection );
-		}
-
 		return (int) $field_id;
 	}
 
@@ -1060,16 +1060,17 @@ final class FieldsController {
 		$field_id_str = (string) $field_id;
 
 		if ( null === $insert_after_id ) {
-			$result = add_post_meta( $collection_id, 'fields', $field_id_str );
+			$result = add_post_meta( $collection_id, 'cortext_fields', $field_id_str );
 			return false !== $result;
 		}
 
-		$existing  = $this->collection_field_ids( $collection_id );
-		$reordered = array();
-		$inserted  = false;
+		$insert_after = (int) $insert_after_id;
+		$existing     = Document::collection_field_ids( $collection_id );
+		$reordered    = array();
+		$inserted     = false;
 		foreach ( $existing as $id ) {
-			$reordered[] = $id;
-			if ( $id === $insert_after_id ) {
+			$reordered[] = (string) $id;
+			if ( $id === $insert_after ) {
 				$reordered[] = $field_id_str;
 				$inserted    = true;
 			}
@@ -1087,12 +1088,12 @@ final class FieldsController {
 		// sequence is delete-then-add. If a re-add fails (filter, DB
 		// error), best-effort restore the previous list so the schema
 		// isn't lost.
-		delete_post_meta( $collection_id, 'fields' );
+		delete_post_meta( $collection_id, 'cortext_fields' );
 		foreach ( $reordered as $id ) {
-			if ( false === add_post_meta( $collection_id, 'fields', $id ) ) {
-				delete_post_meta( $collection_id, 'fields' );
+			if ( false === add_post_meta( $collection_id, 'cortext_fields', $id ) ) {
+				delete_post_meta( $collection_id, 'cortext_fields' );
 				foreach ( $existing as $rollback_id ) {
-					add_post_meta( $collection_id, 'fields', $rollback_id );
+					add_post_meta( $collection_id, 'cortext_fields', (string) $rollback_id );
 				}
 				return false;
 			}
@@ -1102,31 +1103,32 @@ final class FieldsController {
 	}
 
 	private function detach_field( int $collection_id, int $field_id ): void {
-		delete_post_meta( $collection_id, 'fields', (string) $field_id );
-	}
-
-	/**
-	 * Returns the field IDs stored in a collection's `meta.fields`.
-	 *
-	 * @param int $collection_id Collection post ID.
-	 * @return array<int,string> Stringified IDs in display order.
-	 */
-	private function collection_field_ids( int $collection_id ): array {
-		$raw = get_post_meta( $collection_id, 'fields', false );
-		if ( ! is_array( $raw ) ) {
-			return array();
-		}
-
-		$ids = array();
-		foreach ( $raw as $id ) {
-			$ids[] = (string) $id;
-		}
-		return $ids;
+		delete_post_meta( $collection_id, 'cortext_fields', (string) $field_id );
 	}
 
 	private function require_collection( int $collection_id ): WP_Post|WP_Error {
 		$collection = get_post( $collection_id );
-		if ( ! $collection instanceof WP_Post || Collection::POST_TYPE !== $collection->post_type ) {
+		if ( ! $collection instanceof WP_Post || ! Document::is_collection_post( $collection ) ) {
+			return new WP_Error(
+				'cortext_collection_not_found',
+				__( 'Collection not found.', 'cortext' ),
+				array( 'status' => 404 )
+			);
+		}
+		return $collection;
+	}
+
+	/**
+	 * Loose variant of `require_collection`: accepts any `crtxt_document`,
+	 * even one that does not yet have `cortext_fields`. Used by the field
+	 * `create` handler, where the first field is what promotes the document
+	 * into a collection.
+	 *
+	 * @param int $collection_id Candidate document id.
+	 */
+	private function require_collection_document( int $collection_id ): WP_Post|WP_Error {
+		$collection = get_post( $collection_id );
+		if ( ! $collection instanceof WP_Post || Document::POST_TYPE !== $collection->post_type ) {
 			return new WP_Error(
 				'cortext_collection_not_found',
 				__( 'Collection not found.', 'cortext' ),

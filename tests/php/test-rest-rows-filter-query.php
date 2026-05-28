@@ -10,10 +10,10 @@ declare( strict_types=1 );
 namespace Cortext\Tests;
 
 use Cortext\Fields\FieldTypeRegistry;
-use Cortext\PostType\Collection;
-use Cortext\PostType\CollectionEntries;
+use Cortext\PostType\Document;
 use Cortext\PostType\Field;
 use Cortext\Rest\RowsFilterQuery;
+use Cortext\Taxonomy\TraitTaxonomy;
 use WorDBless\BaseTestCase;
 
 final class Test_Rest_Rows_Filter_Query extends BaseTestCase {
@@ -21,8 +21,8 @@ final class Test_Rest_Rows_Filter_Query extends BaseTestCase {
 	public function set_up(): void {
 		parent::set_up();
 
-		$this->unregister_dynamic_collection_post_types();
-		( new Collection() )->register_post_type();
+		( new Document() )->register_post_type();
+		( new TraitTaxonomy() )->register_taxonomy();
 		( new Field() )->register_post_type();
 	}
 
@@ -383,15 +383,12 @@ final class Test_Rest_Rows_Filter_Query extends BaseTestCase {
 	private function create_collection_with_slug( string $title, string $slug ): int {
 		$collection_id = (int) wp_insert_post(
 			array(
-				'post_type'   => Collection::POST_TYPE,
+				'post_type'   => Document::POST_TYPE,
 				'post_status' => 'private',
 				'post_title'  => $title,
-				'meta_input'  => array( 'slug' => $slug ),
+				'post_name'   => $slug,
 			)
 		);
-
-		( new CollectionEntries() )->register_for_collection( get_post( $collection_id ) );
-
 		return $collection_id;
 	}
 
@@ -404,7 +401,7 @@ final class Test_Rest_Rows_Filter_Query extends BaseTestCase {
 				'meta_input'  => array( 'type' => $type ),
 			)
 		);
-		add_post_meta( $collection_id, 'fields', (string) $field_id );
+		add_post_meta( $collection_id, 'cortext_fields', (string) $field_id );
 
 		return $field_id;
 	}
@@ -436,14 +433,4 @@ final class Test_Rest_Rows_Filter_Query extends BaseTestCase {
 		return 'alpha';
 	}
 
-	private function unregister_dynamic_collection_post_types(): void {
-		foreach ( get_post_types() as $post_type ) {
-			if (
-				str_starts_with( $post_type, CollectionEntries::CPT_PREFIX ) &&
-				! in_array( $post_type, array( Collection::POST_TYPE, Field::POST_TYPE ), true )
-			) {
-				unregister_post_type( $post_type );
-			}
-		}
-	}
 }
