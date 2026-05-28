@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 
 let mockRecents = [];
 let mockIsResolving = false;
+let mockRecordsById = new Map();
 const mockNavigate = jest.fn();
 
 jest.mock( '@tanstack/react-router', () => ( {
@@ -25,7 +26,14 @@ jest.mock( '@wordpress/icons', () => ( {
 	Icon: ( { icon } ) => <span data-testid={ `icon-${ icon }` } />,
 } ) );
 
-jest.mock( '../../../src/components/PageIcon', () => () => (
+jest.mock( '@wordpress/core-data', () => ( {
+	__esModule: true,
+	useEntityRecord: ( _kind, _postType, id ) => ( {
+		record: mockRecordsById.get( id ) ?? null,
+	} ),
+} ) );
+
+jest.mock( '../../../src/components/DocumentIcon', () => () => (
 	<span data-testid="page-icon" />
 ) );
 
@@ -40,29 +48,26 @@ import SidebarRecents from '../../../src/components/SidebarRecents';
 
 function pageRecent( id, title ) {
 	return {
-		kind: 'page',
 		id,
 		title,
-		path: `page/${ title.toLowerCase() }-${ id }`,
+		path: `${ title.toLowerCase() }-${ id }`,
 	};
 }
 
 function rowRecent( id, title, collectionTitle ) {
 	return {
-		kind: 'row',
 		id,
 		title,
-		path: `collection/books/${ title.toLowerCase() }-${ id }`,
+		path: `books/${ title.toLowerCase() }-${ id }`,
 		collection: { id: 12, title: collectionTitle, slug: 'books' },
 	};
 }
 
 function collectionRecent( id, title ) {
 	return {
-		kind: 'collection',
 		id,
 		title,
-		path: `collection/${ title.toLowerCase() }-${ id }`,
+		path: `${ title.toLowerCase() }-${ id }`,
 	};
 }
 
@@ -82,6 +87,7 @@ beforeEach( () => {
 	mockNavigate.mockReset();
 	mockRecents = [];
 	mockIsResolving = false;
+	mockRecordsById = new Map();
 	window.Element.prototype.animate = jest.fn();
 	window.Element.prototype.getAnimations = jest.fn( () => [] );
 	window.matchMedia = jest.fn( () => ( { matches: false } ) );
@@ -138,13 +144,14 @@ describe( 'SidebarRecents animation', () => {
 		expect( blurSpy ).toHaveBeenCalled();
 		expect( mockNavigate ).toHaveBeenCalledWith( {
 			to: '/$',
-			params: { _splat: 'page/alpha-1' },
+			params: { _splat: 'alpha-1' },
 		} );
 		blurSpy.mockRestore();
 	} );
 
 	it( 'shows a row recent with its collection in the title', () => {
 		mockRecents = [ rowRecent( 7, 'War and Peace', 'Books' ) ];
+		mockRecordsById.set( 7, { id: 7, crtxt_trait: [ 12 ], meta: {} } );
 
 		render( <SidebarRecents /> );
 
@@ -160,6 +167,11 @@ describe( 'SidebarRecents animation', () => {
 
 	it( 'shows a collection recent with the table icon', () => {
 		mockRecents = [ collectionRecent( 33, 'Library' ) ];
+		mockRecordsById.set( 33, {
+			id: 33,
+			crtxt_trait: [],
+			meta: { cortext_fields: [ 1 ] },
+		} );
 
 		const { container } = render( <SidebarRecents /> );
 
@@ -177,6 +189,7 @@ describe( 'SidebarRecents animation', () => {
 		const row = rowRecent( 11, 'Ada Lovelace', 'People' );
 		row.icon = JSON.stringify( { type: 'wp', name: 'people' } );
 		mockRecents = [ row ];
+		mockRecordsById.set( 11, { id: 11, crtxt_trait: [ 12 ], meta: {} } );
 
 		const { container } = render( <SidebarRecents /> );
 

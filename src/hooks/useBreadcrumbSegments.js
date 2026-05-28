@@ -7,14 +7,11 @@ import {
 	ACTIVE_PAGES_QUERY,
 	POST_TYPE as PAGE_POST_TYPE,
 } from '../components/page-queries';
-import { COLLECTION_QUERY } from '../collections';
-import usePooledEntityRecord from './usePooledEntityRecord';
-import {
-	computeCollectionUri,
-	computeDocumentUri,
-} from '../router/useResolveEntity';
+import { COLLECTION_QUERY, DOCUMENT_POST_TYPE } from '../collections';
+import { computeDocumentUri } from '../router/useResolveEntity';
 
-const COLLECTION_POST_TYPE = 'crtxt_collection';
+const TRAIT_TAXONOMY = 'crtxt_trait';
+const TRAIT_TERMS_QUERY = { per_page: 100, context: 'view' };
 
 // Prefer `title.raw` over `title.rendered`: WordPress runs rendered titles
 // through its formatting pipeline, so `&` becomes `&#038;` etc. React would
@@ -28,161 +25,125 @@ function titleOf( entity ) {
 	);
 }
 
-// Returns the breadcrumb segments for the currently painted surface. Driven by
-// `paintedRoute` (from EntityRoute) rather than the URL so the breadcrumb
-// updates in lockstep with the document-actions Fill. During navigation, both
-// sides of the top bar should still describe the same entity.
-//
-// Document targets carry a `postType`. Pages (`crtxt_page`) contribute the
-// natural ancestor chain; rows (dynamic `crtxt_<slug>`) contribute their
-// parent collection plus the row title. Collection targets are flat.
-export default function useBreadcrumbSegments( paintedRoute ) {
-	const navigate = useNavigate();
-	const kind = paintedRoute?.kind ?? 'unresolved';
-	const documentId = kind === 'document' ? paintedRoute.id : null;
-	const documentPostType = kind === 'document' ? paintedRoute.postType : null;
-	const isPageDocument = documentPostType === PAGE_POST_TYPE;
-	const isRowDocument = Boolean( documentPostType ) && ! isPageDocument;
-	const pageId = isPageDocument ? documentId : null;
-	const rowId = isRowDocument ? documentId : null;
-	const rowPostType = isRowDocument ? documentPostType : null;
-	let collectionId = null;
-	if ( kind === 'collection' ) {
-		collectionId = paintedRoute.id;
-	} else if ( isRowDocument ) {
-		collectionId = paintedRoute.collectionId ?? null;
-	}
+function traitTermIdOf( record ) {
+	const terms = record?.crtxt_trait;
+	return Array.isArray( terms ) && terms.length > 0
+		? Number( terms[ 0 ] )
+		: 0;
+}
 
-	// Page breadcrumbs climb the parent chain, so they need the full active
-	// pages query. The local Map keeps each parent lookup constant-time
-	// instead of scanning the array per hop.
+// Walks one step up the breadcrumb chain. A document's parent is the
+// collection that owns its trait term (if any), then its `post_parent` (if
+// any). Collections, pages, and rows all use the same rule; the difference is
+// which slots are filled.
+function parentOf( record, byId, collectionsByTerm ) {
+	const traitTermId = traitTermIdOf( record );
+	if ( traitTermId > 0 ) {
+		return collectionsByTerm.get( traitTermId ) ?? null;
+	}
+	if ( record?.parent ) {
+		return byId.get( record.parent ) ?? null;
+	}
+	return null;
+}
+
+// Returns the breadcrumb segments for the currently mounted document.
+// Driven by `paintedDocumentId` (from EntityRoute) rather than the URL so the
+// breadcrumb updates in lockstep with the document-actions Fill.
+export default function useBreadcrumbSegments( paintedDocumentId ) {
+	const navigate = useNavigate();
+	const documentId = paintedDocumentId ?? null;
+
+	const { record: document } = useEntityRecord(
+		'postType',
+		DOCUMENT_POST_TYPE,
+		documentId ?? 0
+	);
+
+	// Sidebar lists already subscribe to these two queries, so they answer
+	// most ancestor lookups from cache without per-id resolvers.
 	const { records: activePages } = useEntityRecords(
 		'postType',
 		PAGE_POST_TYPE,
 		ACTIVE_PAGES_QUERY
 	);
-	const pagesById = useMemo(
-		() =>
-			new Map(
-				( activePages ?? [] ).map( ( page ) => [ page.id, page ] )
-			),
-		[ activePages ]
+	const { records: allCollections } = useEntityRecords(
+		'postType',
+		DOCUMENT_POST_TYPE,
+		COLLECTION_QUERY
+	);
+	// Pull the mirror terms separately so we can resolve a row's
+	// `crtxt_trait` term IDs back to their owning collection. The taxonomy
+	// uses the collection's post ID as the term slug, so the join is
+	// deterministic: term.slug parses back to collection.id.
+	const { records: traitTerms } = useEntityRecords(
+		'taxonomy',
+		TRAIT_TAXONOMY,
+		TRAIT_TERMS_QUERY
 	);
 
-	// The sidebar and collection picker already subscribe to these two
-	// queries, so reading through `usePooledEntityRecord` piggybacks on
-	// those subscriptions instead of firing a per-id resolver.
-	const { record: currentPage } = usePooledEntityRecord(
-		'postType',
-		PAGE_POST_TYPE,
-		ACTIVE_PAGES_QUERY,
-		pageId
-	);
-	const { record: currentCollection } = usePooledEntityRecord(
-		'postType',
-		COLLECTION_POST_TYPE,
-		COLLECTION_QUERY,
-		collectionId
-	);
+	const documentsById = useMemo( () => {
+		const map = new Map();
+		( activePages ?? [] ).forEach( ( page ) => map.set( page.id, page ) );
+		( allCollections ?? [] ).forEach( ( collection ) =>
+			map.set( collection.id, collection )
+		);
+		return map;
+	}, [ activePages, allCollections ] );
 
-	// Rows are behind per-collection endpoints, so the row title still needs
-	// its own fetch.
-	const { record: currentRow } = useEntityRecord(
-		'postType',
-		rowPostType ?? '',
-		rowId ?? 0,
-		{ enabled: Boolean( rowPostType && rowId ) }
-	);
+	const collectionsByTerm = useMemo( () => {
+		const map = new Map();
+		( traitTerms ?? [] ).forEach( ( term ) => {
+			const collectionId = Number( term.slug );
+			if ( ! Number.isFinite( collectionId ) || collectionId < 1 ) {
+				return;
+			}
+			const collection = documentsById.get( collectionId );
+			if ( collection ) {
+				map.set( Number( term.id ), collection );
+			}
+		} );
+		return map;
+	}, [ traitTerms, documentsById ] );
 
-	const goToPage = useCallback(
-		( page ) => {
+	const goToDocument = useCallback(
+		( target ) => {
 			navigate( {
 				to: '/$',
-				params: { _splat: computeDocumentUri( page ) },
-			} );
-		},
-		[ navigate ]
-	);
-
-	const goToCollection = useCallback(
-		( collection ) => {
-			navigate( {
-				to: '/$',
-				params: { _splat: computeCollectionUri( collection ) },
+				params: { _splat: computeDocumentUri( target ) },
 			} );
 		},
 		[ navigate ]
 	);
 
 	return useMemo( () => {
-		if ( pageId ) {
-			if ( ! currentPage ) {
-				return [];
-			}
-
-			const chain = [];
-			let cursor = currentPage;
-			const seen = new Set();
-			while ( cursor && ! seen.has( cursor.id ) ) {
-				seen.add( cursor.id );
-				chain.unshift( cursor );
-				cursor = cursor.parent
-					? pagesById.get( cursor.parent ) ?? null
-					: null;
-			}
-
-			return chain.map( ( page, index ) => {
-				const isCurrent = index === chain.length - 1;
-				return {
-					key: `page:${ page.id }`,
-					label: titleOf( page ),
-					onClick: isCurrent ? null : () => goToPage( page ),
-					isCurrent,
-				};
-			} );
+		if ( ! documentId || ! document ) {
+			return [];
 		}
 
-		if ( collectionId ) {
-			if ( ! currentCollection ) {
-				return [];
-			}
-			if ( rowId ) {
-				return [
-					{
-						key: `collection:${ currentCollection.id }`,
-						label: titleOf( currentCollection ),
-						onClick: () => goToCollection( currentCollection ),
-						isCurrent: false,
-					},
-					{
-						key: `row:${ rowPostType }:${ rowId }`,
-						label: titleOf( currentRow ),
-						onClick: null,
-						isCurrent: true,
-					},
-				];
-			}
-			return [
-				{
-					key: `collection:${ currentCollection.id }`,
-					label: titleOf( currentCollection ),
-					onClick: null,
-					isCurrent: true,
-				},
-			];
+		const chain = [];
+		const seen = new Set();
+		let cursor = documentsById.get( documentId ) ?? document;
+		while ( cursor && ! seen.has( cursor.id ) ) {
+			seen.add( cursor.id );
+			chain.unshift( cursor );
+			cursor = parentOf( cursor, documentsById, collectionsByTerm );
 		}
 
-		return [];
+		return chain.map( ( node, index ) => {
+			const isCurrent = index === chain.length - 1;
+			return {
+				key: `document:${ node.id }`,
+				label: titleOf( node ),
+				onClick: isCurrent ? null : () => goToDocument( node ),
+				isCurrent,
+			};
+		} );
 	}, [
-		pageId,
-		collectionId,
-		rowId,
-		rowPostType,
-		pagesById,
-		currentPage,
-		currentCollection,
-		currentRow,
-		goToPage,
-		goToCollection,
+		documentId,
+		document,
+		documentsById,
+		collectionsByTerm,
+		goToDocument,
 	] );
 }

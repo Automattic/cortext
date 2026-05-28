@@ -28,12 +28,13 @@ function parseDropId( id ) {
  * auto-expand while hovering an `inside` drop zone, and the drag state the
  * component renders.
  *
- * Dragging can move pages and full-page collections. Keep them in one list
- * for ordering, then save each moved record through its own endpoint.
+ * Dragging works on any node in the tree, pages and nested collections
+ * alike. They share one ordered list here; each move hits the same
+ * `crtxt_document` REST endpoint.
  *
  * @param {Object}   args
- * @param {Array}    args.pages            Loaded `crtxt_page` records.
- * @param {Array}    args.collections      Loaded `crtxt_collection` records (may be undefined while resolving).
+ * @param {Array}    args.pages            Loaded `crtxt_document` records.
+ * @param {Array}    args.collections      Loaded `crtxt_document` collection records (may be undefined while resolving).
  * @param {Set}      args.expandedIds      Currently expanded node ids (from `useSidebarTree`).
  * @param {Function} args.expand           Expand callback from `useSidebarTree`.
  * @param {Function} args.saveEntityRecord core-data dispatcher used to persist moves.

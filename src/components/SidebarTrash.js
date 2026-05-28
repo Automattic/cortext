@@ -9,7 +9,7 @@ import {
 import { rotateLeft, trash } from '@wordpress/icons';
 import { useNavigate } from '@tanstack/react-router';
 
-import PageIcon from './PageIcon';
+import DocumentIcon from './DocumentIcon';
 import { SidebarListSkeleton } from './Skeleton';
 import TypeToConfirmDialog from './TypeToConfirmDialog';
 import { POST_TYPE, TRASHED_PAGES_QUERY } from './page-queries';
@@ -17,6 +17,7 @@ import useDelayedFlag, {
 	SKELETON_MIN_VISIBLE_MS,
 } from '../hooks/useDelayedFlag';
 import { useDocumentActions, useDocumentRecord } from '../documents';
+import { hasFields, hasTrait } from '../documents/capabilities';
 
 const EMPTY_TRASHED_DOCUMENTS_STATE = {
 	documents: [],
@@ -27,11 +28,10 @@ const EMPTY_TRASHED_DOCUMENTS_STATE = {
 	refresh: () => {},
 };
 
-// These mirror the PHP cascade marker meta keys. Trash entries point back to
-// the cascade root (page → subpage, page → owned inline collection), which lets
-// the sidebar show one row for the whole trashed group.
+// Mirrors the PHP `TrashCascade::PARENT_MARKER_META` value. Trash entries
+// point back to the cascade root (page -> subpage, page -> nested collection),
+// which lets the sidebar show one row for the whole trashed group.
 const PARENT_MARKER_META = '_cortext_trashed_by_parent';
-const OWNER_PAGE_MARKER_META = '_cortext_trashed_by_owner_page';
 
 export function computeSidebarTrashRoots( trashedDocuments = [] ) {
 	const all = Array.isArray( trashedDocuments ) ? trashedDocuments : [];
@@ -42,13 +42,7 @@ export function computeSidebarTrashRoots( trashedDocuments = [] ) {
 
 	const markerOf = ( document ) => {
 		const meta = document.meta ?? {};
-		// Pages → subpages and pages → owned inline collections use different
-		// marker keys, but both point at the same kind of root: a parent page.
-		const parent = Number( meta[ PARENT_MARKER_META ] ?? 0 );
-		if ( parent > 0 ) {
-			return parent;
-		}
-		return Number( meta[ OWNER_PAGE_MARKER_META ] ?? 0 );
+		return Number( meta[ PARENT_MARKER_META ] ?? 0 );
 	};
 
 	all.forEach( ( document ) => {
@@ -73,13 +67,10 @@ export function computeSidebarTrashRoots( trashedDocuments = [] ) {
 		while ( stack.length ) {
 			const node = stack.pop();
 			counts.total++;
-			if ( node.kind === 'page' || node.type === POST_TYPE ) {
-				counts.pages++;
-			} else if (
-				node.kind === 'collection' ||
-				node.type === 'crtxt_collection'
-			) {
+			if ( hasFields( node ) ) {
 				counts.collections++;
+			} else if ( ! hasTrait( node ) ) {
+				counts.pages++;
 			}
 			const kids = childrenByMarker.get( node.id );
 			if ( kids ) {
@@ -191,7 +182,7 @@ function SidebarTrashRow( {
 					}
 				>
 					<span className="cortext-sidebar__trash-title">
-						<PageIcon
+						<DocumentIcon
 							icon={ documentIcon }
 							size={ 14 }
 							className="cortext-sidebar__trash-title-icon"
@@ -210,7 +201,10 @@ function SidebarTrashRow( {
 									key={ crumb.id }
 									className="cortext-sidebar__breadcrumb-crumb"
 								>
-									<PageIcon icon={ crumb.icon } size={ 12 } />
+									<DocumentIcon
+										icon={ crumb.icon }
+										size={ 12 }
+									/>
 									<span>{ crumb.title }</span>
 									{ index < breadcrumb.length - 1 && (
 										<span

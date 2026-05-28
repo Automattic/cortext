@@ -1,5 +1,4 @@
 import { __, _n, sprintf } from '@wordpress/i18n';
-import apiFetch from '@wordpress/api-fetch';
 import { useEntityRecords } from '@wordpress/core-data';
 import { useDispatch } from '@wordpress/data';
 import { useState, useMemo, useCallback, useEffect } from '@wordpress/element';
@@ -87,13 +86,11 @@ import SidebarSection from './SidebarSection';
 import { SidebarListSkeleton } from './Skeleton';
 import SidebarTrash, { computeSidebarTrashRoots } from './SidebarTrash';
 import ThemeToggle from './ThemeToggle';
-import { nextChildOrder } from './pages-tree';
-import { POST_TYPE } from './page-queries';
 import {
+	computeDocumentUri,
 	PUBLISHED_DOCUMENTS_URI,
-	computeCollectionUri,
 } from '../router/useResolveEntity';
-import { FULL_PAGE_COLLECTION_QUERY } from '../collections';
+import { DOCUMENT_POST_TYPE, FULL_PAGE_COLLECTION_QUERY } from '../collections';
 import useDelayedFlag, {
 	SKELETON_MIN_VISIBLE_MS,
 } from '../hooks/useDelayedFlag';
@@ -106,6 +103,7 @@ import {
 	favoriteIdentForRecord,
 	favoriteKey,
 	favoriteKeyForRecord,
+	useCreateDocument,
 	useDocumentSelection,
 	useFavoriteToggle,
 } from '../documents';
@@ -125,7 +123,7 @@ export default function Sidebar( {
 	const { records: collections, isResolving: isResolvingCollections } =
 		useEntityRecords(
 			'postType',
-			'crtxt_collection',
+			DOCUMENT_POST_TYPE,
 			FULL_PAGE_COLLECTION_QUERY
 		);
 	const trashedDocumentsState = useTrashedDocuments();
@@ -148,7 +146,7 @@ export default function Sidebar( {
 		setFavorites,
 		isResolving: isResolvingFavorites,
 	} = useFavorites();
-	const { saveEntityRecord, invalidateResolution } = useDispatch( 'core' );
+	const { saveEntityRecord } = useDispatch( 'core' );
 	const {
 		navigate,
 		activeUri,
@@ -227,13 +225,12 @@ export default function Sidebar( {
 		[ isRowSelected, navigate ]
 	);
 
-	const { topLevelCollections, tree, expandedIds, toggleExpand, expand } =
-		useSidebarTree( {
-			pages,
-			collections,
-			selectedId,
-			selectedCollectionId,
-		} );
+	const { tree, expandedIds, toggleExpand, expand } = useSidebarTree( {
+		pages,
+		collections,
+		selectedId,
+		selectedCollectionId,
+	} );
 
 	// `draggedId` and `activeDrop` flow into the per-row callbacks below, so
 	// the DnD hook has to resolve before any `useCallback` that lists them as
@@ -247,12 +244,6 @@ export default function Sidebar( {
 			expand,
 			saveEntityRecord,
 		} );
-
-	const showCollectionsSkeleton = useDelayedFlag(
-		isResolvingCollections && topLevelCollections.length === 0,
-		120,
-		SKELETON_MIN_VISIBLE_MS
-	);
 
 	const [ autoRenameId, setAutoRenameId ] = useState( null );
 	const [ isTrashPanelOpen, setIsTrashPanelOpen ] = useState( false );
@@ -285,62 +276,6 @@ export default function Sidebar( {
 		}
 	}, [ collapsed ] );
 
-	// --- Create actions (kept here because they target the workspace, not
-	// an existing document, and they need autoRenameId + selection state).
-
-	const createRootPage = useCallback( async () => {
-		const created = await saveEntityRecord( 'postType', POST_TYPE, {
-			status: 'draft',
-		} );
-		if ( created?.id ) {
-			onSelect( created.id, created );
-			setAutoRenameId( created.id );
-		}
-	}, [ saveEntityRecord, onSelect ] );
-
-	const createRootCollection = useCallback( async () => {
-		const created = await apiFetch( {
-			path: '/wp/v2/crtxt_collections',
-			method: 'POST',
-			data: {
-				title: __( 'Untitled', 'cortext' ),
-				status: 'private',
-				mode: 'full_page',
-			},
-		} );
-		invalidateResolution( 'getEntityRecords', [
-			'postType',
-			'crtxt_collection',
-			FULL_PAGE_COLLECTION_QUERY,
-		] );
-		// tech-debt.md#2: core-data may have cached `/wp/v2/types` before this
-		// collection registered its row CPT. Refresh the entity config so row
-		// lookups can find the new post type.
-		invalidateResolution( 'getEntitiesConfig', [ 'postType' ] );
-		if ( created?.id ) {
-			navigate( {
-				to: '/$',
-				params: { _splat: computeCollectionUri( created ) },
-			} );
-		}
-	}, [ invalidateResolution, navigate ] );
-
-	const createChildPage = useCallback(
-		async ( parentId ) => {
-			const created = await saveEntityRecord( 'postType', POST_TYPE, {
-				status: 'draft',
-				parent: parentId,
-				menu_order: nextChildOrder( parentId, pages ),
-			} );
-			if ( created?.id ) {
-				expand( parentId );
-				onSelect( created.id, created );
-				setAutoRenameId( created.id );
-			}
-		},
-		[ saveEntityRecord, pages, expand, onSelect ]
-	);
-
 	// --- Per-row selection helpers --------------------------------------
 
 	const onSetRowHome = useCallback(
@@ -366,9 +301,9 @@ export default function Sidebar( {
 		[ home ]
 	);
 
-	// Callbacks for document descriptors. The page tree and collection list
-	// stay out of this: trash cascades now come from the server response, so
-	// descriptors do not need to walk local trees.
+	// Wire callbacks that `useDocumentActions` needs (rename, trash, duplicate)
+	// from DocumentRow / SidebarTrash. Create goes through `useCreateDocument`
+	// at the top of Sidebar and bypasses the provider.
 	const documentsHandlers = useMemo(
 		() => ( {
 			selectedCollectionId,
@@ -382,8 +317,31 @@ export default function Sidebar( {
 		[ selectedCollectionId, expand, onSelect ]
 	);
 
-	// Props shared by every DocumentRow. Keeping them together makes the Pages
-	// and Collections sections use the same selection, DnD, and menu behavior.
+	const create = useCreateDocument();
+	const createAndOpen = useCallback(
+		async ( input ) => {
+			const created = await create( input );
+			if ( created?.id ) {
+				setAutoRenameId( created.id );
+				navigate( {
+					to: '/$',
+					params: { _splat: computeDocumentUri( created ) },
+				} );
+			}
+			return created;
+		},
+		[ create, navigate ]
+	);
+	const createRootPage = useCallback(
+		() => createAndOpen( {} ),
+		[ createAndOpen ]
+	);
+	const createChildPage = useCallback(
+		( parentId ) => createAndOpen( { parent: parentId } ),
+		[ createAndOpen ]
+	);
+
+	// Props shared by every DocumentRow in the Pages tree.
 	const rowChrome = {
 		expandedIds,
 		draggedId,
@@ -391,7 +349,6 @@ export default function Sidebar( {
 		isSelected: isRowSelected,
 		onSelect: onRowSelect,
 		onToggleExpand: toggleExpand,
-		onCreateChild: createChildPage,
 		isFavorite,
 		isFavoriteDisabled: areFavoriteActionsDisabled,
 		onToggleFavorite: toggleFavorite,
@@ -400,6 +357,7 @@ export default function Sidebar( {
 		isHomeUpdating,
 		autoRenameId,
 		onAutoRenameConsumed: () => setAutoRenameId( null ),
+		onCreateChild: createChildPage,
 	};
 
 	// --- Render ------------------------------------------------------------
@@ -527,13 +485,6 @@ export default function Sidebar( {
 							/>
 						</SidebarSection>
 
-						{ /* One DndContext wraps both sections so top-level
-						     collections (rendered in the Collections section
-						     below) are part of the same drag/drop graph as
-						     the Pages tree. Without this, top-level
-						     collection rows would register their useDraggable
-						     / useDroppable hooks outside any provider and
-						     the gesture would never fire. */ }
 						<DndContext
 							sensors={ sensors }
 							collisionDetection={ pointerWithin }
@@ -579,58 +530,6 @@ export default function Sidebar( {
 										/>
 									) ) }
 								</ul>
-							</SidebarSection>
-
-							<SidebarSection
-								id="collections"
-								title={ __( 'Collections', 'cortext' ) }
-								isCollapsed={ isSectionCollapsed(
-									'collections'
-								) }
-								onToggle={ () =>
-									toggleSection( 'collections' )
-								}
-								actions={
-									<Button
-										className="cortext-sidebar__section-action"
-										icon={ plus }
-										size="small"
-										label={ __(
-											'New collection',
-											'cortext'
-										) }
-										onClick={ createRootCollection }
-									/>
-								}
-							>
-								{ isResolvingCollections &&
-									topLevelCollections.length === 0 &&
-									showCollectionsSkeleton && (
-										<SidebarListSkeleton itemCount={ 3 } />
-									) }
-								{ ! isResolvingCollections &&
-									topLevelCollections.length === 0 && (
-										<p className="cortext-sidebar__empty">
-											{ __(
-												'No collections yet.',
-												'cortext'
-											) }
-										</p>
-									) }
-								{ topLevelCollections.length > 0 && (
-									<ul className="cortext-sidebar__list">
-										{ topLevelCollections.map(
-											( collection ) => (
-												<DocumentRow
-													key={ collection.id }
-													record={ collection }
-													depth={ 0 }
-													{ ...rowChrome }
-												/>
-											)
-										) }
-									</ul>
-								) }
 							</SidebarSection>
 
 							<DragOverlay>

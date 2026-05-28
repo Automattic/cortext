@@ -2,36 +2,17 @@ import { useState, useMemo, useCallback, useEffect } from '@wordpress/element';
 
 import { buildTree, collectAncestorIds } from '../pages-tree';
 
-// Pages and full-page collections share one tree. Collections with a loaded
-// page parent appear under that page. Collections without a loaded page
-// parent stay in the Collections section, including row-owned collections
-// for now (tech-debt.md#53).
-//
-// Sort top-level collections here. Otherwise `useEntityRecords` returns
-// whatever order core-data emits, which can shift after a rename and reorder
-// the sidebar. Nested collections get the same menu_order/id sort through
-// `buildTree`.
-function deriveCollectionGroups( pages, collections ) {
+// Pages and collections share one tree. Top-level collections (`parent === 0`)
+// always join; nested collections (`parent > 0`) join only if their parent
+// page is in the loaded set, since orphans without an anchor would render
+// detached from any node. (tech-debt.md#53 tracks lifting that with a paged
+// tree endpoint.)
+function deriveTreeCollections( pages, collections ) {
 	const pageIds = new Set( pages.map( ( p ) => p.id ) );
-	const nested = [];
-	const topLevel = [];
-	( collections ?? [] ).forEach( ( collection ) => {
+	return ( collections ?? [] ).filter( ( collection ) => {
 		const parent = collection.parent ?? 0;
-		if ( parent && pageIds.has( parent ) ) {
-			nested.push( collection );
-		} else {
-			topLevel.push( collection );
-		}
+		return parent === 0 || pageIds.has( parent );
 	} );
-	topLevel.sort( ( a, b ) => {
-		const ao = a.menu_order || 0;
-		const bo = b.menu_order || 0;
-		if ( ao !== bo ) {
-			return ao - bo;
-		}
-		return a.id - b.id;
-	} );
-	return { nestedCollections: nested, topLevelCollections: topLevel };
 }
 
 /**
@@ -42,8 +23,8 @@ function deriveCollectionGroups( pages, collections ) {
  * page.
  *
  * @param {Object}  args
- * @param {Array}   args.pages                Loaded `crtxt_page` records.
- * @param {Array}   args.collections          Loaded `crtxt_collection` records (may be undefined while resolving).
+ * @param {Array}   args.pages                Loaded `crtxt_document` records.
+ * @param {Array}   args.collections          Loaded `crtxt_document` collection records (may be undefined while resolving).
  * @param {?number} args.selectedId           Currently selected page id, or null.
  * @param {?number} args.selectedCollectionId Currently selected collection id, or null.
  */
@@ -53,14 +34,14 @@ export default function useSidebarTree( {
 	selectedId,
 	selectedCollectionId,
 } ) {
-	const { nestedCollections, topLevelCollections } = useMemo(
-		() => deriveCollectionGroups( pages, collections ),
+	const treeCollections = useMemo(
+		() => deriveTreeCollections( pages, collections ),
 		[ pages, collections ]
 	);
 
 	const tree = useMemo(
-		() => buildTree( [ ...pages, ...nestedCollections ] ),
-		[ pages, nestedCollections ]
+		() => buildTree( [ ...pages, ...treeCollections ] ),
+		[ pages, treeCollections ]
 	);
 
 	const [ expandedIds, setExpandedIds ] = useState( () => new Set() );
@@ -123,8 +104,6 @@ export default function useSidebarTree( {
 	}, [] );
 
 	return {
-		nestedCollections,
-		topLevelCollections,
 		tree,
 		expandedIds,
 		toggleExpand,

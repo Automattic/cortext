@@ -89,7 +89,6 @@ describe( 'useSidebarSections', () => {
 			recents: true,
 			favorites: false,
 			pages: true,
-			collections: false,
 		} );
 	} );
 

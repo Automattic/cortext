@@ -17,7 +17,7 @@ import {
  * up with the title.
  *
  * @param {Object}  args
- * @param {Array}   args.pages    Loaded `crtxt_page` records, used for hint-free `onSelect` lookups and the canonical URL effect.
+ * @param {Array}   args.pages    Loaded `crtxt_document` records, used for hint-free `onSelect` lookups and the canonical URL effect.
  * @param {?string} args.homePath Resolved workspace home path, or null while loading.
  */
 export default function useSidebarNavigation( { pages, homePath } ) {
