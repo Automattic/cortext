@@ -314,6 +314,15 @@ final class NotionController {
 
 		delete_option( self::JOB_OPTION_PREFIX . $job_id );
 
+		/**
+		 * TODO: Avoid zombie jobs if something goes wrong. One simple
+		 * mitigation would be to periodically find them by querying the
+		 * options table and deleting those older than X.
+		 *
+		 * @example
+		 * $wpdb->get_results("SELECT * FROM {$wpdb->options} WHERE `option_name` LIKE 'cortext_notion_import_%'")
+		 */
+
 		return new WP_REST_Response( array( 'finished' => true ), 200 );
 	}
 
