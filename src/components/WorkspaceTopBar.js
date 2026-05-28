@@ -49,7 +49,7 @@ function useHistoryNavigationState( history ) {
 // while sharing chrome with the workspace shell.
 export const TopBarActionsFill = Fill;
 
-export default function WorkspaceTopBar( { history, paintedRoute } ) {
+export default function WorkspaceTopBar( { history, paintedDocumentId } ) {
 	const { canGoBack, canGoForward } = useHistoryNavigationState( history );
 
 	const goBack = useCallback( () => {
@@ -81,7 +81,7 @@ export default function WorkspaceTopBar( { history, paintedRoute } ) {
 						onClick={ goForward }
 					/>
 				</div>
-				<Breadcrumbs paintedRoute={ paintedRoute } />
+				<Breadcrumbs paintedDocumentId={ paintedDocumentId } />
 			</div>
 			<div className="cortext-topbar__actions">
 				<Slot bubblesVirtually />

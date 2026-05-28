@@ -44,12 +44,12 @@ import apiFetch from '@wordpress/api-fetch';
 import CanvasOwnerInspector, {
 	useIsCanvasOwnerSelected,
 } from './CanvasOwnerInspector';
-import './PageInspectorSidebar.scss';
+import './DocumentInspectorSidebar.scss';
 
 import DocumentPropertiesActions from './DocumentPropertiesActions';
 import { useDocumentPropertiesContext } from './DocumentPropertiesContext';
 import MediaPicker, { MediaUploadCheck } from './MediaPicker';
-import PageIcon from './PageIcon';
+import DocumentIcon from './DocumentIcon';
 import DocumentIdentityControls from './DocumentIdentityControls';
 import { SkeletonBlock } from './Skeleton';
 import useDelayedFlag, {
@@ -61,7 +61,7 @@ import {
 	POST_TYPE,
 	TRASHED_PAGES_QUERY,
 } from './page-queries';
-import { FULL_PAGE_COLLECTION_QUERY } from '../collections';
+import { DOCUMENT_POST_TYPE, FULL_PAGE_COLLECTION_QUERY } from '../collections';
 import { unlock } from '../lock-unlock';
 import { notifyDocumentTrashChanged } from '../hooks/documentTrashInvalidation';
 import { useFavorites } from '../hooks/useFavorites';
@@ -70,11 +70,11 @@ import { useWorkspaceHome } from '../hooks/useWorkspaceHome';
 const { Tabs } = unlock( componentsPrivateApis );
 
 export const INSPECTOR_SCOPE = 'cortext';
-export const PAGE_INSPECTOR = 'cortext/page-inspector';
+export const DOCUMENT_INSPECTOR = 'cortext/document-inspector';
 export const BLOCK_INSPECTOR = 'cortext/block-inspector';
 
 export function isInspectorArea( area ) {
-	return area === PAGE_INSPECTOR || area === BLOCK_INSPECTOR;
+	return area === DOCUMENT_INSPECTOR || area === BLOCK_INSPECTOR;
 }
 
 export function InspectorSidebarSlot( props ) {
@@ -181,8 +181,10 @@ function PageAttributesInspectorPanel() {
 
 function InspectorToolGroup( { label, children } ) {
 	return (
-		<div className="cortext-page-inspector__tool">
-			<div className="cortext-page-inspector__tool-label">{ label }</div>
+		<div className="cortext-document-inspector__tool">
+			<div className="cortext-document-inspector__tool-label">
+				{ label }
+			</div>
 			{ children }
 		</div>
 	);
@@ -271,13 +273,13 @@ function PageIconInspectorControls( { postId, postType } ) {
 
 	return (
 		<InspectorToolGroup label={ __( 'Icon', 'cortext' ) }>
-			<div className="cortext-page-inspector__control-row">
+			<div className="cortext-document-inspector__control-row">
 				{ iconMeta ? (
 					<span
-						className="cortext-page-inspector__icon-preview"
+						className="cortext-document-inspector__icon-preview"
 						aria-hidden="true"
 					>
-						<PageIcon icon={ iconMeta } size={ 24 } />
+						<DocumentIcon icon={ iconMeta } size={ 24 } />
 					</span>
 				) : null }
 				<DocumentIdentityControls
@@ -414,7 +416,7 @@ function PageFeaturedImageInspectorControls( { postId, postType } ) {
 	);
 	if ( isResolvingMedia && ! src ) {
 		featuredImagePreview = showMediaSkeleton ? (
-			<SkeletonBlock className="cortext-page-inspector__featured-image-skeleton" />
+			<SkeletonBlock className="cortext-document-inspector__featured-image-skeleton" />
 		) : null;
 	} else if ( src ) {
 		featuredImagePreview = (
@@ -430,11 +432,11 @@ function PageFeaturedImageInspectorControls( { postId, postType } ) {
 	return (
 		<InspectorToolGroup label={ __( 'Featured image', 'cortext' ) }>
 			{ featuredId > 0 ? (
-				<div className="cortext-page-inspector__featured-image-preview">
+				<div className="cortext-document-inspector__featured-image-preview">
 					{ featuredImagePreview }
 				</div>
 			) : null }
-			<div className="cortext-page-inspector__control-row">
+			<div className="cortext-document-inspector__control-row">
 				<MediaUploadCheck>
 					<MediaPicker
 						allowedTypes={ [ 'image' ] }
@@ -475,7 +477,7 @@ function PageFeaturedImageInspectorControls( { postId, postType } ) {
 function PageIdentityInspectorPanel( { postId, postType, title } ) {
 	return (
 		<PanelBody title={ title } initialOpen>
-			<div className="cortext-page-inspector__tools">
+			<div className="cortext-document-inspector__tools">
 				<PageIconInspectorControls
 					postId={ postId }
 					postType={ postType }
@@ -499,7 +501,7 @@ function PageActionsPanel( { postId } ) {
 	);
 	const { records: collections = [] } = useEntityRecords(
 		'postType',
-		'crtxt_collection',
+		DOCUMENT_POST_TYPE,
 		FULL_PAGE_COLLECTION_QUERY
 	);
 	const { home, setHome, isUpdating: isHomeUpdating } = useWorkspaceHome();
@@ -511,28 +513,19 @@ function PageActionsPanel( { postId } ) {
 	} = useFavorites();
 	const [ isTrashing, setIsTrashing ] = useState( false );
 	const [ error, setError ] = useState( null );
-	const isHome = home?.kind === 'page' && home.id === postId;
-	const isFavorite = favorites.some(
-		( favorite ) => favorite.kind === 'page' && favorite.id === postId
-	);
+	const isHome = home?.id === postId;
+	const isFavorite = favorites.some( ( favorite ) => favorite.id === postId );
 
 	const togglePageFavorite = useCallback( async () => {
 		setError( null );
 		try {
 			await setFavorites( ( current ) => {
 				const nextIsFavorite = current.some(
-					( favorite ) =>
-						favorite.kind === 'page' && favorite.id === postId
+					( favorite ) => favorite.id === postId
 				);
 				return nextIsFavorite
-					? current.filter(
-							( favorite ) =>
-								! (
-									favorite.kind === 'page' &&
-									favorite.id === postId
-								)
-					  )
-					: [ ...current, { kind: 'page', id: postId } ];
+					? current.filter( ( favorite ) => favorite.id !== postId )
+					: [ ...current, { id: postId } ];
 			} );
 		} catch ( err ) {
 			setError(
@@ -547,7 +540,7 @@ function PageActionsPanel( { postId } ) {
 		}
 		setError( null );
 		try {
-			await setHome( { kind: 'page', id: postId } );
+			await setHome( { id: postId } );
 		} catch ( err ) {
 			setError(
 				err?.message ?? __( 'Could not set page as home.', 'cortext' )
@@ -560,7 +553,7 @@ function PageActionsPanel( { postId } ) {
 		setIsTrashing( true );
 		try {
 			const deleted = await apiFetch( {
-				path: `/wp/v2/crtxt_pages/${ postId }`,
+				path: `/wp/v2/crtxt_documents/${ postId }`,
 				method: 'DELETE',
 			} );
 			const trashed = deleted?.previous ?? deleted;
@@ -581,7 +574,7 @@ function PageActionsPanel( { postId } ) {
 			// collections, so refresh the full-page list now.
 			invalidateResolution( 'getEntityRecords', [
 				'postType',
-				'crtxt_collection',
+				DOCUMENT_POST_TYPE,
 				FULL_PAGE_COLLECTION_QUERY,
 			] );
 			notifyDocumentTrashChanged();
@@ -626,9 +619,9 @@ function PageActionsPanel( { postId } ) {
 					{ error }
 				</Notice>
 			) : null }
-			<div className="cortext-page-inspector__actions">
+			<div className="cortext-document-inspector__actions">
 				<Button
-					className="cortext-page-inspector__action-button"
+					className="cortext-document-inspector__action-button"
 					variant="secondary"
 					icon={ isFavorite ? starFilled : starEmpty }
 					label={
@@ -645,7 +638,7 @@ function PageActionsPanel( { postId } ) {
 					size="compact"
 				/>
 				<Button
-					className="cortext-page-inspector__action-button"
+					className="cortext-document-inspector__action-button"
 					variant="secondary"
 					icon={ homeIcon }
 					label={
@@ -660,7 +653,7 @@ function PageActionsPanel( { postId } ) {
 					size="compact"
 				/>
 				<Button
-					className="cortext-page-inspector__action-button"
+					className="cortext-document-inspector__action-button"
 					variant="secondary"
 					icon={ trash }
 					label={ __( 'Move to Trash', 'cortext' ) }
@@ -675,9 +668,9 @@ function PageActionsPanel( { postId } ) {
 	);
 }
 
-function PageInspectorContent( { postId } ) {
+function DocumentInspectorContent( { postId } ) {
 	return (
-		<div className="cortext-page-inspector">
+		<div className="cortext-document-inspector">
 			<PageIdentityInspectorPanel
 				postId={ postId }
 				postType={ POST_TYPE }
@@ -693,7 +686,7 @@ function PageInspectorContent( { postId } ) {
 // Collection inspector: identity controls first, then the owner data-view panels.
 function CollectionInspectorContent( { postId, postType } ) {
 	return (
-		<div className="cortext-page-inspector">
+		<div className="cortext-document-inspector">
 			<PageIdentityInspectorPanel
 				postId={ postId }
 				postType={ postType }
@@ -719,20 +712,29 @@ function InspectorFrame( { children, isTrashed } ) {
 	return isTrashed ? <Disabled>{ children }</Disabled> : children;
 }
 
-export default function PageInspectorSidebar( { postId, postType } ) {
-	const isPage = postType === POST_TYPE;
-	const isCollection = postType === 'crtxt_collection';
+export default function DocumentInspectorSidebar( { postId, postType } ) {
+	const { record: currentRecord } = useEntityRecord(
+		'postType',
+		postType,
+		postId || 0
+	);
+	const hasFields =
+		Array.isArray( currentRecord?.meta?.cortext_fields ) &&
+		currentRecord.meta.cortext_fields.length > 0;
+	const hasTrait =
+		Array.isArray( currentRecord?.crtxt_trait ) &&
+		currentRecord.crtxt_trait.length > 0;
 	const propertiesCtx = useDocumentPropertiesContext();
 	const rowCollectionId = propertiesCtx?.collectionId;
 	const { record: rowCollection } = useEntityRecord(
 		'postType',
-		'crtxt_collection',
+		'crtxt_document',
 		rowCollectionId || 0
 	);
 	const { record: ownedCollection } = useEntityRecord(
 		'postType',
-		'crtxt_collection',
-		isCollection ? postId : 0
+		'crtxt_document',
+		hasFields ? postId : 0
 	);
 	const rowCollectionTitle = (
 		rowCollection?.title?.rendered ||
@@ -745,19 +747,19 @@ export default function PageInspectorSidebar( { postId, postType } ) {
 		''
 	).trim();
 	let documentTabLabel;
-	if ( isPage ) {
-		documentTabLabel = __( 'Page', 'cortext' );
-	} else if ( isCollection ) {
+	if ( hasFields ) {
 		documentTabLabel =
 			ownedCollectionTitle || __( 'Collection', 'cortext' );
-	} else if ( rowCollectionTitle ) {
-		documentTabLabel = sprintf(
-			/* translators: %s: collection name (e.g. "Books Item") */
-			__( '%s Item', 'cortext' ),
-			rowCollectionTitle
-		);
+	} else if ( hasTrait ) {
+		documentTabLabel = rowCollectionTitle
+			? sprintf(
+					/* translators: %s: collection name (e.g. "Books Item") */
+					__( '%s Item', 'cortext' ),
+					rowCollectionTitle
+			  )
+			: __( 'Collection Item', 'cortext' );
 	} else {
-		documentTabLabel = __( 'Collection Item', 'cortext' );
+		documentTabLabel = __( 'Page', 'cortext' );
 	}
 	const isTrashed = useSelect(
 		( select ) =>
@@ -796,11 +798,11 @@ export default function PageInspectorSidebar( { postId, postType } ) {
 		isInspectorArea( activeArea ) &&
 		( showBlockTab || activeArea !== BLOCK_INSPECTOR )
 			? activeArea
-			: PAGE_INSPECTOR;
+			: DOCUMENT_INSPECTOR;
 	const { enableComplementaryArea } = useDispatch( interfaceStore );
 	useEffect( () => {
 		if ( ! showBlockTab && activeArea === BLOCK_INSPECTOR ) {
-			enableComplementaryArea( INSPECTOR_SCOPE, PAGE_INSPECTOR );
+			enableComplementaryArea( INSPECTOR_SCOPE, DOCUMENT_INSPECTOR );
 		}
 	}, [ activeArea, enableComplementaryArea, showBlockTab ] );
 	const selectTab = useCallback(
@@ -814,10 +816,10 @@ export default function PageInspectorSidebar( { postId, postType } ) {
 
 	const tabs = showBlockTab
 		? [
-				{ id: PAGE_INSPECTOR, label: documentTabLabel },
+				{ id: DOCUMENT_INSPECTOR, label: documentTabLabel },
 				{ id: BLOCK_INSPECTOR, label: __( 'Block', 'cortext' ) },
 		  ]
-		: [ { id: PAGE_INSPECTOR, label: documentTabLabel } ];
+		: [ { id: DOCUMENT_INSPECTOR, label: documentTabLabel } ];
 
 	return (
 		<Tabs
@@ -826,20 +828,22 @@ export default function PageInspectorSidebar( { postId, postType } ) {
 			selectOnMove={ false }
 		>
 			<InspectorComplementaryArea
-				identifier={ PAGE_INSPECTOR }
+				identifier={ DOCUMENT_INSPECTOR }
 				title={ documentTabLabel }
 				isActiveByDefault
 				tabs={ tabs }
 			>
 				<InspectorFrame isTrashed={ isTrashed }>
-					{ isPage && <PageInspectorContent postId={ postId } /> }
-					{ isCollection && (
+					{ hasFields && (
 						<CollectionInspectorContent
 							postId={ postId }
 							postType={ postType }
 						/>
 					) }
-					{ ! isPage && ! isCollection && <RowInspectorContent /> }
+					{ ! hasFields && hasTrait && <RowInspectorContent /> }
+					{ ! hasFields && ! hasTrait && (
+						<DocumentInspectorContent postId={ postId } />
+					) }
 				</InspectorFrame>
 			</InspectorComplementaryArea>
 			{ showBlockTab && (

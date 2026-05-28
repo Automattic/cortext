@@ -58,7 +58,7 @@ describe( 'RelationReferences', () => {
 		expect( mockOpenDocument ).toHaveBeenCalledWith( {
 			id: 12,
 			slug: 'ada-lovelace',
-			postType: 'crtxt_people',
+			postType: 'crtxt_document',
 			collectionId: 7,
 			preferredMode: 'side',
 		} );

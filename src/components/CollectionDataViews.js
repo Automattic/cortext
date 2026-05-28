@@ -37,7 +37,7 @@ import {
 } from './DocumentPeekProvider';
 import { CurrentViewModeProvider } from './CurrentViewModeContext';
 import EditableCell, { RowMutationContext } from './EditableCell';
-import PageIcon from './PageIcon';
+import DocumentIcon from './DocumentIcon';
 import { CollectionRowsSkeleton } from './Skeleton';
 import useDelayedFlag, {
 	SKELETON_MIN_VISIBLE_MS,
@@ -175,7 +175,7 @@ function TitleCell( { item } ) {
 		>
 			{ documentIcon ? (
 				<span className="cortext-title-cell__icon" aria-hidden="true">
-					<PageIcon icon={ documentIcon } size={ 16 } />
+					<DocumentIcon icon={ documentIcon } size={ 16 } />
 				</span>
 			) : null }
 			<EditableCell
@@ -271,7 +271,7 @@ function prefillFromFilters( filters, fieldIds ) {
 	return prefill;
 }
 
-function NewRowButton( { slug, view, fields, onCreated, disabled } ) {
+function NewRowButton( { collectionId, view, fields, onCreated, disabled } ) {
 	const [ isCreating, setIsCreating ] = useState( false );
 	const [ error, setError ] = useState( null );
 
@@ -289,17 +289,25 @@ function NewRowButton( { slug, view, fields, onCreated, disabled } ) {
 	);
 
 	const onClick = useCallback( async () => {
+		if ( ! collectionId ) {
+			return;
+		}
 		setIsCreating( true );
 		setError( null );
 		const meta = prefillFromFilters( view?.filters, prefillableFieldIds );
 		try {
-			// FIXME: Consider supporting row creation via /cortext/v1/rows.
+			// Rows are `crtxt_document` records with a `crtxt_trait`
+			// term pointing at the collection. The backend's
+			// `rest_after_insert_crtxt_document` hook applies the term when
+			// the body carries `cortext_trait`, so no custom endpoint is
+			// needed for the create.
 			const created = await apiFetch( {
-				path: `/wp/v2/crtxt_${ slug }`,
+				path: '/wp/v2/crtxt_documents',
 				method: 'POST',
 				data: {
-					status: 'private',
 					title: '',
+					status: 'private',
+					cortext_trait: collectionId,
 					...( Object.keys( meta ).length ? { meta } : {} ),
 				},
 			} );
@@ -311,7 +319,7 @@ function NewRowButton( { slug, view, fields, onCreated, disabled } ) {
 		} finally {
 			setIsCreating( false );
 		}
-	}, [ slug, view, prefillableFieldIds, onCreated ] );
+	}, [ collectionId, view, prefillableFieldIds, onCreated ] );
 
 	return (
 		<>
@@ -321,7 +329,7 @@ function NewRowButton( { slug, view, fields, onCreated, disabled } ) {
 				icon={ plus }
 				onClick={ onClick }
 				isBusy={ isCreating }
-				disabled={ disabled || isCreating || ! slug }
+				disabled={ disabled || isCreating || ! collectionId }
 			>
 				{ __( 'New', 'cortext' ) }
 			</Button>
@@ -927,16 +935,22 @@ export default function CollectionDataViews( {
 			if ( ! collectionId || ! rowId ) {
 				return null;
 			}
+			// Rows update through core REST now. The title travels at the post
+			// top level; everything else as a `meta` key. The backend's
+			// `rest_pre_insert_crtxt_document` filter validates relation
+			// targets, and `rest_after_insert_crtxt_document` syncs reverse
+			// pointers + the field-value sidecar so callers see the same
+			// observable behaviour as the legacy custom endpoint.
+			const payload =
+				fieldId === 'title'
+					? { title: value }
+					: { meta: { [ fieldId ]: value } };
 			const updated = await apiFetch( {
-				path: `/cortext/v1/collections/${ collectionId }/rows/${ rowId }`,
+				path: `/wp/v2/crtxt_documents/${ rowId }`,
 				method: 'POST',
-				data: {
-					field: fieldId,
-					value,
-				},
+				data: payload,
 			} );
 			touchRecent( {
-				kind: 'row',
 				id: updated?.id ?? rowId,
 				collectionId,
 			} );
@@ -997,7 +1011,6 @@ export default function CollectionDataViews( {
 			}
 			if ( created?.id ) {
 				touchRecent( {
-					kind: 'row',
 					id: created.id,
 					collectionId,
 				} );
@@ -1020,7 +1033,11 @@ export default function CollectionDataViews( {
 	onChangeViewRef.current = onChangeView;
 	const previousVisibleFieldsRef = useRef( null );
 	const savedRowDetailMode = getRowDetailMode( view );
-	const postType = slug ? `crtxt_${ slug }` : null;
+	// Rows now live in the unified `crtxt_document` post type; the collection
+	// slug only survives in `collectionId` for filtering. The peek/full row
+	// surfaces still want a post type to address `/wp/v2/*` core REST routes,
+	// and that is always `crtxt_document` for rows.
+	const postType = slug ? 'crtxt_document' : null;
 	const { openDocument, closeDocument } = useDocumentPeekActions();
 	const { peek } = useDocumentPeekState();
 	const openRowId = peek?.docId ?? null;
@@ -1032,7 +1049,6 @@ export default function CollectionDataViews( {
 	rowsRef.current = dataFiltered;
 	const source = useMemo(
 		() => ( {
-			kind: 'collection',
 			collectionId,
 			getRowList: () => rowsRef.current ?? [],
 			refresh,
@@ -1128,13 +1144,15 @@ export default function CollectionDataViews( {
 			}
 			setRowActionError( null );
 			try {
+				// `DocumentDuplicator` copies content, field values, icon, and
+				// cover; it reuses the source row's collection membership so
+				// the duplicate lands in the same collection.
 				const created = await apiFetch( {
-					path: `/cortext/v1/collections/${ collectionId }/rows/${ row.id }/duplicate`,
+					path: `/cortext/v1/documents/${ row.id }/duplicate`,
 					method: 'POST',
 				} );
 				if ( created?.id ) {
 					touchRecent( {
-						kind: 'row',
 						id: created.id,
 						collectionId,
 					} );
@@ -1189,7 +1207,8 @@ export default function CollectionDataViews( {
 				BULK_DELETE_CONCURRENCY,
 				( row ) =>
 					apiFetch( {
-						path: `/wp/v2/${ postType }/${ row.id }`,
+						// `crtxt_document` registers `rest_base => 'crtxt_documents'`.
+						path: `/wp/v2/crtxt_documents/${ row.id }`,
 						method: 'DELETE',
 					} )
 			);
@@ -1223,7 +1242,7 @@ export default function CollectionDataViews( {
 				// stale entries on the next read, but doing it here keeps the next
 				// favorites PUT from sending these row ids back.
 				setFavorites( ( current ) =>
-					filterFavoritesByDeletedIds( current, { row: deleted } )
+					filterFavoritesByDeletedIds( current, deleted )
 				).catch( () => {
 					// Keep this quiet. The next favorites read asks the server to
 					// prune stale rows anyway.
@@ -1806,7 +1825,7 @@ export default function CollectionDataViews( {
 									   component instead of inside its layout chrome. */ }
 									<div className="cortext-data-view__footer">
 										<NewRowButton
-											slug={ slug }
+											collectionId={ collectionId }
 											view={ view }
 											fields={ fields }
 											onCreated={ onCreated }

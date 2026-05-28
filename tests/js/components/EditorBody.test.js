@@ -1,0 +1,175 @@
+// `EditorBody.js` carries a `collectDuplicateHeaderClientIds` invariant: a
+// schema-bearing document's body owns one self-referencing `cortext/data-view`,
+// and anything else at the root (foreign data-views or extra copies) must
+// surface as a duplicate so the layout effect can drop it. The cleanup catches
+// the race where a document switch leaves the previous document's blocks in
+// the editor store before the new entity's blocks hydrate.
+
+jest.mock( '@wordpress/block-editor', () => ( {
+	__esModule: true,
+	BlockCanvas: () => null,
+	BlockList: () => null,
+	store: {},
+	useSettings: () => [],
+} ) );
+
+jest.mock( '@wordpress/components', () => ( {
+	__esModule: true,
+	Button: () => null,
+	Disabled: () => null,
+	Notice: () => null,
+} ) );
+
+jest.mock( '@wordpress/core-data', () => ( {
+	__esModule: true,
+	useEntityProp: () => [ null, () => {} ],
+	useEntityRecord: () => ( { record: null } ),
+} ) );
+
+jest.mock( '@wordpress/data', () => ( {
+	__esModule: true,
+	useDispatch: () => ( {} ),
+	useSelect: () => null,
+} ) );
+
+jest.mock( '@wordpress/editor', () => ( {
+	__esModule: true,
+	store: {},
+} ) );
+
+jest.mock( '@wordpress/blocks', () => ( {
+	__esModule: true,
+	createBlock: () => null,
+} ) );
+
+jest.mock( '@wordpress/api-fetch', () => ( {
+	__esModule: true,
+	default: () => Promise.resolve(),
+} ) );
+
+jest.mock( '../../../src/components/DocumentIdentityControls', () => ( {
+	__esModule: true,
+	default: () => null,
+} ) );
+
+jest.mock( '../../../src/components/DocumentPropertiesContext', () => ( {
+	__esModule: true,
+	useDocumentPropertiesContext: () => null,
+} ) );
+
+jest.mock( '../../../src/components/CanvasOwnerInspector', () => ( {
+	__esModule: true,
+	findCanvasOwnerBlock: () => null,
+	getCanvasOwnerBlockNameForRecord: () => null,
+	getCanvasOwnerInitialAttributesForRecord: () => null,
+} ) );
+
+jest.mock( '../../../src/components/MediaPicker', () => ( {
+	__esModule: true,
+	default: () => null,
+	MediaUploadCheck: () => null,
+} ) );
+
+jest.mock( '../../../src/hooks/afterNextPaint', () => ( {
+	__esModule: true,
+	default: () => () => {},
+} ) );
+
+const {
+	collectDuplicateHeaderClientIds,
+} = require( '../../../src/components/EditorBody' );
+
+const COLLECTION_ID = 7;
+const OWNER = 'cortext/data-view';
+
+function ownerBlock( clientId, collectionId ) {
+	return {
+		clientId,
+		name: OWNER,
+		attributes: { collectionId },
+	};
+}
+
+function namedBlock( clientId, name, attributes = {} ) {
+	return { clientId, name, attributes };
+}
+
+describe( 'collectDuplicateHeaderClientIds', () => {
+	it( 'returns nothing when the only data-view is self-referencing', () => {
+		const blocks = [
+			namedBlock( 'title', 'core/post-title' ),
+			ownerBlock( 'self', COLLECTION_ID ),
+		];
+
+		expect(
+			collectDuplicateHeaderClientIds( blocks, OWNER, COLLECTION_ID )
+		).toEqual( [] );
+	} );
+
+	it( 'marks a foreign data-view as duplicate so it gets removed', () => {
+		// Simulates the document-switch race: editor still holds the old
+		// document's data-view (pointing at a different collection) while
+		// EnsureHeaderBlocks already runs against the new postId.
+		const blocks = [
+			namedBlock( 'title', 'core/post-title' ),
+			ownerBlock( 'stale', 9999 ),
+			ownerBlock( 'self', COLLECTION_ID ),
+		];
+
+		expect(
+			collectDuplicateHeaderClientIds( blocks, OWNER, COLLECTION_ID )
+		).toEqual( [ 'stale' ] );
+	} );
+
+	it( 'marks foreign data-views even when no self-referencing block is present yet', () => {
+		// The transient window before the owner-insertion effect runs: only the
+		// stale block is at the root. It still has to be removed.
+		const blocks = [
+			namedBlock( 'title', 'core/post-title' ),
+			ownerBlock( 'stale', 9999 ),
+		];
+
+		expect(
+			collectDuplicateHeaderClientIds( blocks, OWNER, COLLECTION_ID )
+		).toEqual( [ 'stale' ] );
+	} );
+
+	it( 'keeps only the first self-referencing data-view when duplicates land at the root', () => {
+		const blocks = [
+			ownerBlock( 'first', COLLECTION_ID ),
+			ownerBlock( 'second', COLLECTION_ID ),
+		];
+
+		expect(
+			collectDuplicateHeaderClientIds( blocks, OWNER, COLLECTION_ID )
+		).toEqual( [ 'second' ] );
+	} );
+
+	it( 'leaves foreign data-views alone on pages (no owner block)', () => {
+		// Pages have `ownerBlockName === null`; their root may legitimately
+		// embed data-views for any collection.
+		const blocks = [
+			namedBlock( 'title', 'core/post-title' ),
+			ownerBlock( 'embed-a', 100 ),
+			ownerBlock( 'embed-b', 200 ),
+		];
+
+		expect(
+			collectDuplicateHeaderClientIds( blocks, null, COLLECTION_ID )
+		).toEqual( [] );
+	} );
+
+	it( 'still dedupes singletons (cover, icon, title, properties)', () => {
+		const blocks = [
+			namedBlock( 'cover-1', 'cortext/document-cover' ),
+			namedBlock( 'cover-2', 'cortext/document-cover' ),
+			namedBlock( 'title-1', 'core/post-title' ),
+			namedBlock( 'title-2', 'core/post-title' ),
+			ownerBlock( 'self', COLLECTION_ID ),
+		];
+
+		expect(
+			collectDuplicateHeaderClientIds( blocks, OWNER, COLLECTION_ID )
+		).toEqual( [ 'cover-2', 'title-2' ] );
+	} );
+} );

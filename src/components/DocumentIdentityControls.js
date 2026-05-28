@@ -19,7 +19,7 @@ import './DocumentIdentityControls.scss';
 
 import MediaPicker, { MediaUploadCheck } from './MediaPicker';
 
-import PageIcon from './PageIcon';
+import DocumentIcon from './DocumentIcon';
 
 // The picker carries ~150KB of emoji data, so defer it until the popover
 // actually opens. The first interaction pays the load cost; subsequent
@@ -535,7 +535,7 @@ export default function DocumentIdentityControls( {
 					isOpen,
 					onToggle,
 					currentIconNode: (
-						<PageIcon icon={ currentIcon } size={ 16 } />
+						<DocumentIcon icon={ currentIcon } size={ 16 } />
 					),
 				} )
 			}

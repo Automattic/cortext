@@ -325,14 +325,17 @@ describe( 'RelationEditor', () => {
 
 		await waitFor( () =>
 			expect( apiFetch ).toHaveBeenCalledWith( {
-				path: '/cortext/v1/collections/9/rows',
+				path: '/wp/v2/crtxt_documents',
 				method: 'POST',
-				data: { title: 'New Ada' },
+				data: {
+					title: 'New Ada',
+					status: 'private',
+					cortext_trait: 9,
+				},
 			} )
 		);
 		await waitFor( () => expect( onSave ).toHaveBeenCalledWith( [ 44 ] ) );
 		expect( mockTouchRecent ).toHaveBeenCalledWith( {
-			kind: 'row',
 			id: 44,
 			collectionId: 9,
 		} );

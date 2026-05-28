@@ -8,18 +8,18 @@ import {
 	useState,
 } from '@wordpress/element';
 
-import './PageIcon.scss';
+import './DocumentIcon.scss';
 
 import useDelayedFlag from '../hooks/useDelayedFlag';
 import { ICON_COLOR_BY_NAME } from './iconColors';
 
-// PageIconWp does `import * as icons from '@wordpress/icons'` so it can look
+// DocumentIconWp does `import * as icons from '@wordpress/icons'` so it can look
 // glyphs up by name at runtime. That defeats tree-shaking and would pull the
 // entire icon set (~238 KiB) into the initial bundle. Lazy-load it: most
-// page icons are emoji/image, and pages that do use a wp glyph only trigger
+// document icons are emoji/image, and documents that do use a wp glyph only trigger
 // the chunk download on first render.
-const PageIconWp = lazy( () =>
-	import( /* webpackChunkName: "page-icon-wp" */ './PageIconWp' )
+const DocumentIconWp = lazy( () =>
+	import( /* webpackChunkName: "document-icon-wp" */ './DocumentIconWp' )
 );
 
 // Three shapes are persisted in the cortext_document_icon meta:
@@ -128,7 +128,7 @@ function ImageIcon( { id, size, alt, className } ) {
 	);
 }
 
-export default function PageIcon( { icon, size = 16, alt, className } ) {
+export default function DocumentIcon( { icon, size = 16, alt, className } ) {
 	const parsed = useMemo( () => parsePageIcon( icon ), [ icon ] );
 	const classes = [ 'cortext-document-icon' ];
 	// `display: inline-flex` is the load-bearing bit: spans are inline by
@@ -196,7 +196,7 @@ export default function PageIcon( { icon, size = 16, alt, className } ) {
 				<Suspense
 					fallback={ <Icon icon={ pageGlyph } size={ size } /> }
 				>
-					<PageIconWp name={ parsed.name } size={ size } />
+					<DocumentIconWp name={ parsed.name } size={ size } />
 				</Suspense>
 			</span>
 		);

@@ -63,8 +63,8 @@ function Segment( { segment } ) {
 	);
 }
 
-export default function Breadcrumbs( { paintedRoute } ) {
-	const segments = truncate( useBreadcrumbSegments( paintedRoute ) );
+export default function Breadcrumbs( { paintedDocumentId } ) {
+	const segments = truncate( useBreadcrumbSegments( paintedDocumentId ) );
 
 	if ( segments.length === 0 ) {
 		return null;

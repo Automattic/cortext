@@ -124,9 +124,7 @@ function DetailPaneContent( {
 				onApi={ onApi }
 				onSaved={ onSaved }
 				recentTarget={
-					rowId && collectionId
-						? { kind: 'row', id: rowId, collectionId }
-						: null
+					rowId && collectionId ? { id: rowId, collectionId } : null
 				}
 			/>
 			<DocumentPropertiesProvider
