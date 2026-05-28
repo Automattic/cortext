@@ -13,7 +13,7 @@ on:
                 default: true
                 type: boolean
             dry_run:
-                description: 'Dry run'
+                description: 'Dry run (uploads files only; no tag or release)'
                 required: true
                 default: true
                 type: boolean
