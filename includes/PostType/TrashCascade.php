@@ -66,6 +66,21 @@ final class TrashCascade {
 		// wp-admin/edit.php's bulk-untrash flow. REST, WP-CLI, and the
 		// cascade would otherwise restore documents as drafts.
 		add_filter( 'wp_untrash_post_status', array( $this, 'restore_previous_status' ), 10, 3 );
+		// edit.php's bulk loop calls `wp_die()` when `wp_trash_post` returns
+		// false, which happens once the cascade already trashed a selected
+		// descendant. Renaming the actions routes them through
+		// `handle_bulk_actions-{screen}` so the no-op counts as processed
+		// instead of dying.
+		add_filter(
+			'bulk_actions-edit-' . Document::POST_TYPE,
+			array( $this, 'replace_bulk_actions' )
+		);
+		add_filter(
+			'handle_bulk_actions-edit-' . Document::POST_TYPE,
+			array( $this, 'handle_admin_bulk_action' ),
+			10,
+			3
+		);
 	}
 
 	public function register_meta(): void {
@@ -402,5 +417,98 @@ final class TrashCascade {
 			)
 		);
 		return array_map( 'intval', $ids );
+	}
+
+	/**
+	 * Swaps core's trash/untrash bulk actions for Cortext-prefixed clones.
+	 * Renaming routes the actions through `handle_bulk_actions-{screen}`,
+	 * which does not `wp_die()` on a false return from `wp_trash_post`. The
+	 * cascade is allowed to no-op when a row is already trashed by its
+	 * collection (or a child by its parent) in the same bulk request.
+	 *
+	 * @param array<string,string> $actions Bulk-action dropdown entries.
+	 * @return array<string,string>
+	 */
+	public function replace_bulk_actions( array $actions ): array {
+		if ( isset( $actions['trash'] ) ) {
+			unset( $actions['trash'] );
+			$actions['cortext_trash'] = __( 'Move to Trash', 'cortext' );
+		}
+		if ( isset( $actions['untrash'] ) ) {
+			unset( $actions['untrash'] );
+			$actions['cortext_untrash'] = __( 'Restore', 'cortext' );
+		}
+		return $actions;
+	}
+
+	/**
+	 * Handles the cascade-safe bulk trash/untrash actions. A selected
+	 * document counts as processed once it ends up in the requested status,
+	 * whether the bulk loop changed it directly or a cascade got there
+	 * first.
+	 *
+	 * @param mixed             $sendback URL the admin will redirect to after processing.
+	 * @param string            $action   Bulk action identifier.
+	 * @param array<int,string> $post_ids Selected post ids.
+	 * @return mixed
+	 */
+	public function handle_admin_bulk_action( $sendback, string $action, array $post_ids ) {
+		if ( 'cortext_trash' === $action ) {
+			return $this->run_admin_bulk( (string) $sendback, $post_ids, 'trash' );
+		}
+		if ( 'cortext_untrash' === $action ) {
+			return $this->run_admin_bulk( (string) $sendback, $post_ids, 'untrash' );
+		}
+		return $sendback;
+	}
+
+	/**
+	 * Shared handler for the cascade-safe trash and untrash actions.
+	 *
+	 * @param string            $sendback URL the admin will redirect to after processing.
+	 * @param array<int,string> $post_ids Selected post ids.
+	 * @param string            $action   Either 'trash' or 'untrash'.
+	 */
+	private function run_admin_bulk( string $sendback, array $post_ids, string $action ): string {
+		$count  = 0;
+		$locked = 0;
+
+		foreach ( $post_ids as $post_id ) {
+			$post_id = (int) $post_id;
+			if ( ! current_user_can( 'delete_post', $post_id ) ) {
+				wp_die(
+					'trash' === $action
+						? esc_html__( 'Sorry, you are not allowed to move this item to the Trash.', 'cortext' )
+						: esc_html__( 'Sorry, you are not allowed to restore this item from the Trash.', 'cortext' )
+				);
+			}
+
+			if ( 'trash' === $action ) {
+				if ( wp_check_post_lock( $post_id ) ) {
+					++$locked;
+					continue;
+				}
+				wp_trash_post( $post_id );
+				if ( 'trash' === get_post_status( $post_id ) ) {
+					++$count;
+				}
+			} else {
+				wp_untrash_post( $post_id );
+				if ( 'trash' !== get_post_status( $post_id ) ) {
+					++$count;
+				}
+			}
+		}
+
+		$count_key = 'trash' === $action ? 'trashed' : 'untrashed';
+		$args      = array(
+			$count_key => $count,
+			'ids'      => implode( ',', array_map( 'intval', $post_ids ) ),
+		);
+		if ( 'trash' === $action ) {
+			$args['locked'] = $locked;
+		}
+
+		return add_query_arg( $args, $sendback );
 	}
 }
