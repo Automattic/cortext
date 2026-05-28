@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build a distributable Cortext plugin ZIP.
+# Build dist/cortext.zip without changing the local dev install.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."

@@ -7,7 +7,7 @@ Cortext is an early prototype. There is no packaged release yet; to try it you r
 -   PHP 8.1+
 -   WordPress 6.9+ (provided by wp-env)
 -   Docker (recommended runtime for wp-env)
--   Node.js 24.15
+-   Node.js 24.15 or newer in the Node 24 line
 -   pnpm 11+
 -   Git
 
@@ -44,7 +44,7 @@ This is not optional. wp-env runs detached and would leak containers if a worktr
 ```
 pnpm run dev          # JS watcher, when wp-env is already running
 pnpm run build        # production build
-pnpm run build:zip    # production build packaged as dist/cortext.zip
+pnpm run build:zip    # build dist/cortext.zip
 pnpm run lint:js      # ESLint, scoped to src/
 pnpm run lint:php     # PHPCS via pnpm (same as composer phpcs)
 pnpm run lint:style   # stylelint for src/**/*.{css,pcss,scss}
