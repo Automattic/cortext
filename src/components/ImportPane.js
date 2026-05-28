@@ -144,6 +144,11 @@ export default function ImportPane() {
 	};
 	const handleChangeKey = () => setIsChangingNotionApiKey( true );
 	const handleCancelChangeKey = () => setIsChangingNotionApiKey( false );
+	const handleForgetKey = () => {
+		window.localStorage.removeItem( NOTION_KEY_STORAGE );
+		setIsChangingNotionApiKey( false );
+		setNotionApiKey( null );
+	};
 	const handleRetry = () => {
 		setImportJobs( {} );
 		forceResolveCollections();
@@ -174,6 +179,13 @@ export default function ImportPane() {
 					<HStack justify="flex-start">
 						<Button variant="secondary" onClick={ handleChangeKey }>
 							{ __( 'Change key', 'cortext' ) }
+						</Button>
+						<Button
+							variant="secondary"
+							isDestructive={ true }
+							onClick={ handleForgetKey }
+						>
+							{ __( 'Forget key', 'cortext' ) }
 						</Button>
 					</HStack>
 					<ImportBody
