@@ -30,7 +30,7 @@ releases as fixes to the current beta.
 
 ## PR labels
 
-Every PR included in a release needs exactly one `type:*` label:
+Every PR needs exactly one `type:*` label:
 
 -   `type: enhancement` for product changes, including new features and
     improvements to existing behavior
@@ -41,7 +41,8 @@ Every PR included in a release needs exactly one `type:*` label:
 -   `type: code quality` for refactors, cleanup, tests, and internal structure
 
 Use `release: skip` for PRs that should not be assigned to the active release
-milestone. A skipped PR does not need a `type:*` label.
+milestone. It only skips milestone assignment; the PR still needs one `type:*`
+label.
 
 Area labels are optional and do not affect release automation. Add them when
 they make planning or filtering easier:
@@ -58,8 +59,10 @@ assigns it to the single open milestone unless:
 -   the PR has `release: skip`.
 
 If there is no open milestone, or more than one, the workflow comments on the PR
-and fails. If the PR does not have exactly one `type:*` label, it leaves a
-comment so the changelog can be fixed before release time.
+and fails.
+
+`.github/workflows/enforce-pr-labels.yml` also checks open PRs before merge. It
+fails if a ready PR has zero `type:*` labels or more than one.
 
 ## Changelog preview
 
