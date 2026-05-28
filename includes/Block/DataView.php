@@ -9,7 +9,7 @@ declare( strict_types=1 );
 
 namespace Cortext\Block;
 
-use Cortext\PostType\Collection;
+use Cortext\PostType\Document;
 
 final class DataView {
 
@@ -51,7 +51,7 @@ final class DataView {
 		}
 
 		$collection = get_post( $collection_id );
-		if ( ! $collection || Collection::POST_TYPE !== $collection->post_type ) {
+		if ( ! $collection || ! Document::is_collection_post( $collection ) ) {
 			return '';
 		}
 

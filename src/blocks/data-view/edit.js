@@ -27,7 +27,6 @@ import { useDispatch, useSelect } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
 import { useCallback, useState } from '@wordpress/element';
 import { store as interfaceStore } from '@wordpress/interface';
-import apiFetch from '@wordpress/api-fetch';
 import { cog, plus, replace } from '@wordpress/icons';
 
 import CanvasOwnerInspector, {
@@ -36,7 +35,11 @@ import CanvasOwnerInspector, {
 import CollectionDataViews from '../../components/CollectionDataViews';
 import AddFieldPopover from '../../components/fields/AddFieldPopover';
 import { useEditorSurface } from '../../components/EditorSurfaceContext';
-import { FULL_PAGE_COLLECTION_QUERY } from '../../collections';
+import {
+	DOCUMENT_POST_TYPE,
+	FULL_PAGE_COLLECTION_QUERY,
+} from '../../collections';
+import { useCreateDocument } from '../../documents';
 import { toDataViewId } from '../../hooks/fieldIds';
 import {
 	CollectionFieldsProvider,
@@ -94,11 +97,10 @@ function createDefaultView() {
 }
 
 function CollectionPicker( { selectedId = '', onSelect } ) {
-	// The picker only lists full-page collections. Inline collections stay with
-	// the block that created them.
+	// Every document that defines a schema (has `cortext_fields` meta).
 	const { records, isResolving, hasResolved } = useEntityRecords(
 		'postType',
-		'crtxt_collection',
+		DOCUMENT_POST_TYPE,
 		FULL_PAGE_COLLECTION_QUERY
 	);
 
@@ -145,14 +147,13 @@ function CollectionPicker( { selectedId = '', onSelect } ) {
 
 function CollectionCreator( { onCreate } ) {
 	const [ title, setTitle ] = useState( '' );
-	const [ isFullPage, setIsFullPage ] = useState( false );
 	const [ isSaving, setIsSaving ] = useState( false );
 	const [ error, setError ] = useState( '' );
-	const { invalidateResolution } = useDispatch( 'core' );
+	const create = useCreateDocument();
 	const canCreate = title.trim() && ! isSaving;
 
-	// Inline collections need the current page as owner. Full-page collections
-	// can use that same id as their sidebar parent.
+	// Nest the new collection under the current page so it appears beneath it
+	// in the sidebar tree, matching how the user got here.
 	const ownerPageId = useSelect(
 		( select ) => select( editorStore ).getCurrentPostId(),
 		[]
@@ -167,34 +168,11 @@ function CollectionCreator( { onCreate } ) {
 		setError( '' );
 
 		try {
-			const data = {
+			const collection = await create( {
 				title: title.trim(),
 				status: 'private',
-				mode: isFullPage ? 'full_page' : 'inline',
-			};
-			// The REST filter maps `parent` to owner meta for inline
-			// collections, or to post_parent for full-page collections.
-			if ( ownerPageId ) {
-				data.parent = ownerPageId;
-			}
-			const collection = await apiFetch( {
-				path: '/wp/v2/crtxt_collections',
-				method: 'POST',
-				data,
+				...( ownerPageId ? { parent: ownerPageId } : {} ),
 			} );
-			// The picker reads the full-page query, so refresh only when the
-			// new collection can appear there.
-			if ( isFullPage ) {
-				invalidateResolution( 'getEntityRecords', [
-					'postType',
-					'crtxt_collection',
-					FULL_PAGE_COLLECTION_QUERY,
-				] );
-			}
-			// tech-debt.md#2: core-data may have cached `/wp/v2/types` before
-			// this collection registered its row CPT. Refresh the entity config
-			// so the next row detail lookup can find the new post type.
-			invalidateResolution( 'getEntitiesConfig', [ 'postType' ] );
 			onCreate( collection );
 		} catch ( apiError ) {
 			setError(
@@ -218,16 +196,6 @@ function CollectionCreator( { onCreate } ) {
 				value={ title }
 				onChange={ setTitle }
 				__next40pxDefaultSize
-				__nextHasNoMarginBottom
-			/>
-			<CheckboxControl
-				label={ __( 'Create as a full-page collection', 'cortext' ) }
-				help={ __(
-					'Full-page collections appear in the sidebar and get their own workspace URL. Inline collections stay inside this block.',
-					'cortext'
-				) }
-				checked={ isFullPage }
-				onChange={ setIsFullPage }
 				__nextHasNoMarginBottom
 			/>
 			<Button
@@ -317,7 +285,7 @@ function CollectionToolbarControl( {
 						enableComplementaryArea(
 							'cortext',
 							isOwner
-								? 'cortext/page-inspector'
+								? 'cortext/document-inspector'
 								: 'cortext/block-inspector'
 						)
 					}

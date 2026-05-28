@@ -15,7 +15,7 @@ import { useEntityProp, store as coreStore } from '@wordpress/core-data';
 import { useDispatch } from '@wordpress/data';
 import { replace, trash } from '@wordpress/icons';
 
-import PageIcon from '../../components/PageIcon';
+import DocumentIcon from '../../components/DocumentIcon';
 import DocumentIdentityControls from '../../components/DocumentIdentityControls';
 
 export default function Edit( { context, clientId } ) {
@@ -144,7 +144,7 @@ export default function Edit( { context, clientId } ) {
 								}
 								label={ __( 'Change icon', 'cortext' ) }
 							>
-								<PageIcon icon={ iconMeta } size={ 56 } />
+								<DocumentIcon icon={ iconMeta } size={ 56 } />
 							</Button>
 						) : (
 							<Button

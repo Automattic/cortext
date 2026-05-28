@@ -60,7 +60,7 @@ export default function Edit() {
 			collectionId
 				? select( coreStore ).canUser( 'update', {
 						kind: 'postType',
-						name: 'crtxt_collection',
+						name: 'crtxt_document',
 						id: collectionId,
 				  } ) === true
 				: false,
@@ -71,7 +71,7 @@ export default function Edit() {
 			collectionId
 				? select( coreStore ).isSavingEntityRecord(
 						'postType',
-						'crtxt_collection',
+						'crtxt_document',
 						collectionId
 				  )
 				: false,
@@ -138,11 +138,11 @@ export default function Edit() {
 			try {
 				await saveEntityRecord(
 					'postType',
-					'crtxt_collection',
+					'crtxt_document',
 					{
 						id: collectionId,
 						meta: {
-							detail_layout:
+							cortext_detail_layout:
 								detailLayoutMetaFromEntries( nextEntries ),
 						},
 					},
@@ -167,11 +167,11 @@ export default function Edit() {
 		try {
 			await saveEntityRecord(
 				'postType',
-				'crtxt_collection',
+				'crtxt_document',
 				{
 					id: collectionId,
 					meta: {
-						detail_layout: detailLayoutMetaFromEntries(
+						cortext_detail_layout: detailLayoutMetaFromEntries(
 							draftEntries ?? currentEntries
 						),
 					},

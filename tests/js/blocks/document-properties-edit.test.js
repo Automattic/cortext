@@ -148,11 +148,11 @@ describe( 'document-properties Edit layout mode', () => {
 		await waitFor( () =>
 			expect( mockSaveEntityRecord ).toHaveBeenCalledWith(
 				'postType',
-				'crtxt_collection',
+				'crtxt_document',
 				{
 					id: 77,
 					meta: {
-						detail_layout: {
+						cortext_detail_layout: {
 							fields: [
 								{ field: 'created_at', visible: false },
 								{ field: 'field-10', visible: true },
@@ -205,11 +205,11 @@ describe( 'document-properties Edit layout mode', () => {
 		await waitFor( () =>
 			expect( mockSaveEntityRecord ).toHaveBeenCalledWith(
 				'postType',
-				'crtxt_collection',
+				'crtxt_document',
 				{
 					id: 77,
 					meta: {
-						detail_layout: {
+						cortext_detail_layout: {
 							fields: [
 								{ field: 'created_at', visible: true },
 								{ field: 'field-10', visible: true },
