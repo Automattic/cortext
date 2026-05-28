@@ -597,6 +597,60 @@ final class Test_Post_Type_Document extends BaseTestCase {
 		$this->assertSame( array(), $terms );
 	}
 
+	public function test_prepare_meta_updates_rejects_field_from_another_collection(): void {
+		// `field-<id>` is registered globally on `crtxt_document`, so without
+		// an extra check WP REST would accept writes for any field on any
+		// row. The handler must reject the request when the field doesn't
+		// belong to the row's collection.
+		$source_collection_id = $this->create_collection();
+		$other_collection_id  = $this->create_collection();
+		$other_field_id       = $this->create_field( 'text' );
+		add_post_meta( $other_collection_id, 'cortext_fields', (string) $other_field_id );
+
+		$row_id  = (int) wp_insert_post(
+			array(
+				'post_type'   => Document::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Source row',
+			)
+		);
+		$source_term_id = TraitTaxonomy::term_id_for_trait( $source_collection_id );
+		wp_set_object_terms( $row_id, array( $source_term_id ), TraitTaxonomy::TAXONOMY );
+
+		$request = new WP_REST_Request( 'POST', '/wp/v2/crtxt_documents/' . $row_id );
+		$request->set_param( 'id', $row_id );
+		$request->set_param( 'meta', array( 'field-' . $other_field_id => 'sneaky' ) );
+
+		$result = ( new Document() )->prepare_meta_updates( new \stdClass(), $request );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'cortext_field_not_in_collection', $result->get_error_code() );
+	}
+
+	public function test_prepare_meta_updates_accepts_field_from_the_rows_own_collection(): void {
+		$collection_id = $this->create_collection();
+		$field_id      = (int) get_post_meta( $collection_id, 'cortext_fields', false )[0];
+
+		$row_id         = (int) wp_insert_post(
+			array(
+				'post_type'   => Document::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Source row',
+			)
+		);
+		$source_term_id = TraitTaxonomy::term_id_for_trait( $collection_id );
+		wp_set_object_terms( $row_id, array( $source_term_id ), TraitTaxonomy::TAXONOMY );
+
+		$request = new WP_REST_Request( 'POST', '/wp/v2/crtxt_documents/' . $row_id );
+		$request->set_param( 'id', $row_id );
+		$request->set_param( 'meta', array( 'field-' . $field_id => 'value' ) );
+
+		$prepared = new \stdClass();
+		$result   = ( new Document() )->prepare_meta_updates( $prepared, $request );
+
+		$this->assertSame( $prepared, $result );
+	}
+
 	public function test_apply_trait_filters_adds_not_exists_tax_query_for_no_trait(): void {
 		$request = new WP_REST_Request( 'GET', '/wp/v2/crtxt_documents' );
 		$request->set_param( 'cortext_no_trait', '1' );

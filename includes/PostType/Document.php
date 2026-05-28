@@ -434,6 +434,62 @@ final class Document {
 	}
 
 	/**
+	 * Returns a `WP_Error` when `$meta` carries `field-<id>` keys for fields
+	 * that do not belong to the document's collection, otherwise null. Page
+	 * documents (no trait) and collection documents (no parent collection)
+	 * reject any field meta; rows only accept meta for fields attached to
+	 * their collection.
+	 *
+	 * @param int                 $post_id Document id being updated.
+	 * @param array<string,mixed> $meta    Meta payload from the REST request.
+	 */
+	private function reject_foreign_field_meta( int $post_id, array $meta ): ?WP_Error {
+		$field_keys = array();
+		foreach ( $meta as $key => $_ ) {
+			if ( ! is_string( $key ) || ! str_starts_with( $key, 'field-' ) ) {
+				continue;
+			}
+			$field_id = (int) substr( $key, 6 );
+			if ( $field_id > 0 ) {
+				$field_keys[ $field_id ] = $key;
+			}
+		}
+		if ( count( $field_keys ) === 0 ) {
+			return null;
+		}
+
+		$post = get_post( $post_id );
+		if ( ! $post instanceof WP_Post || self::POST_TYPE !== $post->post_type ) {
+			return new WP_Error(
+				'cortext_field_not_in_collection',
+				__( 'Field meta is only accepted on document rows.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$trait_post = ( new Documents() )->find_trait_for_document( $post );
+		$allowed    = $trait_post instanceof WP_Post
+			? array_flip( self::collection_field_ids( (int) $trait_post->ID ) )
+			: array();
+
+		foreach ( $field_keys as $field_id => $key ) {
+			if ( ! isset( $allowed[ $field_id ] ) ) {
+				return new WP_Error(
+					'cortext_field_not_in_collection',
+					/* translators: %s: meta key being rejected. */
+					sprintf( __( 'Field meta "%s" does not belong to this row\'s collection.', 'cortext' ), $key ),
+					array(
+						'status' => 400,
+						'key'    => $key,
+					)
+				);
+			}
+		}
+
+		return null;
+	}
+
+	/**
 	 * Validates a `meta` payload arriving via core REST before WP writes any
 	 * of it. For each `field-<id>` that is a relation field, this stashes the
 	 * prepared update (validation result + current values) so the after-insert
@@ -464,6 +520,16 @@ final class Document {
 			// `apply_meta_updates` using the freshly-written post id.
 			return $prepared_post;
 		}
+
+		// `field-<id>` post meta is registered globally on `crtxt_document`,
+		// so without an extra check WP REST will accept writes for any field
+		// id on any row. Reject keys whose field does not belong to this
+		// row's collection before the meta touches the wire.
+		$reject = $this->reject_foreign_field_meta( $post_id, $meta );
+		if ( $reject instanceof WP_Error ) {
+			return $reject;
+		}
+
 		$relation_keys_consumed = array();
 		foreach ( $meta as $key => $value ) {
 			if ( ! is_string( $key ) || ! str_starts_with( $key, 'field-' ) ) {
