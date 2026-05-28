@@ -92,6 +92,127 @@ final class Documents {
 	}
 
 	/**
+	 * Creates or updates a `crtxt_document`. Kind is derived from the
+	 * payload, never declared:
+	 *   - `fields` present     -> writes the `cortext_fields` schema
+	 *                              (collection).
+	 *   - `collection` present -> assigns the `crtxt_trait` mirror term
+	 *                              (row member of that collection).
+	 *   - neither              -> page.
+	 *
+	 * The same call shape covers create (no `id`) and update (with `id`).
+	 *
+	 * Payload keys:
+	 *   - id          (int)             Update when present; create otherwise.
+	 *   - title       (string)          post_title.
+	 *   - status      (string)          post_status. Default 'draft' on create.
+	 *   - parent      (int)             post_parent.
+	 *   - content     (string)          post_content.
+	 *   - author      (int)             post_author.
+	 *   - fields      (int[]|string[])  Schema field ids. Rewrites all
+	 *                                   cortext_fields meta rows.
+	 *   - collection  (int|null)        Owning collection id. Sets the
+	 *                                   mirror term; pass 0/null to remove.
+	 *   - meta        (array)           Extra meta_input merged in
+	 *                                   (`field-<id>` values, breadcrumbs,
+	 *                                   `cortext_document_icon`, ...).
+	 *
+	 * @param array<string,mixed> $payload Save payload.
+	 *
+	 * @return int|WP_Error Document id, or WP_Error.
+	 */
+	public function save( array $payload ): int|WP_Error {
+		$is_update = isset( $payload['id'] ) && (int) $payload['id'] > 0;
+
+		$postarr = array( 'post_type' => Document::POST_TYPE );
+
+		if ( $is_update ) {
+			$post_id  = (int) $payload['id'];
+			$existing = get_post( $post_id );
+			if ( ! $existing instanceof WP_Post || Document::POST_TYPE !== $existing->post_type ) {
+				return new WP_Error(
+					'cortext_document_not_found',
+					__( 'Document not found.', 'cortext' ),
+					array( 'status' => 404 )
+				);
+			}
+			$postarr['ID'] = $post_id;
+		} else {
+			$postarr['post_status'] = isset( $payload['status'] )
+				? (string) $payload['status']
+				: 'draft';
+		}
+
+		if ( array_key_exists( 'title', $payload ) ) {
+			$postarr['post_title'] = (string) $payload['title'];
+		}
+		if ( $is_update && array_key_exists( 'status', $payload ) ) {
+			$postarr['post_status'] = (string) $payload['status'];
+		}
+		if ( array_key_exists( 'parent', $payload ) ) {
+			$postarr['post_parent'] = (int) $payload['parent'];
+		}
+		if ( array_key_exists( 'content', $payload ) ) {
+			$postarr['post_content'] = (string) $payload['content'];
+		}
+		if ( array_key_exists( 'author', $payload ) ) {
+			$postarr['post_author'] = (int) $payload['author'];
+		}
+
+		// Single-row meta goes through `meta_input`. `cortext_fields` is
+		// multi-row (registered with `single => false`); handled after the
+		// post exists with `add_post_meta` in a loop.
+		if ( isset( $payload['meta'] ) && is_array( $payload['meta'] ) && count( $payload['meta'] ) > 0 ) {
+			$postarr['meta_input'] = $payload['meta'];
+		}
+
+		$result = $is_update
+			? wp_update_post( $postarr, true )
+			: wp_insert_post( $postarr, true );
+
+		if ( $result instanceof WP_Error ) {
+			return $result;
+		}
+		$document_id = (int) $result;
+
+		if ( array_key_exists( 'fields', $payload ) && is_array( $payload['fields'] ) ) {
+			delete_post_meta( $document_id, 'cortext_fields' );
+			foreach ( $payload['fields'] as $field_id ) {
+				$value = (string) $field_id;
+				if ( '' !== $value ) {
+					add_post_meta( $document_id, 'cortext_fields', $value );
+				}
+			}
+		}
+
+		if ( array_key_exists( 'collection', $payload ) ) {
+			$collection_id = (int) $payload['collection'];
+			if ( $collection_id > 0 ) {
+				$term_id = TraitTaxonomy::term_id_for_trait( $collection_id );
+				if ( $term_id < 1 ) {
+					return new WP_Error(
+						'cortext_collection_not_found',
+						__( 'Collection mirror term not found.', 'cortext' ),
+						array(
+							'status'        => 404,
+							'collection_id' => $collection_id,
+						)
+					);
+				}
+				$set = wp_set_object_terms( $document_id, array( $term_id ), TraitTaxonomy::TAXONOMY, false );
+				if ( $set instanceof WP_Error ) {
+					return $set;
+				}
+			} else {
+				// Explicit `collection => 0/null` removes membership.
+				wp_set_object_terms( $document_id, array(), TraitTaxonomy::TAXONOMY, false );
+			}
+		}
+
+		return $document_id;
+	}
+
+	/**
 	 * Returns the post types that opt into the `cortext-document` trait.
 	 * After the universal-document refactor this is a stable, finite set.
 	 *

@@ -658,6 +658,154 @@ final class Test_Documents extends BaseTestCase {
 		$this->assertSame( array( $term_id ), $row['crtxt_trait'] );
 	}
 
+	public function test_save_creates_page_when_no_fields_or_collection(): void {
+		$id = $this->documents->save(
+			array(
+				'title'  => 'About',
+				'status' => 'private',
+			)
+		);
+
+		$this->assertIsInt( $id );
+		$this->assertGreaterThan( 0, $id );
+		$this->assertSame( 'About', get_post( $id )->post_title );
+		$this->assertSame( 'private', get_post( $id )->post_status );
+		$this->assertFalse( Document::is_collection( $id ) );
+		$this->assertSame( array(), wp_get_object_terms( $id, TraitTaxonomy::TAXONOMY, array( 'fields' => 'ids' ) ) );
+	}
+
+	public function test_save_creates_collection_from_fields(): void {
+		$field_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Author',
+				'meta_input'  => array( 'type' => 'text' ),
+			)
+		);
+
+		$collection_id = $this->documents->save(
+			array(
+				'title'  => 'Books',
+				'fields' => array( $field_id ),
+			)
+		);
+
+		$this->assertIsInt( $collection_id );
+		$this->assertTrue( Document::is_collection( $collection_id ) );
+		$this->assertSame(
+			array( (string) $field_id ),
+			get_post_meta( $collection_id, 'cortext_fields', false )
+		);
+		// The mirror term is created by the meta sync hook.
+		$this->assertGreaterThan( 0, TraitTaxonomy::term_id_for_trait( $collection_id ) );
+	}
+
+	public function test_save_creates_row_when_collection_passed(): void {
+		$collection_id = $this->create_collection( 'books', 'Books' );
+
+		$row_id = $this->documents->save(
+			array(
+				'title'      => 'The Left Hand of Darkness',
+				'collection' => $collection_id,
+			)
+		);
+
+		$this->assertIsInt( $row_id );
+		$row = get_post( $row_id );
+		$this->assertNotNull( $this->documents->find_trait_for_document( $row ) );
+		$this->assertSame(
+			$collection_id,
+			(int) $this->documents->find_trait_for_document( $row )->ID
+		);
+	}
+
+	public function test_save_returns_error_for_unknown_collection(): void {
+		$result = $this->documents->save(
+			array(
+				'title'      => 'Orphan row',
+				'collection' => 999_999,
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'cortext_collection_not_found', $result->get_error_code() );
+	}
+
+	public function test_save_returns_error_for_unknown_id_on_update(): void {
+		$result = $this->documents->save(
+			array(
+				'id'    => 999_999,
+				'title' => 'Ghost',
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'cortext_document_not_found', $result->get_error_code() );
+	}
+
+	public function test_save_updates_existing_document(): void {
+		$collection_id = $this->create_collection( 'books', 'Books' );
+		$row_id        = $this->create_row( $collection_id, 'Old title' );
+
+		$result = $this->documents->save(
+			array(
+				'id'    => $row_id,
+				'title' => 'New title',
+				// Unregistered meta key acts as a breadcrumb (mirrors the
+				// pattern used by the Notion importer).
+				'meta'  => array( 'cortext_notion_page_id' => 'abc-123' ),
+			)
+		);
+
+		$this->assertSame( $row_id, $result );
+		$this->assertSame( 'New title', get_post( $row_id )->post_title );
+		$this->assertSame( 'abc-123', get_post_meta( $row_id, 'cortext_notion_page_id', true ) );
+	}
+
+	public function test_save_replaces_collection_fields_on_update(): void {
+		$collection_id = $this->create_collection( 'books', 'Books' );
+		$first_field   = (int) get_post_meta( $collection_id, 'cortext_fields', false )[0];
+		$second_field  = (int) wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Year',
+				'meta_input'  => array( 'type' => 'number' ),
+			)
+		);
+
+		$this->documents->save(
+			array(
+				'id'     => $collection_id,
+				'fields' => array( $second_field ),
+			)
+		);
+
+		$this->assertSame(
+			array( (string) $second_field ),
+			get_post_meta( $collection_id, 'cortext_fields', false )
+		);
+		unset( $first_field );
+	}
+
+	public function test_save_removes_collection_membership_when_collection_zero(): void {
+		$collection_id = $this->create_collection( 'books', 'Books' );
+		$row_id        = $this->create_row( $collection_id, 'Stays as row' );
+
+		$this->documents->save(
+			array(
+				'id'         => $row_id,
+				'collection' => 0,
+			)
+		);
+
+		// Fresh service avoids the `trait_cache` populated during the row
+		// creation path; we want the assertion to read live taxonomy state.
+		$fresh = new Documents();
+		$this->assertNull( $fresh->find_trait_for_document( get_post( $row_id ) ) );
+	}
+
 	private function create_user( string $role ): int {
 		return (int) wp_insert_user(
 			array(
