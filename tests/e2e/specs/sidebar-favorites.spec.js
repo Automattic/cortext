@@ -175,8 +175,8 @@ test.describe( 'Sidebar favorites', () => {
 			} );
 
 			await admin.visitAdminPage( 'admin.php', 'page=cortext' );
-			const pageKey = `favorite:page:${ createdPage.id }`;
-			const collectionKey = `favorite:collection:${ collection.id }`;
+			const pageKey = `favorite:${ createdPage.id }`;
+			const collectionKey = `favorite:${ collection.id }`;
 
 			await favoriteFromSidebar( page, PAGE_TITLE, requestUtils, [
 				pageKey,
@@ -272,10 +272,7 @@ test.describe( 'Sidebar favorites', () => {
 				method: 'PUT',
 				path: '/cortext/v1/favorites',
 				data: {
-					favorites: [
-						{ id: createdPage.id },
-						{ id: otherPage.id },
-					],
+					favorites: [ { id: createdPage.id }, { id: otherPage.id } ],
 				},
 			} );
 
@@ -285,7 +282,7 @@ test.describe( 'Sidebar favorites', () => {
 			);
 
 			const row = page.locator(
-				`.cortext-sidebar__favorite-row[data-favorite-key="favorite:page:${ createdPage.id }"] .cortext-sidebar__row`
+				`.cortext-sidebar__favorite-row[data-favorite-key="favorite:${ createdPage.id }"] .cortext-sidebar__row`
 			);
 			const title = row.locator( '.cortext-sidebar__favorite-title' );
 			await expect( row ).toBeVisible();
@@ -316,7 +313,7 @@ test.describe( 'Sidebar favorites', () => {
 			);
 
 			const otherRow = page.locator(
-				`.cortext-sidebar__favorite-row[data-favorite-key="favorite:page:${ otherPage.id }"] .cortext-sidebar__row`
+				`.cortext-sidebar__favorite-row[data-favorite-key="favorite:${ otherPage.id }"] .cortext-sidebar__row`
 			);
 			const otherTitle = otherRow.locator(
 				'.cortext-sidebar__favorite-title'
