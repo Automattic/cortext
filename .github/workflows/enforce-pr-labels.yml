@@ -1,0 +1,35 @@
+name: Enforce PR labels
+
+on:
+    pull_request_target:
+        types:
+            - opened
+            - reopened
+            - synchronize
+            - ready_for_review
+            - labeled
+            - unlabeled
+
+permissions: {}
+
+jobs:
+    type-label:
+        if: ${{ github.event.pull_request.state == 'open' && github.event.pull_request.draft == false }}
+        runs-on: ubuntu-24.04
+        permissions:
+            pull-requests: write
+        steps:
+            - uses: mheap/github-action-required-labels@0ac283b4e65c1fb28ce6079dea5546ceca98ccbe # v5.5.2
+              with:
+                  mode: exactly
+                  count: 1
+                  labels: '^(type: enhancement|type: bug|type: docs|type: tooling|type: code quality)$'
+                  use_regex: true
+                  add_comment: true
+                  message: |
+                      **Choose one PR type**
+
+                      Add exactly one `type:*` label before merging this PR.
+
+                      Use one of: `type: enhancement`, `type: bug`, `type: docs`, `type: tooling`, `type: code quality`.
+                  exit_type: failure

@@ -100,7 +100,7 @@ final class DocumentIconBlock {
 				//
 				// frontend.js is CSS-only today, so the marker stays empty
 				// on the public page and the saved color is dropped. See
-				// tech-debt.md#34 for the build-time SVG map vs. hydration
+				// tech-debt.md#td-wp-icon-public-blank for the build-time SVG map vs. hydration
 				// trade-off.
 				$name = isset( $decoded['name'] ) ? (string) $decoded['name'] : '';
 				if ( '' === $name ) {

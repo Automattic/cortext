@@ -53,7 +53,8 @@
 	}
 }
 
-// tech-debt.md#55: placeholder shaped like the active layout while
+// tech-debt.md#td-dataviews-loading-skeletons: placeholder shaped like
+// the active layout while
 // useCollectionRows fetches. It sits beside <DataViews>; the wrapper handles
 // placement. Heights track DataViews v6 closely enough to keep the page steady.
 .cortext-collection-skeleton {

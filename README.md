@@ -24,6 +24,7 @@ Cortext stores documents, collection definitions, fields, and collection rows as
 ## Docs
 
 -   [Getting started](docs/getting-started.md): install, run, day-to-day commands.
+-   [Release process](docs/release.md): milestones, labels, and changelog previews.
 -   [Vision and principles](docs/vision.md): what drives the design.
 -   [Architecture](docs/architecture.md): current storage and shell overview.
 -   [Shell architecture](docs/architecture/shell.md): React shell, mount point, editor setup.

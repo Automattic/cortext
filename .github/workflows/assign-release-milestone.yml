@@ -1,0 +1,83 @@
+name: Assign Release Milestone
+
+on:
+    pull_request_target:
+        types: [closed]
+
+permissions:
+    issues: write
+    pull-requests: write
+
+jobs:
+    assign:
+        if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main'
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/github-script@v8
+              with:
+                  script: |
+                      const owner = context.repo.owner;
+                      const repo = context.repo.repo;
+                      const pr = context.payload.pull_request;
+                      const labels = pr.labels.map( ( label ) => label.name );
+                      const allowedTypeLabels = [
+                        'type: enhancement',
+                        'type: bug',
+                        'type: docs',
+                        'type: tooling',
+                        'type: code quality',
+                      ];
+
+                      if ( labels.includes( 'release: skip' ) ) {
+                        core.info( 'Skipping release milestone assignment because release: skip is present.' );
+                        return;
+                      }
+
+                      const milestones = await github.paginate(
+                        github.rest.issues.listMilestones,
+                        { owner, repo, state: 'open', per_page: 100 }
+                      );
+
+                      if ( milestones.length !== 1 ) {
+                        const message = milestones.length === 0
+                          ? 'No open release milestone exists. Create the next release milestone, for example 0.1.0.'
+                          : `Expected exactly one open release milestone, found ${ milestones.length }: ${ milestones.map( ( milestone ) => milestone.title ).join( ', ' ) }.`;
+                        await github.rest.issues.createComment( {
+                          owner,
+                          repo,
+                          issue_number: pr.number,
+                          body: `Release automation could not assign a milestone. ${ message }`,
+                        } );
+                        core.setFailed( message );
+                        return;
+                      }
+
+                      const releaseMilestone = milestones[0];
+                      let assignedMilestone = pr.milestone;
+                      if ( pr.milestone ) {
+                        core.info( `PR already has milestone ${ pr.milestone.title }; leaving it unchanged.` );
+                      } else {
+                        await github.rest.issues.update( {
+                          owner,
+                          repo,
+                          issue_number: pr.number,
+                          milestone: releaseMilestone.number,
+                        } );
+                        assignedMilestone = releaseMilestone;
+                        core.info( `Assigned milestone ${ releaseMilestone.title }.` );
+                      }
+
+                      const typeLabels = labels.filter( ( label ) => label.startsWith( 'type:' ) );
+                      const validTypeLabels = typeLabels.filter( ( label ) => allowedTypeLabels.includes( label ) );
+                      if ( typeLabels.length !== 1 || validTypeLabels.length !== 1 ) {
+                        const foundTypeLabels = typeLabels.length
+                          ? typeLabels.map( ( label ) => `\`${ label }\`` ).join( ', ' )
+                          : 'none';
+                        const allowedTypeLabelList = allowedTypeLabels.map( ( label ) => `\`${ label }\`` ).join( ', ' );
+                        await github.rest.issues.createComment( {
+                          owner,
+                          repo,
+                          issue_number: pr.number,
+                          body: `This PR is assigned to the release milestone ${ assignedMilestone.title }, but release notes need exactly one supported \`type:*\` label. Found ${ foundTypeLabels }. Use one of: ${ allowedTypeLabelList }.`,
+                        } );
+                      }

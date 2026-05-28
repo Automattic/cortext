@@ -2,7 +2,7 @@
 /**
  * Server-side registration for the `cortext/document-properties` block.
  *
- * The render callback is intentionally empty for now. tech-debt.md#42 tracks
+ * The render callback is intentionally empty for now. tech-debt.md#td-row-properties-public-render tracks
  * the public row markup. Register the block now so rows already store it in
  * `post_content`; the server render can come later without changing editor
  * wiring.
@@ -44,7 +44,7 @@ final class DocumentPropertiesBlock {
 
 	/**
 	 * Frontend render placeholder. Rows keep this block in `post_content`;
-	 * tech-debt.md#42 tracks the public markup.
+	 * tech-debt.md#td-row-properties-public-render tracks the public markup.
 	 *
 	 * @param array  $attributes Block attributes (unused).
 	 * @param string $content    Inner HTML (none; block is dynamic).

@@ -92,7 +92,7 @@ function hasActiveCalculations( view ) {
 }
 
 const BULK_DELETE_CONCURRENCY = 4;
-// tech-debt.md#61: DataViews ties list focus to its own selection. Cortext
+// tech-debt.md#td-dataviews-list-row-hooks: DataViews ties list focus to its own selection. Cortext
 // uses blank-row clicks and keyboard activation to open the row instead.
 const EMPTY_DATA_VIEW_SELECTION = [];
 const LIST_ROW_EMPTY_CLICK_TARGET_SELECTOR = '.dataviews-view-list__item';
@@ -252,7 +252,7 @@ export default function CollectionDataViews( {
 
 	// Editable, currently-visible columns in the order DataViews renders
 	// them. Drives Tab/Shift+Tab cell-to-cell navigation. See
-	// tech-debt.md#1: DataViews would own this if inline editing were
+	// tech-debt.md#td-dataviews-inline-editing: DataViews would own this if inline editing were
 	// upstream, and this walker would go away.
 	const editableVisibleFields = useMemo( () => {
 		const order = dataViewsView?.fields ?? [];
@@ -287,7 +287,7 @@ export default function CollectionDataViews( {
 			return { data };
 		}
 		const calculationView = { ...( view ?? {} ) };
-		// tech-debt.md#36: summaries need the filtered row set before
+		// tech-debt.md#td-dataviews-layout-slots: summaries need the filtered row set before
 		// pagination, which DataViews does not expose as a separate result.
 		delete calculationView.page;
 		delete calculationView.perPage;
@@ -324,7 +324,7 @@ export default function CollectionDataViews( {
 	const [ selectedRowIds, setSelectedRowIds ] = useState( [] );
 	const [ selectedRowsById, setSelectedRowsById ] = useState( {} );
 	const [ selectionAnchorId, setSelectionAnchorId ] = useState( null );
-	// tech-debt.md#48: DataViews only gives layouts the current-page
+	// tech-debt.md#td-document-layer-thin: DataViews only gives layouts the current-page
 	// selection, so Cortext owns off-page ids and click-intent merging.
 	const selectionInteractionRef = useRef( null );
 
@@ -625,7 +625,7 @@ export default function CollectionDataViews( {
 			// new row belongs on the last page. Search, filters, and explicit
 			// sorts make that guess unsafe; refresh in place instead.
 			//
-			// tech-debt.md#2: lastPage arithmetic is optimistic against
+			// tech-debt.md#td-rows-not-in-core-data: lastPage arithmetic is optimistic against
 			// possibly stale paginationInfo. With rows in core-data this
 			// becomes a useEffect on totalPages.
 			const nextView = nextViewAfterRowCreated(
@@ -1383,7 +1383,7 @@ export default function CollectionDataViews( {
 		};
 	}, [ collectionId, isResolving, onReady, rowError, rowsResolved ] );
 
-	// tech-debt.md#22: Gutenberg selects on any mousedown that bubbles up.
+	// tech-debt.md#td-gutenberg-scrollbar-select: Gutenberg selects on any mousedown that bubbles up.
 	// Dragging the dataviews scrollbar lands in the gutter (offset past the
 	// scrollable element's clientWidth/Height); stop propagation there so
 	// the scroll drag doesn't also pull a bounding box around the block.
@@ -1461,7 +1461,7 @@ export default function CollectionDataViews( {
 
 	const hasSelectionColumn = isTableLayout && dataFiltered.length > 0;
 	const hasVisibleRows = visibleRowIds.length > 0;
-	// tech-debt.md#36: DataViews has no table footer slot, so table bulk
+	// tech-debt.md#td-dataviews-layout-slots: DataViews has no table footer slot, so table bulk
 	// controls share the same portaled footer row as calculations.
 	const tableBulkActions =
 		isTableLayout && hasVisibleRows && selectedRowIds.length > 0 ? (
@@ -1641,7 +1641,7 @@ export default function CollectionDataViews( {
 											onRowsChanged={ refresh }
 										/>
 									) }
-									{ /* tech-debt.md#7: table/list render New just
+									{ /* tech-debt.md#td-dataviews-layout-slots: table/list render New just
 									   outside DataViews because there is no append
 									   slot in the layout chrome. */ }
 									{ ! isGridLayout && (

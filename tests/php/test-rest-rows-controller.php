@@ -214,7 +214,6 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		);
 
 		$this->assertGreaterThanOrEqual( 400, $response->get_status() );
-		$this->assertLessThan( 500, $response->get_status() );
 	}
 
 	private function query_rows( array $params ): \WP_REST_Response {

@@ -5,8 +5,8 @@ import { buildTree, collectAncestorIds } from '../pages-tree';
 // Pages and collections share one tree. Top-level collections (`parent === 0`)
 // always join; nested collections (`parent > 0`) join only if their parent
 // page is in the loaded set, since orphans without an anchor would render
-// detached from any node. (tech-debt.md#53 tracks lifting that with a paged
-// tree endpoint.)
+// detached from any node. See tech-debt.md#td-workspace-tree-no-unified-model
+// for the paged tree endpoint that would lift this gating.
 function deriveTreeCollections( pages, collections ) {
 	const pageIds = new Set( pages.map( ( p ) => p.id ) );
 	return ( collections ?? [] ).filter( ( collection ) => {

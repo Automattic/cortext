@@ -1,7 +1,7 @@
 /**
  * Property panel for a row document. It renders one row per collection field
  * with the edit control that matches the field type. Row detail chrome and the
- * locked document-properties editor block both mount this; see tech-debt.md#42
+ * locked document-properties editor block both mount this; see tech-debt.md#td-row-properties-public-render
  * for the remaining public-rendering work.
  *
  * Reads the post's edited title and meta from `editorStore` so the live
@@ -917,7 +917,7 @@ function SortableRowProperty( props ) {
 /*
  * Renders the row's collection-field properties as document chrome above the
  * block editor. This is intentionally not serialized yet; see
- * tech-debt.md#42 for the frontend rendering work.
+ * tech-debt.md#td-row-properties-public-render for the frontend rendering work.
  *
  * @param {Object}   props
  * @param {number}   props.collectionId The row's parent collection ID.

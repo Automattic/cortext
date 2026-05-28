@@ -168,7 +168,8 @@ th.dataviews-view-table__checkbox-column {
 // those <th>s and replace it with a single combined dropdown (Sort /
 // Move / Hide / Rename / Duplicate / Delete). Title and system fields
 // don't have a marker, so their built-in triggers stay visible.
-// `tech-debt.md#16` covers the upstream gap that forces this takeover.
+// `tech-debt.md#td-dataviews-header-extension-slots` covers the upstream
+// gap that forces this takeover.
 .dataviews-view-table
 th:has(.cortext-column-header-marker)
 .dataviews-view-table-header-button:not(.cortext-column-header-trigger) {
@@ -223,7 +224,8 @@ tbody > tr > td:not(:first-child) {
 	width: 100%;
 }
 
-// tech-debt.md#5: DataViews uses a real <table>. Cortext switches it to
+// tech-debt.md#td-dataviews-inline-editing: DataViews uses a real
+// <table>. Cortext switches it to
 // `table-layout: fixed` for predictable resizing, but the display shell
 // still anchors cell layout while editors mount. To keep the column from
 // reflowing when an editor mounts, we always render the display shell and
@@ -887,7 +889,8 @@ tr:has(.cortext-title-cell--is-opening)
 	width: 100%;
 	min-width: 0;
 
-	// tech-debt.md#55: hold the layout area while rows load, so search,
+	// tech-debt.md#td-dataviews-loading-skeletons: hold the layout area
+	// while rows load, so search,
 	// filters, header, and rows/cards appear together.
 	&__rows-skeleton {
 		position: absolute;
@@ -937,7 +940,7 @@ tr:has(.cortext-title-cell--is-opening)
 	// DataViews v6's td `padding-block` (12 and 16); compact is
 	// intentionally tighter than DataViews's default (4 -> 0) so the row
 	// matches the 40px editor floor and gets closer to a compact
-	// density. See tech-debt.md#5.
+	// density. See tech-debt.md#td-dataviews-inline-editing.
 	.dataviews-view-table {
 		table-layout: fixed;
 
@@ -1127,7 +1130,8 @@ tr:has(.cortext-title-cell--is-opening)
 	}
 }
 
-// tech-debt.md#15: The resizer and dnd-kit drag handle are portaled into each
+// tech-debt.md#td-dataviews-column-interactions: The resizer and dnd-kit
+// drag handle are portaled into each
 // `<th>` rendered by `@wordpress/dataviews`, so the th needs a position anchor.
 /* stylelint-disable-next-line no-descending-specificity */
 .cortext-data-view .dataviews-view-table thead > tr > th {

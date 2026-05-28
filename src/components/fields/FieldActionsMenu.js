@@ -201,7 +201,7 @@ export default function FieldActionsMenu( {
 		[ closeMenu ]
 	);
 
-	// tech-debt.md#30: Format lives here; Calculate is injected by table
+	// tech-debt.md#td-wp-menu-popover-limitations: Format lives here; Calculate is injected by table
 	// headers. Both are sibling popovers that act like submenus.
 	const hideMenuOnInteractOutside = useCallback( ( event ) => {
 		const target = event.target;
@@ -217,7 +217,7 @@ export default function FieldActionsMenu( {
 		return true;
 	}, [] );
 
-	// tech-debt.md#27: Ariakit only sees clicks in this iframe. Editor chrome
+	// tech-debt.md#td-wp-menu-popover-limitations: Ariakit only sees clicks in this iframe. Editor chrome
 	// clicks land in the parent document, so listen there too.
 	useEffect( () => {
 		if ( ! isMenuOpen ) {
@@ -317,7 +317,7 @@ export default function FieldActionsMenu( {
 						placement="bottom"
 					/>
 				) : null }
-				{ /* tech-debt.md#29: portal avoids table-header text
+				{ /* tech-debt.md#td-wp-menu-popover-limitations: portal avoids table-header text
 				     transform leaking into the menu. */ }
 				<Menu.Popover
 					className="cortext-field-actions-popover"
@@ -397,7 +397,7 @@ export default function FieldActionsMenu( {
 								{ __( 'Duplicate', 'cortext' ) }
 							</Menu.ItemLabel>
 						</Menu.Item>
-						{ /* tech-debt.md#28: Menu.Item has no destructive
+						{ /* tech-debt.md#td-wp-menu-popover-limitations: Menu.Item has no destructive
 						     variant, so style Delete with a class. */ }
 						<Menu.Item
 							className="cortext-column-header-actions__destructive-item"

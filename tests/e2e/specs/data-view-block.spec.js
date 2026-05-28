@@ -4196,7 +4196,7 @@ test.describe( 'Collection view block', () => {
 
 			// 2. Rename "Notes" → "Description" via the column-header
 			//    dropdown (combined Sort/Move/Hide + Rename/Duplicate/
-			//    Delete menu — see docs/tech-debt.md#16).
+			//    Delete menu — see docs/tech-debt.md#td-dataviews-header-extension-slots).
 			await openColumnDropdown( notesHeader, 'Notes' );
 			await columnMenuItem( 'Rename' ).click();
 

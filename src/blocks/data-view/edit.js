@@ -283,7 +283,7 @@ function CollectionToolbarControl( {
 					) }
 				/>
 			) }
-			{ /* tech-debt.md#57: peek/modal hide the parent inspector
+			{ /* tech-debt.md#td-row-detail-toolbar-isolation: peek/modal hide the parent inspector
 			     button until there is a row-scoped one. Owner blocks open
 			     the document tab, where their panels are slotted. */ }
 			{ ( hasBlockInspector || isOwner ) && (

@@ -9,7 +9,7 @@
  * `posts_pre_query` filter that answers from the in-memory store and keeps
  * pagination totals available.
  *
- * Tracked in docs/tech-debt.md#9. Use by `use InMemoryPostsQuery;` in a test
+ * Tracked in docs/tech-debt.md#td-wordbless-row-coverage. Use by `use InMemoryPostsQuery;` in a test
  * class and call `install_in_memory_posts_query()` from `set_up()` and
  * `uninstall_in_memory_posts_query()` from `tear_down()`.
  *

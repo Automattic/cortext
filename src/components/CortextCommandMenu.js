@@ -23,7 +23,7 @@ import { store as commandsStore } from '@wordpress/commands';
 const EMPTY_DESCRIPTIONS = new Map();
 export const CommandDescriptionContext = createContext( EMPTY_DESCRIPTIONS );
 
-// tech-debt.md#38: @wordpress/commands has no custom group API. Keep the
+// tech-debt.md#td-command-palette-host-glue: @wordpress/commands has no custom group API. Keep the
 // upstream store/hooks, but render the menu locally so workspace recents
 // can live in their own section.
 const ITEM_ID_PREFIX = 'command-palette-item-';

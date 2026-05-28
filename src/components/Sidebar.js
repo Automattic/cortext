@@ -118,7 +118,7 @@ export default function Sidebar( {
 	onToggleCollapsed,
 	onWidthChange,
 } ) {
-	// tech-debt.md#53: this tree still comes from flat REST lists capped at
+	// tech-debt.md#td-workspace-tree-no-unified-model: this tree still comes from flat REST lists capped at
 	// `per_page: 100`. The follow-up is lazy loading or a paged tree endpoint.
 	const { records: collections, isResolving: isResolvingCollections } =
 		useEntityRecords(

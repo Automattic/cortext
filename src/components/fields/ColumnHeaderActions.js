@@ -32,13 +32,13 @@ import { withColumnCalculation } from '../tableCalculations';
 // Projects Cortext controls into DataViews' table header:
 //
 // - `[data-cortext-field-marker="<recordId>"]` marks custom fields. We hide
-//   DataViews' trigger (see `tech-debt.md#16`) and portal in one menu with
+//   DataViews' trigger (see `tech-debt.md#td-dataviews-header-extension-slots`) and portal in one menu with
 //   Sort / Move / Hide plus Rename / Duplicate / Delete. The marker is only
 //   the anchor; the real button is a sibling so the column drag handle can
 //   still forward clicks to it.
 // - `th.dataviews-view-table__actions-column` — `+` button in the
 //   row-actions column header that opens the same `AddFieldPopover`
-//   as the toolbar Add field trigger. See `tech-debt.md#17`.
+//   as the toolbar Add field trigger. See `tech-debt.md#td-dataviews-actions-column-piggyback`.
 //
 // The invisible anchor lets this component find its wrapper. A
 // MutationObserver re-syncs portals after DataViews rewrites the header.
@@ -88,7 +88,7 @@ export default function ColumnHeaderActions( {
 				} );
 			// The add-field button lives in DataViews' actions column header.
 			// Row actions keep that column rendered, so we no longer need a
-			// synthetic table column for it. See `tech-debt.md#17`.
+			// synthetic table column for it. See `tech-debt.md#td-dataviews-actions-column-piggyback`.
 			const actionsTh = wrapper.querySelector(
 				'th.dataviews-view-table__actions-column'
 			);

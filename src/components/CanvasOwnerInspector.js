@@ -6,7 +6,8 @@ import { useSelect } from '@wordpress/data';
 // A document whose body renders through a single locked block ("owner") joins
 // the header set, hides the Block tab, fills the document tab, and drops the
 // usual block chrome. Today only schema-bearing documents have an owner: the
-// `cortext/data-view` pointing back at themselves. See tech-debt.md#59.
+// `cortext/data-view` pointing back at themselves. See
+// tech-debt.md#td-collection-owner-body-contract.
 
 const OWNER_BLOCK_NAME = 'cortext/data-view';
 
