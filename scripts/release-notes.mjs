@@ -143,7 +143,7 @@ async function main() {
 	] );
 
 	const pullRequests = items
-		.filter( ( item ) => item.pull_request )
+		.filter( ( item ) => item.pull_request?.merged_at )
 		.sort( ( a, b ) => a.number - b.number );
 
 	const errors = [];
