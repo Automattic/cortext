@@ -562,12 +562,13 @@ export default function CollectionDataViews( {
 			if ( ! collectionId || ! rowId ) {
 				return null;
 			}
+			// `fieldId` is the DataView field id (`field-<post_id>`), which is
+			// also the post meta key on the row document.
 			const updated = await apiFetch( {
-				path: `/cortext/v1/collections/${ collectionId }/rows/${ rowId }`,
+				path: `/wp/v2/crtxt_documents/${ rowId }`,
 				method: 'POST',
 				data: {
-					field: fieldId,
-					value,
+					meta: { [ fieldId ]: value },
 				},
 			} );
 			touchRecent( {
@@ -950,7 +951,7 @@ export default function CollectionDataViews( {
 			setRowActionError( null );
 			try {
 				const created = await apiFetch( {
-					path: `/cortext/v1/collections/${ collectionId }/rows/${ row.id }/duplicate`,
+					path: `/cortext/v1/documents/${ row.id }/duplicate`,
 					method: 'POST',
 				} );
 				if ( created?.id ) {

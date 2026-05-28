@@ -659,11 +659,10 @@ describe( 'RowProperties', () => {
 
 		await waitFor( () =>
 			expect( apiFetch ).toHaveBeenCalledWith( {
-				path: '/cortext/v1/collections/44/rows/99',
+				path: '/wp/v2/crtxt_documents/99',
 				method: 'POST',
 				data: {
-					field: 'field-7',
-					value: [ 456 ],
+					meta: { 'field-7': [ 456 ] },
 				},
 			} )
 		);
