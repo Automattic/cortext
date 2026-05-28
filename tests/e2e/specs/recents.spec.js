@@ -145,6 +145,7 @@ test.describe( 'Sidebar recents', () => {
 		const collectionTitle = `E2E Recent Collection ${ suffix }`;
 		let recentPage;
 		let collection;
+		let field;
 
 		try {
 			recentPage = await requestUtils.rest( {
@@ -161,7 +162,24 @@ test.describe( 'Sidebar recents', () => {
 				data: {
 					title: collectionTitle,
 					status: 'private',
-					mode: 'full_page',
+				},
+			} );
+			// Promote the document to a collection so the canvas renders the
+			// data view and the sidebar labels it as a collection.
+			field = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_fields',
+				data: {
+					title: 'Title',
+					status: 'private',
+					meta: { type: 'text' },
+				},
+			} );
+			await requestUtils.rest( {
+				method: 'POST',
+				path: `/wp/v2/crtxt_documents/${ collection.id }`,
+				data: {
+					meta: { cortext_fields: [ String( field.id ) ] },
 				},
 			} );
 
@@ -219,6 +237,10 @@ test.describe( 'Sidebar recents', () => {
 			await deleteIfCreated(
 				requestUtils,
 				collection && `/wp/v2/crtxt_documents/${ collection.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				field && `/wp/v2/crtxt_fields/${ field.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,

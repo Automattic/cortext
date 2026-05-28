@@ -430,6 +430,26 @@ async function createManualOrderFixture( requestUtils ) {
 		},
 	} );
 
+	// Attach at least one field so the document is promoted to a collection
+	// (the `cortext_fields` meta change is what creates the mirror trait term;
+	// without it, `cortext_trait` on row inserts is a silent no-op).
+	const field = await requestUtils.rest( {
+		method: 'POST',
+		path: '/wp/v2/crtxt_fields',
+		data: {
+			title: 'Title',
+			status: 'private',
+			meta: { type: 'text' },
+		},
+	} );
+	await requestUtils.rest( {
+		method: 'POST',
+		path: `/wp/v2/crtxt_documents/${ collection.id }`,
+		data: {
+			meta: { cortext_fields: [ String( field.id ) ] },
+		},
+	} );
+
 	const rows = [];
 	for ( const title of [ 'Alpha Manual', 'Beta Manual', 'Gamma Manual' ] ) {
 		rows.push(
@@ -445,7 +465,7 @@ async function createManualOrderFixture( requestUtils ) {
 		);
 	}
 
-	return { collection, rows };
+	return { collection, field, rows };
 }
 
 function createDataViewBlockMarkup( collectionId, viewOverrides = {} ) {
@@ -1228,7 +1248,7 @@ test.describe( 'Collection view block', () => {
 				path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
 				data: {
 					meta: {
-						fields: [
+						cortext_fields: [
 							String( fixture.fieldA.id ),
 							String( fixture.fieldB.id ),
 						],
@@ -1852,7 +1872,7 @@ test.describe( 'Collection view block', () => {
 				path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
 				data: {
 					meta: {
-						fields: [
+						cortext_fields: [
 							String( fixture.field.id ),
 							String( fixture.tagsField.id ),
 							String( fixture.yearField.id ),

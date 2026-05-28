@@ -674,6 +674,25 @@ test.describe( 'Navigation lifecycle', () => {
 					status: 'private',
 				},
 			} );
+			// Promote the document to a collection so the trait mirror term
+			// gets created; without `cortext_fields` the row insert below
+			// would be a silent no-op on `cortext_trait`.
+			fixture.field = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_fields',
+				data: {
+					title: 'Title',
+					status: 'private',
+					meta: { type: 'text' },
+				},
+			} );
+			await requestUtils.rest( {
+				method: 'POST',
+				path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
+				data: {
+					meta: { cortext_fields: [ String( fixture.field.id ) ] },
+				},
+			} );
 			fixture.entry = await requestUtils.rest( {
 				method: 'POST',
 				path: '/wp/v2/crtxt_documents',
