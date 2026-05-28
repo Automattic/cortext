@@ -44,6 +44,7 @@ This is not optional. wp-env runs detached and would leak containers if a worktr
 ```
 pnpm run dev          # JS watcher, when wp-env is already running
 pnpm run build        # production build
+pnpm run build:zip    # production build packaged as dist/cortext.zip
 pnpm run lint:js      # ESLint, scoped to src/
 pnpm run lint:php     # PHPCS via pnpm (same as composer phpcs)
 pnpm run lint:style   # stylelint for src/**/*.{css,pcss,scss}
