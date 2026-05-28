@@ -47,8 +47,16 @@ label.
 Area labels are optional and do not affect release automation. Add them when
 they make planning or filtering easier:
 
+-   `area: canvas` for the block editor canvas, blocks, inspector, covers,
+    icons, and document chrome
+-   `area: collections` for fields, rows, views, DataViews, relations, rollups,
+    formulas, and row properties
 -   `area: desktop`
--   `area: performance`
+-   `area: performance` for budgets, profiling, benchmarks, and regressions
+-   `area: publishing` for public rendering through WordPress, templates,
+    frontend block output, and theme-facing views
+-   `area: shell` for the app shell, sidebar, routing, top bar, command palette,
+    recents, favorites, trash, and layout
 
 ## Automatic assignment
 
