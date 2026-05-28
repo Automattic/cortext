@@ -1,15 +1,13 @@
-// Renders the full block inserter as a secondary sidebar inside the
-// Cortext canvas. Gutenberg's Quick Inserter calls
-// `__experimentalSetIsInserterOpened` when the user clicks Browse All;
-// `@wordpress/editor`'s EditorProvider wires that setting to the
-// `core/editor` store's `setIsInserterOpened` action (see
-// `use-block-editor-settings.js`), so the click flips the store flag.
-// This component is the UI side of that contract: when the flag is
-// truthy, render `__experimentalLibrary` with the insertion context the
-// Quick Inserter carried in, and close on ESC or selection.
+// Renders Gutenberg's full inserter inside the Cortext canvas. Browse All
+// stores either `true` or the Quick Inserter payload: filter text, insertion
+// target, and `onSelect`. Pass that payload through so a slash-menu search
+// opens the same filtered view in the sidebar.
 //
-// The DOM uses Gutenberg's own `editor-inserter-sidebar` class names so
-// the package's CSS applies without Cortext having to redefine it.
+// The public `isInserterOpened` selector only gives us a boolean. Gutenberg's
+// own sidebar reads the private `getInserter` selector via `unlock`; we do the
+// same here so Browse All keeps the Quick Inserter context.
+//
+// Keep Gutenberg's class names so its sidebar styles apply here too.
 // eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 import { __experimentalLibrary as InserterLibrary } from '@wordpress/block-editor';
 import { useDispatch, useSelect } from '@wordpress/data';
@@ -17,11 +15,12 @@ import { store as editorStore } from '@wordpress/editor';
 import { useCallback, useRef } from '@wordpress/element';
 import { ESCAPE } from '@wordpress/keycodes';
 
+import { unlock } from '../lock-unlock';
 import './CortextInserterSidebar.scss';
 
 export default function CortextInserterSidebar() {
 	const inserter = useSelect(
-		( select ) => select( editorStore ).isInserterOpened(),
+		( select ) => unlock( select( editorStore ) ).getInserter(),
 		[]
 	);
 	const { setIsInserterOpened } = useDispatch( editorStore );
@@ -41,11 +40,6 @@ export default function CortextInserterSidebar() {
 		[ close ]
 	);
 
-	// The selector returns `true`, `false`, or an object the Quick Inserter
-	// supplied with insertion context. Treat anything non-object as "no
-	// extra context" and let the library default to root-level insertion.
-	const context = inserter && typeof inserter === 'object' ? inserter : null;
-
 	return (
 		// eslint-disable-next-line jsx-a11y/no-static-element-interactions
 		<div
@@ -56,10 +50,10 @@ export default function CortextInserterSidebar() {
 				<InserterLibrary
 					ref={ libraryRef }
 					showInserterHelpPanel
-					rootClientId={ context?.rootClientId }
-					__experimentalInsertionIndex={ context?.insertionIndex }
-					__experimentalFilterValue={ context?.filterValue }
-					onSelect={ context?.onSelect }
+					rootClientId={ inserter?.rootClientId }
+					__experimentalInsertionIndex={ inserter?.insertionIndex }
+					__experimentalFilterValue={ inserter?.filterValue }
+					onSelect={ inserter?.onSelect }
 					onClose={ close }
 				/>
 			</div>

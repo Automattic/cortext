@@ -1,23 +1,25 @@
 /**
- * Covers `src/components/CortextInserterSidebar.js`. The sidebar mirrors the
- * `core/editor` store's `isInserterOpened` state into rendered UI, forwards
- * the carried insertion context to the inserter library, and closes on
- * ESC or the library's onClose.
+ * Covers the Cortext inserter sidebar. Browse All should keep the slash-menu
+ * search and insertion target, then close on ESC or when the library closes.
  */
 
 import { fireEvent, render, screen } from '@testing-library/react';
 
-let mockInserterState;
+let mockInserterPayload;
 const mockSetIsInserterOpened = jest.fn();
 
 jest.mock( '@wordpress/data', () => ( {
 	useSelect: ( cb ) =>
 		cb( () => ( {
-			isInserterOpened: () => mockInserterState,
+			getInserter: () => mockInserterPayload,
 		} ) ),
 	useDispatch: () => ( {
 		setIsInserterOpened: mockSetIsInserterOpened,
 	} ),
+} ) );
+
+jest.mock( '../../../src/lock-unlock', () => ( {
+	unlock: ( store ) => store,
 } ) );
 
 jest.mock( '@wordpress/editor', () => ( {
@@ -58,7 +60,7 @@ import CortextInserterSidebar from '../../../src/components/CortextInserterSideb
 
 beforeEach( () => {
 	mockSetIsInserterOpened.mockClear();
-	mockInserterState = true;
+	mockInserterPayload = {};
 } );
 
 describe( 'CortextInserterSidebar', () => {
@@ -68,8 +70,8 @@ describe( 'CortextInserterSidebar', () => {
 		expect( screen.getByTestId( 'inserter-library' ) ).toBeInTheDocument();
 	} );
 
-	it( 'forwards insertion context from the editor store', () => {
-		mockInserterState = {
+	it( 'forwards the Quick Inserter payload to the library', () => {
+		mockInserterPayload = {
 			rootClientId: 'parent-id',
 			insertionIndex: 3,
 			filterValue: 'pull',
@@ -83,8 +85,8 @@ describe( 'CortextInserterSidebar', () => {
 		expect( library ).toHaveAttribute( 'data-filter', 'pull' );
 	} );
 
-	it( 'defaults context to undefined when the store flag is just true', () => {
-		mockInserterState = true;
+	it( 'leaves library props empty without a Quick Inserter payload', () => {
+		mockInserterPayload = {};
 
 		render( <CortextInserterSidebar /> );
 
