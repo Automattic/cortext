@@ -110,7 +110,7 @@ final class Test_Documents extends BaseTestCase {
 
 	public function test_find_returns_row_icon_when_set(): void {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
-		$icon = wp_json_encode(
+		$icon          = wp_json_encode(
 			array(
 				'type' => 'wp',
 				'name' => 'people',
@@ -153,7 +153,7 @@ final class Test_Documents extends BaseTestCase {
 				'post_name'   => '',
 			)
 		);
-		$term_id = TraitTaxonomy::term_id_for_trait( $collection_id );
+		$term_id       = TraitTaxonomy::term_id_for_trait( $collection_id );
 		$this->assertGreaterThan( 0, $term_id );
 		wp_set_object_terms( $row_id, array( $term_id ), TraitTaxonomy::TAXONOMY, false );
 
@@ -625,7 +625,7 @@ final class Test_Documents extends BaseTestCase {
 		);
 		add_post_meta( $collection_id, 'cortext_fields', '42' );
 
-		$row_id = (int) wp_insert_post(
+		$row_id  = (int) wp_insert_post(
 			array(
 				'post_type'   => \Cortext\PostType\Document::POST_TYPE,
 				'post_status' => 'trash',
@@ -635,7 +635,7 @@ final class Test_Documents extends BaseTestCase {
 		$term_id = \Cortext\Taxonomy\TraitTaxonomy::term_id_for_trait( $collection_id );
 		wp_set_object_terms( $row_id, array( $term_id ), \Cortext\Taxonomy\TraitTaxonomy::TAXONOMY );
 
-		$page = $this->documents->format_document(
+		$page       = $this->documents->format_document(
 			get_post( $page_id ),
 			array( 'include_trash_meta' => true )
 		);
@@ -643,7 +643,7 @@ final class Test_Documents extends BaseTestCase {
 			get_post( $collection_id ),
 			array( 'include_trash_meta' => true )
 		);
-		$row = $this->documents->format_document(
+		$row        = $this->documents->format_document(
 			get_post( $row_id ),
 			array( 'include_trash_meta' => true )
 		);
@@ -701,13 +701,13 @@ final class Test_Documents extends BaseTestCase {
 		$this->assertGreaterThan( 0, TraitTaxonomy::term_id_for_trait( $collection_id ) );
 	}
 
-	public function test_save_creates_row_when_collection_passed(): void {
+	public function test_save_creates_row_when_trait_passed(): void {
 		$collection_id = $this->create_collection( 'books', 'Books' );
 
 		$row_id = $this->documents->save(
 			array(
-				'title'      => 'The Left Hand of Darkness',
-				'collection' => $collection_id,
+				'title' => 'The Left Hand of Darkness',
+				'trait' => $collection_id,
 			)
 		);
 
@@ -720,17 +720,18 @@ final class Test_Documents extends BaseTestCase {
 		);
 	}
 
-	public function test_save_returns_error_for_unknown_collection(): void {
+	public function test_save_returns_error_for_unknown_trait(): void {
 		$result = $this->documents->save(
 			array(
-				'title'      => 'Orphan row',
-				'collection' => 999_999,
+				'title' => 'Orphan row',
+				'trait' => 999_999,
 			)
 		);
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 'cortext_collection_not_found', $result->get_error_code() );
+		$this->assertSame( 'cortext_trait_not_found', $result->get_error_code() );
 	}
+
 
 	public function test_save_returns_error_for_unknown_id_on_update(): void {
 		$result = $this->documents->save(
@@ -789,14 +790,14 @@ final class Test_Documents extends BaseTestCase {
 		unset( $first_field );
 	}
 
-	public function test_save_removes_collection_membership_when_collection_zero(): void {
+	public function test_save_removes_trait_membership_when_trait_zero(): void {
 		$collection_id = $this->create_collection( 'books', 'Books' );
 		$row_id        = $this->create_row( $collection_id, 'Stays as row' );
 
 		$this->documents->save(
 			array(
-				'id'         => $row_id,
-				'collection' => 0,
+				'id'    => $row_id,
+				'trait' => 0,
 			)
 		);
 

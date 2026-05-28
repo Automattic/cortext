@@ -94,28 +94,29 @@ final class Documents {
 	/**
 	 * Creates or updates a `crtxt_document`. Kind is derived from the
 	 * payload, never declared:
-	 *   - `fields` present     -> writes the `cortext_fields` schema
-	 *                              (collection).
-	 *   - `collection` present -> assigns the `crtxt_trait` mirror term
-	 *                              (row member of that collection).
-	 *   - neither              -> page.
+	 *   - `fields` present -> writes the `cortext_fields` schema
+	 *                          (collection in UI terms).
+	 *   - `trait`  present -> assigns the `crtxt_trait` mirror term
+	 *                          (row, i.e. member of that trait/collection).
+	 *   - neither          -> page.
 	 *
 	 * The same call shape covers create (no `id`) and update (with `id`).
 	 *
 	 * Payload keys:
-	 *   - id          (int)             Update when present; create otherwise.
-	 *   - title       (string)          post_title.
-	 *   - status      (string)          post_status. Default 'draft' on create.
-	 *   - parent      (int)             post_parent.
-	 *   - content     (string)          post_content.
-	 *   - author      (int)             post_author.
-	 *   - fields      (int[]|string[])  Schema field ids. Rewrites all
-	 *                                   cortext_fields meta rows.
-	 *   - collection  (int|null)        Owning collection id. Sets the
-	 *                                   mirror term; pass 0/null to remove.
-	 *   - meta        (array)           Extra meta_input merged in
-	 *                                   (`field-<id>` values, breadcrumbs,
-	 *                                   `cortext_document_icon`, ...).
+	 *   - id      (int)             Update when present; create otherwise.
+	 *   - title   (string)          post_title.
+	 *   - status  (string)          post_status. Default 'draft' on create.
+	 *   - parent  (int)             post_parent.
+	 *   - content (string)          post_content.
+	 *   - author  (int)             post_author.
+	 *   - fields  (int[]|string[])  Schema field ids. Rewrites all
+	 *                               cortext_fields meta rows.
+	 *   - trait   (int|null)        Owning collection/trait document id.
+	 *                               Sets the mirror term; pass 0/null to
+	 *                               remove membership.
+	 *   - meta    (array)           Extra meta_input merged in
+	 *                               (`field-<id>` values, breadcrumbs,
+	 *                               `cortext_document_icon`, ...).
 	 *
 	 * @param array<string,mixed> $payload Save payload.
 	 *
@@ -185,17 +186,17 @@ final class Documents {
 			}
 		}
 
-		if ( array_key_exists( 'collection', $payload ) ) {
-			$collection_id = (int) $payload['collection'];
-			if ( $collection_id > 0 ) {
-				$term_id = TraitTaxonomy::term_id_for_trait( $collection_id );
+		if ( array_key_exists( 'trait', $payload ) ) {
+			$trait_id = (int) $payload['trait'];
+			if ( $trait_id > 0 ) {
+				$term_id = TraitTaxonomy::term_id_for_trait( $trait_id );
 				if ( $term_id < 1 ) {
 					return new WP_Error(
-						'cortext_collection_not_found',
-						__( 'Collection mirror term not found.', 'cortext' ),
+						'cortext_trait_not_found',
+						__( 'Trait mirror term not found.', 'cortext' ),
 						array(
-							'status'        => 404,
-							'collection_id' => $collection_id,
+							'status'   => 404,
+							'trait_id' => $trait_id,
 						)
 					);
 				}
@@ -204,7 +205,7 @@ final class Documents {
 					return $set;
 				}
 			} else {
-				// Explicit `collection => 0/null` removes membership.
+				// Explicit `trait => 0/null` removes membership.
 				wp_set_object_terms( $document_id, array(), TraitTaxonomy::TAXONOMY, false );
 			}
 		}
