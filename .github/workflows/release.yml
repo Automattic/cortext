@@ -4,19 +4,16 @@ on:
     workflow_dispatch:
         inputs:
             version:
-                description: 'Release version, e.g. 0.1.0'
+                description: 'Version'
                 required: true
                 default: '0.1.0'
-            milestone:
-                description: 'Milestone title. Defaults to version.'
-                required: false
             prerelease:
-                description: 'Mark the draft release as a prerelease.'
+                description: 'Prerelease'
                 required: true
                 default: true
                 type: boolean
             dry_run:
-                description: 'Build and upload release files without creating a release or tag.'
+                description: 'Dry run (uploads files only; no tag or release)'
                 required: true
                 default: true
                 type: boolean
@@ -61,15 +58,12 @@ jobs:
               id: milestone
               uses: actions/github-script@v8
               env:
-                  INPUT_MILESTONE: ${{ github.event.inputs.milestone }}
                   VERSION: ${{ github.event.inputs.version }}
               with:
                   script: |
                       const owner = context.repo.owner;
                       const repo = context.repo.repo;
-                      const inputMilestone = process.env.INPUT_MILESTONE.trim();
                       const version = process.env.VERSION.trim();
-                      const requestedTitle = inputMilestone || version;
 
                       if ( ! /^\d+\.\d+\.\d+$/.test( version ) ) {
                         throw new Error( `Release versions must use the WordPress-style format 0.1.0, without a leading "v". Received "${ version }".` );
@@ -80,7 +74,7 @@ jobs:
                         { owner, repo, state: 'open', per_page: 100 }
                       );
 
-                      if ( ! inputMilestone && milestones.length !== 1 ) {
+                      if ( milestones.length !== 1 ) {
                         throw new Error(
                           milestones.length === 0
                             ? 'No open release milestone exists. Create 0.1.0 before drafting the first release.'
@@ -88,9 +82,9 @@ jobs:
                         );
                       }
 
-                      const milestone = milestones.find( ( item ) => item.title === requestedTitle );
+                      const milestone = milestones.find( ( item ) => item.title === version );
                       if ( ! milestone ) {
-                        throw new Error( `Cannot find open milestone "${ requestedTitle }".` );
+                        throw new Error( `Cannot find open milestone "${ version }".` );
                       }
 
                       core.setOutput( 'title', milestone.title );
