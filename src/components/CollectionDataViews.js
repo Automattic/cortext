@@ -110,7 +110,7 @@ export default function CollectionDataViews( {
 	revealFieldId = null,
 	onFieldRevealed,
 } ) {
-	const { fields, collection, slug, isResolving, fieldsResolved } =
+	const { fields, collection, isResolving, fieldsResolved } =
 		useCollectionFieldsContext();
 	const { touchRecent } = useRecents();
 	// Field IDs from the last schema sync. We use this to auto-show fields
@@ -658,7 +658,7 @@ export default function CollectionDataViews( {
 
 	const previousVisibleFieldsRef = useRef( null );
 	const savedRowDetailMode = getRowDetailMode( view );
-	const postType = slug ? `crtxt_${ slug }` : null;
+	const postType = collectionId ? 'crtxt_document' : null;
 	const { openDocument, closeDocument } = useDocumentPeekActions();
 	const { peek } = useDocumentPeekState();
 	const openRowId = peek?.docId ?? null;
@@ -1010,7 +1010,7 @@ export default function CollectionDataViews( {
 				BULK_DELETE_CONCURRENCY,
 				( row ) =>
 					apiFetch( {
-						path: `/wp/v2/${ postType }/${ row.id }`,
+						path: `/wp/v2/crtxt_documents/${ row.id }`,
 						method: 'DELETE',
 					} )
 			);
@@ -1586,7 +1586,7 @@ export default function CollectionDataViews( {
 									{ isGridLayout && (
 										<GridNewRowPortal
 											wrapperRef={ tableWrapperRef }
-											slug={ slug }
+											collectionId={ collectionId }
 											view={ dataViewsView }
 											fields={ fields }
 											onCreated={ onCreated }
@@ -1654,7 +1654,7 @@ export default function CollectionDataViews( {
 											}
 										>
 											<DataViewNewRowButton
-												slug={ slug }
+												collectionId={ collectionId }
 												view={ view }
 												fields={ fields }
 												onCreated={ onCreated }
