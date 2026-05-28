@@ -298,15 +298,15 @@ The create-field flow also has to reveal the new trailing column itself. It carr
 
 **What.** `DocumentIdentity::prepend_header_blocks` slips a locked `core/post-title` block into `post_content` on insert, so the editor canvas can show the title inline as part of the BlockList. The public template still calls `the_title()` immediately before `the_content()`, and `core/post-title` resolves to the same `post_title` again, so every page created after this filter landed renders its title twice publicly. Older pages (no title block in their content) are fine until the editor next persists them.
 
-**Where.** `prepend_header_blocks` in `includes/PostType/DocumentIdentity.php`, paired with `the_title()` in `templates/single-crtxt_page.php`.
+**Where.** `prepend_header_blocks` in `includes/PostType/DocumentIdentity.php`, paired with `the_title()` in `templates/single-crtxt_document.php`.
 
 **Solution.** Stop baking `core/post-title` into `post_content` and mount the editor's title input as canvas chrome above `BlockCanvas`, the way Gutenberg itself does it. The template keeps `the_title()` as the single source of truth; the editor keeps an inline-editable title; pages already saved with the block get a small migration that strips it. Until then `the_title()` is the authoritative render and the duplication is the cost of the canvas-as-blocklist shape.
 
 ## 33. Frontend stylesheet doesn't carry the cover/icon rules `[internal]`
 
-**What.** The PHP `render_callback`s emit `.cortext-document-cover-block`, `.cortext-document-icon-block`, and `.cortext-document-icon` markup on public pages, but their CSS still doesn't load there. Since the shell-style split, the admin/editor rules live in block edit partials and `PageIcon.scss`; `src/frontend.scss` still has none. On a public `crtxt_page`, the cover image renders at intrinsic size and the icon block falls back to inline layout.
+**What.** The PHP `render_callback`s emit `.cortext-document-cover-block`, `.cortext-document-icon-block`, and `.cortext-document-icon` markup on public pages, but their CSS still doesn't load there. Since the shell-style split, the admin/editor rules live in block edit partials and `DocumentIcon.scss`; `src/frontend.scss` still has none. On a public `crtxt_document`, the cover image renders at intrinsic size and the icon block falls back to inline layout.
 
-**Where.** `src/blocks/document-cover/edit.scss`, `src/blocks/document-icon/edit.scss`, and `src/components/PageIcon.scss` versus `src/frontend.scss`, plus the PHP render callbacks in `includes/Editor/DocumentCoverBlock.php` and `includes/Editor/DocumentIconBlock.php`.
+**Where.** `src/blocks/document-cover/edit.scss`, `src/blocks/document-icon/edit.scss`, and `src/components/DocumentIcon.scss` versus `src/frontend.scss`, plus the PHP render callbacks in `includes/Editor/DocumentCoverBlock.php` and `includes/Editor/DocumentIconBlock.php`.
 
 **Solution.** Extract the persisted cover/icon markup rules into a shared partial that both admin/editor and frontend stylesheets `@use`. Keep editor-only chrome, such as hover replace/remove controls and picker popovers, in the block edit partials.
 
@@ -478,21 +478,19 @@ That is acceptable for the current DataView scale. It is not a real bulk operati
 
 **Solution.** If collections start moving large row sets to Trash, add a collection-row bulk trash endpoint or an async job endpoint with progress polling. That endpoint should own permission checks, trash order, partial-failure reporting, and cleanup. Then the DataView action can send selected IDs once instead of managing a client-side queue.
 
-## 53. Workspace tree has no unified node model `[internal]`
+## 53. Sidebar tree caps at 100 nodes per query `[internal]`
 
-**What.** The sidebar builds its workspace tree from two REST lists: active pages (`crtxt_page`) and full-page collections (`crtxt_collection`). The shell joins them client-side by reading `post_parent`. That works for collections under loaded pages, but row-owned collections and collections whose parent page is outside the loaded window fall back to the flat Collections section because there is no parent record to attach to. There is still no "workspace node" shape with `kind`, so every tree consumer has to branch on pages versus collections.
+**What.** The sidebar pulls its tree from two `useEntityRecords` calls against `crtxt_document`: pages (no `cortext_fields`) and collections (with it). Both hit `per_page: 100`. We merge them client-side by `post_parent`, so a collection whose parent page sits past the 100-row window drops out of the tree. Workspaces past 100 nodes per list get a truncated sidebar. Lazy loading is in RSM-1848.
 
-Drag/drop and `menu_order` accounting look at both pages and collections through `treeRecords`, a single `DndContext` now wraps both sections, and the cycle guard walks the merged node graph. The model gap that remains is shape, not wiring: every tree consumer still branches on pages versus collections to derive a `kind`, and the Collections section's contents are a UX choice on top of that. Today it shows only top-level full-page collections (`parent = 0`); nested ones live solely in the Pages tree. That follows Notion's "one thing, one place" rule, but once collections nest there is no surface for "see every collection at a glance". The unified model would let this be configurable per workspace: top-level only, all collections grouped, or per-parent sub-headers. Lazy loading lives in RSM-1848.
+**Where.** `ACTIVE_PAGES_QUERY` in `src/components/page-queries.js`, `FULL_PAGE_COLLECTION_QUERY` in `src/collections.js`, `deriveNestedCollections` and the merged `buildTree` call in `src/components/sidebar/useSidebarTree.js`, drag/drop in `src/components/sidebar/useSidebarDnd.js`, and `computeDropTarget` in `src/components/pages-tree.js`.
 
-**Where.** `ACTIVE_PAGES_QUERY` in `src/components/page-queries.js`, `FULL_PAGE_COLLECTION_QUERY` in `src/collections.js`, `nestedCollections` / `topLevelCollections`, `treeRecords`, `handleDragOver`, and the shared `DndContext` in `src/components/Sidebar.js`, the `renderCollectionRow` bridge in `src/components/PageRow.js`, `CollectionRow`'s drag/drop zones, `computeDropTarget` in `src/components/pages-tree.js`, and the `Collection::hierarchical` / `Collection::validate_parent_document` setup on the PHP side.
-
-**Solution.** Add a workspace-tree REST endpoint that returns navigable nodes with `kind`, `id`, `parent`, `menu_order`, and visibility in one shape. Row-owned collections could then appear under their row, missing parents would not look top-level by accident, and page/collection branching would move out of every consumer. The Collections section then becomes a view over the same model with the user's chosen filter, instead of a separate flat list.
+**Solution.** One workspace-tree REST endpoint that paginates server-side and returns nodes in one shape (id, parent, menu_order, capability flags). Consumers stop joining two lists; depth stops mattering.
 
 ## 54. Collection duplication cannot clone relation schema `[internal]`
 
 **What.** Duplicating a full-page collection creates the new collection, registers its row CPT, and copies field posts that stand on their own. It skips relations because a relation is really a pair: the forward field plus the reverse field on another collection. A safe copy has to create or update both sides, keep the cardinality, and remap ids without touching the original relation. Until that exists, the REST response lists skipped fields and the sidebar tells the user the copy is missing columns. Rollups that read through a skipped relation belong in the same bucket; they are not useful until the copied schema has its own relation target.
 
-**Where.** `CollectionDuplicator::duplicate()`, `clone_fields()`, and `remap_rollup_references()` in `includes/Documents/CollectionDuplicator.php`, plus the skipped-field notice in `src/components/Sidebar.js` and duplicate coverage in `tests/php/test-rest-collections.php`.
+**Where.** `DocumentDuplicator::duplicate()`, `clone_schema()`, and `remap_rollup_references()` in `includes/Documents/DocumentDuplicator.php`, plus the skipped-field notice in `src/components/Sidebar.js` and duplicate coverage in `tests/php/test-rest-collections.php`.
 
 **Solution.** Add a relation-aware schema copy step. It should clone and remap the forward and reverse fields together, or skip every dependent field, including rollups that point at skipped relations. The duplicate should never carry references back to the source collection's fields. Once that exists, the sidebar notice can name the exact skipped field types instead of treating them all as generic missing columns.
 
@@ -536,8 +534,32 @@ This is acceptable for now and covered by e2e, but it is still a timing bridge b
 
 ## 59. Collection canvases use a self-referencing owner block `[upstream, internal]`
 
-**What.** A full-page collection needs a locked `cortext/data-view` block whose `collectionId` is the collection post's own ID. WordPress and Gutenberg can give a CPT a static template, but not one that fills attributes from the just-created post and then treats that block as the body. Cortext works around that in a few places: PHP seeds the serialized block after insert, a one-shot backfill catches older collections, the editor adds the block if content is still empty, CSS hides body appenders and owner-block chrome, a SlotFill moves the data-view panels into the Collection tab, and the block hides "Change collection" so the owner cannot point away from itself.
+**What.** A collection document's body is a locked `cortext/data-view` block whose `collectionId` is the document's own id. WordPress and Gutenberg can give a CPT a static template, but not one that fills attributes from the just-created post and then treats that block as the body. Cortext works around that in a few places: PHP appends the serialized block when `cortext_fields` meta is first added, the editor adds the block if content is still empty, CSS hides body appenders and owner-block chrome, a SlotFill moves the data-view panels into the Collection tab, and the block hides "Change collection" so the owner cannot point away from itself.
 
-**Where.** `Collection::build_data_view_block_markup()` and `Collection::maybe_seed_data_view_block()` in `includes/PostType/Collection.php`, `includes/PostType/CollectionContentBackfill.php`, `src/components/CanvasOwnerInspector.js`, owner-block handling in `src/components/EditorBody.js`, `src/blocks/data-view/edit.js`, `src/components/PageInspectorSidebar.js`, and the owner rules in `src/styles/global/_shell-root.scss`.
+**Where.** `Document::build_data_view_block_markup()` and `Document::maybe_seed_data_view_block_on_meta()` in `includes/PostType/Document.php`, `src/components/CanvasOwnerInspector.js`, owner-block handling in `src/components/EditorBody.js`, `src/blocks/data-view/edit.js`, `src/components/DocumentInspectorSidebar.js`, and the owner rules in `src/styles/global/_shell-root.scss`.
 
 **Solution.** Replace this with a direct owner-block path: either an upstream dynamic block-template hook or a local body-owner contract. It should read attributes from the current post, lock the body to that block, own inserter/chrome/inspector policy, and keep public serialization predictable. Then the post-insert seed, backfill, editor fallback, SlotFill routing, and owner CSS can shrink or disappear.
+
+## 60. Sidecar reindex after relation writes is still per-target `[internal, soft]`
+
+**What.** `Relations::apply_relation_pointers` now batches the postmeta writes (delta + bulk INSERT/DELETE) and `Document::prepare_meta_updates` skips WP REST's O(N×M) `update_multi_meta_value` diff via `Relations::fast_write_forward_meta`. That brought `relation_many_targets` p95 from ~18s back to ~460ms and `relation_small_delta` from ~18s to ~25ms at 50 collections. The remaining cost in `many_targets` is `reindex_targets` calling `FieldValueIndex::index_row_field` once per touched reverse row (500 calls × 1 SELECT meta + 1 DELETE sidecar + N INSERTs sidecar). It is within budget but is the largest term left in the write path.
+
+**Where.** `Relations::apply_relation_pointers` and `Relations::reindex_targets` in `includes/Relations.php`; `FieldValueIndex::index_row_field` and `write_index_rows` in `includes/FieldValues/FieldValueIndex.php`. Scenarios `relation_many_targets` and `relation_small_delta` in `includes/CLI/PerfBench.php`.
+
+**Solution.** Compute the sidecar delta directly from the postmeta delta we already have (added / removed reverse pointers), then write it with two batched statements: one `DELETE FROM <sidecar> WHERE (row_id, field_id, value_text) IN (...)` for removals, one multi-row `INSERT` for additions (using the next `value_seq` per target, which can be read in one warmup query). The forward field's sidecar can stay on `index_row_field` since it is a single row.
+
+## 61. Option migrations rewrite postmeta one row at a time `[internal]`
+
+**What.** `FieldsController::migrate_rows` loops over every row whose select / multiselect value matches the source token and calls `delete_post_meta` + `add_post_meta` (or `update_post_meta`) per row. That is ~2 SQL statements per row plus hooks. `migrate_many_rows` p95 ≈ 1s at 50 collections with ~5000 SQL queries for what is conceptually a single update on a meta_key + meta_value pair.
+
+**Where.** `FieldsController::migrate_rows` in `includes/Rest/FieldsController.php`; `migrate_1000_rows` and `migrate_many_rows` scenarios in `includes/CLI/PerfBench.php`.
+
+**Solution.** Replace the loop with a single statement per branch: `UPDATE wp_postmeta SET meta_value = %s WHERE meta_key = %s AND meta_value = %s` for `action = 'replace'` on single-value fields, `DELETE FROM wp_postmeta WHERE ...` for `action = 'clear'`. Pre-fetch the affected row ids so the meta cache and sidecar reindex can be invalidated in batch afterwards. Multiselect `replace` is harder because of the "already has target" case; query the conflict set first, then run two statements (a `DELETE` for the duplicates, an `UPDATE` for the rest).
+
+## 62. `register_field_meta` warms postmeta one field at a time `[internal, soft]`
+
+**What.** `Document::register_field_meta` runs on every `init` and iterates every `crtxt_field` post calling `get_post_meta($field_id, 'type', true)`. Each call triggers a single-post meta cache load, which is one extra SELECT per field. On the bench dataset (~540 fields) that is ~540 unnecessary SELECTs on every REST request before any handler runs.
+
+**Where.** `Document::register_field_meta` in `includes/PostType/Document.php`.
+
+**Solution.** Call `update_meta_cache( 'post', $field_ids )` once before the foreach so the subsequent `get_post_meta` calls are cache hits. The field-id list is already in memory from the preceding `get_posts`, so the warmup is a one-liner.

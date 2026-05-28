@@ -12,10 +12,7 @@ The plugin bootstraps editor settings on the server and exposes them to the clie
 
 The client entry is `src/index.js`. Routing is handled in the React app, while the browser stays on the Cortext wp-admin page.
 
-The shell has two main work surfaces:
-
--   Page routes mount a block editor canvas for `crtxt_page` documents.
--   Collection routes mount DataViews-backed record views for rows.
+The shell has one work surface: every routed entity is a `crtxt_document`, rendered through a block editor canvas. Pages are documents without a schema, collections are documents whose body is the locked `cortext/data-view` block, and rows open as documents too (full page) or as a side peek (inside their parent collection's view).
 
 The sidebar handles page navigation and nesting. Autosave is split between a client debounce and a small server-side revision throttle.
 

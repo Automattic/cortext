@@ -6,11 +6,10 @@ These are implementation notes for the current prototype. They are not a stable 
 
 Cortext stores its main data in WordPress posts and post meta:
 
--   `crtxt_page` stores workspace documents.
--   `crtxt_collection` stores collection definitions.
+-   `crtxt_document` stores every editable record. A document is a page, a collection, or a row depending on its state: a `cortext_fields` meta makes it a collection (schema-defining), a `crtxt_trait` taxonomy term makes it a row of that collection, and neither makes it a plain page.
+-   `crtxt_trait` is the taxonomy that wires rows to their collection. Each collection document mirrors itself as a term in this taxonomy (term slug = the collection's post id).
 -   `crtxt_field` stores field definitions.
--   Each collection gets a row post type based on its slug.
--   Row values are stored as field-keyed post meta.
+-   Row values are stored as field-keyed post meta (`field-<id>`) on the row document.
 
 This keeps the data inspectable with normal WordPress tools while the product surface can stay focused on knowledge base workflows.
 
