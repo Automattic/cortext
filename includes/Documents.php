@@ -321,8 +321,9 @@ final class Documents {
 		if ( ! empty( $opts['include_trash_meta'] ) ) {
 			$document['modified_at'] = $this->format_gmt_date( $post->post_modified_gmt );
 			$document['meta']        = array(
-				'cortext_document_icon'          => $icon,
-				TrashCascade::PARENT_MARKER_META => (int) get_post_meta( $post->ID, TrashCascade::PARENT_MARKER_META, true ),
+				'cortext_document_icon'              => $icon,
+				TrashCascade::PARENT_MARKER_META     => (int) get_post_meta( $post->ID, TrashCascade::PARENT_MARKER_META, true ),
+				TrashCascade::COLLECTION_MARKER_META => (int) get_post_meta( $post->ID, TrashCascade::COLLECTION_MARKER_META, true ),
 			);
 		}
 

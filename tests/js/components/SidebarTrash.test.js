@@ -736,6 +736,35 @@ describe( 'SidebarTrash', () => {
 		).toHaveTextContent( '1 collection' );
 	} );
 
+	it( 'nests cascade-trashed rows under their collection via the COLLECTION marker', () => {
+		// Trashing a collection stamps each of its rows with
+		// `_cortext_trashed_by_collection`. The sidebar root view has to
+		// follow that marker the same way it follows the parent marker for
+		// pages, otherwise each row shows up as its own root and the user
+		// sees N+1 entries instead of one.
+		const collection = makeCollection( {
+			id: 50,
+			title: { rendered: 'Sprint board', raw: 'Sprint board' },
+		} );
+		const rowA = makeRow( {
+			id: 51,
+			meta: { _cortext_trashed_by_collection: 50 },
+		} );
+		const rowB = makeRow( {
+			id: 52,
+			meta: { _cortext_trashed_by_collection: 50 },
+		} );
+
+		setTrashRecords( { records: [ collection, rowA, rowB ] } );
+
+		const { container } = renderSidebarTrash();
+
+		expect( screen.getByText( 'Sprint board' ) ).toBeInTheDocument();
+		expect(
+			container.querySelector( '.cortext-sidebar__breadcrumb' )
+		).toHaveTextContent( '2 nested items' );
+	} );
+
 	it( 'promotes orphaned descendants (stale marker) back to roots', () => {
 		// Marker points at a parent no longer in Trash. It may have been
 		// permanently deleted by an older build or a different path; either

@@ -28,10 +28,13 @@ const EMPTY_TRASHED_DOCUMENTS_STATE = {
 	refresh: () => {},
 };
 
-// Mirrors the PHP `TrashCascade::PARENT_MARKER_META` value. Trash entries
-// point back to the cascade root (page -> subpage, page -> nested collection),
-// which lets the sidebar show one row for the whole trashed group.
+// Mirror the PHP `TrashCascade` markers. The cascade stamps a different key
+// depending on whether the descendant was trashed as a child page or as a row
+// of a collection, but the value carries the same meaning ("trashed by this
+// document"), so the sidebar treats either marker as a pointer back to the
+// cascade root.
 const PARENT_MARKER_META = '_cortext_trashed_by_parent';
+const COLLECTION_MARKER_META = '_cortext_trashed_by_collection';
 
 export function computeSidebarTrashRoots( trashedDocuments = [] ) {
 	const all = Array.isArray( trashedDocuments ) ? trashedDocuments : [];
@@ -42,7 +45,11 @@ export function computeSidebarTrashRoots( trashedDocuments = [] ) {
 
 	const markerOf = ( document ) => {
 		const meta = document.meta ?? {};
-		return Number( meta[ PARENT_MARKER_META ] ?? 0 );
+		const parent = Number( meta[ PARENT_MARKER_META ] ?? 0 );
+		if ( parent > 0 ) {
+			return parent;
+		}
+		return Number( meta[ COLLECTION_MARKER_META ] ?? 0 );
 	};
 
 	all.forEach( ( document ) => {
