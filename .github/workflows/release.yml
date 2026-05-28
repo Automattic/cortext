@@ -1,0 +1,154 @@
+name: Release
+
+on:
+    workflow_dispatch:
+        inputs:
+            version:
+                description: 'Release version, e.g. 0.1.0'
+                required: true
+                default: '0.1.0'
+            milestone:
+                description: 'Milestone title. Defaults to version.'
+                required: false
+            prerelease:
+                description: 'Mark the draft release as a prerelease.'
+                required: true
+                default: true
+                type: boolean
+            dry_run:
+                description: 'Build and upload release files without creating a release or tag.'
+                required: true
+                default: true
+                type: boolean
+
+permissions:
+    contents: write
+    issues: read
+    pull-requests: read
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.event.inputs.version }}
+    cancel-in-progress: true
+
+jobs:
+    release:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 11.0.8
+                  standalone: true
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: '24.15'
+                  cache: 'pnpm'
+
+            - uses: shivammathur/setup-php@v2
+              with:
+                  php-version: '8.1'
+                  tools: composer:v2
+                  coverage: none
+
+            - uses: actions/cache@v4
+              with:
+                  path: ~/.composer/cache
+                  key: composer-${{ hashFiles('composer.lock') }}
+
+            - name: Resolve milestone
+              id: milestone
+              uses: actions/github-script@v8
+              env:
+                  INPUT_MILESTONE: ${{ github.event.inputs.milestone }}
+                  VERSION: ${{ github.event.inputs.version }}
+              with:
+                  script: |
+                      const owner = context.repo.owner;
+                      const repo = context.repo.repo;
+                      const inputMilestone = process.env.INPUT_MILESTONE.trim();
+                      const version = process.env.VERSION.trim();
+                      const requestedTitle = inputMilestone || version;
+
+                      if ( ! /^\d+\.\d+\.\d+$/.test( version ) ) {
+                        throw new Error( `Release versions must use the WordPress-style format 0.1.0, without a leading "v". Received "${ version }".` );
+                      }
+
+                      const milestones = await github.paginate(
+                        github.rest.issues.listMilestones,
+                        { owner, repo, state: 'open', per_page: 100 }
+                      );
+
+                      if ( ! inputMilestone && milestones.length !== 1 ) {
+                        throw new Error(
+                          milestones.length === 0
+                            ? 'No open release milestone exists. Create 0.1.0 before drafting the first release.'
+                            : `Expected exactly one open release milestone, found ${ milestones.length }: ${ milestones.map( ( milestone ) => milestone.title ).join( ', ' ) }.`
+                        );
+                      }
+
+                      const milestone = milestones.find( ( item ) => item.title === requestedTitle );
+                      if ( ! milestone ) {
+                        throw new Error( `Cannot find open milestone "${ requestedTitle }".` );
+                      }
+
+                      core.setOutput( 'title', milestone.title );
+
+            - name: Generate release notes
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  MILESTONE: ${{ steps.milestone.outputs.title }}
+                  REPOSITORY: ${{ github.repository }}
+                  VERSION: ${{ github.event.inputs.version }}
+              run: |
+                  node scripts/release-notes.mjs \
+                    --repo "$REPOSITORY" \
+                    --milestone "$MILESTONE" \
+                    --version "$VERSION" \
+                    --strict > release-notes.md
+
+            - name: Build plugin ZIP
+              run: ./scripts/build-zip.sh
+
+            - name: Check release files
+              run: |
+                  test -s release-notes.md
+                  test -s dist/cortext.zip
+
+            - name: Upload dry-run files
+              if: ${{ github.event.inputs.dry_run == 'true' }}
+              uses: actions/upload-artifact@v4
+              with:
+                  name: cortext-release-${{ github.event.inputs.version }}-dry-run
+                  path: |
+                      release-notes.md
+                      dist/cortext.zip
+
+            - name: Write dry-run summary
+              if: ${{ github.event.inputs.dry_run == 'true' }}
+              env:
+                  ARTIFACT_NAME: cortext-release-${{ github.event.inputs.version }}-dry-run
+                  MILESTONE: ${{ steps.milestone.outputs.title }}
+                  VERSION: ${{ github.event.inputs.version }}
+              run: |
+                  {
+                    echo "## Release dry run"
+                    echo ""
+                    echo "- Version: \`$VERSION\`"
+                    echo "- Milestone: \`$MILESTONE\`"
+                    echo "- Artifact: \`$ARTIFACT_NAME\`"
+                    echo ""
+                    echo "No GitHub Release or tag was created."
+                  } >> "$GITHUB_STEP_SUMMARY"
+
+            - name: Create draft GitHub Release
+              if: ${{ github.event.inputs.dry_run != 'true' }}
+              uses: softprops/action-gh-release@v2
+              with:
+                  tag_name: ${{ github.event.inputs.version }}
+                  name: ${{ github.event.inputs.version }}
+                  body_path: release-notes.md
+                  draft: true
+                  prerelease: ${{ github.event.inputs.prerelease }}
+                  files: dist/cortext.zip
