@@ -6,7 +6,12 @@
 // surface loads first wins, the second is a no-op.
 import { registerCoreBlocks } from '@wordpress/block-library';
 
+// Register the `cortext` category before the `../blocks` barrel registers
+// Cortext blocks from block.json.
+import { CORTEXT_BLOCK_CATEGORY } from './cortextBlockCategory';
 import '../blocks';
+
+export { CORTEXT_BLOCK_CATEGORY };
 
 if ( ! window.__cortextBlocksRegistered ) {
 	registerCoreBlocks();
