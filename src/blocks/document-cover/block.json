@@ -3,7 +3,7 @@
 	"apiVersion": 3,
 	"name": "cortext/document-cover",
 	"title": "Document cover",
-	"category": "widgets",
+	"category": "cortext",
 	"icon": "format-image",
 	"description": "Document cover image, bound to the document's featured image.",
 	"textdomain": "cortext",

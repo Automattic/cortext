@@ -1,10 +1,12 @@
 import { Button, Dropdown, PanelBody } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
-import { plus, seen, unseen } from '@wordpress/icons';
+import { pencil, plus, seen, unseen } from '@wordpress/icons';
 
 import AddFieldPopover from './fields/AddFieldPopover';
 import { CollectionFieldsProvider } from './CollectionFieldsContext';
 import { useDocumentPropertiesContext } from './DocumentPropertiesContext';
+
+import './DocumentPropertiesActions.scss';
 
 // Row-property actions shown in both the Row inspector tab and the block
 // inspector. Values are edited in the document block; this panel handles
@@ -14,8 +16,15 @@ export default function DocumentPropertiesActions() {
 	if ( ! ctx ) {
 		return null;
 	}
-	const { collectionId, fields, isResolving, isVisible, onToggleVisible } =
-		ctx;
+	const {
+		collectionId,
+		fields,
+		isLayoutEditing,
+		isResolving,
+		isVisible,
+		onRequestLayoutEdit,
+		onToggleVisible,
+	} = ctx;
 	if ( isResolving ) {
 		return null;
 	}
@@ -28,14 +37,29 @@ export default function DocumentPropertiesActions() {
 			<div className="cortext-document-properties-actions">
 				{ onToggleVisible && hasFields && (
 					<Button
+						className="cortext-document-properties-actions__button"
 						variant="secondary"
 						icon={ isVisible ? unseen : seen }
 						onClick={ onToggleVisible }
 						__next40pxDefaultSize
 					>
 						{ isVisible
-							? __( 'Hide fields', 'cortext' )
-							: __( 'Show fields', 'cortext' ) }
+							? __( 'Collapse', 'cortext' )
+							: __( 'Expand', 'cortext' ) }
+					</Button>
+				) }
+				{ onRequestLayoutEdit && hasFields && (
+					<Button
+						className="cortext-document-properties-actions__button"
+						variant="secondary"
+						icon={ pencil }
+						isPressed={ isLayoutEditing }
+						onClick={ onRequestLayoutEdit }
+						__next40pxDefaultSize
+					>
+						{ isLayoutEditing
+							? __( 'Done customizing', 'cortext' )
+							: __( 'Customize', 'cortext' ) }
 					</Button>
 				) }
 				{ collectionId && (
@@ -43,13 +67,15 @@ export default function DocumentPropertiesActions() {
 						popoverProps={ { placement: 'bottom-start' } }
 						renderToggle={ ( { isOpen, onToggle } ) => (
 							<Button
+								className="cortext-document-properties-actions__button"
 								variant="secondary"
 								icon={ plus }
+								isPressed={ isOpen }
 								onClick={ onToggle }
 								aria-expanded={ isOpen }
 								__next40pxDefaultSize
 							>
-								{ __( 'Add field', 'cortext' ) }
+								{ __( 'Add property', 'cortext' ) }
 							</Button>
 						) }
 						renderContent={ ( { onClose } ) => (

@@ -15,10 +15,11 @@ import useAutosave from '../hooks/useAutosave';
 // block sources and the registerCoreBlocks call site off the initial
 // bundle. The module is idempotent, so Canvas's copy of this import is
 // a no-op when RowEditor mounts second, or vice versa.
-import './initEditor';
+import { getEditorSettings } from './initEditor';
 import { DocumentPropertiesProvider } from './DocumentPropertiesContext';
 import { EditorSurfaceProvider } from './EditorSurfaceContext';
 import EditorBody from './EditorBody';
+import { RowMutationContext } from './EditableCell';
 
 const ROW_DETAIL_EDITOR_CSS = `
 	body {
@@ -102,8 +103,13 @@ function DetailPaneContent( {
 	detailLayoutEntries,
 	isActive,
 	isHidden,
+	isPropertiesLayoutEditing,
+	layoutEditRequest,
+	mutationContext,
 	onApi,
+	onLayoutEditingChange,
 	onPaneReady,
+	onRequestLayoutEdit,
 	onRestored,
 	onSaved,
 	onTogglePropertiesVisible,
@@ -117,6 +123,32 @@ function DetailPaneContent( {
 		[ detailKey, onPaneReady ]
 	);
 
+	const content = (
+		<DocumentPropertiesProvider
+			collectionId={ collectionId }
+			rowId={ rowId ?? row?.id }
+			fields={ fields }
+			allFields={ allFields }
+			detailLayoutEntries={ detailLayoutEntries }
+			fallbackRecord={ row }
+			isVisible={ propertiesVisible }
+			isLayoutEditing={ isPropertiesLayoutEditing }
+			layoutEditRequest={ layoutEditRequest }
+			onLayoutEditingChange={ onLayoutEditingChange }
+			onRequestLayoutEdit={ onRequestLayoutEdit }
+			onToggleVisible={ onTogglePropertiesVisible }
+		>
+			<EditorBody
+				isActive={ isActive && ! isHidden }
+				postId={ row?.id }
+				postType={ postType }
+				extraStyles={ ROW_DETAIL_EXTRA_STYLES }
+				onReady={ handleReady }
+				onRestored={ onRestored }
+			/>
+		</DocumentPropertiesProvider>
+	);
+
 	return (
 		<>
 			<RowAutosaveBridge
@@ -127,24 +159,13 @@ function DetailPaneContent( {
 					rowId && collectionId ? { id: rowId, collectionId } : null
 				}
 			/>
-			<DocumentPropertiesProvider
-				collectionId={ collectionId }
-				fields={ fields }
-				allFields={ allFields }
-				detailLayoutEntries={ detailLayoutEntries }
-				fallbackRecord={ row }
-				isVisible={ propertiesVisible }
-				onToggleVisible={ onTogglePropertiesVisible }
-			>
-				<EditorBody
-					isActive={ isActive && ! isHidden }
-					postId={ row?.id }
-					postType={ postType }
-					extraStyles={ ROW_DETAIL_EXTRA_STYLES }
-					onReady={ handleReady }
-					onRestored={ onRestored }
-				/>
-			</DocumentPropertiesProvider>
+			{ mutationContext ? (
+				<RowMutationContext.Provider value={ mutationContext }>
+					{ content }
+				</RowMutationContext.Provider>
+			) : (
+				content
+			) }
 			<div
 				aria-hidden={ isHidden ? true : undefined }
 				{ ...( isHidden ? { inert: '' } : {} ) }
@@ -161,8 +182,13 @@ export default function RowEditor( {
 	detailLayoutEntries,
 	isActive,
 	isHidden,
+	isPropertiesLayoutEditing,
+	layoutEditRequest,
+	mutationContext,
 	onApi,
+	onLayoutEditingChange,
 	onPaneReady,
+	onRequestLayoutEdit,
 	onRestored,
 	onSaved,
 	onTogglePropertiesVisible,
@@ -175,7 +201,7 @@ export default function RowEditor( {
 	return (
 		<EditorProvider
 			post={ post }
-			settings={ window.cortextEditorSettings ?? {} }
+			settings={ getEditorSettings() }
 			useSubRegistry
 		>
 			{ /* tech-debt.md#57: row detail owns these SlotFills while
@@ -190,8 +216,13 @@ export default function RowEditor( {
 						detailLayoutEntries={ detailLayoutEntries }
 						isActive={ isActive }
 						isHidden={ isHidden }
+						isPropertiesLayoutEditing={ isPropertiesLayoutEditing }
+						layoutEditRequest={ layoutEditRequest }
+						mutationContext={ mutationContext }
 						onApi={ onApi }
+						onLayoutEditingChange={ onLayoutEditingChange }
 						onPaneReady={ onPaneReady }
+						onRequestLayoutEdit={ onRequestLayoutEdit }
 						onRestored={ onRestored }
 						onSaved={ onSaved }
 						onTogglePropertiesVisible={ onTogglePropertiesVisible }

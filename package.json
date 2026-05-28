@@ -69,6 +69,7 @@
 		"@wordpress/date": "^5.44.0",
 		"@wordpress/editor": "^14.44.0",
 		"@wordpress/element": "^6.44.0",
+		"@wordpress/hooks": "^4.46.0",
 		"@wordpress/i18n": "^6.17.0",
 		"@wordpress/icons": "^12.2.0",
 		"@wordpress/interface": "^9.0.0",

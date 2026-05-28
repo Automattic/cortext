@@ -17,6 +17,7 @@ declare( strict_types=1 );
 
 namespace Cortext\Rest;
 
+use Cortext\Fields\FieldDefaults;
 use Cortext\Fields\FieldTypeConverter;
 use Cortext\FieldValues\FieldValueReadQuery;
 use Cortext\PostType\Document;
@@ -1039,19 +1040,36 @@ final class RowsController {
 
 		$created_by_id  = (int) $post->post_author;
 		$modified_by_id = (int) get_post_meta( $post->ID, '_modified_by', true );
+		$cover_id       = (int) get_post_thumbnail_id( $post );
+		$cover          = null;
+		if ( $cover_id > 0 ) {
+			$cover_src = wp_get_attachment_image_src( $cover_id, 'large' );
+			if ( ! is_array( $cover_src ) ) {
+				$cover_src = wp_get_attachment_image_src( $cover_id, 'full' );
+			}
+			if ( is_array( $cover_src ) && ! empty( $cover_src[0] ) ) {
+				$cover = array(
+					'id'  => $cover_id,
+					'url' => $cover_src[0],
+					'alt' => (string) get_post_meta( $cover_id, '_wp_attachment_image_alt', true ),
+				);
+			}
+		}
 
 		return array(
-			'id'          => $post->ID,
-			'title'       => array(
+			'id'             => $post->ID,
+			'title'          => array(
 				'raw'      => $post->post_title,
 				'rendered' => $post->post_title,
 			),
-			'status'      => $post->post_status,
-			'created_at'  => $this->format_gmt_date( $post->post_date_gmt ),
-			'modified_at' => $this->format_gmt_date( $post->post_modified_gmt ),
-			'created_by'  => $this->display_name_for( $created_by_id ),
-			'modified_by' => $this->display_name_for( $modified_by_id > 0 ? $modified_by_id : $created_by_id ),
-			'meta'        => $meta,
+			'status'         => $post->post_status,
+			'created_at'     => $this->format_gmt_date( $post->post_date_gmt ),
+			'modified_at'    => $this->format_gmt_date( $post->post_modified_gmt ),
+			'created_by'     => $this->display_name_for( $created_by_id ),
+			'modified_by'    => $this->display_name_for( $modified_by_id > 0 ? $modified_by_id : $created_by_id ),
+			'featured_media' => $cover_id,
+			'cover'          => $cover,
+			'meta'           => $meta,
 		);
 	}
 
@@ -1305,7 +1323,7 @@ final class RowsController {
 	 * Builds lightweight field definitions for the response.
 	 *
 	 * @param int[] $field_ids Field post IDs.
-	 * @return array<int, array{id: int, label: string, type: string}>
+	 * @return array<int, array{id: int, label: string, type: string, description: string, options: string|null}>
 	 */
 	private function field_definitions( array $field_ids ): array {
 		$definitions = array();
@@ -1318,10 +1336,11 @@ final class RowsController {
 			$options = get_post_meta( $field_id, 'options', true );
 
 			$definitions[] = array(
-				'id'      => $field_id,
-				'label'   => $field->post_title,
-				'type'    => $type,
-				'options' => empty( $options ) ? null : $options,
+				'id'          => $field_id,
+				'label'       => $field->post_title,
+				'type'        => $type,
+				'description' => (string) get_post_meta( $field_id, 'description', true ),
+				'options'     => empty( $options ) ? null : $options,
 			);
 		}
 		return $definitions;

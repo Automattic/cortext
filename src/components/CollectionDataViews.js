@@ -1,16 +1,8 @@
 import apiFetch from '@wordpress/api-fetch';
-import {
-	Button,
-	CheckboxControl,
-	Notice,
-	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
-	__experimentalHStack as HStack,
-} from '@wordpress/components';
+import { Notice } from '@wordpress/components';
 import { DataViews } from '@wordpress/dataviews';
 import {
-	createContext,
 	useCallback,
-	useContext,
 	useEffect,
 	useLayoutEffect,
 	useMemo,
@@ -18,32 +10,45 @@ import {
 	useState,
 } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
-import {
-	closeSmall,
-	copy,
-	plus,
-	starEmpty,
-	starFilled,
-	trash,
-} from '@wordpress/icons';
+import { copy, starEmpty, starFilled, trash } from '@wordpress/icons';
 
 import './CollectionDataViews.scss';
+import './CollectionDataViews.grid.scss';
+import './CollectionDataViews.list.scss';
 
 import DataViewColumnInteractions from './DataViewColumnInteractions';
+import {
+	DataViewStateShell,
+	DataViewsBulkSelectionControls,
+	DataViewsChrome,
+	DataViewsSelectionFooter,
+} from './CollectionDataViewChrome';
+import DataViewNewRowButton from './DataViewNewRowButton';
 import DataViewRowReorder from './DataViewRowReorder';
 import {
 	useDocumentPeekActions,
 	useDocumentPeekState,
 } from './DocumentPeekProvider';
 import { CurrentViewModeProvider } from './CurrentViewModeContext';
-import EditableCell, { RowMutationContext } from './EditableCell';
-import DocumentIcon from './DocumentIcon';
+import { RowMutationContext } from './EditableCell';
+import {
+	COVER_FIELD,
+	OpenRowActionContext,
+	TITLE_FIELD,
+} from './CollectionDataViewFields';
+import GridNewRowPortal from './GridNewRowPortal';
 import { CollectionRowsSkeleton } from './Skeleton';
 import useDelayedFlag, {
 	SKELETON_MIN_VISIBLE_MS,
 } from '../hooks/useDelayedFlag';
 import afterNextPaint from '../hooks/afterNextPaint';
 import allSettledWithConcurrency from './allSettledWithConcurrency';
+import {
+	DEFAULT_LAYOUTS,
+	adaptViewForDataViews,
+	mergeDataViewsChange,
+} from './dataViewAdapter';
+import { nextViewAfterRowCreated } from './dataViewCreation';
 import { filterSortAndPaginateWithGroups } from './groupedFilters';
 import TableCalculationsFooter from './TableCalculationsFooter';
 import ColumnHeaderActions from './fields/ColumnHeaderActions';
@@ -51,12 +56,15 @@ import { ROW_DETAIL_MODE_ICONS, ROW_DETAIL_MODE_LABELS } from './RowDetailView';
 import {
 	GHOST_FIELD_ID,
 	MANUAL_SORT_ID,
-	TITLE_FIELD_ID,
 	isDefaultVisibleField,
 	normalizeView,
 	pruneFiltersForFields,
 	withNewlyVisibleFields,
 } from './dataViewColumns';
+import {
+	INTERACTIVE_DATA_VIEW_ITEM_IGNORE_SELECTOR,
+	findDataViewItemFromEvent,
+} from './dataViewItemLookup';
 import { scrollToEndQuickly } from './dataViewScroll';
 import { getRowDetailMode, withRowDetailMode } from './rowDetailUtils';
 import {
@@ -70,7 +78,6 @@ import {
 	toggleVisibleSelection,
 } from './dataViewSelection';
 import { useCollectionFieldsContext } from './CollectionFieldsContext';
-import { dataViewsFilterByForType } from '../hooks/fieldMapping';
 import { toDataViewId, toRecordId } from '../hooks/fieldIds';
 import useCollectionRows from '../hooks/useCollectionRows';
 import { useRecents } from '../hooks/useRecents';
@@ -80,456 +87,17 @@ import { elementsFromOptions } from '../hooks/optionElements';
 import { notifyDocumentTrashChanged } from '../hooks/documentTrashInvalidation';
 import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
 
-const DEFAULT_LAYOUTS = { table: { density: 'compact' }, grid: {}, list: {} };
-const TITLE_LABEL = __( 'Title', 'cortext' );
-const TITLE_FILTER_OPERATORS = [
-	'is',
-	'isNot',
-	'contains',
-	'notContains',
-	'startsWith',
-	'endsWith',
-	'isEmpty',
-	'isNotEmpty',
-];
 function hasActiveCalculations( view ) {
 	return Object.values( view?.calculations ?? {} ).some( Boolean );
 }
 
-const OpenRowActionContext = createContext( {
-	enabled: false,
-	icon: ROW_DETAIL_MODE_ICONS.side,
-	openRowId: null,
-	requestOpenRow: null,
-} );
-
-// The peek panel cannot render until the editor is ready. On slower loads a
-// row click can feel like nothing happened, so pointerdown applies a short
-// "opening" state immediately.
-const OPENING_FEEDBACK_TIMEOUT_MS = 600;
-
-function TitleCell( { item } ) {
-	const { enabled, icon, openRowId, requestOpenRow } =
-		useContext( OpenRowActionContext );
-	const canOpenRow = Boolean( enabled && requestOpenRow );
-	const isOpenRow = canOpenRow && String( item?.id ) === String( openRowId );
-	const documentIcon = item?.meta?.cortext_document_icon ?? '';
-	const [ isOpening, setIsOpening ] = useState( false );
-	const openingTimeoutRef = useRef( null );
-
-	const clearOpeningTimeout = useCallback( () => {
-		if ( openingTimeoutRef.current ) {
-			clearTimeout( openingTimeoutRef.current );
-			openingTimeoutRef.current = null;
-		}
-	}, [] );
-
-	useEffect( () => clearOpeningTimeout, [ clearOpeningTimeout ] );
-
-	// Once this row owns the open peek, --is-open handles the visual state.
-	// Drop the short-lived opening state so it cannot linger after a quick close.
-	useEffect( () => {
-		if ( isOpenRow && isOpening ) {
-			clearOpeningTimeout();
-			setIsOpening( false );
-		}
-	}, [ clearOpeningTimeout, isOpening, isOpenRow ] );
-
-	const openRow = useCallback(
-		( event ) => {
-			event.preventDefault();
-			event.stopPropagation();
-			requestOpenRow?.( item );
-		},
-		[ item, requestOpenRow ]
-	);
-	const handleOpenPointerDown = useCallback(
-		( event ) => {
-			event.stopPropagation();
-			if ( ! canOpenRow || isOpenRow ) {
-				return;
-			}
-			setIsOpening( true );
-			clearOpeningTimeout();
-			openingTimeoutRef.current = setTimeout( () => {
-				openingTimeoutRef.current = null;
-				setIsOpening( false );
-			}, OPENING_FEEDBACK_TIMEOUT_MS );
-		},
-		[ canOpenRow, clearOpeningTimeout, isOpenRow ]
-	);
-	const stopPropagation = useCallback( ( event ) => {
-		event.stopPropagation();
-	}, [] );
-
-	return (
-		<div
-			className={
-				'cortext-title-cell' +
-				( canOpenRow ? ' cortext-title-cell--with-open-action' : '' ) +
-				( isOpenRow ? ' cortext-title-cell--is-open' : '' ) +
-				( isOpening && ! isOpenRow
-					? ' cortext-title-cell--is-opening'
-					: '' )
-			}
-		>
-			{ documentIcon ? (
-				<span className="cortext-title-cell__icon" aria-hidden="true">
-					<DocumentIcon icon={ documentIcon } size={ 16 } />
-				</span>
-			) : null }
-			<EditableCell
-				item={ item }
-				fieldId="title"
-				fieldType="title"
-				label={ TITLE_LABEL }
-				getValue={ ( ctx ) =>
-					ctx.item?.title?.raw ?? ctx.item?.title?.rendered ?? ''
-				}
-			/>
-			{ canOpenRow ? (
-				<Button
-					className="cortext-title-cell__open"
-					icon={ icon }
-					label={ __( 'Open row', 'cortext' ) }
-					size="small"
-					variant="tertiary"
-					onClick={ openRow }
-					onMouseDown={ stopPropagation }
-					onPointerDown={ handleOpenPointerDown }
-				>
-					{ __( 'Open', 'cortext' ) }
-				</Button>
-			) : null }
-		</div>
-	);
-}
-
-const TITLE_FIELD = {
-	id: TITLE_FIELD_ID,
-	type: 'text',
-	label: TITLE_LABEL,
-	header: (
-		<span className="cortext-column-header-label">{ TITLE_LABEL }</span>
-	),
-	// Prefer `title.raw` over `title.rendered` so sort comparisons use
-	// the unfiltered string (the_title encodes `&` as `&#038;`, which
-	// would otherwise sort under that literal entity). Same reason as
-	// `mapField`'s label fallback in `src/hooks/fieldMapping.js`.
-	getValue: ( { item } ) => {
-		const title = item?.title;
-		return typeof title === 'string'
-			? title
-			: title?.raw ?? title?.rendered ?? '';
-	},
-	render: ( { item } ) => <TitleCell item={ item } />,
-	editable: true,
-	cortextType: 'title',
-	sortable: true,
-	filterable: true,
-	operators: TITLE_FILTER_OPERATORS,
-	filterBy: dataViewsFilterByForType( 'text', TITLE_FILTER_OPERATORS ),
-	enableGlobalSearch: true,
-	// The title column can't be hidden (it's the row identity), but it
-	// reorders and resizes like any other column. `normalizeView` re-adds
-	// the id to `view.fields` if something corrupts the saved state.
-	enableHiding: false,
-};
-
-// Pulls a "single equality" prefill out of the active filters: only filters
-// whose operator is `is` and whose value is a single scalar contribute.
-// Multi-value operators (`isAny`, `isNone`, …) are skipped
-// because the issue scopes prefill to single equality clauses only.
-//
-// The server now applies filters via GET /cortext/v1/rows, so prefill
-// is a side effect of real filtering rather than its only consumer.
-function prefillFromFilters( filters, fieldIds ) {
-	const prefill = {};
-	if ( ! Array.isArray( filters ) ) {
-		return prefill;
-	}
-	for ( const filter of filters ) {
-		if ( ! filter || typeof filter !== 'object' ) {
-			continue;
-		}
-		const op = filter.operator;
-		if ( op !== 'is' ) {
-			continue;
-		}
-		const { field, value } = filter;
-		if ( ! field || field === 'title' ) {
-			continue;
-		}
-		if ( Array.isArray( value ) || value === null || value === undefined ) {
-			continue;
-		}
-		if ( ! fieldIds.has( field ) ) {
-			continue;
-		}
-		prefill[ field ] = value;
-	}
-	return prefill;
-}
-
-function NewRowButton( { collectionId, view, fields, onCreated, disabled } ) {
-	const [ isCreating, setIsCreating ] = useState( false );
-	const [ error, setError ] = useState( null );
-
-	const prefillableFieldIds = useMemo(
-		() =>
-			new Set(
-				fields
-					.filter(
-						( f ) =>
-							f.editable !== false && f.cortextType !== 'rollup'
-					)
-					.map( ( f ) => f.id )
-			),
-		[ fields ]
-	);
-
-	const onClick = useCallback( async () => {
-		if ( ! collectionId ) {
-			return;
-		}
-		setIsCreating( true );
-		setError( null );
-		const meta = prefillFromFilters( view?.filters, prefillableFieldIds );
-		try {
-			// Rows are `crtxt_document` records with a `crtxt_trait`
-			// term pointing at the collection. The backend's
-			// `rest_after_insert_crtxt_document` hook applies the term when
-			// the body carries `cortext_trait`, so no custom endpoint is
-			// needed for the create.
-			const created = await apiFetch( {
-				path: '/wp/v2/crtxt_documents',
-				method: 'POST',
-				data: {
-					title: '',
-					status: 'private',
-					cortext_trait: collectionId,
-					...( Object.keys( meta ).length ? { meta } : {} ),
-				},
-			} );
-			onCreated( created );
-		} catch ( err ) {
-			setError(
-				err?.message ?? __( 'Could not create row.', 'cortext' )
-			);
-		} finally {
-			setIsCreating( false );
-		}
-	}, [ collectionId, view, prefillableFieldIds, onCreated ] );
-
-	return (
-		<>
-			<Button
-				className="cortext-data-view__new-row"
-				variant="tertiary"
-				icon={ plus }
-				onClick={ onClick }
-				isBusy={ isCreating }
-				disabled={ disabled || isCreating || ! collectionId }
-			>
-				{ __( 'New', 'cortext' ) }
-			</Button>
-			{ error ? (
-				<Notice
-					status="error"
-					isDismissible
-					onRemove={ () => setError( null ) }
-				>
-					{ error }
-				</Notice>
-			) : null }
-		</>
-	);
-}
-
-const TABLE_ROW_SELECTOR =
-	'.dataviews-view-table tbody > tr:not(.dataviews-view-table__group-header-row)';
-const GRID_CARD_SELECTOR = '.dataviews-view-grid__card';
-const INTERACTIVE_SELECTION_IGNORE_SELECTOR =
-	'button, a, input, textarea, select, [contenteditable="true"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], .components-button';
 const BULK_DELETE_CONCURRENCY = 4;
-
-function findDataViewItemFromEvent( event, wrapper, layout, rows ) {
-	const target = event.target;
-	if ( ! target || ! wrapper ) {
-		return null;
-	}
-
-	const selector =
-		layout === 'grid' ? GRID_CARD_SELECTOR : TABLE_ROW_SELECTOR;
-	const itemElement = target.closest?.( selector );
-	if ( ! itemElement || ! wrapper.contains( itemElement ) ) {
-		return null;
-	}
-
-	const renderedItems = Array.from( wrapper.querySelectorAll( selector ) );
-	const index = renderedItems.indexOf( itemElement );
-	if ( index < 0 || ! rows[ index ]?.id ) {
-		return null;
-	}
-
-	return {
-		id: normalizeRowId( rows[ index ].id ),
-		row: rows[ index ],
-	};
-}
-
-function DataViewsChrome( { footer } ) {
-	return (
-		<>
-			<HStack
-				alignment="top"
-				justify="space-between"
-				className="dataviews__view-actions"
-				spacing={ 1 }
-			>
-				<HStack
-					justify="start"
-					expanded={ false }
-					className="dataviews__search"
-				>
-					<DataViews.Search />
-					<DataViews.FiltersToggle />
-				</HStack>
-				<HStack
-					spacing={ 1 }
-					expanded={ false }
-					style={ { flexShrink: 0 } }
-				>
-					<DataViews.LayoutSwitcher />
-					<DataViews.ViewConfig />
-				</HStack>
-			</HStack>
-			<DataViews.Filters className="dataviews-filters__container" />
-			<DataViews.Layout />
-			{ footer }
-		</>
-	);
-}
-
-function DataViewsBulkSelectionControls( {
-	className = 'dataviews-bulk-actions-footer__container',
-	selectedIds,
-	visibleIds,
-	onClearSelection,
-	onDeleteSelected,
-	onToggleVisibleSelection,
-} ) {
-	const selectedSet = useMemo(
-		() => new Set( selectedIds ),
-		[ selectedIds ]
-	);
-	const selectedCount = selectedIds.length;
-	const visibleCount = visibleIds.length;
-	const selectedVisibleCount = visibleIds.filter( ( id ) =>
-		selectedSet.has( id )
-	).length;
-	const allVisibleSelected =
-		visibleCount > 0 && selectedVisibleCount === visibleCount;
-	const hasVisibleSelection = selectedVisibleCount > 0;
-
-	const countLabel =
-		selectedCount > 0
-			? sprintf(
-					/* translators: %d: number of selected rows. */
-					_n(
-						'%d row selected',
-						'%d rows selected',
-						selectedCount,
-						'cortext'
-					),
-					selectedCount
-			  )
-			: sprintf(
-					/* translators: %d: number of visible rows. */
-					_n( '%d row', '%d rows', visibleCount, 'cortext' ),
-					visibleCount
-			  );
-
-	return (
-		<HStack expanded={ false } className={ className } spacing={ 3 }>
-			<CheckboxControl
-				className="dataviews-view-table-selection-checkbox"
-				__nextHasNoMarginBottom
-				checked={ allVisibleSelected }
-				indeterminate={ ! allVisibleSelected && hasVisibleSelection }
-				onChange={ onToggleVisibleSelection }
-				aria-label={
-					allVisibleSelected
-						? __( 'Deselect visible rows', 'cortext' )
-						: __( 'Select visible rows', 'cortext' )
-				}
-			/>
-			<span className="dataviews-bulk-actions-footer__item-count">
-				{ countLabel }
-			</span>
-			<HStack
-				className="dataviews-bulk-actions-footer__action-buttons"
-				expanded={ false }
-				spacing={ 1 }
-			>
-				{ selectedCount > 0 && (
-					<Button
-						icon={ trash }
-						isDestructive
-						label={ __( 'Trash selected rows', 'cortext' ) }
-						onClick={ onDeleteSelected }
-						size="compact"
-						showTooltip
-						tooltipPosition="top"
-					/>
-				) }
-				{ selectedCount > 0 && (
-					<Button
-						icon={ closeSmall }
-						label={ __( 'Clear selection', 'cortext' ) }
-						onClick={ onClearSelection }
-						size="compact"
-						showTooltip
-						tooltipPosition="top"
-					/>
-				) }
-			</HStack>
-		</HStack>
-	);
-}
-
-function DataViewsSelectionFooter( {
-	enabled,
-	selectedIds,
-	visibleIds,
-	totalItems,
-	totalPages,
-	onClearSelection,
-	onDeleteSelected,
-	onToggleVisibleSelection,
-} ) {
-	const showBulkControls = enabled && totalItems > 0;
-	const showPagination = totalItems > 0 && totalPages > 1;
-
-	if ( ! showBulkControls && ! showPagination ) {
-		return null;
-	}
-
-	return (
-		<HStack expanded={ false } justify="end" className="dataviews-footer">
-			{ showBulkControls ? (
-				<DataViewsBulkSelectionControls
-					selectedIds={ selectedIds }
-					visibleIds={ visibleIds }
-					onClearSelection={ onClearSelection }
-					onDeleteSelected={ onDeleteSelected }
-					onToggleVisibleSelection={ onToggleVisibleSelection }
-				/>
-			) : null }
-			<DataViews.Pagination />
-		</HStack>
-	);
-}
+// tech-debt.md#61: DataViews ties list focus to its own selection. Cortext
+// uses blank-row clicks and keyboard activation to open the row instead.
+const EMPTY_DATA_VIEW_SELECTION = [];
+const LIST_ROW_EMPTY_CLICK_TARGET_SELECTOR = '.dataviews-view-list__item';
+const LIST_ROW_SELECTOR = '.dataviews-view-list > [role="row"]';
+const ignoreDataViewsSelectionChange = () => {};
 
 export default function CollectionDataViews( {
 	collectionId,
@@ -551,9 +119,22 @@ export default function CollectionDataViews( {
 	const knownFieldIdsRef = useRef( null );
 
 	const availableFields = useMemo(
-		() => [ TITLE_FIELD, ...fields ],
+		() => [ TITLE_FIELD, COVER_FIELD, ...fields ],
 		[ fields ]
 	);
+	const dataViewsView = useMemo(
+		() => adaptViewForDataViews( view ),
+		[ view ]
+	);
+	const viewRef = useRef( view );
+	viewRef.current = view;
+	const onChangeViewRef = useRef( onChangeView );
+	onChangeViewRef.current = onChangeView;
+	const onDataViewsChange = useCallback( ( nextView ) => {
+		onChangeViewRef.current(
+			mergeDataViewsChange( viewRef.current, nextView )
+		);
+	}, [] );
 
 	// Compute a reconciled view synchronously so that useCollectionRows
 	// never fetches with stale/deleted field references. While fields are
@@ -608,11 +189,17 @@ export default function CollectionDataViews( {
 
 	const isTableLayout = view?.type === 'table';
 	const isGridLayout = view?.type === 'grid';
+	const isListLayout = view?.type === 'list';
+	let skeletonLayout = 'table';
+	if ( isGridLayout ) {
+		skeletonLayout = 'grid';
+	} else if ( isListLayout ) {
+		skeletonLayout = 'list';
+	}
 	const supportsRowSelection = isTableLayout || isGridLayout;
 	const isServerPaginated = queryMode === 'server';
 	const dataViewFields = availableFields;
-	const isRowsLoadingShell =
-		! rowsResolved && data.length === 0 && isTableLayout;
+	const isRowsLoadingShell = ! rowsResolved && data.length === 0;
 	// Treat field loading and first-page row loading as one shell state. While
 	// either is still running, hide DataViews chrome and show the rows skeleton
 	// so the user does not see three quick states: generic placeholder, empty
@@ -654,18 +241,26 @@ export default function CollectionDataViews( {
 			[ fieldId ]: elements,
 		} ) );
 	}, [] );
+	const [ formatOverrides, setFormatOverrides ] = useState( {} );
+	const updateFieldFormat = useCallback( ( recordId, nextFormat ) => {
+		const fieldId = `field-${ recordId }`;
+		setFormatOverrides( ( current ) => ( {
+			...current,
+			[ fieldId ]: nextFormat ?? null,
+		} ) );
+	}, [] );
 
 	// Editable, currently-visible columns in the order DataViews renders
 	// them. Drives Tab/Shift+Tab cell-to-cell navigation. See
 	// tech-debt.md#1: DataViews would own this if inline editing were
 	// upstream, and this walker would go away.
 	const editableVisibleFields = useMemo( () => {
-		const order = view?.fields ?? [];
+		const order = dataViewsView?.fields ?? [];
 		const byId = new Map( availableFields.map( ( f ) => [ f.id, f ] ) );
 		return order
 			.map( ( id ) => byId.get( id ) )
 			.filter( ( f ) => f && f.editable );
-	}, [ availableFields, view?.fields ] );
+	}, [ availableFields, dataViewsView?.fields ] );
 
 	const { data: dataFiltered, paginationInfo: clientPaginationInfo } =
 		useMemo( () => {
@@ -707,8 +302,13 @@ export default function CollectionDataViews( {
 		: clientPaginationInfo;
 
 	const dataFilteredInRenderOrder = useMemo(
-		() => rowsInDataViewRenderOrder( dataFiltered, view, dataViewFields ),
-		[ dataFiltered, view, dataViewFields ]
+		() =>
+			rowsInDataViewRenderOrder(
+				dataFiltered,
+				dataViewsView,
+				dataViewFields
+			),
+		[ dataFiltered, dataViewsView, dataViewFields ]
 	);
 	const visibleRowIds = useMemo(
 		() => rowIds( dataFilteredInRenderOrder ),
@@ -797,6 +397,31 @@ export default function CollectionDataViews( {
 		},
 		[ supportsRowSelection, updateSelectedRowIds, visibleRowIds ]
 	);
+	const dataViewsSelectionProps = useMemo( () => {
+		if ( supportsRowSelection ) {
+			return {
+				selection: selectedRowIds,
+				onChangeSelection,
+			};
+		}
+
+		// DataViews list keeps an internal selected row when uncontrolled.
+		// Cortext uses list clicks for row open / cell edit, so keep selection
+		// controlled and empty in this layout.
+		if ( isListLayout ) {
+			return {
+				selection: EMPTY_DATA_VIEW_SELECTION,
+				onChangeSelection: ignoreDataViewsSelectionChange,
+			};
+		}
+
+		return {};
+	}, [
+		isListLayout,
+		onChangeSelection,
+		selectedRowIds,
+		supportsRowSelection,
+	] );
 
 	const clearSelection = useCallback( () => {
 		setSelectedRowIds( [] );
@@ -847,7 +472,9 @@ export default function CollectionDataViews( {
 				return;
 			}
 
-			if ( target.closest( INTERACTIVE_SELECTION_IGNORE_SELECTOR ) ) {
+			if (
+				target.closest( INTERACTIVE_DATA_VIEW_ITEM_IGNORE_SELECTOR )
+			) {
 				return;
 			}
 
@@ -935,22 +562,16 @@ export default function CollectionDataViews( {
 			if ( ! collectionId || ! rowId ) {
 				return null;
 			}
-			// Rows update through core REST now. The title travels at the post
-			// top level; everything else as a `meta` key. The backend's
-			// `rest_pre_insert_crtxt_document` filter validates relation
-			// targets, and `rest_after_insert_crtxt_document` syncs reverse
-			// pointers + the field-value sidecar so callers see the same
-			// observable behaviour as the legacy custom endpoint.
-			const payload =
-				fieldId === 'title'
-					? { title: value }
-					: { meta: { [ fieldId ]: value } };
 			const updated = await apiFetch( {
-				path: `/wp/v2/crtxt_documents/${ rowId }`,
+				path: `/cortext/v1/collections/${ collectionId }/rows/${ rowId }`,
 				method: 'POST',
-				data: payload,
+				data: {
+					field: fieldId,
+					value,
+				},
 			} );
 			touchRecent( {
+				kind: 'row',
 				id: updated?.id ?? rowId,
 				collectionId,
 			} );
@@ -960,57 +581,65 @@ export default function CollectionDataViews( {
 		[ collectionId, refresh, touchRecent ]
 	);
 
+	let dataViewLayoutType = 'table';
+	if ( isGridLayout ) {
+		dataViewLayoutType = 'grid';
+	}
+	if ( isListLayout ) {
+		dataViewLayoutType = 'list';
+	}
 	const mutationContext = useMemo(
 		() => ( {
 			saveRowField,
+			canEditCells: isTableLayout || isGridLayout || isListLayout,
+			layoutType: dataViewLayoutType,
 			editRequest,
 			clearEditRequest,
 			requestNext,
 			optionOverrides,
 			updateFieldOptions,
+			formatOverrides,
+			updateFieldFormat,
 			refreshRows: refresh,
 		} ),
 		[
 			saveRowField,
+			dataViewLayoutType,
+			isGridLayout,
+			isListLayout,
+			isTableLayout,
 			editRequest,
 			clearEditRequest,
 			requestNext,
 			optionOverrides,
 			updateFieldOptions,
+			formatOverrides,
+			updateFieldFormat,
 			refresh,
 		]
 	);
 
 	const onCreated = useCallback(
 		( created ) => {
-			// Without an explicit sort, rows use their stored order and new
-			// rows append to the end. Move to the last page before refreshing
-			// so the new row is visible instead of sending the user back to
-			// page 1. With a user-chosen sort, the new row could land anywhere;
-			// refresh in place and leave the view alone.
+			// In an unconstrained view, rows append to the stored order, so the
+			// new row belongs on the last page. Search, filters, and explicit
+			// sorts make that guess unsafe; refresh in place instead.
 			//
 			// tech-debt.md#2: lastPage arithmetic is optimistic against
 			// possibly stale paginationInfo. With rows in core-data this
 			// becomes a useEffect on totalPages.
-			const hasExplicitSort = Boolean( view?.sort?.field );
-			if ( ! hasExplicitSort ) {
-				const perPage = view?.perPage ?? 25;
-				const expectedTotal =
-					( activePaginationInfo?.totalItems ?? 0 ) + 1;
-				const lastPage = Math.max(
-					1,
-					Math.ceil( expectedTotal / perPage )
-				);
-				if ( ( view?.page ?? 1 ) !== lastPage ) {
-					onChangeView( { ...view, page: lastPage } );
-				} else {
-					refresh();
-				}
+			const nextView = nextViewAfterRowCreated(
+				view,
+				activePaginationInfo
+			);
+			if ( nextView !== view ) {
+				onChangeView( nextView );
 			} else {
 				refresh();
 			}
 			if ( created?.id ) {
 				touchRecent( {
+					kind: 'row',
 					id: created.id,
 					collectionId,
 				} );
@@ -1027,17 +656,9 @@ export default function CollectionDataViews( {
 		]
 	);
 
-	const viewRef = useRef( view );
-	viewRef.current = view;
-	const onChangeViewRef = useRef( onChangeView );
-	onChangeViewRef.current = onChangeView;
 	const previousVisibleFieldsRef = useRef( null );
 	const savedRowDetailMode = getRowDetailMode( view );
-	// Rows now live in the unified `crtxt_document` post type; the collection
-	// slug only survives in `collectionId` for filtering. The peek/full row
-	// surfaces still want a post type to address `/wp/v2/*` core REST routes,
-	// and that is always `crtxt_document` for rows.
-	const postType = slug ? 'crtxt_document' : null;
+	const postType = slug ? `crtxt_${ slug }` : null;
 	const { openDocument, closeDocument } = useDocumentPeekActions();
 	const { peek } = useDocumentPeekState();
 	const openRowId = peek?.docId ?? null;
@@ -1049,16 +670,19 @@ export default function CollectionDataViews( {
 	rowsRef.current = dataFiltered;
 	const source = useMemo(
 		() => ( {
+			kind: 'collection',
 			collectionId,
 			getRowList: () => rowsRef.current ?? [],
 			refresh,
+			updateFieldOptions,
+			updateFieldFormat,
 			onModeChange: ( mode ) => {
 				onChangeViewRef.current(
 					withRowDetailMode( viewRef.current, mode )
 				);
 			},
 		} ),
-		[ collectionId, refresh ]
+		[ collectionId, refresh, updateFieldFormat, updateFieldOptions ]
 	);
 
 	const requestOpenRow = useCallback(
@@ -1090,12 +714,193 @@ export default function CollectionDataViews( {
 
 	const openRowActionContext = useMemo(
 		() => ( {
-			enabled: isTableLayout,
+			enabled: isTableLayout || isGridLayout || isListLayout,
 			icon: ROW_DETAIL_MODE_ICONS[ savedRowDetailMode ],
 			openRowId,
 			requestOpenRow,
+			showInlineOpen: isTableLayout,
 		} ),
-		[ isTableLayout, openRowId, requestOpenRow, savedRowDetailMode ]
+		[
+			isGridLayout,
+			isListLayout,
+			isTableLayout,
+			openRowId,
+			requestOpenRow,
+			savedRowDetailMode,
+		]
+	);
+	const handleDataViewClick = useCallback(
+		( event ) => {
+			let clickLayout = null;
+			if ( isGridLayout ) {
+				clickLayout = 'grid';
+			} else if ( isListLayout ) {
+				clickLayout = 'list';
+			}
+			if ( ! clickLayout || event.defaultPrevented ) {
+				return;
+			}
+			if (
+				event.metaKey ||
+				event.ctrlKey ||
+				event.shiftKey ||
+				event.altKey
+			) {
+				return;
+			}
+			const target = event.target;
+			if ( ! target?.closest ) {
+				return;
+			}
+			if (
+				target.closest( INTERACTIVE_DATA_VIEW_ITEM_IGNORE_SELECTOR )
+			) {
+				return;
+			}
+			const rowInfo = findDataViewItemFromEvent(
+				event,
+				tableWrapperRef.current,
+				clickLayout,
+				dataFilteredInRenderOrder
+			);
+			if ( ! rowInfo?.row ) {
+				return;
+			}
+			requestOpenRow( rowInfo.row );
+		},
+		[
+			dataFilteredInRenderOrder,
+			isGridLayout,
+			isListLayout,
+			requestOpenRow,
+		]
+	);
+	const handleDataViewPointerDownCapture = useCallback(
+		( event ) => {
+			if ( ! isListLayout || event.defaultPrevented ) {
+				return;
+			}
+			if ( event.button !== undefined && event.button !== 0 ) {
+				return;
+			}
+			if (
+				event.metaKey ||
+				event.ctrlKey ||
+				event.shiftKey ||
+				event.altKey
+			) {
+				return;
+			}
+			const target = event.target;
+			if ( ! target?.closest ) {
+				return;
+			}
+			if (
+				target.closest( INTERACTIVE_DATA_VIEW_ITEM_IGNORE_SELECTOR )
+			) {
+				return;
+			}
+			if ( ! target.closest( LIST_ROW_EMPTY_CLICK_TARGET_SELECTOR ) ) {
+				return;
+			}
+			const rowInfo = findDataViewItemFromEvent(
+				event,
+				tableWrapperRef.current,
+				'list',
+				dataFilteredInRenderOrder
+			);
+			if ( ! rowInfo?.row ) {
+				return;
+			}
+			event.preventDefault();
+			event.stopPropagation();
+			requestOpenRow( rowInfo.row );
+		},
+		[ dataFilteredInRenderOrder, isListLayout, requestOpenRow ]
+	);
+	const handleDataViewKeyDownCapture = useCallback(
+		( event ) => {
+			if ( ! isListLayout || event.defaultPrevented ) {
+				return;
+			}
+			const target = event.target;
+			if (
+				! target?.closest ||
+				! target.matches?.( LIST_ROW_EMPTY_CLICK_TARGET_SELECTOR )
+			) {
+				return;
+			}
+
+			const wrapper = tableWrapperRef.current;
+			const rowElement = target.closest( LIST_ROW_SELECTOR );
+			if (
+				! wrapper ||
+				! rowElement ||
+				! wrapper.contains( rowElement )
+			) {
+				return;
+			}
+
+			if ( event.key === 'Enter' || event.key === ' ' ) {
+				const rowInfo = findDataViewItemFromEvent(
+					event,
+					wrapper,
+					'list',
+					dataFilteredInRenderOrder
+				);
+				if ( ! rowInfo?.row ) {
+					return;
+				}
+				event.preventDefault();
+				event.stopPropagation();
+				requestOpenRow( rowInfo.row );
+				return;
+			}
+
+			const renderedRows = Array.from(
+				wrapper.querySelectorAll( LIST_ROW_SELECTOR )
+			);
+			const currentIndex = renderedRows.indexOf( rowElement );
+			if ( currentIndex < 0 ) {
+				return;
+			}
+
+			let nextIndex = null;
+			if ( event.key === 'ArrowDown' ) {
+				nextIndex = Math.min(
+					currentIndex + 1,
+					renderedRows.length - 1
+				);
+			} else if ( event.key === 'ArrowUp' ) {
+				nextIndex = Math.max( currentIndex - 1, 0 );
+			} else if ( event.key === 'Home' ) {
+				nextIndex = 0;
+			} else if ( event.key === 'End' ) {
+				nextIndex = renderedRows.length - 1;
+			}
+
+			if ( nextIndex === null || nextIndex === currentIndex ) {
+				return;
+			}
+			const nextTarget = renderedRows[ nextIndex ]?.querySelector(
+				LIST_ROW_EMPTY_CLICK_TARGET_SELECTOR
+			);
+			if ( ! nextTarget ) {
+				return;
+			}
+
+			event.preventDefault();
+			event.stopPropagation();
+			nextTarget.focus();
+		},
+		[ dataFilteredInRenderOrder, isListLayout, requestOpenRow ]
+	);
+	const handleDataViewClickCapture = useCallback(
+		( event ) => {
+			captureSelectionIntent( event );
+			handleDataViewClick( event );
+		},
+		[ captureSelectionIntent, handleDataViewClick ]
 	);
 
 	const [ rowActionError, setRowActionError ] = useState( null );
@@ -1144,15 +949,13 @@ export default function CollectionDataViews( {
 			}
 			setRowActionError( null );
 			try {
-				// `DocumentDuplicator` copies content, field values, icon, and
-				// cover; it reuses the source row's collection membership so
-				// the duplicate lands in the same collection.
 				const created = await apiFetch( {
-					path: `/cortext/v1/documents/${ row.id }/duplicate`,
+					path: `/cortext/v1/collections/${ collectionId }/rows/${ row.id }/duplicate`,
 					method: 'POST',
 				} );
 				if ( created?.id ) {
 					touchRecent( {
+						kind: 'row',
 						id: created.id,
 						collectionId,
 					} );
@@ -1207,8 +1010,7 @@ export default function CollectionDataViews( {
 				BULK_DELETE_CONCURRENCY,
 				( row ) =>
 					apiFetch( {
-						// `crtxt_document` registers `rest_base => 'crtxt_documents'`.
-						path: `/wp/v2/crtxt_documents/${ row.id }`,
+						path: `/wp/v2/${ postType }/${ row.id }`,
 						method: 'DELETE',
 					} )
 			);
@@ -1242,7 +1044,7 @@ export default function CollectionDataViews( {
 				// stale entries on the next read, but doing it here keeps the next
 				// favorites PUT from sending these row ids back.
 				setFavorites( ( current ) =>
-					filterFavoritesByDeletedIds( current, deleted )
+					filterFavoritesByDeletedIds( current, { row: deleted } )
 				).catch( () => {
 					// Keep this quiet. The next favorites read asks the server to
 					// prune stale rows anyway.
@@ -1292,9 +1094,8 @@ export default function CollectionDataViews( {
 
 	const rowActions = useMemo( () => {
 		const actions = [];
-		// List and grid get one primary Open action, matching the saved
-		// detail mode. Table already has the inline Open button in the title
-		// cell, so these actions stay inside the menu there.
+		// The row itself opens in grid/list, and table has the inline Open
+		// button in the title cell. Keep the mode choices in the row menu.
 		for ( const mode of [ 'side', 'modal', 'full' ] ) {
 			actions.push( {
 				id: `open-in-${ mode }`,
@@ -1304,7 +1105,6 @@ export default function CollectionDataViews( {
 					ROW_DETAIL_MODE_LABELS[ mode ]
 				),
 				icon: ROW_DETAIL_MODE_ICONS[ mode ],
-				isPrimary: ! isTableLayout && mode === savedRowDetailMode,
 				context: 'single',
 				callback: ( items ) => openRowInMode( items?.[ 0 ], mode ),
 			} );
@@ -1351,10 +1151,8 @@ export default function CollectionDataViews( {
 		areFavoriteActionsDisabled,
 		duplicateRow,
 		isRowFavorite,
-		isTableLayout,
 		openRowInMode,
 		requestDeleteRows,
-		savedRowDetailMode,
 		toggleRowFavorite,
 	] );
 
@@ -1373,12 +1171,10 @@ export default function CollectionDataViews( {
 	// they sit outside `normalizeView`'s scope. Other view settings
 	// (perPage, search, layout.density) are left alone.
 	useEffect( () => {
-		// Don't run while we have no data at all *or* while the field
-		// records are mid-refetch — during a refetch `fieldRecords` is
-		// briefly empty for a new include query, and stripping orphan
-		// IDs against that transient state would wipe the user's
-		// `view.fields` (and their persisted view) until the refetch
-		// completes.
+		// Skip while we have no data, or while field records are refetching.
+		// `fieldRecords` can briefly be empty for a new include query; pruning
+		// against that temporary state would wipe the saved `view.fields`
+		// until the refetch completes.
 		if ( isResolving || ! fieldsResolved ) {
 			return;
 		}
@@ -1635,24 +1431,31 @@ export default function CollectionDataViews( {
 
 	if ( ! isResolving && collectionId && ! collection ) {
 		return (
-			invalid ?? (
-				<p>
-					{ __(
-						'This collection is no longer available.',
-						'cortext'
-					) }
-				</p>
-			)
+			<DataViewStateShell status="invalid">
+				{ invalid ?? (
+					<p>
+						{ __(
+							'This collection is no longer available.',
+							'cortext'
+						) }
+					</p>
+				) }
+			</DataViewStateShell>
 		);
 	}
 
 	if ( ! isResolving && rowError ) {
 		return (
-			error ?? (
-				<p>
-					{ __( 'Collection rows could not be loaded.', 'cortext' ) }
-				</p>
-			)
+			<DataViewStateShell status="error">
+				{ error ?? (
+					<p>
+						{ __(
+							'Collection rows could not be loaded.',
+							'cortext'
+						) }
+					</p>
+				) }
+			</DataViewStateShell>
 		);
 	}
 
@@ -1683,7 +1486,6 @@ export default function CollectionDataViews( {
 			onToggleVisibleSelection={ toggleVisibleRows }
 		/>
 	);
-
 	return (
 		<CurrentViewModeProvider value={ savedRowDetailMode }>
 			<RowMutationContext.Provider value={ mutationContext }>
@@ -1696,7 +1498,17 @@ export default function CollectionDataViews( {
 						<div
 							className="cortext-data-view"
 							ref={ tableWrapperRef }
-							onClickCapture={ captureSelectionIntent }
+							onPointerDownCapture={
+								handleDataViewPointerDownCapture
+							}
+							onKeyDownCapture={ handleDataViewKeyDownCapture }
+							onClickCapture={ handleDataViewClickCapture }
+							data-grid-card-clickable={
+								isGridLayout ? 'true' : undefined
+							}
+							data-list-row-clickable={
+								isListLayout ? 'true' : undefined
+							}
 							data-loading-shell={
 								showLoadingShell ? 'true' : undefined
 							}
@@ -1746,6 +1558,7 @@ export default function CollectionDataViews( {
 										density={
 											view?.layout?.density ?? 'compact'
 										}
+										layout={ skeletonLayout }
 									/>
 								</div>
 							) }
@@ -1754,8 +1567,8 @@ export default function CollectionDataViews( {
 									<DataViews
 										data={ dataFiltered }
 										fields={ dataViewFields }
-										view={ view }
-										onChangeView={ onChangeView }
+										view={ dataViewsView }
+										onChangeView={ onDataViewsChange }
 										paginationInfo={ activePaginationInfo }
 										defaultLayouts={ DEFAULT_LAYOUTS }
 										getItemId={ ( item ) =>
@@ -1764,17 +1577,22 @@ export default function CollectionDataViews( {
 										isLoading={ isLoading }
 										empty={ empty }
 										actions={ dataViewActions }
-										{ ...( supportsRowSelection
-											? {
-													selection: selectedRowIds,
-													onChangeSelection,
-											  }
-											: {} ) }
+										{ ...dataViewsSelectionProps }
 									>
 										<DataViewsChrome
 											footer={ dataViewsFooter }
 										/>
 									</DataViews>
+									{ isGridLayout && (
+										<GridNewRowPortal
+											wrapperRef={ tableWrapperRef }
+											slug={ slug }
+											view={ dataViewsView }
+											fields={ fields }
+											onCreated={ onCreated }
+											hasRows={ dataFiltered.length > 0 }
+										/>
+									) }
 									<DataViewRowReorder
 										wrapperRef={ tableWrapperRef }
 										view={ view }
@@ -1814,23 +1632,40 @@ export default function CollectionDataViews( {
 											onFieldOptionsSaved={
 												updateFieldOptions
 											}
+											onFieldFormatSaved={
+												updateFieldFormat
+											}
 											onFieldCreated={
 												requestRevealCreatedField
 											}
 											onRowsChanged={ refresh }
 										/>
 									) }
-									{ /* tech-debt.md#7: DataViews has no footer slot, so the
-									   New-row affordance and its CSS layout sit outside the
-									   component instead of inside its layout chrome. */ }
-									<div className="cortext-data-view__footer">
-										<NewRowButton
-											collectionId={ collectionId }
-											view={ view }
-											fields={ fields }
-											onCreated={ onCreated }
-										/>
-									</div>
+									{ /* tech-debt.md#7: table/list render New just
+									   outside DataViews because there is no append
+									   slot in the layout chrome. */ }
+									{ ! isGridLayout && (
+										<div
+											className={
+												'cortext-data-view__footer' +
+												( isListLayout
+													? ' cortext-data-view__footer--list'
+													: '' )
+											}
+										>
+											<DataViewNewRowButton
+												slug={ slug }
+												view={ view }
+												fields={ fields }
+												onCreated={ onCreated }
+												presentation={
+													isListLayout
+														? 'list-row'
+														: 'footer'
+												}
+											/>
+										</div>
+									) }
 								</>
 							) }
 						</div>

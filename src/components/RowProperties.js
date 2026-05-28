@@ -1,38 +1,38 @@
 /**
- * Property panel for a row document. Renders one row per collection field
- * with the right edit affordance for that field type. Mounted by row detail
- * chrome and full-page row chrome for now; see tech-debt.md#42 for the
- * follow-up that turns this into a locked document block.
+ * Property panel for a row document. It renders one row per collection field
+ * with the edit control that matches the field type. Row detail chrome and the
+ * locked document-properties editor block both mount this; see tech-debt.md#42
+ * for the remaining public-rendering work.
  *
  * Reads the post's edited title and meta from `editorStore` so the live
  * values stay in sync with the locked `core/post-title` block above and
  * any field changes that flow through autosave.
  */
 
-import {
-	Button,
-	CheckboxControl,
-	DateTimePicker,
-	Dropdown,
-	Popover,
-} from '@wordpress/components';
+import apiFetch from '@wordpress/api-fetch';
+import { Button, CheckboxControl } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
 import {
+	Fragment,
 	useCallback,
 	useContext,
 	useEffect,
+	useLayoutEffect,
 	useMemo,
 	useRef,
 	useState,
 } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
-import { dragHandle } from '@wordpress/icons';
+import { dragHandle, seen, unseen } from '@wordpress/icons';
 import {
 	DndContext,
+	DragOverlay,
 	KeyboardSensor,
 	PointerSensor,
 	closestCenter,
+	pointerWithin,
+	useDroppable,
 	useSensor,
 	useSensors,
 } from '@dnd-kit/core';
@@ -44,23 +44,42 @@ import {
 } from '@dnd-kit/sortable';
 
 import {
+	DateEditor,
 	RowMutationContext,
-	dateOnlyValue,
+	SelectEditor,
 	formatDisplay,
 } from './EditableCell';
 import { TITLE_FIELD_ID } from './dataViewColumns';
-import EditOptionsPopover from './fields/EditOptionsPopover';
+import FieldActionsMenu from './fields/FieldActionsMenu';
 import { FieldTypeIcon, SystemFieldIcon } from './fields/fieldTypes';
 import { hasSystemFieldIcon } from './fields/systemFieldIconIds';
+import Infotip from './Infotip';
+import MultiselectEdit from './MultiselectEdit';
 import { toRecordId } from '../hooks/fieldIds';
+import { elementsFromOptions } from '../hooks/optionElements';
+import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
 import {
 	isRowDetailFieldEditable,
 	isValidNumberDraft,
 	parseNumberPropertyValue,
+	relationTargetCollectionId,
+	rowDetailDisplayFieldType as displayFieldType,
 	rowDetailFieldType as fieldType,
 	splitPropertyPatch,
 	valueForField,
 } from './rowDetailUtils';
+import RelationEditor from './relations/RelationEditor';
+
+export const HIDDEN_PROPERTIES_DROP_TARGET =
+	'cortext-row-properties-hidden-drop-target';
+
+function rowPropertiesCollisionDetection( args ) {
+	const pointerCollisions = pointerWithin( args );
+	const hiddenDropTarget = pointerCollisions.find(
+		( collision ) => collision.id === HIDDEN_PROPERTIES_DROP_TARGET
+	);
+	return hiddenDropTarget ? [ hiddenDropTarget ] : closestCenter( args );
+}
 
 function emptyLabel() {
 	return (
@@ -79,9 +98,132 @@ function ReadOnlyProperty( { value, type, elements, format } ) {
 	);
 }
 
-function OptionPropertyValue( { value, type, elements } ) {
-	const display = formatDisplay( value, type, { elements } );
-	return display === '' ? emptyLabel() : display;
+function EmptyHiddenPropertiesDropZone( { placeholderHeight } ) {
+	const { isOver, setNodeRef } = useDroppable( {
+		id: HIDDEN_PROPERTIES_DROP_TARGET,
+	} );
+	return (
+		<div
+			ref={ setNodeRef }
+			className="cortext-row-detail__property-hidden-dropzone-wrap"
+		>
+			{ placeholderHeight ? (
+				<div
+					className="cortext-row-detail__property-hidden-placeholder"
+					style={ { height: placeholderHeight } }
+				/>
+			) : null }
+			<div className="cortext-row-detail__property-hidden-separator">
+				<span>{ __( 'Hidden properties', 'cortext' ) }</span>
+			</div>
+			<div
+				className={
+					'cortext-row-detail__property-hidden-dropzone' +
+					( isOver ? ' is-over' : '' )
+				}
+				aria-label={ __(
+					'Drop properties here to hide them',
+					'cortext'
+				) }
+			/>
+		</div>
+	);
+}
+
+function RowPropertyDragOverlay( {
+	data,
+	field,
+	formatOverrides,
+	localFormatOverrides,
+	localOptionOverrides,
+	optionOverrides,
+	width,
+} ) {
+	if ( ! field ) {
+		return null;
+	}
+	const type = fieldType( field );
+	const displayType = displayFieldType( field );
+	const value = valueForField( field, data );
+	const elements =
+		localOptionOverrides?.[ field.id ] ??
+		optionOverrides?.[ field.id ] ??
+		field.cortextElements ??
+		field.elements ??
+		[];
+	let format = field.cortextFormat;
+	if ( formatOverrides?.[ field.id ] !== undefined ) {
+		format = formatOverrides[ field.id ];
+	}
+	if ( localFormatOverrides?.[ field.id ] !== undefined ) {
+		format = localFormatOverrides[ field.id ];
+	}
+	let propertyIcon = null;
+	if ( isCollectionField( field ) ) {
+		propertyIcon = (
+			<FieldTypeIcon
+				type={ type }
+				className="cortext-row-detail__property-type-icon"
+			/>
+		);
+	} else if ( hasInternalFieldIcon( field ) ) {
+		propertyIcon = (
+			<SystemFieldIcon
+				fieldId={ field.id }
+				className="cortext-row-detail__property-type-icon"
+			/>
+		);
+	}
+	return (
+		<div
+			className="cortext-row-detail__property cortext-row-detail__property--layout-editing cortext-row-detail__property-drag-overlay"
+			style={ width ? { width } : undefined }
+		>
+			<div className="cortext-row-detail__property-label">
+				<span className="cortext-row-detail__property-label-icon-slot">
+					<span
+						className="cortext-row-detail__property-layout-chip components-button"
+						aria-hidden="true"
+					/>
+					{ propertyIcon }
+				</span>
+				<span className="cortext-row-detail__property-label-content">
+					<span className="cortext-row-detail__property-label-text">
+						{ field.label }
+					</span>
+				</span>
+			</div>
+			<div className="cortext-row-detail__property-value">
+				<div className="cortext-row-detail__property-value-content">
+					<ReadOnlyProperty
+						value={ value }
+						type={ displayType }
+						elements={ elements }
+						format={ format }
+					/>
+				</div>
+			</div>
+		</div>
+	);
+}
+
+function HiddenPropertiesSeparator() {
+	const { setNodeRef, transform, transition } = useSortable( {
+		id: HIDDEN_PROPERTIES_DROP_TARGET,
+	} );
+	const style = {
+		transform: transformToString( transform ),
+		transition,
+	};
+	return (
+		<div
+			ref={ setNodeRef }
+			style={ style }
+			className="cortext-row-detail__property-hidden-separator"
+		>
+			<span>{ __( 'Hidden properties', 'cortext' ) }</span>
+		</div>
+	);
 }
 
 function isCollectionField( field ) {
@@ -95,161 +237,11 @@ function hasInternalFieldIcon( field ) {
 	return hasSystemFieldIcon( field?.id );
 }
 
-function SelectPropertyControl( {
-	field,
-	value,
-	elements,
-	onChange,
-	onOptionsSaved,
-	onRowsChanged,
-} ) {
-	const [ anchor, setAnchor ] = useState( null );
-	const [ isOpen, setIsOpen ] = useState( false );
-	const close = useCallback( () => setIsOpen( false ), [] );
-	const recordId = field.cortextRecordId ?? toRecordId( field.id );
-
-	return (
-		<>
-			<Button
-				ref={ setAnchor }
-				className="cortext-row-detail__property-trigger"
-				variant="tertiary"
-				onClick={ () => setIsOpen( true ) }
-				aria-expanded={ isOpen }
-				aria-label={ field.label }
-			>
-				<OptionPropertyValue
-					value={ value }
-					type="select"
-					elements={ elements }
-				/>
-			</Button>
-			{ isOpen && anchor ? (
-				<Popover
-					anchor={ anchor }
-					placement="bottom-start"
-					onClose={ close }
-					focusOnMount="firstElement"
-				>
-					<EditOptionsPopover
-						recordId={ recordId }
-						fieldType="select"
-						initialOptions={ elements ?? [] }
-						value={ value }
-						onOptionsSaved={ onOptionsSaved }
-						onRowsChanged={ onRowsChanged }
-						onRequestClose={ close }
-						onPick={ async ( next ) => {
-							onChange( next );
-							close();
-						} }
-					/>
-				</Popover>
-			) : null }
-		</>
-	);
-}
-
-function MultiselectPropertyControl( {
-	field,
-	value,
-	elements,
-	onChange,
-	onOptionsSaved,
-	onRowsChanged,
-} ) {
-	const [ anchor, setAnchor ] = useState( null );
-	const [ isOpen, setIsOpen ] = useState( false );
-	const close = useCallback( () => setIsOpen( false ), [] );
-	const recordId = field.cortextRecordId ?? toRecordId( field.id );
-	const current = useMemo(
-		() => ( Array.isArray( value ) ? value : [] ),
-		[ value ]
-	);
-	const handlePick = useCallback(
-		( optionValue ) => {
-			const next = current.includes( optionValue )
-				? current.filter( ( item ) => item !== optionValue )
-				: [ ...current, optionValue ];
-			onChange( next );
-		},
-		[ current, onChange ]
-	);
-
-	return (
-		<>
-			<Button
-				ref={ setAnchor }
-				className="cortext-row-detail__property-trigger"
-				variant="tertiary"
-				onClick={ () => setIsOpen( true ) }
-				aria-expanded={ isOpen }
-				aria-label={ field.label }
-			>
-				<OptionPropertyValue
-					value={ current }
-					type="multiselect"
-					elements={ elements }
-				/>
-			</Button>
-			{ isOpen && anchor ? (
-				<Popover
-					anchor={ anchor }
-					placement="bottom-start"
-					onClose={ close }
-					focusOnMount="firstElement"
-				>
-					<EditOptionsPopover
-						recordId={ recordId }
-						fieldType="multiselect"
-						initialOptions={ elements ?? [] }
-						value={ current }
-						onOptionsSaved={ onOptionsSaved }
-						onRowsChanged={ onRowsChanged }
-						onRequestClose={ close }
-						onPick={ handlePick }
-					/>
-				</Popover>
-			) : null }
-		</>
-	);
-}
-
-function DatePropertyControl( { field, value, type, onChange } ) {
-	const display = value
-		? formatDisplay( value, type, { format: field.cortextFormat } )
-		: __( 'Empty', 'cortext' );
-
-	return (
-		<Dropdown
-			popoverProps={ { placement: 'bottom-start' } }
-			renderToggle={ ( { isOpen, onToggle } ) => (
-				<Button
-					className="cortext-row-detail__property-trigger"
-					variant="tertiary"
-					onClick={ onToggle }
-					aria-expanded={ isOpen }
-					aria-label={ field.label }
-				>
-					{ display }
-				</Button>
-			) }
-			renderContent={ () => (
-				<div className="cortext-row-detail__date-popover">
-					<DateTimePicker
-						currentDate={ value || null }
-						onChange={ ( next ) =>
-							onChange(
-								type === 'date' ? dateOnlyValue( next ) : next
-							)
-						}
-						is12Hour={ field.cortextFormat?.hour12 ?? true }
-						aria-label={ field.label }
-					/>
-				</div>
-			) }
-		/>
-	);
+function relationConfigForField( field ) {
+	return {
+		targetCollectionId: relationTargetCollectionId( field ),
+		multiple: field.relation?.multiple ?? field.relationMultiple ?? true,
+	};
 }
 
 function EditablePropertyText( { label, inputMode, value, onChange } ) {
@@ -257,6 +249,20 @@ function EditablePropertyText( { label, inputMode, value, onChange } ) {
 		value === null || value === undefined ? '' : String( value );
 	const [ draft, setDraft ] = useState( textValue );
 	const [ isFocused, setIsFocused ] = useState( false );
+	const controlRef = useRef( null );
+	const resizeControl = useCallback( () => {
+		const control = controlRef.current;
+		if ( ! control ) {
+			return;
+		}
+		const width =
+			control.getBoundingClientRect?.().width ?? control.clientWidth;
+		control.style.height = '30px';
+		if ( ! Number.isFinite( width ) || width < 24 ) {
+			return;
+		}
+		control.style.height = `${ Math.max( 30, control.scrollHeight ) }px`;
+	}, [] );
 
 	useEffect( () => {
 		if ( ! isFocused ) {
@@ -264,32 +270,118 @@ function EditablePropertyText( { label, inputMode, value, onChange } ) {
 		}
 	}, [ isFocused, textValue ] );
 
+	useLayoutEffect( () => {
+		resizeControl();
+	}, [ draft, resizeControl ] );
+
+	useLayoutEffect( () => {
+		const control = controlRef.current;
+		if (
+			! control ||
+			typeof window === 'undefined' ||
+			typeof window.ResizeObserver === 'undefined'
+		) {
+			return undefined;
+		}
+		let frame = null;
+		const scheduleResize = () => {
+			if ( frame ) {
+				window.cancelAnimationFrame( frame );
+			}
+			frame = window.requestAnimationFrame( () => {
+				frame = null;
+				resizeControl();
+			} );
+		};
+		const observer = new window.ResizeObserver( scheduleResize );
+		observer.observe( control );
+		scheduleResize();
+		return () => {
+			observer.disconnect();
+			if ( frame ) {
+				window.cancelAnimationFrame( frame );
+			}
+		};
+	}, [ resizeControl ] );
+
 	return (
-		<input
+		<textarea
 			aria-label={ label }
+			ref={ controlRef }
 			className="cortext-row-detail__property-editable-text"
 			inputMode={ inputMode }
 			placeholder={ isFocused ? '' : __( 'Empty', 'cortext' ) }
-			type="text"
+			rows={ 1 }
 			value={ draft }
 			onBlur={ () => setIsFocused( false ) }
 			onChange={ ( event ) => {
-				const next = event.currentTarget.value;
+				const next = event.currentTarget.value.replace(
+					/[\r\n]+/g,
+					' '
+				);
 				setDraft( next );
 				onChange( next );
 			} }
 			onFocus={ () => setIsFocused( true ) }
+			onKeyDown={ ( event ) => {
+				if ( event.key === 'Enter' ) {
+					event.preventDefault();
+				}
+			} }
 		/>
 	);
 }
 
-function EditableNumberPropertyText( { label, value, onChange } ) {
+function EditableNumberPropertyText( { label, value, format, onChange } ) {
 	const textValue =
 		value === null || value === undefined ? '' : String( value );
+	const inputRef = useRef( null );
 	const committedTextRef = useRef( textValue );
 	const committedValueRef = useRef( value ?? null );
 	const [ draft, setDraft ] = useState( textValue );
 	const [ isFocused, setIsFocused ] = useState( false );
+	const formattedDisplay = useMemo( () => {
+		if ( textValue === '' || ! format ) {
+			return textValue;
+		}
+		return formatDisplay( value, 'number', { format } );
+	}, [ format, textValue, value ] );
+	const formattedValue =
+		typeof formattedDisplay === 'string' ? formattedDisplay : textValue;
+	const hasRichDisplay =
+		formattedDisplay !== '' && typeof formattedDisplay !== 'string';
+	const showRawInputValue = useCallback(
+		( input ) => {
+			input.value = textValue;
+			setDraft( textValue );
+			setIsFocused( true );
+		},
+		[ textValue ]
+	);
+	const focusRawInputValue = useCallback(
+		( input ) => {
+			showRawInputValue( input );
+			input.focus();
+			input.select();
+		},
+		[ showRawInputValue ]
+	);
+	const handleInputInteractionStart = useCallback(
+		( event ) => {
+			event.stopPropagation();
+			if (
+				! isFocused ||
+				event.currentTarget.ownerDocument.activeElement !==
+					event.currentTarget
+			) {
+				focusRawInputValue( event.currentTarget );
+			}
+		},
+		[ focusRawInputValue, isFocused ]
+	);
+	const stopInputPropagation = useCallback( ( event ) => {
+		event.stopPropagation();
+	}, [] );
 
 	useEffect( () => {
 		committedTextRef.current = textValue;
@@ -299,6 +391,13 @@ function EditableNumberPropertyText( { label, value, onChange } ) {
 			setDraft( textValue );
 		}
 	}, [ isFocused, textValue, value ] );
+
+	useLayoutEffect( () => {
+		if ( isFocused ) {
+			inputRef.current?.focus();
+			inputRef.current?.select();
+		}
+	}, [ isFocused ] );
 
 	const commitDraft = useCallback(
 		( nextDraft ) => {
@@ -322,14 +421,35 @@ function EditableNumberPropertyText( { label, value, onChange } ) {
 		[ onChange ]
 	);
 
+	if ( hasRichDisplay && ! isFocused ) {
+		return (
+			<Button
+				className="cortext-row-detail__property-trigger"
+				variant="tertiary"
+				onMouseDown={ stopInputPropagation }
+				onPointerDown={ stopInputPropagation }
+				onClick={ ( event ) => {
+					event.stopPropagation();
+					setDraft( textValue );
+					setIsFocused( true );
+				} }
+				aria-label={ label }
+			>
+				{ formattedDisplay }
+			</Button>
+		);
+	}
+
 	return (
 		<input
+			ref={ inputRef }
 			aria-label={ label }
 			className="cortext-row-detail__property-editable-text"
 			inputMode="decimal"
 			placeholder={ isFocused ? '' : __( 'Empty', 'cortext' ) }
 			type="text"
-			value={ draft }
+			value={ isFocused ? draft : formattedValue }
+			onClick={ stopInputPropagation }
 			onBlur={ () => {
 				setIsFocused( false );
 				const parsed = parseNumberPropertyValue( draft );
@@ -344,7 +464,14 @@ function EditableNumberPropertyText( { label, value, onChange } ) {
 				setDraft( committedTextRef.current );
 			} }
 			onChange={ ( event ) => commitDraft( event.currentTarget.value ) }
-			onFocus={ () => setIsFocused( true ) }
+			onMouseDown={ handleInputInteractionStart }
+			onPointerDown={ handleInputInteractionStart }
+			onFocus={ ( event ) => {
+				// The resting value may include formatting (for example
+				// thousands separators). Swap the DOM value immediately so
+				// keyboard input after focus edits the raw number.
+				showRawInputValue( event.currentTarget );
+			} }
 		/>
 	);
 }
@@ -353,7 +480,9 @@ function PropertyControl( {
 	field,
 	value,
 	elements,
+	relation,
 	onChange,
+	onRelationChange,
 	onOptionsSaved,
 	onRowsChanged,
 } ) {
@@ -377,6 +506,7 @@ function PropertyControl( {
 			<EditableNumberPropertyText
 				label={ label }
 				value={ value }
+				format={ field.cortextFormat }
 				onChange={ onChange }
 			/>
 		);
@@ -384,37 +514,69 @@ function PropertyControl( {
 
 	if ( type === 'select' ) {
 		return (
-			<SelectPropertyControl
-				field={ field }
+			<SelectEditor
+				recordId={ field.cortextRecordId ?? toRecordId( field.id ) }
 				value={ value }
 				elements={ elements }
-				onChange={ onChange }
+				onCommit={ ( next ) => {
+					onChange( next );
+					return true;
+				} }
 				onOptionsSaved={ onOptionsSaved }
 				onRowsChanged={ onRowsChanged }
+				label={ label }
+				defaultOpen={ false }
+				triggerClassName="cortext-row-detail__property-trigger cortext-select-edit__toggle"
+				placeholder={ __( 'Empty', 'cortext' ) }
 			/>
 		);
 	}
 
 	if ( type === 'multiselect' ) {
 		return (
-			<MultiselectPropertyControl
-				field={ field }
-				value={ value }
+			<MultiselectEdit
+				recordId={ field.cortextRecordId ?? toRecordId( field.id ) }
+				value={ Array.isArray( value ) ? value : [] }
 				elements={ elements }
-				onChange={ onChange }
+				onSave={ onChange }
 				onOptionsSaved={ onOptionsSaved }
 				onRowsChanged={ onRowsChanged }
+				label={ label }
+				defaultOpen={ false }
+				triggerClassName="cortext-row-detail__property-trigger cortext-multiselect-edit__toggle"
 			/>
 		);
 	}
 
 	if ( type === 'date' || type === 'datetime' ) {
 		return (
-			<DatePropertyControl
-				field={ field }
+			<DateEditor
 				value={ value }
 				type={ type }
-				onChange={ onChange }
+				format={ field.cortextFormat }
+				onCommit={ ( next ) => {
+					onChange( next );
+					return true;
+				} }
+				label={ label }
+				defaultOpen={ false }
+				triggerClassName="cortext-row-detail__property-trigger cortext-date-edit__toggle"
+				emptyLabel={ __( 'Empty', 'cortext' ) }
+				contentClassName="cortext-row-detail__date-popover"
+				closeOnCommit={ false }
+			/>
+		);
+	}
+
+	if ( type === 'relation' ) {
+		return (
+			<RelationEditor
+				value={ Array.isArray( value ) ? value : [] }
+				relation={ relation }
+				onSave={ onRelationChange }
+				onCancel={ () => {} }
+				label={ label }
+				defaultOpen={ false }
 			/>
 		);
 	}
@@ -436,6 +598,69 @@ function PropertyControl( {
 	);
 }
 
+function PropertyLabel( {
+	collectionId,
+	field,
+	onFieldOptionsSaved,
+	onFieldFormatSaved,
+	onRowsChanged,
+} ) {
+	const recordId = field.cortextRecordId ?? toRecordId( field.id );
+	const description = field.description?.trim() ?? '';
+	if ( ! collectionId || ! recordId ) {
+		return (
+			<>
+				<span className="cortext-row-detail__property-label-text">
+					{ field.label }
+				</span>
+				{ description ? (
+					<Infotip
+						description={ description }
+						label={ sprintf(
+							/* translators: %s: field label */
+							__( 'About %s', 'cortext' ),
+							field.label
+						) }
+						placement="bottom"
+					/>
+				) : null }
+			</>
+		);
+	}
+
+	const configureLabel = sprintf(
+		/* translators: %s: Field label. */
+		__( 'Configure %s field', 'cortext' ),
+		field.label
+	);
+
+	return (
+		<FieldActionsMenu
+			recordId={ recordId }
+			collectionId={ collectionId }
+			field={ field }
+			className="cortext-row-detail__property-label-actions"
+			triggerButton={
+				<Button
+					className="cortext-row-detail__property-label-button"
+					variant="tertiary"
+					label={ configureLabel }
+				/>
+			}
+			triggerContent={
+				<span className="cortext-row-detail__property-label-content">
+					<span className="cortext-row-detail__property-label-text">
+						{ field.label }
+					</span>
+				</span>
+			}
+			onFieldOptionsSaved={ onFieldOptionsSaved }
+			onFieldFormatSaved={ onFieldFormatSaved }
+			onRowsChanged={ onRowsChanged }
+		/>
+	);
+}
+
 function transformToString( transform ) {
 	if ( ! transform ) {
 		return undefined;
@@ -444,28 +669,96 @@ function transformToString( transform ) {
 	return `translate3d(${ x }px, ${ y }px, 0) scaleX(${ scaleX }) scaleY(${ scaleY })`;
 }
 
+function skipSortableLayoutAnimation() {
+	return false;
+}
+
+function blurActiveLayoutChip( node ) {
+	const activeElement = node?.ownerDocument?.activeElement;
+	if (
+		activeElement?.classList?.contains(
+			'cortext-row-detail__property-layout-chip'
+		)
+	) {
+		activeElement.blur();
+	}
+}
+
+function measuredElementWidth( node ) {
+	const width = node?.getBoundingClientRect?.().width;
+	return Number.isFinite( width ) && width > 0 ? width : null;
+}
+
+function measuredElementHeight( node ) {
+	const height = node?.getBoundingClientRect?.().height;
+	return Number.isFinite( height ) && height > 0 ? height : null;
+}
+
+function findPropertyElement( container, fieldId ) {
+	if ( ! container || ! fieldId ) {
+		return null;
+	}
+	return (
+		Array.from(
+			container.querySelectorAll( '[data-cortext-property-id]' )
+		).find(
+			( node ) => node.dataset.cortextPropertyId === String( fieldId )
+		) ?? null
+	);
+}
+
 function RowProperty( {
 	canReorderLayout,
+	collectionId,
 	data,
 	field,
+	formatOverrides,
+	handleFieldFormatSaved,
+	handleFieldOptionsSaved,
+	isLayoutEditing,
 	isDragging,
+	isCollapsedForHiddenDrop,
+	localFormatOverrides,
+	localOptionOverrides,
+	onLayoutVisibilityToggle,
 	optionOverrides,
 	refreshRows,
 	reorderAttributes,
 	reorderListeners,
 	rowRef,
+	rowId,
 	rowStyle,
 	update,
-	updateFieldOptions,
+	updateRelation,
 } ) {
-	const isEditable = isRowDetailFieldEditable( field );
+	const relation = relationConfigForField( field );
+	const editContext = { collectionId, rowId };
+	const isEditable = isRowDetailFieldEditable( field, editContext );
 	const value = valueForField( field, data );
 	const type = fieldType( field );
+	const displayType = displayFieldType( field );
+	const isVisibleInLayout = field.cortextDetailVisible !== false;
 	const elements =
+		localOptionOverrides?.[ field.id ] ??
 		optionOverrides?.[ field.id ] ??
 		field.cortextElements ??
 		field.elements ??
 		[];
+	let format = field.cortextFormat;
+	if ( formatOverrides?.[ field.id ] !== undefined ) {
+		format = formatOverrides[ field.id ];
+	}
+	if ( localFormatOverrides?.[ field.id ] !== undefined ) {
+		format = localFormatOverrides[ field.id ];
+	}
+	const displayField =
+		elements !== field.cortextElements || format !== field.cortextFormat
+			? {
+					...field,
+					cortextElements: elements,
+					cortextFormat: format,
+			  }
+			: field;
 	let propertyIcon = null;
 	if ( isCollectionField( field ) ) {
 		propertyIcon = (
@@ -482,70 +775,106 @@ function RowProperty( {
 			/>
 		);
 	}
+	let propertyValue = (
+		<ReadOnlyProperty
+			value={ value }
+			type={ displayType }
+			elements={ elements }
+			format={ format }
+		/>
+	);
+	if ( isEditable ) {
+		propertyValue = (
+			<PropertyControl
+				field={ displayField }
+				value={ value }
+				elements={ elements }
+				relation={ relation }
+				onChange={ ( next ) => update( { [ field.id ]: next } ) }
+				onRelationChange={ ( next ) =>
+					updateRelation( field.id, next )
+				}
+				onOptionsSaved={ ( nextOptions ) =>
+					handleFieldOptionsSaved(
+						field.cortextRecordId ?? toRecordId( field.id ),
+						nextOptions
+					)
+				}
+				onRowsChanged={ refreshRows }
+			/>
+		);
+	}
 
 	return (
 		<div
 			ref={ rowRef }
 			style={ rowStyle }
+			data-cortext-property-id={ field.id }
 			className={
 				'cortext-row-detail__property' +
 				( isEditable
 					? ' cortext-row-detail__property--editable'
 					: ' cortext-row-detail__property--readonly' ) +
-				( isDragging ? ' is-dragging' : '' )
+				( isLayoutEditing
+					? ' cortext-row-detail__property--layout-editing'
+					: '' ) +
+				( isVisibleInLayout ? '' : ' is-hidden' ) +
+				( isDragging ? ' is-dragging' : '' ) +
+				( isCollapsedForHiddenDrop
+					? ' is-collapsed-for-hidden-drop'
+					: '' )
 			}
 		>
 			<div className="cortext-row-detail__property-label">
 				<span className="cortext-row-detail__property-label-icon-slot">
-					{ propertyIcon }
 					{ canReorderLayout ? (
 						<Button
 							className="cortext-row-detail__property-layout-chip"
 							aria-label={ __( 'Reorder property', 'cortext' ) }
 							icon={ dragHandle }
-							label={ __( 'Reorder property', 'cortext' ) }
 							size="small"
 							variant="tertiary"
 							{ ...reorderAttributes }
 							{ ...reorderListeners }
 						/>
 					) : null }
+					{ propertyIcon }
 				</span>
-				<span className="cortext-row-detail__property-label-text">
-					{ field.label }
-				</span>
+				<PropertyLabel
+					collectionId={ collectionId }
+					field={ displayField }
+					onFieldOptionsSaved={ handleFieldOptionsSaved }
+					onFieldFormatSaved={ handleFieldFormatSaved }
+					onRowsChanged={ refreshRows }
+				/>
 			</div>
 			<div className="cortext-row-detail__property-value">
-				{ isEditable ? (
-					<PropertyControl
-						field={ field }
-						value={ value }
-						elements={ elements }
-						onChange={ ( next ) =>
-							update( { [ field.id ]: next } )
+				<div className="cortext-row-detail__property-value-content">
+					{ propertyValue }
+				</div>
+				{ isLayoutEditing ? (
+					<Button
+						className="cortext-row-detail__property-visibility"
+						icon={ isVisibleInLayout ? seen : unseen }
+						label={
+							isVisibleInLayout
+								? __( 'Hide property', 'cortext' )
+								: __( 'Show property', 'cortext' )
 						}
-						onOptionsSaved={ ( nextOptions ) =>
-							updateFieldOptions?.(
-								field.cortextRecordId ?? toRecordId( field.id ),
-								nextOptions
-							)
-						}
-						onRowsChanged={ refreshRows }
+						isPressed={ isVisibleInLayout }
+						size="small"
+						variant="tertiary"
+						onClick={ () => onLayoutVisibilityToggle?.( field.id ) }
 					/>
-				) : (
-					<ReadOnlyProperty
-						value={ value }
-						type={ type }
-						elements={ elements }
-						format={ field.cortextFormat }
-					/>
-				) }
+				) : null }
 			</div>
 		</div>
 	);
 }
 
 function SortableRowProperty( props ) {
+	const shouldSuppressDropAnimation =
+		props.suppressDropAnimation && ! props.activeLayoutFieldId;
 	const {
 		attributes,
 		isDragging,
@@ -553,17 +882,30 @@ function SortableRowProperty( props ) {
 		setNodeRef,
 		transform,
 		transition,
-	} = useSortable( { id: props.field.id } );
+	} = useSortable( {
+		id: props.field.id,
+		animateLayoutChanges: shouldSuppressDropAnimation
+			? skipSortableLayoutAnimation
+			: undefined,
+	} );
+	const shouldDisableHiddenDropMotion =
+		props.isDroppingIntoEmptyHiddenDrop || props.isCollapsedForHiddenDrop;
+	const shouldDisableMotion =
+		shouldDisableHiddenDropMotion || shouldSuppressDropAnimation;
 	const style = {
-		transform: transformToString( transform ),
-		transition,
+		transform: shouldDisableMotion
+			? undefined
+			: transformToString( transform ),
+		transition: shouldDisableMotion ? 'none' : transition,
 	};
 
 	return (
 		<RowProperty
 			{ ...props }
 			canReorderLayout
-			isDragging={ isDragging }
+			isDragging={
+				isDragging && props.activeLayoutFieldId === props.field.id
+			}
 			reorderAttributes={ attributes }
 			reorderListeners={ listeners }
 			rowRef={ setNodeRef }
@@ -575,18 +917,83 @@ function SortableRowProperty( props ) {
 /*
  * Renders the row's collection-field properties as document chrome above the
  * block editor. This is intentionally not serialized yet; see
- * tech-debt.md#42 for the block-backed version needed for frontend rendering.
+ * tech-debt.md#42 for the frontend rendering work.
+ *
+ * @param {Object}   props
+ * @param {number}   props.collectionId The row's parent collection ID.
+ * @param {Array}    props.fields       Fields shown for this row.
+ * @param {boolean}  props.isLayoutEditing Whether the user is arranging properties.
+ * @param {Function} props.onLayoutReorder Reorders fields from the properties list.
+ * @param {Function} props.onLayoutVisibilityToggle Shows or hides a field in the layout.
+ * @param {number}   [props.rowId]      The current row ID.
+ * @param {Object}   [props.row]        Fallback row record for values outside editor state,
+ *                                      such as relations and rollups.
  */
-export default function RowProperties( { fields, onLayoutReorder, row } ) {
+export default function RowProperties( {
+	collectionId,
+	fields,
+	isLayoutEditing = false,
+	onLayoutReorder,
+	onLayoutVisibilityToggle,
+	row,
+	rowId: providedRowId,
+} ) {
 	const { editPost } = useDispatch( editorStore );
-	const { optionOverrides, updateFieldOptions, refreshRows } =
-		useContext( RowMutationContext );
+	const {
+		optionOverrides,
+		updateFieldOptions,
+		formatOverrides,
+		updateFieldFormat,
+		refreshRows,
+	} = useContext( RowMutationContext );
+	const [ localOptionOverrides, setLocalOptionOverrides ] = useState( {} );
+	const [ localFormatOverrides, setLocalFormatOverrides ] = useState( {} );
+	const [ activeLayoutFieldId, setActiveLayoutFieldId ] = useState( null );
+	const [ activeLayoutOverId, setActiveLayoutOverId ] = useState( null );
+	const [ activeLayoutOverlayWidth, setActiveLayoutOverlayWidth ] =
+		useState( null );
+	const [ activeLayoutPlaceholderHeight, setActiveLayoutPlaceholderHeight ] =
+		useState( null );
+	const [
+		suppressedDropAnimationFieldId,
+		setSuppressedDropAnimationFieldId,
+	] = useState( null );
+	const propertiesRef = useRef( null );
+	const handleFieldOptionsSaved = useCallback(
+		( recordId, nextOptions ) => {
+			const fieldId = `field-${ recordId }`;
+			const elements = elementsFromOptions( nextOptions ) || [];
+			setLocalOptionOverrides( ( current ) => ( {
+				...current,
+				[ fieldId ]: elements,
+			} ) );
+			updateFieldOptions?.( recordId, nextOptions );
+		},
+		[ updateFieldOptions ]
+	);
+	const handleFieldFormatSaved = useCallback(
+		( recordId, nextFormat ) => {
+			const fieldId = `field-${ recordId }`;
+			setLocalFormatOverrides( ( current ) => ( {
+				...current,
+				[ fieldId ]: nextFormat ?? null,
+			} ) );
+			updateFieldFormat?.( recordId, nextFormat );
+		},
+		[ updateFieldFormat ]
+	);
+	const [ savedRow, setSavedRow ] = useState( null );
+	const rowId = savedRow?.id ?? providedRowId ?? row?.id;
 	const sensors = useSensors(
 		useSensor( PointerSensor, { activationConstraint: { distance: 4 } } ),
 		useSensor( KeyboardSensor, {
 			coordinateGetter: sortableKeyboardCoordinates,
 		} )
 	);
+
+	useEffect( () => {
+		setSavedRow( null );
+	}, [ row?.id ] );
 
 	// The locked `core/post-title` block above already exposes the title;
 	// duplicating it as a property row would give the user two edit surfaces
@@ -615,16 +1022,27 @@ export default function RowProperties( { fields, onLayoutReorder, row } ) {
 			hydratedMeta && Object.keys( hydratedMeta ).length > 0
 				? hydratedMeta
 				: null;
+		const fallbackHydratedMeta = row?.cortext_hydrated_meta ?? {};
+		const savedHydratedMeta = savedRow?.meta ?? {};
 		return {
-			row,
+			row: savedRow ?? row,
 			title:
 				typeof title === 'string'
 					? title
-					: row?.title?.raw ?? row?.title?.rendered ?? '',
-			meta: meta ?? {},
-			hydratedMeta: storeHydratedMeta ?? row?.cortext_hydrated_meta ?? {},
+					: savedRow?.title?.raw ??
+					  savedRow?.title?.rendered ??
+					  row?.title?.raw ??
+					  row?.title?.rendered ??
+					  '',
+			meta: { ...( savedRow?.meta ?? {} ), ...( meta ?? {} ) },
+			hydratedMeta: {
+				...( storeHydratedMeta ?? {} ),
+				...fallbackHydratedMeta,
+				...savedHydratedMeta,
+			},
+			editContext: { collectionId, rowId },
 		};
-	}, [ hydratedMeta, meta, row, title ] );
+	}, [ collectionId, hydratedMeta, meta, row, rowId, savedRow, title ] );
 
 	const update = useCallback(
 		( patch ) => {
@@ -644,60 +1062,198 @@ export default function RowProperties( { fields, onLayoutReorder, row } ) {
 	);
 	const canReorderLayout =
 		typeof onLayoutReorder === 'function' && propertyFields.length > 1;
-	const sortableIds = useMemo(
-		() => propertyFields.map( ( field ) => field.id ),
-		[ propertyFields ]
-	);
+	const handleDragStart = useCallback( ( event ) => {
+		const activeFieldId = event.active?.id ?? null;
+		const activeProperty = findPropertyElement(
+			propertiesRef.current,
+			activeFieldId
+		);
+		setActiveLayoutFieldId( activeFieldId );
+		setActiveLayoutOverId( null );
+		setSuppressedDropAnimationFieldId( null );
+		setActiveLayoutOverlayWidth(
+			measuredElementWidth( activeProperty ) ??
+				event.active?.rect?.current?.initial?.width ??
+				measuredElementWidth( propertiesRef.current )
+		);
+		setActiveLayoutPlaceholderHeight(
+			measuredElementHeight( activeProperty ) ??
+				event.active?.rect?.current?.initial?.height ??
+				null
+		);
+	}, [] );
+	const handleDragOver = useCallback( ( event ) => {
+		setActiveLayoutOverId( event.over?.id ?? null );
+	}, [] );
+	const sortableIds = useMemo( () => {
+		return propertyFields.flatMap( ( field, index ) => {
+			const startsHiddenGroup =
+				isLayoutEditing &&
+				field.cortextDetailVisible === false &&
+				propertyFields[ index - 1 ]?.cortextDetailVisible !== false;
+			return startsHiddenGroup
+				? [ HIDDEN_PROPERTIES_DROP_TARGET, field.id ]
+				: [ field.id ];
+		} );
+	}, [ isLayoutEditing, propertyFields ] );
 	const handleDragEnd = useCallback(
 		( event ) => {
 			const { active, over } = event;
+			const droppedIntoEmptyHidden =
+				isLayoutEditing &&
+				over?.id === HIDDEN_PROPERTIES_DROP_TARGET &&
+				! propertyFields.some(
+					( field ) => field.cortextDetailVisible === false
+				);
+			setActiveLayoutFieldId( null );
+			setActiveLayoutOverId( null );
+			setActiveLayoutOverlayWidth( null );
+			setActiveLayoutPlaceholderHeight( null );
+			setSuppressedDropAnimationFieldId(
+				droppedIntoEmptyHidden ? active?.id ?? null : null
+			);
+			blurActiveLayoutChip( propertiesRef.current );
 			if ( ! over || active.id === over.id ) {
 				return;
 			}
 			onLayoutReorder?.( active.id, over.id );
 		},
-		[ onLayoutReorder ]
+		[ isLayoutEditing, onLayoutReorder, propertyFields ]
+	);
+	const handleDragCancel = useCallback( () => {
+		setActiveLayoutFieldId( null );
+		setActiveLayoutOverId( null );
+		setActiveLayoutOverlayWidth( null );
+		setActiveLayoutPlaceholderHeight( null );
+		setSuppressedDropAnimationFieldId( null );
+		blurActiveLayoutChip( propertiesRef.current );
+	}, [] );
+
+	const updateRelation = useCallback(
+		async ( fieldId, next ) => {
+			if ( ! collectionId || ! rowId ) {
+				return null;
+			}
+			const updated = await apiFetch( {
+				path: `/cortext/v1/collections/${ collectionId }/rows/${ rowId }`,
+				method: 'POST',
+				data: {
+					field: fieldId,
+					value: next,
+				},
+			} );
+			setSavedRow( updated );
+			refreshRows?.();
+			notifyCollectionRowsChanged( collectionId );
+			return updated;
+		},
+		[ collectionId, refreshRows, rowId ]
 	);
 
 	if ( propertyFields.length === 0 ) {
 		return null;
 	}
 
+	const hasHiddenFields = propertyFields.some(
+		( field ) => field.cortextDetailVisible === false
+	);
+	const activeLayoutField = activeLayoutFieldId
+		? propertyFields.find( ( field ) => field.id === activeLayoutFieldId )
+		: null;
+	const isDroppingIntoEmptyHidden =
+		isLayoutEditing &&
+		! hasHiddenFields &&
+		activeLayoutFieldId &&
+		activeLayoutOverId === HIDDEN_PROPERTIES_DROP_TARGET;
 	const fieldCountLabel = sprintf(
 		/* translators: %d: Number of row fields. */
 		_n( '%d field', '%d fields', propertyFields.length, 'cortext' ),
 		propertyFields.length
 	);
+	const renderProperty = ( field ) =>
+		canReorderLayout ? (
+			<SortableRowProperty
+				key={ field.id }
+				collectionId={ collectionId }
+				data={ data }
+				field={ field }
+				activeLayoutFieldId={ activeLayoutFieldId }
+				formatOverrides={ formatOverrides }
+				handleFieldFormatSaved={ handleFieldFormatSaved }
+				handleFieldOptionsSaved={ handleFieldOptionsSaved }
+				isCollapsedForHiddenDrop={
+					isDroppingIntoEmptyHidden &&
+					field.id === activeLayoutFieldId
+				}
+				isDroppingIntoEmptyHiddenDrop={ isDroppingIntoEmptyHidden }
+				isLayoutEditing={ isLayoutEditing }
+				localFormatOverrides={ localFormatOverrides }
+				localOptionOverrides={ localOptionOverrides }
+				onLayoutVisibilityToggle={ onLayoutVisibilityToggle }
+				optionOverrides={ optionOverrides }
+				refreshRows={ refreshRows }
+				rowId={ rowId }
+				suppressDropAnimation={
+					suppressedDropAnimationFieldId === field.id
+				}
+				update={ update }
+				updateRelation={ updateRelation }
+			/>
+		) : (
+			<RowProperty
+				key={ field.id }
+				canReorderLayout={ false }
+				collectionId={ collectionId }
+				data={ data }
+				field={ field }
+				formatOverrides={ formatOverrides }
+				handleFieldFormatSaved={ handleFieldFormatSaved }
+				handleFieldOptionsSaved={ handleFieldOptionsSaved }
+				isCollapsedForHiddenDrop={ false }
+				isLayoutEditing={ isLayoutEditing }
+				localFormatOverrides={ localFormatOverrides }
+				localOptionOverrides={ localOptionOverrides }
+				onLayoutVisibilityToggle={ onLayoutVisibilityToggle }
+				optionOverrides={ optionOverrides }
+				refreshRows={ refreshRows }
+				rowId={ rowId }
+				update={ update }
+				updateRelation={ updateRelation }
+			/>
+		);
 
 	const rows = (
 		<div
+			ref={ propertiesRef }
 			className="cortext-row-detail__properties cortext-row-detail__properties--rows"
 			aria-label={ fieldCountLabel }
 		>
-			{ propertyFields.map( ( field ) =>
-				canReorderLayout ? (
-					<SortableRowProperty
-						key={ field.id }
-						data={ data }
-						field={ field }
-						optionOverrides={ optionOverrides }
-						refreshRows={ refreshRows }
-						update={ update }
-						updateFieldOptions={ updateFieldOptions }
-					/>
-				) : (
-					<RowProperty
-						key={ field.id }
-						canReorderLayout={ false }
-						data={ data }
-						field={ field }
-						optionOverrides={ optionOverrides }
-						refreshRows={ refreshRows }
-						update={ update }
-						updateFieldOptions={ updateFieldOptions }
-					/>
-				)
-			) }
+			{ propertyFields.map( ( field, index ) => {
+				const startsHiddenGroup =
+					isLayoutEditing &&
+					field.cortextDetailVisible === false &&
+					propertyFields[ index - 1 ]?.cortextDetailVisible !== false;
+				return (
+					<Fragment key={ field.id }>
+						{ startsHiddenGroup ? (
+							<HiddenPropertiesSeparator
+								key={ HIDDEN_PROPERTIES_DROP_TARGET }
+							/>
+						) : null }
+						{ renderProperty( field ) }
+					</Fragment>
+				);
+			} ) }
+			{ isLayoutEditing && ! hasHiddenFields ? (
+				<EmptyHiddenPropertiesDropZone
+					key={ HIDDEN_PROPERTIES_DROP_TARGET }
+					placeholderHeight={
+						isDroppingIntoEmptyHidden
+							? activeLayoutPlaceholderHeight
+							: null
+					}
+				/>
+			) : null }
 		</div>
 	);
 
@@ -708,8 +1264,11 @@ export default function RowProperties( { fields, onLayoutReorder, row } ) {
 	return (
 		<DndContext
 			sensors={ sensors }
-			collisionDetection={ closestCenter }
+			collisionDetection={ rowPropertiesCollisionDetection }
+			onDragCancel={ handleDragCancel }
 			onDragEnd={ handleDragEnd }
+			onDragOver={ handleDragOver }
+			onDragStart={ handleDragStart }
 		>
 			<SortableContext
 				items={ sortableIds }
@@ -717,6 +1276,17 @@ export default function RowProperties( { fields, onLayoutReorder, row } ) {
 			>
 				{ rows }
 			</SortableContext>
+			<DragOverlay dropAnimation={ null }>
+				<RowPropertyDragOverlay
+					data={ data }
+					field={ activeLayoutField }
+					formatOverrides={ formatOverrides }
+					localFormatOverrides={ localFormatOverrides }
+					localOptionOverrides={ localOptionOverrides }
+					optionOverrides={ optionOverrides }
+					width={ activeLayoutOverlayWidth }
+				/>
+			</DragOverlay>
 		</DndContext>
 	);
 }

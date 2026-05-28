@@ -28,7 +28,9 @@ jest.mock( '../../../src/components/EditorBody', () =>
 	jest.fn( () => <div data-testid="editor-body" /> )
 );
 
-jest.mock( '../../../src/components/initEditor', () => ( {} ) );
+jest.mock( '../../../src/components/initEditor', () => ( {
+	getEditorSettings: () => ( {} ),
+} ) );
 
 jest.mock( '../../../src/hooks/useAutosave', () =>
 	jest.fn( () => ( {

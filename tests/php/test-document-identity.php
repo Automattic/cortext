@@ -26,12 +26,12 @@ final class Test_Document_Identity extends BaseTestCase {
 		$markup = DocumentIdentity::header_blocks_markup();
 
 		$this->assertStringContainsString( '<!-- wp:post-title', $markup );
-		$this->assertStringNotContainsString( 'cortext/page-header-actions', $markup );
+		$this->assertSame( 1, substr_count( $markup, '<!-- wp:post-title' ) );
 	}
 
-	public function test_prepend_header_blocks_strips_legacy_actions_on_update(): void {
+	public function test_prepend_header_blocks_leaves_updates_untouched(): void {
 		$identity = new DocumentIdentity();
-		$content  = '<!-- wp:cortext/page-header-actions {"lock":{"move":true,"remove":true}} /--><!-- wp:paragraph --><p>Body</p><!-- /wp:paragraph -->';
+		$content  = '<!-- wp:paragraph --><p>Body</p><!-- /wp:paragraph -->';
 
 		$data = $identity->prepend_header_blocks(
 			array(
@@ -42,13 +42,12 @@ final class Test_Document_Identity extends BaseTestCase {
 		);
 
 		$unslashed = wp_unslash( $data['post_content'] );
-		$this->assertStringNotContainsString( 'cortext/page-header-actions', $unslashed );
-		$this->assertStringContainsString( '<!-- wp:paragraph -->', $unslashed );
+		$this->assertSame( $content, $unslashed );
 	}
 
-	public function test_prepend_header_blocks_adds_title_without_legacy_actions_on_create(): void {
+	public function test_prepend_header_blocks_adds_title_on_create(): void {
 		$identity = new DocumentIdentity();
-		$content  = '<!-- wp:cortext/page-header-actions {"lock":{"move":true,"remove":true}} /--><!-- wp:paragraph --><p>Body</p><!-- /wp:paragraph -->';
+		$content  = '<!-- wp:paragraph --><p>Body</p><!-- /wp:paragraph -->';
 
 		$data = $identity->prepend_header_blocks(
 			array(
@@ -60,7 +59,6 @@ final class Test_Document_Identity extends BaseTestCase {
 
 		$unslashed = wp_unslash( $data['post_content'] );
 		$this->assertStringContainsString( '<!-- wp:post-title', $unslashed );
-		$this->assertStringNotContainsString( 'cortext/page-header-actions', $unslashed );
 		$this->assertStringContainsString( '<!-- wp:paragraph -->', $unslashed );
 	}
 

@@ -4,8 +4,11 @@ import { DataViews, filterSortAndPaginate } from '@wordpress/dataviews';
 import usePublicRows from '../hooks/usePublicRows';
 import { buildPublicFields } from '../hooks/publicFieldMapping';
 import { normalizeView } from './dataViewColumns';
-
-const DEFAULT_LAYOUTS = { table: { density: 'compact' }, grid: {}, list: {} };
+import {
+	DEFAULT_LAYOUTS,
+	adaptViewForDataViews,
+	mergeDataViewsChange,
+} from './dataViewAdapter';
 
 export default function PublicDataView( { collectionId, view: initialView } ) {
 	const [ view, setView ] = useState( () => ( {
@@ -17,6 +20,15 @@ export default function PublicDataView( { collectionId, view: initialView } ) {
 		sort: {},
 		filters: [],
 		layout: {},
+		layoutByType: {
+			table: { density: 'compact' },
+			grid: {},
+			list: {},
+		},
+		fieldsByType: {
+			grid: [],
+			list: [],
+		},
 		...initialView,
 	} ) );
 
@@ -55,19 +67,23 @@ export default function PublicDataView( { collectionId, view: initialView } ) {
 		// reorder updates land in state exactly as DataViews
 		// produced them. The reconciledView memo above handles
 		// cleanup on the next render.
-		setView( next );
+		setView( ( current ) => mergeDataViewsChange( current, next ) );
 	}, [] );
 
 	const { data: dataFiltered, paginationInfo } = useMemo(
 		() => filterSortAndPaginate( data, reconciledView, fields ),
 		[ data, reconciledView, fields ]
 	);
+	const dataViewsView = useMemo(
+		() => adaptViewForDataViews( reconciledView ),
+		[ reconciledView ]
+	);
 
 	return (
 		<DataViews
 			data={ dataFiltered }
 			fields={ fields }
-			view={ reconciledView }
+			view={ dataViewsView }
 			onChangeView={ onChangeView }
 			paginationInfo={ paginationInfo }
 			defaultLayouts={ DEFAULT_LAYOUTS }

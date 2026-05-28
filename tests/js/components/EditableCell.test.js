@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 
 import {
 	dateOnlyValue,
@@ -61,6 +61,21 @@ describe( 'formatDisplay', () => {
 				format: { style: 'us', time: true, hour12: false },
 			} );
 			expect( out ).toContain( '14:30' );
+		} );
+
+		it( 'formats date range rollups from object values', () => {
+			expect(
+				formatDisplay(
+					{ start: '2026-05-01', end: '2026-05-03' },
+					'rollup-date-range',
+					{
+						format: {
+							style: 'us',
+							rollup_target_type: 'date',
+						},
+					}
+				)
+			).toBe( '05/01/2026 - 05/03/2026' );
 		} );
 	} );
 
@@ -387,6 +402,14 @@ describe( 'formatDisplay', () => {
 			expect( screen.queryByText( 'LP' ) ).toBeNull();
 		} );
 	} );
+
+	describe( 'relation', () => {
+		it( 'returns the empty string when no relation references are present', () => {
+			expect( formatDisplay( [], 'relation' ) ).toBe( '' );
+			expect( formatDisplay( [ null ], 'relation' ) ).toBe( '' );
+			expect( formatDisplay( { id: 0 }, 'relation' ) ).toBe( '' );
+		} );
+	} );
 } );
 
 describe( 'dateOnlyValue', () => {
@@ -421,5 +444,36 @@ describe( 'EditableCell option overrides', () => {
 		);
 
 		expect( screen.getByText( 'High' ) ).toHaveClass( 'cortext-chip--red' );
+	} );
+
+	it( 'starts editing when a displayed link is clicked', () => {
+		render(
+			<RowMutationContext.Provider
+				value={ {
+					saveRowField: jest.fn(),
+					canEditCells: true,
+				} }
+			>
+				<EditableCell
+					item={ {
+						id: 1,
+						meta: { website: 'https://example.com/path' },
+					} }
+					fieldId="website"
+					fieldType="url"
+					label="Website"
+				/>
+			</RowMutationContext.Provider>
+		);
+
+		fireEvent.click(
+			screen.getByRole( 'link', {
+				name: 'https://example.com/path',
+			} )
+		);
+
+		expect(
+			screen.getByRole( 'textbox', { name: 'Website' } )
+		).toHaveValue( 'https://example.com/path' );
 	} );
 } );

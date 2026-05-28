@@ -19,7 +19,7 @@ import {
 	useRef,
 	useState,
 } from '@wordpress/element';
-import { Icon, check } from '@wordpress/icons';
+import { Icon, check, pencil } from '@wordpress/icons';
 
 import MultiselectEdit from './MultiselectEdit';
 import Chip from './fields/Chip';
@@ -50,6 +50,8 @@ function siteLocale() {
 // the cell could call `saveEntityRecord` directly.
 export const RowMutationContext = createContext( {
 	saveRowField: null,
+	canEditCells: true,
+	layoutType: 'table',
 	// `{ rowId, fieldId }` of the cell that should pop into edit mode.
 	// Set by the parent when a new row is created (open the title) or
 	// when Tab navigation hops between cells.
@@ -60,6 +62,8 @@ export const RowMutationContext = createContext( {
 	requestNext: () => {},
 	optionOverrides: {},
 	updateFieldOptions: () => {},
+	formatOverrides: {},
+	updateFieldFormat: () => {},
 	refreshRows: () => {},
 } );
 
@@ -95,6 +99,8 @@ function FieldError( { message } ) {
 // http(s) URLs. Anything else (relative paths, mailto:, plain strings) is
 // rendered as text so we never produce a broken link.
 const URL_PATTERN = /^https?:\/\//i;
+const NESTED_DISPLAY_INTERACTIVE_SELECTOR =
+	'a, button, input, textarea, select, [contenteditable="true"], [role="button"]';
 
 // Clamp decimals to a sane range; Intl.NumberFormat throws above 100.
 function clampDecimals( decimals ) {
@@ -423,6 +429,11 @@ export function formatDisplay( value, type, options = {} ) {
 	}
 
 	if ( type === 'relation' ) {
+		const refs = Array.isArray( value ) ? value : [ value ];
+		const hasReference = refs.some( ( ref ) => ref && ref.id );
+		if ( ! hasReference ) {
+			return '';
+		}
 		return <RelationReferences value={ value } />;
 	}
 
@@ -475,12 +486,41 @@ function CellShell( { children, onActivate, ariaLabel, className, disabled } ) {
 	// nowrap` above `flex-wrap: wrap` chips made multiselect cells overflow
 	// into adjacent columns.
 	const isText = typeof children === 'string';
+	const activateFromNestedInteractive = ( event ) => {
+		if ( disabled ) {
+			return;
+		}
+		const target = event.target;
+		const nestedInteractive = target?.closest?.(
+			NESTED_DISPLAY_INTERACTIVE_SELECTOR
+		);
+		if (
+			! nestedInteractive ||
+			nestedInteractive === event.currentTarget ||
+			! event.currentTarget.contains( nestedInteractive )
+		) {
+			return;
+		}
+		event.preventDefault();
+		event.stopPropagation();
+		onActivate();
+	};
 	return (
 		<div
 			role={ disabled ? undefined : 'button' }
 			tabIndex={ disabled ? -1 : 0 }
 			className={ className }
+			onClickCapture={ activateFromNestedInteractive }
 			onClick={ disabled ? undefined : onActivate }
+			onKeyDownCapture={
+				disabled
+					? undefined
+					: ( event ) => {
+							if ( event.key === 'Enter' || event.key === ' ' ) {
+								activateFromNestedInteractive( event );
+							}
+					  }
+			}
 			onKeyDown={
 				disabled
 					? undefined
@@ -494,12 +534,22 @@ function CellShell( { children, onActivate, ariaLabel, className, disabled } ) {
 			aria-label={ ariaLabel }
 			aria-hidden={ disabled }
 		>
-			{ isText ? (
-				<span className="cortext-editable-cell__display">
-					{ children }
-				</span>
-			) : (
-				children
+			<span className="cortext-editable-cell__content">
+				{ isText ? (
+					<span className="cortext-editable-cell__display">
+						{ children }
+					</span>
+				) : (
+					children
+				) }
+			</span>
+			{ ! disabled && (
+				<Icon
+					className="cortext-editable-cell__edit-indicator"
+					icon={ pencil }
+					size={ 14 }
+					aria-hidden="true"
+				/>
 			) }
 		</div>
 	);
@@ -530,6 +580,7 @@ function TextLikeEditor( {
 	onTab,
 	shouldAutoFocus,
 	label,
+	compact = false,
 } ) {
 	const [ local, setLocal ] = useState( value ?? '' );
 	const inputRef = useRef( null );
@@ -567,6 +618,22 @@ function TextLikeEditor( {
 	};
 
 	if ( type === 'number' ) {
+		if ( compact ) {
+			return (
+				<input
+					ref={ inputRef }
+					className="cortext-editable-cell__compact-input"
+					type="text"
+					inputMode="decimal"
+					value={ local ?? '' }
+					onChange={ ( event ) => setLocal( event.target.value ) }
+					onBlur={ commit }
+					onKeyDown={ handleKeyDown }
+					aria-label={ label }
+				/>
+			);
+		}
+
 		// `spinControls="none"` drops both NumberControl's custom spin
 		// buttons (the default "custom" mode renders them as a suffix
 		// inside the input, which widens the cell on focus) and the
@@ -582,6 +649,21 @@ function TextLikeEditor( {
 				label={ label }
 				hideLabelFromVision
 				__next40pxDefaultSize
+			/>
+		);
+	}
+
+	if ( compact ) {
+		return (
+			<input
+				ref={ inputRef }
+				className="cortext-editable-cell__compact-input"
+				value={ local ?? '' }
+				onChange={ ( event ) => setLocal( event.target.value ) }
+				onBlur={ commit }
+				onKeyDown={ handleKeyDown }
+				type={ inputTypeFor( type ) }
+				aria-label={ label }
 			/>
 		);
 	}
@@ -611,7 +693,7 @@ function TextLikeEditor( {
 // (creating an option, picking a color in the per-option submenu).
 // `Popover` here lets the parent unmount it explicitly when editing
 // ends, while still closing on outside click + Escape via `onClose`.
-function SelectEditor( {
+export function SelectEditor( {
 	value,
 	elements,
 	onCommit,
@@ -622,8 +704,13 @@ function SelectEditor( {
 	onTab,
 	recordId,
 	label,
+	defaultOpen = true,
+	triggerClassName = 'cortext-select-edit__toggle',
+	placeholder = __( 'Select…', 'cortext' ),
+	popoverVariant = 'default',
 } ) {
 	const [ anchor, setAnchor ] = useState( null );
+	const [ isOpen, setIsOpen ] = useState( defaultOpen );
 	const items = useMemo( () => elements ?? [], [ elements ] );
 	const labelFor = useMemo( () => {
 		const map = new Map( items.map( ( e ) => [ e.value, e.label ] ) );
@@ -641,9 +728,14 @@ function SelectEditor( {
 		/>
 	) : (
 		<span className="cortext-select-edit__placeholder">
-			{ __( 'Select…', 'cortext' ) }
+			{ placeholder }
 		</span>
 	);
+
+	const close = () => {
+		setIsOpen( false );
+		onCancel?.();
+	};
 
 	const handleTriggerKeyDown = ( event ) => {
 		if ( event.key === 'Tab' && onTab ) {
@@ -657,18 +749,19 @@ function SelectEditor( {
 			<Button
 				ref={ setAnchor }
 				variant="tertiary"
-				className="cortext-select-edit__toggle"
+				className={ triggerClassName }
+				onClick={ () => setIsOpen( true ) }
 				onKeyDown={ handleTriggerKeyDown }
-				aria-expanded
+				aria-expanded={ isOpen }
 				aria-label={ label }
 			>
 				{ triggerContent }
 			</Button>
-			{ anchor ? (
+			{ isOpen && anchor ? (
 				<Popover
 					anchor={ anchor }
 					placement="bottom-start"
-					onClose={ onCancel }
+					onClose={ close }
 					focusOnMount="firstElement"
 				>
 					<EditOptionsPopover
@@ -676,12 +769,13 @@ function SelectEditor( {
 						fieldType="select"
 						initialOptions={ items }
 						value={ value }
+						variant={ popoverVariant }
 						onOptionsSaved={ onOptionsSaved }
 						onRowsChanged={ onRowsChanged }
 						onRequestClose={ onRequestClose }
 						onPick={ async ( next ) => {
 							await onCommit( next );
-							onCancel();
+							close();
 						} }
 					/>
 				</Popover>
@@ -690,32 +784,45 @@ function SelectEditor( {
 	);
 }
 
-function DateEditor( { value, type, format, onCommit, onCancel, label } ) {
+export function DateEditor( {
+	value,
+	type,
+	format,
+	onCommit,
+	onCancel,
+	label,
+	defaultOpen = true,
+	triggerClassName = 'cortext-date-edit__toggle',
+	emptyLabel = __( 'Pick a date…', 'cortext' ),
+	contentClassName = 'cortext-editable-cell__date',
+	closeOnCommit = true,
+} ) {
 	return (
 		<Dropdown
-			defaultOpen
+			defaultOpen={ defaultOpen }
 			onClose={ onCancel }
 			renderToggle={ ( { isOpen, onToggle } ) => (
 				<Button
 					variant="tertiary"
-					className="cortext-date-edit__toggle"
+					className={ triggerClassName }
 					onClick={ onToggle }
 					aria-expanded={ isOpen }
+					aria-label={ label }
 				>
 					{ value
 						? formatDisplay( value, type, { format } )
-						: __( 'Pick a date…', 'cortext' ) }
+						: emptyLabel }
 				</Button>
 			) }
 			renderContent={ ( { onClose } ) => (
-				<div className="cortext-editable-cell__date">
+				<div className={ contentClassName }>
 					<DateTimePicker
 						currentDate={ value || null }
 						onChange={ async ( next ) => {
 							const didSave = await onCommit(
 								type === 'date' ? dateOnlyValue( next ) : next
 							);
-							if ( didSave ) {
+							if ( closeOnCommit && didSave ) {
 								onClose();
 							}
 						} }
@@ -741,11 +848,14 @@ export default function EditableCell( {
 } ) {
 	const {
 		saveRowField,
+		canEditCells,
 		editRequest,
 		clearEditRequest,
 		requestNext,
+		layoutType,
 		optionOverrides,
 		updateFieldOptions,
+		formatOverrides,
 		refreshRows,
 	} = useContext( RowMutationContext );
 	const [ isEditing, setIsEditing ] = useState( false );
@@ -758,11 +868,16 @@ export default function EditableCell( {
 		? getValue( { item } )
 		: item?.meta?.[ fieldId ] ?? null;
 	const effectiveElements = optionOverrides?.[ fieldId ] ?? elements;
+	const effectiveFormat =
+		formatOverrides?.[ fieldId ] !== undefined
+			? formatOverrides[ fieldId ]
+			: format;
 	const display = formatDisplay( value, fieldType, {
 		elements: effectiveElements,
-		format,
+		format: effectiveFormat,
 		relation,
 	} );
+	const isListLayout = layoutType === 'list';
 
 	// Open this cell when the parent targets it via editRequest (new-row
 	// title auto-open, Tab navigation, etc.), then clear the request so
@@ -774,6 +889,7 @@ export default function EditableCell( {
 			editRequest?.rowId === rowId &&
 			editRequest?.fieldId === fieldId &&
 			! readOnly &&
+			canEditCells &&
 			saveRowField;
 		if ( ! targeted ) {
 			return;
@@ -794,12 +910,13 @@ export default function EditableCell( {
 		editRequest,
 		isEditing,
 		readOnly,
+		canEditCells,
 		saveRowField,
 		fieldType,
 		clearEditRequest,
 	] );
 
-	if ( readOnly || ! saveRowField ) {
+	if ( readOnly || ! canEditCells || ! saveRowField ) {
 		return <span className="cortext-cell-readonly">{ display }</span>;
 	}
 
@@ -891,6 +1008,7 @@ export default function EditableCell( {
 					onRequestClose={ closeEditor }
 					onCancel={ closeEditor }
 					label={ label }
+					popoverVariant={ isListLayout ? 'compact' : 'default' }
 				/>
 			);
 		} else if ( fieldType === 'relation' ) {
@@ -925,6 +1043,7 @@ export default function EditableCell( {
 						requestNext?.( rowId, fieldId, direction )
 					}
 					label={ label }
+					popoverVariant={ isListLayout ? 'compact' : 'default' }
 				/>
 			);
 		} else if ( fieldType === 'date' || fieldType === 'datetime' ) {
@@ -932,7 +1051,7 @@ export default function EditableCell( {
 				<DateEditor
 					value={ value }
 					type={ fieldType }
-					format={ format }
+					format={ effectiveFormat }
 					onCommit={ commit }
 					onCancel={ closeEditor }
 					label={ label }
@@ -953,6 +1072,7 @@ export default function EditableCell( {
 					}
 					shouldAutoFocus
 					label={ label }
+					compact={ isListLayout }
 				/>
 			);
 		}

@@ -30,8 +30,12 @@ export default function MultiselectEdit( {
 	onRequestClose,
 	onCancel,
 	label,
+	defaultOpen = true,
+	triggerClassName = 'cortext-multiselect-edit__toggle',
+	popoverVariant = 'default',
 } ) {
 	const [ anchor, setAnchor ] = useState( null );
+	const [ isOpen, setIsOpen ] = useState( defaultOpen );
 	const items = useMemo( () => elements ?? [], [ elements ] );
 	const [ current, setCurrent ] = useState( () =>
 		Array.isArray( value ) ? value : []
@@ -73,22 +77,28 @@ export default function MultiselectEdit( {
 		</span>
 	);
 
+	const close = () => {
+		setIsOpen( false );
+		onCancel?.();
+	};
+
 	return (
 		<>
 			<Button
 				ref={ setAnchor }
-				className="cortext-multiselect-edit__toggle"
+				className={ triggerClassName }
 				variant="tertiary"
-				aria-expanded
+				onClick={ () => setIsOpen( true ) }
+				aria-expanded={ isOpen }
 				aria-label={ label }
 			>
 				{ triggerContent }
 			</Button>
-			{ anchor ? (
+			{ isOpen && anchor ? (
 				<Popover
 					anchor={ anchor }
 					placement="bottom-start"
-					onClose={ onCancel }
+					onClose={ close }
 					focusOnMount="firstElement"
 				>
 					<EditOptionsPopover
@@ -96,6 +106,7 @@ export default function MultiselectEdit( {
 						fieldType="multiselect"
 						initialOptions={ items }
 						value={ current }
+						variant={ popoverVariant }
 						onOptionsSaved={ onOptionsSaved }
 						onRowsChanged={ onRowsChanged }
 						onRequestClose={ onRequestClose }

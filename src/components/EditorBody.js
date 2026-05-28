@@ -13,6 +13,7 @@ import apiFetch from '@wordpress/api-fetch';
 import {
 	BlockCanvas,
 	BlockList,
+	Inserter,
 	store as blockEditorStore,
 	useSettings,
 } from '@wordpress/block-editor';
@@ -22,6 +23,7 @@ import { useEntityProp, useEntityRecord } from '@wordpress/core-data';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
 import { __ } from '@wordpress/i18n';
+import { ENTER, SPACE } from '@wordpress/keycodes';
 import {
 	useEffect,
 	useLayoutEffect,
@@ -43,7 +45,6 @@ const DOCUMENT_ICON_BLOCK = 'cortext/document-icon';
 const DOCUMENT_COVER_BLOCK = 'cortext/document-cover';
 const DOCUMENT_PROPERTIES_BLOCK = 'cortext/document-properties';
 const POST_TITLE_BLOCK = 'core/post-title';
-const LEGACY_HEADER_ACTIONS_BLOCK = 'cortext/page-header-actions';
 const ROOT_BLOCK_LIST = '';
 const DISABLE_HEADER_BOUNDARY_MOVE_UP_CLASS =
 	'cortext-disable-header-boundary-move-up';
@@ -135,6 +136,10 @@ export function collectDuplicateHeaderClientIds(
 function useDocumentRecord( postType, postId ) {
 	const { record } = useEntityRecord( 'postType', postType, postId || 0 );
 	return record;
+}
+
+function isHeaderChromeBlock( block, ownerBlockName ) {
+	return isHeaderBlock( block, ownerBlockName );
 }
 
 function syncHeaderBoundaryMoveUpClass() {
@@ -257,7 +262,6 @@ function HeaderPrefixToolbarGuard( {
 			const firstBodyIndex = blocks.findIndex(
 				( block, index ) =>
 					index > titleIndex &&
-					block.name !== LEGACY_HEADER_ACTIONS_BLOCK &&
 					! isHeaderBlock( block, ownerBlockName )
 			);
 			if ( firstBodyIndex < 0 ) {
@@ -505,7 +509,6 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 		bodyBlockBeforeTitleId,
 		shouldHideHeaderInsertionPoint,
 		duplicateHeaderIds,
-		legacyActionIds,
 		isTrashed,
 	} = useSelect(
 		( select ) => {
@@ -535,10 +538,7 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 					index--
 				) {
 					const block = blocks[ index ];
-					if (
-						block.name === LEGACY_HEADER_ACTIONS_BLOCK ||
-						isHeaderBlock( block, ownerBlockName )
-					) {
+					if ( isHeaderBlock( block, ownerBlockName ) ) {
 						continue;
 					}
 					currentBodyBlockBeforeTitleId = block.clientId;
@@ -577,11 +577,6 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 					insertionPointRootClientId === ROOT_BLOCK_LIST &&
 					insertionPointIndex <= currentHeaderEndIndex,
 				duplicateHeaderIds: duplicateIds,
-				legacyActionIds: blocks
-					.filter(
-						( block ) => block.name === LEGACY_HEADER_ACTIONS_BLOCK
-					)
-					.map( ( block ) => block.clientId ),
 				isTrashed:
 					select( editorStore ).getCurrentPostAttribute(
 						'status'
@@ -605,7 +600,7 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 			return;
 		}
 
-		[ ...legacyActionIds, ...duplicateHeaderIds ].forEach( ( clientId ) => {
+		duplicateHeaderIds.forEach( ( clientId ) => {
 			updateBlockAttributes( clientId, { lock: {} } );
 			removeBlock( clientId, false );
 		} );
@@ -627,7 +622,6 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 		hasProperties,
 		hasSchema,
 		isTrashed,
-		legacyActionIds,
 		propertiesClientId,
 		propertiesContextStable,
 		removeBlock,
@@ -777,7 +771,6 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 			! bodyBlockBeforeTitleId ||
 			headerEndIndex < 0 ||
 			duplicateHeaderIds.length > 0 ||
-			legacyActionIds.length > 0 ||
 			( featuredId > 0 && ! hasCover ) ||
 			( iconMeta && ! hasIcon ) ||
 			! hasTitle ||
@@ -808,7 +801,6 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 		headerEndIndex,
 		iconMeta,
 		isTrashed,
-		legacyActionIds.length,
 		moveBlocksToPosition,
 		startTyping,
 		stopTyping,
@@ -849,6 +841,72 @@ function HideHeaderBlockKebab( { postId, postType } ) {
 	}, [ ownerBlockName, selectedName ] );
 
 	return null;
+}
+
+function HeaderAwareRootAppender( { ownerBlockName } ) {
+	// tech-debt.md#56: Gutenberg's root appender only treats a fully empty
+	// root list as empty. Cortext's locked header blocks are chrome, so the
+	// body still needs a first-block prompt after them.
+	const { bodyEmpty, insertionIndex } = useSelect(
+		( select ) => {
+			const blocks = select( blockEditorStore ).getBlocks();
+			const headerEndIndex = blocks.reduce(
+				( lastIndex, block, index ) =>
+					isHeaderChromeBlock( block, ownerBlockName )
+						? index
+						: lastIndex,
+				-1
+			);
+			return {
+				bodyEmpty:
+					blocks.length > 0 &&
+					blocks.every( ( block ) =>
+						isHeaderChromeBlock( block, ownerBlockName )
+					),
+				insertionIndex: headerEndIndex + 1,
+			};
+		},
+		[ ownerBlockName ]
+	);
+	const { insertDefaultBlock, startTyping } = useDispatch( blockEditorStore );
+
+	if ( ! bodyEmpty ) {
+		return null;
+	}
+
+	const onAppend = () => {
+		insertDefaultBlock( undefined, ROOT_BLOCK_LIST, insertionIndex );
+		startTyping();
+	};
+
+	return (
+		<div className="block-editor-default-block-appender has-visible-prompt">
+			<p
+				tabIndex="0"
+				// Match core's default appender semantics so focusing the
+				// prompt immediately creates the first editable body block.
+				// eslint-disable-next-line jsx-a11y/no-noninteractive-element-to-interactive-role
+				role="button"
+				aria-label={ __( 'Add default block', 'cortext' ) }
+				className="block-editor-default-block-appender__content"
+				onKeyDown={ ( event ) => {
+					if ( ENTER === event.keyCode || SPACE === event.keyCode ) {
+						onAppend();
+					}
+				} }
+				onClick={ onAppend }
+				onFocus={ onAppend }
+			>
+				{ __( 'Type / to choose a block', 'cortext' ) }
+			</p>
+			<Inserter
+				rootClientId={ ROOT_BLOCK_LIST }
+				position="bottom right"
+				isAppender
+				__experimentalIsQuick
+			/>
+		</div>
+	);
 }
 
 function TrashedNotice( { postId, postType, onRestored } ) {
@@ -1100,7 +1158,32 @@ export default function EditorBody( {
 	const styles = extraStyles
 		? [ ...( baseStyles ?? [] ), ...extraStyles ]
 		: baseStyles;
-	const [ layout ] = useSettings( 'layout' );
+	const { themeSupportsLayout, hasRootPaddingAwareAlignments } = useSelect(
+		( select ) => {
+			const settings = select( blockEditorStore ).getSettings();
+			return {
+				themeSupportsLayout: settings.supportsLayout,
+				hasRootPaddingAwareAlignments:
+					settings.__experimentalFeatures
+						?.useRootPaddingAwareAlignments,
+			};
+		},
+		[]
+	);
+	const [ globalLayoutSettings ] = useSettings( 'layout' );
+	// Match @wordpress/editor's visual-editor fallback. Themes with layout
+	// support get the constrained post-content canvas; classic themes keep the
+	// default flow layout.
+	const canvasLayout = themeSupportsLayout
+		? { type: 'constrained', ...globalLayoutSettings }
+		: { type: 'default' };
+	const canvasClassName = [
+		'wp-block-post-content',
+		themeSupportsLayout ? 'is-layout-constrained' : 'is-layout-flow',
+		hasRootPaddingAwareAlignments ? 'has-global-padding' : '',
+	]
+		.filter( Boolean )
+		.join( ' ' );
 	const blockCanvasRef = useRef( null );
 	const isTrashed = useSelect(
 		( select ) =>
@@ -1110,6 +1193,24 @@ export default function EditorBody( {
 	);
 	const record = useDocumentRecord( postType, postId );
 	const ownerBlockName = getCanvasOwnerBlockNameForRecord( record );
+	const shouldUseHeaderAwareAppender = useSelect(
+		( select ) => {
+			if ( ownerBlockName ) {
+				return false;
+			}
+			const blocks = select( blockEditorStore ).getBlocks();
+			return (
+				blocks.length > 0 &&
+				blocks.every( ( block ) =>
+					isHeaderChromeBlock( block, ownerBlockName )
+				)
+			);
+		},
+		[ ownerBlockName ]
+	);
+	const renderAppender = shouldUseHeaderAwareAppender
+		? () => <HeaderAwareRootAppender ownerBlockName={ ownerBlockName } />
+		: undefined;
 
 	const blockCanvas = (
 		<div className="cortext-canvas__block-canvas" ref={ blockCanvasRef }>
@@ -1135,8 +1236,9 @@ export default function EditorBody( {
 						.join( ' ' ) }
 				>
 					<BlockList
-						className="wp-block-post-content is-layout-constrained has-global-padding"
-						layout={ { type: 'constrained', ...layout } }
+						className={ canvasClassName }
+						layout={ canvasLayout }
+						renderAppender={ renderAppender }
 					/>
 				</div>
 				<CanvasReadyEffect

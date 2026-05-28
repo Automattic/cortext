@@ -59,9 +59,9 @@ const HOVER_SUPPRESSION_RELEASE_DELAY = 120;
 const ROW_SELECTORS = {
 	table: '.dataviews-view-table tbody > tr',
 	list: [
-		'.dataviews-view-list__item',
-		'.dataviews-view-list li',
-		'.dataviews-view-list [role="row"]',
+		'.dataviews-view-list > [role="row"]',
+		'.dataviews-view-list > li',
+		'.dataviews-view-list > .dataviews-view-list__item',
 	].join( ',' ),
 };
 
@@ -624,7 +624,12 @@ function useRenderedRows( wrapperRef, view, rows ) {
 
 		sync();
 		const observer = new window.MutationObserver( sync );
-		observer.observe( wrapper, { childList: true, subtree: true } );
+		observer.observe( wrapper, {
+			attributeFilter: [ 'class' ],
+			attributes: true,
+			childList: true,
+			subtree: true,
+		} );
 		// Pull `ResizeObserver` from the wrapper's window so the block editor
 		// iframe uses its own constructor. We watch both the outer wrapper
 		// and DataViews' inner scroller: the preview width comes from the
@@ -650,7 +655,7 @@ function useRenderedRows( wrapperRef, view, rows ) {
 
 		// Leave decoration classes in place between subscriptions. Sort changes
 		// and refetches can re-run this effect during the drop freeze; removing
-		// `cortext-row-reorder-cell` here collapses the 24px handle padding for
+		// `cortext-row-reorder-cell` here collapses the drag-handle offset for
 		// one frame. sync() handles rows that leave the set, and the unmount
 		// effect below does the final cleanup.
 		return () => {
@@ -993,8 +998,12 @@ function linearRowGaps( renderedRows, activeRow ) {
 		const lineTop = before
 			? before.rect.top
 			: after.rect.top + after.rect.height;
-		const top = Math.max( rawTop, lineTop - ROW_DROP_ZONE_MAX_SIDE );
-		const bottom = Math.min( rawBottom, lineTop + ROW_DROP_ZONE_MAX_SIDE );
+		const top = after
+			? Math.max( rawTop, lineTop - ROW_DROP_ZONE_MAX_SIDE )
+			: lineTop - ROW_DROP_ZONE_MAX_SIDE;
+		const bottom = before
+			? Math.min( rawBottom, lineTop + ROW_DROP_ZONE_MAX_SIDE )
+			: lineTop + ROW_DROP_ZONE_MAX_SIDE;
 		const tableContainerRect = anchor.el?.closest( '.dataviews-view-table' )
 			? rowViewportContainer( anchor.el )?.getBoundingClientRect?.()
 			: null;
@@ -1379,6 +1388,7 @@ export default function DataViewRowReorder( {
 				<RowDragHandle
 					key={ `row-handle:${ row.rowId }` }
 					row={ row }
+					keyboardFocusable={ view?.type !== 'list' }
 				/>
 			) ) }
 			{ rowGaps.map( ( gap ) => (

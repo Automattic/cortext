@@ -3,7 +3,7 @@
 	"apiVersion": 3,
 	"name": "cortext/data-view",
 	"title": "Collection view",
-	"category": "widgets",
+	"category": "cortext",
 	"icon": "database",
 	"description": "Displays a Cortext collection's rows as a table, grid, or list.",
 	"textdomain": "cortext",
@@ -35,6 +35,17 @@
 				"page": 1,
 				"search": "",
 				"layout": {},
+				"layoutByType": {
+					"table": {
+						"density": "compact"
+					},
+					"grid": {},
+					"list": {}
+				},
+				"fieldsByType": {
+					"grid": [],
+					"list": []
+				},
 				"rowDetailMode": "side"
 			}
 		}

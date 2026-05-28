@@ -8,7 +8,13 @@ import {
 	useRef,
 	useState,
 } from '@wordpress/element';
-import { Icon, closeSmall, plus } from '@wordpress/icons';
+import {
+	Icon,
+	arrowUpRight,
+	chevronDown,
+	closeSmall,
+	plus,
+} from '@wordpress/icons';
 
 import useCollectionRows from '../../hooks/useCollectionRows';
 import useCollectionRowsByIds from '../../hooks/useCollectionRowsByIds';
@@ -37,6 +43,7 @@ export default function RelationEditor( {
 	onSave,
 	onCancel,
 	label,
+	defaultOpen = true,
 } ) {
 	const [ search, setSearch ] = useState( '' );
 	const debouncedSearch = useDebouncedValue( search, SEARCH_DEBOUNCE_MS );
@@ -247,7 +254,7 @@ export default function RelationEditor( {
 
 	return (
 		<Dropdown
-			defaultOpen
+			defaultOpen={ defaultOpen }
 			onClose={ onCancel }
 			popoverProps={ {
 				placement: 'bottom-start',
@@ -268,13 +275,26 @@ export default function RelationEditor( {
 									key={ ref.id }
 									className="cortext-relation-edit__toggle-ref"
 								>
-									{ relationTitle( ref ) }
+									<Icon
+										className="cortext-relation-ref__icon"
+										icon={ arrowUpRight }
+									/>
+									<span className="cortext-relation-ref__title">
+										{ relationTitle( ref ) }
+									</span>
 								</span>
 							) ) }
 						</span>
 					) : (
-						__( 'Select rows…', 'cortext' )
+						<span className="cortext-relation-edit__toggle-placeholder">
+							{ __( 'Select rows…', 'cortext' ) }
+						</span>
 					) }
+					<Icon
+						icon={ chevronDown }
+						size={ 16 }
+						className="cortext-relation-edit__toggle-chevron"
+					/>
 				</Button>
 			) }
 			renderContent={ ( { onClose } ) => (

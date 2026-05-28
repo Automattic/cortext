@@ -3,7 +3,7 @@
 	"apiVersion": 3,
 	"name": "cortext/document-icon",
 	"title": "Document icon",
-	"category": "widgets",
+	"category": "cortext",
 	"icon": "smiley",
 	"description": "Document identity icon. Reads from the cortext_document_icon post meta.",
 	"textdomain": "cortext",

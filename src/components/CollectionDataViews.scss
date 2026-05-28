@@ -1,6 +1,8 @@
 @use "@wordpress/base-styles/colors" as *;
 @use "@wordpress/base-styles/variables" as *;
 
+$title-cell-icon-size: $grid-unit-20;
+
 .cortext-collection-pane {
 	position: relative;
 	display: flex;
@@ -260,6 +262,16 @@ tbody > tr > td:not(:first-child) {
 		}
 	}
 
+	&__content {
+		display: block;
+		min-width: 0;
+		max-width: 100%;
+	}
+
+	&__edit-indicator {
+		display: none;
+	}
+
 	// Wrap text content with an ellipsis when the column is narrower than
 	// the cell value. Chip/link displays carry their own truncation
 	// (`.cortext-chip` already sets text-overflow), so this rule only ever
@@ -365,7 +377,11 @@ tbody > tr > td:not(:first-child) {
 
 	&__icon {
 		display: inline-flex;
-		flex: 0 0 auto;
+		align-items: center;
+		justify-content: center;
+		width: $title-cell-icon-size;
+		height: $title-cell-icon-size;
+		flex: 0 0 $title-cell-icon-size;
 		line-height: 0;
 	}
 
@@ -462,6 +478,15 @@ tr:has(.cortext-title-cell--is-opening)
 	color: $gray-700;
 }
 
+.cortext-title-cell .cortext-cell-readonly {
+	display: block;
+	min-width: 0;
+	overflow: hidden;
+	color: inherit;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 .cortext-cell-link {
 	display: inline-block;
 	max-width: 100%;
@@ -487,6 +512,18 @@ tr:has(.cortext-title-cell--is-opening)
 	min-width: 0;
 	max-width: 100%;
 	overflow: hidden;
+}
+
+.cortext-relation-edit__toggle-refs,
+.cortext-relation-edit__toggle-placeholder {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.cortext-relation-edit__toggle-chevron {
+	flex: 0 0 auto;
+	margin-left: $grid-unit-05;
+	color: $gray-700;
 }
 
 .cortext-relation-ref,
@@ -850,8 +887,8 @@ tr:has(.cortext-title-cell--is-opening)
 	width: 100%;
 	min-width: 0;
 
-	// tech-debt.md#55: cover the table area while the shell loads, so search,
-	// filters, header, and rows appear together instead of in two beats.
+	// tech-debt.md#55: hold the layout area while rows load, so search,
+	// filters, header, and rows/cards appear together.
 	&__rows-skeleton {
 		position: absolute;
 		inset: 0;
@@ -999,6 +1036,29 @@ tr:has(.cortext-title-cell--is-opening)
 		&:hover:not(:disabled) {
 			background: $gray-100;
 			color: $gray-900;
+		}
+	}
+
+	&__state {
+		display: grid;
+		align-content: center;
+		min-height: 180px;
+		padding: $grid-unit-30;
+		color: $gray-700;
+		text-align: center;
+	}
+
+	.dataviews-no-results,
+	.dataviews-loading {
+		display: grid;
+		align-content: center;
+		min-height: 160px;
+		padding: $grid-unit-30;
+		color: $gray-700;
+		text-align: center;
+
+		p {
+			margin: 0;
 		}
 	}
 

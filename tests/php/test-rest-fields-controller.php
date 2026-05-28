@@ -648,10 +648,14 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 				),
 			)
 		)->get_data()['id'];
+		update_post_meta( (int) $source_id, 'description', 'Pick the current priority.' );
+		update_post_meta( (int) $source_id, 'default_value', '{"mode":"value","value":"high"}' );
 
 		$copy_id = (int) $this->duplicate_field( $collection_id, (int) $source_id )->get_data()['id'];
 
 		$this->assertSame( 'select', get_post_meta( $copy_id, 'type', true ) );
+		$this->assertSame( 'Pick the current priority.', get_post_meta( $copy_id, 'description', true ) );
+		$this->assertSame( '{"mode":"value","value":"high"}', get_post_meta( $copy_id, 'default_value', true ) );
 		$this->assertSame(
 			get_post_meta( (int) $source_id, 'options', true ),
 			get_post_meta( $copy_id, 'options', true )
@@ -937,6 +941,85 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 		);
 	}
 
+	public function test_update_options_replaces_matching_select_default(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$collection_id = $this->create_collection_with_slug( 'Defaults', 'defopts' );
+		$field_id      = (int) $this->create_field(
+			$collection_id,
+			array(
+				'title'   => 'Status',
+				'type'    => 'select',
+				'options' => array(
+					array(
+						'value' => 'todo',
+						'label' => 'To do',
+					),
+				),
+			)
+		)->get_data()['id'];
+		update_post_meta( $field_id, 'default_value', '{"mode":"value","value":"todo"}' );
+
+		$response = $this->update_options(
+			$field_id,
+			array(
+				'options'    => array(
+					array(
+						'value' => 'doing',
+						'label' => 'Doing',
+					),
+				),
+				'migrations' => array(
+					array(
+						'from'   => 'todo',
+						'action' => 'replace',
+						'to'     => 'doing',
+					),
+				),
+			)
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( '{"mode":"value","value":"doing"}', get_post_meta( $field_id, 'default_value', true ) );
+	}
+
+	public function test_update_options_prunes_missing_multiselect_defaults(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$collection_id = $this->create_collection_with_slug( 'Multi Defaults', 'mdefopts' );
+		$field_id      = (int) $this->create_field(
+			$collection_id,
+			array(
+				'title'   => 'Tags',
+				'type'    => 'multiselect',
+				'options' => array(
+					array(
+						'value' => 'a',
+						'label' => 'A',
+					),
+					array(
+						'value' => 'b',
+						'label' => 'B',
+					),
+				),
+			)
+		)->get_data()['id'];
+		update_post_meta( $field_id, 'default_value', '{"mode":"value","value":["a","b"]}' );
+
+		$response = $this->update_options(
+			$field_id,
+			array(
+				'options' => array(
+					array(
+						'value' => 'b',
+						'label' => 'B',
+					),
+				),
+			)
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( '{"mode":"value","value":["b"]}', get_post_meta( $field_id, 'default_value', true ) );
+	}
+
 	public function test_update_options_strips_unknown_color(): void {
 		wp_set_current_user( $this->create_user( 'editor' ) );
 		$collection_id = $this->create_collection_with_slug( 'Strip', 'strip-c' );
@@ -1179,6 +1262,17 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( 'F j, Y', get_post_meta( $field_id, 'prior_date_format', true ) );
 		$this->assertSame( 'text', get_post_meta( $field_id, 'type', true ) );
+	}
+
+	public function test_convert_clears_field_default(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		[ , $field_id ] = $this->fixture_text_field_with_rows( 'defclear', array( 'a' ) );
+		update_post_meta( $field_id, 'default_value', '{"mode":"value","value":"Draft"}' );
+
+		$response = $this->convert_field( $field_id, 'number' );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( '', get_post_meta( $field_id, 'default_value', true ) );
 	}
 
 	public function test_convert_text_to_select_makes_format_typed_value_return_chip(): void {
