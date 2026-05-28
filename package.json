@@ -3,7 +3,7 @@
 	"version": "0.0.1",
 	"description": "Knowledge base inside WordPress.",
 	"engines": {
-		"node": "~24.15",
+		"node": "^24.15",
 		"pnpm": ">=11"
 	},
 	"private": true,
@@ -14,6 +14,7 @@
 		"start:seed": "wp-env start && pnpm run env:seed && pnpm run dev",
 		"dev": "wp-scripts start",
 		"build": "wp-scripts build",
+		"build:zip": "./scripts/build-zip.sh",
 		"format": "wp-scripts format",
 		"format:check": "prettier --check '**/*.{js,jsx,json,ts,tsx,yml,yaml}' --config .prettierrc.js --ignore-path .prettierignore",
 		"lint:js": "wp-scripts lint-js src",
