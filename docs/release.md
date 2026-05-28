@@ -1,7 +1,7 @@
 # Release process
 
-Cortext builds release notes from GitHub milestones. For now the release flow is
-small on purpose; we can add ceremony once there is a real cadence to protect.
+Cortext builds release notes from GitHub milestones. The process is intentionally
+small for now; we can add more steps once we have a regular release cadence.
 
 ## Milestones
 
@@ -47,14 +47,14 @@ label.
 Area labels are optional and do not affect release automation. Add them when
 they make planning or filtering easier:
 
--   `area: canvas` for the block editor canvas, blocks, inspector, covers,
-    icons, and document chrome
+-   `area: canvas` for the block editor canvas, blocks, inspector, covers, and
+    icons
 -   `area: collections` for fields, rows, views, DataViews, relations, rollups,
     formulas, and row properties
 -   `area: desktop`
 -   `area: performance` for budgets, profiling, benchmarks, and regressions
--   `area: publishing` for public rendering through WordPress, templates,
-    frontend block output, and theme-facing views
+-   `area: publishing` for public output through WordPress, templates, frontend
+    block rendering, and theme-facing views
 -   `area: shell` for the app shell, sidebar, routing, top bar, command palette,
     recents, favorites, trash, and layout
 

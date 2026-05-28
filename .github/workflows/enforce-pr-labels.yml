@@ -27,9 +27,9 @@ jobs:
                   use_regex: true
                   add_comment: true
                   message: |
-                      **Missing PR type label**
+                      **Choose one PR type**
 
-                      This PR needs exactly one `type:*` label before it can merge.
+                      Add exactly one `type:*` label before merging this PR.
 
-                      Valid labels are `type: enhancement`, `type: bug`, `type: docs`, `type: tooling`, and `type: code quality`.
+                      Use one of: `type: enhancement`, `type: bug`, `type: docs`, `type: tooling`, `type: code quality`.
                   exit_type: failure
