@@ -165,20 +165,40 @@ test.describe( 'Workspace home', () => {
 	} ) => {
 		let collection;
 
+		let field;
+
 		try {
 			collection = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_traits',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: COLLECTION_HOME_TITLE,
 					status: 'private',
-					mode: 'full_page',
+				},
+			} );
+			field = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_fields',
+				data: {
+					title: 'Title',
+					status: 'private',
+					meta: { type: 'text' },
+				},
+			} );
+			// Promote the document to a collection by attaching at least one
+			// field to its schema; without `cortext_fields` the canvas renders
+			// as a plain page.
+			await requestUtils.rest( {
+				method: 'POST',
+				path: `/wp/v2/crtxt_documents/${ collection.id }`,
+				data: {
+					meta: { cortext_fields: [ String( field.id ) ] },
 				},
 			} );
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/collection/${ collection.slug }-${ collection.id }`
+				`page=cortext&p=/${ collection.slug }-${ collection.id }`
 			);
 			// Full-page collections render inside the BlockCanvas iframe.
 			const collectionCanvas = page.frameLocator(
@@ -192,14 +212,18 @@ test.describe( 'Workspace home', () => {
 			await admin.visitAdminPage( 'admin.php', 'page=cortext' );
 			await expect
 				.poll( () => appPath( page ) )
-				.toContain( '/collection/' );
+				.toContain( `${ collection.slug }-${ collection.id }` );
 			await expect(
 				collectionCanvas.locator( '.cortext-data-view' )
 			).toBeVisible( { timeout: 15_000 } );
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				collection && `/wp/v2/crtxt_traits/${ collection.id }`
+				collection && `/wp/v2/crtxt_documents/${ collection.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				field && `/wp/v2/crtxt_fields/${ field.id }`
 			);
 		}
 	} );

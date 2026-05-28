@@ -291,9 +291,7 @@ test.describe( 'Cortext UI performance', () => {
 				const createPromise = page.waitForResponse(
 					( response ) =>
 						response.request().method() === 'POST' &&
-						response
-							.url()
-							.includes( `/wp/v2/crtxt_${ COLLECTION_SLUG }` ),
+						response.url().includes( '/wp/v2/crtxt_documents' ),
 					{ timeout: READY_TIMEOUT_MS }
 				);
 				const startedAt = Date.now();
@@ -658,9 +656,7 @@ test.describe( 'Cortext UI performance', () => {
 				await probe.reset();
 				const responsePromise = page.waitForResponse(
 					( response ) =>
-						response
-							.url()
-							.includes( `/wp/v2/crtxt_${ COLLECTION_SLUG }/` ),
+						response.url().includes( '/wp/v2/crtxt_documents/' ),
 					{ timeout: READY_TIMEOUT_MS }
 				);
 				const startedAt = Date.now();

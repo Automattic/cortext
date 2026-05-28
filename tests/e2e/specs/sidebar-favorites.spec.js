@@ -161,11 +161,10 @@ test.describe( 'Sidebar favorites', () => {
 			} );
 			collection = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_traits',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: COLLECTION_TITLE,
 					status: 'private',
-					mode: 'full_page',
 				},
 			} );
 			await requestUtils.rest( {
@@ -234,7 +233,7 @@ test.describe( 'Sidebar favorites', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				collection && `/wp/v2/crtxt_traits/${ collection.id }`
+				collection && `/wp/v2/crtxt_documents/${ collection.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,

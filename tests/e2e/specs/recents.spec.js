@@ -70,16 +70,14 @@ async function expandRecentsIfCollapsed( page ) {
 
 async function createCollectionFixture( requestUtils ) {
 	const suffix = Date.now().toString( 36 ).slice( -4 );
-	const slug = `e2erec${ suffix }`;
 	const collectionTitle = `E2E Recent Rows ${ suffix }`;
 
 	const collection = await requestUtils.rest( {
 		method: 'POST',
-		path: '/wp/v2/crtxt_traits',
+		path: '/wp/v2/crtxt_documents',
 		data: {
 			title: collectionTitle,
 			status: 'private',
-			meta: { slug },
 		},
 	} );
 
@@ -95,25 +93,26 @@ async function createCollectionFixture( requestUtils ) {
 
 	await requestUtils.rest( {
 		method: 'POST',
-		path: `/wp/v2/crtxt_traits/${ collection.id }`,
+		path: `/wp/v2/crtxt_documents/${ collection.id }`,
 		data: {
-			meta: { fields: [ String( field.id ) ] },
+			meta: { cortext_fields: [ String( field.id ) ] },
 		},
 	} );
 
 	const entry = await requestUtils.rest( {
 		method: 'POST',
-		path: `/wp/v2/crtxt_${ slug }`,
+		path: '/wp/v2/crtxt_documents',
 		data: {
 			title: 'The Left Hand of Darkness',
 			status: 'private',
+			cortext_trait: collection.id,
 			meta: {
 				[ `field-${ field.id }` ]: 'Ursula K. Le Guin',
 			},
 		},
 	} );
 
-	return { collection, collectionTitle, field, entry, slug };
+	return { collection, collectionTitle, field, entry };
 }
 
 function createDataViewBlockMarkup( collectionId ) {
@@ -158,7 +157,7 @@ test.describe( 'Sidebar recents', () => {
 			} );
 			collection = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_traits',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: collectionTitle,
 					status: 'private',
@@ -191,7 +190,7 @@ test.describe( 'Sidebar recents', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/collection/${ collection.slug }-${ collection.id }`
+				`page=cortext&p=/${ collection.slug }-${ collection.id }`
 			);
 			// Full-page collections render inside the BlockCanvas iframe.
 			await expect(
@@ -219,7 +218,7 @@ test.describe( 'Sidebar recents', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				collection && `/wp/v2/crtxt_traits/${ collection.id }`
+				collection && `/wp/v2/crtxt_documents/${ collection.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
@@ -274,7 +273,7 @@ test.describe( 'Sidebar recents', () => {
 			await expect
 				.poll( async () => {
 					const row = await requestUtils.rest( {
-						path: `/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`,
+						path: `/wp/v2/crtxt_documents/${ fixture.entry.id }`,
 						params: { context: 'edit' },
 					} );
 					return row.meta[ `field-${ fixture.field.id }` ];
@@ -303,8 +302,7 @@ test.describe( 'Sidebar recents', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				fixture.entry &&
-					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+				fixture.entry && `/wp/v2/crtxt_documents/${ fixture.entry.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
@@ -317,7 +315,7 @@ test.describe( 'Sidebar recents', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_traits/${ fixture.collection.id }`
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
 			);
 		}
 	} );
