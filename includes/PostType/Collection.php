@@ -30,7 +30,7 @@ final class Collection {
 		add_action( 'init', array( $this, 'register_post_type' ) );
 		add_action( 'rest_api_init', array( $this, 'register_rest_filters' ) );
 		// The owner data-view needs the new post ID, so seed it after insert.
-		// EditorBody still repairs old or empty content. See tech-debt.md#59.
+		// EditorBody still repairs old or empty content. See tech-debt.md#td-collection-owner-body-contract.
 		add_action( 'wp_after_insert_post', array( $this, 'maybe_seed_data_view_block' ), 10, 3 );
 	}
 

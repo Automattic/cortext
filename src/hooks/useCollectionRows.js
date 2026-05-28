@@ -4,7 +4,7 @@ import apiFetch from '@wordpress/api-fetch';
 
 import { useCollectionRowsInvalidation } from './rowInvalidation';
 
-// tech-debt.md#2: rows live outside core-data, so this hook manages
+// tech-debt.md#td-rows-not-in-core-data: rows live outside core-data, so this hook manages
 // its own fetch state and exposes a manual refresh() handle.
 
 const CLIENT_PER_PAGE = 100;
@@ -482,7 +482,7 @@ export default function useCollectionRows(
 		  } )
 		: null;
 
-	// tech-debt.md#2: callers POST via apiFetch and bump refresh() to
+	// tech-debt.md#td-rows-not-in-core-data: callers POST via apiFetch and bump refresh() to
 	// re-read. With rows in core-data this whole counter goes away.
 	const refresh = useCallback( () => {
 		setRefreshKey( ( key ) => key + 1 );

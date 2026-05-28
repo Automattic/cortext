@@ -335,7 +335,8 @@ body.cortext-hide-block-settings-menu .block-editor-block-switcher {
 	display: none;
 }
 
-// tech-debt.md#59: owner canvases lock the body to one block. Hide the normal
+// tech-debt.md#td-collection-owner-body-contract: owner canvases lock
+// the body to one block. Hide the normal
 // appender; cover and icon insertion still goes through
 // DocumentIdentityActions.
 .cortext-canvas__editor--owner .block-editor-default-block-appender,
@@ -370,7 +371,8 @@ body.cortext-hide-block-settings-menu .block-editor-block-switcher {
 	display: none;
 }
 
-// tech-debt.md#57: while row peek/modal owns the surface, keep the page
+// tech-debt.md#td-row-detail-toolbar-isolation: while row peek/modal
+// owns the surface, keep the page
 // canvas toolbar out of sight so only row toolbar actions are reachable.
 body.cortext-hide-parent-block-toolbar
 .cortext-shell__canvas

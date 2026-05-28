@@ -4,7 +4,7 @@ import { useSelect } from '@wordpress/data';
 
 // Maps a Canvas post type to its one allowed body block. Owner blocks join the
 // header set, hide the Block tab, fill the document tab, and drop the usual
-// block chrome. See tech-debt.md#59.
+// block chrome. See tech-debt.md#td-collection-owner-body-contract.
 //
 // `matches` lets the data-view block disambiguate the owned instance from any
 // inline data-view that happens to point at this collection.

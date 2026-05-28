@@ -347,7 +347,7 @@ export default function RowDetailView( {
 			return undefined;
 		}
 
-		// tech-debt.md#57: while row detail owns the surface, keep the
+		// tech-debt.md#td-row-detail-toolbar-isolation: while row detail owns the surface, keep the
 		// still-selected page block toolbar out of sight.
 		document.body.classList.add( HIDE_PARENT_BLOCK_TOOLBAR_CLASS );
 		return () => {

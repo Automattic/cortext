@@ -14,7 +14,7 @@ import EditOptionsPopover from './fields/EditOptionsPopover';
 // happens via the Popover's outside-click which fires `onCancel`.
 //
 // Replaces the previous `FormTokenField` implementation
-// (tech-debt.md#6) so the cell picker matches the column-header "Edit
+// (tech-debt.md#td-dataviews-multiselect-control) so the cell picker matches the column-header "Edit
 // options" surface: same chips, same per-option submenu, same
 // search-or-create input. Uses a controlled Popover (instead of
 // `Dropdown`) so the editor isn't torn down by Dropdown's outside-click

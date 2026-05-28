@@ -210,7 +210,7 @@ export default function useAutosave( options = {} ) {
 	] );
 
 	useEffect( () => {
-		// tech-debt.md#40: the editor store keeps didSucceed/didFail as level signals, but
+		// tech-debt.md#td-autosave-save-completion: the editor store keeps didSucceed/didFail as level signals, but
 		// the user-visible side effects below (status flip, Recents touch)
 		// are edges: they should fire once per save that *this hook ran*.
 		// Re-running the effect because recentTarget changed (the user opened

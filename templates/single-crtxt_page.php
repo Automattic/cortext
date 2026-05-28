@@ -33,7 +33,7 @@ defined( 'ABSPATH' ) || exit;
 			// resolves a second time inside `the_content()` for any page
 			// whose `post_content` carries the locked `core/post-title`
 			// block prepended by `DocumentIdentity::prepend_header_blocks`.
-			// See tech-debt.md#32.
+			// See tech-debt.md#td-public-title-double-render.
 			?>
 			<h1 class="cortext-public-page__title"><?php the_title(); ?></h1>
 			<div class="cortext-public-page__body is-layout-constrained">

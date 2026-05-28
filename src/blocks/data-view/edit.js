@@ -200,7 +200,7 @@ function CollectionCreator( { onCreate } ) {
 					FULL_PAGE_COLLECTION_QUERY,
 				] );
 			}
-			// tech-debt.md#2: core-data may have cached `/wp/v2/types` before
+			// tech-debt.md#td-rows-not-in-core-data: core-data may have cached `/wp/v2/types` before
 			// this collection registered its row CPT. Refresh the entity config
 			// so the next row detail lookup can find the new post type.
 			invalidateResolution( 'getEntitiesConfig', [ 'postType' ] );
@@ -315,7 +315,7 @@ function CollectionToolbarControl( {
 					) }
 				/>
 			) }
-			{ /* tech-debt.md#57: peek/modal hide the parent inspector
+			{ /* tech-debt.md#td-row-detail-toolbar-isolation: peek/modal hide the parent inspector
 			     button until there is a row-scoped one. Owner blocks open
 			     the document tab, where their panels are slotted. */ }
 			{ ( hasBlockInspector || isOwner ) && (

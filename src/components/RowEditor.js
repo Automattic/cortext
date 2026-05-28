@@ -206,7 +206,7 @@ export default function RowEditor( {
 			settings={ getEditorSettings() }
 			useSubRegistry
 		>
-			{ /* tech-debt.md#57: row detail owns these SlotFills while
+			{ /* tech-debt.md#td-row-detail-toolbar-isolation: row detail owns these SlotFills while
 			     peek/modal are open. */ }
 			<SlotFillProvider>
 				<EditorSurfaceProvider hasBlockInspector={ false }>

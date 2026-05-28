@@ -7,8 +7,8 @@
 // emits them into the editor chunk's CSS file and skip the initial CSS
 // bundle on home and collection views.
 
-// tech-debt.md#38: wp-admin does not expose this handle on our screen, so
-// bundle the palette styles here.
+// tech-debt.md#td-command-palette-host-glue: wp-admin does not expose this
+// handle on our screen, so bundle the palette styles here.
 @use "../node_modules/@wordpress/commands/build-style/style.css" as commands;
 
 // Same deal for @wordpress/dataviews. Importing via JS would be tree-shaken

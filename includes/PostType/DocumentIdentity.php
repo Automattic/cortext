@@ -68,7 +68,7 @@ final class DocumentIdentity {
 	 *
 	 * Note: prepending `core/post-title` to `post_content` makes the
 	 * public template render the title twice (the_title + the block's
-	 * own resolution of `post_title`). See tech-debt.md#32 for the
+	 * own resolution of `post_title`). See tech-debt.md#td-public-title-double-render for the
 	 * architectural fix that drops the block from content entirely.
 	 */
 	public static function header_blocks_markup(): string {
