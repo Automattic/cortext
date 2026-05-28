@@ -18,7 +18,7 @@ import './Canvas.scss';
 // Registers core + Cortext blocks before any editor renders. Shared with
 // RowEditor so opening a row peek first (without a document open) still
 // gets the blocks registered.
-import './initEditor';
+import { getEditorSettings } from './initEditor';
 import useAutosave from '../hooks/useAutosave';
 import useDelayedFlag from '../hooks/useDelayedFlag';
 import { withViewTransition } from '../hooks/viewTransition';
@@ -456,7 +456,7 @@ export default function Canvas( {
 			) }
 			<EditorProvider
 				post={ renderedPost }
-				settings={ window.cortextEditorSettings ?? {} }
+				settings={ getEditorSettings() }
 				useSubRegistry={ useSubRegistry }
 			>
 				<CanvasEditor
