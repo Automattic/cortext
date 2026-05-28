@@ -7,7 +7,7 @@ import {
 	store as interfaceStore,
 } from '@wordpress/interface';
 import { Button } from '@wordpress/components';
-import { cog, pencil, seen, unseen } from '@wordpress/icons';
+import { closeSmall, cog, pencil, plus, seen, unseen } from '@wordpress/icons';
 import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
 
 // Editor-surface stylesheets. Imported via a sibling SCSS file (not
@@ -24,6 +24,7 @@ import useDelayedFlag from '../hooks/useDelayedFlag';
 import { withViewTransition } from '../hooks/viewTransition';
 import { POST_TYPE } from './page-queries';
 import CollectionPublishToggle from './CollectionPublishToggle';
+import CortextInserterSidebar from './CortextInserterSidebar';
 import { DocumentPropertiesProvider } from './DocumentPropertiesContext';
 import EditorBody from './EditorBody';
 import PagePublishToggle from './PagePublishToggle';
@@ -35,6 +36,25 @@ import PageInspectorSidebar, {
 	PAGE_INSPECTOR,
 	isInspectorArea,
 } from './PageInspectorSidebar';
+
+function InserterToggle() {
+	const isOpen = useSelect(
+		( select ) => !! select( editorStore ).isInserterOpened(),
+		[]
+	);
+	const { setIsInserterOpened } = useDispatch( editorStore );
+
+	return (
+		<Button
+			className="cortext-document-actions__inserter"
+			icon={ isOpen ? closeSmall : plus }
+			size="compact"
+			label={ __( 'Add block', 'cortext' ) }
+			isPressed={ isOpen }
+			onClick={ () => setIsInserterOpened( ! isOpen ) }
+		/>
+	);
+}
 
 function DocumentActions( {
 	isActive,
@@ -73,6 +93,7 @@ function DocumentActions( {
 	return (
 		<TopBarActionsFill>
 			<div className="cortext-document-actions">
+				<InserterToggle />
 				{ topBarActions }
 				{ postType === POST_TYPE && <PagePublishToggle /> }
 				{ postType === 'crtxt_collection' && (
@@ -238,6 +259,13 @@ function CanvasEditor( {
 		onSwitchPost,
 	] );
 
+	// Browse All writes to the editor store through EditorProvider. When that
+	// flag is on, show Gutenberg's full inserter beside the canvas.
+	const isInserterOpened = useSelect(
+		( select ) => !! select( editorStore ).isInserterOpened(),
+		[]
+	);
+
 	const hasProperties = Array.isArray( fields ) && fields.length > 0;
 	const [ arePropertiesVisible, setArePropertiesVisible ] = useState( true );
 	const [ isPropertiesLayoutEditing, setIsPropertiesLayoutEditing ] =
@@ -301,6 +329,9 @@ function CanvasEditor( {
 							onRestored={ onRestored }
 						/>
 					</>
+				}
+				secondarySidebar={
+					isInserterOpened ? <CortextInserterSidebar /> : null
 				}
 				sidebar={ <InspectorSidebarSlot /> }
 			/>

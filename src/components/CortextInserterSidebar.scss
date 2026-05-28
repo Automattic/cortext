@@ -1,0 +1,9 @@
+// Cortext does not register block patterns, so this tab is always empty
+// for now.
+
+// TabbedSidebar renders Blocks, Patterns, then Media. Hide the middle tab
+// inside our wrapper; remove this once Cortext has patterns to show.
+
+.cortext-inserter-sidebar [role="tab"]:nth-of-type(2) {
+	display: none;
+}
