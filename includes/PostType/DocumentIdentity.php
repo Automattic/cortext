@@ -4,8 +4,9 @@
  * the `cortext-document` capability.
  *
  * `DocumentTypeRegistrar::register()` calls `register_for_post_type()` while
- * registering each Cortext document post type. That keeps pages and dynamic
- * row CPTs on the same path and avoids ordering assumptions.
+ * registering each Cortext document post type. Under the universal model
+ * this is just `crtxt_document` and `crtxt_trait`; the helper used to handle
+ * the per-collection dynamic CPTs that no longer exist.
  *
  * @package Cortext
  */

@@ -1,8 +1,9 @@
 <?php
 /**
- * Registers a post type as a Cortext document. This keeps the plain WordPress
- * registration and the Cortext document wiring together for pages,
- * collections, and dynamic row CPTs.
+ * Registers a post type as a Cortext document. Wraps the plain WordPress
+ * registration so the document trait, default settings, and identity meta
+ * stay consistent across the two cortext post types (`crtxt_document` for
+ * pages and rows, `crtxt_trait` for collection schemas).
  *
  * @package Cortext
  */

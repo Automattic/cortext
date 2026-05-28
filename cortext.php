@@ -44,8 +44,12 @@ add_action(
 register_activation_hook(
 	__FILE__,
 	static function () {
-		( new \Cortext\PostType\Page() )->register_post_type();
-		( new \Cortext\PostType\Collection() )->register_post_type();
+		// Register the document CPT and its trait taxonomy explicitly so
+		// `flush_rewrite_rules()` below sees Cortext's rewrite rules. The
+		// same registration runs again on `init` during normal boot via
+		// `Plugin::boot()`.
+		( new \Cortext\PostType\Document() )->register_post_type();
+		( new \Cortext\Taxonomy\TraitTaxonomy() )->register_taxonomy();
 		( new \Cortext\FieldValues\FieldValueIndex() )->activate();
 		flush_rewrite_rules();
 	}

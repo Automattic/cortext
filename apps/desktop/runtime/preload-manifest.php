@@ -12,7 +12,7 @@
 return array(
 	'wp-content/plugins/cortext/includes/Plugin.php',
 	'wp-content/plugins/cortext/includes/Documents.php',
-	'wp-content/plugins/cortext/includes/Documents/CollectionDuplicator.php',
+	'wp-content/plugins/cortext/includes/Documents/DocumentDuplicator.php',
 	'wp-content/plugins/cortext/includes/Relations.php',
 	'wp-content/plugins/cortext/includes/Block/DataView.php',
 	'wp-content/plugins/cortext/includes/Rest/DocumentsController.php',
@@ -22,9 +22,7 @@ return array(
 	'wp-content/plugins/cortext/includes/Rest/RowsMetaQuery.php',
 	'wp-content/plugins/cortext/includes/Rest/RowsQueryScope.php',
 	'wp-content/plugins/cortext/includes/Rest/WorkspaceHomeController.php',
-	'wp-content/plugins/cortext/includes/PostType/Collection.php',
-	'wp-content/plugins/cortext/includes/PostType/CollectionEntries.php',
+	'wp-content/plugins/cortext/includes/PostType/Document.php',
 	'wp-content/plugins/cortext/includes/PostType/DocumentIdentity.php',
 	'wp-content/plugins/cortext/includes/PostType/Field.php',
-	'wp-content/plugins/cortext/includes/PostType/Page.php',
 );
