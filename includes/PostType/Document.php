@@ -743,8 +743,9 @@ final class Document {
 				'rest_base'             => 'crtxt_documents',
 				'rest_controller_class' => 'WP_REST_Posts_Controller',
 				'has_archive'           => false,
-				// `post_parent` carries the page-tree hierarchy. Rows always
-				// keep `post_parent = 0`; validation in Documents enforces it.
+				// `post_parent` carries the workspace-tree hierarchy. Any
+				// document can hang under any other; the tree is content,
+				// not type.
 				'hierarchical'          => true,
 				'supports'              => array(
 					'title',
