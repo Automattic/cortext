@@ -33,6 +33,7 @@ import {
 	restoreDocument,
 	permanentlyDeleteDocument,
 } from './actions';
+import { computeDocumentUri } from '../router/useResolveEntity';
 
 /**
  * Sidebar-scoped context for document actions. The provider supplies the data
@@ -269,7 +270,7 @@ export function useDocumentSelection( { selectedId, selectedCollectionId } ) {
 			}
 			navigate( {
 				to: '/$',
-				params: { _splat: `${ record.slug ?? '' }-${ record.id }` },
+				params: { _splat: computeDocumentUri( record ) },
 			} );
 		},
 		[ navigate ]
