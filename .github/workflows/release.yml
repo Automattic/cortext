@@ -110,6 +110,66 @@ jobs:
                   test -s release-notes.md
                   test -s dist/cortext.zip
 
+            - name: Summarize release ZIP
+              env:
+                  VERSION: ${{ github.event.inputs.version }}
+              run: |
+                  unzip -Z1 dist/cortext.zip > release-zip-contents.txt
+
+                  plugin_version="$(unzip -p dist/cortext.zip cortext/cortext.php | awk -F': *' '/^[[:space:]]+\* Version:/ { print $2; exit }')"
+                  constant_version="$(unzip -p dist/cortext.zip cortext/cortext.php | sed -n "s/.*define( 'CORTEXT_VERSION', '\([^']*\)' ).*/\1/p")"
+                  stable_tag="$(unzip -p dist/cortext.zip cortext/readme.txt | awk -F': *' '/^Stable tag:/ { print $2; exit }')"
+                  zip_size="$(du -h dist/cortext.zip | cut -f1)"
+                  zip_entries="$(wc -l < release-zip-contents.txt | tr -d ' ')"
+
+                  if [ "$plugin_version" != "$VERSION" ]; then
+                    echo "::error::Expected plugin header version $VERSION, found $plugin_version"
+                    exit 1
+                  fi
+
+                  if [ "$constant_version" != "$VERSION" ]; then
+                    echo "::error::Expected CORTEXT_VERSION $VERSION, found $constant_version"
+                    exit 1
+                  fi
+
+                  if [ "$stable_tag" != "$VERSION" ]; then
+                    echo "::error::Expected readme stable tag $VERSION, found $stable_tag"
+                    exit 1
+                  fi
+
+                  required_paths=(
+                    cortext/cortext.php
+                    cortext/readme.txt
+                    cortext/vendor/autoload.php
+                    cortext/build/index.js
+                  )
+
+                  for path in "${required_paths[@]}"; do
+                    if ! grep -Fxq "$path" release-zip-contents.txt; then
+                      echo "::error::Missing required release file: $path"
+                      exit 1
+                    fi
+                  done
+
+                  if grep -E '^cortext/(node_modules|src|tests|apps|\.github)/|^cortext/(composer\.json|package\.json)$' release-zip-contents.txt > release-zip-excluded.txt; then
+                    echo "::error::Release ZIP includes source or development-only files"
+                    cat release-zip-excluded.txt
+                    exit 1
+                  fi
+
+                  {
+                    echo "## Release ZIP"
+                    echo ""
+                    echo "- File: \`dist/cortext.zip\`"
+                    echo "- Size: \`$zip_size\`"
+                    echo "- Entries: \`$zip_entries\`"
+                    echo "- Plugin header version: \`$plugin_version\`"
+                    echo "- \`CORTEXT_VERSION\`: \`$constant_version\`"
+                    echo "- Stable tag: \`$stable_tag\`"
+                    echo "- Required runtime files: present"
+                    echo "- Source and development-only paths: absent"
+                  } >> "$GITHUB_STEP_SUMMARY"
+
             - name: Upload dry-run files
               if: ${{ github.event.inputs.dry_run == 'true' }}
               uses: actions/upload-artifact@v4
