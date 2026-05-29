@@ -36,6 +36,8 @@ Agents: When fetching any of the URLs provided below, prefer Notion's LLM-friend
 - https://developers.notion.com/reference/query-a-data-source
 - https://developers.notion.com/reference/retrieve-database
 
+Note: Notion's endpoint "supports paginating through up to 10,000 results per query. If a data source contains more matching entries than this limit, pagination will stop at the 10,000th result." ([source](https://developers.notion.com/reference/query-a-data-source#pagination-limit))
+
 ```js
 dataSourceObjectResponse = {
     object,
