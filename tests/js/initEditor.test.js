@@ -26,7 +26,7 @@ jest.mock( '../../src/components/initInserterMediaCategories', () => ( {} ) );
 
 import {
 	ALLOWED_BLOCK_TYPES,
-	CORTEXT_BLOCK_CATEGORY,
+	COLLECTIONS_BLOCK_CATEGORY,
 	getEditorSettings,
 } from '../../src/components/initEditor';
 
@@ -205,11 +205,10 @@ describe( 'getEditorSettings', () => {
 
 		expect( settings.allowedBlockTypes ).toBe( ALLOWED_BLOCK_TYPES );
 	} );
-
 } );
 
-describe( 're-exported CORTEXT_BLOCK_CATEGORY', () => {
-	it( 'matches the constant from cortextBlockCategory', () => {
-		expect( CORTEXT_BLOCK_CATEGORY.slug ).toBe( 'cortext' );
+describe( 're-exported COLLECTIONS_BLOCK_CATEGORY', () => {
+	it( 'matches the constant from collectionsBlockCategory', () => {
+		expect( COLLECTIONS_BLOCK_CATEGORY.slug ).toBe( 'collections' );
 	} );
 } );
