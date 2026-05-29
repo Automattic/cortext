@@ -18,7 +18,8 @@ export default function useAutosave( options = {} ) {
 	const recentId = options.recentTarget?.id ?? null;
 	const recentCollectionId = options.recentTarget?.collectionId ?? null;
 	const { savePost, editPost } = useDispatch( editorStore );
-	const { createErrorNotice, removeNotice } = useDispatch( noticesStore );
+	const { createErrorNotice, createSuccessNotice } =
+		useDispatch( noticesStore );
 	const { touchRecent } = useRecents();
 
 	const {
@@ -263,8 +264,16 @@ export default function useAutosave( options = {} ) {
 			savingTargetRef.current = null;
 			setStatus( 'saved' );
 			setLastSavedAt( Date.now() );
-			removeNotice( AUTOSAVE_ERROR_NOTICE_ID );
-			errorNoticeShownRef.current = false;
+			if ( errorNoticeShownRef.current ) {
+				// Replace the failure notice with a short success message.
+				// Reusing the notice id swaps it in place, and without
+				// `explicitDismiss` SnackbarList fades it out.
+				createSuccessNotice( __( 'All changes saved.', 'cortext' ), {
+					id: AUTOSAVE_ERROR_NOTICE_ID,
+					type: 'snackbar',
+				} );
+				errorNoticeShownRef.current = false;
+			}
 			if ( latchedTarget ) {
 				touchRecent( latchedTarget );
 			}
@@ -274,7 +283,7 @@ export default function useAutosave( options = {} ) {
 		didSucceed,
 		didFail,
 		createErrorNotice,
-		removeNotice,
+		createSuccessNotice,
 		recentKind,
 		recentId,
 		recentCollectionId,

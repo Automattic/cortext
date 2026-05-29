@@ -92,7 +92,7 @@ beforeEach( () => {
 		savePost: jest.fn(),
 		editPost: jest.fn(),
 		createErrorNotice: jest.fn(),
-		removeNotice: jest.fn(),
+		createSuccessNotice: jest.fn(),
 	} );
 	mockTouchRecent.mockReset();
 } );
@@ -605,7 +605,7 @@ describe( 'useAutosave: status', () => {
 			savePost: jest.fn(),
 			editPost: jest.fn(),
 			createErrorNotice,
-			removeNotice: jest.fn(),
+			createSuccessNotice: jest.fn(),
 		} );
 		setStoreState( { didFail: true } );
 
@@ -627,7 +627,7 @@ describe( 'useAutosave: status', () => {
 			savePost: jest.fn(),
 			editPost: jest.fn(),
 			createErrorNotice,
-			removeNotice: jest.fn(),
+			createSuccessNotice: jest.fn(),
 		} );
 		setStoreState( { didFail: true } );
 
@@ -648,13 +648,13 @@ describe( 'useAutosave: status', () => {
 		expect( createErrorNotice ).toHaveBeenCalledTimes( 1 );
 	} );
 
-	it( 'removes the autosave error notice after a successful save', () => {
-		const removeNotice = jest.fn();
+	it( 'swaps the failure snackbar for a short success snackbar after recovery', () => {
+		const createSuccessNotice = jest.fn();
 		useDispatch.mockReturnValue( {
 			savePost: jest.fn(),
 			editPost: jest.fn(),
 			createErrorNotice: jest.fn(),
-			removeNotice,
+			createSuccessNotice,
 		} );
 		setStoreState( { didFail: true } );
 
@@ -669,7 +669,38 @@ describe( 'useAutosave: status', () => {
 			rerender();
 		} );
 
-		expect( removeNotice ).toHaveBeenCalledWith( 'cortext-autosave-error' );
+		// Reusing the failure notice id swaps it in place. Omitting
+		// explicitDismiss lets SnackbarList fade out the success message.
+		expect( createSuccessNotice ).toHaveBeenCalledWith(
+			expect.any( String ),
+			expect.objectContaining( {
+				id: 'cortext-autosave-error',
+				type: 'snackbar',
+			} )
+		);
+		expect(
+			createSuccessNotice.mock.calls[ 0 ][ 1 ].explicitDismiss
+		).toBeUndefined();
+	} );
+
+	it( 'does not announce success on a normal save with no prior failure', () => {
+		const createSuccessNotice = jest.fn();
+		useDispatch.mockReturnValue( {
+			savePost: jest.fn(),
+			editPost: jest.fn(),
+			createErrorNotice: jest.fn(),
+			createSuccessNotice,
+		} );
+		setStoreState( { isSaving: true } );
+
+		const { rerender } = renderHook( () => useAutosave() );
+
+		act( () => {
+			setStoreState( { isSaving: false, didSucceed: true } );
+			rerender();
+		} );
+
+		expect( createSuccessNotice ).not.toHaveBeenCalled();
 	} );
 
 	it( 'resets status when the current post id changes', () => {
