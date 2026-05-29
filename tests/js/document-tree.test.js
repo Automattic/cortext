@@ -1,5 +1,5 @@
 /**
- * Pure-function tests for `src/components/pages-tree.js`: flat-to-tree
+ * Pure-function tests for `src/components/document-tree.js`: flat-to-tree
  * building, descendant collection, cycle detection, drag-drop reorder math,
  * and next-child menu_order allocation.
  */
@@ -8,11 +8,11 @@ import {
 	buildTree,
 	collectAncestorIds,
 	collectDescendants,
-	firstPageInTree,
+	firstDocumentInTree,
 	isDescendantOf,
 	computeDropTarget,
 	nextChildOrder,
-} from '../../src/components/pages-tree';
+} from '../../src/components/document-tree';
 
 function makePage( id, parent = 0, menuOrder = 0 ) {
 	return { id, parent, menu_order: menuOrder };
@@ -49,9 +49,9 @@ describe( 'buildTree', () => {
 	} );
 } );
 
-describe( 'firstPageInTree', () => {
+describe( 'firstDocumentInTree', () => {
 	it( 'returns null when there are no pages', () => {
-		expect( firstPageInTree( [] ) ).toBeNull();
+		expect( firstDocumentInTree( [] ) ).toBeNull();
 	} );
 
 	it( 'returns the first root page using sidebar tree ordering', () => {
@@ -62,7 +62,7 @@ describe( 'firstPageInTree', () => {
 			makePage( 4, 2, 0 ),
 		];
 
-		expect( firstPageInTree( pages ).id ).toBe( 2 );
+		expect( firstDocumentInTree( pages ).id ).toBe( 2 );
 	} );
 } );
 

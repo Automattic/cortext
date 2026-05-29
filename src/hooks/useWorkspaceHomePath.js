@@ -2,7 +2,7 @@ import { useEntityRecords } from '@wordpress/core-data';
 import { useMemo } from '@wordpress/element';
 
 import { ACTIVE_PAGES_QUERY, POST_TYPE } from '../components/page-queries';
-import { firstPageInTree } from '../components/pages-tree';
+import { firstDocumentInTree } from '../components/document-tree';
 import { computeDocumentUri } from '../router/useResolveEntity';
 import { useWorkspaceHome } from './useWorkspaceHome';
 
@@ -21,7 +21,7 @@ export function useWorkspaceHomePath() {
 	);
 	const pages = useMemo( () => records ?? [], [ records ] );
 	const fallbackHomePage = useMemo(
-		() => firstPageInTree( pages ),
+		() => firstDocumentInTree( pages ),
 		[ pages ]
 	);
 	const homePath =

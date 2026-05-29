@@ -39,7 +39,7 @@ import {
 	POST_TYPE,
 	TRASHED_PAGES_QUERY,
 } from '../components/page-queries';
-import { firstPageInTree } from '../components/pages-tree';
+import { firstDocumentInTree } from '../components/document-tree';
 import { withViewTransition } from '../hooks/viewTransition';
 import { useRecents } from '../hooks/useRecents';
 import { useWorkspaceHome } from '../hooks/useWorkspaceHome';
@@ -214,7 +214,7 @@ export default function EntityRoute( { history } ) {
 			return;
 		}
 
-		const fallback = firstPageInTree( pages ?? [] );
+		const fallback = firstDocumentInTree( pages ?? [] );
 		const path =
 			home?.path ?? ( fallback ? computeDocumentUri( fallback ) : null );
 		if ( ! path ) {

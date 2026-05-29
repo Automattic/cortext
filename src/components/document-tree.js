@@ -1,7 +1,8 @@
 /**
- * Pure helpers for turning the flat list of pages returned by the REST API
- * into a nested tree, and for computing the minimal set of parent/menu_order
- * updates needed when a page is dragged to a new spot.
+ * Pure helpers for turning the flat list of documents (pages and collections)
+ * returned by the REST API into a nested tree, and for computing the minimal
+ * set of parent/menu_order updates needed when a document is dragged to a new
+ * spot.
  */
 
 /**
@@ -45,12 +46,12 @@ export function buildTree( pages ) {
 }
 
 /**
- * Returns the first page in the same ordering used by the sidebar tree.
+ * Returns the first document in the same ordering used by the sidebar tree.
  *
  * @param {Array} pages Flat page list.
  * @return {Object|null} First root page, or null when there are no pages.
  */
-export function firstPageInTree( pages ) {
+export function firstDocumentInTree( pages ) {
 	return buildTree( pages )[ 0 ]?.page ?? null;
 }
 

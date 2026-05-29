@@ -1,14 +1,15 @@
 import { useState, useMemo, useCallback, useEffect } from '@wordpress/element';
 
-import { buildTree, collectAncestorIds } from '../pages-tree';
+import { buildTree, collectAncestorIds } from '../document-tree';
 
 /**
  * Sidebar tree state. `documents` is the single non-row list (pages plus
  * collections) that feeds the whole tree, so each document renders once. Page
- * vs collection is a per-record concern derived elsewhere from the
- * `cortext_collection` marker. The hook also expands ancestors of the active
- * selection so direct links from Home, Favorites, or Recents reveal nested
- * documents instead of hiding them under a collapsed parent.
+ * vs collection is a per-record concern derived elsewhere from whether the
+ * document defines a trait (`cortext_defines_trait`). The hook also expands
+ * ancestors of the active selection so direct links from Home, Favorites, or
+ * Recents reveal nested documents instead of hiding them under a collapsed
+ * parent.
  *
  * @param {Object}  args
  * @param {Array}   args.documents            Loaded non-row `crtxt_document` records (pages and collections).

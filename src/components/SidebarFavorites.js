@@ -34,7 +34,7 @@ import useDelayedFlag, {
 	SKELETON_MIN_VISIBLE_MS,
 } from '../hooks/useDelayedFlag';
 import { DOCUMENT_POST_TYPE } from '../collections';
-import { collectDescendants } from './pages-tree';
+import { collectDescendants } from './document-tree';
 import { whenViewTransitionsSettled } from '../hooks/viewTransition';
 
 const FAVORITE_ADD_ANIMATION_MS = 220;

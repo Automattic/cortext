@@ -6,7 +6,7 @@ import {
 	useSensors,
 } from '@dnd-kit/core';
 
-import { computeDropTarget, isDescendantOf } from '../pages-tree';
+import { computeDropTarget, isDescendantOf } from '../document-tree';
 import { POST_TYPE } from '../page-queries';
 
 const AUTO_EXPAND_DELAY = 700;
