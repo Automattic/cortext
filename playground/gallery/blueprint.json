@@ -8,7 +8,7 @@
 	},
 	"preferredVersions": {
 		"php": "8.1",
-		"wp": "6.9"
+		"wp": "7.0"
 	},
 	"features": {
 		"networking": true
