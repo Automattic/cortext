@@ -12,6 +12,7 @@ import { useCallback, useState } from '@wordpress/element';
 
 import PublishToggle from './PublishToggle';
 import useCollectionDependentPages from '../hooks/useCollectionDependentPages';
+import { definesTrait } from '../documents/capabilities';
 
 const CASCADE_PUBLISH_ERROR_NOTICE_ID = 'cortext-document-publish-error';
 
@@ -38,26 +39,32 @@ export default function DocumentPublishToggle( { postId } ) {
 	const { saveEntityRecord } = useDispatch( coreStore );
 	const { createErrorNotice, removeNotice } = useDispatch( noticesStore );
 
-	const { status, link, title, isSaving, blocks, fieldIds } = useSelect(
+	const { status, link, title, isSaving, blocks, isCollection } = useSelect(
 		( select ) => {
 			const editor = select( editorStore );
-			const meta = editor.getEditedPostAttribute( 'meta' ) || {};
+			const record = select( coreStore ).getEntityRecord(
+				'postType',
+				'crtxt_document',
+				postId
+			);
 			return {
 				status: editor.getEditedPostAttribute( 'status' ),
 				link: editor.getEditedPostAttribute( 'link' ),
 				title: editor.getEditedPostAttribute( 'title' ),
 				isSaving: editor.isSavingPost(),
 				blocks: select( blockEditorStore ).getBlocks(),
-				fieldIds: Array.isArray( meta.cortext_fields )
-					? meta.cortext_fields
-					: [],
+				isCollection: definesTrait( record ),
 			};
 		},
-		[]
+		[ postId ]
 	);
 
 	const isPublic = status === 'publish';
-	const isReferenceable = fieldIds.length > 0;
+	// A collection can be embedded in other documents through a data-view block,
+	// so unpublishing it may strand public dependents. Identity is the mirror
+	// term (`cortext_defines_trait`), true even for a collection with no custom
+	// fields, so the dependency check keys off that, not a field count.
+	const isReferenceable = isCollection;
 
 	const [ isConfirming, setIsConfirming ] = useState( false );
 	const { isLoading, dependentPages, error } = useCollectionDependentPages(
