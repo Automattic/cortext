@@ -33,15 +33,13 @@ function parseDropId( id ) {
  * `crtxt_document` REST endpoint.
  *
  * @param {Object}   args
- * @param {Array}    args.pages            Loaded `crtxt_document` records.
- * @param {Array}    args.collections      Loaded `crtxt_document` collection records (may be undefined while resolving).
+ * @param {Array}    args.pages            Loaded `crtxt_document` records (every non-row document: pages and collections).
  * @param {Set}      args.expandedIds      Currently expanded node ids (from `useSidebarTree`).
  * @param {Function} args.expand           Expand callback from `useSidebarTree`.
  * @param {Function} args.saveEntityRecord core-data dispatcher used to persist moves.
  */
 export default function useSidebarDnd( {
 	pages,
-	collections,
 	expandedIds,
 	expand,
 	saveEntityRecord,
@@ -62,12 +60,12 @@ export default function useSidebarDnd( {
 		}
 	}, [] );
 
-	// Pages and full-page collections share the same drag order, but each
-	// record is still saved through its own REST endpoint.
-	const treeRecords = useMemo(
-		() => [ ...pages, ...( collections ?? [] ) ],
-		[ pages, collections ]
-	);
+	// `pages` already lists every non-row document: in the unified model pages
+	// and collections share one post type and one query (`cortext_no_trait`).
+	// The separate collections list is a subset of it, so merging the two would
+	// list every collection twice and corrupt the sibling order math in
+	// `computeDropTarget`.
+	const treeRecords = useMemo( () => pages, [ pages ] );
 
 	const handleDragStart = useCallback( ( { active } ) => {
 		const id = active?.data?.current?.pageId ?? null;

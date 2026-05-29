@@ -249,7 +249,6 @@ export default function Sidebar( {
 	const { sensors, draggedId, draggedPage, activeDrop, handlers } =
 		useSidebarDnd( {
 			pages,
-			collections,
 			expandedIds,
 			expand,
 			saveEntityRecord,
