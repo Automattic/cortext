@@ -301,6 +301,45 @@ describe( 'useAutosave: flush triggers', () => {
 		expect( savePost ).not.toHaveBeenCalled();
 	} );
 
+	it( 'prompts before unload when failed saves leave edits unsaved', () => {
+		setStoreState( { isDirty: true, didFail: true } );
+
+		renderHook( () => useAutosave() );
+
+		const event = new Event( 'beforeunload', { cancelable: true } );
+		act( () => {
+			window.dispatchEvent( event );
+		} );
+
+		expect( event.defaultPrevented ).toBe( true );
+	} );
+
+	it( 'does not prompt before unload while saves are healthy', () => {
+		setStoreState( { isDirty: true } );
+
+		renderHook( () => useAutosave() );
+
+		const event = new Event( 'beforeunload', { cancelable: true } );
+		act( () => {
+			window.dispatchEvent( event );
+		} );
+
+		expect( event.defaultPrevented ).toBe( false );
+	} );
+
+	it( 'does not prompt before unload without unsaved edits', () => {
+		setStoreState( { isDirty: false, didFail: true } );
+
+		renderHook( () => useAutosave() );
+
+		const event = new Event( 'beforeunload', { cancelable: true } );
+		act( () => {
+			window.dispatchEvent( event );
+		} );
+
+		expect( event.defaultPrevented ).toBe( false );
+	} );
+
 	it( 'waits for an in-flight autosave instead of reporting failure', async () => {
 		let resolveSave;
 		const savePost = jest.fn(
