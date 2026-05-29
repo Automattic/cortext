@@ -382,6 +382,21 @@ final class Test_Post_Type_Document extends BaseTestCase {
 		$this->assertStringContainsString( '"collectionId":' . $collection_id, wp_unslash( (string) $collection->post_content ) );
 	}
 
+	public function test_data_view_owner_markup_locks_move_and_remove(): void {
+		$blocks = parse_blocks( Document::build_data_view_block_markup( 123 ) );
+
+		$this->assertCount( 1, $blocks );
+		$this->assertSame( 'cortext/data-view', $blocks[0]['blockName'] );
+		$this->assertSame( 123, $blocks[0]['attrs']['collectionId'] ?? null );
+		$this->assertSame(
+			array(
+				'move'   => true,
+				'remove' => true,
+			),
+			$blocks[0]['attrs']['lock'] ?? null
+		);
+	}
+
 	public function test_seed_data_view_block_is_idempotent(): void {
 		// Pre-stamp the canvas with the canonical (unslashed) markup so the
 		// idempotency check matches even under WorDBless's storage quirk
