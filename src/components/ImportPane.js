@@ -114,6 +114,7 @@ export default function ImportPane() {
 						...( prev[ collection.id ] ?? {} ),
 						status: progress.status === 'done' ? 'done' : 'running',
 						processed: progress.processed ?? 0,
+						retryAfter: progress.retryAfter ?? 0,
 						collection_id:
 							progress.collection_id ??
 							prev[ collection.id ]?.collection_id,
@@ -284,8 +285,31 @@ function CollectionsList( { collections, onImport, importJobs } ) {
 // a card; error state adds an extra line below for the message.
 function CollectionCard( { collection, job, onImport } ) {
 	const navigate = useNavigate();
+
+	const [ timeUntilRetry, setTimeUntilRetry ] = useState( null );
+
 	const status = job?.status ?? 'idle';
 	const processed = job?.processed ?? 0;
+	const retryAfter = job?.retryAfter ?? 0;
+
+	useEffect( () => {
+		if ( ! retryAfter ) {
+			setTimeUntilRetry( null );
+			return undefined;
+		}
+
+		setTimeUntilRetry( retryAfter );
+		const intervalId = window.setInterval( () => {
+			setTimeUntilRetry( ( t ) => {
+				if ( t === null || t <= 1 ) {
+					window.clearInterval( intervalId );
+					return null;
+				}
+				return t - 1;
+			} );
+		}, 1000 );
+		return () => window.clearInterval( intervalId );
+	}, [ retryAfter ] );
 
 	let statusLine = null;
 	switch ( status ) {
@@ -294,7 +318,23 @@ function CollectionCard( { collection, job, onImport } ) {
 			break;
 
 		case 'running':
-			if ( processed ) {
+			if ( timeUntilRetry !== null ) {
+				statusLine = processed
+					? sprintf(
+							/* translators: 1: rows processed so far, 2: seconds remaining before retry */
+							__(
+								'Imported %1$d rows. Waiting for Notion: %2$d s…',
+								'cortext'
+							),
+							processed,
+							timeUntilRetry
+					  )
+					: sprintf(
+							/* translators: %d: seconds remaining before retry */
+							__( 'Waiting for Notion: %d s…', 'cortext' ),
+							timeUntilRetry
+					  );
+			} else if ( processed ) {
 				statusLine = sprintf(
 					/* translators: %d: rows processed */
 					__( 'Importing %d rows…', 'cortext' ),

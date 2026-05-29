@@ -11,6 +11,12 @@ import apiFetch from '@wordpress/api-fetch';
 // means an infinite loop and we'd rather fail loud.
 const MAX_STALLED_TICKS = 2;
 
+// HTTP 429 (Too Many Requests): limit for Retry-After values. In practice,
+// Notion should never emit a value close to this.
+const MAX_RETRY_AFTER_SECS = 60;
+
+const sleep = ( ms ) => new Promise( ( r ) => setTimeout( r, ms ) );
+
 /**
  * GET /cortext/v1/notion/collections — every data source reachable
  * with the given key, as `{ id, title }`. Used to populate the Import
@@ -77,7 +83,24 @@ export async function runImport( key, dataSourceId, onProgress ) {
 	let state = started;
 	let stalledTicks = 0;
 	while ( state.has_more ) {
-		const next = await tickImport( key, state.job_id );
+		let next;
+		try {
+			next = await tickImport( key, state.job_id );
+		} catch ( err ) {
+			if ( err?.data?.status !== 429 ) {
+				throw err;
+			}
+
+			// HTTP 429 (Too Many Requests)
+			const wait = Math.min(
+				MAX_RETRY_AFTER_SECS,
+				Math.max( 1, Number( err.data.retry_after ) || 1 )
+			);
+			onProgress?.( { ...state, retryAfter: wait } );
+			await sleep( wait * 1000 );
+			onProgress?.( { ...state, retryAfter: 0 } );
+			continue;
+		}
 
 		// A tick that left `processed` unchanged while still claiming
 		// `has_more` is a stall signal: either the server didn't fetch
