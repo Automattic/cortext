@@ -85,6 +85,13 @@ final class DocumentDuplicator {
 		$skipped_fields = array();
 		if ( Document::is_collection_post( $source ) ) {
 			$skipped_fields = $this->clone_schema( (int) $source->ID, $new_id );
+			// Designate the duplicate a collection through its own mirror term.
+			// Cloning fields creates the term as a side effect of the
+			// `cortext_fields` write, but an empty source (or one whose only
+			// fields are skipped relations) clones no field meta, so create it
+			// explicitly. This also seeds the self-referencing data-view body
+			// and drops the copied source one.
+			( new TraitTaxonomy() )->ensure_mirror_term( $new_id );
 		}
 
 		$collection_id   = 0;
@@ -93,6 +100,7 @@ final class DocumentDuplicator {
 			$collection_id = (int) $collection_post->ID;
 			$result        = $this->copy_membership_and_values( $source, $new_id, $collection_id );
 			if ( $result instanceof WP_Error ) {
+				$this->delete_partial_duplicate( $new_id );
 				return $result;
 			}
 		}
@@ -266,6 +274,20 @@ final class DocumentDuplicator {
 		}
 
 		return true;
+	}
+
+	/**
+	 * Removes a partially-built duplicate after a failure: the cloned field
+	 * posts (if any) and the document itself, so a failed duplicate leaves
+	 * nothing behind.
+	 *
+	 * @param int $new_id Newly created duplicate document id.
+	 */
+	private function delete_partial_duplicate( int $new_id ): void {
+		foreach ( Document::collection_field_ids( $new_id ) as $field_id ) {
+			wp_delete_post( $field_id, true );
+		}
+		wp_delete_post( $new_id, true );
 	}
 
 	private function copy_icon( WP_Post $source, int $target_id ): void {
