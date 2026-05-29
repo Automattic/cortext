@@ -57,6 +57,11 @@ export default function useAutosave( options = {} ) {
 	const savingWaitersRef = useRef( [] );
 	const prevIsSavingRef = useRef( isSaving );
 	const savingTargetRef = useRef( null );
+	// Track the one beforeunload case worth interrupting: the document still
+	// has edits and the last save failed. Healthy saves still get a final flush
+	// and leave without a prompt.
+	const unsavedRiskRef = useRef( false );
+	unsavedRiskRef.current = isDirty && status === 'error';
 	// Show the failure snackbar once per failed-save streak. Background retries
 	// can cycle through saving and error repeatedly; the next successful save
 	// resets the latch.
@@ -313,8 +318,15 @@ export default function useAutosave( options = {} ) {
 		const onBlur = () => {
 			flushNow();
 		};
-		const onBeforeUnload = () => {
+		const onBeforeUnload = ( event ) => {
 			flushNow();
+			if ( unsavedRiskRef.current ) {
+				// Save is already failing, and the browser may unload before
+				// flushNow finishes. Ask it to show the native leave-site
+				// prompt so the user can stay put.
+				event.preventDefault();
+				event.returnValue = '';
+			}
 		};
 
 		document.addEventListener( 'visibilitychange', onVisibilityChange );
