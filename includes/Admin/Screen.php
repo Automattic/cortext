@@ -16,6 +16,7 @@ declare( strict_types=1 );
 namespace Cortext\Admin;
 
 use Cortext\PostType\Document;
+use Cortext\Runtime\Features;
 use Cortext\Theming\Preferences;
 
 final class Screen {
@@ -97,6 +98,7 @@ final class Screen {
 			'window.cortextSettings = ' . wp_json_encode(
 				array(
 					'adminUrl'        => admin_url(),
+					'features'        => ( new Features() )->to_client_settings(),
 					'menuSlug'        => self::MENU_SLUG,
 					'userDisplayName' => wp_get_current_user()->display_name,
 				)
