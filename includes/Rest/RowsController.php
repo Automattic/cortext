@@ -254,7 +254,8 @@ final class RowsController {
 				$where_sql,
 				$filter_sql['join'],
 				$request->get_param( 'sort' ),
-				$search
+				$search,
+				TraitTaxonomy::term_taxonomy_id_for_trait( $collection_id )
 			);
 			$query      = $scope->run( $query_args );
 
@@ -382,17 +383,17 @@ final class RowsController {
 		$include = (array) $request->get_param( 'include' );
 		if ( count( $include ) > 0 ) {
 			// The by-ID response is read as a Map<id, row>, not an ordered list.
-			// Keep the default menu_order / ID order so callers do not start
-			// depending on the order of the include array.
+			// Keep a stable ID order so callers do not start depending on the
+			// order of the include array.
 			$args['post__in'] = $include;
 		}
 
 		$sort = $request->get_param( 'sort' );
 		if ( ! is_array( $sort ) || empty( $sort['field'] ) ) {
-			$args['orderby'] = array(
-				'menu_order' => 'ASC',
-				'ID'         => 'ASC',
-			);
+			// Manual position lives in term_order, applied by
+			// RowsFilterQuery::apply_manual_order_clauses. ID order is the
+			// fallback when no collection term scope is available.
+			$args['orderby'] = array( 'ID' => 'ASC' );
 		} else {
 			$direction = ( $sort['direction'] ?? 'asc' ) === 'desc' ? 'DESC' : 'ASC';
 
@@ -400,10 +401,9 @@ final class RowsController {
 				$args['orderby'] = 'title';
 				$args['order']   = $direction;
 			} elseif ( 'manual' === $sort['field'] ) {
-				$args['orderby'] = array(
-					'menu_order' => 'ASC',
-					'ID'         => 'ASC',
-				);
+				// Manual position lives in term_order; the clause filter sets the
+				// ORDER BY. Keep ID as the no-scope fallback.
+				$args['orderby'] = array( 'ID' => 'ASC' );
 			} elseif ( 'created_at' === $sort['field'] ) {
 				$args['orderby'] = 'date';
 				$args['order']   = $direction;

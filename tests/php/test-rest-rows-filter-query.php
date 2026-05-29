@@ -345,7 +345,7 @@ final class Test_Rest_Rows_Filter_Query extends BaseTestCase {
 
 	public function test_search_order_is_a_no_op_when_search_is_empty(): void {
 		$query   = new RowsFilterQuery();
-		$clauses = array( 'orderby' => 'wp_posts.menu_order ASC' );
+		$clauses = array( 'orderby' => 'wp_posts.post_date ASC' );
 
 		$this->assertSame(
 			$clauses,
@@ -359,8 +359,11 @@ final class Test_Rest_Rows_Filter_Query extends BaseTestCase {
 
 	public function test_search_order_is_a_no_op_when_explicit_sort_is_present(): void {
 		$query   = new RowsFilterQuery();
-		$clauses = array( 'orderby' => 'wp_posts.menu_order ASC' );
-		$sort    = array( 'field' => 'title', 'direction' => 'asc' );
+		$clauses = array( 'orderby' => 'wp_posts.post_date ASC' );
+		$sort    = array(
+			'field'     => 'title',
+			'direction' => 'asc',
+		);
 
 		$this->assertSame(
 			$clauses,
@@ -370,14 +373,78 @@ final class Test_Rest_Rows_Filter_Query extends BaseTestCase {
 
 	public function test_search_order_prepends_exact_title_match_when_search_non_empty(): void {
 		$query   = new RowsFilterQuery();
-		$clauses = array( 'orderby' => 'wp_posts.menu_order ASC' );
+		$clauses = array(
+			'join'    => '',
+			'orderby' => 'wp_posts.post_date ASC',
+		);
 
 		$result = $query->apply_search_order_clauses( $clauses, null, '  Alpha  ' );
 
-		$this->assertStringContainsString( "CASE WHEN LOWER(", $result['orderby'] );
+		$this->assertStringContainsString( 'CASE WHEN LOWER(', $result['orderby'] );
 		$this->assertStringContainsString( ".post_title) = LOWER('Alpha')", $result['orderby'] );
-		$this->assertStringContainsString( "menu_order ASC", $result['orderby'] );
-		$this->assertStringContainsString( ".ID ASC", $result['orderby'] );
+		// Without a collection term scope, the tie-break falls back to ID order
+		// and no manual-order join is added.
+		$this->assertStringContainsString( '.ID ASC', $result['orderby'] );
+		$this->assertStringNotContainsString( 'cortext_order', $result['orderby'] );
+		$this->assertStringNotContainsString( 'cortext_order', (string) $result['join'] );
+	}
+
+	public function test_search_order_ties_on_manual_position_when_scoped(): void {
+		$query   = new RowsFilterQuery();
+		$clauses = array(
+			'join'    => '',
+			'orderby' => 'wp_posts.post_date ASC',
+		);
+
+		$result = $query->apply_search_order_clauses( $clauses, null, 'Alpha', 42 );
+
+		$this->assertStringContainsString( 'cortext_order.term_order ASC', $result['orderby'] );
+		$this->assertStringContainsString( 'cortext_order', (string) $result['join'] );
+		$this->assertStringContainsString( 'term_taxonomy_id', (string) $result['join'] );
+	}
+
+	public function test_manual_order_clause_orders_by_term_order_when_scoped(): void {
+		$query  = new RowsFilterQuery();
+		$result = $query->apply_manual_order_clauses(
+			array(
+				'join'    => '',
+				'orderby' => 'wp_posts.post_date ASC',
+			),
+			array(
+				'field'     => 'manual',
+				'direction' => 'asc',
+			),
+			42
+		);
+
+		$this->assertStringContainsString( 'cortext_order.term_order ASC', $result['orderby'] );
+		$this->assertStringContainsString( 'cortext_order', (string) $result['join'] );
+	}
+
+	public function test_manual_order_clause_is_a_no_op_for_field_sorts(): void {
+		$query   = new RowsFilterQuery();
+		$clauses = array(
+			'join'    => '',
+			'orderby' => 'wp_posts.post_date ASC',
+		);
+
+		$this->assertSame(
+			$clauses,
+			$query->apply_manual_order_clauses( $clauses, array( 'field' => 'field-7' ), 42 )
+		);
+	}
+
+	public function test_manual_order_clause_is_a_no_op_without_scope(): void {
+		$query   = new RowsFilterQuery();
+		$clauses = array(
+			'join'    => '',
+			'orderby' => 'wp_posts.post_date ASC',
+		);
+
+		$this->assertSame(
+			$clauses,
+			$query->apply_manual_order_clauses( $clauses, null, null )
+		);
 	}
 
 	private function create_collection_with_slug( string $title, string $slug ): int {
@@ -432,5 +499,4 @@ final class Test_Rest_Rows_Filter_Query extends BaseTestCase {
 		}
 		return 'alpha';
 	}
-
 }

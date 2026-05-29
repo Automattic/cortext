@@ -1,6 +1,10 @@
 <?php
 /**
- * Manual row order stored in post menu_order.
+ * Manual row order, scoped per collection.
+ *
+ * A row's position is stored in the `term_order` column of its `crtxt_trait`
+ * relationship, so the same row can hold an independent order in every
+ * collection it belongs to.
  *
  * @package Cortext
  */
@@ -60,9 +64,9 @@ final class RowsManualOrder {
 			);
 		}
 
-		$trait_term_id = $this->trait_term_id( $collection_id );
-		if ( is_wp_error( $trait_term_id ) ) {
-			return $trait_term_id;
+		$tt_id = $this->trait_tt_id( $collection_id );
+		if ( is_wp_error( $tt_id ) ) {
+			return $tt_id;
 		}
 
 		$row = $this->row_in_collection( $row_id, $collection_id );
@@ -91,8 +95,8 @@ final class RowsManualOrder {
 			return $after;
 		}
 
-		$before_order = $before instanceof WP_Post ? (int) $before->menu_order : null;
-		$after_order  = $after instanceof WP_Post ? (int) $after->menu_order : null;
+		$before_order = $before instanceof WP_Post ? TraitTaxonomy::member_order( $before->ID, $tt_id ) : null;
+		$after_order  = $after instanceof WP_Post ? TraitTaxonomy::member_order( $after->ID, $tt_id ) : null;
 
 		if ( null !== $before_order && null !== $after_order && $before_order <= $after_order ) {
 			return new WP_Error(
@@ -109,21 +113,12 @@ final class RowsManualOrder {
 			}
 			$reseeded = true;
 
-			$before = null === $before_id ? null : $this->row_in_collection( $before_id, $collection_id );
-			if ( is_wp_error( $before ) ) {
-				return $before;
-			}
-			$after = null === $after_id ? null : $this->row_in_collection( $after_id, $collection_id );
-			if ( is_wp_error( $after ) ) {
-				return $after;
-			}
-
-			$before_order = $before instanceof WP_Post ? (int) $before->menu_order : null;
-			$after_order  = $after instanceof WP_Post ? (int) $after->menu_order : null;
+			$before_order = null === $before_id ? null : TraitTaxonomy::member_order( $before_id, $tt_id );
+			$after_order  = null === $after_id ? null : TraitTaxonomy::member_order( $after_id, $tt_id );
 		}
 
 		$menu_order = $this->menu_order_between( $before_order, $after_order );
-		$updated    = $this->update_menu_order( $row->ID, $menu_order );
+		$updated    = $this->set_row_order( $row->ID, $tt_id, $menu_order );
 		if ( is_wp_error( $updated ) ) {
 			return $updated;
 		}
@@ -137,13 +132,18 @@ final class RowsManualOrder {
 	}
 
 	/**
-	 * Copies the current server order into menu_order.
+	 * Copies the current server order into the collection's term_order.
 	 *
 	 * @param int        $collection_id Collection post ID.
 	 * @param array|null $current_sort  Sort object from the current view, or null for default ordering.
 	 * @return bool|WP_Error
 	 */
 	public function seed_collection( int $collection_id, ?array $current_sort ): bool|WP_Error {
+		$tt_id = $this->trait_tt_id( $collection_id );
+		if ( is_wp_error( $tt_id ) ) {
+			return $tt_id;
+		}
+
 		$row_ids = $this->row_ids_for_sort( $collection_id, $current_sort );
 		if ( is_wp_error( $row_ids ) ) {
 			return $row_ids;
@@ -151,7 +151,7 @@ final class RowsManualOrder {
 
 		$order = self::ORDER_STEP;
 		foreach ( $row_ids as $row_id ) {
-			$updated = $this->update_menu_order( $row_id, $order );
+			$updated = $this->set_row_order( $row_id, $tt_id, $order );
 			if ( is_wp_error( $updated ) ) {
 				return $updated;
 			}
@@ -169,6 +169,11 @@ final class RowsManualOrder {
 	 * @return bool|WP_Error
 	 */
 	public function densify( int $collection_id ): bool|WP_Error {
+		$tt_id = $this->trait_tt_id( $collection_id );
+		if ( is_wp_error( $tt_id ) ) {
+			return $tt_id;
+		}
+
 		$row_ids = $this->row_ids_for_sort(
 			$collection_id,
 			array(
@@ -182,7 +187,7 @@ final class RowsManualOrder {
 
 		$order = self::ORDER_STEP;
 		foreach ( $row_ids as $row_id ) {
-			$updated = $this->update_menu_order( $row_id, $order );
+			$updated = $this->set_row_order( $row_id, $tt_id, $order );
 			if ( is_wp_error( $updated ) ) {
 				return $updated;
 			}
@@ -232,6 +237,35 @@ final class RowsManualOrder {
 		return $term_id;
 	}
 
+	/**
+	 * Resolves the collection's mirror term's `term_taxonomy_id`, which scopes
+	 * every manual-order read and write to this collection's membership.
+	 *
+	 * @param int $collection_id Collection post ID.
+	 * @return int|WP_Error
+	 */
+	private function trait_tt_id( int $collection_id ): int|WP_Error {
+		$collection = get_post( $collection_id );
+		if ( ! $collection instanceof WP_Post || ! Document::is_collection_post( $collection ) ) {
+			return new WP_Error(
+				'cortext_collection_not_found',
+				__( 'Collection not found.', 'cortext' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		$tt_id = TraitTaxonomy::term_taxonomy_id_for_trait( $collection_id );
+		if ( $tt_id < 1 ) {
+			return new WP_Error(
+				'cortext_collection_not_registered',
+				__( 'Collection mirror term is not registered.', 'cortext' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		return $tt_id;
+	}
+
 	private function row_in_collection( int $row_id, int $collection_id ): WP_Post|WP_Error {
 		$row = get_post( $row_id );
 		if (
@@ -249,37 +283,23 @@ final class RowsManualOrder {
 		return $row;
 	}
 
-	private function update_menu_order( int $row_id, int $menu_order ): bool|WP_Error {
-		if ( $this->is_wordbless_active() ) {
-			$updated = wp_update_post(
-				array(
-					'ID'         => $row_id,
-					'menu_order' => $menu_order,
-				),
-				true
-			);
-			return is_wp_error( $updated ) ? $updated : true;
-		}
-
-		global $wpdb;
-
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Direct menu_order write; avoids revision churn.
-		$updated = $wpdb->update(
-			$wpdb->posts,
-			array( 'menu_order' => $menu_order ),
-			array( 'ID' => $row_id ),
-			array( '%d' ),
-			array( '%d' )
-		);
-		if ( false === $updated ) {
+	/**
+	 * Writes one row's manual order for a collection into the `term_order`
+	 * column of its (row, trait term) relationship.
+	 *
+	 * @param int $row_id     Row post ID.
+	 * @param int $tt_id      Collection mirror term's term_taxonomy_id.
+	 * @param int $menu_order Order value to store.
+	 * @return bool|WP_Error
+	 */
+	private function set_row_order( int $row_id, int $tt_id, int $menu_order ): bool|WP_Error {
+		if ( ! TraitTaxonomy::set_member_order( $row_id, $tt_id, $menu_order ) ) {
 			return new WP_Error(
 				'cortext_reorder_update_failed',
 				__( 'Couldn\'t save the row order.', 'cortext' ),
 				array( 'status' => 500 )
 			);
 		}
-		clean_post_cache( $row_id );
-
 		return true;
 	}
 
@@ -295,6 +315,7 @@ final class RowsManualOrder {
 		if ( is_wp_error( $trait_term_id ) ) {
 			return $trait_term_id;
 		}
+		$order_tt_id = TraitTaxonomy::term_taxonomy_id_for_trait( $collection_id );
 
 		$row_query    = new RowsFilterQuery();
 		$field_schema = $row_query->field_schema_for( $collection_id );
@@ -303,7 +324,7 @@ final class RowsManualOrder {
 			return $validation;
 		}
 
-		$wordbless_ids = $this->wordbless_row_ids_for_sort( $trait_term_id, $sort, $field_schema );
+		$wordbless_ids = $this->wordbless_row_ids_for_sort( $trait_term_id, $order_tt_id, $sort, $field_schema );
 		if ( null !== $wordbless_ids ) {
 			return $wordbless_ids;
 		}
@@ -322,19 +343,11 @@ final class RowsManualOrder {
 			),
 		);
 
-		if ( ! is_array( $sort ) || empty( $sort['field'] ) ) {
-			$args['orderby'] = array(
-				'menu_order' => 'ASC',
-				'ID'         => 'ASC',
-			);
-		} else {
+		// Manual and default ordering come from term_order, applied by the scope's
+		// manual-order clause. Field/date/title sorts bring their own ORDER BY.
+		if ( is_array( $sort ) && ! empty( $sort['field'] ) ) {
 			$direction = ( $sort['direction'] ?? 'asc' ) === 'desc' ? 'DESC' : 'ASC';
-			if ( 'manual' === $sort['field'] ) {
-				$args['orderby'] = array(
-					'menu_order' => 'ASC',
-					'ID'         => 'ASC',
-				);
-			} elseif ( 'title' === $sort['field'] ) {
+			if ( 'title' === $sort['field'] ) {
 				$args['orderby'] = 'title';
 				$args['order']   = $direction;
 			} elseif ( 'created_at' === $sort['field'] ) {
@@ -343,13 +356,17 @@ final class RowsManualOrder {
 			} elseif ( 'modified_at' === $sort['field'] ) {
 				$args['orderby'] = 'modified';
 				$args['order']   = $direction;
+			} elseif ( 'manual' === $sort['field'] ) {
+				$args['orderby'] = array( 'ID' => 'ASC' );
 			} else {
 				$args['orderby'] = 'none';
 				$args['order']   = $direction;
 			}
+		} else {
+			$args['orderby'] = array( 'ID' => 'ASC' );
 		}
 
-		$scope = new RowsQueryScope( $row_query, $field_schema, '', '', $sort );
+		$scope = new RowsQueryScope( $row_query, $field_schema, '', '', $sort, '', $order_tt_id );
 		$query = $scope->run( $args );
 
 		return array_map(
@@ -363,11 +380,12 @@ final class RowsManualOrder {
 	 * fallback here so production keeps using WP_Query.
 	 *
 	 * @param int        $trait_term_id Mirror term id for the trait.
+	 * @param int        $order_tt_id   Mirror term's term_taxonomy_id for manual order.
 	 * @param array|null $sort          Sort object.
 	 * @param array      $field_schema  Field schema.
 	 * @return int[]|null
 	 */
-	private function wordbless_row_ids_for_sort( int $trait_term_id, ?array $sort, array $field_schema ): ?array {
+	private function wordbless_row_ids_for_sort( int $trait_term_id, int $order_tt_id, ?array $sort, array $field_schema ): ?array {
 		if ( ! $this->is_wordbless_active() ) {
 			return null;
 		}
@@ -387,9 +405,9 @@ final class RowsManualOrder {
 		$direction = is_array( $sort ) && ( $sort['direction'] ?? 'asc' ) === 'desc' ? -1 : 1;
 		usort(
 			$posts,
-			function ( $a, $b ) use ( $field, $direction, $field_schema ): int {
+			function ( $a, $b ) use ( $field, $direction, $field_schema, $order_tt_id ): int {
 				if ( '' === $field || 'manual' === $field ) {
-					$result = (int) $a->menu_order <=> (int) $b->menu_order;
+					$result = TraitTaxonomy::member_order( (int) $a->ID, $order_tt_id ) <=> TraitTaxonomy::member_order( (int) $b->ID, $order_tt_id );
 					if ( 0 === $result ) {
 						return (int) $a->ID <=> (int) $b->ID;
 					}

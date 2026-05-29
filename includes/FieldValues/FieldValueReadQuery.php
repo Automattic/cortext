@@ -117,7 +117,7 @@ final class FieldValueReadQuery {
 			'from'       => "{$wpdb->posts} AS p",
 			'where'      => $where,
 			'joins'      => $joins,
-			'orderby'    => 'p.menu_order ASC, p.ID ASC',
+			'orderby'    => $this->manual_orderby( $trait_term_id ),
 			'post_type'  => Document::POST_TYPE,
 			'uses_index' => false,
 		);
@@ -445,8 +445,10 @@ final class FieldValueReadQuery {
 	}
 
 	private function append_sort( array &$plan, mixed $sort, array $field_schema, int $collection_id, int &$alias_counter ): bool {
+		$trait_term_id = Relations::trait_term_id_for_collection( $collection_id );
+
 		if ( ! is_array( $sort ) || empty( $sort['field'] ) ) {
-			$plan['orderby'] = 'p.menu_order ASC, p.ID ASC';
+			$plan['orderby'] = $this->manual_orderby( $trait_term_id );
 			return true;
 		}
 
@@ -458,7 +460,7 @@ final class FieldValueReadQuery {
 			return true;
 		}
 		if ( 'manual' === $field_key ) {
-			$plan['orderby'] = 'p.menu_order ASC, p.ID ASC';
+			$plan['orderby'] = $this->manual_orderby( $trait_term_id );
 			return true;
 		}
 		if ( 'created_at' === $field_key ) {
@@ -517,6 +519,21 @@ final class FieldValueReadQuery {
 
 		$plan['uses_index'] = true;
 		return true;
+	}
+
+	/**
+	 * Manual order expression. A row's position is per collection, stored in the
+	 * `term_order` of its `crtxt_trait` relationship; `tr_doc` is the membership
+	 * join `build_plan` already adds for the collection's term, so its
+	 * `term_order` is this collection's order. Falls back to ID order when there
+	 * is no collection term scope (no `tr_doc` join in the plan).
+	 *
+	 * @param int $trait_term_id Collection mirror term id, or 0 when unscoped.
+	 */
+	private function manual_orderby( int $trait_term_id ): string {
+		return $trait_term_id > 0
+			? 'tr_doc.term_order ASC, p.ID ASC'
+			: 'p.ID ASC';
 	}
 
 	private function run_plan( array $plan, int $page, int $per_page ): ?array {

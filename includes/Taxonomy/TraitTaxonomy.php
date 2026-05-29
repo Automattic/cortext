@@ -46,6 +46,14 @@ final class TraitTaxonomy {
 
 	public const TAXONOMY = 'crtxt_trait';
 
+	/**
+	 * Manual order fallback for WorDBless test runs, which do not back
+	 * `wp_term_relationships`. Keyed by `"{object_id}:{term_taxonomy_id}"`.
+	 *
+	 * @var array<string,int>
+	 */
+	private static array $wordbless_order = array();
+
 	public function register(): void {
 		add_action( 'init', array( $this, 'register_taxonomy' ) );
 		// A document becomes a collection when its `cortext_fields` meta has
@@ -114,6 +122,20 @@ final class TraitTaxonomy {
 		$slug = self::term_slug_for_trait( $trait_id );
 		$term = get_term_by( 'slug', $slug, self::TAXONOMY );
 		return ( $term && ! is_wp_error( $term ) ) ? (int) $term->term_id : 0;
+	}
+
+	/**
+	 * Resolves the mirror term's `term_taxonomy_id` for a collection, or 0 when
+	 * none exists. Manual row order is stored per (row, term_taxonomy_id) in
+	 * `wp_term_relationships`, so order reads and writes key off this id, not the
+	 * term id.
+	 *
+	 * @param int $trait_id Trait document id.
+	 */
+	public static function term_taxonomy_id_for_trait( int $trait_id ): int {
+		$slug = self::term_slug_for_trait( $trait_id );
+		$term = get_term_by( 'slug', $slug, self::TAXONOMY );
+		return ( $term && ! is_wp_error( $term ) ) ? (int) $term->term_taxonomy_id : 0;
 	}
 
 	/**
@@ -243,9 +265,11 @@ final class TraitTaxonomy {
 	 * collection's manual order: a freshly created row should land after the
 	 * existing rows, not before them.
 	 *
-	 * Only acts on documents with `menu_order === 0` so it never overrides an
-	 * order written by the manual-reorder seed or a drag. A `crtxt_trait` term
-	 * marks the document as a collection member.
+	 * Order is scoped per (row, collection) and stored in the `term_order`
+	 * column of `wp_term_relationships`, so the same row can hold an independent
+	 * position in every collection it belongs to. Only acts when the gained
+	 * relationship still carries the default `term_order` of 0, so it never
+	 * overrides an order written by the manual-reorder seed or a drag.
 	 *
 	 * @param int    $object_id Document id that gained terms.
 	 * @param array  $terms     Terms passed to wp_set_object_terms (unused).
@@ -259,9 +283,9 @@ final class TraitTaxonomy {
 		if ( self::TAXONOMY !== $taxonomy ) {
 			return;
 		}
-		// Only act when the document actually gained a term it did not have
-		// before; re-saving the same membership must not reshuffle the order.
-		$added = array_diff( $tt_ids, $old_tt_ids );
+		// Only act on terms the document gained in this write; re-saving the same
+		// membership must not reshuffle the order.
+		$added = array_map( 'intval', array_diff( $tt_ids, $old_tt_ids ) );
 		if ( count( $added ) === 0 ) {
 			return;
 		}
@@ -269,38 +293,102 @@ final class TraitTaxonomy {
 		if ( ! $post instanceof WP_Post || Document::POST_TYPE !== $post->post_type ) {
 			return;
 		}
-		if ( 0 !== (int) $post->menu_order ) {
-			return;
+
+		foreach ( $added as $term_taxonomy_id ) {
+			// A freshly attached relationship starts at term_order 0; leave any
+			// non-zero position (seed or drag) untouched.
+			if ( 0 !== self::member_order( $object_id, $term_taxonomy_id ) ) {
+				continue;
+			}
+			$max_order = self::max_member_order( $term_taxonomy_id, $object_id );
+			self::set_member_order( $object_id, $term_taxonomy_id, $max_order + 100 );
 		}
-
-		$max_order = $this->max_member_menu_order( (int) reset( $added ), $object_id );
-
-		global $wpdb;
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Single menu_order write; avoids revision churn from wp_update_post.
-		$wpdb->update(
-			$wpdb->posts,
-			array( 'menu_order' => $max_order + 100 ),
-			array( 'ID' => $object_id )
-		);
-		clean_post_cache( $object_id );
 	}
 
 	/**
-	 * Highest `menu_order` among the documents already in a collection, found
-	 * through the shared trait term taxonomy id.
+	 * Reads a member's manual order within one collection, i.e. the `term_order`
+	 * of the (row, trait term) relationship. Returns 0 when the relationship has
+	 * no explicit order yet.
+	 *
+	 * @param int $object_id        Row document id.
+	 * @param int $term_taxonomy_id Collection mirror term's term_taxonomy_id.
+	 */
+	public static function member_order( int $object_id, int $term_taxonomy_id ): int {
+		if ( self::is_wordbless_active() ) {
+			return self::$wordbless_order[ "{$object_id}:{$term_taxonomy_id}" ] ?? 0;
+		}
+
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Single relationship read scoped by primary-key columns.
+		return (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT term_order FROM {$wpdb->term_relationships} WHERE object_id = %d AND term_taxonomy_id = %d",
+				$object_id,
+				$term_taxonomy_id
+			)
+		);
+	}
+
+	/**
+	 * Writes a member's manual order within one collection into the `term_order`
+	 * column of its (row, trait term) relationship.
+	 *
+	 * @param int $object_id        Row document id.
+	 * @param int $term_taxonomy_id Collection mirror term's term_taxonomy_id.
+	 * @param int $order            Order value to store.
+	 */
+	public static function set_member_order( int $object_id, int $term_taxonomy_id, int $order ): bool {
+		if ( self::is_wordbless_active() ) {
+			self::$wordbless_order[ "{$object_id}:{$term_taxonomy_id}" ] = $order;
+			return true;
+		}
+
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Single relationship write scoped by primary-key columns.
+		$updated = $wpdb->update(
+			$wpdb->term_relationships,
+			array( 'term_order' => $order ),
+			array(
+				'object_id'        => $object_id,
+				'term_taxonomy_id' => $term_taxonomy_id,
+			),
+			array( '%d' ),
+			array( '%d', '%d' )
+		);
+		return false !== $updated;
+	}
+
+	/**
+	 * Highest `term_order` among the rows already in a collection, found through
+	 * the collection's shared trait term taxonomy id.
 	 *
 	 * @param int $term_taxonomy_id Trait term taxonomy id.
 	 * @param int $exclude_post_id  Document to exclude (the one being added).
 	 */
-	private function max_member_menu_order( int $term_taxonomy_id, int $exclude_post_id ): int {
-		global $wpdb;
+	public static function max_member_order( int $term_taxonomy_id, int $exclude_post_id ): int {
+		if ( self::is_wordbless_active() ) {
+			$max = 0;
+			foreach ( self::$wordbless_order as $key => $order ) {
+				$parts = explode( ':', (string) $key );
+				if ( 2 !== count( $parts ) ) {
+					continue;
+				}
+				$object_id = (int) $parts[0];
+				$tt_id     = (int) $parts[1];
+				if ( $tt_id === $term_taxonomy_id && $object_id !== $exclude_post_id ) {
+					$max = max( $max, (int) $order );
+				}
+			}
+			return $max;
+		}
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- One aggregate read during insert; loading every member post would be far heavier.
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- One aggregate read during insert; loading every member relationship would be far heavier.
 		return (int) $wpdb->get_var(
 			$wpdb->prepare(
-				"SELECT COALESCE(MAX(p.menu_order), 0)
-				FROM {$wpdb->posts} p
-				INNER JOIN {$wpdb->term_relationships} tr ON tr.object_id = p.ID
+				"SELECT COALESCE(MAX(tr.term_order), 0)
+				FROM {$wpdb->term_relationships} tr
+				INNER JOIN {$wpdb->posts} p ON p.ID = tr.object_id
 				WHERE tr.term_taxonomy_id = %d
 				AND p.post_status IN ('draft', 'private', 'publish')
 				AND p.ID != %d",
@@ -308,5 +396,17 @@ final class TraitTaxonomy {
 				$exclude_post_id
 			)
 		);
+	}
+
+	/**
+	 * Clears the WorDBless manual-order fallback between test cases. No effect
+	 * outside WorDBless, where order lives in `wp_term_relationships`.
+	 */
+	public static function reset_wordbless_order(): void {
+		self::$wordbless_order = array();
+	}
+
+	private static function is_wordbless_active(): bool {
+		return defined( 'WP_REPAIRING' ) && WP_REPAIRING && class_exists( '\WorDBless\Posts' );
 	}
 }

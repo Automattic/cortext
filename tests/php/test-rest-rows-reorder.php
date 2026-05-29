@@ -35,6 +35,7 @@ final class Test_Rest_Rows_Reorder extends BaseTestCase {
 		( new Field() )->register_post_type();
 
 		$this->install_in_memory_term_store();
+		TraitTaxonomy::reset_wordbless_order();
 
 		$GLOBALS['wp_rest_server'] = new WP_REST_Server();
 		( new RowsController() )->register();
@@ -106,14 +107,6 @@ final class Test_Rest_Rows_Reorder extends BaseTestCase {
 		wp_set_current_user( $this->create_user( 'author' ) );
 		$fixture = $this->create_collection_fixture( 'seeded' );
 		$rows    = $this->create_ordered_rows( $fixture['collection_id'], 5 );
-		foreach ( $rows as $row_id ) {
-			wp_update_post(
-				array(
-					'ID'         => $row_id,
-					'menu_order' => 0,
-				)
-			);
-		}
 
 		$response = $this->reorder_row(
 			$rows[4],
@@ -133,7 +126,10 @@ final class Test_Rest_Rows_Reorder extends BaseTestCase {
 		$this->assertSame( '1', get_post_meta( $fixture['collection_id'], '_cortext_manual_seeded', true ) );
 		$this->assertSame(
 			array( 100, 200, 300, 400, 500 ),
-			array_map( array( $this, 'menu_order' ), $rows )
+			array_map(
+				fn( int $row_id ): int => $this->order_of( $fixture['collection_id'], $row_id ),
+				$rows
+			)
 		);
 	}
 
@@ -160,7 +156,10 @@ final class Test_Rest_Rows_Reorder extends BaseTestCase {
 		$this->assertSame( 150, $response->get_data()['menu_order'] );
 		$this->assertSame(
 			array( 100, 200, 150, 400, 500 ),
-			array_map( array( $this, 'menu_order' ), $rows )
+			array_map(
+				fn( int $row_id ): int => $this->order_of( $fixture['collection_id'], $row_id ),
+				$rows
+			)
 		);
 	}
 
@@ -185,7 +184,10 @@ final class Test_Rest_Rows_Reorder extends BaseTestCase {
 		$this->assertTrue( $response->get_data()['reseeded'] );
 		$this->assertSame(
 			array( 100, 200, 0 ),
-			array_map( array( $this, 'menu_order' ), $rows )
+			array_map(
+				fn( int $row_id ): int => $this->order_of( $fixture['collection_id'], $row_id ),
+				$rows
+			)
 		);
 	}
 
@@ -209,9 +211,55 @@ final class Test_Rest_Rows_Reorder extends BaseTestCase {
 
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertTrue( $response->get_data()['reseeded'] );
-		$this->assertSame( 150, $this->menu_order( $rows[2] ) );
-		$this->assertSame( 100, $this->menu_order( $rows[0] ) );
-		$this->assertSame( 200, $this->menu_order( $rows[1] ) );
+		$this->assertSame( 150, $this->order_of( $fixture['collection_id'], $rows[2] ) );
+		$this->assertSame( 100, $this->order_of( $fixture['collection_id'], $rows[0] ) );
+		$this->assertSame( 200, $this->order_of( $fixture['collection_id'], $rows[1] ) );
+	}
+
+	public function test_new_member_lands_after_existing_rows(): void {
+		$fixture       = $this->create_collection_fixture( 'append' );
+		$collection_id = $fixture['collection_id'];
+		$tt_id         = TraitTaxonomy::term_taxonomy_id_for_trait( $collection_id );
+
+		$existing = $this->create_ordered_rows( $collection_id, 2 );
+		$this->set_manual_orders( $collection_id, $existing, array( 100, 200 ) );
+
+		$new_row = $this->create_row_for( $collection_id, 'New Row' );
+		$trait   = new TraitTaxonomy();
+		$trait->append_new_member_to_order(
+			$new_row,
+			array( $tt_id ),
+			array( $tt_id ),
+			TraitTaxonomy::TAXONOMY,
+			false,
+			array()
+		);
+
+		$this->assertSame( 300, $this->order_of( $collection_id, $new_row ) );
+		$this->assertSame( 100, $this->order_of( $collection_id, $existing[0] ) );
+		$this->assertSame( 200, $this->order_of( $collection_id, $existing[1] ) );
+	}
+
+	public function test_new_member_keeps_existing_order_on_resave(): void {
+		$fixture       = $this->create_collection_fixture( 'resave' );
+		$collection_id = $fixture['collection_id'];
+		$tt_id         = TraitTaxonomy::term_taxonomy_id_for_trait( $collection_id );
+
+		$row = $this->create_row_for( $collection_id, 'Placed Row' );
+		TraitTaxonomy::set_member_order( $row, $tt_id, 250 );
+
+		$trait = new TraitTaxonomy();
+		$trait->append_new_member_to_order(
+			$row,
+			array( $tt_id ),
+			array( $tt_id ),
+			TraitTaxonomy::TAXONOMY,
+			false,
+			array()
+		);
+
+		// A non-zero position (a prior drag or seed) is left untouched.
+		$this->assertSame( 250, $this->order_of( $collection_id, $row ) );
 	}
 
 	private function reorder_row( int $row_id, array $params ): \WP_REST_Response {
@@ -284,7 +332,7 @@ final class Test_Rest_Rows_Reorder extends BaseTestCase {
 		string $title = 'Row',
 		string $date = '2026-01-01 00:00:00'
 	): int {
-		$id = (int) wp_insert_post(
+		$id      = (int) wp_insert_post(
 			array(
 				'post_type'     => Document::POST_TYPE,
 				'post_status'   => 'publish',
@@ -301,26 +349,30 @@ final class Test_Rest_Rows_Reorder extends BaseTestCase {
 	}
 
 	/**
-	 * Sets manual order values for a collection fixture.
+	 * Sets manual order values for a collection fixture, writing them into the
+	 * collection's per-row term_order the same way the reorder flow does.
 	 *
 	 * @param int   $collection_id Collection post ID.
 	 * @param int[] $row_ids       Row post IDs.
-	 * @param int[] $orders        Menu order values.
+	 * @param int[] $orders        Order values.
 	 */
 	private function set_manual_orders( int $collection_id, array $row_ids, array $orders ): void {
+		$tt_id = TraitTaxonomy::term_taxonomy_id_for_trait( $collection_id );
 		foreach ( $row_ids as $index => $row_id ) {
-			wp_update_post(
-				array(
-					'ID'         => $row_id,
-					'menu_order' => $orders[ $index ],
-				)
-			);
+			TraitTaxonomy::set_member_order( $row_id, $tt_id, $orders[ $index ] );
 		}
 		update_post_meta( $collection_id, '_cortext_manual_seeded', '1' );
 	}
 
-	private function menu_order( int $row_id ): int {
-		return (int) get_post( $row_id )->menu_order;
+	/**
+	 * Reads a row's manual order within a collection.
+	 *
+	 * @param int $collection_id Collection post ID.
+	 * @param int $row_id        Row post ID.
+	 */
+	private function order_of( int $collection_id, int $row_id ): int {
+		$tt_id = TraitTaxonomy::term_taxonomy_id_for_trait( $collection_id );
+		return TraitTaxonomy::member_order( $row_id, $tt_id );
 	}
 
 	private function create_user( string $role ): int {
