@@ -1,4 +1,5 @@
 import {
+	IMPORT_URI,
 	PUBLISHED_DOCUMENTS_URI,
 	parseIdFromUri,
 	parseSplatUri,
@@ -10,6 +11,7 @@ import {
 //   - `collection`: explicit `collection/<slug>-<id>` prefix. Collections
 //     are schema containers, not documents.
 //   - `published`: singleton splat for the Published documents screen.
+//   - `import`: singleton splat for the Import screen.
 //   - `document`: anything else with an id. Pages and rows both fall here;
 //     the resolver discovers the actual post type via the document
 //     locator endpoint.
@@ -20,6 +22,9 @@ export function parseTarget( splat ) {
 	}
 	if ( splat === PUBLISHED_DOCUMENTS_URI ) {
 		return { kind: 'published', tail: '' };
+	}
+	if ( splat === IMPORT_URI ) {
+		return { kind: 'import', tail: '' };
 	}
 	if ( ! splat ) {
 		return { kind: 'empty', tail: '' };
@@ -85,6 +90,8 @@ export function reducer( state, action ) {
 				active = { kind: 'empty' };
 			} else if ( target.kind === 'published' ) {
 				active = { kind: 'published' };
+			} else if ( target.kind === 'import' ) {
+				active = { kind: 'import' };
 			} else if ( target.kind === 'document' ) {
 				if ( target.id === null ) {
 					active = { kind: 'document-not-found' };
@@ -228,6 +235,8 @@ export function init( target ) {
 		active = { kind: 'empty' };
 	} else if ( target.kind === 'published' ) {
 		active = { kind: 'published' };
+	} else if ( target.kind === 'import' ) {
+		active = { kind: 'import' };
 	} else if ( target.kind === 'document' && target.id === null ) {
 		active = { kind: 'document-not-found' };
 	} else if ( target.kind === 'collection' && target.id === null ) {

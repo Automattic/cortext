@@ -1,0 +1,68 @@
+@use "@wordpress/base-styles/colors" as *;
+@use "@wordpress/base-styles/variables" as *;
+
+.cortext-import-pane {
+	box-sizing: border-box;
+	flex: 1 1 auto;
+	min-height: 0;
+	height: 100%;
+	// Padding stays inside the scroll box; together with `border-box`
+	// above, `height: 100%` matches the parent exactly and the bottom of
+	// the scroll content stays reachable.
+	padding: $grid-unit-30 $grid-unit-40 $grid-unit-40;
+	overflow: auto;
+
+	> * + * {
+		margin-block-start: 1rem;
+	}
+
+	&__form {
+		max-width: 480px;
+	}
+
+	&__section {
+		min-width: 0;
+
+		> h3 {
+			margin-block-end: $grid-unit-20;
+		}
+	}
+}
+
+.cortext-import-collections {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: $grid-unit-20;
+
+	&__card-row {
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-20;
+	}
+
+	&__card-title {
+		font-size: 16px;
+		font-weight: 500;
+	}
+
+	&__card-status {
+		flex: 1 1 auto;
+		min-width: 0;
+	}
+
+	&__card-action {
+		margin-inline-start: auto;
+	}
+
+	&__card-error {
+		display: block;
+		margin-block-start: $grid-unit-15;
+		color: $alert-red;
+		font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+		font-size: 12px;
+		word-break: break-word;
+	}
+}
