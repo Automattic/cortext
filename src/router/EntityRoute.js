@@ -326,28 +326,27 @@ export default function EntityRoute( { history } ) {
 			if ( response?.post && postType ) {
 				receiveEntityRecords( 'postType', postType, [ response.post ] );
 			}
-			if ( postType === POST_TYPE ) {
-				invalidateResolution( 'getEntityRecords', [
-					'postType',
-					POST_TYPE,
-					ACTIVE_PAGES_QUERY,
-				] );
-				invalidateResolution( 'getEntityRecords', [
-					'postType',
-					POST_TYPE,
-					TRASHED_PAGES_QUERY,
-				] );
-				notifyDocumentTrashChanged();
-			} else if ( postType ) {
-				invalidateResolution( 'getEntityRecords', [
-					'postType',
-					postType,
-				] );
-				notifyDocumentTrashChanged();
+			// Every document shares one post type, so a restore always re-enters
+			// the workspace tree and leaves the Trash list.
+			invalidateResolution( 'getEntityRecords', [
+				'postType',
+				POST_TYPE,
+				ACTIVE_PAGES_QUERY,
+			] );
+			invalidateResolution( 'getEntityRecords', [
+				'postType',
+				POST_TYPE,
+				TRASHED_PAGES_QUERY,
+			] );
+			notifyDocumentTrashChanged();
+			// A restored row lives inside a collection's data view rather than
+			// the tree, and can change rollups and relations elsewhere, so
+			// refresh any open collection views too.
+			if ( isRow ) {
 				notifyCollectionRowsChanged();
 			}
 		},
-		[ invalidateResolution, receiveEntityRecords ]
+		[ invalidateResolution, receiveEntityRecords, isRow ]
 	);
 
 	const editorRecentTarget =
