@@ -468,7 +468,7 @@ final class CollectionEntries {
 						$slug
 					)
 				),
-				'0.0.1'
+				'0.1.0'
 			);
 			return;
 		}
@@ -484,7 +484,7 @@ final class CollectionEntries {
 						self::MAX_CPT_LEN - strlen( self::CPT_PREFIX )
 					)
 				),
-				'0.0.1'
+				'0.1.0'
 			);
 			return;
 		}
