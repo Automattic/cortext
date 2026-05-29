@@ -66,6 +66,10 @@ final class Document {
 		// transient autosave that fires before the cleanup never persists.
 		add_filter( 'wp_insert_post_data', array( $this, 'strip_foreign_root_data_views' ), 10, 2 );
 		add_action( 'rest_api_init', array( $this, 'register_rest_fields' ) );
+		// `field-<id>` meta is registered on every `crtxt_document`, so a REST
+		// response would carry every collection's fields on every document.
+		// Trim it to the document's own collection before it goes out.
+		add_filter( 'rest_prepare_' . self::POST_TYPE, array( $this, 'limit_field_meta_to_collection' ), 10, 2 );
 	}
 
 	/**
@@ -89,6 +93,41 @@ final class Document {
 				),
 			)
 		);
+	}
+
+	/**
+	 * Trims `field-<id>` meta in the REST response to the document's own
+	 * collection. `field-<id>` is registered on every `crtxt_document`, so
+	 * without this trim the response carries every collection's fields on every
+	 * document. A row keeps its collection's fields; pages and collections keep
+	 * none, since field values belong to rows. Schema and identity meta stay.
+	 *
+	 * @param \WP_REST_Response $response Prepared response.
+	 * @param \WP_Post          $post     Document being prepared.
+	 * @return \WP_REST_Response
+	 */
+	public function limit_field_meta_to_collection( $response, $post ) {
+		$data = $response->get_data();
+		if ( ! is_array( $data ) || ! isset( $data['meta'] ) || ! is_array( $data['meta'] ) ) {
+			return $response;
+		}
+
+		$allowed    = array();
+		$trait_post = ( new Documents() )->find_trait_for_document( $post );
+		if ( $trait_post instanceof WP_Post ) {
+			foreach ( self::collection_field_ids( (int) $trait_post->ID ) as $field_id ) {
+				$allowed[ 'field-' . $field_id ] = true;
+			}
+		}
+
+		foreach ( array_keys( $data['meta'] ) as $key ) {
+			if ( is_string( $key ) && str_starts_with( $key, 'field-' ) && ! isset( $allowed[ $key ] ) ) {
+				unset( $data['meta'][ $key ] );
+			}
+		}
+
+		$response->set_data( $data );
+		return $response;
 	}
 
 	/**

@@ -15,6 +15,7 @@ use Cortext\PostType\Field;
 use Cortext\Taxonomy\TraitTaxonomy;
 use WorDBless\BaseTestCase;
 use WP_REST_Request;
+use WP_REST_Response;
 
 final class Test_Post_Type_Document extends BaseTestCase {
 
@@ -694,6 +695,55 @@ final class Test_Post_Type_Document extends BaseTestCase {
 		$result   = ( new Document() )->prepare_meta_updates( $prepared, $request );
 
 		$this->assertSame( $prepared, $result );
+	}
+
+	public function test_limit_field_meta_to_collection_keeps_only_the_rows_collection_fields(): void {
+		$collection_id = $this->create_collection();
+		$own_field_id  = (int) get_post_meta( $collection_id, 'cortext_fields', false )[0];
+		$foreign_field = $this->create_field( 'text' );
+
+		$row_id  = $this->create_document( array( 'post_title' => 'Row' ) );
+		$term_id = TraitTaxonomy::term_id_for_trait( $collection_id );
+		wp_set_object_terms( $row_id, array( $term_id ), TraitTaxonomy::TAXONOMY );
+
+		$response = new WP_REST_Response(
+			array(
+				'meta' => array(
+					'field-' . $own_field_id  => 'kept',
+					'field-' . $foreign_field => 'dropped',
+					'cortext_fields'          => array(),
+				),
+			)
+		);
+
+		$meta = ( new Document() )
+			->limit_field_meta_to_collection( $response, get_post( $row_id ) )
+			->get_data()['meta'];
+
+		$this->assertArrayHasKey( 'field-' . $own_field_id, $meta );
+		$this->assertArrayNotHasKey( 'field-' . $foreign_field, $meta );
+		$this->assertArrayHasKey( 'cortext_fields', $meta );
+	}
+
+	public function test_limit_field_meta_to_collection_drops_all_field_meta_on_a_page(): void {
+		$field_id = $this->create_field( 'text' );
+		$page_id  = $this->create_document( array( 'post_title' => 'Page' ) );
+
+		$response = new WP_REST_Response(
+			array(
+				'meta' => array(
+					'field-' . $field_id => 'x',
+					'cortext_fields'     => array(),
+				),
+			)
+		);
+
+		$meta = ( new Document() )
+			->limit_field_meta_to_collection( $response, get_post( $page_id ) )
+			->get_data()['meta'];
+
+		$this->assertArrayNotHasKey( 'field-' . $field_id, $meta );
+		$this->assertArrayHasKey( 'cortext_fields', $meta );
 	}
 
 	public function test_apply_trait_filters_adds_not_exists_tax_query_for_no_trait(): void {
