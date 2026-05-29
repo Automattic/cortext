@@ -33,9 +33,11 @@ writes `dist/cortext.zip`.
 ## Prepare a release-backed demo
 
 1. Follow the [release process](release.md).
-2. Run the `Prepare release` workflow with version `0.1.0` and dry run enabled.
+2. Run the `Prepare release` workflow with the release version and dry run
+   enabled.
 3. Check the workflow summary. The `Release ZIP` section should report version
-   `0.1.0`, required runtime files present, and source/dev paths absent.
+   metadata for that release, required runtime files present, and source/dev
+   paths absent.
 4. Run `Prepare release` again with dry run disabled when the draft GitHub
    Release is ready.
 5. Publish the draft release after reviewing the release notes and ZIP.
