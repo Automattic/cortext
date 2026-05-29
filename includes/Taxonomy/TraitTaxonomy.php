@@ -52,6 +52,10 @@ final class TraitTaxonomy {
 		add_action( 'updated_post_meta', array( $this, 'sync_term_on_meta_change' ), 10, 4 );
 		add_action( 'deleted_post_meta', array( $this, 'sync_term_on_meta_change' ), 10, 4 );
 		add_action( 'before_delete_post', array( $this, 'sync_term_on_delete' ), 10, 2 );
+		// When a document joins a collection (gains a trait term), append it to
+		// the end of that collection's manual order. Membership arrives with the
+		// term, so `set_object_terms` is the moment to assign the order.
+		add_action( 'set_object_terms', array( $this, 'append_new_member_to_order' ), 10, 6 );
 	}
 
 	public function register_taxonomy(): void {
@@ -132,8 +136,12 @@ final class TraitTaxonomy {
 	}
 
 	/**
-	 * Ensures the mirror term state matches the document's collection status.
-	 * Triggered whenever `cortext_fields` meta on a `crtxt_document` changes.
+	 * Keeps the mirror term in step when `cortext_fields` gains values. A
+	 * document that holds custom fields is a collection, so make sure its term
+	 * exists. Empty/missing `cortext_fields` is not a downgrade signal: a
+	 * collection with only the implicit title legitimately has no custom
+	 * fields, and its term is created on designation (see
+	 * `ensure_mirror_term`). Term removal happens only on permanent delete.
 	 *
 	 * @param int|array $meta_id    Meta id (or ids for delete).
 	 * @param int       $post_id    Post id whose meta changed.
@@ -149,22 +157,27 @@ final class TraitTaxonomy {
 		if ( get_post_type( $post_id ) !== Document::POST_TYPE ) {
 			return;
 		}
-		$this->ensure_mirror_term_state( $post_id );
+		$fields = get_post_meta( $post_id, 'cortext_fields', false );
+		if ( is_array( $fields ) && count( $fields ) > 0 ) {
+			$this->ensure_mirror_term( $post_id );
+		}
 	}
 
 	/**
-	 * Idempotently creates the mirror term when the document has the
-	 * `cortext_fields` meta. Never deletes here: meta can be wiped and
-	 * re-added in the same request (e.g. when reordering fields), and
-	 * `wp_delete_term` would cascade-delete all row→collection relationships.
-	 * Term cleanup happens in `sync_term_on_delete` (permanent delete only).
+	 * Idempotently designates a document a collection: sets the
+	 * `cortext_collection` marker (identity + query filter) and creates its
+	 * mirror term (what rows attach to). Safe to call repeatedly. Never deletes
+	 * here: a collection's marker and term must survive field edits and trash
+	 * so its rows stay attached; cleanup happens in `sync_term_on_delete`
+	 * (permanent delete only).
 	 *
 	 * @param int $document_id Document post id.
 	 */
-	public function ensure_mirror_term_state( int $document_id ): void {
-		if ( ! Document::is_collection( $document_id ) ) {
+	public function ensure_mirror_term( int $document_id ): void {
+		if ( get_post_type( $document_id ) !== Document::POST_TYPE ) {
 			return;
 		}
+		update_post_meta( $document_id, Document::COLLECTION_MARKER_META, '1' );
 		$slug = self::term_slug_for_trait( $document_id );
 		if ( get_term_by( 'slug', $slug, self::TAXONOMY ) ) {
 			return;
@@ -194,5 +207,77 @@ final class TraitTaxonomy {
 		if ( $term && ! is_wp_error( $term ) ) {
 			wp_delete_term( (int) $term->term_id, self::TAXONOMY );
 		}
+	}
+
+	/**
+	 * Appends a document that just joined a collection to the end of that
+	 * collection's manual order: a freshly created row should land after the
+	 * existing rows, not before them.
+	 *
+	 * Only acts on documents with `menu_order === 0` so it never overrides an
+	 * order written by the manual-reorder seed or a drag. A `crtxt_trait` term
+	 * marks the document as a collection member.
+	 *
+	 * @param int    $object_id Document id that gained terms.
+	 * @param array  $terms     Terms passed to wp_set_object_terms (unused).
+	 * @param array  $tt_ids    Term taxonomy ids now assigned.
+	 * @param string $taxonomy  Taxonomy the terms belong to.
+	 * @param bool   $append    Whether the terms were appended (unused).
+	 * @param array  $old_tt_ids Term taxonomy ids before the change.
+	 */
+	public function append_new_member_to_order( int $object_id, array $terms, array $tt_ids, string $taxonomy, bool $append, array $old_tt_ids ): void {
+		unset( $terms, $append );
+		if ( self::TAXONOMY !== $taxonomy ) {
+			return;
+		}
+		// Only act when the document actually gained a term it did not have
+		// before; re-saving the same membership must not reshuffle the order.
+		$added = array_diff( $tt_ids, $old_tt_ids );
+		if ( count( $added ) === 0 ) {
+			return;
+		}
+		$post = get_post( $object_id );
+		if ( ! $post instanceof WP_Post || Document::POST_TYPE !== $post->post_type ) {
+			return;
+		}
+		if ( 0 !== (int) $post->menu_order ) {
+			return;
+		}
+
+		$max_order = $this->max_member_menu_order( (int) reset( $added ), $object_id );
+
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Single menu_order write; avoids revision churn from wp_update_post.
+		$wpdb->update(
+			$wpdb->posts,
+			array( 'menu_order' => $max_order + 100 ),
+			array( 'ID' => $object_id )
+		);
+		clean_post_cache( $object_id );
+	}
+
+	/**
+	 * Highest `menu_order` among the documents already in a collection, found
+	 * through the shared trait term taxonomy id.
+	 *
+	 * @param int $term_taxonomy_id Trait term taxonomy id.
+	 * @param int $exclude_post_id  Document to exclude (the one being added).
+	 */
+	private function max_member_menu_order( int $term_taxonomy_id, int $exclude_post_id ): int {
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- One aggregate read during insert; loading every member post would be far heavier.
+		return (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COALESCE(MAX(p.menu_order), 0)
+				FROM {$wpdb->posts} p
+				INNER JOIN {$wpdb->term_relationships} tr ON tr.object_id = p.ID
+				WHERE tr.term_taxonomy_id = %d
+				AND p.post_status IN ('draft', 'private', 'publish')
+				AND p.ID != %d",
+				$term_taxonomy_id,
+				$exclude_post_id
+			)
+		);
 	}
 }

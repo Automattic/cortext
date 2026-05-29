@@ -61,9 +61,9 @@ final class Document {
 		// sync. WP REST writes the forward meta itself between these two hooks.
 		add_filter( 'rest_pre_insert_' . self::POST_TYPE, array( $this, 'prepare_meta_updates' ), 10, 2 );
 		add_action( 'rest_after_insert_' . self::POST_TYPE, array( $this, 'apply_meta_updates' ), 20, 3 );
-		// When a document is promoted to a collection (gains `cortext_fields`),
-		// seed its body with the locked `cortext/data-view` block so the
-		// canvas renders the table view.
+		// When a document is designated a collection (gains the
+		// `cortext_collection` marker), seed its body with the locked
+		// `cortext/data-view` block so the canvas renders the table view.
 		add_action( 'added_post_meta', array( $this, 'maybe_seed_data_view_block_on_meta' ), 10, 4 );
 		add_action( 'updated_post_meta', array( $this, 'maybe_seed_data_view_block_on_meta' ), 10, 4 );
 		// Defense in depth for a collection's body invariant. The block editor
@@ -78,6 +78,16 @@ final class Document {
 	 * (row-detail layout settings).
 	 */
 	public function register_collection_meta(): void {
+		register_post_meta(
+			self::POST_TYPE,
+			self::COLLECTION_MARKER_META,
+			array(
+				'type'              => 'string',
+				'single'            => true,
+				'show_in_rest'      => true,
+				'sanitize_callback' => 'sanitize_text_field',
+			)
+		);
 		register_post_meta(
 			self::POST_TYPE,
 			'cortext_fields',
@@ -188,7 +198,9 @@ final class Document {
 	 */
 	public function maybe_seed_data_view_block_on_meta( $meta_id, $post_id, $meta_key, $meta_value ): void {
 		unset( $meta_id, $meta_value );
-		if ( 'cortext_fields' !== (string) $meta_key ) {
+		// Seed on the collection marker, not on `cortext_fields`: an empty
+		// collection (no custom fields) still needs its owner data-view block.
+		if ( self::COLLECTION_MARKER_META !== (string) $meta_key ) {
 			return;
 		}
 		$post_id = (int) $post_id;
@@ -321,14 +333,27 @@ final class Document {
 	}
 
 	/**
-	 * Returns true when the given document has the `cortext_fields` meta
-	 * (i.e., it defines a schema and acts as a collection).
+	 * Meta marker that designates a document a collection. Distinct from
+	 * `cortext_fields` (the schema): a brand-new collection has only the
+	 * implicit title and zero custom fields, so the schema cannot be the
+	 * marker. Set alongside the mirror term when the collection is designated.
+	 */
+	public const COLLECTION_MARKER_META = 'cortext_collection';
+
+	/**
+	 * Returns true when the document is a collection.
+	 *
+	 * Identity lives in the `cortext_collection` marker rather than in
+	 * `cortext_fields`, so a collection with no custom fields still reads as a
+	 * collection. The marker is also what `cortext_collections` /
+	 * `cortext_no_collections` query filters key on, keeping the per-document
+	 * check and the list queries consistent. The mirror term (which rows
+	 * attach to) is created in lockstep with the marker.
 	 *
 	 * @param int $document_id Document post id.
 	 */
 	public static function is_collection( int $document_id ): bool {
-		$value = get_post_meta( $document_id, 'cortext_fields', false );
-		return is_array( $value ) && count( $value ) > 0;
+		return '1' === (string) get_post_meta( $document_id, self::COLLECTION_MARKER_META, true );
 	}
 
 	/**
@@ -373,6 +398,14 @@ final class Document {
 	 */
 	public function assign_trait_from_request( \WP_Post $post, \WP_REST_Request $request, bool $creating ): void {
 		unset( $creating ); // The caller may pass an update; assigning is idempotent either way.
+
+		// `cortext_collection` designates this document a collection: create its
+		// mirror term even with zero custom fields (a brand-new collection only
+		// has the implicit title). The term is the collection's identity.
+		if ( $request->get_param( 'cortext_collection' ) ) {
+			( new TraitTaxonomy() )->ensure_mirror_term( (int) $post->ID );
+		}
+
 		$trait_id = (int) $request->get_param( 'cortext_trait' );
 		if ( $trait_id < 1 ) {
 			return;
@@ -662,17 +695,19 @@ final class Document {
 		}
 		if ( null !== $collections && '' !== (string) $collections && '0' !== (string) $collections ) {
 			$meta_query[] = array(
-				'key'     => 'cortext_fields',
+				'key'     => self::COLLECTION_MARKER_META,
 				'compare' => 'EXISTS',
 			);
 		}
 		// `cortext_no_trait` only excludes rows; pages-only queries also need
 		// to exclude collections. The sidebar tree pulls collections from a
 		// dedicated query and merges them with pages, so any collection that
-		// also leaks into the pages query lands in the tree twice.
+		// also leaks into the pages query lands in the tree twice. Key on the
+		// collection marker (not `cortext_fields`) so an empty collection (no
+		// custom fields, only the title) is still treated as a collection.
 		if ( null !== $no_collections && '' !== (string) $no_collections && '0' !== (string) $no_collections ) {
 			$meta_query[] = array(
-				'key'     => 'cortext_fields',
+				'key'     => self::COLLECTION_MARKER_META,
 				'compare' => 'NOT EXISTS',
 			);
 		}

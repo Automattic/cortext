@@ -164,7 +164,7 @@ final class Test_Taxonomy_Trait_Taxonomy extends BaseTestCase {
 		// the term during that gap, or `wp_delete_term` would cascade and
 		// strip every row→collection relationship.
 		\WorDBless\PostMeta::init()->clear_all_meta_for_object( $collection_id );
-		$this->trait_taxonomy->ensure_mirror_term_state( $collection_id );
+		$this->trait_taxonomy->ensure_mirror_term( $collection_id );
 
 		$this->assertSame( $term_id, TraitTaxonomy::term_id_for_trait( $collection_id ) );
 	}
@@ -182,11 +182,11 @@ final class Test_Taxonomy_Trait_Taxonomy extends BaseTestCase {
 		$this->assertSame( 0, TraitTaxonomy::term_id_for_trait( $foreign_id ) );
 	}
 
-	public function test_ensure_mirror_term_state_does_not_recreate_an_existing_term(): void {
+	public function test_ensure_mirror_term_does_not_recreate_an_existing_term(): void {
 		$collection_id = $this->create_collection();
 		$first_term_id = TraitTaxonomy::term_id_for_trait( $collection_id );
 
-		$this->trait_taxonomy->ensure_mirror_term_state( $collection_id );
+		$this->trait_taxonomy->ensure_mirror_term( $collection_id );
 
 		$this->assertSame( $first_term_id, TraitTaxonomy::term_id_for_trait( $collection_id ) );
 	}

@@ -699,7 +699,7 @@ final class Test_Post_Type_Document extends BaseTestCase {
 		$this->assertArrayHasKey( 'meta_query', $args );
 		$this->assertArrayNotHasKey( 'tax_query', $args );
 		$clause = $args['meta_query'][0];
-		$this->assertSame( 'cortext_fields', $clause['key'] );
+		$this->assertSame( 'cortext_collection', $clause['key'] );
 		$this->assertSame( 'EXISTS', $clause['compare'] );
 	}
 
@@ -715,7 +715,7 @@ final class Test_Post_Type_Document extends BaseTestCase {
 
 		$this->assertArrayHasKey( 'meta_query', $args );
 		$clause = $args['meta_query'][0];
-		$this->assertSame( 'cortext_fields', $clause['key'] );
+		$this->assertSame( 'cortext_collection', $clause['key'] );
 		$this->assertSame( 'NOT EXISTS', $clause['compare'] );
 	}
 
@@ -729,7 +729,7 @@ final class Test_Post_Type_Document extends BaseTestCase {
 		$this->assertArrayHasKey( 'tax_query', $args );
 		$this->assertArrayHasKey( 'meta_query', $args );
 		$this->assertSame( 'NOT EXISTS', $args['tax_query'][0]['operator'] );
-		$this->assertSame( 'cortext_fields', $args['meta_query'][0]['key'] );
+		$this->assertSame( 'cortext_collection', $args['meta_query'][0]['key'] );
 		$this->assertSame( 'NOT EXISTS', $args['meta_query'][0]['compare'] );
 	}
 

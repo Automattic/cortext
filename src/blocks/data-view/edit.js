@@ -180,6 +180,10 @@ function CollectionCreator( { onCreate } ) {
 			const collection = await create( {
 				title: title.trim(),
 				status: 'private',
+				// Designate the new document a collection so its mirror term is
+				// created server-side, even though it starts with no custom
+				// fields (only the implicit title).
+				cortext_collection: true,
 				...( ownerPageId ? { parent: ownerPageId } : {} ),
 			} );
 			onCreate( collection );

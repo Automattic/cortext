@@ -177,6 +177,11 @@ final class Documents {
 		$document_id = (int) $result;
 
 		if ( array_key_exists( 'fields', $payload ) && is_array( $payload['fields'] ) ) {
+			// The `fields` key designates this document a collection, even when
+			// the schema is empty (a new collection has only the implicit
+			// title). Create the mirror term first so the document is a
+			// collection regardless of how many custom fields it carries.
+			( new TraitTaxonomy() )->ensure_mirror_term( $document_id );
 			delete_post_meta( $document_id, 'cortext_fields' );
 			foreach ( $payload['fields'] as $field_id ) {
 				$value = (string) $field_id;

@@ -1630,7 +1630,7 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 			)
 		);
 		// Force the trait mirror term so row writes can attach to it.
-		( new TraitTaxonomy() )->ensure_mirror_term_state( $id );
+		( new TraitTaxonomy() )->ensure_mirror_term( $id );
 		// Track that this document should be treated as a collection. The
 		// short-circuit filter is shared across instances; each fixture id
 		// is registered in a static array consulted at filter time.

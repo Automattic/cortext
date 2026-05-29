@@ -701,6 +701,40 @@ final class Test_Documents extends BaseTestCase {
 		$this->assertGreaterThan( 0, TraitTaxonomy::term_id_for_trait( $collection_id ) );
 	}
 
+	public function test_save_creates_empty_collection_when_fields_key_is_empty(): void {
+		// A brand-new collection has only the implicit title and zero custom
+		// fields. The `fields` key (even empty) designates it a collection, so
+		// it must still get a mirror term and read as a collection.
+		$collection_id = $this->documents->save(
+			array(
+				'title'  => 'Empty Books',
+				'fields' => array(),
+			)
+		);
+
+		$this->assertIsInt( $collection_id );
+		$this->assertTrue(
+			Document::is_collection( $collection_id ),
+			'A collection with no custom fields is still a collection.'
+		);
+		$this->assertGreaterThan(
+			0,
+			TraitTaxonomy::term_id_for_trait( $collection_id )
+		);
+		$this->assertSame(
+			array(),
+			Document::collection_field_ids( $collection_id )
+		);
+	}
+
+	public function test_save_without_fields_key_stays_a_page(): void {
+		$page_id = $this->documents->save( array( 'title' => 'Just a page' ) );
+
+		$this->assertIsInt( $page_id );
+		$this->assertFalse( Document::is_collection( $page_id ) );
+		$this->assertSame( 0, TraitTaxonomy::term_id_for_trait( $page_id ) );
+	}
+
 	public function test_save_creates_row_when_trait_passed(): void {
 		$collection_id = $this->create_collection( 'books', 'Books' );
 
