@@ -1108,13 +1108,27 @@ test.describe( 'Collection view block', () => {
 				.click();
 
 			await expect( canvas.getByText( 'Title' ) ).toBeVisible();
-			// The placeholder nests the new collection under the current
-			// page, so it never shows up at the top of the sidebar tree.
+
+			// The placeholder creates the collection document immediately and
+			// points the block at it, so capture its id from the block now.
+			// Cleanup then deletes it even if a later assertion fails.
+			fixture.createdCollectionId = await page.evaluate( () => {
+				const dataViewBlock = window.wp.data
+					.select( 'core/block-editor' )
+					.getBlocks()
+					.find( ( block ) => block.name === 'cortext/data-view' );
+				return dataViewBlock?.attributes?.collectionId ?? 0;
+			} );
+			expect( fixture.createdCollectionId ).toBeGreaterThan( 0 );
+
+			// The new collection is a full document nested under the current
+			// page, so it shows in the sidebar tree beneath its parent.
 			await expect(
-				page
-					.locator( '.cortext-sidebar' )
-					.getByText( 'Inline Books', { exact: true } )
-			).toBeHidden();
+				page.locator( '.cortext-sidebar' ).getByRole( 'button', {
+					name: 'Inline Books',
+					exact: true,
+				} )
+			).toBeVisible();
 
 			await page.evaluate( async () => {
 				await window.wp.data.dispatch( 'core/editor' ).savePost();
@@ -1123,15 +1137,14 @@ test.describe( 'Collection view block', () => {
 				() => ! window.wp.data.select( 'core/editor' ).isSavingPost()
 			);
 
-			let saved = await requestUtils.rest( {
+			const saved = await requestUtils.rest( {
 				path: `/wp/v2/crtxt_documents/${ fixture.page.id }`,
 				params: { context: 'edit' },
 			} );
 
-			fixture.createdCollectionId = parseCollectionIdFromContent(
-				saved.content.raw
+			expect( parseCollectionIdFromContent( saved.content.raw ) ).toBe(
+				fixture.createdCollectionId
 			);
-			expect( fixture.createdCollectionId ).toBeGreaterThan( 0 );
 
 			const createdCollection = await requestUtils.rest( {
 				path: `/wp/v2/crtxt_documents/${ fixture.createdCollectionId }`,
@@ -1162,12 +1175,12 @@ test.describe( 'Collection view block', () => {
 				() => ! window.wp.data.select( 'core/editor' ).isSavingPost()
 			);
 
-			saved = await requestUtils.rest( {
+			const switched = await requestUtils.rest( {
 				path: `/wp/v2/crtxt_documents/${ fixture.page.id }`,
 				params: { context: 'edit' },
 			} );
 
-			expect( saved.content.raw ).toContain(
+			expect( switched.content.raw ).toContain(
 				`"collectionId":${ fixture.collection.id }`
 			);
 		} finally {
@@ -2337,7 +2350,7 @@ test.describe( 'Collection view block', () => {
 
 			fixture.page = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: 'Empty row body prompt page',
 					status: 'private',
@@ -2413,7 +2426,7 @@ test.describe( 'Collection view block', () => {
 			);
 			await deleteIfCreated(
 				requestUtils,
-				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
@@ -2422,7 +2435,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
 			);
 		}
 	} );

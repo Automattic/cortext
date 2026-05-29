@@ -28,7 +28,7 @@ async function storedFavoriteKeys( requestUtils ) {
 		path: '/cortext/v1/favorites',
 	} );
 	return ( response?.favorites ?? [] ).map(
-		( favorite ) => `favorite:${ favorite.kind }:${ favorite.id }`
+		( favorite ) => `favorite:${ favorite.id }`
 	);
 }
 

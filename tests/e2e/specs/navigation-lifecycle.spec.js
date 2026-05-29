@@ -767,7 +767,7 @@ test.describe( 'Navigation lifecycle', () => {
 						route
 							.request()
 							.url()
-							.includes( `collection=${ fixture.collection.id }` )
+							.includes( `trait=${ fixture.collection.id }` )
 					) {
 						await rowsGate;
 					}
@@ -777,9 +777,7 @@ test.describe( 'Navigation lifecycle', () => {
 			const rowsRequest = page.waitForRequest(
 				( request ) =>
 					request.url().includes( '/wp-json/cortext/v1/rows' ) &&
-					request
-						.url()
-						.includes( `collection=${ fixture.collection.id }` )
+					request.url().includes( `trait=${ fixture.collection.id }` )
 			);
 
 			await resetViewTransitionProbe( page );

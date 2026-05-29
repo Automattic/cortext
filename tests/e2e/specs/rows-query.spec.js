@@ -30,7 +30,7 @@ function rowsPath( params ) {
 async function queryRows( requestUtils, collectionId, params = {} ) {
 	return requestUtils.rest( {
 		path: rowsPath( {
-			collection: collectionId,
+			trait: collectionId,
 			per_page: 100,
 			...params,
 		} ),
