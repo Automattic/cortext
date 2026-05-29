@@ -1,0 +1,36 @@
+{
+	"$schema": "https://playground.wordpress.net/blueprint-schema.json",
+	"meta": {
+		"title": "Cortext",
+		"description": "A WordPress knowledge base with nested pages, typed collections, views, relations, and public publishing.",
+		"author": "Automattic",
+		"categories": [ "knowledge base", "productivity" ]
+	},
+	"preferredVersions": {
+		"php": "8.1",
+		"wp": "6.9"
+	},
+	"features": {
+		"networking": true
+	},
+	"extraLibraries": [ "wp-cli" ],
+	"landingPage": "/wp-admin/admin.php?page=cortext",
+	"login": true,
+	"steps": [
+		{
+			"step": "installPlugin",
+			"pluginData": {
+				"resource": "url",
+				"url": "https://github.com/Automattic/cortext/releases/download/0.1.0/cortext.zip"
+			},
+			"options": {
+				"activate": true,
+				"targetFolderName": "cortext"
+			}
+		},
+		{
+			"step": "wp-cli",
+			"command": "wp cortext seed"
+		}
+	]
+}
