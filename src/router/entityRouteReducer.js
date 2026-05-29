@@ -11,8 +11,12 @@ import {
 //   - `document`:  anything else with an id. Collections, pages, and rows all
 //                  fall here; the resolver discovers each document's
 //                  capabilities via the locator endpoint.
-export function parseTarget( splat ) {
+export function parseTarget( splat, options = {} ) {
+	const { publicWebAffordances = true } = options;
 	if ( splat === PUBLISHED_DOCUMENTS_URI ) {
+		if ( ! publicWebAffordances ) {
+			return { kind: 'empty', tail: '' };
+		}
 		return { kind: 'published', tail: '' };
 	}
 	if ( splat === IMPORT_URI ) {

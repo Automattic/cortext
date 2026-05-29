@@ -41,6 +41,7 @@ import {
 	TRASHED_PAGES_QUERY,
 } from '../components/page-queries';
 import { firstDocumentInTree } from '../components/document-tree';
+import { isPublicWebAffordancesEnabled } from '../settings';
 import { withViewTransition } from '../hooks/viewTransition';
 import { useRecents } from '../hooks/useRecents';
 import { useWorkspaceHome } from '../hooks/useWorkspaceHome';
@@ -103,7 +104,11 @@ export default function EntityRoute( { history } ) {
 	const params = useParams( { strict: false } );
 	const navigate = useNavigate();
 	const splat = params._splat ?? '';
-	const target = useMemo( () => parseTarget( splat ), [ splat ] );
+	const publicWebAffordances = isPublicWebAffordancesEnabled();
+	const target = useMemo(
+		() => parseTarget( splat, { publicWebAffordances } ),
+		[ splat, publicWebAffordances ]
+	);
 	const { home, isResolving: isResolvingHome } = useWorkspaceHome();
 	const { touchRecent } = useRecents();
 	const { records: pages, isResolving: isResolvingPages } = useEntityRecords(
@@ -402,9 +407,11 @@ export default function EntityRoute( { history } ) {
 						) }
 					</WorkspacePane>
 				) }
-				<WorkspacePane active={ active.kind === 'published' }>
-					<PublishedDocumentsPane />
-				</WorkspacePane>
+				{ publicWebAffordances ? (
+					<WorkspacePane active={ active.kind === 'published' }>
+						<PublishedDocumentsPane />
+					</WorkspacePane>
+				) : null }
 				<WorkspacePane active={ active.kind === 'import' }>
 					<ImportPane />
 				</WorkspacePane>

@@ -31,6 +31,15 @@ describe( 'EntityRoute reducer', () => {
 			} );
 		} );
 
+		it( 'treats `published` as empty when public web affordances are off', () => {
+			expect(
+				parseTarget( 'published', { publicWebAffordances: false } )
+			).toEqual( {
+				kind: 'empty',
+				tail: '',
+			} );
+		} );
+
 		it( 'does not match `published/<anything>` (falls through to document)', () => {
 			expect( parseTarget( 'published/foo' ).kind ).toBe( 'document' );
 		} );
