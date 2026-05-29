@@ -225,9 +225,10 @@ export default function Sidebar( {
 		[ isRowSelected, navigate ]
 	);
 
+	// The tree is built from one non-row document list (pages and collections).
+	// The `collections` query feeds only the Favorites label lookup.
 	const { tree, expandedIds, toggleExpand, expand } = useSidebarTree( {
-		pages,
-		collections,
+		documents: pages,
 		selectedId,
 		selectedCollectionId,
 	} );
