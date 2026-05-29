@@ -1,7 +1,7 @@
 /**
- * Covers `src/components/cortextBlockCategory.js`. The module must run before
- * Cortext block files import, because Gutenberg drops unknown categories during
- * `registerBlockType`.
+ * Covers `src/components/collectionsBlockCategory.js`. The module must run
+ * before Cortext block files import, because Gutenberg drops unknown
+ * categories during `registerBlockType`.
  */
 
 jest.mock( '@wordpress/blocks', () => ( {
@@ -16,9 +16,9 @@ jest.mock( '@wordpress/i18n', () => ( {
 import { getCategories, setCategories } from '@wordpress/blocks';
 
 import {
-	CORTEXT_BLOCK_CATEGORY,
-	ensureCortextCategory,
-} from '../../src/components/cortextBlockCategory';
+	COLLECTIONS_BLOCK_CATEGORY,
+	ensureCollectionsCategory,
+} from '../../src/components/collectionsBlockCategory';
 
 beforeEach( () => {
 	getCategories.mockClear();
@@ -26,44 +26,44 @@ beforeEach( () => {
 	getCategories.mockReturnValue( [] );
 } );
 
-describe( 'CORTEXT_BLOCK_CATEGORY', () => {
+describe( 'COLLECTIONS_BLOCK_CATEGORY', () => {
 	it( 'uses the slug referenced by Cortext block.json files', () => {
-		expect( CORTEXT_BLOCK_CATEGORY.slug ).toBe( 'cortext' );
+		expect( COLLECTIONS_BLOCK_CATEGORY.slug ).toBe( 'collections' );
 	} );
 
 	it( 'carries a translated title', () => {
-		expect( CORTEXT_BLOCK_CATEGORY.title ).toBe( 'Cortext' );
+		expect( COLLECTIONS_BLOCK_CATEGORY.title ).toBe( 'Collections' );
 	} );
 } );
 
-describe( 'ensureCortextCategory', () => {
-	it( 'adds the Cortext category ahead of existing categories', () => {
+describe( 'ensureCollectionsCategory', () => {
+	it( 'adds the Collections category ahead of existing categories', () => {
 		getCategories.mockReturnValue( [
 			{ slug: 'text', title: 'Text' },
 			{ slug: 'media', title: 'Media' },
 		] );
 
-		ensureCortextCategory();
+		ensureCollectionsCategory();
 
 		expect( setCategories ).toHaveBeenCalledTimes( 1 );
 		expect( setCategories ).toHaveBeenCalledWith( [
-			CORTEXT_BLOCK_CATEGORY,
+			COLLECTIONS_BLOCK_CATEGORY,
 			{ slug: 'text', title: 'Text' },
 			{ slug: 'media', title: 'Media' },
 		] );
 	} );
 
-	it( 'does not add the Cortext category twice', () => {
+	it( 'does not add the Collections category twice', () => {
 		getCategories.mockReturnValueOnce( [
 			{ slug: 'text', title: 'Text' },
 		] );
-		ensureCortextCategory();
+		ensureCollectionsCategory();
 
 		getCategories.mockReturnValueOnce( [
-			CORTEXT_BLOCK_CATEGORY,
+			COLLECTIONS_BLOCK_CATEGORY,
 			{ slug: 'text', title: 'Text' },
 		] );
-		ensureCortextCategory();
+		ensureCollectionsCategory();
 
 		expect( setCategories ).toHaveBeenCalledTimes( 1 );
 	} );

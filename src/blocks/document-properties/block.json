@@ -3,7 +3,7 @@
 	"apiVersion": 3,
 	"name": "cortext/document-properties",
 	"title": "Document properties",
-	"category": "cortext",
+	"category": "collections",
 	"icon": "list-view",
 	"description": "Row properties shown between the title and body, using the collection schema and row meta.",
 	"textdomain": "cortext",
