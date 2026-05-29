@@ -5,16 +5,14 @@ cloning the repo or running `wp-env`.
 
 ## Demo blueprint
 
-`playground/blueprint.json` installs Cortext from the `0.1.0` GitHub Release:
+`playground/blueprint.json` installs Cortext from the latest GitHub Release:
 
 ```text
-https://github.com/Automattic/cortext/releases/download/0.1.0/cortext.zip
+https://github.com/Automattic/cortext/releases/latest/download/cortext.zip
 ```
 
-The URL is pinned to `0.1.0` because beta releases may be marked as prereleases,
-and GitHub's `latest` release URL does not reliably point at prerelease assets.
-After the `0.1.0` release includes `cortext.zip`, the README link can load that
-blueprint:
+After the first GitHub Release includes `cortext.zip`, the README link can load
+that blueprint:
 
 ```text
 https://playground.wordpress.net/?blueprint-url=https://raw.githubusercontent.com/Automattic/cortext/main/playground/blueprint.json

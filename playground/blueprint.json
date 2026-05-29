@@ -21,7 +21,7 @@
 			"step": "installPlugin",
 			"pluginData": {
 				"resource": "url",
-				"url": "https://github.com/Automattic/cortext/releases/download/0.1.0/cortext.zip"
+				"url": "https://github.com/Automattic/cortext/releases/latest/download/cortext.zip"
 			},
 			"options": {
 				"activate": true,
