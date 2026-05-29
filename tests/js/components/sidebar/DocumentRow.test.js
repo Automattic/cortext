@@ -27,13 +27,11 @@ jest.mock( '../../../../src/documents', () => {
 			trash: mockTrash,
 		} ),
 		useDocumentRecord: ( record ) => {
-			const hasFields =
-				Array.isArray( record?.meta?.cortext_fields ) &&
-				record.meta.cortext_fields.length > 0;
+			const definesTrait = record?.cortext_defines_trait === true;
 			const hasTrait =
 				Array.isArray( record?.crtxt_trait ) &&
 				record.crtxt_trait.length > 0;
-			const isRow = hasTrait && ! hasFields;
+			const isRow = hasTrait && ! definesTrait;
 			return {
 				title:
 					record?.title?.rendered?.trim() ||
@@ -44,7 +42,7 @@ jest.mock( '../../../../src/documents', () => {
 				} ),
 				features: {
 					hierarchy: ! isRow,
-					canCreateChild: ! isRow && ! hasFields,
+					canCreateChild: ! isRow && ! definesTrait,
 					hasOwnIcon: ! isRow,
 				},
 			};

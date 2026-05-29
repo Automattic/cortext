@@ -170,6 +170,7 @@ describe( 'SidebarRecents animation', () => {
 		mockRecordsById.set( 33, {
 			id: 33,
 			crtxt_trait: [],
+			cortext_defines_trait: true,
 			meta: { cortext_fields: [ 1 ] },
 		} );
 

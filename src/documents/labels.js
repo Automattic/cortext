@@ -1,6 +1,6 @@
 import { __, _n, sprintf } from '@wordpress/i18n';
 
-import { hasFields, hasTrait } from './capabilities';
+import { definesTrait, hasTrait } from './capabilities';
 
 /**
  * Localized noun for a record (used in aria labels, headers, etc.).
@@ -8,7 +8,7 @@ import { hasFields, hasTrait } from './capabilities';
  * @param {Object} record Document record.
  */
 export function documentLabel( record ) {
-	if ( hasFields( record ) ) {
+	if ( definesTrait( record ) ) {
 		return __( 'Collection', 'cortext' );
 	}
 	if ( hasTrait( record ) ) {
@@ -18,7 +18,7 @@ export function documentLabel( record ) {
 }
 
 export function restoreErrorMessage( record ) {
-	if ( hasFields( record ) ) {
+	if ( definesTrait( record ) ) {
 		return __( 'Could not restore collection.', 'cortext' );
 	}
 	if ( hasTrait( record ) ) {
@@ -28,7 +28,7 @@ export function restoreErrorMessage( record ) {
 }
 
 export function permanentDeleteErrorMessage( record ) {
-	if ( hasFields( record ) ) {
+	if ( definesTrait( record ) ) {
 		return __( 'Could not delete collection.', 'cortext' );
 	}
 	if ( hasTrait( record ) ) {
@@ -71,7 +71,7 @@ export function descendantLabel( counts ) {
  */
 export function permanentDeleteConfirmation( record, counts ) {
 	const total = counts?.total ?? 0;
-	if ( hasFields( record ) ) {
+	if ( definesTrait( record ) ) {
 		return {
 			title: __( 'Permanently delete collection?', 'cortext' ),
 			message: __(

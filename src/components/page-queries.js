@@ -3,9 +3,10 @@
  * rows all live in the unified `crtxt_document` post type. The workspace tree
  * shows everything that is not a row (pages and collections), so the active
  * query excludes only rows via `cortext_no_trait`. Page vs collection is
- * derived per-record from the `cortext_collection` marker, so one query feeds
- * the whole tree. The same query objects are passed to `invalidateResolution`
- * after lifecycle actions so the entries deep-match the resolved selector args.
+ * derived per-record from whether the document defines a trait
+ * (`cortext_defines_trait`), so one query feeds the whole tree. The same query
+ * objects are passed to `invalidateResolution` after lifecycle actions so the
+ * entries deep-match the resolved selector args.
  */
 
 export const POST_TYPE = 'crtxt_document';

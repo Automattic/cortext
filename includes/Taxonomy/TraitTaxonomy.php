@@ -1,16 +1,20 @@
 <?php
 /**
  * Registers the `crtxt_trait` taxonomy and keeps a mirror term for every
- * `crtxt_document` that defines a schema (has `cortext_fields` meta).
+ * `crtxt_document` that defines a trait (is a collection).
  *
  * Trait is a single concept stored in two complementary forms:
  *
- * - the document (`crtxt_document` post with `cortext_fields` meta) carries
- *   the rich definition: title, schema (fields list), body, icon, cover,
- *   settings;
+ * - the document (`crtxt_document` post) carries the rich definition: title,
+ *   schema (fields list), body, icon, cover, settings;
  * - the term (`crtxt_trait` taxonomy) carries the applied form: documents
  *   are tagged with this term to say "this document has the trait" (= is a
  *   row of the collection).
+ *
+ * The mirror term is also the collection's identity: a document is a
+ * collection precisely when its mirror term exists. Identity lives in the
+ * term, not in a meta marker, so an empty collection (only the implicit
+ * title, no custom fields) is still a collection.
  *
  * Both share the slug `crtxt_trait` because they refer to the same trait.
  * They do not collide because the document REST base is `crtxt_documents`
@@ -136,6 +140,32 @@ final class TraitTaxonomy {
 	}
 
 	/**
+	 * Document ids of every collection. Each `crtxt_trait` term is a
+	 * collection, so the term slugs (which are document ids) are the full list.
+	 * `get_terms` is cached by WP, so callers can treat this as a single query.
+	 *
+	 * @return int[]
+	 */
+	public static function all_trait_ids(): array {
+		$slugs = get_terms(
+			array(
+				'taxonomy'   => self::TAXONOMY,
+				'hide_empty' => false,
+				'fields'     => 'slugs',
+			)
+		);
+		if ( is_wp_error( $slugs ) ) {
+			return array();
+		}
+		return array_values(
+			array_filter(
+				array_map( array( self::class, 'trait_id_from_slug' ), $slugs ),
+				static fn( int $id ): bool => $id > 0
+			)
+		);
+	}
+
+	/**
 	 * Keeps the mirror term in step when `cortext_fields` gains values. A
 	 * document that holds custom fields is a collection, so make sure its term
 	 * exists. Empty/missing `cortext_fields` is not a downgrade signal: a
@@ -164,12 +194,12 @@ final class TraitTaxonomy {
 	}
 
 	/**
-	 * Idempotently designates a document a collection: sets the
-	 * `cortext_collection` marker (identity + query filter) and creates its
-	 * mirror term (what rows attach to). Safe to call repeatedly. Never deletes
-	 * here: a collection's marker and term must survive field edits and trash
-	 * so its rows stay attached; cleanup happens in `sync_term_on_delete`
-	 * (permanent delete only).
+	 * Idempotently designates a document a collection by creating its mirror
+	 * term (what rows attach to) and seeding its data-view block. The term is
+	 * the collection's identity. Safe to call repeatedly. Never deletes here: a
+	 * collection's term must survive field edits and trash so its rows stay
+	 * attached; cleanup happens in `sync_term_on_delete` (permanent delete
+	 * only).
 	 *
 	 * @param int $document_id Document post id.
 	 */
@@ -177,16 +207,15 @@ final class TraitTaxonomy {
 		if ( get_post_type( $document_id ) !== Document::POST_TYPE ) {
 			return;
 		}
-		update_post_meta( $document_id, Document::COLLECTION_MARKER_META, '1' );
 		$slug = self::term_slug_for_trait( $document_id );
-		if ( get_term_by( 'slug', $slug, self::TAXONOMY ) ) {
-			return;
+		if ( ! get_term_by( 'slug', $slug, self::TAXONOMY ) ) {
+			wp_insert_term(
+				self::term_name_for_trait( $document_id ),
+				self::TAXONOMY,
+				array( 'slug' => $slug )
+			);
 		}
-		wp_insert_term(
-			self::term_name_for_trait( $document_id ),
-			self::TAXONOMY,
-			array( 'slug' => $slug )
-		);
+		Document::seed_data_view_block( $document_id );
 	}
 
 	/**

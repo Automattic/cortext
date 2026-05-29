@@ -64,10 +64,26 @@ final class Test_Post_Type_Document extends BaseTestCase {
 		$this->assertFalse( Document::is_collection( $page_id ) );
 	}
 
-	public function test_is_collection_returns_true_when_cortext_fields_meta_present(): void {
+	public function test_is_collection_returns_true_when_mirror_term_exists(): void {
 		$collection_id = $this->create_collection();
 
+		// The mirror term is the collection's identity.
+		$this->assertGreaterThan( 0, TraitTaxonomy::term_id_for_trait( $collection_id ) );
 		$this->assertTrue( Document::is_collection( $collection_id ) );
+	}
+
+	public function test_is_collection_returns_true_for_empty_collection(): void {
+		// A collection with no custom fields still defines a trait: designate it
+		// directly and confirm the term-based identity holds.
+		$collection_id = $this->create_document();
+		( new TraitTaxonomy() )->ensure_mirror_term( $collection_id );
+
+		$this->assertGreaterThan( 0, TraitTaxonomy::term_id_for_trait( $collection_id ) );
+		$this->assertTrue(
+			Document::is_collection( $collection_id ),
+			'A collection with no custom fields is still a collection.'
+		);
+		$this->assertSame( array(), Document::collection_field_ids( $collection_id ) );
 	}
 
 	public function test_is_collection_post_requires_matching_post_type(): void {
@@ -120,6 +136,9 @@ final class Test_Post_Type_Document extends BaseTestCase {
 		$this->assertArrayHasKey( 'cortext_fields', $registered );
 		$this->assertFalse( $registered['cortext_fields']['single'] );
 		$this->assertSame( 'sanitize_text_field', $registered['cortext_fields']['sanitize_callback'] );
+		// Collection identity lives in the mirror term, not in a meta marker, so
+		// no `cortext_collection` meta is registered.
+		$this->assertArrayNotHasKey( 'cortext_collection', $registered );
 	}
 
 	public function test_register_collection_meta_registers_detail_layout(): void {
@@ -132,6 +151,22 @@ final class Test_Post_Type_Document extends BaseTestCase {
 			array( Document::class, 'sanitize_detail_layout' ),
 			$registered['cortext_detail_layout']['sanitize_callback']
 		);
+	}
+
+	public function test_defines_trait_rest_field_reports_collection_state(): void {
+		( new Document() )->register_rest_fields();
+
+		$fields = $GLOBALS['wp_rest_additional_fields'][ Document::POST_TYPE ] ?? array();
+		$this->assertArrayHasKey( 'cortext_defines_trait', $fields );
+		$this->assertTrue( $fields['cortext_defines_trait']['schema']['readonly'] );
+		$this->assertSame( 'boolean', $fields['cortext_defines_trait']['schema']['type'] );
+
+		$callback      = $fields['cortext_defines_trait']['get_callback'];
+		$collection_id = $this->create_collection();
+		$page_id       = $this->create_document();
+
+		$this->assertTrue( $callback( array( 'id' => $collection_id ) ) );
+		$this->assertFalse( $callback( array( 'id' => $page_id ) ) );
 	}
 
 	public function test_sanitize_detail_layout_accepts_array_with_visible_entries(): void {
@@ -318,11 +353,7 @@ final class Test_Post_Type_Document extends BaseTestCase {
 		$this->assertSame( '__return_false', $registered[ "field-{$rollup_field}" ]['auth_callback'] );
 	}
 
-	public function test_maybe_seed_data_view_block_inserts_block_on_first_cortext_fields_meta(): void {
-		$document = new Document();
-		add_action( 'added_post_meta', array( $document, 'maybe_seed_data_view_block_on_meta' ), 10, 4 );
-		add_action( 'updated_post_meta', array( $document, 'maybe_seed_data_view_block_on_meta' ), 10, 4 );
-
+	public function test_seed_data_view_block_inserts_owner_block(): void {
 		$collection_id = (int) wp_insert_post(
 			array(
 				'post_type'   => Document::POST_TYPE,
@@ -330,7 +361,8 @@ final class Test_Post_Type_Document extends BaseTestCase {
 				'post_title'  => 'Collection seed',
 			)
 		);
-		add_post_meta( $collection_id, 'cortext_fields', '99' );
+
+		Document::seed_data_view_block( $collection_id );
 
 		$collection = get_post( $collection_id );
 		$this->assertNotNull( $collection );
@@ -341,11 +373,7 @@ final class Test_Post_Type_Document extends BaseTestCase {
 		$this->assertStringContainsString( '"collectionId":' . $collection_id, wp_unslash( (string) $collection->post_content ) );
 	}
 
-	public function test_maybe_seed_data_view_block_is_idempotent(): void {
-		$document = new Document();
-		add_action( 'added_post_meta', array( $document, 'maybe_seed_data_view_block_on_meta' ), 10, 4 );
-		add_action( 'updated_post_meta', array( $document, 'maybe_seed_data_view_block_on_meta' ), 10, 4 );
-
+	public function test_seed_data_view_block_is_idempotent(): void {
 		// Pre-stamp the canvas with the canonical (unslashed) markup so the
 		// idempotency check matches even under WorDBless's storage quirk
 		// (`get_post` returns the slashed shape on read).
@@ -359,16 +387,16 @@ final class Test_Post_Type_Document extends BaseTestCase {
 		);
 		$markup = Document::build_data_view_block_markup( $collection_id );
 		// Directly inject the canonical markup into the in-memory store, then
-		// trigger the seed via add_post_meta.
-		$post                                                         = get_post( $collection_id );
-		$post->post_content                                           = $markup;
+		// seed again to prove it bails out.
+		$post                                                           = get_post( $collection_id );
+		$post->post_content                                             = $markup;
 		\WorDBless\Posts::init()->posts[ $collection_id ]->post_content = $markup;
 		wp_cache_set( $collection_id, $post, 'posts' );
 
-		// The function reads from get_post; with the canonical markup in place,
-		// has_owner_data_view_block() returns true and the seed should bail out.
+		// With the canonical markup in place, has_owner_data_view_block()
+		// returns true and the seed should bail out.
 		$this->assertTrue( Document::has_owner_data_view_block( $markup, $collection_id ) );
-		add_post_meta( $collection_id, 'cortext_fields', '7' );
+		Document::seed_data_view_block( $collection_id );
 
 		$collection = get_post( $collection_id );
 		$this->assertNotNull( $collection );
@@ -379,10 +407,7 @@ final class Test_Post_Type_Document extends BaseTestCase {
 		);
 	}
 
-	public function test_maybe_seed_data_view_block_ignores_non_document_posts(): void {
-		$document = new Document();
-		add_action( 'added_post_meta', array( $document, 'maybe_seed_data_view_block_on_meta' ), 10, 4 );
-
+	public function test_seed_data_view_block_ignores_non_document_posts(): void {
 		$foreign_id = (int) wp_insert_post(
 			array(
 				'post_type'   => 'post',
@@ -390,7 +415,8 @@ final class Test_Post_Type_Document extends BaseTestCase {
 				'post_title'  => 'Foreign',
 			)
 		);
-		add_post_meta( $foreign_id, 'cortext_fields', '1' );
+
+		Document::seed_data_view_block( $foreign_id );
 
 		$foreign = get_post( $foreign_id );
 		$this->assertNotNull( $foreign );
@@ -562,6 +588,25 @@ final class Test_Post_Type_Document extends BaseTestCase {
 		$this->assertTrue( has_term( $term_id, TraitTaxonomy::TAXONOMY, $row_id ) );
 	}
 
+	public function test_assign_trait_from_request_designates_collection_from_param(): void {
+		// `cortext_collection` is a transient creation param read straight off
+		// the request body; it is not registered as meta. Setting it designates
+		// the document a collection by creating its mirror term.
+		$document_id = $this->create_document();
+		$post        = get_post( $document_id );
+		$this->assertFalse( Document::is_collection( $document_id ) );
+
+		$request = new WP_REST_Request( 'POST', '/wp/v2/crtxt_documents' );
+		$request->set_param( 'cortext_collection', true );
+
+		( new Document() )->assign_trait_from_request( $post, $request, true );
+
+		$this->assertGreaterThan( 0, TraitTaxonomy::term_id_for_trait( $document_id ) );
+		$this->assertTrue( Document::is_collection( $document_id ) );
+		// The designation lives in the term, so no marker meta is written.
+		$this->assertSame( '', (string) get_post_meta( $document_id, 'cortext_collection', true ) );
+	}
+
 	public function test_assign_trait_from_request_skips_when_no_trait_param(): void {
 		$row_id  = (int) wp_insert_post(
 			array(
@@ -690,17 +735,29 @@ final class Test_Post_Type_Document extends BaseTestCase {
 		$this->assertSame( array(), $args );
 	}
 
-	public function test_apply_trait_filters_adds_meta_query_for_collections(): void {
+	public function test_apply_trait_filters_restricts_collections_to_trait_ids(): void {
+		$first  = $this->create_collection();
+		$second = $this->create_collection();
+
 		$request = new WP_REST_Request( 'GET', '/wp/v2/crtxt_documents' );
 		$request->set_param( 'cortext_collections', '1' );
 
 		$args = ( new Document() )->apply_trait_filters( array(), $request );
 
-		$this->assertArrayHasKey( 'meta_query', $args );
 		$this->assertArrayNotHasKey( 'tax_query', $args );
-		$clause = $args['meta_query'][0];
-		$this->assertSame( 'cortext_collection', $clause['key'] );
-		$this->assertSame( 'EXISTS', $clause['compare'] );
+		$this->assertArrayHasKey( 'post__in', $args );
+		$this->assertEqualsCanonicalizing( array( $first, $second ), $args['post__in'] );
+	}
+
+	public function test_apply_trait_filters_collections_forces_empty_result_when_none_exist(): void {
+		// With no collections, an empty `post__in` would match every document,
+		// so the filter has to stand in `array( 0 )` to return nothing.
+		$request = new WP_REST_Request( 'GET', '/wp/v2/crtxt_documents' );
+		$request->set_param( 'cortext_collections', '1' );
+
+		$args = ( new Document() )->apply_trait_filters( array(), $request );
+
+		$this->assertSame( array( 0 ), $args['post__in'] );
 	}
 
 	public function test_apply_trait_filters_excludes_collections_for_no_collections(): void {
@@ -708,18 +765,31 @@ final class Test_Post_Type_Document extends BaseTestCase {
 		// has to drop collections, otherwise a nested collection arrives from
 		// both the pages query and the collections query and the merged tree
 		// renders it twice.
+		$collection_id = $this->create_collection();
+
 		$request = new WP_REST_Request( 'GET', '/wp/v2/crtxt_documents' );
 		$request->set_param( 'cortext_no_collections', '1' );
 
 		$args = ( new Document() )->apply_trait_filters( array(), $request );
 
-		$this->assertArrayHasKey( 'meta_query', $args );
-		$clause = $args['meta_query'][0];
-		$this->assertSame( 'cortext_collection', $clause['key'] );
-		$this->assertSame( 'NOT EXISTS', $clause['compare'] );
+		$this->assertArrayHasKey( 'post__not_in', $args );
+		$this->assertContains( $collection_id, $args['post__not_in'] );
+	}
+
+	public function test_apply_trait_filters_no_collections_is_noop_when_none_exist(): void {
+		// Nothing to exclude means no `post__not_in`, so a pages-only query is
+		// not accidentally narrowed.
+		$request = new WP_REST_Request( 'GET', '/wp/v2/crtxt_documents' );
+		$request->set_param( 'cortext_no_collections', '1' );
+
+		$args = ( new Document() )->apply_trait_filters( array(), $request );
+
+		$this->assertArrayNotHasKey( 'post__not_in', $args );
 	}
 
 	public function test_apply_trait_filters_combines_no_trait_and_no_collections_for_pages(): void {
+		$collection_id = $this->create_collection();
+
 		$request = new WP_REST_Request( 'GET', '/wp/v2/crtxt_documents' );
 		$request->set_param( 'cortext_no_trait', '1' );
 		$request->set_param( 'cortext_no_collections', '1' );
@@ -727,10 +797,9 @@ final class Test_Post_Type_Document extends BaseTestCase {
 		$args = ( new Document() )->apply_trait_filters( array(), $request );
 
 		$this->assertArrayHasKey( 'tax_query', $args );
-		$this->assertArrayHasKey( 'meta_query', $args );
 		$this->assertSame( 'NOT EXISTS', $args['tax_query'][0]['operator'] );
-		$this->assertSame( 'cortext_collection', $args['meta_query'][0]['key'] );
-		$this->assertSame( 'NOT EXISTS', $args['meta_query'][0]['compare'] );
+		$this->assertArrayHasKey( 'post__not_in', $args );
+		$this->assertContains( $collection_id, $args['post__not_in'] );
 	}
 
 	public function test_apply_trait_filters_is_a_noop_when_no_params_set(): void {

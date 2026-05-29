@@ -22,6 +22,7 @@ import { getEditorSettings } from './initEditor';
 import useAutosave from '../hooks/useAutosave';
 import useDelayedFlag from '../hooks/useDelayedFlag';
 import { withViewTransition } from '../hooks/viewTransition';
+import { definesTrait } from '../documents/capabilities';
 import { POST_TYPE } from './page-queries';
 import { DocumentPropertiesProvider } from './DocumentPropertiesContext';
 import DocumentPublishToggle from './DocumentPublishToggle';
@@ -169,14 +170,12 @@ function CanvasEditor( {
 	onRestored,
 	recentTarget,
 } ) {
-	const hasFields =
-		Array.isArray( post?.meta?.cortext_fields ) &&
-		post.meta.cortext_fields.length > 0;
+	const isCollection = definesTrait( post );
 	const hasTrait =
 		Array.isArray( post?.crtxt_trait ) && post.crtxt_trait.length > 0;
 	const autosaveRecentTarget =
 		recentTarget ??
-		( post?.id && ! hasFields && ! hasTrait ? { id: post.id } : null );
+		( post?.id && ! isCollection && ! hasTrait ? { id: post.id } : null );
 	const { status, flushNow, isDirty, isSaving } = useAutosave( {
 		recentTarget: autosaveRecentTarget,
 	} );

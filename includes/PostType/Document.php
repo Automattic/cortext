@@ -61,33 +61,42 @@ final class Document {
 		// sync. WP REST writes the forward meta itself between these two hooks.
 		add_filter( 'rest_pre_insert_' . self::POST_TYPE, array( $this, 'prepare_meta_updates' ), 10, 2 );
 		add_action( 'rest_after_insert_' . self::POST_TYPE, array( $this, 'apply_meta_updates' ), 20, 3 );
-		// When a document is designated a collection (gains the
-		// `cortext_collection` marker), seed its body with the locked
-		// `cortext/data-view` block so the canvas renders the table view.
-		add_action( 'added_post_meta', array( $this, 'maybe_seed_data_view_block_on_meta' ), 10, 4 );
-		add_action( 'updated_post_meta', array( $this, 'maybe_seed_data_view_block_on_meta' ), 10, 4 );
 		// Defense in depth for a collection's body invariant. The block editor
 		// cleans foreign data-view blocks on render; this catch ensures a
 		// transient autosave that fires before the cleanup never persists.
 		add_filter( 'wp_insert_post_data', array( $this, 'strip_foreign_root_data_views' ), 10, 2 );
+		add_action( 'rest_api_init', array( $this, 'register_rest_fields' ) );
 	}
 
 	/**
-	 * Registers the meta keys that promote a `crtxt_document` to a collection:
+	 * Exposes whether a document defines a trait (is a collection) as a
+	 * read-only REST field, so the client can tell a collection apart from a
+	 * page without reading meta. Mirrors `is_collection`: a document defines a
+	 * trait when its mirror term exists.
+	 */
+	public function register_rest_fields(): void {
+		register_rest_field(
+			self::POST_TYPE,
+			'cortext_defines_trait',
+			array(
+				'get_callback' => static function ( array $record ): bool {
+					return in_array( (int) $record['id'], TraitTaxonomy::all_trait_ids(), true );
+				},
+				'schema'       => array(
+					'type'     => 'boolean',
+					'context'  => array( 'view', 'edit' ),
+					'readonly' => true,
+				),
+			)
+		);
+	}
+
+	/**
+	 * Registers the schema meta keys a `crtxt_document` collection can carry:
 	 * `cortext_fields` (schema definition) and `cortext_detail_layout`
 	 * (row-detail layout settings).
 	 */
 	public function register_collection_meta(): void {
-		register_post_meta(
-			self::POST_TYPE,
-			self::COLLECTION_MARKER_META,
-			array(
-				'type'              => 'string',
-				'single'            => true,
-				'show_in_rest'      => true,
-				'sanitize_callback' => 'sanitize_text_field',
-			)
-		);
 		register_post_meta(
 			self::POST_TYPE,
 			'cortext_fields',
@@ -188,33 +197,25 @@ final class Document {
 	}
 
 	/**
-	 * Seeds the canvas with a locked `cortext/data-view` block when a
-	 * document gains `cortext_fields` meta and does not yet carry the block.
+	 * Seeds a collection document's canvas with the locked `cortext/data-view`
+	 * block when it does not yet carry its owner block. Idempotent: a document
+	 * that already holds the block, or that is not a `crtxt_document`, is left
+	 * untouched. An empty collection (no custom fields) still gets its block.
 	 *
-	 * @param int    $meta_id    Meta row id (unused).
-	 * @param int    $post_id    Post id whose meta changed.
-	 * @param string $meta_key   Meta key that changed.
-	 * @param mixed  $meta_value New meta value (unused).
+	 * @param int $document_id Collection document id.
 	 */
-	public function maybe_seed_data_view_block_on_meta( $meta_id, $post_id, $meta_key, $meta_value ): void {
-		unset( $meta_id, $meta_value );
-		// Seed on the collection marker, not on `cortext_fields`: an empty
-		// collection (no custom fields) still needs its owner data-view block.
-		if ( self::COLLECTION_MARKER_META !== (string) $meta_key ) {
-			return;
-		}
-		$post_id = (int) $post_id;
-		$post    = get_post( $post_id );
+	public static function seed_data_view_block( int $document_id ): void {
+		$post = get_post( $document_id );
 		if ( ! $post instanceof WP_Post || self::POST_TYPE !== $post->post_type ) {
 			return;
 		}
-		if ( self::has_owner_data_view_block( (string) $post->post_content, $post_id ) ) {
+		if ( self::has_owner_data_view_block( (string) $post->post_content, $document_id ) ) {
 			return;
 		}
 		wp_update_post(
 			array(
-				'ID'           => $post_id,
-				'post_content' => $post->post_content . self::build_data_view_block_markup( $post_id ),
+				'ID'           => $document_id,
+				'post_content' => $post->post_content . self::build_data_view_block_markup( $document_id ),
 			)
 		);
 	}
@@ -333,27 +334,17 @@ final class Document {
 	}
 
 	/**
-	 * Meta marker that designates a document a collection. Distinct from
-	 * `cortext_fields` (the schema): a brand-new collection has only the
-	 * implicit title and zero custom fields, so the schema cannot be the
-	 * marker. Set alongside the mirror term when the collection is designated.
-	 */
-	public const COLLECTION_MARKER_META = 'cortext_collection';
-
-	/**
 	 * Returns true when the document is a collection.
 	 *
-	 * Identity lives in the `cortext_collection` marker rather than in
-	 * `cortext_fields`, so a collection with no custom fields still reads as a
-	 * collection. The marker is also what `cortext_collections` /
-	 * `cortext_no_collections` query filters key on, keeping the per-document
-	 * check and the list queries consistent. The mirror term (which rows
-	 * attach to) is created in lockstep with the marker.
+	 * A document is a collection when it defines a trait, that is when its
+	 * mirror term (slug = document id) exists. Identity lives in the term, not
+	 * in a meta marker, so a collection with no custom fields still reads as a
+	 * collection. `term_id_for_trait` resolves the term.
 	 *
 	 * @param int $document_id Document post id.
 	 */
 	public static function is_collection( int $document_id ): bool {
-		return '1' === (string) get_post_meta( $document_id, self::COLLECTION_MARKER_META, true );
+		return TraitTaxonomy::term_id_for_trait( $document_id ) > 0;
 	}
 
 	/**
@@ -674,8 +665,7 @@ final class Document {
 		$collections    = $request->get_param( 'cortext_collections' );
 		$no_collections = $request->get_param( 'cortext_no_collections' );
 
-		$tax_query  = $args['tax_query'] ?? array();
-		$meta_query = $args['meta_query'] ?? array();
+		$tax_query = $args['tax_query'] ?? array();
 
 		if ( null !== $no_trait && '' !== (string) $no_trait && '0' !== (string) $no_trait ) {
 			$tax_query[] = array(
@@ -694,29 +684,29 @@ final class Document {
 			}
 		}
 		if ( null !== $collections && '' !== (string) $collections && '0' !== (string) $collections ) {
-			$meta_query[] = array(
-				'key'     => self::COLLECTION_MARKER_META,
-				'compare' => 'EXISTS',
-			);
+			// A document is a collection when its mirror term exists, so the
+			// set of collection ids is the trait term slugs. Restrict to them
+			// by id. An empty `post__in` in WP_Query matches everything, so
+			// stand in `array( 0 )` when there are no collections to force an
+			// empty result.
+			$ids              = TraitTaxonomy::all_trait_ids();
+			$args['post__in'] = array() === $ids ? array( 0 ) : $ids;
 		}
 		// `cortext_no_trait` only excludes rows; pages-only queries also need
 		// to exclude collections. The sidebar tree pulls collections from a
 		// dedicated query and merges them with pages, so any collection that
-		// also leaks into the pages query lands in the tree twice. Key on the
-		// collection marker (not `cortext_fields`) so an empty collection (no
-		// custom fields, only the title) is still treated as a collection.
+		// also leaks into the pages query lands in the tree twice. A collection
+		// is identified by its mirror term, so an empty collection (no custom
+		// fields, only the title) is still excluded here.
 		if ( null !== $no_collections && '' !== (string) $no_collections && '0' !== (string) $no_collections ) {
-			$meta_query[] = array(
-				'key'     => self::COLLECTION_MARKER_META,
-				'compare' => 'NOT EXISTS',
-			);
+			$ids = TraitTaxonomy::all_trait_ids();
+			if ( array() !== $ids ) {
+				$args['post__not_in'] = array_merge( $args['post__not_in'] ?? array(), $ids );
+			}
 		}
 
 		if ( count( $tax_query ) > 0 ) {
 			$args['tax_query'] = $tax_query; // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
-		}
-		if ( count( $meta_query ) > 0 ) {
-			$args['meta_query'] = $meta_query; // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 		}
 		return $args;
 	}

@@ -62,6 +62,7 @@ import {
 	TRASHED_PAGES_QUERY,
 } from './page-queries';
 import { DOCUMENT_POST_TYPE, FULL_PAGE_COLLECTION_QUERY } from '../collections';
+import { definesTrait } from '../documents/capabilities';
 import { unlock } from '../lock-unlock';
 import { notifyDocumentTrashChanged } from '../hooks/documentTrashInvalidation';
 import { useFavorites } from '../hooks/useFavorites';
@@ -718,9 +719,7 @@ export default function DocumentInspectorSidebar( { postId, postType } ) {
 		postType,
 		postId || 0
 	);
-	const hasFields =
-		Array.isArray( currentRecord?.meta?.cortext_fields ) &&
-		currentRecord.meta.cortext_fields.length > 0;
+	const isCollection = definesTrait( currentRecord );
 	const hasTrait =
 		Array.isArray( currentRecord?.crtxt_trait ) &&
 		currentRecord.crtxt_trait.length > 0;
@@ -734,7 +733,7 @@ export default function DocumentInspectorSidebar( { postId, postType } ) {
 	const { record: ownedCollection } = useEntityRecord(
 		'postType',
 		'crtxt_document',
-		hasFields ? postId : 0
+		isCollection ? postId : 0
 	);
 	const rowCollectionTitle = (
 		rowCollection?.title?.rendered ||
@@ -747,7 +746,7 @@ export default function DocumentInspectorSidebar( { postId, postType } ) {
 		''
 	).trim();
 	let documentTabLabel;
-	if ( hasFields ) {
+	if ( isCollection ) {
 		documentTabLabel =
 			ownedCollectionTitle || __( 'Collection', 'cortext' );
 	} else if ( hasTrait ) {
@@ -834,14 +833,14 @@ export default function DocumentInspectorSidebar( { postId, postType } ) {
 				tabs={ tabs }
 			>
 				<InspectorFrame isTrashed={ isTrashed }>
-					{ hasFields && (
+					{ isCollection && (
 						<CollectionInspectorContent
 							postId={ postId }
 							postType={ postType }
 						/>
 					) }
-					{ ! hasFields && hasTrait && <RowInspectorContent /> }
-					{ ! hasFields && ! hasTrait && (
+					{ ! isCollection && hasTrait && <RowInspectorContent /> }
+					{ ! isCollection && ! hasTrait && (
 						<DocumentInspectorContent postId={ postId } />
 					) }
 				</InspectorFrame>

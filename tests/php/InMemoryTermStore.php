@@ -225,6 +225,9 @@ trait InMemoryTermStore {
 		if ( 'tt_ids' === $fields ) {
 			return array_map( static fn( array $term ): int => (int) $term['term_taxonomy_id'], $matches );
 		}
+		if ( 'slugs' === $fields ) {
+			return array_map( static fn( array $term ): string => (string) $term['slug'], $matches );
+		}
 		if ( 'count' === $fields ) {
 			return array( count( $matches ) );
 		}

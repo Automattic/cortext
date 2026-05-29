@@ -17,7 +17,7 @@ import useDelayedFlag, {
 	SKELETON_MIN_VISIBLE_MS,
 } from '../hooks/useDelayedFlag';
 import { useDocumentActions, useDocumentRecord } from '../documents';
-import { hasFields, hasTrait } from '../documents/capabilities';
+import { definesTrait, hasTrait } from '../documents/capabilities';
 
 const EMPTY_TRASHED_DOCUMENTS_STATE = {
 	documents: [],
@@ -74,7 +74,7 @@ export function computeSidebarTrashRoots( trashedDocuments = [] ) {
 		while ( stack.length ) {
 			const node = stack.pop();
 			counts.total++;
-			if ( hasFields( node ) ) {
+			if ( definesTrait( node ) ) {
 				counts.collections++;
 			} else if ( ! hasTrait( node ) ) {
 				counts.pages++;

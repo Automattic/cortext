@@ -268,6 +268,9 @@ function makeCollection( overrides = {} ) {
 		title: { rendered: 'Tasks', raw: 'Tasks' },
 		parent: 0,
 		crtxt_trait: [],
+		// A collection's identity is the trait it defines, surfaced by the
+		// `cortext_defines_trait` REST field.
+		cortext_defines_trait: true,
 		meta: {
 			cortext_document_icon: '',
 			_cortext_trashed_by_parent: 0,

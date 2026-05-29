@@ -28,7 +28,7 @@ import {
 	PUBLISHED_COLLECTIONS_QUERY,
 } from '../collections';
 import { computeDocumentUri } from '../router/useResolveEntity';
-import { hasFields } from '../documents/capabilities';
+import { definesTrait } from '../documents/capabilities';
 import { documentLabel } from '../documents/labels';
 
 const DEFAULT_LAYOUTS = { table: { density: 'compact' }, grid: {}, list: {} };
@@ -175,7 +175,9 @@ export default function PublishedDocumentsPane() {
 				],
 				filterBy: { operators: [ 'is', 'isAny' ] },
 				getValue: ( { item } ) =>
-					hasFields( item.source ) ? FILTER_COLLECTION : FILTER_PAGE,
+					definesTrait( item.source )
+						? FILTER_COLLECTION
+						: FILTER_PAGE,
 				render: ( { item } ) => documentLabel( item.source ),
 			},
 			{

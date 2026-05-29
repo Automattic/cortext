@@ -1,7 +1,7 @@
 import { Icon, customPostType, listItem, table } from '@wordpress/icons';
 
 import DocumentIcon from '../components/DocumentIcon';
-import { hasFields, hasTrait } from './capabilities';
+import { definesTrait, hasTrait } from './capabilities';
 
 /**
  * Sidebar icon for a document record. Pages and collections opt into the
@@ -33,7 +33,7 @@ export function listIconForRecord( record, size = 16 ) {
 	if ( icon ) {
 		return <DocumentIcon icon={ icon } size={ size } />;
 	}
-	if ( hasFields( record ) ) {
+	if ( definesTrait( record ) ) {
 		return <Icon icon={ table } size={ size } />;
 	}
 	if ( hasTrait( record ) ) {
