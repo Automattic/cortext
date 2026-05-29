@@ -1,6 +1,6 @@
 # Cortext Playground Gallery
 
-These files are the Cortext side of a future `WordPress/blueprints` gallery PR.
+These files are the Cortext side of a `WordPress/blueprints` gallery PR.
 
 ## Prepare the gallery PR
 
