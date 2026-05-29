@@ -56,6 +56,10 @@ export default function useAutosave( options = {} ) {
 	const savingWaitersRef = useRef( [] );
 	const prevIsSavingRef = useRef( isSaving );
 	const savingTargetRef = useRef( null );
+	// Show the failure snackbar once per failed-save streak. Background retries
+	// can cycle through saving and error repeatedly; the next successful save
+	// resets the latch.
+	const errorNoticeShownRef = useRef( false );
 
 	const stateRef = useRef( {
 		isDirty,
@@ -239,19 +243,28 @@ export default function useAutosave( options = {} ) {
 		} else if ( didFail ) {
 			savingTargetRef.current = null;
 			setStatus( 'error' );
-			// The toolbar no longer carries a save status, so a failed
-			// autosave needs its own way of reaching the user. Snackbar
-			// is dismissable and stays out of the way when things work.
-			createErrorNotice( __( 'Failed to save changes.', 'cortext' ), {
-				id: AUTOSAVE_ERROR_NOTICE_ID,
-				type: 'snackbar',
-			} );
+			// Successful autosaves stay quiet, so failures need a clear notice.
+			// Show it once when saving first fails; background retries would
+			// otherwise open it every few seconds. `explicitDismiss` keeps it
+			// around until the user closes it or the save recovers.
+			if ( ! errorNoticeShownRef.current ) {
+				createErrorNotice(
+					__( "Couldn't save your changes.", 'cortext' ),
+					{
+						id: AUTOSAVE_ERROR_NOTICE_ID,
+						type: 'snackbar',
+						explicitDismiss: true,
+					}
+				);
+				errorNoticeShownRef.current = true;
+			}
 		} else if ( didSucceed && wasSaving ) {
 			const latchedTarget = savingTargetRef.current;
 			savingTargetRef.current = null;
 			setStatus( 'saved' );
 			setLastSavedAt( Date.now() );
 			removeNotice( AUTOSAVE_ERROR_NOTICE_ID );
+			errorNoticeShownRef.current = false;
 			if ( latchedTarget ) {
 				touchRecent( latchedTarget );
 			}

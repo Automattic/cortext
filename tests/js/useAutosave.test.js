@@ -581,7 +581,25 @@ describe( 'useAutosave: status', () => {
 		expect( result.current.status ).toBe( 'error' );
 	} );
 
-	it( 'surfaces a snackbar notice when a save fails', () => {
+	it( 'recovers to saved when a later save succeeds', () => {
+		setStoreState( { didFail: true } );
+
+		const { result, rerender } = renderHook( () => useAutosave() );
+		expect( result.current.status ).toBe( 'error' );
+
+		act( () => {
+			setStoreState( { isSaving: true, didFail: false } );
+			rerender();
+		} );
+		act( () => {
+			setStoreState( { isSaving: false, didSucceed: true } );
+			rerender();
+		} );
+
+		expect( result.current.status ).toBe( 'saved' );
+	} );
+
+	it( 'shows a dismissible snackbar when a save fails', () => {
 		const createErrorNotice = jest.fn();
 		useDispatch.mockReturnValue( {
 			savePost: jest.fn(),
@@ -598,8 +616,36 @@ describe( 'useAutosave: status', () => {
 			expect.objectContaining( {
 				type: 'snackbar',
 				id: 'cortext-autosave-error',
+				explicitDismiss: true,
 			} )
 		);
+	} );
+
+	it( 'does not reopen the snackbar while retries keep failing', () => {
+		const createErrorNotice = jest.fn();
+		useDispatch.mockReturnValue( {
+			savePost: jest.fn(),
+			editPost: jest.fn(),
+			createErrorNotice,
+			removeNotice: jest.fn(),
+		} );
+		setStoreState( { didFail: true } );
+
+		const { rerender } = renderHook( () => useAutosave() );
+		expect( createErrorNotice ).toHaveBeenCalledTimes( 1 );
+
+		// A background retry starts and fails again. Without the latch, the
+		// snackbar would open again on every cycle.
+		act( () => {
+			setStoreState( { isSaving: true, didFail: false } );
+			rerender();
+		} );
+		act( () => {
+			setStoreState( { isSaving: false, didFail: true } );
+			rerender();
+		} );
+
+		expect( createErrorNotice ).toHaveBeenCalledTimes( 1 );
 	} );
 
 	it( 'removes the autosave error notice after a successful save', () => {
