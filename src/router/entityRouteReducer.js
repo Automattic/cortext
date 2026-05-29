@@ -1,7 +1,12 @@
-import { PUBLISHED_DOCUMENTS_URI, parseIdFromUri } from './useResolveEntity';
+import {
+	IMPORT_URI,
+	PUBLISHED_DOCUMENTS_URI,
+	parseIdFromUri,
+} from './useResolveEntity';
 
 // Possible targets:
 //   - `published`: singleton splat for the Published documents screen.
+//   - `import`:    singleton splat for the Import screen.
 //   - `empty`:     no splat (workspace home).
 //   - `document`:  anything else with an id. Collections, pages, and rows all
 //                  fall here; the resolver discovers each document's
@@ -9,6 +14,9 @@ import { PUBLISHED_DOCUMENTS_URI, parseIdFromUri } from './useResolveEntity';
 export function parseTarget( splat ) {
 	if ( splat === PUBLISHED_DOCUMENTS_URI ) {
 		return { kind: 'published', tail: '' };
+	}
+	if ( splat === IMPORT_URI ) {
+		return { kind: 'import', tail: '' };
 	}
 	if ( ! splat ) {
 		return { kind: 'empty', tail: '' };
@@ -33,6 +41,8 @@ export function reducer( state, action ) {
 				active = { kind: 'empty' };
 			} else if ( target.kind === 'published' ) {
 				active = { kind: 'published' };
+			} else if ( target.kind === 'import' ) {
+				active = { kind: 'import' };
 			} else if ( target.kind === 'document' ) {
 				if ( target.id === null ) {
 					active = { kind: 'document-not-found' };
@@ -102,6 +112,8 @@ export function init( target ) {
 		active = { kind: 'empty' };
 	} else if ( target.kind === 'published' ) {
 		active = { kind: 'published' };
+	} else if ( target.kind === 'import' ) {
+		active = { kind: 'import' };
 	} else if ( target.kind === 'document' && target.id === null ) {
 		active = { kind: 'document-not-found' };
 	} else {

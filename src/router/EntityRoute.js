@@ -29,6 +29,7 @@ const Canvas = lazy( () =>
 );
 import CanvasSkeleton from '../components/CanvasSkeleton';
 import { RowMutationContext } from '../components/EditableCell';
+import ImportPane from '../components/ImportPane';
 import PublishedDocumentsPane from '../components/PublishedDocumentsPane';
 import { CanvasProgressBar } from '../components/Skeleton';
 import useDelayedFlag from '../hooks/useDelayedFlag';
@@ -297,7 +298,6 @@ export default function EntityRoute( { history } ) {
 		[ dispatch ]
 	);
 
-	// Drives the breadcrumb from the same paint state the document-actions
 	// Fill uses, so both sides of the top bar update together. Null when no
 	// document is mounted (loading, empty, not found, published).
 	const paintedDocumentId =
@@ -405,6 +405,9 @@ export default function EntityRoute( { history } ) {
 				) }
 				<WorkspacePane active={ active.kind === 'published' }>
 					<PublishedDocumentsPane />
+				</WorkspacePane>
+				<WorkspacePane active={ active.kind === 'import' }>
+					<ImportPane />
 				</WorkspacePane>
 				<WorkspacePane active={ active.kind === 'empty' }>
 					<EmptyState />

@@ -92,7 +92,7 @@ beforeEach( () => {
 		savePost: jest.fn(),
 		editPost: jest.fn(),
 		createErrorNotice: jest.fn(),
-		removeNotice: jest.fn(),
+		createSuccessNotice: jest.fn(),
 	} );
 	mockTouchRecent.mockReset();
 } );
@@ -299,6 +299,45 @@ describe( 'useAutosave: flush triggers', () => {
 			window.dispatchEvent( new Event( 'blur' ) );
 		} );
 		expect( savePost ).not.toHaveBeenCalled();
+	} );
+
+	it( 'prompts before unload when failed saves leave edits unsaved', () => {
+		setStoreState( { isDirty: true, didFail: true } );
+
+		renderHook( () => useAutosave() );
+
+		const event = new Event( 'beforeunload', { cancelable: true } );
+		act( () => {
+			window.dispatchEvent( event );
+		} );
+
+		expect( event.defaultPrevented ).toBe( true );
+	} );
+
+	it( 'does not prompt before unload while saves are healthy', () => {
+		setStoreState( { isDirty: true } );
+
+		renderHook( () => useAutosave() );
+
+		const event = new Event( 'beforeunload', { cancelable: true } );
+		act( () => {
+			window.dispatchEvent( event );
+		} );
+
+		expect( event.defaultPrevented ).toBe( false );
+	} );
+
+	it( 'does not prompt before unload without unsaved edits', () => {
+		setStoreState( { isDirty: false, didFail: true } );
+
+		renderHook( () => useAutosave() );
+
+		const event = new Event( 'beforeunload', { cancelable: true } );
+		act( () => {
+			window.dispatchEvent( event );
+		} );
+
+		expect( event.defaultPrevented ).toBe( false );
 	} );
 
 	it( 'waits for an in-flight autosave instead of reporting failure', async () => {
@@ -579,13 +618,31 @@ describe( 'useAutosave: status', () => {
 		expect( result.current.status ).toBe( 'error' );
 	} );
 
-	it( 'surfaces a snackbar notice when a save fails', () => {
+	it( 'recovers to saved when a later save succeeds', () => {
+		setStoreState( { didFail: true } );
+
+		const { result, rerender } = renderHook( () => useAutosave() );
+		expect( result.current.status ).toBe( 'error' );
+
+		act( () => {
+			setStoreState( { isSaving: true, didFail: false } );
+			rerender();
+		} );
+		act( () => {
+			setStoreState( { isSaving: false, didSucceed: true } );
+			rerender();
+		} );
+
+		expect( result.current.status ).toBe( 'saved' );
+	} );
+
+	it( 'shows a dismissible snackbar when a save fails', () => {
 		const createErrorNotice = jest.fn();
 		useDispatch.mockReturnValue( {
 			savePost: jest.fn(),
 			editPost: jest.fn(),
 			createErrorNotice,
-			removeNotice: jest.fn(),
+			createSuccessNotice: jest.fn(),
 		} );
 		setStoreState( { didFail: true } );
 
@@ -596,17 +653,45 @@ describe( 'useAutosave: status', () => {
 			expect.objectContaining( {
 				type: 'snackbar',
 				id: 'cortext-autosave-error',
+				explicitDismiss: true,
 			} )
 		);
 	} );
 
-	it( 'removes the autosave error notice after a successful save', () => {
-		const removeNotice = jest.fn();
+	it( 'does not reopen the snackbar while retries keep failing', () => {
+		const createErrorNotice = jest.fn();
+		useDispatch.mockReturnValue( {
+			savePost: jest.fn(),
+			editPost: jest.fn(),
+			createErrorNotice,
+			createSuccessNotice: jest.fn(),
+		} );
+		setStoreState( { didFail: true } );
+
+		const { rerender } = renderHook( () => useAutosave() );
+		expect( createErrorNotice ).toHaveBeenCalledTimes( 1 );
+
+		// A background retry starts and fails again. Without the latch, the
+		// snackbar would open again on every cycle.
+		act( () => {
+			setStoreState( { isSaving: true, didFail: false } );
+			rerender();
+		} );
+		act( () => {
+			setStoreState( { isSaving: false, didFail: true } );
+			rerender();
+		} );
+
+		expect( createErrorNotice ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'swaps the failure snackbar for a short success snackbar after recovery', () => {
+		const createSuccessNotice = jest.fn();
 		useDispatch.mockReturnValue( {
 			savePost: jest.fn(),
 			editPost: jest.fn(),
 			createErrorNotice: jest.fn(),
-			removeNotice,
+			createSuccessNotice,
 		} );
 		setStoreState( { didFail: true } );
 
@@ -621,7 +706,38 @@ describe( 'useAutosave: status', () => {
 			rerender();
 		} );
 
-		expect( removeNotice ).toHaveBeenCalledWith( 'cortext-autosave-error' );
+		// Reusing the failure notice id swaps it in place. Omitting
+		// explicitDismiss lets SnackbarList fade out the success message.
+		expect( createSuccessNotice ).toHaveBeenCalledWith(
+			expect.any( String ),
+			expect.objectContaining( {
+				id: 'cortext-autosave-error',
+				type: 'snackbar',
+			} )
+		);
+		expect(
+			createSuccessNotice.mock.calls[ 0 ][ 1 ].explicitDismiss
+		).toBeUndefined();
+	} );
+
+	it( 'does not announce success on a normal save with no prior failure', () => {
+		const createSuccessNotice = jest.fn();
+		useDispatch.mockReturnValue( {
+			savePost: jest.fn(),
+			editPost: jest.fn(),
+			createErrorNotice: jest.fn(),
+			createSuccessNotice,
+		} );
+		setStoreState( { isSaving: true } );
+
+		const { rerender } = renderHook( () => useAutosave() );
+
+		act( () => {
+			setStoreState( { isSaving: false, didSucceed: true } );
+			rerender();
+		} );
+
+		expect( createSuccessNotice ).not.toHaveBeenCalled();
 	} );
 
 	it( 'resets status when the current post id changes', () => {

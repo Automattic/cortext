@@ -3,7 +3,7 @@
  * Plugin Name:       Cortext
  * Plugin URI:        https://github.com/priethor/cortext
  * Description:       Build a WordPress-native knowledge base with nested pages, typed collections, flexible views, and publishing through your own site.
- * Version:           0.0.1
+ * Version:           0.1.0
  * Requires at least: 6.9
  * Requires PHP:      8.1
  * Author:            Héctor Prieto, Miguel Fonseca
@@ -16,7 +16,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'CORTEXT_VERSION', '0.0.1' );
+define( 'CORTEXT_VERSION', '0.1.0' );
 define( 'CORTEXT_PATH', plugin_dir_path( __FILE__ ) );
 define( 'CORTEXT_URL', plugin_dir_url( __FILE__ ) );
 

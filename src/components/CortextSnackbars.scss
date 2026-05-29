@@ -1,0 +1,23 @@
+// SnackbarList is absolute-positioned but has no offsets, so it would sit over
+// the top-bar breadcrumbs here. This wrapper lives in the canvas column, which
+// lets us anchor notices below the top bar and away from the sidebar.
+// Keep the left edge fixed so the snackbar does not jump when the message
+// changes from failure to success.
+.cortext-snackbars {
+	position: absolute;
+	bottom: 24px;
+	left: 24px;
+	z-index: 100000;
+	pointer-events: none;
+
+	.components-snackbar-list {
+		position: static;
+		width: auto;
+	}
+
+	// Let the snackbar controls receive clicks while the wrapper stays
+	// click-through over the canvas.
+	.components-snackbar {
+		pointer-events: auto;
+	}
+}

@@ -13,10 +13,13 @@
 import { registerCoreBlocks } from '@wordpress/block-library';
 import { addFilter } from '@wordpress/hooks';
 
-// Register the `cortext` category before the `../blocks` barrel registers
+// Register the Collections category before the `../blocks` barrel registers
 // Cortext blocks from block.json.
-import { CORTEXT_BLOCK_CATEGORY } from './cortextBlockCategory';
+import { COLLECTIONS_BLOCK_CATEGORY } from './collectionsBlockCategory';
 import '../blocks';
+
+// Side-effect import: register media categories for the full inserter.
+import './initInserterMediaCategories';
 
 // `core/post-title` is insertable by default. Cortext owns title placement
 // through EnsureHeaderBlocks, so users should not see the block in the
@@ -41,7 +44,7 @@ addFilter(
 	}
 );
 
-export { CORTEXT_BLOCK_CATEGORY };
+export { COLLECTIONS_BLOCK_CATEGORY };
 
 // Blocks allowed in a Cortext document. Most are user-insertable; a few are
 // inserted by Cortext itself. Blocks outside this list, including late

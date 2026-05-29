@@ -11,6 +11,7 @@ const documentTarget = ( id ) => ( {
 	tail: `${ id }`,
 } );
 const publishedTarget = { kind: 'published', tail: '' };
+const importTarget = { kind: 'import', tail: '' };
 
 function activate( state, target ) {
 	let next = reducer( state, { type: 'TARGET_CHANGED', target } );
@@ -32,6 +33,17 @@ describe( 'EntityRoute reducer', () => {
 
 		it( 'does not match `published/<anything>` (falls through to document)', () => {
 			expect( parseTarget( 'published/foo' ).kind ).toBe( 'document' );
+		} );
+
+		it( 'maps a bare `import` splat to the import kind', () => {
+			expect( parseTarget( 'import' ) ).toEqual( {
+				kind: 'import',
+				tail: '',
+			} );
+		} );
+
+		it( 'does not match `import/<anything>` (falls through to document)', () => {
+			expect( parseTarget( 'import/foo' ).kind ).toBe( 'document' );
 		} );
 
 		it( 'maps an empty splat to the empty kind', () => {
@@ -74,6 +86,12 @@ describe( 'EntityRoute reducer', () => {
 		it( 'starts a published target on the published pane', () => {
 			expect( init( publishedTarget ).active ).toEqual( {
 				kind: 'published',
+			} );
+		} );
+
+		it( 'starts an import target on the import pane', () => {
+			expect( init( importTarget ).active ).toEqual( {
+				kind: 'import',
 			} );
 		} );
 
@@ -139,6 +157,18 @@ describe( 'EntityRoute reducer', () => {
 				target: publishedTarget,
 			} );
 			expect( next.active ).toEqual( { kind: 'published' } );
+		} );
+
+		it( 'switches to import immediately', () => {
+			const state = activate(
+				init( documentTarget( 1 ) ),
+				documentTarget( 1 )
+			);
+			const next = reducer( state, {
+				type: 'TARGET_CHANGED',
+				target: importTarget,
+			} );
+			expect( next.active ).toEqual( { kind: 'import' } );
 		} );
 
 		it( 'switches to empty immediately', () => {

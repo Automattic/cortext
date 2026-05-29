@@ -17,7 +17,8 @@ export default function useAutosave( options = {} ) {
 	const recentId = options.recentTarget?.id ?? null;
 	const recentCollectionId = options.recentTarget?.collectionId ?? null;
 	const { savePost, editPost } = useDispatch( editorStore );
-	const { createErrorNotice, removeNotice } = useDispatch( noticesStore );
+	const { createErrorNotice, createSuccessNotice } =
+		useDispatch( noticesStore );
 	const { touchRecent } = useRecents();
 
 	const {
@@ -55,6 +56,15 @@ export default function useAutosave( options = {} ) {
 	const savingWaitersRef = useRef( [] );
 	const prevIsSavingRef = useRef( isSaving );
 	const savingTargetRef = useRef( null );
+	// Track the one beforeunload case worth interrupting: the document still
+	// has edits and the last save failed. Healthy saves still get a final flush
+	// and leave without a prompt.
+	const unsavedRiskRef = useRef( false );
+	unsavedRiskRef.current = isDirty && status === 'error';
+	// Show the failure snackbar once per failed-save streak. Background retries
+	// can cycle through saving and error repeatedly; the next successful save
+	// resets the latch.
+	const errorNoticeShownRef = useRef( false );
 
 	const stateRef = useRef( {
 		isDirty,
@@ -236,19 +246,36 @@ export default function useAutosave( options = {} ) {
 		} else if ( didFail ) {
 			savingTargetRef.current = null;
 			setStatus( 'error' );
-			// The toolbar no longer carries a save status, so a failed
-			// autosave needs its own way of reaching the user. Snackbar
-			// is dismissable and stays out of the way when things work.
-			createErrorNotice( __( 'Failed to save changes.', 'cortext' ), {
-				id: AUTOSAVE_ERROR_NOTICE_ID,
-				type: 'snackbar',
-			} );
+			// Successful autosaves stay quiet, so failures need a clear notice.
+			// Show it once when saving first fails; background retries would
+			// otherwise open it every few seconds. `explicitDismiss` keeps it
+			// around until the user closes it or the save recovers.
+			if ( ! errorNoticeShownRef.current ) {
+				createErrorNotice(
+					__( "Couldn't save your changes.", 'cortext' ),
+					{
+						id: AUTOSAVE_ERROR_NOTICE_ID,
+						type: 'snackbar',
+						explicitDismiss: true,
+					}
+				);
+				errorNoticeShownRef.current = true;
+			}
 		} else if ( didSucceed && wasSaving ) {
 			const latchedTarget = savingTargetRef.current;
 			savingTargetRef.current = null;
 			setStatus( 'saved' );
 			setLastSavedAt( Date.now() );
-			removeNotice( AUTOSAVE_ERROR_NOTICE_ID );
+			if ( errorNoticeShownRef.current ) {
+				// Replace the failure notice with a short success message.
+				// Reusing the notice id swaps it in place, and without
+				// `explicitDismiss` SnackbarList fades it out.
+				createSuccessNotice( __( 'All changes saved.', 'cortext' ), {
+					id: AUTOSAVE_ERROR_NOTICE_ID,
+					type: 'snackbar',
+				} );
+				errorNoticeShownRef.current = false;
+			}
 			if ( latchedTarget ) {
 				touchRecent( latchedTarget );
 			}
@@ -258,7 +285,7 @@ export default function useAutosave( options = {} ) {
 		didSucceed,
 		didFail,
 		createErrorNotice,
-		removeNotice,
+		createSuccessNotice,
 		recentId,
 		recentCollectionId,
 		touchRecent,
@@ -287,8 +314,15 @@ export default function useAutosave( options = {} ) {
 		const onBlur = () => {
 			flushNow();
 		};
-		const onBeforeUnload = () => {
+		const onBeforeUnload = ( event ) => {
 			flushNow();
+			if ( unsavedRiskRef.current ) {
+				// Save is already failing, and the browser may unload before
+				// flushNow finishes. Ask it to show the native leave-site
+				// prompt so the user can stay put.
+				event.preventDefault();
+				event.returnValue = '';
+			}
 		};
 
 		document.addEventListener( 'visibilitychange', onVisibilityChange );
