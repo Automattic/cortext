@@ -121,12 +121,6 @@ final class Client {
 		$status = (int) wp_remote_retrieve_response_code( $response );
 		$json   = json_decode( wp_remote_retrieve_body( $response ), true );
 
-		// FIXME: Simulate Retry-After of n seconds.
-		$simulate_429 = str_ends_with( $path, 'query' ) ? rand(0, 2) : 0;
-		if ( $simulate_429 ) {
-			$status = 429;
-		}
-
 		if ( $status < 200 || $status >= 300 ) {
 			$message = is_array( $json ) && isset( $json['message'] )
 				? (string) $json['message']
@@ -135,7 +129,6 @@ final class Client {
 
 			if ( 429 === $status ) {
 				$data['retry_after'] = max(
-					$simulate_429 ?? 0,
 					1,
 					(int) wp_remote_retrieve_header( $response, 'retry-after' )
 				);

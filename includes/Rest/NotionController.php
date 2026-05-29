@@ -39,7 +39,7 @@ use WP_REST_Response;
 final class NotionController {
 
 	private const NAMESPACE         = 'cortext/v1';
-	private const TICK_PAGE_SIZE    = 5; // FIXME.
+	private const TICK_PAGE_SIZE    = 50;
 	private const JOB_OPTION_PREFIX = 'cortext_notion_import_';
 
 	public function register(): void {
