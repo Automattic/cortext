@@ -465,6 +465,11 @@ final class Document {
 				'order'          => 'ASC',
 			)
 		);
+		// Prime every field's meta in one query so the per-field reads below are
+		// cache hits. This runs on `init` for every request, so without priming
+		// it costs one query per field and the per-request cost grows with the
+		// workspace.
+		update_meta_cache( 'post', $field_ids );
 		foreach ( $field_ids as $field_id ) {
 			$type     = (string) get_post_meta( (int) $field_id, 'type', true );
 			$wp_meta  = FieldTypeRegistry::exists( $type )
@@ -578,9 +583,10 @@ final class Document {
 			$post_id = (int) $request->get_param( 'id' );
 		}
 		if ( $post_id < 1 ) {
-			// Creating a row from scratch: no prior relation values, so
-			// reverse pointers are computed from the empty "current" set in
-			// `apply_meta_updates` using the freshly-written post id.
+			// Creating a row: the post id does not exist yet, so relation
+			// targets cannot be validated and their reverse pointers cannot be
+			// synced here. `apply_meta_updates` does both after core REST
+			// inserts the row and its trait is assigned.
 			return $prepared_post;
 		}
 
@@ -637,7 +643,6 @@ final class Document {
 	 * @param bool            $creating Whether this is a create or update.
 	 */
 	public function apply_meta_updates( WP_Post $post, WP_REST_Request $request, bool $creating ): void {
-		unset( $creating );
 		$row_id = (int) $post->ID;
 
 		$relation_field_ids = array();
@@ -660,6 +665,26 @@ final class Document {
 		}
 		$collection_id = (int) $trait->ID;
 		$index         = new FieldValueIndex();
+
+		// On create, `prepare_meta_updates` ran before the row's id existed, so
+		// relation fields were written by core REST without their reverse
+		// pointers, and core's forward write leaves a later re-sync seeing no
+		// diff. Clear each relation field and let `sync_relation_value` rebuild
+		// the forward and reverse pointers from an empty set now that the row
+		// and its trait exist.
+		if ( $creating && $has_meta ) {
+			foreach ( $meta as $key => $value ) {
+				if ( ! is_string( $key ) || ! str_starts_with( $key, 'field-' ) ) {
+					continue;
+				}
+				$relation_field_id = (int) substr( $key, 6 );
+				if ( $relation_field_id < 1 || 'relation' !== (string) get_post_meta( $relation_field_id, 'type', true ) ) {
+					continue;
+				}
+				delete_post_meta( $row_id, Relations::meta_key( $relation_field_id ) );
+				Relations::sync_relation_value( $row_id, $relation_field_id, $value );
+			}
+		}
 
 		// Forward index for non-relation meta written by WP REST.
 		if ( $has_meta ) {
