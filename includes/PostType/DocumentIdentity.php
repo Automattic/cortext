@@ -4,9 +4,9 @@
  * the `cortext-document` capability.
  *
  * `DocumentTypeRegistrar::register()` calls `register_for_post_type()` while
- * registering each Cortext document post type. Under the universal model
- * this is just `crtxt_document` and `crtxt_trait`; the helper used to handle
- * the per-collection dynamic CPTs that no longer exist.
+ * registering each Cortext document post type: `crtxt_document` and
+ * `crtxt_trait`. The helper stays post-type-agnostic so any type that opts
+ * into the `cortext-document` capability gets the icon.
  *
  * @package Cortext
  */

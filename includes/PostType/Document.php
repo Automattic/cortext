@@ -731,12 +731,13 @@ final class Document {
 			$ids              = TraitTaxonomy::all_trait_ids();
 			$args['post__in'] = array() === $ids ? array( 0 ) : $ids;
 		}
-		// `cortext_no_trait` only excludes rows; pages-only queries also need
-		// to exclude collections. The sidebar tree pulls collections from a
-		// dedicated query and merges them with pages, so any collection that
-		// also leaks into the pages query lands in the tree twice. A collection
-		// is identified by its mirror term, so an empty collection (no custom
-		// fields, only the title) is still excluded here.
+		// `cortext_no_trait` only excludes rows. Screens that list pages on
+		// their own (the trash list and the published-documents screen) also
+		// exclude collections, since a collection is not a page. The sidebar
+		// document tree does not use this filter: it keeps collections and shows
+		// them nested. A collection is identified by its mirror term, so an
+		// empty collection (only the title, no custom fields) is still excluded
+		// here.
 		if ( null !== $no_collections && '' !== (string) $no_collections && '0' !== (string) $no_collections ) {
 			$ids = TraitTaxonomy::all_trait_ids();
 			if ( array() !== $ids ) {

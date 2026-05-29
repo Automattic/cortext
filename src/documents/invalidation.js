@@ -21,8 +21,9 @@ const FULL_PAGE_COLLECTIONS = [
 ];
 
 /**
- * Lifecycle changes on any document can affect both the page tree and the
- * collections list (a doc can be either, both, or neither). Refresh both lists
+ * A lifecycle change on any document can affect the sidebar document tree (the
+ * non-row query that holds pages and collections), the trashed-pages list, and
+ * the collections lookup that Favorites resolves titles from. Refresh all three
  * after trash, restore, permanent delete, and duplicate.
  */
 export const afterDocumentTrash = [

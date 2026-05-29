@@ -811,10 +811,9 @@ final class Test_Post_Type_Document extends BaseTestCase {
 	}
 
 	public function test_apply_trait_filters_excludes_collections_for_no_collections(): void {
-		// `cortext_no_trait` only drops rows; the sidebar's pages query also
-		// has to drop collections, otherwise a nested collection arrives from
-		// both the pages query and the collections query and the merged tree
-		// renders it twice.
+		// `cortext_no_trait` only drops rows. A pages-only screen (the trash
+		// list, the published-documents screen) also drops collections, since a
+		// collection is not a page.
 		$collection_id = $this->create_collection();
 
 		$request = new WP_REST_Request( 'GET', '/wp/v2/crtxt_documents' );

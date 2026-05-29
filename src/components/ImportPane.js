@@ -87,8 +87,9 @@ export default function ImportPane() {
 			// document is in the DB. We only need to invalidate once;
 			// subsequent ticks only add row documents, not new
 			// collections. The collection is a `crtxt_document`, so it
-			// lands in both the sidebar tree (pages query) and the
-			// collections list.
+			// shows in the sidebar tree (the non-row document query) and in
+			// the collections lookup Favorites resolves titles from; refresh
+			// both.
 			let sidebarInvalidated = false;
 			const refreshSidebarOnce = ( progress ) => {
 				if ( sidebarInvalidated || ! progress.collection_id ) {
