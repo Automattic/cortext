@@ -113,6 +113,10 @@ import useSidebarDnd from './sidebar/useSidebarDnd';
 import useSidebarNavigation from './sidebar/useSidebarNavigation';
 import useSidebarTree from './sidebar/useSidebarTree';
 import DocumentRow from './sidebar/DocumentRow';
+import {
+	isPublicWebAffordancesEnabled,
+	isWordPressAffordancesEnabled,
+} from '../settings';
 
 export default function Sidebar( {
 	collapsed = false,
@@ -161,6 +165,8 @@ export default function Sidebar( {
 		useDocumentSelection( { selectedId, selectedCollectionId } );
 	const adminUrl = window.cortextSettings?.adminUrl ?? '/wp-admin/';
 	const userName = window.cortextSettings?.userDisplayName ?? '';
+	const publicWebAffordances = isPublicWebAffordancesEnabled();
+	const wordpressAffordances = isWordPressAffordancesEnabled();
 	const commandPaletteShortcut = displayShortcut.primary( 'k' );
 	const brandLabel = userName
 		? sprintf(
@@ -184,7 +190,8 @@ export default function Sidebar( {
 			params: { _splat: PUBLISHED_DOCUMENTS_URI },
 		} );
 	}, [ navigate ] );
-	const isPublishedActive = activeUri === PUBLISHED_DOCUMENTS_URI;
+	const isPublishedActive =
+		publicWebAffordances && activeUri === PUBLISHED_DOCUMENTS_URI;
 	const goImport = useCallback( () => {
 		navigate( {
 			to: '/$',
@@ -433,17 +440,21 @@ export default function Sidebar( {
 					<Icon icon={ homeIcon } size={ 16 } />
 					{ ! collapsed && <span>{ __( 'Home', 'cortext' ) }</span> }
 				</Button>
-				<Button
-					className="cortext-sidebar__quick-action cortext-sidebar__quick-action--published"
-					label={ __( 'Published documents', 'cortext' ) }
-					isPressed={ isPublishedActive }
-					onClick={ goPublished }
-				>
-					<Icon icon={ globe } size={ 16 } />
-					{ ! collapsed && (
-						<span>{ __( 'Published documents', 'cortext' ) }</span>
-					) }
-				</Button>
+				{ publicWebAffordances ? (
+					<Button
+						className="cortext-sidebar__quick-action cortext-sidebar__quick-action--published"
+						label={ __( 'Published documents', 'cortext' ) }
+						isPressed={ isPublishedActive }
+						onClick={ goPublished }
+					>
+						<Icon icon={ globe } size={ 16 } />
+						{ ! collapsed && (
+							<span>
+								{ __( 'Published documents', 'cortext' ) }
+							</span>
+						) }
+					</Button>
+				) : null }
 				<Button
 					className="cortext-sidebar__quick-action cortext-sidebar__quick-action--import"
 					label={ __( 'Import', 'cortext' ) }
@@ -612,12 +623,14 @@ export default function Sidebar( {
 				/>
 				<div className="cortext-sidebar__footer-group cortext-sidebar__footer-group--preferences">
 					<ThemeToggle />
-					<Button
-						className="cortext-sidebar__back"
-						label={ __( 'Go to WordPress', 'cortext' ) }
-						href={ adminUrl }
-						icon={ <Icon icon={ wordpress } size={ 24 } /> }
-					/>
+					{ wordpressAffordances ? (
+						<Button
+							className="cortext-sidebar__back"
+							label={ __( 'Go to WordPress', 'cortext' ) }
+							href={ adminUrl }
+							icon={ <Icon icon={ wordpress } size={ 24 } /> }
+						/>
+					) : null }
 				</div>
 			</div>
 			{ ! collapsed && (
