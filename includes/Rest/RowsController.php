@@ -1288,6 +1288,13 @@ final class RowsController {
 		);
 	}
 
+	private function field_id_from_key( string $field_key ): int {
+		if ( 1 !== preg_match( '/^field-(\d+)$/', $field_key, $matches ) ) {
+			return 0;
+		}
+		return (int) $matches[1];
+	}
+
 	/**
 	 * Reads valid values for a select or multiselect field.
 	 *

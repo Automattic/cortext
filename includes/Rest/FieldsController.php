@@ -727,32 +727,13 @@ final class FieldsController {
 	}
 
 	/**
-	 * Finds the entry post type for the collection that owns this field.
-	 *
-	 * A field belongs to one collection, so the first match is enough.
-	 *
-	 * @param int $field_id Field post ID to resolve.
-	 */
-	/**
 	 * Resolves the mirror term id for the trait that owns the given field,
 	 * or 0 when the field is not attached to any trait.
 	 *
 	 * @param int $field_id Field post id.
 	 */
 	private function trait_term_id_for_field( int $field_id ): int {
-		$field_id_str = (string) $field_id;
-
-		// Reverse lookup: which collection's `cortext_fields` meta references
-		// this field?
-		global $wpdb;
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- field→collection reverse lookup; bounded by a single matching row.
-		$collection_id = (int) $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = %s AND meta_value = %s LIMIT 1",
-				'cortext_fields',
-				$field_id_str
-			)
-		);
+		$collection_id = $this->collection_id_for_field( $field_id );
 		if ( $collection_id < 1 ) {
 			return 0;
 		}
@@ -764,13 +745,36 @@ final class FieldsController {
 
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- field→collection reverse lookup; bounded by a single matching row.
-		return (int) $wpdb->get_var(
+		$collection_id = (int) $wpdb->get_var(
 			$wpdb->prepare(
 				"SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = %s AND meta_value = %s LIMIT 1",
 				'cortext_fields',
 				$field_id_str
 			)
 		);
+		if ( $collection_id > 0 ) {
+			return $collection_id;
+		}
+
+		if ( self::is_wordbless_active() ) {
+			foreach ( \WorDBless\PostMeta::init()->meta as $post_id => $rows ) {
+				foreach ( $rows as $row ) {
+					if (
+							isset( $row['meta_key'], $row['meta_value'] ) &&
+							'cortext_fields' === $row['meta_key'] &&
+							(string) maybe_unserialize( $row['meta_value'] ) === $field_id_str
+						) {
+						return (int) $post_id;
+					}
+				}
+			}
+		}
+
+		return 0;
+	}
+
+	private static function is_wordbless_active(): bool {
+		return class_exists( '\WorDBless\PostMeta' );
 	}
 
 	/**

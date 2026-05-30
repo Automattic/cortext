@@ -336,7 +336,7 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$method->setAccessible( true );
 
 		$this->assertSame(
-			2,
+			2.0,
 			$method->invoke(
 				null,
 				array(

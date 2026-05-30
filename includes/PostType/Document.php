@@ -590,7 +590,7 @@ final class Document {
 			if ( ! is_string( $key ) || ! str_starts_with( $key, 'field-' ) ) {
 				continue;
 			}
-			$field_id = (int) substr( $key, 6 );
+			$field_id   = (int) substr( $key, 6 );
 			$field_type = $field_id > 0 ? (string) get_post_meta( $field_id, 'type', true ) : '';
 			if ( in_array( $field_type, array( 'rollup', 'formula' ), true ) ) {
 				unset( $meta[ $key ] );
@@ -679,7 +679,7 @@ final class Document {
 
 		$meta     = $request->get_param( 'meta' );
 		$has_meta = is_array( $meta ) && count( $meta ) > 0;
-		$trait = ( new Documents() )->find_trait_for_document( $post );
+		$trait    = ( new Documents() )->find_trait_for_document( $post );
 		if ( ! $trait instanceof WP_Post ) {
 			return;
 		}
