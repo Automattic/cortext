@@ -161,6 +161,7 @@ final class FieldValues {
 			return array( $collection_id );
 		}
 
+		$collection_ids = TraitTaxonomy::all_trait_ids();
 		return array_map(
 			'intval',
 			get_posts(
@@ -169,12 +170,10 @@ final class FieldValues {
 					'post_status'    => array( 'draft', 'private', 'publish' ),
 					'fields'         => 'ids',
 					'posts_per_page' => -1,
-					'meta_query'     => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
-						array(
-							'key'     => 'cortext_fields',
-							'compare' => 'EXISTS',
-						),
-					),
+					// A document is a collection when its mirror term exists. An
+					// empty `post__in` matches everything in WP_Query, so stand in
+					// `array( 0 )` to force an empty result.
+					'post__in'       => array() === $collection_ids ? array( 0 ) : $collection_ids,
 				)
 			)
 		);
