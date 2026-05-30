@@ -66,6 +66,7 @@ import {
 	findDataViewItemFromEvent,
 } from './dataViewItemLookup';
 import { scrollToEndQuickly } from './dataViewScroll';
+import { saveRowDocumentField } from './rowDocumentMutations';
 import { getRowDetailMode, withRowDetailMode } from './rowDetailUtils';
 import {
 	applyVisibleSelectionChange,
@@ -110,7 +111,7 @@ export default function CollectionDataViews( {
 	revealFieldId = null,
 	onFieldRevealed,
 } ) {
-	const { fields, collection, slug, isResolving, fieldsResolved } =
+	const { fields, collection, isResolving, fieldsResolved } =
 		useCollectionFieldsContext();
 	const { touchRecent } = useRecents();
 	// Field IDs from the last schema sync. We use this to auto-show fields
@@ -562,20 +563,14 @@ export default function CollectionDataViews( {
 			if ( ! collectionId || ! rowId ) {
 				return null;
 			}
-			const updated = await apiFetch( {
-				path: `/cortext/v1/collections/${ collectionId }/rows/${ rowId }`,
-				method: 'POST',
-				data: {
-					field: fieldId,
-					value,
-				},
-			} );
+			const updated = await saveRowDocumentField( rowId, fieldId, value );
 			touchRecent( {
 				kind: 'row',
 				id: updated?.id ?? rowId,
 				collectionId,
 			} );
 			refresh();
+			notifyCollectionRowsChanged( collectionId );
 			return updated;
 		},
 		[ collectionId, refresh, touchRecent ]
@@ -658,7 +653,7 @@ export default function CollectionDataViews( {
 
 	const previousVisibleFieldsRef = useRef( null );
 	const savedRowDetailMode = getRowDetailMode( view );
-	const postType = slug ? `crtxt_${ slug }` : null;
+	const postType = collectionId ? 'crtxt_document' : null;
 	const { openDocument, closeDocument } = useDocumentPeekActions();
 	const { peek } = useDocumentPeekState();
 	const openRowId = peek?.docId ?? null;
@@ -667,12 +662,23 @@ export default function CollectionDataViews( {
 	// next/previous, refresh, and writing mode changes back to this view. Refs
 	// keep row order current without replacing the source object each render.
 	const rowsRef = useRef( null );
+	const rowListSubscribersRef = useRef( new Set() );
 	rowsRef.current = dataFiltered;
+	useEffect( () => {
+		rowListSubscribersRef.current.forEach( ( listener ) => listener() );
+	}, [ dataFiltered ] );
+	const subscribeToRowList = useCallback( ( listener ) => {
+		rowListSubscribersRef.current.add( listener );
+		return () => {
+			rowListSubscribersRef.current.delete( listener );
+		};
+	}, [] );
 	const source = useMemo(
 		() => ( {
 			kind: 'collection',
 			collectionId,
 			getRowList: () => rowsRef.current ?? [],
+			subscribeToRowList,
 			refresh,
 			updateFieldOptions,
 			updateFieldFormat,
@@ -682,7 +688,13 @@ export default function CollectionDataViews( {
 				);
 			},
 		} ),
-		[ collectionId, refresh, updateFieldFormat, updateFieldOptions ]
+		[
+			collectionId,
+			refresh,
+			subscribeToRowList,
+			updateFieldFormat,
+			updateFieldOptions,
+		]
 	);
 
 	const requestOpenRow = useCallback(
@@ -950,7 +962,7 @@ export default function CollectionDataViews( {
 			setRowActionError( null );
 			try {
 				const created = await apiFetch( {
-					path: `/cortext/v1/collections/${ collectionId }/rows/${ row.id }/duplicate`,
+					path: `/cortext/v1/documents/${ row.id }/duplicate`,
 					method: 'POST',
 				} );
 				if ( created?.id ) {
@@ -1010,7 +1022,7 @@ export default function CollectionDataViews( {
 				BULK_DELETE_CONCURRENCY,
 				( row ) =>
 					apiFetch( {
-						path: `/wp/v2/${ postType }/${ row.id }`,
+						path: `/wp/v2/crtxt_documents/${ row.id }`,
 						method: 'DELETE',
 					} )
 			);
@@ -1586,7 +1598,7 @@ export default function CollectionDataViews( {
 									{ isGridLayout && (
 										<GridNewRowPortal
 											wrapperRef={ tableWrapperRef }
-											slug={ slug }
+											collectionId={ collectionId }
 											view={ dataViewsView }
 											fields={ fields }
 											onCreated={ onCreated }
@@ -1654,7 +1666,7 @@ export default function CollectionDataViews( {
 											}
 										>
 											<DataViewNewRowButton
-												slug={ slug }
+												collectionId={ collectionId }
 												view={ view }
 												fields={ fields }
 												onCreated={ onCreated }

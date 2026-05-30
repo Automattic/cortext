@@ -1074,18 +1074,9 @@ tr:has(.cortext-title-cell--is-opening)
 	}
 }
 
-// Per-context heights. The shared rules above stay context-agnostic; each
-// render path provides its own height.
-
-.cortext-canvas__table .cortext-data-view-shell,
-.cortext-canvas__table .cortext-data-view {
-	height: 100%;
-}
-
-// Embedded blocks do not have a fixed-height parent. With the shared
-// `height: 100%`, the shell collapses and the table disappears. In block
-// mode, let content set the height until #23 gives authors an explicit
-// per-instance viewport.
+// Embedded blocks have no fixed-height parent, so `height: 100%` would
+// collapse the shell. Let content drive height in block context until
+// #23 gives authors a per-instance viewport.
 .wp-block-cortext-data-view .cortext-data-view-shell {
 	height: auto;
 }

@@ -32,7 +32,7 @@ beforeEach( () => {
 describe( 'useFavorites', () => {
 	it( 'loads the current user favorites', async () => {
 		apiFetch.mockResolvedValueOnce( {
-			favorites: [ { kind: 'page', id: '7', path: 'page/notes-7' } ],
+			favorites: [ { id: '7', path: 'page/notes-7' } ],
 		} );
 
 		const { result } = renderHook( () => useFavorites(), { wrapper } );
@@ -42,7 +42,7 @@ describe( 'useFavorites', () => {
 		} );
 
 		expect( result.current.favorites ).toEqual( [
-			{ kind: 'page', id: 7, path: 'page/notes-7' },
+			{ id: 7, path: 'page/notes-7' },
 		] );
 	} );
 
@@ -68,7 +68,7 @@ describe( 'useFavorites', () => {
 		act( () => {
 			writePromise = result.current.setFavorites( ( current ) => [
 				...current,
-				{ kind: 'page', id: 2 },
+				{ id: 2 },
 			] );
 		} );
 
@@ -76,7 +76,7 @@ describe( 'useFavorites', () => {
 
 		await act( async () => {
 			initialLoad.resolve( {
-				favorites: [ { kind: 'page', id: 1, path: 'page/one-1' } ],
+				favorites: [ { id: 1, path: 'page/one-1' } ],
 			} );
 			await writePromise;
 		} );
@@ -85,10 +85,7 @@ describe( 'useFavorites', () => {
 			path: '/cortext/v1/favorites',
 			method: 'PUT',
 			data: {
-				favorites: [
-					{ kind: 'page', id: 1, path: 'page/one-1' },
-					{ kind: 'page', id: 2 },
-				],
+				favorites: [ { id: 1, path: 'page/one-1' }, { id: 2 } ],
 			},
 		} );
 	} );
@@ -116,18 +113,16 @@ describe( 'useFavorites', () => {
 		let firstPromise;
 		let secondPromise;
 		await act( async () => {
-			firstPromise = result.current.setFavorites( [
-				{ kind: 'page', id: 1 },
-			] );
+			firstPromise = result.current.setFavorites( [ { id: 1 } ] );
 			secondPromise = result.current.setFavorites( ( current ) => [
 				...current,
-				{ kind: 'page', id: 2 },
+				{ id: 2 },
 			] );
 			await Promise.resolve();
 		} );
 
 		await waitFor( () => {
-			expect( putCalls ).toEqual( [ [ { kind: 'page', id: 1 } ] ] );
+			expect( putCalls ).toEqual( [ [ { id: 1 } ] ] );
 		} );
 
 		await act( async () => {
@@ -136,21 +131,16 @@ describe( 'useFavorites', () => {
 		} );
 		await expect( firstPromise ).rejects.toThrow( 'first failed' );
 		await waitFor( () => {
-			expect( putCalls ).toEqual( [
-				[ { kind: 'page', id: 1 } ],
-				[ { kind: 'page', id: 2 } ],
-			] );
+			expect( putCalls ).toEqual( [ [ { id: 1 } ], [ { id: 2 } ] ] );
 		} );
 
 		await act( async () => {
 			secondWrite.resolve( {
-				favorites: [ { kind: 'page', id: 2 } ],
+				favorites: [ { id: 2 } ],
 			} );
 			await secondPromise;
 		} );
 
-		expect( result.current.favorites ).toEqual( [
-			{ kind: 'page', id: 2 },
-		] );
+		expect( result.current.favorites ).toEqual( [ { id: 2 } ] );
 	} );
 } );

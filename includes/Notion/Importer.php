@@ -4,11 +4,19 @@
  *
  * Lives in two halves the controller drives separately:
  *   - `create_collection`: takes a Notion data-source payload and creates
- *     the Cortext collection + per-property fields, registers the row CPT,
- *     and stores Notion UUIDs in postmeta as breadcrumbs for v2 work.
+ *     the Cortext collection document + per-property fields, then designates
+ *     the document a collection (its mirror trait term), and stores Notion
+ *     UUIDs in postmeta as breadcrumbs for v2 work.
  *   - `import_rows`: takes a batch of Notion `/query` results and inserts
- *     them as row posts with their property values mapped to Cortext
- *     postmeta.
+ *     them as row documents tagged with the collection's trait term, with
+ *     their property values mapped to `field-<id>` postmeta.
+ *
+ * Everything is a `crtxt_document`: a collection is a document designated by
+ * its mirror term in the `crtxt_trait` taxonomy (its schema lives in
+ * `cortext_fields`), and a row is a document tagged with that term (its values
+ * live in `field-<id>` meta). Creation routes through `Documents::save` and
+ * `Field::save` so the importer never reimplements the document/field write
+ * paths.
  *
  * Field mapping is intentionally conservative — relations, rollups,
  * people, files etc. are skipped at v1. Breadcrumbs on the collection
@@ -22,11 +30,10 @@ declare( strict_types=1 );
 
 namespace Cortext\Notion;
 
-use Cortext\PostType\Collection;
-use Cortext\PostType\CollectionEntries;
+use Cortext\Documents;
+use Cortext\PostType\Document;
 use Cortext\PostType\Field;
 use WP_Error;
-use WP_Post;
 
 final class Importer {
 
@@ -38,17 +45,18 @@ final class Importer {
 	public const META_ROW_PAGE_ID         = 'cortext_notion_page_id';
 
 	/**
-	 * Hook breadcrumb meta keys onto `init` so they're visible via REST.
-	 * The row-side `cortext_notion_page_id` registers per-CPT inside
-	 * `import_rows` because row CPTs are dynamic.
+	 * Hook breadcrumb meta keys onto `init` so they're visible via REST. All
+	 * three subjects (collection, field, row) live on static post types now,
+	 * so every key registers here.
 	 */
 	public function register(): void {
 		add_action( 'init', array( $this, 'register_breadcrumb_meta' ) );
 	}
 
 	/**
-	 * Register the static breadcrumb meta keys (collection + field) so
-	 * REST consumers can read them.
+	 * Register the breadcrumb meta keys so REST consumers can read them.
+	 * Collection and row breadcrumbs both live on `crtxt_document`; field
+	 * breadcrumbs live on `crtxt_field`.
 	 */
 	public function register_breadcrumb_meta(): void {
 		foreach (
@@ -56,10 +64,11 @@ final class Importer {
 				self::META_COLLECTION_DS_ID,
 				self::META_COLLECTION_DB_ID,
 				self::META_COLLECTION_IMPORTED,
+				self::META_ROW_PAGE_ID,
 			) as $key
 		) {
 			register_post_meta(
-				Collection::POST_TYPE,
+				Document::POST_TYPE,
 				$key,
 				array(
 					'type'         => 'string',
@@ -90,51 +99,64 @@ final class Importer {
 	/**
 	 * Build a Cortext collection from a Notion data-source object.
 	 *
+	 * Creates the document, its per-property fields, then designates it a
+	 * collection by attaching the field schema (which seeds the mirror trait
+	 * term and the locked data-view body).
+	 *
 	 * @param array $data_source The full `/data_sources/{id}` payload.
-	 * @return int|WP_Error      Collection post ID or error.
+	 * @return int|WP_Error      Collection document ID or error.
 	 */
 	public function create_collection( array $data_source ) {
-		$title = $this->data_source_title( $data_source );
-		$slug  = Collection::unique_slug( $title );
+		$title     = $this->data_source_title( $data_source );
+		$documents = new Documents();
 
-		$collection_id = wp_insert_post(
+		$collection_id = $documents->save(
 			array(
-				'post_type'   => Collection::POST_TYPE,
-				'post_title'  => $title,
-				'post_status' => 'private',
-				'meta_input'  => array(
-					'slug'                         => $slug,
-					'workspace_mode'               => 'full_page',
+				'title'  => $title,
+				'status' => 'private',
+				'meta'   => array(
 					self::META_COLLECTION_DS_ID    => (string) ( $data_source['id'] ?? '' ),
 					self::META_COLLECTION_DB_ID    => (string) ( $data_source['parent']['database_id'] ?? '' ),
 					self::META_COLLECTION_IMPORTED => gmdate( 'c' ),
 				),
-			),
-			true
+			)
 		);
 
-		if ( is_wp_error( $collection_id ) ) {
+		if ( $collection_id instanceof WP_Error ) {
 			return $collection_id;
-		}
-
-		$collection_post = get_post( $collection_id );
-		if ( $collection_post instanceof WP_Post ) {
-			( new CollectionEntries() )->register_for_collection( $collection_post );
 		}
 
 		// Per-property field creation. Order matches the source payload,
 		// which Notion documents as schema-creation order.
+		$field_ids = array();
 		foreach ( ( $data_source['properties'] ?? array() ) as $name => $prop ) {
 			if ( ! is_array( $prop ) ) {
 				continue;
 			}
-			$err = $this->create_field( (int) $collection_id, $slug, (string) $name, $prop );
-			if ( is_wp_error( $err ) ) {
+			$field_id = $this->create_field( (string) $name, $prop );
+			if ( $field_id instanceof WP_Error ) {
 				// FIXME: This needs better handling. Any previously created
 				// fields need to be cleaned up too.
 				wp_delete_post( (int) $collection_id, true );
-				return $err;
+				return $field_id;
 			}
+			if ( $field_id > 0 ) {
+				$field_ids[] = $field_id;
+			}
+		}
+
+		// Designate the document a collection. Passing `fields` (even an empty
+		// list) creates the mirror trait term and seeds the data-view body;
+		// with fields it also writes the `cortext_fields` schema.
+		$designated = $documents->save(
+			array(
+				'id'     => (int) $collection_id,
+				'fields' => $field_ids,
+			)
+		);
+		if ( $designated instanceof WP_Error ) {
+			wp_delete_post( (int) $collection_id, true );
+			return $designated;
 		}
 
 		return (int) $collection_id;
@@ -143,29 +165,16 @@ final class Importer {
 	/**
 	 * Insert a batch of Notion rows into a Cortext collection.
 	 *
-	 * @param int   $collection_id Cortext collection ID.
+	 * @param int   $collection_id Cortext collection document ID.
 	 * @param array $raw_rows      Notion `/query` results (page objects).
 	 * @return int                 Number of rows successfully inserted.
 	 */
 	public function import_rows( int $collection_id, array $raw_rows ): int {
-		$slug = (string) get_post_meta( $collection_id, 'slug', true );
-		if ( '' === $slug ) {
+		if ( ! Document::is_collection( $collection_id ) ) {
 			return 0;
 		}
-		$post_type = CollectionEntries::CPT_PREFIX . $slug;
 
-		// Make the row-level breadcrumb visible via REST. Safe to call
-		// repeatedly; WP dedupes on key + object_subtype.
-		register_post_meta(
-			$post_type,
-			self::META_ROW_PAGE_ID,
-			array(
-				'type'         => 'string',
-				'single'       => true,
-				'show_in_rest' => true,
-			)
-		);
-
+		$documents = new Documents();
 		$field_map = $this->build_field_map( $collection_id );
 
 		$count = 0;
@@ -177,22 +186,11 @@ final class Importer {
 			$title   = $this->row_title( $row );
 			$page_id = (string) ( $row['id'] ?? '' );
 
-			$row_id = wp_insert_post(
-				array(
-					'post_type'   => $post_type,
-					'post_title'  => $title,
-					'post_status' => 'private',
-					'meta_input'  => array(
-						self::META_ROW_PAGE_ID => $page_id,
-					),
-				),
-				true
-			);
-
-			if ( is_wp_error( $row_id ) || ! $row_id ) {
-				continue;
-			}
-
+			// Single-valued cell meta rides along on the row create through
+			// `meta`; multiselect needs one meta row per value, so collect
+			// those and write them after the document exists.
+			$single_meta  = array( self::META_ROW_PAGE_ID => $page_id );
+			$multi_values = array();
 			foreach ( ( $row['properties'] ?? array() ) as $prop ) {
 				if ( ! is_array( $prop ) ) {
 					continue;
@@ -203,7 +201,38 @@ final class Importer {
 				}
 				$mapping = $field_map[ $prop_id ];
 				$value   = $this->cell_value( $prop, $mapping['type'] );
-				$this->write_row_field( (int) $row_id, (int) $mapping['id'], $mapping['type'], $value );
+				$key     = "field-{$mapping['id']}";
+
+				if ( 'multiselect' === $mapping['type'] ) {
+					$multi_values[ $key ] = is_array( $value ) ? $value : array();
+					continue;
+				}
+				if ( null === $value || '' === $value ) {
+					continue;
+				}
+				$single_meta[ $key ] = $value;
+			}
+
+			$row_id = $documents->save(
+				array(
+					'title'  => $title,
+					'status' => 'private',
+					'trait'  => $collection_id,
+					'meta'   => $single_meta,
+				)
+			);
+
+			if ( $row_id instanceof WP_Error || $row_id < 1 ) {
+				continue;
+			}
+
+			foreach ( $multi_values as $key => $items ) {
+				delete_post_meta( (int) $row_id, $key );
+				foreach ( $items as $item ) {
+					if ( null !== $item && '' !== $item ) {
+						add_post_meta( (int) $row_id, $key, (string) $item );
+					}
+				}
 			}
 
 			++$count;
@@ -252,79 +281,53 @@ final class Importer {
 	}
 
 	/**
-	 * Create one Cortext field for a Notion property and attach it to
-	 * the collection. Returns null for clean skips (title, unsupported
-	 * type) and a WP_Error only on actual `wp_insert_post` failure.
+	 * Create one Cortext field for a Notion property. Returns the field id,
+	 * 0 for clean skips (title, unsupported type), or a WP_Error only on an
+	 * actual save failure. The caller attaches the returned id to the
+	 * collection schema.
 	 *
-	 * @param int    $collection_id Parent collection.
-	 * @param string $slug          Collection slug (for row CPT name).
-	 * @param string $name          Property display name.
-	 * @param array  $prop          Notion property schema.
-	 * @return null|WP_Error null on success/skip, WP_Error on hard failure.
+	 * @param string $name Property display name.
+	 * @param array  $prop Notion property schema.
+	 * @return int|WP_Error Field id, 0 on skip, WP_Error on hard failure.
 	 */
-	private function create_field( int $collection_id, string $slug, string $name, array $prop ) {
+	private function create_field( string $name, array $prop ) {
 		$notion_type = (string) ( $prop['type'] ?? '' );
 		if ( '' === $notion_type || 'title' === $notion_type ) {
-			return null;
+			return 0;
 		}
 
 		$cortext_type = $this->cortext_type_for( $notion_type );
 		if ( null === $cortext_type ) {
-			return null;
+			return 0;
 		}
 
-		$field_id = wp_insert_post(
-			array(
-				'post_type'   => Field::POST_TYPE,
-				'post_title'  => $name,
-				'post_status' => 'private',
-				'meta_input'  => array(
-					'type'                       => $cortext_type,
-					self::META_FIELD_PROPERTY_ID => $this->decode_property_id( (string) ( $prop['id'] ?? '' ) ),
-					self::META_FIELD_NOTION_TYPE => $notion_type,
-				),
+		$payload = array(
+			'title'  => $name,
+			'status' => 'private',
+			'type'   => $cortext_type,
+			'meta'   => array(
+				self::META_FIELD_PROPERTY_ID => $this->decode_property_id( (string) ( $prop['id'] ?? '' ) ),
+				self::META_FIELD_NOTION_TYPE => $notion_type,
 			),
-			true
 		);
-
-		if ( is_wp_error( $field_id ) ) {
-			return $field_id;
-		}
 
 		// Type-specific extras.
 		if ( 'select' === $cortext_type ) {
-			$source  = 'status' === $notion_type ? ( $prop['status'] ?? array() ) : ( $prop['select'] ?? array() );
-			$options = $this->map_options( (array) ( $source['options'] ?? array() ) );
-			update_post_meta( $field_id, 'options', wp_json_encode( $options ) );
+			$source             = 'status' === $notion_type ? ( $prop['status'] ?? array() ) : ( $prop['select'] ?? array() );
+			$payload['options'] = $this->map_options( (array) ( $source['options'] ?? array() ) );
 		} elseif ( 'multiselect' === $cortext_type ) {
-			$options = $this->map_options( (array) ( $prop['multi_select']['options'] ?? array() ) );
-			update_post_meta( $field_id, 'options', wp_json_encode( $options ) );
+			$payload['options'] = $this->map_options( (array) ( $prop['multi_select']['options'] ?? array() ) );
 		} elseif ( 'number' === $cortext_type ) {
-			$format = (string) ( $prop['number']['format'] ?? 'number' );
-			update_post_meta(
-				$field_id,
-				'number_format',
-				wp_json_encode( array( 'format' => $format ) )
-			);
+			$format                   = (string) ( $prop['number']['format'] ?? 'number' );
+			$payload['number_format'] = (string) wp_json_encode( array( 'format' => $format ) );
 		}
 
-		add_post_meta( $collection_id, 'fields', (string) $field_id );
+		$field_id = Field::save( $payload );
+		if ( $field_id instanceof WP_Error ) {
+			return $field_id;
+		}
 
-		// Register the per-field meta key on the row CPT now that the
-		// field exists. `register_for_collection` (called earlier in
-		// create_collection) registered the CPT itself; this hooks each
-		// field-{id} key into REST. Safe to call repeatedly.
-		register_post_meta(
-			CollectionEntries::CPT_PREFIX . $slug,
-			"field-{$field_id}",
-			array(
-				'type'         => CollectionEntries::wp_meta_type_for( $cortext_type ),
-				'single'       => 'multiselect' !== $cortext_type,
-				'show_in_rest' => true,
-			)
-		);
-
-		return null;
+		return (int) $field_id;
 	}
 
 	/**
@@ -363,17 +366,12 @@ final class Importer {
 	 * Build a `decoded_property_id => { id: field_post_id, type }` map
 	 * from a collection's attached field posts.
 	 *
-	 * @param int $collection_id Collection post ID.
+	 * @param int $collection_id Collection document ID.
 	 * @return array<string,array{id:int,type:string}>
 	 */
 	private function build_field_map( int $collection_id ): array {
-		$map       = array();
-		$field_ids = get_post_meta( $collection_id, 'fields', false );
-		foreach ( (array) $field_ids as $field_id ) {
-			$field_id = (int) $field_id;
-			if ( ! $field_id ) {
-				continue;
-			}
+		$map = array();
+		foreach ( Document::collection_field_ids( $collection_id ) as $field_id ) {
 			$prop_id = (string) get_post_meta( $field_id, self::META_FIELD_PROPERTY_ID, true );
 			if ( '' === $prop_id ) {
 				continue;
@@ -388,38 +386,6 @@ final class Importer {
 			);
 		}
 		return $map;
-	}
-
-	/**
-	 * Persist one cell value onto a row, picking the right WP meta call
-	 * shape for the field type.
-	 *
-	 * @param int    $row_id   Row post ID.
-	 * @param int    $field_id Cortext field post ID.
-	 * @param string $type     Cortext field type.
-	 * @param mixed  $value    Already-converted value from `cell_value`.
-	 */
-	private function write_row_field( int $row_id, int $field_id, string $type, $value ): void {
-		$key = "field-{$field_id}";
-
-		if ( 'multiselect' === $type ) {
-			delete_post_meta( $row_id, $key );
-			if ( is_array( $value ) ) {
-				foreach ( $value as $item ) {
-					if ( null !== $item && '' !== $item ) {
-						add_post_meta( $row_id, $key, (string) $item );
-					}
-				}
-			}
-			return;
-		}
-
-		if ( null === $value || '' === $value ) {
-			delete_post_meta( $row_id, $key );
-			return;
-		}
-
-		update_post_meta( $row_id, $key, $value );
 	}
 
 	/**

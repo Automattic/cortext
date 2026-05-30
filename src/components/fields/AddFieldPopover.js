@@ -230,11 +230,11 @@ function RollupConfig( {
 	const targetCollectionId = selectedRelation?.relatedCollectionId;
 	const { record: targetCollection } = useEntityRecord(
 		'postType',
-		'crtxt_collection',
+		'crtxt_document',
 		targetCollectionId ?? 0
 	);
 	const targetFieldIds = useMemo( () => {
-		const raw = targetCollection?.meta?.fields;
+		const raw = targetCollection?.meta?.cortext_fields;
 		return Array.isArray( raw )
 			? raw.map( ( id ) => Number( id ) ).filter( Boolean )
 			: [];
@@ -442,7 +442,7 @@ export default function AddFieldPopover( { collectionId, onCreate } ) {
 	const { run, isBusy, error } = useCreateField( collectionId );
 	const { records: collections } = useEntityRecords(
 		'postType',
-		'crtxt_collection',
+		'crtxt_document',
 		COLLECTION_QUERY
 	);
 

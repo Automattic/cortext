@@ -1,86 +1,44 @@
 import { useState, useMemo, useCallback, useEffect } from '@wordpress/element';
 
-import { buildTree, collectAncestorIds } from '../pages-tree';
-
-// Pages and full-page collections share one tree. Collections with a loaded
-// page parent appear under that page. Collections without a loaded page
-// parent stay in the Collections section, including row-owned collections
-// for now (tech-debt.md#td-workspace-tree-no-unified-model).
-//
-// Sort top-level collections here. Otherwise `useEntityRecords` returns
-// whatever order core-data emits, which can shift after a rename and reorder
-// the sidebar. Nested collections get the same menu_order/id sort through
-// `buildTree`.
-function deriveCollectionGroups( pages, collections ) {
-	const pageIds = new Set( pages.map( ( p ) => p.id ) );
-	const nested = [];
-	const topLevel = [];
-	( collections ?? [] ).forEach( ( collection ) => {
-		const parent = collection.parent ?? 0;
-		if ( parent && pageIds.has( parent ) ) {
-			nested.push( collection );
-		} else {
-			topLevel.push( collection );
-		}
-	} );
-	topLevel.sort( ( a, b ) => {
-		const ao = a.menu_order || 0;
-		const bo = b.menu_order || 0;
-		if ( ao !== bo ) {
-			return ao - bo;
-		}
-		return a.id - b.id;
-	} );
-	return { nestedCollections: nested, topLevelCollections: topLevel };
-}
+import { buildTree, collectAncestorIds } from '../document-tree';
 
 /**
- * Sidebar tree state: pages and nested collections merged into one tree,
- * the expanded-id set, and helpers for toggling branches. It also expands
+ * Sidebar tree state. `documents` is the single non-row list (pages plus
+ * collections) that feeds the whole tree, so each document renders once. Page
+ * vs collection is a per-record concern derived elsewhere from whether the
+ * document defines a trait (`cortext_defines_trait`). The hook also expands
  * ancestors of the active selection so direct links from Home, Favorites, or
- * Recents reveal nested collections instead of hiding them under a collapsed
- * page.
+ * Recents reveal nested documents instead of hiding them under a collapsed
+ * parent.
  *
  * @param {Object}  args
- * @param {Array}   args.pages                Loaded `crtxt_page` records.
- * @param {Array}   args.collections          Loaded `crtxt_collection` records (may be undefined while resolving).
+ * @param {Array}   args.documents            Loaded non-row `crtxt_document` records (pages and collections).
  * @param {?number} args.selectedId           Currently selected page id, or null.
  * @param {?number} args.selectedCollectionId Currently selected collection id, or null.
  */
 export default function useSidebarTree( {
-	pages,
-	collections,
+	documents,
 	selectedId,
 	selectedCollectionId,
 } ) {
-	const { nestedCollections, topLevelCollections } = useMemo(
-		() => deriveCollectionGroups( pages, collections ),
-		[ pages, collections ]
-	);
-
-	const tree = useMemo(
-		() => buildTree( [ ...pages, ...nestedCollections ] ),
-		[ pages, nestedCollections ]
-	);
+	const tree = useMemo( () => buildTree( documents ?? [] ), [ documents ] );
 
 	const [ expandedIds, setExpandedIds ] = useState( () => new Set() );
 
 	useEffect( () => {
+		const list = documents ?? [];
 		let ancestorIds = [];
 		if ( selectedId !== null ) {
-			ancestorIds = collectAncestorIds( selectedId, pages );
+			ancestorIds = collectAncestorIds( selectedId, list );
 		} else if ( selectedCollectionId !== null ) {
 			// Direct links from Home, Favorites, and Recents should reveal
-			// nested collections instead of leaving them under a collapsed page.
-			const collection = ( collections ?? [] ).find(
+			// nested documents instead of leaving them under a collapsed parent.
+			const collection = list.find(
 				( c ) => c.id === selectedCollectionId
 			);
 			const parent = Number( collection?.parent ?? 0 );
 			if ( parent > 0 ) {
-				ancestorIds = [
-					parent,
-					...collectAncestorIds( parent, pages ),
-				];
+				ancestorIds = [ parent, ...collectAncestorIds( parent, list ) ];
 			}
 		}
 		if ( ancestorIds.length === 0 ) {
@@ -97,7 +55,7 @@ export default function useSidebarTree( {
 			} );
 			return changed ? next : prev;
 		} );
-	}, [ selectedId, selectedCollectionId, pages, collections ] );
+	}, [ selectedId, selectedCollectionId, documents ] );
 
 	const toggleExpand = useCallback( ( id ) => {
 		setExpandedIds( ( prev ) => {
@@ -123,8 +81,6 @@ export default function useSidebarTree( {
 	}, [] );
 
 	return {
-		nestedCollections,
-		topLevelCollections,
 		tree,
 		expandedIds,
 		toggleExpand,

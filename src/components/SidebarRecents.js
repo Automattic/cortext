@@ -1,5 +1,6 @@
 import { useNavigate } from '@tanstack/react-router';
 import { Button } from '@wordpress/components';
+import { useEntityRecord } from '@wordpress/core-data';
 import { useCallback, useLayoutEffect, useRef } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 
@@ -9,6 +10,7 @@ import useDelayedFlag, {
 } from '../hooks/useDelayedFlag';
 import { useRecents } from '../hooks/useRecents';
 import { useDocumentRecord } from '../documents';
+import { DOCUMENT_POST_TYPE } from '../collections';
 
 const RECENT_REPOSITION_OPTIONS = {
 	duration: 180,
@@ -21,7 +23,7 @@ const RECENT_APPEARANCE_OPTIONS = {
 };
 
 function recentKey( recent ) {
-	return `${ recent.kind }:${ recent.id }`;
+	return `recent:${ recent.id }`;
 }
 
 function shouldAnimateRecents() {
@@ -56,7 +58,17 @@ function runNodeAnimation( node, keyframes, options ) {
  * @param {Function} props.onSelect   Navigate to the recent's path.
  */
 function SidebarRecentsRow( { recent, setNodeRef, onSelect } ) {
-	const { listIcon, kindLabel } = useDocumentRecord( recent );
+	// Recents wire shape only carries id/title/path/icon (and optional row
+	// context). Capability checks need `meta.cortext_fields` / `crtxt_trait`,
+	// so we load the document record at render time and merge it with the
+	// snapshot. Already-loaded records hit the core-data cache instantly.
+	const { record } = useEntityRecord(
+		'postType',
+		DOCUMENT_POST_TYPE,
+		recent.id || 0
+	);
+	const merged = record ? { ...recent, ...record } : recent;
+	const { listIcon, kindLabel } = useDocumentRecord( merged );
 	const title = recent?.title?.trim?.() || __( '(untitled)', 'cortext' );
 	const contextTitle = recent?.collection?.title?.trim?.() ?? '';
 

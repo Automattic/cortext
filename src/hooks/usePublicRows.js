@@ -6,7 +6,7 @@ const SERVER_OPERATORS = new Set( [ 'is', 'isNot', 'isAny', 'isNone' ] );
 
 function buildQueryArgs( collectionId, view ) {
 	const args = {
-		collection: collectionId,
+		trait: collectionId,
 		context: 'view',
 		per_page: -1,
 	};

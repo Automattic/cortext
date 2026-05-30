@@ -201,11 +201,11 @@ describe( 'document-properties Customize properties mode', () => {
 		await waitFor( () =>
 			expect( mockSaveEntityRecord ).toHaveBeenLastCalledWith(
 				'postType',
-				'crtxt_collection',
+				'crtxt_document',
 				{
 					id: 77,
 					meta: {
-						detail_layout: {
+						cortext_detail_layout: {
 							fields: [
 								{ field: 'created_at', visible: false },
 								{ field: 'field-10', visible: true },
@@ -345,11 +345,11 @@ describe( 'document-properties Customize properties mode', () => {
 		await waitFor( () =>
 			expect( mockSaveEntityRecord ).toHaveBeenCalledWith(
 				'postType',
-				'crtxt_collection',
+				'crtxt_document',
 				{
 					id: 77,
 					meta: {
-						detail_layout: {
+						cortext_detail_layout: {
 							fields: [
 								{ field: 'created_at', visible: true },
 								{ field: 'field-11', visible: false },
@@ -388,11 +388,11 @@ describe( 'document-properties Customize properties mode', () => {
 		await waitFor( () =>
 			expect( mockSaveEntityRecord ).toHaveBeenCalledWith(
 				'postType',
-				'crtxt_collection',
+				'crtxt_document',
 				{
 					id: 77,
 					meta: {
-						detail_layout: {
+						cortext_detail_layout: {
 							fields: [
 								{ field: 'created_at', visible: true },
 								{ field: 'field-11', visible: false },
@@ -421,11 +421,11 @@ describe( 'document-properties Customize properties mode', () => {
 		await waitFor( () =>
 			expect( mockSaveEntityRecord ).toHaveBeenCalledWith(
 				'postType',
-				'crtxt_collection',
+				'crtxt_document',
 				{
 					id: 77,
 					meta: {
-						detail_layout: {
+						cortext_detail_layout: {
 							fields: [
 								{ field: 'created_at', visible: true },
 								{ field: 'field-10', visible: false },
@@ -462,11 +462,11 @@ describe( 'document-properties Customize properties mode', () => {
 		await waitFor( () =>
 			expect( mockSaveEntityRecord ).toHaveBeenCalledWith(
 				'postType',
-				'crtxt_collection',
+				'crtxt_document',
 				{
 					id: 77,
 					meta: {
-						detail_layout: {
+						cortext_detail_layout: {
 							fields: [
 								{ field: 'created_at', visible: true },
 								{ field: 'field-11', visible: true },
@@ -493,11 +493,11 @@ describe( 'document-properties Customize properties mode', () => {
 		await waitFor( () =>
 			expect( mockSaveEntityRecord ).toHaveBeenCalledWith(
 				'postType',
-				'crtxt_collection',
+				'crtxt_document',
 				{
 					id: 77,
 					meta: {
-						detail_layout: {
+						cortext_detail_layout: {
 							fields: [
 								{ field: 'field-11', visible: true },
 								{ field: 'field-10', visible: true },
@@ -526,11 +526,11 @@ describe( 'document-properties Customize properties mode', () => {
 		await waitFor( () =>
 			expect( mockSaveEntityRecord ).toHaveBeenCalledWith(
 				'postType',
-				'crtxt_collection',
+				'crtxt_document',
 				{
 					id: 77,
 					meta: {
-						detail_layout: {
+						cortext_detail_layout: {
 							fields: [
 								{ field: 'field-10', visible: true },
 								{ field: 'created_at', visible: true },
@@ -589,11 +589,11 @@ describe( 'document-properties Customize properties mode', () => {
 		await waitFor( () =>
 			expect( mockSaveEntityRecord ).toHaveBeenCalledWith(
 				'postType',
-				'crtxt_collection',
+				'crtxt_document',
 				{
 					id: 77,
 					meta: {
-						detail_layout: {
+						cortext_detail_layout: {
 							fields: [
 								{ field: 'created_at', visible: true },
 								{ field: 'field-10', visible: true },

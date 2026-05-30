@@ -82,7 +82,7 @@ jest.mock( '../../../src/components/CortextCommandMenu', () => {
 	};
 } );
 
-jest.mock( '../../../src/components/PageIcon', () => () => null );
+jest.mock( '../../../src/components/DocumentIcon', () => () => null );
 
 import CommandPalette from '../../../src/components/CommandPalette';
 
@@ -114,16 +114,14 @@ describe( 'CommandPalette recents', () => {
 	it( 'registers a command for each recent item', () => {
 		mockRecents = [
 			{
-				kind: 'page',
 				id: 7,
 				title: 'Notes',
-				path: 'page/notes-7',
+				path: 'notes-7',
 			},
 			{
-				kind: 'row',
 				id: 12,
 				title: 'Ada Lovelace',
-				path: 'collection/people-9',
+				path: 'people-9',
 				collection: { title: 'People' },
 			},
 		];
@@ -141,12 +139,12 @@ describe( 'CommandPalette recents', () => {
 		expect( commands ).toEqual(
 			expect.arrayContaining( [
 				expect.objectContaining( {
-					name: 'cortext/recent/page-7',
+					name: 'cortext/recent/7',
 					label: 'Notes',
 					searchLabel: 'Open recent: Notes',
 				} ),
 				expect.objectContaining( {
-					name: 'cortext/recent/row-12',
+					name: 'cortext/recent/12',
 					label: 'Ada Lovelace in People',
 					searchLabel: 'Open recent: Ada Lovelace in People',
 				} ),
@@ -159,10 +157,9 @@ describe( 'CommandPalette recents', () => {
 		const focus = jest.fn();
 		mockRecents = [
 			{
-				kind: 'collection',
 				id: 9,
 				title: 'People',
-				path: 'collection/people-9',
+				path: 'people-9',
 			},
 		];
 
@@ -170,16 +167,13 @@ describe( 'CommandPalette recents', () => {
 
 		const command = mockUseCommand.mock.calls
 			.map( ( [ registered ] ) => registered )
-			.find(
-				( registered ) =>
-					registered.name === 'cortext/recent/collection-9'
-			);
+			.find( ( registered ) => registered.name === 'cortext/recent/9' );
 
 		command.callback( { close } );
 
 		expect( mockNavigate ).toHaveBeenCalledWith( {
 			to: '/$',
-			params: { _splat: 'collection/people-9' },
+			params: { _splat: 'people-9' },
 		} );
 		expect( close ).toHaveBeenCalled();
 		jest.runOnlyPendingTimers();
@@ -208,14 +202,12 @@ describe( 'CommandPalette document search', () => {
 		mockUseDocuments.mockReturnValue( {
 			documents: [
 				{
-					kind: 'page',
 					id: 42,
 					title: 'Roadmap',
 					path: 'roadmap-42',
 					excerpt: 'Quarterly themes for next half.',
 				},
 				{
-					kind: 'row',
 					id: 77,
 					title: 'Ship the thing',
 					path: 'ship-the-thing-77',
@@ -250,24 +242,22 @@ describe( 'CommandPalette document search', () => {
 			( [ command ] ) => command
 		);
 		const pageCommand = commands.find(
-			( c ) => c.name === 'cortext/document/page-42'
+			( c ) => c.name === 'cortext/document/42'
 		);
 		const rowCommand = commands.find(
-			( c ) => c.name === 'cortext/document/row-77'
+			( c ) => c.name === 'cortext/document/77'
 		);
 
 		expect( pageCommand ).toMatchObject( {
 			label: 'Roadmap',
-			keywords: [ 'page' ],
 		} );
 		expect( rowCommand ).toMatchObject( {
 			label: 'Ship the thing',
-			keywords: [ 'row' ],
 		} );
-		expect( mockMenu.descriptions.get( 'cortext/document/page-42' ) ).toBe(
+		expect( mockMenu.descriptions.get( 'cortext/document/42' ) ).toBe(
 			'Quarterly themes for next half.'
 		);
-		expect( mockMenu.descriptions.get( 'cortext/document/row-77' ) ).toBe(
+		expect( mockMenu.descriptions.get( 'cortext/document/77' ) ).toBe(
 			'in Projects'
 		);
 
@@ -330,7 +320,6 @@ describe( 'CommandPalette document search', () => {
 		mockIsPaletteOpen = true;
 		const staleDocs = [
 			{
-				kind: 'page',
 				id: 1,
 				title: 'Stale',
 				path: 'stale-1',
@@ -359,7 +348,7 @@ describe( 'CommandPalette document search', () => {
 		expect(
 			mockUseCommand.mock.calls
 				.map( ( [ c ] ) => c )
-				.some( ( c ) => c.name === 'cortext/document/page-1' )
+				.some( ( c ) => c.name === 'cortext/document/1' )
 		).toBe( true );
 
 		mockUseCommand.mockClear();
@@ -386,12 +375,12 @@ describe( 'CommandPalette document search', () => {
 		expect(
 			mockUseCommand.mock.calls
 				.map( ( [ c ] ) => c )
-				.some( ( c ) => c.name === 'cortext/document/page-1' )
+				.some( ( c ) => c.name === 'cortext/document/1' )
 		).toBe( true );
 
 		// Descriptions stay populated so the second line does not flicker.
 		expect(
-			mockMenu.descriptions.get( 'cortext/document/page-1' )
+			mockMenu.descriptions.get( 'cortext/document/1' )
 		).toBeTruthy();
 	} );
 
@@ -399,8 +388,8 @@ describe( 'CommandPalette document search', () => {
 		mockIsPaletteOpen = true;
 		mockUseDocuments.mockReturnValue( {
 			documents: [
-				{ kind: 'page', id: 42, title: 'Alice', path: 'alice-42' },
-				{ kind: 'row', id: 77, title: 'Bob', path: 'bob-77' },
+				{ id: 42, title: 'Alice', path: 'alice-42' },
+				{ id: 77, title: 'Bob', path: 'bob-77' },
 			],
 			total: 2,
 			isLoading: false,
@@ -418,22 +407,18 @@ describe( 'CommandPalette document search', () => {
 			jest.advanceTimersByTime( 150 );
 		} );
 
-		expect( mockMenu.selectedValue ).toBe(
-			'document-cortext/document/page-42'
-		);
+		expect( mockMenu.selectedValue ).toBe( 'document-cortext/document/42' );
 
 		// User (or cmdk) moves the selection. The next refinement must not
 		// jump back to the new first doc; cmdk owns the value from here.
 		act( () => {
-			mockMenu.onSelectedValueChange(
-				'document-cortext/document/row-77'
-			);
+			mockMenu.onSelectedValueChange( 'document-cortext/document/77' );
 		} );
 		mockUseDocuments.mockReturnValue( {
 			documents: [
-				{ kind: 'row', id: 99, title: 'Alicia', path: 'alicia-99' },
-				{ kind: 'page', id: 42, title: 'Alice', path: 'alice-42' },
-				{ kind: 'row', id: 77, title: 'Bob', path: 'bob-77' },
+				{ id: 99, title: 'Alicia', path: 'alicia-99' },
+				{ id: 42, title: 'Alice', path: 'alice-42' },
+				{ id: 77, title: 'Bob', path: 'bob-77' },
 			],
 			total: 3,
 			isLoading: false,
@@ -447,9 +432,7 @@ describe( 'CommandPalette document search', () => {
 		act( () => {
 			jest.advanceTimersByTime( 150 );
 		} );
-		expect( mockMenu.selectedValue ).toBe(
-			'document-cortext/document/row-77'
-		);
+		expect( mockMenu.selectedValue ).toBe( 'document-cortext/document/77' );
 
 		// Clearing the input drops the anchor so cmdk picks fresh next time.
 		act( () => {
@@ -462,8 +445,8 @@ describe( 'CommandPalette document search', () => {
 		mockIsPaletteOpen = true;
 		mockUseDocuments.mockReturnValue( {
 			documents: [
-				{ kind: 'page', id: 42, title: 'Alice', path: 'alice-42' },
-				{ kind: 'row', id: 77, title: 'Bob', path: 'bob-77' },
+				{ id: 42, title: 'Alice', path: 'alice-42' },
+				{ id: 77, title: 'Bob', path: 'bob-77' },
 			],
 			total: 2,
 			isLoading: false,
@@ -483,21 +466,17 @@ describe( 'CommandPalette document search', () => {
 
 		// User arrows to the second doc.
 		act( () => {
-			mockMenu.onSelectedValueChange(
-				'document-cortext/document/row-77'
-			);
+			mockMenu.onSelectedValueChange( 'document-cortext/document/77' );
 		} );
-		expect( mockMenu.selectedValue ).toBe(
-			'document-cortext/document/row-77'
-		);
+		expect( mockMenu.selectedValue ).toBe( 'document-cortext/document/77' );
 
-		// Refinement returns a set that no longer contains row-77. The
+		// Refinement returns a set that no longer contains 77. The
 		// selection has to jump to the new first doc so cmdk does not show
 		// a frame with nothing highlighted.
 		mockUseDocuments.mockReturnValue( {
 			documents: [
-				{ kind: 'row', id: 99, title: 'Alicia', path: 'alicia-99' },
-				{ kind: 'page', id: 42, title: 'Alice', path: 'alice-42' },
+				{ id: 99, title: 'Alicia', path: 'alicia-99' },
+				{ id: 42, title: 'Alice', path: 'alice-42' },
 			],
 			total: 2,
 			isLoading: false,
@@ -512,15 +491,13 @@ describe( 'CommandPalette document search', () => {
 			jest.advanceTimersByTime( 150 );
 		} );
 
-		expect( mockMenu.selectedValue ).toBe(
-			'document-cortext/document/row-99'
-		);
+		expect( mockMenu.selectedValue ).toBe( 'document-cortext/document/99' );
 	} );
 
 	it( 'clears the input and the controlled selection when the palette closes', () => {
 		mockIsPaletteOpen = true;
 		mockUseDocuments.mockReturnValue( {
-			documents: [ { kind: 'page', id: 1, title: 'Foo', path: 'foo-1' } ],
+			documents: [ { id: 1, title: 'Foo', path: 'foo-1' } ],
 			total: 1,
 			isLoading: false,
 			hasResolved: true,
@@ -539,9 +516,7 @@ describe( 'CommandPalette document search', () => {
 			jest.advanceTimersByTime( 150 );
 		} );
 		expect( mockMenu.search ).toBe( 'foo' );
-		expect( mockMenu.selectedValue ).toBe(
-			'document-cortext/document/page-1'
-		);
+		expect( mockMenu.selectedValue ).toBe( 'document-cortext/document/1' );
 
 		// Simulate the palette closing after the user picked a result.
 		// `close()` from the command callback bypasses `closeAndReset`, so
@@ -558,7 +533,6 @@ describe( 'CommandPalette document search', () => {
 		mockIsPaletteOpen = true;
 		const staleDocs = [
 			{
-				kind: 'page',
 				id: 1,
 				title: 'Stale',
 				path: 'stale-1',
@@ -608,7 +582,7 @@ describe( 'CommandPalette document search', () => {
 		expect(
 			mockUseCommand.mock.calls
 				.map( ( [ c ] ) => c )
-				.some( ( c ) => c.name === 'cortext/document/page-1' )
+				.some( ( c ) => c.name === 'cortext/document/1' )
 		).toBe( false );
 	} );
 } );

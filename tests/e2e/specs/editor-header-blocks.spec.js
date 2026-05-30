@@ -331,27 +331,26 @@ async function exerciseHeaderGuard( page ) {
 
 async function createRowFixture( requestUtils ) {
 	const suffix = Date.now().toString( 36 ).slice( -4 );
-	const slug = `e2ehdr${ suffix }`;
 	const collection = await requestUtils.rest( {
 		method: 'POST',
-		path: '/wp/v2/crtxt_collections',
+		path: '/wp/v2/crtxt_documents',
 		data: {
 			title: `E2E Header Collection ${ suffix }`,
 			status: 'private',
-			meta: { slug },
 		},
 	} );
 	const row = await requestUtils.rest( {
 		method: 'POST',
-		path: `/wp/v2/crtxt_${ slug }`,
+		path: '/wp/v2/crtxt_documents',
 		data: {
 			title: `E2E Header Row ${ suffix }`,
 			status: 'private',
+			cortext_trait: collection.id,
 			content: bodyMarkup(),
 			meta: { cortext_document_icon: DOCUMENT_ICON_META },
 		},
 	} );
-	return { collection, row, slug };
+	return { collection, row };
 }
 
 test.describe( 'editor header blocks', () => {
@@ -364,7 +363,7 @@ test.describe( 'editor header blocks', () => {
 		try {
 			createdPage = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: 'E2E Header Guard Page',
 					status: 'private',
@@ -382,7 +381,7 @@ test.describe( 'editor header blocks', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				createdPage && `/wp/v2/crtxt_pages/${ createdPage.id }`
+				createdPage && `/wp/v2/crtxt_documents/${ createdPage.id }`
 			);
 		}
 	} );
@@ -405,11 +404,11 @@ test.describe( 'editor header blocks', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				fixture && `/wp/v2/crtxt_${ fixture.slug }/${ fixture.row.id }`
+				fixture && `/wp/v2/crtxt_documents/${ fixture.row.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
-				fixture && `/wp/v2/crtxt_collections/${ fixture.collection.id }`
+				fixture && `/wp/v2/crtxt_documents/${ fixture.collection.id }`
 			);
 		}
 	} );

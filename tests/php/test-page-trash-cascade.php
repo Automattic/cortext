@@ -1,6 +1,6 @@
 <?php
 /**
- * Tests for Cortext\PostType\Cascade\PageHierarchyTrashCascade.
+ * Tests for the post_parent leg of Cortext\PostType\TrashCascade.
  *
  * @package Cortext
  */
@@ -9,9 +9,9 @@ declare( strict_types=1 );
 
 namespace Cortext\Tests;
 
-use Cortext\PostType\Cascade\PageHierarchyTrashCascade;
-use Cortext\PostType\Page;
-use Cortext\PostType\TrashCascadeEngine;
+use Cortext\PostType\Document;
+use Cortext\PostType\TrashCascade;
+use Cortext\Taxonomy\TraitTaxonomy;
 use WorDBless\BaseTestCase;
 
 final class Test_Page_Trash_Cascade extends BaseTestCase {
@@ -21,17 +21,16 @@ final class Test_Page_Trash_Cascade extends BaseTestCase {
 	public function set_up(): void {
 		parent::set_up();
 
-		( new Page() )->register_post_type();
+		( new Document() )->register_post_type();
+		( new TraitTaxonomy() )->register_taxonomy();
 
 		remove_all_actions( 'wp_trash_post' );
 		remove_all_actions( 'untrashed_post' );
 		remove_all_filters( 'wp_untrash_post_status' );
-		remove_all_filters( 'bulk_actions-edit-' . Page::POST_TYPE );
-		remove_all_filters( 'handle_bulk_actions-edit-' . Page::POST_TYPE );
 
 		$this->install_in_memory_posts_query();
 
-		( new TrashCascadeEngine( array( new PageHierarchyTrashCascade() ) ) )->register();
+		( new TrashCascade() )->register();
 	}
 
 	public function tear_down(): void {
@@ -42,23 +41,15 @@ final class Test_Page_Trash_Cascade extends BaseTestCase {
 	public function test_register_hooks_trash_and_untrash_actions(): void {
 		$this->assertNotFalse(
 			has_action( 'wp_trash_post' ),
-			'cascade_trash should be hooked on wp_trash_post.'
+			'on_trash should be hooked on wp_trash_post.'
 		);
 		$this->assertNotFalse(
 			has_action( 'untrashed_post' ),
-			'cascade_restore should be hooked on untrashed_post.'
+			'on_restore should be hooked on untrashed_post.'
 		);
 		$this->assertNotFalse(
 			has_filter( 'wp_untrash_post_status' ),
 			'restore_previous_status should be hooked on wp_untrash_post_status so programmatic restores return to the pre-trash status.'
-		);
-		$this->assertNotFalse(
-			has_filter( 'bulk_actions-edit-' . Page::POST_TYPE ),
-			'replace_bulk_actions should be hooked so admin Pages list trash/untrash route through our handler.'
-		);
-		$this->assertNotFalse(
-			has_filter( 'handle_bulk_actions-edit-' . Page::POST_TYPE ),
-			'handle_admin_bulk_action should be hooked to process the cortext-prefixed bulk actions.'
 		);
 	}
 
@@ -75,9 +66,9 @@ final class Test_Page_Trash_Cascade extends BaseTestCase {
 
 		// Each descendant's marker is its immediate parent, not the cascade root,
 		// so restoring an intermediate node can locate its own subtree.
-		$this->assertSame( '', (string) get_post_meta( $parent_id, PageHierarchyTrashCascade::META_KEY, true ) );
-		$this->assertSame( (string) $parent_id, (string) get_post_meta( $child_id, PageHierarchyTrashCascade::META_KEY, true ) );
-		$this->assertSame( (string) $child_id, (string) get_post_meta( $grandchild_id, PageHierarchyTrashCascade::META_KEY, true ) );
+		$this->assertSame( '', (string) get_post_meta( $parent_id, TrashCascade::PARENT_MARKER_META, true ) );
+		$this->assertSame( (string) $parent_id, (string) get_post_meta( $child_id, TrashCascade::PARENT_MARKER_META, true ) );
+		$this->assertSame( (string) $child_id, (string) get_post_meta( $grandchild_id, TrashCascade::PARENT_MARKER_META, true ) );
 	}
 
 	public function test_restoring_intermediate_node_revives_its_subtree(): void {
@@ -97,8 +88,8 @@ final class Test_Page_Trash_Cascade extends BaseTestCase {
 
 		// Markers on the restored subtree are cleared so a later parent-restore
 		// does not re-trigger anything.
-		$this->assertSame( '', (string) get_post_meta( $child_id, PageHierarchyTrashCascade::META_KEY, true ) );
-		$this->assertSame( '', (string) get_post_meta( $grandchild_id, PageHierarchyTrashCascade::META_KEY, true ) );
+		$this->assertSame( '', (string) get_post_meta( $child_id, TrashCascade::PARENT_MARKER_META, true ) );
+		$this->assertSame( '', (string) get_post_meta( $grandchild_id, TrashCascade::PARENT_MARKER_META, true ) );
 	}
 
 	public function test_trashing_non_page_post_does_not_touch_other_post_types(): void {
@@ -115,7 +106,7 @@ final class Test_Page_Trash_Cascade extends BaseTestCase {
 		wp_trash_post( $post_id );
 
 		$this->assertSame( 'publish', get_post_status( $cortext_page_id ) );
-		$this->assertSame( '', (string) get_post_meta( $cortext_page_id, PageHierarchyTrashCascade::META_KEY, true ) );
+		$this->assertSame( '', (string) get_post_meta( $cortext_page_id, TrashCascade::PARENT_MARKER_META, true ) );
 	}
 
 	public function test_pre_trashed_child_is_not_restamped_when_parent_is_trashed(): void {
@@ -126,12 +117,12 @@ final class Test_Page_Trash_Cascade extends BaseTestCase {
 		// root of its own one-page cascade).
 		wp_trash_post( $child_id );
 		$this->assertSame( 'trash', get_post_status( $child_id ) );
-		$this->assertSame( '', (string) get_post_meta( $child_id, PageHierarchyTrashCascade::META_KEY, true ) );
+		$this->assertSame( '', (string) get_post_meta( $child_id, TrashCascade::PARENT_MARKER_META, true ) );
 
 		// Trashing the parent must not re-stamp the already-trashed child.
 		wp_trash_post( $parent_id );
 
-		$this->assertSame( '', (string) get_post_meta( $child_id, PageHierarchyTrashCascade::META_KEY, true ) );
+		$this->assertSame( '', (string) get_post_meta( $child_id, TrashCascade::PARENT_MARKER_META, true ) );
 	}
 
 	public function test_restoring_parent_revives_only_descendants_marked_by_its_cascade(): void {
@@ -151,7 +142,7 @@ final class Test_Page_Trash_Cascade extends BaseTestCase {
 	}
 
 	public function test_restoring_returns_pages_to_their_pre_trash_status(): void {
-		$private_parent_id = $this->create_page( array( 'post_status' => 'private' ) );
+		$private_parent_id  = $this->create_page( array( 'post_status' => 'private' ) );
 		$published_child_id = $this->create_page(
 			array(
 				'post_parent' => $private_parent_id,
@@ -172,12 +163,12 @@ final class Test_Page_Trash_Cascade extends BaseTestCase {
 		$child_id  = $this->create_page( array( 'post_parent' => $parent_id ) );
 
 		wp_trash_post( $parent_id );
-		$this->assertSame( (string) $parent_id, (string) get_post_meta( $child_id, PageHierarchyTrashCascade::META_KEY, true ) );
+		$this->assertSame( (string) $parent_id, (string) get_post_meta( $child_id, TrashCascade::PARENT_MARKER_META, true ) );
 
 		// Restore just the child while the parent stays in trash.
 		wp_untrash_post( $child_id );
 
-		$this->assertSame( '', (string) get_post_meta( $child_id, PageHierarchyTrashCascade::META_KEY, true ) );
+		$this->assertSame( '', (string) get_post_meta( $child_id, TrashCascade::PARENT_MARKER_META, true ) );
 
 		// A later parent-restore must not try to revive an already-active child.
 		wp_untrash_post( $parent_id );
@@ -185,95 +176,9 @@ final class Test_Page_Trash_Cascade extends BaseTestCase {
 		$this->assertNotSame( 'trash', get_post_status( $parent_id ) );
 	}
 
-	public function test_replace_bulk_actions_swaps_built_in_trash_and_untrash(): void {
-		$cascade = new PageHierarchyTrashCascade();
-
-		$swapped = $cascade->replace_bulk_actions(
-			array(
-				'edit'    => 'Edit',
-				'trash'   => 'Move to Trash',
-				'untrash' => 'Restore',
-				'delete'  => 'Delete permanently',
-			)
-		);
-
-		$this->assertArrayNotHasKey( 'trash', $swapped );
-		$this->assertArrayNotHasKey( 'untrash', $swapped );
-		$this->assertArrayHasKey( 'cortext_trash', $swapped );
-		$this->assertArrayHasKey( 'cortext_untrash', $swapped );
-		// Other actions pass through.
-		$this->assertSame( 'Edit', $swapped['edit'] );
-		$this->assertSame( 'Delete permanently', $swapped['delete'] );
-	}
-
-	public function test_bulk_trash_handler_does_not_error_when_parent_and_child_are_both_selected(): void {
-		wp_set_current_user( $this->create_user_with_cap() );
-
-		$parent_id = $this->create_page();
-		$child_id  = $this->create_page( array( 'post_parent' => $parent_id ) );
-
-		$cascade = new PageHierarchyTrashCascade();
-
-		// Core's bulk handler would wp_die() on the second wp_trash_post call.
-		// Our handler tolerates the cascade-already-trashed state.
-		$sendback = $cascade->handle_admin_bulk_action(
-			'http://example.com/wp-admin/edit.php?post_type=' . Page::POST_TYPE,
-			'cortext_trash',
-			array( $parent_id, $child_id )
-		);
-
-		$this->assertSame( 'trash', get_post_status( $parent_id ) );
-		$this->assertSame( 'trash', get_post_status( $child_id ) );
-		$this->assertStringContainsString( 'trashed=2', (string) $sendback );
-	}
-
-	public function test_bulk_untrash_handler_does_not_error_when_parent_and_child_are_both_selected(): void {
-		wp_set_current_user( $this->create_user_with_cap() );
-
-		$parent_id = $this->create_page();
-		$child_id  = $this->create_page( array( 'post_parent' => $parent_id ) );
-
-		wp_trash_post( $parent_id );
-		$this->assertSame( 'trash', get_post_status( $parent_id ) );
-		$this->assertSame( 'trash', get_post_status( $child_id ) );
-
-		$cascade = new PageHierarchyTrashCascade();
-
-		$sendback = $cascade->handle_admin_bulk_action(
-			'http://example.com/wp-admin/edit.php?post_status=trash&post_type=' . Page::POST_TYPE,
-			'cortext_untrash',
-			array( $parent_id, $child_id )
-		);
-
-		$this->assertNotSame( 'trash', get_post_status( $parent_id ) );
-		$this->assertNotSame( 'trash', get_post_status( $child_id ) );
-		$this->assertStringContainsString( 'untrashed=2', (string) $sendback );
-	}
-
-	public function test_handle_admin_bulk_action_passes_through_unrelated_actions(): void {
-		$cascade  = new PageHierarchyTrashCascade();
-		$sendback = 'http://example.com/wp-admin/edit.php?post_type=' . Page::POST_TYPE;
-
-		$result = $cascade->handle_admin_bulk_action( $sendback, 'edit', array( 1, 2 ) );
-
-		$this->assertSame( $sendback, $result );
-	}
-
-	private function create_user_with_cap(): int {
-		$user_id = wp_insert_user(
-			array(
-				'user_login' => 'editor_' . wp_generate_uuid4(),
-				'user_pass'  => 'pass',
-				'role'       => 'administrator',
-			)
-		);
-		$this->assertIsInt( $user_id );
-		return (int) $user_id;
-	}
-
 	private function create_page( array $args = array() ): int {
 		$defaults = array(
-			'post_type'   => Page::POST_TYPE,
+			'post_type'   => Document::POST_TYPE,
 			'post_status' => 'publish',
 			'post_title'  => 'Test page ' . wp_generate_uuid4(),
 		);

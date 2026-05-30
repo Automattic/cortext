@@ -13,14 +13,12 @@ declare( strict_types=1 );
 
 namespace Cortext\Tests;
 
-use Cortext\PostType\Cascade\CollectionToRowTrashCascade;
-use Cortext\PostType\Cascade\DocumentToCollectionTrashCascade;
-use Cortext\PostType\Cascade\PageHierarchyTrashCascade;
-use Cortext\PostType\Collection;
-use Cortext\PostType\CollectionEntries;
-use Cortext\PostType\Page;
-use Cortext\PostType\TrashCascadeEngine;
+use Cortext\PostType\Document;
+use Cortext\PostType\DocumentIdentity;
+use Cortext\PostType\Field;
+use Cortext\PostType\TrashCascade;
 use Cortext\Rest\DocumentsController;
+use Cortext\Taxonomy\TraitTaxonomy;
 use WorDBless\BaseTestCase;
 use WP_REST_Request;
 use WP_REST_Server;
@@ -28,26 +26,29 @@ use WP_REST_Server;
 final class Test_Rest_Documents_Controller_Mutations extends BaseTestCase {
 
 	use InMemoryPostsQuery;
+	use InMemoryTermStore;
 
 	public function set_up(): void {
 		parent::set_up();
 
-		( new Page() )->register_post_type();
-		( new Collection() )->register_post_type();
+		( new Document() )->register_post_type();
+		( new DocumentIdentity() )->register();
+		( new TraitTaxonomy() )->register_taxonomy();
+		$trait_taxonomy = new TraitTaxonomy();
+		add_action( 'added_post_meta', array( $trait_taxonomy, 'sync_term_on_meta_change' ), 10, 4 );
+		add_action( 'updated_post_meta', array( $trait_taxonomy, 'sync_term_on_meta_change' ), 10, 4 );
+		add_action( 'deleted_post_meta', array( $trait_taxonomy, 'sync_term_on_meta_change' ), 10, 4 );
+		add_action( 'before_delete_post', array( $trait_taxonomy, 'sync_term_on_delete' ), 10, 2 );
+		( new Field() )->register_post_type();
 
 		remove_all_actions( 'wp_trash_post' );
 		remove_all_actions( 'untrashed_post' );
 		remove_all_filters( 'wp_untrash_post_status' );
 
+		$this->install_in_memory_term_store();
 		$this->install_in_memory_posts_query();
 
-		( new TrashCascadeEngine(
-			array(
-				new PageHierarchyTrashCascade(),
-				new DocumentToCollectionTrashCascade(),
-				new CollectionToRowTrashCascade( new CollectionEntries() ),
-			)
-		) )->register();
+		( new TrashCascade() )->register();
 
 		$GLOBALS['wp_rest_server'] = new WP_REST_Server();
 		( new DocumentsController() )->register();
@@ -56,6 +57,7 @@ final class Test_Rest_Documents_Controller_Mutations extends BaseTestCase {
 
 	public function tear_down(): void {
 		$this->uninstall_in_memory_posts_query();
+		$this->uninstall_in_memory_term_store();
 		wp_set_current_user( 0 );
 		parent::tear_down();
 	}
@@ -253,25 +255,8 @@ final class Test_Rest_Documents_Controller_Mutations extends BaseTestCase {
 	public function test_permanent_delete_removes_a_trashed_row_document(): void {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
 
-		$row_post_type = 'crtxt_trashrow';
-		register_post_type(
-			$row_post_type,
-			array(
-				'public'       => false,
-				'show_in_rest' => true,
-				'rest_base'    => $row_post_type,
-				'supports'     => array( 'title', 'editor' ),
-			)
-		);
-		add_post_type_support( $row_post_type, 'cortext-document' );
-
-		$row_id = (int) wp_insert_post(
-			array(
-				'post_type'   => $row_post_type,
-				'post_status' => 'publish',
-				'post_title'  => 'A trashed row',
-			)
-		);
+		$collection_id = $this->create_full_page_collection( 'trashrow' );
+		$row_id        = $this->create_row( $collection_id );
 		wp_trash_post( $row_id );
 
 		$response = $this->permanent_delete( $row_id );
@@ -281,7 +266,7 @@ final class Test_Rest_Documents_Controller_Mutations extends BaseTestCase {
 		$this->assertNull( get_post( $row_id ) );
 	}
 
-	public function test_trash_response_lists_cascade_deleted_pages_and_collections(): void {
+	public function test_trash_response_lists_cascade_deleted_descendants(): void {
 		// The sidebar uses this list to drop favorites without re-walking the
 		// page tree. Without it, the client carries that knowledge.
 		wp_set_current_user( $this->create_user( 'administrator' ) );
@@ -290,30 +275,27 @@ final class Test_Rest_Documents_Controller_Mutations extends BaseTestCase {
 		$child_id      = $this->create_page( array( 'post_parent' => $parent_id ) );
 		$grandchild_id = $this->create_page( array( 'post_parent' => $child_id ) );
 
-		$inline_collection_id = wp_insert_post(
+		$inline_collection_id = $this->create_full_page_collection( 'inline' );
+		wp_update_post(
 			array(
-				'post_type'   => Collection::POST_TYPE,
-				'post_status' => 'private',
-				'post_title'  => 'Inline owned by parent',
-				'meta_input'  => array(
-					Collection::MODE_META_KEY         => Collection::MODE_INLINE,
-					Collection::INLINE_OWNER_META_KEY => $parent_id,
-				),
+				'ID'          => $inline_collection_id,
+				'post_parent' => $parent_id,
 			)
 		);
 
-		$request = new WP_REST_Request( 'DELETE', '/wp/v2/crtxt_pages/' . $parent_id );
+		$request  = new WP_REST_Request( 'DELETE', '/wp/v2/crtxt_documents/' . $parent_id );
 		$response = rest_do_request( $request );
 
 		$this->assertSame( 200, $response->get_status() );
 		$data = $response->get_data();
 		$this->assertArrayHasKey( 'cascade_deleted', $data );
-		$this->assertContains( $child_id, $data['cascade_deleted']['pages'] );
-		$this->assertContains( $grandchild_id, $data['cascade_deleted']['pages'] );
+		$this->assertIsArray( $data['cascade_deleted'] );
+		$this->assertContains( $child_id, $data['cascade_deleted'] );
+		$this->assertContains( $grandchild_id, $data['cascade_deleted'] );
 		$this->assertContains(
 			$inline_collection_id,
-			$data['cascade_deleted']['collections'],
-			'Inline collections owned by the trashed page belong in the cascade response.'
+			$data['cascade_deleted'],
+			'Collections owned by the trashed page belong in the cascade response.'
 		);
 	}
 
@@ -335,11 +317,11 @@ final class Test_Rest_Documents_Controller_Mutations extends BaseTestCase {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
 
 		$collection_id = $this->create_full_page_collection( 'wipeable' );
-		$row_id        = $this->create_row_for_collection( 'wipeable' );
+		$row_id        = $this->create_row( $collection_id );
 		wp_trash_post( $collection_id );
 
-		// After trash, the dynamic CPT may not be re-registered next request.
-		// Confirm the cascade still walks rows on permanent delete.
+		// The cascade has to walk rows on permanent delete even if the trait
+		// term lookup briefly fails.
 		$response = $this->permanent_delete( $collection_id );
 
 		$this->assertSame( 200, $response->get_status() );
@@ -353,7 +335,7 @@ final class Test_Rest_Documents_Controller_Mutations extends BaseTestCase {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
 
 		$collection_id = $this->create_full_page_collection( 'reported' );
-		$row_id        = $this->create_row_for_collection( 'reported' );
+		$row_id        = $this->create_row( $collection_id );
 		wp_trash_post( $collection_id );
 
 		$response = $this->permanent_delete( $collection_id );
@@ -369,29 +351,12 @@ final class Test_Rest_Documents_Controller_Mutations extends BaseTestCase {
 	}
 
 	public function test_restore_skips_cascade_walk_for_flat_row_documents(): void {
-		// Row CPTs opt into cortext-document but have no hierarchy today, so
-		// restore should only return the row itself.
+		// A row that is just a `crtxt_document` with a trait term and no
+		// nested documents should come back on its own.
 		wp_set_current_user( $this->create_user( 'administrator' ) );
 
-		$row_post_type = 'crtxt_widgets';
-		register_post_type(
-			$row_post_type,
-			array(
-				'public'       => false,
-				'show_in_rest' => true,
-				'rest_base'    => $row_post_type,
-				'supports'     => array( 'title', 'editor' ),
-			)
-		);
-		add_post_type_support( $row_post_type, 'cortext-document' );
-
-		$row_id = (int) wp_insert_post(
-			array(
-				'post_type'   => $row_post_type,
-				'post_status' => 'publish',
-				'post_title'  => 'A widget row',
-			)
-		);
+		$collection_id = $this->create_full_page_collection( 'widgets' );
+		$row_id        = $this->create_row( $collection_id );
 		wp_trash_post( $row_id );
 
 		$response = $this->restore( $row_id );
@@ -422,7 +387,7 @@ final class Test_Rest_Documents_Controller_Mutations extends BaseTestCase {
 
 	private function create_page( array $args = array() ): int {
 		$defaults = array(
-			'post_type'   => Page::POST_TYPE,
+			'post_type'   => Document::POST_TYPE,
 			'post_status' => 'publish',
 			'post_title'  => 'Test page ' . wp_generate_uuid4(),
 		);
@@ -436,33 +401,43 @@ final class Test_Rest_Documents_Controller_Mutations extends BaseTestCase {
 	private function create_full_page_collection( string $slug ): int {
 		$id = wp_insert_post(
 			array(
-				'post_type'   => Collection::POST_TYPE,
+				'post_type'   => Document::POST_TYPE,
 				'post_status' => 'private',
 				'post_title'  => 'Collection ' . $slug,
-				'meta_input'  => array(
-					'slug'                    => $slug,
-					Collection::MODE_META_KEY => Collection::MODE_FULL_PAGE,
-				),
+				'post_name'   => $slug,
 			)
 		);
 		$this->assertIsInt( $id );
 		$this->assertGreaterThan( 0, $id );
 
-		( new CollectionEntries() )->register_for_collection( get_post( (int) $id ) );
+		$field_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Title',
+				'meta_input'  => array( 'type' => 'text' ),
+			)
+		);
+		$this->assertGreaterThan( 0, $field_id );
+		add_post_meta( (int) $id, 'cortext_fields', (string) $field_id );
 
 		return (int) $id;
 	}
 
-	private function create_row_for_collection( string $slug ): int {
-		$id = wp_insert_post(
+	private function create_row( int $collection_id ): int {
+		$id = (int) wp_insert_post(
 			array(
-				'post_type'   => CollectionEntries::CPT_PREFIX . $slug,
+				'post_type'   => Document::POST_TYPE,
 				'post_status' => 'private',
 				'post_title'  => 'Row ' . wp_generate_uuid4(),
 			)
 		);
-		$this->assertIsInt( $id );
 		$this->assertGreaterThan( 0, $id );
-		return (int) $id;
+
+		$term_id = TraitTaxonomy::term_id_for_trait( $collection_id );
+		$this->assertGreaterThan( 0, $term_id );
+		wp_set_object_terms( $id, array( $term_id ), TraitTaxonomy::TAXONOMY, false );
+
+		return $id;
 	}
 }

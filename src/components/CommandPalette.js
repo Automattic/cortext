@@ -141,7 +141,7 @@ function RecentCommandRegistration( { canvasRef, recent } ) {
 	);
 
 	useCommand( {
-		name: `cortext/recent/${ recent.kind }-${ recent.id }`,
+		name: `cortext/recent/${ recent.id }`,
 		label: documentTitle( recent ),
 		searchLabel: sprintf(
 			/* translators: %s: recent item title */
@@ -150,7 +150,7 @@ function RecentCommandRegistration( { canvasRef, recent } ) {
 		),
 		context: DEFAULT_COMMAND_CONTEXT,
 		icon: listIconForRecord( recent ),
-		keywords: [ __( 'recent', 'cortext' ), recent.kind ],
+		keywords: [ __( 'recent', 'cortext' ) ],
 		disabled: ! recent.path,
 		callback: goToRecent,
 	} );
@@ -181,11 +181,10 @@ function DocumentCommandRegistration( { canvasRef, document } ) {
 	);
 
 	useCommand( {
-		name: `cortext/document/${ document.kind }-${ document.id }`,
+		name: `cortext/document/${ document.id }`,
 		label: document.title?.trim?.() || __( '(untitled)', 'cortext' ),
 		context: DEFAULT_COMMAND_CONTEXT,
 		icon: listIconForRecord( document ),
-		keywords: [ document.kind ],
 		disabled: ! document.path,
 		callback: goToDocument,
 	} );
@@ -193,9 +192,7 @@ function DocumentCommandRegistration( { canvasRef, document } ) {
 }
 
 function documentCommandValues( documents ) {
-	return documents.map(
-		( doc ) => `document-cortext/document/${ doc.kind }-${ doc.id }`
-	);
+	return documents.map( ( doc ) => `document-cortext/document/${ doc.id }` );
 }
 
 function DocumentResultsRegistration( {
@@ -244,10 +241,7 @@ function DocumentResultsRegistration( {
 		for ( const doc of documents ) {
 			const description = documentDescription( doc );
 			if ( description ) {
-				map.set(
-					`cortext/document/${ doc.kind }-${ doc.id }`,
-					description
-				);
+				map.set( `cortext/document/${ doc.id }`, description );
 			}
 		}
 		onDescriptionsChange( map );
@@ -267,7 +261,7 @@ function DocumentResultsRegistration( {
 
 	return documents.map( ( doc ) => (
 		<DocumentCommandRegistration
-			key={ `${ doc.kind }:${ doc.id }` }
+			key={ doc.id }
 			canvasRef={ canvasRef }
 			document={ doc }
 		/>
@@ -347,7 +341,7 @@ function CommandPaletteContents( {
 			/>
 			{ recents.map( ( recent ) => (
 				<RecentCommandRegistration
-					key={ `${ recent.kind }:${ recent.id }` }
+					key={ `recent:${ recent.id }` }
 					canvasRef={ canvasRef }
 					recent={ recent }
 				/>

@@ -7,7 +7,6 @@ export const SIDEBAR_SECTION_DEFAULTS = {
 	recents: true,
 	favorites: false,
 	pages: false,
-	collections: false,
 };
 
 export function normalizeSidebarSectionsCollapsed( value ) {

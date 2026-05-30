@@ -16,7 +16,6 @@ const FIXTURE = {
 	slug: 'ada-lovelace',
 	title: { raw: 'Ada Lovelace' },
 	collectionId: 7,
-	collectionSlug: 'people',
 };
 
 function renderReferences() {
@@ -58,7 +57,7 @@ describe( 'RelationReferences', () => {
 		expect( mockOpenDocument ).toHaveBeenCalledWith( {
 			id: 12,
 			slug: 'ada-lovelace',
-			postType: 'crtxt_people',
+			postType: 'crtxt_document',
 			collectionId: 7,
 			preferredMode: 'side',
 		} );

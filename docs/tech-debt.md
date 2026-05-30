@@ -581,7 +581,7 @@ Keep this local for now, but treat it as custom drag-and-drop code. It measures 
 
 Drag/drop and `menu_order` accounting look at both pages and collections through `treeRecords`, a single `DndContext` now wraps both sections, and the cycle guard walks the merged node graph. The model gap that remains is shape, not wiring: every tree consumer still branches on pages versus collections to derive a `kind`, and the Collections section's contents are a UX choice on top of that. Today it shows only top-level full-page collections (`parent = 0`); nested ones live solely in the Pages tree. The unified model would let this be configurable per workspace: top-level only, all collections grouped, or per-parent sub-headers.
 
-**Where.** `ACTIVE_PAGES_QUERY` in `src/components/page-queries.js`, `FULL_PAGE_COLLECTION_QUERY` in `src/collections.js`, `nestedCollections` / `topLevelCollections`, `treeRecords`, `handleDragOver`, and the shared `DndContext` in `src/components/Sidebar.js`, the `renderCollectionRow` bridge in `src/components/PageRow.js`, `CollectionRow`'s drag/drop zones, `computeDropTarget` in `src/components/pages-tree.js`, and the `Collection::hierarchical` / `Collection::validate_parent_document` setup on the PHP side.
+**Where.** `ACTIVE_PAGES_QUERY` in `src/components/page-queries.js`, `FULL_PAGE_COLLECTION_QUERY` in `src/collections.js`, `nestedCollections` / `topLevelCollections`, `treeRecords`, `handleDragOver`, and the shared `DndContext` in `src/components/Sidebar.js`, the `renderCollectionRow` bridge in `src/components/PageRow.js`, `CollectionRow`'s drag/drop zones, `computeDropTarget` in `src/components/document-tree.js`, and the `Collection::hierarchical` / `Collection::validate_parent_document` setup on the PHP side.
 
 **Solution.** Add a workspace-tree REST endpoint that returns navigable nodes with `kind`, `id`, `parent`, `menu_order`, and visibility in one shape. Row-owned collections could then appear under their row, missing parents would not look top-level by accident, and page/collection branching would move out of every consumer. The Collections section then becomes a view over the same model with the user's chosen filter, instead of a separate flat list.
 
@@ -642,3 +642,46 @@ The rows endpoint is still the hard case. `RowsController` unit tests cover rout
 **Where.** `tests/php/InMemoryPostsQuery.php`, `tests/php/test-documents.php`, `tests/php/test-rest-documents-controller.php`, `tests/php/test-page-trash-cascade.php`, `tests/php/test-rest-document-trash-controller.php`, and `tests/php/test-rest-recents-controller.php`, plus the still-limited row coverage in `tests/php/test-rest-rows-controller.php` and `tests/php/test-field-value-read-query.php`.
 
 **Solution.** Keep the in-memory shim for simple document queries, but test the row endpoint against a real `wpdb` before treating sort/filter/pagination as covered. Either add a `wp-env` + `WP_UnitTestCase` suite for rows, or rely on targeted e2e coverage in `tests/e2e/specs/data-view-block.spec.js` until that suite exists. Once real database coverage exists, the shim should stay limited to tests that only need cheap post lookup behavior.
+
+### Universal document model follow-ups
+
+<a id="td-relation-sidecar-reindex-per-target"></a>
+
+**Sidecar reindex after relation writes is still per-target.**
+
+**What.** `Relations::apply_relation_pointers` now batches the postmeta writes (delta + bulk INSERT/DELETE), and `Document::prepare_meta_updates` skips WP REST's O(N×M) `update_multi_meta_value` diff via `Relations::fast_write_forward_meta`. That brought `relation_many_targets` p95 from ~18s back to ~460ms and `relation_small_delta` from ~18s to ~25ms at 50 collections. The remaining cost in `many_targets` is `reindex_targets` calling `FieldValueIndex::index_row_field` once per touched reverse row (500 calls × 1 SELECT meta + 1 DELETE sidecar + N INSERTs sidecar). It is within budget but is the largest term left in the write path.
+
+**Where.** `Relations::apply_relation_pointers` and `Relations::reindex_targets` in `includes/Relations.php`; `FieldValueIndex::index_row_field` and `write_index_rows` in `includes/FieldValues/FieldValueIndex.php`. Scenarios `relation_many_targets` and `relation_small_delta` in `includes/CLI/PerfBench.php`.
+
+**Solution.** Compute the sidecar delta directly from the postmeta delta we already have (added / removed reverse pointers), then write it with two batched statements: one `DELETE FROM <sidecar> WHERE (row_id, field_id, value_text) IN (...)` for removals, one multi-row `INSERT` for additions (using the next `value_seq` per target, which can be read in one warmup query). The forward field's sidecar can stay on `index_row_field` since it is a single row.
+
+<a id="td-option-migration-per-row"></a>
+
+**Option migrations rewrite postmeta one row at a time.**
+
+**What.** `FieldsController::migrate_rows` loops over every row whose select / multiselect value matches the source token and calls `delete_post_meta` + `add_post_meta` (or `update_post_meta`) per row. That is ~2 SQL statements per row plus hooks. `migrate_many_rows` p95 ≈ 1s at 50 collections with ~5000 SQL queries for what is conceptually a single update on a meta_key + meta_value pair.
+
+**Where.** `FieldsController::migrate_rows` in `includes/Rest/FieldsController.php`; `migrate_1000_rows` and `migrate_many_rows` scenarios in `includes/CLI/PerfBench.php`.
+
+**Solution.** Replace the loop with a single statement per branch: `UPDATE wp_postmeta SET meta_value = %s WHERE meta_key = %s AND meta_value = %s` for `action = 'replace'` on single-value fields, `DELETE FROM wp_postmeta WHERE ...` for `action = 'clear'`. Pre-fetch the affected row ids so the meta cache and sidecar reindex can be invalidated in batch afterwards. Multiselect `replace` is harder because of the "already has target" case; query the conflict set first, then run two statements (a `DELETE` for the duplicates, an `UPDATE` for the rest).
+
+<a id="td-register-field-meta-cache-warmup"></a>
+
+**`register_field_meta` warms postmeta one field at a time.**
+
+**What.** `Document::register_field_meta` runs on every `init` and iterates every `crtxt_field` post calling `get_post_meta($field_id, 'type', true)`. Each call triggers a single-post meta cache load, which is one extra SELECT per field. On the bench dataset (~540 fields) that is ~540 unnecessary SELECTs on every REST request before any handler runs.
+
+**Where.** `Document::register_field_meta` in `includes/PostType/Document.php`.
+
+**Solution.** Call `update_meta_cache( 'post', $field_ids )` once before the foreach so the subsequent `get_post_meta` calls are cache hits. The field-id list is already in memory from the preceding `get_posts`, so the warmup is a one-liner.
+
+<a id="td-published-documents-panel-row-gap"></a>
+
+**Published Documents panel hides published rows.**
+
+**What.** Any `crtxt_document` is publishable now, but `PublishedDocumentsPane` only queries pages (`PUBLISHED_PAGES_QUERY`, with `cortext_no_trait + cortext_no_collections`) and collections (`PUBLISHED_COLLECTIONS_QUERY`, with `cortext_collections`). A row that the user explicitly publishes ends up reachable via its public URL but is not listed in the panel.
+
+**Where.** `PublishedDocumentsPane.js` and the constants in `src/components/page-queries.js` / `src/collections.js`.
+
+**Solution.** Add a third query for published rows (any document with a `crtxt_trait` term and `status = publish`), or replace the three queries with a single "status = publish, every document" pass and let `documentLabel` / icon helpers render the type chip. The Type column already covers Page / Collection / Row, so the rendering layer needs no change.
+

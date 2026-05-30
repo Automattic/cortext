@@ -9,14 +9,12 @@ declare( strict_types=1 );
 
 namespace Cortext\Tests;
 
-use Cortext\PostType\Cascade\DocumentToCollectionTrashCascade;
-use Cortext\PostType\Cascade\PageHierarchyTrashCascade;
-use Cortext\PostType\Collection;
-use Cortext\PostType\CollectionEntries;
+use Cortext\PostType\Document;
 use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Field;
-use Cortext\PostType\Page;
+use Cortext\PostType\TrashCascade;
 use Cortext\Rest\DocumentsController;
+use Cortext\Taxonomy\TraitTaxonomy;
 use WorDBless\BaseTestCase;
 use WP_REST_Request;
 use WP_REST_Server;
@@ -24,16 +22,22 @@ use WP_REST_Server;
 final class Test_Rest_Documents_Controller extends BaseTestCase {
 
 	use InMemoryPostsQuery;
+	use InMemoryTermStore;
 
 	public function set_up(): void {
 		parent::set_up();
 
-		$this->unregister_dynamic_collection_post_types();
-		( new Page() )->register_post_type();
+		( new Document() )->register_post_type();
 		( new DocumentIdentity() )->register();
-		( new Collection() )->register_post_type();
+		( new TraitTaxonomy() )->register_taxonomy();
+		$trait_taxonomy = new TraitTaxonomy();
+		add_action( 'added_post_meta', array( $trait_taxonomy, 'sync_term_on_meta_change' ), 10, 4 );
+		add_action( 'updated_post_meta', array( $trait_taxonomy, 'sync_term_on_meta_change' ), 10, 4 );
+		add_action( 'deleted_post_meta', array( $trait_taxonomy, 'sync_term_on_meta_change' ), 10, 4 );
+		add_action( 'before_delete_post', array( $trait_taxonomy, 'sync_term_on_delete' ), 10, 2 );
 		( new Field() )->register_post_type();
 
+		$this->install_in_memory_term_store();
 		$this->install_in_memory_posts_query();
 
 		$GLOBALS['wp_rest_server'] = new WP_REST_Server();
@@ -43,6 +47,7 @@ final class Test_Rest_Documents_Controller extends BaseTestCase {
 
 	public function tear_down(): void {
 		$this->uninstall_in_memory_posts_query();
+		$this->uninstall_in_memory_term_store();
 		wp_set_current_user( 0 );
 		parent::tear_down();
 	}
@@ -62,15 +67,15 @@ final class Test_Rest_Documents_Controller extends BaseTestCase {
 
 	public function test_returns_pages_and_rows_with_excerpts(): void {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
-		$this->create_collection( 'projects', 'Projects' );
-		$page_id = $this->create_page(
+		$collection_id = $this->create_collection( 'projects', 'Projects' );
+		$page_id       = $this->create_page(
 			array(
 				'post_title'   => 'Welcome',
 				'post_name'    => 'welcome',
 				'post_content' => 'The quick brown fox.',
 			)
 		);
-		$row_id  = $this->create_row( 'crtxt_projects', 'Launch plan' );
+		$row_id        = $this->create_row( $collection_id, 'Launch plan' );
 
 		$response = $this->query();
 
@@ -85,31 +90,11 @@ final class Test_Rest_Documents_Controller extends BaseTestCase {
 		}
 
 		$this->assertArrayHasKey( $page_id, $by_id );
-		$this->assertSame( 'page', $by_id[ $page_id ]['kind'] );
 		$this->assertSame( 'Welcome', $by_id[ $page_id ]['title'] );
 		$this->assertStringContainsString( 'quick brown fox', $by_id[ $page_id ]['excerpt'] );
 
 		$this->assertArrayHasKey( $row_id, $by_id );
-		$this->assertSame( 'row', $by_id[ $row_id ]['kind'] );
 		$this->assertSame( 'Projects', $by_id[ $row_id ]['collection']['title'] );
-	}
-
-	public function test_filters_by_kind(): void {
-		wp_set_current_user( $this->create_user( 'administrator' ) );
-		$this->create_collection( 'projects', 'Projects' );
-		$page_id = $this->create_page( array( 'post_title' => 'Welcome' ) );
-		$row_id  = $this->create_row( 'crtxt_projects', 'Launch plan' );
-
-		$pages_only = $this->query( array( 'kind' => 'page' ) )->get_data();
-		$rows_only  = $this->query( array( 'kind' => 'row' ) )->get_data();
-
-		$page_ids = array_column( $pages_only['documents'], 'id' );
-		$row_ids  = array_column( $rows_only['documents'], 'id' );
-
-		$this->assertContains( $page_id, $page_ids );
-		$this->assertNotContains( $row_id, $page_ids );
-		$this->assertContains( $row_id, $row_ids );
-		$this->assertNotContains( $page_id, $row_ids );
 	}
 
 	public function test_matches_search(): void {
@@ -124,14 +109,6 @@ final class Test_Rest_Documents_Controller extends BaseTestCase {
 		$this->assertNotContains( $unrelated, $ids );
 	}
 
-	public function test_rejects_invalid_kind(): void {
-		wp_set_current_user( $this->create_user( 'administrator' ) );
-
-		$response = $this->query( array( 'kind' => 'wat' ) );
-
-		$this->assertSame( 400, $response->get_status() );
-	}
-
 	public function test_status_trash_lists_pages_and_rows_with_trash_metadata(): void {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
 
@@ -142,13 +119,13 @@ final class Test_Rest_Documents_Controller extends BaseTestCase {
 				'post_parent' => 123,
 				'meta_input'  => array(
 					DocumentIdentity::META_KEY => '{"type":"emoji","value":"P"}',
-					PageHierarchyTrashCascade::META_KEY => '99',
+					TrashCascade::PARENT_MARKER_META => '99',
 				),
 			)
 		);
 		wp_trash_post( $page_id );
 
-		$row_id = $this->create_row( 'crtxt_albums', 'Trashed album' );
+		$row_id = $this->create_row( $collection_id, 'Trashed album' );
 		wp_trash_post( $row_id );
 
 		$visible_page = $this->create_page( array( 'post_title' => 'Still here' ) );
@@ -163,46 +140,45 @@ final class Test_Rest_Documents_Controller extends BaseTestCase {
 		$this->assertArrayNotHasKey( $visible_page, $by_id );
 
 		$page = $by_id[ $page_id ];
-		$this->assertSame( 'page', $page['kind'] );
 		$this->assertSame( 123, $page['parent'] );
-		$this->assertSame( 99, $page['meta'][ PageHierarchyTrashCascade::META_KEY ] );
+		$this->assertSame( 99, $page['meta'][ TrashCascade::PARENT_MARKER_META ] );
 		$this->assertSame( '{"type":"emoji","value":"P"}', $page['meta']['cortext_document_icon'] );
 
 		$row = $by_id[ $row_id ];
-		$this->assertSame( 'row', $row['kind'] );
 		$this->assertSame( $collection_id, $row['collection']['id'] );
 		$this->assertSame( 'Albums', $row['collection']['title'] );
 	}
 
-	public function test_status_trash_surfaces_owner_marker_on_inline_collections(): void {
+	public function test_status_trash_surfaces_parent_marker_on_nested_collections(): void {
 		// Without this marker in the response, the sidebar can't tell which
-		// inline collection was trashed by which page, so the inline entries
-		// would render as roots instead of nesting under their owner page.
+		// collection was trashed by which owner page, so the entries would
+		// render as roots instead of nesting under their owner page.
 		wp_set_current_user( $this->create_user( 'administrator' ) );
 
 		$owner_page = $this->create_page( array( 'post_title' => 'Owner' ) );
-		$inline_id  = (int) wp_insert_post(
+		$nested_id  = $this->create_collection( 'action-items', 'Action items' );
+		// Sit the trashed collection underneath the owner page so the cascade
+		// marker has a counterpart in the page tree.
+		wp_update_post(
 			array(
-				'post_type'   => Collection::POST_TYPE,
-				'post_status' => 'private',
-				'post_title'  => 'Action items',
-				'meta_input'  => array(
-					'slug'                                       => 'action-items',
-					Collection::MODE_META_KEY                    => Collection::MODE_INLINE,
-					Collection::INLINE_OWNER_META_KEY            => $owner_page,
-					DocumentToCollectionTrashCascade::TRASHED_BY_OWNER_META_KEY => $owner_page,
-				),
+				'ID'          => $nested_id,
+				'post_parent' => $owner_page,
 			)
 		);
-		wp_trash_post( $inline_id );
+		update_post_meta(
+			$nested_id,
+			TrashCascade::PARENT_MARKER_META,
+			$owner_page
+		);
+		wp_trash_post( $nested_id );
 
 		$response = $this->query( array( 'status' => 'trash' ) );
 
 		$by_id = array_column( $response->get_data()['documents'], null, 'id' );
-		$this->assertArrayHasKey( $inline_id, $by_id );
+		$this->assertArrayHasKey( $nested_id, $by_id );
 		$this->assertSame(
 			$owner_page,
-			$by_id[ $inline_id ]['meta'][ DocumentToCollectionTrashCascade::TRASHED_BY_OWNER_META_KEY ]
+			$by_id[ $nested_id ]['meta'][ TrashCascade::PARENT_MARKER_META ]
 		);
 	}
 
@@ -253,7 +229,7 @@ final class Test_Rest_Documents_Controller extends BaseTestCase {
 
 	private function create_page( array $args = array() ): int {
 		$defaults = array(
-			'post_type'   => Page::POST_TYPE,
+			'post_type'   => Document::POST_TYPE,
 			'post_status' => 'private',
 			'post_title'  => 'Test page ' . wp_generate_uuid4(),
 		);
@@ -267,44 +243,43 @@ final class Test_Rest_Documents_Controller extends BaseTestCase {
 	private function create_collection( string $slug, string $title = 'Collection' ): int {
 		$id = wp_insert_post(
 			array(
-				'post_type'   => Collection::POST_TYPE,
+				'post_type'   => Document::POST_TYPE,
 				'post_status' => 'private',
 				'post_title'  => $title,
-				'meta_input'  => array(
-					'slug' => $slug,
-				),
+				'post_name'   => $slug,
 			)
 		);
 		$this->assertIsInt( $id );
 		$this->assertGreaterThan( 0, $id );
 
-		( new CollectionEntries() )->register_for_collection( get_post( (int) $id ) );
-
-		return (int) $id;
-	}
-
-	private function create_row( string $post_type, string $title ): int {
-		$id = wp_insert_post(
+		$field_id = (int) wp_insert_post(
 			array(
-				'post_type'   => $post_type,
+				'post_type'   => Field::POST_TYPE,
 				'post_status' => 'private',
-				'post_title'  => $title,
+				'post_title'  => 'Title',
+				'meta_input'  => array( 'type' => 'text' ),
 			)
 		);
-		$this->assertIsInt( $id );
-		$this->assertGreaterThan( 0, $id );
+		$this->assertGreaterThan( 0, $field_id );
+		add_post_meta( (int) $id, 'cortext_fields', (string) $field_id );
 
 		return (int) $id;
 	}
 
-	private function unregister_dynamic_collection_post_types(): void {
-		foreach ( get_post_types() as $post_type ) {
-			if (
-				str_starts_with( $post_type, CollectionEntries::CPT_PREFIX ) &&
-				! in_array( $post_type, array( Page::POST_TYPE, Collection::POST_TYPE, Field::POST_TYPE ), true )
-			) {
-				unregister_post_type( $post_type );
-			}
-		}
+	private function create_row( int $collection_id, string $title ): int {
+		$id = (int) wp_insert_post(
+			array(
+				'post_type'   => Document::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => $title,
+			)
+		);
+		$this->assertGreaterThan( 0, $id );
+
+		$term_id = TraitTaxonomy::term_id_for_trait( $collection_id );
+		$this->assertGreaterThan( 0, $term_id );
+		wp_set_object_terms( $id, array( $term_id ), TraitTaxonomy::TAXONOMY, false );
+
+		return $id;
 	}
 }

@@ -266,7 +266,7 @@ function addFilterArgs( args, prefix, filter ) {
 
 function buildClientQueryArgs( collectionId ) {
 	return {
-		collection: collectionId,
+		trait: collectionId,
 		page: 1,
 		per_page: CLIENT_PER_PAGE,
 	};
@@ -313,7 +313,7 @@ function projectedFields( view, fields ) {
 
 function buildServerQueryArgs( collectionId, view, filters = [], fields = [] ) {
 	const args = {
-		collection: collectionId,
+		trait: collectionId,
 		page: pageNumber( view?.page ),
 		per_page: perPageNumber( view?.perPage ),
 	};

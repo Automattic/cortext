@@ -35,11 +35,11 @@ const ENDPOINTS = [
 	},
 	{
 		name: 'pages_list',
-		path: '/wp-json/wp/v2/crtxt_pages/?context=edit&per_page=10',
+		path: '/wp-json/wp/v2/crtxt_documents/?context=edit&per_page=10&status[]=draft&status[]=private&status[]=publish&cortext_no_trait=1&cortext_no_collections=1',
 	},
 	{
 		name: 'collections_list',
-		path: '/wp-json/wp/v2/crtxt_collections/?context=edit&per_page=10',
+		path: '/wp-json/wp/v2/crtxt_documents/?context=edit&per_page=10&status[]=draft&status[]=private&status[]=publish&cortext_collections=1',
 	},
 ];
 

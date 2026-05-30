@@ -1041,7 +1041,7 @@ describe( 'DataViewRowReorder', () => {
 			expect( mockApiFetch ).toHaveBeenCalledTimes( 1 )
 		);
 		expect( mockApiFetch ).toHaveBeenCalledWith( {
-			path: '/cortext/v1/collections/7/rows/1/reorder',
+			path: '/cortext/v1/documents/1/reorder',
 			method: 'POST',
 			data: {
 				before_id: null,

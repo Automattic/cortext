@@ -83,6 +83,10 @@ $grid-card-content-hover-background: #f3f3f3;
 	}
 
 	.dataviews-view-grid {
+		// WP 6.7+ dataviews ships `display: flex; flex-direction: column` on
+		// the grid wrapper, which would stack cards in a single column.
+		// Force the grid layout we want so cards flow into multiple columns.
+		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
 		grid-template-rows: none;
 		grid-auto-rows: minmax(var(--cortext-grid-card-height, 220px), auto);

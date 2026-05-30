@@ -11,10 +11,10 @@ namespace Cortext\CLI;
 
 use Cortext\FieldValues\FieldValueIndex;
 use Cortext\FieldValues\FieldValueStore;
-use Cortext\PostType\Collection;
-use Cortext\PostType\CollectionEntries;
+use Cortext\PostType\Document;
 use Cortext\PostType\Field;
 use Cortext\Relations;
+use Cortext\Taxonomy\TraitTaxonomy;
 use RuntimeException;
 use WP_Post;
 use WP_REST_Request;
@@ -310,6 +310,12 @@ final class PerfBench {
 			wp_suspend_cache_invalidation( $previous_suspend );
 		}
 
+		// `wp_insert_term` ran with cache invalidation suspended (see the
+		// wrapper above), so the trait term cache still holds the pre-insert
+		// NULL for each collection. Rebuild needs `get_term_by` to find the
+		// new terms, so refresh the taxonomy cache before it runs.
+		clean_taxonomy_cache( TraitTaxonomy::TAXONOMY );
+
 		$this->rebuild_seeded_field_value_index( $manifest );
 		update_option( self::DATASET_OPTION, $manifest, false );
 		return $manifest;
@@ -495,11 +501,14 @@ final class PerfBench {
 	}
 
 	private function ensure_post_types(): void {
-		if ( ! post_type_exists( Collection::POST_TYPE ) ) {
-			( new Collection() )->register_post_type();
+		if ( ! post_type_exists( Document::POST_TYPE ) ) {
+			( new Document() )->register_post_type();
 		}
 		if ( ! post_type_exists( Field::POST_TYPE ) ) {
 			( new Field() )->register_post_type();
+		}
+		if ( ! taxonomy_exists( TraitTaxonomy::TAXONOMY ) ) {
+			( new TraitTaxonomy() )->register_taxonomy();
 		}
 	}
 
@@ -537,6 +546,55 @@ final class PerfBench {
 	}
 
 	/**
+	 * Ensures a top-level "Performance tests" page exists and returns its id.
+	 * The page is also tagged with the dataset meta so `delete_dataset()`
+	 * picks it up alongside the rest of the bench fixture. Without it, the
+	 * perf collections sit at the root of the workspace tree rather than
+	 * under a page, which is what real collections do when the data-view
+	 * block's `CollectionCreator` makes them.
+	 *
+	 * @throws RuntimeException When the anchor page cannot be created.
+	 */
+	private function ensure_perf_anchor_page(): int {
+		$existing = get_posts(
+			array(
+				'post_type'      => Document::POST_TYPE,
+				'post_status'    => array( 'draft', 'private', 'publish' ),
+				'post_parent'    => 0,
+				'posts_per_page' => 1,
+				// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- bounded by the dataset marker.
+				'meta_query'     => array(
+					array(
+						'key'   => self::DATASET_META_KEY,
+						'value' => self::DATASET_META_VALUE,
+					),
+				),
+				'title'          => 'Performance tests',
+				'fields'         => 'ids',
+			)
+		);
+		if ( $existing ) {
+			return (int) $existing[0];
+		}
+
+		$page_id = wp_insert_post(
+			array(
+				'post_type'   => Document::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Performance tests',
+				'meta_input'  => array(
+					self::DATASET_META_KEY => self::DATASET_META_VALUE,
+				),
+			),
+			true
+		);
+		if ( is_wp_error( $page_id ) ) {
+			throw new RuntimeException( esc_html( $page_id->get_error_message() ) );
+		}
+		return (int) $page_id;
+	}
+
+	/**
 	 * Creates the collections, fields, and rows used by the benchmark.
 	 *
 	 * @param array<string,int> $config       Seed config.
@@ -545,10 +603,17 @@ final class PerfBench {
 	 * @throws RuntimeException When a collection, field, or row cannot be created.
 	 */
 	private function create_dataset( array $config, int $seed_user_id ): array {
-		$collections       = $this->create_collections( (int) $config['collections'] );
+		$anchor_page_id    = $this->ensure_perf_anchor_page();
+		$collections       = $this->create_collections( (int) $config['collections'], $anchor_page_id );
 		$wide_collection   = $collections[2] ?? null;
 		$wide_scalar_count = (int) ( $config['wide_fields'] ?? self::DEFAULT_WIDE_FIELDS );
 		$field_map         = $this->create_fields( $collections, (int) $config['fields'], $wide_scalar_count, (int) $config['relations'], (int) $config['rollups'] );
+		// Mirror terms were inserted via the `added_post_meta` hook on
+		// `cortext_fields`, but `wp_suspend_cache_invalidation(true)` (set in
+		// `seed_dataset`) left their slug lookups stale. Refresh the cache
+		// before `create_rows` calls `Relations::trait_term_id_for_collection`
+		// to tag each row with its collection's term.
+		clean_taxonomy_cache( TraitTaxonomy::TAXONOMY );
 		$row_map           = $this->create_rows( $collections, $field_map, (int) $config['rows'], $seed_user_id );
 		$target_collection = $collections[1] ?? null;
 
@@ -577,11 +642,12 @@ final class PerfBench {
 	/**
 	 * Creates the benchmark collections.
 	 *
-	 * @param int $count Number of collections to create.
+	 * @param int $count          Number of collections to create.
+	 * @param int $anchor_page_id Parent page id for the collections (0 for root).
 	 * @return array<int,array{id:int,slug:string,title:string}>
 	 * @throws RuntimeException When a collection cannot be created.
 	 */
-	private function create_collections( int $count ): array {
+	private function create_collections( int $count, int $anchor_page_id = 0 ): array {
 		$collections = array();
 
 		for ( $index = 0; $index < $count; $index++ ) {
@@ -590,11 +656,11 @@ final class PerfBench {
 
 			$collection_id = wp_insert_post(
 				array(
-					'post_type'   => Collection::POST_TYPE,
+					'post_type'   => Document::POST_TYPE,
 					'post_status' => 'private',
 					'post_title'  => $title,
+					'post_parent' => $anchor_page_id,
 					'meta_input'  => array(
-						'slug'                 => $slug,
 						self::DATASET_META_KEY => self::DATASET_META_VALUE,
 					),
 				),
@@ -608,8 +674,6 @@ final class PerfBench {
 			if ( ! $collection instanceof WP_Post ) {
 				throw new RuntimeException( 'Could not create the benchmark collection.' );
 			}
-
-			( new CollectionEntries() )->register_for_collection( $collection );
 
 			$collections[] = array(
 				'id'    => (int) $collection_id,
@@ -647,7 +711,6 @@ final class PerfBench {
 			$collection_scalar_count = 2 === $index ? max( $scalar_count, $wide_scalar_count ) : $scalar_count;
 			$fields                  = $this->create_scalar_fields_for_collection( $collection['id'], $index, $collection_scalar_count );
 			$field_map['collections'][ $collection['slug'] ] = $fields;
-			( new CollectionEntries() )->register_for_collection( get_post( $collection['id'] ) );
 
 			if ( 0 === $index ) {
 				$field_map['primary']['scalar_field_ids']   = array_column( $fields, 'id' );
@@ -703,10 +766,6 @@ final class PerfBench {
 					'title' => 'Perf Rollup ' . ( $index + 1 ),
 				);
 			}
-		}
-
-		foreach ( $collections as $collection ) {
-			( new CollectionEntries() )->register_for_collection( get_post( $collection['id'] ) );
 		}
 
 		return $field_map;
@@ -864,7 +923,7 @@ final class PerfBench {
 			throw new RuntimeException( esc_html( $field_id->get_error_message() ) );
 		}
 
-		if ( false === add_post_meta( $collection_id, 'fields', (string) $field_id ) ) {
+		if ( false === add_post_meta( $collection_id, 'cortext_fields', (string) $field_id ) ) {
 			wp_delete_post( (int) $field_id, true );
 			throw new RuntimeException( 'Could not attach the benchmark field to its collection.' );
 		}
@@ -885,13 +944,13 @@ final class PerfBench {
 		$row_map = array();
 
 		foreach ( $collections as $collection_index => $collection ) {
-			$post_type = CollectionEntries::CPT_PREFIX . $collection['slug'];
-			$row_ids   = array();
-			$fields    = $field_map['collections'][ $collection['slug'] ] ?? array();
+			$trait_term_id = Relations::trait_term_id_for_collection( (int) $collection['id'] );
+			$row_ids       = array();
+			$fields        = $field_map['collections'][ $collection['slug'] ] ?? array();
 
 			for ( $row_index = 1; $row_index <= $rows_per_collection; $row_index++ ) {
 				$row_ids[] = $this->insert_row(
-					$post_type,
+					$trait_term_id,
 					$collection['title'] . ' Row ' . str_pad( (string) $row_index, 5, '0', STR_PAD_LEFT ),
 					$seed_user_id,
 					$this->row_meta( $collection_index, $row_index, $rows_per_collection, $fields )
@@ -1013,16 +1072,16 @@ final class PerfBench {
 	}
 
 	/**
-	 * Inserts one row post.
+	 * Inserts one row post and tags it with the collection's trait term.
 	 *
-	 * @param string              $post_type Dynamic row post type.
-	 * @param string              $title Row title.
-	 * @param int                 $author_id Author user ID.
-	 * @param array<string,mixed> $meta Row meta.
+	 * @param int                 $trait_term_id Collection trait term id.
+	 * @param string              $title         Row title.
+	 * @param int                 $author_id     Author user ID.
+	 * @param array<string,mixed> $meta          Row meta.
 	 * @return int Row post ID.
 	 * @throws RuntimeException When the row cannot be inserted.
 	 */
-	private function insert_row( string $post_type, string $title, int $author_id, array $meta ): int {
+	private function insert_row( int $trait_term_id, string $title, int $author_id, array $meta ): int {
 		global $wpdb;
 
 		$now     = current_time( 'mysql' );
@@ -1050,7 +1109,7 @@ final class PerfBench {
 				'post_parent'           => 0,
 				'guid'                  => '',
 				'menu_order'            => 0,
-				'post_type'             => $post_type,
+				'post_type'             => Document::POST_TYPE,
 				'post_mime_type'        => '',
 				'comment_count'         => 0,
 			)
@@ -1061,6 +1120,9 @@ final class PerfBench {
 		}
 
 		$row_id = (int) $wpdb->insert_id;
+		if ( $trait_term_id > 0 ) {
+			wp_set_object_terms( $row_id, array( $trait_term_id ), TraitTaxonomy::TAXONOMY );
+		}
 		foreach ( $meta as $key => $value ) {
 			$values = is_array( $value ) ? $value : array( $value );
 			foreach ( $values as $entry ) {
@@ -1093,7 +1155,7 @@ final class PerfBench {
 			$post_type = get_post_type( $id );
 			if ( Field::POST_TYPE === $post_type ) {
 				$fields[] = $id;
-			} elseif ( Collection::POST_TYPE === $post_type ) {
+			} elseif ( Document::POST_TYPE === $post_type && Document::is_collection( $id ) ) {
 				$collections[] = $id;
 			} else {
 				$rows[] = $id;
@@ -1118,17 +1180,13 @@ final class PerfBench {
 	}
 
 	/**
-	 * Registers row CPTs from a saved manifest.
+	 * No-op in the universal-document model. Kept as a stable hook in case
+	 * future seed metadata needs to be applied when a manifest is loaded.
 	 *
 	 * @param array<string,mixed> $manifest Dataset manifest.
 	 */
 	private function register_dataset_collections( array $manifest ): void {
-		foreach ( $manifest['collections'] ?? array() as $collection ) {
-			$collection_post = get_post( (int) ( $collection['id'] ?? 0 ) );
-			if ( $collection_post instanceof WP_Post ) {
-				( new CollectionEntries() )->register_for_collection( $collection_post );
-			}
-		}
+		unset( $manifest );
 	}
 
 	/**
@@ -1177,7 +1235,7 @@ final class PerfBench {
 		// relation and rollup hydration while staying away from rows touched by
 		// write scenarios.
 		$row_detail_row_id = $primary_row_ids[ self::PAGE_SIZE * 2 ] ?? $primary_row_ids[0];
-		$row_rest_base     = CollectionEntries::CPT_PREFIX . (string) $manifest['primary_slug'];
+		$row_rest_base     = 'crtxt_documents';
 
 		return array(
 			// This is the first thing users hit when opening a collection:
@@ -1189,9 +1247,9 @@ final class PerfBench {
 					'GET',
 					'/cortext/v1/rows',
 					array(
-						'collection' => $primary_collection_id,
-						'page'       => 1,
-						'per_page'   => self::PAGE_SIZE,
+						'trait'    => $primary_collection_id,
+						'page'     => 1,
+						'per_page' => self::PAGE_SIZE,
 					)
 				),
 			),
@@ -1203,9 +1261,9 @@ final class PerfBench {
 					'GET',
 					'/cortext/v1/rows',
 					array(
-						'collection' => $primary_collection_id,
-						'page'       => 50,
-						'per_page'   => self::PAGE_SIZE,
+						'trait'    => $primary_collection_id,
+						'page'     => 50,
+						'per_page' => self::PAGE_SIZE,
 					)
 				),
 			),
@@ -1219,9 +1277,9 @@ final class PerfBench {
 						'GET',
 						'/cortext/v1/rows',
 						array(
-							'collection' => $primary_collection_id,
-							'page'       => $page,
-							'per_page'   => self::PAGE_SIZE,
+							'trait'    => $primary_collection_id,
+							'page'     => $page,
+							'per_page' => self::PAGE_SIZE,
 						)
 					),
 					array( 1, 2, 3, 50 )
@@ -1235,10 +1293,10 @@ final class PerfBench {
 					'GET',
 					'/cortext/v1/rows',
 					array(
-						'collection' => $primary_collection_id,
-						'page'       => 1,
-						'per_page'   => self::PAGE_SIZE,
-						'sort'       => array(
+						'trait'    => $primary_collection_id,
+						'page'     => 1,
+						'per_page' => self::PAGE_SIZE,
+						'sort'     => array(
 							'field'     => Relations::meta_key( $sort_field_id ),
 							'direction' => 'asc',
 						),
@@ -1252,10 +1310,10 @@ final class PerfBench {
 					'GET',
 					'/cortext/v1/rows',
 					array(
-						'collection' => $primary_collection_id,
-						'page'       => 1,
-						'per_page'   => self::PAGE_SIZE,
-						'search'     => 'Value',
+						'trait'    => $primary_collection_id,
+						'page'     => 1,
+						'per_page' => self::PAGE_SIZE,
+						'search'   => 'Value',
 					)
 				),
 			),
@@ -1267,10 +1325,10 @@ final class PerfBench {
 					'GET',
 					'/cortext/v1/rows',
 					array(
-						'collection' => $primary_collection_id,
-						'page'       => 1,
-						'per_page'   => self::PAGE_SIZE,
-						'filters'    => array(
+						'trait'    => $primary_collection_id,
+						'page'     => 1,
+						'per_page' => self::PAGE_SIZE,
+						'filters'  => array(
 							array(
 								'relation' => 'AND',
 								'filters'  => array(
@@ -1313,9 +1371,9 @@ final class PerfBench {
 					'GET',
 					'/cortext/v1/rows',
 					array(
-						'collection' => $primary_collection_id,
-						'page'       => 2,
-						'per_page'   => self::PAGE_SIZE,
+						'trait'    => $primary_collection_id,
+						'page'     => 2,
+						'per_page' => self::PAGE_SIZE,
 					)
 				),
 			),
@@ -1328,9 +1386,9 @@ final class PerfBench {
 					'GET',
 					'/cortext/v1/rows',
 					array(
-						'collection' => $primary_collection_id,
-						'page'       => 3,
-						'per_page'   => self::PAGE_SIZE,
+						'trait'    => $primary_collection_id,
+						'page'     => 3,
+						'per_page' => self::PAGE_SIZE,
 					)
 				),
 			),
@@ -1340,10 +1398,10 @@ final class PerfBench {
 					'GET',
 					'/cortext/v1/rows',
 					array(
-						'collection' => $primary_collection_id,
-						'page'       => 3,
-						'per_page'   => self::PAGE_SIZE,
-						'fields'     => $primary_rollup_id > 0
+						'trait'    => $primary_collection_id,
+						'page'     => 3,
+						'per_page' => self::PAGE_SIZE,
+						'fields'   => $primary_rollup_id > 0
 							? array( "field-{$primary_rollup_id}" )
 							: array(),
 					)
@@ -1379,9 +1437,9 @@ final class PerfBench {
 					'GET',
 					'/cortext/v1/rows',
 					array(
-						'collection' => $wide_collection_id,
-						'page'       => 1,
-						'per_page'   => self::PAGE_SIZE,
+						'trait'    => $wide_collection_id,
+						'page'     => 1,
+						'per_page' => self::PAGE_SIZE,
 					)
 				),
 			),
@@ -1392,12 +1450,11 @@ final class PerfBench {
 				'prepare' => fn() => Relations::set_relation_values( $relation_row_id, $relation_field_id, $relation_source_targets, true ),
 				'run'     => fn() => $this->rest_request(
 					'POST',
-					"/cortext/v1/collections/{$primary_collection_id}/rows/{$relation_row_id}",
+					"/wp/v2/crtxt_documents/{$relation_row_id}",
 					array(
-						'collection_id' => $primary_collection_id,
-						'row_id'        => $relation_row_id,
-						'field'         => Relations::meta_key( $relation_field_id ),
-						'value'         => $relation_target_targets,
+						'meta' => array(
+							Relations::meta_key( $relation_field_id ) => $relation_target_targets,
+						),
 					)
 				),
 			),
@@ -1408,12 +1465,11 @@ final class PerfBench {
 				'prepare' => fn() => Relations::set_relation_values( $relation_row_id, $relation_field_id, $relation_source_targets, true ),
 				'run'     => fn() => $this->rest_request(
 					'POST',
-					"/cortext/v1/collections/{$primary_collection_id}/rows/{$relation_row_id}",
+					"/wp/v2/crtxt_documents/{$relation_row_id}",
 					array(
-						'collection_id' => $primary_collection_id,
-						'row_id'        => $relation_row_id,
-						'field'         => Relations::meta_key( $relation_field_id ),
-						'value'         => $relation_delta_targets,
+						'meta' => array(
+							Relations::meta_key( $relation_field_id ) => $relation_delta_targets,
+						),
 					)
 				),
 			),
@@ -1441,6 +1497,20 @@ final class PerfBench {
 					'new-many'
 				),
 				'run'     => fn() => $this->migrate_options( (int) $manifest['migration_field_id'], 'old-many', 'new-many' ),
+			),
+			// Measures cold-start cost of the document CPT registration and the
+			// Registers the document post type and trait taxonomy from cold,
+			// the slice of init most sensitive to the number of declared
+			// types. Re-runs the registration each iteration so the scenario
+			// always measures the same fresh path.
+			'boot_cost'               => array(
+				'label' => 'Cold-start: register document types',
+				'run'   => function () {
+					unregister_post_type( Document::POST_TYPE );
+					unregister_taxonomy( TraitTaxonomy::TAXONOMY );
+					( new Document() )->register_post_type();
+					( new TraitTaxonomy() )->register_taxonomy();
+				},
 			),
 		);
 	}
@@ -1634,10 +1704,10 @@ final class PerfBench {
 					'GET',
 					'/cortext/v1/rows',
 					array(
-						'collection' => $primary_collection_id,
-						'page'       => 1,
-						'per_page'   => 50,
-						'filters'    => $this->materialization_filter_tree( $number_field_id, $select_field_id, $filter_minimum ),
+						'trait'    => $primary_collection_id,
+						'page'     => 1,
+						'per_page' => 50,
+						'filters'  => $this->materialization_filter_tree( $number_field_id, $select_field_id, $filter_minimum ),
 					)
 				),
 			),
@@ -1648,10 +1718,10 @@ final class PerfBench {
 					'GET',
 					'/cortext/v1/rows',
 					array(
-						'collection' => $primary_collection_id,
-						'page'       => 1,
-						'per_page'   => 50,
-						'filters'    => $this->materialization_filter_tree( $number_field_id, $select_field_id, $filter_minimum ),
+						'trait'    => $primary_collection_id,
+						'page'     => 1,
+						'per_page' => 50,
+						'filters'  => $this->materialization_filter_tree( $number_field_id, $select_field_id, $filter_minimum ),
 					)
 				),
 			),
@@ -1662,10 +1732,10 @@ final class PerfBench {
 					'GET',
 					'/cortext/v1/rows',
 					array(
-						'collection' => $primary_collection_id,
-						'page'       => 1,
-						'per_page'   => 50,
-						'sort'       => array(
+						'trait'    => $primary_collection_id,
+						'page'     => 1,
+						'per_page' => 50,
+						'sort'     => array(
 							'field'     => Relations::meta_key( $date_field_id ),
 							'direction' => 'asc',
 						),
@@ -1679,10 +1749,10 @@ final class PerfBench {
 					'GET',
 					'/cortext/v1/rows',
 					array(
-						'collection' => $primary_collection_id,
-						'page'       => 1,
-						'per_page'   => 50,
-						'sort'       => array(
+						'trait'    => $primary_collection_id,
+						'page'     => 1,
+						'per_page' => 50,
+						'sort'     => array(
 							'field'     => Relations::meta_key( $date_field_id ),
 							'direction' => 'asc',
 						),
@@ -1696,11 +1766,11 @@ final class PerfBench {
 					'GET',
 					'/cortext/v1/rows',
 					array(
-						'collection' => $primary_collection_id,
-						'page'       => 1,
-						'per_page'   => 50,
-						'filters'    => $this->materialization_filter_tree( $number_field_id, $select_field_id, $filter_minimum ),
-						'sort'       => array(
+						'trait'    => $primary_collection_id,
+						'page'     => 1,
+						'per_page' => 50,
+						'filters'  => $this->materialization_filter_tree( $number_field_id, $select_field_id, $filter_minimum ),
+						'sort'     => array(
 							'field'     => Relations::meta_key( $date_field_id ),
 							'direction' => 'asc',
 						),
@@ -1714,11 +1784,11 @@ final class PerfBench {
 					'GET',
 					'/cortext/v1/rows',
 					array(
-						'collection' => $primary_collection_id,
-						'page'       => 1,
-						'per_page'   => 50,
-						'filters'    => $this->materialization_filter_tree( $number_field_id, $select_field_id, $filter_minimum ),
-						'sort'       => array(
+						'trait'    => $primary_collection_id,
+						'page'     => 1,
+						'per_page' => 50,
+						'filters'  => $this->materialization_filter_tree( $number_field_id, $select_field_id, $filter_minimum ),
+						'sort'     => array(
 							'field'     => Relations::meta_key( $date_field_id ),
 							'direction' => 'asc',
 						),
@@ -1731,8 +1801,8 @@ final class PerfBench {
 					'GET',
 					'/cortext/v1/rows',
 					array(
-						'collection' => $primary_collection_id,
-						'include'    => $index->query_two_field_filter_ids(
+						'trait'    => $primary_collection_id,
+						'include'  => $index->query_two_field_filter_ids(
 							$primary_collection_id,
 							$number_field_id,
 							$filter_minimum,
@@ -1740,7 +1810,7 @@ final class PerfBench {
 							'stable',
 							50
 						),
-						'per_page'   => 50,
+						'per_page' => 50,
 					)
 				),
 			),
@@ -1895,18 +1965,18 @@ final class PerfBench {
 		float $filter_minimum
 	): void {
 		$filter_params = array(
-			'collection' => $collection_id,
-			'page'       => 1,
-			'per_page'   => 50,
-			'filters'    => $this->materialization_filter_tree( $number_field_id, $select_field_id, $filter_minimum ),
+			'trait'    => $collection_id,
+			'page'     => 1,
+			'per_page' => 50,
+			'filters'  => $this->materialization_filter_tree( $number_field_id, $select_field_id, $filter_minimum ),
 		);
 		$this->assert_rest_rows_parity( $filter_params, 'REST filter response' );
 
 		$sort_params = array(
-			'collection' => $collection_id,
-			'page'       => 1,
-			'per_page'   => 50,
-			'sort'       => array(
+			'trait'    => $collection_id,
+			'page'     => 1,
+			'per_page' => 50,
+			'sort'     => array(
 				'field'     => Relations::meta_key( $date_field_id ),
 				'direction' => 'asc',
 			),
@@ -1989,7 +2059,7 @@ final class PerfBench {
 		unset( $collection_id );
 		global $wpdb;
 
-		$post_type  = CollectionEntries::CPT_PREFIX . $slug;
+		$post_type  = Document::POST_TYPE;
 		$number_key = Relations::meta_key( $number_field_id );
 		$select_key = Relations::meta_key( $select_field_id );
 
@@ -2031,7 +2101,7 @@ final class PerfBench {
 
 		global $wpdb;
 
-		$post_type    = CollectionEntries::CPT_PREFIX . $slug;
+		$post_type    = Document::POST_TYPE;
 		$placeholders = implode( ', ', array_fill( 0, count( $field_keys ), '%s' ) );
 		$like         = '%' . $wpdb->esc_like( $term ) . '%';
 		$args         = array_merge( $field_keys, array( $post_type, $like, $limit ) );
@@ -2076,7 +2146,7 @@ final class PerfBench {
 
 		global $wpdb;
 
-		$post_type    = CollectionEntries::CPT_PREFIX . $slug;
+		$post_type    = Document::POST_TYPE;
 		$number_key   = Relations::meta_key( $number_field_id );
 		$select_key   = Relations::meta_key( $select_field_id );
 		$placeholders = implode( ', ', array_fill( 0, count( $field_keys ), '%s' ) );
@@ -2110,7 +2180,7 @@ final class PerfBench {
 	private function postmeta_date_sort_ids( string $slug, int $date_field_id, int $limit ): array {
 		global $wpdb;
 
-		$post_type = CollectionEntries::CPT_PREFIX . $slug;
+		$post_type = Document::POST_TYPE;
 		$date_key  = Relations::meta_key( $date_field_id );
 
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
@@ -2146,7 +2216,7 @@ final class PerfBench {
 	): array {
 		global $wpdb;
 
-		$post_type  = CollectionEntries::CPT_PREFIX . $slug;
+		$post_type  = Document::POST_TYPE;
 		$date_key   = Relations::meta_key( $date_field_id );
 		$number_key = Relations::meta_key( $number_field_id );
 		$select_key = Relations::meta_key( $select_field_id );
@@ -2184,7 +2254,7 @@ final class PerfBench {
 	private function postmeta_relation_contains_ids( string $slug, int $relation_field_id, int $target_row_id, int $limit ): array {
 		global $wpdb;
 
-		$post_type = CollectionEntries::CPT_PREFIX . $slug;
+		$post_type = Document::POST_TYPE;
 		$key       = Relations::meta_key( $relation_field_id );
 
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
@@ -2213,7 +2283,7 @@ final class PerfBench {
 	private function postmeta_sum_number( string $slug, int $field_id ): float {
 		global $wpdb;
 
-		$post_type = CollectionEntries::CPT_PREFIX . $slug;
+		$post_type = Document::POST_TYPE;
 		$key       = Relations::meta_key( $field_id );
 
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
@@ -2235,7 +2305,7 @@ final class PerfBench {
 	private function postmeta_count_text( string $slug, int $field_id, string $value ): int {
 		global $wpdb;
 
-		$post_type = CollectionEntries::CPT_PREFIX . $slug;
+		$post_type = Document::POST_TYPE;
 		$key       = Relations::meta_key( $field_id );
 
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
@@ -2340,6 +2410,7 @@ final class PerfBench {
 	}
 
 	private function run_materialization_rest_write( int $collection_id, int $row_id, int $field_id, float $value, bool $sidecar_enabled ): mixed {
+		unset( $collection_id );
 		$disable_sidecar = static fn(): bool => false;
 		if ( ! $sidecar_enabled ) {
 			add_filter( 'cortext_field_values_index_enabled', $disable_sidecar );
@@ -2348,12 +2419,11 @@ final class PerfBench {
 		try {
 			return $this->rest_request(
 				'POST',
-				"/cortext/v1/collections/{$collection_id}/rows/{$row_id}",
+				"/wp/v2/crtxt_documents/{$row_id}",
 				array(
-					'collection_id' => $collection_id,
-					'row_id'        => $row_id,
-					'field'         => Relations::meta_key( $field_id ),
-					'value'         => (string) $value,
+					'meta' => array(
+						Relations::meta_key( $field_id ) => (string) $value,
+					),
 				)
 			);
 		} finally {
@@ -2636,7 +2706,7 @@ final class PerfBench {
 	 */
 	private function manifest_is_usable( array $manifest ): bool {
 		$collection_id = (int) ( $manifest['primary_collection_id'] ?? 0 );
-		return $collection_id > 0 && Collection::POST_TYPE === get_post_type( $collection_id );
+		return $collection_id > 0 && Document::is_collection( $collection_id );
 	}
 
 	/**

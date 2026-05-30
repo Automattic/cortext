@@ -353,22 +353,20 @@ test.describe( 'Navigation lifecycle', () => {
 		try {
 			fixture.firstPage = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: { title: HISTORY_FIRST_PAGE_TITLE, status: 'private' },
 			} );
 			fixture.secondPage = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: { title: HISTORY_SECOND_PAGE_TITLE, status: 'private' },
 			} );
-			fixture.slug = `e2ehist${ SUFFIX }`;
 			fixture.collection = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_collections',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: HISTORY_COLLECTION_TITLE,
 					status: 'private',
-					meta: { slug: fixture.slug },
 				},
 			} );
 
@@ -436,17 +434,17 @@ test.describe( 'Navigation lifecycle', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
 				fixture.secondPage &&
-					`/wp/v2/crtxt_pages/${ fixture.secondPage.id }`
+					`/wp/v2/crtxt_documents/${ fixture.secondPage.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
 				fixture.firstPage &&
-					`/wp/v2/crtxt_pages/${ fixture.firstPage.id }`
+					`/wp/v2/crtxt_documents/${ fixture.firstPage.id }`
 			);
 		}
 	} );
@@ -462,7 +460,7 @@ test.describe( 'Navigation lifecycle', () => {
 		try {
 			fixture.firstPage = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: NO_FLASH_FIRST_PAGE_TITLE,
 					status: 'private',
@@ -470,7 +468,7 @@ test.describe( 'Navigation lifecycle', () => {
 			} );
 			fixture.secondPage = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: NO_FLASH_SECOND_PAGE_TITLE,
 					status: 'private',
@@ -540,12 +538,12 @@ test.describe( 'Navigation lifecycle', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.secondPage &&
-					`/wp/v2/crtxt_pages/${ fixture.secondPage.id }`
+					`/wp/v2/crtxt_documents/${ fixture.secondPage.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
 				fixture.firstPage &&
-					`/wp/v2/crtxt_pages/${ fixture.firstPage.id }`
+					`/wp/v2/crtxt_documents/${ fixture.firstPage.id }`
 			);
 		}
 	} );
@@ -570,7 +568,7 @@ test.describe( 'Navigation lifecycle', () => {
 			);
 			fixture.firstPage = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: COVER_FIRST_PAGE_TITLE,
 					status: 'private',
@@ -579,7 +577,7 @@ test.describe( 'Navigation lifecycle', () => {
 			} );
 			fixture.secondPage = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: COVER_SECOND_PAGE_TITLE,
 					status: 'private',
@@ -629,12 +627,12 @@ test.describe( 'Navigation lifecycle', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.secondPage &&
-					`/wp/v2/crtxt_pages/${ fixture.secondPage.id }`
+					`/wp/v2/crtxt_documents/${ fixture.secondPage.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
 				fixture.firstPage &&
-					`/wp/v2/crtxt_pages/${ fixture.firstPage.id }`
+					`/wp/v2/crtxt_documents/${ fixture.firstPage.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
@@ -660,28 +658,49 @@ test.describe( 'Navigation lifecycle', () => {
 		try {
 			fixture.firstPage = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: { title: FIRST_PAGE_TITLE, status: 'private' },
 			} );
 			fixture.secondPage = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: { title: SECOND_PAGE_TITLE, status: 'private' },
 			} );
-			fixture.slug = `e2elife${ SUFFIX }`;
 			fixture.collection = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_collections',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: COLLECTION_TITLE,
 					status: 'private',
-					meta: { slug: fixture.slug },
+				},
+			} );
+			// Promote the document to a collection so the trait mirror term
+			// gets created; without `cortext_fields` the row insert below
+			// would be a silent no-op on `cortext_trait`.
+			fixture.field = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_fields',
+				data: {
+					title: 'Title',
+					status: 'private',
+					meta: { type: 'text' },
+				},
+			} );
+			await requestUtils.rest( {
+				method: 'POST',
+				path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
+				data: {
+					meta: { cortext_fields: [ String( fixture.field.id ) ] },
 				},
 			} );
 			fixture.entry = await requestUtils.rest( {
 				method: 'POST',
-				path: `/wp/v2/crtxt_${ fixture.slug }`,
-				data: { title: ENTRY_TITLE, status: 'private' },
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: ENTRY_TITLE,
+					status: 'private',
+					cortext_trait: fixture.collection.id,
+				},
 			} );
 
 			await admin.visitAdminPage(
@@ -725,7 +744,7 @@ test.describe( 'Navigation lifecycle', () => {
 				releaseCollection = resolve;
 			} );
 			await page.route(
-				`**/wp-json/wp/v2/crtxt_collections/${ fixture.collection.id }**`,
+				`**/wp-json/wp/v2/crtxt_documents/${ fixture.collection.id }**`,
 				async ( route ) => {
 					await collectionGate;
 					await route.continue();
@@ -735,7 +754,7 @@ test.describe( 'Navigation lifecycle', () => {
 				request
 					.url()
 					.includes(
-						`/wp-json/wp/v2/crtxt_collections/${ fixture.collection.id }`
+						`/wp-json/wp/v2/crtxt_documents/${ fixture.collection.id }`
 					)
 			);
 			const rowsGate = new Promise( ( resolve ) => {
@@ -748,7 +767,7 @@ test.describe( 'Navigation lifecycle', () => {
 						route
 							.request()
 							.url()
-							.includes( `collection=${ fixture.collection.id }` )
+							.includes( `trait=${ fixture.collection.id }` )
 					) {
 						await rowsGate;
 					}
@@ -758,9 +777,7 @@ test.describe( 'Navigation lifecycle', () => {
 			const rowsRequest = page.waitForRequest(
 				( request ) =>
 					request.url().includes( '/wp-json/cortext/v1/rows' ) &&
-					request
-						.url()
-						.includes( `collection=${ fixture.collection.id }` )
+					request.url().includes( `trait=${ fixture.collection.id }` )
 			);
 
 			await resetViewTransitionProbe( page );
@@ -832,23 +849,22 @@ test.describe( 'Navigation lifecycle', () => {
 			releaseRows();
 			await deleteIfCreated(
 				requestUtils,
-				fixture.entry &&
-					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+				fixture.entry && `/wp/v2/crtxt_documents/${ fixture.entry.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
 				fixture.secondPage &&
-					`/wp/v2/crtxt_pages/${ fixture.secondPage.id }`
+					`/wp/v2/crtxt_documents/${ fixture.secondPage.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
 				fixture.firstPage &&
-					`/wp/v2/crtxt_pages/${ fixture.firstPage.id }`
+					`/wp/v2/crtxt_documents/${ fixture.firstPage.id }`
 			);
 		}
 	} );

@@ -5,10 +5,9 @@
  * Handles listing, restore, permanent delete, duplicate, and collection
  * create through the `Documents` service.
  *
- * Restore and permanent-delete walk the page hierarchy via
- * `TrashCascadeEngine` so descendants move with their root. Single-resource
- * reads still go through `DocumentLocatorController` plus
- * `/wp/v2/<rest_base>/<id>`.
+ * Restore and permanent-delete walk descendants via `TrashCascade` so the
+ * subtree moves with its root. Single-resource reads still go through
+ * `DocumentLocatorController` plus `/wp/v2/<rest_base>/<id>`.
  *
  * @package Cortext
  */
@@ -18,13 +17,9 @@ declare( strict_types=1 );
 namespace Cortext\Rest;
 
 use Cortext\Documents;
-use Cortext\PostType\Cascade\CollectionToRowTrashCascade;
-use Cortext\PostType\Cascade\DocumentToCollectionTrashCascade;
-use Cortext\PostType\Cascade\PageHierarchyTrashCascade;
-use Cortext\PostType\Collection;
-use Cortext\PostType\CollectionEntries;
-use Cortext\PostType\Page;
-use Cortext\PostType\TrashCascadeEngine;
+use Cortext\PostType\Document;
+use Cortext\PostType\TrashCascade;
+use Cortext\Rest\RowsManualOrder;
 use WP_Error;
 use WP_Post;
 use WP_REST_Request;
@@ -36,17 +31,11 @@ final class DocumentsController {
 
 	private Documents $documents;
 
-	private TrashCascadeEngine $cascade;
+	private TrashCascade $cascade;
 
-	public function __construct( ?Documents $documents = null, ?TrashCascadeEngine $cascade = null ) {
+	public function __construct( ?Documents $documents = null, ?TrashCascade $cascade = null ) {
 		$this->documents = $documents ?? new Documents();
-		$this->cascade   = $cascade ?? new TrashCascadeEngine(
-			array(
-				new PageHierarchyTrashCascade(),
-				new DocumentToCollectionTrashCascade(),
-				new CollectionToRowTrashCascade( new CollectionEntries() ),
-			)
-		);
+		$this->cascade   = $cascade ?? new TrashCascade();
 	}
 
 	public function register(): void {
@@ -66,11 +55,6 @@ final class DocumentsController {
 						'search'   => array(
 							'type'    => 'string',
 							'default' => '',
-						),
-						'kind'     => array(
-							'type'    => 'string',
-							'default' => '',
-							'enum'    => array( '', Documents::KIND_PAGE, Documents::KIND_ROW, Documents::KIND_COLLECTION ),
 						),
 						'status'   => array(
 							'type'    => 'string',
@@ -150,6 +134,36 @@ final class DocumentsController {
 				),
 			)
 		);
+
+		register_rest_route(
+			self::NAMESPACE,
+			'/documents/(?P<id>\d+)/reorder',
+			array(
+				array(
+					'methods'             => 'POST',
+					'callback'            => array( $this, 'reorder' ),
+					'permission_callback' => array( $this, 'can_reorder' ),
+					'args'                => array(
+						'id'           => array(
+							'type'     => 'integer',
+							'required' => true,
+						),
+						'before_id'    => array(
+							'type'     => array( 'integer', 'null' ),
+							'required' => false,
+						),
+						'after_id'     => array(
+							'type'     => array( 'integer', 'null' ),
+							'required' => false,
+						),
+						'current_sort' => array(
+							'type'     => array( 'object', 'null' ),
+							'required' => false,
+						),
+					),
+				),
+			)
+		);
 	}
 
 	public function can_read(): bool {
@@ -162,7 +176,6 @@ final class DocumentsController {
 		$result = $this->documents->list(
 			array(
 				'search'          => (string) $request->get_param( 'search' ),
-				'kind'            => (string) $request->get_param( 'kind' ),
 				'status'          => '' === $status ? null : $status,
 				'page'            => (int) $request->get_param( 'page' ),
 				'per_page'        => (int) $request->get_param( 'per_page' ),
@@ -335,6 +348,105 @@ final class DocumentsController {
 	}
 
 	/**
+	 * Permission gate for reorder. Reorder is row-only: a real document that
+	 * isn't a row returns 400 (unsupported), a missing one 404.
+	 *
+	 * @param WP_REST_Request $request Incoming REST request.
+	 *
+	 * @return bool|WP_Error
+	 */
+	public function can_reorder( WP_REST_Request $request ) {
+		$id   = (int) $request->get_param( 'id' );
+		$post = get_post( $id );
+
+		if ( ! $post instanceof WP_Post || Document::POST_TYPE !== $post->post_type ) {
+			return new WP_Error(
+				'cortext_document_not_found',
+				__( 'Document not found.', 'cortext' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		$trait = $this->documents->find_trait_for_document( $post );
+		if ( ! $trait instanceof WP_Post ) {
+			return new WP_Error(
+				'cortext_reorder_unsupported',
+				__( 'Reordering is only supported for rows.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		return current_user_can( 'edit_post', $id );
+	}
+
+	public function reorder( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+		$row_id = (int) $request->get_param( 'id' );
+
+		$row = get_post( $row_id );
+		if ( ! $row instanceof WP_Post ) {
+			return new WP_Error(
+				'cortext_document_not_found',
+				__( 'Document not found.', 'cortext' ),
+				array( 'status' => 404 )
+			);
+		}
+		$collection_post = $this->documents->find_trait_for_document( $row );
+		if ( ! $collection_post instanceof WP_Post ) {
+			return new WP_Error(
+				'cortext_reorder_unsupported',
+				__( 'Reordering is only supported for rows.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+		$collection_id = (int) $collection_post->ID;
+		$before_id     = $this->nullable_id( $request->get_param( 'before_id' ) );
+		$after_id      = $this->nullable_id( $request->get_param( 'after_id' ) );
+		$current_sort  = $request->get_param( 'current_sort' );
+		$current_sort  = is_array( $current_sort ) ? $current_sort : null;
+
+		if ( null === $before_id && null === $after_id ) {
+			return new WP_Error(
+				'cortext_reorder_neighbor_required',
+				__( 'Choose a position for the row.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$manual_order = new RowsManualOrder();
+		if (
+			! $manual_order->is_seeded( $collection_id ) &&
+			! array_key_exists( 'current_sort', $request->get_params() )
+		) {
+			return new WP_Error(
+				'cortext_reorder_current_sort_required',
+				__( 'Send the current sort before starting manual order.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$result = $manual_order->move_row(
+			$collection_id,
+			$row_id,
+			$before_id,
+			$after_id,
+			$current_sort
+		);
+		if ( $result instanceof WP_Error ) {
+			return $result;
+		}
+
+		return new WP_REST_Response( $result, 200 );
+	}
+
+	private function nullable_id( mixed $value ): ?int {
+		if ( null === $value ) {
+			return null;
+		}
+		$id = (int) $value;
+		return $id > 0 ? $id : null;
+	}
+
+	/**
 	 * Permission gate for dependent-pages. Only collections have block-level
 	 * dependents to enumerate; for any other document kind return 404 so the
 	 * caller cannot probe id existence by capability.
@@ -347,7 +459,7 @@ final class DocumentsController {
 		$id   = (int) $request->get_param( 'id' );
 		$post = get_post( $id );
 
-		if ( ! $post instanceof WP_Post || Collection::POST_TYPE !== $post->post_type ) {
+		if ( ! $post instanceof WP_Post || ! Document::is_collection_post( $post ) ) {
 			return new WP_Error(
 				'cortext_document_not_found',
 				__( 'Document not found.', 'cortext' ),
@@ -362,7 +474,7 @@ final class DocumentsController {
 	 * Returns the public pages containing a `cortext/data-view` block
 	 * referencing this collection.
 	 *
-	 * @see CollectionPublishToggle for use case.
+	 * @see DocumentPublishToggle for use case.
 	 *
 	 * For speed, search in two stages:
 	 *
@@ -400,9 +512,11 @@ final class DocumentsController {
 				"SELECT ID FROM {$wpdb->posts}
 				WHERE post_type = %s
 					AND post_status = 'publish'
+					AND ID != %d
 					AND ( post_content LIKE %s OR post_content LIKE %s )
 				LIMIT %d",
-				Page::POST_TYPE,
+				Document::POST_TYPE,
+				$collection_id,
 				$needle_comma,
 				$needle_brace,
 				$limit

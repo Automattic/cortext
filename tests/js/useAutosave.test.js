@@ -188,6 +188,69 @@ describe( 'useAutosave: debounce', () => {
 		} );
 		expect( savePost ).not.toHaveBeenCalled();
 	} );
+
+	it( 'does not retry the same failed edits until they change', () => {
+		const savePost = jest.fn();
+		useDispatch.mockReturnValue( {
+			savePost,
+			editPost: jest.fn(),
+			createErrorNotice: jest.fn(),
+			createSuccessNotice: jest.fn(),
+		} );
+		setStoreState( { isDirty: true, didFail: true } );
+
+		renderHook( () => useAutosave() );
+
+		act( () => {
+			jest.advanceTimersByTime( 5000 );
+		} );
+		expect( savePost ).not.toHaveBeenCalled();
+	} );
+
+	it( 'flushNow retries the same failed edits when explicitly requested', async () => {
+		const savePost = jest.fn().mockResolvedValue();
+		useDispatch.mockReturnValue( {
+			savePost,
+			editPost: jest.fn(),
+			createErrorNotice: jest.fn(),
+			createSuccessNotice: jest.fn(),
+		} );
+		setStoreState( { isDirty: true, didFail: true } );
+
+		const { result } = renderHook( () => useAutosave() );
+
+		await act( async () => {
+			await expect( result.current.flushNow() ).resolves.toBe( true );
+		} );
+		expect( savePost ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'retries after a failed save once the edits change', () => {
+		const savePost = jest.fn();
+		useDispatch.mockReturnValue( {
+			savePost,
+			editPost: jest.fn(),
+			createErrorNotice: jest.fn(),
+			createSuccessNotice: jest.fn(),
+		} );
+		setStoreState( { isDirty: true, didFail: true } );
+
+		const { rerender } = renderHook( () => useAutosave() );
+
+		act( () => {
+			jest.advanceTimersByTime( 5000 );
+		} );
+		expect( savePost ).not.toHaveBeenCalled();
+
+		simulateEdit();
+		setStoreState( { isDirty: true, didFail: true } );
+		rerender();
+
+		act( () => {
+			jest.advanceTimersByTime( 800 );
+		} );
+		expect( savePost ).toHaveBeenCalledTimes( 1 );
+	} );
 } );
 
 describe( 'useAutosave: throttle', () => {
@@ -480,7 +543,7 @@ describe( 'useAutosave: status', () => {
 
 		const { rerender } = renderHook( () =>
 			useAutosave( {
-				recentTarget: { kind: 'page', id: 42 },
+				recentTarget: { id: 42 },
 			} )
 		);
 
@@ -498,7 +561,6 @@ describe( 'useAutosave: status', () => {
 		} );
 
 		expect( mockTouchRecent ).toHaveBeenCalledWith( {
-			kind: 'page',
 			id: 42,
 		} );
 	} );
@@ -508,7 +570,7 @@ describe( 'useAutosave: status', () => {
 
 		const { rerender } = renderHook( () =>
 			useAutosave( {
-				recentTarget: { kind: 'row', id: 42, collectionId: 9 },
+				recentTarget: { id: 42, collectionId: 9 },
 			} )
 		);
 
@@ -526,7 +588,6 @@ describe( 'useAutosave: status', () => {
 		} );
 
 		expect( mockTouchRecent ).toHaveBeenCalledWith( {
-			kind: 'row',
 			id: 42,
 			collectionId: 9,
 		} );
@@ -545,7 +606,7 @@ describe( 'useAutosave: status', () => {
 
 		renderHook( () =>
 			useAutosave( {
-				recentTarget: { kind: 'row', id: 42, collectionId: 9 },
+				recentTarget: { id: 42, collectionId: 9 },
 			} )
 		);
 
@@ -556,8 +617,8 @@ describe( 'useAutosave: status', () => {
 		// Edit row A → save starts → user opens row B before the save
 		// resolves. When the save lands, Recents must reflect A (which was
 		// actually saved), not B (which the parent has since swapped in).
-		const targetA = { kind: 'row', id: 1, collectionId: 9 };
-		const targetB = { kind: 'row', id: 2, collectionId: 9 };
+		const targetA = { id: 1, collectionId: 9 };
+		const targetB = { id: 2, collectionId: 9 };
 
 		setStoreState( { isSaving: false, currentPostId: 1 } );
 
@@ -599,13 +660,13 @@ describe( 'useAutosave: status', () => {
 
 		const { rerender } = renderHook( ( props ) => useAutosave( props ), {
 			initialProps: {
-				recentTarget: { kind: 'row', id: 1, collectionId: 9 },
+				recentTarget: { id: 1, collectionId: 9 },
 			},
 		} );
 
 		act( () => {
 			rerender( {
-				recentTarget: { kind: 'row', id: 2, collectionId: 9 },
+				recentTarget: { id: 2, collectionId: 9 },
 			} );
 		} );
 

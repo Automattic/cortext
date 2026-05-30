@@ -9,12 +9,11 @@ declare( strict_types=1 );
 
 namespace Cortext\Tests;
 
-use Cortext\PostType\Collection;
-use Cortext\PostType\CollectionEntries;
+use Cortext\PostType\Document;
 use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Field;
-use Cortext\PostType\Page;
 use Cortext\Rest\RecentsController;
+use Cortext\Taxonomy\TraitTaxonomy;
 use WorDBless\BaseTestCase;
 use WP_REST_Request;
 use WP_REST_Server;
@@ -22,16 +21,23 @@ use WP_REST_Server;
 final class Test_Rest_Recents_Controller extends BaseTestCase {
 
 	use InMemoryPostsQuery;
+	use InMemoryTermStore;
 
 	private const META_KEY = 'cortext_recents';
 
 	public function set_up(): void {
 		parent::set_up();
 
-		$this->unregister_dynamic_collection_post_types();
-		( new Page() )->register_post_type();
-		( new Collection() )->register_post_type();
+		( new Document() )->register_post_type();
+		( new TraitTaxonomy() )->register_taxonomy();
+		$trait_taxonomy = new TraitTaxonomy();
+		add_action( 'added_post_meta', array( $trait_taxonomy, 'sync_term_on_meta_change' ), 10, 4 );
+		add_action( 'updated_post_meta', array( $trait_taxonomy, 'sync_term_on_meta_change' ), 10, 4 );
+		add_action( 'deleted_post_meta', array( $trait_taxonomy, 'sync_term_on_meta_change' ), 10, 4 );
+		add_action( 'before_delete_post', array( $trait_taxonomy, 'sync_term_on_delete' ), 10, 2 );
+		( new Field() )->register_post_type();
 
+		$this->install_in_memory_term_store();
 		$this->install_in_memory_posts_query();
 
 		$GLOBALS['wp_rest_server'] = new WP_REST_Server();
@@ -41,6 +47,7 @@ final class Test_Rest_Recents_Controller extends BaseTestCase {
 
 	public function tear_down(): void {
 		$this->uninstall_in_memory_posts_query();
+		$this->uninstall_in_memory_term_store();
 		wp_set_current_user( 0 );
 		parent::tear_down();
 	}
@@ -77,26 +84,25 @@ final class Test_Rest_Recents_Controller extends BaseTestCase {
 			)
 		);
 		$collection = $this->create_collection( 'people', 'People' );
-		$row_id     = $this->create_row( 'crtxt_people', 'Ada Lovelace' );
+		$row_id     = $this->create_row( $collection, 'Ada Lovelace' );
 
-		$this->touch_recent( 'page', $page_id );
-		$this->touch_recent( 'collection', $collection );
-		$response = $this->touch_recent( 'row', $row_id, $collection );
+		$this->touch_recent( $page_id );
+		$this->touch_recent( $collection );
+		$response = $this->touch_recent( $row_id );
 
 		$this->assertSame( 200, $response->get_status() );
 		$recents = $this->get_recents()->get_data()['recents'];
 
 		$this->assertCount( 3, $recents );
-		$this->assertSame( 'row', $recents[0]['kind'] );
 		$this->assertSame( $row_id, $recents[0]['id'] );
 		$this->assertSame( 'Ada Lovelace', $recents[0]['title'] );
 		$this->assertSame( "ada-lovelace-{$row_id}", $recents[0]['path'] );
 		$this->assertSame( $collection, $recents[0]['collection']['id'] );
 		$this->assertSame( 'People', $recents[0]['collection']['title'] );
-		$this->assertSame( 'collection', $recents[1]['kind'] );
-		$this->assertSame( "collection/people-{$collection}", $recents[1]['path'] );
-		$this->assertSame( 'page', $recents[2]['kind'] );
-		$this->assertSame( "page/notes-{$page_id}", $recents[2]['path'] );
+		$this->assertSame( $collection, $recents[1]['id'] );
+		$this->assertSame( "people-{$collection}", $recents[1]['path'] );
+		$this->assertSame( $page_id, $recents[2]['id'] );
+		$this->assertSame( "notes-{$page_id}", $recents[2]['path'] );
 		$this->assertSame( $page_icon, $recents[2]['icon'] );
 		$this->assertMatchesRegularExpression(
 			'/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/',
@@ -110,7 +116,7 @@ final class Test_Rest_Recents_Controller extends BaseTestCase {
 
 		wp_set_current_user( $user_a );
 		$page_id = $this->create_page();
-		$this->touch_recent( 'page', $page_id );
+		$this->touch_recent( $page_id );
 
 		wp_set_current_user( $user_b );
 		$response = $this->get_recents();
@@ -124,15 +130,56 @@ final class Test_Rest_Recents_Controller extends BaseTestCase {
 		$page_a = $this->create_page( array( 'post_title' => 'A' ) );
 		$page_b = $this->create_page( array( 'post_title' => 'B' ) );
 
-		$this->touch_recent( 'page', $page_a );
-		$this->touch_recent( 'page', $page_b );
-		$this->touch_recent( 'page', $page_a );
+		$this->touch_recent( $page_a );
+		$this->touch_recent( $page_b );
+		$this->touch_recent( $page_a );
 
 		$recents = $this->get_recents()->get_data()['recents'];
 
 		$this->assertCount( 2, $recents );
 		$this->assertSame( $page_a, $recents[0]['id'] );
 		$this->assertSame( $page_b, $recents[1]['id'] );
+	}
+
+	public function test_stored_meta_uses_bare_id_shape(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$page_id = $this->create_page();
+
+		$this->touch_recent( $page_id );
+
+		$stored = get_user_meta( get_current_user_id(), self::META_KEY, true );
+		$this->assertIsArray( $stored );
+		$this->assertCount( 1, $stored );
+		$this->assertSame( $page_id, $stored[0]['id'] );
+		$this->assertArrayNotHasKey( 'kind', $stored[0] );
+		$this->assertArrayHasKey( 'updatedAt', $stored[0] );
+	}
+
+	public function test_legacy_kind_id_meta_is_forward_migrated_on_read(): void {
+		// Older builds stored each recent as `{kind, id, updatedAt}`. The
+		// reader accepts that shape, renders it, and rewrites storage to
+		// the new `{id, updatedAt}` shape on the next save.
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$page_id = $this->create_page();
+
+		update_user_meta(
+			get_current_user_id(),
+			self::META_KEY,
+			array(
+				array(
+					'kind'      => 'page',
+					'id'        => $page_id,
+					'updatedAt' => '2026-05-01T00:00:00+00:00',
+				),
+			)
+		);
+
+		$response = $this->get_recents();
+		$recents  = $response->get_data()['recents'];
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertCount( 1, $recents );
+		$this->assertSame( $page_id, $recents[0]['id'] );
 	}
 
 	public function test_rejects_invalid_and_forbidden_targets(): void {
@@ -145,7 +192,7 @@ final class Test_Rest_Recents_Controller extends BaseTestCase {
 			)
 		);
 
-		$invalid_type = $this->touch_recent( 'page', $post_id );
+		$invalid_type = $this->touch_recent( $post_id );
 
 		$owner_id = $this->create_user( 'administrator' );
 		wp_set_current_user( $owner_id );
@@ -157,7 +204,7 @@ final class Test_Rest_Recents_Controller extends BaseTestCase {
 		);
 
 		wp_set_current_user( $this->create_user( 'contributor' ) );
-		$forbidden = $this->touch_recent( 'page', $private_page );
+		$forbidden = $this->touch_recent( $private_page );
 
 		$this->assertSame( 404, $invalid_type->get_status() );
 		$this->assertSame( 403, $forbidden->get_status() );
@@ -167,7 +214,7 @@ final class Test_Rest_Recents_Controller extends BaseTestCase {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
 		$page_id = $this->create_page();
 
-		$this->touch_recent( 'page', $page_id );
+		$this->touch_recent( $page_id );
 		wp_trash_post( $page_id );
 
 		$response = $this->get_recents();
@@ -177,7 +224,7 @@ final class Test_Rest_Recents_Controller extends BaseTestCase {
 		$this->assertSame( array(), get_user_meta( get_current_user_id(), self::META_KEY, true ) );
 
 		$page_id = $this->create_page();
-		$this->touch_recent( 'page', $page_id );
+		$this->touch_recent( $page_id );
 		wp_delete_post( $page_id, true );
 
 		$response = $this->get_recents();
@@ -196,7 +243,7 @@ final class Test_Rest_Recents_Controller extends BaseTestCase {
 					'post_title' => "Page {$i}",
 				)
 			);
-			$this->touch_recent( 'page', $page_ids[ $i ] );
+			$this->touch_recent( $page_ids[ $i ] );
 		}
 
 		$recents = $this->get_recents()->get_data()['recents'];
@@ -212,69 +259,14 @@ final class Test_Rest_Recents_Controller extends BaseTestCase {
 		);
 	}
 
-	public function test_rejects_touching_an_inline_collection_recent(): void {
-		wp_set_current_user( $this->create_user( 'administrator' ) );
-		$collection_id = $this->create_collection( 'hidden', 'Hidden' );
-		update_post_meta( $collection_id, Collection::MODE_META_KEY, Collection::MODE_INLINE );
-
-		$response = $this->touch_recent( 'collection', $collection_id );
-
-		$this->assertSame( 400, $response->get_status() );
-		$this->assertSame(
-			'cortext_document_target_inline_collection',
-			$response->get_data()['code']
-		);
-	}
-
-	public function test_get_drops_stale_inline_collection_recents(): void {
-		$user_id = $this->create_user( 'administrator' );
-		wp_set_current_user( $user_id );
-		$full_id   = $this->create_collection( 'visible', 'Visible' );
-		$inline_id = $this->create_collection( 'hidden', 'Hidden' );
-		update_post_meta( $full_id, Collection::MODE_META_KEY, Collection::MODE_FULL_PAGE );
-		update_post_meta( $inline_id, Collection::MODE_META_KEY, Collection::MODE_INLINE );
-
-		update_user_meta(
-			$user_id,
-			self::META_KEY,
-			array(
-				array(
-					'kind'      => 'collection',
-					'id'        => $full_id,
-					'updatedAt' => gmdate( DATE_RFC3339 ),
-				),
-				array(
-					'kind'      => 'collection',
-					'id'        => $inline_id,
-					'updatedAt' => gmdate( DATE_RFC3339 ),
-				),
-			)
-		);
-
-		$response = $this->get_recents();
-
-		$this->assertSame( 200, $response->get_status() );
-		$this->assertSame(
-			array( $full_id ),
-			array_column( $response->get_data()['recents'], 'id' )
-		);
-	}
-
 	private function get_recents() {
 		$request = new WP_REST_Request( 'GET', '/cortext/v1/recents' );
 		return rest_do_request( $request );
 	}
 
-	private function touch_recent( string $kind, int $id, int $collection_id = 0 ) {
+	private function touch_recent( int $id ) {
 		$request = new WP_REST_Request( 'POST', '/cortext/v1/recents' );
-		$params  = array(
-			'kind' => $kind,
-			'id'   => $id,
-		);
-		if ( $collection_id > 0 ) {
-			$params['collectionId'] = $collection_id;
-		}
-		$request->set_body_params( $params );
+		$request->set_body_params( array( 'id' => $id ) );
 		return rest_do_request( $request );
 	}
 
@@ -290,7 +282,7 @@ final class Test_Rest_Recents_Controller extends BaseTestCase {
 
 	private function create_page( array $args = array() ): int {
 		$defaults = array(
-			'post_type'   => Page::POST_TYPE,
+			'post_type'   => Document::POST_TYPE,
 			'post_status' => 'private',
 			'post_title'  => 'Test page ' . wp_generate_uuid4(),
 		);
@@ -304,44 +296,43 @@ final class Test_Rest_Recents_Controller extends BaseTestCase {
 	private function create_collection( string $slug, string $title = 'Collection' ): int {
 		$id = wp_insert_post(
 			array(
-				'post_type'   => Collection::POST_TYPE,
+				'post_type'   => Document::POST_TYPE,
 				'post_status' => 'private',
 				'post_title'  => $title,
-				'meta_input'  => array(
-					'slug' => $slug,
-				),
+				'post_name'   => $slug,
 			)
 		);
 		$this->assertIsInt( $id );
 		$this->assertGreaterThan( 0, $id );
 
-		( new CollectionEntries() )->register_for_collection( get_post( (int) $id ) );
-
-		return (int) $id;
-	}
-
-	private function create_row( string $post_type, string $title ): int {
-		$id = wp_insert_post(
+		$field_id = (int) wp_insert_post(
 			array(
-				'post_type'   => $post_type,
+				'post_type'   => Field::POST_TYPE,
 				'post_status' => 'private',
-				'post_title'  => $title,
+				'post_title'  => 'Title',
+				'meta_input'  => array( 'type' => 'text' ),
 			)
 		);
-		$this->assertIsInt( $id );
-		$this->assertGreaterThan( 0, $id );
+		$this->assertGreaterThan( 0, $field_id );
+		add_post_meta( (int) $id, 'cortext_fields', (string) $field_id );
 
 		return (int) $id;
 	}
 
-	private function unregister_dynamic_collection_post_types(): void {
-		foreach ( get_post_types() as $post_type ) {
-			if (
-				str_starts_with( $post_type, CollectionEntries::CPT_PREFIX ) &&
-				! in_array( $post_type, array( Page::POST_TYPE, Collection::POST_TYPE, Field::POST_TYPE ), true )
-			) {
-				unregister_post_type( $post_type );
-			}
-		}
+	private function create_row( int $collection_id, string $title ): int {
+		$id = (int) wp_insert_post(
+			array(
+				'post_type'   => Document::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => $title,
+			)
+		);
+		$this->assertGreaterThan( 0, $id );
+
+		$term_id = TraitTaxonomy::term_id_for_trait( $collection_id );
+		$this->assertGreaterThan( 0, $term_id );
+		wp_set_object_terms( $id, array( $term_id ), TraitTaxonomy::TAXONOMY, false );
+
+		return $id;
 	}
 }

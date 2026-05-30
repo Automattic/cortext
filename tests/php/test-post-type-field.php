@@ -154,6 +154,143 @@ final class Test_Post_Type_Field extends BaseTestCase {
 		);
 	}
 
+	public function test_save_creates_field_with_direct_meta(): void {
+		( new Field() )->register_post_type();
+
+		$id = Field::save(
+			array(
+				'title'       => 'Author',
+				'type'        => 'text',
+				'description' => 'Book author',
+			)
+		);
+
+		$this->assertIsInt( $id );
+		$this->assertGreaterThan( 0, $id );
+		$this->assertSame( 'Author', get_post( $id )->post_title );
+		$this->assertSame( 'text', get_post_meta( $id, 'type', true ) );
+		$this->assertSame( 'Book author', get_post_meta( $id, 'description', true ) );
+	}
+
+	public function test_save_encodes_array_options_as_json(): void {
+		( new Field() )->register_post_type();
+
+		$id = Field::save(
+			array(
+				'title'   => 'Status',
+				'type'    => 'select',
+				'options' => array(
+					array(
+						'value' => 'open',
+						'label' => 'Open',
+						'color' => 'blue',
+					),
+					array(
+						'value' => 'closed',
+						'label' => 'Closed',
+						'color' => 'red',
+					),
+				),
+			)
+		);
+
+		$this->assertIsInt( $id );
+		$stored  = get_post_meta( $id, 'options', true );
+		$decoded = json_decode( $stored, true );
+		$this->assertCount( 2, $decoded );
+		$this->assertSame( 'open', $decoded[0]['value'] );
+	}
+
+	public function test_save_passes_string_options_through(): void {
+		( new Field() )->register_post_type();
+
+		$json = '[{"value":"x","label":"X"}]';
+		$id   = Field::save(
+			array(
+				'title'   => 'Tag',
+				'type'    => 'multiselect',
+				'options' => $json,
+			)
+		);
+
+		$this->assertIsInt( $id );
+		$this->assertSame( $json, get_post_meta( $id, 'options', true ) );
+	}
+
+	public function test_save_maps_default_to_default_value_meta_key(): void {
+		( new Field() )->register_post_type();
+
+		$id = Field::save(
+			array(
+				'title'   => 'Status',
+				'type'    => 'text',
+				'default' => '{"mode":"value","value":"Draft"}',
+			)
+		);
+
+		$this->assertIsInt( $id );
+		$this->assertSame(
+			'{"mode":"value","value":"Draft"}',
+			get_post_meta( $id, 'default_value', true )
+		);
+	}
+
+	public function test_save_merges_meta_escape_hatch(): void {
+		( new Field() )->register_post_type();
+
+		$id = Field::save(
+			array(
+				'title' => 'Author',
+				'type'  => 'text',
+				'meta'  => array( 'cortext_notion_property_id' => 'prop-uuid-1' ),
+			)
+		);
+
+		$this->assertIsInt( $id );
+		$this->assertSame(
+			'prop-uuid-1',
+			get_post_meta( $id, 'cortext_notion_property_id', true )
+		);
+	}
+
+	public function test_save_updates_existing_field(): void {
+		( new Field() )->register_post_type();
+
+		$id = Field::save(
+			array(
+				'title' => 'Status',
+				'type'  => 'text',
+			)
+		);
+		$this->assertIsInt( $id );
+
+		$updated = Field::save(
+			array(
+				'id'      => $id,
+				'type'    => 'select',
+				'options' => array( array( 'value' => 'open', 'label' => 'Open' ) ),
+			)
+		);
+
+		$this->assertSame( $id, $updated );
+		$this->assertSame( 'select', get_post_meta( $id, 'type', true ) );
+		$this->assertNotEmpty( get_post_meta( $id, 'options', true ) );
+	}
+
+	public function test_save_returns_error_for_unknown_id(): void {
+		( new Field() )->register_post_type();
+
+		$result = Field::save(
+			array(
+				'id'   => 999_999,
+				'type' => 'text',
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'cortext_field_not_found', $result->get_error_code() );
+	}
+
 	private function create_user( string $role ): int {
 		return (int) wp_insert_user(
 			array(

@@ -83,7 +83,7 @@ describe( 'ALLOWED_BLOCK_TYPES', () => {
 	it( 'excludes post-context blocks that need post-type supports we do not declare', () => {
 		// core/post-author and core/post-author-name require the post type
 		// to support 'author'. core/post-excerpt requires 'excerpt'.
-		// Cortext's crtxt_page and crtxt_collection don't declare either.
+		// Cortext's crtxt_document declares neither.
 		const denied = [
 			'core/post-author',
 			'core/post-author-name',

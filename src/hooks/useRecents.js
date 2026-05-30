@@ -13,7 +13,6 @@ const RecentsContext = createContext( null );
 
 function recentFingerprint( recent ) {
 	return JSON.stringify( [
-		recent?.kind,
 		recent?.id,
 		recent?.title,
 		recent?.path,
@@ -89,7 +88,7 @@ export function RecentsProvider( { children } ) {
 	}, [] );
 
 	const touchRecent = useCallback( async ( target ) => {
-		if ( ! target?.kind || ! target?.id ) {
+		if ( ! target?.id ) {
 			return null;
 		}
 		const requestId = latestTouchRequest.current + 1;

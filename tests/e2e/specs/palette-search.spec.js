@@ -55,7 +55,7 @@ test.describe( 'Command palette search', () => {
 		try {
 			seededPage = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: pageTitle,
 					status: 'private',
@@ -81,7 +81,7 @@ test.describe( 'Command palette search', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				seededPage && `/wp/v2/crtxt_pages/${ seededPage.id }`
+				seededPage && `/wp/v2/crtxt_documents/${ seededPage.id }`
 			);
 		}
 	} );
@@ -92,7 +92,6 @@ test.describe( 'Command palette search', () => {
 		requestUtils,
 	} ) => {
 		const suffix = Date.now().toString( 36 ).slice( -4 );
-		const slug = `palette${ suffix }`;
 		const rowToken = `palrow${ suffix }`;
 		const collectionTitle = `Palette rows ${ suffix }`;
 		const fixture = {};
@@ -100,20 +99,20 @@ test.describe( 'Command palette search', () => {
 		try {
 			fixture.collection = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_collections',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: collectionTitle,
 					status: 'private',
-					meta: { slug },
 				},
 			} );
 
 			fixture.entry = await requestUtils.rest( {
 				method: 'POST',
-				path: `/wp/v2/crtxt_${ slug }`,
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: rowToken,
 					status: 'private',
+					cortext_trait: fixture.collection.id,
 				},
 			} );
 
@@ -135,12 +134,12 @@ test.describe( 'Command palette search', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				fixture.entry && `/wp/v2/crtxt_${ slug }/${ fixture.entry.id }`
+				fixture.entry && `/wp/v2/crtxt_documents/${ fixture.entry.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
 			);
 		}
 	} );

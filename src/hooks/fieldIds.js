@@ -4,8 +4,8 @@
 //   `created_at`, `created_by`, `modified_at`, `modified_by` for the
 //   non-custom columns; `__add_field` for the ghost column.
 // - Field record IDs in REST routes: numeric post IDs.
-// - Collection `meta.fields` storage: stringified post IDs (the meta is
-//   `'type' => 'string', 'single' => false` server-side).
+// - Collection `meta.cortext_fields` storage: stringified post IDs (the meta
+//   is `'type' => 'string', 'single' => false` server-side).
 //
 // `toRecordId` is the gate the management UI calls before offering rename /
 // duplicate / delete — non-custom columns return null and the UI hides the

@@ -10,9 +10,9 @@ declare( strict_types=1 );
 namespace Cortext\Tests;
 
 use Cortext\CLI\PerfBench;
-use Cortext\PostType\Collection;
-use Cortext\PostType\CollectionEntries;
+use Cortext\PostType\Document;
 use Cortext\PostType\Field;
+use Cortext\Taxonomy\TraitTaxonomy;
 use RuntimeException;
 use WorDBless\BaseTestCase;
 
@@ -21,14 +21,13 @@ final class Test_CLI_Perf_Bench extends BaseTestCase {
 	public function set_up(): void {
 		parent::set_up();
 
-		$this->unregister_dynamic_collection_post_types();
-		( new Collection() )->register_post_type();
+		( new Document() )->register_post_type();
+		( new TraitTaxonomy() )->register_taxonomy();
 		( new Field() )->register_post_type();
 	}
 
 	public function tear_down(): void {
 		wp_set_current_user( 0 );
-		$this->unregister_dynamic_collection_post_types();
 
 		parent::tear_down();
 	}
@@ -249,8 +248,9 @@ final class Test_CLI_Perf_Bench extends BaseTestCase {
 		$this->assertGreaterThan( 0, $manifest['sort_field_id'] );
 		$this->assertGreaterThan( 0, $manifest['relation_field_id'] );
 		$this->assertGreaterThan( 0, $manifest['migration_field_id'] );
-		$this->assertTrue( post_type_exists( 'crtxt_perfmain' ) );
-		$this->assertTrue( post_type_exists( 'crtxt_perftgt1' ) );
+		$this->assertTrue( post_type_exists( Document::POST_TYPE ) );
+		$this->assertGreaterThan( 0, $manifest['primary_collection_id'] );
+		$this->assertSame( 'perfmain', $manifest['primary_slug'] );
 	}
 
 	public function test_seed_dataset_rejects_too_few_fields(): void {
@@ -278,16 +278,5 @@ final class Test_CLI_Perf_Bench extends BaseTestCase {
 				'role'       => 'administrator',
 			)
 		);
-	}
-
-	private function unregister_dynamic_collection_post_types(): void {
-		foreach ( get_post_types() as $post_type ) {
-			if (
-				str_starts_with( $post_type, CollectionEntries::CPT_PREFIX ) &&
-				! in_array( $post_type, array( Collection::POST_TYPE, Field::POST_TYPE ), true )
-			) {
-				unregister_post_type( $post_type );
-			}
-		}
 	}
 }

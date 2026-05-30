@@ -2,17 +2,15 @@
 /**
  * Public entry point for Cortext document operations.
  *
- * "Document" is the union of post types that opt into the `cortext-document`
- * trait: pages (`crtxt_page`), collections (`crtxt_collection`), and rows
- * (`crtxt_<slug>`). Code that needs to find, list, or mutate documents should
- * call this service instead of branching on post types.
+ * Every editable document is a `crtxt_document` post. The "kind" labels
+ * (`page`, `collection`, `row`) are UI copy derived from state at display
+ * time, not part of the wire shape:
+ *   - `cortext_fields` meta -> collection (schema-bearing).
+ *   - `crtxt_trait` term    -> row (collection member).
+ *   - neither               -> page.
  *
- * Kind-specific details, such as paths, owners, icons, and duplication, live
- * in `Cortext\Documents\*` implementations. The default `KindRegistry`
- * resolves those for callers outside the `Documents/` namespace.
- *
- * Listing, collection create, duplicate, restore, and permanent delete live
- * here. Row CRUD still goes through the row REST controllers.
+ * Callers outside this class should call `format_document` / `format_target`
+ * instead of branching on the underlying meta or taxonomy themselves.
  *
  * @package Cortext
  */
@@ -21,19 +19,14 @@ declare( strict_types=1 );
 
 namespace Cortext;
 
-use Cortext\Documents\CollectionDuplicator;
-use Cortext\Documents\CollectionKind;
-use Cortext\Documents\DocumentKind;
-use Cortext\Documents\KindRegistry;
-use Cortext\Documents\PageKind;
-use Cortext\Documents\RowKind;
+use Cortext\Documents\DocumentDuplicator;
+use Cortext\Relations;
 use Cortext\Fields\FieldTypeRegistry;
-use Cortext\PostType\Cascade\DocumentToCollectionTrashCascade;
-use Cortext\PostType\Cascade\PageHierarchyTrashCascade;
-use Cortext\PostType\Collection;
-use Cortext\PostType\CollectionEntries;
+use Cortext\PostType\Document;
 use Cortext\PostType\DocumentIdentity;
+use Cortext\PostType\TrashCascade;
 use Cortext\Rest\RowsFilterQuery;
+use Cortext\Taxonomy\TraitTaxonomy;
 use WP_Error;
 use WP_Post;
 use WP_Query;
@@ -51,54 +44,29 @@ final class Documents {
 	private const MAX_PER_PAGE     = 100;
 
 	/**
-	 * Caches `row CPT -> parent collection` lookups for this service instance.
-	 * A `list()` call with many rows from the same CPT then asks for the
-	 * collection once.
+	 * Caches `document_id -> trait_post` lookups for this service instance.
 	 *
-	 * @var array<string,?WP_Post>
+	 * @var array<int,?WP_Post>
 	 */
-	private array $collection_cache = array();
+	private array $trait_cache = array();
 
 	private RowsFilterQuery $rows_filter_query;
 
-	private KindRegistry $kinds;
-
-	public function __construct(
-		?RowsFilterQuery $rows_filter_query = null,
-		?KindRegistry $kinds = null
-	) {
+	public function __construct( ?RowsFilterQuery $rows_filter_query = null ) {
 		$this->rows_filter_query = $rows_filter_query ?? new RowsFilterQuery();
-		$this->kinds             = $kinds ?? $this->build_default_kind_registry();
 	}
 
 	/**
-	 * Builds the default kind registry. Page and collection kinds are
-	 * self-contained; row kind needs the documents service to resolve a row
-	 * CPT to its parent collection, so it receives `$this`.
-	 */
-	private function build_default_kind_registry(): KindRegistry {
-		$registry = new KindRegistry();
-		$registry->register( new PageKind() );
-		$registry->register( new CollectionKind() );
-		$registry->register( new RowKind( $this ) );
-		return $registry;
-	}
-
-	/**
-	 * Duplicates a document by id. The service resolves the kind from the
-	 * post type, so callers do not pass a kind.
-	 *
-	 * For now, only collections support duplication here. Page duplication
-	 * still goes through core-data's optimistic `saveEntityRecord` flow, and
-	 * row duplication still goes through `RowsController`.
+	 * Duplicates a document by id. See `DocumentDuplicator` for the
+	 * capability-by-capability copy rules.
 	 *
 	 * @param int $id Source document post id.
 	 *
-	 * @return array{id: int, title: string, slug: string, restBase: string, mode: string, parent: int, skipped_fields: array<int, array{id: int, title: string, reason: string}>}|WP_Error
+	 * @return array<string,mixed>|WP_Error
 	 */
 	public function duplicate( int $id ): array|WP_Error {
 		$post = get_post( $id );
-		if ( ! $post instanceof WP_Post ) {
+		if ( ! $post instanceof WP_Post || ! post_type_supports( $post->post_type, 'cortext-document' ) ) {
 			return new WP_Error(
 				'cortext_document_not_found',
 				__( 'Document not found.', 'cortext' ),
@@ -106,54 +74,158 @@ final class Documents {
 			);
 		}
 
-		$kind = $this->kind_object_for_post_type( $post->post_type );
-		if ( null === $kind ) {
-			return new WP_Error(
-				'cortext_document_not_found',
-				__( 'Document not found.', 'cortext' ),
-				array( 'status' => 404 )
-			);
-		}
-
-		if ( 'collection' !== $kind->id() ) {
-			return new WP_Error(
-				'cortext_duplicate_unsupported',
-				__( 'Duplicating this document type is not supported through this endpoint.', 'cortext' ),
-				array( 'status' => 400 )
-			);
-		}
-
-		$result = ( new CollectionDuplicator() )->duplicate( $post );
+		$result = ( new DocumentDuplicator( $this ) )->duplicate( $post );
 		if ( $result instanceof WP_Error ) {
 			return $result;
 		}
 
-		$collection = $result['collection'];
+		$document = $result['document'];
 		return array(
-			'id'             => (int) $collection->ID,
-			'title'          => $collection->post_title,
-			'slug'           => $result['slug'],
-			'restBase'       => CollectionEntries::CPT_PREFIX . $result['slug'],
-			'mode'           => Collection::MODE_FULL_PAGE,
-			'parent'         => (int) $collection->post_parent,
+			'id'             => (int) $document->ID,
+			'title'          => $document->post_title,
+			'slug'           => (string) $document->post_name,
+			'restBase'       => 'crtxt_documents',
+			'parent'         => (int) $document->post_parent,
+			'collection_id'  => $result['collection_id'] > 0 ? $result['collection_id'] : null,
 			'skipped_fields' => $result['skipped_fields'],
 		);
 	}
 
 	/**
-	 * Returns every registered post type that opts into the `cortext-document`
-	 * trait. The set is dynamic because row CPTs are registered per published
-	 * collection on `init`.
+	 * Creates or updates a `crtxt_document`. Kind is derived from the
+	 * payload, never declared:
+	 *   - `fields` present -> writes the `cortext_fields` schema
+	 *                          (collection in UI terms).
+	 *   - `trait`  present -> assigns the `crtxt_trait` mirror term
+	 *                          (row, i.e. member of that trait/collection).
+	 *   - neither          -> page.
+	 *
+	 * The same call shape covers create (no `id`) and update (with `id`).
+	 *
+	 * Payload keys:
+	 *   - id      (int)             Update when present; create otherwise.
+	 *   - title   (string)          post_title.
+	 *   - status  (string)          post_status. Default 'draft' on create.
+	 *   - parent  (int)             post_parent.
+	 *   - content (string)          post_content.
+	 *   - author  (int)             post_author.
+	 *   - fields  (int[]|string[])  Schema field ids. Rewrites all
+	 *                               cortext_fields meta rows.
+	 *   - trait   (int|null)        Owning collection/trait document id.
+	 *                               Sets the mirror term; pass 0/null to
+	 *                               remove membership.
+	 *   - meta    (array)           Extra meta_input merged in
+	 *                               (`field-<id>` values, breadcrumbs,
+	 *                               `cortext_document_icon`, ...).
+	 *
+	 * @param array<string,mixed> $payload Save payload.
+	 *
+	 * @return int|WP_Error Document id, or WP_Error.
+	 */
+	public function save( array $payload ): int|WP_Error {
+		$is_update = isset( $payload['id'] ) && (int) $payload['id'] > 0;
+
+		$postarr = array( 'post_type' => Document::POST_TYPE );
+
+		if ( $is_update ) {
+			$post_id  = (int) $payload['id'];
+			$existing = get_post( $post_id );
+			if ( ! $existing instanceof WP_Post || Document::POST_TYPE !== $existing->post_type ) {
+				return new WP_Error(
+					'cortext_document_not_found',
+					__( 'Document not found.', 'cortext' ),
+					array( 'status' => 404 )
+				);
+			}
+			$postarr['ID'] = $post_id;
+		} else {
+			$postarr['post_status'] = isset( $payload['status'] )
+				? (string) $payload['status']
+				: 'draft';
+		}
+
+		if ( array_key_exists( 'title', $payload ) ) {
+			$postarr['post_title'] = (string) $payload['title'];
+		}
+		if ( $is_update && array_key_exists( 'status', $payload ) ) {
+			$postarr['post_status'] = (string) $payload['status'];
+		}
+		if ( array_key_exists( 'parent', $payload ) ) {
+			$postarr['post_parent'] = (int) $payload['parent'];
+		}
+		if ( array_key_exists( 'content', $payload ) ) {
+			$postarr['post_content'] = (string) $payload['content'];
+		}
+		if ( array_key_exists( 'author', $payload ) ) {
+			$postarr['post_author'] = (int) $payload['author'];
+		}
+
+		// Single-row meta goes through `meta_input`. `cortext_fields` is
+		// multi-row (registered with `single => false`); handled after the
+		// post exists with `add_post_meta` in a loop.
+		if ( isset( $payload['meta'] ) && is_array( $payload['meta'] ) && count( $payload['meta'] ) > 0 ) {
+			$postarr['meta_input'] = $payload['meta'];
+		}
+
+		$result = $is_update
+			? wp_update_post( $postarr, true )
+			: wp_insert_post( $postarr, true );
+
+		if ( $result instanceof WP_Error ) {
+			return $result;
+		}
+		$document_id = (int) $result;
+
+		if ( array_key_exists( 'fields', $payload ) && is_array( $payload['fields'] ) ) {
+			// The `fields` key designates this document a collection, even when
+			// the schema is empty (a new collection has only the implicit
+			// title). Create the mirror term first so the document is a
+			// collection regardless of how many custom fields it carries.
+			( new TraitTaxonomy() )->ensure_mirror_term( $document_id );
+			delete_post_meta( $document_id, 'cortext_fields' );
+			foreach ( $payload['fields'] as $field_id ) {
+				$value = (string) $field_id;
+				if ( '' !== $value ) {
+					add_post_meta( $document_id, 'cortext_fields', $value );
+				}
+			}
+		}
+
+		if ( array_key_exists( 'trait', $payload ) ) {
+			$trait_id = (int) $payload['trait'];
+			if ( $trait_id > 0 ) {
+				$term_id = TraitTaxonomy::term_id_for_trait( $trait_id );
+				if ( $term_id < 1 ) {
+					return new WP_Error(
+						'cortext_trait_not_found',
+						__( 'Trait mirror term not found.', 'cortext' ),
+						array(
+							'status'   => 404,
+							'trait_id' => $trait_id,
+						)
+					);
+				}
+				$set = wp_set_object_terms( $document_id, array( $term_id ), TraitTaxonomy::TAXONOMY, false );
+				if ( $set instanceof WP_Error ) {
+					return $set;
+				}
+			} else {
+				// Explicit `trait => 0/null` removes membership.
+				wp_set_object_terms( $document_id, array(), TraitTaxonomy::TAXONOMY, false );
+			}
+		}
+
+		return $document_id;
+	}
+
+	/**
+	 * Returns the post types that opt into the `cortext-document` trait.
+	 * After the universal-document refactor this is a stable, finite set.
 	 *
 	 * @return string[]
 	 */
 	public function get_document_post_types(): array {
-		return array_values(
-			array_filter(
-				get_post_types(),
-				static fn( string $post_type ): bool => post_type_supports( $post_type, 'cortext-document' )
-			)
-		);
+		return array( Document::POST_TYPE );
 	}
 
 	/**
@@ -184,7 +256,7 @@ final class Documents {
 			return null;
 		}
 
-		if ( empty( $opts['allow_trash'] ) && 'trash' === $post->post_status ) {
+		if ( empty( $opts['allow_trash'] ) && self::STATUS_TRASH === $post->post_status ) {
 			return null;
 		}
 
@@ -196,15 +268,14 @@ final class Documents {
 	}
 
 	/**
-	 * Lists documents the current user can edit. Filters and paging mirror the
-	 * conventions used by `/cortext/v1/rows`.
+	 * Lists documents the current user can edit. Filters and paging mirror
+	 * the conventions used by the rows endpoint.
 	 *
 	 * Arguments:
 	 *   - `search` (string): split-term match across title, excerpt, content.
-	 *   - `kind`   (string): 'page' or 'row' to restrict by document kind.
 	 *   - `status` (string|string[]): post status filter. Defaults to
 	 *     `publish, draft, private`. Pass `'trash'` to list every trashed
-	 *     document, since the Trash sidebar needs the full set.
+	 *     document.
 	 *   - `page`   (int):    1-based page number.
 	 *   - `per_page` (int):  page size, clamped to MAX_PER_PAGE.
 	 *   - `include_excerpt` (bool): include excerpt in formatted documents.
@@ -213,14 +284,6 @@ final class Documents {
 	 * @return array{documents: array<int,array<string,mixed>>, total: int}
 	 */
 	public function list( array $args = array() ): array {
-		$post_types = $this->post_types_for_kind( $args['kind'] ?? '' );
-		if ( empty( $post_types ) ) {
-			return array(
-				'documents' => array(),
-				'total'     => 0,
-			);
-		}
-
 		$statuses = $this->normalize_statuses( $args['status'] ?? null );
 		$is_trash = array( self::STATUS_TRASH ) === $statuses;
 		$page     = max( 1, (int) ( $args['page'] ?? 1 ) );
@@ -231,7 +294,7 @@ final class Documents {
 		$search   = isset( $args['search'] ) ? trim( (string) $args['search'] ) : '';
 
 		$query_args = array(
-			'post_type'           => $post_types,
+			'post_type'           => Document::POST_TYPE,
 			'post_status'         => $statuses,
 			'fields'              => 'ids',
 			'posts_per_page'      => -1,
@@ -246,19 +309,16 @@ final class Documents {
 		} else {
 			// With a search term, let `WP_Query` apply its
 			// `search_orderby_title` scoring so title hits bubble up before
-			// body/meta-only matches. The palette caps results to a small
-			// page, so ordering by modified date alone would arbitrarily
-			// hide the most relevant document when the recently-edited
-			// long tail happens to match.
+			// body/meta-only matches.
 			$query_args['s'] = $search;
 		}
 
-		$search_filter = $this->build_search_filter( $search, $post_types );
+		$search_filter = $this->build_search_filter( $search );
 		if ( null !== $search_filter ) {
 			add_filter( 'posts_search', $search_filter, 10, 2 );
 		}
 
-		$orderby_filter = $this->build_search_orderby_filter( $search, $post_types );
+		$orderby_filter = $this->build_search_orderby_filter( $search );
 		if ( null !== $orderby_filter ) {
 			add_filter( 'posts_search_orderby', $orderby_filter, 10, 2 );
 		}
@@ -337,69 +397,34 @@ final class Documents {
 	}
 
 	/**
-	 * Narrows the post-type set based on the requested kind, or returns the
-	 * full document set when no kind is requested.
-	 *
-	 * @param string $kind Document kind id (`page`, `collection`, `row`), or empty for any.
-	 * @return string[]
-	 */
-	private function post_types_for_kind( string $kind ): array {
-		$post_types = $this->get_document_post_types();
-
-		if ( '' === $kind ) {
-			return $post_types;
-		}
-
-		$target = $this->kinds->by_id( $kind );
-		if ( null === $target ) {
-			return array();
-		}
-
-		return array_values(
-			array_filter(
-				$post_types,
-				static fn( string $post_type ): bool => $target->owns_post_type( $post_type )
-			)
-		);
-	}
-
-	/**
-	 * Formats one document for the shared response shape. Row documents include
-	 * the parent collection summary so callers can render breadcrumbs without a
-	 * second lookup. Returns null when the post type is not a Cortext document.
+	 * Formats one document for the shared response shape. Row documents
+	 * include the parent collection summary so callers can render breadcrumbs
+	 * without a second lookup. Returns null when the post is not a Cortext
+	 * document.
 	 *
 	 * @param WP_Post            $post Document post.
 	 * @param array<string,bool> $opts Formatting flags.
 	 * @return array<string,mixed>|null
 	 */
 	public function format_document( WP_Post $post, array $opts = array() ): ?array {
-		$kind = $this->kind_object_for_post_type( $post->post_type );
+		$kind = $this->kind_for_document( $post );
 		if ( null === $kind ) {
 			return null;
 		}
 
-		$owner_context = $kind->owner_context( $post );
-
-		// A row without its parent collection cannot be opened in the UI.
-		if ( 'row' === $kind->id() && null === $owner_context ) {
-			return null;
-		}
-
-		// Inline collections have no workspace route of their own; the kind
-		// context flags that and the owner's path replaces the document's.
-		$path = $kind->path_for( $post );
-		if ( $owner_context && $owner_context->use_as_document_path ) {
-			$owner_kind = $this->kinds->by_post_type( $owner_context->post->post_type );
-			if ( null !== $owner_kind ) {
-				$path = $owner_kind->path_for( $owner_context->post );
+		// A row needs its parent collection to be openable.
+		$collection_post = null;
+		if ( self::KIND_ROW === $kind ) {
+			$collection_post = $this->find_trait_for_document( $post );
+			if ( ! $collection_post instanceof WP_Post ) {
+				return null;
 			}
 		}
 
 		$document = array(
-			'kind'   => $kind->id(),
 			'id'     => (int) $post->ID,
 			'title'  => $this->post_title( $post ),
-			'path'   => $path,
+			'path'   => $this->path_for( $post ),
 			'parent' => (int) $post->post_parent,
 		);
 
@@ -407,39 +432,36 @@ final class Documents {
 			$document['excerpt'] = $this->build_excerpt( $post );
 		}
 
-		$icon = '';
-		if ( $kind->has_icon() ) {
-			$icon = (string) get_post_meta( $post->ID, DocumentIdentity::META_KEY, true );
-			if ( '' !== $icon ) {
-				$document['icon'] = $icon;
-			}
+		$icon = (string) get_post_meta( $post->ID, DocumentIdentity::META_KEY, true );
+		if ( '' !== $icon ) {
+			$document['icon'] = $icon;
 		}
 
-		if ( $owner_context ) {
-			$owner_kind                        = $this->kinds->by_post_type( $owner_context->post->post_type );
-			$document[ $owner_context->field ] = array(
-				'id'    => (int) $owner_context->post->ID,
-				'title' => $this->post_title( $owner_context->post ),
-				'path'  => null !== $owner_kind ? $owner_kind->path_for( $owner_context->post ) : '',
+		if ( $collection_post instanceof WP_Post ) {
+			$document['collection'] = array(
+				'id'    => (int) $collection_post->ID,
+				'title' => $this->post_title( $collection_post ),
+				'path'  => $this->path_for( $collection_post ),
 			);
 		}
 
 		if ( ! empty( $opts['include_trash_meta'] ) ) {
 			$document['modified_at'] = $this->format_gmt_date( $post->post_modified_gmt );
-			$document['meta']        = array(
-				'cortext_document_icon'             => $icon,
-				PageHierarchyTrashCascade::META_KEY => (int) get_post_meta( $post->ID, PageHierarchyTrashCascade::META_KEY, true ),
+			// The Trash panel reads `cortext_defines_trait` (collection) and
+			// `crtxt_trait` (row) to pick the label, icon, and cascade-count copy,
+			// and to keep the type-to-confirm guard on collection deletes. Mirror
+			// the `cortext_defines_trait` field that `/wp/v2/crtxt_documents`
+			// exposes; without it a trashed collection reads as a page.
+			$document['cortext_defines_trait'] = Document::is_collection_post( $post );
+			$document['crtxt_trait']           = array_values(
+				array_map( 'intval', wp_get_object_terms( $post->ID, TraitTaxonomy::TAXONOMY, array( 'fields' => 'ids' ) ) )
 			);
-			// Inline collections trashed alongside their owner page carry a
-			// separate marker. The sidebar uses it to nest them under the
-			// page's trash entry instead of listing them as siblings.
-			if ( 'collection' === $kind->id() ) {
-				$document['meta'][ DocumentToCollectionTrashCascade::TRASHED_BY_OWNER_META_KEY ] = (int) get_post_meta(
-					$post->ID,
-					DocumentToCollectionTrashCascade::TRASHED_BY_OWNER_META_KEY,
-					true
-				);
-			}
+			$document['meta']                  = array(
+				'cortext_document_icon'              => $icon,
+				'cortext_fields'                     => Document::collection_field_ids( (int) $post->ID ),
+				TrashCascade::PARENT_MARKER_META     => (int) get_post_meta( $post->ID, TrashCascade::PARENT_MARKER_META, true ),
+				TrashCascade::COLLECTION_MARKER_META => (int) get_post_meta( $post->ID, TrashCascade::COLLECTION_MARKER_META, true ),
+			);
 		}
 
 		return $document;
@@ -451,86 +473,102 @@ final class Documents {
 	}
 
 	/**
-	 * Maps a post type to its document kind id, or null when the post type
-	 * is not a Cortext document. Public so trash, breadcrumbs, and similar
-	 * code can branch on the same classification.
+	 * Derives the document kind label from state for internal branching.
+	 * Returns null when the post does not opt into the `cortext-document`
+	 * trait. Not part of the wire shape; consumers derive UI copy from the
+	 * loaded record's capabilities.
 	 *
-	 * @param string $post_type Post type slug.
+	 * @param WP_Post $post Document post.
 	 */
-	public function kind_for_post_type( string $post_type ): ?string {
-		// Only post types that opt into the document trait count here. That
-		// keeps `crtxt_field` out of document handling.
-		if ( ! post_type_supports( $post_type, 'cortext-document' ) ) {
+	private function kind_for_document( WP_Post $post ): ?string {
+		if ( ! post_type_supports( $post->post_type, 'cortext-document' ) ) {
 			return null;
 		}
-		return $this->kinds->by_post_type( $post_type )?->id();
+		if ( Document::is_collection_post( $post ) ) {
+			return self::KIND_COLLECTION;
+		}
+		if ( $this->has_trait_term( $post ) ) {
+			return self::KIND_ROW;
+		}
+		return self::KIND_PAGE;
 	}
 
 	/**
-	 * Resolves the kind object for a post type, or null when no kind claims
-	 * it. Internal helper for format_document and the listing search filter.
+	 * Workspace path for any document: `<slug>-<id>`, or `<id>` for fresh
+	 * drafts with no `post_name`. Mirrors `computeDocumentUri` on the JS side.
 	 *
-	 * @param string $post_type Post type slug.
+	 * @param WP_Post $post Document post.
 	 */
-	private function kind_object_for_post_type( string $post_type ): ?DocumentKind {
-		if ( ! post_type_supports( $post_type, 'cortext-document' ) ) {
-			return null;
-		}
-		return $this->kinds->by_post_type( $post_type );
+	private function path_for( WP_Post $post ): string {
+		$slug = trim( (string) $post->post_name );
+		return '' === $slug ? (string) $post->ID : "{$slug}-{$post->ID}";
 	}
 
 	/**
-	 * Finds the collection post that owns a row CPT by matching the post-type
-	 * suffix to the collection's `slug` meta. Public so callers that already
-	 * have a row in hand do not repeat the lookup.
+	 * Whether the document carries at least one `crtxt_trait` term.
 	 *
-	 * @param string $post_type Row CPT slug, e.g. `crtxt_projects`.
+	 * @param WP_Post $post Document post.
 	 */
-	public function find_collection_by_row_post_type( string $post_type ): ?WP_Post {
-		if ( array_key_exists( $post_type, $this->collection_cache ) ) {
-			return $this->collection_cache[ $post_type ];
+	private function has_trait_term( WP_Post $post ): bool {
+		if ( Document::POST_TYPE !== $post->post_type ) {
+			return false;
 		}
-
-		$collection = $this->lookup_collection_by_row_post_type( $post_type );
-
-		$this->collection_cache[ $post_type ] = $collection;
-
-		return $collection;
-	}
-
-	private function lookup_collection_by_row_post_type( string $post_type ): ?WP_Post {
-		if (
-			! str_starts_with( $post_type, CollectionEntries::CPT_PREFIX ) ||
-			Collection::POST_TYPE === $post_type
-		) {
-			return null;
-		}
-
-		$slug = substr( $post_type, strlen( CollectionEntries::CPT_PREFIX ) );
-		if ( '' === $slug ) {
-			return null;
-		}
-
-		$collections = get_posts(
-			array(
-				'post_type'      => Collection::POST_TYPE,
-				'post_status'    => array( 'draft', 'private', 'publish' ),
-				'posts_per_page' => 1,
-				'meta_key'       => 'slug', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
-				'meta_value'     => $slug,  // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
-			)
+		$terms = wp_get_object_terms(
+			(int) $post->ID,
+			TraitTaxonomy::TAXONOMY,
+			array( 'fields' => 'ids' )
 		);
-
-		return $collections[0] ?? null;
+		return is_array( $terms ) && count( $terms ) > 0;
 	}
 
 	/**
-	 * Resolves a document target by id and returns the shape used by Favorites,
-	 * Recents, and Workspace Home. Those callers pass an id, and the documents
-	 * service handles kind lookup, validation, and formatting in one place.
+	 * Returns the first trait (collection) document that a row document is a
+	 * member of. Reads the document's `crtxt_trait` term, extracts the trait
+	 * document id from the deterministic term slug, and loads the document.
 	 *
-	 * The kind comes from the post type. Rows resolve their parent collection
-	 * from the dynamic CPT that stores them.
+	 * In the universal model, traits are just `crtxt_document` posts with a
+	 * `cortext_fields` meta. A row can belong to multiple traits (multi-trait
+	 * membership), but most legacy callers expect a singular "owning trait" —
+	 * this helper returns the first one found. Callers that need all traits
+	 * should query `wp_get_object_terms` directly.
+	 *
+	 * @param WP_Post $document Row document post.
+	 */
+	public function find_trait_for_document( WP_Post $document ): ?WP_Post {
+		$document_id = (int) $document->ID;
+		if ( array_key_exists( $document_id, $this->trait_cache ) ) {
+			return $this->trait_cache[ $document_id ];
+		}
+
+		$trait = null;
+		$terms = wp_get_object_terms(
+			$document_id,
+			TraitTaxonomy::TAXONOMY,
+			array( 'fields' => 'all' )
+		);
+		if ( is_array( $terms ) && count( $terms ) > 0 ) {
+			$trait_id = TraitTaxonomy::trait_id_from_slug( (string) $terms[0]->slug );
+			if ( $trait_id > 0 ) {
+				$candidate = get_post( $trait_id );
+				if (
+					$candidate instanceof WP_Post
+					&& Document::POST_TYPE === $candidate->post_type
+					&& Document::is_collection( $trait_id )
+				) {
+					$trait = $candidate;
+				}
+			}
+		}
+
+		$this->trait_cache[ $document_id ] = $trait;
+		return $trait;
+	}
+
+	/**
+	 * Resolves a document target by id and returns the shape used by
+	 * Favorites, Recents, and Workspace Home. Those callers pass an id, and
+	 * the documents service handles kind lookup, validation, and formatting
+	 * in one place.
 	 *
 	 * @param int   $id   Target document id.
 	 * @param array $opts {
@@ -552,16 +590,12 @@ final class Documents {
 			return $this->target_not_found_error();
 		}
 
-		$kind = $this->kind_object_for_post_type( $post->post_type );
+		$kind = $this->kind_for_document( $post );
 		if ( null === $kind ) {
 			return $this->target_not_found_error();
 		}
 
-		if ( self::KIND_COLLECTION === $kind->id() && Collection::is_inline( $id ) ) {
-			return $this->inline_collection_target_error();
-		}
-
-		if ( self::KIND_ROW === $kind->id() ) {
+		if ( self::KIND_ROW === $kind ) {
 			$row_check = $this->validate_row_target( $post, $require_edit );
 			if ( $row_check instanceof WP_Error ) {
 				return $row_check;
@@ -575,42 +609,38 @@ final class Documents {
 		}
 
 		$target = array(
-			'kind'  => $kind->id(),
 			'id'    => $id,
 			'title' => $this->post_title( $post ),
-			'path'  => $kind->path_for( $post ),
+			'path'  => $this->path_for( $post ),
 		);
 
-		if ( $kind->has_icon() ) {
-			$icon = (string) get_post_meta( $id, DocumentIdentity::META_KEY, true );
-			if ( '' !== $icon ) {
-				$target['icon'] = $icon;
-			}
+		$icon = (string) get_post_meta( $id, DocumentIdentity::META_KEY, true );
+		if ( '' !== $icon ) {
+			$target['icon'] = $icon;
 		}
 
 		return $target;
 	}
 
 	/**
-	 * Resolves a row's parent collection from its CPT and runs the permission
-	 * check. The CPT already names the collection (`crtxt_<slug>`), so callers
-	 * do not pass a separate collection id; the lookup is cached for the
-	 * service instance.
+	 * Resolves a row's parent trait and runs the permission check. The row's
+	 * `crtxt_trait` term names the trait, so callers do not pass a
+	 * separate trait id; the lookup is cached for the service instance.
 	 *
-	 * @param WP_Post $row          Row post.
-	 * @param bool    $require_edit Enforce `edit_post` on both row and collection.
+	 * @param WP_Post $row          Row document post.
+	 * @param bool    $require_edit Enforce `edit_post` on both row and trait.
 	 */
 	private function validate_row_target( WP_Post $row, bool $require_edit ): ?WP_Error {
-		$collection = $this->find_collection_by_row_post_type( $row->post_type );
+		$trait = $this->find_trait_for_document( $row );
 		if (
-			! $collection instanceof WP_Post
-			|| self::STATUS_TRASH === $collection->post_status
+			! $trait instanceof WP_Post
+			|| self::STATUS_TRASH === $trait->post_status
 		) {
 			return $this->target_not_found_error();
 		}
 
 		if ( $require_edit
-			&& ( ! current_user_can( 'edit_post', $collection->ID )
+			&& ( ! current_user_can( 'edit_post', $trait->ID )
 				|| ! current_user_can( 'edit_post', $row->ID ) )
 		) {
 			return $this->target_forbidden_error();
@@ -632,14 +662,6 @@ final class Documents {
 			'cortext_document_target_not_found',
 			__( 'Target document was not found.', 'cortext' ),
 			array( 'status' => 404 )
-		);
-	}
-
-	private function inline_collection_target_error(): WP_Error {
-		return new WP_Error(
-			'cortext_document_target_inline_collection',
-			__( 'Inline collections cannot be used as document targets.', 'cortext' ),
-			array( 'status' => 400 )
 		);
 	}
 
@@ -684,79 +706,82 @@ final class Documents {
 
 	/**
 	 * Returns a `posts_search` filter that lets row documents match text-like
-	 * field meta (text, email, url), not only title/content/excerpt. This
-	 * replaces WP's search clause, so split-term matching behaves the same way
-	 * it does in `/rows`.
+	 * trait field meta (text, email, url), not only title/content/excerpt.
+	 * Pages and collections in the same result set fall back to WP's default
+	 * search clause behavior (their post_type still gets the title/content
+	 * branches inside `build_documents_search_sql`).
 	 *
-	 * Returns null for an empty search, a page-only query, or row CPTs without
-	 * any text-like fields.
+	 * Returns null for an empty search or a workspace without any trait that
+	 * defines text-like fields.
 	 *
-	 * @param string   $search     Trimmed search string.
-	 * @param string[] $post_types Post types used by the WP_Query.
+	 * @param string $search Trimmed search string.
 	 */
-	private function build_search_filter( string $search, array $post_types ): ?callable {
+	private function build_search_filter( string $search ): ?callable {
 		if ( '' === $search ) {
 			return null;
 		}
 
-		$row_text_keys_by_cpt = array();
-		foreach ( $post_types as $post_type ) {
-			$kind = $this->kind_object_for_post_type( $post_type );
-			if ( null === $kind || 'row' !== $kind->id() ) {
-				continue;
-			}
-			$collection = $this->find_collection_by_row_post_type( $post_type );
-			if ( ! $collection instanceof WP_Post ) {
-				continue;
-			}
-
-			$schema = $this->rows_filter_query->field_schema_for( (int) $collection->ID );
-			$keys   = array();
-			foreach ( $schema as $field ) {
-				if ( empty( $field['system'] ) && FieldTypeRegistry::is_text_like( (string) $field['type'] ) ) {
-					$keys[] = (string) $field['key'];
-				}
-			}
-			if ( count( $keys ) > 0 ) {
-				$row_text_keys_by_cpt[ $post_type ] = $keys;
-			}
-		}
-
-		if ( count( $row_text_keys_by_cpt ) === 0 ) {
+		$row_text_keys = $this->collect_row_text_keys();
+		if ( count( $row_text_keys ) === 0 ) {
 			return null;
 		}
-
-		$post_type_signature = $post_types;
-		sort( $post_type_signature );
 
 		return function (
 			string $search_sql,
 			WP_Query $wp_query
 		) use (
 			$search,
-			$post_type_signature,
-			$row_text_keys_by_cpt
+			$row_text_keys
 		): string {
-			$query_post_types = (array) $wp_query->get( 'post_type' );
-			sort( $query_post_types );
-			if ( $query_post_types !== $post_type_signature ) {
-				return $search_sql;
-			}
-
-			return $this->build_documents_search_sql( $search, $row_text_keys_by_cpt );
+			unset( $wp_query );
+			return $this->build_documents_search_sql( $search, $row_text_keys );
 		};
 	}
 
 	/**
-	 * Builds the SQL used by the documents endpoint instead of WP_Query's
-	 * default search clause. Each search term must match somewhere. Pages use
-	 * title/content/excerpt; rows can also use their collection's text-like
-	 * field meta values.
+	 * Collects the text-like field meta keys across every trait in the
+	 * workspace. Returns the unique set of keys; trait-specific scoping is
+	 * not required because the meta key encodes the field id.
 	 *
-	 * @param string                 $search               Search string.
-	 * @param array<string,string[]> $row_text_keys_by_cpt Row CPT to its text-like meta keys.
+	 * @return string[]
 	 */
-	private function build_documents_search_sql( string $search, array $row_text_keys_by_cpt ): string {
+	private function collect_row_text_keys(): array {
+		$keys   = array();
+		$traits = get_posts(
+			array(
+				'post_type'      => Document::POST_TYPE,
+				'post_status'    => array( 'publish', 'draft', 'private' ),
+				'posts_per_page' => -1,
+				'fields'         => 'ids',
+				'meta_query'     => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+					array(
+						'key'     => 'cortext_fields',
+						'compare' => 'EXISTS',
+					),
+				),
+			)
+		);
+		foreach ( $traits as $trait_id ) {
+			$schema = $this->rows_filter_query->field_schema_for( (int) $trait_id );
+			foreach ( $schema as $field ) {
+				if ( empty( $field['system'] ) && FieldTypeRegistry::is_text_like( (string) $field['type'] ) ) {
+					$keys[ (string) $field['key'] ] = true;
+				}
+			}
+		}
+		return array_keys( $keys );
+	}
+
+	/**
+	 * Builds the SQL used by the documents endpoint instead of WP_Query's
+	 * default search clause. Each search term must match somewhere. Pages
+	 * and traits use title/content/excerpt; row documents can also use
+	 * text-like trait field meta values.
+	 *
+	 * @param string   $search        Search string.
+	 * @param string[] $row_text_keys Text-like field meta keys.
+	 */
+	private function build_documents_search_sql( string $search, array $row_text_keys ): string {
 		global $wpdb;
 
 		$terms = preg_split( '/\s+/', trim( $search ) );
@@ -787,12 +812,11 @@ final class Documents {
 				) . ' )',
 			);
 
-			foreach ( $row_text_keys_by_cpt as $cpt => $keys ) {
-				$meta_sql = $this->rows_filter_query->meta_search_sql( $keys, $like );
-				if ( '' === $meta_sql ) {
-					continue;
+			if ( count( $row_text_keys ) > 0 ) {
+				$meta_sql = $this->rows_filter_query->meta_search_sql( $row_text_keys, $like );
+				if ( '' !== $meta_sql ) {
+					$branches[] = '( ' . $wpdb->prepare( "{$wpdb->posts}.post_type = %s", Document::POST_TYPE ) . " AND {$meta_sql} )";
 				}
-				$branches[] = '( ' . $wpdb->prepare( "{$wpdb->posts}.post_type = %s", $cpt ) . " AND {$meta_sql} )";
 			}
 			// phpcs:enable
 
@@ -804,45 +828,20 @@ final class Documents {
 
 	/**
 	 * Returns a `posts_search_orderby` filter that ranks documents by where
-	 * the query lives in them. WP's default `search_orderby_title` for
-	 * single-term queries only distinguishes "title contains" vs "title
-	 * does not contain", so a recently edited document whose title happens
-	 * to include the term as a substring ties with one whose title starts
-	 * with it. For a palette the user expects the prefix match first.
+	 * the query lives in them.
 	 *
-	 * Tiers (ASC):
-	 *   1. title starts with the query
-	 *   2. title contains the query
-	 *   3. excerpt contains the query
-	 *   4. content contains the query
-	 *   5. everything else (rows that matched only by meta, etc.)
-	 *
-	 * Returns null for an empty search or when the WP_Query is not the one
-	 * `list()` is currently running.
-	 *
-	 * @param string   $search     Trimmed search string.
-	 * @param string[] $post_types Post types used by the WP_Query.
+	 * @param string $search Trimmed search string.
 	 */
-	private function build_search_orderby_filter( string $search, array $post_types ): ?callable {
+	private function build_search_orderby_filter( string $search ): ?callable {
 		if ( '' === $search ) {
 			return null;
 		}
 
-		$post_type_signature = $post_types;
-		sort( $post_type_signature );
-
 		return function (
 			string $search_orderby,
 			WP_Query $wp_query
-		) use (
-			$search,
-			$post_type_signature
-		): string {
-			$query_post_types = (array) $wp_query->get( 'post_type' );
-			sort( $query_post_types );
-			if ( $query_post_types !== $post_type_signature ) {
-				return $search_orderby;
-			}
+		) use ( $search ): string {
+			unset( $wp_query, $search_orderby );
 
 			global $wpdb;
 			$like_prefix   = $wpdb->esc_like( $search ) . '%';

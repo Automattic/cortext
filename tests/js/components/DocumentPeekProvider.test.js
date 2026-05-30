@@ -160,7 +160,7 @@ describe( 'DocumentPeekProvider', () => {
 				postType: 'crtxt_a',
 				collectionId: 1,
 				preferredMode: 'side',
-				source: { kind: 'collection', getRowList: () => rows },
+				source: { getRowList: () => rows },
 			} );
 		} );
 
@@ -181,7 +181,7 @@ describe( 'DocumentPeekProvider', () => {
 				postType: 'crtxt_a',
 				collectionId: 1,
 				preferredMode: 'side',
-				source: { kind: 'collection', getRowList: () => rows },
+				source: { getRowList: () => rows },
 			} );
 		} );
 		act( () => {
@@ -255,7 +255,7 @@ describe( 'DocumentPeekProvider', () => {
 				postType: 'crtxt_a',
 				collectionId: 1,
 				preferredMode: 'side',
-				source: { kind: 'collection', getRowList: () => [], refresh },
+				source: { getRowList: () => [], refresh },
 			} );
 		} );
 		act( () => {

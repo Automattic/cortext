@@ -203,7 +203,7 @@ final class NotionController {
 			$job_id,
 			array(
 				'collection_id'   => (int) $collection_id,
-				'collection_slug' => (string) get_post_meta( (int) $collection_id, 'slug', true ),
+				'collection_slug' => (string) get_post_field( 'post_name', (int) $collection_id ),
 				'data_source_id'  => $data_source_id,
 				'cursor'          => null,
 				'processed'       => 0,

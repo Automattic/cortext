@@ -54,7 +54,7 @@ describe( 'useCollectionRowsByIds', () => {
 
 		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
 		const path = lastRequestPath();
-		expect( path ).toContain( 'collection=42' );
+		expect( path ).toContain( 'trait=42' );
 		expect( path ).toContain( 'include[0]=1' );
 		expect( path ).toContain( 'include[1]=2' );
 		expect( path ).toContain( 'include[2]=3' );

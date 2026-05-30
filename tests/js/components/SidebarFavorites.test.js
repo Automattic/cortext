@@ -1,5 +1,10 @@
 import { act, render, screen } from '@testing-library/react';
 
+jest.mock( '@wordpress/core-data', () => ( {
+	__esModule: true,
+	useEntityRecord: jest.fn().mockReturnValue( { record: null } ),
+} ) );
+
 import SidebarFavorites, {
 	filterFavoritesForTrashedPage,
 	moveFavorite,
@@ -39,49 +44,37 @@ describe( 'SidebarFavorites helpers', () => {
 		).toBeInTheDocument();
 	} );
 
-	it( 'builds stable favorite keys', () => {
-		expect( favoriteKey( { kind: 'page', id: 12 } ) ).toBe(
-			'favorite:page:12'
-		);
-		expect( favoriteKey( { kind: 'collection', id: '9' } ) ).toBe(
-			'favorite:collection:9'
-		);
+	it( 'builds stable favorite keys from id alone', () => {
+		expect( favoriteKey( { id: 12 } ) ).toBe( 'favorite:12' );
+		expect( favoriteKey( { id: '9' } ) ).toBe( 'favorite:9' );
 	} );
 
 	it( 'moves favorites by sortable id', () => {
-		const favorites = [
-			{ kind: 'page', id: 1 },
-			{ kind: 'collection', id: 2 },
-			{ kind: 'page', id: 3 },
-		];
+		const favorites = [ { id: 1 }, { id: 2 }, { id: 3 } ];
 
-		expect(
-			moveFavorite( favorites, 'favorite:page:3', 'favorite:page:1' )
-		).toEqual( [
-			{ kind: 'page', id: 3 },
-			{ kind: 'page', id: 1 },
-			{ kind: 'collection', id: 2 },
-		] );
+		expect( moveFavorite( favorites, 'favorite:3', 'favorite:1' ) ).toEqual(
+			[ { id: 3 }, { id: 1 }, { id: 2 } ]
+		);
 	} );
 
 	it( 'returns the same list for no-op or unknown moves', () => {
-		const favorites = [ { kind: 'page', id: 1 } ];
+		const favorites = [ { id: 1 } ];
 
-		expect(
-			moveFavorite( favorites, 'favorite:page:1', 'favorite:page:1' )
-		).toBe( favorites );
-		expect(
-			moveFavorite( favorites, 'favorite:page:1', 'favorite:page:999' )
-		).toBe( favorites );
+		expect( moveFavorite( favorites, 'favorite:1', 'favorite:1' ) ).toBe(
+			favorites
+		);
+		expect( moveFavorite( favorites, 'favorite:1', 'favorite:999' ) ).toBe(
+			favorites
+		);
 	} );
 
 	it( 'removes a trashed page and loaded descendants from favorites', () => {
 		const favorites = [
-			{ kind: 'page', id: 1 },
-			{ kind: 'page', id: 2 },
-			{ kind: 'page', id: 3 },
-			{ kind: 'page', id: 4 },
-			{ kind: 'collection', id: 5 },
+			{ id: 1 },
+			{ id: 2 },
+			{ id: 3 },
+			{ id: 4 },
+			{ id: 5 },
 		];
 		const pages = [
 			{ id: 1, parent: 0 },
@@ -91,10 +84,7 @@ describe( 'SidebarFavorites helpers', () => {
 		];
 
 		expect( filterFavoritesForTrashedPage( favorites, 1, pages ) ).toEqual(
-			[
-				{ kind: 'page', id: 4 },
-				{ kind: 'collection', id: 5 },
-			]
+			[ { id: 4 }, { id: 5 } ]
 		);
 	} );
 
@@ -103,9 +93,9 @@ describe( 'SidebarFavorites helpers', () => {
 		// Row 6 lives in that collection, so its favorite must come out of the
 		// list too; otherwise the next save would replay a now-trashed row.
 		const favorites = [
-			{ kind: 'page', id: 1 },
-			{ kind: 'row', id: 6, collection: { id: 5 } },
-			{ kind: 'row', id: 7, collection: { id: 9 } },
+			{ id: 1 },
+			{ id: 6, collection: { id: 5 } },
+			{ id: 7, collection: { id: 9 } },
 		];
 		const pages = [ { id: 1, parent: 0 } ];
 		const collections = [
@@ -115,47 +105,47 @@ describe( 'SidebarFavorites helpers', () => {
 
 		expect(
 			filterFavoritesForTrashedPage( favorites, 1, pages, collections )
-		).toEqual( [ { kind: 'row', id: 7, collection: { id: 9 } } ] );
+		).toEqual( [ { id: 7, collection: { id: 9 } } ] );
 	} );
 
 	it( 'resolves page and collection favorites from loaded records', () => {
 		const items = resolveFavoriteItems(
 			[
-				{ kind: 'page', id: 1, path: 'page/old-1' },
-				{ kind: 'collection', id: 2, path: 'collection/old-2' },
+				{ id: 1, path: 'old-1' },
+				{ id: 2, path: 'old-2' },
 			],
 			[
 				{
 					id: 1,
-					type: 'crtxt_page',
+					type: 'crtxt_document',
 					slug: 'hello',
 					title: { rendered: 'Hello', raw: 'Hello' },
+					crtxt_trait: [],
 				},
 			],
 			[
 				{
 					id: 2,
-					type: 'crtxt_collection',
+					type: 'crtxt_document',
 					slug: 'books',
 					title: { rendered: 'Books', raw: 'Books' },
+					meta: { cortext_fields: [ 7 ] },
 				},
 			]
 		);
 
 		expect( items ).toMatchObject( [
 			{
-				kind: 'page',
 				id: 1,
 				title: 'Hello',
 				path: 'hello-1',
-				sortableId: 'favorite:page:1',
+				sortableId: 'favorite:1',
 			},
 			{
-				kind: 'collection',
 				id: 2,
 				title: 'Books',
-				path: 'collection/books-2',
-				sortableId: 'favorite:collection:2',
+				path: 'books-2',
+				sortableId: 'favorite:2',
 			},
 		] );
 	} );
@@ -163,20 +153,18 @@ describe( 'SidebarFavorites helpers', () => {
 	it( 'uses stored paths when sidebar records are missing', () => {
 		const favorites = [
 			{
-				kind: 'page',
 				id: 1,
 				title: 'Stored Notes',
-				path: 'page/old-1',
+				path: 'old-1',
 				icon: 'notebook',
 			},
 		];
 
 		expect( resolveFavoriteItems( favorites, [], [] ) ).toMatchObject( [
 			{
-				kind: 'page',
 				id: 1,
 				title: 'Stored Notes',
-				path: 'page/old-1',
+				path: 'old-1',
 				icon: 'notebook',
 			},
 		] );
@@ -187,10 +175,9 @@ describe( 'SidebarFavorites helpers', () => {
 			resolveFavoriteItems(
 				[
 					{
-						kind: 'collection',
 						id: 2,
 						title: 'Stored Books',
-						path: 'collection/books-2',
+						path: 'books-2',
 					},
 				],
 				[],
@@ -198,23 +185,20 @@ describe( 'SidebarFavorites helpers', () => {
 			)
 		).toMatchObject( [
 			{
-				kind: 'collection',
 				id: 2,
 				title: 'Stored Books',
-				path: 'collection/books-2',
+				path: 'books-2',
 			},
 		] );
 	} );
 
 	it( 'drops missing favorites without a stored path', () => {
-		expect(
-			resolveFavoriteItems( [ { kind: 'page', id: 1 } ], [], [] )
-		).toEqual( [] );
+		expect( resolveFavoriteItems( [ { id: 1 } ], [], [] ) ).toEqual( [] );
 	} );
 
 	it( 'keeps a re-added favorite visible after the removal timer fires', () => {
 		jest.useFakeTimers();
-		const favorite = { kind: 'page', id: 1, path: 'page/notes-1' };
+		const favorite = { id: 1, path: 'notes-1' };
 		const pages = [
 			{
 				id: 1,
@@ -264,7 +248,7 @@ describe( 'SidebarFavorites helpers', () => {
 	} );
 
 	it( 'does not mark initially loaded favorites as newly added', () => {
-		const favorite = { kind: 'page', id: 1 };
+		const favorite = { id: 1 };
 		const pages = [
 			{
 				id: 1,
@@ -300,8 +284,8 @@ describe( 'SidebarFavorites helpers', () => {
 	} );
 
 	it( 'marks favorites added after initial load as newly added', () => {
-		const notes = { kind: 'page', id: 1 };
-		const tasks = { kind: 'page', id: 2 };
+		const notes = { id: 1 };
+		const tasks = { id: 2 };
 		const pages = [
 			{
 				id: 1,

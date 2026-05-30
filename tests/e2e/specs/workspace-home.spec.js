@@ -79,7 +79,7 @@ test.describe( 'Workspace home', () => {
 		try {
 			homePage = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: PAGE_HOME_TITLE,
 					status: 'private',
@@ -87,7 +87,7 @@ test.describe( 'Workspace home', () => {
 			} );
 			otherPage = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: OTHER_PAGE_TITLE,
 					status: 'private',
@@ -149,11 +149,11 @@ test.describe( 'Workspace home', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				otherPage && `/wp/v2/crtxt_pages/${ otherPage.id }`
+				otherPage && `/wp/v2/crtxt_documents/${ otherPage.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
-				homePage && `/wp/v2/crtxt_pages/${ homePage.id }`
+				homePage && `/wp/v2/crtxt_documents/${ homePage.id }`
 			);
 		}
 	} );
@@ -165,20 +165,40 @@ test.describe( 'Workspace home', () => {
 	} ) => {
 		let collection;
 
+		let field;
+
 		try {
 			collection = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_collections',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: COLLECTION_HOME_TITLE,
 					status: 'private',
-					mode: 'full_page',
+				},
+			} );
+			field = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_fields',
+				data: {
+					title: 'Title',
+					status: 'private',
+					meta: { type: 'text' },
+				},
+			} );
+			// Promote the document to a collection by attaching at least one
+			// field to its schema; without `cortext_fields` the canvas renders
+			// as a plain page.
+			await requestUtils.rest( {
+				method: 'POST',
+				path: `/wp/v2/crtxt_documents/${ collection.id }`,
+				data: {
+					meta: { cortext_fields: [ String( field.id ) ] },
 				},
 			} );
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/collection/${ collection.slug }-${ collection.id }`
+				`page=cortext&p=/${ collection.slug }-${ collection.id }`
 			);
 			// Full-page collections render inside the BlockCanvas iframe.
 			const collectionCanvas = page.frameLocator(
@@ -192,14 +212,18 @@ test.describe( 'Workspace home', () => {
 			await admin.visitAdminPage( 'admin.php', 'page=cortext' );
 			await expect
 				.poll( () => appPath( page ) )
-				.toContain( '/collection/' );
+				.toContain( `${ collection.slug }-${ collection.id }` );
 			await expect(
 				collectionCanvas.locator( '.cortext-data-view' )
 			).toBeVisible( { timeout: 15_000 } );
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				collection && `/wp/v2/crtxt_collections/${ collection.id }`
+				collection && `/wp/v2/crtxt_documents/${ collection.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				field && `/wp/v2/crtxt_fields/${ field.id }`
 			);
 		}
 	} );
@@ -215,7 +239,7 @@ test.describe( 'Workspace home', () => {
 		try {
 			fallback = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: FALLBACK_TITLE,
 					status: 'private',
@@ -224,7 +248,7 @@ test.describe( 'Workspace home', () => {
 			} );
 			deletedHome = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: DELETED_HOME_TITLE,
 					status: 'private',
@@ -234,11 +258,11 @@ test.describe( 'Workspace home', () => {
 			await requestUtils.rest( {
 				method: 'PUT',
 				path: '/cortext/v1/workspace-home',
-				data: { kind: 'page', id: deletedHome.id },
+				data: { id: deletedHome.id },
 			} );
 			await requestUtils.rest( {
 				method: 'DELETE',
-				path: `/wp/v2/crtxt_pages/${ deletedHome.id }`,
+				path: `/wp/v2/crtxt_documents/${ deletedHome.id }`,
 			} );
 
 			await admin.visitAdminPage( 'admin.php', 'page=cortext' );
@@ -249,11 +273,11 @@ test.describe( 'Workspace home', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				deletedHome && `/wp/v2/crtxt_pages/${ deletedHome.id }`
+				deletedHome && `/wp/v2/crtxt_documents/${ deletedHome.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
-				fallback && `/wp/v2/crtxt_pages/${ fallback.id }`
+				fallback && `/wp/v2/crtxt_documents/${ fallback.id }`
 			);
 		}
 	} );

@@ -22,20 +22,20 @@ import { getEditorSettings } from './initEditor';
 import useAutosave from '../hooks/useAutosave';
 import useDelayedFlag from '../hooks/useDelayedFlag';
 import { withViewTransition } from '../hooks/viewTransition';
+import { definesTrait } from '../documents/capabilities';
 import { POST_TYPE } from './page-queries';
-import CollectionPublishToggle from './CollectionPublishToggle';
 import CortextInserterSidebar from './CortextInserterSidebar';
 import { DocumentPropertiesProvider } from './DocumentPropertiesContext';
+import DocumentPublishToggle from './DocumentPublishToggle';
 import EditorBody from './EditorBody';
-import PagePublishToggle from './PagePublishToggle';
 import { CanvasProgressBar } from './Skeleton';
 import { TopBarActionsFill } from './WorkspaceTopBar';
-import PageInspectorSidebar, {
+import DocumentInspectorSidebar, {
 	INSPECTOR_SCOPE,
 	InspectorSidebarSlot,
-	PAGE_INSPECTOR,
+	DOCUMENT_INSPECTOR,
 	isInspectorArea,
-} from './PageInspectorSidebar';
+} from './DocumentInspectorSidebar';
 
 function InserterToggle() {
 	const isOpen = useSelect(
@@ -59,7 +59,6 @@ function InserterToggle() {
 function DocumentActions( {
 	isActive,
 	postId,
-	postType,
 	topBarActions,
 	hasProperties,
 	arePropertiesVisible,
@@ -80,7 +79,7 @@ function DocumentActions( {
 	);
 	// Pages and rows both open the document tab first: page metadata for pages,
 	// row properties for rows. Block details stay in the second tab.
-	const defaultInspector = PAGE_INSPECTOR;
+	const defaultInspector = DOCUMENT_INSPECTOR;
 
 	// Canvas stays mounted across route changes (preservePaint keeps the
 	// editor iframe warm). Suppress the Fill when this page isn't the active
@@ -95,10 +94,7 @@ function DocumentActions( {
 			<div className="cortext-document-actions">
 				<InserterToggle />
 				{ topBarActions }
-				{ postType === POST_TYPE && <PagePublishToggle /> }
-				{ postType === 'crtxt_collection' && (
-					<CollectionPublishToggle collectionId={ postId } />
-				) }
+				<DocumentPublishToggle postId={ postId } />
 				{ hasProperties ? (
 					<>
 						<Button
@@ -195,11 +191,12 @@ function CanvasEditor( {
 	onRestored,
 	recentTarget,
 } ) {
+	const isCollection = definesTrait( post );
+	const hasTrait =
+		Array.isArray( post?.crtxt_trait ) && post.crtxt_trait.length > 0;
 	const autosaveRecentTarget =
 		recentTarget ??
-		( postType === POST_TYPE && post?.id
-			? { kind: 'page', id: post.id }
-			: null );
+		( post?.id && ! isCollection && ! hasTrait ? { id: post.id } : null );
 	const { status, flushNow, isDirty, isSaving } = useAutosave( {
 		recentTarget: autosaveRecentTarget,
 	} );
@@ -307,7 +304,6 @@ function CanvasEditor( {
 			<DocumentActions
 				isActive={ isActive }
 				postId={ post.id }
-				postType={ postType }
 				topBarActions={ topBarActions }
 				hasProperties={ hasProperties }
 				arePropertiesVisible={ arePropertiesVisible }
@@ -335,7 +331,10 @@ function CanvasEditor( {
 				}
 				sidebar={ <InspectorSidebarSlot /> }
 			/>
-			<PageInspectorSidebar postId={ post.id } postType={ postType } />
+			<DocumentInspectorSidebar
+				postId={ post.id }
+				postType={ postType }
+			/>
 		</DocumentPropertiesProvider>
 	);
 }

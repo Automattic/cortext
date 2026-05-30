@@ -15,7 +15,7 @@ declare( strict_types=1 );
 
 namespace Cortext\Admin;
 
-use Cortext\PostType\Page;
+use Cortext\PostType\Document;
 use Cortext\Theming\Preferences;
 
 final class Screen {
@@ -45,14 +45,15 @@ final class Screen {
 			3
 		);
 
-		// Escape hatch: core's list table + post.php editor for Cortext pages,
-		// nested under the shell menu. Primary UI stays the React shell.
+		// Escape hatch: core's list table + post.php editor for Cortext
+		// documents, nested under the shell menu. Primary UI stays the
+		// React shell.
 		add_submenu_page(
 			self::MENU_SLUG,
-			__( 'Manage Pages', 'cortext' ),
-			__( 'Manage Pages', 'cortext' ),
+			__( 'Manage Documents', 'cortext' ),
+			__( 'Manage Documents', 'cortext' ),
 			'edit_posts',
-			'edit.php?post_type=' . Page::POST_TYPE
+			'edit.php?post_type=' . Document::POST_TYPE
 		);
 	}
 
@@ -126,14 +127,21 @@ final class Screen {
 			$editor_settings['styles'] = array();
 		}
 
-		// `build/index.css` carries the DataViews package CSS (bundled
-		// through `src/index.scss`) and our own plugin styles. The block
-		// editor iframe only injects stylesheets listed in
-		// `editor_settings.styles`, so enqueueing this handle on the admin
-		// page isn't enough. An `@import` inside the `css` entry gets
-		// stripped by core's transformStyles, so inline the file's contents.
-		$style_path = CORTEXT_PATH . 'build/index.css';
-		if ( file_exists( $style_path ) ) {
+		// The block editor iframe only sees stylesheets listed in
+		// `editor_settings.styles`. Webpack splits Cortext's CSS into
+		// `build/index.css` (shell chrome) and `build/editor.css` (editor
+		// surfaces: column chrome, cell rendering, DataViews CSS, data-view
+		// block). Both need to reach the iframe. `@import` inside the `css`
+		// entry gets stripped by core's transformStyles, so inline each
+		// file.
+		// FIXME: the data-view block should declare its own `editorStyle`
+		// in `block.json` so WP propagates it to the iframe natively. This
+		// is the stop-gap until then.
+		foreach ( array( 'build/index.css', 'build/editor.css' ) as $relative ) {
+			$style_path = CORTEXT_PATH . $relative;
+			if ( ! file_exists( $style_path ) ) {
+				continue;
+			}
 			$style_css = file_get_contents( $style_path ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
 			if ( is_string( $style_css ) && '' !== $style_css ) {
 				$editor_settings['styles'][] = array( 'css' => $style_css );

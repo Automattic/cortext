@@ -35,8 +35,8 @@ import DocumentIdentityControls from './DocumentIdentityControls';
 import { useDocumentPropertiesContext } from './DocumentPropertiesContext';
 import {
 	findCanvasOwnerBlock,
-	getCanvasOwnerBlockName,
-	getCanvasOwnerInitialAttributes,
+	getCanvasOwnerBlockNameForRecord,
+	getCanvasOwnerInitialAttributesForRecord,
 } from './CanvasOwnerInspector';
 import MediaPicker, { MediaUploadCheck } from './MediaPicker';
 import afterNextPaint from '../hooks/afterNextPaint';
@@ -66,21 +66,80 @@ const DEFAULT_HEADER_BLOCK_NAMES = new Set( [
 ] );
 const CANVAS_READY_IMAGE_TIMEOUT = 8000;
 
-// Some post types add an owner block to the reserved header/body prefix.
-function getHeaderBlockNames( postType ) {
-	const ownerName = getCanvasOwnerBlockName( postType );
-	if ( ! ownerName ) {
+// Schema-bearing documents add an owner block to the reserved header/body
+// prefix. Plain documents do not, so the set collapses to defaults.
+function getHeaderBlockNames( ownerBlockName ) {
+	if ( ! ownerBlockName ) {
 		return DEFAULT_HEADER_BLOCK_NAMES;
 	}
-	return new Set( [ ...DEFAULT_HEADER_BLOCK_NAMES, ownerName ] );
+	return new Set( [ ...DEFAULT_HEADER_BLOCK_NAMES, ownerBlockName ] );
 }
 
-function isHeaderBlock( block, postType ) {
-	return getHeaderBlockNames( postType ).has( block?.name );
+function isHeaderBlock( block, ownerBlockName ) {
+	return getHeaderBlockNames( ownerBlockName ).has( block?.name );
 }
 
-function isHeaderChromeBlock( block, postType ) {
-	return isHeaderBlock( block, postType );
+// Returns clientIds of header blocks that should be removed by the next
+// layout pass. Catches two cases:
+//   1. Duplicate singletons (cover, icon, title, properties) inserted by a
+//      stray paste or older content version.
+//   2. Owner data-views whose `collectionId` does not point at the current
+//      document, or extra self-referencing copies. A collection's body is
+//      its self-referencing data-view; anything else is residue from a
+//      stale block-editor state that survived a document switch.
+//
+// Exported so the invariant can be tested without driving the full layout
+// effect.
+export function collectDuplicateHeaderClientIds(
+	blocks,
+	ownerBlockName,
+	postId
+) {
+	const duplicateIds = [];
+	const seenSingletons = new Set();
+	blocks.forEach( ( block ) => {
+		if (
+			block.name !== DOCUMENT_COVER_BLOCK &&
+			block.name !== DOCUMENT_ICON_BLOCK &&
+			block.name !== POST_TITLE_BLOCK &&
+			block.name !== DOCUMENT_PROPERTIES_BLOCK
+		) {
+			return;
+		}
+		if ( seenSingletons.has( block.name ) ) {
+			duplicateIds.push( block.clientId );
+			return;
+		}
+		seenSingletons.add( block.name );
+	} );
+	if ( ownerBlockName ) {
+		let ownerSeen = false;
+		blocks.forEach( ( block ) => {
+			if ( block.name !== ownerBlockName ) {
+				return;
+			}
+			const attrId = Number( block.attributes?.collectionId );
+			if ( attrId !== Number( postId ) ) {
+				duplicateIds.push( block.clientId );
+				return;
+			}
+			if ( ownerSeen ) {
+				duplicateIds.push( block.clientId );
+				return;
+			}
+			ownerSeen = true;
+		} );
+	}
+	return duplicateIds;
+}
+
+function useDocumentRecord( postType, postId ) {
+	const { record } = useEntityRecord( 'postType', postType, postId || 0 );
+	return record;
+}
+
+function isHeaderChromeBlock( block, ownerBlockName ) {
+	return isHeaderBlock( block, ownerBlockName );
 }
 
 function syncHeaderBoundaryMoveUpClass() {
@@ -178,9 +237,12 @@ function syncHeaderBoundaryMoveUpState( root, shouldDisable ) {
 
 function HeaderPrefixToolbarGuard( {
 	isActive = true,
+	postId,
 	postType,
 	toolbarRootRef,
 } ) {
+	const record = useDocumentRecord( postType, postId );
+	const ownerBlockName = getCanvasOwnerBlockNameForRecord( record );
 	const guardId = useRef( Symbol( DISABLE_HEADER_BOUNDARY_MOVE_UP_CLASS ) );
 	const shouldDisableMoveUp = useSelect(
 		( select ) => {
@@ -199,7 +261,8 @@ function HeaderPrefixToolbarGuard( {
 
 			const firstBodyIndex = blocks.findIndex(
 				( block, index ) =>
-					index > titleIndex && ! isHeaderBlock( block, postType )
+					index > titleIndex &&
+					! isHeaderBlock( block, ownerBlockName )
 			);
 			if ( firstBodyIndex < 0 ) {
 				return false;
@@ -217,7 +280,7 @@ function HeaderPrefixToolbarGuard( {
 
 			return Math.min( ...selectedRootIndexes ) === firstBodyIndex;
 		},
-		[ isActive, postType ]
+		[ isActive, ownerBlockName ]
 	);
 
 	useEffect( () => {
@@ -431,7 +494,8 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 		propertiesContextStable &&
 		Array.isArray( propertiesCtx?.fields ) &&
 		propertiesCtx.fields.length > 0;
-	const ownerBlockName = getCanvasOwnerBlockName( postType );
+	const record = useDocumentRecord( postType, postId );
+	const ownerBlockName = getCanvasOwnerBlockNameForRecord( record );
 	const {
 		coverIndex,
 		titleIndex,
@@ -474,7 +538,7 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 					index--
 				) {
 					const block = blocks[ index ];
-					if ( isHeaderBlock( block, postType ) ) {
+					if ( isHeaderBlock( block, ownerBlockName ) ) {
 						continue;
 					}
 					currentBodyBlockBeforeTitleId = block.clientId;
@@ -486,46 +550,11 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 				insertionPoint?.rootClientId ?? ROOT_BLOCK_LIST;
 			const insertionPointIndex =
 				insertionPoint?.index ?? Number.POSITIVE_INFINITY;
-			const seenSingletons = new Set();
-			const duplicateIds = [];
-			blocks.forEach( ( block ) => {
-				if (
-					block.name !== DOCUMENT_COVER_BLOCK &&
-					block.name !== DOCUMENT_ICON_BLOCK &&
-					block.name !== POST_TITLE_BLOCK &&
-					block.name !== DOCUMENT_PROPERTIES_BLOCK
-				) {
-					return;
-				}
-				if ( seenSingletons.has( block.name ) ) {
-					duplicateIds.push( block.clientId );
-					return;
-				}
-				seenSingletons.add( block.name );
-			} );
-			// The owner block is keyed on attribute match, not just name, so
-			// a foreign data-view (pointing at another collection) isn't a
-			// duplicate of the self-referencing owner. If we name-deduped
-			// here, the dedup pass would drop the owner whenever a foreign
-			// data-view came first and the insertion pass would re-add it
-			// on the next render, leaving the document dirty forever.
-			if ( ownerBlockName ) {
-				let ownerSeen = false;
-				blocks.forEach( ( block ) => {
-					if ( block.name !== ownerBlockName ) {
-						return;
-					}
-					const attrId = Number( block.attributes?.collectionId );
-					if ( attrId !== Number( postId ) ) {
-						return;
-					}
-					if ( ownerSeen ) {
-						duplicateIds.push( block.clientId );
-						return;
-					}
-					ownerSeen = true;
-				} );
-			}
+			const duplicateIds = collectDuplicateHeaderClientIds(
+				blocks,
+				ownerBlockName,
+				postId
+			);
 			const propertiesBlock = blocks.find(
 				( block ) => block.name === DOCUMENT_PROPERTIES_BLOCK
 			);
@@ -537,7 +566,7 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 				hasTitle: names.includes( POST_TITLE_BLOCK ),
 				hasProperties: !! propertiesBlock,
 				hasOwner: ownerBlockName
-					? !! findCanvasOwnerBlock( blocks, postType, postId )
+					? !! findCanvasOwnerBlock( blocks, record, postId )
 					: true,
 				propertiesClientId: propertiesBlock?.clientId ?? null,
 				headerEndIndex: currentHeaderEndIndex,
@@ -554,7 +583,7 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 					) === 'trash',
 			};
 		},
-		[ ownerBlockName, postId, postType ]
+		[ ownerBlockName, postId, record ]
 	);
 	const {
 		insertBlocks,
@@ -700,8 +729,8 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 		if ( needsOwner ) {
 			// The owner block is the body. Add it last so it follows any
 			// header repairs made in this pass.
-			const ownerAttributes = getCanvasOwnerInitialAttributes(
-				postType,
+			const ownerAttributes = getCanvasOwnerInitialAttributesForRecord(
+				record,
 				postId
 			);
 			insertBlocks(
@@ -730,7 +759,7 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 		isTrashed,
 		ownerBlockName,
 		postId,
-		postType,
+		record,
 		startTyping,
 		stopTyping,
 		titleIndex,
@@ -785,8 +814,9 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 // a per-block filter. The toolbar and iframe live in separate documents, so a
 // body class is the simplest hook for CSS. Mounting this here keeps Canvas and
 // RowEditor on the same path.
-function HideHeaderBlockKebab( { postType } ) {
-	const ownerBlockName = getCanvasOwnerBlockName( postType );
+function HideHeaderBlockKebab( { postId, postType } ) {
+	const record = useDocumentRecord( postType, postId );
+	const ownerBlockName = getCanvasOwnerBlockNameForRecord( record );
 	const selectedName = useSelect( ( select ) => {
 		const store = select( blockEditorStore );
 		const clientId = store.getSelectedBlockClientId();
@@ -813,7 +843,7 @@ function HideHeaderBlockKebab( { postType } ) {
 	return null;
 }
 
-function HeaderAwareRootAppender( { postType } ) {
+function HeaderAwareRootAppender( { ownerBlockName } ) {
 	// tech-debt.md#td-gutenberg-header-boundary: Gutenberg's root appender only treats a fully empty
 	// root list as empty. Cortext's locked header blocks are chrome, so the
 	// body still needs a first-block prompt after them.
@@ -822,19 +852,21 @@ function HeaderAwareRootAppender( { postType } ) {
 			const blocks = select( blockEditorStore ).getBlocks();
 			const headerEndIndex = blocks.reduce(
 				( lastIndex, block, index ) =>
-					isHeaderChromeBlock( block, postType ) ? index : lastIndex,
+					isHeaderChromeBlock( block, ownerBlockName )
+						? index
+						: lastIndex,
 				-1
 			);
 			return {
 				bodyEmpty:
 					blocks.length > 0 &&
 					blocks.every( ( block ) =>
-						isHeaderChromeBlock( block, postType )
+						isHeaderChromeBlock( block, ownerBlockName )
 					),
 				insertionIndex: headerEndIndex + 1,
 			};
 		},
-		[ postType ]
+		[ ownerBlockName ]
 	);
 	const { insertDefaultBlock, startTyping } = useDispatch( blockEditorStore );
 
@@ -1159,23 +1191,25 @@ export default function EditorBody( {
 			'trash',
 		[]
 	);
+	const record = useDocumentRecord( postType, postId );
+	const ownerBlockName = getCanvasOwnerBlockNameForRecord( record );
 	const shouldUseHeaderAwareAppender = useSelect(
 		( select ) => {
-			if ( getCanvasOwnerBlockName( postType ) ) {
+			if ( ownerBlockName ) {
 				return false;
 			}
 			const blocks = select( blockEditorStore ).getBlocks();
 			return (
 				blocks.length > 0 &&
 				blocks.every( ( block ) =>
-					isHeaderChromeBlock( block, postType )
+					isHeaderChromeBlock( block, ownerBlockName )
 				)
 			);
 		},
-		[ postType ]
+		[ ownerBlockName ]
 	);
 	const renderAppender = shouldUseHeaderAwareAppender
-		? () => <HeaderAwareRootAppender postType={ postType } />
+		? () => <HeaderAwareRootAppender ownerBlockName={ ownerBlockName } />
 		: undefined;
 
 	const blockCanvas = (
@@ -1186,18 +1220,17 @@ export default function EditorBody( {
 					postType={ postType }
 				/>
 				<EnsureHeaderBlocks postId={ postId } postType={ postType } />
-				<HideHeaderBlockKebab postType={ postType } />
+				<HideHeaderBlockKebab postId={ postId } postType={ postType } />
 				<HeaderPrefixToolbarGuard
 					isActive={ isActive }
+					postId={ postId }
 					postType={ postType }
 					toolbarRootRef={ blockCanvasRef }
 				/>
 				<div
 					className={ [
 						'cortext-canvas__editor',
-						getCanvasOwnerBlockName( postType )
-							? 'cortext-canvas__editor--owner'
-							: '',
+						ownerBlockName ? 'cortext-canvas__editor--owner' : '',
 					]
 						.filter( Boolean )
 						.join( ' ' ) }

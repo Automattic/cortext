@@ -22,10 +22,9 @@ import { useNavigate } from '@tanstack/react-router';
 
 import './ImportPane.scss';
 import { extractCollections, runImport } from './notionImport';
-import { COLLECTION_QUERY, FULL_PAGE_COLLECTION_QUERY } from '../collections';
-import { computeCollectionUri } from '../router/useResolveEntity';
-
-const COLLECTION_POST_TYPE = 'crtxt_collection';
+import { DOCUMENT_POST_TYPE, FULL_PAGE_COLLECTION_QUERY } from '../collections';
+import { ACTIVE_PAGES_QUERY } from './page-queries';
+import { computeDocumentUri } from '../router/useResolveEntity';
 
 const NOTION_KEY_STORAGE = 'cortext.notionKey';
 
@@ -85,9 +84,12 @@ export default function ImportPane() {
 			// Refresh the workspace sidebar as soon as the new Cortext
 			// collection exists. The first onProgress fires right after
 			// `/import/start` returns, which is when the collection
-			// post is in the DB. We only need to invalidate once;
-			// subsequent ticks only add rows under a different CPT, not
-			// new `crtxt_collection` posts.
+			// document is in the DB. We only need to invalidate once;
+			// subsequent ticks only add row documents, not new
+			// collections. The collection is a `crtxt_document`, so it
+			// shows in the sidebar tree (the non-row document query) and in
+			// the collections lookup Favorites resolves titles from; refresh
+			// both.
 			let sidebarInvalidated = false;
 			const refreshSidebarOnce = ( progress ) => {
 				if ( sidebarInvalidated || ! progress.collection_id ) {
@@ -96,13 +98,13 @@ export default function ImportPane() {
 				sidebarInvalidated = true;
 				invalidateResolution( 'getEntityRecords', [
 					'postType',
-					COLLECTION_POST_TYPE,
-					FULL_PAGE_COLLECTION_QUERY,
+					DOCUMENT_POST_TYPE,
+					ACTIVE_PAGES_QUERY,
 				] );
 				invalidateResolution( 'getEntityRecords', [
 					'postType',
-					COLLECTION_POST_TYPE,
-					COLLECTION_QUERY,
+					DOCUMENT_POST_TYPE,
+					FULL_PAGE_COLLECTION_QUERY,
 				] );
 			};
 
@@ -355,13 +357,12 @@ function CollectionCard( { collection, job, onImport } ) {
 			break;
 	}
 
-	const openTo =
-		job?.collection_id && job?.collection_slug
-			? computeCollectionUri( {
-					id: job.collection_id,
-					slug: job.collection_slug,
-			  } )
-			: null;
+	const openTo = job?.collection_id
+		? computeDocumentUri( {
+				id: job.collection_id,
+				slug: job.collection_slug,
+		  } )
+		: null;
 
 	// Pick the one button that fits the current state.
 	let actionButton;
