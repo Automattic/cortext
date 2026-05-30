@@ -66,6 +66,7 @@ import {
 	findDataViewItemFromEvent,
 } from './dataViewItemLookup';
 import { scrollToEndQuickly } from './dataViewScroll';
+import { saveRowDocumentField } from './rowDocumentMutations';
 import { getRowDetailMode, withRowDetailMode } from './rowDetailUtils';
 import {
 	applyVisibleSelectionChange,
@@ -562,21 +563,14 @@ export default function CollectionDataViews( {
 			if ( ! collectionId || ! rowId ) {
 				return null;
 			}
-			// `fieldId` is the DataView field id (`field-<post_id>`), which is
-			// also the post meta key on the row document.
-			const updated = await apiFetch( {
-				path: `/wp/v2/crtxt_documents/${ rowId }`,
-				method: 'POST',
-				data: {
-					meta: { [ fieldId ]: value },
-				},
-			} );
+			const updated = await saveRowDocumentField( rowId, fieldId, value );
 			touchRecent( {
 				kind: 'row',
 				id: updated?.id ?? rowId,
 				collectionId,
 			} );
 			refresh();
+			notifyCollectionRowsChanged( collectionId );
 			return updated;
 		},
 		[ collectionId, refresh, touchRecent ]
@@ -668,12 +662,23 @@ export default function CollectionDataViews( {
 	// next/previous, refresh, and writing mode changes back to this view. Refs
 	// keep row order current without replacing the source object each render.
 	const rowsRef = useRef( null );
+	const rowListSubscribersRef = useRef( new Set() );
 	rowsRef.current = dataFiltered;
+	useEffect( () => {
+		rowListSubscribersRef.current.forEach( ( listener ) => listener() );
+	}, [ dataFiltered ] );
+	const subscribeToRowList = useCallback( ( listener ) => {
+		rowListSubscribersRef.current.add( listener );
+		return () => {
+			rowListSubscribersRef.current.delete( listener );
+		};
+	}, [] );
 	const source = useMemo(
 		() => ( {
 			kind: 'collection',
 			collectionId,
 			getRowList: () => rowsRef.current ?? [],
+			subscribeToRowList,
 			refresh,
 			updateFieldOptions,
 			updateFieldFormat,
@@ -683,7 +688,13 @@ export default function CollectionDataViews( {
 				);
 			},
 		} ),
-		[ collectionId, refresh, updateFieldFormat, updateFieldOptions ]
+		[
+			collectionId,
+			refresh,
+			subscribeToRowList,
+			updateFieldFormat,
+			updateFieldOptions,
+		]
 	);
 
 	const requestOpenRow = useCallback(
