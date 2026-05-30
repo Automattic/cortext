@@ -351,7 +351,7 @@ final class Test_Post_Type_Document extends BaseTestCase {
 		$this->assertSame( 'integer', $registered[ "field-{$relation_field}" ]['type'] );
 
 		$this->assertArrayHasKey( "field-{$rollup_field}", $registered );
-		$this->assertSame( '__return_false', $registered[ "field-{$rollup_field}" ]['auth_callback'] );
+		$this->assertTrue( $registered[ "field-{$rollup_field}" ]['single'] );
 	}
 
 	public function test_seed_data_view_block_inserts_owner_block(): void {
@@ -386,11 +386,11 @@ final class Test_Post_Type_Document extends BaseTestCase {
 				'post_content' => '',
 			)
 		);
-		$markup = Document::build_data_view_block_markup( $collection_id );
+		$markup        = Document::build_data_view_block_markup( $collection_id );
 		// Directly inject the canonical markup into the in-memory store, then
 		// seed again to prove it bails out.
-		$post                                                           = get_post( $collection_id );
-		$post->post_content                                             = $markup;
+		$post               = get_post( $collection_id );
+		$post->post_content = $markup;
 		\WorDBless\Posts::init()->posts[ $collection_id ]->post_content = $markup;
 		wp_cache_set( $collection_id, $post, 'posts' );
 
@@ -476,6 +476,8 @@ final class Test_Post_Type_Document extends BaseTestCase {
 	}
 
 	/**
+	 * Returns block names in order.
+	 *
 	 * @param array<int,array<string,mixed>> $blocks
 	 * @return array<int,string>
 	 */
@@ -491,6 +493,8 @@ final class Test_Post_Type_Document extends BaseTestCase {
 	}
 
 	/**
+	 * Returns data-view collection ids in order.
+	 *
 	 * @param array<int,array<string,mixed>> $blocks
 	 * @return array<int,int>
 	 */
@@ -653,7 +657,7 @@ final class Test_Post_Type_Document extends BaseTestCase {
 		$other_field_id       = $this->create_field( 'text' );
 		add_post_meta( $other_collection_id, 'cortext_fields', (string) $other_field_id );
 
-		$row_id  = (int) wp_insert_post(
+		$row_id         = (int) wp_insert_post(
 			array(
 				'post_type'   => Document::POST_TYPE,
 				'post_status' => 'private',
@@ -697,6 +701,46 @@ final class Test_Post_Type_Document extends BaseTestCase {
 		$this->assertSame( $prepared, $result );
 	}
 
+	public function test_prepare_meta_updates_ignores_rollup_meta(): void {
+		$collection_id = $this->create_collection();
+		$field_id      = (int) get_post_meta( $collection_id, 'cortext_fields', false )[0];
+		$rollup_field  = $this->create_field( 'rollup' );
+		add_post_meta( $collection_id, 'cortext_fields', (string) $rollup_field );
+
+		$row_id  = $this->create_document( array( 'post_title' => 'Source row' ) );
+		$term_id = TraitTaxonomy::term_id_for_trait( $collection_id );
+		wp_set_object_terms( $row_id, array( $term_id ), TraitTaxonomy::TAXONOMY );
+
+		$request = new WP_REST_Request( 'POST', '/wp/v2/crtxt_documents/' . $row_id );
+		$request->set_param( 'id', $row_id );
+		$request->set_param(
+			'meta',
+			array(
+				'field-' . $field_id     => 'value',
+				'field-' . $rollup_field => '',
+			)
+		);
+
+		$prepared = new \stdClass();
+		$result   = ( new Document() )->prepare_meta_updates( $prepared, $request );
+
+		$this->assertSame( $prepared, $result );
+		$this->assertSame( array( 'field-' . $field_id => 'value' ), $request->get_param( 'meta' ) );
+	}
+
+	public function test_prepare_meta_updates_ignores_rollup_meta_on_create(): void {
+		$rollup_field = $this->create_field( 'rollup' );
+
+		$request = new WP_REST_Request( 'POST', '/wp/v2/crtxt_documents' );
+		$request->set_param( 'meta', array( 'field-' . $rollup_field => '' ) );
+
+		$prepared = new \stdClass();
+		$result   = ( new Document() )->prepare_meta_updates( $prepared, $request );
+
+		$this->assertSame( $prepared, $result );
+		$this->assertSame( array(), $request->get_param( 'meta' ) );
+	}
+
 	public function test_limit_field_meta_to_collection_keeps_only_the_rows_collection_fields(): void {
 		$collection_id = $this->create_collection();
 		$own_field_id  = (int) get_post_meta( $collection_id, 'cortext_fields', false )[0];
@@ -723,6 +767,33 @@ final class Test_Post_Type_Document extends BaseTestCase {
 		$this->assertArrayHasKey( 'field-' . $own_field_id, $meta );
 		$this->assertArrayNotHasKey( 'field-' . $foreign_field, $meta );
 		$this->assertArrayHasKey( 'cortext_fields', $meta );
+	}
+
+	public function test_limit_field_meta_to_collection_drops_rollup_meta(): void {
+		$collection_id = $this->create_collection();
+		$own_field_id  = (int) get_post_meta( $collection_id, 'cortext_fields', false )[0];
+		$rollup_field  = $this->create_field( 'rollup' );
+		add_post_meta( $collection_id, 'cortext_fields', (string) $rollup_field );
+
+		$row_id  = $this->create_document( array( 'post_title' => 'Row' ) );
+		$term_id = TraitTaxonomy::term_id_for_trait( $collection_id );
+		wp_set_object_terms( $row_id, array( $term_id ), TraitTaxonomy::TAXONOMY );
+
+		$response = new WP_REST_Response(
+			array(
+				'meta' => array(
+					'field-' . $own_field_id => 'kept',
+					'field-' . $rollup_field => '',
+				),
+			)
+		);
+
+		$meta = ( new Document() )
+			->limit_field_meta_to_collection( $response, get_post( $row_id ) )
+			->get_data()['meta'];
+
+		$this->assertArrayHasKey( 'field-' . $own_field_id, $meta );
+		$this->assertArrayNotHasKey( 'field-' . $rollup_field, $meta );
 	}
 
 	public function test_limit_field_meta_to_collection_drops_all_field_meta_on_a_page(): void {
@@ -889,7 +960,7 @@ final class Test_Post_Type_Document extends BaseTestCase {
 	}
 
 	private function create_collection(): int {
-		$id = $this->create_document( array( 'post_title' => 'Collection ' . wp_generate_uuid4() ) );
+		$id       = $this->create_document( array( 'post_title' => 'Collection ' . wp_generate_uuid4() ) );
 		$field_id = $this->create_field( 'text' );
 		add_post_meta( $id, 'cortext_fields', (string) $field_id );
 

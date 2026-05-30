@@ -99,8 +99,10 @@ final class Document {
 	 * Trims `field-<id>` meta in the REST response to the document's own
 	 * collection. `field-<id>` is registered on every `crtxt_document`, so
 	 * without this trim the response carries every collection's fields on every
-	 * document. A row keeps its collection's fields; pages and collections keep
-	 * none, since field values belong to rows. Schema and identity meta stay.
+	 * document. A row keeps its collection's writable fields. Rollups stay out
+	 * of `meta` because they are computed and read-only, exposed in
+	 * `cortext_hydrated_meta`. Pages and collections keep no field values.
+	 * Schema and identity meta stay.
 	 *
 	 * @param \WP_REST_Response $response Prepared response.
 	 * @param \WP_Post          $post     Document being prepared.
@@ -116,6 +118,9 @@ final class Document {
 		$trait_post = ( new Documents() )->find_trait_for_document( $post );
 		if ( $trait_post instanceof WP_Post ) {
 			foreach ( self::collection_field_ids( (int) $trait_post->ID ) as $field_id ) {
+				if ( 'rollup' === (string) get_post_meta( $field_id, 'type', true ) ) {
+					continue;
+				}
 				$allowed[ 'field-' . $field_id ] = true;
 			}
 		}
@@ -492,11 +497,6 @@ final class Document {
 			if ( 'string' === $wp_meta ) {
 				$config['sanitize_callback'] = 'sanitize_text_field';
 			}
-			// Rollups are computed read-only values. Reject any REST write so
-			// a stray `meta: { field-X: ... }` payload cannot clobber the cache.
-			if ( 'rollup' === $type ) {
-				$config['auth_callback'] = '__return_false';
-			}
 			register_post_meta( self::POST_TYPE, 'field-' . (int) $field_id, $config );
 		}
 	}
@@ -578,6 +578,24 @@ final class Document {
 		if ( ! is_array( $meta ) || count( $meta ) === 0 ) {
 			return $prepared_post;
 		}
+		// Rollups are computed and read-only, exposed in `cortext_hydrated_meta`.
+		// Drop any rollup `field-<id>` from the write, so a stray one (stale
+		// client, hand-built request) is ignored instead of failing the whole
+		// save.
+		foreach ( $meta as $key => $_value ) {
+			if ( ! is_string( $key ) || ! str_starts_with( $key, 'field-' ) ) {
+				continue;
+			}
+			$field_id = (int) substr( $key, 6 );
+			if ( $field_id > 0 && 'rollup' === (string) get_post_meta( $field_id, 'type', true ) ) {
+				unset( $meta[ $key ] );
+			}
+		}
+		$request->set_param( 'meta', $meta );
+		if ( count( $meta ) === 0 ) {
+			return $prepared_post;
+		}
+
 		$post_id = (int) ( $prepared_post->ID ?? 0 );
 		if ( $post_id < 1 ) {
 			$post_id = (int) $request->get_param( 'id' );
