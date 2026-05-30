@@ -604,10 +604,10 @@ final class Test_Documents extends BaseTestCase {
 	}
 
 	public function test_format_document_with_trash_meta_exposes_collection_and_row_shape(): void {
-		// The sidebar Trash panel reads `cortext_fields` and `crtxt_trait`
-		// from the formatted payload to distinguish collections from rows.
-		// Page documents come back with empty arrays; collections expose
-		// their field ids; rows expose their trait term id.
+		// The sidebar Trash panel reads `cortext_defines_trait` and `crtxt_trait`
+		// from the formatted payload to distinguish collections from rows and to
+		// keep the type-to-confirm guard on collection deletes. Pages define no
+		// trait; collections define one; rows carry a term.
 		$page_id = (int) wp_insert_post(
 			array(
 				'post_type'   => \Cortext\PostType\Document::POST_TYPE,
@@ -656,6 +656,12 @@ final class Test_Documents extends BaseTestCase {
 
 		$this->assertSame( array(), $row['meta']['cortext_fields'] );
 		$this->assertSame( array( $term_id ), $row['crtxt_trait'] );
+
+		// `definesTrait()` on the client reads `cortext_defines_trait`; without
+		// it a trashed collection reads as a page and loses its delete guard.
+		$this->assertFalse( $page['cortext_defines_trait'] );
+		$this->assertTrue( $collection['cortext_defines_trait'] );
+		$this->assertFalse( $row['cortext_defines_trait'] );
 	}
 
 	public function test_save_creates_page_when_no_fields_or_collection(): void {
