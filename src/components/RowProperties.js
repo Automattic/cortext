@@ -4,14 +4,14 @@
  * locked document-properties editor block both mount this; see tech-debt.md#td-row-properties-public-render
  * for the remaining public-rendering work.
  *
- * Reads the post's edited title and meta from `editorStore` so the live
- * values stay in sync with the locked `core/post-title` block above and
- * any field changes that flow through autosave.
+ * Reads the post's edited title and initial meta from `editorStore` so the
+ * live values stay in sync with the locked `core/post-title` block above.
+ * Row property edits save as minimal REST patches, not through the post
+ * autosave.
  */
 
-import apiFetch from '@wordpress/api-fetch';
 import { Button, CheckboxControl } from '@wordpress/components';
-import { useDispatch, useSelect } from '@wordpress/data';
+import { useSelect } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
 import {
 	Fragment,
@@ -58,6 +58,7 @@ import MultiselectEdit from './MultiselectEdit';
 import { toRecordId } from '../hooks/fieldIds';
 import { elementsFromOptions } from '../hooks/optionElements';
 import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
+import { saveRowDocumentField } from './rowDocumentMutations';
 import {
 	isRowDetailFieldEditable,
 	isValidNumberDraft,
@@ -72,6 +73,7 @@ import RelationEditor from './relations/RelationEditor';
 
 export const HIDDEN_PROPERTIES_DROP_TARGET =
 	'cortext-row-properties-hidden-drop-target';
+const ROW_PROPERTY_SAVE_DEBOUNCE_MS = 500;
 
 function rowPropertiesCollisionDetection( args ) {
 	const pointerCollisions = pointerWithin( args );
@@ -235,6 +237,85 @@ function isCollectionField( field ) {
 
 function hasInternalFieldIcon( field ) {
 	return hasSystemFieldIcon( field?.id );
+}
+
+function withoutKey( object, key ) {
+	const next = { ...( object ?? {} ) };
+	delete next[ key ];
+	return next;
+}
+
+function saveErrorMessage( error ) {
+	return error?.message || __( 'Could not save property.', 'cortext' );
+}
+
+function shouldDebouncePropertySave( field ) {
+	const type = fieldType( field );
+	return [ 'text', 'email', 'url', 'number' ].includes( type );
+}
+
+function savedMetaValue( updated, fieldId, fallback ) {
+	if (
+		updated?.meta &&
+		Object.prototype.hasOwnProperty.call( updated.meta, fieldId )
+	) {
+		return updated.meta[ fieldId ];
+	}
+	return fallback;
+}
+
+function savedHydratedMetaValue( updated, fieldId, fallback ) {
+	if (
+		updated?.cortext_hydrated_meta &&
+		Object.prototype.hasOwnProperty.call(
+			updated.cortext_hydrated_meta,
+			fieldId
+		)
+	) {
+		return updated.cortext_hydrated_meta[ fieldId ];
+	}
+	if (
+		updated?.meta &&
+		Object.prototype.hasOwnProperty.call( updated.meta, fieldId )
+	) {
+		return updated.meta[ fieldId ];
+	}
+	return fallback;
+}
+
+function savedTitleValue( updated, fallback ) {
+	return updated?.title?.raw ?? updated?.title?.rendered ?? fallback ?? '';
+}
+
+function stableValueString( value ) {
+	if ( Array.isArray( value ) ) {
+		return `[${ value.map( stableValueString ).join( ',' ) }]`;
+	}
+	if ( value && typeof value === 'object' ) {
+		return `{${ Object.keys( value )
+			.sort()
+			.map( ( key ) => `${ key }:${ stableValueString( value[ key ] ) }` )
+			.join( ',' ) }}`;
+	}
+	return JSON.stringify( value );
+}
+
+function propertyValuesEqual( first, second ) {
+	if ( Object.is( first, second ) ) {
+		return true;
+	}
+	if (
+		first === null ||
+		first === undefined ||
+		second === null ||
+		second === undefined
+	) {
+		return ( first ?? '' ) === ( second ?? '' );
+	}
+	if ( typeof first !== 'object' && typeof second !== 'object' ) {
+		return String( first ) === String( second );
+	}
+	return stableValueString( first ) === stableValueString( second );
 }
 
 function relationConfigForField( field ) {
@@ -728,6 +809,7 @@ function RowProperty( {
 	rowRef,
 	rowId,
 	rowStyle,
+	saveError,
 	update,
 	updateRelation,
 } ) {
@@ -790,10 +872,10 @@ function RowProperty( {
 				value={ value }
 				elements={ elements }
 				relation={ relation }
-				onChange={ ( next ) => update( { [ field.id ]: next } ) }
-				onRelationChange={ ( next ) =>
-					updateRelation( field.id, next )
+				onChange={ ( next ) =>
+					update( { [ field.id ]: next }, { field } )
 				}
+				onRelationChange={ ( next ) => updateRelation( field, next ) }
 				onOptionsSaved={ ( nextOptions ) =>
 					handleFieldOptionsSaved(
 						field.cortextRecordId ?? toRecordId( field.id ),
@@ -851,6 +933,14 @@ function RowProperty( {
 			<div className="cortext-row-detail__property-value">
 				<div className="cortext-row-detail__property-value-content">
 					{ propertyValue }
+					{ saveError ? (
+						<div
+							className="cortext-row-detail__property-error"
+							role="alert"
+						>
+							{ saveError }
+						</div>
+					) : null }
 				</div>
 				{ isLayoutEditing ? (
 					<Button
@@ -938,7 +1028,6 @@ export default function RowProperties( {
 	row,
 	rowId: providedRowId,
 } ) {
-	const { editPost } = useDispatch( editorStore );
 	const {
 		optionOverrides,
 		updateFieldOptions,
@@ -959,6 +1048,10 @@ export default function RowProperties( {
 		setSuppressedDropAnimationFieldId,
 	] = useState( null );
 	const propertiesRef = useRef( null );
+	const isMountedRef = useRef( true );
+	const pendingSavesRef = useRef( new Map() );
+	const saveTimersRef = useRef( new Map() );
+	const fieldSaveVersionsRef = useRef( new Map() );
 	const handleFieldOptionsSaved = useCallback(
 		( recordId, nextOptions ) => {
 			const fieldId = `field-${ recordId }`;
@@ -982,18 +1075,26 @@ export default function RowProperties( {
 		},
 		[ updateFieldFormat ]
 	);
-	const [ savedRow, setSavedRow ] = useState( null );
-	const rowId = savedRow?.id ?? providedRowId ?? row?.id;
+	// Field edits save as minimal REST patches (see `rowDocumentMutations`)
+	// while the panel still reads from `editorStore`, so this hand-rolled
+	// optimistic layer bridges the two: `local*` holds the in-flight edit and
+	// `committed*` holds a saved value until the live `row` catches up. Rows in
+	// core-data (tech-debt.md#td-rows-not-in-core-data) would let
+	// `saveEntityRecord` do this and delete the block.
+	const [ committedMeta, setCommittedMeta ] = useState( {} );
+	const [ committedHydratedMeta, setCommittedHydratedMeta ] = useState( {} );
+	const [ committedTitle, setCommittedTitle ] = useState( undefined );
+	const [ localMeta, setLocalMeta ] = useState( {} );
+	const [ localTitle, setLocalTitle ] = useState( undefined );
+	const [ fieldErrors, setFieldErrors ] = useState( {} );
+	const sourceRowId = providedRowId ?? row?.id;
+	const rowId = sourceRowId;
 	const sensors = useSensors(
 		useSensor( PointerSensor, { activationConstraint: { distance: 4 } } ),
 		useSensor( KeyboardSensor, {
 			coordinateGetter: sortableKeyboardCoordinates,
 		} )
 	);
-
-	useEffect( () => {
-		setSavedRow( null );
-	}, [ row?.id ] );
 
 	// The locked `core/post-title` block above already exposes the title;
 	// duplicating it as a property row would give the user two edit surfaces
@@ -1017,48 +1118,381 @@ export default function RowProperties( {
 		[]
 	);
 
+	const clearSaveTimer = useCallback( ( fieldId ) => {
+		const timer = saveTimersRef.current.get( fieldId );
+		if ( timer ) {
+			clearTimeout( timer );
+			saveTimersRef.current.delete( fieldId );
+		}
+	}, [] );
+
+	const clearLocalFieldValue = useCallback( ( fieldId ) => {
+		if ( fieldId === TITLE_FIELD_ID ) {
+			setLocalTitle( undefined );
+			return;
+		}
+		setLocalMeta( ( current ) => withoutKey( current, fieldId ) );
+	}, [] );
+
+	const applyLocalFieldValue = useCallback( ( fieldId, value ) => {
+		if ( fieldId === TITLE_FIELD_ID ) {
+			setLocalTitle( value ?? '' );
+			return;
+		}
+		setLocalMeta( ( current ) => ( {
+			...current,
+			[ fieldId ]: value,
+		} ) );
+	}, [] );
+
+	const clearCommittedValues = useCallback( () => {
+		setCommittedMeta( {} );
+		setCommittedHydratedMeta( {} );
+		setCommittedTitle( undefined );
+	}, [] );
+
+	const applyCommittedFieldValue = useCallback(
+		( fieldId, entry, updated ) => {
+			if ( fieldId === TITLE_FIELD_ID ) {
+				setCommittedTitle( savedTitleValue( updated, entry.value ) );
+				return;
+			}
+
+			setCommittedMeta( ( current ) => ( {
+				...current,
+				[ fieldId ]: savedMetaValue( updated, fieldId, entry.value ),
+			} ) );
+			if ( entry.isRelationField ) {
+				setCommittedHydratedMeta( ( current ) => ( {
+					...current,
+					[ fieldId ]: savedHydratedMetaValue(
+						updated,
+						fieldId,
+						entry.value
+					),
+				} ) );
+			} else {
+				setCommittedHydratedMeta( ( current ) =>
+					withoutKey( current, fieldId )
+				);
+			}
+		},
+		[]
+	);
+
+	const flushQueuedFieldSave = useCallback(
+		async ( fieldId, { rethrow = false } = {} ) => {
+			const entry = pendingSavesRef.current.get( fieldId );
+			if ( ! entry ) {
+				return null;
+			}
+
+			pendingSavesRef.current.delete( fieldId );
+			clearSaveTimer( fieldId );
+
+			try {
+				const updated = await saveRowDocumentField(
+					entry.rowId,
+					fieldId,
+					entry.value
+				);
+				if ( ! isMountedRef.current ) {
+					return updated;
+				}
+				const isLatestSave =
+					fieldSaveVersionsRef.current.get( fieldId ) ===
+					entry.version;
+				if ( isLatestSave ) {
+					applyCommittedFieldValue( fieldId, entry, updated );
+					setFieldErrors( ( current ) =>
+						withoutKey( current, fieldId )
+					);
+					clearLocalFieldValue( fieldId );
+				}
+				refreshRows?.();
+				if ( collectionId ) {
+					notifyCollectionRowsChanged( collectionId );
+				}
+				return updated;
+			} catch ( error ) {
+				if (
+					isMountedRef.current &&
+					fieldSaveVersionsRef.current.get( fieldId ) ===
+						entry.version
+				) {
+					setFieldErrors( ( current ) => ( {
+						...current,
+						[ fieldId ]: saveErrorMessage( error ),
+					} ) );
+				}
+				if ( rethrow ) {
+					throw error;
+				}
+				return null;
+			}
+		},
+		[
+			applyCommittedFieldValue,
+			clearLocalFieldValue,
+			clearSaveTimer,
+			collectionId,
+			refreshRows,
+		]
+	);
+
+	const queueFieldSave = useCallback(
+		(
+			fieldId,
+			value,
+			{ debounce = false, rethrow = false, field = null } = {}
+		) => {
+			if ( ! rowId ) {
+				return null;
+			}
+
+			applyLocalFieldValue( fieldId, value );
+			setFieldErrors( ( current ) => withoutKey( current, fieldId ) );
+
+			const version =
+				( fieldSaveVersionsRef.current.get( fieldId ) ?? 0 ) + 1;
+			fieldSaveVersionsRef.current.set( fieldId, version );
+			pendingSavesRef.current.set( fieldId, {
+				rowId,
+				value,
+				version,
+				isRelationField:
+					fieldType( field ?? { id: fieldId } ) === 'relation',
+			} );
+			clearSaveTimer( fieldId );
+
+			if ( debounce ) {
+				const timer = setTimeout(
+					() => flushQueuedFieldSave( fieldId ),
+					ROW_PROPERTY_SAVE_DEBOUNCE_MS
+				);
+				saveTimersRef.current.set( fieldId, timer );
+				return null;
+			}
+
+			return flushQueuedFieldSave( fieldId, { rethrow } );
+		},
+		[ applyLocalFieldValue, clearSaveTimer, flushQueuedFieldSave, rowId ]
+	);
+
+	const flushAllPendingSaves = useCallback(
+		async ( { preserveState = true } = {} ) => {
+			const entries = Array.from( pendingSavesRef.current.entries() );
+			pendingSavesRef.current.clear();
+			saveTimersRef.current.forEach( ( timer ) => clearTimeout( timer ) );
+			saveTimersRef.current.clear();
+
+			for ( const [ fieldId, entry ] of entries ) {
+				try {
+					const updated = await saveRowDocumentField(
+						entry.rowId,
+						fieldId,
+						entry.value
+					);
+					if ( preserveState && isMountedRef.current ) {
+						const isLatestSave =
+							fieldSaveVersionsRef.current.get( fieldId ) ===
+							entry.version;
+						if ( isLatestSave ) {
+							applyCommittedFieldValue( fieldId, entry, updated );
+							setFieldErrors( ( current ) =>
+								withoutKey( current, fieldId )
+							);
+							clearLocalFieldValue( fieldId );
+						}
+						refreshRows?.();
+						if ( collectionId ) {
+							notifyCollectionRowsChanged( collectionId );
+						}
+					}
+				} catch ( error ) {
+					if (
+						preserveState &&
+						isMountedRef.current &&
+						fieldSaveVersionsRef.current.get( fieldId ) ===
+							entry.version
+					) {
+						setFieldErrors( ( current ) => ( {
+							...current,
+							[ fieldId ]: saveErrorMessage( error ),
+						} ) );
+					}
+				}
+			}
+		},
+		[
+			applyCommittedFieldValue,
+			clearLocalFieldValue,
+			collectionId,
+			refreshRows,
+		]
+	);
+
+	useEffect( () => {
+		isMountedRef.current = true;
+		return () => {
+			isMountedRef.current = false;
+			flushAllPendingSaves( { preserveState: false } );
+		};
+	}, [ flushAllPendingSaves ] );
+
+	useEffect( () => {
+		const flushOnExit = () => {
+			flushAllPendingSaves();
+		};
+		const flushOnVisibilityChange = () => {
+			if ( document.visibilityState === 'hidden' ) {
+				flushAllPendingSaves();
+			}
+		};
+		window.addEventListener( 'blur', flushOnExit );
+		window.addEventListener( 'beforeunload', flushOnExit );
+		document.addEventListener(
+			'visibilitychange',
+			flushOnVisibilityChange
+		);
+		return () => {
+			window.removeEventListener( 'blur', flushOnExit );
+			window.removeEventListener( 'beforeunload', flushOnExit );
+			document.removeEventListener(
+				'visibilitychange',
+				flushOnVisibilityChange
+			);
+		};
+	}, [ flushAllPendingSaves ] );
+
+	const previousSourceRowIdRef = useRef( sourceRowId );
+	useEffect( () => {
+		if ( previousSourceRowIdRef.current === sourceRowId ) {
+			return;
+		}
+		previousSourceRowIdRef.current = sourceRowId;
+		flushAllPendingSaves( { preserveState: false } );
+		clearCommittedValues();
+		setLocalMeta( {} );
+		setLocalTitle( undefined );
+		setFieldErrors( {} );
+	}, [ clearCommittedValues, flushAllPendingSaves, sourceRowId ] );
+
+	useEffect( () => {
+		const rowMeta = row?.meta ?? {};
+		const caughtUpFieldIds = Object.entries( committedMeta )
+			.filter(
+				( [ fieldId, value ] ) =>
+					Object.prototype.hasOwnProperty.call( rowMeta, fieldId ) &&
+					propertyValuesEqual( rowMeta[ fieldId ], value )
+			)
+			.map( ( [ fieldId ] ) => fieldId );
+		if ( caughtUpFieldIds.length === 0 ) {
+			return;
+		}
+		setCommittedMeta( ( current ) => {
+			let next = current;
+			caughtUpFieldIds.forEach( ( fieldId ) => {
+				if ( Object.prototype.hasOwnProperty.call( next, fieldId ) ) {
+					next = withoutKey( next, fieldId );
+				}
+			} );
+			return next;
+		} );
+		setCommittedHydratedMeta( ( current ) => {
+			let next = current;
+			caughtUpFieldIds.forEach( ( fieldId ) => {
+				if ( Object.prototype.hasOwnProperty.call( next, fieldId ) ) {
+					next = withoutKey( next, fieldId );
+				}
+			} );
+			return next;
+		} );
+	}, [ committedMeta, row ] );
+
+	useEffect( () => {
+		if (
+			committedTitle === undefined ||
+			! propertyValuesEqual(
+				row?.title?.raw ?? row?.title?.rendered ?? '',
+				committedTitle
+			)
+		) {
+			return;
+		}
+		setCommittedTitle( undefined );
+	}, [ committedTitle, row ] );
+
 	const data = useMemo( () => {
 		const storeHydratedMeta =
 			hydratedMeta && Object.keys( hydratedMeta ).length > 0
 				? hydratedMeta
 				: null;
 		const fallbackHydratedMeta = row?.cortext_hydrated_meta ?? {};
-		const savedHydratedMeta = savedRow?.meta ?? {};
+		let displayTitle = '';
+		if ( localTitle !== undefined ) {
+			displayTitle = localTitle;
+		} else if ( committedTitle !== undefined ) {
+			displayTitle = committedTitle;
+		} else if ( typeof title === 'string' ) {
+			displayTitle = title;
+		} else {
+			displayTitle = row?.title?.raw ?? row?.title?.rendered ?? '';
+		}
 		return {
-			row: savedRow ?? row,
-			title:
-				typeof title === 'string'
-					? title
-					: savedRow?.title?.raw ??
-					  savedRow?.title?.rendered ??
-					  row?.title?.raw ??
-					  row?.title?.rendered ??
-					  '',
-			meta: { ...( savedRow?.meta ?? {} ), ...( meta ?? {} ) },
+			row,
+			title: displayTitle,
+			meta: {
+				...( meta ?? {} ),
+				...( row?.meta ?? {} ),
+				...committedMeta,
+				...localMeta,
+			},
 			hydratedMeta: {
 				...( storeHydratedMeta ?? {} ),
 				...fallbackHydratedMeta,
-				...savedHydratedMeta,
+				...committedHydratedMeta,
 			},
 			editContext: { collectionId, rowId },
 		};
-	}, [ collectionId, hydratedMeta, meta, row, rowId, savedRow, title ] );
+	}, [
+		collectionId,
+		committedHydratedMeta,
+		committedMeta,
+		committedTitle,
+		hydratedMeta,
+		localMeta,
+		localTitle,
+		meta,
+		row,
+		rowId,
+		title,
+	] );
 
 	const update = useCallback(
-		( patch ) => {
+		( patch, options = {} ) => {
 			const split = splitPropertyPatch( patch );
-			const next = {};
 			if ( split.title !== undefined ) {
-				next.title = split.title;
+				queueFieldSave( TITLE_FIELD_ID, split.title, {
+					debounce: shouldDebouncePropertySave( {
+						id: TITLE_FIELD_ID,
+						cortextFieldType: 'title',
+					} ),
+				} );
 			}
 			if ( split.meta ) {
-				next.meta = split.meta;
-			}
-			if ( Object.keys( next ).length > 0 ) {
-				editPost( next );
+				Object.entries( split.meta ).forEach(
+					( [ fieldId, value ] ) => {
+						queueFieldSave( fieldId, value, {
+							debounce: shouldDebouncePropertySave(
+								options.field ?? { id: fieldId }
+							),
+						} );
+					}
+				);
 			}
 		},
-		[ editPost ]
+		[ queueFieldSave ]
 	);
 	const canReorderLayout =
 		typeof onLayoutReorder === 'function' && propertyFields.length > 1;
@@ -1130,25 +1564,20 @@ export default function RowProperties( {
 	}, [] );
 
 	const updateRelation = useCallback(
-		async ( fieldId, next ) => {
+		async ( field, next ) => {
 			if ( ! collectionId || ! rowId ) {
 				return null;
 			}
-			// `fieldId` is the DataView field id (`field-<post_id>`), which is
-			// also the post meta key on the row document.
-			const updated = await apiFetch( {
-				path: `/wp/v2/crtxt_documents/${ rowId }`,
-				method: 'POST',
-				data: {
-					meta: { [ fieldId ]: next },
-				},
+			const fieldId = field?.id;
+			if ( ! fieldId ) {
+				return null;
+			}
+			return queueFieldSave( fieldId, next, {
+				field,
+				rethrow: true,
 			} );
-			setSavedRow( updated );
-			refreshRows?.();
-			notifyCollectionRowsChanged( collectionId );
-			return updated;
 		},
-		[ collectionId, refreshRows, rowId ]
+		[ collectionId, queueFieldSave, rowId ]
 	);
 
 	if ( propertyFields.length === 0 ) {
@@ -1194,6 +1623,7 @@ export default function RowProperties( {
 				optionOverrides={ optionOverrides }
 				refreshRows={ refreshRows }
 				rowId={ rowId }
+				saveError={ fieldErrors[ field.id ] }
 				suppressDropAnimation={
 					suppressedDropAnimationFieldId === field.id
 				}
@@ -1218,6 +1648,7 @@ export default function RowProperties( {
 				optionOverrides={ optionOverrides }
 				refreshRows={ refreshRows }
 				rowId={ rowId }
+				saveError={ fieldErrors[ field.id ] }
 				update={ update }
 				updateRelation={ updateRelation }
 			/>
