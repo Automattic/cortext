@@ -337,6 +337,7 @@ final class Relations {
 		// re-index below covers the same rows in one pass.
 		FieldValueIndex::suspend_sync();
 
+		$conflict_rows = array();
 		try {
 			if ( ! $reverse_multiple && count( $added ) > 0 ) {
 				// Conflict resolution can't be batched cleanly: each target may
@@ -344,7 +345,7 @@ final class Relations {
 				// from its forward field. Keep the slow path but limit it to
 				// added (a no-op on unchanged targets) and let (D) keep the
 				// sidecar quiet.
-				self::resolve_reverse_conflicts( $row_id, $field_id, $reverse_id, $added, $multiple );
+				$conflict_rows = self::resolve_reverse_conflicts( $row_id, $field_id, $reverse_id, $added, $multiple );
 			}
 
 			if ( count( $removed ) > 0 ) {
@@ -362,6 +363,11 @@ final class Relations {
 		// reverse-pointer changes. Re-index the touched targets explicitly so
 		// the field-value index stays in sync.
 		self::reindex_targets( array_merge( $added, $removed ), $reverse_id, $target_collection_id );
+
+		// Conflict resolution rewrote the forward field on rows that used to
+		// point at a reassigned target. Their forward index entries went stale
+		// while sync was suspended, so re-index that field on each.
+		self::reindex_targets( $conflict_rows, $field_id );
 	}
 
 	/**
@@ -374,12 +380,15 @@ final class Relations {
 	 * @param int   $reverse_id   Reverse field id.
 	 * @param int[] $added        Targets newly gaining `$row_id` on the reverse side.
 	 * @param bool  $multiple     Whether the forward field accepts multiple values.
+	 * @return int[] Rows whose forward `$field_id` was rewritten, so the caller
+	 *               can re-index them once sync resumes.
 	 */
-	private static function resolve_reverse_conflicts( int $row_id, int $field_id, int $reverse_id, array $added, bool $multiple ): void {
+	private static function resolve_reverse_conflicts( int $row_id, int $field_id, int $reverse_id, array $added, bool $multiple ): array {
 		// (B) Warm the meta cache for every target at once; subsequent reads
 		// are cache hits instead of one SELECT per target.
 		update_meta_cache( 'post', $added );
 
+		$rewritten = array();
 		foreach ( $added as $target_id ) {
 			$existing  = self::relation_values( $target_id, $reverse_id );
 			$conflicts = array_values( array_diff( $existing, array( $row_id ) ) );
@@ -391,8 +400,10 @@ final class Relations {
 					array_values( array_diff( $conflict_values, array( $target_id ) ) ),
 					$multiple
 				);
+				$rewritten[] = (int) $conflict_row_id;
 			}
 		}
+		return array_values( array_unique( $rewritten ) );
 	}
 
 	/**
@@ -503,24 +514,24 @@ final class Relations {
 	}
 
 	/**
-	 * Pushes the new reverse-pointer state into the field-value index for
-	 * every target we touched. Replaces the per-row queue the meta hooks would
-	 * have populated; without it the sidecar would silently drift.
+	 * Pushes a relation field's new state into the field-value index for every
+	 * row we touched. Replaces the per-row queue the meta hooks would have
+	 * populated; without it the sidecar would silently drift.
 	 *
-	 * @param int[] $targets              Touched target row ids.
-	 * @param int   $reverse_id           Reverse field id.
-	 * @param int   $target_collection_id Target rows' collection id.
+	 * @param int[]    $rows          Touched row ids.
+	 * @param int      $field_id      Relation field to re-index (forward or reverse).
+	 * @param int|null $collection_id Rows' collection id, or null to resolve per row.
 	 */
-	private static function reindex_targets( array $targets, int $reverse_id, int $target_collection_id ): void {
-		if ( count( $targets ) === 0 ) {
+	private static function reindex_targets( array $rows, int $field_id, ?int $collection_id = null ): void {
+		if ( count( $rows ) === 0 ) {
 			return;
 		}
 		$index = new FieldValueIndex();
 		if ( ! $index->can_write() ) {
 			return;
 		}
-		foreach ( array_unique( $targets ) as $target_id ) {
-			$index->index_row_field( $target_id, $reverse_id, $target_collection_id );
+		foreach ( array_unique( $rows ) as $row_id ) {
+			$index->index_row_field( $row_id, $field_id, $collection_id );
 		}
 	}
 
@@ -571,7 +582,8 @@ final class Relations {
 				continue;
 			}
 
-			foreach ( self::relation_values( $row_id, $field_id ) as $related_id ) {
+			$targets = array_map( 'intval', self::relation_values( $row_id, $field_id ) );
+			foreach ( $targets as $related_id ) {
 				$reverse_values = self::relation_values( $related_id, $reverse_id );
 				self::set_relation_values(
 					$related_id,
@@ -580,6 +592,11 @@ final class Relations {
 					self::relation_is_multiple( $reverse_id )
 				);
 			}
+
+			// `set_relation_values` only writes meta; the relation sidecar is
+			// maintained explicitly, so re-index each target's reverse field or
+			// the deleted row lingers in `cortext_field_values`.
+			self::reindex_targets( $targets, $reverse_id );
 		}
 	}
 }

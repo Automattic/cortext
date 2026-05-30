@@ -193,6 +193,13 @@ final class TrashCascade {
 			return;
 		}
 
+		// Drop this document's id from the reverse relation fields of any row
+		// that points at it, so a permanent delete never leaves a dangling
+		// reference behind in meta or the field-value index. The collection
+		// cascade below deletes each row with `wp_delete_post`, which re-enters
+		// this hook, so cascaded rows get the same cleanup.
+		Relations::remove_deleted_row_references( $post_id );
+
 		if ( ! Document::is_collection( $post_id ) ) {
 			return;
 		}
