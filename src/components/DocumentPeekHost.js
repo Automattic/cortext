@@ -61,6 +61,7 @@ export default function DocumentPeekHost() {
 	peekStateRef.current = { peek, isPinned };
 	const [ optionOverrides, setOptionOverrides ] = useState( {} );
 	const [ formatOverrides, setFormatOverrides ] = useState( {} );
+	const [ , setRowListRevision ] = useState( 0 );
 
 	useEffect( () => {
 		setOptionOverrides( {} );
@@ -146,6 +147,12 @@ export default function DocumentPeekHost() {
 	const renderedMode = modeSurfaceTransition
 		? modeSurfaceTransition.surfaceMode
 		: peek?.mode;
+
+	useEffect( () => {
+		return peek?.source?.subscribeToRowList?.( () => {
+			setRowListRevision( ( current ) => current + 1 );
+		} );
+	}, [ peek?.source ] );
 
 	if ( ! peek || ! peekFields || ! renderedMode ) {
 		return null;
