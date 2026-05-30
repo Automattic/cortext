@@ -398,6 +398,29 @@ final class Test_Document_Duplicator extends BaseTestCase {
 		);
 	}
 
+	public function test_duplicate_collection_copies_field_description_and_default(): void {
+		$collection_id = $this->create_collection_with_fields( array( array( 'Status', 'text' ) ) );
+		$field_id      = Document::collection_field_ids( $collection_id )[0];
+		update_post_meta( $field_id, 'description', 'Ships from the warehouse' );
+		update_post_meta(
+			$field_id,
+			'default_value',
+			(string) wp_json_encode(
+				array(
+					'mode'  => 'value',
+					'value' => 'pending',
+				)
+			)
+		);
+
+		$result = $this->duplicator->duplicate( get_post( $collection_id ) );
+
+		$this->assertIsArray( $result );
+		$cloned_field_id = (int) $this->stored_collection_field_ids( (int) $result['document']->ID )[0];
+		$this->assertSame( 'Ships from the warehouse', get_post_meta( $cloned_field_id, 'description', true ) );
+		$this->assertStringContainsString( 'pending', (string) get_post_meta( $cloned_field_id, 'default_value', true ) );
+	}
+
 	private function create_page( string $title ): int {
 		$id = (int) wp_insert_post(
 			array(
@@ -451,7 +474,7 @@ final class Test_Document_Duplicator extends BaseTestCase {
 	}
 
 	private function create_row( int $collection_id, string $title ): int {
-		$id = (int) wp_insert_post(
+		$id      = (int) wp_insert_post(
 			array(
 				'post_type'   => Document::POST_TYPE,
 				'post_status' => 'private',
@@ -469,6 +492,7 @@ final class Test_Document_Duplicator extends BaseTestCase {
 	 * WorDBless's in-memory store so duplicate-test assertions see real DB
 	 * state.
 	 *
+	 * @param int $collection_id Collection document id.
 	 * @return string[]
 	 */
 	private function stored_collection_field_ids( int $collection_id ): array {
