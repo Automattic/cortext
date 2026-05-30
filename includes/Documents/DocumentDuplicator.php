@@ -31,6 +31,8 @@ final class DocumentDuplicator {
 	 */
 	private const FIELD_META_WHITELIST = array(
 		'type',
+		'description',
+		'default_value',
 		'options',
 		'number_format',
 		'date_format',
