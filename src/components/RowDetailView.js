@@ -579,18 +579,24 @@ export default function RowDetailView( {
 								pane.state === 'preparing' ||
 								pane.state === 'covered';
 							const isApiActive = isCurrentPane && ! isHiddenPane;
+							const paneRowMeta = {
+								...( pane.detail.record.meta ?? {} ),
+								...( pane.detail.row?.meta ?? {} ),
+							};
+							const paneRowHydratedMeta = {
+								...( pane.detail.record.cortext_hydrated_meta ??
+									{} ),
+								...( pane.detail.row?.cortext_hydrated_meta ??
+									{} ),
+							};
 							const paneRow = {
 								...( pane.detail.row ?? {} ),
 								...pane.detail.record,
 								title:
 									pane.detail.record.title ??
 									pane.detail.row?.title,
-								meta:
-									pane.detail.record.meta ??
-									pane.detail.row?.meta,
-								cortext_hydrated_meta:
-									pane.detail.record.cortext_hydrated_meta ??
-									pane.detail.row?.cortext_hydrated_meta,
+								meta: paneRowMeta,
+								cortext_hydrated_meta: paneRowHydratedMeta,
 							};
 
 							return (
