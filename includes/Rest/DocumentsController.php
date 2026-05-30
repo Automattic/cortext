@@ -348,8 +348,8 @@ final class DocumentsController {
 	}
 
 	/**
-	 * Permission gate for reorder. Reorder is row-only; for any other kind
-	 * return 404 so the path stays opaque.
+	 * Permission gate for reorder. Reorder is row-only: a real document that
+	 * isn't a row returns 400 (unsupported), a missing one 404.
 	 *
 	 * @param WP_REST_Request $request Incoming REST request.
 	 *
