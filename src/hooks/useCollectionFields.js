@@ -132,7 +132,6 @@ export default function useCollectionFields( collectionId ) {
 		allDetailFields: detailLayout.allFields,
 		detailLayoutEntries: detailLayout.entries,
 		collection: collection ?? null,
-		slug: collection?.slug ?? null,
 		// True only for the first load of this collection or its field list.
 		// After we have the collection and a latched field list, schema
 		// refetches stay quiet so the table doesn't unmount and remount.

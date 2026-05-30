@@ -16,7 +16,6 @@ const FIXTURE = {
 	slug: 'ada-lovelace',
 	title: { raw: 'Ada Lovelace' },
 	collectionId: 7,
-	collectionSlug: 'people',
 };
 
 function renderReferences() {

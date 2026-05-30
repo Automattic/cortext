@@ -174,7 +174,6 @@ final class RowsController {
 			return $collection;
 		}
 
-		$slug                = (string) get_post_meta( $collection->ID, 'slug', true );
 		$field_ids           = Document::collection_field_ids( $collection->ID );
 		$requested_fields    = $request->get_param( 'fields' );
 		$formatted_field_ids = is_array( $requested_fields )
@@ -192,7 +191,7 @@ final class RowsController {
 					'rows'       => array(),
 					'total'      => 0,
 					'totalPages' => 0,
-					'collection' => $this->collection_definition( $collection, $slug ),
+					'collection' => $this->collection_definition( $collection ),
 					'fields'     => $this->field_definitions( $field_ids ),
 				),
 				200
@@ -290,7 +289,7 @@ final class RowsController {
 				'rows'       => $rows,
 				'total'      => $total,
 				'totalPages' => $total_pages,
-				'collection' => $this->collection_definition( $collection, $slug ),
+				'collection' => $this->collection_definition( $collection ),
 				'fields'     => $fields,
 			),
 			200
@@ -478,12 +477,11 @@ final class RowsController {
 	 * @param int                   $row_id   Row post ID.
 	 * @param int                   $field_id Relation field post ID.
 	 * @param RowFormatContext|null $ctx      Formatting context for rows responses.
-	 * @return array<int,array{id:int,slug:string,title:array{raw:string,rendered:string},collectionId:int,collectionSlug:string}>
+	 * @return array<int,array{id:int,slug:string,title:array{raw:string,rendered:string},collectionId:int}>
 	 */
 	private function format_relation_value( int $row_id, int $field_id, ?RowFormatContext $ctx = null ): array {
 		$relation_meta        = $this->relation_field_meta_for( $field_id, $ctx );
 		$target_collection_id = $relation_meta['related_collection_id'];
-		$target_slug          = $relation_meta['target_slug'];
 
 		// Prime raw targets before filtering; the filter calls `get_post`.
 		$raw_ids = Relations::relation_values( $row_id, $field_id );
@@ -498,14 +496,13 @@ final class RowsController {
 				continue;
 			}
 			$refs[] = array(
-				'id'             => $target_id,
-				'slug'           => (string) $target->post_name,
-				'title'          => array(
+				'id'           => $target_id,
+				'slug'         => (string) $target->post_name,
+				'title'        => array(
 					'raw'      => $target->post_title,
 					'rendered' => $target->post_title,
 				),
-				'collectionId'   => $target_collection_id,
-				'collectionSlug' => $target_slug,
+				'collectionId' => $target_collection_id,
 			);
 		}
 
@@ -517,7 +514,7 @@ final class RowsController {
 	 *
 	 * @param int                   $field_id Relation field post ID.
 	 * @param RowFormatContext|null $ctx      Optional formatting context.
-	 * @return array{related_collection_id: int, target_slug: string}
+	 * @return array{related_collection_id: int}
 	 */
 	private function relation_field_meta_for( int $field_id, ?RowFormatContext $ctx ): array {
 		if ( null !== $ctx && isset( $ctx->relation_field_meta[ $field_id ] ) ) {
@@ -526,7 +523,6 @@ final class RowsController {
 		$target_collection_id = (int) get_post_meta( $field_id, 'related_collection_id', true );
 		$entry                = array(
 			'related_collection_id' => $target_collection_id,
-			'target_slug'           => (string) get_post_meta( $target_collection_id, 'slug', true ),
 		);
 		if ( null !== $ctx ) {
 			$ctx->relation_field_meta[ $field_id ] = $entry;
@@ -1303,10 +1299,9 @@ final class RowsController {
 	 * Builds collection metadata for row response consumers.
 	 *
 	 * @param WP_Post $collection Collection post.
-	 * @param string  $slug       Collection row post type suffix.
-	 * @return array{id:int,title:array{raw:string,rendered:string},slug:string,manual_order_seeded:bool}
+	 * @return array{id:int,title:array{raw:string,rendered:string},manual_order_seeded:bool}
 	 */
-	private function collection_definition( WP_Post $collection, string $slug ): array {
+	private function collection_definition( WP_Post $collection ): array {
 		$manual_order = new RowsManualOrder();
 		return array(
 			'id'                  => $collection->ID,
@@ -1314,7 +1309,6 @@ final class RowsController {
 				'raw'      => $collection->post_title,
 				'rendered' => $collection->post_title,
 			),
-			'slug'                => $slug,
 			'manual_order_seeded' => $manual_order->is_seeded( $collection->ID ),
 		);
 	}
