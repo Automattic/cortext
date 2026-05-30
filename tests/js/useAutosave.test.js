@@ -188,6 +188,69 @@ describe( 'useAutosave: debounce', () => {
 		} );
 		expect( savePost ).not.toHaveBeenCalled();
 	} );
+
+	it( 'does not retry the same failed edits until they change', () => {
+		const savePost = jest.fn();
+		useDispatch.mockReturnValue( {
+			savePost,
+			editPost: jest.fn(),
+			createErrorNotice: jest.fn(),
+			createSuccessNotice: jest.fn(),
+		} );
+		setStoreState( { isDirty: true, didFail: true } );
+
+		renderHook( () => useAutosave() );
+
+		act( () => {
+			jest.advanceTimersByTime( 5000 );
+		} );
+		expect( savePost ).not.toHaveBeenCalled();
+	} );
+
+	it( 'flushNow retries the same failed edits when explicitly requested', async () => {
+		const savePost = jest.fn().mockResolvedValue();
+		useDispatch.mockReturnValue( {
+			savePost,
+			editPost: jest.fn(),
+			createErrorNotice: jest.fn(),
+			createSuccessNotice: jest.fn(),
+		} );
+		setStoreState( { isDirty: true, didFail: true } );
+
+		const { result } = renderHook( () => useAutosave() );
+
+		await act( async () => {
+			await expect( result.current.flushNow() ).resolves.toBe( true );
+		} );
+		expect( savePost ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'retries after a failed save once the edits change', () => {
+		const savePost = jest.fn();
+		useDispatch.mockReturnValue( {
+			savePost,
+			editPost: jest.fn(),
+			createErrorNotice: jest.fn(),
+			createSuccessNotice: jest.fn(),
+		} );
+		setStoreState( { isDirty: true, didFail: true } );
+
+		const { rerender } = renderHook( () => useAutosave() );
+
+		act( () => {
+			jest.advanceTimersByTime( 5000 );
+		} );
+		expect( savePost ).not.toHaveBeenCalled();
+
+		simulateEdit();
+		setStoreState( { isDirty: true, didFail: true } );
+		rerender();
+
+		act( () => {
+			jest.advanceTimersByTime( 800 );
+		} );
+		expect( savePost ).toHaveBeenCalledTimes( 1 );
+	} );
 } );
 
 describe( 'useAutosave: throttle', () => {

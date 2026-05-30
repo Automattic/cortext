@@ -65,6 +65,7 @@ export default function useAutosave( options = {} ) {
 	// can cycle through saving and error repeatedly; the next successful save
 	// resets the latch.
 	const errorNoticeShownRef = useRef( false );
+	const failedEditsReferenceRef = useRef( null );
 
 	const stateRef = useRef( {
 		isDirty,
@@ -74,6 +75,7 @@ export default function useAutosave( options = {} ) {
 		editPost,
 		postStatus,
 		postTitle,
+		editsReference,
 	} );
 	stateRef.current = {
 		isDirty,
@@ -83,6 +85,7 @@ export default function useAutosave( options = {} ) {
 		editPost,
 		postStatus,
 		postTitle,
+		editsReference,
 	};
 
 	// Promote draft to private once the user has given the page a real title,
@@ -182,6 +185,9 @@ export default function useAutosave( options = {} ) {
 		if ( postStatus === 'trash' ) {
 			return undefined;
 		}
+		if ( failedEditsReferenceRef.current === editsReference ) {
+			return undefined;
+		}
 		const elapsed = Date.now() - lastSaveAtRef.current;
 		const wait = Math.max( debounceMs, minSaveIntervalMs - elapsed );
 
@@ -195,8 +201,15 @@ export default function useAutosave( options = {} ) {
 				isSaveable: s,
 				isSaving: saving,
 				postStatus: ps,
+				editsReference: editsRef,
 			} = stateRef.current;
-			if ( d && s && ! saving && ps !== 'trash' ) {
+			if (
+				d &&
+				s &&
+				! saving &&
+				ps !== 'trash' &&
+				failedEditsReferenceRef.current !== editsRef
+			) {
 				saveCurrentPost();
 			}
 		}, wait );
@@ -245,6 +258,9 @@ export default function useAutosave( options = {} ) {
 			setStatus( 'saving' );
 		} else if ( didFail ) {
 			savingTargetRef.current = null;
+			if ( wasSaving || ! failedEditsReferenceRef.current ) {
+				failedEditsReferenceRef.current = editsReference;
+			}
 			setStatus( 'error' );
 			// Successful autosaves stay quiet, so failures need a clear notice.
 			// Show it once when saving first fails; background retries would
@@ -264,6 +280,7 @@ export default function useAutosave( options = {} ) {
 		} else if ( didSucceed && wasSaving ) {
 			const latchedTarget = savingTargetRef.current;
 			savingTargetRef.current = null;
+			failedEditsReferenceRef.current = null;
 			setStatus( 'saved' );
 			setLastSavedAt( Date.now() );
 			if ( errorNoticeShownRef.current ) {
@@ -284,6 +301,7 @@ export default function useAutosave( options = {} ) {
 		isSaving,
 		didSucceed,
 		didFail,
+		editsReference,
 		createErrorNotice,
 		createSuccessNotice,
 		recentId,
@@ -301,9 +319,19 @@ export default function useAutosave( options = {} ) {
 			return;
 		}
 		lastPostIdRef.current = currentPostId;
+		failedEditsReferenceRef.current = null;
 		setStatus( 'idle' );
 		setLastSavedAt( null );
 	}, [ currentPostId ] );
+
+	useEffect( () => {
+		if (
+			failedEditsReferenceRef.current &&
+			failedEditsReferenceRef.current !== editsReference
+		) {
+			failedEditsReferenceRef.current = null;
+		}
+	}, [ editsReference ] );
 
 	useEffect( () => {
 		const onVisibilityChange = () => {
