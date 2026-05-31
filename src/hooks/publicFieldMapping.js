@@ -147,27 +147,18 @@ function arrayValue( value ) {
 	return list.map( textValue ).filter( Boolean );
 }
 
-function numberValue( value ) {
-	if ( value === null || value === undefined || value === '' ) {
-		return null;
-	}
-	const number = Number( value );
-	return Number.isFinite( number ) ? number : null;
-}
-
 function publicValue( value, type ) {
 	switch ( type ) {
 		case 'relation':
 			return formatPublicRelation( value );
 		case 'multiselect':
 			return arrayValue( value );
-		case 'number':
-			return numberValue( value );
 		case 'checkbox':
 			return value === true;
 		case 'text':
 		case 'email':
 		case 'url':
+		case 'number':
 		case 'select':
 		case 'date':
 		case 'datetime':
@@ -205,8 +196,7 @@ function mapPublicField( fieldDef ) {
 		case 'number':
 			return {
 				...base,
-				type: 'integer',
-				isValid: { custom: () => null },
+				type: 'text',
 			};
 		case 'email':
 			return {
@@ -245,14 +235,12 @@ function mapPublicField( fieldDef ) {
 			return {
 				...base,
 				type: 'text',
-				enableSorting: false,
 				filterBy: false,
 			};
 		case 'rollup':
 			return {
 				...base,
 				type: 'text',
-				enableSorting: false,
 				filterBy: false,
 			};
 		case 'text':
