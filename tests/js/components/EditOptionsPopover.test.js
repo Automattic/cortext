@@ -393,7 +393,7 @@ describe( 'EditOptionsPopover', () => {
 		fireEvent.click( screen.getByRole( 'button', { name: 'Delete' } ) );
 
 		expect( await screen.findByRole( 'dialog' ) ).toHaveTextContent(
-			'Could not check whether rows use this option.'
+			'Could not check whether documents use this option.'
 		);
 		expect( mockUpdateRun ).not.toHaveBeenCalled();
 	} );

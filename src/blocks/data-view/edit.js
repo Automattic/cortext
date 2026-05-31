@@ -527,7 +527,7 @@ function CollectionInspectorControls( {
 							__nextHasNoMarginBottom
 						/>
 						<SelectControl
-							label={ __( 'Rows per page', 'cortext' ) }
+							label={ __( 'Per page', 'cortext' ) }
 							value={ String( view?.perPage ?? 25 ) }
 							options={ PER_PAGE_OPTIONS }
 							onChange={ ( perPage ) =>
@@ -541,7 +541,7 @@ function CollectionInspectorControls( {
 							__nextHasNoMarginBottom
 						/>
 						<ToggleGroupControl
-							label={ __( 'Row detail', 'cortext' ) }
+							label={ __( 'Detail view', 'cortext' ) }
 							value={
 								view?.rowDetailMode ?? DEFAULT_ROW_DETAIL_MODE
 							}
@@ -686,10 +686,7 @@ export default function Edit( {
 					}
 					error={
 						<Notice status="error" isDismissible={ false }>
-							{ __(
-								'Collection rows could not be loaded.',
-								'cortext'
-							) }
+							{ __( 'Could not load documents.', 'cortext' ) }
 						</Notice>
 					}
 				/>

@@ -19,7 +19,7 @@ import { FIELD_TYPES, FieldTypeIcon, fieldTypeLabel } from './fieldTypes';
 
 const RELATION_LIMIT_OPTIONS = [
 	{ value: 'many', label: __( 'No limit', 'cortext' ) },
-	{ value: 'one', label: __( '1 page', 'cortext' ) },
+	{ value: 'one', label: __( '1 document', 'cortext' ) },
 ];
 
 const ROLLUP_AGGREGATORS = [

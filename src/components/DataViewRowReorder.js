@@ -1240,10 +1240,13 @@ export default function DataViewRowReorder( {
 						sort: request.previousSort,
 					} );
 				}
-				createErrorNotice( __( "Couldn't move the row.", 'cortext' ), {
-					id: ROW_REORDER_NOTICE_ID,
-					type: 'snackbar',
-				} );
+				createErrorNotice(
+					__( "Couldn't move the document.", 'cortext' ),
+					{
+						id: ROW_REORDER_NOTICE_ID,
+						type: 'snackbar',
+					}
+				);
 			} finally {
 				setIsPosting( false );
 			}
@@ -1427,7 +1430,7 @@ export default function DataViewRowReorder( {
 				>
 					<p>
 						{ __(
-							'Rows will stay where you dropped them, and the current sort will be cleared.',
+							'Documents will stay where you dropped them, and the current sort will be cleared.',
 							'cortext'
 						) }
 					</p>

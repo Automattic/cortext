@@ -32,7 +32,7 @@ export default function RowDragHandle( { row, keyboardFocusable = true } ) {
 		data: row,
 		attributes: {
 			role: 'button',
-			roleDescription: __( 'draggable row', 'cortext' ),
+			roleDescription: __( 'draggable item', 'cortext' ),
 		},
 	} );
 
@@ -104,8 +104,8 @@ export default function RowDragHandle( { row, keyboardFocusable = true } ) {
 			ref={ setHandleRef }
 			className="cortext-row-drag-handle"
 			aria-label={ sprintf(
-				/* translators: %s: row title */
-				__( 'Reorder row: %s', 'cortext' ),
+				/* translators: %s: item title */
+				__( 'Reorder: %s', 'cortext' ),
 				row.label
 			) }
 			data-dragging={ isDragging ? 'true' : 'false' }

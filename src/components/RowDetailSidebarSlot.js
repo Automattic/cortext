@@ -226,10 +226,7 @@ export function RowDetailSidebarSlot() {
 					<div
 						className="cortext-row-detail-sidebar-shell__resize-handle"
 						role="separator"
-						aria-label={ __(
-							'Resize row detail panel',
-							'cortext'
-						) }
+						aria-label={ __( 'Resize detail panel', 'cortext' ) }
 						aria-orientation="vertical"
 						aria-valuemin={ MIN_WIDTH }
 						aria-valuemax={ maxWidth }

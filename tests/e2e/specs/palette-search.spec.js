@@ -37,7 +37,7 @@ async function openPalette( page ) {
 		window.dispatchEvent( new Event( 'cortext:open-command-palette' ) );
 	} );
 	await expect(
-		page.getByPlaceholder( 'Search pages, collections, and actions' )
+		page.getByPlaceholder( 'Search or run a command' )
 	).toBeVisible( { timeout: 5000 } );
 }
 
@@ -67,7 +67,7 @@ test.describe( 'Command palette search', () => {
 
 			await openPalette( page );
 			await page
-				.getByPlaceholder( 'Search pages, collections, and actions' )
+				.getByPlaceholder( 'Search or run a command' )
 				.fill( token );
 
 			const result = page.getByRole( 'option', { name: pageTitle } );
@@ -120,7 +120,7 @@ test.describe( 'Command palette search', () => {
 
 			await openPalette( page );
 			await page
-				.getByPlaceholder( 'Search pages, collections, and actions' )
+				.getByPlaceholder( 'Search or run a command' )
 				.fill( rowToken );
 
 			const result = page.getByRole( 'option', { name: rowToken } );
