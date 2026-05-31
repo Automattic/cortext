@@ -17,11 +17,7 @@ import {
 	store as coreStore,
 } from '@wordpress/core-data';
 import { useDispatch, useSelect } from '@wordpress/data';
-import {
-	PageAttributesPanel,
-	PostURLPanel,
-	store as editorStore,
-} from '@wordpress/editor';
+import { store as editorStore } from '@wordpress/editor';
 import {
 	useCallback,
 	useContext,
@@ -132,51 +128,6 @@ function InspectorComplementaryArea( {
 				</Tabs.TabPanel>
 			</Tabs.Context.Provider>
 		</ComplementaryArea>
-	);
-}
-
-function PageLinkPanel() {
-	const isVisible = useSelect( ( select ) => {
-		const editor = select( editorStore );
-		const postTypeSlug = editor.getCurrentPostType();
-		const postType = select( coreStore ).getPostType( postTypeSlug );
-		if ( ! postType?.viewable ) {
-			return false;
-		}
-		if ( ! editor.getCurrentPost()?.link ) {
-			return false;
-		}
-		return Boolean( editor.getPermalinkParts() );
-	}, [] );
-
-	if ( ! isVisible ) {
-		return null;
-	}
-
-	return (
-		<PanelBody title={ __( 'Link', 'cortext' ) }>
-			<PostURLPanel />
-		</PanelBody>
-	);
-}
-
-function PageAttributesInspectorPanel() {
-	const supportsPageAttributes = useSelect( ( select ) => {
-		const editor = select( editorStore );
-		const postType = select( coreStore ).getPostType(
-			editor.getEditedPostAttribute( 'type' )
-		);
-		return Boolean( postType?.supports?.[ 'page-attributes' ] );
-	}, [] );
-
-	if ( ! supportsPageAttributes ) {
-		return null;
-	}
-
-	return (
-		<PanelBody title={ __( 'Page attributes', 'cortext' ) }>
-			<PageAttributesPanel />
-		</PanelBody>
 	);
 }
 
@@ -677,8 +628,6 @@ function DocumentInspectorContent( { postId } ) {
 				postType={ POST_TYPE }
 				title={ __( 'Page identity', 'cortext' ) }
 			/>
-			<PageLinkPanel />
-			<PageAttributesInspectorPanel />
 			<PageActionsPanel postId={ postId } />
 		</div>
 	);
@@ -693,7 +642,6 @@ function CollectionInspectorContent( { postId, postType } ) {
 				postType={ postType }
 				title={ __( 'Collection identity', 'cortext' ) }
 			/>
-			<PageLinkPanel />
 			<CanvasOwnerInspector.Slot />
 		</div>
 	);
