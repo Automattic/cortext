@@ -16,6 +16,7 @@ use Cortext\Editor\DocumentIconBlock;
 use Cortext\Editor\DocumentPropertiesBlock;
 use Cortext\Editor\RevisionThrottle;
 use Cortext\FieldValues\FieldValueIndex;
+use Cortext\Frontend\AdminBar;
 use Cortext\Frontend\Assets;
 use Cortext\Frontend\Template;
 use Cortext\PostType\Document;
@@ -71,6 +72,7 @@ final class Plugin {
 		( new WorkspaceHomeController() )->register();
 		( new NotionController() )->register();
 		( new NotionImporter() )->register();
+		( new AdminBar() )->register();
 		( new Template() )->register();
 		( new Assets() )->register();
 		( new DataView() )->register();
