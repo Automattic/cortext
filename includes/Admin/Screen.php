@@ -15,7 +15,6 @@ declare( strict_types=1 );
 
 namespace Cortext\Admin;
 
-use Cortext\PostType\Document;
 use Cortext\Runtime\Features;
 use Cortext\Theming\Preferences;
 
@@ -44,17 +43,6 @@ final class Screen {
 			array( $this, 'render' ),
 			'dashicons-welcome-write-blog',
 			3
-		);
-
-		// Escape hatch: core's list table + post.php editor for Cortext
-		// documents, nested under the shell menu. Primary UI stays the
-		// React shell.
-		add_submenu_page(
-			self::MENU_SLUG,
-			__( 'Manage Documents', 'cortext' ),
-			__( 'Manage Documents', 'cortext' ),
-			'edit_posts',
-			'edit.php?post_type=' . Document::POST_TYPE
 		);
 	}
 
