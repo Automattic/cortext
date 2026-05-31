@@ -1133,7 +1133,10 @@ describe( 'DataViewRowReorder', () => {
 			type: 'table',
 			sort: { field: 'title', direction: 'asc' },
 		};
-		const { onChangeView, mutateRows } = await renderReorder( { view } );
+		const { onChangeView, mutateRows, onReordered, rerender } =
+			await renderReorder( {
+				view,
+			} );
 
 		dragEnd( 3, gapDrop( 0, 1, null ) );
 
@@ -1172,9 +1175,13 @@ describe( 'DataViewRowReorder', () => {
 			request.resolve( { reseeded: false } );
 			await request.promise;
 		} );
-		// Server confirms; we don't need a second `onChangeView` because the
-		// sort was already cleared at commit time.
+		// Server confirms before the parent has applied the cleared sort, so
+		// the rows are not refreshed under the stale title sort.
 		expect( onChangeView ).toHaveBeenCalledTimes( 1 );
+		expect( onReordered ).not.toHaveBeenCalled();
+
+		rerender( { view: { type: 'table', sort: null } } );
+		await waitFor( () => expect( onReordered ).toHaveBeenCalledTimes( 1 ) );
 	} );
 
 	it( 'skips confirmation when there is no current sort', async () => {

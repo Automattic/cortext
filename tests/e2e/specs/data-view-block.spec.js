@@ -62,83 +62,6 @@ function tableFooterDataCells( footer ) {
 	return footer.locator( TABLE_FOOTER_DATA_CELL_SELECTOR );
 }
 
-async function expectSidePeekCoversPageInspector( page ) {
-	await expect
-		.poll( async () =>
-			page.evaluate( () => {
-				const inspector = document.querySelector(
-					'.cortext-shell__canvas .cortext-workspace__pane[data-active="true"] .interface-interface-skeleton__sidebar'
-				);
-				const peek = document.querySelector(
-					'.cortext-row-detail-sidebar-shell:not(.cortext-row-detail-sidebar-shell--closing)'
-				);
-
-				if ( ! inspector || ! peek ) {
-					return false;
-				}
-
-				const inspectorRect = inspector.getBoundingClientRect();
-				const peekRect = peek.getBoundingClientRect();
-				const overlapLeft = Math.max(
-					inspectorRect.left,
-					peekRect.left
-				);
-				const overlapRight = Math.min(
-					inspectorRect.right,
-					peekRect.right
-				);
-				const overlapTop = Math.max( inspectorRect.top, peekRect.top );
-				const overlapBottom = Math.min(
-					inspectorRect.bottom,
-					peekRect.bottom
-				);
-
-				if (
-					overlapRight <= overlapLeft ||
-					overlapBottom <= overlapTop
-				) {
-					return false;
-				}
-
-				const topElement = document.elementFromPoint(
-					( overlapLeft + overlapRight ) / 2,
-					( overlapTop + overlapBottom ) / 2
-				);
-				return Boolean(
-					topElement?.closest( '.cortext-row-detail-sidebar-shell' )
-				);
-			} )
-		)
-		.toBe( true );
-}
-
-async function expectPageInspectorIsTopmost( page ) {
-	await expect
-		.poll( async () =>
-			page.evaluate( () => {
-				const inspector = document.querySelector(
-					'.cortext-shell__canvas .cortext-workspace__pane[data-active="true"] .interface-interface-skeleton__sidebar'
-				);
-
-				if ( ! inspector ) {
-					return false;
-				}
-
-				const rect = inspector.getBoundingClientRect();
-				const topElement = document.elementFromPoint(
-					( rect.left + rect.right ) / 2,
-					( rect.top + rect.bottom ) / 2
-				);
-				return Boolean(
-					topElement?.closest(
-						'.interface-interface-skeleton__sidebar'
-					)
-				);
-			} )
-		)
-		.toBe( true );
-}
-
 async function startSidePeekShellStabilityLog( page ) {
 	await page.evaluate( () => {
 		window.__cortextSidePeekShellEvents = [];
@@ -698,7 +621,7 @@ test.describe( 'Collection view block', () => {
 								type: layout,
 								fields: [ 'title' ],
 								sort: {
-									field: 'created_at',
+									field: 'title',
 									direction: 'asc',
 								},
 							}
@@ -813,7 +736,7 @@ test.describe( 'Collection view block', () => {
 								view: {
 									...block.attributes.view,
 									sort: {
-										field: 'created_at',
+										field: 'title',
 										direction: 'asc',
 									},
 								},
@@ -831,8 +754,8 @@ test.describe( 'Collection view block', () => {
 						.toEqual( [
 							expect.stringContaining( 'Alpha Manual' ),
 							expect.stringContaining( 'Beta Manual' ),
-							expect.stringContaining( 'Gamma Manual' ),
 							expect.stringContaining( 'Delta Manual' ),
+							expect.stringContaining( 'Gamma Manual' ),
 						] );
 
 					await dragRenderedRow(
@@ -874,8 +797,8 @@ test.describe( 'Collection view block', () => {
 						.toEqual( [
 							expect.stringContaining( 'Alpha Manual' ),
 							expect.stringContaining( 'Beta Manual' ),
-							expect.stringContaining( 'Gamma Manual' ),
 							expect.stringContaining( 'Delta Manual' ),
+							expect.stringContaining( 'Gamma Manual' ),
 						] );
 				}
 			} finally {
@@ -2347,7 +2270,7 @@ test.describe( 'Collection view block', () => {
 		}
 	} );
 
-	test( 'shows the default body prompt below row properties when the row body is empty', async ( {
+	test( 'seeds the first empty row body block below row properties', async ( {
 		admin,
 		page,
 		requestUtils,
@@ -2405,29 +2328,33 @@ test.describe( 'Collection view block', () => {
 			const propertiesSlot = detailCanvas.locator(
 				'.cortext-document-properties'
 			);
-			const prompt = detailCanvas.locator(
-				'.block-editor-default-block-appender.has-visible-prompt .block-editor-default-block-appender__content'
+			const bodyParagraph = detailCanvas
+				.locator( '[data-type="core/paragraph"]' )
+				.first();
+			const appender = detailCanvas.locator(
+				'.block-editor-default-block-appender.has-visible-prompt'
 			);
 
 			await expect( propertiesSlot ).toBeVisible();
-			await expect( prompt ).toContainText( 'Type / to choose a block' );
+			await expect( bodyParagraph ).toBeVisible();
+			await expect( appender ).toHaveCount( 0 );
 			await expect
 				.poll( async () => {
-					const [ propertiesBox, promptBox ] = await Promise.all( [
+					const [ propertiesBox, paragraphBox ] = await Promise.all( [
 						propertiesSlot.boundingBox(),
-						prompt.boundingBox(),
+						bodyParagraph.boundingBox(),
 					] );
-					if ( ! propertiesBox || ! promptBox ) {
+					if ( ! propertiesBox || ! paragraphBox ) {
 						return false;
 					}
 					return (
-						promptBox.y >=
+						paragraphBox.y >=
 						propertiesBox.y + propertiesBox.height - 2
 					);
 				} )
 				.toBe( true );
 
-			await prompt.click();
+			await bodyParagraph.click();
 			await expect(
 				detailCanvas.locator( '[data-type="core/paragraph"]' )
 			).toHaveCount( 1 );
