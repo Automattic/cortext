@@ -1052,7 +1052,7 @@ tr:has(.cortext-title-cell--is-opening)
 	}
 
 	.dataviews-no-results,
-	.dataviews-loading {
+	.dataviews-loading:not(:empty) {
 		display: grid;
 		align-content: center;
 		min-height: 160px;
@@ -1063,6 +1063,13 @@ tr:has(.cortext-title-cell--is-opening)
 		p {
 			margin: 0;
 		}
+	}
+
+	// During a row refresh, DataViews can leave behind an empty loading notice
+	// even though the table is still painted. Hide it so inline saves do not add
+	// a blank strip below the rows.
+	.dataviews-loading:empty {
+		display: none;
 	}
 
 	// Loading shell hides DataViews chrome and the new-row footer so the rows

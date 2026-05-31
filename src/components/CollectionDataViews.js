@@ -301,6 +301,9 @@ export default function CollectionDataViews( {
 	const activePaginationInfo = isServerPaginated
 		? serverPaginationInfo
 		: clientPaginationInfo;
+	// DataViews changes its scroll wrapper while loading. For a background row
+	// refresh, keep the painted rows steady; our shell covers the empty load.
+	const showDataViewsLoading = isLoading && dataFiltered.length === 0;
 
 	const dataFilteredInRenderOrder = useMemo(
 		() =>
@@ -1586,7 +1589,7 @@ export default function CollectionDataViews( {
 										getItemId={ ( item ) =>
 											String( item.id )
 										}
-										isLoading={ isLoading }
+										isLoading={ showDataViewsLoading }
 										empty={ empty }
 										actions={ dataViewActions }
 										{ ...dataViewsSelectionProps }
