@@ -404,6 +404,30 @@ describe( 'SidebarTrash', () => {
 		).toHaveTextContent( 'Workspace / Project' );
 	} );
 
+	it( 'omits blank ancestor titles from trashed breadcrumbs', () => {
+		const parent = makePage( {
+			id: 11,
+			title: { rendered: '', raw: '' },
+		} );
+		const child = makePage( {
+			id: 12,
+			parent: 11,
+			title: { rendered: 'Notes', raw: 'Notes' },
+		} );
+
+		setTrashRecords( { records: [ child ] } );
+
+		const { container } = renderSidebarTrash( {
+			activePages: [ parent ],
+		} );
+
+		expect( screen.getByText( 'Notes' ) ).toBeInTheDocument();
+		expect(
+			container.querySelector( '.cortext-sidebar__breadcrumb' )
+		).toBeFalsy();
+		expect( screen.queryByText( '(untitled)' ) ).not.toBeInTheDocument();
+	} );
+
 	it( 'falls back to no breadcrumb when ancestors are missing (orphan)', () => {
 		const orphan = makePage( { id: 5, parent: 99 } );
 
@@ -460,6 +484,23 @@ describe( 'SidebarTrash', () => {
 
 		expect( screen.getByText( 'Draft record' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Research' ) ).toBeInTheDocument();
+	} );
+
+	it( 'omits blank collection context for trashed rows', () => {
+		const row = makeRow( {
+			id: 17,
+			title: { rendered: 'Draft record', raw: 'Draft record' },
+			collection: {
+				id: 22,
+				title: { rendered: '', raw: '' },
+			},
+		} );
+		setTrashRecords( { records: [ row ] } );
+
+		renderSidebarTrash();
+
+		expect( screen.getByText( 'Draft record' ) ).toBeInTheDocument();
+		expect( screen.queryByText( '(untitled)' ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'restores a row through the document endpoint', async () => {
@@ -868,6 +909,25 @@ describe( 'SidebarTrash', () => {
 		expect(
 			container.querySelector( '.cortext-sidebar__breadcrumb' )
 		).toHaveTextContent( 'Quarterly review' );
+	} );
+
+	it( 'omits blank owner context for inline collections', () => {
+		const inline = makeCollection( {
+			id: 34,
+			title: { rendered: 'Action items', raw: 'Action items' },
+			owner: {
+				id: 99,
+				title: { rendered: '', raw: '' },
+				path: 'page/quarterly-99',
+			},
+		} );
+
+		setTrashRecords( { records: [ inline ] } );
+
+		renderSidebarTrash();
+
+		expect( screen.getByText( 'Action items' ) ).toBeInTheDocument();
+		expect( screen.queryByText( '(untitled)' ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'nests a collection under its owner page when both are in trash', () => {

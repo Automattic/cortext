@@ -84,7 +84,7 @@ export function computeSidebarTrashRoots( trashedDocuments = [] ) {
 	return { roots, descendantCountById };
 }
 
-function titleText( title ) {
+function optionalTitleText( title ) {
 	if ( typeof title === 'string' && title.trim() ) {
 		return title.trim();
 	}
@@ -97,7 +97,7 @@ function buildBreadcrumb( record, ancestorById ) {
 	const seen = new Set( [ record.id ] );
 	while ( current && ! seen.has( current.id ) ) {
 		seen.add( current.id );
-		const title = titleText( current.title );
+		const title = optionalTitleText( current.title );
 		if ( title ) {
 			ancestors.unshift( {
 				id: current.id,
@@ -145,12 +145,14 @@ function SidebarTrashRow( {
 		: [];
 	const documentIcon = record.meta?.cortext_document_icon ?? '';
 	const collectionTitle = record.collection?.id
-		? titleText( record.collection?.title )
+		? optionalTitleText( record.collection?.title )
 		: '';
 	// Inline collections are the only trash items with an owner. If that page
 	// is still active, show its title so similar inline tables are easier to
 	// tell apart.
-	const ownerTitle = record.owner ? titleText( record.owner?.title ) : '';
+	const ownerTitle = record.owner
+		? optionalTitleText( record.owner?.title )
+		: '';
 	const meta = descendantCounts.total
 		? nestedDocumentCountLabel( descendantCounts )
 		: '';

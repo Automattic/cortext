@@ -11,6 +11,7 @@ import useDelayedFlag, {
 import { useRecents } from '../hooks/useRecents';
 import { useDocumentRecord } from '../documents';
 import { DOCUMENT_POST_TYPE } from '../collections';
+import { definesTrait } from '../documents/capabilities';
 
 const RECENT_REPOSITION_OPTIONS = {
 	duration: 180,
@@ -48,16 +49,43 @@ function runNodeAnimation( node, keyframes, options ) {
 	node.animate( keyframes, options );
 }
 
+function recentTitle( recent ) {
+	return recent?.title?.trim?.() || __( '(untitled)', 'cortext' );
+}
+
+function recentContextTitle( recent ) {
+	return recent?.collection?.title?.trim?.() ?? '';
+}
+
+function recentDisplayTitle( recent ) {
+	const title = recentTitle( recent );
+	const contextTitle = recentContextTitle( recent );
+	return contextTitle
+		? sprintf(
+				/* translators: 1: document title, 2: collection title */
+				__( '%1$s in %2$s', 'cortext' ),
+				title,
+				contextTitle
+		  )
+		: title;
+}
+
 /**
  * One item in Recents. The descriptor supplies the icon; this row only adds
  * collection context when it helps distinguish matching document titles.
  *
  * @param {Object}   props
- * @param {Object}   props.recent     Recent activity record from the server.
- * @param {Function} props.setNodeRef Ref setter used by the FLIP animation.
- * @param {Function} props.onSelect   Navigate to the recent's path.
+ * @param {Object}   props.recent           Recent activity record from the server.
+ * @param {boolean}  props.isDuplicateLabel Whether another recent has the same display label.
+ * @param {Function} props.setNodeRef       Ref setter used by the FLIP animation.
+ * @param {Function} props.onSelect         Navigate to the recent's path.
  */
-function SidebarRecentsRow( { recent, setNodeRef, onSelect } ) {
+function SidebarRecentsRow( {
+	recent,
+	isDuplicateLabel,
+	setNodeRef,
+	onSelect,
+} ) {
 	// Recents wire shape only carries id/title/path/icon (and optional row
 	// context). Capability checks need `meta.cortext_fields` / `crtxt_trait`,
 	// so we load the document record at render time and merge it with the
@@ -69,29 +97,22 @@ function SidebarRecentsRow( { recent, setNodeRef, onSelect } ) {
 	);
 	const merged = record ? { ...recent, ...record } : recent;
 	const { listIcon } = useDocumentRecord( merged );
-	const title = recent?.title?.trim?.() || __( '(untitled)', 'cortext' );
-	const contextTitle = recent?.collection?.title?.trim?.() ?? '';
+	const displayTitle = recentDisplayTitle( recent );
+	const duplicateContext = definesTrait( merged )
+		? __( 'contains rows', 'cortext' )
+		: __( 'plain document', 'cortext' );
 
-	const displayTitle = contextTitle
+	const ariaLabel = isDuplicateLabel
 		? sprintf(
-				/* translators: 1: row title, 2: collection title */
-				__( '%1$s in %2$s', 'cortext' ),
-				title,
-				contextTitle
-		  )
-		: title;
-
-	const ariaLabel = contextTitle
-		? sprintf(
-				/* translators: 1: recent title, 2: collection title */
-				__( 'Recent: %1$s in %2$s', 'cortext' ),
-				title,
-				contextTitle
+				/* translators: 1: recent title, 2: context for duplicate recent titles */
+				__( 'Recent: %1$s, %2$s', 'cortext' ),
+				displayTitle,
+				duplicateContext
 		  )
 		: sprintf(
 				/* translators: %s: recent title */
 				__( 'Recent: %s', 'cortext' ),
-				title
+				displayTitle
 		  );
 
 	return (
@@ -129,6 +150,11 @@ export default function SidebarRecents() {
 	const recentNodes = useRef( new Map() );
 	const previousRects = useRef( new Map() );
 	const hasCompletedInitialLoad = useRef( false );
+	const labelCounts = new Map();
+	recents.forEach( ( recent ) => {
+		const label = recentDisplayTitle( recent );
+		labelCounts.set( label, ( labelCounts.get( label ) ?? 0 ) + 1 );
+	} );
 	const setRecentNodeRef = useCallback(
 		( key ) => ( node ) => {
 			if ( node ) {
@@ -220,6 +246,11 @@ export default function SidebarRecents() {
 							<SidebarRecentsRow
 								key={ key }
 								recent={ recent }
+								isDuplicateLabel={
+									( labelCounts.get(
+										recentDisplayTitle( recent )
+									) ?? 0 ) > 1
+								}
 								setNodeRef={ setRecentNodeRef( key ) }
 								onSelect={ onSelectRecent }
 							/>

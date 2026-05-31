@@ -184,6 +184,37 @@ describe( 'SidebarRecents animation', () => {
 		).toBeInTheDocument();
 	} );
 
+	it( 'adds accessible context when recent titles collide', () => {
+		mockRecents = [
+			pageRecent( 21, 'Roadmap' ),
+			collectionRecent( 33, 'Roadmap' ),
+		];
+		mockRecordsById.set( 21, {
+			id: 21,
+			crtxt_trait: [],
+			meta: {},
+		} );
+		mockRecordsById.set( 33, {
+			id: 33,
+			crtxt_trait: [],
+			cortext_defines_trait: true,
+			meta: { cortext_fields: [ 1 ] },
+		} );
+
+		render( <SidebarRecents /> );
+
+		expect(
+			screen.getByRole( 'button', {
+				name: 'Recent: Roadmap, plain document',
+			} )
+		).toBeInTheDocument();
+		expect(
+			screen.getByRole( 'button', {
+				name: 'Recent: Roadmap, contains rows',
+			} )
+		).toBeInTheDocument();
+	} );
+
 	it( 'shows a row recent with its custom icon when set', () => {
 		// A row that has a `cortext_document_icon` stored renders that glyph
 		// instead of the generic list-item fallback.
