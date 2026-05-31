@@ -674,14 +674,3 @@ The rows endpoint is still the hard case. `RowsController` unit tests cover rout
 **Where.** `Document::register_field_meta` in `includes/PostType/Document.php`.
 
 **Solution.** Call `update_meta_cache( 'post', $field_ids )` once before the foreach so the subsequent `get_post_meta` calls are cache hits. The field-id list is already in memory from the preceding `get_posts`, so the warmup is a one-liner.
-
-<a id="td-published-documents-panel-row-gap"></a>
-
-**Published Documents panel hides published rows.**
-
-**What.** Any `crtxt_document` is publishable now, but `PublishedDocumentsPane` only queries pages (`PUBLISHED_PAGES_QUERY`, with `cortext_no_trait + cortext_no_collections`) and collections (`PUBLISHED_COLLECTIONS_QUERY`, with `cortext_collections`). A row that the user explicitly publishes ends up reachable via its public URL but is not listed in the panel.
-
-**Where.** `PublishedDocumentsPane.js` and the constants in `src/components/page-queries.js` / `src/collections.js`.
-
-**Solution.** Add a third query for published rows (any document with a `crtxt_trait` term and `status = publish`), or replace the three queries with a single "status = publish, every document" pass and let `documentLabel` / icon helpers render the type chip. The Type column already covers Page / Collection / Row, so the rendering layer needs no change.
-
