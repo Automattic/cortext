@@ -20,11 +20,8 @@ import {
 import { iconForRecord, listIconForRecord } from './icons';
 import { documentFeatures } from './capabilities';
 import {
-	documentLabel,
-	descendantLabel,
-	permanentDeleteConfirmation,
-	permanentDeleteErrorMessage,
-	restoreErrorMessage,
+	nestedDocumentCountLabel,
+	permanentDeleteDocumentConfirmation,
 } from './labels';
 import {
 	renameDocument,
@@ -163,8 +160,7 @@ export function useDocumentActions() {
 }
 
 /**
- * Display data for a record: title, icons, feature flags, localized labels,
- * and trash-list copy.
+ * Display data for a record: title, icons, feature flags, and trash-list copy.
  *
  * @param {Object} record Document record.
  */
@@ -173,13 +169,11 @@ export function useDocumentRecord( record ) {
 		title: documentTitle( record ),
 		icon: iconForRecord( record ),
 		listIcon: ( size ) => listIconForRecord( record, size ),
-		kindLabel: documentLabel( record ),
 		features: documentFeatures( record ),
-		descendantLabel: ( counts ) => descendantLabel( counts ),
-		permanentDeleteConfirmation: ( counts ) =>
-			permanentDeleteConfirmation( record, counts ),
-		restoreErrorMessage: restoreErrorMessage( record ),
-		permanentDeleteErrorMessage: permanentDeleteErrorMessage( record ),
+		nestedDocumentCountLabel: ( counts ) =>
+			nestedDocumentCountLabel( counts ),
+		permanentDeleteDocumentConfirmation: ( counts ) =>
+			permanentDeleteDocumentConfirmation( record, counts ),
 	};
 }
 

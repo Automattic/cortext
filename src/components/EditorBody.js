@@ -436,7 +436,7 @@ function DocumentIdentityActions( { postId, postType } ) {
 			ref={ actionsRef }
 			className="cortext-canvas__identity-actions"
 			role="group"
-			aria-label={ __( 'Document identity actions', 'cortext' ) }
+			aria-label={ __( 'Identity actions', 'cortext' ) }
 		>
 			{ ! hasIcon && ! hasCover && (
 				<DocumentIdentityControls
@@ -924,7 +924,8 @@ function TrashedNotice( { postId, postType, onRestored } ) {
 			onRestored?.( postId, postType, response );
 		} catch ( err ) {
 			setError(
-				err?.message ?? __( 'Could not restore document.', 'cortext' )
+				err?.message ??
+					__( 'Could not restore this document.', 'cortext' )
 			);
 		} finally {
 			setIsRestoring( false );
@@ -945,7 +946,9 @@ function TrashedNotice( { postId, postType, onRestored } ) {
 				},
 			] }
 		>
-			{ error ? error : __( 'This document is in trash.', 'cortext' ) }
+			{ error
+				? error
+				: __( 'This document is in the Trash.', 'cortext' ) }
 		</Notice>
 	);
 }

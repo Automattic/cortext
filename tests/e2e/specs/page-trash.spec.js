@@ -3,7 +3,7 @@
  *
  * Walks the user-visible path the unit tests can't: open a page, trash it
  * from the sidebar dropdown, see the Trash panel pick it up with the
- * cascade subpage count, the canvas locked behind a notice, and Restore
+ * nested document count, the canvas locked behind a notice, and Restore
  * via the banner unwinding the whole thing.
  */
 
@@ -91,7 +91,7 @@ test.describe( 'Page trash flow', () => {
 			await page.getByRole( 'menuitem', { name: 'Trash' } ).click();
 
 			// Active sidebar drops the whole subtree; the Trash panel
-			// shows the cascade root with the subpage count.
+			// shows the cascade root with the nested document count.
 			await expect(
 				sidebar.getByRole( 'button', {
 					name: PARENT_TITLE,
@@ -107,12 +107,12 @@ test.describe( 'Page trash flow', () => {
 
 			const trashList = page.locator( '.cortext-sidebar__trash-list' );
 			await expect( trashList ).toContainText( PARENT_TITLE );
-			await expect( trashList ).toContainText( '1 subpage' );
+			await expect( trashList ).toContainText( '1 nested document' );
 
 			// Canvas keeps the parent open with a trashed banner.
 			const notice = page.locator( '.cortext-canvas__notice' );
 			await expect( notice ).toContainText(
-				'This document is in trash.'
+				'This document is in the Trash.'
 			);
 
 			// Restore via the banner. Subtree returns; banner disappears.

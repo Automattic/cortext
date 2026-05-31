@@ -665,10 +665,10 @@ describe( 'SidebarTrash', () => {
 
 		expect(
 			container.querySelector( '.cortext-sidebar__breadcrumb' )
-		).toHaveTextContent( '2 subpages' );
+		).toHaveTextContent( '2 nested documents' );
 	} );
 
-	it( 'shows a collection count when a trashed page owns only nested collections', () => {
+	it( 'shows a nested document count when a trashed page owns only nested collections', () => {
 		const root = makePage( {
 			id: 1,
 			title: { rendered: 'Quarterly review', raw: 'Quarterly review' },
@@ -686,10 +686,10 @@ describe( 'SidebarTrash', () => {
 
 		expect(
 			container.querySelector( '.cortext-sidebar__breadcrumb' )
-		).toHaveTextContent( '1 collection' );
+		).toHaveTextContent( '1 nested document' );
 	} );
 
-	it( 'falls back to nested items when a trashed page mixes subpages and nested collections', () => {
+	it( 'shows nested documents when a trashed page mixes child documents and nested collections', () => {
 		const root = makePage( {
 			id: 1,
 			title: { rendered: 'Quarterly review', raw: 'Quarterly review' },
@@ -711,14 +711,14 @@ describe( 'SidebarTrash', () => {
 
 		expect(
 			container.querySelector( '.cortext-sidebar__breadcrumb' )
-		).toHaveTextContent( '2 nested items' );
+		).toHaveTextContent( '2 nested documents' );
 	} );
 
 	it( 'shows the cascade count beside a row that owns a trashed collection', () => {
 		// TrashCascade applies to any document with descendants via
 		// `post_parent`, rows included. The owned collection points back at
 		// the row through `_cortext_trashed_by_parent`, so the row surfaces
-		// the collection-count badge.
+		// the nested-document badge.
 		const row = makeRow( {
 			id: 17,
 			title: { rendered: 'Sprint 12', raw: 'Sprint 12' },
@@ -736,7 +736,7 @@ describe( 'SidebarTrash', () => {
 
 		expect(
 			container.querySelector( '.cortext-sidebar__breadcrumb' )
-		).toHaveTextContent( '1 collection' );
+		).toHaveTextContent( '1 nested document' );
 	} );
 
 	it( 'nests cascade-trashed rows under their collection via the COLLECTION marker', () => {
@@ -765,7 +765,7 @@ describe( 'SidebarTrash', () => {
 		expect( screen.getByText( 'Sprint board' ) ).toBeInTheDocument();
 		expect(
 			container.querySelector( '.cortext-sidebar__breadcrumb' )
-		).toHaveTextContent( '2 nested items' );
+		).toHaveTextContent( '2 nested documents' );
 	} );
 
 	it( 'promotes orphaned descendants (stale marker) back to roots', () => {
@@ -911,7 +911,7 @@ describe( 'SidebarTrash', () => {
 
 		expect(
 			screen.getByText(
-				"Permanently delete this collection and all its rows? You can't undo this."
+				"Delete this document and all rows it contains? This can't be undone."
 			)
 		).toBeInTheDocument();
 	} );
@@ -937,7 +937,7 @@ describe( 'SidebarTrash', () => {
 
 		expect(
 			screen.getByText(
-				"Permanently delete this page and 1 subpage? You can't undo this."
+				"Delete this document and 1 nested document? This can't be undone."
 			)
 		).toBeInTheDocument();
 	} );
@@ -981,7 +981,7 @@ describe( 'SidebarTrash', () => {
 		).toBeInTheDocument();
 	} );
 
-	it( 'falls back to nested items in the confirm when subpages and nested collections mix', () => {
+	it( 'mentions nested documents in the confirm when child documents and nested collections mix', () => {
 		const root = makePage( {
 			id: 1,
 			title: { rendered: 'Workspace', raw: 'Workspace' },
@@ -1007,7 +1007,7 @@ describe( 'SidebarTrash', () => {
 
 		expect(
 			screen.getByText(
-				"Permanently delete this page and 2 nested items? You can't undo this."
+				"Delete this document and 2 nested documents? This can't be undone."
 			)
 		).toBeInTheDocument();
 	} );
