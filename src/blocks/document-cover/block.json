@@ -2,10 +2,10 @@
 	"$schema": "https://schemas.wp.org/trunk/block.json",
 	"apiVersion": 3,
 	"name": "cortext/document-cover",
-	"title": "Document cover",
+	"title": "Cover",
 	"category": "collections",
 	"icon": "format-image",
-	"description": "Document cover image, bound to the document's featured image.",
+	"description": "Cover image, bound to the featured image.",
 	"textdomain": "cortext",
 	"usesContext": [ "postId", "postType" ],
 	"supports": {

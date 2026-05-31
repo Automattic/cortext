@@ -197,9 +197,7 @@ export default function PublishedDocumentsPane() {
 	if ( isLoading && items.length === 0 ) {
 		return (
 			<VStack className="cortext-published-pane" spacing={ 5 }>
-				<Heading level={ 2 }>
-					{ __( 'Published documents', 'cortext' ) }
-				</Heading>
+				<Heading level={ 2 }>{ __( 'Published', 'cortext' ) }</Heading>
 				<Spinner />
 			</VStack>
 		);
@@ -208,14 +206,9 @@ export default function PublishedDocumentsPane() {
 	return (
 		<VStack className="cortext-published-pane" spacing={ 5 }>
 			<VStack spacing={ 1 }>
-				<Heading level={ 2 }>
-					{ __( 'Published documents', 'cortext' ) }
-				</Heading>
+				<Heading level={ 2 }>{ __( 'Published', 'cortext' ) }</Heading>
 				<Text variant="muted">
-					{ __(
-						'Visible to anyone with the public link.',
-						'cortext'
-					) }
+					{ __( 'Public on the web.', 'cortext' ) }
 				</Text>
 			</VStack>
 			<DataViews
@@ -229,7 +222,7 @@ export default function PublishedDocumentsPane() {
 				isLoading={ isLoading }
 				empty={
 					<Text variant="muted">
-						{ __( 'No public documents yet.', 'cortext' ) }
+						{ __( 'Nothing is public yet.', 'cortext' ) }
 					</Text>
 				}
 			/>

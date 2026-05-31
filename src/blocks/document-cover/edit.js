@@ -98,7 +98,7 @@ export default function Edit( { context, clientId } ) {
 		return (
 			<div { ...blockProps }>
 				<span className="cortext-document-cover-block__hint">
-					{ __( 'Document cover is unavailable here.', 'cortext' ) }
+					{ __( 'Cover is unavailable here.', 'cortext' ) }
 				</span>
 			</div>
 		);
