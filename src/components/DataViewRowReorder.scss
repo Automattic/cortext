@@ -115,12 +115,14 @@ body.cortext-row-dragging .cortext-row-drop-indicator {
 	bottom: 0;
 }
 
-.cortext-row-drop-indicator--gap::before {
-	top: var(--cortext-row-drop-line-top, 50%);
-}
-
 .cortext-row-drop-indicator.is-active::before {
 	opacity: 1;
+}
+
+// Moving the neighboring rows already shows the drop gap. Hide the gap line so
+// the table does not draw a second cue over the animation.
+.cortext-row-drop-indicator--gap::before {
+	content: none;
 }
 
 // The preview gets the source row's measured width. Use inset shadows for the
