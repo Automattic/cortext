@@ -27,7 +27,8 @@ async function deleteIfCreated( requestUtils, path ) {
 async function createPublishedCollection(
 	requestUtils,
 	title,
-	fieldTitle = 'Notes'
+	fieldTitle = 'Notes',
+	fieldType = 'text'
 ) {
 	const collection = await requestUtils.rest( {
 		method: 'POST',
@@ -44,7 +45,7 @@ async function createPublishedCollection(
 		data: {
 			title: fieldTitle,
 			status: 'private',
-			meta: { type: 'text' },
+			meta: { type: fieldType },
 		},
 	} );
 
@@ -473,6 +474,128 @@ test.describe( 'Public page rendering', () => {
 				requestUtils,
 				fixture.authors?.collection &&
 					`/wp/v2/crtxt_documents/${ fixture.authors.collection.id }`
+			);
+		}
+	} );
+
+	test( 'published DataView sorts number fields without falling back', async ( {
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = { rows: [] };
+		const consoleErrors = [];
+		const pageErrors = [];
+		const onConsole = ( message ) => {
+			if ( message.type() === 'error' ) {
+				consoleErrors.push( message.text() );
+			}
+		};
+		const onPageError = ( error ) => pageErrors.push( error.message );
+
+		page.on( 'console', onConsole );
+		page.on( 'pageerror', onPageError );
+
+		try {
+			const suffix = Date.now().toString( 36 ).slice( -4 );
+			Object.assign(
+				fixture,
+				await createPublishedCollection(
+					requestUtils,
+					`Public Authors ${ suffix }`,
+					'Born',
+					'number'
+				)
+			);
+
+			const bornKey = `field-${ fixture.field.id }`;
+			for ( const row of [
+				{
+					title: 'Later Author',
+					born: 1972,
+				},
+				{
+					title: 'Earlier Author',
+					born: 1882,
+				},
+			] ) {
+				fixture.rows.push(
+					await requestUtils.rest( {
+						method: 'POST',
+						path: '/wp/v2/crtxt_documents',
+						data: {
+							title: row.title,
+							status: 'publish',
+							cortext_trait: fixture.collection.id,
+							meta: {
+								[ bornKey ]: row.born,
+							},
+						},
+					} )
+				);
+			}
+
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: `Public number sort ${ suffix }`,
+					status: 'publish',
+					content: createDataViewBlockMarkup( fixture.collection.id, {
+						fields: [ 'title', bornKey ],
+						sort: { field: bornKey, direction: 'asc' },
+					} ),
+				},
+			} );
+
+			await page.context().clearCookies( { name: /^wordpress_/ } );
+
+			const response = await page.goto(
+				`/cortext/${ fixture.page.slug }/`
+			);
+
+			expect( response?.status() ).toBe( 200 );
+			await expect(
+				page.locator( '.wp-block-cortext-data-view .dataviews-wrapper' )
+			).toBeVisible();
+			await expect(
+				page.getByText( "We couldn't load this collection view." )
+			).toHaveCount( 0 );
+			await expect( page.getByText( '1882' ) ).toBeVisible();
+			await expect
+				.poll( () =>
+					renderedPublicTitles( page, [
+						'Earlier Author',
+						'Later Author',
+					] )
+				)
+				.toEqual( [ 'Earlier Author', 'Later Author' ] );
+			expect( pageErrors ).toEqual( [] );
+			expect(
+				consoleErrors.filter(
+					( message ) => ! /favicon/i.test( message )
+				)
+			).toEqual( [] );
+		} finally {
+			page.off( 'console', onConsole );
+			page.off( 'pageerror', onPageError );
+			for ( const row of fixture.rows ?? [] ) {
+				await deleteIfCreated(
+					requestUtils,
+					`/wp/v2/crtxt_documents/${ row.id }`
+				);
+			}
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
 			);
 		}
 	} );

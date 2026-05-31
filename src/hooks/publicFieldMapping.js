@@ -131,6 +131,40 @@ function publicValue( value, type ) {
 	return value;
 }
 
+function compareEmptyLast( a, b ) {
+	const aEmpty = a === null || a === undefined || a === '';
+	const bEmpty = b === null || b === undefined || b === '';
+	if ( aEmpty && bEmpty ) {
+		return 0;
+	}
+	if ( aEmpty ) {
+		return 1;
+	}
+	if ( bEmpty ) {
+		return -1;
+	}
+	return null;
+}
+
+function sortNumberValues( getValue ) {
+	return ( a, b, direction ) => {
+		const av = getValue( { item: a } );
+		const bv = getValue( { item: b } );
+		const emptyCompare = compareEmptyLast( av, bv );
+		if ( emptyCompare !== null ) {
+			return emptyCompare;
+		}
+
+		const an = Number( av );
+		const bn = Number( bv );
+		const diff =
+			Number.isFinite( an ) && Number.isFinite( bn )
+				? an - bn
+				: String( av ).localeCompare( String( bv ) );
+		return direction === 'asc' ? diff : -diff;
+	};
+}
+
 /**
  * Builds a DataViews-compatible field spec from a REST field definition.
  *
@@ -157,7 +191,12 @@ function mapPublicField( fieldDef ) {
 
 	switch ( type ) {
 		case 'number':
-			return { ...base, type: 'text' };
+			return {
+				...base,
+				type: 'integer',
+				isValid: { custom: () => null },
+				sort: sortNumberValues( base.getValue ),
+			};
 		case 'email':
 			return { ...base, type: 'email' };
 		case 'url':
