@@ -8,7 +8,10 @@ import './frontend.scss';
 
 import { createRoot } from '@wordpress/element';
 
-import PublicDataView from './components/PublicDataView';
+import PublicDataView, {
+	PublicDataViewErrorBoundary,
+	PublicDataViewErrorFallback,
+} from './components/PublicDataView';
 
 document.querySelectorAll( '[data-cortext-data-view]' ).forEach( ( el ) => {
 	const script = el.querySelector( '.cortext-dv-init' );
@@ -16,9 +19,21 @@ document.querySelectorAll( '[data-cortext-data-view]' ).forEach( ( el ) => {
 		return;
 	}
 
-	const init = JSON.parse( script.textContent );
 	const root = createRoot( el );
+	let init;
+	try {
+		init = JSON.parse( script.textContent );
+	} catch {
+		root.render( <PublicDataViewErrorFallback /> );
+		return;
+	}
+
 	root.render(
-		<PublicDataView collectionId={ init.collectionId } view={ init.view } />
+		<PublicDataViewErrorBoundary>
+			<PublicDataView
+				collectionId={ init.collectionId }
+				view={ init.view }
+			/>
+		</PublicDataViewErrorBoundary>
 	);
 } );

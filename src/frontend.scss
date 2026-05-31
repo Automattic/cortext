@@ -15,7 +15,17 @@
 
 .cortext-public-page {
 	margin: 0;
-	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+	// prettier-ignore
+	font-family:
+		-apple-system,
+		BlinkMacSystemFont,
+		"Segoe UI",
+		Roboto,
+		Oxygen-Sans,
+		Ubuntu,
+		Cantarell,
+		"Helvetica Neue",
+		sans-serif;
 	line-height: 1.6;
 	color: #1e1e1e;
 	background: #fff;
@@ -105,6 +115,14 @@
 	min-width: 0;
 	max-width: 100%;
 	overflow: hidden;
+}
+
+.cortext-public-data-view-error {
+	padding: $grid-unit-20;
+	border: $border-width solid $gray-200;
+	border-radius: 4px;
+	color: $gray-700;
+	background: $white;
 }
 
 // DataView block layout on the public side.
