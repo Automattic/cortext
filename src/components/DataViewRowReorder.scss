@@ -38,6 +38,18 @@ body.cortext-row-dragging .cortext-row-reorder-target {
 	will-change: transform;
 }
 
+// List layout sets its own row `transition` (background-color/box-shadow) that
+// outranks the rule above, so displaced list rows would snap to the new spot
+// instead of sliding. Re-assert transform easing for reordered list rows while
+// a drag is active so list matches the table.
+body.cortext-row-dragging
+.dataviews-view-list
+div[role="row"].cortext-row-reorder-target {
+	transition:
+		transform 120ms ease,
+		opacity 120ms ease;
+}
+
 // Last-resort guard for `clearVisualState({ withoutTransition: true })`.
 // The body-class flip above is what prevents the drop flicker.
 body.cortext-row-reorder-no-transition .cortext-row-reorder-target {
