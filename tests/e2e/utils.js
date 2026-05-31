@@ -26,4 +26,16 @@ async function withExpectedConsoleError( expectedPattern, testFn ) {
 	}
 }
 
-module.exports = { withExpectedConsoleError };
+async function clearWordPressAuthCookies( context ) {
+	const cookies = await context.cookies();
+	const preserved = cookies.filter(
+		( cookie ) => ! cookie.name.startsWith( 'wordpress_' )
+	);
+
+	await context.clearCookies();
+	if ( preserved.length > 0 ) {
+		await context.addCookies( preserved );
+	}
+}
+
+module.exports = { clearWordPressAuthCookies, withExpectedConsoleError };

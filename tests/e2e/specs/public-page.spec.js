@@ -7,7 +7,10 @@
 
 const { test, expect } = require( '@wordpress/e2e-test-utils-playwright' );
 
-const { withExpectedConsoleError } = require( '../utils' );
+const {
+	clearWordPressAuthCookies,
+	withExpectedConsoleError,
+} = require( '../utils' );
 
 async function deleteIfCreated( requestUtils, path ) {
 	if ( ! path ) {
@@ -157,8 +160,7 @@ test.describe( 'Public page rendering', () => {
 				},
 			} );
 
-			await page.context().clearCookies( { name: /^wordpress_/ } );
-
+			await clearWordPressAuthCookies( page.context() );
 			const response = await page.goto(
 				`/cortext/${ createdPage.slug }/`
 			);
@@ -412,10 +414,7 @@ test.describe( 'Public page rendering', () => {
 						},
 					} );
 
-					await page
-						.context()
-						.clearCookies( { name: /^wordpress_/ } );
-
+					await clearWordPressAuthCookies( page.context() );
 					const response = await page.goto(
 						`/cortext/${ createdPage.slug }/`
 					);

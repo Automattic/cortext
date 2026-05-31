@@ -1,4 +1,6 @@
 const fs = require( 'fs' );
+const path = require( 'path' );
+const { execFileSync } = require( 'child_process' );
 
 const baseGlobalSetup = require( '@wordpress/scripts/config/playwright/global-setup.js' );
 
@@ -43,12 +45,44 @@ function markAlphaNoticeSeen( storageStatePath, origin ) {
 	);
 }
 
+function runWpCli( args, options = {} ) {
+	const projectRoot = path.resolve( __dirname, '../..' );
+	const wpEnvBin = path.join(
+		projectRoot,
+		'node_modules',
+		'.bin',
+		process.platform === 'win32' ? 'wp-env.cmd' : 'wp-env'
+	);
+
+	execFileSync( wpEnvBin, [ 'run', 'cli', 'wp', ...args ], {
+		cwd: projectRoot,
+		stdio: 'inherit',
+		...options,
+	} );
+}
+
+function deactivateLocalAutologin() {
+	try {
+		runWpCli( [ 'plugin', 'deactivate', 'dev-autologin' ], {
+			stdio: 'ignore',
+		} );
+	} catch {
+		// The local dev-autologin plugin only exists in some wp-env overrides.
+	}
+}
+
+function flushRewriteRules() {
+	runWpCli( [ 'rewrite', 'flush' ] );
+}
+
 /**
  * @param {import('@playwright/test').FullConfig} config
  * @return {Promise<void>}
  */
 async function globalSetup( config ) {
 	await baseGlobalSetup( config );
+	deactivateLocalAutologin();
+	flushRewriteRules();
 
 	const { storageState, baseURL } = config.projects[ 0 ].use;
 	if ( typeof storageState !== 'string' || ! baseURL ) {
