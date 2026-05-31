@@ -714,6 +714,79 @@ describe( 'DataViewRowReorder', () => {
 		window.requestAnimationFrame = originalRequestAnimationFrame;
 	} );
 
+	it( 'keeps row measurements frozen during drag', async () => {
+		// Let rAF queue up so each `sync()` clears its frame guard when we flush
+		// it. The default synchronous mock would hide the re-measure path this
+		// test cares about.
+		const originalRequestAnimationFrame = window.requestAnimationFrame;
+		const frames = [];
+		window.requestAnimationFrame = ( callback ) => {
+			frames.push( callback );
+			return frames.length;
+		};
+		const flush = () =>
+			act( () => {
+				frames.splice( 0 ).forEach( ( callback ) => callback() );
+			} );
+
+		// Render directly instead of using `renderReorder`: with deferred rAF,
+		// that helper would wait forever before the first gap render.
+		const wrapper = createWrapper( [ 40, 40, 40 ] );
+		const wrapperRef = { current: wrapper };
+		render(
+			<DataViewRowReorder
+				wrapperRef={ wrapperRef }
+				view={ { type: 'table', sort: null } }
+				onChangeView={ jest.fn() }
+				collectionId={ 7 }
+				rows={ rows }
+				data={ rows }
+				mutateRows={ jest.fn() }
+				onReordered={ jest.fn() }
+			/>
+		);
+		flush();
+		await waitFor( () =>
+			expect( screen.getByTestId( 'dnd-context' ) ).toBeInTheDocument()
+		);
+
+		// Start dragging the second row. Drag displacement changes row classes;
+		// before the fix, the MutationObserver treated that as a reason to
+		// measure again and saved mid-transition geometry.
+		dragStart( 2 );
+
+		const gapBoxes = () =>
+			[
+				...document.querySelectorAll(
+					'.cortext-row-drop-indicator--gap'
+				),
+			].map( ( gap ) => `${ gap.style.top }/${ gap.style.height }` );
+		const before = gapBoxes();
+		expect( before.length ).toBeGreaterThan( 0 );
+
+		// Pretend the DOM now reports a shifted row and let the observer run.
+		// During a drag, `sync()` should ignore that and keep the original
+		// snapshot.
+		act( () => {
+			const lastRow = wrapperRef.current.querySelectorAll( 'tr' )[ 2 ];
+			lastRow.getBoundingClientRect = () => ( {
+				top: 200,
+				left: 10,
+				width: 320,
+				height: 120,
+				right: 330,
+				bottom: 320,
+			} );
+			for ( const observer of mockResizeObserverInstances ) {
+				observer.callback();
+			}
+		} );
+		flush();
+
+		expect( gapBoxes() ).toEqual( before );
+		window.requestAnimationFrame = originalRequestAnimationFrame;
+	} );
+
 	it( 'mounts row drag handles inside the row cell', async () => {
 		await renderReorder();
 
