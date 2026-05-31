@@ -43,6 +43,20 @@ jest.mock( '../../../src/hooks/useAutosave', () =>
 	} ) )
 );
 
+jest.mock( '../../../src/hooks/usePostLock', () =>
+	jest.fn( () => ( {
+		error: null,
+		isAcquiring: false,
+		isLocked: false,
+		isReadOnly: false,
+		isTakeover: false,
+		isTakingOver: false,
+		retry: jest.fn(),
+		takeOver: jest.fn(),
+		user: null,
+	} ) )
+);
+
 describe( 'RowEditor', () => {
 	beforeEach( () => {
 		EditorBody.mockClear();

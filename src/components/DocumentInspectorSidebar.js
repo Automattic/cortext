@@ -709,11 +709,15 @@ function RowInspectorContent() {
 	);
 }
 
-function InspectorFrame( { children, isTrashed } ) {
-	return isTrashed ? <Disabled>{ children }</Disabled> : children;
+function InspectorFrame( { children, isLocked } ) {
+	return isLocked ? <Disabled>{ children }</Disabled> : children;
 }
 
-export default function DocumentInspectorSidebar( { postId, postType } ) {
+export default function DocumentInspectorSidebar( {
+	isLocked = false,
+	postId,
+	postType,
+} ) {
 	const { record: currentRecord } = useEntityRecord(
 		'postType',
 		postType,
@@ -766,6 +770,11 @@ export default function DocumentInspectorSidebar( { postId, postType } ) {
 			'trash',
 		[]
 	);
+	const isStoreLocked = useSelect(
+		( select ) => select( editorStore ).isPostLocked?.() ?? false,
+		[]
+	);
+	const isReadOnly = isTrashed || isLocked || isStoreLocked;
 	const activeArea = useSelect(
 		( select ) =>
 			select( interfaceStore ).getActiveComplementaryArea(
@@ -832,7 +841,7 @@ export default function DocumentInspectorSidebar( { postId, postType } ) {
 				isActiveByDefault
 				tabs={ tabs }
 			>
-				<InspectorFrame isTrashed={ isTrashed }>
+				<InspectorFrame isLocked={ isReadOnly }>
 					{ isCollection && (
 						<CollectionInspectorContent
 							postId={ postId }
@@ -851,7 +860,7 @@ export default function DocumentInspectorSidebar( { postId, postType } ) {
 					title={ __( 'Block', 'cortext' ) }
 					tabs={ tabs }
 				>
-					<InspectorFrame isTrashed={ isTrashed }>
+					<InspectorFrame isLocked={ isReadOnly }>
 						<BlockInspector />
 					</InspectorFrame>
 				</InspectorComplementaryArea>

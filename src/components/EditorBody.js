@@ -237,6 +237,7 @@ function syncHeaderBoundaryMoveUpState( root, shouldDisable ) {
 
 function HeaderPrefixToolbarGuard( {
 	isActive = true,
+	isLocked = false,
 	postId,
 	postType,
 	toolbarRootRef,
@@ -246,7 +247,7 @@ function HeaderPrefixToolbarGuard( {
 	const guardId = useRef( Symbol( DISABLE_HEADER_BOUNDARY_MOVE_UP_CLASS ) );
 	const shouldDisableMoveUp = useSelect(
 		( select ) => {
-			if ( ! isActive ) {
+			if ( ! isActive || isLocked ) {
 				return false;
 			}
 			const store = select( blockEditorStore );
@@ -280,7 +281,7 @@ function HeaderPrefixToolbarGuard( {
 
 			return Math.min( ...selectedRootIndexes ) === firstBodyIndex;
 		},
-		[ isActive, ownerBlockName ]
+		[ isActive, isLocked, ownerBlockName ]
 	);
 
 	useEffect( () => {
@@ -311,7 +312,7 @@ function HeaderPrefixToolbarGuard( {
 	return null;
 }
 
-function DocumentIdentityActions( { postId, postType } ) {
+function DocumentIdentityActions( { isLocked = false, postId, postType } ) {
 	const isInsertingCoverRef = useRef( false );
 	const actionsRef = useRef( null );
 	const [ meta ] = useEntityProp( 'postType', postType, 'meta', postId );
@@ -343,7 +344,7 @@ function DocumentIdentityActions( { postId, postType } ) {
 	const { editEntityRecord, saveEditedEntityRecord } = useDispatch( 'core' );
 
 	useEffect( () => {
-		if ( isTrashed || hasCover ) {
+		if ( isTrashed || isLocked || hasCover ) {
 			return undefined;
 		}
 		const node = actionsRef.current;
@@ -395,14 +396,14 @@ function DocumentIdentityActions( { postId, postType } ) {
 				focusFirstActionFromTitle,
 				true
 			);
-	}, [ hasCover, isTrashed, selectedBlockName ] );
+	}, [ hasCover, isLocked, isTrashed, selectedBlockName ] );
 
-	if ( isTrashed || hasCover ) {
+	if ( isTrashed || isLocked || hasCover ) {
 		return null;
 	}
 
 	const ensureIconBlock = () => {
-		if ( hasIcon ) {
+		if ( hasIcon || isLocked ) {
 			return;
 		}
 		const block = createBlock( DOCUMENT_ICON_BLOCK, {
@@ -412,7 +413,7 @@ function DocumentIdentityActions( { postId, postType } ) {
 	};
 
 	const insertCover = async ( mediaId ) => {
-		if ( hasCover || isInsertingCoverRef.current ) {
+		if ( hasCover || isLocked || isInsertingCoverRef.current ) {
 			return;
 		}
 		isInsertingCoverRef.current = true;
@@ -476,7 +477,7 @@ function DocumentIdentityActions( { postId, postType } ) {
 	);
 }
 
-function EnsureHeaderBlocks( { postId, postType } ) {
+function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 	const [ meta ] = useEntityProp( 'postType', postType, 'meta', postId );
 	const [ featuredId ] = useEntityProp(
 		'postType',
@@ -596,7 +597,7 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 	} = useDispatch( blockEditorStore );
 
 	useLayoutEffect( () => {
-		if ( isTrashed ) {
+		if ( isTrashed || isLocked ) {
 			return;
 		}
 
@@ -621,6 +622,7 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 		duplicateHeaderIds,
 		hasProperties,
 		hasSchema,
+		isLocked,
 		isTrashed,
 		propertiesClientId,
 		propertiesContextStable,
@@ -629,11 +631,16 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 	] );
 
 	useLayoutEffect( () => {
-		if ( isTrashed || ! shouldHideHeaderInsertionPoint ) {
+		if ( isTrashed || isLocked || ! shouldHideHeaderInsertionPoint ) {
 			return;
 		}
 		hideInsertionPoint();
-	}, [ hideInsertionPoint, isTrashed, shouldHideHeaderInsertionPoint ] );
+	}, [
+		hideInsertionPoint,
+		isLocked,
+		isTrashed,
+		shouldHideHeaderInsertionPoint,
+	] );
 
 	// useLayoutEffect rather than useEffect: we want the insertion to
 	// happen between render and paint so the user never sees the
@@ -647,7 +654,7 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 	// reads as "the icon is being inserted right now" when really the
 	// document is just hydrating.
 	useLayoutEffect( () => {
-		if ( isTrashed ) {
+		if ( isTrashed || isLocked ) {
 			return;
 		}
 
@@ -756,6 +763,7 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 		hasTitle,
 		iconMeta,
 		insertBlocks,
+		isLocked,
 		isTrashed,
 		ownerBlockName,
 		postId,
@@ -768,6 +776,7 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 	useLayoutEffect( () => {
 		if (
 			isTrashed ||
+			isLocked ||
 			! bodyBlockBeforeTitleId ||
 			headerEndIndex < 0 ||
 			duplicateHeaderIds.length > 0 ||
@@ -800,6 +809,7 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 		hasTitle,
 		headerEndIndex,
 		iconMeta,
+		isLocked,
 		isTrashed,
 		moveBlocksToPosition,
 		startTyping,
@@ -1145,6 +1155,7 @@ function CanvasReadyEffect( {
 export default function EditorBody( {
 	featuredMedia,
 	isActive = true,
+	isLocked = false,
 	postId,
 	postType,
 	extraStyles,
@@ -1208,21 +1219,33 @@ export default function EditorBody( {
 		},
 		[ ownerBlockName ]
 	);
-	const renderAppender = shouldUseHeaderAwareAppender
-		? () => <HeaderAwareRootAppender ownerBlockName={ ownerBlockName } />
-		: undefined;
+	const isReadOnly = isTrashed || isLocked;
+	const renderAppender =
+		shouldUseHeaderAwareAppender && ! isReadOnly
+			? () => (
+					<HeaderAwareRootAppender
+						ownerBlockName={ ownerBlockName }
+					/>
+			  )
+			: undefined;
 
 	const blockCanvas = (
 		<div className="cortext-canvas__block-canvas" ref={ blockCanvasRef }>
 			<BlockCanvas height="100%" styles={ styles }>
 				<DocumentIdentityActions
+					isLocked={ isReadOnly }
 					postId={ postId }
 					postType={ postType }
 				/>
-				<EnsureHeaderBlocks postId={ postId } postType={ postType } />
+				<EnsureHeaderBlocks
+					isLocked={ isReadOnly }
+					postId={ postId }
+					postType={ postType }
+				/>
 				<HideHeaderBlockKebab postId={ postId } postType={ postType } />
 				<HeaderPrefixToolbarGuard
 					isActive={ isActive }
+					isLocked={ isReadOnly }
 					postId={ postId }
 					postType={ postType }
 					toolbarRootRef={ blockCanvasRef }
@@ -1261,7 +1284,7 @@ export default function EditorBody( {
 					onRestored={ onRestored }
 				/>
 			) }
-			{ isTrashed ? (
+			{ isReadOnly ? (
 				<Disabled className="cortext-canvas__locked">
 					{ blockCanvas }
 				</Disabled>
