@@ -57,8 +57,21 @@ const SYSTEM_FIELDS = [
 		},
 	},
 	{
+		id: 'created_by',
+		label: __( 'Created by', 'cortext' ),
+		type: 'text',
+		enableGlobalSearch: false,
+		enableSorting: false,
+		getValue: ( { item } ) => item?.created_by ?? '',
+		render: ( { item } ) => (
+			<span className="cortext-cell-readonly">
+				{ item?.created_by ? String( item.created_by ) : '' }
+			</span>
+		),
+	},
+	{
 		id: 'modified_at',
-		label: __( 'Modified', 'cortext' ),
+		label: __( 'Last edited', 'cortext' ),
 		type: 'datetime',
 		enableGlobalSearch: false,
 		enableSorting: true,
@@ -74,7 +87,42 @@ const SYSTEM_FIELDS = [
 				: date.toLocaleDateString();
 		},
 	},
+	{
+		id: 'modified_by',
+		label: __( 'Last edited by', 'cortext' ),
+		type: 'text',
+		enableGlobalSearch: false,
+		enableSorting: false,
+		getValue: ( { item } ) => item?.modified_by ?? '',
+		render: ( { item } ) => (
+			<span className="cortext-cell-readonly">
+				{ item?.modified_by ? String( item.modified_by ) : '' }
+			</span>
+		),
+	},
 ];
+
+function relationTitle( entry ) {
+	if ( ! entry ) {
+		return '';
+	}
+	if ( typeof entry !== 'object' ) {
+		return String( entry );
+	}
+	return entry?.title?.raw || entry?.title?.rendered || `#${ entry?.id }`;
+}
+
+function formatPublicRelation( value ) {
+	const refs = Array.isArray( value ) ? value : [ value ];
+	return refs.map( relationTitle ).filter( Boolean ).join( ', ' );
+}
+
+function formatPublicDisplay( value, type, elements ) {
+	if ( type === 'relation' ) {
+		return formatPublicRelation( value );
+	}
+	return formatDisplay( value, type, elements );
+}
 
 /**
  * Builds a DataViews-compatible field spec from a REST field definition.
@@ -96,7 +144,7 @@ function mapPublicField( fieldDef ) {
 		label,
 		getValue: ( { item } ) => item?.meta?.[ id ] ?? null,
 		render: ( { item } ) =>
-			formatDisplay( item?.meta?.[ id ] ?? null, type, elements ),
+			formatPublicDisplay( item?.meta?.[ id ] ?? null, type, elements ),
 	};
 
 	switch ( type ) {
@@ -115,6 +163,8 @@ function mapPublicField( fieldDef ) {
 			return { ...base, type: 'datetime' };
 		case 'checkbox':
 			return { ...base, type: 'boolean' };
+		case 'relation':
+			return { ...base, type: 'text', enableSorting: false };
 		case 'text':
 		default:
 			return { ...base, type: 'text' };
