@@ -157,7 +157,7 @@ describe( 'PublicDataView', () => {
 		expect( Array.isArray( rowRequestView.filters ) ).toBe( true );
 	} );
 
-	it( 'preserves REST row order when the saved public view uses manual sort', () => {
+	it( 'keeps REST row order when the saved public view uses manual sort', () => {
 		renderPublicDataView( {
 			type: 'table',
 			fields: [ 'title' ],
@@ -177,6 +177,47 @@ describe( 'PublicDataView', () => {
 				.at( -1 )[ 0 ]
 				.data.map( ( item ) => item.title.rendered )
 		).toEqual( [ 'Gamma Manual', 'Alpha Manual', 'Beta Manual' ] );
+	} );
+
+	it( 'drops saved public sort before fetching or rendering DataViews', () => {
+		usePublicRows.mockReturnValue( {
+			data: [
+				{
+					id: 20,
+					title: { rendered: 'Later author' },
+					meta: { 'field-33': 1972 },
+				},
+				{
+					id: 21,
+					title: { rendered: 'Earlier author' },
+					meta: { 'field-33': 1882 },
+				},
+			],
+			fields: [
+				{
+					id: 33,
+					label: 'Born',
+					type: 'number',
+					options: null,
+				},
+			],
+			isLoading: false,
+		} );
+
+		renderPublicDataView( {
+			type: 'table',
+			fields: [ 'title', 'field-33' ],
+			sort: { field: 'field-33', direction: 'asc' },
+			filters: [],
+		} );
+
+		expect( mockFilterSortAndPaginate ).toHaveBeenCalledWith(
+			expect.any( Array ),
+			expect.objectContaining( { sort: null } ),
+			expect.any( Array )
+		);
+		expect( usePublicRows.mock.calls.at( -1 )[ 1 ].sort ).toBeNull();
+		expect( mockDataViews.mock.calls.at( -1 )[ 0 ].view.sort ).toBeNull();
 	} );
 
 	it( 'renders public author system fields as plain text', () => {
@@ -295,7 +336,7 @@ describe( 'PublicDataView', () => {
 		expect( author.closest( '.cortext-relation-ref' ) ).toBeNull();
 	} );
 
-	it( 'maps public number fields to numeric sort values', () => {
+	it( 'maps public number fields without a local sorter', () => {
 		usePublicRows.mockReturnValue( {
 			data: [
 				{
@@ -331,21 +372,18 @@ describe( 'PublicDataView', () => {
 		const bornField = dataViewFields.find(
 			( field ) => field.id === 'field-33'
 		);
-		const [ later, earlier ] =
-			usePublicRows.mock.results.at( -1 ).value.data;
 
 		expect( bornField ).toEqual(
 			expect.objectContaining( {
 				type: 'integer',
 				isValid: { custom: expect.any( Function ) },
-				sort: expect.any( Function ),
+				enableSorting: false,
 			} )
 		);
-		expect( bornField.sort( later, earlier, 'asc' ) ).toBeGreaterThan( 0 );
-		expect( bornField.sort( later, earlier, 'desc' ) ).toBeLessThan( 0 );
+		expect( bornField.sort ).toBeUndefined();
 	} );
 
-	it( 'keeps every public field type sort-safe', () => {
+	it( 'keeps every public field type value-safe', () => {
 		const fieldCases = [
 			{
 				id: 41,
@@ -485,11 +523,10 @@ describe( 'PublicDataView', () => {
 				fieldCase.emptyValue
 			);
 			expect( () =>
-				field.sort( filledItem, emptyItem, 'asc' )
+				field.getValue( { item: filledItem } )
 			).not.toThrow();
-			expect( () =>
-				field.sort( emptyItem, filledItem, 'desc' )
-			).not.toThrow();
+			expect( field.sort ).toBeUndefined();
+			expect( field.enableSorting ).toBe( false );
 		}
 
 		for ( const fieldId of [
@@ -504,11 +541,11 @@ describe( 'PublicDataView', () => {
 			);
 
 			expect( () =>
-				field.sort( filledItem, emptyItem, 'asc' )
+				field.getValue( { item: filledItem } )
 			).not.toThrow();
-			expect( () =>
-				field.sort( emptyItem, filledItem, 'desc' )
-			).not.toThrow();
+			expect( () => field.getValue( { item: emptyItem } ) ).not.toThrow();
+			expect( field.sort ).toBeUndefined();
+			expect( field.enableSorting ).toBe( false );
 		}
 	} );
 

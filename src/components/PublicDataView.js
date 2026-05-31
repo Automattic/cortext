@@ -68,17 +68,6 @@ function normalizeFieldIds( fields ) {
 		} );
 }
 
-function normalizeSort( sort ) {
-	if ( ! isObject( sort ) || ! sort.field ) {
-		return null;
-	}
-
-	return {
-		field: String( sort.field ),
-		direction: sort.direction === 'asc' ? 'asc' : 'desc',
-	};
-}
-
 function normalizeStyles( styles ) {
 	if ( ! isObject( styles ) ) {
 		return undefined;
@@ -160,7 +149,7 @@ export function normalizePublicView( view ) {
 				? source.search
 				: DEFAULT_PUBLIC_VIEW.search,
 		fields: normalizeFieldIds( source.fields ),
-		sort: normalizeSort( source.sort ),
+		sort: null,
 		filters: Array.isArray( source.filters ) ? source.filters : [],
 		layout: isObject( source.layout )
 			? normalizeLayout( source.layout, type )
@@ -245,7 +234,12 @@ export default function PublicDataView( { collectionId, view: initialView } ) {
 	}, [] );
 
 	const { data: dataFiltered, paginationInfo } = useMemo(
-		() => filterSortAndPaginateWithGroups( data, reconciledView, fields ),
+		() =>
+			filterSortAndPaginateWithGroups(
+				data,
+				{ ...reconciledView, sort: null },
+				fields
+			),
 		[ data, reconciledView, fields ]
 	);
 	const dataViewsView = useMemo(

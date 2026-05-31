@@ -17,8 +17,8 @@ const TITLE_FIELD = {
 	type: 'text',
 	enableGlobalSearch: true,
 	enableHiding: false,
+	enableSorting: false,
 	getValue: ( { item } ) => textValue( item?.title?.rendered ),
-	sort: sortTextValues( ( { item } ) => textValue( item?.title?.rendered ) ),
 	render: ( { item } ) => item?.title?.rendered ?? '',
 };
 
@@ -44,9 +44,8 @@ const SYSTEM_FIELDS = [
 		label: __( 'Created', 'cortext' ),
 		type: 'datetime',
 		enableGlobalSearch: false,
-		enableSorting: true,
+		enableSorting: false,
 		getValue: ( { item } ) => textValue( item?.created_at ),
-		sort: sortDateValues( ( { item } ) => textValue( item?.created_at ) ),
 		render: ( { item } ) => {
 			const value = item?.created_at;
 			if ( ! value ) {
@@ -65,7 +64,6 @@ const SYSTEM_FIELDS = [
 		enableGlobalSearch: false,
 		enableSorting: false,
 		getValue: ( { item } ) => textValue( item?.created_by ),
-		sort: sortTextValues( ( { item } ) => textValue( item?.created_by ) ),
 		render: ( { item } ) => (
 			<span className="cortext-cell-readonly">
 				{ item?.created_by ? String( item.created_by ) : '' }
@@ -77,9 +75,8 @@ const SYSTEM_FIELDS = [
 		label: __( 'Last edited', 'cortext' ),
 		type: 'datetime',
 		enableGlobalSearch: false,
-		enableSorting: true,
+		enableSorting: false,
 		getValue: ( { item } ) => textValue( item?.modified_at ),
-		sort: sortDateValues( ( { item } ) => textValue( item?.modified_at ) ),
 		render: ( { item } ) => {
 			const value = item?.modified_at;
 			if ( ! value ) {
@@ -98,7 +95,6 @@ const SYSTEM_FIELDS = [
 		enableGlobalSearch: false,
 		enableSorting: false,
 		getValue: ( { item } ) => textValue( item?.modified_by ),
-		sort: sortTextValues( ( { item } ) => textValue( item?.modified_by ) ),
 		render: ( { item } ) => (
 			<span className="cortext-cell-readonly">
 				{ item?.modified_by ? String( item.modified_by ) : '' }
@@ -180,99 +176,6 @@ function publicValue( value, type ) {
 	}
 }
 
-function compareEmptyLast( a, b ) {
-	const aEmpty = a === null || a === undefined || a === '';
-	const bEmpty = b === null || b === undefined || b === '';
-	if ( aEmpty && bEmpty ) {
-		return 0;
-	}
-	if ( aEmpty ) {
-		return 1;
-	}
-	if ( bEmpty ) {
-		return -1;
-	}
-	return null;
-}
-
-function sortNumberValues( getValue ) {
-	return ( a, b, direction ) => {
-		const av = getValue( { item: a } );
-		const bv = getValue( { item: b } );
-		const emptyCompare = compareEmptyLast( av, bv );
-		if ( emptyCompare !== null ) {
-			return emptyCompare;
-		}
-
-		const an = Number( av );
-		const bn = Number( bv );
-		const diff =
-			Number.isFinite( an ) && Number.isFinite( bn )
-				? an - bn
-				: String( av ).localeCompare( String( bv ) );
-		return direction === 'asc' ? diff : -diff;
-	};
-}
-
-function sortTextValues( getValue ) {
-	return ( a, b, direction ) => {
-		const av = getValue( { item: a } );
-		const bv = getValue( { item: b } );
-		const emptyCompare = compareEmptyLast( av, bv );
-		if ( emptyCompare !== null ) {
-			return emptyCompare;
-		}
-
-		const diff = textValue( av ).localeCompare( textValue( bv ) );
-		return direction === 'asc' ? diff : -diff;
-	};
-}
-
-function sortArrayValues( getValue ) {
-	return ( a, b, direction ) => {
-		const av = getValue( { item: a } );
-		const bv = getValue( { item: b } );
-		if ( av.length !== bv.length ) {
-			const diff = av.length - bv.length;
-			return direction === 'asc' ? diff : -diff;
-		}
-
-		const diff = av.join( ',' ).localeCompare( bv.join( ',' ) );
-		return direction === 'asc' ? diff : -diff;
-	};
-}
-
-function sortDateValues( getValue ) {
-	return ( a, b, direction ) => {
-		const av = getValue( { item: a } );
-		const bv = getValue( { item: b } );
-		const emptyCompare = compareEmptyLast( av, bv );
-		if ( emptyCompare !== null ) {
-			return emptyCompare;
-		}
-
-		const at = new Date( av ).getTime();
-		const bt = new Date( bv ).getTime();
-		const diff =
-			Number.isFinite( at ) && Number.isFinite( bt )
-				? at - bt
-				: textValue( av ).localeCompare( textValue( bv ) );
-		return direction === 'asc' ? diff : -diff;
-	};
-}
-
-function sortBooleanValues( getValue ) {
-	return ( a, b, direction ) => {
-		const av = getValue( { item: a } );
-		const bv = getValue( { item: b } );
-		if ( av === bv ) {
-			return 0;
-		}
-		const diff = av ? 1 : -1;
-		return direction === 'asc' ? diff : -diff;
-	};
-}
-
 /**
  * Builds a DataViews-compatible field spec from a REST field definition.
  *
@@ -291,6 +194,7 @@ function mapPublicField( fieldDef ) {
 	const base = {
 		id,
 		label,
+		enableSorting: false,
 		getValue: ( { item } ) =>
 			publicValue( item?.meta?.[ id ] ?? null, type ),
 		render: ( { item } ) =>
@@ -303,46 +207,39 @@ function mapPublicField( fieldDef ) {
 				...base,
 				type: 'integer',
 				isValid: { custom: () => null },
-				sort: sortNumberValues( base.getValue ),
 			};
 		case 'email':
 			return {
 				...base,
 				type: 'email',
-				sort: sortTextValues( base.getValue ),
 			};
 		case 'url':
 			return {
 				...base,
 				type: 'text',
-				sort: sortTextValues( base.getValue ),
 			};
 		case 'select':
 			return {
 				...base,
 				type: 'text',
 				elements,
-				sort: sortTextValues( base.getValue ),
 			};
 		case 'multiselect':
 			return {
 				...base,
 				type: 'array',
 				elements,
-				sort: sortArrayValues( base.getValue ),
 			};
 		case 'date':
 		case 'datetime':
 			return {
 				...base,
 				type: 'datetime',
-				sort: sortDateValues( base.getValue ),
 			};
 		case 'checkbox':
 			return {
 				...base,
 				type: 'boolean',
-				sort: sortBooleanValues( base.getValue ),
 			};
 		case 'relation':
 			return {
@@ -350,14 +247,19 @@ function mapPublicField( fieldDef ) {
 				type: 'text',
 				enableSorting: false,
 				filterBy: false,
-				sort: sortTextValues( base.getValue ),
+			};
+		case 'rollup':
+			return {
+				...base,
+				type: 'text',
+				enableSorting: false,
+				filterBy: false,
 			};
 		case 'text':
 		default:
 			return {
 				...base,
 				type: 'text',
-				sort: sortTextValues( base.getValue ),
 			};
 	}
 }

@@ -304,7 +304,7 @@ test.describe( 'Public page rendering', () => {
 		}
 	} );
 
-	test( 'published DataView sorts relation fields without falling back', async ( {
+	test( 'published DataView ignores saved relation sort without falling back', async ( {
 		page,
 		requestUtils,
 	} ) => {
@@ -424,7 +424,7 @@ test.describe( 'Public page rendering', () => {
 				.poll( () =>
 					renderedPublicTitles( page, [ 'A Book', 'Zed Book' ] )
 				)
-				.toEqual( [ 'A Book', 'Zed Book' ] );
+				.toEqual( [ 'Zed Book', 'A Book' ] );
 			expect( pageErrors ).toEqual( [] );
 			expect(
 				consoleErrors.filter(
@@ -478,7 +478,7 @@ test.describe( 'Public page rendering', () => {
 		}
 	} );
 
-	test( 'published DataView sorts number fields without falling back', async ( {
+	test( 'published DataView ignores saved number sort without falling back', async ( {
 		page,
 		requestUtils,
 	} ) => {
@@ -568,7 +568,7 @@ test.describe( 'Public page rendering', () => {
 						'Later Author',
 					] )
 				)
-				.toEqual( [ 'Earlier Author', 'Later Author' ] );
+				.toEqual( [ 'Later Author', 'Earlier Author' ] );
 			expect( pageErrors ).toEqual( [] );
 			expect(
 				consoleErrors.filter(
