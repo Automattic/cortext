@@ -28,6 +28,7 @@ use Cortext\Rest\FavoritesController;
 use Cortext\Rest\FieldsController;
 use Cortext\Notion\Importer as NotionImporter;
 use Cortext\Rest\NotionController;
+use Cortext\Rest\PostLocksController;
 use Cortext\Rest\RecentsController;
 use Cortext\Rest\RowsController;
 use Cortext\Rest\WorkspaceHomeController;
@@ -66,6 +67,7 @@ final class Plugin {
 		( new FieldsController() )->register();
 		( new DocumentLocatorController() )->register();
 		( new DocumentsController( null, $trash_cascade ) )->register();
+		( new PostLocksController() )->register();
 		( new RecentsController() )->register();
 		( new RowsController() )->register();
 		( new WorkspaceHomeController() )->register();
