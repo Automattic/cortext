@@ -49,8 +49,8 @@ function runNodeAnimation( node, keyframes, options ) {
 }
 
 /**
- * One item in Recents. The descriptor supplies the icon and type label, while
- * this row only adds collection context when the recent item is a row.
+ * One item in Recents. The descriptor supplies the icon; this row only adds
+ * collection context when it helps distinguish matching document titles.
  *
  * @param {Object}   props
  * @param {Object}   props.recent     Recent activity record from the server.
@@ -68,7 +68,7 @@ function SidebarRecentsRow( { recent, setNodeRef, onSelect } ) {
 		recent.id || 0
 	);
 	const merged = record ? { ...recent, ...record } : recent;
-	const { listIcon, kindLabel } = useDocumentRecord( merged );
+	const { listIcon } = useDocumentRecord( merged );
 	const title = recent?.title?.trim?.() || __( '(untitled)', 'cortext' );
 	const contextTitle = recent?.collection?.title?.trim?.() ?? '';
 
@@ -83,15 +83,14 @@ function SidebarRecentsRow( { recent, setNodeRef, onSelect } ) {
 
 	const ariaLabel = contextTitle
 		? sprintf(
-				/* translators: 1: row title, 2: collection title */
-				__( 'Recent row: %1$s in %2$s', 'cortext' ),
+				/* translators: 1: recent title, 2: collection title */
+				__( 'Recent: %1$s in %2$s', 'cortext' ),
 				title,
 				contextTitle
 		  )
 		: sprintf(
-				/* translators: 1: recent item type, 2: recent item title */
-				__( 'Recent %1$s: %2$s', 'cortext' ),
-				kindLabel.toLowerCase(),
+				/* translators: %s: recent title */
+				__( 'Recent: %s', 'cortext' ),
 				title
 		  );
 

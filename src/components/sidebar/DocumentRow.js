@@ -260,8 +260,8 @@ export default function DocumentRow( {
 							icon={ plus }
 							size="small"
 							label={ sprintf(
-								/* translators: %s: parent page title */
-								__( 'Add a page inside %s', 'cortext' ),
+								/* translators: %s: parent document title */
+								__( 'Add a document inside %s', 'cortext' ),
 								title
 							) }
 							onClick={ ( e ) => {
@@ -347,9 +347,7 @@ export default function DocumentRow( {
 										onClose();
 									} }
 								>
-									{ features.hierarchy
-										? __( 'Trash', 'cortext' )
-										: __( 'Move to Trash', 'cortext' ) }
+									{ __( 'Move to Trash', 'cortext' ) }
 								</MenuItem>
 							</MenuGroup>
 						) }

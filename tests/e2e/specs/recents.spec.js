@@ -42,7 +42,7 @@ async function readRecentsPlacement( page ) {
 		).map( ( title ) => title.textContent.trim() );
 		return {
 			recents: titles.indexOf( 'Recents' ),
-			pages: titles.indexOf( 'Pages' ),
+			pages: titles.indexOf( 'Documents' ),
 		};
 	} );
 }
@@ -198,7 +198,7 @@ test.describe( 'Sidebar recents', () => {
 			await expandRecentsIfCollapsed( page );
 			await expect(
 				sidebar.getByRole( 'button', {
-					name: `Recent page: ${ pageTitle }`,
+					name: `Recent: ${ pageTitle }`,
 				} )
 			).toBeVisible();
 
@@ -218,19 +218,19 @@ test.describe( 'Sidebar recents', () => {
 			).toBeVisible( { timeout: 15_000 } );
 			await expect(
 				sidebar.getByRole( 'button', {
-					name: `Recent collection: ${ collectionTitle }`,
+					name: `Recent: ${ collectionTitle }`,
 				} )
 			).toBeVisible();
 
 			await page.reload();
 			await expect(
 				sidebar.getByRole( 'button', {
-					name: `Recent collection: ${ collectionTitle }`,
+					name: `Recent: ${ collectionTitle }`,
 				} )
 			).toBeVisible();
 			await expect(
 				sidebar.getByRole( 'button', {
-					name: `Recent page: ${ pageTitle }`,
+					name: `Recent: ${ pageTitle }`,
 				} )
 			).toBeVisible();
 		} finally {
@@ -305,7 +305,7 @@ test.describe( 'Sidebar recents', () => {
 			const sidebar = page.locator( '.cortext-sidebar' );
 			await expandRecentsIfCollapsed( page );
 			const recentRow = sidebar.getByRole( 'button', {
-				name: `Recent row: The Left Hand of Darkness in ${ fixture.collectionTitle }`,
+				name: `Recent: The Left Hand of Darkness in ${ fixture.collectionTitle }`,
 			} );
 			await expect( recentRow ).toBeVisible( { timeout: 15_000 } );
 

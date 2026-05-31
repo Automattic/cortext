@@ -138,7 +138,7 @@ describe( 'SidebarRecents animation', () => {
 
 		render( <SidebarRecents /> );
 		fireEvent.click(
-			screen.getByRole( 'button', { name: 'Recent page: Alpha' } )
+			screen.getByRole( 'button', { name: 'Recent: Alpha' } )
 		);
 
 		expect( blurSpy ).toHaveBeenCalled();
@@ -160,7 +160,7 @@ describe( 'SidebarRecents animation', () => {
 		).toBeInTheDocument();
 		expect(
 			screen.getByRole( 'button', {
-				name: 'Recent row: War and Peace in Books',
+				name: 'Recent: War and Peace in Books',
 			} )
 		).toBeInTheDocument();
 	} );
@@ -177,7 +177,7 @@ describe( 'SidebarRecents animation', () => {
 		const { container } = render( <SidebarRecents /> );
 
 		expect(
-			screen.getByRole( 'button', { name: 'Recent collection: Library' } )
+			screen.getByRole( 'button', { name: 'Recent: Library' } )
 		).toBeInTheDocument();
 		expect(
 			container.querySelector( '[data-testid="icon-table"]' )

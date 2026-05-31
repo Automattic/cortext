@@ -24,7 +24,7 @@ import {
 	useEffect,
 	useState,
 } from '@wordpress/element';
-import { __, sprintf } from '@wordpress/i18n';
+import { __ } from '@wordpress/i18n';
 import {
 	home as homeIcon,
 	starEmpty,
@@ -43,7 +43,6 @@ import CanvasOwnerInspector, {
 import './DocumentInspectorSidebar.scss';
 
 import DocumentPropertiesActions from './DocumentPropertiesActions';
-import { useDocumentPropertiesContext } from './DocumentPropertiesContext';
 import MediaPicker, { MediaUploadCheck } from './MediaPicker';
 import DocumentIcon from './DocumentIcon';
 import DocumentIdentityControls from './DocumentIdentityControls';
@@ -495,7 +494,7 @@ function PageActionsPanel( { postId } ) {
 			await setHome( { id: postId } );
 		} catch ( err ) {
 			setError(
-				err?.message ?? __( 'Could not set page as home.', 'cortext' )
+				err?.message ?? __( 'Could not set as home.', 'cortext' )
 			);
 		}
 	}, [ isHome, postId, setHome ] );
@@ -543,14 +542,15 @@ function PageActionsPanel( { postId } ) {
 				setError(
 					err?.message ??
 						__(
-							'Page moved to Trash, but Favorites could not be updated.',
+							'Document moved to Trash, but Favorites could not be updated.',
 							'cortext'
 						)
 				);
 			}
 		} catch ( err ) {
 			setError(
-				err?.message ?? __( 'Could not move page to Trash.', 'cortext' )
+				err?.message ??
+					__( 'Could not move document to Trash.', 'cortext' )
 			);
 		} finally {
 			setIsTrashing( false );
@@ -626,7 +626,7 @@ function DocumentInspectorContent( { postId } ) {
 			<PageIdentityInspectorPanel
 				postId={ postId }
 				postType={ POST_TYPE }
-				title={ __( 'Page identity', 'cortext' ) }
+				title={ __( 'Identity', 'cortext' ) }
 			/>
 			<PageActionsPanel postId={ postId } />
 		</div>
@@ -640,7 +640,7 @@ function CollectionInspectorContent( { postId, postType } ) {
 			<PageIdentityInspectorPanel
 				postId={ postId }
 				postType={ postType }
-				title={ __( 'Collection identity', 'cortext' ) }
+				title={ __( 'Identity', 'cortext' ) }
 			/>
 			<CanvasOwnerInspector.Slot />
 		</div>
@@ -671,43 +671,7 @@ export default function DocumentInspectorSidebar( { postId, postType } ) {
 	const hasTrait =
 		Array.isArray( currentRecord?.crtxt_trait ) &&
 		currentRecord.crtxt_trait.length > 0;
-	const propertiesCtx = useDocumentPropertiesContext();
-	const rowCollectionId = propertiesCtx?.collectionId;
-	const { record: rowCollection } = useEntityRecord(
-		'postType',
-		'crtxt_document',
-		rowCollectionId || 0
-	);
-	const { record: ownedCollection } = useEntityRecord(
-		'postType',
-		'crtxt_document',
-		isCollection ? postId : 0
-	);
-	const rowCollectionTitle = (
-		rowCollection?.title?.rendered ||
-		rowCollection?.title?.raw ||
-		''
-	).trim();
-	const ownedCollectionTitle = (
-		ownedCollection?.title?.rendered ||
-		ownedCollection?.title?.raw ||
-		''
-	).trim();
-	let documentTabLabel;
-	if ( isCollection ) {
-		documentTabLabel =
-			ownedCollectionTitle || __( 'Collection', 'cortext' );
-	} else if ( hasTrait ) {
-		documentTabLabel = rowCollectionTitle
-			? sprintf(
-					/* translators: %s: collection name (e.g. "Books Item") */
-					__( '%s Item', 'cortext' ),
-					rowCollectionTitle
-			  )
-			: __( 'Collection Item', 'cortext' );
-	} else {
-		documentTabLabel = __( 'Page', 'cortext' );
-	}
+	const documentTabLabel = __( 'Document', 'cortext' );
 	const isTrashed = useSelect(
 		( select ) =>
 			select( editorStore ).getCurrentPostAttribute( 'status' ) ===
