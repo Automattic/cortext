@@ -13,6 +13,7 @@ import { useCallback, useState } from '@wordpress/element';
 import PublishToggle from './PublishToggle';
 import useCollectionDependentPages from '../hooks/useCollectionDependentPages';
 import { definesTrait } from '../documents/capabilities';
+import { isPublicWebAffordancesEnabled } from '../settings';
 
 const CASCADE_PUBLISH_ERROR_NOTICE_ID = 'cortext-document-publish-error';
 
@@ -35,6 +36,7 @@ function referencedCollectionIds( blocks ) {
 }
 
 export default function DocumentPublishToggle( { postId } ) {
+	const publicWebAffordances = isPublicWebAffordancesEnabled();
 	const { editPost, savePost } = useDispatch( editorStore );
 	const { saveEntityRecord } = useDispatch( coreStore );
 	const { createErrorNotice, removeNotice } = useDispatch( noticesStore );
@@ -119,7 +121,7 @@ export default function DocumentPublishToggle( { postId } ) {
 		togglePublishStatus();
 	}, [ togglePublishStatus ] );
 
-	if ( status === 'draft' ) {
+	if ( ! publicWebAffordances || status === 'draft' ) {
 		return null;
 	}
 
