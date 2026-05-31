@@ -38,7 +38,16 @@ final class FieldValueReadQuery {
 	 * @param bool   $has_include  Whether the request includes include[].
 	 */
 	public function supports_query( array $field_schema, mixed $filters, mixed $sort, string $search = '', bool $has_include = false ): bool {
-		return null !== $this->build_plan( 1, 0, $field_schema, $filters, $sort, $search, $has_include );
+		return null !== $this->build_plan(
+			1,
+			0,
+			$field_schema,
+			$filters,
+			$sort,
+			$search,
+			$has_include,
+			self::ACTIVE_STATUSES
+		);
 	}
 
 	/**
@@ -55,6 +64,7 @@ final class FieldValueReadQuery {
 	 * @param bool   $has_include   Whether the request includes include[].
 	 * @param int    $page          One-based page number.
 	 * @param int    $per_page      Rows per page.
+	 * @param array  $post_statuses Row post statuses visible to this request.
 	 * @return array{posts:WP_Post[],total:int,totalPages:int}|null
 	 */
 	public function query_rows(
@@ -65,7 +75,8 @@ final class FieldValueReadQuery {
 		string $search,
 		bool $has_include,
 		int $page,
-		int $per_page
+		int $per_page,
+		?array $post_statuses = null
 	): ?array {
 		if ( ! $this->index->can_read() ) {
 			return null;
@@ -76,7 +87,16 @@ final class FieldValueReadQuery {
 			return null;
 		}
 
-		$plan = $this->build_plan( $collection_id, $trait_term_id, $field_schema, $filters, $sort, $search, $has_include );
+		$plan = $this->build_plan(
+			$collection_id,
+			$trait_term_id,
+			$field_schema,
+			$filters,
+			$sort,
+			$search,
+			$has_include,
+			$this->visible_post_statuses( $post_statuses )
+		);
 		if ( null === $plan ) {
 			return null;
 		}
@@ -92,7 +112,8 @@ final class FieldValueReadQuery {
 		mixed $filters,
 		mixed $sort,
 		string $search,
-		bool $has_include
+		bool $has_include,
+		array $post_statuses
 	): ?array {
 		if ( $has_include || '' !== trim( $search ) ) {
 			return null;
@@ -102,7 +123,7 @@ final class FieldValueReadQuery {
 
 		$where = array(
 			$wpdb->prepare( 'p.post_type = %s', Document::POST_TYPE ),
-			"p.post_status IN ('draft', 'private', 'publish')",
+			$this->post_status_sql( 'p', $post_statuses ),
 		);
 		$joins = array();
 
@@ -119,35 +140,36 @@ final class FieldValueReadQuery {
 			'joins'      => $joins,
 			'orderby'    => $this->manual_orderby( $trait_term_id ),
 			'post_type'  => Document::POST_TYPE,
+			'statuses'   => $post_statuses,
 			'uses_index' => false,
 		);
 
 		$alias_counter = 0;
-		if ( ! $this->append_filters( $plan, $filters, $field_schema, $collection_id, $alias_counter ) ) {
+		if ( ! $this->append_filters( $plan, $filters, $field_schema, $collection_id, $alias_counter, $post_statuses ) ) {
 			return null;
 		}
-		if ( ! $this->append_sort( $plan, $sort, $field_schema, $collection_id, $alias_counter ) ) {
+		if ( ! $this->append_sort( $plan, $sort, $field_schema, $collection_id, $alias_counter, $post_statuses ) ) {
 			return null;
 		}
 
 		return $plan['uses_index'] ? $plan : null;
 	}
 
-	private function append_filters( array &$plan, mixed $filters, array $field_schema, int $collection_id, int &$alias_counter ): bool {
+	private function append_filters( array &$plan, mixed $filters, array $field_schema, int $collection_id, int &$alias_counter, array $post_statuses ): bool {
 		if ( ! is_array( $filters ) || count( $filters ) === 0 ) {
 			return true;
 		}
 
 		$nodes = $this->is_filter_node( $filters ) ? array( $filters ) : array_values( $filters );
 		foreach ( $nodes as $node ) {
-			if ( ! $this->append_filter_node( $plan, $node, $field_schema, $collection_id, $alias_counter ) ) {
+			if ( ! $this->append_filter_node( $plan, $node, $field_schema, $collection_id, $alias_counter, $post_statuses ) ) {
 				return false;
 			}
 		}
 		return true;
 	}
 
-	private function append_filter_node( array &$plan, mixed $node, array $field_schema, int $collection_id, int &$alias_counter ): bool {
+	private function append_filter_node( array &$plan, mixed $node, array $field_schema, int $collection_id, int &$alias_counter, array $post_statuses ): bool {
 		if ( ! is_array( $node ) ) {
 			return false;
 		}
@@ -164,7 +186,7 @@ final class FieldValueReadQuery {
 				return false;
 			}
 			foreach ( $node['filters'] as $child ) {
-				if ( ! $this->append_filter_node( $plan, $child, $field_schema, $collection_id, $alias_counter ) ) {
+				if ( ! $this->append_filter_node( $plan, $child, $field_schema, $collection_id, $alias_counter, $post_statuses ) ) {
 					return false;
 				}
 			}
@@ -174,14 +196,14 @@ final class FieldValueReadQuery {
 		if ( ! $is_leaf ) {
 			return false;
 		}
-		return $this->append_filter_leaf( $plan, $node, $field_schema, $collection_id, $alias_counter );
+		return $this->append_filter_leaf( $plan, $node, $field_schema, $collection_id, $alias_counter, $post_statuses );
 	}
 
 	private function is_filter_node( array $value ): bool {
 		return isset( $value['field'] ) || isset( $value['operator'] ) || isset( $value['relation'] ) || isset( $value['filters'] );
 	}
 
-	private function append_filter_leaf( array &$plan, array $filter, array $field_schema, int $collection_id, int &$alias_counter ): bool {
+	private function append_filter_leaf( array &$plan, array $filter, array $field_schema, int $collection_id, int &$alias_counter, array $post_statuses ): bool {
 		$field_key = isset( $filter['field'] ) ? (string) $filter['field'] : '';
 		$operator  = isset( $filter['operator'] ) ? (string) $filter['operator'] : '';
 		if ( '' === $field_key || '' === $operator || ! isset( $field_schema[ $field_key ] ) ) {
@@ -206,7 +228,7 @@ final class FieldValueReadQuery {
 			return false;
 		}
 
-		$join = $this->field_filter_join( $field, $operator, $filter['value'] ?? null, $collection_id, ++$alias_counter );
+		$join = $this->field_filter_join( $field, $operator, $filter['value'] ?? null, $collection_id, ++$alias_counter, $post_statuses );
 		if ( null === $join ) {
 			return false;
 		}
@@ -239,7 +261,7 @@ final class FieldValueReadQuery {
 		};
 	}
 
-	private function field_filter_join( array $field, string $operator, mixed $value, int $collection_id, int $index ): ?string {
+	private function field_filter_join( array $field, string $operator, mixed $value, int $collection_id, int $index, array $post_statuses ): ?string {
 		$type     = (string) ( $field['type'] ?? '' );
 		$field_id = $this->field_id_from_schema( $field );
 		if ( $field_id <= 0 ) {
@@ -272,7 +294,7 @@ final class FieldValueReadQuery {
 				ON ({$alias}.row_id = p.ID
 				AND {$alias}.collection_id = %d
 				AND {$alias}.field_id = %d
-				AND {$alias}.post_status IN ('draft', 'private', 'publish')
+				AND {$this->post_status_sql( $alias, $post_statuses )}
 				AND {$predicate_sql})",
 			...$args
 		);
@@ -444,7 +466,7 @@ final class FieldValueReadQuery {
 		);
 	}
 
-	private function append_sort( array &$plan, mixed $sort, array $field_schema, int $collection_id, int &$alias_counter ): bool {
+	private function append_sort( array &$plan, mixed $sort, array $field_schema, int $collection_id, int &$alias_counter, array $post_statuses ): bool {
 		$trait_term_id = Relations::trait_term_id_for_collection( $collection_id );
 
 		if ( ! is_array( $sort ) || empty( $sort['field'] ) ) {
@@ -501,7 +523,7 @@ final class FieldValueReadQuery {
 				ON ({$alias}.row_id = p.ID
 				AND {$alias}.collection_id = %d
 				AND {$alias}.field_id = %d
-				AND {$alias}.post_status IN ('draft', 'private', 'publish'))",
+				AND {$this->post_status_sql( $alias, $post_statuses )})",
 			$collection_id,
 			$field_id
 		);
@@ -590,7 +612,7 @@ final class FieldValueReadQuery {
 		$posts = get_posts(
 			array(
 				'post_type'        => $plan['post_type'],
-				'post_status'      => self::ACTIVE_STATUSES,
+				'post_status'      => $plan['statuses'],
 				'post__in'         => $ids,
 				'orderby'          => 'post__in',
 				'posts_per_page'   => count( $ids ),
@@ -607,6 +629,35 @@ final class FieldValueReadQuery {
 			),
 			'total'      => $total,
 			'totalPages' => (int) ceil( $total / $per_page ),
+		);
+	}
+
+	private function visible_post_statuses( ?array $post_statuses ): array {
+		if ( null === $post_statuses ) {
+			return self::ACTIVE_STATUSES;
+		}
+
+		$allowed = array_values(
+			array_intersect(
+				self::ACTIVE_STATUSES,
+				array_map( 'strval', $post_statuses )
+			)
+		);
+		return count( $allowed ) > 0 ? $allowed : self::ACTIVE_STATUSES;
+	}
+
+	private function post_status_sql( string $alias, array $post_statuses ): string {
+		global $wpdb;
+
+		$placeholders = implode(
+			', ',
+			array_fill( 0, count( $post_statuses ), '%s' )
+		);
+
+		return $wpdb->prepare(
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+			"{$alias}.post_status IN ({$placeholders})",
+			...$post_statuses
 		);
 	}
 

@@ -229,6 +229,7 @@ final class RowsController {
 		$ctx              = new RowFormatContext();
 		$ctx->field_types = $this->field_types_map( $formatted_field_ids );
 		$multi_field_ids  = $this->multi_value_field_ids_from( $ctx->field_types );
+		$row_statuses     = $this->row_statuses_for_request( $request );
 
 		$sidecar_result = ( new FieldValueReadQuery() )->query_rows(
 			$collection_id,
@@ -238,7 +239,8 @@ final class RowsController {
 			$search,
 			array_key_exists( 'include', $query_params ),
 			(int) $request->get_param( 'page' ),
-			(int) $request->get_param( 'per_page' )
+			(int) $request->get_param( 'per_page' ),
+			$row_statuses
 		);
 
 		if ( null !== $sidecar_result ) {
@@ -246,7 +248,7 @@ final class RowsController {
 			$total       = $sidecar_result['total'];
 			$total_pages = $sidecar_result['totalPages'];
 		} else {
-			$query_args = $this->build_query_args( $request, $collection_id );
+			$query_args = $this->build_query_args( $request, $collection_id, $row_statuses );
 			$scope      = new RowsQueryScope(
 				$row_query,
 				$field_schema,
@@ -358,12 +360,13 @@ final class RowsController {
 	 *
 	 * @param WP_REST_Request $request       Full request object.
 	 * @param int             $collection_id Collection (trait) post ID.
+	 * @param string[]        $row_statuses  Post statuses visible to this request.
 	 * @return array
 	 */
-	private function build_query_args( WP_REST_Request $request, int $collection_id ): array {
+	private function build_query_args( WP_REST_Request $request, int $collection_id, array $row_statuses ): array {
 		$args = array(
 			'post_type'      => Document::POST_TYPE,
-			'post_status'    => array( 'draft', 'private', 'publish' ),
+			'post_status'    => $row_statuses,
 			'posts_per_page' => (int) $request->get_param( 'per_page' ),
 			'paged'          => (int) $request->get_param( 'page' ),
 		);
@@ -416,6 +419,12 @@ final class RowsController {
 		}
 
 		return $args;
+	}
+
+	private function row_statuses_for_request( WP_REST_Request $request ): array {
+		return 'view' === $request->get_param( 'context' )
+			? array( 'publish' )
+			: array( 'draft', 'private', 'publish' );
 	}
 
 	/**
