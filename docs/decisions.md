@@ -4,6 +4,14 @@ Running log of significant design decisions. Newest first. Each entry captures *
 
 Desktop-specific runtime and packaging decisions live in `docs/desktop-decisions.md`.
 
+## 2026-05-29 — Document editing stays in the Cortext shell
+
+**Decision.** `crtxt_document` no longer exposes the core wp-admin editing screens. The Cortext menu goes straight to the React shell, and the document post type uses `show_ui => false` while staying available over REST. The inspector also leaves out WordPress's permalink and parent-page panels. Page hierarchy and order stay in the Cortext sidebar, where users already move pages around.
+
+**Why.** Cortext has one editing surface: the shell. The core list table, `post.php`, and generic inspector panels would give users a second, half-compatible way to edit the same documents. They also surface things we do not want here, like slug editing and a parent selector that does not behave well in Cortext.
+
+**Trade-off.** Bulk actions from the core list table are gone for now. When we need them, they should come back as shell features instead of as a fallback to WordPress screens.
+
 ## 2026-05-23 — Field values stay in postmeta while the sidecar proves itself
 
 **Decision.** Row field values still live in `wp_postmeta`. Cortext can also maintain a derived `cortext_field_values` table for row `field-*` values. If the host can create the table and the index is enabled, Cortext installs it and schedules a background rebuild/verify. Production reads stay on postmeta until the materialization benchmark shows at least a 10x filter or sort win at 50K rows without unacceptable write cost. The index covers row values only; collection schema, field definitions, column order, options, relation config, and rollup config stay in collection/field posts and postmeta.
@@ -42,6 +50,8 @@ Id-based URLs sidestep both issues. The id is stable from creation, renames cann
 **Revisit when.** Legacy `untitled`-slugged pages surface in a user-visible context where their slug matters (export, share link, breadcrumb), or product decides to hide abandoned blank drafts from the sidebar.
 
 ## 2026-04-23 — Core admin is an escape hatch, not the primary UI
+
+**Superseded by 2026-05-29 — Document editing stays in the Cortext shell.**
 
 **Decision.** `crtxt_page` registers with `show_ui => true` and `show_in_menu => false`. `Admin\Screen` adds a "Manage Pages" submenu under the Cortext top-level that links to `edit.php?post_type=crtxt_page`. The React shell remains the primary editing surface.
 
