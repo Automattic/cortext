@@ -17,7 +17,8 @@ const TITLE_FIELD = {
 	type: 'text',
 	enableGlobalSearch: true,
 	enableHiding: false,
-	getValue: ( { item } ) => item?.title?.rendered ?? '',
+	getValue: ( { item } ) => textValue( item?.title?.rendered ),
+	sort: sortTextValues( ( { item } ) => textValue( item?.title?.rendered ) ),
 	render: ( { item } ) => item?.title?.rendered ?? '',
 };
 
@@ -44,7 +45,8 @@ const SYSTEM_FIELDS = [
 		type: 'datetime',
 		enableGlobalSearch: false,
 		enableSorting: true,
-		getValue: ( { item } ) => item?.created_at ?? '',
+		getValue: ( { item } ) => textValue( item?.created_at ),
+		sort: sortDateValues( ( { item } ) => textValue( item?.created_at ) ),
 		render: ( { item } ) => {
 			const value = item?.created_at;
 			if ( ! value ) {
@@ -62,7 +64,8 @@ const SYSTEM_FIELDS = [
 		type: 'text',
 		enableGlobalSearch: false,
 		enableSorting: false,
-		getValue: ( { item } ) => item?.created_by ?? '',
+		getValue: ( { item } ) => textValue( item?.created_by ),
+		sort: sortTextValues( ( { item } ) => textValue( item?.created_by ) ),
 		render: ( { item } ) => (
 			<span className="cortext-cell-readonly">
 				{ item?.created_by ? String( item.created_by ) : '' }
@@ -75,7 +78,8 @@ const SYSTEM_FIELDS = [
 		type: 'datetime',
 		enableGlobalSearch: false,
 		enableSorting: true,
-		getValue: ( { item } ) => item?.modified_at ?? '',
+		getValue: ( { item } ) => textValue( item?.modified_at ),
+		sort: sortDateValues( ( { item } ) => textValue( item?.modified_at ) ),
 		render: ( { item } ) => {
 			const value = item?.modified_at;
 			if ( ! value ) {
@@ -93,7 +97,8 @@ const SYSTEM_FIELDS = [
 		type: 'text',
 		enableGlobalSearch: false,
 		enableSorting: false,
-		getValue: ( { item } ) => item?.modified_by ?? '',
+		getValue: ( { item } ) => textValue( item?.modified_by ),
+		sort: sortTextValues( ( { item } ) => textValue( item?.modified_by ) ),
 		render: ( { item } ) => (
 			<span className="cortext-cell-readonly">
 				{ item?.modified_by ? String( item.modified_by ) : '' }
@@ -109,7 +114,11 @@ function relationTitle( entry ) {
 	if ( typeof entry !== 'object' ) {
 		return String( entry );
 	}
-	return entry?.title?.raw || entry?.title?.rendered || `#${ entry?.id }`;
+	return (
+		entry?.title?.raw ||
+		entry?.title?.rendered ||
+		( entry?.id ? `#${ entry.id }` : '' )
+	);
 }
 
 function formatPublicRelation( value ) {
@@ -124,11 +133,51 @@ function formatPublicDisplay( value, type, elements ) {
 	return formatDisplay( value, type, elements );
 }
 
-function publicValue( value, type ) {
-	if ( type === 'relation' ) {
-		return formatPublicRelation( value );
+function textValue( value ) {
+	if ( value === null || value === undefined ) {
+		return '';
 	}
-	return value;
+	if ( Array.isArray( value ) ) {
+		return value.map( textValue ).filter( Boolean ).join( ', ' );
+	}
+	if ( typeof value === 'object' ) {
+		return relationTitle( value );
+	}
+	return String( value );
+}
+
+function arrayValue( value ) {
+	const list = Array.isArray( value ) ? value : [ value ];
+	return list.map( textValue ).filter( Boolean );
+}
+
+function numberValue( value ) {
+	if ( value === null || value === undefined || value === '' ) {
+		return null;
+	}
+	const number = Number( value );
+	return Number.isFinite( number ) ? number : null;
+}
+
+function publicValue( value, type ) {
+	switch ( type ) {
+		case 'relation':
+			return formatPublicRelation( value );
+		case 'multiselect':
+			return arrayValue( value );
+		case 'number':
+			return numberValue( value );
+		case 'checkbox':
+			return value === true;
+		case 'text':
+		case 'email':
+		case 'url':
+		case 'select':
+		case 'date':
+		case 'datetime':
+		default:
+			return textValue( value );
+	}
 }
 
 function compareEmptyLast( a, b ) {
@@ -161,6 +210,65 @@ function sortNumberValues( getValue ) {
 			Number.isFinite( an ) && Number.isFinite( bn )
 				? an - bn
 				: String( av ).localeCompare( String( bv ) );
+		return direction === 'asc' ? diff : -diff;
+	};
+}
+
+function sortTextValues( getValue ) {
+	return ( a, b, direction ) => {
+		const av = getValue( { item: a } );
+		const bv = getValue( { item: b } );
+		const emptyCompare = compareEmptyLast( av, bv );
+		if ( emptyCompare !== null ) {
+			return emptyCompare;
+		}
+
+		const diff = textValue( av ).localeCompare( textValue( bv ) );
+		return direction === 'asc' ? diff : -diff;
+	};
+}
+
+function sortArrayValues( getValue ) {
+	return ( a, b, direction ) => {
+		const av = getValue( { item: a } );
+		const bv = getValue( { item: b } );
+		if ( av.length !== bv.length ) {
+			const diff = av.length - bv.length;
+			return direction === 'asc' ? diff : -diff;
+		}
+
+		const diff = av.join( ',' ).localeCompare( bv.join( ',' ) );
+		return direction === 'asc' ? diff : -diff;
+	};
+}
+
+function sortDateValues( getValue ) {
+	return ( a, b, direction ) => {
+		const av = getValue( { item: a } );
+		const bv = getValue( { item: b } );
+		const emptyCompare = compareEmptyLast( av, bv );
+		if ( emptyCompare !== null ) {
+			return emptyCompare;
+		}
+
+		const at = new Date( av ).getTime();
+		const bt = new Date( bv ).getTime();
+		const diff =
+			Number.isFinite( at ) && Number.isFinite( bt )
+				? at - bt
+				: textValue( av ).localeCompare( textValue( bv ) );
+		return direction === 'asc' ? diff : -diff;
+	};
+}
+
+function sortBooleanValues( getValue ) {
+	return ( a, b, direction ) => {
+		const av = getValue( { item: a } );
+		const bv = getValue( { item: b } );
+		if ( av === bv ) {
+			return 0;
+		}
+		const diff = av ? 1 : -1;
 		return direction === 'asc' ? diff : -diff;
 	};
 }
@@ -198,23 +306,59 @@ function mapPublicField( fieldDef ) {
 				sort: sortNumberValues( base.getValue ),
 			};
 		case 'email':
-			return { ...base, type: 'email' };
+			return {
+				...base,
+				type: 'email',
+				sort: sortTextValues( base.getValue ),
+			};
 		case 'url':
-			return { ...base, type: 'text' };
+			return {
+				...base,
+				type: 'text',
+				sort: sortTextValues( base.getValue ),
+			};
 		case 'select':
-			return { ...base, type: 'text', elements };
+			return {
+				...base,
+				type: 'text',
+				elements,
+				sort: sortTextValues( base.getValue ),
+			};
 		case 'multiselect':
-			return { ...base, type: 'array', elements };
+			return {
+				...base,
+				type: 'array',
+				elements,
+				sort: sortArrayValues( base.getValue ),
+			};
 		case 'date':
 		case 'datetime':
-			return { ...base, type: 'datetime' };
+			return {
+				...base,
+				type: 'datetime',
+				sort: sortDateValues( base.getValue ),
+			};
 		case 'checkbox':
-			return { ...base, type: 'boolean' };
+			return {
+				...base,
+				type: 'boolean',
+				sort: sortBooleanValues( base.getValue ),
+			};
 		case 'relation':
-			return { ...base, type: 'text', enableSorting: false };
+			return {
+				...base,
+				type: 'text',
+				enableSorting: false,
+				filterBy: false,
+				sort: sortTextValues( base.getValue ),
+			};
 		case 'text':
 		default:
-			return { ...base, type: 'text' };
+			return {
+				...base,
+				type: 'text',
+				sort: sortTextValues( base.getValue ),
+			};
 	}
 }
 

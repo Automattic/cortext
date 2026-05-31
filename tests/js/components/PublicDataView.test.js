@@ -28,6 +28,7 @@ import PublicDataView, {
 	PublicDataViewErrorBoundary,
 	normalizePublicView,
 } from '../../../src/components/PublicDataView';
+import { buildPublicFields } from '../../../src/hooks/publicFieldMapping';
 import usePublicRows from '../../../src/hooks/usePublicRows';
 
 const rows = [
@@ -342,6 +343,173 @@ describe( 'PublicDataView', () => {
 		);
 		expect( bornField.sort( later, earlier, 'asc' ) ).toBeGreaterThan( 0 );
 		expect( bornField.sort( later, earlier, 'desc' ) ).toBeLessThan( 0 );
+	} );
+
+	it( 'keeps every public field type sort-safe', () => {
+		const fieldCases = [
+			{
+				id: 41,
+				label: 'Text',
+				type: 'text',
+				value: 'Alpha',
+				emptyValue: '',
+				expectedType: 'text',
+			},
+			{
+				id: 42,
+				label: 'Email',
+				type: 'email',
+				value: 'ada@example.com',
+				emptyValue: '',
+				expectedType: 'email',
+			},
+			{
+				id: 43,
+				label: 'URL',
+				type: 'url',
+				value: 'https://example.com',
+				emptyValue: '',
+				expectedType: 'text',
+			},
+			{
+				id: 44,
+				label: 'Status',
+				type: 'select',
+				value: 'open',
+				emptyValue: '',
+				expectedType: 'text',
+				options: JSON.stringify( [ { value: 'open', label: 'Open' } ] ),
+			},
+			{
+				id: 45,
+				label: 'Tags',
+				type: 'multiselect',
+				value: [ 'alpha', 'beta' ],
+				emptyValue: [],
+				expectedType: 'array',
+				options: JSON.stringify( [
+					{ value: 'alpha', label: 'Alpha' },
+					{ value: 'beta', label: 'Beta' },
+				] ),
+			},
+			{
+				id: 46,
+				label: 'Born',
+				type: 'number',
+				value: 1882,
+				emptyValue: null,
+				expectedType: 'integer',
+			},
+			{
+				id: 47,
+				label: 'Published',
+				type: 'date',
+				value: '2026-05-31',
+				emptyValue: '',
+				expectedType: 'datetime',
+			},
+			{
+				id: 48,
+				label: 'Updated',
+				type: 'datetime',
+				value: '2026-05-31T10:00:00+00:00',
+				emptyValue: '',
+				expectedType: 'datetime',
+			},
+			{
+				id: 49,
+				label: 'Done',
+				type: 'checkbox',
+				value: true,
+				emptyValue: false,
+				expectedType: 'boolean',
+			},
+			{
+				id: 50,
+				label: 'Author',
+				type: 'relation',
+				value: [
+					{
+						id: 99,
+						title: { rendered: 'Octavia Butler' },
+					},
+				],
+				emptyValue: '',
+				expectedType: 'text',
+			},
+			{
+				id: 51,
+				label: 'Computed',
+				type: 'rollup',
+				value: { title: { rendered: 'Computed value' } },
+				emptyValue: '',
+				expectedType: 'text',
+			},
+		];
+
+		const fields = buildPublicFields(
+			fieldCases.map( ( field ) => ( {
+				id: field.id,
+				label: field.label,
+				type: field.type,
+				options: field.options ?? null,
+			} ) )
+		);
+		const filledItem = {
+			id: 100,
+			title: { rendered: 'Filled row' },
+			created_at: '2026-05-31T10:00:00+00:00',
+			created_by: 'Ada Lovelace',
+			modified_at: '2026-05-31T11:00:00+00:00',
+			modified_by: 'Grace Hopper',
+			meta: Object.fromEntries(
+				fieldCases.map( ( field ) => [
+					`field-${ field.id }`,
+					field.value,
+				] )
+			),
+		};
+		const emptyItem = {
+			id: 101,
+			title: { rendered: null },
+			meta: {},
+		};
+
+		for ( const fieldCase of fieldCases ) {
+			const field = fields.find(
+				( candidate ) => candidate.id === `field-${ fieldCase.id }`
+			);
+
+			expect( field.type ).toBe( fieldCase.expectedType );
+			expect( field.getValue( { item: emptyItem } ) ).toEqual(
+				fieldCase.emptyValue
+			);
+			expect( () =>
+				field.sort( filledItem, emptyItem, 'asc' )
+			).not.toThrow();
+			expect( () =>
+				field.sort( emptyItem, filledItem, 'desc' )
+			).not.toThrow();
+		}
+
+		for ( const fieldId of [
+			'title',
+			'created_at',
+			'created_by',
+			'modified_at',
+			'modified_by',
+		] ) {
+			const field = fields.find(
+				( candidate ) => candidate.id === fieldId
+			);
+
+			expect( () =>
+				field.sort( filledItem, emptyItem, 'asc' )
+			).not.toThrow();
+			expect( () =>
+				field.sort( emptyItem, filledItem, 'desc' )
+			).not.toThrow();
+		}
 	} );
 
 	it( 'shows a local fallback when a public DataView render throws', () => {
