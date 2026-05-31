@@ -270,6 +270,25 @@ describe( 'PublicDataView', () => {
 		} );
 
 		const author = screen.getByText( 'Octavia Butler' );
+		const dataViewFields = mockDataViews.mock.calls.at( -1 )[ 0 ].fields;
+		const authorField = dataViewFields.find(
+			( field ) => field.id === 'field-22'
+		);
+
+		expect(
+			authorField.getValue( {
+				item: {
+					meta: {
+						'field-22': [
+							{
+								id: 99,
+								title: { rendered: 'Octavia Butler' },
+							},
+						],
+					},
+				},
+			} )
+		).toBe( 'Octavia Butler' );
 		expect( author.closest( 'a' ) ).toBeNull();
 		expect( author.closest( '.cortext-chip' ) ).toBeNull();
 		expect( author.closest( '.cortext-relation-ref' ) ).toBeNull();

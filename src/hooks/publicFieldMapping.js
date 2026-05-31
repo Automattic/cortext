@@ -124,6 +124,13 @@ function formatPublicDisplay( value, type, elements ) {
 	return formatDisplay( value, type, elements );
 }
 
+function publicValue( value, type ) {
+	if ( type === 'relation' ) {
+		return formatPublicRelation( value );
+	}
+	return value;
+}
+
 /**
  * Builds a DataViews-compatible field spec from a REST field definition.
  *
@@ -142,7 +149,8 @@ function mapPublicField( fieldDef ) {
 	const base = {
 		id,
 		label,
-		getValue: ( { item } ) => item?.meta?.[ id ] ?? null,
+		getValue: ( { item } ) =>
+			publicValue( item?.meta?.[ id ] ?? null, type ),
 		render: ( { item } ) =>
 			formatPublicDisplay( item?.meta?.[ id ] ?? null, type, elements ),
 	};

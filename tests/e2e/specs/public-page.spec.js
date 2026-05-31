@@ -24,6 +24,41 @@ async function deleteIfCreated( requestUtils, path ) {
 	}
 }
 
+async function createPublishedCollection(
+	requestUtils,
+	title,
+	fieldTitle = 'Notes'
+) {
+	const collection = await requestUtils.rest( {
+		method: 'POST',
+		path: '/wp/v2/crtxt_documents',
+		data: {
+			title,
+			status: 'publish',
+		},
+	} );
+
+	const field = await requestUtils.rest( {
+		method: 'POST',
+		path: '/wp/v2/crtxt_fields',
+		data: {
+			title: fieldTitle,
+			status: 'private',
+			meta: { type: 'text' },
+		},
+	} );
+
+	await requestUtils.rest( {
+		method: 'POST',
+		path: `/wp/v2/crtxt_documents/${ collection.id }`,
+		data: {
+			meta: { cortext_fields: [ String( field.id ) ] },
+		},
+	} );
+
+	return { collection, field };
+}
+
 function createDataViewBlockMarkup( collectionId, viewOverrides = {} ) {
 	const attributes = {
 		collectionId,
@@ -46,32 +81,10 @@ function createDataViewBlockMarkup( collectionId, viewOverrides = {} ) {
 async function createPublishedCollectionWithRows( requestUtils ) {
 	const suffix = Date.now().toString( 36 ).slice( -4 );
 
-	const collection = await requestUtils.rest( {
-		method: 'POST',
-		path: '/wp/v2/crtxt_documents',
-		data: {
-			title: `Public DataView order ${ suffix }`,
-			status: 'publish',
-		},
-	} );
-
-	const field = await requestUtils.rest( {
-		method: 'POST',
-		path: '/wp/v2/crtxt_fields',
-		data: {
-			title: 'Notes',
-			status: 'private',
-			meta: { type: 'text' },
-		},
-	} );
-
-	await requestUtils.rest( {
-		method: 'POST',
-		path: `/wp/v2/crtxt_documents/${ collection.id }`,
-		data: {
-			meta: { cortext_fields: [ String( field.id ) ] },
-		},
-	} );
+	const { collection, field } = await createPublishedCollection(
+		requestUtils,
+		`Public DataView order ${ suffix }`
+	);
 
 	const rows = [];
 	for ( const title of [
@@ -286,6 +299,180 @@ test.describe( 'Public page rendering', () => {
 				requestUtils,
 				fixture.collection &&
 					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
+			);
+		}
+	} );
+
+	test( 'published DataView sorts relation fields without falling back', async ( {
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = { rows: [] };
+		const consoleErrors = [];
+		const pageErrors = [];
+		const onConsole = ( message ) => {
+			if ( message.type() === 'error' ) {
+				consoleErrors.push( message.text() );
+			}
+		};
+		const onPageError = ( error ) => pageErrors.push( error.message );
+
+		page.on( 'console', onConsole );
+		page.on( 'pageerror', onPageError );
+
+		try {
+			const suffix = Date.now().toString( 36 ).slice( -4 );
+			fixture.books = await createPublishedCollection(
+				requestUtils,
+				`Public Books ${ suffix }`
+			);
+			fixture.authors = await createPublishedCollection(
+				requestUtils,
+				`Public Authors ${ suffix }`
+			);
+
+			fixture.authorRows = [];
+			for ( const title of [ 'Zelda Fitzgerald', 'Ada Lovelace' ] ) {
+				fixture.authorRows.push(
+					await requestUtils.rest( {
+						method: 'POST',
+						path: '/wp/v2/crtxt_documents',
+						data: {
+							title,
+							status: 'publish',
+							cortext_trait: fixture.authors.collection.id,
+						},
+					} )
+				);
+			}
+
+			fixture.relation = await requestUtils.rest( {
+				method: 'POST',
+				path: `/cortext/v1/collections/${ fixture.books.collection.id }/fields`,
+				data: {
+					title: 'Author',
+					type: 'relation',
+					related_collection_id: fixture.authors.collection.id,
+					relation_multiple: false,
+					reverse_multiple: true,
+				},
+			} );
+
+			const [ zelda, ada ] = fixture.authorRows;
+			const relationKey = `field-${ fixture.relation.id }`;
+			for ( const row of [
+				{
+					title: 'Zed Book',
+					authorId: zelda.id,
+				},
+				{
+					title: 'A Book',
+					authorId: ada.id,
+				},
+			] ) {
+				fixture.rows.push(
+					await requestUtils.rest( {
+						method: 'POST',
+						path: '/wp/v2/crtxt_documents',
+						data: {
+							title: row.title,
+							status: 'publish',
+							cortext_trait: fixture.books.collection.id,
+							meta: {
+								[ relationKey ]: [ row.authorId ],
+							},
+						},
+					} )
+				);
+			}
+
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: `Public relation sort ${ suffix }`,
+					status: 'publish',
+					content: createDataViewBlockMarkup(
+						fixture.books.collection.id,
+						{
+							fields: [ 'title', relationKey ],
+							sort: { field: relationKey, direction: 'asc' },
+						}
+					),
+				},
+			} );
+
+			await page.context().clearCookies( { name: /^wordpress_/ } );
+
+			const response = await page.goto(
+				`/cortext/${ fixture.page.slug }/`
+			);
+
+			expect( response?.status() ).toBe( 200 );
+			await expect(
+				page.locator( '.wp-block-cortext-data-view .dataviews-wrapper' )
+			).toBeVisible();
+			await expect(
+				page.getByText( "We couldn't load this collection view." )
+			).toHaveCount( 0 );
+			await expect( page.getByText( 'Ada Lovelace' ) ).toBeVisible();
+			await expect(
+				page.getByText( 'Ada Lovelace' ).locator( 'xpath=ancestor::a' )
+			).toHaveCount( 0 );
+			await expect
+				.poll( () =>
+					renderedPublicTitles( page, [ 'A Book', 'Zed Book' ] )
+				)
+				.toEqual( [ 'A Book', 'Zed Book' ] );
+			expect( pageErrors ).toEqual( [] );
+			expect(
+				consoleErrors.filter(
+					( message ) => ! /favicon/i.test( message )
+				)
+			).toEqual( [] );
+		} finally {
+			page.off( 'console', onConsole );
+			page.off( 'pageerror', onPageError );
+			for ( const row of fixture.rows ?? [] ) {
+				await deleteIfCreated(
+					requestUtils,
+					`/wp/v2/crtxt_documents/${ row.id }`
+				);
+			}
+			for ( const row of fixture.authorRows ?? [] ) {
+				await deleteIfCreated(
+					requestUtils,
+					`/wp/v2/crtxt_documents/${ row.id }`
+				);
+			}
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.relation &&
+					`/wp/v2/crtxt_fields/${ fixture.relation.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.books?.field &&
+					`/wp/v2/crtxt_fields/${ fixture.books.field.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.authors?.field &&
+					`/wp/v2/crtxt_fields/${ fixture.authors.field.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.books?.collection &&
+					`/wp/v2/crtxt_documents/${ fixture.books.collection.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.authors?.collection &&
+					`/wp/v2/crtxt_documents/${ fixture.authors.collection.id }`
 			);
 		}
 	} );
