@@ -35,33 +35,36 @@ function referencedCollectionIds( blocks ) {
 	return [ ...ids ];
 }
 
-export default function DocumentPublishToggle( { postId } ) {
+export default function DocumentPublishToggle( { disabled = false, postId } ) {
 	const publicWebAffordances = isPublicWebAffordancesEnabled();
 	const { editPost, savePost } = useDispatch( editorStore );
 	const { saveEntityRecord } = useDispatch( coreStore );
 	const { createErrorNotice, removeNotice } = useDispatch( noticesStore );
 
-	const { status, link, title, isSaving, blocks, isCollection } = useSelect(
-		( select ) => {
-			const editor = select( editorStore );
-			const record = select( coreStore ).getEntityRecord(
-				'postType',
-				'crtxt_document',
-				postId
-			);
-			return {
-				status: editor.getEditedPostAttribute( 'status' ),
-				link: editor.getEditedPostAttribute( 'link' ),
-				title: editor.getEditedPostAttribute( 'title' ),
-				isSaving: editor.isSavingPost(),
-				blocks: select( blockEditorStore ).getBlocks(),
-				isCollection: definesTrait( record ),
-			};
-		},
-		[ postId ]
-	);
+	const { status, link, title, isSaving, isLocked, blocks, isCollection } =
+		useSelect(
+			( select ) => {
+				const editor = select( editorStore );
+				const record = select( coreStore ).getEntityRecord(
+					'postType',
+					'crtxt_document',
+					postId
+				);
+				return {
+					status: editor.getEditedPostAttribute( 'status' ),
+					link: editor.getEditedPostAttribute( 'link' ),
+					title: editor.getEditedPostAttribute( 'title' ),
+					isSaving: editor.isSavingPost(),
+					isLocked: editor.isPostLocked?.() ?? false,
+					blocks: select( blockEditorStore ).getBlocks(),
+					isCollection: definesTrait( record ),
+				};
+			},
+			[ postId ]
+		);
 
 	const isPublic = status === 'publish';
+	const isDisabled = disabled || isLocked;
 	// A collection can be embedded in other documents through a data-view block,
 	// so unpublishing it may strand public dependents. Identity is the mirror
 	// term (`cortext_defines_trait`), true even for a collection with no custom
@@ -75,6 +78,9 @@ export default function DocumentPublishToggle( { postId } ) {
 	);
 
 	const togglePublishStatus = useCallback( async () => {
+		if ( isDisabled ) {
+			return;
+		}
 		if ( ! isPublic ) {
 			const collectionIds = referencedCollectionIds( blocks );
 			if ( collectionIds.length > 0 ) {
@@ -113,6 +119,7 @@ export default function DocumentPublishToggle( { postId } ) {
 		createErrorNotice,
 		removeNotice,
 		isPublic,
+		isDisabled,
 		blocks,
 	] );
 
@@ -130,10 +137,17 @@ export default function DocumentPublishToggle( { postId } ) {
 			<PublishToggle
 				isPublic={ isPublic }
 				isSaving={ isSaving }
+				disabled={ isDisabled }
 				link={ link }
 				onToggle={ togglePublishStatus }
 				onRequestUnpublish={
-					isReferenceable ? () => setIsConfirming( true ) : undefined
+					isReferenceable
+						? () => {
+								if ( ! isDisabled ) {
+									setIsConfirming( true );
+								}
+						  }
+						: undefined
 				}
 			/>
 			{ isConfirming && isReferenceable ? (

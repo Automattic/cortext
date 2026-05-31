@@ -38,6 +38,7 @@ const DEFAULT_STATE = {
 	isSaving: false,
 	didSucceed: false,
 	didFail: false,
+	isPostLocked: false,
 	postStatus: 'private',
 	postTitle: '',
 	currentPostId: 1,
@@ -53,6 +54,7 @@ function setStoreState( state ) {
 		isSavingPost: () => merged.isSaving,
 		didPostSaveRequestSucceed: () => merged.didSucceed,
 		didPostSaveRequestFail: () => merged.didFail,
+		isPostLocked: () => merged.isPostLocked,
 		getCurrentPostId: () => merged.currentPostId,
 		getEditedPostAttribute: ( name ) => {
 			if ( name === 'status' ) {
@@ -180,6 +182,19 @@ describe( 'useAutosave: debounce', () => {
 		const savePost = jest.fn();
 		useDispatch.mockReturnValue( { savePost } );
 		setStoreState( { isDirty: true, isSaving: true } );
+
+		renderHook( () => useAutosave() );
+
+		act( () => {
+			jest.advanceTimersByTime( 5000 );
+		} );
+		expect( savePost ).not.toHaveBeenCalled();
+	} );
+
+	it( 'skips save while the post is locked', () => {
+		const savePost = jest.fn();
+		useDispatch.mockReturnValue( { savePost } );
+		setStoreState( { isDirty: true, isPostLocked: true } );
 
 		renderHook( () => useAutosave() );
 
@@ -361,6 +376,22 @@ describe( 'useAutosave: flush triggers', () => {
 		act( () => {
 			window.dispatchEvent( new Event( 'blur' ) );
 		} );
+		expect( savePost ).not.toHaveBeenCalled();
+	} );
+
+	it( 'does not flush while the post is locked', async () => {
+		const savePost = jest.fn();
+		useDispatch.mockReturnValue( { savePost } );
+		setStoreState( { isDirty: true, isPostLocked: true } );
+
+		const { result } = renderHook( () => useAutosave() );
+
+		let didFlush;
+		await act( async () => {
+			didFlush = await result.current.flushNow();
+		} );
+
+		expect( didFlush ).toBe( true );
 		expect( savePost ).not.toHaveBeenCalled();
 	} );
 
