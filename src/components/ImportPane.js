@@ -323,9 +323,9 @@ function CollectionCard( { collection, job, onImport } ) {
 			if ( timeUntilRetry !== null ) {
 				statusLine = processed
 					? sprintf(
-							/* translators: 1: rows processed so far, 2: seconds remaining before retry */
+							/* translators: 1: documents processed so far, 2: seconds remaining before retry */
 							__(
-								'Imported %1$d rows. Waiting for Notion: %2$d s…',
+								'Imported %1$d documents. Waiting for Notion: %2$d s…',
 								'cortext'
 							),
 							processed,
@@ -338,8 +338,8 @@ function CollectionCard( { collection, job, onImport } ) {
 					  );
 			} else if ( processed ) {
 				statusLine = sprintf(
-					/* translators: %d: rows processed */
-					__( 'Importing %d rows…', 'cortext' ),
+					/* translators: %d: documents processed */
+					__( 'Importing %d documents…', 'cortext' ),
 					processed
 				);
 			}
@@ -348,8 +348,8 @@ function CollectionCard( { collection, job, onImport } ) {
 		case 'done':
 			if ( processed ) {
 				statusLine = sprintf(
-					/* translators: %d: rows processed */
-					__( '%d rows imported.', 'cortext' ),
+					/* translators: %d: documents processed */
+					__( '%d documents imported.', 'cortext' ),
 					processed
 				);
 			}

@@ -131,7 +131,7 @@ describe( 'RelationEditor', () => {
 			/>
 		);
 
-		fireEvent.change( screen.getByLabelText( 'Search rows' ), {
+		fireEvent.change( screen.getByLabelText( 'Search' ), {
 			target: { value: 'abc' },
 		} );
 
@@ -230,7 +230,7 @@ describe( 'RelationEditor', () => {
 		await flushPopoverEffects();
 	} );
 
-	it( 'hides "Create row" while the debounced search has not caught up', async () => {
+	it( 'hides create while the debounced search has not caught up', async () => {
 		// Pin the debounced value so search ('New Row') stays unsettled.
 		useDebouncedValue.mockImplementation( () => '' );
 
@@ -244,17 +244,19 @@ describe( 'RelationEditor', () => {
 			/>
 		);
 
-		fireEvent.change( screen.getByLabelText( 'Search rows' ), {
+		fireEvent.change( screen.getByLabelText( 'Search' ), {
 			target: { value: 'New Row' },
 		} );
 
 		expect(
-			screen.queryByRole( 'button', { name: 'Create row "New Row"' } )
+			screen.queryByRole( 'button', {
+				name: 'Create "New Row"',
+			} )
 		).toBeNull();
 		await flushPopoverEffects();
 	} );
 
-	it( 'hides "Create row" when an exact-title match exists in results', async () => {
+	it( 'hides create when an exact-title match exists in results', async () => {
 		mockRowsResponse( {
 			data: [ { id: 5, title: { raw: 'Exact Match' } } ],
 		} );
@@ -269,12 +271,14 @@ describe( 'RelationEditor', () => {
 			/>
 		);
 
-		fireEvent.change( screen.getByLabelText( 'Search rows' ), {
+		fireEvent.change( screen.getByLabelText( 'Search' ), {
 			target: { value: 'Exact Match' },
 		} );
 
 		expect(
-			screen.queryByRole( 'button', { name: 'Create row "Exact Match"' } )
+			screen.queryByRole( 'button', {
+				name: 'Create "Exact Match"',
+			} )
 		).toBeNull();
 		await flushPopoverEffects();
 	} );
@@ -345,12 +349,14 @@ describe( 'RelationEditor', () => {
 			/>
 		);
 
-		fireEvent.change( screen.getByLabelText( 'Search rows' ), {
+		fireEvent.change( screen.getByLabelText( 'Search' ), {
 			target: { value: 'New Ada' },
 		} );
 
 		fireEvent.click(
-			screen.getByRole( 'button', { name: 'Create row "New Ada"' } )
+			screen.getByRole( 'button', {
+				name: 'Create "New Ada"',
+			} )
 		);
 
 		await waitFor( () =>
