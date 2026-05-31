@@ -20,16 +20,11 @@ import './PublishedDocumentsPane.scss';
 
 import DocumentIcon from './DocumentIcon';
 import {
-	POST_TYPE as PAGE_POST_TYPE,
-	PUBLISHED_PAGES_QUERY,
+	POST_TYPE as DOCUMENT_POST_TYPE,
+	PUBLISHED_DOCUMENTS_QUERY,
 } from './page-queries';
-import {
-	DOCUMENT_POST_TYPE,
-	PUBLISHED_COLLECTIONS_QUERY,
-} from '../collections';
 import { computeDocumentUri } from '../router/useResolveEntity';
-import { definesTrait } from '../documents/capabilities';
-import { documentLabel } from '../documents/labels';
+import { definesTrait, hasTrait } from '../documents/capabilities';
 
 const DEFAULT_LAYOUTS = { table: { density: 'compact' }, grid: {}, list: {} };
 
@@ -44,11 +39,9 @@ const DEFAULT_VIEW = {
 	layout: {},
 };
 
-// Local enum values for the Type filter. These stay in this component so
-// DataViews has stable filter elements; the display label still comes from
-// `documentLabel` reading capabilities.
-const FILTER_PAGE = 'page';
-const FILTER_COLLECTION = 'collection';
+const TYPE_PAGE = 'page';
+const TYPE_COLLECTION_ITEM = 'collection-item';
+const TYPE_COLLECTION = 'collection';
 
 function titleText( entity ) {
 	const title = entity?.title;
@@ -58,42 +51,37 @@ function titleText( entity ) {
 	return title?.raw?.trim() || title?.rendered?.trim() || '';
 }
 
-// Pages and collections both live in `crtxt_document`, so ids do not collide,
-// but the lists arrive from separate queries (`/wp/v2/pages` vs the universal
-// document filter for collections). Capability-derived `source` flags drive
-// the Type filter; `.source` carries the underlying record for navigation
-// and link rendering.
-function buildItems( pages, collections ) {
-	const items = [];
+function documentTypeValue( record ) {
+	if ( definesTrait( record ) ) {
+		return TYPE_COLLECTION;
+	}
+	if ( hasTrait( record ) ) {
+		return TYPE_COLLECTION_ITEM;
+	}
+	return TYPE_PAGE;
+}
+
+function documentTypeLabel( record ) {
+	if ( definesTrait( record ) ) {
+		return __( 'Collection', 'cortext' );
+	}
+	if ( hasTrait( record ) ) {
+		return __( 'Collection item', 'cortext' );
+	}
+	return __( 'Page', 'cortext' );
+}
+
+function buildItems( documents ) {
 	const untitled = __( '(untitled)', 'cortext' );
-
-	for ( const page of pages ?? [] ) {
-		items.push( {
-			key: `page-${ page.id }`,
-			id: page.id,
-			postType: PAGE_POST_TYPE,
-			title: titleText( page ) || untitled,
-			modified: page.modified ?? page.modified_gmt ?? '',
-			link: page.link ?? '',
-			icon: page?.meta?.cortext_document_icon ?? '',
-			source: page,
-		} );
-	}
-
-	for ( const collection of collections ?? [] ) {
-		items.push( {
-			key: `collection-${ collection.id }`,
-			id: collection.id,
-			postType: DOCUMENT_POST_TYPE,
-			title: titleText( collection ) || untitled,
-			modified: collection.modified ?? collection.modified_gmt ?? '',
-			link: collection.link ?? '',
-			icon: collection?.meta?.cortext_document_icon ?? '',
-			source: collection,
-		} );
-	}
-
-	return items;
+	return ( documents ?? [] ).map( ( document ) => ( {
+		key: `document-${ document.id }`,
+		id: document.id,
+		title: titleText( document ) || untitled,
+		modified: document.modified ?? document.modified_gmt ?? '',
+		link: document.link ?? '',
+		icon: document?.meta?.cortext_document_icon ?? '',
+		source: document,
+	} ) );
 }
 
 function formatModified( value ) {
@@ -109,19 +97,11 @@ export default function PublishedDocumentsPane() {
 	const [ view, setView ] = useState( DEFAULT_VIEW );
 	const navigate = useNavigate();
 
-	const { records: pages, isResolving: isResolvingPages } = useEntityRecords(
+	const { records: documents, isResolving: isLoading } = useEntityRecords(
 		'postType',
-		PAGE_POST_TYPE,
-		PUBLISHED_PAGES_QUERY
+		DOCUMENT_POST_TYPE,
+		PUBLISHED_DOCUMENTS_QUERY
 	);
-	const { records: collections, isResolving: isResolvingCollections } =
-		useEntityRecords(
-			'postType',
-			DOCUMENT_POST_TYPE,
-			PUBLISHED_COLLECTIONS_QUERY
-		);
-
-	const isLoading = isResolvingPages || isResolvingCollections;
 
 	const openItem = useCallback(
 		( item ) => {
@@ -133,10 +113,7 @@ export default function PublishedDocumentsPane() {
 		[ navigate ]
 	);
 
-	const items = useMemo(
-		() => buildItems( pages, collections ),
-		[ pages, collections ]
-	);
+	const items = useMemo( () => buildItems( documents ), [ documents ] );
 
 	const fields = useMemo(
 		() => [
@@ -167,18 +144,19 @@ export default function PublishedDocumentsPane() {
 				id: 'type',
 				label: __( 'Type', 'cortext' ),
 				elements: [
-					{ value: FILTER_PAGE, label: __( 'Page', 'cortext' ) },
+					{ value: TYPE_PAGE, label: __( 'Page', 'cortext' ) },
 					{
-						value: FILTER_COLLECTION,
+						value: TYPE_COLLECTION_ITEM,
+						label: __( 'Collection item', 'cortext' ),
+					},
+					{
+						value: TYPE_COLLECTION,
 						label: __( 'Collection', 'cortext' ),
 					},
 				],
 				filterBy: { operators: [ 'is', 'isAny' ] },
-				getValue: ( { item } ) =>
-					definesTrait( item.source )
-						? FILTER_COLLECTION
-						: FILTER_PAGE,
-				render: ( { item } ) => documentLabel( item.source ),
+				getValue: ( { item } ) => documentTypeValue( item.source ),
+				render: ( { item } ) => documentTypeLabel( item.source ),
 			},
 			{
 				id: 'modified',
@@ -235,7 +213,7 @@ export default function PublishedDocumentsPane() {
 				</Heading>
 				<Text variant="muted">
 					{ __(
-						'Pages and collections that are currently public.',
+						'Visible to anyone with the public link.',
 						'cortext'
 					) }
 				</Text>
@@ -251,10 +229,7 @@ export default function PublishedDocumentsPane() {
 				isLoading={ isLoading }
 				empty={
 					<Text variant="muted">
-						{ __(
-							'No documents are currently public.',
-							'cortext'
-						) }
+						{ __( 'No public documents yet.', 'cortext' ) }
 					</Text>
 				}
 			/>

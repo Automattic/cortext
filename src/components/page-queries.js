@@ -26,13 +26,10 @@ export const TRASHED_PAGES_QUERY = {
 	cortext_no_collections: 1,
 };
 
-// Used by the Published documents screen. Same shape as ACTIVE_PAGES_QUERY so
-// it deep-matches alongside it for invalidation when a page is published or
-// unpublished.
-export const PUBLISHED_PAGES_QUERY = {
+// The Published documents screen needs every published document, including
+// collection items, so leave trait and collection filters off.
+export const PUBLISHED_DOCUMENTS_QUERY = {
 	per_page: 100,
 	status: 'publish',
 	context: 'edit',
-	cortext_no_trait: 1,
-	cortext_no_collections: 1,
 };
