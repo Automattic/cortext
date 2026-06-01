@@ -34,7 +34,8 @@
 	--cortext-danger-strong: #b32d2e;
 
 	// Option chip palette. Backgrounds are muted tints; foregrounds are a
-	// matching hue dark enough to read on the background. Names mirror
+	// matching hue dark enough to read, with the louder families softened
+	// toward the blue/green baseline. Names mirror
 	// `Cortext\OptionPalette::names()` and the JS `OPTION_COLOR_NAMES`
 	// constant. Lives on `:root` (not `.cortext-root`) so popover portals
 	// can resolve the variables. `default` is intentionally absent: the
@@ -44,7 +45,7 @@
 	--cortext-option-brown-bg: #f4eee5;
 	--cortext-option-brown-fg: #774f3a;
 	--cortext-option-orange-bg: #fbecdd;
-	--cortext-option-orange-fg: #b35a13;
+	--cortext-option-orange-fg: #a8642a;
 	--cortext-option-yellow-bg: #fbf3db;
 	--cortext-option-yellow-fg: #8a6018;
 	--cortext-option-green-bg: #ddedea;
@@ -52,11 +53,11 @@
 	--cortext-option-blue-bg: #ddebf1;
 	--cortext-option-blue-fg: #2a5a82;
 	--cortext-option-purple-bg: #eae4f2;
-	--cortext-option-purple-fg: #5a3f9f;
+	--cortext-option-purple-fg: #5e4691;
 	--cortext-option-pink-bg: #f4dfeb;
-	--cortext-option-pink-fg: #9c3a6b;
+	--cortext-option-pink-fg: #94476c;
 	--cortext-option-red-bg: #fbe4e4;
-	--cortext-option-red-fg: #a82a2a;
+	--cortext-option-red-fg: #98403d;
 }
 
 // Note: option chips intentionally don't have a dark-mode variant yet.
