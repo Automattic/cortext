@@ -4,7 +4,7 @@ Cortext runs as a React app inside wp-admin. The shell is full-screen, but it st
 
 ## Server entry
 
-`Cortext\Admin\Screen` registers the Cortext admin page, prints the React mount point, loads the built assets, and applies a full-screen body class for this screen. It also keeps the core Pages list table reachable as an escape hatch for bulk operations the shell does not cover yet.
+`Cortext\Admin\Screen` registers the Cortext admin page, prints the React mount point, loads the built assets, and adds the full-screen body class. Document editing stays in that shell; Cortext does not expose core's Documents list table or `post.php` editor for `crtxt_document`.
 
 The plugin bootstraps editor settings on the server and exposes them to the client. That lets Cortext mount the block editor without recreating the editor environment from scratch.
 

@@ -842,10 +842,9 @@ final class Document {
 					'slug'       => 'cortext',
 					'with_front' => false,
 				),
-				// The React shell is the primary UI. Core's admin screens
-				// (edit.php list + post.php editor) stay enabled as an
-				// escape hatch, exposed through Admin\Screen's submenu.
-				'show_ui'               => true,
+				// Documents are edited in the React shell. REST stays on for the
+				// shell, but the core list table and post.php editor stay hidden.
+				'show_ui'               => false,
 				'show_in_menu'          => false,
 				'show_in_rest'          => true,
 				'rest_base'             => 'crtxt_documents',

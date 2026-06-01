@@ -55,6 +55,14 @@ final class Test_Post_Type_Document extends BaseTestCase {
 		$this->assertTrue( post_type_exists( Document::POST_TYPE ) );
 	}
 
+	public function test_registered_post_type_uses_shell_for_editing_ui(): void {
+		$object = get_post_type_object( Document::POST_TYPE );
+
+		$this->assertNotNull( $object );
+		$this->assertFalse( $object->show_ui, 'crtxt_document editing belongs in the Cortext shell, not in core admin screens.' );
+		$this->assertFalse( $object->show_in_menu, 'show_in_menu stays false because navigation lives in the Cortext shell.' );
+	}
+
 	public function test_registered_post_type_supports_cortext_document_capability(): void {
 		$this->assertTrue( post_type_supports( Document::POST_TYPE, 'cortext-document' ) );
 	}
