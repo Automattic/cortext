@@ -49,6 +49,14 @@ final class Test_Cortext_Media extends BaseTestCase {
 		$this->assertTrue( has_term( CortextMedia::TERM, CortextMedia::TAXONOMY, $attachment ) );
 	}
 
+	public function test_marks_attachment_explicitly_as_cortext_media(): void {
+		$attachment = $this->make_attachment( 0 );
+
+		$this->media->tag( $attachment );
+
+		$this->assertTrue( has_term( CortextMedia::TERM, CortextMedia::TAXONOMY, $attachment ) );
+	}
+
 	public function test_does_not_tag_attachment_without_a_cortext_parent(): void {
 		$orphan  = $this->make_attachment( 0 );
 		$regular = (int) wp_insert_post(
