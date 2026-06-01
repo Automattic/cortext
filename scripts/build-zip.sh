@@ -25,7 +25,8 @@ runtime_paths=(
 	LICENSE
 	cortext-banner.png
 	cortext-banner.svg
-	cortext-icon.png
+	cortext-icon-dark.png
+	cortext-icon-light.png
 	includes
 	templates
 	build

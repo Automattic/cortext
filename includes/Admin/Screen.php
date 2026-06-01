@@ -24,7 +24,7 @@ final class Screen {
 	public const HOOK_SUFFIX    = 'toplevel_page_' . self::MENU_SLUG;
 	private const SCRIPT_HANDLE = 'cortext-shell';
 	private const BODY_CLASS    = 'cortext-fullscreen';
-	private const ICON_PATH     = 'cortext-icon.png';
+	private const ICON_PATH     = 'cortext-icon-light.png';
 
 	public function register(): void {
 		add_action( 'admin_menu', array( $this, 'register_menu' ) );
