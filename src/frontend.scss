@@ -144,4 +144,11 @@
 			max-width: 100%;
 		}
 	}
+
+	// The public view is read-only, but the table still turns every column
+	// header into a menu button (sort, hide, move, filter) and the library
+	// gives no way to switch that off. Make the button inert instead.
+	.dataviews-view-table-header-button {
+		pointer-events: none;
+	}
 }

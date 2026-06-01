@@ -265,6 +265,9 @@ export default function PublicDataView( { collectionId, view: initialView } ) {
 		[ reconciledView ]
 	);
 
+	// Read-only: the public page shows the saved view, not an editable
+	// explorer. Render just the layout and pagination and skip the search,
+	// filter, and config toolbar.
 	return (
 		<DataViews
 			data={ dataFiltered }
@@ -275,6 +278,9 @@ export default function PublicDataView( { collectionId, view: initialView } ) {
 			defaultLayouts={ DEFAULT_LAYOUTS }
 			getItemId={ ( item ) => String( item.id ) }
 			isLoading={ isLoading }
-		/>
+		>
+			<DataViews.Layout />
+			<DataViews.Pagination />
+		</DataViews>
 	);
 }
