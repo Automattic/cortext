@@ -218,8 +218,8 @@ export default function PublicDataView( { collectionId, view: initialView } ) {
 	// and pin title first. When view.fields is empty (no saved field
 	// order), seed it with every available field so DataViews' reorder
 	// and hide/show controls have a complete list to work from. Skip
-	// reconciliation while the REST response is in flight — the field
-	// list is incomplete then and seeding against it would lock out
+	// reconciliation while the REST response is in flight. The field
+	// list is incomplete then, and seeding against it would lock out
 	// fields that arrive later.
 	const reconciledView = useMemo( () => {
 		if ( isLoading || fieldDefs.length === 0 ) {

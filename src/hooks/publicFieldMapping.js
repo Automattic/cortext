@@ -313,7 +313,7 @@ function mapPublicField( fieldDef ) {
 /**
  * Builds the full field list for a public DataViews instance.
  *
- * Returns every available field — DataViews uses `view.fields` to
+ * Returns every available field. DataViews uses `view.fields` to
  * control which columns are visible. Pre-filtering here would cause
  * hidden fields to disappear from the field-visibility settings.
  *
