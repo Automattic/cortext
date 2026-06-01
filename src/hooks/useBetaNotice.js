@@ -1,6 +1,6 @@
 import { useCallback, useState } from '@wordpress/element';
 
-const STORAGE_KEY = 'cortext.alphaNoticeSeen';
+const STORAGE_KEY = 'cortext.betaNoticeSeen';
 
 function readSeen() {
 	try {
@@ -12,7 +12,7 @@ function readSeen() {
 	}
 }
 
-export default function useAlphaNotice() {
+export default function useBetaNotice() {
 	const [ isOpen, setOpen ] = useState( () => ! readSeen() );
 
 	const acknowledge = useCallback( ( persist ) => {
