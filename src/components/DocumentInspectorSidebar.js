@@ -187,7 +187,7 @@ function DocumentIconInspectorControls( { postId, postType } ) {
 			const insertIndex = hasCoverBlock ? coverIndex + 1 : 0;
 			insertBlocks(
 				createBlock( 'cortext/document-icon', {
-					lock: { move: true },
+					lock: { move: true, remove: true },
 				} ),
 				insertIndex,
 				undefined,
@@ -299,7 +299,7 @@ function PageFeaturedImageInspectorControls( { postId, postType } ) {
 		insertBlocks(
 			createBlock( 'cortext/document-cover', {
 				align: 'full',
-				lock: { move: true },
+				lock: { move: true, remove: true },
 			} ),
 			0,
 			undefined,

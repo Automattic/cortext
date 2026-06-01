@@ -30,6 +30,7 @@ import {
 	COLLECTIONS_BLOCK_CATEGORY,
 	getEditorSettings,
 } from '../../src/components/initEditor';
+import { applyFilters } from '@wordpress/hooks';
 
 beforeEach( () => {
 	delete window.cortextEditorSettings;
@@ -172,6 +173,33 @@ describe( 'ALLOWED_BLOCK_TYPES', () => {
 		expect( new Set( ALLOWED_BLOCK_TYPES ).size ).toBe(
 			ALLOWED_BLOCK_TYPES.length
 		);
+	} );
+} );
+
+describe( 'core/post-title registration filter', () => {
+	it( 'keeps the title available to Cortext but out of user actions', () => {
+		const settings = applyFilters(
+			'blocks.registerBlockType',
+			{ supports: { html: false } },
+			'core/post-title'
+		);
+
+		expect( settings.supports ).toMatchObject( {
+			html: false,
+			inserter: false,
+			lock: false,
+			multiple: false,
+		} );
+	} );
+
+	it( 'leaves other block supports alone', () => {
+		const settings = applyFilters(
+			'blocks.registerBlockType',
+			{ supports: { multiple: true } },
+			'core/paragraph'
+		);
+
+		expect( settings.supports ).toEqual( { multiple: true } );
 	} );
 } );
 

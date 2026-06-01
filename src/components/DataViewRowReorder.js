@@ -1132,6 +1132,7 @@ export default function DataViewRowReorder( {
 	dataRef.current = data;
 	const mutateRowsRef = useRef( mutateRows );
 	mutateRowsRef.current = mutateRows;
+	const pendingRefreshAfterSortClearRef = useRef( false );
 	const hoverSuppressionTimeoutRef = useRef( null );
 	const noTransitionFrameRef = useRef( null );
 	const onChangeViewRef = useRef( onChangeView );
@@ -1207,6 +1208,29 @@ export default function DataViewRowReorder( {
 		[ releaseRowHover, suppressRowTransitionsOnce ]
 	);
 
+	const flushRefreshAfterSortClear = useCallback( () => {
+		if ( ! pendingRefreshAfterSortClearRef.current ) {
+			return;
+		}
+		const currentSort = viewRef.current?.sort ?? null;
+		const hasExplicitSort =
+			Boolean( currentSort?.field ) &&
+			currentSort.field !== MANUAL_SORT_ID;
+		if ( hasExplicitSort ) {
+			return;
+		}
+		pendingRefreshAfterSortClearRef.current = false;
+		onReorderedRef.current?.();
+	}, [] );
+
+	useEffect( () => {
+		flushRefreshAfterSortClear();
+	}, [
+		flushRefreshAfterSortClear,
+		view?.sort?.direction,
+		view?.sort?.field,
+	] );
+
 	// Posts the reorder to the server. On failure restores `data` from the
 	// snapshot taken before the optimistic mutation, and (if we cleared a
 	// non-manual sort to make the move visible) restores that sort too.
@@ -1229,7 +1253,12 @@ export default function DataViewRowReorder( {
 						current_sort: request.currentSort ?? null,
 					},
 				} );
-				onReorderedRef.current?.();
+				if ( request.refreshAfterSortClear ) {
+					pendingRefreshAfterSortClearRef.current = true;
+					flushRefreshAfterSortClear();
+				} else {
+					onReorderedRef.current?.();
+				}
 			} catch {
 				if ( request.previousData && mutateRowsRef.current ) {
 					mutateRowsRef.current( request.previousData );
@@ -1251,7 +1280,12 @@ export default function DataViewRowReorder( {
 				setIsPosting( false );
 			}
 		},
-		[ collectionId, createErrorNotice, isPosting ]
+		[
+			collectionId,
+			createErrorNotice,
+			flushRefreshAfterSortClear,
+			isPosting,
+		]
 	);
 
 	const onDragStart = useCallback(
@@ -1309,7 +1343,9 @@ export default function DataViewRowReorder( {
 			performReorder( {
 				...request,
 				previousData,
-				...( clearSort ? { previousSort } : {} ),
+				...( clearSort
+					? { previousSort, refreshAfterSortClear: true }
+					: {} ),
 			} );
 		},
 		[ clearDragState, performReorder ]

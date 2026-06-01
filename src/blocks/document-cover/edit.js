@@ -86,7 +86,7 @@ export default function Edit( { context, clientId } ) {
 		}
 		insertBlocks(
 			createBlock( 'cortext/document-icon', {
-				lock: { move: true },
+				lock: { move: true, remove: true },
 			} ),
 			coverIndex + 1,
 			undefined,

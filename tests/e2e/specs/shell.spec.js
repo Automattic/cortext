@@ -10,7 +10,10 @@
 
 const { test, expect } = require( '@wordpress/e2e-test-utils-playwright' );
 
-const { withExpectedConsoleError } = require( '../utils' );
+const {
+	clearWordPressAuthCookies,
+	withExpectedConsoleError,
+} = require( '../utils' );
 
 const SHELL_PATH = '/wp-admin/admin.php?page=cortext';
 
@@ -34,10 +37,7 @@ test.describe( 'Cortext shell', () => {
 	} );
 
 	test( 'anonymous visitor is redirected to login', async ( { page } ) => {
-		// Keep Playground's `playground_auto_login_already_happened` cookie
-		// intact so the `--login` mu-plugin doesn't silently log us back in
-		// as admin when WP auth cookies are cleared.
-		await page.context().clearCookies( { name: /^wordpress_/ } );
+		await clearWordPressAuthCookies( page.context() );
 
 		await page.goto( SHELL_PATH );
 
@@ -48,9 +48,11 @@ test.describe( 'Cortext shell', () => {
 		page,
 		requestUtils,
 	} ) => {
+		const suffix = Date.now().toString( 36 ).slice( -5 );
+		const username = `cortext-subscriber-${ suffix }`;
 		const user = await requestUtils.createUser( {
-			username: 'cortext-subscriber',
-			email: 'cortext-subscriber@example.test',
+			username,
+			email: `${ username }@example.test`,
 			password: 'cortext-sub-password',
 			roles: [ 'subscriber' ],
 		} );
@@ -59,17 +61,11 @@ test.describe( 'Cortext shell', () => {
 			/the server responded with a status of 403/,
 			async () => {
 				try {
-					// Keep Playground's `playground_auto_login_already_happened` cookie
-					// intact so the `--login` mu-plugin doesn't silently log us back in
-					// as admin when WP auth cookies are cleared.
-					await page
-						.context()
-						.clearCookies( { name: /^wordpress_/ } );
-
+					await clearWordPressAuthCookies( page.context() );
 					await page.request.post( '/wp-login.php', {
 						failOnStatusCode: true,
 						form: {
-							log: 'cortext-subscriber',
+							log: username,
 							pwd: 'cortext-sub-password',
 						},
 					} );

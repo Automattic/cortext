@@ -25,9 +25,10 @@ import './initInserterMediaCategories';
 // Side-effect import: float Cortext blocks to the top of the slash inserter.
 import './prioritizeCortextInserterBlocks';
 
-// `core/post-title` is insertable by default. Cortext owns title placement
-// through EnsureHeaderBlocks, so users should not see the block in the
-// inserter. Flip the support before `registerCoreBlocks` reads it.
+// Core exposes `core/post-title` in the inserter and block actions by default.
+// Cortext owns title placement through EnsureHeaderBlocks, so users shouldn't
+// insert another title, duplicate it, or unlock its fixed position. Adjust the
+// supports before `registerCoreBlocks` reads them.
 // Keep it in `ALLOWED_BLOCK_TYPES`: `insertBlocks` checks that list before it
 // inserts the locked header. The `cortext/document-*` blocks use the same
 // hidden-from-inserter pattern in block.json.
@@ -43,6 +44,8 @@ addFilter(
 			supports: {
 				...settings.supports,
 				inserter: false,
+				lock: false,
+				multiple: false,
 			},
 		};
 	}

@@ -29,6 +29,20 @@ final class Test_Document_Identity extends BaseTestCase {
 		$this->assertSame( 1, substr_count( $markup, '<!-- wp:post-title' ) );
 	}
 
+	public function test_header_blocks_markup_locks_title_move_and_remove(): void {
+		$blocks = parse_blocks( DocumentIdentity::header_blocks_markup() );
+
+		$this->assertCount( 1, $blocks );
+		$this->assertSame( 'core/post-title', $blocks[0]['blockName'] );
+		$this->assertSame(
+			array(
+				'move'   => true,
+				'remove' => true,
+			),
+			$blocks[0]['attrs']['lock'] ?? null
+		);
+	}
+
 	public function test_prepend_header_blocks_leaves_updates_untouched(): void {
 		$identity = new DocumentIdentity();
 		$content  = '<!-- wp:paragraph --><p>Body</p><!-- /wp:paragraph -->';
