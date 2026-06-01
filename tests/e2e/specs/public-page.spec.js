@@ -64,6 +64,37 @@ test.describe( 'Public page rendering', () => {
 		}
 	} );
 
+	test( 'published page hides the WordPress admin bar for logged-in visitors', async ( {
+		page,
+		requestUtils,
+	} ) => {
+		const suffix = Date.now().toString( 36 ).slice( -4 );
+		let createdPage;
+
+		try {
+			createdPage = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: `Public page while logged in ${ suffix }`,
+					status: 'publish',
+				},
+			} );
+
+			const response = await page.goto(
+				`/cortext/${ createdPage.slug }/`
+			);
+
+			expect( response?.status() ).toBe( 200 );
+			await expect( page.locator( '#wpadminbar' ) ).toHaveCount( 0 );
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				createdPage && `/wp/v2/crtxt_documents/${ createdPage.id }`
+			);
+		}
+	} );
+
 	test( 'private page returns 404 for anonymous visitors', async ( {
 		page,
 		requestUtils,
