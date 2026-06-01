@@ -23,6 +23,9 @@
 		"collectionId": {
 			"type": "number"
 		},
+		"intent": {
+			"type": "string"
+		},
 		"view": {
 			"type": "object",
 			"default": {
