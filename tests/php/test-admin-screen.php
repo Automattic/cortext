@@ -59,7 +59,7 @@ final class Test_Admin_Screen extends BaseTestCase {
 		$markup = (string) ob_get_clean();
 
 		$this->assertStringContainsString( 'rel="icon"', $markup );
-		$this->assertStringContainsString( 'href="' . CORTEXT_URL . 'cortext-icon-light.png"', $markup );
+		$this->assertStringContainsString( 'href="' . CORTEXT_URL . 'assets/brand/icon-light.png"', $markup );
 		$this->assertStringContainsString( 'type="image/png"', $markup );
 	}
 

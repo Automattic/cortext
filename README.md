@@ -1,4 +1,4 @@
-![Cortext](cortext-banner.png)
+![Cortext](assets/brand/banner.png)
 
 # Cortext
 
@@ -8,6 +8,8 @@
 > Some things may change during the beta, so do not make it the only place for important work yet.
 
 A WordPress plugin for building a knowledge base inside your own site: nested pages, typed collections, multiple views, and publishing through WordPress.
+
+![Cortext workspace](assets/screenshots/workspace.jpg)
 
 ## Why
 

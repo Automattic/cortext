@@ -3349,7 +3349,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	 * @return int Seeded Workspace page ID.
 	 */
 	private function seed_pages( array $collection_ids ): int {
-		$banner = CORTEXT_PATH . 'cortext-banner.png';
+		$banner = CORTEXT_PATH . 'assets/brand/banner.png';
 		$tree   = array(
 			array(
 				'title'          => 'Welcome to Cortext',
