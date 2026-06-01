@@ -4,6 +4,7 @@ import apiFetch from '@wordpress/api-fetch';
 
 const SERVER_OPERATORS = new Set( [ 'is', 'isNot', 'isAny', 'isNone' ] );
 const MANUAL_SORT_ID = 'manual';
+const PUBLIC_PER_PAGE = 100;
 const SYSTEM_SORT_FIELDS = new Set( [ 'title', 'created_at', 'modified_at' ] );
 const SORTABLE_FIELD_TYPES = new Set( [
 	'text',
@@ -52,11 +53,12 @@ function sortForServer( sort, fields = [] ) {
 	};
 }
 
-export function buildQueryArgs( collectionId, view, fields = [] ) {
+export function buildQueryArgs( collectionId, view, fields = [], page = 1 ) {
 	const args = {
 		trait: collectionId,
 		context: 'view',
-		per_page: -1,
+		page,
+		per_page: PUBLIC_PER_PAGE,
 	};
 
 	const sort = sortForServer( view?.sort, fields );
@@ -81,6 +83,17 @@ export function buildQueryArgs( collectionId, view, fields = [] ) {
 	} );
 
 	return args;
+}
+
+function totalPagesNumber( value ) {
+	const number = Number( value );
+	return Number.isFinite( number ) && number >= 1 ? Math.floor( number ) : 1;
+}
+
+function fetchRowsPage( args ) {
+	return apiFetch( {
+		path: addQueryArgs( '/cortext/v1/rows', args ),
+	} );
 }
 
 export default function usePublicRows( collectionId, view ) {
@@ -108,29 +121,52 @@ export default function usePublicRows( collectionId, view ) {
 		}
 
 		const requestId = ++requestIdRef.current;
-		const path = addQueryArgs(
-			'/cortext/v1/rows',
-			buildQueryArgs( collectionId, view, state.fields )
-		);
+		const baseArgs = buildQueryArgs( collectionId, view, state.fields );
 
 		setState( ( prev ) => ( { ...prev, isLoading: true } ) );
 
-		apiFetch( { path } )
-			.then( ( body ) => {
+		async function loadRows() {
+			try {
+				const firstPage = await fetchRowsPage( baseArgs );
 				if ( requestId !== requestIdRef.current ) {
 					return;
 				}
+
+				const rows = Array.isArray( firstPage.rows )
+					? [ ...firstPage.rows ]
+					: [];
+				const totalPages = totalPagesNumber( firstPage.totalPages );
+				const remainingPages = Array.from(
+					{ length: totalPages - 1 },
+					( _, index ) => index + 2
+				);
+				const remainingPageBodies = await Promise.all(
+					remainingPages.map( ( page ) =>
+						fetchRowsPage( { ...baseArgs, page } )
+					)
+				);
+				if ( requestId !== requestIdRef.current ) {
+					return;
+				}
+
+				remainingPageBodies.forEach( ( body ) => {
+					if ( Array.isArray( body?.rows ) ) {
+						rows.push( ...body.rows );
+					}
+				} );
+
 				setState( {
-					data: Array.isArray( body.rows ) ? body.rows : [],
-					fields: Array.isArray( body.fields ) ? body.fields : [],
+					data: rows,
+					fields: Array.isArray( firstPage.fields )
+						? firstPage.fields
+						: [],
 					paginationInfo: {
-						totalItems: body.total ?? 0,
-						totalPages: body.totalPages ?? 1,
+						totalItems: firstPage.total ?? rows.length,
+						totalPages,
 					},
 					isLoading: false,
 				} );
-			} )
-			.catch( () => {
+			} catch {
 				if ( requestId !== requestIdRef.current ) {
 					return;
 				}
@@ -140,7 +176,11 @@ export default function usePublicRows( collectionId, view ) {
 					paginationInfo: { totalItems: 0, totalPages: 0 },
 					isLoading: false,
 				} );
-			} );
+			}
+		}
+
+		loadRows();
+
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [ collectionId, queryKey ] );
 

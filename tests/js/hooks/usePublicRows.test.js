@@ -1,4 +1,12 @@
-import {
+import { renderHook, waitFor } from '@testing-library/react';
+
+jest.mock( '@wordpress/api-fetch', () => ( {
+	__esModule: true,
+	default: jest.fn(),
+} ) );
+
+import apiFetch from '@wordpress/api-fetch';
+import usePublicRows, {
 	buildQueryArgs,
 	isPublicSortSupported,
 } from '../../../src/hooks/usePublicRows';
@@ -24,7 +32,24 @@ const fieldDefs = [ ...supportedFields, ...unsupportedFields ].map(
 	( [ id, type ] ) => ( { id, type } )
 );
 
+function requestParams( callIndex ) {
+	const path = apiFetch.mock.calls[ callIndex ][ 0 ].path;
+	return new URL( path, 'https://example.test' ).searchParams;
+}
+
+beforeEach( () => {
+	apiFetch.mockReset();
+} );
+
 describe( 'usePublicRows query args', () => {
+	it( 'uses REST-valid public pagination args', () => {
+		const args = buildQueryArgs( 7, {}, fieldDefs );
+
+		expect( args.context ).toBe( 'view' );
+		expect( args.page ).toBe( 1 );
+		expect( args.per_page ).toBe( 100 );
+	} );
+
 	it.each( supportedFields )(
 		'forwards supported saved field-%s sort to the public rows endpoint',
 		( fieldId ) => {
@@ -99,5 +124,42 @@ describe( 'usePublicRows query args', () => {
 
 		expect( args[ 'sort[field]' ] ).toBe( 'title' );
 		expect( args[ 'sort[direction]' ] ).toBe( 'asc' );
+	} );
+} );
+
+describe( 'usePublicRows', () => {
+	it( 'loads every public rows page with valid REST pagination', async () => {
+		apiFetch.mockImplementation( ( { path } ) => {
+			const page = Number(
+				new URL( path, 'https://example.test' ).searchParams.get(
+					'page'
+				)
+			);
+
+			return Promise.resolve( {
+				rows: [ { id: page } ],
+				fields: page === 1 ? fieldDefs : [],
+				total: 2,
+				totalPages: 2,
+			} );
+		} );
+
+		const { result } = renderHook( () =>
+			usePublicRows( 7, { filters: [] } )
+		);
+
+		await waitFor( () => expect( result.current.isLoading ).toBe( false ) );
+
+		expect( apiFetch ).toHaveBeenCalledTimes( 2 );
+		expect( result.current.data.map( ( row ) => row.id ) ).toEqual( [
+			1, 2,
+		] );
+		expect( result.current.fields ).toEqual( fieldDefs );
+
+		expect( requestParams( 0 ).get( 'context' ) ).toBe( 'view' );
+		expect( requestParams( 0 ).get( 'page' ) ).toBe( '1' );
+		expect( requestParams( 0 ).get( 'per_page' ) ).toBe( '100' );
+		expect( requestParams( 1 ).get( 'page' ) ).toBe( '2' );
+		expect( requestParams( 1 ).get( 'per_page' ) ).toBe( '100' );
 	} );
 } );
