@@ -25,7 +25,6 @@ import { useEntityRecord } from '@wordpress/core-data';
 import DocumentIcon, {
 	parseDocumentIcon,
 } from '../../../src/components/DocumentIcon';
-import PageIcon, { parsePageIcon } from '../../../src/components/PageIcon';
 
 const BOOK_EMOJI = '\uD83D\uDCD8';
 const DEFAULT_SLOT_SIZE = '16px';
@@ -83,15 +82,6 @@ describe( 'parseDocumentIcon', () => {
 		).toBeNull();
 	} );
 
-	it( 'leaves the old PageIcon parser import working', () => {
-		expect(
-			parsePageIcon( iconMeta( { type: 'emoji', value: BOOK_EMOJI } ) )
-		).toEqual(
-			parseDocumentIcon(
-				iconMeta( { type: 'emoji', value: BOOK_EMOJI } )
-			)
-		);
-	} );
 } );
 
 describe( 'DocumentIcon', () => {
@@ -228,17 +218,4 @@ describe( 'DocumentIcon', () => {
 		expect( stylesheet ).toContain( 'max-width: none;' );
 	} );
 
-	it( 'keeps PageIcon working as a wrapper around DocumentIcon', () => {
-		const { container } = render(
-			<PageIcon
-				icon={ iconMeta( { type: 'emoji', value: BOOK_EMOJI } ) }
-			/>
-		);
-
-		expect( container.firstElementChild ).toHaveClass(
-			'cortext-document-icon',
-			'cortext-document-icon--emoji'
-		);
-		expect( screen.getByText( BOOK_EMOJI ) ).toBeInTheDocument();
-	} );
 } );

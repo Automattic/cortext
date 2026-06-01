@@ -225,5 +225,3 @@ export default function DocumentIcon( {
 		/>
 	);
 }
-
-export const parsePageIcon = parseDocumentIcon;
