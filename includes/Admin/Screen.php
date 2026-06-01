@@ -24,9 +24,11 @@ final class Screen {
 	public const HOOK_SUFFIX    = 'toplevel_page_' . self::MENU_SLUG;
 	private const SCRIPT_HANDLE = 'cortext-shell';
 	private const BODY_CLASS    = 'cortext-fullscreen';
+	private const ICON_PATH     = 'cortext-icon.png';
 
 	public function register(): void {
 		add_action( 'admin_menu', array( $this, 'register_menu' ) );
+		add_action( 'admin_head-' . self::HOOK_SUFFIX, array( $this, 'render_favicon' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 		// tech-debt.md#td-command-palette-host-glue: core adds this late; run after it so this
 		// screen only has one palette.
@@ -41,13 +43,24 @@ final class Screen {
 			'edit_posts',
 			self::MENU_SLUG,
 			array( $this, 'render' ),
-			'dashicons-welcome-write-blog',
+			$this->icon_url(),
 			3
 		);
 	}
 
 	public function render(): void {
 		echo '<div id="cortext-root" class="cortext-root"></div>';
+	}
+
+	public function render_favicon(): void {
+		printf(
+			'<link rel="icon" href="%s" sizes="256x256" type="image/png" />' . "\n",
+			esc_url( $this->icon_url() )
+		);
+	}
+
+	public function icon_url(): string {
+		return CORTEXT_URL . self::ICON_PATH;
 	}
 
 	public function enqueue_assets( string $hook_suffix ): void {
