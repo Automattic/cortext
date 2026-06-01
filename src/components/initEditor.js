@@ -21,6 +21,9 @@ import '../blocks';
 // Side-effect import: register media categories for the full inserter.
 import './initInserterMediaCategories';
 
+// Side-effect import: float Cortext blocks to the top of the slash inserter.
+import './prioritizeCortextInserterBlocks';
+
 // `core/post-title` is insertable by default. Cortext owns title placement
 // through EnsureHeaderBlocks, so users should not see the block in the
 // inserter. Flip the support before `registerCoreBlocks` reads it.
