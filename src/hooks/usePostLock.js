@@ -6,6 +6,55 @@ import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
 import { addAction, removeAction } from '@wordpress/hooks';
 import { __ } from '@wordpress/i18n';
 
+const POST_LOCK_HEARTBEAT_NUDGE_MS = 5000;
+const heartbeatNudgeRefs = new Set();
+let heartbeatNudgeTimerId = null;
+
+function hasVisibleDocument() {
+	return (
+		typeof document === 'undefined' || document.visibilityState !== 'hidden'
+	);
+}
+
+function hasOwnedPostLock() {
+	for ( const ref of heartbeatNudgeRefs ) {
+		if ( ref.current?.activePostLock ) {
+			return true;
+		}
+	}
+	return false;
+}
+
+function nudgePostLockHeartbeat() {
+	if ( ! hasVisibleDocument() || ! hasOwnedPostLock() ) {
+		return;
+	}
+
+	window.wp?.heartbeat?.connectNow?.();
+}
+
+function registerHeartbeatNudgeRef( ref ) {
+	if ( typeof window === 'undefined' ) {
+		return () => {};
+	}
+
+	heartbeatNudgeRefs.add( ref );
+	if ( heartbeatNudgeTimerId === null ) {
+		heartbeatNudgeTimerId = window.setInterval(
+			nudgePostLockHeartbeat,
+			POST_LOCK_HEARTBEAT_NUDGE_MS
+		);
+	}
+
+	return () => {
+		heartbeatNudgeRefs.delete( ref );
+		if ( heartbeatNudgeRefs.size === 0 && heartbeatNudgeTimerId !== null ) {
+			window.clearInterval( heartbeatNudgeTimerId );
+			heartbeatNudgeTimerId = null;
+		}
+	};
+}
+
 function defaultPostLockUtils() {
 	return globalThis?.cortextEditorSettings?.postLockUtils ?? null;
 }
@@ -275,11 +324,14 @@ export default function usePostLock( {
 		addAction( 'heartbeat.send', hookName, sendPostLock );
 		addAction( 'heartbeat.tick', hookName, receivePostLock );
 		window.addEventListener( 'beforeunload', releasePostLock );
+		const unregisterHeartbeatNudge =
+			registerHeartbeatNudgeRef( ownedLockRef );
 
 		return () => {
 			removeAction( 'heartbeat.send', hookName );
 			removeAction( 'heartbeat.tick', hookName );
 			window.removeEventListener( 'beforeunload', releasePostLock );
+			unregisterHeartbeatNudge();
 		};
 	}, [
 		autosave,

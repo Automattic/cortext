@@ -43,6 +43,7 @@ let mockAutosave;
 let mockClearEntityRecordEdits;
 let mockReceiveEntityRecords;
 let mockUpdatePostLock;
+let originalWp;
 
 function installDataMocks() {
 	useDispatch.mockImplementation( ( store ) => {
@@ -93,6 +94,7 @@ function heartbeatCallback( hookName ) {
 }
 
 beforeEach( () => {
+	originalWp = window.wp;
 	mockHeartbeatActions = {};
 	editorState = {
 		activePostLock: null,
@@ -115,7 +117,13 @@ beforeEach( () => {
 } );
 
 afterEach( () => {
+	if ( originalWp === undefined ) {
+		delete window.wp;
+	} else {
+		window.wp = originalWp;
+	}
 	delete globalThis.cortextEditorSettings;
+	jest.restoreAllMocks();
 	jest.clearAllMocks();
 } );
 
@@ -204,6 +212,56 @@ it( 'refreshes our lock through heartbeat', async () => {
 		isLocked: false,
 		activePostLock: '110:1',
 	} );
+} );
+
+it( 'nudges heartbeat while holding a visible lock', async () => {
+	const connectNow = jest.fn();
+	let nudgeHeartbeat;
+	const setIntervalSpy = jest
+		.spyOn( window, 'setInterval' )
+		.mockImplementation( ( callback ) => {
+			nudgeHeartbeat = callback;
+			return 123;
+		} );
+	const clearIntervalSpy = jest
+		.spyOn( window, 'clearInterval' )
+		.mockImplementation( () => {} );
+	window.wp = {
+		...( originalWp ?? {} ),
+		heartbeat: {
+			...( originalWp?.heartbeat ?? {} ),
+			connectNow,
+		},
+	};
+	apiFetch.mockResolvedValue( {
+		postLock: { isLocked: false, activePostLock: '100:1' },
+		postLockUtils,
+	} );
+
+	const { unmount } = renderHook( () =>
+		usePostLock( { postId: 7, postType: 'crtxt_document' } )
+	);
+
+	await act( async () => {
+		await Promise.resolve();
+		await Promise.resolve();
+	} );
+	expect( mockUpdatePostLock ).toHaveBeenCalledWith( {
+		isLocked: false,
+		activePostLock: '100:1',
+	} );
+	expect( setIntervalSpy ).toHaveBeenCalledWith(
+		expect.any( Function ),
+		5000
+	);
+
+	act( () => nudgeHeartbeat() );
+
+	expect( connectNow ).toHaveBeenCalledTimes( 1 );
+
+	unmount();
+
+	expect( clearIntervalSpy ).toHaveBeenCalledWith( 123 );
 } );
 
 it( 'becomes read-only when heartbeat says someone took over', async () => {
