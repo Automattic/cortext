@@ -821,7 +821,7 @@ final class Document {
 	}
 
 	public function register_post_type(): void {
-		DocumentTypeRegistrar::register(
+		register_post_type(
 			self::POST_TYPE,
 			array(
 				'labels'                => array(
@@ -876,5 +876,6 @@ final class Document {
 				'delete_with_user'      => false,
 			)
 		);
+		DocumentIdentity::register_for_post_type( self::POST_TYPE );
 	}
 }

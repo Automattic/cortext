@@ -3,10 +3,10 @@
  * Per-document icon (emoji or uploaded image) for any post type that opts into
  * the `cortext-document` capability.
  *
- * `DocumentTypeRegistrar::register()` calls `register_for_post_type()` while
- * registering each Cortext document post type: `crtxt_document` and
- * `crtxt_trait`. The helper stays post-type-agnostic so any type that opts
- * into the `cortext-document` capability gets the icon.
+ * `Document::register_post_type()` calls `register_for_post_type()` right after
+ * `register_post_type()` so the `crtxt_document` type opts in. The helper stays
+ * post-type-agnostic so any type that opts into the `cortext-document`
+ * capability gets the icon.
  *
  * @package Cortext
  */
@@ -38,7 +38,7 @@ final class DocumentIdentity {
 
 	/**
 	 * Opts a post type into the `cortext-document` capability and registers the
-	 * document icon meta on it. `DocumentTypeRegistrar::register()` calls this
+	 * document icon meta on it. `Document::register_post_type()` calls this
 	 * right after `register_post_type()`; external callers should leave it
 	 * alone.
 	 *
