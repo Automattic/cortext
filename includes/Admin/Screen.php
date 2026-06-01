@@ -103,11 +103,10 @@ final class Screen {
 			self::SCRIPT_HANDLE,
 			'window.cortextSettings = ' . wp_json_encode(
 				array(
-					'adminUrl'        => admin_url(),
-					'features'        => ( new Features() )->to_client_settings(),
-					'iconUrl'         => $this->icon_url(),
-					'menuSlug'        => self::MENU_SLUG,
-					'userDisplayName' => wp_get_current_user()->display_name,
+					'adminUrl' => admin_url(),
+					'features' => ( new Features() )->to_client_settings(),
+					'iconUrl'  => $this->icon_url(),
+					'menuSlug' => self::MENU_SLUG,
 				)
 			) . ';',
 			'before'
