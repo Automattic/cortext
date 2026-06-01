@@ -10,7 +10,6 @@ declare( strict_types=1 );
 namespace Cortext\Tests;
 
 use Cortext\PostType\Document;
-use Cortext\PostType\DocumentIdentity;
 use Cortext\Rest\DocumentLocatorController;
 use Cortext\Taxonomy\TraitTaxonomy;
 use WorDBless\BaseTestCase;
@@ -25,12 +24,6 @@ final class Test_Rest_Document_Locator_Controller extends BaseTestCase {
 		parent::set_up();
 
 		( new Document() )->register_post_type();
-		// Document::register_post_type opts in via DocumentTypeRegistrar,
-		// which calls register_for_post_type. In tests we call
-		// register_post_type directly, so wire up cortext-document support
-		// here for the `DocumentLocatorController::check_document_post`
-		// permission gate.
-		DocumentIdentity::register_for_post_type( Document::POST_TYPE );
 		( new TraitTaxonomy() )->register_taxonomy();
 		$trait_taxonomy = new TraitTaxonomy();
 		add_action( 'added_post_meta', array( $trait_taxonomy, 'sync_term_on_meta_change' ), 10, 4 );
