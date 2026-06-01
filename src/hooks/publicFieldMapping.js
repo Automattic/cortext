@@ -147,6 +147,24 @@ function arrayValue( value ) {
 	return list.map( textValue ).filter( Boolean );
 }
 
+function numberValue( value ) {
+	if ( value === null || value === undefined || value === '' ) {
+		return '';
+	}
+	if ( typeof value === 'number' ) {
+		return Number.isFinite( value ) ? value : '';
+	}
+	if ( typeof value === 'string' ) {
+		const trimmed = value.trim();
+		if ( trimmed === '' ) {
+			return '';
+		}
+		const number = Number( trimmed );
+		return Number.isFinite( number ) ? number : value;
+	}
+	return textValue( value );
+}
+
 function publicValue( value, type ) {
 	switch ( type ) {
 		case 'relation':
@@ -155,10 +173,11 @@ function publicValue( value, type ) {
 			return arrayValue( value );
 		case 'checkbox':
 			return value === true;
+		case 'number':
+			return numberValue( value );
 		case 'text':
 		case 'email':
 		case 'url':
-		case 'number':
 		case 'select':
 		case 'date':
 		case 'datetime':
