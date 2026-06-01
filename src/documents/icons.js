@@ -3,18 +3,28 @@ import { Icon, customPostType, listItem, table } from '@wordpress/icons';
 import DocumentIcon from '../components/DocumentIcon';
 import { definesTrait, hasTrait } from './capabilities';
 
+// A collection with no custom icon shows the table glyph, but rendered through
+// DocumentIcon (as a wp glyph) so it inherits the same 1.4x glyph scale and box
+// as a page's document glyph; a raw <Icon> reads noticeably smaller next to
+// page rows in the tree.
+const COLLECTION_ICON = JSON.stringify( { type: 'wp', name: 'table' } );
+
 /**
- * Sidebar icon for a document record. Pages and collections opt into the
- * shared document-identity meta and render via DocumentIcon; rows take the
- * static post-type glyph.
+ * Sidebar-tree icon for a document record. A custom document-identity icon
+ * always wins. Without one, a collection shows the table glyph (through
+ * DocumentIcon, so its size matches a page), a row takes the static post-type
+ * glyph, and a page falls back to the document glyph.
  *
  * @param {Object} record Document record.
  * @param {number} [size] Icon size in pixels.
  * @return {Object} Rendered React node for the icon.
  */
 export function iconForRecord( record, size = 16 ) {
+	const iconMeta = record?.meta?.cortext_document_icon ?? '';
+	if ( ! iconMeta && definesTrait( record ) ) {
+		return <DocumentIcon icon={ COLLECTION_ICON } size={ size } />;
+	}
 	if ( ! hasTrait( record ) ) {
-		const iconMeta = record?.meta?.cortext_document_icon ?? '';
 		return <DocumentIcon icon={ iconMeta } size={ size } />;
 	}
 	return <Icon icon={ customPostType } size={ size } />;
