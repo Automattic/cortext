@@ -460,6 +460,7 @@ function DocumentIdentityActions( { isLocked = false, postId, postType } ) {
 				<MediaUploadCheck>
 					<MediaPicker
 						allowedTypes={ [ 'image' ] }
+						postId={ postId }
 						onSelect={ ( media ) => insertCover( media.id ) }
 						render={ ( { open } ) => (
 							<Button

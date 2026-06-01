@@ -391,6 +391,7 @@ function PageFeaturedImageInspectorControls( { postId, postType } ) {
 				<MediaUploadCheck>
 					<MediaPicker
 						allowedTypes={ [ 'image' ] }
+						postId={ postId }
 						value={ featuredId }
 						onSelect={ setFeaturedImage }
 						render={ ( { open } ) => (

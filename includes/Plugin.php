@@ -19,6 +19,7 @@ use Cortext\FieldValues\FieldValueIndex;
 use Cortext\Frontend\AdminBar;
 use Cortext\Frontend\Assets;
 use Cortext\Frontend\Template;
+use Cortext\Media\CortextMedia;
 use Cortext\PostType\Document;
 use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Field;
@@ -78,6 +79,7 @@ final class Plugin {
 		( new Template() )->register();
 		( new Assets() )->register();
 		( new DataView() )->register();
+		( new CortextMedia() )->register();
 		( new Preferences() )->register();
 	}
 

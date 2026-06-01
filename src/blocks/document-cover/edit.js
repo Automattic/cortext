@@ -111,6 +111,7 @@ export default function Edit( { context, clientId } ) {
 					<MediaUploadCheck>
 						<MediaPicker
 							allowedTypes={ [ 'image' ] }
+							postId={ postId }
 							value={ featuredId }
 							onSelect={ ( picked ) =>
 								setFeaturedId( picked.id )
@@ -138,6 +139,7 @@ export default function Edit( { context, clientId } ) {
 					<MediaUploadCheck>
 						<MediaPicker
 							allowedTypes={ [ 'image' ] }
+							postId={ postId }
 							value={ featuredId }
 							onSelect={ ( picked ) =>
 								setFeaturedId( picked.id )
@@ -200,6 +202,7 @@ export default function Edit( { context, clientId } ) {
 					<MediaUploadCheck>
 						<MediaPicker
 							allowedTypes={ [ 'image' ] }
+							postId={ postId }
 							value={ featuredId }
 							onSelect={ ( picked ) =>
 								setFeaturedId( picked.id )
