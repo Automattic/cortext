@@ -83,10 +83,19 @@ async function createPublishedCollectionWithRows( requestUtils ) {
 	);
 
 	const rows = [];
-	for ( const title of [
-		'Alpha Public Manual',
-		'Beta Public Manual',
-		'Gamma Public Manual',
+	for ( const { title, notes } of [
+		{
+			title: 'Alpha Public Manual',
+			notes: 'needle visible note',
+		},
+		{
+			title: 'Beta Public Manual',
+			notes: 'needle archived note',
+		},
+		{
+			title: 'Gamma Public Manual',
+			notes: 'plain visible note',
+		},
 	] ) {
 		rows.push(
 			await requestUtils.rest( {
@@ -96,6 +105,9 @@ async function createPublishedCollectionWithRows( requestUtils ) {
 					title,
 					status: 'private',
 					cortext_trait: collection.id,
+					meta: {
+						[ `field-${ field.id }` ]: notes,
+					},
 				},
 			} )
 		);
@@ -277,6 +289,79 @@ test.describe( 'Public page rendering', () => {
 		} finally {
 			page.off( 'console', onConsole );
 			page.off( 'pageerror', onPageError );
+			for ( const row of fixture.rows ?? [] ) {
+				await deleteIfCreated(
+					requestUtils,
+					`/wp/v2/crtxt_documents/${ row.id }`
+				);
+			}
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
+			);
+		}
+	} );
+
+	test( 'published DataView applies saved search and filters for anonymous visitors', async ( {
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+
+		try {
+			Object.assign(
+				fixture,
+				await createPublishedCollectionWithRows( requestUtils )
+			);
+
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: `Public filtered DataView ${ Date.now()
+						.toString( 36 )
+						.slice( -4 ) }`,
+					status: 'publish',
+					content: createDataViewBlockMarkup( fixture.collection.id, {
+						fields: [ 'title', `field-${ fixture.field.id }` ],
+						search: 'needle',
+						filters: [
+							{
+								field: `field-${ fixture.field.id }`,
+								operator: 'contains',
+								value: 'visible',
+							},
+						],
+					} ),
+				},
+			} );
+
+			await page.context().clearCookies( { name: /^wordpress_/ } );
+
+			const response = await page.goto(
+				`/cortext/${ fixture.page.slug }/`
+			);
+
+			expect( response?.status() ).toBe( 200 );
+			await expect(
+				page.getByText( 'Alpha Public Manual', { exact: true } )
+			).toBeVisible();
+			await expect(
+				page.getByText( 'Beta Public Manual', { exact: true } )
+			).toBeHidden();
+			await expect(
+				page.getByText( 'Gamma Public Manual', { exact: true } )
+			).toBeHidden();
+		} finally {
 			for ( const row of fixture.rows ?? [] ) {
 				await deleteIfCreated(
 					requestUtils,

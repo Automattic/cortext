@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from '@wordpress/element';
 import { addQueryArgs } from '@wordpress/url';
 import apiFetch from '@wordpress/api-fetch';
 
-const SERVER_OPERATORS = new Set( [ 'is', 'isNot', 'isAny', 'isNone' ] );
 const MANUAL_SORT_ID = 'manual';
 const PUBLIC_PER_PAGE = 100;
 const SYSTEM_SORT_FIELDS = new Set( [ 'title', 'created_at', 'modified_at' ] );
@@ -66,21 +65,6 @@ export function buildQueryArgs( collectionId, view, fields = [], page = 1 ) {
 		args[ 'sort[field]' ] = sort.field;
 		args[ 'sort[direction]' ] = sort.direction;
 	}
-
-	const serverFilters = ( view?.filters ?? [] ).filter(
-		( f ) => f.field && f.operator && SERVER_OPERATORS.has( f.operator )
-	);
-	serverFilters.forEach( ( filter, i ) => {
-		args[ `filters[${ i }][field]` ] = filter.field;
-		args[ `filters[${ i }][operator]` ] = filter.operator;
-		if ( Array.isArray( filter.value ) ) {
-			filter.value.forEach( ( v, j ) => {
-				args[ `filters[${ i }][value][${ j }]` ] = v;
-			} );
-		} else {
-			args[ `filters[${ i }][value]` ] = filter.value;
-		}
-	} );
 
 	return args;
 }

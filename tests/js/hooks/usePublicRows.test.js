@@ -125,6 +125,26 @@ describe( 'usePublicRows query args', () => {
 		expect( args[ 'sort[field]' ] ).toBe( 'title' );
 		expect( args[ 'sort[direction]' ] ).toBe( 'asc' );
 	} );
+
+	it( 'keeps public filters local instead of forwarding them to REST', () => {
+		const args = buildQueryArgs(
+			7,
+			{
+				filters: [
+					{
+						field: 'created_by',
+						operator: 'is',
+						value: 'Ada Lovelace',
+					},
+				],
+			},
+			fieldDefs
+		);
+
+		expect( args[ 'filters[0][field]' ] ).toBeUndefined();
+		expect( args[ 'filters[0][operator]' ] ).toBeUndefined();
+		expect( args[ 'filters[0][value]' ] ).toBeUndefined();
+	} );
 } );
 
 describe( 'usePublicRows', () => {

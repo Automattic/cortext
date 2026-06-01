@@ -8,8 +8,39 @@
 
 import { __ } from '@wordpress/i18n';
 
-import { elementsFromOptions } from './fieldMapping';
+import { dataViewsFilterByForType, elementsFromOptions } from './fieldMapping';
 import { formatDisplay } from '../utils/formatDisplay';
+
+const PUBLIC_SEARCHABLE_TYPES = new Set( [
+	'text',
+	'email',
+	'url',
+	'select',
+	'multiselect',
+	'relation',
+	'rollup',
+] );
+const PUBLIC_FILTER_OPERATORS = {
+	text: [ 'is', 'isNot', 'contains', 'notContains', 'startsWith' ],
+	email: [ 'is', 'isNot', 'contains', 'notContains', 'startsWith' ],
+	url: [ 'is', 'isNot', 'contains', 'notContains', 'startsWith' ],
+	number: [ 'is', 'greaterThan', 'lessThan', 'between' ],
+	date: [ 'on', 'before', 'after', 'between' ],
+	datetime: [ 'on', 'before', 'after' ],
+	select: [ 'isAny', 'isNone' ],
+	multiselect: [ 'isAny', 'isNone' ],
+};
+
+function publicFilterByForType( type ) {
+	return dataViewsFilterByForType(
+		type,
+		PUBLIC_FILTER_OPERATORS[ type ] ?? []
+	);
+}
+
+function isPublicSearchable( type ) {
+	return PUBLIC_SEARCHABLE_TYPES.has( type );
+}
 
 const TITLE_FIELD = {
 	id: 'title',
@@ -18,6 +49,7 @@ const TITLE_FIELD = {
 	enableGlobalSearch: true,
 	enableHiding: false,
 	enableSorting: false,
+	filterBy: publicFilterByForType( 'text' ),
 	getValue: ( { item } ) => textValue( item?.title?.rendered ),
 	render: ( { item } ) => item?.title?.rendered ?? '',
 };
@@ -28,6 +60,7 @@ const COVER_FIELD = {
 	type: 'media',
 	enableGlobalSearch: false,
 	enableSorting: false,
+	filterBy: false,
 	getValue: ( { item } ) => item?.cover?.url ?? '',
 	render: ( { item } ) => {
 		const cover = item?.cover;
@@ -45,6 +78,7 @@ const SYSTEM_FIELDS = [
 		type: 'datetime',
 		enableGlobalSearch: false,
 		enableSorting: false,
+		filterBy: false,
 		getValue: ( { item } ) => textValue( item?.created_at ),
 		render: ( { item } ) => {
 			const value = item?.created_at;
@@ -61,8 +95,9 @@ const SYSTEM_FIELDS = [
 		id: 'created_by',
 		label: __( 'Created by', 'cortext' ),
 		type: 'text',
-		enableGlobalSearch: false,
+		enableGlobalSearch: true,
 		enableSorting: false,
+		filterBy: publicFilterByForType( 'text' ),
 		getValue: ( { item } ) => textValue( item?.created_by ),
 		render: ( { item } ) => (
 			<span className="cortext-cell-readonly">
@@ -76,6 +111,7 @@ const SYSTEM_FIELDS = [
 		type: 'datetime',
 		enableGlobalSearch: false,
 		enableSorting: false,
+		filterBy: false,
 		getValue: ( { item } ) => textValue( item?.modified_at ),
 		render: ( { item } ) => {
 			const value = item?.modified_at;
@@ -92,8 +128,9 @@ const SYSTEM_FIELDS = [
 		id: 'modified_by',
 		label: __( 'Last edited by', 'cortext' ),
 		type: 'text',
-		enableGlobalSearch: false,
+		enableGlobalSearch: true,
 		enableSorting: false,
+		filterBy: publicFilterByForType( 'text' ),
 		getValue: ( { item } ) => textValue( item?.modified_by ),
 		render: ( { item } ) => (
 			<span className="cortext-cell-readonly">
@@ -205,6 +242,8 @@ function mapPublicField( fieldDef ) {
 		id,
 		label,
 		enableSorting: false,
+		enableGlobalSearch: isPublicSearchable( type ),
+		filterBy: publicFilterByForType( type ),
 		getValue: ( { item } ) =>
 			publicValue( item?.meta?.[ id ] ?? null, type ),
 		render: ( { item } ) =>
