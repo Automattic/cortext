@@ -26,6 +26,7 @@ import { withViewTransition } from '../hooks/viewTransition';
 import { definesTrait } from '../documents/capabilities';
 import { POST_TYPE } from './page-queries';
 import CortextInserterSidebar from './CortextInserterSidebar';
+import CortextLinkSuggestions from './CortextLinkSuggestions';
 import { DocumentPropertiesProvider } from './DocumentPropertiesContext';
 import DocumentPublishToggle from './DocumentPublishToggle';
 import EditorBody from './EditorBody';
@@ -530,6 +531,7 @@ export default function Canvas( {
 				settings={ getEditorSettings() }
 				useSubRegistry={ useSubRegistry }
 			>
+				<CortextLinkSuggestions />
 				<CanvasEditor
 					post={ renderedPost }
 					postType={ renderedPost.type ?? postType }
