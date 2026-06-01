@@ -134,6 +134,7 @@ describe( 'useCollectionRows', () => {
 		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 1 ) );
 		expect( result.current.queryMode ).toBe( 'server' );
 		expect( lastRequestPath() ).toContain( 'trait=7' );
+		expect( lastRequestPath() ).toContain( 'context=edit' );
 		expect( lastRequestPath() ).toContain( 'page=2' );
 		expect( lastRequestPath() ).toContain( 'per_page=50' );
 	} );
@@ -805,6 +806,7 @@ describe( 'useCollectionRows', () => {
 		);
 
 		expect( plan.mode ).toBe( 'client' );
+		expect( plan.args.context ).toBe( 'edit' );
 		expect( plan.args.page ).toBe( 1 );
 		expect( plan.args.per_page ).toBe( 100 );
 		expect( plan.args[ 'sort[field]' ] ).toBeUndefined();
@@ -987,6 +989,12 @@ describe( 'useCollectionRows', () => {
 
 		expect( plan.mode ).toBe( 'client' );
 		expect( plan.args[ 'fields[0]' ] ).toBeUndefined();
+	} );
+
+	it( 'marks direct editor row query args with edit context', () => {
+		const args = buildQueryArgs( 7, { page: 1, perPage: 25 }, baseFields );
+
+		expect( args.context ).toBe( 'edit' );
 	} );
 
 	it( 'refetches when the visible fields change', async () => {

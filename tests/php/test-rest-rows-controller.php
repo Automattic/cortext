@@ -97,6 +97,67 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertSame( 200, $response->get_status() );
 	}
 
+	public function test_view_context_returns_collection_rows_for_published_collection(): void {
+		wp_set_current_user( 0 );
+
+		$fixture = $this->create_collection_fixture( 'pub-visible-rows', 'text', 'publish' );
+
+		$this->create_row_fixture( $fixture['collection_id'], 'Visible row', 'publish' );
+		$this->create_row_fixture( $fixture['collection_id'], 'Private row', 'private' );
+		$this->create_row_fixture( $fixture['collection_id'], 'Draft row', 'draft' );
+
+		$response = $this->query_rows(
+			array(
+				'trait'   => $fixture['collection_id'],
+				'context' => 'view',
+			)
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$data   = $response->get_data();
+		$titles = array_map(
+			static fn( array $row ): string => $row['title']['raw'],
+			$data['rows']
+		);
+		sort( $titles );
+
+		$this->assertSame( 3, $data['total'] );
+		$this->assertSame(
+			array( 'Draft row', 'Private row', 'Visible row' ),
+			$titles
+		);
+	}
+
+	public function test_default_context_uses_editor_row_statuses(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+
+		$fixture = $this->create_collection_fixture( 'edit-visible-rows' );
+
+		$this->create_row_fixture( $fixture['collection_id'], 'Visible row', 'publish' );
+		$this->create_row_fixture( $fixture['collection_id'], 'Private row', 'private' );
+		$this->create_row_fixture( $fixture['collection_id'], 'Draft row', 'draft' );
+
+		$response = $this->query_rows(
+			array(
+				'trait' => $fixture['collection_id'],
+			)
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$data   = $response->get_data();
+		$titles = array_map(
+			static fn( array $row ): string => $row['title']['raw'],
+			$data['rows']
+		);
+		sort( $titles );
+
+		$this->assertSame( 3, $data['total'] );
+		$this->assertSame(
+			array( 'Draft row', 'Private row', 'Visible row' ),
+			$titles
+		);
+	}
+
 	public function test_view_context_rejects_unpublished_collection(): void {
 		wp_set_current_user( 0 );
 
@@ -261,6 +322,23 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 			'collection_id' => $collection_id,
 			'field_id'      => $field_id,
 		);
+	}
+
+	private function create_row_fixture( int $collection_id, string $title, string $post_status ): int {
+		$row_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Document::POST_TYPE,
+				'post_status' => $post_status,
+				'post_title'  => $title,
+			)
+		);
+
+		$term_id = TraitTaxonomy::term_id_for_trait( $collection_id );
+		if ( $term_id > 0 ) {
+			wp_set_object_terms( $row_id, array( $term_id ), TraitTaxonomy::TAXONOMY, false );
+		}
+
+		return $row_id;
 	}
 
 	private function create_user( string $role ): int {
