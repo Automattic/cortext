@@ -9,6 +9,7 @@ declare( strict_types=1 );
 
 namespace Cortext\CLI;
 
+use Cortext\Media\CortextMedia;
 use Cortext\PostType\Document;
 use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Field;
@@ -3975,7 +3976,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			)
 		);
 		if ( $existing ) {
-			return (int) $existing[0];
+			return $this->tag_seed_attachment( (int) $existing[0] );
 		}
 
 		$upload_dir = wp_upload_dir();
@@ -4008,7 +4009,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		$metadata = wp_generate_attachment_metadata( $attach_id, $dest );
 		wp_update_attachment_metadata( $attach_id, $metadata );
 
-		return (int) $attach_id;
+		return $this->tag_seed_attachment( (int) $attach_id );
 	}
 
 	/**
@@ -4035,7 +4036,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			)
 		);
 		if ( $existing ) {
-			return (int) $existing[0];
+			return $this->tag_seed_attachment( (int) $existing[0] );
 		}
 
 		require_once ABSPATH . 'wp-admin/includes/file.php';
@@ -4082,7 +4083,15 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		$metadata = wp_generate_attachment_metadata( $attach_id, $dest );
 		wp_update_attachment_metadata( $attach_id, $metadata );
 
-		return (int) $attach_id;
+		return $this->tag_seed_attachment( (int) $attach_id );
+	}
+
+	private function tag_seed_attachment( int $attachment_id ): int {
+		if ( $attachment_id > 0 ) {
+			( new CortextMedia() )->tag( $attachment_id );
+		}
+
+		return $attachment_id;
 	}
 
 	/**

@@ -65,7 +65,7 @@ final class CortextMedia {
 	}
 
 	/**
-	 * Stamps the origin term when a new attachment is parented to a Cortext
+	 * Marks the origin term when a new attachment is parented to a Cortext
 	 * document. Runs on every upload site-wide but bails cheaply (two cached
 	 * reads) for anything not parented to a `crtxt_document`.
 	 *
@@ -84,7 +84,7 @@ final class CortextMedia {
 	}
 
 	/**
-	 * Stamps media that predates upload-time tagging: attachments parented to a
+	 * Marks media that predates upload-time tagging: attachments parented to a
 	 * document, document covers (featured images), and image icons. Idempotent,
 	 * so it is safe to run repeatedly.
 	 *
@@ -142,7 +142,16 @@ final class CortextMedia {
 		);
 	}
 
-	private function tag( int $attachment_id ): void {
+	/**
+	 * Marks an attachment as Cortext media.
+	 *
+	 * @param int $attachment_id Attachment post ID.
+	 */
+	public function tag( int $attachment_id ): void {
+		if ( 'attachment' !== get_post_type( $attachment_id ) ) {
+			return;
+		}
+
 		wp_set_object_terms( $attachment_id, self::TERM, self::TAXONOMY );
 	}
 
