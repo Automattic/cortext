@@ -280,6 +280,14 @@ async function readCollectionBodyState( page, collectionId ) {
 	);
 }
 
+async function expectCollectionBodyState( page, collectionId, expected ) {
+	await expect
+		.poll( () => readCollectionBodyState( page, collectionId ), {
+			timeout: 15_000,
+		} )
+		.toMatchObject( expected );
+}
+
 async function attemptCollectionBodyMutations( page, collectionId ) {
 	await page.evaluate(
 		( { blockedText, postId } ) => {
@@ -644,28 +652,24 @@ test.describe( 'editor header blocks', () => {
 			const editorCanvas = page.frameLocator(
 				'iframe[name="editor-canvas"]'
 			);
-			await expect
-				.poll( () => readCollectionBodyState( page, collection.id ) )
-				.toMatchObject( {
-					blockedCount: 0,
-					legacyLock: {
-						edit: true,
-						move: true,
-						remove: true,
-					},
-					legacyPresent: true,
-					ownerCount: 1,
-				} );
+			await expectCollectionBodyState( page, collection.id, {
+				blockedCount: 0,
+				legacyLock: {
+					edit: true,
+					move: true,
+					remove: true,
+				},
+				legacyPresent: true,
+				ownerCount: 1,
+			} );
 
 			await attemptCollectionBodyMutations( page, collection.id );
 
-			await expect
-				.poll( () => readCollectionBodyState( page, collection.id ) )
-				.toMatchObject( {
-					blockedCount: 0,
-					legacyPresent: true,
-					ownerCount: 1,
-				} );
+			await expectCollectionBodyState( page, collection.id, {
+				blockedCount: 0,
+				legacyPresent: true,
+				ownerCount: 1,
+			} );
 			await selectFirstBlockByName( page, POST_TITLE_BLOCK );
 			await expect(
 				editorCanvas.getByRole( 'button', {
@@ -673,6 +677,74 @@ test.describe( 'editor header blocks', () => {
 				} )
 			).toHaveCount( 0 );
 		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				collection && `/wp/v2/crtxt_documents/${ collection.id }`
+			);
+		}
+	} );
+
+	test( 'preserves legacy collection body blocks after switching documents', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const suffix = Date.now().toString( 36 ).slice( -4 );
+		const sourceTitle = `E2E Switch Source ${ suffix }`;
+		const collectionTitle = `E2E Switch Collection ${ suffix }`;
+		let sourcePage;
+		let collection;
+		try {
+			sourcePage = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: sourceTitle,
+					status: 'private',
+					content: bodyMarkup(),
+				},
+			} );
+			collection = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: collectionTitle,
+					status: 'private',
+					cortext_collection: true,
+					content: paragraphMarkup( COLLECTION_LEGACY_BODY ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/${ sourcePage.id }`
+			);
+			await waitForEditorPost( page, sourcePage.id );
+			await expectParagraphsAfterTitle( page, [ BODY_A, BODY_B ] );
+
+			await page
+				.locator( '.cortext-sidebar' )
+				.getByRole( 'button', {
+					name: collectionTitle,
+					exact: true,
+				} )
+				.click();
+			await waitForEditorPost( page, collection.id );
+			await expectCollectionBodyState( page, collection.id, {
+				blockedCount: 0,
+				legacyLock: {
+					edit: true,
+					move: true,
+					remove: true,
+				},
+				legacyPresent: true,
+				ownerCount: 1,
+			} );
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				sourcePage && `/wp/v2/crtxt_documents/${ sourcePage.id }`
+			);
 			await deleteIfCreated(
 				requestUtils,
 				collection && `/wp/v2/crtxt_documents/${ collection.id }`
