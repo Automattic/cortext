@@ -1,4 +1,4 @@
-import { Icon, customPostType, listItem, table } from '@wordpress/icons';
+import { Icon, customPostType } from '@wordpress/icons';
 
 import DocumentIcon from '../components/DocumentIcon';
 import { definesTrait, hasTrait } from './capabilities';
@@ -8,6 +8,9 @@ import { definesTrait, hasTrait } from './capabilities';
 // as a page's document glyph; a raw <Icon> reads noticeably smaller next to
 // page rows in the tree.
 const COLLECTION_ICON = JSON.stringify( { type: 'wp', name: 'table' } );
+// Same idea for a row's list glyph in the compact lists (Recents, Favorites,
+// Command Palette), so collection and row icons line up with page icons there.
+const ROW_ICON = JSON.stringify( { type: 'wp', name: 'listItem' } );
 
 /**
  * Sidebar-tree icon for a document record. A custom document-identity icon
@@ -44,10 +47,10 @@ export function listIconForRecord( record, size = 16 ) {
 		return <DocumentIcon icon={ icon } size={ size } />;
 	}
 	if ( definesTrait( record ) ) {
-		return <Icon icon={ table } size={ size } />;
+		return <DocumentIcon icon={ COLLECTION_ICON } size={ size } />;
 	}
 	if ( hasTrait( record ) ) {
-		return <Icon icon={ listItem } size={ size } />;
+		return <DocumentIcon icon={ ROW_ICON } size={ size } />;
 	}
 	return <DocumentIcon icon="" size={ size } />;
 }

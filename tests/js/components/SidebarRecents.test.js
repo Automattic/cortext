@@ -33,8 +33,8 @@ jest.mock( '@wordpress/core-data', () => ( {
 	} ),
 } ) );
 
-jest.mock( '../../../src/components/DocumentIcon', () => () => (
-	<span data-testid="document-icon" />
+jest.mock( '../../../src/components/DocumentIcon', () => ( { icon } ) => (
+	<span data-testid="document-icon" data-icon={ icon } />
 ) );
 
 jest.mock( '../../../src/hooks/useRecents', () => ( {
@@ -179,9 +179,14 @@ describe( 'SidebarRecents animation', () => {
 		expect(
 			screen.getByRole( 'button', { name: 'Recent: Library' } )
 		).toBeInTheDocument();
+		// The collection's table glyph now renders through DocumentIcon (so its
+		// size matches a page); the icon prop carries the table wp glyph.
 		expect(
-			container.querySelector( '[data-testid="icon-table"]' )
-		).toBeInTheDocument();
+			container.querySelector( '[data-testid="document-icon"]' )
+		).toHaveAttribute(
+			'data-icon',
+			JSON.stringify( { type: 'wp', name: 'table' } )
+		);
 	} );
 
 	it( 'adds accessible context when recent titles collide', () => {
