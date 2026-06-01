@@ -2,13 +2,23 @@ import { __, _n, sprintf } from '@wordpress/i18n';
 import { useEntityRecords } from '@wordpress/core-data';
 import { useDispatch } from '@wordpress/data';
 import { useState, useMemo, useCallback, useEffect } from '@wordpress/element';
-import { Button, Icon, Notice } from '@wordpress/components';
+import {
+	Button,
+	Dropdown,
+	Icon,
+	MenuGroup,
+	MenuItem,
+	Notice,
+} from '@wordpress/components';
 import { displayShortcut } from '@wordpress/keycodes';
 import {
+	chevronDown,
 	globe,
 	home as homeIcon,
+	page,
 	plus,
 	search,
+	table,
 	trash as trashIcon,
 	upload,
 	wordpress,
@@ -105,6 +115,7 @@ import {
 	favoriteIdentForRecord,
 	favoriteKey,
 	favoriteKeyForRecord,
+	useCreateCollectionDocument,
 	useCreateDocument,
 	useDocumentSelection,
 	useFavoriteToggle,
@@ -334,9 +345,11 @@ export default function Sidebar( {
 	);
 
 	const create = useCreateDocument();
-	const createAndOpen = useCallback(
-		async ( input ) => {
-			const created = await create( input );
+	const createCollection = useCreateCollectionDocument();
+	// After creating a page or collection, open it and put its sidebar row into
+	// rename mode.
+	const openAfterCreate = useCallback(
+		( created ) => {
 			if ( created?.id ) {
 				setAutoRenameId( created.id );
 				navigate( {
@@ -346,15 +359,31 @@ export default function Sidebar( {
 			}
 			return created;
 		},
-		[ create, navigate ]
+		[ navigate ]
+	);
+	const createAndOpen = useCallback(
+		async ( input ) => openAfterCreate( await create( input ) ),
+		[ create, openAfterCreate ]
+	);
+	const createCollectionAndOpen = useCallback(
+		async ( input ) => openAfterCreate( await createCollection( input ) ),
+		[ createCollection, openAfterCreate ]
 	);
 	const createRootPage = useCallback(
 		() => createAndOpen( {} ),
 		[ createAndOpen ]
 	);
+	const createRootCollection = useCallback(
+		() => createCollectionAndOpen( {} ),
+		[ createCollectionAndOpen ]
+	);
 	const createChildPage = useCallback(
 		( parentId ) => createAndOpen( { parent: parentId } ),
 		[ createAndOpen ]
+	);
+	const createChildCollection = useCallback(
+		( parentId ) => createCollectionAndOpen( { parent: parentId } ),
+		[ createCollectionAndOpen ]
 	);
 
 	// Props shared by every DocumentRow in the Pages tree.
@@ -374,6 +403,7 @@ export default function Sidebar( {
 		autoRenameId,
 		onAutoRenameConsumed: () => setAutoRenameId( null ),
 		onCreateChild: createChildPage,
+		onCreateChildCollection: createChildCollection,
 	};
 
 	// --- Render ------------------------------------------------------------
@@ -528,16 +558,69 @@ export default function Sidebar( {
 								isCollapsed={ isSectionCollapsed( 'pages' ) }
 								onToggle={ () => toggleSection( 'pages' ) }
 								actions={
-									<Button
-										className="cortext-sidebar__section-action"
-										icon={ plus }
-										size="small"
-										label={ __(
-											'New document',
-											'cortext'
-										) }
-										onClick={ createRootPage }
-									/>
+									<div className="cortext-sidebar__split-action">
+										<Button
+											className="cortext-sidebar__section-action cortext-sidebar__split-action-primary"
+											icon={ plus }
+											size="small"
+											label={ __(
+												'New document',
+												'cortext'
+											) }
+											onClick={ createRootPage }
+										/>
+										<Dropdown
+											contentClassName="cortext-sidebar__create-menu"
+											popoverProps={ {
+												placement: 'bottom-end',
+											} }
+											renderToggle={ ( {
+												isOpen,
+												onToggle,
+											} ) => (
+												<Button
+													className="cortext-sidebar__section-action cortext-sidebar__split-action-toggle"
+													icon={ chevronDown }
+													size="small"
+													label={ __(
+														'Create a document or collection',
+														'cortext'
+													) }
+													onClick={ onToggle }
+													isPressed={ isOpen }
+													aria-expanded={ isOpen }
+												/>
+											) }
+											renderContent={ ( { onClose } ) => (
+												<MenuGroup>
+													<MenuItem
+														icon={ page }
+														onClick={ () => {
+															createRootPage();
+															onClose();
+														} }
+													>
+														{ __(
+															'New document',
+															'cortext'
+														) }
+													</MenuItem>
+													<MenuItem
+														icon={ table }
+														onClick={ () => {
+															createRootCollection();
+															onClose();
+														} }
+													>
+														{ __(
+															'New collection',
+															'cortext'
+														) }
+													</MenuItem>
+												</MenuGroup>
+											) }
+										/>
+									</div>
 								}
 							>
 								{ isResolvingPages &&
