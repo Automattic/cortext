@@ -214,6 +214,10 @@ tbody > tr > td:not(:first-child) {
 	width: min(100%, 420px);
 }
 
+.cortext-collection-chooser__search {
+	margin-bottom: $grid-unit-05;
+}
+
 .cortext-collection-chooser__item.components-button {
 	justify-content: flex-start;
 	min-height: 36px;

@@ -17,6 +17,7 @@ import {
 	Notice,
 	PanelBody,
 	Placeholder,
+	SearchControl,
 	SelectControl,
 	Spinner,
 	TextControl,
@@ -27,7 +28,7 @@ import { useDispatch, useSelect } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
 import { useCallback, useState } from '@wordpress/element';
 import { store as interfaceStore } from '@wordpress/interface';
-import { cog, plus, replace } from '@wordpress/icons';
+import { cog, link, plus, replace, table } from '@wordpress/icons';
 
 import CanvasOwnerInspector, {
 	useIsCanvasOwnerBlock,
@@ -39,7 +40,7 @@ import {
 	DOCUMENT_POST_TYPE,
 	FULL_PAGE_COLLECTION_QUERY,
 } from '../../collections';
-import { useCreateDocument } from '../../documents';
+import { useCreateCollectionDocument } from '../../documents';
 import { toDataViewId } from '../../hooks/fieldIds';
 import {
 	CollectionFieldsProvider,
@@ -112,6 +113,7 @@ function CollectionPicker( { selectedId = '', onSelect } ) {
 		DOCUMENT_POST_TYPE,
 		FULL_PAGE_COLLECTION_QUERY
 	);
+	const [ query, setQuery ] = useState( '' );
 
 	const hasCollections = Boolean( records?.length );
 
@@ -127,29 +129,48 @@ function CollectionPicker( { selectedId = '', onSelect } ) {
 		);
 	}
 
+	const collectionTitle = ( collection ) =>
+		collection.title?.rendered ||
+		collection.title?.raw ||
+		`#${ collection.id }`;
+	const needle = query.trim().toLowerCase();
+	const matches = needle
+		? ( records ?? [] ).filter( ( collection ) =>
+				collectionTitle( collection ).toLowerCase().includes( needle )
+		  )
+		: records ?? [];
+
 	return (
 		<div className="cortext-collection-chooser">
-			{ /* TODO: Add search once collection lists are long enough to make scanning noisy. */ }
-			{ ( records ?? [] ).map( ( collection ) => {
-				const title =
-					collection.title?.rendered ||
-					collection.title?.raw ||
-					`#${ collection.id }`;
-				const isSelected =
-					selectedId && Number( selectedId ) === collection.id;
+			<SearchControl
+				__nextHasNoMarginBottom
+				className="cortext-collection-chooser__search"
+				value={ query }
+				onChange={ setQuery }
+				placeholder={ __( 'Search collections', 'cortext' ) }
+			/>
+			{ matches.length === 0 ? (
+				<p className="cortext-data-view-picker__empty">
+					{ __( 'No collections match your search.', 'cortext' ) }
+				</p>
+			) : (
+				matches.map( ( collection ) => {
+					const isSelected =
+						selectedId && Number( selectedId ) === collection.id;
 
-				return (
-					<Button
-						key={ collection.id }
-						className="cortext-collection-chooser__item"
-						variant={ isSelected ? 'secondary' : 'tertiary' }
-						isPressed={ isSelected }
-						onClick={ () => onSelect( collection.id ) }
-					>
-						{ title }
-					</Button>
-				);
-			} ) }
+					return (
+						<Button
+							key={ collection.id }
+							className="cortext-collection-chooser__item"
+							variant={ isSelected ? 'secondary' : 'tertiary' }
+							isPressed={ isSelected }
+							onClick={ () => onSelect( collection.id ) }
+						>
+							{ collectionTitle( collection ) }
+						</Button>
+					);
+				} )
+			) }
 		</div>
 	);
 }
@@ -158,7 +179,7 @@ function CollectionCreator( { onCreate } ) {
 	const [ title, setTitle ] = useState( '' );
 	const [ isSaving, setIsSaving ] = useState( false );
 	const [ error, setError ] = useState( '' );
-	const create = useCreateDocument();
+	const create = useCreateCollectionDocument();
 	const canCreate = title.trim() && ! isSaving;
 
 	// Nest the new collection under the current page so it appears beneath it
@@ -180,10 +201,6 @@ function CollectionCreator( { onCreate } ) {
 			const collection = await create( {
 				title: title.trim(),
 				status: 'private',
-				// Designate the new document a collection so its mirror term is
-				// created server-side, even though it starts with no custom
-				// fields (only the implicit title).
-				cortext_collection: true,
 				...( ownerPageId ? { parent: ownerPageId } : {} ),
 			} );
 			onCreate( collection );
@@ -576,7 +593,7 @@ export default function Edit( {
 	context,
 	setAttributes,
 } ) {
-	const { collectionId, view, align } = attributes;
+	const { collectionId, view, align, intent } = attributes;
 	const isOwner = useIsCanvasOwnerBlock(
 		clientId,
 		context?.postType,
@@ -597,9 +614,18 @@ export default function Edit( {
 		[ setAttributes ]
 	);
 
+	// The inserter variations stamp a transient `intent` to open the placeholder
+	// in create or link mode. Clear it once a collection is bound so resolved
+	// blocks only persist `collectionId` + `view`; until then it rides in the
+	// attributes and survives remounts (the canvas reconciles blocks on load),
+	// keeping the chosen mode.
 	const selectCollection = useCallback(
 		( id ) =>
-			setAttributes( { collectionId: id, view: createDefaultView() } ),
+			setAttributes( {
+				collectionId: id,
+				view: createDefaultView(),
+				intent: undefined,
+			} ),
 		[ setAttributes ]
 	);
 
@@ -624,6 +650,7 @@ export default function Edit( {
 	}, [] );
 
 	if ( ! collectionId ) {
+		const isLinkMode = intent === 'link-existing';
 		return (
 			<div { ...blockProps }>
 				<InspectorControls>
@@ -631,22 +658,33 @@ export default function Edit( {
 						<CollectionPicker onSelect={ selectCollection } />
 					</PanelBody>
 				</InspectorControls>
-				<Placeholder
-					label={ __( 'Collection view', 'cortext' ) }
-					instructions={ __(
-						'Pick a collection to display.',
-						'cortext'
-					) }
-				>
-					<CollectionPicker onSelect={ selectCollection } />
-					<div className="cortext-data-view-placeholder__create">
+				{ isLinkMode ? (
+					<Placeholder
+						icon={ link }
+						label={ __( 'Link a collection', 'cortext' ) }
+						instructions={ __(
+							'Show an existing collection here.',
+							'cortext'
+						) }
+					>
+						<CollectionPicker onSelect={ selectCollection } />
+					</Placeholder>
+				) : (
+					<Placeholder
+						icon={ table }
+						label={ __( 'New collection', 'cortext' ) }
+						instructions={ __(
+							'Name your collection to create it here.',
+							'cortext'
+						) }
+					>
 						<CollectionCreator
 							onCreate={ ( collection ) =>
 								selectCollection( collection.id )
 							}
 						/>
-					</div>
-				</Placeholder>
+					</Placeholder>
+				) }
 			</div>
 		);
 	}
