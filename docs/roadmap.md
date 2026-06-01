@@ -17,7 +17,7 @@ The repo already has a usable first shape:
 
 ## Before this is production-ready
 
-Some workflows, permissions, REST responses, block attributes, and theme tokens still need hardening. Until then, use staging sites for serious testing.
+Some workflows, permissions, REST responses, block attributes, and theme tokens still need hardening. Until then, test it where rough edges are okay.
 
 The next work should focus on:
 

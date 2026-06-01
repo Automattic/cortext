@@ -50,7 +50,7 @@ export default function BetaNoticeModal( { onAcknowledge } ) {
 							{ __( 'Start with test content.', 'cortext' ) }
 						</strong>{ ' ' }
 						{ __(
-							'Use a staging site before adding anything important.',
+							'Try it somewhere low-stakes before adding anything important.',
 							'cortext'
 						) }
 					</div>
@@ -64,7 +64,7 @@ export default function BetaNoticeModal( { onAcknowledge } ) {
 							{ __( 'Feedback is welcome.', 'cortext' ) }
 						</strong>{ ' ' }
 						{ __(
-							'Please test on a staging site and tell us what breaks, what feels off, and what you need next.',
+							'Tell us what breaks, what feels off, and what you need next.',
 							'cortext'
 						) }
 					</div>

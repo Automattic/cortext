@@ -1,6 +1,6 @@
 # Security
 
-Cortext is in beta. Test security-sensitive use cases on staging first.
+Cortext is in beta. Try security-sensitive setups somewhere private first.
 
 Access checks are still being hardened. Please report anything that exposes more data or actions than expected.
 

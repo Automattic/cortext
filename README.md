@@ -3,9 +3,9 @@
 # Cortext
 
 > [!WARNING]
-> Cortext is an early beta. Try it on a test or staging site first.
+> Cortext is an early beta. Try it somewhere low-stakes first.
 >
-> Early releases may change behavior during the beta. Avoid relying on Cortext for critical workflows until it has had more real-world testing.
+> Some things may change during the beta, so do not make it the only place for important work yet.
 
 A WordPress plugin for building a knowledge base inside your own site: nested pages, typed collections, multiple views, and publishing through WordPress.
 
