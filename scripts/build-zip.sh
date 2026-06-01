@@ -23,8 +23,7 @@ runtime_paths=(
 	cortext.php
 	readme.txt
 	LICENSE
-	cortext-banner.png
-	cortext-banner.svg
+	assets/brand
 	includes
 	templates
 	build

@@ -4,13 +4,13 @@ const { execFileSync } = require( 'child_process' );
 
 const baseGlobalSetup = require( '@wordpress/scripts/config/playwright/global-setup.js' );
 
-const ALPHA_NOTICE_STORAGE_KEY = 'cortext.alphaNoticeSeen';
+const BETA_NOTICE_STORAGE_KEY = 'cortext.betaNoticeSeen';
 
 /**
  * @param {string} storageStatePath
  * @param {string} origin
  */
-function markAlphaNoticeSeen( storageStatePath, origin ) {
+function markBetaNoticeSeen( storageStatePath, origin ) {
 	const storageState = JSON.parse(
 		fs.readFileSync( storageStatePath, 'utf8' )
 	);
@@ -24,14 +24,14 @@ function markAlphaNoticeSeen( storageStatePath, origin ) {
 
 	const localStorage = originState.localStorage || [];
 	const existingEntry = localStorage.find(
-		( item ) => item.name === ALPHA_NOTICE_STORAGE_KEY
+		( item ) => item.name === BETA_NOTICE_STORAGE_KEY
 	);
 
 	if ( existingEntry ) {
 		existingEntry.value = 'true';
 	} else {
 		localStorage.push( {
-			name: ALPHA_NOTICE_STORAGE_KEY,
+			name: BETA_NOTICE_STORAGE_KEY,
 			value: 'true',
 		} );
 	}
@@ -138,7 +138,7 @@ async function globalSetup( config ) {
 		return;
 	}
 
-	markAlphaNoticeSeen( storageState, new URL( baseURL ).origin );
+	markBetaNoticeSeen( storageState, new URL( baseURL ).origin );
 }
 
 module.exports = globalSetup;

@@ -58,34 +58,6 @@ const sidebarToggleIcon = (
 	</svg>
 );
 
-const cortextMarkIcon = (
-	<svg
-		xmlns="http://www.w3.org/2000/svg"
-		viewBox="0 0 24 24"
-		width="24"
-		height="24"
-		aria-hidden="true"
-		focusable="false"
-	>
-		<ellipse
-			cx="12"
-			cy="12"
-			rx="7"
-			ry="6"
-			stroke="currentColor"
-			strokeWidth="1.6"
-			fill="none"
-		/>
-		<path
-			d="M12 6v12M8.5 8.5 12 10l3.5-1.5"
-			stroke="currentColor"
-			strokeWidth="1.4"
-			strokeLinecap="round"
-			fill="none"
-		/>
-		<circle cx="12" cy="10" r="0.9" fill="currentColor" />
-	</svg>
-);
 import { DndContext, DragOverlay, pointerWithin } from '@dnd-kit/core';
 
 import { openCommandPalette } from './CommandPalette';
@@ -175,6 +147,7 @@ export default function Sidebar( {
 	const { isSelected: isRowSelected, selectRecord: onRowSelect } =
 		useDocumentSelection( { selectedId, selectedCollectionId } );
 	const adminUrl = window.cortextSettings?.adminUrl ?? '/wp-admin/';
+	const brandIconUrl = window.cortextSettings?.iconUrl ?? '';
 	const userName = window.cortextSettings?.userDisplayName ?? '';
 	const publicWebAffordances = isPublicWebAffordancesEnabled();
 	const wordpressAffordances = isWordPressAffordancesEnabled();
@@ -421,7 +394,17 @@ export default function Sidebar( {
 							className="cortext-sidebar__brand-mark"
 							aria-hidden="true"
 						>
-							{ cortextMarkIcon }
+							{ brandIconUrl ? (
+								<img
+									className="cortext-sidebar__brand-image"
+									src={ brandIconUrl }
+									alt=""
+								/>
+							) : (
+								<span className="cortext-sidebar__brand-initial">
+									C
+								</span>
+							) }
 						</span>
 						<span className="cortext-sidebar__brand-text">
 							{ brandLabel }

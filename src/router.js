@@ -12,12 +12,12 @@ import { SlotFillProvider } from '@wordpress/components';
 import Sidebar from './components/Sidebar';
 import EntityRoute from './router/EntityRoute';
 import CommandPalette from './components/CommandPalette';
-import AlphaNoticeModal from './components/AlphaNoticeModal';
+import BetaNoticeModal from './components/BetaNoticeModal';
 import { DocumentPeekProvider } from './components/DocumentPeekProvider';
 import DocumentPeekHost from './components/DocumentPeekHost';
 import { RowDetailSidebarSlot } from './components/RowDetailSidebarSlot';
 import useSidebarLayout from './hooks/useSidebarLayout';
-import useAlphaNotice from './hooks/useAlphaNotice';
+import useBetaNotice from './hooks/useBetaNotice';
 import { FavoritesProvider } from './hooks/useFavorites';
 import { RecentsProvider } from './hooks/useRecents';
 import { WorkspaceHomeProvider } from './hooks/useWorkspaceHome';
@@ -50,7 +50,7 @@ function isEditableTarget( target ) {
 
 function RootLayout() {
 	const { collapsed, width, toggleCollapsed, setWidth } = useSidebarLayout();
-	const alphaNotice = useAlphaNotice();
+	const betaNotice = useBetaNotice();
 	const canvasRef = useRef( null );
 
 	useEffect( () => {
@@ -92,9 +92,9 @@ function RootLayout() {
 								<RowDetailSidebarSlot />
 							</div>
 							<CommandPalette canvasRef={ canvasRef } />
-							{ alphaNotice.isOpen && (
-								<AlphaNoticeModal
-									onAcknowledge={ alphaNotice.acknowledge }
+							{ betaNotice.isOpen && (
+								<BetaNoticeModal
+									onAcknowledge={ betaNotice.acknowledge }
 								/>
 							) }
 						</DocumentPeekProvider>

@@ -1,6 +1,6 @@
 # Data model
 
-These are implementation notes for the current prototype. They are not a stable public API.
+These are contributor notes for the current beta. They are not public API documentation.
 
 ## Current shape
 
@@ -15,6 +15,6 @@ This keeps the data inspectable with normal WordPress tools while the product su
 
 ## What can change
 
-Post type names, meta keys, REST responses, block attributes, and stored content shapes can change during early versions. We are not promising migrations yet.
+Treat post type names, meta keys, REST responses, block attributes, and stored content shapes as internal implementation details until public APIs are documented.
 
 The main thing to preserve is the principle, not the exact current shape: Cortext data should remain WordPress data unless there is a strong reason to leave that path.

@@ -36,6 +36,7 @@ final class Test_Admin_Screen extends BaseTestCase {
 		$this->assertNotNull( $cortext_item, 'Cortext menu entry was not registered.' );
 		$this->assertSame( 'edit_posts', $cortext_item[1], 'Cortext menu capability should be edit_posts.' );
 		$this->assertSame( 'Cortext', $cortext_item[0], 'Cortext menu title should be "Cortext".' );
+		$this->assertSame( 'dashicons-welcome-write-blog', $cortext_item[6], 'Cortext should keep the compact wp-admin menu icon.' );
 
 		foreach ( $submenu[ Screen::MENU_SLUG ] ?? array() as $item ) {
 			$this->assertNotSame( 'Manage Documents', $item[0] ?? null, 'Cortext should not add a Manage Documents submenu.' );
@@ -50,6 +51,16 @@ final class Test_Admin_Screen extends BaseTestCase {
 
 		$this->assertStringContainsString( 'cortext-fullscreen', $classes );
 		$this->assertStringStartsWith( 'wp-admin ', $classes );
+	}
+
+	public function test_render_favicon_outputs_product_icon_link(): void {
+		ob_start();
+		( new Screen() )->render_favicon();
+		$markup = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'rel="icon"', $markup );
+		$this->assertStringContainsString( 'href="' . CORTEXT_URL . 'assets/brand/icon-light.png"', $markup );
+		$this->assertStringContainsString( 'type="image/png"', $markup );
 	}
 
 	public function test_add_body_class_passes_through_on_other_screens(): void {

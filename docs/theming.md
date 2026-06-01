@@ -1,6 +1,6 @@
 # Theming
 
-These are implementation notes for the current prototype, not a stable
+These are implementation notes for the current beta, not a stable
 public API.
 
 Cortext has two visual surfaces:
@@ -44,7 +44,7 @@ changes should stay out of scope.
 
 `var(--cortext-accent)` is the brand color for Cortext-rendered UI:
 sidebar primary buttons, popover focus rings, row-detail input focus
-rings, drag/drop indicators, the alpha notice icon, cell link color,
+rings, drag/drop indicators, the beta notice icon, cell link color,
 relation chip focus, format-submenu selected tile, the canvas progress
 bar, and so on.
 

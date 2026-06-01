@@ -1,15 +1,15 @@
-![Cortext](cortext-banner.png)
+![Cortext](assets/brand/banner.png)
 
 # Cortext
 
 > [!WARNING]
-> Cortext is an experimental prototype. Do not use it on production sites or with data you cannot afford to lose.
+> Cortext is an early beta. Try it somewhere low-stakes first.
 >
-> The data layer will change. Post types, meta keys, REST responses, block attributes, theme tokens, and stored content shapes are not stable yet.
->
-> We are not writing migrations for early builds. Treat anything you create with Cortext today as throwaway data.
+> Some things may change during the beta, so do not make it the only place for important work yet.
 
 A WordPress plugin for building a knowledge base inside your own site: nested pages, typed collections, multiple views, and publishing through WordPress.
+
+![Cortext workspace](assets/screenshots/workspace.jpg)
 
 ## Why
 

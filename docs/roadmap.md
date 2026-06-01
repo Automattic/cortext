@@ -1,8 +1,8 @@
 # Roadmap
 
-Cortext is still a prototype. The next goal is simple: make the WordPress-native knowledge base model clear enough to test in public.
+Cortext is in beta. The next goal is simple: make the WordPress-native knowledge base model clear enough to test in public.
 
-## Current prototype
+## What works today
 
 The repo already has a usable first shape:
 
@@ -17,7 +17,7 @@ The repo already has a usable first shape:
 
 ## Before this is production-ready
 
-The storage model, REST responses, block attributes, and theme tokens still need to settle. **Until then, data schemas are volatile, user data is assumed disposable, and migrations are not planned.**
+Some workflows, permissions, REST responses, block attributes, and theme tokens still need hardening. Until then, test it where rough edges are okay.
 
 The next work should focus on:
 
@@ -25,6 +25,6 @@ The next work should focus on:
 -   Hardening permissions, tests, accessibility, and editor edge cases.
 -   Deciding which APIs are internal and which can become public.
 -   Designing import/export around multiple sources, not one source too early.
--   Adding migrations only after the data model stabilizes somewhat.
+-   Planning upgrade and compatibility work before wider production use.
 
 Other ideas can wait until the basic model has had more real use.
