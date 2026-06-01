@@ -10,8 +10,12 @@
 	vertical-align: middle;
 
 	&--emoji {
-		font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji",
-			"Twemoji Mozilla", sans-serif;
+		font-family:
+			"Apple Color Emoji",
+			"Segoe UI Emoji",
+			"Noto Color Emoji",
+			"Twemoji Mozilla",
+			sans-serif;
 	}
 
 	&--image {
@@ -60,6 +64,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+
 	.cortext-document-icon--image-loading-visible {
 		animation: none;
 	}
