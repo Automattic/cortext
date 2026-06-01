@@ -36,7 +36,7 @@ final class Test_Admin_Screen extends BaseTestCase {
 		$this->assertNotNull( $cortext_item, 'Cortext menu entry was not registered.' );
 		$this->assertSame( 'edit_posts', $cortext_item[1], 'Cortext menu capability should be edit_posts.' );
 		$this->assertSame( 'Cortext', $cortext_item[0], 'Cortext menu title should be "Cortext".' );
-		$this->assertSame( CORTEXT_URL . 'cortext-icon.png', $cortext_item[6], 'Cortext should use its product icon in the admin menu.' );
+		$this->assertSame( 'dashicons-welcome-write-blog', $cortext_item[6], 'Cortext should keep the compact wp-admin menu icon.' );
 
 		foreach ( $submenu[ Screen::MENU_SLUG ] ?? array() as $item ) {
 			$this->assertNotSame( 'Manage Documents', $item[0] ?? null, 'Cortext should not add a Manage Documents submenu.' );

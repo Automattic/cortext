@@ -43,7 +43,7 @@ final class Screen {
 			'edit_posts',
 			self::MENU_SLUG,
 			array( $this, 'render' ),
-			$this->icon_url(),
+			'dashicons-welcome-write-blog',
 			3
 		);
 	}
