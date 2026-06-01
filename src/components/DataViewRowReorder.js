@@ -574,13 +574,20 @@ function findRenderedRows( wrapper, view, rows ) {
 		.filter( Boolean );
 }
 
-function useRenderedRows( wrapperRef, view, rows ) {
+function useRenderedRows( wrapperRef, view, rows, isDragging ) {
 	const [ renderedRows, setRenderedRows ] = useState( [] );
 	const renderedRowsRef = useRef( renderedRows );
 	renderedRowsRef.current = renderedRows;
 	const decoratedRowsRef = useRef( [] );
 	const decoratedCellsRef = useRef( [] );
 	const isLinear = usesLinearGaps( view );
+	// Keep row measurements fixed during a drag. Moving rows toggles classes as
+	// the drop target changes; if the MutationObserver runs `sync()` in the
+	// middle of that transition, `rowRect` can read a half-animated rect and save
+	// bad gap positions. The table layout should not change while the pointer is
+	// down, so keep the snapshot from drag start.
+	const isDraggingRef = useRef( isDragging );
+	isDraggingRef.current = isDragging;
 
 	useEffect( () => {
 		const wrapper = wrapperRef.current;
@@ -590,11 +597,16 @@ function useRenderedRows( wrapperRef, view, rows ) {
 
 		let frame = null;
 		const sync = () => {
-			if ( frame ) {
+			if ( frame || isDraggingRef.current ) {
 				return;
 			}
 			frame = window.requestAnimationFrame( () => {
 				frame = null;
+				// A sync queued just before drag start can still fire after the
+				// pointer is down. Ignore it so the snapshot stays put.
+				if ( isDraggingRef.current ) {
+					return;
+				}
 				const next = findRenderedRows( wrapper, view, rows );
 				const nextRows = next.map( ( item ) => item.el );
 				const nextCells = next.map( ( item ) => item.handleEl );
@@ -625,8 +637,6 @@ function useRenderedRows( wrapperRef, view, rows ) {
 		sync();
 		const observer = new window.MutationObserver( sync );
 		observer.observe( wrapper, {
-			attributeFilter: [ 'class' ],
-			attributes: true,
 			childList: true,
 			subtree: true,
 		} );
@@ -1092,8 +1102,13 @@ export default function DataViewRowReorder( {
 	mutateRows,
 	onReordered,
 } ) {
-	const renderedRows = useRenderedRows( wrapperRef, view, rows );
 	const [ activeRow, setActiveRow ] = useState( null );
+	const renderedRows = useRenderedRows(
+		wrapperRef,
+		view,
+		rows,
+		activeRow !== null
+	);
 	const [ activeDrop, setActiveDrop ] = useState( null );
 	const [ visualRow, setVisualRow ] = useState( null );
 	const [ visualDrop, setVisualDrop ] = useState( null );
