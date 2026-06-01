@@ -1,6 +1,10 @@
 import { __ } from '@wordpress/i18n';
 import { registerBlockVariation } from '@wordpress/blocks';
-import { link, table } from '@wordpress/icons';
+
+import {
+	collectionIcon,
+	linkedCollectionIcon,
+} from '../../components/cortextIcons';
 
 const BLOCK_NAME = 'cortext/data-view';
 
@@ -30,7 +34,7 @@ export const DATA_VIEW_VARIATIONS = [
 			__( 'list', 'cortext' ),
 			__( 'data', 'cortext' ),
 		],
-		icon: table,
+		icon: collectionIcon,
 		attributes: { intent: 'create-inline' },
 		// Replaces the bare block in the inserter so creating is the default
 		// entry, leaving exactly two Collections items instead of three.
@@ -49,7 +53,7 @@ export const DATA_VIEW_VARIATIONS = [
 			__( 'existing', 'cortext' ),
 			__( 'reference', 'cortext' ),
 		],
-		icon: link,
+		icon: linkedCollectionIcon,
 		attributes: { intent: 'link-existing' },
 		scope: [ 'inserter' ],
 		isActive: matchesIntent,
