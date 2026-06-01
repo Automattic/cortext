@@ -531,7 +531,7 @@ export default function Canvas( {
 				settings={ getEditorSettings() }
 				useSubRegistry={ useSubRegistry }
 			>
-				<CortextLinkSuggestions />
+				<CortextLinkSuggestions allowCreate />
 				<CanvasEditor
 					post={ renderedPost }
 					postType={ renderedPost.type ?? postType }
