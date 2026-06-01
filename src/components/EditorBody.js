@@ -566,6 +566,7 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 		emptyBodyInsertionIndex,
 		protectedLockRepairs,
 		collectionBodyClientIds,
+		lockedCollectionBodyClientIds,
 		isTrashed,
 	} = useSelect(
 		( select ) => {
@@ -621,6 +622,7 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 			);
 			const lockRepairs = [];
 			const bodyClientIds = [];
+			const lockedBodyClientIds = [];
 			blocks.forEach( ( block ) => {
 				let desiredLock = null;
 				if (
@@ -638,6 +640,14 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 				) {
 					bodyClientIds.push( block.clientId );
 					desiredLock = COLLECTION_LEGACY_BLOCK_LOCK;
+					if (
+						! lockNeedsRepair(
+							block.attributes?.lock,
+							COLLECTION_LEGACY_BLOCK_LOCK
+						)
+					) {
+						lockedBodyClientIds.push( block.clientId );
+					}
 				}
 				if (
 					desiredLock &&
@@ -687,6 +697,7 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 					) === 'trash',
 				protectedLockRepairs: lockRepairs,
 				collectionBodyClientIds: bodyClientIds,
+				lockedCollectionBodyClientIds: lockedBodyClientIds,
 			};
 		},
 		[ ownerBlockName, postId, record ]
@@ -710,7 +721,7 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 	}, [ postId, postType ] );
 
 	useLayoutEffect( () => {
-		if ( isTrashed || isLocked ) {
+		if ( isTrashed ) {
 			return;
 		}
 
@@ -729,7 +740,11 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 			! snapshot.initialized
 		) {
 			snapshot.key = `${ postType }:${ postId }`;
-			snapshot.clientIds = new Set( collectionBodyClientIds );
+			snapshot.clientIds = new Set(
+				lockedCollectionBodyClientIds.length > 0
+					? lockedCollectionBodyClientIds
+					: collectionBodyClientIds
+			);
 			snapshot.initialized = true;
 		}
 
@@ -741,6 +756,10 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 					updateBlockAttributes( clientId, { lock: {} } );
 					removeBlock( clientId, false );
 				} );
+		}
+
+		if ( isLocked ) {
+			return;
 		}
 
 		protectedLockRepairs.forEach( ( { clientId, lock } ) => {
@@ -771,6 +790,7 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 		hasTitle,
 		isLocked,
 		isTrashed,
+		lockedCollectionBodyClientIds,
 		ownerBlockName,
 		propertiesClientId,
 		propertiesContextStable,
