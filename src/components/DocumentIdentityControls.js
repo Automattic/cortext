@@ -374,6 +374,7 @@ function PickerBody( {
 			<MediaUploadCheck>
 				<MediaPicker
 					allowedTypes={ [ 'image' ] }
+					postId={ postId }
 					onSelect={ ( media ) => persist( encodeImage( media.id ) ) }
 					render={ ( { open } ) => (
 						<div className="cortext-document-identity-popover__upload">
