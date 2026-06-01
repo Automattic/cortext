@@ -8,29 +8,29 @@ Stable tag: 0.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Build a WordPress-native knowledge base with nested pages, typed collections, views, and public publishing.
+Build a WordPress-native knowledge base with pages, typed collections, views, and public publishing.
 
 == Description ==
 
-Cortext is an experimental knowledge base workspace for WordPress. It combines nested documents, typed collections, multiple views, relation fields, rollups, and public publishing inside your own site.
+Cortext is a beta knowledge base workspace for WordPress. It gives you documents, typed collections, multiple views, relation fields, rollups, and public pages without moving your data out of WordPress.
 
-**Important:** Cortext is an early beta. Do not use it on production sites or with data you cannot afford to lose. The data layer will change, and early builds do not include migrations or upgrade paths.
+**Important:** Do not use Cortext on production sites or with data you cannot afford to lose. The data model will keep changing during the beta, and early builds do not include migrations or upgrade paths.
 
 = What you can try =
 
-* Create nested documents with the WordPress block editor.
-* Model typed collections with table, grid, and list views.
-* Add relation fields, rollups, and row details.
-* Embed collection views inside documents.
-* Publish Cortext pages through your active WordPress theme.
+* Write nested documents in the WordPress block editor.
+* Create typed collections and switch between table, grid, and list views.
+* Connect entries with relation fields and rollups.
+* Embed collection views in documents.
+* Publish Cortext pages with your active WordPress theme.
 
-Cortext stores documents, collection definitions, fields, and collection rows as WordPress posts and post meta, so the data remains inspectable with normal WordPress tools.
+Behind the scenes, Cortext stores documents, collection definitions, fields, and collection rows as WordPress posts and post meta. You can still inspect the raw data with normal WordPress tools.
 
 == Installation ==
 
-1. Install and activate Cortext.
+1. Install and activate Cortext on a test site.
 2. Open "Cortext" from the WordPress admin menu.
-3. Start with a test site. Cortext is still a beta and its stored data is not stable yet.
+3. Try the workspace with disposable content first.
 
 Developers who want sample data can run `wp cortext seed` with WP-CLI.
 
@@ -38,15 +38,15 @@ Developers who want sample data can run `wp cortext seed` with WP-CLI.
 
 = Is Cortext production ready? =
 
-No. Cortext is a beta for testing the model and interface. Treat anything you create with it as disposable until the storage model is stable.
+No. Cortext is a beta for testing the model and interface. Treat anything you create with it as disposable until the storage model settles.
 
 = Does Cortext send data to an external service? =
 
-No. Cortext runs inside WordPress and does not connect to an external service during normal plugin use.
+No. Cortext runs inside WordPress and does not call an external service during normal plugin use.
 
 = Where is the source for the built JavaScript and CSS? =
 
-The source code and build tools are maintained at https://github.com/Automattic/cortext. The packaged assets are built with `pnpm run build`; the release ZIP is built with `pnpm run build:zip`.
+Source code and build tooling live at https://github.com/Automattic/cortext. The JavaScript and CSS shipped in the plugin package are built from that repository.
 
 == Screenshots ==
 

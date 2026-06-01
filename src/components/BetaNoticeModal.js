@@ -24,10 +24,7 @@ export default function BetaNoticeModal( { onAcknowledge } ) {
 			size="medium"
 		>
 			<p className="cortext-beta-notice__intro">
-				{ __(
-					'Thanks for trying Cortext! A few things to keep in mind before you dive in:',
-					'cortext'
-				) }
+				{ __( 'Before you start, a quick heads-up:', 'cortext' ) }
 			</p>
 			<ul className="cortext-beta-notice__list">
 				<li>
@@ -39,7 +36,7 @@ export default function BetaNoticeModal( { onAcknowledge } ) {
 							{ __( 'Expect rough edges.', 'cortext' ) }
 						</strong>{ ' ' }
 						{ __(
-							'Cortext is in beta. Bugs, missing features, and breaking changes between releases are still on the table.',
+							'Cortext is in beta. Some workflows are unfinished, and updates may still break things.',
 							'cortext'
 						) }
 					</div>
@@ -56,7 +53,7 @@ export default function BetaNoticeModal( { onAcknowledge } ) {
 							) }
 						</strong>{ ' ' }
 						{ __(
-							'Content you create now may not survive future schema changes. Avoid using Cortext for anything you can’t afford to lose.',
+							'Content you create now may not survive later schema changes. Keep production and irreplaceable content out of Cortext for now.',
 							'cortext'
 						) }
 					</div>
@@ -70,7 +67,7 @@ export default function BetaNoticeModal( { onAcknowledge } ) {
 							{ __( 'Feedback is welcome.', 'cortext' ) }
 						</strong>{ ' ' }
 						{ __(
-							'Please test on a staging site, not production, and let us know what you find.',
+							'Please test on a staging site and tell us what breaks, what feels off, and what you need next.',
 							'cortext'
 						) }
 					</div>
