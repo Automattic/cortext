@@ -41,11 +41,18 @@
 		color: var(--cortext-accent-contrast);
 		background: var(--cortext-accent);
 		border-radius: 50%;
+		overflow: hidden;
 	}
 
-	&__brand-mark svg {
-		width: 18px;
-		height: 18px;
+	&__brand-image {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+	}
+
+	&__brand-initial {
+		font-size: 12px;
+		line-height: 1;
 	}
 
 	&__brand-text {

@@ -105,6 +105,7 @@ final class Screen {
 				array(
 					'adminUrl'        => admin_url(),
 					'features'        => ( new Features() )->to_client_settings(),
+					'iconUrl'         => $this->icon_url(),
 					'menuSlug'        => self::MENU_SLUG,
 					'userDisplayName' => wp_get_current_user()->display_name,
 				)
