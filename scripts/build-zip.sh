@@ -24,7 +24,6 @@ runtime_paths=(
 	readme.txt
 	LICENSE
 	cortext-banner.png
-	cortext-banner.svg
 	cortext-icon-dark.png
 	cortext-icon-light.png
 	includes
