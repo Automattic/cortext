@@ -16,6 +16,9 @@ function fetchMediaItems( mediaType ) {
 			path: addQueryArgs( '/wp/v2/media', {
 				...query,
 				media_type: mediaType,
+				// Scope the tab to media uploaded from Cortext. The server reads
+				// this on /wp/v2/media; see Cortext\Media\CortextMedia.
+				cortext_origin: 1,
 			} ),
 		} );
 		return items.map( ( item ) => ( {
