@@ -141,7 +141,7 @@ function InspectorToolGroup( { label, children } ) {
 	);
 }
 
-function PageIconInspectorControls( { postId, postType } ) {
+function DocumentIconInspectorControls( { postId, postType } ) {
 	const [ meta ] = useEntityProp( 'postType', postType, 'meta', postId );
 	const iconMeta = meta?.cortext_document_icon ?? '';
 	const { coverIndex, hasCoverBlock, iconBlockId } = useSelect(
@@ -429,7 +429,7 @@ function PageIdentityInspectorPanel( { postId, postType, title } ) {
 	return (
 		<PanelBody title={ title } initialOpen>
 			<div className="cortext-document-inspector__tools">
-				<PageIconInspectorControls
+				<DocumentIconInspectorControls
 					postId={ postId }
 					postType={ postType }
 				/>
