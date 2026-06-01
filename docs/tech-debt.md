@@ -461,9 +461,9 @@ Relations and list-style rollups now keep sorting disabled. Scalar rollups can s
 
 **Frontend stylesheet doesn't carry the cover/icon rules.**
 
-**What.** The PHP `render_callback`s emit `.cortext-document-cover-block`, `.cortext-document-icon-block`, and `.cortext-document-icon` markup on public pages, but their CSS still doesn't load there. Since the shell-style split, the admin/editor rules live in block edit partials and `PageIcon.scss`; `src/frontend.scss` still has none. On a public `crtxt_page`, the cover image renders at intrinsic size and the icon block falls back to inline layout.
+**What.** The PHP `render_callback`s emit `.cortext-document-cover-block`, `.cortext-document-icon-block`, and `.cortext-document-icon` markup on public pages, but their CSS still doesn't load there. Since the shell-style split, the admin/editor rules live in block edit partials and `DocumentIcon.scss`; `src/frontend.scss` still has none. On a public `crtxt_page`, the cover image renders at intrinsic size and the icon block falls back to inline layout.
 
-**Where.** `src/blocks/document-cover/edit.scss`, `src/blocks/document-icon/edit.scss`, and `src/components/PageIcon.scss` versus `src/frontend.scss`, plus the PHP render callbacks in `includes/Editor/DocumentCoverBlock.php` and `includes/Editor/DocumentIconBlock.php`.
+**Where.** `src/blocks/document-cover/edit.scss`, `src/blocks/document-icon/edit.scss`, and `src/components/DocumentIcon.scss` versus `src/frontend.scss`, plus the PHP render callbacks in `includes/Editor/DocumentCoverBlock.php` and `includes/Editor/DocumentIconBlock.php`.
 
 **Solution.** Extract the persisted cover/icon markup rules into a shared partial that both admin/editor and frontend stylesheets `@use`. Keep editor-only chrome, such as hover replace/remove controls and picker popovers, in the block edit partials.
 

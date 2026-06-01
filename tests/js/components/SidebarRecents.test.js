@@ -34,7 +34,7 @@ jest.mock( '@wordpress/core-data', () => ( {
 } ) );
 
 jest.mock( '../../../src/components/DocumentIcon', () => () => (
-	<span data-testid="page-icon" />
+	<span data-testid="document-icon" />
 ) );
 
 jest.mock( '../../../src/hooks/useRecents', () => ( {
@@ -226,7 +226,7 @@ describe( 'SidebarRecents animation', () => {
 		const { container } = render( <SidebarRecents /> );
 
 		expect(
-			container.querySelector( '[data-testid="page-icon"]' )
+			container.querySelector( '[data-testid="document-icon"]' )
 		).toBeInTheDocument();
 		expect(
 			container.querySelector( '[data-testid="icon-list-item"]' )

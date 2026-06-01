@@ -13,25 +13,23 @@ import './DocumentIcon.scss';
 import useDelayedFlag from '../hooks/useDelayedFlag';
 import { ICON_COLOR_BY_NAME } from './iconColors';
 
-// DocumentIconWp does `import * as icons from '@wordpress/icons'` so it can look
-// glyphs up by name at runtime. That defeats tree-shaking and would pull the
-// entire icon set (~238 KiB) into the initial bundle. Lazy-load it: most
-// document icons are emoji/image, and documents that do use a wp glyph only trigger
-// the chunk download on first render.
+// DocumentIconWp imports the full @wordpress/icons namespace so it can resolve
+// a glyph by saved name. Keep that out of the main bundle: most document icons
+// are emoji or images, and WP glyphs can pay the lazy-load cost when needed.
 const DocumentIconWp = lazy( () =>
 	import( /* webpackChunkName: "document-icon-wp" */ './DocumentIconWp' )
 );
-const DEFAULT_PAGE_ICON_SIZE = 16;
+const DEFAULT_DOCUMENT_ICON_SIZE = 16;
 const EMOJI_VISUAL_SCALE = 0.875;
 const GLYPH_VISUAL_SCALE = 1.4;
 
-// Three shapes are persisted in the cortext_document_icon meta:
+// cortext_document_icon stores one of three shapes:
 //   { type: 'emoji', value: '📘' }
 //   { type: 'image', id: 123 }
 //   { type: 'wp', name: 'home', color?: 'red' }
-// Anything else (empty meta, parse error) falls through to the page glyph.
+// Empty or invalid meta falls back to the page glyph.
 
-export function parsePageIcon( raw ) {
+export function parseDocumentIcon( raw ) {
 	if ( ! raw ) {
 		return null;
 	}
@@ -65,7 +63,7 @@ export function parsePageIcon( raw ) {
 			return { type: 'wp', name: decoded.name, color };
 		}
 	} catch {
-		// Malformed meta is treated as no icon; the surface picks its fallback.
+		// Bad meta should not break the row; render the fallback instead.
 	}
 
 	return null;
@@ -77,9 +75,8 @@ function ImageIcon( { id, size, alt, className } ) {
 		record?.media_details?.sizes?.thumbnail?.source_url ??
 		record?.source_url ??
 		null;
-	// Keep the swatch until REST has a URL and the browser has loaded it.
-	// Otherwise the swatch disappears first and the icon slot looks empty
-	// while the image bytes arrive.
+	// Keep the swatch until the browser has painted the image. REST can return
+	// a URL before the bytes are ready, which otherwise leaves an empty slot.
 	const [ hasImagePainted, setHasImagePainted ] = useState( false );
 	useEffect( () => {
 		setHasImagePainted( false );
@@ -120,9 +117,8 @@ function ImageIcon( { id, size, alt, className } ) {
 					loading="lazy"
 					decoding="async"
 					onLoad={ () => setHasImagePainted( true ) }
-					// Drop the swatch on a failed fetch too. Without this the
-					// swatch pulses forever for 404s or deleted media; we'd
-					// rather show the browser's broken-image fallback.
+					// Failed images should not leave the loading swatch running
+					// forever. Let the browser show its normal broken-image UI.
 					onError={ () => setHasImagePainted( true ) }
 					style={ { opacity: hasImagePainted ? 1 : 0 } }
 				/>
@@ -133,11 +129,11 @@ function ImageIcon( { id, size, alt, className } ) {
 
 export default function DocumentIcon( {
 	icon,
-	size = DEFAULT_PAGE_ICON_SIZE,
+	size = DEFAULT_DOCUMENT_ICON_SIZE,
 	alt,
 	className,
 } ) {
-	const parsed = useMemo( () => parsePageIcon( icon ), [ icon ] );
+	const parsed = useMemo( () => parseDocumentIcon( icon ), [ icon ] );
 	const classes = [ 'cortext-document-icon' ];
 	const numericSize = typeof size === 'number' ? size : parseFloat( size );
 	const hasNumericSize = Number.isFinite( numericSize );
@@ -147,12 +143,9 @@ export default function DocumentIcon( {
 	const glyphSize = hasNumericSize
 		? Math.round( numericSize * GLYPH_VISUAL_SCALE )
 		: size;
-	// `display: inline-flex` is the load-bearing bit: spans are inline by
-	// default, so width/height get ignored and the emoji variant ends up
-	// sized by `font-size * line-height` — taller than the SVG-based
-	// variants. inline-flex makes the dimensions effective and centers
-	// whatever's inside, so swapping between emoji, wp icon, and image
-	// keeps the icon block the exact same height.
+	// Spans are inline by default, so width/height would be ignored and emoji
+	// would end up taller than SVG icons. inline-flex makes the slot size real
+	// and keeps emoji, WP glyphs, images, and the fallback aligned.
 	const boxStyle = {
 		display: 'inline-flex',
 		alignItems: 'center',
@@ -163,7 +156,7 @@ export default function DocumentIcon( {
 	};
 	const glyphBoxStyle = {
 		...boxStyle,
-		'--cortext-page-icon-glyph-size':
+		'--cortext-document-icon-glyph-size':
 			typeof glyphSize === 'number' ? `${ glyphSize }px` : glyphSize,
 	};
 	if ( className ) {

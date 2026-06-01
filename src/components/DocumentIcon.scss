@@ -25,15 +25,14 @@
 
 	&--fallback svg,
 	&--wp svg {
-		width: var(--cortext-page-icon-glyph-size);
-		min-width: var(--cortext-page-icon-glyph-size);
-		height: var(--cortext-page-icon-glyph-size);
-		flex: 0 0 var(--cortext-page-icon-glyph-size);
+		width: var(--cortext-document-icon-glyph-size);
+		min-width: var(--cortext-document-icon-glyph-size);
+		height: var(--cortext-document-icon-glyph-size);
+		flex: 0 0 var(--cortext-document-icon-glyph-size);
 		max-width: none;
 	}
 
-	// Wrapper for image icons. The swatch stays under the <img> until the image
-	// has loaded; REST returning a URL is not enough.
+	// Keep the swatch underneath the image until the browser has painted it.
 	&--image-wrap {
 		position: relative;
 		display: inline-block;
@@ -49,9 +48,8 @@
 		transition: opacity 80ms ease-out;
 	}
 
-	// Reserve the icon slot as soon as an image icon is parsed. Keep it
-	// transparent during the useDelayedFlag window so cache hits do not flash a
-	// swatch; `--visible` paints it after the delay.
+	// Reserve the image slot immediately. The swatch stays transparent during
+	// the delay so cached images do not flash a placeholder.
 	&--image-loading {
 		position: absolute;
 		inset: 0;
