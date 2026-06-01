@@ -18,8 +18,10 @@ import './PublishToggle.scss';
  *                                             calls this instead of onToggle so
  *                                             the wrapper can interpose a
  *                                             confirmation dialog.
+ * @param {boolean}   props.disabled           Disables write actions.
  */
 export default function PublishToggle( {
+	disabled = false,
 	isPublic,
 	isSaving,
 	link = null,
@@ -29,27 +31,30 @@ export default function PublishToggle( {
 	const [ copied, setCopied ] = useState( false );
 
 	const handleClick = useCallback( () => {
+		if ( disabled ) {
+			return;
+		}
 		if ( isPublic && onRequestUnpublish ) {
 			onRequestUnpublish();
 			return;
 		}
 		onToggle();
-	}, [ isPublic, onRequestUnpublish, onToggle ] );
+	}, [ disabled, isPublic, onRequestUnpublish, onToggle ] );
 
 	const copyLink = useCallback( async () => {
-		if ( link ) {
+		if ( link && ! disabled ) {
 			await navigator.clipboard.writeText( link );
 			setCopied( true );
 			setTimeout( () => setCopied( false ), 2000 );
 		}
-	}, [ link ] );
+	}, [ disabled, link ] );
 
 	return (
 		<div className="cortext-publish-toggle">
 			<Button
 				icon={ isPublic ? globe : lock }
 				onClick={ handleClick }
-				disabled={ isSaving }
+				disabled={ isSaving || disabled }
 				variant="tertiary"
 				size="compact"
 				isPressed={ isPublic }
@@ -62,6 +67,7 @@ export default function PublishToggle( {
 				<Button
 					className="cortext-publish-toggle__copy"
 					onClick={ copyLink }
+					disabled={ disabled }
 					size="compact"
 				>
 					{ copied

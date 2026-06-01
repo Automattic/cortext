@@ -59,6 +59,11 @@ final class Screen {
 		// core/post-featured-image block inside the editor iframe) can open
 		// the WordPress media library.
 		wp_enqueue_media();
+		wp_enqueue_script( 'heartbeat' );
+		wp_add_inline_script(
+			'heartbeat',
+			'if ( window.wp && wp.heartbeat ) { wp.heartbeat.interval( 10 ); }'
+		);
 
 		$asset_path = CORTEXT_PATH . 'build/index.asset.php';
 		if ( ! file_exists( $asset_path ) ) {
@@ -116,6 +121,24 @@ final class Screen {
 		if ( ! isset( $editor_settings['styles'] ) || ! is_array( $editor_settings['styles'] ) ) {
 			$editor_settings['styles'] = array();
 		}
+		if ( ! isset( $editor_settings['postLock'] ) || ! is_array( $editor_settings['postLock'] ) ) {
+			$editor_settings['postLock'] = array();
+		}
+		$editor_settings['postLock'] = array_merge(
+			array( 'isLocked' => false ),
+			$editor_settings['postLock']
+		);
+		if ( ! isset( $editor_settings['postLockUtils'] ) || ! is_array( $editor_settings['postLockUtils'] ) ) {
+			$editor_settings['postLockUtils'] = array();
+		}
+		$editor_settings['postLockUtils'] = array_merge(
+			array(
+				'nonce'       => '',
+				'unlockNonce' => '',
+				'ajaxUrl'     => admin_url( 'admin-ajax.php' ),
+			),
+			$editor_settings['postLockUtils']
+		);
 
 		// The block editor iframe only sees stylesheets listed in
 		// `editor_settings.styles`. Webpack splits Cortext's CSS into

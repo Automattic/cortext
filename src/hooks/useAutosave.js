@@ -28,6 +28,7 @@ export default function useAutosave( options = {} ) {
 		didSucceed,
 		didFail,
 		editsReference,
+		isPostLocked,
 		postStatus,
 		postTitle,
 		currentPostId,
@@ -39,6 +40,7 @@ export default function useAutosave( options = {} ) {
 			isSaving: editor.isSavingPost(),
 			didSucceed: editor.didPostSaveRequestSucceed(),
 			didFail: editor.didPostSaveRequestFail(),
+			isPostLocked: editor.isPostLocked?.() ?? false,
 			editsReference:
 				select( coreDataStore ).getReferenceByDistinctEdits(),
 			postStatus: editor.getEditedPostAttribute( 'status' ),
@@ -71,6 +73,7 @@ export default function useAutosave( options = {} ) {
 		isDirty,
 		isSaveable,
 		isSaving,
+		isPostLocked,
 		savePost,
 		editPost,
 		postStatus,
@@ -81,6 +84,7 @@ export default function useAutosave( options = {} ) {
 		isDirty,
 		isSaveable,
 		isSaving,
+		isPostLocked,
 		savePost,
 		editPost,
 		postStatus,
@@ -154,9 +158,10 @@ export default function useAutosave( options = {} ) {
 			isDirty: d,
 			isSaveable: s,
 			isSaving: saving,
+			isPostLocked: locked,
 			postStatus: ps,
 		} = stateRef.current;
-		if ( ! d || ! s || ps === 'trash' ) {
+		if ( ! d || ! s || locked || ps === 'trash' ) {
 			return true;
 		}
 		if ( saving ) {
@@ -176,7 +181,7 @@ export default function useAutosave( options = {} ) {
 	}, [ didFail, isSaving ] );
 
 	useEffect( () => {
-		if ( ! isDirty || ! isSaveable ) {
+		if ( ! isDirty || ! isSaveable || isPostLocked ) {
 			return undefined;
 		}
 		// Trashed pages are read-only in the canvas; never autosave them.
@@ -200,6 +205,7 @@ export default function useAutosave( options = {} ) {
 				isDirty: d,
 				isSaveable: s,
 				isSaving: saving,
+				isPostLocked: locked,
 				postStatus: ps,
 				editsReference: editsRef,
 			} = stateRef.current;
@@ -207,6 +213,7 @@ export default function useAutosave( options = {} ) {
 				d &&
 				s &&
 				! saving &&
+				! locked &&
 				ps !== 'trash' &&
 				failedEditsReferenceRef.current !== editsRef
 			) {
@@ -224,6 +231,7 @@ export default function useAutosave( options = {} ) {
 		debounceMs,
 		editsReference,
 		isDirty,
+		isPostLocked,
 		isSaveable,
 		isSaving,
 		minSaveIntervalMs,

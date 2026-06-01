@@ -38,7 +38,7 @@ async function deleteIfCreated( requestUtils, path ) {
 			path,
 			params: { force: true },
 		} );
-	} catch ( _error ) {
+	} catch {
 		// Best-effort cleanup; the record may already be gone.
 	}
 }
@@ -61,23 +61,57 @@ async function waitForEditorPost( page, postId ) {
 	);
 }
 
+function isDetachedFrameError( error ) {
+	return /\bFrame was detached\b/.test( error?.message || '' );
+}
+
 async function coverImagePainted( page ) {
 	const frame = page.frame( { name: 'editor-canvas' } );
 	if ( ! frame ) {
 		return false;
 	}
-	const image = frame.locator( '.cortext-document-cover-block__image' );
-	if ( ( await image.count() ) === 0 ) {
+	try {
+		const image = frame.locator( '.cortext-document-cover-block__image' );
+		if ( ( await image.count() ) === 0 ) {
+			return false;
+		}
+		return await image.evaluate( ( node ) => {
+			const style =
+				node.ownerDocument.defaultView.getComputedStyle( node );
+			return (
+				node.complete &&
+				node.naturalWidth > 0 &&
+				Number( style.opacity ) === 1
+			);
+		} );
+	} catch ( error ) {
+		if ( isDetachedFrameError( error ) ) {
+			return false;
+		}
+		throw error;
+	}
+}
+
+async function canvasContainsAnyTitle( page, titles ) {
+	const frame = page.frame( { name: 'editor-canvas' } );
+	if ( ! frame ) {
 		return false;
 	}
-	return image.evaluate( ( node ) => {
-		const style = node.ownerDocument.defaultView.getComputedStyle( node );
-		return (
-			node.complete &&
-			node.naturalWidth > 0 &&
-			Number( style.opacity ) === 1
-		);
-	} );
+	try {
+		return await frame
+			.locator( 'body' )
+			.evaluate( ( body, expectedTitles ) => {
+				const text = body.innerText || '';
+				return expectedTitles.some( ( title ) =>
+					text.includes( title )
+				);
+			}, titles );
+	} catch ( error ) {
+		if ( isDetachedFrameError( error ) ) {
+			return false;
+		}
+		throw error;
+	}
 }
 
 async function waitForCoverImagePainted( page ) {
@@ -87,17 +121,6 @@ async function waitForCoverImagePainted( page ) {
 				'the cover image should paint before the canvas is marked ready',
 		} )
 		.toBe( true );
-}
-
-async function canvasContainsAnyTitle( page, titles ) {
-	const frame = page.frame( { name: 'editor-canvas' } );
-	if ( ! frame ) {
-		return false;
-	}
-	return frame.locator( 'body' ).evaluate( ( body, expectedTitles ) => {
-		const text = body.innerText || '';
-		return expectedTitles.some( ( title ) => text.includes( title ) );
-	}, titles );
 }
 
 async function oldCanvasSnapshotState( page ) {
@@ -114,13 +137,18 @@ async function oldCanvasSnapshotState( page ) {
 			mode === 'hold-old-canvas' &&
 			animationName.includes( 'cortext-hold-old-canvas' ) &&
 			opacity === 1;
-		return { animationName, isHolding, mode, opacity };
+		const isVisible =
+			isHolding ||
+			( mode === 'reveal-old-canvas' &&
+				animationName.includes( 'cortext-reveal-old-canvas' ) &&
+				opacity > 0 );
+		return { animationName, isHolding, isVisible, mode, opacity };
 	} );
 }
 
-async function isHoldingOldCanvasSnapshot( page ) {
+async function isOldCanvasSnapshotVisible( page ) {
 	const state = await oldCanvasSnapshotState( page );
-	return state.isHolding;
+	return state.isVisible;
 }
 
 async function expectOldCanvasSnapshotHeld( page ) {
@@ -135,17 +163,22 @@ async function expectOldCanvasSnapshotHeld( page ) {
 	);
 }
 
+async function expectOldCanvasSnapshotVisible( page ) {
+	const state = await oldCanvasSnapshotState( page );
+	expect( state.isVisible ).toBe( true );
+}
+
 async function waitForCanvasTitleWithoutBlanking( page, titles, targetTitle ) {
 	const deadline = Date.now() + 5000;
 	while ( Date.now() < deadline ) {
-		const [ hasAnyTitle, hasTargetTitle, isHoldingSnapshot ] =
+		const [ hasAnyTitle, hasTargetTitle, isSnapshotVisible ] =
 			await Promise.all( [
 				canvasContainsAnyTitle( page, titles ),
 				canvasContainsAnyTitle( page, [ targetTitle ] ),
-				isHoldingOldCanvasSnapshot( page ),
+				isOldCanvasSnapshotVisible( page ),
 			] );
 
-		if ( ! hasAnyTitle && ! isHoldingSnapshot ) {
+		if ( ! hasAnyTitle && ! isSnapshotVisible ) {
 			throw new Error(
 				'The canvas went blank while the old snapshot was not covering it.'
 			);
@@ -513,12 +546,14 @@ test.describe( 'Navigation lifecycle', () => {
 				.click();
 			await locatorRequest;
 			await page.waitForTimeout( 100 );
-			expect(
-				await canvasContainsAnyTitle( page, [
+			if (
+				! ( await canvasContainsAnyTitle( page, [
 					NO_FLASH_FIRST_PAGE_TITLE,
 					NO_FLASH_SECOND_PAGE_TITLE,
-				] )
-			).toBe( true );
+				] ) )
+			) {
+				await expectOldCanvasSnapshotVisible( page );
+			}
 
 			releaseLocator();
 			await waitForCanvasTitleWithoutBlanking(

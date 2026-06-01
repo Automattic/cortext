@@ -21,6 +21,7 @@ import './Canvas.scss';
 import { getEditorSettings } from './initEditor';
 import useAutosave from '../hooks/useAutosave';
 import useDelayedFlag from '../hooks/useDelayedFlag';
+import usePostLock from '../hooks/usePostLock';
 import { withViewTransition } from '../hooks/viewTransition';
 import { definesTrait } from '../documents/capabilities';
 import { POST_TYPE } from './page-queries';
@@ -28,6 +29,7 @@ import CortextInserterSidebar from './CortextInserterSidebar';
 import { DocumentPropertiesProvider } from './DocumentPropertiesContext';
 import DocumentPublishToggle from './DocumentPublishToggle';
 import EditorBody from './EditorBody';
+import { PostLockFailureNotice, PostLockModal } from './PostLockControls';
 import { CanvasProgressBar } from './Skeleton';
 import { TopBarActionsFill } from './WorkspaceTopBar';
 import DocumentInspectorSidebar, {
@@ -37,12 +39,18 @@ import DocumentInspectorSidebar, {
 	isInspectorArea,
 } from './DocumentInspectorSidebar';
 
-function InserterToggle() {
+function InserterToggle( { disabled = false } ) {
 	const isOpen = useSelect(
 		( select ) => !! select( editorStore ).isInserterOpened(),
 		[]
 	);
 	const { setIsInserterOpened } = useDispatch( editorStore );
+
+	useEffect( () => {
+		if ( disabled && isOpen ) {
+			setIsInserterOpened( false );
+		}
+	}, [ disabled, isOpen, setIsInserterOpened ] );
 
 	return (
 		<Button
@@ -51,12 +59,18 @@ function InserterToggle() {
 			size="compact"
 			label={ __( 'Add block', 'cortext' ) }
 			isPressed={ isOpen }
-			onClick={ () => setIsInserterOpened( ! isOpen ) }
+			disabled={ disabled }
+			onClick={ () => {
+				if ( ! disabled ) {
+					setIsInserterOpened( ! isOpen );
+				}
+			} }
 		/>
 	);
 }
 
 function DocumentActions( {
+	disabled = false,
 	isActive,
 	postId,
 	topBarActions,
@@ -92,9 +106,12 @@ function DocumentActions( {
 	return (
 		<TopBarActionsFill>
 			<div className="cortext-document-actions">
-				<InserterToggle />
+				<InserterToggle disabled={ disabled } />
 				{ topBarActions }
-				<DocumentPublishToggle postId={ postId } />
+				<DocumentPublishToggle
+					postId={ postId }
+					disabled={ disabled }
+				/>
 				{ hasProperties ? (
 					<>
 						<Button
@@ -107,6 +124,7 @@ function DocumentActions( {
 									: __( 'Expand properties', 'cortext' )
 							}
 							isPressed={ arePropertiesVisible }
+							disabled={ disabled }
 							onClick={ onTogglePropertiesVisible }
 						/>
 						<Button
@@ -119,6 +137,7 @@ function DocumentActions( {
 									: __( 'Customize properties', 'cortext' )
 							}
 							isPressed={ isPropertiesLayoutEditing }
+							disabled={ disabled }
 							onClick={ onEditPropertiesLayout }
 						/>
 					</>
@@ -146,6 +165,7 @@ function DocumentActions( {
 function VisualCanvas( {
 	featuredMedia,
 	isActive,
+	isLocked = false,
 	postId,
 	postType,
 	onReady,
@@ -155,6 +175,7 @@ function VisualCanvas( {
 		<EditorBody
 			featuredMedia={ featuredMedia }
 			isActive={ isActive }
+			isLocked={ isLocked }
 			postId={ postId }
 			postType={ postType }
 			onReady={ onReady }
@@ -199,6 +220,11 @@ function CanvasEditor( {
 		( post?.id && ! isCollection && ! hasTrait ? { id: post.id } : null );
 	const { status, flushNow, isDirty, isSaving } = useAutosave( {
 		recentTarget: autosaveRecentTarget,
+	} );
+	const postLock = usePostLock( {
+		postId: post.id,
+		postType: post.type ?? postType,
+		enabled: isActive,
 	} );
 	const { resetPost } = useDispatch( editorStore );
 	const discard = useCallback( () => resetPost(), [ resetPost ] );
@@ -302,6 +328,7 @@ function CanvasEditor( {
 			onToggleVisible={ togglePropertiesVisible }
 		>
 			<DocumentActions
+				disabled={ postLock.isReadOnly }
 				isActive={ isActive }
 				postId={ post.id }
 				topBarActions={ topBarActions }
@@ -316,9 +343,15 @@ function CanvasEditor( {
 				content={
 					<>
 						{ notice }
+						<PostLockFailureNotice
+							error={ postLock.error }
+							isRetrying={ postLock.isAcquiring }
+							onRetry={ postLock.retry }
+						/>
 						<VisualCanvas
 							featuredMedia={ post.featured_media }
 							isActive={ isActive }
+							isLocked={ postLock.isReadOnly }
 							postId={ post.id }
 							postType={ post.type ?? postType }
 							onReady={ onDisplayedPost }
@@ -331,7 +364,15 @@ function CanvasEditor( {
 				}
 				sidebar={ <InspectorSidebarSlot /> }
 			/>
+			<PostLockModal
+				isOpen={ postLock.isLocked }
+				isTakeover={ postLock.isTakeover }
+				isTakingOver={ postLock.isTakingOver }
+				onTakeOver={ postLock.takeOver }
+				user={ postLock.user }
+			/>
 			<DocumentInspectorSidebar
+				isLocked={ postLock.isReadOnly }
 				postId={ post.id }
 				postType={ postType }
 			/>
