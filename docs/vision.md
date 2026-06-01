@@ -16,7 +16,7 @@ WordPress core now has enough of the pieces to make this practical: posts, post 
 
 Every architectural decision should start with WordPress primitives. No custom tables unless the post/meta model clearly fails. No REST API bypass. No fighting the block editor.
 
-If something is hard to do the WordPress way, that is a signal to reconsider the shape of the feature. Sometimes we are using the primitive wrong. Sometimes core has a real gap, and the better answer is to fix it upstream. Cortext is a prototype, so a short-lived local fork of an experimental component is fine while we learn. A parallel implementation that sticks around after the experiment is technical debt.
+If something is hard to do the WordPress way, that is a signal to reconsider the shape of the feature. Sometimes we are using the primitive wrong. Sometimes core has a real gap, and the better answer is to fix it upstream. Cortext is young, so a short-lived local fork of an experimental component is fine while we learn. A parallel implementation that sticks around after the experiment is technical debt.
 
 The data stays readable because it is ordinary WordPress data: properties are post meta, and documents and rows are posts. Even if you uninstall the plugin, the raw data is still inspectable. Once the data model settles, export should be possible through WXR, SQL dumps, WP-CLI, or REST.
 

@@ -3,7 +3,7 @@
 # Cortext
 
 > [!WARNING]
-> Cortext is an experimental prototype. Do not use it on production sites or with data you cannot afford to lose.
+> Cortext is an early beta. Do not use it on production sites or with data you cannot afford to lose.
 >
 > The data layer will change. Post types, meta keys, REST responses, block attributes, theme tokens, and stored content shapes are not stable yet.
 >

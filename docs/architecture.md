@@ -28,7 +28,7 @@ Cortext pages can render on the public site through a thin plugin template. The 
 
 ## What is still unsettled
 
-Several ideas are still being tested, including reusable schema across collections, import/export, migrations, and the shape of a stable REST contract. Until those settle, treat this repo as a prototype and treat the data as disposable.
+Several ideas are still being tested, including reusable schema across collections, import/export, migrations, and the shape of a stable REST contract. Until those settle, treat this repo as beta software and treat the data as disposable.
 
 More detailed notes live in:
 

@@ -1,6 +1,6 @@
 {
-	"name": "priethor/cortext",
-	"description": "A WordPress workspace with nested pages, typed collections with multiple views, and cross-type taxonomies.",
+	"name": "automattic/cortext",
+	"description": "A WordPress-native knowledge base with nested pages, typed collections, multiple views, relation fields, and rollups.",
 	"type": "wordpress-plugin",
 	"license": "GPL-2.0-or-later",
 	"authors": [

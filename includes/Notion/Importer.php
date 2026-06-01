@@ -334,7 +334,7 @@ final class Importer {
 	 * Map Notion `select` / `multi_select` / `status` options to the
 	 * Cortext `[{value, label, color}]` shape. Notion colors carry
 	 * through verbatim — palette names like `red`, `blue`, etc. line up
-	 * close enough with Cortext's option colors for the prototype.
+	 * close enough with Cortext's option colors for now.
 	 *
 	 * @param array $notion_options Notion option records.
 	 */

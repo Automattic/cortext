@@ -12,7 +12,7 @@ that did not match the as-built code or Cortext's vision.
 
 ## Context
 
-Cortext is in alpha. Data is reseed-able. There is no migration cost. UX can
+Cortext is in beta. Data is reseed-able. There is no migration cost. UX can
 change. This document recommends adopting the cleanest model from day one
 rather than evolving the current architecture.
 
@@ -291,7 +291,7 @@ at design time.
 
 ## Implementation plan
 
-Since Cortext is in alpha and data is reseed-able, this is not a migration
+Since Cortext is in beta and data is reseed-able, this is not a migration
 of existing data. Phases focus on rewiring code, not preserving data.
 
 ### Phase 0: design freeze
@@ -351,8 +351,8 @@ Lock decisions on:
 
 ### Phase 6: reseed and validate
 
-- Drop existing alpha data.
-- Reseed with the new model via updated `wp cortext seed-dummy-collections`.
+- Drop existing data.
+- Reseed with the new model via updated `wp cortext seed`.
 - Run `wp cortext perf-bench` to validate.
 
 Scope estimate: 4-6 weeks of focused effort. No data migration accelerates
@@ -373,7 +373,7 @@ this versus the originally drafted 6-phase migration plan.
 - **Search degradation without sidecar.** Custom search via `RowsFilterQuery`
   works the same in both models, with one extra join. Verified manageable.
 - **Renaming concepts in code.** Cortext currently has `Collection`, `CollectionKind`,
-  etc. Renaming to `Trait` touches several files. In alpha, this is one-time
+  etc. Renaming to `Trait` touches several files. In beta, this is one-time
   refactor work.
 
 ## Critical files

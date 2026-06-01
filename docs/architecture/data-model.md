@@ -1,6 +1,6 @@
 # Data model
 
-These are implementation notes for the current prototype. They are not a stable public API.
+These are implementation notes for the current beta. They are not a stable public API.
 
 ## Current shape
 

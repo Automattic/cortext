@@ -32,4 +32,4 @@ Queries cap at `per_page: 100`. A record opened by direct URL or recent-item lin
 
 ## Current scope
 
-The shell supports pages, collections, embedded collection views, row details, relations, rollups, and basic public rendering for pages. Several editor edges are still prototype-quality, especially layout fidelity, concurrent editing, and bulk actions.
+The shell supports pages, collections, embedded collection views, row details, relations, rollups, and basic public rendering for pages. Several editor edges are still rough, especially layout fidelity, concurrent editing, and bulk actions.

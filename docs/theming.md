@@ -1,6 +1,6 @@
 # Theming
 
-These are implementation notes for the current prototype, not a stable
+These are implementation notes for the current beta, not a stable
 public API.
 
 Cortext has two visual surfaces:

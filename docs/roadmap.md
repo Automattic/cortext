@@ -1,8 +1,8 @@
 # Roadmap
 
-Cortext is still a prototype. The next goal is simple: make the WordPress-native knowledge base model clear enough to test in public.
+Cortext is in beta. The next goal is simple: make the WordPress-native knowledge base model clear enough to test in public.
 
-## Current prototype
+## What works today
 
 The repo already has a usable first shape:
 
