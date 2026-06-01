@@ -3,7 +3,7 @@
 # Cortext
 
 > [!WARNING]
-> Cortext is an early beta. Try it on a test or staging site first, and keep backups of anything important.
+> Cortext is an early beta. Try it on a test or staging site first.
 >
 > Early releases may change behavior during the beta. Avoid relying on Cortext for critical workflows until it has had more real-world testing.
 

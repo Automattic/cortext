@@ -6,7 +6,7 @@ import {
 } from '@wordpress/components';
 import { useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
-import { Icon, backup, bug, comment } from '@wordpress/icons';
+import { Icon, bug, caution, comment } from '@wordpress/icons';
 
 import './BetaNoticeModal.scss';
 
@@ -43,14 +43,14 @@ export default function BetaNoticeModal( { onAcknowledge } ) {
 				</li>
 				<li>
 					<span className="cortext-beta-notice__icon">
-						<Icon icon={ backup } />
+						<Icon icon={ caution } />
 					</span>
 					<div>
 						<strong>
-							{ __( 'Keep backups close.', 'cortext' ) }
+							{ __( 'Start with test content.', 'cortext' ) }
 						</strong>{ ' ' }
 						{ __(
-							'Start with test content, or make sure you have backups before adding anything important.',
+							'Use a staging site before adding anything important.',
 							'cortext'
 						) }
 					</div>

@@ -1,6 +1,6 @@
 # Security
 
-Cortext is in beta. Test security-sensitive use cases on staging first, and keep backups of important content.
+Cortext is in beta. Test security-sensitive use cases on staging first.
 
 Access checks are still being hardened. Please report anything that exposes more data or actions than expected.
 
