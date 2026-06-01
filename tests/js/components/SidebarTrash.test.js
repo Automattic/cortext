@@ -404,6 +404,30 @@ describe( 'SidebarTrash', () => {
 		).toHaveTextContent( 'Workspace / Project' );
 	} );
 
+	it( 'omits blank ancestor titles from trashed breadcrumbs', () => {
+		const parent = makePage( {
+			id: 11,
+			title: { rendered: '', raw: '' },
+		} );
+		const child = makePage( {
+			id: 12,
+			parent: 11,
+			title: { rendered: 'Notes', raw: 'Notes' },
+		} );
+
+		setTrashRecords( { records: [ child ] } );
+
+		const { container } = renderSidebarTrash( {
+			activePages: [ parent ],
+		} );
+
+		expect( screen.getByText( 'Notes' ) ).toBeInTheDocument();
+		expect(
+			container.querySelector( '.cortext-sidebar__breadcrumb' )
+		).toBeFalsy();
+		expect( screen.queryByText( '(untitled)' ) ).not.toBeInTheDocument();
+	} );
+
 	it( 'falls back to no breadcrumb when ancestors are missing (orphan)', () => {
 		const orphan = makePage( { id: 5, parent: 99 } );
 
@@ -460,6 +484,23 @@ describe( 'SidebarTrash', () => {
 
 		expect( screen.getByText( 'Draft record' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Research' ) ).toBeInTheDocument();
+	} );
+
+	it( 'omits blank collection context for trashed rows', () => {
+		const row = makeRow( {
+			id: 17,
+			title: { rendered: 'Draft record', raw: 'Draft record' },
+			collection: {
+				id: 22,
+				title: { rendered: '', raw: '' },
+			},
+		} );
+		setTrashRecords( { records: [ row ] } );
+
+		renderSidebarTrash();
+
+		expect( screen.getByText( 'Draft record' ) ).toBeInTheDocument();
+		expect( screen.queryByText( '(untitled)' ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'restores a row through the document endpoint', async () => {
@@ -665,10 +706,10 @@ describe( 'SidebarTrash', () => {
 
 		expect(
 			container.querySelector( '.cortext-sidebar__breadcrumb' )
-		).toHaveTextContent( '2 subpages' );
+		).toHaveTextContent( '2 nested documents' );
 	} );
 
-	it( 'shows a collection count when a trashed page owns only nested collections', () => {
+	it( 'shows a nested document count when a trashed page owns only nested collections', () => {
 		const root = makePage( {
 			id: 1,
 			title: { rendered: 'Quarterly review', raw: 'Quarterly review' },
@@ -686,10 +727,10 @@ describe( 'SidebarTrash', () => {
 
 		expect(
 			container.querySelector( '.cortext-sidebar__breadcrumb' )
-		).toHaveTextContent( '1 collection' );
+		).toHaveTextContent( '1 nested document' );
 	} );
 
-	it( 'falls back to nested items when a trashed page mixes subpages and nested collections', () => {
+	it( 'shows nested documents when a trashed page mixes child documents and nested collections', () => {
 		const root = makePage( {
 			id: 1,
 			title: { rendered: 'Quarterly review', raw: 'Quarterly review' },
@@ -711,14 +752,14 @@ describe( 'SidebarTrash', () => {
 
 		expect(
 			container.querySelector( '.cortext-sidebar__breadcrumb' )
-		).toHaveTextContent( '2 nested items' );
+		).toHaveTextContent( '2 nested documents' );
 	} );
 
 	it( 'shows the cascade count beside a row that owns a trashed collection', () => {
 		// TrashCascade applies to any document with descendants via
 		// `post_parent`, rows included. The owned collection points back at
 		// the row through `_cortext_trashed_by_parent`, so the row surfaces
-		// the collection-count badge.
+		// the nested-document badge.
 		const row = makeRow( {
 			id: 17,
 			title: { rendered: 'Sprint 12', raw: 'Sprint 12' },
@@ -736,7 +777,7 @@ describe( 'SidebarTrash', () => {
 
 		expect(
 			container.querySelector( '.cortext-sidebar__breadcrumb' )
-		).toHaveTextContent( '1 collection' );
+		).toHaveTextContent( '1 nested document' );
 	} );
 
 	it( 'nests cascade-trashed rows under their collection via the COLLECTION marker', () => {
@@ -765,7 +806,7 @@ describe( 'SidebarTrash', () => {
 		expect( screen.getByText( 'Sprint board' ) ).toBeInTheDocument();
 		expect(
 			container.querySelector( '.cortext-sidebar__breadcrumb' )
-		).toHaveTextContent( '2 nested items' );
+		).toHaveTextContent( '2 nested documents' );
 	} );
 
 	it( 'promotes orphaned descendants (stale marker) back to roots', () => {
@@ -870,6 +911,25 @@ describe( 'SidebarTrash', () => {
 		).toHaveTextContent( 'Quarterly review' );
 	} );
 
+	it( 'omits blank owner context for inline collections', () => {
+		const inline = makeCollection( {
+			id: 34,
+			title: { rendered: 'Action items', raw: 'Action items' },
+			owner: {
+				id: 99,
+				title: { rendered: '', raw: '' },
+				path: 'page/quarterly-99',
+			},
+		} );
+
+		setTrashRecords( { records: [ inline ] } );
+
+		renderSidebarTrash();
+
+		expect( screen.getByText( 'Action items' ) ).toBeInTheDocument();
+		expect( screen.queryByText( '(untitled)' ) ).not.toBeInTheDocument();
+	} );
+
 	it( 'nests a collection under its owner page when both are in trash', () => {
 		// Page → nested collection cascade. The page is the root; the nested
 		// collection should fold under it instead of appearing as a second
@@ -911,7 +971,7 @@ describe( 'SidebarTrash', () => {
 
 		expect(
 			screen.getByText(
-				"Permanently delete this collection and all its rows? You can't undo this."
+				"Delete this document and all rows it contains? This can't be undone."
 			)
 		).toBeInTheDocument();
 	} );
@@ -937,7 +997,7 @@ describe( 'SidebarTrash', () => {
 
 		expect(
 			screen.getByText(
-				"Permanently delete this page and 1 subpage? You can't undo this."
+				"Delete this document and 1 nested document? This can't be undone."
 			)
 		).toBeInTheDocument();
 	} );
@@ -981,7 +1041,7 @@ describe( 'SidebarTrash', () => {
 		).toBeInTheDocument();
 	} );
 
-	it( 'falls back to nested items in the confirm when subpages and nested collections mix', () => {
+	it( 'mentions nested documents in the confirm when child documents and nested collections mix', () => {
 		const root = makePage( {
 			id: 1,
 			title: { rendered: 'Workspace', raw: 'Workspace' },
@@ -1007,7 +1067,7 @@ describe( 'SidebarTrash', () => {
 
 		expect(
 			screen.getByText(
-				"Permanently delete this page and 2 nested items? You can't undo this."
+				"Delete this document and 2 nested documents? This can't be undone."
 			)
 		).toBeInTheDocument();
 	} );

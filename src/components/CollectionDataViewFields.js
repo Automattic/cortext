@@ -126,7 +126,7 @@ function TitleCell( { item } ) {
 				<Button
 					className="cortext-title-cell__open"
 					icon={ icon }
-					label={ __( 'Open row', 'cortext' ) }
+					label={ __( 'Open', 'cortext' ) }
 					size="small"
 					variant="tertiary"
 					onClick={ openRow }

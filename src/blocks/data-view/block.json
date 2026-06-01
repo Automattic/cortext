@@ -5,7 +5,7 @@
 	"title": "Collection view",
 	"category": "collections",
 	"icon": "database",
-	"description": "Displays a Cortext collection's rows as a table, grid, or list.",
+	"description": "Displays a collection as a table, grid, or list.",
 	"textdomain": "cortext",
 	"usesContext": [ "postId", "postType" ],
 	"supports": {

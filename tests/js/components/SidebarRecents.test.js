@@ -138,7 +138,7 @@ describe( 'SidebarRecents animation', () => {
 
 		render( <SidebarRecents /> );
 		fireEvent.click(
-			screen.getByRole( 'button', { name: 'Recent page: Alpha' } )
+			screen.getByRole( 'button', { name: 'Recent: Alpha' } )
 		);
 
 		expect( blurSpy ).toHaveBeenCalled();
@@ -160,7 +160,7 @@ describe( 'SidebarRecents animation', () => {
 		).toBeInTheDocument();
 		expect(
 			screen.getByRole( 'button', {
-				name: 'Recent row: War and Peace in Books',
+				name: 'Recent: War and Peace in Books',
 			} )
 		).toBeInTheDocument();
 	} );
@@ -177,10 +177,41 @@ describe( 'SidebarRecents animation', () => {
 		const { container } = render( <SidebarRecents /> );
 
 		expect(
-			screen.getByRole( 'button', { name: 'Recent collection: Library' } )
+			screen.getByRole( 'button', { name: 'Recent: Library' } )
 		).toBeInTheDocument();
 		expect(
 			container.querySelector( '[data-testid="icon-table"]' )
+		).toBeInTheDocument();
+	} );
+
+	it( 'adds accessible context when recent titles collide', () => {
+		mockRecents = [
+			pageRecent( 21, 'Roadmap' ),
+			collectionRecent( 33, 'Roadmap' ),
+		];
+		mockRecordsById.set( 21, {
+			id: 21,
+			crtxt_trait: [],
+			meta: {},
+		} );
+		mockRecordsById.set( 33, {
+			id: 33,
+			crtxt_trait: [],
+			cortext_defines_trait: true,
+			meta: { cortext_fields: [ 1 ] },
+		} );
+
+		render( <SidebarRecents /> );
+
+		expect(
+			screen.getByRole( 'button', {
+				name: 'Recent: Roadmap, plain document',
+			} )
+		).toBeInTheDocument();
+		expect(
+			screen.getByRole( 'button', {
+				name: 'Recent: Roadmap, contains rows',
+			} )
 		).toBeInTheDocument();
 	} );
 

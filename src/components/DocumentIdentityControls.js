@@ -386,7 +386,7 @@ function PickerBody( {
 							</Button>
 							<p className="cortext-document-identity-popover__hint">
 								{ __(
-									'Pick or upload an image to use as this document’s icon.',
+									'Pick or upload an image for the icon.',
 									'cortext'
 								) }
 							</p>

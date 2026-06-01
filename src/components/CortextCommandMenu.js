@@ -30,10 +30,7 @@ const ITEM_ID_PREFIX = 'command-palette-item-';
 const RECENT_COMMAND_PREFIX = 'cortext/recent/';
 const DOCUMENT_COMMAND_PREFIX = 'cortext/document/';
 const commandMenuLabel = __( 'Search or run a command', 'cortext' );
-const inputPlaceholder = __(
-	'Search pages, collections, and actions',
-	'cortext'
-);
+const inputPlaceholder = __( 'Search or run a command', 'cortext' );
 
 const CATEGORY_LABELS = {
 	command: __( 'Command' ),

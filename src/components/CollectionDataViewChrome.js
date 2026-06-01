@@ -66,18 +66,23 @@ export function DataViewsBulkSelectionControls( {
 	const countLabel =
 		selectedCount > 0
 			? sprintf(
-					/* translators: %d: number of selected rows. */
+					/* translators: %d: number of selected documents. */
 					_n(
-						'%d row selected',
-						'%d rows selected',
+						'%d document selected',
+						'%d documents selected',
 						selectedCount,
 						'cortext'
 					),
 					selectedCount
 			  )
 			: sprintf(
-					/* translators: %d: number of visible rows. */
-					_n( '%d row', '%d rows', visibleCount, 'cortext' ),
+					/* translators: %d: number of visible documents. */
+					_n(
+						'%d document',
+						'%d documents',
+						visibleCount,
+						'cortext'
+					),
 					visibleCount
 			  );
 
@@ -91,8 +96,8 @@ export function DataViewsBulkSelectionControls( {
 				onChange={ onToggleVisibleSelection }
 				aria-label={
 					allVisibleSelected
-						? __( 'Deselect visible rows', 'cortext' )
-						: __( 'Select visible rows', 'cortext' )
+						? __( 'Deselect visible', 'cortext' )
+						: __( 'Select visible', 'cortext' )
 				}
 			/>
 			<span className="dataviews-bulk-actions-footer__item-count">
@@ -107,7 +112,7 @@ export function DataViewsBulkSelectionControls( {
 					<Button
 						icon={ trash }
 						isDestructive
-						label={ __( 'Trash selected rows', 'cortext' ) }
+						label={ __( 'Move selected to Trash', 'cortext' ) }
 						onClick={ onDeleteSelected }
 						size="compact"
 						showTooltip

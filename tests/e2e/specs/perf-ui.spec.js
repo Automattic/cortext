@@ -25,7 +25,7 @@
  *   - workspace_home_ready: root Cortext URL until sidebar and home content render.
  *   - shell_navigation_warm: sidebar navigation from one loaded collection to another.
  *   - search_rows_ready: DataView search input to filtered rows.
- *   - row_navigate_next: "Row below" click in full row detail to the next row.
+ *   - row_navigate_next: "Next" click in full detail view to the next row.
  */
 
 const { expect, test } = require( '@wordpress/e2e-test-utils-playwright' );
@@ -265,7 +265,7 @@ test.describe( 'Cortext UI performance', () => {
 				const startedAt = Date.now();
 
 				await activeCollectionView( page )
-					.getByLabel( 'Open row' )
+					.getByLabel( 'Open' )
 					.first()
 					.click( { force: true } );
 				await waitForRowDetailReady( page );
@@ -492,9 +492,7 @@ test.describe( 'Cortext UI performance', () => {
 		} );
 		await waitForCommandPaletteReady( page );
 
-		const input = page.getByPlaceholder(
-			'Search pages, collections, and actions'
-		);
+		const input = page.getByPlaceholder( 'Search or run a command' );
 
 		await probe.reset();
 		const responsePromise = page.waitForResponse(
@@ -639,7 +637,7 @@ test.describe( 'Cortext UI performance', () => {
 				await waitForCollectionReady( page );
 				await clearCollectionSearch( page );
 				await activeCollectionView( page )
-					.getByLabel( 'Open row' )
+					.getByLabel( 'Open' )
 					.first()
 					.click( { force: true } );
 				await waitForRowDetailReady( page );
@@ -661,7 +659,7 @@ test.describe( 'Cortext UI performance', () => {
 				);
 				const startedAt = Date.now();
 
-				await page.getByLabel( 'Row below' ).click();
+				await page.getByLabel( 'Next' ).click();
 				await responsePromise;
 				await expect
 					.poll( () => titleLocator.getAttribute( 'data-block' ), {

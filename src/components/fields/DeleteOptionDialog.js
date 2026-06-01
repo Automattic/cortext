@@ -13,9 +13,9 @@ import { useOptionUsage } from '../../hooks/useFieldMutations';
 const ACTION_CLEAR = 'clear';
 const ACTION_REPLACE = 'replace';
 
-// Lazy-fetches the row count for the option being deleted, then asks the
-// user to either clear the value across those rows or replace it with
-// another option. When no row uses the value, `onConfirm` fires
+// Lazy-fetches the document count for the option being deleted, then asks the
+// user to either clear the value across those documents or replace it with
+// another option. When no document uses the value, `onConfirm` fires
 // immediately with no migration so the parent can simply drop the option
 // without prompting.
 export default function DeleteOptionDialog( {
@@ -51,7 +51,7 @@ export default function DeleteOptionDialog( {
 				if ( ! cancelled ) {
 					setError(
 						__(
-							'Could not check whether rows use this option.',
+							'Could not check whether documents use this option.',
 							'cortext'
 						)
 					);
@@ -121,10 +121,10 @@ export default function DeleteOptionDialog( {
 		>
 			<p>
 				{ sprintf(
-					/* translators: 1: option label, 2: number of rows referencing it */
+					/* translators: 1: option label, 2: number of documents referencing it */
 					_n(
-						'%2$d row currently uses "%1$s".',
-						'%2$d rows currently use "%1$s".',
+						'%2$d document currently uses "%1$s".',
+						'%2$d documents currently use "%1$s".',
 						count,
 						'cortext'
 					),
@@ -141,7 +141,7 @@ export default function DeleteOptionDialog( {
 						checked={ action === ACTION_CLEAR }
 						onChange={ () => setAction( ACTION_CLEAR ) }
 					/>
-					{ __( 'Clear the value on those rows.', 'cortext' ) }
+					{ __( 'Clear this value in those documents.', 'cortext' ) }
 				</label>
 				<label htmlFor="cortext-delete-option-action-replace">
 					<input

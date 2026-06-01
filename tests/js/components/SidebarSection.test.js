@@ -7,20 +7,20 @@ describe( 'SidebarSection', () => {
 		render(
 			<SidebarSection
 				id="pages"
-				title="Pages"
+				title="Documents"
 				isCollapsed={ false }
 				onToggle={ jest.fn() }
 			>
-				<div>Page row</div>
+				<div>Document row</div>
 			</SidebarSection>
 		);
 
 		const toggle = screen.getByRole( 'button', {
-			name: 'Collapse Pages',
+			name: 'Collapse Documents',
 		} );
 
 		expect( toggle ).toHaveAttribute( 'aria-expanded', 'true' );
-		expect( screen.getByText( 'Page row' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Document row' ) ).toBeInTheDocument();
 	} );
 
 	it( 'hides the body when collapsed and calls onToggle from the title', () => {
@@ -28,27 +28,27 @@ describe( 'SidebarSection', () => {
 		render(
 			<SidebarSection
 				id="pages"
-				title="Pages"
+				title="Documents"
 				isCollapsed
 				onToggle={ onToggle }
 			>
-				<div>Page row</div>
+				<div>Document row</div>
 			</SidebarSection>
 		);
 
 		const toggle = screen.getByRole( 'button', {
-			name: 'Expand Pages',
+			name: 'Expand Documents',
 		} );
 
 		expect( toggle ).toHaveAttribute( 'aria-expanded', 'false' );
 		expect(
 			screen
-				.getByText( 'Page row' )
+				.getByText( 'Document row' )
 				.closest( '.cortext-sidebar__section-body-wrapper' )
 		).toHaveAttribute( 'aria-hidden', 'true' );
 		expect(
 			screen
-				.getByText( 'Page row' )
+				.getByText( 'Document row' )
 				.closest( '.cortext-sidebar__section-body-wrapper' )
 		).toHaveAttribute( 'inert' );
 
@@ -63,16 +63,18 @@ describe( 'SidebarSection', () => {
 		render(
 			<SidebarSection
 				id="pages"
-				title="Pages"
+				title="Documents"
 				isCollapsed={ false }
 				onToggle={ onToggle }
-				actions={ <button onClick={ onAction }>New page</button> }
+				actions={ <button onClick={ onAction }>New document</button> }
 			>
-				<div>Page row</div>
+				<div>Document row</div>
 			</SidebarSection>
 		);
 
-		fireEvent.click( screen.getByRole( 'button', { name: 'New page' } ) );
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'New document' } )
+		);
 
 		expect( onAction ).toHaveBeenCalledTimes( 1 );
 		expect( onToggle ).not.toHaveBeenCalled();

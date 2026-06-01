@@ -510,7 +510,7 @@ async function dragRenderedRow(
 	const sourceTitle = orderedTitles[ fromIndex ];
 	const targetTitle = orderedTitles[ toIndex ];
 	const source = canvas.getByRole( 'button', {
-		name: `Reorder row: ${ sourceTitle }`,
+		name: `Reorder: ${ sourceTitle }`,
 	} );
 	const target = canvas.getByText( targetTitle, { exact: true } ).first();
 
@@ -731,7 +731,7 @@ test.describe( 'Collection view block', () => {
 				await dragRenderedRow( page, canvas, 2, 0, 'before', layout );
 				await expect(
 					page.getByText(
-						'Rows will stay where you dropped them, and the current sort will be cleared.'
+						'Documents will stay where you dropped them, and the current sort will be cleared.'
 					)
 				).toBeVisible();
 				await page
@@ -739,7 +739,7 @@ test.describe( 'Collection view block', () => {
 					.click();
 				await expect(
 					page.getByText(
-						'Rows will stay where you dropped them, and the current sort will be cleared.'
+						'Documents will stay where you dropped them, and the current sort will be cleared.'
 					)
 				).not.toBeVisible();
 				await expect
@@ -851,7 +851,7 @@ test.describe( 'Collection view block', () => {
 					);
 					await expect(
 						page.getByText(
-							'Rows will stay where you dropped them, and the current sort will be cleared.'
+							'Documents will stay where you dropped them, and the current sort will be cleared.'
 						)
 					).toBeVisible();
 					await page
@@ -859,7 +859,7 @@ test.describe( 'Collection view block', () => {
 						.click();
 					await expect(
 						page.getByText(
-							'Rows will stay where you dropped them, and the current sort will be cleared.'
+							'Documents will stay where you dropped them, and the current sort will be cleared.'
 						)
 					).not.toBeVisible();
 					await expect
@@ -934,7 +934,7 @@ test.describe( 'Collection view block', () => {
 				.boundingBox();
 			const handleBox = await canvas
 				.getByRole( 'button', {
-					name: 'Reorder row: Alpha Manual',
+					name: 'Reorder: Alpha Manual',
 				} )
 				.boundingBox();
 			expect( dataViewBox ).toBeTruthy();
@@ -945,7 +945,7 @@ test.describe( 'Collection view block', () => {
 					Number(
 						await canvas
 							.getByRole( 'button', {
-								name: 'Reorder row: Alpha Manual',
+								name: 'Reorder: Alpha Manual',
 							} )
 							.evaluate(
 								( node ) =>
@@ -1566,22 +1566,30 @@ test.describe( 'Collection view block', () => {
 			await alphaRow
 				.locator( '.dataviews-selection-checkbox input' )
 				.check();
-			await expect( canvas.getByText( '1 row selected' ) ).toBeVisible();
+			await expect(
+				canvas.getByText( '1 document selected' )
+			).toBeVisible();
 			await betaRow
 				.locator( '.dataviews-selection-checkbox input' )
 				.check();
-			await expect( canvas.getByText( '2 rows selected' ) ).toBeVisible();
+			await expect(
+				canvas.getByText( '2 documents selected' )
+			).toBeVisible();
 			await canvas
 				.getByRole( 'button', { name: 'Clear selection' } )
 				.click();
-			await expect( canvas.getByText( '2 rows selected' ) ).toBeHidden();
+			await expect(
+				canvas.getByText( '2 documents selected' )
+			).toBeHidden();
 
 			await alphaRow.dispatchEvent( 'click' );
-			await expect( canvas.getByText( '1 row selected' ) ).toHaveCount(
-				0
-			);
+			await expect(
+				canvas.getByText( '1 document selected' )
+			).toHaveCount( 0 );
 			await betaRow.dispatchEvent( 'click', { shiftKey: true } );
-			await expect( canvas.getByText( '2 rows selected' ) ).toBeVisible();
+			await expect(
+				canvas.getByText( '2 documents selected' )
+			).toBeVisible();
 
 			await canvas.getByRole( 'button', { name: 'Next page' } ).click();
 
@@ -1589,16 +1597,22 @@ test.describe( 'Collection view block', () => {
 				.locator( 'tbody > tr' )
 				.filter( { hasText: 'Gamma Book' } );
 			await expect( gammaRow ).toBeVisible();
-			await expect( canvas.getByText( '2 rows selected' ) ).toBeVisible();
+			await expect(
+				canvas.getByText( '2 documents selected' )
+			).toBeVisible();
 			await gammaRow.dispatchEvent( 'click', {
 				[ process.platform === 'darwin' ? 'metaKey' : 'ctrlKey' ]: true,
 			} );
-			await expect( canvas.getByText( '3 rows selected' ) ).toBeVisible();
+			await expect(
+				canvas.getByText( '3 documents selected' )
+			).toBeVisible();
 
 			await canvas
-				.getByRole( 'button', { name: 'Trash selected rows' } )
+				.getByRole( 'button', { name: 'Move selected to Trash' } )
 				.click();
-			await expect( canvas.getByText( '3 rows selected' ) ).toBeHidden();
+			await expect(
+				canvas.getByText( '3 documents selected' )
+			).toBeHidden();
 
 			await expect
 				.poll( async () => {
@@ -1793,7 +1807,7 @@ test.describe( 'Collection view block', () => {
 			await titleCellOpenButton.click();
 
 			const detail = page.getByRole( 'dialog', {
-				name: 'Row detail',
+				name: 'Detail',
 			} );
 			await expect( detail ).toBeVisible();
 			await selectParentDataViewBlock( page );
@@ -1964,7 +1978,7 @@ test.describe( 'Collection view block', () => {
 				.first();
 			await expect( titleCellOpenButton ).toHaveAttribute(
 				'aria-label',
-				'Open row'
+				'Open'
 			);
 			await expect( titleCellOpenButton ).toHaveCSS( 'opacity', '0' );
 			await firstRow.hover();
@@ -1985,12 +1999,12 @@ test.describe( 'Collection view block', () => {
 
 			await expect(
 				canvas.getByRole( 'dialog', {
-					name: 'Row detail',
+					name: 'Detail',
 				} )
 			).toHaveCount( 0 );
 
 			const detail = page.getByRole( 'dialog', {
-				name: 'Row detail',
+				name: 'Detail',
 			} );
 			await expect( detail ).toBeVisible();
 			await detail.hover();
@@ -2133,7 +2147,7 @@ test.describe( 'Collection view block', () => {
 				}
 			};
 			await page.route( delayedSecondRowPattern, delaySecondRow );
-			await detail.getByRole( 'button', { name: 'Row below' } ).click();
+			await detail.getByRole( 'button', { name: 'Next' } ).click();
 			await expect( detail.locator( '.components-spinner' ) ).toHaveCount(
 				0
 			);
@@ -2149,14 +2163,14 @@ test.describe( 'Collection view block', () => {
 					.filter( { hasText: 'Tags' } )
 			).toBeVisible();
 			await page.unroute( delayedSecondRowPattern, delaySecondRow );
-			await detail.getByRole( 'button', { name: 'Row above' } ).click();
+			await detail.getByRole( 'button', { name: 'Previous' } ).click();
 			await expect( detailTitle ).toHaveText(
 				'The Left Hand of Darkness'
 			);
 			await expectSidePeekShellStayedOpen( page );
 			// Side and modal panes are local React state, not URL state, so
 			// browser Back/Forward doesn't navigate between rows anymore.
-			// The Row above / Row below buttons above already cover that.
+			// The Previous / Next buttons above already cover that.
 
 			// Collapsing properties keeps the block selectable as a stub.
 			const propertiesSlot = detailCanvas.locator(
@@ -2166,7 +2180,7 @@ test.describe( 'Collection view block', () => {
 			// button. Scope to the row-detail toolbar so the locator stays
 			// unambiguous regardless of editor selection.
 			const rowDetailToolbar = detail.getByRole( 'toolbar', {
-				name: 'Row detail tools',
+				name: 'Detail tools',
 			} );
 			await rowDetailToolbar
 				.getByRole( 'button', { name: 'Collapse properties' } )
@@ -2214,7 +2228,7 @@ test.describe( 'Collection view block', () => {
 				detail.getByRole( 'button', { name: 'Center modal' } )
 			).toBeVisible();
 			await expect(
-				detail.getByRole( 'button', { name: 'Full page' } )
+				detail.getByRole( 'button', { name: 'Full view' } )
 			).toBeVisible();
 			await expect(
 				detail.getByRole( 'button', { name: 'Change layout' } )
@@ -2233,10 +2247,10 @@ test.describe( 'Collection view block', () => {
 				modalDetail.getByRole( 'button', { name: 'Side peek' } )
 			).toBeVisible();
 			await expect(
-				modalDetail.getByRole( 'button', { name: 'Full page' } )
+				modalDetail.getByRole( 'button', { name: 'Full view' } )
 			).toBeVisible();
 			await modalDetail
-				.getByRole( 'button', { name: 'Full page' } )
+				.getByRole( 'button', { name: 'Full view' } )
 				.click();
 			await expect( detail ).toBeHidden();
 			await expect(
@@ -2262,9 +2276,7 @@ test.describe( 'Collection view block', () => {
 				'[name="editor-canvas"]'
 			);
 			await expect(
-				collectionCanvas
-					.getByRole( 'button', { name: 'Open row' } )
-					.first()
+				collectionCanvas.getByRole( 'button', { name: 'Open' } ).first()
 			).toBeAttached();
 
 			await expect
@@ -2385,7 +2397,7 @@ test.describe( 'Collection view block', () => {
 			await openRowButton.click();
 
 			const detail = page.getByRole( 'dialog', {
-				name: 'Row detail',
+				name: 'Detail',
 			} );
 			await expect( detail ).toBeVisible();
 

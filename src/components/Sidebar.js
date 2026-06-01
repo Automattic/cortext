@@ -443,15 +443,13 @@ export default function Sidebar( {
 				{ publicWebAffordances ? (
 					<Button
 						className="cortext-sidebar__quick-action cortext-sidebar__quick-action--published"
-						label={ __( 'Published documents', 'cortext' ) }
+						label={ __( 'Published', 'cortext' ) }
 						isPressed={ isPublishedActive }
 						onClick={ goPublished }
 					>
 						<Icon icon={ globe } size={ 16 } />
 						{ ! collapsed && (
-							<span>
-								{ __( 'Published documents', 'cortext' ) }
-							</span>
+							<span>{ __( 'Published', 'cortext' ) }</span>
 						) }
 					</Button>
 				) : null }
@@ -526,7 +524,7 @@ export default function Sidebar( {
 						>
 							<SidebarSection
 								id="pages"
-								title={ __( 'Pages', 'cortext' ) }
+								title={ __( 'Documents', 'cortext' ) }
 								isCollapsed={ isSectionCollapsed( 'pages' ) }
 								onToggle={ () => toggleSection( 'pages' ) }
 								actions={
@@ -534,7 +532,10 @@ export default function Sidebar( {
 										className="cortext-sidebar__section-action"
 										icon={ plus }
 										size="small"
-										label={ __( 'New page', 'cortext' ) }
+										label={ __(
+											'New document',
+											'cortext'
+										) }
 										onClick={ createRootPage }
 									/>
 								}
@@ -546,7 +547,7 @@ export default function Sidebar( {
 									) }
 								{ ! isResolvingPages && pages.length === 0 && (
 									<p className="cortext-sidebar__empty">
-										{ __( 'No pages yet.', 'cortext' ) }
+										{ __( 'Nothing here yet.', 'cortext' ) }
 									</p>
 								) }
 

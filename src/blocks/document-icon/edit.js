@@ -61,7 +61,7 @@ export default function Edit( { context, clientId } ) {
 		return (
 			<div { ...blockProps }>
 				<span className="cortext-document-icon-block__hint">
-					{ __( 'Document icon is unavailable here.', 'cortext' ) }
+					{ __( 'Icon is unavailable here.', 'cortext' ) }
 				</span>
 			</div>
 		);

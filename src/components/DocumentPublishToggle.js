@@ -97,7 +97,7 @@ export default function DocumentPublishToggle( { disabled = false, postId } ) {
 				if ( results.some( ( r ) => r.status === 'rejected' ) ) {
 					createErrorNotice(
 						__(
-							"Couldn't publish referenced collections. The document was not published.",
+							"Couldn't publish referenced documents that contain rows. The document was not published.",
 							'cortext'
 						),
 						{
@@ -167,7 +167,7 @@ export default function DocumentPublishToggle( { disabled = false, postId } ) {
 					{ isLoading && (
 						<p>
 							{ __(
-								'Checking for public dependent pages…',
+								'Checking for public dependent documents…',
 								'cortext'
 							) }
 						</p>
@@ -175,7 +175,7 @@ export default function DocumentPublishToggle( { disabled = false, postId } ) {
 					{ error && (
 						<p>
 							{ __(
-								'Could not check for public dependent pages.',
+								'Could not check for public dependent documents.',
 								'cortext'
 							) }
 						</p>
@@ -184,7 +184,7 @@ export default function DocumentPublishToggle( { disabled = false, postId } ) {
 						<>
 							<p>
 								{ __(
-									'The following pages are currently public and reference this document.',
+									'The following documents are currently public and reference this document.',
 									'cortext'
 								) }
 							</p>

@@ -979,7 +979,7 @@ export default function CollectionDataViews( {
 			} catch ( apiError ) {
 				setRowActionError(
 					apiError?.message ??
-						__( 'Could not duplicate row.', 'cortext' )
+						__( 'Could not duplicate this document.', 'cortext' )
 				);
 			}
 		},
@@ -1055,14 +1055,14 @@ export default function CollectionDataViews( {
 				refresh();
 				notifyDocumentTrashChanged();
 				notifyCollectionRowsChanged();
-				// Prune favorites for the rows we just trashed. The server cleans
+				// Prune favorites for the documents we just trashed. The server cleans
 				// stale entries on the next read, but doing it here keeps the next
-				// favorites PUT from sending these row ids back.
+				// favorites PUT from sending these document ids back.
 				setFavorites( ( current ) =>
 					filterFavoritesByDeletedIds( current, { row: deleted } )
 				).catch( () => {
 					// Keep this quiet. The next favorites read asks the server to
-					// prune stale rows anyway.
+					// prune stale documents anyway.
 				} );
 			}
 
@@ -1070,20 +1070,20 @@ export default function CollectionDataViews( {
 				let deleteErrorMessage;
 				if ( nextRows.length === 1 ) {
 					deleteErrorMessage = __(
-						'Could not move row to Trash.',
+						'Could not move document to Trash.',
 						'cortext'
 					);
 				} else if ( failedRows.length === nextRows.length ) {
 					deleteErrorMessage = __(
-						'Could not move selected rows to Trash.',
+						'Could not move selected documents to Trash.',
 						'cortext'
 					);
 				} else {
 					deleteErrorMessage = sprintf(
-						/* translators: %d: number of rows that failed to move to Trash. */
+						/* translators: %d: number of documents that failed to move to Trash. */
 						_n(
-							'%d row could not be moved to Trash.',
-							'%d rows could not be moved to Trash.',
+							'%d document could not be moved to Trash.',
+							'%d documents could not be moved to Trash.',
 							failedRows.length,
 							'cortext'
 						),
@@ -1109,13 +1109,13 @@ export default function CollectionDataViews( {
 
 	const rowActions = useMemo( () => {
 		const actions = [];
-		// The row itself opens in grid/list, and table has the inline Open
-		// button in the title cell. Keep the mode choices in the row menu.
+		// The document itself opens in grid/list, and table has the inline Open
+		// button in the title cell. Keep the mode choices in the document menu.
 		for ( const mode of [ 'side', 'modal', 'full' ] ) {
 			actions.push( {
 				id: `open-in-${ mode }`,
 				label: sprintf(
-					/* translators: %s: row detail mode (Side peek, Center modal, Full page). */
+					/* translators: %s: document detail mode (Side peek, Center modal, Full view). */
 					__( 'Open in %s', 'cortext' ),
 					ROW_DETAIL_MODE_LABELS[ mode ]
 				),
@@ -1463,12 +1463,7 @@ export default function CollectionDataViews( {
 		return (
 			<DataViewStateShell status="error">
 				{ error ?? (
-					<p>
-						{ __(
-							'Collection rows could not be loaded.',
-							'cortext'
-						) }
-					</p>
+					<p>{ __( 'Could not load documents.', 'cortext' ) }</p>
 				) }
 			</DataViewStateShell>
 		);

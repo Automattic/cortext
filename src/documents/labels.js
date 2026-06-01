@@ -1,143 +1,56 @@
 import { __, _n, sprintf } from '@wordpress/i18n';
 
-import { definesTrait, hasTrait } from './capabilities';
+import { definesTrait } from './capabilities';
 
 /**
- * Localized noun for a record (used in aria labels, headers, etc.).
+ * Label for descendants that will be restored or deleted with a trash root.
  *
- * @param {Object} record Document record.
+ * @param {Object} counts Cascade counts `{ total }`.
  */
-export function documentLabel( record ) {
-	if ( definesTrait( record ) ) {
-		return __( 'Collection', 'cortext' );
-	}
-	if ( hasTrait( record ) ) {
-		return __( 'Row', 'cortext' );
-	}
-	return __( 'Page', 'cortext' );
-}
-
-export function restoreErrorMessage( record ) {
-	if ( definesTrait( record ) ) {
-		return __( 'Could not restore collection.', 'cortext' );
-	}
-	if ( hasTrait( record ) ) {
-		return __( 'Could not restore row.', 'cortext' );
-	}
-	return __( 'Could not restore page.', 'cortext' );
-}
-
-export function permanentDeleteErrorMessage( record ) {
-	if ( definesTrait( record ) ) {
-		return __( 'Could not delete collection.', 'cortext' );
-	}
-	if ( hasTrait( record ) ) {
-		return __( 'Could not delete row.', 'cortext' );
-	}
-	return __( 'Could not delete page.', 'cortext' );
-}
-
-export function descendantLabel( counts ) {
-	const pages = counts?.pages ?? 0;
-	const collections = counts?.collections ?? 0;
+export function nestedDocumentCountLabel( counts ) {
 	const total = counts?.total ?? 0;
-	if ( pages > 0 && collections === 0 ) {
-		return sprintf(
-			/* translators: %d: number of subpages */
-			_n( '%d subpage', '%d subpages', pages, 'cortext' ),
-			pages
-		);
-	}
-	if ( collections > 0 && pages === 0 ) {
-		return sprintf(
-			/* translators: %d: number of nested collections */
-			_n( '%d collection', '%d collections', collections, 'cortext' ),
-			collections
-		);
-	}
 	return sprintf(
 		/* translators: %d: number of nested trashed documents */
-		_n( '%d nested item', '%d nested items', total, 'cortext' ),
+		_n( '%d nested document', '%d nested documents', total, 'cortext' ),
 		total
 	);
 }
 
 /**
- * Confirmation copy for permanent delete. Schema-bearing documents take rows
- * down with them, so the dialog asks the user to type the title.
+ * Confirmation copy for permanent delete. Documents that contain rows take
+ * those rows down with them, so the dialog asks the user to type the title.
  *
  * @param {Object} record Document being deleted.
- * @param {Object} counts Cascade counts `{ pages, collections, total }`.
+ * @param {Object} counts Cascade counts `{ total }`.
  */
-export function permanentDeleteConfirmation( record, counts ) {
+export function permanentDeleteDocumentConfirmation( record, counts ) {
 	const total = counts?.total ?? 0;
 	if ( definesTrait( record ) ) {
 		return {
-			title: __( 'Permanently delete collection?', 'cortext' ),
+			title: __( 'Delete this document permanently?', 'cortext' ),
 			message: __(
-				"Permanently delete this collection and all its rows? You can't undo this.",
+				"Delete this document and all rows it contains? This can't be undone.",
 				'cortext'
 			),
 			requireTypeToConfirm: true,
 		};
 	}
-	if ( hasTrait( record ) ) {
-		if ( total === 0 ) {
-			return {
-				title: __( 'Permanently delete row?', 'cortext' ),
-				message: __(
-					"Permanently delete this row? You can't undo this.",
-					'cortext'
-				),
-			};
-		}
-		return {
-			title: __( 'Permanently delete row?', 'cortext' ),
-			message: sprintf(
-				/* translators: %d: number of nested trashed items deleted along with the row. */
-				_n(
-					"Permanently delete this row and %d nested item? You can't undo this.",
-					"Permanently delete this row and %d nested items? You can't undo this.",
-					total,
-					'cortext'
-				),
-				total
-			),
-		};
-	}
 	if ( total === 0 ) {
 		return {
-			title: __( 'Permanently delete page?', 'cortext' ),
+			title: __( 'Delete this document permanently?', 'cortext' ),
 			message: __(
-				"Permanently delete this page? You can't undo this.",
+				"Delete this document permanently? This can't be undone.",
 				'cortext'
 			),
 		};
 	}
-	const pages = counts?.pages ?? 0;
-	const collections = counts?.collections ?? 0;
-	if ( pages > 0 && collections === 0 ) {
-		return {
-			title: __( 'Permanently delete page?', 'cortext' ),
-			message: sprintf(
-				/* translators: %d: number of subpages deleted along with the page. */
-				_n(
-					"Permanently delete this page and %d subpage? You can't undo this.",
-					"Permanently delete this page and %d subpages? You can't undo this.",
-					pages,
-					'cortext'
-				),
-				pages
-			),
-		};
-	}
 	return {
-		title: __( 'Permanently delete page?', 'cortext' ),
+		title: __( 'Delete this document permanently?', 'cortext' ),
 		message: sprintf(
-			/* translators: %d: number of nested trashed items deleted along with the page. */
+			/* translators: %d: number of nested documents deleted along with the document. */
 			_n(
-				"Permanently delete this page and %d nested item? You can't undo this.",
-				"Permanently delete this page and %d nested items? You can't undo this.",
+				"Delete this document and %d nested document? This can't be undone.",
+				"Delete this document and %d nested documents? This can't be undone.",
 				total,
 				'cortext'
 			),

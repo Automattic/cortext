@@ -407,7 +407,7 @@ describe( 'DataViewRowReorder', () => {
 		expect( itemButtons[ 2 ] ).not.toHaveClass(
 			'cortext-row-reorder-target'
 		);
-		const handles = screen.getAllByLabelText( /^Reorder row:/ );
+		const handles = screen.getAllByLabelText( /^Reorder:/ );
 		expect( handles ).toHaveLength( 3 );
 		expect( handles[ 0 ] ).toHaveAttribute( 'tabindex', '-1' );
 	} );
@@ -791,7 +791,7 @@ describe( 'DataViewRowReorder', () => {
 		await renderReorder();
 
 		const handle = screen.getByRole( 'button', {
-			name: 'Reorder row: One',
+			name: 'Reorder: One',
 		} );
 
 		expect( handle.parentElement?.tagName ).toBe( 'TD' );
@@ -804,7 +804,7 @@ describe( 'DataViewRowReorder', () => {
 		await renderReorder();
 
 		const handle = screen.getByRole( 'button', {
-			name: 'Reorder row: One',
+			name: 'Reorder: One',
 		} );
 		const renderedTableRows = document.querySelectorAll( 'tr' );
 
@@ -1073,7 +1073,7 @@ describe( 'DataViewRowReorder', () => {
 
 		await waitFor( () =>
 			expect( mockCreateErrorNotice ).toHaveBeenCalledWith(
-				"Couldn't move the row.",
+				"Couldn't move the document.",
 				{
 					id: 'cortext-row-reorder-failed',
 					type: 'snackbar',
@@ -1139,7 +1139,7 @@ describe( 'DataViewRowReorder', () => {
 
 		expect(
 			screen.getByText(
-				'Rows will stay where you dropped them, and the current sort will be cleared.'
+				'Documents will stay where you dropped them, and the current sort will be cleared.'
 			)
 		).toBeInTheDocument();
 		expect( mockApiFetch ).not.toHaveBeenCalled();
@@ -1232,7 +1232,7 @@ describe( 'DataViewRowReorder', () => {
 
 		await waitFor( () =>
 			expect( mockCreateErrorNotice ).toHaveBeenCalledWith(
-				"Couldn't move the row.",
+				"Couldn't move the document.",
 				{
 					id: 'cortext-row-reorder-failed',
 					type: 'snackbar',
@@ -1257,7 +1257,7 @@ describe( 'DataViewRowReorder', () => {
 
 		await waitFor( () =>
 			expect( mockCreateErrorNotice ).toHaveBeenCalledWith(
-				"Couldn't move the row.",
+				"Couldn't move the document.",
 				{
 					id: 'cortext-row-reorder-failed',
 					type: 'snackbar',
@@ -1284,7 +1284,7 @@ describe( 'DataViewRowReorder', () => {
 		await renderReorderInParent( { onPointerDown: onParentPointerDown } );
 
 		fireEvent.pointerDown(
-			screen.getByRole( 'button', { name: 'Reorder row: One' } )
+			screen.getByRole( 'button', { name: 'Reorder: One' } )
 		);
 
 		expect( onPointerDown ).toHaveBeenCalledTimes( 1 );
@@ -1297,7 +1297,7 @@ describe( 'DataViewRowReorder', () => {
 		await renderReorder();
 
 		fireEvent.pointerDown(
-			screen.getByRole( 'button', { name: 'Reorder row: One' } )
+			screen.getByRole( 'button', { name: 'Reorder: One' } )
 		);
 
 		expect( document.body ).toHaveClass(

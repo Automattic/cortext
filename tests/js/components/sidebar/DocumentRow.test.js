@@ -189,7 +189,9 @@ describe( 'DocumentRow (hierarchical mode)', () => {
 	it( 'renders an add-child button', () => {
 		const { props } = renderRow();
 		fireEvent.click(
-			screen.getByRole( 'button', { name: 'Add a page inside Hello' } )
+			screen.getByRole( 'button', {
+				name: 'Add a document inside Hello',
+			} )
 		);
 		expect( props.onCreateChild ).toHaveBeenCalledWith( 1 );
 	} );
@@ -272,7 +274,9 @@ describe( 'DocumentRow (hierarchical mode)', () => {
 	it( 'invokes the document layer trash action from the menu', () => {
 		const { container, props } = renderRow();
 		fireEvent.click( container.querySelector( '.cortext-sidebar__menu' ) );
-		fireEvent.click( screen.getByRole( 'menuitem', { name: 'Trash' } ) );
+		fireEvent.click(
+			screen.getByRole( 'menuitem', { name: 'Move to Trash' } )
+		);
 		expect( mockTrash ).toHaveBeenCalledWith( props.record );
 	} );
 

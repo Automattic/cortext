@@ -220,7 +220,7 @@ export default function RelationEditor( {
 			const createdId = Number( created?.id );
 			if ( ! createdId ) {
 				throw new Error(
-					__( 'Related row could not be created.', 'cortext' )
+					__( 'Related item could not be created.', 'cortext' )
 				);
 			}
 			touchRecent( {
@@ -242,7 +242,7 @@ export default function RelationEditor( {
 		} catch ( error ) {
 			setCreateError(
 				error?.message ||
-					__( 'Related row could not be created.', 'cortext' )
+					__( 'Related item could not be created.', 'cortext' )
 			);
 		} finally {
 			setIsCreating( false );
@@ -287,7 +287,7 @@ export default function RelationEditor( {
 						</span>
 					) : (
 						<span className="cortext-relation-edit__toggle-placeholder">
-							{ __( 'Select rows…', 'cortext' ) }
+							{ __( 'Select…', 'cortext' ) }
 						</span>
 					) }
 					<Icon
@@ -311,11 +311,8 @@ export default function RelationEditor( {
 							onChange={ ( event ) =>
 								setSearch( event.target.value )
 							}
-							placeholder={ __(
-								'Search or create a row…',
-								'cortext'
-							) }
-							aria-label={ __( 'Search rows', 'cortext' ) }
+							placeholder={ __( 'Search or create…', 'cortext' ) }
+							aria-label={ __( 'Search', 'cortext' ) }
 						/>
 					</div>
 					{ selectedIds.length > 0 ? (
@@ -349,7 +346,7 @@ export default function RelationEditor( {
 					) : null }
 					<div className="cortext-relation-edit__section cortext-relation-edit__section--more">
 						<div className="cortext-relation-edit__section-label">
-							{ __( 'Rows', 'cortext' ) }
+							{ __( 'Available', 'cortext' ) }
 						</div>
 						{ isLoading && accumulatedRows.length === 0 ? (
 							<div className="cortext-relation-edit__loading">
@@ -360,7 +357,7 @@ export default function RelationEditor( {
 							<div className="cortext-relation-edit__empty">
 								{ createTitle
 									? __( 'No results', 'cortext' )
-									: __( 'No rows', 'cortext' ) }
+									: __( 'Nothing available', 'cortext' ) }
 							</div>
 						) : null }
 						{ unselectedRows.map( ( row ) => (
@@ -400,8 +397,8 @@ export default function RelationEditor( {
 								/>
 								<span className="cortext-relation-edit__row-title">
 									{ sprintf(
-										/* translators: %s: row title */
-										__( 'Create row "%s"', 'cortext' ),
+										/* translators: %s: item title */
+										__( 'Create "%s"', 'cortext' ),
 										createTitle
 									) }
 								</span>

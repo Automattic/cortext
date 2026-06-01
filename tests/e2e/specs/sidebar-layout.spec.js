@@ -584,7 +584,7 @@ test.describe( 'Sidebar layout controls', () => {
 			).toBeVisible();
 
 			await sidebar
-				.getByRole( 'button', { name: 'Collapse Pages' } )
+				.getByRole( 'button', { name: 'Collapse Documents' } )
 				.click();
 
 			await expect(
@@ -597,7 +597,7 @@ test.describe( 'Sidebar layout controls', () => {
 			await page.reload();
 
 			await expect(
-				sidebar.getByRole( 'button', { name: 'Expand Pages' } )
+				sidebar.getByRole( 'button', { name: 'Expand Documents' } )
 			).toBeVisible();
 			await expect(
 				sidebar.getByRole( 'button', {
@@ -607,7 +607,7 @@ test.describe( 'Sidebar layout controls', () => {
 			).toHaveCount( 0 );
 
 			await sidebar
-				.getByRole( 'button', { name: 'Expand Pages' } )
+				.getByRole( 'button', { name: 'Expand Documents' } )
 				.click();
 
 			await expect(
