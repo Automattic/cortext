@@ -97,7 +97,7 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertSame( 200, $response->get_status() );
 	}
 
-	public function test_view_context_only_returns_published_rows(): void {
+	public function test_view_context_returns_collection_rows_for_published_collection(): void {
 		wp_set_current_user( 0 );
 
 		$fixture = $this->create_collection_fixture( 'pub-visible-rows', 'text', 'publish' );
@@ -119,9 +119,13 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 			static fn( array $row ): string => $row['title']['raw'],
 			$data['rows']
 		);
+		sort( $titles );
 
-		$this->assertSame( 1, $data['total'] );
-		$this->assertSame( array( 'Visible row' ), $titles );
+		$this->assertSame( 3, $data['total'] );
+		$this->assertSame(
+			array( 'Draft row', 'Private row', 'Visible row' ),
+			$titles
+		);
 	}
 
 	public function test_default_context_uses_editor_row_statuses(): void {

@@ -229,7 +229,7 @@ final class RowsController {
 		$ctx              = new RowFormatContext();
 		$ctx->field_types = $this->field_types_map( $formatted_field_ids );
 		$multi_field_ids  = $this->multi_value_field_ids_from( $ctx->field_types );
-		$row_statuses     = $this->row_statuses_for_request( $request );
+		$row_statuses     = $this->row_statuses_for_request();
 
 		$sidecar_result = ( new FieldValueReadQuery() )->query_rows(
 			$collection_id,
@@ -421,10 +421,10 @@ final class RowsController {
 		return $args;
 	}
 
-	private function row_statuses_for_request( WP_REST_Request $request ): array {
-		return 'view' === $request->get_param( 'context' )
-			? array( 'publish' )
-			: array( 'draft', 'private', 'publish' );
+	private function row_statuses_for_request(): array {
+		// Rows default to private; public visibility is controlled by the
+		// published collection/page gate, not each row's internal status.
+		return array( 'draft', 'private', 'publish' );
 	}
 
 	/**

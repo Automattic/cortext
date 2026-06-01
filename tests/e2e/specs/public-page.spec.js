@@ -94,7 +94,7 @@ async function createPublishedCollectionWithRows( requestUtils ) {
 				path: '/wp/v2/crtxt_documents',
 				data: {
 					title,
-					status: 'publish',
+					status: 'private',
 					cortext_trait: collection.id,
 				},
 			} )
