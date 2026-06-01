@@ -1,7 +1,7 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
-import { render, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 jest.mock( '@wordpress/core-data', () => ( {
 	__esModule: true,
@@ -23,11 +23,14 @@ jest.mock( '../../../src/components/DocumentIconWp', () => ( {
 import { useEntityRecord } from '@wordpress/core-data';
 
 import DocumentIcon, {
-	parsePageIcon,
+	parseDocumentIcon,
 } from '../../../src/components/DocumentIcon';
+import PageIcon, { parsePageIcon } from '../../../src/components/PageIcon';
 
+const BOOK_EMOJI = '\uD83D\uDCD8';
 const DEFAULT_SLOT_SIZE = '16px';
 const DEFAULT_GLYPH_SIZE = '22px';
+const DOCUMENT_GLYPH_SIZE_VAR = '--cortext-document-icon-glyph-size';
 
 function iconMeta( value ) {
 	return JSON.stringify( value );
@@ -44,7 +47,7 @@ function expectStableSlot( element, size = DEFAULT_SLOT_SIZE ) {
 	} );
 }
 
-describe( 'PageIcon', () => {
+describe( 'parseDocumentIcon', () => {
 	beforeEach( () => {
 		jest.clearAllMocks();
 		useEntityRecord.mockReturnValue( { record: null } );
@@ -52,23 +55,52 @@ describe( 'PageIcon', () => {
 
 	it( 'parses supported document icon metadata', () => {
 		expect(
-			parsePageIcon( iconMeta( { type: 'emoji', value: '\u{1F600}' } ) )
-		).toEqual( { type: 'emoji', value: '\u{1F600}' } );
+			parseDocumentIcon(
+				iconMeta( { type: 'emoji', value: BOOK_EMOJI } )
+			)
+		).toEqual( { type: 'emoji', value: BOOK_EMOJI } );
 		expect(
-			parsePageIcon( iconMeta( { type: 'image', id: 42 } ) )
+			parseDocumentIcon( iconMeta( { type: 'image', id: 42 } ) )
 		).toEqual( { type: 'image', id: 42 } );
 		expect(
-			parsePageIcon(
+			parseDocumentIcon(
 				iconMeta( { type: 'wp', name: 'bell', color: 'blue' } )
 			)
 		).toEqual( { type: 'wp', name: 'bell', color: 'blue' } );
-		expect( parsePageIcon( '{' ) ).toBeNull();
+	} );
+
+	it( 'rejects empty, malformed, and invalid meta', () => {
+		expect( parseDocumentIcon( '' ) ).toBeNull();
+		expect( parseDocumentIcon( '{' ) ).toBeNull();
 		expect(
-			parsePageIcon( iconMeta( { type: 'image', id: 0 } ) )
+			parseDocumentIcon( iconMeta( { type: 'emoji', value: '' } ) )
+		).toBeNull();
+		expect(
+			parseDocumentIcon( iconMeta( { type: 'image', id: 0 } ) )
+		).toBeNull();
+		expect(
+			parseDocumentIcon( iconMeta( { type: 'wp', name: '' } ) )
 		).toBeNull();
 	} );
 
-	it( 'keeps the same slot size for fallback, emoji, wp, and image icons', async () => {
+	it( 'leaves the old PageIcon parser import working', () => {
+		expect(
+			parsePageIcon( iconMeta( { type: 'emoji', value: BOOK_EMOJI } ) )
+		).toEqual(
+			parseDocumentIcon(
+				iconMeta( { type: 'emoji', value: BOOK_EMOJI } )
+			)
+		);
+	} );
+} );
+
+describe( 'DocumentIcon', () => {
+	beforeEach( () => {
+		jest.clearAllMocks();
+		useEntityRecord.mockReturnValue( { record: null } );
+	} );
+
+	it( 'uses the same outer slot for fallback, emoji, wp, and image icons', async () => {
 		useEntityRecord.mockReturnValue( {
 			record: {
 				source_url: 'https://example.test/icon.jpg',
@@ -80,9 +112,7 @@ describe( 'PageIcon', () => {
 		expect( fallbackIcon ).toHaveClass( 'cortext-document-icon--fallback' );
 		expectStableSlot( fallbackIcon );
 		expect(
-			fallbackIcon.style.getPropertyValue(
-				'--cortext-page-icon-glyph-size'
-			)
+			fallbackIcon.style.getPropertyValue( DOCUMENT_GLYPH_SIZE_VAR )
 		).toBe( DEFAULT_GLYPH_SIZE );
 		expect( fallbackIcon.querySelector( 'svg' ) ).toHaveAttribute(
 			'width',
@@ -92,7 +122,7 @@ describe( 'PageIcon', () => {
 
 		const emoji = render(
 			<DocumentIcon
-				icon={ iconMeta( { type: 'emoji', value: '\u{1F600}' } ) }
+				icon={ iconMeta( { type: 'emoji', value: BOOK_EMOJI } ) }
 			/>
 		);
 		const emojiIcon = renderedIcon( emoji.container );
@@ -107,9 +137,9 @@ describe( 'PageIcon', () => {
 		const wpIcon = renderedIcon( wp.container );
 		expect( wpIcon ).toHaveClass( 'cortext-document-icon--wp' );
 		expectStableSlot( wpIcon );
-		expect(
-			wpIcon.style.getPropertyValue( '--cortext-page-icon-glyph-size' )
-		).toBe( DEFAULT_GLYPH_SIZE );
+		expect( wpIcon.style.getPropertyValue( DOCUMENT_GLYPH_SIZE_VAR ) ).toBe(
+			DEFAULT_GLYPH_SIZE
+		);
 		await waitFor( () =>
 			expect(
 				wp.container.querySelector( '[data-testid="wp-glyph"]' )
@@ -129,6 +159,60 @@ describe( 'PageIcon', () => {
 		);
 	} );
 
+	it( 'keeps the image wrapper and loading behavior intact', () => {
+		useEntityRecord.mockReturnValue( {
+			record: {
+				media_details: {
+					sizes: {
+						thumbnail: {
+							source_url: 'https://example.test/thumb.jpg',
+						},
+					},
+				},
+				source_url: 'https://example.test/full.jpg',
+			},
+		} );
+
+		const { container } = render(
+			<DocumentIcon
+				icon={ iconMeta( { type: 'image', id: 42 } ) }
+				size={ 28 }
+				alt="Cover"
+				className="extra-class"
+			/>
+		);
+		const wrapper = container.firstElementChild;
+		const image = screen.getByRole( 'img', { name: 'Cover' } );
+
+		expect( useEntityRecord ).toHaveBeenCalledWith( 'root', 'media', 42 );
+		expect( wrapper ).toHaveClass(
+			'cortext-document-icon',
+			'cortext-document-icon--image-wrap',
+			'extra-class'
+		);
+		expectStableSlot( wrapper, '28px' );
+		expect(
+			wrapper.querySelector( '.cortext-document-icon--image-loading' )
+		).toBeInTheDocument();
+		expect( image ).toHaveClass( 'cortext-document-icon--image' );
+		expect( image ).toHaveAttribute(
+			'src',
+			'https://example.test/thumb.jpg'
+		);
+		expect( image ).toHaveAttribute( 'width', '28' );
+		expect( image ).toHaveAttribute( 'height', '28' );
+		expect( image ).toHaveAttribute( 'loading', 'lazy' );
+		expect( image ).toHaveAttribute( 'decoding', 'async' );
+		expect( image ).toHaveStyle( { opacity: '0' } );
+
+		fireEvent.load( image );
+
+		expect(
+			wrapper.querySelector( '.cortext-document-icon--image-loading' )
+		).not.toBeInTheDocument();
+		expect( image ).toHaveStyle( { opacity: '1' } );
+	} );
+
 	it( 'keeps glyph svgs from shrinking in flex containers', () => {
 		const stylesheet = readFileSync(
 			join( process.cwd(), 'src/components/DocumentIcon.scss' ),
@@ -136,11 +220,25 @@ describe( 'PageIcon', () => {
 		);
 
 		expect( stylesheet ).toContain(
-			'min-width: var(--cortext-page-icon-glyph-size);'
+			'min-width: var(--cortext-document-icon-glyph-size);'
 		);
 		expect( stylesheet ).toContain(
-			'flex: 0 0 var(--cortext-page-icon-glyph-size);'
+			'flex: 0 0 var(--cortext-document-icon-glyph-size);'
 		);
 		expect( stylesheet ).toContain( 'max-width: none;' );
+	} );
+
+	it( 'keeps PageIcon working as a wrapper around DocumentIcon', () => {
+		const { container } = render(
+			<PageIcon
+				icon={ iconMeta( { type: 'emoji', value: BOOK_EMOJI } ) }
+			/>
+		);
+
+		expect( container.firstElementChild ).toHaveClass(
+			'cortext-document-icon',
+			'cortext-document-icon--emoji'
+		);
+		expect( screen.getByText( BOOK_EMOJI ) ).toBeInTheDocument();
 	} );
 } );
