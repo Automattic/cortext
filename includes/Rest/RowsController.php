@@ -105,7 +105,7 @@ final class RowsController {
 						),
 						'context'  => array(
 							'type'    => 'string',
-							'default' => 'view',
+							'default' => 'edit',
 							'enum'    => array( 'view', 'edit' ),
 						),
 					),
@@ -117,9 +117,9 @@ final class RowsController {
 	/**
 	 * Permission gate for the rows endpoint.
 	 *
-	 * `context=edit` requires `edit_posts` (existing editor behaviour).
-	 * `context=view` is public — anyone may read rows from a published
-	 * collection.
+	 * `context=edit` is the default editor path and requires `edit_posts`.
+	 * `context=view` is the public opt-in: anyone may read rows from a
+	 * published collection.
 	 *
 	 * @param WP_REST_Request $request Full request object.
 	 * @return bool|WP_Error

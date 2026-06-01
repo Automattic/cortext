@@ -124,6 +124,36 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertSame( array( 'Visible row' ), $titles );
 	}
 
+	public function test_default_context_uses_editor_row_statuses(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+
+		$fixture = $this->create_collection_fixture( 'edit-visible-rows' );
+
+		$this->create_row_fixture( $fixture['collection_id'], 'Visible row', 'publish' );
+		$this->create_row_fixture( $fixture['collection_id'], 'Private row', 'private' );
+		$this->create_row_fixture( $fixture['collection_id'], 'Draft row', 'draft' );
+
+		$response = $this->query_rows(
+			array(
+				'trait' => $fixture['collection_id'],
+			)
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$data   = $response->get_data();
+		$titles = array_map(
+			static fn( array $row ): string => $row['title']['raw'],
+			$data['rows']
+		);
+		sort( $titles );
+
+		$this->assertSame( 3, $data['total'] );
+		$this->assertSame(
+			array( 'Draft row', 'Private row', 'Visible row' ),
+			$titles
+		);
+	}
+
 	public function test_view_context_rejects_unpublished_collection(): void {
 		wp_set_current_user( 0 );
 
