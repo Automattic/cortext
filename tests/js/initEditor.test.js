@@ -14,6 +14,7 @@ jest.mock( '@wordpress/blocks', () => ( {
 
 jest.mock( '@wordpress/i18n', () => ( {
 	__: ( str ) => str,
+	setLocaleData: jest.fn(),
 } ) );
 
 // Mock the block barrel; importing the real one pulls in every block edit/save

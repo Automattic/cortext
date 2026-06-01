@@ -28,6 +28,10 @@ jest.mock( '../../../src/components/EditorBody', () =>
 	jest.fn( () => <div data-testid="editor-body" /> )
 );
 
+jest.mock( '../../../src/components/CortextLinkSuggestions', () =>
+	jest.fn( () => null )
+);
+
 jest.mock( '../../../src/components/initEditor', () => ( {
 	getEditorSettings: () => ( {} ),
 } ) );
