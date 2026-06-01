@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name:       Cortext
- * Plugin URI:        https://github.com/priethor/cortext
+ * Plugin URI:        https://github.com/Automattic/cortext
  * Description:       Build a WordPress-native knowledge base with nested pages, typed collections, flexible views, and publishing through your own site.
  * Version:           0.1.0
  * Requires at least: 6.9
