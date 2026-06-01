@@ -81,7 +81,6 @@ describe( 'parseDocumentIcon', () => {
 			parseDocumentIcon( iconMeta( { type: 'wp', name: '' } ) )
 		).toBeNull();
 	} );
-
 } );
 
 describe( 'DocumentIcon', () => {
@@ -217,5 +216,4 @@ describe( 'DocumentIcon', () => {
 		);
 		expect( stylesheet ).toContain( 'max-width: none;' );
 	} );
-
 } );
