@@ -12,6 +12,7 @@
 // they just do not appear in the UI.
 import { registerCoreBlocks } from '@wordpress/block-library';
 import { addFilter } from '@wordpress/hooks';
+import { __, setLocaleData } from '@wordpress/i18n';
 
 // Register the Collections category before the `../blocks` barrel registers
 // Cortext blocks from block.json.
@@ -43,6 +44,19 @@ addFilter(
 		};
 	}
 );
+
+// Our link picker's "Create" action makes a Cortext document, not a WordPress
+// page, so relabel Gutenberg's create button. "Create: %s" (text and image
+// links) and "Create page: %s" (the button block) are core default-domain
+// strings; overriding them here, on a bundle that only loads on the Cortext
+// page, fixes the wording without forking the link UI.
+const createDocumentLabel =
+	/* translators: %s: the text typed into the link picker. */
+	__( 'Create document: <mark>%s</mark>', 'cortext' );
+setLocaleData( {
+	'Create: <mark>%s</mark>': [ createDocumentLabel ],
+	'Create page: <mark>%s</mark>': [ createDocumentLabel ],
+} );
 
 export { COLLECTIONS_BLOCK_CATEGORY };
 
