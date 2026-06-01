@@ -18,7 +18,7 @@ const matchesIntent = ( blockAttributes, variationAttributes ) =>
 export const DATA_VIEW_VARIATIONS = [
 	{
 		name: 'cortext-collection-new',
-		title: __( 'Collection', 'cortext' ),
+		title: __( 'New collection', 'cortext' ),
 		description: __(
 			'Create a new collection and show it here.',
 			'cortext'

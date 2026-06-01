@@ -1,10 +1,10 @@
 /**
  * Tests for the `cortext/data-view` block variations.
  *
- * The inserter should offer two single-purpose entries: "Collection" (create a
- * new collection inline, the default that replaces the bare block) and "Linked
- * collection view" (point at an existing collection). They are told apart by a
- * transient `intent` attribute the block clears on mount.
+ * The inserter should offer two single-purpose entries: "New collection"
+ * (create a new collection inline, the default that replaces the bare block) and
+ * "Linked collection view" (point at an existing collection). They are told
+ * apart by a transient `intent` attribute the block clears on mount.
  */
 import { DATA_VIEW_VARIATIONS } from '../../../src/blocks/data-view/variations';
 
