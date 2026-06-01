@@ -2,7 +2,7 @@ import { Component, useState, useMemo, useCallback } from '@wordpress/element';
 import { DataViews } from '@wordpress/dataviews';
 import { __ } from '@wordpress/i18n';
 
-import usePublicRows from '../hooks/usePublicRows';
+import usePublicRows, { isPublicSortSupported } from '../hooks/usePublicRows';
 import { buildPublicFields } from '../hooks/publicFieldMapping';
 import { normalizeView } from './dataViewColumns';
 import {
@@ -66,6 +66,17 @@ function normalizeFieldIds( fields ) {
 			seen.add( fieldId );
 			return true;
 		} );
+}
+
+function normalizeSort( sort ) {
+	if ( ! isObject( sort ) || ! sort.field ) {
+		return null;
+	}
+
+	return {
+		field: String( sort.field ),
+		direction: sort.direction === 'asc' ? 'asc' : 'desc',
+	};
 }
 
 function normalizeStyles( styles ) {
@@ -149,7 +160,7 @@ export function normalizePublicView( view ) {
 				? source.search
 				: DEFAULT_PUBLIC_VIEW.search,
 		fields: normalizeFieldIds( source.fields ),
-		sort: null,
+		sort: normalizeSort( source.sort ),
 		filters: Array.isArray( source.filters ) ? source.filters : [],
 		layout: isObject( source.layout )
 			? normalizeLayout( source.layout, type )
@@ -219,8 +230,15 @@ export default function PublicDataView( { collectionId, view: initialView } ) {
 			safeView.fields.length === 0
 				? { ...safeView, fields: fields.map( ( f ) => f.id ) }
 				: safeView;
-		return normalizeView( seeded, validIds );
-	}, [ safeView, fields, isLoading, fieldDefs.length ] );
+		const normalized = normalizeView( seeded, validIds );
+		if (
+			normalized.sort?.field &&
+			! isPublicSortSupported( normalized.sort, fieldDefs )
+		) {
+			return { ...normalized, sort: null };
+		}
+		return normalized;
+	}, [ safeView, fields, isLoading, fieldDefs ] );
 
 	const onChangeView = useCallback( ( next ) => {
 		setView( ( current ) =>

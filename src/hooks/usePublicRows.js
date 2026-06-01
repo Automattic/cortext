@@ -3,13 +3,67 @@ import { addQueryArgs } from '@wordpress/url';
 import apiFetch from '@wordpress/api-fetch';
 
 const SERVER_OPERATORS = new Set( [ 'is', 'isNot', 'isAny', 'isNone' ] );
+const MANUAL_SORT_ID = 'manual';
+const SYSTEM_SORT_FIELDS = new Set( [ 'title', 'created_at', 'modified_at' ] );
+const SORTABLE_FIELD_TYPES = new Set( [
+	'text',
+	'email',
+	'url',
+	'number',
+	'date',
+	'datetime',
+	'checkbox',
+	'select',
+] );
 
-function buildQueryArgs( collectionId, view ) {
+export function isPublicSortSupported( sort, fields = [] ) {
+	if ( ! sort?.field ) {
+		return true;
+	}
+	if ( sort.field === MANUAL_SORT_ID ) {
+		return true;
+	}
+	if ( SYSTEM_SORT_FIELDS.has( sort.field ) ) {
+		return true;
+	}
+
+	const match = /^field-(\d+)$/.exec( sort.field );
+	if ( ! match ) {
+		return false;
+	}
+
+	const fieldId = Number( match[ 1 ] );
+	const field = fields.find( ( candidate ) => candidate?.id === fieldId );
+	return SORTABLE_FIELD_TYPES.has( field?.type );
+}
+
+function sortForServer( sort, fields = [] ) {
+	if (
+		! sort?.field ||
+		sort.field === MANUAL_SORT_ID ||
+		! isPublicSortSupported( sort, fields )
+	) {
+		return null;
+	}
+
+	return {
+		field: sort.field,
+		direction: sort.direction === 'desc' ? 'desc' : 'asc',
+	};
+}
+
+export function buildQueryArgs( collectionId, view, fields = [] ) {
 	const args = {
 		trait: collectionId,
 		context: 'view',
 		per_page: -1,
 	};
+
+	const sort = sortForServer( view?.sort, fields );
+	if ( sort ) {
+		args[ 'sort[field]' ] = sort.field;
+		args[ 'sort[direction]' ] = sort.direction;
+	}
 
 	const serverFilters = ( view?.filters ?? [] ).filter(
 		( f ) => f.field && f.operator && SERVER_OPERATORS.has( f.operator )
@@ -39,7 +93,7 @@ export default function usePublicRows( collectionId, view ) {
 
 	const requestIdRef = useRef( 0 );
 	const queryKey = collectionId
-		? JSON.stringify( buildQueryArgs( collectionId, view ) )
+		? JSON.stringify( buildQueryArgs( collectionId, view, state.fields ) )
 		: null;
 
 	useEffect( () => {
@@ -56,7 +110,7 @@ export default function usePublicRows( collectionId, view ) {
 		const requestId = ++requestIdRef.current;
 		const path = addQueryArgs(
 			'/cortext/v1/rows',
-			buildQueryArgs( collectionId, view )
+			buildQueryArgs( collectionId, view, state.fields )
 		);
 
 		setState( ( prev ) => ( { ...prev, isLoading: true } ) );

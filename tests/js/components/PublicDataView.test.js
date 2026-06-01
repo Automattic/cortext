@@ -22,6 +22,32 @@ jest.mock( '@wordpress/dataviews', () => {
 jest.mock( '../../../src/hooks/usePublicRows', () => ( {
 	__esModule: true,
 	default: jest.fn(),
+	isPublicSortSupported: jest.fn( ( sort, fields = [] ) => {
+		if ( ! sort?.field || sort.field === 'manual' ) {
+			return true;
+		}
+		if ( [ 'title', 'created_at', 'modified_at' ].includes( sort.field ) ) {
+			return true;
+		}
+
+		const match = /^field-(\d+)$/.exec( sort.field );
+		if ( ! match ) {
+			return false;
+		}
+
+		const fieldId = Number( match[ 1 ] );
+		const field = fields.find( ( candidate ) => candidate?.id === fieldId );
+		return [
+			'text',
+			'email',
+			'url',
+			'number',
+			'date',
+			'datetime',
+			'checkbox',
+			'select',
+		].includes( field?.type );
+	} ),
 } ) );
 
 import PublicDataView, {
@@ -178,7 +204,7 @@ describe( 'PublicDataView', () => {
 		).toEqual( [ 'Gamma Manual', 'Alpha Manual', 'Beta Manual' ] );
 	} );
 
-	it( 'drops saved public sort before fetching or rendering DataViews', () => {
+	it( 'keeps supported public sort for REST and disables local sorting', () => {
 		usePublicRows.mockReturnValue( {
 			data: [
 				{
@@ -215,8 +241,14 @@ describe( 'PublicDataView', () => {
 			expect.objectContaining( { sort: null } ),
 			expect.any( Array )
 		);
-		expect( usePublicRows.mock.calls.at( -1 )[ 1 ].sort ).toBeNull();
-		expect( mockDataViews.mock.calls.at( -1 )[ 0 ].view.sort ).toBeNull();
+		expect( usePublicRows.mock.calls.at( -1 )[ 1 ].sort ).toEqual( {
+			field: 'field-33',
+			direction: 'asc',
+		} );
+		expect( mockDataViews.mock.calls.at( -1 )[ 0 ].view.sort ).toEqual( {
+			field: 'field-33',
+			direction: 'asc',
+		} );
 	} );
 
 	it( 'renders public author system fields as plain text', () => {
@@ -333,6 +365,36 @@ describe( 'PublicDataView', () => {
 		expect( author.closest( 'a' ) ).toBeNull();
 		expect( author.closest( '.cortext-chip' ) ).toBeNull();
 		expect( author.closest( '.cortext-relation-ref' ) ).toBeNull();
+	} );
+
+	it( 'drops unsupported saved public relation sort before rendering DataViews', () => {
+		usePublicRows.mockReturnValue( {
+			data: [
+				{
+					id: 20,
+					title: { rendered: 'Kindred' },
+					meta: {},
+				},
+			],
+			fields: [
+				{
+					id: 22,
+					label: 'Author',
+					type: 'relation',
+					options: null,
+				},
+			],
+			isLoading: false,
+		} );
+
+		renderPublicDataView( {
+			type: 'table',
+			fields: [ 'title', 'field-22' ],
+			sort: { field: 'field-22', direction: 'asc' },
+			filters: [],
+		} );
+
+		expect( mockDataViews.mock.calls.at( -1 )[ 0 ].view.sort ).toBeNull();
 	} );
 
 	it( 'shows a local fallback when a public DataView render throws', () => {
