@@ -45,25 +45,70 @@ function markAlphaNoticeSeen( storageStatePath, origin ) {
 	);
 }
 
-function runWpCli( args, options = {} ) {
-	const projectRoot = path.resolve( __dirname, '../..' );
+const projectRoot = path.resolve( __dirname, '../..' );
+
+function readWpEnvPort( configPath ) {
+	try {
+		const resolvedPath = path.resolve( projectRoot, configPath );
+		const config = JSON.parse( fs.readFileSync( resolvedPath, 'utf8' ) );
+		return config.port ? Number( config.port ) : null;
+	} catch {
+		return null;
+	}
+}
+
+function baseUrlPort( baseURL ) {
+	try {
+		const { port, protocol } = new URL( baseURL );
+		if ( port ) {
+			return Number( port );
+		}
+		return protocol === 'https:' ? 443 : 80;
+	} catch {
+		return null;
+	}
+}
+
+function resolveWpEnvConfig( baseURL ) {
+	if ( process.env.WP_ENV_CONFIG ) {
+		return process.env.WP_ENV_CONFIG;
+	}
+
+	const port = baseUrlPort( baseURL );
+	if ( port && port === readWpEnvPort( '.wp-env.test.json' ) ) {
+		return '.wp-env.test.json';
+	}
+
+	if ( port && port === readWpEnvPort( '.wp-env.override.json' ) ) {
+		return null;
+	}
+
+	if ( port && port === readWpEnvPort( '.wp-env.json' ) ) {
+		return null;
+	}
+
+	return false;
+}
+
+function runWpCli( args, wpEnvConfig, options = {} ) {
 	const wpEnvBin = path.join(
 		projectRoot,
 		'node_modules',
 		'.bin',
 		process.platform === 'win32' ? 'wp-env.cmd' : 'wp-env'
 	);
+	const configArgs = wpEnvConfig ? [ '--config', wpEnvConfig ] : [];
 
-	execFileSync( wpEnvBin, [ 'run', 'cli', 'wp', ...args ], {
+	execFileSync( wpEnvBin, [ ...configArgs, 'run', 'cli', 'wp', ...args ], {
 		cwd: projectRoot,
 		stdio: 'inherit',
 		...options,
 	} );
 }
 
-function deactivateLocalAutologin() {
+function deactivateLocalAutologin( wpEnvConfig ) {
 	try {
-		runWpCli( [ 'plugin', 'deactivate', 'dev-autologin' ], {
+		runWpCli( [ 'plugin', 'deactivate', 'dev-autologin' ], wpEnvConfig, {
 			stdio: 'ignore',
 		} );
 	} catch {
@@ -71,8 +116,8 @@ function deactivateLocalAutologin() {
 	}
 }
 
-function flushRewriteRules() {
-	runWpCli( [ 'rewrite', 'flush' ] );
+function flushRewriteRules( wpEnvConfig ) {
+	runWpCli( [ 'rewrite', 'flush' ], wpEnvConfig );
 }
 
 /**
@@ -81,10 +126,14 @@ function flushRewriteRules() {
  */
 async function globalSetup( config ) {
 	await baseGlobalSetup( config );
-	deactivateLocalAutologin();
-	flushRewriteRules();
-
 	const { storageState, baseURL } = config.projects[ 0 ].use;
+
+	const wpEnvConfig = resolveWpEnvConfig( baseURL );
+	if ( wpEnvConfig !== false ) {
+		deactivateLocalAutologin( wpEnvConfig );
+		flushRewriteRules( wpEnvConfig );
+	}
+
 	if ( typeof storageState !== 'string' || ! baseURL ) {
 		return;
 	}
