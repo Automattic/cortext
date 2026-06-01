@@ -47,7 +47,7 @@ module.exports = {
 	},
 	// Scope wp-scripts' default 244 KiB asset-size warning to the initial
 	// entry. Intentional lazy chunks (emoji-mart data, icon library, the
-	// editor split, the icons vendor chunk pulled by PageIconWp) are gated
+	// editor split, the icons vendor chunk pulled by DocumentIconWp) are gated
 	// behind user actions, so flagging them is noise that drowns out the
 	// warning when index.js actually regresses. Source maps are dev-only
 	// and never served to end users. RTL stylesheets are alternates for
@@ -62,7 +62,7 @@ module.exports = {
 			if ( assetFilename.endsWith( '-rtl.css' ) ) {
 				return false;
 			}
-			return ! /^(emoji-mart-data|emoji-mart-react|icon-library-picker|page-icon-wp|editor|vendors-.*icons)/.test(
+			return ! /^(emoji-mart-data|emoji-mart-react|icon-library-picker|document-icon-wp|editor|vendors-.*icons)/.test(
 				assetFilename
 			);
 		},
