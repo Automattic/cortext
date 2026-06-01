@@ -47,13 +47,10 @@ export default function BetaNoticeModal( { onAcknowledge } ) {
 					</span>
 					<div>
 						<strong>
-							{ __(
-								'The data model is still evolving.',
-								'cortext'
-							) }
+							{ __( 'Keep backups close.', 'cortext' ) }
 						</strong>{ ' ' }
 						{ __(
-							'Later schema changes may need cleanup or migration. Start with test content, or make sure you have backups before adding anything important.',
+							'Start with test content, or make sure you have backups before adding anything important.',
 							'cortext'
 						) }
 					</div>

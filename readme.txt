@@ -14,7 +14,7 @@ Build a WordPress-native knowledge base with pages, typed collections, views, an
 
 Cortext is a beta knowledge base workspace for WordPress. It gives you documents, typed collections, multiple views, relation fields, rollups, and public pages without moving your data out of WordPress.
 
-**Important:** Cortext is still in beta. We recommend starting on a test or staging site and keeping backups of anything important. The data model may change before the plugin settles.
+**Important:** Cortext is still in beta. We recommend starting on a test or staging site and keeping backups of anything important. Some workflows may change during the beta.
 
 = What you can try =
 
@@ -38,7 +38,7 @@ Developers who want sample data can run `wp cortext seed` with WP-CLI.
 
 = Is Cortext production ready? =
 
-Not yet. Cortext is ready to try, but the storage model is still settling. Start on staging and keep backups before relying on it for important content.
+Not yet. Cortext is ready to try, but still early. Start on staging and keep backups before relying on it for important content.
 
 = Does Cortext send data to an external service? =
 

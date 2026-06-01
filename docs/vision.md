@@ -18,7 +18,7 @@ Every architectural decision should start with WordPress primitives. No custom t
 
 If something is hard to do the WordPress way, that is a signal to reconsider the shape of the feature. Sometimes we are using the primitive wrong. Sometimes core has a real gap, and the better answer is to fix it upstream. Cortext is young, so a short-lived local fork of an experimental component is fine while we learn. A parallel implementation that sticks around after the experiment is technical debt.
 
-The data stays readable because it is ordinary WordPress data: properties are post meta, and documents and rows are posts. Even if you uninstall the plugin, the raw data is still inspectable. Once the data model settles, export should be possible through WXR, SQL dumps, WP-CLI, or REST.
+The data stays readable because it is ordinary WordPress data: properties are post meta, and documents and rows are posts. Even if you uninstall the plugin, the raw data is still inspectable. As the public APIs mature, export should be possible through WXR, SQL dumps, WP-CLI, or REST.
 
 Cortext is not an AI-first knowledge base, and that is deliberate. If Cortext keeps its data in native WordPress shapes, it can adopt future WordPress work without building a separate data layer too early.
 
