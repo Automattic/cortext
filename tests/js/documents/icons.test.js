@@ -1,9 +1,10 @@
 /**
  * Tests for `iconForRecord` and `listIconForRecord` in `src/documents/icons.js`.
  *
- * In the sidebar tree, a collection without a custom icon reads as the table
- * glyph rendered through DocumentIcon (so its size matches a page); a custom
- * icon wins, pages keep the document glyph, and rows take the post-type glyph.
+ * In the sidebar tree, a collection without a custom icon reads as the
+ * collection glyph rendered through DocumentIcon (so its size matches a page); a
+ * custom icon wins, pages keep the document glyph, and rows take the post-type
+ * glyph.
  * In the compact lists, collection and row glyphs also go through DocumentIcon
  * so they line up in size with page icons.
  *
@@ -15,12 +16,12 @@ import { Icon, customPostType } from '@wordpress/icons';
 import { iconForRecord, listIconForRecord } from '../../../src/documents/icons';
 import DocumentIcon from '../../../src/components/DocumentIcon';
 
-it( 'renders a collection without a custom icon as the table glyph through DocumentIcon', () => {
+it( 'renders a collection without a custom icon as the collection glyph through DocumentIcon', () => {
 	const element = iconForRecord( { cortext_defines_trait: true } );
 	expect( element.type ).toBe( DocumentIcon );
 	expect( JSON.parse( element.props.icon ) ).toEqual( {
 		type: 'wp',
-		name: 'table',
+		name: 'collection',
 	} );
 } );
 
@@ -47,12 +48,12 @@ it( 'gives a row the static post-type glyph', () => {
 } );
 
 describe( 'listIconForRecord', () => {
-	it( 'renders a collection as the table glyph through DocumentIcon', () => {
+	it( 'renders a collection as the collection glyph through DocumentIcon', () => {
 		const element = listIconForRecord( { cortext_defines_trait: true } );
 		expect( element.type ).toBe( DocumentIcon );
 		expect( JSON.parse( element.props.icon ) ).toEqual( {
 			type: 'wp',
-			name: 'table',
+			name: 'collection',
 		} );
 	} );
 

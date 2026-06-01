@@ -165,7 +165,7 @@ describe( 'SidebarRecents animation', () => {
 		).toBeInTheDocument();
 	} );
 
-	it( 'shows a collection recent with the table icon', () => {
+	it( 'shows a collection recent with the collection icon', () => {
 		mockRecents = [ collectionRecent( 33, 'Library' ) ];
 		mockRecordsById.set( 33, {
 			id: 33,
@@ -179,13 +179,13 @@ describe( 'SidebarRecents animation', () => {
 		expect(
 			screen.getByRole( 'button', { name: 'Recent: Library' } )
 		).toBeInTheDocument();
-		// The collection's table glyph now renders through DocumentIcon (so its
-		// size matches a page); the icon prop carries the table wp glyph.
+		// The collection glyph renders through DocumentIcon (so its size matches
+		// a page); the icon prop carries the collection wp glyph.
 		expect(
 			container.querySelector( '[data-testid="document-icon"]' )
 		).toHaveAttribute(
 			'data-icon',
-			JSON.stringify( { type: 'wp', name: 'table' } )
+			JSON.stringify( { type: 'wp', name: 'collection' } )
 		);
 	} );
 

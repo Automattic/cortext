@@ -14,10 +14,10 @@ import {
 	plus,
 	starEmpty,
 	starFilled,
-	table,
 } from '@wordpress/icons';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 
+import { collectionIcon } from '../cortextIcons';
 import { useDocumentActions, useDocumentRecord } from '../../documents';
 
 /**
@@ -298,7 +298,7 @@ export default function DocumentRow( {
 								{ features.canCreateChild && (
 									<MenuGroup>
 										<MenuItem
-											icon={ table }
+											icon={ collectionIcon }
 											onClick={ () => {
 												onCreateChildCollection?.(
 													recordId

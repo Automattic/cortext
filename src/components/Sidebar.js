@@ -18,7 +18,6 @@ import {
 	page,
 	plus,
 	search,
-	table,
 	trash as trashIcon,
 	upload,
 	wordpress,
@@ -90,6 +89,7 @@ const cortextMarkIcon = (
 import { DndContext, DragOverlay, pointerWithin } from '@dnd-kit/core';
 
 import { openCommandPalette } from './CommandPalette';
+import { collectionIcon } from './cortextIcons';
 import SidebarFavorites from './SidebarFavorites';
 import SidebarResizeHandle from './SidebarResizeHandle';
 import SidebarRecents from './SidebarRecents';
@@ -606,7 +606,7 @@ export default function Sidebar( {
 														) }
 													</MenuItem>
 													<MenuItem
-														icon={ table }
+														icon={ collectionIcon }
 														onClick={ () => {
 															createRootCollection();
 															onClose();
