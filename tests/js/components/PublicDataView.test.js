@@ -4,13 +4,16 @@ import { DataViews as mockDataViews } from '@wordpress/dataviews';
 const mockFilterSortAndPaginate = jest.fn();
 
 jest.mock( '@wordpress/dataviews', () => {
-	const MockDataViews = jest.fn( ( { data = [] } ) => (
+	const MockDataViews = jest.fn( ( { data = [], children } ) => (
 		<div data-testid="dataviews">
+			{ children }
 			{ data.map( ( item ) => (
 				<span key={ item.id }>{ item.title?.rendered }</span>
 			) ) }
 		</div>
 	) );
+	MockDataViews.Layout = () => <div data-testid="dataviews-layout" />;
+	MockDataViews.Pagination = () => <div data-testid="dataviews-pagination" />;
 
 	return {
 		DataViews: MockDataViews,
@@ -71,9 +74,10 @@ const fieldDefs = [
 	},
 ];
 
-function defaultDataViewsImplementation( { data = [] } ) {
+function defaultDataViewsImplementation( { data = [], children } ) {
 	return (
 		<div data-testid="dataviews">
+			{ children }
 			{ data.map( ( item ) => (
 				<span key={ item.id }>{ item.title?.rendered }</span>
 			) ) }
@@ -180,6 +184,19 @@ describe( 'PublicDataView', () => {
 		expect( Array.isArray( rowRequestView.fields ) ).toBe( true );
 		expect( Array.isArray( dataViewsView.fields ) ).toBe( true );
 		expect( Array.isArray( rowRequestView.filters ) ).toBe( true );
+	} );
+
+	it( 'renders only the read-only layout and pagination', () => {
+		renderPublicDataView( {
+			type: 'table',
+			fields: [ 'title' ],
+			filters: [],
+		} );
+
+		expect( screen.getByTestId( 'dataviews-layout' ) ).toBeInTheDocument();
+		expect(
+			screen.getByTestId( 'dataviews-pagination' )
+		).toBeInTheDocument();
 	} );
 
 	it( 'keeps REST row order when the saved public view uses manual sort', () => {

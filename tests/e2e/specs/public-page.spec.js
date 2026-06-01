@@ -267,6 +267,14 @@ test.describe( 'Public page rendering', () => {
 			await expect(
 				page.locator( '.wp-block-cortext-data-view .dataviews-wrapper' )
 			).toBeVisible();
+
+			// Read-only: the search, filter, and configuration toolbar is
+			// not rendered for visitors.
+			await expect(
+				page.locator(
+					'.wp-block-cortext-data-view .dataviews__view-actions'
+				)
+			).toHaveCount( 0 );
 			await expect
 				.poll( () =>
 					renderedPublicTitles( page, [
