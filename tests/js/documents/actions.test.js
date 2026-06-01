@@ -17,6 +17,7 @@ jest.mock( '@wordpress/data', () => {
 import { useDispatch } from '@wordpress/data';
 import {
 	createDocument,
+	useCreateCollectionDocument,
 	useCreateDocument,
 } from '../../../src/documents/actions';
 import { DOCUMENT_POST_TYPE } from '../../../src/collections';
@@ -145,6 +146,59 @@ describe( 'useCreateDocument', () => {
 			'postType',
 			DOCUMENT_POST_TYPE,
 			{ status: 'draft' }
+		);
+	} );
+} );
+
+describe( 'useCreateCollectionDocument', () => {
+	beforeEach( () => {
+		useDispatch.mockReset();
+	} );
+
+	it( 'adds cortext_collection to the caller payload', async () => {
+		const saveEntityRecord = jest.fn().mockResolvedValue( { id: 21 } );
+		const invalidateResolution = jest.fn();
+		useDispatch.mockReturnValue( {
+			saveEntityRecord,
+			invalidateResolution,
+		} );
+
+		const { result } = renderHook( () => useCreateCollectionDocument() );
+
+		await act( async () => {
+			await result.current( { title: 'Tasks', parent: 3 } );
+		} );
+
+		expect( saveEntityRecord ).toHaveBeenCalledWith(
+			'postType',
+			DOCUMENT_POST_TYPE,
+			{
+				status: 'draft',
+				title: 'Tasks',
+				parent: 3,
+				cortext_collection: true,
+			}
+		);
+	} );
+
+	it( 'creates a draft with only the collection flag by default', async () => {
+		const saveEntityRecord = jest.fn().mockResolvedValue( { id: 22 } );
+		const invalidateResolution = jest.fn();
+		useDispatch.mockReturnValue( {
+			saveEntityRecord,
+			invalidateResolution,
+		} );
+
+		const { result } = renderHook( () => useCreateCollectionDocument() );
+
+		await act( async () => {
+			await result.current();
+		} );
+
+		expect( saveEntityRecord ).toHaveBeenCalledWith(
+			'postType',
+			DOCUMENT_POST_TYPE,
+			{ status: 'draft', cortext_collection: true }
 		);
 	} );
 } );

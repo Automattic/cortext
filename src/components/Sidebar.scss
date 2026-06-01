@@ -202,6 +202,20 @@
 		}
 	}
 
+	&__split-action {
+		display: flex;
+		align-items: center;
+	}
+
+	// Keep the create-menu toggle visible while its dropdown is open: the
+	// popover takes focus, so the header's focus-within reveal no longer holds.
+	@media (hover: hover) and (pointer: fine) {
+
+		&__split-action-toggle.components-button[aria-expanded="true"] {
+			opacity: 1;
+		}
+	}
+
 	&__content {
 		flex: 1 1 auto;
 		min-height: 0;

@@ -9,7 +9,7 @@ export {
 	useDocumentSelection,
 	useFavoriteToggle,
 } from './hooks';
-export { useCreateDocument } from './actions';
+export { useCreateDocument, useCreateCollectionDocument } from './actions';
 export { documentTitle } from './title';
 export { listIconForRecord } from './icons';
 export { documentUri } from './uri';

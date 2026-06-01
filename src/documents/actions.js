@@ -49,6 +49,17 @@ export function useCreateDocument() {
 	);
 }
 
+// Create a collection document. The REST layer reads `cortext_collection` while
+// saving, mirrors the trait term, and creates the owner data view. The flag is
+// not stored on the post.
+export function useCreateCollectionDocument() {
+	const create = useCreateDocument();
+	return useCallback(
+		( input = {} ) => create( { ...input, cortext_collection: true } ),
+		[ create ]
+	);
+}
+
 // First rename of a draft promotes status to private so core regenerates
 // `post_name` from the new title via `wp_unique_post_slug(sanitize_title())`.
 export async function renameDocument( record, title, ctx ) {

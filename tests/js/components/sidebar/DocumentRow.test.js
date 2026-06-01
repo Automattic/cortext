@@ -71,6 +71,16 @@ function makeRow( overrides = {} ) {
 	};
 }
 
+function makeCollection( overrides = {} ) {
+	return {
+		id: 5,
+		type: 'crtxt_document',
+		cortext_defines_trait: true,
+		title: { rendered: 'Tasks', raw: 'Tasks' },
+		...overrides,
+	};
+}
+
 function baseProps( overrides = {} ) {
 	return {
 		record: makePage(),
@@ -83,6 +93,7 @@ function baseProps( overrides = {} ) {
 		onSelect: jest.fn(),
 		onToggleExpand: jest.fn(),
 		onCreateChild: jest.fn(),
+		onCreateChildCollection: jest.fn(),
 		isFavorite: false,
 		isFavoriteDisabled: false,
 		onToggleFavorite: jest.fn(),
@@ -194,6 +205,27 @@ describe( 'DocumentRow (hierarchical mode)', () => {
 			} )
 		);
 		expect( props.onCreateChild ).toHaveBeenCalledWith( 1 );
+	} );
+
+	it( 'creates a child collection from the menu', () => {
+		const { container, props } = renderRow();
+		fireEvent.click( container.querySelector( '.cortext-sidebar__menu' ) );
+		fireEvent.click(
+			screen.getByRole( 'menuitem', {
+				name: 'Add collection inside',
+			} )
+		);
+		expect( props.onCreateChildCollection ).toHaveBeenCalledWith( 1 );
+	} );
+
+	it( 'does not show the child collection action for collections', () => {
+		const { container } = renderRow( { record: makeCollection() } );
+		fireEvent.click( container.querySelector( '.cortext-sidebar__menu' ) );
+		expect(
+			screen.queryByRole( 'menuitem', {
+				name: 'Add collection inside',
+			} )
+		).toBeNull();
 	} );
 
 	it( 'calls onSelect with the record when the title is clicked', () => {
@@ -353,6 +385,16 @@ describe( 'DocumentRow (leaf mode)', () => {
 		const { container } = renderRow( { record: makeRow() } );
 		expect(
 			container.querySelector( '.cortext-sidebar__add-child' )
+		).toBeNull();
+	} );
+
+	it( 'does not show the child collection action for rows', () => {
+		const { container } = renderRow( { record: makeRow() } );
+		fireEvent.click( container.querySelector( '.cortext-sidebar__menu' ) );
+		expect(
+			screen.queryByRole( 'menuitem', {
+				name: 'Add collection inside',
+			} )
 		).toBeNull();
 	} );
 
