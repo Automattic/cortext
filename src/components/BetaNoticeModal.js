@@ -36,7 +36,7 @@ export default function BetaNoticeModal( { onAcknowledge } ) {
 							{ __( 'Expect rough edges.', 'cortext' ) }
 						</strong>{ ' ' }
 						{ __(
-							'Cortext is in beta. Some workflows are unfinished, and updates may still break things.',
+							'Cortext is in beta. Some workflows are unfinished, and updates may still change behavior.',
 							'cortext'
 						) }
 					</div>
@@ -53,7 +53,7 @@ export default function BetaNoticeModal( { onAcknowledge } ) {
 							) }
 						</strong>{ ' ' }
 						{ __(
-							'Content you create now may not survive later schema changes. Keep production and irreplaceable content out of Cortext for now.',
+							'Later schema changes may need cleanup or migration. Start with test content, or make sure you have backups before adding anything important.',
 							'cortext'
 						) }
 					</div>
