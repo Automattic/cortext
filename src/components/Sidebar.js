@@ -148,17 +148,10 @@ export default function Sidebar( {
 		useDocumentSelection( { selectedId, selectedCollectionId } );
 	const adminUrl = window.cortextSettings?.adminUrl ?? '/wp-admin/';
 	const brandIconUrl = window.cortextSettings?.iconUrl ?? '';
-	const userName = window.cortextSettings?.userDisplayName ?? '';
 	const publicWebAffordances = isPublicWebAffordancesEnabled();
 	const wordpressAffordances = isWordPressAffordancesEnabled();
 	const commandPaletteShortcut = displayShortcut.primary( 'k' );
-	const brandLabel = userName
-		? sprintf(
-				/* translators: %s: user display name */
-				__( "%s's Cortext", 'cortext' ),
-				userName
-		  )
-		: __( 'Cortext', 'cortext' );
+	const brandLabel = __( 'Cortext', 'cortext' );
 
 	const [ favoritesError, setFavoritesError ] = useState( null );
 	const [ duplicateNotice, setDuplicateNotice ] = useState( null );
