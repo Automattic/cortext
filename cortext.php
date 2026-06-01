@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Cortext
  * Plugin URI:        https://github.com/Automattic/cortext
- * Description:       Build a WordPress-native knowledge base with nested pages, typed collections, flexible views, and publishing through your own site.
+ * Description:       Build a WordPress-native knowledge base with pages, typed collections, views, and public publishing.
  * Version:           0.1.0
  * Requires at least: 6.9
  * Requires PHP:      8.1
