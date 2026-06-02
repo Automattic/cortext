@@ -18,8 +18,8 @@
 		"dist": "electron-builder"
 	},
 	"devDependencies": {
-		"@playwright/test": "^1.48.0",
-		"electron": "^33.2.0",
+		"@playwright/test": "^1.60.0",
+		"electron": "^42.3.1",
 		"electron-builder": "^26.8.1"
 	},
 	"build": {
@@ -55,7 +55,8 @@
 				}
 			],
 			"identity": null,
-			"category": "public.app-category.productivity"
+			"category": "public.app-category.productivity",
+			"minimumSystemVersion": "12.0.0"
 		}
 	}
 }

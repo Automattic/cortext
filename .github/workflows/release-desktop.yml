@@ -76,6 +76,12 @@ jobs:
               working-directory: apps/desktop
               run: npm ci
 
+            # Electron 42 skips the binary download during npm ci. Fetch it here
+            # so electron-builder packages a complete app.
+            - name: Install Electron binary
+              working-directory: apps/desktop
+              run: npx install-electron
+
             # static-php-cli compiles natively; a macos-14 runner yields arm64.
             # The build is the slow part, so cache the result across runs.
             - name: Cache bundled PHP runtime
