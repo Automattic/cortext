@@ -108,18 +108,24 @@ CORTEXT_DESKTOP_DISTRIBUTION=1 npm --prefix apps/desktop run snapshot
 npm --prefix apps/desktop run dist
 ```
 
-`dist` runs electron-builder against the `build` block in `package.json`. It
-writes an arm64 `.dmg` to `apps/desktop/dist/` and bundles `snapshot.zip` and
-`runtime/bin/php`, so both need to exist first. `CORTEXT_DESKTOP_DISTRIBUTION=1`
-tells the snapshot build to ship only the autologin mu-plugin and leave out the
-timing and runtime-probe ones, which exist for development and benchmarks.
+`dist` runs electron-builder using the `build` block in `package.json`. It
+writes an arm64 `.dmg` to `apps/desktop/dist/` and bundles `snapshot.zip`,
+`runtime/bin/php`, and the desktop update-lock mu-plugin, so build the snapshot
+and PHP binary first. `CORTEXT_DESKTOP_DISTRIBUTION=1` keeps the autologin and
+update-lock mu-plugins in the snapshot, but drops the timing and runtime-probe
+helpers used for development and benchmarks.
 
 The DMG is not signed, so macOS blocks it on first launch. Open it once from
 System Settings > Privacy & Security > "Open Anyway", or run
 `xattr -dr com.apple.quarantine /Applications/Cortext.app`.
 
-On launch the installed app asks GitHub for the latest release and links to the
-download if you are behind. It does not install updates itself.
+On launch the installed app checks GitHub for the latest release and links to
+the download if you are behind. It does not update itself.
+
+In desktop, WordPress is bundled runtime code, not a site the user maintains
+through wp-admin. The snapshot disables core, plugin, and theme updates, and
+each launch refreshes the update-lock mu-plugin in the extracted site. WordPress
+changes come through new Cortext desktop releases.
 
 For now the build is arm64 only and unsigned.
 
@@ -179,6 +185,9 @@ snapshot exists.
 - `mu-plugins/cortext-autologin.php`: bypasses `auth_redirect()` and
   maps the current request to the local admin before `pluggable.php`
   loads. Desktop-only; do not ship this on a public site.
+- `mu-plugins/cortext-update-lock.php`: disables WordPress core, plugin,
+  theme, and file-editor updates in desktop. The runtime copies it into the
+  extracted site on every launch, so older local sites get the same lock.
 - `mu-plugins/cortext-timing.php`: emits the local `Server-Timing` value
   used by the desktop runtime benchmark.
 
