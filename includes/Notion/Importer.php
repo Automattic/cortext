@@ -135,9 +135,7 @@ final class Importer {
 			}
 			$field_id = $this->create_field( (string) $name, $prop );
 			if ( $field_id instanceof WP_Error ) {
-				// FIXME: This needs better handling. Any previously created
-				// fields need to be cleaned up too.
-				wp_delete_post( (int) $collection_id, true );
+				$this->discard_partial_collection( (int) $collection_id, $field_ids );
 				return $field_id;
 			}
 			if ( $field_id > 0 ) {
@@ -155,11 +153,26 @@ final class Importer {
 			)
 		);
 		if ( $designated instanceof WP_Error ) {
-			wp_delete_post( (int) $collection_id, true );
+			$this->discard_partial_collection( (int) $collection_id, $field_ids );
 			return $designated;
 		}
 
 		return (int) $collection_id;
+	}
+
+	/**
+	 * Removes a half-built collection and the fields created for it, so a
+	 * failed import leaves nothing behind. Field creation can fail midway, and
+	 * designation can fail after every field exists; both paths unwind here.
+	 *
+	 * @param int   $collection_id Collection document to delete.
+	 * @param int[] $field_ids     Field documents created before the failure.
+	 */
+	private function discard_partial_collection( int $collection_id, array $field_ids ): void {
+		foreach ( $field_ids as $field_id ) {
+			wp_delete_post( (int) $field_id, true );
+		}
+		wp_delete_post( $collection_id, true );
 	}
 
 	/**
