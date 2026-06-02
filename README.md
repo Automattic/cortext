@@ -21,9 +21,22 @@ Because it is still WordPress, Cortext can publish knowledge base entries as the
 
 Cortext stores documents, collection definitions, fields, and collection rows as WordPress posts and post meta. The admin UI is a React shell that combines a WordPress block editor for documents with collection views built on WordPress packages.
 
+## Try the beta
+
+You do not need to build from source to try Cortext.
+
+1. Download the latest `cortext.zip` from the [Releases page](https://github.com/Automattic/cortext/releases).
+2. In wp-admin, go to Plugins, then Add New, then Upload Plugin, and choose the ZIP.
+3. Install and activate Cortext, then open "Cortext" from the admin menu.
+
+New to Cortext? [Using Cortext](docs/using-cortext.md) walks through the main pieces and the basic tasks.
+
+Cortext needs WordPress 6.9+ and PHP 8.1+. Once the listing is live, you will also be able to install it from the WordPress.org plugin directory.
+
 ## Docs
 
--   [Getting started](docs/getting-started.md): install, run, day-to-day commands.
+-   [Using Cortext](docs/using-cortext.md): the main pieces and how to get around.
+-   [Getting started](docs/getting-started.md): set up from source, run, day-to-day commands.
 -   [Release process](docs/release.md): milestones, labels, and changelog previews.
 -   [Vision and principles](docs/vision.md): what drives the design.
 -   [Architecture](docs/architecture.md): current storage and shell overview.
