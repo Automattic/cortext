@@ -207,7 +207,10 @@ export default function PublishedDocumentsPane() {
 		<VStack className="cortext-published-pane" spacing={ 5 }>
 			<VStack spacing={ 1 }>
 				<Heading level={ 2 }>{ __( 'Published', 'cortext' ) }</Heading>
-				<Text variant="muted">
+				<Text
+					className="cortext-published-pane__description"
+					variant="muted"
+				>
 					{ __( 'Public on the web.', 'cortext' ) }
 				</Text>
 			</VStack>

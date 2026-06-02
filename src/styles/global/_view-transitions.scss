@@ -49,6 +49,28 @@
 	}
 }
 
+@keyframes cortext-pane-crossfade-old {
+
+	from {
+		opacity: 1;
+	}
+
+	to {
+		opacity: 0;
+	}
+}
+
+@keyframes cortext-pane-crossfade-new {
+
+	from {
+		opacity: 0;
+	}
+
+	to {
+		opacity: 1;
+	}
+}
+
 // tech-debt.md#td-page-transitions-snapshot: Page-to-page swaps rebuild
 // the editor while the route
 // stays on the same pane. Keep the old snapshot above the new one until the
@@ -73,6 +95,18 @@
 	mix-blend-mode: normal;
 	opacity: 1;
 	z-index: 1;
+}
+
+// Chrome's default View Transition blend uses plus-lighter. For light static
+// panes, replace it with a plain opacity fade so the midpoint stays clean.
+:root[data-cortext-view-transition="pane-crossfade"]::view-transition-old(cortext-canvas) {
+	animation: cortext-pane-crossfade-old 240ms ease both;
+	mix-blend-mode: normal;
+}
+
+:root[data-cortext-view-transition="pane-crossfade"]::view-transition-new(cortext-canvas) {
+	animation: cortext-pane-crossfade-new 240ms ease both;
+	mix-blend-mode: normal;
 }
 
 // The side peek lives outside the canvas. Give it its own transition layer so

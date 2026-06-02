@@ -162,6 +162,17 @@ export default function EntityRoute( { history } ) {
 			} );
 			return;
 		}
+		// Import and Published are light static panes. Use a plain fade so
+		// Chrome's default blend does not wash the transition to white.
+		if (
+			after.active.kind === 'import' ||
+			after.active.kind === 'published'
+		) {
+			withViewTransition( () => rawDispatch( action ), {
+				mode: 'pane-crossfade',
+			} );
+			return;
+		}
 		withViewTransition( () => rawDispatch( action ) );
 	}, [] );
 
