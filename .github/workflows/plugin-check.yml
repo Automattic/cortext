@@ -1,0 +1,43 @@
+name: Plugin Check
+
+# Run on demand (e.g. before a WordPress.org submission). Plugin Check is slow,
+# so it is not wired to every push or PR.
+on:
+    workflow_dispatch:
+
+permissions:
+    contents: read
+
+jobs:
+    plugin-check:
+        name: Plugin Check
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 11.0.8
+                  standalone: true
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: '24.15'
+                  cache: 'pnpm'
+
+            - uses: shivammathur/setup-php@v2
+              with:
+                  php-version: '8.1'
+                  tools: composer:v2
+                  coverage: none
+
+            # Build the same tree the release ZIP ships, so Plugin Check sees
+            # exactly what WordPress.org reviews (no src/tests/dev files).
+            - name: Build the plugin
+              run: ./scripts/build-zip.sh
+
+            - name: Plugin Check
+              uses: WordPress/plugin-check-action@v1.1.6
+              with:
+                  build-dir: ./dist/cortext
+                  exclude-directories: vendor
