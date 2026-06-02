@@ -116,6 +116,16 @@ function platformKey() {
 	throw new Error( `Unsupported macOS architecture: ${ process.arch }.` );
 }
 
+function spcPackageRoot() {
+	if ( process.arch === 'arm64' ) {
+		return 'aarch64-darwin';
+	}
+	if ( process.arch === 'x64' ) {
+		return 'x86_64-darwin';
+	}
+	throw new Error( `Unsupported macOS architecture: ${ process.arch }.` );
+}
+
 function frankenPlatformName() {
 	return platformKey() === 'macos-aarch64' ? 'mac-arm64' : 'mac-x86_64';
 }
@@ -331,6 +341,16 @@ async function installPhp( options ) {
 	}
 
 	if ( ! existsSync( builtPhp ) || options.rebuild ) {
+		const pkgConfig = resolve(
+			spcDir,
+			'pkgroot',
+			spcPackageRoot(),
+			'bin/pkg-config'
+		);
+		if ( ! existsSync( pkgConfig ) ) {
+			run( spcBin, [ 'install-pkg', 'pkg-config' ], { cwd: spcDir } );
+		}
+
 		const extensionList = phpExtensions().join( ',' );
 		const buildArgs = [ 'build', extensionList, '--build-cli' ];
 
