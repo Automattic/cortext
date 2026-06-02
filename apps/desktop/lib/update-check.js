@@ -40,7 +40,9 @@ function fetchReleases() {
 			( res ) => {
 				if ( res.statusCode !== 200 ) {
 					res.resume();
-					reject( new Error( `GitHub API responded ${ res.statusCode }` ) );
+					reject(
+						new Error( `GitHub API responded ${ res.statusCode }` )
+					);
 					return;
 				}
 				let body = '';
@@ -56,7 +58,9 @@ function fetchReleases() {
 				} );
 			}
 		);
-		req.on( 'timeout', () => req.destroy( new Error( 'request timed out' ) ) );
+		req.on( 'timeout', () =>
+			req.destroy( new Error( 'request timed out' ) )
+		);
 		req.on( 'error', reject );
 	} );
 }
@@ -84,7 +88,9 @@ async function checkForUpdates() {
 	const { response } = await dialog.showMessageBox( {
 		type: 'info',
 		message: 'A new version of Cortext is available',
-		detail: `You have ${ app.getVersion() }. The latest is ${ latest.tag }.`,
+		detail: `You have ${ app.getVersion() }. The latest is ${
+			latest.tag
+		}.`,
 		buttons: [ 'Download', 'Later' ],
 		defaultId: 0,
 		cancelId: 1,
