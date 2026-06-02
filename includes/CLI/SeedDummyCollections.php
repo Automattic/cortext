@@ -55,6 +55,12 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	 * so worktrees come up in seconds without hitting Wikidata or Picsum.
 	 * Combine with `--full` to bundle the entire catalog.
 	 *
+	 * Bundled images ship in the repo, so keep them CC0 or public domain.
+	 * The live sources used for quick local demos are not always safe to
+	 * commit. The current bundle uses CC0 art from the Met; see
+	 * `seed-assets/CREDITS.md`. If you re-prefetch, replace anything new with
+	 * CC0 artwork before committing it.
+	 *
 	 * [--with-real-images]
 	 * : Fetch the actual book/album cover from Open Library and Cover Art
 	 * Archive at seed time. Used as the row's cover image, and as the row's
@@ -4136,6 +4142,9 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	 * downloads the file into `seed-assets/icons/` so it can be committed and
 	 * reused by future seeds. Idempotent: existing bundle files are kept.
 	 * Honors `--full` so callers can bundle either the compact or full set.
+	 *
+	 * These files ship in the repo, so keep them CC0. The current bundle uses
+	 * Met Open Access art; see `seed-assets/CREDITS.md`.
 	 */
 	private function prefetch_icons(): void {
 		$bundle_dir = CORTEXT_PATH . 'seed-assets/icons';
