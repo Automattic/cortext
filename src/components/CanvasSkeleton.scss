@@ -9,6 +9,11 @@
 // real Canvas doesn't reflow. Animation is intentionally subtle: a slow
 // pulse keeps it from competing with whatever lands next.
 .cortext-canvas-skeleton {
+	// The canvas surface is always light (white), even in dark mode, so the
+	// placeholder fill can't follow the shell's --cortext-state-hover, which
+	// flips to a translucent white in dark mode and vanishes on white. Pin a
+	// translucent black so the skeleton stays visible in both themes.
+	--cortext-canvas-skeleton-fill: rgba(0, 0, 0, 0.07);
 	display: flex;
 	flex-direction: column;
 	flex: 1 1 auto;
@@ -22,7 +27,7 @@
 		margin: 0 auto $grid-unit-30;
 		padding-inline: $grid-unit-20;
 		border-radius: var(--cortext-shell-radius);
-		background: var(--cortext-state-hover);
+		background: var(--cortext-canvas-skeleton-fill);
 		animation: cortext-canvas-skeleton-pulse 1.6s ease-in-out infinite;
 	}
 
@@ -39,7 +44,7 @@
 	&__line {
 		height: $grid-unit-20;
 		border-radius: var(--cortext-shell-radius);
-		background: var(--cortext-state-hover);
+		background: var(--cortext-canvas-skeleton-fill);
 		animation: cortext-canvas-skeleton-pulse 1.6s ease-in-out infinite;
 
 		&--short {
