@@ -36,6 +36,7 @@ const PLUGIN_INCLUDES = [
 	'readme.txt',
 	'LICENSE',
 	'includes',
+	'assets/brand',
 	'build',
 	'templates',
 	'src/blocks',
