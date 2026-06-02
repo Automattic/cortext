@@ -14,6 +14,7 @@ const HISTORY_SECOND_PAGE_TITLE = `E2E History Page B ${ SUFFIX }`;
 const HISTORY_COLLECTION_TITLE = `E2E History Collection ${ SUFFIX }`;
 const NO_FLASH_FIRST_PAGE_TITLE = `E2E No Flash Page A ${ SUFFIX }`;
 const NO_FLASH_SECOND_PAGE_TITLE = `E2E No Flash Page B ${ SUFFIX }`;
+const DARK_LOADING_FIRST_PAGE_TITLE = `E2E Dark Loading Page A ${ SUFFIX }`;
 const COVER_FIRST_PAGE_TITLE = `E2E Cover Page A ${ SUFFIX }`;
 const COVER_SECOND_PAGE_TITLE = `E2E Cover Page B ${ SUFFIX }`;
 const COVER_PNG = Buffer.from(
@@ -198,6 +199,51 @@ async function waitForTransitionModeToClear( page ) {
 	await page.waitForFunction(
 		() => ! document.documentElement.dataset.cortextViewTransition
 	);
+}
+
+async function canvasSurfaceState( page ) {
+	return page.evaluate( () => {
+		const root = document.documentElement;
+		const rootStyle = window.getComputedStyle( root );
+		const workspace = document.querySelector( '.cortext-workspace' );
+		const activePane = document.querySelector(
+			'.cortext-workspace__pane[data-active="true"]'
+		);
+		const styleFor = ( element ) =>
+			element ? window.getComputedStyle( element ) : null;
+		return {
+			activePaneBackground: styleFor( activePane )?.backgroundColor || '',
+			hasLoadingPane: Boolean(
+				activePane?.querySelector( '.cortext-canvas__loading' )
+			),
+			hasSkeleton: Boolean(
+				activePane?.querySelector( '.cortext-canvas-skeleton' )
+			),
+			rootTheme:
+				document
+					.getElementById( 'cortext-root' )
+					?.getAttribute( 'data-theme' ) || '',
+			transitionBackgrounds: {
+				group: window.getComputedStyle(
+					root,
+					'::view-transition-group(cortext-canvas)'
+				).backgroundColor,
+				new: window.getComputedStyle(
+					root,
+					'::view-transition-new(cortext-canvas)'
+				).backgroundColor,
+				old: window.getComputedStyle(
+					root,
+					'::view-transition-old(cortext-canvas)'
+				).backgroundColor,
+			},
+			transitionSurface: rootStyle
+				.getPropertyValue( '--cortext-canvas-transition-surface-root' )
+				.trim(),
+			workspaceBackground: styleFor( workspace )?.backgroundColor || '',
+			workspaceKind: workspace?.getAttribute( 'data-target-kind' ) || '',
+		};
+	} );
 }
 
 async function resetViewTransitionProbe( page ) {
@@ -575,6 +621,94 @@ test.describe( 'Navigation lifecycle', () => {
 				fixture.secondPage &&
 					`/wp/v2/crtxt_documents/${ fixture.secondPage.id }`
 			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.firstPage &&
+					`/wp/v2/crtxt_documents/${ fixture.firstPage.id }`
+			);
+		}
+	} );
+
+	test( 'loads a dark-mode document on the light canvas', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+		let releaseFirstLocator = () => {};
+
+		try {
+			fixture.firstPage = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: DARK_LOADING_FIRST_PAGE_TITLE,
+					status: 'private',
+				},
+			} );
+
+			await page.addInitScript( () => {
+				window.localStorage.setItem( 'cortext.colorScheme', 'dark' );
+			} );
+
+			const firstLocatorGate = new Promise( ( resolve ) => {
+				releaseFirstLocator = resolve;
+			} );
+			await page.route(
+				`**/wp-json/cortext/v1/documents/${ fixture.firstPage.id }`,
+				async ( route ) => {
+					await firstLocatorGate;
+					await route.continue();
+				}
+			);
+			const firstLocatorRequest = page.waitForRequest( ( request ) =>
+				request
+					.url()
+					.includes(
+						`/wp-json/cortext/v1/documents/${ fixture.firstPage.id }`
+					)
+			);
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/${ fixture.firstPage.id }`
+			);
+			await firstLocatorRequest;
+
+			await expect( page.locator( '#cortext-root' ) ).toHaveAttribute(
+				'data-theme',
+				'dark'
+			);
+			await expect( page.locator( '.cortext-workspace' ) ).toHaveCSS(
+				'background-color',
+				'rgb(255, 255, 255)'
+			);
+			await expect(
+				page.locator( '.cortext-workspace__pane[data-active="true"]' )
+			).toHaveCSS( 'background-color', 'rgb(255, 255, 255)' );
+
+			const loadingSurface = await canvasSurfaceState( page );
+			expect( loadingSurface ).toEqual(
+				expect.objectContaining( {
+					activePaneBackground: 'rgb(255, 255, 255)',
+					hasLoadingPane: true,
+					hasSkeleton: true,
+					rootTheme: 'dark',
+					transitionSurface: '#fff',
+					workspaceBackground: 'rgb(255, 255, 255)',
+					workspaceKind: 'document',
+				} )
+			);
+			expect( loadingSurface.transitionBackgrounds ).toEqual( {
+				group: 'rgb(255, 255, 255)',
+				new: 'rgb(255, 255, 255)',
+				old: 'rgb(255, 255, 255)',
+			} );
+
+			releaseFirstLocator();
+			await waitForEditorPost( page, fixture.firstPage.id );
+		} finally {
+			releaseFirstLocator();
 			await deleteIfCreated(
 				requestUtils,
 				fixture.firstPage &&

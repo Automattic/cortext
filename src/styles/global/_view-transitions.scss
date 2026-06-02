@@ -1,17 +1,13 @@
 @use "@wordpress/base-styles/colors" as *;
 @use "@wordpress/base-styles/variables" as *;
 
-// Leave the default root snapshot out so the sidebar and topbar stay live
-// during the swap. Only the canvas opts in below. The fallback canvas surface
-// also lives here because view-transition pseudos cannot read shell tokens
-// from .cortext-root; :has() handles dark mode.
+// Keep the root out of the transition so the sidebar and topbar stay live.
+// The pseudos read from :root, not .cortext-root. Since the editor canvas is
+// still light-only, its transition backdrop stays white in dark mode.
 :root {
 	view-transition-name: none;
 	--cortext-canvas-frame-surface-root: #{$white};
-}
-
-:root:has(.cortext-root[data-theme="dark"]) {
-	--cortext-canvas-frame-surface-root: #2a2a2a;
+	--cortext-canvas-transition-surface-root: #{$white};
 }
 
 // During the cross-fade, both snapshots briefly dip to about 50% opacity. The
@@ -21,7 +17,7 @@
 ::view-transition-image-pair(cortext-canvas),
 ::view-transition-old(cortext-canvas),
 ::view-transition-new(cortext-canvas) {
-	background: var(--cortext-canvas-frame-surface-root, #fff);
+	background: var(--cortext-canvas-transition-surface-root, #fff);
 }
 
 // Keep the canvas layer below the side peek so the canvas cross-fade never

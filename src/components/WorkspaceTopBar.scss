@@ -22,7 +22,7 @@
 	}
 }
 
-.cortext-workspace[data-target-kind="collection"] {
+.cortext-workspace[data-target-kind="document"] {
 	background: var(--cortext-canvas-surface);
 }
 
@@ -46,8 +46,10 @@
 	z-index: 1;
 }
 
-.cortext-workspace[data-target-kind="collection"]
-.cortext-workspace__pane[data-active="true"] {
+// Documents, rows, and full-page collection views all render light content.
+// Keep their active pane on the canvas surface; published, import, and empty
+// panes can use the frame.
+.cortext-workspace[data-target-kind="document"] .cortext-workspace__pane[data-active="true"] {
 	background: var(--cortext-canvas-surface);
 }
 
