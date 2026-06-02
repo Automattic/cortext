@@ -74,8 +74,8 @@ WordPress's destructive red so the visual stays familiar. Both live on
 
 ## Where this leaves us
 
-The shell now reads from a coherent token contract. Light and dark
-remain the two visible modes. The door is open for named variants
+The shell reads from a coherent token contract, with light and dark as
+the two visible modes. The structure leaves room for named variants
 (`[data-cortext-variant="..."]`) and a font-family toggle to land later
-without touching every shell-owned selector again. Those are feature
-work, not part of this refactor.
+without touching every shell-owned selector again. Those remain future
+work.
