@@ -176,4 +176,47 @@ describe( 'DocumentPublishToggle', () => {
 		} );
 		expect( editorDispatch.savePost ).toHaveBeenCalledTimes( 1 );
 	} );
+
+	it( 'hides publishing for an unpublished row (carries a trait, does not define one)', () => {
+		record = {
+			id: 7,
+			cortext_defines_trait: false,
+			crtxt_trait: [ 12 ],
+		};
+		editorState.status = 'private';
+
+		const { container } = render( <DocumentPublishToggle postId={ 7 } /> );
+
+		expect( screen.queryByRole( 'button' ) ).toBeNull();
+		expect( container.firstChild ).toBeNull();
+	} );
+
+	it( 'keeps the unpublish control for an already-public row', () => {
+		record = {
+			id: 7,
+			cortext_defines_trait: false,
+			crtxt_trait: [ 12 ],
+		};
+		editorState.status = 'publish';
+
+		render( <DocumentPublishToggle postId={ 7 } /> );
+
+		expect(
+			screen.getByRole( 'button', { name: 'Unpublish' } )
+		).toBeTruthy();
+	} );
+
+	it( 'keeps publishing for a collection (defines its own trait)', () => {
+		record = {
+			id: 7,
+			cortext_defines_trait: true,
+			crtxt_trait: [ 7 ],
+		};
+
+		render( <DocumentPublishToggle postId={ 7 } /> );
+
+		expect(
+			screen.getByRole( 'button', { name: 'Publish' } )
+		).toBeTruthy();
+	} );
 } );
