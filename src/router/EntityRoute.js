@@ -162,6 +162,18 @@ export default function EntityRoute( { history } ) {
 			} );
 			return;
 		}
+		// Import and Published are static light panes; give them a plain
+		// cross-fade. The user-agent plus-lighter blend (kept below for the
+		// document loader) would wash two light panes to white at the midpoint.
+		if (
+			after.active.kind === 'import' ||
+			after.active.kind === 'published'
+		) {
+			withViewTransition( () => rawDispatch( action ), {
+				mode: 'pane-crossfade',
+			} );
+			return;
+		}
 		withViewTransition( () => rawDispatch( action ) );
 	}, [] );
 
