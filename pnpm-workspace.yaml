@@ -58,6 +58,7 @@ overrides:
     '@wordpress/viewport': 6.46.0
     '@wordpress/views': 1.13.0
     ajv: 8.18.0
+    'eslint@10.2.1>ajv': 6.12.6
     axios: 1.16.0
     basic-ftp: 5.3.1
     fast-xml-builder: 1.2.0
