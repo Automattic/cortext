@@ -45,7 +45,7 @@ composer install \
 	--optimize-autoloader \
 	--no-interaction
 
-rm -f "${stage_dir}/composer.json" "${stage_dir}/composer.lock"
+rm -f "${stage_dir}/composer.lock"
 
 (
 	cd "$dist_dir"

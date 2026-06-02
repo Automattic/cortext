@@ -625,7 +625,7 @@ final class FieldValueIndex {
 
 		$table = $this->table_name();
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Benchmark reads directly from the derived index.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Benchmark reads hit the derived index directly; the table name comes from this plugin.
 		$ids = $wpdb->get_col(
 			$wpdb->prepare(
 				"SELECT n.row_id
@@ -662,7 +662,7 @@ final class FieldValueIndex {
 
 		$table = $this->table_name();
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Benchmark reads directly from the derived index.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Benchmark reads hit the derived index directly; the table name comes from this plugin.
 		$ids = $wpdb->get_col(
 			$wpdb->prepare(
 				"SELECT row_id
@@ -690,7 +690,7 @@ final class FieldValueIndex {
 
 		$table = $this->table_name();
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Benchmark reads directly from the derived index.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Benchmark reads hit the derived index directly; the table name comes from this plugin.
 		$ids = $wpdb->get_col(
 			$wpdb->prepare(
 				"SELECT row_id
@@ -727,7 +727,7 @@ final class FieldValueIndex {
 
 		$table = $this->table_name();
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Benchmark reads directly from the derived index.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Benchmark reads hit the derived index directly; the table name comes from this plugin.
 		$ids = $wpdb->get_col(
 			$wpdb->prepare(
 				"SELECT d.row_id
@@ -776,7 +776,7 @@ final class FieldValueIndex {
 		$args         = array_merge( array( $collection_id ), $field_ids, array( $like, $limit ) );
 
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Benchmark reads directly from the derived index.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Benchmark reads hit the derived index directly; the table name comes from this plugin.
 		$ids = $wpdb->get_col(
 			$wpdb->prepare(
 				"SELECT DISTINCT row_id
@@ -820,7 +820,7 @@ final class FieldValueIndex {
 		$args         = array_merge( array( $collection_id ), $field_ids, array( $like, $number_field_id, $minimum, $select_field_id, $select_value, $limit ) );
 
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Benchmark reads directly from the derived index.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Benchmark reads hit the derived index directly; the table name comes from this plugin.
 		$ids = $wpdb->get_col(
 			$wpdb->prepare(
 				"SELECT DISTINCT t.row_id
@@ -855,7 +855,7 @@ final class FieldValueIndex {
 		$function = 'count' === $operation ? 'COUNT(value_number)' : 'COALESCE(SUM(value_number), 0)';
 		$table    = $this->table_name();
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Benchmark reads directly from the derived index.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Benchmark reads hit the derived index directly; table and aggregate SQL come from fixed plugin code.
 		$value = $wpdb->get_var(
 			$wpdb->prepare(
 				"SELECT {$function}
@@ -880,7 +880,7 @@ final class FieldValueIndex {
 
 		$table = $this->table_name();
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Benchmark reads directly from the derived index.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Benchmark reads hit the derived index directly; the table name comes from this plugin.
 		return (int) $wpdb->get_var(
 			$wpdb->prepare(
 				"SELECT COUNT(*)
@@ -1111,7 +1111,7 @@ final class FieldValueIndex {
 
 		$table = $this->table_name();
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Verification compares the derived index to the postmeta source of truth.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Verification compares the derived index with postmeta; the table name comes from this plugin.
 		return $wpdb->get_results(
 			$wpdb->prepare(
 				"SELECT row_id, collection_id, field_id, value_seq, value_text, value_number, value_date, post_status
