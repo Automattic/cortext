@@ -12,7 +12,7 @@ import { useCallback, useState } from '@wordpress/element';
 
 import PublishToggle from './PublishToggle';
 import useCollectionDependentPages from '../hooks/useCollectionDependentPages';
-import { definesTrait } from '../documents/capabilities';
+import { definesTrait, hasTrait } from '../documents/capabilities';
 import { isPublicWebAffordancesEnabled } from '../settings';
 
 const CASCADE_PUBLISH_ERROR_NOTICE_ID = 'cortext-document-publish-error';
@@ -41,27 +41,36 @@ export default function DocumentPublishToggle( { disabled = false, postId } ) {
 	const { saveEntityRecord } = useDispatch( coreStore );
 	const { createErrorNotice, removeNotice } = useDispatch( noticesStore );
 
-	const { status, link, title, isSaving, isLocked, blocks, isCollection } =
-		useSelect(
-			( select ) => {
-				const editor = select( editorStore );
-				const record = select( coreStore ).getEntityRecord(
-					'postType',
-					'crtxt_document',
-					postId
-				);
-				return {
-					status: editor.getEditedPostAttribute( 'status' ),
-					link: editor.getEditedPostAttribute( 'link' ),
-					title: editor.getEditedPostAttribute( 'title' ),
-					isSaving: editor.isSavingPost(),
-					isLocked: editor.isPostLocked?.() ?? false,
-					blocks: select( blockEditorStore ).getBlocks(),
-					isCollection: definesTrait( record ),
-				};
-			},
-			[ postId ]
-		);
+	const {
+		status,
+		link,
+		title,
+		isSaving,
+		isLocked,
+		blocks,
+		isCollection,
+		carriesTrait,
+	} = useSelect(
+		( select ) => {
+			const editor = select( editorStore );
+			const record = select( coreStore ).getEntityRecord(
+				'postType',
+				'crtxt_document',
+				postId
+			);
+			return {
+				status: editor.getEditedPostAttribute( 'status' ),
+				link: editor.getEditedPostAttribute( 'link' ),
+				title: editor.getEditedPostAttribute( 'title' ),
+				isSaving: editor.isSavingPost(),
+				isLocked: editor.isPostLocked?.() ?? false,
+				blocks: select( blockEditorStore ).getBlocks(),
+				isCollection: definesTrait( record ),
+				carriesTrait: hasTrait( record ),
+			};
+		},
+		[ postId ]
+	);
 
 	const isPublic = status === 'publish';
 	const isDisabled = disabled || isLocked;
@@ -70,6 +79,11 @@ export default function DocumentPublishToggle( { disabled = false, postId } ) {
 	// term (`cortext_defines_trait`), true even for a collection with no custom
 	// fields, so the dependency check keys off that, not a field count.
 	const isReferenceable = isCollection;
+	// A row (carries a trait term but doesn't define one) has no public
+	// properties render yet, so publishing one strands a page with no fields.
+	// Hide the publish affordance for a not-yet-public row. A row that is
+	// already public keeps the control so it can still be unpublished.
+	const isRow = carriesTrait && ! isCollection;
 
 	const [ isConfirming, setIsConfirming ] = useState( false );
 	const { isLoading, dependentPages, error } = useCollectionDependentPages(
@@ -128,7 +142,11 @@ export default function DocumentPublishToggle( { disabled = false, postId } ) {
 		togglePublishStatus();
 	}, [ togglePublishStatus ] );
 
-	if ( ! publicWebAffordances || status === 'draft' ) {
+	if (
+		! publicWebAffordances ||
+		status === 'draft' ||
+		( isRow && ! isPublic )
+	) {
 		return null;
 	}
 
