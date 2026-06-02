@@ -13,6 +13,7 @@
 		"runtime:caddy": "node scripts/install-runtime.mjs caddy",
 		"bench:runtime": "node scripts/bench-runtime.mjs",
 		"test": "npm run test:e2e",
+		"test:unit": "node --test scripts/*.test.mjs",
 		"test:e2e": "playwright test",
 		"dist": "electron-builder"
 	},
