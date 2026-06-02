@@ -163,6 +163,22 @@ function formatPublicDisplay( value, type, elements ) {
 	if ( type === 'relation' ) {
 		return formatPublicRelation( value );
 	}
+	if ( type === 'rollup' ) {
+		// Date-range rollups arrive as a { start, end } object.
+		if (
+			value &&
+			typeof value === 'object' &&
+			! Array.isArray( value ) &&
+			( 'start' in value || 'end' in value )
+		) {
+			return formatDisplay( value, 'rollup-date-range' );
+		}
+		// Other rollups are a scalar or an array of the target field's
+		// values. An array can hold relation references (objects), which
+		// formatDisplay stringifies to "[object Object]". textValue reads
+		// their titles instead.
+		return textValue( value );
+	}
 	return formatDisplay( value, type, elements );
 }
 
