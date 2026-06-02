@@ -7,8 +7,12 @@ const {
 	startRuntime,
 	stopRuntime,
 } = require( './lib/runtime' );
+const { scheduleUpdateCheck } = require( './lib/update-check' );
 
-const SNAPSHOT_ZIP = path.resolve( __dirname, 'snapshot.zip' );
+// Bundled resources (the snapshot and the PHP runtime) sit next to the app in
+// dev and under `process.resourcesPath` once packaged into the .app.
+const RESOURCES_DIR = app.isPackaged ? process.resourcesPath : __dirname;
+const SNAPSHOT_ZIP = path.join( RESOURCES_DIR, 'snapshot.zip' );
 
 let runtimeHandle = null;
 let quitting = false;
@@ -61,9 +65,10 @@ async function createWindow() {
 		await win.loadURL(
 			`http://127.0.0.1:${ PORT }/wp-admin/admin.php?page=cortext`
 		);
-		if ( process.env.CORTEXT_DEVTOOLS !== '0' ) {
+		if ( ! app.isPackaged && process.env.CORTEXT_DEVTOOLS !== '0' ) {
 			win.webContents.openDevTools( { mode: 'detach' } );
 		}
+		scheduleUpdateCheck();
 	} catch ( err ) {
 		console.error( '[cortext-desktop] failed to reach PHP server:', err );
 		await win.loadFile( path.resolve( __dirname, 'error.html' ) );
@@ -74,7 +79,7 @@ app.whenReady().then( () => {
 	try {
 		const wordpressDir = ensureSiteFromSnapshot();
 		runtimeHandle = startRuntime( {
-			appDir: __dirname,
+			appDir: RESOURCES_DIR,
 			wordpressDir,
 			runtimeStateDir: path.join(
 				app.getPath( 'temp' ),

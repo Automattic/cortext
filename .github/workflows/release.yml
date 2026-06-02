@@ -28,8 +28,85 @@ concurrency:
     cancel-in-progress: true
 
 jobs:
+    desktop:
+        name: Build desktop DMG (macOS arm64)
+        runs-on: macos-14
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 11.0.8
+                  standalone: true
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: '24.15'
+                  cache: 'pnpm'
+
+            - uses: shivammathur/setup-php@v2
+              with:
+                  php-version: '8.1'
+                  tools: composer:v2
+                  coverage: none
+
+            - uses: actions/cache@v4
+              with:
+                  path: ~/.composer/cache
+                  key: composer-${{ hashFiles('composer.lock') }}
+
+            - name: Install PHP dependencies
+              run: composer install --no-dev --optimize-autoloader --no-interaction
+
+            - name: Install JS dependencies
+              run: pnpm install --frozen-lockfile
+
+            - name: Install desktop dependencies
+              working-directory: apps/desktop
+              run: npm ci
+
+            # static-php-cli compiles natively; a macos-14 runner yields arm64.
+            # The build is the slow part, so cache the result across runs.
+            - name: Cache bundled PHP runtime
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      apps/desktop/.runtime-cache
+                      apps/desktop/runtime/bin
+                  key: desktop-runtime-php-${{ hashFiles('apps/desktop/scripts/install-runtime.mjs') }}
+
+            - name: Build bundled arm64 PHP
+              working-directory: apps/desktop
+              run: npm run runtime:php
+
+            - name: Cache snapshot downloads (WP core + wp-cli + SQLite plugin)
+              uses: actions/cache@v4
+              with:
+                  path: apps/desktop/.snapshot-cache
+                  key: desktop-snapshot-cache-${{ hashFiles('apps/desktop/scripts/build-snapshot.mjs') }}
+
+            - name: Build distribution snapshot
+              working-directory: apps/desktop
+              env:
+                  CORTEXT_DESKTOP_DISTRIBUTION: '1'
+              run: npm run snapshot
+
+            - name: Build unsigned DMG
+              working-directory: apps/desktop
+              env:
+                  VERSION: ${{ github.event.inputs.version }}
+              run: npm run dist -- -c.extraMetadata.version="$VERSION"
+
+            - name: Upload DMG artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: cortext-desktop-dmg-${{ github.event.inputs.version }}
+                  path: apps/desktop/dist/*.dmg
+                  if-no-files-found: error
+
     release:
         runs-on: ubuntu-latest
+        needs: desktop
         steps:
             - uses: actions/checkout@v4
 
@@ -102,13 +179,29 @@ jobs:
                     --version "$VERSION" \
                     --strict > release-notes.md
 
+            - name: Append desktop install note
+              run: |
+                  cat >> release-notes.md <<'EOF'
+
+                  ## Opening the macOS app
+
+                  The desktop DMG is not signed yet, so macOS warns on first launch. After moving Cortext to Applications, open it once via System Settings -> Privacy & Security -> "Open Anyway", or run `xattr -dr com.apple.quarantine /Applications/Cortext.app`.
+                  EOF
+
             - name: Build plugin ZIP
               run: ./scripts/build-zip.sh
+
+            - name: Download desktop DMG
+              uses: actions/download-artifact@v4
+              with:
+                  name: cortext-desktop-dmg-${{ github.event.inputs.version }}
+                  path: dist
 
             - name: Check release files
               run: |
                   test -s release-notes.md
                   test -s dist/cortext.zip
+                  ls dist/*.dmg >/dev/null
 
             - name: Summarize release ZIP
               env:
@@ -178,6 +271,7 @@ jobs:
                   path: |
                       release-notes.md
                       dist/cortext.zip
+                      dist/*.dmg
 
             - name: Write dry-run summary
               if: ${{ github.event.inputs.dry_run == 'true' }}
@@ -205,4 +299,6 @@ jobs:
                   body_path: release-notes.md
                   draft: true
                   prerelease: ${{ github.event.inputs.prerelease }}
-                  files: dist/cortext.zip
+                  files: |
+                      dist/cortext.zip
+                      dist/*.dmg
