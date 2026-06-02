@@ -10,11 +10,28 @@ declare( strict_types=1 );
 
 namespace Cortext\Editor;
 
+use Cortext\Frontend\Assets;
 use Cortext\PostType\DocumentIdentity;
 
 final class DocumentIconBlock {
 
 	public const BLOCK_NAME = 'cortext/document-icon';
+
+	/**
+	 * Named icon colors to CSS, mirroring `src/components/iconColors.js`. The
+	 * `wp` glyph hydrates with `currentColor`, so the span's color flows in.
+	 */
+	private const ICON_COLOR_CSS = array(
+		'gray'   => '#9ca3af',
+		'brown'  => '#92400e',
+		'orange' => '#f97316',
+		'yellow' => '#eab308',
+		'green'  => '#22c55e',
+		'blue'   => '#3b82f6',
+		'purple' => '#a855f7',
+		'pink'   => '#ec4899',
+		'red'    => '#ef4444',
+	);
 
 	public function register(): void {
 		add_action( 'init', array( $this, 'register_block' ) );
@@ -93,22 +110,23 @@ final class DocumentIconBlock {
 				return '<div class="cortext-document-icon-block">' . $img . '</div>';
 
 			case 'wp':
-				// We don't ship the SVG markup server-side; @wordpress/icons
-				// is JS-only. Emit a marker the frontend (or a future hydration
-				// step) can fill in. Keeps published markup deterministic
-				// even if the icon set isn't loaded.
-				//
-				// frontend.js is CSS-only today, so the marker stays empty
-				// on the public page and the saved color is dropped. See
-				// tech-debt.md#td-wp-icon-public-blank for the build-time SVG map vs. hydration
-				// trade-off.
+				// @wordpress/icons is JS-only, so the glyph isn't available in
+				// PHP. Emit a marker carrying the icon name (and color) and let
+				// the frontend runtime hydrate the SVG into it. Enqueue that
+				// runtime here so it loads on pages that have no data-view block.
 				$name = isset( $decoded['name'] ) ? (string) $decoded['name'] : '';
 				if ( '' === $name ) {
 					return '';
 				}
+				Assets::enqueue_frontend_runtime();
+				$color = isset( $decoded['color'] ) ? (string) $decoded['color'] : '';
+				$style = isset( self::ICON_COLOR_CSS[ $color ] )
+					? sprintf( ' style="color:%s"', esc_attr( self::ICON_COLOR_CSS[ $color ] ) )
+					: '';
 				return sprintf(
-					'<div class="cortext-document-icon-block"><span class="cortext-document-icon cortext-document-icon--wp" data-icon="%s" aria-hidden="true"></span></div>',
-					esc_attr( $name )
+					'<div class="cortext-document-icon-block"><span class="cortext-document-icon cortext-document-icon--wp" data-icon="%s"%s aria-hidden="true"></span></div>',
+					esc_attr( $name ),
+					$style
 				);
 		}
 

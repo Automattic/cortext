@@ -29,13 +29,11 @@ defined( 'ABSPATH' ) || exit;
 		?>
 		<article id="post-<?php the_ID(); ?>">
 			<?php
-			// `the_title()` is the authoritative render; the same string also
-			// resolves a second time inside `the_content()` for any page
-			// whose `post_content` carries the locked `core/post-title`
-			// block prepended by `DocumentIdentity::prepend_header_blocks`.
-			// See tech-debt.md#td-public-title-double-render.
+			// The title comes from the locked `core/post-title` block that
+			// `DocumentIdentity::prepend_header_blocks` keeps at the top of
+			// `post_content`, so `the_content()` renders it. The template
+			// adds no separate `the_title()`; that would print it twice.
 			?>
-			<h1 class="cortext-public-page__title"><?php the_title(); ?></h1>
 			<div class="cortext-public-page__body is-layout-constrained">
 				<?php the_content(); ?>
 			</div>

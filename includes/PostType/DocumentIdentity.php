@@ -73,8 +73,10 @@ final class DocumentIdentity {
 	 * architectural fix that drops the block from content entirely.
 	 */
 	public static function header_blocks_markup(): string {
-		$lock = array(
-			'lock' => array(
+		$attrs = array(
+			// Render the title as the page <h1>; the block defaults to <h2>.
+			'level' => 1,
+			'lock'  => array(
 				'move'   => true,
 				'remove' => true,
 			),
@@ -83,7 +85,7 @@ final class DocumentIdentity {
 		$blocks = array(
 			array(
 				'blockName'    => 'core/post-title',
-				'attrs'        => $lock,
+				'attrs'        => $attrs,
 				'innerBlocks'  => array(),
 				'innerHTML'    => '',
 				'innerContent' => array(),
