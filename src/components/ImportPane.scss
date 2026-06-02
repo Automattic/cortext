@@ -2,6 +2,24 @@
 @use "@wordpress/base-styles/variables" as *;
 
 .cortext-import-pane {
+	--cortext-pane-background: var(--cortext-canvas-surface);
+	--cortext-pane-surface: #{$gray-100};
+	--cortext-pane-control-surface: var(--cortext-canvas-surface);
+	--cortext-pane-border: var(--cortext-canvas-border);
+	--cortext-pane-input-border: #{$gray-600};
+	--cortext-pane-text: #{$gray-900};
+	--cortext-pane-text-muted: #{$gray-700};
+	--cortext-pane-error: var(--cortext-danger);
+	--cortext-pane-primary-surface: var(--wp-components-color-accent);
+	--cortext-pane-primary-hover-surface: var(--wp-admin-theme-color-darker-10, color-mix(in srgb, var(--wp-components-color-accent) 90%, #{$black}));
+	--cortext-pane-primary-text: var(--wp-components-color-accent-inverted);
+	--wp-components-color-background: var(--cortext-pane-control-surface);
+	--wp-components-color-foreground: var(--cortext-pane-text);
+	--wp-components-color-gray-600: #{$gray-600};
+	--wp-components-color-gray-700: var(--cortext-pane-text-muted);
+	--wp-components-color-accent: var(--wp-admin-theme-color, var(--cortext-accent));
+	--wp-components-color-accent-inverted: #{$white};
+
 	box-sizing: border-box;
 	flex: 1 1 auto;
 	min-height: 0;
@@ -11,9 +29,20 @@
 	// the scroll content stays reachable.
 	padding: $grid-unit-30 $grid-unit-40 $grid-unit-40;
 	overflow: auto;
+	color-scheme: light;
+	background: var(--cortext-pane-background);
+	color: var(--cortext-pane-text);
+	display: flex;
+	flex-direction: column;
+	// Space the blocks with a flex gap rather than margins. The WordPress
+	// Heading and Text components reset their own margins to zero, so margin
+	// rules on them are ignored; the gap is immune to that.
+	gap: $grid-unit-40;
 
-	> * + * {
-		margin-block-start: 1rem;
+	// Keep the page in a readable column so the notice and copy do not stretch
+	// the full canvas width and line up with the constrained form below.
+	> * {
+		max-width: 640px;
 	}
 
 	&__form {
@@ -23,8 +52,54 @@
 	&__section {
 		min-width: 0;
 
-		> h3 {
+		> h4 {
 			margin-block-end: $grid-unit-20;
+		}
+	}
+
+	&__description {
+		color: var(--cortext-pane-text-muted);
+	}
+
+	.components-card {
+		background: var(--cortext-pane-surface);
+		border-color: var(--cortext-pane-border);
+		color: var(--cortext-pane-text);
+	}
+
+	.components-button.is-secondary {
+		box-shadow: inset 0 0 0 $border-width var(--cortext-pane-border);
+	}
+
+	.components-button.is-destructive {
+		color: var(--cortext-pane-error);
+	}
+
+	.components-text-control__input {
+		border-color: var(--cortext-pane-input-border);
+	}
+
+	.components-button.is-primary {
+		background: var(--cortext-pane-primary-surface);
+		box-shadow:
+			inset 0 0 0 $border-width
+			var(--cortext-pane-primary-surface);
+		color: var(--cortext-pane-primary-text);
+
+		&:disabled,
+		&[aria-disabled="true"] {
+			background: var(--cortext-pane-control-surface);
+			box-shadow: inset 0 0 0 $border-width var(--cortext-pane-border);
+			color: var(--cortext-pane-text-muted);
+		}
+
+		&:hover:not(:disabled),
+		&:focus:not(:disabled) {
+			background: var(--cortext-pane-primary-hover-surface);
+			box-shadow:
+				inset 0 0 0 $border-width
+				var(--cortext-pane-primary-hover-surface);
+			color: var(--cortext-pane-primary-text);
 		}
 	}
 }
@@ -60,7 +135,7 @@
 	&__card-error {
 		display: block;
 		margin-block-start: $grid-unit-15;
-		color: $alert-red;
+		color: var(--cortext-pane-error, #{$alert-red});
 		font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 		font-size: 12px;
 		word-break: break-word;

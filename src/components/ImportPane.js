@@ -161,15 +161,25 @@ export default function ImportPane() {
 
 	return (
 		<div className="cortext-import-pane">
-			<VStack spacing={ 1 }>
+			<VStack spacing={ 2 }>
 				<Heading level={ 2 }>{ __( 'Import', 'cortext' ) }</Heading>
-				<Text variant="muted">
+				<Text
+					className="cortext-import-pane__description"
+					variant="muted"
+				>
 					{ __(
-						'Bring content from Notion into Cortext.',
+						'Bring content from your other tools into Cortext.',
 						'cortext'
 					) }
 				</Text>
 			</VStack>
+			<Notice status="warning" isDismissible={ false }>
+				{ __(
+					'Import is in early alpha. Notion is the only source so far, and the importer is rough enough that it may not bring everything over. More sources will come later.',
+					'cortext'
+				) }
+			</Notice>
+			<Heading level={ 3 }>{ __( 'Notion', 'cortext' ) }</Heading>
 			{ showForm ? (
 				<NoKeyForm
 					onSave={ handleSaveKey }
@@ -248,7 +258,7 @@ function ImportBody( {
 				) }
 			</Text>
 			<section className="cortext-import-pane__section">
-				<Heading level={ 3 }>
+				<Heading level={ 4 }>
 					{ __( 'Collections', 'cortext' ) }
 				</Heading>
 				<CollectionsList
