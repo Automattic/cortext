@@ -86,6 +86,12 @@ jobs:
               working-directory: apps/desktop
               run: npm ci
 
+            # Electron 42 skips the binary download during npm ci. Fetch it here
+            # so Playwright has something to launch.
+            - name: Install Electron binary
+              working-directory: apps/desktop
+              run: npx install-electron
+
             - name: Install Playwright browsers
               working-directory: apps/desktop
               run: npx playwright install --with-deps chromium
