@@ -9,6 +9,8 @@ declare( strict_types=1 );
 
 namespace Cortext\CLI;
 
+defined( 'ABSPATH' ) || exit;
+
 use Cortext\FieldValues\FieldValueIndex;
 use Cortext\FieldValues\FieldValueStore;
 use Cortext\PostType\Document;

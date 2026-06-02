@@ -14,6 +14,8 @@ declare( strict_types=1 );
 
 namespace Cortext;
 
+defined( 'ABSPATH' ) || exit;
+
 final class OptionPalette {
 
 	private const NAMES = array(

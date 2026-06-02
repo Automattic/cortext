@@ -9,6 +9,8 @@ declare( strict_types=1 );
 
 namespace Cortext\Runtime;
 
+defined( 'ABSPATH' ) || exit;
+
 final class Features {
 
 	public function is_desktop(): bool {

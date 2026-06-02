@@ -9,6 +9,8 @@ declare( strict_types=1 );
 
 namespace Cortext\Rest;
 
+defined( 'ABSPATH' ) || exit;
+
 use Cortext\Fields\FieldTypeRegistry;
 use WP_Error;
 

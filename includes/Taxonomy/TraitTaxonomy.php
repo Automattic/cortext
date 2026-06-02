@@ -39,6 +39,8 @@ declare( strict_types=1 );
 
 namespace Cortext\Taxonomy;
 
+defined( 'ABSPATH' ) || exit;
+
 use Cortext\PostType\Document;
 use WP_Post;
 

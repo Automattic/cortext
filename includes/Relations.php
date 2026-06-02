@@ -9,6 +9,8 @@ declare( strict_types=1 );
 
 namespace Cortext;
 
+defined( 'ABSPATH' ) || exit;
+
 use Cortext\FieldValues\FieldValueIndex;
 use Cortext\PostType\Document;
 use Cortext\PostType\Field;

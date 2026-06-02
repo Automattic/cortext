@@ -15,6 +15,8 @@ declare( strict_types=1 );
 
 namespace Cortext\PostType;
 
+defined( 'ABSPATH' ) || exit;
+
 final class DocumentIdentity {
 
 	/**

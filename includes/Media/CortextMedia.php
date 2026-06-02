@@ -22,6 +22,8 @@ declare( strict_types=1 );
 
 namespace Cortext\Media;
 
+defined( 'ABSPATH' ) || exit;
+
 use Cortext\PostType\Document;
 use WP_Post;
 use WP_REST_Request;

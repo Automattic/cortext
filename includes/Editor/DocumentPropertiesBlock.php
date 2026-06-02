@@ -14,6 +14,8 @@ declare( strict_types=1 );
 
 namespace Cortext\Editor;
 
+defined( 'ABSPATH' ) || exit;
+
 final class DocumentPropertiesBlock {
 
 	public const BLOCK_NAME = 'cortext/document-properties';

@@ -14,6 +14,8 @@ declare( strict_types=1 );
 
 namespace Cortext\Rest;
 
+defined( 'ABSPATH' ) || exit;
+
 use WP_Query;
 
 final class RowsQueryScope {

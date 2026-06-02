@@ -9,6 +9,8 @@ declare( strict_types=1 );
 
 namespace Cortext\Editor;
 
+defined( 'ABSPATH' ) || exit;
+
 use WP_Post;
 
 final class RevisionThrottle {

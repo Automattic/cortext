@@ -10,6 +10,8 @@ declare( strict_types=1 );
 
 namespace Cortext\Editor;
 
+defined( 'ABSPATH' ) || exit;
+
 use Cortext\Frontend\Assets;
 use Cortext\PostType\DocumentIdentity;
 

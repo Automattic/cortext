@@ -16,6 +16,8 @@ declare( strict_types=1 );
 
 namespace Cortext\Rest;
 
+defined( 'ABSPATH' ) || exit;
+
 use Cortext\Documents;
 use Cortext\PostType\Document;
 use Cortext\PostType\TrashCascade;

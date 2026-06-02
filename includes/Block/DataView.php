@@ -9,6 +9,8 @@ declare( strict_types=1 );
 
 namespace Cortext\Block;
 
+defined( 'ABSPATH' ) || exit;
+
 use Cortext\Frontend\Assets;
 use Cortext\PostType\Document;
 
@@ -62,11 +64,14 @@ final class DataView {
 
 		Assets::enqueue_frontend_runtime();
 
+		// Escape <, >, and & so a `view` attribute containing `</script>` can't
+		// break out of the inline JSON island below.
 		$init_data = wp_json_encode(
 			array(
 				'collectionId' => $collection_id,
 				'view'         => $attributes['view'] ?? array(),
-			)
+			),
+			JSON_HEX_TAG | JSON_HEX_AMP
 		);
 
 		$wrapper_attributes = get_block_wrapper_attributes(
