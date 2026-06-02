@@ -98,3 +98,34 @@ pnpm run release:notes -- --milestone 0.1.0 --version 0.1.0 --strict --full
 
 Use `--strict` before drafting a release. It fails if any milestone PR is
 missing a `type:*` label or has more than one.
+
+## Cutting a release
+
+Releases run from the Actions tab, through the "Prepare release" workflow
+(`.github/workflows/release.yml`). It takes a version, a `prerelease` flag, and
+a `dry_run` flag. Run it with `dry_run` on first: that builds everything and
+uploads the artifacts without creating a tag or a Release. Turn `dry_run` off to
+publish a draft Release.
+
+"Prepare release" only orchestrates. It calls two reusable workflows:
+
+-   `release-plugin.yml` resolves the milestone, builds the changelog and the
+    plugin ZIP, and creates the draft Release.
+-   `release-desktop.yml` builds the bundled PHP and the snapshot, runs
+    electron-builder, and attaches the macOS DMG.
+
+Both write to the same Release by tag. Whichever runs first creates the draft,
+and the other adds its artifact. The plugin run owns the title and notes; the
+desktop run only uploads the DMG. You can also run either workflow on its own
+from the Actions tab, which is handy for rebuilding just the DMG against a draft
+that already exists.
+
+## Desktop app
+
+The desktop release builds a macOS DMG with electron-builder and attaches it to
+the same Release as the plugin ZIP. It is arm64 only and unsigned for now.
+Because it is unsigned, macOS warns on first launch, so the release notes tell
+people to open it from System Settings > Privacy & Security > "Open Anyway", or
+to run `xattr -dr com.apple.quarantine /Applications/Cortext.app` once. The
+installed app checks GitHub Releases on launch and links to the download when a
+newer version exists, but it does not update itself.
