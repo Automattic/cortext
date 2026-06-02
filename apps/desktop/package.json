@@ -38,6 +38,10 @@
 			{
 				"from": "runtime/bin/php",
 				"to": "runtime/bin/php"
+			},
+			{
+				"from": "runtime/mu-plugins/cortext-update-lock.php",
+				"to": "runtime/mu-plugins/cortext-update-lock.php"
 			}
 		],
 		"mac": {
