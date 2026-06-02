@@ -92,6 +92,10 @@ jobs:
               working-directory: apps/desktop
               run: npx install-electron
 
+            - name: Run desktop unit tests
+              working-directory: apps/desktop
+              run: npm run test:unit
+
             - name: Install Playwright browsers
               working-directory: apps/desktop
               run: npx playwright install --with-deps chromium

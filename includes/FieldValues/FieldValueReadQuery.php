@@ -571,7 +571,7 @@ final class FieldValueReadQuery {
 
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$count_sql = "SELECT COUNT(DISTINCT p.ID) FROM {$from} {$joins} WHERE {$where}";
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- Reads from the field-value index by design.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Reads through the field-value index; build_plan prepares the WHERE/JOIN pieces.
 		$total = $wpdb->get_var( $count_sql );
 		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		if ( null === $total && '' !== $wpdb->last_error ) {
@@ -595,7 +595,7 @@ final class FieldValueReadQuery {
 			$per_page,
 			$offset
 		);
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- Reads from the field-value index by design.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Reads through the field-value index; build_plan prepares the WHERE/JOIN pieces.
 		$ids = $wpdb->get_col( $id_sql );
 		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		if ( ! is_array( $ids ) && '' !== $wpdb->last_error ) {
@@ -618,7 +618,7 @@ final class FieldValueReadQuery {
 				'post__in'         => $ids,
 				'orderby'          => 'post__in',
 				'posts_per_page'   => count( $ids ),
-				'suppress_filters' => true,
+				'suppress_filters' => false,
 			)
 		);
 

@@ -65,6 +65,7 @@ test( 'launches and loads the Cortext shell', async () => {
 		await expect( window.locator( '#cortext-root' ) ).toBeVisible( {
 			timeout: 30 * 1000,
 		} );
+		await expect.poll( () => window.title() ).toBe( 'Cortext' );
 	} finally {
 		await app.close();
 	}
