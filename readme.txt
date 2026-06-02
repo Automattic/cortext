@@ -40,9 +40,13 @@ Developers who want sample data can run `wp cortext seed` with WP-CLI.
 
 Not yet. Cortext is ready to try, but still early. Use it somewhere low-stakes before relying on it for important content.
 
-= Does Cortext send data to an external service? =
+= Does Cortext connect to external services? =
 
-No. Cortext runs inside WordPress and does not call an external service during normal plugin use.
+Only when you ask it to. Everyday use (writing documents, building collections, publishing pages) stays inside WordPress with no external calls.
+
+The one exception is the optional Notion import. When you run it, Cortext sends the Notion token you provide and the collections you pick to api.notion.com so it can read that content into WordPress. Notion's Terms (https://www.notion.so/28ffdd083dc3473e9c2da6ec011b58ac) and Privacy Policy (https://www.notion.com/trust/privacy-policy) apply to that traffic.
+
+The WP-CLI seeder is opt-in the same way: `wp cortext seed --with-real-images` (or the `--prefetch-*` flags) fetches sample cover art from public sources like Open Library, MusicBrainz, the Cover Art Archive, and Wikimedia/Wikidata. That only happens when you pass the flag.
 
 = Where is the source for the built JavaScript and CSS? =
 

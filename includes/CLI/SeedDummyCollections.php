@@ -55,11 +55,18 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	 * so worktrees come up in seconds without hitting Wikidata or Picsum.
 	 * Combine with `--full` to bundle the entire catalog.
 	 *
+	 * Bundled images ship in the repo, so keep them CC0 or public domain.
+	 * The live sources used for quick local demos are not always safe to
+	 * commit. The current bundle uses CC0 art from the Met; see
+	 * `seed-assets/CREDITS.md`. If you re-prefetch, replace anything new with
+	 * CC0 artwork before committing it.
+	 *
 	 * [--with-real-images]
-	 * : Fetch the actual book/album cover from Open Library and Cover Art
-	 * Archive at seed time. Used as the row's cover image, and as the row's
-	 * icon when no Wikimedia Commons portrait/cover is available (so a
-	 * Discworld book row gets its real cover instead of a picsum fallback).
+	 * : Real-images mode: skip the CC0 bundle and fetch each row's real image
+	 * live. Authors/musicians get their Wikimedia Commons portrait; books and
+	 * albums get the real cover from Open Library or the Cover Art Archive,
+	 * used as both the cover and the icon (a picsum photo fills in when no
+	 * match is found).
 	 * Cached via WP transients so a `--reset` reseed reuses prior lookups.
 	 * Images stay in the WP media library, never in the repo, so the
 	 * plugin doesn't redistribute publishers' artwork.
@@ -4136,6 +4143,9 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	 * downloads the file into `seed-assets/icons/` so it can be committed and
 	 * reused by future seeds. Idempotent: existing bundle files are kept.
 	 * Honors `--full` so callers can bundle either the compact or full set.
+	 *
+	 * These files ship in the repo, so keep them CC0. The current bundle uses
+	 * Met Open Access art; see `seed-assets/CREDITS.md`.
 	 */
 	private function prefetch_icons(): void {
 		$bundle_dir = CORTEXT_PATH . 'seed-assets/icons';
@@ -4545,14 +4555,12 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			return;
 		}
 
-		// `--with-real-images` overrides the bundled icon for books and albums:
-		// the existing bundle was prefetched against picsum (Wikidata has no
-		// P18 for most modern works), so the bundled file is a random photo
-		// rather than the real cover. Reach for the live cover lookup instead.
-		// Authors/musicians keep using the bundle: their Commons portraits
-		// are correct already.
-		$skip_bundle = $this->fetch_real_images
-			&& in_array( $collection_slug, array( 'books', 'albums' ), true );
+		// `--with-real-images` is the real-images mode: skip the CC0 bundle for
+		// every collection and fetch live instead (Commons portraits for
+		// authors/musicians, Open Library / Cover Art Archive covers for
+		// books/albums). Without the flag, every row uses the committed CC0
+		// bundle.
+		$skip_bundle = $this->fetch_real_images;
 
 		if ( ! $skip_bundle ) {
 			$bundle_path = $this->bundled_icon_path( $collection_slug, $title );

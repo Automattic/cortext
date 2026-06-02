@@ -57,6 +57,7 @@ function LoadingPane( { active } ) {
 	return (
 		<div className="cortext-canvas__loading cortext-canvas__loading--document">
 			{ showProgress ? <CanvasProgressBar /> : null }
+			<CanvasSkeleton />
 		</div>
 	);
 }
