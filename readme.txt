@@ -42,7 +42,11 @@ Not yet. Cortext is ready to try, but still early. Use it somewhere low-stakes b
 
 = Does Cortext send data to an external service? =
 
-No. Cortext runs inside WordPress and does not call an external service during normal plugin use.
+Only when you ask it to. Everyday use (writing documents, building collections, publishing pages) stays inside WordPress with no external calls.
+
+The one exception is the optional Notion import. When you run it, Cortext sends the Notion token you provide and the collections you pick to api.notion.com so it can read that content into WordPress. Nothing leaves WordPress unless you start that import.
+
+The WP-CLI seeder is opt-in the same way: `wp cortext seed --with-real-images` (or the `--prefetch-*` flags) fetches sample cover art from public sources like Open Library, MusicBrainz, the Cover Art Archive, and Wikimedia. That only happens when you pass the flag.
 
 = Where is the source for the built JavaScript and CSS? =
 
