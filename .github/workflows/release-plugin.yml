@@ -121,7 +121,7 @@ jobs:
 
                   ## Opening the macOS app
 
-                  The desktop DMG is not signed yet, so macOS warns on first launch. After moving Cortext to Applications, open it once via System Settings -> Privacy & Security -> "Open Anyway", or run `xattr -dr com.apple.quarantine /Applications/Cortext.app`.
+                  This DMG isn't signed yet, so macOS warns you the first time you open it. Move Cortext to Applications, then open it from System Settings > Privacy & Security > "Open Anyway", or run `xattr -dr com.apple.quarantine /Applications/Cortext.app` once.
                   EOF
 
             - name: Build plugin ZIP
