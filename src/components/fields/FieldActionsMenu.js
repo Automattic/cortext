@@ -20,6 +20,7 @@ import { chevronRight, cog, copy, pencil, trash } from '@wordpress/icons';
 import ChangeFieldTypePopover from './ChangeFieldTypePopover';
 import EditOptionsPopover from './EditOptionsPopover';
 import FieldFormatPopover from './FieldFormatPopover';
+import FormulaConfig from './FormulaConfig';
 import FieldSettingsPopover from './FieldSettingsPopover';
 import RenameFieldInline from './RenameFieldInline';
 import {
@@ -30,6 +31,7 @@ import Infotip from '../Infotip';
 import {
 	useDeleteField,
 	useDuplicateField,
+	useUpdateFormulaExpression,
 } from '../../hooks/useFieldMutations';
 
 const { Menu } = unlock( componentsPrivateApis );
@@ -66,6 +68,7 @@ export default function FieldActionsMenu( {
 	const [ isMenuOpen, setIsMenuOpen ] = useState( false );
 	const [ isFormatting, setIsFormatting ] = useState( false );
 	const [ isEditingOptions, setIsEditingOptions ] = useState( false );
+	const [ isEditingFormula, setIsEditingFormula ] = useState( false );
 	const [ isEditingSettings, setIsEditingSettings ] = useState( false );
 	const [ isChangingType, setIsChangingType ] = useState( false );
 	const [ shouldFocusFormat, setShouldFocusFormat ] = useState( false );
@@ -75,6 +78,7 @@ export default function FieldActionsMenu( {
 	const optionsAnchorRef = useRef( null );
 	const duplicate = useDuplicateField( collectionId );
 	const remove = useDeleteField( collectionId );
+	const updateFormula = useUpdateFormulaExpression( collectionId );
 	const { fields } = useCollectionFieldsContext();
 	const mappedField = useMappedField( recordId );
 	const activeField = useMemo( () => {
@@ -100,12 +104,14 @@ export default function FieldActionsMenu( {
 		activeField?.type;
 	const canFormat = FORMATTABLE_TYPES.has( fieldType );
 	const supportsOptions = TYPES_WITH_OPTIONS.has( fieldType );
+	const supportsFormula = fieldType === 'formula';
 	const canChangeType =
 		Boolean( fieldType ) && ! UNCONVERTIBLE_SOURCE_TYPES.has( fieldType );
 	const initialOptions = useMemo(
 		() => ( supportsOptions ? activeField?.cortextElements ?? [] : [] ),
 		[ supportsOptions, activeField ]
 	);
+	const [ formulaError, setFormulaError ] = useState( '' );
 	const dependentRollups = useMemo( () => {
 		const fieldList = Array.isArray( fields ) ? fields : [];
 		return fieldList.filter(
@@ -370,6 +376,18 @@ export default function FieldActionsMenu( {
 								</Menu.ItemLabel>
 							</Menu.Item>
 						) : null }
+						{ supportsFormula ? (
+							<Menu.Item
+								onClick={ () => {
+									setFormulaError( '' );
+									setIsEditingFormula( true );
+								} }
+							>
+								<Menu.ItemLabel>
+									{ __( 'Edit formula', 'cortext' ) }
+								</Menu.ItemLabel>
+							</Menu.Item>
+						) : null }
 						{ canChangeType ? (
 							<Menu.Item
 								onClick={ () => setIsChangingType( true ) }
@@ -479,6 +497,38 @@ export default function FieldActionsMenu( {
 						onRowsChanged={ onRowsChanged }
 						onRequestClose={ () => setIsEditingOptions( false ) }
 					/>
+				</Popover>
+			) : null }
+			{ isEditingFormula && supportsFormula ? (
+				<Popover
+					anchor={ optionsAnchorRef.current }
+					placement="bottom-start"
+					onClose={ () => setIsEditingFormula( false ) }
+					focusOnMount="firstElement"
+					className="cortext-formula-popover-host"
+				>
+					<div className="cortext-data-view-toolbar-popover__content">
+						<FormulaConfig
+							initialExpression={
+								activeField?.formulaExpression ?? ''
+							}
+							isBusy={ updateFormula.isBusy }
+							errorMessage={
+								formulaError || updateFormula.error?.message
+							}
+							backLabel={ __( 'Cancel', 'cortext' ) }
+							submitLabel={ __( 'Save formula', 'cortext' ) }
+							excludeRecordId={ recordId }
+							onBack={ () => setIsEditingFormula( false ) }
+							onError={ setFormulaError }
+							onSubmit={ async ( expression ) => {
+								setFormulaError( '' );
+								await updateFormula.run( recordId, expression );
+								setIsEditingFormula( false );
+								onRowsChanged?.();
+							} }
+						/>
+					</div>
 				</Popover>
 			) : null }
 			{ isEditingSettings ? (

@@ -163,6 +163,35 @@ export function useUpdateFieldOptions() {
 	return { run, isBusy, error };
 }
 
+export function useUpdateFormulaExpression( collectionId ) {
+	const { isBusy, setIsBusy, error, setError } = useMutationState();
+	const flush = useFlushFieldRecord();
+	const invalidate = useFieldListInvalidation();
+	const run = useCallback(
+		async ( recordId, expression ) => {
+			setIsBusy( true );
+			setError( null );
+			try {
+				const result = await apiFetch( {
+					path: `/cortext/v1/fields/${ recordId }/formula`,
+					method: 'POST',
+					data: { expression },
+				} );
+				await flush( recordId );
+				invalidate( collectionId );
+				return result;
+			} catch ( apiError ) {
+				setError( apiError );
+				throw apiError;
+			} finally {
+				setIsBusy( false );
+			}
+		},
+		[ collectionId, flush, invalidate, setIsBusy, setError ]
+	);
+	return { run, isBusy, error };
+}
+
 // Refetches a single `crtxt_field` record and pushes it into the
 // entity store, replacing whatever is there. Called by the option
 // popover hosts when they unmount, so the row cells (which read

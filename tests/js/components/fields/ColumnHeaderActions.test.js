@@ -4,6 +4,7 @@ const mockDeleteFieldRun = jest.fn();
 const mockDuplicateFieldRun = jest.fn();
 const mockFlushFieldRecord = jest.fn();
 const mockUpdateFieldOptionsRun = jest.fn();
+const mockUpdateFormulaRun = jest.fn();
 const mockChangeFieldTypeRun = jest.fn();
 const mockSaveEntityRecord = jest.fn();
 
@@ -191,6 +192,11 @@ jest.mock( '../../../../src/hooks/useFieldMutations', () => ( {
 	useOptionUsage: () => ( { run: jest.fn().mockResolvedValue( 0 ) } ),
 	useUpdateFieldOptions: () => ( {
 		run: mockUpdateFieldOptionsRun,
+		isBusy: false,
+		error: null,
+	} ),
+	useUpdateFormulaExpression: () => ( {
+		run: mockUpdateFormulaRun,
 		isBusy: false,
 		error: null,
 	} ),

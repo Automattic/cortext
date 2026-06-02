@@ -149,6 +149,13 @@ final class FieldTypeRegistry {
 			'wp_meta_type' => 'string',
 			'operators'    => array(),
 		),
+		'formula'     => array(
+			'sortable'     => false,
+			'filterable'   => false,
+			'text_like'    => false,
+			'wp_meta_type' => 'string',
+			'operators'    => array(),
+		),
 	);
 
 	/**
@@ -212,5 +219,22 @@ final class FieldTypeRegistry {
 			'filterable' => self::is_filterable( $type ),
 			'operators'  => self::operators_for( $type ),
 		);
+	}
+
+	public static function effective_type_for_field( int $field_id, string $type = '' ): string {
+		$field_type = '' !== $type ? $type : (string) get_post_meta( $field_id, 'type', true );
+		if ( 'formula' !== $field_type ) {
+			return $field_type;
+		}
+		$result_type = (string) get_post_meta( $field_id, 'formula_result_type', true );
+		return self::exists( $result_type ) && 'formula' !== $result_type ? $result_type : 'text';
+	}
+
+	public static function capabilities_for_field( int $field_id, string $type = '' ): array {
+		return self::capabilities_for( self::effective_type_for_field( $field_id, $type ) );
+	}
+
+	public static function wp_meta_type_for_field( int $field_id, string $type = '' ): string {
+		return self::wp_meta_type( self::effective_type_for_field( $field_id, $type ) );
 	}
 }

@@ -14,6 +14,9 @@ defined( 'ABSPATH' ) || exit;
 use Cortext\Fields\FieldDefaults;
 use Cortext\Fields\FieldTypeConverter;
 use Cortext\Fields\FieldTypeRegistry;
+use Cortext\Formula\Compiler as FormulaCompiler;
+use Cortext\Formula\FormulaError;
+use Cortext\Formula\Materializer as FormulaMaterializer;
 use Cortext\OptionPalette;
 use Cortext\PostType\Document;
 use Cortext\PostType\Field;
@@ -134,6 +137,10 @@ final class FieldsController {
 							'required' => false,
 							'enum'     => self::ROLLUP_AGGREGATORS,
 						),
+						'expression'               => array(
+							'type'     => 'string',
+							'required' => false,
+						),
 					),
 				),
 			)
@@ -154,6 +161,28 @@ final class FieldsController {
 						),
 						'field_id'      => array(
 							'type'     => 'integer',
+							'required' => true,
+						),
+					),
+				),
+			)
+		);
+
+		register_rest_route(
+			self::NAMESPACE,
+			'/fields/(?P<field_id>\d+)/formula',
+			array(
+				array(
+					'methods'             => 'POST',
+					'callback'            => array( $this, 'update_formula' ),
+					'permission_callback' => array( $this, 'can_edit_field' ),
+					'args'                => array(
+						'field_id'   => array(
+							'type'     => 'integer',
+							'required' => true,
+						),
+						'expression' => array(
+							'type'     => 'string',
 							'required' => true,
 						),
 					),
@@ -312,12 +341,74 @@ final class FieldsController {
 			return $this->create_rollup( $request, $collection_id, $title );
 		}
 
+		if ( 'formula' === $type ) {
+			return $this->create_formula( $request, $collection_id, $title );
+		}
+
 		$meta = array( 'type' => $type );
 		if ( $this->type_supports_options( $type ) && is_array( $options ) ) {
 			$meta['options'] = wp_json_encode( $this->normalize_options( $options ) );
 		}
 
 		return $this->insert_and_attach( $collection_id, $title, $meta );
+	}
+
+	public function update_formula( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+		$field_id = (int) $request->get_param( 'field_id' );
+		$field    = get_post( $field_id );
+		if ( ! $field instanceof WP_Post || Field::POST_TYPE !== $field->post_type ) {
+			return new WP_Error(
+				'cortext_field_not_found',
+				__( 'Field not found.', 'cortext' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		if ( 'formula' !== (string) get_post_meta( $field_id, 'type', true ) ) {
+			return new WP_Error(
+				'cortext_field_type_unsupported',
+				__( 'This field is not a formula.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$collection_id = $this->collection_id_for_field( $field_id );
+		if ( $collection_id < 1 ) {
+			return new WP_Error(
+				'cortext_field_collection_missing',
+				__( 'We couldn\'t find this field\'s collection.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$expression = $this->sanitize_formula_expression( $request->get_param( 'expression' ) );
+		if ( '' === trim( $expression ) ) {
+			return $this->formula_expression_required_error();
+		}
+		$compiled = $this->compile_formula_or_error( $expression, $collection_id, $field_id, $this->stored_formula_refs( $field_id ) );
+		if ( is_wp_error( $compiled ) ) {
+			return $compiled;
+		}
+
+		$dependent_compiled = $this->compile_dependent_formulas_or_error( $collection_id, $field_id, $compiled );
+		if ( is_wp_error( $dependent_compiled ) ) {
+			return $dependent_compiled;
+		}
+
+		$this->persist_formula( $field_id, $expression, $compiled );
+		foreach ( $dependent_compiled as $dependent_field_id => $dependent ) {
+			$this->persist_formula( (int) $dependent_field_id, $dependent['expression'], $dependent['compiled'] );
+		}
+		FormulaMaterializer::recompute_collection( $collection_id );
+
+		return new WP_REST_Response(
+			array(
+				'id'                  => $field_id,
+				'expression'          => $expression,
+				'formula_result_type' => $compiled['result_type'],
+			),
+			200
+		);
 	}
 
 	public function duplicate( WP_REST_Request $request ): WP_REST_Response|WP_Error {
@@ -382,6 +473,11 @@ final class FieldsController {
 				'number_format',
 				'date_format',
 				'expression',
+				'formula_result_type',
+				'formula_ast',
+				'formula_dep_field_ids',
+				'formula_resolved_refs',
+				'formula_is_volatile',
 				'related_collection_id',
 				'relation_multiple',
 				'rollup_relation_field_id',
@@ -401,7 +497,11 @@ final class FieldsController {
 			}
 		}
 
-		return $this->insert_and_attach( $collection_id, $copy_title, $meta, (string) $field_id );
+		$response = $this->insert_and_attach( $collection_id, $copy_title, $meta, (string) $field_id );
+		if ( ! is_wp_error( $response ) && 'formula' === $source_type ) {
+			FormulaMaterializer::recompute_collection( $collection_id );
+		}
+		return $response;
 	}
 
 	public function update_options( WP_REST_Request $request ): WP_REST_Response|WP_Error {
@@ -581,7 +681,7 @@ final class FieldsController {
 			if ( $trait_term_id < 1 ) {
 				return new WP_Error(
 					'cortext_field_collection_missing',
-					__( 'Field collection could not be determined.', 'cortext' ),
+					__( 'We couldn\'t find this field\'s collection.', 'cortext' ),
 					array( 'status' => 400 )
 				);
 			}
@@ -627,23 +727,22 @@ final class FieldsController {
 	}
 
 	/**
-	 * Finds the entry post type for the collection that owns this field.
-	 *
-	 * A field belongs to one collection, so the first match is enough.
-	 *
-	 * @param int $field_id Field post ID to resolve.
-	 */
-	/**
 	 * Resolves the mirror term id for the trait that owns the given field,
 	 * or 0 when the field is not attached to any trait.
 	 *
 	 * @param int $field_id Field post id.
 	 */
 	private function trait_term_id_for_field( int $field_id ): int {
+		$collection_id = $this->collection_id_for_field( $field_id );
+		if ( $collection_id < 1 ) {
+			return 0;
+		}
+		return Relations::trait_term_id_for_collection( $collection_id );
+	}
+
+	private function collection_id_for_field( int $field_id ): int {
 		$field_id_str = (string) $field_id;
 
-		// Reverse lookup: which collection's `cortext_fields` meta references
-		// this field?
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- field→collection reverse lookup; bounded by a single matching row.
 		$collection_id = (int) $wpdb->get_var(
@@ -653,10 +752,29 @@ final class FieldsController {
 				$field_id_str
 			)
 		);
-		if ( $collection_id < 1 ) {
-			return 0;
+		if ( $collection_id > 0 ) {
+			return $collection_id;
 		}
-		return Relations::trait_term_id_for_collection( $collection_id );
+
+		if ( self::is_wordbless_active() ) {
+			foreach ( \WorDBless\PostMeta::init()->meta as $post_id => $rows ) {
+				foreach ( $rows as $row ) {
+					if (
+							isset( $row['meta_key'], $row['meta_value'] ) &&
+							'cortext_fields' === $row['meta_key'] &&
+							(string) maybe_unserialize( $row['meta_value'] ) === $field_id_str
+						) {
+						return (int) $post_id;
+					}
+				}
+			}
+		}
+
+		return 0;
+	}
+
+	private static function is_wordbless_active(): bool {
+		return class_exists( '\WorDBless\PostMeta' );
 	}
 
 	/**
@@ -946,6 +1064,235 @@ final class FieldsController {
 		}
 
 		return $this->insert_and_attach( $collection_id, $title, $meta, $insert_after_id );
+	}
+
+	private function create_formula(
+		WP_REST_Request $request,
+		int $collection_id,
+		string $title,
+		?string $insert_after_id = null
+	): WP_REST_Response|WP_Error {
+		$expression = $this->sanitize_formula_expression( $request->get_param( 'expression' ) );
+		if ( '' === trim( $expression ) ) {
+			return $this->formula_expression_required_error();
+		}
+
+		$field_id = $this->insert_and_attach_id(
+			$collection_id,
+			$title,
+			array( 'type' => 'formula' ),
+			$insert_after_id
+		);
+		if ( is_wp_error( $field_id ) ) {
+			return $field_id;
+		}
+
+		$compiled = $this->compile_formula_or_error( $expression, $collection_id, (int) $field_id );
+		if ( is_wp_error( $compiled ) ) {
+			$this->detach_field( $collection_id, (int) $field_id );
+			wp_delete_post( (int) $field_id, true );
+			return $compiled;
+		}
+
+		$this->persist_formula( (int) $field_id, $expression, $compiled );
+		FormulaMaterializer::recompute_collection( $collection_id );
+
+		return $this->field_response( (int) $field_id, $title, 'formula' );
+	}
+
+	private function sanitize_formula_expression( mixed $expression ): string {
+		return sanitize_textarea_field( (string) $expression );
+	}
+
+	private function formula_expression_required_error(): WP_Error {
+		return new WP_Error(
+			'cortext_formula_expression_required',
+			__( 'Enter a formula.', 'cortext' ),
+			array( 'status' => 400 )
+		);
+	}
+
+	/**
+	 * Compiles a formula expression and converts parser errors to REST errors.
+	 *
+	 * @param string $expression    Formula expression text.
+	 * @param int    $collection_id Collection post ID.
+	 * @param int    $field_id      Formula field post ID.
+	 * @param array  $previous_refs Previously resolved prop refs keyed by name.
+	 * @param array  $formula_overrides Compiled formula metadata not yet persisted.
+	 * @return array{ast:array<string,mixed>,deps:int[],result_type:string,volatile:bool,refs:array<string,array<string,mixed>>}|WP_Error
+	 */
+	private function compile_formula_or_error( string $expression, int $collection_id, int $field_id, array $previous_refs = array(), array $formula_overrides = array() ): array|WP_Error {
+		try {
+			return ( new FormulaCompiler() )->compile( $expression, $collection_id, $field_id, $previous_refs, $formula_overrides );
+		} catch ( FormulaError $error ) {
+			return new WP_Error(
+				$error->formula_code(),
+				$error->getMessage(),
+				array( 'status' => 400 )
+			);
+		}
+	}
+
+	/**
+	 * Recompiles every formula that depends on a changed formula, using the
+	 * pending compiled metadata in memory so we can reject the edit before
+	 * persisting stale downstream formulas.
+	 *
+	 * @param int   $collection_id Collection post ID.
+	 * @param int   $root_field_id Formula field post ID being edited.
+	 * @param array $root_compiled Pending compiled metadata for the edited formula.
+	 * @return array<int,array{expression:string,compiled:array<string,mixed>}>|WP_Error
+	 */
+	private function compile_dependent_formulas_or_error( int $collection_id, int $root_field_id, array $root_compiled ): array|WP_Error {
+		$compiled_by_id = array( $root_field_id => $root_compiled );
+		$compiled_plan  = array();
+
+		foreach ( $this->dependent_formula_ids_in_order( $collection_id, $root_field_id ) as $dependent_field_id ) {
+			$expression = (string) get_post_meta( $dependent_field_id, 'expression', true );
+			$compiled   = $this->compile_formula_or_error(
+				$expression,
+				$collection_id,
+				$dependent_field_id,
+				$this->stored_formula_refs( $dependent_field_id ),
+				$compiled_by_id
+			);
+			if ( is_wp_error( $compiled ) ) {
+				$title = get_the_title( $dependent_field_id );
+				if ( '' === $title ) {
+					$title = '#' . $dependent_field_id;
+				}
+				return new WP_Error(
+					'cortext_formula_dependent_invalid',
+					sprintf(
+						/* translators: 1: dependent formula field title, 2: formula error message. */
+						__( 'Changing this would break "%1$s": %2$s', 'cortext' ),
+						$title,
+						$compiled->get_error_message()
+					),
+					array(
+						'status'             => 400,
+						'dependent_field_id' => $dependent_field_id,
+						'dependent_code'     => $compiled->get_error_code(),
+					)
+				);
+			}
+
+			$compiled_by_id[ $dependent_field_id ] = $compiled;
+			$compiled_plan[ $dependent_field_id ]  = array(
+				'expression' => $expression,
+				'compiled'   => $compiled,
+			);
+		}
+
+		return $compiled_plan;
+	}
+
+	/**
+	 * Finds formulas that transitively depend on a formula, dependency-first.
+	 *
+	 * @param int $collection_id Collection post ID.
+	 * @param int $root_field_id Formula field post ID that changed.
+	 * @return int[]
+	 */
+	private function dependent_formula_ids_in_order( int $collection_id, int $root_field_id ): array {
+		$formula_ids = array();
+		$deps_by_id  = array();
+		foreach ( Document::collection_field_ids( $collection_id ) as $raw_field_id ) {
+			$field_id = (int) $raw_field_id;
+			if ( $field_id < 1 || 'formula' !== (string) get_post_meta( $field_id, 'type', true ) ) {
+				continue;
+			}
+			$formula_ids[]           = $field_id;
+			$deps_by_id[ $field_id ] = $this->stored_formula_deps( $field_id );
+		}
+
+		$dependent_set = array();
+		$changed       = true;
+		while ( $changed ) {
+			$changed = false;
+			foreach ( $deps_by_id as $field_id => $deps ) {
+				if ( $field_id === $root_field_id || isset( $dependent_set[ $field_id ] ) ) {
+					continue;
+				}
+				foreach ( $deps as $dep_id ) {
+					if ( $dep_id === $root_field_id || isset( $dependent_set[ $dep_id ] ) ) {
+						$dependent_set[ $field_id ] = true;
+						$changed                    = true;
+						break;
+					}
+				}
+			}
+		}
+
+		$ordered = array();
+		$visited = array();
+		$visit   = function ( int $field_id ) use ( &$visit, &$deps_by_id, &$dependent_set, &$visited, &$ordered ): void {
+			if ( isset( $visited[ $field_id ] ) ) {
+				return;
+			}
+			$visited[ $field_id ] = true;
+			foreach ( $deps_by_id[ $field_id ] ?? array() as $dep_id ) {
+				if ( isset( $dependent_set[ $dep_id ] ) ) {
+					$visit( (int) $dep_id );
+				}
+			}
+			$ordered[] = $field_id;
+		};
+
+		foreach ( $formula_ids as $field_id ) {
+			if ( isset( $dependent_set[ $field_id ] ) ) {
+				$visit( $field_id );
+			}
+		}
+
+		return $ordered;
+	}
+
+	/**
+	 * Stores the compiled formula metadata on a field post.
+	 *
+	 * @param int    $field_id   Formula field post ID.
+	 * @param string $expression Formula expression text.
+	 * @param array  $compiled   Compiled formula.
+	 */
+	private function persist_formula( int $field_id, string $expression, array $compiled ): void {
+		update_post_meta( $field_id, 'expression', $expression );
+		update_post_meta( $field_id, 'formula_result_type', $compiled['result_type'] );
+		update_post_meta( $field_id, 'formula_ast', wp_json_encode( $compiled['ast'] ) );
+		update_post_meta( $field_id, 'formula_dep_field_ids', wp_json_encode( $compiled['deps'] ) );
+		update_post_meta( $field_id, 'formula_resolved_refs', wp_json_encode( $compiled['refs'] ) );
+		update_post_meta( $field_id, 'formula_is_volatile', ! empty( $compiled['volatile'] ) ? '1' : '0' );
+	}
+
+	/**
+	 * Reads previously resolved formula references for rename resilience.
+	 *
+	 * @param int $field_id Formula field post ID.
+	 * @return array<string,array<string,mixed>>
+	 */
+	private function stored_formula_refs( int $field_id ): array {
+		$raw = (string) get_post_meta( $field_id, 'formula_resolved_refs', true );
+		if ( '' === $raw ) {
+			return array();
+		}
+		$decoded = json_decode( $raw, true );
+		return is_array( $decoded ) ? $decoded : array();
+	}
+
+	/**
+	 * Reads stored formula dependency field IDs.
+	 *
+	 * @param int $field_id Formula field post ID.
+	 * @return int[]
+	 */
+	private function stored_formula_deps( int $field_id ): array {
+		$raw = (string) get_post_meta( $field_id, 'formula_dep_field_ids', true );
+		if ( '' === $raw ) {
+			return array();
+		}
+		$decoded = json_decode( $raw, true );
+		return is_array( $decoded ) ? array_values( array_filter( array_map( 'intval', $decoded ) ) ) : array();
 	}
 
 	/**

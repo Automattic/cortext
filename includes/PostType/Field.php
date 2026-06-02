@@ -338,6 +338,33 @@ final class Field {
 				),
 			)
 		);
+
+		register_rest_field(
+			self::POST_TYPE,
+			'cortext_formula',
+			array(
+				'get_callback' => array( $this, 'get_rest_formula' ),
+				'schema'       => array(
+					'type'       => array( 'object', 'null' ),
+					'context'    => array( 'view', 'edit' ),
+					'readonly'   => true,
+					'properties' => array(
+						'expression'  => array(
+							'type'     => 'string',
+							'readonly' => true,
+						),
+						'result_type' => array(
+							'type'     => 'string',
+							'readonly' => true,
+						),
+						'is_volatile' => array(
+							'type'     => 'boolean',
+							'readonly' => true,
+						),
+					),
+				),
+			)
+		);
 	}
 
 	/**
@@ -350,7 +377,29 @@ final class Field {
 		$field_id = isset( $field_record['id'] ) ? (int) $field_record['id'] : 0;
 		$type     = $field_id > 0 ? (string) get_post_meta( $field_id, 'type', true ) : '';
 
-		return FieldTypeRegistry::capabilities_for( $type );
+		return FieldTypeRegistry::capabilities_for_field( $field_id, $type );
+	}
+
+	/**
+	 * Returns formula metadata for one field REST record.
+	 *
+	 * Formula edits go through the dedicated formula endpoint so the
+	 * compiled AST, dependencies, result type, and volatility stay in sync.
+	 *
+	 * @param array<string,mixed> $field_record REST post response data.
+	 * @return array{expression:string,result_type:string,is_volatile:bool}|null
+	 */
+	public function get_rest_formula( array $field_record ): ?array {
+		$field_id = isset( $field_record['id'] ) ? (int) $field_record['id'] : 0;
+		if ( $field_id < 1 || 'formula' !== (string) get_post_meta( $field_id, 'type', true ) ) {
+			return null;
+		}
+
+		return array(
+			'expression'  => (string) get_post_meta( $field_id, 'expression', true ),
+			'result_type' => (string) get_post_meta( $field_id, 'formula_result_type', true ),
+			'is_volatile' => '1' === (string) get_post_meta( $field_id, 'formula_is_volatile', true ),
+		);
 	}
 
 	private function register_meta(): void {
@@ -359,7 +408,6 @@ final class Field {
 			'options',
 			'number_format',
 			'date_format',
-			'expression',
 			'rollup_aggregator',
 			'rollup_target_type',
 			'rollup_target_options',
@@ -393,6 +441,17 @@ final class Field {
 
 		register_post_meta(
 			self::POST_TYPE,
+			'expression',
+			array(
+				'type'              => 'string',
+				'single'            => true,
+				'show_in_rest'      => false,
+				'sanitize_callback' => 'sanitize_textarea_field',
+			)
+		);
+
+		register_post_meta(
+			self::POST_TYPE,
 			FieldDefaults::META_KEY,
 			array(
 				'type'              => 'string',
@@ -401,6 +460,30 @@ final class Field {
 				'sanitize_callback' => array( FieldDefaults::class, 'sanitize_meta_value' ),
 			)
 		);
+
+		register_post_meta(
+			self::POST_TYPE,
+			'formula_result_type',
+			array(
+				'type'              => 'string',
+				'single'            => true,
+				'show_in_rest'      => false,
+				'sanitize_callback' => 'sanitize_text_field',
+			)
+		);
+
+		foreach ( array( 'formula_ast', 'formula_dep_field_ids', 'formula_resolved_refs' ) as $key ) {
+			register_post_meta(
+				self::POST_TYPE,
+				$key,
+				array(
+					'type'              => 'string',
+					'single'            => true,
+					'show_in_rest'      => false,
+					'sanitize_callback' => static fn( mixed $value ): string => is_string( $value ) ? $value : '',
+				)
+			);
+		}
 
 		register_post_meta(
 			self::POST_TYPE,
@@ -448,6 +531,16 @@ final class Field {
 				'type'         => 'boolean',
 				'single'       => true,
 				'show_in_rest' => true,
+			)
+		);
+
+		register_post_meta(
+			self::POST_TYPE,
+			'formula_is_volatile',
+			array(
+				'type'         => 'boolean',
+				'single'       => true,
+				'show_in_rest' => false,
 			)
 		);
 	}

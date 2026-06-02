@@ -239,6 +239,14 @@ function publicValue( value, type ) {
 	}
 }
 
+const FORMULA_RESULT_TYPES = new Set( [
+	'text',
+	'number',
+	'date',
+	'datetime',
+	'checkbox',
+] );
+
 /**
  * Builds a DataViews-compatible field spec from a REST field definition.
  *
@@ -252,21 +260,31 @@ function publicValue( value, type ) {
 function mapPublicField( fieldDef ) {
 	const id = `field-${ fieldDef.id }`;
 	const { label, type } = fieldDef;
+	let displayType = type;
+	if ( type === 'formula' ) {
+		displayType = FORMULA_RESULT_TYPES.has( fieldDef.formulaResultType )
+			? fieldDef.formulaResultType
+			: 'text';
+	}
 	const elements = elementsFromOptions( fieldDef.options );
 
 	const base = {
 		id,
 		label,
 		enableSorting: false,
-		enableGlobalSearch: isPublicSearchable( type ),
-		filterBy: publicFilterByForType( type ),
+		enableGlobalSearch: isPublicSearchable( displayType ),
+		filterBy: publicFilterByForType( displayType ),
 		getValue: ( { item } ) =>
-			publicValue( item?.meta?.[ id ] ?? null, type ),
+			publicValue( item?.meta?.[ id ] ?? null, displayType ),
 		render: ( { item } ) =>
-			formatPublicDisplay( item?.meta?.[ id ] ?? null, type, elements ),
+			formatPublicDisplay(
+				item?.meta?.[ id ] ?? null,
+				displayType,
+				elements
+			),
 	};
 
-	switch ( type ) {
+	switch ( displayType ) {
 		case 'number':
 			return {
 				...base,

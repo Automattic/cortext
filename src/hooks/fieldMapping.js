@@ -98,6 +98,13 @@ const ROLLUP_NUMERIC_AGGREGATORS = new Set( [
 	'range',
 ] );
 const ROLLUP_SCALAR_DATE_AGGREGATORS = new Set( [ 'earliest', 'latest' ] );
+const FORMULA_RESULT_TYPES = new Set( [
+	'text',
+	'number',
+	'date',
+	'datetime',
+	'checkbox',
+] );
 
 function parseBooleanMeta( raw, fallback = false ) {
 	if ( raw === undefined || raw === null || raw === '' ) {
@@ -130,9 +137,22 @@ function rollupDisplayType( meta ) {
 	return meta?.rollup_target_type === 'datetime' ? 'datetime' : 'date';
 }
 
-function buildRender( id, type, label, elements, format, relation ) {
+function buildRender(
+	id,
+	type,
+	label,
+	elements,
+	format,
+	relation,
+	formulaResultType
+) {
 	const readOnly = ! EDITABLE_TYPES.has( type );
-	const displayType = type === 'rollup' ? rollupDisplayType( format ) : type;
+	let displayType = type;
+	if ( type === 'formula' ) {
+		displayType = formulaResultType ?? 'text';
+	} else if ( type === 'rollup' ) {
+		displayType = rollupDisplayType( format );
+	}
 	return ( { item } ) => (
 		<EditableCell
 			item={ item }
@@ -461,6 +481,16 @@ export function mapField( field ) {
 	// (auto-escaped by React), so the entity layer is unwanted noise.
 	const label = field.title?.raw || field.title?.rendered || `#${ field.id }`;
 	const type = field.meta?.type ?? 'text';
+	const formulaMeta = field.cortext_formula ?? {};
+	let formulaResultType = null;
+	if ( type === 'formula' ) {
+		const rawFormulaResultType =
+			formulaMeta.result_type ?? field.meta?.formula_result_type;
+		formulaResultType = FORMULA_RESULT_TYPES.has( rawFormulaResultType )
+			? rawFormulaResultType
+			: 'text';
+	}
+	const queryType = type === 'formula' ? formulaResultType : type;
 	const rollupTargetType = field.meta?.rollup_target_type;
 	const elements = elementsFromOptions(
 		type === 'rollup'
@@ -504,15 +534,19 @@ export function mapField( field ) {
 		description,
 		recordId: field.id,
 		cortextType: type,
+		cortextQueryType: queryType,
 		sortable: capabilities.sortable === true,
 		filterable: capabilities.filterable === true,
 		operators,
-		filterBy: dataViewsFilterByForType( type, operators ),
+		filterBy: dataViewsFilterByForType( queryType, operators ),
 		relatedCollectionId: relation?.targetCollectionId,
 		relationMultiple: relation?.multiple,
 		rollupAggregator: field.meta?.rollup_aggregator,
 		rollupRelationFieldId: Number( field.meta?.rollup_relation_field_id ),
 		rollupTargetFieldId: Number( field.meta?.rollup_target_field_id ),
+		formulaExpression:
+			formulaMeta.expression ?? field.meta?.expression ?? '',
+		formulaResultType,
 		// Header content is just an aria-hidden marker.
 		// `ColumnHeaderActions` queries the DOM for it and portals our
 		// combined-dropdown trigger into the owning <th>; DataViews'
@@ -529,9 +563,17 @@ export function mapField( field ) {
 			</HeaderLabel>
 		),
 		getValue: ( { item } ) => fieldValue( item, id ),
-		render: buildRender( id, type, label, elements, format, relation ),
+		render: buildRender(
+			id,
+			type,
+			label,
+			elements,
+			format,
+			relation,
+			formulaResultType
+		),
 		editable: EDITABLE_TYPES.has( type ),
-		enableGlobalSearch: SEARCHABLE_TYPES.has( type ),
+		enableGlobalSearch: SEARCHABLE_TYPES.has( queryType ),
 		cortextFieldType: type,
 		cortextElements: elements,
 		cortextFormat: format,
@@ -578,6 +620,35 @@ export function mapField( field ) {
 				enableSorting: false,
 				filterBy: false,
 			};
+		case 'formula':
+			if ( formulaResultType === 'number' ) {
+				return {
+					...base,
+					type: 'integer',
+					editable: false,
+					isValid: { custom: () => null },
+					sort: sortNumberValues( base.getValue ),
+				};
+			}
+			if ( formulaResultType === 'checkbox' ) {
+				return {
+					...base,
+					type: 'boolean',
+					editable: false,
+					getValue: ( { item } ) => checkboxFieldValue( item, id ),
+				};
+			}
+			if (
+				formulaResultType === 'date' ||
+				formulaResultType === 'datetime'
+			) {
+				return {
+					...base,
+					type: formulaResultType,
+					editable: false,
+				};
+			}
+			return { ...base, type: 'text', editable: false };
 		case 'rollup': {
 			const aggregator = field.meta?.rollup_aggregator ?? 'count';
 			const display = rollupDisplayType( field.meta );

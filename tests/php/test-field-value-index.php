@@ -44,6 +44,43 @@ final class Test_Field_Value_Index extends BaseTestCase {
 		$this->assertSame( 220, $text[0]['value_text_length'] );
 	}
 
+	public function test_formula_values_are_indexed_by_result_type(): void {
+		$index = new FieldValueIndex();
+
+		$field_id = (int) wp_insert_post(
+			array(
+				'post_type'   => 'post',
+				'post_status' => 'private',
+				'post_title'  => 'Total',
+				'meta_input'  => array(
+					'type'                => 'formula',
+					'formula_result_type' => 'number',
+				),
+			)
+		);
+		$row_id   = (int) wp_insert_post(
+			array(
+				'post_type'   => 'post',
+				'post_status' => 'private',
+				'post_title'  => 'Invoice A',
+				'meta_input'  => array(
+					Relations::meta_key( $field_id ) => '42.5',
+				),
+			)
+		);
+
+		$method = new \ReflectionMethod( $index, 'index_rows_for_row_field' );
+		$method->setAccessible( true );
+		$rows = $method->invoke( $index, $row_id, $field_id, 123 );
+
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 123, $rows[0]['collection_id'] );
+		$this->assertSame( $field_id, $rows[0]['field_id'] );
+		$this->assertSame( '42.5', $rows[0]['value_text'] );
+		$this->assertSame( 42.5, $rows[0]['value_number'] );
+		$this->assertNull( $rows[0]['value_date'] );
+	}
+
 	public function test_normalizes_multivalue_rows_with_stable_sequence(): void {
 		$index = new FieldValueIndex();
 

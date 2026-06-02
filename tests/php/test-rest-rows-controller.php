@@ -19,10 +19,14 @@ declare( strict_types=1 );
 
 namespace Cortext\Tests;
 
+use Cortext\Formula\Compiler as FormulaCompiler;
+use Cortext\Formula\Functions as FormulaFunctions;
+use Cortext\Formula\Materializer as FormulaMaterializer;
 use Cortext\PostType\Document;
 use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Field;
 use Cortext\Rest\RowsController;
+use Cortext\Rest\RowsFilterQuery;
 use Cortext\Taxonomy\TraitTaxonomy;
 use WorDBless\BaseTestCase;
 use WP_REST_Request;
@@ -226,6 +230,124 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertSame( 'number', $by_id[ $fixture['field_id'] ]['type'] );
 	}
 
+	public function test_query_rows_materializes_formula_values(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+		$fixture    = $this->create_collection_fixture( 'formulaval', 'number' );
+		$row_id     = $this->create_row_for_collection( $fixture['collection_id'], 'Invoice A' );
+		$formula_id = $this->create_formula_field( $fixture['collection_id'], 'Total', 'field("Score") * 2' );
+
+		update_post_meta( $row_id, "field-{$fixture['field_id']}", '10' );
+		update_post_meta( $row_id, "field-{$formula_id}", '-999' );
+
+		$response = $this->query_rows( array( 'trait' => $fixture['collection_id'] ) );
+		$data     = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 20.0, $data['rows'][0]['meta'][ "field-{$formula_id}" ] );
+		$this->assertSame( 20.0, (float) get_post_meta( $row_id, "field-{$formula_id}", true ) );
+	}
+
+	public function test_core_rest_row_updates_recompute_formula_values(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$fixture    = $this->create_collection_fixture( 'formularest', 'number' );
+		$row_id     = $this->create_row_for_collection( $fixture['collection_id'], 'Invoice A' );
+		$formula_id = $this->create_formula_field( $fixture['collection_id'], 'Total', 'field("Score") * 2' );
+
+		$document = new Document();
+		$document->register_field_meta();
+		add_filter( 'rest_pre_insert_' . Document::POST_TYPE, array( $document, 'prepare_meta_updates' ), 10, 2 );
+		add_action( 'rest_after_insert_' . Document::POST_TYPE, array( $document, 'apply_meta_updates' ), 20, 3 );
+
+		$request = new WP_REST_Request( 'PUT', "/wp/v2/crtxt_documents/{$row_id}" );
+		$request->set_param( 'id', $row_id );
+		$request->set_param(
+			'meta',
+			array(
+				"field-{$fixture['field_id']}" => '15',
+				"field-{$formula_id}"          => '999',
+			)
+		);
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 30.0, (float) get_post_meta( $row_id, "field-{$formula_id}", true ) );
+	}
+
+	public function test_rest_prepare_row_hydrates_formula_values(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$fixture    = $this->create_collection_fixture( 'formulahydrate', 'number' );
+		$row_id     = $this->create_row_for_collection( $fixture['collection_id'], 'Invoice A' );
+		$formula_id = $this->create_formula_field( $fixture['collection_id'], 'Total', 'field("Score") + 5' );
+
+		update_post_meta( $row_id, "field-{$fixture['field_id']}", '10' );
+
+		$request = new WP_REST_Request( 'GET', "/wp/v2/crtxt_documents/{$row_id}" );
+		$request->set_param( 'id', $row_id );
+		$request->set_param( 'context', 'edit' );
+		$response = rest_do_request( $request );
+		$data     = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 15.0, $data['cortext_hydrated_meta'][ "field-{$formula_id}" ] );
+	}
+
+	public function test_formula_result_type_controls_sort_and_filter_schema(): void {
+		$fixture    = $this->create_collection_fixture( 'formulaquery', 'number' );
+		$formula_id = $this->create_formula_field( $fixture['collection_id'], 'Total', 'field("Score") + 5' );
+		$key        = "field-{$formula_id}";
+
+		$query  = new RowsFilterQuery();
+		$schema = $query->field_schema_for( $fixture['collection_id'] );
+
+		$this->assertSame( 'number', $schema[ $key ]['type'] );
+		$this->assertTrue( $query->validate_sort( array( 'field' => $key, 'direction' => 'asc' ), $schema, $fixture['collection_id'] ) );
+		$this->assertIsArray(
+			$query->compile_filters(
+				array(
+					array(
+						'field'    => $key,
+						'operator' => 'greaterThan',
+						'value'    => 10,
+					),
+				),
+				$schema,
+				$fixture['collection_id']
+			)
+		);
+	}
+
+	public function test_volatile_formula_refresh_only_runs_when_query_needs_it(): void {
+		$fixture    = $this->create_collection_fixture( 'formulanow', 'number' );
+		$formula_id = $this->create_formula_field( $fixture['collection_id'], 'Age', 'dateBetween(now(), prop("Created"), "days")' );
+		$method     = new \ReflectionMethod( RowsController::class, 'query_needs_volatile_formula_materialization' );
+		$method->setAccessible( true );
+		$controller = new RowsController();
+
+		$plain_request = new WP_REST_Request( 'GET', '/cortext/v1/rows' );
+		$this->assertFalse( $method->invoke( $controller, $fixture['collection_id'], $plain_request ) );
+
+		$sort_request = new WP_REST_Request( 'GET', '/cortext/v1/rows' );
+		$sort_request->set_param( 'sort', array( 'field' => "field-{$formula_id}", 'direction' => 'asc' ) );
+		$this->assertTrue( $method->invoke( $controller, $fixture['collection_id'], $sort_request ) );
+	}
+
+	public function test_date_between_uses_calendar_months(): void {
+		$method = new \ReflectionMethod( FormulaFunctions::class, 'date_between' );
+		$method->setAccessible( true );
+
+		$this->assertSame(
+			2.0,
+			$method->invoke(
+				null,
+				array(
+					array( 'value' => '2024-03-01' ),
+					array( 'value' => '2024-01-01' ),
+					array( 'value' => 'months' ),
+				)
+			)
+		);
+	}
+
 	public function test_sanitize_include_param_dedupes_drops_zero_and_normalizes(): void {
 		$controller = new RowsController();
 		$method     = new \ReflectionMethod( $controller, 'sanitize_include_param' );
@@ -339,6 +461,33 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		}
 
 		return $row_id;
+	}
+
+	private function create_row_for_collection( int $collection_id, string $title ): int {
+		return $this->create_row_fixture( $collection_id, $title, 'publish' );
+	}
+
+	private function create_formula_field( int $collection_id, string $title, string $expression ): int {
+		$field_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => $title,
+				'meta_input'  => array( 'type' => 'formula' ),
+			)
+		);
+		add_post_meta( $collection_id, 'cortext_fields', (string) $field_id );
+
+		$compiled = ( new FormulaCompiler() )->compile( $expression, $collection_id, $field_id );
+		update_post_meta( $field_id, 'expression', $expression );
+		update_post_meta( $field_id, 'formula_result_type', $compiled['result_type'] );
+		update_post_meta( $field_id, 'formula_ast', wp_json_encode( $compiled['ast'] ) );
+		update_post_meta( $field_id, 'formula_dep_field_ids', wp_json_encode( $compiled['deps'] ) );
+		update_post_meta( $field_id, 'formula_resolved_refs', wp_json_encode( $compiled['refs'] ) );
+		update_post_meta( $field_id, 'formula_is_volatile', ! empty( $compiled['volatile'] ) ? '1' : '0' );
+		FormulaMaterializer::recompute_collection( $collection_id );
+
+		return $field_id;
 	}
 
 	private function create_user( string $role ): int {
