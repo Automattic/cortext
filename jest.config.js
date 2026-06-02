@@ -8,9 +8,11 @@ module.exports = {
 		'<rootDir>/tests/js/setup.js',
 	],
 	testMatch: [ '<rootDir>/tests/js/**/*.test.js' ],
-	// parsel-js and uuid@14 are ESM-only. Jest skips node_modules by default,
-	// so let Babel transpile them before Node sees their export syntax.
+	// `@wordpress/core-data@7.45` pulls in `parsel-js` (ESM-only) via its
+	// awareness module. Default Jest doesn't transform node_modules, so the
+	// `export` keyword blows up at parse time. Allowlist parsel-js so Babel
+	// transpiles it before Node parses it.
 	transformIgnorePatterns: [
-		'node_modules/(?!(\\.pnpm/)?(parsel-js|@parsel-js|uuid)(@|/))',
+		'node_modules/(?!(\\.pnpm/)?(parsel-js|@parsel-js)(@|/))',
 	],
 };
