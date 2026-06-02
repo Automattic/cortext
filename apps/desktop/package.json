@@ -13,6 +13,7 @@
 		"runtime:caddy": "node scripts/install-runtime.mjs caddy",
 		"bench:runtime": "node scripts/bench-runtime.mjs",
 		"test": "npm run test:e2e",
+		"test:unit": "node --test scripts/*.test.mjs",
 		"test:e2e": "playwright test",
 		"dist": "electron-builder"
 	},
@@ -31,6 +32,7 @@
 			"main.js",
 			"loading.html",
 			"error.html",
+			"assets/**/*",
 			"lib/**/*"
 		],
 		"extraResources": [
@@ -38,9 +40,14 @@
 			{
 				"from": "runtime/bin/php",
 				"to": "runtime/bin/php"
+			},
+			{
+				"from": "runtime/mu-plugins/cortext-update-lock.php",
+				"to": "runtime/mu-plugins/cortext-update-lock.php"
 			}
 		],
 		"mac": {
+			"icon": "assets/icon.icns",
 			"target": [
 				{
 					"target": "dmg",

@@ -13,6 +13,7 @@ const { scheduleUpdateCheck } = require( './lib/update-check' );
 // dev and under `process.resourcesPath` once packaged into the .app.
 const RESOURCES_DIR = app.isPackaged ? process.resourcesPath : __dirname;
 const SNAPSHOT_ZIP = path.join( RESOURCES_DIR, 'snapshot.zip' );
+const APP_ICON = path.join( __dirname, 'assets/icon.png' );
 
 let runtimeHandle = null;
 let quitting = false;
@@ -52,10 +53,16 @@ async function createWindow() {
 		width: 1280,
 		height: 800,
 		title: 'Cortext',
+		icon: APP_ICON,
 		backgroundColor: '#1d1d1d',
 		webPreferences: {
 			contextIsolation: true,
 		},
+	} );
+
+	win.on( 'page-title-updated', ( event ) => {
+		event.preventDefault();
+		win.setTitle( 'Cortext' );
 	} );
 
 	await win.loadFile( path.resolve( __dirname, 'loading.html' ) );
@@ -77,6 +84,14 @@ async function createWindow() {
 
 app.whenReady().then( () => {
 	try {
+		if (
+			process.platform === 'darwin' &&
+			app.dock &&
+			fs.existsSync( APP_ICON )
+		) {
+			app.dock.setIcon( APP_ICON );
+		}
+
 		const wordpressDir = ensureSiteFromSnapshot();
 		runtimeHandle = startRuntime( {
 			appDir: RESOURCES_DIR,
