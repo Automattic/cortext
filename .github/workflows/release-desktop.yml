@@ -94,6 +94,8 @@ jobs:
 
             - name: Build bundled arm64 PHP
               working-directory: apps/desktop
+              env:
+                  GITHUB_TOKEN: ${{ github.token }}
               run: npm run runtime:php
 
             - name: Cache snapshot downloads (WP core + wp-cli + SQLite plugin)
