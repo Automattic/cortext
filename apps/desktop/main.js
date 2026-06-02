@@ -58,6 +58,11 @@ async function createWindow() {
 		},
 	} );
 
+	win.on( 'page-title-updated', ( event ) => {
+		event.preventDefault();
+		win.setTitle( 'Cortext' );
+	} );
+
 	await win.loadFile( path.resolve( __dirname, 'loading.html' ) );
 
 	try {

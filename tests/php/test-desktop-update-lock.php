@@ -32,6 +32,7 @@ final class Test_Desktop_Update_Lock extends BaseTestCase {
 		$this->assertFalse( defined( 'DISALLOW_FILE_EDIT' ) );
 		$this->assertFalse( has_filter( 'automatic_updater_disabled' ) );
 		$this->assertFalse( has_filter( 'file_mod_allowed' ) );
+		$this->assertFalse( has_filter( 'admin_title' ) );
 	}
 
 	/**
@@ -58,6 +59,10 @@ final class Test_Desktop_Update_Lock extends BaseTestCase {
 		$this->assertFalse( apply_filters( 'auto_update_theme', true ) );
 		$this->assertFalse( apply_filters( 'auto_update_translation', true ) );
 		$this->assertFalse( apply_filters( 'file_mod_allowed', true, 'update_core' ) );
+		$this->assertSame(
+			'Cortext',
+			apply_filters( 'admin_title', 'Cortext - Cortext - WordPress', 'Cortext' )
+		);
 	}
 
 	/**

@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: Cortext desktop update lock
- * Description: Keeps the desktop WordPress runtime immutable between app releases.
+ * Description: Keeps the desktop runtime unchanged between app releases.
  *
  * @package Cortext
  */
@@ -34,6 +34,7 @@ add_filter( 'auto_update_plugin', '__return_false', PHP_INT_MAX );
 add_filter( 'auto_update_theme', '__return_false', PHP_INT_MAX );
 add_filter( 'auto_update_translation', '__return_false', PHP_INT_MAX );
 add_filter( 'file_mod_allowed', '__return_false', PHP_INT_MAX );
+add_filter( 'admin_title', static fn (): string => 'Cortext', PHP_INT_MAX );
 
 $empty_core_update_transient = static function (): stdClass {
 	$transient                  = new stdClass();
