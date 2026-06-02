@@ -24,6 +24,7 @@ overrides:
   '@wordpress/dataviews': 14.3.0
   '@wordpress/date': 5.46.0
   '@wordpress/element': 6.46.0
+  '@wordpress/e2e-test-utils-playwright': 1.46.0
   '@wordpress/eslint-plugin': 25.2.0
   '@wordpress/fields': 0.38.0
   '@wordpress/global-styles-engine': 1.13.0
@@ -3075,13 +3076,6 @@ packages:
 
   '@wordpress/e2e-test-utils-playwright@1.46.0':
     resolution: {integrity: sha512-Bls5BGRNda0Oo4biTZ/KIwO8iHBeovvfWNfrPXReIsrW1td1UqXw2Z9l0/LaP3euJZFNom2QExHCOba+8eN5lQ==}
-    engines: {node: '>=18.12.0', npm: '>=8.19.2'}
-    peerDependencies:
-      '@playwright/test': '>=1'
-      '@types/node': ^20.17.10
-
-  '@wordpress/e2e-test-utils-playwright@1.47.0':
-    resolution: {integrity: sha512-ddDmuW+QaK9g2jsbZi/WWTEDIY3BaO17XLEIIw2vAXksiFTffFlaWh13f85Tl8Md68qZQvG89hEJ++y8DRmNKQ==}
     engines: {node: '>=18.12.0', npm: '>=8.19.2'}
     peerDependencies:
       '@playwright/test': '>=1'
@@ -12520,23 +12514,6 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@wordpress/e2e-test-utils-playwright@1.47.0(@playwright/test@1.60.0)(@types/node@20.19.39)':
-    dependencies:
-      '@playwright/test': 1.60.0
-      '@types/node': 20.19.39
-      change-case: 4.1.2
-      get-port: 5.1.1
-      lighthouse: 12.8.2
-      mime: 3.0.0
-      web-vitals: 4.2.4
-    transitivePeerDependencies:
-      - bare-abort-controller
-      - bare-buffer
-      - bufferutil
-      - react-native-b4a
-      - supports-color
-      - utf-8-validate
-
   '@wordpress/editor@14.46.0(@date-fns/tz@1.4.1)(@emotion/is-prop-valid@1.4.0)(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(stylelint@16.26.1(typescript@6.0.3))':
     dependencies:
       '@wordpress/a11y': 4.46.0
@@ -13135,7 +13112,7 @@ snapshots:
       '@wordpress/babel-preset-default': 8.47.0
       '@wordpress/browserslist-config': 6.47.0
       '@wordpress/dependency-extraction-webpack-plugin': 6.47.0(webpack@5.106.2)
-      '@wordpress/e2e-test-utils-playwright': 1.47.0(@playwright/test@1.60.0)(@types/node@20.19.39)
+      '@wordpress/e2e-test-utils-playwright': 1.46.0(@playwright/test@1.60.0)(@types/node@20.19.39)
       '@wordpress/eslint-plugin': 25.2.0(@babel/core@7.25.7)(@types/eslint@9.6.1)(@typescript-eslint/eslint-plugin@8.59.0(@typescript-eslint/parser@8.59.0(eslint@10.2.1)(typescript@6.0.3))(eslint@10.2.1)(typescript@6.0.3))(@typescript-eslint/parser@8.59.0(eslint@10.2.1)(typescript@6.0.3))(eslint@10.2.1)(jest@29.7.0(@types/node@20.19.39)(babel-plugin-macros@3.1.0))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(stylelint@16.26.1(typescript@6.0.3))(typescript@6.0.3)(wp-prettier@3.0.3)
       '@wordpress/jest-preset-default': 12.47.0(@babel/core@7.25.7)(jest@29.7.0(@types/node@20.19.39)(babel-plugin-macros@3.1.0))
       '@wordpress/npm-package-json-lint-config': 5.47.0(npm-package-json-lint@6.4.0(typescript@6.0.3))
