@@ -2,6 +2,16 @@
 
 Running log for desktop-specific runtime and packaging decisions. Keep the detailed benchmark numbers in PR comments or artifacts unless they become stable product guidance.
 
+## 2026-06-02 — Package the desktop app as an unsigned arm64 DMG
+
+**Decision.** `apps/desktop` packages to a macOS DMG with electron-builder. `npm --prefix apps/desktop run dist` runs the build against a `build` block in `package.json`: appId `com.automattic.cortext`, product name `Cortext`, a single arm64 `dmg` target, `identity: null` so it is unsigned, and `snapshot.zip` plus `runtime/bin/php` listed as `extraResources`. The output lands in `apps/desktop/dist`. `main.js` reads the bundled snapshot and PHP from `process.resourcesPath` when `app.isPackaged`, and DevTools stay closed in the packaged build. The distribution snapshot is built with `CORTEXT_DESKTOP_DISTRIBUTION=1`, which ships only the autologin mu-plugin and drops the timing and runtime-probe ones; the autologin mu-plugin is now inert unless `CORTEXT_DESKTOP` is defined.
+
+**Release flow.** `release.yml` is a `workflow_dispatch` orchestrator that calls two reusable workflows: `release-plugin.yml` (plugin ZIP, milestone, notes) and `release-desktop.yml` (builds the arm64 PHP, builds the distribution snapshot, runs electron-builder, attaches the DMG). Both write to the same Release by tag, so the first run creates the draft and later runs add to it. Each can also run on its own from the Actions tab. The shipped app checks GitHub Releases on launch and links to the download when a newer version exists; installing updates in place is not done, since that needs a signed app and Squirrel.Mac.
+
+**Why unsigned and arm64 only.** This is an alpha for technical testers, so we skip the Apple Developer ID, signing, and notarization for now and live with the Open Anyway step on first launch. arm64 is the only target because static-php-cli does not cross-compile on macOS, so a second architecture means a second native runner.
+
+**Revisit when.** We have an Apple Developer ID and want a signed, notarized build (which is also what unblocks in-place updates), an Intel or universal build earns its second runner, or a Homebrew cask is worth adding.
+
 ## 2026-05-18 — Desktop startup avoids WordPress work in readiness checks
 
 **Decision.** The desktop runtime checks readiness with a static WordPress asset, not `wp-admin`. The generated desktop `wp-config.php` also sets `DISABLE_WP_CRON` to `true`.

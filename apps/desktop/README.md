@@ -14,9 +14,10 @@ The source checkout does not commit a PHP binary. When a bundled PHP is
 present locally, both `npm run snapshot` and the desktop runtime prefer it
 over `PATH`.
 
-For this PR, either use a local PHP install or build the local runtime with
-`npm --prefix apps/desktop run runtime:php`. The signed app should ship that
-runtime. This exploration stops short of wiring it into packaging.
+To run from source you can use a local PHP install, or build the bundled
+runtime with `npm --prefix apps/desktop run runtime:php`. The packaged DMG
+ships that bundled runtime, so build it before `npm run dist` (see Package it
+below).
 
 ## Run it
 
@@ -66,8 +67,9 @@ uses `router.php` for the rewrite behavior WordPress normally gets from
 nginx or Apache. Once PHP reports that it is accepting connections, the
 window loads `http://127.0.0.1:9402/wp-admin/admin.php?page=cortext`.
 
-DevTools open by default. Set `CORTEXT_DEVTOOLS=0` to turn them off.
-Closing the window kills the PHP process.
+In a dev run, DevTools open by default; set `CORTEXT_DEVTOOLS=0` to turn them
+off. The packaged build never opens them. Closing the window kills the PHP
+process.
 
 For runtime experiments, set `CORTEXT_RUNTIME` before launch:
 
@@ -95,6 +97,39 @@ CORTEXT_RUNTIME=franken npm --prefix apps/desktop start
 Install the local Caddy binary with `npm --prefix apps/desktop run
 runtime:caddy`. `php-fpm` itself still needs to come from `PATH` or
 `CORTEXT_PHP_FPM_BIN`.
+
+## Package it
+
+Build an unsigned macOS DMG:
+
+```sh
+npm --prefix apps/desktop run runtime:php
+CORTEXT_DESKTOP_DISTRIBUTION=1 npm --prefix apps/desktop run snapshot
+npm --prefix apps/desktop run dist
+```
+
+`dist` runs electron-builder against the `build` block in `package.json`. It
+writes an arm64 `.dmg` to `apps/desktop/dist/` and bundles `snapshot.zip` and
+`runtime/bin/php`, so both need to exist first. `CORTEXT_DESKTOP_DISTRIBUTION=1`
+tells the snapshot build to ship only the autologin mu-plugin and leave out the
+timing and runtime-probe ones, which exist for development and benchmarks.
+
+The DMG is not signed, so macOS blocks it on first launch. Open it once from
+System Settings > Privacy & Security > "Open Anyway", or run
+`xattr -dr com.apple.quarantine /Applications/Cortext.app`.
+
+On launch the installed app asks GitHub for the latest release and links to the
+download if you are behind. It does not install updates itself.
+
+For now the build is arm64 only and unsigned.
+
+## Releasing
+
+`.github/workflows/release.yml` is the entry point; run it from the Actions tab.
+It calls two reusable workflows: `release-plugin.yml` builds the plugin ZIP and
+owns the GitHub Release notes, and `release-desktop.yml` builds the arm64 PHP,
+builds a distribution snapshot, runs electron-builder, and uploads the DMG. Both
+write to the same Release by tag, and you can also run either one on its own.
 
 ## Performance
 

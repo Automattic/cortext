@@ -13,10 +13,42 @@
 		"runtime:caddy": "node scripts/install-runtime.mjs caddy",
 		"bench:runtime": "node scripts/bench-runtime.mjs",
 		"test": "npm run test:e2e",
-		"test:e2e": "playwright test"
+		"test:e2e": "playwright test",
+		"dist": "electron-builder"
 	},
 	"devDependencies": {
 		"@playwright/test": "^1.48.0",
-		"electron": "^33.2.0"
+		"electron": "^33.2.0",
+		"electron-builder": "^26.8.1"
+	},
+	"build": {
+		"appId": "com.automattic.cortext",
+		"productName": "Cortext",
+		"directories": {
+			"output": "dist"
+		},
+		"files": [
+			"main.js",
+			"loading.html",
+			"error.html",
+			"lib/**/*"
+		],
+		"extraResources": [
+			"snapshot.zip",
+			{
+				"from": "runtime/bin/php",
+				"to": "runtime/bin/php"
+			}
+		],
+		"mac": {
+			"target": [
+				{
+					"target": "dmg",
+					"arch": "arm64"
+				}
+			],
+			"identity": null,
+			"category": "public.app-category.productivity"
+		}
 	}
 }

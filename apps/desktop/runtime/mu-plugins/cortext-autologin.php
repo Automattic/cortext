@@ -14,6 +14,12 @@
  * @package Cortext
  */
 
+// Inert unless this is the desktop app. The desktop wp-config defines
+// CORTEXT_DESKTOP; anywhere else this file must do nothing.
+if ( ! defined( 'CORTEXT_DESKTOP' ) || ! CORTEXT_DESKTOP ) {
+	return;
+}
+
 if ( ! function_exists( 'auth_redirect' ) ) {
 	function auth_redirect() {
 		return;

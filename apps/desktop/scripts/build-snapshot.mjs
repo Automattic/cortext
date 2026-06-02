@@ -256,6 +256,20 @@ cpSync( resolve( RUNTIME_DIR, 'mu-plugins' ), muPluginsDest, {
 	recursive: true,
 } );
 
+// A distribution build ships only the autologin mu-plugin. The timing and
+// runtime-probe mu-plugins are development and benchmark instrumentation.
+const IS_DISTRIBUTION = [ '1', 'true', 'yes', 'on' ].includes(
+	String( process.env.CORTEXT_DESKTOP_DISTRIBUTION || '' ).toLowerCase()
+);
+if ( IS_DISTRIBUTION ) {
+	for ( const devMuPlugin of [
+		'cortext-timing.php',
+		'cortext-runtime-probe.php',
+	] ) {
+		rmSync( resolve( muPluginsDest, devMuPlugin ), { force: true } );
+	}
+}
+
 console.log( '[snapshot] Writing wp-config.php' );
 writeFileSync( resolve( SITE_DIR, 'wp-config.php' ), buildWpConfig() );
 
