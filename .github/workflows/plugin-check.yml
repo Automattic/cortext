@@ -41,3 +41,4 @@ jobs:
               with:
                   build-dir: ./dist/cortext
                   exclude-directories: vendor
+                  wp-version: trunk
