@@ -32,6 +32,7 @@
 			"main.js",
 			"loading.html",
 			"error.html",
+			"assets/**/*",
 			"lib/**/*"
 		],
 		"extraResources": [
@@ -46,6 +47,7 @@
 			}
 		],
 		"mac": {
+			"icon": "assets/icon.icns",
 			"target": [
 				{
 					"target": "dmg",
