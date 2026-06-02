@@ -598,6 +598,8 @@ export default function RowDetailView( {
 								meta: paneRowMeta,
 								cortext_hydrated_meta: paneRowHydratedMeta,
 							};
+							const shouldAcquirePostLock =
+								pane.state === 'preparing' || isApiActive;
 
 							return (
 								<div
@@ -659,6 +661,9 @@ export default function RowDetailView( {
 										}
 										row={ paneRow }
 										rowId={ pane.detail.rowId }
+										shouldAcquirePostLock={
+											shouldAcquirePostLock
+										}
 									/>
 								</div>
 							);

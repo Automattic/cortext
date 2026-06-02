@@ -6,7 +6,7 @@
 // renders synchronously; only this inner stack suspends on first row open.
 import { useDispatch } from '@wordpress/data';
 import { EditorProvider, store as editorStore } from '@wordpress/editor';
-import { useCallback, useEffect, useRef } from '@wordpress/element';
+import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
 import { SlotFillProvider } from '@wordpress/components';
 
 import useAutosave from '../hooks/useAutosave';
@@ -120,16 +120,35 @@ function DetailPaneContent( {
 	propertiesVisible,
 	row,
 	rowId,
+	shouldAcquirePostLock,
 } ) {
-	const handleReady = useCallback(
-		() => onPaneReady( detailKey ),
-		[ detailKey, onPaneReady ]
-	);
 	const postLock = usePostLock( {
 		postId: row?.id ?? rowId,
 		postType,
-		enabled: isActive && ! isHidden,
+		enabled: shouldAcquirePostLock,
 	} );
+	const [ isEditorReady, setIsEditorReady ] = useState( false );
+	const notifiedReadyKeyRef = useRef( null );
+	const handleReady = useCallback( () => setIsEditorReady( true ), [] );
+	const isPostLockSettled =
+		! postLock.isReadOnly || postLock.isFailed || postLock.isLocked;
+
+	useEffect( () => {
+		setIsEditorReady( false );
+		notifiedReadyKeyRef.current = null;
+	}, [ detailKey ] );
+
+	useEffect( () => {
+		if (
+			! isEditorReady ||
+			! isPostLockSettled ||
+			notifiedReadyKeyRef.current === detailKey
+		) {
+			return;
+		}
+		notifiedReadyKeyRef.current = detailKey;
+		onPaneReady( detailKey );
+	}, [ detailKey, isEditorReady, isPostLockSettled, onPaneReady ] );
 
 	const content = (
 		<DocumentPropertiesProvider
@@ -218,6 +237,7 @@ export default function RowEditor( {
 	propertiesVisible,
 	row,
 	rowId,
+	shouldAcquirePostLock = false,
 } ) {
 	return (
 		<EditorProvider
@@ -252,6 +272,7 @@ export default function RowEditor( {
 						propertiesVisible={ propertiesVisible }
 						row={ row }
 						rowId={ rowId }
+						shouldAcquirePostLock={ shouldAcquirePostLock }
 					/>
 				</EditorSurfaceProvider>
 			</SlotFillProvider>
