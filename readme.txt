@@ -69,7 +69,7 @@ Cortext is in beta and feedback helps. Open an issue at https://github.com/Autom
 
 == Screenshots ==
 
-1. The Cortext workspace showing a seeded Books collection with typed fields and relation data.
+1. The Cortext workspace showing a seeded Library page with a catalog table and detail panel.
 
 == Changelog ==
 
