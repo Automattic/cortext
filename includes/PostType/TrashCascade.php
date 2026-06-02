@@ -24,6 +24,8 @@ declare( strict_types=1 );
 
 namespace Cortext\PostType;
 
+defined( 'ABSPATH' ) || exit;
+
 use Cortext\Relations;
 use Cortext\Taxonomy\TraitTaxonomy;
 use WP_Post;

@@ -9,6 +9,8 @@ declare( strict_types=1 );
 
 namespace Cortext\CLI;
 
+defined( 'ABSPATH' ) || exit;
+
 use Cortext\Media\CortextMedia;
 use Cortext\PostType\Document;
 use Cortext\PostType\DocumentIdentity;

@@ -10,6 +10,8 @@ declare( strict_types=1 );
 
 namespace Cortext\CLI;
 
+defined( 'ABSPATH' ) || exit;
+
 use Cortext\Media\CortextMedia;
 use WP_CLI;
 use WP_CLI_Command;

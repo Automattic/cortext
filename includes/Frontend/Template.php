@@ -9,6 +9,8 @@ declare( strict_types=1 );
 
 namespace Cortext\Frontend;
 
+defined( 'ABSPATH' ) || exit;
+
 use Cortext\PostType\Document;
 
 final class Template {

@@ -18,6 +18,8 @@ declare( strict_types=1 );
 
 namespace Cortext\Theming;
 
+defined( 'ABSPATH' ) || exit;
+
 final class Preferences {
 
 	public function register(): void {

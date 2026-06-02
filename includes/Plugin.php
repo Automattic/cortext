@@ -9,6 +9,8 @@ declare( strict_types=1 );
 
 namespace Cortext;
 
+defined( 'ABSPATH' ) || exit;
+
 use Cortext\Admin\Screen;
 use Cortext\Block\DataView;
 use Cortext\Editor\DocumentCoverBlock;

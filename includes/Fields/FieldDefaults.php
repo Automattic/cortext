@@ -9,6 +9,8 @@ declare( strict_types=1 );
 
 namespace Cortext\Fields;
 
+defined( 'ABSPATH' ) || exit;
+
 use Cortext\FieldValues\FieldValueStore;
 use Cortext\Relations;
 

@@ -13,6 +13,8 @@ declare( strict_types=1 );
 
 namespace Cortext\Notion;
 
+defined( 'ABSPATH' ) || exit;
+
 use WP_Error;
 
 final class Client {

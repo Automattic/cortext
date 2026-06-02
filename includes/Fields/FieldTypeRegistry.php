@@ -16,6 +16,8 @@ declare( strict_types=1 );
 
 namespace Cortext\Fields;
 
+defined( 'ABSPATH' ) || exit;
+
 final class FieldTypeRegistry {
 
 	private const TEXT_OPERATORS = array(

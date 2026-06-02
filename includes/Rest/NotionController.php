@@ -30,6 +30,8 @@ declare( strict_types=1 );
 
 namespace Cortext\Rest;
 
+defined( 'ABSPATH' ) || exit;
+
 use Cortext\Notion\Client;
 use Cortext\Notion\Importer;
 use WP_Error;

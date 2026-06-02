@@ -17,6 +17,8 @@ declare( strict_types=1 );
 
 namespace Cortext\Rest;
 
+defined( 'ABSPATH' ) || exit;
+
 use Cortext\PostType\Document;
 use Cortext\Taxonomy\TraitTaxonomy;
 use WP_Error;

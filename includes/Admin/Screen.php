@@ -15,6 +15,8 @@ declare( strict_types=1 );
 
 namespace Cortext\Admin;
 
+defined( 'ABSPATH' ) || exit;
+
 use Cortext\Runtime\Features;
 use Cortext\Theming\Preferences;
 

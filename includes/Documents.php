@@ -19,6 +19,8 @@ declare( strict_types=1 );
 
 namespace Cortext;
 
+defined( 'ABSPATH' ) || exit;
+
 use Cortext\Documents\DocumentDuplicator;
 use Cortext\Relations;
 use Cortext\Fields\FieldTypeRegistry;

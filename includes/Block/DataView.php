@@ -9,6 +9,8 @@ declare( strict_types=1 );
 
 namespace Cortext\Block;
 
+defined( 'ABSPATH' ) || exit;
+
 use Cortext\Frontend\Assets;
 use Cortext\PostType\Document;
 
