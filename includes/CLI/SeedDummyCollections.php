@@ -1,6 +1,6 @@
 <?php
 /**
- * WP-CLI command to seed sample collections with dummy data.
+ * WP-CLI command to seed sample collections and pages.
  *
  * @package Cortext
  */
@@ -24,8 +24,8 @@ final class SeedDummyCollections extends WP_CLI_Command {
 
 	private const WORKSPACE_HOME_META_KEY = 'cortext_workspace_home';
 	private const FAVORITES_META_KEY      = 'cortext_favorites';
-	private const PAGE_CONTENT_VERSION    = 'rich-connected-seed-2026-05-28-universal-document-model';
-	private const ENTRY_CONTENT_VERSION   = 'rich-connected-row-seed-2026-05-07';
+	private const PAGE_CONTENT_VERSION    = 'public-beta-page-seed-2026-06-02-humanized';
+	private const ENTRY_CONTENT_VERSION   = 'public-beta-row-seed-2026-06-02-humanized';
 
 	private bool $seed_full_dataset = false;
 	private bool $fetch_real_images = false;
@@ -47,7 +47,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	 * : Skip the confirmation prompt when using --reset.
 	 *
 	 * [--full]
-	 * : Seed the full demo catalog. By default, only a compact set of
+	 * : Seed the full sample catalog. By default, only a compact set of
 	 * representative rows is seeded.
 	 *
 	 * [--prefetch-icons]
@@ -58,7 +58,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	 * Combine with `--full` to bundle the entire catalog.
 	 *
 	 * Bundled images ship in the repo, so keep them CC0 or public domain.
-	 * The live sources used for quick local demos are not always safe to
+	 * The live sources used for quick local samples are not always safe to
 	 * commit. The current bundle uses CC0 art from the Met; see
 	 * `seed-assets/CREDITS.md`. If you re-prefetch, replace anything new with
 	 * CC0 artwork before committing it.
@@ -133,9 +133,9 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			$this->work_collections()
 		);
 		if ( $this->seed_full_dataset ) {
-			WP_CLI::log( 'Seeding full demo dataset.' );
+			WP_CLI::log( 'Seeding full sample dataset.' );
 		} else {
-			WP_CLI::log( 'Seeding compact demo dataset. Pass --full to include every sample row.' );
+			WP_CLI::log( 'Seeding compact sample dataset. Pass --full to include every sample row.' );
 			$collections = $this->compact_collection_entries( $collections );
 		}
 		if ( $this->fetch_real_images ) {
@@ -177,9 +177,9 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	 */
 	private function nest_collections_under_pages( array $collection_ids ): void {
 		$map = array(
-			'projects'   => 'Scratch Notes',
-			'tasks'      => 'Scratch Notes',
-			'people'     => 'Scratch Notes',
+			'projects'   => 'Team Workspace',
+			'tasks'      => 'Team Workspace',
+			'people'     => 'Team Workspace',
 			'books'      => 'Library',
 			'authors'    => 'Library',
 			'publishers' => 'Library',
@@ -191,7 +191,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 
 		$page_ids = array();
 		foreach ( array_unique( array_values( $map ) ) as $page_title ) {
-			$page_ids[ $page_title ] = $this->find_top_level_page_id( $page_title );
+			$page_ids[ $page_title ] = $this->find_seeded_page_id( $page_title );
 		}
 
 		foreach ( $map as $slug => $page_title ) {
@@ -211,26 +211,6 @@ final class SeedDummyCollections extends WP_CLI_Command {
 				)
 			);
 		}
-	}
-
-	/**
-	 * Looks up a seeded top-level page by title. Returns 0 when no match,
-	 * which `nest_collections_under_pages` treats as "skip".
-	 *
-	 * @param string $title Page title.
-	 */
-	private function find_top_level_page_id( string $title ): int {
-		$ids = get_posts(
-			array(
-				'post_type'   => Document::POST_TYPE,
-				'post_status' => array( 'draft', 'private', 'publish' ),
-				'post_parent' => 0,
-				'title'       => $title,
-				'numberposts' => 1,
-				'fields'      => 'ids',
-			)
-		);
-		return $ids ? (int) $ids[0] : 0;
 	}
 
 	/**
@@ -361,22 +341,21 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			'people'     => array(
 				'Miguel Fonseca',
 				'Hector Prieto',
-				'Iris Okafor',
 				'Nora Singh',
 			),
 			'projects'   => array(
-				'Seed knowledge workspace',
+				'Prepare public beta workspace',
 				'Relation field polish',
 				'Row detail editing',
 			),
 			'tasks'      => array(
-				'Replace flat seed tables with connected data',
-				'Seed author rollups from related books',
-				'Create album track rollups',
-				'Rewrite workspace landing page content',
-				'Add richer research page blocks',
-				'Add people ownership relation',
-				'Audit row detail read-only relation fields',
+				'Connect catalog records',
+				'Review author rollups',
+				'Review album rollups',
+				'Refresh welcome page copy',
+				'Add guide pages to the tour',
+				'Review ownership relations',
+				'Check relation fields in row detail',
 			),
 		);
 	}
@@ -2663,7 +2642,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	}
 
 	/**
-	 * Returns the work/demo collection specs.
+	 * Returns the work collection specs.
 	 *
 	 * @return array<int,array<string,mixed>>
 	 */
@@ -2705,7 +2684,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 						'Email'    => 'miguel@example.com',
 						'Location' => 'Lisbon',
 						'Capacity' => 80,
-						'Notes'    => 'Product direction and seed workspace review.',
+						'Notes'    => 'Product direction and the first-run experience.',
 					),
 					array(
 						'title'    => 'Hector Prieto',
@@ -2714,7 +2693,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 						'Email'    => 'hector@example.com',
 						'Location' => 'Madrid',
 						'Capacity' => 70,
-						'Notes'    => 'Core shell, editor, and data-model plumbing.',
+						'Notes'    => 'Core shell, editor, and relation work.',
 					),
 					array(
 						'title'    => 'Ava Chen',
@@ -2741,16 +2720,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 						'Email'    => 'nora@example.com',
 						'Location' => 'London',
 						'Capacity' => 65,
-						'Notes'    => 'Docs, release notes, and demo narratives.',
-					),
-					array(
-						'title'    => 'Iris Okafor',
-						'Role'     => 'Engineer',
-						'Team'     => 'Platform',
-						'Email'    => 'iris@example.com',
-						'Location' => 'Berlin',
-						'Capacity' => 75,
-						'Notes'    => 'Relations, rollups, and REST behavior.',
+						'Notes'    => 'Guides, release notes, and first-run copy.',
 					),
 					array(
 						'title'    => 'Leo Martin',
@@ -2786,7 +2756,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 						'Email'    => 'priya@example.com',
 						'Location' => 'Mumbai',
 						'Capacity' => 70,
-						'Notes'    => 'Technical planning and QA triage.',
+						'Notes'    => 'Technical planning and release triage.',
 					),
 					array(
 						'title'    => 'Eli Novak',
@@ -2795,7 +2765,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 						'Email'    => 'eli@example.com',
 						'Location' => 'Prague',
 						'Capacity' => 50,
-						'Notes'    => 'Field guide material and test scripts.',
+						'Notes'    => 'Field guides and short walkthroughs.',
 					),
 					array(
 						'title'    => 'Rae Kim',
@@ -2849,76 +2819,77 @@ final class SeedDummyCollections extends WP_CLI_Command {
 				),
 				'entries' => array(
 					array(
-						'title'       => 'Seed knowledge workspace',
-						'Status'      => 'In progress',
-						'Priority'    => 'Urgent',
-						'Kickoff'     => '2026-05-04',
-						'Due'         => '2026-05-18',
-						'Tags'        => array( 'dev-env', 'data', 'documentation' ),
-						'Progress'    => 75,
-						'Blocked?'    => false,
-						'Project URL' => 'https://example.com/projects/seed-workspace',
-						'Notes'       => 'Canonical seed content for local starts and demos.',
+						'title'         => 'Prepare public beta workspace',
+						'legacy_titles' => array( 'Seed knowledge workspace' ),
+						'Status'        => 'In progress',
+						'Priority'      => 'Urgent',
+						'Kickoff'       => '2026-06-02',
+						'Due'           => '2026-06-17',
+						'Tags'          => array( 'dev-env', 'data', 'documentation' ),
+						'Progress'      => 70,
+						'Blocked?'      => false,
+						'Project URL'   => 'https://example.com/projects/public-beta-workspace',
+						'Notes'         => 'Make a fresh Cortext workspace feel clear from the first page.',
 					),
 					array(
 						'title'       => 'Relation field polish',
 						'Status'      => 'Review',
 						'Priority'    => 'High',
-						'Kickoff'     => '2026-05-06',
-						'Due'         => '2026-05-24',
+						'Kickoff'     => '2026-06-02',
+						'Due'         => '2026-06-20',
 						'Tags'        => array( 'data', 'editor' ),
 						'Progress'    => 60,
 						'Blocked?'    => false,
 						'Project URL' => 'https://example.com/projects/relation-polish',
-						'Notes'       => 'Improve relation chips, pickers, and row navigation.',
+						'Notes'       => 'Make linked rows easy to read, open, and edit from a table.',
 					),
 					array(
 						'title'       => 'Row detail editing',
 						'Status'      => 'Planned',
 						'Priority'    => 'High',
-						'Kickoff'     => '2026-05-20',
-						'Due'         => '2026-06-14',
+						'Kickoff'     => '2026-06-10',
+						'Due'         => '2026-07-03',
 						'Tags'        => array( 'editor', 'data' ),
 						'Progress'    => 25,
 						'Blocked?'    => false,
 						'Project URL' => '',
-						'Notes'       => 'Make row pages feel like first-class editable records.',
+						'Notes'       => 'Give collection rows enough room to read like documents.',
 					),
 					array(
 						'title'       => 'Collection icon pass',
 						'Status'      => 'In progress',
 						'Priority'    => 'Medium',
-						'Kickoff'     => '2026-05-07',
-						'Due'         => '2026-05-17',
+						'Kickoff'     => '2026-06-05',
+						'Due'         => '2026-06-21',
 						'Tags'        => array( 'design', 'editor' ),
 						'Progress'    => 55,
 						'Blocked?'    => false,
 						'Project URL' => 'https://example.com/projects/icons',
-						'Notes'       => 'Bring collection identity closer to page identity.',
+						'Notes'       => 'Make collection rows easy to recognize in the sidebar and picker.',
 					),
 					array(
 						'title'       => 'Import modeling guide',
 						'Status'      => 'Backlog',
 						'Priority'    => 'Medium',
 						'Kickoff'     => '',
-						'Due'         => '2026-06-20',
+						'Due'         => '2026-07-12',
 						'Tags'        => array( 'research', 'documentation' ),
 						'Progress'    => 10,
 						'Blocked?'    => false,
 						'Project URL' => '',
-						'Notes'       => 'Turn real-world workspace examples into importer fixtures.',
+						'Notes'       => 'Turn common workspace shapes into clear import examples.',
 					),
 					array(
 						'title'       => 'DataViews saved views',
 						'Status'      => 'Planned',
 						'Priority'    => 'Medium',
-						'Kickoff'     => '2026-06-01',
-						'Due'         => '2026-06-28',
+						'Kickoff'     => '2026-06-18',
+						'Due'         => '2026-07-18',
 						'Tags'        => array( 'data', 'editor' ),
 						'Progress'    => 15,
 						'Blocked?'    => true,
 						'Project URL' => 'https://example.com/projects/saved-views',
-						'Notes'       => 'Blocked on view persistence shape and upstream APIs.',
+						'Notes'       => 'Waiting on the storage shape for named views.',
 					),
 					array(
 						'title'       => 'Public collection templates',
@@ -2930,19 +2901,19 @@ final class SeedDummyCollections extends WP_CLI_Command {
 						'Progress'    => 0,
 						'Blocked?'    => false,
 						'Project URL' => 'https://example.com/projects/public-templates',
-						'Notes'       => 'Explore rendering collection views outside the admin shell.',
+						'Notes'       => 'Explore how collection views should read on published pages.',
 					),
 					array(
 						'title'       => 'Performance baseline',
 						'Status'      => 'Planned',
 						'Priority'    => 'High',
-						'Kickoff'     => '2026-05-27',
-						'Due'         => '2026-06-10',
+						'Kickoff'     => '2026-06-12',
+						'Due'         => '2026-06-28',
 						'Tags'        => array( 'data', 'dev-env' ),
 						'Progress'    => 20,
 						'Blocked?'    => false,
 						'Project URL' => '',
-						'Notes'       => 'Use larger seeds to test loading, pagination, rollups, and relation previews.',
+						'Notes'       => 'Use larger workspaces to watch loading, pagination, rollups, and relation previews.',
 					),
 				),
 			),
@@ -2988,83 +2959,89 @@ final class SeedDummyCollections extends WP_CLI_Command {
 				),
 				'entries' => array(
 					array(
-						'title'    => 'Replace flat seed tables with connected data',
-						'Status'   => 'Doing',
-						'Type'     => 'Feature',
-						'Effort'   => 8,
-						'Due'      => '2026-05-10',
-						'Reminder' => '2026-05-09T10:00:00',
-						'Tags'     => array( 'content', 'api' ),
-						'Done?'    => false,
-						'URL'      => 'https://example.com/tasks/connected-seed',
-						'Notes'    => 'Literature, music, and work clusters should cross-link.',
+						'title'         => 'Connect catalog records',
+						'legacy_titles' => array( 'Connect sample records', 'Replace flat seed tables with connected data' ),
+						'Status'        => 'Doing',
+						'Type'          => 'Feature',
+						'Effort'        => 8,
+						'Due'           => '2026-06-07',
+						'Reminder'      => '2026-06-06T10:00:00',
+						'Tags'          => array( 'content', 'api' ),
+						'Done?'         => false,
+						'URL'           => 'https://example.com/tasks/connect-catalog-records',
+						'Notes'         => 'Keep books, albums, projects, and people linked in a way someone can follow.',
 					),
 					array(
-						'title'    => 'Add collection icons to sidebar rows',
-						'Status'   => 'Review',
-						'Type'     => 'Feature',
-						'Effort'   => 3,
-						'Due'      => '2026-05-11',
-						'Reminder' => '2026-05-10T15:00:00',
-						'Tags'     => array( 'ui' ),
-						'Done?'    => false,
-						'URL'      => '',
-						'Notes'    => 'Use the same icon JSON shape as pages.',
+						'title'         => 'Check collection icons in the sidebar',
+						'legacy_titles' => array( 'Add collection icons to sidebar rows' ),
+						'Status'        => 'Review',
+						'Type'          => 'Feature',
+						'Effort'        => 3,
+						'Due'           => '2026-06-08',
+						'Reminder'      => '2026-06-07T15:00:00',
+						'Tags'          => array( 'ui' ),
+						'Done?'         => false,
+						'URL'           => '',
+						'Notes'         => 'Collection icons should sit comfortably next to page icons.',
 					),
 					array(
-						'title'    => 'Seed author rollups from related books',
-						'Status'   => 'Doing',
-						'Type'     => 'Feature',
-						'Effort'   => 5,
-						'Due'      => '2026-05-12',
-						'Reminder' => '',
-						'Tags'     => array( 'api', 'testing' ),
-						'Done?'    => false,
-						'URL'      => '',
-						'Notes'    => 'Book count, latest book, genres, and average rating.',
+						'title'         => 'Review author rollups',
+						'legacy_titles' => array( 'Seed author rollups from related books' ),
+						'Status'        => 'Doing',
+						'Type'          => 'Feature',
+						'Effort'        => 5,
+						'Due'           => '2026-06-09',
+						'Reminder'      => '',
+						'Tags'          => array( 'api', 'testing' ),
+						'Done?'         => false,
+						'URL'           => '',
+						'Notes'         => 'Book count, latest book, genres, and average rating should agree with the linked rows.',
 					),
 					array(
-						'title'    => 'Create album track rollups',
-						'Status'   => 'Todo',
-						'Type'     => 'Feature',
-						'Effort'   => 5,
-						'Due'      => '2026-05-13',
-						'Reminder' => '',
-						'Tags'     => array( 'api', 'content' ),
-						'Done?'    => false,
-						'URL'      => '',
-						'Notes'    => 'Track count, runtime, and mood rollups should exercise nested relations.',
+						'title'         => 'Review album rollups',
+						'legacy_titles' => array( 'Create album track rollups' ),
+						'Status'        => 'Todo',
+						'Type'          => 'Feature',
+						'Effort'        => 5,
+						'Due'           => '2026-06-10',
+						'Reminder'      => '',
+						'Tags'          => array( 'api', 'content' ),
+						'Done?'         => false,
+						'URL'           => '',
+						'Notes'         => 'Track count, runtime, and mood rollups make nested relations easy to inspect.',
 					),
 					array(
-						'title'    => 'Rewrite workspace landing page content',
-						'Status'   => 'Doing',
-						'Type'     => 'Docs',
-						'Effort'   => 4,
-						'Due'      => '2026-05-13',
-						'Reminder' => '2026-05-12T09:30:00',
-						'Tags'     => array( 'content', 'ui' ),
-						'Done?'    => false,
-						'URL'      => '',
-						'Notes'    => 'Pages should open with paragraphs, not duplicate-looking headings.',
+						'title'         => 'Refresh welcome page copy',
+						'legacy_titles' => array( 'Rewrite workspace landing page content' ),
+						'Status'        => 'Doing',
+						'Type'          => 'Docs',
+						'Effort'        => 4,
+						'Due'           => '2026-06-11',
+						'Reminder'      => '2026-06-10T09:30:00',
+						'Tags'          => array( 'content', 'ui' ),
+						'Done?'         => false,
+						'URL'           => '',
+						'Notes'         => 'The first page should sound like a useful welcome, not a release note.',
 					),
 					array(
-						'title'    => 'Add richer research page blocks',
-						'Status'   => 'Todo',
-						'Type'     => 'Docs',
-						'Effort'   => 3,
-						'Due'      => '2026-05-14',
-						'Reminder' => '',
-						'Tags'     => array( 'content' ),
-						'Done?'    => false,
-						'URL'      => '',
-						'Notes'    => 'Mix paragraphs, lists, quotes, separators, and collection views.',
+						'title'         => 'Add guide pages to the tour',
+						'legacy_titles' => array( 'Add guide page examples', 'Add richer research page blocks' ),
+						'Status'        => 'Todo',
+						'Type'          => 'Docs',
+						'Effort'        => 3,
+						'Due'           => '2026-06-12',
+						'Reminder'      => '',
+						'Tags'          => array( 'content' ),
+						'Done?'         => false,
+						'URL'           => '',
+						'Notes'         => 'Add a few normal paragraphs around collection views so the pages feel written, not assembled.',
 					),
 					array(
 						'title'    => 'Check relation picker with dozens of rows',
 						'Status'   => 'Todo',
 						'Type'     => 'Research',
 						'Effort'   => 3,
-						'Due'      => '2026-05-14',
+						'Due'      => '2026-06-13',
 						'Reminder' => '',
 						'Tags'     => array( 'testing', 'ui' ),
 						'Done?'    => false,
@@ -3072,143 +3049,154 @@ final class SeedDummyCollections extends WP_CLI_Command {
 						'Notes'    => 'Use books, albums, and tasks to test search behavior.',
 					),
 					array(
-						'title'    => 'Normalize seed option colors to palette names',
-						'Status'   => 'Review',
-						'Type'     => 'Chore',
-						'Effort'   => 2,
-						'Due'      => '2026-05-12',
-						'Reminder' => '',
-						'Tags'     => array( 'cleanup' ),
-						'Done?'    => false,
-						'URL'      => '',
-						'Notes'    => 'Avoid legacy hex colors in freshly seeded options.',
+						'title'         => 'Review option colors',
+						'legacy_titles' => array( 'Check option colors in sample data', 'Normalize seed option colors to palette names' ),
+						'Status'        => 'Review',
+						'Type'          => 'Chore',
+						'Effort'        => 2,
+						'Due'           => '2026-06-09',
+						'Reminder'      => '',
+						'Tags'          => array( 'cleanup' ),
+						'Done?'         => false,
+						'URL'           => '',
+						'Notes'         => 'New rows should use the same named palette colors.',
 					),
 					array(
-						'title'    => 'Add people ownership relation',
-						'Status'   => 'Todo',
-						'Type'     => 'Feature',
-						'Effort'   => 3,
-						'Due'      => '2026-05-15',
-						'Reminder' => '',
-						'Tags'     => array( 'api' ),
-						'Done?'    => false,
-						'URL'      => '',
-						'Notes'    => 'Projects should point to owners and tasks to assignees.',
+						'title'         => 'Review ownership relations',
+						'legacy_titles' => array( 'Add people ownership relation' ),
+						'Status'        => 'Todo',
+						'Type'          => 'Feature',
+						'Effort'        => 3,
+						'Due'           => '2026-06-14',
+						'Reminder'      => '',
+						'Tags'          => array( 'api' ),
+						'Done?'         => false,
+						'URL'           => '',
+						'Notes'         => 'Projects should point to owners, and tasks should point to assignees.',
 					),
 					array(
-						'title'    => 'Backfill task relation examples',
-						'Status'   => 'Todo',
-						'Type'     => 'Chore',
-						'Effort'   => 4,
-						'Due'      => '2026-05-15',
-						'Reminder' => '',
-						'Tags'     => array( 'content' ),
-						'Done?'    => false,
-						'URL'      => '',
-						'Notes'    => 'Spread tasks across projects and people.',
+						'title'         => 'Review task relation examples',
+						'legacy_titles' => array( 'Backfill task relation examples' ),
+						'Status'        => 'Todo',
+						'Type'          => 'Chore',
+						'Effort'        => 4,
+						'Due'           => '2026-06-15',
+						'Reminder'      => '',
+						'Tags'          => array( 'content' ),
+						'Done?'         => false,
+						'URL'           => '',
+						'Notes'         => 'Spread tasks across projects and people without making the table noisy.',
 					),
 					array(
-						'title'    => 'Verify seeded pages update on rerun',
-						'Status'   => 'Todo',
-						'Type'     => 'Bug',
-						'Effort'   => 2,
-						'Due'      => '2026-05-16',
-						'Reminder' => '',
-						'Tags'     => array( 'testing' ),
-						'Done?'    => false,
-						'URL'      => '',
-						'Notes'    => 'Existing sparse pages should receive richer content.',
+						'title'         => 'Refresh guide pages after edits',
+						'legacy_titles' => array( 'Check sample pages after a rerun', 'Verify seeded pages update on rerun' ),
+						'Status'        => 'Todo',
+						'Type'          => 'Bug',
+						'Effort'        => 2,
+						'Due'           => '2026-06-16',
+						'Reminder'      => '',
+						'Tags'          => array( 'testing' ),
+						'Done?'         => false,
+						'URL'           => '',
+						'Notes'         => 'Guide pages should pick up the latest copy when the workspace is refreshed.',
 					),
 					array(
-						'title'    => 'Document reset command behavior',
-						'Status'   => 'Done',
-						'Type'     => 'Docs',
-						'Effort'   => 1,
-						'Due'      => '2026-05-07',
-						'Reminder' => '',
-						'Tags'     => array( 'content' ),
-						'Done?'    => true,
-						'URL'      => '',
-						'Notes'    => 'Seed reset remains the cleanest way to remove legacy demo rows.',
+						'title'         => 'Explain fresh workspace setup',
+						'legacy_titles' => array( 'Document sample reset behavior', 'Document reset command behavior' ),
+						'Status'        => 'Done',
+						'Type'          => 'Docs',
+						'Effort'        => 1,
+						'Due'           => '2026-06-01',
+						'Reminder'      => '',
+						'Tags'          => array( 'content' ),
+						'Done?'         => true,
+						'URL'           => '',
+						'Notes'         => 'Keep the reset path easy to find for anyone who wants to start over.',
 					),
 					array(
-						'title'    => 'Audit row detail read-only relation fields',
-						'Status'   => 'Blocked',
-						'Type'     => 'Research',
-						'Effort'   => 5,
-						'Due'      => '2026-05-20',
-						'Reminder' => '',
-						'Tags'     => array( 'blocked', 'api' ),
-						'Done?'    => false,
-						'URL'      => '',
-						'Notes'    => 'Needs row-detail relation save path.',
+						'title'         => 'Check relation fields in row detail',
+						'legacy_titles' => array( 'Audit row detail read-only relation fields' ),
+						'Status'        => 'Blocked',
+						'Type'          => 'Research',
+						'Effort'        => 5,
+						'Due'           => '2026-06-21',
+						'Reminder'      => '',
+						'Tags'          => array( 'blocked', 'api' ),
+						'Done?'         => false,
+						'URL'           => '',
+						'Notes'         => 'Relation fields should read clearly when a row opens as a page.',
 					),
 					array(
-						'title'    => 'Tune sidebar icon spacing',
-						'Status'   => 'Review',
-						'Type'     => 'Bug',
-						'Effort'   => 2,
-						'Due'      => '2026-05-12',
-						'Reminder' => '',
-						'Tags'     => array( 'ui' ),
-						'Done?'    => false,
-						'URL'      => '',
-						'Notes'    => 'Collection title buttons need stable text truncation.',
+						'title'         => 'Review sidebar icon spacing',
+						'legacy_titles' => array( 'Tune sidebar icon spacing' ),
+						'Status'        => 'Review',
+						'Type'          => 'Bug',
+						'Effort'        => 2,
+						'Due'           => '2026-06-09',
+						'Reminder'      => '',
+						'Tags'          => array( 'ui' ),
+						'Done?'         => false,
+						'URL'           => '',
+						'Notes'         => 'Collection title buttons need stable text truncation.',
 					),
 					array(
-						'title'    => 'Create publisher catalog examples',
-						'Status'   => 'Todo',
-						'Type'     => 'Feature',
-						'Effort'   => 4,
-						'Due'      => '2026-05-16',
-						'Reminder' => '',
-						'Tags'     => array( 'content', 'api' ),
-						'Done?'    => false,
-						'URL'      => '',
-						'Notes'    => 'Books should point to publishers and publishers should roll up counts.',
+						'title'         => 'Review publisher catalog examples',
+						'legacy_titles' => array( 'Create publisher catalog examples' ),
+						'Status'        => 'Todo',
+						'Type'          => 'Feature',
+						'Effort'        => 4,
+						'Due'           => '2026-06-18',
+						'Reminder'      => '',
+						'Tags'          => array( 'content', 'api' ),
+						'Done?'         => false,
+						'URL'           => '',
+						'Notes'         => 'Books should point to publishers, and publishers should roll up counts.',
 					),
 					array(
-						'title'    => 'Create label catalog examples',
-						'Status'   => 'Todo',
-						'Type'     => 'Feature',
-						'Effort'   => 4,
-						'Due'      => '2026-05-17',
-						'Reminder' => '',
-						'Tags'     => array( 'content', 'api' ),
-						'Done?'    => false,
-						'URL'      => '',
-						'Notes'    => 'Albums should point to labels and labels should roll up releases.',
+						'title'         => 'Review label catalog examples',
+						'legacy_titles' => array( 'Create label catalog examples' ),
+						'Status'        => 'Todo',
+						'Type'          => 'Feature',
+						'Effort'        => 4,
+						'Due'           => '2026-06-19',
+						'Reminder'      => '',
+						'Tags'          => array( 'content', 'api' ),
+						'Done?'         => false,
+						'URL'           => '',
+						'Notes'         => 'Albums should point to labels, and labels should roll up releases.',
 					),
 					array(
-						'title'    => 'Stress test table horizontal scroll',
-						'Status'   => 'Todo',
-						'Type'     => 'Research',
-						'Effort'   => 3,
-						'Due'      => '2026-05-18',
-						'Reminder' => '',
-						'Tags'     => array( 'testing', 'ui' ),
-						'Done?'    => false,
-						'URL'      => '',
-						'Notes'    => 'Larger field sets should make scroll behavior visible.',
+						'title'         => 'Check table horizontal scroll',
+						'legacy_titles' => array( 'Stress test table horizontal scroll' ),
+						'Status'        => 'Todo',
+						'Type'          => 'Research',
+						'Effort'        => 3,
+						'Due'           => '2026-06-22',
+						'Reminder'      => '',
+						'Tags'          => array( 'testing', 'ui' ),
+						'Done?'         => false,
+						'URL'           => '',
+						'Notes'         => 'Larger field sets should make scroll behavior visible.',
 					),
 					array(
-						'title'    => 'Add task footer calculation examples',
-						'Status'   => 'Todo',
-						'Type'     => 'Feature',
-						'Effort'   => 2,
-						'Due'      => '2026-05-18',
-						'Reminder' => '',
-						'Tags'     => array( 'ui', 'testing' ),
-						'Done?'    => false,
-						'URL'      => '',
-						'Notes'    => 'Effort and status fields are good calculation candidates.',
+						'title'         => 'Review task footer calculations',
+						'legacy_titles' => array( 'Add task footer calculation examples' ),
+						'Status'        => 'Todo',
+						'Type'          => 'Feature',
+						'Effort'        => 2,
+						'Due'           => '2026-06-22',
+						'Reminder'      => '',
+						'Tags'          => array( 'ui', 'testing' ),
+						'Done?'         => false,
+						'URL'           => '',
+						'Notes'         => 'Effort and status fields are good calculation candidates.',
 					),
 					array(
 						'title'    => 'Review collection creation defaults',
 						'Status'   => 'Todo',
 						'Type'     => 'Research',
 						'Effort'   => 3,
-						'Due'      => '2026-05-22',
+						'Due'      => '2026-06-24',
 						'Reminder' => '',
 						'Tags'     => array( 'api' ),
 						'Done?'    => false,
@@ -3220,7 +3208,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 						'Status'   => 'Todo',
 						'Type'     => 'Feature',
 						'Effort'   => 5,
-						'Due'      => '2026-05-23',
+						'Due'      => '2026-06-25',
 						'Reminder' => '',
 						'Tags'     => array( 'ui', 'design' ),
 						'Done?'    => false,
@@ -3228,59 +3216,62 @@ final class SeedDummyCollections extends WP_CLI_Command {
 						'Notes'    => 'Side, modal, and full-page modes need predictable transitions.',
 					),
 					array(
-						'title'    => 'Add import fixture notes',
-						'Status'   => 'Todo',
-						'Type'     => 'Docs',
-						'Effort'   => 3,
-						'Due'      => '2026-05-24',
-						'Reminder' => '',
-						'Tags'     => array( 'content' ),
-						'Done?'    => false,
-						'URL'      => '',
-						'Notes'    => 'Describe how relation seeding mirrors importer order.',
+						'title'         => 'Draft import notes',
+						'legacy_titles' => array( 'Add import fixture notes' ),
+						'Status'        => 'Todo',
+						'Type'          => 'Docs',
+						'Effort'        => 3,
+						'Due'           => '2026-06-26',
+						'Reminder'      => '',
+						'Tags'          => array( 'content' ),
+						'Done?'         => false,
+						'URL'           => '',
+						'Notes'         => 'Describe how related records should arrive during an import.',
 					),
 					array(
 						'title'    => 'Profile rollup formatting',
 						'Status'   => 'Todo',
 						'Type'     => 'Research',
 						'Effort'   => 4,
-						'Due'      => '2026-05-25',
+						'Due'      => '2026-06-27',
 						'Reminder' => '',
 						'Tags'     => array( 'api', 'testing' ),
 						'Done?'    => false,
 						'URL'      => '',
-						'Notes'    => 'Rollups are computed on read, so larger seeds expose cost.',
+						'Notes'    => 'Large workspaces make rollup timing easier to spot.',
 					),
 					array(
-						'title'    => 'Polish empty date displays',
-						'Status'   => 'Todo',
-						'Type'     => 'Bug',
-						'Effort'   => 2,
-						'Due'      => '2026-05-19',
-						'Reminder' => '',
-						'Tags'     => array( 'ui' ),
-						'Done?'    => false,
-						'URL'      => '',
-						'Notes'    => 'Backlog projects intentionally keep blank dates.',
+						'title'         => 'Review empty date displays',
+						'legacy_titles' => array( 'Polish empty date displays' ),
+						'Status'        => 'Todo',
+						'Type'          => 'Bug',
+						'Effort'        => 2,
+						'Due'           => '2026-06-20',
+						'Reminder'      => '',
+						'Tags'          => array( 'ui' ),
+						'Done?'         => false,
+						'URL'           => '',
+						'Notes'         => 'Backlog projects intentionally keep blank dates.',
 					),
 					array(
-						'title'    => 'Write manual QA checklist page',
-						'Status'   => 'Todo',
-						'Type'     => 'Docs',
-						'Effort'   => 3,
-						'Due'      => '2026-05-20',
-						'Reminder' => '',
-						'Tags'     => array( 'content', 'testing' ),
-						'Done?'    => false,
-						'URL'      => '',
-						'Notes'    => 'Use seeded pages as test scripts.',
+						'title'         => 'Write quick tour checklist',
+						'legacy_titles' => array( 'Write manual checks page', 'Write manual QA checklist page' ),
+						'Status'        => 'Todo',
+						'Type'          => 'Docs',
+						'Effort'        => 3,
+						'Due'           => '2026-06-23',
+						'Reminder'      => '',
+						'Tags'          => array( 'content', 'testing' ),
+						'Done?'         => false,
+						'URL'           => '',
+						'Notes'         => 'Keep the tour short enough for someone to finish in a few minutes.',
 					),
 					array(
 						'title'    => 'Check collection home preference with icons',
 						'Status'   => 'Todo',
 						'Type'     => 'Bug',
 						'Effort'   => 2,
-						'Due'      => '2026-05-21',
+						'Due'      => '2026-06-24',
 						'Reminder' => '',
 						'Tags'     => array( 'testing', 'ui' ),
 						'Done?'    => false,
@@ -3288,64 +3279,68 @@ final class SeedDummyCollections extends WP_CLI_Command {
 						'Notes'    => 'Collections can be homes too.',
 					),
 					array(
-						'title'    => 'Clean up old paintings seed references',
-						'Status'   => 'Todo',
-						'Type'     => 'Chore',
-						'Effort'   => 2,
-						'Due'      => '2026-05-21',
-						'Reminder' => '',
-						'Tags'     => array( 'cleanup' ),
-						'Done?'    => false,
-						'URL'      => '',
-						'Notes'    => 'Fresh reset no longer needs the paintings collection.',
+						'title'         => 'Retire outdated content references',
+						'legacy_titles' => array( 'Remove outdated sample references', 'Clean up old paintings seed references' ),
+						'Status'        => 'Todo',
+						'Type'          => 'Chore',
+						'Effort'        => 2,
+						'Due'           => '2026-06-24',
+						'Reminder'      => '',
+						'Tags'          => array( 'cleanup' ),
+						'Done?'         => false,
+						'URL'           => '',
+						'Notes'         => 'Old collection names should not leak into a fresh workspace.',
 					),
 					array(
-						'title'    => 'Add saved view fixture once model exists',
-						'Status'   => 'Blocked',
-						'Type'     => 'Feature',
-						'Effort'   => 5,
-						'Due'      => '2026-06-05',
-						'Reminder' => '',
-						'Tags'     => array( 'blocked', 'api' ),
-						'Done?'    => false,
-						'URL'      => '',
-						'Notes'    => 'Waiting for named saved-view storage.',
+						'title'         => 'Plan saved view examples',
+						'legacy_titles' => array( 'Add saved view fixture once model exists' ),
+						'Status'        => 'Blocked',
+						'Type'          => 'Feature',
+						'Effort'        => 5,
+						'Due'           => '2026-07-06',
+						'Reminder'      => '',
+						'Tags'          => array( 'blocked', 'api' ),
+						'Done?'         => false,
+						'URL'           => '',
+						'Notes'         => 'Waiting for the named-view storage shape.',
 					),
 					array(
 						'title'    => 'Review mobile table density',
 						'Status'   => 'Todo',
 						'Type'     => 'Research',
 						'Effort'   => 3,
-						'Due'      => '2026-05-26',
+						'Due'      => '2026-06-30',
 						'Reminder' => '',
 						'Tags'     => array( 'ui', 'testing' ),
 						'Done?'    => false,
 						'URL'      => '',
-						'Notes'    => 'Richer seeds make cramped states easier to see.',
+						'Notes'    => 'Dense rows make cramped mobile states easier to see.',
 					),
 					array(
-						'title'    => 'Add cover image fallback tests',
-						'Status'   => 'Todo',
-						'Type'     => 'Bug',
-						'Effort'   => 2,
-						'Due'      => '2026-05-27',
-						'Reminder' => '',
-						'Tags'     => array( 'testing' ),
-						'Done?'    => false,
-						'URL'      => '',
-						'Notes'    => 'Seeded pages use bundled cover assets.',
+						'title'         => 'Review cover image fallbacks',
+						'legacy_titles' => array( 'Add cover image fallback tests' ),
+						'Status'        => 'Todo',
+						'Type'          => 'Bug',
+						'Effort'        => 2,
+						'Due'           => '2026-07-01',
+						'Reminder'      => '',
+						'Tags'          => array( 'testing' ),
+						'Done?'         => false,
+						'URL'           => '',
+						'Notes'         => 'Bundled cover assets should load without a network lookup.',
 					),
 					array(
-						'title'    => 'Prepare demo script for relation chips',
-						'Status'   => 'Todo',
-						'Type'     => 'Docs',
-						'Effort'   => 2,
-						'Due'      => '2026-05-28',
-						'Reminder' => '',
-						'Tags'     => array( 'content' ),
-						'Done?'    => false,
-						'URL'      => '',
-						'Notes'    => 'Books, albums, and tasks each show a different relation pattern.',
+						'title'         => 'Draft relation-chip tour',
+						'legacy_titles' => array( 'Prepare demo script for relation chips' ),
+						'Status'        => 'Todo',
+						'Type'          => 'Docs',
+						'Effort'        => 2,
+						'Due'           => '2026-07-02',
+						'Reminder'      => '',
+						'Tags'          => array( 'content' ),
+						'Done?'         => false,
+						'URL'           => '',
+						'Notes'         => 'Use books, albums, and tasks to show three different relation patterns.',
 					),
 				),
 			),
@@ -3369,162 +3364,145 @@ final class SeedDummyCollections extends WP_CLI_Command {
 				'cover'          => $banner,
 				'content'        => $this->page_content(
 					array(
-						$this->paragraph( 'Welcome to Cortext. This seeded workspace is built to show the product as a real knowledge base: pages explain the work, collections hold structured records, and relations connect everything into a usable graph.' ),
-						$this->quote_block( 'Use this page as the front door: scan the linked projects, open a row, follow a relation, then move into the library or music catalog for richer examples.' ),
-						$this->heading( 'Start here', 2 ),
+						$this->paragraph( 'Welcome to Cortext. This workspace is intentionally small: a few pages, a handful of collections, and enough links to show how writing and structured data sit together.' ),
+						$this->quote_block( 'Start with Getting started, then open the team, library, and music examples when you want to see the same idea applied to real records.' ),
+						$this->heading( 'What to try first', 2 ),
 						$this->list_block(
 							array(
-								'Projects roll up task counts, effort, status, and due dates.',
-								'Books connect to authors and publishers, with rollups on both sides.',
-								'Albums connect to artists, labels, and tracks so nested relations are visible immediately.',
-								'People own projects and receive tasks, which makes row detail and relation previews more realistic.',
+								'Take the short tour in Getting started.',
+								'Open Team Workspace to see projects, tasks, and people together.',
+								'Browse Library and Music Catalog when you want denser examples.',
+								'Open any row to see how a record can also read like a page.',
 							)
 						),
-						$this->data_view_block( $collection_ids['projects'] ?? 0 ),
-						$this->data_view_block( $collection_ids['tasks'] ?? 0 ),
-						$this->data_view_block( $collection_ids['people'] ?? 0 ),
 					)
 				),
 				'children'       => array(
 					array(
-						'title'    => 'How to use this seed',
-						'icon'     => '🛠️',
-						'content'  => $this->page_content(
+						'title'         => 'Getting started',
+						'legacy_titles' => array( 'How to use this seed' ),
+						'icon'          => '🧭',
+						'content'       => $this->page_content(
 							array(
-								$this->paragraph( 'Use this page as a short script for manual checks after starting wp-env or changing collection behavior.' ),
-								$this->heading( 'Walkthrough', 2 ),
+								$this->paragraph( 'Start here if you have a few minutes. The tour walks through the bits that make Cortext different: embedded tables, linked rows, row pages, and rollups.' ),
+								$this->heading( 'Tour', 2 ),
 								$this->list_block(
 									array(
-										'Open Books and inspect Author, Publisher, and rollup columns.',
-										'Open Albums and verify the Tracks relation plus Runtime and Track moods rollups.',
-										'Open Projects, create a task from a filtered view, and confirm prefilled values still save.',
-										'Set a collection as the workspace home, then reload and confirm the sidebar selection survives.',
+										'Open Team Workspace and scan the project table.',
+										'Open a project row, then follow its linked tasks.',
+										'Open a person row and check the work connected to them.',
+										'Browse Library or Music Catalog once you want a denser example.',
+										'Read Modeling guide for the thinking behind the structure.',
 									),
 									true
 								),
-								$this->separator_block(),
-								$this->paragraph( 'The seed intentionally includes empty dates, unread books, blocked tasks, and mixed option values so edge states appear without hand-editing rows.' ),
+								$this->data_view_block( $collection_ids['projects'] ?? 0 ),
 							)
 						),
-						'children' => array(
+						'children'      => array(
 							array(
-								'title'   => 'QA checklist',
-								'icon'    => array(
-									'type'  => 'wp',
-									'name'  => 'check',
-									'color' => 'green',
-								),
-								'content' => $this->page_content(
+								'title'         => 'Modeling guide',
+								'legacy_titles' => array( 'Modeling notes' ),
+								'icon'          => '📐',
+								'content'       => $this->page_content(
 									array(
-										$this->paragraph( 'A compact checklist for changes that touch the shell, data views, row detail, or page identity.' ),
-										$this->heading( 'Checks', 2 ),
+										$this->paragraph( 'The model is intentionally plain: make collections for things you would open, link records when one thing really belongs to another, and let rollups do the counting.' ),
+										$this->heading( 'How to read this', 2 ),
 										$this->list_block(
 											array(
-												'Sidebar: collection icons render, selected rows stay legible, and long titles truncate.',
-												'Tables: relation chips open the expected collection and row routes.',
-												'Rollups: counts, sums, unique values, latest dates, and date ranges render without edit affordances.',
-												'Pages: cover, icon, title, and first paragraph keep comfortable spacing.',
-											)
-										),
-									)
-								),
-							),
-							array(
-								'title'    => 'Modeling notes',
-								'icon'     => '📐',
-								'content'  => $this->page_content(
-									array(
-										$this->paragraph( 'The seed follows the same modeling rule as the guide: collections are nouns, relations are explicit links, and rollups are derived views of those links.' ),
-										$this->heading( 'Why these examples work', 2 ),
-										$this->list_block(
-											array(
-												'Books and albums are concrete records that deserve their own collections.',
+												'Books and albums are concrete records with their own fields and page bodies.',
 												'Authors, publishers, artists, and labels are related records, not repeated text fields.',
-												'Tasks are operational records that can belong to projects and people simultaneously.',
+												'Projects, tasks, and people use the same model for day-to-day work.',
+												'Rollups keep summaries close to the record without copying the underlying rows.',
 											)
 										),
 									)
 								),
-								'children' => array(
+								'children'      => array(
 									array(
-										'title'   => 'Relation shapes',
-										'icon'    => '🔗',
-										'content' => $this->page_content(
+										'title'         => 'Relation examples',
+										'legacy_titles' => array( 'Relation shapes' ),
+										'icon'          => '🔗',
+										'content'       => $this->page_content(
 											array(
-												$this->paragraph( 'Most seeded relations are single on the row being edited and multiple on the reverse side. That gives tables simple cells while still making reverse lookups useful.' ),
+												$this->paragraph( 'Most examples keep the edited side single-value and the reverse side multi-value. A book has one author; an author can have many books. Tables stay readable, and the reverse lookup still does useful work.' ),
 												$this->data_view_block( $collection_ids['books'] ?? 0 ),
 											)
 										),
 									),
 									array(
-										'title'   => 'Rollup shapes',
-										'icon'    => array(
+										'title'         => 'Rollup examples',
+										'legacy_titles' => array( 'Rollup shapes' ),
+										'icon'          => array(
 											'type'  => 'wp',
 											'name'  => 'chartBar',
 											'color' => 'purple',
 										),
-										'content' => $this->page_content(
+										'content'       => $this->page_content(
 											array(
-												$this->paragraph( 'The seed covers each rollup family the UI currently knows how to display: counts, sums, unique option values, scalar dates, and date ranges.' ),
+												$this->paragraph( 'Start here for rollups: counts, sums, unique option values, latest dates, and date ranges.' ),
 												$this->data_view_block( $collection_ids['authors'] ?? 0 ),
 											)
 										),
 									),
 								),
 							),
+							array(
+								'title'         => 'Try these interactions',
+								'legacy_titles' => array( 'Manual checks', 'QA checklist' ),
+								'icon'          => array(
+									'type'  => 'wp',
+									'name'  => 'check',
+									'color' => 'green',
+								),
+								'content'       => $this->page_content(
+									array(
+										$this->paragraph( 'A few things are worth trying before you close the workspace.' ),
+										$this->heading( 'Quick pass', 2 ),
+										$this->list_block(
+											array(
+												'Move through the sidebar and notice how page and collection icons sit in the same tree.',
+												'Open relation chips from tables and row pages.',
+												'Compare rollup values with the rows they summarize.',
+												'Leave the blank dates alone for a moment; they are there to show empty states.',
+											)
+										),
+									)
+								),
+							),
 						),
 					),
 					array(
-						'title'    => 'Operations',
-						'icon'     => '🎨',
-						'content'  => $this->page_content(
+						'title'         => 'Team Workspace',
+						'legacy_titles' => array( 'Operations' ),
+						'icon'          => '🎨',
+						'content'       => $this->page_content(
 							array(
-								$this->paragraph( 'The operations area keeps the practical demo close to the home page: projects, tasks, and people are the fastest way to check inline editing and relation behavior.' ),
-								$this->heading( 'Operational views', 2 ),
+								$this->paragraph( 'This is a small team space. Projects have owners, tasks have assignees, and each person gathers the work connected to them.' ),
+								$this->heading( 'Work in progress', 2 ),
 								$this->data_view_block( $collection_ids['projects'] ?? 0 ),
 								$this->data_view_block( $collection_ids['tasks'] ?? 0 ),
+								$this->data_view_block( $collection_ids['people'] ?? 0 ),
 							)
 						),
-						'children' => array(
+						'children'      => array(
 							array(
-								'title'   => 'Sprint review',
-								'icon'    => '🧩',
-								'content' => $this->page_content(
+								'title'         => 'Public beta plan',
+								'legacy_titles' => array( 'Sprint review' ),
+								'icon'          => '🧩',
+								'content'       => $this->page_content(
 									array(
-										$this->paragraph( 'A review page with enough structure to test editor content around embedded data views.' ),
-										$this->heading( 'Agenda', 2 ),
+										$this->paragraph( 'Use this page like a lightweight project brief. The project view stays next to the notes, so the plan, tasks, and owners are in one place.' ),
+										$this->heading( 'Review points', 2 ),
 										$this->list_block(
 											array(
-												'Review blocked tasks and owners.',
-												'Open project rows in side mode and full mode.',
-												'Check whether task rollups match the linked task rows.',
+												'Look for blocked tasks and missing owners.',
+												'Open project rows in side mode and full-page mode.',
+												'Compare project rollups with the linked task rows.',
 											),
 											true
 										),
 										$this->data_view_block( $collection_ids['projects'] ?? 0 ),
-									)
-								),
-							),
-							array(
-								'title'   => 'Demo script',
-								'icon'    => array(
-									'type'  => 'wp',
-									'name'  => 'megaphone',
-									'color' => 'orange',
-								),
-								'content' => $this->page_content(
-									array(
-										$this->paragraph( 'A lightweight talk track for showing Cortext from a fresh local environment.' ),
-										$this->heading( 'Flow', 2 ),
-										$this->list_block(
-											array(
-												'Start on Workspace to show pages plus embedded databases.',
-												'Open Library to show relational data and rollups.',
-												'Open Music Catalog to show a denser nested relation graph.',
-												'Return to Operations and create a new task from the footer.',
-											),
-											true
-										),
 									)
 								),
 							),
@@ -3538,7 +3516,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 				'cover'   => CORTEXT_PATH . 'seed-assets/covers/page-library.jpg',
 				'content' => $this->page_content(
 					array(
-						$this->paragraph( 'The library cluster models books as records connected to authors and publishers. It is deliberately large enough to make relations, rollups, filters, and search feel real.' ),
+						$this->paragraph( 'Library keeps books connected to authors and publishers. There are enough records here for filters, search, relation chips, and rollups to feel useful.' ),
 						$this->heading( 'Catalog', 2 ),
 						$this->data_view_block( $collection_ids['books'] ?? 0 ),
 						$this->heading( 'People and imprints', 2 ),
@@ -3556,7 +3534,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 				),
 				'content' => $this->page_content(
 					array(
-						$this->paragraph( 'The music cluster adds a denser relationship graph: albums belong to artists and labels, while tracks belong to albums and feed album-level rollups.' ),
+						$this->paragraph( 'Music Catalog has more links than Library. Albums belong to artists and labels, tracks belong to albums, and album rows summarize the songs attached to them.' ),
 						$this->heading( 'Albums and tracks', 2 ),
 						$this->data_view_block(
 							$collection_ids['albums'] ?? 0,
@@ -3601,42 +3579,6 @@ final class SeedDummyCollections extends WP_CLI_Command {
 					)
 				),
 			),
-			array(
-				'title'   => 'About Cortext',
-				'icon'    => '🧠',
-				'content' => $this->page_content(
-					array(
-						$this->paragraph( 'Cortext is a WordPress-native workspace for documents and structured knowledge. This seeded page gives the editor a realistic reference page without reusing the welcome cover asset.' ),
-						$this->heading( 'What this seed demonstrates', 2 ),
-						$this->list_block(
-							array(
-								'Pages can carry icons, body copy, and embedded collection views.',
-								'Collections stay in WordPress storage but behave like typed workspace databases.',
-								'Relations and rollups make the data model visible without custom tables.',
-							)
-						),
-						$this->separator_block(),
-						$this->paragraph( 'The data is intentionally synthetic where exact catalog history would be a distraction. The important part is the shape: rows, fields, relations, and pages that look plausible while exercising the product.' ),
-					)
-				),
-			),
-			array(
-				'title'   => 'Scratch Notes',
-				'icon'    => '📝',
-				'content' => $this->page_content(
-					array(
-						$this->paragraph( 'This root-level page is intentionally open-ended. It gives the sidebar another sibling for ordering tests and gives the editor a low-stakes place for scratch blocks.' ),
-						$this->heading( 'Loose notes', 2 ),
-						$this->list_block(
-							array(
-								'Try dragging this page above and below Library.',
-								'Add a block below this list and confirm autosave is quiet.',
-								'Trash and restore it to check root-level restore behavior.',
-							)
-						),
-					)
-				),
-			),
 		);
 
 		$workspace_page_id = 0;
@@ -3647,51 +3589,48 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			}
 		}
 
+		$this->trash_obsolete_seed_pages(
+			array(
+				'How to use this seed',
+				'Walkthrough',
+				'Demo script',
+				'About Cortext',
+				'Notes',
+				'Scratch Notes',
+			)
+		);
+
 		return $workspace_page_id;
 	}
 
 	private function seed_page_tree( array $node, int $parent_id ): int {
-		$existing         = array();
 		$candidate_titles = array_merge(
 			array( $node['title'] ),
 			$node['legacy_titles'] ?? array()
 		);
-		foreach ( $candidate_titles as $candidate_title ) {
-			$existing = get_posts(
-				array(
-					'post_type'   => Document::POST_TYPE,
-					'post_status' => array( 'draft', 'private', 'publish' ),
-					'post_parent' => $parent_id,
-					'title'       => $candidate_title,
-					'numberposts' => 1,
-					'fields'      => 'ids',
-				)
-			);
-			if ( $existing ) {
-				break;
-			}
-		}
+		$page_id          = $this->find_seed_page_tree_candidate( $candidate_titles, $parent_id );
 
-		if ( $existing ) {
-			$page_id = (int) $existing[0];
+		if ( $page_id > 0 ) {
 			WP_CLI::log( "Page '{$node['title']}' already exists (ID {$page_id})." );
 
 			$page            = get_post( $page_id );
 			$content_version = (string) get_post_meta( $page_id, '_cortext_seed_content_version', true );
 			$needs_update    = $page && (
 				(string) $page->post_title !== (string) $node['title'] ||
+				(int) $page->post_parent !== $parent_id ||
 				( isset( $node['content'] ) && self::PAGE_CONTENT_VERSION !== $content_version )
 			);
 			if ( $needs_update ) {
 				$update = array(
-					'ID'         => $page_id,
-					'post_title' => $node['title'],
+					'ID'          => $page_id,
+					'post_title'  => $node['title'],
+					'post_parent' => $parent_id,
 				);
 				if ( isset( $node['content'] ) ) {
 					$update['post_content'] = $node['content'];
 				}
 				wp_update_post( $update );
-				WP_CLI::log( "Updated page '{$node['title']}' with current demo content." );
+				WP_CLI::log( "Updated page '{$node['title']}' with current sample content." );
 			}
 		} else {
 			$page_id = wp_insert_post(
@@ -3738,6 +3677,94 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		}
 
 		return (int) $page_id;
+	}
+
+	/**
+	 * Finds a seeded page by its current/legacy title and preferred parent.
+	 *
+	 * @param string[] $candidate_titles Page titles to match.
+	 * @param int      $parent_id        Intended parent page ID.
+	 */
+	private function find_seed_page_tree_candidate( array $candidate_titles, int $parent_id ): int {
+		foreach ( $candidate_titles as $candidate_title ) {
+			$ids = get_posts(
+				array(
+					'post_type'   => Document::POST_TYPE,
+					'post_status' => array( 'draft', 'private', 'publish' ),
+					'post_parent' => $parent_id,
+					'title'       => (string) $candidate_title,
+					'numberposts' => 1,
+					'fields'      => 'ids',
+				)
+			);
+			if ( $ids ) {
+				return (int) $ids[0];
+			}
+		}
+
+		foreach ( $candidate_titles as $candidate_title ) {
+			$ids = get_posts(
+				array(
+					'post_type'   => Document::POST_TYPE,
+					'post_status' => array( 'draft', 'private', 'publish' ),
+					'title'       => (string) $candidate_title,
+					'numberposts' => 1,
+					'fields'      => 'ids',
+					// phpcs:ignore WordPress.DB.SlowDBQuery
+					'meta_key'    => '_cortext_seed_content_version',
+				)
+			);
+			foreach ( $ids as $id ) {
+				if ( $this->is_seed_page( (int) $id ) ) {
+					return (int) $id;
+				}
+			}
+		}
+
+		return 0;
+	}
+
+	/**
+	 * Moves old seeded guide pages out of the active sample tree.
+	 *
+	 * @param string[] $titles Page titles to trash.
+	 */
+	private function trash_obsolete_seed_pages( array $titles ): void {
+		foreach ( $titles as $title ) {
+			$ids = get_posts(
+				array(
+					'post_type'   => Document::POST_TYPE,
+					'post_status' => array( 'draft', 'private', 'publish' ),
+					'title'       => (string) $title,
+					'numberposts' => -1,
+					'fields'      => 'ids',
+					// phpcs:ignore WordPress.DB.SlowDBQuery
+					'meta_key'    => '_cortext_seed_content_version',
+				)
+			);
+			foreach ( $ids as $id ) {
+				$id = (int) $id;
+				if ( ! $this->is_seed_page( $id ) ) {
+					continue;
+				}
+				wp_trash_post( $id );
+				WP_CLI::log( "Moved obsolete sample page '{$title}' to trash (ID {$id})." );
+			}
+		}
+	}
+
+	private function is_seed_page( int $page_id ): bool {
+		$page = get_post( $page_id );
+		if ( ! $page || Document::POST_TYPE !== $page->post_type || Document::is_collection( $page_id ) ) {
+			return false;
+		}
+
+		$terms = wp_get_object_terms(
+			$page_id,
+			TraitTaxonomy::TAXONOMY,
+			array( 'fields' => 'ids' )
+		);
+		return ! is_wp_error( $terms ) && empty( $terms );
 	}
 
 	private function remove_page_cover_block( int $page_id ): void {
@@ -3832,7 +3859,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			array( 'page', $workspace_page_id ),
 			array( 'page', $this->find_seeded_page_id( 'Library' ) ),
 			array( 'page', $this->find_seeded_page_id( 'Music Catalog' ) ),
-			array( 'page', $this->find_seeded_page_id( 'Operations' ) ),
+			array( 'page', $this->find_seeded_page_id( 'Team Workspace' ) ),
 		);
 
 		foreach ( $candidates as $candidate ) {
@@ -4773,7 +4800,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	}
 
 	/**
-	 * Builds a realistic body for a seeded row.
+	 * Builds a realistic body for a sample row.
 	 *
 	 * @param array<string,mixed> $spec  Collection spec.
 	 * @param array<string,mixed> $entry Row values.
@@ -4808,17 +4835,17 @@ final class SeedDummyCollections extends WP_CLI_Command {
 
 	private function entry_intro( string $slug, string $title ): string {
 		return match ( $slug ) {
-			'authors'    => "{$title} is an author profile with enough context to make the row detail feel like a real research note rather than an empty database record.",
-			'publishers' => "{$title} is an imprint record used by the library sample to demonstrate catalog metadata, reverse relations, and publisher-level rollups.",
-			'books'      => "{$title} is a seeded book record with reading context, catalog fields, and links to author and publisher records.",
-			'musicians'  => "{$title} is an artist profile for the music catalog, connected to album records and release rollups.",
-			'labels'     => "{$title} is a label profile that gives albums a realistic publishing home and makes reverse catalog views useful.",
-			'albums'     => "{$title} is an album record with release metadata, track links, and rollups that summarize the connected tracks.",
-			'tracks'     => "{$title} is a track note used to check dense relation chips, numeric duration rollups, and short-form row bodies.",
-			'people'     => "{$title} is a team member profile that participates in task assignment, project ownership, and people-centric rollups.",
-			'projects'   => "{$title} is an operational project brief connected to tasks, owners, status fields, and due-date rollups.",
-			'tasks'      => "{$title} is a seeded task brief with enough body content to test opening, editing, and saving row pages.",
-			default      => "{$title} is a seeded row with body content for row-detail and full-page editing checks.",
+				'authors'    => "{$title} is an author profile with a few notes for browsing the library.",
+				'publishers' => "{$title} gives the library a publisher record, so books can link to an imprint instead of repeating text.",
+				'books'      => "{$title} keeps the reading notes, catalog fields, author, and publisher in one place.",
+				'musicians'  => "{$title} is an artist profile connected to albums and release summaries.",
+				'labels'     => "{$title} gives albums a label home and makes catalog browsing easier.",
+				'albums'     => "{$title} collects release details, track links, and a quick summary of the songs.",
+				'tracks'     => "{$title} keeps a short listening note and its album link.",
+				'people'     => "{$title} has the work tied to this person: assignments, owned projects, and a few profile details.",
+				'projects'   => "{$title} gathers the status, owner, dates, and tasks in one place.",
+				'tasks'      => "{$title} has the details a teammate would need before opening the work.",
+				default      => "{$title} has a short note and a few fields to make the row worth opening.",
 		};
 	}
 
@@ -4842,7 +4869,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	private function entry_summary_items( array $entry ): array {
 		$items = array();
 		foreach ( $entry as $field => $value ) {
-			if ( in_array( $field, array( 'title', 'icon', 'Notes', 'Website', 'URL', 'Project URL' ), true ) ) {
+			if ( in_array( $field, array( 'title', 'legacy_titles', 'icon', 'Notes', 'Website', 'URL', 'Project URL' ), true ) ) {
 				continue;
 			}
 
@@ -4857,7 +4884,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	}
 
 	/**
-	 * Formats a seeded row field for body text.
+	 * Formats a sample row field for body text.
 	 *
 	 * @param mixed $value Field value.
 	 */
@@ -5003,10 +5030,10 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	/**
 	 * Builds default table column widths for seeded data-view blocks.
 	 *
-	 * Heuristics use field title and type cues so demo collections paint with
+	 * Heuristics use field title and type cues so sample collections paint with
 	 * comfortable widths out of the box (Title 260, Notes/Description 360,
 	 * pluralized relations 280, rollups by aggregator family, etc). Lives in
-	 * the seeder because it is demo presentation, not part of the document
+	 * the seeder because it is sample presentation, not part of the document
 	 * model.
 	 *
 	 * @param int $collection_id Collection ID.
@@ -5257,20 +5284,42 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		}
 
 		foreach ( $spec['entries'] as $entry ) {
+			$entry_title       = (string) $entry['title'];
+			$candidate_titles  = array_merge(
+				array( $entry_title ),
+				isset( $entry['legacy_titles'] ) && is_array( $entry['legacy_titles'] ) ? $entry['legacy_titles'] : array()
+			);
+			$existing_entry_id = 0;
+			foreach ( $candidate_titles as $candidate_title ) {
+				$candidate_title = (string) $candidate_title;
+				if ( isset( $existing_entries_by_title[ $candidate_title ] ) ) {
+					$existing_entry_id = (int) $existing_entries_by_title[ $candidate_title ];
+					break;
+				}
+			}
+
 			$entry_content = $this->entry_content( $spec, $entry );
-			if ( isset( $existing_entries_by_title[ $entry['title'] ] ) ) {
-				$existing_entry_id = $existing_entries_by_title[ $entry['title'] ];
+			if ( $existing_entry_id > 0 ) {
+				$existing_entry = get_post( $existing_entry_id );
+				if ( $existing_entry && $entry_title !== (string) $existing_entry->post_title ) {
+					wp_update_post(
+						array(
+							'ID'         => $existing_entry_id,
+							'post_title' => $entry_title,
+						)
+					);
+				}
 				$this->update_entry_content( $existing_entry_id, $entry_content );
-				$this->maybe_apply_row_icon( $existing_entry_id, $spec['slug'], $entry['title'] );
-				$this->maybe_apply_row_cover( $existing_entry_id, $spec['slug'], $entry['title'] );
-				WP_CLI::log( "Entry '{$entry['title']}' already exists. Skipping." );
+				$this->maybe_apply_row_icon( $existing_entry_id, $spec['slug'], $entry_title );
+				$this->maybe_apply_row_cover( $existing_entry_id, $spec['slug'], $entry_title );
+				WP_CLI::log( "Entry '{$entry_title}' already exists. Skipping." );
 				continue;
 			}
 
 			$entry_id = wp_insert_post(
 				array(
 					'post_type'    => Document::POST_TYPE,
-					'post_title'   => $entry['title'],
+					'post_title'   => $entry_title,
 					'post_status'  => 'private',
 					'post_content' => $entry_content,
 				),
@@ -5278,7 +5327,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			);
 
 			if ( is_wp_error( $entry_id ) ) {
-				WP_CLI::error( "Failed to create entry '{$entry['title']}': " . $entry_id->get_error_message() );
+				WP_CLI::error( "Failed to create entry '{$entry_title}': " . $entry_id->get_error_message() );
 			}
 
 			$trait_term_id = Relations::trait_term_id_for_collection( (int) $collection_id );
@@ -5287,8 +5336,8 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			}
 
 			update_post_meta( (int) $entry_id, '_cortext_seed_entry_content_version', self::ENTRY_CONTENT_VERSION );
-			$this->maybe_apply_row_icon( (int) $entry_id, $spec['slug'], $entry['title'] );
-			$this->maybe_apply_row_cover( (int) $entry_id, $spec['slug'], $entry['title'] );
+			$this->maybe_apply_row_icon( (int) $entry_id, $spec['slug'], $entry_title );
+			$this->maybe_apply_row_cover( (int) $entry_id, $spec['slug'], $entry_title );
 
 			foreach ( $field_ids as $field_name => $field_id ) {
 				if ( array_key_exists( $field_name, $entry ) ) {
@@ -5309,7 +5358,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 				update_post_meta( $entry_id, "field-{$field_id}", $value );
 			}
 
-			WP_CLI::log( "Created entry '{$entry['title']}' (ID {$entry_id})." );
+			WP_CLI::log( "Created entry '{$entry_title}' (ID {$entry_id})." );
 		}
 
 		return (int) $collection_id;
@@ -5917,14 +5966,14 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	 */
 	private function project_owner_relations(): array {
 		return array(
-			'Seed knowledge workspace'    => 'Miguel Fonseca',
-			'Relation field polish'       => 'Iris Okafor',
-			'Row detail editing'          => 'Hector Prieto',
-			'Collection icon pass'        => 'Ava Chen',
-			'Import modeling guide'       => 'Sam Rivera',
-			'DataViews saved views'       => 'Priya Shah',
-			'Public collection templates' => 'Mina Park',
-			'Performance baseline'        => 'Rae Kim',
+			'Prepare public beta workspace' => 'Miguel Fonseca',
+			'Relation field polish'         => 'Hector Prieto',
+			'Row detail editing'            => 'Hector Prieto',
+			'Collection icon pass'          => 'Ava Chen',
+			'Import modeling guide'         => 'Sam Rivera',
+			'DataViews saved views'         => 'Priya Shah',
+			'Public collection templates'   => 'Mina Park',
+			'Performance baseline'          => 'Rae Kim',
 		);
 	}
 
@@ -5935,36 +5984,36 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	 */
 	private function task_project_relations(): array {
 		return array(
-			'Replace flat seed tables with connected data' => 'Seed knowledge workspace',
-			'Add collection icons to sidebar rows'         => 'Collection icon pass',
-			'Seed author rollups from related books'       => 'Seed knowledge workspace',
-			'Create album track rollups'                   => 'Seed knowledge workspace',
-			'Rewrite workspace landing page content'       => 'Seed knowledge workspace',
-			'Add richer research page blocks'              => 'Seed knowledge workspace',
-			'Check relation picker with dozens of rows'    => 'Relation field polish',
-			'Normalize seed option colors to palette names' => 'Seed knowledge workspace',
-			'Add people ownership relation'                => 'Relation field polish',
-			'Backfill task relation examples'              => 'Seed knowledge workspace',
-			'Verify seeded pages update on rerun'          => 'Seed knowledge workspace',
-			'Document reset command behavior'              => 'Import modeling guide',
-			'Audit row detail read-only relation fields'   => 'Row detail editing',
-			'Tune sidebar icon spacing'                    => 'Collection icon pass',
-			'Create publisher catalog examples'            => 'Seed knowledge workspace',
-			'Create label catalog examples'                => 'Seed knowledge workspace',
-			'Stress test table horizontal scroll'          => 'Performance baseline',
-			'Add task footer calculation examples'         => 'DataViews saved views',
-			'Review collection creation defaults'          => 'Import modeling guide',
-			'Design row page opening states'               => 'Row detail editing',
-			'Add import fixture notes'                     => 'Import modeling guide',
-			'Profile rollup formatting'                    => 'Performance baseline',
-			'Polish empty date displays'                   => 'Row detail editing',
-			'Write manual QA checklist page'               => 'Import modeling guide',
-			'Check collection home preference with icons'  => 'Collection icon pass',
-			'Clean up old paintings seed references'       => 'Seed knowledge workspace',
-			'Add saved view fixture once model exists'     => 'DataViews saved views',
-			'Review mobile table density'                  => 'Performance baseline',
-			'Add cover image fallback tests'               => 'Collection icon pass',
-			'Prepare demo script for relation chips'       => 'Import modeling guide',
+			'Connect catalog records'                     => 'Prepare public beta workspace',
+			'Check collection icons in the sidebar'       => 'Collection icon pass',
+			'Review author rollups'                       => 'Prepare public beta workspace',
+			'Review album rollups'                        => 'Prepare public beta workspace',
+			'Refresh welcome page copy'                   => 'Prepare public beta workspace',
+			'Add guide pages to the tour'                 => 'Prepare public beta workspace',
+			'Check relation picker with dozens of rows'   => 'Relation field polish',
+			'Review option colors'                        => 'Prepare public beta workspace',
+			'Review ownership relations'                  => 'Relation field polish',
+			'Review task relation examples'               => 'Prepare public beta workspace',
+			'Refresh guide pages after edits'             => 'Prepare public beta workspace',
+			'Explain fresh workspace setup'               => 'Import modeling guide',
+			'Check relation fields in row detail'         => 'Row detail editing',
+			'Review sidebar icon spacing'                 => 'Collection icon pass',
+			'Review publisher catalog examples'           => 'Prepare public beta workspace',
+			'Review label catalog examples'               => 'Prepare public beta workspace',
+			'Check table horizontal scroll'               => 'Performance baseline',
+			'Review task footer calculations'             => 'DataViews saved views',
+			'Review collection creation defaults'         => 'Import modeling guide',
+			'Design row page opening states'              => 'Row detail editing',
+			'Draft import notes'                          => 'Import modeling guide',
+			'Profile rollup formatting'                   => 'Performance baseline',
+			'Review empty date displays'                  => 'Row detail editing',
+			'Write quick tour checklist'                  => 'Import modeling guide',
+			'Check collection home preference with icons' => 'Collection icon pass',
+			'Retire outdated content references'          => 'Prepare public beta workspace',
+			'Plan saved view examples'                    => 'DataViews saved views',
+			'Review mobile table density'                 => 'Performance baseline',
+			'Review cover image fallbacks'                => 'Collection icon pass',
+			'Draft relation-chip tour'                    => 'Import modeling guide',
 		);
 	}
 
@@ -5975,36 +6024,36 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	 */
 	private function task_assignee_relations(): array {
 		return array(
-			'Replace flat seed tables with connected data' => 'Hector Prieto',
-			'Add collection icons to sidebar rows'         => 'Ava Chen',
-			'Seed author rollups from related books'       => 'Iris Okafor',
-			'Create album track rollups'                   => 'Iris Okafor',
-			'Rewrite workspace landing page content'       => 'Nora Singh',
-			'Add richer research page blocks'              => 'Nora Singh',
-			'Check relation picker with dozens of rows'    => 'Sam Rivera',
-			'Normalize seed option colors to palette names' => 'Rae Kim',
-			'Add people ownership relation'                => 'Hector Prieto',
-			'Backfill task relation examples'              => 'Owen Brooks',
-			'Verify seeded pages update on rerun'          => 'Priya Shah',
-			'Document reset command behavior'              => 'Eli Novak',
-			'Audit row detail read-only relation fields'   => 'Iris Okafor',
-			'Tune sidebar icon spacing'                    => 'Mina Park',
-			'Create publisher catalog examples'            => 'Owen Brooks',
-			'Create label catalog examples'                => 'Owen Brooks',
-			'Stress test table horizontal scroll'          => 'Rae Kim',
-			'Add task footer calculation examples'         => 'Leo Martin',
-			'Review collection creation defaults'          => 'Sam Rivera',
-			'Design row page opening states'               => 'Mina Park',
-			'Add import fixture notes'                     => 'Eli Novak',
-			'Profile rollup formatting'                    => 'Rae Kim',
-			'Polish empty date displays'                   => 'Leo Martin',
-			'Write manual QA checklist page'               => 'Nora Singh',
-			'Check collection home preference with icons'  => 'Priya Shah',
-			'Clean up old paintings seed references'       => 'Hector Prieto',
-			'Add saved view fixture once model exists'     => 'Priya Shah',
-			'Review mobile table density'                  => 'Mina Park',
-			'Add cover image fallback tests'               => 'Leo Martin',
-			'Prepare demo script for relation chips'       => 'Nora Singh',
+			'Connect catalog records'                     => 'Hector Prieto',
+			'Check collection icons in the sidebar'       => 'Ava Chen',
+			'Review author rollups'                       => 'Hector Prieto',
+			'Review album rollups'                        => 'Hector Prieto',
+			'Refresh welcome page copy'                   => 'Nora Singh',
+			'Add guide pages to the tour'                 => 'Nora Singh',
+			'Check relation picker with dozens of rows'   => 'Sam Rivera',
+			'Review option colors'                        => 'Rae Kim',
+			'Review ownership relations'                  => 'Hector Prieto',
+			'Review task relation examples'               => 'Owen Brooks',
+			'Refresh guide pages after edits'             => 'Priya Shah',
+			'Explain fresh workspace setup'               => 'Eli Novak',
+			'Check relation fields in row detail'         => 'Hector Prieto',
+			'Review sidebar icon spacing'                 => 'Mina Park',
+			'Review publisher catalog examples'           => 'Owen Brooks',
+			'Review label catalog examples'               => 'Owen Brooks',
+			'Check table horizontal scroll'               => 'Rae Kim',
+			'Review task footer calculations'             => 'Leo Martin',
+			'Review collection creation defaults'         => 'Sam Rivera',
+			'Design row page opening states'              => 'Mina Park',
+			'Draft import notes'                          => 'Eli Novak',
+			'Profile rollup formatting'                   => 'Rae Kim',
+			'Review empty date displays'                  => 'Leo Martin',
+			'Write quick tour checklist'                  => 'Nora Singh',
+			'Check collection home preference with icons' => 'Priya Shah',
+			'Retire outdated content references'          => 'Hector Prieto',
+			'Plan saved view examples'                    => 'Priya Shah',
+			'Review mobile table density'                 => 'Mina Park',
+			'Review cover image fallbacks'                => 'Leo Martin',
+			'Draft relation-chip tour'                    => 'Nora Singh',
 		);
 	}
 
