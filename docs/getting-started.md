@@ -1,6 +1,6 @@
 # Getting started
 
-Cortext is in beta. To try the latest code you run it from source; the same paths work whether you are kicking the tires or contributing.
+Cortext is in beta. This guide covers running Cortext from source to work on the plugin. If you just want to try the beta, install the packaged plugin instead: see [Try the beta](../README.md#try-the-beta).
 
 ## Requirements
 

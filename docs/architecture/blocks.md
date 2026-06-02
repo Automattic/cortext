@@ -67,7 +67,7 @@ To keep the block out of the picker, `initEditor.js` registers a `blocks.registe
 
 ### Post-author and post-excerpt require `register_post_type` supports
 
-`core/post-author`, `core/post-author-name`, and `core/post-excerpt` rely on the post type declaring `supports: ['author']` or `supports: ['excerpt']`. Cortext's `crtxt_page` and `crtxt_collection` declare neither, so these blocks would fail or render empty. Leave them out until those supports exist.
+`core/post-author`, `core/post-author-name`, and `core/post-excerpt` rely on the post type declaring `supports: ['author']` or `supports: ['excerpt']`. Cortext's `crtxt_document` post type declares neither, so these blocks would fail or render empty. Leave them out until those supports exist.
 
 ### The `collections` inserter category
 

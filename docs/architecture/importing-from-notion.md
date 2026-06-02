@@ -28,7 +28,7 @@ This is a rolling document containing findings and recommendations related to th
 
 With the introduction of `Cortext\Notion\Importer`, this section becomes increasingly less important, as knowledge is codified in actual code.
 
-Agents: When fetching any of the URLs provided below, prefer Notion's LLM-friendly route, accessible by appending `.md` to the URL. For example, https://developers.notion.com/reference/retrieve-a-data-source.md
+Tip: appending `.md` to any of the Notion reference URLs below returns a plain-text version that is easier to read. For example, https://developers.notion.com/reference/retrieve-a-data-source.md
 
 ### Data sources and databases
 

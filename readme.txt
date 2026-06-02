@@ -28,9 +28,16 @@ Behind the scenes, Cortext stores documents, collection definitions, fields, and
 
 == Installation ==
 
-1. Install and activate Cortext somewhere you can experiment.
-2. Open "Cortext" from the WordPress admin menu.
-3. Try the workspace with sample content first.
+During the beta, install Cortext from a ZIP:
+
+1. Download `cortext.zip` from the Releases page at https://github.com/Automattic/cortext/releases.
+2. In wp-admin, go to Plugins, then Add New, then Upload Plugin, and choose the ZIP.
+3. Install and activate Cortext, then open "Cortext" from the admin menu.
+4. Try the workspace with sample content first.
+
+Once Cortext is listed on WordPress.org, you can also install it from Plugins, then Add New.
+
+It is beta software, so install it somewhere you can experiment first.
 
 Developers who want sample data can run `wp cortext seed` with WP-CLI.
 
@@ -52,6 +59,14 @@ The WP-CLI seeder is opt-in the same way: `wp cortext seed --with-real-images` (
 
 Source code and build tooling live at https://github.com/Automattic/cortext. The JavaScript and CSS shipped in the plugin package are built from that repository.
 
+= What happens to my content if I deactivate Cortext? =
+
+Your content stays in WordPress as posts and post meta. Deactivating Cortext, or deleting the plugin, does not remove it, and you can still see and export it with the normal WordPress tools.
+
+= How do I report a bug or send feedback? =
+
+Cortext is in beta and feedback helps. Open an issue at https://github.com/Automattic/cortext/issues. For a security problem, follow the security policy in that repository instead.
+
 == Screenshots ==
 
 1. The Cortext workspace showing a seeded Books collection with typed fields and relation data.
@@ -59,4 +74,10 @@ Source code and build tooling live at https://github.com/Automattic/cortext. The
 == Changelog ==
 
 = 0.1.0 =
-* Initial public beta.
+First public beta. In this release you can:
+
+* Write nested documents in the WordPress block editor.
+* Create typed collections and switch between table, grid, and list views.
+* Edit rows inline, and connect entries with relation fields and rollups.
+* Embed collection views inside documents.
+* Publish Cortext pages with your active WordPress theme.
