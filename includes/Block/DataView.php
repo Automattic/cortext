@@ -9,6 +9,7 @@ declare( strict_types=1 );
 
 namespace Cortext\Block;
 
+use Cortext\Frontend\Assets;
 use Cortext\PostType\Document;
 
 final class DataView {
@@ -59,7 +60,7 @@ final class DataView {
 			return '';
 		}
 
-		$this->enqueue_assets();
+		Assets::enqueue_frontend_runtime();
 
 		$init_data = wp_json_encode(
 			array(
@@ -76,31 +77,6 @@ final class DataView {
 			'<div %s><script type="application/json" class="cortext-dv-init">%s</script></div>',
 			$wrapper_attributes,
 			$init_data
-		);
-	}
-
-	private function enqueue_assets(): void {
-		$asset_path = CORTEXT_PATH . 'build/frontend.asset.php';
-		$asset      = file_exists( $asset_path )
-			? require $asset_path
-			: array(
-				'dependencies' => array(),
-				'version'      => CORTEXT_VERSION,
-			);
-
-		wp_enqueue_script(
-			'cortext-frontend',
-			CORTEXT_URL . 'build/frontend.js',
-			$asset['dependencies'],
-			$asset['version'],
-			true
-		);
-
-		wp_enqueue_style(
-			'cortext-frontend',
-			CORTEXT_URL . 'build/frontend.css',
-			array( 'wp-block-library', 'wp-components' ),
-			$asset['version']
 		);
 	}
 }
