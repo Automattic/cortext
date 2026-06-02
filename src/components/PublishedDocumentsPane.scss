@@ -2,11 +2,48 @@
 @use "@wordpress/base-styles/variables" as *;
 
 .cortext-published-pane {
+	--cortext-published-surface: var(--cortext-canvas-surface);
+	--cortext-published-border: var(--cortext-canvas-border);
+	--cortext-published-text: #{$gray-900};
+	--cortext-published-text-muted: #{$gray-700};
+	--wp-components-color-background: var(--cortext-published-surface);
+	--wp-components-color-foreground: var(--cortext-published-text);
+	--wp-components-color-gray-600: #{$gray-600};
+	--wp-components-color-gray-700: var(--cortext-published-text-muted);
+	--wp-components-color-accent: var(--wp-admin-theme-color, var(--cortext-accent));
+
 	flex: 1 1 auto;
 	min-height: 0;
 	height: 100%;
 	padding: $grid-unit-30 $grid-unit-40;
 	overflow: auto;
+	color-scheme: light;
+	background: var(--cortext-published-surface);
+	color: var(--cortext-published-text);
+
+	.cortext-published-pane__description {
+		color: var(--cortext-published-text-muted);
+	}
+
+	.dataviews-wrapper {
+		color-scheme: light;
+		background: var(--cortext-published-surface);
+		color: var(--cortext-published-text);
+	}
+
+	.dataviews-footer,
+	.dataviews__view-actions,
+	.dataviews-filters__container,
+	.dataviews-view-table thead th,
+	.dataviews-view-table td.dataviews-view-table__actions-column--sticky,
+	.dataviews-view-table th.dataviews-view-table__actions-column--sticky {
+		background: var(--cortext-published-surface);
+	}
+
+	.dataviews-footer,
+	.dataviews-view-table tr {
+		border-color: var(--cortext-published-border);
+	}
 
 	&__title.components-button {
 		display: inline-flex;
@@ -16,6 +53,12 @@
 		height: auto;
 		min-height: 0;
 		text-align: start;
+		color: var(--cortext-published-text);
+
+		&:hover,
+		&:focus-visible {
+			color: var(--wp-components-color-accent);
+		}
 	}
 
 	&__title-icon {
