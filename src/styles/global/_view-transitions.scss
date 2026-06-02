@@ -97,10 +97,8 @@
 	z-index: 1;
 }
 
-// Import and Published are static light panes. The user-agent cross-fade blends
-// snapshots with plus-lighter, which washes two light panes to white at the
-// midpoint; dissolve them with a normal blend instead. The document loader
-// keeps plus-lighter, so its paint-in is untouched.
+// Chrome's default View Transition blend uses plus-lighter. For light static
+// panes, replace it with a plain opacity fade so the midpoint stays clean.
 :root[data-cortext-view-transition="pane-crossfade"]::view-transition-old(cortext-canvas) {
 	animation: cortext-pane-crossfade-old 240ms ease both;
 	mix-blend-mode: normal;

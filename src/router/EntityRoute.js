@@ -162,9 +162,8 @@ export default function EntityRoute( { history } ) {
 			} );
 			return;
 		}
-		// Import and Published are static light panes; give them a plain
-		// cross-fade. The user-agent plus-lighter blend (kept below for the
-		// document loader) would wash two light panes to white at the midpoint.
+		// Import and Published are light static panes. Use a plain fade so
+		// Chrome's default blend does not wash the transition to white.
 		if (
 			after.active.kind === 'import' ||
 			after.active.kind === 'published'

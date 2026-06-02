@@ -9,10 +9,8 @@
 // real Canvas doesn't reflow. Animation is intentionally subtle: a slow
 // pulse keeps it from competing with whatever lands next.
 .cortext-canvas-skeleton {
-	// The canvas surface is always light (white), even in dark mode, so the
-	// placeholder fill can't follow the shell's --cortext-state-hover, which
-	// flips to a translucent white in dark mode and vanishes on white. Pin a
-	// translucent black so the skeleton stays visible in both themes.
+	// The editor canvas stays light in dark mode. Use a dark translucent fill
+	// so the skeleton remains visible on that white surface.
 	--cortext-canvas-skeleton-fill: rgba(0, 0, 0, 0.07);
 	display: flex;
 	flex-direction: column;

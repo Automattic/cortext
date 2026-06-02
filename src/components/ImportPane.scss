@@ -34,13 +34,11 @@
 	color: var(--cortext-pane-text);
 	display: flex;
 	flex-direction: column;
-	// Space the blocks with a flex gap rather than margins. The WordPress
-	// Heading and Text components reset their own margins to zero, so margin
-	// rules on them are ignored; the gap is immune to that.
+	// WordPress Heading and Text reset their margins; gap keeps the page
+	// spacing steady.
 	gap: $grid-unit-40;
 
-	// Keep the page in a readable column so the notice and copy do not stretch
-	// the full canvas width and line up with the constrained form below.
+	// Keep the copy and notice in the same readable column as the form.
 	> * {
 		max-width: 640px;
 	}

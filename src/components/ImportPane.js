@@ -168,14 +168,14 @@ export default function ImportPane() {
 					variant="muted"
 				>
 					{ __(
-						'Bring content from your other tools into Cortext.',
+						'Bring content from other tools into Cortext.',
 						'cortext'
 					) }
 				</Text>
 			</VStack>
 			<Notice status="warning" isDismissible={ false }>
 				{ __(
-					'Import is in early alpha. Notion is the only source so far, and the importer is rough enough that it may not bring everything over. More sources will come later.',
+					'Import is still early. Notion is the only source for now, and some content may not come across cleanly. More sources are coming later.',
 					'cortext'
 				) }
 			</Notice>
