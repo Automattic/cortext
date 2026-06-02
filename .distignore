@@ -3,9 +3,9 @@
 # deploy action.
 #
 # This mirrors the runtime allowlist in scripts/build-zip.sh as a denylist:
-# anything not listed here can ship to users. The public plugin should contain
-# cortext.php, readme.txt, LICENSE, includes/, templates/, build/,
-# seed-assets/, assets/brand/, and vendor/ without dev dependencies.
+# anything not listed here can ship to users. The plugin ZIP should contain
+# cortext.php, readme.txt, LICENSE, composer.json, includes/, templates/,
+# build/, seed-assets/, assets/brand/, and vendor/ without dev dependencies.
 #
 # Note: .distignore does not respect .gitignore, but build/ and vendor/ are
 # gitignored. If a deploy relies on this file, run `pnpm run build` and
@@ -32,7 +32,6 @@
 /package.json
 /pnpm-lock.yaml
 /pnpm-workspace.yaml
-/composer.json
 /composer.lock
 
 # Local dev environment (wp-env) and its generated auto-login helpers

@@ -786,7 +786,7 @@ final class Document {
 		if ( null !== $no_collections && '' !== (string) $no_collections && '0' !== (string) $no_collections ) {
 			$ids = TraitTaxonomy::all_trait_ids();
 			if ( array() !== $ids ) {
-				$args['post__not_in'] = array_merge( $args['post__not_in'] ?? array(), $ids );
+				$args['post__not_in'] = array_merge( $args['post__not_in'] ?? array(), $ids ); // phpcs:ignore WordPressVIPMinimum.Performance.WPQueryParams.PostNotIn_post__not_in -- Trait ids are one per collection, so this stays bounded.
 			}
 		}
 

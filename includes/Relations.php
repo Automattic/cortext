@@ -265,7 +265,7 @@ final class Relations {
 			if ( count( $removed ) > 0 ) {
 				$placeholders = implode( ',', array_fill( 0, count( $removed ), '%d' ) );
 				$args         = array_merge( array( $row_id, $key ), array_map( 'strval', $removed ) );
-				// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQLPlaceholders
+				// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQLPlaceholders, PluginCheck.Security.DirectDB.UnescapedDBParameter
 				$wpdb->query(
 					$wpdb->prepare(
 						"DELETE FROM {$wpdb->postmeta}
@@ -287,7 +287,7 @@ final class Relations {
 					$args[] = $key;
 					$args[] = (string) $value;
 				}
-				// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQLPlaceholders
+				// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQLPlaceholders, PluginCheck.Security.DirectDB.UnescapedDBParameter
 				$wpdb->query(
 					$wpdb->prepare(
 						"INSERT INTO {$wpdb->postmeta} (post_id, meta_key, meta_value) VALUES {$placeholders}",
@@ -424,7 +424,7 @@ final class Relations {
 		$placeholders = implode( ',', array_fill( 0, count( $targets ), '%d' ) );
 		$args         = array_merge( array( $key, (string) $row_id ), $targets );
 
-		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQLPlaceholders
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQLPlaceholders, PluginCheck.Security.DirectDB.UnescapedDBParameter
 		$wpdb->query(
 			$wpdb->prepare(
 				"DELETE FROM {$wpdb->postmeta}
@@ -464,7 +464,7 @@ final class Relations {
 			// so the (target, reverse_key, row_id) row is the only one left.
 			$placeholders = implode( ',', array_fill( 0, count( $targets ), '%d' ) );
 			$args         = array_merge( array( $key ), $targets );
-			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQLPlaceholders
+			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQLPlaceholders, PluginCheck.Security.DirectDB.UnescapedDBParameter
 			$wpdb->query(
 				$wpdb->prepare(
 					"DELETE FROM {$wpdb->postmeta}
@@ -501,7 +501,7 @@ final class Relations {
 			$args[] = $value;
 		}
 
-		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQLPlaceholders
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQLPlaceholders, PluginCheck.Security.DirectDB.UnescapedDBParameter
 		$wpdb->query(
 			$wpdb->prepare(
 				"INSERT INTO {$wpdb->postmeta} (post_id, meta_key, meta_value) VALUES {$placeholders}",

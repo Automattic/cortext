@@ -162,6 +162,7 @@ jobs:
                   required_paths=(
                     cortext/cortext.php
                     cortext/readme.txt
+                    cortext/composer.json
                     cortext/vendor/autoload.php
                     cortext/build/index.js
                   )
@@ -177,7 +178,7 @@ jobs:
                   # catches local dev helpers, desktop-only files, WordPress
                   # core copies, and other files that should stay out of a
                   # plugin release.
-                  allowed='^cortext/(cortext\.php|readme\.txt|LICENSE)$|^cortext/(includes|templates|build|seed-assets|vendor|assets/brand)/'
+                  allowed='^cortext/(cortext\.php|readme\.txt|LICENSE|composer\.json)$|^cortext/(includes|templates|build|seed-assets|vendor|assets/brand)/'
                   if grep -v '/$' release-zip-contents.txt | grep -vE "$allowed" > release-zip-unexpected.txt; then
                     echo "::error::Release ZIP contains files outside the runtime allowlist"
                     cat release-zip-unexpected.txt
