@@ -2,6 +2,8 @@
 
 # Cortext
 
+[Try in WordPress Playground](https://playground.wordpress.net/?blueprint-url=https://raw.githubusercontent.com/Automattic/cortext/main/playground/blueprint.json)
+
 > [!WARNING]
 > Cortext is an early beta. Try it somewhere low-stakes first.
 >
@@ -24,6 +26,7 @@ Cortext stores documents, collection definitions, fields, and collection rows as
 ## Docs
 
 -   [Getting started](docs/getting-started.md): install, run, day-to-day commands.
+-   [Playground](docs/playground.md): try Cortext in WordPress Playground and prepare the gallery files.
 -   [Release process](docs/release.md): milestones, labels, and changelog previews.
 -   [Vision and principles](docs/vision.md): what drives the design.
 -   [Architecture](docs/architecture.md): current storage and shell overview.
