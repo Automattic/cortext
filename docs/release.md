@@ -123,9 +123,10 @@ that already exists.
 ## Desktop app
 
 The desktop release builds a macOS DMG with electron-builder and attaches it to
-the same Release as the plugin ZIP. It is arm64 only and unsigned for now.
-Because it is unsigned, macOS warns on first launch, so the release notes tell
-people to open it from System Settings > Privacy & Security > "Open Anyway", or
-to run `xattr -dr com.apple.quarantine /Applications/Cortext.app` once. The
-installed app checks GitHub Releases on launch and links to the download when a
-newer version exists, but it does not update itself.
+the same Release as the plugin ZIP. The build is arm64-only and unsigned for
+now, so macOS may show a "Cortext is damaged" warning the first time it opens.
+Release notes should tell people to move Cortext to Applications. If the warning
+appears, they should click Cancel, open Terminal, and run
+`xattr -dr com.apple.quarantine /Applications/Cortext.app && open /Applications/Cortext.app`.
+The installed app checks GitHub Releases on launch and links to the download
+when a newer version exists, but it does not update itself.
