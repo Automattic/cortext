@@ -46,6 +46,10 @@
 		min-height: 0;
 	}
 
+	&.interface-interface-skeleton {
+		left: 0;
+	}
+
 	&__visual {
 		display: flex;
 		flex-direction: column;
