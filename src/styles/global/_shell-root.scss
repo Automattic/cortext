@@ -206,10 +206,29 @@ body.cortext-fullscreen {
 	overflow: auto;
 }
 
+.cortext-canvas__empty-title {
+	margin: 0;
+	color: var(--cortext-text-strong);
+}
+
 .cortext-canvas__empty-text {
-	color: $gray-700;
+	color: var(--cortext-text-muted);
 	text-align: center;
 	padding: $grid-unit-30 0;
+	max-width: 460px;
+}
+
+.cortext-canvas__empty-actions {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: $grid-unit-10;
+}
+
+.cortext-canvas__empty-error {
+	color: $alert-red;
+	text-align: center;
+	margin-top: $grid-unit-15;
 }
 
 // Identity-action affordances render inside the BlockCanvas iframe via
