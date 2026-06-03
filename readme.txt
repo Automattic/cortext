@@ -49,11 +49,7 @@ Not yet. Cortext is ready to try, but still early. Use it somewhere low-stakes b
 
 = Does Cortext connect to external services? =
 
-Only when you ask it to. Everyday use (writing documents, building collections, publishing pages) stays inside WordPress with no external calls.
-
-The one exception is the optional Notion import. When you run it, Cortext sends the Notion token you provide and the collections you pick to api.notion.com so it can read that content into WordPress. Notion's Terms (https://www.notion.so/28ffdd083dc3473e9c2da6ec011b58ac) and Privacy Policy (https://www.notion.com/trust/privacy-policy) apply to that traffic.
-
-The WP-CLI seeder is opt-in the same way: `wp cortext seed --with-real-images` (or the `--prefetch-*` flags) fetches sample cover art from public sources like Open Library, MusicBrainz, the Cover Art Archive, and Wikimedia/Wikidata. That only happens when you pass the flag.
+Only when you ask it to. Everyday use (writing documents, building collections, publishing pages) stays inside WordPress with no external calls. The one exception is the optional Notion import. See the External services section below for what it sends and when.
 
 = Where is the source for the built JavaScript and CSS? =
 
@@ -66,6 +62,14 @@ Your content stays in WordPress as posts and post meta. Deactivating Cortext, or
 = How do I report a bug or send feedback? =
 
 Cortext is in beta and feedback helps. Open an issue at https://github.com/Automattic/cortext/issues. For a security problem, follow the security policy in that repository instead.
+
+== External services ==
+
+Cortext runs inside your WordPress install. The only external service it can reach is the optional Notion import.
+
+The import reads content from a Notion workspace into Cortext. It runs only when you start an import and supply a Notion integration token; nothing leaves your site otherwise. When you run it, Cortext sends that token and the IDs of the collections you picked to the Notion API at api.notion.com, which returns the content to store in WordPress.
+
+Notion's Terms of Service (https://www.notion.so/28ffdd083dc3473e9c2da6ec011b58ac) and Privacy Policy (https://www.notion.com/trust/privacy-policy) cover that traffic.
 
 == Screenshots ==
 
