@@ -42,6 +42,7 @@ import {
 	getCanvasOwnerInitialAttributesForRecord,
 } from './CanvasOwnerInspector';
 import MediaPicker, { MediaUploadCheck } from './MediaPicker';
+import { parseDocumentIcon } from './DocumentIcon';
 import afterNextPaint from '../hooks/afterNextPaint';
 
 const DOCUMENT_ICON_BLOCK = 'cortext/document-icon';
@@ -1352,12 +1353,11 @@ function imageMatchesSource( image, expectedSource ) {
 	);
 }
 
-function findCoverImage( ownerDocument, expectedSource ) {
-	const images = [
-		...ownerDocument.querySelectorAll(
-			'.cortext-document-cover-block__image'
-		),
-	];
+const COVER_IMAGE_SELECTOR = '.cortext-document-cover-block__image';
+const ICON_IMAGE_SELECTOR = '.cortext-document-icon--image';
+
+function findImageNode( ownerDocument, selector, expectedSource ) {
+	const images = [ ...ownerDocument.querySelectorAll( selector ) ];
 	if ( expectedSource ) {
 		return (
 			images.find( ( image ) =>
@@ -1368,8 +1368,8 @@ function findCoverImage( ownerDocument, expectedSource ) {
 	return images[ 0 ] ?? null;
 }
 
-function waitForCoverImageNode( ownerDocument, expectedSource ) {
-	const existing = findCoverImage( ownerDocument, expectedSource );
+function waitForImageNode( ownerDocument, selector, expectedSource ) {
+	const existing = findImageNode( ownerDocument, selector, expectedSource );
 	if ( existing ) {
 		return Promise.resolve( existing );
 	}
@@ -1385,7 +1385,11 @@ function waitForCoverImageNode( ownerDocument, expectedSource ) {
 			resolve( image );
 		};
 		const observer = new MutationObserver( () => {
-			const image = findCoverImage( ownerDocument, expectedSource );
+			const image = findImageNode(
+				ownerDocument,
+				selector,
+				expectedSource
+			);
 			if ( image ) {
 				cleanup( image );
 			}
@@ -1403,19 +1407,38 @@ function waitForCoverImageNode( ownerDocument, expectedSource ) {
 	} );
 }
 
-async function waitForCriticalImages( canvasRoot, expectedCoverSource ) {
+// Hold the reveal until the header images have painted, so they don't pop in
+// once the canvas is shown. The cover is matched by its resolved source. An
+// uploaded icon image fetches its media record and bytes async, so the icon slot
+// would otherwise sit empty for a moment mid-transition.
+async function waitForCriticalImages(
+	canvasRoot,
+	expectedCoverSource,
+	{ iconNeedsImage = false } = {}
+) {
 	const iframe = canvasRoot?.querySelector( 'iframe' );
 	const ownerDocument = iframe?.contentDocument ?? canvasRoot?.ownerDocument;
 	if ( ! ownerDocument ) {
 		return;
 	}
-	const coverImage = await waitForCoverImageNode(
-		ownerDocument,
-		expectedCoverSource
-	);
-	if ( coverImage ) {
-		await waitForImageReady( coverImage );
+	const waits = [];
+	if ( expectedCoverSource ) {
+		waits.push(
+			waitForImageNode(
+				ownerDocument,
+				COVER_IMAGE_SELECTOR,
+				expectedCoverSource
+			).then( ( image ) => image && waitForImageReady( image ) )
+		);
 	}
+	if ( iconNeedsImage ) {
+		waits.push(
+			waitForImageNode( ownerDocument, ICON_IMAGE_SELECTOR ).then(
+				( image ) => image && waitForImageReady( image )
+			)
+		);
+	}
+	await Promise.all( waits );
 }
 
 function CanvasReadyEffect( {
@@ -1436,6 +1459,8 @@ function CanvasReadyEffect( {
 	const numericFeaturedId = Number( featuredId ?? featuredMedia ) || 0;
 	const needsCover = numericFeaturedId > 0;
 	const needsIcon = Boolean( meta?.cortext_document_icon );
+	const iconNeedsImage =
+		parseDocumentIcon( meta?.cortext_document_icon )?.type === 'image';
 	const propertiesCtx = useDocumentPropertiesContext();
 	const isPropertiesResolving = Boolean( propertiesCtx?.isResolving );
 	const needsProperties =
@@ -1502,8 +1527,10 @@ function CanvasReadyEffect( {
 
 		let cancelled = false;
 		async function signalReady() {
-			if ( needsCover && src ) {
-				await waitForCriticalImages( canvasRootRef.current, src );
+			if ( ( needsCover && src ) || iconNeedsImage ) {
+				await waitForCriticalImages( canvasRootRef.current, src, {
+					iconNeedsImage,
+				} );
 			}
 			await afterNextPaint(
 				canvasRootRef.current?.ownerDocument?.defaultView
@@ -1520,6 +1547,7 @@ function CanvasReadyEffect( {
 		areHeaderBlocksReady,
 		canvasRootRef,
 		featuredMedia,
+		iconNeedsImage,
 		needsCover,
 		onReady,
 		postId,
