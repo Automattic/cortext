@@ -116,9 +116,9 @@ Releases run from the Actions tab, through the "Prepare release" workflow
 and a `dry_run` flag. The milestone is the release version, such as `0.1.1` or
 `0.2.0`, and it must already exist and be open. Run it with `dry_run` on first:
 that applies the version bump inside the checkout, builds everything, and
-uploads the artifacts without creating a commit, tag, Release, or next
-milestone. Turn `dry_run` off to commit the version bump, push it to the
-selected branch, and publish a draft Release.
+uploads the artifacts without creating a commit, tag, or Release, and without
+closing the milestone or creating a next milestone. Turn `dry_run` off to commit
+the version bump, push it to the selected branch, and publish a draft Release.
 
 "Prepare release" first updates the plugin header, `CORTEXT_VERSION`,
 `readme.txt` stable tag, root package version, and desktop package versions to
@@ -137,10 +137,11 @@ desktop run only uploads the DMG. You can also run either workflow on its own
 from the Actions tab, which is handy for rebuilding just the DMG against a draft
 that already exists.
 
-When a non-patch release succeeds, the workflow creates the next non-patch
-milestone if it does not already exist. For example, `2.0.0` creates `2.1.0`
-and `0.2.0` creates `0.3.0`. A patch release such as `0.1.1` does not create a
-milestone.
+When a release succeeds, the workflow closes the released milestone. If it is a
+non-patch release, it also creates the next non-patch milestone if it does not
+already exist. For example, `2.0.0` creates `2.1.0` and `0.2.0` creates
+`0.3.0`. A patch release such as `0.1.1` closes `0.1.1` but does not create a
+next milestone.
 
 ## Desktop app
 

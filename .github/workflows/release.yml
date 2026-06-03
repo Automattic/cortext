@@ -144,44 +144,70 @@ jobs:
             ref: ${{ needs.bump-version.outputs.ref }}
         secrets: inherit
 
-    next-milestone:
-        name: Create next minor milestone
+    finalize-milestone:
+        name: Finalize release milestone
         needs: [bump-version, plugin, desktop]
-        if: ${{ ! inputs.dry_run && needs.bump-version.outputs.should_create_next_milestone == 'true' }}
+        if: ${{ ! inputs.dry_run }}
         runs-on: ubuntu-latest
         steps:
-            - name: Create next release milestone
+            - name: Close released milestone and create next when needed
               uses: actions/github-script@v9
               env:
                   CURRENT_MILESTONE: ${{ needs.bump-version.outputs.milestone }}
                   NEXT_MILESTONE: ${{ needs.bump-version.outputs.next_milestone }}
+                  SHOULD_CREATE_NEXT_MILESTONE: ${{ needs.bump-version.outputs.should_create_next_milestone }}
               with:
                   script: |
                       const owner = context.repo.owner;
                       const repo = context.repo.repo;
                       const currentMilestone = process.env.CURRENT_MILESTONE;
                       const nextMilestone = process.env.NEXT_MILESTONE;
+                      const shouldCreateNextMilestone = process.env.SHOULD_CREATE_NEXT_MILESTONE === 'true';
 
                       const milestones = await github.paginate(
                         github.rest.issues.listMilestones,
                         { owner, repo, state: 'all', per_page: 100 }
                       );
-                      const existing = milestones.find( ( item ) => item.title === nextMilestone );
+                      const released = milestones.find( ( item ) => item.title === currentMilestone );
+                      if ( ! released ) {
+                        throw new Error( `Cannot find released milestone "${ currentMilestone }" to close.` );
+                      }
 
-                      if ( existing?.state === 'open' ) {
-                        core.info( `Next milestone ${ nextMilestone } already exists.` );
-                      } else if ( existing ) {
-                        throw new Error( `Next milestone "${ nextMilestone }" already exists but is ${ existing.state }.` );
-                      } else {
-                        await github.rest.issues.createMilestone( {
+                      if ( released.state === 'open' ) {
+                        await github.rest.issues.updateMilestone( {
                           owner,
                           repo,
-                          title: nextMilestone,
+                          milestone_number: released.number,
+                          state: 'closed',
                         } );
-                        core.info( `Created next milestone ${ nextMilestone } after ${ currentMilestone }.` );
+                        core.info( `Closed released milestone ${ currentMilestone }.` );
+                      } else {
+                        core.info( `Released milestone ${ currentMilestone } is already ${ released.state }.` );
+                      }
+
+                      if ( shouldCreateNextMilestone ) {
+                        const existing = milestones.find( ( item ) => item.title === nextMilestone );
+
+                        if ( existing?.state === 'open' ) {
+                          core.info( `Next milestone ${ nextMilestone } already exists.` );
+                        } else if ( existing ) {
+                          throw new Error( `Next milestone "${ nextMilestone }" already exists but is ${ existing.state }.` );
+                        } else {
+                          await github.rest.issues.createMilestone( {
+                            owner,
+                            repo,
+                            title: nextMilestone,
+                          } );
+                          core.info( `Created next milestone ${ nextMilestone } after ${ currentMilestone }.` );
+                        }
+                      } else {
+                        core.info( `Patch release ${ currentMilestone } does not create a next milestone.` );
                       }
 
                       await core.summary
-                        .addHeading( 'Next milestone' )
-                        .addRaw( `Release ${ currentMilestone } points the next non-patch line at ${ nextMilestone }.` )
+                        .addHeading( 'Release milestone' )
+                        .addRaw( shouldCreateNextMilestone
+                          ? `Closed ${ currentMilestone } and ensured ${ nextMilestone } exists for the next non-patch release.`
+                          : `Closed ${ currentMilestone }. Patch releases do not create a next milestone.`
+                        )
                         .write();
