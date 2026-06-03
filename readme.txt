@@ -4,7 +4,7 @@ Tags: knowledge-base, collections, custom-post-types, block-editor, publishing
 Requires at least: 6.9
 Tested up to: 7.0
 Requires PHP: 8.1
-Stable tag: 0.1.0
+Stable tag: 0.1.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -76,6 +76,15 @@ Notion's Terms of Service (https://www.notion.so/28ffdd083dc3473e9c2da6ec011b58a
 1. The Cortext workspace showing a seeded Library page with a catalog table and detail panel.
 
 == Changelog ==
+
+= 0.1.1 =
+Patch release for the 0.1 beta line. In this release:
+
+* Added richer demo content entry points for empty workspaces.
+* Fixed row reordering so the first drag works in scrolled collections.
+* Fixed canvas flicker when opening or leaving row documents.
+* Moved the Cortext admin menu below the core WordPress items.
+* Improved release packaging and automation for distributed builds.
 
 = 0.1.0 =
 First public beta. In this release you can:

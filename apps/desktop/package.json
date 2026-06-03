@@ -1,6 +1,6 @@
 {
 	"name": "cortext-desktop",
-	"version": "0.0.1",
+	"version": "0.1.1",
 	"description": "Cortext desktop app: Electron shell that runs Cortext on native PHP.",
 	"private": true,
 	"license": "GPL-2.0-or-later",
