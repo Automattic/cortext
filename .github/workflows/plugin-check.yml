@@ -15,7 +15,7 @@ jobs:
         steps:
             - uses: actions/checkout@v4
 
-            - uses: pnpm/action-setup@v4
+            - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
               with:
                   version: 11.0.8
                   standalone: true
@@ -25,7 +25,7 @@ jobs:
                   node-version: '24.15'
                   cache: 'pnpm'
 
-            - uses: shivammathur/setup-php@v2
+            - uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # 2.37.1
               with:
                   php-version: '8.1'
                   tools: composer:v2
@@ -62,7 +62,7 @@ jobs:
             # .wp-env.json. Keep the env local, then install Plugin Check with
             # WP-CLI once WordPress is running.
             - name: Start wp-env
-              uses: nick-fields/retry@v4
+              uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
               with:
                   timeout_minutes: 10
                   max_attempts: 3
