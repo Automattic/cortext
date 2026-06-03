@@ -48,8 +48,7 @@ module.exports = {
 			// image sets it only reaches when no `data` prop is passed or a
 			// non-native set is rendered. Cortext always passes bundled
 			// `@emoji-mart/data` and renders native emoji, so those fetches
-			// never run. Blank them so the shipped bundle carries no
-			// remote-asset references.
+			// never run. Strip them so they stay out of the shipped bundle.
 			{
 				test: /[\\/]emoji-mart[\\/]dist[\\/].*\.js$/,
 				loader: path.resolve(
