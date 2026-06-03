@@ -3,7 +3,7 @@ name: Release plugin ZIP
 on:
     workflow_call:
         inputs:
-            version:
+            milestone:
                 required: true
                 type: string
             prerelease:
@@ -20,10 +20,9 @@ on:
                 type: string
     workflow_dispatch:
         inputs:
-            version:
-                description: 'Version'
+            milestone:
+                description: 'Release milestone/version, for example 0.1.1 or 0.2.0'
                 required: true
-                default: '0.1.0'
             prerelease:
                 description: 'Prerelease'
                 required: true
@@ -45,7 +44,7 @@ permissions:
     pull-requests: read
 
 concurrency:
-    group: cortext-release-plugin-${{ inputs.version }}
+    group: cortext-release-plugin-${{ inputs.milestone }}
     cancel-in-progress: true
 
 jobs:
@@ -77,24 +76,19 @@ jobs:
                   path: ~/.composer/cache
                   key: composer-${{ hashFiles('composer.lock') }}
 
-            - name: Update release metadata
-              env:
-                  VERSION: ${{ inputs.version }}
-              run: node scripts/bump-release-version.mjs "$VERSION"
-
             - name: Resolve milestone
               id: milestone
               uses: actions/github-script@v9
               env:
-                  VERSION: ${{ inputs.version }}
+                  MILESTONE: ${{ inputs.milestone }}
               with:
                   script: |
                       const owner = context.repo.owner;
                       const repo = context.repo.repo;
-                      const version = process.env.VERSION.trim();
+                      const milestoneTitle = process.env.MILESTONE.trim();
 
-                      if ( ! /^\d+\.\d+\.\d+$/.test( version ) ) {
-                        throw new Error( `Release versions must use the WordPress-style format 0.1.0, without a leading "v". Received "${ version }".` );
+                      if ( ! /^\d+\.\d+\.\d+$/.test( milestoneTitle ) ) {
+                        throw new Error( `Release milestones must use the WordPress-style format 0.1.0, without a leading "v". Received "${ milestoneTitle }".` );
                       }
 
                       const milestones = await github.paginate(
@@ -102,27 +96,26 @@ jobs:
                         { owner, repo, state: 'open', per_page: 100 }
                       );
 
-                      if ( milestones.length !== 1 ) {
-                        throw new Error(
-                          milestones.length === 0
-                            ? 'No open release milestone exists. Create 0.1.0 before drafting the first release.'
-                            : `Expected exactly one open release milestone, found ${ milestones.length }: ${ milestones.map( ( milestone ) => milestone.title ).join( ', ' ) }.`
-                        );
-                      }
-
-                      const milestone = milestones.find( ( item ) => item.title === version );
+                      const milestone = milestones.find( ( item ) => item.title === milestoneTitle );
                       if ( ! milestone ) {
-                        throw new Error( `Cannot find open milestone "${ version }".` );
+                        const openMilestones = milestones.map( ( item ) => item.title ).join( ', ' ) || 'none';
+                        throw new Error( `Cannot find open release milestone "${ milestoneTitle }". Open milestones: ${ openMilestones }.` );
                       }
 
                       core.setOutput( 'title', milestone.title );
+                      core.setOutput( 'version', milestone.title );
+
+            - name: Update release metadata
+              env:
+                  VERSION: ${{ steps.milestone.outputs.version }}
+              run: node scripts/bump-release-version.mjs "$VERSION"
 
             - name: Generate release notes
               env:
                   GH_TOKEN: ${{ github.token }}
                   MILESTONE: ${{ steps.milestone.outputs.title }}
                   REPOSITORY: ${{ github.repository }}
-                  VERSION: ${{ inputs.version }}
+                  VERSION: ${{ steps.milestone.outputs.version }}
               run: |
                   node scripts/release-notes.mjs \
                     --repo "$REPOSITORY" \
@@ -149,7 +142,7 @@ jobs:
 
             - name: Summarize release ZIP
               env:
-                  VERSION: ${{ inputs.version }}
+                  VERSION: ${{ steps.milestone.outputs.version }}
               run: |
                   unzip -Z1 dist/cortext.zip > release-zip-contents.txt
 
@@ -222,7 +215,7 @@ jobs:
               if: ${{ inputs.dry_run }}
               uses: actions/upload-artifact@v7
               with:
-                  name: cortext-release-${{ inputs.version }}-dry-run
+                  name: cortext-release-${{ steps.milestone.outputs.version }}-dry-run
                   path: |
                       release-notes.md
                       dist/cortext.zip
@@ -230,9 +223,9 @@ jobs:
             - name: Write dry-run summary
               if: ${{ inputs.dry_run }}
               env:
-                  ARTIFACT_NAME: cortext-release-${{ inputs.version }}-dry-run
+                  ARTIFACT_NAME: cortext-release-${{ steps.milestone.outputs.version }}-dry-run
                   MILESTONE: ${{ steps.milestone.outputs.title }}
-                  VERSION: ${{ inputs.version }}
+                  VERSION: ${{ steps.milestone.outputs.version }}
               run: |
                   {
                     echo "## Release dry run"
@@ -248,8 +241,8 @@ jobs:
               if: ${{ ! inputs.dry_run }}
               uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
               with:
-                  tag_name: ${{ inputs.version }}
-                  name: ${{ inputs.version }}
+                  tag_name: ${{ steps.milestone.outputs.version }}
+                  name: ${{ steps.milestone.outputs.version }}
                   body_path: release-notes.md
                   draft: true
                   prerelease: ${{ inputs.prerelease }}
