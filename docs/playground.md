@@ -61,5 +61,5 @@ unzip -l dist/cortext.zip | less
 The ZIP should include runtime files such as `cortext/cortext.php`,
 `cortext/vendor/autoload.php`, `cortext/build/index.js`, and
 `cortext/readme.txt`. It should not include source, test, or tooling paths such
-as `src/`, `tests/`, `apps/`, `.github/`, `node_modules/`, `composer.json`, or
+as `src/`, `tests/`, `apps/`, `.github/`, `node_modules/`, `composer.lock`, or
 `package.json`.
