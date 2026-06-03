@@ -33,6 +33,7 @@ import { cog, link, plus, replace, table } from '@wordpress/icons';
 import CanvasOwnerInspector, {
 	useIsCanvasOwnerBlock,
 } from '../../components/CanvasOwnerInspector';
+import { useCanvasReadySignals } from '../../components/CanvasReadyContext';
 import CollectionDataViews from '../../components/CollectionDataViews';
 import AddFieldPopover from '../../components/fields/AddFieldPopover';
 import { useEditorSurface } from '../../components/EditorSurfaceContext';
@@ -599,6 +600,7 @@ export default function Edit( {
 		context?.postType,
 		context?.postId
 	);
+	const { signalCollectionReady } = useCanvasReadySignals();
 	const blockProps = useBlockProps( {
 		className: isOwner ? 'is-document-owner' : undefined,
 	} );
@@ -648,6 +650,15 @@ export default function Edit( {
 			current === fieldId ? null : current
 		);
 	}, [] );
+
+	const onCollectionReady = useCallback(
+		( readyCollectionId ) => {
+			if ( isOwner ) {
+				signalCollectionReady?.( readyCollectionId );
+			}
+		},
+		[ isOwner, signalCollectionReady ]
+	);
 
 	if ( ! collectionId ) {
 		const isLinkMode = intent === 'link-existing';
@@ -712,6 +723,7 @@ export default function Edit( {
 					collectionId={ collectionId }
 					view={ view }
 					onChangeView={ setView }
+					onReady={ isOwner ? onCollectionReady : undefined }
 					revealFieldId={ revealFieldId }
 					onFieldRevealed={ onFieldRevealed }
 					invalid={

@@ -26,12 +26,15 @@ import { __ } from '@wordpress/i18n';
 import { ENTER, SPACE, isKeyboardEvent } from '@wordpress/keycodes';
 import {
 	useEffect,
+	useCallback,
 	useLayoutEffect,
+	useMemo,
 	useRef,
 	useState,
 } from '@wordpress/element';
 
 import DocumentIdentityControls from './DocumentIdentityControls';
+import { CanvasReadyProvider } from './CanvasReadyContext';
 import { useDocumentPropertiesContext } from './DocumentPropertiesContext';
 import {
 	findCanvasOwnerBlock,
@@ -39,6 +42,7 @@ import {
 	getCanvasOwnerInitialAttributesForRecord,
 } from './CanvasOwnerInspector';
 import MediaPicker, { MediaUploadCheck } from './MediaPicker';
+import { parseDocumentIcon } from './DocumentIcon';
 import afterNextPaint from '../hooks/afterNextPaint';
 
 const DOCUMENT_ICON_BLOCK = 'cortext/document-icon';
@@ -149,6 +153,31 @@ export function collectDuplicateHeaderClientIds(
 		} );
 	}
 	return duplicateIds;
+}
+
+export function areCanvasReadyRequirementsMet( {
+	hasTitle,
+	needsCover = false,
+	hasCover = false,
+	needsIcon = false,
+	hasIcon = false,
+	isCoverRecordReady = true,
+	isPropertiesResolving = false,
+	needsProperties = false,
+	hasProperties = false,
+	needsOwner = false,
+	hasOwner = false,
+	isOwnerContentReady = true,
+} ) {
+	return (
+		hasTitle &&
+		( ! needsCover || hasCover ) &&
+		( ! needsIcon || hasIcon ) &&
+		isCoverRecordReady &&
+		! isPropertiesResolving &&
+		( ! needsProperties || hasProperties ) &&
+		( ! needsOwner || ( hasOwner && isOwnerContentReady ) )
+	);
 }
 
 function useDocumentRecord( postType, postId ) {
@@ -539,10 +568,11 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 	);
 	const iconMeta = meta?.cortext_document_icon ?? '';
 	const propertiesCtx = useDocumentPropertiesContext();
-	// During a Canvas document switch, the provider can move to the next row
-	// before the editor does. Treat that moment as "schema unknown" so the
-	// header sync does not edit the outgoing post.
-	const propertiesContextStable = ! propertiesCtx?.isResolving;
+	// The row context can advance before the editor swaps posts. In that gap,
+	// leave the outgoing row's header alone.
+	const propertiesContextStable = ! (
+		propertiesCtx?.isSchemaResolving ?? propertiesCtx?.isResolving
+	);
 	const hasSchema =
 		propertiesContextStable &&
 		Array.isArray( propertiesCtx?.fields ) &&
@@ -1323,12 +1353,11 @@ function imageMatchesSource( image, expectedSource ) {
 	);
 }
 
-function findCoverImage( ownerDocument, expectedSource ) {
-	const images = [
-		...ownerDocument.querySelectorAll(
-			'.cortext-document-cover-block__image'
-		),
-	];
+const COVER_IMAGE_SELECTOR = '.cortext-document-cover-block__image';
+const ICON_IMAGE_SELECTOR = '.cortext-document-icon--image';
+
+function findImageNode( ownerDocument, selector, expectedSource ) {
+	const images = [ ...ownerDocument.querySelectorAll( selector ) ];
 	if ( expectedSource ) {
 		return (
 			images.find( ( image ) =>
@@ -1339,8 +1368,8 @@ function findCoverImage( ownerDocument, expectedSource ) {
 	return images[ 0 ] ?? null;
 }
 
-function waitForCoverImageNode( ownerDocument, expectedSource ) {
-	const existing = findCoverImage( ownerDocument, expectedSource );
+function waitForImageNode( ownerDocument, selector, expectedSource ) {
+	const existing = findImageNode( ownerDocument, selector, expectedSource );
 	if ( existing ) {
 		return Promise.resolve( existing );
 	}
@@ -1356,7 +1385,11 @@ function waitForCoverImageNode( ownerDocument, expectedSource ) {
 			resolve( image );
 		};
 		const observer = new MutationObserver( () => {
-			const image = findCoverImage( ownerDocument, expectedSource );
+			const image = findImageNode(
+				ownerDocument,
+				selector,
+				expectedSource
+			);
 			if ( image ) {
 				cleanup( image );
 			}
@@ -1374,19 +1407,38 @@ function waitForCoverImageNode( ownerDocument, expectedSource ) {
 	} );
 }
 
-async function waitForCriticalImages( canvasRoot, expectedCoverSource ) {
+// Hold the reveal until the header images have painted, so they don't pop in
+// once the canvas is shown. The cover is matched by its resolved source. An
+// uploaded icon image fetches its media record and bytes async, so the icon slot
+// would otherwise sit empty for a moment mid-transition.
+async function waitForCriticalImages(
+	canvasRoot,
+	expectedCoverSource,
+	{ iconNeedsImage = false } = {}
+) {
 	const iframe = canvasRoot?.querySelector( 'iframe' );
 	const ownerDocument = iframe?.contentDocument ?? canvasRoot?.ownerDocument;
 	if ( ! ownerDocument ) {
 		return;
 	}
-	const coverImage = await waitForCoverImageNode(
-		ownerDocument,
-		expectedCoverSource
-	);
-	if ( coverImage ) {
-		await waitForImageReady( coverImage );
+	const waits = [];
+	if ( expectedCoverSource ) {
+		waits.push(
+			waitForImageNode(
+				ownerDocument,
+				COVER_IMAGE_SELECTOR,
+				expectedCoverSource
+			).then( ( image ) => image && waitForImageReady( image ) )
+		);
 	}
+	if ( iconNeedsImage ) {
+		waits.push(
+			waitForImageNode( ownerDocument, ICON_IMAGE_SELECTOR ).then(
+				( image ) => image && waitForImageReady( image )
+			)
+		);
+	}
+	await Promise.all( waits );
 }
 
 function CanvasReadyEffect( {
@@ -1394,6 +1446,7 @@ function CanvasReadyEffect( {
 	postId,
 	postType,
 	canvasRootRef,
+	ownerContentReady = true,
 	onReady,
 } ) {
 	const [ featuredId ] = useEntityProp(
@@ -1406,6 +1459,17 @@ function CanvasReadyEffect( {
 	const numericFeaturedId = Number( featuredId ?? featuredMedia ) || 0;
 	const needsCover = numericFeaturedId > 0;
 	const needsIcon = Boolean( meta?.cortext_document_icon );
+	const iconNeedsImage =
+		parseDocumentIcon( meta?.cortext_document_icon )?.type === 'image';
+	const propertiesCtx = useDocumentPropertiesContext();
+	const isPropertiesResolving = Boolean( propertiesCtx?.isResolving );
+	const needsProperties =
+		! isPropertiesResolving &&
+		Array.isArray( propertiesCtx?.fields ) &&
+		propertiesCtx.fields.length > 0;
+	const record = useDocumentRecord( postType, postId );
+	const ownerBlockName = getCanvasOwnerBlockNameForRecord( record );
+	const needsOwner = Boolean( ownerBlockName );
 	const {
 		record: coverMedia,
 		isResolving: isResolvingCoverMedia,
@@ -1414,29 +1478,47 @@ function CanvasReadyEffect( {
 		enabled: needsCover,
 	} );
 	const src = coverSource( coverMedia );
-	const { hasCover, hasIcon, hasTitle } = useSelect( ( select ) => {
-		const blocks = select( blockEditorStore ).getBlocks();
-		return {
-			hasCover: blocks.some(
-				( block ) => block.name === DOCUMENT_COVER_BLOCK
-			),
-			hasIcon: blocks.some(
-				( block ) => block.name === DOCUMENT_ICON_BLOCK
-			),
-			hasTitle: blocks.some(
-				( block ) => block.name === POST_TITLE_BLOCK
-			),
-		};
-	}, [] );
+	const { hasCover, hasIcon, hasTitle, hasProperties, hasOwner } = useSelect(
+		( select ) => {
+			const blocks = select( blockEditorStore ).getBlocks();
+			return {
+				hasCover: blocks.some(
+					( block ) => block.name === DOCUMENT_COVER_BLOCK
+				),
+				hasIcon: blocks.some(
+					( block ) => block.name === DOCUMENT_ICON_BLOCK
+				),
+				hasTitle: blocks.some(
+					( block ) => block.name === POST_TITLE_BLOCK
+				),
+				hasProperties: blocks.some(
+					( block ) => block.name === DOCUMENT_PROPERTIES_BLOCK
+				),
+				hasOwner: ownerBlockName
+					? Boolean( findCanvasOwnerBlock( blocks, record, postId ) )
+					: true,
+			};
+		},
+		[ ownerBlockName, postId, record ]
+	);
 	const isCoverRecordReady =
 		! needsCover ||
 		Boolean( src ) ||
 		( ! isResolvingCoverMedia && hasResolvedCoverMedia );
-	const areHeaderBlocksReady =
-		hasTitle &&
-		( ! needsCover || hasCover ) &&
-		( ! needsIcon || hasIcon ) &&
-		isCoverRecordReady;
+	const areHeaderBlocksReady = areCanvasReadyRequirementsMet( {
+		hasTitle,
+		needsCover,
+		hasCover,
+		needsIcon,
+		hasIcon,
+		isCoverRecordReady,
+		isPropertiesResolving,
+		needsProperties,
+		hasProperties,
+		needsOwner,
+		hasOwner,
+		isOwnerContentReady: ownerContentReady,
+	} );
 
 	useLayoutEffect( () => {
 		if ( ! areHeaderBlocksReady ) {
@@ -1445,8 +1527,10 @@ function CanvasReadyEffect( {
 
 		let cancelled = false;
 		async function signalReady() {
-			if ( needsCover && src ) {
-				await waitForCriticalImages( canvasRootRef.current, src );
+			if ( ( needsCover && src ) || iconNeedsImage ) {
+				await waitForCriticalImages( canvasRootRef.current, src, {
+					iconNeedsImage,
+				} );
 			}
 			await afterNextPaint(
 				canvasRootRef.current?.ownerDocument?.defaultView
@@ -1463,6 +1547,7 @@ function CanvasReadyEffect( {
 		areHeaderBlocksReady,
 		canvasRootRef,
 		featuredMedia,
+		iconNeedsImage,
 		needsCover,
 		onReady,
 		postId,
@@ -1517,6 +1602,7 @@ export default function EditorBody( {
 		.filter( Boolean )
 		.join( ' ' );
 	const blockCanvasRef = useRef( null );
+	const [ readyOwnerKey, setReadyOwnerKey ] = useState( null );
 	const isTrashed = useSelect(
 		( select ) =>
 			select( editorStore ).getCurrentPostAttribute( 'status' ) ===
@@ -1525,6 +1611,20 @@ export default function EditorBody( {
 	);
 	const record = useDocumentRecord( postType, postId );
 	const ownerBlockName = getCanvasOwnerBlockNameForRecord( record );
+	const ownerKey = ownerBlockName ? `${ postType }:${ postId }` : null;
+	const ownerContentReady = ! ownerKey || readyOwnerKey === ownerKey;
+	const signalCollectionReady = useCallback(
+		( collectionId ) => {
+			if ( Number( collectionId ) === Number( postId ) ) {
+				setReadyOwnerKey( ownerKey );
+			}
+		},
+		[ ownerKey, postId ]
+	);
+	const canvasReadySignals = useMemo(
+		() => ( { signalCollectionReady } ),
+		[ signalCollectionReady ]
+	);
 	const shouldUseHeaderAwareAppender = useSelect(
 		( select ) => {
 			if ( ownerBlockName ) {
@@ -1553,54 +1653,65 @@ export default function EditorBody( {
 			: undefined;
 
 	const blockCanvas = (
-		<div className="cortext-canvas__block-canvas" ref={ blockCanvasRef }>
-			<BlockCanvas height="100%" styles={ styles }>
-				<DocumentIdentityActions
-					isLocked={ isReadOnly }
-					postId={ postId }
-					postType={ postType }
-				/>
-				<EnsureHeaderBlocks
-					isLocked={ isReadOnly }
-					postId={ postId }
-					postType={ postType }
-				/>
-				<HideHeaderBlockKebab postId={ postId } postType={ postType } />
-				<ProtectedBlockShortcutGuard
-					postId={ postId }
-					postType={ postType }
-					canvasRootRef={ blockCanvasRef }
-				/>
-				<HeaderPrefixToolbarGuard
-					isActive={ isActive }
-					isLocked={ isReadOnly }
-					postId={ postId }
-					postType={ postType }
-					toolbarRootRef={ blockCanvasRef }
-				/>
-				<div
-					className={ [
-						'cortext-canvas__editor',
-						ownerBlockName ? 'cortext-canvas__editor--owner' : '',
-					]
-						.filter( Boolean )
-						.join( ' ' ) }
-				>
-					<BlockList
-						className={ canvasClassName }
-						layout={ canvasLayout }
-						renderAppender={ renderAppender }
+		<CanvasReadyProvider value={ canvasReadySignals }>
+			<div
+				className="cortext-canvas__block-canvas"
+				ref={ blockCanvasRef }
+			>
+				<BlockCanvas height="100%" styles={ styles }>
+					<DocumentIdentityActions
+						isLocked={ isReadOnly }
+						postId={ postId }
+						postType={ postType }
 					/>
-				</div>
-				<CanvasReadyEffect
-					featuredMedia={ featuredMedia }
-					postId={ postId }
-					postType={ postType }
-					canvasRootRef={ blockCanvasRef }
-					onReady={ onReady }
-				/>
-			</BlockCanvas>
-		</div>
+					<EnsureHeaderBlocks
+						isLocked={ isReadOnly }
+						postId={ postId }
+						postType={ postType }
+					/>
+					<HideHeaderBlockKebab
+						postId={ postId }
+						postType={ postType }
+					/>
+					<ProtectedBlockShortcutGuard
+						postId={ postId }
+						postType={ postType }
+						canvasRootRef={ blockCanvasRef }
+					/>
+					<HeaderPrefixToolbarGuard
+						isActive={ isActive }
+						isLocked={ isReadOnly }
+						postId={ postId }
+						postType={ postType }
+						toolbarRootRef={ blockCanvasRef }
+					/>
+					<div
+						className={ [
+							'cortext-canvas__editor',
+							ownerBlockName
+								? 'cortext-canvas__editor--owner'
+								: '',
+						]
+							.filter( Boolean )
+							.join( ' ' ) }
+					>
+						<BlockList
+							className={ canvasClassName }
+							layout={ canvasLayout }
+							renderAppender={ renderAppender }
+						/>
+					</div>
+					<CanvasReadyEffect
+						featuredMedia={ featuredMedia }
+						postId={ postId }
+						postType={ postType }
+						canvasRootRef={ blockCanvasRef }
+						ownerContentReady={ ownerContentReady }
+						onReady={ onReady }
+					/>
+				</BlockCanvas>
+			</div>
+		</CanvasReadyProvider>
 	);
 
 	return (
