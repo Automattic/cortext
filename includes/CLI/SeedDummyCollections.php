@@ -204,8 +204,8 @@ final class SeedDummyCollections {
 	}
 
 	/**
-	 * Returns the developer-only image fetcher, or stops with guidance when it
-	 * is absent. The fetcher lives under `includes/CLI/Dev/`, which the
+	 * Returns the developer-only image fetcher, or aborts with an explanation
+	 * when it is absent. The fetcher lives under `includes/CLI/Dev/`, which the
 	 * distributed plugin omits, so real-image fetching and prefetching only
 	 * work from a checkout of the repository.
 	 */

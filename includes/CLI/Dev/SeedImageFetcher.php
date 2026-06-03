@@ -9,9 +9,9 @@
  * they can be committed and shipped offline.
  *
  * This file lives under `includes/CLI/Dev/`, which `build-zip.sh` and
- * `.distignore` keep out of the distributed plugin. The shipped seeder seeds
- * from the bundled `seed-assets/` only and never instantiates this class, so
- * the published package makes no remote-asset calls. Run the seeder from a
+ * `.distignore` keep out of the distributed plugin. The shipped seeder uses
+ * only the bundled `seed-assets/` and never instantiates this class, so the
+ * published package makes no remote-asset calls. Run the seeder from a
  * checkout of the repository to fetch real images or refresh the bundle.
  *
  * @package Cortext

@@ -49,7 +49,7 @@ Not yet. Cortext is ready to try, but still early. Use it somewhere low-stakes b
 
 = Does Cortext connect to external services? =
 
-Only when you ask it to. Everyday use (writing documents, building collections, publishing pages) stays inside WordPress with no external calls. The one exception is the optional Notion import. See the External services section below for what it sends and when.
+Only when you ask it to. Everyday use stays inside WordPress with no external calls. The one exception is the optional Notion import; the External services section below covers what it sends and when.
 
 = Where is the source for the built JavaScript and CSS? =
 
