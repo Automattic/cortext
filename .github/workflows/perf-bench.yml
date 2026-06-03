@@ -27,7 +27,7 @@ jobs:
         continue-on-error: true
         timeout-minutes: 40
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v6.0.2
 
             - uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # 2.37.1
               with:
@@ -35,17 +35,17 @@ jobs:
                   tools: composer:v2
                   coverage: none
 
-            - uses: actions/cache@v4
+            - uses: actions/cache@v5
               with:
                   path: ~/.composer/cache
                   key: composer-${{ hashFiles('composer.lock') }}
 
-            - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+            - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
               with:
                   version: 11.0.8
                   standalone: true
 
-            - uses: actions/setup-node@v4
+            - uses: actions/setup-node@v6
               with:
                   node-version: '24.15'
                   cache: 'pnpm'
@@ -134,7 +134,7 @@ jobs:
 
             - name: Save benchmark artifacts
               if: always()
-              uses: actions/upload-artifact@v4
+              uses: actions/upload-artifact@v7
               with:
                   name: perf-bench
                   path: |

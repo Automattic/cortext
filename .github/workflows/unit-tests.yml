@@ -17,7 +17,7 @@ jobs:
             php_changed: ${{ steps.changed_paths.outputs.php_changed }}
             js_changed: ${{ steps.changed_paths.outputs.js_changed }}
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v6.0.2
               with:
                   fetch-depth: 0
 
@@ -61,7 +61,7 @@ jobs:
         needs: changes
         if: needs.changes.outputs.php_changed == 'true'
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v6.0.2
 
             - uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # 2.37.1
               with:
@@ -69,7 +69,7 @@ jobs:
                   tools: composer:v2
                   coverage: none
 
-            - uses: actions/cache@v4
+            - uses: actions/cache@v5
               with:
                   path: ~/.composer/cache
                   key: composer-${{ hashFiles('composer.lock') }}
@@ -84,14 +84,14 @@ jobs:
         needs: changes
         if: needs.changes.outputs.js_changed == 'true'
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v6.0.2
 
-            - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+            - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
               with:
                   version: 11.0.8
                   standalone: true
 
-            - uses: actions/setup-node@v4
+            - uses: actions/setup-node@v6
               with:
                   node-version: '24.15'
                   cache: 'pnpm'

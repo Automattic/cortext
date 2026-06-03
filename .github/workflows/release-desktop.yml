@@ -43,14 +43,14 @@ jobs:
         name: Build desktop DMG (macOS arm64)
         runs-on: macos-14
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v6.0.2
 
-            - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+            - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
               with:
                   version: 11.0.8
                   standalone: true
 
-            - uses: actions/setup-node@v4
+            - uses: actions/setup-node@v6
               with:
                   node-version: '24.15'
                   cache: 'pnpm'
@@ -61,7 +61,7 @@ jobs:
                   tools: composer:v2
                   coverage: none
 
-            - uses: actions/cache@v4
+            - uses: actions/cache@v5
               with:
                   path: ~/.composer/cache
                   key: composer-${{ hashFiles('composer.lock') }}
@@ -85,7 +85,7 @@ jobs:
             # static-php-cli compiles natively; a macos-14 runner yields arm64.
             # The build is the slow part, so cache the result across runs.
             - name: Cache bundled PHP runtime
-              uses: actions/cache@v4
+              uses: actions/cache@v5
               with:
                   path: |
                       apps/desktop/.runtime-cache
@@ -99,7 +99,7 @@ jobs:
               run: npm run runtime:php
 
             - name: Cache snapshot downloads (WP core + wp-cli + SQLite plugin)
-              uses: actions/cache@v4
+              uses: actions/cache@v5
               with:
                   path: apps/desktop/.snapshot-cache
                   key: desktop-snapshot-cache-${{ hashFiles('apps/desktop/scripts/build-snapshot.mjs') }}
@@ -118,7 +118,7 @@ jobs:
 
             - name: Upload dry-run DMG
               if: ${{ inputs.dry_run }}
-              uses: actions/upload-artifact@v4
+              uses: actions/upload-artifact@v7
               with:
                   name: cortext-desktop-dmg-${{ inputs.version }}-dry-run
                   path: apps/desktop/dist/*.dmg
@@ -128,7 +128,7 @@ jobs:
             # the plugin workflow stays the owner of the Release title and notes.
             - name: Attach DMG to draft GitHub Release
               if: ${{ ! inputs.dry_run }}
-              uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+              uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
               with:
                   tag_name: ${{ inputs.version }}
                   draft: true
