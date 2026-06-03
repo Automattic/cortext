@@ -38,6 +38,13 @@ cp -R "${runtime_paths[@]}" "$stage_dir"
 mkdir -p "$stage_dir/assets"
 cp -R assets/brand "$stage_dir/assets/"
 
+# Drop developer-only CLI tooling. includes/CLI/Dev/ holds the seeder's remote
+# image fetching (Open Library, MusicBrainz, Wikidata, Lorem Picsum); it is not
+# part of the distributed plugin, where the seeder runs offline from
+# seed-assets/. Removing it before `composer install --optimize-autoloader`
+# keeps it out of the generated classmap.
+rm -rf "$stage_dir/includes/CLI/Dev"
+
 composer install \
 	--working-dir="$stage_dir" \
 	--no-dev \
