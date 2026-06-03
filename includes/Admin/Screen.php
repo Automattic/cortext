@@ -46,7 +46,7 @@ final class Screen {
 			self::MENU_SLUG,
 			array( $this, 'render' ),
 			'dashicons-welcome-write-blog',
-			3
+			'58.5'
 		);
 	}
 
