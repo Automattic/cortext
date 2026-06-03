@@ -26,12 +26,6 @@
 	z-index: 1;
 }
 
-// WordPress owns this fallback outside the Cortext root. Hide it while the
-// canvas snapshot is frozen so it cannot leak into the transition.
-:root[data-cortext-view-transition] #wp-auth-check-wrap {
-	display: none !important;
-}
-
 @keyframes cortext-hold-old-canvas {
 
 	0%,
