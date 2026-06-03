@@ -106,11 +106,16 @@ missing a `type:*` label or has more than one.
 
 Releases run from the Actions tab, through the "Prepare release" workflow
 (`.github/workflows/release.yml`). It takes a version, a `prerelease` flag, and
-a `dry_run` flag. Run it with `dry_run` on first: that builds everything and
-uploads the artifacts without creating a tag or a Release. Turn `dry_run` off to
-publish a draft Release.
+a `dry_run` flag. Run it with `dry_run` on first: that applies the version bump
+inside the checkout, builds everything, and uploads the artifacts without
+creating a commit, tag, or Release. Turn `dry_run` off to commit the version
+bump, push it to the selected branch, and publish a draft Release.
 
-"Prepare release" only orchestrates. It calls two reusable workflows:
+"Prepare release" first updates the plugin header, `CORTEXT_VERSION`,
+`readme.txt` stable tag, root package version, and desktop package versions to
+the requested release version. On a real release, it commits those changes as
+`chore: bump release to <version>` before building. It then calls two reusable
+workflows against the bumped commit:
 
 -   `release-plugin.yml` resolves the milestone, builds the changelog and the
     plugin ZIP, and creates the draft Release.

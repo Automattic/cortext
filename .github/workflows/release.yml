@@ -31,18 +31,76 @@ concurrency:
 # to the same tagged Release. Either child can also be run on its own from the
 # Actions tab; the first run creates the draft Release, later runs attach to it.
 jobs:
+    bump-version:
+        name: Bump release version
+        runs-on: ubuntu-latest
+        outputs:
+            ref: ${{ steps.release-ref.outputs.ref }}
+        steps:
+            - name: Check release branch
+              if: ${{ ! inputs.dry_run && github.ref_type != 'branch' }}
+              run: |
+                  echo "::error::Release version commits can only be pushed from a branch ref."
+                  exit 1
+
+            - uses: actions/checkout@v6.0.2
+              with:
+                  ref: ${{ github.ref_name }}
+
+            - uses: actions/setup-node@v6
+              with:
+                  node-version: '24.15'
+
+            - name: Update release metadata
+              env:
+                  VERSION: ${{ inputs.version }}
+              run: node scripts/bump-release-version.mjs "$VERSION"
+
+            - name: Commit release metadata
+              if: ${{ ! inputs.dry_run }}
+              env:
+                  VERSION: ${{ inputs.version }}
+              run: |
+                  if git diff --quiet -- \
+                    package.json \
+                    apps/desktop/package.json \
+                    apps/desktop/package-lock.json \
+                    cortext.php \
+                    readme.txt; then
+                    echo "Release metadata already matches $VERSION."
+                  else
+                    git config user.name "github-actions[bot]"
+                    git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+                    git add \
+                      package.json \
+                      apps/desktop/package.json \
+                      apps/desktop/package-lock.json \
+                      cortext.php \
+                      readme.txt
+                    git commit -m "chore: bump release to $VERSION"
+                    git push origin "HEAD:${GITHUB_REF_NAME}"
+                  fi
+
+            - name: Set release ref
+              id: release-ref
+              run: echo "ref=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
     plugin:
+        needs: bump-version
         uses: ./.github/workflows/release-plugin.yml
         with:
             version: ${{ inputs.version }}
             prerelease: ${{ inputs.prerelease }}
             dry_run: ${{ inputs.dry_run }}
+            ref: ${{ needs.bump-version.outputs.ref }}
         secrets: inherit
 
     desktop:
+        needs: bump-version
         uses: ./.github/workflows/release-desktop.yml
         with:
             version: ${{ inputs.version }}
             prerelease: ${{ inputs.prerelease }}
             dry_run: ${{ inputs.dry_run }}
+            ref: ${{ needs.bump-version.outputs.ref }}
         secrets: inherit

@@ -14,6 +14,10 @@ on:
                 required: false
                 default: true
                 type: boolean
+            ref:
+                required: false
+                default: ''
+                type: string
     workflow_dispatch:
         inputs:
             version:
@@ -30,6 +34,10 @@ on:
                 required: true
                 default: true
                 type: boolean
+            ref:
+                description: 'Git ref to build'
+                required: false
+                default: ''
 
 permissions:
     contents: write
@@ -45,6 +53,8 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v6.0.2
+              with:
+                  ref: ${{ inputs.ref || github.sha }}
 
             - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
               with:
@@ -66,6 +76,11 @@ jobs:
               with:
                   path: ~/.composer/cache
                   key: composer-${{ hashFiles('composer.lock') }}
+
+            - name: Update release metadata
+              env:
+                  VERSION: ${{ inputs.version }}
+              run: node scripts/bump-release-version.mjs "$VERSION"
 
             - name: Resolve milestone
               id: milestone
