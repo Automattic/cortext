@@ -662,6 +662,19 @@ function useRenderedRows( wrapperRef, view, rows, isDragging ) {
 		wrapper.addEventListener( 'scroll', sync, true );
 		window.addEventListener( 'resize', sync );
 		window.addEventListener( 'scroll', sync, true );
+		// `window` is the parent frame, but the wrapper lives in the editor
+		// canvas iframe, which scrolls on its own. The parent never sees that
+		// scroll, so without the iframe listeners below the gap snapshot keeps
+		// its pre-scroll positions: the first drag onto a table lower down
+		// finds the fixed drop zones sitting the scroll distance below the
+		// rows, with nothing under the pointer. Later drags re-sync, so only
+		// the first one misses.
+		const ownerWindow = wrapper.ownerDocument?.defaultView;
+		const watchesOwnerWindow = ownerWindow && ownerWindow !== window;
+		if ( watchesOwnerWindow ) {
+			ownerWindow.addEventListener( 'scroll', sync, true );
+			ownerWindow.addEventListener( 'resize', sync );
+		}
 
 		// Leave decoration classes in place between subscriptions. Sort changes
 		// and refetches can re-run this effect during the drop freeze; removing
@@ -677,6 +690,10 @@ function useRenderedRows( wrapperRef, view, rows, isDragging ) {
 			wrapper.removeEventListener( 'scroll', sync, true );
 			window.removeEventListener( 'resize', sync );
 			window.removeEventListener( 'scroll', sync, true );
+			if ( watchesOwnerWindow ) {
+				ownerWindow.removeEventListener( 'scroll', sync, true );
+				ownerWindow.removeEventListener( 'resize', sync );
+			}
 		};
 	}, [ wrapperRef, view, rows, isLinear ] );
 

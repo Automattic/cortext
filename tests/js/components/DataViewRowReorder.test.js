@@ -146,8 +146,8 @@ afterEach( () => {
 	);
 } );
 
-function createWrapper( heights = [ 40, 40, 40 ] ) {
-	const wrapper = document.createElement( 'div' );
+function createWrapper( heights = [ 40, 40, 40 ], ownerDocument = document ) {
+	const wrapper = ownerDocument.createElement( 'div' );
 	wrapper.innerHTML = `
 		<table class="dataviews-view-table">
 			<tbody>
@@ -172,7 +172,7 @@ function createWrapper( heights = [ 40, 40, 40 ] ) {
 			bottom: rowTop + height,
 		} );
 	} );
-	document.body.appendChild( wrapper );
+	ownerDocument.body.appendChild( wrapper );
 	return wrapper;
 }
 
@@ -237,7 +237,9 @@ function draggableDataFor( rowId ) {
 }
 
 async function renderReorder( props = {}, options = {} ) {
-	const wrapperRef = { current: createWrapper( options.rowHeights ) };
+	const wrapperRef = {
+		current: createWrapper( options.rowHeights, options.ownerDocument ),
+	};
 	const onChangeView = jest.fn();
 	const onReordered = jest.fn();
 	const mutateRows = jest.fn();
@@ -1311,5 +1313,44 @@ describe( 'DataViewRowReorder', () => {
 			'cortext-row-reorder-suppress-hover'
 		);
 		expect( document.body ).not.toHaveClass( 'cortext-row-dragging' );
+	} );
+
+	it( 'suppresses row hover in the row document', async () => {
+		const iframe = document.createElement( 'iframe' );
+		document.body.appendChild( iframe );
+		const iframeDocument = iframe.contentDocument;
+		mockDraggableListeners = { onPointerDown: jest.fn() };
+
+		await renderReorder( {}, { ownerDocument: iframeDocument } );
+
+		fireEvent.pointerDown(
+			within( iframeDocument.body ).getByRole( 'button', {
+				name: 'Reorder: One',
+			} )
+		);
+
+		expect( iframeDocument.body ).toHaveClass(
+			'cortext-row-reorder-suppress-hover'
+		);
+		expect( document.body ).not.toHaveClass(
+			'cortext-row-reorder-suppress-hover'
+		);
+	} );
+
+	it( 'captures the pointer on the drag handle before activation', async () => {
+		mockDraggableListeners = { onPointerDown: jest.fn() };
+
+		await renderReorder();
+
+		const handle = screen.getByRole( 'button', { name: 'Reorder: One' } );
+		handle.setPointerCapture = jest.fn();
+		const event = new window.MouseEvent( 'pointerdown', {
+			bubbles: true,
+		} );
+		Object.defineProperty( event, 'pointerId', { value: 42 } );
+
+		fireEvent( handle, event );
+
+		expect( handle.setPointerCapture ).toHaveBeenCalledWith( 42 );
 	} );
 } );

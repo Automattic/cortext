@@ -11,13 +11,23 @@ const ROW_DRAGGING_CLASS = 'cortext-row-dragging';
 const ROW_SUPPRESS_HOVER_CLASS = 'cortext-row-reorder-suppress-hover';
 const HOVER_SUPPRESSION_PRIME_TIMEOUT = 800;
 
-function primeRowHoverSuppression() {
-	document.body.classList.add( ROW_SUPPRESS_HOVER_CLASS );
-	window.setTimeout( () => {
-		if ( ! document.body.classList.contains( ROW_DRAGGING_CLASS ) ) {
-			document.body.classList.remove( ROW_SUPPRESS_HOVER_CLASS );
+function primeRowHoverSuppression( ownerDocument = document ) {
+	const body = ownerDocument?.body ?? document.body;
+	const ownerWindow = ownerDocument?.defaultView ?? window;
+	body.classList.add( ROW_SUPPRESS_HOVER_CLASS );
+	ownerWindow.setTimeout( () => {
+		if ( ! body.classList.contains( ROW_DRAGGING_CLASS ) ) {
+			body.classList.remove( ROW_SUPPRESS_HOVER_CLASS );
 		}
 	}, HOVER_SUPPRESSION_PRIME_TIMEOUT );
+}
+
+function capturePointer( event ) {
+	const pointerId = event.pointerId ?? event.nativeEvent?.pointerId;
+	if ( pointerId === undefined ) {
+		return;
+	}
+	event.currentTarget?.setPointerCapture?.( pointerId );
 }
 
 export default function RowDragHandle( { row, keyboardFocusable = true } ) {
@@ -67,7 +77,7 @@ export default function RowDragHandle( { row, keyboardFocusable = true } ) {
 	}, [] );
 
 	const stopInteractionStart = useCallback( ( event ) => {
-		primeRowHoverSuppression();
+		primeRowHoverSuppression( event.currentTarget?.ownerDocument );
 		event.stopPropagation();
 	}, [] );
 
@@ -84,7 +94,12 @@ export default function RowDragHandle( { row, keyboardFocusable = true } ) {
 								eventName === 'onTouchStart' ||
 								eventName === 'onKeyDown'
 							) {
-								primeRowHoverSuppression();
+								primeRowHoverSuppression(
+									event.currentTarget?.ownerDocument
+								);
+							}
+							if ( eventName === 'onPointerDown' ) {
+								capturePointer( event );
 							}
 							event.stopPropagation();
 							handler?.( event );
