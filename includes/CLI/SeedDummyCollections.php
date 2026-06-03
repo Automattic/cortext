@@ -11,6 +11,7 @@ namespace Cortext\CLI;
 
 defined( 'ABSPATH' ) || exit;
 
+use Cortext\CLI\Dev\SeedImageFetcher;
 use Cortext\Media\CortextMedia;
 use Cortext\PostType\Document;
 use Cortext\PostType\DocumentIdentity;
@@ -28,6 +29,8 @@ final class SeedDummyCollections {
 	private bool $seed_full_dataset = false;
 	private bool $fetch_real_images = false;
 	private array $messages         = array();
+
+	private ?SeedImageFetcher $image_fetcher = null;
 
 	/**
 	 * Runs the compact offline sample seed and returns log messages for
@@ -109,18 +112,25 @@ final class SeedDummyCollections {
 	 */
 	public function __invoke( array $args, array $assoc_args ): void {
 		if ( self::get_flag_value( $assoc_args, 'prefetch-icons', false ) ) {
-			$this->seed_full_dataset = self::get_flag_value( $assoc_args, 'full', false );
-			$this->prefetch_icons();
+			$full = self::get_flag_value( $assoc_args, 'full', false );
+			$this->require_image_fetcher()->prefetch_icons( $this->prefetch_collections( $full ) );
 			return;
 		}
 
 		if ( self::get_flag_value( $assoc_args, 'prefetch-covers', false ) ) {
-			$this->seed_full_dataset = self::get_flag_value( $assoc_args, 'full', false );
-			$this->prefetch_covers();
+			$full = self::get_flag_value( $assoc_args, 'full', false );
+			$this->require_image_fetcher()->prefetch_covers( $this->prefetch_collections( $full ) );
 			return;
 		}
 
 		$this->fetch_real_images = self::get_flag_value( $assoc_args, 'with-real-images', false );
+		if ( $this->fetch_real_images && ! class_exists( SeedImageFetcher::class ) ) {
+			$this->warning( 'Real images need the Cortext development tooling under includes/CLI/Dev/, which ships only in the repository, not the plugin package. Seeding with the bundled images instead.' );
+			$this->fetch_real_images = false;
+		}
+		if ( $this->fetch_real_images ) {
+			$this->image_fetcher = new SeedImageFetcher( $this->book_author_relations(), $this->album_artist_relations(), true );
+		}
 
 		// Run as an administrator so seeded entries get a real `post_author`
 		// (otherwise CLI's user-0 context produces empty Created by /
@@ -177,6 +187,33 @@ final class SeedDummyCollections {
 		$this->seed_favorites( $seed_user_id, $workspace_page_id );
 
 		$this->success( 'Seeding complete.' );
+	}
+
+	/**
+	 * Builds the collections the prefetch routines walk, honoring `--full`.
+	 *
+	 * @param bool $full Whether to include every sample row.
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function prefetch_collections( bool $full ): array {
+		$collections = array_merge( $this->literature_collections(), $this->music_collections() );
+		if ( ! $full ) {
+			$collections = $this->compact_collection_entries( $collections );
+		}
+		return $collections;
+	}
+
+	/**
+	 * Returns the developer-only image fetcher, or stops with guidance when it
+	 * is absent. The fetcher lives under `includes/CLI/Dev/`, which the
+	 * distributed plugin omits, so real-image fetching and prefetching only
+	 * work from a checkout of the repository.
+	 */
+	private function require_image_fetcher(): SeedImageFetcher {
+		if ( ! class_exists( SeedImageFetcher::class ) ) {
+			$this->error( 'Prefetching needs the Cortext development tooling under includes/CLI/Dev/, which is not part of the distributed plugin. Run this command from a checkout of the repository.' );
+		}
+		return new SeedImageFetcher( $this->book_author_relations(), $this->album_artist_relations() );
 	}
 
 	/**
@@ -4068,7 +4105,7 @@ final class SeedDummyCollections {
 		}
 
 		if ( 'image' === $type && ! empty( $icon['url'] ) ) {
-			$attachment_id = $this->ensure_attachment_from_url( $icon['url'] );
+			$attachment_id = null !== $this->image_fetcher ? $this->image_fetcher->ensure_attachment_from_url( $icon['url'] ) : 0;
 			if ( $attachment_id > 0 ) {
 				return (string) wp_json_encode(
 					array(
@@ -4141,520 +4178,12 @@ final class SeedDummyCollections {
 		return $this->tag_seed_attachment( (int) $attach_id );
 	}
 
-	/**
-	 * Downloads an image from a URL into the media library and returns the
-	 * attachment ID. Idempotent across reseeds: subsequent calls with the
-	 * same URL hit the existing attachment instead of re-downloading.
-	 * Returns 0 on failure (no network, bad response, file write error).
-	 * Bundle short-circuiting happens earlier in `maybe_apply_row_icon`, so
-	 * this path only runs when a row's icon isn't bundled yet.
-	 *
-	 * @param string $url Absolute http(s) URL to an image.
-	 */
-	private function ensure_attachment_from_url( string $url ): int {
-		$hash     = substr( md5( $url ), 0, 12 );
-		$filename = 'seed-icon-' . $hash . '.jpg';
-
-		$existing = get_posts(
-			array(
-				'post_type'      => 'attachment',
-				'name'           => sanitize_title( pathinfo( $filename, PATHINFO_FILENAME ) ),
-				'posts_per_page' => 1,
-				'fields'         => 'ids',
-				'post_status'    => 'inherit',
-			)
-		);
-		if ( $existing ) {
-			return $this->tag_seed_attachment( (int) $existing[0] );
-		}
-
-		require_once ABSPATH . 'wp-admin/includes/file.php';
-		require_once ABSPATH . 'wp-admin/includes/image.php';
-
-		$tmp = download_url( $url, 30 );
-		if ( is_wp_error( $tmp ) ) {
-			$this->warning( "Failed to download icon from {$url}: " . $tmp->get_error_message() );
-			return 0;
-		}
-
-		$upload_dir = wp_upload_dir();
-		if ( ! empty( $upload_dir['error'] ) ) {
-			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
-			@unlink( $tmp );
-			return 0;
-		}
-
-		$dest = trailingslashit( $upload_dir['path'] ) . wp_unique_filename( $upload_dir['path'], $filename );
-		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.rename_rename
-		if ( ! @rename( $tmp, $dest ) && ! @copy( $tmp, $dest ) ) {
-			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
-			@unlink( $tmp );
-			return 0;
-		}
-		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
-		@unlink( $tmp );
-
-		$filetype  = wp_check_filetype( $dest );
-		$attach_id = wp_insert_attachment(
-			array(
-				'guid'           => trailingslashit( $upload_dir['url'] ) . basename( $dest ),
-				'post_mime_type' => $filetype['type'] ?? 'image/jpeg',
-				'post_title'     => pathinfo( $filename, PATHINFO_FILENAME ),
-				'post_content'   => '',
-				'post_status'    => 'inherit',
-			),
-			$dest
-		);
-		if ( is_wp_error( $attach_id ) || ! $attach_id ) {
-			return 0;
-		}
-
-		$metadata = wp_generate_attachment_metadata( $attach_id, $dest );
-		wp_update_attachment_metadata( $attach_id, $metadata );
-
-		return $this->tag_seed_attachment( (int) $attach_id );
-	}
-
 	private function tag_seed_attachment( int $attachment_id ): int {
 		if ( $attachment_id > 0 ) {
 			( new CortextMedia() )->tag( $attachment_id );
 		}
 
 		return $attachment_id;
-	}
-
-	/**
-	 * Returns a deterministic image URL for a row in one of the visually
-	 * meaningful seeded collections, or null if the collection isn't eligible.
-	 * First tries to resolve the row to a real Wikimedia Commons file via
-	 * Wikidata (so an author row gets that author's actual portrait); falls
-	 * back to Lorem Picsum when no Commons image is available. Commons files
-	 * carry their own per-image license (commonly CC-BY-SA): see each file's
-	 * Commons page for credit; Picsum serves Unsplash photos under the
-	 * Unsplash License (attribution appreciated, not required).
-	 *
-	 * @param string $collection_slug Source collection slug.
-	 * @param string $title           Row title.
-	 */
-	private function row_icon_url( string $collection_slug, string $title ): ?string {
-		$icon_collections = array( 'authors', 'musicians', 'books', 'albums' );
-		if ( ! in_array( $collection_slug, $icon_collections, true ) ) {
-			return null;
-		}
-		$commons = $this->commons_image_url( $collection_slug, $title );
-		if ( null !== $commons ) {
-			return $commons;
-		}
-		// Books and albums rarely have P18 on Wikidata (covers are fair-use
-		// only), so when the user opts in to real images, reach for Open
-		// Library / Cover Art Archive instead of the picsum fallback. The
-		// real cover doubles as the icon: a Discworld book row gets the
-		// actual Discworld cover top-left and again as featured image.
-		if ( $this->fetch_real_images && in_array( $collection_slug, array( 'books', 'albums' ), true ) ) {
-			$cover = $this->real_cover_url( $collection_slug, $title );
-			if ( null !== $cover ) {
-				return $cover;
-			}
-		}
-		$seed = sanitize_title( $collection_slug . '-' . $title );
-		return 'https://picsum.photos/seed/' . rawurlencode( $seed ) . '/256/256';
-	}
-
-	/**
-	 * Walks the icon-bearing collections, resolves each row's icon URL, and
-	 * downloads the file into `seed-assets/icons/` so it can be committed and
-	 * reused by future seeds. Idempotent: existing bundle files are kept.
-	 * Honors `--full` so callers can bundle either the compact or full set.
-	 *
-	 * These files ship in the repo, so keep them CC0. The current bundle uses
-	 * Met Open Access art; see `seed-assets/CREDITS.md`.
-	 */
-	private function prefetch_icons(): void {
-		$bundle_dir = CORTEXT_PATH . 'seed-assets/icons';
-		if ( ! is_dir( $bundle_dir ) && ! wp_mkdir_p( $bundle_dir ) ) {
-			$this->error( "Failed to create {$bundle_dir}" );
-		}
-
-		$collections = array_merge(
-			$this->literature_collections(),
-			$this->music_collections()
-		);
-		if ( ! $this->seed_full_dataset ) {
-			$collections = $this->compact_collection_entries( $collections );
-		}
-
-		require_once ABSPATH . 'wp-admin/includes/file.php';
-
-		$downloaded = 0;
-		$cached     = 0;
-		$missed     = 0;
-		$total      = 0;
-
-		foreach ( $collections as $spec ) {
-			$slug = (string) ( $spec['slug'] ?? '' );
-			foreach ( ( $spec['entries'] ?? array() ) as $entry ) {
-				$title = (string) ( $entry['title'] ?? '' );
-				if ( '' === $title ) {
-					continue;
-				}
-				$url = $this->row_icon_url( $slug, $title );
-				if ( null === $url ) {
-					continue;
-				}
-				++$total;
-				$dest = $this->bundle_icon_path( $slug, $title );
-				if ( file_exists( $dest ) ) {
-					++$cached;
-					continue;
-				}
-				$tmp = download_url( $url, 30 );
-				if ( is_wp_error( $tmp ) ) {
-					$this->warning( "Failed to download icon for {$slug}/{$title}: " . $tmp->get_error_message() );
-					++$missed;
-					continue;
-				}
-				// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
-				if ( ! @copy( $tmp, $dest ) ) {
-					// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
-					@unlink( $tmp );
-					$this->warning( "Failed to write {$dest}" );
-					++$missed;
-					continue;
-				}
-				// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
-				@unlink( $tmp );
-				++$downloaded;
-				$this->log( "Bundled {$slug}/{$title} -> " . basename( $dest ) );
-			}
-		}
-
-		$this->success(
-			sprintf(
-				'Prefetched %d / %d icons (%d already bundled, %d failed). Bundle directory: %s',
-				$downloaded,
-				$total,
-				$cached,
-				$missed,
-				$bundle_dir
-			)
-		);
-	}
-
-	/**
-	 * Walks book and album rows, resolves each to a real cover URL via
-	 * Open Library / Cover Art Archive, and downloads into
-	 * `seed-assets/covers/`. Existing bundle files are kept (so a curated
-	 * stand-in survives), so re-running this is a way to fill in any gaps
-	 * left by manual curation. Honors `--full`.
-	 */
-	private function prefetch_covers(): void {
-		$bundle_dir = CORTEXT_PATH . 'seed-assets/covers';
-		if ( ! is_dir( $bundle_dir ) && ! wp_mkdir_p( $bundle_dir ) ) {
-			$this->error( "Failed to create {$bundle_dir}" );
-		}
-
-		$collections = array_merge(
-			$this->literature_collections(),
-			$this->music_collections()
-		);
-		if ( ! $this->seed_full_dataset ) {
-			$collections = $this->compact_collection_entries( $collections );
-		}
-
-		require_once ABSPATH . 'wp-admin/includes/file.php';
-
-		$downloaded = 0;
-		$cached     = 0;
-		$missed     = 0;
-		$total      = 0;
-
-		foreach ( $collections as $spec ) {
-			$slug = (string) ( $spec['slug'] ?? '' );
-			if ( ! in_array( $slug, array( 'books', 'albums' ), true ) ) {
-				continue;
-			}
-			foreach ( ( $spec['entries'] ?? array() ) as $entry ) {
-				$title = (string) ( $entry['title'] ?? '' );
-				if ( '' === $title ) {
-					continue;
-				}
-				$url = $this->real_cover_url( $slug, $title );
-				if ( null === $url ) {
-					continue;
-				}
-				++$total;
-				$dest = CORTEXT_PATH . 'seed-assets/covers/' . sanitize_title( $slug ) . '-' . sanitize_title( $title ) . '.jpg';
-				if ( file_exists( $dest ) ) {
-					++$cached;
-					continue;
-				}
-				$tmp = download_url( $url, 30 );
-				if ( is_wp_error( $tmp ) ) {
-					$this->warning( "Failed to download cover for {$slug}/{$title}: " . $tmp->get_error_message() );
-					++$missed;
-					continue;
-				}
-				// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
-				if ( ! @copy( $tmp, $dest ) ) {
-					// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
-					@unlink( $tmp );
-					$this->warning( "Failed to write {$dest}" );
-					++$missed;
-					continue;
-				}
-				// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
-				@unlink( $tmp );
-				++$downloaded;
-				$this->log( "Bundled cover {$slug}/{$title} -> " . basename( $dest ) );
-			}
-		}
-
-		$this->success(
-			sprintf(
-				'Prefetched %d / %d covers (%d already bundled, %d failed).',
-				$downloaded,
-				$total,
-				$cached,
-				$missed
-			)
-		);
-	}
-
-	/**
-	 * Looks up a real book or album cover URL with transient caching, the
-	 * same way `commons_image_url()` caches Wikidata lookups. Books resolve
-	 * via Open Library; albums via MusicBrainz + Cover Art Archive. Returns
-	 * null when no cover is available; cached as `''` so misses don't re-hit.
-	 *
-	 * @param string $collection_slug Source collection slug.
-	 * @param string $title           Row title.
-	 */
-	private function real_cover_url( string $collection_slug, string $title ): ?string {
-		$cache_key = 'cortext_seed_cover_' . md5( $collection_slug . '|' . $title );
-		$cached    = get_transient( $cache_key );
-		if ( false !== $cached ) {
-			return '' === $cached ? null : (string) $cached;
-		}
-
-		$resolved = $this->resolve_real_cover_url( $collection_slug, $title );
-		set_transient( $cache_key, $resolved ?? '', MONTH_IN_SECONDS );
-		return $resolved;
-	}
-
-	private function resolve_real_cover_url( string $collection_slug, string $title ): ?string {
-		if ( 'books' === $collection_slug ) {
-			$author = $this->book_author_relations()[ $title ] ?? '';
-			return $this->open_library_cover_url( $title, $author );
-		}
-		if ( 'albums' === $collection_slug ) {
-			$artist = $this->album_artist_relations()[ $title ] ?? '';
-			return $this->cover_art_archive_url( $title, $artist );
-		}
-		return null;
-	}
-
-	private function open_library_cover_url( string $title, string $author ): ?string {
-		$params = array(
-			'title' => $title,
-			'limit' => 5,
-		);
-		if ( '' !== $author ) {
-			$params['author'] = $author;
-		}
-		$data = $this->fetch_json( 'https://openlibrary.org/search.json?' . http_build_query( $params ) );
-		if ( null === $data || empty( $data['docs'] ) ) {
-			return null;
-		}
-		foreach ( $data['docs'] as $doc ) {
-			$cover_id = (int) ( $doc['cover_i'] ?? 0 );
-			if ( $cover_id > 0 ) {
-				return 'https://covers.openlibrary.org/b/id/' . $cover_id . '-L.jpg';
-			}
-		}
-		return null;
-	}
-
-	private function cover_art_archive_url( string $title, string $artist ): ?string {
-		// MusicBrainz requires an explicit User-Agent and applies a 1 req/s
-		// rate limit. The transient cache layer keeps this from biting once
-		// covers are resolved; on first prefetch, allow ~1s per row.
-		$query    = sprintf( 'release:"%s" AND artist:"%s"', addslashes( $title ), addslashes( $artist ) );
-		$response = wp_remote_get(
-			'https://musicbrainz.org/ws/2/release/?' . http_build_query(
-				array(
-					'query' => $query,
-					'fmt'   => 'json',
-					'limit' => 10,
-				)
-			),
-			array(
-				'timeout' => 15,
-				'headers' => array(
-					'User-Agent' => 'CortextSeeder/1.0 (https://github.com/Automattic/cortext)',
-				),
-			)
-		);
-		if ( is_wp_error( $response ) ) {
-			return null;
-		}
-		$data = json_decode( wp_remote_retrieve_body( $response ), true );
-		if ( ! is_array( $data ) || empty( $data['releases'] ) ) {
-			return null;
-		}
-
-		foreach ( $data['releases'] as $release ) {
-			$mbid = (string) ( $release['id'] ?? '' );
-			if ( '' === $mbid ) {
-				continue;
-			}
-			$cover_url = "https://coverartarchive.org/release/{$mbid}/front-500";
-			$check     = wp_remote_head(
-				$cover_url,
-				array(
-					'timeout'     => 10,
-					'redirection' => 3,
-				)
-			);
-			if ( is_wp_error( $check ) ) {
-				continue;
-			}
-			$code = (int) wp_remote_retrieve_response_code( $check );
-			if ( 200 === $code ) {
-				return $cover_url;
-			}
-		}
-		return null;
-	}
-
-	/**
-	 * Resolves a row to a Wikimedia Commons file URL by searching Wikidata
-	 * for the title (with a collection-specific hint to disambiguate) and
-	 * grabbing the entity's `P18` (image) claim. Returns the Commons
-	 * `Special:FilePath` URL with `?width=256`, which 302s to a thumbnail.
-	 * Returns null on any failure (no entity, no P18, network error) so the
-	 * caller can fall back.
-	 *
-	 * @param string $collection_slug Source collection slug.
-	 * @param string $title           Row title.
-	 */
-	private function commons_image_url( string $collection_slug, string $title ): ?string {
-		// Resolving a Commons URL takes two HTTP round-trips to Wikidata,
-		// which dominates seed time. Cache the resolved URL (or a sentinel
-		// for misses) per (slug, title) so a `--reset` reseed reuses prior
-		// lookups instead of re-querying. Cache TTL is generous because
-		// Wikidata P18 is stable; clear `cortext_seed_commons_*` transients
-		// to force a refresh.
-		$cache_key = 'cortext_seed_commons_' . md5( $collection_slug . '|' . $title );
-		$cached    = get_transient( $cache_key );
-		if ( false !== $cached ) {
-			return '' === $cached ? null : (string) $cached;
-		}
-
-		$resolved = $this->resolve_commons_image_url( $collection_slug, $title );
-		set_transient( $cache_key, $resolved ?? '', MONTH_IN_SECONDS );
-		return $resolved;
-	}
-
-	private function resolve_commons_image_url( string $collection_slug, string $title ): ?string {
-		// Wikidata's `wbsearchentities` matches labels/aliases, so appending an
-		// English hint to the query kills matches. Disambiguate by scanning
-		// the top results' descriptions for collection-appropriate keywords
-		// instead, and fall through to the top hit if none match.
-		$keyword_map = array(
-			'authors'   => array( 'author', 'writer', 'novelist', 'poet', 'essayist' ),
-			'musicians' => array( 'musician', 'singer', 'composer', 'band', 'rapper', 'guitarist', 'drummer', 'pianist', 'rock', 'jazz', 'pop', 'electronic' ),
-			'books'     => array( 'novel', 'book', 'novella', 'short story', 'story collection' ),
-			'albums'    => array( 'album', 'studio album', 'compilation', 'live album', 'ep' ),
-		);
-		$keywords    = $keyword_map[ $collection_slug ] ?? null;
-		if ( null === $keywords ) {
-			return null;
-		}
-
-		$entity_id = $this->wikidata_resolve_entity( $title, $keywords );
-		if ( null === $entity_id ) {
-			return null;
-		}
-
-		$filename = $this->wikidata_image_filename( $entity_id );
-		if ( null === $filename ) {
-			return null;
-		}
-
-		return 'https://commons.wikimedia.org/wiki/Special:FilePath/'
-			. rawurlencode( $filename )
-			. '?width=256';
-	}
-
-	/**
-	 * Searches Wikidata for `$title` and returns the QID of the first result
-	 * whose description contains one of the collection-appropriate keywords.
-	 * Falls back to the top hit if none of the top results match (better than
-	 * dropping the row entirely; wrong matches still get caught downstream
-	 * when the entity has no P18). Returns null only when search is empty.
-	 *
-	 * @param string            $title    Row title.
-	 * @param array<int,string> $keywords Lowercase keywords to look for in entity descriptions.
-	 */
-	private function wikidata_resolve_entity( string $title, array $keywords ): ?string {
-		$url  = 'https://www.wikidata.org/w/api.php?' . http_build_query(
-			array(
-				'action'   => 'wbsearchentities',
-				'search'   => $title,
-				'language' => 'en',
-				'format'   => 'json',
-				'limit'    => 10,
-			)
-		);
-		$data = $this->fetch_json( $url );
-		if ( null === $data || empty( $data['search'] ) ) {
-			return null;
-		}
-		foreach ( $data['search'] as $hit ) {
-			$description = strtolower( (string) ( $hit['description'] ?? '' ) );
-			if ( '' === $description ) {
-				continue;
-			}
-			foreach ( $keywords as $keyword ) {
-				if ( false !== strpos( $description, $keyword ) ) {
-					return isset( $hit['id'] ) ? (string) $hit['id'] : null;
-				}
-			}
-		}
-		return isset( $data['search'][0]['id'] ) ? (string) $data['search'][0]['id'] : null;
-	}
-
-	private function wikidata_image_filename( string $entity_id ): ?string {
-		$url    = 'https://www.wikidata.org/w/api.php?' . http_build_query(
-			array(
-				'action' => 'wbgetentities',
-				'ids'    => $entity_id,
-				'props'  => 'claims',
-				'format' => 'json',
-			)
-		);
-		$data   = $this->fetch_json( $url );
-		$claims = $data['entities'][ $entity_id ]['claims']['P18'] ?? null;
-		if ( ! is_array( $claims ) ) {
-			return null;
-		}
-		foreach ( $claims as $claim ) {
-			$value = $claim['mainsnak']['datavalue']['value'] ?? '';
-			if ( '' !== $value ) {
-				return (string) $value;
-			}
-		}
-		return null;
-	}
-
-	private function fetch_json( string $url ): ?array {
-		$response = wp_remote_get( $url, array( 'timeout' => 15 ) );
-		if ( is_wp_error( $response ) ) {
-			return null;
-		}
-		$body = wp_remote_retrieve_body( $response );
-		$data = json_decode( $body, true );
-		return is_array( $data ) ? $data : null;
 	}
 
 	/**
@@ -4705,11 +4234,11 @@ final class SeedDummyCollections {
 		// don't reach for Wikidata or Picsum. The user opts in to network
 		// lookups with `--with-real-images`, or runs `--prefetch-icons` to
 		// extend the bundle once.
-		if ( ! $this->fetch_real_images ) {
+		if ( ! $this->fetch_real_images || null === $this->image_fetcher ) {
 			return;
 		}
 
-		$icon_url = $this->row_icon_url( $collection_slug, $title );
+		$icon_url = $this->image_fetcher->row_icon_url( $collection_slug, $title );
 		if ( null === $icon_url ) {
 			return;
 		}
@@ -4721,22 +4250,9 @@ final class SeedDummyCollections {
 		);
 		if ( '' !== $icon_meta ) {
 			update_post_meta( $entry_id, DocumentIdentity::META_KEY, $icon_meta );
-			$source = $this->row_icon_source_label( $icon_url );
+			$source = $this->image_fetcher->row_icon_source_label( $icon_url );
 			$this->log( sprintf( '  Icon (%s) attached to entry %d.', $source, $entry_id ) );
 		}
-	}
-
-	private function row_icon_source_label( string $url ): string {
-		if ( false !== strpos( $url, 'commons.wikimedia.org' ) ) {
-			return 'commons';
-		}
-		if ( false !== strpos( $url, 'openlibrary.org' ) ) {
-			return 'open-library';
-		}
-		if ( false !== strpos( $url, 'coverartarchive.org' ) ) {
-			return 'cover-art-archive';
-		}
-		return 'picsum';
 	}
 
 	/**
@@ -4794,19 +4310,19 @@ final class SeedDummyCollections {
 			return;
 		}
 
-		if ( ! $this->fetch_real_images ) {
+		if ( ! $this->fetch_real_images || null === $this->image_fetcher ) {
 			$this->maybe_apply_album_icon_as_row_cover( $entry_id, $collection_slug, $title );
 			return;
 		}
-		$url = $this->real_cover_url( $collection_slug, $title );
+		$url = $this->image_fetcher->real_cover_url( $collection_slug, $title );
 		if ( null === $url ) {
 			$this->maybe_apply_album_icon_as_row_cover( $entry_id, $collection_slug, $title );
 			return;
 		}
-		$cover_id = $this->ensure_attachment_from_url( $url );
+		$cover_id = $this->image_fetcher->ensure_attachment_from_url( $url );
 		if ( $cover_id > 0 ) {
 			update_post_meta( $entry_id, '_thumbnail_id', $cover_id );
-			$source = false !== strpos( $url, 'openlibrary.org' ) ? 'open-library' : 'cover-art-archive';
+			$source = $this->image_fetcher->row_icon_source_label( $url );
 			$this->log( sprintf( '  Cover (%s) attached to entry %d.', $source, $entry_id ) );
 			return;
 		}
