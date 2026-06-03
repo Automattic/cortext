@@ -17,10 +17,8 @@ use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Field;
 use Cortext\Relations;
 use Cortext\Taxonomy\TraitTaxonomy;
-use WP_CLI;
-use WP_CLI_Command;
 
-final class SeedDummyCollections extends WP_CLI_Command {
+final class SeedDummyCollections {
 
 	private const WORKSPACE_HOME_META_KEY = 'cortext_workspace_home';
 	private const FAVORITES_META_KEY      = 'cortext_favorites';
@@ -29,6 +27,20 @@ final class SeedDummyCollections extends WP_CLI_Command {
 
 	private bool $seed_full_dataset = false;
 	private bool $fetch_real_images = false;
+	private array $messages         = array();
+
+	/**
+	 * Runs the compact offline sample seed and returns log messages for
+	 * non-CLI callers such as the onboarding REST endpoint.
+	 *
+	 * @return array<int,array{level:string,message:string}>
+	 */
+	public function seed_sample_content(): array {
+		$this->messages = array();
+		$this->__invoke( array(), array() );
+
+		return $this->messages;
+	}
 
 	/**
 	 * Seeds connected sample collections (books/authors/publishers,
@@ -96,19 +108,19 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	 * @param array $assoc_args Associative arguments.
 	 */
 	public function __invoke( array $args, array $assoc_args ): void {
-		if ( WP_CLI\Utils\get_flag_value( $assoc_args, 'prefetch-icons', false ) ) {
-			$this->seed_full_dataset = WP_CLI\Utils\get_flag_value( $assoc_args, 'full', false );
+		if ( self::get_flag_value( $assoc_args, 'prefetch-icons', false ) ) {
+			$this->seed_full_dataset = self::get_flag_value( $assoc_args, 'full', false );
 			$this->prefetch_icons();
 			return;
 		}
 
-		if ( WP_CLI\Utils\get_flag_value( $assoc_args, 'prefetch-covers', false ) ) {
-			$this->seed_full_dataset = WP_CLI\Utils\get_flag_value( $assoc_args, 'full', false );
+		if ( self::get_flag_value( $assoc_args, 'prefetch-covers', false ) ) {
+			$this->seed_full_dataset = self::get_flag_value( $assoc_args, 'full', false );
 			$this->prefetch_covers();
 			return;
 		}
 
-		$this->fetch_real_images = WP_CLI\Utils\get_flag_value( $assoc_args, 'with-real-images', false );
+		$this->fetch_real_images = self::get_flag_value( $assoc_args, 'with-real-images', false );
 
 		// Run as an administrator so seeded entries get a real `post_author`
 		// (otherwise CLI's user-0 context produces empty Created by /
@@ -117,12 +129,12 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		$seed_user_id = $this->default_seed_user_id();
 		wp_set_current_user( $seed_user_id );
 
-		$this->seed_full_dataset = WP_CLI\Utils\get_flag_value( $assoc_args, 'full', false );
+		$this->seed_full_dataset = self::get_flag_value( $assoc_args, 'full', false );
 
-		if ( WP_CLI\Utils\get_flag_value( $assoc_args, 'reset', false ) ) {
-			WP_CLI::confirm(
+		if ( self::get_flag_value( $assoc_args, 'reset', false ) ) {
+			$this->confirm(
 				'This will delete all Cortext collections, fields, entries, pages, workspace home preferences, and sidebar favorites. Continue?',
-				array( 'yes' => WP_CLI\Utils\get_flag_value( $assoc_args, 'force', false ) )
+				array( 'yes' => self::get_flag_value( $assoc_args, 'force', false ) )
 			);
 			$this->reset();
 		}
@@ -133,15 +145,15 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			$this->work_collections()
 		);
 		if ( $this->seed_full_dataset ) {
-			WP_CLI::log( 'Seeding full sample dataset.' );
+			$this->log( 'Seeding full sample dataset.' );
 		} else {
-			WP_CLI::log( 'Seeding compact sample dataset. Pass --full to include every sample row.' );
+			$this->log( 'Seeding compact sample dataset. Pass --full to include every sample row.' );
 			$collections = $this->compact_collection_entries( $collections );
 		}
 		if ( $this->fetch_real_images ) {
-			WP_CLI::log( 'Row images: bundle first, then live Wikimedia Commons / Open Library / Cover Art Archive for misses (per-file license, see each source).' );
+			$this->log( 'Row images: bundle first, then live Wikimedia Commons / Open Library / Cover Art Archive for misses (per-file license, see each source).' );
 		} else {
-			WP_CLI::log( 'Row images: bundle only (offline). Pass --with-real-images for live Wikimedia / Open Library / Cover Art Archive lookups, or --prefetch-icons to extend the bundle.' );
+			$this->log( 'Row images: bundle only (offline). Pass --with-real-images for live Wikimedia / Open Library / Cover Art Archive lookups, or --prefetch-icons to extend the bundle.' );
 		}
 
 		$collection_ids = array();
@@ -164,7 +176,83 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		$this->seed_workspace_home( $seed_user_id, $workspace_page_id );
 		$this->seed_favorites( $seed_user_id, $workspace_page_id );
 
-		WP_CLI::success( 'Seeding complete.' );
+		$this->success( 'Seeding complete.' );
+	}
+
+	/**
+	 * Lightweight flag reader so the seeder can run both under WP-CLI and REST.
+	 *
+	 * @param array<string,mixed> $assoc_args Associative arguments.
+	 * @param string              $name       Flag name.
+	 * @param mixed               $fallback   Fallback value.
+	 */
+	private static function get_flag_value( array $assoc_args, string $name, mixed $fallback = false ): mixed {
+		if ( function_exists( 'WP_CLI\\Utils\\get_flag_value' ) ) {
+			return \WP_CLI\Utils\get_flag_value( $assoc_args, $name, $fallback );
+		}
+
+		return array_key_exists( $name, $assoc_args ) ? $assoc_args[ $name ] : $fallback;
+	}
+
+	/**
+	 * Confirms destructive CLI-only actions.
+	 *
+	 * @param string              $message Confirmation message.
+	 * @param array<string,mixed> $options Confirmation options.
+	 * @throws \RuntimeException When confirmation is required outside WP-CLI.
+	 */
+	private function confirm( string $message, array $options = array() ): void {
+		if ( class_exists( '\WP_CLI' ) ) {
+			\WP_CLI::confirm( $message, $options );
+			return;
+		}
+
+		if ( empty( $options['yes'] ) ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception message is returned to REST/CLI callers, not rendered here.
+			throw new \RuntimeException( $message );
+		}
+	}
+
+	private function log( string $message ): void {
+		$this->messages[] = array(
+			'level'   => 'info',
+			'message' => $message,
+		);
+
+		if ( class_exists( '\WP_CLI' ) ) {
+			\WP_CLI::log( $message );
+		}
+	}
+
+	private function warning( string $message ): void {
+		$this->messages[] = array(
+			'level'   => 'warning',
+			'message' => $message,
+		);
+
+		if ( class_exists( '\WP_CLI' ) ) {
+			\WP_CLI::warning( $message );
+		}
+	}
+
+	private function success( string $message ): void {
+		$this->messages[] = array(
+			'level'   => 'success',
+			'message' => $message,
+		);
+
+		if ( class_exists( '\WP_CLI' ) ) {
+			\WP_CLI::success( $message );
+		}
+	}
+
+	private function error( string $message ): void {
+		if ( class_exists( '\WP_CLI' ) ) {
+			\WP_CLI::error( $message );
+		}
+
+		// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception message is returned to REST/CLI callers, not rendered here.
+		throw new \RuntimeException( $message );
 	}
 
 	/**
@@ -220,6 +308,11 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	 * have a recognizable `post_author` and `_modified_by`.
 	 */
 	private function default_seed_user_id(): int {
+		$current_user_id = get_current_user_id();
+		if ( $current_user_id > 0 ) {
+			return $current_user_id;
+		}
+
 		$users = get_users(
 			array(
 				'role'   => 'administrator',
@@ -3611,7 +3704,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		$page_id          = $this->find_seed_page_tree_candidate( $candidate_titles, $parent_id );
 
 		if ( $page_id > 0 ) {
-			WP_CLI::log( "Page '{$node['title']}' already exists (ID {$page_id})." );
+			$this->log( "Page '{$node['title']}' already exists (ID {$page_id})." );
 
 			$page            = get_post( $page_id );
 			$content_version = (string) get_post_meta( $page_id, '_cortext_seed_content_version', true );
@@ -3630,7 +3723,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 					$update['post_content'] = $node['content'];
 				}
 				wp_update_post( $update );
-				WP_CLI::log( "Updated page '{$node['title']}' with current sample content." );
+				$this->log( "Updated page '{$node['title']}' with current sample content." );
 			}
 		} else {
 			$page_id = wp_insert_post(
@@ -3645,10 +3738,10 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			);
 
 			if ( is_wp_error( $page_id ) ) {
-				WP_CLI::error( "Failed to create page '{$node['title']}': " . $page_id->get_error_message() );
+				$this->error( "Failed to create page '{$node['title']}': " . $page_id->get_error_message() );
 			}
 
-			WP_CLI::log( "Created page '{$node['title']}' (ID {$page_id})." );
+			$this->log( "Created page '{$node['title']}' (ID {$page_id})." );
 		}
 
 		if ( ! empty( $node['icon'] ) ) {
@@ -3748,7 +3841,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 					continue;
 				}
 				wp_trash_post( $id );
-				WP_CLI::log( "Moved obsolete sample page '{$title}' to trash (ID {$id})." );
+				$this->log( "Moved obsolete sample page '{$title}' to trash (ID {$id})." );
 			}
 		}
 	}
@@ -3806,13 +3899,13 @@ final class SeedDummyCollections extends WP_CLI_Command {
 
 		$current = get_user_meta( $user_id, self::WORKSPACE_HOME_META_KEY, true );
 		if ( is_string( $current ) && '' !== $current && $this->workspace_home_exists( $current ) ) {
-			WP_CLI::log( 'Workspace home already exists. Skipping.' );
+			$this->log( 'Workspace home already exists. Skipping.' );
 			return;
 		}
 
 		update_user_meta( $user_id, self::WORKSPACE_HOME_META_KEY, "page:{$page_id}" );
 		$page_title = get_the_title( $page_id );
-		WP_CLI::log( "Set workspace home to page '{$page_title}' (ID {$page_id})." );
+		$this->log( "Set workspace home to page '{$page_title}' (ID {$page_id})." );
 	}
 
 	private function workspace_home_exists( string $raw ): bool {
@@ -3849,7 +3942,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	private function seed_favorites( int $user_id, int $workspace_page_id ): void {
 		$current = get_user_meta( $user_id, self::FAVORITES_META_KEY, true );
 		if ( $this->favorites_exist( $current ) ) {
-			WP_CLI::log( 'Favorites already exist. Skipping.' );
+			$this->log( 'Favorites already exist. Skipping.' );
 			return;
 		}
 
@@ -3878,12 +3971,12 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		}
 
 		if ( ! $favorites ) {
-			WP_CLI::warning( 'No valid favorites were found to seed.' );
+			$this->warning( 'No valid favorites were found to seed.' );
 			return;
 		}
 
 		update_user_meta( $user_id, self::FAVORITES_META_KEY, $favorites );
-		WP_CLI::log( sprintf( 'Seeded %d sidebar favorites.', count( $favorites ) ) );
+		$this->log( sprintf( 'Seeded %d sidebar favorites.', count( $favorites ) ) );
 	}
 
 	/**
@@ -4080,7 +4173,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 
 		$tmp = download_url( $url, 30 );
 		if ( is_wp_error( $tmp ) ) {
-			WP_CLI::warning( "Failed to download icon from {$url}: " . $tmp->get_error_message() );
+			$this->warning( "Failed to download icon from {$url}: " . $tmp->get_error_message() );
 			return 0;
 		}
 
@@ -4179,7 +4272,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	private function prefetch_icons(): void {
 		$bundle_dir = CORTEXT_PATH . 'seed-assets/icons';
 		if ( ! is_dir( $bundle_dir ) && ! wp_mkdir_p( $bundle_dir ) ) {
-			WP_CLI::error( "Failed to create {$bundle_dir}" );
+			$this->error( "Failed to create {$bundle_dir}" );
 		}
 
 		$collections = array_merge(
@@ -4216,7 +4309,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 				}
 				$tmp = download_url( $url, 30 );
 				if ( is_wp_error( $tmp ) ) {
-					WP_CLI::warning( "Failed to download icon for {$slug}/{$title}: " . $tmp->get_error_message() );
+					$this->warning( "Failed to download icon for {$slug}/{$title}: " . $tmp->get_error_message() );
 					++$missed;
 					continue;
 				}
@@ -4224,18 +4317,18 @@ final class SeedDummyCollections extends WP_CLI_Command {
 				if ( ! @copy( $tmp, $dest ) ) {
 					// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
 					@unlink( $tmp );
-					WP_CLI::warning( "Failed to write {$dest}" );
+					$this->warning( "Failed to write {$dest}" );
 					++$missed;
 					continue;
 				}
 				// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
 				@unlink( $tmp );
 				++$downloaded;
-				WP_CLI::log( "Bundled {$slug}/{$title} -> " . basename( $dest ) );
+				$this->log( "Bundled {$slug}/{$title} -> " . basename( $dest ) );
 			}
 		}
 
-		WP_CLI::success(
+		$this->success(
 			sprintf(
 				'Prefetched %d / %d icons (%d already bundled, %d failed). Bundle directory: %s',
 				$downloaded,
@@ -4257,7 +4350,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	private function prefetch_covers(): void {
 		$bundle_dir = CORTEXT_PATH . 'seed-assets/covers';
 		if ( ! is_dir( $bundle_dir ) && ! wp_mkdir_p( $bundle_dir ) ) {
-			WP_CLI::error( "Failed to create {$bundle_dir}" );
+			$this->error( "Failed to create {$bundle_dir}" );
 		}
 
 		$collections = array_merge(
@@ -4297,7 +4390,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 				}
 				$tmp = download_url( $url, 30 );
 				if ( is_wp_error( $tmp ) ) {
-					WP_CLI::warning( "Failed to download cover for {$slug}/{$title}: " . $tmp->get_error_message() );
+					$this->warning( "Failed to download cover for {$slug}/{$title}: " . $tmp->get_error_message() );
 					++$missed;
 					continue;
 				}
@@ -4305,18 +4398,18 @@ final class SeedDummyCollections extends WP_CLI_Command {
 				if ( ! @copy( $tmp, $dest ) ) {
 					// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
 					@unlink( $tmp );
-					WP_CLI::warning( "Failed to write {$dest}" );
+					$this->warning( "Failed to write {$dest}" );
 					++$missed;
 					continue;
 				}
 				// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
 				@unlink( $tmp );
 				++$downloaded;
-				WP_CLI::log( "Bundled cover {$slug}/{$title} -> " . basename( $dest ) );
+				$this->log( "Bundled cover {$slug}/{$title} -> " . basename( $dest ) );
 			}
 		}
 
-		WP_CLI::success(
+		$this->success(
 			sprintf(
 				'Prefetched %d / %d covers (%d already bundled, %d failed).',
 				$downloaded,
@@ -4602,7 +4695,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 				);
 				if ( '' !== $icon_meta ) {
 					update_post_meta( $entry_id, DocumentIdentity::META_KEY, $icon_meta );
-					WP_CLI::log( sprintf( '  Icon (bundle) attached to entry %d.', $entry_id ) );
+					$this->log( sprintf( '  Icon (bundle) attached to entry %d.', $entry_id ) );
 				}
 				return;
 			}
@@ -4629,7 +4722,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		if ( '' !== $icon_meta ) {
 			update_post_meta( $entry_id, DocumentIdentity::META_KEY, $icon_meta );
 			$source = $this->row_icon_source_label( $icon_url );
-			WP_CLI::log( sprintf( '  Icon (%s) attached to entry %d.', $source, $entry_id ) );
+			$this->log( sprintf( '  Icon (%s) attached to entry %d.', $source, $entry_id ) );
 		}
 	}
 
@@ -4696,7 +4789,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			$cover_id = $this->ensure_attachment_from_path( $path );
 			if ( $cover_id > 0 ) {
 				update_post_meta( $entry_id, '_thumbnail_id', $cover_id );
-				WP_CLI::log( sprintf( '  Cover (bundle) attached to entry %d.', $entry_id ) );
+				$this->log( sprintf( '  Cover (bundle) attached to entry %d.', $entry_id ) );
 			}
 			return;
 		}
@@ -4714,7 +4807,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		if ( $cover_id > 0 ) {
 			update_post_meta( $entry_id, '_thumbnail_id', $cover_id );
 			$source = false !== strpos( $url, 'openlibrary.org' ) ? 'open-library' : 'cover-art-archive';
-			WP_CLI::log( sprintf( '  Cover (%s) attached to entry %d.', $source, $entry_id ) );
+			$this->log( sprintf( '  Cover (%s) attached to entry %d.', $source, $entry_id ) );
 			return;
 		}
 
@@ -4744,7 +4837,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		$cover_id = $this->ensure_attachment_from_path( $path );
 		if ( $cover_id > 0 ) {
 			update_post_meta( $entry_id, '_thumbnail_id', $cover_id );
-			WP_CLI::log( sprintf( '  Cover (album icon bundle) attached to entry %d.', $entry_id ) );
+			$this->log( sprintf( '  Cover (album icon bundle) attached to entry %d.', $entry_id ) );
 		}
 	}
 
@@ -5160,7 +5253,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 
 		if ( $existing ) {
 			$collection_id = $existing[0]->ID;
-			WP_CLI::log( "Collection '{$spec['title']}' already exists (ID {$collection_id})." );
+			$this->log( "Collection '{$spec['title']}' already exists (ID {$collection_id})." );
 		} else {
 			$collection_id = wp_insert_post(
 				array(
@@ -5172,11 +5265,11 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			);
 
 			if ( is_wp_error( $collection_id ) ) {
-				WP_CLI::error( "Failed to create collection '{$spec['title']}': " . $collection_id->get_error_message() );
+				$this->error( "Failed to create collection '{$spec['title']}': " . $collection_id->get_error_message() );
 			}
 
 			update_post_meta( $collection_id, 'cortext_seed_slug', $slug );
-			WP_CLI::log( "Created collection '{$spec['title']}' (ID {$collection_id})." );
+			$this->log( "Created collection '{$spec['title']}' (ID {$collection_id})." );
 		}
 
 		// In the universal-document model rows live in `crtxt_document`, which
@@ -5214,7 +5307,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 					delete_post_meta( $found, 'number_format' );
 				}
 				$field_ids[ $title ] = $found;
-				WP_CLI::log( "Field '{$title}' already exists (ID {$found}); refreshed seed metadata." );
+				$this->log( "Field '{$title}' already exists (ID {$found}); refreshed seed metadata." );
 				continue;
 			}
 
@@ -5228,7 +5321,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			);
 
 			if ( is_wp_error( $field_id ) ) {
-				WP_CLI::error( "Failed to create field '{$title}': " . $field_id->get_error_message() );
+				$this->error( "Failed to create field '{$title}': " . $field_id->get_error_message() );
 			}
 
 			update_post_meta( $field_id, 'type', $type );
@@ -5240,7 +5333,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			}
 			add_post_meta( $collection_id, 'cortext_fields', $field_id );
 			$field_ids[ $title ] = $field_id;
-			WP_CLI::log( "Created field '{$title}' (ID {$field_id}, type: {$type})." );
+			$this->log( "Created field '{$title}' (ID {$field_id}, type: {$type})." );
 		}
 
 		// 4. Register field meta on the entry CPT (safe to call repeatedly).
@@ -5312,7 +5405,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 				$this->update_entry_content( $existing_entry_id, $entry_content );
 				$this->maybe_apply_row_icon( $existing_entry_id, $spec['slug'], $entry_title );
 				$this->maybe_apply_row_cover( $existing_entry_id, $spec['slug'], $entry_title );
-				WP_CLI::log( "Entry '{$entry_title}' already exists. Skipping." );
+				$this->log( "Entry '{$entry_title}' already exists. Skipping." );
 				continue;
 			}
 
@@ -5327,7 +5420,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			);
 
 			if ( is_wp_error( $entry_id ) ) {
-				WP_CLI::error( "Failed to create entry '{$entry_title}': " . $entry_id->get_error_message() );
+				$this->error( "Failed to create entry '{$entry_title}': " . $entry_id->get_error_message() );
 			}
 
 			$trait_term_id = Relations::trait_term_id_for_collection( (int) $collection_id );
@@ -5358,7 +5451,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 				update_post_meta( $entry_id, "field-{$field_id}", $value );
 			}
 
-			WP_CLI::log( "Created entry '{$entry_title}' (ID {$entry_id})." );
+			$this->log( "Created entry '{$entry_title}' (ID {$entry_id})." );
 		}
 
 		return (int) $collection_id;
@@ -5390,7 +5483,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		}
 
 		if ( $removed > 0 ) {
-			WP_CLI::log( sprintf( 'Removed %d seeded Icon field(s).', $removed ) );
+			$this->log( sprintf( 'Removed %d seeded Icon field(s).', $removed ) );
 		}
 
 		return get_post_meta( $collection_id, 'cortext_fields', false );
@@ -6096,7 +6189,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			$reverse_multiple
 		);
 
-		WP_CLI::log(
+		$this->log(
 			sprintf(
 				"Seeded relation '%s' (ID %d) <-> '%s' (ID %d).",
 				$source_title,
@@ -6147,7 +6240,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			delete_post_meta( $field_id, 'rollup_target_field_id' );
 		}
 
-		WP_CLI::log(
+		$this->log(
 			sprintf(
 				"Seeded rollup '%s' (ID %d, aggregator: %s).",
 				$title,
@@ -6226,11 +6319,11 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		);
 
 		if ( is_wp_error( $field_id ) ) {
-			WP_CLI::error( "Failed to create field '{$title}': " . $field_id->get_error_message() );
+			$this->error( "Failed to create field '{$title}': " . $field_id->get_error_message() );
 		}
 
 		add_post_meta( $collection_id, 'cortext_fields', (string) $field_id );
-		WP_CLI::log( "Created field '{$title}' (ID {$field_id})." );
+		$this->log( "Created field '{$title}' (ID {$field_id})." );
 
 		return (int) $field_id;
 	}
@@ -6444,7 +6537,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 	): void {
 		$source_id = $this->entry_id_by_title( $source_slug, $source_title );
 		if ( $source_id < 1 ) {
-			WP_CLI::warning( "Could not seed relation for missing row '{$source_title}'." );
+			$this->warning( "Could not seed relation for missing row '{$source_title}'." );
 			return;
 		}
 
@@ -6455,7 +6548,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		foreach ( $target_titles as $target_title ) {
 			$target_id = $this->entry_id_by_title( $target_slug, $target_title );
 			if ( $target_id < 1 ) {
-				WP_CLI::warning( "Could not seed relation target '{$target_title}'." );
+				$this->warning( "Could not seed relation target '{$target_title}'." );
 				continue;
 			}
 			$target_ids[] = $target_id;
@@ -6463,7 +6556,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 
 		$result = Relations::sync_relation_value( $source_id, $field_id, $target_ids );
 		if ( is_wp_error( $result ) ) {
-			WP_CLI::warning(
+			$this->warning(
 				sprintf(
 					"Could not seed relation for '%s': %s",
 					$source_title,
@@ -6563,7 +6656,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 			}
 
 			if ( $entries ) {
-				WP_CLI::log( sprintf( 'Deleted %d entries from "%s".', count( $entries ), $collection->post_title ) );
+				$this->log( sprintf( 'Deleted %d entries from "%s".', count( $entries ), $collection->post_title ) );
 			}
 		}
 
@@ -6582,7 +6675,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		}
 
 		if ( $fields ) {
-			WP_CLI::log( sprintf( 'Deleted %d fields.', count( $fields ) ) );
+			$this->log( sprintf( 'Deleted %d fields.', count( $fields ) ) );
 		}
 
 		// 3. Delete all collections.
@@ -6591,7 +6684,7 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		}
 
 		if ( $collections ) {
-			WP_CLI::log( sprintf( 'Deleted %d collections.', count( $collections ) ) );
+			$this->log( sprintf( 'Deleted %d collections.', count( $collections ) ) );
 		}
 
 		// 4. Delete all pages, including trashed ones. WP_Query's 'any'
@@ -6610,18 +6703,18 @@ final class SeedDummyCollections extends WP_CLI_Command {
 		}
 
 		if ( $pages ) {
-			WP_CLI::log( sprintf( 'Deleted %d pages.', count( $pages ) ) );
+			$this->log( sprintf( 'Deleted %d pages.', count( $pages ) ) );
 		}
 
 		if ( delete_metadata( 'user', 0, self::WORKSPACE_HOME_META_KEY, '', true ) ) {
-			WP_CLI::log( 'Deleted workspace home preferences.' );
+			$this->log( 'Deleted workspace home preferences.' );
 		}
 
 		if ( delete_metadata( 'user', 0, self::FAVORITES_META_KEY, '', true ) ) {
-			WP_CLI::log( 'Deleted sidebar favorites.' );
+			$this->log( 'Deleted sidebar favorites.' );
 		}
 
-		WP_CLI::success( 'Reset complete.' );
+		$this->success( 'Reset complete.' );
 	}
 
 	/**

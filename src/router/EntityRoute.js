@@ -118,6 +118,11 @@ export default function EntityRoute( { history } ) {
 		ACTIVE_PAGES_QUERY
 	);
 
+	// `pages` spans every non-row document (pages and collections), so an empty
+	// list once resolved means a fresh install with nothing created yet. That is
+	// the only state where the empty pane offers to seed sample content.
+	const isWorkspaceEmpty = ! isResolvingPages && ( pages?.length ?? 0 ) === 0;
+
 	const [ state, rawDispatch ] = useReducer( reducer, target, init );
 	const { active, mountedDocumentId, displayedDocumentId } = state;
 
@@ -428,7 +433,7 @@ export default function EntityRoute( { history } ) {
 					<ImportPane />
 				</WorkspacePane>
 				<WorkspacePane active={ active.kind === 'empty' }>
-					<EmptyState />
+					<EmptyState isWorkspaceEmpty={ isWorkspaceEmpty } />
 				</WorkspacePane>
 				<WorkspacePane active={ active.kind === 'document-not-found' }>
 					<NotFoundPane />
