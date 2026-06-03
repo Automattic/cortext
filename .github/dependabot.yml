@@ -5,6 +5,10 @@ updates:
       schedule:
           interval: 'weekly'
           day: 'monday'
+      labels:
+          - 'type: tooling'
+          - 'dependencies'
+          - 'github_actions'
       open-pull-requests-limit: 10
       groups:
           actions-minor-patch:
