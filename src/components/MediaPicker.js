@@ -1,18 +1,46 @@
 import { useCallback } from '@wordpress/element';
 import { MediaUploadCheck } from '@wordpress/block-editor';
 
-// Resolves to the host document's `wp` global. Inside the BlockCanvas iframe
-// `window.wp.media` is undefined (wp_enqueue_media() only loads media-views in
-// the parent), so we walk up to `window.parent` when needed. Returns null when
-// the host has not loaded media-views (for example a screen that did not call
-// wp_enqueue_media()); callers should treat the trigger as a no-op.
-function getHostWp() {
-	if ( typeof window === 'undefined' ) {
+function readWindowWp( candidate ) {
+	try {
+		return candidate?.wp ?? null;
+	} catch {
 		return null;
 	}
-	const host =
-		window.parent && window.parent !== window ? window.parent : window;
-	return host?.wp ?? null;
+}
+
+function readWindowParent( candidate ) {
+	try {
+		return candidate?.parent ?? null;
+	} catch {
+		return null;
+	}
+}
+
+// Find the closest window that actually has wp.media. In the block canvas that
+// is usually the parent; in Playground it can be the current wp-admin iframe.
+export function getHostWp(
+	startWindow = typeof window === 'undefined' ? null : window
+) {
+	let candidate = startWindow;
+	const visited = new Set();
+
+	while ( candidate && ! visited.has( candidate ) ) {
+		visited.add( candidate );
+
+		const wp = readWindowWp( candidate );
+		if ( wp?.media ) {
+			return wp;
+		}
+
+		const parent = readWindowParent( candidate );
+		if ( ! parent || parent === candidate ) {
+			break;
+		}
+		candidate = parent;
+	}
+
+	return null;
 }
 
 // Drop-in alternative to `<MediaUpload>` from `@wordpress/block-editor`
