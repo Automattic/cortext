@@ -16,6 +16,25 @@ body.cortext-fullscreen {
 	}
 }
 
+// WordPress's session overlay (#wp-auth-check-wrap) follows the heartbeat,
+// which this screen runs often for the post lock. During navigation a
+// heartbeat can briefly read the session as stale and open the overlay for a
+// frame before the next one hides it. Delay its appearance ~2s so the quick
+// flash never shows; a real sign-out keeps it open and still shows after.
+body.cortext-fullscreen #wp-auth-check-wrap:not(.hidden) {
+	opacity: 0;
+	pointer-events: none;
+	animation: cortext-auth-check-reveal 0s linear 2s forwards;
+}
+
+@keyframes cortext-auth-check-reveal {
+
+	100% {
+		opacity: 1;
+		pointer-events: auto;
+	}
+}
+
 .cortext-root {
 	position: fixed;
 	inset: 0;
