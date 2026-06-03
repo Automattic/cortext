@@ -40,6 +40,25 @@ module.exports = {
 		// numeric-only chunk names.
 		chunkFilename: '[name].js?ver=[chunkhash]',
 	},
+	module: {
+		...defaultConfig.module,
+		rules: [
+			...defaultConfig.module.rules,
+			// emoji-mart hardcodes jsDelivr CDN URLs for the emoji data and
+			// image sets it only reaches when no `data` prop is passed or a
+			// non-native set is rendered. Cortext always passes bundled
+			// `@emoji-mart/data` and renders native emoji, so those fetches
+			// never run. Blank them so the shipped bundle carries no
+			// remote-asset references.
+			{
+				test: /[\\/]emoji-mart[\\/]dist[\\/].*\.js$/,
+				loader: path.resolve(
+					__dirname,
+					'scripts/strip-emoji-cdn-loader.js'
+				),
+			},
+		],
+	},
 	optimization: {
 		...defaultConfig.optimization,
 		chunkIds: 'named',
