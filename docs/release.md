@@ -44,8 +44,10 @@ Use `release: skip` for PRs that should not be assigned to the active release
 milestone. It only skips milestone assignment; the PR still needs one `type:*`
 label.
 
-Area labels are optional and do not affect release automation. Add them when
-they make planning or filtering easier:
+Area labels are optional and group release notes within each `type:*` section.
+PRs without exactly one supported area label appear under `Other`, so missing or
+ambiguous areas do not block releases. Add area labels when they make planning,
+filtering, or release notes easier:
 
 -   `area: canvas` for the block editor canvas, blocks, inspector, covers, and
     icons
@@ -76,7 +78,8 @@ fails if a ready PR has zero `type:*` labels or more than one.
 
 By default, release notes are the public changelog. They include user-facing
 enhancements and bug fixes, and leave docs, tooling, and code quality changes
-out of the published notes.
+out of the published notes. Notes are grouped by `type:*` first, then by
+`area:*`, with unclassified entries under `Other`.
 
 Preview the changelog locally:
 

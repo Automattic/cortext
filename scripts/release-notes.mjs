@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const TYPE_LABELS = new Map( [
 	[ 'type: enhancement', 'Enhancements' ],
@@ -17,6 +19,27 @@ const TYPE_ORDER = [
 	'Documentation',
 	'Tooling',
 	'Code quality',
+];
+
+const AREA_LABELS = new Map( [
+	[ 'area: canvas', 'Canvas' ],
+	[ 'area: collections', 'Collections' ],
+	[ 'area: desktop', 'Desktop' ],
+	[ 'area: performance', 'Performance' ],
+	[ 'area: publishing', 'Publishing' ],
+	[ 'area: shell', 'Shell' ],
+] );
+
+const OTHER_AREA = 'Other';
+
+const AREA_ORDER = [
+	'Canvas',
+	'Collections',
+	'Desktop',
+	'Performance',
+	'Publishing',
+	'Shell',
+	OTHER_AREA,
 ];
 
 function parseArgs() {
@@ -106,6 +129,21 @@ function getTypeLabels( pr ) {
 		.filter( ( name ) => TYPE_LABELS.has( name.toLowerCase() ) );
 }
 
+function getArea( pr ) {
+	const areaLabels = pr.labels
+		.map( ( label ) => label.name )
+		.filter( ( name ) => name.toLowerCase().startsWith( 'area:' ) );
+	const supportedAreaLabels = areaLabels.filter( ( name ) =>
+		AREA_LABELS.has( name.toLowerCase() )
+	);
+
+	if ( areaLabels.length !== 1 || supportedAreaLabels.length !== 1 ) {
+		return OTHER_AREA;
+	}
+
+	return AREA_LABELS.get( supportedAreaLabels[ 0 ].toLowerCase() );
+}
+
 function getIncludedTypeLabels( options ) {
 	if ( options.full ) {
 		return new Set( TYPE_LABELS.keys() );
@@ -121,9 +159,106 @@ function getTypeOrder( includedTypeLabels ) {
 	);
 }
 
+function getAreaGroups() {
+	return new Map( AREA_ORDER.map( ( area ) => [ area, [] ] ) );
+}
+
 function formatPr( pr ) {
 	const title = sentence( normalizeTitle( pr.title ) );
 	return `- ${ title } ([#${ pr.number }](${ pr.html_url || pr.url }))`;
+}
+
+export function buildReleaseNotes( pullRequests, options ) {
+	const errors = [];
+	const includedTypeLabels = getIncludedTypeLabels( options );
+	const typeOrder = getTypeOrder( includedTypeLabels );
+	const grouped = new Map(
+		typeOrder.map( ( type ) => [ type, getAreaGroups() ] )
+	);
+	const includedPullRequests = [];
+
+	for ( const pr of pullRequests ) {
+		const typeLabels = getTypeLabels( pr );
+		if ( typeLabels.length !== 1 ) {
+			errors.push(
+				`#${ pr.number } needs exactly one type:* label; found ${
+					typeLabels.length ? typeLabels.join( ', ' ) : 'none'
+				}.`
+			);
+			continue;
+		}
+
+		const typeLabel = typeLabels[ 0 ].toLowerCase();
+		if ( ! includedTypeLabels.has( typeLabel ) ) {
+			continue;
+		}
+
+		const section = TYPE_LABELS.get( typeLabel );
+		const area = getArea( pr );
+		grouped.get( section ).get( area ).push( pr );
+		includedPullRequests.push( pr );
+	}
+
+	if ( errors.length && options.strict ) {
+		throw new Error(
+			`Release note classification failed:\n${ errors.join( '\n' ) }`
+		);
+	}
+
+	const title = options.version
+		? `# Cortext ${ options.version }`
+		: `# ${ options.milestone }`;
+	let notes = `${ title }\n\n`;
+
+	if ( ! pullRequests.length ) {
+		notes += 'No pull requests were found for this milestone.\n';
+	} else if ( ! includedPullRequests.length ) {
+		notes += options.full
+			? 'No release note entries were found for this milestone.\n'
+			: 'No public changelog entries were found for this milestone.\n';
+	} else {
+		for ( const section of typeOrder ) {
+			const areaGroups = grouped.get( section );
+			const hasPrs = Array.from( areaGroups.values() ).some(
+				( prs ) => prs.length
+			);
+			if ( ! hasPrs ) {
+				continue;
+			}
+			notes += `## ${ section }\n\n`;
+			for ( const area of AREA_ORDER ) {
+				const prs = areaGroups.get( area );
+				if ( ! prs.length ) {
+					continue;
+				}
+				notes += `### ${ area }\n\n`;
+				notes += `${ prs.map( formatPr ).join( '\n' ) }\n\n`;
+			}
+		}
+	}
+
+	const contributors = [
+		...new Set(
+			includedPullRequests
+				.map( ( pr ) => pr.user?.login )
+				.filter( Boolean )
+				.filter( ( login ) => ! login.endsWith( '[bot]' ) )
+		),
+	].sort( ( a, b ) => a.localeCompare( b ) );
+
+	if ( contributors.length ) {
+		notes += '## Contributors\n\n';
+		notes += contributors.map( ( login ) => `@${ login }` ).join( ' ' );
+		notes += '\n\n';
+	}
+
+	if ( errors.length ) {
+		notes += '## Release note warnings\n\n';
+		notes += errors.map( ( error ) => `- ${ error }` ).join( '\n' );
+		notes += '\n';
+	}
+
+	return notes;
 }
 
 async function main() {
@@ -168,86 +303,15 @@ async function main() {
 		.filter( ( item ) => item.pull_request?.merged_at )
 		.sort( ( a, b ) => a.number - b.number );
 
-	const errors = [];
-	const includedTypeLabels = getIncludedTypeLabels( options );
-	const typeOrder = getTypeOrder( includedTypeLabels );
-	const grouped = new Map( typeOrder.map( ( type ) => [ type, [] ] ) );
-	const includedPullRequests = [];
-
-	for ( const pr of pullRequests ) {
-		const typeLabels = getTypeLabels( pr );
-		if ( typeLabels.length !== 1 ) {
-			errors.push(
-				`#${ pr.number } needs exactly one type:* label; found ${
-					typeLabels.length ? typeLabels.join( ', ' ) : 'none'
-				}.`
-			);
-			continue;
-		}
-
-		const typeLabel = typeLabels[ 0 ].toLowerCase();
-		if ( ! includedTypeLabels.has( typeLabel ) ) {
-			continue;
-		}
-
-		const section = TYPE_LABELS.get( typeLabel );
-		grouped.get( section ).push( pr );
-		includedPullRequests.push( pr );
-	}
-
-	if ( errors.length && options.strict ) {
-		throw new Error(
-			`Release note classification failed:\n${ errors.join( '\n' ) }`
-		);
-	}
-
-	const title = options.version
-		? `# Cortext ${ options.version }`
-		: `# ${ options.milestone }`;
-	let notes = `${ title }\n\n`;
-
-	if ( ! pullRequests.length ) {
-		notes += 'No pull requests were found for this milestone.\n';
-	} else if ( ! includedPullRequests.length ) {
-		notes += options.full
-			? 'No release note entries were found for this milestone.\n'
-			: 'No public changelog entries were found for this milestone.\n';
-	} else {
-		for ( const section of typeOrder ) {
-			const prs = grouped.get( section );
-			if ( ! prs.length ) {
-				continue;
-			}
-			notes += `## ${ section }\n\n`;
-			notes += `${ prs.map( formatPr ).join( '\n' ) }\n\n`;
-		}
-	}
-
-	const contributors = [
-		...new Set(
-			includedPullRequests
-				.map( ( pr ) => pr.user?.login )
-				.filter( Boolean )
-				.filter( ( login ) => ! login.endsWith( '[bot]' ) )
-		),
-	].sort( ( a, b ) => a.localeCompare( b ) );
-
-	if ( contributors.length ) {
-		notes += '## Contributors\n\n';
-		notes += contributors.map( ( login ) => `@${ login }` ).join( ' ' );
-		notes += '\n\n';
-	}
-
-	if ( errors.length ) {
-		notes += '## Release note warnings\n\n';
-		notes += errors.map( ( error ) => `- ${ error }` ).join( '\n' );
-		notes += '\n';
-	}
-
-	process.stdout.write( notes );
+	process.stdout.write( buildReleaseNotes( pullRequests, options ) );
 }
 
-main().catch( ( error ) => {
-	console.error( error.message );
-	process.exit( 1 );
-} );
+if (
+	process.argv[ 1 ] &&
+	resolve( process.argv[ 1 ] ) === fileURLToPath( import.meta.url )
+) {
+	main().catch( ( error ) => {
+		console.error( error.message );
+		process.exit( 1 );
+	} );
+}
