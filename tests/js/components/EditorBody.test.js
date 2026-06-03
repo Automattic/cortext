@@ -76,6 +76,7 @@ jest.mock( '../../../src/hooks/afterNextPaint', () => ( {
 } ) );
 
 const {
+	areCanvasReadyRequirementsMet,
 	collectDuplicateHeaderClientIds,
 } = require( '../../../src/components/EditorBody' );
 
@@ -171,5 +172,54 @@ describe( 'collectDuplicateHeaderClientIds', () => {
 		expect(
 			collectDuplicateHeaderClientIds( blocks, OWNER, COLLECTION_ID )
 		).toEqual( [ 'cover-2', 'title-2' ] );
+	} );
+} );
+
+describe( 'areCanvasReadyRequirementsMet', () => {
+	it( 'waits for row properties when a schema-bearing row is rendering', () => {
+		expect(
+			areCanvasReadyRequirementsMet( {
+				hasTitle: true,
+				needsProperties: true,
+				hasProperties: false,
+			} )
+		).toBe( false );
+
+		expect(
+			areCanvasReadyRequirementsMet( {
+				hasTitle: true,
+				needsProperties: true,
+				hasProperties: true,
+			} )
+		).toBe( true );
+	} );
+
+	it( 'waits for collection owner content when a collection owns the body', () => {
+		expect(
+			areCanvasReadyRequirementsMet( {
+				hasTitle: true,
+				needsOwner: true,
+				hasOwner: true,
+				isOwnerContentReady: false,
+			} )
+		).toBe( false );
+
+		expect(
+			areCanvasReadyRequirementsMet( {
+				hasTitle: true,
+				needsOwner: true,
+				hasOwner: true,
+				isOwnerContentReady: true,
+			} )
+		).toBe( true );
+	} );
+
+	it( 'does not mark a row ready while its property schema is resolving', () => {
+		expect(
+			areCanvasReadyRequirementsMet( {
+				hasTitle: true,
+				isPropertiesResolving: true,
+			} )
+		).toBe( false );
 	} );
 } );
