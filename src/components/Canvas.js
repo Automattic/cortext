@@ -8,7 +8,13 @@ import {
 } from '@wordpress/interface';
 import { Button } from '@wordpress/components';
 import { closeSmall, cog, pencil, plus, seen, unseen } from '@wordpress/icons';
-import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
+import {
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from '@wordpress/element';
 
 // Editor-surface stylesheets. Imported via a sibling SCSS file (not
 // src/index.scss) so mini-css-extract emits them into the editor chunk's
@@ -39,6 +45,11 @@ import DocumentInspectorSidebar, {
 	DOCUMENT_INSPECTOR,
 	isInspectorArea,
 } from './DocumentInspectorSidebar';
+import {
+	makeRowDocumentContext,
+	rememberRowDocumentContext,
+	rowDocumentContextForEditorPost,
+} from '../router/rowContextCache';
 
 function InserterToggle( { disabled = false } ) {
 	const isOpen = useSelect(
@@ -202,6 +213,7 @@ function CanvasEditor( {
 	allFields,
 	detailLayoutEntries,
 	row,
+	propertiesResolving = false,
 	pendingPost,
 	onSwitchPost,
 	onDisplayedPost,
@@ -314,13 +326,11 @@ function CanvasEditor( {
 			allFields={ allFields }
 			detailLayoutEntries={ detailLayoutEntries }
 			fallbackRecord={ row }
-			// While a document switch is in flight (`pendingPost` set),
-			// the provider already carries the destination's fields but
-			// the editor still renders the previous post. Pausing the
-			// header-block lifecycle here keeps `EnsureHeaderBlocks` from
-			// deleting `cortext/document-properties` from the outgoing
-			// row right before `flushNow()` saves that deletion.
-			isResolving={ !! pendingPost }
+			isResolving={ propertiesResolving }
+			// During a document switch, only the header repair pass should
+			// wait. The visible row properties can stay on screen until the
+			// next editor is ready.
+			isSchemaResolving={ propertiesResolving || !! pendingPost }
 			isVisible={ arePropertiesVisible }
 			isLayoutEditing={ isPropertiesLayoutEditing }
 			layoutEditRequest={ layoutEditRequest }
@@ -389,6 +399,7 @@ export default function Canvas( {
 	allFields,
 	detailLayoutEntries,
 	row,
+	propertiesResolving = false,
 	onDisplayedPost,
 	isActive,
 	topBarActions = null,
@@ -406,10 +417,44 @@ export default function Canvas( {
 	);
 	const [ displayedPost, setDisplayedPost ] = useState( null );
 	const pendingDisplayResolversRef = useRef( new Map() );
-	// Keep the last rendered post mounted until CanvasEditor has flushed edits
-	// and chosen the next post. Falling back to `requestedPost` on a type change
-	// would remount the editor at once and could drop edits mid-navigation.
+	const rowContextCacheRef = useRef( new Map() );
+	const incomingRowContext = useMemo(
+		() =>
+			makeRowDocumentContext( {
+				documentId: row?.id ?? postId,
+				collectionId,
+				fields,
+				allFields,
+				detailLayoutEntries,
+				row,
+				isResolving: propertiesResolving,
+			} ),
+		[
+			allFields,
+			collectionId,
+			detailLayoutEntries,
+			fields,
+			postId,
+			propertiesResolving,
+			row,
+		]
+	);
+	// Keep the editor on the last painted post until CanvasEditor has saved
+	// and opted into the next one. Jumping straight to `requestedPost` would
+	// remount the editor in the middle of navigation.
 	const renderedPost = displayedPost ?? requestedPost;
+	const renderedRowContext = rowDocumentContextForEditorPost(
+		rowContextCacheRef.current,
+		renderedPost?.id,
+		incomingRowContext
+	);
+
+	useEffect( () => {
+		rememberRowDocumentContext(
+			rowContextCacheRef.current,
+			incomingRowContext
+		);
+	}, [ incomingRowContext ] );
 
 	useEffect( () => {
 		if ( ! requestedPost ) {
@@ -535,11 +580,16 @@ export default function Canvas( {
 				<CanvasEditor
 					post={ renderedPost }
 					postType={ renderedPost.type ?? postType }
-					collectionId={ collectionId }
-					fields={ fields }
-					allFields={ allFields }
-					detailLayoutEntries={ detailLayoutEntries }
-					row={ row }
+					collectionId={ renderedRowContext?.collectionId }
+					fields={ renderedRowContext?.fields }
+					allFields={ renderedRowContext?.allFields }
+					detailLayoutEntries={
+						renderedRowContext?.detailLayoutEntries
+					}
+					row={ renderedRowContext?.row }
+					propertiesResolving={
+						renderedRowContext?.isResolving ?? false
+					}
 					pendingPost={ pendingPost }
 					onSwitchPost={ switchDisplayedPost }
 					onDisplayedPost={ handleDisplayedPost }

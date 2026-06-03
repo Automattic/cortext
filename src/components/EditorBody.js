@@ -539,10 +539,11 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 	);
 	const iconMeta = meta?.cortext_document_icon ?? '';
 	const propertiesCtx = useDocumentPropertiesContext();
-	// During a Canvas document switch, the provider can move to the next row
-	// before the editor does. Treat that moment as "schema unknown" so the
-	// header sync does not edit the outgoing post.
-	const propertiesContextStable = ! propertiesCtx?.isResolving;
+	// The row context can advance before the editor swaps posts. In that gap,
+	// leave the outgoing row's header alone.
+	const propertiesContextStable = ! (
+		propertiesCtx?.isSchemaResolving ?? propertiesCtx?.isResolving
+	);
 	const hasSchema =
 		propertiesContextStable &&
 		Array.isArray( propertiesCtx?.fields ) &&

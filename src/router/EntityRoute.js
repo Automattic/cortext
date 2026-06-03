@@ -51,6 +51,11 @@ import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
 import EmptyState from './EmptyState';
 import { computeDocumentUri, useResolveDocument } from './useResolveEntity';
 import { init, parseTarget, reducer } from './entityRouteReducer';
+import {
+	makeRowDocumentContext,
+	rememberRowDocumentContext,
+	rowDocumentContextForEditorPost,
+} from './rowContextCache';
 
 function LoadingPane( { active } ) {
 	const showProgress = useDelayedFlag( active );
@@ -219,6 +224,34 @@ export default function EntityRoute( { history } ) {
 			...rowFieldsState.allDetailFields,
 		];
 	}, [ rowParentCollectionId, rowFieldsState?.allDetailFields ] );
+	const targetRowContext = useMemo(
+		() =>
+			makeRowDocumentContext( {
+				documentId: documentResolution.entity?.id,
+				collectionId: rowParentCollectionId,
+				fields: rowFields,
+				allFields: rowAllFields,
+				detailLayoutEntries: rowFieldsState.detailLayoutEntries,
+				row: documentResolution.entity,
+				isResolving: rowFieldsState.isResolving,
+			} ),
+		[
+			documentResolution.entity,
+			rowFieldsState.isResolving,
+			rowAllFields,
+			rowFields,
+			rowFieldsState.detailLayoutEntries,
+			rowParentCollectionId,
+		]
+	);
+	const rowContextCacheRef = useRef( new Map() );
+
+	useEffect( () => {
+		rememberRowDocumentContext(
+			rowContextCacheRef.current,
+			targetRowContext
+		);
+	}, [ targetRowContext ] );
 
 	useLayoutEffect( () => {
 		dispatch( { type: 'TARGET_CHANGED', target } );
@@ -330,7 +363,12 @@ export default function EntityRoute( { history } ) {
 	// `DOCUMENT_DISPLAYED` until it renders, and `active` can't flip to
 	// `document` until that dispatch arrives.
 	const editorPostId = mountedDocumentId;
-	const isRow = Boolean( editorPostId ) && Boolean( rowParentCollectionId );
+	const editorRowContext = rowDocumentContextForEditorPost(
+		rowContextCacheRef.current,
+		editorPostId,
+		targetRowContext
+	);
+	const isRow = Boolean( editorRowContext );
 
 	const { invalidateResolution, receiveEntityRecords } =
 		useDispatch( 'core' );
@@ -367,10 +405,10 @@ export default function EntityRoute( { history } ) {
 	);
 
 	const editorRecentTarget =
-		isRow && editorPostId !== null && rowParentCollectionId
+		isRow && editorPostId !== null && editorRowContext?.collectionId
 			? {
 					id: editorPostId,
-					collectionId: rowParentCollectionId,
+					collectionId: editorRowContext.collectionId,
 			  }
 			: null;
 	const editorCanvas =
@@ -379,13 +417,16 @@ export default function EntityRoute( { history } ) {
 				<Canvas
 					postId={ editorPostId }
 					postType={ POST_TYPE }
-					collectionId={ isRow ? rowParentCollectionId : undefined }
-					fields={ isRow ? rowFields : undefined }
-					allFields={ isRow ? rowAllFields : undefined }
+					collectionId={ editorRowContext?.collectionId }
+					fields={ editorRowContext?.fields }
+					allFields={ editorRowContext?.allFields }
 					detailLayoutEntries={
-						isRow ? rowFieldsState.detailLayoutEntries : undefined
+						editorRowContext?.detailLayoutEntries
 					}
-					row={ isRow ? documentResolution.entity : undefined }
+					row={ editorRowContext?.row }
+					propertiesResolving={
+						editorRowContext?.isResolving ?? false
+					}
 					onDisplayedPost={ handleDocumentDisplayed }
 					isActive={ isDocumentActive }
 					onRestored={ onRestoreDocument }
@@ -408,15 +449,11 @@ export default function EntityRoute( { history } ) {
 				) }
 				{ editorCanvas !== null && (
 					<WorkspacePane active={ isDocumentActive } preservePaint>
-						{ isRow ? (
-							<RowMutationContext.Provider
-								value={ ROW_MUTATION_DEFAULT }
-							>
-								{ editorCanvas }
-							</RowMutationContext.Provider>
-						) : (
-							editorCanvas
-						) }
+						<RowMutationContext.Provider
+							value={ ROW_MUTATION_DEFAULT }
+						>
+							{ editorCanvas }
+						</RowMutationContext.Provider>
 					</WorkspacePane>
 				) }
 				{ publicWebAffordances ? (
