@@ -49,6 +49,10 @@
 /node_modules
 /dist
 
+# Developer-only CLI tooling: the seeder's remote image fetching lives here and
+# is not part of the distributed plugin (the shipped seeder runs offline).
+/includes/CLI/Dev
+
 # Conductor workspace snapshots (gitignored; present only in local worktrees)
 /.context
 
