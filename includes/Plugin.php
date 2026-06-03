@@ -35,6 +35,7 @@ use Cortext\Rest\NotionController;
 use Cortext\Rest\PostLocksController;
 use Cortext\Rest\RecentsController;
 use Cortext\Rest\RowsController;
+use Cortext\Rest\SampleContentController;
 use Cortext\Rest\WorkspaceHomeController;
 use Cortext\Taxonomy\TraitTaxonomy;
 use Cortext\Theming\Preferences;
@@ -74,6 +75,7 @@ final class Plugin {
 		( new PostLocksController() )->register();
 		( new RecentsController() )->register();
 		( new RowsController() )->register();
+		( new SampleContentController() )->register();
 		( new WorkspaceHomeController() )->register();
 		( new NotionController() )->register();
 		( new NotionImporter() )->register();
