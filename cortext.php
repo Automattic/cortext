@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name:       Cortext
- * Plugin URI:        https://github.com/priethor/cortext
- * Description:       Build a WordPress-native knowledge base with nested pages, typed collections, flexible views, and publishing through your own site.
+ * Plugin URI:        https://github.com/Automattic/cortext
+ * Description:       Build a WordPress-native knowledge base with pages, typed collections, views, and public publishing.
  * Version:           0.1.0
  * Requires at least: 6.9
  * Requires PHP:      8.1
@@ -44,8 +44,12 @@ add_action(
 register_activation_hook(
 	__FILE__,
 	static function () {
-		( new \Cortext\PostType\Page() )->register_post_type();
-		( new \Cortext\PostType\Collection() )->register_post_type();
+		// Register the document CPT and its trait taxonomy explicitly so
+		// `flush_rewrite_rules()` below sees Cortext's rewrite rules. The
+		// same registration runs again on `init` during normal boot via
+		// `Plugin::boot()`.
+		( new \Cortext\PostType\Document() )->register_post_type();
+		( new \Cortext\Taxonomy\TraitTaxonomy() )->register_taxonomy();
 		( new \Cortext\FieldValues\FieldValueIndex() )->activate();
 		flush_rewrite_rules();
 	}
@@ -56,4 +60,5 @@ if ( defined( 'WP_CLI' ) && WP_CLI ) {
 	\WP_CLI::add_command( 'cortext field-values', \Cortext\CLI\FieldValues::class );
 	\WP_CLI::add_command( 'cortext perf-seed', array( \Cortext\CLI\PerfBench::class, 'seed' ) );
 	\WP_CLI::add_command( 'cortext perf-bench', array( \Cortext\CLI\PerfBench::class, 'bench' ) );
+	\WP_CLI::add_command( 'cortext backfill-media', \Cortext\CLI\BackfillMedia::class );
 }

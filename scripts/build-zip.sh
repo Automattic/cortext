@@ -23,8 +23,6 @@ runtime_paths=(
 	cortext.php
 	readme.txt
 	LICENSE
-	cortext-banner.png
-	cortext-banner.svg
 	includes
 	templates
 	build
@@ -35,6 +33,11 @@ runtime_paths=(
 
 cp -R "${runtime_paths[@]}" "$stage_dir"
 
+# Keep brand assets under assets/brand/ so runtime URLs for the admin icon and
+# seeded page banner match the source tree.
+mkdir -p "$stage_dir/assets"
+cp -R assets/brand "$stage_dir/assets/"
+
 composer install \
 	--working-dir="$stage_dir" \
 	--no-dev \
@@ -42,7 +45,7 @@ composer install \
 	--optimize-autoloader \
 	--no-interaction
 
-rm -f "${stage_dir}/composer.json" "${stage_dir}/composer.lock"
+rm -f "${stage_dir}/composer.lock"
 
 (
 	cd "$dist_dir"

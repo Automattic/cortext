@@ -9,6 +9,8 @@ declare( strict_types=1 );
 
 namespace Cortext\Rest;
 
+defined( 'ABSPATH' ) || exit;
+
 use Cortext\Documents;
 use WP_Error;
 use WP_REST_Request;
@@ -19,12 +21,6 @@ final class RecentsController {
 	private const NAMESPACE = 'cortext/v1';
 	private const META_KEY  = 'cortext_recents';
 	private const MAX_ITEMS = 5;
-
-	private const ALLOWED_KINDS = array(
-		Documents::KIND_PAGE,
-		Documents::KIND_COLLECTION,
-		Documents::KIND_ROW,
-	);
 
 	private Documents $documents;
 
@@ -51,12 +47,7 @@ final class RecentsController {
 					'callback'            => array( $this, 'touch_recent' ),
 					'permission_callback' => array( $this, 'can_read' ),
 					'args'                => array(
-						'kind' => array(
-							'type'     => 'string',
-							'required' => true,
-							'enum'     => self::ALLOWED_KINDS,
-						),
-						'id'   => array(
+						'id' => array(
 							'type'     => 'integer',
 							'required' => true,
 							'minimum'  => 1,
@@ -88,24 +79,14 @@ final class RecentsController {
 			return $target;
 		}
 
-		if ( ! in_array( $target['kind'], self::ALLOWED_KINDS, true ) ) {
-			return new WP_Error(
-				'cortext_document_target_not_found',
-				__( 'Target document was not found.', 'cortext' ),
-				array( 'status' => 404 )
-			);
-		}
-
 		$item = array(
-			'kind'      => $target['kind'],
-			'id'        => $target['id'],
+			'id'        => (int) $target['id'],
 			'updatedAt' => gmdate( DATE_RFC3339 ),
 		);
 
 		$items = array( $item );
-		$key   = $this->recent_key( $item );
 		foreach ( $this->read_stored_items( get_current_user_id() ) as $stored_item ) {
-			if ( $this->recent_key( $stored_item ) === $key ) {
+			if ( $stored_item['id'] === $item['id'] ) {
 				continue;
 			}
 			$items[] = $stored_item;
@@ -154,10 +135,12 @@ final class RecentsController {
 	}
 
 	/**
-	 * Reads normalized stored recent items.
+	 * Reads normalized stored recent items. Older entries shaped as
+	 * `{kind, id, updatedAt}` are accepted and forward-migrated to the
+	 * `{id, updatedAt}` shape on the next write.
 	 *
 	 * @param int $user_id User ID.
-	 * @return array<int,array{kind:string,id:int,updatedAt:string}>
+	 * @return array<int,array{id:int,updatedAt:string}>
 	 */
 	private function read_stored_items( int $user_id ): array {
 		$raw = get_user_meta( $user_id, self::META_KEY, true );
@@ -170,14 +153,12 @@ final class RecentsController {
 			if ( ! is_array( $item ) ) {
 				continue;
 			}
-			$kind = isset( $item['kind'] ) ? (string) $item['kind'] : '';
-			$id   = isset( $item['id'] ) ? (int) $item['id'] : 0;
-			if ( ! in_array( $kind, self::ALLOWED_KINDS, true ) || $id < 1 ) {
+			$id = isset( $item['id'] ) ? (int) $item['id'] : 0;
+			if ( $id < 1 ) {
 				continue;
 			}
 
 			$items[] = array(
-				'kind'      => $kind,
 				'id'        => $id,
 				'updatedAt' => isset( $item['updatedAt'] ) && is_string( $item['updatedAt'] )
 					? $item['updatedAt']
@@ -186,16 +167,5 @@ final class RecentsController {
 		}
 
 		return array_slice( $items, 0, self::MAX_ITEMS );
-	}
-
-	/**
-	 * Dedupe key for a stored recent item. The post id is enough because a post
-	 * can only belong to one kind; older entries may carry a stale kind label,
-	 * but the id still points to the same target.
-	 *
-	 * @param array{id:int} $item Recent item.
-	 */
-	private function recent_key( array $item ): string {
-		return (string) $item['id'];
 	}
 }

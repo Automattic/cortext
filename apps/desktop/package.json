@@ -13,10 +13,50 @@
 		"runtime:caddy": "node scripts/install-runtime.mjs caddy",
 		"bench:runtime": "node scripts/bench-runtime.mjs",
 		"test": "npm run test:e2e",
-		"test:e2e": "playwright test"
+		"test:unit": "node --test scripts/*.test.mjs",
+		"test:e2e": "playwright test",
+		"dist": "electron-builder"
 	},
 	"devDependencies": {
-		"@playwright/test": "^1.48.0",
-		"electron": "^33.2.0"
+		"@playwright/test": "^1.60.0",
+		"electron": "^42.3.1",
+		"electron-builder": "^26.8.1"
+	},
+	"build": {
+		"appId": "com.automattic.cortext",
+		"productName": "Cortext",
+		"directories": {
+			"output": "dist"
+		},
+		"files": [
+			"main.js",
+			"loading.html",
+			"error.html",
+			"assets/**/*",
+			"lib/**/*"
+		],
+		"extraResources": [
+			"snapshot.zip",
+			{
+				"from": "runtime/bin/php",
+				"to": "runtime/bin/php"
+			},
+			{
+				"from": "runtime/mu-plugins/cortext-update-lock.php",
+				"to": "runtime/mu-plugins/cortext-update-lock.php"
+			}
+		],
+		"mac": {
+			"icon": "assets/icon.icns",
+			"target": [
+				{
+					"target": "dmg",
+					"arch": "arm64"
+				}
+			],
+			"identity": null,
+			"category": "public.app-category.productivity",
+			"minimumSystemVersion": "12.0.0"
+		}
 	}
 }

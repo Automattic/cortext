@@ -10,7 +10,6 @@
 @use "../../node_modules/@wordpress/editor/build-style/style.css" as editor;
 
 .cortext-canvas {
-
 	// Cross-document navigation keeps the previous post visible until autosave
 	// finishes. Put the progress bar over it while the next document loads.
 	&__pending-progress {
@@ -47,6 +46,10 @@
 		min-height: 0;
 	}
 
+	&.interface-interface-skeleton {
+		left: 0;
+	}
+
 	&__visual {
 		display: flex;
 		flex-direction: column;
@@ -75,5 +78,17 @@
 		flex: 1 1 auto;
 		min-height: 0;
 		opacity: 0.7;
+	}
+}
+
+.cortext-post-lock-modal__content {
+	display: flex;
+	align-items: flex-start;
+	gap: $grid-unit-30;
+
+	.editor-post-locked-modal__buttons {
+		display: flex;
+		justify-content: flex-end;
+		margin-top: $grid-unit-30;
 	}
 }

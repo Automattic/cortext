@@ -9,7 +9,10 @@ declare( strict_types=1 );
 
 namespace Cortext\Block;
 
-use Cortext\PostType\Collection;
+defined( 'ABSPATH' ) || exit;
+
+use Cortext\Frontend\Assets;
+use Cortext\PostType\Document;
 
 final class DataView {
 
@@ -51,7 +54,7 @@ final class DataView {
 		}
 
 		$collection = get_post( $collection_id );
-		if ( ! $collection || Collection::POST_TYPE !== $collection->post_type ) {
+		if ( ! $collection || ! Document::is_collection_post( $collection ) ) {
 			return '';
 		}
 
@@ -59,13 +62,16 @@ final class DataView {
 			return '';
 		}
 
-		$this->enqueue_assets();
+		Assets::enqueue_frontend_runtime();
 
+		// Escape <, >, and & so a `view` attribute containing `</script>` can't
+		// break out of the inline JSON island below.
 		$init_data = wp_json_encode(
 			array(
 				'collectionId' => $collection_id,
 				'view'         => $attributes['view'] ?? array(),
-			)
+			),
+			JSON_HEX_TAG | JSON_HEX_AMP
 		);
 
 		$wrapper_attributes = get_block_wrapper_attributes(
@@ -76,31 +82,6 @@ final class DataView {
 			'<div %s><script type="application/json" class="cortext-dv-init">%s</script></div>',
 			$wrapper_attributes,
 			$init_data
-		);
-	}
-
-	private function enqueue_assets(): void {
-		$asset_path = CORTEXT_PATH . 'build/frontend.asset.php';
-		$asset      = file_exists( $asset_path )
-			? require $asset_path
-			: array(
-				'dependencies' => array(),
-				'version'      => CORTEXT_VERSION,
-			);
-
-		wp_enqueue_script(
-			'cortext-frontend',
-			CORTEXT_URL . 'build/frontend.js',
-			$asset['dependencies'],
-			$asset['version'],
-			true
-		);
-
-		wp_enqueue_style(
-			'cortext-frontend',
-			CORTEXT_URL . 'build/frontend.css',
-			array( 'wp-block-library', 'wp-components' ),
-			$asset['version']
 		);
 	}
 }

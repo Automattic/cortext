@@ -110,6 +110,39 @@ final class Test_Field_Value_Read_Query extends BaseTestCase {
 		}
 	}
 
+	public function test_index_plan_can_scope_rows_to_published_status(): void {
+		$query  = new FieldValueReadQuery();
+		$schema = $this->field_schema();
+		$method = new \ReflectionMethod( $query, 'build_plan' );
+		$method->setAccessible( true );
+
+		$plan = $method->invoke(
+			$query,
+			7,
+			11,
+			$schema,
+			array(),
+			array(
+				'field'     => 'field-101',
+				'direction' => 'asc',
+			),
+			'',
+			false,
+			array( 'publish' )
+		);
+
+		$this->assertIsArray( $plan );
+		$this->assertSame( array( 'publish' ), $plan['statuses'] );
+		$this->assertStringContainsString(
+			"p.post_status IN ('publish')",
+			implode( ' ', $plan['where'] )
+		);
+		$this->assertStringContainsString(
+			"fv_sort_1.post_status IN ('publish')",
+			implode( ' ', $plan['joins'] )
+		);
+	}
+
 	public function test_rejects_custom_text_sorts_that_need_full_values(): void {
 		$query  = new FieldValueReadQuery();
 		$schema = $this->field_schema();

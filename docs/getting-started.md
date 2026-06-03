@@ -1,6 +1,6 @@
 # Getting started
 
-Cortext is an early prototype. There is no packaged release yet; to try it you run it from source. The same paths work whether you are kicking the tires or contributing.
+Cortext is in beta. This guide covers running Cortext from source to work on the plugin. If you just want to try the beta, install the packaged plugin instead: see [Try the beta](../README.md#try-the-beta).
 
 ## Requirements
 
@@ -14,7 +14,7 @@ Cortext is an early prototype. There is no packaged release yet; to try it you r
 ## First-time setup
 
 ```
-git clone https://github.com/priethor/cortext.git
+git clone https://github.com/Automattic/cortext.git
 cd cortext
 ./scripts/setup.sh
 ```
@@ -91,7 +91,7 @@ If you use an agent orchestrator (Conductor, Cursor, Cline, or similar), wire:
 
 ## Contributing
 
-Cortext is a prototype, so docs, architecture notes, and scope are all fair game for PRs.
+Cortext is in beta, so docs, architecture notes, and scope are all fair game for PRs.
 
 -   Branch prefix: `add/`, `fix/`, `docs/`, `refactor/`, `tests/`, followed by a concise slug.
 -   CI runs ESLint, stylelint, Jest, PHPCS, and PHPUnit. Keep them green before requesting review.

@@ -28,7 +28,7 @@ async function storedFavoriteKeys( requestUtils ) {
 		path: '/cortext/v1/favorites',
 	} );
 	return ( response?.favorites ?? [] ).map(
-		( favorite ) => `favorite:${ favorite.kind }:${ favorite.id }`
+		( favorite ) => `favorite:${ favorite.id }`
 	);
 }
 
@@ -153,7 +153,7 @@ test.describe( 'Sidebar favorites', () => {
 		try {
 			createdPage = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: PAGE_TITLE,
 					status: 'private',
@@ -161,11 +161,10 @@ test.describe( 'Sidebar favorites', () => {
 			} );
 			collection = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_collections',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: COLLECTION_TITLE,
 					status: 'private',
-					mode: 'full_page',
 				},
 			} );
 			await requestUtils.rest( {
@@ -175,8 +174,8 @@ test.describe( 'Sidebar favorites', () => {
 			} );
 
 			await admin.visitAdminPage( 'admin.php', 'page=cortext' );
-			const pageKey = `favorite:page:${ createdPage.id }`;
-			const collectionKey = `favorite:collection:${ collection.id }`;
+			const pageKey = `favorite:${ createdPage.id }`;
+			const collectionKey = `favorite:${ collection.id }`;
 
 			await favoriteFromSidebar( page, PAGE_TITLE, requestUtils, [
 				pageKey,
@@ -234,11 +233,11 @@ test.describe( 'Sidebar favorites', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				collection && `/wp/v2/crtxt_collections/${ collection.id }`
+				collection && `/wp/v2/crtxt_documents/${ collection.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
-				createdPage && `/wp/v2/crtxt_pages/${ createdPage.id }`
+				createdPage && `/wp/v2/crtxt_documents/${ createdPage.id }`
 			);
 		}
 	} );
@@ -254,7 +253,7 @@ test.describe( 'Sidebar favorites', () => {
 		try {
 			createdPage = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: `${ PAGE_TITLE } Flash`,
 					status: 'private',
@@ -262,7 +261,7 @@ test.describe( 'Sidebar favorites', () => {
 			} );
 			otherPage = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: `${ PAGE_TITLE } Flash Target`,
 					status: 'private',
@@ -272,16 +271,7 @@ test.describe( 'Sidebar favorites', () => {
 				method: 'PUT',
 				path: '/cortext/v1/favorites',
 				data: {
-					favorites: [
-						{
-							kind: 'page',
-							id: createdPage.id,
-						},
-						{
-							kind: 'page',
-							id: otherPage.id,
-						},
-					],
+					favorites: [ { id: createdPage.id }, { id: otherPage.id } ],
 				},
 			} );
 
@@ -291,7 +281,7 @@ test.describe( 'Sidebar favorites', () => {
 			);
 
 			const row = page.locator(
-				`.cortext-sidebar__favorite-row[data-favorite-key="favorite:page:${ createdPage.id }"] .cortext-sidebar__row`
+				`.cortext-sidebar__favorite-row[data-favorite-key="favorite:${ createdPage.id }"] .cortext-sidebar__row`
 			);
 			const title = row.locator( '.cortext-sidebar__favorite-title' );
 			await expect( row ).toBeVisible();
@@ -322,7 +312,7 @@ test.describe( 'Sidebar favorites', () => {
 			);
 
 			const otherRow = page.locator(
-				`.cortext-sidebar__favorite-row[data-favorite-key="favorite:page:${ otherPage.id }"] .cortext-sidebar__row`
+				`.cortext-sidebar__favorite-row[data-favorite-key="favorite:${ otherPage.id }"] .cortext-sidebar__row`
 			);
 			const otherTitle = otherRow.locator(
 				'.cortext-sidebar__favorite-title'
@@ -356,11 +346,11 @@ test.describe( 'Sidebar favorites', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				otherPage && `/wp/v2/crtxt_pages/${ otherPage.id }`
+				otherPage && `/wp/v2/crtxt_documents/${ otherPage.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
-				createdPage && `/wp/v2/crtxt_pages/${ createdPage.id }`
+				createdPage && `/wp/v2/crtxt_documents/${ createdPage.id }`
 			);
 		}
 	} );

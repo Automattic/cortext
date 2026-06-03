@@ -9,6 +9,8 @@ declare( strict_types=1 );
 
 namespace Cortext\Rest;
 
+defined( 'ABSPATH' ) || exit;
+
 use Cortext\Fields\FieldTypeRegistry;
 use WP_Error;
 
@@ -73,7 +75,7 @@ final class RowsFilterQuery {
 			),
 		);
 
-		foreach ( get_post_meta( $collection_id, 'fields', false ) as $raw_field_id ) {
+		foreach ( get_post_meta( $collection_id, 'cortext_fields', false ) as $raw_field_id ) {
 			$field_id = (int) $raw_field_id;
 			if ( $field_id < 1 ) {
 				continue;
@@ -236,18 +238,50 @@ final class RowsFilterQuery {
 	}
 
 	/**
+	 * Orders rows by their manual position for the manual sort and as the
+	 * default (no sort) order. Manual position is per collection, stored in the
+	 * `term_order` column of the row's `crtxt_trait` relationship, so the join
+	 * keys on the collection's own term taxonomy id and a row that belongs to
+	 * several collections is ordered only by the listed one's position.
+	 *
+	 * A no-op for field/date/title sorts (they bring their own ORDER BY) and
+	 * when no collection term scope is known.
+	 *
+	 * @param array    $clauses      WP_Query SQL clauses.
+	 * @param mixed    $sort         Sort request value.
+	 * @param int|null $order_tt_id Collection mirror term's term_taxonomy_id.
+	 * @return array
+	 */
+	public function apply_manual_order_clauses( array $clauses, mixed $sort, ?int $order_tt_id ): array {
+		if ( null === $order_tt_id || $order_tt_id < 1 ) {
+			return $clauses;
+		}
+		$field = is_array( $sort ) ? (string) ( $sort['field'] ?? '' ) : '';
+		if ( '' !== $field && 'manual' !== $field ) {
+			return $clauses;
+		}
+
+		global $wpdb;
+
+		$clauses            = $this->ensure_manual_order_join( $clauses, $order_tt_id );
+		$clauses['orderby'] = "cortext_order.term_order ASC, {$wpdb->posts}.ID ASC";
+		return $clauses;
+	}
+
+	/**
 	 * Puts exact title matches first when the request is an unsorted search.
 	 *
 	 * The relation picker only reads the first page before deciding whether to
 	 * show "Create row" for the typed title. Without this, a match on page 2+
 	 * could still make the picker offer a duplicate. Richer ranking can wait.
 	 *
-	 * @param array  $clauses WP_Query SQL clauses.
-	 * @param mixed  $sort    Sort request value; when present, this method is a no-op.
-	 * @param string $search  Raw search term from the request.
+	 * @param array    $clauses     WP_Query SQL clauses.
+	 * @param mixed    $sort        Sort request value; when present, this method is a no-op.
+	 * @param string   $search      Raw search term from the request.
+	 * @param int|null $order_tt_id Collection mirror term's term_taxonomy_id, for the manual tie-break.
 	 * @return array
 	 */
-	public function apply_search_order_clauses( array $clauses, mixed $sort, string $search ): array {
+	public function apply_search_order_clauses( array $clauses, mixed $sort, string $search, ?int $order_tt_id = null ): array {
 		if ( is_array( $sort ) && ! empty( $sort['field'] ) ) {
 			return $clauses;
 		}
@@ -259,13 +293,48 @@ final class RowsFilterQuery {
 
 		global $wpdb;
 
+		if ( null !== $order_tt_id && $order_tt_id > 0 ) {
+			$clauses   = $this->ensure_manual_order_join( $clauses, $order_tt_id );
+			$tie_break = 'cortext_order.term_order ASC';
+		} else {
+			$tie_break = "{$wpdb->posts}.ID ASC";
+		}
+
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$clauses['orderby'] = $wpdb->prepare(
-			"CASE WHEN LOWER({$wpdb->posts}.post_title) = LOWER(%s) THEN 0 ELSE 1 END ASC, {$wpdb->posts}.menu_order ASC, {$wpdb->posts}.ID ASC",
+			"CASE WHEN LOWER({$wpdb->posts}.post_title) = LOWER(%s) THEN 0 ELSE 1 END ASC, {$tie_break}, {$wpdb->posts}.ID ASC",
 			$trimmed
 		);
 		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
+		return $clauses;
+	}
+
+	/**
+	 * Adds the LEFT JOIN that exposes a row's manual position within one
+	 * collection as `cortext_order.term_order`, unless it is already present. A
+	 * private alias keeps it independent of WP's own tax_query join, so it stays
+	 * correct for rows that belong to more than one collection. The guard keeps
+	 * the join unique when both the manual-order and search-order steps want it
+	 * for the same (unsorted) request.
+	 *
+	 * @param array $clauses     WP_Query SQL clauses.
+	 * @param int   $order_tt_id Collection mirror term's term_taxonomy_id.
+	 * @return array
+	 */
+	private function ensure_manual_order_join( array $clauses, int $order_tt_id ): array {
+		$existing = (string) ( $clauses['join'] ?? '' );
+		if ( str_contains( $existing, 'AS cortext_order ' ) ) {
+			return $clauses;
+		}
+
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$clauses['join'] = $existing . $wpdb->prepare(
+			" LEFT JOIN {$wpdb->term_relationships} AS cortext_order ON ( cortext_order.object_id = {$wpdb->posts}.ID AND cortext_order.term_taxonomy_id = %d )",
+			$order_tt_id
+		);
 		return $clauses;
 	}
 

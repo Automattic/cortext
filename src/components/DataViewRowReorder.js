@@ -574,13 +574,20 @@ function findRenderedRows( wrapper, view, rows ) {
 		.filter( Boolean );
 }
 
-function useRenderedRows( wrapperRef, view, rows ) {
+function useRenderedRows( wrapperRef, view, rows, isDragging ) {
 	const [ renderedRows, setRenderedRows ] = useState( [] );
 	const renderedRowsRef = useRef( renderedRows );
 	renderedRowsRef.current = renderedRows;
 	const decoratedRowsRef = useRef( [] );
 	const decoratedCellsRef = useRef( [] );
 	const isLinear = usesLinearGaps( view );
+	// Keep row measurements fixed during a drag. Moving rows toggles classes as
+	// the drop target changes; if the MutationObserver runs `sync()` in the
+	// middle of that transition, `rowRect` can read a half-animated rect and save
+	// bad gap positions. The table layout should not change while the pointer is
+	// down, so keep the snapshot from drag start.
+	const isDraggingRef = useRef( isDragging );
+	isDraggingRef.current = isDragging;
 
 	useEffect( () => {
 		const wrapper = wrapperRef.current;
@@ -590,11 +597,16 @@ function useRenderedRows( wrapperRef, view, rows ) {
 
 		let frame = null;
 		const sync = () => {
-			if ( frame ) {
+			if ( frame || isDraggingRef.current ) {
 				return;
 			}
 			frame = window.requestAnimationFrame( () => {
 				frame = null;
+				// A sync queued just before drag start can still fire after the
+				// pointer is down. Ignore it so the snapshot stays put.
+				if ( isDraggingRef.current ) {
+					return;
+				}
 				const next = findRenderedRows( wrapper, view, rows );
 				const nextRows = next.map( ( item ) => item.el );
 				const nextCells = next.map( ( item ) => item.handleEl );
@@ -625,8 +637,6 @@ function useRenderedRows( wrapperRef, view, rows ) {
 		sync();
 		const observer = new window.MutationObserver( sync );
 		observer.observe( wrapper, {
-			attributeFilter: [ 'class' ],
-			attributes: true,
 			childList: true,
 			subtree: true,
 		} );
@@ -1092,8 +1102,13 @@ export default function DataViewRowReorder( {
 	mutateRows,
 	onReordered,
 } ) {
-	const renderedRows = useRenderedRows( wrapperRef, view, rows );
 	const [ activeRow, setActiveRow ] = useState( null );
+	const renderedRows = useRenderedRows(
+		wrapperRef,
+		view,
+		rows,
+		activeRow !== null
+	);
 	const [ activeDrop, setActiveDrop ] = useState( null );
 	const [ visualRow, setVisualRow ] = useState( null );
 	const [ visualDrop, setVisualDrop ] = useState( null );
@@ -1117,6 +1132,7 @@ export default function DataViewRowReorder( {
 	dataRef.current = data;
 	const mutateRowsRef = useRef( mutateRows );
 	mutateRowsRef.current = mutateRows;
+	const pendingRefreshAfterSortClearRef = useRef( false );
 	const hoverSuppressionTimeoutRef = useRef( null );
 	const noTransitionFrameRef = useRef( null );
 	const onChangeViewRef = useRef( onChangeView );
@@ -1192,6 +1208,29 @@ export default function DataViewRowReorder( {
 		[ releaseRowHover, suppressRowTransitionsOnce ]
 	);
 
+	const flushRefreshAfterSortClear = useCallback( () => {
+		if ( ! pendingRefreshAfterSortClearRef.current ) {
+			return;
+		}
+		const currentSort = viewRef.current?.sort ?? null;
+		const hasExplicitSort =
+			Boolean( currentSort?.field ) &&
+			currentSort.field !== MANUAL_SORT_ID;
+		if ( hasExplicitSort ) {
+			return;
+		}
+		pendingRefreshAfterSortClearRef.current = false;
+		onReorderedRef.current?.();
+	}, [] );
+
+	useEffect( () => {
+		flushRefreshAfterSortClear();
+	}, [
+		flushRefreshAfterSortClear,
+		view?.sort?.direction,
+		view?.sort?.field,
+	] );
+
 	// Posts the reorder to the server. On failure restores `data` from the
 	// snapshot taken before the optimistic mutation, and (if we cleared a
 	// non-manual sort to make the move visible) restores that sort too.
@@ -1203,7 +1242,10 @@ export default function DataViewRowReorder( {
 			setIsPosting( true );
 			try {
 				await apiFetch( {
-					path: `/cortext/v1/collections/${ collectionId }/rows/${ request.rowId }/reorder`,
+					// The reorder endpoint derives the parent collection from
+					// the row's trait term, so the row id is the only path
+					// param needed.
+					path: `/cortext/v1/documents/${ request.rowId }/reorder`,
 					method: 'POST',
 					data: {
 						before_id: request.before_id,
@@ -1211,7 +1253,12 @@ export default function DataViewRowReorder( {
 						current_sort: request.currentSort ?? null,
 					},
 				} );
-				onReorderedRef.current?.();
+				if ( request.refreshAfterSortClear ) {
+					pendingRefreshAfterSortClearRef.current = true;
+					flushRefreshAfterSortClear();
+				} else {
+					onReorderedRef.current?.();
+				}
 			} catch {
 				if ( request.previousData && mutateRowsRef.current ) {
 					mutateRowsRef.current( request.previousData );
@@ -1222,15 +1269,23 @@ export default function DataViewRowReorder( {
 						sort: request.previousSort,
 					} );
 				}
-				createErrorNotice( __( "Couldn't move the row.", 'cortext' ), {
-					id: ROW_REORDER_NOTICE_ID,
-					type: 'snackbar',
-				} );
+				createErrorNotice(
+					__( "Couldn't move the document.", 'cortext' ),
+					{
+						id: ROW_REORDER_NOTICE_ID,
+						type: 'snackbar',
+					}
+				);
 			} finally {
 				setIsPosting( false );
 			}
 		},
-		[ collectionId, createErrorNotice, isPosting ]
+		[
+			collectionId,
+			createErrorNotice,
+			flushRefreshAfterSortClear,
+			isPosting,
+		]
 	);
 
 	const onDragStart = useCallback(
@@ -1288,7 +1343,9 @@ export default function DataViewRowReorder( {
 			performReorder( {
 				...request,
 				previousData,
-				...( clearSort ? { previousSort } : {} ),
+				...( clearSort
+					? { previousSort, refreshAfterSortClear: true }
+					: {} ),
 			} );
 		},
 		[ clearDragState, performReorder ]
@@ -1409,7 +1466,7 @@ export default function DataViewRowReorder( {
 				>
 					<p>
 						{ __(
-							'Rows will stay where you dropped them, and the current sort will be cleared.',
+							'Documents will stay where you dropped them, and the current sort will be cleared.',
 							'cortext'
 						) }
 					</p>

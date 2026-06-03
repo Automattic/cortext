@@ -1,6 +1,6 @@
 # Theming
 
-These are implementation notes for the current prototype, not a stable
+These are implementation notes for the current beta, not a stable
 public API.
 
 Cortext has two visual surfaces:
@@ -44,7 +44,7 @@ changes should stay out of scope.
 
 `var(--cortext-accent)` is the brand color for Cortext-rendered UI:
 sidebar primary buttons, popover focus rings, row-detail input focus
-rings, drag/drop indicators, the alpha notice icon, cell link color,
+rings, drag/drop indicators, the beta notice icon, cell link color,
 relation chip focus, format-submenu selected tile, the canvas progress
 bar, and so on.
 
@@ -74,8 +74,8 @@ WordPress's destructive red so the visual stays familiar. Both live on
 
 ## Where this leaves us
 
-The shell now reads from a coherent token contract. Light and dark
-remain the two visible modes. The door is open for named variants
+The shell reads from a coherent token contract, with light and dark as
+the two visible modes. The structure leaves room for named variants
 (`[data-cortext-variant="..."]`) and a font-family toggle to land later
-without touching every shell-owned selector again. Those are feature
-work, not part of this refactor.
+without touching every shell-owned selector again. Those remain future
+work.

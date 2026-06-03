@@ -1,17 +1,13 @@
 @use "@wordpress/base-styles/colors" as *;
 @use "@wordpress/base-styles/variables" as *;
 
-// Leave the default root snapshot out so the sidebar and topbar stay live
-// during the swap. Only the canvas opts in below. The fallback canvas surface
-// also lives here because view-transition pseudos cannot read shell tokens
-// from .cortext-root; :has() handles dark mode.
+// Keep the root out of the transition so the sidebar and topbar stay live.
+// The pseudos read from :root, not .cortext-root. Since the editor canvas is
+// still light-only, its transition backdrop stays white in dark mode.
 :root {
 	view-transition-name: none;
 	--cortext-canvas-frame-surface-root: #{$white};
-}
-
-:root:has(.cortext-root[data-theme="dark"]) {
-	--cortext-canvas-frame-surface-root: #2a2a2a;
+	--cortext-canvas-transition-surface-root: #{$white};
 }
 
 // During the cross-fade, both snapshots briefly dip to about 50% opacity. The
@@ -21,7 +17,7 @@
 ::view-transition-image-pair(cortext-canvas),
 ::view-transition-old(cortext-canvas),
 ::view-transition-new(cortext-canvas) {
-	background: var(--cortext-canvas-frame-surface-root, #fff);
+	background: var(--cortext-canvas-transition-surface-root, #fff);
 }
 
 // Keep the canvas layer below the side peek so the canvas cross-fade never
@@ -53,6 +49,28 @@
 	}
 }
 
+@keyframes cortext-pane-crossfade-old {
+
+	from {
+		opacity: 1;
+	}
+
+	to {
+		opacity: 0;
+	}
+}
+
+@keyframes cortext-pane-crossfade-new {
+
+	from {
+		opacity: 0;
+	}
+
+	to {
+		opacity: 1;
+	}
+}
+
 // tech-debt.md#td-page-transitions-snapshot: Page-to-page swaps rebuild
 // the editor while the route
 // stays on the same pane. Keep the old snapshot above the new one until the
@@ -77,6 +95,18 @@
 	mix-blend-mode: normal;
 	opacity: 1;
 	z-index: 1;
+}
+
+// Chrome's default View Transition blend uses plus-lighter. For light static
+// panes, replace it with a plain opacity fade so the midpoint stays clean.
+:root[data-cortext-view-transition="pane-crossfade"]::view-transition-old(cortext-canvas) {
+	animation: cortext-pane-crossfade-old 240ms ease both;
+	mix-blend-mode: normal;
+}
+
+:root[data-cortext-view-transition="pane-crossfade"]::view-transition-new(cortext-canvas) {
+	animation: cortext-pane-crossfade-new 240ms ease both;
+	mix-blend-mode: normal;
 }
 
 // The side peek lives outside the canvas. Give it its own transition layer so

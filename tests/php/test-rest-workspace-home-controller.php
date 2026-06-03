@@ -9,22 +9,33 @@ declare( strict_types=1 );
 
 namespace Cortext\Tests;
 
-use Cortext\PostType\Collection;
-use Cortext\PostType\Page;
+use Cortext\PostType\Document;
+use Cortext\PostType\Field;
 use Cortext\Rest\WorkspaceHomeController;
+use Cortext\Taxonomy\TraitTaxonomy;
 use WorDBless\BaseTestCase;
 use WP_REST_Request;
 use WP_REST_Server;
 
 final class Test_Rest_Workspace_Home_Controller extends BaseTestCase {
 
+	use InMemoryTermStore;
+
 	private const META_KEY = 'cortext_workspace_home';
 
 	public function set_up(): void {
 		parent::set_up();
 
-		( new Page() )->register_post_type();
-		( new Collection() )->register_post_type();
+		( new Document() )->register_post_type();
+		( new TraitTaxonomy() )->register_taxonomy();
+		$trait_taxonomy = new TraitTaxonomy();
+		add_action( 'added_post_meta', array( $trait_taxonomy, 'sync_term_on_meta_change' ), 10, 4 );
+		add_action( 'updated_post_meta', array( $trait_taxonomy, 'sync_term_on_meta_change' ), 10, 4 );
+		add_action( 'deleted_post_meta', array( $trait_taxonomy, 'sync_term_on_meta_change' ), 10, 4 );
+		add_action( 'before_delete_post', array( $trait_taxonomy, 'sync_term_on_delete' ), 10, 2 );
+		( new Field() )->register_post_type();
+
+		$this->install_in_memory_term_store();
 
 		$GLOBALS['wp_rest_server'] = new WP_REST_Server();
 		( new WorkspaceHomeController() )->register();
@@ -32,6 +43,7 @@ final class Test_Rest_Workspace_Home_Controller extends BaseTestCase {
 	}
 
 	public function tear_down(): void {
+		$this->uninstall_in_memory_term_store();
 		wp_set_current_user( 0 );
 		parent::tear_down();
 	}
@@ -49,24 +61,23 @@ final class Test_Rest_Workspace_Home_Controller extends BaseTestCase {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
 		$page_id = $this->create_page(
 			array(
-				'post_name' => 'daily-notes',
+				'post_name'  => 'daily-notes',
+				'post_title' => 'Daily notes',
 			)
 		);
 
-		$set_response = $this->set_home( 'page', $page_id );
+		$set_response = $this->set_home( $page_id );
 		$get_response = $this->get_home();
 
-		$expected = array(
-			'kind' => 'page',
-			'id'   => $page_id,
-			'path' => "page/daily-notes-{$page_id}",
-		);
+		$home = $set_response->get_data()['home'];
 		$this->assertSame( 200, $set_response->get_status() );
-		$this->assertSame( $expected, $set_response->get_data()['home'] );
-		$this->assertSame( $expected, $get_response->get_data()['home'] );
+		$this->assertSame( $page_id, $home['id'] );
+		$this->assertSame( "daily-notes-{$page_id}", $home['path'] );
+		$this->assertSame( 'Daily notes', $home['title'] );
+		$this->assertSame( $home, $get_response->get_data()['home'] );
 		$this->assertSame(
-			"page:{$page_id}",
-			get_user_meta( get_current_user_id(), self::META_KEY, true )
+			(string) $page_id,
+			(string) get_user_meta( get_current_user_id(), self::META_KEY, true )
 		);
 	}
 
@@ -74,17 +85,37 @@ final class Test_Rest_Workspace_Home_Controller extends BaseTestCase {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
 		$collection_id = $this->create_collection( 'books' );
 
-		$set_response = $this->set_home( 'collection', $collection_id );
+		$set_response = $this->set_home( $collection_id );
 		$get_response = $this->get_home();
 
-		$expected = array(
-			'kind' => 'collection',
-			'id'   => $collection_id,
-			'path' => "collection/books-{$collection_id}",
-		);
+		$home = $set_response->get_data()['home'];
 		$this->assertSame( 200, $set_response->get_status() );
-		$this->assertSame( $expected, $set_response->get_data()['home'] );
-		$this->assertSame( $expected, $get_response->get_data()['home'] );
+		$this->assertSame( $collection_id, $home['id'] );
+		$this->assertSame( "books-{$collection_id}", $home['path'] );
+		$this->assertSame( $home, $get_response->get_data()['home'] );
+	}
+
+	public function test_legacy_kind_id_stored_meta_is_forward_migrated_on_read(): void {
+		// Older builds stored the home as `"kind:id"`. The reader accepts
+		// that shape and returns the resolved target.
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$page_id = $this->create_page(
+			array(
+				'post_name' => 'home',
+			)
+		);
+		update_user_meta(
+			get_current_user_id(),
+			self::META_KEY,
+			"page:{$page_id}"
+		);
+
+		$response = $this->get_home();
+
+		$home = $response->get_data()['home'];
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( $page_id, $home['id'] );
+		$this->assertSame( "home-{$page_id}", $home['path'] );
 	}
 
 	public function test_home_is_stored_per_user(): void {
@@ -93,7 +124,7 @@ final class Test_Rest_Workspace_Home_Controller extends BaseTestCase {
 		wp_set_current_user( $user_a );
 		$page_id = $this->create_page();
 
-		$this->set_home( 'page', $page_id );
+		$this->set_home( $page_id );
 
 		wp_set_current_user( $user_b );
 		$response = $this->get_home();
@@ -112,7 +143,7 @@ final class Test_Rest_Workspace_Home_Controller extends BaseTestCase {
 			)
 		);
 
-		$response = $this->set_home( 'page', $post_id );
+		$response = $this->set_home( $post_id );
 
 		$this->assertSame( 404, $response->get_status() );
 		$this->assertSame(
@@ -132,7 +163,7 @@ final class Test_Rest_Workspace_Home_Controller extends BaseTestCase {
 		);
 
 		wp_set_current_user( $this->create_user( 'contributor' ) );
-		$response = $this->set_home( 'page', $page_id );
+		$response = $this->set_home( $page_id );
 
 		$this->assertSame( 403, $response->get_status() );
 		$this->assertSame(
@@ -144,7 +175,7 @@ final class Test_Rest_Workspace_Home_Controller extends BaseTestCase {
 	public function test_get_returns_null_when_stored_home_is_trashed(): void {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
 		$page_id = $this->create_page();
-		$this->set_home( 'page', $page_id );
+		$this->set_home( $page_id );
 
 		wp_trash_post( $page_id );
 		$response = $this->get_home();
@@ -156,7 +187,7 @@ final class Test_Rest_Workspace_Home_Controller extends BaseTestCase {
 	public function test_get_returns_null_when_stored_home_is_deleted(): void {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
 		$page_id = $this->create_page();
-		$this->set_home( 'page', $page_id );
+		$this->set_home( $page_id );
 
 		wp_delete_post( $page_id, true );
 		$response = $this->get_home();
@@ -173,50 +204,14 @@ final class Test_Rest_Workspace_Home_Controller extends BaseTestCase {
 		$this->assertSame( 403, $response->get_status() );
 	}
 
-	public function test_rejects_setting_inline_collection_as_home(): void {
-		wp_set_current_user( $this->create_user( 'administrator' ) );
-		$collection_id = $this->create_collection( 'hidden' );
-		update_post_meta( $collection_id, Collection::MODE_META_KEY, Collection::MODE_INLINE );
-
-		$response = $this->set_home( 'collection', $collection_id );
-
-		$this->assertSame( 400, $response->get_status() );
-		$this->assertSame(
-			'cortext_document_target_inline_collection',
-			$response->get_data()['code']
-		);
-	}
-
-	public function test_get_returns_null_when_stored_home_points_to_inline_collection(): void {
-		wp_set_current_user( $this->create_user( 'administrator' ) );
-		$collection_id = $this->create_collection( 'visible' );
-		update_post_meta( $collection_id, Collection::MODE_META_KEY, Collection::MODE_FULL_PAGE );
-
-		$this->set_home( 'collection', $collection_id );
-
-		// Defensive case: if a stored home becomes inline, reads collapse to
-		// null instead of sending users to a missing route.
-		update_post_meta( $collection_id, Collection::MODE_META_KEY, Collection::MODE_INLINE );
-
-		$response = $this->get_home();
-
-		$this->assertSame( 200, $response->get_status() );
-		$this->assertNull( $response->get_data()['home'] );
-	}
-
 	private function get_home() {
 		$request = new WP_REST_Request( 'GET', '/cortext/v1/workspace-home' );
 		return rest_do_request( $request );
 	}
 
-	private function set_home( string $kind, int $id ) {
+	private function set_home( int $id ) {
 		$request = new WP_REST_Request( 'PUT', '/cortext/v1/workspace-home' );
-		$request->set_body_params(
-			array(
-				'kind' => $kind,
-				'id'   => $id,
-			)
-		);
+		$request->set_body_params( array( 'id' => $id ) );
 		return rest_do_request( $request );
 	}
 
@@ -232,7 +227,7 @@ final class Test_Rest_Workspace_Home_Controller extends BaseTestCase {
 
 	private function create_page( array $args = array() ): int {
 		$defaults = array(
-			'post_type'   => Page::POST_TYPE,
+			'post_type'   => Document::POST_TYPE,
 			'post_status' => 'private',
 			'post_title'  => 'Test page ' . wp_generate_uuid4(),
 		);
@@ -246,16 +241,26 @@ final class Test_Rest_Workspace_Home_Controller extends BaseTestCase {
 	private function create_collection( string $slug ): int {
 		$id = wp_insert_post(
 			array(
-				'post_type'   => Collection::POST_TYPE,
+				'post_type'   => Document::POST_TYPE,
 				'post_status' => 'private',
 				'post_title'  => 'Test collection ' . wp_generate_uuid4(),
-				'meta_input'  => array(
-					'slug' => $slug,
-				),
+				'post_name'   => $slug,
 			)
 		);
 		$this->assertIsInt( $id );
 		$this->assertGreaterThan( 0, $id );
+
+		$field_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Title',
+				'meta_input'  => array( 'type' => 'text' ),
+			)
+		);
+		$this->assertGreaterThan( 0, $field_id );
+		add_post_meta( (int) $id, 'cortext_fields', (string) $field_id );
+
 		return (int) $id;
 	}
 }

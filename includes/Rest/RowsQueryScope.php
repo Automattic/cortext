@@ -14,6 +14,8 @@ declare( strict_types=1 );
 
 namespace Cortext\Rest;
 
+defined( 'ABSPATH' ) || exit;
+
 use WP_Query;
 
 final class RowsQueryScope {
@@ -27,6 +29,7 @@ final class RowsQueryScope {
 	private string $search;
 	private array $field_schema;
 	private RowsFilterQuery $row_query;
+	private ?int $order_tt_id;
 
 	public function __construct(
 		RowsFilterQuery $row_query,
@@ -34,7 +37,8 @@ final class RowsQueryScope {
 		string $where_sql,
 		string $join_sql,
 		mixed $sort,
-		string $search = ''
+		string $search = '',
+		?int $order_tt_id = null
 	) {
 		$this->row_query    = $row_query;
 		$this->field_schema = $field_schema;
@@ -42,6 +46,7 @@ final class RowsQueryScope {
 		$this->join_sql     = $join_sql;
 		$this->sort         = $sort;
 		$this->search       = $search;
+		$this->order_tt_id  = $order_tt_id;
 		$this->token        = uniqid( 'cortext_rows_', true );
 	}
 
@@ -68,7 +73,8 @@ final class RowsQueryScope {
 			}
 			$clauses = $this->row_query->apply_filter_join_clauses( $clauses, $this->join_sql );
 			$clauses = $this->row_query->apply_sort_clauses( $clauses, $this->sort, $this->field_schema );
-			return $this->row_query->apply_search_order_clauses( $clauses, $this->sort, $this->search );
+			$clauses = $this->row_query->apply_manual_order_clauses( $clauses, $this->sort, $this->order_tt_id );
+			return $this->row_query->apply_search_order_clauses( $clauses, $this->sort, $this->search, $this->order_tt_id );
 		};
 
 		add_filter( 'posts_where', $where_callback, 10, 2 );

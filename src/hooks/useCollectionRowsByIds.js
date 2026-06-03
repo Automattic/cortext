@@ -15,7 +15,7 @@ function chunk( values, size ) {
 
 function buildIncludeArgs( collectionId, ids ) {
 	const args = {
-		collection: collectionId,
+		trait: collectionId,
 		per_page: MAX_IDS_PER_REQUEST,
 		context: 'edit',
 	};

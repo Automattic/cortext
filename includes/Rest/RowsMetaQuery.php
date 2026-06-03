@@ -9,6 +9,8 @@ declare( strict_types=1 );
 
 namespace Cortext\Rest;
 
+defined( 'ABSPATH' ) || exit;
+
 use WP_Meta_Query;
 
 final class RowsMetaQuery extends WP_Meta_Query {

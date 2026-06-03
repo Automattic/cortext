@@ -1,8 +1,8 @@
 # Security
 
-Cortext is still a prototype. Do not use it on production sites or with data you cannot afford to lose.
+Cortext is in beta. Try security-sensitive setups somewhere private first.
 
-The data layer and access model are still moving. Early versions will not include migrations or upgrade paths.
+Access checks are still being hardened. Please report anything that exposes more data or actions than expected.
 
 ## Reporting
 

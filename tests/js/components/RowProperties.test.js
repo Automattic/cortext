@@ -351,38 +351,263 @@ describe( 'RowProperties', () => {
 		expect( handle ).not.toHaveFocus();
 	} );
 
-	it( 'keeps text-like properties single-line while using a textarea', () => {
-		render(
-			<RowProperties
-				fields={ [
-					{
-						id: 'field-7',
-						label: 'Website',
-						cortextFieldType: 'url',
-						editable: true,
+	it( 'keeps text-like properties single-line while saving a minimal row patch', async () => {
+		jest.useFakeTimers();
+		apiFetch.mockResolvedValue( {
+			id: 99,
+			title: { raw: 'Current title', rendered: 'Current title' },
+			meta: { 'field-7': 'https://example.com bad' },
+		} );
+
+		try {
+			render(
+				<RowProperties
+					fields={ [
+						{
+							id: 'field-7',
+							label: 'Website',
+							cortextFieldType: 'url',
+							editable: true,
+						},
+					] }
+					row={ { id: 99 } }
+				/>
+			);
+
+			const input = screen.getByRole( 'textbox', { name: 'Website' } );
+			const enter = createEvent.keyDown( input, {
+				key: 'Enter',
+				code: 'Enter',
+			} );
+			fireEvent( input, enter );
+
+			expect( enter.defaultPrevented ).toBe( true );
+
+			fireEvent.change( input, {
+				target: { value: 'https://example.com\nbad' },
+			} );
+
+			expect( input ).toHaveValue( 'https://example.com bad' );
+			expect( apiFetch ).not.toHaveBeenCalled();
+
+			await act( async () => {
+				jest.advanceTimersByTime( 500 );
+				await Promise.resolve();
+			} );
+
+			await waitFor( () =>
+				expect( apiFetch ).toHaveBeenCalledWith( {
+					path: '/wp/v2/crtxt_documents/99',
+					method: 'POST',
+					data: {
+						meta: { 'field-7': 'https://example.com bad' },
 					},
-				] }
-				row={ {} }
+				} )
+			);
+			expect( mockEditPost ).not.toHaveBeenCalled();
+		} finally {
+			jest.useRealTimers();
+		}
+	} );
+
+	it( 'shows row meta updates from the table over stale editor meta', () => {
+		const fields = [
+			{
+				id: 'field-7',
+				label: 'Status',
+				cortextFieldType: 'text',
+				editable: true,
+			},
+		];
+
+		const { rerender } = render(
+			<RowProperties
+				fields={ fields }
+				row={ { id: 99, meta: { 'field-7': 'Open' } } }
 			/>
 		);
 
-		const input = screen.getByRole( 'textbox', { name: 'Website' } );
-		const enter = createEvent.keyDown( input, {
-			key: 'Enter',
-			code: 'Enter',
-		} );
-		fireEvent( input, enter );
+		expect( screen.getByRole( 'textbox', { name: 'Status' } ) ).toHaveValue(
+			'Open'
+		);
 
-		expect( enter.defaultPrevented ).toBe( true );
+		rerender(
+			<RowProperties
+				fields={ fields }
+				row={ { id: 99, meta: { 'field-7': 'Closed' } } }
+			/>
+		);
 
-		fireEvent.change( input, {
-			target: { value: 'https://example.com\nbad' },
-		} );
+		expect( screen.getByRole( 'textbox', { name: 'Status' } ) ).toHaveValue(
+			'Closed'
+		);
+	} );
 
-		expect( input ).toHaveValue( 'https://example.com bad' );
-		expect( mockEditPost ).toHaveBeenCalledWith( {
-			meta: { 'field-7': 'https://example.com bad' },
+	it( 'keeps a saved property visible until the row fallback catches up', async () => {
+		jest.useFakeTimers();
+		apiFetch.mockResolvedValue( {
+			id: 99,
+			meta: { 'field-7': 'Doing' },
 		} );
+		const fields = [
+			{
+				id: 'field-7',
+				label: 'Status',
+				cortextFieldType: 'text',
+				editable: true,
+			},
+		];
+
+		try {
+			const { rerender } = render(
+				<RowProperties
+					fields={ fields }
+					row={ { id: 99, meta: { 'field-7': 'Open' } } }
+				/>
+			);
+
+			fireEvent.change(
+				screen.getByRole( 'textbox', { name: 'Status' } ),
+				{
+					target: { value: 'Doing' },
+				}
+			);
+			await act( async () => {
+				jest.advanceTimersByTime( 500 );
+				await Promise.resolve();
+			} );
+
+			rerender(
+				<RowProperties
+					fields={ fields }
+					row={ { id: 99, meta: { 'field-7': 'Open' } } }
+				/>
+			);
+
+			expect(
+				screen.getByRole( 'textbox', { name: 'Status' } )
+			).toHaveValue( 'Doing' );
+
+			rerender(
+				<RowProperties
+					fields={ fields }
+					row={ { id: 99, meta: { 'field-7': 'Doing' } } }
+				/>
+			);
+
+			await waitFor( () =>
+				expect(
+					screen.getByRole( 'textbox', { name: 'Status' } )
+				).toHaveValue( 'Doing' )
+			);
+
+			rerender(
+				<RowProperties
+					fields={ fields }
+					row={ { id: 99, meta: { 'field-7': 'Closed' } } }
+				/>
+			);
+
+			expect(
+				screen.getByRole( 'textbox', { name: 'Status' } )
+			).toHaveValue( 'Closed' );
+		} finally {
+			jest.useRealTimers();
+		}
+	} );
+
+	it( 'keeps field save responses from overwriting other edited fields', async () => {
+		jest.useFakeTimers();
+		const resolvers = [];
+		apiFetch.mockImplementation(
+			() =>
+				new Promise( ( resolve ) => {
+					resolvers.push( resolve );
+				} )
+		);
+
+		try {
+			render(
+				<RowProperties
+					fields={ [
+						{
+							id: 'field-7',
+							label: 'Status',
+							cortextFieldType: 'text',
+							editable: true,
+						},
+						{
+							id: 'field-8',
+							label: 'Tags',
+							cortextFieldType: 'text',
+							editable: true,
+						},
+					] }
+					row={ {
+						id: 99,
+						meta: { 'field-7': 'Open', 'field-8': '' },
+					} }
+				/>
+			);
+
+			fireEvent.change(
+				screen.getByRole( 'textbox', { name: 'Status' } ),
+				{
+					target: { value: 'Doing' },
+				}
+			);
+			await act( async () => {
+				jest.advanceTimersByTime( 500 );
+				await Promise.resolve();
+			} );
+
+			fireEvent.change( screen.getByRole( 'textbox', { name: 'Tags' } ), {
+				target: { value: 'Tagged' },
+			} );
+			await act( async () => {
+				jest.advanceTimersByTime( 500 );
+				await Promise.resolve();
+			} );
+
+			expect( apiFetch ).toHaveBeenNthCalledWith( 1, {
+				path: '/wp/v2/crtxt_documents/99',
+				method: 'POST',
+				data: { meta: { 'field-7': 'Doing' } },
+			} );
+			expect( apiFetch ).toHaveBeenNthCalledWith( 2, {
+				path: '/wp/v2/crtxt_documents/99',
+				method: 'POST',
+				data: { meta: { 'field-8': 'Tagged' } },
+			} );
+
+			await act( async () => {
+				resolvers[ 1 ]( {
+					id: 99,
+					meta: { 'field-7': 'Open', 'field-8': 'Tagged' },
+				} );
+				await Promise.resolve();
+			} );
+			expect(
+				screen.getByRole( 'textbox', { name: 'Tags' } )
+			).toHaveValue( 'Tagged' );
+
+			await act( async () => {
+				resolvers[ 0 ]( {
+					id: 99,
+					meta: { 'field-7': 'Doing', 'field-8': '' },
+				} );
+				await Promise.resolve();
+			} );
+
+			expect(
+				screen.getByRole( 'textbox', { name: 'Status' } )
+			).toHaveValue( 'Doing' );
+			expect(
+				screen.getByRole( 'textbox', { name: 'Tags' } )
+			).toHaveValue( 'Tagged' );
+		} finally {
+			jest.useRealTimers();
+		}
 	} );
 
 	it( 'remeasures text properties after the side peek width settles', () => {
@@ -659,11 +884,10 @@ describe( 'RowProperties', () => {
 
 		await waitFor( () =>
 			expect( apiFetch ).toHaveBeenCalledWith( {
-				path: '/cortext/v1/collections/44/rows/99',
+				path: '/wp/v2/crtxt_documents/99',
 				method: 'POST',
 				data: {
-					field: 'field-7',
-					value: [ 456 ],
+					meta: { 'field-7': [ 456 ] },
 				},
 			} )
 		);

@@ -321,7 +321,7 @@ test.describe( 'Sidebar layout controls', () => {
 		try {
 			fixture.page = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: `E2E Chrome Alignment ${ suffix }`,
 					status: 'private',
@@ -347,7 +347,9 @@ test.describe( 'Sidebar layout controls', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				fixture.page ? `/wp/v2/crtxt_pages/${ fixture.page.id }` : null
+				fixture.page
+					? `/wp/v2/crtxt_documents/${ fixture.page.id }`
+					: null
 			);
 		}
 	} );
@@ -363,7 +365,7 @@ test.describe( 'Sidebar layout controls', () => {
 		try {
 			fixture.page = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: `E2E Cog Chrome ${ suffix }`,
 					status: 'private',
@@ -501,7 +503,9 @@ test.describe( 'Sidebar layout controls', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				fixture.page ? `/wp/v2/crtxt_pages/${ fixture.page.id }` : null
+				fixture.page
+					? `/wp/v2/crtxt_documents/${ fixture.page.id }`
+					: null
 			);
 		}
 	} );
@@ -548,7 +552,7 @@ test.describe( 'Sidebar layout controls', () => {
 		try {
 			fixture.parent = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: parentTitle,
 					status: 'private',
@@ -556,7 +560,7 @@ test.describe( 'Sidebar layout controls', () => {
 			} );
 			fixture.child = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: childTitle,
 					status: 'private',
@@ -580,7 +584,7 @@ test.describe( 'Sidebar layout controls', () => {
 			).toBeVisible();
 
 			await sidebar
-				.getByRole( 'button', { name: 'Collapse Pages' } )
+				.getByRole( 'button', { name: 'Collapse Documents' } )
 				.click();
 
 			await expect(
@@ -593,7 +597,7 @@ test.describe( 'Sidebar layout controls', () => {
 			await page.reload();
 
 			await expect(
-				sidebar.getByRole( 'button', { name: 'Expand Pages' } )
+				sidebar.getByRole( 'button', { name: 'Expand Documents' } )
 			).toBeVisible();
 			await expect(
 				sidebar.getByRole( 'button', {
@@ -603,7 +607,7 @@ test.describe( 'Sidebar layout controls', () => {
 			).toHaveCount( 0 );
 
 			await sidebar
-				.getByRole( 'button', { name: 'Expand Pages' } )
+				.getByRole( 'button', { name: 'Expand Documents' } )
 				.click();
 
 			await expect(
@@ -616,13 +620,13 @@ test.describe( 'Sidebar layout controls', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.child
-					? `/wp/v2/crtxt_pages/${ fixture.child.id }`
+					? `/wp/v2/crtxt_documents/${ fixture.child.id }`
 					: null
 			);
 			await deleteIfCreated(
 				requestUtils,
 				fixture.parent
-					? `/wp/v2/crtxt_pages/${ fixture.parent.id }`
+					? `/wp/v2/crtxt_documents/${ fixture.parent.id }`
 					: null
 			);
 		}
@@ -682,7 +686,7 @@ test.describe( 'Sidebar layout controls', () => {
 		try {
 			fixture.page = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: { title, status: 'private' },
 			} );
 
@@ -717,7 +721,9 @@ test.describe( 'Sidebar layout controls', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				fixture.page ? `/wp/v2/crtxt_pages/${ fixture.page.id }` : null
+				fixture.page
+					? `/wp/v2/crtxt_documents/${ fixture.page.id }`
+					: null
 			);
 		}
 	} );

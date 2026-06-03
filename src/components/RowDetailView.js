@@ -65,7 +65,7 @@ export const ROW_DETAIL_MODE_ICONS = {
 export const ROW_DETAIL_MODE_LABELS = {
 	side: __( 'Side peek', 'cortext' ),
 	modal: __( 'Center modal', 'cortext' ),
-	full: __( 'Full page', 'cortext' ),
+	full: __( 'Full view', 'cortext' ),
 };
 const ROW_DETAIL_MODAL_CLOSE_MS = 240;
 const ROW_DETAIL_SWITCH_MS = 180;
@@ -169,7 +169,7 @@ function DetailShell( {
 				<div
 					className="cortext-row-detail__toolbar"
 					role="toolbar"
-					aria-label={ __( 'Row detail tools', 'cortext' ) }
+					aria-label={ __( 'Detail tools', 'cortext' ) }
 				>
 					<div className="cortext-row-detail__toolbar-group">
 						<Button
@@ -202,14 +202,14 @@ function DetailShell( {
 						<Button
 							className="cortext-row-detail__toolbar-button cortext-row-detail__toolbar-button--icon"
 							icon={ chevronUp }
-							label={ __( 'Row above', 'cortext' ) }
+							label={ __( 'Previous', 'cortext' ) }
 							onClick={ onPrevious }
 							disabled={ ! canGoPrevious }
 						/>
 						<Button
 							className="cortext-row-detail__toolbar-button cortext-row-detail__toolbar-button--icon"
 							icon={ chevronDown }
-							label={ __( 'Row below', 'cortext' ) }
+							label={ __( 'Next', 'cortext' ) }
 							onClick={ onNext }
 							disabled={ ! canGoNext }
 						/>
@@ -579,19 +579,27 @@ export default function RowDetailView( {
 								pane.state === 'preparing' ||
 								pane.state === 'covered';
 							const isApiActive = isCurrentPane && ! isHiddenPane;
+							const paneRowMeta = {
+								...( pane.detail.record.meta ?? {} ),
+								...( pane.detail.row?.meta ?? {} ),
+							};
+							const paneRowHydratedMeta = {
+								...( pane.detail.record.cortext_hydrated_meta ??
+									{} ),
+								...( pane.detail.row?.cortext_hydrated_meta ??
+									{} ),
+							};
 							const paneRow = {
 								...( pane.detail.row ?? {} ),
 								...pane.detail.record,
 								title:
 									pane.detail.record.title ??
 									pane.detail.row?.title,
-								meta:
-									pane.detail.record.meta ??
-									pane.detail.row?.meta,
-								cortext_hydrated_meta:
-									pane.detail.record.cortext_hydrated_meta ??
-									pane.detail.row?.cortext_hydrated_meta,
+								meta: paneRowMeta,
+								cortext_hydrated_meta: paneRowHydratedMeta,
 							};
+							const shouldAcquirePostLock =
+								pane.state === 'preparing' || isApiActive;
 
 							return (
 								<div
@@ -653,6 +661,9 @@ export default function RowDetailView( {
 										}
 										row={ paneRow }
 										rowId={ pane.detail.rowId }
+										shouldAcquirePostLock={
+											shouldAcquirePostLock
+										}
 									/>
 								</div>
 							);
@@ -671,7 +682,7 @@ export default function RowDetailView( {
 						? ' cortext-row-detail-modal--closing'
 						: '' )
 				}
-				title={ __( 'Row detail', 'cortext' ) }
+				title={ __( 'Detail', 'cortext' ) }
 				overlayClassName={
 					isModalClosing ? 'is-animating-out' : undefined
 				}
@@ -689,7 +700,7 @@ export default function RowDetailView( {
 		<div
 			className={ `cortext-row-detail cortext-row-detail--${ normalizedMode }` }
 			role="dialog"
-			aria-label={ __( 'Row detail', 'cortext' ) }
+			aria-label={ __( 'Detail', 'cortext' ) }
 		>
 			{ content }
 		</div>

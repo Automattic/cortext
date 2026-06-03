@@ -3,9 +3,10 @@
  * Per-document icon (emoji or uploaded image) for any post type that opts into
  * the `cortext-document` capability.
  *
- * `DocumentTypeRegistrar::register()` calls `register_for_post_type()` while
- * registering each Cortext document post type. That keeps pages and dynamic
- * row CPTs on the same path and avoids ordering assumptions.
+ * `Document::register_post_type()` calls `register_for_post_type()` right after
+ * `register_post_type()` so the `crtxt_document` type opts in. The helper stays
+ * post-type-agnostic so any type that opts into the `cortext-document`
+ * capability gets the icon.
  *
  * @package Cortext
  */
@@ -13,6 +14,8 @@
 declare( strict_types=1 );
 
 namespace Cortext\PostType;
+
+defined( 'ABSPATH' ) || exit;
 
 final class DocumentIdentity {
 
@@ -37,7 +40,7 @@ final class DocumentIdentity {
 
 	/**
 	 * Opts a post type into the `cortext-document` capability and registers the
-	 * document icon meta on it. `DocumentTypeRegistrar::register()` calls this
+	 * document icon meta on it. `Document::register_post_type()` calls this
 	 * right after `register_post_type()`; external callers should leave it
 	 * alone.
 	 *
@@ -72,8 +75,10 @@ final class DocumentIdentity {
 	 * architectural fix that drops the block from content entirely.
 	 */
 	public static function header_blocks_markup(): string {
-		$lock = array(
-			'lock' => array(
+		$attrs = array(
+			// Render the title as the page <h1>; the block defaults to <h2>.
+			'level' => 1,
+			'lock'  => array(
 				'move'   => true,
 				'remove' => true,
 			),
@@ -82,7 +87,7 @@ final class DocumentIdentity {
 		$blocks = array(
 			array(
 				'blockName'    => 'core/post-title',
-				'attrs'        => $lock,
+				'attrs'        => $attrs,
 				'innerBlocks'  => array(),
 				'innerHTML'    => '',
 				'innerContent' => array(),

@@ -15,7 +15,7 @@ use WP_Post;
 
 final class Test_Revision_Throttle extends BaseTestCase {
 
-	private const PAGE_POST_TYPE = 'crtxt_page';
+	private const PAGE_POST_TYPE = 'crtxt_document';
 	private const ROW_POST_TYPE  = 'crtxt_widgets';
 
 	protected function setUp(): void {

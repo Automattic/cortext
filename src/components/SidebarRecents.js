@@ -1,5 +1,6 @@
 import { useNavigate } from '@tanstack/react-router';
 import { Button } from '@wordpress/components';
+import { useEntityRecord } from '@wordpress/core-data';
 import { useCallback, useLayoutEffect, useRef } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 
@@ -9,6 +10,8 @@ import useDelayedFlag, {
 } from '../hooks/useDelayedFlag';
 import { useRecents } from '../hooks/useRecents';
 import { useDocumentRecord } from '../documents';
+import { DOCUMENT_POST_TYPE } from '../collections';
+import { definesTrait } from '../documents/capabilities';
 
 const RECENT_REPOSITION_OPTIONS = {
 	duration: 180,
@@ -21,7 +24,7 @@ const RECENT_APPEARANCE_OPTIONS = {
 };
 
 function recentKey( recent ) {
-	return `${ recent.kind }:${ recent.id }`;
+	return `recent:${ recent.id }`;
 }
 
 function shouldAnimateRecents() {
@@ -46,41 +49,70 @@ function runNodeAnimation( node, keyframes, options ) {
 	node.animate( keyframes, options );
 }
 
-/**
- * One item in Recents. The descriptor supplies the icon and type label, while
- * this row only adds collection context when the recent item is a row.
- *
- * @param {Object}   props
- * @param {Object}   props.recent     Recent activity record from the server.
- * @param {Function} props.setNodeRef Ref setter used by the FLIP animation.
- * @param {Function} props.onSelect   Navigate to the recent's path.
- */
-function SidebarRecentsRow( { recent, setNodeRef, onSelect } ) {
-	const { listIcon, kindLabel } = useDocumentRecord( recent );
-	const title = recent?.title?.trim?.() || __( '(untitled)', 'cortext' );
-	const contextTitle = recent?.collection?.title?.trim?.() ?? '';
+function recentTitle( recent ) {
+	return recent?.title?.trim?.() || __( '(untitled)', 'cortext' );
+}
 
-	const displayTitle = contextTitle
+function recentContextTitle( recent ) {
+	return recent?.collection?.title?.trim?.() ?? '';
+}
+
+function recentDisplayTitle( recent ) {
+	const title = recentTitle( recent );
+	const contextTitle = recentContextTitle( recent );
+	return contextTitle
 		? sprintf(
-				/* translators: 1: row title, 2: collection title */
+				/* translators: 1: document title, 2: collection title */
 				__( '%1$s in %2$s', 'cortext' ),
 				title,
 				contextTitle
 		  )
 		: title;
+}
 
-	const ariaLabel = contextTitle
+/**
+ * One item in Recents. The descriptor supplies the icon; this row only adds
+ * collection context when it helps distinguish matching document titles.
+ *
+ * @param {Object}   props
+ * @param {Object}   props.recent           Recent activity record from the server.
+ * @param {boolean}  props.isDuplicateLabel Whether another recent has the same display label.
+ * @param {Function} props.setNodeRef       Ref setter used by the FLIP animation.
+ * @param {Function} props.onSelect         Navigate to the recent's path.
+ */
+function SidebarRecentsRow( {
+	recent,
+	isDuplicateLabel,
+	setNodeRef,
+	onSelect,
+} ) {
+	// Recents wire shape only carries id/title/path/icon (and optional row
+	// context). Capability checks need `meta.cortext_fields` / `crtxt_trait`,
+	// so we load the document record at render time and merge it with the
+	// snapshot. Already-loaded records hit the core-data cache instantly.
+	const { record } = useEntityRecord(
+		'postType',
+		DOCUMENT_POST_TYPE,
+		recent.id || 0
+	);
+	const merged = record ? { ...recent, ...record } : recent;
+	const { listIcon } = useDocumentRecord( merged );
+	const displayTitle = recentDisplayTitle( recent );
+	const duplicateContext = definesTrait( merged )
+		? __( 'contains rows', 'cortext' )
+		: __( 'plain document', 'cortext' );
+
+	const ariaLabel = isDuplicateLabel
 		? sprintf(
-				/* translators: 1: row title, 2: collection title */
-				__( 'Recent row: %1$s in %2$s', 'cortext' ),
-				title,
-				contextTitle
+				/* translators: 1: recent title, 2: context for duplicate recent titles */
+				__( 'Recent: %1$s, %2$s', 'cortext' ),
+				displayTitle,
+				duplicateContext
 		  )
 		: sprintf(
-				/* translators: 1: recent item type, 2: recent item title */
-				__( 'Recent %1$s: %2$s', 'cortext' ),
-				kindLabel.toLowerCase(),
-				title
+				/* translators: %s: recent title */
+				__( 'Recent: %s', 'cortext' ),
+				displayTitle
 		  );
 
 	return (
@@ -118,6 +150,11 @@ export default function SidebarRecents() {
 	const recentNodes = useRef( new Map() );
 	const previousRects = useRef( new Map() );
 	const hasCompletedInitialLoad = useRef( false );
+	const labelCounts = new Map();
+	recents.forEach( ( recent ) => {
+		const label = recentDisplayTitle( recent );
+		labelCounts.set( label, ( labelCounts.get( label ) ?? 0 ) + 1 );
+	} );
 	const setRecentNodeRef = useCallback(
 		( key ) => ( node ) => {
 			if ( node ) {
@@ -209,6 +246,11 @@ export default function SidebarRecents() {
 							<SidebarRecentsRow
 								key={ key }
 								recent={ recent }
+								isDuplicateLabel={
+									( labelCounts.get(
+										recentDisplayTitle( recent )
+									) ?? 0 ) > 1
+								}
 								setNodeRef={ setRecentNodeRef( key ) }
 								onSelect={ onSelectRecent }
 							/>

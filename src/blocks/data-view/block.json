@@ -3,9 +3,9 @@
 	"apiVersion": 3,
 	"name": "cortext/data-view",
 	"title": "Collection view",
-	"category": "cortext",
+	"category": "collections",
 	"icon": "database",
-	"description": "Displays a Cortext collection's rows as a table, grid, or list.",
+	"description": "Displays a collection as a table, grid, or list.",
 	"textdomain": "cortext",
 	"usesContext": [ "postId", "postType" ],
 	"supports": {
@@ -22,6 +22,9 @@
 		},
 		"collectionId": {
 			"type": "number"
+		},
+		"intent": {
+			"type": "string"
 		},
 		"view": {
 			"type": "object",

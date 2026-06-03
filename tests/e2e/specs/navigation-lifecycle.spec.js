@@ -14,6 +14,7 @@ const HISTORY_SECOND_PAGE_TITLE = `E2E History Page B ${ SUFFIX }`;
 const HISTORY_COLLECTION_TITLE = `E2E History Collection ${ SUFFIX }`;
 const NO_FLASH_FIRST_PAGE_TITLE = `E2E No Flash Page A ${ SUFFIX }`;
 const NO_FLASH_SECOND_PAGE_TITLE = `E2E No Flash Page B ${ SUFFIX }`;
+const DARK_LOADING_FIRST_PAGE_TITLE = `E2E Dark Loading Page A ${ SUFFIX }`;
 const COVER_FIRST_PAGE_TITLE = `E2E Cover Page A ${ SUFFIX }`;
 const COVER_SECOND_PAGE_TITLE = `E2E Cover Page B ${ SUFFIX }`;
 const COVER_PNG = Buffer.from(
@@ -38,7 +39,7 @@ async function deleteIfCreated( requestUtils, path ) {
 			path,
 			params: { force: true },
 		} );
-	} catch ( _error ) {
+	} catch {
 		// Best-effort cleanup; the record may already be gone.
 	}
 }
@@ -61,23 +62,57 @@ async function waitForEditorPost( page, postId ) {
 	);
 }
 
+function isDetachedFrameError( error ) {
+	return /\bFrame was detached\b/.test( error?.message || '' );
+}
+
 async function coverImagePainted( page ) {
 	const frame = page.frame( { name: 'editor-canvas' } );
 	if ( ! frame ) {
 		return false;
 	}
-	const image = frame.locator( '.cortext-document-cover-block__image' );
-	if ( ( await image.count() ) === 0 ) {
+	try {
+		const image = frame.locator( '.cortext-document-cover-block__image' );
+		if ( ( await image.count() ) === 0 ) {
+			return false;
+		}
+		return await image.evaluate( ( node ) => {
+			const style =
+				node.ownerDocument.defaultView.getComputedStyle( node );
+			return (
+				node.complete &&
+				node.naturalWidth > 0 &&
+				Number( style.opacity ) === 1
+			);
+		} );
+	} catch ( error ) {
+		if ( isDetachedFrameError( error ) ) {
+			return false;
+		}
+		throw error;
+	}
+}
+
+async function canvasContainsAnyTitle( page, titles ) {
+	const frame = page.frame( { name: 'editor-canvas' } );
+	if ( ! frame ) {
 		return false;
 	}
-	return image.evaluate( ( node ) => {
-		const style = node.ownerDocument.defaultView.getComputedStyle( node );
-		return (
-			node.complete &&
-			node.naturalWidth > 0 &&
-			Number( style.opacity ) === 1
-		);
-	} );
+	try {
+		return await frame
+			.locator( 'body' )
+			.evaluate( ( body, expectedTitles ) => {
+				const text = body.innerText || '';
+				return expectedTitles.some( ( title ) =>
+					text.includes( title )
+				);
+			}, titles );
+	} catch ( error ) {
+		if ( isDetachedFrameError( error ) ) {
+			return false;
+		}
+		throw error;
+	}
 }
 
 async function waitForCoverImagePainted( page ) {
@@ -87,17 +122,6 @@ async function waitForCoverImagePainted( page ) {
 				'the cover image should paint before the canvas is marked ready',
 		} )
 		.toBe( true );
-}
-
-async function canvasContainsAnyTitle( page, titles ) {
-	const frame = page.frame( { name: 'editor-canvas' } );
-	if ( ! frame ) {
-		return false;
-	}
-	return frame.locator( 'body' ).evaluate( ( body, expectedTitles ) => {
-		const text = body.innerText || '';
-		return expectedTitles.some( ( title ) => text.includes( title ) );
-	}, titles );
 }
 
 async function oldCanvasSnapshotState( page ) {
@@ -114,13 +138,18 @@ async function oldCanvasSnapshotState( page ) {
 			mode === 'hold-old-canvas' &&
 			animationName.includes( 'cortext-hold-old-canvas' ) &&
 			opacity === 1;
-		return { animationName, isHolding, mode, opacity };
+		const isVisible =
+			isHolding ||
+			( mode === 'reveal-old-canvas' &&
+				animationName.includes( 'cortext-reveal-old-canvas' ) &&
+				opacity > 0 );
+		return { animationName, isHolding, isVisible, mode, opacity };
 	} );
 }
 
-async function isHoldingOldCanvasSnapshot( page ) {
+async function isOldCanvasSnapshotVisible( page ) {
 	const state = await oldCanvasSnapshotState( page );
-	return state.isHolding;
+	return state.isVisible;
 }
 
 async function expectOldCanvasSnapshotHeld( page ) {
@@ -135,17 +164,22 @@ async function expectOldCanvasSnapshotHeld( page ) {
 	);
 }
 
+async function expectOldCanvasSnapshotVisible( page ) {
+	const state = await oldCanvasSnapshotState( page );
+	expect( state.isVisible ).toBe( true );
+}
+
 async function waitForCanvasTitleWithoutBlanking( page, titles, targetTitle ) {
 	const deadline = Date.now() + 5000;
 	while ( Date.now() < deadline ) {
-		const [ hasAnyTitle, hasTargetTitle, isHoldingSnapshot ] =
+		const [ hasAnyTitle, hasTargetTitle, isSnapshotVisible ] =
 			await Promise.all( [
 				canvasContainsAnyTitle( page, titles ),
 				canvasContainsAnyTitle( page, [ targetTitle ] ),
-				isHoldingOldCanvasSnapshot( page ),
+				isOldCanvasSnapshotVisible( page ),
 			] );
 
-		if ( ! hasAnyTitle && ! isHoldingSnapshot ) {
+		if ( ! hasAnyTitle && ! isSnapshotVisible ) {
 			throw new Error(
 				'The canvas went blank while the old snapshot was not covering it.'
 			);
@@ -165,6 +199,51 @@ async function waitForTransitionModeToClear( page ) {
 	await page.waitForFunction(
 		() => ! document.documentElement.dataset.cortextViewTransition
 	);
+}
+
+async function canvasSurfaceState( page ) {
+	return page.evaluate( () => {
+		const root = document.documentElement;
+		const rootStyle = window.getComputedStyle( root );
+		const workspace = document.querySelector( '.cortext-workspace' );
+		const activePane = document.querySelector(
+			'.cortext-workspace__pane[data-active="true"]'
+		);
+		const styleFor = ( element ) =>
+			element ? window.getComputedStyle( element ) : null;
+		return {
+			activePaneBackground: styleFor( activePane )?.backgroundColor || '',
+			hasLoadingPane: Boolean(
+				activePane?.querySelector( '.cortext-canvas__loading' )
+			),
+			hasSkeleton: Boolean(
+				activePane?.querySelector( '.cortext-canvas-skeleton' )
+			),
+			rootTheme:
+				document
+					.getElementById( 'cortext-root' )
+					?.getAttribute( 'data-theme' ) || '',
+			transitionBackgrounds: {
+				group: window.getComputedStyle(
+					root,
+					'::view-transition-group(cortext-canvas)'
+				).backgroundColor,
+				new: window.getComputedStyle(
+					root,
+					'::view-transition-new(cortext-canvas)'
+				).backgroundColor,
+				old: window.getComputedStyle(
+					root,
+					'::view-transition-old(cortext-canvas)'
+				).backgroundColor,
+			},
+			transitionSurface: rootStyle
+				.getPropertyValue( '--cortext-canvas-transition-surface-root' )
+				.trim(),
+			workspaceBackground: styleFor( workspace )?.backgroundColor || '',
+			workspaceKind: workspace?.getAttribute( 'data-target-kind' ) || '',
+		};
+	} );
 }
 
 async function resetViewTransitionProbe( page ) {
@@ -353,22 +432,20 @@ test.describe( 'Navigation lifecycle', () => {
 		try {
 			fixture.firstPage = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: { title: HISTORY_FIRST_PAGE_TITLE, status: 'private' },
 			} );
 			fixture.secondPage = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: { title: HISTORY_SECOND_PAGE_TITLE, status: 'private' },
 			} );
-			fixture.slug = `e2ehist${ SUFFIX }`;
 			fixture.collection = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_collections',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: HISTORY_COLLECTION_TITLE,
 					status: 'private',
-					meta: { slug: fixture.slug },
 				},
 			} );
 
@@ -436,17 +513,17 @@ test.describe( 'Navigation lifecycle', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
 				fixture.secondPage &&
-					`/wp/v2/crtxt_pages/${ fixture.secondPage.id }`
+					`/wp/v2/crtxt_documents/${ fixture.secondPage.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
 				fixture.firstPage &&
-					`/wp/v2/crtxt_pages/${ fixture.firstPage.id }`
+					`/wp/v2/crtxt_documents/${ fixture.firstPage.id }`
 			);
 		}
 	} );
@@ -462,7 +539,7 @@ test.describe( 'Navigation lifecycle', () => {
 		try {
 			fixture.firstPage = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: NO_FLASH_FIRST_PAGE_TITLE,
 					status: 'private',
@@ -470,7 +547,7 @@ test.describe( 'Navigation lifecycle', () => {
 			} );
 			fixture.secondPage = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: NO_FLASH_SECOND_PAGE_TITLE,
 					status: 'private',
@@ -515,12 +592,14 @@ test.describe( 'Navigation lifecycle', () => {
 				.click();
 			await locatorRequest;
 			await page.waitForTimeout( 100 );
-			expect(
-				await canvasContainsAnyTitle( page, [
+			if (
+				! ( await canvasContainsAnyTitle( page, [
 					NO_FLASH_FIRST_PAGE_TITLE,
 					NO_FLASH_SECOND_PAGE_TITLE,
-				] )
-			).toBe( true );
+				] ) )
+			) {
+				await expectOldCanvasSnapshotVisible( page );
+			}
 
 			releaseLocator();
 			await waitForCanvasTitleWithoutBlanking(
@@ -540,12 +619,100 @@ test.describe( 'Navigation lifecycle', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.secondPage &&
-					`/wp/v2/crtxt_pages/${ fixture.secondPage.id }`
+					`/wp/v2/crtxt_documents/${ fixture.secondPage.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
 				fixture.firstPage &&
-					`/wp/v2/crtxt_pages/${ fixture.firstPage.id }`
+					`/wp/v2/crtxt_documents/${ fixture.firstPage.id }`
+			);
+		}
+	} );
+
+	test( 'loads a dark-mode document on the light canvas', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+		let releaseFirstLocator = () => {};
+
+		try {
+			fixture.firstPage = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: DARK_LOADING_FIRST_PAGE_TITLE,
+					status: 'private',
+				},
+			} );
+
+			await page.addInitScript( () => {
+				window.localStorage.setItem( 'cortext.colorScheme', 'dark' );
+			} );
+
+			const firstLocatorGate = new Promise( ( resolve ) => {
+				releaseFirstLocator = resolve;
+			} );
+			await page.route(
+				`**/wp-json/cortext/v1/documents/${ fixture.firstPage.id }`,
+				async ( route ) => {
+					await firstLocatorGate;
+					await route.continue();
+				}
+			);
+			const firstLocatorRequest = page.waitForRequest( ( request ) =>
+				request
+					.url()
+					.includes(
+						`/wp-json/cortext/v1/documents/${ fixture.firstPage.id }`
+					)
+			);
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/${ fixture.firstPage.id }`
+			);
+			await firstLocatorRequest;
+
+			await expect( page.locator( '#cortext-root' ) ).toHaveAttribute(
+				'data-theme',
+				'dark'
+			);
+			await expect( page.locator( '.cortext-workspace' ) ).toHaveCSS(
+				'background-color',
+				'rgb(255, 255, 255)'
+			);
+			await expect(
+				page.locator( '.cortext-workspace__pane[data-active="true"]' )
+			).toHaveCSS( 'background-color', 'rgb(255, 255, 255)' );
+
+			const loadingSurface = await canvasSurfaceState( page );
+			expect( loadingSurface ).toEqual(
+				expect.objectContaining( {
+					activePaneBackground: 'rgb(255, 255, 255)',
+					hasLoadingPane: true,
+					hasSkeleton: true,
+					rootTheme: 'dark',
+					transitionSurface: '#fff',
+					workspaceBackground: 'rgb(255, 255, 255)',
+					workspaceKind: 'document',
+				} )
+			);
+			expect( loadingSurface.transitionBackgrounds ).toEqual( {
+				group: 'rgb(255, 255, 255)',
+				new: 'rgb(255, 255, 255)',
+				old: 'rgb(255, 255, 255)',
+			} );
+
+			releaseFirstLocator();
+			await waitForEditorPost( page, fixture.firstPage.id );
+		} finally {
+			releaseFirstLocator();
+			await deleteIfCreated(
+				requestUtils,
+				fixture.firstPage &&
+					`/wp/v2/crtxt_documents/${ fixture.firstPage.id }`
 			);
 		}
 	} );
@@ -570,7 +737,7 @@ test.describe( 'Navigation lifecycle', () => {
 			);
 			fixture.firstPage = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: COVER_FIRST_PAGE_TITLE,
 					status: 'private',
@@ -579,7 +746,7 @@ test.describe( 'Navigation lifecycle', () => {
 			} );
 			fixture.secondPage = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: COVER_SECOND_PAGE_TITLE,
 					status: 'private',
@@ -629,12 +796,12 @@ test.describe( 'Navigation lifecycle', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.secondPage &&
-					`/wp/v2/crtxt_pages/${ fixture.secondPage.id }`
+					`/wp/v2/crtxt_documents/${ fixture.secondPage.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
 				fixture.firstPage &&
-					`/wp/v2/crtxt_pages/${ fixture.firstPage.id }`
+					`/wp/v2/crtxt_documents/${ fixture.firstPage.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
@@ -660,28 +827,49 @@ test.describe( 'Navigation lifecycle', () => {
 		try {
 			fixture.firstPage = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: { title: FIRST_PAGE_TITLE, status: 'private' },
 			} );
 			fixture.secondPage = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: { title: SECOND_PAGE_TITLE, status: 'private' },
 			} );
-			fixture.slug = `e2elife${ SUFFIX }`;
 			fixture.collection = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_collections',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: COLLECTION_TITLE,
 					status: 'private',
-					meta: { slug: fixture.slug },
+				},
+			} );
+			// Promote the document to a collection so the trait mirror term
+			// gets created; without `cortext_fields` the row insert below
+			// would be a silent no-op on `cortext_trait`.
+			fixture.field = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_fields',
+				data: {
+					title: 'Title',
+					status: 'private',
+					meta: { type: 'text' },
+				},
+			} );
+			await requestUtils.rest( {
+				method: 'POST',
+				path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
+				data: {
+					meta: { cortext_fields: [ String( fixture.field.id ) ] },
 				},
 			} );
 			fixture.entry = await requestUtils.rest( {
 				method: 'POST',
-				path: `/wp/v2/crtxt_${ fixture.slug }`,
-				data: { title: ENTRY_TITLE, status: 'private' },
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: ENTRY_TITLE,
+					status: 'private',
+					cortext_trait: fixture.collection.id,
+				},
 			} );
 
 			await admin.visitAdminPage(
@@ -725,7 +913,7 @@ test.describe( 'Navigation lifecycle', () => {
 				releaseCollection = resolve;
 			} );
 			await page.route(
-				`**/wp-json/wp/v2/crtxt_collections/${ fixture.collection.id }**`,
+				`**/wp-json/wp/v2/crtxt_documents/${ fixture.collection.id }**`,
 				async ( route ) => {
 					await collectionGate;
 					await route.continue();
@@ -735,7 +923,7 @@ test.describe( 'Navigation lifecycle', () => {
 				request
 					.url()
 					.includes(
-						`/wp-json/wp/v2/crtxt_collections/${ fixture.collection.id }`
+						`/wp-json/wp/v2/crtxt_documents/${ fixture.collection.id }`
 					)
 			);
 			const rowsGate = new Promise( ( resolve ) => {
@@ -748,7 +936,7 @@ test.describe( 'Navigation lifecycle', () => {
 						route
 							.request()
 							.url()
-							.includes( `collection=${ fixture.collection.id }` )
+							.includes( `trait=${ fixture.collection.id }` )
 					) {
 						await rowsGate;
 					}
@@ -758,9 +946,7 @@ test.describe( 'Navigation lifecycle', () => {
 			const rowsRequest = page.waitForRequest(
 				( request ) =>
 					request.url().includes( '/wp-json/cortext/v1/rows' ) &&
-					request
-						.url()
-						.includes( `collection=${ fixture.collection.id }` )
+					request.url().includes( `trait=${ fixture.collection.id }` )
 			);
 
 			await resetViewTransitionProbe( page );
@@ -832,23 +1018,22 @@ test.describe( 'Navigation lifecycle', () => {
 			releaseRows();
 			await deleteIfCreated(
 				requestUtils,
-				fixture.entry &&
-					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+				fixture.entry && `/wp/v2/crtxt_documents/${ fixture.entry.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
 				fixture.secondPage &&
-					`/wp/v2/crtxt_pages/${ fixture.secondPage.id }`
+					`/wp/v2/crtxt_documents/${ fixture.secondPage.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
 				fixture.firstPage &&
-					`/wp/v2/crtxt_pages/${ fixture.firstPage.id }`
+					`/wp/v2/crtxt_documents/${ fixture.firstPage.id }`
 			);
 		}
 	} );

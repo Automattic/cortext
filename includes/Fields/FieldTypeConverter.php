@@ -14,6 +14,8 @@ declare( strict_types=1 );
 
 namespace Cortext\Fields;
 
+defined( 'ABSPATH' ) || exit;
+
 final class FieldTypeConverter {
 
 	public const STATUS_DISPLAYS = 'displays';

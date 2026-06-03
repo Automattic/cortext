@@ -10,29 +10,14 @@ const documentTarget = ( id ) => ( {
 	id,
 	tail: `${ id }`,
 } );
-const collectionTarget = ( id ) => ( {
-	kind: 'collection',
-	id,
-	tail: `${ id }`,
-} );
 const publishedTarget = { kind: 'published', tail: '' };
+const importTarget = { kind: 'import', tail: '' };
 
-const PAGE_TYPE = 'crtxt_page';
-
-function activate( state, target, options = {} ) {
-	const postType = options.postType ?? PAGE_TYPE;
+function activate( state, target ) {
 	let next = reducer( state, { type: 'TARGET_CHANGED', target } );
 	if ( target.kind === 'document' && target.id !== null ) {
-		next = reducer( next, {
-			type: 'DOCUMENT_RESOLVED',
-			kind: 'document',
-			id: target.id,
-			postType,
-		} );
+		next = reducer( next, { type: 'DOCUMENT_RESOLVED', id: target.id } );
 		next = reducer( next, { type: 'DOCUMENT_DISPLAYED', id: target.id } );
-	} else if ( target.kind === 'collection' && target.id !== null ) {
-		next = reducer( next, { type: 'COLLECTION_RESOLVED', id: target.id } );
-		next = reducer( next, { type: 'COLLECTION_READY', id: target.id } );
 	}
 	return next;
 }
@@ -46,8 +31,59 @@ describe( 'EntityRoute reducer', () => {
 			} );
 		} );
 
+		it( 'treats `published` as empty when public web affordances are off', () => {
+			expect(
+				parseTarget( 'published', { publicWebAffordances: false } )
+			).toEqual( {
+				kind: 'empty',
+				tail: '',
+			} );
+		} );
+
 		it( 'does not match `published/<anything>` (falls through to document)', () => {
 			expect( parseTarget( 'published/foo' ).kind ).toBe( 'document' );
+		} );
+
+		it( 'maps a bare `import` splat to the import kind', () => {
+			expect( parseTarget( 'import' ) ).toEqual( {
+				kind: 'import',
+				tail: '',
+			} );
+		} );
+
+		it( 'does not match `import/<anything>` (falls through to document)', () => {
+			expect( parseTarget( 'import/foo' ).kind ).toBe( 'document' );
+		} );
+
+		it( 'maps an empty splat to the empty kind', () => {
+			expect( parseTarget( '' ) ).toEqual( {
+				kind: 'empty',
+				tail: '',
+			} );
+		} );
+
+		it( 'maps a bare id to a document target', () => {
+			expect( parseTarget( '42' ) ).toEqual( {
+				kind: 'document',
+				id: 42,
+				tail: '42',
+			} );
+		} );
+
+		it( 'maps a slug-prefixed splat to a document target', () => {
+			expect( parseTarget( 'about-us-42' ) ).toEqual( {
+				kind: 'document',
+				id: 42,
+				tail: 'about-us-42',
+			} );
+		} );
+
+		it( 'maps a malformed splat (no trailing id) to a document target with null id', () => {
+			expect( parseTarget( 'about-us' ) ).toEqual( {
+				kind: 'document',
+				id: null,
+				tail: 'about-us',
+			} );
 		} );
 	} );
 
@@ -59,6 +95,12 @@ describe( 'EntityRoute reducer', () => {
 		it( 'starts a published target on the published pane', () => {
 			expect( init( publishedTarget ).active ).toEqual( {
 				kind: 'published',
+			} );
+		} );
+
+		it( 'starts an import target on the import pane', () => {
+			expect( init( importTarget ).active ).toEqual( {
+				kind: 'import',
 			} );
 		} );
 
@@ -75,20 +117,10 @@ describe( 'EntityRoute reducer', () => {
 			} );
 		} );
 
-		it( 'starts a malformed collection target as collection-not-found', () => {
-			const target = { kind: 'collection', id: null, tail: 'foo' };
-			expect( init( target ).active ).toEqual( {
-				kind: 'collection-not-found',
-			} );
-		} );
-
 		it( 'has empty mount state', () => {
 			const state = init( documentTarget( 1 ) );
 			expect( state.mountedDocumentId ).toBeNull();
-			expect( state.mountedDocumentType ).toBeNull();
 			expect( state.displayedDocumentId ).toBeNull();
-			expect( state.mountedCollectionIds ).toEqual( [] );
-			expect( state.readyCollectionIds.size ).toBe( 0 );
 		} );
 	} );
 
@@ -107,56 +139,21 @@ describe( 'EntityRoute reducer', () => {
 			expect( next.active ).toEqual( { kind: 'document', id: 1 } );
 		} );
 
-		it( 'preserves paint when navigating to a collection that is not ready yet', () => {
-			const state = activate(
-				init( documentTarget( 1 ) ),
-				documentTarget( 1 )
-			);
-			const next = reducer( state, {
-				type: 'TARGET_CHANGED',
-				target: collectionTarget( 5 ),
-			} );
-			expect( next.target ).toEqual( collectionTarget( 5 ) );
-			expect( next.active ).toEqual( { kind: 'document', id: 1 } );
-		} );
-
-		it( 'preserves the previous collection until the next collection mounts', () => {
-			const state = activate(
-				init( collectionTarget( 5 ) ),
-				collectionTarget( 5 )
-			);
-			const next = reducer( state, {
-				type: 'TARGET_CHANGED',
-				target: collectionTarget( 7 ),
-			} );
-			expect( next.target ).toEqual( collectionTarget( 7 ) );
-			expect( next.active ).toEqual( { kind: 'collection', id: 5 } );
-			expect( next.mountedCollectionIds ).toEqual( [ 5 ] );
-		} );
-
 		it( 'reactivates a document that is already mounted and displayed', () => {
 			let state = activate(
 				init( documentTarget( 1 ) ),
 				documentTarget( 1 )
 			);
-			state = activate( state, collectionTarget( 5 ) );
-			expect( state.active ).toEqual( { kind: 'collection', id: 5 } );
+			state = activate( state, documentTarget( 2 ) );
+			expect( state.active ).toEqual( { kind: 'document', id: 2 } );
 
 			state = reducer( state, {
 				type: 'TARGET_CHANGED',
 				target: documentTarget( 1 ),
 			} );
-			expect( state.active ).toEqual( { kind: 'document', id: 1 } );
-		} );
-
-		it( 'reactivates a collection that is already mounted and ready', () => {
-			let state = activate(
-				init( collectionTarget( 5 ) ),
-				collectionTarget( 5 )
-			);
-			state = activate( state, documentTarget( 1 ) );
-			// The previous collection is pruned once the document activates.
-			expect( state.mountedCollectionIds ).toEqual( [] );
+			// Switching back to a previously displayed doc requires
+			// remount before reactivation; the previous paint is preserved.
+			expect( state.active ).toEqual( { kind: 'document', id: 2 } );
 		} );
 
 		it( 'switches to published immediately', () => {
@@ -169,6 +166,18 @@ describe( 'EntityRoute reducer', () => {
 				target: publishedTarget,
 			} );
 			expect( next.active ).toEqual( { kind: 'published' } );
+		} );
+
+		it( 'switches to import immediately', () => {
+			const state = activate(
+				init( documentTarget( 1 ) ),
+				documentTarget( 1 )
+			);
+			const next = reducer( state, {
+				type: 'TARGET_CHANGED',
+				target: importTarget,
+			} );
+			expect( next.active ).toEqual( { kind: 'import' } );
 		} );
 
 		it( 'switches to empty immediately', () => {
@@ -194,6 +203,20 @@ describe( 'EntityRoute reducer', () => {
 			} );
 			expect( next.active ).toEqual( { kind: 'document-not-found' } );
 		} );
+
+		it( 'reuses an already-mounted document when target id matches both mount and paint', () => {
+			let state = activate(
+				init( documentTarget( 1 ) ),
+				documentTarget( 1 )
+			);
+			// Already mounted+displayed. A TARGET_CHANGED back to the same id
+			// flips active immediately without going through loading.
+			state = reducer( state, {
+				type: 'TARGET_CHANGED',
+				target: documentTarget( 1 ),
+			} );
+			expect( state.active ).toEqual( { kind: 'document', id: 1 } );
+		} );
 	} );
 
 	describe( 'DOCUMENT_RESOLVED', () => {
@@ -204,14 +227,8 @@ describe( 'EntityRoute reducer', () => {
 				target: documentTarget( 1 ),
 			} );
 			state = reducer( state, { type: 'DOCUMENT_DISPLAYED', id: 1 } );
-			state = reducer( state, {
-				type: 'DOCUMENT_RESOLVED',
-				kind: 'document',
-				id: 1,
-				postType: PAGE_TYPE,
-			} );
+			state = reducer( state, { type: 'DOCUMENT_RESOLVED', id: 1 } );
 			expect( state.mountedDocumentId ).toBe( 1 );
-			expect( state.mountedDocumentType ).toBe( PAGE_TYPE );
 			expect( state.active ).toEqual( { kind: 'document', id: 1 } );
 		} );
 
@@ -221,12 +238,7 @@ describe( 'EntityRoute reducer', () => {
 				type: 'TARGET_CHANGED',
 				target: documentTarget( 1 ),
 			} );
-			state = reducer( state, {
-				type: 'DOCUMENT_RESOLVED',
-				kind: 'document',
-				id: 1,
-				postType: PAGE_TYPE,
-			} );
+			state = reducer( state, { type: 'DOCUMENT_RESOLVED', id: 1 } );
 			expect( state.mountedDocumentId ).toBe( 1 );
 			expect( state.active ).toEqual( { kind: 'loading' } );
 		} );
@@ -238,9 +250,7 @@ describe( 'EntityRoute reducer', () => {
 			);
 			const next = reducer( state, {
 				type: 'DOCUMENT_RESOLVED',
-				kind: 'document',
 				id: 99,
-				postType: PAGE_TYPE,
 			} );
 			expect( next ).toBe( state );
 		} );
@@ -252,51 +262,13 @@ describe( 'EntityRoute reducer', () => {
 			);
 			state = reducer( state, {
 				type: 'TARGET_CHANGED',
-				target: collectionTarget( 5 ),
+				target: documentTarget( 2 ),
 			} );
 			const next = reducer( state, {
 				type: 'DOCUMENT_RESOLVED',
-				kind: 'document',
 				id: 1,
-				postType: PAGE_TYPE,
 			} );
 			expect( next ).toBe( state );
-		} );
-
-		it( 'ignores a same-id resolution from a different kind', () => {
-			// Post IDs are reused across post types in WordPress, so an id
-			// match alone could let a stale page resolution apply to a same-id
-			// collection target. The kind check rejects it.
-			let state = init( collectionTarget( 42 ) );
-			state = reducer( state, {
-				type: 'TARGET_CHANGED',
-				target: collectionTarget( 42 ),
-			} );
-			const next = reducer( state, {
-				type: 'DOCUMENT_RESOLVED',
-				kind: 'document',
-				id: 42,
-				postType: PAGE_TYPE,
-			} );
-			expect( next ).toBe( state );
-		} );
-
-		it( 'mounts a full-page collection as a Canvas document', () => {
-			let state = init( collectionTarget( 7 ) );
-			state = reducer( state, {
-				type: 'TARGET_CHANGED',
-				target: collectionTarget( 7 ),
-			} );
-			state = reducer( state, {
-				type: 'DOCUMENT_RESOLVED',
-				kind: 'collection',
-				id: 7,
-				postType: 'crtxt_collection',
-			} );
-			expect( state.mountedDocumentId ).toBe( 7 );
-			expect( state.mountedDocumentType ).toBe( 'crtxt_collection' );
-			state = reducer( state, { type: 'DOCUMENT_DISPLAYED', id: 7 } );
-			expect( state.active ).toEqual( { kind: 'document', id: 7 } );
 		} );
 	} );
 
@@ -309,24 +281,9 @@ describe( 'EntityRoute reducer', () => {
 			} );
 			state = reducer( state, {
 				type: 'DOCUMENT_NOT_FOUND',
-				kind: 'document',
 				id: 99,
 			} );
 			expect( state.active ).toEqual( { kind: 'document-not-found' } );
-		} );
-
-		it( 'activates collection-not-found on a collection target', () => {
-			let state = init( collectionTarget( 5 ) );
-			state = reducer( state, {
-				type: 'TARGET_CHANGED',
-				target: collectionTarget( 5 ),
-			} );
-			state = reducer( state, {
-				type: 'DOCUMENT_NOT_FOUND',
-				kind: 'collection',
-				id: 5,
-			} );
-			expect( state.active ).toEqual( { kind: 'collection-not-found' } );
 		} );
 
 		it( 'is ignored when the not-found id does not match the current target', () => {
@@ -340,22 +297,7 @@ describe( 'EntityRoute reducer', () => {
 			} );
 			const next = reducer( state, {
 				type: 'DOCUMENT_NOT_FOUND',
-				kind: 'document',
 				id: 1,
-			} );
-			expect( next ).toBe( state );
-		} );
-
-		it( 'is ignored when the not-found kind does not match the current target', () => {
-			let state = init( collectionTarget( 42 ) );
-			state = reducer( state, {
-				type: 'TARGET_CHANGED',
-				target: collectionTarget( 42 ),
-			} );
-			const next = reducer( state, {
-				type: 'DOCUMENT_NOT_FOUND',
-				kind: 'document',
-				id: 42,
 			} );
 			expect( next ).toBe( state );
 		} );
@@ -368,12 +310,7 @@ describe( 'EntityRoute reducer', () => {
 				type: 'TARGET_CHANGED',
 				target: documentTarget( 1 ),
 			} );
-			state = reducer( state, {
-				type: 'DOCUMENT_RESOLVED',
-				kind: 'document',
-				id: 1,
-				postType: PAGE_TYPE,
-			} );
+			state = reducer( state, { type: 'DOCUMENT_RESOLVED', id: 1 } );
 			expect( state.active ).toEqual( { kind: 'loading' } );
 			state = reducer( state, { type: 'DOCUMENT_DISPLAYED', id: 1 } );
 			expect( state.active ).toEqual( { kind: 'document', id: 1 } );
@@ -396,124 +333,13 @@ describe( 'EntityRoute reducer', () => {
 		} );
 	} );
 
-	describe( 'COLLECTION_RESOLVED', () => {
-		it( 'mounts the collection before row data is ready', () => {
-			let state = init( collectionTarget( 5 ) );
-			state = reducer( state, {
-				type: 'TARGET_CHANGED',
-				target: collectionTarget( 5 ),
-			} );
-			state = reducer( state, { type: 'COLLECTION_RESOLVED', id: 5 } );
-			expect( state.mountedCollectionIds ).toEqual( [ 5 ] );
-			expect( state.active ).toEqual( { kind: 'collection', id: 5 } );
-		} );
-
-		it( 'preserves the active content pane until collection rows are ready', () => {
-			let state = activate(
-				init( documentTarget( 1 ) ),
-				documentTarget( 1 )
-			);
-			state = reducer( state, {
-				type: 'TARGET_CHANGED',
-				target: collectionTarget( 5 ),
-			} );
-			state = reducer( state, { type: 'COLLECTION_RESOLVED', id: 5 } );
-			expect( state.mountedCollectionIds ).toEqual( [ 5 ] );
-			expect( state.active ).toEqual( { kind: 'document', id: 1 } );
-		} );
-
-		it( 'ignores a resolution for a different target', () => {
-			const state = activate(
-				init( collectionTarget( 5 ) ),
-				collectionTarget( 5 )
-			);
-			const next = reducer( state, {
-				type: 'COLLECTION_RESOLVED',
-				id: 99,
-			} );
-			expect( next ).toBe( state );
-		} );
-	} );
-
-	describe( 'COLLECTION_READY', () => {
-		it( 'tracks readiness and activates the matching target', () => {
-			let state = init( collectionTarget( 5 ) );
-			state = reducer( state, {
-				type: 'TARGET_CHANGED',
-				target: collectionTarget( 5 ),
-			} );
-			state = reducer( state, { type: 'COLLECTION_RESOLVED', id: 5 } );
-			state = reducer( state, { type: 'COLLECTION_READY', id: 5 } );
-			expect( state.active ).toEqual( { kind: 'collection', id: 5 } );
-			expect( state.readyCollectionIds.has( 5 ) ).toBe( true );
-		} );
-
-		it( 'tracks readiness but does not activate until the pane is mounted', () => {
-			let state = init( collectionTarget( 5 ) );
-			state = reducer( state, {
-				type: 'TARGET_CHANGED',
-				target: collectionTarget( 5 ),
-			} );
-			state = reducer( state, { type: 'COLLECTION_READY', id: 5 } );
-			expect( state.readyCollectionIds.has( 5 ) ).toBe( true );
-			expect( state.active ).toEqual( { kind: 'loading' } );
-		} );
-	} );
-
-	describe( 'pruning', () => {
-		it( 'drops the previous collection after the next one activates', () => {
-			let state = activate(
-				init( collectionTarget( 5 ) ),
-				collectionTarget( 5 )
-			);
-			state = reducer( state, {
-				type: 'TARGET_CHANGED',
-				target: collectionTarget( 7 ),
-			} );
-			state = reducer( state, { type: 'COLLECTION_RESOLVED', id: 7 } );
-			expect( state.mountedCollectionIds ).toEqual( [ 5, 7 ] );
-			state = reducer( state, { type: 'COLLECTION_READY', id: 7 } );
-			expect( state.mountedCollectionIds ).toEqual( [ 7 ] );
-		} );
-
-		it( 'drops mounted collections when leaving for a document', () => {
-			let state = activate(
-				init( collectionTarget( 5 ) ),
-				collectionTarget( 5 )
-			);
-			state = activate( state, documentTarget( 1 ) );
-			expect( state.mountedCollectionIds ).toEqual( [] );
-			expect( state.readyCollectionIds.size ).toBe( 0 );
-		} );
-	} );
-
 	describe( 'navigation flows', () => {
 		it( 'cold-loads a document through loading → document', () => {
 			let state = init( documentTarget( 1 ) );
 			expect( state.active ).toEqual( { kind: 'loading' } );
-			state = reducer( state, {
-				type: 'DOCUMENT_RESOLVED',
-				kind: 'document',
-				id: 1,
-				postType: PAGE_TYPE,
-			} );
+			state = reducer( state, { type: 'DOCUMENT_RESOLVED', id: 1 } );
 			expect( state.active ).toEqual( { kind: 'loading' } );
 			state = reducer( state, { type: 'DOCUMENT_DISPLAYED', id: 1 } );
-			expect( state.active ).toEqual( { kind: 'document', id: 1 } );
-		} );
-
-		it( 'document → collection → document reuses the document mount', () => {
-			let state = activate(
-				init( documentTarget( 1 ) ),
-				documentTarget( 1 )
-			);
-			const mountedDocumentId = state.mountedDocumentId;
-			state = activate( state, collectionTarget( 5 ) );
-			state = reducer( state, {
-				type: 'TARGET_CHANGED',
-				target: documentTarget( 1 ),
-			} );
-			expect( state.mountedDocumentId ).toBe( mountedDocumentId );
 			expect( state.active ).toEqual( { kind: 'document', id: 1 } );
 		} );
 	} );

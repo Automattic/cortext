@@ -6,10 +6,11 @@
 // renders synchronously; only this inner stack suspends on first row open.
 import { useDispatch } from '@wordpress/data';
 import { EditorProvider, store as editorStore } from '@wordpress/editor';
-import { useCallback, useEffect, useRef } from '@wordpress/element';
+import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
 import { SlotFillProvider } from '@wordpress/components';
 
 import useAutosave from '../hooks/useAutosave';
+import usePostLock from '../hooks/usePostLock';
 // Registers core + Cortext blocks before any editor renders. Living here
 // (rather than at a static import in RowDetailView) keeps the Cortext
 // block sources and the registerCoreBlocks call site off the initial
@@ -19,6 +20,8 @@ import { getEditorSettings } from './initEditor';
 import { DocumentPropertiesProvider } from './DocumentPropertiesContext';
 import { EditorSurfaceProvider } from './EditorSurfaceContext';
 import EditorBody from './EditorBody';
+import { PostLockFailureNotice, PostLockModal } from './PostLockControls';
+import CortextLinkSuggestions from './CortextLinkSuggestions';
 import { RowMutationContext } from './EditableCell';
 
 const ROW_DETAIL_EDITOR_CSS = `
@@ -117,11 +120,35 @@ function DetailPaneContent( {
 	propertiesVisible,
 	row,
 	rowId,
+	shouldAcquirePostLock,
 } ) {
-	const handleReady = useCallback(
-		() => onPaneReady( detailKey ),
-		[ detailKey, onPaneReady ]
-	);
+	const postLock = usePostLock( {
+		postId: row?.id ?? rowId,
+		postType,
+		enabled: shouldAcquirePostLock,
+	} );
+	const [ isEditorReady, setIsEditorReady ] = useState( false );
+	const notifiedReadyKeyRef = useRef( null );
+	const handleReady = useCallback( () => setIsEditorReady( true ), [] );
+	const isPostLockSettled =
+		! postLock.isReadOnly || postLock.isFailed || postLock.isLocked;
+
+	useEffect( () => {
+		setIsEditorReady( false );
+		notifiedReadyKeyRef.current = null;
+	}, [ detailKey ] );
+
+	useEffect( () => {
+		if (
+			! isEditorReady ||
+			! isPostLockSettled ||
+			notifiedReadyKeyRef.current === detailKey
+		) {
+			return;
+		}
+		notifiedReadyKeyRef.current = detailKey;
+		onPaneReady( detailKey );
+	}, [ detailKey, isEditorReady, isPostLockSettled, onPaneReady ] );
 
 	const content = (
 		<DocumentPropertiesProvider
@@ -138,13 +165,26 @@ function DetailPaneContent( {
 			onRequestLayoutEdit={ onRequestLayoutEdit }
 			onToggleVisible={ onTogglePropertiesVisible }
 		>
+			<PostLockFailureNotice
+				error={ postLock.error }
+				isRetrying={ postLock.isAcquiring }
+				onRetry={ postLock.retry }
+			/>
 			<EditorBody
 				isActive={ isActive && ! isHidden }
+				isLocked={ postLock.isReadOnly }
 				postId={ row?.id }
 				postType={ postType }
 				extraStyles={ ROW_DETAIL_EXTRA_STYLES }
 				onReady={ handleReady }
 				onRestored={ onRestored }
+			/>
+			<PostLockModal
+				isOpen={ postLock.isLocked }
+				isTakeover={ postLock.isTakeover }
+				isTakingOver={ postLock.isTakingOver }
+				onTakeOver={ postLock.takeOver }
+				user={ postLock.user }
 			/>
 		</DocumentPropertiesProvider>
 	);
@@ -156,9 +196,7 @@ function DetailPaneContent( {
 				onApi={ onApi }
 				onSaved={ onSaved }
 				recentTarget={
-					rowId && collectionId
-						? { kind: 'row', id: rowId, collectionId }
-						: null
+					rowId && collectionId ? { id: rowId, collectionId } : null
 				}
 			/>
 			{ mutationContext ? (
@@ -199,6 +237,7 @@ export default function RowEditor( {
 	propertiesVisible,
 	row,
 	rowId,
+	shouldAcquirePostLock = false,
 } ) {
 	return (
 		<EditorProvider
@@ -206,6 +245,7 @@ export default function RowEditor( {
 			settings={ getEditorSettings() }
 			useSubRegistry
 		>
+			<CortextLinkSuggestions />
 			{ /* tech-debt.md#td-row-detail-toolbar-isolation: row detail owns these SlotFills while
 			     peek/modal are open. */ }
 			<SlotFillProvider>
@@ -232,6 +272,7 @@ export default function RowEditor( {
 						propertiesVisible={ propertiesVisible }
 						row={ row }
 						rowId={ rowId }
+						shouldAcquirePostLock={ shouldAcquirePostLock }
 					/>
 				</EditorSurfaceProvider>
 			</SlotFillProvider>

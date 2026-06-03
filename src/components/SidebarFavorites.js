@@ -1,5 +1,6 @@
 import { __, sprintf } from '@wordpress/i18n';
 import { Button } from '@wordpress/components';
+import { useEntityRecord } from '@wordpress/core-data';
 import {
 	useCallback,
 	useEffect,
@@ -32,7 +33,8 @@ import {
 import useDelayedFlag, {
 	SKELETON_MIN_VISIBLE_MS,
 } from '../hooks/useDelayedFlag';
-import { collectDescendants } from './pages-tree';
+import { DOCUMENT_POST_TYPE } from '../collections';
+import { collectDescendants } from './document-tree';
 import { whenViewTransitionsSettled } from '../hooks/viewTransition';
 
 const FAVORITE_ADD_ANIMATION_MS = 220;
@@ -71,80 +73,51 @@ export function filterFavoritesForTrashedPage(
 	pages,
 	collections = []
 ) {
-	const trashedPageIds = new Set( [
+	const trashedIds = new Set( [
 		Number( pageId ),
 		...collectDescendants( Number( pageId ), pages ),
 	] );
 
-	// The cascade also trashes full-page collections under these pages. Remove
-	// those favorites here. Inline owners are server-only, so the controller
-	// filters stale inline favorites on read.
-	const trashedCollectionIds = new Set(
-		( collections ?? [] )
-			.filter( ( collection ) =>
-				trashedPageIds.has( Number( collection.parent ?? 0 ) )
-			)
-			.map( ( collection ) => Number( collection.id ) )
-	);
+	// The cascade trashes nested collections too. Add their ids so favorites
+	// pointing at them get filtered out.
+	( collections ?? [] ).forEach( ( collection ) => {
+		if ( trashedIds.has( Number( collection.parent ?? 0 ) ) ) {
+			trashedIds.add( Number( collection.id ) );
+		}
+	} );
 
 	return favorites.filter( ( favorite ) => {
-		if ( favorite.kind === 'page' ) {
-			return ! trashedPageIds.has( Number( favorite.id ) );
+		// Rows fall with their parent collection. The favorite carries the
+		// owner inline (`collection.id`), set by `format_target` on read.
+		if ( favorite.collection?.id ) {
+			return ! trashedIds.has( Number( favorite.collection.id ) );
 		}
-		if ( favorite.kind === 'collection' ) {
-			return ! trashedCollectionIds.has( Number( favorite.id ) );
-		}
-		if ( favorite.kind === 'row' ) {
-			// Rows fall with their parent collection. The favorite carries the
-			// owner inline (`collection.id`), set by `format_target` on read.
-			return ! trashedCollectionIds.has(
-				Number( favorite.collection?.id )
-			);
-		}
-		return true;
+		return ! trashedIds.has( Number( favorite.id ) );
 	} );
 }
 
-export function filterFavoritesForTrashedCollection( favorites, collectionId ) {
-	const target = Number( collectionId );
-	return favorites.filter(
-		( favorite ) =>
-			! (
-				( favorite.kind === 'collection' &&
-					Number( favorite.id ) === target ) ||
-				( favorite.kind === 'row' &&
-					Number( favorite.collection?.id ) === target )
-			)
-	);
-}
-
 export function resolveFavoriteItems( favorites, pages, collections ) {
-	// One lookup keyed by `<kind>:<id>` so the resolver does not have to
-	// branch on kind. Rows are never in here (they don't ride the sidebar
-	// tree) and fall through to the stored favorite shape below.
-	const recordsByKey = new Map();
-	( pages ?? [] ).forEach( ( page ) =>
-		recordsByKey.set( favoriteKey( { kind: 'page', id: page.id } ), page )
-	);
+	// Lookup by id since favorites no longer carry a kind tag. Pages and
+	// collections both live in `crtxt_document`, so ids do not collide.
+	const recordsById = new Map();
+	( pages ?? [] ).forEach( ( page ) => recordsById.set( page.id, page ) );
 	( collections ?? [] ).forEach( ( collection ) =>
-		recordsByKey.set(
-			favoriteKey( { kind: 'collection', id: collection.id } ),
-			collection
-		)
+		recordsById.set( collection.id, collection )
 	);
 
 	return favorites
 		.map( ( favorite ) => {
-			const key = favoriteKey( favorite );
-			const record = recordsByKey.get( key );
+			const id = Number( favorite.id );
+			const record = recordsById.get( id );
 
 			if ( ! record && ! favorite.path ) {
 				return null;
 			}
 
+			const key = favoriteKey( favorite );
 			return {
 				...favorite,
-				id: Number( favorite.id ),
+				id,
 				key,
 				sortableId: key,
 				record,
@@ -189,7 +162,19 @@ function mergeDisplayFavorites( currentDisplay, nextFavorites, removingKeys ) {
 }
 
 function SortableFavoriteRow( { item, isDisabled, onSelect, onRemove } ) {
-	const { listIcon } = useDocumentRecord( item );
+	// Favorites wire shape only carries id/title/path/icon. Capability checks
+	// need `meta.cortext_fields` / `crtxt_trait`, so we load the document
+	// record at render time when the sidebar lists did not already supply
+	// one. Pages and collections come pre-loaded from the sidebar tree;
+	// rows fall through to a per-item fetch (cached after the first load).
+	const { record: fetched } = useEntityRecord(
+		'postType',
+		DOCUMENT_POST_TYPE,
+		item.record ? 0 : item.id || 0
+	);
+	const record = item.record ?? fetched;
+	const merged = record ? { ...item, ...record } : item;
+	const { listIcon } = useDocumentRecord( merged );
 	const {
 		attributes,
 		listeners,
@@ -450,7 +435,7 @@ export default function SidebarFavorites( {
 			{ isEmpty ? (
 				<p className="cortext-sidebar__empty cortext-sidebar__empty--inline">
 					{ __(
-						'Star a page from its title menu to pin it here.',
+						'Star from the title menu to pin it here.',
 						'cortext'
 					) }
 				</p>

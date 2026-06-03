@@ -1,6 +1,14 @@
 <?php
 /**
- * REST endpoint for querying collection rows.
+ * REST endpoint for the `rows view` of `crtxt_document`: the filtered, sorted,
+ * paged listing the workspace consumes when rendering a DataView.
+ *
+ * Rows themselves are plain `crtxt_document` posts with a `crtxt_trait`
+ * term pointing at their collection. Their CRUD goes through core REST
+ * (`/wp/v2/crtxt_documents/...`), with relation reverse pointers and sidecar
+ * cache maintained from `Document` hooks. This controller only owns the
+ * power-query read endpoint because core REST cannot express server-side
+ * calculations, manual sort, or field projection.
  *
  * @package Cortext
  */
@@ -9,13 +17,14 @@ declare( strict_types=1 );
 
 namespace Cortext\Rest;
 
+defined( 'ABSPATH' ) || exit;
+
 use Cortext\Fields\FieldDefaults;
 use Cortext\Fields\FieldTypeConverter;
 use Cortext\FieldValues\FieldValueReadQuery;
-use Cortext\FieldValues\FieldValueStore;
-use Cortext\PostType\Collection;
-use Cortext\PostType\CollectionEntries;
+use Cortext\PostType\Document;
 use Cortext\Relations;
+use Cortext\Taxonomy\TraitTaxonomy;
 use WP_Error;
 use WP_Post;
 use WP_REST_Request;
@@ -30,17 +39,17 @@ final class RowsController {
 	}
 
 	public function register_routes(): void {
-		// Add hydrated relations and rollups to the normal row CPT response.
-		// Peek/modal panes fetch rows with `useEntityRecord`; without this
-		// hook, relation meta is still raw stored IDs and rollups are missing.
-		foreach ( CollectionEntries::get_entry_post_types() as $entry_post_type ) {
-			add_filter(
-				"rest_prepare_{$entry_post_type}",
-				array( $this, 'filter_rest_prepare_row' ),
-				10,
-				3
-			);
-		}
+		// Add hydrated relations and rollups to the unified document REST
+		// response. Peek/modal panes fetch rows with `useEntityRecord`;
+		// without this hook, relation meta is still raw stored IDs and
+		// rollups are missing. The filter only acts when the document has
+		// trait membership (i.e. it is a row).
+		add_filter(
+			'rest_prepare_' . Document::POST_TYPE,
+			array( $this, 'filter_rest_prepare_row' ),
+			10,
+			3
+		);
 
 		register_rest_route(
 			self::NAMESPACE,
@@ -51,25 +60,25 @@ final class RowsController {
 					'callback'            => array( $this, 'get_rows' ),
 					'permission_callback' => array( $this, 'can_read' ),
 					'args'                => array(
-						'collection' => array(
+						'trait'    => array(
 							'type'     => 'integer',
 							'required' => true,
 						),
-						'page'       => array(
+						'page'     => array(
 							'type'    => 'integer',
 							'default' => 1,
 							'minimum' => 1,
 						),
-						'per_page'   => array(
+						'per_page' => array(
 							'type'              => 'integer',
 							'default'           => 25,
 							'validate_callback' => static fn( $value ) => (int) $value >= 1 && (int) $value <= 100,
 						),
-						'search'     => array(
+						'search'   => array(
 							'type'    => 'string',
 							'default' => '',
 						),
-						'sort'       => array(
+						'sort'     => array(
 							'type'       => 'object',
 							'default'    => null,
 							'properties' => array(
@@ -80,133 +89,26 @@ final class RowsController {
 								),
 							),
 						),
-						'filters'    => array(
+						'filters'  => array(
 							'type'    => 'array',
 							'default' => array(),
 						),
-						'include'    => array(
+						'include'  => array(
 							'type'              => 'array',
 							'default'           => array(),
 							'items'             => array( 'type' => 'integer' ),
 							'sanitize_callback' => array( $this, 'sanitize_include_param' ),
 							'validate_callback' => array( $this, 'validate_include_param' ),
 						),
-						'fields'     => array(
+						'fields'   => array(
 							'type'    => 'array',
 							'default' => null,
 							'items'   => array( 'type' => 'string' ),
 						),
-						'context'    => array(
+						'context'  => array(
 							'type'    => 'string',
-							'default' => 'view',
+							'default' => 'edit',
 							'enum'    => array( 'view', 'edit' ),
-						),
-					),
-				),
-			)
-		);
-
-		register_rest_route(
-			self::NAMESPACE,
-			'/collections/(?P<collection_id>\d+)/rows',
-			array(
-				array(
-					'methods'             => 'POST',
-					'callback'            => array( $this, 'create_row' ),
-					'permission_callback' => array( $this, 'can_create_row' ),
-					'args'                => array(
-						'collection_id' => array(
-							'type'     => 'integer',
-							'required' => true,
-						),
-						'title'         => array(
-							'type'     => 'string',
-							'required' => true,
-						),
-					),
-				),
-			)
-		);
-
-		register_rest_route(
-			self::NAMESPACE,
-			'/collections/(?P<collection_id>\d+)/rows/(?P<row_id>\d+)',
-			array(
-				array(
-					'methods'             => 'POST',
-					'callback'            => array( $this, 'update_row_field' ),
-					'permission_callback' => array( $this, 'can_edit_row' ),
-					'args'                => array(
-						'collection_id' => array(
-							'type'     => 'integer',
-							'required' => true,
-						),
-						'row_id'        => array(
-							'type'     => 'integer',
-							'required' => true,
-						),
-						'field'         => array(
-							'type'     => 'string',
-							'required' => true,
-						),
-						'value'         => array(
-							'required' => false,
-						),
-					),
-				),
-			)
-		);
-
-		register_rest_route(
-			self::NAMESPACE,
-			'/collections/(?P<collection_id>\d+)/rows/(?P<row_id>\d+)/reorder',
-			array(
-				array(
-					'methods'             => 'POST',
-					'callback'            => array( $this, 'reorder_row' ),
-					'permission_callback' => array( $this, 'can_edit_row' ),
-					'args'                => array(
-						'collection_id' => array(
-							'type'     => 'integer',
-							'required' => true,
-						),
-						'row_id'        => array(
-							'type'     => 'integer',
-							'required' => true,
-						),
-						'before_id'     => array(
-							'type'     => array( 'integer', 'null' ),
-							'required' => false,
-						),
-						'after_id'      => array(
-							'type'     => array( 'integer', 'null' ),
-							'required' => false,
-						),
-						'current_sort'  => array(
-							'type'     => array( 'object', 'null' ),
-							'required' => false,
-						),
-					),
-				),
-			)
-		);
-
-		register_rest_route(
-			self::NAMESPACE,
-			'/collections/(?P<collection_id>\d+)/rows/(?P<row_id>\d+)/duplicate',
-			array(
-				array(
-					'methods'             => 'POST',
-					'callback'            => array( $this, 'duplicate_row' ),
-					'permission_callback' => array( $this, 'can_duplicate_row' ),
-					'args'                => array(
-						'collection_id' => array(
-							'type'     => 'integer',
-							'required' => true,
-						),
-						'row_id'        => array(
-							'type'     => 'integer',
-							'required' => true,
 						),
 					),
 				),
@@ -217,9 +119,9 @@ final class RowsController {
 	/**
 	 * Permission gate for the rows endpoint.
 	 *
-	 * `context=edit` requires `edit_posts` (existing editor behaviour).
-	 * `context=view` is public — anyone may read rows from a published
-	 * collection.
+	 * `context=edit` is the default editor path and requires `edit_posts`.
+	 * `context=view` is the public opt-in: anyone may read rows from a
+	 * published collection.
 	 *
 	 * @param WP_REST_Request $request Full request object.
 	 * @return bool|WP_Error
@@ -237,11 +139,11 @@ final class RowsController {
 			);
 		}
 
-		// context=view: allow if the collection is published.
-		$collection_id = (int) $request->get_param( 'collection' );
+		// context=view: allow if the collection document is published.
+		$collection_id = (int) $request->get_param( 'trait' );
 		$collection    = get_post( $collection_id );
 
-		if ( ! $collection || Collection::POST_TYPE !== $collection->post_type ) {
+		if ( ! $collection || ! Document::is_collection_post( $collection ) ) {
 			return new WP_Error(
 				'cortext_collection_not_found',
 				__( 'Collection not found.', 'cortext' ),
@@ -260,57 +162,6 @@ final class RowsController {
 		return true;
 	}
 
-	public function can_create_row( WP_REST_Request $request ): bool|WP_Error {
-		$collection_id = (int) $request->get_param( 'collection_id' );
-
-		$collection = $this->validate_collection( $collection_id );
-		if ( is_wp_error( $collection ) ) {
-			return $collection;
-		}
-
-		return current_user_can( 'edit_posts' );
-	}
-
-	public function can_edit_row( WP_REST_Request $request ): bool|WP_Error {
-		$collection_id = (int) $request->get_param( 'collection_id' );
-		$row_id        = (int) $request->get_param( 'row_id' );
-
-		$collection = $this->validate_collection( $collection_id );
-		if ( is_wp_error( $collection ) ) {
-			return $collection;
-		}
-
-		$slug = (string) get_post_meta( $collection_id, 'slug', true );
-		$row  = get_post( $row_id );
-		if ( ! $row instanceof WP_Post || CollectionEntries::CPT_PREFIX . $slug !== $row->post_type ) {
-			return new WP_Error(
-				'cortext_row_not_found',
-				__( 'Row not found.', 'cortext' ),
-				array( 'status' => 404 )
-			);
-		}
-
-		return current_user_can( 'edit_post', $row_id );
-	}
-
-	/**
-	 * Allows duplication only when the user can edit the source row and add
-	 * rows to the collection.
-	 *
-	 * @param WP_REST_Request $request Incoming REST request.
-	 * @return bool|WP_Error
-	 */
-	public function can_duplicate_row( WP_REST_Request $request ): bool|WP_Error {
-		$edit_check = $this->can_edit_row( $request );
-		if ( is_wp_error( $edit_check ) ) {
-			return $edit_check;
-		}
-		if ( ! $edit_check ) {
-			return false;
-		}
-		return current_user_can( 'edit_posts' );
-	}
-
 	/**
 	 * Returns paginated, sortable, filterable rows for a collection.
 	 *
@@ -318,15 +169,14 @@ final class RowsController {
 	 * @return WP_REST_Response|WP_Error
 	 */
 	public function get_rows( WP_REST_Request $request ) {
-		$collection_id = (int) $request->get_param( 'collection' );
+		$collection_id = (int) $request->get_param( 'trait' );
 
 		$collection = $this->validate_collection( $collection_id );
 		if ( is_wp_error( $collection ) ) {
 			return $collection;
 		}
 
-		$slug                = (string) get_post_meta( $collection->ID, 'slug', true );
-		$field_ids           = $this->collection_field_ids( $collection->ID );
+		$field_ids           = Document::collection_field_ids( $collection->ID );
 		$requested_fields    = $request->get_param( 'fields' );
 		$formatted_field_ids = is_array( $requested_fields )
 			? $this->filter_requested_field_ids( $requested_fields, $field_ids )
@@ -343,7 +193,7 @@ final class RowsController {
 					'rows'       => array(),
 					'total'      => 0,
 					'totalPages' => 0,
-					'collection' => $this->collection_definition( $collection, $slug ),
+					'collection' => $this->collection_definition( $collection ),
 					'fields'     => $this->field_definitions( $field_ids ),
 				),
 				200
@@ -381,18 +231,18 @@ final class RowsController {
 		$ctx              = new RowFormatContext();
 		$ctx->field_types = $this->field_types_map( $formatted_field_ids );
 		$multi_field_ids  = $this->multi_value_field_ids_from( $ctx->field_types );
+		$row_statuses     = $this->row_statuses_for_request();
 
-		$post_type      = CollectionEntries::CPT_PREFIX . $slug;
 		$sidecar_result = ( new FieldValueReadQuery() )->query_rows(
 			$collection_id,
-			$post_type,
 			$field_schema,
 			$request->get_param( 'filters' ),
 			$request->get_param( 'sort' ),
 			$search,
 			array_key_exists( 'include', $query_params ),
 			(int) $request->get_param( 'page' ),
-			(int) $request->get_param( 'per_page' )
+			(int) $request->get_param( 'per_page' ),
+			$row_statuses
 		);
 
 		if ( null !== $sidecar_result ) {
@@ -400,14 +250,15 @@ final class RowsController {
 			$total       = $sidecar_result['total'];
 			$total_pages = $sidecar_result['totalPages'];
 		} else {
-			$query_args = $this->build_query_args( $request, $slug );
+			$query_args = $this->build_query_args( $request, $collection_id, $row_statuses );
 			$scope      = new RowsQueryScope(
 				$row_query,
 				$field_schema,
 				$where_sql,
 				$filter_sql['join'],
 				$request->get_param( 'sort' ),
-				$search
+				$search,
+				TraitTaxonomy::term_taxonomy_id_for_trait( $collection_id )
 			);
 			$query      = $scope->run( $query_args );
 
@@ -442,290 +293,10 @@ final class RowsController {
 				'rows'       => $rows,
 				'total'      => $total,
 				'totalPages' => $total_pages,
-				'collection' => $this->collection_definition( $collection, $slug ),
+				'collection' => $this->collection_definition( $collection ),
 				'fields'     => $fields,
 			),
 			200
-		);
-	}
-
-	public function create_row( WP_REST_Request $request ): WP_REST_Response|WP_Error {
-		$collection_id = (int) $request->get_param( 'collection_id' );
-		$title         = trim( sanitize_text_field( (string) $request->get_param( 'title' ) ) );
-
-		if ( '' === $title ) {
-			return new WP_Error(
-				'cortext_row_title_required',
-				__( 'Row title is required.', 'cortext' ),
-				array( 'status' => 400 )
-			);
-		}
-
-		$collection = $this->validate_collection( $collection_id );
-		if ( is_wp_error( $collection ) ) {
-			return $collection;
-		}
-
-		$slug   = (string) get_post_meta( $collection_id, 'slug', true );
-		$row_id = wp_insert_post(
-			array(
-				'post_type'   => CollectionEntries::CPT_PREFIX . $slug,
-				'post_status' => 'private',
-				'post_title'  => $title,
-			),
-			true
-		);
-
-		if ( is_wp_error( $row_id ) ) {
-			return $row_id;
-		}
-
-		$row = get_post( (int) $row_id );
-		if ( ! $row instanceof WP_Post ) {
-			return new WP_Error(
-				'cortext_row_create_failed',
-				__( 'Row could not be created.', 'cortext' ),
-				array( 'status' => 500 )
-			);
-		}
-
-		FieldDefaults::apply_to_row( $collection_id, (int) $row_id );
-
-		$field_ids       = $this->collection_field_ids( $collection_id );
-		$multi_field_ids = $this->multi_value_field_ids( $field_ids );
-		return new WP_REST_Response(
-			$this->format_row( $row, $field_ids, $multi_field_ids ),
-			201
-		);
-	}
-
-	public function update_row_field( WP_REST_Request $request ): WP_REST_Response|WP_Error {
-		$collection_id = (int) $request->get_param( 'collection_id' );
-		$row_id        = (int) $request->get_param( 'row_id' );
-		$field_key     = (string) $request->get_param( 'field' );
-		$value         = $request->get_param( 'value' );
-
-		$collection = $this->validate_collection( $collection_id );
-		if ( is_wp_error( $collection ) ) {
-			return $collection;
-		}
-
-		$slug = (string) get_post_meta( $collection_id, 'slug', true );
-		$row  = get_post( $row_id );
-		if ( ! $row instanceof WP_Post || CollectionEntries::CPT_PREFIX . $slug !== $row->post_type ) {
-			return new WP_Error(
-				'cortext_row_not_found',
-				__( 'Row not found.', 'cortext' ),
-				array( 'status' => 404 )
-			);
-		}
-
-		if ( 'title' === $field_key ) {
-			$result = wp_update_post(
-				array(
-					'ID'         => $row_id,
-					'post_title' => sanitize_text_field( (string) $value ),
-				),
-				true
-			);
-			if ( is_wp_error( $result ) ) {
-				return $result;
-			}
-			$field_ids       = $this->collection_field_ids( $collection_id );
-			$multi_field_ids = $this->multi_value_field_ids( $field_ids );
-			return new WP_REST_Response(
-				$this->format_row( get_post( $row_id ), $field_ids, $multi_field_ids ),
-				200
-			);
-		}
-
-		$field_id  = $this->field_id_from_key( $field_key );
-		$field_ids = $this->collection_field_ids( $collection_id );
-		if ( ! $field_id || ! in_array( $field_id, $field_ids, true ) ) {
-			return new WP_Error(
-				'cortext_field_not_in_collection',
-				__( 'Field does not belong to this collection.', 'cortext' ),
-				array( 'status' => 404 )
-			);
-		}
-
-		$field_type = (string) get_post_meta( $field_id, 'type', true );
-		if ( 'rollup' === $field_type ) {
-			return new WP_Error(
-				'cortext_rollup_read_only',
-				__( 'Rollups are read-only.', 'cortext' ),
-				array( 'status' => 400 )
-			);
-		}
-
-		if ( 'relation' === $field_type ) {
-			$synced = Relations::sync_relation_value( $row_id, $field_id, $value );
-			if ( is_wp_error( $synced ) ) {
-				return $synced;
-			}
-		} else {
-			$this->write_field_value( $row_id, $field_id, $field_type, $value, $collection_id, $row->post_status );
-		}
-
-		$touch = wp_update_post( array( 'ID' => $row_id ), true );
-		if ( is_wp_error( $touch ) ) {
-			return $touch;
-		}
-
-		$field_ids       = $this->collection_field_ids( $collection_id );
-		$multi_field_ids = $this->multi_value_field_ids( $field_ids );
-		return new WP_REST_Response(
-			$this->format_row( get_post( $row_id ), $field_ids, $multi_field_ids ),
-			200
-		);
-	}
-
-	public function reorder_row( WP_REST_Request $request ): WP_REST_Response|WP_Error {
-		$collection_id = (int) $request->get_param( 'collection_id' );
-		$row_id        = (int) $request->get_param( 'row_id' );
-		$before_id     = $this->nullable_row_id_param( $request->get_param( 'before_id' ) );
-		$after_id      = $this->nullable_row_id_param( $request->get_param( 'after_id' ) );
-		$current_sort  = $request->get_param( 'current_sort' );
-		$current_sort  = is_array( $current_sort ) ? $current_sort : null;
-
-		if ( null === $before_id && null === $after_id ) {
-			return new WP_Error(
-				'cortext_reorder_neighbor_required',
-				__( 'Choose a position for the row.', 'cortext' ),
-				array( 'status' => 400 )
-			);
-		}
-
-		$manual_order = new RowsManualOrder();
-		if (
-			! $manual_order->is_seeded( $collection_id ) &&
-			! array_key_exists( 'current_sort', $request->get_params() )
-		) {
-			return new WP_Error(
-				'cortext_reorder_current_sort_required',
-				__( 'Send the current sort before starting manual order.', 'cortext' ),
-				array( 'status' => 400 )
-			);
-		}
-
-		$result = $manual_order->move_row(
-			$collection_id,
-			$row_id,
-			$before_id,
-			$after_id,
-			$current_sort
-		);
-		if ( is_wp_error( $result ) ) {
-			return $result;
-		}
-
-		return new WP_REST_Response( $result, 200 );
-	}
-
-	/**
-	 * Duplicates a row. Copies the title as "Copy of %s", plus content, status,
-	 * document icon, featured media, and stored field values. Relation values
-	 * are copied only when the reverse field accepts more than one row; copying
-	 * a single reverse would move the relation away from the source row.
-	 *
-	 * @param WP_REST_Request $request Incoming REST request.
-	 * @return WP_REST_Response|WP_Error
-	 */
-	public function duplicate_row( WP_REST_Request $request ): WP_REST_Response|WP_Error {
-		$collection_id = (int) $request->get_param( 'collection_id' );
-		$row_id        = (int) $request->get_param( 'row_id' );
-
-		$collection = $this->validate_collection( $collection_id );
-		if ( is_wp_error( $collection ) ) {
-			return $collection;
-		}
-
-		$slug   = (string) get_post_meta( $collection_id, 'slug', true );
-		$source = get_post( $row_id );
-		if ( ! $source instanceof WP_Post || CollectionEntries::CPT_PREFIX . $slug !== $source->post_type ) {
-			return new WP_Error(
-				'cortext_row_not_found',
-				__( 'Row not found.', 'cortext' ),
-				array( 'status' => 404 )
-			);
-		}
-
-		$copy_title = sprintf(
-			/* translators: %s: original row title. */
-			__( 'Copy of %s', 'cortext' ),
-			$source->post_title
-		);
-
-		$new_id = wp_insert_post(
-			array(
-				'post_type'    => $source->post_type,
-				'post_status'  => $source->post_status,
-				'post_title'   => $copy_title,
-				'post_content' => $source->post_content,
-				'post_excerpt' => $source->post_excerpt,
-			),
-			true
-		);
-		if ( is_wp_error( $new_id ) ) {
-			return $new_id;
-		}
-
-		$new_id    = (int) $new_id;
-		$field_ids = $this->collection_field_ids( $collection_id );
-
-		foreach ( $field_ids as $field_id ) {
-			$field_type = (string) get_post_meta( $field_id, 'type', true );
-
-			if ( 'rollup' === $field_type ) {
-				continue;
-			}
-
-			if ( 'relation' === $field_type ) {
-				$reverse_id = (int) get_post_meta( $field_id, 'relation_reverse_field_id', true );
-				if ( $reverse_id < 1 || ! Relations::relation_is_multiple( $reverse_id ) ) {
-					continue;
-				}
-				$values = Relations::relation_values( $row_id, $field_id );
-				if ( count( $values ) === 0 ) {
-					continue;
-				}
-				$synced = Relations::sync_relation_value( $new_id, $field_id, $values );
-				if ( is_wp_error( $synced ) ) {
-					return $synced;
-				}
-				continue;
-			}
-
-			$key = Relations::meta_key( $field_id );
-			if ( 'multiselect' === $field_type ) {
-				foreach ( get_post_meta( $row_id, $key, false ) as $value ) {
-					if ( '' !== $value && null !== $value ) {
-						add_post_meta( $new_id, $key, $value );
-					}
-				}
-				continue;
-			}
-
-			$value = get_post_meta( $row_id, $key, true );
-			if ( '' !== $value && null !== $value ) {
-				update_post_meta( $new_id, $key, $value );
-			}
-		}
-
-		$icon = (string) get_post_meta( $row_id, 'cortext_document_icon', true );
-		if ( '' !== $icon ) {
-			update_post_meta( $new_id, 'cortext_document_icon', $icon );
-		}
-
-		$thumbnail_id = (int) get_post_thumbnail_id( $row_id );
-		if ( $thumbnail_id > 0 ) {
-			set_post_thumbnail( $new_id, $thumbnail_id );
-		}
-
-		$multi_field_ids = $this->multi_value_field_ids( $field_ids );
-		return new WP_REST_Response(
-			$this->format_row( get_post( $new_id ), $field_ids, $multi_field_ids ),
-			201
 		);
 	}
 
@@ -738,7 +309,7 @@ final class RowsController {
 	private function validate_collection( int $collection_id ) {
 		$collection = get_post( $collection_id );
 
-		if ( ! $collection || Collection::POST_TYPE !== $collection->post_type ) {
+		if ( ! $collection || ! Document::is_collection_post( $collection ) ) {
 			return new WP_Error(
 				'cortext_collection_not_found',
 				__( 'Collection not found.', 'cortext' ),
@@ -746,27 +317,15 @@ final class RowsController {
 			);
 		}
 
-		$slug = get_post_meta( $collection_id, 'slug', true );
-		if ( ! $slug || ! post_type_exists( CollectionEntries::CPT_PREFIX . $slug ) ) {
+		if ( Relations::trait_term_id_for_collection( $collection_id ) < 1 ) {
 			return new WP_Error(
 				'cortext_collection_not_registered',
-				__( 'Collection row type is not registered.', 'cortext' ),
+				__( 'Collection mirror term is not registered.', 'cortext' ),
 				array( 'status' => 404 )
 			);
 		}
 
 		return $collection;
-	}
-
-	/**
-	 * Returns the field IDs attached to a collection, as integers.
-	 *
-	 * @param int $collection_id Collection post ID.
-	 * @return int[]
-	 */
-	private function collection_field_ids( int $collection_id ): array {
-		$raw = get_post_meta( $collection_id, 'fields', false );
-		return array_map( 'intval', $raw );
 	}
 
 	/**
@@ -801,32 +360,44 @@ final class RowsController {
 	/**
 	 * Translates REST params into WP_Query arguments.
 	 *
-	 * @param WP_REST_Request $request Full request object.
-	 * @param string          $slug    Collection slug.
+	 * @param WP_REST_Request $request       Full request object.
+	 * @param int             $collection_id Collection (trait) post ID.
+	 * @param string[]        $row_statuses  Post statuses visible to this request.
 	 * @return array
 	 */
-	private function build_query_args( WP_REST_Request $request, string $slug ): array {
+	private function build_query_args( WP_REST_Request $request, int $collection_id, array $row_statuses ): array {
 		$args = array(
-			'post_type'      => CollectionEntries::CPT_PREFIX . $slug,
-			'post_status'    => array( 'draft', 'private', 'publish' ),
+			'post_type'      => Document::POST_TYPE,
+			'post_status'    => $row_statuses,
 			'posts_per_page' => (int) $request->get_param( 'per_page' ),
 			'paged'          => (int) $request->get_param( 'page' ),
 		);
 
+		$trait_term_id = Relations::trait_term_id_for_collection( $collection_id );
+		if ( $trait_term_id > 0 ) {
+			$args['tax_query'] = array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
+				array(
+					'taxonomy' => TraitTaxonomy::TAXONOMY,
+					'field'    => 'term_id',
+					'terms'    => array( $trait_term_id ),
+				),
+			);
+		}
+
 		$include = (array) $request->get_param( 'include' );
 		if ( count( $include ) > 0 ) {
 			// The by-ID response is read as a Map<id, row>, not an ordered list.
-			// Keep the default menu_order / ID order so callers do not start
-			// depending on the order of the include array.
+			// Keep a stable ID order so callers do not start depending on the
+			// order of the include array.
 			$args['post__in'] = $include;
 		}
 
 		$sort = $request->get_param( 'sort' );
 		if ( ! is_array( $sort ) || empty( $sort['field'] ) ) {
-			$args['orderby'] = array(
-				'menu_order' => 'ASC',
-				'ID'         => 'ASC',
-			);
+			// Manual position lives in term_order, applied by
+			// RowsFilterQuery::apply_manual_order_clauses. ID order is the
+			// fallback when no collection term scope is available.
+			$args['orderby'] = array( 'ID' => 'ASC' );
 		} else {
 			$direction = ( $sort['direction'] ?? 'asc' ) === 'desc' ? 'DESC' : 'ASC';
 
@@ -834,10 +405,9 @@ final class RowsController {
 				$args['orderby'] = 'title';
 				$args['order']   = $direction;
 			} elseif ( 'manual' === $sort['field'] ) {
-				$args['orderby'] = array(
-					'menu_order' => 'ASC',
-					'ID'         => 'ASC',
-				);
+				// Manual position lives in term_order; the clause filter sets the
+				// ORDER BY. Keep ID as the no-scope fallback.
+				$args['orderby'] = array( 'ID' => 'ASC' );
 			} elseif ( 'created_at' === $sort['field'] ) {
 				$args['orderby'] = 'date';
 				$args['order']   = $direction;
@@ -851,6 +421,12 @@ final class RowsController {
 		}
 
 		return $args;
+	}
+
+	private function row_statuses_for_request(): array {
+		// Rows default to private; public visibility is controlled by the
+		// published collection/page gate, not each row's internal status.
+		return array( 'draft', 'private', 'publish' );
 	}
 
 	/**
@@ -906,30 +482,17 @@ final class RowsController {
 		return true;
 	}
 
-	private function nullable_row_id_param( mixed $value ): ?int {
-		if ( null === $value || '' === $value ) {
-			return null;
-		}
-		$id = (int) $value;
-		return $id > 0 ? $id : null;
-	}
-
-	private function write_field_value( int $row_id, int $field_id, string $field_type, mixed $value, ?int $collection_id = null, ?string $post_status = null ): void {
-		( new FieldValueStore() )->write_value( $row_id, $field_id, $field_type, $value, $collection_id, $post_status );
-	}
-
 	/**
 	 * Formats resolved references for a relation field.
 	 *
 	 * @param int                   $row_id   Row post ID.
 	 * @param int                   $field_id Relation field post ID.
 	 * @param RowFormatContext|null $ctx      Formatting context for rows responses.
-	 * @return array<int,array{id:int,slug:string,title:array{raw:string,rendered:string},collectionId:int,collectionSlug:string}>
+	 * @return array<int,array{id:int,slug:string,title:array{raw:string,rendered:string},collectionId:int}>
 	 */
 	private function format_relation_value( int $row_id, int $field_id, ?RowFormatContext $ctx = null ): array {
 		$relation_meta        = $this->relation_field_meta_for( $field_id, $ctx );
 		$target_collection_id = $relation_meta['related_collection_id'];
-		$target_slug          = $relation_meta['target_slug'];
 
 		// Prime raw targets before filtering; the filter calls `get_post`.
 		$raw_ids = Relations::relation_values( $row_id, $field_id );
@@ -944,14 +507,13 @@ final class RowsController {
 				continue;
 			}
 			$refs[] = array(
-				'id'             => $target_id,
-				'slug'           => (string) $target->post_name,
-				'title'          => array(
+				'id'           => $target_id,
+				'slug'         => (string) $target->post_name,
+				'title'        => array(
 					'raw'      => $target->post_title,
 					'rendered' => $target->post_title,
 				),
-				'collectionId'   => $target_collection_id,
-				'collectionSlug' => $target_slug,
+				'collectionId' => $target_collection_id,
 			);
 		}
 
@@ -963,7 +525,7 @@ final class RowsController {
 	 *
 	 * @param int                   $field_id Relation field post ID.
 	 * @param RowFormatContext|null $ctx      Optional formatting context.
-	 * @return array{related_collection_id: int, target_slug: string}
+	 * @return array{related_collection_id: int}
 	 */
 	private function relation_field_meta_for( int $field_id, ?RowFormatContext $ctx ): array {
 		if ( null !== $ctx && isset( $ctx->relation_field_meta[ $field_id ] ) ) {
@@ -972,7 +534,6 @@ final class RowsController {
 		$target_collection_id = (int) get_post_meta( $field_id, 'related_collection_id', true );
 		$entry                = array(
 			'related_collection_id' => $target_collection_id,
-			'target_slug'           => (string) get_post_meta( $target_collection_id, 'slug', true ),
 		);
 		if ( null !== $ctx ) {
 			$ctx->relation_field_meta[ $field_id ] = $entry;
@@ -1377,12 +938,11 @@ final class RowsController {
 			return $response;
 		}
 
-		$slug = substr( $post->post_type, strlen( CollectionEntries::CPT_PREFIX ) );
-		if ( '' === $slug ) {
+		if ( Document::POST_TYPE !== $post->post_type ) {
 			return $response;
 		}
 
-		$collection = $this->find_collection_by_slug( $slug );
+		$collection = $this->find_trait_for_document( $post->ID );
 		if ( ! $collection instanceof WP_Post ) {
 			return $response;
 		}
@@ -1401,7 +961,7 @@ final class RowsController {
 			$modified_by_id > 0 ? $modified_by_id : $created_by_id
 		);
 
-		$field_ids = $this->collection_field_ids( $collection->ID );
+		$field_ids = Document::collection_field_ids( $collection->ID );
 		if ( count( $field_ids ) > 0 ) {
 			// Keep hydrated values out of `meta`. Those keys are registered as
 			// strings; if autosave sends hydrated objects back, REST rejects the
@@ -1428,31 +988,28 @@ final class RowsController {
 	}
 
 	/**
-	 * Looks up a collection by its `meta.slug` (the canonical identifier
-	 * embedded in the row CPT slug). Mirrors
-	 * `CollectionEntries::collection_id_for_entry_post_type` but returns the
-	 * post object directly since the caller already needs collection context.
+	 * Resolves the trait (collection) that a document is a row of, by reading
+	 * the document's `crtxt_trait` term and extracting the trait id
+	 * from the deterministic mirror-term slug.
 	 *
-	 * @param string $slug Collection meta slug (e.g., `books` for `crtxt_books`).
+	 * @param int $document_id Document post id.
 	 * @return WP_Post|null
 	 */
-	private function find_collection_by_slug( string $slug ): ?WP_Post {
-		$matches = get_posts(
-			array(
-				'post_type'      => Collection::POST_TYPE,
-				'post_status'    => array( 'draft', 'private', 'publish' ),
-				// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
-				'meta_query'     => array(
-					array(
-						'key'   => 'slug',
-						'value' => $slug,
-					),
-				),
-				'posts_per_page' => 1,
-			)
+	private function find_trait_for_document( int $document_id ): ?WP_Post {
+		$terms = wp_get_object_terms(
+			$document_id,
+			TraitTaxonomy::TAXONOMY,
+			array( 'fields' => 'all' )
 		);
-
-		return ! empty( $matches ) ? $matches[0] : null;
+		if ( ! is_array( $terms ) || count( $terms ) === 0 ) {
+			return null;
+		}
+		$trait_id = TraitTaxonomy::trait_id_from_slug( (string) $terms[0]->slug );
+		if ( $trait_id < 1 ) {
+			return null;
+		}
+		$trait = get_post( $trait_id );
+		return $trait instanceof WP_Post && Document::is_collection_post( $trait ) ? $trait : null;
 	}
 
 	/**
@@ -1508,10 +1065,6 @@ final class RowsController {
 
 		return array(
 			'id'             => $post->ID,
-			// `kind` keeps the row self-describing on the wire. Without it,
-			// JS helpers like `kindFromRecord` see no `type` either (the
-			// cortext endpoint trims that) and would fall back to `null`.
-			'kind'           => 'row',
 			'title'          => array(
 				'raw'      => $post->post_title,
 				'rendered' => $post->post_title,
@@ -1757,10 +1310,9 @@ final class RowsController {
 	 * Builds collection metadata for row response consumers.
 	 *
 	 * @param WP_Post $collection Collection post.
-	 * @param string  $slug       Collection row post type suffix.
-	 * @return array{id:int,title:array{raw:string,rendered:string},slug:string,manual_order_seeded:bool}
+	 * @return array{id:int,title:array{raw:string,rendered:string},manual_order_seeded:bool}
 	 */
-	private function collection_definition( WP_Post $collection, string $slug ): array {
+	private function collection_definition( WP_Post $collection ): array {
 		$manual_order = new RowsManualOrder();
 		return array(
 			'id'                  => $collection->ID,
@@ -1768,7 +1320,6 @@ final class RowsController {
 				'raw'      => $collection->post_title,
 				'rendered' => $collection->post_title,
 			),
-			'slug'                => $slug,
 			'manual_order_seeded' => $manual_order->is_seeded( $collection->ID ),
 		);
 	}
@@ -1798,18 +1349,5 @@ final class RowsController {
 			);
 		}
 		return $definitions;
-	}
-
-	/**
-	 * Extracts the numeric field ID from a meta key like "field-123".
-	 *
-	 * @param string $key Meta key.
-	 * @return int|null
-	 */
-	private function field_id_from_key( string $key ): ?int {
-		if ( str_starts_with( $key, 'field-' ) ) {
-			return (int) substr( $key, 6 );
-		}
-		return null;
 	}
 }

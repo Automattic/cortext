@@ -7,7 +7,7 @@ import {
 	store as interfaceStore,
 } from '@wordpress/interface';
 import { Button } from '@wordpress/components';
-import { cog, pencil, seen, unseen } from '@wordpress/icons';
+import { closeSmall, cog, pencil, plus, seen, unseen } from '@wordpress/icons';
 import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
 
 // Editor-surface stylesheets. Imported via a sibling SCSS file (not
@@ -21,25 +21,59 @@ import './Canvas.scss';
 import { getEditorSettings } from './initEditor';
 import useAutosave from '../hooks/useAutosave';
 import useDelayedFlag from '../hooks/useDelayedFlag';
+import usePostLock from '../hooks/usePostLock';
 import { withViewTransition } from '../hooks/viewTransition';
+import { definesTrait } from '../documents/capabilities';
 import { POST_TYPE } from './page-queries';
-import CollectionPublishToggle from './CollectionPublishToggle';
+import CortextInserterSidebar from './CortextInserterSidebar';
+import CortextLinkSuggestions from './CortextLinkSuggestions';
 import { DocumentPropertiesProvider } from './DocumentPropertiesContext';
+import DocumentPublishToggle from './DocumentPublishToggle';
 import EditorBody from './EditorBody';
-import PagePublishToggle from './PagePublishToggle';
+import { PostLockFailureNotice, PostLockModal } from './PostLockControls';
 import { CanvasProgressBar } from './Skeleton';
 import { TopBarActionsFill } from './WorkspaceTopBar';
-import PageInspectorSidebar, {
+import DocumentInspectorSidebar, {
 	INSPECTOR_SCOPE,
 	InspectorSidebarSlot,
-	PAGE_INSPECTOR,
+	DOCUMENT_INSPECTOR,
 	isInspectorArea,
-} from './PageInspectorSidebar';
+} from './DocumentInspectorSidebar';
+
+function InserterToggle( { disabled = false } ) {
+	const isOpen = useSelect(
+		( select ) => !! select( editorStore ).isInserterOpened(),
+		[]
+	);
+	const { setIsInserterOpened } = useDispatch( editorStore );
+
+	useEffect( () => {
+		if ( disabled && isOpen ) {
+			setIsInserterOpened( false );
+		}
+	}, [ disabled, isOpen, setIsInserterOpened ] );
+
+	return (
+		<Button
+			className="cortext-document-actions__inserter"
+			icon={ isOpen ? closeSmall : plus }
+			size="compact"
+			label={ __( 'Add block', 'cortext' ) }
+			isPressed={ isOpen }
+			disabled={ disabled }
+			onClick={ () => {
+				if ( ! disabled ) {
+					setIsInserterOpened( ! isOpen );
+				}
+			} }
+		/>
+	);
+}
 
 function DocumentActions( {
+	disabled = false,
 	isActive,
 	postId,
-	postType,
 	topBarActions,
 	hasProperties,
 	arePropertiesVisible,
@@ -60,7 +94,7 @@ function DocumentActions( {
 	);
 	// Pages and rows both open the document tab first: page metadata for pages,
 	// row properties for rows. Block details stay in the second tab.
-	const defaultInspector = PAGE_INSPECTOR;
+	const defaultInspector = DOCUMENT_INSPECTOR;
 
 	// Canvas stays mounted across route changes (preservePaint keeps the
 	// editor iframe warm). Suppress the Fill when this page isn't the active
@@ -73,11 +107,12 @@ function DocumentActions( {
 	return (
 		<TopBarActionsFill>
 			<div className="cortext-document-actions">
+				<InserterToggle disabled={ disabled } />
 				{ topBarActions }
-				{ postType === POST_TYPE && <PagePublishToggle /> }
-				{ postType === 'crtxt_collection' && (
-					<CollectionPublishToggle collectionId={ postId } />
-				) }
+				<DocumentPublishToggle
+					postId={ postId }
+					disabled={ disabled }
+				/>
 				{ hasProperties ? (
 					<>
 						<Button
@@ -90,6 +125,7 @@ function DocumentActions( {
 									: __( 'Expand properties', 'cortext' )
 							}
 							isPressed={ arePropertiesVisible }
+							disabled={ disabled }
 							onClick={ onTogglePropertiesVisible }
 						/>
 						<Button
@@ -102,6 +138,7 @@ function DocumentActions( {
 									: __( 'Customize properties', 'cortext' )
 							}
 							isPressed={ isPropertiesLayoutEditing }
+							disabled={ disabled }
 							onClick={ onEditPropertiesLayout }
 						/>
 					</>
@@ -129,6 +166,7 @@ function DocumentActions( {
 function VisualCanvas( {
 	featuredMedia,
 	isActive,
+	isLocked = false,
 	postId,
 	postType,
 	onReady,
@@ -138,6 +176,7 @@ function VisualCanvas( {
 		<EditorBody
 			featuredMedia={ featuredMedia }
 			isActive={ isActive }
+			isLocked={ isLocked }
 			postId={ postId }
 			postType={ postType }
 			onReady={ onReady }
@@ -174,13 +213,19 @@ function CanvasEditor( {
 	onRestored,
 	recentTarget,
 } ) {
+	const isCollection = definesTrait( post );
+	const hasTrait =
+		Array.isArray( post?.crtxt_trait ) && post.crtxt_trait.length > 0;
 	const autosaveRecentTarget =
 		recentTarget ??
-		( postType === POST_TYPE && post?.id
-			? { kind: 'page', id: post.id }
-			: null );
+		( post?.id && ! isCollection && ! hasTrait ? { id: post.id } : null );
 	const { status, flushNow, isDirty, isSaving } = useAutosave( {
 		recentTarget: autosaveRecentTarget,
+	} );
+	const postLock = usePostLock( {
+		postId: post.id,
+		postType: post.type ?? postType,
+		enabled: isActive,
 	} );
 	const { resetPost } = useDispatch( editorStore );
 	const discard = useCallback( () => resetPost(), [ resetPost ] );
@@ -238,6 +283,13 @@ function CanvasEditor( {
 		onSwitchPost,
 	] );
 
+	// Browse All writes to the editor store through EditorProvider. When that
+	// flag is on, show Gutenberg's full inserter beside the canvas.
+	const isInserterOpened = useSelect(
+		( select ) => !! select( editorStore ).isInserterOpened(),
+		[]
+	);
+
 	const hasProperties = Array.isArray( fields ) && fields.length > 0;
 	const [ arePropertiesVisible, setArePropertiesVisible ] = useState( true );
 	const [ isPropertiesLayoutEditing, setIsPropertiesLayoutEditing ] =
@@ -277,9 +329,9 @@ function CanvasEditor( {
 			onToggleVisible={ togglePropertiesVisible }
 		>
 			<DocumentActions
+				disabled={ postLock.isReadOnly }
 				isActive={ isActive }
 				postId={ post.id }
-				postType={ postType }
 				topBarActions={ topBarActions }
 				hasProperties={ hasProperties }
 				arePropertiesVisible={ arePropertiesVisible }
@@ -292,9 +344,15 @@ function CanvasEditor( {
 				content={
 					<>
 						{ notice }
+						<PostLockFailureNotice
+							error={ postLock.error }
+							isRetrying={ postLock.isAcquiring }
+							onRetry={ postLock.retry }
+						/>
 						<VisualCanvas
 							featuredMedia={ post.featured_media }
 							isActive={ isActive }
+							isLocked={ postLock.isReadOnly }
 							postId={ post.id }
 							postType={ post.type ?? postType }
 							onReady={ onDisplayedPost }
@@ -302,9 +360,23 @@ function CanvasEditor( {
 						/>
 					</>
 				}
+				secondarySidebar={
+					isInserterOpened ? <CortextInserterSidebar /> : null
+				}
 				sidebar={ <InspectorSidebarSlot /> }
 			/>
-			<PageInspectorSidebar postId={ post.id } postType={ postType } />
+			<PostLockModal
+				isOpen={ postLock.isLocked }
+				isTakeover={ postLock.isTakeover }
+				isTakingOver={ postLock.isTakingOver }
+				onTakeOver={ postLock.takeOver }
+				user={ postLock.user }
+			/>
+			<DocumentInspectorSidebar
+				isLocked={ postLock.isReadOnly }
+				postId={ post.id }
+				postType={ postType }
+			/>
 		</DocumentPropertiesProvider>
 	);
 }
@@ -459,6 +531,7 @@ export default function Canvas( {
 				settings={ getEditorSettings() }
 				useSubRegistry={ useSubRegistry }
 			>
+				<CortextLinkSuggestions allowCreate />
 				<CanvasEditor
 					post={ renderedPost }
 					postType={ renderedPost.type ?? postType }

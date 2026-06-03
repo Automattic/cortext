@@ -73,7 +73,7 @@ describe( 'useCreateField', () => {
 		} );
 		expect( mockDispatch.invalidateResolution ).toHaveBeenCalledWith(
 			'getEntityRecord',
-			[ 'postType', 'crtxt_collection', 5 ]
+			[ 'postType', 'crtxt_document', 5 ]
 		);
 	} );
 
@@ -180,7 +180,7 @@ describe( 'useDuplicateField', () => {
 		} );
 		expect( mockDispatch.invalidateResolution ).toHaveBeenCalledWith(
 			'getEntityRecord',
-			[ 'postType', 'crtxt_collection', 7 ]
+			[ 'postType', 'crtxt_document', 7 ]
 		);
 	} );
 } );
@@ -239,7 +239,7 @@ describe( 'useDeleteField', () => {
 		);
 		expect( mockDispatch.invalidateResolution ).toHaveBeenCalledWith(
 			'getEntityRecord',
-			[ 'postType', 'crtxt_collection', 5 ]
+			[ 'postType', 'crtxt_document', 5 ]
 		);
 	} );
 

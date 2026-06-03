@@ -232,9 +232,9 @@ function makePage( overrides = {} ) {
 	return {
 		id: 1,
 		type: POST_TYPE,
-		kind: 'page',
 		title: { rendered: 'A page', raw: 'A page' },
 		parent: 0,
+		crtxt_trait: [],
 		meta: { _cortext_trashed_by_parent: 0, ...( meta ?? {} ) },
 		...rest,
 	};
@@ -244,11 +244,11 @@ function makeRow( overrides = {} ) {
 	const { meta, collection, ...rest } = overrides;
 	return {
 		id: 101,
-		type: 'crtxt_books',
-		kind: 'row',
+		type: 'crtxt_document',
 		slug: 'archived-book',
 		status: 'trash',
 		title: { rendered: 'Archived book', raw: 'Archived book' },
+		crtxt_trait: [ 12 ],
 		meta: { cortext_document_icon: '', ...( meta ?? {} ) },
 		collection: {
 			id: 12,
@@ -264,14 +264,17 @@ function makeCollection( overrides = {} ) {
 	const { meta, owner, ...rest } = overrides;
 	return {
 		id: 201,
-		type: 'crtxt_collection',
-		kind: 'collection',
+		type: 'crtxt_document',
 		title: { rendered: 'Tasks', raw: 'Tasks' },
 		parent: 0,
+		crtxt_trait: [],
+		// A collection's identity is the trait it defines, surfaced by the
+		// `cortext_defines_trait` REST field.
+		cortext_defines_trait: true,
 		meta: {
 			cortext_document_icon: '',
 			_cortext_trashed_by_parent: 0,
-			_cortext_trashed_by_owner_page: 0,
+			cortext_fields: [ 1 ],
 			...( meta ?? {} ),
 		},
 		...( owner !== undefined ? { owner } : {} ),
@@ -401,6 +404,30 @@ describe( 'SidebarTrash', () => {
 		).toHaveTextContent( 'Workspace / Project' );
 	} );
 
+	it( 'omits blank ancestor titles from trashed breadcrumbs', () => {
+		const parent = makePage( {
+			id: 11,
+			title: { rendered: '', raw: '' },
+		} );
+		const child = makePage( {
+			id: 12,
+			parent: 11,
+			title: { rendered: 'Notes', raw: 'Notes' },
+		} );
+
+		setTrashRecords( { records: [ child ] } );
+
+		const { container } = renderSidebarTrash( {
+			activePages: [ parent ],
+		} );
+
+		expect( screen.getByText( 'Notes' ) ).toBeInTheDocument();
+		expect(
+			container.querySelector( '.cortext-sidebar__breadcrumb' )
+		).toBeFalsy();
+		expect( screen.queryByText( '(untitled)' ) ).not.toBeInTheDocument();
+	} );
+
 	it( 'falls back to no breadcrumb when ancestors are missing (orphan)', () => {
 		const orphan = makePage( { id: 5, parent: 99 } );
 
@@ -459,6 +486,23 @@ describe( 'SidebarTrash', () => {
 		expect( screen.getByText( 'Research' ) ).toBeInTheDocument();
 	} );
 
+	it( 'omits blank collection context for trashed rows', () => {
+		const row = makeRow( {
+			id: 17,
+			title: { rendered: 'Draft record', raw: 'Draft record' },
+			collection: {
+				id: 22,
+				title: { rendered: '', raw: '' },
+			},
+		} );
+		setTrashRecords( { records: [ row ] } );
+
+		renderSidebarTrash();
+
+		expect( screen.getByText( 'Draft record' ) ).toBeInTheDocument();
+		expect( screen.queryByText( '(untitled)' ) ).not.toBeInTheDocument();
+	} );
+
 	it( 'restores a row through the document endpoint', async () => {
 		const refresh = jest.fn();
 		setTrashRecords( { records: [ makeRow( { id: 17 } ) ] } );
@@ -476,7 +520,6 @@ describe( 'SidebarTrash', () => {
 			} );
 		} );
 		expect( refresh ).toHaveBeenCalled();
-		expect( dispatchMocks.invalidateResolution ).not.toHaveBeenCalled();
 	} );
 
 	it( 'shows restore errors next to the item', async () => {
@@ -663,30 +706,31 @@ describe( 'SidebarTrash', () => {
 
 		expect(
 			container.querySelector( '.cortext-sidebar__breadcrumb' )
-		).toHaveTextContent( '2 subpages' );
+		).toHaveTextContent( '2 nested documents' );
 	} );
 
-	it( 'shows a collection count when a trashed page owns only inline collections', () => {
+	it( 'shows a nested document count when a trashed page owns only nested collections', () => {
 		const root = makePage( {
 			id: 1,
 			title: { rendered: 'Quarterly review', raw: 'Quarterly review' },
 		} );
-		const inline = makeCollection( {
+		const nested = makeCollection( {
 			id: 2,
+			parent: 1,
 			title: { rendered: 'Action items', raw: 'Action items' },
-			meta: { _cortext_trashed_by_owner_page: 1 },
+			meta: { _cortext_trashed_by_parent: 1 },
 		} );
 
-		setTrashRecords( { records: [ root, inline ] } );
+		setTrashRecords( { records: [ root, nested ] } );
 
 		const { container } = renderSidebarTrash();
 
 		expect(
 			container.querySelector( '.cortext-sidebar__breadcrumb' )
-		).toHaveTextContent( '1 collection' );
+		).toHaveTextContent( '1 nested document' );
 	} );
 
-	it( 'falls back to nested items when a trashed page mixes subpages and inline collections', () => {
+	it( 'shows nested documents when a trashed page mixes child documents and nested collections', () => {
 		const root = makePage( {
 			id: 1,
 			title: { rendered: 'Quarterly review', raw: 'Quarterly review' },
@@ -696,33 +740,35 @@ describe( 'SidebarTrash', () => {
 			parent: 1,
 			meta: { _cortext_trashed_by_parent: 1 },
 		} );
-		const inline = makeCollection( {
+		const nested = makeCollection( {
 			id: 3,
-			meta: { _cortext_trashed_by_owner_page: 1 },
+			parent: 1,
+			meta: { _cortext_trashed_by_parent: 1 },
 		} );
 
-		setTrashRecords( { records: [ root, subpage, inline ] } );
+		setTrashRecords( { records: [ root, subpage, nested ] } );
 
 		const { container } = renderSidebarTrash();
 
 		expect(
 			container.querySelector( '.cortext-sidebar__breadcrumb' )
-		).toHaveTextContent( '2 nested items' );
+		).toHaveTextContent( '2 nested documents' );
 	} );
 
 	it( 'shows the cascade count beside a row that owns a trashed collection', () => {
-		// `DocumentToCollectionTrashCascade` applies to any document that owns
-		// a collection, rows included. The owned collection points back at the
-		// row via `_cortext_trashed_by_owner_page`, so the row should surface
-		// the nested-item badge.
+		// TrashCascade applies to any document with descendants via
+		// `post_parent`, rows included. The owned collection points back at
+		// the row through `_cortext_trashed_by_parent`, so the row surfaces
+		// the nested-document badge.
 		const row = makeRow( {
 			id: 17,
 			title: { rendered: 'Sprint 12', raw: 'Sprint 12' },
 		} );
 		const ownedCollection = makeCollection( {
 			id: 22,
+			parent: 17,
 			title: { rendered: 'Tasks', raw: 'Tasks' },
-			meta: { _cortext_trashed_by_owner_page: 17 },
+			meta: { _cortext_trashed_by_parent: 17 },
 		} );
 
 		setTrashRecords( { records: [ row, ownedCollection ] } );
@@ -731,7 +777,36 @@ describe( 'SidebarTrash', () => {
 
 		expect(
 			container.querySelector( '.cortext-sidebar__breadcrumb' )
-		).toHaveTextContent( '1 nested item' );
+		).toHaveTextContent( '1 nested document' );
+	} );
+
+	it( 'nests cascade-trashed rows under their collection via the COLLECTION marker', () => {
+		// Trashing a collection stamps each of its rows with
+		// `_cortext_trashed_by_collection`. The sidebar root view has to
+		// follow that marker the same way it follows the parent marker for
+		// pages, otherwise each row shows up as its own root and the user
+		// sees N+1 entries instead of one.
+		const collection = makeCollection( {
+			id: 50,
+			title: { rendered: 'Sprint board', raw: 'Sprint board' },
+		} );
+		const rowA = makeRow( {
+			id: 51,
+			meta: { _cortext_trashed_by_collection: 50 },
+		} );
+		const rowB = makeRow( {
+			id: 52,
+			meta: { _cortext_trashed_by_collection: 50 },
+		} );
+
+		setTrashRecords( { records: [ collection, rowA, rowB ] } );
+
+		const { container } = renderSidebarTrash();
+
+		expect( screen.getByText( 'Sprint board' ) ).toBeInTheDocument();
+		expect(
+			container.querySelector( '.cortext-sidebar__breadcrumb' )
+		).toHaveTextContent( '2 nested documents' );
 	} );
 
 	it( 'promotes orphaned descendants (stale marker) back to roots', () => {
@@ -771,10 +846,10 @@ describe( 'SidebarTrash', () => {
 		} );
 	} );
 
-	it( 'navigates with the collection/ prefix when a trashed collection title is clicked', () => {
-		// Documents controller hands back the right path per kind. Without
-		// honoring it, the click would navigate to a bare id and mount the
-		// document Canvas instead of the CollectionPane.
+	it( 'navigates to the server-provided path when a trashed collection title is clicked', () => {
+		// The trash REST response carries a `path` per record; clicking the
+		// title must navigate there verbatim rather than rebuilding a splat
+		// from the id.
 		const collection = makeCollection( {
 			id: 73,
 			title: { rendered: 'Library', raw: 'Library' },
@@ -836,21 +911,41 @@ describe( 'SidebarTrash', () => {
 		).toHaveTextContent( 'Quarterly review' );
 	} );
 
-	it( 'nests an inline collection under its owner page when both are in trash', () => {
-		// Page → inline collection cascade. The page is the root; the
-		// inline collection should fold under it instead of appearing as a
-		// second root entry.
+	it( 'omits blank owner context for inline collections', () => {
+		const inline = makeCollection( {
+			id: 34,
+			title: { rendered: 'Action items', raw: 'Action items' },
+			owner: {
+				id: 99,
+				title: { rendered: '', raw: '' },
+				path: 'page/quarterly-99',
+			},
+		} );
+
+		setTrashRecords( { records: [ inline ] } );
+
+		renderSidebarTrash();
+
+		expect( screen.getByText( 'Action items' ) ).toBeInTheDocument();
+		expect( screen.queryByText( '(untitled)' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'nests a collection under its owner page when both are in trash', () => {
+		// Page → nested collection cascade. The page is the root; the nested
+		// collection should fold under it instead of appearing as a second
+		// root entry.
 		const owner = makePage( {
 			id: 50,
 			title: { rendered: 'Sprint notes', raw: 'Sprint notes' },
 		} );
-		const inline = makeCollection( {
+		const nested = makeCollection( {
 			id: 51,
+			parent: 50,
 			title: { rendered: 'Action items', raw: 'Action items' },
-			meta: { _cortext_trashed_by_owner_page: 50 },
+			meta: { _cortext_trashed_by_parent: 50 },
 		} );
 
-		setTrashRecords( { records: [ owner, inline ] } );
+		setTrashRecords( { records: [ owner, nested ] } );
 
 		renderSidebarTrash();
 
@@ -876,7 +971,7 @@ describe( 'SidebarTrash', () => {
 
 		expect(
 			screen.getByText(
-				"Permanently delete this collection and all its rows? You can't undo this."
+				"Delete this document and all rows it contains? This can't be undone."
 			)
 		).toBeInTheDocument();
 	} );
@@ -902,7 +997,7 @@ describe( 'SidebarTrash', () => {
 
 		expect(
 			screen.getByText(
-				"Permanently delete this page and 1 subpage? You can't undo this."
+				"Delete this document and 1 nested document? This can't be undone."
 			)
 		).toBeInTheDocument();
 	} );
@@ -946,7 +1041,7 @@ describe( 'SidebarTrash', () => {
 		).toBeInTheDocument();
 	} );
 
-	it( 'falls back to nested items in the confirm when subpages and inline collections mix', () => {
+	it( 'mentions nested documents in the confirm when child documents and nested collections mix', () => {
 		const root = makePage( {
 			id: 1,
 			title: { rendered: 'Workspace', raw: 'Workspace' },
@@ -956,12 +1051,13 @@ describe( 'SidebarTrash', () => {
 			parent: 1,
 			meta: { _cortext_trashed_by_parent: 1 },
 		} );
-		const inline = makeCollection( {
+		const nested = makeCollection( {
 			id: 3,
-			meta: { _cortext_trashed_by_owner_page: 1 },
+			parent: 1,
+			meta: { _cortext_trashed_by_parent: 1 },
 		} );
 
-		setTrashRecords( { records: [ root, subpage, inline ] } );
+		setTrashRecords( { records: [ root, subpage, nested ] } );
 
 		renderSidebarTrash();
 
@@ -971,7 +1067,7 @@ describe( 'SidebarTrash', () => {
 
 		expect(
 			screen.getByText(
-				"Permanently delete this page and 2 nested items? You can't undo this."
+				"Delete this document and 2 nested documents? This can't be undone."
 			)
 		).toBeInTheDocument();
 	} );

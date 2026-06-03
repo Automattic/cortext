@@ -15,7 +15,7 @@
  *   - row_create_ready: New row click through POST and rendered row.
  *   - sort_apply: open the first column header menu, choose "Sort
  *     ascending", wait for sorted rows.
- *   - page_edit_ready: crtxt_page in Gutenberg until the editor is mounted.
+ *   - page_edit_ready: page document in Gutenberg until the editor is mounted.
  *   - command_palette_open: shell event to command palette mount.
  *   - palette_search_ready: command palette search from typing to the first
  *     document result from /cortext/v1/documents.
@@ -25,7 +25,7 @@
  *   - workspace_home_ready: root Cortext URL until sidebar and home content render.
  *   - shell_navigation_warm: sidebar navigation from one loaded collection to another.
  *   - search_rows_ready: DataView search input to filtered rows.
- *   - row_navigate_next: "Row below" click in full row detail to the next row.
+ *   - row_navigate_next: "Next" click in full detail view to the next row.
  */
 
 const { expect, test } = require( '@wordpress/e2e-test-utils-playwright' );
@@ -154,7 +154,7 @@ test.describe( 'Cortext UI performance', () => {
 
 		perfPage = await requestUtils.rest( {
 			method: 'POST',
-			path: '/wp/v2/crtxt_pages',
+			path: '/wp/v2/crtxt_documents',
 			data: {
 				title: 'Cortext perf page',
 				status: 'private',
@@ -168,7 +168,7 @@ test.describe( 'Cortext UI performance', () => {
 			try {
 				await requestUtils.rest( {
 					method: 'DELETE',
-					path: `/wp/v2/crtxt_pages/${ perfPage.id }`,
+					path: `/wp/v2/crtxt_documents/${ perfPage.id }`,
 					params: { force: true },
 				} );
 			} catch {
@@ -265,7 +265,7 @@ test.describe( 'Cortext UI performance', () => {
 				const startedAt = Date.now();
 
 				await activeCollectionView( page )
-					.getByLabel( 'Open row' )
+					.getByLabel( 'Open' )
 					.first()
 					.click( { force: true } );
 				await waitForRowDetailReady( page );
@@ -291,9 +291,7 @@ test.describe( 'Cortext UI performance', () => {
 				const createPromise = page.waitForResponse(
 					( response ) =>
 						response.request().method() === 'POST' &&
-						response
-							.url()
-							.includes( `/wp/v2/crtxt_${ COLLECTION_SLUG }` ),
+						response.url().includes( '/wp/v2/crtxt_documents' ),
 					{ timeout: READY_TIMEOUT_MS }
 				);
 				const startedAt = Date.now();
@@ -494,9 +492,7 @@ test.describe( 'Cortext UI performance', () => {
 		} );
 		await waitForCommandPaletteReady( page );
 
-		const input = page.getByPlaceholder(
-			'Search pages, collections, and actions'
-		);
+		const input = page.getByPlaceholder( 'Search or run a command' );
 
 		await probe.reset();
 		const responsePromise = page.waitForResponse(
@@ -641,7 +637,7 @@ test.describe( 'Cortext UI performance', () => {
 				await waitForCollectionReady( page );
 				await clearCollectionSearch( page );
 				await activeCollectionView( page )
-					.getByLabel( 'Open row' )
+					.getByLabel( 'Open' )
 					.first()
 					.click( { force: true } );
 				await waitForRowDetailReady( page );
@@ -658,14 +654,12 @@ test.describe( 'Cortext UI performance', () => {
 				await probe.reset();
 				const responsePromise = page.waitForResponse(
 					( response ) =>
-						response
-							.url()
-							.includes( `/wp/v2/crtxt_${ COLLECTION_SLUG }/` ),
+						response.url().includes( '/wp/v2/crtxt_documents/' ),
 					{ timeout: READY_TIMEOUT_MS }
 				);
 				const startedAt = Date.now();
 
-				await page.getByLabel( 'Row below' ).click();
+				await page.getByLabel( 'Next' ).click();
 				await responsePromise;
 				await expect
 					.poll( () => titleLocator.getAttribute( 'data-block' ), {

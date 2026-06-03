@@ -9,9 +9,11 @@ declare( strict_types=1 );
 
 namespace Cortext\FieldValues;
 
-use Cortext\PostType\Collection;
-use Cortext\PostType\CollectionEntries;
+defined( 'ABSPATH' ) || exit;
+
+use Cortext\PostType\Document;
 use Cortext\PostType\Field;
+use Cortext\Taxonomy\TraitTaxonomy;
 use Cortext\Relations;
 use RuntimeException;
 use WP_Post;
@@ -39,9 +41,9 @@ final class FieldValueIndex {
 	private const PAGE_SIZE              = 500;
 
 	private static int $sync_suspensions             = 0;
-	private static array $collection_id_by_post_type = array();
 	private static array $table_exists_cache         = array();
 	private static array $pending_row_fields         = array();
+	private static array $collection_id_by_row_cache = array();
 
 	public function register(): void {
 		add_action( 'added_post_meta', array( $this, 'sync_meta_change' ), 10, 4 );
@@ -50,6 +52,9 @@ final class FieldValueIndex {
 		add_action( 'wp_trash_post', array( $this, 'sync_row_status' ), 20, 1 );
 		add_action( 'untrashed_post', array( $this, 'sync_row_status' ), 20, 1 );
 		add_action( 'before_delete_post', array( $this, 'cleanup_deleted_post' ), 20, 2 );
+		// Invalidate the row->collection cache when a document's trait
+		// membership changes, so the next meta sync resolves the new trait.
+		add_action( 'set_object_terms', array( $this, 'invalidate_collection_cache_for_row' ), 10, 4 );
 		add_action( 'init', array( $this, 'maybe_auto_provision' ), 30 );
 		add_action( 'shutdown', array( $this, 'flush_pending_sync' ), 1 );
 		add_action( self::AUTO_REBUILD_HOOK, array( $this, 'run_auto_rebuild' ) );
@@ -68,9 +73,27 @@ final class FieldValueIndex {
 	}
 
 	public static function flush_runtime_caches(): void {
-		self::$collection_id_by_post_type = array();
 		self::$table_exists_cache         = array();
 		self::$pending_row_fields         = array();
+		self::$collection_id_by_row_cache = array();
+	}
+
+	/**
+	 * Invalidates the cached row->collection mapping when a document's
+	 * `crtxt_trait` term assignment changes. Hooked on
+	 * `set_object_terms` so subsequent meta syncs resolve the new trait.
+	 *
+	 * @param int    $object_id Document post id whose terms changed.
+	 * @param mixed  $terms     New terms (unused).
+	 * @param mixed  $tt_ids    New term_taxonomy ids (unused).
+	 * @param string $taxonomy  Taxonomy that was set.
+	 */
+	public function invalidate_collection_cache_for_row( int $object_id, $terms, $tt_ids, string $taxonomy ): void {
+		unset( $terms, $tt_ids );
+		if ( TraitTaxonomy::TAXONOMY !== $taxonomy ) {
+			return;
+		}
+		unset( self::$collection_id_by_row_cache[ $object_id ] );
 	}
 
 	public function table_name(): string {
@@ -174,7 +197,6 @@ final class FieldValueIndex {
 				return;
 			}
 
-			( new CollectionEntries() )->register_all();
 			$collection_ids = $this->collection_ids();
 			foreach ( $collection_ids as $collection_id ) {
 				$this->rebuild_collection( $collection_id );
@@ -260,12 +282,12 @@ final class FieldValueIndex {
 			);
 		}
 
-		$post_type = Relations::entry_post_type_for_collection( $collection_id );
-		if ( null === $post_type ) {
-			throw new RuntimeException( esc_html__( 'Collection row type is not registered.', 'cortext' ) );
+		$term_id = Relations::trait_term_id_for_collection( $collection_id );
+		if ( $term_id < 1 ) {
+			throw new RuntimeException( esc_html__( 'Collection mirror term is not registered.', 'cortext' ) );
 		}
 
-		$field_ids = array_values( array_filter( array_map( 'intval', get_post_meta( $collection_id, 'fields', false ) ) ) );
+		$field_ids = array_values( array_filter( array_map( 'intval', get_post_meta( $collection_id, 'cortext_fields', false ) ) ) );
 		$this->set_status( self::STATUS_SYNCING );
 		$this->delete_collection( $collection_id );
 
@@ -276,13 +298,20 @@ final class FieldValueIndex {
 		do {
 			$query = new WP_Query(
 				array(
-					'post_type'      => $post_type,
+					'post_type'      => Document::POST_TYPE,
 					'post_status'    => array( 'draft', 'private', 'publish', 'trash' ),
 					'fields'         => 'ids',
 					'posts_per_page' => self::PAGE_SIZE,
 					'paged'          => $page,
 					'orderby'        => 'ID',
 					'order'          => 'ASC',
+					'tax_query'      => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
+						array(
+							'taxonomy' => TraitTaxonomy::TAXONOMY,
+							'field'    => 'term_id',
+							'terms'    => array( $term_id ),
+						),
+					),
 				)
 			);
 
@@ -319,25 +348,32 @@ final class FieldValueIndex {
 			);
 		}
 
-		$post_type = Relations::entry_post_type_for_collection( $collection_id );
-		if ( null === $post_type ) {
-			throw new RuntimeException( esc_html__( 'Collection row type is not registered.', 'cortext' ) );
+		$term_id = Relations::trait_term_id_for_collection( $collection_id );
+		if ( $term_id < 1 ) {
+			throw new RuntimeException( esc_html__( 'Collection mirror term is not registered.', 'cortext' ) );
 		}
 
-		$field_ids = array_values( array_filter( array_map( 'intval', get_post_meta( $collection_id, 'fields', false ) ) ) );
+		$field_ids = array_values( array_filter( array_map( 'intval', get_post_meta( $collection_id, 'cortext_fields', false ) ) ) );
 		$expected  = array();
 		$page      = 1;
 
 		do {
 			$query = new WP_Query(
 				array(
-					'post_type'      => $post_type,
+					'post_type'      => Document::POST_TYPE,
 					'post_status'    => array( 'draft', 'private', 'publish', 'trash' ),
 					'fields'         => 'ids',
 					'posts_per_page' => self::PAGE_SIZE,
 					'paged'          => $page,
 					'orderby'        => 'ID',
 					'order'          => 'ASC',
+					'tax_query'      => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
+						array(
+							'taxonomy' => TraitTaxonomy::TAXONOMY,
+							'field'    => 'term_id',
+							'terms'    => array( $term_id ),
+						),
+					),
 				)
 			);
 
@@ -550,15 +586,29 @@ final class FieldValueIndex {
 			return;
 		}
 
-		if ( Collection::POST_TYPE === $post_type ) {
+		if ( Document::POST_TYPE === $post_type && Document::is_collection( (int) $post_id ) ) {
 			$this->delete_collection( $post_id );
-			self::$collection_id_by_post_type = array();
 			return;
 		}
 
-		if ( is_string( $post_type ) && $this->is_entry_post_type( $post_type ) ) {
+		if ( Document::POST_TYPE === $post_type && $this->is_indexed_document( $post_id ) ) {
 			$this->delete_row( $post_id );
 		}
+	}
+
+	/**
+	 * Whether a `crtxt_document` post has trait membership and therefore is
+	 * indexed in the field-value table. Pages do not.
+	 *
+	 * @param int $document_id Document post id.
+	 */
+	private function is_indexed_document( int $document_id ): bool {
+		$terms = wp_get_object_terms(
+			$document_id,
+			TraitTaxonomy::TAXONOMY,
+			array( 'fields' => 'ids' )
+		);
+		return is_array( $terms ) && count( $terms ) > 0;
 	}
 
 	public function query_two_field_filter_ids(
@@ -575,7 +625,7 @@ final class FieldValueIndex {
 
 		$table = $this->table_name();
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Benchmark reads directly from the derived index.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Benchmark reads hit the derived index directly; the table name comes from this plugin.
 		$ids = $wpdb->get_col(
 			$wpdb->prepare(
 				"SELECT n.row_id
@@ -612,7 +662,7 @@ final class FieldValueIndex {
 
 		$table = $this->table_name();
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Benchmark reads directly from the derived index.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Benchmark reads hit the derived index directly; the table name comes from this plugin.
 		$ids = $wpdb->get_col(
 			$wpdb->prepare(
 				"SELECT row_id
@@ -640,7 +690,7 @@ final class FieldValueIndex {
 
 		$table = $this->table_name();
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Benchmark reads directly from the derived index.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Benchmark reads hit the derived index directly; the table name comes from this plugin.
 		$ids = $wpdb->get_col(
 			$wpdb->prepare(
 				"SELECT row_id
@@ -677,7 +727,7 @@ final class FieldValueIndex {
 
 		$table = $this->table_name();
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Benchmark reads directly from the derived index.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Benchmark reads hit the derived index directly; the table name comes from this plugin.
 		$ids = $wpdb->get_col(
 			$wpdb->prepare(
 				"SELECT d.row_id
@@ -726,7 +776,7 @@ final class FieldValueIndex {
 		$args         = array_merge( array( $collection_id ), $field_ids, array( $like, $limit ) );
 
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Benchmark reads directly from the derived index.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Benchmark reads hit the derived index directly; the table name comes from this plugin.
 		$ids = $wpdb->get_col(
 			$wpdb->prepare(
 				"SELECT DISTINCT row_id
@@ -770,7 +820,7 @@ final class FieldValueIndex {
 		$args         = array_merge( array( $collection_id ), $field_ids, array( $like, $number_field_id, $minimum, $select_field_id, $select_value, $limit ) );
 
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Benchmark reads directly from the derived index.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Benchmark reads hit the derived index directly; the table name comes from this plugin.
 		$ids = $wpdb->get_col(
 			$wpdb->prepare(
 				"SELECT DISTINCT t.row_id
@@ -805,7 +855,7 @@ final class FieldValueIndex {
 		$function = 'count' === $operation ? 'COUNT(value_number)' : 'COALESCE(SUM(value_number), 0)';
 		$table    = $this->table_name();
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Benchmark reads directly from the derived index.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Benchmark reads hit the derived index directly; table and aggregate SQL come from fixed plugin code.
 		$value = $wpdb->get_var(
 			$wpdb->prepare(
 				"SELECT {$function}
@@ -830,7 +880,7 @@ final class FieldValueIndex {
 
 		$table = $this->table_name();
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Benchmark reads directly from the derived index.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Benchmark reads hit the derived index directly; the table name comes from this plugin.
 		return (int) $wpdb->get_var(
 			$wpdb->prepare(
 				"SELECT COUNT(*)
@@ -970,10 +1020,16 @@ final class FieldValueIndex {
 			'intval',
 			get_posts(
 				array(
-					'post_type'      => Collection::POST_TYPE,
+					'post_type'      => Document::POST_TYPE,
 					'post_status'    => array( 'draft', 'private', 'publish' ),
 					'fields'         => 'ids',
 					'posts_per_page' => -1,
+					'meta_query'     => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+						array(
+							'key'     => 'cortext_fields',
+							'compare' => 'EXISTS',
+						),
+					),
 				)
 			)
 		);
@@ -1055,7 +1111,7 @@ final class FieldValueIndex {
 
 		$table = $this->table_name();
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Verification compares the derived index to the postmeta source of truth.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Verification compares the derived index with postmeta; the table name comes from this plugin.
 		return $wpdb->get_results(
 			$wpdb->prepare(
 				"SELECT row_id, collection_id, field_id, value_seq, value_text, value_number, value_date, post_status
@@ -1085,56 +1141,32 @@ final class FieldValueIndex {
 	}
 
 	private function collection_id_for_row( int $row_id ): int {
-		$post = get_post( $row_id );
-		if ( ! $post instanceof WP_Post || ! $this->is_entry_post_type( $post->post_type ) ) {
-			return 0;
+		if ( array_key_exists( $row_id, self::$collection_id_by_row_cache ) ) {
+			return self::$collection_id_by_row_cache[ $row_id ];
 		}
 
-		$slug = substr( $post->post_type, strlen( CollectionEntries::CPT_PREFIX ) );
-		if ( '' === $slug ) {
-			self::$collection_id_by_post_type[ $post->post_type ] = 0;
-			return 0;
-		}
+		$collection_id = $this->resolve_collection_id_for_row( $row_id );
 
-		if ( array_key_exists( $post->post_type, self::$collection_id_by_post_type ) ) {
-			$cached_id = self::$collection_id_by_post_type[ $post->post_type ];
-			if ( $cached_id < 1 ) {
-				return 0;
-			}
-			if ( Collection::POST_TYPE === get_post_type( $cached_id ) && (string) get_post_meta( $cached_id, 'slug', true ) === $slug ) {
-				return $cached_id;
-			}
-			unset( self::$collection_id_by_post_type[ $post->post_type ] );
-		}
-
-		foreach ( CollectionEntries::known_collection_ids() as $collection_id ) {
-			if ( (string) get_post_meta( $collection_id, 'slug', true ) === $slug ) {
-				self::$collection_id_by_post_type[ $post->post_type ] = (int) $collection_id;
-				return self::$collection_id_by_post_type[ $post->post_type ];
-			}
-		}
-
-		$collections = get_posts(
-			array(
-				'post_type'      => Collection::POST_TYPE,
-				'post_status'    => array( 'draft', 'pending', 'private', 'publish' ),
-				'posts_per_page' => -1,
-			)
-		);
-		foreach ( $collections as $collection ) {
-			if ( (string) get_post_meta( $collection->ID, 'slug', true ) === $slug ) {
-				self::$collection_id_by_post_type[ $post->post_type ] = (int) $collection->ID;
-				return self::$collection_id_by_post_type[ $post->post_type ];
-			}
-		}
-
-		self::$collection_id_by_post_type[ $post->post_type ] = 0;
-		return 0;
+		self::$collection_id_by_row_cache[ $row_id ] = $collection_id;
+		return $collection_id;
 	}
 
-	private function is_entry_post_type( string $post_type ): bool {
-		return str_starts_with( $post_type, CollectionEntries::CPT_PREFIX )
-			&& ! in_array( $post_type, array( Collection::POST_TYPE, Field::POST_TYPE ), true );
+	private function resolve_collection_id_for_row( int $row_id ): int {
+		$post = get_post( $row_id );
+		if ( ! $post instanceof WP_Post || Document::POST_TYPE !== $post->post_type ) {
+			return 0;
+		}
+
+		$terms = wp_get_object_terms(
+			$row_id,
+			TraitTaxonomy::TAXONOMY,
+			array( 'fields' => 'all' )
+		);
+		if ( ! is_array( $terms ) || count( $terms ) === 0 ) {
+			return 0;
+		}
+
+		return TraitTaxonomy::trait_id_from_slug( (string) $terms[0]->slug );
 	}
 
 	private function is_field_meta_key( string $meta_key ): bool {

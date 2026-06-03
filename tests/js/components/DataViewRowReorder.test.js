@@ -407,7 +407,7 @@ describe( 'DataViewRowReorder', () => {
 		expect( itemButtons[ 2 ] ).not.toHaveClass(
 			'cortext-row-reorder-target'
 		);
-		const handles = screen.getAllByLabelText( /^Reorder row:/ );
+		const handles = screen.getAllByLabelText( /^Reorder:/ );
 		expect( handles ).toHaveLength( 3 );
 		expect( handles[ 0 ] ).toHaveAttribute( 'tabindex', '-1' );
 	} );
@@ -714,11 +714,84 @@ describe( 'DataViewRowReorder', () => {
 		window.requestAnimationFrame = originalRequestAnimationFrame;
 	} );
 
+	it( 'keeps row measurements frozen during drag', async () => {
+		// Let rAF queue up so each `sync()` clears its frame guard when we flush
+		// it. The default synchronous mock would hide the re-measure path this
+		// test cares about.
+		const originalRequestAnimationFrame = window.requestAnimationFrame;
+		const frames = [];
+		window.requestAnimationFrame = ( callback ) => {
+			frames.push( callback );
+			return frames.length;
+		};
+		const flush = () =>
+			act( () => {
+				frames.splice( 0 ).forEach( ( callback ) => callback() );
+			} );
+
+		// Render directly instead of using `renderReorder`: with deferred rAF,
+		// that helper would wait forever before the first gap render.
+		const wrapper = createWrapper( [ 40, 40, 40 ] );
+		const wrapperRef = { current: wrapper };
+		render(
+			<DataViewRowReorder
+				wrapperRef={ wrapperRef }
+				view={ { type: 'table', sort: null } }
+				onChangeView={ jest.fn() }
+				collectionId={ 7 }
+				rows={ rows }
+				data={ rows }
+				mutateRows={ jest.fn() }
+				onReordered={ jest.fn() }
+			/>
+		);
+		flush();
+		await waitFor( () =>
+			expect( screen.getByTestId( 'dnd-context' ) ).toBeInTheDocument()
+		);
+
+		// Start dragging the second row. Drag displacement changes row classes;
+		// before the fix, the MutationObserver treated that as a reason to
+		// measure again and saved mid-transition geometry.
+		dragStart( 2 );
+
+		const gapBoxes = () =>
+			[
+				...document.querySelectorAll(
+					'.cortext-row-drop-indicator--gap'
+				),
+			].map( ( gap ) => `${ gap.style.top }/${ gap.style.height }` );
+		const before = gapBoxes();
+		expect( before.length ).toBeGreaterThan( 0 );
+
+		// Pretend the DOM now reports a shifted row and let the observer run.
+		// During a drag, `sync()` should ignore that and keep the original
+		// snapshot.
+		act( () => {
+			const lastRow = wrapperRef.current.querySelectorAll( 'tr' )[ 2 ];
+			lastRow.getBoundingClientRect = () => ( {
+				top: 200,
+				left: 10,
+				width: 320,
+				height: 120,
+				right: 330,
+				bottom: 320,
+			} );
+			for ( const observer of mockResizeObserverInstances ) {
+				observer.callback();
+			}
+		} );
+		flush();
+
+		expect( gapBoxes() ).toEqual( before );
+		window.requestAnimationFrame = originalRequestAnimationFrame;
+	} );
+
 	it( 'mounts row drag handles inside the row cell', async () => {
 		await renderReorder();
 
 		const handle = screen.getByRole( 'button', {
-			name: 'Reorder row: One',
+			name: 'Reorder: One',
 		} );
 
 		expect( handle.parentElement?.tagName ).toBe( 'TD' );
@@ -731,7 +804,7 @@ describe( 'DataViewRowReorder', () => {
 		await renderReorder();
 
 		const handle = screen.getByRole( 'button', {
-			name: 'Reorder row: One',
+			name: 'Reorder: One',
 		} );
 		const renderedTableRows = document.querySelectorAll( 'tr' );
 
@@ -1000,7 +1073,7 @@ describe( 'DataViewRowReorder', () => {
 
 		await waitFor( () =>
 			expect( mockCreateErrorNotice ).toHaveBeenCalledWith(
-				"Couldn't move the row.",
+				"Couldn't move the document.",
 				{
 					id: 'cortext-row-reorder-failed',
 					type: 'snackbar',
@@ -1041,7 +1114,7 @@ describe( 'DataViewRowReorder', () => {
 			expect( mockApiFetch ).toHaveBeenCalledTimes( 1 )
 		);
 		expect( mockApiFetch ).toHaveBeenCalledWith( {
-			path: '/cortext/v1/collections/7/rows/1/reorder',
+			path: '/cortext/v1/documents/1/reorder',
 			method: 'POST',
 			data: {
 				before_id: null,
@@ -1060,13 +1133,16 @@ describe( 'DataViewRowReorder', () => {
 			type: 'table',
 			sort: { field: 'title', direction: 'asc' },
 		};
-		const { onChangeView, mutateRows } = await renderReorder( { view } );
+		const { onChangeView, mutateRows, onReordered, rerender } =
+			await renderReorder( {
+				view,
+			} );
 
 		dragEnd( 3, gapDrop( 0, 1, null ) );
 
 		expect(
 			screen.getByText(
-				'Rows will stay where you dropped them, and the current sort will be cleared.'
+				'Documents will stay where you dropped them, and the current sort will be cleared.'
 			)
 		).toBeInTheDocument();
 		expect( mockApiFetch ).not.toHaveBeenCalled();
@@ -1099,9 +1175,13 @@ describe( 'DataViewRowReorder', () => {
 			request.resolve( { reseeded: false } );
 			await request.promise;
 		} );
-		// Server confirms; we don't need a second `onChangeView` because the
-		// sort was already cleared at commit time.
+		// Server confirms before the parent has applied the cleared sort, so
+		// the rows are not refreshed under the stale title sort.
 		expect( onChangeView ).toHaveBeenCalledTimes( 1 );
+		expect( onReordered ).not.toHaveBeenCalled();
+
+		rerender( { view: { type: 'table', sort: null } } );
+		await waitFor( () => expect( onReordered ).toHaveBeenCalledTimes( 1 ) );
 	} );
 
 	it( 'skips confirmation when there is no current sort', async () => {
@@ -1159,7 +1239,7 @@ describe( 'DataViewRowReorder', () => {
 
 		await waitFor( () =>
 			expect( mockCreateErrorNotice ).toHaveBeenCalledWith(
-				"Couldn't move the row.",
+				"Couldn't move the document.",
 				{
 					id: 'cortext-row-reorder-failed',
 					type: 'snackbar',
@@ -1184,7 +1264,7 @@ describe( 'DataViewRowReorder', () => {
 
 		await waitFor( () =>
 			expect( mockCreateErrorNotice ).toHaveBeenCalledWith(
-				"Couldn't move the row.",
+				"Couldn't move the document.",
 				{
 					id: 'cortext-row-reorder-failed',
 					type: 'snackbar',
@@ -1211,7 +1291,7 @@ describe( 'DataViewRowReorder', () => {
 		await renderReorderInParent( { onPointerDown: onParentPointerDown } );
 
 		fireEvent.pointerDown(
-			screen.getByRole( 'button', { name: 'Reorder row: One' } )
+			screen.getByRole( 'button', { name: 'Reorder: One' } )
 		);
 
 		expect( onPointerDown ).toHaveBeenCalledTimes( 1 );
@@ -1224,7 +1304,7 @@ describe( 'DataViewRowReorder', () => {
 		await renderReorder();
 
 		fireEvent.pointerDown(
-			screen.getByRole( 'button', { name: 'Reorder row: One' } )
+			screen.getByRole( 'button', { name: 'Reorder: One' } )
 		);
 
 		expect( document.body ).toHaveClass(

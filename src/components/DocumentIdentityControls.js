@@ -19,7 +19,7 @@ import './DocumentIdentityControls.scss';
 
 import MediaPicker, { MediaUploadCheck } from './MediaPicker';
 
-import PageIcon from './PageIcon';
+import DocumentIcon from './DocumentIcon';
 
 // The picker carries ~150KB of emoji data, so defer it until the popover
 // actually opens. The first interaction pays the load cost; subsequent
@@ -374,6 +374,7 @@ function PickerBody( {
 			<MediaUploadCheck>
 				<MediaPicker
 					allowedTypes={ [ 'image' ] }
+					postId={ postId }
 					onSelect={ ( media ) => persist( encodeImage( media.id ) ) }
 					render={ ( { open } ) => (
 						<div className="cortext-document-identity-popover__upload">
@@ -386,7 +387,7 @@ function PickerBody( {
 							</Button>
 							<p className="cortext-document-identity-popover__hint">
 								{ __(
-									'Pick or upload an image to use as this document’s icon.',
+									'Pick or upload an image for the icon.',
 									'cortext'
 								) }
 							</p>
@@ -535,7 +536,7 @@ export default function DocumentIdentityControls( {
 					isOpen,
 					onToggle,
 					currentIconNode: (
-						<PageIcon icon={ currentIcon } size={ 16 } />
+						<DocumentIcon icon={ currentIcon } size={ 16 } />
 					),
 				} )
 			}

@@ -1,0 +1,241 @@
+name: Release plugin ZIP
+
+on:
+    workflow_call:
+        inputs:
+            version:
+                required: true
+                type: string
+            prerelease:
+                required: false
+                default: true
+                type: boolean
+            dry_run:
+                required: false
+                default: true
+                type: boolean
+    workflow_dispatch:
+        inputs:
+            version:
+                description: 'Version'
+                required: true
+                default: '0.1.0'
+            prerelease:
+                description: 'Prerelease'
+                required: true
+                default: true
+                type: boolean
+            dry_run:
+                description: 'Dry run (uploads files only; no tag or release)'
+                required: true
+                default: true
+                type: boolean
+
+permissions:
+    contents: write
+    issues: read
+    pull-requests: read
+
+concurrency:
+    group: cortext-release-plugin-${{ inputs.version }}
+    cancel-in-progress: true
+
+jobs:
+    plugin:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 11.0.8
+                  standalone: true
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: '24.15'
+                  cache: 'pnpm'
+
+            - uses: shivammathur/setup-php@v2
+              with:
+                  php-version: '8.1'
+                  tools: composer:v2
+                  coverage: none
+
+            - uses: actions/cache@v4
+              with:
+                  path: ~/.composer/cache
+                  key: composer-${{ hashFiles('composer.lock') }}
+
+            - name: Resolve milestone
+              id: milestone
+              uses: actions/github-script@v8
+              env:
+                  VERSION: ${{ inputs.version }}
+              with:
+                  script: |
+                      const owner = context.repo.owner;
+                      const repo = context.repo.repo;
+                      const version = process.env.VERSION.trim();
+
+                      if ( ! /^\d+\.\d+\.\d+$/.test( version ) ) {
+                        throw new Error( `Release versions must use the WordPress-style format 0.1.0, without a leading "v". Received "${ version }".` );
+                      }
+
+                      const milestones = await github.paginate(
+                        github.rest.issues.listMilestones,
+                        { owner, repo, state: 'open', per_page: 100 }
+                      );
+
+                      if ( milestones.length !== 1 ) {
+                        throw new Error(
+                          milestones.length === 0
+                            ? 'No open release milestone exists. Create 0.1.0 before drafting the first release.'
+                            : `Expected exactly one open release milestone, found ${ milestones.length }: ${ milestones.map( ( milestone ) => milestone.title ).join( ', ' ) }.`
+                        );
+                      }
+
+                      const milestone = milestones.find( ( item ) => item.title === version );
+                      if ( ! milestone ) {
+                        throw new Error( `Cannot find open milestone "${ version }".` );
+                      }
+
+                      core.setOutput( 'title', milestone.title );
+
+            - name: Generate release notes
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  MILESTONE: ${{ steps.milestone.outputs.title }}
+                  REPOSITORY: ${{ github.repository }}
+                  VERSION: ${{ inputs.version }}
+              run: |
+                  node scripts/release-notes.mjs \
+                    --repo "$REPOSITORY" \
+                    --milestone "$MILESTONE" \
+                    --version "$VERSION" \
+                    --strict > release-notes.md
+
+            - name: Append desktop install note
+              run: |
+                  cat >> release-notes.md <<'EOF'
+
+                  ## Opening the macOS app
+
+                  This DMG is unsigned, so macOS may show a "Cortext is damaged" warning the first time you open it. Move Cortext to Applications. If that warning appears, click Cancel, open Terminal, and run `xattr -dr com.apple.quarantine /Applications/Cortext.app && open /Applications/Cortext.app`.
+                  EOF
+
+            - name: Build plugin ZIP
+              run: ./scripts/build-zip.sh
+
+            - name: Check release files
+              run: |
+                  test -s release-notes.md
+                  test -s dist/cortext.zip
+
+            - name: Summarize release ZIP
+              env:
+                  VERSION: ${{ inputs.version }}
+              run: |
+                  unzip -Z1 dist/cortext.zip > release-zip-contents.txt
+
+                  plugin_version="$(unzip -p dist/cortext.zip cortext/cortext.php | awk -F': *' '/^[[:space:]]+\* Version:/ { print $2; exit }')"
+                  constant_version="$(unzip -p dist/cortext.zip cortext/cortext.php | sed -n "s/.*define( 'CORTEXT_VERSION', '\([^']*\)' ).*/\1/p")"
+                  stable_tag="$(unzip -p dist/cortext.zip cortext/readme.txt | awk -F': *' '/^Stable tag:/ { print $2; exit }')"
+                  zip_size="$(du -h dist/cortext.zip | cut -f1)"
+                  zip_entries="$(wc -l < release-zip-contents.txt | tr -d ' ')"
+
+                  if [ "$plugin_version" != "$VERSION" ]; then
+                    echo "::error::Expected plugin header version $VERSION, found $plugin_version"
+                    exit 1
+                  fi
+
+                  if [ "$constant_version" != "$VERSION" ]; then
+                    echo "::error::Expected CORTEXT_VERSION $VERSION, found $constant_version"
+                    exit 1
+                  fi
+
+                  if [ "$stable_tag" != "$VERSION" ]; then
+                    echo "::error::Expected readme stable tag $VERSION, found $stable_tag"
+                    exit 1
+                  fi
+
+                  required_paths=(
+                    cortext/cortext.php
+                    cortext/readme.txt
+                    cortext/composer.json
+                    cortext/vendor/autoload.php
+                    cortext/build/index.js
+                  )
+
+                  for path in "${required_paths[@]}"; do
+                    if ! grep -Fxq "$path" release-zip-contents.txt; then
+                      echo "::error::Missing required release file: $path"
+                      exit 1
+                    fi
+                  done
+
+                  # Keep the public ZIP to the runtime files we expect. This
+                  # catches local dev helpers, desktop-only files, WordPress
+                  # core copies, and other files that should stay out of a
+                  # plugin release.
+                  allowed='^cortext/(cortext\.php|readme\.txt|LICENSE|composer\.json)$|^cortext/(includes|templates|build|seed-assets|vendor|assets/brand)/'
+                  if grep -v '/$' release-zip-contents.txt | grep -vE "$allowed" > release-zip-unexpected.txt; then
+                    echo "::error::Release ZIP contains files outside the runtime allowlist"
+                    cat release-zip-unexpected.txt
+                    exit 1
+                  fi
+
+                  if grep -qiE 'autologin|auto-login' release-zip-contents.txt; then
+                    echo "::error::Release ZIP contains auto-login code"
+                    exit 1
+                  fi
+
+                  {
+                    echo "## Release ZIP"
+                    echo ""
+                    echo "- File: \`dist/cortext.zip\`"
+                    echo "- Size: \`$zip_size\`"
+                    echo "- Entries: \`$zip_entries\`"
+                    echo "- Plugin header version: \`$plugin_version\`"
+                    echo "- \`CORTEXT_VERSION\`: \`$constant_version\`"
+                    echo "- Stable tag: \`$stable_tag\`"
+                    echo "- Required runtime files: present"
+                    echo "- Source and development-only paths: absent"
+                  } >> "$GITHUB_STEP_SUMMARY"
+
+            - name: Upload dry-run files
+              if: ${{ inputs.dry_run }}
+              uses: actions/upload-artifact@v4
+              with:
+                  name: cortext-release-${{ inputs.version }}-dry-run
+                  path: |
+                      release-notes.md
+                      dist/cortext.zip
+
+            - name: Write dry-run summary
+              if: ${{ inputs.dry_run }}
+              env:
+                  ARTIFACT_NAME: cortext-release-${{ inputs.version }}-dry-run
+                  MILESTONE: ${{ steps.milestone.outputs.title }}
+                  VERSION: ${{ inputs.version }}
+              run: |
+                  {
+                    echo "## Release dry run"
+                    echo ""
+                    echo "- Version: \`$VERSION\`"
+                    echo "- Milestone: \`$MILESTONE\`"
+                    echo "- Artifact: \`$ARTIFACT_NAME\`"
+                    echo ""
+                    echo "No GitHub Release or tag was created."
+                  } >> "$GITHUB_STEP_SUMMARY"
+
+            - name: Create or update draft GitHub Release
+              if: ${{ ! inputs.dry_run }}
+              uses: softprops/action-gh-release@v2
+              with:
+                  tag_name: ${{ inputs.version }}
+                  name: ${{ inputs.version }}
+                  body_path: release-notes.md
+                  draft: true
+                  prerelease: ${{ inputs.prerelease }}
+                  files: dist/cortext.zip

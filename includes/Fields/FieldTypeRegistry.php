@@ -4,9 +4,10 @@
  *
  * Single source of truth for which capabilities each field type has —
  * whether it can be sorted or filtered, which filter operators it accepts,
- * whether it is included in full-text search, and how its values are typed in WP postmeta. Consumers
- * (`FieldsController`, `CollectionEntries`, `RowsFilterQuery`) read
- * from here instead of re-listing types in scattered constants.
+ * whether it is included in full-text search, and how its values are typed
+ * in WP postmeta. Consumers (`FieldsController`, `Document::register_field_meta`,
+ * `RowsFilterQuery`) read from here instead of re-listing types in scattered
+ * constants.
  *
  * @package Cortext
  */
@@ -14,6 +15,8 @@
 declare( strict_types=1 );
 
 namespace Cortext\Fields;
+
+defined( 'ABSPATH' ) || exit;
 
 final class FieldTypeRegistry {
 

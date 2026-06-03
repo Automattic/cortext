@@ -186,9 +186,8 @@ body.cortext-fullscreen {
 }
 
 // Loading and empty states for the canvas column. EntityRoute renders these
-// on collection routes and during route resolution, before (or instead of)
-// mounting the lazy editor chunk, so the styles have to live in the initial
-// CSS bundle.
+// during route resolution, before (or instead of) mounting the lazy editor
+// chunk, so the styles have to live in the initial CSS bundle.
 .cortext-canvas__loading,
 .cortext-canvas__empty {
 	display: flex;
@@ -199,10 +198,9 @@ body.cortext-fullscreen {
 	height: 100%;
 }
 
-// While the document or editor mounts, stretch the loading area so the
-// placeholder can occupy the same space as the incoming content.
-.cortext-canvas__loading--document,
-.cortext-canvas__loading--collection {
+// While the document mounts, stretch the loading area so the placeholder
+// can occupy the same space as the incoming content.
+.cortext-canvas__loading--document {
 	align-items: stretch;
 	justify-content: flex-start;
 	overflow: auto;
@@ -214,27 +212,10 @@ body.cortext-fullscreen {
 	padding: $grid-unit-30 0;
 }
 
-// Wrapper that hosts DataViews on a full-page collection route. DataViews
-// needs an explicit height on its parent or its inner scroll collapses to
-// 0; we fill the canvas column.
-.cortext-canvas__table {
-	position: relative;
-	flex: 1 1 auto;
-	min-width: 0;
-	height: 100%;
-	overflow: hidden;
-	background: transparent;
-	color: $gray-900;
-}
-
-.cortext-canvas__table .cortext-canvas__loading {
-	color: $gray-700;
-}
-
 // Identity-action affordances render inside the BlockCanvas iframe via
-// EditorBody, so their layout + reveal-on-hover rules have to live in the
-// eagerly-enqueued admin bundle (BlockCanvas auto-loads index.css into the
-// iframe; the lazy editor chunk never reaches it).
+// EditorBody. The iframe loads `index.css` and `editor.css` from
+// `editor_settings.styles` (see `Screen.php`), so this rule can live in
+// either bundle.
 .cortext-canvas__identity-actions {
 	display: flex;
 	align-items: center;
@@ -322,16 +303,16 @@ body:has(.cortext-canvas__identity-actions:hover) .cortext-canvas__identity-acti
 }
 /* stylelint-enable no-descending-specificity */
 
-// Hide the block kebab (more options) while a Cortext header block is
-// selected. The body class is toggled by HideHeaderBlockKebab in
-// Canvas.js. The long comment there explains why a JS hook beats CSS
-// :has() here. We hide several adjacent wrappers because core's toolbar
-// keeps a placeholder slot around the kebab even when it's empty.
+// Hide Core actions while a protected Cortext block is selected. Hide adjacent
+// wrappers too, because Core leaves empty toolbar slots around missing
+// controls.
 body.cortext-hide-block-settings-menu .block-editor-block-settings-menu,
 body.cortext-hide-block-settings-menu .block-editor-block-toolbar > .block-editor-block-settings-menu,
 body.cortext-hide-block-settings-menu .components-toolbar-group:has(> .block-editor-block-settings-menu),
 body.cortext-hide-block-settings-menu .block-editor-block-toolbar__group-collapsible-toolbar,
-body.cortext-hide-block-settings-menu .block-editor-block-switcher {
+body.cortext-hide-block-settings-menu .block-editor-block-switcher,
+body.cortext-hide-block-settings-menu .block-editor-block-lock-toolbar,
+body.cortext-hide-block-settings-menu .block-editor-block-mover {
 	display: none;
 }
 

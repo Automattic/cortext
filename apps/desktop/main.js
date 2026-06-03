@@ -7,8 +7,13 @@ const {
 	startRuntime,
 	stopRuntime,
 } = require( './lib/runtime' );
+const { scheduleUpdateCheck } = require( './lib/update-check' );
 
-const SNAPSHOT_ZIP = path.resolve( __dirname, 'snapshot.zip' );
+// Bundled resources (the snapshot and the PHP runtime) sit next to the app in
+// dev and under `process.resourcesPath` once packaged into the .app.
+const RESOURCES_DIR = app.isPackaged ? process.resourcesPath : __dirname;
+const SNAPSHOT_ZIP = path.join( RESOURCES_DIR, 'snapshot.zip' );
+const APP_ICON = path.join( __dirname, 'assets/icon.png' );
 
 let runtimeHandle = null;
 let quitting = false;
@@ -48,10 +53,16 @@ async function createWindow() {
 		width: 1280,
 		height: 800,
 		title: 'Cortext',
+		icon: APP_ICON,
 		backgroundColor: '#1d1d1d',
 		webPreferences: {
 			contextIsolation: true,
 		},
+	} );
+
+	win.on( 'page-title-updated', ( event ) => {
+		event.preventDefault();
+		win.setTitle( 'Cortext' );
 	} );
 
 	await win.loadFile( path.resolve( __dirname, 'loading.html' ) );
@@ -61,9 +72,10 @@ async function createWindow() {
 		await win.loadURL(
 			`http://127.0.0.1:${ PORT }/wp-admin/admin.php?page=cortext`
 		);
-		if ( process.env.CORTEXT_DEVTOOLS !== '0' ) {
+		if ( ! app.isPackaged && process.env.CORTEXT_DEVTOOLS !== '0' ) {
 			win.webContents.openDevTools( { mode: 'detach' } );
 		}
+		scheduleUpdateCheck();
 	} catch ( err ) {
 		console.error( '[cortext-desktop] failed to reach PHP server:', err );
 		await win.loadFile( path.resolve( __dirname, 'error.html' ) );
@@ -72,9 +84,17 @@ async function createWindow() {
 
 app.whenReady().then( () => {
 	try {
+		if (
+			process.platform === 'darwin' &&
+			app.dock &&
+			fs.existsSync( APP_ICON )
+		) {
+			app.dock.setIcon( APP_ICON );
+		}
+
 		const wordpressDir = ensureSiteFromSnapshot();
 		runtimeHandle = startRuntime( {
-			appDir: __dirname,
+			appDir: RESOURCES_DIR,
 			wordpressDir,
 			runtimeStateDir: path.join(
 				app.getPath( 'temp' ),
@@ -96,9 +116,7 @@ app.whenReady().then( () => {
 app.on( 'window-all-closed', () => {
 	quitting = true;
 	stopRuntime( runtimeHandle );
-	if ( process.platform !== 'darwin' ) {
-		app.quit();
-	}
+	app.quit();
 } );
 
 app.on( 'before-quit', () => {

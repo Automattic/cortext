@@ -1,0 +1,199 @@
+name: Plugin Check
+
+# Run on demand (e.g. before a WordPress.org submission). Plugin Check is slow,
+# so it is not wired to every push or PR.
+on:
+    workflow_dispatch:
+
+permissions:
+    contents: read
+
+jobs:
+    plugin-check:
+        name: Plugin Check
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 11.0.8
+                  standalone: true
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: '24.15'
+                  cache: 'pnpm'
+
+            - uses: shivammathur/setup-php@v2
+              with:
+                  php-version: '8.1'
+                  tools: composer:v2
+                  coverage: none
+
+            # Build the same tree the release ZIP ships, so Plugin Check sees
+            # exactly what WordPress.org reviews (no src/tests/dev files).
+            - name: Build the plugin
+              run: ./scripts/build-zip.sh
+
+            - name: Configure Plugin Check environment
+              shell: bash
+              run: |
+                  set -euo pipefail
+
+                  plugin_dir="$(realpath ./dist/cortext)"
+                  plugin_slug="$(basename "$plugin_dir")"
+
+                  echo "PLUGIN_SLUG=$plugin_slug" >> "$GITHUB_ENV"
+
+                  cat > .wp-env.plugin-check.json <<EOF
+                  {
+                    "core": "WordPress/WordPress#master",
+                    "port": 8880,
+                    "testsEnvironment": false,
+                    "mappings": {
+                      "wp-content/plugins/${plugin_slug}": "${plugin_dir}"
+                    }
+                  }
+                  EOF
+
+            # The official Plugin Check action currently breaks on GitHub's
+            # ubuntu-24.04 runner when plugin-check.zip is loaded through
+            # .wp-env.json. Keep the env local, then install Plugin Check with
+            # WP-CLI once WordPress is running.
+            - name: Start wp-env
+              uses: nick-fields/retry@v4
+              with:
+                  timeout_minutes: 10
+                  max_attempts: 3
+                  shell: bash
+                  command: |
+                      ./node_modules/.bin/wp-env --config .wp-env.plugin-check.json start
+                      ./node_modules/.bin/wp-env --config .wp-env.plugin-check.json run cli wp cli info
+
+            - name: Run Plugin Check
+              shell: bash
+              run: |
+                  set -euo pipefail
+
+                  wp_env=( ./node_modules/.bin/wp-env --config .wp-env.plugin-check.json )
+
+                  echo "::group::Debugging information"
+                  "${wp_env[@]}" run cli wp plugin list
+                  echo "::endgroup::"
+
+                  echo "::group::Install Plugin Check"
+                  "${wp_env[@]}" run cli wp plugin install plugin-check --activate
+                  "${wp_env[@]}" run cli wp plugin list-checks
+                  "${wp_env[@]}" run cli wp plugin list-check-categories
+                  echo "::endgroup::"
+
+                  echo "::group::Install plugin dependencies"
+                  dependencies="$( "${wp_env[@]}" run cli wp plugin get "$PLUGIN_SLUG" --field=requires_plugins | tr ',' ' ' | xargs )"
+                  if [ -n "$dependencies" ]; then
+                    echo "Installing plugin dependencies: $dependencies"
+                    "${wp_env[@]}" run cli wp plugin install --activate $dependencies
+                  else
+                    echo "Plugin has no dependencies"
+                  fi
+                  echo "::endgroup::"
+
+                  "${wp_env[@]}" run cli wp plugin activate "$PLUGIN_SLUG"
+
+                  echo "::group::Run Plugin Check"
+                  results="$RUNNER_TEMP/plugin-check-results.txt"
+                  set +e
+                  "${wp_env[@]}" run cli wp plugin check "$PLUGIN_SLUG" \
+                    --format=json \
+                    --exclude-directories=vendor \
+                    --require=./wp-content/plugins/plugin-check/cli.php \
+                    | tee "$results"
+                  status="${PIPESTATUS[0]}"
+                  set -e
+                  echo "::endgroup::"
+
+                  exit "$status"
+
+            - name: Process Plugin Check results
+              shell: bash
+              run: |
+                  node <<'NODE'
+                  const fs = require( 'fs' );
+
+                  const resultsPath = `${ process.env.RUNNER_TEMP }/plugin-check-results.txt`;
+                  const content = fs.existsSync( resultsPath ) ? fs.readFileSync( resultsPath, 'utf8' ) : '';
+                  const lines = content.split( /\r?\n/ );
+
+                  const escapeData = ( value ) =>
+                    String( value )
+                      .replace( /%/g, '%25' )
+                      .replace( /\r/g, '%0D' )
+                      .replace( /\n/g, '%0A' );
+
+                  const escapeProperty = ( value ) =>
+                    escapeData( value ).replace( /:/g, '%3A' ).replace( /,/g, '%2C' );
+
+                  const decodeHtmlEntities = ( value ) =>
+                    String( value )
+                      .replace( /&quot;/g, '"' )
+                      .replace( /&#039;/g, "'" )
+                      .replace( /&lt;/g, '<' )
+                      .replace( /&gt;/g, '>' )
+                      .replace( /&amp;/g, '&' );
+
+                  const annotate = ( command, properties, message ) => {
+                    const props = Object.entries( properties )
+                      .filter( ( [ , value ] ) => value !== undefined && value !== null && value !== '' )
+                      .map( ( [ key, value ] ) => `${ key }=${ escapeProperty( value ) }` )
+                      .join( ',' );
+
+                    console.log( `::${ command } ${ props }::${ escapeData( decodeHtmlEntities( message ) ) }` );
+                  };
+
+                  let errors = 0;
+                  let warnings = 0;
+
+                  for ( let index = 0; index < lines.length - 1; index++ ) {
+                    const line = lines[ index ];
+
+                    if ( ! line.startsWith( 'FILE: ' ) ) {
+                      continue;
+                    }
+
+                    const file = line.slice( 6 );
+                    const results = JSON.parse( lines[ ++index ] || '[]' );
+
+                    for ( const result of results ) {
+                      if ( result.type === 'ERROR' ) {
+                        errors++;
+                      } else if ( result.type === 'WARNING' ) {
+                        warnings++;
+                      }
+
+                      annotate(
+                        result.type === 'ERROR' ? 'error' : 'warning',
+                        {
+                          file,
+                          line: result.line > 0 ? result.line : undefined,
+                          col: result.column > 0 ? result.column : undefined,
+                          title: result.code,
+                        },
+                        result.message
+                      );
+                    }
+                  }
+
+                  console.log( `Plugin Check found ${ errors } error(s) and ${ warnings } warning(s).` );
+
+                  if ( errors > 0 ) {
+                    process.exit( 1 );
+                  }
+                  NODE
+
+            - name: Upload Plugin Check results
+              if: ${{ always() }}
+              uses: actions/upload-artifact@v4
+              with:
+                  name: plugin-check-results
+                  path: ${{ runner.temp }}/plugin-check-results.txt
+                  if-no-files-found: ignore

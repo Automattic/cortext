@@ -4,6 +4,24 @@ Running log of significant design decisions. Newest first. Each entry captures *
 
 Desktop-specific runtime and packaging decisions live in `docs/desktop-decisions.md`.
 
+## 2026-05-30 — One `crtxt_document` post type for pages, collections, and rows
+
+**Decision.** Pages, collections, and rows are all one post type, `crtxt_document`. A document's role comes from its state: a `cortext_fields` schema makes it a collection (mirrored as a `crtxt_trait` taxonomy term), carrying a collection's `crtxt_trait` term makes it a row, and neither makes it a plain page. Field definitions stay in `crtxt_field` posts; row values stay in row post meta with the optional `cortext_field_values` sidecar. This replaced registering a dynamic post type per collection.
+
+**Why.** A post type per collection made per-request boot cost grow with the number of collections, paid on every request whether or not a collection was in use. One document type keeps boot flat. It also keeps document bodies in `wp_posts`, which is non-negotiable: that is what gives Cortext the block editor, revisions and autosaves, the REST conventions the shell relies on, search, and post locks. Native taxonomy membership (`crtxt_trait`) turns "which collection is this row in" into a `tax_query` instead of a postmeta scan. Beta data is reseed-able, so there was no migration cost to adopting the cleaner model directly.
+
+**Trade-off.** "Collection" is no longer a stored entity. It is the set of documents that carry a trait term, so code that thinks in collections resolves membership through the taxonomy rather than a post type. Multi-collection membership is possible by design but not yet surfaced in the UI. The `cortext_field_values` sidecar for indexed reads stays a separate, still-proving track (see the 2026-05-23 entry).
+
+**Revisit when.** Per-request registration or the taxonomy-membership query becomes a measured bottleneck, or WordPress core ships first-class content types that cover what Cortext gets from this model today.
+
+## 2026-05-29 — Document editing stays in the Cortext shell
+
+**Decision.** `crtxt_document` no longer exposes the core wp-admin editing screens. The Cortext menu goes straight to the React shell, and the document post type uses `show_ui => false` while staying available over REST. The inspector also leaves out WordPress's permalink and parent-page panels. Page hierarchy and order stay in the Cortext sidebar, where users already move pages around.
+
+**Why.** Cortext has one editing surface: the shell. The core list table, `post.php`, and generic inspector panels would give users a second, half-compatible way to edit the same documents. They also surface things we do not want here, like slug editing and a parent selector that does not behave well in Cortext.
+
+**Trade-off.** Bulk actions from the core list table are gone for now. When we need them, they should come back as shell features instead of as a fallback to WordPress screens.
+
 ## 2026-05-23 — Field values stay in postmeta while the sidecar proves itself
 
 **Decision.** Row field values still live in `wp_postmeta`. Cortext can also maintain a derived `cortext_field_values` table for row `field-*` values. If the host can create the table and the index is enabled, Cortext installs it and schedules a background rebuild/verify. Production reads stay on postmeta until the materialization benchmark shows at least a 10x filter or sort win at 50K rows without unacceptable write cost. The index covers row values only; collection schema, field definitions, column order, options, relation config, and rollup config stay in collection/field posts and postmeta.
@@ -42,6 +60,8 @@ Id-based URLs sidestep both issues. The id is stable from creation, renames cann
 **Revisit when.** Legacy `untitled`-slugged pages surface in a user-visible context where their slug matters (export, share link, breadcrumb), or product decides to hide abandoned blank drafts from the sidebar.
 
 ## 2026-04-23 — Core admin is an escape hatch, not the primary UI
+
+**Superseded by 2026-05-29 — Document editing stays in the Cortext shell.**
 
 **Decision.** `crtxt_page` registers with `show_ui => true` and `show_in_menu => false`. `Admin\Screen` adds a "Manage Pages" submenu under the Cortext top-level that links to `edit.php?post_type=crtxt_page`. The React shell remains the primary editing surface.
 

@@ -86,7 +86,7 @@ export default function Edit( { context, clientId } ) {
 		}
 		insertBlocks(
 			createBlock( 'cortext/document-icon', {
-				lock: { move: true },
+				lock: { move: true, remove: true },
 			} ),
 			coverIndex + 1,
 			undefined,
@@ -98,7 +98,7 @@ export default function Edit( { context, clientId } ) {
 		return (
 			<div { ...blockProps }>
 				<span className="cortext-document-cover-block__hint">
-					{ __( 'Document cover is unavailable here.', 'cortext' ) }
+					{ __( 'Cover is unavailable here.', 'cortext' ) }
 				</span>
 			</div>
 		);
@@ -111,6 +111,7 @@ export default function Edit( { context, clientId } ) {
 					<MediaUploadCheck>
 						<MediaPicker
 							allowedTypes={ [ 'image' ] }
+							postId={ postId }
 							value={ featuredId }
 							onSelect={ ( picked ) =>
 								setFeaturedId( picked.id )
@@ -138,6 +139,7 @@ export default function Edit( { context, clientId } ) {
 					<MediaUploadCheck>
 						<MediaPicker
 							allowedTypes={ [ 'image' ] }
+							postId={ postId }
 							value={ featuredId }
 							onSelect={ ( picked ) =>
 								setFeaturedId( picked.id )
@@ -200,6 +202,7 @@ export default function Edit( { context, clientId } ) {
 					<MediaUploadCheck>
 						<MediaPicker
 							allowedTypes={ [ 'image' ] }
+							postId={ postId }
 							value={ featuredId }
 							onSelect={ ( picked ) =>
 								setFeaturedId( picked.id )

@@ -214,6 +214,10 @@ tbody > tr > td:not(:first-child) {
 	width: min(100%, 420px);
 }
 
+.cortext-collection-chooser__search {
+	margin-bottom: $grid-unit-05;
+}
+
 .cortext-collection-chooser__item.components-button {
 	justify-content: flex-start;
 	min-height: 36px;
@@ -1052,7 +1056,7 @@ tr:has(.cortext-title-cell--is-opening)
 	}
 
 	.dataviews-no-results,
-	.dataviews-loading {
+	.dataviews-loading:not(:empty) {
 		display: grid;
 		align-content: center;
 		min-height: 160px;
@@ -1065,6 +1069,13 @@ tr:has(.cortext-title-cell--is-opening)
 		}
 	}
 
+	// During a row refresh, DataViews can leave behind an empty loading notice
+	// even though the table is still painted. Hide it so inline saves do not add
+	// a blank strip below the rows.
+	.dataviews-loading:empty {
+		display: none;
+	}
+
 	// Loading shell hides DataViews chrome and the new-row footer so the rows
 	// skeleton stands alone. Keep this after the wrapper/footer rules above to
 	// satisfy descending-specificity.
@@ -1074,18 +1085,9 @@ tr:has(.cortext-title-cell--is-opening)
 	}
 }
 
-// Per-context heights. The shared rules above stay context-agnostic; each
-// render path provides its own height.
-
-.cortext-canvas__table .cortext-data-view-shell,
-.cortext-canvas__table .cortext-data-view {
-	height: 100%;
-}
-
-// Embedded blocks do not have a fixed-height parent. With the shared
-// `height: 100%`, the shell collapses and the table disappears. In block
-// mode, let content set the height until #23 gives authors an explicit
-// per-instance viewport.
+// Embedded blocks have no fixed-height parent, so `height: 100%` would
+// collapse the shell. Let content drive height in block context until
+// #23 gives authors a per-instance viewport.
 .wp-block-cortext-data-view .cortext-data-view-shell {
 	height: auto;
 }

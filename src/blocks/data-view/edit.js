@@ -17,6 +17,7 @@ import {
 	Notice,
 	PanelBody,
 	Placeholder,
+	SearchControl,
 	SelectControl,
 	Spinner,
 	TextControl,
@@ -27,8 +28,7 @@ import { useDispatch, useSelect } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
 import { useCallback, useState } from '@wordpress/element';
 import { store as interfaceStore } from '@wordpress/interface';
-import apiFetch from '@wordpress/api-fetch';
-import { cog, plus, replace } from '@wordpress/icons';
+import { cog, link, plus, replace, table } from '@wordpress/icons';
 
 import CanvasOwnerInspector, {
 	useIsCanvasOwnerBlock,
@@ -36,7 +36,11 @@ import CanvasOwnerInspector, {
 import CollectionDataViews from '../../components/CollectionDataViews';
 import AddFieldPopover from '../../components/fields/AddFieldPopover';
 import { useEditorSurface } from '../../components/EditorSurfaceContext';
-import { FULL_PAGE_COLLECTION_QUERY } from '../../collections';
+import {
+	DOCUMENT_POST_TYPE,
+	FULL_PAGE_COLLECTION_QUERY,
+} from '../../collections';
+import { useCreateCollectionDocument } from '../../documents';
 import { toDataViewId } from '../../hooks/fieldIds';
 import {
 	CollectionFieldsProvider,
@@ -103,13 +107,13 @@ function createDefaultView() {
 }
 
 function CollectionPicker( { selectedId = '', onSelect } ) {
-	// The picker only lists full-page collections. Inline collections stay with
-	// the block that created them.
+	// Every document that defines a schema (has `cortext_fields` meta).
 	const { records, isResolving, hasResolved } = useEntityRecords(
 		'postType',
-		'crtxt_collection',
+		DOCUMENT_POST_TYPE,
 		FULL_PAGE_COLLECTION_QUERY
 	);
+	const [ query, setQuery ] = useState( '' );
 
 	const hasCollections = Boolean( records?.length );
 
@@ -125,43 +129,61 @@ function CollectionPicker( { selectedId = '', onSelect } ) {
 		);
 	}
 
+	const collectionTitle = ( collection ) =>
+		collection.title?.rendered ||
+		collection.title?.raw ||
+		`#${ collection.id }`;
+	const needle = query.trim().toLowerCase();
+	const matches = needle
+		? ( records ?? [] ).filter( ( collection ) =>
+				collectionTitle( collection ).toLowerCase().includes( needle )
+		  )
+		: records ?? [];
+
 	return (
 		<div className="cortext-collection-chooser">
-			{ /* TODO: Add search once collection lists are long enough to make scanning noisy. */ }
-			{ ( records ?? [] ).map( ( collection ) => {
-				const title =
-					collection.title?.rendered ||
-					collection.title?.raw ||
-					`#${ collection.id }`;
-				const isSelected =
-					selectedId && Number( selectedId ) === collection.id;
+			<SearchControl
+				__nextHasNoMarginBottom
+				className="cortext-collection-chooser__search"
+				value={ query }
+				onChange={ setQuery }
+				placeholder={ __( 'Search collections', 'cortext' ) }
+			/>
+			{ matches.length === 0 ? (
+				<p className="cortext-data-view-picker__empty">
+					{ __( 'No collections match your search.', 'cortext' ) }
+				</p>
+			) : (
+				matches.map( ( collection ) => {
+					const isSelected =
+						selectedId && Number( selectedId ) === collection.id;
 
-				return (
-					<Button
-						key={ collection.id }
-						className="cortext-collection-chooser__item"
-						variant={ isSelected ? 'secondary' : 'tertiary' }
-						isPressed={ isSelected }
-						onClick={ () => onSelect( collection.id ) }
-					>
-						{ title }
-					</Button>
-				);
-			} ) }
+					return (
+						<Button
+							key={ collection.id }
+							className="cortext-collection-chooser__item"
+							variant={ isSelected ? 'secondary' : 'tertiary' }
+							isPressed={ isSelected }
+							onClick={ () => onSelect( collection.id ) }
+						>
+							{ collectionTitle( collection ) }
+						</Button>
+					);
+				} )
+			) }
 		</div>
 	);
 }
 
 function CollectionCreator( { onCreate } ) {
 	const [ title, setTitle ] = useState( '' );
-	const [ isFullPage, setIsFullPage ] = useState( false );
 	const [ isSaving, setIsSaving ] = useState( false );
 	const [ error, setError ] = useState( '' );
-	const { invalidateResolution } = useDispatch( 'core' );
+	const create = useCreateCollectionDocument();
 	const canCreate = title.trim() && ! isSaving;
 
-	// Inline collections need the current page as owner. Full-page collections
-	// can use that same id as their sidebar parent.
+	// Nest the new collection under the current page so it appears beneath it
+	// in the sidebar tree, matching how the user got here.
 	const ownerPageId = useSelect(
 		( select ) => select( editorStore ).getCurrentPostId(),
 		[]
@@ -176,34 +198,11 @@ function CollectionCreator( { onCreate } ) {
 		setError( '' );
 
 		try {
-			const data = {
+			const collection = await create( {
 				title: title.trim(),
 				status: 'private',
-				mode: isFullPage ? 'full_page' : 'inline',
-			};
-			// The REST filter maps `parent` to owner meta for inline
-			// collections, or to post_parent for full-page collections.
-			if ( ownerPageId ) {
-				data.parent = ownerPageId;
-			}
-			const collection = await apiFetch( {
-				path: '/wp/v2/crtxt_collections',
-				method: 'POST',
-				data,
+				...( ownerPageId ? { parent: ownerPageId } : {} ),
 			} );
-			// The picker reads the full-page query, so refresh only when the
-			// new collection can appear there.
-			if ( isFullPage ) {
-				invalidateResolution( 'getEntityRecords', [
-					'postType',
-					'crtxt_collection',
-					FULL_PAGE_COLLECTION_QUERY,
-				] );
-			}
-			// tech-debt.md#td-rows-not-in-core-data: core-data may have cached `/wp/v2/types` before
-			// this collection registered its row CPT. Refresh the entity config
-			// so the next row detail lookup can find the new post type.
-			invalidateResolution( 'getEntitiesConfig', [ 'postType' ] );
 			onCreate( collection );
 		} catch ( apiError ) {
 			setError(
@@ -227,16 +226,6 @@ function CollectionCreator( { onCreate } ) {
 				value={ title }
 				onChange={ setTitle }
 				__next40pxDefaultSize
-				__nextHasNoMarginBottom
-			/>
-			<CheckboxControl
-				label={ __( 'Create as a full-page collection', 'cortext' ) }
-				help={ __(
-					'Full-page collections appear in the sidebar and get their own workspace URL. Inline collections stay inside this block.',
-					'cortext'
-				) }
-				checked={ isFullPage }
-				onChange={ setIsFullPage }
 				__nextHasNoMarginBottom
 			/>
 			<Button
@@ -326,7 +315,7 @@ function CollectionToolbarControl( {
 						enableComplementaryArea(
 							'cortext',
 							isOwner
-								? 'cortext/page-inspector'
+								? 'cortext/document-inspector'
 								: 'cortext/block-inspector'
 						)
 					}
@@ -555,7 +544,7 @@ function CollectionInspectorControls( {
 							__nextHasNoMarginBottom
 						/>
 						<SelectControl
-							label={ __( 'Rows per page', 'cortext' ) }
+							label={ __( 'Per page', 'cortext' ) }
 							value={ String( view?.perPage ?? 25 ) }
 							options={ PER_PAGE_OPTIONS }
 							onChange={ ( perPage ) =>
@@ -569,7 +558,7 @@ function CollectionInspectorControls( {
 							__nextHasNoMarginBottom
 						/>
 						<ToggleGroupControl
-							label={ __( 'Row detail', 'cortext' ) }
+							label={ __( 'Detail view', 'cortext' ) }
 							value={
 								view?.rowDetailMode ?? DEFAULT_ROW_DETAIL_MODE
 							}
@@ -604,7 +593,7 @@ export default function Edit( {
 	context,
 	setAttributes,
 } ) {
-	const { collectionId, view, align } = attributes;
+	const { collectionId, view, align, intent } = attributes;
 	const isOwner = useIsCanvasOwnerBlock(
 		clientId,
 		context?.postType,
@@ -625,9 +614,18 @@ export default function Edit( {
 		[ setAttributes ]
 	);
 
+	// The inserter variations stamp a transient `intent` to open the placeholder
+	// in create or link mode. Clear it once a collection is bound so resolved
+	// blocks only persist `collectionId` + `view`; until then it rides in the
+	// attributes and survives remounts (the canvas reconciles blocks on load),
+	// keeping the chosen mode.
 	const selectCollection = useCallback(
 		( id ) =>
-			setAttributes( { collectionId: id, view: createDefaultView() } ),
+			setAttributes( {
+				collectionId: id,
+				view: createDefaultView(),
+				intent: undefined,
+			} ),
 		[ setAttributes ]
 	);
 
@@ -652,6 +650,7 @@ export default function Edit( {
 	}, [] );
 
 	if ( ! collectionId ) {
+		const isLinkMode = intent === 'link-existing';
 		return (
 			<div { ...blockProps }>
 				<InspectorControls>
@@ -659,22 +658,33 @@ export default function Edit( {
 						<CollectionPicker onSelect={ selectCollection } />
 					</PanelBody>
 				</InspectorControls>
-				<Placeholder
-					label={ __( 'Collection view', 'cortext' ) }
-					instructions={ __(
-						'Pick a collection to display.',
-						'cortext'
-					) }
-				>
-					<CollectionPicker onSelect={ selectCollection } />
-					<div className="cortext-data-view-placeholder__create">
+				{ isLinkMode ? (
+					<Placeholder
+						icon={ link }
+						label={ __( 'Link a collection', 'cortext' ) }
+						instructions={ __(
+							'Show an existing collection here.',
+							'cortext'
+						) }
+					>
+						<CollectionPicker onSelect={ selectCollection } />
+					</Placeholder>
+				) : (
+					<Placeholder
+						icon={ table }
+						label={ __( 'New collection', 'cortext' ) }
+						instructions={ __(
+							'Name your collection to create it here.',
+							'cortext'
+						) }
+					>
 						<CollectionCreator
 							onCreate={ ( collection ) =>
 								selectCollection( collection.id )
 							}
 						/>
-					</div>
-				</Placeholder>
+					</Placeholder>
+				) }
 			</div>
 		);
 	}
@@ -714,10 +724,7 @@ export default function Edit( {
 					}
 					error={
 						<Notice status="error" isDismissible={ false }>
-							{ __(
-								'Collection rows could not be loaded.',
-								'cortext'
-							) }
+							{ __( 'Could not load documents.', 'cortext' ) }
 						</Notice>
 					}
 				/>

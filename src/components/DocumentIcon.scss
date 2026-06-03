@@ -1,0 +1,71 @@
+@use "@wordpress/base-styles/colors" as *;
+@use "@wordpress/base-styles/variables" as *;
+
+.cortext-document-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 auto;
+	line-height: 1;
+	vertical-align: middle;
+
+	&--emoji {
+		font-family:
+			"Apple Color Emoji",
+			"Segoe UI Emoji",
+			"Noto Color Emoji",
+			"Twemoji Mozilla",
+			sans-serif;
+	}
+
+	&--image {
+		object-fit: cover;
+		border-radius: 3px;
+	}
+
+	&--fallback svg,
+	&--wp svg {
+		width: var(--cortext-document-icon-glyph-size);
+		min-width: var(--cortext-document-icon-glyph-size);
+		height: var(--cortext-document-icon-glyph-size);
+		flex: 0 0 var(--cortext-document-icon-glyph-size);
+		max-width: none;
+	}
+
+	// Keep the swatch underneath the image until the browser has painted it.
+	&--image-wrap {
+		position: relative;
+		display: inline-block;
+		flex: 0 0 auto;
+		vertical-align: middle;
+	}
+
+	&--image-wrap .cortext-document-icon--image {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+		transition: opacity 80ms ease-out;
+	}
+
+	// Reserve the image slot immediately. The swatch stays transparent during
+	// the delay so cached images do not flash a placeholder.
+	&--image-loading {
+		position: absolute;
+		inset: 0;
+		display: block;
+		border-radius: 3px;
+	}
+
+	&--image-loading-visible {
+		background: var(--cortext-state-hover-strong, rgba(0, 0, 0, 0.09));
+		animation: cortext-skeleton-pulse 1.4s ease-in-out infinite;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+	.cortext-document-icon--image-loading-visible {
+		animation: none;
+	}
+}

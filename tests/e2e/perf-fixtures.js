@@ -6,7 +6,7 @@
 
 async function resolveCollectionAdminUrl( requestUtils, slug ) {
 	const collections = await requestUtils.rest( {
-		path: '/wp/v2/crtxt_collections',
+		path: '/wp/v2/crtxt_traits',
 		params: {
 			context: 'edit',
 			per_page: 100,

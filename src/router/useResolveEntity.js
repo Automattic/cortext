@@ -6,9 +6,10 @@ import apiFetch from '@wordpress/api-fetch';
 // don't break existing links and fresh drafts stay addressable as a bare id.
 //
 // Two REST round trips:
-//   1. `/cortext/v1/documents/<id>` returns the post type (and rest_base).
-//      Pages and row CPTs both opt into the `cortext-document` trait, so
-//      one locator covers both.
+//   1. `/cortext/v1/documents/<id>` returns the post type, rest_base, and
+//      trait ids the document belongs to. A non-empty `trait_ids` means the
+//      document is a row of those collections. Returned as a list so future
+//      multi-trait UX can use the whole set; single-trait callers read `[0]`.
 //   2. `/wp/v2/<rest_base>/<id>` returns the record (slug, parent, meta).
 
 // Pulls the trailing `<digits>`, optionally preceded by `-`, out of a URI.
@@ -19,10 +20,18 @@ export function parseIdFromUri( uri ) {
 	return match ? parseInt( match[ 1 ], 10 ) : null;
 }
 
+function normalizeTraitIds( raw ) {
+	if ( ! Array.isArray( raw ) ) {
+		return [];
+	}
+	return raw.map( ( id ) => Number( id ) ).filter( ( id ) => id > 0 );
+}
+
 export function useResolveDocument( uri ) {
 	const id = parseIdFromUri( uri );
 	const [ state, setState ] = useState( {
 		entity: null,
+		traitIds: [],
 		isResolving: true,
 		notFound: false,
 		id,
@@ -38,6 +47,7 @@ export function useResolveDocument( uri ) {
 		if ( ! id ) {
 			setState( {
 				entity: null,
+				traitIds: [],
 				isResolving: false,
 				notFound: Boolean( uri ),
 				id: null,
@@ -48,6 +58,7 @@ export function useResolveDocument( uri ) {
 		let cancelled = false;
 		setState( {
 			entity: null,
+			traitIds: [],
 			isResolving: true,
 			notFound: false,
 			id,
@@ -62,12 +73,14 @@ export function useResolveDocument( uri ) {
 				if ( ! restBase ) {
 					setState( {
 						entity: null,
+						traitIds: [],
 						isResolving: false,
 						notFound: true,
 						id,
 					} );
 					return;
 				}
+				const traitIds = normalizeTraitIds( locator?.trait_ids );
 				try {
 					const entity = await apiFetch( {
 						path: `/wp/v2/${ restBase }/${ id }?context=edit&_fields=id,slug,parent,type,created_at,created_by,modified_at,modified_by,cortext_hydrated_meta`,
@@ -75,6 +88,7 @@ export function useResolveDocument( uri ) {
 					if ( ! cancelled ) {
 						setState( {
 							entity,
+							traitIds,
 							isResolving: false,
 							notFound: false,
 							id,
@@ -84,6 +98,7 @@ export function useResolveDocument( uri ) {
 					if ( ! cancelled ) {
 						setState( {
 							entity: null,
+							traitIds: [],
 							isResolving: false,
 							notFound: true,
 							id,
@@ -95,6 +110,7 @@ export function useResolveDocument( uri ) {
 				if ( ! cancelled ) {
 					setState( {
 						entity: null,
+						traitIds: [],
 						isResolving: false,
 						notFound: true,
 						id,
@@ -112,94 +128,22 @@ export function useResolveDocument( uri ) {
 	return state;
 }
 
-const COLLECTION_TYPE = 'crtxt_collection';
-
-export function useResolveCollection( id ) {
-	// Same id-tagging as useResolveDocument above.
-	const [ state, setState ] = useState( {
-		entity: null,
-		isResolving: true,
-		notFound: false,
-		id,
-	} );
-
-	useEffect( () => {
-		if ( ! id ) {
-			setState( {
-				entity: null,
-				isResolving: false,
-				notFound: true,
-				id: null,
-			} );
-			return undefined;
-		}
-
-		let cancelled = false;
-		setState( {
-			entity: null,
-			isResolving: true,
-			notFound: false,
-			id,
-		} );
-
-		// EntityRoute needs `workspace_mode` to reject inline URLs, and `type`
-		// to mount Canvas.
-		apiFetch( {
-			path: `/wp/v2/${ COLLECTION_TYPE }s/${ id }?context=edit&_fields=id,slug,type,meta`,
-		} )
-			.then( ( entity ) => {
-				if ( ! cancelled ) {
-					setState( {
-						entity,
-						isResolving: false,
-						notFound: false,
-						id,
-					} );
-				}
-			} )
-			.catch( () => {
-				if ( ! cancelled ) {
-					setState( {
-						entity: null,
-						isResolving: false,
-						notFound: true,
-						id,
-					} );
-				}
-			} );
-
-		return () => {
-			cancelled = true;
-		};
-	}, [ id ] );
-
-	return state;
-}
-
 // Builds the URL segment: `<slug>-<id>` when a slug exists, or bare `<id>`
-// for fresh drafts. parseIdFromUri only reads the trailing digits, so the
-// slug part is purely cosmetic. No prefix; documents are the default kind
-// in the splat.
+// for fresh drafts. `parseIdFromUri` only reads the trailing digits, so the
+// slug part is purely cosmetic.
 export function computeDocumentUri( entity ) {
 	const slug = typeof entity?.slug === 'string' ? entity.slug.trim() : '';
 	return slug ? `${ slug }-${ entity.id }` : `${ entity.id }`;
 }
 
-// Builds a collection URL segment with the explicit `collection/` prefix.
-// Collections still keep their own URL prefix, even though full-page
-// collections now render in Canvas.
-export function computeCollectionUri( entity ) {
-	const slug = typeof entity?.slug === 'string' ? entity.slug.trim() : '';
-	const tail = slug ? `${ slug }-${ entity.id }` : `${ entity.id }`;
-	return `collection/${ tail }`;
-}
-
 // Singleton splat for the Published documents screen. The route reducer
 // matches the splat exactly; trailing segments fall through to the document
 // resolver and end up at "not found".
-//
-// FIXME: I don't like this constant
 export const PUBLISHED_DOCUMENTS_URI = 'published';
+
+// Singleton splat for the Import screen, matched exactly like
+// PUBLISHED_DOCUMENTS_URI above.
+export const IMPORT_URI = 'import';
 
 // Strips the prefix from a splat URI and returns { prefix, tail }.
 export function parseSplatUri( uri ) {

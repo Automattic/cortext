@@ -9,8 +9,8 @@ declare( strict_types=1 );
 
 namespace Cortext\Tests;
 
+use Cortext\PostType\Document;
 use Cortext\PostType\DocumentIdentity;
-use Cortext\PostType\Page;
 use WorDBless\BaseTestCase;
 
 final class Test_Document_Identity extends BaseTestCase {
@@ -19,7 +19,7 @@ final class Test_Document_Identity extends BaseTestCase {
 		parent::setUp();
 		// The prepender now gates on post_type_supports('cortext-document'),
 		// so the test post type needs the trait wired up before each case.
-		DocumentIdentity::register_for_post_type( Page::POST_TYPE );
+		DocumentIdentity::register_for_post_type( Document::POST_TYPE );
 	}
 
 	public function test_header_blocks_markup_contains_title_only(): void {
@@ -29,13 +29,27 @@ final class Test_Document_Identity extends BaseTestCase {
 		$this->assertSame( 1, substr_count( $markup, '<!-- wp:post-title' ) );
 	}
 
+	public function test_header_blocks_markup_locks_title_move_and_remove(): void {
+		$blocks = parse_blocks( DocumentIdentity::header_blocks_markup() );
+
+		$this->assertCount( 1, $blocks );
+		$this->assertSame( 'core/post-title', $blocks[0]['blockName'] );
+		$this->assertSame(
+			array(
+				'move'   => true,
+				'remove' => true,
+			),
+			$blocks[0]['attrs']['lock'] ?? null
+		);
+	}
+
 	public function test_prepend_header_blocks_leaves_updates_untouched(): void {
 		$identity = new DocumentIdentity();
 		$content  = '<!-- wp:paragraph --><p>Body</p><!-- /wp:paragraph -->';
 
 		$data = $identity->prepend_header_blocks(
 			array(
-				'post_type'    => Page::POST_TYPE,
+				'post_type'    => Document::POST_TYPE,
 				'post_content' => wp_slash( $content ),
 			),
 			array( 'ID' => 123 )
@@ -51,7 +65,7 @@ final class Test_Document_Identity extends BaseTestCase {
 
 		$data = $identity->prepend_header_blocks(
 			array(
-				'post_type'    => Page::POST_TYPE,
+				'post_type'    => Document::POST_TYPE,
 				'post_content' => wp_slash( $content ),
 			),
 			array()
@@ -68,7 +82,7 @@ final class Test_Document_Identity extends BaseTestCase {
 
 		$data = $identity->prepend_header_blocks(
 			array(
-				'post_type'    => Page::POST_TYPE,
+				'post_type'    => Document::POST_TYPE,
 				'post_content' => wp_slash( $content ),
 			),
 			array()

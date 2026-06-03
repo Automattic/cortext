@@ -2,9 +2,10 @@ import { SnackbarList } from '@wordpress/components';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { store as noticesStore } from '@wordpress/notices';
 
-// Renders only Cortext-owned snackbars. The editor store also dispatches its
-// own "Post updated" success notice on every save; in an autosave-silent UI
-// those would fire constantly, so we filter to notices we tagged ourselves.
+import './CortextSnackbars.scss';
+
+// Show only snackbars created by Cortext. Core also emits its own "Post updated"
+// notice after saves, which would be noisy here, so we keep notices with our ids.
 export default function CortextSnackbars() {
 	const notices = useSelect(
 		( select ) =>
@@ -20,5 +21,9 @@ export default function CortextSnackbars() {
 	);
 	const { removeNotice } = useDispatch( noticesStore );
 
-	return <SnackbarList notices={ notices } onRemove={ removeNotice } />;
+	return (
+		<div className="cortext-snackbars">
+			<SnackbarList notices={ notices } onRemove={ removeNotice } />
+		</div>
+	);
 }

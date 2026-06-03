@@ -23,7 +23,7 @@ import { useEntityProp, useEntityRecord } from '@wordpress/core-data';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
 import { __ } from '@wordpress/i18n';
-import { ENTER, SPACE } from '@wordpress/keycodes';
+import { ENTER, SPACE, isKeyboardEvent } from '@wordpress/keycodes';
 import {
 	useEffect,
 	useLayoutEffect,
@@ -35,8 +35,8 @@ import DocumentIdentityControls from './DocumentIdentityControls';
 import { useDocumentPropertiesContext } from './DocumentPropertiesContext';
 import {
 	findCanvasOwnerBlock,
-	getCanvasOwnerBlockName,
-	getCanvasOwnerInitialAttributes,
+	getCanvasOwnerBlockNameForRecord,
+	getCanvasOwnerInitialAttributesForRecord,
 } from './CanvasOwnerInspector';
 import MediaPicker, { MediaUploadCheck } from './MediaPicker';
 import afterNextPaint from '../hooks/afterNextPaint';
@@ -64,23 +64,128 @@ const DEFAULT_HEADER_BLOCK_NAMES = new Set( [
 	POST_TITLE_BLOCK,
 	DOCUMENT_PROPERTIES_BLOCK,
 ] );
+const PROTECTED_HEADER_LOCK = { move: true, remove: true };
+const COLLECTION_LEGACY_BLOCK_LOCK = { move: true, remove: true, edit: true };
 const CANVAS_READY_IMAGE_TIMEOUT = 8000;
 
-// Some post types add an owner block to the reserved header/body prefix.
-function getHeaderBlockNames( postType ) {
-	const ownerName = getCanvasOwnerBlockName( postType );
-	if ( ! ownerName ) {
+// Schema-bearing documents add an owner block to the reserved header/body
+// prefix. Plain documents do not, so the set collapses to defaults.
+function getHeaderBlockNames( ownerBlockName ) {
+	if ( ! ownerBlockName ) {
 		return DEFAULT_HEADER_BLOCK_NAMES;
 	}
-	return new Set( [ ...DEFAULT_HEADER_BLOCK_NAMES, ownerName ] );
+	return new Set( [ ...DEFAULT_HEADER_BLOCK_NAMES, ownerBlockName ] );
 }
 
-function isHeaderBlock( block, postType ) {
-	return getHeaderBlockNames( postType ).has( block?.name );
+function isCanvasOwnerBlock( block, record, postId ) {
+	if ( ! block || ! getCanvasOwnerBlockNameForRecord( record ) ) {
+		return false;
+	}
+	return !! findCanvasOwnerBlock( [ block ], record, postId );
 }
 
-function isHeaderChromeBlock( block, postType ) {
-	return isHeaderBlock( block, postType );
+function isHeaderBlock( block, ownerBlockName, record = null, postId = null ) {
+	if ( ! getHeaderBlockNames( ownerBlockName ).has( block?.name ) ) {
+		return false;
+	}
+	if ( block?.name !== ownerBlockName ) {
+		return true;
+	}
+	if ( ! record || ! postId ) {
+		return true;
+	}
+	return isCanvasOwnerBlock( block, record, postId );
+}
+
+// Returns clientIds of header blocks that should be removed by the next
+// layout pass. Catches two cases:
+//   1. Duplicate singletons (cover, icon, title, properties) inserted by a
+//      stray paste or older content version.
+//   2. Owner data-views whose `collectionId` does not point at the current
+//      document, or extra self-referencing copies. A collection's body is
+//      its self-referencing data-view; anything else is residue from a
+//      stale block-editor state that survived a document switch.
+//
+// Exported so the invariant can be tested without driving the full layout
+// effect.
+export function collectDuplicateHeaderClientIds(
+	blocks,
+	ownerBlockName,
+	postId
+) {
+	const duplicateIds = [];
+	const seenSingletons = new Set();
+	blocks.forEach( ( block ) => {
+		if (
+			block.name !== DOCUMENT_COVER_BLOCK &&
+			block.name !== DOCUMENT_ICON_BLOCK &&
+			block.name !== POST_TITLE_BLOCK &&
+			block.name !== DOCUMENT_PROPERTIES_BLOCK
+		) {
+			return;
+		}
+		if ( seenSingletons.has( block.name ) ) {
+			duplicateIds.push( block.clientId );
+			return;
+		}
+		seenSingletons.add( block.name );
+	} );
+	if ( ownerBlockName ) {
+		let ownerSeen = false;
+		blocks.forEach( ( block ) => {
+			if ( block.name !== ownerBlockName ) {
+				return;
+			}
+			const attrId = Number( block.attributes?.collectionId );
+			if ( attrId !== Number( postId ) ) {
+				duplicateIds.push( block.clientId );
+				return;
+			}
+			if ( ownerSeen ) {
+				duplicateIds.push( block.clientId );
+				return;
+			}
+			ownerSeen = true;
+		} );
+	}
+	return duplicateIds;
+}
+
+function useDocumentRecord( postType, postId ) {
+	const { record } = useEntityRecord( 'postType', postType, postId || 0 );
+	return record;
+}
+
+function isHeaderChromeBlock( block, ownerBlockName, record, postId ) {
+	return isHeaderBlock( block, ownerBlockName, record, postId );
+}
+
+function isCollectionBodyBlock( block, ownerBlockName, record, postId ) {
+	return (
+		!! ownerBlockName &&
+		!! block &&
+		! isHeaderBlock( block, ownerBlockName, record, postId )
+	);
+}
+
+function lockNeedsRepair( lock, desiredLock ) {
+	return (
+		lock?.move !== desiredLock.move ||
+		lock?.remove !== desiredLock.remove ||
+		( desiredLock.edit === true
+			? lock?.edit !== true
+			: lock?.edit === true )
+	);
+}
+
+function selectedClientIdFromEvent( event ) {
+	const target = event.target;
+	if ( ! target || typeof target.closest !== 'function' ) {
+		return null;
+	}
+	return (
+		target.closest( '[data-block]' )?.getAttribute( 'data-block' ) ?? null
+	);
 }
 
 function syncHeaderBoundaryMoveUpClass() {
@@ -178,13 +283,17 @@ function syncHeaderBoundaryMoveUpState( root, shouldDisable ) {
 
 function HeaderPrefixToolbarGuard( {
 	isActive = true,
+	isLocked = false,
+	postId,
 	postType,
 	toolbarRootRef,
 } ) {
+	const record = useDocumentRecord( postType, postId );
+	const ownerBlockName = getCanvasOwnerBlockNameForRecord( record );
 	const guardId = useRef( Symbol( DISABLE_HEADER_BOUNDARY_MOVE_UP_CLASS ) );
 	const shouldDisableMoveUp = useSelect(
 		( select ) => {
-			if ( ! isActive ) {
+			if ( ! isActive || isLocked ) {
 				return false;
 			}
 			const store = select( blockEditorStore );
@@ -199,7 +308,8 @@ function HeaderPrefixToolbarGuard( {
 
 			const firstBodyIndex = blocks.findIndex(
 				( block, index ) =>
-					index > titleIndex && ! isHeaderBlock( block, postType )
+					index > titleIndex &&
+					! isHeaderBlock( block, ownerBlockName, record, postId )
 			);
 			if ( firstBodyIndex < 0 ) {
 				return false;
@@ -217,7 +327,7 @@ function HeaderPrefixToolbarGuard( {
 
 			return Math.min( ...selectedRootIndexes ) === firstBodyIndex;
 		},
-		[ isActive, postType ]
+		[ isActive, isLocked, ownerBlockName, postId, record ]
 	);
 
 	useEffect( () => {
@@ -248,7 +358,7 @@ function HeaderPrefixToolbarGuard( {
 	return null;
 }
 
-function DocumentIdentityActions( { postId, postType } ) {
+function DocumentIdentityActions( { isLocked = false, postId, postType } ) {
 	const isInsertingCoverRef = useRef( false );
 	const actionsRef = useRef( null );
 	const [ meta ] = useEntityProp( 'postType', postType, 'meta', postId );
@@ -280,7 +390,7 @@ function DocumentIdentityActions( { postId, postType } ) {
 	const { editEntityRecord, saveEditedEntityRecord } = useDispatch( 'core' );
 
 	useEffect( () => {
-		if ( isTrashed || hasCover ) {
+		if ( isTrashed || isLocked || hasCover ) {
 			return undefined;
 		}
 		const node = actionsRef.current;
@@ -332,30 +442,30 @@ function DocumentIdentityActions( { postId, postType } ) {
 				focusFirstActionFromTitle,
 				true
 			);
-	}, [ hasCover, isTrashed, selectedBlockName ] );
+	}, [ hasCover, isLocked, isTrashed, selectedBlockName ] );
 
-	if ( isTrashed || hasCover ) {
+	if ( isTrashed || isLocked || hasCover ) {
 		return null;
 	}
 
 	const ensureIconBlock = () => {
-		if ( hasIcon ) {
+		if ( hasIcon || isLocked ) {
 			return;
 		}
 		const block = createBlock( DOCUMENT_ICON_BLOCK, {
-			lock: { move: true },
+			lock: PROTECTED_HEADER_LOCK,
 		} );
 		insertBlocks( block, 0, undefined, false );
 	};
 
 	const insertCover = async ( mediaId ) => {
-		if ( hasCover || isInsertingCoverRef.current ) {
+		if ( hasCover || isLocked || isInsertingCoverRef.current ) {
 			return;
 		}
 		isInsertingCoverRef.current = true;
 		const block = createBlock( DOCUMENT_COVER_BLOCK, {
 			align: 'full',
-			lock: { move: true },
+			lock: PROTECTED_HEADER_LOCK,
 		} );
 		insertBlocks( block, 0, undefined, false );
 		try {
@@ -373,7 +483,7 @@ function DocumentIdentityActions( { postId, postType } ) {
 			ref={ actionsRef }
 			className="cortext-canvas__identity-actions"
 			role="group"
-			aria-label={ __( 'Document identity actions', 'cortext' ) }
+			aria-label={ __( 'Identity actions', 'cortext' ) }
 		>
 			{ ! hasIcon && ! hasCover && (
 				<DocumentIdentityControls
@@ -396,6 +506,7 @@ function DocumentIdentityActions( { postId, postType } ) {
 				<MediaUploadCheck>
 					<MediaPicker
 						allowedTypes={ [ 'image' ] }
+						postId={ postId }
 						onSelect={ ( media ) => insertCover( media.id ) }
 						render={ ( { open } ) => (
 							<Button
@@ -413,7 +524,12 @@ function DocumentIdentityActions( { postId, postType } ) {
 	);
 }
 
-function EnsureHeaderBlocks( { postId, postType } ) {
+function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
+	const collectionBodySnapshotRef = useRef( {
+		key: null,
+		initialized: false,
+		clientIds: new Set(),
+	} );
 	const [ meta ] = useEntityProp( 'postType', postType, 'meta', postId );
 	const [ featuredId ] = useEntityProp(
 		'postType',
@@ -431,7 +547,8 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 		propertiesContextStable &&
 		Array.isArray( propertiesCtx?.fields ) &&
 		propertiesCtx.fields.length > 0;
-	const ownerBlockName = getCanvasOwnerBlockName( postType );
+	const record = useDocumentRecord( postType, postId );
+	const ownerBlockName = getCanvasOwnerBlockNameForRecord( record );
 	const {
 		coverIndex,
 		titleIndex,
@@ -445,6 +562,11 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 		bodyBlockBeforeTitleId,
 		shouldHideHeaderInsertionPoint,
 		duplicateHeaderIds,
+		shouldSeedEmptyBodyBlock,
+		emptyBodyInsertionIndex,
+		protectedLockRepairs,
+		collectionBodyClientIds,
+		lockedCollectionBodyClientIds,
 		isTrashed,
 	} = useSelect(
 		( select ) => {
@@ -455,8 +577,13 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 			const currentPropertiesIndex = names.indexOf(
 				DOCUMENT_PROPERTIES_BLOCK
 			);
-			const currentOwnerIndex = ownerBlockName
-				? names.indexOf( ownerBlockName )
+			const ownerBlock = ownerBlockName
+				? findCanvasOwnerBlock( blocks, record, postId )
+				: null;
+			const currentOwnerIndex = ownerBlock
+				? blocks.findIndex(
+						( block ) => block.clientId === ownerBlock.clientId
+				  )
 				: -1;
 			// The protected prefix ends at the last installed header block:
 			// cover, icon, title, properties, or the owner block. max() keeps
@@ -474,7 +601,9 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 					index--
 				) {
 					const block = blocks[ index ];
-					if ( isHeaderBlock( block, postType ) ) {
+					if (
+						isHeaderBlock( block, ownerBlockName, record, postId )
+					) {
 						continue;
 					}
 					currentBodyBlockBeforeTitleId = block.clientId;
@@ -486,46 +615,50 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 				insertionPoint?.rootClientId ?? ROOT_BLOCK_LIST;
 			const insertionPointIndex =
 				insertionPoint?.index ?? Number.POSITIVE_INFINITY;
-			const seenSingletons = new Set();
-			const duplicateIds = [];
+			const duplicateIds = collectDuplicateHeaderClientIds(
+				blocks,
+				ownerBlockName,
+				postId
+			);
+			const lockRepairs = [];
+			const bodyClientIds = [];
+			const lockedBodyClientIds = [];
 			blocks.forEach( ( block ) => {
+				let desiredLock = null;
 				if (
-					block.name !== DOCUMENT_COVER_BLOCK &&
-					block.name !== DOCUMENT_ICON_BLOCK &&
-					block.name !== POST_TITLE_BLOCK &&
-					block.name !== DOCUMENT_PROPERTIES_BLOCK
+					DEFAULT_HEADER_BLOCK_NAMES.has( block.name ) ||
+					isCanvasOwnerBlock( block, record, postId )
 				) {
-					return;
+					desiredLock = PROTECTED_HEADER_LOCK;
+				} else if (
+					isCollectionBodyBlock(
+						block,
+						ownerBlockName,
+						record,
+						postId
+					)
+				) {
+					bodyClientIds.push( block.clientId );
+					desiredLock = COLLECTION_LEGACY_BLOCK_LOCK;
+					if (
+						! lockNeedsRepair(
+							block.attributes?.lock,
+							COLLECTION_LEGACY_BLOCK_LOCK
+						)
+					) {
+						lockedBodyClientIds.push( block.clientId );
+					}
 				}
-				if ( seenSingletons.has( block.name ) ) {
-					duplicateIds.push( block.clientId );
-					return;
+				if (
+					desiredLock &&
+					lockNeedsRepair( block.attributes?.lock, desiredLock )
+				) {
+					lockRepairs.push( {
+						clientId: block.clientId,
+						lock: desiredLock,
+					} );
 				}
-				seenSingletons.add( block.name );
 			} );
-			// The owner block is keyed on attribute match, not just name, so
-			// a foreign data-view (pointing at another collection) isn't a
-			// duplicate of the self-referencing owner. If we name-deduped
-			// here, the dedup pass would drop the owner whenever a foreign
-			// data-view came first and the insertion pass would re-add it
-			// on the next render, leaving the document dirty forever.
-			if ( ownerBlockName ) {
-				let ownerSeen = false;
-				blocks.forEach( ( block ) => {
-					if ( block.name !== ownerBlockName ) {
-						return;
-					}
-					const attrId = Number( block.attributes?.collectionId );
-					if ( attrId !== Number( postId ) ) {
-						return;
-					}
-					if ( ownerSeen ) {
-						duplicateIds.push( block.clientId );
-						return;
-					}
-					ownerSeen = true;
-				} );
-			}
 			const propertiesBlock = blocks.find(
 				( block ) => block.name === DOCUMENT_PROPERTIES_BLOCK
 			);
@@ -536,12 +669,22 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 				hasIcon: names.includes( DOCUMENT_ICON_BLOCK ),
 				hasTitle: names.includes( POST_TITLE_BLOCK ),
 				hasProperties: !! propertiesBlock,
-				hasOwner: ownerBlockName
-					? !! findCanvasOwnerBlock( blocks, postType, postId )
-					: true,
+				hasOwner: ownerBlockName ? !! ownerBlock : true,
 				propertiesClientId: propertiesBlock?.clientId ?? null,
 				headerEndIndex: currentHeaderEndIndex,
 				bodyBlockBeforeTitleId: currentBodyBlockBeforeTitleId,
+				shouldSeedEmptyBodyBlock:
+					! ownerBlockName &&
+					blocks.length > 0 &&
+					blocks.every( ( block ) =>
+						isHeaderChromeBlock(
+							block,
+							ownerBlockName,
+							record,
+							postId
+						)
+					),
+				emptyBodyInsertionIndex: currentHeaderEndIndex + 1,
 				shouldHideHeaderInsertionPoint:
 					store.isBlockInsertionPointVisible() &&
 					currentHeaderEndIndex > -1 &&
@@ -552,9 +695,12 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 					select( editorStore ).getCurrentPostAttribute(
 						'status'
 					) === 'trash',
+				protectedLockRepairs: lockRepairs,
+				collectionBodyClientIds: bodyClientIds,
+				lockedCollectionBodyClientIds: lockedBodyClientIds,
 			};
 		},
-		[ ownerBlockName, postId, postType ]
+		[ ownerBlockName, postId, record ]
 	);
 	const {
 		insertBlocks,
@@ -567,13 +713,60 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 	} = useDispatch( blockEditorStore );
 
 	useLayoutEffect( () => {
+		collectionBodySnapshotRef.current = {
+			key: `${ postType }:${ postId }`,
+			initialized: false,
+			clientIds: new Set(),
+		};
+	}, [ postId, postType ] );
+
+	useLayoutEffect( () => {
 		if ( isTrashed ) {
 			return;
 		}
 
+		const removedClientIds = new Set();
 		duplicateHeaderIds.forEach( ( clientId ) => {
+			removedClientIds.add( clientId );
 			updateBlockAttributes( clientId, { lock: {} } );
 			removeBlock( clientId, false );
+		} );
+
+		const snapshot = collectionBodySnapshotRef.current;
+		if (
+			ownerBlockName &&
+			hasOwner &&
+			hasTitle &&
+			! snapshot.initialized
+		) {
+			snapshot.key = `${ postType }:${ postId }`;
+			snapshot.clientIds = new Set(
+				lockedCollectionBodyClientIds.length > 0
+					? lockedCollectionBodyClientIds
+					: collectionBodyClientIds
+			);
+			snapshot.initialized = true;
+		}
+
+		if ( ownerBlockName && hasOwner && snapshot.initialized ) {
+			collectionBodyClientIds
+				.filter( ( clientId ) => ! snapshot.clientIds.has( clientId ) )
+				.forEach( ( clientId ) => {
+					removedClientIds.add( clientId );
+					updateBlockAttributes( clientId, { lock: {} } );
+					removeBlock( clientId, false );
+				} );
+		}
+
+		if ( isLocked ) {
+			return;
+		}
+
+		protectedLockRepairs.forEach( ( { clientId, lock } ) => {
+			if ( removedClientIds.has( clientId ) ) {
+				return;
+			}
+			updateBlockAttributes( clientId, { lock } );
 		} );
 
 		// Keep the properties block only on rows whose collection has fields.
@@ -590,21 +783,71 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 		}
 	}, [
 		duplicateHeaderIds,
+		collectionBodyClientIds,
 		hasProperties,
 		hasSchema,
+		hasOwner,
+		hasTitle,
+		isLocked,
 		isTrashed,
+		lockedCollectionBodyClientIds,
+		ownerBlockName,
 		propertiesClientId,
 		propertiesContextStable,
+		postId,
+		postType,
+		protectedLockRepairs,
 		removeBlock,
 		updateBlockAttributes,
 	] );
 
 	useLayoutEffect( () => {
-		if ( isTrashed || ! shouldHideHeaderInsertionPoint ) {
+		if ( isTrashed || isLocked || ! shouldHideHeaderInsertionPoint ) {
 			return;
 		}
 		hideInsertionPoint();
-	}, [ hideInsertionPoint, isTrashed, shouldHideHeaderInsertionPoint ] );
+	}, [
+		hideInsertionPoint,
+		isLocked,
+		isTrashed,
+		shouldHideHeaderInsertionPoint,
+	] );
+
+	useLayoutEffect( () => {
+		if (
+			isTrashed ||
+			ownerBlockName ||
+			! shouldSeedEmptyBodyBlock ||
+			duplicateHeaderIds.length > 0 ||
+			( featuredId > 0 && ! hasCover ) ||
+			( iconMeta && ! hasIcon ) ||
+			! hasTitle ||
+			( hasSchema && ! hasProperties )
+		) {
+			return;
+		}
+
+		insertBlocks(
+			createBlock( 'core/paragraph' ),
+			emptyBodyInsertionIndex,
+			undefined,
+			false
+		);
+	}, [
+		duplicateHeaderIds.length,
+		emptyBodyInsertionIndex,
+		featuredId,
+		hasCover,
+		hasIcon,
+		hasProperties,
+		hasSchema,
+		hasTitle,
+		iconMeta,
+		insertBlocks,
+		isTrashed,
+		ownerBlockName,
+		shouldSeedEmptyBodyBlock,
+	] );
 
 	// useLayoutEffect rather than useEffect: we want the insertion to
 	// happen between render and paint so the user never sees the
@@ -618,7 +861,7 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 	// reads as "the icon is being inserted right now" when really the
 	// document is just hydrating.
 	useLayoutEffect( () => {
-		if ( isTrashed ) {
+		if ( isTrashed || isLocked ) {
 			return;
 		}
 
@@ -643,7 +886,7 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 			insertBlocks(
 				createBlock( DOCUMENT_COVER_BLOCK, {
 					align: 'full',
-					lock: { move: true },
+					lock: PROTECTED_HEADER_LOCK,
 				} ),
 				0,
 				undefined,
@@ -659,7 +902,7 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 			}
 			insertBlocks(
 				createBlock( DOCUMENT_ICON_BLOCK, {
-					lock: { move: true },
+					lock: PROTECTED_HEADER_LOCK,
 				} ),
 				iconIndex,
 				undefined,
@@ -671,7 +914,7 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 		if ( needsTitle ) {
 			insertBlocks(
 				createBlock( POST_TITLE_BLOCK, {
-					lock: { move: true, remove: true },
+					lock: PROTECTED_HEADER_LOCK,
 				} ),
 				computedTitleIndex,
 				undefined,
@@ -690,7 +933,7 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 				: titleIndex + ( needsCover ? 1 : 0 ) + ( needsIcon ? 1 : 0 );
 			insertBlocks(
 				createBlock( DOCUMENT_PROPERTIES_BLOCK, {
-					lock: { move: true, remove: true },
+					lock: PROTECTED_HEADER_LOCK,
 				} ),
 				anchorTitleIndex + 1,
 				undefined,
@@ -700,8 +943,8 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 		if ( needsOwner ) {
 			// The owner block is the body. Add it last so it follows any
 			// header repairs made in this pass.
-			const ownerAttributes = getCanvasOwnerInitialAttributes(
-				postType,
+			const ownerAttributes = getCanvasOwnerInitialAttributesForRecord(
+				record,
 				postId
 			);
 			insertBlocks(
@@ -727,10 +970,11 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 		hasTitle,
 		iconMeta,
 		insertBlocks,
+		isLocked,
 		isTrashed,
 		ownerBlockName,
 		postId,
-		postType,
+		record,
 		startTyping,
 		stopTyping,
 		titleIndex,
@@ -739,6 +983,7 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 	useLayoutEffect( () => {
 		if (
 			isTrashed ||
+			isLocked ||
 			! bodyBlockBeforeTitleId ||
 			headerEndIndex < 0 ||
 			duplicateHeaderIds.length > 0 ||
@@ -771,6 +1016,7 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 		hasTitle,
 		headerEndIndex,
 		iconMeta,
+		isLocked,
 		isTrashed,
 		moveBlocksToPosition,
 		startTyping,
@@ -780,40 +1026,147 @@ function EnsureHeaderBlocks( { postId, postType } ) {
 	return null;
 }
 
-// Hide core's block settings menu while a locked header block is selected.
-// Those menu items do not fit fixed singleton blocks, and core does not expose
-// a per-block filter. The toolbar and iframe live in separate documents, so a
-// body class is the simplest hook for CSS. Mounting this here keeps Canvas and
-// RowEditor on the same path.
-function HideHeaderBlockKebab( { postType } ) {
-	const ownerBlockName = getCanvasOwnerBlockName( postType );
-	const selectedName = useSelect( ( select ) => {
-		const store = select( blockEditorStore );
-		const clientId = store.getSelectedBlockClientId();
-		return clientId ? store.getBlockName( clientId ) : null;
-	}, [] );
+// Hide Core block actions while a protected Cortext block is selected.
+// Duplicate, move, lock, and add actions do not make sense for fixed headers
+// or locked collection body content. The toolbar and iframe live in separate
+// documents, so a body class is the simplest hook.
+function HideHeaderBlockKebab( { postId, postType } ) {
+	const record = useDocumentRecord( postType, postId );
+	const ownerBlockName = getCanvasOwnerBlockNameForRecord( record );
+	const isSelectedProtected = useSelect(
+		( select ) => {
+			const store = select( blockEditorStore );
+			const clientId = store.getSelectedBlockClientId();
+			if ( ! clientId ) {
+				return false;
+			}
+			const block = store.getBlock( clientId );
+			return (
+				isHeaderBlock( block, ownerBlockName, record, postId ) ||
+				isCollectionBodyBlock( block, ownerBlockName, record, postId )
+			);
+		},
+		[ ownerBlockName, postId, record ]
+	);
 
 	useEffect( () => {
-		const isHeader =
-			selectedName === DOCUMENT_COVER_BLOCK ||
-			selectedName === DOCUMENT_ICON_BLOCK ||
-			selectedName === DOCUMENT_PROPERTIES_BLOCK ||
-			( !! ownerBlockName && selectedName === ownerBlockName );
 		document.body.classList.toggle(
 			'cortext-hide-block-settings-menu',
-			isHeader
+			isSelectedProtected
 		);
 		return () => {
 			document.body.classList.remove(
 				'cortext-hide-block-settings-menu'
 			);
 		};
-	}, [ ownerBlockName, selectedName ] );
+	}, [ isSelectedProtected ] );
 
 	return null;
 }
 
-function HeaderAwareRootAppender( { postType } ) {
+function ProtectedBlockShortcutGuard( { postId, postType, canvasRootRef } ) {
+	const record = useDocumentRecord( postType, postId );
+	const ownerBlockName = getCanvasOwnerBlockNameForRecord( record );
+	const { protectedClientIds, selectedClientIds } = useSelect(
+		( select ) => {
+			const store = select( blockEditorStore );
+			const blocks = store.getBlocks();
+			const protectedIds = [];
+			const selectedIds = store.getSelectedBlockClientIds();
+
+			blocks.forEach( ( block ) => {
+				const isProtected =
+					isHeaderBlock( block, ownerBlockName, record, postId ) ||
+					isCollectionBodyBlock(
+						block,
+						ownerBlockName,
+						record,
+						postId
+					);
+				if ( isProtected ) {
+					protectedIds.push( block.clientId );
+				}
+			} );
+
+			return {
+				protectedClientIds: protectedIds,
+				selectedClientIds: selectedIds,
+			};
+		},
+		[ ownerBlockName, postId, record ]
+	);
+
+	useEffect( () => {
+		const protectedSet = new Set( protectedClientIds );
+		if ( protectedSet.size === 0 ) {
+			return undefined;
+		}
+
+		const getCandidateClientIds = ( event, fallbackClientIds ) => {
+			const eventClientId = selectedClientIdFromEvent( event );
+			return eventClientId ? [ eventClientId ] : fallbackClientIds;
+		};
+		const includesProtected = ( clientIds ) =>
+			clientIds.some( ( clientId ) => protectedSet.has( clientId ) );
+		const stopProtectedShortcut = ( event ) => {
+			event.preventDefault();
+			event.stopPropagation();
+			event.stopImmediatePropagation?.();
+		};
+		const onKeyDown = ( event ) => {
+			if ( event.defaultPrevented ) {
+				return;
+			}
+			if ( isKeyboardEvent.primaryShift( event, 'd' ) ) {
+				const clientIds = getCandidateClientIds(
+					event,
+					selectedClientIds
+				);
+				if ( includesProtected( clientIds ) ) {
+					stopProtectedShortcut( event );
+				}
+				return;
+			}
+			if ( isKeyboardEvent.primaryAlt( event, 't' ) ) {
+				const clientIds = getCandidateClientIds(
+					event,
+					selectedClientIds.slice( 0, 1 )
+				);
+				if ( includesProtected( clientIds ) ) {
+					stopProtectedShortcut( event );
+				}
+				return;
+			}
+			if ( isKeyboardEvent.primaryAlt( event, 'y' ) ) {
+				const clientIds = getCandidateClientIds(
+					event,
+					selectedClientIds.slice( -1 )
+				);
+				if ( includesProtected( clientIds ) ) {
+					stopProtectedShortcut( event );
+				}
+			}
+		};
+
+		const ownerDocument = canvasRootRef?.current?.ownerDocument ?? document;
+		const iframeDocument =
+			canvasRootRef?.current?.querySelector( 'iframe' )
+				?.contentDocument ?? null;
+		const documents = [ ownerDocument, iframeDocument ].filter( Boolean );
+		documents.forEach( ( doc ) =>
+			doc.addEventListener( 'keydown', onKeyDown, true )
+		);
+		return () => {
+			documents.forEach( ( doc ) =>
+				doc.removeEventListener( 'keydown', onKeyDown, true )
+			);
+		};
+	}, [ canvasRootRef, protectedClientIds, selectedClientIds ] );
+
+	return null;
+}
+
+function HeaderAwareRootAppender( { ownerBlockName, postId, record } ) {
 	// tech-debt.md#td-gutenberg-header-boundary: Gutenberg's root appender only treats a fully empty
 	// root list as empty. Cortext's locked header blocks are chrome, so the
 	// body still needs a first-block prompt after them.
@@ -822,19 +1175,26 @@ function HeaderAwareRootAppender( { postType } ) {
 			const blocks = select( blockEditorStore ).getBlocks();
 			const headerEndIndex = blocks.reduce(
 				( lastIndex, block, index ) =>
-					isHeaderChromeBlock( block, postType ) ? index : lastIndex,
+					isHeaderChromeBlock( block, ownerBlockName, record, postId )
+						? index
+						: lastIndex,
 				-1
 			);
 			return {
 				bodyEmpty:
 					blocks.length > 0 &&
 					blocks.every( ( block ) =>
-						isHeaderChromeBlock( block, postType )
+						isHeaderChromeBlock(
+							block,
+							ownerBlockName,
+							record,
+							postId
+						)
 					),
 				insertionIndex: headerEndIndex + 1,
 			};
 		},
-		[ postType ]
+		[ ownerBlockName, postId, record ]
 	);
 	const { insertDefaultBlock, startTyping } = useDispatch( blockEditorStore );
 
@@ -892,7 +1252,8 @@ function TrashedNotice( { postId, postType, onRestored } ) {
 			onRestored?.( postId, postType, response );
 		} catch ( err ) {
 			setError(
-				err?.message ?? __( 'Could not restore document.', 'cortext' )
+				err?.message ??
+					__( 'Could not restore this document.', 'cortext' )
 			);
 		} finally {
 			setIsRestoring( false );
@@ -913,7 +1274,9 @@ function TrashedNotice( { postId, postType, onRestored } ) {
 				},
 			] }
 		>
-			{ error ? error : __( 'This document is in trash.', 'cortext' ) }
+			{ error
+				? error
+				: __( 'This document is in the Trash.', 'cortext' ) }
 		</Notice>
 	);
 }
@@ -1113,6 +1476,7 @@ function CanvasReadyEffect( {
 export default function EditorBody( {
 	featuredMedia,
 	isActive = true,
+	isLocked = false,
 	postId,
 	postType,
 	extraStyles,
@@ -1159,45 +1523,65 @@ export default function EditorBody( {
 			'trash',
 		[]
 	);
+	const record = useDocumentRecord( postType, postId );
+	const ownerBlockName = getCanvasOwnerBlockNameForRecord( record );
 	const shouldUseHeaderAwareAppender = useSelect(
 		( select ) => {
-			if ( getCanvasOwnerBlockName( postType ) ) {
+			if ( ownerBlockName ) {
 				return false;
 			}
 			const blocks = select( blockEditorStore ).getBlocks();
 			return (
 				blocks.length > 0 &&
 				blocks.every( ( block ) =>
-					isHeaderChromeBlock( block, postType )
+					isHeaderChromeBlock( block, ownerBlockName, record, postId )
 				)
 			);
 		},
-		[ postType ]
+		[ ownerBlockName, postId, record ]
 	);
-	const renderAppender = shouldUseHeaderAwareAppender
-		? () => <HeaderAwareRootAppender postType={ postType } />
-		: undefined;
+	const isReadOnly = isTrashed || isLocked;
+	const renderAppender =
+		shouldUseHeaderAwareAppender && ! isReadOnly
+			? () => (
+					<HeaderAwareRootAppender
+						ownerBlockName={ ownerBlockName }
+						postId={ postId }
+						record={ record }
+					/>
+			  )
+			: undefined;
 
 	const blockCanvas = (
 		<div className="cortext-canvas__block-canvas" ref={ blockCanvasRef }>
 			<BlockCanvas height="100%" styles={ styles }>
 				<DocumentIdentityActions
+					isLocked={ isReadOnly }
 					postId={ postId }
 					postType={ postType }
 				/>
-				<EnsureHeaderBlocks postId={ postId } postType={ postType } />
-				<HideHeaderBlockKebab postType={ postType } />
+				<EnsureHeaderBlocks
+					isLocked={ isReadOnly }
+					postId={ postId }
+					postType={ postType }
+				/>
+				<HideHeaderBlockKebab postId={ postId } postType={ postType } />
+				<ProtectedBlockShortcutGuard
+					postId={ postId }
+					postType={ postType }
+					canvasRootRef={ blockCanvasRef }
+				/>
 				<HeaderPrefixToolbarGuard
 					isActive={ isActive }
+					isLocked={ isReadOnly }
+					postId={ postId }
 					postType={ postType }
 					toolbarRootRef={ blockCanvasRef }
 				/>
 				<div
 					className={ [
 						'cortext-canvas__editor',
-						getCanvasOwnerBlockName( postType )
-							? 'cortext-canvas__editor--owner'
-							: '',
+						ownerBlockName ? 'cortext-canvas__editor--owner' : '',
 					]
 						.filter( Boolean )
 						.join( ' ' ) }
@@ -1228,7 +1612,7 @@ export default function EditorBody( {
 					onRestored={ onRestored }
 				/>
 			) }
-			{ isTrashed ? (
+			{ isReadOnly ? (
 				<Disabled className="cortext-canvas__locked">
 					{ blockCanvas }
 				</Disabled>

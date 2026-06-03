@@ -1,43 +1,84 @@
 import { useCallback } from '@wordpress/element';
 import { MediaUploadCheck } from '@wordpress/block-editor';
 
-// Resolves to the wp.media (Backbone media library) instance available in
-// the host document. From inside the BlockCanvas iframe `window.wp.media`
-// is undefined — `wp_enqueue_media()` only enqueues media-views into the
-// parent — so we walk up to `window.parent` when needed. Returns null when
-// the host hasn't loaded media-views (e.g., the screen called this without
-// `wp_enqueue_media()`); callers should treat the trigger as a no-op.
-function getHostWpMedia() {
+// Resolves to the host document's `wp` global. Inside the BlockCanvas iframe
+// `window.wp.media` is undefined (wp_enqueue_media() only loads media-views in
+// the parent), so we walk up to `window.parent` when needed. Returns null when
+// the host has not loaded media-views (for example a screen that did not call
+// wp_enqueue_media()); callers should treat the trigger as a no-op.
+function getHostWp() {
 	if ( typeof window === 'undefined' ) {
 		return null;
 	}
 	const host =
 		window.parent && window.parent !== window ? window.parent : window;
-	return host?.wp?.media ?? null;
+	return host?.wp ?? null;
 }
 
 // Drop-in alternative to `<MediaUpload>` from `@wordpress/block-editor`
 // for the same use cases (single-select image picker). The render-prop
 // API matches: `({ open }) => <Trigger />`. Wrap with our own
-// `<MediaUploadCheck>` re-export so callers stay symmetrical.
+// `<MediaUploadCheck>` re-export so callers stay symmetrical. Pass `postId`
+// to attach uploads to that document so they count as Cortext media.
 export default function MediaPicker( {
 	allowedTypes = [ 'image' ],
 	value,
 	onSelect,
 	title,
 	render,
+	postId,
 } ) {
 	const open = useCallback( () => {
-		const wpMedia = getHostWpMedia();
+		const wp = getHostWp();
+		const wpMedia = wp?.media;
 		if ( ! wpMedia ) {
 			return;
 		}
 
+		// Parent uploads to the active document so they get stamped as Cortext
+		// media; otherwise cover/icon uploads land unattached and never enter
+		// the (now Cortext-scoped) picker. Core's uploader reads
+		// `wp.media.view.settings.post.id` in its `ready()`, so point it at the
+		// document for the frame's lifetime and restore it on close.
+		const postSettings = wpMedia.view?.settings?.post;
+		const shouldParent = !! ( postSettings && postId );
+		const previousPostId = postSettings?.id;
+		if ( shouldParent ) {
+			postSettings.id = postId;
+		}
+
 		const frame = wpMedia( {
 			title,
-			library: { type: allowedTypes },
+			// Scope the library to media uploaded from Cortext (the
+			// `cortext_media` taxonomy term; see Cortext\Media\CortextMedia).
+			// The term's query_var survives core's query-attachments whitelist.
+			library: { type: allowedTypes, cortext_media: 'cortext' },
 			multiple: false,
 		} );
+
+		if ( shouldParent ) {
+			frame.on( 'close', () => {
+				postSettings.id = previousPostId;
+			} );
+		}
+
+		// wp.media does not reinject a freshly uploaded attachment into a
+		// library filtered by a custom taxonomy, so a new upload would only
+		// appear after reopening. Re-query the library once the upload queue
+		// drains (every upload finished, and the new attachments are stamped
+		// server-side by then) so it shows immediately. Listening to `reset`
+		// avoids a loop: it fires on upload completion, not on library loads.
+		const uploaderQueue = wp?.Uploader?.queue;
+		if ( uploaderQueue ) {
+			const requery = () => {
+				const library = frame.state()?.get?.( 'library' );
+				if ( library?.props ) {
+					library.props.set( 'ignore', Date.now() );
+				}
+			};
+			uploaderQueue.on( 'reset', requery );
+			frame.on( 'close', () => uploaderQueue.off( 'reset', requery ) );
+		}
 
 		// Pre-select the current attachment so the modal opens with it
 		// highlighted, mirroring core's MediaUpload behavior.
@@ -58,7 +99,7 @@ export default function MediaPicker( {
 		} );
 
 		frame.open();
-	}, [ allowedTypes, value, onSelect, title ] );
+	}, [ allowedTypes, value, onSelect, title, postId ] );
 
 	return render( { open } );
 }

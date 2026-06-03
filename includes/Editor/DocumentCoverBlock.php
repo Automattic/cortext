@@ -10,6 +10,8 @@ declare( strict_types=1 );
 
 namespace Cortext\Editor;
 
+defined( 'ABSPATH' ) || exit;
+
 final class DocumentCoverBlock {
 
 	public const BLOCK_NAME = 'cortext/document-cover';

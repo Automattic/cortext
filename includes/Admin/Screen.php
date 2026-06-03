@@ -15,7 +15,9 @@ declare( strict_types=1 );
 
 namespace Cortext\Admin;
 
-use Cortext\PostType\Page;
+defined( 'ABSPATH' ) || exit;
+
+use Cortext\Runtime\Features;
 use Cortext\Theming\Preferences;
 
 final class Screen {
@@ -24,9 +26,11 @@ final class Screen {
 	public const HOOK_SUFFIX    = 'toplevel_page_' . self::MENU_SLUG;
 	private const SCRIPT_HANDLE = 'cortext-shell';
 	private const BODY_CLASS    = 'cortext-fullscreen';
+	private const ICON_PATH     = 'assets/brand/icon-light.png';
 
 	public function register(): void {
 		add_action( 'admin_menu', array( $this, 'register_menu' ) );
+		add_action( 'admin_head-' . self::HOOK_SUFFIX, array( $this, 'render_favicon' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 		// tech-debt.md#td-command-palette-host-glue: core adds this late; run after it so this
 		// screen only has one palette.
@@ -44,20 +48,21 @@ final class Screen {
 			'dashicons-welcome-write-blog',
 			3
 		);
-
-		// Escape hatch: core's list table + post.php editor for Cortext pages,
-		// nested under the shell menu. Primary UI stays the React shell.
-		add_submenu_page(
-			self::MENU_SLUG,
-			__( 'Manage Pages', 'cortext' ),
-			__( 'Manage Pages', 'cortext' ),
-			'edit_posts',
-			'edit.php?post_type=' . Page::POST_TYPE
-		);
 	}
 
 	public function render(): void {
 		echo '<div id="cortext-root" class="cortext-root"></div>';
+	}
+
+	public function render_favicon(): void {
+		printf(
+			'<link rel="icon" href="%s" sizes="256x256" type="image/png" />' . "\n",
+			esc_url( $this->icon_url() )
+		);
+	}
+
+	public function icon_url(): string {
+		return CORTEXT_URL . self::ICON_PATH;
 	}
 
 	public function enqueue_assets( string $hook_suffix ): void {
@@ -69,6 +74,11 @@ final class Screen {
 		// core/post-featured-image block inside the editor iframe) can open
 		// the WordPress media library.
 		wp_enqueue_media();
+		wp_enqueue_script( 'heartbeat' );
+		wp_add_inline_script(
+			'heartbeat',
+			'if ( window.wp && wp.heartbeat ) { wp.heartbeat.interval( 10 ); }'
+		);
 
 		$asset_path = CORTEXT_PATH . 'build/index.asset.php';
 		if ( ! file_exists( $asset_path ) ) {
@@ -95,9 +105,10 @@ final class Screen {
 			self::SCRIPT_HANDLE,
 			'window.cortextSettings = ' . wp_json_encode(
 				array(
-					'adminUrl'        => admin_url(),
-					'menuSlug'        => self::MENU_SLUG,
-					'userDisplayName' => wp_get_current_user()->display_name,
+					'adminUrl' => admin_url(),
+					'features' => ( new Features() )->to_client_settings(),
+					'iconUrl'  => $this->icon_url(),
+					'menuSlug' => self::MENU_SLUG,
 				)
 			) . ';',
 			'before'
@@ -125,15 +136,40 @@ final class Screen {
 		if ( ! isset( $editor_settings['styles'] ) || ! is_array( $editor_settings['styles'] ) ) {
 			$editor_settings['styles'] = array();
 		}
+		if ( ! isset( $editor_settings['postLock'] ) || ! is_array( $editor_settings['postLock'] ) ) {
+			$editor_settings['postLock'] = array();
+		}
+		$editor_settings['postLock'] = array_merge(
+			array( 'isLocked' => false ),
+			$editor_settings['postLock']
+		);
+		if ( ! isset( $editor_settings['postLockUtils'] ) || ! is_array( $editor_settings['postLockUtils'] ) ) {
+			$editor_settings['postLockUtils'] = array();
+		}
+		$editor_settings['postLockUtils'] = array_merge(
+			array(
+				'nonce'       => '',
+				'unlockNonce' => '',
+				'ajaxUrl'     => admin_url( 'admin-ajax.php' ),
+			),
+			$editor_settings['postLockUtils']
+		);
 
-		// `build/index.css` carries the DataViews package CSS (bundled
-		// through `src/index.scss`) and our own plugin styles. The block
-		// editor iframe only injects stylesheets listed in
-		// `editor_settings.styles`, so enqueueing this handle on the admin
-		// page isn't enough. An `@import` inside the `css` entry gets
-		// stripped by core's transformStyles, so inline the file's contents.
-		$style_path = CORTEXT_PATH . 'build/index.css';
-		if ( file_exists( $style_path ) ) {
+		// The block editor iframe only sees stylesheets listed in
+		// `editor_settings.styles`. Webpack splits Cortext's CSS into
+		// `build/index.css` (shell chrome) and `build/editor.css` (editor
+		// surfaces: column chrome, cell rendering, DataViews CSS, data-view
+		// block). Both need to reach the iframe. `@import` inside the `css`
+		// entry gets stripped by core's transformStyles, so inline each
+		// file.
+		// FIXME: the data-view block should declare its own `editorStyle`
+		// in `block.json` so WP propagates it to the iframe natively. This
+		// is the stop-gap until then.
+		foreach ( array( 'build/index.css', 'build/editor.css' ) as $relative ) {
+			$style_path = CORTEXT_PATH . $relative;
+			if ( ! file_exists( $style_path ) ) {
+				continue;
+			}
 			$style_css = file_get_contents( $style_path ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
 			if ( is_string( $style_css ) && '' !== $style_css ) {
 				$editor_settings['styles'][] = array( 'css' => $style_css );

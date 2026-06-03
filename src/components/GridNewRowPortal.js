@@ -8,7 +8,7 @@ const GRID_VIEW_SELECTOR = '.dataviews-view-grid';
 // a portal into the rendered grid.
 export default function GridNewRowPortal( {
 	wrapperRef,
-	slug,
+	collectionId,
 	view,
 	fields,
 	onCreated,
@@ -29,7 +29,7 @@ export default function GridNewRowPortal( {
 
 	const newRowCard = (
 		<DataViewNewRowButton
-			slug={ slug }
+			collectionId={ collectionId }
 			view={ view }
 			fields={ fields }
 			onCreated={ onCreated }

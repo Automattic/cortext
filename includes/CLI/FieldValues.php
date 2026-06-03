@@ -9,10 +9,12 @@ declare( strict_types=1 );
 
 namespace Cortext\CLI;
 
+defined( 'ABSPATH' ) || exit;
+
 use Cortext\FieldValues\FieldValueIndex;
-use Cortext\PostType\Collection;
-use Cortext\PostType\CollectionEntries;
+use Cortext\PostType\Document;
 use Cortext\PostType\Field;
+use Cortext\Taxonomy\TraitTaxonomy;
 
 final class FieldValues {
 
@@ -72,7 +74,6 @@ final class FieldValues {
 		unset( $args );
 
 		$this->ensure_post_types();
-		( new CollectionEntries() )->register_all();
 
 		$index          = new FieldValueIndex();
 		$collection_ids = $this->collection_ids_from_args( $assoc_args );
@@ -123,7 +124,6 @@ final class FieldValues {
 		unset( $args );
 
 		$this->ensure_post_types();
-		( new CollectionEntries() )->register_all();
 
 		$index   = new FieldValueIndex();
 		$passed  = true;
@@ -146,11 +146,14 @@ final class FieldValues {
 	}
 
 	private function ensure_post_types(): void {
-		if ( ! post_type_exists( Collection::POST_TYPE ) ) {
-			( new Collection() )->register_post_type();
+		if ( ! post_type_exists( Document::POST_TYPE ) ) {
+			( new Document() )->register_post_type();
 		}
 		if ( ! post_type_exists( Field::POST_TYPE ) ) {
 			( new Field() )->register_post_type();
+		}
+		if ( ! taxonomy_exists( TraitTaxonomy::TAXONOMY ) ) {
+			( new TraitTaxonomy() )->register_taxonomy();
 		}
 	}
 
@@ -160,14 +163,19 @@ final class FieldValues {
 			return array( $collection_id );
 		}
 
+		$collection_ids = TraitTaxonomy::all_trait_ids();
 		return array_map(
 			'intval',
 			get_posts(
 				array(
-					'post_type'      => Collection::POST_TYPE,
+					'post_type'      => Document::POST_TYPE,
 					'post_status'    => array( 'draft', 'private', 'publish' ),
 					'fields'         => 'ids',
 					'posts_per_page' => -1,
+					// A document is a collection when its mirror term exists. An
+					// empty `post__in` matches everything in WP_Query, so stand in
+					// `array( 0 )` to force an empty result.
+					'post__in'       => array() === $collection_ids ? array( 0 ) : $collection_ids,
 				)
 			)
 		);

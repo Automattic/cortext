@@ -17,6 +17,7 @@ import {
 } from '@wordpress/icons';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 
+import { collectionIcon } from '../cortextIcons';
 import { useDocumentActions, useDocumentRecord } from '../../documents';
 
 /**
@@ -32,25 +33,26 @@ import { useDocumentActions, useDocumentRecord } from '../../documents';
  * inspect for each kind.
  *
  * @param {Object}                            props
- * @param {Object}                            props.record               Raw document record.
- * @param {Array}                             [props.childNodes]         Child tree nodes (hierarchy only).
- * @param {number}                            [props.depth]              Nesting depth, 0 at the root.
- * @param {Set<number>}                       props.expandedIds          Currently expanded row ids.
- * @param {?number}                           [props.draggedId]          Id of the row being dragged.
- * @param {?{zone: string, targetId: number}} [props.activeDrop]         Active drop target metadata.
- * @param {boolean}                           [props.isHidden]           True when an ancestor is collapsed.
- * @param {Function|boolean}                  props.isSelected           Selection predicate or flag.
- * @param {Function}                          props.onSelect             Called with the record on title click.
- * @param {Function}                          props.onToggleExpand       Called with the record id on chevron click.
- * @param {Function}                          props.onCreateChild        Called with the parent id from the add-child button.
- * @param {Function|boolean}                  props.isFavorite           Favorite predicate or flag.
- * @param {boolean}                           [props.isFavoriteDisabled] Disable favorite toggling.
- * @param {Function}                          props.onToggleFavorite     Called with the record from the menu.
- * @param {Function|boolean}                  props.isHome               Home predicate or flag.
- * @param {Function}                          props.onSetHome            Called with the record from the menu.
- * @param {boolean}                           [props.isHomeUpdating]     Disable set-as-home while a save is in flight.
- * @param {?number}                           [props.autoRenameId]       Row id that should immediately enter rename mode.
- * @param {Function}                          props.onAutoRenameConsumed Called once rename mode has opened.
+ * @param {Object}                            props.record                    Raw document record.
+ * @param {Array}                             [props.childNodes]              Child tree nodes (hierarchy only).
+ * @param {number}                            [props.depth]                   Nesting depth, 0 at the root.
+ * @param {Set<number>}                       props.expandedIds               Currently expanded row ids.
+ * @param {?number}                           [props.draggedId]               Id of the row being dragged.
+ * @param {?{zone: string, targetId: number}} [props.activeDrop]              Active drop target metadata.
+ * @param {boolean}                           [props.isHidden]                True when an ancestor is collapsed.
+ * @param {Function|boolean}                  props.isSelected                Selection predicate or flag.
+ * @param {Function}                          props.onSelect                  Called with the record on title click.
+ * @param {Function}                          props.onToggleExpand            Called with the record id on chevron click.
+ * @param {Function}                          props.onCreateChild             Called with the parent id from the add-child button.
+ * @param {Function}                          [props.onCreateChildCollection] Called with the parent id to create a child collection.
+ * @param {Function|boolean}                  props.isFavorite                Favorite predicate or flag.
+ * @param {boolean}                           [props.isFavoriteDisabled]      Disable favorite toggling.
+ * @param {Function}                          props.onToggleFavorite          Called with the record from the menu.
+ * @param {Function|boolean}                  props.isHome                    Home predicate or flag.
+ * @param {Function}                          props.onSetHome                 Called with the record from the menu.
+ * @param {boolean}                           [props.isHomeUpdating]          Disable set-as-home while a save is in flight.
+ * @param {?number}                           [props.autoRenameId]            Row id that should immediately enter rename mode.
+ * @param {Function}                          props.onAutoRenameConsumed      Called once rename mode has opened.
  */
 export default function DocumentRow( {
 	record,
@@ -64,6 +66,7 @@ export default function DocumentRow( {
 	onSelect,
 	onToggleExpand,
 	onCreateChild,
+	onCreateChildCollection,
 	isFavorite,
 	isFavoriteDisabled = false,
 	onToggleFavorite,
@@ -260,8 +263,8 @@ export default function DocumentRow( {
 							icon={ plus }
 							size="small"
 							label={ sprintf(
-								/* translators: %s: parent page title */
-								__( 'Add a page inside %s', 'cortext' ),
+								/* translators: %s: parent document title */
+								__( 'Add a document inside %s', 'cortext' ),
 								title
 							) }
 							onClick={ ( e ) => {
@@ -291,67 +294,90 @@ export default function DocumentRow( {
 							/>
 						) }
 						renderContent={ ( { onClose } ) => (
-							<MenuGroup>
-								<MenuItem
-									icon={
-										rowIsFavorite ? starFilled : starEmpty
-									}
-									disabled={ isFavoriteDisabled }
-									onClick={ () => {
-										onToggleFavorite?.( record );
-										onClose();
-									} }
-								>
-									{ rowIsFavorite
-										? __(
-												'Remove from favorites',
+							<>
+								{ features.canCreateChild && (
+									<MenuGroup>
+										<MenuItem
+											icon={ collectionIcon }
+											onClick={ () => {
+												onCreateChildCollection?.(
+													recordId
+												);
+												onClose();
+											} }
+										>
+											{ __(
+												'Add collection inside',
 												'cortext'
-										  )
-										: __( 'Add to favorites', 'cortext' ) }
-								</MenuItem>
-								<MenuItem
-									icon={ homeIcon }
-									disabled={ rowIsHome || isHomeUpdating }
-									onClick={ () => {
-										onSetHome( record );
-										onClose();
-									} }
-								>
-									{ rowIsHome
-										? __( 'Home', 'cortext' )
-										: __( 'Set as home', 'cortext' ) }
-								</MenuItem>
-								<MenuItem
-									icon="edit"
-									onClick={ () => {
-										startRename();
-										onClose();
-									} }
-								>
-									{ __( 'Rename', 'cortext' ) }
-								</MenuItem>
-								<MenuItem
-									icon="admin-page"
-									onClick={ () => {
-										duplicate( record );
-										onClose();
-									} }
-								>
-									{ __( 'Duplicate', 'cortext' ) }
-								</MenuItem>
-								<MenuItem
-									icon="trash"
-									isDestructive
-									onClick={ () => {
-										trash( record );
-										onClose();
-									} }
-								>
-									{ features.hierarchy
-										? __( 'Trash', 'cortext' )
-										: __( 'Move to Trash', 'cortext' ) }
-								</MenuItem>
-							</MenuGroup>
+											) }
+										</MenuItem>
+									</MenuGroup>
+								) }
+								<MenuGroup>
+									<MenuItem
+										icon={
+											rowIsFavorite
+												? starFilled
+												: starEmpty
+										}
+										disabled={ isFavoriteDisabled }
+										onClick={ () => {
+											onToggleFavorite?.( record );
+											onClose();
+										} }
+									>
+										{ rowIsFavorite
+											? __(
+													'Remove from favorites',
+													'cortext'
+											  )
+											: __(
+													'Add to favorites',
+													'cortext'
+											  ) }
+									</MenuItem>
+									<MenuItem
+										icon={ homeIcon }
+										disabled={ rowIsHome || isHomeUpdating }
+										onClick={ () => {
+											onSetHome( record );
+											onClose();
+										} }
+									>
+										{ rowIsHome
+											? __( 'Home', 'cortext' )
+											: __( 'Set as home', 'cortext' ) }
+									</MenuItem>
+									<MenuItem
+										icon="edit"
+										onClick={ () => {
+											startRename();
+											onClose();
+										} }
+									>
+										{ __( 'Rename', 'cortext' ) }
+									</MenuItem>
+									<MenuItem
+										icon="admin-page"
+										onClick={ () => {
+											duplicate( record );
+											onClose();
+										} }
+									>
+										{ __( 'Duplicate', 'cortext' ) }
+									</MenuItem>
+									<MenuItem
+										icon="trash"
+										isDestructive
+										onClick={ () => {
+											trash( record );
+											onClose();
+										} }
+									>
+										{ __( 'Move to Trash', 'cortext' ) }
+									</MenuItem>
+								</MenuGroup>
+							</>
 						) }
 					/>
 
@@ -410,6 +436,9 @@ export default function DocumentRow( {
 								onSelect={ onSelect }
 								onToggleExpand={ onToggleExpand }
 								onCreateChild={ onCreateChild }
+								onCreateChildCollection={
+									onCreateChildCollection
+								}
 								isFavorite={ isFavorite }
 								isFavoriteDisabled={ isFavoriteDisabled }
 								onToggleFavorite={ onToggleFavorite }

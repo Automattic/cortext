@@ -14,11 +14,11 @@ const AUTOSAVE_ERROR_NOTICE_ID = 'cortext-autosave-error';
 export default function useAutosave( options = {} ) {
 	const debounceMs = options.debounceMs ?? DEBOUNCE_MS;
 	const minSaveIntervalMs = options.minSaveIntervalMs ?? MIN_SAVE_INTERVAL_MS;
-	const recentKind = options.recentTarget?.kind ?? null;
 	const recentId = options.recentTarget?.id ?? null;
 	const recentCollectionId = options.recentTarget?.collectionId ?? null;
 	const { savePost, editPost } = useDispatch( editorStore );
-	const { createErrorNotice, removeNotice } = useDispatch( noticesStore );
+	const { createErrorNotice, createSuccessNotice } =
+		useDispatch( noticesStore );
 	const { touchRecent } = useRecents();
 
 	const {
@@ -28,6 +28,7 @@ export default function useAutosave( options = {} ) {
 		didSucceed,
 		didFail,
 		editsReference,
+		isPostLocked,
 		postStatus,
 		postTitle,
 		currentPostId,
@@ -39,6 +40,7 @@ export default function useAutosave( options = {} ) {
 			isSaving: editor.isSavingPost(),
 			didSucceed: editor.didPostSaveRequestSucceed(),
 			didFail: editor.didPostSaveRequestFail(),
+			isPostLocked: editor.isPostLocked?.() ?? false,
 			editsReference:
 				select( coreDataStore ).getReferenceByDistinctEdits(),
 			postStatus: editor.getEditedPostAttribute( 'status' ),
@@ -56,24 +58,38 @@ export default function useAutosave( options = {} ) {
 	const savingWaitersRef = useRef( [] );
 	const prevIsSavingRef = useRef( isSaving );
 	const savingTargetRef = useRef( null );
+	// Track the one beforeunload case worth interrupting: the document still
+	// has edits and the last save failed. Healthy saves still get a final flush
+	// and leave without a prompt.
+	const unsavedRiskRef = useRef( false );
+	unsavedRiskRef.current = isDirty && status === 'error';
+	// Show the failure snackbar once per failed-save streak. Background retries
+	// can cycle through saving and error repeatedly; the next successful save
+	// resets the latch.
+	const errorNoticeShownRef = useRef( false );
+	const failedEditsReferenceRef = useRef( null );
 
 	const stateRef = useRef( {
 		isDirty,
 		isSaveable,
 		isSaving,
+		isPostLocked,
 		savePost,
 		editPost,
 		postStatus,
 		postTitle,
+		editsReference,
 	} );
 	stateRef.current = {
 		isDirty,
 		isSaveable,
 		isSaving,
+		isPostLocked,
 		savePost,
 		editPost,
 		postStatus,
 		postTitle,
+		editsReference,
 	};
 
 	// Promote draft to private once the user has given the page a real title,
@@ -142,9 +158,10 @@ export default function useAutosave( options = {} ) {
 			isDirty: d,
 			isSaveable: s,
 			isSaving: saving,
+			isPostLocked: locked,
 			postStatus: ps,
 		} = stateRef.current;
-		if ( ! d || ! s || ps === 'trash' ) {
+		if ( ! d || ! s || locked || ps === 'trash' ) {
 			return true;
 		}
 		if ( saving ) {
@@ -164,13 +181,16 @@ export default function useAutosave( options = {} ) {
 	}, [ didFail, isSaving ] );
 
 	useEffect( () => {
-		if ( ! isDirty || ! isSaveable ) {
+		if ( ! isDirty || ! isSaveable || isPostLocked ) {
 			return undefined;
 		}
 		// Trashed pages are read-only in the canvas; never autosave them.
 		// The UI is locked via `<Disabled>`, but a stray edit through any
 		// other path (drag-drop, programmatic) shouldn't persist either.
 		if ( postStatus === 'trash' ) {
+			return undefined;
+		}
+		if ( failedEditsReferenceRef.current === editsReference ) {
 			return undefined;
 		}
 		const elapsed = Date.now() - lastSaveAtRef.current;
@@ -185,9 +205,18 @@ export default function useAutosave( options = {} ) {
 				isDirty: d,
 				isSaveable: s,
 				isSaving: saving,
+				isPostLocked: locked,
 				postStatus: ps,
+				editsReference: editsRef,
 			} = stateRef.current;
-			if ( d && s && ! saving && ps !== 'trash' ) {
+			if (
+				d &&
+				s &&
+				! saving &&
+				! locked &&
+				ps !== 'trash' &&
+				failedEditsReferenceRef.current !== editsRef
+			) {
 				saveCurrentPost();
 			}
 		}, wait );
@@ -202,6 +231,7 @@ export default function useAutosave( options = {} ) {
 		debounceMs,
 		editsReference,
 		isDirty,
+		isPostLocked,
 		isSaveable,
 		isSaving,
 		minSaveIntervalMs,
@@ -224,34 +254,53 @@ export default function useAutosave( options = {} ) {
 				// user switches to a different row before this save resolves,
 				// recentTarget will have moved on by completion time and we
 				// would otherwise mark the new row as recent.
-				savingTargetRef.current =
-					recentKind && recentId
-						? {
-								kind: recentKind,
-								id: recentId,
-								...( recentCollectionId
-									? { collectionId: recentCollectionId }
-									: {} ),
-						  }
-						: null;
+				savingTargetRef.current = recentId
+					? {
+							id: recentId,
+							...( recentCollectionId
+								? { collectionId: recentCollectionId }
+								: {} ),
+					  }
+					: null;
 			}
 			setStatus( 'saving' );
 		} else if ( didFail ) {
 			savingTargetRef.current = null;
+			if ( wasSaving || ! failedEditsReferenceRef.current ) {
+				failedEditsReferenceRef.current = editsReference;
+			}
 			setStatus( 'error' );
-			// The toolbar no longer carries a save status, so a failed
-			// autosave needs its own way of reaching the user. Snackbar
-			// is dismissable and stays out of the way when things work.
-			createErrorNotice( __( 'Failed to save changes.', 'cortext' ), {
-				id: AUTOSAVE_ERROR_NOTICE_ID,
-				type: 'snackbar',
-			} );
+			// Successful autosaves stay quiet, so failures need a clear notice.
+			// Show it once when saving first fails; background retries would
+			// otherwise open it every few seconds. `explicitDismiss` keeps it
+			// around until the user closes it or the save recovers.
+			if ( ! errorNoticeShownRef.current ) {
+				createErrorNotice(
+					__( "Couldn't save your changes.", 'cortext' ),
+					{
+						id: AUTOSAVE_ERROR_NOTICE_ID,
+						type: 'snackbar',
+						explicitDismiss: true,
+					}
+				);
+				errorNoticeShownRef.current = true;
+			}
 		} else if ( didSucceed && wasSaving ) {
 			const latchedTarget = savingTargetRef.current;
 			savingTargetRef.current = null;
+			failedEditsReferenceRef.current = null;
 			setStatus( 'saved' );
 			setLastSavedAt( Date.now() );
-			removeNotice( AUTOSAVE_ERROR_NOTICE_ID );
+			if ( errorNoticeShownRef.current ) {
+				// Replace the failure notice with a short success message.
+				// Reusing the notice id swaps it in place, and without
+				// `explicitDismiss` SnackbarList fades it out.
+				createSuccessNotice( __( 'All changes saved.', 'cortext' ), {
+					id: AUTOSAVE_ERROR_NOTICE_ID,
+					type: 'snackbar',
+				} );
+				errorNoticeShownRef.current = false;
+			}
 			if ( latchedTarget ) {
 				touchRecent( latchedTarget );
 			}
@@ -260,9 +309,9 @@ export default function useAutosave( options = {} ) {
 		isSaving,
 		didSucceed,
 		didFail,
+		editsReference,
 		createErrorNotice,
-		removeNotice,
-		recentKind,
+		createSuccessNotice,
 		recentId,
 		recentCollectionId,
 		touchRecent,
@@ -278,9 +327,19 @@ export default function useAutosave( options = {} ) {
 			return;
 		}
 		lastPostIdRef.current = currentPostId;
+		failedEditsReferenceRef.current = null;
 		setStatus( 'idle' );
 		setLastSavedAt( null );
 	}, [ currentPostId ] );
+
+	useEffect( () => {
+		if (
+			failedEditsReferenceRef.current &&
+			failedEditsReferenceRef.current !== editsReference
+		) {
+			failedEditsReferenceRef.current = null;
+		}
+	}, [ editsReference ] );
 
 	useEffect( () => {
 		const onVisibilityChange = () => {
@@ -291,8 +350,15 @@ export default function useAutosave( options = {} ) {
 		const onBlur = () => {
 			flushNow();
 		};
-		const onBeforeUnload = () => {
+		const onBeforeUnload = ( event ) => {
 			flushNow();
+			if ( unsavedRiskRef.current ) {
+				// Save is already failing, and the browser may unload before
+				// flushNow finishes. Ask it to show the native leave-site
+				// prompt so the user can stay put.
+				event.preventDefault();
+				event.returnValue = '';
+			}
 		};
 
 		document.addEventListener( 'visibilitychange', onVisibilityChange );

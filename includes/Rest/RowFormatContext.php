@@ -9,6 +9,8 @@ declare( strict_types=1 );
 
 namespace Cortext\Rest;
 
+defined( 'ABSPATH' ) || exit;
+
 /**
  * Holds field metadata for one `get_rows()` call. The controller passes this
  * object through the formatter instead of keeping cache state on itself.

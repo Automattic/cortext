@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
-# Stop the detached Playground server so it doesn't leak when the
-# worktree is archived.
+# Stop wp-env when the worktree is archived so the dev server and its
+# ports don't leak. Only a running environment needs stopping; one that
+# was never started or is already stopped has nothing to free.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-pnpm exec wp-env stop --runtime=playground
+
+if pnpm exec wp-env status --json | grep -q '"status":"running"'; then
+	pnpm exec wp-env stop
+fi

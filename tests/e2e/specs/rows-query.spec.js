@@ -30,7 +30,7 @@ function rowsPath( params ) {
 async function queryRows( requestUtils, collectionId, params = {} ) {
 	return requestUtils.rest( {
 		path: rowsPath( {
-			collection: collectionId,
+			trait: collectionId,
 			per_page: 100,
 			...params,
 		} ),
@@ -57,15 +57,13 @@ async function createRowsQueryFixture( requestUtils ) {
 	const suffix = `${ Date.now().toString( 36 ).slice( -5 ) }${ Math.random()
 		.toString( 36 )
 		.slice( 2, 4 ) }`;
-	const slug = `rows${ suffix }`;
 
 	const collection = await requestUtils.rest( {
 		method: 'POST',
-		path: '/wp/v2/crtxt_collections',
+		path: '/wp/v2/crtxt_documents',
 		data: {
 			title: `E2E Rows ${ suffix }`,
 			status: 'private',
-			meta: { slug },
 		},
 	} );
 
@@ -79,10 +77,10 @@ async function createRowsQueryFixture( requestUtils ) {
 
 	await requestUtils.rest( {
 		method: 'POST',
-		path: `/wp/v2/crtxt_collections/${ collection.id }`,
+		path: `/wp/v2/crtxt_documents/${ collection.id }`,
 		data: {
 			meta: {
-				fields: Object.values( fields ).map( ( field ) =>
+				cortext_fields: Object.values( fields ).map( ( field ) =>
 					String( field.id )
 				),
 			},
@@ -121,10 +119,11 @@ async function createRowsQueryFixture( requestUtils ) {
 	] ) {
 		rows[ spec.key ] = await requestUtils.rest( {
 			method: 'POST',
-			path: `/wp/v2/crtxt_${ slug }`,
+			path: '/wp/v2/crtxt_documents',
 			data: {
 				title: spec.title,
 				status: 'private',
+				cortext_trait: collection.id,
 				meta: {
 					[ `field-${ fields.status.id }` ]: spec.status,
 					[ `field-${ fields.notes.id }` ]: spec.notes,
@@ -136,7 +135,7 @@ async function createRowsQueryFixture( requestUtils ) {
 		} );
 	}
 
-	return { collection, fields, rows, slug };
+	return { collection, fields, rows };
 }
 
 test.describe( 'rows endpoint server query', () => {
@@ -217,7 +216,7 @@ test.describe( 'rows endpoint server query', () => {
 				for ( const row of Object.values( fixture.rows ) ) {
 					await deleteIfCreated(
 						requestUtils,
-						`/wp/v2/crtxt_${ fixture.slug }/${ row.id }`
+						`/wp/v2/crtxt_documents/${ row.id }`
 					);
 				}
 				for ( const field of Object.values( fixture.fields ) ) {
@@ -228,7 +227,7 @@ test.describe( 'rows endpoint server query', () => {
 				}
 				await deleteIfCreated(
 					requestUtils,
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
 				);
 			}
 		}

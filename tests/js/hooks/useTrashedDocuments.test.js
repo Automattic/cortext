@@ -17,7 +17,6 @@ beforeEach( () => {
 it( 'fetches trashed documents', async () => {
 	const document = {
 		id: 10,
-		kind: 'row',
 		title: { raw: 'Archived', rendered: 'Archived' },
 		collection: { id: 2, title: { raw: 'Books' } },
 	};

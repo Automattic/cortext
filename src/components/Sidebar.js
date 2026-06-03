@@ -1,16 +1,25 @@
 import { __, _n, sprintf } from '@wordpress/i18n';
-import apiFetch from '@wordpress/api-fetch';
 import { useEntityRecords } from '@wordpress/core-data';
 import { useDispatch } from '@wordpress/data';
 import { useState, useMemo, useCallback, useEffect } from '@wordpress/element';
-import { Button, Icon, Notice } from '@wordpress/components';
+import {
+	Button,
+	Dropdown,
+	Icon,
+	MenuGroup,
+	MenuItem,
+	Notice,
+} from '@wordpress/components';
 import { displayShortcut } from '@wordpress/keycodes';
 import {
+	chevronDown,
 	globe,
 	home as homeIcon,
+	page,
 	plus,
 	search,
 	trash as trashIcon,
+	upload,
 	wordpress,
 } from '@wordpress/icons';
 
@@ -49,37 +58,10 @@ const sidebarToggleIcon = (
 	</svg>
 );
 
-const cortextMarkIcon = (
-	<svg
-		xmlns="http://www.w3.org/2000/svg"
-		viewBox="0 0 24 24"
-		width="24"
-		height="24"
-		aria-hidden="true"
-		focusable="false"
-	>
-		<ellipse
-			cx="12"
-			cy="12"
-			rx="7"
-			ry="6"
-			stroke="currentColor"
-			strokeWidth="1.6"
-			fill="none"
-		/>
-		<path
-			d="M12 6v12M8.5 8.5 12 10l3.5-1.5"
-			stroke="currentColor"
-			strokeWidth="1.4"
-			strokeLinecap="round"
-			fill="none"
-		/>
-		<circle cx="12" cy="10" r="0.9" fill="currentColor" />
-	</svg>
-);
 import { DndContext, DragOverlay, pointerWithin } from '@dnd-kit/core';
 
 import { openCommandPalette } from './CommandPalette';
+import { collectionIcon } from './cortextIcons';
 import SidebarFavorites from './SidebarFavorites';
 import SidebarResizeHandle from './SidebarResizeHandle';
 import SidebarRecents from './SidebarRecents';
@@ -87,13 +69,12 @@ import SidebarSection from './SidebarSection';
 import { SidebarListSkeleton } from './Skeleton';
 import SidebarTrash, { computeSidebarTrashRoots } from './SidebarTrash';
 import ThemeToggle from './ThemeToggle';
-import { nextChildOrder } from './pages-tree';
-import { POST_TYPE } from './page-queries';
 import {
+	computeDocumentUri,
+	IMPORT_URI,
 	PUBLISHED_DOCUMENTS_URI,
-	computeCollectionUri,
 } from '../router/useResolveEntity';
-import { FULL_PAGE_COLLECTION_QUERY } from '../collections';
+import { DOCUMENT_POST_TYPE, FULL_PAGE_COLLECTION_QUERY } from '../collections';
 import useDelayedFlag, {
 	SKELETON_MIN_VISIBLE_MS,
 } from '../hooks/useDelayedFlag';
@@ -106,6 +87,8 @@ import {
 	favoriteIdentForRecord,
 	favoriteKey,
 	favoriteKeyForRecord,
+	useCreateCollectionDocument,
+	useCreateDocument,
 	useDocumentSelection,
 	useFavoriteToggle,
 } from '../documents';
@@ -113,6 +96,10 @@ import useSidebarDnd from './sidebar/useSidebarDnd';
 import useSidebarNavigation from './sidebar/useSidebarNavigation';
 import useSidebarTree from './sidebar/useSidebarTree';
 import DocumentRow from './sidebar/DocumentRow';
+import {
+	isPublicWebAffordancesEnabled,
+	isWordPressAffordancesEnabled,
+} from '../settings';
 
 export default function Sidebar( {
 	collapsed = false,
@@ -125,7 +112,7 @@ export default function Sidebar( {
 	const { records: collections, isResolving: isResolvingCollections } =
 		useEntityRecords(
 			'postType',
-			'crtxt_collection',
+			DOCUMENT_POST_TYPE,
 			FULL_PAGE_COLLECTION_QUERY
 		);
 	const trashedDocumentsState = useTrashedDocuments();
@@ -148,7 +135,7 @@ export default function Sidebar( {
 		setFavorites,
 		isResolving: isResolvingFavorites,
 	} = useFavorites();
-	const { saveEntityRecord, invalidateResolution } = useDispatch( 'core' );
+	const { saveEntityRecord } = useDispatch( 'core' );
 	const {
 		navigate,
 		activeUri,
@@ -160,15 +147,11 @@ export default function Sidebar( {
 	const { isSelected: isRowSelected, selectRecord: onRowSelect } =
 		useDocumentSelection( { selectedId, selectedCollectionId } );
 	const adminUrl = window.cortextSettings?.adminUrl ?? '/wp-admin/';
-	const userName = window.cortextSettings?.userDisplayName ?? '';
+	const brandIconUrl = window.cortextSettings?.iconUrl ?? '';
+	const publicWebAffordances = isPublicWebAffordancesEnabled();
+	const wordpressAffordances = isWordPressAffordancesEnabled();
 	const commandPaletteShortcut = displayShortcut.primary( 'k' );
-	const brandLabel = userName
-		? sprintf(
-				/* translators: %s: user display name */
-				__( "%s's Cortext", 'cortext' ),
-				userName
-		  )
-		: __( 'Cortext', 'cortext' );
+	const brandLabel = __( 'Cortext', 'cortext' );
 
 	const [ favoritesError, setFavoritesError ] = useState( null );
 	const [ duplicateNotice, setDuplicateNotice ] = useState( null );
@@ -184,7 +167,15 @@ export default function Sidebar( {
 			params: { _splat: PUBLISHED_DOCUMENTS_URI },
 		} );
 	}, [ navigate ] );
-	const isPublishedActive = activeUri === PUBLISHED_DOCUMENTS_URI;
+	const isPublishedActive =
+		publicWebAffordances && activeUri === PUBLISHED_DOCUMENTS_URI;
+	const goImport = useCallback( () => {
+		navigate( {
+			to: '/$',
+			params: { _splat: IMPORT_URI },
+		} );
+	}, [ navigate ] );
+	const isImportActive = activeUri === IMPORT_URI;
 	const toggleTrashPanel = useCallback( () => {
 		if ( collapsed ) {
 			setIsTrashPanelOpen( true );
@@ -227,13 +218,13 @@ export default function Sidebar( {
 		[ isRowSelected, navigate ]
 	);
 
-	const { topLevelCollections, tree, expandedIds, toggleExpand, expand } =
-		useSidebarTree( {
-			pages,
-			collections,
-			selectedId,
-			selectedCollectionId,
-		} );
+	// The tree is built from one non-row document list (pages and collections).
+	// The `collections` query feeds only the Favorites label lookup.
+	const { tree, expandedIds, toggleExpand, expand } = useSidebarTree( {
+		documents: pages,
+		selectedId,
+		selectedCollectionId,
+	} );
 
 	// `draggedId` and `activeDrop` flow into the per-row callbacks below, so
 	// the DnD hook has to resolve before any `useCallback` that lists them as
@@ -242,17 +233,10 @@ export default function Sidebar( {
 	const { sensors, draggedId, draggedPage, activeDrop, handlers } =
 		useSidebarDnd( {
 			pages,
-			collections,
 			expandedIds,
 			expand,
 			saveEntityRecord,
 		} );
-
-	const showCollectionsSkeleton = useDelayedFlag(
-		isResolvingCollections && topLevelCollections.length === 0,
-		120,
-		SKELETON_MIN_VISIBLE_MS
-	);
 
 	const [ autoRenameId, setAutoRenameId ] = useState( null );
 	const [ isTrashPanelOpen, setIsTrashPanelOpen ] = useState( false );
@@ -285,62 +269,6 @@ export default function Sidebar( {
 		}
 	}, [ collapsed ] );
 
-	// --- Create actions (kept here because they target the workspace, not
-	// an existing document, and they need autoRenameId + selection state).
-
-	const createRootPage = useCallback( async () => {
-		const created = await saveEntityRecord( 'postType', POST_TYPE, {
-			status: 'draft',
-		} );
-		if ( created?.id ) {
-			onSelect( created.id, created );
-			setAutoRenameId( created.id );
-		}
-	}, [ saveEntityRecord, onSelect ] );
-
-	const createRootCollection = useCallback( async () => {
-		const created = await apiFetch( {
-			path: '/wp/v2/crtxt_collections',
-			method: 'POST',
-			data: {
-				title: __( 'Untitled', 'cortext' ),
-				status: 'private',
-				mode: 'full_page',
-			},
-		} );
-		invalidateResolution( 'getEntityRecords', [
-			'postType',
-			'crtxt_collection',
-			FULL_PAGE_COLLECTION_QUERY,
-		] );
-		// tech-debt.md#td-rows-not-in-core-data: core-data may have cached `/wp/v2/types` before this
-		// collection registered its row CPT. Refresh the entity config so row
-		// lookups can find the new post type.
-		invalidateResolution( 'getEntitiesConfig', [ 'postType' ] );
-		if ( created?.id ) {
-			navigate( {
-				to: '/$',
-				params: { _splat: computeCollectionUri( created ) },
-			} );
-		}
-	}, [ invalidateResolution, navigate ] );
-
-	const createChildPage = useCallback(
-		async ( parentId ) => {
-			const created = await saveEntityRecord( 'postType', POST_TYPE, {
-				status: 'draft',
-				parent: parentId,
-				menu_order: nextChildOrder( parentId, pages ),
-			} );
-			if ( created?.id ) {
-				expand( parentId );
-				onSelect( created.id, created );
-				setAutoRenameId( created.id );
-			}
-		},
-		[ saveEntityRecord, pages, expand, onSelect ]
-	);
-
 	// --- Per-row selection helpers --------------------------------------
 
 	const onSetRowHome = useCallback(
@@ -366,9 +294,9 @@ export default function Sidebar( {
 		[ home ]
 	);
 
-	// Callbacks for document descriptors. The page tree and collection list
-	// stay out of this: trash cascades now come from the server response, so
-	// descriptors do not need to walk local trees.
+	// Wire callbacks that `useDocumentActions` needs (rename, trash, duplicate)
+	// from DocumentRow / SidebarTrash. Create goes through `useCreateDocument`
+	// at the top of Sidebar and bypasses the provider.
 	const documentsHandlers = useMemo(
 		() => ( {
 			selectedCollectionId,
@@ -382,8 +310,49 @@ export default function Sidebar( {
 		[ selectedCollectionId, expand, onSelect ]
 	);
 
-	// Props shared by every DocumentRow. Keeping them together makes the Pages
-	// and Collections sections use the same selection, DnD, and menu behavior.
+	const create = useCreateDocument();
+	const createCollection = useCreateCollectionDocument();
+	// After creating a page or collection, open it and put its sidebar row into
+	// rename mode.
+	const openAfterCreate = useCallback(
+		( created ) => {
+			if ( created?.id ) {
+				setAutoRenameId( created.id );
+				navigate( {
+					to: '/$',
+					params: { _splat: computeDocumentUri( created ) },
+				} );
+			}
+			return created;
+		},
+		[ navigate ]
+	);
+	const createAndOpen = useCallback(
+		async ( input ) => openAfterCreate( await create( input ) ),
+		[ create, openAfterCreate ]
+	);
+	const createCollectionAndOpen = useCallback(
+		async ( input ) => openAfterCreate( await createCollection( input ) ),
+		[ createCollection, openAfterCreate ]
+	);
+	const createRootPage = useCallback(
+		() => createAndOpen( {} ),
+		[ createAndOpen ]
+	);
+	const createRootCollection = useCallback(
+		() => createCollectionAndOpen( {} ),
+		[ createCollectionAndOpen ]
+	);
+	const createChildPage = useCallback(
+		( parentId ) => createAndOpen( { parent: parentId } ),
+		[ createAndOpen ]
+	);
+	const createChildCollection = useCallback(
+		( parentId ) => createCollectionAndOpen( { parent: parentId } ),
+		[ createCollectionAndOpen ]
+	);
+
+	// Props shared by every DocumentRow in the Pages tree.
 	const rowChrome = {
 		expandedIds,
 		draggedId,
@@ -391,7 +360,6 @@ export default function Sidebar( {
 		isSelected: isRowSelected,
 		onSelect: onRowSelect,
 		onToggleExpand: toggleExpand,
-		onCreateChild: createChildPage,
 		isFavorite,
 		isFavoriteDisabled: areFavoriteActionsDisabled,
 		onToggleFavorite: toggleFavorite,
@@ -400,6 +368,8 @@ export default function Sidebar( {
 		isHomeUpdating,
 		autoRenameId,
 		onAutoRenameConsumed: () => setAutoRenameId( null ),
+		onCreateChild: createChildPage,
+		onCreateChildCollection: createChildCollection,
 	};
 
 	// --- Render ------------------------------------------------------------
@@ -417,7 +387,17 @@ export default function Sidebar( {
 							className="cortext-sidebar__brand-mark"
 							aria-hidden="true"
 						>
-							{ cortextMarkIcon }
+							{ brandIconUrl ? (
+								<img
+									className="cortext-sidebar__brand-image"
+									src={ brandIconUrl }
+									alt=""
+								/>
+							) : (
+								<span className="cortext-sidebar__brand-initial">
+									C
+								</span>
+							) }
 						</span>
 						<span className="cortext-sidebar__brand-text">
 							{ brandLabel }
@@ -466,15 +446,28 @@ export default function Sidebar( {
 					<Icon icon={ homeIcon } size={ 16 } />
 					{ ! collapsed && <span>{ __( 'Home', 'cortext' ) }</span> }
 				</Button>
+				{ publicWebAffordances ? (
+					<Button
+						className="cortext-sidebar__quick-action cortext-sidebar__quick-action--published"
+						label={ __( 'Published', 'cortext' ) }
+						isPressed={ isPublishedActive }
+						onClick={ goPublished }
+					>
+						<Icon icon={ globe } size={ 16 } />
+						{ ! collapsed && (
+							<span>{ __( 'Published', 'cortext' ) }</span>
+						) }
+					</Button>
+				) : null }
 				<Button
-					className="cortext-sidebar__quick-action cortext-sidebar__quick-action--published"
-					label={ __( 'Published documents', 'cortext' ) }
-					isPressed={ isPublishedActive }
-					onClick={ goPublished }
+					className="cortext-sidebar__quick-action cortext-sidebar__quick-action--import"
+					label={ __( 'Import', 'cortext' ) }
+					isPressed={ isImportActive }
+					onClick={ goImport }
 				>
-					<Icon icon={ globe } size={ 16 } />
+					<Icon icon={ upload } size={ 16 } />
 					{ ! collapsed && (
-						<span>{ __( 'Published documents', 'cortext' ) }</span>
+						<span>{ __( 'Import', 'cortext' ) }</span>
 					) }
 				</Button>
 			</div>
@@ -527,13 +520,6 @@ export default function Sidebar( {
 							/>
 						</SidebarSection>
 
-						{ /* One DndContext wraps both sections so top-level
-						     collections (rendered in the Collections section
-						     below) are part of the same drag/drop graph as
-						     the Pages tree. Without this, top-level
-						     collection rows would register their useDraggable
-						     / useDroppable hooks outside any provider and
-						     the gesture would never fire. */ }
 						<DndContext
 							sensors={ sensors }
 							collisionDetection={ pointerWithin }
@@ -544,17 +530,73 @@ export default function Sidebar( {
 						>
 							<SidebarSection
 								id="pages"
-								title={ __( 'Pages', 'cortext' ) }
+								title={ __( 'Documents', 'cortext' ) }
 								isCollapsed={ isSectionCollapsed( 'pages' ) }
 								onToggle={ () => toggleSection( 'pages' ) }
 								actions={
-									<Button
-										className="cortext-sidebar__section-action"
-										icon={ plus }
-										size="small"
-										label={ __( 'New page', 'cortext' ) }
-										onClick={ createRootPage }
-									/>
+									<div className="cortext-sidebar__split-action">
+										<Button
+											className="cortext-sidebar__section-action cortext-sidebar__split-action-primary"
+											icon={ plus }
+											size="small"
+											label={ __(
+												'New document',
+												'cortext'
+											) }
+											onClick={ createRootPage }
+										/>
+										<Dropdown
+											contentClassName="cortext-sidebar__create-menu"
+											popoverProps={ {
+												placement: 'bottom-end',
+											} }
+											renderToggle={ ( {
+												isOpen,
+												onToggle,
+											} ) => (
+												<Button
+													className="cortext-sidebar__section-action cortext-sidebar__split-action-toggle"
+													icon={ chevronDown }
+													size="small"
+													label={ __(
+														'Create a document or collection',
+														'cortext'
+													) }
+													onClick={ onToggle }
+													isPressed={ isOpen }
+													aria-expanded={ isOpen }
+												/>
+											) }
+											renderContent={ ( { onClose } ) => (
+												<MenuGroup>
+													<MenuItem
+														icon={ page }
+														onClick={ () => {
+															createRootPage();
+															onClose();
+														} }
+													>
+														{ __(
+															'New document',
+															'cortext'
+														) }
+													</MenuItem>
+													<MenuItem
+														icon={ collectionIcon }
+														onClick={ () => {
+															createRootCollection();
+															onClose();
+														} }
+													>
+														{ __(
+															'New collection',
+															'cortext'
+														) }
+													</MenuItem>
+												</MenuGroup>
+											) }
+										/>
+									</div>
 								}
 							>
 								{ isResolvingPages &&
@@ -564,7 +606,7 @@ export default function Sidebar( {
 									) }
 								{ ! isResolvingPages && pages.length === 0 && (
 									<p className="cortext-sidebar__empty">
-										{ __( 'No pages yet.', 'cortext' ) }
+										{ __( 'Nothing here yet.', 'cortext' ) }
 									</p>
 								) }
 
@@ -579,58 +621,6 @@ export default function Sidebar( {
 										/>
 									) ) }
 								</ul>
-							</SidebarSection>
-
-							<SidebarSection
-								id="collections"
-								title={ __( 'Collections', 'cortext' ) }
-								isCollapsed={ isSectionCollapsed(
-									'collections'
-								) }
-								onToggle={ () =>
-									toggleSection( 'collections' )
-								}
-								actions={
-									<Button
-										className="cortext-sidebar__section-action"
-										icon={ plus }
-										size="small"
-										label={ __(
-											'New collection',
-											'cortext'
-										) }
-										onClick={ createRootCollection }
-									/>
-								}
-							>
-								{ isResolvingCollections &&
-									topLevelCollections.length === 0 &&
-									showCollectionsSkeleton && (
-										<SidebarListSkeleton itemCount={ 3 } />
-									) }
-								{ ! isResolvingCollections &&
-									topLevelCollections.length === 0 && (
-										<p className="cortext-sidebar__empty">
-											{ __(
-												'No collections yet.',
-												'cortext'
-											) }
-										</p>
-									) }
-								{ topLevelCollections.length > 0 && (
-									<ul className="cortext-sidebar__list">
-										{ topLevelCollections.map(
-											( collection ) => (
-												<DocumentRow
-													key={ collection.id }
-													record={ collection }
-													depth={ 0 }
-													{ ...rowChrome }
-												/>
-											)
-										) }
-									</ul>
-								) }
 							</SidebarSection>
 
 							<DragOverlay>
@@ -693,12 +683,14 @@ export default function Sidebar( {
 				/>
 				<div className="cortext-sidebar__footer-group cortext-sidebar__footer-group--preferences">
 					<ThemeToggle />
-					<Button
-						className="cortext-sidebar__back"
-						label={ __( 'Go to WordPress', 'cortext' ) }
-						href={ adminUrl }
-						icon={ <Icon icon={ wordpress } size={ 24 } /> }
-					/>
+					{ wordpressAffordances ? (
+						<Button
+							className="cortext-sidebar__back"
+							label={ __( 'Go to WordPress', 'cortext' ) }
+							href={ adminUrl }
+							icon={ <Icon icon={ wordpress } size={ 24 } /> }
+						/>
+					) : null }
 				</div>
 			</div>
 			{ ! collapsed && (

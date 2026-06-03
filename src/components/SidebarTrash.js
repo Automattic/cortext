@@ -9,7 +9,7 @@ import {
 import { rotateLeft, trash } from '@wordpress/icons';
 import { useNavigate } from '@tanstack/react-router';
 
-import PageIcon from './PageIcon';
+import DocumentIcon from './DocumentIcon';
 import { SidebarListSkeleton } from './Skeleton';
 import TypeToConfirmDialog from './TypeToConfirmDialog';
 import { POST_TYPE, TRASHED_PAGES_QUERY } from './page-queries';
@@ -27,11 +27,13 @@ const EMPTY_TRASHED_DOCUMENTS_STATE = {
 	refresh: () => {},
 };
 
-// These mirror the PHP cascade marker meta keys. Trash entries point back to
-// the cascade root (page → subpage, page → owned inline collection), which lets
-// the sidebar show one row for the whole trashed group.
+// Mirror the PHP `TrashCascade` markers. The cascade stamps a different key
+// depending on whether the descendant was trashed as a child page or as a row
+// of a collection, but the value carries the same meaning ("trashed by this
+// document"), so the sidebar treats either marker as a pointer back to the
+// cascade root.
 const PARENT_MARKER_META = '_cortext_trashed_by_parent';
-const OWNER_PAGE_MARKER_META = '_cortext_trashed_by_owner_page';
+const COLLECTION_MARKER_META = '_cortext_trashed_by_collection';
 
 export function computeSidebarTrashRoots( trashedDocuments = [] ) {
 	const all = Array.isArray( trashedDocuments ) ? trashedDocuments : [];
@@ -42,13 +44,11 @@ export function computeSidebarTrashRoots( trashedDocuments = [] ) {
 
 	const markerOf = ( document ) => {
 		const meta = document.meta ?? {};
-		// Pages → subpages and pages → owned inline collections use different
-		// marker keys, but both point at the same kind of root: a parent page.
 		const parent = Number( meta[ PARENT_MARKER_META ] ?? 0 );
 		if ( parent > 0 ) {
 			return parent;
 		}
-		return Number( meta[ OWNER_PAGE_MARKER_META ] ?? 0 );
+		return Number( meta[ COLLECTION_MARKER_META ] ?? 0 );
 	};
 
 	all.forEach( ( document ) => {
@@ -68,19 +68,11 @@ export function computeSidebarTrashRoots( trashedDocuments = [] ) {
 
 	const descendantCountById = new Map();
 	roots.forEach( ( root ) => {
-		const counts = { pages: 0, collections: 0, total: 0 };
+		const counts = { total: 0 };
 		const stack = [ ...( childrenByMarker.get( root.id ) ?? [] ) ];
 		while ( stack.length ) {
 			const node = stack.pop();
 			counts.total++;
-			if ( node.kind === 'page' || node.type === POST_TYPE ) {
-				counts.pages++;
-			} else if (
-				node.kind === 'collection' ||
-				node.type === 'crtxt_collection'
-			) {
-				counts.collections++;
-			}
 			const kids = childrenByMarker.get( node.id );
 			if ( kids ) {
 				stack.push( ...kids );
@@ -92,11 +84,11 @@ export function computeSidebarTrashRoots( trashedDocuments = [] ) {
 	return { roots, descendantCountById };
 }
 
-function titleText( title, fallback ) {
+function optionalTitleText( title ) {
 	if ( typeof title === 'string' && title.trim() ) {
 		return title.trim();
 	}
-	return title?.rendered?.trim() || title?.raw?.trim() || fallback;
+	return title?.rendered?.trim() || title?.raw?.trim() || '';
 }
 
 function buildBreadcrumb( record, ancestorById ) {
@@ -105,19 +97,20 @@ function buildBreadcrumb( record, ancestorById ) {
 	const seen = new Set( [ record.id ] );
 	while ( current && ! seen.has( current.id ) ) {
 		seen.add( current.id );
-		ancestors.unshift( {
-			id: current.id,
-			title:
-				current.title?.rendered?.trim() ||
-				__( '(untitled)', 'cortext' ),
-			icon: current.meta?.cortext_document_icon ?? '',
-		} );
+		const title = optionalTitleText( current.title );
+		if ( title ) {
+			ancestors.unshift( {
+				id: current.id,
+				title,
+				icon: current.meta?.cortext_document_icon ?? '',
+			} );
+		}
 		current = current.parent ? ancestorById.get( current.parent ) : null;
 	}
 	return ancestors;
 }
 
-const EMPTY_COUNTS = Object.freeze( { pages: 0, collections: 0, total: 0 } );
+const EMPTY_COUNTS = Object.freeze( { total: 0 } );
 
 /**
  * One row in the trash list. Display copy comes from `useDocumentRecord`, so
@@ -130,7 +123,7 @@ const EMPTY_COUNTS = Object.freeze( { pages: 0, collections: 0, total: 0 } );
  * @param {boolean}                        props.isSelected       Whether the canvas is currently showing this document.
  * @param {boolean}                        props.isBusy           Restore or delete in flight for this row.
  * @param {?{id: number, message: string}} props.error            Per-row error to display under the row.
- * @param {Function}                       props.onRestore        Parent callback `(record, restoreErrorMessage)`.
+ * @param {Function}                       props.onRestore        Parent callback `(record)`.
  * @param {Function}                       props.onRequestDelete  Parent callback `(record)` to open the confirm dialog.
  */
 function SidebarTrashRow( {
@@ -144,7 +137,7 @@ function SidebarTrashRow( {
 	onRequestDelete,
 } ) {
 	const navigate = useNavigate();
-	const { title, features, descendantLabel, restoreErrorMessage } =
+	const { title, features, nestedDocumentCountLabel } =
 		useDocumentRecord( record );
 
 	const breadcrumb = features.hierarchy
@@ -152,21 +145,21 @@ function SidebarTrashRow( {
 		: [];
 	const documentIcon = record.meta?.cortext_document_icon ?? '';
 	const collectionTitle = record.collection?.id
-		? titleText( record.collection?.title, __( 'Collection', 'cortext' ) )
+		? optionalTitleText( record.collection?.title )
 		: '';
 	// Inline collections are the only trash items with an owner. If that page
 	// is still active, show its title so similar inline tables are easier to
 	// tell apart.
 	const ownerTitle = record.owner
-		? titleText( record.owner?.title, __( 'Page', 'cortext' ) )
+		? optionalTitleText( record.owner?.title )
 		: '';
 	const meta = descendantCounts.total
-		? descendantLabel( descendantCounts )
+		? nestedDocumentCountLabel( descendantCounts )
 		: '';
 
 	const handleRestore = useCallback( () => {
-		onRestore( record, restoreErrorMessage );
-	}, [ onRestore, record, restoreErrorMessage ] );
+		onRestore( record );
+	}, [ onRestore, record ] );
 
 	const handleRequestDelete = useCallback( () => {
 		onRequestDelete( record );
@@ -191,7 +184,7 @@ function SidebarTrashRow( {
 					}
 				>
 					<span className="cortext-sidebar__trash-title">
-						<PageIcon
+						<DocumentIcon
 							icon={ documentIcon }
 							size={ 14 }
 							className="cortext-sidebar__trash-title-icon"
@@ -210,7 +203,10 @@ function SidebarTrashRow( {
 									key={ crumb.id }
 									className="cortext-sidebar__breadcrumb-crumb"
 								>
-									<PageIcon icon={ crumb.icon } size={ 12 } />
+									<DocumentIcon
+										icon={ crumb.icon }
+										size={ 12 }
+									/>
 									<span>{ crumb.title }</span>
 									{ index < breadcrumb.length - 1 && (
 										<span
@@ -275,20 +271,20 @@ function SidebarTrashRow( {
  * @param {Object}   props
  * @param {Object}   props.record    Trashed record pending delete.
  * @param {Object}   props.counts    Cascade counts for the pending root.
- * @param {Function} props.onConfirm Parent callback `(record, permanentDeleteErrorMessage)`.
+ * @param {Function} props.onConfirm Parent callback `(record)`.
  * @param {Function} props.onCancel  Closes the dialog without deleting.
  */
 function SidebarTrashConfirmDialog( { record, counts, onConfirm, onCancel } ) {
-	const { title, permanentDeleteConfirmation, permanentDeleteErrorMessage } =
+	const { title, permanentDeleteDocumentConfirmation } =
 		useDocumentRecord( record );
-	const dialogConfig = permanentDeleteConfirmation( counts ) ?? {
+	const dialogConfig = permanentDeleteDocumentConfirmation( counts ) ?? {
 		title: '',
 		message: '',
 	};
 
 	const handleConfirm = useCallback( () => {
-		onConfirm( record, permanentDeleteErrorMessage );
-	}, [ onConfirm, record, permanentDeleteErrorMessage ] );
+		onConfirm( record );
+	}, [ onConfirm, record ] );
 
 	if ( dialogConfig.requireTypeToConfirm ) {
 		return (
@@ -321,7 +317,7 @@ function SidebarTrashConfirmDialog( { record, counts, onConfirm, onCancel } ) {
  * deleted with that parent. If a marker points to a parent that is no longer
  * in Trash, the orphan still appears so it can be recovered.
  *
- * Restore and permanent delete go through the descriptors, keeping per-kind
+ * Restore and permanent delete go through the descriptors, keeping per-case
  * refreshes and error copy out of this component.
  *
  * @param {Object}      props
@@ -398,7 +394,7 @@ export default function SidebarTrash( {
 	);
 
 	const handleRestore = useCallback(
-		async ( record, restoreErrorMessage ) => {
+		async ( record ) => {
 			setRowError( null );
 			setBusyId( record.id );
 			try {
@@ -406,7 +402,9 @@ export default function SidebarTrash( {
 			} catch ( error ) {
 				setRowError( {
 					id: record.id,
-					message: error?.message ?? restoreErrorMessage,
+					message:
+						error?.message ??
+						__( 'Could not restore this document.', 'cortext' ),
 				} );
 			} finally {
 				setBusyId( null );
@@ -416,7 +414,7 @@ export default function SidebarTrash( {
 	);
 
 	const handlePermanentDelete = useCallback(
-		async ( record, permanentDeleteErrorMessage ) => {
+		async ( record ) => {
 			setPendingDelete( null );
 			setRowError( null );
 			setBusyId( record.id );
@@ -435,7 +433,9 @@ export default function SidebarTrash( {
 			} catch ( error ) {
 				setRowError( {
 					id: record.id,
-					message: error?.message ?? permanentDeleteErrorMessage,
+					message:
+						error?.message ??
+						__( 'Could not delete this document.', 'cortext' ),
 				} );
 			} finally {
 				setBusyId( null );

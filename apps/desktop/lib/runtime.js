@@ -111,6 +111,26 @@ function configureObjectCacheDropIn( wordpressDir, appDir ) {
 	}
 }
 
+function configureDesktopUpdateLock( wordpressDir, appDir ) {
+	const sourcePath = path.join(
+		appDir,
+		'runtime/mu-plugins/cortext-update-lock.php'
+	);
+	const muPluginsDir = path.join( wordpressDir, 'wp-content/mu-plugins' );
+
+	if ( ! fs.existsSync( sourcePath ) ) {
+		throw new Error(
+			`Desktop update lock mu-plugin not found at ${ sourcePath }.`
+		);
+	}
+
+	fs.mkdirSync( muPluginsDir, { recursive: true } );
+	fs.copyFileSync(
+		sourcePath,
+		path.join( muPluginsDir, 'cortext-update-lock.php' )
+	);
+}
+
 function configurePreloadFiles( wordpressDir, appDir ) {
 	const files = [
 		[ 'preload.php', 'cortext-preload.php' ],
@@ -497,6 +517,7 @@ function startRuntime( {
 	handle.stateDir = stateDir;
 
 	configureObjectCacheDropIn( wordpressDir, appDir );
+	configureDesktopUpdateLock( wordpressDir, appDir );
 
 	if ( normalized === 'php' ) {
 		startPhpCli( handle, wordpressDir, port, appDir, stateDir );

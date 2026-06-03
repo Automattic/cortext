@@ -1,12 +1,13 @@
 /**
  * Public-facing styles for Cortext pages.
  *
- * Enqueued only on singular crtxt_page views. Intentionally minimal,
+ * Enqueued only on singular crtxt_document views. Intentionally minimal,
  * core block styles come from wp-block-library, enqueued separately.
  *
- * Heads-up: cover and icon styles still only load in admin/editor
- * bundles, so the PHP-rendered cover/icon markup is unstyled here.
- * See tech-debt.md#td-frontend-cover-icon-styles.
+ * Cover and icon styles for the PHP-rendered document-identity markup live
+ * in the "Document identity" section below, scoped to the persisted classes
+ * the render callbacks emit. The editor styles the same classes from its
+ * block edit partials.
  */
 @use "@wordpress/base-styles/colors" as *;
 @use "@wordpress/base-styles/variables" as *;
@@ -15,7 +16,17 @@
 
 .cortext-public-page {
 	margin: 0;
-	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+	// prettier-ignore
+	font-family:
+		-apple-system,
+		BlinkMacSystemFont,
+		"Segoe UI",
+		Roboto,
+		Oxygen-Sans,
+		Ubuntu,
+		Cantarell,
+		"Helvetica Neue",
+		sans-serif;
 	line-height: 1.6;
 	color: #1e1e1e;
 	background: #fff;
@@ -26,11 +37,13 @@
 	padding: 2rem 2rem 4rem;
 }
 
-.cortext-public-page__title {
+// The page title is the core/post-title block at the top of the content
+// (the template renders no separate the_title()). Give it the page-title look.
+.cortext-public-page .wp-block-post-title {
 	font-size: 2.5rem;
 	font-weight: 700;
 	line-height: 1.2;
-	margin: 2rem 0 1.5rem;
+	margin-block: 2rem 1.5rem;
 }
 
 .cortext-public-page__body {
@@ -47,6 +60,83 @@
 
 	> .alignfull {
 		max-width: none;
+	}
+}
+
+// -- Document identity: cover and icon (PHP-rendered markup) -------------
+// The cover/icon render callbacks emit these persisted classes on the public
+// page. The editor styles the same classes from its block edit partials; the
+// front end doesn't load those bundles, so the layout rules live here too.
+
+.cortext-document-cover-block {
+	position: relative;
+	height: clamp(140px, 26vh, 260px);
+	margin: 0;
+
+	&__image,
+	img {
+		display: block;
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+	}
+}
+
+.cortext-document-icon-block {
+	display: flex;
+	align-items: flex-end;
+	justify-content: flex-start;
+	max-width: var(--wp--style--global--content-size, 840px);
+	width: 100%;
+	margin: $grid-unit-10 auto;
+	padding: 0 $grid-unit-20;
+}
+
+// Pull the icon up over the cover when one immediately follows the other,
+// mirroring the editor overlap.
+.cortext-document-cover-block + .cortext-document-icon-block {
+	position: relative;
+	z-index: 1;
+	margin-block-start: -28px;
+	margin-block-end: 0;
+}
+
+.cortext-document-icon {
+	--cortext-document-icon-glyph-size: 44px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 auto;
+	line-height: 1;
+	vertical-align: middle;
+
+	&--emoji {
+		// prettier-ignore
+		font-family:
+			"Apple Color Emoji",
+			"Segoe UI Emoji",
+			"Noto Color Emoji",
+			"Twemoji Mozilla",
+			sans-serif;
+		font-size: 48px;
+	}
+
+	&--image {
+		width: 56px;
+		height: 56px;
+		object-fit: cover;
+		border-radius: 3px;
+	}
+
+	&--wp svg {
+		width: var(--cortext-document-icon-glyph-size);
+		min-width: var(--cortext-document-icon-glyph-size);
+		height: var(--cortext-document-icon-glyph-size);
+		flex: 0 0 var(--cortext-document-icon-glyph-size);
+		max-width: none;
+		// Admin themes svg fill to currentColor globally; the public page
+		// doesn't, so the saved icon color wouldn't reach the glyph otherwise.
+		fill: currentcolor;
 	}
 }
 
@@ -107,16 +197,32 @@
 	overflow: hidden;
 }
 
+.cortext-public-data-view-error {
+	padding: $grid-unit-20;
+	border: $border-width solid $gray-200;
+	border-radius: 4px;
+	color: $gray-700;
+	background: $white;
+}
+
 // DataView block layout on the public side.
 .wp-block-cortext-data-view {
 	overflow-x: auto;
 
 	.dataviews-view-table {
-		// Let the table grow beyond the container so columns keep
-		// their natural width instead of collapsing. The parent's
-		// overflow-x: auto provides the scrollbar.
+		// Size columns to their content and scroll horizontally (the parent's
+		// overflow-x provides the scrollbar) instead of cramming every column
+		// into the content width. Per-cell min/max stops a shrinkable text
+		// column (e.g. a relation list) from collapsing to a few pixels and
+		// wrapping a word per line, or one column from eating the whole table.
 		table-layout: auto;
-		min-width: 600px;
+		min-width: 100%;
+
+		th,
+		td {
+			min-width: 7rem;
+			max-width: 24rem;
+		}
 
 		/* stylelint-disable-next-line no-descending-specificity */
 		tbody .dataviews-view-table__cell-content-wrapper {
@@ -124,6 +230,21 @@
 			width: 100%;
 			min-width: 0;
 			max-width: 100%;
+			// Cap row height: a relation or multi-value cell would otherwise
+			// wrap into a very tall row. Keep a few lines and clip the rest;
+			// the full value lives on the row's own page. Top-align so the clip
+			// keeps the start of the value (DataViews centers the cell, which
+			// would otherwise show a meaningless middle slice).
+			align-items: flex-start;
+			max-height: 4.5em;
+			overflow: hidden;
 		}
+	}
+
+	// The public view is read-only, but the table still turns every column
+	// header into a menu button (sort, hide, move, filter) and the library
+	// gives no way to switch that off. Make the button inert instead.
+	.dataviews-view-table-header-button {
+		pointer-events: none;
 	}
 }

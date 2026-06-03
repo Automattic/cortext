@@ -37,7 +37,7 @@ function prefillFromFilters( filters, fieldIds ) {
 }
 
 export default function DataViewNewRowButton( {
-	slug,
+	collectionId,
 	view,
 	fields,
 	onCreated,
@@ -65,25 +65,25 @@ export default function DataViewNewRowButton( {
 		setError( null );
 		const meta = prefillFromFilters( view?.filters, prefillableFieldIds );
 		try {
-			// FIXME: Consider supporting row creation via /cortext/v1/rows.
 			const created = await apiFetch( {
-				path: `/wp/v2/crtxt_${ slug }`,
+				path: '/wp/v2/crtxt_documents',
 				method: 'POST',
 				data: {
 					status: 'private',
 					title: '',
+					cortext_trait: collectionId,
 					...( Object.keys( meta ).length ? { meta } : {} ),
 				},
 			} );
 			onCreated( created );
 		} catch ( err ) {
 			setError(
-				err?.message ?? __( 'Could not create row.', 'cortext' )
+				err?.message ?? __( 'Could not create a document.', 'cortext' )
 			);
 		} finally {
 			setIsCreating( false );
 		}
-	}, [ slug, view, prefillableFieldIds, onCreated ] );
+	}, [ collectionId, view, prefillableFieldIds, onCreated ] );
 
 	const button = (
 		<Button
@@ -100,7 +100,7 @@ export default function DataViewNewRowButton( {
 			icon={ plus }
 			onClick={ onClick }
 			isBusy={ isCreating }
-			disabled={ disabled || isCreating || ! slug }
+			disabled={ disabled || isCreating || ! collectionId }
 		>
 			{ __( 'New', 'cortext' ) }
 		</Button>

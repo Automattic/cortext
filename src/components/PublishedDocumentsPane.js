@@ -18,19 +18,13 @@ import { useNavigate } from '@tanstack/react-router';
 
 import './PublishedDocumentsPane.scss';
 
-import Infotip from './Infotip';
-import PageIcon from './PageIcon';
+import DocumentIcon from './DocumentIcon';
 import {
-	POST_TYPE as PAGE_POST_TYPE,
-	PUBLISHED_PAGES_QUERY,
+	POST_TYPE as DOCUMENT_POST_TYPE,
+	PUBLISHED_DOCUMENTS_QUERY,
 } from './page-queries';
-import { PUBLISHED_COLLECTIONS_QUERY } from '../collections';
-import {
-	computeCollectionUri,
-	computeDocumentUri,
-} from '../router/useResolveEntity';
-
-const COLLECTION_POST_TYPE = 'crtxt_collection';
+import { computeDocumentUri } from '../router/useResolveEntity';
+import { definesTrait, hasTrait } from '../documents/capabilities';
 
 const DEFAULT_LAYOUTS = { table: { density: 'compact' }, grid: {}, list: {} };
 
@@ -45,10 +39,9 @@ const DEFAULT_VIEW = {
 	layout: {},
 };
 
-const TYPE_LABELS = {
-	page: __( 'Page', 'cortext' ),
-	collection: __( 'Collection', 'cortext' ),
-};
+const TYPE_PAGE = 'page';
+const TYPE_COLLECTION_ITEM = 'collection-item';
+const TYPE_COLLECTION = 'collection';
 
 function titleText( entity ) {
 	const title = entity?.title;
@@ -58,57 +51,37 @@ function titleText( entity ) {
 	return title?.raw?.trim() || title?.rendered?.trim() || '';
 }
 
-// DataViews can't natively de-duplicate two record sets coming from different
-// post types because ids collide (a page #4 and a collection #4 are unrelated
-// entities). The composite `${kind}-${id}` key keeps them distinct in the
-// table while preserving the underlying record on `.source` for navigation
-// and link rendering.
-function buildItems( pages, collections ) {
-	const items = [];
+function documentTypeValue( record ) {
+	if ( definesTrait( record ) ) {
+		return TYPE_COLLECTION;
+	}
+	if ( hasTrait( record ) ) {
+		return TYPE_COLLECTION_ITEM;
+	}
+	return TYPE_PAGE;
+}
+
+function documentTypeLabel( record ) {
+	if ( definesTrait( record ) ) {
+		return __( 'Collection', 'cortext' );
+	}
+	if ( hasTrait( record ) ) {
+		return __( 'Collection item', 'cortext' );
+	}
+	return __( 'Page', 'cortext' );
+}
+
+function buildItems( documents ) {
 	const untitled = __( '(untitled)', 'cortext' );
-
-	const pagesById = new Map();
-	for ( const page of pages ?? [] ) {
-		pagesById.set( page.id, page );
-	}
-
-	for ( const page of pages ?? [] ) {
-		items.push( {
-			key: `page-${ page.id }`,
-			id: page.id,
-			kind: 'page',
-			postType: PAGE_POST_TYPE,
-			title: titleText( page ) || untitled,
-			modified: page.modified ?? page.modified_gmt ?? '',
-			link: page.link ?? '',
-			icon: page?.meta?.cortext_document_icon ?? '',
-			source: page,
-		} );
-	}
-
-	for ( const collection of collections ?? [] ) {
-		const mode = collection?.meta?.workspace_mode ?? '';
-		const ownerId = collection?.meta?._cortext_inline_owner_page ?? 0;
-		// Owner page may not be in `pages` when its status is draft/private
-		// while the inline collection is published. The render falls back to
-		// a title-less "Embedded in a page" in that case.
-		const ownerPage = ownerId ? pagesById.get( ownerId ) ?? null : null;
-		items.push( {
-			key: `collection-${ collection.id }`,
-			id: collection.id,
-			kind: 'collection',
-			postType: COLLECTION_POST_TYPE,
-			title: titleText( collection ) || untitled,
-			modified: collection.modified ?? collection.modified_gmt ?? '',
-			link: '',
-			icon: collection?.meta?.cortext_document_icon ?? '',
-			source: collection,
-			workspaceMode: mode,
-			ownerPage,
-		} );
-	}
-
-	return items;
+	return ( documents ?? [] ).map( ( document ) => ( {
+		key: `document-${ document.id }`,
+		id: document.id,
+		title: titleText( document ) || untitled,
+		modified: document.modified ?? document.modified_gmt ?? '',
+		link: document.link ?? '',
+		icon: document?.meta?.cortext_document_icon ?? '',
+		source: document,
+	} ) );
 }
 
 function formatModified( value ) {
@@ -124,35 +97,23 @@ export default function PublishedDocumentsPane() {
 	const [ view, setView ] = useState( DEFAULT_VIEW );
 	const navigate = useNavigate();
 
-	const { records: pages, isResolving: isResolvingPages } = useEntityRecords(
+	const { records: documents, isResolving: isLoading } = useEntityRecords(
 		'postType',
-		PAGE_POST_TYPE,
-		PUBLISHED_PAGES_QUERY
+		DOCUMENT_POST_TYPE,
+		PUBLISHED_DOCUMENTS_QUERY
 	);
-	const { records: collections, isResolving: isResolvingCollections } =
-		useEntityRecords(
-			'postType',
-			COLLECTION_POST_TYPE,
-			PUBLISHED_COLLECTIONS_QUERY
-		);
-
-	const isLoading = isResolvingPages || isResolvingCollections;
 
 	const openItem = useCallback(
 		( item ) => {
-			const splat =
-				item.kind === 'collection'
-					? computeCollectionUri( item.source )
-					: computeDocumentUri( item.source );
-			navigate( { to: '/$', params: { _splat: splat } } );
+			navigate( {
+				to: '/$',
+				params: { _splat: computeDocumentUri( item.source ) },
+			} );
 		},
 		[ navigate ]
 	);
 
-	const items = useMemo(
-		() => buildItems( pages, collections ),
-		[ pages, collections ]
-	);
+	const items = useMemo( () => buildItems( documents ), [ documents ] );
 
 	const fields = useMemo(
 		() => [
@@ -171,7 +132,7 @@ export default function PublishedDocumentsPane() {
 							className="cortext-published-pane__title-icon"
 							aria-hidden="true"
 						>
-							<PageIcon icon={ item.icon } size={ 16 } />
+							<DocumentIcon icon={ item.icon } size={ 16 } />
 						</span>
 						<span className="cortext-published-pane__title-text">
 							{ item.title }
@@ -183,12 +144,19 @@ export default function PublishedDocumentsPane() {
 				id: 'type',
 				label: __( 'Type', 'cortext' ),
 				elements: [
-					{ value: 'page', label: TYPE_LABELS.page },
-					{ value: 'collection', label: TYPE_LABELS.collection },
+					{ value: TYPE_PAGE, label: __( 'Page', 'cortext' ) },
+					{
+						value: TYPE_COLLECTION_ITEM,
+						label: __( 'Collection item', 'cortext' ),
+					},
+					{
+						value: TYPE_COLLECTION,
+						label: __( 'Collection', 'cortext' ),
+					},
 				],
 				filterBy: { operators: [ 'is', 'isAny' ] },
-				getValue: ( { item } ) => item.kind,
-				render: ( { item } ) => TYPE_LABELS[ item.kind ] ?? item.kind,
+				getValue: ( { item } ) => documentTypeValue( item.source ),
+				render: ( { item } ) => documentTypeLabel( item.source ),
 			},
 			{
 				id: 'modified',
@@ -203,60 +171,17 @@ export default function PublishedDocumentsPane() {
 				enableGlobalSearch: false,
 				getValue: ( { item } ) => item.link,
 				render: ( { item } ) => {
-					if ( item.kind === 'page' ) {
-						if ( ! item.link ) {
-							return (
-								<Text variant="muted">
-									{ __( 'N/A', 'cortext' ) }
-								</Text>
-							);
-						}
-						return (
-							<ExternalLink href={ item.link }>
-								{ __( 'View', 'cortext' ) }
-							</ExternalLink>
-						);
-					}
-					if ( item.workspaceMode !== 'inline' ) {
-						return (
-							<span className="cortext-published-pane__na">
-								<Text variant="muted">
-									{ __( 'N/A', 'cortext' ) }
-								</Text>
-								<Infotip
-									description={ __(
-										'While this collection does not have a URL, its data is nevertheless publicly accessible.',
-										'cortext'
-									) }
-								/>
-							</span>
-						);
-					}
-					if ( ! item.ownerPage ) {
+					if ( ! item.link ) {
 						return (
 							<Text variant="muted">
-								{ __( 'Embedded in a page', 'cortext' ) }
+								{ __( 'N/A', 'cortext' ) }
 							</Text>
 						);
 					}
-					const ownerTitle =
-						titleText( item.ownerPage ) ||
-						__( '(untitled)', 'cortext' );
 					return (
-						<Text variant="muted">
-							{ __( 'Embedded in', 'cortext' ) }{ ' ' }
-							<Button
-								variant="link"
-								onClick={ () =>
-									openItem( {
-										kind: 'page',
-										source: item.ownerPage,
-									} )
-								}
-							>
-								{ ownerTitle }
-							</Button>
-						</Text>
+						<ExternalLink href={ item.link }>
+							{ __( 'View', 'cortext' ) }
+						</ExternalLink>
 					);
 				},
 			},
@@ -272,9 +197,7 @@ export default function PublishedDocumentsPane() {
 	if ( isLoading && items.length === 0 ) {
 		return (
 			<VStack className="cortext-published-pane" spacing={ 5 }>
-				<Heading level={ 2 }>
-					{ __( 'Published documents', 'cortext' ) }
-				</Heading>
+				<Heading level={ 2 }>{ __( 'Published', 'cortext' ) }</Heading>
 				<Spinner />
 			</VStack>
 		);
@@ -283,14 +206,12 @@ export default function PublishedDocumentsPane() {
 	return (
 		<VStack className="cortext-published-pane" spacing={ 5 }>
 			<VStack spacing={ 1 }>
-				<Heading level={ 2 }>
-					{ __( 'Published documents', 'cortext' ) }
-				</Heading>
-				<Text variant="muted">
-					{ __(
-						'Pages and collections that are currently public.',
-						'cortext'
-					) }
+				<Heading level={ 2 }>{ __( 'Published', 'cortext' ) }</Heading>
+				<Text
+					className="cortext-published-pane__description"
+					variant="muted"
+				>
+					{ __( 'Public on the web.', 'cortext' ) }
 				</Text>
 			</VStack>
 			<DataViews
@@ -304,10 +225,7 @@ export default function PublishedDocumentsPane() {
 				isLoading={ isLoading }
 				empty={
 					<Text variant="muted">
-						{ __(
-							'No documents are currently public.',
-							'cortext'
-						) }
+						{ __( 'Nothing is public yet.', 'cortext' ) }
 					</Text>
 				}
 			/>

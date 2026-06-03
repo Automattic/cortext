@@ -6,15 +6,16 @@ The short version: Cortext keeps its data in WordPress, then adds a focused admi
 
 ## Storage
 
-Cortext currently uses WordPress posts and post meta for the main data model:
+Cortext stores its data in WordPress posts and post meta. Pages, collections, and rows are all one post type, `crtxt_document`; a document's role comes from its state rather than from a dedicated type:
 
--   Pages are hierarchical WordPress posts with block content.
--   Collections describe a type of record, such as tasks, books, or people.
--   Fields describe the properties that belong to a collection.
--   Rows are records inside a collection.
--   Field values are stored as row metadata.
+-   A document with no schema and no trait is a page. `post_parent` carries the workspace hierarchy.
+-   A document with a `cortext_fields` schema is a collection. It mirrors itself as a term in the `crtxt_trait` taxonomy.
+-   A document carrying a collection's `crtxt_trait` term is a row of that collection.
+-   `crtxt_field` posts hold field definitions. Row values live in row post meta (`field-<id>`), with an optional `cortext_field_values` sidecar table for indexed filters and sorts.
 
-The exact post types, meta keys, REST responses, and block attributes are still allowed to change. Do not build external integrations against them yet.
+One post type instead of a dynamic type per collection keeps per-request boot cost flat as collections grow, and it keeps every document in `wp_posts` so the block editor, revisions, REST, search, and locks keep working without special cases. The [data model](architecture/data-model.md) covers the exact keys; the [decision log](decisions.md) records why the model is shaped this way.
+
+Treat the exact post types, meta keys, REST responses, and block attributes as internal implementation details for now. Do not build external integrations against them yet.
 
 ## Admin shell
 
@@ -26,12 +27,13 @@ Collection views use WordPress's DataViews package where it fits, with Cortext c
 
 Cortext pages can render on the public site through a thin plugin template. The active WordPress theme still owns the public page surface. Cortext's shell theme does not leak into published content.
 
-## What is still unsettled
+## What we are still testing
 
-Several ideas are still being tested, including reusable schema across collections, import/export, migrations, and the shape of a stable REST contract. Until those settle, treat this repo as a prototype and treat the data as disposable.
+Several ideas are still being tested, including reusable schema across collections, import/export, upgrade handling, and the shape of a stable REST contract. For now, treat this repo as beta software and avoid depending on it for important work.
 
 More detailed notes live in:
 
 -   [Shell architecture](architecture/shell.md)
+-   [Blocks](architecture/blocks.md): which editor blocks are allowed and excluded.
 -   [Data model](architecture/data-model.md)
 -   [Theming](theming.md)

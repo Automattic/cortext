@@ -1,0 +1,88 @@
+# Files and directories to leave out when Cortext is deployed to the
+# WordPress.org SVN repository, whether through `wp dist-archive` or the 10up
+# deploy action.
+#
+# This mirrors the runtime allowlist in scripts/build-zip.sh as a denylist:
+# anything not listed here can ship to users. The plugin ZIP should contain
+# cortext.php, readme.txt, LICENSE, composer.json, includes/, templates/,
+# build/, seed-assets/, assets/brand/, and vendor/ without dev dependencies.
+#
+# Note: .distignore does not respect .gitignore, but build/ and vendor/ are
+# gitignored. If a deploy relies on this file, run `pnpm run build` and
+# `composer install --no-dev` before the SVN push. Otherwise the published
+# plugin will miss its compiled assets or Composer autoloader. The cleaner path
+# is to deploy from the scripts/build-zip.sh staging output via the deploy
+# action's BUILD_DIR input, which ignores this file.
+
+# Version control and CI
+/.git
+/.github
+/.gitignore
+/.gitattributes
+
+# Editor, linter, and package-manager config
+/.npmrc
+/.prettierignore
+/.prettierrc.js
+/jest.config.js
+/phpcs.xml.dist
+/phpunit.xml.dist
+/playwright.config.js
+/webpack.config.js
+/package.json
+/pnpm-lock.yaml
+/pnpm-workspace.yaml
+/composer.lock
+
+# Local dev environment (wp-env) and its generated auto-login helpers
+/.wp-env.json
+/.wp-env.test.json
+/.wp-env.override.json
+/.wp-env-plugins
+
+# Source, tooling, tests, docs, and the desktop app (not part of the plugin)
+/src
+/apps
+/scripts
+/tests
+/docs
+/node_modules
+/dist
+
+# Conductor workspace snapshots (gitignored; present only in local worktrees)
+/.context
+
+# Composer/test installs, coverage, and local agent state (gitignored but
+# present on disk; .distignore does not honor .gitignore, so list them here)
+/wordpress
+/coverage
+/artifacts
+/playwright-report
+/test-results
+/.claude
+/.serena
+/.playwright-mcp
+
+# Repo-facing docs (the plugin directory renders readme.txt)
+/README.md
+/CONTRIBUTING.md
+/SECURITY.md
+
+# Directory artwork and screenshots (deployed as wp.org assets, not bundled)
+/assets/wordpress-org
+/assets/screenshots
+
+# This file
+/.distignore
+
+# OS, editor, secrets, and log cruft
+.DS_Store
+Thumbs.db
+.vscode
+.idea
+*.swp
+*.log
+.env
+.env.local
+.env.*.local
+.phpunit.result.cache

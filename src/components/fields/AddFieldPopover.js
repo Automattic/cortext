@@ -19,7 +19,7 @@ import { FIELD_TYPES, FieldTypeIcon, fieldTypeLabel } from './fieldTypes';
 
 const RELATION_LIMIT_OPTIONS = [
 	{ value: 'many', label: __( 'No limit', 'cortext' ) },
-	{ value: 'one', label: __( '1 page', 'cortext' ) },
+	{ value: 'one', label: __( '1 document', 'cortext' ) },
 ];
 
 const ROLLUP_AGGREGATORS = [
@@ -230,11 +230,11 @@ function RollupConfig( {
 	const targetCollectionId = selectedRelation?.relatedCollectionId;
 	const { record: targetCollection } = useEntityRecord(
 		'postType',
-		'crtxt_collection',
+		'crtxt_document',
 		targetCollectionId ?? 0
 	);
 	const targetFieldIds = useMemo( () => {
-		const raw = targetCollection?.meta?.fields;
+		const raw = targetCollection?.meta?.cortext_fields;
 		return Array.isArray( raw )
 			? raw.map( ( id ) => Number( id ) ).filter( Boolean )
 			: [];
@@ -442,7 +442,7 @@ export default function AddFieldPopover( { collectionId, onCreate } ) {
 	const { run, isBusy, error } = useCreateField( collectionId );
 	const { records: collections } = useEntityRecords(
 		'postType',
-		'crtxt_collection',
+		'crtxt_document',
 		COLLECTION_QUERY
 	);
 

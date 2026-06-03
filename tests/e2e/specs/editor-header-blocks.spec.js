@@ -18,6 +18,8 @@ const EXPECTED_HEADER_PREFIX = [ DOCUMENT_ICON_BLOCK, POST_TITLE_BLOCK ];
 const BODY_A = 'Header guard body A';
 const BODY_B = 'Header guard body B';
 const INSERTED_BODY = 'Header guard inserted at zero';
+const COLLECTION_LEGACY_BODY = 'Collection legacy body block';
+const COLLECTION_BLOCKED_BODY = 'Collection blocked new body';
 const DOCUMENT_ICON_META = JSON.stringify( { type: 'emoji', value: 'P' } );
 const DISABLE_HEADER_BOUNDARY_MOVE_UP_CLASS =
 	'cortext-disable-header-boundary-move-up';
@@ -52,6 +54,10 @@ function bodyMarkup() {
 		`<!-- wp:paragraph --><p>${ BODY_A }</p><!-- /wp:paragraph -->`,
 		`<!-- wp:paragraph --><p>${ BODY_B }</p><!-- /wp:paragraph -->`,
 	].join( '\n\n' );
+}
+
+function paragraphMarkup( text ) {
+	return `<!-- wp:paragraph --><p>${ text }</p><!-- /wp:paragraph -->`;
 }
 
 async function readHeaderState( page ) {
@@ -214,6 +220,106 @@ async function selectParagraph( page, content ) {
 	}, content );
 }
 
+async function selectFirstBlockByName( page, blockName ) {
+	await page.evaluate( ( name ) => {
+		const block = window.wp.data
+			.select( 'core/block-editor' )
+			.getBlocks()
+			.find( ( candidate ) => candidate.name === name );
+		if ( ! block ) {
+			throw new Error( `Block not found: ${ name }` );
+		}
+		window.wp.data
+			.dispatch( 'core/block-editor' )
+			.selectBlock( block.clientId );
+	}, blockName );
+}
+
+async function readCollectionBodyState( page, collectionId ) {
+	return page.evaluate(
+		( { blockedText, legacyText, postId } ) => {
+			const getParagraphText = ( block ) => {
+				const content = block.attributes?.content ?? '';
+				if ( typeof content?.text === 'string' ) {
+					return content.text;
+				}
+				const element = document.createElement( 'div' );
+				element.innerHTML = String( content );
+				return element.textContent || String( content );
+			};
+			const blocks = window.wp.data
+				.select( 'core/block-editor' )
+				.getBlocks();
+			const ownerBlocks = blocks.filter(
+				( block ) =>
+					block.name === 'cortext/data-view' &&
+					Number( block.attributes?.collectionId ) ===
+						Number( postId )
+			);
+			const legacyBlock = blocks.find(
+				( block ) =>
+					block.name === 'core/paragraph' &&
+					getParagraphText( block ) === legacyText
+			);
+			return {
+				blockedCount: blocks.filter(
+					( block ) =>
+						block.name === 'core/paragraph' &&
+						getParagraphText( block ) === blockedText
+				).length,
+				legacyLock: legacyBlock?.attributes?.lock ?? null,
+				legacyPresent: Boolean( legacyBlock ),
+				ownerCount: ownerBlocks.length,
+			};
+		},
+		{
+			blockedText: COLLECTION_BLOCKED_BODY,
+			legacyText: COLLECTION_LEGACY_BODY,
+			postId: collectionId,
+		}
+	);
+}
+
+async function expectCollectionBodyState( page, collectionId, expected ) {
+	await expect
+		.poll( () => readCollectionBodyState( page, collectionId ), {
+			timeout: 15_000,
+		} )
+		.toMatchObject( expected );
+}
+
+async function attemptCollectionBodyMutations( page, collectionId ) {
+	await page.evaluate(
+		( { blockedText, postId } ) => {
+			const select = window.wp.data.select( 'core/block-editor' );
+			const dispatch = window.wp.data.dispatch( 'core/block-editor' );
+			const blocks = select.getBlocks();
+			const ownerBlock = blocks.find(
+				( block ) =>
+					block.name === 'cortext/data-view' &&
+					Number( block.attributes?.collectionId ) ===
+						Number( postId )
+			);
+			if ( ! ownerBlock ) {
+				throw new Error( 'Owner data-view block not found.' );
+			}
+			dispatch.selectBlock( ownerBlock.clientId );
+			dispatch.duplicateBlocks( [ ownerBlock.clientId ], false );
+			dispatch.insertBeforeBlock( ownerBlock.clientId );
+			dispatch.insertAfterBlock( ownerBlock.clientId );
+			dispatch.insertBlocks(
+				window.wp.blocks.createBlock( 'core/paragraph', {
+					content: blockedText,
+				} ),
+				blocks.length,
+				undefined,
+				false
+			);
+		},
+		{ blockedText: COLLECTION_BLOCKED_BODY, postId: collectionId }
+	);
+}
+
 async function expectMoveUpToolbarState( page, content, shouldBeEnabled ) {
 	await selectParagraph( page, content );
 	await expect
@@ -329,29 +435,51 @@ async function exerciseHeaderGuard( page ) {
 	await expectInsertionPointAllowedAfterHeader( page );
 }
 
-async function createRowFixture( requestUtils ) {
+async function createRowFixture(
+	requestUtils,
+	{ content = bodyMarkup(), withField = false } = {}
+) {
 	const suffix = Date.now().toString( 36 ).slice( -4 );
-	const slug = `e2ehdr${ suffix }`;
 	const collection = await requestUtils.rest( {
 		method: 'POST',
-		path: '/wp/v2/crtxt_collections',
+		path: '/wp/v2/crtxt_documents',
 		data: {
 			title: `E2E Header Collection ${ suffix }`,
 			status: 'private',
-			meta: { slug },
+			cortext_collection: true,
 		},
 	} );
+	let field = null;
+	if ( withField ) {
+		field = await requestUtils.rest( {
+			method: 'POST',
+			path: '/wp/v2/crtxt_fields',
+			data: {
+				title: `E2E Header Field ${ suffix }`,
+				status: 'private',
+				meta: { type: 'text' },
+			},
+		} );
+		await requestUtils.rest( {
+			method: 'POST',
+			path: `/wp/v2/crtxt_documents/${ collection.id }`,
+			data: {
+				meta: { cortext_fields: [ String( field.id ) ] },
+			},
+		} );
+	}
 	const row = await requestUtils.rest( {
 		method: 'POST',
-		path: `/wp/v2/crtxt_${ slug }`,
+		path: '/wp/v2/crtxt_documents',
 		data: {
 			title: `E2E Header Row ${ suffix }`,
 			status: 'private',
-			content: bodyMarkup(),
+			cortext_trait: collection.id,
+			content,
 			meta: { cortext_document_icon: DOCUMENT_ICON_META },
 		},
 	} );
-	return { collection, row, slug };
+	return { collection, field, row };
 }
 
 test.describe( 'editor header blocks', () => {
@@ -364,7 +492,7 @@ test.describe( 'editor header blocks', () => {
 		try {
 			createdPage = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: 'E2E Header Guard Page',
 					status: 'private',
@@ -382,7 +510,87 @@ test.describe( 'editor header blocks', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				createdPage && `/wp/v2/crtxt_pages/${ createdPage.id }`
+				createdPage && `/wp/v2/crtxt_documents/${ createdPage.id }`
+			);
+		}
+	} );
+
+	test( 'adds the first empty body block after page and row headers', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		let createdPage;
+		let fixture;
+		try {
+			createdPage = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: 'E2E Empty Body Page',
+					status: 'private',
+					content: '',
+					meta: { cortext_document_icon: DOCUMENT_ICON_META },
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/${ createdPage.id }`
+			);
+			await waitForEditorPost( page, createdPage.id );
+			await expectHeaderPrefix( page );
+			const editorCanvas = page.frameLocator(
+				'iframe[name="editor-canvas"]'
+			);
+
+			await selectFirstBlockByName( page, DOCUMENT_ICON_BLOCK );
+			await expect(
+				editorCanvas.getByRole( 'button', {
+					name: 'Add block after',
+				} )
+			).toHaveCount( 0 );
+
+			await selectFirstBlockByName( page, POST_TITLE_BLOCK );
+			await expect(
+				editorCanvas.getByRole( 'button', {
+					name: 'Add block after',
+				} )
+			).toHaveCount( 0 );
+			await expectParagraphsAfterTitle( page, [ '' ] );
+
+			fixture = await createRowFixture( requestUtils, {
+				content: '',
+				withField: true,
+			} );
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/${ fixture.row.id }`
+			);
+			await waitForEditorPost( page, fixture.row.id );
+			await expectParagraphsAfterTitle( page, [ '' ] );
+			await selectFirstBlockByName( page, DOCUMENT_PROPERTIES_BLOCK );
+			await expect(
+				editorCanvas.getByRole( 'button', {
+					name: 'Add block after',
+				} )
+			).toHaveCount( 0 );
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				createdPage && `/wp/v2/crtxt_documents/${ createdPage.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture && `/wp/v2/crtxt_documents/${ fixture.row.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture && `/wp/v2/crtxt_documents/${ fixture.collection.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture?.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
 			);
 		}
 	} );
@@ -405,11 +613,141 @@ test.describe( 'editor header blocks', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				fixture && `/wp/v2/crtxt_${ fixture.slug }/${ fixture.row.id }`
+				fixture && `/wp/v2/crtxt_documents/${ fixture.row.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
-				fixture && `/wp/v2/crtxt_collections/${ fixture.collection.id }`
+				fixture && `/wp/v2/crtxt_documents/${ fixture.collection.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture?.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
+			);
+		}
+	} );
+
+	test( 'keeps legacy collection body blocks locked and removes new ones', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		let collection;
+		try {
+			collection = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: 'E2E Collection With Legacy Body',
+					status: 'private',
+					cortext_collection: true,
+					content: paragraphMarkup( COLLECTION_LEGACY_BODY ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/${ collection.id }`
+			);
+			await waitForEditorPost( page, collection.id );
+			const editorCanvas = page.frameLocator(
+				'iframe[name="editor-canvas"]'
+			);
+			await expectCollectionBodyState( page, collection.id, {
+				blockedCount: 0,
+				legacyLock: {
+					edit: true,
+					move: true,
+					remove: true,
+				},
+				legacyPresent: true,
+				ownerCount: 1,
+			} );
+
+			await attemptCollectionBodyMutations( page, collection.id );
+
+			await expectCollectionBodyState( page, collection.id, {
+				blockedCount: 0,
+				legacyPresent: true,
+				ownerCount: 1,
+			} );
+			await selectFirstBlockByName( page, POST_TITLE_BLOCK );
+			await expect(
+				editorCanvas.getByRole( 'button', {
+					name: 'Add block after',
+				} )
+			).toHaveCount( 0 );
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				collection && `/wp/v2/crtxt_documents/${ collection.id }`
+			);
+		}
+	} );
+
+	test( 'preserves legacy collection body blocks after switching documents', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const suffix = Date.now().toString( 36 ).slice( -4 );
+		const sourceTitle = `E2E Switch Source ${ suffix }`;
+		const collectionTitle = `E2E Switch Collection ${ suffix }`;
+		let sourcePage;
+		let collection;
+		try {
+			sourcePage = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: sourceTitle,
+					status: 'private',
+					content: bodyMarkup(),
+				},
+			} );
+			collection = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: collectionTitle,
+					status: 'private',
+					cortext_collection: true,
+					content: paragraphMarkup( COLLECTION_LEGACY_BODY ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/${ sourcePage.id }`
+			);
+			await waitForEditorPost( page, sourcePage.id );
+			await expectParagraphsAfterTitle( page, [ BODY_A, BODY_B ] );
+
+			await page
+				.locator( '.cortext-sidebar' )
+				.getByRole( 'button', {
+					name: collectionTitle,
+					exact: true,
+				} )
+				.click();
+			await waitForEditorPost( page, collection.id );
+			await expectCollectionBodyState( page, collection.id, {
+				blockedCount: 0,
+				legacyLock: {
+					edit: true,
+					move: true,
+					remove: true,
+				},
+				legacyPresent: true,
+				ownerCount: 1,
+			} );
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				sourcePage && `/wp/v2/crtxt_documents/${ sourcePage.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				collection && `/wp/v2/crtxt_documents/${ collection.id }`
 			);
 		}
 	} );

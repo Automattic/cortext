@@ -54,7 +54,7 @@ beforeEach( () => {
 	} );
 	useEntityRecord.mockImplementation( ( kind, name, id ) => ( {
 		record:
-			kind === 'postType' && name === 'crtxt_collection' && id === 9
+			kind === 'postType' && name === 'crtxt_trait' && id === 9
 				? {
 						id: 9,
 						title: { raw: 'Invoices', rendered: 'Invoices' },

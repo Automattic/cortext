@@ -38,14 +38,26 @@
 		justify-content: center;
 		width: $grid-unit-30;
 		height: $grid-unit-30;
+	}
+
+	&__brand-image {
+		display: block;
+		width: 100%;
+		height: 100%;
+		object-fit: contain;
+	}
+
+	&__brand-initial {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 100%;
+		height: 100%;
 		color: var(--cortext-accent-contrast);
 		background: var(--cortext-accent);
 		border-radius: 50%;
-	}
-
-	&__brand-mark svg {
-		width: 18px;
-		height: 18px;
+		font-size: 12px;
+		line-height: 1;
 	}
 
 	&__brand-text {
@@ -198,6 +210,20 @@
 
 		&__section-header:hover &__section-action,
 		&__section-header:focus-within &__section-action {
+			opacity: 1;
+		}
+	}
+
+	&__split-action {
+		display: flex;
+		align-items: center;
+	}
+
+	// Keep the create-menu toggle visible while its dropdown is open: the
+	// popover takes focus, so the header's focus-within reveal no longer holds.
+	@media (hover: hover) and (pointer: fine) {
+
+		&__split-action-toggle.components-button[aria-expanded="true"] {
 			opacity: 1;
 		}
 	}

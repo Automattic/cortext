@@ -1,12 +1,11 @@
 /**
  * Render and prop-contract tests for `src/components/sidebar/DocumentRow.js`.
  *
- * `DocumentRow` replaces `PageRow` and `CollectionRow`. The document layer
- * decides whether a row behaves like a hierarchy node or a leaf, so the suite
- * covers both modes through this one component:
- *  - hierarchy: real chevron, recursive children, three drop zones,
- *    add-child button.
- *  - leaf: chevron placeholder, no children, two drop zones, no add-child.
+ * DocumentRow has two modes derived from the record's capabilities:
+ *  - hierarchy (pages and collections without a trait term): real chevron,
+ *    recursive children, three drop zones, add-child button.
+ *  - leaf (rows — documents tagged with a trait term): chevron placeholder,
+ *    no children, two drop zones, no add-child.
  *
  * The `documents` module is mocked so tests can inspect actions and feature
  * resolution without mounting the full sidebar provider stack each time.
@@ -28,9 +27,12 @@ jest.mock( '../../../../src/documents', () => {
 			trash: mockTrash,
 		} ),
 		useDocumentRecord: ( record ) => {
-			const isCollection = record?.type === 'crtxt_collection';
+			const definesTrait = record?.cortext_defines_trait === true;
+			const hasTrait =
+				Array.isArray( record?.crtxt_trait ) &&
+				record.crtxt_trait.length > 0;
+			const isRow = hasTrait && ! definesTrait;
 			return {
-				kind: isCollection ? 'collection' : 'page',
 				title:
 					record?.title?.rendered?.trim() ||
 					record?.title?.raw?.trim() ||
@@ -39,9 +41,9 @@ jest.mock( '../../../../src/documents', () => {
 					'data-testid': 'mock-icon',
 				} ),
 				features: {
-					hierarchy: ! isCollection,
-					canCreateChild: ! isCollection,
-					hasOwnIcon: ! isCollection,
+					hierarchy: ! isRow,
+					canCreateChild: ! isRow && ! definesTrait,
+					hasOwnIcon: ! isRow,
 				},
 			};
 		},
@@ -53,17 +55,28 @@ import DocumentRow from '../../../../src/components/sidebar/DocumentRow';
 function makePage( overrides = {} ) {
 	return {
 		id: 1,
-		type: 'crtxt_page',
+		type: 'crtxt_document',
 		title: { rendered: 'Hello', raw: 'Hello' },
+		...overrides,
+	};
+}
+
+function makeRow( overrides = {} ) {
+	return {
+		id: 7,
+		type: 'crtxt_document',
+		crtxt_trait: [ 12 ],
+		title: { rendered: 'Books', raw: 'Books' },
 		...overrides,
 	};
 }
 
 function makeCollection( overrides = {} ) {
 	return {
-		id: 7,
-		type: 'crtxt_collection',
-		title: { rendered: 'Books', raw: 'Books' },
+		id: 5,
+		type: 'crtxt_document',
+		cortext_defines_trait: true,
+		title: { rendered: 'Tasks', raw: 'Tasks' },
 		...overrides,
 	};
 }
@@ -80,6 +93,7 @@ function baseProps( overrides = {} ) {
 		onSelect: jest.fn(),
 		onToggleExpand: jest.fn(),
 		onCreateChild: jest.fn(),
+		onCreateChildCollection: jest.fn(),
 		isFavorite: false,
 		isFavoriteDisabled: false,
 		onToggleFavorite: jest.fn(),
@@ -186,9 +200,32 @@ describe( 'DocumentRow (hierarchical mode)', () => {
 	it( 'renders an add-child button', () => {
 		const { props } = renderRow();
 		fireEvent.click(
-			screen.getByRole( 'button', { name: 'Add a page inside Hello' } )
+			screen.getByRole( 'button', {
+				name: 'Add a document inside Hello',
+			} )
 		);
 		expect( props.onCreateChild ).toHaveBeenCalledWith( 1 );
+	} );
+
+	it( 'creates a child collection from the menu', () => {
+		const { container, props } = renderRow();
+		fireEvent.click( container.querySelector( '.cortext-sidebar__menu' ) );
+		fireEvent.click(
+			screen.getByRole( 'menuitem', {
+				name: 'Add collection inside',
+			} )
+		);
+		expect( props.onCreateChildCollection ).toHaveBeenCalledWith( 1 );
+	} );
+
+	it( 'does not show the child collection action for collections', () => {
+		const { container } = renderRow( { record: makeCollection() } );
+		fireEvent.click( container.querySelector( '.cortext-sidebar__menu' ) );
+		expect(
+			screen.queryByRole( 'menuitem', {
+				name: 'Add collection inside',
+			} )
+		).toBeNull();
 	} );
 
 	it( 'calls onSelect with the record when the title is clicked', () => {
@@ -269,7 +306,9 @@ describe( 'DocumentRow (hierarchical mode)', () => {
 	it( 'invokes the document layer trash action from the menu', () => {
 		const { container, props } = renderRow();
 		fireEvent.click( container.querySelector( '.cortext-sidebar__menu' ) );
-		fireEvent.click( screen.getByRole( 'menuitem', { name: 'Trash' } ) );
+		fireEvent.click(
+			screen.getByRole( 'menuitem', { name: 'Move to Trash' } )
+		);
 		expect( mockTrash ).toHaveBeenCalledWith( props.record );
 	} );
 
@@ -315,7 +354,7 @@ describe( 'DocumentRow (hierarchical mode)', () => {
 
 describe( 'DocumentRow (leaf mode)', () => {
 	it( 'renders only the chevron placeholder', () => {
-		const { container } = renderRow( { record: makeCollection() } );
+		const { container } = renderRow( { record: makeRow() } );
 		expect(
 			container.querySelector( '.cortext-sidebar__chevron--placeholder' )
 		).toBeTruthy();
@@ -327,7 +366,7 @@ describe( 'DocumentRow (leaf mode)', () => {
 	} );
 
 	it( 'exposes only before/after drop zones', () => {
-		const { container } = renderRow( { record: makeCollection() } );
+		const { container } = renderRow( { record: makeRow() } );
 		expect(
 			container.querySelectorAll( '.cortext-sidebar__drop-zone' )
 		).toHaveLength( 2 );
@@ -343,15 +382,25 @@ describe( 'DocumentRow (leaf mode)', () => {
 	} );
 
 	it( 'omits the add-child button', () => {
-		const { container } = renderRow( { record: makeCollection() } );
+		const { container } = renderRow( { record: makeRow() } );
 		expect(
 			container.querySelector( '.cortext-sidebar__add-child' )
 		).toBeNull();
 	} );
 
+	it( 'does not show the child collection action for rows', () => {
+		const { container } = renderRow( { record: makeRow() } );
+		fireEvent.click( container.querySelector( '.cortext-sidebar__menu' ) );
+		expect(
+			screen.queryByRole( 'menuitem', {
+				name: 'Add collection inside',
+			} )
+		).toBeNull();
+	} );
+
 	it( 'uses the leaf-specific trash menu label', () => {
 		const { container, props } = renderRow( {
-			record: makeCollection(),
+			record: makeRow(),
 		} );
 		fireEvent.click( container.querySelector( '.cortext-sidebar__menu' ) );
 		fireEvent.click(
@@ -363,12 +412,12 @@ describe( 'DocumentRow (leaf mode)', () => {
 	it( 'does not render child rows even when childNodes are passed', () => {
 		// Leaves never render child branches. Ignore passed nodes so stale tree
 		// data cannot show rows under a collection.
-		const stray = makeCollection( {
+		const stray = makeRow( {
 			id: 8,
 			title: { rendered: 'Stray', raw: 'Stray' },
 		} );
 		const { container } = renderRow( {
-			record: makeCollection(),
+			record: makeRow(),
 			childNodes: [ { page: stray, children: [] } ],
 			expandedIds: new Set( [ 7 ] ),
 		} );
@@ -380,7 +429,7 @@ describe( 'DocumentRow (leaf mode)', () => {
 
 	it( 'enters rename mode when autoRenameId matches', () => {
 		const { container, props } = renderRow( {
-			record: makeCollection(),
+			record: makeRow(),
 			autoRenameId: 7,
 		} );
 		const input = container.querySelector(

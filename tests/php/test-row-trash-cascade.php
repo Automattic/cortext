@@ -1,6 +1,6 @@
 <?php
 /**
- * Tests for Cortext\PostType\Cascade\CollectionToRowTrashCascade.
+ * Tests for the collection-to-row leg of Cortext\PostType\TrashCascade.
  *
  * @package Cortext
  */
@@ -9,32 +9,42 @@ declare( strict_types=1 );
 
 namespace Cortext\Tests;
 
-use Cortext\PostType\Cascade\CollectionToRowTrashCascade;
-use Cortext\PostType\Collection;
-use Cortext\PostType\CollectionEntries;
-use Cortext\PostType\TrashCascadeEngine;
+use Cortext\PostType\Document;
+use Cortext\PostType\Field;
+use Cortext\PostType\TrashCascade;
+use Cortext\Taxonomy\TraitTaxonomy;
 use WorDBless\BaseTestCase;
 
 final class Test_Row_Trash_Cascade extends BaseTestCase {
 
 	use InMemoryPostsQuery;
+	use InMemoryTermStore;
 
 	public function set_up(): void {
 		parent::set_up();
 
-		( new Collection() )->register_post_type();
+		( new Document() )->register_post_type();
+		( new TraitTaxonomy() )->register_taxonomy();
+		$trait_taxonomy = new TraitTaxonomy();
+		add_action( 'added_post_meta', array( $trait_taxonomy, 'sync_term_on_meta_change' ), 10, 4 );
+		add_action( 'updated_post_meta', array( $trait_taxonomy, 'sync_term_on_meta_change' ), 10, 4 );
+		add_action( 'deleted_post_meta', array( $trait_taxonomy, 'sync_term_on_meta_change' ), 10, 4 );
+		add_action( 'before_delete_post', array( $trait_taxonomy, 'sync_term_on_delete' ), 10, 2 );
+		( new Field() )->register_post_type();
 
 		remove_all_actions( 'wp_trash_post' );
 		remove_all_actions( 'untrashed_post' );
 		remove_all_actions( 'before_delete_post' );
 
+		$this->install_in_memory_term_store();
 		$this->install_in_memory_posts_query();
 
-		( new TrashCascadeEngine( array( new CollectionToRowTrashCascade() ) ) )->register();
+		( new TrashCascade() )->register();
 	}
 
 	public function tear_down(): void {
 		$this->uninstall_in_memory_posts_query();
+		$this->uninstall_in_memory_term_store();
 		parent::tear_down();
 	}
 
@@ -45,7 +55,7 @@ final class Test_Row_Trash_Cascade extends BaseTestCase {
 	}
 
 	public function test_trashing_collection_trashes_its_rows_and_stamps_marker(): void {
-		[ $collection_id, $row_ids ] = $this->create_collection_with_rows( 'tasks', 3 );
+		[ $collection_id, $row_ids ] = $this->create_collection_with_rows( 3 );
 
 		wp_trash_post( $collection_id );
 
@@ -53,15 +63,15 @@ final class Test_Row_Trash_Cascade extends BaseTestCase {
 			$this->assertSame( 'trash', get_post_status( $row_id ) );
 			$this->assertSame(
 				(string) $collection_id,
-				(string) get_post_meta( $row_id, CollectionToRowTrashCascade::TRASHED_BY_OWNER_META_KEY, true ),
+				(string) get_post_meta( $row_id, TrashCascade::COLLECTION_MARKER_META, true ),
 				'Each row trashed by the cascade carries the collection id as its owner marker.'
 			);
 		}
 	}
 
 	public function test_restoring_collection_revives_only_rows_its_cascade_trashed(): void {
-		[ $collection_id, $row_ids ] = $this->create_collection_with_rows( 'restore', 2 );
-		$independently_trashed       = $this->create_row_for_collection( 'restore' );
+		[ $collection_id, $row_ids ] = $this->create_collection_with_rows( 2 );
+		$independently_trashed       = $this->create_row_for_collection( $collection_id );
 
 		// Trash one row independently. It carries no marker.
 		wp_trash_post( $independently_trashed );
@@ -73,7 +83,7 @@ final class Test_Row_Trash_Cascade extends BaseTestCase {
 			$this->assertNotSame( 'trash', get_post_status( $row_id ), 'Cascade-trashed rows come back on restore.' );
 			$this->assertSame(
 				'',
-				(string) get_post_meta( $row_id, CollectionToRowTrashCascade::TRASHED_BY_OWNER_META_KEY, true ),
+				(string) get_post_meta( $row_id, TrashCascade::COLLECTION_MARKER_META, true ),
 				'Marker is cleared so a future cascade restore does not revive the row twice.'
 			);
 		}
@@ -86,7 +96,7 @@ final class Test_Row_Trash_Cascade extends BaseTestCase {
 	}
 
 	public function test_permanent_delete_of_collection_removes_all_rows(): void {
-		[ $collection_id, $row_ids ] = $this->create_collection_with_rows( 'wiped', 2 );
+		[ $collection_id, $row_ids ] = $this->create_collection_with_rows( 2 );
 
 		wp_delete_post( $collection_id, true );
 
@@ -95,17 +105,38 @@ final class Test_Row_Trash_Cascade extends BaseTestCase {
 		}
 	}
 
+	public function test_permanent_delete_keeps_priority_lead_over_trait_term_sync(): void {
+		// Production wires TraitTaxonomy::sync_term_on_delete at priority 10
+		// on `before_delete_post`, and registers it BEFORE TrashCascade. If
+		// TrashCascade::on_delete ran at the same priority, the trait term
+		// would be deleted first and `all_row_ids` (which queries by term)
+		// would return empty, leaving the rows orphaned. Re-add the term sync
+		// hook on top of the test's clean slate to reproduce the production
+		// order, then assert the cascade still finds and deletes the rows.
+		( new TraitTaxonomy() )->register_taxonomy();
+		add_action(
+			'before_delete_post',
+			array( new TraitTaxonomy(), 'sync_term_on_delete' ),
+			10,
+			2
+		);
+
+		[ $collection_id, $row_ids ] = $this->create_collection_with_rows( 2 );
+
+		wp_delete_post( $collection_id, true );
+
+		foreach ( $row_ids as $row_id ) {
+			$this->assertNull(
+				get_post( $row_id ),
+				'TrashCascade::on_delete must run before TraitTaxonomy::sync_term_on_delete, otherwise the row lookup loses its key.'
+			);
+		}
+	}
+
 	public function test_permanent_delete_of_already_trashed_collection_still_force_deletes_rows(): void {
-		// A trashed collection's dynamic row CPT is not registered by the
-		// normal init pass (it queries active statuses). The cascade has to
-		// register it on demand before walking rows; without that, the
-		// row query returns empty and the rows leak.
-		[ $collection_id, $row_ids ] = $this->create_collection_with_rows( 'two-step', 2 );
+		[ $collection_id, $row_ids ] = $this->create_collection_with_rows( 2 );
 
 		wp_trash_post( $collection_id );
-		// Simulate a fresh request: tear down the dynamic CPT so the cascade
-		// must register it from the collection meta to see the rows.
-		unregister_post_type( CollectionEntries::CPT_PREFIX . 'two-step' );
 
 		wp_delete_post( $collection_id, true );
 
@@ -115,8 +146,9 @@ final class Test_Row_Trash_Cascade extends BaseTestCase {
 	}
 
 	public function test_trashing_a_non_collection_post_is_a_noop(): void {
-		// The cascade is bound to crtxt_collection only. Trashing anything
-		// else should not invoke the row walk.
+		// The collection-to-row cascade only fires when the trashed document
+		// carries `cortext_fields`. Trashing anything else (pages, regular WP
+		// posts) should not invoke the row walk.
 		register_post_type(
 			'some_other_post_type',
 			array(
@@ -140,44 +172,53 @@ final class Test_Row_Trash_Cascade extends BaseTestCase {
 	}
 
 	/**
-	 * Creates a full-page collection with a registered row CPT and seeded
-	 * rows.
+	 * Creates a collection (`crtxt_document` with `cortext_fields` meta) and
+	 * a set of rows tagged with its mirror trait term.
 	 *
 	 * @return array{0:int,1:int[]} Collection id, row ids.
 	 */
-	private function create_collection_with_rows( string $slug, int $row_count ): array {
+	private function create_collection_with_rows( int $row_count ): array {
 		$collection_id = (int) wp_insert_post(
 			array(
-				'post_type'   => Collection::POST_TYPE,
+				'post_type'   => Document::POST_TYPE,
 				'post_status' => 'private',
-				'post_title'  => 'Collection ' . $slug,
-				'meta_input'  => array(
-					'slug'                    => $slug,
-					Collection::MODE_META_KEY => Collection::MODE_FULL_PAGE,
-				),
+				'post_title'  => 'Collection ' . wp_generate_uuid4(),
 			)
 		);
+		$this->assertGreaterThan( 0, $collection_id );
 
-		$collection = get_post( $collection_id );
-		( new CollectionEntries() )->register_for_collection( $collection );
+		$field_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Title',
+				'meta_input'  => array( 'type' => 'text' ),
+			)
+		);
+		$this->assertGreaterThan( 0, $field_id );
+		add_post_meta( $collection_id, 'cortext_fields', (string) $field_id );
 
 		$row_ids = array();
 		for ( $i = 0; $i < $row_count; $i++ ) {
-			$row_ids[] = $this->create_row_for_collection( $slug, "Row {$slug} {$i}" );
+			$row_ids[] = $this->create_row_for_collection( $collection_id );
 		}
 
 		return array( $collection_id, $row_ids );
 	}
 
-	private function create_row_for_collection( string $slug, string $title = '' ): int {
+	private function create_row_for_collection( int $collection_id ): int {
 		$id = (int) wp_insert_post(
 			array(
-				'post_type'   => CollectionEntries::CPT_PREFIX . $slug,
+				'post_type'   => Document::POST_TYPE,
 				'post_status' => 'private',
-				'post_title'  => '' === $title ? "Row {$slug} " . wp_generate_uuid4() : $title,
+				'post_title'  => 'Row ' . wp_generate_uuid4(),
 			)
 		);
 		$this->assertGreaterThan( 0, $id );
+
+		$term_id = TraitTaxonomy::term_id_for_trait( $collection_id );
+		$this->assertGreaterThan( 0, $term_id );
+		wp_set_object_terms( $id, array( $term_id ), TraitTaxonomy::TAXONOMY, false );
 
 		return $id;
 	}

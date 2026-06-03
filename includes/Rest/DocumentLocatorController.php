@@ -4,9 +4,11 @@
  *
  * The shell addresses any document by id alone (the slug in the URL is
  * cosmetic). Core REST still needs the post type to fetch the record, and
- * that differs across documents: `crtxt_page` for pages, dynamic
- * `crtxt_<collection-slug>` for rows. This endpoint is the one extra hop
- * that lets the URL stay slug-agnostic.
+ * pages and rows now share `crtxt_document`. The locator also reports the
+ * parent trait id for rows so the shell can mount the right pane without
+ * an extra round trip. Whether a document is a page, row, or collection is
+ * derived on the client from `trait_id` and the loaded record's
+ * capabilities.
  *
  * @package Cortext
  */
@@ -15,7 +17,12 @@ declare( strict_types=1 );
 
 namespace Cortext\Rest;
 
+defined( 'ABSPATH' ) || exit;
+
+use Cortext\PostType\Document;
+use Cortext\Taxonomy\TraitTaxonomy;
 use WP_Error;
+use WP_Post;
 use WP_REST_Request;
 use WP_REST_Response;
 
@@ -86,8 +93,38 @@ final class DocumentLocatorController {
 				'type'      => $post->post_type,
 				'rest_base' => $rest_base,
 				'slug'      => $post->post_name,
+				'trait_ids' => $this->trait_ids_for( $post ),
 			),
 			200
 		);
+	}
+
+	/**
+	 * Returns the collection document ids the post belongs to. Empty array
+	 * when none. The shape is plural so multi-trait consumers don't break the
+	 * API later; single-trait callers just read `[0]`.
+	 *
+	 * @param WP_Post $post Document to inspect.
+	 * @return int[]
+	 */
+	private function trait_ids_for( WP_Post $post ): array {
+		if ( Document::POST_TYPE !== $post->post_type ) {
+			return array();
+		}
+		$terms = get_the_terms( $post, TraitTaxonomy::TAXONOMY );
+		if ( ! is_array( $terms ) || empty( $terms ) ) {
+			return array();
+		}
+		$ids = array();
+		foreach ( $terms as $term ) {
+			if ( ! is_object( $term ) || ! isset( $term->slug ) ) {
+				continue;
+			}
+			$trait_id = TraitTaxonomy::trait_id_from_slug( (string) $term->slug );
+			if ( $trait_id > 0 ) {
+				$ids[] = $trait_id;
+			}
+		}
+		return $ids;
 	}
 }

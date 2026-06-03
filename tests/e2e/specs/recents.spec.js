@@ -42,7 +42,7 @@ async function readRecentsPlacement( page ) {
 		).map( ( title ) => title.textContent.trim() );
 		return {
 			recents: titles.indexOf( 'Recents' ),
-			pages: titles.indexOf( 'Pages' ),
+			pages: titles.indexOf( 'Documents' ),
 		};
 	} );
 }
@@ -70,16 +70,14 @@ async function expandRecentsIfCollapsed( page ) {
 
 async function createCollectionFixture( requestUtils ) {
 	const suffix = Date.now().toString( 36 ).slice( -4 );
-	const slug = `e2erec${ suffix }`;
 	const collectionTitle = `E2E Recent Rows ${ suffix }`;
 
 	const collection = await requestUtils.rest( {
 		method: 'POST',
-		path: '/wp/v2/crtxt_collections',
+		path: '/wp/v2/crtxt_documents',
 		data: {
 			title: collectionTitle,
 			status: 'private',
-			meta: { slug },
 		},
 	} );
 
@@ -95,25 +93,26 @@ async function createCollectionFixture( requestUtils ) {
 
 	await requestUtils.rest( {
 		method: 'POST',
-		path: `/wp/v2/crtxt_collections/${ collection.id }`,
+		path: `/wp/v2/crtxt_documents/${ collection.id }`,
 		data: {
-			meta: { fields: [ String( field.id ) ] },
+			meta: { cortext_fields: [ String( field.id ) ] },
 		},
 	} );
 
 	const entry = await requestUtils.rest( {
 		method: 'POST',
-		path: `/wp/v2/crtxt_${ slug }`,
+		path: '/wp/v2/crtxt_documents',
 		data: {
 			title: 'The Left Hand of Darkness',
 			status: 'private',
+			cortext_trait: collection.id,
 			meta: {
 				[ `field-${ field.id }` ]: 'Ursula K. Le Guin',
 			},
 		},
 	} );
 
-	return { collection, collectionTitle, field, entry, slug };
+	return { collection, collectionTitle, field, entry };
 }
 
 function createDataViewBlockMarkup( collectionId ) {
@@ -146,11 +145,12 @@ test.describe( 'Sidebar recents', () => {
 		const collectionTitle = `E2E Recent Collection ${ suffix }`;
 		let recentPage;
 		let collection;
+		let field;
 
 		try {
 			recentPage = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: pageTitle,
 					status: 'private',
@@ -158,11 +158,28 @@ test.describe( 'Sidebar recents', () => {
 			} );
 			collection = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_collections',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: collectionTitle,
 					status: 'private',
-					mode: 'full_page',
+				},
+			} );
+			// Promote the document to a collection so the canvas renders the
+			// data view and the sidebar labels it as a collection.
+			field = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_fields',
+				data: {
+					title: 'Title',
+					status: 'private',
+					meta: { type: 'text' },
+				},
+			} );
+			await requestUtils.rest( {
+				method: 'POST',
+				path: `/wp/v2/crtxt_documents/${ collection.id }`,
+				data: {
+					meta: { cortext_fields: [ String( field.id ) ] },
 				},
 			} );
 
@@ -181,7 +198,7 @@ test.describe( 'Sidebar recents', () => {
 			await expandRecentsIfCollapsed( page );
 			await expect(
 				sidebar.getByRole( 'button', {
-					name: `Recent page: ${ pageTitle }`,
+					name: `Recent: ${ pageTitle }`,
 				} )
 			).toBeVisible();
 
@@ -191,7 +208,7 @@ test.describe( 'Sidebar recents', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/collection/${ collection.slug }-${ collection.id }`
+				`page=cortext&p=/${ collection.slug }-${ collection.id }`
 			);
 			// Full-page collections render inside the BlockCanvas iframe.
 			await expect(
@@ -201,29 +218,33 @@ test.describe( 'Sidebar recents', () => {
 			).toBeVisible( { timeout: 15_000 } );
 			await expect(
 				sidebar.getByRole( 'button', {
-					name: `Recent collection: ${ collectionTitle }`,
+					name: `Recent: ${ collectionTitle }`,
 				} )
 			).toBeVisible();
 
 			await page.reload();
 			await expect(
 				sidebar.getByRole( 'button', {
-					name: `Recent collection: ${ collectionTitle }`,
+					name: `Recent: ${ collectionTitle }`,
 				} )
 			).toBeVisible();
 			await expect(
 				sidebar.getByRole( 'button', {
-					name: `Recent page: ${ pageTitle }`,
+					name: `Recent: ${ pageTitle }`,
 				} )
 			).toBeVisible();
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				collection && `/wp/v2/crtxt_collections/${ collection.id }`
+				collection && `/wp/v2/crtxt_documents/${ collection.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
-				recentPage && `/wp/v2/crtxt_pages/${ recentPage.id }`
+				field && `/wp/v2/crtxt_fields/${ field.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				recentPage && `/wp/v2/crtxt_documents/${ recentPage.id }`
 			);
 		}
 	} );
@@ -243,7 +264,7 @@ test.describe( 'Sidebar recents', () => {
 
 			fixture.page = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: 'Row recent test page',
 					status: 'private',
@@ -274,7 +295,7 @@ test.describe( 'Sidebar recents', () => {
 			await expect
 				.poll( async () => {
 					const row = await requestUtils.rest( {
-						path: `/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`,
+						path: `/wp/v2/crtxt_documents/${ fixture.entry.id }`,
 						params: { context: 'edit' },
 					} );
 					return row.meta[ `field-${ fixture.field.id }` ];
@@ -284,7 +305,7 @@ test.describe( 'Sidebar recents', () => {
 			const sidebar = page.locator( '.cortext-sidebar' );
 			await expandRecentsIfCollapsed( page );
 			const recentRow = sidebar.getByRole( 'button', {
-				name: `Recent row: The Left Hand of Darkness in ${ fixture.collectionTitle }`,
+				name: `Recent: The Left Hand of Darkness in ${ fixture.collectionTitle }`,
 			} );
 			await expect( recentRow ).toBeVisible( { timeout: 15_000 } );
 
@@ -303,12 +324,11 @@ test.describe( 'Sidebar recents', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				fixture.entry &&
-					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+				fixture.entry && `/wp/v2/crtxt_documents/${ fixture.entry.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
-				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
@@ -317,7 +337,7 @@ test.describe( 'Sidebar recents', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
 			);
 		}
 	} );

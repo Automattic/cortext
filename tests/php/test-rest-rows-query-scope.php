@@ -9,11 +9,11 @@ declare( strict_types=1 );
 
 namespace Cortext\Tests;
 
-use Cortext\PostType\Collection;
-use Cortext\PostType\CollectionEntries;
+use Cortext\PostType\Document;
 use Cortext\PostType\Field;
 use Cortext\Rest\RowsFilterQuery;
 use Cortext\Rest\RowsQueryScope;
+use Cortext\Taxonomy\TraitTaxonomy;
 use WorDBless\BaseTestCase;
 use WP_Query;
 
@@ -22,8 +22,8 @@ final class Test_Rest_Rows_Query_Scope extends BaseTestCase {
 	public function set_up(): void {
 		parent::set_up();
 
-		$this->unregister_dynamic_collection_post_types();
-		( new Collection() )->register_post_type();
+		( new Document() )->register_post_type();
+		( new TraitTaxonomy() )->register_taxonomy();
 		( new Field() )->register_post_type();
 	}
 
@@ -169,14 +169,4 @@ final class Test_Rest_Rows_Query_Scope extends BaseTestCase {
 		return false;
 	}
 
-	private function unregister_dynamic_collection_post_types(): void {
-		foreach ( get_post_types() as $post_type ) {
-			if (
-				str_starts_with( $post_type, CollectionEntries::CPT_PREFIX ) &&
-				! in_array( $post_type, array( Collection::POST_TYPE, Field::POST_TYPE ), true )
-			) {
-				unregister_post_type( $post_type );
-			}
-		}
-	}
 }

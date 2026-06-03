@@ -38,6 +38,7 @@ const DEFAULT_STATE = {
 	isSaving: false,
 	didSucceed: false,
 	didFail: false,
+	isPostLocked: false,
 	postStatus: 'private',
 	postTitle: '',
 	currentPostId: 1,
@@ -53,6 +54,7 @@ function setStoreState( state ) {
 		isSavingPost: () => merged.isSaving,
 		didPostSaveRequestSucceed: () => merged.didSucceed,
 		didPostSaveRequestFail: () => merged.didFail,
+		isPostLocked: () => merged.isPostLocked,
 		getCurrentPostId: () => merged.currentPostId,
 		getEditedPostAttribute: ( name ) => {
 			if ( name === 'status' ) {
@@ -92,7 +94,7 @@ beforeEach( () => {
 		savePost: jest.fn(),
 		editPost: jest.fn(),
 		createErrorNotice: jest.fn(),
-		removeNotice: jest.fn(),
+		createSuccessNotice: jest.fn(),
 	} );
 	mockTouchRecent.mockReset();
 } );
@@ -187,6 +189,82 @@ describe( 'useAutosave: debounce', () => {
 			jest.advanceTimersByTime( 5000 );
 		} );
 		expect( savePost ).not.toHaveBeenCalled();
+	} );
+
+	it( 'skips save while the post is locked', () => {
+		const savePost = jest.fn();
+		useDispatch.mockReturnValue( { savePost } );
+		setStoreState( { isDirty: true, isPostLocked: true } );
+
+		renderHook( () => useAutosave() );
+
+		act( () => {
+			jest.advanceTimersByTime( 5000 );
+		} );
+		expect( savePost ).not.toHaveBeenCalled();
+	} );
+
+	it( 'does not retry the same failed edits until they change', () => {
+		const savePost = jest.fn();
+		useDispatch.mockReturnValue( {
+			savePost,
+			editPost: jest.fn(),
+			createErrorNotice: jest.fn(),
+			createSuccessNotice: jest.fn(),
+		} );
+		setStoreState( { isDirty: true, didFail: true } );
+
+		renderHook( () => useAutosave() );
+
+		act( () => {
+			jest.advanceTimersByTime( 5000 );
+		} );
+		expect( savePost ).not.toHaveBeenCalled();
+	} );
+
+	it( 'flushNow retries the same failed edits when explicitly requested', async () => {
+		const savePost = jest.fn().mockResolvedValue();
+		useDispatch.mockReturnValue( {
+			savePost,
+			editPost: jest.fn(),
+			createErrorNotice: jest.fn(),
+			createSuccessNotice: jest.fn(),
+		} );
+		setStoreState( { isDirty: true, didFail: true } );
+
+		const { result } = renderHook( () => useAutosave() );
+
+		await act( async () => {
+			await expect( result.current.flushNow() ).resolves.toBe( true );
+		} );
+		expect( savePost ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'retries after a failed save once the edits change', () => {
+		const savePost = jest.fn();
+		useDispatch.mockReturnValue( {
+			savePost,
+			editPost: jest.fn(),
+			createErrorNotice: jest.fn(),
+			createSuccessNotice: jest.fn(),
+		} );
+		setStoreState( { isDirty: true, didFail: true } );
+
+		const { rerender } = renderHook( () => useAutosave() );
+
+		act( () => {
+			jest.advanceTimersByTime( 5000 );
+		} );
+		expect( savePost ).not.toHaveBeenCalled();
+
+		simulateEdit();
+		setStoreState( { isDirty: true, didFail: true } );
+		rerender();
+
+		act( () => {
+			jest.advanceTimersByTime( 800 );
+		} );
+		expect( savePost ).toHaveBeenCalledTimes( 1 );
 	} );
 } );
 
@@ -299,6 +377,61 @@ describe( 'useAutosave: flush triggers', () => {
 			window.dispatchEvent( new Event( 'blur' ) );
 		} );
 		expect( savePost ).not.toHaveBeenCalled();
+	} );
+
+	it( 'does not flush while the post is locked', async () => {
+		const savePost = jest.fn();
+		useDispatch.mockReturnValue( { savePost } );
+		setStoreState( { isDirty: true, isPostLocked: true } );
+
+		const { result } = renderHook( () => useAutosave() );
+
+		let didFlush;
+		await act( async () => {
+			didFlush = await result.current.flushNow();
+		} );
+
+		expect( didFlush ).toBe( true );
+		expect( savePost ).not.toHaveBeenCalled();
+	} );
+
+	it( 'prompts before unload when failed saves leave edits unsaved', () => {
+		setStoreState( { isDirty: true, didFail: true } );
+
+		renderHook( () => useAutosave() );
+
+		const event = new Event( 'beforeunload', { cancelable: true } );
+		act( () => {
+			window.dispatchEvent( event );
+		} );
+
+		expect( event.defaultPrevented ).toBe( true );
+	} );
+
+	it( 'does not prompt before unload while saves are healthy', () => {
+		setStoreState( { isDirty: true } );
+
+		renderHook( () => useAutosave() );
+
+		const event = new Event( 'beforeunload', { cancelable: true } );
+		act( () => {
+			window.dispatchEvent( event );
+		} );
+
+		expect( event.defaultPrevented ).toBe( false );
+	} );
+
+	it( 'does not prompt before unload without unsaved edits', () => {
+		setStoreState( { isDirty: false, didFail: true } );
+
+		renderHook( () => useAutosave() );
+
+		const event = new Event( 'beforeunload', { cancelable: true } );
+		act( () => {
+			window.dispatchEvent( event );
+		} );
+
+		expect( event.defaultPrevented ).toBe( false );
 	} );
 
 	it( 'waits for an in-flight autosave instead of reporting failure', async () => {
@@ -441,7 +574,7 @@ describe( 'useAutosave: status', () => {
 
 		const { rerender } = renderHook( () =>
 			useAutosave( {
-				recentTarget: { kind: 'page', id: 42 },
+				recentTarget: { id: 42 },
 			} )
 		);
 
@@ -459,7 +592,6 @@ describe( 'useAutosave: status', () => {
 		} );
 
 		expect( mockTouchRecent ).toHaveBeenCalledWith( {
-			kind: 'page',
 			id: 42,
 		} );
 	} );
@@ -469,7 +601,7 @@ describe( 'useAutosave: status', () => {
 
 		const { rerender } = renderHook( () =>
 			useAutosave( {
-				recentTarget: { kind: 'row', id: 42, collectionId: 9 },
+				recentTarget: { id: 42, collectionId: 9 },
 			} )
 		);
 
@@ -487,7 +619,6 @@ describe( 'useAutosave: status', () => {
 		} );
 
 		expect( mockTouchRecent ).toHaveBeenCalledWith( {
-			kind: 'row',
 			id: 42,
 			collectionId: 9,
 		} );
@@ -506,7 +637,7 @@ describe( 'useAutosave: status', () => {
 
 		renderHook( () =>
 			useAutosave( {
-				recentTarget: { kind: 'row', id: 42, collectionId: 9 },
+				recentTarget: { id: 42, collectionId: 9 },
 			} )
 		);
 
@@ -517,8 +648,8 @@ describe( 'useAutosave: status', () => {
 		// Edit row A → save starts → user opens row B before the save
 		// resolves. When the save lands, Recents must reflect A (which was
 		// actually saved), not B (which the parent has since swapped in).
-		const targetA = { kind: 'row', id: 1, collectionId: 9 };
-		const targetB = { kind: 'row', id: 2, collectionId: 9 };
+		const targetA = { id: 1, collectionId: 9 };
+		const targetB = { id: 2, collectionId: 9 };
 
 		setStoreState( { isSaving: false, currentPostId: 1 } );
 
@@ -560,13 +691,13 @@ describe( 'useAutosave: status', () => {
 
 		const { rerender } = renderHook( ( props ) => useAutosave( props ), {
 			initialProps: {
-				recentTarget: { kind: 'row', id: 1, collectionId: 9 },
+				recentTarget: { id: 1, collectionId: 9 },
 			},
 		} );
 
 		act( () => {
 			rerender( {
-				recentTarget: { kind: 'row', id: 2, collectionId: 9 },
+				recentTarget: { id: 2, collectionId: 9 },
 			} );
 		} );
 
@@ -581,13 +712,31 @@ describe( 'useAutosave: status', () => {
 		expect( result.current.status ).toBe( 'error' );
 	} );
 
-	it( 'surfaces a snackbar notice when a save fails', () => {
+	it( 'recovers to saved when a later save succeeds', () => {
+		setStoreState( { didFail: true } );
+
+		const { result, rerender } = renderHook( () => useAutosave() );
+		expect( result.current.status ).toBe( 'error' );
+
+		act( () => {
+			setStoreState( { isSaving: true, didFail: false } );
+			rerender();
+		} );
+		act( () => {
+			setStoreState( { isSaving: false, didSucceed: true } );
+			rerender();
+		} );
+
+		expect( result.current.status ).toBe( 'saved' );
+	} );
+
+	it( 'shows a dismissible snackbar when a save fails', () => {
 		const createErrorNotice = jest.fn();
 		useDispatch.mockReturnValue( {
 			savePost: jest.fn(),
 			editPost: jest.fn(),
 			createErrorNotice,
-			removeNotice: jest.fn(),
+			createSuccessNotice: jest.fn(),
 		} );
 		setStoreState( { didFail: true } );
 
@@ -598,17 +747,45 @@ describe( 'useAutosave: status', () => {
 			expect.objectContaining( {
 				type: 'snackbar',
 				id: 'cortext-autosave-error',
+				explicitDismiss: true,
 			} )
 		);
 	} );
 
-	it( 'removes the autosave error notice after a successful save', () => {
-		const removeNotice = jest.fn();
+	it( 'does not reopen the snackbar while retries keep failing', () => {
+		const createErrorNotice = jest.fn();
+		useDispatch.mockReturnValue( {
+			savePost: jest.fn(),
+			editPost: jest.fn(),
+			createErrorNotice,
+			createSuccessNotice: jest.fn(),
+		} );
+		setStoreState( { didFail: true } );
+
+		const { rerender } = renderHook( () => useAutosave() );
+		expect( createErrorNotice ).toHaveBeenCalledTimes( 1 );
+
+		// A background retry starts and fails again. Without the latch, the
+		// snackbar would open again on every cycle.
+		act( () => {
+			setStoreState( { isSaving: true, didFail: false } );
+			rerender();
+		} );
+		act( () => {
+			setStoreState( { isSaving: false, didFail: true } );
+			rerender();
+		} );
+
+		expect( createErrorNotice ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'swaps the failure snackbar for a short success snackbar after recovery', () => {
+		const createSuccessNotice = jest.fn();
 		useDispatch.mockReturnValue( {
 			savePost: jest.fn(),
 			editPost: jest.fn(),
 			createErrorNotice: jest.fn(),
-			removeNotice,
+			createSuccessNotice,
 		} );
 		setStoreState( { didFail: true } );
 
@@ -623,7 +800,38 @@ describe( 'useAutosave: status', () => {
 			rerender();
 		} );
 
-		expect( removeNotice ).toHaveBeenCalledWith( 'cortext-autosave-error' );
+		// Reusing the failure notice id swaps it in place. Omitting
+		// explicitDismiss lets SnackbarList fade out the success message.
+		expect( createSuccessNotice ).toHaveBeenCalledWith(
+			expect.any( String ),
+			expect.objectContaining( {
+				id: 'cortext-autosave-error',
+				type: 'snackbar',
+			} )
+		);
+		expect(
+			createSuccessNotice.mock.calls[ 0 ][ 1 ].explicitDismiss
+		).toBeUndefined();
+	} );
+
+	it( 'does not announce success on a normal save with no prior failure', () => {
+		const createSuccessNotice = jest.fn();
+		useDispatch.mockReturnValue( {
+			savePost: jest.fn(),
+			editPost: jest.fn(),
+			createErrorNotice: jest.fn(),
+			createSuccessNotice,
+		} );
+		setStoreState( { isSaving: true } );
+
+		const { rerender } = renderHook( () => useAutosave() );
+
+		act( () => {
+			setStoreState( { isSaving: false, didSucceed: true } );
+			rerender();
+		} );
+
+		expect( createSuccessNotice ).not.toHaveBeenCalled();
 	} );
 
 	it( 'resets status when the current post id changes', () => {

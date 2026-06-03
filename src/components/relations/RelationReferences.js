@@ -33,9 +33,7 @@ export default function RelationReferences( { value } ) {
 							openDocument( {
 								id: ref.id,
 								slug: ref.slug ?? '',
-								postType: ref.collectionSlug
-									? `crtxt_${ ref.collectionSlug }`
-									: null,
+								postType: 'crtxt_document',
 								collectionId: ref.collectionId,
 								preferredMode: currentViewMode,
 							} );

@@ -1,18 +1,17 @@
 #!/usr/bin/env node
 import { execSync, spawnSync } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
 import {
 	cpSync,
 	createWriteStream,
 	existsSync,
 	mkdirSync,
-	readFileSync,
 	rmSync,
 	writeFileSync,
 } from 'node:fs';
 import https from 'node:https';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildWpConfig, randomSalt } from './wp-config.mjs';
 
 const __dirname = dirname( fileURLToPath( import.meta.url ) );
 const DESKTOP_DIR = resolve( __dirname, '..' );
@@ -36,6 +35,7 @@ const PLUGIN_INCLUDES = [
 	'readme.txt',
 	'LICENSE',
 	'includes',
+	'assets/brand',
 	'build',
 	'templates',
 	'src/blocks',
@@ -135,56 +135,6 @@ async function ensureCachedDownload( url, cachePath ) {
 	return cachePath;
 }
 
-function randomSalt() {
-	// 64 ASCII chars, matching WP's generated salt length.
-	return randomBytes( 48 ).toString( 'base64' ).slice( 0, 64 );
-}
-
-function buildWpConfig() {
-	const constants = [
-		[ 'DB_NAME', 'database_name_here' ],
-		[ 'DB_USER', 'username_here' ],
-		[ 'DB_PASSWORD', 'password_here' ],
-		[ 'DB_HOST', 'localhost' ],
-		[ 'DB_CHARSET', 'utf8mb4' ],
-		[ 'DB_COLLATE', '' ],
-	];
-	const saltKeys = [
-		'AUTH_KEY',
-		'SECURE_AUTH_KEY',
-		'LOGGED_IN_KEY',
-		'NONCE_KEY',
-		'AUTH_SALT',
-		'SECURE_AUTH_SALT',
-		'LOGGED_IN_SALT',
-		'NONCE_SALT',
-	];
-	const lines = [ '<?php' ];
-	for ( const [ name, value ] of constants ) {
-		lines.push( `define( '${ name }', '${ value }' );` );
-	}
-	for ( const key of saltKeys ) {
-		lines.push( `define( '${ key }', '${ randomSalt() }' );` );
-	}
-	lines.push( "$table_prefix = 'wp_';" );
-	lines.push(
-		"if ( ! defined( 'WP_HOME' ) ) { define( 'WP_HOME', 'http://127.0.0.1:9402' ); }"
-	);
-	lines.push(
-		"if ( ! defined( 'WP_SITEURL' ) ) { define( 'WP_SITEURL', 'http://127.0.0.1:9402' ); }"
-	);
-	lines.push(
-		"if ( ! defined( 'CORTEXT_DESKTOP' ) ) { define( 'CORTEXT_DESKTOP', true ); }"
-	);
-	lines.push(
-		"if ( ! defined( 'DISABLE_WP_CRON' ) ) { define( 'DISABLE_WP_CRON', true ); }"
-	);
-	lines.push( "$GLOBALS['cortext_desktop_request_start'] = microtime( true );" );
-	lines.push( "if ( ! defined( 'ABSPATH' ) ) { define( 'ABSPATH', __DIR__ . '/' ); }" );
-	lines.push( "require_once ABSPATH . 'wp-settings.php';" );
-	return lines.join( '\n' ) + '\n';
-}
-
 console.log( '[snapshot] Building plugin assets' );
 run( 'npm run build', { cwd: REPO_ROOT } );
 
@@ -256,6 +206,20 @@ cpSync( resolve( RUNTIME_DIR, 'mu-plugins' ), muPluginsDest, {
 	recursive: true,
 } );
 
+// Distribution builds keep the desktop auth and update-lock mu-plugins. The
+// timing and runtime-probe helpers are only for development and benchmarks.
+const IS_DISTRIBUTION = [ '1', 'true', 'yes', 'on' ].includes(
+	String( process.env.CORTEXT_DESKTOP_DISTRIBUTION || '' ).toLowerCase()
+);
+if ( IS_DISTRIBUTION ) {
+	for ( const devMuPlugin of [
+		'cortext-timing.php',
+		'cortext-runtime-probe.php',
+	] ) {
+		rmSync( resolve( muPluginsDest, devMuPlugin ), { force: true } );
+	}
+}
+
 console.log( '[snapshot] Writing wp-config.php' );
 writeFileSync( resolve( SITE_DIR, 'wp-config.php' ), buildWpConfig() );
 
@@ -319,6 +283,9 @@ for ( const seedCommand of snapshotSeedCommands() ) {
 console.log( '[snapshot] Zipping site' );
 rmSync( OUTFILE, { force: true } );
 run( `cd "${ WORK_DIR }" && zip -q -r "${ OUTFILE }" wordpress` );
+if ( ! existsSync( OUTFILE ) ) {
+	throw new Error( `Snapshot zip was not written: ${ OUTFILE }` );
+}
 
 console.log( '[snapshot] Cleaning staging dir' );
 rmSync( WORK_DIR, { recursive: true, force: true } );

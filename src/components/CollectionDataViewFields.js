@@ -10,7 +10,7 @@ import {
 import { __ } from '@wordpress/i18n';
 
 import EditableCell from './EditableCell';
-import PageIcon from './PageIcon';
+import DocumentIcon from './DocumentIcon';
 import { ROW_DETAIL_MODE_ICONS } from './RowDetailView';
 import { COVER_FIELD_ID, TITLE_FIELD_ID } from './dataViewColumns';
 import { dataViewsFilterByForType } from '../hooks/fieldMapping';
@@ -109,7 +109,7 @@ function TitleCell( { item } ) {
 		>
 			{ documentIcon ? (
 				<span className="cortext-title-cell__icon" aria-hidden="true">
-					<PageIcon icon={ documentIcon } />
+					<DocumentIcon icon={ documentIcon } />
 				</span>
 			) : null }
 			<EditableCell
@@ -126,7 +126,7 @@ function TitleCell( { item } ) {
 				<Button
 					className="cortext-title-cell__open"
 					icon={ icon }
-					label={ __( 'Open row', 'cortext' ) }
+					label={ __( 'Open', 'cortext' ) }
 					size="small"
 					variant="tertiary"
 					onClick={ openRow }

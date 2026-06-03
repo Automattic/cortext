@@ -3,9 +3,9 @@
  * Server-side registration for the `cortext/document-properties` block.
  *
  * The render callback is intentionally empty for now. tech-debt.md#td-row-properties-public-render tracks
- * the public row markup, including how row CPTs should be reached on the
- * frontend. Register the block now so rows already store it in `post_content`;
- * the server render can come later without changing editor wiring.
+ * the public row markup. Register the block now so rows already store it in
+ * `post_content`; the server render can come later without changing editor
+ * wiring.
  *
  * @package Cortext
  */
@@ -13,6 +13,8 @@
 declare( strict_types=1 );
 
 namespace Cortext\Editor;
+
+defined( 'ABSPATH' ) || exit;
 
 final class DocumentPropertiesBlock {
 

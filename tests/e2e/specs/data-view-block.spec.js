@@ -62,83 +62,6 @@ function tableFooterDataCells( footer ) {
 	return footer.locator( TABLE_FOOTER_DATA_CELL_SELECTOR );
 }
 
-async function expectSidePeekCoversPageInspector( page ) {
-	await expect
-		.poll( async () =>
-			page.evaluate( () => {
-				const inspector = document.querySelector(
-					'.cortext-shell__canvas .cortext-workspace__pane[data-active="true"] .interface-interface-skeleton__sidebar'
-				);
-				const peek = document.querySelector(
-					'.cortext-row-detail-sidebar-shell:not(.cortext-row-detail-sidebar-shell--closing)'
-				);
-
-				if ( ! inspector || ! peek ) {
-					return false;
-				}
-
-				const inspectorRect = inspector.getBoundingClientRect();
-				const peekRect = peek.getBoundingClientRect();
-				const overlapLeft = Math.max(
-					inspectorRect.left,
-					peekRect.left
-				);
-				const overlapRight = Math.min(
-					inspectorRect.right,
-					peekRect.right
-				);
-				const overlapTop = Math.max( inspectorRect.top, peekRect.top );
-				const overlapBottom = Math.min(
-					inspectorRect.bottom,
-					peekRect.bottom
-				);
-
-				if (
-					overlapRight <= overlapLeft ||
-					overlapBottom <= overlapTop
-				) {
-					return false;
-				}
-
-				const topElement = document.elementFromPoint(
-					( overlapLeft + overlapRight ) / 2,
-					( overlapTop + overlapBottom ) / 2
-				);
-				return Boolean(
-					topElement?.closest( '.cortext-row-detail-sidebar-shell' )
-				);
-			} )
-		)
-		.toBe( true );
-}
-
-async function expectPageInspectorIsTopmost( page ) {
-	await expect
-		.poll( async () =>
-			page.evaluate( () => {
-				const inspector = document.querySelector(
-					'.cortext-shell__canvas .cortext-workspace__pane[data-active="true"] .interface-interface-skeleton__sidebar'
-				);
-
-				if ( ! inspector ) {
-					return false;
-				}
-
-				const rect = inspector.getBoundingClientRect();
-				const topElement = document.elementFromPoint(
-					( rect.left + rect.right ) / 2,
-					( rect.top + rect.bottom ) / 2
-				);
-				return Boolean(
-					topElement?.closest(
-						'.interface-interface-skeleton__sidebar'
-					)
-				);
-			} )
-		)
-		.toBe( true );
-}
-
 async function startSidePeekShellStabilityLog( page ) {
 	await page.evaluate( () => {
 		window.__cortextSidePeekShellEvents = [];
@@ -286,15 +209,13 @@ async function expectRowToolbarIsolated( page, detail, blockText ) {
 
 async function createCollectionFixture( requestUtils ) {
 	const suffix = Date.now().toString( 36 ).slice( -4 );
-	const slug = `e2ebooks${ suffix }`;
 
 	const collection = await requestUtils.rest( {
 		method: 'POST',
-		path: '/wp/v2/crtxt_collections',
+		path: '/wp/v2/crtxt_documents',
 		data: {
 			title: `E2E Books ${ suffix }`,
 			status: 'private',
-			meta: { slug },
 		},
 	} );
 
@@ -310,38 +231,37 @@ async function createCollectionFixture( requestUtils ) {
 
 	await requestUtils.rest( {
 		method: 'POST',
-		path: `/wp/v2/crtxt_collections/${ collection.id }`,
+		path: `/wp/v2/crtxt_documents/${ collection.id }`,
 		data: {
-			meta: { fields: [ String( field.id ) ] },
+			meta: { cortext_fields: [ String( field.id ) ] },
 		},
 	} );
 
 	const entry = await requestUtils.rest( {
 		method: 'POST',
-		path: `/wp/v2/crtxt_${ slug }`,
+		path: '/wp/v2/crtxt_documents',
 		data: {
 			title: 'The Left Hand of Darkness',
 			status: 'private',
+			cortext_trait: collection.id,
 			meta: {
 				[ `field-${ field.id }` ]: 'Ursula K. Le Guin',
 			},
 		},
 	} );
 
-	return { collection, field, entry, slug };
+	return { collection, field, entry };
 }
 
 async function createCalculationFixture( requestUtils ) {
 	const suffix = Date.now().toString( 36 ).slice( -4 );
-	const slug = `e2ecalc${ suffix }`;
 
 	const collection = await requestUtils.rest( {
 		method: 'POST',
-		path: '/wp/v2/crtxt_collections',
+		path: '/wp/v2/crtxt_documents',
 		data: {
 			title: `E2E Calculations ${ suffix }`,
 			status: 'private',
-			meta: { slug },
 		},
 	} );
 
@@ -365,10 +285,10 @@ async function createCalculationFixture( requestUtils ) {
 
 	await requestUtils.rest( {
 		method: 'POST',
-		path: `/wp/v2/crtxt_collections/${ collection.id }`,
+		path: `/wp/v2/crtxt_documents/${ collection.id }`,
 		data: {
 			meta: {
-				fields: Object.values( fields ).map( ( field ) =>
+				cortext_fields: Object.values( fields ).map( ( field ) =>
 					String( field.id )
 				),
 			},
@@ -402,10 +322,11 @@ async function createCalculationFixture( requestUtils ) {
 		rows.push(
 			await requestUtils.rest( {
 				method: 'POST',
-				path: `/wp/v2/crtxt_${ slug }`,
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: row.title,
 					status: 'private',
+					cortext_trait: collection.id,
 					meta: {
 						[ `field-${ fields.pages.id }` ]: row.pages,
 						[ `field-${ fields.status.id }` ]: row.status,
@@ -417,20 +338,38 @@ async function createCalculationFixture( requestUtils ) {
 		);
 	}
 
-	return { collection, fields, rows, slug };
+	return { collection, fields, rows };
 }
 
 async function createManualOrderFixture( requestUtils ) {
 	const suffix = Date.now().toString( 36 ).slice( -4 );
-	const slug = `e2eorder${ suffix }`;
 
 	const collection = await requestUtils.rest( {
 		method: 'POST',
-		path: '/wp/v2/crtxt_collections',
+		path: '/wp/v2/crtxt_documents',
 		data: {
 			title: `E2E Order ${ suffix }`,
 			status: 'private',
-			meta: { slug },
+		},
+	} );
+
+	// Attach at least one field so the document is promoted to a collection
+	// (the `cortext_fields` meta change is what creates the mirror trait term;
+	// without it, `cortext_trait` on row inserts is a silent no-op).
+	const field = await requestUtils.rest( {
+		method: 'POST',
+		path: '/wp/v2/crtxt_fields',
+		data: {
+			title: 'Title',
+			status: 'private',
+			meta: { type: 'text' },
+		},
+	} );
+	await requestUtils.rest( {
+		method: 'POST',
+		path: `/wp/v2/crtxt_documents/${ collection.id }`,
+		data: {
+			meta: { cortext_fields: [ String( field.id ) ] },
 		},
 	} );
 
@@ -439,15 +378,17 @@ async function createManualOrderFixture( requestUtils ) {
 		rows.push(
 			await requestUtils.rest( {
 				method: 'POST',
-				path: `/cortext/v1/collections/${ collection.id }/rows`,
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title,
+					status: 'private',
+					cortext_trait: collection.id,
 				},
 			} )
 		);
 	}
 
-	return { collection, rows, slug };
+	return { collection, field, rows };
 }
 
 function createDataViewBlockMarkup( collectionId, viewOverrides = {} ) {
@@ -492,7 +433,7 @@ async function dragRenderedRow(
 	const sourceTitle = orderedTitles[ fromIndex ];
 	const targetTitle = orderedTitles[ toIndex ];
 	const source = canvas.getByRole( 'button', {
-		name: `Reorder row: ${ sourceTitle }`,
+		name: `Reorder: ${ sourceTitle }`,
 	} );
 	const target = canvas.getByText( targetTitle, { exact: true } ).first();
 
@@ -552,7 +493,7 @@ async function renderedManualTitles(
 
 async function listCollectionRows( requestUtils, collectionId ) {
 	return requestUtils.rest( {
-		path: `/cortext/v1/rows?collection=${ collectionId }&per_page=100`,
+		path: `/cortext/v1/rows?trait=${ collectionId }&per_page=100`,
 	} );
 }
 
@@ -572,7 +513,7 @@ test.describe( 'Collection view block', () => {
 
 			fixture.page = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: 'DataView block test page',
 					status: 'private',
@@ -612,7 +553,7 @@ test.describe( 'Collection view block', () => {
 			);
 
 			const saved = await requestUtils.rest( {
-				path: `/wp/v2/crtxt_pages/${ fixture.page.id }`,
+				path: `/wp/v2/crtxt_documents/${ fixture.page.id }`,
 				params: { context: 'edit' },
 			} );
 			expect( saved.content.raw ).toContain( 'wp:cortext/data-view' );
@@ -633,12 +574,11 @@ test.describe( 'Collection view block', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				fixture.entry &&
-					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+				fixture.entry && `/wp/v2/crtxt_documents/${ fixture.entry.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
-				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
@@ -647,7 +587,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
 			);
 		}
 	} );
@@ -671,7 +611,7 @@ test.describe( 'Collection view block', () => {
 
 				fixture.page = await requestUtils.rest( {
 					method: 'POST',
-					path: '/wp/v2/crtxt_pages',
+					path: '/wp/v2/crtxt_documents',
 					data: {
 						title: `Manual row order ${ layout }`,
 						status: 'private',
@@ -681,7 +621,7 @@ test.describe( 'Collection view block', () => {
 								type: layout,
 								fields: [ 'title' ],
 								sort: {
-									field: 'created_at',
+									field: 'title',
 									direction: 'asc',
 								},
 							}
@@ -714,7 +654,7 @@ test.describe( 'Collection view block', () => {
 				await dragRenderedRow( page, canvas, 2, 0, 'before', layout );
 				await expect(
 					page.getByText(
-						'Rows will stay where you dropped them, and the current sort will be cleared.'
+						'Documents will stay where you dropped them, and the current sort will be cleared.'
 					)
 				).toBeVisible();
 				await page
@@ -722,7 +662,7 @@ test.describe( 'Collection view block', () => {
 					.click();
 				await expect(
 					page.getByText(
-						'Rows will stay where you dropped them, and the current sort will be cleared.'
+						'Documents will stay where you dropped them, and the current sort will be cleared.'
 					)
 				).not.toBeVisible();
 				await expect
@@ -753,9 +693,11 @@ test.describe( 'Collection view block', () => {
 				fixture.rows.push(
 					await requestUtils.rest( {
 						method: 'POST',
-						path: `/cortext/v1/collections/${ fixture.collection.id }/rows`,
+						path: '/wp/v2/crtxt_documents',
 						data: {
 							title: 'Delta Manual',
+							status: 'private',
+							cortext_trait: fixture.collection.id,
 						},
 					} )
 				);
@@ -794,7 +736,7 @@ test.describe( 'Collection view block', () => {
 								view: {
 									...block.attributes.view,
 									sort: {
-										field: 'created_at',
+										field: 'title',
 										direction: 'asc',
 									},
 								},
@@ -812,8 +754,8 @@ test.describe( 'Collection view block', () => {
 						.toEqual( [
 							expect.stringContaining( 'Alpha Manual' ),
 							expect.stringContaining( 'Beta Manual' ),
-							expect.stringContaining( 'Gamma Manual' ),
 							expect.stringContaining( 'Delta Manual' ),
+							expect.stringContaining( 'Gamma Manual' ),
 						] );
 
 					await dragRenderedRow(
@@ -832,7 +774,7 @@ test.describe( 'Collection view block', () => {
 					);
 					await expect(
 						page.getByText(
-							'Rows will stay where you dropped them, and the current sort will be cleared.'
+							'Documents will stay where you dropped them, and the current sort will be cleared.'
 						)
 					).toBeVisible();
 					await page
@@ -840,7 +782,7 @@ test.describe( 'Collection view block', () => {
 						.click();
 					await expect(
 						page.getByText(
-							'Rows will stay where you dropped them, and the current sort will be cleared.'
+							'Documents will stay where you dropped them, and the current sort will be cleared.'
 						)
 					).not.toBeVisible();
 					await expect
@@ -855,8 +797,8 @@ test.describe( 'Collection view block', () => {
 						.toEqual( [
 							expect.stringContaining( 'Alpha Manual' ),
 							expect.stringContaining( 'Beta Manual' ),
-							expect.stringContaining( 'Gamma Manual' ),
 							expect.stringContaining( 'Delta Manual' ),
+							expect.stringContaining( 'Gamma Manual' ),
 						] );
 				}
 			} finally {
@@ -864,18 +806,19 @@ test.describe( 'Collection view block', () => {
 					for ( const row of fixture.rows ) {
 						await deleteIfCreated(
 							requestUtils,
-							`/wp/v2/crtxt_${ fixture.slug }/${ row.id }`
+							`/wp/v2/crtxt_documents/${ row.id }`
 						);
 					}
 				}
 				await deleteIfCreated(
 					requestUtils,
-					fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+					fixture.page &&
+						`/wp/v2/crtxt_documents/${ fixture.page.id }`
 				);
 				await deleteIfCreated(
 					requestUtils,
 					fixture.collection &&
-						`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+						`/wp/v2/crtxt_documents/${ fixture.collection.id }`
 				);
 			}
 		} );
@@ -896,7 +839,7 @@ test.describe( 'Collection view block', () => {
 
 			await admin.visitAdminPage(
 				'admin.php',
-				`page=cortext&p=/collection/${ fixture.slug }-${ fixture.collection.id }`
+				`page=cortext&p=/${ fixture.collection.slug }-${ fixture.collection.id }`
 			);
 
 			// Full-page collections render through Canvas, so the table sits
@@ -914,7 +857,7 @@ test.describe( 'Collection view block', () => {
 				.boundingBox();
 			const handleBox = await canvas
 				.getByRole( 'button', {
-					name: 'Reorder row: Alpha Manual',
+					name: 'Reorder: Alpha Manual',
 				} )
 				.boundingBox();
 			expect( dataViewBox ).toBeTruthy();
@@ -925,7 +868,7 @@ test.describe( 'Collection view block', () => {
 					Number(
 						await canvas
 							.getByRole( 'button', {
-								name: 'Reorder row: Alpha Manual',
+								name: 'Reorder: Alpha Manual',
 							} )
 							.evaluate(
 								( node ) =>
@@ -941,14 +884,14 @@ test.describe( 'Collection view block', () => {
 				for ( const row of fixture.rows ) {
 					await deleteIfCreated(
 						requestUtils,
-						`/wp/v2/crtxt_${ fixture.slug }/${ row.id }`
+						`/wp/v2/crtxt_documents/${ row.id }`
 					);
 				}
 			}
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
 			);
 		}
 	} );
@@ -968,7 +911,7 @@ test.describe( 'Collection view block', () => {
 
 			fixture.page = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: 'Row trash test page',
 					status: 'private',
@@ -1026,12 +969,11 @@ test.describe( 'Collection view block', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				fixture.entry &&
-					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+				fixture.entry && `/wp/v2/crtxt_documents/${ fixture.entry.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
-				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
@@ -1040,7 +982,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
 			);
 		}
 	} );
@@ -1060,7 +1002,7 @@ test.describe( 'Collection view block', () => {
 
 			fixture.page = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: 'Inline collection creation page',
 					status: 'private',
@@ -1089,14 +1031,27 @@ test.describe( 'Collection view block', () => {
 				.click();
 
 			await expect( canvas.getByText( 'Title' ) ).toBeVisible();
-			// The placeholder creates collections as inline by default, so
-			// the new collection renders inside this block but does not
-			// appear in the sidebar's Collections section.
+
+			// The placeholder creates the collection document immediately and
+			// points the block at it, so capture its id from the block now.
+			// Cleanup then deletes it even if a later assertion fails.
+			fixture.createdCollectionId = await page.evaluate( () => {
+				const dataViewBlock = window.wp.data
+					.select( 'core/block-editor' )
+					.getBlocks()
+					.find( ( block ) => block.name === 'cortext/data-view' );
+				return dataViewBlock?.attributes?.collectionId ?? 0;
+			} );
+			expect( fixture.createdCollectionId ).toBeGreaterThan( 0 );
+
+			// The new collection is a full document nested under the current
+			// page, so it shows in the sidebar tree beneath its parent.
 			await expect(
-				page
-					.locator( '.cortext-sidebar' )
-					.getByText( 'Inline Books', { exact: true } )
-			).toBeHidden();
+				page.locator( '.cortext-sidebar' ).getByRole( 'button', {
+					name: 'Inline Books',
+					exact: true,
+				} )
+			).toBeVisible();
 
 			await page.evaluate( async () => {
 				await window.wp.data.dispatch( 'core/editor' ).savePost();
@@ -1105,23 +1060,21 @@ test.describe( 'Collection view block', () => {
 				() => ! window.wp.data.select( 'core/editor' ).isSavingPost()
 			);
 
-			let saved = await requestUtils.rest( {
-				path: `/wp/v2/crtxt_pages/${ fixture.page.id }`,
+			const saved = await requestUtils.rest( {
+				path: `/wp/v2/crtxt_documents/${ fixture.page.id }`,
 				params: { context: 'edit' },
 			} );
 
-			fixture.createdCollectionId = parseCollectionIdFromContent(
-				saved.content.raw
+			expect( parseCollectionIdFromContent( saved.content.raw ) ).toBe(
+				fixture.createdCollectionId
 			);
-			expect( fixture.createdCollectionId ).toBeGreaterThan( 0 );
 
 			const createdCollection = await requestUtils.rest( {
-				path: `/wp/v2/crtxt_collections/${ fixture.createdCollectionId }`,
+				path: `/wp/v2/crtxt_documents/${ fixture.createdCollectionId }`,
 				params: { context: 'edit' },
 			} );
-			fixture.createdFieldIds = createdCollection.meta.fields || [];
-			expect( createdCollection.meta.slug ).toBe( 'inline-books' );
-			expect( createdCollection.meta.workspace_mode ).toBe( 'inline' );
+			fixture.createdFieldIds =
+				createdCollection.meta.cortext_fields || [];
 			expect( fixture.createdFieldIds ).toEqual( [] );
 
 			await page
@@ -1145,23 +1098,22 @@ test.describe( 'Collection view block', () => {
 				() => ! window.wp.data.select( 'core/editor' ).isSavingPost()
 			);
 
-			saved = await requestUtils.rest( {
-				path: `/wp/v2/crtxt_pages/${ fixture.page.id }`,
+			const switched = await requestUtils.rest( {
+				path: `/wp/v2/crtxt_documents/${ fixture.page.id }`,
 				params: { context: 'edit' },
 			} );
 
-			expect( saved.content.raw ).toContain(
+			expect( switched.content.raw ).toContain(
 				`"collectionId":${ fixture.collection.id }`
 			);
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
-				fixture.entry &&
-					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+				fixture.entry && `/wp/v2/crtxt_documents/${ fixture.entry.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
@@ -1170,7 +1122,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
 			);
 			if ( fixture.createdFieldIds ) {
 				for ( const fieldId of fixture.createdFieldIds ) {
@@ -1183,7 +1135,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.createdCollectionId &&
-					`/wp/v2/crtxt_collections/${ fixture.createdCollectionId }`
+					`/wp/v2/crtxt_documents/${ fixture.createdCollectionId }`
 			);
 		}
 	} );
@@ -1197,16 +1149,13 @@ test.describe( 'Collection view block', () => {
 
 		try {
 			const suffix = Date.now().toString( 36 ).slice( -4 );
-			const slug = `e2eclean${ suffix }`;
-			fixture.slug = slug;
 
 			fixture.collection = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_collections',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: `Cleanup ${ suffix }`,
 					status: 'private',
-					meta: { slug },
 				},
 			} );
 
@@ -1232,10 +1181,10 @@ test.describe( 'Collection view block', () => {
 
 			await requestUtils.rest( {
 				method: 'POST',
-				path: `/wp/v2/crtxt_collections/${ fixture.collection.id }`,
+				path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
 				data: {
 					meta: {
-						fields: [
+						cortext_fields: [
 							String( fixture.fieldA.id ),
 							String( fixture.fieldB.id ),
 						],
@@ -1273,7 +1222,7 @@ test.describe( 'Collection view block', () => {
 
 			fixture.page = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: 'View cleanup test page',
 					status: 'private',
@@ -1290,9 +1239,9 @@ test.describe( 'Collection view block', () => {
 
 			await requestUtils.rest( {
 				method: 'POST',
-				path: `/wp/v2/crtxt_collections/${ fixture.collection.id }`,
+				path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
 				data: {
-					meta: { fields: [ String( fixture.fieldB.id ) ] },
+					meta: { cortext_fields: [ String( fixture.fieldB.id ) ] },
 				},
 			} );
 
@@ -1325,7 +1274,7 @@ test.describe( 'Collection view block', () => {
 			);
 
 			const saved = await requestUtils.rest( {
-				path: `/wp/v2/crtxt_pages/${ fixture.page.id }`,
+				path: `/wp/v2/crtxt_documents/${ fixture.page.id }`,
 				params: { context: 'edit' },
 			} );
 
@@ -1340,7 +1289,7 @@ test.describe( 'Collection view block', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
 			);
 			if ( ! fixture.fieldADeleted ) {
 				await deleteIfCreated(
@@ -1356,7 +1305,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
 			);
 		}
 	} );
@@ -1377,7 +1326,7 @@ test.describe( 'Collection view block', () => {
 			const filterValue = 'Ursula K. Le Guin';
 			fixture.page = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: 'New row + prefill',
 					status: 'private',
@@ -1413,11 +1362,12 @@ test.describe( 'Collection view block', () => {
 			).toBeVisible();
 
 			const beforeRows = await requestUtils.rest( {
-				path: `/wp/v2/crtxt_${ fixture.slug }`,
+				path: '/wp/v2/crtxt_documents',
 				params: {
 					context: 'edit',
 					status: 'draft,private,publish',
 					per_page: 100,
+					cortext_trait: fixture.collection.id,
 				},
 			} );
 
@@ -1428,11 +1378,12 @@ test.describe( 'Collection view block', () => {
 			await expect
 				.poll( async () => {
 					const rows = await requestUtils.rest( {
-						path: `/wp/v2/crtxt_${ fixture.slug }`,
+						path: '/wp/v2/crtxt_documents',
 						params: {
 							context: 'edit',
 							status: 'draft,private,publish',
 							per_page: 100,
+							cortext_trait: fixture.collection.id,
 						},
 					} );
 					return rows.length;
@@ -1440,11 +1391,12 @@ test.describe( 'Collection view block', () => {
 				.toBe( beforeRows.length + 1 );
 
 			const afterRows = await requestUtils.rest( {
-				path: `/wp/v2/crtxt_${ fixture.slug }`,
+				path: '/wp/v2/crtxt_documents',
 				params: {
 					context: 'edit',
 					status: 'draft,private,publish',
 					per_page: 100,
+					cortext_trait: fixture.collection.id,
 				},
 			} );
 
@@ -1460,16 +1412,15 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.createdRowId &&
-					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.createdRowId }`
+					`/wp/v2/crtxt_documents/${ fixture.createdRowId }`
 			);
 			await deleteIfCreated(
 				requestUtils,
-				fixture.entry &&
-					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+				fixture.entry && `/wp/v2/crtxt_documents/${ fixture.entry.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
-				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
@@ -1478,7 +1429,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
 			);
 		}
 	} );
@@ -1499,7 +1450,7 @@ test.describe( 'Collection view block', () => {
 
 			fixture.page = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: 'Bulk row trash page',
 					status: 'private',
@@ -1538,22 +1489,30 @@ test.describe( 'Collection view block', () => {
 			await alphaRow
 				.locator( '.dataviews-selection-checkbox input' )
 				.check();
-			await expect( canvas.getByText( '1 row selected' ) ).toBeVisible();
+			await expect(
+				canvas.getByText( '1 document selected' )
+			).toBeVisible();
 			await betaRow
 				.locator( '.dataviews-selection-checkbox input' )
 				.check();
-			await expect( canvas.getByText( '2 rows selected' ) ).toBeVisible();
+			await expect(
+				canvas.getByText( '2 documents selected' )
+			).toBeVisible();
 			await canvas
 				.getByRole( 'button', { name: 'Clear selection' } )
 				.click();
-			await expect( canvas.getByText( '2 rows selected' ) ).toBeHidden();
+			await expect(
+				canvas.getByText( '2 documents selected' )
+			).toBeHidden();
 
 			await alphaRow.dispatchEvent( 'click' );
-			await expect( canvas.getByText( '1 row selected' ) ).toHaveCount(
-				0
-			);
+			await expect(
+				canvas.getByText( '1 document selected' )
+			).toHaveCount( 0 );
 			await betaRow.dispatchEvent( 'click', { shiftKey: true } );
-			await expect( canvas.getByText( '2 rows selected' ) ).toBeVisible();
+			await expect(
+				canvas.getByText( '2 documents selected' )
+			).toBeVisible();
 
 			await canvas.getByRole( 'button', { name: 'Next page' } ).click();
 
@@ -1561,16 +1520,22 @@ test.describe( 'Collection view block', () => {
 				.locator( 'tbody > tr' )
 				.filter( { hasText: 'Gamma Book' } );
 			await expect( gammaRow ).toBeVisible();
-			await expect( canvas.getByText( '2 rows selected' ) ).toBeVisible();
+			await expect(
+				canvas.getByText( '2 documents selected' )
+			).toBeVisible();
 			await gammaRow.dispatchEvent( 'click', {
 				[ process.platform === 'darwin' ? 'metaKey' : 'ctrlKey' ]: true,
 			} );
-			await expect( canvas.getByText( '3 rows selected' ) ).toBeVisible();
+			await expect(
+				canvas.getByText( '3 documents selected' )
+			).toBeVisible();
 
 			await canvas
-				.getByRole( 'button', { name: 'Trash selected rows' } )
+				.getByRole( 'button', { name: 'Move selected to Trash' } )
 				.click();
-			await expect( canvas.getByText( '3 rows selected' ) ).toBeHidden();
+			await expect(
+				canvas.getByText( '3 documents selected' )
+			).toBeHidden();
 
 			await expect
 				.poll( async () => {
@@ -1589,12 +1554,12 @@ test.describe( 'Collection view block', () => {
 			for ( const row of fixture.rows ?? [] ) {
 				await deleteIfCreated(
 					requestUtils,
-					`/wp/v2/crtxt_${ fixture.slug }/${ row.id }`
+					`/wp/v2/crtxt_documents/${ row.id }`
 				);
 			}
 			await deleteIfCreated(
 				requestUtils,
-				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
 			);
 			for ( const field of Object.values( fixture.fields ?? {} ) ) {
 				await deleteIfCreated(
@@ -1605,7 +1570,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
 			);
 		}
 	} );
@@ -1625,7 +1590,7 @@ test.describe( 'Collection view block', () => {
 
 			fixture.page = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: 'Inline edit text cell',
 					status: 'private',
@@ -1670,7 +1635,7 @@ test.describe( 'Collection view block', () => {
 			await expect
 				.poll( async () => {
 					const row = await requestUtils.rest( {
-						path: `/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`,
+						path: `/wp/v2/crtxt_documents/${ fixture.entry.id }`,
 						params: { context: 'edit' },
 					} );
 					return row.meta[ `field-${ fixture.field.id }` ];
@@ -1681,12 +1646,11 @@ test.describe( 'Collection view block', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				fixture.entry &&
-					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+				fixture.entry && `/wp/v2/crtxt_documents/${ fixture.entry.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
-				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
@@ -1695,7 +1659,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
 			);
 		}
 	} );
@@ -1716,7 +1680,7 @@ test.describe( 'Collection view block', () => {
 
 			fixture.entry = await requestUtils.rest( {
 				method: 'POST',
-				path: `/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`,
+				path: `/wp/v2/crtxt_documents/${ fixture.entry.id }`,
 				data: {
 					content: `<!-- wp:paragraph --><p>${ rowBodyText }</p><!-- /wp:paragraph -->`,
 				},
@@ -1724,7 +1688,7 @@ test.describe( 'Collection view block', () => {
 
 			fixture.page = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: 'Row toolbar test page',
 					status: 'private',
@@ -1766,7 +1730,7 @@ test.describe( 'Collection view block', () => {
 			await titleCellOpenButton.click();
 
 			const detail = page.getByRole( 'dialog', {
-				name: 'Row detail',
+				name: 'Detail',
 			} );
 			await expect( detail ).toBeVisible();
 			await selectParentDataViewBlock( page );
@@ -1792,12 +1756,11 @@ test.describe( 'Collection view block', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				fixture.entry &&
-					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+				fixture.entry && `/wp/v2/crtxt_documents/${ fixture.entry.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
-				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
@@ -1806,7 +1769,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
 			);
 		}
 	} );
@@ -1856,10 +1819,10 @@ test.describe( 'Collection view block', () => {
 
 			await requestUtils.rest( {
 				method: 'POST',
-				path: `/wp/v2/crtxt_collections/${ fixture.collection.id }`,
+				path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
 				data: {
 					meta: {
-						fields: [
+						cortext_fields: [
 							String( fixture.field.id ),
 							String( fixture.tagsField.id ),
 							String( fixture.yearField.id ),
@@ -1870,7 +1833,7 @@ test.describe( 'Collection view block', () => {
 
 			fixture.entry = await requestUtils.rest( {
 				method: 'POST',
-				path: `/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`,
+				path: `/wp/v2/crtxt_documents/${ fixture.entry.id }`,
 				data: {
 					meta: {
 						[ `field-${ fixture.field.id }` ]: 'Ursula K. Le Guin',
@@ -1885,10 +1848,11 @@ test.describe( 'Collection view block', () => {
 
 			fixture.secondEntry = await requestUtils.rest( {
 				method: 'POST',
-				path: `/wp/v2/crtxt_${ fixture.slug }`,
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: 'Kindred',
 					status: 'private',
+					cortext_trait: fixture.collection.id,
 					meta: {
 						[ `field-${ fixture.field.id }` ]: 'Octavia Butler',
 					},
@@ -1897,7 +1861,7 @@ test.describe( 'Collection view block', () => {
 
 			fixture.page = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: 'Row detail page',
 					status: 'private',
@@ -1937,7 +1901,7 @@ test.describe( 'Collection view block', () => {
 				.first();
 			await expect( titleCellOpenButton ).toHaveAttribute(
 				'aria-label',
-				'Open row'
+				'Open'
 			);
 			await expect( titleCellOpenButton ).toHaveCSS( 'opacity', '0' );
 			await firstRow.hover();
@@ -1958,12 +1922,12 @@ test.describe( 'Collection view block', () => {
 
 			await expect(
 				canvas.getByRole( 'dialog', {
-					name: 'Row detail',
+					name: 'Detail',
 				} )
 			).toHaveCount( 0 );
 
 			const detail = page.getByRole( 'dialog', {
-				name: 'Row detail',
+				name: 'Detail',
 			} );
 			await expect( detail ).toBeVisible();
 			await detail.hover();
@@ -2093,7 +2057,7 @@ test.describe( 'Collection view block', () => {
 			await startSidePeekShellStabilityLog( page );
 
 			const delayedSecondRowPattern = new RegExp(
-				`/wp-json/wp/v2/crtxt_${ fixture.slug }/${ fixture.secondEntry.id }(\\?|$)`
+				`/wp-json/wp/v2/crtxt_documents/${ fixture.secondEntry.id }(\\?|$)`
 			);
 			const delaySecondRow = async ( route ) => {
 				await page.waitForTimeout( 350 );
@@ -2106,7 +2070,7 @@ test.describe( 'Collection view block', () => {
 				}
 			};
 			await page.route( delayedSecondRowPattern, delaySecondRow );
-			await detail.getByRole( 'button', { name: 'Row below' } ).click();
+			await detail.getByRole( 'button', { name: 'Next' } ).click();
 			await expect( detail.locator( '.components-spinner' ) ).toHaveCount(
 				0
 			);
@@ -2122,14 +2086,14 @@ test.describe( 'Collection view block', () => {
 					.filter( { hasText: 'Tags' } )
 			).toBeVisible();
 			await page.unroute( delayedSecondRowPattern, delaySecondRow );
-			await detail.getByRole( 'button', { name: 'Row above' } ).click();
+			await detail.getByRole( 'button', { name: 'Previous' } ).click();
 			await expect( detailTitle ).toHaveText(
 				'The Left Hand of Darkness'
 			);
 			await expectSidePeekShellStayedOpen( page );
 			// Side and modal panes are local React state, not URL state, so
 			// browser Back/Forward doesn't navigate between rows anymore.
-			// The Row above / Row below buttons above already cover that.
+			// The Previous / Next buttons above already cover that.
 
 			// Collapsing properties keeps the block selectable as a stub.
 			const propertiesSlot = detailCanvas.locator(
@@ -2139,7 +2103,7 @@ test.describe( 'Collection view block', () => {
 			// button. Scope to the row-detail toolbar so the locator stays
 			// unambiguous regardless of editor selection.
 			const rowDetailToolbar = detail.getByRole( 'toolbar', {
-				name: 'Row detail tools',
+				name: 'Detail tools',
 			} );
 			await rowDetailToolbar
 				.getByRole( 'button', { name: 'Collapse properties' } )
@@ -2187,7 +2151,7 @@ test.describe( 'Collection view block', () => {
 				detail.getByRole( 'button', { name: 'Center modal' } )
 			).toBeVisible();
 			await expect(
-				detail.getByRole( 'button', { name: 'Full page' } )
+				detail.getByRole( 'button', { name: 'Full view' } )
 			).toBeVisible();
 			await expect(
 				detail.getByRole( 'button', { name: 'Change layout' } )
@@ -2206,10 +2170,10 @@ test.describe( 'Collection view block', () => {
 				modalDetail.getByRole( 'button', { name: 'Side peek' } )
 			).toBeVisible();
 			await expect(
-				modalDetail.getByRole( 'button', { name: 'Full page' } )
+				modalDetail.getByRole( 'button', { name: 'Full view' } )
 			).toBeVisible();
 			await modalDetail
-				.getByRole( 'button', { name: 'Full page' } )
+				.getByRole( 'button', { name: 'Full view' } )
 				.click();
 			await expect( detail ).toBeHidden();
 			await expect(
@@ -2235,15 +2199,13 @@ test.describe( 'Collection view block', () => {
 				'[name="editor-canvas"]'
 			);
 			await expect(
-				collectionCanvas
-					.getByRole( 'button', { name: 'Open row' } )
-					.first()
+				collectionCanvas.getByRole( 'button', { name: 'Open' } ).first()
 			).toBeAttached();
 
 			await expect
 				.poll( async () => {
 					const row = await requestUtils.rest( {
-						path: `/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`,
+						path: `/wp/v2/crtxt_documents/${ fixture.entry.id }`,
 						params: { context: 'edit' },
 					} );
 					return {
@@ -2266,7 +2228,7 @@ test.describe( 'Collection view block', () => {
 			);
 
 			const saved = await requestUtils.rest( {
-				path: `/wp/v2/crtxt_pages/${ fixture.page.id }`,
+				path: `/wp/v2/crtxt_documents/${ fixture.page.id }`,
 				params: { context: 'edit' },
 			} );
 			expect( saved.content.raw ).not.toContain(
@@ -2275,17 +2237,16 @@ test.describe( 'Collection view block', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				fixture.entry &&
-					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+				fixture.entry && `/wp/v2/crtxt_documents/${ fixture.entry.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
 				fixture.secondEntry &&
-					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.secondEntry.id }`
+					`/wp/v2/crtxt_documents/${ fixture.secondEntry.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
-				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
@@ -2304,12 +2265,12 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
 			);
 		}
 	} );
 
-	test( 'shows the default body prompt below row properties when the row body is empty', async ( {
+	test( 'seeds the first empty row body block below row properties', async ( {
 		admin,
 		page,
 		requestUtils,
@@ -2324,7 +2285,7 @@ test.describe( 'Collection view block', () => {
 
 			fixture.page = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: 'Empty row body prompt page',
 					status: 'private',
@@ -2359,7 +2320,7 @@ test.describe( 'Collection view block', () => {
 			await openRowButton.click();
 
 			const detail = page.getByRole( 'dialog', {
-				name: 'Row detail',
+				name: 'Detail',
 			} );
 			await expect( detail ).toBeVisible();
 
@@ -2367,41 +2328,44 @@ test.describe( 'Collection view block', () => {
 			const propertiesSlot = detailCanvas.locator(
 				'.cortext-document-properties'
 			);
-			const prompt = detailCanvas.locator(
-				'.block-editor-default-block-appender.has-visible-prompt .block-editor-default-block-appender__content'
+			const bodyParagraph = detailCanvas
+				.locator( '[data-type="core/paragraph"]' )
+				.first();
+			const appender = detailCanvas.locator(
+				'.block-editor-default-block-appender.has-visible-prompt'
 			);
 
 			await expect( propertiesSlot ).toBeVisible();
-			await expect( prompt ).toContainText( 'Type / to choose a block' );
+			await expect( bodyParagraph ).toBeVisible();
+			await expect( appender ).toHaveCount( 0 );
 			await expect
 				.poll( async () => {
-					const [ propertiesBox, promptBox ] = await Promise.all( [
+					const [ propertiesBox, paragraphBox ] = await Promise.all( [
 						propertiesSlot.boundingBox(),
-						prompt.boundingBox(),
+						bodyParagraph.boundingBox(),
 					] );
-					if ( ! propertiesBox || ! promptBox ) {
+					if ( ! propertiesBox || ! paragraphBox ) {
 						return false;
 					}
 					return (
-						promptBox.y >=
+						paragraphBox.y >=
 						propertiesBox.y + propertiesBox.height - 2
 					);
 				} )
 				.toBe( true );
 
-			await prompt.click();
+			await bodyParagraph.click();
 			await expect(
 				detailCanvas.locator( '[data-type="core/paragraph"]' )
 			).toHaveCount( 1 );
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				fixture.entry &&
-					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+				fixture.entry && `/wp/v2/crtxt_documents/${ fixture.entry.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
-				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
@@ -2410,7 +2374,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
 			);
 		}
 	} );
@@ -2424,16 +2388,13 @@ test.describe( 'Collection view block', () => {
 
 		try {
 			const suffix = Date.now().toString( 36 ).slice( -4 );
-			const slug = `e2etypes${ suffix }`;
-			fixture.slug = slug;
 
 			fixture.collection = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_collections',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: `Typed cells ${ suffix }`,
 					status: 'private',
-					meta: { slug },
 				},
 			} );
 
@@ -2465,20 +2426,21 @@ test.describe( 'Collection view block', () => {
 
 			await requestUtils.rest( {
 				method: 'POST',
-				path: `/wp/v2/crtxt_collections/${ fixture.collection.id }`,
+				path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
 				data: {
 					meta: {
-						fields: fixture.fieldIds.map( String ),
+						cortext_fields: fixture.fieldIds.map( String ),
 					},
 				},
 			} );
 
 			fixture.entry = await requestUtils.rest( {
 				method: 'POST',
-				path: `/wp/v2/crtxt_${ slug }`,
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: 'Sample row',
 					status: 'private',
+					cortext_trait: fixture.collection.id,
 					meta: {
 						[ `field-${ urlField.id }` ]:
 							'https://example.com/welcome',
@@ -2492,7 +2454,7 @@ test.describe( 'Collection view block', () => {
 
 			fixture.page = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: 'Typed cell rendering page',
 					status: 'private',
@@ -2586,12 +2548,11 @@ test.describe( 'Collection view block', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				fixture.entry &&
-					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+				fixture.entry && `/wp/v2/crtxt_documents/${ fixture.entry.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
-				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
 			);
 			for ( const fieldId of fixture.fieldIds ) {
 				await deleteIfCreated(
@@ -2602,7 +2563,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
 			);
 		}
 	} );
@@ -2616,16 +2577,13 @@ test.describe( 'Collection view block', () => {
 
 		try {
 			const suffix = Date.now().toString( 36 ).slice( -4 );
-			const slug = `e2eformat${ suffix }`;
-			fixture.slug = slug;
 
 			fixture.collection = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_collections',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: `Format keyboard ${ suffix }`,
 					status: 'private',
-					meta: { slug },
 				},
 			} );
 
@@ -2641,18 +2599,19 @@ test.describe( 'Collection view block', () => {
 
 			await requestUtils.rest( {
 				method: 'POST',
-				path: `/wp/v2/crtxt_collections/${ fixture.collection.id }`,
+				path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
 				data: {
-					meta: { fields: [ String( fixture.field.id ) ] },
+					meta: { cortext_fields: [ String( fixture.field.id ) ] },
 				},
 			} );
 
 			fixture.entry = await requestUtils.rest( {
 				method: 'POST',
-				path: `/wp/v2/crtxt_${ slug }`,
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: 'Keyboard row',
 					status: 'private',
+					cortext_trait: fixture.collection.id,
 					meta: {
 						[ `field-${ fixture.field.id }` ]: 12.5,
 					},
@@ -2661,7 +2620,7 @@ test.describe( 'Collection view block', () => {
 
 			fixture.page = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: 'Format keyboard page',
 					status: 'private',
@@ -2759,12 +2718,11 @@ test.describe( 'Collection view block', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				fixture.entry &&
-					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+				fixture.entry && `/wp/v2/crtxt_documents/${ fixture.entry.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
-				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
@@ -2773,7 +2731,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
 			);
 		}
 	} );
@@ -2787,16 +2745,13 @@ test.describe( 'Collection view block', () => {
 
 		try {
 			const suffix = Date.now().toString( 36 ).slice( -4 );
-			const slug = `e2esys${ suffix }`;
-			fixture.slug = slug;
 
 			fixture.collection = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_collections',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: `System fields ${ suffix }`,
 					status: 'private',
-					meta: { slug },
 				},
 			} );
 
@@ -2812,18 +2767,19 @@ test.describe( 'Collection view block', () => {
 
 			await requestUtils.rest( {
 				method: 'POST',
-				path: `/wp/v2/crtxt_collections/${ fixture.collection.id }`,
+				path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
 				data: {
-					meta: { fields: [ String( fixture.field.id ) ] },
+					meta: { cortext_fields: [ String( fixture.field.id ) ] },
 				},
 			} );
 
 			fixture.entry = await requestUtils.rest( {
 				method: 'POST',
-				path: `/wp/v2/crtxt_${ slug }`,
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: 'Sample row',
 					status: 'private',
+					cortext_trait: fixture.collection.id,
 					meta: {
 						[ `field-${ fixture.field.id }` ]: 'a note',
 					},
@@ -2832,7 +2788,7 @@ test.describe( 'Collection view block', () => {
 
 			fixture.page = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: 'System field page',
 					status: 'private',
@@ -2891,12 +2847,11 @@ test.describe( 'Collection view block', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				fixture.entry &&
-					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+				fixture.entry && `/wp/v2/crtxt_documents/${ fixture.entry.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
-				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
@@ -2905,7 +2860,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
 			);
 		}
 	} );
@@ -2926,10 +2881,11 @@ test.describe( 'Collection view block', () => {
 			// A second entry whose Author value won't match the query.
 			fixture.entry2 = await requestUtils.rest( {
 				method: 'POST',
-				path: `/wp/v2/crtxt_${ fixture.slug }`,
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: 'Dune',
 					status: 'private',
+					cortext_trait: fixture.collection.id,
 					meta: {
 						[ `field-${ fixture.field.id }` ]: 'Frank Herbert',
 					},
@@ -2938,7 +2894,7 @@ test.describe( 'Collection view block', () => {
 
 			fixture.page = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: 'Global search test page',
 					status: 'private',
@@ -2979,16 +2935,15 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.entry2 &&
-					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry2.id }`
+					`/wp/v2/crtxt_documents/${ fixture.entry2.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
-				fixture.entry &&
-					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+				fixture.entry && `/wp/v2/crtxt_documents/${ fixture.entry.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
-				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
@@ -2997,7 +2952,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
 			);
 		}
 	} );
@@ -3021,7 +2976,7 @@ test.describe( 'Collection view block', () => {
 
 			fixture.page = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: 'Table calculations persistence page',
 					status: 'private',
@@ -3177,7 +3132,7 @@ test.describe( 'Collection view block', () => {
 			);
 
 			const saved = await requestUtils.rest( {
-				path: `/wp/v2/crtxt_pages/${ fixture.page.id }`,
+				path: `/wp/v2/crtxt_documents/${ fixture.page.id }`,
 				params: { context: 'edit' },
 			} );
 			expect( saved.content.raw ).toContain( '"calculations"' );
@@ -3195,12 +3150,12 @@ test.describe( 'Collection view block', () => {
 			for ( const row of fixture.rows ?? [] ) {
 				await deleteIfCreated(
 					requestUtils,
-					`/wp/v2/crtxt_${ fixture.slug }/${ row.id }`
+					`/wp/v2/crtxt_documents/${ row.id }`
 				);
 			}
 			await deleteIfCreated(
 				requestUtils,
-				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
 			);
 			for ( const field of Object.values( fixture.fields ?? {} ) ) {
 				await deleteIfCreated(
@@ -3211,7 +3166,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
 			);
 		}
 	} );
@@ -3233,7 +3188,7 @@ test.describe( 'Collection view block', () => {
 
 			fixture.page = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: 'Filtered calculation page',
 					status: 'private',
@@ -3280,12 +3235,12 @@ test.describe( 'Collection view block', () => {
 			for ( const row of fixture.rows ?? [] ) {
 				await deleteIfCreated(
 					requestUtils,
-					`/wp/v2/crtxt_${ fixture.slug }/${ row.id }`
+					`/wp/v2/crtxt_documents/${ row.id }`
 				);
 			}
 			await deleteIfCreated(
 				requestUtils,
-				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
 			);
 			for ( const field of Object.values( fixture.fields ?? {} ) ) {
 				await deleteIfCreated(
@@ -3296,7 +3251,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
 			);
 		}
 	} );
@@ -3316,7 +3271,7 @@ test.describe( 'Collection view block', () => {
 
 			fixture.page = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: 'Column resize persistence page',
 					status: 'private',
@@ -3387,7 +3342,7 @@ test.describe( 'Collection view block', () => {
 			);
 
 			const saved = await requestUtils.rest( {
-				path: `/wp/v2/crtxt_pages/${ fixture.page.id }`,
+				path: `/wp/v2/crtxt_documents/${ fixture.page.id }`,
 				params: { context: 'edit' },
 			} );
 
@@ -3411,12 +3366,11 @@ test.describe( 'Collection view block', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				fixture.entry &&
-					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+				fixture.entry && `/wp/v2/crtxt_documents/${ fixture.entry.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
-				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
@@ -3425,7 +3379,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
 			);
 		}
 	} );
@@ -3446,7 +3400,7 @@ test.describe( 'Collection view block', () => {
 			const fieldKey = `field-${ fixture.field.id }`;
 			fixture.page = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: 'Column auto-size page',
 					status: 'private',
@@ -3515,12 +3469,11 @@ test.describe( 'Collection view block', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				fixture.entry &&
-					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+				fixture.entry && `/wp/v2/crtxt_documents/${ fixture.entry.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
-				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
@@ -3529,7 +3482,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
 			);
 		}
 	} );
@@ -3543,16 +3496,13 @@ test.describe( 'Collection view block', () => {
 
 		try {
 			const suffix = Date.now().toString( 36 ).slice( -4 );
-			const slug = `e2eheader${ suffix }`;
-			fixture.slug = slug;
 
 			fixture.collection = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_collections',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: `Header ellipsis ${ suffix }`,
 					status: 'private',
-					meta: { slug },
 				},
 			} );
 
@@ -3569,16 +3519,17 @@ test.describe( 'Collection view block', () => {
 
 			await requestUtils.rest( {
 				method: 'POST',
-				path: `/wp/v2/crtxt_collections/${ fixture.collection.id }`,
-				data: { meta: { fields: [ String( field.id ) ] } },
+				path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
+				data: { meta: { cortext_fields: [ String( field.id ) ] } },
 			} );
 
 			fixture.entry = await requestUtils.rest( {
 				method: 'POST',
-				path: `/wp/v2/crtxt_${ slug }`,
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: 'Header row',
 					status: 'private',
+					cortext_trait: fixture.collection.id,
 					meta: { [ `field-${ field.id }` ]: true },
 				},
 			} );
@@ -3586,7 +3537,7 @@ test.describe( 'Collection view block', () => {
 			const fieldKey = `field-${ field.id }`;
 			fixture.page = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: 'Header ellipsis page',
 					status: 'private',
@@ -3656,12 +3607,11 @@ test.describe( 'Collection view block', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				fixture.entry &&
-					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+				fixture.entry && `/wp/v2/crtxt_documents/${ fixture.entry.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
-				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
 			);
 			for ( const fieldId of fixture.fieldIds ) {
 				await deleteIfCreated(
@@ -3672,7 +3622,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
 			);
 		}
 	} );
@@ -3768,16 +3718,13 @@ test.describe( 'Collection view block', () => {
 
 		try {
 			const suffix = Date.now().toString( 36 ).slice( -4 );
-			const slug = `e2eoverlap${ suffix }`;
-			fixture.slug = slug;
 
 			fixture.collection = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_collections',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: `Resize overlap ${ suffix }`,
 					status: 'private',
-					meta: { slug },
 				},
 			} );
 
@@ -3803,18 +3750,19 @@ test.describe( 'Collection view block', () => {
 
 			await requestUtils.rest( {
 				method: 'POST',
-				path: `/wp/v2/crtxt_collections/${ fixture.collection.id }`,
+				path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
 				data: {
-					meta: { fields: fixture.fieldIds.map( String ) },
+					meta: { cortext_fields: fixture.fieldIds.map( String ) },
 				},
 			} );
 
 			fixture.entry = await requestUtils.rest( {
 				method: 'POST',
-				path: `/wp/v2/crtxt_${ slug }`,
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: 'Resize overlap row',
 					status: 'private',
+					cortext_trait: fixture.collection.id,
 					meta: {
 						[ `field-${ tagsField.id }` ]: [ 'feature', 'docs' ],
 						[ `field-${ dueField.id }` ]: '2026-05-15',
@@ -3826,7 +3774,7 @@ test.describe( 'Collection view block', () => {
 			const dueKey = `field-${ dueField.id }`;
 			fixture.page = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: 'Column resize overlap page',
 					status: 'private',
@@ -3886,12 +3834,11 @@ test.describe( 'Collection view block', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				fixture.entry &&
-					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+				fixture.entry && `/wp/v2/crtxt_documents/${ fixture.entry.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
-				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
 			);
 			for ( const fieldId of fixture.fieldIds ) {
 				await deleteIfCreated(
@@ -3902,7 +3849,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
 			);
 		}
 	} );
@@ -3916,16 +3863,13 @@ test.describe( 'Collection view block', () => {
 
 		try {
 			const suffix = Date.now().toString( 36 ).slice( -4 );
-			const slug = `e2eorder${ suffix }`;
-			fixture.slug = slug;
 
 			fixture.collection = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_collections',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: `Reorder ${ suffix }`,
 					status: 'private',
-					meta: { slug },
 				},
 			} );
 
@@ -3944,18 +3888,19 @@ test.describe( 'Collection view block', () => {
 
 			await requestUtils.rest( {
 				method: 'POST',
-				path: `/wp/v2/crtxt_collections/${ fixture.collection.id }`,
+				path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
 				data: {
-					meta: { fields: fixture.fieldIds.map( String ) },
+					meta: { cortext_fields: fixture.fieldIds.map( String ) },
 				},
 			} );
 
 			fixture.entry = await requestUtils.rest( {
 				method: 'POST',
-				path: `/wp/v2/crtxt_${ slug }`,
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: 'Sample',
 					status: 'private',
+					cortext_trait: fixture.collection.id,
 					meta: {
 						[ `field-${ fieldA.id }` ]: 'Author A',
 						[ `field-${ fieldB.id }` ]: 'Notes B',
@@ -3965,7 +3910,7 @@ test.describe( 'Collection view block', () => {
 
 			fixture.page = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: 'Column reorder persistence page',
 					status: 'private',
@@ -4069,7 +4014,7 @@ test.describe( 'Collection view block', () => {
 			);
 
 			const saved = await requestUtils.rest( {
-				path: `/wp/v2/crtxt_pages/${ fixture.page.id }`,
+				path: `/wp/v2/crtxt_documents/${ fixture.page.id }`,
 				params: { context: 'edit' },
 			} );
 
@@ -4104,12 +4049,11 @@ test.describe( 'Collection view block', () => {
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
-				fixture.entry &&
-					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+				fixture.entry && `/wp/v2/crtxt_documents/${ fixture.entry.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
-				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
 			);
 			for ( const fieldId of fixture.fieldIds ) {
 				await deleteIfCreated(
@@ -4120,7 +4064,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
 			);
 		}
 	} );
@@ -4139,7 +4083,7 @@ test.describe( 'Collection view block', () => {
 
 			fixture.page = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_pages',
+				path: '/wp/v2/crtxt_documents',
 				data: {
 					title: 'Field management page',
 					status: 'private',
@@ -4298,12 +4242,11 @@ test.describe( 'Collection view block', () => {
 			// removes their entry meta).
 			await deleteIfCreated(
 				requestUtils,
-				fixture.entry &&
-					`/wp/v2/crtxt_${ fixture.slug }/${ fixture.entry.id }`
+				fixture.entry && `/wp/v2/crtxt_documents/${ fixture.entry.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
-				fixture.page && `/wp/v2/crtxt_pages/${ fixture.page.id }`
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
@@ -4312,7 +4255,7 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
-					`/wp/v2/crtxt_collections/${ fixture.collection.id }`
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
 			);
 		}
 	} );

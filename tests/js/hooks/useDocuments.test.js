@@ -15,7 +15,6 @@ beforeEach( () => {
 
 it( 'fetches documents without filters', async () => {
 	const document = {
-		kind: 'page',
 		id: 10,
 		title: 'Welcome',
 		path: 'page/welcome-10',
@@ -34,13 +33,12 @@ it( 'fetches documents without filters', async () => {
 	expect( result.current.error ).toBeNull();
 } );
 
-it( 'passes search, kind, and paging to the endpoint', async () => {
+it( 'passes search and paging to the endpoint', async () => {
 	apiFetch.mockResolvedValueOnce( { documents: [], total: 0 } );
 
 	const { result } = renderHook( () =>
 		useDocuments( {
 			search: 'quarterly review',
-			kind: 'row',
 			page: 2,
 			perPage: 5,
 		} )
@@ -51,7 +49,6 @@ it( 'passes search, kind, and paging to the endpoint', async () => {
 	const call = apiFetch.mock.calls[ 0 ][ 0 ];
 	expect( call.path ).toContain( '/cortext/v1/documents?' );
 	expect( call.path ).toContain( 'search=quarterly+review' );
-	expect( call.path ).toContain( 'kind=row' );
 	expect( call.path ).toContain( 'page=2' );
 	expect( call.path ).toContain( 'per_page=5' );
 } );
@@ -73,7 +70,6 @@ it( 'refetches when the search term changes', async () => {
 
 it( 'keeps the last result visible while a refresh is in flight', async () => {
 	const document = {
-		kind: 'page',
 		id: 1,
 		title: 'Cached',
 		path: 'page/cached-1',
@@ -109,7 +105,6 @@ it( 'keeps the last result visible while a refresh is in flight', async () => {
 
 it( 'reports errors without dropping the previous result', async () => {
 	const document = {
-		kind: 'page',
 		id: 1,
 		title: 'Cached',
 		path: 'page/cached-1',

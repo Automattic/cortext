@@ -4,7 +4,7 @@ Cortext runs as a React app inside wp-admin. The shell is full-screen, but it st
 
 ## Server entry
 
-`Cortext\Admin\Screen` registers the Cortext admin page, prints the React mount point, loads the built assets, and applies a full-screen body class for this screen. It also keeps the core Pages list table reachable as an escape hatch for bulk operations the shell does not cover yet.
+`Cortext\Admin\Screen` registers the Cortext admin page, prints the React mount point, loads the built assets, and adds the full-screen body class. Document editing stays in that shell; Cortext does not expose core's Documents list table or `post.php` editor for `crtxt_document`.
 
 The plugin bootstraps editor settings on the server and exposes them to the client. That lets Cortext mount the block editor without recreating the editor environment from scratch.
 
@@ -12,10 +12,7 @@ The plugin bootstraps editor settings on the server and exposes them to the clie
 
 The client entry is `src/index.js`. Routing is handled in the React app, while the browser stays on the Cortext wp-admin page.
 
-The shell has two main work surfaces:
-
--   Page routes mount a block editor canvas for `crtxt_page` documents.
--   Collection routes mount DataViews-backed record views for rows.
+The shell has one work surface: every routed entity is a `crtxt_document`, rendered through a block editor canvas. Pages are documents without a schema, collections are documents whose body is the locked `cortext/data-view` block, and rows open as documents too (full page) or as a side peek (inside their parent collection's view).
 
 The sidebar handles page navigation and nesting. Autosave is split between a client debounce and a small server-side revision throttle.
 
@@ -35,4 +32,4 @@ Queries cap at `per_page: 100`. A record opened by direct URL or recent-item lin
 
 ## Current scope
 
-The shell supports pages, collections, embedded collection views, row details, relations, rollups, and basic public rendering for pages. Several editor edges are still prototype-quality, especially layout fidelity, concurrent editing, and bulk actions.
+The shell supports pages, collections, embedded collection views, row details, relations, rollups, and basic public rendering for pages. Several editor edges are still rough, especially layout fidelity, concurrent editing, and bulk actions.

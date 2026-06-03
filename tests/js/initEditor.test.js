@@ -14,17 +14,23 @@ jest.mock( '@wordpress/blocks', () => ( {
 
 jest.mock( '@wordpress/i18n', () => ( {
 	__: ( str ) => str,
+	setLocaleData: jest.fn(),
 } ) );
 
 // Mock the block barrel; importing the real one pulls in every block edit/save
 // component.
 jest.mock( '../../src/blocks', () => ( {} ) );
 
+// `initInserterMediaCategories` dispatches to the block-editor store on
+// import; stub it so the test doesn't pull the full data + editor chain.
+jest.mock( '../../src/components/initInserterMediaCategories', () => ( {} ) );
+
 import {
 	ALLOWED_BLOCK_TYPES,
-	CORTEXT_BLOCK_CATEGORY,
+	COLLECTIONS_BLOCK_CATEGORY,
 	getEditorSettings,
 } from '../../src/components/initEditor';
+import { applyFilters } from '@wordpress/hooks';
 
 beforeEach( () => {
 	delete window.cortextEditorSettings;
@@ -79,7 +85,7 @@ describe( 'ALLOWED_BLOCK_TYPES', () => {
 	it( 'excludes post-context blocks that need post-type supports we do not declare', () => {
 		// core/post-author and core/post-author-name require the post type
 		// to support 'author'. core/post-excerpt requires 'excerpt'.
-		// Cortext's crtxt_page and crtxt_collection don't declare either.
+		// Cortext's crtxt_document declares neither.
 		const denied = [
 			'core/post-author',
 			'core/post-author-name',
@@ -170,6 +176,33 @@ describe( 'ALLOWED_BLOCK_TYPES', () => {
 	} );
 } );
 
+describe( 'core/post-title registration filter', () => {
+	it( 'keeps the title available to Cortext but out of user actions', () => {
+		const settings = applyFilters(
+			'blocks.registerBlockType',
+			{ supports: { html: false } },
+			'core/post-title'
+		);
+
+		expect( settings.supports ).toMatchObject( {
+			html: false,
+			inserter: false,
+			lock: false,
+			multiple: false,
+		} );
+	} );
+
+	it( 'leaves other block supports alone', () => {
+		const settings = applyFilters(
+			'blocks.registerBlockType',
+			{ supports: { multiple: true } },
+			'core/paragraph'
+		);
+
+		expect( settings.supports ).toEqual( { multiple: true } );
+	} );
+} );
+
 describe( 'getEditorSettings', () => {
 	it( 'injects allowedBlockTypes into the base settings', () => {
 		window.cortextEditorSettings = {
@@ -203,8 +236,8 @@ describe( 'getEditorSettings', () => {
 	} );
 } );
 
-describe( 're-exported CORTEXT_BLOCK_CATEGORY', () => {
-	it( 'matches the constant from cortextBlockCategory', () => {
-		expect( CORTEXT_BLOCK_CATEGORY.slug ).toBe( 'cortext' );
+describe( 're-exported COLLECTIONS_BLOCK_CATEGORY', () => {
+	it( 'matches the constant from collectionsBlockCategory', () => {
+		expect( COLLECTIONS_BLOCK_CATEGORY.slug ).toBe( 'collections' );
 	} );
 } );

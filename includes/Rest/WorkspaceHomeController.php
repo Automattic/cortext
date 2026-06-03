@@ -9,6 +9,8 @@ declare( strict_types=1 );
 
 namespace Cortext\Rest;
 
+defined( 'ABSPATH' ) || exit;
+
 use Cortext\Documents;
 use WP_Error;
 use WP_REST_Request;
@@ -18,11 +20,6 @@ final class WorkspaceHomeController {
 
 	private const NAMESPACE = 'cortext/v1';
 	private const META_KEY  = 'cortext_workspace_home';
-
-	private const ALLOWED_KINDS = array(
-		Documents::KIND_PAGE,
-		Documents::KIND_COLLECTION,
-	);
 
 	private Documents $documents;
 
@@ -49,12 +46,7 @@ final class WorkspaceHomeController {
 					'callback'            => array( $this, 'update_home' ),
 					'permission_callback' => array( $this, 'can_read' ),
 					'args'                => array(
-						'kind' => array(
-							'type'     => 'string',
-							'required' => true,
-							'enum'     => self::ALLOWED_KINDS,
-						),
-						'id'   => array(
+						'id' => array(
 							'type'     => 'integer',
 							'required' => true,
 							'minimum'  => 1,
@@ -88,7 +80,7 @@ final class WorkspaceHomeController {
 			return $home;
 		}
 
-		update_user_meta( get_current_user_id(), self::META_KEY, "{$home['kind']}:{$home['id']}" );
+		update_user_meta( get_current_user_id(), self::META_KEY, (int) $home['id'] );
 
 		return new WP_REST_Response(
 			array(
@@ -100,26 +92,22 @@ final class WorkspaceHomeController {
 
 	private function resolve_stored_home( int $user_id ): ?array {
 		$raw = get_user_meta( $user_id, self::META_KEY, true );
-		if ( ! is_string( $raw ) || '' === $raw ) {
+		$id  = $this->stored_entry_id( $raw );
+		if ( $id < 1 ) {
 			return null;
 		}
 
-		$parts = explode( ':', $raw, 2 );
-		if ( 2 !== count( $parts ) ) {
-			return null;
-		}
-
-		$home = $this->resolve_home_target( (int) $parts[1] );
+		$home = $this->resolve_home_target( $id );
 		return is_wp_error( $home ) ? null : $home;
 	}
 
 	/**
 	 * Resolves a workspace home target by id and returns the small wire shape
-	 * Home needs. The response keeps `{kind, id, path}` only; callers can read
-	 * title or icon from the matching document record when they need it.
+	 * Home needs. The response keeps `{id, path, title?, icon?}`; callers can
+	 * read further fields from the matching document record when they need it.
 	 *
 	 * @param int $id Target document id.
-	 * @return array{kind:string,id:int,path:string}|WP_Error
+	 * @return array<string,mixed>|WP_Error
 	 */
 	private function resolve_home_target( int $id ) {
 		$target = $this->documents->format_target( $id );
@@ -127,18 +115,32 @@ final class WorkspaceHomeController {
 			return $target;
 		}
 
-		if ( ! in_array( $target['kind'], self::ALLOWED_KINDS, true ) ) {
-			return new WP_Error(
-				'cortext_document_target_not_found',
-				__( 'Target document was not found.', 'cortext' ),
-				array( 'status' => 404 )
-			);
+		return $target;
+	}
+
+	/**
+	 * Reads the home document id from stored user meta. Integers are the
+	 * canonical shape; strings (`"kind:id"` from older builds) are accepted
+	 * for lazy migration on the next read.
+	 *
+	 * @param mixed $raw Raw stored value.
+	 */
+	private function stored_entry_id( mixed $raw ): int {
+		if ( is_int( $raw ) ) {
+			return $raw;
 		}
 
-		return array(
-			'kind' => $target['kind'],
-			'id'   => $target['id'],
-			'path' => $target['path'],
-		);
+		if ( is_string( $raw ) && '' !== $raw ) {
+			if ( ctype_digit( $raw ) ) {
+				return (int) $raw;
+			}
+			$parts = explode( ':', $raw, 2 );
+			if ( 2 !== count( $parts ) ) {
+				return 0;
+			}
+			return (int) $parts[1];
+		}
+
+		return 0;
 	}
 }
