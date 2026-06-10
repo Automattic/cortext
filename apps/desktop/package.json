@@ -63,9 +63,7 @@
 			"binaries": [
 				"Contents/Resources/runtime/bin/php"
 			],
-			"notarize": {
-				"teamId": "PZYM8XX95Q"
-			}
+			"notarize": true
 		}
 	}
 }
