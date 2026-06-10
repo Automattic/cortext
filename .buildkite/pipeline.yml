@@ -8,9 +8,6 @@ env:
   IMAGE_ID: $IMAGE_ID
 
 steps:
-  # Build, sign, and notarize the desktop DMG. Runs on every build; only a v*
-  # tag publishes to the GitHub Release. The signed DMG is always a Buildkite
-  # artifact for download/testing.
   - label: ":apple: Build, sign, notarize desktop DMG"
     key: release-desktop
     command: .buildkite/commands/release-desktop.sh

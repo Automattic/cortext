@@ -2,12 +2,9 @@
 
 set -euo pipefail
 
-# Build, sign, and notarize the Cortext desktop DMG on the macOS signing queue.
-# Mirrors .github/workflows/release-desktop.yml; the release build moves here
-# because GitHub Actions cannot reach the signing secrets.
+# Build, sign, and notarize the Cortext desktop DMG.
 
-# Only v* tag builds publish to the GitHub Release. Other builds still produce a
-# signed+notarized DMG, uploaded as a Buildkite artifact.
+# Only v* tag builds publish to the GitHub Release.
 if [[ "${BUILDKITE_TAG:-}" == v* ]]; then
   version="${BUILDKITE_TAG#v}"
   publish=true
