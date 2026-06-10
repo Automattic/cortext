@@ -1,8 +1,10 @@
 # frozen_string_literal: true
 
+require 'json'
+
 UI.user_error!('Please run fastlane via `bundle exec`') unless FastlaneCore::Helper.bundler?
 
-APPLE_TEAM_ID = 'PZYM8XX95Q'
+APPLE_TEAM_ID = JSON.parse(File.read(File.expand_path('../package.json', __dir__))).dig('build', 'mac', 'notarize', 'teamId')
 
 CODE_SIGNING_STORAGE_OPTIONS = {
   storage_mode: 's3',
