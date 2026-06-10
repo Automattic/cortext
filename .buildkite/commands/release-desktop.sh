@@ -49,7 +49,9 @@ echo "--- :apple: build, sign, notarize DMG"
 # carries as APP_STORE_CONNECT_API_KEY_KEY into a temp file.
 apple_api_key_path="$(mktemp -t cortext_asc).p8"
 trap 'rm -f "$apple_api_key_path"' EXIT
-printf '%s' "$APP_STORE_CONNECT_API_KEY_KEY" > "$apple_api_key_path"
+# The secret stores the .p8 with newlines as literal \n; %b turns them back into
+# real newlines so the file is a valid PEM (a no-op if they are already real).
+printf '%b' "$APP_STORE_CONNECT_API_KEY_KEY" > "$apple_api_key_path"
 export APPLE_API_KEY="$apple_api_key_path"
 export APPLE_API_KEY_ID="$APP_STORE_CONNECT_API_KEY_KEY_ID"
 export APPLE_API_ISSUER="$APP_STORE_CONNECT_API_KEY_ISSUER_ID"
