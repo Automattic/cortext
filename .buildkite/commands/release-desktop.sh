@@ -60,8 +60,12 @@ npm --prefix apps/desktop run dist -- -c.extraMetadata.version="$version"
 
 echo "--- :white_check_mark: verify signature + notarization"
 dmg="$(ls apps/desktop/dist/*.dmg)"
-codesign --verify --strict --verbose=2 "$dmg"
-xcrun stapler validate "$dmg"
+# electron-builder signs, notarizes and staples the .app, then wraps it in an
+# unsigned .dmg — so the notarized artifact to verify is the app, not the dmg.
+app="apps/desktop/dist/mac-arm64/Cortext.app"
+codesign --verify --strict --deep --verbose=2 "$app"
+spctl --assess --type exec --verbose=2 "$app"
+xcrun stapler validate "$app"
 
 if ! "$publish"; then
   echo "--- :information_source: no v* tag; signed DMG stashed as a Buildkite artifact"
