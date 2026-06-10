@@ -4,7 +4,8 @@ require 'json'
 
 UI.user_error!('Please run fastlane via `bundle exec`') unless FastlaneCore::Helper.bundler?
 
-APPLE_TEAM_ID = JSON.parse(File.read(File.expand_path('../package.json', __dir__))).dig('build', 'mac', 'notarize', 'teamId')
+# The team id is the trailing `(XXXXXXXXXX)` of electron-builder's signing identity.
+APPLE_TEAM_ID = JSON.parse(File.read(File.expand_path('../package.json', __dir__))).dig('build', 'mac', 'identity')[/\(([A-Z0-9]+)\)\z/, 1]
 
 CODE_SIGNING_STORAGE_OPTIONS = {
   storage_mode: 's3',
