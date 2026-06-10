@@ -27,6 +27,12 @@ npm --prefix apps/desktop ci
 # electron-builder packages a complete app.
 ( cd apps/desktop && npx install-electron )
 
+echo "--- :hammer_and_wrench: install static-php-cli build toolchain"
+# static-php-cli source-builds any library without a pre-built binary (e.g.
+# libxml2), which the minimal agent image can't do unaided.
+brew install cmake autoconf automake libtool bison re2c
+export PATH="$(brew --prefix bison)/bin:$PATH"
+
 echo "--- :php: build bundled arm64 PHP runtime"
 npm --prefix apps/desktop run runtime:php
 
