@@ -17,6 +17,8 @@ fi
 echo "--- :package: install JS + PHP dependencies"
 corepack enable
 corepack prepare "pnpm@$(node -p "require('./package.json').packageManager.split('@')[1]")" --activate
+# The xcode-* agent image ships no composer; brew pulls php in as a dependency.
+command -v composer >/dev/null || brew install composer
 composer install --no-dev --optimize-autoloader --no-interaction
 pnpm install --frozen-lockfile
 npm --prefix apps/desktop ci
