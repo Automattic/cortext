@@ -54,7 +54,7 @@
 					"arch": "arm64"
 				}
 			],
-			"identity": "Developer ID Application: Automattic, Inc. (PZYM8XX95Q)",
+			"identity": "Automattic, Inc. (PZYM8XX95Q)",
 			"category": "public.app-category.productivity",
 			"minimumSystemVersion": "12.0.0",
 			"hardenedRuntime": true,
