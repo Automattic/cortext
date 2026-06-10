@@ -1,0 +1,11 @@
+#!/bin/sh
+
+# Sourced by the pipeline-upload step so these values land in the rendered pipeline.yml.
+
+CI_TOOLKIT_PLUGIN_VERSION='6.0.1'
+NVM_PLUGIN_VERSION='0.6.0'
+XCODE_VERSION=$(sed -E 's/^~> ?//' .xcode-version)
+
+export IMAGE_ID="xcode-$XCODE_VERSION"
+export CI_TOOLKIT_PLUGIN="automattic/a8c-ci-toolkit#$CI_TOOLKIT_PLUGIN_VERSION"
+export NVM_PLUGIN="automattic/nvm#$NVM_PLUGIN_VERSION"
