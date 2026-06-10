@@ -54,9 +54,18 @@
 					"arch": "arm64"
 				}
 			],
-			"identity": null,
+			"identity": "Developer ID Application: Automattic, Inc. (PZYM8XX95Q)",
 			"category": "public.app-category.productivity",
-			"minimumSystemVersion": "12.0.0"
+			"minimumSystemVersion": "12.0.0",
+			"hardenedRuntime": true,
+			"entitlements": "signing/entitlements.mac.plist",
+			"entitlementsInherit": "signing/entitlements.mac.plist",
+			"binaries": [
+				"Contents/Resources/runtime/bin/php"
+			],
+			"notarize": {
+				"teamId": "PZYM8XX95Q"
+			}
 		}
 	}
 }
