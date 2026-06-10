@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/buildkite/pipeline-schema/main/schema.json
+---
+
+agents:
+  queue: mac
+
+env:
+  IMAGE_ID: $IMAGE_ID
+
+steps:
+  # Build, sign, and notarize the desktop DMG. Runs on every build; only a v*
+  # tag publishes to the GitHub Release. The signed DMG is always a Buildkite
+  # artifact for download/testing.
+  - label: ":apple: Build, sign, notarize desktop DMG"
+    key: release-desktop
+    command: .buildkite/commands/release-desktop.sh
+    plugins: [$CI_TOOLKIT_PLUGIN, $NVM_PLUGIN]
+    artifact_paths:
+      - "apps/desktop/dist/*.dmg"
+      - "apps/desktop/dist/*.dmg.blockmap"
+    notify:
+      - github_commit_status:
+          context: Build, Sign & Notarize Desktop
