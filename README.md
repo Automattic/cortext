@@ -2,7 +2,7 @@
 
 # Cortext
 
-[Try in WordPress Playground](https://playground.wordpress.net/?blueprint-url=https://raw.githubusercontent.com/Automattic/cortext/main/playground/blueprint.json)
+[Try in WordPress Playground](https://playground.wordpress.net/?blueprint-url=https://raw.githubusercontent.com/Automattic/cortext/main/assets/wordpress-org/blueprints/blueprint.json)
 
 > [!WARNING]
 > Cortext is an early beta. Try it somewhere low-stakes first.
