@@ -137,6 +137,32 @@ desktop run only uploads the DMG. You can also run either workflow on its own
 from the Actions tab, which is handy for rebuilding just the DMG against a draft
 that already exists.
 
+## Deploying to WordPress.org
+
+After the GitHub Release is published, deploy that exact ZIP to the
+WordPress.org SVN repository. SVN is only the distribution channel; GitHub stays
+the source of truth.
+
+```bash
+svn checkout https://plugins.svn.wordpress.org/cortext .context/wporg-svn/cortext
+gh release download <version> --repo Automattic/cortext --pattern cortext.zip --dir .context/wporg-release/<version>
+unzip .context/wporg-release/<version>/cortext.zip -d .context/wporg-release/<version>/unpacked
+rsync -a --delete .context/wporg-release/<version>/unpacked/cortext/ .context/wporg-svn/cortext/trunk/
+rsync -a --delete assets/wordpress-org/ .context/wporg-svn/cortext/assets/
+svn status .context/wporg-svn/cortext/trunk .context/wporg-svn/cortext/assets | awk '/^!/ { print substr($0, 9) }' | while IFS= read -r path; do
+    svn rm "$path"
+done
+svn add --force .context/wporg-svn/cortext/trunk .context/wporg-svn/cortext/assets
+svn copy .context/wporg-svn/cortext/trunk .context/wporg-svn/cortext/tags/<version>
+svn commit .context/wporg-svn/cortext -m "Release Cortext <version>" --username <wporg-user>
+```
+
+Before committing, check that `trunk/readme.txt` and
+`tags/<version>/readme.txt` both point to the release stable tag, the plugin
+header and `CORTEXT_VERSION` match the release, and the SVN tree contains only
+runtime files plus WordPress.org assets. The Preview button blueprint comes from
+`assets/wordpress-org/blueprints/blueprint.json`.
+
 When a release succeeds, the workflow closes the released milestone. If it is a
 non-patch release, it also creates the next non-patch milestone if it does not
 already exist. For example, `2.0.0` creates `2.1.0` and `0.2.0` creates
