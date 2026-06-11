@@ -198,7 +198,8 @@ if svn ls "$svn_url/tags/$version" >/dev/null 2>&1; then
 fi
 
 echo "Checking out $svn_url"
-svn checkout "$svn_url" "$svn_dir" >/dev/null
+svn checkout --depth immediates "$svn_url" "$svn_dir" >/dev/null
+svn update --set-depth infinity "$svn_dir/trunk" "$svn_dir/assets" >/dev/null
 
 rsync -a --delete "$plugin_dir/" "$svn_dir/trunk/"
 rsync -a --delete "$asset_dir/" "$svn_dir/assets/"
