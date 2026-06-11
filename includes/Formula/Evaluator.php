@@ -116,7 +116,7 @@ final class Evaluator {
 
 		if ( '+' === $operator && ( 'text' === $left['type'] || 'text' === $right['type'] ) ) {
 			return array(
-				'value' => (string) ( $left['value'] ?? '' ) . (string) ( $right['value'] ?? '' ),
+				'value' => $this->value_to_text( $left['value'] ?? null ) . $this->value_to_text( $right['value'] ?? null ),
 				'type'  => 'text',
 			);
 		}
@@ -147,6 +147,16 @@ final class Evaluator {
 			},
 			'type'  => 'number',
 		);
+	}
+
+	private function value_to_text( mixed $value ): string {
+		if ( null === $value ) {
+			return '';
+		}
+		if ( is_bool( $value ) ) {
+			return $value ? 'true' : 'false';
+		}
+		return (string) $value;
 	}
 
 	/**

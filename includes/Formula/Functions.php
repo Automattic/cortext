@@ -309,11 +309,13 @@ final class Functions {
 		if ( in_array( $unit, array( 'months', 'month', 'years', 'year' ), true ) ) {
 			return self::calendar_date_difference( $a, $b, $unit );
 		}
-		return match ( $unit ) {
-			'minutes', 'minute' => floor( $seconds / MINUTE_IN_SECONDS ),
-			'hours', 'hour' => floor( $seconds / HOUR_IN_SECONDS ),
-			'weeks', 'week' => floor( $seconds / WEEK_IN_SECONDS ),
-			default => floor( $seconds / DAY_IN_SECONDS ),
+		$sign     = $seconds < 0 ? -1 : 1;
+		$distance = abs( $seconds );
+		return $sign * match ( $unit ) {
+			'minutes', 'minute' => floor( $distance / MINUTE_IN_SECONDS ),
+			'hours', 'hour' => floor( $distance / HOUR_IN_SECONDS ),
+			'weeks', 'week' => floor( $distance / WEEK_IN_SECONDS ),
+			default => floor( $distance / DAY_IN_SECONDS ),
 		};
 	}
 

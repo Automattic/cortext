@@ -47,6 +47,83 @@ final class Test_Formula_Functions extends BaseTestCase {
 		$this->assertSame( '2:30 PM', $result['value'] );
 	}
 
+	public function test_date_between_truncates_negative_partial_units_toward_zero(): void {
+		$result = Functions::evaluate(
+			'datebetween',
+			array(
+				array(
+					'value' => '2026-05-01 00:00:00',
+					'type'  => 'datetime',
+				),
+				array(
+					'value' => '2026-05-01 12:00:00',
+					'type'  => 'datetime',
+				),
+				array(
+					'value' => 'days',
+					'type'  => 'text',
+				),
+			)
+		);
+
+		$this->assertSame( 0.0, $result['value'] );
+	}
+
+	public function test_text_plus_stringifies_booleans_like_concat(): void {
+		$row = get_post(
+			wp_insert_post(
+				array(
+					'post_type'   => 'post',
+					'post_status' => 'private',
+					'post_title'  => 'Formula row',
+				)
+			)
+		);
+
+		$evaluator = new Evaluator();
+		$result    = $evaluator->evaluate(
+			array(
+				'node'     => 'binary',
+				'operator' => '+',
+				'type'     => 'text',
+				'left'     => array(
+					'node'  => 'literal',
+					'type'  => 'checkbox',
+					'value' => true,
+				),
+				'right'    => array(
+					'node'  => 'literal',
+					'type'  => 'text',
+					'value' => '',
+				),
+			),
+			$row
+		);
+
+		$this->assertSame( 'true', $result['value'] );
+
+		$result = $evaluator->evaluate(
+			array(
+				'node'     => 'binary',
+				'operator' => '+',
+				'type'     => 'text',
+				'left'     => array(
+					'node'  => 'literal',
+					'type'  => 'checkbox',
+					'value' => false,
+				),
+				'right'    => array(
+					'node'  => 'literal',
+					'type'  => 'text',
+					'value' => '',
+				),
+			),
+			$row
+		);
+
+		$this->assertSame( 'false', $result['value'] );
+	}
+
 	public function test_if_only_evaluates_selected_branch(): void {
 		$row = get_post(
 			wp_insert_post(
