@@ -59,7 +59,9 @@ export APPLE_API_ISSUER="$APP_STORE_CONNECT_API_KEY_ISSUER_ID"
 npm --prefix apps/desktop run dist -- -c.extraMetadata.version="$version"
 
 echo "--- :white_check_mark: verify signature + notarization"
-dmg="$(ls apps/desktop/dist/*.dmg)"
+dmg=(apps/desktop/dist/*.dmg)
+[[ ${#dmg[@]} -eq 1 ]] || { echo "Expected exactly one DMG, found ${#dmg[@]}"; exit 1; }
+dmg="${dmg[0]}"
 # electron-builder signs, notarizes and staples the .app, then wraps it in an
 # unsigned .dmg — so the notarized artifact to verify is the app, not the dmg.
 app="apps/desktop/dist/mac-arm64/Cortext.app"
