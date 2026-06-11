@@ -121,6 +121,34 @@ export default function FieldActionsMenu( {
 					candidate.rollupTargetFieldId === recordId )
 		);
 	}, [ fields, recordId ] );
+	const dependentFormulas = useMemo( () => {
+		const fieldList = Array.isArray( fields ) ? fields : [];
+		const deletedIds = new Set( [ Number( recordId ) ] );
+		const dependents = [];
+		let found = true;
+		while ( found ) {
+			found = false;
+			for ( const candidate of fieldList ) {
+				const candidateId = Number( candidate.recordId );
+				if (
+					! candidateId ||
+					deletedIds.has( candidateId ) ||
+					candidate.cortextType !== 'formula'
+				) {
+					continue;
+				}
+				const deps = Array.isArray( candidate.formulaDepFieldIds )
+					? candidate.formulaDepFieldIds.map( Number )
+					: [];
+				if ( deps.some( ( depId ) => deletedIds.has( depId ) ) ) {
+					dependents.push( candidate );
+					deletedIds.add( candidateId );
+					found = true;
+				}
+			}
+		}
+		return dependents;
+	}, [ fields, recordId ] );
 
 	const cancelClose = useCallback( () => {
 		if ( closeTimerRef.current ) {
@@ -461,18 +489,38 @@ export default function FieldActionsMenu( {
 						<p>
 							{ dependentRollups.length === 1
 								? __(
-										'This will also delete 1 rollup that depends on it:',
+										'This also deletes 1 rollup that uses it:',
 										'cortext'
 								  )
 								: sprintf(
 										/* translators: %d: number of dependent rollup fields */
 										__(
-											'This will also delete %d rollups that depend on it:',
+											'This also deletes %d rollups that use it:',
 											'cortext'
 										),
 										dependentRollups.length
 								  ) }{ ' ' }
 							{ dependentRollups
+								.map( ( candidate ) => candidate.label )
+								.join( ', ' ) }
+						</p>
+					) : null }
+					{ dependentFormulas.length > 0 ? (
+						<p>
+							{ dependentFormulas.length === 1
+								? __(
+										'This also deletes 1 formula that uses it:',
+										'cortext'
+								  )
+								: sprintf(
+										/* translators: %d: number of dependent formula fields */
+										__(
+											'This also deletes %d formulas that use it:',
+											'cortext'
+										),
+										dependentFormulas.length
+								  ) }{ ' ' }
+							{ dependentFormulas
 								.map( ( candidate ) => candidate.label )
 								.join( ', ' ) }
 						</p>

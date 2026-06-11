@@ -547,6 +547,9 @@ export function mapField( field ) {
 		formulaExpression:
 			formulaMeta.expression ?? field.meta?.expression ?? '',
 		formulaResultType,
+		formulaDepFieldIds: Array.isArray( formulaMeta.dep_field_ids )
+			? formulaMeta.dep_field_ids.map( Number ).filter( Boolean )
+			: [],
 		// Header content is just an aria-hidden marker.
 		// `ColumnHeaderActions` queries the DOM for it and portals our
 		// combined-dropdown trigger into the owning <th>; DataViews'

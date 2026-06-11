@@ -678,7 +678,7 @@ describe( 'ColumnHeaderActions', () => {
 		expect( mockDuplicateFieldRun ).toHaveBeenCalledWith( 77 );
 	} );
 
-	it( 'warns when deleting a field will also delete dependent rollups', async () => {
+	it( 'shows the rollup cascade warning when deleting a source field', async () => {
 		useCollectionFieldsContext.mockReturnValue( {
 			fields: [
 				{
@@ -705,12 +705,52 @@ describe( 'ColumnHeaderActions', () => {
 		);
 
 		expect(
-			screen.getByText(
-				'This will also delete 1 rollup that depends on it:',
-				{ exact: false }
-			)
+			screen.getByText( 'This also deletes 1 rollup that uses it:', {
+				exact: false,
+			} )
 		).toBeInTheDocument();
 		expect( screen.getByText( /Invoice total/ ) ).toBeInTheDocument();
+	} );
+
+	it( 'shows the formula cascade warning when deleting a source field', async () => {
+		useCollectionFieldsContext.mockReturnValue( {
+			fields: [
+				{
+					id: 'field-77',
+					recordId: 77,
+					label: 'Score',
+					cortextType: 'number',
+				},
+				{
+					id: 'field-88',
+					recordId: 88,
+					label: 'Score plus tax',
+					cortextType: 'formula',
+					formulaDepFieldIds: [ 77 ],
+				},
+				{
+					id: 'field-99',
+					recordId: 99,
+					label: 'Score label',
+					cortextType: 'formula',
+					formulaDepFieldIds: [ 88 ],
+				},
+			],
+		} );
+
+		render( <Harness collectionId={ 5 } recordId={ 77 } /> );
+
+		fireEvent.click(
+			await screen.findByRole( 'button', { name: 'Delete' } )
+		);
+
+		expect(
+			screen.getByText( 'This also deletes 2 formulas that use it:', {
+				exact: false,
+			} )
+		).toBeInTheDocument();
+		expect( screen.getByText( /Score plus tax/ ) ).toBeInTheDocument();
+		expect( screen.getByText( /Score label/ ) ).toBeInTheDocument();
 	} );
 
 	it( 'shows select field options in the shared field menu', async () => {
