@@ -242,6 +242,10 @@ jobs:
               uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
               with:
                   tag_name: ${{ steps.milestone.outputs.version }}
+                  # Empty when run standalone without a ref: creation then
+                  # defaults to the default branch, and reruns against an
+                  # existing draft keep its pinned commit.
+                  target_commitish: ${{ inputs.ref }}
                   name: ${{ steps.milestone.outputs.version }}
                   body_path: release-notes.md
                   draft: true

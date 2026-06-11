@@ -1,6 +1,8 @@
 name: Deploy to WordPress.org SVN
 
 on:
+    release:
+        types: [released]
     workflow_dispatch:
         inputs:
             version:
@@ -16,15 +18,43 @@ permissions:
     contents: read
 
 concurrency:
-    group: cortext-wporg-deploy-${{ inputs.version }}
+    group: cortext-wporg-deploy-${{ github.event_name == 'release' && github.event.release.tag_name || inputs.version }}
     cancel-in-progress: false
 
+# Stable GitHub Releases go to WordPress.org. The dry run runs first; the SVN
+# commit waits for wordpress-org approval. Manual dispatch stays available for
+# reruns and one-off deploys.
 jobs:
     dry-run:
         name: Dry run
         runs-on: ubuntu-latest
+        env:
+            VERSION: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.version }}
         steps:
             - uses: actions/checkout@v6.0.3
+
+            - name: Check release is deployable
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: |
+                  set -euo pipefail
+
+                  if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                    echo "::error::Release versions must use the WordPress-style format 0.1.0, without a leading \"v\". Received \"$VERSION\"."
+                    exit 1
+                  fi
+
+                  release_json="$(gh release view "$VERSION" --json isPrerelease,assets)"
+
+                  if [ "$(jq -r '.isPrerelease' <<< "$release_json")" = "true" ]; then
+                    echo "::error::Release $VERSION is a prerelease, and prereleases do not deploy to WordPress.org."
+                    exit 1
+                  fi
+
+                  if ! jq -e '.assets[] | select(.name == "cortext.zip")' <<< "$release_json" > /dev/null; then
+                    echo "::error::Release $VERSION has no cortext.zip asset."
+                    exit 1
+                  fi
 
             - name: Install Subversion
               run: |
@@ -34,15 +64,16 @@ jobs:
             - name: Preview WordPress.org SVN deploy
               env:
                   GH_TOKEN: ${{ github.token }}
-                  VERSION: ${{ inputs.version }}
               run: ./scripts/deploy-wporg.sh --version "$VERSION"
 
     publish:
         name: Publish
         needs: dry-run
-        if: ${{ inputs.commit }}
+        if: ${{ github.event_name == 'release' || inputs.commit }}
         runs-on: ubuntu-latest
         environment: wordpress-org
+        env:
+            VERSION: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.version }}
         steps:
             - uses: actions/checkout@v6.0.3
 
@@ -56,7 +87,6 @@ jobs:
                   GH_TOKEN: ${{ github.token }}
                   WPORG_USERNAME: ${{ secrets.WPORG_USERNAME }}
                   WPORG_PASSWORD: ${{ secrets.WPORG_PASSWORD }}
-                  VERSION: ${{ inputs.version }}
               run: |
                   set -euo pipefail
 
