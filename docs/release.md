@@ -139,29 +139,36 @@ that already exists.
 
 ## Deploying to WordPress.org
 
-After the GitHub Release is published, deploy that exact ZIP to the
-WordPress.org SVN repository. SVN is only the distribution channel; GitHub stays
-the source of truth.
+After the GitHub Release is published, deploy that same ZIP to WordPress.org
+SVN. SVN is only the distribution channel; GitHub stays the source of truth.
+
+Preview the SVN deploy first:
 
 ```bash
-svn checkout https://plugins.svn.wordpress.org/cortext .context/wporg-svn/cortext
-gh release download <version> --repo Automattic/cortext --pattern cortext.zip --dir .context/wporg-release/<version>
-unzip .context/wporg-release/<version>/cortext.zip -d .context/wporg-release/<version>/unpacked
-rsync -a --delete .context/wporg-release/<version>/unpacked/cortext/ .context/wporg-svn/cortext/trunk/
-rsync -a --delete assets/wordpress-org/ .context/wporg-svn/cortext/assets/
-svn status .context/wporg-svn/cortext/trunk .context/wporg-svn/cortext/assets | awk '/^!/ { print substr($0, 9) }' | while IFS= read -r path; do
-    svn rm "$path"
-done
-svn add --force .context/wporg-svn/cortext/trunk .context/wporg-svn/cortext/assets
-svn copy .context/wporg-svn/cortext/trunk .context/wporg-svn/cortext/tags/<version>
-svn commit .context/wporg-svn/cortext -m "Release Cortext <version>" --username <wporg-user>
+pnpm run deploy:wporg -- --version <version>
 ```
 
-Before committing, check that `trunk/readme.txt` and
-`tags/<version>/readme.txt` both point to the release stable tag, the plugin
-header and `CORTEXT_VERSION` match the release, and the SVN tree contains only
-runtime files plus WordPress.org assets. The Preview button blueprint comes from
-`assets/wordpress-org/blueprints/blueprint.json`.
+Dry runs also work for an already-published version. If `tags/<version>` already
+exists, the script stages a local `tags/__dry-run-<version>` copy so the rest of
+the flow can still be checked without touching the real tag.
+
+If the status output looks right, publish it:
+
+```bash
+pnpm run deploy:wporg -- --version <version> --commit --username <wporg-user>
+```
+
+The "Deploy to WordPress.org SVN" workflow runs the same script. It always runs
+a dry-run job first. If `commit` is `true`, a separate publish job uses the
+`wordpress-org` GitHub environment, where `WPORG_USERNAME` and `WPORG_PASSWORD`
+live as environment secrets. Configure that environment with required reviewers
+and restrict it to `main` before using it for real releases.
+
+The script downloads the GitHub Release ZIP, syncs it into `trunk/`, copies
+`assets/wordpress-org/` into the SVN assets directory, removes deleted SVN
+entries, creates `tags/<version>`, and checks that the plugin header,
+`CORTEXT_VERSION`, and stable tag all match. For non-interactive use, set
+`WPORG_USERNAME` and `WPORG_PASSWORD`.
 
 When a release succeeds, the workflow closes the released milestone. If it is a
 non-patch release, it also creates the next non-patch milestone if it does not
