@@ -41,7 +41,7 @@ jobs:
                   fi
 
                   php_paths='^(\.github/workflows/unit-tests\.yml|composer\.(json|lock)|phpunit\.xml\.dist|cortext\.php|includes/|templates/|tests/php/)'
-                  js_paths='^(\.github/workflows/unit-tests\.yml|package\.json|pnpm-lock\.yaml|jest\.config\.js|src/|tests/js/)'
+                  js_paths='^(\.github/workflows/unit-tests\.yml|package\.json|pnpm-lock\.yaml|jest\.config\.js|scripts/(bump-release-version|release-notes)\.mjs|src/|tests/js/|tests/node/)'
 
                   if [ -n "$changed_files" ] && grep -Eq "$php_paths" <<< "$changed_files"; then
                     echo "php_changed=true" >> "$GITHUB_OUTPUT"

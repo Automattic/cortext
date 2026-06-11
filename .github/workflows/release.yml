@@ -3,10 +3,9 @@ name: Prepare release
 on:
     workflow_dispatch:
         inputs:
-            version:
-                description: 'Version'
+            milestone:
+                description: 'Release milestone/version, for example 0.1.1 or 0.2.0'
                 required: true
-                default: '0.1.0'
             prerelease:
                 description: 'Prerelease'
                 required: true
@@ -20,29 +19,195 @@ on:
 
 permissions:
     contents: write
-    issues: read
+    issues: write
     pull-requests: read
 
 concurrency:
-    group: cortext-release-${{ inputs.version }}
+    group: cortext-release-${{ inputs.milestone }}
     cancel-in-progress: true
 
 # Orchestrator: builds the plugin ZIP and the desktop DMG and lets each attach
 # to the same tagged Release. Either child can also be run on its own from the
 # Actions tab; the first run creates the draft Release, later runs attach to it.
 jobs:
+    bump-version:
+        name: Bump release version
+        runs-on: ubuntu-latest
+        outputs:
+            ref: ${{ steps.release-ref.outputs.ref }}
+            version: ${{ steps.milestone.outputs.version }}
+            milestone: ${{ steps.milestone.outputs.title }}
+            next_milestone: ${{ steps.milestone.outputs.next_milestone }}
+            should_create_next_milestone: ${{ steps.milestone.outputs.should_create_next_milestone }}
+        steps:
+            - name: Check release branch
+              if: ${{ ! inputs.dry_run && github.ref_type != 'branch' }}
+              run: |
+                  echo "::error::Release version commits can only be pushed from a branch ref."
+                  exit 1
+
+            - uses: actions/checkout@v6.0.2
+              with:
+                  ref: ${{ github.ref_name }}
+
+            - uses: actions/setup-node@v6
+              with:
+                  node-version: '24.15'
+
+            - name: Resolve release milestone
+              id: milestone
+              uses: actions/github-script@v9
+              env:
+                  MILESTONE: ${{ inputs.milestone }}
+              with:
+                  script: |
+                      const owner = context.repo.owner;
+                      const repo = context.repo.repo;
+                      const milestoneTitle = process.env.MILESTONE.trim();
+
+                      if ( ! /^\d+\.\d+\.\d+$/.test( milestoneTitle ) ) {
+                        throw new Error( `Release milestones must use the WordPress-style format 0.1.0, without a leading "v". Received "${ milestoneTitle }".` );
+                      }
+
+                      const milestones = await github.paginate(
+                        github.rest.issues.listMilestones,
+                        { owner, repo, state: 'open', per_page: 100 }
+                      );
+                      const milestone = milestones.find( ( item ) => item.title === milestoneTitle );
+                      if ( ! milestone ) {
+                        const openMilestones = milestones.map( ( item ) => item.title ).join( ', ' ) || 'none';
+                        throw new Error( `Cannot find open release milestone "${ milestoneTitle }". Open milestones: ${ openMilestones }.` );
+                      }
+
+                      const [ major, minor, patch ] = milestoneTitle.split( '.' ).map( Number );
+                      const shouldCreateNextMilestone = patch === 0;
+                      const nextMilestone = shouldCreateNextMilestone
+                        ? `${ major }.${ minor + 1 }.0`
+                        : '';
+
+                      core.setOutput( 'title', milestone.title );
+                      core.setOutput( 'version', milestone.title );
+                      core.setOutput( 'should_create_next_milestone', String( shouldCreateNextMilestone ) );
+                      core.setOutput( 'next_milestone', nextMilestone );
+
+            - name: Update release metadata
+              env:
+                  VERSION: ${{ steps.milestone.outputs.version }}
+              run: node scripts/bump-release-version.mjs "$VERSION"
+
+            - name: Commit release metadata
+              if: ${{ ! inputs.dry_run }}
+              env:
+                  VERSION: ${{ steps.milestone.outputs.version }}
+              run: |
+                  if git diff --quiet -- \
+                    package.json \
+                    apps/desktop/package.json \
+                    apps/desktop/package-lock.json \
+                    cortext.php \
+                    readme.txt; then
+                    echo "Release metadata already matches $VERSION."
+                  else
+                    git config user.name "github-actions[bot]"
+                    git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+                    git add \
+                      package.json \
+                      apps/desktop/package.json \
+                      apps/desktop/package-lock.json \
+                      cortext.php \
+                      readme.txt
+                    git commit -m "chore: bump release to $VERSION"
+                    git push origin "HEAD:${GITHUB_REF_NAME}"
+                  fi
+
+            - name: Set release ref
+              id: release-ref
+              run: echo "ref=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
     plugin:
+        needs: bump-version
         uses: ./.github/workflows/release-plugin.yml
         with:
-            version: ${{ inputs.version }}
+            milestone: ${{ needs.bump-version.outputs.milestone }}
             prerelease: ${{ inputs.prerelease }}
             dry_run: ${{ inputs.dry_run }}
+            ref: ${{ needs.bump-version.outputs.ref }}
         secrets: inherit
 
     desktop:
+        needs: bump-version
         uses: ./.github/workflows/release-desktop.yml
         with:
-            version: ${{ inputs.version }}
+            version: ${{ needs.bump-version.outputs.version }}
             prerelease: ${{ inputs.prerelease }}
             dry_run: ${{ inputs.dry_run }}
+            ref: ${{ needs.bump-version.outputs.ref }}
         secrets: inherit
+
+    finalize-milestone:
+        name: Finalize release milestone
+        needs: [bump-version, plugin, desktop]
+        if: ${{ ! inputs.dry_run }}
+        runs-on: ubuntu-latest
+        steps:
+            - name: Close released milestone and create next when needed
+              uses: actions/github-script@v9
+              env:
+                  CURRENT_MILESTONE: ${{ needs.bump-version.outputs.milestone }}
+                  NEXT_MILESTONE: ${{ needs.bump-version.outputs.next_milestone }}
+                  SHOULD_CREATE_NEXT_MILESTONE: ${{ needs.bump-version.outputs.should_create_next_milestone }}
+              with:
+                  script: |
+                      const owner = context.repo.owner;
+                      const repo = context.repo.repo;
+                      const currentMilestone = process.env.CURRENT_MILESTONE;
+                      const nextMilestone = process.env.NEXT_MILESTONE;
+                      const shouldCreateNextMilestone = process.env.SHOULD_CREATE_NEXT_MILESTONE === 'true';
+
+                      const milestones = await github.paginate(
+                        github.rest.issues.listMilestones,
+                        { owner, repo, state: 'all', per_page: 100 }
+                      );
+                      const released = milestones.find( ( item ) => item.title === currentMilestone );
+                      if ( ! released ) {
+                        throw new Error( `Cannot find released milestone "${ currentMilestone }" to close.` );
+                      }
+
+                      if ( released.state === 'open' ) {
+                        await github.rest.issues.updateMilestone( {
+                          owner,
+                          repo,
+                          milestone_number: released.number,
+                          state: 'closed',
+                        } );
+                        core.info( `Closed released milestone ${ currentMilestone }.` );
+                      } else {
+                        core.info( `Released milestone ${ currentMilestone } is already ${ released.state }.` );
+                      }
+
+                      if ( shouldCreateNextMilestone ) {
+                        const existing = milestones.find( ( item ) => item.title === nextMilestone );
+
+                        if ( existing?.state === 'open' ) {
+                          core.info( `Next milestone ${ nextMilestone } already exists.` );
+                        } else if ( existing ) {
+                          throw new Error( `Next milestone "${ nextMilestone }" already exists but is ${ existing.state }.` );
+                        } else {
+                          await github.rest.issues.createMilestone( {
+                            owner,
+                            repo,
+                            title: nextMilestone,
+                          } );
+                          core.info( `Created next milestone ${ nextMilestone } after ${ currentMilestone }.` );
+                        }
+                      } else {
+                        core.info( `Patch release ${ currentMilestone } does not create a next milestone.` );
+                      }
+
+                      await core.summary
+                        .addHeading( 'Release milestone' )
+                        .addRaw( shouldCreateNextMilestone
+                          ? `Closed ${ currentMilestone } and ensured ${ nextMilestone } exists for the next non-patch release.`
+                          : `Closed ${ currentMilestone }. Patch releases do not create a next milestone.`
+                        )
+                        .write();

@@ -33,30 +33,36 @@ jobs:
                         return;
                       }
 
-                      const milestones = await github.paginate(
-                        github.rest.issues.listMilestones,
-                        { owner, repo, state: 'open', per_page: 100 }
-                      );
-
-                      if ( milestones.length !== 1 ) {
-                        const message = milestones.length === 0
-                          ? 'No open release milestone exists. Create the next release milestone, for example 0.1.0.'
-                          : `Expected exactly one open release milestone, found ${ milestones.length }: ${ milestones.map( ( milestone ) => milestone.title ).join( ', ' ) }.`;
-                        await github.rest.issues.createComment( {
-                          owner,
-                          repo,
-                          issue_number: pr.number,
-                          body: `Release automation could not assign a milestone. ${ message }`,
-                        } );
-                        core.setFailed( message );
-                        return;
-                      }
-
-                      const releaseMilestone = milestones[0];
                       let assignedMilestone = pr.milestone;
                       if ( pr.milestone ) {
                         core.info( `PR already has milestone ${ pr.milestone.title }; leaving it unchanged.` );
                       } else {
+                        const milestones = await github.paginate(
+                          github.rest.issues.listMilestones,
+                          { owner, repo, state: 'open', per_page: 100 }
+                        );
+                        const defaultMilestones = milestones.filter( ( milestone ) => {
+                          const match = milestone.title.match( /^(\d+)\.(\d+)\.(\d+)$/ );
+                          return match && Number( match[3] ) === 0;
+                        } );
+
+                        if ( defaultMilestones.length !== 1 ) {
+                          const openMilestones = milestones.map( ( milestone ) => milestone.title ).join( ', ' ) || 'none';
+                          const defaultMilestoneTitles = defaultMilestones.map( ( milestone ) => milestone.title ).join( ', ' ) || 'none';
+                          const message = defaultMilestones.length === 0
+                            ? `No open non-patch release milestone exists. Open milestones: ${ openMilestones }.`
+                            : `Expected exactly one open non-patch release milestone, found ${ defaultMilestones.length }: ${ defaultMilestoneTitles }.`;
+                          await github.rest.issues.createComment( {
+                            owner,
+                            repo,
+                            issue_number: pr.number,
+                            body: `Release automation could not assign a milestone. ${ message }`,
+                          } );
+                          core.setFailed( message );
+                          return;
+                        }
+
+                        const releaseMilestone = defaultMilestones[0];
                         await github.rest.issues.update( {
                           owner,
                           repo,

@@ -5,12 +5,18 @@ small for now; we can add more steps once we have a regular release cadence.
 
 ## Milestones
 
--   Keep exactly one release milestone open at a time.
 -   Milestone titles are version numbers, starting with `0.1.0`.
 -   Git tags and GitHub Release names use the same version number, without a
     leading `v`.
 -   Milestones do not need due dates.
--   After publishing a release, close its milestone and create the next one.
+-   Keep exactly one non-patch release milestone open for the main line, such as
+    `0.2.0`.
+-   Patch milestones, such as `0.1.1`, may be open at the same time for hotfix
+    releases.
+-   After publishing a non-patch release, the workflow creates the next
+    non-patch milestone, such as `0.3.0` after `0.2.0`. Patch releases do not
+    create a next milestone.
+-   After publishing a release, close its milestone.
 
 The first milestone is `0.1.0`.
 
@@ -63,13 +69,14 @@ filtering, or release notes easier:
 ## Automatic assignment
 
 When a PR is merged into `main`, `.github/workflows/assign-release-milestone.yml`
-assigns it to the single open milestone unless:
+assigns it to the single open non-patch milestone unless:
 
 -   the PR already has a milestone, or
 -   the PR has `release: skip`.
 
-If there is no open milestone, or more than one, the workflow comments on the PR
-and fails.
+If there is no open non-patch milestone, or more than one, the workflow comments
+on the PR and fails. Patch and hotfix PRs should be assigned to their patch
+milestone manually before merge.
 
 `.github/workflows/enforce-pr-labels.yml` also checks open PRs before merge. It
 fails if a ready PR has zero `type:*` labels or more than one.
@@ -105,12 +112,19 @@ missing a `type:*` label or has more than one.
 ## Cutting a release
 
 Releases run from the Actions tab, through the "Prepare release" workflow
-(`.github/workflows/release.yml`). It takes a version, a `prerelease` flag, and
-a `dry_run` flag. Run it with `dry_run` on first: that builds everything and
-uploads the artifacts without creating a tag or a Release. Turn `dry_run` off to
-publish a draft Release.
+(`.github/workflows/release.yml`). It takes a `milestone`, a `prerelease` flag,
+and a `dry_run` flag. The milestone is the release version, such as `0.1.1` or
+`0.2.0`, and it must already exist and be open. Run it with `dry_run` on first:
+that applies the version bump inside the checkout, builds everything, and
+uploads the artifacts without creating a commit, tag, or Release, and without
+closing the milestone or creating a next milestone. Turn `dry_run` off to commit
+the version bump, push it to the selected branch, and publish a draft Release.
 
-"Prepare release" only orchestrates. It calls two reusable workflows:
+"Prepare release" first updates the plugin header, `CORTEXT_VERSION`,
+`readme.txt` stable tag, root package version, and desktop package versions to
+the requested milestone version. On a real release, it commits those changes as
+`chore: bump release to <version>` before building. It then calls two reusable
+workflows against the bumped commit:
 
 -   `release-plugin.yml` resolves the milestone, builds the changelog and the
     plugin ZIP, and creates the draft Release.
@@ -122,6 +136,12 @@ and the other adds its artifact. The plugin run owns the title and notes; the
 desktop run only uploads the DMG. You can also run either workflow on its own
 from the Actions tab, which is handy for rebuilding just the DMG against a draft
 that already exists.
+
+When a release succeeds, the workflow closes the released milestone. If it is a
+non-patch release, it also creates the next non-patch milestone if it does not
+already exist. For example, `2.0.0` creates `2.1.0` and `0.2.0` creates
+`0.3.0`. A patch release such as `0.1.1` closes `0.1.1` but does not create a
+next milestone.
 
 ## Desktop app
 

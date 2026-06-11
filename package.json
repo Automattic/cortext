@@ -33,7 +33,7 @@
 		"test:env:seed:full": "node scripts/wp-env-seed.mjs --config .wp-env.test.json --full",
 		"test:env:seed:reset": "node scripts/wp-env-seed.mjs --config .wp-env.test.json --reset --force",
 		"test:env:seed:reset:full": "node scripts/wp-env-seed.mjs --config .wp-env.test.json --reset --force --full",
-		"test:unit": "wp-scripts test-unit-js --config jest.config.js",
+		"test:unit": "wp-scripts test-unit-js --config jest.config.js && node --test tests/node/*.test.mjs",
 		"test:unit:watch": "wp-scripts test-unit-js --config jest.config.js --watch",
 		"test:e2e": "wp-scripts test-playwright --config playwright.config.js",
 		"test:e2e:debug": "wp-scripts test-playwright --config playwright.config.js --ui"
