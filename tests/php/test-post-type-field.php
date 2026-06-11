@@ -186,6 +186,27 @@ final class Test_Post_Type_Field extends BaseTestCase {
 		$this->assertSame( '1', get_post_meta( $field_id, 'expression', true ) );
 	}
 
+	public function test_formula_expression_sanitizer_preserves_comparison_operators(): void {
+		$field_post_type = new Field();
+		$field_post_type->register_post_type();
+
+		$field_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Comparison',
+				'meta_input'  => array( 'type' => 'formula' ),
+			)
+		);
+
+		update_post_meta( $field_id, 'expression', "field(\"A\") <= field(\"B\")\r\n" );
+
+		$this->assertSame(
+			'field("A") <= field("B")',
+			get_post_meta( $field_id, 'expression', true )
+		);
+	}
+
 	public function test_save_creates_field_with_direct_meta(): void {
 		( new Field() )->register_post_type();
 

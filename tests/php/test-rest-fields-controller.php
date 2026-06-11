@@ -670,6 +670,51 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 		$this->assertSame( 'text', get_post_meta( $formula_id, 'formula_result_type', true ) );
 	}
 
+	public function test_formula_preserves_less_than_comparisons_on_create_and_update(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$collection_id = $this->create_collection_with_slug( 'Comparisons', 'fcompare' );
+
+		$this->create_field(
+			$collection_id,
+			array(
+				'title' => 'A',
+				'type'  => 'number',
+			)
+		);
+		$this->create_field(
+			$collection_id,
+			array(
+				'title' => 'B',
+				'type'  => 'number',
+			)
+		);
+
+		$response = $this->create_field(
+			$collection_id,
+			array(
+				'title'      => 'A before B',
+				'type'       => 'formula',
+				'expression' => 'field("A") < field("B")',
+			)
+		);
+
+		$this->assertSame( 201, $response->get_status() );
+		$formula_id = (int) $response->get_data()['id'];
+		$this->assertSame( 'field("A") < field("B")', get_post_meta( $formula_id, 'expression', true ) );
+		$this->assertSame( 'checkbox', get_post_meta( $formula_id, 'formula_result_type', true ) );
+
+		$response = $this->update_formula(
+			$formula_id,
+			array(
+				'expression' => 'field("A") <= field("B")',
+			)
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'field("A") <= field("B")', get_post_meta( $formula_id, 'expression', true ) );
+		$this->assertSame( 'checkbox', get_post_meta( $formula_id, 'formula_result_type', true ) );
+	}
+
 	public function test_formula_update_recompiles_dependent_formulas(): void {
 		wp_set_current_user( $this->create_user( 'editor' ) );
 		$collection_id = $this->create_collection_with_slug( 'Dependents', 'fdeps' );

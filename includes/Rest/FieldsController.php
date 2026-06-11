@@ -1101,7 +1101,7 @@ final class FieldsController {
 	}
 
 	private function sanitize_formula_expression( mixed $expression ): string {
-		return sanitize_textarea_field( (string) $expression );
+		return Field::sanitize_formula_expression( $expression );
 	}
 
 	private function formula_expression_required_error(): WP_Error {
