@@ -15,6 +15,7 @@
 		"dev": "wp-scripts start",
 		"build": "wp-scripts build",
 		"build:zip": "./scripts/build-zip.sh",
+		"deploy:wporg": "./scripts/deploy-wporg.sh",
 		"release:notes": "node scripts/release-notes.mjs",
 		"format": "wp-scripts format",
 		"format:check": "prettier --check '**/*.{js,jsx,json,ts,tsx,yml,yaml}' --config .prettierrc.js --ignore-path .prettierignore",
