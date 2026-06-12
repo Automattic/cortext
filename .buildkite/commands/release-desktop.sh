@@ -5,8 +5,8 @@ set -euo pipefail
 # Build, sign, and notarize the Cortext desktop DMG.
 
 # Release tag builds publish to the GitHub Release.
-if [[ "${BUILDKITE_TAG:-}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  version="${BUILDKITE_TAG#v}"
+if [[ "${BUILDKITE_TAG:-}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  version="$BUILDKITE_TAG"
   publish=true
 else
   base_version="$(python3 -c 'import json; print(json.load(open("apps/desktop/package.json"))["version"])')"
