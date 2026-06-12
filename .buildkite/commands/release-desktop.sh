@@ -4,8 +4,8 @@ set -euo pipefail
 
 # Build, sign, and notarize the Cortext desktop DMG.
 
-# Only v* tag builds publish to the GitHub Release.
-if [[ "${BUILDKITE_TAG:-}" == v* ]]; then
+# Release tag builds publish to the GitHub Release.
+if [[ "${BUILDKITE_TAG:-}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   version="${BUILDKITE_TAG#v}"
   publish=true
 else
@@ -70,7 +70,7 @@ spctl --assess --type exec --verbose=2 "$app"
 xcrun stapler validate "$app"
 
 if ! "$publish"; then
-  echo "--- :information_source: no v* tag; signed DMG stashed as a Buildkite artifact"
+  echo "--- :information_source: no release tag; signed DMG stashed as a Buildkite artifact"
   exit 0
 fi
 
