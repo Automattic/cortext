@@ -46,7 +46,7 @@ jobs:
                   echo "::error::Release version commits can only be pushed from a branch ref."
                   exit 1
 
-            - uses: actions/checkout@v6.0.2
+            - uses: actions/checkout@v6.0.3
               with:
                   ref: ${{ github.ref_name }}
 

@@ -16,7 +16,7 @@ jobs:
         outputs:
             e2e_changed: ${{ steps.changed_paths.outputs.e2e_changed }}
         steps:
-            - uses: actions/checkout@v6.0.2
+            - uses: actions/checkout@v6.0.3
               with:
                   fetch-depth: 0
 
@@ -54,9 +54,9 @@ jobs:
         if: needs.changes.outputs.e2e_changed == 'true'
         timeout-minutes: 20
         steps:
-            - uses: actions/checkout@v6.0.2
+            - uses: actions/checkout@v6.0.3
 
-            - uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # 2.37.1
+            - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
               with:
                   php-version: '8.1'
                   tools: composer:v2
