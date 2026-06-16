@@ -106,30 +106,26 @@ missing a `type:*` label or has more than one.
 
 Releases run from the Actions tab, through the "Prepare release" workflow
 (`.github/workflows/release.yml`). It takes a version, a `prerelease` flag, and
-a `dry_run` flag. Run it with `dry_run` on first: that builds everything and
-uploads the artifacts without creating a tag or a Release. Turn `dry_run` off to
-publish a draft Release.
+a `dry_run` flag. Run it with `dry_run` on first: that builds the plugin ZIP and
+uploads the release notes without creating a tag or a Release. Turn `dry_run`
+off to publish a draft Release.
 
-"Prepare release" only orchestrates. It calls two reusable workflows:
+The GitHub Actions release workflow owns the plugin ZIP, milestone validation,
+release notes, and draft GitHub Release. Buildkite owns the macOS desktop DMG.
+The release tag build signs, notarizes, and staples the app, then uploads the
+DMG to the same draft Release.
 
--   `release-plugin.yml` resolves the milestone, builds the changelog and the
-    plugin ZIP, and creates the draft Release.
--   `release-desktop.yml` builds the bundled PHP and the snapshot, runs
-    electron-builder, and attaches the macOS DMG.
+If the DMG needs to be rebuilt, rerun the Buildkite release tag build rather
+than starting a GitHub Actions workflow.
 
-Both write to the same Release by tag. Whichever runs first creates the draft,
-and the other adds its artifact. The plugin run owns the title and notes; the
-desktop run only uploads the DMG. You can also run either workflow on its own
-from the Actions tab, which is handy for rebuilding just the DMG against a draft
-that already exists.
+Both systems write to the same Release by tag, but only Buildkite uploads the
+desktop artifact. The GitHub Actions run owns the title, notes, and plugin ZIP.
 
 ## Desktop app
 
 The desktop release builds a macOS DMG with electron-builder and attaches it to
-the same Release as the plugin ZIP. The build is arm64-only and unsigned for
-now, so macOS may show a "Cortext is damaged" warning the first time it opens.
-Release notes should tell people to move Cortext to Applications. If the warning
-appears, they should click Cancel, open Terminal, and run
-`xattr -dr com.apple.quarantine /Applications/Cortext.app && open /Applications/Cortext.app`.
+the same Release as the plugin ZIP. The release build is arm64-only, signed, and
+notarized by Buildkite. Release notes should tell people to move Cortext to
+Applications.
 The installed app checks GitHub Releases on launch and links to the download
 when a newer version exists, but it does not update itself.
