@@ -1,0 +1,68 @@
+name: Deploy to WordPress.org SVN
+
+on:
+    workflow_dispatch:
+        inputs:
+            version:
+                description: 'Release version to deploy, for example 0.2.0'
+                required: true
+            commit:
+                description: 'Commit to WordPress.org SVN'
+                required: true
+                default: false
+                type: boolean
+
+permissions:
+    contents: read
+
+concurrency:
+    group: cortext-wporg-deploy-${{ inputs.version }}
+    cancel-in-progress: false
+
+jobs:
+    dry-run:
+        name: Dry run
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v6.0.3
+
+            - name: Install Subversion
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y subversion
+
+            - name: Preview WordPress.org SVN deploy
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  VERSION: ${{ inputs.version }}
+              run: ./scripts/deploy-wporg.sh --version "$VERSION"
+
+    publish:
+        name: Publish
+        needs: dry-run
+        if: ${{ inputs.commit }}
+        runs-on: ubuntu-latest
+        environment: wordpress-org
+        steps:
+            - uses: actions/checkout@v6.0.3
+
+            - name: Install Subversion
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y subversion
+
+            - name: Publish to WordPress.org SVN
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  WPORG_USERNAME: ${{ secrets.WPORG_USERNAME }}
+                  WPORG_PASSWORD: ${{ secrets.WPORG_PASSWORD }}
+                  VERSION: ${{ inputs.version }}
+              run: |
+                  set -euo pipefail
+
+                  if [ -z "$WPORG_USERNAME" ] || [ -z "$WPORG_PASSWORD" ]; then
+                    echo "::error::Set WPORG_USERNAME and WPORG_PASSWORD as wordpress-org environment secrets before publishing."
+                    exit 1
+                  fi
+
+                  ./scripts/deploy-wporg.sh --version "$VERSION" --commit

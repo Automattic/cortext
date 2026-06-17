@@ -28,14 +28,12 @@ Behind the scenes, Cortext stores documents, collection definitions, fields, and
 
 == Installation ==
 
-During the beta, install Cortext from a ZIP:
+Install Cortext from the WordPress plugin directory:
 
-1. Download `cortext.zip` from the Releases page at https://github.com/Automattic/cortext/releases.
-2. In wp-admin, go to Plugins, then Add New, then Upload Plugin, and choose the ZIP.
+1. In wp-admin, go to Plugins, then Add New.
+2. Search for "Cortext".
 3. Install and activate Cortext, then open "Cortext" from the admin menu.
 4. Try the workspace with sample content first.
-
-Once Cortext is listed on WordPress.org, you can also install it from Plugins, then Add New.
 
 It is beta software, so install it somewhere you can experiment first.
 

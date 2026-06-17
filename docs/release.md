@@ -5,12 +5,18 @@ small for now; we can add more steps once we have a regular release cadence.
 
 ## Milestones
 
--   Keep exactly one release milestone open at a time.
 -   Milestone titles are version numbers, starting with `0.1.0`.
 -   Git tags and GitHub Release names use the same version number, without a
     leading `v`.
 -   Milestones do not need due dates.
--   After publishing a release, close its milestone and create the next one.
+-   Keep exactly one non-patch release milestone open for the main line, such as
+    `0.2.0`.
+-   Patch milestones, such as `0.1.1`, may be open at the same time for hotfix
+    releases.
+-   After publishing a non-patch release, the workflow creates the next
+    non-patch milestone, such as `0.3.0` after `0.2.0`. Patch releases do not
+    create a next milestone.
+-   After publishing a release, close its milestone.
 
 The first milestone is `0.1.0`.
 
@@ -63,13 +69,14 @@ filtering, or release notes easier:
 ## Automatic assignment
 
 When a PR is merged into `main`, `.github/workflows/assign-release-milestone.yml`
-assigns it to the single open milestone unless:
+assigns it to the single open non-patch milestone unless:
 
 -   the PR already has a milestone, or
 -   the PR has `release: skip`.
 
-If there is no open milestone, or more than one, the workflow comments on the PR
-and fails.
+If there is no open non-patch milestone, or more than one, the workflow comments
+on the PR and fails. Patch and hotfix PRs should be assigned to their patch
+milestone manually before merge.
 
 `.github/workflows/enforce-pr-labels.yml` also checks open PRs before merge. It
 fails if a ready PR has zero `type:*` labels or more than one.
@@ -105,21 +112,70 @@ missing a `type:*` label or has more than one.
 ## Cutting a release
 
 Releases run from the Actions tab, through the "Prepare release" workflow
-(`.github/workflows/release.yml`). It takes a version, a `prerelease` flag, and
-a `dry_run` flag. Run it with `dry_run` on first: that builds the plugin ZIP and
-uploads the release notes without creating a tag or a Release. Turn `dry_run`
-off to publish a draft Release.
+(`.github/workflows/release.yml`). It takes a `milestone`, a `prerelease` flag,
+and a `dry_run` flag. The milestone is the release version, such as `0.1.1` or
+`0.2.0`, and it must already exist and be open. Run it with `dry_run` on first:
+that applies the version bump inside the checkout, builds the plugin ZIP, and
+uploads the release notes without creating a commit, tag, or Release, and
+without closing the milestone or creating a next milestone. Turn `dry_run` off
+to commit the version bump, push it to the selected branch, and publish a draft
+Release.
 
-The GitHub Actions release workflow owns the plugin ZIP, milestone validation,
-release notes, and draft GitHub Release. Buildkite owns the macOS desktop DMG.
-The release tag build signs, notarizes, and staples the app, then uploads the
-DMG to the same draft Release.
+"Prepare release" first updates the plugin header, `CORTEXT_VERSION`,
+`readme.txt` stable tag, root package version, and desktop package versions to
+the requested milestone version. On a real release, it commits those changes as
+`chore: bump release to <version>` before building. It then calls
+`release-plugin.yml` against the bumped commit to build the plugin ZIP, validate
+the milestone, write release notes, and create or update the draft GitHub
+Release.
+
+Buildkite owns the macOS desktop DMG. The release tag build signs, notarizes,
+and staples the app, then uploads the DMG to the same draft Release.
 
 If the DMG needs to be rebuilt, rerun the Buildkite release tag build rather
 than starting a GitHub Actions workflow.
 
 Both systems write to the same Release by tag, but only Buildkite uploads the
 desktop artifact. The GitHub Actions run owns the title, notes, and plugin ZIP.
+
+## Deploying to WordPress.org
+
+After the GitHub Release is published, deploy that same ZIP to WordPress.org
+SVN. SVN is only the distribution channel; GitHub stays the source of truth.
+
+Preview the SVN deploy first:
+
+```bash
+pnpm run deploy:wporg -- --version <version>
+```
+
+Dry runs also work for an already-published version. If `tags/<version>` already
+exists, the script stages a local `tags/__dry-run-<version>` copy so the rest of
+the flow can still be checked without touching the real tag.
+
+If the status output looks right, publish it:
+
+```bash
+pnpm run deploy:wporg -- --version <version> --commit --username <wporg-user>
+```
+
+The "Deploy to WordPress.org SVN" workflow runs the same script. It always runs
+a dry-run job first. If `commit` is `true`, a separate publish job uses the
+`wordpress-org` GitHub environment, where `WPORG_USERNAME` and `WPORG_PASSWORD`
+live as environment secrets. Configure that environment with required reviewers
+and restrict it to `main` before using it for real releases.
+
+The script downloads the GitHub Release ZIP, syncs it into `trunk/`, copies
+`assets/wordpress-org/` into the SVN assets directory, removes deleted SVN
+entries, creates `tags/<version>`, and checks that the plugin header,
+`CORTEXT_VERSION`, and stable tag all match. For non-interactive use, set
+`WPORG_USERNAME` and `WPORG_PASSWORD`.
+
+When a release succeeds, the workflow closes the released milestone. If it is a
+non-patch release, it also creates the next non-patch milestone if it does not
+already exist. For example, `2.0.0` creates `2.1.0` and `0.2.0` creates
+`0.3.0`. A patch release such as `0.1.1` closes `0.1.1` but does not create a
+next milestone.
 
 ## Desktop app
 
