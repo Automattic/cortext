@@ -127,15 +127,17 @@ through wp-admin. The snapshot disables core, plugin, and theme updates, and
 each launch refreshes the update-lock mu-plugin in the extracted site. WordPress
 changes come through new Cortext desktop releases.
 
-For now the build is arm64 only and unsigned.
+Release builds are arm64-only, signed, and notarized on Buildkite. Local builds
+remain unsigned unless you provide a signing environment.
 
 ## Releasing
 
 `.github/workflows/release.yml` is the entry point; run it from the Actions tab.
-It calls two reusable workflows: `release-plugin.yml` builds the plugin ZIP and
-owns the GitHub Release notes, and `release-desktop.yml` builds the arm64 PHP,
-builds a distribution snapshot, runs electron-builder, and uploads the DMG. Both
-write to the same Release by tag, and you can also run either one on its own.
+It builds the plugin ZIP, validates the milestone, writes release notes, and
+creates or updates the draft GitHub Release. Buildkite owns the macOS desktop
+DMG: the release tag build builds the arm64 PHP runtime, builds the distribution
+snapshot, runs electron-builder, signs and notarizes the app, and uploads the
+DMG to the same Release.
 
 ## Performance
 

@@ -127,9 +127,9 @@ jobs:
               run: |
                   cat >> release-notes.md <<'EOF'
 
-                  ## Opening the macOS app
+                  ## Installing the macOS app
 
-                  This DMG is unsigned, so macOS may show a "Cortext is damaged" warning the first time you open it. Move Cortext to Applications. If that warning appears, click Cancel, open Terminal, and run `xattr -dr com.apple.quarantine /Applications/Cortext.app && open /Applications/Cortext.app`.
+                  The macOS DMG is signed and notarized. Move Cortext to Applications before opening it.
                   EOF
 
             - name: Build plugin ZIP

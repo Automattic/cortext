@@ -2,11 +2,19 @@
 
 Running log for desktop-specific runtime and packaging decisions. Keep the detailed benchmark numbers in PR comments or artifacts unless they become stable product guidance.
 
+## 2026-06-16 — Buildkite owns the signed macOS DMG
+
+**Decision.** GitHub Actions prepares the plugin ZIP, validates the release milestone, writes release notes, and creates or updates the draft GitHub Release. Buildkite is the only macOS DMG publisher: the release tag build builds the bundled PHP runtime and distribution snapshot, runs electron-builder, signs and notarizes the app, verifies the signed app, and uploads the DMG to the same draft Release.
+
+**Why.** Keeping the desktop artifact in one CI system avoids two automation paths racing to build or upload the same DMG. Buildkite also has the macOS signing and notarization environment needed for the release artifact.
+
+**Revisit when.** Desktop releases need additional architectures, auto-update artifacts, or a different release owner.
+
 ## 2026-06-02 — Package the desktop app as an unsigned arm64 DMG
 
 **Decision.** `apps/desktop` packages to a macOS DMG with electron-builder. `npm --prefix apps/desktop run dist` runs the build against a `build` block in `package.json`: appId `com.automattic.cortext`, product name `Cortext`, a single arm64 `dmg` target, `identity: null` so it is unsigned, and `snapshot.zip` plus `runtime/bin/php` listed as `extraResources`. The output lands in `apps/desktop/dist`. `main.js` reads the bundled snapshot and PHP from `process.resourcesPath` when `app.isPackaged`, and DevTools stay closed in the packaged build. The distribution snapshot is built with `CORTEXT_DESKTOP_DISTRIBUTION=1`, which ships only the autologin mu-plugin and drops the timing and runtime-probe ones; the autologin mu-plugin is now inert unless `CORTEXT_DESKTOP` is defined.
 
-**Release flow.** `release.yml` is a `workflow_dispatch` orchestrator. It takes an explicit release milestone, bumps metadata to that milestone version first, committing it on real releases and only applying it locally on dry runs. Then it calls two reusable workflows against the bumped commit: `release-plugin.yml` (plugin ZIP, milestone, notes) and `release-desktop.yml` (builds the arm64 PHP, builds the distribution snapshot, runs electron-builder, attaches the DMG). Both write to the same Release by tag, so the first run creates the draft and later runs add to it. Successful releases close the published milestone; non-patch releases also create the next non-patch milestone. Each child workflow can also run on its own from the Actions tab. The shipped app checks GitHub Releases on launch and links to the download when a newer version exists; installing updates in place is not done, since that needs a signed app and Squirrel.Mac.
+**Release flow.** This original GitHub Actions desktop release flow was superseded by the 2026-06-16 Buildkite release flow. `release.yml` still handles the release milestone, version bump, plugin ZIP, notes, draft GitHub Release, and milestone finalization. Buildkite is now the only desktop DMG publisher: release tag builds sign, notarize, verify, and upload the DMG to the same Release. The shipped app checks GitHub Releases on launch and links to the download when a newer version exists; installing updates in place is not done, since that needs Squirrel.Mac.
 
 **Why unsigned and arm64 only.** This is an alpha for technical testers, so we skip the Apple Developer ID, signing, and notarization for now and live with the Open Anyway step on first launch. arm64 is the only target because static-php-cli does not cross-compile on macOS, so a second architecture means a second native runner.
 
@@ -30,10 +38,10 @@ Running log for desktop-specific runtime and packaging decisions. Keep the detai
 
 **Follow-up order.** After merge, measure each idea against the merged baseline:
 
-- OPcache `file_cache` first, because it is runtime-configurable and does not need a PHP rebuild.
-- Request/query profiling for the Library workflow before adding object cache, so we know whether APCu is fixing real repeated reads or just adding cache coherency risk across CLI server workers.
-- Preload or targeted `opcache_compile_file()` only after the hot PHP files are known from profiling.
-- A JIT-enabled PHP rebuild last. If tested, verify `opcache_get_status()['jit']['buffer_used'] > 0` after warmup and measure memory at 4 and 8 workers.
+-   OPcache `file_cache` first, because it is runtime-configurable and does not need a PHP rebuild.
+-   Request/query profiling for the Library workflow before adding object cache, so we know whether APCu is fixing real repeated reads or just adding cache coherency risk across CLI server workers.
+-   Preload or targeted `opcache_compile_file()` only after the hot PHP files are known from profiling.
+-   A JIT-enabled PHP rebuild last. If tested, verify `opcache_get_status()['jit']['buffer_used'] > 0` after warmup and measure memory at 4 and 8 workers.
 
 **Not in this branch.** Do not make FrankenPHP the default, do not switch v1 desktop back to Playground/WASM, and do not bundle PHP-FPM/Caddy unless a follow-up benchmark shows a real Library workflow win that justifies the packaging cost.
 

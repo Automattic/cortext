@@ -115,27 +115,28 @@ Releases run from the Actions tab, through the "Prepare release" workflow
 (`.github/workflows/release.yml`). It takes a `milestone`, a `prerelease` flag,
 and a `dry_run` flag. The milestone is the release version, such as `0.1.1` or
 `0.2.0`, and it must already exist and be open. Run it with `dry_run` on first:
-that applies the version bump inside the checkout, builds everything, and
-uploads the artifacts without creating a commit, tag, or Release, and without
-closing the milestone or creating a next milestone. Turn `dry_run` off to commit
-the version bump, push it to the selected branch, and publish a draft Release.
+that applies the version bump inside the checkout, builds the plugin ZIP, and
+uploads the release notes without creating a commit, tag, or Release, and
+without closing the milestone or creating a next milestone. Turn `dry_run` off
+to commit the version bump, push it to the selected branch, and publish a draft
+Release.
 
 "Prepare release" first updates the plugin header, `CORTEXT_VERSION`,
 `readme.txt` stable tag, root package version, and desktop package versions to
 the requested milestone version. On a real release, it commits those changes as
-`chore: bump release to <version>` before building. It then calls two reusable
-workflows against the bumped commit:
+`chore: bump release to <version>` before building. It then calls
+`release-plugin.yml` against the bumped commit to build the plugin ZIP, validate
+the milestone, write release notes, and create or update the draft GitHub
+Release.
 
--   `release-plugin.yml` resolves the milestone, builds the changelog and the
-    plugin ZIP, and creates the draft Release.
--   `release-desktop.yml` builds the bundled PHP and the snapshot, runs
-    electron-builder, and attaches the macOS DMG.
+Buildkite owns the macOS desktop DMG. The release tag build signs, notarizes,
+and staples the app, then uploads the DMG to the same draft Release.
 
-Both write to the same Release by tag. Whichever runs first creates the draft,
-and the other adds its artifact. The plugin run owns the title and notes; the
-desktop run only uploads the DMG. You can also run either workflow on its own
-from the Actions tab, which is handy for rebuilding just the DMG against a draft
-that already exists.
+If the DMG needs to be rebuilt, rerun the Buildkite release tag build rather
+than starting a GitHub Actions workflow.
+
+Both systems write to the same Release by tag, but only Buildkite uploads the
+desktop artifact. The GitHub Actions run owns the title, notes, and plugin ZIP.
 
 ## Deploying to WordPress.org
 
@@ -179,10 +180,8 @@ next milestone.
 ## Desktop app
 
 The desktop release builds a macOS DMG with electron-builder and attaches it to
-the same Release as the plugin ZIP. The build is arm64-only and unsigned for
-now, so macOS may show a "Cortext is damaged" warning the first time it opens.
-Release notes should tell people to move Cortext to Applications. If the warning
-appears, they should click Cancel, open Terminal, and run
-`xattr -dr com.apple.quarantine /Applications/Cortext.app && open /Applications/Cortext.app`.
+the same Release as the plugin ZIP. The release build is arm64-only, signed, and
+notarized by Buildkite. Release notes should tell people to move Cortext to
+Applications.
 The installed app checks GitHub Releases on launch and links to the download
 when a newer version exists, but it does not update itself.

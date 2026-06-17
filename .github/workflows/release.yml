@@ -26,9 +26,8 @@ concurrency:
     group: cortext-release-${{ inputs.milestone }}
     cancel-in-progress: true
 
-# Orchestrator: builds the plugin ZIP and the desktop DMG and lets each attach
-# to the same tagged Release. Either child can also be run on its own from the
-# Actions tab; the first run creates the draft Release, later runs attach to it.
+# GitHub Actions prepares the plugin ZIP and draft Release. Buildkite owns the
+# signed desktop DMG and attaches it from the release tag build.
 jobs:
     bump-version:
         name: Bump release version
@@ -134,19 +133,9 @@ jobs:
             ref: ${{ needs.bump-version.outputs.ref }}
         secrets: inherit
 
-    desktop:
-        needs: bump-version
-        uses: ./.github/workflows/release-desktop.yml
-        with:
-            version: ${{ needs.bump-version.outputs.version }}
-            prerelease: ${{ inputs.prerelease }}
-            dry_run: ${{ inputs.dry_run }}
-            ref: ${{ needs.bump-version.outputs.ref }}
-        secrets: inherit
-
     finalize-milestone:
         name: Finalize release milestone
-        needs: [bump-version, plugin, desktop]
+        needs: [bump-version, plugin]
         if: ${{ ! inputs.dry_run }}
         runs-on: ubuntu-latest
         steps:
