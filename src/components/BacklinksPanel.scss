@@ -1,0 +1,67 @@
+@use "@wordpress/base-styles/colors" as *;
+@use "@wordpress/base-styles/variables" as *;
+
+.cortext-backlinks {
+	display: flex;
+	flex-direction: column;
+	gap: $grid-unit-10;
+}
+
+.cortext-backlinks-panel__title {
+	color: var(--cortext-text-muted);
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+}
+
+.cortext-backlinks__list {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.cortext-backlinks__item {
+	margin: 0;
+	padding: 0;
+}
+
+.cortext-backlinks__button.components-button {
+	display: flex;
+	align-items: center;
+	justify-content: flex-start;
+	gap: $grid-unit-10;
+	width: 100%;
+	min-width: 0;
+	height: 32px;
+	padding: 0 $grid-unit-10;
+	color: inherit;
+	text-align: start;
+}
+
+.cortext-backlinks__icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 auto;
+	width: 18px;
+	height: 18px;
+	color: var(--cortext-text-muted);
+}
+
+.cortext-backlinks__title {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.cortext-backlinks-panel {
+	display: flex;
+	flex-direction: column;
+	gap: $grid-unit-10;
+	padding: $grid-unit-20 $grid-unit-30 $grid-unit-30;
+	border-top: $border-width solid var(--cortext-row-detail-border, #e9e9e7);
+}

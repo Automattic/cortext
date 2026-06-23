@@ -22,7 +22,6 @@ namespace Cortext\Tests;
 
 use Cortext\Fields\FieldTypeRegistry;
 use Cortext\PostType\Document;
-use Cortext\Taxonomy\TraitTaxonomy;
 use WorDBless\Posts as WorDBlessPosts;
 use WP_Post;
 use WP_Query;
@@ -321,11 +320,9 @@ trait InMemoryPostsQuery {
 	}
 
 	/**
-	 * Evaluates a subset of `tax_query` clauses for the `crtxt_trait`
-	 * taxonomy. Supports `EXISTS`, `NOT EXISTS`, and a `term_id` membership
-	 * test. The trait term slug is the collection document id, so a
-	 * candidate document is a row when at least one trait term is attached
-	 * to it. Term relationships are derived from `wp_get_object_terms`,
+	 * Evaluates a subset of `tax_query` clauses against the in-memory term
+	 * store. Supports `EXISTS`, `NOT EXISTS`, and membership tests by term id
+	 * or slug. Term relationships are derived from `wp_get_object_terms`,
 	 * which `wp_set_object_terms` writes through WP's standard taxonomy
 	 * machinery and WorDBless backs in memory.
 	 *
@@ -338,14 +335,16 @@ trait InMemoryPostsQuery {
 				continue;
 			}
 			$taxonomy = (string) ( $clause['taxonomy'] ?? '' );
-			if ( TraitTaxonomy::TAXONOMY !== $taxonomy ) {
+			if ( '' === $taxonomy ) {
 				continue;
 			}
 			$compare = strtoupper( (string) ( $clause['operator'] ?? 'IN' ) );
+			$field   = (string) ( $clause['field'] ?? 'term_id' );
+			$fields  = in_array( $field, array( 'slug', 'name' ), true ) ? 'slugs' : 'ids';
 			$terms   = wp_get_object_terms(
 				(int) $post->ID,
-				TraitTaxonomy::TAXONOMY,
-				array( 'fields' => 'ids' )
+				$taxonomy,
+				array( 'fields' => $fields )
 			);
 			$has_any = is_array( $terms ) && count( $terms ) > 0;
 
@@ -361,10 +360,15 @@ trait InMemoryPostsQuery {
 				}
 				continue;
 			}
-			$expected = array_map( 'intval', (array) ( $clause['terms'] ?? array() ) );
+			$expected = in_array( $field, array( 'slug', 'name' ), true )
+				? array_map( 'strval', (array) ( $clause['terms'] ?? array() ) )
+				: array_map( 'intval', (array) ( $clause['terms'] ?? array() ) );
 			$matched  = false;
-			foreach ( (array) $terms as $term_id ) {
-				if ( in_array( (int) $term_id, $expected, true ) ) {
+			foreach ( (array) $terms as $term ) {
+				$value = in_array( $field, array( 'slug', 'name' ), true )
+					? (string) $term
+					: (int) $term;
+				if ( in_array( $value, $expected, true ) ) {
 					$matched = true;
 					break;
 				}

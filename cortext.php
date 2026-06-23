@@ -61,4 +61,5 @@ if ( defined( 'WP_CLI' ) && WP_CLI ) {
 	\WP_CLI::add_command( 'cortext perf-seed', array( \Cortext\CLI\PerfBench::class, 'seed' ) );
 	\WP_CLI::add_command( 'cortext perf-bench', array( \Cortext\CLI\PerfBench::class, 'bench' ) );
 	\WP_CLI::add_command( 'cortext backfill-media', \Cortext\CLI\BackfillMedia::class );
+	\WP_CLI::add_command( 'cortext backfill-mentions', \Cortext\CLI\BackfillMentions::class );
 }

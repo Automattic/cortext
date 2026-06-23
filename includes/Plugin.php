@@ -27,6 +27,7 @@ use Cortext\PostType\Document;
 use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Field;
 use Cortext\PostType\TrashCascade;
+use Cortext\Rest\BacklinksController;
 use Cortext\Rest\DocumentLocatorController;
 use Cortext\Rest\DocumentsController;
 use Cortext\Rest\FavoritesController;
@@ -38,6 +39,7 @@ use Cortext\Rest\RecentsController;
 use Cortext\Rest\RowsController;
 use Cortext\Rest\SampleContentController;
 use Cortext\Rest\WorkspaceHomeController;
+use Cortext\Taxonomy\MentionTaxonomy;
 use Cortext\Taxonomy\TraitTaxonomy;
 use Cortext\Theming\Preferences;
 
@@ -57,6 +59,7 @@ final class Plugin {
 		( new Document() )->register();
 		( new DocumentIdentity() )->register();
 		( new TraitTaxonomy() )->register();
+		( new MentionTaxonomy() )->register();
 		( new Field() )->register();
 		( new FieldValueIndex() )->register();
 
@@ -71,6 +74,7 @@ final class Plugin {
 		( new DocumentPropertiesBlock() )->register();
 		( new FavoritesController() )->register();
 		( new FieldsController() )->register();
+		( new BacklinksController() )->register();
 		( new DocumentLocatorController() )->register();
 		( new DocumentsController( null, $trash_cascade ) )->register();
 		( new PostLocksController() )->register();
