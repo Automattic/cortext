@@ -82,6 +82,7 @@
 		"@wordpress/notices": "^5.44.0",
 		"@wordpress/preferences": "^4.44.0",
 		"@wordpress/private-apis": "^1.44.0",
+		"@wordpress/rich-text": "^7.45.0",
 		"@wordpress/route": "^0.10.0",
 		"@wordpress/url": "^4.44.0",
 		"cmdk": "^1.1.1",

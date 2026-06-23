@@ -33,6 +33,10 @@ jest.mock( '../../../src/components/CortextLinkSuggestions', () =>
 	jest.fn( () => null )
 );
 
+jest.mock( '../../../src/components/mention', () => ( {
+	CortextMentions: jest.fn( () => null ),
+} ) );
+
 jest.mock( '../../../src/components/initEditor', () => ( {
 	getEditorSettings: () => ( {} ),
 } ) );

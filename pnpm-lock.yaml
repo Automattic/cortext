@@ -106,6 +106,9 @@ importers:
       '@wordpress/private-apis':
         specifier: ^1.44.0
         version: 1.45.0
+      '@wordpress/rich-text':
+        specifier: ^7.45.0
+        version: 7.45.0(react@18.3.1)
       '@wordpress/route':
         specifier: ^0.10.0
         version: 0.10.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)

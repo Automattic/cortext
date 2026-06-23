@@ -20,6 +20,7 @@ use Cortext\Editor\RevisionThrottle;
 use Cortext\FieldValues\FieldValueIndex;
 use Cortext\Frontend\AdminBar;
 use Cortext\Frontend\Assets;
+use Cortext\Frontend\MentionRenderer;
 use Cortext\Frontend\Template;
 use Cortext\Media\CortextMedia;
 use Cortext\PostType\Document;
@@ -80,6 +81,7 @@ final class Plugin {
 		( new NotionController() )->register();
 		( new NotionImporter() )->register();
 		( new AdminBar() )->register();
+		( new MentionRenderer() )->register();
 		( new Template() )->register();
 		( new Assets() )->register();
 		( new DataView() )->register();
