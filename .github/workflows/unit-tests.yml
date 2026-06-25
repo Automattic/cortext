@@ -17,7 +17,7 @@ jobs:
             php_changed: ${{ steps.changed_paths.outputs.php_changed }}
             js_changed: ${{ steps.changed_paths.outputs.js_changed }}
         steps:
-            - uses: actions/checkout@v6.0.3
+            - uses: actions/checkout@v7.0.0
               with:
                   fetch-depth: 0
 
@@ -61,7 +61,7 @@ jobs:
         needs: changes
         if: needs.changes.outputs.php_changed == 'true'
         steps:
-            - uses: actions/checkout@v6.0.3
+            - uses: actions/checkout@v7.0.0
 
             - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
               with:
@@ -84,7 +84,7 @@ jobs:
         needs: changes
         if: needs.changes.outputs.js_changed == 'true'
         steps:
-            - uses: actions/checkout@v6.0.3
+            - uses: actions/checkout@v7.0.0
 
             - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
               with:
