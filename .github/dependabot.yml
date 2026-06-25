@@ -1,13 +1,44 @@
 version: 2
 updates:
+    - package-ecosystem: 'npm'
+      directory: '/'
+      schedule:
+          interval: 'weekly'
+          day: 'monday'
+      labels:
+          - 'type: dependencies'
+      open-pull-requests-limit: 0
+    - package-ecosystem: 'npm'
+      directory: '/apps/desktop'
+      schedule:
+          interval: 'weekly'
+          day: 'monday'
+      labels:
+          - 'type: dependencies'
+      open-pull-requests-limit: 0
+    - package-ecosystem: 'bundler'
+      directory: '/apps/desktop'
+      schedule:
+          interval: 'weekly'
+          day: 'monday'
+      labels:
+          - 'type: dependencies'
+      open-pull-requests-limit: 0
+    - package-ecosystem: 'composer'
+      directory: '/'
+      schedule:
+          interval: 'weekly'
+          day: 'monday'
+      labels:
+          - 'type: dependencies'
+      open-pull-requests-limit: 0
     - package-ecosystem: 'github-actions'
       directory: '/'
       schedule:
           interval: 'weekly'
           day: 'monday'
       labels:
-          - 'type: tooling'
-          - 'dependencies'
+          - 'type: dependencies'
           - 'github_actions'
       open-pull-requests-limit: 10
       groups:

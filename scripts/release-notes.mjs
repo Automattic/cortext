@@ -8,6 +8,7 @@ const TYPE_LABELS = new Map( [
 	[ 'type: bug', 'Bug fixes' ],
 	[ 'type: docs', 'Documentation' ],
 	[ 'type: tooling', 'Tooling' ],
+	[ 'type: dependencies', 'Dependencies' ],
 	[ 'type: code quality', 'Code quality' ],
 ] );
 
@@ -18,6 +19,7 @@ const TYPE_ORDER = [
 	'Bug fixes',
 	'Documentation',
 	'Tooling',
+	'Dependencies',
 	'Code quality',
 ];
 
@@ -123,16 +125,58 @@ function sentence( text ) {
 	return /[.!?]$/.test( text ) ? text : `${ text }.`;
 }
 
-function getTypeLabels( pr ) {
-	return pr.labels
-		.map( ( label ) => label.name )
-		.filter( ( name ) => TYPE_LABELS.has( name.toLowerCase() ) );
+function getLabelNames( pr ) {
+	return pr.labels.map( ( label ) => label.name ).filter( Boolean );
+}
+
+function isBotPullRequest( pr ) {
+	const login = pr.user?.login || '';
+	const type = pr.user?.type || '';
+	return (
+		type.toLowerCase() === 'bot' ||
+		login.endsWith( '[bot]' ) ||
+		login.startsWith( 'app/' )
+	);
+}
+
+function getTypeClassification( pr ) {
+	const labelNames = getLabelNames( pr );
+	const explicitTypeLabels = labelNames.filter( ( name ) =>
+		name.toLowerCase().startsWith( 'type:' )
+	);
+	const supportedTypeLabels = explicitTypeLabels
+		.map( ( name ) => name.toLowerCase() )
+		.filter( ( name ) => TYPE_LABELS.has( name ) );
+	const typeLabels = [ ...new Set( supportedTypeLabels ) ];
+
+	return {
+		typeLabels,
+		foundTypeLabels: explicitTypeLabels,
+		hasUnsupportedTypeLabels:
+			explicitTypeLabels.length !== supportedTypeLabels.length,
+	};
+}
+
+function describeTypeLabels( foundTypeLabels ) {
+	return foundTypeLabels.length ? foundTypeLabels.join( ', ' ) : 'none';
+}
+
+function typeClassificationError( pr, foundTypeLabels ) {
+	const found = describeTypeLabels( foundTypeLabels );
+	return `#${ pr.number } needs exactly one type:* label; found ${ found }.`;
+}
+
+function hasValidTypeClassification( classification ) {
+	return (
+		classification.typeLabels.length === 1 &&
+		! classification.hasUnsupportedTypeLabels
+	);
 }
 
 function getArea( pr ) {
-	const areaLabels = pr.labels
-		.map( ( label ) => label.name )
-		.filter( ( name ) => name.toLowerCase().startsWith( 'area:' ) );
+	const areaLabels = getLabelNames( pr ).filter( ( name ) =>
+		name.toLowerCase().startsWith( 'area:' )
+	);
 	const supportedAreaLabels = areaLabels.filter( ( name ) =>
 		AREA_LABELS.has( name.toLowerCase() )
 	);
@@ -178,17 +222,15 @@ export function buildReleaseNotes( pullRequests, options ) {
 	const includedPullRequests = [];
 
 	for ( const pr of pullRequests ) {
-		const typeLabels = getTypeLabels( pr );
-		if ( typeLabels.length !== 1 ) {
+		const classification = getTypeClassification( pr );
+		if ( ! hasValidTypeClassification( classification ) ) {
 			errors.push(
-				`#${ pr.number } needs exactly one type:* label; found ${
-					typeLabels.length ? typeLabels.join( ', ' ) : 'none'
-				}.`
+				typeClassificationError( pr, classification.foundTypeLabels )
 			);
 			continue;
 		}
 
-		const typeLabel = typeLabels[ 0 ].toLowerCase();
+		const typeLabel = classification.typeLabels[ 0 ].toLowerCase();
 		if ( ! includedTypeLabels.has( typeLabel ) ) {
 			continue;
 		}
@@ -240,9 +282,9 @@ export function buildReleaseNotes( pullRequests, options ) {
 	const contributors = [
 		...new Set(
 			includedPullRequests
+				.filter( ( pr ) => ! isBotPullRequest( pr ) )
 				.map( ( pr ) => pr.user?.login )
 				.filter( Boolean )
-				.filter( ( login ) => ! login.endsWith( '[bot]' ) )
 		),
 	].sort( ( a, b ) => a.localeCompare( b ) );
 

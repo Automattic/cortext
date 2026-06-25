@@ -163,4 +163,90 @@ describe( 'release notes', () => {
 			}
 		);
 	} );
+
+	it( 'excludes dependency PRs from public release notes', () => {
+		const notes = buildReleaseNotes(
+			[
+				pullRequest(
+					50,
+					'build(deps): bump undici in /apps/desktop',
+					[ 'type: dependencies', 'javascript' ],
+					'app/dependabot'
+				),
+			],
+			{ ...baseOptions, strict: true }
+		);
+
+		assert.match(
+			notes,
+			/No public changelog entries were found for this milestone\./
+		);
+	} );
+
+	it( 'puts dependency PRs under Dependencies in full release notes', () => {
+		const notes = buildReleaseNotes(
+			[
+				pullRequest(
+					51,
+					'build(deps): bump nokogiri in /apps/desktop',
+					[ 'type: dependencies', 'ruby' ],
+					'app/dependabot'
+				),
+			],
+			{ ...baseOptions, full: true, strict: true }
+		);
+
+		assert.equal(
+			notes,
+			`# Cortext 0.2.0
+
+## Dependencies
+
+### Other
+
+- Bump nokogiri in /apps/desktop. ([#51](https://github.com/Automattic/cortext/pull/51))
+
+`
+		);
+	} );
+
+	it( 'rejects dependency PRs with a conflicting type label', () => {
+		assert.throws(
+			() =>
+				buildReleaseNotes(
+					[
+						pullRequest(
+							53,
+							'build(deps): bump a conflicted package',
+							[ 'type: dependencies', 'type: bug' ],
+							'amy'
+						),
+					],
+					{ ...baseOptions, strict: true }
+				),
+			/#53 needs exactly one type:\* label; found type: dependencies, type: bug\./
+		);
+	} );
+
+	it( 'rejects dependency PRs with multiple type labels', () => {
+		assert.throws(
+			() =>
+				buildReleaseNotes(
+					[
+						pullRequest( 55, 'build(deps): bump duplicate types', [
+							'type: dependencies',
+							'type: code quality',
+						] ),
+					],
+					{ ...baseOptions, strict: true }
+				),
+			( error ) => {
+				assert.match(
+					error.message,
+					/#55 needs exactly one type:\* label; found type: dependencies, type: code quality\./
+				);
+				return true;
+			}
+		);
+	} );
 } );

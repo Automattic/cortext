@@ -25,6 +25,7 @@ jobs:
                         'type: bug',
                         'type: docs',
                         'type: tooling',
+                        'type: dependencies',
                         'type: code quality',
                       ];
 
