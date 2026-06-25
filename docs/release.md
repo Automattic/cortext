@@ -42,13 +42,16 @@ Every PR needs exactly one `type:*` label:
     improvements to existing behavior
 -   `type: bug`
 -   `type: docs`
--   `type: tooling` for CI, release, packaging, scripts, dependencies, and
-    repo automation
+-   `type: tooling` for CI, release, packaging, scripts, and repo automation
+-   `type: dependencies` for dependency updates
 -   `type: code quality` for refactors, cleanup, tests, and internal structure
 
 Use `release: skip` for PRs that should not be assigned to the active release
 milestone. It only skips milestone assignment; the PR still needs one `type:*`
 label.
+
+Dependabot adds `type: dependencies` to its PRs, which groups them under the
+Dependencies section in release notes.
 
 Area labels are optional and group release notes within each `type:*` section.
 PRs without exactly one supported area label appear under `Other`, so missing or
@@ -79,7 +82,7 @@ on the PR and fails. Patch and hotfix PRs should be assigned to their patch
 milestone manually before merge.
 
 `.github/workflows/enforce-pr-labels.yml` also checks open PRs before merge. It
-fails if a ready PR has zero `type:*` labels or more than one.
+fails if a ready PR has zero release-note type labels or more than one.
 
 ## Changelog preview
 
