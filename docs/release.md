@@ -13,10 +13,11 @@ small for now; we can add more steps once we have a regular release cadence.
     `0.2.0`.
 -   Patch milestones, such as `0.1.1`, may be open at the same time for hotfix
     releases.
--   After publishing a non-patch release, the workflow creates the next
-    non-patch milestone, such as `0.3.0` after `0.2.0`. Patch releases do not
-    create a next milestone.
--   After publishing a release, close its milestone.
+-   Preparing a non-patch release creates the next non-patch milestone, such as
+    `0.3.0` after `0.2.0`. Patch releases do not create a next milestone.
+-   Preparing a release also closes its milestone. The cut is the version bump
+    commit; PRs merged after that belong to the next milestone, even if the
+    draft is still waiting to be published or deployed.
 
 The first milestone is `0.1.0`.
 
@@ -141,12 +142,39 @@ than starting a GitHub Actions workflow.
 Both systems write to the same Release by tag, but only Buildkite uploads the
 desktop artifact. The GitHub Actions run owns the title, notes, and plugin ZIP.
 
+Once the draft looks right, publish it. Publishing a stable Release starts the
+WordPress.org deploy.
+
 ## Deploying to WordPress.org
 
-After the GitHub Release is published, deploy that same ZIP to WordPress.org
-SVN. SVN is only the distribution channel; GitHub stays the source of truth.
+Publishing a stable GitHub Release deploys the release ZIP to WordPress.org
+SVN. SVN is just the distribution channel; GitHub stays the source of truth.
 
-Preview the SVN deploy first:
+The "Deploy to WordPress.org SVN" workflow listens for stable Releases.
+Prereleases do not start the automatic deploy. If you later promote a
+prerelease to a stable Release, the deploy runs then. Before touching SVN, the
+workflow checks the version format, confirms the Release is stable, and makes
+sure `cortext.zip` is attached. Then it runs a dry run so you can inspect the
+SVN status.
+
+The actual SVN commit runs in a separate publish job behind the `wordpress-org`
+GitHub environment. Store `WPORG_USERNAME` and `WPORG_PASSWORD` there as
+environment secrets. The environment needs required reviewers, and it must allow
+tag refs matching `*.*.*`; the workflow runs on the release tag, so a
+branch-only environment rejects the publish job. Review the dry-run output
+before approving.
+
+You can still run the same workflow from the Actions tab for reruns and one-off
+deploys. Pass a `version` and choose whether to set `commit`. Without `commit`,
+the workflow stops after the dry run.
+
+The script downloads the GitHub Release ZIP, syncs it into `trunk/`, copies
+`assets/wordpress-org/` into the SVN assets directory, removes deleted SVN
+entries, creates `tags/<version>`, and checks that the plugin header,
+`CORTEXT_VERSION`, and stable tag all match. For non-interactive use, set
+`WPORG_USERNAME` and `WPORG_PASSWORD`.
+
+To preview the SVN deploy locally:
 
 ```bash
 pnpm run deploy:wporg -- --version <version>
@@ -156,29 +184,14 @@ Dry runs also work for an already-published version. If `tags/<version>` already
 exists, the script stages a local `tags/__dry-run-<version>` copy so the rest of
 the flow can still be checked without touching the real tag.
 
-If the status output looks right, publish it:
+To publish from your machine instead of GitHub Actions:
 
 ```bash
 pnpm run deploy:wporg -- --version <version> --commit --username <wporg-user>
 ```
 
-The "Deploy to WordPress.org SVN" workflow runs the same script. It always runs
-a dry-run job first. If `commit` is `true`, a separate publish job uses the
-`wordpress-org` GitHub environment, where `WPORG_USERNAME` and `WPORG_PASSWORD`
-live as environment secrets. Configure that environment with required reviewers
-and restrict it to `main` before using it for real releases.
-
-The script downloads the GitHub Release ZIP, syncs it into `trunk/`, copies
-`assets/wordpress-org/` into the SVN assets directory, removes deleted SVN
-entries, creates `tags/<version>`, and checks that the plugin header,
-`CORTEXT_VERSION`, and stable tag all match. For non-interactive use, set
-`WPORG_USERNAME` and `WPORG_PASSWORD`.
-
-When a release succeeds, the workflow closes the released milestone. If it is a
-non-patch release, it also creates the next non-patch milestone if it does not
-already exist. For example, `2.0.0` creates `2.1.0` and `0.2.0` creates
-`0.3.0`. A patch release such as `0.1.1` closes `0.1.1` but does not create a
-next milestone.
+When we add another distribution channel, such as a desktop update feed, give it
+its own workflow on the same release event.
 
 ## Desktop app
 

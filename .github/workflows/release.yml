@@ -121,7 +121,22 @@ jobs:
 
             - name: Set release ref
               id: release-ref
-              run: echo "ref=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  VERSION: ${{ steps.milestone.outputs.version }}
+                  DRY_RUN: ${{ inputs.dry_run }}
+              run: |
+                  ref=""
+                  if [ "$DRY_RUN" != "true" ]; then
+                    # Reuse an existing draft's pinned commit so reruns keep the
+                    # cut at the version-bump commit instead of advancing to
+                    # commits merged after it.
+                    ref="$(gh release view "$VERSION" --json isDraft,targetCommitish \
+                      --jq 'select(.isDraft) | .targetCommitish' 2>/dev/null || true)"
+                    [ -z "$ref" ] || echo "Reusing existing draft commit $ref for $VERSION."
+                  fi
+                  [ -n "$ref" ] || ref="$(git rev-parse HEAD)"
+                  echo "ref=$ref" >> "$GITHUB_OUTPUT"
 
     plugin:
         needs: bump-version
