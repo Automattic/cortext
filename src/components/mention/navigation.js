@@ -15,9 +15,8 @@ export function mentionAnchorFromEvent( event ) {
 	return target?.closest?.( `a[${ MENTION_ATTRIBUTE }]` ) ?? null;
 }
 
-// The router resolves a document by the trailing id, so the stored path is only
-// cosmetic. Use it when present, otherwise navigate by bare id; the destination
-// view canonicalizes its own URL, so there is no per-click lookup.
+// The router only needs the trailing id. Use the stored path for nicer URLs
+// when it exists; otherwise the destination can canonicalize from the id.
 export function pathForMentionAnchor( anchor ) {
 	const stored = anchor.getAttribute( 'data-crtxt-path' );
 	if ( stored ) {

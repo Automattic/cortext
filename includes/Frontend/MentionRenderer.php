@@ -1,6 +1,6 @@
 <?php
 /**
- * Refreshes Cortext mention anchors on public renders.
+ * Updates Cortext mention links during public rendering.
  *
  * @package Cortext
  */
@@ -45,14 +45,12 @@ final class MentionRenderer {
 			_prime_post_caches( $ids, true, true );
 		}
 
-		// The rewritten title and icon depend on the current viewer's read
-		// access (see can_render_target). Output is therefore per-user; a
-		// full-page cache that stores a privileged render and serves it to
-		// anonymous visitors could expose private mention titles.
+		// Titles and icons depend on the current viewer's read access. Do not
+		// let a page cache reuse a signed-in render for someone who cannot read
+		// the target document; that would leak the mention title.
 		//
-		// Matches Cortext-generated mention anchors only. The inner `.*?` and
-		// `[^>]*` assume well-formed anchors with no `>` inside attribute
-		// values, which holds for markup this plugin emits.
+		// Only touch anchors emitted by Cortext. Mention markup does not put `>`
+		// inside attribute values, so the regex can stay narrow.
 		$pattern = '#<a\b(?=[^>]*\b' . Mention::ATTRIBUTE . '=(["\'])(?P<id>\d+)\1)[^>]*>(?P<inner>.*?)</a>#is';
 		$next    = preg_replace_callback(
 			$pattern,
@@ -83,7 +81,7 @@ final class MentionRenderer {
 	}
 
 	/**
-	 * Replaces one mention anchor with fresh target markup.
+	 * Builds current markup for one mention anchor.
 	 *
 	 * @param array<string,string> $matches Regex matches.
 	 */

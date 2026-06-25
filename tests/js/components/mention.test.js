@@ -83,7 +83,7 @@ describe( 'mention completer', () => {
 		expect( options[ 0 ].iconImageUrl ).toBeUndefined();
 	} );
 
-	it( 'returns persisted mention anchor markup for document completions', () => {
+	it( 'saves a plain mention anchor for document completions', () => {
 		const html = renderToString(
 			getMentionCompletion( {
 				kind: 'document',
@@ -105,7 +105,7 @@ describe( 'mention completer', () => {
 		expect( html ).not.toContain( 'cortext-mention__label' );
 	} );
 
-	it( 'does not persist wp icon snapshots in completions', () => {
+	it( 'leaves icon snapshots out of saved completions', () => {
 		const html = renderToString(
 			getMentionCompletion( {
 				kind: 'document',
@@ -174,7 +174,7 @@ describe( 'mention icons', () => {
 		expect( mentionEmojiFromIcon( '{' ) ).toBe( '' );
 	} );
 
-	it( 'uses the destination record icon before derived fallbacks', () => {
+	it( "prefers the record's icon before fallback icons", () => {
 		expect(
 			mentionIconForRecord( {
 				meta: {
@@ -214,7 +214,7 @@ describe( 'mention icons', () => {
 		anchor.remove();
 	} );
 
-	it( 'hydrates mention icons from the current target record', async () => {
+	it( 'loads mention icons from the target record', async () => {
 		apiFetch.mockResolvedValue( {
 			id: 33,
 			meta: {
@@ -252,7 +252,7 @@ describe( 'mention icons', () => {
 		anchor.remove();
 	} );
 
-	it( 'hydrates mentions inside the editor iframe from the mounted controller', async () => {
+	it( 'updates mentions inside the editor iframe from the mounted controller', async () => {
 		apiFetch.mockResolvedValue( {
 			id: 289,
 			meta: {
@@ -329,7 +329,7 @@ describe( 'mention snapshot rewrite helper', () => {
 		expect( ids ).toEqual( [ 2, 3 ] );
 	} );
 
-	it( 'rewrites stale title and href snapshots', () => {
+	it( 'updates old title and href snapshots', () => {
 		const result = rewriteMentionSnapshots(
 			'<span>See <a class="cortext-mention" data-crtxt-mention="2" data-crtxt-path="old-2" data-crtxt-icon-emoji="O" style="--cortext-mention-icon-color: #111;" href="/old">Old</a></span>',
 			new Map( [
@@ -355,7 +355,7 @@ describe( 'mention snapshot rewrite helper', () => {
 		expect( result.html ).not.toContain( 'cortext-mention__label' );
 	} );
 
-	it( 'leaves current or unresolved snapshots alone', () => {
+	it( 'leaves up-to-date or unresolved snapshots alone', () => {
 		const html =
 			'<a class="cortext-mention" data-crtxt-mention="2" href="/fresh-2">Fresh</a>';
 

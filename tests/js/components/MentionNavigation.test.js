@@ -64,7 +64,7 @@ describe( 'Cortext mention navigation', () => {
 		iframe.remove();
 	} );
 
-	it( 'uses the stored path snapshot and falls back to the bare id without a network round-trip', () => {
+	it( 'uses the stored path, or the bare id when no path is saved', () => {
 		const withPath = document.createElement( 'a' );
 		withPath.setAttribute( 'data-crtxt-mention', '7' );
 		withPath.setAttribute( 'data-crtxt-path', 'tasks-7' );
@@ -78,7 +78,7 @@ describe( 'Cortext mention navigation', () => {
 		expect( apiFetch ).not.toHaveBeenCalled();
 	} );
 
-	it( 'prevents the public href from handling direct mention click events', async () => {
+	it( 'keeps direct mention clicks inside the Cortext router', async () => {
 		const anchor = document.createElement( 'a' );
 		anchor.setAttribute( 'data-crtxt-mention', '7' );
 		anchor.setAttribute( 'data-crtxt-path', 'target-7' );

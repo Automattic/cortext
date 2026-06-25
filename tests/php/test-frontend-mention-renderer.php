@@ -31,7 +31,7 @@ final class Test_Frontend_Mention_Renderer extends BaseTestCase {
 		parent::tear_down();
 	}
 
-	public function test_refreshes_title_and_permalink_snapshot(): void {
+	public function test_updates_title_and_permalink_snapshot(): void {
 		$target = $this->create_document( 'Fresh title' );
 		update_post_meta(
 			$target,
@@ -83,7 +83,7 @@ final class Test_Frontend_Mention_Renderer extends BaseTestCase {
 		$this->assertStringContainsString( 'style="--cortext-mention-icon-color: #eab308;"', $rendered );
 	}
 
-	public function test_deleted_target_degrades_to_missing_span(): void {
+	public function test_deleted_target_renders_saved_label_as_missing_mention(): void {
 		$target = $this->create_document( 'Gone' );
 		wp_delete_post( $target, true );
 		$html = sprintf(
@@ -100,7 +100,7 @@ final class Test_Frontend_Mention_Renderer extends BaseTestCase {
 		$this->assertStringNotContainsString( '<a class="cortext-mention"', $rendered );
 	}
 
-	public function test_trashed_target_degrades_to_missing_span(): void {
+	public function test_trashed_target_renders_saved_label_as_missing_mention(): void {
 		$target = $this->create_document( 'Trashed' );
 		wp_trash_post( $target );
 		$html = sprintf(
@@ -117,7 +117,7 @@ final class Test_Frontend_Mention_Renderer extends BaseTestCase {
 		$this->assertStringNotContainsString( '<a class="cortext-mention"', $rendered );
 	}
 
-	public function test_non_document_target_degrades_to_missing_span(): void {
+	public function test_non_document_target_renders_saved_label_as_missing_mention(): void {
 		$target = (int) wp_insert_post(
 			array(
 				'post_type'   => 'post',
@@ -138,7 +138,7 @@ final class Test_Frontend_Mention_Renderer extends BaseTestCase {
 		);
 	}
 
-	public function test_unreadable_private_target_degrades_to_missing_span(): void {
+	public function test_unreadable_private_target_renders_saved_label_as_missing_mention(): void {
 		$target = (int) wp_insert_post(
 			array(
 				'post_type'   => Document::POST_TYPE,
@@ -162,7 +162,7 @@ final class Test_Frontend_Mention_Renderer extends BaseTestCase {
 		$this->assertStringNotContainsString( 'Secret title', $rendered );
 	}
 
-	public function test_no_mention_content_passes_through_unchanged(): void {
+	public function test_content_without_mentions_is_unchanged(): void {
 		$html = '<p>No mention here.</p>';
 
 		$this->assertSame( $html, $this->renderer->refresh_mentions( $html ) );

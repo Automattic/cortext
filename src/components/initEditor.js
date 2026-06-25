@@ -25,7 +25,7 @@ import './initInserterMediaCategories';
 // Side-effect import: float Cortext blocks to the top of the slash inserter.
 import './prioritizeCortextInserterBlocks';
 
-// Side-effect import: register Cortext inline mention format and @ completer.
+// Register Cortext's inline mention format and @ completer.
 import './mention';
 
 // Core exposes `core/post-title` in the inserter and block actions by default.

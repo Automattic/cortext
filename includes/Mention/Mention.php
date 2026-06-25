@@ -1,6 +1,6 @@
 <?php
 /**
- * Shared contract for Cortext inline mention markup.
+ * Markup shared by Cortext inline mentions.
  *
  * @package Cortext
  */
@@ -12,9 +12,9 @@ namespace Cortext\Mention;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Inline mentions persist as an anchor carrying the target document id in a data
- * attribute. The public renderer and the backlinks index both parse that markup,
- * so the attribute name and id pattern live here as the single source of truth.
+ * Mentions are saved as anchors with the target document id in a data attribute.
+ * The public renderer and backlink index both parse that shape, so keep the
+ * attribute name and id regex together.
  */
 final class Mention {
 

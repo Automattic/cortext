@@ -162,10 +162,9 @@ function setUpEditorDocumentBindings( rootDocument, navigate ) {
 	};
 }
 
-// Canvas and RowEditor both mount CortextMentions, so this can run more than
-// once on the same admin document. Ref-count the observer and navigation
-// handler per document so a single set is installed and teardown waits for the
-// last caller to release.
+// Canvas and RowEditor can mount CortextMentions at the same time. Share one
+// observer/navigation binding per document and release it after the last mount
+// unmounts.
 export function retainMentionIconHydratorsForEditorDocument(
 	rootDocument = document,
 	navigate = null
@@ -286,10 +285,9 @@ export default function CortextMentions() {
 		);
 	}, [ navigate ] );
 
-	// Value-stable signature of the mention set plus each target's current
-	// title and link. The selector runs on every store change but returns a
-	// string, so the rewrite below only fires when a mention is added or
-	// removed or a target is renamed, never on plain keystrokes.
+	// Track the mention ids plus each target's title/link. The selector still
+	// runs on store changes, but this string only changes when the mention set
+	// changes or a target is renamed.
 	const signature = useSelect( ( select ) => {
 		const mentionedIds = new Set();
 		collectBlocks( select( blockEditorStore ).getBlocks() ).forEach(

@@ -60,9 +60,8 @@ export const mentionCompleter = {
 	getOptionCompletion: getMentionCompletion,
 };
 
-// Cortext claims the `@` trigger for document mentions, so any other
-// `@`-prefixed completer (notably core's user mentions) is dropped in favor of
-// ours. Filter by name too so re-applying the filter never duplicates ours.
+// Cortext uses `@` for document mentions. Remove the other `@` completers
+// (usually core user mentions), then add ours once.
 export function withCortextMentionCompleter( completers ) {
 	const withoutMentionPrefix = completers.filter(
 		( completer ) =>

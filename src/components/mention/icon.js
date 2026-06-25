@@ -203,9 +203,8 @@ function fetchMentionTargetIcon( id ) {
 		return mentionTargetIconCache.get( id );
 	}
 
-	// Resolved icons are cached for the session: a mention shows the target's
-	// icon as of first hydration and does not live-update if that icon later
-	// changes. Failed requests are evicted so a later mutation can retry.
+	// Cache icon lookups for this session. A mention keeps the icon found on
+	// first hydration; failed requests are dropped so a later mutation can retry.
 	const promise = apiFetch( {
 		path: `/wp/v2/crtxt_documents/${ id }?context=edit&_fields=id,meta,cortext_defines_trait,crtxt_trait`,
 	} )
@@ -292,7 +291,7 @@ export function retainMentionIconHydrator( ownerDocument ) {
 		};
 		const view = ownerDocument.defaultView;
 		let hydrateScheduled = false;
-		// Coalesce bursts of editor mutations into a single hydrate per frame.
+		// Batch editor mutation bursts into one hydrate per frame.
 		const scheduleHydrate = () => {
 			if ( hydrateScheduled ) {
 				return;
