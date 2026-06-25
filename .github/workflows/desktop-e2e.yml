@@ -63,7 +63,7 @@ jobs:
                   tools: composer:v2
                   coverage: none
 
-            - uses: actions/cache@v5
+            - uses: actions/cache@v5.0.5
               with:
                   path: ~/.composer/cache
                   key: composer-${{ hashFiles('composer.lock') }}
@@ -101,7 +101,7 @@ jobs:
               run: npx playwright install --with-deps chromium
 
             - name: Cache snapshot downloads (WP core + wp-cli + SQLite plugin)
-              uses: actions/cache@v5
+              uses: actions/cache@v5.0.5
               with:
                   path: apps/desktop/.snapshot-cache
                   key: desktop-snapshot-cache-${{ hashFiles('apps/desktop/scripts/build-snapshot.mjs') }}
