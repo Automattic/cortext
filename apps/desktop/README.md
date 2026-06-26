@@ -119,13 +119,21 @@ The DMG is not signed, so macOS blocks it on first launch. Open it once from
 System Settings > Privacy & Security > "Open Anyway", or run
 `xattr -dr com.apple.quarantine /Applications/Cortext.app`.
 
-On launch the installed app checks GitHub for the latest release and links to
-the download if you are behind. It does not update itself.
+On launch, and every few hours after that, the installed app checks the latest
+published GitHub Release with electron-updater. If a newer version exists, it
+downloads it in the background and asks the user to restart. Draft Releases are
+ignored, so users only get an update after someone publishes the Release. The
+Cortext app menu includes "Check for Updates..." and a toggle for automatic
+installs. In-place updates require the signed, notarized app running from
+Applications.
 
 In desktop, WordPress is bundled runtime code, not a site the user maintains
-through wp-admin. The snapshot disables core, plugin, and theme updates, and
-each launch refreshes the update-lock mu-plugin in the extracted site. WordPress
-changes come through new Cortext desktop releases.
+through wp-admin. The snapshot disables core, plugin, and theme updates. Each
+launch refreshes the update-lock mu-plugin in the extracted site. New WordPress
+and Cortext code ships with Cortext desktop releases: after an app update,
+Cortext refreshes the bundled files in the extracted site, keeps the user's
+database and uploads, and lets WordPress run any database upgrade on the next
+load.
 
 Release builds are arm64-only, signed, and notarized on Buildkite. Local builds
 remain unsigned unless you provide a signing environment.

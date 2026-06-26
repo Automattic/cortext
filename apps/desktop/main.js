@@ -1,4 +1,4 @@
-const { app, BrowserWindow } = require( 'electron' );
+const { app, BrowserWindow, Menu } = require( 'electron' );
 const { spawnSync } = require( 'child_process' );
 const path = require( 'path' );
 const fs = require( 'fs' );
@@ -7,7 +7,19 @@ const {
 	startRuntime,
 	stopRuntime,
 } = require( './lib/runtime' );
-const { scheduleUpdateCheck } = require( './lib/update-check' );
+const {
+	scheduleUpdateCheck,
+	checkForUpdatesInteractive,
+	isUpdateReadyToInstall,
+	setAutoDownload,
+} = require( './lib/auto-update' );
+const {
+	refreshSiteIfOutdated,
+	recoverInterruptedSwap,
+	writeMarker,
+} = require( './lib/site-refresh' );
+const { buildAppMenu } = require( './lib/menu' );
+const settings = require( './lib/settings' );
 
 // Bundled resources (the snapshot and the PHP runtime) sit next to the app in
 // dev and under `process.resourcesPath` once packaged into the .app.
@@ -45,10 +57,27 @@ function ensureSiteFromSnapshot() {
 			`Snapshot extraction failed: ${ wordpressDir } is empty.`
 		);
 	}
+	writeMarker( siteRoot, app.getVersion() );
 	return wordpressDir;
 }
 
-async function createWindow() {
+function refreshMenu() {
+	Menu.setApplicationMenu(
+		buildAppMenu( {
+			updateLabel: isUpdateReadyToInstall()
+				? 'Restart to Apply Update'
+				: 'Check for Updates…',
+			onUpdateItem: () => checkForUpdatesInteractive(),
+			autoInstallUpdates: settings.get( 'autoInstallUpdates' ),
+			onToggleAutoInstall: ( enabled ) => {
+				settings.set( 'autoInstallUpdates', enabled );
+				setAutoDownload( enabled );
+			},
+		} )
+	);
+}
+
+function createWindow() {
 	const win = new BrowserWindow( {
 		width: 1280,
 		height: 800,
@@ -65,8 +94,10 @@ async function createWindow() {
 		win.setTitle( 'Cortext' );
 	} );
 
-	await win.loadFile( path.resolve( __dirname, 'loading.html' ) );
+	return win;
+}
 
+async function loadSite( win ) {
 	try {
 		await runtimeHandle.ready;
 		await win.loadURL(
@@ -75,14 +106,22 @@ async function createWindow() {
 		if ( ! app.isPackaged && process.env.CORTEXT_DEVTOOLS !== '0' ) {
 			win.webContents.openDevTools( { mode: 'detach' } );
 		}
-		scheduleUpdateCheck();
+		scheduleUpdateCheck( {
+			window: win,
+			onState: refreshMenu,
+			prepareQuit: () => {
+				quitting = true;
+			},
+			autoDownload: settings.get( 'autoInstallUpdates' ),
+		} );
 	} catch ( err ) {
 		console.error( '[cortext-desktop] failed to reach PHP server:', err );
 		await win.loadFile( path.resolve( __dirname, 'error.html' ) );
 	}
 }
 
-app.whenReady().then( () => {
+app.whenReady().then( async () => {
+	let win = null;
 	try {
 		if (
 			process.platform === 'darwin' &&
@@ -92,7 +131,24 @@ app.whenReady().then( () => {
 			app.dock.setIcon( APP_ICON );
 		}
 
-		const wordpressDir = ensureSiteFromSnapshot();
+		refreshMenu();
+		win = createWindow();
+		// Load the loading screen before any site refresh so users never stare at
+		// a blank window.
+		await win.loadFile( path.resolve( __dirname, 'loading.html' ) );
+
+		const siteRoot = getSiteRoot();
+		recoverInterruptedSwap( siteRoot );
+		ensureSiteFromSnapshot();
+		// Update bundled WordPress/Cortext files before PHP starts. User data
+		// stays in place.
+		refreshSiteIfOutdated( {
+			snapshotZip: SNAPSHOT_ZIP,
+			siteRoot,
+			version: app.getVersion(),
+		} );
+		const wordpressDir = path.join( siteRoot, 'wordpress' );
+
 		runtimeHandle = startRuntime( {
 			appDir: RESOURCES_DIR,
 			wordpressDir,
@@ -106,10 +162,15 @@ app.whenReady().then( () => {
 				}
 			},
 		} );
-		createWindow();
+
+		await loadSite( win );
 	} catch ( err ) {
 		console.error( '[cortext-desktop]', err );
-		app.quit();
+		if ( win ) {
+			win.loadFile( path.resolve( __dirname, 'error.html' ) );
+		} else {
+			app.quit();
+		}
 	}
 } );
 
