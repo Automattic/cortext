@@ -1,17 +1,37 @@
 @use "@wordpress/base-styles/colors" as *;
 @use "@wordpress/base-styles/variables" as *;
 
-.cortext-backlinks {
-	display: flex;
-	flex-direction: column;
-	gap: $grid-unit-10;
+.cortext-backlinks-panel {
+	padding: $grid-unit-05 $grid-unit-20;
+	border-top: $border-width solid var(--cortext-row-detail-border, #e9e9e7);
 }
 
-.cortext-backlinks-panel__title {
+.cortext-backlinks-panel__toggle.components-button {
+	display: flex;
+	align-items: center;
+	gap: $grid-unit-05;
+	width: 100%;
+	height: auto;
+	padding: $grid-unit-05 0;
 	color: var(--cortext-text-muted);
-	font-size: 11px;
-	font-weight: 600;
-	text-transform: uppercase;
+	font-size: 12px;
+	font-weight: 500;
+	text-align: start;
+
+	&:hover:not(:disabled) {
+		color: inherit;
+	}
+
+	svg {
+		flex: 0 0 auto;
+		width: 18px;
+		height: 18px;
+		fill: currentcolor;
+	}
+}
+
+.cortext-backlinks {
+	padding-bottom: $grid-unit-05;
 }
 
 .cortext-backlinks__list {
@@ -35,7 +55,7 @@
 	gap: $grid-unit-10;
 	width: 100%;
 	min-width: 0;
-	height: 32px;
+	height: 28px;
 	padding: 0 $grid-unit-10;
 	color: inherit;
 	text-align: start;
@@ -46,8 +66,8 @@
 	align-items: center;
 	justify-content: center;
 	flex: 0 0 auto;
-	width: 18px;
-	height: 18px;
+	width: 16px;
+	height: 16px;
 	color: var(--cortext-text-muted);
 }
 
@@ -56,12 +76,4 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-}
-
-.cortext-backlinks-panel {
-	display: flex;
-	flex-direction: column;
-	gap: $grid-unit-10;
-	padding: $grid-unit-20 $grid-unit-30 $grid-unit-30;
-	border-top: $border-width solid var(--cortext-row-detail-border, #e9e9e7);
 }

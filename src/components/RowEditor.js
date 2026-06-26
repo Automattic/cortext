@@ -182,7 +182,6 @@ function DetailPaneContent( {
 				onRestored={ onRestored }
 			/>
 			<BacklinksPanel
-				asPanel={ false }
 				documentId={ row?.id ?? rowId }
 				className="cortext-row-detail__backlinks"
 			/>

@@ -1,7 +1,8 @@
 import apiFetch from '@wordpress/api-fetch';
-import { Button, PanelBody } from '@wordpress/components';
+import { Button } from '@wordpress/components';
 import { useEffect, useState } from '@wordpress/element';
 import { _n, sprintf } from '@wordpress/i18n';
+import { chevronDown, chevronRight } from '@wordpress/icons';
 import { useNavigate } from '@tanstack/react-router';
 
 import { documentTitle, listIconForRecord } from '../documents';
@@ -70,13 +71,15 @@ function BacklinksList( { sources } ) {
 	);
 }
 
+// Backlinks stay collapsed by default to a single quiet line, in the spirit of
+// Notion's linked-references; expanding reveals the source list inline.
 export default function BacklinksPanel( {
-	asPanel = true,
 	className = '',
 	documentId,
 	initialOpen = false,
 } ) {
 	const [ data, setData ] = useState( null );
+	const [ isOpen, setIsOpen ] = useState( initialOpen );
 
 	useEffect( () => {
 		if ( ! documentId ) {
@@ -110,31 +113,23 @@ export default function BacklinksPanel( {
 		return null;
 	}
 
-	const title = sprintf(
+	const label = sprintf(
 		/* translators: %d: backlink count. */
 		_n( 'Backlink (%d)', 'Backlinks (%d)', total, 'cortext' ),
 		total
 	);
-	const content = <BacklinksList sources={ sources } />;
-
-	if ( ! asPanel ) {
-		return (
-			<section
-				className={ `cortext-backlinks-panel ${ className }`.trim() }
-			>
-				<h2 className="cortext-backlinks-panel__title">{ title }</h2>
-				{ content }
-			</section>
-		);
-	}
 
 	return (
-		<PanelBody
-			className={ className }
-			title={ title }
-			initialOpen={ initialOpen }
-		>
-			{ content }
-		</PanelBody>
+		<div className={ `cortext-backlinks-panel ${ className }`.trim() }>
+			<Button
+				className="cortext-backlinks-panel__toggle"
+				icon={ isOpen ? chevronDown : chevronRight }
+				onClick={ () => setIsOpen( ( value ) => ! value ) }
+				aria-expanded={ isOpen }
+			>
+				{ label }
+			</Button>
+			{ isOpen ? <BacklinksList sources={ sources } /> : null }
+		</div>
 	);
 }
