@@ -234,6 +234,19 @@ test.describe( 'Visual revision history', () => {
 					);
 				} )
 				.toBe( true );
+
+			// The restored state also becomes the latest revision; otherwise
+			// reopening history after a restore marks the pre-restore snapshot
+			// as "Current" and the visual history feels broken.
+			await expect
+				.poll( async () => {
+					const history = await requestUtils.rest( {
+						path: `/wp/v2/crtxt_documents/${ createdPage.id }/revisions`,
+						params: { context: 'edit', per_page: 100 },
+					} );
+					return history[ 0 ]?.title.raw;
+				} )
+				.toBe( OLD_TITLE );
 		} finally {
 			await deleteIfCreated( requestUtils, createdPage?.id );
 		}

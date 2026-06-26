@@ -129,13 +129,19 @@ final class RestoreRevisionController {
 			return $meta_result;
 		}
 
+		$restored_snapshot_id = $this->snapshot_current_state( $post_id );
+		if ( $restored_snapshot_id instanceof WP_Error ) {
+			return $restored_snapshot_id;
+		}
+
 		return new WP_REST_Response(
 			array(
-				'restored'     => $post_id,
-				'revision'     => $revision_id,
-				'snapshot'     => $snapshot_id,
-				'post'         => $this->prepared_post( $post_id ),
-				'metaRestored' => $meta_result,
+				'restored'         => $post_id,
+				'revision'         => $revision_id,
+				'snapshot'         => $snapshot_id,
+				'restoredSnapshot' => $restored_snapshot_id,
+				'post'             => $this->prepared_post( $post_id ),
+				'metaRestored'     => $meta_result,
 			),
 			200
 		);

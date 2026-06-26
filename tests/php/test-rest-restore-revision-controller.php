@@ -84,6 +84,42 @@ final class Test_Rest_Restore_Revision_Controller extends BaseTestCase {
 		$this->assertSame( $revision_id, $response->get_data()['revision'] );
 		// A pre-restore snapshot is reported so the restore stays reversible.
 		$this->assertArrayHasKey( 'snapshot', $response->get_data() );
+		// The restored state is also revisioned so history can keep treating
+		// the latest revision as the current visual version.
+		$this->assertArrayHasKey( 'restoredSnapshot', $response->get_data() );
+	}
+
+	public function test_restore_creates_current_revision_for_restored_state(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$page_id = $this->create_page(
+			array(
+				'post_title'   => 'Current title',
+				'post_content' => '<!-- wp:paragraph --><p>Current body</p><!-- /wp:paragraph -->',
+			)
+		);
+
+		$revision_id = $this->create_revision(
+			$page_id,
+			array(
+				'post_title'   => 'Old title',
+				'post_content' => '<!-- wp:paragraph --><p>Old body</p><!-- /wp:paragraph -->',
+			)
+		);
+
+		$response = $this->restore_revision( $page_id, $revision_id );
+		$data     = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertGreaterThan( 0, (int) $data['snapshot'] );
+		$this->assertGreaterThan( 0, (int) $data['restoredSnapshot'] );
+		$this->assertSame( 'Current title', get_post( (int) $data['snapshot'] )->post_title );
+		$this->assertSame( 'Old title', get_post( (int) $data['restoredSnapshot'] )->post_title );
+
+		$this->assertArrayHasKey(
+			(int) $data['restoredSnapshot'],
+			wp_get_post_revisions( $page_id )
+		);
 	}
 
 	public function test_restores_icon_and_cover_identity(): void {
@@ -209,13 +245,21 @@ final class Test_Rest_Restore_Revision_Controller extends BaseTestCase {
 		);
 	}
 
-	private function create_page(): int {
+	/**
+	 * Creates a document test page.
+	 *
+	 * @param array<string,mixed> $args Post overrides.
+	 */
+	private function create_page( array $args = array() ): int {
 		$id = (int) wp_insert_post(
-			array(
-				'post_type'    => Document::POST_TYPE,
-				'post_status'  => 'private',
-				'post_title'   => 'Page',
-				'post_content' => '<!-- wp:paragraph --><p>Current</p><!-- /wp:paragraph -->',
+			array_merge(
+				array(
+					'post_type'    => Document::POST_TYPE,
+					'post_status'  => 'private',
+					'post_title'   => 'Page',
+					'post_content' => '<!-- wp:paragraph --><p>Current</p><!-- /wp:paragraph -->',
+				),
+				$args
 			)
 		);
 		$this->assertGreaterThan( 0, $id );
