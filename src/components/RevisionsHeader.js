@@ -6,7 +6,7 @@ import {
 import { dateI18n, getDate, getSettings } from '@wordpress/date';
 import { useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
-import { closeSmall, reset, seen, unseen } from '@wordpress/icons';
+import { seen, unseen } from '@wordpress/icons';
 
 import { useRevisionControls } from '../hooks/useRevisions';
 
@@ -52,39 +52,45 @@ export default function RevisionsHeader( { postId, postType } ) {
 
 	return (
 		<div className="cortext-revisions-header">
+			<div className="cortext-revisions-header__tools">
+				<Button
+					icon={ isShowingRevisionDiff ? unseen : seen }
+					label={
+						isShowingRevisionDiff
+							? __( 'Hide changes', 'cortext' )
+							: __( 'Show changes', 'cortext' )
+					}
+					isPressed={ isShowingRevisionDiff }
+					onClick={ () => toggleDiff() }
+					size="compact"
+				/>
+			</div>
 			<span className="cortext-revisions-header__label">
 				{ revisionLabel( currentRevision ) }
 			</span>
-			<Button
-				icon={ isShowingRevisionDiff ? unseen : seen }
-				label={
-					isShowingRevisionDiff
-						? __( 'Hide changes', 'cortext' )
-						: __( 'Show changes', 'cortext' )
-				}
-				isPressed={ isShowingRevisionDiff }
-				onClick={ () => toggleDiff() }
-				size="compact"
-			/>
-			<Button
-				icon={ reset }
-				label={ restoreReason }
-				showTooltip
-				accessibleWhenDisabled
-				variant="primary"
-				isBusy={ isRestoring }
-				disabled={ ! canRestore || isRestoring }
-				onClick={ () => setIsConfirming( true ) }
-				size="compact"
-			>
-				{ __( 'Restore', 'cortext' ) }
-			</Button>
-			<Button
-				icon={ closeSmall }
-				label={ __( 'Back to editor', 'cortext' ) }
-				onClick={ exitRevisions }
-				size="compact"
-			/>
+			<div className="cortext-revisions-header__actions">
+				<Button
+					className="cortext-revisions-header__exit"
+					variant="secondary"
+					onClick={ exitRevisions }
+					size="compact"
+				>
+					{ __( 'Exit', 'cortext' ) }
+				</Button>
+				<Button
+					className="cortext-revisions-header__restore"
+					label={ restoreReason }
+					showTooltip
+					accessibleWhenDisabled
+					variant="primary"
+					isBusy={ isRestoring }
+					disabled={ ! canRestore || isRestoring }
+					onClick={ () => setIsConfirming( true ) }
+					size="compact"
+				>
+					{ __( 'Restore', 'cortext' ) }
+				</Button>
+			</div>
 			{ isConfirming ? (
 				<ConfirmDialog
 					onConfirm={ async () => {

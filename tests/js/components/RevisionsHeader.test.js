@@ -55,8 +55,6 @@ jest.mock( '@wordpress/date', () => ( {
 
 jest.mock( '@wordpress/icons', () => ( {
 	__esModule: true,
-	closeSmall: 'closeSmall',
-	reset: 'reset',
 	seen: 'seen',
 	unseen: 'unseen',
 } ) );

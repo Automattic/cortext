@@ -99,6 +99,14 @@
 	gap: $grid-unit-10;
 	min-width: 0;
 
+	&__tools,
+	&__actions {
+		display: flex;
+		align-items: center;
+		flex: 0 0 auto;
+		gap: $grid-unit-05;
+	}
+
 	&__label {
 		min-width: 0;
 		max-width: 36ch;
@@ -106,6 +114,36 @@
 		color: var(--cortext-text-muted);
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+
+	&__exit.components-button.is-secondary {
+		color: var(--cortext-button-text);
+		box-shadow: inset 0 0 0 $border-width var(--cortext-chrome-border);
+	}
+
+	&__exit.components-button.is-secondary:hover:not(:disabled),
+	&__exit.components-button.is-secondary:focus:not(:disabled) {
+		background: var(--cortext-button-hover-surface);
+		color: var(--cortext-text-strong);
+		box-shadow: inset 0 0 0 $border-width var(--cortext-chrome-border);
+	}
+
+	&__restore.components-button.is-primary {
+		background: var(--cortext-button-primary-surface);
+		box-shadow: none;
+		color: var(--cortext-button-primary-text);
+	}
+
+	&__restore.components-button.is-primary:hover:not(:disabled),
+	&__restore.components-button.is-primary:focus:not(:disabled) {
+		background: var(--cortext-button-primary-hover-surface);
+		color: var(--cortext-button-primary-text);
+	}
+
+	&__restore.components-button.is-primary:disabled {
+		background: var(--cortext-button-primary-surface);
+		color: var(--cortext-button-primary-text);
+		opacity: 0.45;
 	}
 }
 
