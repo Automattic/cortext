@@ -361,9 +361,9 @@ export default function useSidebarTree( { selectedId, selectedCollectionId } ) {
 
 	const refreshLoadedBranches = useCallback( () => {
 		const parentIds = [ ...branchesRef.current.keys() ];
-		parentIds.forEach( ( parentId ) => {
-			refreshBranch( parentId );
-		} );
+		return Promise.allSettled(
+			parentIds.map( ( parentId ) => refreshBranch( parentId ) )
+		);
 	}, [ refreshBranch ] );
 
 	const persistExpanded = useCallback( ( ids ) => {
@@ -580,10 +580,17 @@ export default function useSidebarTree( { selectedId, selectedCollectionId } ) {
 	useEffect( () => {
 		const handleTreeChange = ( event ) => {
 			const parentId = event?.detail?.parentId;
+			const revealId = normalizeId( event?.detail?.revealId );
+			let refreshPromise;
 			if ( normalizeId( parentId ) > 0 || parentId === ROOT_PARENT_ID ) {
-				refreshBranch( parentId );
+				refreshPromise = refreshBranch( parentId );
 			} else {
-				refreshLoadedBranches();
+				refreshPromise = refreshLoadedBranches();
+			}
+			if ( revealId > 0 ) {
+				Promise.resolve( refreshPromise ).finally( () => {
+					revealRecordPath( revealId );
+				} );
 			}
 		};
 		window.addEventListener( SIDEBAR_TREE_CHANGED_EVENT, handleTreeChange );
@@ -592,7 +599,7 @@ export default function useSidebarTree( { selectedId, selectedCollectionId } ) {
 				SIDEBAR_TREE_CHANGED_EVENT,
 				handleTreeChange
 			);
-	}, [ refreshBranch, refreshLoadedBranches ] );
+	}, [ refreshBranch, refreshLoadedBranches, revealRecordPath ] );
 
 	const tree = useMemo(
 		() => buildNodesForParent( ROOT_PARENT_ID, branches ),

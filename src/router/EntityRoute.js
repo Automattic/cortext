@@ -48,6 +48,7 @@ import { useWorkspaceHome } from '../hooks/useWorkspaceHome';
 import useCollectionFields from '../hooks/useCollectionFields';
 import { notifyDocumentTrashChanged } from '../hooks/documentTrashInvalidation';
 import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
+import { notifySidebarTreeChanged } from '../hooks/sidebarTreeInvalidation';
 import EmptyState from './EmptyState';
 import { computeDocumentUri, useResolveDocument } from './useResolveEntity';
 import { init, parseTarget, reducer } from './entityRouteReducer';
@@ -398,6 +399,10 @@ export default function EntityRoute( { history } ) {
 				POST_TYPE,
 				TRASHED_PAGES_QUERY,
 			] );
+			notifySidebarTreeChanged( {
+				parentId: Number( response?.post?.parent ?? 0 ),
+				revealId: Number( postId ),
+			} );
 			notifyDocumentTrashChanged();
 			// A restored row lives inside a collection's data view rather than
 			// the tree, and can change rollups and relations elsewhere, so

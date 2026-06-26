@@ -44,7 +44,7 @@ async function deleteIfCreated( requestUtils, id ) {
 function sidebarNodeByTitle( page, title ) {
 	return page
 		.locator( '.cortext-sidebar__node', {
-			has: page.getByRole( 'button', { name: title } ),
+			has: page.getByRole( 'button', { name: title, exact: true } ),
 		} )
 		.first();
 }
@@ -125,14 +125,14 @@ test.describe( 'Sidebar lazy tree', () => {
 		await expect( page.locator( '#cortext-sidebar' ) ).toBeVisible();
 
 		await expect(
-			page.getByRole( 'button', { name: PARENT_TITLE } )
+			page.getByRole( 'button', { name: PARENT_TITLE, exact: true } )
 		).toBeVisible();
 		await expect(
-			page.getByRole( 'button', { name: LAST_ROOT_TITLE } )
+			page.getByRole( 'button', { name: LAST_ROOT_TITLE, exact: true } )
 		).toHaveCount( 0 );
 
 		await loadMoreUntilVisible(
-			page.getByRole( 'button', { name: LAST_ROOT_TITLE } ),
+			page.getByRole( 'button', { name: LAST_ROOT_TITLE, exact: true } ),
 			page
 				.locator(
 					'#cortext-sidebar .cortext-sidebar__list > .cortext-sidebar__load-more-node'
@@ -149,14 +149,14 @@ test.describe( 'Sidebar lazy tree', () => {
 		await childRequest;
 
 		await expect(
-			page.getByRole( 'button', { name: FIRST_CHILD_TITLE } )
+			page.getByRole( 'button', { name: FIRST_CHILD_TITLE, exact: true } )
 		).toBeVisible();
 		await expect(
-			page.getByRole( 'button', { name: LAST_CHILD_TITLE } )
+			page.getByRole( 'button', { name: LAST_CHILD_TITLE, exact: true } )
 		).toHaveCount( 0 );
 
 		await loadMoreUntilVisible(
-			page.getByRole( 'button', { name: LAST_CHILD_TITLE } ),
+			page.getByRole( 'button', { name: LAST_CHILD_TITLE, exact: true } ),
 			sidebarNodeByTitle( page, PARENT_TITLE ).getByRole( 'button', {
 				name: 'Show more',
 			} )
@@ -164,7 +164,7 @@ test.describe( 'Sidebar lazy tree', () => {
 
 		await page.reload();
 		await expect(
-			page.getByRole( 'button', { name: FIRST_CHILD_TITLE } )
+			page.getByRole( 'button', { name: FIRST_CHILD_TITLE, exact: true } )
 		).toBeVisible();
 	} );
 } );

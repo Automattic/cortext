@@ -6,6 +6,7 @@ import useSidebarTree, {
 	ROOT_PARENT_ID,
 	SIDEBAR_TREE_PREFERENCES_PATH,
 } from '../../../../src/components/sidebar/useSidebarTree';
+import { SIDEBAR_TREE_CHANGED_EVENT } from '../../../../src/hooks/sidebarTreeInvalidation';
 
 jest.mock( '@wordpress/api-fetch', () => ( {
 	__esModule: true,
@@ -280,6 +281,53 @@ describe( 'useSidebarTree', () => {
 				method: 'PUT',
 				data: { expanded: [] },
 			} )
+		);
+	} );
+
+	it( 'reveals a restored active document after refreshing its branch', async () => {
+		mockTreeRequests( {
+			records: {
+				2: makeRecord( 2 ),
+			},
+			branches: {
+				'0:1': {
+					records: [ makeRecord( 1 ) ],
+					total: 2,
+					totalPages: 2,
+				},
+				'0:2': {
+					records: [ makeRecord( 2 ) ],
+					total: 2,
+					totalPages: 2,
+				},
+			},
+		} );
+
+		const { result } = renderHook( () =>
+			useSidebarTree( {
+				selectedId: null,
+				selectedCollectionId: null,
+			} )
+		);
+
+		await waitFor( () =>
+			expect(
+				result.current.tree.map( ( node ) => node.page.id )
+			).toEqual( [ 1 ] )
+		);
+
+		await act( async () => {
+			window.dispatchEvent(
+				new CustomEvent( SIDEBAR_TREE_CHANGED_EVENT, {
+					detail: { parentId: ROOT_PARENT_ID, revealId: 2 },
+				} )
+			);
+		} );
+
+		await waitFor( () =>
+			expect(
+				result.current.tree.map( ( node ) => node.page.id )
+			).toEqual( [ 1, 2 ] )
 		);
 	} );
 } );
