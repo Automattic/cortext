@@ -63,6 +63,12 @@ function tableFooterDataCells( footer ) {
 	return footer.locator( TABLE_FOOTER_DATA_CELL_SELECTOR );
 }
 
+function dataViewTableRow( canvas, title ) {
+	return canvas.locator( '.dataviews-view-table tbody tr' ).filter( {
+		hasText: title,
+	} );
+}
+
 async function startSidePeekShellStabilityLog( page ) {
 	await page.evaluate( () => {
 		window.__cortextSidePeekShellEvents = [];
@@ -1117,7 +1123,7 @@ test.describe( 'Collection view block', () => {
 				.click();
 
 			await expect(
-				canvas.getByText( 'The Left Hand of Darkness' )
+				dataViewTableRow( canvas, 'The Left Hand of Darkness' )
 			).toBeVisible();
 
 			await page.evaluate( async () => {
