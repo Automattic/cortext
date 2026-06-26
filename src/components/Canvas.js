@@ -29,6 +29,7 @@ import useAutosave from '../hooks/useAutosave';
 import useDelayedFlag from '../hooks/useDelayedFlag';
 import usePostLock from '../hooks/usePostLock';
 import { withViewTransition } from '../hooks/viewTransition';
+import { notifyBacklinksChanged } from '../hooks/backlinksInvalidation';
 import { definesTrait } from '../documents/capabilities';
 import { POST_TYPE } from './page-queries';
 import CortextInserterSidebar from './CortextInserterSidebar';
@@ -232,7 +233,7 @@ function CanvasEditor( {
 	const autosaveRecentTarget =
 		recentTarget ??
 		( post?.id && ! isCollection && ! hasTrait ? { id: post.id } : null );
-	const { status, flushNow, isDirty, isSaving } = useAutosave( {
+	const { status, lastSavedAt, flushNow, isDirty, isSaving } = useAutosave( {
 		recentTarget: autosaveRecentTarget,
 	} );
 	const postLock = usePostLock( {
@@ -242,6 +243,7 @@ function CanvasEditor( {
 	} );
 	const { resetPost } = useDispatch( editorStore );
 	const discard = useCallback( () => resetPost(), [ resetPost ] );
+	const lastNotifiedBacklinkSaveRef = useRef( null );
 
 	useEffect( () => {
 		onApi?.( { flushNow, discard } );
@@ -249,10 +251,17 @@ function CanvasEditor( {
 	}, [ discard, flushNow, onApi ] );
 
 	useEffect( () => {
-		if ( status === 'saved' ) {
-			onSaved?.();
+		if (
+			status !== 'saved' ||
+			! lastSavedAt ||
+			lastNotifiedBacklinkSaveRef.current === lastSavedAt
+		) {
+			return;
 		}
-	}, [ onSaved, status ] );
+		lastNotifiedBacklinkSaveRef.current = lastSavedAt;
+		notifyBacklinksChanged();
+		onSaved?.();
+	}, [ lastSavedAt, onSaved, status ] );
 
 	useEffect( () => {
 		if (

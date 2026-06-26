@@ -11,7 +11,7 @@ import './BacklinksPanel.scss';
 // detail toolbar that opens the source list in a popover, so backlinks never
 // take room in the content itself.
 export default function BacklinksToolbarButton( { documentId } ) {
-	const { sources, total } = useBacklinks( documentId );
+	const { sources, total, refresh } = useBacklinks( documentId );
 	const [ isOpen, setIsOpen ] = useState( false );
 
 	if ( total < 1 ) {
@@ -32,7 +32,15 @@ export default function BacklinksToolbarButton( { documentId } ) {
 				label={ label }
 				showTooltip
 				aria-expanded={ isOpen }
-				onClick={ () => setIsOpen( ( value ) => ! value ) }
+				onClick={ () =>
+					setIsOpen( ( value ) => {
+						const nextValue = ! value;
+						if ( nextValue ) {
+							void refresh();
+						}
+						return nextValue;
+					} )
+				}
 			>
 				<span className="cortext-backlinks-toolbar__count">
 					{ total }

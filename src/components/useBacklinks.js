@@ -1,5 +1,7 @@
 import apiFetch from '@wordpress/api-fetch';
-import { useEffect, useState } from '@wordpress/element';
+import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
+
+import { useBacklinksInvalidation } from '../hooks/backlinksInvalidation';
 
 function uniqueSources( sources ) {
 	const seen = new Set();
@@ -30,32 +32,42 @@ function sourcesFromResponse( data ) {
 // and their count; callers decide how to surface them (panel, popover, etc.).
 export function useBacklinks( documentId ) {
 	const [ data, setData ] = useState( null );
+	const requestRef = useRef( 0 );
 
-	useEffect( () => {
+	const refresh = useCallback( () => {
 		if ( ! documentId ) {
 			setData( null );
-			return undefined;
+			return Promise.resolve( null );
 		}
 
-		let cancelled = false;
-		apiFetch( {
+		const request = requestRef.current + 1;
+		requestRef.current = request;
+
+		return apiFetch( {
 			path: `/cortext/v1/documents/${ documentId }/backlinks`,
 		} )
 			.then( ( response ) => {
-				if ( ! cancelled ) {
+				if ( requestRef.current === request ) {
 					setData( response );
 				}
+				return response;
 			} )
 			.catch( () => {
-				if ( ! cancelled ) {
+				if ( requestRef.current === request ) {
 					setData( null );
 				}
+				return null;
 			} );
-
-		return () => {
-			cancelled = true;
-		};
 	}, [ documentId ] );
+
+	useEffect( () => {
+		refresh();
+		return () => {
+			requestRef.current += 1;
+		};
+	}, [ refresh ] );
+
+	useBacklinksInvalidation( refresh );
 
 	const sources = sourcesFromResponse( data );
 	// A single source can mention the target more than once; the total counts
@@ -64,5 +76,5 @@ export function useBacklinks( documentId ) {
 		( sum, source ) => sum + ( Number( source.mentions ) || 1 ),
 		0
 	);
-	return { sources, total };
+	return { sources, total, refresh };
 }

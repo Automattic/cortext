@@ -16,10 +16,18 @@ jest.mock( '../../../src/documents', () => ( {
 	listIconForRecord: () => <span data-testid="backlink-icon" />,
 } ) );
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+	act,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+} from '@testing-library/react';
 import apiFetch from '@wordpress/api-fetch';
 
 import BacklinksPanel from '../../../src/components/BacklinksPanel';
+import BacklinksToolbarButton from '../../../src/components/BacklinksToolbarButton';
+import { notifyBacklinksChanged } from '../../../src/hooks/backlinksInvalidation';
 
 describe( 'BacklinksPanel', () => {
 	beforeEach( () => {
@@ -72,6 +80,74 @@ describe( 'BacklinksPanel', () => {
 
 		await waitFor( () => expect( apiFetch ).toHaveBeenCalled() );
 		expect( container ).toBeEmptyDOMElement();
+	} );
+
+	it( 'refreshes when backlink data changes', async () => {
+		apiFetch
+			.mockResolvedValueOnce( { total: 0, sources: [] } )
+			.mockResolvedValueOnce( {
+				total: 1,
+				sources: [
+					{
+						collection: null,
+						id: 12,
+						title: 'Updated source',
+						path: 'updated-source-12',
+					},
+				],
+			} );
+
+		const { container } = render(
+			<BacklinksPanel documentId={ 9 } initialOpen />
+		);
+
+		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 1 ) );
+		expect( container ).toBeEmptyDOMElement();
+
+		act( () => {
+			notifyBacklinksChanged();
+		} );
+
+		expect( await screen.findByText( '1 backlink' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Updated source' ) ).toBeInTheDocument();
+		expect( apiFetch ).toHaveBeenCalledTimes( 2 );
+	} );
+
+	it( 'refreshes the popover when it opens', async () => {
+		apiFetch
+			.mockResolvedValueOnce( {
+				total: 1,
+				sources: [
+					{
+						collection: null,
+						id: 12,
+						title: 'Draft source',
+						path: 'draft-source-12',
+					},
+				],
+			} )
+			.mockResolvedValueOnce( {
+				total: 2,
+				sources: [
+					{
+						collection: null,
+						id: 12,
+						title: 'Draft source',
+						mentions: 2,
+						path: 'draft-source-12',
+					},
+				],
+			} );
+
+		render( <BacklinksToolbarButton documentId={ 9 } /> );
+
+		fireEvent.click(
+			await screen.findByRole( 'button', { name: '1 backlink' } )
+		);
+
+		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 2 ) );
+		expect( await screen.findByText( '2 backlinks' ) ).toBeInTheDocument();
+		expect( screen.getByText( '(2)' ) ).toBeInTheDocument();
 	} );
 
 	it( 'shows a single backlink without a group header', async () => {
