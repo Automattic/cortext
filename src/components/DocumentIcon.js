@@ -17,7 +17,9 @@ import { ICON_COLOR_BY_NAME } from './iconColors';
 // a glyph by saved name. Keep that out of the main bundle: most document icons
 // are emoji or images, and WP glyphs can pay the lazy-load cost when needed.
 const DocumentIconWp = lazy( () =>
-	import( /* webpackChunkName: "document-icon-wp" */ './DocumentIconWp' )
+	import(
+		/* webpackChunkName: "document-icon-wp-admin" */ './DocumentIconWp'
+	)
 );
 const DEFAULT_DOCUMENT_ICON_SIZE = 16;
 const EMOJI_VISUAL_SCALE = 0.875;
