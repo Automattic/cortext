@@ -38,8 +38,8 @@ function writeMarker( siteRoot, version ) {
 
 function extractSnapshot( snapshotZip, dest ) {
 	fs.mkdirSync( dest, { recursive: true } );
-		// macOS `unzip` can exit 1 for warnings, such as stripped absolute paths.
-		// Check the extracted files instead.
+	// macOS `unzip` can exit 1 for warnings, such as stripped absolute paths.
+	// Check the extracted files instead.
 	spawnSync( 'unzip', [ '-q', '-o', snapshotZip, '-d', dest ], {
 		stdio: [ 'ignore', 'ignore', 'ignore' ],
 	} );
@@ -68,8 +68,8 @@ function recoverInterruptedSwap( siteRoot ) {
 	if ( ! fs.existsSync( siteRoot ) ) {
 		return;
 	}
-		// Remove scratch extraction dirs left by a killed refresh so they do not
-		// pile up.
+	// Remove scratch extraction dirs left by a killed refresh so they do not
+	// pile up.
 	for ( const name of fs.readdirSync( siteRoot ) ) {
 		if ( name.startsWith( NEXT_PREFIX ) ) {
 			fs.rmSync( path.join( siteRoot, name ), {
@@ -102,22 +102,22 @@ function refreshSiteIfOutdated( { snapshotZip, siteRoot, version } ) {
 
 	const wordpressDir = path.join( siteRoot, 'wordpress' );
 	if ( ! fs.existsSync( wordpressDir ) ) {
-			// No site has been extracted yet; first-run extraction writes the marker.
+		// No site has been extracted yet; first-run extraction writes the marker.
 		return false;
 	}
 
 	const markerString = readMarker( siteRoot );
 	const current = parseVersion( version );
 	const marker = parseVersion( markerString );
-		// Exact same build, including prerelease suffix: no refresh needed.
+	// Exact same build, including prerelease suffix: no refresh needed.
 	if ( markerString && markerString === String( version ) ) {
 		return false;
 	}
-		// Never downgrade. If the marker is numerically newer, the user already ran
-		// a build ahead of this bundle; replacing code under that database could
-		// break it. parseVersion compares only the numeric core, so same-core
-		// prereleases (0.2.0-rc.1 -> 0.2.0-rc.2) still refresh, matching the app
-		// binary swap.
+	// Never downgrade. If the marker is numerically newer, the user already ran
+	// a build ahead of this bundle; replacing code under that database could
+	// break it. parseVersion compares only the numeric core, so same-core
+	// prereleases (0.2.0-rc.1 -> 0.2.0-rc.2) still refresh, matching the app
+	// binary swap.
 	if ( current && marker && isNewer( marker, current ) ) {
 		return false;
 	}
@@ -134,8 +134,8 @@ function refreshSiteIfOutdated( { snapshotZip, siteRoot, version } ) {
 		extractSnapshot( snapshotZip, nextSite );
 		carryOver( wordpressDir, path.join( nextSite, 'wordpress' ) );
 
-			// Keep the swap on one volume. Each rename is atomic: stash the live
-			// tree, promote the new tree, restore the stash if promotion fails.
+		// Keep the swap on one volume. Each rename is atomic: stash the live
+		// tree, promote the new tree, restore the stash if promotion fails.
 		fs.renameSync( wordpressDir, bakDir );
 		try {
 			fs.renameSync( path.join( nextSite, 'wordpress' ), wordpressDir );

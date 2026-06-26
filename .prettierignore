@@ -9,6 +9,10 @@ build/
 dist/
 wordpress/
 
+# Local env and test artifacts
+.wp-env.override.json
+test-results/
+
 # Lockfiles
 package-lock.json
 pnpm-lock.yaml

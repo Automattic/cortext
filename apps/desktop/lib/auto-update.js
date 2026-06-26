@@ -62,8 +62,8 @@ function notInApplicationsFolder() {
 async function promptMoveToApplications() {
 	const { response } = await showMessage( {
 		type: 'info',
-			message: 'Move Cortext to Applications to use updates',
-			detail: 'Cortext needs to run from Applications for automatic updates. Move it now?',
+		message: 'Move Cortext to Applications to use updates',
+		detail: 'Cortext needs to run from Applications for automatic updates. Move it now?',
 		buttons: [ 'Move to Applications', 'Not Now' ],
 		defaultId: 0,
 		cancelId: 1,
@@ -119,12 +119,12 @@ function wireEvents() {
 			setState( 'downloading' );
 			return;
 		}
-			// Manual mode: ask before downloading when automatic installs are off.
+		// Manual mode: ask before downloading when automatic installs are off.
 		showManualDialogs = false;
 		const { response } = await showMessage( {
 			type: 'info',
 			message: 'A new version of Cortext is available',
-				detail: 'Download it now? You can install it later.',
+			detail: 'Download it now? You can install it later.',
 			buttons: [ 'Download', 'Later' ],
 			defaultId: 0,
 			cancelId: 1,
@@ -158,7 +158,7 @@ function wireEvents() {
 		const { response } = await showMessage( {
 			type: 'info',
 			message: 'Update ready to install',
-				detail: 'Restart Cortext now to install the update, or install it later.',
+			detail: 'Restart Cortext now to install the update, or install it later.',
 			buttons: [ 'Restart Now', 'Later' ],
 			defaultId: 0,
 			cancelId: 1,
@@ -197,8 +197,8 @@ function initAutoUpdates( {
 	onStateChange = onState;
 	prepareQuit = prepare;
 	autoUpdater.autoDownload = autoDownload;
-		// Keep install-on-quit tied to the same preference. With the setting off,
-		// a manually downloaded update should not install during the next quit.
+	// Keep install-on-quit tied to the same preference. With the setting off,
+	// a manually downloaded update should not install during the next quit.
 	autoUpdater.autoInstallOnAppQuit = autoDownload;
 	autoUpdater.allowPrerelease = true;
 	autoUpdater.logger = null;
@@ -211,22 +211,22 @@ function runCheck( { manual } ) {
 		return;
 	}
 	if ( notInApplicationsFolder() ) {
-			// Silent checks from a read-only or quarantined path only fail, so skip
-			// them. Manual checks can ask the user to move the app.
+		// Silent checks from a read-only or quarantined path only fail, so skip
+		// them. Manual checks can ask the user to move the app.
 		if ( manual ) {
 			promptMoveToApplications();
 		}
 		return;
 	}
-		// Set this for every check. A later silent retry should not inherit a
-		// previous manual dialog.
+	// Set this for every check. A later silent retry should not inherit a
+	// previous manual dialog.
 	showManualDialogs = manual;
 	autoUpdater.checkForUpdates().catch( reportError );
 }
 
-	// Run a silent launch check and schedule later checks. If electron-updater
-	// cannot load in a packaged build, use the old notify-only checker so users
-	// still hear about updates.
+// Run a silent launch check and schedule later checks. If electron-updater
+// cannot load in a packaged build, use the old notify-only checker so users
+// still hear about updates.
 function scheduleUpdateCheck( options = {} ) {
 	const ready = initAutoUpdates( options );
 	if ( ! ready ) {
@@ -260,8 +260,8 @@ function quitAndInstall() {
 		return;
 	}
 	setState( 'restart' );
-		// Let main.js enter its normal quit path, which stops PHP before the
-		// updater restarts the app.
+	// Let main.js enter its normal quit path, which stops PHP before the
+	// updater restarts the app.
 	prepareQuit?.();
 	autoUpdater.quitAndInstall();
 }

@@ -3,8 +3,8 @@ const fs = require( 'fs' );
 const path = require( 'path' );
 
 const DEFAULTS = {
-		// Download updates in the background and install them after the user
-		// restarts. When off, ask before downloading and do not install on quit.
+	// Download updates in the background and install them after the user
+	// restarts. When off, ask before downloading and do not install on quit.
 	autoInstallUpdates: true,
 };
 
@@ -33,8 +33,8 @@ function get( key ) {
 	return readAll()[ key ];
 }
 
-	// Write through a sibling temp file, then rename it over settings.json. A
-	// crash mid-write leaves the old file intact.
+// Write through a sibling temp file, then rename it over settings.json. A
+// crash mid-write leaves the old file intact.
 function set( key, value ) {
 	const next = { ...readAll(), [ key ]: value };
 	const file = settingsPath();
