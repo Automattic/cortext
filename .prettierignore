@@ -8,6 +8,7 @@ vendor/
 build/
 dist/
 wordpress/
+artifacts/
 
 # Lockfiles
 package-lock.json
