@@ -55,7 +55,7 @@ final class Test_Rest_Backlinks_Controller extends BaseTestCase {
 		parent::tear_down();
 	}
 
-	public function test_returns_page_and_row_backlinks_as_a_flat_list(): void {
+	public function test_returns_page_and_row_backlinks_together(): void {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
 
 		$target     = $this->create_document( 'Target' );
@@ -95,7 +95,7 @@ final class Test_Rest_Backlinks_Controller extends BaseTestCase {
 		$this->assertSame( 0, $response->get_data()['total'] );
 	}
 
-	public function test_unreadable_source_is_filtered_out(): void {
+	public function test_hides_sources_the_viewer_cannot_read(): void {
 		$admin = $this->create_user( 'administrator' );
 		wp_set_current_user( $admin );
 
@@ -129,7 +129,7 @@ final class Test_Rest_Backlinks_Controller extends BaseTestCase {
 		$this->assertSame( 404, $response->get_status() );
 	}
 
-	public function test_empty_result_when_never_mentioned(): void {
+	public function test_returns_empty_sources_when_target_has_no_backlinks(): void {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
 		$target = $this->create_document( 'Target' );
 

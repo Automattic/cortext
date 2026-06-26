@@ -1,6 +1,6 @@
 <?php
 /**
- * WP-CLI command that backfills the Cortext mention index.
+ * WP-CLI helper for rebuilding the Cortext mention index.
  *
  * @package Cortext
  */
@@ -18,7 +18,7 @@ use WP_CLI_Command;
 final class BackfillMentions extends WP_CLI_Command {
 
 	/**
-	 * Re-indexes inline document mentions in existing Cortext documents.
+	 * Rebuilds inline document mentions for existing Cortext documents.
 	 *
 	 * ## EXAMPLES
 	 *
@@ -31,7 +31,7 @@ final class BackfillMentions extends WP_CLI_Command {
 
 		WP_CLI::success(
 			sprintf(
-				'Indexed %d mention(s) across %d document(s).',
+				'Indexed %d mention(s) in %d document(s).',
 				$result['mentions'],
 				$result['documents']
 			)

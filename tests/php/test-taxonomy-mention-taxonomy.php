@@ -37,13 +37,13 @@ final class Test_Taxonomy_Mention_Taxonomy extends BaseTestCase {
 		parent::tear_down();
 	}
 
-	public function test_extract_target_ids_parses_and_dedupes_mentions(): void {
+	public function test_extract_target_ids_finds_each_mentioned_target_once(): void {
 		$html = '<p><a data-crtxt-mention="8">A</a><a data-crtxt-mention="8">A again</a><a data-crtxt-mention="9">B</a></p>';
 
 		$this->assertSame( array( 8, 9 ), MentionTaxonomy::extract_target_ids( $html ) );
 	}
 
-	public function test_save_tags_source_with_target_mirror_term(): void {
+	public function test_save_tags_source_with_the_target_term(): void {
 		$target = $this->create_document( 'Target' );
 		$source = $this->create_document(
 			'Source',
@@ -55,7 +55,7 @@ final class Test_Taxonomy_Mention_Taxonomy extends BaseTestCase {
 		$this->assertSame( array( (string) $target ), $slugs );
 	}
 
-	public function test_resave_without_mention_removes_relationship(): void {
+	public function test_resave_without_mentions_removes_the_target_term(): void {
 		$target = $this->create_document( 'Target' );
 		$source = $this->create_document(
 			'Source',
@@ -85,7 +85,7 @@ final class Test_Taxonomy_Mention_Taxonomy extends BaseTestCase {
 		$this->assertSame( 0, MentionTaxonomy::term_id_for_target( $source ) );
 	}
 
-	public function test_target_delete_removes_mirror_term(): void {
+	public function test_target_delete_removes_the_target_term(): void {
 		$target = $this->create_document( 'Target' );
 		$this->create_document( 'Source', $this->mention_markup( $target ) );
 		$this->assertGreaterThan( 0, MentionTaxonomy::term_id_for_target( $target ) );

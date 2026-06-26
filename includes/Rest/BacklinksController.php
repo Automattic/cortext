@@ -1,6 +1,6 @@
 <?php
 /**
- * REST endpoint for backlinks to a Cortext document.
+ * REST endpoint that lists documents mentioning a target.
  *
  * @package Cortext
  */
@@ -24,8 +24,8 @@ final class BacklinksController {
 
 	private const NAMESPACE = 'cortext/v1';
 
-	// Backlinks fill one sidebar panel; cap the result and report truncation
-	// rather than page through thousands of sources.
+	// The sidebar only needs a bounded list; return a truncation flag instead of
+	// paging through very large backlink sets.
 	private const MAX_SOURCES = 200;
 
 	public function register(): void {
@@ -87,7 +87,7 @@ final class BacklinksController {
 				array(
 					'post_type'           => Document::POST_TYPE,
 					'post_status'         => array( 'publish', 'draft', 'private' ),
-					// Fetch one past the cap so a fuller index reports as truncated.
+					// Fetch one extra row so the response can say when the list was capped.
 					// phpcs:ignore WordPress.WP.PostsPerPage.posts_per_page_posts_per_page -- Backlinks are capped intentionally for one sidebar payload.
 					'posts_per_page'      => self::MAX_SOURCES + 1,
 					'ignore_sticky_posts' => true,

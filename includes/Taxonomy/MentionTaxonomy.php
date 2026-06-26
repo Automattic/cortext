@@ -1,6 +1,6 @@
 <?php
 /**
- * Indexes Cortext inline mentions with private mirror terms.
+ * Keeps a private taxonomy mirror of inline document mentions.
  *
  * @package Cortext
  */
@@ -78,9 +78,9 @@ final class MentionTaxonomy {
 			array( 'slug' => self::term_slug_for_target( $target_id ) )
 		);
 		if ( is_wp_error( $result ) ) {
-			// A concurrent save may have inserted the mirror term between the
-			// lookup above and this insert. WP returns the existing term id in
-			// the `term_exists` error data; fall back to a slug lookup.
+			// Another save may have created the mirror term after the lookup
+			// above. WP puts the existing id in `term_exists`; otherwise, look
+			// it up by slug.
 			$existing_id = (int) $result->get_error_data();
 			return $existing_id > 0 ? $existing_id : self::term_id_for_target( $target_id );
 		}
@@ -88,7 +88,7 @@ final class MentionTaxonomy {
 	}
 
 	/**
-	 * Extracts distinct mentioned target ids from post content.
+	 * Finds the target document ids mentioned in post content.
 	 *
 	 * @param string $content   Post content.
 	 * @param int    $source_id Source document id to exclude from results.
@@ -124,7 +124,7 @@ final class MentionTaxonomy {
 	}
 
 	/**
-	 * Syncs mention terms when a document is saved.
+	 * Updates mention terms when a document is saved.
 	 *
 	 * @param int     $post_id Document id.
 	 * @param WP_Post $post    Saved document.
@@ -158,7 +158,7 @@ final class MentionTaxonomy {
 	}
 
 	/**
-	 * Re-indexes every existing Cortext document.
+	 * Rebuilds the mention index for existing Cortext documents.
 	 *
 	 * @return array{documents:int,mentions:int}
 	 */

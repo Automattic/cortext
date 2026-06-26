@@ -23,7 +23,7 @@ describe( 'BacklinksPanel', () => {
 		jest.clearAllMocks();
 	} );
 
-	it( 'renders flat backlinks and navigates to a source', async () => {
+	it( 'shows backlinks and opens the source document', async () => {
 		apiFetch.mockResolvedValueOnce( {
 			total: 2,
 			sources: [
@@ -65,7 +65,7 @@ describe( 'BacklinksPanel', () => {
 		} );
 	} );
 
-	it( 'stays hidden when there are no backlinks', async () => {
+	it( 'hides itself when there are no backlinks', async () => {
 		apiFetch.mockResolvedValueOnce( { total: 0, sources: [] } );
 
 		const { container } = render( <BacklinksPanel documentId={ 9 } /> );
@@ -74,7 +74,7 @@ describe( 'BacklinksPanel', () => {
 		expect( container ).toBeEmptyDOMElement();
 	} );
 
-	it( 'does not repeat the collection header for a single backlink', async () => {
+	it( 'shows a single backlink without a group header', async () => {
 		apiFetch.mockResolvedValueOnce( {
 			total: 1,
 			sources: [
@@ -94,7 +94,7 @@ describe( 'BacklinksPanel', () => {
 		expect( screen.queryByText( 'Pages (1)' ) ).not.toBeInTheDocument();
 	} );
 
-	it( 'deduplicates legacy grouped responses by source id', async () => {
+	it( 'keeps legacy grouped responses from showing the same source twice', async () => {
 		apiFetch.mockResolvedValueOnce( {
 			total: 2,
 			groups: [
