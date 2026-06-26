@@ -29,12 +29,13 @@ describe( 'dataViewAdapter', () => {
 		const view = adaptViewForDataViews( canonicalView );
 
 		expect( view.type ).toBe( 'table' );
+		expect( view.titleField ).toBe( 'title' );
+		expect( view.showTitle ).toBe( false );
 		expect( view.fields ).toEqual( [ 'title', 'field-1', 'field-2' ] );
 		expect( view.layout ).toEqual( {
 			density: 'compact',
-			styles: { title: { width: 280 } },
+			styles: { title: { minWidth: 80, width: 280 } },
 		} );
-		expect( view.titleField ).toBeUndefined();
 		expect( view.mediaField ).toBeUndefined();
 	} );
 

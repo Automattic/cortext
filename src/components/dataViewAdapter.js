@@ -1,4 +1,4 @@
-import { COVER_FIELD_ID, TITLE_FIELD_ID } from './dataViewColumns';
+import { COVER_FIELD_ID, MIN_WIDTHS, TITLE_FIELD_ID } from './dataViewColumns';
 
 // tech-debt.md#td-dataviews-view-state-shape: DataViews only carries the active layout shape. Cortext keeps
 // per-layout buckets and hydrates the active shape before rendering.
@@ -10,6 +10,8 @@ export const DEFAULT_LAYOUTS = {
 	grid: { layout: {} },
 	list: {},
 };
+
+const DEFAULT_TABLE_TITLE_WIDTH = 240;
 
 function isObject( value ) {
 	return Boolean(
@@ -23,6 +25,27 @@ function normalizeType( type ) {
 
 function cloneLayout( layout ) {
 	return isObject( layout ) ? { ...layout } : {};
+}
+
+function layoutForTableDataViews( layout ) {
+	const nextLayout = cloneLayout( layout );
+	const styles = isObject( nextLayout.styles )
+		? { ...nextLayout.styles }
+		: {};
+	const titleStyle = isObject( styles[ TITLE_FIELD_ID ] )
+		? { ...styles[ TITLE_FIELD_ID ] }
+		: {};
+
+	styles[ TITLE_FIELD_ID ] = {
+		minWidth: MIN_WIDTHS.title,
+		...titleStyle,
+		width: titleStyle.width ?? DEFAULT_TABLE_TITLE_WIDTH,
+	};
+
+	return {
+		...nextLayout,
+		styles,
+	};
 }
 
 function defaultLayoutForType( type ) {
@@ -99,7 +122,9 @@ function withActiveLayout( view, type, layoutByType, fieldsByType ) {
 	};
 
 	if ( type === 'table' ) {
-		delete next.titleField;
+		next.titleField = TITLE_FIELD_ID;
+		next.showTitle = false;
+		next.layout = layoutForTableDataViews( next.layout );
 		delete next.mediaField;
 		delete next.descriptionField;
 		return next;
