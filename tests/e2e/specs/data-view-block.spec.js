@@ -3208,6 +3208,17 @@ test.describe( 'Collection view block', () => {
 				},
 			} );
 
+			const rowRequestUrls = [];
+			page.on( 'request', ( request ) => {
+				const url = decodeURIComponent( request.url() );
+				if (
+					url.includes( '/cortext/v1/rows' ) &&
+					url.includes( `trait=${ fixture.collection.id }` )
+				) {
+					rowRequestUrls.push( url );
+				}
+			} );
+
 			await admin.visitAdminPage(
 				'admin.php',
 				`page=cortext&p=/${ fixture.page.id }`
@@ -3231,6 +3242,39 @@ test.describe( 'Collection view block', () => {
 					canvas.locator( 'tfoot.cortext-table-calculations' )
 				).nth( 1 )
 			).toContainText( '30' );
+			await expect
+				.poll( () => rowRequestUrls.length )
+				.toBeGreaterThan( 0 );
+			expect(
+				rowRequestUrls.some( ( url ) => url.includes( 'per_page=100' ) )
+			).toBe( false );
+			expect(
+				rowRequestUrls.some( ( url ) => url.includes( 'per_page=1' ) )
+			).toBe( true );
+			expect(
+				rowRequestUrls.some( ( url ) =>
+					url.includes( `calculations[${ pageKey }]=sum` )
+				)
+			).toBe( true );
+
+			await canvas.getByRole( 'button', { name: 'Next page' } ).click();
+			await expect( canvas.getByText( 'Beta Book' ) ).toBeVisible();
+			await expect( canvas.getByText( 'Alpha Book' ) ).toBeHidden();
+			await expect(
+				tableFooterDataCells(
+					canvas.locator( 'tfoot.cortext-table-calculations' )
+				).nth( 1 )
+			).toContainText( '30' );
+			expect(
+				rowRequestUrls.some( ( url ) => url.includes( 'page=2' ) )
+			).toBe( true );
+			expect(
+				rowRequestUrls.every(
+					( url ) =>
+						url.includes( 'per_page=1' ) &&
+						url.includes( `calculations[${ pageKey }]=sum` )
+				)
+			).toBe( true );
 		} finally {
 			for ( const row of fixture.rows ?? [] ) {
 				await deleteIfCreated(

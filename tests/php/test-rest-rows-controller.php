@@ -212,6 +212,87 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertArrayHasKey( 'totalPages', $data );
 		$this->assertArrayHasKey( 'collection', $data );
 		$this->assertArrayHasKey( 'fields', $data );
+		$this->assertArrayNotHasKey( 'calculations', $data );
+	}
+
+	public function test_query_rows_returns_calculations_for_full_result_set_with_paged_rows(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+		$fixture   = $this->create_collection_fixture( 'calculations', 'number' );
+		$score_id  = $fixture['field_id'];
+		$status_id = $this->create_collection_field( $fixture['collection_id'], 'Status', 'text' );
+		$notes_id  = $this->create_collection_field( $fixture['collection_id'], 'Notes', 'text' );
+		$due_id    = $this->create_collection_field( $fixture['collection_id'], 'Due', 'date' );
+
+		$this->create_row_fixture(
+			$fixture['collection_id'],
+			'Alpha row',
+			'private',
+			array(
+				"field-{$score_id}"  => 10,
+				"field-{$status_id}" => 'Alpha',
+				"field-{$due_id}"    => '2026-02-01',
+			)
+		);
+		$this->create_row_fixture(
+			$fixture['collection_id'],
+			'Beta row',
+			'private',
+			array(
+				"field-{$score_id}"  => 20,
+				"field-{$status_id}" => 'Beta',
+				"field-{$notes_id}"  => 'Filled',
+				"field-{$due_id}"    => '2026-01-01',
+			)
+		);
+		$this->create_row_fixture(
+			$fixture['collection_id'],
+			'Gamma row',
+			'private',
+			array(
+				"field-{$score_id}"  => 30,
+				"field-{$status_id}" => 'Alpha',
+				"field-{$due_id}"    => '2026-03-01',
+			)
+		);
+
+		$response = $this->query_rows(
+			array(
+				'trait'        => $fixture['collection_id'],
+				'per_page'     => 1,
+				'calculations' => array(
+					"field-{$score_id}"  => 'sum',
+					"field-{$status_id}" => 'countUnique',
+					"field-{$notes_id}"  => 'percentEmpty',
+					"field-{$due_id}"    => 'min',
+				),
+			)
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertCount( 1, $data['rows'] );
+		$this->assertSame( 3, $data['total'] );
+		$this->assertSame( 60.0, $data['calculations'][ "field-{$score_id}" ]['value'] );
+		$this->assertSame( 2, $data['calculations'][ "field-{$status_id}" ]['value'] );
+		$this->assertEqualsWithDelta( 2 / 3, $data['calculations'][ "field-{$notes_id}" ]['value'], 0.00001 );
+		$this->assertSame( '2026-01-01', $data['calculations'][ "field-{$due_id}" ]['value'] );
+	}
+
+	public function test_query_rows_rejects_invalid_calculation_for_field_type(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+		$fixture = $this->create_collection_fixture( 'badcalc', 'text' );
+
+		$response = $this->query_rows(
+			array(
+				'trait'        => $fixture['collection_id'],
+				'calculations' => array(
+					"field-{$fixture['field_id']}" => 'sum',
+				),
+			)
+		);
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'cortext_invalid_calculation', $response->as_error()->get_error_code() );
 	}
 
 	public function test_field_definitions_in_response(): void {
@@ -307,16 +388,7 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 			)
 		);
 
-		$field_id = (int) wp_insert_post(
-			array(
-				'post_type'   => Field::POST_TYPE,
-				'post_status' => 'private',
-				'post_title'  => 'Score',
-				'meta_input'  => array( 'type' => $field_type ),
-			)
-		);
-
-		add_post_meta( $collection_id, 'cortext_fields', (string) $field_id );
+		$field_id = $this->create_collection_field( $collection_id, 'Score', $field_type );
 
 		return array(
 			'collection_id' => $collection_id,
@@ -324,7 +396,22 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		);
 	}
 
-	private function create_row_fixture( int $collection_id, string $title, string $post_status ): int {
+	private function create_collection_field( int $collection_id, string $title, string $field_type ): int {
+		$field_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => $title,
+				'meta_input'  => array( 'type' => $field_type ),
+			)
+		);
+
+		add_post_meta( $collection_id, 'cortext_fields', (string) $field_id );
+
+		return $field_id;
+	}
+
+	private function create_row_fixture( int $collection_id, string $title, string $post_status, array $meta = array() ): int {
 		$row_id = (int) wp_insert_post(
 			array(
 				'post_type'   => Document::POST_TYPE,
@@ -336,6 +423,10 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$term_id = TraitTaxonomy::term_id_for_trait( $collection_id );
 		if ( $term_id > 0 ) {
 			wp_set_object_terms( $row_id, array( $term_id ), TraitTaxonomy::TAXONOMY, false );
+		}
+
+		foreach ( $meta as $key => $value ) {
+			update_post_meta( $row_id, $key, $value );
 		}
 
 		return $row_id;

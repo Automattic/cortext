@@ -88,10 +88,6 @@ import { elementsFromOptions } from '../hooks/optionElements';
 import { notifyDocumentTrashChanged } from '../hooks/documentTrashInvalidation';
 import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
 
-function hasActiveCalculations( view ) {
-	return Object.values( view?.calculations ?? {} ).some( Boolean );
-}
-
 const BULK_DELETE_CONCURRENCY = 4;
 // tech-debt.md#td-dataviews-list-row-hooks: DataViews ties list focus to its own selection. Cortext
 // uses blank-row clicks and keyboard activation to open the row instead.
@@ -174,6 +170,7 @@ export default function CollectionDataViews( {
 
 	const {
 		data,
+		calculations: serverCalculations,
 		paginationInfo: serverPaginationInfo,
 		isLoading,
 		hasResolved: rowsResolved,
@@ -184,8 +181,7 @@ export default function CollectionDataViews( {
 	} = useCollectionRows(
 		isResolving ? null : collectionId,
 		reconciledView,
-		availableFields,
-		{ forceClient: hasActiveCalculations( reconciledView ) }
+		availableFields
 	);
 
 	const isTableLayout = view?.type === 'table';
@@ -1619,6 +1615,10 @@ export default function CollectionDataViews( {
 											view={ view }
 											fields={ availableFields }
 											data={ dataFilteredForCalculations }
+											calculations={ serverCalculations }
+											isServerPaginated={
+												isServerPaginated
+											}
 											onChangeView={ onChangeView }
 											hasSelectionColumn={
 												hasSelectionColumn

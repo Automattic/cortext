@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
 import { addQueryArgs } from '@wordpress/url';
 import apiFetch from '@wordpress/api-fetch';
 
+import { sanitizeCalculations } from '../components/tableCalculations';
 import { useCollectionRowsInvalidation } from './rowInvalidation';
 
 // tech-debt.md#td-rows-not-in-core-data: rows live outside core-data, so this hook manages
@@ -24,10 +25,6 @@ function serverFieldInfo( field ) {
 
 function fieldInfoMap( fields = [] ) {
 	return new Map( fields.map( ( f ) => [ f.id, serverFieldInfo( f ) ] ) );
-}
-
-function hasCalculations( view ) {
-	return Object.values( view?.calculations ?? {} ).some( Boolean );
 }
 
 function pageNumber( value, fallback = 1 ) {
@@ -341,6 +338,13 @@ function buildServerQueryArgs( collectionId, view, filters = [], fields = [] ) {
 		} );
 	}
 
+	const calculations = sanitizeCalculations( view?.calculations, fields );
+	Object.entries( calculations )
+		.sort( ( [ a ], [ b ] ) => a.localeCompare( b ) )
+		.forEach( ( [ fieldId, calculation ] ) => {
+			args[ `calculations[${ fieldId }]` ] = calculation;
+		} );
+
 	return args;
 }
 
@@ -421,7 +425,6 @@ export function buildQueryPlan(
 	const filterResult = serverFilterResult( view?.filters, fieldInfo );
 	const canUseServer =
 		! options.forceClient &&
-		! hasCalculations( view ) &&
 		isServerSupportedSort( view?.sort, fieldInfo ) &&
 		! filterResult.hasUnsupported;
 
@@ -463,6 +466,7 @@ export default function useCollectionRows(
 	const [ state, setState ] = useState( {
 		data: [],
 		collection: null,
+		calculations: {},
 		paginationInfo: { totalItems: 0, totalPages: 0 },
 		isLoading: false,
 		hasResolved: false,
@@ -513,6 +517,7 @@ export default function useCollectionRows(
 			setState( {
 				data: [],
 				collection: null,
+				calculations: {},
 				paginationInfo: { totalItems: 0, totalPages: 0 },
 				isLoading: false,
 				hasResolved: false,
@@ -618,6 +623,12 @@ export default function useCollectionRows(
 				setState( {
 					data: Array.isArray( body.rows ) ? body.rows : [],
 					collection: body.collection ?? null,
+					calculations:
+						body.calculations &&
+						typeof body.calculations === 'object' &&
+						! Array.isArray( body.calculations )
+							? body.calculations
+							: {},
 					paginationInfo: {
 						totalItems: body.total ?? 0,
 						totalPages: body.totalPages ?? 1,
@@ -633,6 +644,7 @@ export default function useCollectionRows(
 				setState( {
 					data: [],
 					collection: null,
+					calculations: {},
 					paginationInfo: { totalItems: 0, totalPages: 0 },
 					isLoading: false,
 					hasResolved: true,

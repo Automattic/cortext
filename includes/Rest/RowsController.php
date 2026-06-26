@@ -32,7 +32,40 @@ use WP_REST_Response;
 
 final class RowsController {
 
-	private const NAMESPACE = 'cortext/v1';
+	private const NAMESPACE                   = 'cortext/v1';
+	private const COUNT_CALCULATIONS          = array(
+		'count',
+		'countValues',
+		'countUnique',
+		'empty',
+		'notEmpty',
+	);
+	private const PRESENCE_COUNT_CALCULATIONS = array( 'count', 'empty', 'notEmpty' );
+	private const BOOLEAN_COUNT_CALCULATIONS  = array( 'count' );
+	private const PERCENT_CALCULATIONS        = array( 'percentEmpty', 'percentNotEmpty' );
+	private const NUMBER_CALCULATIONS         = array(
+		'sum',
+		'average',
+		'median',
+		'min',
+		'max',
+		'range',
+	);
+	private const NUMBER_TYPES                = array( 'number', 'integer' );
+	private const DATE_TYPES                  = array( 'date', 'datetime' );
+	private const BOOLEAN_TYPES               = array( 'boolean', 'checkbox' );
+	private const MULTI_VALUE_TYPES           = array( 'array', 'multiselect' );
+	private const SCALAR_COUNT_TYPES          = array(
+		'title',
+		'text',
+		'email',
+		'url',
+		'select',
+		'number',
+		'integer',
+		'date',
+		'datetime',
+	);
 
 	public function register(): void {
 		add_action( 'rest_api_init', array( $this, 'register_routes' ) );
@@ -60,25 +93,25 @@ final class RowsController {
 					'callback'            => array( $this, 'get_rows' ),
 					'permission_callback' => array( $this, 'can_read' ),
 					'args'                => array(
-						'trait'    => array(
+						'trait'        => array(
 							'type'     => 'integer',
 							'required' => true,
 						),
-						'page'     => array(
+						'page'         => array(
 							'type'    => 'integer',
 							'default' => 1,
 							'minimum' => 1,
 						),
-						'per_page' => array(
+						'per_page'     => array(
 							'type'              => 'integer',
 							'default'           => 25,
 							'validate_callback' => static fn( $value ) => (int) $value >= 1 && (int) $value <= 100,
 						),
-						'search'   => array(
+						'search'       => array(
 							'type'    => 'string',
 							'default' => '',
 						),
-						'sort'     => array(
+						'sort'         => array(
 							'type'       => 'object',
 							'default'    => null,
 							'properties' => array(
@@ -89,23 +122,28 @@ final class RowsController {
 								),
 							),
 						),
-						'filters'  => array(
+						'filters'      => array(
 							'type'    => 'array',
 							'default' => array(),
 						),
-						'include'  => array(
+						'include'      => array(
 							'type'              => 'array',
 							'default'           => array(),
 							'items'             => array( 'type' => 'integer' ),
 							'sanitize_callback' => array( $this, 'sanitize_include_param' ),
 							'validate_callback' => array( $this, 'validate_include_param' ),
 						),
-						'fields'   => array(
+						'fields'       => array(
 							'type'    => 'array',
 							'default' => null,
 							'items'   => array( 'type' => 'string' ),
 						),
-						'context'  => array(
+						'calculations' => array(
+							'type'       => 'object',
+							'default'    => array(),
+							'properties' => array(),
+						),
+						'context'      => array(
 							'type'    => 'string',
 							'default' => 'edit',
 							'enum'    => array( 'view', 'edit' ),
@@ -181,6 +219,18 @@ final class RowsController {
 		$formatted_field_ids = is_array( $requested_fields )
 			? $this->filter_requested_field_ids( $requested_fields, $field_ids )
 			: $field_ids;
+		$row_query           = new RowsFilterQuery();
+		$field_schema        = $row_query->field_schema_for( $collection_id );
+		$fields              = $this->field_definitions( $field_ids );
+
+		$calculation_requests = $this->validated_calculations(
+			$request->get_param( 'calculations' ),
+			$field_schema,
+			$collection_id
+		);
+		if ( is_wp_error( $calculation_requests ) ) {
+			return $calculation_requests;
+		}
 
 		// If `include` was sent but sanitizes to an empty list, return no rows.
 		// Falling through would return page 1 of the collection, which is not
@@ -188,20 +238,25 @@ final class RowsController {
 		// but future callers might.
 		$query_params = $request->get_query_params();
 		if ( array_key_exists( 'include', $query_params ) && count( (array) $request->get_param( 'include' ) ) === 0 ) {
+			$response = array(
+				'rows'       => array(),
+				'total'      => 0,
+				'totalPages' => 0,
+				'collection' => $this->collection_definition( $collection ),
+				'fields'     => $fields,
+			);
+			if ( count( $calculation_requests ) > 0 ) {
+				$response['calculations'] = $this->calculate_rows(
+					array(),
+					$calculation_requests,
+					$field_schema
+				);
+			}
 			return new WP_REST_Response(
-				array(
-					'rows'       => array(),
-					'total'      => 0,
-					'totalPages' => 0,
-					'collection' => $this->collection_definition( $collection ),
-					'fields'     => $this->field_definitions( $field_ids ),
-				),
+				$response,
 				200
 			);
 		}
-
-		$row_query    = new RowsFilterQuery();
-		$field_schema = $row_query->field_schema_for( $collection_id );
 
 		$sort_validation = $row_query->validate_sort(
 			$request->get_param( 'sort' ),
@@ -286,18 +341,32 @@ final class RowsController {
 			$posts
 		);
 
-		$fields = $this->field_definitions( $field_ids );
-
-		return new WP_REST_Response(
-			array(
-				'rows'       => $rows,
-				'total'      => $total,
-				'totalPages' => $total_pages,
-				'collection' => $this->collection_definition( $collection ),
-				'fields'     => $fields,
-			),
-			200
+		$response = array(
+			'rows'       => $rows,
+			'total'      => $total,
+			'totalPages' => $total_pages,
+			'collection' => $this->collection_definition( $collection ),
+			'fields'     => $fields,
 		);
+
+		if ( count( $calculation_requests ) > 0 ) {
+			$calculation_posts        = $this->query_posts_for_calculations(
+				$request,
+				$collection_id,
+				$row_statuses,
+				$row_query,
+				$field_schema,
+				$where_sql,
+				$filter_sql['join']
+			);
+			$response['calculations'] = $this->calculate_rows(
+				$calculation_posts,
+				$calculation_requests,
+				$field_schema
+			);
+		}
+
+		return new WP_REST_Response( $response, 200 );
 	}
 
 	/**
@@ -421,6 +490,457 @@ final class RowsController {
 		}
 
 		return $args;
+	}
+
+	/**
+	 * Builds the unpaged query for table calculation totals.
+	 *
+	 * @param WP_REST_Request $request       Full request object.
+	 * @param int             $collection_id Collection (trait) post ID.
+	 * @param string[]        $row_statuses  Post statuses visible to this request.
+	 * @return array
+	 */
+	private function build_calculation_query_args( WP_REST_Request $request, int $collection_id, array $row_statuses ): array {
+		$args = array(
+			'post_type'      => Document::POST_TYPE,
+			'post_status'    => $row_statuses,
+			'posts_per_page' => -1,
+			'paged'          => 1,
+			'no_found_rows'  => true,
+			'orderby'        => array( 'ID' => 'ASC' ),
+		);
+
+		$trait_term_id = Relations::trait_term_id_for_collection( $collection_id );
+		if ( $trait_term_id > 0 ) {
+			$args['tax_query'] = array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
+				array(
+					'taxonomy' => TraitTaxonomy::TAXONOMY,
+					'field'    => 'term_id',
+					'terms'    => array( $trait_term_id ),
+				),
+			);
+		}
+
+		$include = (array) $request->get_param( 'include' );
+		if ( count( $include ) > 0 ) {
+			$args['post__in'] = $include;
+		}
+
+		return $args;
+	}
+
+	/**
+	 * Queries every row in the current filter and search scope for calculations.
+	 *
+	 * @param WP_REST_Request $request       Full request object.
+	 * @param int             $collection_id Collection (trait) post ID.
+	 * @param string[]        $row_statuses  Post statuses visible to this request.
+	 * @param RowsFilterQuery $row_query     Row filter/search compiler.
+	 * @param array           $field_schema  Field schema from RowsFilterQuery.
+	 * @param string          $where_sql     Compiled filter/search WHERE SQL.
+	 * @param string          $join_sql      Compiled filter JOIN SQL.
+	 * @return WP_Post[]
+	 */
+	private function query_posts_for_calculations(
+		WP_REST_Request $request,
+		int $collection_id,
+		array $row_statuses,
+		RowsFilterQuery $row_query,
+		array $field_schema,
+		string $where_sql,
+		string $join_sql
+	): array {
+		$scope = new RowsQueryScope(
+			$row_query,
+			$field_schema,
+			$where_sql,
+			$join_sql,
+			null,
+			'',
+			TraitTaxonomy::term_taxonomy_id_for_trait( $collection_id )
+		);
+		$query = $scope->run(
+			$this->build_calculation_query_args( $request, $collection_id, $row_statuses )
+		);
+
+		return array_values(
+			array_filter(
+				$query->posts,
+				static fn( $post ): bool => $post instanceof WP_Post
+			)
+		);
+	}
+
+	/**
+	 * Adds system fields that can be visible in DataViews, but are not sortable
+	 * or filterable row-query fields.
+	 *
+	 * @param array $field_schema Base query field schema.
+	 * @return array
+	 */
+	private function calculation_field_schema( array $field_schema ): array {
+		unset( $field_schema['manual'] );
+
+		$field_schema['cover']       = array(
+			'id'     => 0,
+			'key'    => 'cover',
+			'type'   => 'media',
+			'system' => true,
+		);
+		$field_schema['created_by']  = array(
+			'id'     => 0,
+			'key'    => 'created_by',
+			'type'   => 'text',
+			'system' => true,
+		);
+		$field_schema['modified_by'] = array(
+			'id'     => 0,
+			'key'    => 'modified_by',
+			'type'   => 'text',
+			'system' => true,
+		);
+
+		return $field_schema;
+	}
+
+	/**
+	 * Validates the requested `calculations[field-id]=operation` map.
+	 *
+	 * @param mixed $raw           Raw request value.
+	 * @param array $field_schema  Field schema from RowsFilterQuery.
+	 * @param int   $collection_id Collection post ID for errors.
+	 * @return array<string,string>|WP_Error
+	 */
+	private function validated_calculations( mixed $raw, array $field_schema, int $collection_id ): array|WP_Error {
+		if ( null === $raw || array() === $raw || '' === $raw ) {
+			return array();
+		}
+		if ( ! is_array( $raw ) ) {
+			return new WP_Error(
+				'cortext_invalid_calculations',
+				__( 'Calculations must be an object keyed by field ID.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$schema   = $this->calculation_field_schema( $field_schema );
+		$requests = array();
+		foreach ( $raw as $field_key => $calculation ) {
+			$field_key   = (string) $field_key;
+			$calculation = (string) $calculation;
+
+			if ( ! isset( $schema[ $field_key ] ) ) {
+				return new WP_Error(
+					'cortext_invalid_calculation_field',
+					sprintf(
+						/* translators: 1: field key, 2: collection ID */
+						__( 'Field "%1$s" cannot be calculated for collection %2$d.', 'cortext' ),
+						$field_key,
+						$collection_id
+					),
+					array( 'status' => 400 )
+				);
+			}
+
+			if ( ! $this->is_calculation_available( $schema[ $field_key ], $calculation ) ) {
+				return new WP_Error(
+					'cortext_invalid_calculation',
+					sprintf(
+						/* translators: 1: calculation key, 2: field key */
+						__( 'Calculation "%1$s" is not available for field "%2$s".', 'cortext' ),
+						$calculation,
+						$field_key
+					),
+					array( 'status' => 400 )
+				);
+			}
+
+			$requests[ $field_key ] = $calculation;
+		}
+
+		return $requests;
+	}
+
+	/**
+	 * Returns all calculations available for a schema field.
+	 *
+	 * @param array $field Schema field entry.
+	 * @return string[]
+	 */
+	private function calculation_options_for_field( array $field ): array {
+		$type          = (string) ( $field['type'] ?? 'text' );
+		$count_options = self::PRESENCE_COUNT_CALCULATIONS;
+		if ( in_array( $type, self::BOOLEAN_TYPES, true ) ) {
+			$count_options = self::BOOLEAN_COUNT_CALCULATIONS;
+		} elseif ( in_array( $type, self::SCALAR_COUNT_TYPES, true ) ) {
+			$count_options = self::COUNT_CALCULATIONS;
+		} elseif ( in_array( $type, self::MULTI_VALUE_TYPES, true ) ) {
+			$count_options = self::PRESENCE_COUNT_CALCULATIONS;
+		}
+
+		$options = $count_options;
+		if ( in_array( 'empty', $count_options, true ) && in_array( 'notEmpty', $count_options, true ) ) {
+			$options = array_merge( $options, self::PERCENT_CALCULATIONS );
+		}
+		if ( in_array( $type, self::NUMBER_TYPES, true ) ) {
+			$options = array_merge( $options, self::NUMBER_CALCULATIONS );
+		} elseif ( in_array( $type, self::DATE_TYPES, true ) ) {
+			$options = array_merge( $options, array( 'min', 'max' ) );
+		}
+
+		return array_values( array_unique( $options ) );
+	}
+
+	private function is_calculation_available( array $field, string $calculation ): bool {
+		return in_array( $calculation, $this->calculation_options_for_field( $field ), true );
+	}
+
+	/**
+	 * Computes raw calculation values for a list of matching rows.
+	 *
+	 * @param WP_Post[]            $posts        Matching rows.
+	 * @param array<string,string> $requests     Field key => calculation key.
+	 * @param array                $field_schema Field schema from RowsFilterQuery.
+	 * @return array<string,array{calculation:string,value:mixed}>
+	 */
+	private function calculate_rows( array $posts, array $requests, array $field_schema ): array {
+		$schema           = $this->calculation_field_schema( $field_schema );
+		$custom_field_ids = array();
+		foreach ( $requests as $field_key => $calculation ) {
+			if ( 'count' === $calculation ) {
+				continue;
+			}
+			if ( preg_match( '/^field-(\d+)$/', $field_key, $matches ) ) {
+				$custom_field_ids[] = (int) $matches[1];
+			}
+		}
+		$custom_field_ids = array_values( array_unique( $custom_field_ids ) );
+
+		$ctx              = new RowFormatContext();
+		$ctx->field_types = $this->field_types_map( $custom_field_ids );
+		$multi_field_ids  = $this->multi_value_field_ids_from( $ctx->field_types );
+
+		$this->prime_user_cache( $posts );
+		$related_ids = $this->collect_related_row_ids( $posts, $custom_field_ids, $ctx );
+		if ( count( $related_ids ) > 0 ) {
+			_prime_post_caches( $related_ids, false, true );
+		}
+
+		$results = array();
+		foreach ( $requests as $field_key => $calculation ) {
+			if ( ! isset( $schema[ $field_key ] ) ) {
+				continue;
+			}
+
+			if ( 'count' === $calculation ) {
+				$results[ $field_key ] = array(
+					'calculation' => $calculation,
+					'value'       => count( $posts ),
+				);
+				continue;
+			}
+
+			$field  = $schema[ $field_key ];
+			$values = array_map(
+				function ( WP_Post $post ) use ( $field_key, $field, $ctx, $multi_field_ids ) {
+					return $this->calculation_value_for_post( $post, $field_key, $field, $ctx, $multi_field_ids );
+				},
+				$posts
+			);
+
+			$results[ $field_key ] = array(
+				'calculation' => $calculation,
+				'value'       => $this->calculate_values( $values, $field, $calculation, count( $posts ) ),
+			);
+		}
+
+		return $results;
+	}
+
+	/**
+	 * Reads the normalized row value used by table calculations.
+	 *
+	 * @param WP_Post          $post            Row post.
+	 * @param string           $field_key       DataView field key.
+	 * @param array            $field           Schema field entry.
+	 * @param RowFormatContext $ctx            Formatting context.
+	 * @param array<int,true>  $multi_field_ids Multi-value custom fields.
+	 * @return mixed
+	 */
+	private function calculation_value_for_post( WP_Post $post, string $field_key, array $field, RowFormatContext $ctx, array $multi_field_ids ): mixed {
+		if ( 'title' === $field_key ) {
+			return $post->post_title;
+		}
+		if ( 'created_at' === $field_key ) {
+			return $this->format_gmt_date( $post->post_date_gmt );
+		}
+		if ( 'modified_at' === $field_key ) {
+			return $this->format_gmt_date( $post->post_modified_gmt );
+		}
+		if ( 'created_by' === $field_key ) {
+			return $this->display_name_for( (int) $post->post_author );
+		}
+		if ( 'modified_by' === $field_key ) {
+			$modified_by_id = (int) get_post_meta( $post->ID, '_modified_by', true );
+			return $this->display_name_for( $modified_by_id > 0 ? $modified_by_id : (int) $post->post_author );
+		}
+		if ( 'cover' === $field_key ) {
+			$cover = $this->cover_data_for_post( $post );
+			return $cover['url'] ?? '';
+		}
+
+		if ( ! preg_match( '/^field-(\d+)$/', $field_key, $matches ) ) {
+			return null;
+		}
+
+		$field_id   = (int) $matches[1];
+		$field_type = (string) ( $field['type'] ?? '' );
+		if ( 'relation' === $field_type ) {
+			return $this->format_relation_value( $post->ID, $field_id, $ctx );
+		}
+		if ( 'rollup' === $field_type ) {
+			return $this->compute_rollup_value( $post->ID, $field_id, $ctx );
+		}
+		return $this->format_typed_value(
+			$post->ID,
+			$field_id,
+			$field_type,
+			isset( $multi_field_ids[ $field_id ] )
+		);
+	}
+
+	/**
+	 * Computes one raw calculation value.
+	 *
+	 * @param array  $values      Normalized row values.
+	 * @param array  $field       Schema field entry.
+	 * @param string $calculation Calculation key.
+	 * @param int    $row_count   Matching row count.
+	 * @return mixed
+	 */
+	private function calculate_values( array $values, array $field, string $calculation, int $row_count ): mixed {
+		if ( 'count' === $calculation ) {
+			return $row_count;
+		}
+
+		$populated = array_values(
+			array_filter(
+				$values,
+				fn( $value ): bool => ! $this->is_empty_calculation_value( $value )
+			)
+		);
+
+		return match ( $calculation ) {
+			'countValues' => count( $populated ),
+			'countUnique' => count( array_unique( array_map( array( $this, 'unique_calculation_key' ), $populated ) ) ),
+			'empty' => $row_count - count( $populated ),
+			'notEmpty' => count( $populated ),
+			'percentEmpty' => $row_count > 0 ? ( $row_count - count( $populated ) ) / $row_count : null,
+			'percentNotEmpty' => $row_count > 0 ? count( $populated ) / $row_count : null,
+			'sum' => $this->sum_calculation_value( $values ),
+			'average' => $this->average_calculation_value( $values ),
+			'median' => $this->median_calculation_value( $values ),
+			'range' => $this->range_calculation_value( $values ),
+			'min', 'max' => $this->extrema_calculation_value( $values, $field, $calculation ),
+			default => null,
+		};
+	}
+
+	private function is_empty_calculation_value( mixed $value ): bool {
+		return null === $value || '' === $value || ( is_array( $value ) && count( $value ) === 0 );
+	}
+
+	private function unique_calculation_key( mixed $value ): string {
+		if ( is_array( $value ) ) {
+			$items = array_map( 'strval', $value );
+			sort( $items, SORT_STRING );
+			return (string) wp_json_encode( $items );
+		}
+		return (string) $value;
+	}
+
+	/**
+	 * Returns finite numeric values used by math calculations.
+	 *
+	 * @param array $values Normalized row values.
+	 * @return float[]
+	 */
+	private function numeric_calculation_values( array $values ): array {
+		$numbers = array();
+		foreach ( $values as $value ) {
+			if ( $this->is_empty_calculation_value( $value ) || ! is_numeric( $value ) ) {
+				continue;
+			}
+			$numbers[] = (float) $value;
+		}
+		return $numbers;
+	}
+
+	private function sum_calculation_value( array $values ): ?float {
+		$numbers = $this->numeric_calculation_values( $values );
+		return count( $numbers ) > 0 ? array_sum( $numbers ) : null;
+	}
+
+	private function average_calculation_value( array $values ): ?float {
+		$numbers = $this->numeric_calculation_values( $values );
+		return count( $numbers ) > 0 ? array_sum( $numbers ) / count( $numbers ) : null;
+	}
+
+	private function median_calculation_value( array $values ): ?float {
+		$numbers = $this->numeric_calculation_values( $values );
+		if ( count( $numbers ) === 0 ) {
+			return null;
+		}
+		sort( $numbers, SORT_NUMERIC );
+		$count  = count( $numbers );
+		$middle = intdiv( $count, 2 );
+		if ( 1 === $count % 2 ) {
+			return $numbers[ $middle ];
+		}
+		return ( $numbers[ $middle - 1 ] + $numbers[ $middle ] ) / 2;
+	}
+
+	private function range_calculation_value( array $values ): ?float {
+		$numbers = $this->numeric_calculation_values( $values );
+		return count( $numbers ) > 0 ? max( $numbers ) - min( $numbers ) : null;
+	}
+
+	private function extrema_calculation_value( array $values, array $field, string $direction ): mixed {
+		$type = (string) ( $field['type'] ?? 'text' );
+		$best = null;
+		foreach ( $values as $value ) {
+			$comparable = $this->comparable_calculation_value( $value, $type );
+			if ( null === $comparable ) {
+				continue;
+			}
+
+			if (
+				null === $best ||
+				( 'min' === $direction && $comparable < $best['comparable'] ) ||
+				( 'max' === $direction && $comparable > $best['comparable'] )
+			) {
+				$best = array(
+					'comparable' => $comparable,
+					'value'      => $value,
+				);
+			}
+		}
+
+		return $best['value'] ?? null;
+	}
+
+	private function comparable_calculation_value( mixed $value, string $type ): int|float|null {
+		if ( $this->is_empty_calculation_value( $value ) ) {
+			return null;
+		}
+		if ( in_array( $type, self::NUMBER_TYPES, true ) ) {
+			return is_numeric( $value ) ? (float) $value : null;
+		}
+		if ( in_array( $type, self::DATE_TYPES, true ) ) {
+			$timestamp = strtotime( (string) $value );
+			return false === $timestamp ? null : $timestamp;
+		}
+		return null;
 	}
 
 	private function row_statuses_for_request(): array {
@@ -1048,20 +1568,7 @@ final class RowsController {
 		$created_by_id  = (int) $post->post_author;
 		$modified_by_id = (int) get_post_meta( $post->ID, '_modified_by', true );
 		$cover_id       = (int) get_post_thumbnail_id( $post );
-		$cover          = null;
-		if ( $cover_id > 0 ) {
-			$cover_src = wp_get_attachment_image_src( $cover_id, 'large' );
-			if ( ! is_array( $cover_src ) ) {
-				$cover_src = wp_get_attachment_image_src( $cover_id, 'full' );
-			}
-			if ( is_array( $cover_src ) && ! empty( $cover_src[0] ) ) {
-				$cover = array(
-					'id'  => $cover_id,
-					'url' => $cover_src[0],
-					'alt' => (string) get_post_meta( $cover_id, '_wp_attachment_image_alt', true ),
-				);
-			}
-		}
+		$cover          = $this->cover_data_for_post( $post );
 
 		return array(
 			'id'             => $post->ID,
@@ -1077,6 +1584,33 @@ final class RowsController {
 			'featured_media' => $cover_id,
 			'cover'          => $cover,
 			'meta'           => $meta,
+		);
+	}
+
+	/**
+	 * Returns the row cover payload used in row responses.
+	 *
+	 * @param WP_Post $post Row post object.
+	 * @return array{id:int,url:string,alt:string}|null
+	 */
+	private function cover_data_for_post( WP_Post $post ): ?array {
+		$cover_id = (int) get_post_thumbnail_id( $post );
+		if ( $cover_id < 1 ) {
+			return null;
+		}
+
+		$cover_src = wp_get_attachment_image_src( $cover_id, 'large' );
+		if ( ! is_array( $cover_src ) ) {
+			$cover_src = wp_get_attachment_image_src( $cover_id, 'full' );
+		}
+		if ( ! is_array( $cover_src ) || empty( $cover_src[0] ) ) {
+			return null;
+		}
+
+		return array(
+			'id'  => $cover_id,
+			'url' => $cover_src[0],
+			'alt' => (string) get_post_meta( $cover_id, '_wp_attachment_image_alt', true ),
 		);
 	}
 
