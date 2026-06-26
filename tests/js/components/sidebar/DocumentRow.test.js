@@ -57,6 +57,7 @@ function makePage( overrides = {} ) {
 		id: 1,
 		type: 'crtxt_document',
 		title: { rendered: 'Hello', raw: 'Hello' },
+		cortext_has_tree_children: false,
 		...overrides,
 	};
 }
@@ -92,6 +93,7 @@ function baseProps( overrides = {} ) {
 		isSelected: false,
 		onSelect: jest.fn(),
 		onToggleExpand: jest.fn(),
+		onLoadMore: jest.fn(),
 		onCreateChild: jest.fn(),
 		onCreateChildCollection: jest.fn(),
 		isFavorite: false,
@@ -180,11 +182,52 @@ describe( 'DocumentRow (hierarchical mode)', () => {
 		).toBeTruthy();
 	} );
 
-	it( 'renders a chevron placeholder when the node has no children', () => {
+	it( 'shows a chevron when the API says the branch has children', () => {
+		const { container } = renderRow( {
+			record: makePage( { cortext_has_tree_children: true } ),
+		} );
+		expect(
+			container.querySelector(
+				'.cortext-sidebar__chevron:not(.cortext-sidebar__chevron--placeholder)'
+			)
+		).toBeTruthy();
+	} );
+
+	it( 'shows a chevron placeholder when the API says there are no children', () => {
 		const { container } = renderRow();
 		expect(
 			container.querySelector( '.cortext-sidebar__chevron--placeholder' )
 		).toBeTruthy();
+	} );
+
+	it( 'keeps the placeholder after an empty branch loads', () => {
+		const { container } = renderRow( {
+			record: makePage( { cortext_has_tree_children: true } ),
+			childBranch: {
+				records: [],
+				page: 1,
+				total: 0,
+				totalPages: 0,
+				isLoading: false,
+				hasResolved: true,
+				error: null,
+			},
+		} );
+		expect(
+			container.querySelector( '.cortext-sidebar__chevron--placeholder' )
+		).toBeTruthy();
+	} );
+
+	it( 'toggles an unloaded branch when its chevron is clicked', () => {
+		const { props } = renderRow( {
+			record: makePage( { cortext_has_tree_children: true } ),
+		} );
+		fireEvent.click(
+			screen.getByRole( 'button', {
+				name: 'Expand',
+			} )
+		);
+		expect( props.onToggleExpand ).toHaveBeenCalledWith( 1 );
 	} );
 
 	it( 'exposes three drop zones (before / inside / after)', () => {
@@ -349,6 +392,30 @@ describe( 'DocumentRow (hierarchical mode)', () => {
 			container.querySelectorAll( '.cortext-sidebar__row' )
 		).toHaveLength( 2 );
 		expect( screen.getByText( 'Child' ) ).toBeInTheDocument();
+	} );
+
+	it( 'shows the next-page button when a child branch has more rows', () => {
+		const child = makePage( {
+			id: 2,
+			title: { rendered: 'Child', raw: 'Child' },
+		} );
+		const { props } = renderRow( {
+			childNodes: [ { page: child, children: [] } ],
+			childBranch: {
+				records: [ child ],
+				page: 1,
+				total: 150,
+				totalPages: 2,
+				isLoading: false,
+				hasResolved: true,
+				error: null,
+			},
+			expandedIds: new Set( [ 1 ] ),
+		} );
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Show more' } ) );
+
+		expect( props.onLoadMore ).toHaveBeenCalledWith( 1 );
 	} );
 } );
 

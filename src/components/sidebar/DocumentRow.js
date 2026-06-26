@@ -35,6 +35,7 @@ import { useDocumentActions, useDocumentRecord } from '../../documents';
  * @param {Object}                            props
  * @param {Object}                            props.record                    Raw document record.
  * @param {Array}                             [props.childNodes]              Child tree nodes (hierarchy only).
+ * @param {Object}                            [props.childBranch]             Lazy-loaded child branch state.
  * @param {number}                            [props.depth]                   Nesting depth, 0 at the root.
  * @param {Set<number>}                       props.expandedIds               Currently expanded row ids.
  * @param {?number}                           [props.draggedId]               Id of the row being dragged.
@@ -43,6 +44,7 @@ import { useDocumentActions, useDocumentRecord } from '../../documents';
  * @param {Function|boolean}                  props.isSelected                Selection predicate or flag.
  * @param {Function}                          props.onSelect                  Called with the record on title click.
  * @param {Function}                          props.onToggleExpand            Called with the record id on chevron click.
+ * @param {Function}                          props.onLoadMore                Called with the parent id from a branch Show more button.
  * @param {Function}                          props.onCreateChild             Called with the parent id from the add-child button.
  * @param {Function}                          [props.onCreateChildCollection] Called with the parent id to create a child collection.
  * @param {Function|boolean}                  props.isFavorite                Favorite predicate or flag.
@@ -57,6 +59,7 @@ import { useDocumentActions, useDocumentRecord } from '../../documents';
 export default function DocumentRow( {
 	record,
 	childNodes = [],
+	childBranch = null,
 	depth = 0,
 	expandedIds,
 	draggedId = null,
@@ -65,6 +68,7 @@ export default function DocumentRow( {
 	isSelected,
 	onSelect,
 	onToggleExpand,
+	onLoadMore,
 	onCreateChild,
 	onCreateChildCollection,
 	isFavorite,
@@ -80,7 +84,25 @@ export default function DocumentRow( {
 	const { rename, duplicate, trash } = useDocumentActions();
 
 	const recordId = record.id;
-	const hasChildren = features.hierarchy && childNodes.length > 0;
+	const hasLoadedChildren = features.hierarchy && childNodes.length > 0;
+	const hasServerChildren = record.cortext_has_tree_children === true;
+	const hasMoreChildren =
+		childBranch?.hasResolved &&
+		childBranch.totalPages > 0 &&
+		childBranch.page < childBranch.totalPages;
+	const branchKnownEmpty =
+		childBranch?.hasResolved &&
+		! childBranch?.isLoading &&
+		! childBranch?.error &&
+		! hasLoadedChildren &&
+		! hasMoreChildren;
+	const canExpand =
+		features.hierarchy &&
+		! branchKnownEmpty &&
+		( hasLoadedChildren ||
+			hasServerChildren ||
+			childBranch?.isLoading ||
+			childBranch?.error );
 	const isExpanded = expandedIds?.has( recordId ) ?? false;
 	const rowIsSelected =
 		typeof isSelected === 'function' ? isSelected( record ) : !! isSelected;
@@ -191,7 +213,7 @@ export default function DocumentRow( {
 					{ ...attributes }
 					{ ...listeners }
 				>
-					{ hasChildren ? (
+					{ canExpand ? (
 						<Button
 							className={
 								'cortext-sidebar__chevron' +
@@ -413,7 +435,7 @@ export default function DocumentRow( {
 				</div>
 			</div>
 
-			{ hasChildren && (
+			{ canExpand && (
 				<div
 					className={
 						'cortext-sidebar__children-wrapper' +
@@ -427,6 +449,7 @@ export default function DocumentRow( {
 								key={ childNode.page.id }
 								record={ childNode.page }
 								childNodes={ childNode.children }
+								childBranch={ childNode.branch }
 								depth={ depth + 1 }
 								expandedIds={ expandedIds }
 								draggedId={ draggedId }
@@ -435,6 +458,7 @@ export default function DocumentRow( {
 								isSelected={ isSelected }
 								onSelect={ onSelect }
 								onToggleExpand={ onToggleExpand }
+								onLoadMore={ onLoadMore }
 								onCreateChild={ onCreateChild }
 								onCreateChildCollection={
 									onCreateChildCollection
@@ -449,6 +473,41 @@ export default function DocumentRow( {
 								onAutoRenameConsumed={ onAutoRenameConsumed }
 							/>
 						) ) }
+						{ childBranch?.error && (
+							<li className="cortext-sidebar__node">
+								<p
+									className="cortext-sidebar__row-error"
+									role="alert"
+								>
+									{ __(
+										"We couldn't load these documents.",
+										'cortext'
+									) }
+								</p>
+							</li>
+						) }
+						{ hasMoreChildren && (
+							<li
+								className="cortext-sidebar__node cortext-sidebar__load-more-node"
+								style={ { '--cortext-depth': depth + 1 } }
+							>
+								<Button
+									className="cortext-sidebar__load-more"
+									size="compact"
+									isBusy={ childBranch.isLoading }
+									disabled={ childBranch.isLoading }
+									onClick={ ( e ) => {
+										e.stopPropagation();
+										onLoadMore?.( recordId );
+									} }
+									onPointerDown={ ( e ) =>
+										e.stopPropagation()
+									}
+								>
+									{ __( 'Show more', 'cortext' ) }
+								</Button>
+							</li>
+						) }
 					</ul>
 				</div>
 			) }
