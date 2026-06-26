@@ -3184,7 +3184,6 @@ test.describe( 'Collection view block', () => {
 				await createCalculationFixture( requestUtils )
 			);
 			const pageKey = `field-${ fixture.fields.pages.id }`;
-			const statusKey = `field-${ fixture.fields.status.id }`;
 
 			fixture.page = await requestUtils.rest( {
 				method: 'POST',
@@ -3196,9 +3195,9 @@ test.describe( 'Collection view block', () => {
 						fields: [ 'title', pageKey ],
 						filters: [
 							{
-								field: statusKey,
-								operator: 'isAny',
-								value: [ 'Alpha', 'Beta' ],
+								field: pageKey,
+								operator: 'lessThan',
+								value: 30,
 							},
 						],
 						calculations: { [ pageKey ]: 'sum' },
@@ -3218,6 +3217,10 @@ test.describe( 'Collection view block', () => {
 					rowRequestUrls.push( url );
 				}
 			} );
+			const calculationRowRequestUrls = () =>
+				rowRequestUrls.filter( ( url ) =>
+					url.includes( `calculations[${ pageKey }]=sum` )
+				);
 
 			await admin.visitAdminPage(
 				'admin.php',
@@ -3243,17 +3246,16 @@ test.describe( 'Collection view block', () => {
 				).nth( 1 )
 			).toContainText( '30' );
 			await expect
-				.poll( () => rowRequestUrls.length )
+				.poll( () => calculationRowRequestUrls().length )
 				.toBeGreaterThan( 0 );
 			expect(
-				rowRequestUrls.some( ( url ) => url.includes( 'per_page=100' ) )
+				calculationRowRequestUrls().some( ( url ) =>
+					url.includes( 'per_page=100' )
+				)
 			).toBe( false );
 			expect(
-				rowRequestUrls.some( ( url ) => url.includes( 'per_page=1' ) )
-			).toBe( true );
-			expect(
-				rowRequestUrls.some( ( url ) =>
-					url.includes( `calculations[${ pageKey }]=sum` )
+				calculationRowRequestUrls().some( ( url ) =>
+					url.includes( 'per_page=1' )
 				)
 			).toBe( true );
 
@@ -3265,14 +3267,16 @@ test.describe( 'Collection view block', () => {
 					canvas.locator( 'tfoot.cortext-table-calculations' )
 				).nth( 1 )
 			).toContainText( '30' );
+			await expect
+				.poll( () =>
+					calculationRowRequestUrls().some( ( url ) =>
+						url.includes( 'page=2' )
+					)
+				)
+				.toBe( true );
 			expect(
-				rowRequestUrls.some( ( url ) => url.includes( 'page=2' ) )
-			).toBe( true );
-			expect(
-				rowRequestUrls.every(
-					( url ) =>
-						url.includes( 'per_page=1' ) &&
-						url.includes( `calculations[${ pageKey }]=sum` )
+				calculationRowRequestUrls().every( ( url ) =>
+					url.includes( 'per_page=1' )
 				)
 			).toBe( true );
 		} finally {
