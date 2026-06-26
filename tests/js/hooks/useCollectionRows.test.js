@@ -194,26 +194,22 @@ describe( 'useCollectionRows', () => {
 		expect( lastRequestPath() ).toContain( 'sort[direction]=desc' );
 	} );
 
-	it( 'accumulates every server page in client mode', async () => {
-		apiFetch.mockImplementation( ( { path } ) => {
-			const page = Number(
-				new URL( path, 'https://example.test' ).searchParams.get(
-					'page'
-				)
-			);
-			return Promise.resolve( {
-				rows: [ { id: page } ],
-				collection: null,
-				total: 3,
-				totalPages: 3,
-			} );
+	it( 'requests calculations in server mode and stores the response totals', async () => {
+		apiFetch.mockResolvedValue( {
+			rows: [ { id: 1 } ],
+			collection: null,
+			total: 3,
+			totalPages: 3,
+			calculations: {
+				'field-20': { calculation: 'sum', value: 30 },
+			},
 		} );
 
 		const view = {
 			type: 'table',
 			filters: [],
 			calculations: {
-				'field-10': 'count',
+				'field-20': 'sum',
 			},
 			page: 1,
 			perPage: 25,
@@ -223,12 +219,15 @@ describe( 'useCollectionRows', () => {
 			useCollectionRows( 7, view, baseFields )
 		);
 
-		await waitFor( () => expect( result.current.data ).toHaveLength( 3 ) );
-		expect( apiFetch ).toHaveBeenCalledTimes( 3 );
-		expect( result.current.data.map( ( row ) => row.id ) ).toEqual( [
-			1, 2, 3,
-		] );
-		expect( result.current.queryMode ).toBe( 'client' );
+		await waitFor( () =>
+			expect( result.current.data ).toEqual( [ { id: 1 } ] )
+		);
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+		expect( result.current.queryMode ).toBe( 'server' );
+		expect( result.current.calculations ).toEqual( {
+			'field-20': { calculation: 'sum', value: 30 },
+		} );
+		expect( lastRequestPath() ).toContain( 'calculations[field-20]=sum' );
 	} );
 
 	it( 'fetches remaining client-mode pages in parallel', async () => {
@@ -262,15 +261,12 @@ describe( 'useCollectionRows', () => {
 		const view = {
 			type: 'table',
 			filters: [],
-			calculations: {
-				'field-10': 'count',
-			},
 			page: 1,
 			perPage: 25,
 		};
 
 		const { result } = renderHook( () =>
-			useCollectionRows( 7, view, baseFields )
+			useCollectionRows( 7, view, baseFields, { forceClient: true } )
 		);
 
 		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 4 ) );

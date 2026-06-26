@@ -7,6 +7,7 @@ import TableCalculationMenu from './TableCalculationMenu';
 import {
 	CALCULATION_LABELS,
 	calculateField,
+	formatCalculationValue,
 	isCalculationAvailable,
 	withColumnCalculation,
 } from './tableCalculations';
@@ -35,7 +36,14 @@ function useDataViewsTable( wrapperRef ) {
 	return table;
 }
 
-function CalculationCell( { field, rows, view, onChangeView } ) {
+function CalculationCell( {
+	field,
+	rows,
+	view,
+	serverCalculations,
+	isServerPaginated,
+	onChangeView,
+} ) {
 	const emptyLabel = __( 'Calculate', 'cortext' );
 	const selected = isCalculationAvailable(
 		field,
@@ -43,7 +51,26 @@ function CalculationCell( { field, rows, view, onChangeView } ) {
 	)
 		? view.calculations[ field.id ]
 		: null;
-	const result = selected ? calculateField( rows, field, selected ) : '';
+	const serverCalculation = selected
+		? serverCalculations?.[ field.id ]
+		: null;
+	const hasServerResult =
+		Boolean( serverCalculation ) &&
+		serverCalculation.calculation === selected;
+	let result = '';
+	if ( selected && hasServerResult ) {
+		result = formatCalculationValue(
+			serverCalculation.value,
+			field,
+			selected
+		);
+	} else if ( selected && ! isServerPaginated ) {
+		// In client mode `rows` is the full filtered set, so a local
+		// calculation is correct. In server mode `rows` is only the current
+		// page, so wait for the server total instead of showing a page-only
+		// number.
+		result = calculateField( rows, field, selected );
+	}
 	const label = selected ? CALCULATION_LABELS[ selected ] : emptyLabel;
 
 	const pick = ( calculation ) => {
@@ -95,6 +122,8 @@ export default function TableCalculationsFooter( {
 	view,
 	fields,
 	data,
+	calculations,
+	isServerPaginated = false,
 	onChangeView,
 	hasSelectionColumn = false,
 	bulkActions = null,
@@ -144,6 +173,8 @@ export default function TableCalculationsFooter( {
 									field={ field }
 									rows={ data }
 									view={ view }
+									serverCalculations={ calculations }
+									isServerPaginated={ isServerPaginated }
 									onChangeView={ onChangeView }
 								/>
 							) : null }

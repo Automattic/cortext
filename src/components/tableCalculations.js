@@ -219,10 +219,21 @@ function formatPercent( part, total ) {
 	if ( total === 0 ) {
 		return '';
 	}
+	return formatPercentRatio( part / total );
+}
+
+function formatPercentRatio( ratio ) {
+	if ( ratio === null || ratio === undefined ) {
+		return '';
+	}
+	const number = Number( ratio );
+	if ( ! Number.isFinite( number ) ) {
+		return '';
+	}
 	return new Intl.NumberFormat( undefined, {
 		style: 'percent',
 		maximumFractionDigits: 0,
-	} ).format( part / total );
+	} ).format( number );
 }
 
 function comparableValue( value, field ) {
@@ -295,6 +306,33 @@ function formatResultValue( value, field ) {
 	}
 
 	return String( value );
+}
+
+export function formatCalculationValue( value, field, calculation ) {
+	if ( ! isCalculationAvailable( field, calculation ) ) {
+		return '';
+	}
+
+	switch ( calculation ) {
+		case 'count':
+		case 'countValues':
+		case 'countUnique':
+		case 'empty':
+		case 'notEmpty':
+			return value === null || value === undefined ? '' : String( value );
+		case 'percentEmpty':
+		case 'percentNotEmpty':
+			return formatPercentRatio( value );
+		case 'sum':
+		case 'average':
+		case 'median':
+		case 'range':
+		case 'min':
+		case 'max':
+			return formatResultValue( value, field );
+		default:
+			return '';
+	}
 }
 
 export function calculateField( rows, field, calculation ) {

@@ -1,6 +1,7 @@
 import {
 	calculateField,
 	calculationOptionsForField,
+	formatCalculationValue,
 	isEmptyValue,
 	sanitizeCalculations,
 	withColumnCalculation,
@@ -192,6 +193,36 @@ describe( 'calculateField', () => {
 		).toBe( '' );
 		expect(
 			calculateField( rows, field( { cortextType: 'number' } ), 'range' )
+		).toBe( '' );
+	} );
+} );
+
+describe( 'formatCalculationValue', () => {
+	it( 'formats server values the same way as local totals', () => {
+		const numberField = field( { cortextType: 'number' } );
+
+		expect( formatCalculationValue( 30, numberField, 'sum' ) ).toBe( '30' );
+		expect(
+			formatCalculationValue( 0.25, numberField, 'percentEmpty' )
+		).toBe( '25%' );
+		expect( formatCalculationValue( null, numberField, 'average' ) ).toBe(
+			''
+		);
+		expect( formatCalculationValue( 0, numberField, 'countValues' ) ).toBe(
+			'0'
+		);
+	} );
+
+	it( 'leaves percent totals blank when the server has no rows', () => {
+		// The server sends null for percent calculations with no matching
+		// rows. Show that as blank, not "0%".
+		const numberField = field( { cortextType: 'number' } );
+
+		expect(
+			formatCalculationValue( null, numberField, 'percentEmpty' )
+		).toBe( '' );
+		expect(
+			formatCalculationValue( null, numberField, 'percentNotEmpty' )
 		).toBe( '' );
 	} );
 } );

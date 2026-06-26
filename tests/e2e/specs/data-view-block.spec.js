@@ -3184,7 +3184,6 @@ test.describe( 'Collection view block', () => {
 				await createCalculationFixture( requestUtils )
 			);
 			const pageKey = `field-${ fixture.fields.pages.id }`;
-			const statusKey = `field-${ fixture.fields.status.id }`;
 
 			fixture.page = await requestUtils.rest( {
 				method: 'POST',
@@ -3196,9 +3195,9 @@ test.describe( 'Collection view block', () => {
 						fields: [ 'title', pageKey ],
 						filters: [
 							{
-								field: statusKey,
-								operator: 'isAny',
-								value: [ 'Alpha', 'Beta' ],
+								field: pageKey,
+								operator: 'lessThan',
+								value: 30,
 							},
 						],
 						calculations: { [ pageKey ]: 'sum' },
@@ -3207,6 +3206,21 @@ test.describe( 'Collection view block', () => {
 					} ),
 				},
 			} );
+
+			const rowRequestUrls = [];
+			page.on( 'request', ( request ) => {
+				const url = decodeURIComponent( request.url() );
+				if (
+					url.includes( '/cortext/v1/rows' ) &&
+					url.includes( `trait=${ fixture.collection.id }` )
+				) {
+					rowRequestUrls.push( url );
+				}
+			} );
+			const calculationRowRequestUrls = () =>
+				rowRequestUrls.filter( ( url ) =>
+					url.includes( `calculations[${ pageKey }]=sum` )
+				);
 
 			await admin.visitAdminPage(
 				'admin.php',
@@ -3231,6 +3245,40 @@ test.describe( 'Collection view block', () => {
 					canvas.locator( 'tfoot.cortext-table-calculations' )
 				).nth( 1 )
 			).toContainText( '30' );
+			await expect
+				.poll( () => calculationRowRequestUrls().length )
+				.toBeGreaterThan( 0 );
+			expect(
+				calculationRowRequestUrls().some( ( url ) =>
+					url.includes( 'per_page=100' )
+				)
+			).toBe( false );
+			expect(
+				calculationRowRequestUrls().some( ( url ) =>
+					url.includes( 'per_page=1' )
+				)
+			).toBe( true );
+
+			await canvas.getByRole( 'button', { name: 'Next page' } ).click();
+			await expect( canvas.getByText( 'Beta Book' ) ).toBeVisible();
+			await expect( canvas.getByText( 'Alpha Book' ) ).toBeHidden();
+			await expect(
+				tableFooterDataCells(
+					canvas.locator( 'tfoot.cortext-table-calculations' )
+				).nth( 1 )
+			).toContainText( '30' );
+			await expect
+				.poll( () =>
+					calculationRowRequestUrls().some( ( url ) =>
+						url.includes( 'page=2' )
+					)
+				)
+				.toBe( true );
+			expect(
+				calculationRowRequestUrls().every( ( url ) =>
+					url.includes( 'per_page=1' )
+				)
+			).toBe( true );
 		} finally {
 			for ( const row of fixture.rows ?? [] ) {
 				await deleteIfCreated(
