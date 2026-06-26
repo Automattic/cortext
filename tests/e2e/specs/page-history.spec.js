@@ -221,6 +221,15 @@ test.describe( 'Visual revision history', () => {
 			} );
 			expect( restored.content.raw ).toContain( OLD_BODY );
 
+			await expect( header ).toBeHidden();
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+			await expect(
+				canvas.locator( '.cortext-canvas__editor' )
+			).toContainText( OLD_BODY );
+			await expect(
+				canvas.locator( '.cortext-canvas__editor' )
+			).not.toContainText( CURRENT_BODY );
+
 			// The pre-restore (CURRENT) version stays available in history so
 			// the restore is reversible.
 			await expect

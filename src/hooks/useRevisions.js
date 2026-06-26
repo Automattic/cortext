@@ -207,8 +207,11 @@ export function useRevisionControls( { postId, postType } = {} ) {
 	const { setCurrentRevisionId, setShowRevisionDiff } = unlock(
 		useDispatch( editorStore )
 	);
-	const { receiveEntityRecords, invalidateResolution } =
-		useDispatch( coreStore );
+	const {
+		clearEntityRecordEdits,
+		receiveEntityRecords,
+		invalidateResolution,
+	} = useDispatch( coreStore );
 	const { createErrorNotice, createSuccessNotice } =
 		useDispatch( noticesStore );
 	const revisionsQuery = useMemo( () => revisionQuery( 'id', 'desc' ), [] );
@@ -241,9 +244,14 @@ export function useRevisionControls( { postId, postType } = {} ) {
 					data: { revision_id: revisionId },
 				} );
 				if ( response?.post ) {
-					receiveEntityRecords( 'postType', postType, [
-						response.post,
-					] );
+					clearEntityRecordEdits?.( 'postType', postType, postId );
+					receiveEntityRecords(
+						'postType',
+						postType,
+						[ response.post ],
+						undefined,
+						true
+					);
 				}
 				invalidateResolution( 'getRevisions', [
 					'postType',
@@ -279,6 +287,7 @@ export function useRevisionControls( { postId, postType } = {} ) {
 		},
 		[
 			canRestore,
+			clearEntityRecordEdits,
 			createErrorNotice,
 			createSuccessNotice,
 			currentRevisionId,
