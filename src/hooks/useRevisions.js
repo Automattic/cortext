@@ -7,6 +7,10 @@ import { __ } from '@wordpress/i18n';
 import { store as noticesStore } from '@wordpress/notices';
 
 import { unlock } from '../lock-unlock';
+import {
+	afterDocumentIdentityChange,
+	applyInvalidationPack,
+} from '../documents/invalidation';
 
 const BASE_REVISION_FIELDS = [
 	'id',
@@ -251,6 +255,10 @@ export function useRevisionControls( { postId, postType } = {} ) {
 						[ response.post ],
 						undefined,
 						true
+					);
+					applyInvalidationPack(
+						invalidateResolution,
+						afterDocumentIdentityChange
 					);
 				}
 				invalidateResolution( 'getRevisions', [

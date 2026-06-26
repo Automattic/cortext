@@ -17,6 +17,13 @@ const CURRENT_TITLE = `E2E History Current ${ SUFFIX }`;
 const SEED_BODY = `Seed revision body ${ SUFFIX }`;
 const OLD_BODY = `Old revision body ${ SUFFIX }`;
 const CURRENT_BODY = `Current revision body ${ SUFFIX }`;
+const OLD_ICON_VALUE = String.fromCodePoint( 0x1f535 );
+const CURRENT_ICON_VALUE = String.fromCodePoint( 0x1f7e2 );
+const OLD_ICON = JSON.stringify( { type: 'emoji', value: OLD_ICON_VALUE } );
+const CURRENT_ICON = JSON.stringify( {
+	type: 'emoji',
+	value: CURRENT_ICON_VALUE,
+} );
 const PROJECT_ROOT = path.resolve( __dirname, '../../..' );
 
 function readWpEnvPort( configPath ) {
@@ -79,18 +86,24 @@ async function delay( ms ) {
 	await new Promise( ( resolve ) => setTimeout( resolve, ms ) );
 }
 
-function updateDocumentWithRevisionBypass( id, title, body ) {
+function updateDocumentWithRevisionBypass( id, title, body, icon = '' ) {
 	const encodedPayload = Buffer.from(
 		JSON.stringify( {
 			id,
 			title,
 			content: paragraph( body ),
+			icon,
 		} )
 	).toString( 'base64' );
 	const code = `
 $payload = json_decode( base64_decode( '${ encodedPayload }' ), true );
 $result = Cortext\\Editor\\RevisionThrottle::with_bypass(
 	static function () use ( $payload ) {
+		update_post_meta(
+			(int) $payload['id'],
+			'cortext_document_icon',
+			wp_slash( (string) ( $payload['icon'] ?? '' ) )
+		);
 		return wp_update_post(
 			array(
 				'ID'           => (int) $payload['id'],
@@ -109,6 +122,25 @@ if ( is_wp_error( $result ) ) {
 `;
 
 	runWpCli( [ 'eval', code ] );
+}
+
+function sidebarRowForTitle( page, title ) {
+	return page
+		.locator( '#cortext-sidebar-section-pages .cortext-sidebar__row' )
+		.filter( {
+			has: page.locator( '.cortext-sidebar__title', {
+				hasText: title,
+			} ),
+		} )
+		.first();
+}
+
+function sidebarEmojiIconForTitle( page, title ) {
+	return sidebarRowForTitle( page, title )
+		.locator(
+			'.cortext-sidebar__icon .cortext-document-icon--emoji img.emoji'
+		)
+		.first();
 }
 
 async function deleteIfCreated( requestUtils, id ) {
@@ -151,13 +183,15 @@ test.describe( 'Visual revision history', () => {
 			updateDocumentWithRevisionBypass(
 				createdPage.id,
 				OLD_TITLE,
-				OLD_BODY
+				OLD_BODY,
+				OLD_ICON
 			);
 			await delay( 1100 );
 			updateDocumentWithRevisionBypass(
 				createdPage.id,
 				CURRENT_TITLE,
-				CURRENT_BODY
+				CURRENT_BODY,
+				CURRENT_ICON
 			);
 
 			await admin.visitAdminPage(
@@ -173,6 +207,12 @@ test.describe( 'Visual revision history', () => {
 				createdPage.id,
 				{ timeout: 15_000 }
 			);
+
+			const currentSidebarRow = sidebarRowForTitle( page, CURRENT_TITLE );
+			await expect( currentSidebarRow ).toBeVisible();
+			await expect(
+				sidebarEmojiIconForTitle( page, CURRENT_TITLE )
+			).toHaveAttribute( 'alt', CURRENT_ICON_VALUE );
 
 			// Open the history panel from the editor top bar.
 			await page
@@ -229,6 +269,15 @@ test.describe( 'Visual revision history', () => {
 			await expect(
 				canvas.locator( '.cortext-canvas__editor' )
 			).not.toContainText( CURRENT_BODY );
+
+			const restoredSidebarRow = sidebarRowForTitle( page, OLD_TITLE );
+			await expect( restoredSidebarRow ).toBeVisible();
+			await expect(
+				sidebarEmojiIconForTitle( page, OLD_TITLE )
+			).toHaveAttribute( 'alt', OLD_ICON_VALUE );
+			await expect(
+				sidebarEmojiIconForTitle( page, OLD_TITLE )
+			).not.toHaveAttribute( 'alt', CURRENT_ICON_VALUE );
 
 			// The pre-restore (CURRENT) version stays available in history so
 			// the restore is reversible.
