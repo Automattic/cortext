@@ -945,6 +945,28 @@ test.describe( 'Collection view block', () => {
 			await tableRow
 				.getByRole( 'button', { name: 'Actions' } )
 				.click( { force: true } );
+			const actionsMenu = canvas
+				.locator( '[data-dialog][role="menu"][data-open]' )
+				.first();
+			await expect( actionsMenu ).toBeVisible();
+			const actionMenuStyles = await actionsMenu.evaluate( ( node ) => {
+				const styles =
+					node.ownerDocument.defaultView.getComputedStyle( node );
+				const { width } = node.getBoundingClientRect();
+				return {
+					backgroundColor: styles.backgroundColor,
+					boxShadow: styles.boxShadow,
+					fontSize: styles.fontSize,
+					width,
+				};
+			} );
+			expect( actionMenuStyles.backgroundColor ).toBe(
+				'rgb(255, 255, 255)'
+			);
+			expect( actionMenuStyles.boxShadow ).not.toBe( 'none' );
+			expect( actionMenuStyles.fontSize ).toBe( '13px' );
+			expect( actionMenuStyles.width ).toBeGreaterThanOrEqual( 160 );
+
 			await canvas.getByRole( 'menuitem', { name: 'Trash' } ).click();
 
 			await expect( rowTitle ).toHaveCount( 0 );

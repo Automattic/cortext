@@ -4,6 +4,115 @@
 $title-cell-icon-size: $grid-unit-20;
 $title-cell-open-button-width: $grid-unit-80;
 
+// DataViews row actions use the private @wordpress/components Menu, whose
+// Emotion styles can be injected outside the BlockCanvas iframe. Keep the
+// fallback on stable ARIA/data attributes instead of generated class names.
+body.block-editor-iframe__body [data-dialog][role="menu"][data-open] {
+	position: relative;
+	z-index: 1000000;
+	display: grid;
+	grid-template-columns: minmax(0, max-content) 1fr;
+	box-sizing: border-box;
+	min-width: 160px;
+	max-width: 320px;
+	max-height: var(--popover-available-height, calc(100vh - #{$grid-unit-20}));
+	padding: $grid-unit-05;
+	overflow: auto;
+	overscroll-behavior: contain;
+	border-radius: 4px;
+	background: $white;
+	box-shadow:
+		0 0 0 $border-width $gray-300,
+		0 8px 16px rgba(0, 0, 0, 0.12);
+	font-family: $default-font;
+	font-size: $default-font-size;
+	line-height: 20px;
+	color: $gray-900;
+}
+
+body.block-editor-iframe__body
+[data-dialog][role="menu"][data-open]
+[role="group"] {
+	display: contents;
+}
+
+body.block-editor-iframe__body
+[data-dialog][role="menu"][data-open]
+:is([role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"]) {
+	all: unset;
+	position: relative;
+	display: grid;
+	grid-column: 1 / -1;
+	grid-template-columns: minmax(0, max-content) 1fr;
+	align-items: center;
+	box-sizing: border-box;
+	min-height: $grid-unit-40;
+	padding: $grid-unit-05 $grid-unit-15;
+	border-radius: 2px;
+	color: $gray-900;
+	cursor: pointer;
+	font-family: $default-font;
+	font-size: $default-font-size;
+	font-weight: 400;
+	line-height: 20px;
+	user-select: none;
+}
+
+body.block-editor-iframe__body
+[data-dialog][role="menu"][data-open]
+:is([role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"])[aria-disabled="true"] {
+	color: $gray-600;
+	cursor: default;
+}
+
+body.block-editor-iframe__body
+[data-dialog][role="menu"][data-open]
+:is([role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"]):not([aria-disabled="true"]):is(:hover, [data-active-item]) {
+	background: $gray-100;
+	color: $gray-900;
+}
+
+body.block-editor-iframe__body
+[data-dialog][role="menu"][data-open]
+:is([role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"])[data-focus-visible] {
+	box-shadow: inset 0 0 0 $border-width $gray-400;
+}
+
+body.block-editor-iframe__body
+[data-dialog][role="menu"][data-open]
+:is([role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"]) > span:first-child {
+	grid-column: 1;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	color: $gray-700;
+}
+
+body.block-editor-iframe__body
+[data-dialog][role="menu"][data-open]
+:is([role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"]) > div {
+	grid-column: 2;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: $grid-unit-15;
+	min-width: 0;
+	pointer-events: none;
+}
+
+body.block-editor-iframe__body
+[data-dialog][role="menu"][data-open]
+[data-wp-component="Truncate"] {
+	display: block;
+	min-width: 0;
+	overflow: hidden;
+	color: inherit;
+	font-size: $default-font-size;
+	line-height: 20px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 .cortext-collection-pane {
 	position: relative;
 	display: flex;
@@ -398,7 +507,8 @@ tbody > tr > td:not(:first-child) {
 		grid-template-columns: minmax(0, 1fr);
 		align-items: center;
 		gap: $grid-unit-05;
-		padding-inline-end: $title-cell-open-button-width + $grid-unit-10;
+		padding-inline-end: $grid-unit-10;
+		transition: padding-inline-end 120ms ease;
 
 		.cortext-editable-cell {
 			min-width: 0;
@@ -443,6 +553,26 @@ tbody > tr > td:not(:first-child) {
 .cortext-title-cell:focus-within,
 .cortext-title-cell--with-open-action:hover {
 	background: $gray-100;
+}
+
+.cortext-title-cell:focus-within,
+.cortext-title-cell--with-open-action:hover,
+.cortext-data-view
+.dataviews-view-table
+tbody
+tr:hover
+.cortext-title-cell--with-open-action,
+.cortext-data-view
+.dataviews-view-table
+tbody
+tr:has(.cortext-title-cell--is-open)
+.cortext-title-cell--with-open-action,
+.cortext-data-view
+.dataviews-view-table
+tbody
+tr:has(.cortext-title-cell--is-opening)
+.cortext-title-cell--with-open-action {
+	padding-inline-end: $title-cell-open-button-width + $grid-unit-10;
 }
 
 .cortext-title-cell:focus-within .cortext-title-cell__open.components-button,
