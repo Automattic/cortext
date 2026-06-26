@@ -44,6 +44,8 @@ import {
 import MediaPicker, { MediaUploadCheck } from './MediaPicker';
 import { parseDocumentIcon } from './DocumentIcon';
 import afterNextPaint from '../hooks/afterNextPaint';
+import RevisionDiffStyles from './RevisionDiffStyles';
+import { unlock } from '../lock-unlock';
 
 const DOCUMENT_ICON_BLOCK = 'cortext/document-icon';
 const DOCUMENT_COVER_BLOCK = 'cortext/document-cover';
@@ -751,7 +753,7 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 	}, [ postId, postType ] );
 
 	useLayoutEffect( () => {
-		if ( isTrashed ) {
+		if ( isTrashed || isLocked ) {
 			return;
 		}
 
@@ -786,10 +788,6 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 					updateBlockAttributes( clientId, { lock: {} } );
 					removeBlock( clientId, false );
 				} );
-		}
-
-		if ( isLocked ) {
-			return;
 		}
 
 		protectedLockRepairs.forEach( ( { clientId, lock } ) => {
@@ -1609,6 +1607,11 @@ export default function EditorBody( {
 			'trash',
 		[]
 	);
+	const isRevisionsMode = useSelect(
+		( select ) =>
+			unlock( select( editorStore ) ).isRevisionsMode?.() ?? false,
+		[]
+	);
 	const record = useDocumentRecord( postType, postId );
 	const ownerBlockName = getCanvasOwnerBlockNameForRecord( record );
 	const ownerKey = ownerBlockName ? `${ postType }:${ postId }` : null;
@@ -1640,7 +1643,7 @@ export default function EditorBody( {
 		},
 		[ ownerBlockName, postId, record ]
 	);
-	const isReadOnly = isTrashed || isLocked;
+	const isReadOnly = isTrashed || isLocked || isRevisionsMode;
 	const renderAppender =
 		shouldUseHeaderAwareAppender && ! isReadOnly
 			? () => (
@@ -1659,6 +1662,7 @@ export default function EditorBody( {
 				ref={ blockCanvasRef }
 			>
 				<BlockCanvas height="100%" styles={ styles }>
+					<RevisionDiffStyles />
 					<DocumentIdentityActions
 						isLocked={ isReadOnly }
 						postId={ postId }

@@ -48,6 +48,13 @@ import MediaPicker, { MediaUploadCheck } from './MediaPicker';
 import DocumentIcon from './DocumentIcon';
 import DocumentIdentityControls from './DocumentIdentityControls';
 import { SkeletonBlock } from './Skeleton';
+import RevisionPropertiesDiff from './RevisionPropertiesDiff';
+import {
+	BLOCK_INSPECTOR,
+	DOCUMENT_INSPECTOR,
+	INSPECTOR_SCOPE,
+	isInspectorArea,
+} from './editorPanelConstants';
 import useDelayedFlag, {
 	SKELETON_MIN_VISIBLE_MS,
 } from '../hooks/useDelayedFlag';
@@ -63,16 +70,16 @@ import { unlock } from '../lock-unlock';
 import { notifyDocumentTrashChanged } from '../hooks/documentTrashInvalidation';
 import { useFavorites } from '../hooks/useFavorites';
 import { useWorkspaceHome } from '../hooks/useWorkspaceHome';
+import { useRevisionControls } from '../hooks/useRevisions';
 
 const { Tabs } = unlock( componentsPrivateApis );
 
-export const INSPECTOR_SCOPE = 'cortext';
-export const DOCUMENT_INSPECTOR = 'cortext/document-inspector';
-export const BLOCK_INSPECTOR = 'cortext/block-inspector';
-
-export function isInspectorArea( area ) {
-	return area === DOCUMENT_INSPECTOR || area === BLOCK_INSPECTOR;
-}
+export {
+	BLOCK_INSPECTOR,
+	DOCUMENT_INSPECTOR,
+	INSPECTOR_SCOPE,
+	isInspectorArea,
+} from './editorPanelConstants';
 
 export function InspectorSidebarSlot( props ) {
 	return <ComplementaryArea.Slot scope={ INSPECTOR_SCOPE } { ...props } />;
@@ -680,7 +687,10 @@ export default function DocumentInspectorSidebar( {
 	const hasTrait =
 		Array.isArray( currentRecord?.crtxt_trait ) &&
 		currentRecord.crtxt_trait.length > 0;
-	const documentTabLabel = __( 'Document', 'cortext' );
+	const { isRevisionsMode } = useRevisionControls( { postId, postType } );
+	const documentTabLabel = isRevisionsMode
+		? __( 'Revision', 'cortext' )
+		: __( 'Document', 'cortext' );
 	const isTrashed = useSelect(
 		( select ) =>
 			select( editorStore ).getCurrentPostAttribute( 'status' ) ===
@@ -691,7 +701,8 @@ export default function DocumentInspectorSidebar( {
 		( select ) => select( editorStore ).isPostLocked?.() ?? false,
 		[]
 	);
-	const isReadOnly = isTrashed || isLocked || isStoreLocked;
+	const isReadOnly =
+		isTrashed || isLocked || isStoreLocked || isRevisionsMode;
 	const activeArea = useSelect(
 		( select ) =>
 			select( interfaceStore ).getActiveComplementaryArea(
@@ -705,6 +716,9 @@ export default function DocumentInspectorSidebar( {
 	const isCanvasOwnerSelected = useIsCanvasOwnerSelected( postType, postId );
 	const showBlockTab = useSelect(
 		( select ) => {
+			if ( isRevisionsMode ) {
+				return false;
+			}
 			const store = select( blockEditorStore );
 			const clientId = store.getSelectedBlockClientId();
 			if ( ! clientId ) {
@@ -717,7 +731,7 @@ export default function DocumentInspectorSidebar( {
 				store.getBlockName( clientId ) !== 'cortext/document-properties'
 			);
 		},
-		[ isCanvasOwnerSelected ]
+		[ isCanvasOwnerSelected, isRevisionsMode ]
 	);
 	const selectedTabId =
 		isInspectorArea( activeArea ) &&
@@ -758,20 +772,26 @@ export default function DocumentInspectorSidebar( {
 				isActiveByDefault
 				tabs={ tabs }
 			>
-				<InspectorFrame isLocked={ isReadOnly }>
-					{ isCollection && (
-						<CollectionInspectorContent
-							postId={ postId }
-							postType={ postType }
-						/>
-					) }
-					{ ! isCollection && hasTrait && (
-						<RowInspectorContent postId={ postId } />
-					) }
-					{ ! isCollection && ! hasTrait && (
-						<DocumentInspectorContent postId={ postId } />
-					) }
-				</InspectorFrame>
+				{ isRevisionsMode ? (
+					<div className="cortext-document-inspector">
+						<RevisionPropertiesDiff />
+					</div>
+				) : (
+					<InspectorFrame isLocked={ isReadOnly }>
+						{ isCollection && (
+							<CollectionInspectorContent
+								postId={ postId }
+								postType={ postType }
+							/>
+						) }
+						{ ! isCollection && hasTrait && (
+							<RowInspectorContent postId={ postId } />
+						) }
+						{ ! isCollection && ! hasTrait && (
+							<DocumentInspectorContent postId={ postId } />
+						) }
+					</InspectorFrame>
+				) }
 			</InspectorComplementaryArea>
 			{ showBlockTab && (
 				<InspectorComplementaryArea
