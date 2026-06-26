@@ -305,6 +305,35 @@ test.describe( 'Visual revision history', () => {
 					return history[ 0 ]?.title.raw;
 				} )
 				.toBe( OLD_TITLE );
+
+			// Re-selecting the newest revisions after restore should still load
+			// real revision records. This catches stale core-data caches that
+			// leave the current/previous previews blank after a restore.
+			if ( ! ( await panel.isVisible() ) ) {
+				await page
+					.locator( '.cortext-document-actions' )
+					.getByRole( 'button', { name: 'History' } )
+					.click();
+				await expect( panel ).toBeVisible();
+			}
+
+			const revisionButtons = panel.locator(
+				'.cortext-revision-history__button'
+			);
+			await expect
+				.poll( async () => revisionButtons.count() )
+				.toBeGreaterThan( 1 );
+
+			await revisionButtons.first().click();
+			await expect( header ).toBeVisible();
+			await expect(
+				canvas.locator( '.cortext-canvas__editor' )
+			).toContainText( OLD_BODY );
+
+			await revisionButtons.nth( 1 ).click();
+			await expect(
+				canvas.locator( '.cortext-canvas__editor' )
+			).toContainText( CURRENT_BODY );
 		} finally {
 			await deleteIfCreated( requestUtils, createdPage?.id );
 		}

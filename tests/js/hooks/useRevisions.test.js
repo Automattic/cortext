@@ -38,7 +38,10 @@ jest.mock( '../../../src/lock-unlock', () => ( {
 } ) );
 
 import {
+	editorRevisionQuery,
+	recentRevisionQuery,
 	revisionFeaturedMedia,
+	revisionInvalidationQueries,
 	revisionMetaValue,
 	revisionQuery,
 } from '../../../src/hooks/useRevisions';
@@ -81,6 +84,47 @@ describe( 'revisionQuery', () => {
 		expect( customFields ).toContain( 'custom_key' );
 
 		expect( revisionQuery( 'id', 'asc' ).order ).toBe( 'asc' );
+	} );
+} );
+
+describe( 'revision cache invalidation queries', () => {
+	it( 'includes the native editor query for the selected revision', () => {
+		const query = editorRevisionQuery( 'custom_key' );
+
+		expect( query ).toEqual( {
+			per_page: -1,
+			context: 'edit',
+			_fields:
+				'id,date,modified,author,meta,title.raw,excerpt.raw,content.raw,custom_key',
+		} );
+	} );
+
+	it( 'includes the native ascending query for the previous revision', () => {
+		expect( editorRevisionQuery( 'id', 'asc' ) ).toMatchObject( {
+			per_page: -1,
+			context: 'edit',
+			orderby: 'date',
+			order: 'asc',
+		} );
+	} );
+
+	it( 'includes the native recent-revisions panel query', () => {
+		expect( recentRevisionQuery( 'custom_key' ) ).toEqual( {
+			per_page: 3,
+			orderby: 'date',
+			order: 'desc',
+			_fields: 'custom_key,date,author',
+		} );
+	} );
+
+	it( 'collects every query that should be stale after restoring', () => {
+		expect( revisionInvalidationQueries( 'id' ) ).toEqual( [
+			revisionQuery( 'id', 'desc' ),
+			revisionQuery( 'id', 'asc' ),
+			editorRevisionQuery( 'id' ),
+			editorRevisionQuery( 'id', 'asc' ),
+			recentRevisionQuery( 'id' ),
+		] );
 	} );
 } );
 

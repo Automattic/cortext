@@ -21,6 +21,17 @@ const BASE_REVISION_FIELDS = [
 	'content.raw',
 ];
 
+const EDITOR_REVISION_FIELDS = [
+	'id',
+	'date',
+	'modified',
+	'author',
+	'meta',
+	'title.raw',
+	'excerpt.raw',
+	'content.raw',
+];
+
 function hasOwnProperty( object, key ) {
 	return Object.prototype.hasOwnProperty.call( object ?? {}, key );
 }
@@ -80,6 +91,52 @@ export function revisionQuery( revisionKey = 'id', order = 'desc' ) {
 			...new Set( [ ...BASE_REVISION_FIELDS, revisionKey ] ),
 		].join(),
 	};
+}
+
+export function editorRevisionQuery( revisionKey = 'id', order ) {
+	const query = {
+		per_page: -1,
+		context: 'edit',
+		_fields: [
+			...new Set( [ ...EDITOR_REVISION_FIELDS, revisionKey ] ),
+		].join(),
+	};
+
+	if ( order ) {
+		query.orderby = 'date';
+		query.order = order;
+	}
+
+	return query;
+}
+
+export function recentRevisionQuery( revisionKey = 'id' ) {
+	return {
+		per_page: 3,
+		orderby: 'date',
+		order: 'desc',
+		_fields: `${ revisionKey },date,author`,
+	};
+}
+
+export function revisionInvalidationQueries( revisionKey = 'id' ) {
+	const queries = [
+		revisionQuery( revisionKey, 'desc' ),
+		revisionQuery( revisionKey, 'asc' ),
+		editorRevisionQuery( revisionKey ),
+		editorRevisionQuery( revisionKey, 'asc' ),
+		recentRevisionQuery( revisionKey ),
+	];
+	const seen = new Set();
+
+	return queries.filter( ( query ) => {
+		const key = JSON.stringify( query );
+		if ( seen.has( key ) ) {
+			return false;
+		}
+		seen.add( key );
+		return true;
+	} );
 }
 
 export function useRevisions( postType, postId, { order = 'desc' } = {} ) {
@@ -165,41 +222,50 @@ export function useRevisionControls( { postId, postType } = {} ) {
 		postStatus,
 		isDirty,
 		isSaving,
-	} = useSelect( ( select ) => {
-		const editor = unlock( select( editorStore ) );
-		const store = select( editorStore );
-		const hasControls =
-			typeof editor.getCurrentRevisionId === 'function' &&
-			typeof editor.isRevisionsMode === 'function';
-		const currentId =
-			typeof editor.getCurrentRevisionId === 'function'
-				? editor.getCurrentRevisionId()
+		revisionKey,
+	} = useSelect(
+		( select ) => {
+			const editor = unlock( select( editorStore ) );
+			const store = select( editorStore );
+			const entityConfig = postType
+				? select( coreStore ).getEntityConfig( 'postType', postType )
 				: null;
-		return {
-			isAvailable:
-				hasControls && typeof editor.getCurrentRevision === 'function',
-			isRevisionsMode:
-				typeof editor.isRevisionsMode === 'function'
-					? editor.isRevisionsMode()
-					: Boolean( currentId ),
-			isShowingRevisionDiff:
-				typeof editor.isShowingRevisionDiff === 'function'
-					? editor.isShowingRevisionDiff()
-					: false,
-			currentRevisionId: currentId,
-			currentRevision:
-				typeof editor.getCurrentRevision === 'function'
-					? editor.getCurrentRevision()
-					: null,
-			previousRevision:
-				typeof editor.getPreviousRevision === 'function'
-					? editor.getPreviousRevision()
-					: null,
-			postStatus: store.getCurrentPostAttribute( 'status' ),
-			isDirty: store.isEditedPostDirty?.() ?? false,
-			isSaving: store.isSavingPost?.() ?? false,
-		};
-	}, [] );
+			const hasControls =
+				typeof editor.getCurrentRevisionId === 'function' &&
+				typeof editor.isRevisionsMode === 'function';
+			const currentId =
+				typeof editor.getCurrentRevisionId === 'function'
+					? editor.getCurrentRevisionId()
+					: null;
+			return {
+				isAvailable:
+					hasControls &&
+					typeof editor.getCurrentRevision === 'function',
+				isRevisionsMode:
+					typeof editor.isRevisionsMode === 'function'
+						? editor.isRevisionsMode()
+						: Boolean( currentId ),
+				isShowingRevisionDiff:
+					typeof editor.isShowingRevisionDiff === 'function'
+						? editor.isShowingRevisionDiff()
+						: false,
+				currentRevisionId: currentId,
+				currentRevision:
+					typeof editor.getCurrentRevision === 'function'
+						? editor.getCurrentRevision()
+						: null,
+				previousRevision:
+					typeof editor.getPreviousRevision === 'function'
+						? editor.getPreviousRevision()
+						: null,
+				postStatus: store.getCurrentPostAttribute( 'status' ),
+				isDirty: store.isEditedPostDirty?.() ?? false,
+				isSaving: store.isSavingPost?.() ?? false,
+				revisionKey: entityConfig?.revisionKey || 'id',
+			};
+		},
+		[ postType ]
+	);
 	// Restoring writes server-side and resets the editor, so block it while the
 	// editor has unsaved edits (would be silently discarded) or a save is in
 	// flight, and on trashed documents (restore the document first).
@@ -215,7 +281,10 @@ export function useRevisionControls( { postId, postType } = {} ) {
 	} = useDispatch( coreStore );
 	const { createErrorNotice, createSuccessNotice } =
 		useDispatch( noticesStore );
-	const revisionsQuery = useMemo( () => revisionQuery( 'id', 'desc' ), [] );
+	const invalidationQueries = useMemo(
+		() => revisionInvalidationQueries( revisionKey ),
+		[ revisionKey ]
+	);
 
 	const selectRevision = useCallback(
 		( revisionId ) => {
@@ -259,12 +328,14 @@ export function useRevisionControls( { postId, postType } = {} ) {
 						reason: 'revision-restore',
 					} );
 				}
-				invalidateResolution( 'getRevisions', [
-					'postType',
-					postType,
-					postId,
-					revisionsQuery,
-				] );
+				invalidationQueries.forEach( ( query ) => {
+					invalidateResolution( 'getRevisions', [
+						'postType',
+						postType,
+						postId,
+						query,
+					] );
+				} );
 				setCurrentRevisionId?.( null );
 				createSuccessNotice(
 					__(
@@ -298,10 +369,10 @@ export function useRevisionControls( { postId, postType } = {} ) {
 			createSuccessNotice,
 			currentRevisionId,
 			invalidateResolution,
+			invalidationQueries,
 			postId,
 			postType,
 			receiveEntityRecords,
-			revisionsQuery,
 			setCurrentRevisionId,
 		]
 	);
