@@ -5,7 +5,7 @@ Cortext is in beta. This guide covers running Cortext from source to work on the
 ## Requirements
 
 -   PHP 8.1+
--   WordPress 6.9+ (provided by wp-env)
+-   WordPress 7.0+ (provided by wp-env)
 -   Docker (recommended runtime for wp-env)
 -   Node.js 24.15 or newer in the Node 24 line
 -   pnpm 11+
