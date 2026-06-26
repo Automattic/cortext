@@ -135,9 +135,7 @@ describe( 'mention completer', () => {
 			'Project',
 			'Brief',
 		] );
-		expect( mentionCompleter.getOptionLabel ).toBe(
-			getMentionOptionLabel
-		);
+		expect( mentionCompleter.getOptionLabel ).toBe( getMentionOptionLabel );
 		expect( mentionCompleter.getOptionKeywords ).toBe(
 			getMentionOptionKeywords
 		);
@@ -165,12 +163,12 @@ describe( 'mention icons', () => {
 	} );
 
 	it( 'extracts emoji icons from document icon metadata', () => {
-		expect(
-			mentionEmojiFromIcon( '{"type":"emoji","value":"B"}' )
-		).toBe( 'B' );
-		expect(
-			mentionEmojiFromIcon( '{"type":"wp","name":"bell"}' )
-		).toBe( '' );
+		expect( mentionEmojiFromIcon( '{"type":"emoji","value":"B"}' ) ).toBe(
+			'B'
+		);
+		expect( mentionEmojiFromIcon( '{"type":"wp","name":"bell"}' ) ).toBe(
+			''
+		);
 		expect( mentionEmojiFromIcon( '{' ) ).toBe( '' );
 	} );
 
@@ -178,15 +176,14 @@ describe( 'mention icons', () => {
 		expect(
 			mentionIconForRecord( {
 				meta: {
-					cortext_document_icon:
-						'{"type":"emoji","value":"A"}',
+					cortext_document_icon: '{"type":"emoji","value":"A"}',
 				},
 				cortext_defines_trait: true,
 			} )
 		).toBe( '{"type":"emoji","value":"A"}' );
-		expect(
-			mentionIconForRecord( { cortext_defines_trait: true } )
-		).toBe( '{"type":"wp","name":"collection"}' );
+		expect( mentionIconForRecord( { cortext_defines_trait: true } ) ).toBe(
+			'{"type":"wp","name":"collection"}'
+		);
 		expect( mentionIconForRecord( { crtxt_trait: [ 5 ] } ) ).toBe(
 			'{"type":"wp","name":"listItem"}'
 		);
@@ -239,16 +236,14 @@ describe( 'mention icons', () => {
 			'purple'
 		);
 		expect(
-			anchor.style.getPropertyValue(
-				'--cortext-mention-icon-color'
-			)
+			anchor.style.getPropertyValue( '--cortext-mention-icon-color' )
 		).toBe( '#a855f7' );
 		expect(
 			anchor.style.getPropertyValue( '--cortext-mention-icon-mask' )
 		).toContain( 'data:image/svg+xml' );
-		expect(
-			anchor.getAttribute( 'data-crtxt-icon-hydrated-for' )
-		).toBe( '33' );
+		expect( anchor.getAttribute( 'data-crtxt-icon-hydrated-for' ) ).toBe(
+			'33'
+		);
 		anchor.remove();
 	} );
 
@@ -269,8 +264,7 @@ describe( 'mention icons', () => {
 		anchor.textContent = 'Rollup examples';
 		iframeDocument.body.appendChild( anchor );
 
-		const release =
-			retainMentionIconHydratorsForEditorDocument( document );
+		const release = retainMentionIconHydratorsForEditorDocument( document );
 
 		await waitFor( () => {
 			expect( anchor.getAttribute( 'data-crtxt-icon-wp' ) ).toBe(
@@ -313,9 +307,7 @@ describe( 'mention icons', () => {
 
 		selection.removeAllRanges();
 		updateMentionSelectionState( document );
-		expect( anchor ).not.toHaveClass(
-			'is-cortext-mention-selected'
-		);
+		expect( anchor ).not.toHaveClass( 'is-cortext-mention-selected' );
 		paragraph.remove();
 	} );
 } );
@@ -362,9 +354,7 @@ describe( 'mention snapshot rewrite helper', () => {
 		expect(
 			rewriteMentionSnapshots(
 				html,
-				new Map( [
-					[ 2, { title: 'Fresh', href: '/fresh-2' } ],
-				] )
+				new Map( [ [ 2, { title: 'Fresh', href: '/fresh-2' } ] ] )
 			)
 		).toEqual( { html, changed: false } );
 

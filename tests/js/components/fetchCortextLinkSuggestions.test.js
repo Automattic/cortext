@@ -52,41 +52,41 @@ it( 'honours explicit page and perPage', async () => {
 it( 'maps documents to permalink suggestions using the raw title', async () => {
 	apiFetch.mockResolvedValueOnce( [
 		{
-				id: 12,
-				link: 'https://example.test/cortext/about/',
-				slug: 'about',
-				title: { raw: 'About & Co' },
-				meta: {
-					cortext_document_icon: '{"type":"emoji","value":"A"}',
-				},
+			id: 12,
+			link: 'https://example.test/cortext/about/',
+			slug: 'about',
+			title: { raw: 'About & Co' },
+			meta: {
+				cortext_document_icon: '{"type":"emoji","value":"A"}',
 			},
+		},
 	] );
 
 	const suggestions = await fetchCortextLinkSuggestions( 'about' );
 
 	expect( suggestions ).toEqual( [
 		{
-				id: 12,
-				url: 'https://example.test/cortext/about/',
-				path: 'about-12',
-				icon: '{"type":"emoji","value":"A"}',
-				cortext_defines_trait: undefined,
-				crtxt_trait: undefined,
-				title: 'About & Co',
-				type: 'crtxt_document',
-				kind: 'post-type',
+			id: 12,
+			url: 'https://example.test/cortext/about/',
+			path: 'about-12',
+			icon: '{"type":"emoji","value":"A"}',
+			cortext_defines_trait: undefined,
+			crtxt_trait: undefined,
+			title: 'About & Co',
+			type: 'crtxt_document',
+			kind: 'post-type',
 		},
 	] );
 } );
 
 it( 'falls back to a placeholder title and drops records without an id or url', async () => {
 	apiFetch.mockResolvedValueOnce( [
-			{
-				id: 1,
-				link: 'https://example.test/?p=1',
-				slug: '',
-				title: { raw: '' },
-			},
+		{
+			id: 1,
+			link: 'https://example.test/?p=1',
+			slug: '',
+			title: { raw: '' },
+		},
 		{ id: 0, link: 'https://example.test/x', title: { raw: 'no id' } },
 		{ id: 2, link: '', title: { raw: 'no url' } },
 	] );
@@ -95,13 +95,13 @@ it( 'falls back to a placeholder title and drops records without an id or url', 
 
 	expect( suggestions ).toEqual( [
 		{
-				id: 1,
-				url: 'https://example.test/?p=1',
-				path: '1',
-				icon: '',
-				cortext_defines_trait: undefined,
-				crtxt_trait: undefined,
-				title: '(no title)',
+			id: 1,
+			url: 'https://example.test/?p=1',
+			path: '1',
+			icon: '',
+			cortext_defines_trait: undefined,
+			crtxt_trait: undefined,
+			title: '(no title)',
 			type: 'crtxt_document',
 			kind: 'post-type',
 		},
