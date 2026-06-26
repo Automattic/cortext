@@ -1,9 +1,9 @@
 import { render, screen } from '@testing-library/react';
-import { DataViews as mockDataViews } from '@wordpress/dataviews';
+import { DataViews as mockDataViews } from '@wordpress/dataviews/wp';
 
 const mockFilterSortAndPaginate = jest.fn();
 
-jest.mock( '@wordpress/dataviews', () => {
+jest.mock( '@wordpress/dataviews/wp', () => {
 	const MockDataViews = jest.fn( ( { data = [], children } ) => (
 		<div data-testid="dataviews">
 			{ children }

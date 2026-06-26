@@ -2,9 +2,9 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 
 import { render } from '@testing-library/react';
-import { DataViews as mockDataViews } from '@wordpress/dataviews';
+import { DataViews as mockDataViews } from '@wordpress/dataviews/wp';
 
-jest.mock( '@wordpress/dataviews', () => {
+jest.mock( '@wordpress/dataviews/wp', () => {
 	const MockDataViews = jest.fn( ( { children } ) => (
 		<div data-testid="dataviews">{ children }</div>
 	) );

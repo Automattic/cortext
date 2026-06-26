@@ -1,4 +1,4 @@
-import { filterSortAndPaginate } from '@wordpress/dataviews';
+import { filterSortAndPaginate } from '@wordpress/dataviews/wp';
 
 import { buildPublicFields } from '../../../src/hooks/publicFieldMapping';
 

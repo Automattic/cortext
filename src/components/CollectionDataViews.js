@@ -1,6 +1,6 @@
 import apiFetch from '@wordpress/api-fetch';
 import { Notice } from '@wordpress/components';
-import { DataViews } from '@wordpress/dataviews';
+import { DataViews } from '@wordpress/dataviews/wp';
 import {
 	useCallback,
 	useEffect,

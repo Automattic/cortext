@@ -34,7 +34,7 @@ jest.mock( '@wordpress/core-data', () => ( {
 	useEntityRecords: jest.fn(),
 } ) );
 
-jest.mock( '@wordpress/dataviews', () => {
+jest.mock( '@wordpress/dataviews/wp', () => {
 	const ReactLib = require( 'react' );
 	return {
 		__esModule: true,
@@ -94,7 +94,7 @@ jest.mock( '../../../src/components/DocumentIcon', () => ( {
 } ) );
 
 import { useEntityRecords } from '@wordpress/core-data';
-import { DataViews } from '@wordpress/dataviews';
+import { DataViews } from '@wordpress/dataviews/wp';
 import { useNavigate } from '@tanstack/react-router';
 
 import PublishedDocumentsPane from '../../../src/components/PublishedDocumentsPane';

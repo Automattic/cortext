@@ -1,5 +1,5 @@
 import { Component, useState, useMemo, useCallback } from '@wordpress/element';
-import { DataViews } from '@wordpress/dataviews';
+import { DataViews } from '@wordpress/dataviews/wp';
 import { __ } from '@wordpress/i18n';
 
 import usePublicRows, { isPublicSortSupported } from '../hooks/usePublicRows';

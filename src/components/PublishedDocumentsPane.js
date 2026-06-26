@@ -12,7 +12,7 @@ import {
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalVStack as VStack,
 } from '@wordpress/components';
-import { DataViews, filterSortAndPaginate } from '@wordpress/dataviews';
+import { DataViews, filterSortAndPaginate } from '@wordpress/dataviews/wp';
 import { dateI18n, getSettings as getDateSettings } from '@wordpress/date';
 import { useNavigate } from '@tanstack/react-router';
 
@@ -26,7 +26,11 @@ import {
 import { computeDocumentUri } from '../router/useResolveEntity';
 import { definesTrait, hasTrait } from '../documents/capabilities';
 
-const DEFAULT_LAYOUTS = { table: { density: 'compact' }, grid: {}, list: {} };
+const DEFAULT_LAYOUTS = {
+	table: { layout: { density: 'compact' } },
+	grid: { layout: {} },
+	list: { layout: {} },
+};
 
 const DEFAULT_VIEW = {
 	type: 'table',
