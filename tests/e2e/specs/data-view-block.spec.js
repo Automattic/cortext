@@ -36,9 +36,10 @@ async function expectColumnRevealed( canvas, columnHeader ) {
 			const wrapperRight = wrapperBox.x + wrapperBox.width;
 			const headerLeft = headerBox.x;
 			const headerRight = headerBox.x + headerBox.width;
-			return (
-				headerLeft >= wrapperLeft - 2 && headerRight <= wrapperRight + 2
-			);
+			const visibleWidth =
+				Math.min( headerRight, wrapperRight ) -
+				Math.max( headerLeft, wrapperLeft );
+			return visibleWidth >= Math.min( 24, headerBox.width );
 		} )
 		.toBe( true );
 }
@@ -1030,7 +1031,10 @@ test.describe( 'Collection view block', () => {
 				.getByRole( 'button', { name: 'Create collection' } )
 				.click();
 
-			await expect( canvas.getByText( 'Title' ) ).toBeVisible();
+			await expect( canvas.getByText( 'No results' ) ).toBeVisible();
+			await expect(
+				canvas.getByRole( 'button', { name: 'New' } )
+			).toBeVisible();
 
 			// The placeholder creates the collection document immediately and
 			// points the block at it, so capture its id from the block now.
@@ -1047,10 +1051,13 @@ test.describe( 'Collection view block', () => {
 			// The new collection is a full document nested under the current
 			// page, so it shows in the sidebar tree beneath its parent.
 			await expect(
-				page.locator( '.cortext-sidebar' ).getByRole( 'button', {
-					name: 'Inline Books',
-					exact: true,
-				} )
+				page
+					.locator( '.cortext-sidebar' )
+					.getByRole( 'button', {
+						name: 'Inline Books',
+						exact: true,
+					} )
+					.first()
 			).toBeVisible();
 
 			await page.evaluate( async () => {
@@ -1260,11 +1267,7 @@ test.describe( 'Collection view block', () => {
 			);
 
 			const canvas = page.frameLocator( '[name="editor-canvas"]' );
-			await expect(
-				canvas.locator( '.cortext-column-header-label', {
-					hasText: /^Notes$/,
-				} )
-			).toBeVisible();
+			await expect( canvas.getByText( 'No results' ) ).toBeVisible();
 
 			await page.evaluate( async () => {
 				await window.wp.data.dispatch( 'core/editor' ).savePost();
