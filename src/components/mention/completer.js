@@ -31,14 +31,19 @@ export function getMentionCompletion( option ) {
 
 	const { id, title, url } = option;
 	const label = title || __( '(untitled)', 'cortext' );
+	// Trailing space so the caret lands on a text position after the atomic
+	// mention. Without it the caret cannot sit after a `contentEditable=false`
+	// anchor at the end of a block, and typing stops.
 	return (
-		<a
-			className="cortext-mention"
-			data-crtxt-mention={ String( id ) }
-			href={ url }
-		>
-			{ label }
-		</a>
+		<>
+			<a
+				className="cortext-mention"
+				data-crtxt-mention={ String( id ) }
+				href={ url }
+			>
+				{ label }
+			</a>{ ' ' }
+		</>
 	);
 }
 

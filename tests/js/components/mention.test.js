@@ -102,6 +102,8 @@ describe( 'mention completer', () => {
 		expect( html ).not.toContain( 'data-crtxt-path' );
 		expect( html ).not.toContain( 'data-crtxt-icon' );
 		expect( html ).toContain( '>Brief</a>' );
+		// A trailing space keeps the caret typeable right after the mention.
+		expect( html ).toMatch( /<\/a>\s$/ );
 		expect( html ).not.toContain( 'cortext-mention__label' );
 	} );
 
