@@ -15,6 +15,7 @@ use Cortext\Documents;
 use Cortext\Editor\RevisionThrottle;
 use Cortext\FieldValues\FieldValueIndex;
 use Cortext\PostType\Document;
+use Cortext\PostType\DocumentIdentity;
 use Cortext\Relations;
 use WP_Error;
 use WP_Post;
@@ -183,19 +184,26 @@ final class RestoreRevisionController {
 	 *
 	 * @param int     $post_id  Document being restored.
 	 * @param WP_Post $revision Revision post.
-	 * @return array{fields:int,relations:int,schema:int}|WP_Error
+	 * @return array{fields:int,relations:int,schema:int,identity:int}|WP_Error
 	 */
 	private function restore_revision_meta( int $post_id, WP_Post $revision ): array|WP_Error {
-		$schema_keys = array( 'cortext_fields', 'cortext_detail_layout' );
-		$restored    = array(
+		$schema_keys   = array( 'cortext_fields', 'cortext_detail_layout' );
+		$identity_keys = array( DocumentIdentity::META_KEY, '_thumbnail_id' );
+		$restored      = array(
 			'fields'    => 0,
 			'relations' => 0,
 			'schema'    => 0,
+			'identity'  => 0,
 		);
 
 		foreach ( $schema_keys as $key ) {
 			$this->replace_meta_values( $post_id, $key, get_post_meta( (int) $revision->ID, $key, false ) );
 			++$restored['schema'];
+		}
+
+		foreach ( $identity_keys as $key ) {
+			$this->replace_meta_values( $post_id, $key, get_post_meta( (int) $revision->ID, $key, false ) );
+			++$restored['identity'];
 		}
 
 		$field_ids = $this->field_ids_for_document( $post_id );

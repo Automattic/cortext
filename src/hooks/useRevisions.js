@@ -14,10 +14,60 @@ const BASE_REVISION_FIELDS = [
 	'modified',
 	'author',
 	'meta',
+	'featured_media',
 	'title.raw',
 	'excerpt.raw',
 	'content.raw',
 ];
+
+function hasOwnProperty( object, key ) {
+	return Object.prototype.hasOwnProperty.call( object ?? {}, key );
+}
+
+export function revisionMetaValue( revision, key, fallback = '' ) {
+	const meta = revision?.meta;
+	if ( ! meta || ! hasOwnProperty( meta, key ) ) {
+		return fallback;
+	}
+
+	const value = meta[ key ];
+	if ( Array.isArray( value ) ) {
+		return value[ 0 ] ?? fallback;
+	}
+
+	return value ?? fallback;
+}
+
+export function revisionFeaturedMedia( revision, fallback = 0 ) {
+	const value = hasOwnProperty( revision, 'featured_media' )
+		? revision.featured_media
+		: revisionMetaValue( revision, '_thumbnail_id', fallback );
+
+	return Number( value ) || 0;
+}
+
+export function useRevisionedDocumentIdentity( {
+	postId,
+	postType,
+	meta,
+	featuredId,
+} = {} ) {
+	const { isRevisionsMode, currentRevision } = useRevisionControls( {
+		postId,
+		postType,
+	} );
+
+	return {
+		iconMeta: isRevisionsMode
+			? revisionMetaValue( currentRevision, 'cortext_document_icon', '' )
+			: meta?.cortext_document_icon ?? '',
+		featuredId: isRevisionsMode
+			? revisionFeaturedMedia( currentRevision, 0 )
+			: featuredId,
+		isRevisionsMode,
+		currentRevision,
+	};
+}
 
 export function revisionQuery( revisionKey = 'id', order = 'desc' ) {
 	return {

@@ -43,6 +43,14 @@ final class Test_Document_Identity extends BaseTestCase {
 		);
 	}
 
+	public function test_revision_meta_keys_include_document_identity(): void {
+		$identity = new DocumentIdentity();
+		$keys     = $identity->revision_meta_keys( array(), Document::POST_TYPE );
+
+		$this->assertContains( DocumentIdentity::META_KEY, $keys );
+		$this->assertContains( '_thumbnail_id', $keys );
+	}
+
 	public function test_prepend_header_blocks_leaves_updates_untouched(): void {
 		$identity = new DocumentIdentity();
 		$content  = '<!-- wp:paragraph --><p>Body</p><!-- /wp:paragraph -->';

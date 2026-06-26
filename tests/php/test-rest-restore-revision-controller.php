@@ -86,6 +86,65 @@ final class Test_Rest_Restore_Revision_Controller extends BaseTestCase {
 		$this->assertArrayHasKey( 'snapshot', $response->get_data() );
 	}
 
+	public function test_restores_icon_and_cover_identity(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$page_id      = $this->create_page();
+		$current_icon = '{"type":"wp","name":"star","color":"red"}';
+		$old_icon     = '{"type":"wp","name":"home","color":"blue"}';
+		update_post_meta( $page_id, DocumentIdentity::META_KEY, $current_icon );
+		update_post_meta( $page_id, '_thumbnail_id', '222' );
+
+		$revision_id = $this->create_revision( $page_id );
+		$this->add_revision_meta( $revision_id, DocumentIdentity::META_KEY, $old_icon );
+		$this->add_revision_meta( $revision_id, '_thumbnail_id', '111' );
+
+		$response = $this->restore_revision( $page_id, $revision_id );
+		$data     = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( $old_icon, get_post_meta( $page_id, DocumentIdentity::META_KEY, true ) );
+		$this->assertSame( 111, (int) get_post_thumbnail_id( $page_id ) );
+		$this->assertSame( 111, (int) ( $data['post']['featured_media'] ?? 0 ) );
+		$this->assertSame( 2, $data['metaRestored']['identity'] );
+	}
+
+	public function test_restore_clears_icon_and_cover_when_revision_has_none(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$page_id = $this->create_page();
+		update_post_meta( $page_id, DocumentIdentity::META_KEY, '{"type":"wp","name":"star"}' );
+		update_post_meta( $page_id, '_thumbnail_id', '222' );
+
+		$revision_id = $this->create_revision( $page_id );
+		$response    = $this->restore_revision( $page_id, $revision_id );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( '', get_post_meta( $page_id, DocumentIdentity::META_KEY, true ) );
+		$this->assertSame( 0, (int) get_post_thumbnail_id( $page_id ) );
+	}
+
+	public function test_restore_snapshot_keeps_current_icon_and_cover_reversible(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$page_id      = $this->create_page();
+		$current_icon = '{"type":"wp","name":"star","color":"red"}';
+		$old_icon     = '{"type":"wp","name":"home","color":"blue"}';
+		update_post_meta( $page_id, DocumentIdentity::META_KEY, $current_icon );
+		update_post_meta( $page_id, '_thumbnail_id', '222' );
+
+		$revision_id = $this->create_revision( $page_id );
+		$this->add_revision_meta( $revision_id, DocumentIdentity::META_KEY, $old_icon );
+		$this->add_revision_meta( $revision_id, '_thumbnail_id', '111' );
+
+		$response    = $this->restore_revision( $page_id, $revision_id );
+		$snapshot_id = (int) ( $response->get_data()['snapshot'] ?? 0 );
+
+		$this->assertGreaterThan( 0, $snapshot_id );
+		$this->assertSame( $current_icon, get_post_meta( $snapshot_id, DocumentIdentity::META_KEY, true ) );
+		$this->assertSame( 222, (int) get_post_meta( $snapshot_id, '_thumbnail_id', true ) );
+	}
+
 	public function test_requires_edit_permission(): void {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
 		$page_id     = $this->create_page();

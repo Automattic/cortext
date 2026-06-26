@@ -17,6 +17,7 @@ import { replace, trash } from '@wordpress/icons';
 
 import DocumentIcon from '../../components/DocumentIcon';
 import DocumentIdentityControls from '../../components/DocumentIdentityControls';
+import { useRevisionedDocumentIdentity } from '../../hooks/useRevisions';
 
 export default function Edit( { context, clientId } ) {
 	const postId = context?.postId;
@@ -26,7 +27,11 @@ export default function Edit( { context, clientId } ) {
 	} );
 
 	const [ meta ] = useEntityProp( 'postType', postType, 'meta', postId );
-	const iconMeta = meta?.cortext_document_icon ?? '';
+	const { iconMeta } = useRevisionedDocumentIdentity( {
+		postId,
+		postType,
+		meta,
+	} );
 	const hasIcon = !! iconMeta;
 	const { removeBlock, updateBlockAttributes } =
 		useDispatch( blockEditorStore );

@@ -70,7 +70,10 @@ import { unlock } from '../lock-unlock';
 import { notifyDocumentTrashChanged } from '../hooks/documentTrashInvalidation';
 import { useFavorites } from '../hooks/useFavorites';
 import { useWorkspaceHome } from '../hooks/useWorkspaceHome';
-import { useRevisionControls } from '../hooks/useRevisions';
+import {
+	useRevisionControls,
+	useRevisionedDocumentIdentity,
+} from '../hooks/useRevisions';
 
 const { Tabs } = unlock( componentsPrivateApis );
 
@@ -151,7 +154,11 @@ function InspectorToolGroup( { label, children } ) {
 
 function DocumentIconInspectorControls( { postId, postType } ) {
 	const [ meta ] = useEntityProp( 'postType', postType, 'meta', postId );
-	const iconMeta = meta?.cortext_document_icon ?? '';
+	const { iconMeta } = useRevisionedDocumentIdentity( {
+		postId,
+		postType,
+		meta,
+	} );
 	const { coverIndex, hasCoverBlock, iconBlockId } = useSelect(
 		( select ) => {
 			const blocks = select( blockEditorStore ).getBlocks();
@@ -282,10 +289,15 @@ function PageFeaturedImageInspectorControls( { postId, postType } ) {
 		'featured_media',
 		postId
 	);
+	const { featuredId: displayFeaturedId } = useRevisionedDocumentIdentity( {
+		postId,
+		postType,
+		featuredId,
+	} );
 	const { record: media, isResolving: isResolvingMedia } = useEntityRecord(
 		'root',
 		'media',
-		featuredId || 0
+		displayFeaturedId || 0
 	);
 	const coverBlockId = useSelect(
 		( select ) =>
@@ -390,7 +402,7 @@ function PageFeaturedImageInspectorControls( { postId, postType } ) {
 
 	return (
 		<InspectorToolGroup label={ __( 'Featured image', 'cortext' ) }>
-			{ featuredId > 0 ? (
+			{ displayFeaturedId > 0 ? (
 				<div className="cortext-document-inspector__featured-image-preview">
 					{ featuredImagePreview }
 				</div>
@@ -400,7 +412,7 @@ function PageFeaturedImageInspectorControls( { postId, postType } ) {
 					<MediaPicker
 						allowedTypes={ [ 'image' ] }
 						postId={ postId }
-						value={ featuredId }
+						value={ displayFeaturedId }
 						onSelect={ setFeaturedImage }
 						render={ ( { open } ) => (
 							<Button
@@ -410,14 +422,14 @@ function PageFeaturedImageInspectorControls( { postId, postType } ) {
 								disabled={ isSaving }
 								__next40pxDefaultSize
 							>
-								{ featuredId > 0
+								{ displayFeaturedId > 0
 									? __( 'Change', 'cortext' )
 									: __( 'Add', 'cortext' ) }
 							</Button>
 						) }
 					/>
 				</MediaUploadCheck>
-				{ featuredId > 0 ? (
+				{ displayFeaturedId > 0 ? (
 					<Button
 						variant="tertiary"
 						isDestructive

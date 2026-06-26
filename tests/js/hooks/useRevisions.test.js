@@ -37,7 +37,11 @@ jest.mock( '../../../src/lock-unlock', () => ( {
 	unlock: ( value ) => value,
 } ) );
 
-import { revisionQuery } from '../../../src/hooks/useRevisions';
+import {
+	revisionFeaturedMedia,
+	revisionMetaValue,
+	revisionQuery,
+} from '../../../src/hooks/useRevisions';
 
 describe( 'revisionQuery', () => {
 	it( 'builds a stable edit-context query ordered newest first', () => {
@@ -59,6 +63,7 @@ describe( 'revisionQuery', () => {
 				'modified',
 				'author',
 				'meta',
+				'featured_media',
 				'title.raw',
 				'excerpt.raw',
 				'content.raw',
@@ -76,5 +81,41 @@ describe( 'revisionQuery', () => {
 		expect( customFields ).toContain( 'custom_key' );
 
 		expect( revisionQuery( 'id', 'asc' ).order ).toBe( 'asc' );
+	} );
+} );
+
+describe( 'revision identity helpers', () => {
+	it( 'reads scalar and array revision meta values', () => {
+		expect(
+			revisionMetaValue(
+				{ meta: { cortext_document_icon: '{"type":"emoji"}' } },
+				'cortext_document_icon'
+			)
+		).toBe( '{"type":"emoji"}' );
+
+		expect(
+			revisionMetaValue(
+				{ meta: { cortext_document_icon: [ 'first', 'second' ] } },
+				'cortext_document_icon'
+			)
+		).toBe( 'first' );
+	} );
+
+	it( 'falls back when revision meta is missing', () => {
+		expect( revisionMetaValue( { meta: {} }, 'missing', 'fallback' ) ).toBe(
+			'fallback'
+		);
+	} );
+
+	it( 'uses featured_media before the legacy thumbnail meta key', () => {
+		expect(
+			revisionFeaturedMedia( {
+				featured_media: 45,
+				meta: { _thumbnail_id: '22' },
+			} )
+		).toBe( 45 );
+		expect(
+			revisionFeaturedMedia( { meta: { _thumbnail_id: '22' } } )
+		).toBe( 22 );
 	} );
 } );

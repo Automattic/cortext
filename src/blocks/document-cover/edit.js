@@ -17,6 +17,7 @@ import {
 } from '@wordpress/components';
 import { replace, trash } from '@wordpress/icons';
 import DocumentIdentityControls from '../../components/DocumentIdentityControls';
+import { useRevisionedDocumentIdentity } from '../../hooks/useRevisions';
 
 // Renders the featured image as a full-width banner with hover-revealed
 // Replace/Remove controls in the top-right corner. We deliberately don't
@@ -39,7 +40,13 @@ export default function Edit( { context, clientId } ) {
 		postId
 	);
 	const [ meta ] = useEntityProp( 'postType', postType, 'meta', postId );
-	const iconMeta = meta?.cortext_document_icon ?? '';
+	const { iconMeta, featuredId: displayFeaturedId } =
+		useRevisionedDocumentIdentity( {
+			postId,
+			postType,
+			meta,
+			featuredId,
+		} );
 	const { coverIndex, hasIconBlock } = useSelect(
 		( select ) => {
 			const store = select( blockEditorStore );
@@ -57,7 +64,7 @@ export default function Edit( { context, clientId } ) {
 	const { record: media } = useEntityRecord(
 		'root',
 		'media',
-		featuredId || 0
+		displayFeaturedId || 0
 	);
 	const { insertBlocks, removeBlock, updateBlockAttributes } =
 		useDispatch( blockEditorStore );
@@ -112,7 +119,7 @@ export default function Edit( { context, clientId } ) {
 						<MediaPicker
 							allowedTypes={ [ 'image' ] }
 							postId={ postId }
-							value={ featuredId }
+							value={ displayFeaturedId }
 							onSelect={ ( picked ) =>
 								setFeaturedId( picked.id )
 							}
@@ -125,7 +132,7 @@ export default function Edit( { context, clientId } ) {
 							) }
 						/>
 					</MediaUploadCheck>
-					{ featuredId > 0 && (
+					{ displayFeaturedId > 0 && (
 						<ToolbarButton
 							icon={ trash }
 							label={ __( 'Remove cover', 'cortext' ) }
@@ -140,7 +147,7 @@ export default function Edit( { context, clientId } ) {
 						<MediaPicker
 							allowedTypes={ [ 'image' ] }
 							postId={ postId }
-							value={ featuredId }
+							value={ displayFeaturedId }
 							onSelect={ ( picked ) =>
 								setFeaturedId( picked.id )
 							}
@@ -155,7 +162,7 @@ export default function Edit( { context, clientId } ) {
 							) }
 						/>
 					</MediaUploadCheck>
-					{ featuredId > 0 && (
+					{ displayFeaturedId > 0 && (
 						<Button
 							variant="tertiary"
 							isDestructive
@@ -203,7 +210,7 @@ export default function Edit( { context, clientId } ) {
 						<MediaPicker
 							allowedTypes={ [ 'image' ] }
 							postId={ postId }
-							value={ featuredId }
+							value={ displayFeaturedId }
 							onSelect={ ( picked ) =>
 								setFeaturedId( picked.id )
 							}
@@ -218,7 +225,7 @@ export default function Edit( { context, clientId } ) {
 							) }
 						/>
 					</MediaUploadCheck>
-					{ featuredId > 0 && (
+					{ displayFeaturedId > 0 && (
 						<Button
 							variant="secondary"
 							size="small"
