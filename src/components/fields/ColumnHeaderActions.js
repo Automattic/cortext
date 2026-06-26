@@ -514,7 +514,10 @@ function AddFieldTrigger( { collectionId, onFieldCreated, onRowsChanged } ) {
 							collectionId={ collectionId }
 							onCreate={ ( created ) => {
 								onFieldCreated?.( created );
-								if ( created?.type === 'rollup' ) {
+								if (
+									created?.type === 'rollup' ||
+									created?.type === 'formula'
+								) {
 									onRowsChanged?.();
 								}
 								onClose();

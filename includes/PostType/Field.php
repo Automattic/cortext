@@ -152,11 +152,13 @@ final class Field {
 	 *
 	 * 1. Drops rollup fields that depend on the field, detaching them from
 	 *    their owner collections.
-	 * 2. For a relation field, detaches both sides of the pair from their
+	 * 2. Drops formula fields that depend on the field, detaching them from
+	 *    their owner collections.
+	 * 3. For a relation field, detaches both sides of the pair from their
 	 *    owner collections, drops their dependent rollups, and deletes the
 	 *    reverse field (guarded against the reverse delete bouncing back).
-	 * 3. Removes the `field-<id>` value meta from every row.
-	 * 4. Removes the field's string ID from every collection's
+	 * 4. Removes the `field-<id>` value meta from every row.
+	 * 5. Removes the field's string ID from every collection's
 	 *    `cortext_fields` schema list.
 	 *
 	 * @param int          $post_id Post being deleted.
@@ -169,6 +171,7 @@ final class Field {
 		}
 
 		$this->delete_dependent_rollups( $post_id );
+		$this->delete_dependent_formulas( $post_id );
 
 		$reverse_id = (int) get_post_meta( $post_id, 'relation_reverse_field_id', true );
 		if ( $reverse_id > 0 && empty( self::$deleting_relation_fields[ $reverse_id ] ) ) {
@@ -177,6 +180,7 @@ final class Field {
 				$this->detach_from_collections( $post_id );
 				$this->detach_from_collections( $reverse_id );
 				$this->delete_dependent_rollups( $reverse_id );
+				$this->delete_dependent_formulas( $reverse_id );
 
 				self::$deleting_relation_fields[ $post_id ] = true;
 				wp_delete_post( $reverse_id, true );
@@ -273,6 +277,63 @@ final class Field {
 		}
 	}
 
+	/**
+	 * Deletes formula fields that depend on a deleted field. A missing
+	 * dependency leaves the compiled AST orphaned, so the dependent formula
+	 * column goes away with the source field.
+	 *
+	 * @param int $field_id Field post ID being deleted.
+	 */
+	private function delete_dependent_formulas( int $field_id ): void {
+		$formula_ids = get_posts(
+			array(
+				'post_type'      => self::POST_TYPE,
+				'post_status'    => array( 'draft', 'private', 'publish' ),
+				'fields'         => 'ids',
+				'posts_per_page' => -1,
+				'no_found_rows'  => true,
+				'meta_query'     => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+					array(
+						'key'     => 'type',
+						'value'   => 'formula',
+						'compare' => '=',
+					),
+				),
+			)
+		);
+
+		foreach ( array_map( 'intval', $formula_ids ) as $formula_id ) {
+			if (
+				$formula_id === $field_id
+				|| self::POST_TYPE !== get_post_type( $formula_id )
+				|| 'formula' !== (string) get_post_meta( $formula_id, 'type', true )
+				|| ! in_array( $field_id, $this->formula_dependency_ids( $formula_id ), true )
+			) {
+				continue;
+			}
+			$this->detach_from_collections( $formula_id );
+			wp_delete_post( $formula_id, true );
+		}
+	}
+
+	/**
+	 * Reads the stored dependency IDs for a formula field.
+	 *
+	 * @param int $formula_id Formula field post ID.
+	 * @return int[]
+	 */
+	private function formula_dependency_ids( int $formula_id ): array {
+		$raw = (string) get_post_meta( $formula_id, 'formula_dep_field_ids', true );
+		if ( '' === $raw ) {
+			return array();
+		}
+		$decoded = json_decode( $raw, true );
+		if ( ! is_array( $decoded ) ) {
+			return array();
+		}
+		return array_values( array_filter( array_map( 'intval', $decoded ) ) );
+	}
+
 	public function register_post_type(): void {
 		register_post_type(
 			self::POST_TYPE,
@@ -338,6 +399,40 @@ final class Field {
 				),
 			)
 		);
+
+		register_rest_field(
+			self::POST_TYPE,
+			'cortext_formula',
+			array(
+				'get_callback' => array( $this, 'get_rest_formula' ),
+				'schema'       => array(
+					'type'       => array( 'object', 'null' ),
+					'context'    => array( 'view', 'edit' ),
+					'readonly'   => true,
+					'properties' => array(
+						'expression'    => array(
+							'type'     => 'string',
+							'readonly' => true,
+						),
+						'result_type'   => array(
+							'type'     => 'string',
+							'readonly' => true,
+						),
+						'is_volatile'   => array(
+							'type'     => 'boolean',
+							'readonly' => true,
+						),
+						'dep_field_ids' => array(
+							'type'     => 'array',
+							'readonly' => true,
+							'items'    => array(
+								'type' => 'integer',
+							),
+						),
+					),
+				),
+			)
+		);
 	}
 
 	/**
@@ -350,7 +445,47 @@ final class Field {
 		$field_id = isset( $field_record['id'] ) ? (int) $field_record['id'] : 0;
 		$type     = $field_id > 0 ? (string) get_post_meta( $field_id, 'type', true ) : '';
 
-		return FieldTypeRegistry::capabilities_for( $type );
+		return FieldTypeRegistry::capabilities_for_field( $field_id, $type );
+	}
+
+	/**
+	 * Returns formula metadata for one field REST record.
+	 *
+	 * Formula edits go through the dedicated formula endpoint so the
+	 * compiled AST, dependencies, result type, and volatility stay in sync.
+	 *
+	 * @param array<string,mixed> $field_record REST post response data.
+	 * @return array{expression:string,result_type:string,is_volatile:bool}|null
+	 */
+	public function get_rest_formula( array $field_record ): ?array {
+		$field_id = isset( $field_record['id'] ) ? (int) $field_record['id'] : 0;
+		if ( $field_id < 1 || 'formula' !== (string) get_post_meta( $field_id, 'type', true ) ) {
+			return null;
+		}
+
+		return array(
+			'expression'    => (string) get_post_meta( $field_id, 'expression', true ),
+			'result_type'   => (string) get_post_meta( $field_id, 'formula_result_type', true ),
+			'is_volatile'   => '1' === (string) get_post_meta( $field_id, 'formula_is_volatile', true ),
+			'dep_field_ids' => $this->formula_dependency_ids( $field_id ),
+		);
+	}
+
+	/**
+	 * Normalizes formula text without treating operators like HTML.
+	 *
+	 * `sanitize_textarea_field()` corrupts `<`, `<=`, `>`, and quoted strings
+	 * before the compiler sees them. The lexer and compiler handle formula
+	 * safety; this callback only removes invalid UTF-8, null bytes, and
+	 * platform-specific line endings.
+	 *
+	 * @param mixed $expression Raw formula text.
+	 */
+	public static function sanitize_formula_expression( mixed $expression ): string {
+		$value = wp_check_invalid_utf8( (string) $expression );
+		$value = str_replace( array( "\r\n", "\r" ), "\n", $value );
+		$value = str_replace( "\0", '', $value );
+		return trim( $value );
 	}
 
 	private function register_meta(): void {
@@ -359,7 +494,6 @@ final class Field {
 			'options',
 			'number_format',
 			'date_format',
-			'expression',
 			'rollup_aggregator',
 			'rollup_target_type',
 			'rollup_target_options',
@@ -393,6 +527,17 @@ final class Field {
 
 		register_post_meta(
 			self::POST_TYPE,
+			'expression',
+			array(
+				'type'              => 'string',
+				'single'            => true,
+				'show_in_rest'      => false,
+				'sanitize_callback' => array( self::class, 'sanitize_formula_expression' ),
+			)
+		);
+
+		register_post_meta(
+			self::POST_TYPE,
 			FieldDefaults::META_KEY,
 			array(
 				'type'              => 'string',
@@ -401,6 +546,30 @@ final class Field {
 				'sanitize_callback' => array( FieldDefaults::class, 'sanitize_meta_value' ),
 			)
 		);
+
+		register_post_meta(
+			self::POST_TYPE,
+			'formula_result_type',
+			array(
+				'type'              => 'string',
+				'single'            => true,
+				'show_in_rest'      => false,
+				'sanitize_callback' => 'sanitize_text_field',
+			)
+		);
+
+		foreach ( array( 'formula_ast', 'formula_dep_field_ids', 'formula_resolved_refs' ) as $key ) {
+			register_post_meta(
+				self::POST_TYPE,
+				$key,
+				array(
+					'type'              => 'string',
+					'single'            => true,
+					'show_in_rest'      => false,
+					'sanitize_callback' => static fn( mixed $value ): string => is_string( $value ) ? $value : '',
+				)
+			);
+		}
 
 		register_post_meta(
 			self::POST_TYPE,
@@ -448,6 +617,16 @@ final class Field {
 				'type'         => 'boolean',
 				'single'       => true,
 				'show_in_rest' => true,
+			)
+		);
+
+		register_post_meta(
+			self::POST_TYPE,
+			'formula_is_volatile',
+			array(
+				'type'         => 'boolean',
+				'single'       => true,
+				'show_in_rest' => false,
 			)
 		);
 	}

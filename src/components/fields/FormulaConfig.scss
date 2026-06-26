@@ -1,0 +1,331 @@
+@use "@wordpress/base-styles/colors" as *;
+@use "@wordpress/base-styles/variables" as *;
+
+.cortext-formula-popover-host .components-popover__content {
+	max-height: calc(100vh - 48px);
+	overflow: hidden;
+	min-width: min(520px, calc(100vw - 32px));
+	width: min(520px, calc(100vw - 32px));
+}
+
+.cortext-formula-popover-host .cortext-data-view-toolbar-popover__content {
+	box-sizing: border-box;
+	max-height: calc(100vh - 48px);
+	overflow: hidden;
+}
+
+.cortext-formula-config {
+	display: flex;
+	flex-direction: column;
+	gap: $grid-unit-15;
+	width: 100%;
+
+	.cortext-formula-popover-host & {
+		max-height: calc(100vh - 78px);
+		min-height: 0;
+	}
+
+	&__editor {
+		position: relative;
+	}
+
+	&__header {
+		align-items: center;
+		display: flex;
+		gap: $grid-unit-10;
+		justify-content: space-between;
+		margin-bottom: $grid-unit-05;
+	}
+
+	&__label {
+		margin-bottom: 0;
+	}
+
+	&__reference-toggle.components-button {
+		color: var(--wp-admin-theme-color, #3858e9);
+	}
+
+	&__reference-toggle.components-button.is-pressed {
+		background: #f0f6fc;
+		border-color: var(--wp-admin-theme-color, #3858e9);
+		color: var(--wp-admin-theme-color, #3858e9);
+	}
+
+	&__reference-toggle.components-button.is-pressed:hover:not(:disabled) {
+		background: #e7f0fb;
+		color: var(--wp-admin-theme-color, #3858e9);
+	}
+
+	&__input {
+		background: $white;
+		border: $border-width solid $gray-300;
+		border-radius: 4px;
+		min-height: 120px;
+		position: relative;
+		transition: border-color 0.12s ease, box-shadow 0.12s ease;
+	}
+
+	&__input:focus-within {
+		border-color: var(--wp-admin-theme-color, #007cba);
+		box-shadow: 0 0 0 1px var(--wp-admin-theme-color, #007cba);
+	}
+
+	&__highlight,
+	&__textarea {
+		box-sizing: border-box;
+		font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+		font-size: 13px;
+		line-height: 1.5;
+		margin: 0;
+		min-height: 120px;
+		padding: $grid-unit-10;
+		tab-size: 2;
+		white-space: pre-wrap;
+		word-break: break-word;
+	}
+
+	&__highlight {
+		color: $gray-900;
+		inset: 0;
+		overflow: hidden;
+		pointer-events: none;
+		position: absolute;
+
+		code {
+			background: transparent;
+			border: 0;
+			border-radius: 0;
+			color: inherit;
+			display: block;
+			font-family: inherit;
+			font-size: inherit;
+			line-height: inherit;
+			min-height: 100%;
+			padding: 0;
+			white-space: inherit;
+			will-change: transform;
+		}
+	}
+
+	&__textarea {
+		background: transparent;
+		border: 0;
+		caret-color: $gray-900;
+		color: transparent;
+		display: block;
+		position: relative;
+		resize: vertical;
+		width: 100%;
+		z-index: 1;
+
+		&:focus {
+			box-shadow: none;
+			outline: none;
+		}
+
+		&::placeholder {
+			color: $gray-700;
+			opacity: 0.72;
+		}
+
+		&::selection {
+			background: rgba(0, 124, 186, 0.18);
+		}
+	}
+
+	.cortext-formula-token {
+		color: $gray-900;
+	}
+
+	.cortext-formula-token--function {
+		color: #0b6e99;
+	}
+
+	.cortext-formula-token--field {
+		color: #8a5a00;
+	}
+
+	.cortext-formula-token--string {
+		color: #8b4a8b;
+	}
+
+	.cortext-formula-token--number {
+		color: #057a55;
+	}
+
+	.cortext-formula-token--boolean {
+		color: #7a4cc2;
+	}
+
+	.cortext-formula-token--operator,
+	.cortext-formula-token--punctuation {
+		color: $gray-700;
+	}
+
+	.cortext-formula-token--unknown {
+		color: #b32d2e;
+	}
+
+	&__suggestions {
+		background: $white;
+		border: $border-width solid $gray-200;
+		border-radius: 4px;
+		box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+		display: grid;
+		left: 0;
+		margin-top: $grid-unit-05;
+		max-height: 220px;
+		overflow: auto;
+		position: absolute;
+		right: 0;
+		z-index: 10;
+	}
+
+	&__suggestion {
+		align-items: center;
+		background: transparent;
+		border: 0;
+		color: $gray-900;
+		cursor: pointer;
+		display: flex;
+		font-size: 13px;
+		justify-content: space-between;
+		min-height: 32px;
+		padding: $grid-unit-05 $grid-unit-10;
+		text-align: left;
+
+		&-copy {
+			display: grid;
+			gap: 1px;
+			min-width: 0;
+
+			span,
+			small {
+				overflow: hidden;
+				text-overflow: ellipsis;
+				white-space: nowrap;
+			}
+
+			small {
+				color: $gray-700;
+				font-size: 11px;
+			}
+		}
+
+		code {
+			color: $gray-700;
+			flex: 0 0 auto;
+			font-size: 11px;
+			margin-left: $grid-unit-10;
+		}
+
+		&.is-active,
+		&:hover {
+			background: $gray-100;
+		}
+	}
+
+	&__reference {
+		background: $gray-100;
+		border: $border-width solid $gray-200;
+		border-radius: 4px;
+		color: $gray-900;
+		display: grid;
+		font-size: 12px;
+		gap: $grid-unit-05;
+		padding: $grid-unit-10;
+
+		code {
+			font-size: 12px;
+		}
+	}
+
+	&__reference-label {
+		color: $gray-700;
+		display: inline-block;
+		font-weight: 600;
+		margin-right: $grid-unit-05;
+	}
+
+	&__reference-panel {
+		border: $border-width solid $gray-200;
+		border-radius: 4px;
+		max-height: min(520px, calc(100vh - 260px));
+		overflow: auto;
+
+		.cortext-formula-popover-host & {
+			flex: 1 1 auto;
+			max-height: none;
+			min-height: 220px;
+			min-width: 0;
+		}
+	}
+}
+
+.cortext-formula-reference {
+	color: $gray-900;
+	display: grid;
+	font-size: 12px;
+	gap: $grid-unit-15;
+	padding: $grid-unit-15;
+
+	&__header {
+		align-items: center;
+		border-bottom: $border-width solid $gray-200;
+		display: flex;
+		justify-content: space-between;
+		padding-bottom: $grid-unit-10;
+
+		strong {
+			font-size: 13px;
+		}
+
+		span {
+			color: $gray-700;
+			font-size: 11px;
+			font-weight: 600;
+			text-transform: uppercase;
+		}
+	}
+
+	&__section {
+		display: grid;
+		gap: $grid-unit-05;
+
+		h4 {
+			color: $gray-900;
+			font-size: 11px;
+			font-weight: 600;
+			letter-spacing: 0.5px;
+			margin: 0 0 $grid-unit-05;
+			text-transform: uppercase;
+		}
+
+		p {
+			color: $gray-700;
+			margin: $grid-unit-05 0 0;
+		}
+	}
+
+	&__row {
+		align-items: start;
+		display: grid;
+		gap: $grid-unit-10;
+		grid-template-columns: minmax(170px, 0.52fr) minmax(220px, 1fr);
+
+		code {
+			background: $gray-100;
+			border: $border-width solid $gray-200;
+			border-radius: 3px;
+			color: $gray-900;
+			font-size: 12px;
+			overflow-wrap: anywhere;
+			padding: 2px 5px;
+		}
+
+		span {
+			color: $gray-700;
+			line-height: 1.45;
+		}
+	}
+}

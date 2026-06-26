@@ -20,6 +20,7 @@ import { chevronRight, cog, copy, pencil, trash } from '@wordpress/icons';
 import ChangeFieldTypePopover from './ChangeFieldTypePopover';
 import EditOptionsPopover from './EditOptionsPopover';
 import FieldFormatPopover from './FieldFormatPopover';
+import FormulaConfig from './FormulaConfig';
 import FieldSettingsPopover from './FieldSettingsPopover';
 import RenameFieldInline from './RenameFieldInline';
 import {
@@ -30,6 +31,7 @@ import Infotip from '../Infotip';
 import {
 	useDeleteField,
 	useDuplicateField,
+	useUpdateFormulaExpression,
 } from '../../hooks/useFieldMutations';
 
 const { Menu } = unlock( componentsPrivateApis );
@@ -66,6 +68,7 @@ export default function FieldActionsMenu( {
 	const [ isMenuOpen, setIsMenuOpen ] = useState( false );
 	const [ isFormatting, setIsFormatting ] = useState( false );
 	const [ isEditingOptions, setIsEditingOptions ] = useState( false );
+	const [ isEditingFormula, setIsEditingFormula ] = useState( false );
 	const [ isEditingSettings, setIsEditingSettings ] = useState( false );
 	const [ isChangingType, setIsChangingType ] = useState( false );
 	const [ shouldFocusFormat, setShouldFocusFormat ] = useState( false );
@@ -75,6 +78,7 @@ export default function FieldActionsMenu( {
 	const optionsAnchorRef = useRef( null );
 	const duplicate = useDuplicateField( collectionId );
 	const remove = useDeleteField( collectionId );
+	const updateFormula = useUpdateFormulaExpression( collectionId );
 	const { fields } = useCollectionFieldsContext();
 	const mappedField = useMappedField( recordId );
 	const activeField = useMemo( () => {
@@ -100,12 +104,14 @@ export default function FieldActionsMenu( {
 		activeField?.type;
 	const canFormat = FORMATTABLE_TYPES.has( fieldType );
 	const supportsOptions = TYPES_WITH_OPTIONS.has( fieldType );
+	const supportsFormula = fieldType === 'formula';
 	const canChangeType =
 		Boolean( fieldType ) && ! UNCONVERTIBLE_SOURCE_TYPES.has( fieldType );
 	const initialOptions = useMemo(
 		() => ( supportsOptions ? activeField?.cortextElements ?? [] : [] ),
 		[ supportsOptions, activeField ]
 	);
+	const [ formulaError, setFormulaError ] = useState( '' );
 	const dependentRollups = useMemo( () => {
 		const fieldList = Array.isArray( fields ) ? fields : [];
 		return fieldList.filter(
@@ -114,6 +120,34 @@ export default function FieldActionsMenu( {
 				( candidate.rollupRelationFieldId === recordId ||
 					candidate.rollupTargetFieldId === recordId )
 		);
+	}, [ fields, recordId ] );
+	const dependentFormulas = useMemo( () => {
+		const fieldList = Array.isArray( fields ) ? fields : [];
+		const deletedIds = new Set( [ Number( recordId ) ] );
+		const dependents = [];
+		let found = true;
+		while ( found ) {
+			found = false;
+			for ( const candidate of fieldList ) {
+				const candidateId = Number( candidate.recordId );
+				if (
+					! candidateId ||
+					deletedIds.has( candidateId ) ||
+					candidate.cortextType !== 'formula'
+				) {
+					continue;
+				}
+				const deps = Array.isArray( candidate.formulaDepFieldIds )
+					? candidate.formulaDepFieldIds.map( Number )
+					: [];
+				if ( deps.some( ( depId ) => deletedIds.has( depId ) ) ) {
+					dependents.push( candidate );
+					deletedIds.add( candidateId );
+					found = true;
+				}
+			}
+		}
+		return dependents;
 	}, [ fields, recordId ] );
 
 	const cancelClose = useCallback( () => {
@@ -370,6 +404,18 @@ export default function FieldActionsMenu( {
 								</Menu.ItemLabel>
 							</Menu.Item>
 						) : null }
+						{ supportsFormula ? (
+							<Menu.Item
+								onClick={ () => {
+									setFormulaError( '' );
+									setIsEditingFormula( true );
+								} }
+							>
+								<Menu.ItemLabel>
+									{ __( 'Edit formula', 'cortext' ) }
+								</Menu.ItemLabel>
+							</Menu.Item>
+						) : null }
 						{ canChangeType ? (
 							<Menu.Item
 								onClick={ () => setIsChangingType( true ) }
@@ -443,18 +489,38 @@ export default function FieldActionsMenu( {
 						<p>
 							{ dependentRollups.length === 1
 								? __(
-										'This will also delete 1 rollup that depends on it:',
+										'This also deletes 1 rollup that uses it:',
 										'cortext'
 								  )
 								: sprintf(
 										/* translators: %d: number of dependent rollup fields */
 										__(
-											'This will also delete %d rollups that depend on it:',
+											'This also deletes %d rollups that use it:',
 											'cortext'
 										),
 										dependentRollups.length
 								  ) }{ ' ' }
 							{ dependentRollups
+								.map( ( candidate ) => candidate.label )
+								.join( ', ' ) }
+						</p>
+					) : null }
+					{ dependentFormulas.length > 0 ? (
+						<p>
+							{ dependentFormulas.length === 1
+								? __(
+										'This also deletes 1 formula that uses it:',
+										'cortext'
+								  )
+								: sprintf(
+										/* translators: %d: number of dependent formula fields */
+										__(
+											'This also deletes %d formulas that use it:',
+											'cortext'
+										),
+										dependentFormulas.length
+								  ) }{ ' ' }
+							{ dependentFormulas
 								.map( ( candidate ) => candidate.label )
 								.join( ', ' ) }
 						</p>
@@ -479,6 +545,38 @@ export default function FieldActionsMenu( {
 						onRowsChanged={ onRowsChanged }
 						onRequestClose={ () => setIsEditingOptions( false ) }
 					/>
+				</Popover>
+			) : null }
+			{ isEditingFormula && supportsFormula ? (
+				<Popover
+					anchor={ optionsAnchorRef.current }
+					placement="bottom-start"
+					onClose={ () => setIsEditingFormula( false ) }
+					focusOnMount="firstElement"
+					className="cortext-formula-popover-host"
+				>
+					<div className="cortext-data-view-toolbar-popover__content">
+						<FormulaConfig
+							initialExpression={
+								activeField?.formulaExpression ?? ''
+							}
+							isBusy={ updateFormula.isBusy }
+							errorMessage={
+								formulaError || updateFormula.error?.message
+							}
+							backLabel={ __( 'Cancel', 'cortext' ) }
+							submitLabel={ __( 'Save formula', 'cortext' ) }
+							excludeRecordId={ recordId }
+							onBack={ () => setIsEditingFormula( false ) }
+							onError={ setFormulaError }
+							onSubmit={ async ( expression ) => {
+								setFormulaError( '' );
+								await updateFormula.run( recordId, expression );
+								setIsEditingFormula( false );
+								onRowsChanged?.();
+							} }
+						/>
+					</div>
 				</Popover>
 			) : null }
 			{ isEditingSettings ? (

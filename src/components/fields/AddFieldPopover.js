@@ -16,6 +16,7 @@ import { buildFieldListQuery } from '../../hooks/useCollectionFields';
 import { useCollectionFieldsContext } from '../CollectionFieldsContext';
 import { useCreateField } from '../../hooks/useFieldMutations';
 import { FIELD_TYPES, FieldTypeIcon, fieldTypeLabel } from './fieldTypes';
+import FormulaConfig from './FormulaConfig';
 
 const RELATION_LIMIT_OPTIONS = [
 	{ value: 'many', label: __( 'No limit', 'cortext' ) },
@@ -156,7 +157,7 @@ function RelationConfig( {
 				__nextHasNoMarginBottom
 			/>
 			<ToggleControl
-				label={ __( 'Add related property', 'cortext' ) }
+				label={ __( 'Add related field', 'cortext' ) }
 				checked={ showReverseOptions }
 				onChange={ setShowReverseOptions }
 				disabled={ isBusy }
@@ -165,7 +166,7 @@ function RelationConfig( {
 			{ showReverseOptions ? (
 				<>
 					<TextControl
-						label={ __( 'Related property name', 'cortext' ) }
+						label={ __( 'Related field name', 'cortext' ) }
 						placeholder={ defaultReverseTitle }
 						value={ reverseTitle }
 						onChange={ setReverseTitle }
@@ -174,7 +175,7 @@ function RelationConfig( {
 						__nextHasNoMarginBottom
 					/>
 					<SelectControl
-						label={ __( 'Related property limit', 'cortext' ) }
+						label={ __( 'Related field limit', 'cortext' ) }
 						value={ reverseMultiple ? 'many' : 'one' }
 						options={ RELATION_LIMIT_OPTIONS }
 						onChange={ ( next ) =>
@@ -387,7 +388,7 @@ function RollupConfig( {
 				__nextHasNoMarginBottom
 			/>
 			<SelectControl
-				label={ __( 'Target property', 'cortext' ) }
+				label={ __( 'Target field', 'cortext' ) }
 				value={ targetFieldId }
 				options={ targetOptions }
 				onChange={ ( next ) => {
@@ -451,7 +452,11 @@ export default function AddFieldPopover( { collectionId, onCreate } ) {
 			return;
 		}
 		setSubmitError( '' );
-		if ( chosenType === 'relation' || chosenType === 'rollup' ) {
+		if (
+			chosenType === 'relation' ||
+			chosenType === 'rollup' ||
+			chosenType === 'formula'
+		) {
 			setConfigType( chosenType );
 			return;
 		}
@@ -488,13 +493,16 @@ export default function AddFieldPopover( { collectionId, onCreate } ) {
 		? configuredType.label
 		: fieldTypeLabel( 'text' );
 	let nameLabel = __( 'Name', 'cortext' );
-	let namePlaceholder = __( 'Type property name…', 'cortext' );
+	let namePlaceholder = __( 'Type field name…', 'cortext' );
 	if ( configType === 'relation' ) {
 		nameLabel = __( 'Relation name', 'cortext' );
 		namePlaceholder = __( 'Relation name', 'cortext' );
 	} else if ( configType === 'rollup' ) {
 		nameLabel = __( 'Rollup name', 'cortext' );
 		namePlaceholder = __( 'Rollup name', 'cortext' );
+	} else if ( configType === 'formula' ) {
+		nameLabel = __( 'Formula name', 'cortext' );
+		namePlaceholder = __( 'Formula name', 'cortext' );
 	}
 
 	let configuration = null;
@@ -522,6 +530,22 @@ export default function AddFieldPopover( { collectionId, onCreate } ) {
 				onCreate={ onCreate }
 				onBack={ () => setConfigType( null ) }
 				onError={ setSubmitError }
+			/>
+		);
+	} else if ( configType === 'formula' ) {
+		configuration = (
+			<FormulaConfig
+				isBusy={ isBusy }
+				onBack={ () => setConfigType( null ) }
+				onError={ setSubmitError }
+				onSubmit={ async ( expression ) => {
+					const created = await run( {
+						title: title.trim() || fallbackTitle,
+						type: 'formula',
+						expression,
+					} );
+					onCreate?.( created );
+				} }
 			/>
 		);
 	}

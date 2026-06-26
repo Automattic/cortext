@@ -5,6 +5,7 @@ import {
 	backup,
 	calendar,
 	check,
+	code,
 	formatListBullets,
 	globe,
 	link,
@@ -81,6 +82,7 @@ export const FIELD_TYPES = [
 	{ value: 'checkbox', label: __( 'Checkbox', 'cortext' ), icon: check },
 	{ value: 'relation', label: __( 'Relation', 'cortext' ), icon: link },
 	{ value: 'rollup', label: __( 'Rollup', 'cortext' ), icon: backup },
+	{ value: 'formula', label: __( 'Formula', 'cortext' ), icon: code },
 	{ value: 'url', label: __( 'URL', 'cortext' ), icon: globe },
 	{ value: 'email', label: __( 'Email', 'cortext' ), icon: atSymbol },
 ];

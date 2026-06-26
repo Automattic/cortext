@@ -162,6 +162,20 @@ final class Test_Post_Type_Field_Cleanup extends BaseTestCase {
 		$this->assertNotContains( (string) $rollup_id, $this->stored_fields( $projects_id ) );
 	}
 
+	public function test_field_delete_removes_dependent_formulas(): void {
+		$collection_id = $this->create_collection();
+		$score_id      = $this->attach_field( $collection_id, 'number' );
+		$total_id      = $this->attach_formula_field( $collection_id, array( $score_id ) );
+		$summary_id    = $this->attach_formula_field( $collection_id, array( $total_id ) );
+
+		wp_delete_post( $score_id, true );
+
+		$this->assertNull( get_post( $total_id ) );
+		$this->assertNull( get_post( $summary_id ) );
+		$this->assertNotContains( (string) $total_id, $this->stored_fields( $collection_id ) );
+		$this->assertNotContains( (string) $summary_id, $this->stored_fields( $collection_id ) );
+	}
+
 	public function test_non_field_delete_leaves_schema_untouched(): void {
 		$collection_id = $this->create_collection();
 		$field_id      = $this->attach_field( $collection_id, 'text' );
@@ -264,6 +278,32 @@ final class Test_Post_Type_Field_Cleanup extends BaseTestCase {
 				'rollup_relation_field_id' => (string) $relation_id,
 				'rollup_target_field_id'   => (string) $target_id,
 				'rollup_aggregator'        => 'sum',
+			)
+		);
+	}
+
+	/**
+	 * Inserts a formula field with precomputed dependencies and attaches it to
+	 * its owner collection.
+	 *
+	 * @param int   $owner_id Collection that owns the formula.
+	 * @param int[] $deps     Field IDs the formula depends on.
+	 */
+	private function attach_formula_field( int $owner_id, array $deps ): int {
+		return $this->attach_field(
+			$owner_id,
+			'formula',
+			array(
+				'expression'            => '1',
+				'formula_result_type'   => 'number',
+				'formula_ast'           => wp_json_encode(
+					array(
+						'node'  => 'literal',
+						'type'  => 'number',
+						'value' => 1,
+					)
+				),
+				'formula_dep_field_ids' => wp_json_encode( $deps ),
 			)
 		);
 	}

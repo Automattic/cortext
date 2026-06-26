@@ -80,8 +80,9 @@ final class RowsFilterQuery {
 			if ( $field_id < 1 ) {
 				continue;
 			}
-			$type = (string) get_post_meta( $field_id, 'type', true );
-			$key  = "field-{$field_id}";
+			$raw_type = (string) get_post_meta( $field_id, 'type', true );
+			$type     = FieldTypeRegistry::effective_type_for_field( $field_id, $raw_type );
+			$key      = "field-{$field_id}";
 
 			$schema[ $key ] = array(
 				'id'         => $field_id,

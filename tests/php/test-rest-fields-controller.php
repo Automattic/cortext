@@ -587,6 +587,395 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 		);
 	}
 
+	public function test_create_formula_compiles_refs_and_materializes_existing_rows(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$collection_id = $this->create_collection_with_slug( 'Invoices', 'form-invoices' );
+
+		$price_id = (int) $this->create_field(
+			$collection_id,
+			array(
+				'title' => 'Price',
+				'type'  => 'number',
+			)
+		)->get_data()['id'];
+		$tax_id   = (int) $this->create_field(
+			$collection_id,
+			array(
+				'title' => 'Tax',
+				'type'  => 'number',
+			)
+		)->get_data()['id'];
+
+		$row_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Document::POST_TYPE,
+				'post_status' => 'publish',
+				'post_title'  => 'Invoice A',
+			)
+		);
+		wp_set_object_terms( $row_id, array( TraitTaxonomy::term_id_for_trait( $collection_id ) ), TraitTaxonomy::TAXONOMY, false );
+		update_post_meta( $row_id, "field-{$price_id}", '10' );
+		update_post_meta( $row_id, "field-{$tax_id}", '2.5' );
+
+		$response = $this->create_field(
+			$collection_id,
+			array(
+				'title'      => 'Total',
+				'type'       => 'formula',
+				'expression' => 'field("Price") + prop("Tax")',
+			)
+		);
+
+		$this->assertSame( 201, $response->get_status() );
+		$formula_id = (int) $response->get_data()['id'];
+
+		$this->assertSame( 'formula', get_post_meta( $formula_id, 'type', true ) );
+		$this->assertSame( 'number', get_post_meta( $formula_id, 'formula_result_type', true ) );
+		$this->assertSame(
+			array( $price_id, $tax_id ),
+			json_decode( get_post_meta( $formula_id, 'formula_dep_field_ids', true ), true )
+		);
+		$this->assertSame( 12.5, (float) get_post_meta( $row_id, "field-{$formula_id}", true ) );
+	}
+
+	public function test_formula_select_reference_compiles_as_text(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$collection_id = $this->create_collection_with_slug( 'Tasks', 'fselect-ref' );
+
+		$this->create_field(
+			$collection_id,
+			array(
+				'title'   => 'Status',
+				'type'    => 'select',
+				'options' => array(
+					array(
+						'value' => 'todo',
+						'label' => 'To do',
+					),
+				),
+			)
+		);
+
+		$response = $this->create_field(
+			$collection_id,
+			array(
+				'title'      => 'Status copy',
+				'type'       => 'formula',
+				'expression' => 'field("Status")',
+			)
+		);
+
+		$this->assertSame( 201, $response->get_status() );
+		$formula_id = (int) $response->get_data()['id'];
+		$this->assertSame( 'text', get_post_meta( $formula_id, 'formula_result_type', true ) );
+	}
+
+	public function test_formula_preserves_less_than_comparisons_on_create_and_update(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$collection_id = $this->create_collection_with_slug( 'Comparisons', 'fcompare' );
+
+		$this->create_field(
+			$collection_id,
+			array(
+				'title' => 'A',
+				'type'  => 'number',
+			)
+		);
+		$this->create_field(
+			$collection_id,
+			array(
+				'title' => 'B',
+				'type'  => 'number',
+			)
+		);
+
+		$response = $this->create_field(
+			$collection_id,
+			array(
+				'title'      => 'A before B',
+				'type'       => 'formula',
+				'expression' => 'field("A") < field("B")',
+			)
+		);
+
+		$this->assertSame( 201, $response->get_status() );
+		$formula_id = (int) $response->get_data()['id'];
+		$this->assertSame( 'field("A") < field("B")', get_post_meta( $formula_id, 'expression', true ) );
+		$this->assertSame( 'checkbox', get_post_meta( $formula_id, 'formula_result_type', true ) );
+
+		$response = $this->update_formula(
+			$formula_id,
+			array(
+				'expression' => 'field("A") <= field("B")',
+			)
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'field("A") <= field("B")', get_post_meta( $formula_id, 'expression', true ) );
+		$this->assertSame( 'checkbox', get_post_meta( $formula_id, 'formula_result_type', true ) );
+	}
+
+	public function test_formula_update_recompiles_dependent_formulas(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$collection_id = $this->create_collection_with_slug( 'Dependents', 'fdeps' );
+
+		$row_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Document::POST_TYPE,
+				'post_status' => 'publish',
+				'post_title'  => 'Row A',
+			)
+		);
+		wp_set_object_terms( $row_id, array( TraitTaxonomy::term_id_for_trait( $collection_id ) ), TraitTaxonomy::TAXONOMY, false );
+
+		$a_id = (int) $this->create_field(
+			$collection_id,
+			array(
+				'title'      => 'A',
+				'type'       => 'formula',
+				'expression' => '1',
+			)
+		)->get_data()['id'];
+		$b_id = (int) $this->create_field(
+			$collection_id,
+			array(
+				'title'      => 'B',
+				'type'       => 'formula',
+				'expression' => 'field("A") + 1',
+			)
+		)->get_data()['id'];
+
+		$this->assertSame( 'number', get_post_meta( $b_id, 'formula_result_type', true ) );
+
+		$response = $this->update_formula(
+			$a_id,
+			array(
+				'expression' => '"item-"',
+			)
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'text', get_post_meta( $a_id, 'formula_result_type', true ) );
+		$this->assertSame( 'text', get_post_meta( $b_id, 'formula_result_type', true ) );
+		$this->assertSame( 'item-1', get_post_meta( $row_id, "field-{$b_id}", true ) );
+	}
+
+	public function test_formula_update_rejects_invalid_dependent_formula(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$collection_id = $this->create_collection_with_slug( 'Rejected', 'freject' );
+
+		$a_id = (int) $this->create_field(
+			$collection_id,
+			array(
+				'title'      => 'A',
+				'type'       => 'formula',
+				'expression' => '1',
+			)
+		)->get_data()['id'];
+		$b_id = (int) $this->create_field(
+			$collection_id,
+			array(
+				'title'      => 'B',
+				'type'       => 'formula',
+				'expression' => 'field("A") * 2',
+			)
+		)->get_data()['id'];
+
+		$response = $this->update_formula(
+			$a_id,
+			array(
+				'expression' => '"not a number"',
+			)
+		);
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'cortext_formula_dependent_invalid', $response->get_data()['code'] );
+		$this->assertSame( 'cortext_formula_type_mismatch', $response->get_data()['data']['dependent_code'] );
+		$this->assertSame( '1', get_post_meta( $a_id, 'expression', true ) );
+		$this->assertSame( 'number', get_post_meta( $b_id, 'formula_result_type', true ) );
+	}
+
+	public function test_formula_update_rejects_blank_expression(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$collection_id = $this->create_collection_with_slug( 'Blank', 'fblank' );
+
+		$formula_id = (int) $this->create_field(
+			$collection_id,
+			array(
+				'title'      => 'Total',
+				'type'       => 'formula',
+				'expression' => '1',
+			)
+		)->get_data()['id'];
+
+		$response = $this->update_formula(
+			$formula_id,
+			array(
+				'expression' => " \n\t ",
+			)
+		);
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'cortext_formula_expression_required', $response->get_data()['code'] );
+		$this->assertSame( '1', get_post_meta( $formula_id, 'expression', true ) );
+	}
+
+	public function test_update_formula_resolves_previous_refs_after_field_rename(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$collection_id = $this->create_collection_with_slug( 'Items', 'form-rename' );
+
+		$price_id = (int) $this->create_field(
+			$collection_id,
+			array(
+				'title' => 'Price',
+				'type'  => 'number',
+			)
+		)->get_data()['id'];
+		$formula_id = (int) $this->create_field(
+			$collection_id,
+			array(
+				'title'      => 'Total',
+				'type'       => 'formula',
+				'expression' => 'prop("Price") * 2',
+			)
+		)->get_data()['id'];
+
+		wp_update_post(
+			array(
+				'ID'         => $price_id,
+				'post_title' => 'Cost',
+			)
+		);
+
+		$response = $this->update_formula(
+			$formula_id,
+			array(
+				'expression' => 'prop("Price") + 1',
+			)
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'number', $response->get_data()['formula_result_type'] );
+
+		$ast = json_decode( get_post_meta( $formula_id, 'formula_ast', true ), true );
+		$this->assertSame( $price_id, $ast['left']['field_id'] );
+	}
+
+	public function test_formula_rejects_invalid_refs_and_rolls_back_field(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$collection_id = $this->create_collection_with_slug( 'Tags', 'form-tags' );
+
+		$this->create_field(
+			$collection_id,
+			array(
+				'title' => 'Tags',
+				'type'  => 'multiselect',
+			)
+		);
+
+		$response = $this->create_field(
+			$collection_id,
+			array(
+				'title'      => 'Tag count',
+				'type'       => 'formula',
+				'expression' => 'length(prop("Tags"))',
+			)
+		);
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'cortext_formula_unsupported_target_type', $response->get_data()['code'] );
+		$this->assertCount( 1, $this->stored_collection_field_ids( $collection_id ) );
+	}
+
+	public function test_formula_rejects_excessive_input_before_storage(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$collection_id = $this->create_collection_with_slug( 'Limits', 'form-limits' );
+
+		$cases = array(
+			'Too long'       => array(
+				'expression' => str_repeat( '1 + ', 1100 ) . '1',
+				'code'       => 'cortext_formula_too_long',
+			),
+			'Too many parts' => array(
+				'expression' => implode( '+', array_fill( 0, 260, '1' ) ),
+				'code'       => 'cortext_formula_too_complex',
+			),
+			'Too nested'     => array(
+				'expression' => str_repeat( 'lower(', 65 ) . '"x"' . str_repeat( ')', 65 ),
+				'code'       => 'cortext_formula_too_deep',
+			),
+		);
+
+		foreach ( $cases as $title => $case ) {
+			$response = $this->create_field(
+				$collection_id,
+				array(
+					'title'      => $title,
+					'type'       => 'formula',
+					'expression' => $case['expression'],
+				)
+			);
+
+			$this->assertSame( 400, $response->get_status() );
+			$this->assertSame( $case['code'], $response->get_data()['code'] );
+		}
+
+		$this->assertSame( array(), $this->stored_collection_field_ids( $collection_id ) );
+	}
+
+	public function test_formula_update_rejects_cycles(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$collection_id = $this->create_collection_with_slug( 'Cycles', 'form-cycles' );
+
+		$a_id = (int) $this->create_field(
+			$collection_id,
+			array(
+				'title'      => 'A',
+				'type'       => 'formula',
+				'expression' => '1',
+			)
+		)->get_data()['id'];
+		$b_id = (int) $this->create_field(
+			$collection_id,
+			array(
+				'title'      => 'B',
+				'type'       => 'formula',
+				'expression' => 'prop("A") + 1',
+			)
+		)->get_data()['id'];
+
+		$response = $this->update_formula(
+			$a_id,
+			array(
+				'expression' => 'prop("B") + 1',
+			)
+		);
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'cortext_formula_cycle', $response->get_data()['code'] );
+		$this->assertSame( '1', get_post_meta( $a_id, 'expression', true ) );
+		$this->assertSame( array( $a_id ), json_decode( get_post_meta( $b_id, 'formula_dep_field_ids', true ), true ) );
+	}
+
+	public function test_formula_supports_system_created_and_marks_now_volatile(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$collection_id = $this->create_collection_with_slug( 'Ages', 'form-ages' );
+
+		$response = $this->create_field(
+			$collection_id,
+			array(
+				'title'      => 'Age',
+				'type'       => 'formula',
+				'expression' => 'dateBetween(now(), prop("Created"), "days")',
+			)
+		);
+
+		$this->assertSame( 201, $response->get_status() );
+		$formula_id = (int) $response->get_data()['id'];
+		$this->assertSame( 'number', get_post_meta( $formula_id, 'formula_result_type', true ) );
+		$this->assertSame( '1', get_post_meta( $formula_id, 'formula_is_volatile', true ) );
+	}
+
 	public function test_duplicate_inserts_after_source_with_copy_title(): void {
 		wp_set_current_user( $this->create_user( 'editor' ) );
 		$collection_id = $this->create_collection_with_slug( 'Schemas', 'schemas' );
@@ -1578,6 +1967,18 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 		$request = new WP_REST_Request(
 			'POST',
 			"/cortext/v1/fields/{$field_id}/options"
+		);
+		$request->set_param( 'field_id', $field_id );
+		foreach ( $body as $key => $value ) {
+			$request->set_param( $key, $value );
+		}
+		return rest_do_request( $request );
+	}
+
+	private function update_formula( int $field_id, array $body ) {
+		$request = new WP_REST_Request(
+			'POST',
+			"/cortext/v1/fields/{$field_id}/formula"
 		);
 		$request->set_param( 'field_id', $field_id );
 		foreach ( $body as $key => $value ) {

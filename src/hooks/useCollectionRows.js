@@ -15,7 +15,11 @@ function serverFieldInfo( field ) {
 	return {
 		filterable: field.filterable === true,
 		sortable: field.sortable === true,
-		type: field.cortextFieldType ?? field.cortextType ?? field.type,
+		type:
+			field.cortextQueryType ??
+			field.cortextFieldType ??
+			field.cortextType ??
+			field.type,
 		operators: Array.isArray( field.operators )
 			? field.operators
 			: undefined,

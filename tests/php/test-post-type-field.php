@@ -154,6 +154,59 @@ final class Test_Post_Type_Field extends BaseTestCase {
 		);
 	}
 
+	public function test_formula_expression_meta_is_readonly_in_core_rest(): void {
+		$field_post_type = new Field();
+		$field_post_type->register_post_type();
+
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$field_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Total',
+				'meta_input'  => array(
+					'type'                => 'formula',
+					'expression'          => '1',
+					'formula_result_type' => 'number',
+					'formula_is_volatile' => '0',
+				),
+			)
+		);
+
+		$GLOBALS['wp_rest_server'] = new WP_REST_Server();
+		do_action( 'rest_api_init' );
+
+		$request = new WP_REST_Request( 'PUT', "/wp/v2/crtxt_fields/{$field_id}" );
+		$request->set_param( 'id', $field_id );
+		$request->set_param( 'context', 'edit' );
+		$request->set_param( 'meta', array( 'expression' => '2' ) );
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( '1', get_post_meta( $field_id, 'expression', true ) );
+	}
+
+	public function test_formula_expression_sanitizer_preserves_comparison_operators(): void {
+		$field_post_type = new Field();
+		$field_post_type->register_post_type();
+
+		$field_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Comparison',
+				'meta_input'  => array( 'type' => 'formula' ),
+			)
+		);
+
+		update_post_meta( $field_id, 'expression', "field(\"A\") <= field(\"B\")\r\n" );
+
+		$this->assertSame(
+			'field("A") <= field("B")',
+			get_post_meta( $field_id, 'expression', true )
+		);
+	}
+
 	public function test_save_creates_field_with_direct_meta(): void {
 		( new Field() )->register_post_type();
 
