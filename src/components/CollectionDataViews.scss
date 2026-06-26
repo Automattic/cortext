@@ -970,14 +970,11 @@ tr:has(.cortext-title-cell--is-opening)
 		/* stylelint-disable-next-line no-descending-specificity */
 		tbody .dataviews-view-table__cell-content-wrapper,
 		tbody .dataviews-view-table__primary-column-content {
+			align-items: center;
 			box-sizing: border-box;
 			width: 100%;
 			min-width: 0;
 			max-width: 100%;
-		}
-
-		tbody .dataviews-view-table__cell-content-wrapper {
-			align-items: center;
 		}
 
 		tfoot.cortext-table-calculations {
