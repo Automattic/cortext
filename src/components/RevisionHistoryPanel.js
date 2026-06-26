@@ -101,8 +101,10 @@ function RevisionRow( {
 }
 
 export default function RevisionHistoryPanel( { postId, postType } ) {
-	const { data, isLoading, hasResolved, error, refresh, revisionKey } =
-		useRevisions( postType, postId );
+	const { data, isLoading, hasResolved, error, revisionKey } = useRevisions(
+		postType,
+		postId
+	);
 	const { isAvailable, currentRevisionId, exitRevisions, selectRevision } =
 		useRevisionControls( { postId, postType } );
 	const activeArea = useSelect(
@@ -141,14 +143,6 @@ export default function RevisionHistoryPanel( { postId, postType } ) {
 			header={
 				<div className="cortext-revision-history__header-row">
 					<strong>{ __( 'History', 'cortext' ) }</strong>
-					<Button
-						variant="tertiary"
-						size="compact"
-						onClick={ refresh }
-						disabled={ isLoading }
-					>
-						{ __( 'Refresh', 'cortext' ) }
-					</Button>
 				</div>
 			}
 		>
