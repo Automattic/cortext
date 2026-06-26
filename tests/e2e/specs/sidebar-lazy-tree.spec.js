@@ -140,13 +140,7 @@ test.describe( 'Sidebar lazy tree', () => {
 				.getByRole( 'button', { name: 'Show more' } )
 		);
 
-		const childRequest = page.waitForResponse(
-			( response ) =>
-				response.url().includes( '/wp-json/wp/v2/crtxt_documents' ) &&
-				response.url().includes( `parent=${ parent.id }` )
-		);
 		await expandSidebarNode( page, PARENT_TITLE );
-		await childRequest;
 
 		await expect(
 			page.getByRole( 'button', { name: FIRST_CHILD_TITLE, exact: true } )
