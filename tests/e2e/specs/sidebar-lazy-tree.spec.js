@@ -60,7 +60,7 @@ async function loadMoreUntilVisible( target, loadMoreButton, maxClicks = 10 ) {
 			return;
 		}
 		await expect( loadMoreButton ).toBeVisible();
-		await loadMoreButton.click( { force: true } );
+		await loadMoreButton.evaluate( ( button ) => button.click() );
 	}
 	await expect( target ).toBeVisible();
 }
