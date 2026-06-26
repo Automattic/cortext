@@ -392,8 +392,9 @@ tbody > tr > td:not(:first-child) {
 	}
 
 	&--with-open-action {
+		position: relative;
 		display: grid;
-		grid-template-columns: minmax(0, 1fr) auto;
+		grid-template-columns: minmax(0, 1fr);
 		align-items: center;
 		gap: $grid-unit-05;
 		padding-inline-end: $grid-unit-10;
@@ -404,13 +405,16 @@ tbody > tr > td:not(:first-child) {
 		}
 
 		// When the row has a document icon, slot it before the editable
-		// cell so the leading column shows: icon, title, open-button.
+		// cell so the leading column shows: icon, title.
 		&:has(.cortext-title-cell__icon) {
-			grid-template-columns: auto minmax(0, 1fr) auto;
+			grid-template-columns: auto minmax(0, 1fr);
 		}
 	}
 
 	&__open.components-button {
+		position: absolute;
+		top: 50%;
+		inset-inline-end: $grid-unit-05;
 		justify-self: end;
 		width: auto;
 		min-width: 0;
@@ -424,6 +428,7 @@ tbody > tr > td:not(:first-child) {
 		box-sizing: border-box;
 		opacity: 0;
 		pointer-events: none;
+		transform: translateY(-50%);
 
 		&:hover,
 		&:focus-visible {
@@ -955,19 +960,23 @@ tr:has(.cortext-title-cell--is-opening)
 			vertical-align: middle;
 		}
 
-		// DataViews wraps each cell's render in a flex container that
-		// shrinks to the content's intrinsic width, so the hover/focus
-		// background on the editable shell only painted under the text
-		// instead of the whole cell. Force the wrapper to fill the td so
-		// every cell hovers edge-to-edge regardless of content length. The
-		// min/max reset also overrides DataViews's upstream 15ch floor, which
-		// otherwise lets narrow resized columns paint into their neighbors.
+		// DataViews wraps each cell's render in flex containers that shrink to
+		// the content's intrinsic width, so the hover/focus background on the
+		// editable shell only painted under the text instead of the whole cell.
+		// Force the wrappers to fill the td so every cell hovers edge-to-edge
+		// regardless of content length. The min/max reset also overrides
+		// DataViews's upstream 15ch floor, which otherwise lets narrow resized
+		// columns paint into their neighbors.
 		/* stylelint-disable-next-line no-descending-specificity */
-		tbody .dataviews-view-table__cell-content-wrapper {
+		tbody .dataviews-view-table__cell-content-wrapper,
+		tbody .dataviews-view-table__primary-column-content {
 			box-sizing: border-box;
 			width: 100%;
 			min-width: 0;
 			max-width: 100%;
+		}
+
+		tbody .dataviews-view-table__cell-content-wrapper {
 			align-items: center;
 		}
 
