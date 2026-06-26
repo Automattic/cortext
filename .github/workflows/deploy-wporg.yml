@@ -31,7 +31,7 @@ jobs:
         env:
             VERSION: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.version }}
         steps:
-            - uses: actions/checkout@v6.0.3
+            - uses: actions/checkout@v7.0.0
 
             - name: Check release is deployable
               env:
@@ -75,7 +75,7 @@ jobs:
         env:
             VERSION: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.version }}
         steps:
-            - uses: actions/checkout@v6.0.3
+            - uses: actions/checkout@v7.0.0
 
             - name: Install Subversion
               run: |
