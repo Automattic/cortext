@@ -19,7 +19,7 @@
 	},
 	"devDependencies": {
 		"@playwright/test": "^1.60.0",
-		"electron": "^42.3.1",
+		"electron": "^42.3.3",
 		"electron-builder": "^26.8.1"
 	},
 	"build": {
@@ -52,6 +52,10 @@
 				{
 					"target": "dmg",
 					"arch": "arm64"
+				},
+				{
+					"target": "zip",
+					"arch": "arm64"
 				}
 			],
 			"identity": "Automattic, Inc. (PZYM8XX95Q)",
@@ -64,6 +68,16 @@
 				"Contents/Resources/runtime/bin/php"
 			],
 			"notarize": true
-		}
+		},
+		"publish": [
+			{
+				"provider": "github",
+				"owner": "Automattic",
+				"repo": "cortext"
+			}
+		]
+	},
+	"dependencies": {
+		"electron-updater": "^6.8.9"
 	}
 }
