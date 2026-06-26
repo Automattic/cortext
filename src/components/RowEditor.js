@@ -22,6 +22,7 @@ import { EditorSurfaceProvider } from './EditorSurfaceContext';
 import EditorBody from './EditorBody';
 import { PostLockFailureNotice, PostLockModal } from './PostLockControls';
 import CortextLinkSuggestions from './CortextLinkSuggestions';
+import { CortextMentions } from './mention';
 import { RowMutationContext } from './EditableCell';
 
 const ROW_DETAIL_EDITOR_CSS = `
@@ -246,6 +247,7 @@ export default function RowEditor( {
 			useSubRegistry
 		>
 			<CortextLinkSuggestions />
+			<CortextMentions />
 			{ /* tech-debt.md#td-row-detail-toolbar-isolation: row detail owns these SlotFills while
 			     peek/modal are open. */ }
 			<SlotFillProvider>

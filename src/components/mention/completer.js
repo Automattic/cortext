@@ -1,0 +1,83 @@
+import { addFilter } from '@wordpress/hooks';
+import { __ } from '@wordpress/i18n';
+
+import { fetchCortextLinkSuggestions } from '../fetchCortextLinkSuggestions';
+
+export const MENTION_COMPLETER_NAME = 'cortext/mention';
+
+export async function fetchMentionOptions( search ) {
+	const documents = await fetchCortextLinkSuggestions( search, {
+		perPage: 10,
+	} );
+
+	return documents.map( ( document ) => {
+		const option = {
+			...document,
+			kind: 'document',
+		};
+		return {
+			...option,
+			key: `document-${ document.id }`,
+			value: option,
+			label: document.title || __( '(untitled)', 'cortext' ),
+		};
+	} );
+}
+
+export function getMentionCompletion( option ) {
+	if ( option?.kind !== 'document' ) {
+		return '';
+	}
+
+	const { id, title, url } = option;
+	const label = title || __( '(untitled)', 'cortext' );
+	// Trailing space so the caret lands on a text position after the atomic
+	// mention. Without it the caret cannot sit after a `contentEditable=false`
+	// anchor at the end of a block, and typing stops.
+	return (
+		<>
+			<a
+				className="cortext-mention"
+				data-crtxt-mention={ String( id ) }
+				href={ url }
+			>
+				{ label }
+			</a>{ ' ' }
+		</>
+	);
+}
+
+export function getMentionOptionLabel( option ) {
+	return option?.title || __( '(untitled)', 'cortext' );
+}
+
+export function getMentionOptionKeywords( option ) {
+	return getMentionOptionLabel( option ).split( /\s+/ );
+}
+
+export const mentionCompleter = {
+	name: MENTION_COMPLETER_NAME,
+	triggerPrefix: '@',
+	isDebounced: true,
+	options: fetchMentionOptions,
+	getOptionLabel: getMentionOptionLabel,
+	getOptionKeywords: getMentionOptionKeywords,
+	getOptionCompletion: getMentionCompletion,
+};
+
+// Cortext uses `@` for document mentions. Remove the other `@` completers
+// (usually core user mentions), then add ours once.
+export function withCortextMentionCompleter( completers ) {
+	const withoutMentionPrefix = completers.filter(
+		( completer ) =>
+			completer?.name !== MENTION_COMPLETER_NAME &&
+			completer?.triggerPrefix !== '@'
+	);
+	return [ mentionCompleter, ...withoutMentionPrefix ];
+}
+
+addFilter(
+	'editor.Autocomplete.completers',
+	'cortext/mention-completer',
+	withCortextMentionCompleter
+);

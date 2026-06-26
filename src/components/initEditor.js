@@ -25,6 +25,9 @@ import './initInserterMediaCategories';
 // Side-effect import: float Cortext blocks to the top of the slash inserter.
 import './prioritizeCortextInserterBlocks';
 
+// Register Cortext's inline mention format and @ completer.
+import './mention';
+
 // Core exposes `core/post-title` in the inserter and block actions by default.
 // Cortext owns title placement through EnsureHeaderBlocks, so users shouldn't
 // insert another title, duplicate it, or unlock its fixed position. Adjust the

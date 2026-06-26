@@ -3,6 +3,7 @@ import { addQueryArgs } from '@wordpress/url';
 import { __ } from '@wordpress/i18n';
 
 import { DOCUMENT_POST_TYPE } from '../collections';
+import { computeDocumentUri } from '../router/useResolveEntity';
 
 // Cortext-scoped source for Gutenberg's link autocomplete.
 //
@@ -32,7 +33,8 @@ export async function fetchCortextLinkSuggestions(
 			per_page: perPage,
 			context: 'edit',
 			status: [ 'draft', 'private', 'publish' ],
-			_fields: 'id,link,title',
+			_fields:
+				'id,link,slug,title,meta,cortext_defines_trait,crtxt_trait',
 		} ),
 	} ).catch( () => [] ); // Fail by returning no suggestions, like core.
 
@@ -40,6 +42,10 @@ export async function fetchCortextLinkSuggestions(
 		.map( ( record ) => ( {
 			id: record.id,
 			url: record.link,
+			path: computeDocumentUri( record ),
+			icon: record.meta?.cortext_document_icon ?? '',
+			cortext_defines_trait: record.cortext_defines_trait,
+			crtxt_trait: record.crtxt_trait,
 			title: record.title?.raw || __( '(no title)', 'cortext' ),
 			type: DOCUMENT_POST_TYPE,
 			kind: 'post-type',

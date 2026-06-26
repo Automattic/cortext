@@ -33,6 +33,7 @@ import { definesTrait } from '../documents/capabilities';
 import { POST_TYPE } from './page-queries';
 import CortextInserterSidebar from './CortextInserterSidebar';
 import CortextLinkSuggestions from './CortextLinkSuggestions';
+import { CortextMentions } from './mention';
 import { DocumentPropertiesProvider } from './DocumentPropertiesContext';
 import DocumentPublishToggle from './DocumentPublishToggle';
 import EditorBody from './EditorBody';
@@ -338,6 +339,7 @@ function CanvasEditor( {
 			onRequestLayoutEdit={ requestPropertiesLayoutEdit }
 			onToggleVisible={ togglePropertiesVisible }
 		>
+			<CortextMentions />
 			<DocumentActions
 				disabled={ postLock.isReadOnly }
 				isActive={ isActive }

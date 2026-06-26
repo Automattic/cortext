@@ -25,6 +25,10 @@ jest.mock( '../../src/blocks', () => ( {} ) );
 // import; stub it so the test doesn't pull the full data + editor chain.
 jest.mock( '../../src/components/initInserterMediaCategories', () => ( {} ) );
 
+// Mention registration is covered separately; avoid pulling rich-text stores
+// into this allowlist test.
+jest.mock( '../../src/components/mention', () => ( {} ) );
+
 import {
 	ALLOWED_BLOCK_TYPES,
 	COLLECTIONS_BLOCK_CATEGORY,

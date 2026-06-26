@@ -18,14 +18,14 @@ import PublicDataView, {
 // @wordpress/icons is JS-only. Render the glyph into each marker; the color
 // rides on the span's inline style (the glyph uses currentColor). The icon
 // namespace is heavy, so load it only when a page actually has a wp glyph.
-const wpIconMarkers = document.querySelectorAll(
+const wpDocumentIconMarkers = document.querySelectorAll(
 	'.cortext-document-icon--wp[data-icon]'
 );
-if ( wpIconMarkers.length ) {
+if ( wpDocumentIconMarkers.length ) {
 	import(
 		/* webpackChunkName: "document-icon-wp" */ './components/DocumentIconWp'
 	).then( ( { default: DocumentIconWp } ) => {
-		wpIconMarkers.forEach( ( el ) => {
+		wpDocumentIconMarkers.forEach( ( el ) => {
 			const name = el.getAttribute( 'data-icon' );
 			if ( ! name ) {
 				return;
@@ -34,6 +34,17 @@ if ( wpIconMarkers.length ) {
 				<DocumentIconWp name={ name } size={ 44 } />
 			);
 		} );
+	} );
+}
+
+const wpMentionAnchors = document.querySelectorAll(
+	'.cortext-mention[data-crtxt-icon-wp]'
+);
+if ( wpMentionAnchors.length ) {
+	import(
+		/* webpackChunkName: "mention-icon-wp" */ './components/mention/icon'
+	).then( ( { hydrateMentionWpIconMasks } ) => {
+		hydrateMentionWpIconMasks();
 	} );
 }
 
