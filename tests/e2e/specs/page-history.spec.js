@@ -24,6 +24,10 @@ const CURRENT_ICON = JSON.stringify( {
 	type: 'emoji',
 	value: CURRENT_ICON_VALUE,
 } );
+const COVER_PNG = Buffer.from(
+	'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAGklEQVR42mP8z8BQz0AEYBxVSFUBAAAcZgP9vyv3NwAAAABJRU5ErkJggg==',
+	'base64'
+);
 const PROJECT_ROOT = path.resolve( __dirname, '../../..' );
 
 function readWpEnvPort( configPath ) {
@@ -82,17 +86,41 @@ function paragraph( text ) {
 	return `<!-- wp:paragraph --><p>${ text }</p><!-- /wp:paragraph -->`;
 }
 
+function documentContent( text ) {
+	return [
+		'<!-- wp:cortext/document-cover {"lock":{"move":true,"remove":true}} /-->',
+		'<!-- wp:cortext/document-icon {"lock":{"move":true,"remove":true}} /-->',
+		'<!-- wp:post-title {"level":1,"lock":{"move":true,"remove":true}} /-->',
+		paragraph( text ),
+	].join( '' );
+}
+
+async function uploadCoverMedia( requestUtils, name ) {
+	return requestUtils.uploadMedia( {
+		name,
+		mimeType: 'image/png',
+		buffer: COVER_PNG,
+	} );
+}
+
 async function delay( ms ) {
 	await new Promise( ( resolve ) => setTimeout( resolve, ms ) );
 }
 
-function updateDocumentWithRevisionBypass( id, title, body, icon = '' ) {
+function updateDocumentWithRevisionBypass(
+	id,
+	title,
+	body,
+	icon = '',
+	featuredMedia = 0
+) {
 	const encodedPayload = Buffer.from(
 		JSON.stringify( {
 			id,
 			title,
-			content: paragraph( body ),
+			content: documentContent( body ),
 			icon,
+			featuredMedia,
 		} )
 	).toString( 'base64' );
 	const code = `
@@ -104,6 +132,16 @@ $result = Cortext\\Editor\\RevisionThrottle::with_bypass(
 			'cortext_document_icon',
 			wp_slash( (string) ( $payload['icon'] ?? '' ) )
 		);
+		$featured_media = (int) ( $payload['featuredMedia'] ?? 0 );
+		if ( $featured_media > 0 ) {
+			update_post_meta(
+				(int) $payload['id'],
+				'_thumbnail_id',
+				(string) $featured_media
+			);
+		} else {
+			delete_post_meta( (int) $payload['id'], '_thumbnail_id' );
+		}
 		return wp_update_post(
 			array(
 				'ID'           => (int) $payload['id'],
@@ -158,6 +196,21 @@ async function deleteIfCreated( requestUtils, id ) {
 	}
 }
 
+async function deleteRestPath( requestUtils, restPath ) {
+	if ( ! restPath ) {
+		return;
+	}
+	try {
+		await requestUtils.rest( {
+			method: 'DELETE',
+			path: restPath,
+			params: { force: true },
+		} );
+	} catch {
+		// Best-effort cleanup; the record may have already been deleted.
+	}
+}
+
 test.describe( 'Visual revision history', () => {
 	test( 'preview an older revision and restore it from the shell', async ( {
 		admin,
@@ -165,8 +218,18 @@ test.describe( 'Visual revision history', () => {
 		requestUtils,
 	} ) => {
 		let createdPage;
+		let currentCoverMedia;
+		let oldCoverMedia;
 
 		try {
+			oldCoverMedia = await uploadCoverMedia(
+				requestUtils,
+				`history-cover-old-${ SUFFIX }.png`
+			);
+			currentCoverMedia = await uploadCoverMedia(
+				requestUtils,
+				`history-cover-current-${ SUFFIX }.png`
+			);
 			createdPage = await requestUtils.rest( {
 				method: 'POST',
 				path: '/wp/v2/crtxt_documents',
@@ -184,14 +247,16 @@ test.describe( 'Visual revision history', () => {
 				createdPage.id,
 				OLD_TITLE,
 				OLD_BODY,
-				OLD_ICON
+				OLD_ICON,
+				oldCoverMedia.id
 			);
 			await delay( 1100 );
 			updateDocumentWithRevisionBypass(
 				createdPage.id,
 				CURRENT_TITLE,
 				CURRENT_BODY,
-				CURRENT_ICON
+				CURRENT_ICON,
+				currentCoverMedia.id
 			);
 
 			await admin.visitAdminPage(
@@ -222,6 +287,36 @@ test.describe( 'Visual revision history', () => {
 
 			const panel = page.locator( '.cortext-revision-history' );
 			await expect( panel ).toBeVisible();
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+
+			const currentRevision = panel
+				.locator( '.cortext-revision-history__button' )
+				.filter( { hasText: 'Current' } )
+				.first();
+			await expect( currentRevision ).toBeVisible();
+			await currentRevision.click();
+
+			const header = page.locator( '.cortext-revisions-header' );
+			await expect( header ).toBeVisible();
+			await expect(
+				canvas.locator( '.cortext-canvas__editor' )
+			).toContainText( CURRENT_BODY );
+			await expect(
+				canvas.locator( '.cortext-document-cover-block__image' )
+			).toHaveAttribute(
+				'src',
+				new RegExp( `history-cover-current-${ SUFFIX }` )
+			);
+			await expect(
+				canvas.locator(
+					'.cortext-document-cover-block.is-revision-modified'
+				)
+			).toBeVisible();
+			await expect(
+				canvas.locator(
+					'.cortext-document-icon-block.is-revision-modified'
+				)
+			).toBeVisible();
 
 			// Selecting a revision drops the canvas into read-only revisions
 			// mode and swaps the top bar for the revisions header.
@@ -232,8 +327,13 @@ test.describe( 'Visual revision history', () => {
 			await expect( previousRevision ).toBeVisible();
 			await previousRevision.click();
 
-			const header = page.locator( '.cortext-revisions-header' );
 			await expect( header ).toBeVisible();
+			await expect(
+				canvas.locator( '.cortext-document-cover-block__image' )
+			).toHaveAttribute(
+				'src',
+				new RegExp( `history-cover-old-${ SUFFIX }` )
+			);
 
 			await header
 				.getByRole( 'button', { name: 'Restore revision' } )
@@ -262,7 +362,6 @@ test.describe( 'Visual revision history', () => {
 			expect( restored.content.raw ).toContain( OLD_BODY );
 
 			await expect( header ).toBeHidden();
-			const canvas = page.frameLocator( '[name="editor-canvas"]' );
 			await expect(
 				canvas.locator( '.cortext-canvas__editor' )
 			).toContainText( OLD_BODY );
@@ -329,13 +428,33 @@ test.describe( 'Visual revision history', () => {
 			await expect(
 				canvas.locator( '.cortext-canvas__editor' )
 			).toContainText( OLD_BODY );
+			await expect(
+				canvas.locator( '.cortext-document-cover-block__image' )
+			).toHaveAttribute(
+				'src',
+				new RegExp( `history-cover-old-${ SUFFIX }` )
+			);
 
 			await revisionButtons.nth( 1 ).click();
 			await expect(
 				canvas.locator( '.cortext-canvas__editor' )
 			).toContainText( CURRENT_BODY );
+			await expect(
+				canvas.locator( '.cortext-document-cover-block__image' )
+			).toHaveAttribute(
+				'src',
+				new RegExp( `history-cover-current-${ SUFFIX }` )
+			);
 		} finally {
 			await deleteIfCreated( requestUtils, createdPage?.id );
+			await deleteRestPath(
+				requestUtils,
+				currentCoverMedia && `/wp/v2/media/${ currentCoverMedia.id }`
+			);
+			await deleteRestPath(
+				requestUtils,
+				oldCoverMedia && `/wp/v2/media/${ oldCoverMedia.id }`
+			);
 		}
 	} );
 } );

@@ -37,6 +37,7 @@ final class DocumentIdentity {
 		// already has it.
 		add_filter( 'wp_insert_post_data', array( $this, 'prepend_header_blocks' ), 10, 2 );
 		add_filter( 'wp_post_revision_meta_keys', array( $this, 'revision_meta_keys' ), 10, 2 );
+		add_action( 'rest_api_init', array( $this, 'register_revision_rest_fields' ) );
 	}
 
 	/**
@@ -86,6 +87,29 @@ final class DocumentIdentity {
 		$keys[] = '_thumbnail_id';
 
 		return array_values( array_unique( $keys ) );
+	}
+
+	public function register_revision_rest_fields(): void {
+		foreach ( get_post_types( array( 'show_in_rest' => true ) ) as $post_type ) {
+			if ( ! post_type_supports( $post_type, 'cortext-document' ) ) {
+				continue;
+			}
+
+			register_rest_field(
+				$post_type . '-revision',
+				'featured_media',
+				array(
+					'get_callback' => static function ( array $revision ): int {
+						return (int) get_post_meta( (int) ( $revision['id'] ?? 0 ), '_thumbnail_id', true );
+					},
+					'schema'       => array(
+						'description' => __( 'The ID of the featured media for the revision.', 'cortext' ),
+						'type'        => 'integer',
+						'context'     => array( 'view', 'edit', 'embed' ),
+					),
+				)
+			);
+		}
 	}
 
 	/**

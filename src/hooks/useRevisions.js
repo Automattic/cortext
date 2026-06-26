@@ -1,10 +1,16 @@
 import apiFetch from '@wordpress/api-fetch';
 import { store as coreStore } from '@wordpress/core-data';
-import { useDispatch, useSelect } from '@wordpress/data';
+import {
+	createRegistrySelector,
+	useDispatch,
+	useRegistry,
+	useSelect,
+} from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
 import { useCallback, useMemo, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { store as noticesStore } from '@wordpress/notices';
+import { addQueryArgs } from '@wordpress/url';
 
 import { unlock } from '../lock-unlock';
 import { notifyDocumentRecordChanged } from './documentRecordInvalidation';
@@ -58,26 +64,149 @@ export function revisionFeaturedMedia( revision, fallback = 0 ) {
 	return Number( value ) || 0;
 }
 
+export function revisionRecordQuery( revisionKey = 'id' ) {
+	return {
+		context: 'edit',
+		_fields: [
+			...new Set( [ ...BASE_REVISION_FIELDS, revisionKey ] ),
+		].join(),
+	};
+}
+
+export function revisionIconChanged( currentRevision, previousRevision ) {
+	if ( ! currentRevision || ! previousRevision ) {
+		return false;
+	}
+	return (
+		revisionMetaValue( currentRevision, 'cortext_document_icon', '' ) !==
+		revisionMetaValue( previousRevision, 'cortext_document_icon', '' )
+	);
+}
+
+export function revisionFeaturedMediaChanged(
+	currentRevision,
+	previousRevision
+) {
+	if ( ! currentRevision || ! previousRevision ) {
+		return false;
+	}
+	return (
+		revisionFeaturedMedia( currentRevision, 0 ) !==
+		revisionFeaturedMedia( previousRevision, 0 )
+	);
+}
+
+function revisionIdentifier( revision, revisionKey = 'id' ) {
+	return revision?.[ revisionKey ] ?? revision?.id;
+}
+
+function findRevisionById( revisions, revisionId, revisionKey = 'id' ) {
+	return revisions?.find(
+		( revision ) =>
+			String( revisionIdentifier( revision, revisionKey ) ) ===
+			String( revisionId )
+	);
+}
+
+function useRevisionRecord( { postId, postType, revisionId, revisionKey } ) {
+	return useSelect(
+		( select ) => {
+			if ( ! postType || ! postId || ! revisionId ) {
+				return null;
+			}
+
+			const core = select( coreStore );
+			const query = revisionRecordQuery( revisionKey );
+			if ( typeof core.getRevision === 'function' ) {
+				return (
+					core.getRevision(
+						'postType',
+						postType,
+						postId,
+						revisionId,
+						query
+					) ?? null
+				);
+			}
+
+			const revisions = core.getRevisions?.(
+				'postType',
+				postType,
+				postId,
+				revisionQuery( revisionKey, 'desc' )
+			);
+			return (
+				revisions?.find(
+					( revision ) =>
+						revisionIdentifier( revision, revisionKey ) ===
+						revisionId
+				) ?? null
+			);
+		},
+		[ postId, postType, revisionId, revisionKey ]
+	);
+}
+
 export function useRevisionedDocumentIdentity( {
 	postId,
 	postType,
 	meta,
 	featuredId,
 } = {} ) {
-	const { isRevisionsMode, currentRevision } = useRevisionControls( {
+	const {
+		currentRevision,
+		currentRevisionId,
+		isRevisionsMode,
+		isShowingRevisionDiff,
+		previousRevision,
+		revisionKey,
+	} = useRevisionControls( { postId, postType } );
+	const currentRevisionRecord = useRevisionRecord( {
 		postId,
 		postType,
+		revisionId: currentRevision?.id ?? currentRevisionId,
+		revisionKey,
 	} );
+	const previousRevisionRecord = useRevisionRecord( {
+		postId,
+		postType,
+		revisionId:
+			previousRevision?.id ??
+			revisionIdentifier( previousRevision, revisionKey ),
+		revisionKey,
+	} );
+	const effectiveCurrentRevision = currentRevisionRecord ?? currentRevision;
+	const effectivePreviousRevision =
+		previousRevisionRecord ?? previousRevision;
 
 	return {
 		iconMeta: isRevisionsMode
-			? revisionMetaValue( currentRevision, 'cortext_document_icon', '' )
+			? revisionMetaValue(
+					effectiveCurrentRevision,
+					'cortext_document_icon',
+					''
+			  )
 			: meta?.cortext_document_icon ?? '',
 		featuredId: isRevisionsMode
-			? revisionFeaturedMedia( currentRevision, 0 )
+			? revisionFeaturedMedia( effectiveCurrentRevision, 0 )
 			: featuredId,
 		isRevisionsMode,
-		currentRevision,
+		currentRevision: effectiveCurrentRevision,
+		previousRevision: effectivePreviousRevision,
+		iconChanged:
+			isRevisionsMode &&
+			isShowingRevisionDiff &&
+			revisionIconChanged(
+				effectiveCurrentRevision,
+				effectivePreviousRevision
+			),
+		featuredMediaChanged:
+			isRevisionsMode &&
+			isShowingRevisionDiff &&
+			revisionFeaturedMediaChanged(
+				effectiveCurrentRevision,
+				effectivePreviousRevision
+			),
 	};
 }
 
@@ -109,6 +238,92 @@ export function editorRevisionQuery( revisionKey = 'id', order ) {
 
 	return query;
 }
+
+export function completeRevisionRecordFields( records, query ) {
+	if ( ! query?._fields ) {
+		return records;
+	}
+
+	const fields = query._fields.split( ',' ).filter( Boolean );
+	return records.map( ( record ) => {
+		const nextRecord = { ...record };
+		fields.forEach( ( field ) => {
+			if ( ! hasOwnProperty( nextRecord, field ) ) {
+				nextRecord[ field ] = undefined;
+			}
+		} );
+		return nextRecord;
+	} );
+}
+
+let didRegisterRevisionSelectors = false;
+
+function getEditorRevisionRecord( select, state, order ) {
+	const revisionId = state?.revisionId;
+	if ( ! revisionId ) {
+		return undefined;
+	}
+
+	const postId = state?.postId;
+	const postType = state?.postType;
+	if ( ! postId || ! postType ) {
+		return null;
+	}
+
+	const core = select( coreStore );
+	const revisionKey =
+		core.getEntityConfig( 'postType', postType )?.revisionKey || 'id';
+	const revisions = core.getRevisions(
+		'postType',
+		postType,
+		postId,
+		editorRevisionQuery( revisionKey, order )
+	);
+	if ( ! revisions ) {
+		return null;
+	}
+
+	if ( order !== 'asc' ) {
+		return findRevisionById( revisions, revisionId, revisionKey ) ?? null;
+	}
+
+	const currentIndex = revisions.findIndex(
+		( revision ) =>
+			String( revisionIdentifier( revision, revisionKey ) ) ===
+			String( revisionId )
+	);
+	return currentIndex > 0 ? revisions[ currentIndex - 1 ] : null;
+}
+
+function registerRevisionSelectors() {
+	if (
+		didRegisterRevisionSelectors ||
+		typeof createRegistrySelector !== 'function'
+	) {
+		return;
+	}
+
+	const editorPrivateStore = unlock( editorStore );
+	if ( typeof editorPrivateStore?.registerPrivateSelectors !== 'function' ) {
+		return;
+	}
+
+	// Core's revision selector can stay null after a server-side restore even
+	// when core-data has the matching revision. Read from editor state and the
+	// revisions collection directly so the preview canvas keeps rendering.
+	editorPrivateStore.registerPrivateSelectors( {
+		getCurrentRevision: createRegistrySelector(
+			( select ) => ( state ) => getEditorRevisionRecord( select, state )
+		),
+		getPreviousRevision: createRegistrySelector(
+			( select ) => ( state ) =>
+				getEditorRevisionRecord( select, state, 'asc' )
+		),
+	} );
+	didRegisterRevisionSelectors = true;
+}
+
+registerRevisionSelectors();
 
 export function recentRevisionQuery( revisionKey = 'id' ) {
 	return {
@@ -212,6 +427,7 @@ export function useRevisionAuthor( authorId ) {
 
 export function useRevisionControls( { postId, postType } = {} ) {
 	const [ isRestoring, setIsRestoring ] = useState( false );
+	const registry = useRegistry();
 	const {
 		isAvailable,
 		isRevisionsMode,
@@ -223,6 +439,7 @@ export function useRevisionControls( { postId, postType } = {} ) {
 		isDirty,
 		isSaving,
 		revisionKey,
+		revisionsUrl,
 	} = useSelect(
 		( select ) => {
 			const editor = unlock( select( editorStore ) );
@@ -262,9 +479,14 @@ export function useRevisionControls( { postId, postType } = {} ) {
 				isDirty: store.isEditedPostDirty?.() ?? false,
 				isSaving: store.isSavingPost?.() ?? false,
 				revisionKey: entityConfig?.revisionKey || 'id',
+				revisionsUrl:
+					postId &&
+					typeof entityConfig?.getRevisionsUrl === 'function'
+						? entityConfig.getRevisionsUrl( postId )
+						: null,
 			};
 		},
-		[ postType ]
+		[ postId, postType ]
 	);
 	// Restoring writes server-side and resets the editor, so block it while the
 	// editor has unsaved edits (would be silently discarded) or a save is in
@@ -277,6 +499,7 @@ export function useRevisionControls( { postId, postType } = {} ) {
 	const {
 		clearEntityRecordEdits,
 		receiveEntityRecords,
+		receiveRevisions,
 		invalidateResolution,
 	} = useDispatch( coreStore );
 	const { createErrorNotice, createSuccessNotice } =
@@ -285,12 +508,116 @@ export function useRevisionControls( { postId, postType } = {} ) {
 		() => revisionInvalidationQueries( revisionKey ),
 		[ revisionKey ]
 	);
+	const previewQueries = useMemo(
+		() => [
+			editorRevisionQuery( revisionKey ),
+			editorRevisionQuery( revisionKey, 'asc' ),
+		],
+		[ revisionKey ]
+	);
+	const refreshRevisionPreviewRecords = useCallback(
+		async ( revisionId ) => {
+			if ( ! postType || ! postId ) {
+				return revisionId;
+			}
+
+			previewQueries.forEach( ( query ) => {
+				invalidateResolution( 'getRevisions', [
+					'postType',
+					postType,
+					postId,
+					query,
+				] );
+			} );
+
+			const receivedRecords = await Promise.all(
+				previewQueries.map( async ( query ) => {
+					try {
+						if ( ! revisionsUrl || ! receiveRevisions ) {
+							return [];
+						}
+						const response = await apiFetch( {
+							path: addQueryArgs( revisionsUrl, query ),
+						} );
+						const records = Array.isArray( response )
+							? response
+							: Object.values( response ?? {} );
+						const completeRecords = completeRevisionRecordFields(
+							records,
+							query
+						);
+						await receiveRevisions(
+							'postType',
+							postType,
+							postId,
+							completeRecords,
+							query,
+							false,
+							{}
+						);
+						return completeRecords;
+					} catch {
+						// If the fetch fails, still enter revisions mode so the
+						// normal notices/resolvers can surface the error.
+						return [];
+					}
+				} )
+			);
+			const selectedRecord = receivedRecords
+				.flat()
+				.find( ( revision ) =>
+					findRevisionById( [ revision ], revisionId, revisionKey )
+				);
+
+			for ( let attempt = 0; attempt < 10; attempt++ ) {
+				const revisions = registry
+					.select( coreStore )
+					.getRevisions(
+						'postType',
+						postType,
+						postId,
+						previewQueries[ 0 ]
+					);
+				if ( findRevisionById( revisions, revisionId, revisionKey ) ) {
+					return (
+						revisionIdentifier( selectedRecord, revisionKey ) ??
+						revisionId
+					);
+				}
+				await new Promise( ( resolve ) => setTimeout( resolve, 10 ) );
+			}
+			return (
+				revisionIdentifier( selectedRecord, revisionKey ) ?? revisionId
+			);
+		},
+		[
+			invalidateResolution,
+			postId,
+			postType,
+			previewQueries,
+			receiveRevisions,
+			registry,
+			revisionKey,
+			revisionsUrl,
+		]
+	);
 
 	const selectRevision = useCallback(
 		( revisionId ) => {
-			setCurrentRevisionId?.( revisionId );
+			if ( ! revisionId ) {
+				setCurrentRevisionId?.( revisionId );
+				return;
+			}
+			refreshRevisionPreviewRecords( revisionId ).then(
+				( resolvedRevisionId ) => {
+					setCurrentRevisionId?.( resolvedRevisionId ?? revisionId );
+				},
+				() => {
+					setCurrentRevisionId?.( revisionId );
+				}
+			);
 		},
-		[ setCurrentRevisionId ]
+		[ refreshRevisionPreviewRecords, setCurrentRevisionId ]
 	);
 	const exitRevisions = useCallback( () => {
 		setCurrentRevisionId?.( null );
@@ -390,6 +717,8 @@ export function useRevisionControls( { postId, postType } = {} ) {
 		isSaving,
 		canRestore,
 		isRestoring,
+		revisionKey,
+		revisionsUrl,
 		selectRevision,
 		exitRevisions,
 		toggleDiff,

@@ -38,12 +38,16 @@ jest.mock( '../../../src/lock-unlock', () => ( {
 } ) );
 
 import {
+	completeRevisionRecordFields,
 	editorRevisionQuery,
 	recentRevisionQuery,
 	revisionFeaturedMedia,
+	revisionFeaturedMediaChanged,
+	revisionIconChanged,
 	revisionInvalidationQueries,
 	revisionMetaValue,
 	revisionQuery,
+	revisionRecordQuery,
 } from '../../../src/hooks/useRevisions';
 
 describe( 'revisionQuery', () => {
@@ -84,6 +88,14 @@ describe( 'revisionQuery', () => {
 		expect( customFields ).toContain( 'custom_key' );
 
 		expect( revisionQuery( 'id', 'asc' ).order ).toBe( 'asc' );
+	} );
+
+	it( 'builds a single-revision query with document identity fields', () => {
+		expect( revisionRecordQuery( 'custom_key' ) ).toEqual( {
+			context: 'edit',
+			_fields:
+				'id,date,modified,author,meta,featured_media,title.raw,excerpt.raw,content.raw,custom_key',
+		} );
 	} );
 } );
 
@@ -126,6 +138,28 @@ describe( 'revision cache invalidation queries', () => {
 			recentRevisionQuery( 'id' ),
 		] );
 	} );
+
+	it( 'marks requested dotted fields as received when REST omits them', () => {
+		expect(
+			completeRevisionRecordFields(
+				[
+					{
+						id: 10,
+						title: { raw: 'Title' },
+						content: { raw: 'Body' },
+					},
+				],
+				editorRevisionQuery( 'id' )
+			)
+		).toEqual( [
+			expect.objectContaining( {
+				id: 10,
+				'title.raw': undefined,
+				'excerpt.raw': undefined,
+				'content.raw': undefined,
+			} ),
+		] );
+	} );
 } );
 
 describe( 'revision identity helpers', () => {
@@ -161,5 +195,26 @@ describe( 'revision identity helpers', () => {
 		expect(
 			revisionFeaturedMedia( { meta: { _thumbnail_id: '22' } } )
 		).toBe( 22 );
+	} );
+
+	it( 'detects changed document identity fields', () => {
+		expect(
+			revisionIconChanged(
+				{ meta: { cortext_document_icon: 'new' } },
+				{ meta: { cortext_document_icon: 'old' } }
+			)
+		).toBe( true );
+		expect(
+			revisionIconChanged(
+				{ meta: { cortext_document_icon: 'same' } },
+				{ meta: { cortext_document_icon: 'same' } }
+			)
+		).toBe( false );
+		expect(
+			revisionFeaturedMediaChanged(
+				{ featured_media: 45 },
+				{ meta: { _thumbnail_id: '22' } }
+			)
+		).toBe( true );
 	} );
 } );

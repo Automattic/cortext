@@ -17,6 +17,15 @@ final class Test_Document_Identity extends BaseTestCase {
 
 	protected function setUp(): void {
 		parent::setUp();
+		if ( ! post_type_exists( Document::POST_TYPE ) ) {
+			register_post_type(
+				Document::POST_TYPE,
+				array(
+					'show_in_rest' => true,
+					'supports'     => array( 'custom-fields' ),
+				)
+			);
+		}
 		// The prepender now gates on post_type_supports('cortext-document'),
 		// so the test post type needs the trait wired up before each case.
 		DocumentIdentity::register_for_post_type( Document::POST_TYPE );
@@ -49,6 +58,31 @@ final class Test_Document_Identity extends BaseTestCase {
 
 		$this->assertContains( DocumentIdentity::META_KEY, $keys );
 		$this->assertContains( '_thumbnail_id', $keys );
+	}
+
+	public function test_revision_rest_field_exposes_featured_media(): void {
+		$identity = new DocumentIdentity();
+		$identity->register_revision_rest_fields();
+
+		global $wp_rest_additional_fields;
+		$field = $wp_rest_additional_fields[ Document::POST_TYPE . '-revision' ]['featured_media'] ?? null;
+		$this->assertIsArray( $field );
+
+		$revision_id = (int) wp_insert_post(
+			array(
+				'post_type'   => 'revision',
+				'post_status' => 'inherit',
+				'post_parent' => 123,
+				'post_title'  => 'Revision title',
+			)
+		);
+		$this->assertGreaterThan( 0, $revision_id );
+		add_metadata( 'post', $revision_id, '_thumbnail_id', '321' );
+
+		$this->assertSame(
+			321,
+			$field['get_callback']( array( 'id' => $revision_id ) )
+		);
 	}
 
 	public function test_prepend_header_blocks_leaves_updates_untouched(): void {

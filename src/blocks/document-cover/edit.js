@@ -29,9 +29,6 @@ import { useRevisionedDocumentIdentity } from '../../hooks/useRevisions';
 export default function Edit( { context, clientId } ) {
 	const postId = context?.postId;
 	const postType = context?.postType;
-	const blockProps = useBlockProps( {
-		className: 'cortext-document-cover-block',
-	} );
 
 	const [ featuredId, setFeaturedId ] = useEntityProp(
 		'postType',
@@ -40,13 +37,24 @@ export default function Edit( { context, clientId } ) {
 		postId
 	);
 	const [ meta ] = useEntityProp( 'postType', postType, 'meta', postId );
-	const { iconMeta, featuredId: displayFeaturedId } =
-		useRevisionedDocumentIdentity( {
-			postId,
-			postType,
-			meta,
-			featuredId,
-		} );
+	const {
+		featuredId: displayFeaturedId,
+		featuredMediaChanged,
+		iconMeta,
+	} = useRevisionedDocumentIdentity( {
+		postId,
+		postType,
+		meta,
+		featuredId,
+	} );
+	const blockProps = useBlockProps( {
+		className: [
+			'cortext-document-cover-block',
+			featuredMediaChanged ? 'is-revision-modified' : '',
+		]
+			.filter( Boolean )
+			.join( ' ' ),
+	} );
 	const { coverIndex, hasIconBlock } = useSelect(
 		( select ) => {
 			const store = select( blockEditorStore );

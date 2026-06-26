@@ -22,15 +22,20 @@ import { useRevisionedDocumentIdentity } from '../../hooks/useRevisions';
 export default function Edit( { context, clientId } ) {
 	const postId = context?.postId;
 	const postType = context?.postType;
-	const blockProps = useBlockProps( {
-		className: 'cortext-document-icon-block',
-	} );
 
 	const [ meta ] = useEntityProp( 'postType', postType, 'meta', postId );
-	const { iconMeta } = useRevisionedDocumentIdentity( {
+	const { iconChanged, iconMeta } = useRevisionedDocumentIdentity( {
 		postId,
 		postType,
 		meta,
+	} );
+	const blockProps = useBlockProps( {
+		className: [
+			'cortext-document-icon-block',
+			iconChanged ? 'is-revision-modified' : '',
+		]
+			.filter( Boolean )
+			.join( ' ' ),
 	} );
 	const hasIcon = !! iconMeta;
 	const { removeBlock, updateBlockAttributes } =
