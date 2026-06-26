@@ -73,7 +73,7 @@ final class Test_Taxonomy_Mention_Taxonomy extends BaseTestCase {
 		$this->assertSame( array(), $slugs );
 	}
 
-	public function test_self_mention_is_skipped(): void {
+	public function test_self_mention_is_indexed(): void {
 		$source = $this->create_document( 'Self' );
 		wp_update_post(
 			array(
@@ -82,7 +82,16 @@ final class Test_Taxonomy_Mention_Taxonomy extends BaseTestCase {
 			)
 		);
 
-		$this->assertSame( 0, MentionTaxonomy::term_id_for_target( $source ) );
+		$this->assertGreaterThan(
+			0,
+			MentionTaxonomy::term_id_for_target( $source )
+		);
+		$slugs = wp_get_object_terms(
+			$source,
+			MentionTaxonomy::TAXONOMY,
+			array( 'fields' => 'slugs' )
+		);
+		$this->assertContains( (string) $source, $slugs );
 	}
 
 	public function test_target_delete_removes_the_target_term(): void {

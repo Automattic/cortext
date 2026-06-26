@@ -115,7 +115,7 @@ final class BacklinksController {
 				if ( ! $source_post instanceof WP_Post ) {
 					$source_post = get_post( (int) $source_post );
 				}
-				if ( ! $source_post instanceof WP_Post || (int) $source_post->ID === $target_id ) {
+				if ( ! $source_post instanceof WP_Post ) {
 					continue;
 				}
 				if ( ! current_user_can( 'read_post', (int) $source_post->ID ) ) {
@@ -123,7 +123,14 @@ final class BacklinksController {
 				}
 				$document = $documents->format_document( $source_post, array( 'include_trait_flags' => true ) );
 				if ( null !== $document ) {
-					$sources[] = $document;
+					$document['mentions'] = max(
+						1,
+						MentionTaxonomy::count_target_mentions(
+							(string) $source_post->post_content,
+							$target_id
+						)
+					);
+					$sources[]            = $document;
 				}
 			}
 		}
@@ -131,7 +138,7 @@ final class BacklinksController {
 		return new WP_REST_Response(
 			array(
 				'target'    => $target,
-				'total'     => count( $sources ),
+				'total'     => array_sum( array_column( $sources, 'mentions' ) ),
 				'truncated' => $truncated,
 				'sources'   => $sources,
 			),

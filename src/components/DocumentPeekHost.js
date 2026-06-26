@@ -19,6 +19,7 @@ import {
 import { elementsFromOptions } from '../hooks/optionElements';
 import useCollectionFields from '../hooks/useCollectionFields';
 import { adjacentRowId } from './rowDetailUtils';
+import { parseIdFromUri } from '../router/useResolveEntity';
 
 // EntityRoute adds this title field for full-page rows. Do the same here so
 // RowProperties and RowDetailView get the same field shape.
@@ -56,6 +57,7 @@ export default function DocumentPeekHost() {
 	// the route, so it doesn't need the same gate.
 	const params = useParams( { strict: false } );
 	const splat = params?._splat ?? '';
+	const routeDocId = parseIdFromUri( splat );
 	const prevSplatRef = useRef( splat );
 	const peekStateRef = useRef( { peek, isPinned } );
 	peekStateRef.current = { peek, isPinned };
@@ -154,7 +156,20 @@ export default function DocumentPeekHost() {
 		} );
 	}, [ peek?.source ] );
 
-	if ( ! peek || ! peekFields || ! renderedMode ) {
+	// Opening the doc that is already the background route would mount a second
+	// editor for the same post and loop. Treat it as "go back": close the
+	// redundant peek instead of rendering it.
+	const isCircular =
+		!! peek &&
+		routeDocId !== null &&
+		String( peek.docId ) === String( routeDocId );
+	useEffect( () => {
+		if ( isCircular ) {
+			closeDocument();
+		}
+	}, [ isCircular, closeDocument ] );
+
+	if ( ! peek || ! peekFields || ! renderedMode || isCircular ) {
 		return null;
 	}
 

@@ -23,7 +23,6 @@ import EditorBody from './EditorBody';
 import { PostLockFailureNotice, PostLockModal } from './PostLockControls';
 import CortextLinkSuggestions from './CortextLinkSuggestions';
 import { CortextMentions } from './mention';
-import BacklinksPanel from './BacklinksPanel';
 import { RowMutationContext } from './EditableCell';
 
 const ROW_DETAIL_EDITOR_CSS = `
@@ -180,10 +179,6 @@ function DetailPaneContent( {
 				extraStyles={ ROW_DETAIL_EXTRA_STYLES }
 				onReady={ handleReady }
 				onRestored={ onRestored }
-			/>
-			<BacklinksPanel
-				documentId={ row?.id ?? rowId }
-				className="cortext-row-detail__backlinks"
 			/>
 			<PostLockModal
 				isOpen={ postLock.isLocked }

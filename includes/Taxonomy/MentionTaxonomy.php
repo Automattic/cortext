@@ -90,11 +90,10 @@ final class MentionTaxonomy {
 	/**
 	 * Finds the target document ids mentioned in post content.
 	 *
-	 * @param string $content   Post content.
-	 * @param int    $source_id Source document id to exclude from results.
+	 * @param string $content Post content.
 	 * @return int[]
 	 */
-	public static function extract_target_ids( string $content, int $source_id = 0 ): array {
+	public static function extract_target_ids( string $content ): array {
 		if ( ! str_contains( $content, Mention::ATTRIBUTE ) ) {
 			return array();
 		}
@@ -106,7 +105,7 @@ final class MentionTaxonomy {
 				$value = $processor->get_attribute( Mention::ATTRIBUTE );
 				if ( is_string( $value ) && ctype_digit( $value ) ) {
 					$id = (int) $value;
-					if ( $id > 0 && $id !== $source_id ) {
+					if ( $id > 0 ) {
 						$ids[ $id ] = true;
 					}
 				}
@@ -114,13 +113,28 @@ final class MentionTaxonomy {
 		} elseif ( preg_match_all( Mention::ID_PATTERN, $content, $matches ) ) {
 			foreach ( $matches[2] as $raw_id ) {
 				$id = (int) $raw_id;
-				if ( $id > 0 && $id !== $source_id ) {
+				if ( $id > 0 ) {
 					$ids[ $id ] = true;
 				}
 			}
 		}
 
 		return array_keys( $ids );
+	}
+
+	/**
+	 * Counts how many times a target is mentioned in content.
+	 *
+	 * @param string $content   Post content.
+	 * @param int    $target_id Target document id.
+	 * @return int
+	 */
+	public static function count_target_mentions( string $content, int $target_id ): int {
+		if ( $target_id <= 0 || ! str_contains( $content, Mention::ATTRIBUTE ) ) {
+			return 0;
+		}
+		$pattern = '/' . preg_quote( Mention::ATTRIBUTE, '/' ) . '=(["\'])' . $target_id . '\1/';
+		return (int) preg_match_all( $pattern, $content );
 	}
 
 	/**
@@ -188,7 +202,7 @@ final class MentionTaxonomy {
 	}
 
 	private function sync_post( WP_Post $post ): int {
-		$target_ids = self::extract_target_ids( wp_unslash( (string) $post->post_content ), (int) $post->ID );
+		$target_ids = self::extract_target_ids( wp_unslash( (string) $post->post_content ) );
 		$term_ids   = array();
 		foreach ( $target_ids as $target_id ) {
 			$target = get_post( $target_id );

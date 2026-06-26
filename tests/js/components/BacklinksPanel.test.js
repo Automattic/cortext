@@ -3,9 +3,12 @@ jest.mock( '@wordpress/api-fetch', () => ( {
 	default: jest.fn(),
 } ) );
 
-const mockNavigate = jest.fn();
-jest.mock( '@tanstack/react-router', () => ( {
-	useNavigate: () => mockNavigate,
+const mockOpenDocument = jest.fn();
+jest.mock( '../../../src/components/DocumentPeekProvider', () => ( {
+	useDocumentPeekActions: () => ( { openDocument: mockOpenDocument } ),
+} ) );
+jest.mock( '../../../src/components/CurrentViewModeContext', () => ( {
+	useCurrentViewMode: () => 'side',
 } ) );
 
 jest.mock( '../../../src/documents', () => ( {
@@ -51,18 +54,15 @@ describe( 'BacklinksPanel', () => {
 		expect( apiFetch ).toHaveBeenCalledWith( {
 			path: '/cortext/v1/documents/9/backlinks',
 		} );
-		expect(
-			await screen.findByText( 'Backlinks (2)' )
-		).toBeInTheDocument();
+		expect( await screen.findByText( '2 backlinks' ) ).toBeInTheDocument();
 		expect( screen.queryByText( 'Tasks (1)' ) ).not.toBeInTheDocument();
 		expect( screen.queryByText( 'Pages (1)' ) ).not.toBeInTheDocument();
 
 		fireEvent.click( screen.getByText( 'Launch' ) );
 
-		expect( mockNavigate ).toHaveBeenCalledWith( {
-			to: '/$',
-			params: { _splat: 'launch-11' },
-		} );
+		expect( mockOpenDocument ).toHaveBeenCalledWith(
+			expect.objectContaining( { id: 11, collectionId: 5 } )
+		);
 	} );
 
 	it( 'hides itself when there are no backlinks', async () => {
@@ -89,7 +89,7 @@ describe( 'BacklinksPanel', () => {
 
 		render( <BacklinksPanel documentId={ 9 } initialOpen /> );
 
-		expect( await screen.findByText( 'Backlink (1)' ) ).toBeInTheDocument();
+		expect( await screen.findByText( '1 backlink' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Welcome to Cortext' ) ).toBeInTheDocument();
 		expect( screen.queryByText( 'Pages (1)' ) ).not.toBeInTheDocument();
 	} );
