@@ -447,18 +447,21 @@ final class Documents {
 			);
 		}
 
-		if ( ! empty( $opts['include_trash_meta'] ) ) {
-			$document['modified_at'] = $this->format_gmt_date( $post->post_modified_gmt );
-			// The Trash panel reads `cortext_defines_trait` (collection) and
-			// `crtxt_trait` (row) to pick the label, icon, and cascade-count copy,
-			// and to keep the type-to-confirm guard on collection deletes. Mirror
-			// the `cortext_defines_trait` field that `/wp/v2/crtxt_documents`
-			// exposes; without it a trashed collection reads as a page.
+		if ( ! empty( $opts['include_trait_flags'] ) || ! empty( $opts['include_trash_meta'] ) ) {
+			// Mirror the `cortext_defines_trait` (collection) and `crtxt_trait`
+			// (row) fields that `/wp/v2/crtxt_documents` exposes, so list icons
+			// and the Trash panel can tell collections and rows apart from pages.
+			// The Trash panel also uses them for the cascade-count copy and the
+			// type-to-confirm guard on collection deletes.
 			$document['cortext_defines_trait'] = Document::is_collection_post( $post );
 			$document['crtxt_trait']           = array_values(
 				array_map( 'intval', wp_get_object_terms( $post->ID, TraitTaxonomy::TAXONOMY, array( 'fields' => 'ids' ) ) )
 			);
-			$document['meta']                  = array(
+		}
+
+		if ( ! empty( $opts['include_trash_meta'] ) ) {
+			$document['modified_at'] = $this->format_gmt_date( $post->post_modified_gmt );
+			$document['meta']        = array(
 				'cortext_document_icon'              => $icon,
 				'cortext_fields'                     => Document::collection_field_ids( (int) $post->ID ),
 				TrashCascade::PARENT_MARKER_META     => (int) get_post_meta( $post->ID, TrashCascade::PARENT_MARKER_META, true ),

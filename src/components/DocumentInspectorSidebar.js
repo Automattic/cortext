@@ -43,6 +43,7 @@ import CanvasOwnerInspector, {
 import './DocumentInspectorSidebar.scss';
 
 import DocumentPropertiesActions from './DocumentPropertiesActions';
+import BacklinksPanel from './BacklinksPanel';
 import MediaPicker, { MediaUploadCheck } from './MediaPicker';
 import DocumentIcon from './DocumentIcon';
 import DocumentIdentityControls from './DocumentIdentityControls';
@@ -630,6 +631,7 @@ function DocumentInspectorContent( { postId } ) {
 				title={ __( 'Identity', 'cortext' ) }
 			/>
 			<PageActionsPanel postId={ postId } />
+			<BacklinksPanel documentId={ postId } />
 		</div>
 	);
 }
@@ -644,16 +646,18 @@ function CollectionInspectorContent( { postId, postType } ) {
 				title={ __( 'Identity', 'cortext' ) }
 			/>
 			<CanvasOwnerInspector.Slot />
+			<BacklinksPanel documentId={ postId } />
 		</div>
 	);
 }
 
 // Row inspector for property actions. Values stay in the document block; the
 // sidebar handles visibility and field creation.
-function RowInspectorContent() {
+function RowInspectorContent( { postId } ) {
 	return (
 		<div className="cortext-row-inspector">
 			<DocumentPropertiesActions />
+			<BacklinksPanel documentId={ postId } />
 		</div>
 	);
 }
@@ -761,7 +765,9 @@ export default function DocumentInspectorSidebar( {
 							postType={ postType }
 						/>
 					) }
-					{ ! isCollection && hasTrait && <RowInspectorContent /> }
+					{ ! isCollection && hasTrait && (
+						<RowInspectorContent postId={ postId } />
+					) }
 					{ ! isCollection && ! hasTrait && (
 						<DocumentInspectorContent postId={ postId } />
 					) }

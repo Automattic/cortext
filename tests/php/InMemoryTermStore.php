@@ -331,7 +331,18 @@ trait InMemoryTermStore {
 				$resolved[] = (int) $row['term_id'];
 			}
 		}
-		$current = $append ? ( self::$object_terms[ $object_id ] ?? array() ) : array();
+		$current = self::$object_terms[ $object_id ] ?? array();
+		if ( ! $append ) {
+			$current = array_values(
+				array_filter(
+					$current,
+					static function ( int $term_id ) use ( $taxonomy ): bool {
+						$row = self::$term_store[ $term_id ] ?? null;
+						return $row && $row['taxonomy'] !== $taxonomy;
+					}
+				)
+			);
+		}
 		self::$object_terms[ $object_id ] = array_values( array_unique( array_merge( $current, $resolved ) ) );
 	}
 

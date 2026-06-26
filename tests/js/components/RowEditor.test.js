@@ -37,6 +37,10 @@ jest.mock( '../../../src/components/mention', () => ( {
 	CortextMentions: jest.fn( () => null ),
 } ) );
 
+jest.mock( '../../../src/components/BacklinksPanel', () =>
+	jest.fn( () => null )
+);
+
 jest.mock( '../../../src/components/initEditor', () => ( {
 	getEditorSettings: () => ( {} ),
 } ) );

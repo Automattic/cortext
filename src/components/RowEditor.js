@@ -11,6 +11,7 @@ import { SlotFillProvider } from '@wordpress/components';
 
 import useAutosave from '../hooks/useAutosave';
 import usePostLock from '../hooks/usePostLock';
+import { notifyBacklinksChanged } from '../hooks/backlinksInvalidation';
 // Registers core + Cortext blocks before any editor renders. Living here
 // (rather than at a static import in RowDetailView) keeps the Cortext
 // block sources and the registerCoreBlocks call site off the initial
@@ -93,6 +94,7 @@ function RowAutosaveBridge( {
 			return;
 		}
 		lastNotifiedSaveRef.current = lastSavedAt;
+		notifyBacklinksChanged();
 		onSaved?.();
 	}, [ isActive, lastSavedAt, onSaved, status ] );
 

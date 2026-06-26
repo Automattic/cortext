@@ -23,6 +23,8 @@ import {
 	unseen,
 } from '@wordpress/icons';
 
+import BacklinksToolbarButton from './BacklinksToolbarButton';
+
 import './RowDetailView.scss';
 
 // The editor surface (EditorProvider + EditorBody + autosave + block
@@ -136,6 +138,7 @@ export function ModeControl( { mode, onChangeMode } ) {
 function DetailShell( {
 	arePropertiesVisible,
 	children,
+	documentId,
 	fields,
 	isPinned,
 	isPropertiesLayoutEditing,
@@ -235,6 +238,7 @@ function DetailShell( {
 							/>
 						</div>
 					) : null }
+					<BacklinksToolbarButton documentId={ documentId } />
 					<div className="cortext-row-detail__toolbar-group cortext-row-detail__toolbar-group--end">
 						<Button
 							className="cortext-row-detail__toolbar-button cortext-row-detail__toolbar-button--close"
@@ -540,6 +544,7 @@ export default function RowDetailView( {
 				arePropertiesVisible={ arePropertiesVisible }
 				canGoNext={ canUseRowControls && canGoNext }
 				canGoPrevious={ canUseRowControls && canGoPrevious }
+				documentId={ row?.id ?? rowId }
 				fields={ propertyFields }
 				isPinned={ isPinned }
 				isPropertiesLayoutEditing={ isPropertiesLayoutEditing }
