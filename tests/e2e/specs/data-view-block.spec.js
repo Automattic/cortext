@@ -810,7 +810,6 @@ test.describe( 'Collection view block', () => {
 						type: 'grid',
 						showTitle: false,
 						fields: [ 'title' ],
-						layout: { previewSize: 230 },
 					} ),
 				},
 			} );
@@ -881,6 +880,9 @@ test.describe( 'Collection view block', () => {
 							newAligned:
 								cardWidths.length > 0 &&
 								Math.abs( newWidth - cardWidths[ 0 ] ) <= 2,
+							usesCortextPreviewSize:
+								cardWidths.length > 0 &&
+								Math.min( ...cardWidths ) >= 360,
 						};
 					} );
 
@@ -889,6 +891,7 @@ test.describe( 'Collection view block', () => {
 				cardsWide: true,
 				titlesVisible: true,
 				newAligned: true,
+				usesCortextPreviewSize: true,
 			} );
 		} finally {
 			if ( fixture.rows ) {

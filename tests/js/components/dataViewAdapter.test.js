@@ -1,4 +1,5 @@
 import {
+	DEFAULT_GRID_PREVIEW_SIZE,
 	adaptViewForDataViews,
 	mergeDataViewsChange,
 } from '../../../src/components/dataViewAdapter';
@@ -74,6 +75,20 @@ describe( 'dataViewAdapter', () => {
 		} );
 	} );
 
+	it( 'uses the Cortext grid preview size when no grid size is saved', () => {
+		const view = adaptViewForDataViews( {
+			...canonicalView,
+			type: 'grid',
+			layout: {},
+			layoutByType: {
+				...canonicalView.layoutByType,
+				grid: {},
+			},
+		} );
+
+		expect( view.layout.previewSize ).toBe( DEFAULT_GRID_PREVIEW_SIZE );
+	} );
+
 	it( 'uses titleField for list without inheriting table fields', () => {
 		const view = adaptViewForDataViews( {
 			...canonicalView,
@@ -144,6 +159,31 @@ describe( 'dataViewAdapter', () => {
 			'field-2',
 		] );
 		expect( gridCanonical.fieldsByType.grid ).toEqual( [] );
+	} );
+
+	it( 'preserves the Cortext grid preview size when DataViews emits an empty grid layout', () => {
+		const gridCanonical = mergeDataViewsChange(
+			{
+				...canonicalView,
+				type: 'grid',
+				layout: {},
+				layoutByType: {
+					...canonicalView.layoutByType,
+					grid: {},
+				},
+			},
+			{
+				type: 'grid',
+				layout: {},
+			}
+		);
+
+		expect( gridCanonical.layout.previewSize ).toBe(
+			DEFAULT_GRID_PREVIEW_SIZE
+		);
+		expect( gridCanonical.layoutByType.grid.previewSize ).toBe(
+			DEFAULT_GRID_PREVIEW_SIZE
+		);
 	} );
 
 	it( 'stores grid field changes in the grid bucket only', () => {

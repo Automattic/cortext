@@ -23,7 +23,7 @@ const DEFAULT_PUBLIC_VIEW = {
 	layout: { density: 'compact' },
 	layoutByType: {
 		table: { density: 'compact' },
-		grid: {},
+		grid: { ...DEFAULT_LAYOUTS.grid.layout },
 		list: {},
 	},
 	fieldsByType: {

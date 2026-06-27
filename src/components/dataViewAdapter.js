@@ -4,10 +4,11 @@ import { COVER_FIELD_ID, MIN_WIDTHS, TITLE_FIELD_ID } from './dataViewColumns';
 // per-layout buckets and hydrates the active shape before rendering.
 export const DATA_VIEW_LAYOUT_TYPES = [ 'table', 'grid', 'list' ];
 export const DATA_VIEW_FIELD_LAYOUT_TYPES = [ 'grid', 'list' ];
+export const DEFAULT_GRID_PREVIEW_SIZE = 430;
 
 export const DEFAULT_LAYOUTS = {
 	table: { layout: { density: 'compact' } },
-	grid: { layout: {} },
+	grid: { layout: { previewSize: DEFAULT_GRID_PREVIEW_SIZE } },
 	list: {},
 };
 
@@ -52,6 +53,13 @@ function defaultLayoutForType( type ) {
 	return cloneLayout( DEFAULT_LAYOUTS[ type ]?.layout );
 }
 
+function layoutForType( type, layout ) {
+	return {
+		...defaultLayoutForType( type ),
+		...cloneLayout( layout ),
+	};
+}
+
 function uniqueFields( fields = [] ) {
 	const seen = new Set();
 	return fields.filter( ( fieldId ) => {
@@ -82,10 +90,7 @@ function layoutByTypeFromView( view = {} ) {
 	const stored = isObject( view?.layoutByType ) ? view.layoutByType : {};
 
 	DATA_VIEW_LAYOUT_TYPES.forEach( ( type ) => {
-		buckets[ type ] = {
-			...defaultLayoutForType( type ),
-			...cloneLayout( stored[ type ] ),
-		};
+		buckets[ type ] = layoutForType( type, stored[ type ] );
 	} );
 
 	if ( isObject( view?.layout ) ) {
@@ -166,10 +171,13 @@ export function mergeDataViewsChange( previousView = {}, nextView = {} ) {
 	}
 
 	if ( isObject( previousView?.layout ) ) {
-		layoutByType[ previousType ] = cloneLayout( previousView.layout );
+		layoutByType[ previousType ] = layoutForType(
+			previousType,
+			previousView.layout
+		);
 	}
 	if ( previousType === nextType && isObject( nextView?.layout ) ) {
-		layoutByType[ nextType ] = cloneLayout( nextView.layout );
+		layoutByType[ nextType ] = layoutForType( nextType, nextView.layout );
 	}
 
 	const canonicalFields = tableFields(
@@ -197,7 +205,7 @@ export function mergeDataViewsChange( previousView = {}, nextView = {} ) {
 		type: nextType,
 		fields,
 		fieldsByType,
-		layout: cloneLayout( layoutByType[ nextType ] ),
+		layout: layoutForType( nextType, layoutByType[ nextType ] ),
 		layoutByType,
 	};
 

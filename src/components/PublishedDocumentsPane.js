@@ -19,6 +19,7 @@ import { useNavigate } from '@tanstack/react-router';
 import './PublishedDocumentsPane.scss';
 
 import DocumentIcon from './DocumentIcon';
+import { DEFAULT_GRID_PREVIEW_SIZE } from './dataViewAdapter';
 import {
 	POST_TYPE as DOCUMENT_POST_TYPE,
 	PUBLISHED_DOCUMENTS_QUERY,
@@ -28,7 +29,7 @@ import { definesTrait, hasTrait } from '../documents/capabilities';
 
 const DEFAULT_LAYOUTS = {
 	table: { layout: { density: 'compact' } },
-	grid: { layout: {} },
+	grid: { layout: { previewSize: DEFAULT_GRID_PREVIEW_SIZE } },
 	list: { layout: {} },
 };
 

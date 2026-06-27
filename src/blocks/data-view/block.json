@@ -42,7 +42,9 @@
 					"table": {
 						"density": "compact"
 					},
-					"grid": {},
+					"grid": {
+						"previewSize": 430
+					},
 					"list": {}
 				},
 				"fieldsByType": {
