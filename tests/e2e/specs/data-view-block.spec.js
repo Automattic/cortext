@@ -672,10 +672,16 @@ async function dragRenderedRow(
 			} )
 			.first();
 		await expect( previewChip ).toBeVisible();
+		const visiblePreviewBox = await preview.boundingBox();
 		const chipBox = await previewChip.boundingBox();
+		expect( visiblePreviewBox ).toBeTruthy();
 		expect( chipBox ).toBeTruthy();
 		expect( chipBox.width ).toBeGreaterThan( 24 );
 		expect( chipBox.height ).toBeGreaterThan( 16 );
+		expect( chipBox.y ).toBeGreaterThanOrEqual( visiblePreviewBox.y - 1 );
+		expect( chipBox.y + chipBox.height ).toBeLessThanOrEqual(
+			visiblePreviewBox.y + visiblePreviewBox.height + 1
+		);
 	}
 	await page.mouse.move( targetX, targetY, {
 		steps: 12,

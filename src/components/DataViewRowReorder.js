@@ -521,9 +521,29 @@ function cloneGridCardPreview( source ) {
 	const previewCard = source.ownerDocument.createElement( 'div' );
 	previewCard.className =
 		'cortext-row-drag-preview__grid-card dataviews-view-grid__card';
+	const sourceMedia = Array.from( source.children ).find( ( child ) =>
+		child.classList.contains( 'dataviews-view-grid__media' )
+	);
+	const sourceMediaHeight = sourceMedia?.getBoundingClientRect?.().height;
 
 	for ( const child of Array.from( source.childNodes ) ) {
 		previewCard.appendChild( child.cloneNode( true ) );
+	}
+
+	if ( sourceMediaHeight > 0 ) {
+		const previewMedia = Array.from( previewCard.children ).find(
+			( child ) =>
+				child.classList.contains( 'dataviews-view-grid__media' )
+		);
+		if ( previewMedia ) {
+			previewMedia.style.aspectRatio = 'auto';
+			previewMedia.style.flexBasis = `${ Math.round(
+				sourceMediaHeight
+			) }px`;
+			previewMedia.style.height = `${ Math.round(
+				sourceMediaHeight
+			) }px`;
+		}
 	}
 
 	resetPreviewDragState( previewCard );
