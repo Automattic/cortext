@@ -732,6 +732,104 @@ test.describe( 'Collection view block', () => {
 		}
 	} );
 
+	test( 'keeps list field labels visually hidden on hover', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+
+		try {
+			Object.assign(
+				fixture,
+				await createCollectionFixture( requestUtils )
+			);
+			const fieldKey = `field-${ fixture.field.id }`;
+
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: 'DataView list label page',
+					status: 'private',
+					content: createDataViewBlockMarkup( fixture.collection.id, {
+						type: 'list',
+						fields: [ 'title', fieldKey ],
+						fieldsByType: { list: [ fieldKey ] },
+					} ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/${ fixture.page.id }`
+			);
+
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.page.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+			const row = canvas
+				.locator( '.dataviews-view-list > [role="row"]' )
+				.filter( { hasText: 'The Left Hand of Darkness' } )
+				.first();
+			await expect( row ).toBeVisible();
+			await expect( row.getByText( 'Ursula K. Le Guin' ) ).toBeVisible();
+
+			const label = row
+				.locator( '.dataviews-view-list__field-label' )
+				.filter( { hasText: 'Author' } )
+				.first();
+			await expect( label ).toBeAttached();
+			await row.hover();
+
+			const labelMetrics = await label.evaluate( ( element ) => {
+				const rect = element.getBoundingClientRect();
+				const style = getComputedStyle( element );
+				return {
+					height: rect.height,
+					position: style.position,
+					width: rect.width,
+				};
+			} );
+			expect( labelMetrics ).toMatchObject( {
+				height: 1,
+				position: 'absolute',
+				width: 1,
+			} );
+
+			const fieldColor = await row
+				.locator( '.dataviews-view-list__field' )
+				.first()
+				.evaluate( ( element ) => getComputedStyle( element ).color );
+			expect( fieldColor ).not.toBe( 'rgb(56, 88, 233)' );
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				fixture.entry && `/wp/v2/crtxt_documents/${ fixture.entry.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
+			);
+		}
+	} );
+
 	// Grid layout doesn't expose row reorder yet (card-to-card drops need a
 	// 2D model); the JS unit test "does not mount row reorder for grid
 	// layout yet" guards the behaviour, so e2e covers table and list only.

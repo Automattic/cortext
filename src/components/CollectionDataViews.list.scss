@@ -198,10 +198,24 @@ $list-row-open-background: #f3f3f3;
 		flex: 0 1 auto;
 		min-width: 0;
 		max-width: 100%;
+		color: $gray-700;
 	}
 
 	.dataviews-view-list__field:has(.cortext-editable-cell__shell--empty) {
 		display: none;
+	}
+
+	.dataviews-view-list__field-label {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		margin: -1px;
+		padding: 0;
+		border: 0;
+		clip: rect(0 0 0 0);
+		clip-path: inset(50%);
+		overflow: hidden;
+		white-space: nowrap;
 	}
 
 	.dataviews-view-list__field-value {
@@ -216,13 +230,17 @@ $list-row-open-background: #f3f3f3;
 	}
 
 	.dataviews-view-list div[role="row"].is-selected .dataviews-title-field,
-	.dataviews-view-list div[role="row"].is-selected .dataviews-view-list__fields,
+	.dataviews-view-list div[role="row"].is-selected .dataviews-view-list__field,
+	.dataviews-view-list div[role="row"].is-selected .dataviews-view-list__field-value,
 	.dataviews-view-list div[role="row"]:not(.is-selected):hover .dataviews-title-field,
-	.dataviews-view-list div[role="row"]:not(.is-selected):hover .dataviews-view-list__fields,
+	.dataviews-view-list div[role="row"]:not(.is-selected):hover .dataviews-view-list__field,
+	.dataviews-view-list div[role="row"]:not(.is-selected):hover .dataviews-view-list__field-value,
 	.dataviews-view-list div[role="row"]:not(.is-selected).is-hovered .dataviews-title-field,
-	.dataviews-view-list div[role="row"]:not(.is-selected).is-hovered .dataviews-view-list__fields,
+	.dataviews-view-list div[role="row"]:not(.is-selected).is-hovered .dataviews-view-list__field,
+	.dataviews-view-list div[role="row"]:not(.is-selected).is-hovered .dataviews-view-list__field-value,
 	.dataviews-view-list div[role="row"]:not(.is-selected):focus-within .dataviews-title-field,
-	.dataviews-view-list div[role="row"]:not(.is-selected):focus-within .dataviews-view-list__fields {
+	.dataviews-view-list div[role="row"]:not(.is-selected):focus-within .dataviews-view-list__field,
+	.dataviews-view-list div[role="row"]:not(.is-selected):focus-within .dataviews-view-list__field-value {
 		color: $gray-900;
 	}
 
