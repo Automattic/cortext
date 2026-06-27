@@ -371,6 +371,20 @@ describe( 'normalizeView', () => {
 		expect( next.mediaField ).toBeUndefined();
 	} );
 
+	it( 'drops stale hidden title state outside table layouts', () => {
+		const view = {
+			...baseView(),
+			type: 'list',
+			showTitle: false,
+		};
+		const next = normalizeView(
+			view,
+			new Set( [ TITLE_FIELD_ID, 'field-1', 'field-2' ] )
+		);
+
+		expect( next.showTitle ).toBeUndefined();
+	} );
+
 	it( 'prunes stale grid badge fields', () => {
 		const view = {
 			...baseView(),

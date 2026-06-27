@@ -74,6 +74,16 @@ export function isInspectorArea( area ) {
 	return area === DOCUMENT_INSPECTOR || area === BLOCK_INSPECTOR;
 }
 
+export function getActiveInspectorArea( select ) {
+	try {
+		return select( interfaceStore ).getActiveComplementaryArea(
+			INSPECTOR_SCOPE
+		);
+	} catch {
+		return null;
+	}
+}
+
 export function InspectorSidebarSlot( props ) {
 	return <ComplementaryArea.Slot scope={ INSPECTOR_SCOPE } { ...props } />;
 }
@@ -693,10 +703,7 @@ export default function DocumentInspectorSidebar( {
 	);
 	const isReadOnly = isTrashed || isLocked || isStoreLocked;
 	const activeArea = useSelect(
-		( select ) =>
-			select( interfaceStore ).getActiveComplementaryArea(
-				INSPECTOR_SCOPE
-			),
+		( select ) => getActiveInspectorArea( select ),
 		[]
 	);
 	// Hide Block tabs that would be empty or redundant: no selection,

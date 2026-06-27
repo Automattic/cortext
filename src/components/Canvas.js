@@ -42,6 +42,7 @@ import DocumentInspectorSidebar, {
 	INSPECTOR_SCOPE,
 	InspectorSidebarSlot,
 	DOCUMENT_INSPECTOR,
+	getActiveInspectorArea,
 	isInspectorArea,
 } from './DocumentInspectorSidebar';
 import {
@@ -94,12 +95,7 @@ function DocumentActions( {
 	const { enableComplementaryArea, disableComplementaryArea } =
 		useDispatch( interfaceStore );
 	const isInspectorOpen = useSelect(
-		( select ) =>
-			isInspectorArea(
-				select( interfaceStore ).getActiveComplementaryArea(
-					INSPECTOR_SCOPE
-				)
-			),
+		( select ) => isInspectorArea( getActiveInspectorArea( select ) ),
 		[]
 	);
 	// Pages and rows both open the document tab first: page metadata for pages,

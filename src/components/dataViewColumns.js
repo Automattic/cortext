@@ -178,11 +178,15 @@ export function normalizeView( view, validIds, options = {} ) {
 	const calculationsChanged =
 		( rawCalculations !== undefined && ! hasCalculationObject ) ||
 		! sameShallowObject( currentCalculations, nextCalculations );
+	const visibilityChanged =
+		view?.type !== 'table' &&
+		Object.prototype.hasOwnProperty.call( view ?? {}, 'showTitle' );
 	const layoutChanged =
 		layoutResult.changed ||
 		layoutByTypeResult.changed ||
 		fieldsByTypeResult.changed ||
-		displayFieldResult.changed;
+		displayFieldResult.changed ||
+		visibilityChanged;
 
 	if ( ! fieldsChanged && ! layoutChanged && ! calculationsChanged ) {
 		return view;
@@ -204,6 +208,9 @@ export function normalizeView( view, validIds, options = {} ) {
 		} else {
 			delete nextView[ key ];
 		}
+	}
+	if ( visibilityChanged ) {
+		delete nextView.showTitle;
 	}
 	if ( layoutByTypeResult.layoutByType !== undefined ) {
 		nextView.layoutByType = layoutByTypeResult.layoutByType;

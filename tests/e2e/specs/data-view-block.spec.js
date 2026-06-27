@@ -897,6 +897,7 @@ test.describe( 'Collection view block', () => {
 					status: 'private',
 					content: createDataViewBlockMarkup( fixture.collection.id, {
 						type: 'list',
+						showTitle: false,
 						fields: [ 'title', fieldKey ],
 						fieldsByType: { list: [ fieldKey ] },
 					} ),
@@ -923,7 +924,41 @@ test.describe( 'Collection view block', () => {
 				.filter( { hasText: 'The Left Hand of Darkness' } )
 				.first();
 			await expect( row ).toBeVisible();
+			const titleCell = row.locator( '.dataviews-title-field' ).first();
+			await expect( titleCell ).toBeVisible();
+			await expect(
+				titleCell.getByText( 'The Left Hand of Darkness' )
+			).toBeVisible();
 			await expect( row.getByText( 'Ursula K. Le Guin' ) ).toBeVisible();
+			const listMetrics = await row.evaluate( ( element ) => {
+				const title = element.querySelector( '.dataviews-title-field' );
+				const fields = element.querySelector(
+					'.dataviews-view-list__fields'
+				);
+				const rowRect = element.getBoundingClientRect();
+				const titleRect = title?.getBoundingClientRect();
+				const fieldsRect = fields?.getBoundingClientRect();
+
+				return {
+					titleText: title?.textContent?.trim() ?? '',
+					titleWidth: titleRect?.width ?? 0,
+					titleLeft: titleRect
+						? Math.round( titleRect.left - rowRect.left )
+						: 0,
+					fieldsLeft: fieldsRect
+						? Math.round( fieldsRect.left - rowRect.left )
+						: 0,
+				};
+			} );
+			expect( listMetrics ).toMatchObject( {
+				titleText: expect.stringContaining(
+					'The Left Hand of Darkness'
+				),
+			} );
+			expect( listMetrics.titleWidth ).toBeGreaterThan( 120 );
+			expect( listMetrics.titleLeft ).toBeLessThan(
+				listMetrics.fieldsLeft
+			);
 
 			const label = row
 				.locator( '.dataviews-view-list__field-label' )
