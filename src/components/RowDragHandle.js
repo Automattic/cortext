@@ -10,6 +10,8 @@ import { useDraggable } from '@dnd-kit/core';
 const ROW_DRAGGING_CLASS = 'cortext-row-dragging';
 const ROW_SUPPRESS_HOVER_CLASS = 'cortext-row-reorder-suppress-hover';
 const HOVER_SUPPRESSION_PRIME_TIMEOUT = 800;
+const NATIVE_ACTIVATOR_IGNORE_SELECTOR =
+	'button, a, input, textarea, select, [contenteditable="true"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], .components-button, .cortext-editable-cell, .cortext-row-drag-handle';
 
 function primeRowHoverSuppression( ownerDocument = document ) {
 	const body = ownerDocument?.body ?? document.body;
@@ -30,7 +32,11 @@ function capturePointer( event ) {
 	event.currentTarget?.setPointerCapture?.( pointerId );
 }
 
-export default function RowDragHandle( { row, keyboardFocusable = true } ) {
+export default function RowDragHandle( {
+	row,
+	keyboardFocusable = true,
+	activateFromRow = false,
+} ) {
 	const {
 		attributes,
 		listeners,
@@ -109,6 +115,33 @@ export default function RowDragHandle( { row, keyboardFocusable = true } ) {
 			),
 		[ listeners ]
 	);
+
+	useLayoutEffect( () => {
+		if ( ! activateFromRow || ! row.el || ! listeners?.onPointerDown ) {
+			return undefined;
+		}
+
+		const onPointerDown = ( event ) => {
+			if (
+				event.defaultPrevented ||
+				event.button !== 0 ||
+				! event.isPrimary
+			) {
+				return;
+			}
+			if ( event.target?.closest?.( NATIVE_ACTIVATOR_IGNORE_SELECTOR ) ) {
+				return;
+			}
+
+			primeRowHoverSuppression( row.el.ownerDocument );
+			listeners.onPointerDown( { nativeEvent: event } );
+		};
+
+		row.el.addEventListener( 'pointerdown', onPointerDown );
+		return () => {
+			row.el?.removeEventListener( 'pointerdown', onPointerDown );
+		};
+	}, [ activateFromRow, listeners, row.el ] );
 
 	if ( ! row.handleEl ) {
 		return null;

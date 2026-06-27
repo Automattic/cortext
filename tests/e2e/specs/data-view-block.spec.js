@@ -589,9 +589,15 @@ async function dragRenderedRow(
 	const orderedTitles = await renderedManualTitles( canvas, titles );
 	const sourceTitle = orderedTitles[ fromIndex ];
 	const targetTitle = orderedTitles[ toIndex ];
-	const source = canvas.getByRole( 'button', {
-		name: `Reorder: ${ sourceTitle }`,
-	} );
+	const source =
+		layout === 'grid'
+			? canvas
+					.locator( '.dataviews-view-grid__card' )
+					.filter( { hasText: sourceTitle } )
+					.first()
+			: canvas.getByRole( 'button', {
+					name: `Reorder: ${ sourceTitle }`,
+			  } );
 	const target =
 		layout === 'grid'
 			? canvas
@@ -1374,6 +1380,22 @@ test.describe( 'Collection view block', () => {
 					fixture,
 					await createManualOrderFixture( requestUtils )
 				);
+				if ( layout === 'grid' ) {
+					fixture.media = [];
+					for ( const row of fixture.rows ) {
+						const media = await uploadCoverMedia(
+							requestUtils,
+							`grid-order-cover-${ row.id }.png`,
+							WIDE_COVER_PNG
+						);
+						fixture.media.push( media );
+						await requestUtils.rest( {
+							method: 'POST',
+							path: `/wp/v2/crtxt_documents/${ row.id }`,
+							data: { featured_media: media.id },
+						} );
+					}
+				}
 
 				fixture.page = await requestUtils.rest( {
 					method: 'POST',
@@ -1587,6 +1609,14 @@ test.describe( 'Collection view block', () => {
 						await deleteIfCreated(
 							requestUtils,
 							`/wp/v2/crtxt_documents/${ row.id }`
+						);
+					}
+				}
+				if ( fixture.media ) {
+					for ( const media of fixture.media ) {
+						await deleteIfCreated(
+							requestUtils,
+							`/wp/v2/media/${ media.id }`
 						);
 					}
 				}
