@@ -331,10 +331,6 @@ $grid-card-content-hover-background: #f3f3f3;
 		}
 	}
 
-	.dataviews-view-grid__media:not(:has(.cortext-data-view__cover-image)) {
-		display: none;
-	}
-
 	.dataviews-view-grid__media .cortext-data-view__cover-image {
 		border-radius: 0;
 	}
