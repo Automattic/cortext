@@ -11,7 +11,7 @@ export const DEFAULT_LAYOUTS = {
 	list: {},
 };
 
-const DEFAULT_TABLE_TITLE_WIDTH = 240;
+const DEFAULT_TABLE_TITLE_WIDTH = 320;
 
 function isObject( value ) {
 	return Boolean(

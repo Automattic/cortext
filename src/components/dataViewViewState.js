@@ -24,6 +24,22 @@ function sanitizeWidth( width, maxColumnWidth ) {
 	return Math.max( 0, Math.min( maxColumnWidth, Math.round( value ) ) );
 }
 
+function sanitizeMaxWidth( maxWidth, width, maxColumnWidth ) {
+	if ( typeof maxWidth === 'string' ) {
+		return maxWidth;
+	}
+
+	const sanitized = sanitizeWidth( maxWidth, maxColumnWidth );
+	if (
+		typeof width === 'number' &&
+		sanitized <= width &&
+		sanitized < maxColumnWidth
+	) {
+		return maxColumnWidth;
+	}
+	return sanitized;
+}
+
 export function sanitizeLayoutForFields(
 	layout = {},
 	validSet,
@@ -60,6 +76,17 @@ export function sanitizeLayoutForFields(
 				stylesChanged = true;
 			}
 			next.width = clamped;
+		}
+		if ( entry.maxWidth !== undefined ) {
+			const clamped = sanitizeMaxWidth(
+				entry.maxWidth,
+				next.width,
+				maxColumnWidth
+			);
+			if ( clamped !== entry.maxWidth ) {
+				stylesChanged = true;
+			}
+			next.maxWidth = clamped;
 		}
 		nextStyles[ id ] = next;
 	}

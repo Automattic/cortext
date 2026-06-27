@@ -34,9 +34,25 @@ describe( 'dataViewAdapter', () => {
 		expect( view.fields ).toEqual( [ 'title', 'field-1', 'field-2' ] );
 		expect( view.layout ).toEqual( {
 			density: 'compact',
-			styles: { title: { minWidth: 80, width: 280 } },
+			styles: { title: { minWidth: 160, width: 280 } },
 		} );
 		expect( view.mediaField ).toBeUndefined();
+	} );
+
+	it( 'gives new table title columns enough room for row actions', () => {
+		const view = adaptViewForDataViews( {
+			...canonicalView,
+			layout: { density: 'compact' },
+			layoutByType: {
+				...canonicalView.layoutByType,
+				table: { density: 'compact' },
+			},
+		} );
+
+		expect( view.layout.styles.title ).toEqual( {
+			minWidth: 160,
+			width: 320,
+		} );
 	} );
 
 	it( 'uses titleField for grid without inheriting table fields', () => {

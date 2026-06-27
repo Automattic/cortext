@@ -300,6 +300,31 @@ describe( 'normalizeView', () => {
 		expect( next.layout.styles[ 'field-2' ].width ).toBe( '20ch' );
 	} );
 
+	it( 'migrates numeric maxWidth values that lock the column to its current width', () => {
+		const view = {
+			...baseView(),
+			layout: {
+				density: 'compact',
+				styles: {
+					'field-1': {
+						width: 180,
+						minWidth: 52,
+						maxWidth: 180,
+					},
+				},
+			},
+		};
+		const next = normalizeView(
+			view,
+			new Set( [ TITLE_FIELD_ID, 'field-1' ] )
+		);
+		expect( next.layout.styles[ 'field-1' ] ).toEqual( {
+			width: 180,
+			minWidth: 52,
+			maxWidth: MAX_COLUMN_WIDTH,
+		} );
+	} );
+
 	it( 'preserves layout.density and other layout keys', () => {
 		const view = {
 			...baseView(),
@@ -509,13 +534,13 @@ describe( 'withNewlyVisibleFields', () => {
 } );
 
 describe( 'withColumnWidth', () => {
-	it( 'writes the clamped width plus per-type min and matching maxWidth', () => {
+	it( 'writes the clamped width plus per-type min and a reusable maxWidth', () => {
 		const view = { layout: { density: 'compact' } };
 		const next = withColumnWidth( view, 'field-1', 220, 'text' );
 		expect( next.layout.styles[ 'field-1' ] ).toEqual( {
 			width: 220,
 			minWidth: DEFAULT_MIN_WIDTH + FIELD_HEADER_ICON_CHROME,
-			maxWidth: 220,
+			maxWidth: MAX_COLUMN_WIDTH,
 		} );
 	} );
 
