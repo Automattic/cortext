@@ -941,14 +941,26 @@ test.describe( 'Collection view block', () => {
 				const itemTarget = element.querySelector(
 					'.dataviews-view-list__item'
 				);
+				const itemTargetCell = itemTarget?.parentElement?.matches(
+					'[role="gridcell"]'
+				)
+					? itemTarget.parentElement
+					: null;
 				const rowRect = element.getBoundingClientRect();
 				const titleRect = title?.getBoundingClientRect();
 				const fieldsRect = fields?.getBoundingClientRect();
 				const actionsRect = actions?.getBoundingClientRect();
 				const itemTargetRect = itemTarget?.getBoundingClientRect();
+				const itemTargetCellRect =
+					itemTargetCell?.getBoundingClientRect();
 				const itemTargetStyle = itemTarget
 					? itemTarget.ownerDocument.defaultView.getComputedStyle(
 							itemTarget
+					  )
+					: null;
+				const itemTargetCellStyle = itemTargetCell
+					? itemTargetCell.ownerDocument.defaultView.getComputedStyle(
+							itemTargetCell
 					  )
 					: null;
 
@@ -972,6 +984,10 @@ test.describe( 'Collection view block', () => {
 					itemTargetBorderWidth:
 						itemTargetStyle?.borderTopWidth ?? '',
 					itemTargetWidth: itemTargetRect?.width ?? 0,
+					itemTargetCellPosition: itemTargetCellStyle?.position ?? '',
+					itemTargetCellBorderWidth:
+						itemTargetCellStyle?.borderTopWidth ?? '',
+					itemTargetCellWidth: itemTargetCellRect?.width ?? 0,
 				};
 			} );
 			expect( listMetrics ).toMatchObject( {
@@ -991,6 +1007,9 @@ test.describe( 'Collection view block', () => {
 			expect( listMetrics.itemTargetPosition ).toBe( 'absolute' );
 			expect( listMetrics.itemTargetBorderWidth ).toBe( '0px' );
 			expect( listMetrics.itemTargetWidth ).toBeGreaterThan( 400 );
+			expect( listMetrics.itemTargetCellPosition ).toBe( 'absolute' );
+			expect( listMetrics.itemTargetCellBorderWidth ).toBe( '0px' );
+			expect( listMetrics.itemTargetCellWidth ).toBeGreaterThan( 400 );
 
 			const label = row
 				.locator( '.dataviews-view-list__field-label' )
