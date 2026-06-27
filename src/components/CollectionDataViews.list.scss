@@ -165,6 +165,10 @@ $list-row-open-background: #f3f3f3;
 		z-index: 1;
 	}
 
+	.dataviews-view-list div[role="row"]:has(.cortext-row-drag-handle) .dataviews-view-list__media-wrapper:has(img) {
+		left: var(--cortext-row-drag-content-offset);
+	}
+
 	.dataviews-view-list__media-wrapper:has(img)
 		+ .dataviews-view-list__field-wrapper {
 		box-sizing: border-box;

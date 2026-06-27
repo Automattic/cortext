@@ -1254,6 +1254,9 @@ test.describe( 'Collection view block', () => {
 					'.dataviews-view-list__media-wrapper'
 				);
 				const mediaImage = media?.querySelector( 'img' );
+				const dragHandle = element.querySelector(
+					'.cortext-row-drag-handle'
+				);
 				const title = element.querySelector( '.dataviews-title-field' );
 				const titleIcon = element.querySelector(
 					'.cortext-title-cell__icon'
@@ -1275,6 +1278,7 @@ test.describe( 'Collection view block', () => {
 				} );
 				const mediaRect = media?.getBoundingClientRect();
 				const mediaImageRect = mediaImage?.getBoundingClientRect();
+				const dragHandleRect = dragHandle?.getBoundingClientRect();
 				const titleRect = title?.getBoundingClientRect();
 				const titleIconStyle = titleIcon
 					? titleIcon.ownerDocument.defaultView.getComputedStyle(
@@ -1299,6 +1303,12 @@ test.describe( 'Collection view block', () => {
 						mediaRect && titleRect
 							? Math.round( titleRect.left - mediaRect.right )
 							: null,
+					dragHandleToMediaGap:
+						dragHandleRect && mediaRect
+							? Math.round(
+									mediaRect.left - dragHandleRect.right
+							  )
+							: null,
 					titleIconDisplay: titleIconStyle?.display ?? '',
 					visibleImages: visibleImages.length,
 				};
@@ -1309,6 +1319,13 @@ test.describe( 'Collection view block', () => {
 			expect( mediaMetrics.mediaHeight ).toBeLessThanOrEqual( 32 );
 			expect( mediaMetrics.mediaImageWidth ).toBeLessThanOrEqual( 32 );
 			expect( mediaMetrics.mediaImageHeight ).toBeLessThanOrEqual( 32 );
+			expect( mediaMetrics.dragHandleToMediaGap ).not.toBeNull();
+			expect( mediaMetrics.dragHandleToMediaGap ).toBeGreaterThanOrEqual(
+				4
+			);
+			expect( mediaMetrics.dragHandleToMediaGap ).toBeLessThanOrEqual(
+				16
+			);
 			expect( mediaMetrics.mediaToTitleGap ).not.toBeNull();
 			expect( mediaMetrics.mediaToTitleGap ).toBeGreaterThanOrEqual( 8 );
 			expect( mediaMetrics.mediaToTitleCenterGap ).not.toBeNull();
