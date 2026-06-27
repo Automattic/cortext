@@ -77,12 +77,36 @@ export function scrollToEndQuickly( wrapper, options = {} ) {
 
 export function scrollElementInlineEndQuickly( element, options = {} ) {
 	const ownerWindow = element.ownerDocument?.defaultView ?? window;
+	const scrollNodeToInlineEnd = ( node ) => {
+		if (
+			! node ||
+			typeof node.scrollWidth !== 'number' ||
+			typeof node.clientWidth !== 'number'
+		) {
+			return;
+		}
+		const maxScroll = node.scrollWidth - node.clientWidth;
+		if ( maxScroll <= 0 ) {
+			return;
+		}
+		const isRtl = ownerWindow.getComputedStyle( node ).direction === 'rtl';
+		node.scrollLeft = isRtl ? -maxScroll : maxScroll;
+	};
+	const scrollAncestorsToInlineEnd = () => {
+		let node = element.parentElement;
+		while ( node ) {
+			scrollNodeToInlineEnd( node );
+			node = node.parentElement;
+		}
+		scrollNodeToInlineEnd( element.ownerDocument?.scrollingElement );
+	};
 	const reveal = () => {
 		element.scrollIntoView?.( {
 			block: 'nearest',
 			inline: 'end',
 			behavior: 'auto',
 		} );
+		scrollAncestorsToInlineEnd();
 	};
 
 	reveal();

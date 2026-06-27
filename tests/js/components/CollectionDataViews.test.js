@@ -369,6 +369,25 @@ describe( 'scrollElementInlineEndQuickly', () => {
 		} );
 	} );
 
+	it( 'pushes horizontal scroll ancestors to the end', () => {
+		const parent = document.createElement( 'div' );
+		const element = document.createElement( 'div' );
+		element.scrollIntoView = jest.fn();
+		parent.appendChild( element );
+		Object.defineProperty( parent, 'clientWidth', {
+			value: 200,
+			configurable: true,
+		} );
+		Object.defineProperty( parent, 'scrollWidth', {
+			value: 800,
+			configurable: true,
+		} );
+
+		scrollElementInlineEndQuickly( element );
+
+		expect( parent.scrollLeft ).toBe( 600 );
+	} );
+
 	it( 'keeps revealing while the layout settles', () => {
 		const now = jest
 			.spyOn( window.performance, 'now' )
