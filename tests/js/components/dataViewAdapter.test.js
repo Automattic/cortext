@@ -89,6 +89,23 @@ describe( 'dataViewAdapter', () => {
 		expect( view.layout.previewSize ).toBe( DEFAULT_GRID_PREVIEW_SIZE );
 	} );
 
+	it( 'migrates the oversized temporary grid preview size', () => {
+		const view = adaptViewForDataViews( {
+			...canonicalView,
+			type: 'grid',
+			layout: { previewSize: 430 },
+			layoutByType: {
+				...canonicalView.layoutByType,
+				grid: { previewSize: 430 },
+			},
+		} );
+
+		expect( view.layout.previewSize ).toBe( DEFAULT_GRID_PREVIEW_SIZE );
+		expect( view.layoutByType.grid.previewSize ).toBe(
+			DEFAULT_GRID_PREVIEW_SIZE
+		);
+	} );
+
 	it( 'uses titleField for list without inheriting table fields', () => {
 		const view = adaptViewForDataViews( {
 			...canonicalView,
@@ -175,6 +192,31 @@ describe( 'dataViewAdapter', () => {
 			{
 				type: 'grid',
 				layout: {},
+			}
+		);
+
+		expect( gridCanonical.layout.previewSize ).toBe(
+			DEFAULT_GRID_PREVIEW_SIZE
+		);
+		expect( gridCanonical.layoutByType.grid.previewSize ).toBe(
+			DEFAULT_GRID_PREVIEW_SIZE
+		);
+	} );
+
+	it( 'does not keep the oversized temporary grid preview size after a view change', () => {
+		const gridCanonical = mergeDataViewsChange(
+			{
+				...canonicalView,
+				type: 'grid',
+				layout: { previewSize: 430 },
+				layoutByType: {
+					...canonicalView.layoutByType,
+					grid: { previewSize: 430 },
+				},
+			},
+			{
+				type: 'grid',
+				layout: { previewSize: 430 },
 			}
 		);
 

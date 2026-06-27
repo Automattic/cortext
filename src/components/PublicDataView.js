@@ -8,6 +8,7 @@ import { normalizeView } from './dataViewColumns';
 import {
 	DEFAULT_LAYOUTS,
 	adaptViewForDataViews,
+	layoutForType,
 	mergeDataViewsChange,
 } from './dataViewAdapter';
 import { filterSortAndPaginateWithGroups } from './groupedFilters';
@@ -94,11 +95,7 @@ function normalizeStyles( styles ) {
 }
 
 function normalizeLayout( layout, type ) {
-	const defaults = cloneObject( DEFAULT_LAYOUTS[ type ]?.layout );
-	const normalized = {
-		...defaults,
-		...cloneObject( layout ),
-	};
+	const normalized = layoutForType( type, cloneObject( layout ) );
 
 	const styles = normalizeStyles( normalized.styles );
 	if ( styles ) {

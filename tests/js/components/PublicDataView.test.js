@@ -157,6 +157,17 @@ describe( 'normalizePublicView', () => {
 		} );
 		expect( view.fieldsByType ).toEqual( { grid: [], list: [] } );
 	} );
+
+	it( 'migrates the oversized temporary grid preview size', () => {
+		const view = normalizePublicView( {
+			type: 'grid',
+			layout: { previewSize: 430 },
+			layoutByType: { grid: { previewSize: 430 } },
+		} );
+
+		expect( view.layout.previewSize ).toBe( 290 );
+		expect( view.layoutByType.grid.previewSize ).toBe( 290 );
+	} );
 } );
 
 describe( 'PublicDataView', () => {

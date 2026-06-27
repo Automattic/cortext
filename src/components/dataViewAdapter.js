@@ -5,6 +5,7 @@ import { COVER_FIELD_ID, MIN_WIDTHS, TITLE_FIELD_ID } from './dataViewColumns';
 export const DATA_VIEW_LAYOUT_TYPES = [ 'table', 'grid', 'list' ];
 export const DATA_VIEW_FIELD_LAYOUT_TYPES = [ 'grid', 'list' ];
 export const DEFAULT_GRID_PREVIEW_SIZE = 290;
+const STALE_GRID_PREVIEW_SIZE = 430;
 
 export const DEFAULT_LAYOUTS = {
 	table: { layout: { density: 'compact' } },
@@ -53,11 +54,23 @@ function defaultLayoutForType( type ) {
 	return cloneLayout( DEFAULT_LAYOUTS[ type ]?.layout );
 }
 
-function layoutForType( type, layout ) {
-	return {
+export function layoutForType( type, layout ) {
+	const nextLayout = {
 		...defaultLayoutForType( type ),
 		...cloneLayout( layout ),
 	};
+
+	if ( type === 'grid' ) {
+		const previewSize = Number( nextLayout.previewSize );
+		if (
+			! Number.isFinite( previewSize ) ||
+			previewSize === STALE_GRID_PREVIEW_SIZE
+		) {
+			nextLayout.previewSize = DEFAULT_GRID_PREVIEW_SIZE;
+		}
+	}
+
+	return nextLayout;
 }
 
 function uniqueFields( fields = [] ) {
@@ -94,10 +107,10 @@ function layoutByTypeFromView( view = {} ) {
 	} );
 
 	if ( isObject( view?.layout ) ) {
-		buckets[ currentType ] = {
+		buckets[ currentType ] = layoutForType( currentType, {
 			...buckets[ currentType ],
 			...view.layout,
-		};
+		} );
 	}
 
 	return buckets;
