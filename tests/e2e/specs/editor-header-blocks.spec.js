@@ -150,6 +150,38 @@ async function readCanvasHeightState( page ) {
 	} );
 }
 
+async function readInspectorBorderState( page ) {
+	await page.waitForFunction(
+		() =>
+			!! document.querySelector(
+				'.interface-complementary-area.editor-sidebar__panel > .components-panel__header.editor-sidebar__panel-tabs'
+			),
+		null,
+		{ timeout: 15_000 }
+	);
+
+	return page.evaluate( () => {
+		const root = document.getElementById( 'cortext-root' );
+		const swatch = document.createElement( 'span' );
+		swatch.style.color = 'var(--cortext-canvas-border)';
+		root.appendChild( swatch );
+		const canvasBorder = getComputedStyle( swatch ).color;
+		swatch.remove();
+
+		const header = document.querySelector(
+			'.interface-complementary-area.editor-sidebar__panel > .components-panel__header.editor-sidebar__panel-tabs'
+		);
+		const body = document.querySelector(
+			'.cortext-document-inspector .components-panel__body'
+		);
+		return {
+			canvasBorder,
+			headerBorderBottom: getComputedStyle( header ).borderBottomColor,
+			panelBorderTop: getComputedStyle( body ).borderTopColor,
+		};
+	} );
+}
+
 async function insertParagraphAt( page, content, index ) {
 	await page.evaluate(
 		( args ) => {
@@ -574,6 +606,45 @@ test.describe( 'editor header blocks', () => {
 				state.viewportHeight - 1
 			);
 			expect( state.editorPaddingBottom ).toBeGreaterThanOrEqual( 72 );
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				createdPage && `/wp/v2/crtxt_documents/${ createdPage.id }`
+			);
+		}
+	} );
+
+	test( 'keeps inspector tab separators on the canvas palette', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		let createdPage;
+		try {
+			createdPage = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: 'E2E Inspector Border Page',
+					status: 'private',
+					content: paragraphMarkup( 'Inspector border body.' ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/${ createdPage.id }`
+			);
+			await waitForEditorPost( page, createdPage.id );
+			await page.evaluate( () =>
+				document
+					.getElementById( 'cortext-root' )
+					?.setAttribute( 'data-theme', 'dark' )
+			);
+
+			const state = await readInspectorBorderState( page );
+			expect( state.headerBorderBottom ).toBe( state.canvasBorder );
+			expect( state.panelBorderTop ).toBe( state.canvasBorder );
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
