@@ -59,11 +59,13 @@ describe( 'dataViewAdapter', () => {
 		const view = adaptViewForDataViews( {
 			...canonicalView,
 			type: 'grid',
+			showTitle: false,
 			layout: canonicalView.layoutByType.grid,
 		} );
 
 		expect( view.type ).toBe( 'grid' );
 		expect( view.titleField ).toBe( 'title' );
+		expect( view.showTitle ).toBeUndefined();
 		expect( view.mediaField ).toBe( 'cover' );
 		expect( view.fields ).toEqual( [] );
 		expect( view.layout ).toEqual( {
@@ -76,12 +78,14 @@ describe( 'dataViewAdapter', () => {
 		const view = adaptViewForDataViews( {
 			...canonicalView,
 			type: 'list',
+			showTitle: false,
 			layout: canonicalView.layoutByType.list,
 			fieldsByType: { grid: [], list: [ 'field-2' ] },
 		} );
 
 		expect( view.type ).toBe( 'list' );
 		expect( view.titleField ).toBe( 'title' );
+		expect( view.showTitle ).toBeUndefined();
 		expect( view.fields ).toEqual( [ 'field-2' ] );
 	} );
 
@@ -147,6 +151,7 @@ describe( 'dataViewAdapter', () => {
 			{
 				...canonicalView,
 				type: 'grid',
+				showTitle: false,
 				layout: canonicalView.layoutByType.grid,
 			},
 			{
@@ -165,6 +170,7 @@ describe( 'dataViewAdapter', () => {
 			'field-2',
 		] );
 		expect( gridCanonical.fieldsByType.grid ).toEqual( [ 'field-2' ] );
+		expect( gridCanonical.showTitle ).toBeUndefined();
 	} );
 
 	it( 'updates the active layout bucket when the type does not change', () => {

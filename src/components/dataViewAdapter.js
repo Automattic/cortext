@@ -131,6 +131,7 @@ function withActiveLayout( view, type, layoutByType, fieldsByType ) {
 	}
 
 	next.titleField = TITLE_FIELD_ID;
+	delete next.showTitle;
 	if ( type === 'grid' && ! next.mediaField ) {
 		next.mediaField = COVER_FIELD_ID;
 	}
@@ -202,6 +203,9 @@ export function mergeDataViewsChange( previousView = {}, nextView = {} ) {
 
 	if ( next.titleField === TITLE_FIELD_ID ) {
 		delete next.titleField;
+	}
+	if ( nextType !== 'table' ) {
+		delete next.showTitle;
 	}
 
 	return next;
