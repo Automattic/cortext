@@ -4,6 +4,11 @@
 
 const { test, expect } = require( '@wordpress/e2e-test-utils-playwright' );
 
+const COVER_PNG = Buffer.from(
+	'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAGklEQVR42mP8z8BQz0AEYBxVSFUBAAAcZgP9vyv3NwAAAABJRU5ErkJggg==',
+	'base64'
+);
+
 async function deleteIfCreated( requestUtils, path ) {
 	if ( ! path ) {
 		return;
@@ -17,6 +22,14 @@ async function deleteIfCreated( requestUtils, path ) {
 	} catch {
 		// Best-effort cleanup; failures here should not mask the test result.
 	}
+}
+
+async function uploadCoverMedia( requestUtils, name ) {
+	return requestUtils.uploadMedia( {
+		name,
+		mimeType: 'image/png',
+		buffer: COVER_PNG,
+	} );
 }
 
 async function expectColumnRevealed( canvas, columnHeader ) {
@@ -1062,6 +1075,160 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
+			);
+		}
+	} );
+
+	test( 'keeps list media aligned without duplicating the title icon', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+
+		try {
+			Object.assign(
+				fixture,
+				await createCollectionFixture( requestUtils )
+			);
+			const fieldKey = `field-${ fixture.field.id }`;
+			fixture.coverMedia = await uploadCoverMedia(
+				requestUtils,
+				`list-cover-${ fixture.entry.id }.png`
+			);
+			fixture.iconMedia = await uploadCoverMedia(
+				requestUtils,
+				`list-icon-${ fixture.entry.id }.png`
+			);
+			await requestUtils.rest( {
+				method: 'POST',
+				path: `/wp/v2/crtxt_documents/${ fixture.entry.id }`,
+				data: {
+					featured_media: fixture.coverMedia.id,
+					meta: {
+						cortext_document_icon: JSON.stringify( {
+							type: 'image',
+							id: fixture.iconMedia.id,
+						} ),
+						[ fieldKey ]: 'Ursula K. Le Guin',
+					},
+				},
+			} );
+
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: 'DataView list media page',
+					status: 'private',
+					content: createDataViewBlockMarkup( fixture.collection.id, {
+						type: 'list',
+						mediaField: 'cover',
+						fields: [ 'title', fieldKey ],
+						fieldsByType: { list: [ fieldKey ] },
+					} ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/${ fixture.page.id }`
+			);
+
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.page.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+			const row = canvas
+				.locator( '.dataviews-view-list > [role="row"]' )
+				.filter( { hasText: 'The Left Hand of Darkness' } )
+				.first();
+			await expect( row ).toBeVisible();
+			await expect(
+				row.locator( '.dataviews-view-list__media-wrapper img' )
+			).toBeVisible();
+
+			const mediaMetrics = await row.evaluate( ( element ) => {
+				const media = element.querySelector(
+					'.dataviews-view-list__media-wrapper'
+				);
+				const title = element.querySelector( '.dataviews-title-field' );
+				const titleIcon = element.querySelector(
+					'.cortext-title-cell__icon'
+				);
+				const visibleImages = Array.from(
+					element.querySelectorAll( 'img' )
+				).filter( ( image ) => {
+					const rect = image.getBoundingClientRect();
+					const style =
+						image.ownerDocument.defaultView.getComputedStyle(
+							image
+						);
+					return (
+						style.display !== 'none' &&
+						style.visibility !== 'hidden' &&
+						rect.width > 0 &&
+						rect.height > 0
+					);
+				} );
+				const mediaRect = media?.getBoundingClientRect();
+				const titleRect = title?.getBoundingClientRect();
+				const titleIconStyle = titleIcon
+					? titleIcon.ownerDocument.defaultView.getComputedStyle(
+							titleIcon
+					  )
+					: null;
+
+				return {
+					mediaToTitleCenterGap:
+						mediaRect && titleRect
+							? Math.abs(
+									mediaRect.top +
+										mediaRect.height / 2 -
+										( titleRect.top + titleRect.height / 2 )
+							  )
+							: null,
+					titleIconDisplay: titleIconStyle?.display ?? '',
+					visibleImages: visibleImages.length,
+				};
+			} );
+			expect( mediaMetrics.visibleImages ).toBe( 1 );
+			expect( mediaMetrics.titleIconDisplay ).toBe( 'none' );
+			expect( mediaMetrics.mediaToTitleCenterGap ).not.toBeNull();
+			expect( mediaMetrics.mediaToTitleCenterGap ).toBeLessThanOrEqual(
+				8
+			);
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				fixture.entry && `/wp/v2/crtxt_documents/${ fixture.entry.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.iconMedia && `/wp/v2/media/${ fixture.iconMedia.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.coverMedia && `/wp/v2/media/${ fixture.coverMedia.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,

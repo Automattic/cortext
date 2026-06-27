@@ -152,6 +152,15 @@ $list-row-open-background: #f3f3f3;
 		display: none;
 	}
 
+	.dataviews-view-list__media-wrapper:has(img) {
+		position: relative;
+		top: $grid-unit-30;
+	}
+
+	.dataviews-view-list__media-wrapper:has(img) + .dataviews-view-list__field-wrapper .cortext-title-cell__icon {
+		display: none;
+	}
+
 	.dataviews-view-list__media-wrapper img {
 		width: 100%;
 		height: 100%;
