@@ -181,7 +181,7 @@ async function expectGridDragHandleStaysInCardChrome( canvas ) {
 					topChrome: handleRect.top - cardRect.top <= 24,
 					rightChrome: cardRect.right - handleRect.right >= 32,
 					aboveTitle: handleRect.bottom <= titleRect.top - 4,
-					visible: Number( handleStyles.opacity ) >= 0.7,
+					visible: Number( handleStyles.opacity ) >= 0.99,
 				};
 			} )
 		)
