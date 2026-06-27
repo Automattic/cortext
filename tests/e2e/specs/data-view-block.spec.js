@@ -938,10 +938,19 @@ test.describe( 'Collection view block', () => {
 				const actions = element.querySelector(
 					'.dataviews-view-list__item-actions'
 				);
+				const itemTarget = element.querySelector(
+					'.dataviews-view-list__item'
+				);
 				const rowRect = element.getBoundingClientRect();
 				const titleRect = title?.getBoundingClientRect();
 				const fieldsRect = fields?.getBoundingClientRect();
 				const actionsRect = actions?.getBoundingClientRect();
+				const itemTargetRect = itemTarget?.getBoundingClientRect();
+				const itemTargetStyle = itemTarget
+					? itemTarget.ownerDocument.defaultView.getComputedStyle(
+							itemTarget
+					  )
+					: null;
 
 				return {
 					titleText: title?.textContent?.trim() ?? '',
@@ -959,6 +968,10 @@ test.describe( 'Collection view block', () => {
 					actionsLeft: actionsRect
 						? Math.round( actionsRect.left - rowRect.left )
 						: 0,
+					itemTargetPosition: itemTargetStyle?.position ?? '',
+					itemTargetBorderWidth:
+						itemTargetStyle?.borderTopWidth ?? '',
+					itemTargetWidth: itemTargetRect?.width ?? 0,
 				};
 			} );
 			expect( listMetrics ).toMatchObject( {
@@ -975,6 +988,9 @@ test.describe( 'Collection view block', () => {
 			expect( listMetrics.actionsLeft ).toBeGreaterThan(
 				listMetrics.fieldsLeft
 			);
+			expect( listMetrics.itemTargetPosition ).toBe( 'absolute' );
+			expect( listMetrics.itemTargetBorderWidth ).toBe( '0px' );
+			expect( listMetrics.itemTargetWidth ).toBeGreaterThan( 400 );
 
 			const label = row
 				.locator( '.dataviews-view-list__field-label' )

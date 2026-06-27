@@ -106,7 +106,16 @@ $list-row-open-background: #f3f3f3;
 	}
 
 	.dataviews-view-list__item {
+		position: absolute;
+		inset: 0;
 		z-index: 0;
+		width: 100%;
+		height: 100%;
+		padding: 0;
+		border: 0;
+		background: transparent;
+		box-shadow: none;
+		appearance: none;
 	}
 
 	.dataviews-view-list .dataviews-title-field .cortext-title-cell {
