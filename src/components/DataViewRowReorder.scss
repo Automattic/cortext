@@ -269,6 +269,64 @@ body.cortext-row-dragging .cortext-row-drop-indicator {
 	padding: 0;
 }
 
+.cortext-row-drag-preview--grid-card {
+	display: block;
+	border-radius: 6px;
+	background: $white;
+	box-shadow:
+		0 0 0 $border-width $gray-200,
+		0 8px 24px rgba(0, 0, 0, 0.16);
+}
+
+.cortext-row-drag-preview__grid-card {
+	position: relative;
+	box-sizing: border-box;
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	height: 100%;
+	min-width: 0;
+	border: $border-width solid $gray-200;
+	border-radius: 6px;
+	background: $white;
+	overflow: hidden;
+}
+
+.cortext-row-drag-preview__grid-card .dataviews-view-grid__media {
+	position: relative;
+	flex: 0 0 auto;
+	width: 100%;
+	aspect-ratio: 16 / 9;
+	background: $white;
+	overflow: hidden;
+}
+
+.cortext-row-drag-preview__grid-card .dataviews-view-grid__media img,
+.cortext-row-drag-preview__grid-card
+	.dataviews-view-grid__media
+	.cortext-data-view__cover-image {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.cortext-row-drag-preview__grid-card > .components-v-stack {
+	box-sizing: border-box;
+	flex: 1 1 auto;
+	width: 100%;
+	min-width: 0;
+	padding: $grid-unit-10 $grid-unit-20 $grid-unit-15;
+	background: #f8f8f8;
+}
+
+.cortext-row-drag-preview__grid-card .dataviews-view-grid__title-actions {
+	display: flex;
+	align-items: center;
+	gap: $grid-unit-10;
+	min-width: 0;
+}
+
 body.cortext-row-dragging {
 	cursor: grabbing;
 	user-select: none;

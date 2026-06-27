@@ -633,9 +633,19 @@ async function dragRenderedRow(
 		sourceBox.y + sourceBox.height / 2 + 8,
 		{ steps: 2 }
 	);
-	await expect( canvas.locator( '.cortext-row-drag-preview' ) ).toContainText(
-		sourceTitle
-	);
+	const preview = canvas.locator( '.cortext-row-drag-preview' );
+	await expect( preview ).toContainText( sourceTitle );
+	if ( layout === 'grid' ) {
+		await expect( preview.locator( 'img' ).first() ).toBeVisible();
+		const previewBox = await preview.boundingBox();
+		expect( previewBox ).toBeTruthy();
+		expect( previewBox.width ).toBeGreaterThanOrEqual(
+			sourceBox.width - 4
+		);
+		expect( previewBox.height ).toBeGreaterThanOrEqual(
+			sourceBox.height - 4
+		);
+	}
 	await page.mouse.move( targetX, targetY, {
 		steps: 12,
 	} );

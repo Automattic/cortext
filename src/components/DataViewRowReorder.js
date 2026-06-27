@@ -391,6 +391,9 @@ function interleavePreviewCells( visibleCells, trailingSpacerRight ) {
 
 function rowPreviewCells( rowElement, layout, row, view ) {
 	const label = rowLabel( row );
+	if ( layout === 'grid' ) {
+		return [ { source: rowElement, text: label, isGridCard: true } ];
+	}
 	if ( layout !== 'table' ) {
 		return [ { text: label } ];
 	}
@@ -430,7 +433,15 @@ function rowPreviewWidth( rowElement, layout, rect ) {
 }
 
 function rowPreviewSignature( cells ) {
-	return cells.map( ( cell ) => cell.text ).join( '\u0000' );
+	return cells
+		.map( ( cell ) =>
+			cell.isGridCard
+				? `${ cell.text }:${
+						cell.source?.querySelectorAll( 'img' ).length ?? 0
+				  }`
+				: cell.text
+		)
+		.join( '\u0000' );
 }
 
 function removePreviewInteractivity( node ) {
@@ -454,6 +465,21 @@ function removePreviewChrome( node ) {
 	} );
 }
 
+function resetPreviewDragState( node ) {
+	node.classList.remove(
+		ROW_ACTIVE_CLASS,
+		ROW_DISPLACED_CLASS,
+		ROW_NO_TRANSITION_CLASS,
+		ROW_SUPPRESS_HOVER_CLASS,
+		ROW_DRAGGING_CLASS,
+		'is-hovered',
+		'is-selected'
+	);
+	node.style.removeProperty( 'transform' );
+	node.style.removeProperty( 'transition' );
+	node.style.removeProperty( 'visibility' );
+}
+
 function normalizeClonedCellContent( node ) {
 	node.querySelectorAll(
 		'.dataviews-view-table__cell-content-wrapper'
@@ -462,8 +488,29 @@ function normalizeClonedCellContent( node ) {
 	} );
 }
 
+function cloneGridCardPreview( source ) {
+	const previewCard = source.ownerDocument.createElement( 'div' );
+	previewCard.className = 'cortext-row-drag-preview__grid-card';
+
+	for ( const child of Array.from( source.childNodes ) ) {
+		previewCard.appendChild( child.cloneNode( true ) );
+	}
+
+	resetPreviewDragState( previewCard );
+	previewCard.querySelectorAll( '*' ).forEach( resetPreviewDragState );
+	removePreviewChrome( previewCard );
+	removePreviewInteractivity( previewCard );
+	removeClonedIds( previewCard );
+	return previewCard;
+}
+
 function appendPlainPreviewContent( node, cells ) {
 	for ( const [ index, cell ] of cells.entries() ) {
+		if ( cell.isGridCard && cell.source ) {
+			node.appendChild( cloneGridCardPreview( cell.source ) );
+			continue;
+		}
+
 		const cellElement = node.ownerDocument.createElement( 'div' );
 		const isPrimary = cell.isPrimary ?? index === 0;
 		cellElement.className =
@@ -510,6 +557,7 @@ function RowDragPreview( { row } ) {
 	);
 	const width = Math.max( row.previewWidth ?? cellsWidth, 240 );
 	const density = row.previewDensity ?? 'balanced';
+	const isGridCard = row.previewLayout === 'grid';
 
 	useLayoutEffect( () => {
 		const node = previewRef.current;
@@ -527,8 +575,16 @@ function RowDragPreview( { row } ) {
 	return (
 		<div
 			ref={ previewRef }
-			className={ `cortext-row-drag-preview cortext-row-drag-preview--${ density }` }
-			style={ { width: `${ width }px` } }
+			className={
+				`cortext-row-drag-preview cortext-row-drag-preview--${ density }` +
+				( isGridCard ? ' cortext-row-drag-preview--grid-card' : '' )
+			}
+			style={ {
+				width: `${ width }px`,
+				...( isGridCard && row.previewHeight
+					? { height: `${ row.previewHeight }px` }
+					: {} ),
+			} }
 			aria-label={ row.label }
 		/>
 	);
@@ -566,6 +622,8 @@ function findRenderedRows( wrapper, view, rows ) {
 				previewCells,
 				previewSignature: rowPreviewSignature( previewCells ),
 				previewWidth: rowPreviewWidth( el, layout, rect ),
+				previewHeight: layout === 'grid' ? rect.height : null,
+				previewLayout: layout,
 				previewDensity: previewDensity( el, view ),
 				el,
 				handleEl,
