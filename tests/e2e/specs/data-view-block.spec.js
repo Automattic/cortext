@@ -747,7 +747,7 @@ test.describe( 'Collection view block', () => {
 		}
 	} );
 
-	test( 'keeps grid cards and the New card in matching columns', async ( {
+	test( 'keeps grid titles, cards, and the New card in matching columns', async ( {
 		admin,
 		page,
 		requestUtils,
@@ -768,6 +768,7 @@ test.describe( 'Collection view block', () => {
 					status: 'private',
 					content: createDataViewBlockMarkup( fixture.collection.id, {
 						type: 'grid',
+						showTitle: false,
 						fields: [ 'title' ],
 						layout: { previewSize: 230 },
 					} ),
@@ -817,12 +818,44 @@ test.describe( 'Collection view block', () => {
 						const newWidth = newRect
 							? Math.round( newRect.width )
 							: 0;
+						const cardTitleTexts = Array.from(
+							root.querySelectorAll(
+								'.dataviews-view-grid__card .dataviews-view-grid__title-field'
+							)
+						)
+							.map( ( element ) => element.textContent?.trim() )
+							.filter( Boolean );
+						const emptyMediaSlotsHidden = Array.from(
+							root.querySelectorAll(
+								'.dataviews-view-grid__card .dataviews-view-grid__media'
+							)
+						)
+							.filter(
+								( element ) =>
+									! element.querySelector(
+										'.cortext-data-view__cover-image'
+									)
+							)
+							.every(
+								( element ) =>
+									element.ownerDocument.defaultView.getComputedStyle(
+										element
+									).display === 'none'
+							);
 
 						return {
 							cardCount: cardWidths.length,
 							cardsWide:
 								cardWidths.length > 0 &&
 								Math.min( ...cardWidths ) >= 180,
+							titlesVisible: [
+								'Alpha Manual',
+								'Beta Manual',
+								'Gamma Manual',
+							].every( ( title ) =>
+								cardTitleTexts.includes( title )
+							),
+							emptyMediaSlotsHidden,
 							newAligned:
 								cardWidths.length > 0 &&
 								Math.abs( newWidth - cardWidths[ 0 ] ) <= 2,
@@ -832,6 +865,8 @@ test.describe( 'Collection view block', () => {
 			await expect.poll( getGridMetrics ).toEqual( {
 				cardCount: 3,
 				cardsWide: true,
+				titlesVisible: true,
+				emptyMediaSlotsHidden: true,
 				newAligned: true,
 			} );
 		} finally {
