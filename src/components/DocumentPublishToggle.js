@@ -22,8 +22,8 @@ function referencedCollectionIds( blocks ) {
 	( function walk( list ) {
 		for ( const block of list ) {
 			if (
-				block.name === 'cortext/data-view' &&
-				block.attributes.collectionId
+				block?.name === 'cortext/data-view' &&
+				block.attributes?.collectionId
 			) {
 				ids.add( block.attributes.collectionId );
 			}

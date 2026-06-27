@@ -149,10 +149,10 @@ function DocumentIconInspectorControls( { postId, postType } ) {
 		( select ) => {
 			const blocks = select( blockEditorStore ).getBlocks();
 			const coverBlock = blocks.find(
-				( block ) => block.name === 'cortext/document-cover'
+				( block ) => block?.name === 'cortext/document-cover'
 			);
 			const iconBlock = blocks.find(
-				( block ) => block.name === 'cortext/document-icon'
+				( block ) => block?.name === 'cortext/document-icon'
 			);
 			return {
 				coverIndex: coverBlock ? blocks.indexOf( coverBlock ) : -1,
@@ -284,7 +284,9 @@ function PageFeaturedImageInspectorControls( { postId, postType } ) {
 		( select ) =>
 			select( blockEditorStore )
 				.getBlocks()
-				.find( ( block ) => block.name === 'cortext/document-cover' )
+				.find(
+					( block ) => block?.name === 'cortext/document-cover'
+				)
 				?.clientId ?? null,
 		[]
 	);
