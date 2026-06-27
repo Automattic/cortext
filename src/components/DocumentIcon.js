@@ -11,6 +11,7 @@ import {
 import './DocumentIcon.scss';
 
 import useDelayedFlag from '../hooks/useDelayedFlag';
+import { CORTEXT_GLYPHS } from './cortextIcons';
 import { ICON_COLOR_BY_NAME } from './iconColors';
 
 // DocumentIconWp imports the full @wordpress/icons namespace so it can resolve
@@ -196,6 +197,7 @@ export default function DocumentIcon( {
 	}
 
 	if ( parsed.type === 'wp' ) {
+		const cortextGlyph = CORTEXT_GLYPHS[ parsed.name ];
 		const colorStyle = parsed.color
 			? { color: ICON_COLOR_BY_NAME[ parsed.color ] }
 			: undefined;
@@ -209,11 +211,20 @@ export default function DocumentIcon( {
 				role={ alt ? 'img' : undefined }
 				aria-label={ alt }
 			>
-				<Suspense
-					fallback={ <Icon icon={ pageGlyph } size={ glyphSize } /> }
-				>
-					<DocumentIconWp name={ parsed.name } size={ glyphSize } />
-				</Suspense>
+				{ cortextGlyph ? (
+					<Icon icon={ cortextGlyph } size={ glyphSize } />
+				) : (
+					<Suspense
+						fallback={
+							<Icon icon={ pageGlyph } size={ glyphSize } />
+						}
+					>
+						<DocumentIconWp
+							name={ parsed.name }
+							size={ glyphSize }
+						/>
+					</Suspense>
+				) }
 			</span>
 		);
 	}
