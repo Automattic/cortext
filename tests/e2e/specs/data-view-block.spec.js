@@ -935,9 +935,13 @@ test.describe( 'Collection view block', () => {
 				const fields = element.querySelector(
 					'.dataviews-view-list__fields'
 				);
+				const actions = element.querySelector(
+					'.dataviews-view-list__item-actions'
+				);
 				const rowRect = element.getBoundingClientRect();
 				const titleRect = title?.getBoundingClientRect();
 				const fieldsRect = fields?.getBoundingClientRect();
+				const actionsRect = actions?.getBoundingClientRect();
 
 				return {
 					titleText: title?.textContent?.trim() ?? '',
@@ -948,6 +952,13 @@ test.describe( 'Collection view block', () => {
 					fieldsLeft: fieldsRect
 						? Math.round( fieldsRect.left - rowRect.left )
 						: 0,
+					titleToFieldsGap:
+						titleRect && fieldsRect
+							? Math.round( fieldsRect.left - titleRect.right )
+							: 0,
+					actionsLeft: actionsRect
+						? Math.round( actionsRect.left - rowRect.left )
+						: 0,
 				};
 			} );
 			expect( listMetrics ).toMatchObject( {
@@ -957,6 +968,11 @@ test.describe( 'Collection view block', () => {
 			} );
 			expect( listMetrics.titleWidth ).toBeGreaterThan( 120 );
 			expect( listMetrics.titleLeft ).toBeLessThan(
+				listMetrics.fieldsLeft
+			);
+			expect( listMetrics.titleToFieldsGap ).toBeGreaterThanOrEqual( 4 );
+			expect( listMetrics.titleToFieldsGap ).toBeLessThanOrEqual( 48 );
+			expect( listMetrics.actionsLeft ).toBeGreaterThan(
 				listMetrics.fieldsLeft
 			);
 
