@@ -2,10 +2,7 @@ import { __ } from '@wordpress/i18n';
 import { useEntityRecord } from '@wordpress/core-data';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { EditorProvider, store as editorStore } from '@wordpress/editor';
-import {
-	InterfaceSkeleton,
-	store as interfaceStore,
-} from '@wordpress/interface';
+import { store as interfaceStore } from '@wordpress/interface';
 import { Button } from '@wordpress/components';
 import { closeSmall, cog, pencil, plus, seen, unseen } from '@wordpress/icons';
 import {
@@ -198,6 +195,51 @@ function VisualCanvas( {
 	);
 }
 
+function CanvasInterfaceSkeleton( {
+	className,
+	content,
+	secondarySidebar,
+	sidebar,
+} ) {
+	const classes = [ className, 'interface-interface-skeleton' ]
+		.filter( Boolean )
+		.join( ' ' );
+
+	return (
+		<div className={ classes }>
+			<div className="interface-interface-skeleton__editor">
+				<div className="interface-interface-skeleton__body">
+					{ secondarySidebar ? (
+						<div
+							className="interface-interface-skeleton__secondary-sidebar"
+							role="region"
+							aria-label={ __( 'Block Library', 'cortext' ) }
+						>
+							{ secondarySidebar }
+						</div>
+					) : null }
+					<div
+						className="interface-interface-skeleton__content"
+						role="region"
+						aria-label={ __( 'Content', 'cortext' ) }
+					>
+						{ content }
+					</div>
+					{ sidebar ? (
+						<div
+							className="interface-interface-skeleton__sidebar"
+							role="region"
+							aria-label={ __( 'Settings', 'cortext' ) }
+						>
+							{ sidebar }
+						</div>
+					) : null }
+				</div>
+			</div>
+		</div>
+	);
+}
+
 const CANVAS_SWITCH_READY_TIMEOUT = 8000;
 
 function documentKey( postType, postId ) {
@@ -360,7 +402,7 @@ function CanvasEditor( {
 				onEditPropertiesLayout={ requestPropertiesLayoutEdit }
 				onTogglePropertiesVisible={ togglePropertiesVisible }
 			/>
-			<InterfaceSkeleton
+			<CanvasInterfaceSkeleton
 				className="cortext-canvas"
 				content={
 					<>
