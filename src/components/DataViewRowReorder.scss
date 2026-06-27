@@ -399,6 +399,28 @@ body.cortext-row-dragging .cortext-row-drop-indicator {
 	min-width: 0;
 }
 
+.cortext-row-drag-preview__list-row .cortext-relation-ref,
+.cortext-row-drag-preview__list-row .cortext-relation-ref-more,
+.cortext-row-drag-preview__list-row .cortext-chip {
+	box-shadow: none;
+}
+
+.cortext-row-drag-preview__list-row .cortext-chip--neutral {
+	background-color: $gray-100;
+	box-shadow: none;
+	color: $gray-700;
+}
+
+.cortext-row-drag-preview__list-row .cortext-chips {
+	flex-wrap: nowrap;
+	width: auto;
+	overflow: hidden;
+}
+
+.cortext-row-drag-preview__list-row .cortext-chip {
+	flex: 0 0 auto;
+}
+
 .cortext-row-drag-preview--grid-card {
 	display: block;
 	border-radius: var(--wpds-border-radius-md, 6px);
@@ -480,6 +502,20 @@ body.cortext-row-dragging .cortext-row-drop-indicator {
 .cortext-row-drag-preview__grid-card .dataviews-view-grid__fields {
 	padding-right: $grid-unit-20;
 	padding-left: $grid-unit-20;
+}
+
+.cortext-row-drag-preview__grid-card .cortext-relation-ref,
+.cortext-row-drag-preview__grid-card .cortext-relation-ref-more,
+.cortext-row-drag-preview__grid-card .cortext-chip {
+	box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+	box-shadow: inset 0 0 0 1px
+		color-mix(in oklch, currentcolor 20%, transparent);
+}
+
+.cortext-row-drag-preview__grid-card .cortext-chip--neutral {
+	background-color: $gray-100;
+	box-shadow: inset 0 0 0 1px $gray-300;
+	color: $gray-700;
 }
 
 body.cortext-row-dragging {

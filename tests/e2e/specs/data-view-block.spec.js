@@ -665,6 +665,18 @@ async function dragRenderedRow(
 			)
 		).toHaveCount( 0 );
 	}
+	if ( expectedPreviewText && [ 'grid', 'list' ].includes( layout ) ) {
+		const previewChip = preview
+			.locator( '.cortext-chip', {
+				hasText: expectedPreviewText,
+			} )
+			.first();
+		await expect( previewChip ).toBeVisible();
+		const chipBox = await previewChip.boundingBox();
+		expect( chipBox ).toBeTruthy();
+		expect( chipBox.width ).toBeGreaterThan( 24 );
+		expect( chipBox.height ).toBeGreaterThan( 16 );
+	}
 	await page.mouse.move( targetX, targetY, {
 		steps: 12,
 	} );
@@ -1675,12 +1687,41 @@ test.describe( 'Collection view block', () => {
 				fixture,
 				await createManualOrderFixture( requestUtils )
 			);
-			const fieldKey = `field-${ fixture.field.id }`;
+			fixture.statusField = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_fields',
+				data: {
+					title: 'Status',
+					status: 'private',
+					meta: {
+						type: 'select',
+						options: JSON.stringify( [
+							{
+								value: 'finished',
+								label: 'Finished',
+								color: 'green',
+							},
+						] ),
+					},
+				},
+			} );
+			const fieldKey = `field-${ fixture.statusField.id }`;
 			fixture.media = [];
 
+			await requestUtils.rest( {
+				method: 'POST',
+				path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
+				data: {
+					meta: {
+						cortext_fields: [
+							String( fixture.field.id ),
+							String( fixture.statusField.id ),
+						],
+					},
+				},
+			} );
+
 			for ( const row of fixture.rows ) {
-				const title =
-					row.title?.raw || row.title?.rendered || row.title;
 				const media = await uploadCoverMedia(
 					requestUtils,
 					`grid-preview-cover-${ row.id }.png`,
@@ -1693,7 +1734,7 @@ test.describe( 'Collection view block', () => {
 					data: {
 						featured_media: media.id,
 						meta: {
-							[ fieldKey ]: `${ title } preview detail`,
+							[ fieldKey ]: 'finished',
 						},
 					},
 				} );
@@ -1733,7 +1774,9 @@ test.describe( 'Collection view block', () => {
 
 			const canvas = page.frameLocator( '[name="editor-canvas"]' );
 			await expect(
-				canvas.getByText( 'Beta Manual preview detail' )
+				canvas
+					.locator( '.cortext-chip', { hasText: 'Finished' } )
+					.first()
 			).toBeVisible();
 
 			await dragRenderedRow(
@@ -1744,7 +1787,7 @@ test.describe( 'Collection view block', () => {
 				'before',
 				'grid',
 				[ 'Alpha Manual', 'Beta Manual', 'Gamma Manual' ],
-				'Beta Manual preview detail'
+				'Finished'
 			);
 
 			await page.getByRole( 'button', { name: 'Cancel' } ).click();
@@ -1771,6 +1814,11 @@ test.describe( 'Collection view block', () => {
 			);
 			await deleteIfCreated(
 				requestUtils,
+				fixture.statusField &&
+					`/wp/v2/crtxt_fields/${ fixture.statusField.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
 				fixture.collection &&
 					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
 			);
@@ -1789,12 +1837,41 @@ test.describe( 'Collection view block', () => {
 				fixture,
 				await createManualOrderFixture( requestUtils )
 			);
-			const fieldKey = `field-${ fixture.field.id }`;
+			fixture.statusField = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_fields',
+				data: {
+					title: 'Status',
+					status: 'private',
+					meta: {
+						type: 'select',
+						options: JSON.stringify( [
+							{
+								value: 'finished',
+								label: 'Finished',
+								color: 'green',
+							},
+						] ),
+					},
+				},
+			} );
+			const fieldKey = `field-${ fixture.statusField.id }`;
 			fixture.media = [];
 
+			await requestUtils.rest( {
+				method: 'POST',
+				path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
+				data: {
+					meta: {
+						cortext_fields: [
+							String( fixture.field.id ),
+							String( fixture.statusField.id ),
+						],
+					},
+				},
+			} );
+
 			for ( const row of fixture.rows ) {
-				const title =
-					row.title?.raw || row.title?.rendered || row.title;
 				const media = await uploadCoverMedia(
 					requestUtils,
 					`list-preview-cover-${ row.id }.png`,
@@ -1807,7 +1884,7 @@ test.describe( 'Collection view block', () => {
 					data: {
 						featured_media: media.id,
 						meta: {
-							[ fieldKey ]: `${ title } preview detail`,
+							[ fieldKey ]: 'finished',
 						},
 					},
 				} );
@@ -1848,7 +1925,9 @@ test.describe( 'Collection view block', () => {
 
 			const canvas = page.frameLocator( '[name="editor-canvas"]' );
 			await expect(
-				canvas.getByText( 'Beta Manual preview detail' )
+				canvas
+					.locator( '.cortext-chip', { hasText: 'Finished' } )
+					.first()
 			).toBeVisible();
 
 			await dragRenderedRow(
@@ -1859,7 +1938,7 @@ test.describe( 'Collection view block', () => {
 				'before',
 				'list',
 				[ 'Alpha Manual', 'Beta Manual', 'Gamma Manual' ],
-				'Beta Manual preview detail'
+				'Finished'
 			);
 
 			await page.getByRole( 'button', { name: 'Cancel' } ).click();
@@ -1883,6 +1962,11 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.statusField &&
+					`/wp/v2/crtxt_fields/${ fixture.statusField.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
