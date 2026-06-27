@@ -9,6 +9,11 @@ const COVER_PNG = Buffer.from(
 	'base64'
 );
 
+const WIDE_COVER_PNG = Buffer.from(
+	'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAECAYAAACzzX7wAAAAWklEQVR4nBXKoRVEIQwAwSsnRaSISCQiAolEIiltu9p7f/T8qJARMkNWyA45ITfkhT8qZaTMlJWyU07KTXn5hZJRMktWyS45Jbfk1RdaRstsWS275bTcltf+AePRTyH0zsGVAAAAAElFTkSuQmCC',
+	'base64'
+);
+
 async function deleteIfCreated( requestUtils, path ) {
 	if ( ! path ) {
 		return;
@@ -24,11 +29,11 @@ async function deleteIfCreated( requestUtils, path ) {
 	}
 }
 
-async function uploadCoverMedia( requestUtils, name ) {
+async function uploadCoverMedia( requestUtils, name, buffer = COVER_PNG ) {
 	return requestUtils.uploadMedia( {
 		name,
 		mimeType: 'image/png',
-		buffer: COVER_PNG,
+		buffer,
 	} );
 }
 
@@ -1183,7 +1188,8 @@ test.describe( 'Collection view block', () => {
 			const fieldKey = `field-${ fixture.field.id }`;
 			fixture.coverMedia = await uploadCoverMedia(
 				requestUtils,
-				`list-cover-${ fixture.entry.id }.png`
+				`list-cover-${ fixture.entry.id }.png`,
+				WIDE_COVER_PNG
 			);
 			fixture.iconMedia = await uploadCoverMedia(
 				requestUtils,
@@ -1247,6 +1253,7 @@ test.describe( 'Collection view block', () => {
 				const media = element.querySelector(
 					'.dataviews-view-list__media-wrapper'
 				);
+				const mediaImage = media?.querySelector( 'img' );
 				const title = element.querySelector( '.dataviews-title-field' );
 				const titleIcon = element.querySelector(
 					'.cortext-title-cell__icon'
@@ -1267,6 +1274,7 @@ test.describe( 'Collection view block', () => {
 					);
 				} );
 				const mediaRect = media?.getBoundingClientRect();
+				const mediaImageRect = mediaImage?.getBoundingClientRect();
 				const titleRect = title?.getBoundingClientRect();
 				const titleIconStyle = titleIcon
 					? titleIcon.ownerDocument.defaultView.getComputedStyle(
@@ -1283,12 +1291,26 @@ test.describe( 'Collection view block', () => {
 										( titleRect.top + titleRect.height / 2 )
 							  )
 							: null,
+					mediaWidth: mediaRect?.width ?? 0,
+					mediaHeight: mediaRect?.height ?? 0,
+					mediaImageWidth: mediaImageRect?.width ?? 0,
+					mediaImageHeight: mediaImageRect?.height ?? 0,
+					mediaToTitleGap:
+						mediaRect && titleRect
+							? Math.round( titleRect.left - mediaRect.right )
+							: null,
 					titleIconDisplay: titleIconStyle?.display ?? '',
 					visibleImages: visibleImages.length,
 				};
 			} );
 			expect( mediaMetrics.visibleImages ).toBe( 1 );
 			expect( mediaMetrics.titleIconDisplay ).toBe( 'none' );
+			expect( mediaMetrics.mediaWidth ).toBeLessThanOrEqual( 32 );
+			expect( mediaMetrics.mediaHeight ).toBeLessThanOrEqual( 32 );
+			expect( mediaMetrics.mediaImageWidth ).toBeLessThanOrEqual( 32 );
+			expect( mediaMetrics.mediaImageHeight ).toBeLessThanOrEqual( 32 );
+			expect( mediaMetrics.mediaToTitleGap ).not.toBeNull();
+			expect( mediaMetrics.mediaToTitleGap ).toBeGreaterThanOrEqual( 8 );
 			expect( mediaMetrics.mediaToTitleCenterGap ).not.toBeNull();
 			expect( mediaMetrics.mediaToTitleCenterGap ).toBeLessThanOrEqual(
 				8
