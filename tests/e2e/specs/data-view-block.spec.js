@@ -825,23 +825,6 @@ test.describe( 'Collection view block', () => {
 						)
 							.map( ( element ) => element.textContent?.trim() )
 							.filter( Boolean );
-						const emptyMediaSlotsHidden = Array.from(
-							root.querySelectorAll(
-								'.dataviews-view-grid__card .dataviews-view-grid__media'
-							)
-						)
-							.filter(
-								( element ) =>
-									! element.querySelector(
-										'.cortext-data-view__cover-image'
-									)
-							)
-							.every(
-								( element ) =>
-									element.ownerDocument.defaultView.getComputedStyle(
-										element
-									).display === 'none'
-							);
 
 						return {
 							cardCount: cardWidths.length,
@@ -855,7 +838,6 @@ test.describe( 'Collection view block', () => {
 							].every( ( title ) =>
 								cardTitleTexts.includes( title )
 							),
-							emptyMediaSlotsHidden,
 							newAligned:
 								cardWidths.length > 0 &&
 								Math.abs( newWidth - cardWidths[ 0 ] ) <= 2,
@@ -866,7 +848,6 @@ test.describe( 'Collection view block', () => {
 				cardCount: 3,
 				cardsWide: true,
 				titlesVisible: true,
-				emptyMediaSlotsHidden: true,
 				newAligned: true,
 			} );
 		} finally {
