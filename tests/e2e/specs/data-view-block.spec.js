@@ -3381,37 +3381,22 @@ test.describe( 'Collection view block', () => {
 			const header = tableDataHeaders( table ).nth( 1 );
 
 			// Author is the second data column (title is index 0, Author is
-			// index 1). Dispatch pointer events on the handle so the resize
-			// code receives same-frame coordinates.
+			// index 1). Use a real mouse drag so this covers the handle's
+			// rendered hit area, not only the resize callback.
 			const resizer = header.locator( '.cortext-column-resizer' );
 			await expect( resizer ).toBeAttached();
 			const dragDelta = 80;
-			const pointer = {
-				button: 0,
-				pointerId: 1,
-				pointerType: 'mouse',
-				isPrimary: true,
-			};
-			await resizer.dispatchEvent( 'pointerdown', {
-				...pointer,
-				buttons: 1,
-				clientX: 0,
-			} );
-			await resizer.dispatchEvent( 'pointermove', {
-				...pointer,
-				buttons: 1,
-				clientX: 10,
-			} );
-			await resizer.dispatchEvent( 'pointermove', {
-				...pointer,
-				buttons: 1,
-				clientX: dragDelta,
-			} );
-			await resizer.dispatchEvent( 'pointerup', {
-				...pointer,
-				buttons: 0,
-				clientX: dragDelta,
-			} );
+			const resizerBox = await resizer.boundingBox();
+			expect( resizerBox ).not.toBeNull();
+			const headerBox = await header.boundingBox();
+			expect( headerBox ).not.toBeNull();
+			const startX = headerBox.x + headerBox.width + 2;
+			const startY = resizerBox.y + resizerBox.height / 2;
+			await page.mouse.move( startX, startY );
+			await page.mouse.down();
+			await page.mouse.move( startX + 10, startY );
+			await page.mouse.move( startX + dragDelta, startY );
+			await page.mouse.up();
 
 			await page.evaluate( async () => {
 				await window.wp.data.dispatch( 'core/editor' ).savePost();
