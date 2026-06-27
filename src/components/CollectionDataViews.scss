@@ -1078,6 +1078,156 @@ tr:has(.cortext-title-cell--is-opening)
 		display: none;
 	}
 
+	// WP 7 moved more @wordpress/components layout/control styling to
+	// Emotion. Those styles can be injected outside the BlockCanvas iframe,
+	// leaving the DataViews toolbar stacked and the search input unskinned.
+	// Keep scoped fallbacks for the stable DataViews/control class names.
+	.dataviews__view-actions {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: $grid-unit-05;
+		width: 100%;
+	}
+
+	.dataviews__search {
+		display: flex;
+		align-items: center;
+		justify-content: flex-start;
+		gap: $grid-unit;
+		min-width: 0;
+	}
+
+	.dataviews__view-actions > :last-child {
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-05;
+		flex-shrink: 0;
+	}
+
+	.dataviews-search.components-search-control {
+		display: flex;
+		align-items: center;
+		width: fit-content;
+		max-width: 100%;
+	}
+
+	.dataviews-search .components-input-control__label {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		padding: 0;
+		margin: -1px;
+		overflow: hidden;
+		clip: rect(0 0 0 0);
+		clip-path: inset(50%);
+		border: 0;
+		white-space: nowrap;
+	}
+
+	.dataviews-search .components-input-control__container {
+		position: relative;
+		display: flex;
+		align-items: center;
+		box-sizing: border-box;
+		flex: 1 1 auto;
+		min-width: 220px;
+		border-radius: 2px;
+		background: $white;
+	}
+
+	.dataviews-search .components-input-control__backdrop {
+		position: absolute;
+		inset: 0;
+		box-sizing: border-box;
+		border: $border-width solid $gray-700;
+		border-radius: inherit;
+		pointer-events: none;
+	}
+
+	.dataviews-search
+	.components-input-control__container:focus-within
+	.components-input-control__backdrop {
+		border-color: var(--wp-admin-theme-color, #007cba);
+		box-shadow:
+			0 0 0 var(--wp-admin-border-width-focus, 2px)
+			var(--wp-admin-theme-color, #007cba);
+		outline: 2px solid transparent;
+		outline-offset: -2px;
+	}
+
+	.dataviews-search .components-input-control__prefix,
+	.dataviews-search .components-input-control__suffix {
+		display: flex;
+		align-items: center;
+		align-self: stretch;
+		box-sizing: border-box;
+		color: $gray-900;
+	}
+
+	.dataviews-search .components-input-control__prefix {
+		padding-inline-start: $grid-unit-05;
+	}
+
+	.dataviews-search .components-input-control__suffix {
+		padding-inline-end: $grid-unit-05;
+	}
+
+	.dataviews-search .components-input-control__prefix svg {
+		width: $grid-unit-30;
+		height: $grid-unit-30;
+		transform: scaleX(-1);
+	}
+
+	.dataviews-search .components-input-control__input[type="search"] {
+		display: block;
+		box-sizing: border-box;
+		width: 100%;
+		height: $grid-unit-40;
+		min-height: $grid-unit-40;
+		margin: 0;
+		padding: 0 $grid-unit;
+		border: 0;
+		background: transparent;
+		box-shadow: none;
+		color: $gray-900;
+		font-family: inherit;
+		font-size: $default-font-size;
+		line-height: 1;
+		outline: none;
+	}
+
+	.dataviews-search
+	.components-input-control__input[type="search"]::-webkit-search-decoration,
+	.dataviews-search
+	.components-input-control__input[type="search"]::-webkit-search-cancel-button,
+	.dataviews-search
+	.components-input-control__input[type="search"]::-webkit-search-results-button,
+	.dataviews-search
+	.components-input-control__input[type="search"]::-webkit-search-results-decoration {
+		-webkit-appearance: none;
+	}
+
+	.dataviews-filters__container-visibility-toggle {
+		display: flex;
+		align-items: center;
+	}
+
+	.dataviews-filters__visibility-toggle.components-button {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: $grid-unit-40;
+		min-width: $grid-unit-40;
+		height: $grid-unit-40;
+		padding: $grid-unit-05;
+		border: 0;
+		border-radius: 2px;
+		background: transparent;
+		box-shadow: none;
+		color: $gray-900;
+	}
+
 	// DataViews paints row height via td `padding-block` per density, but
 	// our shell's hover/edit background lives on the shell, so the gray
 	// floated inside the row instead of filling it. Zero the td's

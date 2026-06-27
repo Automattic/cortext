@@ -552,6 +552,66 @@ test.describe( 'Collection view block', () => {
 				canvas.getByText( 'Ursula K. Le Guin' )
 			).toBeVisible();
 
+			const toolbar = canvas
+				.locator( '.dataviews__view-actions' )
+				.first();
+			const search = toolbar.locator( '.dataviews-search' ).first();
+			const searchInput = search.locator( 'input[type="search"]' );
+			const filterToggle = toolbar.locator(
+				'.dataviews-filters__visibility-toggle'
+			);
+			await expect( searchInput ).toBeVisible();
+			await expect( filterToggle ).toBeVisible();
+			await expect
+				.poll( async () =>
+					search.evaluate( ( element ) => {
+						const input = element.querySelector(
+							'input[type="search"]'
+						);
+						const icon = element.querySelector(
+							'.components-input-control__prefix svg'
+						);
+						const filter = element
+							.closest( '.dataviews__view-actions' )
+							?.querySelector(
+								'.dataviews-filters__visibility-toggle'
+							);
+						const searchRect = element.getBoundingClientRect();
+						const inputRect = input.getBoundingClientRect();
+						const iconRect = icon.getBoundingClientRect();
+						const filterRect = filter.getBoundingClientRect();
+						const inputStyles =
+							input.ownerDocument.defaultView.getComputedStyle(
+								input
+							);
+						const centerY = ( rect ) => rect.y + rect.height / 2;
+
+						return {
+							searchSingleRow:
+								searchRect.height >= 28 &&
+								searchRect.height <= 44,
+							inputBorderTop: inputStyles.borderTopWidth,
+							iconAligned:
+								Math.abs(
+									centerY( iconRect ) - centerY( inputRect )
+								) <= 4,
+							filterAligned:
+								Math.abs(
+									centerY( filterRect ) - centerY( inputRect )
+								) <= 4,
+							filterAfterInput:
+								filterRect.x > inputRect.x + inputRect.width,
+						};
+					} )
+				)
+				.toEqual( {
+					searchSingleRow: true,
+					inputBorderTop: '0px',
+					iconAligned: true,
+					filterAligned: true,
+					filterAfterInput: true,
+				} );
+
 			const firstRow = canvas
 				.locator( '.dataviews-view-table tbody > tr' )
 				.first();
