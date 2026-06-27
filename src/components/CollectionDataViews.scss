@@ -543,12 +543,14 @@ tbody > tr > td:not(:first-child) {
 		}
 	}
 
-	&__open.components-button {
+	&__open.components-button,
+	&__open.components-button.is-tertiary {
 		position: absolute;
 		top: 50%;
 		inset-inline-end: $grid-unit-05;
 		justify-self: end;
 		justify-content: center;
+		gap: $grid-unit-05;
 		width: $title-cell-open-button-width;
 		min-width: 0;
 		height: 28px;
@@ -556,6 +558,8 @@ tbody > tr > td:not(:first-child) {
 		padding: 0 $grid-unit-05;
 		border: $border-width solid transparent;
 		color: $gray-700;
+		background: transparent;
+		box-shadow: none;
 		font-size: 12px;
 		line-height: 1;
 		box-sizing: border-box;
@@ -563,10 +567,20 @@ tbody > tr > td:not(:first-child) {
 		pointer-events: none;
 		transform: translateY(-50%);
 
-		&:hover,
+		svg {
+			width: $grid-unit-20;
+			height: $grid-unit-20;
+			flex: 0 0 $grid-unit-20;
+		}
+
+		&:hover:not(:disabled),
+		&:focus:not(:disabled),
 		&:focus-visible {
 			border-color: $gray-300;
 			color: $gray-900;
+			background: transparent;
+			box-shadow: none;
+			text-decoration: none;
 		}
 	}
 }

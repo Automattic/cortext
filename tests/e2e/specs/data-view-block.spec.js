@@ -99,6 +99,10 @@ async function expectOpenButtonFitsTitleCell( openButton ) {
 				const buttonRect = button.getBoundingClientRect();
 				const tableCellRect = tableCell.getBoundingClientRect();
 				const editableRect = editableCell.getBoundingClientRect();
+				const icon = button.querySelector( 'svg' );
+				const iconRect = icon?.getBoundingClientRect();
+				const buttonStyles =
+					button.ownerDocument.defaultView.getComputedStyle( button );
 				const titleCellStyles =
 					button.ownerDocument.defaultView.getComputedStyle(
 						titleCell
@@ -117,6 +121,15 @@ async function expectOpenButtonFitsTitleCell( openButton ) {
 					editableBeforeButton:
 						editableRect.right <= buttonRect.left + 1,
 					reservesOpenSpace: paddingInlineEnd >= buttonRect.width,
+					neutralColor: [
+						'rgb(117, 117, 117)',
+						'rgb(30, 30, 30)',
+					].includes( buttonStyles.color ),
+					transparentBackground:
+						buttonStyles.backgroundColor === 'rgba(0, 0, 0, 0)',
+					iconCompact:
+						! iconRect ||
+						( iconRect.width <= 18 && iconRect.height <= 18 ),
 				};
 			} )
 		)
@@ -125,6 +138,9 @@ async function expectOpenButtonFitsTitleCell( openButton ) {
 			buttonWideEnough: true,
 			editableBeforeButton: true,
 			reservesOpenSpace: true,
+			neutralColor: true,
+			transparentBackground: true,
+			iconCompact: true,
 		} );
 }
 
