@@ -3638,6 +3638,7 @@ test.describe( 'Collection view block', () => {
 				fixture,
 				await createCollectionFixture( requestUtils )
 			);
+			const fieldKey = `field-${ fixture.field.id }`;
 
 			fixture.page = await requestUtils.rest( {
 				method: 'POST',
@@ -3646,7 +3647,17 @@ test.describe( 'Collection view block', () => {
 					title: 'Column resize persistence page',
 					status: 'private',
 					content: createDataViewBlockMarkup( fixture.collection.id, {
-						fields: [ 'title', `field-${ fixture.field.id }` ],
+						fields: [ 'title', fieldKey ],
+						layout: {
+							density: 'compact',
+							styles: {
+								[ fieldKey ]: {
+									width: 80,
+									minWidth: 80,
+									maxWidth: 80,
+								},
+							},
+						},
 					} ),
 				},
 			} );
@@ -3676,7 +3687,7 @@ test.describe( 'Collection view block', () => {
 			// rendered hit area, not only the resize callback.
 			const resizer = header.locator( '.cortext-column-resizer' );
 			await expect( resizer ).toBeAttached();
-			const dragDelta = 80;
+			const dragDelta = 160;
 			const resizerBox = await resizer.boundingBox();
 			expect( resizerBox ).not.toBeNull();
 			const headerBox = await header.boundingBox();
@@ -3703,15 +3714,20 @@ test.describe( 'Collection view block', () => {
 				params: { context: 'edit' },
 			} );
 
-			const fieldKey = `field-${ fixture.field.id }`;
 			expect( saved.content.raw ).toContain( '"styles"' );
 			const widthMatch = saved.content.raw.match(
 				new RegExp( `"${ fieldKey }":\\{[^}]*"width":(\\d+)` )
 			);
 			expect( widthMatch ).not.toBeNull();
 			const persistedWidth = Number( widthMatch[ 1 ] );
-			expect( persistedWidth ).toBeGreaterThan( 0 );
-			expect( persistedWidth ).toBeLessThanOrEqual( 640 );
+			expect( persistedWidth ).toBeGreaterThan( 80 );
+			expect( persistedWidth ).toBeLessThanOrEqual( 1200 );
+
+			const maxWidthMatch = saved.content.raw.match(
+				new RegExp( `"${ fieldKey }":\\{[^}]*"maxWidth":(\\d+)` )
+			);
+			expect( maxWidthMatch ).not.toBeNull();
+			expect( Number( maxWidthMatch[ 1 ] ) ).toBe( 1200 );
 
 			await page.reload();
 			await expect( canvas.getByText( 'Author' ) ).toBeVisible();
