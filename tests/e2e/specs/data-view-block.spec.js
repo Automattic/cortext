@@ -65,6 +65,56 @@ function dataViewTableRow( canvas, title ) {
 	} );
 }
 
+async function expectOpenButtonFitsTitleCell( openButton ) {
+	await expect
+		.poll( () =>
+			openButton.evaluate( ( button ) => {
+				const titleCell = button.closest( '.cortext-title-cell' );
+				const tableCell = button.closest( 'td' );
+				const editableCell = titleCell?.querySelector(
+					'.cortext-editable-cell'
+				);
+				if ( ! titleCell || ! tableCell || ! editableCell ) {
+					return {
+						buttonInsideCell: false,
+						buttonWideEnough: false,
+						editableBeforeButton: false,
+						reservesOpenSpace: false,
+					};
+				}
+
+				const buttonRect = button.getBoundingClientRect();
+				const tableCellRect = tableCell.getBoundingClientRect();
+				const editableRect = editableCell.getBoundingClientRect();
+				const titleCellStyles =
+					button.ownerDocument.defaultView.getComputedStyle(
+						titleCell
+					);
+				const paddingInlineEnd =
+					Number.parseFloat(
+						titleCellStyles.paddingInlineEnd ||
+							titleCellStyles.paddingRight
+					) || 0;
+
+				return {
+					buttonInsideCell:
+						buttonRect.left >= tableCellRect.left - 1 &&
+						buttonRect.right <= tableCellRect.right + 1,
+					buttonWideEnough: buttonRect.width >= 60,
+					editableBeforeButton:
+						editableRect.right <= buttonRect.left + 1,
+					reservesOpenSpace: paddingInlineEnd >= buttonRect.width,
+				};
+			} )
+		)
+		.toEqual( {
+			buttonInsideCell: true,
+			buttonWideEnough: true,
+			editableBeforeButton: true,
+			reservesOpenSpace: true,
+		} );
+}
+
 async function startSidePeekShellStabilityLog( page ) {
 	await page.evaluate( () => {
 		window.__cortextSidePeekShellEvents = [];
@@ -2248,6 +2298,7 @@ test.describe( 'Collection view block', () => {
 			await firstRow.hover();
 			await expect( titleCellOpenButton ).toHaveCSS( 'opacity', '1' );
 			await expect( titleCellOpenButton ).toContainText( 'Open' );
+			await expectOpenButtonFitsTitleCell( titleCellOpenButton );
 			await expect(
 				firstRow.locator( '.cortext-editable-cell__display' ).first()
 			).toHaveCSS( 'cursor', 'pointer' );
@@ -3720,6 +3771,39 @@ test.describe( 'Collection view block', () => {
 			await page.mouse.move( startX + 10, startY );
 			await page.mouse.move( startX + dragDelta, startY );
 			await page.mouse.up();
+
+			const liveWidthTargets = await header.evaluate( ( headerEl ) => {
+				const tableEl = headerEl.closest( '.dataviews-view-table' );
+				const headerIndex = Array.from(
+					headerEl.parentElement.children
+				).indexOf( headerEl );
+				const col =
+					tableEl?.querySelector( 'colgroup' )?.children?.[
+						headerIndex
+					] ?? null;
+				const bodyCell =
+					tableEl?.querySelector(
+						`tbody > tr > *:nth-child(${ headerIndex + 1 })`
+					) ?? null;
+				const renderedWidth = Math.round(
+					headerEl.getBoundingClientRect().width
+				);
+
+				return {
+					bodyCellStyleWidth: bodyCell?.style.width ?? '',
+					colStyleWidth: col?.style.width ?? '',
+					headerStyleWidth: headerEl.style.width,
+					renderedWidth,
+				};
+			} );
+			expect( liveWidthTargets.headerStyleWidth ).toMatch( /^\d+px$/ );
+			expect( liveWidthTargets.colStyleWidth ).toBe(
+				liveWidthTargets.headerStyleWidth
+			);
+			expect( liveWidthTargets.bodyCellStyleWidth ).toBe(
+				liveWidthTargets.headerStyleWidth
+			);
+			expect( liveWidthTargets.renderedWidth ).toBeGreaterThan( 80 );
 
 			await page.evaluate( async () => {
 				await window.wp.data.dispatch( 'core/editor' ).savePost();
