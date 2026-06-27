@@ -898,6 +898,7 @@ test.describe( 'Collection view block', () => {
 					content: createDataViewBlockMarkup( fixture.collection.id, {
 						type: 'list',
 						showTitle: false,
+						mediaField: 'cover',
 						fields: [ 'title', fieldKey ],
 						fieldsByType: { list: [ fieldKey ] },
 					} ),
@@ -946,6 +947,9 @@ test.describe( 'Collection view block', () => {
 				)
 					? itemTarget.parentElement
 					: null;
+				const media = element.querySelector(
+					'.dataviews-view-list__media-wrapper'
+				);
 				const rowRect = element.getBoundingClientRect();
 				const titleRect = title?.getBoundingClientRect();
 				const fieldsRect = fields?.getBoundingClientRect();
@@ -953,6 +957,7 @@ test.describe( 'Collection view block', () => {
 				const itemTargetRect = itemTarget?.getBoundingClientRect();
 				const itemTargetCellRect =
 					itemTargetCell?.getBoundingClientRect();
+				const mediaRect = media?.getBoundingClientRect();
 				const itemTargetStyle = itemTarget
 					? itemTarget.ownerDocument.defaultView.getComputedStyle(
 							itemTarget
@@ -962,6 +967,9 @@ test.describe( 'Collection view block', () => {
 					? itemTargetCell.ownerDocument.defaultView.getComputedStyle(
 							itemTargetCell
 					  )
+					: null;
+				const mediaStyle = media
+					? media.ownerDocument.defaultView.getComputedStyle( media )
 					: null;
 
 				return {
@@ -988,6 +996,9 @@ test.describe( 'Collection view block', () => {
 					itemTargetCellBorderWidth:
 						itemTargetCellStyle?.borderTopWidth ?? '',
 					itemTargetCellWidth: itemTargetCellRect?.width ?? 0,
+					mediaDisplay: mediaStyle?.display ?? '',
+					mediaHasImage: Boolean( media?.querySelector( 'img' ) ),
+					mediaWidth: mediaRect?.width ?? 0,
 				};
 			} );
 			expect( listMetrics ).toMatchObject( {
@@ -1010,6 +1021,9 @@ test.describe( 'Collection view block', () => {
 			expect( listMetrics.itemTargetCellPosition ).toBe( 'absolute' );
 			expect( listMetrics.itemTargetCellBorderWidth ).toBe( '0px' );
 			expect( listMetrics.itemTargetCellWidth ).toBeGreaterThan( 400 );
+			expect( listMetrics.mediaHasImage ).toBe( false );
+			expect( listMetrics.mediaDisplay ).toBe( 'none' );
+			expect( listMetrics.mediaWidth ).toBe( 0 );
 
 			const label = row
 				.locator( '.dataviews-view-list__field-label' )

@@ -148,6 +148,10 @@ $list-row-open-background: #f3f3f3;
 		overflow: hidden;
 	}
 
+	.dataviews-view-list__media-wrapper:not(:has(img)) {
+		display: none;
+	}
+
 	.dataviews-view-list__media-wrapper img {
 		width: 100%;
 		height: 100%;
