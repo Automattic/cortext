@@ -655,6 +655,16 @@ async function dragRenderedRow(
 			sourceBox.height - 4
 		);
 	}
+	if ( layout === 'list' ) {
+		if ( expectedPreviewText ) {
+			await expect( preview.locator( 'img' ).first() ).toBeVisible();
+		}
+		await expect(
+			preview.locator(
+				'.dataviews-view-list__item-actions, .dataviews-view-list__item, .cortext-row-drag-handle'
+			)
+		).toHaveCount( 0 );
+	}
 	await page.mouse.move( targetX, targetY, {
 		steps: 12,
 	} );
@@ -1733,6 +1743,121 @@ test.describe( 'Collection view block', () => {
 				0,
 				'before',
 				'grid',
+				[ 'Alpha Manual', 'Beta Manual', 'Gamma Manual' ],
+				'Beta Manual preview detail'
+			);
+
+			await page.getByRole( 'button', { name: 'Cancel' } ).click();
+		} finally {
+			if ( fixture.rows ) {
+				for ( const row of fixture.rows ) {
+					await deleteIfCreated(
+						requestUtils,
+						`/wp/v2/crtxt_documents/${ row.id }`
+					);
+				}
+			}
+			if ( fixture.media ) {
+				for ( const media of fixture.media ) {
+					await deleteIfCreated(
+						requestUtils,
+						`/wp/v2/media/${ media.id }`
+					);
+				}
+			}
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
+			);
+		}
+	} );
+
+	test( 'previews rich list rows without dragging row controls', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+
+		try {
+			Object.assign(
+				fixture,
+				await createManualOrderFixture( requestUtils )
+			);
+			const fieldKey = `field-${ fixture.field.id }`;
+			fixture.media = [];
+
+			for ( const row of fixture.rows ) {
+				const title =
+					row.title?.raw || row.title?.rendered || row.title;
+				const media = await uploadCoverMedia(
+					requestUtils,
+					`list-preview-cover-${ row.id }.png`,
+					WIDE_COVER_PNG
+				);
+				fixture.media.push( media );
+				await requestUtils.rest( {
+					method: 'POST',
+					path: `/wp/v2/crtxt_documents/${ row.id }`,
+					data: {
+						featured_media: media.id,
+						meta: {
+							[ fieldKey ]: `${ title } preview detail`,
+						},
+					},
+				} );
+			}
+
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: 'Rich list row preview',
+					status: 'private',
+					content: createDataViewBlockMarkup( fixture.collection.id, {
+						type: 'list',
+						mediaField: 'cover',
+						fields: [ 'title', fieldKey ],
+						fieldsByType: { list: [ fieldKey ] },
+						sort: {
+							field: 'title',
+							direction: 'asc',
+						},
+					} ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/${ fixture.page.id }`
+			);
+
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.page.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+			await expect(
+				canvas.getByText( 'Beta Manual preview detail' )
+			).toBeVisible();
+
+			await dragRenderedRow(
+				page,
+				canvas,
+				1,
+				0,
+				'before',
+				'list',
 				[ 'Alpha Manual', 'Beta Manual', 'Gamma Manual' ],
 				'Beta Manual preview detail'
 			);

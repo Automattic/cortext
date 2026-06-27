@@ -394,6 +394,9 @@ function rowPreviewCells( rowElement, layout, row, view ) {
 	if ( layout === 'grid' ) {
 		return [ { source: rowElement, text: label, isGridCard: true } ];
 	}
+	if ( layout === 'list' ) {
+		return [ { source: rowElement, text: label, isListRow: true } ];
+	}
 	if ( layout !== 'table' ) {
 		return [ { text: label } ];
 	}
@@ -435,7 +438,7 @@ function rowPreviewWidth( rowElement, layout, rect ) {
 function rowPreviewSignature( cells ) {
 	return cells
 		.map( ( cell ) =>
-			cell.isGridCard
+			cell.isGridCard || cell.isListRow
 				? `${ cell.text }:${
 						cell.source?.querySelectorAll( 'img' ).length ?? 0
 				  }`
@@ -469,6 +472,23 @@ function removeGridPreviewChrome( node ) {
 	removePreviewChrome( node );
 	node.querySelectorAll(
 		'.dataviews-selection-checkbox, .dataviews-view-grid__media-actions'
+	).forEach( ( child ) => {
+		child.remove();
+	} );
+}
+
+function removeListPreviewChrome( node ) {
+	removePreviewChrome( node );
+	node.querySelectorAll( '.dataviews-view-list__item' ).forEach(
+		( child ) => {
+			const gridCell = child.parentElement?.matches( '[role="gridcell"]' )
+				? child.parentElement
+				: child;
+			gridCell.remove();
+		}
+	);
+	node.querySelectorAll(
+		'.dataviews-selection-checkbox, .dataviews-view-list__item-actions'
 	).forEach( ( child ) => {
 		child.remove();
 	} );
@@ -514,10 +534,26 @@ function cloneGridCardPreview( source ) {
 	return previewCard;
 }
 
+function cloneListRowPreview( source ) {
+	const previewRow = source.cloneNode( true );
+	previewRow.classList.add( 'cortext-row-drag-preview__list-row' );
+
+	resetPreviewDragState( previewRow );
+	previewRow.querySelectorAll( '*' ).forEach( resetPreviewDragState );
+	removeListPreviewChrome( previewRow );
+	removePreviewInteractivity( previewRow );
+	removeClonedIds( previewRow );
+	return previewRow;
+}
+
 function appendPlainPreviewContent( node, cells ) {
 	for ( const [ index, cell ] of cells.entries() ) {
 		if ( cell.isGridCard && cell.source ) {
 			node.appendChild( cloneGridCardPreview( cell.source ) );
+			continue;
+		}
+		if ( cell.isListRow && cell.source ) {
+			node.appendChild( cloneListRowPreview( cell.source ) );
 			continue;
 		}
 
@@ -568,6 +604,8 @@ function RowDragPreview( { row } ) {
 	const width = Math.max( row.previewWidth ?? cellsWidth, 240 );
 	const density = row.previewDensity ?? 'balanced';
 	const isGridCard = row.previewLayout === 'grid';
+	const isListRow = row.previewLayout === 'list';
+	const usesSourceShape = isGridCard || isListRow;
 
 	useLayoutEffect( () => {
 		const node = previewRef.current;
@@ -587,11 +625,12 @@ function RowDragPreview( { row } ) {
 			ref={ previewRef }
 			className={
 				`cortext-row-drag-preview cortext-row-drag-preview--${ density }` +
-				( isGridCard ? ' cortext-row-drag-preview--grid-card' : '' )
+				( isGridCard ? ' cortext-row-drag-preview--grid-card' : '' ) +
+				( isListRow ? ' cortext-row-drag-preview--list-row' : '' )
 			}
 			style={ {
 				width: `${ width }px`,
-				...( isGridCard && row.previewHeight
+				...( usesSourceShape && row.previewHeight
 					? { height: `${ row.previewHeight }px` }
 					: {} ),
 			} }
@@ -632,7 +671,8 @@ function findRenderedRows( wrapper, view, rows ) {
 				previewCells,
 				previewSignature: rowPreviewSignature( previewCells ),
 				previewWidth: rowPreviewWidth( el, layout, rect ),
-				previewHeight: layout === 'grid' ? rect.height : null,
+				previewHeight:
+					layout === 'grid' || layout === 'list' ? rect.height : null,
 				previewLayout: layout,
 				previewDensity: previewDensity( el, view ),
 				el,
