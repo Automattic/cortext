@@ -120,6 +120,36 @@ async function expectParagraphsAfterTitle( page, expected ) {
 		.toEqual( expected );
 }
 
+async function readCanvasHeightState( page ) {
+	await page.waitForFunction(
+		() => {
+			const iframe = document.querySelector(
+				'iframe[name="editor-canvas"]'
+			);
+			return !! iframe?.contentDocument?.body?.querySelector(
+				'.cortext-canvas__editor'
+			);
+		},
+		null,
+		{ timeout: 15_000 }
+	);
+
+	return page.evaluate( () => {
+		const iframe = document.querySelector( 'iframe[name="editor-canvas"]' );
+		const frameDoc = iframe.contentDocument;
+		const body = frameDoc.body;
+		const editor = frameDoc.querySelector( '.cortext-canvas__editor' );
+		const bodyRect = body.getBoundingClientRect();
+		const editorStyle = frameDoc.defaultView.getComputedStyle( editor );
+		return {
+			viewportHeight: frameDoc.documentElement.clientHeight,
+			bodyTop: bodyRect.top,
+			bodyHeight: bodyRect.height,
+			editorPaddingBottom: parseFloat( editorStyle.paddingBottom ),
+		};
+	} );
+}
+
 async function insertParagraphAt( page, content, index ) {
 	await page.evaluate(
 		( args ) => {
@@ -507,6 +537,43 @@ test.describe( 'editor header blocks', () => {
 			);
 			await waitForEditorPost( page, createdPage.id );
 			await exerciseHeaderGuard( page );
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				createdPage && `/wp/v2/crtxt_documents/${ createdPage.id }`
+			);
+		}
+	} );
+
+	test( 'keeps short document canvases as tall as the iframe', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		let createdPage;
+		try {
+			createdPage = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: 'E2E Canvas Height Page',
+					status: 'private',
+					content: paragraphMarkup( 'Short page body.' ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/${ createdPage.id }`
+			);
+			await waitForEditorPost( page, createdPage.id );
+
+			const state = await readCanvasHeightState( page );
+			expect( state.bodyTop ).toBeLessThanOrEqual( 1 );
+			expect( state.bodyHeight ).toBeGreaterThanOrEqual(
+				state.viewportHeight - 1
+			);
+			expect( state.editorPaddingBottom ).toBeGreaterThanOrEqual( 72 );
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
