@@ -676,6 +676,12 @@ export default function DataViewColumnInteractions( {
 	const dropTargetRef = useRef( dropTarget );
 	dropTargetRef.current = dropTarget;
 	const dragLayoutRef = useRef( null );
+	const dragBodyRef = useRef( null );
+	const getDragBody = useCallback( () => {
+		const body = wrapperRef.current?.ownerDocument?.body ?? document.body;
+		dragBodyRef.current = body;
+		return body;
+	}, [ wrapperRef ] );
 
 	const updateDropTarget = useCallback( ( event ) => {
 		const clientX = getDragClientX( event );
@@ -708,10 +714,10 @@ export default function DataViewColumnInteractions( {
 				cellsRef.current,
 				wrapperRef.current
 			);
-			document.body.classList.add( 'cortext-column-dragging' );
+			getDragBody().classList.add( 'cortext-column-dragging' );
 			setActiveColumn( event.active.data.current ?? null );
 		},
-		[ wrapperRef ]
+		[ getDragBody, wrapperRef ]
 	);
 
 	const onDragMove = useCallback(
@@ -727,7 +733,7 @@ export default function DataViewColumnInteractions( {
 				updateDropTarget( event ) ?? dropTargetRef.current;
 			const fromIndex = event.active.data.current?.index;
 
-			document.body.classList.remove( 'cortext-column-dragging' );
+			getDragBody().classList.remove( 'cortext-column-dragging' );
 			clearColumnDragPreview( cellsRef.current );
 			dragLayoutRef.current = null;
 			setDropTarget( null );
@@ -750,21 +756,23 @@ export default function DataViewColumnInteractions( {
 				)
 			);
 		},
-		[ updateDropTarget ]
+		[ getDragBody, updateDropTarget ]
 	);
 
 	const onDragCancel = useCallback( () => {
-		document.body.classList.remove( 'cortext-column-dragging' );
+		getDragBody().classList.remove( 'cortext-column-dragging' );
 		clearColumnDragPreview( cellsRef.current );
 		dragLayoutRef.current = null;
 		setDropTarget( null );
 		setActiveColumn( null );
-	}, [] );
+	}, [ getDragBody ] );
 
 	useEffect( () => {
 		return () => {
-			document.body.classList.remove( 'cortext-column-dragging' );
-			document.body.classList.remove( 'cortext-column-resizing' );
+			( dragBodyRef.current ?? document.body ).classList.remove(
+				'cortext-column-dragging',
+				'cortext-column-resizing'
+			);
 			clearColumnDragPreview( cellsRef.current );
 			dragLayoutRef.current = null;
 		};
@@ -811,7 +819,7 @@ export default function DataViewColumnInteractions( {
 					aria-hidden="true"
 				/>
 			) }
-			<DragOverlay dropAnimation={ null }>
+			<DragOverlay>
 				{ activeColumn ? (
 					<div className="cortext-column-drag-preview">
 						{ activeColumn.label }

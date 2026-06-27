@@ -1469,10 +1469,7 @@ export default function DataViewRowReorder( {
 					activeDrop={ activeDrop }
 				/>
 			) ) }
-			<DragOverlay
-				dropAnimation={ null }
-				zIndex={ ROW_DRAG_OVERLAY_Z_INDEX }
-			>
+			<DragOverlay zIndex={ ROW_DRAG_OVERLAY_Z_INDEX }>
 				{ activeRow ? <RowDragPreview row={ activeRow } /> : null }
 			</DragOverlay>
 			{ pendingRequest ? (

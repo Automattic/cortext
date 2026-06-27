@@ -54,6 +54,7 @@ jest.mock( '@wordpress/notices', () => ( {
 } ) );
 
 let mockDndProps;
+let mockDragOverlayProps;
 let mockDraggableListeners;
 let mockDraggableRefs;
 let mockResizeObserverInstances;
@@ -70,12 +71,17 @@ jest.mock( '@dnd-kit/core', () => {
 				props.children
 			);
 		},
-		DragOverlay: ( { children, zIndex } ) =>
-			createElement(
+		DragOverlay: ( props ) => {
+			mockDragOverlayProps = props;
+			return createElement(
 				'div',
-				{ 'data-testid': 'drag-overlay', style: { zIndex } },
-				children
-			),
+				{
+					'data-testid': 'drag-overlay',
+					style: { zIndex: props.zIndex },
+				},
+				props.children
+			);
+		},
 		KeyboardSensor: jest.fn(),
 		PointerSensor: jest.fn(),
 		closestCenter: jest.fn(),
@@ -119,6 +125,7 @@ beforeEach( () => {
 	mockCreateErrorNotice.mockClear();
 	useDraggable.mockClear();
 	mockDndProps = null;
+	mockDragOverlayProps = null;
 	mockDraggableListeners = {};
 	mockDraggableRefs = {};
 	mockResizeObserverInstances = [];
@@ -448,6 +455,7 @@ describe( 'DataViewRowReorder', () => {
 		expect( overlay ).toHaveStyle( {
 			zIndex: '100002',
 		} );
+		expect( mockDragOverlayProps.dropAnimation ).toBeUndefined();
 		expect(
 			overlay.querySelector( '.cortext-row-drag-preview' )
 		).toHaveClass( 'cortext-row-drag-preview--comfortable' );
