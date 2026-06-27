@@ -584,7 +584,8 @@ async function dragRenderedRow(
 	toIndex,
 	zone = 'before',
 	layout = 'table',
-	titles = [ 'Alpha Manual', 'Beta Manual', 'Gamma Manual' ]
+	titles = [ 'Alpha Manual', 'Beta Manual', 'Gamma Manual' ],
+	expectedPreviewText = null
 ) {
 	const orderedTitles = await renderedManualTitles( canvas, titles );
 	const sourceTitle = orderedTitles[ fromIndex ];
@@ -635,8 +636,16 @@ async function dragRenderedRow(
 	);
 	const preview = canvas.locator( '.cortext-row-drag-preview' );
 	await expect( preview ).toContainText( sourceTitle );
+	if ( expectedPreviewText ) {
+		await expect( preview ).toContainText( expectedPreviewText );
+	}
 	if ( layout === 'grid' ) {
 		await expect( preview.locator( 'img' ).first() ).toBeVisible();
+		await expect(
+			preview.locator(
+				'.dataviews-selection-checkbox, .dataviews-view-grid__media-actions, .cortext-row-drag-handle'
+			)
+		).toHaveCount( 0 );
 		const previewBox = await preview.boundingBox();
 		expect( previewBox ).toBeTruthy();
 		expect( previewBox.width ).toBeGreaterThanOrEqual(
@@ -1443,7 +1452,7 @@ test.describe( 'Collection view block', () => {
 
 				const canvas = page.frameLocator( '[name="editor-canvas"]' );
 				await expect(
-					canvas.getByText( 'Alpha Manual' )
+					canvas.getByText( 'Alpha Manual', { exact: true } ).first()
 				).toBeVisible();
 				await expect(
 					canvas.locator( '.cortext-row-drag-handle' )
@@ -1643,6 +1652,120 @@ test.describe( 'Collection view block', () => {
 			}
 		} );
 	}
+
+	test( 'previews rich grid cards without dragging card controls', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+
+		try {
+			Object.assign(
+				fixture,
+				await createManualOrderFixture( requestUtils )
+			);
+			const fieldKey = `field-${ fixture.field.id }`;
+			fixture.media = [];
+
+			for ( const row of fixture.rows ) {
+				const title =
+					row.title?.raw || row.title?.rendered || row.title;
+				const media = await uploadCoverMedia(
+					requestUtils,
+					`grid-preview-cover-${ row.id }.png`,
+					WIDE_COVER_PNG
+				);
+				fixture.media.push( media );
+				await requestUtils.rest( {
+					method: 'POST',
+					path: `/wp/v2/crtxt_documents/${ row.id }`,
+					data: {
+						featured_media: media.id,
+						meta: {
+							[ fieldKey ]: `${ title } preview detail`,
+						},
+					},
+				} );
+			}
+
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: 'Rich grid card preview',
+					status: 'private',
+					content: createDataViewBlockMarkup( fixture.collection.id, {
+						type: 'grid',
+						fields: [ 'title', fieldKey ],
+						fieldsByType: { grid: [ fieldKey ] },
+						sort: {
+							field: 'title',
+							direction: 'asc',
+						},
+					} ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/${ fixture.page.id }`
+			);
+
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.page.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+			await expect(
+				canvas.getByText( 'Beta Manual preview detail' )
+			).toBeVisible();
+
+			await dragRenderedRow(
+				page,
+				canvas,
+				1,
+				0,
+				'before',
+				'grid',
+				[ 'Alpha Manual', 'Beta Manual', 'Gamma Manual' ],
+				'Beta Manual preview detail'
+			);
+
+			await page.getByRole( 'button', { name: 'Cancel' } ).click();
+		} finally {
+			if ( fixture.rows ) {
+				for ( const row of fixture.rows ) {
+					await deleteIfCreated(
+						requestUtils,
+						`/wp/v2/crtxt_documents/${ row.id }`
+					);
+				}
+			}
+			if ( fixture.media ) {
+				for ( const media of fixture.media ) {
+					await deleteIfCreated(
+						requestUtils,
+						`/wp/v2/media/${ media.id }`
+					);
+				}
+			}
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
+			);
+		}
+	} );
 
 	test( 'shows row drag handles in the full-screen collection table', async ( {
 		admin,

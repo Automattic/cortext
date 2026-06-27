@@ -465,6 +465,15 @@ function removePreviewChrome( node ) {
 	} );
 }
 
+function removeGridPreviewChrome( node ) {
+	removePreviewChrome( node );
+	node.querySelectorAll(
+		'.dataviews-selection-checkbox, .dataviews-view-grid__media-actions'
+	).forEach( ( child ) => {
+		child.remove();
+	} );
+}
+
 function resetPreviewDragState( node ) {
 	node.classList.remove(
 		ROW_ACTIVE_CLASS,
@@ -490,7 +499,8 @@ function normalizeClonedCellContent( node ) {
 
 function cloneGridCardPreview( source ) {
 	const previewCard = source.ownerDocument.createElement( 'div' );
-	previewCard.className = 'cortext-row-drag-preview__grid-card';
+	previewCard.className =
+		'cortext-row-drag-preview__grid-card dataviews-view-grid__card';
 
 	for ( const child of Array.from( source.childNodes ) ) {
 		previewCard.appendChild( child.cloneNode( true ) );
@@ -498,7 +508,7 @@ function cloneGridCardPreview( source ) {
 
 	resetPreviewDragState( previewCard );
 	previewCard.querySelectorAll( '*' ).forEach( resetPreviewDragState );
-	removePreviewChrome( previewCard );
+	removeGridPreviewChrome( previewCard );
 	removePreviewInteractivity( previewCard );
 	removeClonedIds( previewCard );
 	return previewCard;
