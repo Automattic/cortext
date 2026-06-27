@@ -56,7 +56,9 @@ export APPLE_API_KEY="$apple_api_key_path"
 export APPLE_API_KEY_ID="$APP_STORE_CONNECT_API_KEY_KEY_ID"
 export APPLE_API_ISSUER="$APP_STORE_CONNECT_API_KEY_ISSUER_ID"
 
-npm --prefix apps/desktop run dist -- -c.extraMetadata.version="$version"
+# Buildkite uploads release assets only after signature and notarization checks
+# pass. Keep electron-builder from trying to publish during the build step.
+npm --prefix apps/desktop run dist -- -c.extraMetadata.version="$version" --publish never
 
 echo "--- :white_check_mark: verify signature + notarization"
 dmg=(apps/desktop/dist/*.dmg)
