@@ -35,11 +35,6 @@ export function scrollToEndQuickly( wrapper, options = {} ) {
 		wrapper.scrollLeft = target;
 		return;
 	}
-	if ( prefersReducedMotion( ownerWindow ) ) {
-		wrapper.scrollLeft = target;
-		return;
-	}
-
 	const distance = target - start;
 	if ( distance === 0 && ! trackEnd ) {
 		return;
@@ -58,6 +53,14 @@ export function scrollToEndQuickly( wrapper, options = {} ) {
 		ownerWindow.requestAnimationFrame( settleAtEnd );
 	};
 
+	if ( prefersReducedMotion( ownerWindow ) ) {
+		wrapper.scrollLeft = target;
+		if ( trackEnd ) {
+			ownerWindow.requestAnimationFrame( settleAtEnd );
+		}
+		return;
+	}
+
 	const animate = ( now ) => {
 		const progress = Math.min( 1, ( now - startedAt ) / duration );
 		const currentTarget = endTarget();
@@ -70,4 +73,30 @@ export function scrollToEndQuickly( wrapper, options = {} ) {
 		}
 	};
 	ownerWindow.requestAnimationFrame( animate );
+}
+
+export function scrollElementInlineEndQuickly( element, options = {} ) {
+	const ownerWindow = element.ownerDocument?.defaultView ?? window;
+	const reveal = () => {
+		element.scrollIntoView?.( {
+			block: 'nearest',
+			inline: 'end',
+			behavior: 'auto',
+		} );
+	};
+
+	reveal();
+	if ( options.trackEnd !== true ) {
+		return;
+	}
+
+	const settleUntil = ownerWindow.performance.now() + 5000;
+	const settleAtEnd = () => {
+		reveal();
+		if ( ownerWindow.performance.now() >= settleUntil ) {
+			return;
+		}
+		ownerWindow.requestAnimationFrame( settleAtEnd );
+	};
+	ownerWindow.requestAnimationFrame( settleAtEnd );
 }

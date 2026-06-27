@@ -20,28 +20,24 @@ async function deleteIfCreated( requestUtils, path ) {
 }
 
 async function expectColumnRevealed( canvas, columnHeader ) {
-	const wrapper = canvas
-		.locator( '.cortext-data-view > .dataviews-wrapper' )
-		.first();
 	await expect
-		.poll( async () => {
-			const [ wrapperBox, headerBox ] = await Promise.all( [
-				wrapper.boundingBox(),
-				columnHeader.boundingBox(),
-			] );
-			if ( ! wrapperBox || ! headerBox ) {
-				return false;
-			}
-			const wrapperLeft = wrapperBox.x;
-			const wrapperRight = wrapperBox.x + wrapperBox.width;
-			const headerLeft = headerBox.x;
-			const headerRight = headerBox.x + headerBox.width;
-			const visibleWidth =
-				Math.min( headerRight, wrapperRight ) -
-				Math.max( headerLeft, wrapperLeft );
-			return visibleWidth >= Math.min( 24, headerBox.width );
-		} )
+		.poll( () =>
+			columnHeader.evaluate( ( element ) => {
+				const rect = element.getBoundingClientRect();
+				const ownerWindow = element.ownerDocument.defaultView;
+				const viewportLeft = 0;
+				const viewportRight = ownerWindow.innerWidth;
+				const visibleWidth =
+					Math.min( rect.right, viewportRight ) -
+					Math.max( rect.left, viewportLeft );
+				return visibleWidth >= Math.min( 24, rect.width );
+			} )
+		)
 		.toBe( true );
+}
+
+function dataViewWrapper( canvas ) {
+	return canvas.locator( '.cortext-data-view > .dataviews-wrapper' ).first();
 }
 
 const TABLE_DATA_HEADER_SELECTOR =
@@ -3994,6 +3990,113 @@ test.describe( 'Collection view block', () => {
 				requestUtils,
 				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
 			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
+			);
+		}
+	} );
+
+	test( 'scrolls to the end after adding a table column', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+
+		try {
+			Object.assign(
+				fixture,
+				await createCalculationFixture( requestUtils )
+			);
+			const fieldKeys = Object.values( fixture.fields ).map(
+				( field ) => `field-${ field.id }`
+			);
+			const wideColumnStyles = Object.fromEntries(
+				fieldKeys.map( ( fieldKey ) => [
+					fieldKey,
+					{ width: 280, minWidth: 80, maxWidth: 1200 },
+				] )
+			);
+
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: 'Add field scroll page',
+					status: 'private',
+					content: createDataViewBlockMarkup( fixture.collection.id, {
+						fields: [ 'title', ...fieldKeys ],
+						layout: {
+							density: 'compact',
+							styles: wideColumnStyles,
+						},
+					} ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/${ fixture.page.id }`
+			);
+
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.page.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+			await expect( canvas.getByText( 'Alpha Book' ) ).toBeVisible();
+
+			const wrapper = dataViewWrapper( canvas );
+			await wrapper.evaluate( ( element ) => {
+				element.scrollLeft = 0;
+				const scroller = element.ownerDocument.scrollingElement;
+				if ( scroller ) {
+					scroller.scrollLeft = 0;
+				}
+			} );
+
+			const ghostAdd = canvas
+				.locator( 'th' )
+				.last()
+				.getByRole( 'button', { name: 'Add field' } );
+			await ghostAdd.click();
+			const popover = page.locator(
+				'.cortext-data-view-toolbar-popover'
+			);
+			await popover.getByLabel( 'Name' ).fill( 'Appendix' );
+			await popover
+				.getByRole( 'button', { name: 'Text', exact: true } )
+				.click();
+
+			const appendixHeader = canvas.getByRole( 'columnheader', {
+				name: /Appendix/,
+			} );
+			await expect( appendixHeader ).toBeVisible();
+			await expectColumnRevealed( canvas, appendixHeader );
+		} finally {
+			for ( const row of fixture.rows ?? [] ) {
+				await deleteIfCreated(
+					requestUtils,
+					`/wp/v2/crtxt_documents/${ row.id }`
+				);
+			}
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
+			);
+			for ( const field of Object.values( fixture.fields ?? {} ) ) {
+				await deleteIfCreated(
+					requestUtils,
+					`/wp/v2/crtxt_fields/${ field.id }`
+				);
+			}
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&

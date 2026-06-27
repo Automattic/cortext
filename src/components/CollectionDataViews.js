@@ -65,7 +65,10 @@ import {
 	INTERACTIVE_DATA_VIEW_ITEM_IGNORE_SELECTOR,
 	findDataViewItemFromEvent,
 } from './dataViewItemLookup';
-import { scrollToEndQuickly } from './dataViewScroll';
+import {
+	scrollElementInlineEndQuickly,
+	scrollToEndQuickly,
+} from './dataViewScroll';
 import { saveRowDocumentField } from './rowDocumentMutations';
 import { getRowDetailMode, withRowDetailMode } from './rowDetailUtils';
 import {
@@ -218,7 +221,7 @@ export default function CollectionDataViews( {
 			const wrapper =
 				tableWrapperRef.current?.querySelector( '.dataviews-wrapper' );
 			if ( wrapper ) {
-				scrollToEndQuickly( wrapper, { snapIfAtEnd: true } );
+				scrollToEndQuickly( wrapper, { trackEnd: true } );
 			}
 			setLocalRevealFieldId( fieldId );
 		}
@@ -1292,6 +1295,12 @@ export default function CollectionDataViews( {
 				if ( ! marker ) {
 					return false;
 				}
+				scrollElementInlineEndQuickly(
+					marker.closest( 'th' ) ?? marker,
+					{
+						trackEnd: true,
+					}
+				);
 			}
 			scrollToEndQuickly( wrapper, { trackEnd: true } );
 			if ( localRevealFieldId === pendingRevealFieldId ) {

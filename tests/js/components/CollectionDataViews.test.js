@@ -86,7 +86,10 @@ jest.mock( '../../../src/hooks/afterNextPaint', () => ( {
 
 import { useCollectionFieldsContext } from '../../../src/components/CollectionFieldsContext';
 import CollectionDataViews from '../../../src/components/CollectionDataViews';
-import { scrollToEndQuickly } from '../../../src/components/dataViewScroll';
+import {
+	scrollElementInlineEndQuickly,
+	scrollToEndQuickly,
+} from '../../../src/components/dataViewScroll';
 import useCollectionRows from '../../../src/hooks/useCollectionRows';
 
 const tableView = {
@@ -315,6 +318,73 @@ describe( 'scrollToEndQuickly', () => {
 		frame( 180 );
 
 		expect( wrapper.scrollLeft ).toBe( 300 );
+		now.mockRestore();
+	} );
+
+	it( 'keeps chasing the end without animation for reduced motion', () => {
+		const now = jest
+			.spyOn( window.performance, 'now' )
+			.mockReturnValue( 0 );
+		let frame;
+		window.requestAnimationFrame = jest.fn( ( callback ) => {
+			frame = callback;
+			return 1;
+		} );
+		const wrapper = makeScroller( { scrollWidth: 200 } );
+
+		scrollToEndQuickly( wrapper, { trackEnd: true } );
+		Object.defineProperty( wrapper, 'scrollWidth', {
+			value: 500,
+			configurable: true,
+		} );
+		frame();
+
+		expect( wrapper.scrollLeft ).toBe( 300 );
+		now.mockRestore();
+	} );
+} );
+
+describe( 'scrollElementInlineEndQuickly', () => {
+	let requestAnimationFrame;
+
+	beforeEach( () => {
+		requestAnimationFrame = window.requestAnimationFrame;
+	} );
+
+	afterEach( () => {
+		window.requestAnimationFrame = requestAnimationFrame;
+		document.body.innerHTML = '';
+	} );
+
+	it( 'reveals the element inline-end', () => {
+		const element = document.createElement( 'div' );
+		element.scrollIntoView = jest.fn();
+
+		scrollElementInlineEndQuickly( element );
+
+		expect( element.scrollIntoView ).toHaveBeenCalledWith( {
+			block: 'nearest',
+			inline: 'end',
+			behavior: 'auto',
+		} );
+	} );
+
+	it( 'keeps revealing while the layout settles', () => {
+		const now = jest
+			.spyOn( window.performance, 'now' )
+			.mockReturnValue( 0 );
+		let frame;
+		window.requestAnimationFrame = jest.fn( ( callback ) => {
+			frame = callback;
+			return 1;
+		} );
+		const element = document.createElement( 'div' );
+		element.scrollIntoView = jest.fn();
+
+		scrollElementInlineEndQuickly( element, { trackEnd: true } );
+		frame();
+
+		expect( element.scrollIntoView ).toHaveBeenCalledTimes( 2 );
 		now.mockRestore();
 	} );
 } );
