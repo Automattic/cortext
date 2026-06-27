@@ -234,6 +234,45 @@ function createListWrapper( heights = [ 88, 88, 88 ] ) {
 	return wrapper;
 }
 
+function createGridWrapper() {
+	const wrapper = document.createElement( 'div' );
+	wrapper.innerHTML = `
+		<div class="dataviews-view-grid">
+			<div class="dataviews-view-grid-items">
+				<div class="dataviews-view-grid__row">
+					<div class="dataviews-view-grid__row__gridcell dataviews-view-grid__card">
+						<div class="dataviews-view-grid__title-field">One</div>
+					</div>
+					<div class="dataviews-view-grid__row__gridcell dataviews-view-grid__card">
+						<div class="dataviews-view-grid__title-field">Two</div>
+					</div>
+					<div class="dataviews-view-grid__row__gridcell dataviews-view-grid__card">
+						<div class="dataviews-view-grid__title-field">Three</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	`;
+	const rects = [
+		{ top: 10, left: 10, width: 180, height: 220 },
+		{ top: 10, left: 210, width: 180, height: 220 },
+		{ top: 250, left: 10, width: 180, height: 220 },
+	];
+	Array.from(
+		wrapper.querySelectorAll( '.dataviews-view-grid__card' )
+	).forEach( ( card, index ) => {
+		const rect = rects[ index ];
+		card.getClientRects = () => [ {} ];
+		card.getBoundingClientRect = () => ( {
+			...rect,
+			right: rect.left + rect.width,
+			bottom: rect.top + rect.height,
+		} );
+	} );
+	document.body.appendChild( wrapper );
+	return wrapper;
+}
+
 function draggableDataFor( rowId ) {
 	return (
 		[ ...useDraggable.mock.calls ]
@@ -245,7 +284,9 @@ function draggableDataFor( rowId ) {
 
 async function renderReorder( props = {}, options = {} ) {
 	const wrapperRef = {
-		current: createWrapper( options.rowHeights, options.ownerDocument ),
+		current:
+			options.wrapper ??
+			createWrapper( options.rowHeights, options.ownerDocument ),
 	};
 	const onChangeView = jest.fn();
 	const onReordered = jest.fn();
@@ -321,6 +362,13 @@ function gapDrop( insertionIndex, beforeId, afterId ) {
 	};
 }
 
+function itemDrop( rowId ) {
+	return {
+		type: 'item',
+		rowId,
+	};
+}
+
 function dragEnd( draggedId, drop ) {
 	act( () => {
 		mockDndProps.onDragStart( {
@@ -359,9 +407,19 @@ function dragStart( draggedId ) {
 	} );
 }
 
-function dragOver( drop ) {
+function dragOver( drop, draggedId = null ) {
 	act( () => {
 		mockDndProps.onDragOver( {
+			active: draggedId
+				? {
+						data: {
+							current: {
+								rowId: draggedId,
+								label: `Row ${ draggedId }`,
+							},
+						},
+				  }
+				: undefined,
 			over: {
 				data: {
 					current: drop,
@@ -1097,22 +1155,56 @@ describe( 'DataViewRowReorder', () => {
 		expect( onReordered ).not.toHaveBeenCalled();
 	} );
 
-	it( 'does not mount row reorder for grid layout yet', () => {
-		const wrapper = createWrapper();
-		render(
-			<DataViewRowReorder
-				wrapperRef={ { current: wrapper } }
-				view={ {
+	it( 'reorders grid cards by dropping on another card', async () => {
+		const request = deferred();
+		mockApiFetch.mockReturnValueOnce( request.promise );
+		const wrapper = createGridWrapper();
+		const { mutateRows } = await renderReorder(
+			{
+				view: {
 					type: 'grid',
 					sort: null,
-				} }
-				onChangeView={ jest.fn() }
-				collectionId={ 7 }
-				rows={ rows }
-				onReordered={ jest.fn() }
-			/>
+				},
+			},
+			{ wrapper }
 		);
-		expect( screen.queryByTestId( 'dnd-context' ) ).not.toBeInTheDocument();
+
+		await waitFor( () =>
+			expect( useDraggable ).toHaveBeenCalledTimes( 3 )
+		);
+
+		const cards = wrapper.querySelectorAll( '.dataviews-view-grid__card' );
+		expect( cards ).toHaveLength( 3 );
+		expect( cards[ 0 ] ).toHaveClass( 'cortext-row-reorder-target' );
+		expect( cards[ 1 ] ).toHaveClass( 'cortext-row-reorder-target' );
+		expect( cards[ 2 ] ).toHaveClass( 'cortext-row-reorder-target' );
+		expect(
+			document.querySelectorAll( '.cortext-row-drop-indicator--card' )
+		).toHaveLength( 3 );
+
+		dragStart( 1 );
+		await waitFor( () =>
+			expect(
+				document.querySelectorAll( '.cortext-row-drop-indicator--card' )
+			).toHaveLength( 2 )
+		);
+		dragOver( itemDrop( 3 ), 1 );
+		await waitFor( () =>
+			expect( cards[ 2 ] ).toHaveStyle( {
+				transform: 'translate3d(200px, -240px, 0)',
+			} )
+		);
+
+		dragEnd( 1, itemDrop( 3 ) );
+
+		expect( mutateRows ).toHaveBeenCalledTimes( 1 );
+		expect( mutateRows.mock.calls[ 0 ][ 0 ].map( ( r ) => r.id ) ).toEqual(
+			[ 2, 3, 1 ]
+		);
+		await act( async () => {
+			request.resolve( { reseeded: false } );
+			await request.promise;
+		} );
 	} );
 
 	it( 'posts immediately when there is no explicit sort', async () => {

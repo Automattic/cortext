@@ -522,7 +522,13 @@ async function dragRenderedRow(
 	const source = canvas.getByRole( 'button', {
 		name: `Reorder: ${ sourceTitle }`,
 	} );
-	const target = canvas.getByText( targetTitle, { exact: true } ).first();
+	const target =
+		layout === 'grid'
+			? canvas
+					.locator( '.dataviews-view-grid__card' )
+					.filter( { hasText: targetTitle } )
+					.first()
+			: canvas.getByText( targetTitle, { exact: true } ).first();
 
 	await source.waitFor( { state: 'attached' } );
 	const sourceBox = await source.boundingBox();
@@ -531,10 +537,15 @@ async function dragRenderedRow(
 	expect( targetBox ).toBeTruthy();
 
 	const beforeOffset = layout === 'list' ? 48 : 16;
-	const targetY =
-		zone === 'before'
-			? targetBox.y - beforeOffset
-			: targetBox.y + targetBox.height + 16;
+	const targetX = targetBox.x + targetBox.width / 2;
+	let targetY;
+	if ( layout === 'grid' ) {
+		targetY = targetBox.y + targetBox.height / 2;
+	} else if ( zone === 'before' ) {
+		targetY = targetBox.y - beforeOffset;
+	} else {
+		targetY = targetBox.y + targetBox.height + 16;
+	}
 
 	await page.mouse.move(
 		sourceBox.x + sourceBox.width / 2,
@@ -549,7 +560,7 @@ async function dragRenderedRow(
 	await expect( canvas.locator( '.cortext-row-drag-preview' ) ).toContainText(
 		sourceTitle
 	);
-	await page.mouse.move( targetBox.x + targetBox.width / 2, targetY, {
+	await page.mouse.move( targetX, targetY, {
 		steps: 12,
 	} );
 	await page.mouse.up();
@@ -1242,10 +1253,7 @@ test.describe( 'Collection view block', () => {
 		}
 	} );
 
-	// Grid layout doesn't expose row reorder yet (card-to-card drops need a
-	// 2D model); the JS unit test "does not mount row reorder for grid
-	// layout yet" guards the behaviour, so e2e covers table and list only.
-	for ( const layout of [ 'table', 'list' ] ) {
+	for ( const layout of [ 'table', 'list', 'grid' ] ) {
 		test( `manually reorders rows in ${ layout } layout`, async ( {
 			admin,
 			page,

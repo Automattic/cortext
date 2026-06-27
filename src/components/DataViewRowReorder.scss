@@ -137,6 +137,12 @@ body.cortext-row-dragging .cortext-row-drop-indicator {
 	content: none;
 }
 
+.cortext-row-drop-indicator--card::before {
+	inset: 0;
+	border: 2px solid var(--cortext-accent);
+	border-radius: 6px;
+}
+
 // The preview gets the source row's measured width. Use inset shadows for the
 // accent and outline; real borders, or an outer outline shadow, make it look
 // wider than the source row.

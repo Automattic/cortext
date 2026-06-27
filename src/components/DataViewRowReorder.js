@@ -36,6 +36,7 @@ const ROW_DRAG_OVERLAY_Z_INDEX = 100002;
 const ROW_DISPLACED_CLASS = 'cortext-row-reorder-target--displaced';
 const ROW_ACTIVE_CLASS = 'cortext-row-reorder-target--active';
 const ROW_DROP_GAP = 'gap';
+const ROW_DROP_ITEM = 'item';
 const ROW_DRAGGING_CLASS = 'cortext-row-dragging';
 const ROW_SUPPRESS_HOVER_CLASS = 'cortext-row-reorder-suppress-hover';
 const ROW_NO_TRANSITION_CLASS = 'cortext-row-reorder-no-transition';
@@ -54,8 +55,7 @@ const ROW_DROP_ZONE_MAX_SIDE = 40;
 const HOVER_SUPPRESSION_RELEASE_DELAY = 120;
 
 // tech-debt.md#td-dataviews-row-reorder: DataViews doesn't expose row refs or reorder hooks.
-// Keep the DOM selectors for this adapter in one place. Grid stays out for now;
-// card-to-card drops need a separate 2D design.
+// Keep the DOM selectors for this adapter in one place.
 const ROW_SELECTORS = {
 	table: '.dataviews-view-table tbody > tr',
 	list: [
@@ -63,6 +63,7 @@ const ROW_SELECTORS = {
 		'.dataviews-view-list > li',
 		'.dataviews-view-list > .dataviews-view-list__item',
 	].join( ',' ),
+	grid: '.dataviews-view-grid__row__gridcell.dataviews-view-grid__card:not(.dataviews-view-grid__placeholder)',
 };
 
 function rowLabel( row ) {
@@ -580,7 +581,7 @@ function useRenderedRows( wrapperRef, view, rows, isDragging ) {
 	renderedRowsRef.current = renderedRows;
 	const decoratedRowsRef = useRef( [] );
 	const decoratedCellsRef = useRef( [] );
-	const isLinear = usesLinearGaps( view );
+	const supportsLayout = supportsRowReorder( view );
 	// Keep row measurements fixed during a drag. Moving rows toggles classes as
 	// the drop target changes; if the MutationObserver runs `sync()` in the
 	// middle of that transition, `rowRect` can read a half-animated rect and save
@@ -591,7 +592,7 @@ function useRenderedRows( wrapperRef, view, rows, isDragging ) {
 
 	useEffect( () => {
 		const wrapper = wrapperRef.current;
-		if ( ! wrapper || ! isLinear ) {
+		if ( ! wrapper || ! supportsLayout ) {
 			return undefined;
 		}
 
@@ -695,7 +696,7 @@ function useRenderedRows( wrapperRef, view, rows, isDragging ) {
 				ownerWindow.removeEventListener( 'resize', sync );
 			}
 		};
-	}, [ wrapperRef, view, rows, isLinear ] );
+	}, [ wrapperRef, view, rows, supportsLayout ] );
 
 	useEffect( () => {
 		return () => {
@@ -713,7 +714,7 @@ function useRenderedRows( wrapperRef, view, rows, isDragging ) {
 	return renderedRows;
 }
 
-function parseDropData( over ) {
+function parseDropData( over, renderedRows = [], activeRowId = null ) {
 	const data = over?.data?.current;
 	if (
 		data?.type === ROW_DROP_GAP &&
@@ -725,6 +726,31 @@ function parseDropData( over ) {
 			insertionIndex: data.insertionIndex,
 			beforeId: data.beforeId ?? null,
 			afterId: data.afterId ?? null,
+		};
+	}
+	if ( data?.type === ROW_DROP_ITEM ) {
+		const targetId = Number( data.rowId );
+		const activeId = Number( activeRowId );
+		const ids = renderedRows.map( ( row ) => row.rowId );
+		const targetIndex = ids.indexOf( targetId );
+		const activeIndex = ids.indexOf( activeId );
+		if (
+			! targetId ||
+			! activeId ||
+			targetId === activeId ||
+			targetIndex === -1 ||
+			activeIndex === -1
+		) {
+			return null;
+		}
+
+		const insertionIndex =
+			targetIndex > activeIndex ? targetIndex + 1 : targetIndex;
+		return {
+			type: ROW_DROP_GAP,
+			insertionIndex,
+			beforeId: renderedRows[ insertionIndex ]?.rowId ?? null,
+			afterId: renderedRows[ insertionIndex - 1 ]?.rowId ?? null,
 		};
 	}
 	return null;
@@ -758,7 +784,7 @@ function finalIndexForInsertion( insertionIndex, activeIndex, length ) {
 	);
 }
 
-function displacementForDrop( renderedRows, activeRow, activeDrop ) {
+function displacementForDrop( renderedRows, activeRow, activeDrop, view ) {
 	const activeId = Number( activeRow?.rowId );
 	const ids = renderedRows.map( ( row ) => row.rowId );
 	const activeIndex = ids.indexOf( activeId );
@@ -784,6 +810,27 @@ function displacementForDrop( renderedRows, activeRow, activeDrop ) {
 	);
 	const nextRows = renderedRows.filter( ( row ) => row.rowId !== activeId );
 	nextRows.splice( finalIndex, 0, renderedRows[ activeIndex ] );
+
+	if ( usesGridItems( view ) ) {
+		for ( const [ index, row ] of nextRows.entries() ) {
+			const targetRect = renderedRows[ index ]?.rect;
+			if ( ! targetRect ) {
+				continue;
+			}
+
+			const offset = {
+				x: Math.round( targetRect.left - row.rect.left ),
+				y: Math.round( targetRect.top - row.rect.top ),
+			};
+
+			if ( row.rowId === activeId ) {
+				activeOffset = offset.x || offset.y ? offset : null;
+			} else if ( offset.x || offset.y ) {
+				offsets.set( row.rowId, offset );
+			}
+		}
+		return { activeId, activeOffset, offsets };
+	}
 
 	// Stack heights as we go instead of borrowing
 	// `renderedRows[index].rect.top`. Rows can have different heights (an
@@ -906,7 +953,7 @@ function rowTransform( offset ) {
 	}, 0)`;
 }
 
-function useRowDisplacement( renderedRows, activeRow, activeDrop ) {
+function useRowDisplacement( renderedRows, activeRow, activeDrop, view ) {
 	const changedRowsRef = useRef( [] );
 	const frameRef = useRef( null );
 
@@ -925,7 +972,8 @@ function useRowDisplacement( renderedRows, activeRow, activeDrop ) {
 		const { activeId, offsets } = displacementForDrop(
 			renderedRows,
 			activeRow,
-			activeDrop
+			activeDrop,
+			view
 		);
 		const changedRows = [];
 		const changedElements = new Set();
@@ -976,7 +1024,7 @@ function useRowDisplacement( renderedRows, activeRow, activeDrop ) {
 		}
 
 		changedRowsRef.current = changedRows;
-	}, [ activeDrop, activeRow, renderedRows ] );
+	}, [ activeDrop, activeRow, renderedRows, view ] );
 
 	useEffect( () => {
 		return () => {
@@ -992,6 +1040,14 @@ function useRowDisplacement( renderedRows, activeRow, activeDrop ) {
 
 function usesLinearGaps( view ) {
 	return ( view?.type ?? 'table' ) === 'table' || view?.type === 'list';
+}
+
+function usesGridItems( view ) {
+	return view?.type === 'grid';
+}
+
+function supportsRowReorder( view ) {
+	return usesLinearGaps( view ) || usesGridItems( view );
 }
 
 function linearRowGaps( renderedRows, activeRow ) {
@@ -1109,6 +1165,40 @@ function RowGapDropZone( { gap, activeDrop } ) {
 	);
 }
 
+function gridRowItems( renderedRows, activeRow ) {
+	const activeId = Number( activeRow?.rowId );
+	return renderedRows.filter( ( row ) => row.rowId !== activeId );
+}
+
+function RowItemDropZone( { row } ) {
+	const { setNodeRef, isOver } = useDroppable( {
+		id: `row-item:${ row.rowId }`,
+		data: {
+			type: ROW_DROP_ITEM,
+			rowId: row.rowId,
+		},
+	} );
+
+	return (
+		<div
+			ref={ setNodeRef }
+			className={
+				'cortext-row-drop-indicator ' +
+				'cortext-row-drop-indicator--card' +
+				( isOver ? ' is-active' : '' )
+			}
+			style={ {
+				position: 'fixed',
+				top: `${ row.rect.top }px`,
+				left: `${ row.rect.left }px`,
+				width: `${ row.rect.width }px`,
+				height: `${ row.rect.height }px`,
+			} }
+			aria-hidden="true"
+		/>
+	);
+}
+
 export default function DataViewRowReorder( {
 	wrapperRef,
 	view,
@@ -1132,7 +1222,7 @@ export default function DataViewRowReorder( {
 	const [ pendingRequest, setPendingRequest ] = useState( null );
 	const [ isPosting, setIsPosting ] = useState( false );
 	const { createErrorNotice } = useDispatch( noticesStore );
-	useRowDisplacement( renderedRows, visualRow, visualDrop );
+	useRowDisplacement( renderedRows, visualRow, visualDrop, view );
 
 	const sensors = useSensors(
 		useSensor( PointerSensor, {
@@ -1316,11 +1406,18 @@ export default function DataViewRowReorder( {
 		[ suppressRowHover, getReorderBody ]
 	);
 
-	const onDragOver = useCallback( ( event ) => {
-		const drop = parseDropData( event.over );
-		setActiveDrop( drop );
-		setVisualDrop( drop );
-	}, [] );
+	const onDragOver = useCallback(
+		( event ) => {
+			const drop = parseDropData(
+				event.over,
+				renderedRows,
+				event.active?.data?.current?.rowId
+			);
+			setActiveDrop( drop );
+			setVisualDrop( drop );
+		},
+		[ renderedRows ]
+	);
 
 	const clearDragState = useCallback(
 		( options = {} ) => {
@@ -1370,8 +1467,8 @@ export default function DataViewRowReorder( {
 
 	const onDragEnd = useCallback(
 		( event ) => {
-			const drop = parseDropData( event.over );
 			const rowId = event.active?.data?.current?.rowId;
+			const drop = parseDropData( event.over, renderedRows, rowId );
 			const reorder = reorderRequestForDrop(
 				rowsRef.current,
 				rowId,
@@ -1402,7 +1499,7 @@ export default function DataViewRowReorder( {
 
 			commitReorder( request, { clearSort: false } );
 		},
-		[ clearDragState, commitReorder ]
+		[ clearDragState, commitReorder, renderedRows ]
 	);
 
 	const onDragCancel = useCallback( () => {
@@ -1437,13 +1534,16 @@ export default function DataViewRowReorder( {
 		};
 	}, [ clearHoverSuppressionTimeout, clearNoTransitionFrame ] );
 
-	// Skip grid for now. In a 2D layout, dropping onto a card does not tell us
-	// exactly where the row should land.
-	if ( ! usesLinearGaps( view ) || renderedRows.length === 0 ) {
+	if ( ! supportsRowReorder( view ) || renderedRows.length === 0 ) {
 		return null;
 	}
 
-	const rowGaps = linearRowGaps( renderedRows, activeRow );
+	const rowGaps = usesLinearGaps( view )
+		? linearRowGaps( renderedRows, activeRow )
+		: [];
+	const rowItems = usesGridItems( view )
+		? gridRowItems( renderedRows, activeRow )
+		: [];
 
 	return (
 		<DndContext
@@ -1467,6 +1567,12 @@ export default function DataViewRowReorder( {
 					key={ `gap:${ gap.index }` }
 					gap={ gap }
 					activeDrop={ activeDrop }
+				/>
+			) ) }
+			{ rowItems.map( ( row ) => (
+				<RowItemDropZone
+					key={ `row-item:${ row.rowId }` }
+					row={ row }
 				/>
 			) ) }
 			<DragOverlay zIndex={ ROW_DRAG_OVERLAY_Z_INDEX }>
