@@ -154,6 +154,17 @@ describe( 'PublishedDocumentsPane', () => {
 		);
 	} );
 
+	it( 'passes DataViews 17 layout defaults to the published documents table', () => {
+		render( <PublishedDocumentsPane /> );
+
+		expect( DataViews ).toHaveBeenCalledTimes( 1 );
+		expect( DataViews.mock.calls[ 0 ][ 0 ].defaultLayouts ).toEqual( {
+			table: { layout: { density: 'compact' } },
+			grid: { layout: {} },
+			list: { layout: {} },
+		} );
+	} );
+
 	it( 'shows pages, collection items, and collections from the same response', () => {
 		useEntityRecords.mockReturnValue( {
 			records: [

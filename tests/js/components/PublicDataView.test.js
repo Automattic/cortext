@@ -199,6 +199,22 @@ describe( 'PublicDataView', () => {
 		).toBeInTheDocument();
 	} );
 
+	it( 'passes DataViews 17 layout defaults with nested layout objects', () => {
+		renderPublicDataView( {
+			type: 'table',
+			fields: [ 'title' ],
+			filters: [],
+		} );
+
+		expect( mockDataViews.mock.calls.at( -1 )[ 0 ].defaultLayouts ).toEqual(
+			{
+				table: { layout: { density: 'compact' } },
+				grid: { layout: {} },
+				list: {},
+			}
+		);
+	} );
+
 	it( 'keeps REST row order when the saved public view uses manual sort', () => {
 		renderPublicDataView( {
 			type: 'table',
