@@ -144,6 +144,56 @@ async function expectOpenButtonFitsTitleCell( openButton ) {
 		} );
 }
 
+async function expectGridDragHandleStaysInCardChrome( canvas ) {
+	const card = canvas
+		.locator( '.dataviews-view-grid__card' )
+		.filter( { hasText: 'Alpha Manual' } )
+		.first();
+	await card.hover();
+	const handle = card.locator( '> .cortext-row-drag-handle' );
+	await expect( handle ).toBeAttached();
+
+	await expect
+		.poll( () =>
+			card.evaluate( ( element ) => {
+				const dragHandle = element.querySelector(
+					':scope > .cortext-row-drag-handle'
+				);
+				const title = element.querySelector(
+					'.dataviews-view-grid__title-actions'
+				);
+				if ( ! dragHandle || ! title ) {
+					return {
+						topChrome: false,
+						rightChrome: false,
+						aboveTitle: false,
+						visible: false,
+					};
+				}
+				const cardRect = element.getBoundingClientRect();
+				const handleRect = dragHandle.getBoundingClientRect();
+				const titleRect = title.getBoundingClientRect();
+				const handleStyles =
+					dragHandle.ownerDocument.defaultView.getComputedStyle(
+						dragHandle
+					);
+
+				return {
+					topChrome: handleRect.top - cardRect.top <= 24,
+					rightChrome: cardRect.right - handleRect.right >= 32,
+					aboveTitle: handleRect.bottom <= titleRect.top - 4,
+					visible: Number( handleStyles.opacity ) >= 0.9,
+				};
+			} )
+		)
+		.toEqual( {
+			topChrome: true,
+			rightChrome: true,
+			aboveTitle: true,
+			visible: true,
+		} );
+}
+
 async function startSidePeekShellStabilityLog( page ) {
 	await page.evaluate( () => {
 		window.__cortextSidePeekShellEvents = [];
@@ -1327,8 +1377,35 @@ test.describe( 'Collection view block', () => {
 				await expect(
 					canvas.locator( '.cortext-row-drag-handle' )
 				).toHaveCount( 3 );
+				if ( layout === 'grid' ) {
+					await expectGridDragHandleStaysInCardChrome( canvas );
+				}
 
-				await dragRenderedRow( page, canvas, 2, 0, 'before', layout );
+				const sourceRowIndex = layout === 'grid' ? 1 : 2;
+				const expectedOrder =
+					layout === 'grid'
+						? [
+								expect.stringContaining( 'Beta Manual' ),
+								expect.stringContaining( 'Alpha Manual' ),
+								expect.stringContaining( 'Gamma Manual' ),
+						  ]
+						: [
+								expect.stringContaining( 'Gamma Manual' ),
+								expect.stringContaining( 'Alpha Manual' ),
+								expect.stringContaining( 'Beta Manual' ),
+						  ];
+				const expectedOrderWithDelta = [
+					...expectedOrder,
+					expect.stringContaining( 'Delta Manual' ),
+				];
+				await dragRenderedRow(
+					page,
+					canvas,
+					sourceRowIndex,
+					0,
+					'before',
+					layout
+				);
 				await expect(
 					page.getByText(
 						'Documents will stay where you dropped them, and the current sort will be cleared.'
@@ -1344,11 +1421,7 @@ test.describe( 'Collection view block', () => {
 				).not.toBeVisible();
 				await expect
 					.poll( () => renderedManualTitles( canvas ) )
-					.toEqual( [
-						expect.stringContaining( 'Gamma Manual' ),
-						expect.stringContaining( 'Alpha Manual' ),
-						expect.stringContaining( 'Beta Manual' ),
-					] );
+					.toEqual( expectedOrder );
 
 				await page.evaluate( async () => {
 					await window.wp.data.dispatch( 'core/editor' ).savePost();
@@ -1361,11 +1434,7 @@ test.describe( 'Collection view block', () => {
 				await page.reload();
 				await expect
 					.poll( () => renderedManualTitles( canvas ) )
-					.toEqual( [
-						expect.stringContaining( 'Gamma Manual' ),
-						expect.stringContaining( 'Alpha Manual' ),
-						expect.stringContaining( 'Beta Manual' ),
-					] );
+					.toEqual( expectedOrder );
 
 				fixture.rows.push(
 					await requestUtils.rest( {
@@ -1392,12 +1461,7 @@ test.describe( 'Collection view block', () => {
 							'Delta Manual',
 						] )
 					)
-					.toEqual( [
-						expect.stringContaining( 'Gamma Manual' ),
-						expect.stringContaining( 'Alpha Manual' ),
-						expect.stringContaining( 'Beta Manual' ),
-						expect.stringContaining( 'Delta Manual' ),
-					] );
+					.toEqual( expectedOrderWithDelta );
 
 				if ( layout === 'table' ) {
 					await page.evaluate( () => {

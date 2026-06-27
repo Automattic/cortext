@@ -4,7 +4,10 @@
 .cortext-data-view {
 	--cortext-row-drag-handle-size: 24px;
 	--cortext-row-drag-content-gap: 6px;
-	--cortext-row-drag-content-offset: calc(var(--cortext-row-drag-handle-size) + var(--cortext-row-drag-content-gap));
+	--cortext-row-drag-content-offset: calc(
+		var(--cortext-row-drag-handle-size) +
+			var(--cortext-row-drag-content-gap)
+	);
 }
 
 .cortext-row-reorder-cell {
@@ -12,11 +15,15 @@
 }
 
 .cortext-data-view
-.dataviews-view-table
-tbody > tr > td.cortext-row-reorder-cell,
+	.dataviews-view-table
+	tbody
+	> tr
+	> td.cortext-row-reorder-cell,
 .cortext-data-view
-.dataviews-view-table.has-compact-density
-tbody > tr > td.cortext-row-reorder-cell {
+	.dataviews-view-table.has-compact-density
+	tbody
+	> tr
+	> td.cortext-row-reorder-cell {
 	padding-left: var(--cortext-row-drag-content-offset);
 }
 
@@ -43,8 +50,8 @@ body.cortext-row-dragging .cortext-row-reorder-target {
 // instead of sliding. Re-assert transform easing for reordered list rows while
 // a drag is active so list matches the table.
 body.cortext-row-dragging
-.dataviews-view-list
-div[role="row"].cortext-row-reorder-target {
+	.dataviews-view-list
+	div[role="row"].cortext-row-reorder-target {
 	transition:
 		transform 120ms ease,
 		opacity 120ms ease;
@@ -77,13 +84,24 @@ body.cortext-row-reorder-no-transition .cortext-row-reorder-target {
 	border: 0;
 	border-radius: 2px;
 	background-color: transparent;
-	background-image:
-		radial-gradient(circle at 6px 7px, currentcolor 1px, transparent 1.5px),
+	background-image: radial-gradient(
+			circle at 6px 7px,
+			currentcolor 1px,
+			transparent 1.5px
+		),
 		radial-gradient(circle at 12px 7px, currentcolor 1px, transparent 1.5px),
 		radial-gradient(circle at 6px 12px, currentcolor 1px, transparent 1.5px),
-		radial-gradient(circle at 12px 12px, currentcolor 1px, transparent 1.5px),
+		radial-gradient(
+			circle at 12px 12px,
+			currentcolor 1px,
+			transparent 1.5px
+		),
 		radial-gradient(circle at 6px 17px, currentcolor 1px, transparent 1.5px),
-		radial-gradient(circle at 12px 17px, currentcolor 1px, transparent 1.5px);
+		radial-gradient(
+			circle at 12px 17px,
+			currentcolor 1px,
+			transparent 1.5px
+		);
 	color: $gray-700;
 	cursor: grab;
 	opacity: 0.55;
@@ -100,6 +118,31 @@ body.cortext-row-reorder-no-transition .cortext-row-reorder-target {
 
 .cortext-row-drag-handle:hover,
 .cortext-row-drag-handle[data-dragging="true"] {
+	opacity: 1;
+}
+
+.cortext-data-view .dataviews-view-grid__card > .cortext-row-drag-handle {
+	top: $grid-unit-10;
+	right: $grid-unit-50;
+	left: auto;
+	border-radius: 4px;
+	background: rgba(255, 255, 255, 0.92);
+	box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
+	opacity: 0;
+	transform: none;
+	z-index: 2;
+}
+
+.cortext-data-view .dataviews-view-grid__card:hover > .cortext-row-drag-handle,
+.cortext-data-view
+	.dataviews-view-grid__card:focus-within
+	> .cortext-row-drag-handle,
+.cortext-data-view
+	.dataviews-view-grid__card
+	> .cortext-row-drag-handle:focus-visible,
+.cortext-data-view
+	.dataviews-view-grid__card
+	> .cortext-row-drag-handle[data-dragging="true"] {
 	opacity: 1;
 }
 
@@ -220,11 +263,9 @@ body.cortext-row-dragging .cortext-row-drop-indicator {
 }
 
 .cortext-row-drag-preview--comfortable
-.cortext-row-drag-preview__cell--checkbox,
-.cortext-row-drag-preview--comfortable
-.cortext-row-drag-preview__cell--actions,
-.cortext-row-drag-preview--comfortable
-.cortext-row-drag-preview__cell--spacer {
+	.cortext-row-drag-preview__cell--checkbox,
+.cortext-row-drag-preview--comfortable .cortext-row-drag-preview__cell--actions,
+.cortext-row-drag-preview--comfortable .cortext-row-drag-preview__cell--spacer {
 	padding: 0;
 }
 
@@ -234,42 +275,41 @@ body.cortext-row-dragging {
 }
 
 body.cortext-row-reorder-suppress-hover
-.dataviews-view-table
-tr.is-hovered:not(.is-selected),
+	.dataviews-view-table
+	tr.is-hovered:not(.is-selected),
 body.cortext-row-reorder-suppress-hover
-.dataviews-view-table
-tr.is-hovered:not(.is-selected)
-.dataviews-view-table__actions-column--sticky,
+	.dataviews-view-table
+	tr.is-hovered:not(.is-selected)
+	.dataviews-view-table__actions-column--sticky,
 body.cortext-row-reorder-suppress-hover
-.dataviews-view-list
-div[role="row"]:not(.is-selected):hover,
+	.dataviews-view-list
+	div[role="row"]:not(.is-selected):hover,
 body.cortext-row-reorder-suppress-hover
-.dataviews-view-list
-div[role="row"]:not(.is-selected).is-hovered {
+	.dataviews-view-list
+	div[role="row"]:not(.is-selected).is-hovered {
 	background-color: transparent;
 }
 
 body.cortext-row-reorder-suppress-hover
-.dataviews-view-list
-div[role="row"]:not(.is-selected):hover
-.dataviews-view-list__title-field,
+	.dataviews-view-list
+	div[role="row"]:not(.is-selected):hover
+	.dataviews-view-list__title-field,
 body.cortext-row-reorder-suppress-hover
-.dataviews-view-list
-div[role="row"]:not(.is-selected):hover
-.dataviews-view-list__fields,
+	.dataviews-view-list
+	div[role="row"]:not(.is-selected):hover
+	.dataviews-view-list__fields,
 body.cortext-row-reorder-suppress-hover
-.dataviews-view-list
-div[role="row"]:not(.is-selected).is-hovered
-.dataviews-view-list__title-field,
+	.dataviews-view-list
+	div[role="row"]:not(.is-selected).is-hovered
+	.dataviews-view-list__title-field,
 body.cortext-row-reorder-suppress-hover
-.dataviews-view-list
-div[role="row"]:not(.is-selected).is-hovered
-.dataviews-view-list__fields {
+	.dataviews-view-list
+	div[role="row"]:not(.is-selected).is-hovered
+	.dataviews-view-list__fields {
 	color: inherit;
 }
 
 @media (prefers-reduced-motion: reduce) {
-
 	.cortext-row-reorder-target {
 		transition: none;
 	}
