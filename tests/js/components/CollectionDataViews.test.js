@@ -388,7 +388,7 @@ describe( 'scrollElementInlineEndQuickly', () => {
 		expect( parent.scrollLeft ).toBe( 600 );
 	} );
 
-	it( 'keeps revealing while the layout settles', () => {
+	it( 'animates horizontal scroll ancestors to the end', () => {
 		const now = jest
 			.spyOn( window.performance, 'now' )
 			.mockReturnValue( 0 );
@@ -397,13 +397,60 @@ describe( 'scrollElementInlineEndQuickly', () => {
 			frame = callback;
 			return 1;
 		} );
+		const parent = document.createElement( 'div' );
 		const element = document.createElement( 'div' );
 		element.scrollIntoView = jest.fn();
+		parent.appendChild( element );
+		Object.defineProperty( parent, 'clientWidth', {
+			value: 200,
+			configurable: true,
+		} );
+		Object.defineProperty( parent, 'scrollWidth', {
+			value: 800,
+			configurable: true,
+		} );
 
 		scrollElementInlineEndQuickly( element, { trackEnd: true } );
-		frame();
+		expect( parent.scrollLeft ).toBe( 0 );
+		frame( 90 );
+		expect( parent.scrollLeft ).toBeGreaterThan( 0 );
+		expect( parent.scrollLeft ).toBeLessThan( 600 );
+		frame( 180 );
 
-		expect( element.scrollIntoView ).toHaveBeenCalledTimes( 2 );
+		expect( parent.scrollLeft ).toBe( 600 );
+		expect( element.scrollIntoView ).not.toHaveBeenCalled();
+		now.mockRestore();
+	} );
+
+	it( 'keeps scrolling ancestors while the layout settles', () => {
+		const now = jest
+			.spyOn( window.performance, 'now' )
+			.mockReturnValue( 0 );
+		let frame;
+		window.requestAnimationFrame = jest.fn( ( callback ) => {
+			frame = callback;
+			return 1;
+		} );
+		const parent = document.createElement( 'div' );
+		const element = document.createElement( 'div' );
+		parent.appendChild( element );
+		Object.defineProperty( parent, 'clientWidth', {
+			value: 200,
+			configurable: true,
+		} );
+		Object.defineProperty( parent, 'scrollWidth', {
+			value: 200,
+			configurable: true,
+		} );
+
+		scrollElementInlineEndQuickly( element, { trackEnd: true } );
+		Object.defineProperty( parent, 'scrollWidth', {
+			value: 500,
+			configurable: true,
+		} );
+		frame( 180 );
+
+		expect( parent.scrollLeft ).toBe( 300 );
 		now.mockRestore();
 	} );
 } );
