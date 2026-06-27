@@ -552,6 +552,27 @@ test.describe( 'Collection view block', () => {
 				canvas.getByText( 'Ursula K. Le Guin' )
 			).toBeVisible();
 
+			const firstRow = canvas
+				.locator( '.dataviews-view-table tbody > tr' )
+				.first();
+			await firstRow.hover();
+			await expect
+				.poll( () =>
+					firstRow
+						.locator( 'td' )
+						.evaluateAll( ( cells ) => [
+							...new Set(
+								cells.map(
+									( cell ) =>
+										cell.ownerDocument.defaultView.getComputedStyle(
+											cell
+										).backgroundColor
+								)
+							),
+						] )
+				)
+				.toEqual( [ 'rgb(240, 240, 240)' ] );
+
 			await page.evaluate( async () => {
 				await window.wp.data.dispatch( 'core/editor' ).savePost();
 			} );
@@ -573,7 +594,7 @@ test.describe( 'Collection view block', () => {
 
 			await page.reload();
 			await expect(
-				canvas.getByText( 'The Left Hand of Darkness' )
+				dataViewTableRow( canvas, 'The Left Hand of Darkness' )
 			).toBeVisible();
 			await expect(
 				canvas.getByText( 'Ursula K. Le Guin' )

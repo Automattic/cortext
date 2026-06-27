@@ -555,6 +555,13 @@ tbody > tr > td:not(:first-child) {
 	background: $gray-100;
 }
 
+.cortext-data-view
+.dataviews-view-table
+tbody
+tr:not(.is-selected):is(:hover, .is-hovered) > td {
+	background-color: $gray-100;
+}
+
 .cortext-title-cell:focus-within,
 .cortext-title-cell--with-open-action:hover,
 .cortext-data-view
