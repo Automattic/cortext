@@ -284,9 +284,7 @@ function PageFeaturedImageInspectorControls( { postId, postType } ) {
 		( select ) =>
 			select( blockEditorStore )
 				.getBlocks()
-				.find(
-					( block ) => block?.name === 'cortext/document-cover'
-				)
+				.find( ( block ) => block?.name === 'cortext/document-cover' )
 				?.clientId ?? null,
 		[]
 	);

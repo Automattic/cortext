@@ -851,7 +851,7 @@ test.describe( 'Collection view block', () => {
 
 			const labelMetrics = await label.evaluate( ( element ) => {
 				const rect = element.getBoundingClientRect();
-				const style = getComputedStyle( element );
+				const style = window.getComputedStyle( element );
 				return {
 					height: rect.height,
 					position: style.position,
@@ -867,7 +867,9 @@ test.describe( 'Collection view block', () => {
 			const fieldColor = await row
 				.locator( '.dataviews-view-list__field' )
 				.first()
-				.evaluate( ( element ) => getComputedStyle( element ).color );
+				.evaluate(
+					( element ) => window.getComputedStyle( element ).color
+				);
 			expect( fieldColor ).not.toBe( 'rgb(56, 88, 233)' );
 		} finally {
 			await deleteIfCreated(
