@@ -160,7 +160,7 @@ describe( 'PublishedDocumentsPane', () => {
 		expect( DataViews ).toHaveBeenCalledTimes( 1 );
 		expect( DataViews.mock.calls[ 0 ][ 0 ].defaultLayouts ).toEqual( {
 			table: { layout: { density: 'compact' } },
-			grid: { layout: { previewSize: 430 } },
+			grid: { layout: { previewSize: 290 } },
 			list: { layout: {} },
 		} );
 	} );

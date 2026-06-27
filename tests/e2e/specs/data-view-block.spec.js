@@ -930,9 +930,10 @@ test.describe( 'Collection view block', () => {
 							newAligned:
 								cardWidths.length > 0 &&
 								Math.abs( newWidth - cardWidths[ 0 ] ) <= 2,
-							usesCortextPreviewSize:
+							usesBalancedPreviewSize:
 								cardWidths.length > 0 &&
-								Math.min( ...cardWidths ) >= 360,
+								Math.min( ...cardWidths ) >= 260 &&
+								Math.max( ...cardWidths ) <= 360,
 						};
 					} );
 
@@ -941,7 +942,7 @@ test.describe( 'Collection view block', () => {
 				cardsWide: true,
 				titlesVisible: true,
 				newAligned: true,
-				usesCortextPreviewSize: true,
+				usesBalancedPreviewSize: true,
 			} );
 		} finally {
 			if ( fixture.rows ) {
