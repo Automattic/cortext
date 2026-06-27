@@ -6,9 +6,11 @@ import { createBlock } from '@wordpress/blocks';
 import {
 	Button,
 	Disabled,
+	Fill,
 	Notice,
 	PanelBody,
 	privateApis as componentsPrivateApis,
+	Slot,
 } from '@wordpress/components';
 import {
 	useEntityProp,
@@ -31,10 +33,7 @@ import {
 	starFilled,
 	trash,
 } from '@wordpress/icons';
-import {
-	ComplementaryArea,
-	store as interfaceStore,
-} from '@wordpress/interface';
+import { store as interfaceStore } from '@wordpress/interface';
 import apiFetch from '@wordpress/api-fetch';
 
 import CanvasOwnerInspector, {
@@ -69,6 +68,7 @@ const { Tabs } = unlock( componentsPrivateApis );
 export const INSPECTOR_SCOPE = 'cortext';
 export const DOCUMENT_INSPECTOR = 'cortext/document-inspector';
 export const BLOCK_INSPECTOR = 'cortext/block-inspector';
+const INSPECTOR_SLOT = `ComplementaryArea/${ INSPECTOR_SCOPE }`;
 
 export function isInspectorArea( area ) {
 	return area === DOCUMENT_INSPECTOR || area === BLOCK_INSPECTOR;
@@ -85,7 +85,7 @@ export function getActiveInspectorArea( select ) {
 }
 
 export function InspectorSidebarSlot( props ) {
-	return <ComplementaryArea.Slot scope={ INSPECTOR_SCOPE } { ...props } />;
+	return <Slot name={ INSPECTOR_SLOT } { ...props } />;
 }
 
 function InspectorTabsHeader( { tabs } ) {
@@ -115,29 +115,32 @@ function InspectorComplementaryArea( {
 	title,
 } ) {
 	const tabsContextValue = useContext( Tabs.Context );
+	const activeArea = useSelect(
+		( select ) => getActiveInspectorArea( select ),
+		[]
+	);
+	const isActive = activeArea ? activeArea === identifier : isActiveByDefault;
 
 	return (
-		<ComplementaryArea
-			scope={ INSPECTOR_SCOPE }
-			identifier={ identifier }
-			title={ title }
-			closeLabel={ __( 'Close inspector', 'cortext' ) }
-			isPinnable={ false }
-			isActiveByDefault={ isActiveByDefault }
-			className="editor-sidebar__panel"
-			headerClassName="editor-sidebar__panel-tabs"
-			header={
-				<Tabs.Context.Provider value={ tabsContextValue }>
-					<InspectorTabsHeader tabs={ tabs } />
-				</Tabs.Context.Provider>
-			}
-		>
-			<Tabs.Context.Provider value={ tabsContextValue }>
-				<Tabs.TabPanel tabId={ identifier } focusable={ false }>
-					{ children }
-				</Tabs.TabPanel>
-			</Tabs.Context.Provider>
-		</ComplementaryArea>
+		<Fill name={ INSPECTOR_SLOT }>
+			{ isActive ? (
+				<div
+					className="interface-complementary-area editor-sidebar__panel"
+					aria-label={ title }
+				>
+					<div className="editor-sidebar__panel-tabs">
+						<Tabs.Context.Provider value={ tabsContextValue }>
+							<InspectorTabsHeader tabs={ tabs } />
+						</Tabs.Context.Provider>
+					</div>
+					<Tabs.Context.Provider value={ tabsContextValue }>
+						<Tabs.TabPanel tabId={ identifier } focusable={ false }>
+							{ children }
+						</Tabs.TabPanel>
+					</Tabs.Context.Provider>
+				</div>
+			) : null }
+		</Fill>
 	);
 }
 
