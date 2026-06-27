@@ -514,14 +514,14 @@ function ColumnResizer( { fieldId, fieldType, headerEl, view, onChangeView } ) {
 			const startX = event.clientX;
 			const startWidth = getColumnStyleWidth( headerEl );
 			const handle = event.currentTarget;
+			const ownerDocument = handle.ownerDocument;
 			const minWidth = getMinWidth( fieldType, fieldId );
-			// Pointer capture re-targets pointermove/pointerup for this
-			// pointerId to the handle, even if the pointer leaves the iframe
-			// or the viewport. Without it, dragging past the editor canvas
-			// loses the pointer mid-resize.
+			// Pointer capture and ownerDocument listeners keep a resize that
+			// starts in the narrow edge from losing movement once the pointer
+			// leaves the handle or crosses the editor iframe boundary.
 			handle.setPointerCapture?.( event.pointerId );
 			headerEl.classList.add( 'cortext-column-resizing' );
-			document.body.classList.add( 'cortext-column-resizing' );
+			ownerDocument.body.classList.add( 'cortext-column-resizing' );
 
 			// tech-debt.md#td-dataviews-column-interactions: DataViews doesn't provide a live resize hook, so
 			// we mutate the rendered cells during pointer movement and commit
@@ -575,18 +575,26 @@ function ColumnResizer( { fieldId, fieldType, headerEl, view, onChangeView } ) {
 				);
 			};
 
-			handle.addEventListener( 'pointermove', onPointerMove );
-			handle.addEventListener( 'pointerup', onPointerUp );
-			handle.addEventListener( 'pointercancel', onPointerUp );
+			ownerDocument.addEventListener( 'pointermove', onPointerMove );
+			ownerDocument.addEventListener( 'pointerup', onPointerUp );
+			ownerDocument.addEventListener( 'pointercancel', onPointerUp );
 			cleanupRef.current = () => {
-				handle.removeEventListener( 'pointermove', onPointerMove );
-				handle.removeEventListener( 'pointerup', onPointerUp );
-				handle.removeEventListener( 'pointercancel', onPointerUp );
+				ownerDocument.removeEventListener(
+					'pointermove',
+					onPointerMove
+				);
+				ownerDocument.removeEventListener( 'pointerup', onPointerUp );
+				ownerDocument.removeEventListener(
+					'pointercancel',
+					onPointerUp
+				);
 				if ( handle.hasPointerCapture?.( event.pointerId ) ) {
 					handle.releasePointerCapture?.( event.pointerId );
 				}
 				headerEl.classList.remove( 'cortext-column-resizing' );
-				document.body.classList.remove( 'cortext-column-resizing' );
+				ownerDocument.body.classList.remove(
+					'cortext-column-resizing'
+				);
 			};
 		},
 		[ autoFitColumn, fieldId, fieldType, headerEl, onChangeView, view ]

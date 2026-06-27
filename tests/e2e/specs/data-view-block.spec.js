@@ -3523,7 +3523,9 @@ test.describe( 'Collection view block', () => {
 			expect( resizerBox ).not.toBeNull();
 			const headerBox = await header.boundingBox();
 			expect( headerBox ).not.toBeNull();
-			const startX = headerBox.x + headerBox.width + 2;
+			// Start just past the separator, where users naturally grab the
+			// edge from the next-column side.
+			const startX = headerBox.x + headerBox.width + 6;
 			const startY = resizerBox.y + resizerBox.height / 2;
 			await page.mouse.move( startX, startY );
 			await page.mouse.down();
