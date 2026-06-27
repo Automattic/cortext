@@ -620,6 +620,118 @@ test.describe( 'Collection view block', () => {
 		}
 	} );
 
+	test( 'keeps grid cards and the New card in matching columns', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+
+		try {
+			Object.assign(
+				fixture,
+				await createManualOrderFixture( requestUtils )
+			);
+
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: 'Grid layout columns',
+					status: 'private',
+					content: createDataViewBlockMarkup( fixture.collection.id, {
+						type: 'grid',
+						fields: [ 'title' ],
+						layout: { previewSize: 230 },
+					} ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/${ fixture.page.id }`
+			);
+
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.page.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+			await expect( canvas.getByText( 'Alpha Manual' ) ).toBeVisible();
+			await expect(
+				canvas.locator( '.dataviews-view-grid__card' )
+			).toHaveCount( 3 );
+			await expect(
+				canvas.getByRole( 'button', { name: 'New', exact: true } )
+			).toBeVisible();
+
+			const getGridMetrics = () =>
+				canvas
+					.locator( '.cortext-data-view' )
+					.first()
+					.evaluate( ( root ) => {
+						const rects = ( selector ) =>
+							Array.from( root.querySelectorAll( selector ) ).map(
+								( element ) => element.getBoundingClientRect()
+							);
+						const newRect = root
+							.querySelector(
+								'.cortext-data-view__new-row-card-wrapper'
+							)
+							?.getBoundingClientRect();
+						const cardWidths = rects(
+							'.dataviews-view-grid__card'
+						).map( ( rect ) => Math.round( rect.width ) );
+						const newWidth = newRect
+							? Math.round( newRect.width )
+							: 0;
+
+						return {
+							cardCount: cardWidths.length,
+							cardsWide:
+								cardWidths.length > 0 &&
+								Math.min( ...cardWidths ) >= 180,
+							newAligned:
+								cardWidths.length > 0 &&
+								Math.abs( newWidth - cardWidths[ 0 ] ) <= 2,
+						};
+					} );
+
+			await expect.poll( getGridMetrics ).toEqual( {
+				cardCount: 3,
+				cardsWide: true,
+				newAligned: true,
+			} );
+		} finally {
+			if ( fixture.rows ) {
+				for ( const row of fixture.rows ) {
+					await deleteIfCreated(
+						requestUtils,
+						`/wp/v2/crtxt_documents/${ row.id }`
+					);
+				}
+			}
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
+			);
+		}
+	} );
+
 	// Grid layout doesn't expose row reorder yet (card-to-card drops need a
 	// 2D model); the JS unit test "does not mount row reorder for grid
 	// layout yet" guards the behaviour, so e2e covers table and list only.

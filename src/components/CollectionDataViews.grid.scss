@@ -27,6 +27,7 @@ $grid-card-content-hover-background: #f3f3f3;
 
 	&__new-row-card-wrapper {
 		box-sizing: border-box;
+		width: 100%;
 		height: 100%;
 		min-height: var(--cortext-grid-card-height, 220px);
 		min-width: 0;
@@ -83,19 +84,36 @@ $grid-card-content-hover-background: #f3f3f3;
 	}
 
 	.dataviews-view-grid {
-		// WP 6.7+ dataviews ships `display: flex; flex-direction: column` on
-		// the grid wrapper, which would stack cards in a single column.
-		// Force the grid layout we want so cards flow into multiple columns.
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-		grid-template-rows: none;
-		grid-auto-rows: minmax(var(--cortext-grid-card-height, 220px), auto);
-		grid-auto-flow: row;
+		display: flex;
+		flex-direction: column;
 		gap: $grid-unit-20;
-		row-gap: $grid-unit-20;
-		column-gap: $grid-unit-20;
+		padding: $grid-unit-20;
+		margin-bottom: auto;
+	}
+
+	.dataviews-view-grid-items {
+		grid-auto-rows: minmax(var(--cortext-grid-card-height, 220px), auto);
+		gap: $grid-unit-20;
 		padding: $grid-unit-20;
 		align-items: stretch;
+	}
+
+	.dataviews-view-grid__row {
+		display: grid;
+		grid-auto-rows: minmax(var(--cortext-grid-card-height, 220px), auto);
+		gap: $grid-unit-20;
+		align-items: stretch;
+	}
+
+	.dataviews-view-grid__row__gridcell,
+	.dataviews-view-grid-items > .cortext-data-view__new-row-card-wrapper {
+		min-height: var(--cortext-grid-card-height, 220px);
+		min-width: 0;
+	}
+
+	&__new-row-gridcell {
+		display: flex;
+		height: 100%;
 	}
 
 	.dataviews-view-grid__card {
