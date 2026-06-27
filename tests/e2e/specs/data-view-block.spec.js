@@ -418,6 +418,27 @@ function createDataViewBlockMarkup( collectionId, viewOverrides = {} ) {
 	return `<!-- wp:cortext/data-view ${ JSON.stringify( attributes ) } /-->`;
 }
 
+function createOwnerDataViewBlockMarkup( collectionId, viewOverrides = {} ) {
+	const attributes = {
+		collectionId,
+		align: 'full',
+		view: {
+			type: 'table',
+			fields: [],
+			sort: null,
+			filters: [],
+			calculations: {},
+			perPage: 25,
+			page: 1,
+			search: '',
+			layout: {},
+			...viewOverrides,
+		},
+	};
+
+	return `<!-- wp:cortext/data-view ${ JSON.stringify( attributes ) } /-->`;
+}
+
 function createEmptyDataViewBlockMarkup() {
 	return '<!-- wp:cortext/data-view /-->';
 }
@@ -3746,6 +3767,125 @@ test.describe( 'Collection view block', () => {
 			await deleteIfCreated(
 				requestUtils,
 				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
+			);
+		}
+	} );
+
+	test( 'resizes a full-page collection column from a restricted saved width', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+
+		try {
+			Object.assign(
+				fixture,
+				await createCollectionFixture( requestUtils )
+			);
+			const fieldKey = `field-${ fixture.field.id }`;
+
+			await requestUtils.rest( {
+				method: 'POST',
+				path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
+				data: {
+					content: createOwnerDataViewBlockMarkup(
+						fixture.collection.id,
+						{
+							fields: [ 'title', fieldKey ],
+							layout: {
+								density: 'compact',
+								styles: {
+									[ fieldKey ]: {
+										width: 80,
+										minWidth: 80,
+										maxWidth: 80,
+									},
+								},
+							},
+						}
+					),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/${ fixture.collection.slug }-${ fixture.collection.id }`
+			);
+
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.collection.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+			await expect( canvas.getByText( 'Author' ) ).toBeVisible();
+
+			const table = canvas.locator( '.dataviews-view-table' );
+			const header = tableDataHeaders( table ).nth( 1 );
+			const initialRenderedWidth = await header.evaluate(
+				( el ) => el.getBoundingClientRect().width
+			);
+			expect( initialRenderedWidth ).toBeGreaterThanOrEqual( 80 );
+			expect( initialRenderedWidth ).toBeLessThan( 100 );
+
+			const resizer = header.locator( '.cortext-column-resizer' );
+			await expect( resizer ).toBeAttached();
+			const resizerBox = await resizer.boundingBox();
+			expect( resizerBox ).not.toBeNull();
+			const startX = resizerBox.x + resizerBox.width / 2;
+			const startY = resizerBox.y + resizerBox.height / 2;
+			await page.mouse.move( startX, startY );
+			await page.mouse.down();
+			await page.mouse.move( startX + 120, startY, { steps: 8 } );
+			await page.mouse.up();
+
+			await expect
+				.poll( () =>
+					header.evaluate(
+						( el ) => el.getBoundingClientRect().width
+					)
+				)
+				.toBeGreaterThan( initialRenderedWidth + 100 );
+
+			await page.evaluate( async () => {
+				await window.wp.data.dispatch( 'core/editor' ).savePost();
+			} );
+			await page.waitForFunction(
+				() => ! window.wp.data.select( 'core/editor' ).isSavingPost()
+			);
+
+			const saved = await requestUtils.rest( {
+				path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
+				params: { context: 'edit' },
+			} );
+			const widthMatch = saved.content.raw.match(
+				new RegExp( `"${ fieldKey }":\\{[^}]*"width":(\\d+)` )
+			);
+			expect( widthMatch ).not.toBeNull();
+			expect( Number( widthMatch[ 1 ] ) ).toBeGreaterThan( 80 );
+			const maxWidthMatch = saved.content.raw.match(
+				new RegExp( `"${ fieldKey }":\\{[^}]*"maxWidth":(\\d+)` )
+			);
+			expect( maxWidthMatch ).not.toBeNull();
+			expect( Number( maxWidthMatch[ 1 ] ) ).toBe( 1200 );
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				fixture.entry && `/wp/v2/crtxt_documents/${ fixture.entry.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,

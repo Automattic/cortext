@@ -152,6 +152,26 @@ function getColumnBodyCells( headerEl ) {
 	);
 }
 
+function getColumnElement( headerEl ) {
+	const tableEl = headerEl.closest( TABLE_SELECTOR );
+	const headerSiblings = headerEl.parentElement
+		? Array.from( headerEl.parentElement.children )
+		: [];
+	const colIndex = headerSiblings.indexOf( headerEl );
+	if ( colIndex < 0 || ! tableEl ) {
+		return null;
+	}
+	return tableEl.querySelector( 'colgroup' )?.children?.[ colIndex ] ?? null;
+}
+
+function toCssSize( width ) {
+	if ( typeof width === 'string' && width.trim() !== '' ) {
+		return width;
+	}
+	const numeric = Number( width );
+	return Number.isFinite( numeric ) ? `${ numeric }px` : null;
+}
+
 // Buffer added to autofit measurements (px). Browsers can render text at
 // fractional pixel widths, and the copied measurement and live render don't
 // always round the same way; a couple of pixels of slack keeps proportional
@@ -233,12 +253,19 @@ function getAutoFitColumnWidth( headerEl, fieldType, fieldId ) {
 }
 
 function applyColumnWidth( headerEl, width ) {
-	const px = `${ width }px`;
-	headerEl.style.width = px;
-	headerEl.style.maxWidth = px;
+	const cssWidth = toCssSize( width );
+	if ( ! cssWidth ) {
+		return;
+	}
+	const col = getColumnElement( headerEl );
+	if ( col ) {
+		col.style.width = cssWidth;
+	}
+	headerEl.style.width = cssWidth;
+	headerEl.style.maxWidth = cssWidth;
 	for ( const td of getColumnBodyCells( headerEl ) ) {
-		td.style.width = px;
-		td.style.maxWidth = px;
+		td.style.width = cssWidth;
+		td.style.maxWidth = cssWidth;
 	}
 }
 
@@ -531,6 +558,7 @@ function ColumnResizer( { fieldId, fieldType, headerEl, view, onChangeView } ) {
 			// cells in sync avoids a transient mismatch until React commits
 			// the persisted width back through DataViews.
 			const bodyCells = getColumnBodyCells( headerEl );
+			const col = getColumnElement( headerEl );
 
 			const computeWidth = ( clientX ) => {
 				const next = startWidth + ( clientX - startX );
@@ -542,6 +570,9 @@ function ColumnResizer( { fieldId, fieldType, headerEl, view, onChangeView } ) {
 
 			const applyLiveWidth = ( width ) => {
 				const px = `${ width }px`;
+				if ( col ) {
+					col.style.width = px;
+				}
 				headerEl.style.width = px;
 				headerEl.style.maxWidth = px;
 				for ( const td of bodyCells ) {
@@ -626,6 +657,15 @@ export default function DataViewColumnInteractions( {
 			activationConstraint: { distance: DRAG_ACTIVATION_DISTANCE },
 		} )
 	);
+
+	useEffect( () => {
+		for ( const cell of cells ) {
+			const width = view?.layout?.styles?.[ cell.fieldId ]?.width;
+			if ( width !== undefined ) {
+				applyColumnWidth( cell.el, width );
+			}
+		}
+	}, [ cells, view ] );
 
 	const viewRef = useRef( view );
 	viewRef.current = view;

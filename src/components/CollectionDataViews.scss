@@ -154,6 +154,19 @@ body.block-editor-iframe__body
 	width: var(--cortext-table-column-default-width);
 }
 
+.dataviews-view-table
+col[class^="dataviews-view-table__col-"]:not(
+	.dataviews-view-table__col-checkbox
+):not(.dataviews-view-table__col-first-data):not(
+	.dataviews-view-table__col-actions
+):not(.dataviews-view-table__col-expand) {
+	width: var(--cortext-table-column-default-width);
+}
+
+.dataviews-view-table col.dataviews-view-table__col-first-data {
+	width: 320px;
+}
+
 // Keep the actions column only as wide as its kebab/`+` icon. Otherwise it
 // inherits the generic 200px cell width and pushes the last data column under
 // the sticky-right overlay. The `tr` keeps specificity tied with DataViews'
@@ -168,12 +181,20 @@ body.block-editor-iframe__body
 	padding-left: 0;
 }
 
+.dataviews-view-table col.dataviews-view-table__col-actions {
+	width: $grid-unit-50 + $grid-unit-05;
+}
+
 .dataviews-view-table th.dataviews-view-table__checkbox-column,
 .dataviews-view-table td.dataviews-view-table__checkbox-column,
 .dataviews-view-table td.cortext-table-calculations__selection-spacer {
 	width: 44px;
 	min-width: 44px;
 	max-width: 44px;
+}
+
+.dataviews-view-table col.dataviews-view-table__col-checkbox {
+	width: 44px;
 }
 
 // Title carries the post name and tends to be longer than other
