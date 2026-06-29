@@ -2,6 +2,14 @@
 
 Running log for desktop-specific runtime and packaging decisions. Keep the detailed benchmark numbers in PR comments or artifacts unless they become stable product guidance.
 
+## 2026-06-19 — In-place auto-updates over GitHub Releases
+
+**Decision.** The signed desktop app now updates itself from GitHub Releases with `electron-updater`. The mac build ships both `dmg` and `zip`: users download the DMG for first install, while Squirrel.Mac installs the zip. The `github` publish config makes electron-builder write `latest-mac.yml` and `app-update.yml`, and Buildkite uploads the zip, blockmap, and `latest-mac.yml` to the same draft Release as the DMG. The plugin workflow still owns the Release; Buildkite only attaches desktop assets. Drafts remain hidden from the updater. Once a human publishes a Release, the installed app can pick it up. The app menu has one `autoInstallUpdates` checkbox plus a "Check for Updates..." / "Restart to Apply Update" item. On first launch after an app update, Cortext also refreshes the bundled WordPress and plugin code in the extracted site, preserving the SQLite database, uploads, and wp-config. WordPress handles any database upgrade on the next load.
+
+**Why GitHub Releases and not a self-hosted feed.** WordPress Studio uses the same Squirrel path, but its feed comes from WordPress.com and the Apps CDN. Cortext does not have that infrastructure. Reading assets from GitHub Releases keeps the release path small: we already create the Release, sign the app, and upload assets there. We borrowed Studio's runtime behavior (state tracking, manual vs silent dialogs, move-to-Applications prompt, retrying transient network errors), not its feed. The version marker refresh follows the same idea: swap code, leave user data alone.
+
+**Revisit when.** We ship Intel or universal builds, add beta/nightly channels, need wp-config migrations instead of carrying the old file forward, or replace the checkbox with a real preferences window.
+
 ## 2026-06-16 — Buildkite owns the signed macOS DMG
 
 **Decision.** GitHub Actions prepares the plugin ZIP, validates the release milestone, writes release notes, and creates or updates the draft GitHub Release. Buildkite is the only macOS DMG publisher: the release tag build builds the bundled PHP runtime and distribution snapshot, runs electron-builder, signs and notarizes the app, verifies the signed app, and uploads the DMG to the same draft Release.

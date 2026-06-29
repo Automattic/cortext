@@ -56,7 +56,9 @@ export APPLE_API_KEY="$apple_api_key_path"
 export APPLE_API_KEY_ID="$APP_STORE_CONNECT_API_KEY_KEY_ID"
 export APPLE_API_ISSUER="$APP_STORE_CONNECT_API_KEY_ISSUER_ID"
 
-npm --prefix apps/desktop run dist -- -c.extraMetadata.version="$version"
+# Buildkite uploads release assets only after signature and notarization checks
+# pass. Keep electron-builder from trying to publish during the build step.
+npm --prefix apps/desktop run dist -- -c.extraMetadata.version="$version" --publish never
 
 echo "--- :white_check_mark: verify signature + notarization"
 dmg=(apps/desktop/dist/*.dmg)
@@ -74,7 +76,7 @@ if ! "$publish"; then
   exit 0
 fi
 
-echo "--- :rocket: attach DMG to draft GitHub Release"
+echo "--- :rocket: attach DMG and auto-update feed to draft GitHub Release"
 if ! gh release view "$version" --repo Automattic/cortext >/dev/null 2>&1; then
   gh release create "$version" \
     --repo Automattic/cortext \
@@ -82,4 +84,21 @@ if ! gh release view "$version" --repo Automattic/cortext >/dev/null 2>&1; then
     --title "Cortext $version" \
     --notes "Cortext $version"
 fi
-gh release upload "$version" "$dmg" --repo Automattic/cortext --clobber
+
+# electron-updater reads latest-mac.yml from the Release, then downloads the
+# signed zip. Squirrel.Mac installs the zip; the DMG stays for first installs.
+# Keep the Release as a draft until a human publishes it, so shipped apps do not
+# see these assets early.
+[[ -f apps/desktop/dist/latest-mac.yml ]] || {
+  echo "latest-mac.yml missing; did the mac zip target run?"; exit 1;
+}
+shopt -s nullglob
+update_assets=(
+  apps/desktop/dist/*-mac.zip
+  apps/desktop/dist/*-mac.zip.blockmap
+  apps/desktop/dist/latest-mac.yml
+)
+shopt -u nullglob
+
+gh release upload "$version" "$dmg" "${update_assets[@]}" \
+  --repo Automattic/cortext --clobber

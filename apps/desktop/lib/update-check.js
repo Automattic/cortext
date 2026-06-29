@@ -1,30 +1,10 @@
 const https = require( 'https' );
 const { app, dialog, shell } = require( 'electron' );
+const { parseVersion, isNewer } = require( './version' );
 
 const RELEASES_API =
 	'https://api.github.com/repos/Automattic/cortext/releases?per_page=10';
 const RELEASES_URL = 'https://github.com/Automattic/cortext/releases';
-
-// WordPress-style versions: "0.1.0", no leading "v". Pre-release suffixes are
-// ignored for the comparison; only the numeric core decides what is newer.
-function parseVersion( tag ) {
-	const match = String( tag || '' )
-		.trim()
-		.replace( /^v/, '' )
-		.match( /^(\d+)\.(\d+)\.(\d+)/ );
-	return match
-		? [ Number( match[ 1 ] ), Number( match[ 2 ] ), Number( match[ 3 ] ) ]
-		: null;
-}
-
-function isNewer( candidate, current ) {
-	for ( let i = 0; i < 3; i++ ) {
-		if ( candidate[ i ] !== current[ i ] ) {
-			return candidate[ i ] > current[ i ];
-		}
-	}
-	return false;
-}
 
 function fetchReleases() {
 	return new Promise( ( resolve, reject ) => {

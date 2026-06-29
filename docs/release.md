@@ -195,9 +195,14 @@ its own workflow on the same release event.
 
 ## Desktop app
 
-The desktop release builds a macOS DMG with electron-builder and attaches it to
-the same Release as the plugin ZIP. The release build is arm64-only, signed, and
-notarized by Buildkite. Release notes should tell people to move Cortext to
-Applications.
-The installed app checks GitHub Releases on launch and links to the download
-when a newer version exists, but it does not update itself.
+The desktop release builds a signed, notarized arm64 macOS app with
+electron-builder. Buildkite attaches the DMG to the same Release as the plugin
+ZIP, along with `latest-mac.yml` and the signed `*-mac.zip` that Squirrel.Mac
+installs. Release notes should tell people to move Cortext to Applications;
+in-place updates depend on that.
+
+The installed app checks the latest published GitHub Release on launch and every
+few hours after that. When a newer version is available, it downloads it in the
+background and asks the user to restart. Draft Releases are ignored. After an app
+update, Cortext refreshes the bundled WordPress and plugin code in the user's
+extracted site while keeping the database and uploads.
