@@ -1,4 +1,10 @@
-import { useState, useMemo, useRef, useCallback } from '@wordpress/element';
+import {
+	useState,
+	useMemo,
+	useRef,
+	useCallback,
+	useEffect,
+} from '@wordpress/element';
 import {
 	PointerSensor,
 	KeyboardSensor,
@@ -36,12 +42,18 @@ function parseDropId( id ) {
  * @param {Array}    args.pages            Loaded `crtxt_document` records (every non-row document: pages and collections).
  * @param {Set}      args.expandedIds      Currently expanded node ids (from `useSidebarTree`).
  * @param {Function} args.expand           Expand callback from `useSidebarTree`.
+ * @param {Function} args.loadBranch       Loads a lazy tree branch.
+ * @param {Function} args.refreshBranch    Refreshes a loaded lazy tree branch.
+ * @param {Function} args.getBranch        Reads a lazy tree branch state.
  * @param {Function} args.saveEntityRecord core-data dispatcher used to persist moves.
  */
 export default function useSidebarDnd( {
 	pages,
 	expandedIds,
 	expand,
+	loadBranch,
+	refreshBranch,
+	getBranch,
 	saveEntityRecord,
 } ) {
 	const sensors = useSensors(
@@ -52,6 +64,7 @@ export default function useSidebarDnd( {
 	const [ draggedId, setDraggedId ] = useState( null );
 	const [ activeDrop, setActiveDrop ] = useState( null );
 	const autoExpandTimerRef = useRef( null );
+	const recordsRef = useRef( [] );
 
 	const clearAutoExpandTimer = useCallback( () => {
 		if ( autoExpandTimerRef.current ) {
@@ -66,6 +79,10 @@ export default function useSidebarDnd( {
 	// list every collection twice and corrupt the sibling order math in
 	// `computeDropTarget`.
 	const treeRecords = useMemo( () => pages, [ pages ] );
+
+	useEffect( () => {
+		recordsRef.current = treeRecords;
+	}, [ treeRecords ] );
 
 	const handleDragStart = useCallback( ( { active } ) => {
 		const id = active?.data?.current?.pageId ?? null;
@@ -104,14 +121,7 @@ export default function useSidebarDnd( {
 			clearAutoExpandTimer();
 			if ( parsed?.zone === 'inside' ) {
 				const target = pages.find( ( p ) => p.id === parsed.targetId );
-				const hasKids = treeRecords.some(
-					( r ) => ( r.parent || 0 ) === parsed.targetId
-				);
-				if (
-					target &&
-					hasKids &&
-					! expandedIds.has( parsed.targetId )
-				) {
+				if ( target && ! expandedIds.has( parsed.targetId ) ) {
 					autoExpandTimerRef.current = setTimeout( () => {
 						expand( parsed.targetId );
 					}, AUTO_EXPAND_DELAY );
@@ -140,11 +150,45 @@ export default function useSidebarDnd( {
 				return;
 			}
 
+			let records = recordsRef.current;
+			const target = records.find( ( r ) => r.id === parsed.targetId );
+			const active = records.find( ( r ) => r.id === activeId );
+			if ( ! target || ! active ) {
+				return;
+			}
+			const destinationParent =
+				parsed.zone === 'inside'
+					? parsed.targetId
+					: Number( target.parent || 0 );
+			let destinationBranch = getBranch?.( destinationParent );
+			if (
+				parsed.zone === 'inside' &&
+				! destinationBranch?.hasResolved
+			) {
+				destinationBranch = await loadBranch?.( destinationParent );
+				// `recordsRef` only catches up to the loaded children on the
+				// next render, so merge them in from the returned branch.
+				// Without them `computeDropTarget` treats the parent as empty
+				// and drops the row at `menu_order` 0 instead of appending it.
+				const byId = new Map();
+				[
+					...recordsRef.current,
+					...( destinationBranch?.records ?? [] ),
+				].forEach( ( record ) => byId.set( record.id, record ) );
+				records = [ ...byId.values() ];
+			}
+			if (
+				! destinationBranch?.hasResolved ||
+				destinationBranch.page < destinationBranch.totalPages
+			) {
+				return;
+			}
+
 			const updates = computeDropTarget(
 				activeId,
 				parsed.targetId,
 				parsed.zone,
-				treeRecords
+				records
 			);
 			if ( ! updates ) {
 				return;
@@ -154,7 +198,7 @@ export default function useSidebarDnd( {
 			// the endpoint that owns it.
 			await Promise.all(
 				updates.map( ( u ) => {
-					const record = treeRecords.find( ( r ) => r.id === u.id );
+					const record = records.find( ( r ) => r.id === u.id );
 					return saveEntityRecord(
 						'postType',
 						record?.type ?? POST_TYPE,
@@ -166,12 +210,16 @@ export default function useSidebarDnd( {
 			if ( parsed.zone === 'inside' ) {
 				expand( parsed.targetId );
 			}
+			refreshBranch?.( Number( active.parent || 0 ) );
+			refreshBranch?.( destinationParent );
 		},
 		[
 			draggedId,
-			treeRecords,
 			saveEntityRecord,
 			expand,
+			loadBranch,
+			refreshBranch,
+			getBranch,
 			clearAutoExpandTimer,
 		]
 	);

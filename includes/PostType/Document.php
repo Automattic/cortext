@@ -96,6 +96,66 @@ final class Document {
 				),
 			)
 		);
+		register_rest_field(
+			self::POST_TYPE,
+			'cortext_has_tree_children',
+			array(
+				'get_callback' => array( $this, 'has_tree_children_rest_field' ),
+				'schema'       => array(
+					'type'     => 'boolean',
+					'context'  => array( 'edit' ),
+					'readonly' => true,
+				),
+			)
+		);
+	}
+
+	/**
+	 * Returns true when a document has at least one editable child in the sidebar tree.
+	 *
+	 * @param array<string,mixed> $record REST record data.
+	 */
+	public function has_tree_children_rest_field( array $record ): bool {
+		$parent_id = isset( $record['id'] ) ? (int) $record['id'] : 0;
+		if ( $parent_id < 1 ) {
+			return false;
+		}
+
+		$per_page      = 20;
+		$page          = 1;
+		$matched_count = 0;
+		do {
+			$query         = new \WP_Query(
+				array(
+					'post_type'              => self::POST_TYPE,
+					'post_status'            => array( 'draft', 'private', 'publish' ),
+					'post_parent'            => $parent_id,
+					'posts_per_page'         => $per_page,
+					'paged'                  => $page,
+					'fields'                 => 'ids',
+					'no_found_rows'          => true,
+					'perm'                   => 'editable',
+					'update_post_meta_cache' => false,
+					'update_post_term_cache' => false,
+					'tax_query'              => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
+						array(
+							'taxonomy' => TraitTaxonomy::TAXONOMY,
+							'operator' => 'NOT EXISTS',
+						),
+					),
+				)
+			);
+			$matched_count = count( $query->posts );
+
+			foreach ( $query->posts as $child_id ) {
+				if ( current_user_can( 'edit_post', (int) $child_id ) ) {
+					return true;
+				}
+			}
+			++$page;
+		} while ( $matched_count === $per_page );
+
+		return false;
 	}
 
 	/**
@@ -755,6 +815,7 @@ final class Document {
 		$with_trait     = $request->get_param( 'cortext_trait' );
 		$collections    = $request->get_param( 'cortext_collections' );
 		$no_collections = $request->get_param( 'cortext_no_collections' );
+		$tree_order     = $request->get_param( 'cortext_tree_order' );
 
 		$tax_query = $args['tax_query'] ?? array();
 
@@ -800,6 +861,13 @@ final class Document {
 		if ( count( $tax_query ) > 0 ) {
 			$args['tax_query'] = $tax_query; // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
 		}
+		if ( null !== $tree_order && '' !== (string) $tree_order && '0' !== (string) $tree_order ) {
+			$args['orderby'] = array(
+				'menu_order' => 'ASC',
+				'ID'         => 'ASC',
+			);
+			unset( $args['order'] );
+		}
 		return $args;
 	}
 
@@ -824,6 +892,10 @@ final class Document {
 		);
 		$params['cortext_collections']    = array(
 			'description' => __( 'Limit to documents that define a schema (collections).', 'cortext' ),
+			'type'        => 'boolean',
+		);
+		$params['cortext_tree_order']     = array(
+			'description' => __( 'Sort tree branches by menu order, then document ID.', 'cortext' ),
 			'type'        => 'boolean',
 		);
 		return $params;

@@ -38,6 +38,7 @@ use Cortext\Rest\PostLocksController;
 use Cortext\Rest\RecentsController;
 use Cortext\Rest\RowsController;
 use Cortext\Rest\SampleContentController;
+use Cortext\Rest\SidebarTreePreferencesController;
 use Cortext\Rest\WorkspaceHomeController;
 use Cortext\Taxonomy\MentionTaxonomy;
 use Cortext\Taxonomy\TraitTaxonomy;
@@ -81,6 +82,7 @@ final class Plugin {
 		( new RecentsController() )->register();
 		( new RowsController() )->register();
 		( new SampleContentController() )->register();
+		( new SidebarTreePreferencesController() )->register();
 		( new WorkspaceHomeController() )->register();
 		( new NotionController() )->register();
 		( new NotionImporter() )->register();

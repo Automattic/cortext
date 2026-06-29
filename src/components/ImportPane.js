@@ -25,6 +25,7 @@ import { extractCollections, runImport } from './notionImport';
 import { DOCUMENT_POST_TYPE, FULL_PAGE_COLLECTION_QUERY } from '../collections';
 import { ACTIVE_PAGES_QUERY } from './page-queries';
 import { computeDocumentUri } from '../router/useResolveEntity';
+import { notifySidebarTreeChanged } from '../hooks/sidebarTreeInvalidation';
 
 const NOTION_KEY_STORAGE = 'cortext.notionKey';
 
@@ -106,6 +107,7 @@ export default function ImportPane() {
 					DOCUMENT_POST_TYPE,
 					FULL_PAGE_COLLECTION_QUERY,
 				] );
+				notifySidebarTreeChanged();
 			};
 
 			runImport( notionApiKey, collection.id, ( progress ) => {

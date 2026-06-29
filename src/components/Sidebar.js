@@ -2,6 +2,7 @@ import { __, _n, sprintf } from '@wordpress/i18n';
 import { useEntityRecords } from '@wordpress/core-data';
 import { useDispatch } from '@wordpress/data';
 import { useState, useMemo, useCallback, useEffect } from '@wordpress/element';
+import { useParams } from '@tanstack/react-router';
 import {
 	Button,
 	Dropdown,
@@ -72,6 +73,8 @@ import ThemeToggle from './ThemeToggle';
 import {
 	computeDocumentUri,
 	IMPORT_URI,
+	parseIdFromUri,
+	parseSplatUri,
 	PUBLISHED_DOCUMENTS_URI,
 } from '../router/useResolveEntity';
 import { DOCUMENT_POST_TYPE, FULL_PAGE_COLLECTION_QUERY } from '../collections';
@@ -81,7 +84,7 @@ import useDelayedFlag, {
 import { useFavorites } from '../hooks/useFavorites';
 import useSidebarSections from '../hooks/useSidebarSections';
 import useTrashedDocuments from '../hooks/useTrashedDocuments';
-import { useWorkspaceHomePath } from '../hooks/useWorkspaceHomePath';
+import { useWorkspaceHome } from '../hooks/useWorkspaceHome';
 import {
 	DocumentsProvider,
 	favoriteIdentForRecord,
@@ -94,7 +97,7 @@ import {
 } from '../documents';
 import useSidebarDnd from './sidebar/useSidebarDnd';
 import useSidebarNavigation from './sidebar/useSidebarNavigation';
-import useSidebarTree from './sidebar/useSidebarTree';
+import useSidebarTree, { ROOT_PARENT_ID } from './sidebar/useSidebarTree';
 import DocumentRow from './sidebar/DocumentRow';
 import {
 	isPublicWebAffordancesEnabled,
@@ -107,8 +110,8 @@ export default function Sidebar( {
 	onToggleCollapsed,
 	onWidthChange,
 } ) {
-	// tech-debt.md#td-workspace-tree-no-unified-model: this tree still comes from flat REST lists capped at
-	// `per_page: 100`. The follow-up is lazy loading or a paged tree endpoint.
+	// Favorites still needs collection labels. The Documents tree below loads
+	// lazily through useSidebarTree.
 	const { records: collections, isResolving: isResolvingCollections } =
 		useEntityRecords(
 			'postType',
@@ -116,26 +119,63 @@ export default function Sidebar( {
 			FULL_PAGE_COLLECTION_QUERY
 		);
 	const trashedDocumentsState = useTrashedDocuments();
+	const params = useParams( { strict: false } );
+	const routeUri = params._splat ?? '';
+	const { prefix: routePrefix, tail: routeTail } = useMemo(
+		() => parseSplatUri( routeUri ),
+		[ routeUri ]
+	);
+	const routeSelectedId = useMemo(
+		() =>
+			routePrefix === 'page' || routePrefix === null
+				? parseIdFromUri( routeTail )
+				: null,
+		[ routePrefix, routeTail ]
+	);
+	const routeSelectedCollectionId = useMemo(
+		() =>
+			routePrefix === 'collection' ? parseIdFromUri( routeTail ) : null,
+		[ routePrefix, routeTail ]
+	);
 	const {
-		pages,
-		homePath,
 		home,
 		setHome,
-		isResolvingHomePath,
-		isResolvingPages,
+		isResolving: isResolvingHome,
 		isUpdating: isHomeUpdating,
-	} = useWorkspaceHomePath();
-	const showPagesSkeleton = useDelayedFlag(
-		isResolvingPages && pages.length === 0,
-		120,
-		SKELETON_MIN_VISIBLE_MS
-	);
+	} = useWorkspaceHome();
 	const {
 		favorites,
 		setFavorites,
 		isResolving: isResolvingFavorites,
 	} = useFavorites();
 	const { saveEntityRecord } = useDispatch( 'core' );
+	const {
+		tree,
+		pages,
+		rootBranch,
+		isResolvingPages,
+		expandedIds,
+		toggleExpand,
+		expand,
+		loadBranch,
+		loadMore,
+		refreshBranch,
+		getBranch,
+	} = useSidebarTree( {
+		selectedId: routeSelectedId,
+		selectedCollectionId: routeSelectedCollectionId,
+	} );
+	const fallbackHomePage = tree[ 0 ]?.page ?? null;
+	const homePath =
+		home?.path ??
+		( fallbackHomePage ? computeDocumentUri( fallbackHomePage ) : null );
+	const isResolvingHomePath =
+		isResolvingHome || ( ! home?.path && isResolvingPages );
+	const showPagesSkeleton = useDelayedFlag(
+		isResolvingPages && pages.length === 0,
+		120,
+		SKELETON_MIN_VISIBLE_MS
+	);
 	const {
 		navigate,
 		activeUri,
@@ -218,14 +258,6 @@ export default function Sidebar( {
 		[ isRowSelected, navigate ]
 	);
 
-	// The tree is built from one non-row document list (pages and collections).
-	// The `collections` query feeds only the Favorites label lookup.
-	const { tree, expandedIds, toggleExpand, expand } = useSidebarTree( {
-		documents: pages,
-		selectedId,
-		selectedCollectionId,
-	} );
-
 	// `draggedId` and `activeDrop` flow into the per-row callbacks below, so
 	// the DnD hook has to resolve before any `useCallback` that lists them as
 	// deps. Otherwise their `const` bindings sit in the temporal dead zone
@@ -235,6 +267,9 @@ export default function Sidebar( {
 			pages,
 			expandedIds,
 			expand,
+			loadBranch,
+			refreshBranch,
+			getBranch,
 			saveEntityRecord,
 		} );
 
@@ -328,12 +363,20 @@ export default function Sidebar( {
 		[ navigate ]
 	);
 	const createAndOpen = useCallback(
-		async ( input ) => openAfterCreate( await create( input ) ),
-		[ create, openAfterCreate ]
+		async ( input ) => {
+			const created = await create( input );
+			refreshBranch( created?.parent ?? input?.parent ?? ROOT_PARENT_ID );
+			return openAfterCreate( created );
+		},
+		[ create, openAfterCreate, refreshBranch ]
 	);
 	const createCollectionAndOpen = useCallback(
-		async ( input ) => openAfterCreate( await createCollection( input ) ),
-		[ createCollection, openAfterCreate ]
+		async ( input ) => {
+			const created = await createCollection( input );
+			refreshBranch( created?.parent ?? input?.parent ?? ROOT_PARENT_ID );
+			return openAfterCreate( created );
+		},
+		[ createCollection, openAfterCreate, refreshBranch ]
 	);
 	const createRootPage = useCallback(
 		() => createAndOpen( {} ),
@@ -360,6 +403,7 @@ export default function Sidebar( {
 		isSelected: isRowSelected,
 		onSelect: onRowSelect,
 		onToggleExpand: toggleExpand,
+		onLoadMore: loadMore,
 		isFavorite,
 		isFavoriteDisabled: areFavoriteActionsDisabled,
 		onToggleFavorite: toggleFavorite,
@@ -602,11 +646,22 @@ export default function Sidebar( {
 								{ isResolvingPages &&
 									pages.length === 0 &&
 									showPagesSkeleton && (
-										<SidebarListSkeleton itemCount={ 5 } />
+										<SidebarListSkeleton itemCount={ 1 } />
 									) }
 								{ ! isResolvingPages && pages.length === 0 && (
 									<p className="cortext-sidebar__empty">
 										{ __( 'Nothing here yet.', 'cortext' ) }
+									</p>
+								) }
+								{ rootBranch.error && (
+									<p
+										className="cortext-sidebar__row-error"
+										role="alert"
+									>
+										{ __(
+											"We couldn't load these documents.",
+											'cortext'
+										) }
 									</p>
 								) }
 
@@ -616,10 +671,42 @@ export default function Sidebar( {
 											key={ node.page.id }
 											record={ node.page }
 											childNodes={ node.children }
+											childBranch={ node.branch }
 											depth={ 0 }
 											{ ...rowChrome }
 										/>
 									) ) }
+									{ rootBranch.hasResolved &&
+										rootBranch.page <
+											rootBranch.totalPages && (
+											<li
+												className="cortext-sidebar__node cortext-sidebar__load-more-node"
+												style={ {
+													'--cortext-depth': 0,
+												} }
+											>
+												<Button
+													className="cortext-sidebar__load-more"
+													size="compact"
+													isBusy={
+														rootBranch.isLoading
+													}
+													disabled={
+														rootBranch.isLoading
+													}
+													onClick={ () =>
+														loadMore(
+															ROOT_PARENT_ID
+														)
+													}
+												>
+													{ __(
+														'Show more',
+														'cortext'
+													) }
+												</Button>
+											</li>
+										) }
 								</ul>
 							</SidebarSection>
 

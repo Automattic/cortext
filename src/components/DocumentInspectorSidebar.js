@@ -61,6 +61,7 @@ import { DOCUMENT_POST_TYPE, FULL_PAGE_COLLECTION_QUERY } from '../collections';
 import { definesTrait } from '../documents/capabilities';
 import { unlock } from '../lock-unlock';
 import { notifyDocumentTrashChanged } from '../hooks/documentTrashInvalidation';
+import { notifySidebarTreeChanged } from '../hooks/sidebarTreeInvalidation';
 import { useFavorites } from '../hooks/useFavorites';
 import { useWorkspaceHome } from '../hooks/useWorkspaceHome';
 
@@ -530,6 +531,7 @@ function PageActionsPanel( { postId } ) {
 				DOCUMENT_POST_TYPE,
 				FULL_PAGE_COLLECTION_QUERY,
 			] );
+			notifySidebarTreeChanged();
 			notifyDocumentTrashChanged();
 			try {
 				await setFavorites( ( current ) =>
