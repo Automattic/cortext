@@ -357,6 +357,7 @@ async function expectGridCardTitleBeforeFields( card ) {
 						titleBeforeFields: false,
 						fieldsShareTitleSurface: false,
 						fieldsAlignedWithTitle: false,
+						fieldsHaveBreathingRoom: false,
 					};
 				}
 				const mediaRect = media.getBoundingClientRect();
@@ -386,7 +387,13 @@ async function expectGridCardTitleBeforeFields( card ) {
 					fieldsAlignedWithTitle:
 						! titleContentRect ||
 						! fieldContentRect ||
-						fieldContentRect.left >= titleContentRect.left - 4,
+						( fieldContentRect.left >= titleContentRect.left - 4 &&
+							fieldContentRect.left <=
+								titleContentRect.left + 14 ),
+					fieldsHaveBreathingRoom:
+						! fieldContentRect ||
+						( fieldContentRect.top >= titleRect.bottom + 6 &&
+							fieldContentRect.top <= titleRect.bottom + 20 ),
 				};
 			} )
 		)
@@ -395,6 +402,7 @@ async function expectGridCardTitleBeforeFields( card ) {
 			titleBeforeFields: true,
 			fieldsShareTitleSurface: true,
 			fieldsAlignedWithTitle: true,
+			fieldsHaveBreathingRoom: true,
 		} );
 }
 

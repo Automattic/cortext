@@ -199,7 +199,7 @@ $grid-card-content-hover-background: #f3f3f3;
 		order: 1;
 		box-sizing: border-box;
 		width: 100%;
-		padding: $grid-unit-05 $grid-unit-20 0;
+		padding: $grid-unit-10 $grid-unit-20 0;
 		background: $grid-card-content-background;
 	}
 
@@ -320,7 +320,7 @@ $grid-card-content-hover-background: #f3f3f3;
 		justify-content: flex-start;
 		box-sizing: border-box;
 		width: 100%;
-		padding: $grid-unit-05 $grid-unit-20 0;
+		padding: $grid-unit-10 $grid-unit-20 0;
 		background: $grid-card-content-background;
 	}
 
@@ -330,7 +330,7 @@ $grid-card-content-hover-background: #f3f3f3;
 		.dataviews-view-grid__fields,
 		.dataviews-view-grid__badge-fields
 	):last-child {
-		padding-bottom: $grid-unit-15;
+		padding-bottom: $grid-unit-20;
 	}
 
 	.dataviews-view-grid__card > .components-v-stack {
