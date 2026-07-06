@@ -434,10 +434,12 @@ async function expectGridCardRestChrome( card ) {
 				);
 				if ( ! checkbox ) {
 					return {
-						selectionHiddenOnHover: true,
+						selectionVisibleOnHover: false,
+						selectionTopLeft: false,
 					};
 				}
 
+				const cardRect = element.getBoundingClientRect();
 				const checkboxRect = checkbox.getBoundingClientRect();
 				const checkboxStyles =
 					checkbox.ownerDocument.defaultView.getComputedStyle(
@@ -445,16 +447,21 @@ async function expectGridCardRestChrome( card ) {
 					);
 
 				return {
-					selectionHiddenOnHover:
-						checkboxStyles.display === 'none' ||
-						Number( checkboxStyles.opacity ) === 0 ||
-						checkboxRect.width === 0 ||
-						checkboxRect.height === 0,
+					selectionVisibleOnHover:
+						checkboxStyles.display !== 'none' &&
+						Number( checkboxStyles.opacity ) > 0 &&
+						checkboxStyles.pointerEvents !== 'none' &&
+						checkboxRect.width > 0 &&
+						checkboxRect.height > 0,
+					selectionTopLeft:
+						checkboxRect.top - cardRect.top <= 24 &&
+						checkboxRect.left - cardRect.left <= 24,
 				};
 			} )
 		)
 		.toEqual( {
-			selectionHiddenOnHover: true,
+			selectionVisibleOnHover: true,
+			selectionTopLeft: true,
 		} );
 }
 
@@ -1332,6 +1339,121 @@ test.describe( 'Collection view block', () => {
 				firstRowCardCount: 3,
 				usesCompactPreviewSize: true,
 			} );
+		} finally {
+			if ( fixture.rows ) {
+				for ( const row of fixture.rows ) {
+					await deleteIfCreated(
+						requestUtils,
+						`/wp/v2/crtxt_documents/${ row.id }`
+					);
+				}
+			}
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
+			);
+		}
+	} );
+
+	test( 'selects multiple grid cards without showing drag-handle chrome', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+
+		try {
+			await page.setViewportSize( { width: 1440, height: 900 } );
+			Object.assign(
+				fixture,
+				await createManualOrderFixture( requestUtils )
+			);
+
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: 'Grid card selection',
+					status: 'private',
+					content: createDataViewBlockMarkup( fixture.collection.id, {
+						type: 'grid',
+						fields: [ 'title' ],
+						sort: {
+							field: 'title',
+							direction: 'asc',
+						},
+					} ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/${ fixture.page.id }`
+			);
+
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.page.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+			const card = ( title ) =>
+				canvas
+					.locator( '.dataviews-view-grid__card' )
+					.filter( { hasText: title } )
+					.first();
+			const alphaCard = card( 'Alpha Manual' );
+			const betaCard = card( 'Beta Manual' );
+
+			await expect( alphaCard ).toBeVisible();
+			await expect( betaCard ).toBeVisible();
+			await expect(
+				canvas.locator( '.cortext-row-drag-handle' )
+			).toHaveCount( 0 );
+
+			await alphaCard.hover();
+			const alphaCheckbox = alphaCard.locator(
+				'> .dataviews-selection-checkbox input'
+			);
+			await expect( alphaCheckbox ).toBeVisible();
+			await alphaCheckbox.check();
+			await expect( alphaCheckbox ).toBeChecked();
+			await expect(
+				canvas.getByText( '1 document selected' )
+			).toBeVisible();
+
+			await betaCard.hover();
+			const betaCheckbox = betaCard.locator(
+				'> .dataviews-selection-checkbox input'
+			);
+			await expect( betaCheckbox ).toBeVisible();
+			await betaCheckbox.check();
+			await expect( betaCheckbox ).toBeChecked();
+			await expect(
+				canvas.getByText( '2 documents selected' )
+			).toBeVisible();
+
+			await canvas
+				.getByRole( 'button', { name: 'Clear selection' } )
+				.click();
+			await expect(
+				canvas.getByText( '2 documents selected' )
+			).toBeHidden();
+			await expect( alphaCheckbox ).not.toBeChecked();
+			await expect( betaCheckbox ).not.toBeChecked();
 		} finally {
 			if ( fixture.rows ) {
 				for ( const row of fixture.rows ) {
