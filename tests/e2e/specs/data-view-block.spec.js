@@ -329,53 +329,13 @@ async function expectTableActionsColumnSeparator( table ) {
 		} );
 }
 
-async function expectGridDragHandleStaysInCardChrome( canvas ) {
+async function expectGridCardHasNoFloatingDragHandle( canvas ) {
 	const card = canvas
 		.locator( '.dataviews-view-grid__card' )
 		.filter( { hasText: 'Alpha Manual' } )
 		.first();
 	const handle = card.locator( '> .cortext-row-drag-handle' );
-	await expect( handle ).toBeAttached();
-
-	await expect
-		.poll( () =>
-			card.evaluate( ( element ) => {
-				const dragHandle = element.querySelector(
-					':scope > .cortext-row-drag-handle'
-				);
-				const title = element.querySelector(
-					'.dataviews-view-grid__title-actions'
-				);
-				if ( ! dragHandle || ! title ) {
-					return {
-						topChrome: false,
-						rightChrome: false,
-						aboveTitle: false,
-						visible: false,
-					};
-				}
-				const cardRect = element.getBoundingClientRect();
-				const handleRect = dragHandle.getBoundingClientRect();
-				const titleRect = title.getBoundingClientRect();
-				const handleStyles =
-					dragHandle.ownerDocument.defaultView.getComputedStyle(
-						dragHandle
-					);
-
-				return {
-					topChrome: handleRect.top - cardRect.top <= 24,
-					rightChrome: cardRect.right - handleRect.right >= 32,
-					aboveTitle: handleRect.bottom <= titleRect.top - 4,
-					visible: Number( handleStyles.opacity ) >= 0.99,
-				};
-			} )
-		)
-		.toEqual( {
-			topChrome: true,
-			rightChrome: true,
-			aboveTitle: true,
-			visible: true,
-		} );
+	await expect( handle ).toHaveCount( 0 );
 }
 
 async function expectGridCardTitleBeforeFields( card ) {
@@ -414,6 +374,10 @@ async function expectGridCardTitleBeforeFields( card ) {
 }
 
 async function expectGridCardRestChrome( card ) {
+	await expect( card.locator( '> .cortext-row-drag-handle' ) ).toHaveCount(
+		0
+	);
+
 	await expect
 		.poll( () =>
 			card.evaluate( ( element ) => {
@@ -1849,11 +1813,15 @@ test.describe( 'Collection view block', () => {
 				await expect(
 					canvas.getByText( 'Alpha Manual', { exact: true } ).first()
 				).toBeVisible();
-				await expect(
-					canvas.locator( '.cortext-row-drag-handle' )
-				).toHaveCount( 3 );
 				if ( layout === 'grid' ) {
-					await expectGridDragHandleStaysInCardChrome( canvas );
+					await expect(
+						canvas.locator( '.cortext-row-drag-handle' )
+					).toHaveCount( 0 );
+					await expectGridCardHasNoFloatingDragHandle( canvas );
+				} else {
+					await expect(
+						canvas.locator( '.cortext-row-drag-handle' )
+					).toHaveCount( 3 );
 				}
 
 				const sourceRowIndex = layout === 'grid' ? 1 : 2;

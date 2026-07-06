@@ -36,6 +36,7 @@ export default function RowDragHandle( {
 	row,
 	keyboardFocusable = true,
 	activateFromRow = false,
+	renderHandle = true,
 } ) {
 	const {
 		attributes,
@@ -143,7 +144,7 @@ export default function RowDragHandle( {
 		};
 	}, [ activateFromRow, listeners, row.el ] );
 
-	if ( ! row.handleEl ) {
+	if ( ! renderHandle || ! row.handleEl ) {
 		return null;
 	}
 

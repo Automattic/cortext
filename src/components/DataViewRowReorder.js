@@ -1689,6 +1689,7 @@ export default function DataViewRowReorder( {
 					row={ row }
 					keyboardFocusable={ view?.type !== 'list' }
 					activateFromRow={ usesGridItems( view ) }
+					renderHandle={ ! usesGridItems( view ) }
 				/>
 			) ) }
 			{ rowGaps.map( ( gap ) => (
