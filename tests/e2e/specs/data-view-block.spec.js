@@ -158,6 +158,7 @@ async function expectDataViewsToolbarChrome(
 						?.querySelector(
 							'.dataviews-filters__visibility-toggle'
 						);
+					const filterIcon = filter?.querySelector( 'svg' );
 					const actionsToolbar = element.closest(
 						'.dataviews__view-actions'
 					);
@@ -176,8 +177,12 @@ async function expectDataViewsToolbarChrome(
 					const inputRect = input.getBoundingClientRect();
 					const iconRect = icon.getBoundingClientRect();
 					const filterRect = filter.getBoundingClientRect();
+					const filterIconRect = filterIcon.getBoundingClientRect();
 					const viewButtonRects = viewButtons.map( ( button ) =>
 						button.getBoundingClientRect()
+					);
+					const viewIconRects = viewButtons.map( ( button ) =>
+						button.querySelector( 'svg' )?.getBoundingClientRect()
 					);
 					const inputStyles =
 						input.ownerDocument.defaultView.getComputedStyle(
@@ -197,11 +202,15 @@ async function expectDataViewsToolbarChrome(
 						iconAligned:
 							Math.abs(
 								centerY( iconRect ) - centerY( inputRect )
-							) <= 4,
+							) <= 1,
 						filterAligned:
 							Math.abs(
 								centerY( filterRect ) - centerY( inputRect )
-							) <= 4,
+							) <= 1,
+						filterIconAligned:
+							Math.abs(
+								centerY( filterIconRect ) - centerY( inputRect )
+							) <= 1,
 						filterAfterInput:
 							filterRect.x > inputRect.x + inputRect.width,
 						filterCloseToInput:
@@ -219,7 +228,14 @@ async function expectDataViewsToolbarChrome(
 							( rect ) =>
 								Math.abs(
 									centerY( rect ) - centerY( inputRect )
-								) <= 4
+								) <= 1
+						),
+						viewIconsAligned: viewIconRects.every(
+							( rect ) =>
+								rect &&
+								Math.abs(
+									centerY( rect ) - centerY( inputRect )
+								) <= 1
 						),
 						viewButtonsAfterFilter:
 							viewButtonRects[ 0 ].x >
@@ -236,11 +252,13 @@ async function expectDataViewsToolbarChrome(
 			inputBorderTop: '0px',
 			iconAligned: true,
 			filterAligned: true,
+			filterIconAligned: true,
 			filterAfterInput: true,
 			filterCloseToInput: true,
 			viewButtonCount: 2,
 			viewButtonsCompact: true,
 			viewButtonsAligned: true,
+			viewIconsAligned: true,
 			viewButtonsAfterFilter: true,
 		} );
 }

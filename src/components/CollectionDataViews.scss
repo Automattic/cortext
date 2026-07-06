@@ -1257,6 +1257,8 @@ tr:has(.cortext-title-cell--is-opening)
 	}
 
 	.dataviews-search .components-input-control__prefix svg {
+		display: block;
+		flex: 0 0 auto;
 		width: $grid-unit-30;
 		height: $grid-unit-30;
 		transform: scaleX(-1);
@@ -1325,6 +1327,13 @@ tr:has(.cortext-title-cell--is-opening)
 		background: transparent;
 		box-shadow: none;
 		color: $gray-900;
+	}
+
+	.dataviews-filters__visibility-toggle.components-button svg,
+	.dataviews__view-actions > :last-child .dataviews-view-config__toggle-wrapper > .components-button svg,
+	.dataviews__view-actions > :last-child .components-button.has-icon:not(.has-text) svg {
+		display: block;
+		flex: 0 0 auto;
 	}
 
 	.dataviews-filters__visibility-toggle.components-button:hover,
