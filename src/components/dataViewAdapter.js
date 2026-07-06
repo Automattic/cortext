@@ -14,6 +14,7 @@ export const DEFAULT_LAYOUTS = {
 };
 
 const DEFAULT_TABLE_TITLE_WIDTH = 320;
+const UNSUPPORTED_DATAVIEWS_KEYS = [ 'infiniteScrollEnabled', 'startPosition' ];
 
 function isObject( value ) {
 	return Boolean(
@@ -27,6 +28,14 @@ function normalizeType( type ) {
 
 function cloneLayout( layout ) {
 	return isObject( layout ) ? { ...layout } : {};
+}
+
+function withoutUnsupportedDataViewsState( view ) {
+	const next = { ...view };
+	for ( const key of UNSUPPORTED_DATAVIEWS_KEYS ) {
+		delete next[ key ];
+	}
+	return next;
 }
 
 function layoutForTableDataViews( layout ) {
@@ -132,7 +141,7 @@ function fieldsByTypeFromView( view = {} ) {
 function withActiveLayout( view, type, layoutByType, fieldsByType ) {
 	const layout = cloneLayout( layoutByType[ type ] );
 	const next = {
-		...view,
+		...withoutUnsupportedDataViewsState( view ),
 		type,
 		layout,
 		layoutByType,
@@ -213,7 +222,7 @@ export function mergeDataViewsChange( previousView = {}, nextView = {} ) {
 	}
 
 	const next = {
-		...previousView,
+		...withoutUnsupportedDataViewsState( previousView ),
 		...nextView,
 		type: nextType,
 		fields,
@@ -227,6 +236,9 @@ export function mergeDataViewsChange( previousView = {}, nextView = {} ) {
 	}
 	if ( nextType !== 'table' ) {
 		delete next.showTitle;
+	}
+	for ( const key of UNSUPPORTED_DATAVIEWS_KEYS ) {
+		delete next[ key ];
 	}
 
 	return next;

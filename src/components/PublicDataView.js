@@ -146,7 +146,7 @@ export function normalizePublicView( view ) {
 	const type = normalizeType( source.type ?? DEFAULT_PUBLIC_VIEW.type );
 	const layoutByType = normalizeLayoutByType( source.layoutByType );
 
-	return {
+	const normalized = {
 		...DEFAULT_PUBLIC_VIEW,
 		...source,
 		type,
@@ -165,6 +165,9 @@ export function normalizePublicView( view ) {
 		layoutByType,
 		fieldsByType: normalizeFieldsByType( source.fieldsByType ),
 	};
+	delete normalized.infiniteScrollEnabled;
+	delete normalized.startPosition;
+	return normalized;
 }
 
 export function PublicDataViewErrorFallback() {

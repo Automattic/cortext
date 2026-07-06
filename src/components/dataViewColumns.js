@@ -181,12 +181,19 @@ export function normalizeView( view, validIds, options = {} ) {
 	const visibilityChanged =
 		view?.type !== 'table' &&
 		Object.prototype.hasOwnProperty.call( view ?? {}, 'showTitle' );
+	const unsupportedViewStateChanged =
+		Object.prototype.hasOwnProperty.call(
+			view ?? {},
+			'infiniteScrollEnabled'
+		) ||
+		Object.prototype.hasOwnProperty.call( view ?? {}, 'startPosition' );
 	const layoutChanged =
 		layoutResult.changed ||
 		layoutByTypeResult.changed ||
 		fieldsByTypeResult.changed ||
 		displayFieldResult.changed ||
-		visibilityChanged;
+		visibilityChanged ||
+		unsupportedViewStateChanged;
 
 	if ( ! fieldsChanged && ! layoutChanged && ! calculationsChanged ) {
 		return view;
@@ -211,6 +218,10 @@ export function normalizeView( view, validIds, options = {} ) {
 	}
 	if ( visibilityChanged ) {
 		delete nextView.showTitle;
+	}
+	if ( unsupportedViewStateChanged ) {
+		delete nextView.infiniteScrollEnabled;
+		delete nextView.startPosition;
 	}
 	if ( layoutByTypeResult.layoutByType !== undefined ) {
 		nextView.layoutByType = layoutByTypeResult.layoutByType;

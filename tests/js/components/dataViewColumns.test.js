@@ -385,6 +385,22 @@ describe( 'normalizeView', () => {
 		expect( next.showTitle ).toBeUndefined();
 	} );
 
+	it( 'drops unsupported DataViews infinite-scroll state from saved views', () => {
+		const view = {
+			...baseView(),
+			type: 'grid',
+			infiniteScrollEnabled: true,
+			startPosition: 26,
+		};
+		const next = normalizeView(
+			view,
+			new Set( [ TITLE_FIELD_ID, 'field-1', 'field-2' ] )
+		);
+
+		expect( next.infiniteScrollEnabled ).toBeUndefined();
+		expect( next.startPosition ).toBeUndefined();
+	} );
+
 	it( 'prunes stale grid badge fields', () => {
 		const view = {
 			...baseView(),

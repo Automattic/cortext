@@ -121,6 +121,19 @@ describe( 'dataViewAdapter', () => {
 		expect( view.fields ).toEqual( [ 'field-2' ] );
 	} );
 
+	it( 'does not pass unsupported DataViews infinite-scroll state into the rendered view', () => {
+		const view = adaptViewForDataViews( {
+			...canonicalView,
+			type: 'list',
+			infiniteScrollEnabled: true,
+			startPosition: 26,
+			layout: canonicalView.layoutByType.list,
+		} );
+
+		expect( view.infiniteScrollEnabled ).toBeUndefined();
+		expect( view.startPosition ).toBeUndefined();
+	} );
+
 	it( 'round-trips table to grid to table without losing layout buckets', () => {
 		const gridRenderView = adaptViewForDataViews( {
 			...canonicalView,
@@ -303,5 +316,17 @@ describe( 'dataViewAdapter', () => {
 		expect( tableCanonical.search ).toBe( 'needle' );
 		expect( tableCanonical.page ).toBe( 2 );
 		expect( tableCanonical.perPage ).toBe( 25 );
+	} );
+
+	it( 'drops unsupported DataViews infinite-scroll state from emitted view changes', () => {
+		const listCanonical = mergeDataViewsChange( canonicalView, {
+			type: 'list',
+			infiniteScrollEnabled: true,
+			startPosition: 26,
+			layout: {},
+		} );
+
+		expect( listCanonical.infiniteScrollEnabled ).toBeUndefined();
+		expect( listCanonical.startPosition ).toBeUndefined();
 	} );
 } );

@@ -168,6 +168,17 @@ describe( 'normalizePublicView', () => {
 		expect( view.layout.previewSize ).toBe( 240 );
 		expect( view.layoutByType.grid.previewSize ).toBe( 240 );
 	} );
+
+	it( 'drops unsupported DataViews infinite-scroll state from public views', () => {
+		const view = normalizePublicView( {
+			type: 'list',
+			infiniteScrollEnabled: true,
+			startPosition: 26,
+		} );
+
+		expect( view.infiniteScrollEnabled ).toBeUndefined();
+		expect( view.startPosition ).toBeUndefined();
+	} );
 } );
 
 describe( 'PublicDataView', () => {
