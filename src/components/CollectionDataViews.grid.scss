@@ -6,22 +6,20 @@ $grid-card-content-background: #f8f8f8;
 $grid-card-content-hover-background: #f3f3f3;
 
 .cortext-data-view
-	.dataviews-view-grid__card:hover
-	.cortext-title-cell__open.components-button,
+.dataviews-view-grid__card:hover
+.cortext-title-cell__open.components-button,
 .cortext-data-view
-	.dataviews-view-grid__card:focus-within
-	.cortext-title-cell__open.components-button {
+.dataviews-view-grid__card:focus-within
+.cortext-title-cell__open.components-button {
 	opacity: 1;
 	pointer-events: auto;
 }
 
 .cortext-data-view {
+
 	&__grid-new-row {
 		display: grid;
-		grid-template-columns: repeat(
-			auto-fill,
-			minmax(var(--cortext-grid-card-min, 240px), 1fr)
-		);
+		grid-template-columns: repeat(auto-fill, minmax(var(--cortext-grid-card-min, 240px), 1fr));
 		grid-auto-rows: minmax(var(--cortext-grid-card-height, 220px), auto);
 		gap: $grid-unit-20;
 		padding: 0 $grid-unit-20 $grid-unit-20;
@@ -166,11 +164,11 @@ $grid-card-content-hover-background: #f3f3f3;
 	}
 
 	.dataviews-view-grid
-		.dataviews-view-grid__card
-		.dataviews-view-grid__title-actions {
+	.dataviews-view-grid__card
+	.dataviews-view-grid__title-actions {
 		gap: $grid-unit-10;
 		align-items: center;
-		order: 1;
+		order: 0;
 		width: 100%;
 		box-sizing: border-box;
 		padding: $grid-unit-15 $grid-unit-20 $grid-unit-05;
@@ -191,6 +189,7 @@ $grid-card-content-hover-background: #f3f3f3;
 	}
 
 	.dataviews-view-grid__fields {
+		order: 1;
 		padding-top: $grid-unit-05;
 	}
 
@@ -240,7 +239,7 @@ $grid-card-content-hover-background: #f3f3f3;
 	}
 
 	.dataviews-view-grid__field-value
-		.cortext-editable-cell__shell:focus-visible {
+	.cortext-editable-cell__shell:focus-visible {
 		background: transparent;
 		box-shadow: inset 0 0 0 1px var(--cortext-accent);
 		outline: none;
@@ -260,11 +259,11 @@ $grid-card-content-hover-background: #f3f3f3;
 	}
 
 	.dataviews-view-grid__field-value
-		.cortext-editable-cell__shell:hover
-		.cortext-editable-cell__edit-indicator,
+	.cortext-editable-cell__shell:hover
+	.cortext-editable-cell__edit-indicator,
 	.dataviews-view-grid__field-value
-		.cortext-editable-cell__shell:focus-visible
-		.cortext-editable-cell__edit-indicator {
+	.cortext-editable-cell__shell:focus-visible
+	.cortext-editable-cell__edit-indicator {
 		color: $gray-900;
 		opacity: 1;
 	}
@@ -277,7 +276,8 @@ $grid-card-content-hover-background: #f3f3f3;
 	.dataviews-view-grid .cortext-relation-ref-more,
 	.dataviews-view-grid .cortext-chip {
 		box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
-		box-shadow: inset 0 0 0 1px
+		box-shadow:
+			inset 0 0 0 1px
 			color-mix(in oklch, currentcolor 20%, transparent);
 	}
 
@@ -288,6 +288,7 @@ $grid-card-content-hover-background: #f3f3f3;
 	}
 
 	.dataviews-view-grid__badge-fields {
+		order: 1;
 		justify-content: flex-start;
 		padding-top: $grid-unit-05;
 	}
@@ -346,7 +347,7 @@ $grid-card-content-hover-background: #f3f3f3;
 	}
 
 	.dataviews-view-grid__title-actions
-		.dataviews-all-actions-button.components-button {
+	.dataviews-all-actions-button.components-button {
 		display: inline-flex;
 		flex: 0 0 auto;
 		align-items: center;

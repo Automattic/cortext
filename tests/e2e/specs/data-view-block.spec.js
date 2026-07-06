@@ -348,6 +348,41 @@ async function expectGridDragHandleStaysInCardChrome( canvas ) {
 		} );
 }
 
+async function expectGridCardTitleBeforeFields( card ) {
+	await expect
+		.poll( () =>
+			card.evaluate( ( element ) => {
+				const media = element.querySelector(
+					'.dataviews-view-grid__media'
+				);
+				const titleActions = element.querySelector(
+					'.dataviews-view-grid__title-actions'
+				);
+				const fields = element.querySelector(
+					'.dataviews-view-grid__fields, .dataviews-view-grid__badge-fields'
+				);
+				if ( ! media || ! titleActions || ! fields ) {
+					return {
+						titleAfterMedia: false,
+						titleBeforeFields: false,
+					};
+				}
+				const mediaRect = media.getBoundingClientRect();
+				const titleRect = titleActions.getBoundingClientRect();
+				const fieldsRect = fields.getBoundingClientRect();
+
+				return {
+					titleAfterMedia: titleRect.top >= mediaRect.bottom - 1,
+					titleBeforeFields: titleRect.bottom <= fieldsRect.top + 1,
+				};
+			} )
+		)
+		.toEqual( {
+			titleAfterMedia: true,
+			titleBeforeFields: true,
+		} );
+}
+
 async function startSidePeekShellStabilityLog( page ) {
 	await page.evaluate( () => {
 		window.__cortextSidePeekShellEvents = [];
@@ -1930,6 +1965,12 @@ test.describe( 'Collection view block', () => {
 					.locator( '.cortext-chip', { hasText: 'Finished' } )
 					.first()
 			).toBeVisible();
+			await expectGridCardTitleBeforeFields(
+				canvas
+					.locator( '.dataviews-view-grid__card' )
+					.filter( { hasText: 'Alpha Manual' } )
+					.first()
+			);
 
 			await dragRenderedRow(
 				page,
