@@ -396,27 +396,6 @@ $grid-card-content-hover-background: #f3f3f3;
 	}
 
 	.dataviews-view-grid__card > .dataviews-selection-checkbox {
-		position: absolute;
-		top: $grid-unit-10;
-		left: $grid-unit-10;
-		z-index: 3;
-		width: max-content;
-		min-width: 0;
-		margin: 0;
-		opacity: 0;
-		pointer-events: none;
-		transition: opacity 120ms ease;
-	}
-
-	.dataviews-view-grid__card > .dataviews-selection-checkbox
-	.components-base-control__field {
-		margin: 0;
-	}
-
-	.dataviews-view-grid__card:hover > .dataviews-selection-checkbox,
-	.dataviews-view-grid__card:focus-within > .dataviews-selection-checkbox,
-	.dataviews-view-grid__card:has(.dataviews-selection-checkbox input:checked) > .dataviews-selection-checkbox {
-		opacity: 1;
-		pointer-events: auto;
+		display: none;
 	}
 }

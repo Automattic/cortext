@@ -449,8 +449,9 @@ async function expectGridCardRestChrome( card ) {
 						actionCenter <= titleRect.bottom,
 					actionRightAligned: cardRect.right - actionRect.right <= 24,
 					checkboxHiddenAtRest:
-						Number( checkboxStyles.opacity ) === 0 &&
-						checkboxStyles.pointerEvents === 'none',
+						checkboxStyles.display === 'none' ||
+						( Number( checkboxStyles.opacity ) === 0 &&
+							checkboxStyles.pointerEvents === 'none' ),
 				};
 			} )
 		)
@@ -467,44 +468,29 @@ async function expectGridCardRestChrome( card ) {
 				const checkbox = element.querySelector(
 					':scope > .dataviews-selection-checkbox'
 				);
-				const input = checkbox?.querySelector(
-					'input[type="checkbox"]'
-				);
-				if ( ! checkbox || ! input ) {
+				if ( ! checkbox ) {
 					return {
-						selectionVisible: false,
-						selectionCompact: false,
-						inputInsideSelection: false,
-						selectionAtStart: false,
+						selectionHiddenOnHover: true,
 					};
 				}
 
-				const cardRect = element.getBoundingClientRect();
 				const checkboxRect = checkbox.getBoundingClientRect();
-				const inputRect = input.getBoundingClientRect();
 				const checkboxStyles =
 					checkbox.ownerDocument.defaultView.getComputedStyle(
 						checkbox
 					);
 
 				return {
-					selectionVisible: Number( checkboxStyles.opacity ) >= 0.99,
-					selectionCompact:
-						checkboxRect.width <= 44 && checkboxRect.height <= 44,
-					inputInsideSelection:
-						inputRect.left >= checkboxRect.left - 1 &&
-						inputRect.right <= checkboxRect.right + 1,
-					selectionAtStart:
-						checkboxRect.left >= cardRect.left &&
-						checkboxRect.left - cardRect.left <= 24,
+					selectionHiddenOnHover:
+						checkboxStyles.display === 'none' ||
+						Number( checkboxStyles.opacity ) === 0 ||
+						checkboxRect.width === 0 ||
+						checkboxRect.height === 0,
 				};
 			} )
 		)
 		.toEqual( {
-			selectionVisible: true,
-			selectionCompact: true,
-			inputInsideSelection: true,
-			selectionAtStart: true,
+			selectionHiddenOnHover: true,
 		} );
 }
 
