@@ -27,6 +27,7 @@ use Cortext\PostType\ArchiveCascade;
 use Cortext\PostType\Document;
 use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Field;
+use Cortext\PostType\Template as TemplatePostType;
 use Cortext\PostType\TrashCascade;
 use Cortext\Rest\BacklinksController;
 use Cortext\Rest\DocumentLocatorController;
@@ -41,6 +42,7 @@ use Cortext\Rest\RecentsController;
 use Cortext\Rest\RowsController;
 use Cortext\Rest\SampleContentController;
 use Cortext\Rest\SidebarTreePreferencesController;
+use Cortext\Rest\TemplatesController;
 use Cortext\Rest\WorkspaceHomeController;
 use Cortext\Taxonomy\MentionTaxonomy;
 use Cortext\Taxonomy\TraitTaxonomy;
@@ -64,6 +66,7 @@ final class Plugin {
 		( new TraitTaxonomy() )->register();
 		( new MentionTaxonomy() )->register();
 		( new Field() )->register();
+		( new TemplatePostType() )->register();
 		( new FieldValueIndex() )->register();
 
 		$archive_cascade = new ArchiveCascade();
@@ -89,6 +92,7 @@ final class Plugin {
 		( new RowsController() )->register();
 		( new SampleContentController() )->register();
 		( new SidebarTreePreferencesController() )->register();
+		( new TemplatesController() )->register();
 		( new WorkspaceHomeController() )->register();
 		( new NotionController() )->register();
 		( new NotionImporter() )->register();
