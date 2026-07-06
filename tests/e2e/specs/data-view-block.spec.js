@@ -195,6 +195,8 @@ async function expectDataViewsToolbarChrome(
 						) <= 4,
 					filterAfterInput:
 						filterRect.x > inputRect.x + inputRect.width,
+					filterCloseToInput:
+						filterRect.x - ( inputRect.x + inputRect.width ) <= 32,
 					viewButtonCount: viewButtonRects.length,
 					viewButtonsCompact: viewButtonRects.every(
 						( rect ) =>
@@ -223,6 +225,7 @@ async function expectDataViewsToolbarChrome(
 			iconAligned: true,
 			filterAligned: true,
 			filterAfterInput: true,
+			filterCloseToInput: true,
 			viewButtonCount: 2,
 			viewButtonsCompact: true,
 			viewButtonsAligned: true,
@@ -2067,6 +2070,8 @@ test.describe( 'Collection view block', () => {
 		const fixture = {};
 
 		try {
+			await page.setViewportSize( { width: 1600, height: 900 } );
+
 			Object.assign(
 				fixture,
 				await createManualOrderFixture( requestUtils )

@@ -1149,9 +1149,10 @@ tr:has(.cortext-title-cell--is-opening)
 	.dataviews__search {
 		display: flex;
 		align-items: center;
-		justify-content: flex-start;
-		flex: 0 1 368px;
-		width: min(100%, 368px);
+		justify-content: flex-start !important;
+		flex: 0 1 auto;
+		width: auto;
+		max-width: 100%;
 		gap: $grid-unit;
 		min-width: 0;
 	}
@@ -1164,10 +1165,10 @@ tr:has(.cortext-title-cell--is-opening)
 	}
 
 	.dataviews-search.components-search-control {
-		display: flex;
-		align-items: center;
-		flex: 1 1 auto;
-		width: auto;
+		display: block;
+		flex: 0 1 320px;
+		width: 320px;
+		min-width: 0;
 		max-width: 100%;
 	}
 
