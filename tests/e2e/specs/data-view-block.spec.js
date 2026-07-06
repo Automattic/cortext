@@ -1083,6 +1083,7 @@ test.describe( 'Collection view block', () => {
 		const fixture = {};
 
 		try {
+			await page.setViewportSize( { width: 1440, height: 900 } );
 			Object.assign(
 				fixture,
 				await createManualOrderFixture( requestUtils )
@@ -1139,9 +1140,18 @@ test.describe( 'Collection view block', () => {
 								'.cortext-data-view__new-row-card-wrapper'
 							)
 							?.getBoundingClientRect();
+						const gridRect = root
+							.querySelector( '.dataviews-view-grid' )
+							?.getBoundingClientRect();
 						const cardWidths = rects(
 							'.dataviews-view-grid__card'
 						).map( ( rect ) => Math.round( rect.width ) );
+						const firstRowCardCount =
+							root
+								.querySelector( '.dataviews-view-grid__row' )
+								?.querySelectorAll(
+									'.dataviews-view-grid__card'
+								).length ?? 0;
 						const newWidth = newRect
 							? Math.round( newRect.width )
 							: 0;
@@ -1168,9 +1178,12 @@ test.describe( 'Collection view block', () => {
 							newAligned:
 								cardWidths.length > 0 &&
 								Math.abs( newWidth - cardWidths[ 0 ] ) <= 2,
-							usesBalancedPreviewSize:
+							gridWideEnoughForThree:
+								( gridRect?.width ?? 0 ) >= 752,
+							firstRowCardCount,
+							usesCompactPreviewSize:
 								cardWidths.length > 0 &&
-								Math.min( ...cardWidths ) >= 260 &&
+								Math.min( ...cardWidths ) >= 220 &&
 								Math.max( ...cardWidths ) <= 360,
 						};
 					} );
@@ -1180,7 +1193,9 @@ test.describe( 'Collection view block', () => {
 				cardsWide: true,
 				titlesVisible: true,
 				newAligned: true,
-				usesBalancedPreviewSize: true,
+				gridWideEnoughForThree: true,
+				firstRowCardCount: 3,
+				usesCompactPreviewSize: true,
 			} );
 		} finally {
 			if ( fixture.rows ) {

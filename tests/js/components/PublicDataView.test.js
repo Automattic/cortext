@@ -152,7 +152,7 @@ describe( 'normalizePublicView', () => {
 		expect( view.layout.styles ).toBeUndefined();
 		expect( view.layoutByType ).toEqual( {
 			table: { density: 'compact' },
-			grid: { previewSize: 290 },
+			grid: { previewSize: 240 },
 			list: {},
 		} );
 		expect( view.fieldsByType ).toEqual( { grid: [], list: [] } );
@@ -165,8 +165,8 @@ describe( 'normalizePublicView', () => {
 			layoutByType: { grid: { previewSize: 430 } },
 		} );
 
-		expect( view.layout.previewSize ).toBe( 290 );
-		expect( view.layoutByType.grid.previewSize ).toBe( 290 );
+		expect( view.layout.previewSize ).toBe( 240 );
+		expect( view.layoutByType.grid.previewSize ).toBe( 240 );
 	} );
 } );
 
@@ -220,7 +220,7 @@ describe( 'PublicDataView', () => {
 		expect( mockDataViews.mock.calls.at( -1 )[ 0 ].defaultLayouts ).toEqual(
 			{
 				table: { layout: { density: 'compact' } },
-				grid: { layout: { previewSize: 290 } },
+				grid: { layout: { previewSize: 240 } },
 				list: {},
 			}
 		);

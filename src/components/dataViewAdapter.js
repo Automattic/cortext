@@ -4,7 +4,7 @@ import { COVER_FIELD_ID, MIN_WIDTHS, TITLE_FIELD_ID } from './dataViewColumns';
 // per-layout buckets and hydrates the active shape before rendering.
 export const DATA_VIEW_LAYOUT_TYPES = [ 'table', 'grid', 'list' ];
 export const DATA_VIEW_FIELD_LAYOUT_TYPES = [ 'grid', 'list' ];
-export const DEFAULT_GRID_PREVIEW_SIZE = 290;
+export const DEFAULT_GRID_PREVIEW_SIZE = 240;
 const STALE_GRID_PREVIEW_SIZE = 430;
 
 export const DEFAULT_LAYOUTS = {
