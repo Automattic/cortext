@@ -2175,6 +2175,32 @@ test.describe( 'Collection view block', () => {
 				fixture,
 				await createManualOrderFixture( requestUtils )
 			);
+			fixture.relatedCollection = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: 'E2E Bands',
+					status: 'private',
+				},
+			} );
+			fixture.relatedField = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_fields',
+				data: {
+					title: 'Name',
+					status: 'private',
+					meta: { type: 'text' },
+				},
+			} );
+			await requestUtils.rest( {
+				method: 'POST',
+				path: `/wp/v2/crtxt_documents/${ fixture.relatedCollection.id }`,
+				data: {
+					meta: {
+						cortext_fields: [ String( fixture.relatedField.id ) ],
+					},
+				},
+			} );
 			fixture.statusField = await requestUtils.rest( {
 				method: 'POST',
 				path: '/wp/v2/crtxt_fields',
@@ -2193,7 +2219,34 @@ test.describe( 'Collection view block', () => {
 					},
 				},
 			} );
-			const fieldKey = `field-${ fixture.statusField.id }`;
+			fixture.relationField = await requestUtils.rest( {
+				method: 'POST',
+				path: `/cortext/v1/collections/${ fixture.collection.id }/fields`,
+				data: {
+					title: 'Artist',
+					type: 'relation',
+					related_collection_id: fixture.relatedCollection.id,
+					relation_multiple: true,
+					reverse_title: 'Songs',
+					reverse_multiple: true,
+				},
+			} );
+			const relationFieldRecord = await requestUtils.rest( {
+				path: `/wp/v2/crtxt_fields/${ fixture.relationField.id }?context=edit`,
+			} );
+			fixture.reverseRelationFieldId =
+				relationFieldRecord?.meta?.relation_reverse_field_id;
+			fixture.relatedRow = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: 'Los Angeles Azules Extended Relation Label',
+					status: 'private',
+					cortext_trait: fixture.relatedCollection.id,
+				},
+			} );
+			const statusFieldKey = `field-${ fixture.statusField.id }`;
+			const relationFieldKey = `field-${ fixture.relationField.id }`;
 			fixture.media = [];
 
 			await requestUtils.rest( {
@@ -2204,6 +2257,7 @@ test.describe( 'Collection view block', () => {
 						cortext_fields: [
 							String( fixture.field.id ),
 							String( fixture.statusField.id ),
+							String( fixture.relationField.id ),
 						],
 					},
 				},
@@ -2222,7 +2276,8 @@ test.describe( 'Collection view block', () => {
 					data: {
 						featured_media: media.id,
 						meta: {
-							[ fieldKey ]: 'finished',
+							[ statusFieldKey ]: 'finished',
+							[ relationFieldKey ]: [ fixture.relatedRow.id ],
 						},
 					},
 				} );
@@ -2236,8 +2291,10 @@ test.describe( 'Collection view block', () => {
 					status: 'private',
 					content: createDataViewBlockMarkup( fixture.collection.id, {
 						type: 'grid',
-						fields: [ 'title', fieldKey ],
-						fieldsByType: { grid: [ fieldKey ] },
+						fields: [ 'title', relationFieldKey, statusFieldKey ],
+						fieldsByType: {
+							grid: [ relationFieldKey, statusFieldKey ],
+						},
 						sort: {
 							field: 'title',
 							direction: 'asc',
@@ -2266,12 +2323,58 @@ test.describe( 'Collection view block', () => {
 					.locator( '.cortext-chip', { hasText: 'Finished' } )
 					.first()
 			).toBeVisible();
-			await expectGridCardTitleBeforeFields(
-				canvas
-					.locator( '.dataviews-view-grid__card' )
-					.filter( { hasText: 'Alpha Manual' } )
-					.first()
-			);
+			const alphaCard = canvas
+				.locator( '.dataviews-view-grid__card' )
+				.filter( { hasText: 'Alpha Manual' } )
+				.first();
+			await expectGridCardTitleBeforeFields( alphaCard );
+			const relationChip = alphaCard
+				.locator( '.cortext-relation-ref', {
+					hasText: 'Los Angeles Azules Extended Relation Label',
+				} )
+				.first();
+			await expect( relationChip ).toBeVisible();
+			await expect
+				.poll( () =>
+					relationChip.evaluate( ( chip ) => {
+						const shell = chip.closest(
+							'.cortext-editable-cell__shell'
+						);
+						const fields = chip.closest(
+							'.dataviews-view-grid__fields, .dataviews-view-grid__badge-fields'
+						);
+						const title = chip.querySelector(
+							'.cortext-relation-ref__title'
+						);
+						if ( ! shell || ! fields || ! title ) {
+							return {
+								chipInsideFields: false,
+								titleHasRoom: false,
+								shellPaddingRight: Number.POSITIVE_INFINITY,
+							};
+						}
+						const ownerWindow = chip.ownerDocument.defaultView;
+						const chipRect = chip.getBoundingClientRect();
+						const fieldsRect = fields.getBoundingClientRect();
+						const titleRect = title.getBoundingClientRect();
+						const shellPaddingRight = Number.parseFloat(
+							ownerWindow.getComputedStyle( shell ).paddingRight
+						);
+
+						return {
+							chipInsideFields:
+								chipRect.left >= fieldsRect.left - 1 &&
+								chipRect.right <= fieldsRect.right + 1,
+							titleHasRoom: titleRect.width > 80,
+							shellPaddingRight,
+						};
+					} )
+				)
+				.toEqual( {
+					chipInsideFields: true,
+					titleHasRoom: true,
+					shellPaddingRight: 4,
+				} );
 
 			await dragRenderedRow(
 				page,
@@ -2310,6 +2413,31 @@ test.describe( 'Collection view block', () => {
 				requestUtils,
 				fixture.statusField &&
 					`/wp/v2/crtxt_fields/${ fixture.statusField.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.relationField &&
+					`/wp/v2/crtxt_fields/${ fixture.relationField.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.reverseRelationFieldId &&
+					`/wp/v2/crtxt_fields/${ fixture.reverseRelationFieldId }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.relatedRow &&
+					`/wp/v2/crtxt_documents/${ fixture.relatedRow.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.relatedField &&
+					`/wp/v2/crtxt_fields/${ fixture.relatedField.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.relatedCollection &&
+					`/wp/v2/crtxt_documents/${ fixture.relatedCollection.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
