@@ -1140,7 +1140,7 @@ tr:has(.cortext-title-cell--is-opening)
 	// Keep scoped fallbacks for the stable DataViews/control class names.
 	.dataviews__view-actions {
 		display: flex;
-		align-items: flex-start;
+		align-items: center;
 		justify-content: space-between;
 		gap: $grid-unit-05;
 		width: 100%;
@@ -1150,6 +1150,8 @@ tr:has(.cortext-title-cell--is-opening)
 		display: flex;
 		align-items: center;
 		justify-content: flex-start;
+		flex: 0 1 368px;
+		width: min(100%, 368px);
 		gap: $grid-unit;
 		min-width: 0;
 	}
@@ -1164,7 +1166,8 @@ tr:has(.cortext-title-cell--is-opening)
 	.dataviews-search.components-search-control {
 		display: flex;
 		align-items: center;
-		width: fit-content;
+		flex: 1 1 auto;
+		width: auto;
 		max-width: 100%;
 	}
 
@@ -1186,8 +1189,9 @@ tr:has(.cortext-title-cell--is-opening)
 		display: flex;
 		align-items: center;
 		box-sizing: border-box;
-		flex: 1 1 auto;
-		min-width: 220px;
+		flex: 1 1 100%;
+		width: 100%;
+		min-width: 0;
 		border-radius: 2px;
 		background: $white;
 	}
@@ -1239,10 +1243,10 @@ tr:has(.cortext-title-cell--is-opening)
 		display: block;
 		box-sizing: border-box;
 		width: 100%;
-		height: $grid-unit-40;
-		min-height: $grid-unit-40;
+		height: $button-size-compact;
+		min-height: $button-size-compact;
 		margin: 0;
-		padding: 0 $grid-unit;
+		padding: 0 $grid-unit-05;
 		border: 0;
 		background: transparent;
 		box-shadow: none;
@@ -1273,13 +1277,38 @@ tr:has(.cortext-title-cell--is-opening)
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		width: $grid-unit-40;
-		min-width: $grid-unit-40;
-		height: $grid-unit-40;
-		padding: $grid-unit-05;
+		width: $button-size-compact;
+		min-width: $button-size-compact;
+		height: $button-size-compact;
+		padding: 0;
 		border: 0;
 		border-radius: 2px;
 		background: transparent;
+		box-shadow: none;
+		color: $gray-900;
+	}
+
+	.dataviews__view-actions > :last-child .components-button.has-icon:not(.has-text),
+	.dataviews__view-actions > :last-child .dataviews-view-config__toggle-wrapper > .components-button {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: $button-size-compact;
+		min-width: $button-size-compact;
+		height: $button-size-compact;
+		padding: 0;
+		border: 0;
+		border-radius: 2px;
+		background: transparent;
+		box-shadow: none;
+		color: $gray-900;
+	}
+
+	.dataviews-filters__visibility-toggle.components-button:hover,
+	.dataviews-filters__visibility-toggle.components-button:focus,
+	.dataviews__view-actions > :last-child .components-button.has-icon:not(.has-text):is(:hover, :focus),
+	.dataviews__view-actions > :last-child .dataviews-view-config__toggle-wrapper > .components-button:is(:hover, :focus) {
+		background: $gray-100;
 		box-shadow: none;
 		color: $gray-900;
 	}

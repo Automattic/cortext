@@ -132,6 +132,104 @@ async function expectOpenButtonFitsTitleCell( openButton ) {
 		} );
 }
 
+async function expectDataViewsToolbarChrome(
+	toolbar,
+	{ minSearchWidth = 180 } = {}
+) {
+	const search = toolbar.locator( '.dataviews-search' ).first();
+	const searchInput = search.locator( 'input[type="search"]' );
+	const filterToggle = toolbar.locator(
+		'.dataviews-filters__visibility-toggle'
+	);
+	await expect( searchInput ).toBeVisible();
+	await expect( filterToggle ).toBeVisible();
+	await expect
+		.poll( async () =>
+			search.evaluate( ( element, minimumSearchWidth ) => {
+				const input = element.querySelector( 'input[type="search"]' );
+				const icon = element.querySelector(
+					'.components-input-control__prefix svg'
+				);
+				const filter = element
+					.closest( '.dataviews__view-actions' )
+					?.querySelector( '.dataviews-filters__visibility-toggle' );
+				const actionsToolbar = element.closest(
+					'.dataviews__view-actions'
+				);
+				const viewControls =
+					actionsToolbar?.children[
+						actionsToolbar.children.length - 1
+					];
+				const viewButtons = Array.from(
+					viewControls?.querySelectorAll( '.components-button' ) ?? []
+				).filter(
+					( button ) => button.getBoundingClientRect().width > 0
+				);
+				const searchRect = element.getBoundingClientRect();
+				const inputRect = input.getBoundingClientRect();
+				const iconRect = icon.getBoundingClientRect();
+				const filterRect = filter.getBoundingClientRect();
+				const viewButtonRects = viewButtons.map( ( button ) =>
+					button.getBoundingClientRect()
+				);
+				const inputStyles =
+					input.ownerDocument.defaultView.getComputedStyle( input );
+				const centerY = ( rect ) => rect.y + rect.height / 2;
+
+				return {
+					searchSingleRow:
+						searchRect.height >= 28 && searchRect.height <= 44,
+					searchCompactHeight:
+						inputRect.height >= 30 && inputRect.height <= 34,
+					searchCompactWidth:
+						searchRect.width >= minimumSearchWidth &&
+						searchRect.width <= 340,
+					inputBorderTop: inputStyles.borderTopWidth,
+					iconAligned:
+						Math.abs(
+							centerY( iconRect ) - centerY( inputRect )
+						) <= 4,
+					filterAligned:
+						Math.abs(
+							centerY( filterRect ) - centerY( inputRect )
+						) <= 4,
+					filterAfterInput:
+						filterRect.x > inputRect.x + inputRect.width,
+					viewButtonCount: viewButtonRects.length,
+					viewButtonsCompact: viewButtonRects.every(
+						( rect ) =>
+							rect.width >= 30 &&
+							rect.width <= 34 &&
+							rect.height >= 30 &&
+							rect.height <= 34
+					),
+					viewButtonsAligned: viewButtonRects.every(
+						( rect ) =>
+							Math.abs(
+								centerY( rect ) - centerY( inputRect )
+							) <= 4
+					),
+					viewButtonsAfterFilter:
+						viewButtonRects[ 0 ].x >
+						filterRect.x + filterRect.width,
+				};
+			}, minSearchWidth )
+		)
+		.toEqual( {
+			searchSingleRow: true,
+			searchCompactHeight: true,
+			searchCompactWidth: true,
+			inputBorderTop: '0px',
+			iconAligned: true,
+			filterAligned: true,
+			filterAfterInput: true,
+			viewButtonCount: 2,
+			viewButtonsCompact: true,
+			viewButtonsAligned: true,
+			viewButtonsAfterFilter: true,
+		} );
+}
+
 async function expectGridDragHandleStaysInCardChrome( canvas ) {
 	const card = canvas
 		.locator( '.dataviews-view-grid__card' )
@@ -752,62 +850,7 @@ test.describe( 'Collection view block', () => {
 			const toolbar = canvas
 				.locator( '.dataviews__view-actions' )
 				.first();
-			const search = toolbar.locator( '.dataviews-search' ).first();
-			const searchInput = search.locator( 'input[type="search"]' );
-			const filterToggle = toolbar.locator(
-				'.dataviews-filters__visibility-toggle'
-			);
-			await expect( searchInput ).toBeVisible();
-			await expect( filterToggle ).toBeVisible();
-			await expect
-				.poll( async () =>
-					search.evaluate( ( element ) => {
-						const input = element.querySelector(
-							'input[type="search"]'
-						);
-						const icon = element.querySelector(
-							'.components-input-control__prefix svg'
-						);
-						const filter = element
-							.closest( '.dataviews__view-actions' )
-							?.querySelector(
-								'.dataviews-filters__visibility-toggle'
-							);
-						const searchRect = element.getBoundingClientRect();
-						const inputRect = input.getBoundingClientRect();
-						const iconRect = icon.getBoundingClientRect();
-						const filterRect = filter.getBoundingClientRect();
-						const inputStyles =
-							input.ownerDocument.defaultView.getComputedStyle(
-								input
-							);
-						const centerY = ( rect ) => rect.y + rect.height / 2;
-
-						return {
-							searchSingleRow:
-								searchRect.height >= 28 &&
-								searchRect.height <= 44,
-							inputBorderTop: inputStyles.borderTopWidth,
-							iconAligned:
-								Math.abs(
-									centerY( iconRect ) - centerY( inputRect )
-								) <= 4,
-							filterAligned:
-								Math.abs(
-									centerY( filterRect ) - centerY( inputRect )
-								) <= 4,
-							filterAfterInput:
-								filterRect.x > inputRect.x + inputRect.width,
-						};
-					} )
-				)
-				.toEqual( {
-					searchSingleRow: true,
-					inputBorderTop: '0px',
-					iconAligned: true,
-					filterAligned: true,
-					filterAfterInput: true,
-				} );
+			await expectDataViewsToolbarChrome( toolbar );
 
 			const firstRow = canvas
 				.locator( '.dataviews-view-table tbody > tr' )
@@ -2041,6 +2084,10 @@ test.describe( 'Collection view block', () => {
 			await expect( canvas.getByText( 'Alpha Manual' ) ).toBeVisible( {
 				timeout: 15_000,
 			} );
+			await expectDataViewsToolbarChrome(
+				canvas.locator( '.dataviews__view-actions' ).first(),
+				{ minSearchWidth: 300 }
+			);
 			await expect(
 				canvas.locator( '.cortext-row-drag-handle' )
 			).toHaveCount( 3 );
