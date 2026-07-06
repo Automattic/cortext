@@ -232,16 +232,6 @@ $grid-card-content-hover-background: #f3f3f3;
 		width: 100%;
 	}
 
-	.dataviews-view-grid__field-value
-	.cortext-editable-cell:has(
-		:is(.cortext-chip, .cortext-chips, .cortext-relation-refs)
-	) {
-		display: inline-block;
-		width: auto;
-		max-width: 100%;
-		vertical-align: top;
-	}
-
 	.dataviews-view-grid__field-value .cortext-editable-cell > :first-child {
 		min-height: $grid-unit-30;
 		padding: 0 $grid-unit-30 0 $grid-unit-05;
@@ -251,24 +241,6 @@ $grid-card-content-hover-background: #f3f3f3;
 		transition:
 			background-color 120ms ease,
 			box-shadow 120ms ease;
-	}
-
-	.dataviews-view-grid__field-value
-	.cortext-editable-cell__shell:has(
-		:is(.cortext-chip, .cortext-chips, .cortext-relation-refs)
-	) {
-		display: inline-flex;
-		max-width: 100%;
-		padding: 0 $grid-unit-05;
-		vertical-align: top;
-	}
-
-	.dataviews-view-grid__field-value
-	.cortext-editable-cell__shell:has(
-		:is(.cortext-chip, .cortext-chips, .cortext-relation-refs)
-	)
-	.cortext-editable-cell__edit-indicator {
-		display: none;
 	}
 
 	.dataviews-view-grid__field-value .cortext-editable-cell__shell:hover {

@@ -2340,6 +2340,9 @@ test.describe( 'Collection view block', () => {
 						const shell = chip.closest(
 							'.cortext-editable-cell__shell'
 						);
+						const fieldValue = chip.closest(
+							'.dataviews-view-grid__field-value'
+						);
 						const fields = chip.closest(
 							'.dataviews-view-grid__fields, .dataviews-view-grid__badge-fields'
 						);
@@ -2347,19 +2350,29 @@ test.describe( 'Collection view block', () => {
 						const title = chip.querySelector(
 							'.cortext-relation-ref__title'
 						);
-						if ( ! shell || ! fields || ! refs || ! title ) {
+						if (
+							! shell ||
+							! fieldValue ||
+							! fields ||
+							! refs ||
+							! title
+						) {
 							return {
 								chipInsideFields: false,
 								chipInsideRefs: false,
 								chipBoxSizing: '',
+								shellUsesRowWidth: false,
+								shellHasPencilReserve: false,
 								titleHasRoom: false,
-								shellPaddingRight: Number.POSITIVE_INFINITY,
 							};
 						}
 						const ownerWindow = chip.ownerDocument.defaultView;
 						const chipRect = chip.getBoundingClientRect();
+						const fieldValueRect =
+							fieldValue.getBoundingClientRect();
 						const fieldsRect = fields.getBoundingClientRect();
 						const refsRect = refs.getBoundingClientRect();
+						const shellRect = shell.getBoundingClientRect();
 						const titleRect = title.getBoundingClientRect();
 						const chipStyles = ownerWindow.getComputedStyle( chip );
 						const shellPaddingRight = Number.parseFloat(
@@ -2374,8 +2387,10 @@ test.describe( 'Collection view block', () => {
 								chipRect.left >= refsRect.left - 1 &&
 								chipRect.right <= refsRect.right + 1,
 							chipBoxSizing: chipStyles.boxSizing,
+							shellUsesRowWidth:
+								shellRect.right >= fieldValueRect.right - 1,
+							shellHasPencilReserve: shellPaddingRight >= 20,
 							titleHasRoom: titleRect.width > 80,
-							shellPaddingRight,
 						};
 					} )
 				)
@@ -2383,8 +2398,50 @@ test.describe( 'Collection view block', () => {
 					chipInsideFields: true,
 					chipInsideRefs: true,
 					chipBoxSizing: 'border-box',
+					shellUsesRowWidth: true,
+					shellHasPencilReserve: true,
 					titleHasRoom: true,
-					shellPaddingRight: 4,
+				} );
+			await relationChip
+				.locator(
+					'xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " cortext-editable-cell__shell ")][1]'
+				)
+				.hover();
+			await expect
+				.poll( () =>
+					relationChip.evaluate( ( chip ) => {
+						const shell = chip.closest(
+							'.cortext-editable-cell__shell'
+						);
+						const indicator = shell?.querySelector(
+							'.cortext-editable-cell__edit-indicator'
+						);
+						if ( ! shell || ! indicator ) {
+							return {
+								indicatorVisible: false,
+								indicatorRightAligned: false,
+							};
+						}
+						const ownerWindow = chip.ownerDocument.defaultView;
+						const shellRect = shell.getBoundingClientRect();
+						const indicatorRect = indicator.getBoundingClientRect();
+						const indicatorStyles =
+							ownerWindow.getComputedStyle( indicator );
+
+						return {
+							indicatorVisible:
+								indicatorStyles.display !== 'none' &&
+								Number.parseFloat( indicatorStyles.opacity ) >
+									0.9,
+							indicatorRightAligned:
+								indicatorRect.right <= shellRect.right - 3 &&
+								indicatorRect.right >= shellRect.right - 16,
+						};
+					} )
+				)
+				.toEqual( {
+					indicatorVisible: true,
+					indicatorRightAligned: true,
 				} );
 
 			await dragRenderedRow(
