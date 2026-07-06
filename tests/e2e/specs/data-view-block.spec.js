@@ -355,21 +355,46 @@ async function expectGridCardTitleBeforeFields( card ) {
 					return {
 						titleAfterMedia: false,
 						titleBeforeFields: false,
+						fieldsShareTitleSurface: false,
+						fieldsAlignedWithTitle: false,
 					};
 				}
 				const mediaRect = media.getBoundingClientRect();
 				const titleRect = titleActions.getBoundingClientRect();
 				const fieldsRect = fields.getBoundingClientRect();
+				const titleContent = titleActions.querySelector(
+					'.cortext-title-cell'
+				);
+				const fieldContent = fields.querySelector(
+					'.dataviews-view-grid__field-value > *, .cortext-chip, .cortext-relation-ref'
+				);
+				const ownerWindow = element.ownerDocument.defaultView;
+				const titleBackground =
+					ownerWindow.getComputedStyle(
+						titleActions
+					).backgroundColor;
+				const fieldsBackground =
+					ownerWindow.getComputedStyle( fields ).backgroundColor;
+				const titleContentRect = titleContent?.getBoundingClientRect();
+				const fieldContentRect = fieldContent?.getBoundingClientRect();
 
 				return {
 					titleAfterMedia: titleRect.top >= mediaRect.bottom - 1,
 					titleBeforeFields: titleRect.bottom <= fieldsRect.top + 1,
+					fieldsShareTitleSurface:
+						fieldsBackground === titleBackground,
+					fieldsAlignedWithTitle:
+						! titleContentRect ||
+						! fieldContentRect ||
+						fieldContentRect.left >= titleContentRect.left - 4,
 				};
 			} )
 		)
 		.toEqual( {
 			titleAfterMedia: true,
 			titleBeforeFields: true,
+			fieldsShareTitleSurface: true,
+			fieldsAlignedWithTitle: true,
 		} );
 }
 

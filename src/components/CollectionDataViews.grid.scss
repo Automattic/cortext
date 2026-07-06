@@ -194,9 +194,13 @@ $grid-card-content-hover-background: #f3f3f3;
 		}
 	}
 
-	.dataviews-view-grid__fields {
+	.dataviews-view-grid .dataviews-view-grid__fields,
+	.dataviews-view-grid .dataviews-view-grid__fields:not(:empty) {
 		order: 1;
-		padding-top: $grid-unit-05;
+		box-sizing: border-box;
+		width: 100%;
+		padding: $grid-unit-05 $grid-unit-20 0;
+		background: $grid-card-content-background;
 	}
 
 	.dataviews-view-grid__field {
@@ -293,10 +297,23 @@ $grid-card-content-hover-background: #f3f3f3;
 		color: $gray-700;
 	}
 
-	.dataviews-view-grid__badge-fields {
+	.dataviews-view-grid .dataviews-view-grid__badge-fields,
+	.dataviews-view-grid .dataviews-view-grid__badge-fields:not(:empty) {
 		order: 1;
 		justify-content: flex-start;
-		padding-top: $grid-unit-05;
+		box-sizing: border-box;
+		width: 100%;
+		padding: $grid-unit-05 $grid-unit-20 0;
+		background: $grid-card-content-background;
+	}
+
+	.dataviews-view-grid
+	.dataviews-view-grid__card
+	:is(
+		.dataviews-view-grid__fields,
+		.dataviews-view-grid__badge-fields
+	):last-child {
+		padding-bottom: $grid-unit-15;
 	}
 
 	.dataviews-view-grid__card > .components-v-stack {
@@ -313,6 +330,10 @@ $grid-card-content-hover-background: #f3f3f3;
 
 	.dataviews-view-grid__card:hover .dataviews-view-grid__title-actions,
 	.dataviews-view-grid__card:focus-within .dataviews-view-grid__title-actions,
+	.dataviews-view-grid__card:hover .dataviews-view-grid__fields,
+	.dataviews-view-grid__card:focus-within .dataviews-view-grid__fields,
+	.dataviews-view-grid__card:hover .dataviews-view-grid__badge-fields,
+	.dataviews-view-grid__card:focus-within .dataviews-view-grid__badge-fields,
 	.dataviews-view-grid__card:hover > .components-v-stack,
 	.dataviews-view-grid__card:focus-within > .components-v-stack {
 		background: $grid-card-content-hover-background;
