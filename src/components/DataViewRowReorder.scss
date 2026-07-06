@@ -49,9 +49,7 @@ body.cortext-row-dragging .cortext-row-reorder-target {
 // outranks the rule above, so displaced list rows would snap to the new spot
 // instead of sliding. Re-assert transform easing for reordered list rows while
 // a drag is active so list matches the table.
-body.cortext-row-dragging
-	.dataviews-view-list
-	div[role="row"].cortext-row-reorder-target {
+body.cortext-row-dragging .dataviews-view-list :is([role="row"], [role="article"]).cortext-row-reorder-target {
 	transition:
 		transform 120ms ease,
 		opacity 120ms ease;
@@ -530,31 +528,15 @@ body.cortext-row-reorder-suppress-hover
 	.dataviews-view-table
 	tr.is-hovered:not(.is-selected)
 	.dataviews-view-table__actions-column--sticky,
-body.cortext-row-reorder-suppress-hover
-	.dataviews-view-list
-	div[role="row"]:not(.is-selected):hover,
-body.cortext-row-reorder-suppress-hover
-	.dataviews-view-list
-	div[role="row"]:not(.is-selected).is-hovered {
+body.cortext-row-reorder-suppress-hover .dataviews-view-list :is([role="row"], [role="article"]):not(.is-selected):hover,
+body.cortext-row-reorder-suppress-hover .dataviews-view-list :is([role="row"], [role="article"]):not(.is-selected).is-hovered {
 	background-color: transparent;
 }
 
-body.cortext-row-reorder-suppress-hover
-	.dataviews-view-list
-	div[role="row"]:not(.is-selected):hover
-	.dataviews-view-list__title-field,
-body.cortext-row-reorder-suppress-hover
-	.dataviews-view-list
-	div[role="row"]:not(.is-selected):hover
-	.dataviews-view-list__fields,
-body.cortext-row-reorder-suppress-hover
-	.dataviews-view-list
-	div[role="row"]:not(.is-selected).is-hovered
-	.dataviews-view-list__title-field,
-body.cortext-row-reorder-suppress-hover
-	.dataviews-view-list
-	div[role="row"]:not(.is-selected).is-hovered
-	.dataviews-view-list__fields {
+body.cortext-row-reorder-suppress-hover .dataviews-view-list :is([role="row"], [role="article"]):not(.is-selected):hover .dataviews-view-list__title-field,
+body.cortext-row-reorder-suppress-hover .dataviews-view-list :is([role="row"], [role="article"]):not(.is-selected):hover .dataviews-view-list__fields,
+body.cortext-row-reorder-suppress-hover .dataviews-view-list :is([role="row"], [role="article"]):not(.is-selected).is-hovered .dataviews-view-list__title-field,
+body.cortext-row-reorder-suppress-hover .dataviews-view-list :is([role="row"], [role="article"]):not(.is-selected).is-hovered .dataviews-view-list__fields {
 	color: inherit;
 }
 

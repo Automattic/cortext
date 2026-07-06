@@ -96,7 +96,8 @@ const BULK_DELETE_CONCURRENCY = 4;
 // uses blank-row clicks and keyboard activation to open the row instead.
 const EMPTY_DATA_VIEW_SELECTION = [];
 const LIST_ROW_EMPTY_CLICK_TARGET_SELECTOR = '.dataviews-view-list__item';
-const LIST_ROW_SELECTOR = '.dataviews-view-list > [role="row"]';
+const LIST_ROW_SELECTOR =
+	'.dataviews-view-list > :is([role="row"], [role="article"])';
 const ignoreDataViewsSelectionChange = () => {};
 
 export default function CollectionDataViews( {

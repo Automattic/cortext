@@ -59,7 +59,7 @@ const HOVER_SUPPRESSION_RELEASE_DELAY = 120;
 const ROW_SELECTORS = {
 	table: '.dataviews-view-table tbody > tr',
 	list: [
-		'.dataviews-view-list > [role="row"]',
+		'.dataviews-view-list > :is([role="row"], [role="article"])',
 		'.dataviews-view-list > li',
 		'.dataviews-view-list > .dataviews-view-list__item',
 	].join( ',' ),

@@ -183,11 +183,11 @@ function createWrapper( heights = [ 40, 40, 40 ], ownerDocument = document ) {
 	return wrapper;
 }
 
-function createListWrapper( heights = [ 88, 88, 88 ] ) {
+function createListWrapper( heights = [ 88, 88, 88 ], rowRole = 'row' ) {
 	const wrapper = document.createElement( 'div' );
 	wrapper.innerHTML = `
 		<div class="dataviews-view-list">
-			<div role="row">
+			<div role="${ rowRole }">
 				<div class="dataviews-view-list__item-wrapper">
 					<div role="gridcell">
 						<button class="dataviews-view-list__item" type="button"></button>
@@ -195,7 +195,7 @@ function createListWrapper( heights = [ 88, 88, 88 ] ) {
 					<div class="dataviews-view-list__field-wrapper">One</div>
 				</div>
 			</div>
-			<div role="row">
+			<div role="${ rowRole }">
 				<div class="dataviews-view-list__item-wrapper">
 					<div role="gridcell">
 						<button class="dataviews-view-list__item" type="button"></button>
@@ -203,7 +203,7 @@ function createListWrapper( heights = [ 88, 88, 88 ] ) {
 					<div class="dataviews-view-list__field-wrapper">Two</div>
 				</div>
 			</div>
-			<div role="row">
+			<div role="${ rowRole }">
 				<div class="dataviews-view-list__item-wrapper">
 					<div role="gridcell">
 						<button class="dataviews-view-list__item" type="button"></button>
@@ -214,7 +214,7 @@ function createListWrapper( heights = [ 88, 88, 88 ] ) {
 		</div>
 	`;
 	let top = 0;
-	Array.from( wrapper.querySelectorAll( '[role="row"]' ) ).forEach(
+	Array.from( wrapper.querySelectorAll( `[role="${ rowRole }"]` ) ).forEach(
 		( row, index ) => {
 			const height = heights[ index ] ?? 88;
 			const rowTop = top;
@@ -477,6 +477,54 @@ describe( 'DataViewRowReorder', () => {
 		const handles = screen.getAllByLabelText( /^Reorder:/ );
 		expect( handles ).toHaveLength( 3 );
 		expect( handles[ 0 ] ).toHaveAttribute( 'tabindex', '-1' );
+	} );
+
+	it( 'decorates DataViews 17 infinite-scroll list articles for row reorder', async () => {
+		const wrapper = createListWrapper( undefined, 'article' );
+
+		render(
+			<DataViewRowReorder
+				wrapperRef={ { current: wrapper } }
+				view={ {
+					type: 'list',
+					sort: null,
+					infiniteScrollEnabled: true,
+				} }
+				onChangeView={ jest.fn() }
+				collectionId={ 7 }
+				rows={ rows }
+				onReordered={ jest.fn() }
+			/>
+		);
+
+		await waitFor( () =>
+			expect( screen.getByTestId( 'dnd-context' ) ).toBeInTheDocument()
+		);
+		await waitFor( () =>
+			expect( useDraggable ).toHaveBeenCalledTimes( 3 )
+		);
+
+		const listRows = wrapper.querySelectorAll(
+			'.dataviews-view-list > [role="article"]'
+		);
+		const itemButtons = wrapper.querySelectorAll(
+			'.dataviews-view-list__item'
+		);
+		expect( listRows ).toHaveLength( 3 );
+		expect( itemButtons ).toHaveLength( 3 );
+		expect( listRows[ 0 ] ).toHaveClass( 'cortext-row-reorder-target' );
+		expect( listRows[ 1 ] ).toHaveClass( 'cortext-row-reorder-target' );
+		expect( listRows[ 2 ] ).toHaveClass( 'cortext-row-reorder-target' );
+		expect( itemButtons[ 0 ] ).not.toHaveClass(
+			'cortext-row-reorder-target'
+		);
+		expect( itemButtons[ 1 ] ).not.toHaveClass(
+			'cortext-row-reorder-target'
+		);
+		expect( itemButtons[ 2 ] ).not.toHaveClass(
+			'cortext-row-reorder-target'
+		);
+		expect( screen.getAllByLabelText( /^Reorder:/ ) ).toHaveLength( 3 );
 	} );
 
 	it( 'shows a row preview while dragging', async () => {
