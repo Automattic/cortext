@@ -1034,6 +1034,20 @@ tr:has(.cortext-title-cell--is-opening)
 		padding: $grid-unit-05 $grid-unit-10;
 	}
 
+	&__new-row-controls {
+		display: flex;
+		align-items: stretch;
+		gap: $grid-unit-05;
+		width: 100%;
+		min-width: 0;
+	}
+
+	&__new-row-controls--footer {
+		display: inline-flex;
+		width: auto;
+		max-width: 100%;
+	}
+
 	&__new-row.components-button {
 		flex: 1 1 auto;
 		justify-content: flex-start;
@@ -1042,18 +1056,15 @@ tr:has(.cortext-title-cell--is-opening)
 		color: $gray-700;
 		text-decoration: none;
 
+		.cortext-data-view__new-row-controls--footer & {
+			flex: 0 0 auto;
+			width: auto;
+		}
+
 		&:hover:not(:disabled) {
 			background: $gray-100;
 			color: $gray-900;
 		}
-	}
-
-	&__new-row-controls {
-		display: flex;
-		align-items: stretch;
-		gap: $grid-unit-05;
-		width: 100%;
-		min-width: 0;
 	}
 
 	&__new-row-template-menu.components-button {
