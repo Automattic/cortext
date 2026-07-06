@@ -337,7 +337,24 @@ th.dataviews-view-table__checkbox-column > .dataviews-view-table-selection-check
 
 .cortext-data-view .dataviews-view-table tr th.dataviews-view-table__actions-column,
 .cortext-data-view .dataviews-view-table tr td.dataviews-view-table__actions-column {
-	box-shadow: inset $border-width 0 0 $gray-200;
+	position: sticky;
+	right: 0;
+	z-index: 2;
+	background-color: $white;
+
+	&::before {
+		position: absolute;
+		inset-block: 0;
+		inset-inline-start: 0;
+		width: $border-width;
+		background: $gray-200;
+		content: "";
+		pointer-events: none;
+	}
+}
+
+.cortext-data-view .dataviews-view-table tr th.dataviews-view-table__actions-column {
+	z-index: 3;
 }
 
 // Custom field columns carry a marker that `ColumnHeaderActions`

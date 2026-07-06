@@ -248,18 +248,34 @@ async function expectDataViewsToolbarChrome(
 async function expectTableActionsColumnSeparator( table ) {
 	await expect
 		.poll( () =>
-			table.evaluate( ( tableElement ) => {
+			table.evaluate( async ( tableElement ) => {
+				const wrapper = tableElement.closest( '.dataviews-wrapper' );
+				if ( wrapper && wrapper.scrollWidth > wrapper.clientWidth ) {
+					wrapper.scrollLeft = wrapper.scrollWidth;
+					await new Promise( ( resolve ) =>
+						tableElement.ownerDocument.defaultView.requestAnimationFrame(
+							resolve
+						)
+					);
+				}
+
 				const hasSeparator = ( element ) => {
 					if ( ! element ) {
 						return false;
 					}
-					const styles =
-						element.ownerDocument.defaultView.getComputedStyle(
-							element
-						);
+					const ownerWindow = element.ownerDocument.defaultView;
+					const styles = ownerWindow.getComputedStyle( element );
+					const beforeStyles = ownerWindow.getComputedStyle(
+						element,
+						'::before'
+					);
 					return (
 						Number.parseFloat( styles.borderLeftWidth ) > 0 ||
-						styles.boxShadow !== 'none'
+						styles.boxShadow !== 'none' ||
+						( beforeStyles.content !== 'none' &&
+							Number.parseFloat( beforeStyles.width ) > 0 &&
+							beforeStyles.backgroundColor !==
+								'rgba(0, 0, 0, 0)' )
 					);
 				};
 
@@ -5095,6 +5111,9 @@ test.describe( 'Collection view block', () => {
 			} );
 			await expect( appendixHeader ).toBeVisible();
 			await expectColumnRevealed( canvas, appendixHeader );
+			await expectTableActionsColumnSeparator(
+				canvas.locator( '.dataviews-view-table' )
+			);
 		} finally {
 			for ( const row of fixture.rows ?? [] ) {
 				await deleteIfCreated(
