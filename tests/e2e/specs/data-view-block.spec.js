@@ -2343,12 +2343,15 @@ test.describe( 'Collection view block', () => {
 						const fields = chip.closest(
 							'.dataviews-view-grid__fields, .dataviews-view-grid__badge-fields'
 						);
+						const refs = chip.closest( '.cortext-relation-refs' );
 						const title = chip.querySelector(
 							'.cortext-relation-ref__title'
 						);
-						if ( ! shell || ! fields || ! title ) {
+						if ( ! shell || ! fields || ! refs || ! title ) {
 							return {
 								chipInsideFields: false,
+								chipInsideRefs: false,
+								chipBoxSizing: '',
 								titleHasRoom: false,
 								shellPaddingRight: Number.POSITIVE_INFINITY,
 							};
@@ -2356,7 +2359,9 @@ test.describe( 'Collection view block', () => {
 						const ownerWindow = chip.ownerDocument.defaultView;
 						const chipRect = chip.getBoundingClientRect();
 						const fieldsRect = fields.getBoundingClientRect();
+						const refsRect = refs.getBoundingClientRect();
 						const titleRect = title.getBoundingClientRect();
+						const chipStyles = ownerWindow.getComputedStyle( chip );
 						const shellPaddingRight = Number.parseFloat(
 							ownerWindow.getComputedStyle( shell ).paddingRight
 						);
@@ -2365,6 +2370,10 @@ test.describe( 'Collection view block', () => {
 							chipInsideFields:
 								chipRect.left >= fieldsRect.left - 1 &&
 								chipRect.right <= fieldsRect.right + 1,
+							chipInsideRefs:
+								chipRect.left >= refsRect.left - 1 &&
+								chipRect.right <= refsRect.right + 1,
+							chipBoxSizing: chipStyles.boxSizing,
 							titleHasRoom: titleRect.width > 80,
 							shellPaddingRight,
 						};
@@ -2372,6 +2381,8 @@ test.describe( 'Collection view block', () => {
 				)
 				.toEqual( {
 					chipInsideFields: true,
+					chipInsideRefs: true,
+					chipBoxSizing: 'border-box',
 					titleHasRoom: true,
 					shellPaddingRight: 4,
 				} );

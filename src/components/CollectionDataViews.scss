@@ -773,6 +773,7 @@ tr:has(.cortext-title-cell--is-opening)
 .cortext-relation-edit__selected-pill {
 	display: inline-flex;
 	align-items: center;
+	box-sizing: border-box;
 	max-width: 100%;
 	min-width: 0;
 	height: $grid-unit-30;

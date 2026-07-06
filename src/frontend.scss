@@ -261,6 +261,7 @@ $mention-document-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .cortext-chip {
 	display: inline-flex;
 	align-items: center;
+	box-sizing: border-box;
 	padding: 0 $grid-unit-10;
 	height: $grid-unit-30;
 	line-height: 1;
