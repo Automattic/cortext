@@ -413,6 +413,54 @@ async function expectGridCardTitleBeforeFields( card ) {
 		} );
 }
 
+async function expectGridCardRestChrome( card ) {
+	await expect
+		.poll( () =>
+			card.evaluate( ( element ) => {
+				const titleActions = element.querySelector(
+					'.dataviews-view-grid__title-actions'
+				);
+				const actionButton = element.querySelector(
+					'.dataviews-view-grid__media-actions .dataviews-all-actions-button'
+				);
+				const checkbox = element.querySelector(
+					':scope > .dataviews-selection-checkbox'
+				);
+				if ( ! titleActions || ! actionButton || ! checkbox ) {
+					return {
+						actionInTitleChrome: false,
+						actionRightAligned: false,
+						checkboxHiddenAtRest: false,
+					};
+				}
+
+				const cardRect = element.getBoundingClientRect();
+				const titleRect = titleActions.getBoundingClientRect();
+				const actionRect = actionButton.getBoundingClientRect();
+				const checkboxStyles =
+					checkbox.ownerDocument.defaultView.getComputedStyle(
+						checkbox
+					);
+				const actionCenter = actionRect.top + actionRect.height / 2;
+
+				return {
+					actionInTitleChrome:
+						actionCenter >= titleRect.top &&
+						actionCenter <= titleRect.bottom,
+					actionRightAligned: cardRect.right - actionRect.right <= 24,
+					checkboxHiddenAtRest:
+						Number( checkboxStyles.opacity ) === 0 &&
+						checkboxStyles.pointerEvents === 'none',
+				};
+			} )
+		)
+		.toEqual( {
+			actionInTitleChrome: true,
+			actionRightAligned: true,
+			checkboxHiddenAtRest: true,
+		} );
+}
+
 async function startSidePeekShellStabilityLog( page ) {
 	await page.evaluate( () => {
 		window.__cortextSidePeekShellEvents = [];
@@ -1155,6 +1203,13 @@ test.describe( 'Collection view block', () => {
 			await expect(
 				canvas.getByRole( 'button', { name: 'New', exact: true } )
 			).toBeVisible();
+			await page.mouse.move( 0, 0 );
+			await expectGridCardRestChrome(
+				canvas
+					.locator( '.dataviews-view-grid__card' )
+					.filter( { hasText: 'Alpha Manual' } )
+					.first()
+			);
 
 			const getGridMetrics = () =>
 				canvas
