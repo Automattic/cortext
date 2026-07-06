@@ -233,6 +233,44 @@ async function expectDataViewsToolbarChrome(
 		} );
 }
 
+async function expectTableActionsColumnSeparator( table ) {
+	await expect
+		.poll( () =>
+			table.evaluate( ( tableElement ) => {
+				const hasSeparator = ( element ) => {
+					if ( ! element ) {
+						return false;
+					}
+					const styles =
+						element.ownerDocument.defaultView.getComputedStyle(
+							element
+						);
+					return (
+						Number.parseFloat( styles.borderLeftWidth ) > 0 ||
+						styles.boxShadow !== 'none'
+					);
+				};
+
+				return {
+					headerHasSeparator: hasSeparator(
+						tableElement.querySelector(
+							'thead th.dataviews-view-table__actions-column'
+						)
+					),
+					bodyHasSeparator: hasSeparator(
+						tableElement.querySelector(
+							'tbody td.dataviews-view-table__actions-column'
+						)
+					),
+				};
+			} )
+		)
+		.toEqual( {
+			headerHasSeparator: true,
+			bodyHasSeparator: true,
+		} );
+}
+
 async function expectGridDragHandleStaysInCardChrome( canvas ) {
 	const card = canvas
 		.locator( '.dataviews-view-grid__card' )
@@ -2092,6 +2130,9 @@ test.describe( 'Collection view block', () => {
 			await expectDataViewsToolbarChrome(
 				canvas.locator( '.dataviews__view-actions' ).first(),
 				{ minSearchWidth: 300 }
+			);
+			await expectTableActionsColumnSeparator(
+				canvas.locator( '.dataviews-view-table' )
 			);
 			await expect(
 				canvas.locator( '.cortext-row-drag-handle' )

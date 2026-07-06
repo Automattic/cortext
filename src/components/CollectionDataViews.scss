@@ -335,6 +335,11 @@ th.dataviews-view-table__checkbox-column > .dataviews-view-table-selection-check
 	}
 }
 
+.cortext-data-view .dataviews-view-table tr th.dataviews-view-table__actions-column,
+.cortext-data-view .dataviews-view-table tr td.dataviews-view-table__actions-column {
+	box-shadow: inset $border-width 0 0 $gray-200;
+}
+
 // Custom field columns carry a marker that `ColumnHeaderActions`
 // portals our trigger into. We hide DataViews' built-in trigger on
 // those <th>s and replace it with a single combined dropdown (Sort /
