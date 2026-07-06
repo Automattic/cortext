@@ -1579,6 +1579,7 @@ export default function EditorBody( {
 	featuredMedia,
 	isActive = true,
 	isLocked = false,
+	showIdentityActions = true,
 	postId,
 	postType,
 	extraStyles,
@@ -1676,11 +1677,13 @@ export default function EditorBody( {
 				ref={ blockCanvasRef }
 			>
 				<BlockCanvas height="100%" styles={ styles }>
-					<DocumentIdentityActions
-						isLocked={ isReadOnly }
-						postId={ postId }
-						postType={ postType }
-					/>
+					{ showIdentityActions ? (
+						<DocumentIdentityActions
+							isLocked={ isReadOnly }
+							postId={ postId }
+							postType={ postType }
+						/>
+					) : null }
 					<EnsureHeaderBlocks
 						isLocked={ isReadOnly }
 						postId={ postId }
