@@ -1576,6 +1576,39 @@ test.describe( 'Collection view block', () => {
 				const actions = element.querySelector(
 					'.dataviews-view-list__item-actions'
 				);
+				const visibleActionButtons = Array.from(
+					element.querySelectorAll(
+						'.dataviews-view-list__item-actions .components-button'
+					)
+				).filter( ( button ) => {
+					const rect = button.getBoundingClientRect();
+					const style =
+						button.ownerDocument.defaultView.getComputedStyle(
+							button
+						);
+					return (
+						style.display !== 'none' &&
+						style.visibility !== 'hidden' &&
+						rect.width > 0 &&
+						rect.height > 0
+					);
+				} );
+				const visibleSelectionCheckboxes = Array.from(
+					element.querySelectorAll( '.dataviews-selection-checkbox' )
+				).filter( ( checkbox ) => {
+					const rect = checkbox.getBoundingClientRect();
+					const style =
+						checkbox.ownerDocument.defaultView.getComputedStyle(
+							checkbox
+						);
+					return (
+						style.display !== 'none' &&
+						style.visibility !== 'hidden' &&
+						Number( style.opacity ) > 0 &&
+						rect.width > 0 &&
+						rect.height > 0
+					);
+				} );
 				const itemTarget = element.querySelector(
 					'.dataviews-view-list__item'
 				);
@@ -1591,6 +1624,8 @@ test.describe( 'Collection view block', () => {
 				const titleRect = title?.getBoundingClientRect();
 				const fieldsRect = fields?.getBoundingClientRect();
 				const actionsRect = actions?.getBoundingClientRect();
+				const actionButtonRect =
+					visibleActionButtons[ 0 ]?.getBoundingClientRect();
 				const itemTargetRect = itemTarget?.getBoundingClientRect();
 				const itemTargetCellRect =
 					itemTargetCell?.getBoundingClientRect();
@@ -1625,6 +1660,11 @@ test.describe( 'Collection view block', () => {
 					actionsLeft: actionsRect
 						? Math.round( actionsRect.left - rowRect.left )
 						: 0,
+					visibleActionButtons: visibleActionButtons.length,
+					actionButtonWidth: actionButtonRect?.width ?? 0,
+					actionButtonHeight: actionButtonRect?.height ?? 0,
+					visibleSelectionCheckboxes:
+						visibleSelectionCheckboxes.length,
 					itemTargetPosition: itemTargetStyle?.position ?? '',
 					itemTargetBorderWidth:
 						itemTargetStyle?.borderTopWidth ?? '',
@@ -1652,6 +1692,12 @@ test.describe( 'Collection view block', () => {
 			expect( listMetrics.actionsLeft ).toBeGreaterThan(
 				listMetrics.fieldsLeft
 			);
+			expect( listMetrics.visibleActionButtons ).toBeGreaterThanOrEqual(
+				1
+			);
+			expect( listMetrics.actionButtonWidth ).toBeLessThanOrEqual( 40 );
+			expect( listMetrics.actionButtonHeight ).toBeLessThanOrEqual( 40 );
+			expect( listMetrics.visibleSelectionCheckboxes ).toBe( 0 );
 			expect( listMetrics.itemTargetPosition ).toBe( 'absolute' );
 			expect( listMetrics.itemTargetBorderWidth ).toBe( '0px' );
 			expect( listMetrics.itemTargetWidth ).toBeGreaterThan( 400 );
@@ -1683,6 +1729,10 @@ test.describe( 'Collection view block', () => {
 				position: 'absolute',
 				width: 1,
 			} );
+			await expect( row ).toHaveCSS(
+				'background-color',
+				'rgb(248, 248, 248)'
+			);
 
 			const fieldColor = await row
 				.locator( '.dataviews-view-list__field' )
