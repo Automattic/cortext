@@ -134,7 +134,7 @@ async function expectOpenButtonFitsTitleCell( openButton ) {
 
 async function expectDataViewsToolbarChrome(
 	toolbar,
-	{ minSearchWidth = 180 } = {}
+	{ maxSearchWidth = 220, minSearchWidth = 160 } = {}
 ) {
 	const search = toolbar.locator( '.dataviews-search' ).first();
 	const searchInput = search.locator( 'input[type="search"]' );
@@ -145,77 +145,89 @@ async function expectDataViewsToolbarChrome(
 	await expect( filterToggle ).toBeVisible();
 	await expect
 		.poll( async () =>
-			search.evaluate( ( element, minimumSearchWidth ) => {
-				const input = element.querySelector( 'input[type="search"]' );
-				const icon = element.querySelector(
-					'.components-input-control__prefix svg'
-				);
-				const filter = element
-					.closest( '.dataviews__view-actions' )
-					?.querySelector( '.dataviews-filters__visibility-toggle' );
-				const actionsToolbar = element.closest(
-					'.dataviews__view-actions'
-				);
-				const viewControls =
-					actionsToolbar?.children[
-						actionsToolbar.children.length - 1
-					];
-				const viewButtons = Array.from(
-					viewControls?.querySelectorAll( '.components-button' ) ?? []
-				).filter(
-					( button ) => button.getBoundingClientRect().width > 0
-				);
-				const searchRect = element.getBoundingClientRect();
-				const inputRect = input.getBoundingClientRect();
-				const iconRect = icon.getBoundingClientRect();
-				const filterRect = filter.getBoundingClientRect();
-				const viewButtonRects = viewButtons.map( ( button ) =>
-					button.getBoundingClientRect()
-				);
-				const inputStyles =
-					input.ownerDocument.defaultView.getComputedStyle( input );
-				const centerY = ( rect ) => rect.y + rect.height / 2;
+			search.evaluate(
+				( element, widths ) => {
+					const input = element.querySelector(
+						'input[type="search"]'
+					);
+					const icon = element.querySelector(
+						'.components-input-control__prefix svg'
+					);
+					const filter = element
+						.closest( '.dataviews__view-actions' )
+						?.querySelector(
+							'.dataviews-filters__visibility-toggle'
+						);
+					const actionsToolbar = element.closest(
+						'.dataviews__view-actions'
+					);
+					const viewControls =
+						actionsToolbar?.children[
+							actionsToolbar.children.length - 1
+						];
+					const viewButtons = Array.from(
+						viewControls?.querySelectorAll(
+							'.components-button'
+						) ?? []
+					).filter(
+						( button ) => button.getBoundingClientRect().width > 0
+					);
+					const searchRect = element.getBoundingClientRect();
+					const inputRect = input.getBoundingClientRect();
+					const iconRect = icon.getBoundingClientRect();
+					const filterRect = filter.getBoundingClientRect();
+					const viewButtonRects = viewButtons.map( ( button ) =>
+						button.getBoundingClientRect()
+					);
+					const inputStyles =
+						input.ownerDocument.defaultView.getComputedStyle(
+							input
+						);
+					const centerY = ( rect ) => rect.y + rect.height / 2;
 
-				return {
-					searchSingleRow:
-						searchRect.height >= 28 && searchRect.height <= 44,
-					searchCompactHeight:
-						inputRect.height >= 30 && inputRect.height <= 34,
-					searchCompactWidth:
-						searchRect.width >= minimumSearchWidth &&
-						searchRect.width <= 340,
-					inputBorderTop: inputStyles.borderTopWidth,
-					iconAligned:
-						Math.abs(
-							centerY( iconRect ) - centerY( inputRect )
-						) <= 4,
-					filterAligned:
-						Math.abs(
-							centerY( filterRect ) - centerY( inputRect )
-						) <= 4,
-					filterAfterInput:
-						filterRect.x > inputRect.x + inputRect.width,
-					filterCloseToInput:
-						filterRect.x - ( inputRect.x + inputRect.width ) <= 32,
-					viewButtonCount: viewButtonRects.length,
-					viewButtonsCompact: viewButtonRects.every(
-						( rect ) =>
-							rect.width >= 30 &&
-							rect.width <= 34 &&
-							rect.height >= 30 &&
-							rect.height <= 34
-					),
-					viewButtonsAligned: viewButtonRects.every(
-						( rect ) =>
+					return {
+						searchSingleRow:
+							searchRect.height >= 28 && searchRect.height <= 44,
+						searchCompactHeight:
+							inputRect.height >= 30 && inputRect.height <= 34,
+						searchCompactWidth:
+							searchRect.width >= widths.minimum &&
+							searchRect.width <= widths.maximum,
+						inputBorderTop: inputStyles.borderTopWidth,
+						iconAligned:
 							Math.abs(
-								centerY( rect ) - centerY( inputRect )
-							) <= 4
-					),
-					viewButtonsAfterFilter:
-						viewButtonRects[ 0 ].x >
-						filterRect.x + filterRect.width,
-				};
-			}, minSearchWidth )
+								centerY( iconRect ) - centerY( inputRect )
+							) <= 4,
+						filterAligned:
+							Math.abs(
+								centerY( filterRect ) - centerY( inputRect )
+							) <= 4,
+						filterAfterInput:
+							filterRect.x > inputRect.x + inputRect.width,
+						filterCloseToInput:
+							filterRect.x - ( inputRect.x + inputRect.width ) <=
+							32,
+						viewButtonCount: viewButtonRects.length,
+						viewButtonsCompact: viewButtonRects.every(
+							( rect ) =>
+								rect.width >= 30 &&
+								rect.width <= 34 &&
+								rect.height >= 30 &&
+								rect.height <= 34
+						),
+						viewButtonsAligned: viewButtonRects.every(
+							( rect ) =>
+								Math.abs(
+									centerY( rect ) - centerY( inputRect )
+								) <= 4
+						),
+						viewButtonsAfterFilter:
+							viewButtonRects[ 0 ].x >
+							filterRect.x + filterRect.width,
+					};
+				},
+				{ maximum: maxSearchWidth, minimum: minSearchWidth }
+			)
 		)
 		.toEqual( {
 			searchSingleRow: true,
@@ -2128,8 +2140,7 @@ test.describe( 'Collection view block', () => {
 				timeout: 15_000,
 			} );
 			await expectDataViewsToolbarChrome(
-				canvas.locator( '.dataviews__view-actions' ).first(),
-				{ minSearchWidth: 300 }
+				canvas.locator( '.dataviews__view-actions' ).first()
 			);
 			await expectTableActionsColumnSeparator(
 				canvas.locator( '.dataviews-view-table' )
