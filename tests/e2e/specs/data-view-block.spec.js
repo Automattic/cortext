@@ -459,6 +459,53 @@ async function expectGridCardRestChrome( card ) {
 			actionRightAligned: true,
 			checkboxHiddenAtRest: true,
 		} );
+
+	await card.hover();
+	await expect
+		.poll( () =>
+			card.evaluate( ( element ) => {
+				const checkbox = element.querySelector(
+					':scope > .dataviews-selection-checkbox'
+				);
+				const input = checkbox?.querySelector(
+					'input[type="checkbox"]'
+				);
+				if ( ! checkbox || ! input ) {
+					return {
+						selectionVisible: false,
+						selectionCompact: false,
+						inputInsideSelection: false,
+						selectionAtStart: false,
+					};
+				}
+
+				const cardRect = element.getBoundingClientRect();
+				const checkboxRect = checkbox.getBoundingClientRect();
+				const inputRect = input.getBoundingClientRect();
+				const checkboxStyles =
+					checkbox.ownerDocument.defaultView.getComputedStyle(
+						checkbox
+					);
+
+				return {
+					selectionVisible: Number( checkboxStyles.opacity ) >= 0.99,
+					selectionCompact:
+						checkboxRect.width <= 44 && checkboxRect.height <= 44,
+					inputInsideSelection:
+						inputRect.left >= checkboxRect.left - 1 &&
+						inputRect.right <= checkboxRect.right + 1,
+					selectionAtStart:
+						checkboxRect.left >= cardRect.left &&
+						checkboxRect.left - cardRect.left <= 24,
+				};
+			} )
+		)
+		.toEqual( {
+			selectionVisible: true,
+			selectionCompact: true,
+			inputInsideSelection: true,
+			selectionAtStart: true,
+		} );
 }
 
 async function startSidePeekShellStabilityLog( page ) {
