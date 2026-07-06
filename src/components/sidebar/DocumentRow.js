@@ -33,28 +33,31 @@ import { useDocumentActions, useDocumentRecord } from '../../documents';
  * inspect for each kind.
  *
  * @param {Object}                            props
- * @param {Object}                            props.record                    Raw document record.
- * @param {Array}                             [props.childNodes]              Child tree nodes (hierarchy only).
- * @param {Object}                            [props.childBranch]             Lazy-loaded child branch state.
- * @param {number}                            [props.depth]                   Nesting depth, 0 at the root.
- * @param {Set<number>}                       props.expandedIds               Currently expanded row ids.
- * @param {?number}                           [props.draggedId]               Id of the row being dragged.
- * @param {?{zone: string, targetId: number}} [props.activeDrop]              Active drop target metadata.
- * @param {boolean}                           [props.isHidden]                True when an ancestor is collapsed.
- * @param {Function|boolean}                  props.isSelected                Selection predicate or flag.
- * @param {Function}                          props.onSelect                  Called with the record on title click.
- * @param {Function}                          props.onToggleExpand            Called with the record id on chevron click.
- * @param {Function}                          props.onLoadMore                Called with the parent id from a branch Show more button.
- * @param {Function}                          props.onCreateChild             Called with the parent id from the add-child button.
- * @param {Function}                          [props.onCreateChildCollection] Called with the parent id to create a child collection.
- * @param {Function|boolean}                  props.isFavorite                Favorite predicate or flag.
- * @param {boolean}                           [props.isFavoriteDisabled]      Disable favorite toggling.
- * @param {Function}                          props.onToggleFavorite          Called with the record from the menu.
- * @param {Function|boolean}                  props.isHome                    Home predicate or flag.
- * @param {Function}                          props.onSetHome                 Called with the record from the menu.
- * @param {boolean}                           [props.isHomeUpdating]          Disable set-as-home while a save is in flight.
- * @param {?number}                           [props.autoRenameId]            Row id that should immediately enter rename mode.
- * @param {Function}                          props.onAutoRenameConsumed      Called once rename mode has opened.
+ * @param {Object}                            props.record                      Raw document record.
+ * @param {Array}                             [props.childNodes]                Child tree nodes (hierarchy only).
+ * @param {Object}                            [props.childBranch]               Lazy-loaded child branch state.
+ * @param {number}                            [props.depth]                     Nesting depth, 0 at the root.
+ * @param {Set<number>}                       props.expandedIds                 Currently expanded row ids.
+ * @param {?number}                           [props.draggedId]                 Id of the row being dragged.
+ * @param {?{zone: string, targetId: number}} [props.activeDrop]                Active drop target metadata.
+ * @param {boolean}                           [props.isHidden]                  True when an ancestor is collapsed.
+ * @param {Function|boolean}                  props.isSelected                  Selection predicate or flag.
+ * @param {Function}                          props.onSelect                    Called with the record on title click.
+ * @param {Function}                          props.onToggleExpand              Called with the record id on chevron click.
+ * @param {Function}                          props.onLoadMore                  Called with the parent id from a branch Show more button.
+ * @param {Function}                          props.onCreateChild               Called with the parent id from the add-child button.
+ * @param {Function}                          [props.onCreateBlankChild]        Called with the parent id to create a blank child page.
+ * @param {Array}                             [props.pageTemplates]             Page templates available for child creation.
+ * @param {Function}                          [props.onCreateChildFromTemplate] Called with parent id and template.
+ * @param {Function}                          [props.onCreateChildCollection]   Called with the parent id to create a child collection.
+ * @param {Function|boolean}                  props.isFavorite                  Favorite predicate or flag.
+ * @param {boolean}                           [props.isFavoriteDisabled]        Disable favorite toggling.
+ * @param {Function}                          props.onToggleFavorite            Called with the record from the menu.
+ * @param {Function|boolean}                  props.isHome                      Home predicate or flag.
+ * @param {Function}                          props.onSetHome                   Called with the record from the menu.
+ * @param {boolean}                           [props.isHomeUpdating]            Disable set-as-home while a save is in flight.
+ * @param {?number}                           [props.autoRenameId]              Row id that should immediately enter rename mode.
+ * @param {Function}                          props.onAutoRenameConsumed        Called once rename mode has opened.
  */
 export default function DocumentRow( {
 	record,
@@ -70,6 +73,9 @@ export default function DocumentRow( {
 	onToggleExpand,
 	onLoadMore,
 	onCreateChild,
+	onCreateBlankChild,
+	pageTemplates = [],
+	onCreateChildFromTemplate,
 	onCreateChildCollection,
 	isFavorite,
 	isFavoriteDisabled = false,
@@ -320,6 +326,46 @@ export default function DocumentRow( {
 								{ features.canCreateChild && (
 									<MenuGroup>
 										<MenuItem
+											icon="admin-page"
+											onClick={ () => {
+												onCreateBlankChild?.(
+													recordId
+												);
+												onClose();
+											} }
+										>
+											{ __(
+												'Blank document inside',
+												'cortext'
+											) }
+										</MenuItem>
+										{ pageTemplates.map( ( template ) => (
+											<MenuItem
+												key={ template.id }
+												icon="admin-page"
+												onClick={ () => {
+													onCreateChildFromTemplate?.(
+														recordId,
+														template
+													);
+													onClose();
+												} }
+											>
+												{ sprintf(
+													/* translators: %s: template title */
+													__(
+														'New from %s inside',
+														'cortext'
+													),
+													template.title ||
+														__(
+															'Untitled template',
+															'cortext'
+														)
+												) }
+											</MenuItem>
+										) ) }
+										<MenuItem
 											icon={ collectionIcon }
 											onClick={ () => {
 												onCreateChildCollection?.(
@@ -460,6 +506,11 @@ export default function DocumentRow( {
 								onToggleExpand={ onToggleExpand }
 								onLoadMore={ onLoadMore }
 								onCreateChild={ onCreateChild }
+								onCreateBlankChild={ onCreateBlankChild }
+								pageTemplates={ pageTemplates }
+								onCreateChildFromTemplate={
+									onCreateChildFromTemplate
+								}
 								onCreateChildCollection={
 									onCreateChildCollection
 								}

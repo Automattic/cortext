@@ -123,6 +123,7 @@ function renderRow( overrides = {} ) {
 // Popover positioning can finish after a test has already unmounted. Jest
 // then sees React's act warning during the next test and fails the suite.
 // Ignore only that warning; every other console.error should still fail.
+// eslint-disable-next-line no-console
 const originalError = console.error;
 beforeEach( () => {
 	mockRename.mockReset();
@@ -141,6 +142,7 @@ beforeEach( () => {
 } );
 
 afterEach( () => {
+	// eslint-disable-next-line no-console
 	console.error.mockRestore?.();
 } );
 
@@ -259,6 +261,24 @@ describe( 'DocumentRow (hierarchical mode)', () => {
 			} )
 		);
 		expect( props.onCreateChildCollection ).toHaveBeenCalledWith( 1 );
+	} );
+
+	it( 'creates a child document from a page template in the menu', () => {
+		const template = { id: 9, title: 'Brief' };
+		const { container, props } = renderRow( {
+			pageTemplates: [ template ],
+			onCreateChildFromTemplate: jest.fn(),
+		} );
+		fireEvent.click( container.querySelector( '.cortext-sidebar__menu' ) );
+		fireEvent.click(
+			screen.getByRole( 'menuitem', {
+				name: 'New from Brief inside',
+			} )
+		);
+		expect( props.onCreateChildFromTemplate ).toHaveBeenCalledWith(
+			1,
+			template
+		);
 	} );
 
 	it( 'does not show the child collection action for collections', () => {
