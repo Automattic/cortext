@@ -829,23 +829,56 @@ test.describe( 'Collection view block', () => {
 			const firstRow = canvas
 				.locator( '.dataviews-view-table tbody > tr' )
 				.first();
+			await expect(
+				canvas
+					.locator(
+						'.dataviews-view-table thead .dataviews-view-table-selection-checkbox'
+					)
+					.first()
+			).toHaveCSS( 'opacity', '0' );
+			await expect(
+				firstRow.locator( '.dataviews-selection-checkbox' ).first()
+			).toHaveCSS( 'opacity', '0' );
 			await firstRow.hover();
+			await expect(
+				firstRow.locator( '.dataviews-selection-checkbox' ).first()
+			).toHaveCSS( 'opacity', '1' );
 			await expect
 				.poll( () =>
-					firstRow
-						.locator( 'td' )
-						.evaluateAll( ( cells ) => [
-							...new Set(
-								cells.map(
-									( cell ) =>
-										cell.ownerDocument.defaultView.getComputedStyle(
-											cell
-										).backgroundColor
-								)
-							),
-						] )
+					firstRow.evaluate( ( row ) => {
+						const styles = row.ownerDocument.defaultView;
+						const titleCell = row.querySelector(
+							'td:has(.cortext-title-cell)'
+						);
+						const authorCell = Array.from(
+							row.querySelectorAll(
+								'td:not(.dataviews-view-table__checkbox-column):not(.dataviews-view-table__actions-column)'
+							)
+						).find(
+							( cell ) =>
+								! cell.querySelector( '.cortext-title-cell' )
+						);
+						const openButton = row.querySelector(
+							'.cortext-title-cell__open'
+						);
+
+						return {
+							titleBackground:
+								styles.getComputedStyle( titleCell )
+									.backgroundColor,
+							authorBackground:
+								styles.getComputedStyle( authorCell )
+									.backgroundColor,
+							openButtonColor:
+								styles.getComputedStyle( openButton ).color,
+						};
+					} )
 				)
-				.toEqual( [ 'rgb(240, 240, 240)' ] );
+				.toEqual( {
+					titleBackground: 'rgb(240, 240, 240)',
+					authorBackground: 'rgb(255, 255, 255)',
+					openButtonColor: 'rgb(56, 88, 233)',
+				} );
 
 			await page.evaluate( async () => {
 				await window.wp.data.dispatch( 'core/editor' ).savePost();
@@ -2668,12 +2701,14 @@ test.describe( 'Collection view block', () => {
 				.filter( { hasText: 'Beta Book' } );
 
 			await expect( alphaRow ).toBeVisible();
+			await alphaRow.hover();
 			await alphaRow
 				.locator( '.dataviews-selection-checkbox input' )
 				.check();
 			await expect(
 				canvas.getByText( '1 document selected' )
 			).toBeVisible();
+			await betaRow.hover();
 			await betaRow
 				.locator( '.dataviews-selection-checkbox input' )
 				.check();

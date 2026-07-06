@@ -273,9 +273,46 @@ th.dataviews-view-table__checkbox-column {
 	padding-inline-start: 8px;
 }
 
-.cortext-data-view .dataviews-view-table thead th.dataviews-view-table__checkbox-column > .dataviews-view-table-selection-checkbox {
+.cortext-data-view
+.dataviews-view-table
+thead
+th.dataviews-view-table__checkbox-column > .dataviews-view-table-selection-checkbox {
 	margin-left: 10px;
 	margin-inline-start: 10px;
+}
+
+.cortext-data-view
+.dataviews-view-table
+:is(
+	thead
+	th.dataviews-view-table__checkbox-column
+	> .dataviews-view-table-selection-checkbox,
+	tbody
+	td.dataviews-view-table__checkbox-column
+	.dataviews-selection-checkbox
+) {
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity 80ms ease-out;
+}
+
+.cortext-data-view
+.dataviews-view-table
+:is(
+	thead
+	th.dataviews-view-table__checkbox-column:focus-within
+	> .dataviews-view-table-selection-checkbox,
+	tbody
+	tr:is(:hover, .is-hovered, :focus-within, .is-selected)
+	td.dataviews-view-table__checkbox-column
+	.dataviews-selection-checkbox
+),
+.cortext-data-view
+.dataviews-view-table:has(tbody tr.is-selected)
+thead
+th.dataviews-view-table__checkbox-column > .dataviews-view-table-selection-checkbox {
+	opacity: 1;
+	pointer-events: auto;
 }
 
 // The add-field button is portaled into DataViews' actions column header.
@@ -557,7 +594,7 @@ tbody > tr > td:not(:first-child) {
 		min-height: 28px;
 		padding: 0 $grid-unit-05;
 		border: $border-width solid transparent;
-		color: $gray-700;
+		color: var(--wp-admin-theme-color, #3858e9);
 		background: transparent;
 		box-shadow: none;
 		font-size: 12px;
@@ -573,11 +610,11 @@ tbody > tr > td:not(:first-child) {
 			flex: 0 0 $grid-unit-20;
 		}
 
+		&:focus-visible,
 		&:hover:not(:disabled),
-		&:focus:not(:disabled),
-		&:focus-visible {
+		&:focus:not(:disabled) {
 			border-color: $gray-300;
-			color: $gray-900;
+			color: var(--wp-admin-theme-color, #3858e9);
 			background: transparent;
 			box-shadow: none;
 			text-decoration: none;
@@ -588,13 +625,6 @@ tbody > tr > td:not(:first-child) {
 .cortext-title-cell:focus-within,
 .cortext-title-cell--with-open-action:hover {
 	background: $gray-100;
-}
-
-.cortext-data-view
-.dataviews-view-table
-tbody
-tr:not(.is-selected):is(:hover, .is-hovered) > td {
-	background-color: $gray-100;
 }
 
 .cortext-title-cell:focus-within,
@@ -1338,6 +1368,15 @@ tr:has(.cortext-title-cell--is-opening)
 		tbody > tr > td:has(.cortext-editable-cell):hover,
 		tbody > tr > td:has(.cortext-editable-cell__shell:focus-visible) {
 			background: $gray-100;
+		}
+
+		tbody > tr:not(.is-selected):is(:hover, .is-hovered) > td:has(.cortext-title-cell),
+		tbody > tr:not(.is-selected):is(:hover, .is-hovered) > td.dataviews-view-table__checkbox-column {
+			background-color: $gray-100;
+		}
+
+		tbody > tr:not(.is-selected):is(:hover, .is-hovered) > td:not(:has(.cortext-title-cell)):not(.dataviews-view-table__checkbox-column) {
+			background-color: $white;
 		}
 
 		// Repeat the fallbacks for the block-editor iframe, which does not
