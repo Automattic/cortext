@@ -380,7 +380,11 @@ test.describe( 'Sidebar layout controls', () => {
 			const settings = page.locator(
 				'.cortext-document-actions .components-button[aria-label="Settings"]'
 			);
+			const inspector = page.locator(
+				'.interface-complementary-area.editor-sidebar__panel'
+			);
 			await expect( settings ).toBeVisible();
+			await expect( inspector ).toBeVisible();
 
 			await page.evaluate( () => {
 				document
@@ -397,6 +401,7 @@ test.describe( 'Sidebar layout controls', () => {
 			}
 
 			await expect( settings ).not.toHaveClass( /is-pressed/ );
+			await expect( inspector ).toBeHidden();
 			await page.mouse.move( 0, 0 );
 			const unpressedBeforeHover =
 				await readButtonChromeState( settings );
@@ -447,6 +452,7 @@ test.describe( 'Sidebar layout controls', () => {
 			}
 
 			await expect( settings ).toHaveClass( /is-pressed/ );
+			await expect( inspector ).toBeVisible();
 			await page.mouse.move( 0, 0 );
 			const beforeHover = await readButtonChromeState( settings );
 

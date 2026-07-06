@@ -24,6 +24,7 @@ import {
 	useCallback,
 	useContext,
 	useEffect,
+	useRef,
 	useState,
 } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
@@ -119,7 +120,22 @@ function InspectorComplementaryArea( {
 		( select ) => getActiveInspectorArea( select ),
 		[]
 	);
-	const isActive = activeArea ? activeArea === identifier : isActiveByDefault;
+	const { enableComplementaryArea } = useDispatch( interfaceStore );
+	const hasAppliedDefault = useRef( false );
+	useEffect( () => {
+		if ( hasAppliedDefault.current ) {
+			return;
+		}
+		if ( activeArea ) {
+			hasAppliedDefault.current = true;
+			return;
+		}
+		if ( isActiveByDefault ) {
+			hasAppliedDefault.current = true;
+			enableComplementaryArea( INSPECTOR_SCOPE, identifier );
+		}
+	}, [ activeArea, enableComplementaryArea, identifier, isActiveByDefault ] );
+	const isActive = activeArea === identifier;
 
 	return (
 		<Fill name={ INSPECTOR_SLOT }>
