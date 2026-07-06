@@ -2037,6 +2037,7 @@ export default function EditorBody( {
 	isDocumentCanvas = false,
 	isLocked = false,
 	isSurfaceFocusPending = false,
+	showIdentityActions = true,
 	postId,
 	postType,
 	extraStyles,
@@ -2154,11 +2155,13 @@ export default function EditorBody( {
 				<BlockCanvas height="100%" styles={ styles }>
 					<BlockCanvasStyleProvider>
 						<CanvasMenuToolbarGuard />
-						<DocumentIdentityActions
-							isLocked={ isReadOnly }
-							postId={ postId }
-							postType={ postType }
-						/>
+						{ showIdentityActions ? (
+							<DocumentIdentityActions
+								isLocked={ isReadOnly }
+								postId={ postId }
+								postType={ postType }
+							/>
+						) : null }
 						<EnsureHeaderBlocks
 							isLocked={ isReadOnly }
 							postId={ postId }
