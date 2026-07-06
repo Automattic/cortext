@@ -458,11 +458,11 @@ $list-row-open-background: #f3f3f3;
 		.dataviews-view-list__field-wrapper {
 			display: grid !important;
 			grid-template-columns:
-				minmax(160px, max-content) minmax(0, max-content)
+				minmax(160px, max-content) minmax(0, 1fr)
 				auto;
 			column-gap: $grid-unit-20;
 			align-items: center;
-			justify-content: start;
+			justify-content: stretch;
 		}
 
 		.dataviews-view-list__field-wrapper > :first-child {

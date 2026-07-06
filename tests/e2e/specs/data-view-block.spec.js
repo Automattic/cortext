@@ -1525,6 +1525,18 @@ test.describe( 'Collection view block', () => {
 				await createCollectionFixture( requestUtils )
 			);
 			const fieldKey = `field-${ fixture.field.id }`;
+			fixture.secondEntry = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: 'Dune',
+					status: 'private',
+					cortext_trait: fixture.collection.id,
+					meta: {
+						[ fieldKey ]: 'Frank Herbert',
+					},
+				},
+			} );
 
 			fixture.page = await requestUtils.rest( {
 				method: 'POST',
@@ -1568,6 +1580,11 @@ test.describe( 'Collection view block', () => {
 				titleCell.getByText( 'The Left Hand of Darkness' )
 			).toBeVisible();
 			await expect( row.getByText( 'Ursula K. Le Guin' ) ).toBeVisible();
+			const secondRow = canvas
+				.locator( '.dataviews-view-list > [role="row"]' )
+				.filter( { hasText: 'Dune' } )
+				.first();
+			await expect( secondRow ).toBeVisible();
 			const listMetrics = await row.evaluate( ( element ) => {
 				const title = element.querySelector( '.dataviews-title-field' );
 				const fields = element.querySelector(
@@ -1707,6 +1724,66 @@ test.describe( 'Collection view block', () => {
 			expect( listMetrics.mediaHasImage ).toBe( false );
 			expect( listMetrics.mediaDisplay ).toBe( 'none' );
 			expect( listMetrics.mediaWidth ).toBe( 0 );
+			const actionAlignment = await canvas
+				.locator( '.dataviews-view-list' )
+				.evaluate( ( list ) =>
+					Array.from(
+						list.querySelectorAll( ':scope > [role="row"]' )
+					).map( ( listRow ) => {
+						const visibleActionButtons = Array.from(
+							listRow.querySelectorAll(
+								'.dataviews-view-list__item-actions .components-button'
+							)
+						).filter( ( button ) => {
+							const rect = button.getBoundingClientRect();
+							const style =
+								button.ownerDocument.defaultView.getComputedStyle(
+									button
+								);
+							return (
+								style.display !== 'none' &&
+								style.visibility !== 'hidden' &&
+								rect.width > 0 &&
+								rect.height > 0
+							);
+						} );
+						const button = visibleActionButtons[ 0 ];
+						const rowRect = listRow.getBoundingClientRect();
+						const buttonRect = button?.getBoundingClientRect();
+
+						return {
+							text: listRow.textContent ?? '',
+							actionRight: Math.round( buttonRect?.right ?? 0 ),
+							actionRightInset: Math.round(
+								rowRect.right - ( buttonRect?.right ?? 0 )
+							),
+							actionCenterOffset: buttonRect
+								? Math.abs(
+										buttonRect.top +
+											buttonRect.height / 2 -
+											( rowRect.top + rowRect.height / 2 )
+								  )
+								: null,
+						};
+					} )
+				);
+			const firstAction = actionAlignment.find( ( metric ) =>
+				metric.text.includes( 'The Left Hand of Darkness' )
+			);
+			const secondAction = actionAlignment.find( ( metric ) =>
+				metric.text.includes( 'Dune' )
+			);
+			expect( firstAction ).toBeTruthy();
+			expect( secondAction ).toBeTruthy();
+			expect(
+				Math.abs( firstAction.actionRight - secondAction.actionRight )
+			).toBeLessThanOrEqual( 1 );
+			expect( firstAction.actionRightInset ).toBeGreaterThanOrEqual( 8 );
+			expect( firstAction.actionRightInset ).toBeLessThanOrEqual( 32 );
+			expect( secondAction.actionRightInset ).toBeGreaterThanOrEqual( 8 );
+			expect( secondAction.actionRightInset ).toBeLessThanOrEqual( 32 );
+			expect( firstAction.actionCenterOffset ).toBeLessThanOrEqual( 2 );
+			expect( secondAction.actionCenterOffset ).toBeLessThanOrEqual( 2 );
 
 			const label = row
 				.locator( '.dataviews-view-list__field-label' )
@@ -1742,6 +1819,11 @@ test.describe( 'Collection view block', () => {
 				);
 			expect( fieldColor ).not.toBe( 'rgb(56, 88, 233)' );
 		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				fixture.secondEntry &&
+					`/wp/v2/crtxt_documents/${ fixture.secondEntry.id }`
+			);
 			await deleteIfCreated(
 				requestUtils,
 				fixture.entry && `/wp/v2/crtxt_documents/${ fixture.entry.id }`
