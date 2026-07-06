@@ -2,7 +2,6 @@
 @use "@wordpress/base-styles/variables" as *;
 
 $title-cell-icon-size: $grid-unit-20;
-$title-cell-open-button-width: $grid-unit-80;
 
 // DataViews row actions use the private @wordpress/components Menu, whose
 // Emotion styles can be injected outside the BlockCanvas iframe. Keep the
@@ -281,6 +280,11 @@ th.dataviews-view-table__checkbox-column > .dataviews-view-table-selection-check
 	margin-inline-start: 10px;
 }
 
+.cortext-data-view .dataviews-view-table thead > tr > th.dataviews-view-table__checkbox-column {
+	cursor: default;
+	background-color: $white;
+}
+
 .cortext-data-view
 .dataviews-view-table
 :is(
@@ -350,7 +354,7 @@ th:has(.cortext-column-header-marker)
 // Hang the hover state off the <th> instead so the cell as a whole
 // reads as a clickable affordance (and the gray shows through any
 // transparent overlay above it).
-.cortext-data-view .dataviews-view-table thead > tr > th:hover {
+.cortext-data-view .dataviews-view-table thead > tr > th:not(.dataviews-view-table__checkbox-column):hover {
 	background-color: $gray-100;
 }
 
@@ -560,13 +564,11 @@ tbody > tr > td:not(:first-child) {
 	}
 
 	&--with-open-action {
-		position: relative;
 		display: grid;
-		grid-template-columns: minmax(0, 1fr);
+		grid-template-columns: minmax(0, 1fr) auto;
 		align-items: center;
 		gap: $grid-unit-05;
 		padding-inline-end: $grid-unit-10;
-		transition: padding-inline-end 120ms ease;
 
 		.cortext-editable-cell {
 			min-width: 0;
@@ -574,50 +576,32 @@ tbody > tr > td:not(:first-child) {
 		}
 
 		// When the row has a document icon, slot it before the editable
-		// cell so the leading column shows: icon, title.
+		// cell so the leading column shows: icon, title, open-button.
 		&:has(.cortext-title-cell__icon) {
-			grid-template-columns: auto minmax(0, 1fr);
+			grid-template-columns: auto minmax(0, 1fr) auto;
 		}
 	}
 
-	&__open.components-button,
-	&__open.components-button.is-tertiary {
-		position: absolute;
-		top: 50%;
-		inset-inline-end: $grid-unit-05;
+	&__open.components-button {
 		justify-self: end;
-		justify-content: center;
-		gap: $grid-unit-05;
-		width: $title-cell-open-button-width;
+		width: auto;
 		min-width: 0;
 		height: 28px;
 		min-height: 28px;
-		padding: 0 $grid-unit-05;
+		padding: 0 $grid-unit-10;
 		border: $border-width solid transparent;
 		color: var(--wp-admin-theme-color, #3858e9);
-		background: transparent;
-		box-shadow: none;
 		font-size: 12px;
 		line-height: 1;
 		box-sizing: border-box;
 		opacity: 0;
 		pointer-events: none;
-		transform: translateY(-50%);
-
-		svg {
-			width: $grid-unit-20;
-			height: $grid-unit-20;
-			flex: 0 0 $grid-unit-20;
-		}
 
 		&:focus-visible,
-		&:hover:not(:disabled),
-		&:focus:not(:disabled) {
+		&:hover,
+		&:focus {
 			border-color: $gray-300;
 			color: var(--wp-admin-theme-color, #3858e9);
-			background: transparent;
-			box-shadow: none;
-			text-decoration: none;
 		}
 	}
 }
@@ -644,7 +628,7 @@ tr:has(.cortext-title-cell--is-open)
 tbody
 tr:has(.cortext-title-cell--is-opening)
 .cortext-title-cell--with-open-action {
-	padding-inline-end: $title-cell-open-button-width + $grid-unit-10;
+	padding-inline-end: $grid-unit-10;
 }
 
 .cortext-title-cell:focus-within .cortext-title-cell__open.components-button,

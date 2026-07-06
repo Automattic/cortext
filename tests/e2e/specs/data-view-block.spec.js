@@ -97,26 +97,16 @@ async function expectOpenButtonFitsTitleCell( openButton ) {
 						buttonInsideCell: false,
 						buttonWideEnough: false,
 						editableBeforeButton: false,
-						reservesOpenSpace: false,
+						inlineButton: false,
+						actionColor: false,
 					};
 				}
 
 				const buttonRect = button.getBoundingClientRect();
 				const tableCellRect = tableCell.getBoundingClientRect();
 				const editableRect = editableCell.getBoundingClientRect();
-				const icon = button.querySelector( 'svg' );
-				const iconRect = icon?.getBoundingClientRect();
 				const buttonStyles =
 					button.ownerDocument.defaultView.getComputedStyle( button );
-				const titleCellStyles =
-					button.ownerDocument.defaultView.getComputedStyle(
-						titleCell
-					);
-				const paddingInlineEnd =
-					Number.parseFloat(
-						titleCellStyles.paddingInlineEnd ||
-							titleCellStyles.paddingRight
-					) || 0;
 
 				return {
 					buttonInsideCell:
@@ -125,16 +115,11 @@ async function expectOpenButtonFitsTitleCell( openButton ) {
 					buttonWideEnough: buttonRect.width >= 60,
 					editableBeforeButton:
 						editableRect.right <= buttonRect.left + 1,
-					reservesOpenSpace: paddingInlineEnd >= buttonRect.width,
-					neutralColor: [
-						'rgb(117, 117, 117)',
-						'rgb(30, 30, 30)',
+					inlineButton: buttonStyles.position !== 'absolute',
+					actionColor: [
+						'rgb(56, 88, 233)',
+						'rgb(24, 58, 214)',
 					].includes( buttonStyles.color ),
-					transparentBackground:
-						buttonStyles.backgroundColor === 'rgba(0, 0, 0, 0)',
-					iconCompact:
-						! iconRect ||
-						( iconRect.width <= 18 && iconRect.height <= 18 ),
 				};
 			} )
 		)
@@ -142,10 +127,8 @@ async function expectOpenButtonFitsTitleCell( openButton ) {
 			buttonInsideCell: true,
 			buttonWideEnough: true,
 			editableBeforeButton: true,
-			reservesOpenSpace: true,
-			neutralColor: true,
-			transparentBackground: true,
-			iconCompact: true,
+			inlineButton: true,
+			actionColor: true,
 		} );
 }
 
@@ -829,6 +812,20 @@ test.describe( 'Collection view block', () => {
 			const firstRow = canvas
 				.locator( '.dataviews-view-table tbody > tr' )
 				.first();
+			const headerSelectionCell = canvas
+				.locator(
+					'.dataviews-view-table thead th.dataviews-view-table__checkbox-column'
+				)
+				.first();
+			await expect( headerSelectionCell ).toHaveCSS(
+				'cursor',
+				'default'
+			);
+			await headerSelectionCell.hover();
+			await expect( headerSelectionCell ).toHaveCSS(
+				'background-color',
+				'rgb(255, 255, 255)'
+			);
 			await expect(
 				canvas
 					.locator(
@@ -869,15 +866,19 @@ test.describe( 'Collection view block', () => {
 							authorBackground:
 								styles.getComputedStyle( authorCell )
 									.backgroundColor,
-							openButtonColor:
-								styles.getComputedStyle( openButton ).color,
+							openButtonActionColor: [
+								'rgb(56, 88, 233)',
+								'rgb(24, 58, 214)',
+							].includes(
+								styles.getComputedStyle( openButton ).color
+							),
 						};
 					} )
 				)
 				.toEqual( {
 					titleBackground: 'rgb(240, 240, 240)',
 					authorBackground: 'rgb(255, 255, 255)',
-					openButtonColor: 'rgb(56, 88, 233)',
+					openButtonActionColor: true,
 				} );
 
 			await page.evaluate( async () => {
