@@ -271,6 +271,24 @@ describe( 'DocumentRow (hierarchical mode)', () => {
 		expect( props.onCreateChildCollection ).toHaveBeenCalledWith( 1 );
 	} );
 
+	it( 'creates a child document from a page template in the menu', () => {
+		const template = { id: 9, title: 'Brief' };
+		const { container, props } = renderRow( {
+			pageTemplates: [ template ],
+			onCreateChildFromTemplate: jest.fn(),
+		} );
+		fireEvent.click( container.querySelector( '.cortext-sidebar__menu' ) );
+		fireEvent.click(
+			screen.getByRole( 'menuitem', {
+				name: 'New from Brief inside',
+			} )
+		);
+		expect( props.onCreateChildFromTemplate ).toHaveBeenCalledWith(
+			1,
+			template
+		);
+	} );
+
 	it( 'does not show the child collection action for collections', () => {
 		const { container } = renderRow( { record: makeCollection() } );
 		fireEvent.click( container.querySelector( '.cortext-sidebar__menu' ) );
