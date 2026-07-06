@@ -166,6 +166,8 @@ async function expectDataViewsToolbarChrome(
 						actionsToolbar?.children[
 							actionsToolbar.children.length - 1
 						];
+					const viewControlsRect =
+						viewControls.getBoundingClientRect();
 					const viewButtons = Array.from(
 						viewControls?.querySelectorAll(
 							'.components-button'
@@ -224,6 +226,14 @@ async function expectDataViewsToolbarChrome(
 								rect.height >= 30 &&
 								rect.height <= 34
 						),
+						viewControlsCompact:
+							viewControlsRect.height >= 30 &&
+							viewControlsRect.height <= 32,
+						viewControlsAligned:
+							Math.abs(
+								centerY( viewControlsRect ) -
+									centerY( inputRect )
+							) <= 1,
 						viewButtonsAligned: viewButtonRects.every(
 							( rect ) =>
 								Math.abs(
@@ -257,6 +267,8 @@ async function expectDataViewsToolbarChrome(
 			filterCloseToInput: true,
 			viewButtonCount: 2,
 			viewButtonsCompact: true,
+			viewControlsCompact: true,
+			viewControlsAligned: true,
 			viewButtonsAligned: true,
 			viewIconsAligned: true,
 			viewButtonsAfterFilter: true,

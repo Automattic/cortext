@@ -1184,6 +1184,8 @@ tr:has(.cortext-title-cell--is-opening)
 		align-items: center;
 		gap: $grid-unit-05;
 		flex-shrink: 0;
+		height: $button-size-compact;
+		line-height: 0;
 	}
 
 	.dataviews-search.components-search-control {
