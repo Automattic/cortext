@@ -8,6 +8,7 @@ import {
 } from '@wordpress/components';
 import { useEffect, useRef, useState } from '@wordpress/element';
 import {
+	backup,
 	chevronRight,
 	home as homeIcon,
 	moreVertical,
@@ -15,10 +16,16 @@ import {
 	starEmpty,
 	starFilled,
 } from '@wordpress/icons';
+import { useDispatch } from '@wordpress/data';
+import { store as interfaceStore } from '@wordpress/interface';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 
 import { collectionIcon } from '../cortextIcons';
 import { useDocumentActions, useDocumentRecord } from '../../documents';
+import {
+	INSPECTOR_SCOPE,
+	REVISION_HISTORY_PANEL,
+} from '../editorPanelConstants';
 
 /**
  * Sidebar row shared by pages and collections. The document layer tells it
@@ -82,6 +89,7 @@ export default function DocumentRow( {
 } ) {
 	const { title, icon, features } = useDocumentRecord( record );
 	const { rename, duplicate, trash } = useDocumentActions();
+	const { enableComplementaryArea } = useDispatch( interfaceStore );
 
 	const recordId = record.id;
 	const hasLoadedChildren = features.hierarchy && childNodes.length > 0;
@@ -387,6 +395,19 @@ export default function DocumentRow( {
 										} }
 									>
 										{ __( 'Duplicate', 'cortext' ) }
+									</MenuItem>
+									<MenuItem
+										icon={ backup }
+										onClick={ () => {
+											onSelect( record );
+											enableComplementaryArea(
+												INSPECTOR_SCOPE,
+												REVISION_HISTORY_PANEL
+											);
+											onClose();
+										} }
+									>
+										{ __( 'History', 'cortext' ) }
 									</MenuItem>
 									<MenuItem
 										icon="trash"

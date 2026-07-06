@@ -92,3 +92,195 @@
 		margin-top: $grid-unit-30;
 	}
 }
+
+.cortext-revisions-header {
+	display: flex;
+	align-items: center;
+	gap: $grid-unit-10;
+	min-width: 0;
+
+	&__tools,
+	&__actions {
+		display: flex;
+		align-items: center;
+		flex: 0 0 auto;
+		gap: $grid-unit-05;
+	}
+
+	&__label {
+		min-width: 0;
+		max-width: 36ch;
+		overflow: hidden;
+		color: var(--cortext-text-muted);
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	&__exit.components-button.is-secondary {
+		color: var(--cortext-button-text);
+		box-shadow: inset 0 0 0 $border-width var(--cortext-chrome-border);
+	}
+
+	&__exit.components-button.is-secondary:hover:not(:disabled),
+	&__exit.components-button.is-secondary:focus:not(:disabled) {
+		background: var(--cortext-button-hover-surface);
+		color: var(--cortext-text-strong);
+		box-shadow: inset 0 0 0 $border-width var(--cortext-chrome-border);
+	}
+
+	&__restore.components-button.is-primary {
+		background: var(--cortext-button-primary-surface);
+		box-shadow: none;
+		color: var(--cortext-button-primary-text);
+	}
+
+	&__restore.components-button.is-primary:hover:not(:disabled),
+	&__restore.components-button.is-primary:focus:not(:disabled) {
+		background: var(--cortext-button-primary-hover-surface);
+		color: var(--cortext-button-primary-text);
+	}
+
+	&__restore.components-button.is-primary:disabled {
+		background: var(--cortext-button-primary-surface);
+		color: var(--cortext-button-primary-text);
+		opacity: 0.45;
+	}
+}
+
+.cortext-revision-history {
+
+	&__header {
+		padding: $grid-unit-15 $grid-unit-20;
+		border-bottom: $border-width solid var(--cortext-chrome-border);
+	}
+
+	&__header-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: $grid-unit-10;
+	}
+
+	&__loading,
+	&__empty {
+		padding: $grid-unit-20;
+		color: var(--cortext-text-muted);
+	}
+
+	&__list {
+		display: flex;
+		flex-direction: column;
+		margin: 0;
+		padding: $grid-unit-10;
+		list-style: none;
+	}
+
+	&__item {
+		margin: 0;
+	}
+
+	&__button.components-button {
+		display: flex;
+		align-items: flex-start;
+		flex-direction: column;
+		width: 100%;
+		height: auto;
+		padding: $grid-unit-10;
+		border-radius: var(--cortext-shell-radius);
+		text-align: left;
+	}
+
+	&__item.is-selected &__button.components-button {
+		background: var(--wp-admin-theme-color);
+		color: $white;
+	}
+
+	&__main {
+		display: flex;
+		align-items: center;
+		width: 100%;
+		min-width: 0;
+		gap: $grid-unit-05;
+	}
+
+	&__date,
+	&__author {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	&__date {
+		font-weight: 500;
+	}
+
+	&__author {
+		color: var(--cortext-text-muted);
+		font-size: 12px;
+	}
+
+	&__item.is-selected &__author {
+		color: rgba(255, 255, 255, 0.78);
+	}
+
+	&__badge {
+		flex: 0 0 auto;
+		padding: 0 6px;
+		border-radius: 999px;
+		background: var(--cortext-canvas-frame-surface);
+		color: var(--cortext-text-muted);
+		font-size: 11px;
+		line-height: 18px;
+	}
+}
+
+.cortext-revision-properties {
+	display: flex;
+	flex-direction: column;
+	gap: $grid-unit-15;
+
+	&__empty {
+		margin: 0;
+		color: var(--cortext-text-muted);
+	}
+
+	&__field {
+		display: flex;
+		flex-direction: column;
+		gap: $grid-unit-05;
+	}
+
+	&__label {
+		color: var(--cortext-text-muted);
+		font-size: 12px;
+		font-weight: 600;
+	}
+
+	&__values {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+		gap: $grid-unit-10;
+		font-size: 13px;
+	}
+
+	del,
+	ins {
+		min-width: 0;
+		overflow-wrap: anywhere;
+		padding: $grid-unit-05;
+		border-radius: var(--cortext-shell-radius);
+		text-decoration-thickness: 1px;
+	}
+
+	del {
+		background: color-mix(in srgb, currentColor 5%, #d63638 12%);
+		color: #8a2424;
+	}
+
+	ins {
+		background: color-mix(in srgb, currentColor 5%, #00a32a 12%);
+		color: #0f6d2d;
+		text-decoration: none;
+	}
+}

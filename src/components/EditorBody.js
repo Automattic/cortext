@@ -44,6 +44,9 @@ import {
 import MediaPicker, { MediaUploadCheck } from './MediaPicker';
 import { parseDocumentIcon } from './DocumentIcon';
 import afterNextPaint from '../hooks/afterNextPaint';
+import RevisionDiffStyles from './RevisionDiffStyles';
+import { unlock } from '../lock-unlock';
+import { useRevisionedDocumentIdentity } from '../hooks/useRevisions';
 
 const DOCUMENT_ICON_BLOCK = 'cortext/document-icon';
 const DOCUMENT_COVER_BLOCK = 'cortext/document-cover';
@@ -751,7 +754,7 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 	}, [ postId, postType ] );
 
 	useLayoutEffect( () => {
-		if ( isTrashed ) {
+		if ( isTrashed || isLocked ) {
 			return;
 		}
 
@@ -786,10 +789,6 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 					updateBlockAttributes( clientId, { lock: {} } );
 					removeBlock( clientId, false );
 				} );
-		}
-
-		if ( isLocked ) {
-			return;
 		}
 
 		protectedLockRepairs.forEach( ( { clientId, lock } ) => {
@@ -1456,11 +1455,17 @@ function CanvasReadyEffect( {
 		postId
 	);
 	const [ meta ] = useEntityProp( 'postType', postType, 'meta', postId );
-	const numericFeaturedId = Number( featuredId ?? featuredMedia ) || 0;
+	const { iconMeta, featuredId: displayFeaturedId } =
+		useRevisionedDocumentIdentity( {
+			postId,
+			postType,
+			meta,
+			featuredId,
+		} );
+	const numericFeaturedId = Number( displayFeaturedId ?? featuredMedia ) || 0;
 	const needsCover = numericFeaturedId > 0;
-	const needsIcon = Boolean( meta?.cortext_document_icon );
-	const iconNeedsImage =
-		parseDocumentIcon( meta?.cortext_document_icon )?.type === 'image';
+	const needsIcon = Boolean( iconMeta );
+	const iconNeedsImage = parseDocumentIcon( iconMeta )?.type === 'image';
 	const propertiesCtx = useDocumentPropertiesContext();
 	const isPropertiesResolving = Boolean( propertiesCtx?.isResolving );
 	const needsProperties =
@@ -1609,6 +1614,11 @@ export default function EditorBody( {
 			'trash',
 		[]
 	);
+	const isRevisionsMode = useSelect(
+		( select ) =>
+			unlock( select( editorStore ) ).isRevisionsMode?.() ?? false,
+		[]
+	);
 	const record = useDocumentRecord( postType, postId );
 	const ownerBlockName = getCanvasOwnerBlockNameForRecord( record );
 	const ownerKey = ownerBlockName ? `${ postType }:${ postId }` : null;
@@ -1640,7 +1650,7 @@ export default function EditorBody( {
 		},
 		[ ownerBlockName, postId, record ]
 	);
-	const isReadOnly = isTrashed || isLocked;
+	const isReadOnly = isTrashed || isLocked || isRevisionsMode;
 	const renderAppender =
 		shouldUseHeaderAwareAppender && ! isReadOnly
 			? () => (
@@ -1659,6 +1669,7 @@ export default function EditorBody( {
 				ref={ blockCanvasRef }
 			>
 				<BlockCanvas height="100%" styles={ styles }>
+					<RevisionDiffStyles />
 					<DocumentIdentityActions
 						isLocked={ isReadOnly }
 						postId={ postId }

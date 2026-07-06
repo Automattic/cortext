@@ -36,6 +36,8 @@ final class DocumentIdentity {
 		// Add the locked title block on create so the first editor render
 		// already has it.
 		add_filter( 'wp_insert_post_data', array( $this, 'prepend_header_blocks' ), 10, 2 );
+		add_filter( 'wp_post_revision_meta_keys', array( $this, 'revision_meta_keys' ), 10, 2 );
+		add_action( 'rest_api_init', array( $this, 'register_revision_rest_fields' ) );
 	}
 
 	/**
@@ -56,12 +58,58 @@ final class DocumentIdentity {
 				'single'            => true,
 				'default'           => '',
 				'show_in_rest'      => true,
+				'revisions_enabled' => true,
 				'auth_callback'     => static function () {
 					return current_user_can( 'edit_posts' );
 				},
 				'sanitize_callback' => array( self::class, 'sanitize' ),
 			)
 		);
+	}
+
+	/**
+	 * Revisions need to carry document identity alongside post content.
+	 *
+	 * Core includes registered revisioned meta such as the icon automatically,
+	 * but covers use the protected `_thumbnail_id` key behind `featured_media`.
+	 * Add it for Cortext documents so visual history and restore stay aligned.
+	 *
+	 * @param string[] $keys      Revisioned meta keys.
+	 * @param string   $post_type Post type slug.
+	 * @return string[]
+	 */
+	public function revision_meta_keys( array $keys, string $post_type ): array {
+		if ( ! post_type_supports( $post_type, 'cortext-document' ) ) {
+			return $keys;
+		}
+
+		$keys[] = self::META_KEY;
+		$keys[] = '_thumbnail_id';
+
+		return array_values( array_unique( $keys ) );
+	}
+
+	public function register_revision_rest_fields(): void {
+		foreach ( get_post_types( array( 'show_in_rest' => true ) ) as $post_type ) {
+			if ( ! post_type_supports( $post_type, 'cortext-document' ) ) {
+				continue;
+			}
+
+			register_rest_field(
+				$post_type . '-revision',
+				'featured_media',
+				array(
+					'get_callback' => static function ( array $revision ): int {
+						return (int) get_post_meta( (int) ( $revision['id'] ?? 0 ), '_thumbnail_id', true );
+					},
+					'schema'       => array(
+						'description' => __( 'The ID of the featured media for the revision.', 'cortext' ),
+						'type'        => 'integer',
+						'context'     => array( 'view', 'edit', 'embed' ),
+					),
+				)
+			);
+		}
 	}
 
 	/**

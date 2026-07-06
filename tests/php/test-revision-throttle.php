@@ -81,6 +81,35 @@ final class Test_Revision_Throttle extends BaseTestCase {
 		);
 	}
 
+	public function test_scoped_bypass_allows_revision_inside_interval_window(): void {
+		$throttle = new RevisionThrottle();
+		$post     = $this->make_post( self::PAGE_POST_TYPE );
+		$revision = $this->make_revision( 60 );
+
+		$result = RevisionThrottle::with_bypass(
+			static fn() => $throttle->throttle_revision( true, $revision, $post )
+		);
+
+		$this->assertTrue( $result );
+		$this->assertFalse(
+			$throttle->throttle_revision( true, $revision, $post ),
+			'The bypass must not leak beyond the scoped callback.'
+		);
+	}
+
+	public function test_filter_bypass_allows_revision_inside_interval_window(): void {
+		$throttle = new RevisionThrottle();
+		$post     = $this->make_post( self::PAGE_POST_TYPE );
+		$revision = $this->make_revision( 60 );
+
+		add_filter( 'cortext_bypass_revision_throttle', '__return_true' );
+		try {
+			$this->assertTrue( $throttle->throttle_revision( true, $revision, $post ) );
+		} finally {
+			remove_filter( 'cortext_bypass_revision_throttle', '__return_true' );
+		}
+	}
+
 	public function test_throttle_suppresses_row_document_within_interval_window(): void {
 		$throttle = new RevisionThrottle();
 		$post     = $this->make_post( self::ROW_POST_TYPE );

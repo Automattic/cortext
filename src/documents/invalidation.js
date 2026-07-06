@@ -21,6 +21,15 @@ const FULL_PAGE_COLLECTIONS = [
 ];
 
 /**
+ * A direct document update can change labels and icons already shown in the
+ * sidebar tree and Favorites lookup without moving anything in or out of Trash.
+ */
+export const afterDocumentIdentityChange = [
+	ACTIVE_PAGES,
+	FULL_PAGE_COLLECTIONS,
+];
+
+/**
  * A lifecycle change on any document can affect the sidebar document tree (the
  * non-row query that holds pages and collections), the trashed-pages list, and
  * the collections lookup that Favorites resolves titles from. Refresh all three

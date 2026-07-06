@@ -95,10 +95,15 @@ import {
 	useDocumentSelection,
 	useFavoriteToggle,
 } from '../documents';
+import {
+	afterDocumentIdentityChange,
+	applyInvalidationPack,
+} from '../documents/invalidation';
 import useSidebarDnd from './sidebar/useSidebarDnd';
 import useSidebarNavigation from './sidebar/useSidebarNavigation';
 import useSidebarTree, { ROOT_PARENT_ID } from './sidebar/useSidebarTree';
 import DocumentRow from './sidebar/DocumentRow';
+import { useDocumentRecordInvalidation } from '../hooks/documentRecordInvalidation';
 import {
 	isPublicWebAffordancesEnabled,
 	isWordPressAffordancesEnabled,
@@ -148,7 +153,14 @@ export default function Sidebar( {
 		setFavorites,
 		isResolving: isResolvingFavorites,
 	} = useFavorites();
-	const { saveEntityRecord } = useDispatch( 'core' );
+	const { saveEntityRecord, invalidateResolution } = useDispatch( 'core' );
+	const refreshDocumentLists = useCallback( () => {
+		applyInvalidationPack(
+			invalidateResolution,
+			afterDocumentIdentityChange
+		);
+	}, [ invalidateResolution ] );
+	useDocumentRecordInvalidation( refreshDocumentLists );
 	const {
 		tree,
 		pages,

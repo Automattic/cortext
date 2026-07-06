@@ -17,16 +17,26 @@ import { replace, trash } from '@wordpress/icons';
 
 import DocumentIcon from '../../components/DocumentIcon';
 import DocumentIdentityControls from '../../components/DocumentIdentityControls';
+import { useRevisionedDocumentIdentity } from '../../hooks/useRevisions';
 
 export default function Edit( { context, clientId } ) {
 	const postId = context?.postId;
 	const postType = context?.postType;
-	const blockProps = useBlockProps( {
-		className: 'cortext-document-icon-block',
-	} );
 
 	const [ meta ] = useEntityProp( 'postType', postType, 'meta', postId );
-	const iconMeta = meta?.cortext_document_icon ?? '';
+	const { iconChanged, iconMeta } = useRevisionedDocumentIdentity( {
+		postId,
+		postType,
+		meta,
+	} );
+	const blockProps = useBlockProps( {
+		className: [
+			'cortext-document-icon-block',
+			iconChanged ? 'is-revision-modified' : '',
+		]
+			.filter( Boolean )
+			.join( ' ' ),
+	} );
 	const hasIcon = !! iconMeta;
 	const { removeBlock, updateBlockAttributes } =
 		useDispatch( blockEditorStore );

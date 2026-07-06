@@ -7,7 +7,15 @@ import {
 	store as interfaceStore,
 } from '@wordpress/interface';
 import { Button } from '@wordpress/components';
-import { closeSmall, cog, pencil, plus, seen, unseen } from '@wordpress/icons';
+import {
+	backup,
+	closeSmall,
+	cog,
+	pencil,
+	plus,
+	seen,
+	unseen,
+} from '@wordpress/icons';
 import {
 	useCallback,
 	useEffect,
@@ -42,11 +50,18 @@ import { PostLockFailureNotice, PostLockModal } from './PostLockControls';
 import { CanvasProgressBar } from './Skeleton';
 import { TopBarActionsFill } from './WorkspaceTopBar';
 import DocumentInspectorSidebar, {
-	INSPECTOR_SCOPE,
 	InspectorSidebarSlot,
+} from './DocumentInspectorSidebar';
+import {
+	INSPECTOR_SCOPE,
 	DOCUMENT_INSPECTOR,
 	isInspectorArea,
-} from './DocumentInspectorSidebar';
+	REVISION_HISTORY_PANEL,
+} from './editorPanelConstants';
+import RevisionHistoryPanel from './RevisionHistoryPanel';
+import RevisionsHeader from './RevisionsHeader';
+import { useRevisionControls } from '../hooks/useRevisions';
+import { unlock } from '../lock-unlock';
 import {
 	makeRowDocumentContext,
 	rememberRowDocumentContext,
@@ -87,6 +102,7 @@ function DocumentActions( {
 	disabled = false,
 	isActive,
 	postId,
+	postType,
 	topBarActions,
 	hasProperties,
 	arePropertiesVisible,
@@ -96,18 +112,15 @@ function DocumentActions( {
 } ) {
 	const { enableComplementaryArea, disableComplementaryArea } =
 		useDispatch( interfaceStore );
-	const isInspectorOpen = useSelect(
+	const activeArea = useSelect(
 		( select ) =>
-			isInspectorArea(
-				select( interfaceStore ).getActiveComplementaryArea(
-					INSPECTOR_SCOPE
-				)
+			select( interfaceStore ).getActiveComplementaryArea(
+				INSPECTOR_SCOPE
 			),
 		[]
 	);
-	// Pages and rows both open the document tab first: page metadata for pages,
-	// row properties for rows. Block details stay in the second tab.
-	const defaultInspector = DOCUMENT_INSPECTOR;
+	const { isAvailable: hasRevisionControls, isRevisionsMode } =
+		useRevisionControls( { postId, postType } );
 
 	// Canvas stays mounted across route changes (preservePaint keeps the
 	// editor iframe warm). Suppress the Fill when this page isn't the active
@@ -116,6 +129,20 @@ function DocumentActions( {
 	if ( ! isActive ) {
 		return null;
 	}
+
+	if ( isRevisionsMode ) {
+		return (
+			<TopBarActionsFill>
+				<RevisionsHeader postId={ postId } postType={ postType } />
+			</TopBarActionsFill>
+		);
+	}
+
+	// Pages and rows both open the document tab first: page metadata for pages,
+	// row properties for rows. Block details stay in the second tab.
+	const defaultInspector = DOCUMENT_INSPECTOR;
+	const isInspectorOpen = isInspectorArea( activeArea );
+	const isHistoryOpen = activeArea === REVISION_HISTORY_PANEL;
 
 	return (
 		<TopBarActionsFill>
@@ -156,6 +183,22 @@ function DocumentActions( {
 						/>
 					</>
 				) : null }
+				<Button
+					className="cortext-document-actions__history"
+					icon={ backup }
+					size="compact"
+					label={ __( 'History', 'cortext' ) }
+					isPressed={ isHistoryOpen }
+					disabled={ ! hasRevisionControls }
+					onClick={ () =>
+						isHistoryOpen
+							? disableComplementaryArea( INSPECTOR_SCOPE )
+							: enableComplementaryArea(
+									INSPECTOR_SCOPE,
+									REVISION_HISTORY_PANEL
+							  )
+					}
+				/>
 				<Button
 					className="cortext-document-actions__settings"
 					icon={ cog }
@@ -242,6 +285,8 @@ function CanvasEditor( {
 		enabled: isActive,
 	} );
 	const { resetPost } = useDispatch( editorStore );
+	const { setCurrentRevisionId } = unlock( useDispatch( editorStore ) );
+	const setCurrentRevisionIdRef = useRef( setCurrentRevisionId );
 	const discard = useCallback( () => resetPost(), [ resetPost ] );
 	const lastNotifiedBacklinkSaveRef = useRef( null );
 
@@ -249,6 +294,14 @@ function CanvasEditor( {
 		onApi?.( { flushNow, discard } );
 		return () => onApi?.( null );
 	}, [ discard, flushNow, onApi ] );
+
+	useEffect( () => {
+		setCurrentRevisionIdRef.current = setCurrentRevisionId;
+	}, [ setCurrentRevisionId ] );
+
+	useEffect( () => {
+		setCurrentRevisionIdRef.current?.( null );
+	}, [ post.id ] );
 
 	useEffect( () => {
 		if (
@@ -353,6 +406,7 @@ function CanvasEditor( {
 				disabled={ postLock.isReadOnly }
 				isActive={ isActive }
 				postId={ post.id }
+				postType={ post.type ?? postType }
 				topBarActions={ topBarActions }
 				hasProperties={ hasProperties }
 				arePropertiesVisible={ arePropertiesVisible }
@@ -398,6 +452,7 @@ function CanvasEditor( {
 				postId={ post.id }
 				postType={ postType }
 			/>
+			<RevisionHistoryPanel postId={ post.id } postType={ postType } />
 		</DocumentPropertiesProvider>
 	);
 }

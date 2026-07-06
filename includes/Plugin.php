@@ -36,6 +36,7 @@ use Cortext\Notion\Importer as NotionImporter;
 use Cortext\Rest\NotionController;
 use Cortext\Rest\PostLocksController;
 use Cortext\Rest\RecentsController;
+use Cortext\Rest\RestoreRevisionController;
 use Cortext\Rest\RowsController;
 use Cortext\Rest\SampleContentController;
 use Cortext\Rest\SidebarTreePreferencesController;
@@ -78,6 +79,7 @@ final class Plugin {
 		( new BacklinksController() )->register();
 		( new DocumentLocatorController() )->register();
 		( new DocumentsController( null, $trash_cascade ) )->register();
+		( new RestoreRevisionController() )->register();
 		( new PostLocksController() )->register();
 		( new RecentsController() )->register();
 		( new RowsController() )->register();
