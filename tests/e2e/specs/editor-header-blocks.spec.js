@@ -165,7 +165,7 @@ async function readInspectorBorderState( page ) {
 		const swatch = document.createElement( 'span' );
 		swatch.style.color = 'var(--cortext-canvas-border)';
 		root.appendChild( swatch );
-		const canvasBorder = getComputedStyle( swatch ).color;
+		const canvasBorder = window.getComputedStyle( swatch ).color;
 		swatch.remove();
 
 		const header = document.querySelector(
@@ -176,8 +176,9 @@ async function readInspectorBorderState( page ) {
 		);
 		return {
 			canvasBorder,
-			headerBorderBottom: getComputedStyle( header ).borderBottomColor,
-			panelBorderTop: getComputedStyle( body ).borderTopColor,
+			headerBorderBottom:
+				window.getComputedStyle( header ).borderBottomColor,
+			panelBorderTop: window.getComputedStyle( body ).borderTopColor,
 		};
 	} );
 }

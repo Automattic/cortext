@@ -144,7 +144,7 @@ function InspectorComplementaryArea( {
 					className="interface-complementary-area editor-sidebar__panel"
 					aria-label={ title }
 				>
-					<div className="editor-sidebar__panel-tabs">
+					<div className="components-panel__header editor-sidebar__panel-tabs">
 						<Tabs.Context.Provider value={ tabsContextValue }>
 							<InspectorTabsHeader tabs={ tabs } />
 						</Tabs.Context.Provider>
