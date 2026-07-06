@@ -877,7 +877,7 @@ test.describe( 'Collection view block', () => {
 				)
 				.toEqual( {
 					titleBackground: 'rgb(240, 240, 240)',
-					authorBackground: 'rgb(255, 255, 255)',
+					authorBackground: 'rgb(240, 240, 240)',
 					openButtonActionColor: true,
 				} );
 
