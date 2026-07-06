@@ -1061,7 +1061,15 @@ test.describe( 'Collection view block', () => {
 			await expect(
 				firstRow.locator( '.dataviews-selection-checkbox' ).first()
 			).toHaveCSS( 'opacity', '0' );
-			await firstRow.hover();
+			const titleCell = firstRow
+				.locator( 'td:has(.cortext-title-cell)' )
+				.first();
+			const authorCell = firstRow
+				.locator(
+					'td:not(.dataviews-view-table__checkbox-column):not(.dataviews-view-table__actions-column):not(:has(.cortext-title-cell))'
+				)
+				.first();
+			await titleCell.hover();
 			await expect(
 				firstRow.locator( '.dataviews-selection-checkbox' ).first()
 			).toHaveCSS( 'opacity', '1' );
@@ -1069,10 +1077,13 @@ test.describe( 'Collection view block', () => {
 				.poll( () =>
 					firstRow.evaluate( ( row ) => {
 						const styles = row.ownerDocument.defaultView;
-						const titleCell = row.querySelector(
+						const titleCellElement = row.querySelector(
 							'td:has(.cortext-title-cell)'
 						);
-						const authorCell = Array.from(
+						const checkboxCell = row.querySelector(
+							'td.dataviews-view-table__checkbox-column'
+						);
+						const authorCellElement = Array.from(
 							row.querySelectorAll(
 								'td:not(.dataviews-view-table__checkbox-column):not(.dataviews-view-table__actions-column)'
 							)
@@ -1080,16 +1091,25 @@ test.describe( 'Collection view block', () => {
 							( cell ) =>
 								! cell.querySelector( '.cortext-title-cell' )
 						);
+						const actionsCell = row.querySelector(
+							'td.dataviews-view-table__actions-column'
+						);
 						const openButton = row.querySelector(
 							'.cortext-title-cell__open'
 						);
 
 						return {
+							checkboxBackground:
+								styles.getComputedStyle( checkboxCell )
+									.backgroundColor,
 							titleBackground:
-								styles.getComputedStyle( titleCell )
+								styles.getComputedStyle( titleCellElement )
 									.backgroundColor,
 							authorBackground:
-								styles.getComputedStyle( authorCell )
+								styles.getComputedStyle( authorCellElement )
+									.backgroundColor,
+							actionsBackground:
+								styles.getComputedStyle( actionsCell )
 									.backgroundColor,
 							openButtonActionColor: [
 								'rgb(56, 88, 233)',
@@ -1101,9 +1121,42 @@ test.describe( 'Collection view block', () => {
 					} )
 				)
 				.toEqual( {
+					checkboxBackground: 'rgb(248, 248, 248)',
 					titleBackground: 'rgb(240, 240, 240)',
-					authorBackground: 'rgb(240, 240, 240)',
+					authorBackground: 'rgb(248, 248, 248)',
+					actionsBackground: 'rgb(248, 248, 248)',
 					openButtonActionColor: true,
+				} );
+			await authorCell.hover();
+			await expect
+				.poll( () =>
+					firstRow.evaluate( ( row ) => {
+						const styles = row.ownerDocument.defaultView;
+						const titleCellElement = row.querySelector(
+							'td:has(.cortext-title-cell)'
+						);
+						const authorCellElement = Array.from(
+							row.querySelectorAll(
+								'td:not(.dataviews-view-table__checkbox-column):not(.dataviews-view-table__actions-column)'
+							)
+						).find(
+							( cell ) =>
+								! cell.querySelector( '.cortext-title-cell' )
+						);
+
+						return {
+							titleBackground:
+								styles.getComputedStyle( titleCellElement )
+									.backgroundColor,
+							authorBackground:
+								styles.getComputedStyle( authorCellElement )
+									.backgroundColor,
+						};
+					} )
+				)
+				.toEqual( {
+					titleBackground: 'rgb(248, 248, 248)',
+					authorBackground: 'rgb(240, 240, 240)',
 				} );
 
 			await page.evaluate( async () => {

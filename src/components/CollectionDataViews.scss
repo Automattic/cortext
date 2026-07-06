@@ -2,6 +2,8 @@
 @use "@wordpress/base-styles/variables" as *;
 
 $title-cell-icon-size: $grid-unit-20;
+$table-row-hover-background: #f8f8f8;
+$table-cell-hover-background: $gray-100;
 
 // DataViews row actions use the private @wordpress/components Menu, whose
 // Emotion styles can be injected outside the BlockCanvas iframe. Keep the
@@ -394,8 +396,19 @@ th:has(.cortext-column-header-marker)
 .cortext-data-view
 .dataviews-view-table
 tbody
-tr:is(:hover, .is-hovered) > td {
-	background-color: $gray-100;
+tr:is(:hover, .is-hovered) > td,
+.cortext-data-view
+.dataviews-view-table
+tbody
+tr:is(:hover, .is-hovered) > td.dataviews-view-table__actions-column {
+	background-color: $table-row-hover-background;
+}
+
+.cortext-data-view
+.dataviews-view-table
+tbody
+tr:is(:hover, .is-hovered) > td:is(:hover, :focus-within) {
+	background-color: $table-cell-hover-background;
 }
 
 .cortext-data-view
