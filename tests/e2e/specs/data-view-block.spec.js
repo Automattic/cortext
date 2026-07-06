@@ -2343,6 +2343,9 @@ test.describe( 'Collection view block', () => {
 						const fieldValue = chip.closest(
 							'.dataviews-view-grid__field-value'
 						);
+						const field = chip.closest(
+							'.dataviews-view-grid__field'
+						);
 						const fields = chip.closest(
 							'.dataviews-view-grid__fields, .dataviews-view-grid__badge-fields'
 						);
@@ -2353,6 +2356,7 @@ test.describe( 'Collection view block', () => {
 						if (
 							! shell ||
 							! fieldValue ||
+							! field ||
 							! fields ||
 							! refs ||
 							! title
@@ -2361,6 +2365,7 @@ test.describe( 'Collection view block', () => {
 								chipInsideFields: false,
 								chipInsideRefs: false,
 								chipBoxSizing: '',
+								fieldUsesSurfaceWidth: false,
 								shellUsesRowWidth: false,
 								shellHasPencilReserve: false,
 								titleHasRoom: false,
@@ -2370,11 +2375,19 @@ test.describe( 'Collection view block', () => {
 						const chipRect = chip.getBoundingClientRect();
 						const fieldValueRect =
 							fieldValue.getBoundingClientRect();
+						const fieldRect = field.getBoundingClientRect();
 						const fieldsRect = fields.getBoundingClientRect();
 						const refsRect = refs.getBoundingClientRect();
 						const shellRect = shell.getBoundingClientRect();
 						const titleRect = title.getBoundingClientRect();
 						const chipStyles = ownerWindow.getComputedStyle( chip );
+						const fieldsStyles =
+							ownerWindow.getComputedStyle( fields );
+						const fieldsPaddingRight = Number.parseFloat(
+							fieldsStyles.paddingRight
+						);
+						const fieldsContentRight =
+							fieldsRect.right - fieldsPaddingRight;
 						const shellPaddingRight = Number.parseFloat(
 							ownerWindow.getComputedStyle( shell ).paddingRight
 						);
@@ -2387,8 +2400,11 @@ test.describe( 'Collection view block', () => {
 								chipRect.left >= refsRect.left - 1 &&
 								chipRect.right <= refsRect.right + 1,
 							chipBoxSizing: chipStyles.boxSizing,
+							fieldUsesSurfaceWidth:
+								fieldRect.right >= fieldsContentRight - 1,
 							shellUsesRowWidth:
-								shellRect.right >= fieldValueRect.right - 1,
+								shellRect.right >= fieldValueRect.right - 1 &&
+								shellRect.right >= fieldsContentRight - 1,
 							shellHasPencilReserve: shellPaddingRight >= 20,
 							titleHasRoom: titleRect.width > 80,
 						};
@@ -2398,6 +2414,7 @@ test.describe( 'Collection view block', () => {
 					chipInsideFields: true,
 					chipInsideRefs: true,
 					chipBoxSizing: 'border-box',
+					fieldUsesSurfaceWidth: true,
 					shellUsesRowWidth: true,
 					shellHasPencilReserve: true,
 					titleHasRoom: true,
@@ -2425,6 +2442,18 @@ test.describe( 'Collection view block', () => {
 						const ownerWindow = chip.ownerDocument.defaultView;
 						const shellRect = shell.getBoundingClientRect();
 						const indicatorRect = indicator.getBoundingClientRect();
+						const fields = chip.closest(
+							'.dataviews-view-grid__fields, .dataviews-view-grid__badge-fields'
+						);
+						const fieldsRect = fields?.getBoundingClientRect();
+						const fieldsStyles = fields
+							? ownerWindow.getComputedStyle( fields )
+							: null;
+						const fieldsContentRight =
+							fieldsRect && fieldsStyles
+								? fieldsRect.right -
+								  Number.parseFloat( fieldsStyles.paddingRight )
+								: 0;
 						const indicatorStyles =
 							ownerWindow.getComputedStyle( indicator );
 
@@ -2435,7 +2464,8 @@ test.describe( 'Collection view block', () => {
 									0.9,
 							indicatorRightAligned:
 								indicatorRect.right <= shellRect.right - 3 &&
-								indicatorRect.right >= shellRect.right - 16,
+								indicatorRect.right >= shellRect.right - 16 &&
+								indicatorRect.right >= fieldsContentRight - 16,
 						};
 					} )
 				)

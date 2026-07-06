@@ -205,9 +205,12 @@ $grid-card-content-hover-background: #f3f3f3;
 
 	.dataviews-view-grid__field {
 		align-items: baseline;
+		box-sizing: border-box;
+		display: flex;
 		justify-content: flex-start;
 		min-height: $grid-unit-20 + $grid-unit-05;
 		text-align: start;
+		width: 100%;
 	}
 
 	.dataviews-view-grid__field:has(.cortext-editable-cell__shell--empty) {
@@ -219,8 +222,12 @@ $grid-card-content-hover-background: #f3f3f3;
 	}
 
 	.dataviews-view-grid__field-value {
-		flex: 1 1 auto;
+		align-self: stretch;
+		box-sizing: border-box;
+		display: block;
+		flex: 1 1 100%;
 		width: 100%;
+		max-width: 100%;
 		min-width: 0;
 		color: $gray-900;
 		line-height: 1.4;
@@ -229,10 +236,15 @@ $grid-card-content-hover-background: #f3f3f3;
 	}
 
 	.dataviews-view-grid__field-value .cortext-editable-cell {
+		display: block;
+		box-sizing: border-box;
 		width: 100%;
+		max-width: 100%;
 	}
 
 	.dataviews-view-grid__field-value .cortext-editable-cell > :first-child {
+		box-sizing: border-box;
+		width: 100%;
 		min-height: $grid-unit-30;
 		padding: 0 $grid-unit-30 0 $grid-unit-05;
 		border-radius: 4px;
@@ -241,6 +253,11 @@ $grid-card-content-hover-background: #f3f3f3;
 		transition:
 			background-color 120ms ease,
 			box-shadow 120ms ease;
+	}
+
+	.dataviews-view-grid__field-value .cortext-editable-cell__shell {
+		box-sizing: border-box;
+		width: 100%;
 	}
 
 	.dataviews-view-grid__field-value .cortext-editable-cell__shell:hover {
