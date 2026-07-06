@@ -257,8 +257,11 @@ export default function DataViewNewRowButton( {
 			) }
 		/>
 	);
+	const controlsClassName =
+		'cortext-data-view__new-row-controls' +
+		` cortext-data-view__new-row-controls--${ presentation }`;
 	const controls = (
-		<div className="cortext-data-view__new-row-controls">
+		<div className={ controlsClassName }>
 			{ primaryButton }
 			{ optionsMenu }
 		</div>
