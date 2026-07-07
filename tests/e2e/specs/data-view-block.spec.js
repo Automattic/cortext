@@ -2538,6 +2538,32 @@ test.describe( 'Collection view block', () => {
 				.filter( { hasText: 'Alpha Manual' } )
 				.first();
 			await expectGridCardTitleBeforeFields( alphaCard );
+			const gridBodyRhythm = await alphaCard.evaluate( ( element ) => {
+				const body = element.querySelector(
+					':scope > .dataviews-view-grid__title-actions + *'
+				);
+				const fields = element.querySelector(
+					'.dataviews-view-grid__fields'
+				);
+				const ownerWindow = element.ownerDocument.defaultView;
+				const bodyStyles = body
+					? ownerWindow.getComputedStyle( body )
+					: null;
+				const fieldsStyles = fields
+					? ownerWindow.getComputedStyle( fields )
+					: null;
+
+				return {
+					bodyGap: Number.parseFloat(
+						bodyStyles?.rowGap || bodyStyles?.gap || '0'
+					),
+					fieldsGap: Number.parseFloat(
+						fieldsStyles?.rowGap || fieldsStyles?.gap || '0'
+					),
+				};
+			} );
+			expect( gridBodyRhythm.bodyGap ).toBeGreaterThanOrEqual( 8 );
+			expect( gridBodyRhythm.fieldsGap ).toBeGreaterThanOrEqual( 8 );
 			const relationChip = alphaCard
 				.locator( '.cortext-relation-ref', {
 					hasText: 'Los Angeles Azules Extended Relation Label',

@@ -199,6 +199,9 @@ $grid-card-content-hover-background: #f3f3f3;
 		order: 1;
 		box-sizing: border-box;
 		width: 100%;
+		// DataViews 17 renders these pieces with `@wordpress/ui` Stack,
+		// which writes its compact gap inline.
+		gap: $grid-unit-10 !important;
 		padding: $grid-unit-10 $grid-unit-20 0;
 		background: $grid-card-content-background;
 	}
@@ -318,6 +321,7 @@ $grid-card-content-hover-background: #f3f3f3;
 	.dataviews-view-grid .dataviews-view-grid__badge-fields:not(:empty) {
 		order: 1;
 		justify-content: flex-start;
+		gap: $grid-unit-10 !important;
 		box-sizing: border-box;
 		width: 100%;
 		padding: $grid-unit-10 $grid-unit-20 0;
@@ -339,6 +343,7 @@ $grid-card-content-hover-background: #f3f3f3;
 		width: 100%;
 		height: 100%;
 		min-width: 0;
+		gap: $grid-unit-10 !important;
 		box-sizing: border-box;
 		padding: 0 0 $grid-unit-15;
 		background: $grid-card-content-background;
@@ -451,16 +456,13 @@ $grid-card-content-hover-background: #f3f3f3;
 		transition: opacity 120ms ease;
 	}
 
-	.dataviews-view-grid__card
-	> .dataviews-selection-checkbox
-	.components-base-control__field {
+	.dataviews-view-grid__card > .dataviews-selection-checkbox .components-base-control__field {
 		margin: 0;
 	}
 
 	.dataviews-view-grid__card:hover > .dataviews-selection-checkbox,
 	.dataviews-view-grid__card:focus-within > .dataviews-selection-checkbox,
-	.dataviews-view-grid__card:has(.dataviews-selection-checkbox input:checked)
-	> .dataviews-selection-checkbox {
+	.dataviews-view-grid__card:has(.dataviews-selection-checkbox input:checked) > .dataviews-selection-checkbox {
 		opacity: 1;
 		pointer-events: auto;
 	}
