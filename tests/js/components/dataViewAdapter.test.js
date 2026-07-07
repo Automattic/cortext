@@ -89,6 +89,35 @@ describe( 'dataViewAdapter', () => {
 		expect( view.layout.previewSize ).toBe( DEFAULT_GRID_PREVIEW_SIZE );
 	} );
 
+	it( 'does not keep grid density state', () => {
+		const view = adaptViewForDataViews( {
+			...canonicalView,
+			type: 'grid',
+			layout: {
+				previewSize: 290,
+				badgeFields: [ 'field-2' ],
+				density: 'comfortable',
+			},
+			layoutByType: {
+				...canonicalView.layoutByType,
+				grid: {
+					previewSize: 290,
+					badgeFields: [ 'field-2' ],
+					density: 'comfortable',
+				},
+			},
+		} );
+
+		expect( view.layout ).toEqual( {
+			previewSize: 290,
+			badgeFields: [ 'field-2' ],
+		} );
+		expect( view.layoutByType.grid ).toEqual( {
+			previewSize: 290,
+			badgeFields: [ 'field-2' ],
+		} );
+	} );
+
 	it( 'migrates the oversized temporary grid preview size', () => {
 		const view = adaptViewForDataViews( {
 			...canonicalView,
@@ -239,6 +268,33 @@ describe( 'dataViewAdapter', () => {
 		expect( gridCanonical.layoutByType.grid.previewSize ).toBe(
 			DEFAULT_GRID_PREVIEW_SIZE
 		);
+	} );
+
+	it( 'does not store grid density emitted by DataViews', () => {
+		const gridCanonical = mergeDataViewsChange(
+			{
+				...canonicalView,
+				type: 'grid',
+				layout: canonicalView.layoutByType.grid,
+			},
+			{
+				type: 'grid',
+				layout: {
+					previewSize: 290,
+					badgeFields: [ 'field-2' ],
+					density: 'comfortable',
+				},
+			}
+		);
+
+		expect( gridCanonical.layout ).toEqual( {
+			previewSize: 290,
+			badgeFields: [ 'field-2' ],
+		} );
+		expect( gridCanonical.layoutByType.grid ).toEqual( {
+			previewSize: 290,
+			badgeFields: [ 'field-2' ],
+		} );
 	} );
 
 	it( 'stores grid field changes in the grid bucket only', () => {

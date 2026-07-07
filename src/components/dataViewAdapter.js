@@ -59,6 +59,24 @@ function layoutForTableDataViews( layout ) {
 	};
 }
 
+function layoutForGridDataViews( layout ) {
+	const sourceLayout = cloneLayout( layout );
+	const nextLayout = {};
+	const previewSize = Number( sourceLayout.previewSize );
+
+	nextLayout.previewSize =
+		Number.isFinite( previewSize ) &&
+		previewSize !== STALE_GRID_PREVIEW_SIZE
+			? previewSize
+			: DEFAULT_GRID_PREVIEW_SIZE;
+
+	if ( Array.isArray( sourceLayout.badgeFields ) ) {
+		nextLayout.badgeFields = sourceLayout.badgeFields;
+	}
+
+	return nextLayout;
+}
+
 function defaultLayoutForType( type ) {
 	return cloneLayout( DEFAULT_LAYOUTS[ type ]?.layout );
 }
@@ -70,13 +88,7 @@ export function layoutForType( type, layout ) {
 	};
 
 	if ( type === 'grid' ) {
-		const previewSize = Number( nextLayout.previewSize );
-		if (
-			! Number.isFinite( previewSize ) ||
-			previewSize === STALE_GRID_PREVIEW_SIZE
-		) {
-			nextLayout.previewSize = DEFAULT_GRID_PREVIEW_SIZE;
-		}
+		return layoutForGridDataViews( nextLayout );
 	}
 
 	return nextLayout;
