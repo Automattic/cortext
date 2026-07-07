@@ -1397,6 +1397,93 @@ test.describe( 'Collection view block', () => {
 		}
 	} );
 
+	test( 'hides table density controls for grid views', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+
+		try {
+			Object.assign(
+				fixture,
+				await createManualOrderFixture( requestUtils )
+			);
+
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: 'Grid inspector controls',
+					status: 'private',
+					content: createDataViewBlockMarkup( fixture.collection.id, {
+						type: 'grid',
+						fields: [ 'title' ],
+					} ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/${ fixture.page.id }`
+			);
+
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.page.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+			await expect( canvas.getByText( 'Alpha Manual' ) ).toBeVisible();
+			await selectParentDataViewBlock( page );
+			await page.getByRole( 'tab', { name: 'Block' } ).click();
+
+			const viewPanel = page.getByRole( 'button', {
+				name: 'View',
+				exact: true,
+			} );
+			await expect( viewPanel ).toBeVisible();
+			if (
+				( await viewPanel.getAttribute( 'aria-expanded' ) ) !== 'true'
+			) {
+				await viewPanel.click();
+			}
+
+			await expect(
+				page.getByRole( 'combobox', { name: 'Per page' } )
+			).toBeVisible();
+			await expect(
+				page.getByRole( 'combobox', { name: 'Density' } )
+			).toHaveCount( 0 );
+		} finally {
+			if ( fixture.rows ) {
+				for ( const row of fixture.rows ) {
+					await deleteIfCreated(
+						requestUtils,
+						`/wp/v2/crtxt_documents/${ row.id }`
+					);
+				}
+			}
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
+			);
+		}
+	} );
+
 	test( 'selects multiple grid cards without showing drag-handle chrome', async ( {
 		admin,
 		page,

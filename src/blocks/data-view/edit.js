@@ -344,9 +344,10 @@ function CollectionInspectorControls( {
 	} = useCollectionFieldsContext();
 	const isCollectionValid = ! isResolving && collectionId && collection;
 	const visibleFieldIds = view?.fields ?? [];
+	const isTableView = view?.type === 'table';
 	const tableLayout = {
 		...( view?.layoutByType?.table ?? {} ),
-		...( view?.type === 'table' ? view?.layout ?? {} : {} ),
+		...( isTableView ? view?.layout ?? {} : {} ),
 	};
 
 	// Checked fields follow the table order. Unchecked fields keep schema order.
@@ -519,32 +520,31 @@ function CollectionInspectorControls( {
 								) ) }
 							</ToggleGroupControl>
 						) }
-						<SelectControl
-							label={ __( 'Density', 'cortext' ) }
-							value={ tableLayout.density ?? 'compact' }
-							options={ DENSITY_OPTIONS }
-							onChange={ ( density ) =>
-								onChangeView( {
-									...view,
-									layout:
-										view?.type === 'table'
-											? {
-													...( view?.layout ?? {} ),
-													density,
-											  }
-											: view?.layout,
-									layoutByType: {
-										...( view?.layoutByType ?? {} ),
-										table: {
-											...tableLayout,
+						{ isTableView && (
+							<SelectControl
+								label={ __( 'Density', 'cortext' ) }
+								value={ tableLayout.density ?? 'compact' }
+								options={ DENSITY_OPTIONS }
+								onChange={ ( density ) =>
+									onChangeView( {
+										...view,
+										layout: {
+											...( view?.layout ?? {} ),
 											density,
 										},
-									},
-								} )
-							}
-							__next40pxDefaultSize
-							__nextHasNoMarginBottom
-						/>
+										layoutByType: {
+											...( view?.layoutByType ?? {} ),
+											table: {
+												...tableLayout,
+												density,
+											},
+										},
+									} )
+								}
+								__next40pxDefaultSize
+								__nextHasNoMarginBottom
+							/>
+						) }
 						<SelectControl
 							label={ __( 'Per page', 'cortext' ) }
 							value={ String( view?.perPage ?? 25 ) }
