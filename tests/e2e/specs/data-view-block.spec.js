@@ -1626,6 +1626,23 @@ test.describe( 'Collection view block', () => {
 						rect.height > 0
 					);
 				} );
+				const visibleFieldValues = Array.from(
+					element.querySelectorAll(
+						'.dataviews-view-list__field-value'
+					)
+				).filter( ( fieldValue ) => {
+					const rect = fieldValue.getBoundingClientRect();
+					const style =
+						fieldValue.ownerDocument.defaultView.getComputedStyle(
+							fieldValue
+						);
+					return (
+						style.display !== 'none' &&
+						style.visibility !== 'hidden' &&
+						rect.width > 0 &&
+						rect.height > 0
+					);
+				} );
 				const itemTarget = element.querySelector(
 					'.dataviews-view-list__item'
 				);
@@ -1641,6 +1658,8 @@ test.describe( 'Collection view block', () => {
 				const titleRect = title?.getBoundingClientRect();
 				const fieldsRect = fields?.getBoundingClientRect();
 				const actionsRect = actions?.getBoundingClientRect();
+				const metadataRect =
+					visibleFieldValues[ 0 ]?.getBoundingClientRect();
 				const actionButtonRect =
 					visibleActionButtons[ 0 ]?.getBoundingClientRect();
 				const itemTargetRect = itemTarget?.getBoundingClientRect();
@@ -1667,8 +1686,17 @@ test.describe( 'Collection view block', () => {
 					titleLeft: titleRect
 						? Math.round( titleRect.left - rowRect.left )
 						: 0,
+					titleRight: titleRect
+						? Math.round( titleRect.right - rowRect.left )
+						: 0,
 					fieldsLeft: fieldsRect
 						? Math.round( fieldsRect.left - rowRect.left )
+						: 0,
+					metadataLeft: metadataRect
+						? Math.round( metadataRect.left - rowRect.left )
+						: 0,
+					metadataRight: metadataRect
+						? Math.round( metadataRect.right - rowRect.left )
 						: 0,
 					titleToFieldsGap:
 						titleRect && fieldsRect
@@ -1705,9 +1733,11 @@ test.describe( 'Collection view block', () => {
 				listMetrics.fieldsLeft
 			);
 			expect( listMetrics.titleToFieldsGap ).toBeGreaterThanOrEqual( 4 );
-			expect( listMetrics.titleToFieldsGap ).toBeLessThanOrEqual( 48 );
+			expect( listMetrics.metadataLeft ).toBeGreaterThanOrEqual(
+				listMetrics.titleRight + 4
+			);
 			expect( listMetrics.actionsLeft ).toBeGreaterThan(
-				listMetrics.fieldsLeft
+				listMetrics.metadataRight
 			);
 			expect( listMetrics.visibleActionButtons ).toBeGreaterThanOrEqual(
 				1
@@ -1747,15 +1777,38 @@ test.describe( 'Collection view block', () => {
 								rect.height > 0
 							);
 						} );
+						const visibleFieldValues = Array.from(
+							listRow.querySelectorAll(
+								'.dataviews-view-list__field-value'
+							)
+						).filter( ( fieldValue ) => {
+							const rect = fieldValue.getBoundingClientRect();
+							const style =
+								fieldValue.ownerDocument.defaultView.getComputedStyle(
+									fieldValue
+								);
+							return (
+								style.display !== 'none' &&
+								style.visibility !== 'hidden' &&
+								rect.width > 0 &&
+								rect.height > 0
+							);
+						} );
 						const button = visibleActionButtons[ 0 ];
 						const rowRect = listRow.getBoundingClientRect();
 						const buttonRect = button?.getBoundingClientRect();
+						const metadataRect =
+							visibleFieldValues[ 0 ]?.getBoundingClientRect();
 
 						return {
 							text: listRow.textContent ?? '',
+							actionLeft: Math.round( buttonRect?.left ?? 0 ),
 							actionRight: Math.round( buttonRect?.right ?? 0 ),
 							actionRightInset: Math.round(
 								rowRect.right - ( buttonRect?.right ?? 0 )
+							),
+							metadataRight: Math.round(
+								metadataRect?.right ?? 0
 							),
 							actionCenterOffset: buttonRect
 								? Math.abs(
@@ -1778,6 +1831,23 @@ test.describe( 'Collection view block', () => {
 			expect(
 				Math.abs( firstAction.actionRight - secondAction.actionRight )
 			).toBeLessThanOrEqual( 1 );
+			expect(
+				Math.abs(
+					firstAction.metadataRight - secondAction.metadataRight
+				)
+			).toBeLessThanOrEqual( 1 );
+			expect(
+				firstAction.actionLeft - firstAction.metadataRight
+			).toBeGreaterThanOrEqual( 4 );
+			expect(
+				firstAction.actionLeft - firstAction.metadataRight
+			).toBeLessThanOrEqual( 32 );
+			expect(
+				secondAction.actionLeft - secondAction.metadataRight
+			).toBeGreaterThanOrEqual( 4 );
+			expect(
+				secondAction.actionLeft - secondAction.metadataRight
+			).toBeLessThanOrEqual( 32 );
 			expect( firstAction.actionRightInset ).toBeGreaterThanOrEqual( 8 );
 			expect( firstAction.actionRightInset ).toBeLessThanOrEqual( 32 );
 			expect( secondAction.actionRightInset ).toBeGreaterThanOrEqual( 8 );

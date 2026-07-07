@@ -462,7 +462,7 @@ $list-row-open-background: #f3f3f3;
 		.dataviews-view-list__field-wrapper {
 			display: grid !important;
 			grid-template-columns:
-				minmax(160px, max-content) minmax(0, 1fr)
+				minmax(160px, 1fr) minmax(0, max-content)
 				auto;
 			column-gap: $grid-unit-20;
 			align-items: center;
@@ -476,19 +476,19 @@ $list-row-open-background: #f3f3f3;
 		.dataviews-view-list .dataviews-title-field {
 			grid-column: 1;
 			grid-row: 1;
-			width: fit-content;
-			max-width: min(42vw, 520px);
+			width: auto;
+			max-width: 100%;
 		}
 
 		.dataviews-view-list .dataviews-title-field .cortext-title-cell {
-			width: auto;
+			width: 100%;
 		}
 
 		.dataviews-view-list__fields {
 			grid-column: 2;
 			grid-row: 1;
 			flex-wrap: nowrap;
-			justify-content: flex-start;
+			justify-content: flex-end;
 			width: auto;
 			max-width: min(620px, 54vw);
 			margin-top: 0;
