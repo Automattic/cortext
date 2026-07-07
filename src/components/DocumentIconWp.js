@@ -1,5 +1,4 @@
 import * as icons from '@wordpress/icons';
-import { isValidElement } from '@wordpress/element';
 
 import { CORTEXT_GLYPHS } from './cortextIcons';
 
@@ -7,9 +6,18 @@ import { CORTEXT_GLYPHS } from './cortextIcons';
 // Cortext-owned names such as `collection`, so check those before falling back
 // to the full @wordpress/icons namespace.
 export default function DocumentIconWp( { name, size = 16 } ) {
-	const Glyph = CORTEXT_GLYPHS[ name ] ?? icons[ name ];
+	const cortextGlyph = CORTEXT_GLYPHS[ name ];
 	const Icon = icons.Icon;
-	if ( ! Icon || ! isValidElement( Glyph ) || ! Glyph.type ) {
+	if ( cortextGlyph?.type === 'svg' ) {
+		return (
+			<svg { ...cortextGlyph.props } width={ size } height={ size }>
+				{ cortextGlyph.props.children }
+			</svg>
+		);
+	}
+
+	const Glyph = icons[ name ];
+	if ( ! Icon || ! Glyph?.type ) {
 		return null;
 	}
 	return <Icon icon={ Glyph } size={ size } />;
