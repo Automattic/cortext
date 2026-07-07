@@ -136,13 +136,10 @@ export function computeDocumentUri( entity ) {
 	return slug ? `${ slug }-${ entity.id }` : `${ entity.id }`;
 }
 
-// Singleton splat for the Published documents screen. The route reducer
-// matches the splat exactly; trailing segments fall through to the document
-// resolver and end up at "not found".
+export const SETTINGS_URI = 'settings';
+export const SETTINGS_IMPORT_URI = 'settings/import';
+export const SETTINGS_PUBLISHED_URI = 'settings/published';
 export const PUBLISHED_DOCUMENTS_URI = 'published';
-
-// Singleton splat for the Import screen, matched exactly like
-// PUBLISHED_DOCUMENTS_URI above.
 export const IMPORT_URI = 'import';
 
 // Strips the prefix from a splat URI and returns { prefix, tail }.
@@ -155,4 +152,8 @@ export function parseSplatUri( uri ) {
 		prefix: uri.slice( 0, slash ),
 		tail: uri.slice( slash + 1 ),
 	};
+}
+
+export function isSettingsUri( uri ) {
+	return uri === SETTINGS_URI || parseSplatUri( uri ).prefix === SETTINGS_URI;
 }
