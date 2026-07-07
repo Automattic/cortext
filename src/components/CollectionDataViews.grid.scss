@@ -201,7 +201,7 @@ $grid-card-content-hover-background: #f3f3f3;
 		width: 100%;
 		// DataViews 17 renders these pieces with `@wordpress/ui` Stack,
 		// which writes its compact gap inline.
-		gap: $grid-unit-10 !important;
+		gap: $grid-unit-20 !important;
 		padding: $grid-unit-10 $grid-unit-20 0;
 		background: $grid-card-content-background;
 	}

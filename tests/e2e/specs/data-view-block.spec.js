@@ -2563,7 +2563,7 @@ test.describe( 'Collection view block', () => {
 				};
 			} );
 			expect( gridBodyRhythm.bodyGap ).toBeGreaterThanOrEqual( 8 );
-			expect( gridBodyRhythm.fieldsGap ).toBeGreaterThanOrEqual( 8 );
+			expect( gridBodyRhythm.fieldsGap ).toBeGreaterThanOrEqual( 16 );
 			const relationChip = alphaCard
 				.locator( '.cortext-relation-ref', {
 					hasText: 'Los Angeles Azules Extended Relation Label',
