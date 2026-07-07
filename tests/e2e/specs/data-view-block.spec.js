@@ -1459,7 +1459,7 @@ test.describe( 'Collection view block', () => {
 			).toBeVisible();
 			await expect(
 				viewOptionsPopover.getByText( 'Density' )
-			).toHaveCount( 0 );
+			).toBeHidden();
 			await page.keyboard.press( 'Escape' );
 
 			await selectParentDataViewBlock( page );

@@ -1598,8 +1598,6 @@ export default function CollectionDataViews( {
 										<DataViewsChrome
 											footer={ dataViewsFooter }
 											view={ dataViewsView }
-											fields={ dataViewFields }
-											onChangeView={ onDataViewsChange }
 										/>
 									</DataViews>
 									{ isGridLayout && (
