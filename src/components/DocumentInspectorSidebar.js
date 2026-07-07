@@ -199,11 +199,14 @@ function InspectorComplementaryArea( {
 		isAnimated ? 'is-animated' : 'is-static',
 		`is-${ animationPhase }`,
 	].join( ' ' );
+	const fillStyle = {
+		'--cortext-inspector-animation-duration': `${ INSPECTOR_ANIMATION_DURATION_MS }ms`,
+	};
 
 	return (
 		<Fill name={ INSPECTOR_SLOT }>
 			{ isRendered ? (
-				<div className={ fillClasses }>
+				<div className={ fillClasses } style={ fillStyle }>
 					<div
 						id={ identifier.replace( '/', ':' ) }
 						className="interface-complementary-area editor-sidebar__panel"

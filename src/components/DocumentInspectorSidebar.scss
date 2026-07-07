@@ -26,11 +26,11 @@
 	}
 
 	&.is-opening.is-animated {
-		animation: cortext-inspector-sidebar-open 300ms cubic-bezier(0.6, 0, 0.4, 1);
+		animation: cortext-inspector-sidebar-open var(--cortext-inspector-animation-duration) cubic-bezier(0.6, 0, 0.4, 1);
 	}
 
 	&.is-closing.is-animated {
-		transition: width 300ms cubic-bezier(0.6, 0, 0.4, 1);
+		transition: width var(--cortext-inspector-animation-duration) cubic-bezier(0.6, 0, 0.4, 1);
 	}
 
 	> .interface-complementary-area {
