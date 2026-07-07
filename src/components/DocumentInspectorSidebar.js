@@ -70,6 +70,7 @@ export const INSPECTOR_SCOPE = 'cortext';
 export const DOCUMENT_INSPECTOR = 'cortext/document-inspector';
 export const BLOCK_INSPECTOR = 'cortext/block-inspector';
 const INSPECTOR_SLOT = `ComplementaryArea/${ INSPECTOR_SCOPE }`;
+const INSPECTOR_ANIMATION_DURATION_MS = 300;
 
 export function isInspectorArea( area ) {
 	return area === DOCUMENT_INSPECTOR || area === BLOCK_INSPECTOR;
@@ -87,6 +88,14 @@ export function getActiveInspectorArea( select ) {
 
 export function InspectorSidebarSlot( props ) {
 	return <Slot name={ INSPECTOR_SLOT } { ...props } />;
+}
+
+function usePreviousValue( value ) {
+	const previous = useRef();
+	useEffect( () => {
+		previous.current = value;
+	}, [ value ] );
+	return previous.current;
 }
 
 function InspectorTabsHeader( { tabs } ) {
@@ -136,24 +145,75 @@ function InspectorComplementaryArea( {
 		}
 	}, [ activeArea, enableComplementaryArea, identifier, isActiveByDefault ] );
 	const isActive = activeArea === identifier;
+	const previousActiveArea = usePreviousValue( activeArea );
+	const [ isRendered, setIsRendered ] = useState( isActive );
+	const [ isOpen, setIsOpen ] = useState( isActive );
+	const [ isAnimated, setIsAnimated ] = useState( false );
+	useEffect( () => {
+		const isSwitchingAreas =
+			Boolean( previousActiveArea ) &&
+			Boolean( activeArea ) &&
+			activeArea !== previousActiveArea;
+		let animationFrame;
+		let removeTimer;
+
+		setIsAnimated( ! isSwitchingAreas );
+		if ( isActive ) {
+			setIsRendered( true );
+			if ( isSwitchingAreas ) {
+				setIsOpen( true );
+			} else {
+				animationFrame = window.requestAnimationFrame( () => {
+					setIsOpen( true );
+				} );
+			}
+		} else {
+			setIsOpen( false );
+			removeTimer = window.setTimeout(
+				() => setIsRendered( false ),
+				isSwitchingAreas ? 0 : INSPECTOR_ANIMATION_DURATION_MS
+			);
+		}
+
+		return () => {
+			if ( animationFrame ) {
+				window.cancelAnimationFrame( animationFrame );
+			}
+			if ( removeTimer ) {
+				window.clearTimeout( removeTimer );
+			}
+		};
+	}, [ activeArea, isActive, previousActiveArea ] );
+	const fillClasses = [
+		'interface-complementary-area__fill',
+		'cortext-inspector-fill',
+		isOpen ? 'is-open' : 'is-closed',
+		isAnimated ? 'is-animated' : 'is-static',
+	].join( ' ' );
 
 	return (
 		<Fill name={ INSPECTOR_SLOT }>
-			{ isActive ? (
-				<div
-					className="interface-complementary-area editor-sidebar__panel"
-					aria-label={ title }
-				>
-					<div className="components-panel__header editor-sidebar__panel-tabs">
+			{ isRendered ? (
+				<div className={ fillClasses }>
+					<div
+						id={ identifier.replace( '/', ':' ) }
+						className="interface-complementary-area editor-sidebar__panel"
+						aria-label={ title }
+					>
+						<div className="components-panel__header editor-sidebar__panel-tabs">
+							<Tabs.Context.Provider value={ tabsContextValue }>
+								<InspectorTabsHeader tabs={ tabs } />
+							</Tabs.Context.Provider>
+						</div>
 						<Tabs.Context.Provider value={ tabsContextValue }>
-							<InspectorTabsHeader tabs={ tabs } />
+							<Tabs.TabPanel
+								tabId={ identifier }
+								focusable={ false }
+							>
+								{ children }
+							</Tabs.TabPanel>
 						</Tabs.Context.Provider>
 					</div>
-					<Tabs.Context.Provider value={ tabsContextValue }>
-						<Tabs.TabPanel tabId={ identifier } focusable={ false }>
-							{ children }
-						</Tabs.TabPanel>
-					</Tabs.Context.Provider>
 				</div>
 			) : null }
 		</Fill>

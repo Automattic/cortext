@@ -13,6 +13,39 @@
 	border-bottom-color: var(--cortext-canvas-border);
 }
 
+.interface-complementary-area__fill.cortext-inspector-fill {
+	width: 0;
+	overflow: hidden;
+	flex: 0 0 auto;
+
+	&.is-open {
+		width: $sidebar-width;
+	}
+
+	&.is-animated {
+		transition: width 300ms cubic-bezier(0.6, 0, 0.4, 1);
+	}
+
+	> .interface-complementary-area {
+		width: $sidebar-width;
+	}
+
+	@media (max-width: 781px) {
+
+		&.is-open {
+			width: 100vw;
+		}
+
+		> .interface-complementary-area {
+			width: 100vw;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		transition: none;
+	}
+}
+
 .cortext-document-inspector__tools {
 	display: flex;
 	flex-direction: column;

@@ -383,8 +383,12 @@ test.describe( 'Sidebar layout controls', () => {
 			const inspector = page.locator(
 				'.interface-complementary-area.editor-sidebar__panel'
 			);
+			const animatedInspectorFill = page.locator(
+				'.interface-complementary-area__fill'
+			);
 			await expect( settings ).toBeVisible();
 			await expect( inspector ).toBeVisible();
+			await expect( animatedInspectorFill ).toBeVisible();
 
 			await page.evaluate( () => {
 				document
@@ -398,6 +402,7 @@ test.describe( 'Sidebar layout controls', () => {
 				)
 			) {
 				await settings.click();
+				await expect( animatedInspectorFill ).toHaveCount( 1 );
 			}
 
 			await expect( settings ).not.toHaveClass( /is-pressed/ );
@@ -449,6 +454,7 @@ test.describe( 'Sidebar layout controls', () => {
 				)
 			) {
 				await settings.click();
+				await expect( animatedInspectorFill ).toBeVisible();
 			}
 
 			await expect( settings ).toHaveClass( /is-pressed/ );
