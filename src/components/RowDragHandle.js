@@ -7,11 +7,11 @@ import {
 import { __, sprintf } from '@wordpress/i18n';
 import { useDraggable } from '@dnd-kit/core';
 
+import { INTERACTIVE_DATA_VIEW_ITEM_IGNORE_SELECTOR } from './dataViewItemLookup';
+
 const ROW_DRAGGING_CLASS = 'cortext-row-dragging';
 const ROW_SUPPRESS_HOVER_CLASS = 'cortext-row-reorder-suppress-hover';
 const HOVER_SUPPRESSION_PRIME_TIMEOUT = 800;
-const NATIVE_ACTIVATOR_IGNORE_SELECTOR =
-	'button, a, input, textarea, select, [contenteditable="true"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], .components-button, .cortext-editable-cell, .cortext-row-drag-handle';
 
 function primeRowHoverSuppression( ownerDocument = document ) {
 	const body = ownerDocument?.body ?? document.body;
@@ -130,7 +130,11 @@ export default function RowDragHandle( {
 			) {
 				return;
 			}
-			if ( event.target?.closest?.( NATIVE_ACTIVATOR_IGNORE_SELECTOR ) ) {
+			if (
+				event.target?.closest?.(
+					INTERACTIVE_DATA_VIEW_ITEM_IGNORE_SELECTOR
+				)
+			) {
 				return;
 			}
 
