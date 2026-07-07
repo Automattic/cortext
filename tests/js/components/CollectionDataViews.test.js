@@ -226,6 +226,40 @@ describe( 'CollectionDataViews loading styles', () => {
 		expect( nonEmptyLoadingRule ).toContain( 'min-height: 160px;' );
 		expect( emptyLoadingRule ).toContain( 'display: none;' );
 	} );
+
+	it( 'uses DataViews structural hooks instead of legacy component stack classes', () => {
+		const listStyles = readFileSync(
+			join(
+				process.cwd(),
+				'src/components/CollectionDataViews.list.scss'
+			),
+			'utf8'
+		);
+		const gridStyles = readFileSync(
+			join(
+				process.cwd(),
+				'src/components/CollectionDataViews.grid.scss'
+			),
+			'utf8'
+		);
+		const reorderStyles = readFileSync(
+			join( process.cwd(), 'src/components/DataViewRowReorder.scss' ),
+			'utf8'
+		);
+
+		expect( listStyles ).not.toContain( 'components-h-stack' );
+		expect( gridStyles ).not.toContain( 'components-v-stack' );
+		expect( reorderStyles ).not.toMatch( /components-[hv]-stack/ );
+		expect( listStyles ).toMatch(
+			/:where\(\[role="gridcell"\]:has\(> \.dataviews-view-list__item\)\)\s*\+\s*\*/
+		);
+		expect( gridStyles ).toMatch(
+			/>\s*\.dataviews-view-grid__title-actions\s*\+\s*\*/
+		);
+		expect( reorderStyles ).toMatch(
+			/>\s*\.dataviews-view-grid__title-actions\s*\+\s*\*/
+		);
+	} );
 } );
 
 describe( 'scrollToEndQuickly', () => {

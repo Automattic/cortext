@@ -298,8 +298,7 @@ body.cortext-row-dragging .cortext-row-drop-indicator {
 }
 
 .cortext-row-drag-preview__list-row
-	.dataviews-view-list__item-wrapper
-	> .components-h-stack {
+	.dataviews-view-list__item-wrapper > :where([role="gridcell"]:has(> .dataviews-view-list__item)) + * {
 	position: relative;
 	z-index: 1;
 	width: 100%;
@@ -354,7 +353,7 @@ body.cortext-row-dragging .cortext-row-drop-indicator {
 
 .cortext-row-drag-preview__list-row
 	.dataviews-view-list__field-wrapper
-	> .components-h-stack {
+	> :first-child {
 	width: 100%;
 	min-width: 0;
 	gap: $grid-unit-10;
@@ -471,7 +470,7 @@ body.cortext-row-dragging .cortext-row-drop-indicator {
 	object-fit: cover;
 }
 
-.cortext-row-drag-preview__grid-card > .components-v-stack {
+.cortext-row-drag-preview__grid-card > .dataviews-view-grid__title-actions + * {
 	box-sizing: border-box;
 	flex: 1 1 auto;
 	width: 100%;
@@ -490,7 +489,7 @@ body.cortext-row-dragging .cortext-row-drop-indicator {
 }
 
 .cortext-row-drag-preview__grid-card
-	> .components-v-stack
+	> .dataviews-view-grid__title-actions + *
 	> :not(.dataviews-view-grid__badge-fields, .dataviews-view-grid__fields) {
 	padding-right: $grid-unit-20;
 	padding-left: $grid-unit-20;

@@ -98,7 +98,7 @@ $list-row-open-background: #f3f3f3;
 		padding-left: var(--cortext-row-drag-content-offset);
 	}
 
-	.dataviews-view-list__item-wrapper > .components-h-stack {
+	.dataviews-view-list__item-wrapper > :where([role="gridcell"]:has(> .dataviews-view-list__item)) + * {
 		position: relative;
 		z-index: 1;
 		width: 100%;
@@ -204,7 +204,7 @@ $list-row-open-background: #f3f3f3;
 		flex: 1 1 auto;
 	}
 
-	.dataviews-view-list__field-wrapper > .components-h-stack {
+	.dataviews-view-list__field-wrapper > :first-child {
 		width: 100%;
 		min-width: 0;
 		gap: $grid-unit-10;
