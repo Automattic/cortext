@@ -14,35 +14,48 @@
 }
 
 .interface-complementary-area__fill.cortext-inspector-fill {
+	--cortext-inspector-sidebar-width: #{$sidebar-width};
+
 	width: 0;
+	height: 100%;
 	overflow: hidden;
 	flex: 0 0 auto;
 
 	&.is-open {
-		width: $sidebar-width;
+		width: var(--cortext-inspector-sidebar-width);
 	}
 
-	&.is-animated {
+	&.is-opening.is-animated {
+		animation: cortext-inspector-sidebar-open 300ms cubic-bezier(0.6, 0, 0.4, 1);
+	}
+
+	&.is-closing.is-animated {
 		transition: width 300ms cubic-bezier(0.6, 0, 0.4, 1);
 	}
 
 	> .interface-complementary-area {
-		width: $sidebar-width;
+		width: var(--cortext-inspector-sidebar-width);
+		height: 100%;
 	}
 
 	@media (max-width: 781px) {
-
-		&.is-open {
-			width: 100vw;
-		}
-
-		> .interface-complementary-area {
-			width: 100vw;
-		}
+		--cortext-inspector-sidebar-width: 100vw;
 	}
 
 	@media (prefers-reduced-motion: reduce) {
+		animation: none;
 		transition: none;
+	}
+}
+
+@keyframes cortext-inspector-sidebar-open {
+
+	from {
+		width: 0;
+	}
+
+	to {
+		width: var(--cortext-inspector-sidebar-width);
 	}
 }
 

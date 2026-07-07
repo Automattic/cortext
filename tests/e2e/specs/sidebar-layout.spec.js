@@ -455,6 +455,21 @@ test.describe( 'Sidebar layout controls', () => {
 			) {
 				await settings.click();
 				await expect( animatedInspectorFill ).toBeVisible();
+				await expect( animatedInspectorFill ).toHaveClass(
+					/is-opening/
+				);
+				await expect
+					.poll( async () =>
+						animatedInspectorFill.evaluate( ( element ) =>
+							element
+								.getAnimations()
+								.some(
+									( animation ) =>
+										animation.playState !== 'finished'
+								)
+						)
+					)
+					.toBe( true );
 			}
 
 			await expect( settings ).toHaveClass( /is-pressed/ );

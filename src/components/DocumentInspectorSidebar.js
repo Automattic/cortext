@@ -149,38 +149,46 @@ function InspectorComplementaryArea( {
 	const [ isRendered, setIsRendered ] = useState( isActive );
 	const [ isOpen, setIsOpen ] = useState( isActive );
 	const [ isAnimated, setIsAnimated ] = useState( false );
+	const [ animationPhase, setAnimationPhase ] = useState( 'idle' );
 	useEffect( () => {
 		const isSwitchingAreas =
 			Boolean( previousActiveArea ) &&
 			Boolean( activeArea ) &&
 			activeArea !== previousActiveArea;
-		let animationFrame;
 		let removeTimer;
+		let phaseTimer;
 
 		setIsAnimated( ! isSwitchingAreas );
+		setAnimationPhase( 'idle' );
+		if ( isSwitchingAreas ) {
+			setIsOpen( isActive );
+			setIsRendered( isActive );
+			return undefined;
+		}
+
 		if ( isActive ) {
 			setIsRendered( true );
-			if ( isSwitchingAreas ) {
-				setIsOpen( true );
-			} else {
-				animationFrame = window.requestAnimationFrame( () => {
-					setIsOpen( true );
-				} );
-			}
+			setIsOpen( true );
+			setAnimationPhase( 'opening' );
+			phaseTimer = window.setTimeout(
+				() => setAnimationPhase( 'idle' ),
+				INSPECTOR_ANIMATION_DURATION_MS
+			);
 		} else {
 			setIsOpen( false );
-			removeTimer = window.setTimeout(
-				() => setIsRendered( false ),
-				isSwitchingAreas ? 0 : INSPECTOR_ANIMATION_DURATION_MS
-			);
+			setAnimationPhase( 'closing' );
+			removeTimer = window.setTimeout( () => {
+				setIsRendered( false );
+				setAnimationPhase( 'idle' );
+			}, INSPECTOR_ANIMATION_DURATION_MS );
 		}
 
 		return () => {
-			if ( animationFrame ) {
-				window.cancelAnimationFrame( animationFrame );
-			}
 			if ( removeTimer ) {
 				window.clearTimeout( removeTimer );
+			}
+			if ( phaseTimer ) {
+				window.clearTimeout( phaseTimer );
 			}
 		};
 	}, [ activeArea, isActive, previousActiveArea ] );
@@ -189,6 +197,7 @@ function InspectorComplementaryArea( {
 		'cortext-inspector-fill',
 		isOpen ? 'is-open' : 'is-closed',
 		isAnimated ? 'is-animated' : 'is-static',
+		`is-${ animationPhase }`,
 	].join( ' ' );
 
 	return (
