@@ -382,6 +382,33 @@ describe( 'scrollToEndQuickly', () => {
 		expect( wrapper.scrollLeft ).toBe( 300 );
 		now.mockRestore();
 	} );
+
+	it( 'stops chasing the end once the table width is stable', () => {
+		window.matchMedia = jest.fn( () => ( { matches: false } ) );
+		const now = jest
+			.spyOn( window.performance, 'now' )
+			.mockReturnValue( 0 );
+		const frames = [];
+		window.requestAnimationFrame = jest.fn( ( callback ) => {
+			frames.push( callback );
+			return frames.length;
+		} );
+		const wrapper = makeScroller( { scrollWidth: 200 } );
+
+		scrollToEndQuickly( wrapper, { trackEnd: true } );
+		Object.defineProperty( wrapper, 'scrollWidth', {
+			value: 500,
+			configurable: true,
+		} );
+		frames.shift()( 180 );
+		expect( wrapper.scrollLeft ).toBe( 300 );
+		frames.shift()();
+		frames.shift()();
+		frames.shift()();
+
+		expect( frames ).toHaveLength( 0 );
+		now.mockRestore();
+	} );
 } );
 
 describe( 'scrollElementInlineEndQuickly', () => {
@@ -491,6 +518,37 @@ describe( 'scrollElementInlineEndQuickly', () => {
 		frame( 180 );
 
 		expect( parent.scrollLeft ).toBe( 300 );
+		now.mockRestore();
+	} );
+
+	it( 'stops tracking when the user scrolls an ancestor during settle', () => {
+		const now = jest
+			.spyOn( window.performance, 'now' )
+			.mockReturnValue( 0 );
+		const frames = [];
+		window.requestAnimationFrame = jest.fn( ( callback ) => {
+			frames.push( callback );
+			return frames.length;
+		} );
+		const parent = document.createElement( 'div' );
+		const element = document.createElement( 'div' );
+		parent.appendChild( element );
+		Object.defineProperty( parent, 'clientWidth', {
+			value: 200,
+			configurable: true,
+		} );
+		Object.defineProperty( parent, 'scrollWidth', {
+			value: 800,
+			configurable: true,
+		} );
+
+		scrollElementInlineEndQuickly( element, { trackEnd: true } );
+		frames.shift()( 180 );
+		parent.scrollLeft = 200;
+		frames.shift()();
+
+		expect( parent.scrollLeft ).toBe( 200 );
+		expect( frames ).toHaveLength( 0 );
 		now.mockRestore();
 	} );
 } );

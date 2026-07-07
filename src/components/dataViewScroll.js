@@ -18,6 +18,69 @@ function inlineEndTarget( node, ownerWindow ) {
 	return isRtl ? -maxScroll : maxScroll;
 }
 
+const SCROLL_ANIMATION_DURATION_MS = 180;
+const STABLE_SCROLL_FRAME_COUNT = 2;
+const MAX_SCROLL_TRACK_FRAMES = 30;
+
+function createInlineEndTracker( ownerWindow, candidates ) {
+	const previousTargets = new Map();
+	const lastApplied = new Map();
+	let stableFrames = 0;
+	let frameCount = 0;
+
+	const setScrollLeft = ( candidate, value ) => {
+		candidate.scrollLeft = value;
+		lastApplied.set( candidate, value );
+	};
+
+	const userInterrupted = () =>
+		candidates.some( ( candidate ) => {
+			if ( ! lastApplied.has( candidate ) ) {
+				return false;
+			}
+			return (
+				Math.abs(
+					candidate.scrollLeft - lastApplied.get( candidate )
+				) > 2
+			);
+		} );
+
+	const track = () => {
+		if ( userInterrupted() ) {
+			return;
+		}
+
+		let targetsAreStable = true;
+		for ( const candidate of candidates ) {
+			const target = inlineEndTarget( candidate, ownerWindow );
+			const previousTarget = previousTargets.get( candidate );
+			if (
+				previousTarget === undefined ||
+				Math.abs( target - previousTarget ) > 2
+			) {
+				targetsAreStable = false;
+			}
+			previousTargets.set( candidate, target );
+			setScrollLeft( candidate, target );
+		}
+
+		stableFrames = targetsAreStable ? stableFrames + 1 : 0;
+		frameCount += 1;
+		if (
+			stableFrames >= STABLE_SCROLL_FRAME_COUNT ||
+			frameCount >= MAX_SCROLL_TRACK_FRAMES
+		) {
+			return;
+		}
+		ownerWindow.requestAnimationFrame( track );
+	};
+
+	return {
+		setScrollLeft,
+		track,
+	};
+}
+
 export function scrollToEndQuickly( wrapper, options = {} ) {
 	const ownerWindow = wrapper.ownerDocument?.defaultView ?? window;
 	const maxScroll = wrapper.scrollWidth - wrapper.clientWidth;
@@ -49,36 +112,32 @@ export function scrollToEndQuickly( wrapper, options = {} ) {
 		return;
 	}
 
-	const duration = 180;
-	const startedAt = ownerWindow.performance.now();
-	const easeOutCubic = ( t ) => 1 - Math.pow( 1 - t, 3 );
-	const settleUntil = trackEnd ? startedAt + 5000 : 0;
-
-	const settleAtEnd = () => {
-		wrapper.scrollLeft = endTarget();
-		if ( ownerWindow.performance.now() >= settleUntil ) {
-			return;
-		}
-		ownerWindow.requestAnimationFrame( settleAtEnd );
-	};
+	const tracker = createInlineEndTracker( ownerWindow, [ wrapper ] );
 
 	if ( prefersReducedMotion( ownerWindow ) ) {
-		wrapper.scrollLeft = target;
+		tracker.setScrollLeft( wrapper, target );
 		if ( trackEnd ) {
-			ownerWindow.requestAnimationFrame( settleAtEnd );
+			ownerWindow.requestAnimationFrame( tracker.track );
 		}
 		return;
 	}
 
+	const startedAt = ownerWindow.performance.now();
+	const easeOutCubic = ( t ) => 1 - Math.pow( 1 - t, 3 );
 	const animate = ( now ) => {
-		const progress = Math.min( 1, ( now - startedAt ) / duration );
+		const progress = Math.min(
+			1,
+			( now - startedAt ) / SCROLL_ANIMATION_DURATION_MS
+		);
 		const currentTarget = endTarget();
-		wrapper.scrollLeft =
-			start + ( currentTarget - start ) * easeOutCubic( progress );
+		tracker.setScrollLeft(
+			wrapper,
+			start + ( currentTarget - start ) * easeOutCubic( progress )
+		);
 		if ( progress < 1 ) {
 			ownerWindow.requestAnimationFrame( animate );
-		} else {
-			settleAtEnd();
+		} else if ( trackEnd ) {
+			ownerWindow.requestAnimationFrame( tracker.track );
 		}
 	};
 	ownerWindow.requestAnimationFrame( animate );
@@ -116,48 +175,43 @@ export function scrollElementInlineEndQuickly( element, options = {} ) {
 		return;
 	}
 
+	const tracker = createInlineEndTracker( ownerWindow, candidates );
+
+	if ( prefersReducedMotion( ownerWindow ) ) {
+		tracker.track();
+		return;
+	}
+
 	const startByNode = new Map(
 		candidates.map( ( candidate ) => [
 			candidate,
 			candidate.scrollLeft || 0,
 		] )
 	);
-	const duration = 180;
 	const startedAt = ownerWindow.performance.now();
 	const easeOutCubic = ( t ) => 1 - Math.pow( 1 - t, 3 );
-	const settleUntil = startedAt + 5000;
 
 	const applyProgress = ( progress ) => {
 		for ( const candidate of candidates ) {
 			const start = startByNode.get( candidate ) ?? 0;
 			const target = inlineEndTarget( candidate, ownerWindow );
-			candidate.scrollLeft =
-				start + ( target - start ) * easeOutCubic( progress );
+			tracker.setScrollLeft(
+				candidate,
+				start + ( target - start ) * easeOutCubic( progress )
+			);
 		}
 	};
-
-	const settleAtEnd = () => {
-		for ( const candidate of candidates ) {
-			candidate.scrollLeft = inlineEndTarget( candidate, ownerWindow );
-		}
-		if ( ownerWindow.performance.now() >= settleUntil ) {
-			return;
-		}
-		ownerWindow.requestAnimationFrame( settleAtEnd );
-	};
-
-	if ( prefersReducedMotion( ownerWindow ) ) {
-		settleAtEnd();
-		return;
-	}
 
 	const animate = ( now ) => {
-		const progress = Math.min( 1, ( now - startedAt ) / duration );
+		const progress = Math.min(
+			1,
+			( now - startedAt ) / SCROLL_ANIMATION_DURATION_MS
+		);
 		applyProgress( progress );
 		if ( progress < 1 ) {
 			ownerWindow.requestAnimationFrame( animate );
 		} else {
-			settleAtEnd();
+			ownerWindow.requestAnimationFrame( tracker.track );
 		}
 	};
 	ownerWindow.requestAnimationFrame( animate );
