@@ -259,6 +259,12 @@ describe( 'CollectionDataViews loading styles', () => {
 		expect( reorderStyles ).toMatch(
 			/>\s*\.dataviews-view-grid__title-actions\s*\+\s*\*/
 		);
+		expect( listStyles ).not.toMatch(
+			/\.cortext-row-drag-handle\)[^{]+\.dataviews-view-list__media-wrapper:has\(img\)[^{]+left:\s*var\(--cortext-row-drag-content-offset\)/
+		);
+		expect( gridStyles ).toMatch(
+			/>\s*\.dataviews-view-grid__title-actions\s*\+\s*\*\s*\{[^}]*padding:\s*0\s+0\s+\$grid-unit-15;/
+		);
 	} );
 } );
 

@@ -64,17 +64,25 @@ $list-row-open-background: #f3f3f3;
 		&.is-hovered,
 		&:has(:focus-visible) {
 			background: $list-row-hover-background;
+			background-color: $list-row-hover-background;
 			color: $gray-900;
 		}
 
 		&.is-selected {
 			background: $list-row-hover-background;
+			background-color: $list-row-hover-background;
 		}
 
 		&:has(.cortext-title-cell--is-open),
 		&:has(.cortext-title-cell--is-opening) {
 			background: $list-row-open-background;
+			background-color: $list-row-open-background;
 		}
+	}
+
+	.dataviews-view-list > :is([role="row"], [role="article"]):not(.is-selected):is(:hover, .is-hovered, :has(:focus-visible)) {
+		background-color: $list-row-hover-background;
+		color: $gray-900;
 	}
 
 	&[data-list-row-clickable="true"] .dataviews-view-list > :is([role="row"], [role="article"]) {
@@ -163,10 +171,6 @@ $list-row-open-background: #f3f3f3;
 		left: 0;
 		transform: translateY(-50%);
 		z-index: 1;
-	}
-
-	.dataviews-view-list > :is([role="row"], [role="article"]):has(.cortext-row-drag-handle) .dataviews-view-list__media-wrapper:has(img) {
-		left: var(--cortext-row-drag-content-offset);
 	}
 
 	.dataviews-view-list__media-wrapper:has(img)
