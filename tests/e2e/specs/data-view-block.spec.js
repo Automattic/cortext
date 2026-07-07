@@ -1439,6 +1439,29 @@ test.describe( 'Collection view block', () => {
 
 			const canvas = page.frameLocator( '[name="editor-canvas"]' );
 			await expect( canvas.getByText( 'Alpha Manual' ) ).toBeVisible();
+
+			const dataViewToolbar = canvas.locator(
+				'.dataviews__view-actions'
+			);
+			await dataViewToolbar
+				.getByRole( 'button', { name: 'View options' } )
+				.click();
+			const viewOptionsPopover = page.locator(
+				'.dataviews-config__popover:visible'
+			);
+			await expect(
+				viewOptionsPopover.getByRole( 'heading', {
+					name: 'Appearance',
+				} )
+			).toBeVisible();
+			await expect(
+				viewOptionsPopover.getByText( 'Preview size' )
+			).toBeVisible();
+			await expect(
+				viewOptionsPopover.getByText( 'Density' )
+			).toHaveCount( 0 );
+			await page.keyboard.press( 'Escape' );
+
 			await selectParentDataViewBlock( page );
 			await page.getByRole( 'tab', { name: 'Block' } ).click();
 
