@@ -293,6 +293,18 @@ export default function EntityRoute( { history } ) {
 	] );
 
 	useEffect( () => {
+		if ( target.kind !== 'redirect' ) {
+			return;
+		}
+
+		navigate( {
+			to: '/$',
+			params: { _splat: target.to },
+			replace: true,
+		} );
+	}, [ target, navigate ] );
+
+	useEffect( () => {
 		if ( target.kind !== 'document' || target.id === null ) {
 			return;
 		}

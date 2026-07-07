@@ -10,6 +10,7 @@ const documentTarget = ( id ) => ( {
 	id,
 	tail: `${ id }`,
 } );
+const redirectTarget = ( to ) => ( { kind: 'redirect', to, tail: '' } );
 const publishedTarget = { kind: 'published', tail: '' };
 const importTarget = { kind: 'import', tail: '' };
 
@@ -24,35 +25,66 @@ function activate( state, target ) {
 
 describe( 'EntityRoute reducer', () => {
 	describe( 'parseTarget', () => {
-		it( 'maps a bare `published` splat to the published kind', () => {
-			expect( parseTarget( 'published' ) ).toEqual( {
-				kind: 'published',
-				tail: '',
-			} );
+		it( 'sends legacy `published` links to settings/published', () => {
+			expect( parseTarget( 'published' ) ).toEqual(
+				redirectTarget( 'settings/published' )
+			);
 		} );
 
-		it( 'treats `published` as empty when public web affordances are off', () => {
+		it( 'keeps legacy `published` links on the Published settings page before feature checks', () => {
 			expect(
 				parseTarget( 'published', { publicWebAffordances: false } )
-			).toEqual( {
-				kind: 'empty',
-				tail: '',
-			} );
+			).toEqual( redirectTarget( 'settings/published' ) );
 		} );
 
 		it( 'does not match `published/<anything>` (falls through to document)', () => {
 			expect( parseTarget( 'published/foo' ).kind ).toBe( 'document' );
 		} );
 
-		it( 'maps a bare `import` splat to the import kind', () => {
-			expect( parseTarget( 'import' ) ).toEqual( {
+		it( 'sends legacy `import` links to settings/import', () => {
+			expect( parseTarget( 'import' ) ).toEqual(
+				redirectTarget( 'settings/import' )
+			);
+		} );
+
+		it( 'leaves `import/<anything>` for document routing', () => {
+			expect( parseTarget( 'import/foo' ).kind ).toBe( 'document' );
+		} );
+
+		it( 'opens Import from the Settings landing route', () => {
+			expect( parseTarget( 'settings' ) ).toEqual(
+				redirectTarget( 'settings/import' )
+			);
+		} );
+
+		it( 'opens Import from settings/import', () => {
+			expect( parseTarget( 'settings/import' ) ).toEqual( {
 				kind: 'import',
 				tail: '',
 			} );
 		} );
 
-		it( 'does not match `import/<anything>` (falls through to document)', () => {
-			expect( parseTarget( 'import/foo' ).kind ).toBe( 'document' );
+		it( 'opens Published from settings/published when publishing tools are available', () => {
+			expect( parseTarget( 'settings/published' ) ).toEqual( {
+				kind: 'published',
+				tail: '',
+			} );
+		} );
+
+		it( 'falls back to Import when Published is unavailable', () => {
+			expect(
+				parseTarget( 'settings/published', {
+					publicWebAffordances: false,
+				} )
+			).toEqual( redirectTarget( 'settings/import' ) );
+		} );
+
+		it( 'leaves unknown settings pages for document routing', () => {
+			expect( parseTarget( 'settings/foo' ) ).toEqual( {
+				kind: 'document',
+				id: null,
+				tail: 'settings/foo',
+			} );
 		} );
 
 		it( 'maps an empty splat to the empty kind', () => {
@@ -101,6 +133,14 @@ describe( 'EntityRoute reducer', () => {
 		it( 'starts an import target on the import pane', () => {
 			expect( init( importTarget ).active ).toEqual( {
 				kind: 'import',
+			} );
+		} );
+
+		it( 'starts a deep-linked redirect on the loading pane', () => {
+			expect(
+				init( redirectTarget( 'settings/import' ) ).active
+			).toEqual( {
+				kind: 'loading',
 			} );
 		} );
 
@@ -178,6 +218,21 @@ describe( 'EntityRoute reducer', () => {
 				target: importTarget,
 			} );
 			expect( next.active ).toEqual( { kind: 'import' } );
+		} );
+
+		it( 'keeps the current pane visible while redirecting', () => {
+			const state = activate(
+				init( documentTarget( 1 ) ),
+				documentTarget( 1 )
+			);
+			const next = reducer( state, {
+				type: 'TARGET_CHANGED',
+				target: redirectTarget( 'settings/import' ),
+			} );
+			expect( next.target ).toEqual(
+				redirectTarget( 'settings/import' )
+			);
+			expect( next.active ).toBe( state.active );
 		} );
 
 		it( 'switches to empty immediately', () => {
