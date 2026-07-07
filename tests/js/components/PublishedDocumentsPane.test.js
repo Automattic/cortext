@@ -97,6 +97,7 @@ import { useEntityRecords } from '@wordpress/core-data';
 import { DataViews } from '@wordpress/dataviews/wp';
 import { useNavigate } from '@tanstack/react-router';
 
+import { DEFAULT_GRID_PREVIEW_SIZE } from '../../../src/components/dataViewAdapter';
 import PublishedDocumentsPane from '../../../src/components/PublishedDocumentsPane';
 import {
 	POST_TYPE,
@@ -160,7 +161,7 @@ describe( 'PublishedDocumentsPane', () => {
 		expect( DataViews ).toHaveBeenCalledTimes( 1 );
 		expect( DataViews.mock.calls[ 0 ][ 0 ].defaultLayouts ).toEqual( {
 			table: { layout: { density: 'compact' } },
-			grid: { layout: { previewSize: 240 } },
+			grid: { layout: { previewSize: DEFAULT_GRID_PREVIEW_SIZE } },
 			list: { layout: {} },
 		} );
 		expect( DataViews.mock.calls[ 0 ][ 0 ].view.layout ).toEqual( {

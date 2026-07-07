@@ -4,8 +4,7 @@ import { COVER_FIELD_ID, MIN_WIDTHS, TITLE_FIELD_ID } from './dataViewColumns';
 // per-layout buckets and hydrates the active shape before rendering.
 export const DATA_VIEW_LAYOUT_TYPES = [ 'table', 'grid', 'list' ];
 export const DATA_VIEW_FIELD_LAYOUT_TYPES = [ 'grid', 'list' ];
-export const DEFAULT_GRID_PREVIEW_SIZE = 240;
-const STALE_GRID_PREVIEW_SIZE = 430;
+export const DEFAULT_GRID_PREVIEW_SIZE = 230;
 
 export const DEFAULT_LAYOUTS = {
 	table: { layout: { density: 'compact' } },
@@ -64,11 +63,9 @@ function layoutForGridDataViews( layout ) {
 	const nextLayout = {};
 	const previewSize = Number( sourceLayout.previewSize );
 
-	nextLayout.previewSize =
-		Number.isFinite( previewSize ) &&
-		previewSize !== STALE_GRID_PREVIEW_SIZE
-			? previewSize
-			: DEFAULT_GRID_PREVIEW_SIZE;
+	nextLayout.previewSize = Number.isFinite( previewSize )
+		? previewSize
+		: DEFAULT_GRID_PREVIEW_SIZE;
 
 	if ( Array.isArray( sourceLayout.badgeFields ) ) {
 		nextLayout.badgeFields = sourceLayout.badgeFields;

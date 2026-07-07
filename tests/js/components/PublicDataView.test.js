@@ -1,6 +1,8 @@
 import { render, screen } from '@testing-library/react';
 import { DataViews as mockDataViews } from '@wordpress/dataviews/wp';
 
+import { DEFAULT_GRID_PREVIEW_SIZE } from '../../../src/components/dataViewAdapter';
+
 const mockFilterSortAndPaginate = jest.fn();
 
 jest.mock( '@wordpress/dataviews/wp', () => {
@@ -152,21 +154,21 @@ describe( 'normalizePublicView', () => {
 		expect( view.layout.styles ).toBeUndefined();
 		expect( view.layoutByType ).toEqual( {
 			table: { density: 'compact' },
-			grid: { previewSize: 240 },
+			grid: { previewSize: DEFAULT_GRID_PREVIEW_SIZE },
 			list: {},
 		} );
 		expect( view.fieldsByType ).toEqual( { grid: [], list: [] } );
 	} );
 
-	it( 'migrates the oversized temporary grid preview size', () => {
+	it( 'preserves the largest grid preview size', () => {
 		const view = normalizePublicView( {
 			type: 'grid',
 			layout: { previewSize: 430 },
 			layoutByType: { grid: { previewSize: 430 } },
 		} );
 
-		expect( view.layout.previewSize ).toBe( 240 );
-		expect( view.layoutByType.grid.previewSize ).toBe( 240 );
+		expect( view.layout.previewSize ).toBe( 430 );
+		expect( view.layoutByType.grid.previewSize ).toBe( 430 );
 	} );
 
 	it( 'drops unsupported DataViews infinite-scroll state from public views', () => {
@@ -231,7 +233,7 @@ describe( 'PublicDataView', () => {
 		expect( mockDataViews.mock.calls.at( -1 )[ 0 ].defaultLayouts ).toEqual(
 			{
 				table: { layout: { density: 'compact' } },
-				grid: { layout: { previewSize: 240 } },
+				grid: { layout: { previewSize: DEFAULT_GRID_PREVIEW_SIZE } },
 				list: {},
 			}
 		);
