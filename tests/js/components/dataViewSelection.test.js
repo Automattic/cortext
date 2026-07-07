@@ -99,10 +99,34 @@ describe( 'dataViewSelection', () => {
 			rowIds(
 				rowsInDataViewRenderOrder(
 					rows,
-					{ groupByField: 'status' },
+					{ groupBy: { field: 'status' } },
 					fields
 				)
 			)
 		).toEqual( [ '1', '3', '2', '4' ] );
+	} );
+
+	it( 'keeps the legacy grouped view shape supported while saved views migrate', () => {
+		const rows = [
+			{ id: 1, status: 'A' },
+			{ id: 2, status: 'B' },
+			{ id: 3, status: 'A' },
+		];
+		const fields = [
+			{
+				id: 'status',
+				getValue: ( { item } ) => item.status,
+			},
+		];
+
+		expect(
+			rowIds(
+				rowsInDataViewRenderOrder(
+					rows,
+					{ groupByField: 'status' },
+					fields
+				)
+			)
+		).toEqual( [ '1', '3', '2' ] );
 	} );
 } );

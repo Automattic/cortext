@@ -10,7 +10,7 @@ export function rowIds( rows = [] ) {
 }
 
 export function rowsInDataViewRenderOrder( rows = [], view = {}, fields = [] ) {
-	const groupFieldId = view?.groupByField;
+	const groupFieldId = view?.groupBy?.field ?? view?.groupByField;
 	if ( ! groupFieldId ) {
 		return rows;
 	}
