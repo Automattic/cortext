@@ -163,6 +163,9 @@ describe( 'PublishedDocumentsPane', () => {
 			grid: { layout: { previewSize: 240 } },
 			list: { layout: {} },
 		} );
+		expect( DataViews.mock.calls[ 0 ][ 0 ].view.layout ).toEqual( {
+			density: 'compact',
+		} );
 	} );
 
 	it( 'shows pages, collection items, and collections from the same response', () => {

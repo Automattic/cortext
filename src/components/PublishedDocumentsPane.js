@@ -41,7 +41,7 @@ const DEFAULT_VIEW = {
 	fields: [ 'title', 'type', 'modified', 'link' ],
 	sort: { field: 'modified', direction: 'desc' },
 	filters: [],
-	layout: {},
+	layout: { density: 'compact' },
 };
 
 const TYPE_PAGE = 'page';
