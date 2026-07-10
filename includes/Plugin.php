@@ -30,6 +30,7 @@ use Cortext\PostType\TrashCascade;
 use Cortext\Rest\BacklinksController;
 use Cortext\Rest\DocumentLocatorController;
 use Cortext\Rest\DocumentsController;
+use Cortext\Rest\ExperimentsController;
 use Cortext\Rest\FavoritesController;
 use Cortext\Rest\FieldsController;
 use Cortext\Notion\Importer as NotionImporter;
@@ -78,6 +79,7 @@ final class Plugin {
 		( new BacklinksController() )->register();
 		( new DocumentLocatorController() )->register();
 		( new DocumentsController( null, $trash_cascade ) )->register();
+		( new ExperimentsController() )->register();
 		( new PostLocksController() )->register();
 		( new RecentsController() )->register();
 		( new RowsController() )->register();
