@@ -13,6 +13,7 @@ const documentTarget = ( id ) => ( {
 const redirectTarget = ( to ) => ( { kind: 'redirect', to, tail: '' } );
 const publishedTarget = { kind: 'published', tail: '' };
 const importTarget = { kind: 'import', tail: '' };
+const experimentsTarget = { kind: 'experiments', tail: '' };
 
 function activate( state, target ) {
 	let next = reducer( state, { type: 'TARGET_CHANGED', target } );
@@ -60,6 +61,13 @@ describe( 'EntityRoute reducer', () => {
 		it( 'opens Import from settings/import', () => {
 			expect( parseTarget( 'settings/import' ) ).toEqual( {
 				kind: 'import',
+				tail: '',
+			} );
+		} );
+
+		it( 'opens Experiments from settings/experiments', () => {
+			expect( parseTarget( 'settings/experiments' ) ).toEqual( {
+				kind: 'experiments',
 				tail: '',
 			} );
 		} );
@@ -133,6 +141,12 @@ describe( 'EntityRoute reducer', () => {
 		it( 'starts an import target on the import pane', () => {
 			expect( init( importTarget ).active ).toEqual( {
 				kind: 'import',
+			} );
+		} );
+
+		it( 'starts an experiments target on the experiments pane', () => {
+			expect( init( experimentsTarget ).active ).toEqual( {
+				kind: 'experiments',
 			} );
 		} );
 

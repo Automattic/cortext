@@ -137,6 +137,7 @@ export function computeDocumentUri( entity ) {
 }
 
 export const SETTINGS_URI = 'settings';
+export const SETTINGS_EXPERIMENTS_URI = 'settings/experiments';
 export const SETTINGS_IMPORT_URI = 'settings/import';
 export const SETTINGS_PUBLISHED_URI = 'settings/published';
 export const PUBLISHED_DOCUMENTS_URI = 'published';

@@ -29,6 +29,7 @@ const Canvas = lazy( () =>
 );
 import CanvasSkeleton from '../components/CanvasSkeleton';
 import { RowMutationContext } from '../components/EditableCell';
+import ExperimentsPane from '../components/ExperimentsPane';
 import ImportPane from '../components/ImportPane';
 import PublishedDocumentsPane from '../components/PublishedDocumentsPane';
 import { CanvasProgressBar } from '../components/Skeleton';
@@ -173,9 +174,10 @@ export default function EntityRoute( { history } ) {
 			} );
 			return;
 		}
-		// Import and Published are light static panes. Use a plain fade so
-		// Chrome's default blend does not wash the transition to white.
+		// Settings panes are lightweight and mostly static. A plain fade keeps
+		// Chrome's default blend from washing out the transition to white.
 		if (
+			after.active.kind === 'experiments' ||
 			after.active.kind === 'import' ||
 			after.active.kind === 'published'
 		) {
@@ -483,6 +485,9 @@ export default function EntityRoute( { history } ) {
 						<PublishedDocumentsPane />
 					</WorkspacePane>
 				) : null }
+				<WorkspacePane active={ active.kind === 'experiments' }>
+					<ExperimentsPane />
+				</WorkspacePane>
 				<WorkspacePane active={ active.kind === 'import' }>
 					<ImportPane />
 				</WorkspacePane>
