@@ -166,8 +166,9 @@ describe( 'ExperimentsPane', () => {
 		expect( isExperimentEnabled( 'sample' ) ).toBe( true );
 	} );
 
-	it( 'disables every toggle while a save is pending', async () => {
-		let resolveSave;
+	it( 'keeps toggles interactive and queues their saves', async () => {
+		let resolveFirstSave;
+		let resolveSecondSave;
 		apiFetch
 			.mockResolvedValueOnce( {
 				canManage: true,
@@ -191,7 +192,13 @@ describe( 'ExperimentsPane', () => {
 			.mockImplementationOnce(
 				() =>
 					new Promise( ( resolve ) => {
-						resolveSave = resolve;
+						resolveFirstSave = resolve;
+					} )
+			)
+			.mockImplementationOnce(
+				() =>
+					new Promise( ( resolve ) => {
+						resolveSecondSave = resolve;
 					} )
 			);
 
@@ -202,15 +209,17 @@ describe( 'ExperimentsPane', () => {
 		fireEvent.click( first );
 
 		await waitFor( () => {
-			expect( first ).toBeDisabled();
-			expect( second ).toBeDisabled();
+			expect( first ).toBeChecked();
+			expect( first ).not.toBeDisabled();
+			expect( second ).not.toBeDisabled();
 		} );
 		fireEvent.click( second );
+		expect( second ).toBeChecked();
+		expect( second ).not.toBeDisabled();
 		expect( apiFetch ).toHaveBeenCalledTimes( 2 );
-		expect( second ).not.toBeChecked();
 
 		await act( async () => {
-			resolveSave( {
+			resolveFirstSave( {
 				canManage: true,
 				experiments: [
 					{
@@ -231,11 +240,50 @@ describe( 'ExperimentsPane', () => {
 			} );
 		} );
 
+		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 3 ) );
+		expect( apiFetch ).toHaveBeenLastCalledWith( {
+			path: '/cortext/v1/experiments',
+			method: 'PUT',
+			data: { enabled: { second: true } },
+		} );
 		expect( first ).not.toBeDisabled();
+		expect( first ).toBeChecked();
 		expect( second ).not.toBeDisabled();
+		expect( second ).toBeChecked();
+
+		await act( async () => {
+			resolveSecondSave( {
+				canManage: true,
+				experiments: [
+					{
+						id: 'first',
+						label: 'First',
+						description: 'First description',
+						group: 'Labs',
+						enabled: true,
+					},
+					{
+						id: 'second',
+						label: 'Second',
+						description: 'Second description',
+						group: 'Labs',
+						enabled: true,
+					},
+				],
+			} );
+		} );
+
+		await waitFor( () => {
+			expect( first ).not.toBeDisabled();
+			expect( second ).not.toBeDisabled();
+		} );
+		expect( first ).toBeChecked();
+		expect( second ).toBeChecked();
 	} );
 
-	it( 'reverts only the failed experiment after a save failure', async () => {
+	it( 'keeps the latest value when the same toggle changes again', async () => {
+		let resolveFirstSave;
+		let rejectSecondSave;
 		apiFetch
 			.mockResolvedValueOnce( {
 				canManage: true,
@@ -247,29 +295,119 @@ describe( 'ExperimentsPane', () => {
 						group: 'Labs',
 						enabled: false,
 					},
-					{
-						id: 'unchanged',
-						label: 'Unchanged',
-						description: 'Unchanged description',
-						group: 'Labs',
-						enabled: true,
-					},
 				],
 			} )
-			.mockRejectedValueOnce( new Error( 'Nope' ) );
+			.mockImplementationOnce(
+				() =>
+					new Promise( ( resolve ) => {
+						resolveFirstSave = resolve;
+					} )
+			)
+			.mockImplementationOnce(
+				() =>
+					new Promise( ( resolve, reject ) => {
+						rejectSecondSave = reject;
+					} )
+			);
 
 		render( <ExperimentsPane /> );
 
 		const checkbox = await screen.findByRole( 'checkbox', {
 			name: /Sample/,
 		} );
-		const unchanged = screen.getByRole( 'checkbox', {
-			name: /Unchanged/,
-		} );
+		fireEvent.click( checkbox );
 		fireEvent.click( checkbox );
 
-		await waitFor( () => expect( checkbox ).not.toBeChecked() );
-		expect( unchanged ).toBeChecked();
+		expect( checkbox ).not.toBeChecked();
+		expect( checkbox ).not.toBeDisabled();
+		expect( apiFetch ).toHaveBeenCalledTimes( 2 );
+
+		await act( async () => {
+			resolveFirstSave( {
+				canManage: true,
+				experiments: [
+					{
+						id: 'sample',
+						label: 'Sample',
+						description: 'Sample description',
+						group: 'Labs',
+						enabled: true,
+					},
+				],
+			} );
+		} );
+
+		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 3 ) );
+		expect( checkbox ).not.toBeChecked();
+
+		await act( async () => {
+			rejectSecondSave( new Error( 'Nope' ) );
+		} );
+
+		await waitFor( () => expect( checkbox ).toBeChecked() );
+		expect( checkbox ).not.toBeDisabled();
+	} );
+
+	it( 'reverts only the failed experiment and continues queued saves', async () => {
+		let rejectFirstSave;
+		let resolveSecondSave;
+		apiFetch
+			.mockResolvedValueOnce( {
+				canManage: true,
+				experiments: [
+					{
+						id: 'first',
+						label: 'First',
+						description: 'First description',
+						group: 'Labs',
+						enabled: false,
+					},
+					{
+						id: 'second',
+						label: 'Second',
+						description: 'Second description',
+						group: 'Labs',
+						enabled: false,
+					},
+				],
+			} )
+			.mockImplementationOnce(
+				() =>
+					new Promise( ( resolve, reject ) => {
+						rejectFirstSave = reject;
+					} )
+			)
+			.mockImplementationOnce(
+				() =>
+					new Promise( ( resolve ) => {
+						resolveSecondSave = resolve;
+					} )
+			);
+
+		render( <ExperimentsPane /> );
+
+		const first = await screen.findByRole( 'checkbox', {
+			name: /First/,
+		} );
+		const second = screen.getByRole( 'checkbox', {
+			name: /Second/,
+		} );
+		fireEvent.click( first );
+		fireEvent.click( second );
+
+		expect( first ).toBeChecked();
+		expect( second ).toBeChecked();
+		expect( apiFetch ).toHaveBeenCalledTimes( 2 );
+
+		await act( async () => {
+			rejectFirstSave( new Error( 'Nope' ) );
+		} );
+
+		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 3 ) );
+		expect( first ).not.toBeChecked();
+		expect( first ).not.toBeDisabled();
+		expect( second ).toBeChecked();
+		expect( second ).not.toBeDisabled();
 		expect( mockCreateErrorNotice ).toHaveBeenCalledWith(
 			"Couldn't update this experiment.",
 			expect.objectContaining( {
@@ -277,6 +415,32 @@ describe( 'ExperimentsPane', () => {
 				type: 'snackbar',
 			} )
 		);
+
+		await act( async () => {
+			resolveSecondSave( {
+				canManage: true,
+				experiments: [
+					{
+						id: 'first',
+						label: 'First',
+						description: 'First description',
+						group: 'Labs',
+						enabled: false,
+					},
+					{
+						id: 'second',
+						label: 'Second',
+						description: 'Second description',
+						group: 'Labs',
+						enabled: true,
+					},
+				],
+			} );
+		} );
+
+		await waitFor( () => expect( second ).not.toBeDisabled() );
+		expect( first ).not.toBeChecked();
+		expect( second ).toBeChecked();
 	} );
 
 	it( 'shows an error when experiments fail to load', async () => {

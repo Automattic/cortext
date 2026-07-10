@@ -40,6 +40,26 @@ function groupExperiments( experiments ) {
 	} ) );
 }
 
+function applyPendingChanges( experiments, pendingChanges ) {
+	return experiments.map( ( experiment ) =>
+		pendingChanges.has( experiment.id )
+			? {
+					...experiment,
+					enabled: pendingChanges.get( experiment.id ).enabled,
+			  }
+			: experiment
+	);
+}
+
+function getEnabledValues( experiments ) {
+	return new Map(
+		experiments.map( ( experiment ) => [
+			experiment.id,
+			experiment.enabled === true,
+		] )
+	);
+}
+
 export default function ExperimentsPane() {
 	const [ state, setState ] = useState( {
 		canManage: false,
@@ -47,8 +67,11 @@ export default function ExperimentsPane() {
 		isLoading: true,
 		error: null,
 	} );
-	const [ isSaving, setIsSaving ] = useState( false );
-	const isSavingRef = useRef( false );
+	const pendingChangesRef = useRef( new Map() );
+	const confirmedEnabledRef = useRef( new Map() );
+	const saveQueueRef = useRef( [] );
+	const isProcessingQueueRef = useRef( false );
+	const nextChangeVersionRef = useRef( 0 );
 	const { createErrorNotice, createSuccessNotice } =
 		useDispatch( noticesStore );
 
@@ -59,11 +82,13 @@ export default function ExperimentsPane() {
 				if ( cancelled ) {
 					return;
 				}
+				const experiments = Array.isArray( response?.experiments )
+					? response.experiments
+					: [];
+				confirmedEnabledRef.current = getEnabledValues( experiments );
 				setState( {
 					canManage: response?.canManage === true,
-					experiments: Array.isArray( response?.experiments )
-						? response.experiments
-						: [],
+					experiments,
 					isLoading: false,
 					error: null,
 				} );
@@ -89,41 +114,46 @@ export default function ExperimentsPane() {
 		[ state.experiments ]
 	);
 
-	const updateExperiment = useCallback(
-		( id, enabled ) => {
-			if ( isSavingRef.current ) {
-				return;
-			}
+	const processSaveQueue = useCallback( async () => {
+		if ( isProcessingQueueRef.current ) {
+			return;
+		}
 
-			const previousEnabled =
-				state.experiments.find( ( experiment ) => experiment.id === id )
-					?.enabled === true;
-			isSavingRef.current = true;
-			setIsSaving( true );
-			setState( ( current ) => ( {
-				...current,
-				experiments: current.experiments.map( ( experiment ) =>
-					experiment.id === id
-						? { ...experiment, enabled }
-						: experiment
-				),
-			} ) );
-			apiFetch( {
-				path: '/cortext/v1/experiments',
-				method: 'PUT',
-				data: { enabled: { [ id ]: enabled } },
-			} )
-				.then( ( response ) => {
+		isProcessingQueueRef.current = true;
+		try {
+			while ( saveQueueRef.current.length > 0 ) {
+				const { id, enabled, version } = saveQueueRef.current.shift();
+				try {
+					const response = await apiFetch( {
+						path: '/cortext/v1/experiments',
+						method: 'PUT',
+						data: { enabled: { [ id ]: enabled } },
+					} );
 					const experiments = Array.isArray( response?.experiments )
 						? response.experiments
 						: null;
 					if ( experiments ) {
+						confirmedEnabledRef.current =
+							getEnabledValues( experiments );
 						syncCortextExperiments( experiments );
+					} else {
+						confirmedEnabledRef.current.set( id, enabled );
 					}
+					if (
+						pendingChangesRef.current.get( id )?.version === version
+					) {
+						pendingChangesRef.current.delete( id );
+					}
+					const visibleExperiments = experiments
+						? applyPendingChanges(
+								experiments,
+								new Map( pendingChangesRef.current )
+						  )
+						: null;
 					setState( ( current ) => ( {
 						...current,
 						canManage: response?.canManage === true,
-						experiments: experiments ?? current.experiments,
+						experiments: visibleExperiments ?? current.experiments,
 						error: null,
 					} ) );
 					createSuccessNotice(
@@ -133,19 +163,27 @@ export default function ExperimentsPane() {
 							type: 'snackbar',
 						}
 					);
-				} )
-				.catch( () => {
-					setState( ( current ) => ( {
-						...current,
-						experiments: current.experiments.map( ( experiment ) =>
-							experiment.id === id
-								? {
-										...experiment,
-										enabled: previousEnabled,
-								  }
-								: experiment
-						),
-					} ) );
+				} catch {
+					if (
+						pendingChangesRef.current.get( id )?.version === version
+					) {
+						pendingChangesRef.current.delete( id );
+						const confirmedEnabled =
+							confirmedEnabledRef.current.get( id );
+						setState( ( current ) => ( {
+							...current,
+							experiments: current.experiments.map(
+								( experiment ) =>
+									experiment.id === id &&
+									typeof confirmedEnabled === 'boolean'
+										? {
+												...experiment,
+												enabled: confirmedEnabled,
+										  }
+										: experiment
+							),
+						} ) );
+					}
 					createErrorNotice(
 						__( "Couldn't update this experiment.", 'cortext' ),
 						{
@@ -153,13 +191,43 @@ export default function ExperimentsPane() {
 							type: 'snackbar',
 						}
 					);
-				} )
-				.finally( () => {
-					isSavingRef.current = false;
-					setIsSaving( false );
-				} );
+				}
+			}
+		} finally {
+			isProcessingQueueRef.current = false;
+		}
+	}, [ createErrorNotice, createSuccessNotice ] );
+
+	const updateExperiment = useCallback(
+		( id, enabled ) => {
+			const currentExperiment = state.experiments.find(
+				( current ) => current.id === id
+			);
+			if ( ! currentExperiment ) {
+				return;
+			}
+
+			const currentEnabled = pendingChangesRef.current.has( id )
+				? pendingChangesRef.current.get( id ).enabled
+				: currentExperiment.enabled === true;
+			if ( currentEnabled === enabled ) {
+				return;
+			}
+
+			const version = ++nextChangeVersionRef.current;
+			pendingChangesRef.current.set( id, { enabled, version } );
+			setState( ( current ) => ( {
+				...current,
+				experiments: current.experiments.map( ( experiment ) =>
+					experiment.id === id
+						? { ...experiment, enabled }
+						: experiment
+				),
+			} ) );
+			saveQueueRef.current.push( { id, enabled, version } );
+			void processSaveQueue();
 		},
-		[ createErrorNotice, createSuccessNotice, state.experiments ]
+		[ processSaveQueue, state.experiments ]
 	);
 
 	return (
@@ -226,7 +294,6 @@ export default function ExperimentsPane() {
 											checked={
 												experiment.enabled === true
 											}
-											disabled={ isSaving }
 											onChange={ ( enabled ) =>
 												updateExperiment(
 													experiment.id,
