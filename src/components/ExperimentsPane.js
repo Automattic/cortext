@@ -101,7 +101,7 @@ export default function ExperimentsPane() {
 					canManage: false,
 					experiments: [],
 					isLoading: false,
-					error: __( "Couldn't load experiments.", 'cortext' ),
+					error: __( "We couldn't load experiments.", 'cortext' ),
 				} );
 			} );
 		return () => {
@@ -156,13 +156,10 @@ export default function ExperimentsPane() {
 						experiments: visibleExperiments ?? current.experiments,
 						error: null,
 					} ) );
-					createSuccessNotice(
-						__( 'Experiment updated.', 'cortext' ),
-						{
-							id: 'cortext-experiments-updated',
-							type: 'snackbar',
-						}
-					);
+					createSuccessNotice( __( 'Change saved.', 'cortext' ), {
+						id: 'cortext-experiments-updated',
+						type: 'snackbar',
+					} );
 				} catch {
 					if (
 						pendingChangesRef.current.get( id )?.version === version
@@ -185,7 +182,7 @@ export default function ExperimentsPane() {
 						} ) );
 					}
 					createErrorNotice(
-						__( "Couldn't update this experiment.", 'cortext' ),
+						__( "We couldn't save that change.", 'cortext' ),
 						{
 							id: 'cortext-experiments-update-failed',
 							type: 'snackbar',
@@ -240,10 +237,7 @@ export default function ExperimentsPane() {
 					className="cortext-experiments-pane__description"
 					variant="muted"
 				>
-					{ __(
-						'Try Cortext features that are still in development.',
-						'cortext'
-					) }
+					{ __( "Try features we're still working on.", 'cortext' ) }
 				</Text>
 			</VStack>
 			{ state.isLoading ? (
@@ -262,7 +256,7 @@ export default function ExperimentsPane() {
 			{ ! state.isLoading && ! state.error && ! state.canManage ? (
 				<Notice status="warning" isDismissible={ false }>
 					{ __(
-						'You need to be a site administrator to change experiments.',
+						'Only site administrators can turn experiments on or off.',
 						'cortext'
 					) }
 				</Notice>
@@ -272,7 +266,7 @@ export default function ExperimentsPane() {
 			state.canManage &&
 			state.experiments.length === 0 ? (
 				<Text variant="muted">
-					{ __( 'No experiments yet.', 'cortext' ) }
+					{ __( 'Nothing to try right now.', 'cortext' ) }
 				</Text>
 			) : null }
 			{ ! state.isLoading && ! state.error && state.canManage

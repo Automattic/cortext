@@ -106,7 +106,7 @@ describe( 'ExperimentsPane', () => {
 
 		expect( screen.getByTestId( 'spinner' ) ).toBeInTheDocument();
 		expect(
-			await screen.findByText( 'No experiments yet.' )
+			await screen.findByText( 'Nothing to try right now.' )
 		).toBeInTheDocument();
 	} );
 
@@ -119,7 +119,7 @@ describe( 'ExperimentsPane', () => {
 
 		expect(
 			await screen.findByText(
-				'You need to be a site administrator to change experiments.'
+				'Only site administrators can turn experiments on or off.'
 			)
 		).toBeInTheDocument();
 		expect(
@@ -149,7 +149,7 @@ describe( 'ExperimentsPane', () => {
 			} )
 		);
 		expect( mockCreateSuccessNotice ).toHaveBeenCalledWith(
-			'Experiment updated.',
+			'Change saved.',
 			expect.objectContaining( {
 				id: 'cortext-experiments-updated',
 				type: 'snackbar',
@@ -285,7 +285,7 @@ describe( 'ExperimentsPane', () => {
 		expect( second ).toBeChecked();
 		expect( second ).not.toBeDisabled();
 		expect( mockCreateErrorNotice ).toHaveBeenCalledWith(
-			"Couldn't update this experiment.",
+			"We couldn't save that change.",
 			expect.objectContaining( {
 				id: 'cortext-experiments-update-failed',
 				type: 'snackbar',
@@ -309,7 +309,7 @@ describe( 'ExperimentsPane', () => {
 		render( <ExperimentsPane /> );
 
 		expect(
-			await screen.findByText( "Couldn't load experiments." )
+			await screen.findByText( "We couldn't load experiments." )
 		).toBeInTheDocument();
 	} );
 } );
