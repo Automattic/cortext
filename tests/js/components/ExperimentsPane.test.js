@@ -61,6 +61,32 @@ import apiFetch from '@wordpress/api-fetch';
 import ExperimentsPane from '../../../src/components/ExperimentsPane';
 import { isExperimentEnabled } from '../../../src/settings';
 
+function experimentsResponse( enabledById = {}, { canManage = true } = {} ) {
+	return {
+		canManage,
+		experiments: Object.entries( enabledById ).map( ( [ id, enabled ] ) => {
+			const label = `${ id.charAt( 0 ).toUpperCase() }${ id.slice( 1 ) }`;
+			return {
+				id,
+				label,
+				description: `${ label } description`,
+				group: 'Labs',
+				enabled,
+			};
+		} ),
+	};
+}
+
+function deferred() {
+	let resolve;
+	let reject;
+	const promise = new Promise( ( promiseResolve, promiseReject ) => {
+		resolve = promiseResolve;
+		reject = promiseReject;
+	} );
+	return { promise, resolve, reject };
+}
+
 beforeEach( () => {
 	apiFetch.mockReset();
 	mockCreateErrorNotice.mockReset();
@@ -74,10 +100,7 @@ afterEach( () => {
 
 describe( 'ExperimentsPane', () => {
 	it( 'shows an empty state when there are no experiments', async () => {
-		apiFetch.mockResolvedValueOnce( {
-			canManage: true,
-			experiments: [],
-		} );
+		apiFetch.mockResolvedValueOnce( experimentsResponse() );
 
 		render( <ExperimentsPane /> );
 
@@ -88,18 +111,9 @@ describe( 'ExperimentsPane', () => {
 	} );
 
 	it( 'shows a permission notice when the user cannot manage experiments', async () => {
-		apiFetch.mockResolvedValueOnce( {
-			canManage: false,
-			experiments: [
-				{
-					id: 'sample',
-					label: 'Sample',
-					description: 'Sample description',
-					group: 'Labs',
-					enabled: false,
-				},
-			],
-		} );
+		apiFetch.mockResolvedValueOnce(
+			experimentsResponse( { sample: false }, { canManage: false } )
+		);
 
 		render( <ExperimentsPane /> );
 
@@ -116,30 +130,8 @@ describe( 'ExperimentsPane', () => {
 	it( 'renders grouped toggles and saves changes', async () => {
 		window.cortextSettings.experiments.sample = false;
 		apiFetch
-			.mockResolvedValueOnce( {
-				canManage: true,
-				experiments: [
-					{
-						id: 'sample',
-						label: 'Sample',
-						description: 'Sample description',
-						group: 'Labs',
-						enabled: false,
-					},
-				],
-			} )
-			.mockResolvedValueOnce( {
-				canManage: true,
-				experiments: [
-					{
-						id: 'sample',
-						label: 'Sample',
-						description: 'Sample description',
-						group: 'Labs',
-						enabled: true,
-					},
-				],
-			} );
+			.mockResolvedValueOnce( experimentsResponse( { sample: false } ) )
+			.mockResolvedValueOnce( experimentsResponse( { sample: true } ) );
 
 		render( <ExperimentsPane /> );
 
@@ -167,40 +159,14 @@ describe( 'ExperimentsPane', () => {
 	} );
 
 	it( 'keeps toggles interactive and queues their saves', async () => {
-		let resolveFirstSave;
-		let resolveSecondSave;
+		const firstSave = deferred();
+		const secondSave = deferred();
 		apiFetch
-			.mockResolvedValueOnce( {
-				canManage: true,
-				experiments: [
-					{
-						id: 'first',
-						label: 'First',
-						description: 'First description',
-						group: 'Labs',
-						enabled: false,
-					},
-					{
-						id: 'second',
-						label: 'Second',
-						description: 'Second description',
-						group: 'Labs',
-						enabled: false,
-					},
-				],
-			} )
-			.mockImplementationOnce(
-				() =>
-					new Promise( ( resolve ) => {
-						resolveFirstSave = resolve;
-					} )
+			.mockResolvedValueOnce(
+				experimentsResponse( { first: false, second: false } )
 			)
-			.mockImplementationOnce(
-				() =>
-					new Promise( ( resolve ) => {
-						resolveSecondSave = resolve;
-					} )
-			);
+			.mockReturnValueOnce( firstSave.promise )
+			.mockReturnValueOnce( secondSave.promise );
 
 		render( <ExperimentsPane /> );
 
@@ -219,25 +185,9 @@ describe( 'ExperimentsPane', () => {
 		expect( apiFetch ).toHaveBeenCalledTimes( 2 );
 
 		await act( async () => {
-			resolveFirstSave( {
-				canManage: true,
-				experiments: [
-					{
-						id: 'first',
-						label: 'First',
-						description: 'First description',
-						group: 'Labs',
-						enabled: true,
-					},
-					{
-						id: 'second',
-						label: 'Second',
-						description: 'Second description',
-						group: 'Labs',
-						enabled: false,
-					},
-				],
-			} );
+			firstSave.resolve(
+				experimentsResponse( { first: true, second: false } )
+			);
 		} );
 
 		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 3 ) );
@@ -252,25 +202,9 @@ describe( 'ExperimentsPane', () => {
 		expect( second ).toBeChecked();
 
 		await act( async () => {
-			resolveSecondSave( {
-				canManage: true,
-				experiments: [
-					{
-						id: 'first',
-						label: 'First',
-						description: 'First description',
-						group: 'Labs',
-						enabled: true,
-					},
-					{
-						id: 'second',
-						label: 'Second',
-						description: 'Second description',
-						group: 'Labs',
-						enabled: true,
-					},
-				],
-			} );
+			secondSave.resolve(
+				experimentsResponse( { first: true, second: true } )
+			);
 		} );
 
 		await waitFor( () => {
@@ -282,33 +216,12 @@ describe( 'ExperimentsPane', () => {
 	} );
 
 	it( 'keeps the latest value when the same toggle changes again', async () => {
-		let resolveFirstSave;
-		let rejectSecondSave;
+		const firstSave = deferred();
+		const secondSave = deferred();
 		apiFetch
-			.mockResolvedValueOnce( {
-				canManage: true,
-				experiments: [
-					{
-						id: 'sample',
-						label: 'Sample',
-						description: 'Sample description',
-						group: 'Labs',
-						enabled: false,
-					},
-				],
-			} )
-			.mockImplementationOnce(
-				() =>
-					new Promise( ( resolve ) => {
-						resolveFirstSave = resolve;
-					} )
-			)
-			.mockImplementationOnce(
-				() =>
-					new Promise( ( resolve, reject ) => {
-						rejectSecondSave = reject;
-					} )
-			);
+			.mockResolvedValueOnce( experimentsResponse( { sample: false } ) )
+			.mockReturnValueOnce( firstSave.promise )
+			.mockReturnValueOnce( secondSave.promise );
 
 		render( <ExperimentsPane /> );
 
@@ -323,25 +236,14 @@ describe( 'ExperimentsPane', () => {
 		expect( apiFetch ).toHaveBeenCalledTimes( 2 );
 
 		await act( async () => {
-			resolveFirstSave( {
-				canManage: true,
-				experiments: [
-					{
-						id: 'sample',
-						label: 'Sample',
-						description: 'Sample description',
-						group: 'Labs',
-						enabled: true,
-					},
-				],
-			} );
+			firstSave.resolve( experimentsResponse( { sample: true } ) );
 		} );
 
 		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 3 ) );
 		expect( checkbox ).not.toBeChecked();
 
 		await act( async () => {
-			rejectSecondSave( new Error( 'Nope' ) );
+			secondSave.reject( new Error( 'Nope' ) );
 		} );
 
 		await waitFor( () => expect( checkbox ).toBeChecked() );
@@ -349,40 +251,14 @@ describe( 'ExperimentsPane', () => {
 	} );
 
 	it( 'reverts only the failed experiment and continues queued saves', async () => {
-		let rejectFirstSave;
-		let resolveSecondSave;
+		const firstSave = deferred();
+		const secondSave = deferred();
 		apiFetch
-			.mockResolvedValueOnce( {
-				canManage: true,
-				experiments: [
-					{
-						id: 'first',
-						label: 'First',
-						description: 'First description',
-						group: 'Labs',
-						enabled: false,
-					},
-					{
-						id: 'second',
-						label: 'Second',
-						description: 'Second description',
-						group: 'Labs',
-						enabled: false,
-					},
-				],
-			} )
-			.mockImplementationOnce(
-				() =>
-					new Promise( ( resolve, reject ) => {
-						rejectFirstSave = reject;
-					} )
+			.mockResolvedValueOnce(
+				experimentsResponse( { first: false, second: false } )
 			)
-			.mockImplementationOnce(
-				() =>
-					new Promise( ( resolve ) => {
-						resolveSecondSave = resolve;
-					} )
-			);
+			.mockReturnValueOnce( firstSave.promise )
+			.mockReturnValueOnce( secondSave.promise );
 
 		render( <ExperimentsPane /> );
 
@@ -400,7 +276,7 @@ describe( 'ExperimentsPane', () => {
 		expect( apiFetch ).toHaveBeenCalledTimes( 2 );
 
 		await act( async () => {
-			rejectFirstSave( new Error( 'Nope' ) );
+			firstSave.reject( new Error( 'Nope' ) );
 		} );
 
 		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 3 ) );
@@ -417,25 +293,9 @@ describe( 'ExperimentsPane', () => {
 		);
 
 		await act( async () => {
-			resolveSecondSave( {
-				canManage: true,
-				experiments: [
-					{
-						id: 'first',
-						label: 'First',
-						description: 'First description',
-						group: 'Labs',
-						enabled: false,
-					},
-					{
-						id: 'second',
-						label: 'Second',
-						description: 'Second description',
-						group: 'Labs',
-						enabled: true,
-					},
-				],
-			} );
+			secondSave.resolve(
+				experimentsResponse( { first: false, second: true } )
+			);
 		} );
 
 		await waitFor( () => expect( second ).not.toBeDisabled() );
