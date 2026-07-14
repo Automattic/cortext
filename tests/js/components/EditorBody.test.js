@@ -78,7 +78,9 @@ jest.mock( '../../../src/hooks/afterNextPaint', () => ( {
 const {
 	areCanvasReadyRequirementsMet,
 	collectDuplicateHeaderClientIds,
+	useEditorBodyStyles,
 } = require( '../../../src/components/EditorBody' );
+const { renderHook } = require( '@testing-library/react' );
 
 const COLLECTION_ID = 7;
 const OWNER = 'cortext/data-view';
@@ -221,5 +223,100 @@ describe( 'areCanvasReadyRequirementsMet', () => {
 				isPropertiesResolving: true,
 			} )
 		).toBe( false );
+	} );
+} );
+
+describe( 'useEditorBodyStyles', () => {
+	it( 'keeps the merged styles reference stable while its inputs are unchanged', () => {
+		const baseStyles = [ { css: '.base {}' } ];
+		const extraStyles = [ { css: '.extra {}' } ];
+		const { result, rerender } = renderHook(
+			( props ) =>
+				useEditorBodyStyles(
+					props.baseStyles,
+					props.extraStyles,
+					props.isDocumentCanvas
+				),
+			{
+				initialProps: {
+					baseStyles,
+					extraStyles,
+					isDocumentCanvas: true,
+				},
+			}
+		);
+		const firstResult = result.current;
+
+		rerender( { baseStyles, extraStyles, isDocumentCanvas: true } );
+
+		expect( result.current ).toBe( firstResult );
+	} );
+
+	it( 'rebuilds the merged styles when either input changes', () => {
+		const baseStyles = [ { css: '.base {}' } ];
+		const extraStyles = [ { css: '.extra {}' } ];
+		const { result, rerender } = renderHook(
+			( props ) =>
+				useEditorBodyStyles(
+					props.baseStyles,
+					props.extraStyles,
+					props.isDocumentCanvas
+				),
+			{
+				initialProps: {
+					baseStyles,
+					extraStyles,
+					isDocumentCanvas: true,
+				},
+			}
+		);
+		const firstResult = result.current;
+
+		rerender( {
+			baseStyles,
+			extraStyles: [ { css: '.next-extra {}' } ],
+			isDocumentCanvas: true,
+		} );
+
+		expect( result.current ).not.toBe( firstResult );
+	} );
+
+	it( 'adds full-page spacing only to document canvases', () => {
+		const baseStyles = [ { css: '.base {}' } ];
+		const rowStyles = [ { css: '.row-detail {}' } ];
+		const { result, rerender } = renderHook(
+			( props ) =>
+				useEditorBodyStyles(
+					props.baseStyles,
+					props.extraStyles,
+					props.isDocumentCanvas
+				),
+			{
+				initialProps: {
+					baseStyles,
+					extraStyles: rowStyles,
+					isDocumentCanvas: false,
+				},
+			}
+		);
+
+		expect( result.current ).toEqual( [ ...baseStyles, ...rowStyles ] );
+		expect(
+			result.current.some( ( style ) =>
+				style.css?.includes( 'padding-bottom: 72px' )
+			)
+		).toBe( false );
+
+		rerender( {
+			baseStyles,
+			extraStyles: rowStyles,
+			isDocumentCanvas: true,
+		} );
+
+		expect(
+			result.current.some( ( style ) =>
+				style.css?.includes( 'padding-bottom: 72px' )
+			)
+		).toBe( true );
 	} );
 } );

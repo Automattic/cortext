@@ -85,6 +85,21 @@ const CANVAS_DOCUMENT_EDITOR_CSS = `
 `;
 const CANVAS_DOCUMENT_EXTRA_STYLES = [ { css: CANVAS_DOCUMENT_EDITOR_CSS } ];
 
+export function useEditorBodyStyles(
+	baseStyles,
+	extraStyles,
+	isDocumentCanvas = false
+) {
+	return useMemo(
+		() => [
+			...( baseStyles ?? [] ),
+			...( isDocumentCanvas ? CANVAS_DOCUMENT_EXTRA_STYLES : [] ),
+			...( extraStyles ?? [] ),
+		],
+		[ baseStyles, extraStyles, isDocumentCanvas ]
+	);
+}
+
 // Schema-bearing documents add an owner block to the reserved header/body
 // prefix. Plain documents do not, so the set collapses to defaults.
 function getHeaderBlockNames( ownerBlockName ) {
@@ -1574,6 +1589,7 @@ function CanvasReadyEffect( {
 export default function EditorBody( {
 	featuredMedia,
 	isActive = true,
+	isDocumentCanvas = false,
 	isLocked = false,
 	postId,
 	postType,
@@ -1585,11 +1601,11 @@ export default function EditorBody( {
 		( select ) => select( editorStore ).getEditorSettings().styles,
 		[]
 	);
-	const styles = [
-		...( baseStyles ?? [] ),
-		...CANVAS_DOCUMENT_EXTRA_STYLES,
-		...( extraStyles ?? [] ),
-	];
+	const styles = useEditorBodyStyles(
+		baseStyles,
+		extraStyles,
+		isDocumentCanvas
+	);
 	const { themeSupportsLayout, hasRootPaddingAwareAlignments } = useSelect(
 		( select ) => {
 			const settings = select( blockEditorStore ).getSettings();

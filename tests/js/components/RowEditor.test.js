@@ -128,6 +128,14 @@ describe( 'RowEditor', () => {
 		expect( onPaneReady ).toHaveBeenCalledWith( 'crtxt_tasks:20' );
 	} );
 
+	it( 'keeps full-page document spacing out of row details', () => {
+		renderRowEditor();
+
+		expect( EditorBody.mock.calls[ 0 ][ 0 ].isDocumentCanvas ).not.toBe(
+			true
+		);
+	} );
+
 	it( 'keeps the pane hidden while the first post-lock check runs', () => {
 		const onPaneReady = jest.fn();
 		usePostLock.mockReturnValue( {

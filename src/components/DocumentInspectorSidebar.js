@@ -29,6 +29,7 @@ import {
 } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import {
+	closeSmall,
 	home as homeIcon,
 	starEmpty,
 	starFilled,
@@ -90,12 +91,45 @@ export function InspectorSidebarSlot( props ) {
 	return <Slot name={ INSPECTOR_SLOT } { ...props } />;
 }
 
-function usePreviousValue( value ) {
-	const previous = useRef();
+function useAdjustInspectorToViewport( {
+	activeArea,
+	identifier,
+	isActive,
+	isSmall,
+} ) {
+	const previousIsSmall = useRef( false );
+	const shouldOpenWhenNotSmall = useRef( false );
+	const { enableComplementaryArea, disableComplementaryArea } =
+		useDispatch( interfaceStore );
+
 	useEffect( () => {
-		previous.current = value;
-	}, [ value ] );
-	return previous.current;
+		if ( isActive && isSmall && ! previousIsSmall.current ) {
+			disableComplementaryArea( INSPECTOR_SCOPE );
+			shouldOpenWhenNotSmall.current = true;
+		} else if (
+			shouldOpenWhenNotSmall.current &&
+			! isSmall &&
+			previousIsSmall.current
+		) {
+			shouldOpenWhenNotSmall.current = false;
+			enableComplementaryArea( INSPECTOR_SCOPE, identifier );
+		} else if (
+			shouldOpenWhenNotSmall.current &&
+			activeArea &&
+			activeArea !== identifier
+		) {
+			shouldOpenWhenNotSmall.current = false;
+		}
+
+		previousIsSmall.current = isSmall;
+	}, [
+		activeArea,
+		disableComplementaryArea,
+		enableComplementaryArea,
+		identifier,
+		isActive,
+		isSmall,
+	] );
 }
 
 function InspectorTabsHeader( { tabs } ) {
@@ -117,7 +151,7 @@ function InspectorTabsHeader( { tabs } ) {
 	);
 }
 
-function InspectorComplementaryArea( {
+export function InspectorComplementaryArea( {
 	children,
 	identifier,
 	isActiveByDefault,
@@ -125,40 +159,63 @@ function InspectorComplementaryArea( {
 	title,
 } ) {
 	const tabsContextValue = useContext( Tabs.Context );
-	const activeArea = useSelect(
-		( select ) => getActiveInspectorArea( select ),
+	const { activeArea, isSmall } = useSelect(
+		( select ) => ( {
+			activeArea: getActiveInspectorArea( select ),
+			isSmall: select( 'core/viewport' ).isViewportMatch( '< medium' ),
+		} ),
 		[]
 	);
-	const { enableComplementaryArea } = useDispatch( interfaceStore );
-	const hasAppliedDefault = useRef( false );
+	const { enableComplementaryArea, disableComplementaryArea } =
+		useDispatch( interfaceStore );
+	const isActive = activeArea === identifier;
+	useAdjustInspectorToViewport( {
+		activeArea,
+		identifier,
+		isActive,
+		isSmall,
+	} );
 	useEffect( () => {
-		if ( hasAppliedDefault.current ) {
+		if ( activeArea !== undefined ) {
 			return;
 		}
-		if ( activeArea ) {
-			hasAppliedDefault.current = true;
-			return;
-		}
-		if ( isActiveByDefault ) {
-			hasAppliedDefault.current = true;
+
+		if ( isSmall ) {
+			disableComplementaryArea( INSPECTOR_SCOPE );
+		} else if ( isActiveByDefault ) {
 			enableComplementaryArea( INSPECTOR_SCOPE, identifier );
 		}
-	}, [ activeArea, enableComplementaryArea, identifier, isActiveByDefault ] );
-	const isActive = activeArea === identifier;
-	const previousActiveArea = usePreviousValue( activeArea );
+	}, [
+		activeArea,
+		disableComplementaryArea,
+		enableComplementaryArea,
+		identifier,
+		isActiveByDefault,
+		isSmall,
+	] );
+	const previousActiveAreaRef = useRef();
 	const [ isRendered, setIsRendered ] = useState( isActive );
 	const [ isOpen, setIsOpen ] = useState( isActive );
 	const [ isAnimated, setIsAnimated ] = useState( false );
 	const [ animationPhase, setAnimationPhase ] = useState( 'idle' );
 	useEffect( () => {
+		const previousActiveArea = previousActiveAreaRef.current;
+		previousActiveAreaRef.current = activeArea;
 		const isSwitchingAreas =
 			Boolean( previousActiveArea ) &&
 			Boolean( activeArea ) &&
 			activeArea !== previousActiveArea;
+		// `undefined` is the store's uninitialized state. Do not animate when
+		// the default inspector is first enabled, or when an already-active
+		// inspector remounts: both cases should paint at their final width.
+		// `null` is an explicit closed state, so a later manual toggle still
+		// gets the normal opening transition.
+		const shouldAnimate =
+			previousActiveArea !== undefined && ! isSwitchingAreas && ! isSmall;
 		let removeTimer;
 		let phaseTimer;
 
-		setIsAnimated( ! isSwitchingAreas );
+		setIsAnimated( shouldAnimate );
 		setAnimationPhase( 'idle' );
 		if ( isSwitchingAreas ) {
 			setIsOpen( isActive );
@@ -169,18 +226,24 @@ function InspectorComplementaryArea( {
 		if ( isActive ) {
 			setIsRendered( true );
 			setIsOpen( true );
-			setAnimationPhase( 'opening' );
-			phaseTimer = window.setTimeout(
-				() => setAnimationPhase( 'idle' ),
-				INSPECTOR_ANIMATION_DURATION_MS
-			);
+			if ( shouldAnimate ) {
+				setAnimationPhase( 'opening' );
+				phaseTimer = window.setTimeout(
+					() => setAnimationPhase( 'idle' ),
+					INSPECTOR_ANIMATION_DURATION_MS
+				);
+			}
 		} else {
 			setIsOpen( false );
-			setAnimationPhase( 'closing' );
-			removeTimer = window.setTimeout( () => {
+			if ( shouldAnimate ) {
+				setAnimationPhase( 'closing' );
+				removeTimer = window.setTimeout( () => {
+					setIsRendered( false );
+					setAnimationPhase( 'idle' );
+				}, INSPECTOR_ANIMATION_DURATION_MS );
+			} else {
 				setIsRendered( false );
-				setAnimationPhase( 'idle' );
-			}, INSPECTOR_ANIMATION_DURATION_MS );
+			}
 		}
 
 		return () => {
@@ -191,7 +254,7 @@ function InspectorComplementaryArea( {
 				window.clearTimeout( phaseTimer );
 			}
 		};
-	}, [ activeArea, isActive, previousActiveArea ] );
+	}, [ activeArea, isActive, isSmall ] );
 	const fillClasses = [
 		'interface-complementary-area__fill',
 		'cortext-inspector-fill',
@@ -212,10 +275,19 @@ function InspectorComplementaryArea( {
 						className="interface-complementary-area editor-sidebar__panel"
 						aria-label={ title }
 					>
-						<div className="components-panel__header editor-sidebar__panel-tabs">
+						<div className="components-panel__header interface-complementary-area-header editor-sidebar__panel-tabs">
 							<Tabs.Context.Provider value={ tabsContextValue }>
 								<InspectorTabsHeader tabs={ tabs } />
 							</Tabs.Context.Provider>
+							<Button
+								icon={ closeSmall }
+								size="compact"
+								label={ __( 'Close inspector', 'cortext' ) }
+								aria-controls={ identifier.replace( '/', ':' ) }
+								onClick={ () =>
+									disableComplementaryArea( INSPECTOR_SCOPE )
+								}
+							/>
 						</div>
 						<Tabs.Context.Provider value={ tabsContextValue }>
 							<Tabs.TabPanel
