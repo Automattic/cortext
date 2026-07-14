@@ -59,6 +59,8 @@ final class Plugin {
 	}
 
 	public function boot(): void {
+		add_filter( 'cortext_experiments', array( $this, 'register_experiments' ) );
+
 		( new Screen() )->register();
 		( new Document() )->register();
 		( new DocumentIdentity() )->register();
@@ -99,6 +101,24 @@ final class Plugin {
 		( new DataView() )->register();
 		( new CortextMedia() )->register();
 		( new Preferences() )->register();
+	}
+
+	/**
+	 * Registers experiments owned by the plugin.
+	 *
+	 * @param array<int,array<string,mixed>> $experiments Registered experiments.
+	 * @return array<int,array<string,mixed>>
+	 */
+	public function register_experiments( array $experiments ): array {
+		$experiments[] = array(
+			'id'          => Templates::EXPERIMENT_ID,
+			'label'       => __( 'Templates', 'cortext' ),
+			'description' => __( 'Create reusable starting points for documents and collection rows.', 'cortext' ),
+			'group'       => __( 'Content', 'cortext' ),
+			'default'     => false,
+		);
+
+		return $experiments;
 	}
 
 	private function __construct() {}

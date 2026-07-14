@@ -39,13 +39,19 @@ function matchesTemplateChange( detail, kind, collectionId ) {
 	return true;
 }
 
-export function useTemplates( { kind, collectionId } = {} ) {
+export function useTemplates( { kind, collectionId, enabled = true } = {} ) {
 	const [ templates, setTemplates ] = useState( [] );
-	const [ isResolving, setIsResolving ] = useState( true );
+	const [ isResolving, setIsResolving ] = useState( enabled );
 	const [ error, setError ] = useState( null );
-	const queryKey = `${ kind ?? '' }:${ collectionId ?? '' }`;
+	const queryKey = `${ kind ?? '' }:${ collectionId ?? '' }:${ enabled }`;
 
 	const refresh = useCallback( async () => {
+		if ( ! enabled ) {
+			setTemplates( [] );
+			setIsResolving( false );
+			setError( null );
+			return [];
+		}
 		setIsResolving( true );
 		setError( null );
 		try {
@@ -59,9 +65,16 @@ export function useTemplates( { kind, collectionId } = {} ) {
 		} finally {
 			setIsResolving( false );
 		}
-	}, [ kind, collectionId ] );
+	}, [ kind, collectionId, enabled ] );
 
 	useEffect( () => {
+		if ( ! enabled ) {
+			setTemplates( [] );
+			setIsResolving( false );
+			setError( null );
+			return undefined;
+		}
+
 		let cancelled = false;
 		setIsResolving( true );
 		setError( null );
@@ -87,7 +100,7 @@ export function useTemplates( { kind, collectionId } = {} ) {
 	}, [ queryKey ] );
 
 	useEffect( () => {
-		if ( typeof window === 'undefined' ) {
+		if ( ! enabled || typeof window === 'undefined' ) {
 			return undefined;
 		}
 		const onTemplatesChanged = ( event ) => {
@@ -101,7 +114,7 @@ export function useTemplates( { kind, collectionId } = {} ) {
 				TEMPLATES_CHANGED_EVENT,
 				onTemplatesChanged
 			);
-	}, [ collectionId, kind, refresh ] );
+	}, [ collectionId, enabled, kind, refresh ] );
 
 	return useMemo(
 		() => ( { templates, isResolving, error, refresh } ),
