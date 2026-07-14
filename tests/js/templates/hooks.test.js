@@ -29,6 +29,25 @@ beforeEach( () => {
 } );
 
 describe( 'template hooks', () => {
+	it( 'does not resolve templates while the experiment is disabled', async () => {
+		const { result } = renderHook( () =>
+			useTemplates( {
+				kind: 'row',
+				collectionId: 7,
+				enabled: false,
+			} )
+		);
+
+		expect( result.current.templates ).toEqual( [] );
+		expect( result.current.isResolving ).toBe( false );
+		let refreshed;
+		await act( async () => {
+			refreshed = await result.current.refresh();
+		} );
+		expect( refreshed ).toEqual( [] );
+		expect( apiFetch ).not.toHaveBeenCalled();
+	} );
+
 	it( 'loads and refreshes templates for a kind and collection', async () => {
 		apiFetch
 			.mockResolvedValueOnce( { templates: [ { id: 1 } ] } )
