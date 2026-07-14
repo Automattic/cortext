@@ -266,6 +266,7 @@ describe( 'DocumentRow (hierarchical mode)', () => {
 	it( 'creates a child document from a page template in the menu', () => {
 		const template = { id: 9, title: 'Brief' };
 		const { container, props } = renderRow( {
+			onCreateBlankChild: jest.fn(),
 			pageTemplates: [ template ],
 			onCreateChildFromTemplate: jest.fn(),
 		} );
@@ -279,6 +280,25 @@ describe( 'DocumentRow (hierarchical mode)', () => {
 			1,
 			template
 		);
+	} );
+
+	it( 'hides template actions when the experiment is disabled', () => {
+		const { container } = renderRow( {
+			pageTemplates: [ { id: 9, title: 'Brief' } ],
+			onCreateChildFromTemplate: jest.fn(),
+		} );
+		fireEvent.click( container.querySelector( '.cortext-sidebar__menu' ) );
+
+		expect(
+			screen.queryByRole( 'menuitem', {
+				name: 'Blank document inside',
+			} )
+		).toBeNull();
+		expect(
+			screen.queryByRole( 'menuitem', {
+				name: 'New from Brief inside',
+			} )
+		).toBeNull();
 	} );
 
 	it( 'does not show the child collection action for collections', () => {

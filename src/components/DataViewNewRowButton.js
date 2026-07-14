@@ -21,8 +21,10 @@ import {
 	instantiateTemplate,
 	notifyTemplatesChanged,
 	TEMPLATE_KIND_ROW,
+	TEMPLATES_EXPERIMENT_ID,
 	useTemplates,
 } from '../templates';
+import { isExperimentEnabled } from '../settings';
 
 const TemplateEditorModal = lazy( () =>
 	import( /* webpackChunkName: "editor" */ './TemplateEditorModal' )
@@ -68,6 +70,7 @@ export default function DataViewNewRowButton( {
 	disabled,
 	presentation = 'footer',
 } ) {
+	const templatesEnabled = isExperimentEnabled( TEMPLATES_EXPERIMENT_ID );
 	const [ isCreating, setIsCreating ] = useState( false );
 	const [ isCreatingTemplate, setIsCreatingTemplate ] = useState( false );
 	const [ editingTemplateId, setEditingTemplateId ] = useState( null );
@@ -75,6 +78,7 @@ export default function DataViewNewRowButton( {
 	const { templates, isResolving: areTemplatesResolving } = useTemplates( {
 		kind: TEMPLATE_KIND_ROW,
 		collectionId,
+		enabled: templatesEnabled,
 	} );
 
 	const prefillableFieldIds = useMemo(
@@ -97,8 +101,9 @@ export default function DataViewNewRowButton( {
 			) ?? null,
 		[ templates, view?.defaultRowTemplateId ]
 	);
-	const implicitTemplate =
-		defaultTemplate ?? ( templates.length === 1 ? templates[ 0 ] : null );
+	const implicitTemplate = templatesEnabled
+		? defaultTemplate ?? ( templates.length === 1 ? templates[ 0 ] : null )
+		: null;
 
 	const createRow = useCallback(
 		async ( template = null ) => {
@@ -184,14 +189,14 @@ export default function DataViewNewRowButton( {
 			disabled={
 				disabled ||
 				isCreating ||
-				areTemplatesResolving ||
+				( templatesEnabled && areTemplatesResolving ) ||
 				! collectionId
 			}
 		>
 			{ __( 'New', 'cortext' ) }
 		</Button>
 	);
-	const optionsMenu = (
+	const optionsMenu = templatesEnabled ? (
 		<Dropdown
 			popoverProps={ { placement: 'bottom-start' } }
 			renderToggle={ ( { isOpen, onToggle } ) => (
@@ -256,7 +261,7 @@ export default function DataViewNewRowButton( {
 				</>
 			) }
 		/>
-	);
+	) : null;
 	const controlsClassName =
 		'cortext-data-view__new-row-controls' +
 		` cortext-data-view__new-row-controls--${ presentation }`;
@@ -275,17 +280,18 @@ export default function DataViewNewRowButton( {
 			{ error }
 		</Notice>
 	) : null;
-	const templateEditor = editingTemplateId ? (
-		<Suspense fallback={ null }>
-			<TemplateEditorModal
-				collectionId={ collectionId }
-				fields={ fields ?? [] }
-				kind={ TEMPLATE_KIND_ROW }
-				templateId={ editingTemplateId }
-				onClose={ () => setEditingTemplateId( null ) }
-			/>
-		</Suspense>
-	) : null;
+	const templateEditor =
+		templatesEnabled && editingTemplateId ? (
+			<Suspense fallback={ null }>
+				<TemplateEditorModal
+					collectionId={ collectionId }
+					fields={ fields ?? [] }
+					kind={ TEMPLATE_KIND_ROW }
+					templateId={ editingTemplateId }
+					onClose={ () => setEditingTemplateId( null ) }
+				/>
+			</Suspense>
+		) : null;
 
 	if ( presentation === 'grid-card' ) {
 		return (

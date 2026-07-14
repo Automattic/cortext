@@ -20,8 +20,9 @@ use WP_Post;
 
 final class Templates {
 
-	public const KIND_PAGE = 'page';
-	public const KIND_ROW  = 'row';
+	public const EXPERIMENT_ID = 'templates';
+	public const KIND_PAGE     = 'page';
+	public const KIND_ROW      = 'row';
 
 	public const PAGE_DEFAULT_OPTION = 'cortext_default_page_template_id';
 

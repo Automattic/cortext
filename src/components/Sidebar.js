@@ -1,7 +1,14 @@
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { useEntityRecords } from '@wordpress/core-data';
 import { useDispatch } from '@wordpress/data';
-import { useState, useMemo, useCallback, useEffect } from '@wordpress/element';
+import {
+	lazy,
+	Suspense,
+	useState,
+	useMemo,
+	useCallback,
+	useEffect,
+} from '@wordpress/element';
 import { useParams } from '@tanstack/react-router';
 import {
 	Button,
@@ -95,11 +102,26 @@ import {
 	useDocumentSelection,
 	useFavoriteToggle,
 } from '../documents';
+import {
+	createTemplate,
+	notifyTemplatesChanged,
+	TEMPLATE_KIND_PAGE,
+	TEMPLATES_EXPERIMENT_ID,
+	useInstantiateTemplate,
+	useTemplates,
+} from '../templates';
 import useSidebarDnd from './sidebar/useSidebarDnd';
 import useSidebarNavigation from './sidebar/useSidebarNavigation';
 import useSidebarTree, { ROOT_PARENT_ID } from './sidebar/useSidebarTree';
 import DocumentRow from './sidebar/DocumentRow';
-import { isWordPressAffordancesEnabled } from '../settings';
+import {
+	isExperimentEnabled,
+	isWordPressAffordancesEnabled,
+} from '../settings';
+
+const TemplateEditorModal = lazy( () =>
+	import( /* webpackChunkName: "editor" */ './TemplateEditorModal' )
+);
 
 export default function Sidebar( {
 	collapsed = false,
@@ -183,9 +205,18 @@ export default function Sidebar( {
 	const commandPaletteShortcut = displayShortcut.primary( 'k' );
 	const brandLabel = __( 'Cortext', 'cortext' );
 	const isSettingsMode = isSettingsUri( routeUri );
+	const templatesEnabled = isExperimentEnabled( TEMPLATES_EXPERIMENT_ID );
+	const { templates: pageTemplates } = useTemplates( {
+		kind: TEMPLATE_KIND_PAGE,
+		enabled: templatesEnabled,
+	} );
+	const instantiateTemplate = useInstantiateTemplate();
 
 	const [ favoritesError, setFavoritesError ] = useState( null );
 	const [ duplicateNotice, setDuplicateNotice ] = useState( null );
+	const [ templateNotice, setTemplateNotice ] = useState( null );
+	const [ isCreatingTemplate, setIsCreatingTemplate ] = useState( false );
+	const [ editingTemplateId, setEditingTemplateId ] = useState( null );
 	const [ settingsReturnUri, setSettingsReturnUri ] = useState( null );
 	const {
 		isFavorite,
@@ -398,6 +429,17 @@ export default function Sidebar( {
 		},
 		[ create, openAfterCreate, refreshBranch ]
 	);
+	const createFromTemplateAndOpen = useCallback(
+		async ( template, input = {} ) => {
+			if ( ! template?.id ) {
+				return createAndOpen( input );
+			}
+			return openAfterCreate(
+				await instantiateTemplate( template.id, input )
+			);
+		},
+		[ createAndOpen, instantiateTemplate, openAfterCreate ]
+	);
 	const createCollectionAndOpen = useCallback(
 		async ( input ) => {
 			const created = await createCollection( input );
@@ -422,6 +464,27 @@ export default function Sidebar( {
 		( parentId ) => createCollectionAndOpen( { parent: parentId } ),
 		[ createCollectionAndOpen ]
 	);
+	const createPageTemplate = useCallback( async () => {
+		setIsCreatingTemplate( true );
+		setTemplateNotice( null );
+		try {
+			const template = await createTemplate( {
+				kind: TEMPLATE_KIND_PAGE,
+				title: __( 'Untitled template', 'cortext' ),
+			} );
+			notifyTemplatesChanged( { kind: TEMPLATE_KIND_PAGE } );
+			if ( template?.id ) {
+				setEditingTemplateId( template.id );
+			}
+		} catch ( error ) {
+			setTemplateNotice(
+				error?.message ??
+					__( "Couldn't create the template.", 'cortext' )
+			);
+		} finally {
+			setIsCreatingTemplate( false );
+		}
+	}, [] );
 
 	// Props shared by every DocumentRow in the Pages tree.
 	const rowChrome = {
@@ -441,6 +504,16 @@ export default function Sidebar( {
 		autoRenameId,
 		onAutoRenameConsumed: () => setAutoRenameId( null ),
 		onCreateChild: createChildPage,
+		...( templatesEnabled
+			? {
+					onCreateBlankChild: createChildPage,
+					pageTemplates,
+					onCreateChildFromTemplate: ( parentId, template ) =>
+						createFromTemplateAndOpen( template, {
+							parent: parentId,
+						} ),
+			  }
+			: {} ),
 		onCreateChildCollection: createChildCollection,
 	};
 
@@ -556,6 +629,16 @@ export default function Sidebar( {
 										{ duplicateNotice }
 									</Notice>
 								) : null }
+								{ templatesEnabled && templateNotice ? (
+									<Notice
+										status="info"
+										onRemove={ () =>
+											setTemplateNotice( null )
+										}
+									>
+										{ templateNotice }
+									</Notice>
+								) : null }
 								<SidebarSection
 									id="recents"
 									title={ __( 'Recents', 'cortext' ) }
@@ -652,36 +735,125 @@ export default function Sidebar( {
 													) }
 													renderContent={ ( {
 														onClose,
-													} ) => (
-														<MenuGroup>
-															<MenuItem
-																icon={ page }
-																onClick={ () => {
-																	createRootPage();
-																	onClose();
-																} }
-															>
-																{ __(
-																	'New document',
-																	'cortext'
-																) }
-															</MenuItem>
-															<MenuItem
-																icon={
-																	collectionIcon
-																}
-																onClick={ () => {
-																	createRootCollection();
-																	onClose();
-																} }
-															>
-																{ __(
-																	'New collection',
-																	'cortext'
-																) }
-															</MenuItem>
-														</MenuGroup>
-													) }
+													} ) =>
+														templatesEnabled ? (
+															<>
+																<MenuGroup>
+																	<MenuItem
+																		icon={
+																			page
+																		}
+																		onClick={ () => {
+																			createRootPage();
+																			onClose();
+																		} }
+																	>
+																		{ __(
+																			'Blank document',
+																			'cortext'
+																		) }
+																	</MenuItem>
+																	{ pageTemplates.map(
+																		(
+																			template
+																		) => (
+																			<MenuItem
+																				key={
+																					template.id
+																				}
+																				icon={
+																					page
+																				}
+																				onClick={ () => {
+																					createFromTemplateAndOpen(
+																						template
+																					);
+																					onClose();
+																				} }
+																			>
+																				{ sprintf(
+																					/* translators: %s: template title */
+																					__(
+																						'New from %s',
+																						'cortext'
+																					),
+																					template.title ||
+																						__(
+																							'Untitled template',
+																							'cortext'
+																						)
+																				) }
+																			</MenuItem>
+																		)
+																	) }
+																	<MenuItem
+																		icon={
+																			page
+																		}
+																		disabled={
+																			isCreatingTemplate
+																		}
+																		onClick={ () => {
+																			createPageTemplate();
+																			onClose();
+																		} }
+																	>
+																		{ __(
+																			'New template',
+																			'cortext'
+																		) }
+																	</MenuItem>
+																</MenuGroup>
+																<MenuGroup>
+																	<MenuItem
+																		icon={
+																			collectionIcon
+																		}
+																		onClick={ () => {
+																			createRootCollection();
+																			onClose();
+																		} }
+																	>
+																		{ __(
+																			'New collection',
+																			'cortext'
+																		) }
+																	</MenuItem>
+																</MenuGroup>
+															</>
+														) : (
+															<MenuGroup>
+																<MenuItem
+																	icon={
+																		page
+																	}
+																	onClick={ () => {
+																		createRootPage();
+																		onClose();
+																	} }
+																>
+																	{ __(
+																		'New document',
+																		'cortext'
+																	) }
+																</MenuItem>
+																<MenuItem
+																	icon={
+																		collectionIcon
+																	}
+																	onClick={ () => {
+																		createRootCollection();
+																		onClose();
+																	} }
+																>
+																	{ __(
+																		'New collection',
+																		'cortext'
+																	) }
+																</MenuItem>
+															</MenuGroup>
+														)
+													}
 												/>
 											</div>
 										}
@@ -867,6 +1039,15 @@ export default function Sidebar( {
 					onToggleCollapsed={ onToggleCollapsed }
 				/>
 			) }
+			{ templatesEnabled && editingTemplateId ? (
+				<Suspense fallback={ null }>
+					<TemplateEditorModal
+						kind={ TEMPLATE_KIND_PAGE }
+						templateId={ editingTemplateId }
+						onClose={ () => setEditingTemplateId( null ) }
+					/>
+				</Suspense>
+			) : null }
 		</aside>
 	);
 }

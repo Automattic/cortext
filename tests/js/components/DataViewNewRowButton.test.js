@@ -65,6 +65,7 @@ jest.mock( '../../../src/templates', () => ( {
 	instantiateTemplate: jest.fn(),
 	notifyTemplatesChanged: jest.fn(),
 	TEMPLATE_KIND_ROW: 'row',
+	TEMPLATES_EXPERIMENT_ID: 'templates',
 	useTemplates: jest.fn(),
 } ) );
 
@@ -88,12 +89,19 @@ const fields = [
 ];
 
 beforeEach( () => {
+	window.cortextSettings = {
+		experiments: { templates: true },
+	};
 	apiFetch.mockReset();
 	createTemplate.mockReset();
 	instantiateTemplate.mockReset();
 	notifyTemplatesChanged.mockReset();
 	useTemplates.mockReset();
 	useTemplates.mockReturnValue( { templates: [] } );
+} );
+
+afterEach( () => {
+	delete window.cortextSettings;
 } );
 
 function renderButton( props = {} ) {
@@ -169,6 +177,27 @@ describe( 'DataViewNewRowButton templates', () => {
 
 		expect( instantiateTemplate ).not.toHaveBeenCalled();
 		expect( apiFetch ).not.toHaveBeenCalled();
+	} );
+
+	it( 'creates a blank row without template controls when the experiment is disabled', async () => {
+		window.cortextSettings.experiments.templates = false;
+		apiFetch.mockResolvedValueOnce( { id: 103 } );
+
+		renderButton();
+
+		expect( useTemplates ).toHaveBeenCalledWith( {
+			kind: 'row',
+			collectionId: 7,
+			enabled: false,
+		} );
+		expect(
+			screen.queryByRole( 'button', { name: 'New row menu' } )
+		).toBeNull();
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'New' } ) );
+
+		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 1 ) );
+		expect( instantiateTemplate ).not.toHaveBeenCalled();
 	} );
 
 	it( 'creates from a selected template in the options menu', async () => {

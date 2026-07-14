@@ -2,6 +2,7 @@ import apiFetch from '@wordpress/api-fetch';
 import { addQueryArgs } from '@wordpress/url';
 
 export const TEMPLATE_POST_TYPE = 'crtxt_template';
+export const TEMPLATES_EXPERIMENT_ID = 'templates';
 export const TEMPLATE_KIND_PAGE = 'page';
 export const TEMPLATE_KIND_ROW = 'row';
 

@@ -118,6 +118,7 @@ export default function DocumentRow( {
 		typeof isHome === 'function' ? isHome( record ) : !! isHome;
 	const isBeingDragged = draggedId === recordId;
 	const isDropTarget = activeDrop && activeDrop.targetId === recordId;
+	const templatesEnabled = typeof onCreateBlankChild === 'function';
 
 	const [ isRenaming, setIsRenaming ] = useState( false );
 	const [ draftTitle, setDraftTitle ] = useState( '' );
@@ -325,46 +326,52 @@ export default function DocumentRow( {
 							<>
 								{ features.canCreateChild && (
 									<MenuGroup>
-										<MenuItem
-											icon="admin-page"
-											onClick={ () => {
-												onCreateBlankChild?.(
-													recordId
-												);
-												onClose();
-											} }
-										>
-											{ __(
-												'Blank document inside',
-												'cortext'
-											) }
-										</MenuItem>
-										{ pageTemplates.map( ( template ) => (
-											<MenuItem
-												key={ template.id }
-												icon="admin-page"
-												onClick={ () => {
-													onCreateChildFromTemplate?.(
-														recordId,
-														template
-													);
-													onClose();
-												} }
-											>
-												{ sprintf(
-													/* translators: %s: template title */
-													__(
-														'New from %s inside',
+										{ templatesEnabled ? (
+											<>
+												<MenuItem
+													icon="admin-page"
+													onClick={ () => {
+														onCreateBlankChild(
+															recordId
+														);
+														onClose();
+													} }
+												>
+													{ __(
+														'Blank document inside',
 														'cortext'
-													),
-													template.title ||
-														__(
-															'Untitled template',
-															'cortext'
-														)
+													) }
+												</MenuItem>
+												{ pageTemplates.map(
+													( template ) => (
+														<MenuItem
+															key={ template.id }
+															icon="admin-page"
+															onClick={ () => {
+																onCreateChildFromTemplate?.(
+																	recordId,
+																	template
+																);
+																onClose();
+															} }
+														>
+															{ sprintf(
+																/* translators: %s: template title */
+																__(
+																	'New from %s inside',
+																	'cortext'
+																),
+																template.title ||
+																	__(
+																		'Untitled template',
+																		'cortext'
+																	)
+															) }
+														</MenuItem>
+													)
 												) }
-											</MenuItem>
-										) ) }
+											</>
+										) : null }
 										<MenuItem
 											icon={ collectionIcon }
 											onClick={ () => {
