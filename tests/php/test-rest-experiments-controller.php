@@ -109,7 +109,7 @@ final class Test_Rest_Experiments_Controller extends BaseTestCase {
 	/**
 	 * Updates experiment settings through REST.
 	 *
-	 * @param array<string,bool> $enabled Experiment enabled values.
+	 * @param array<string,bool> $enabled Experiment IDs mapped to enabled values.
 	 */
 	private function set_experiments( array $enabled ) {
 		$request = new WP_REST_Request( 'PUT', '/cortext/v1/experiments' );

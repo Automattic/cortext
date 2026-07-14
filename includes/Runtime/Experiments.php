@@ -73,7 +73,7 @@ final class Experiments {
 	}
 
 	/**
-	 * Returns enabled state for client-side checks.
+	 * Returns the enabled state of each experiment for client-side checks.
 	 *
 	 * @return array<string,bool>
 	 */
@@ -86,7 +86,7 @@ final class Experiments {
 	}
 
 	/**
-	 * Returns registered experiments with resolved enabled states.
+	 * Returns each registered experiment and whether it is enabled.
 	 *
 	 * @return array<int,array{id:string,label:string,description:string,group:string,enabled:bool}>
 	 */
@@ -109,9 +109,9 @@ final class Experiments {
 	}
 
 	/**
-	 * Updates known experiment values.
+	 * Updates the enabled state of registered experiments.
 	 *
-	 * @param array<string,mixed> $enabled Experiment ID to enabled value.
+	 * @param array<string,mixed> $enabled Experiment IDs mapped to enabled values.
 	 * @return array<int,array{id:string,label:string,description:string,group:string,enabled:bool}>|WP_Error
 	 */
 	public function update( array $enabled ): array|WP_Error {
@@ -122,7 +122,7 @@ final class Experiments {
 			if ( ! is_string( $id ) || ! $this->is_valid_id( $id ) || ! isset( $registered[ $id ] ) ) {
 				return new WP_Error(
 					'cortext_experiments_unknown_id',
-					__( "The request includes an experiment that isn't registered.", 'cortext' ),
+					__( "One or more experiments aren't registered.", 'cortext' ),
 					array( 'status' => 400 )
 				);
 			}

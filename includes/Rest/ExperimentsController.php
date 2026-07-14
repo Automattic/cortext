@@ -75,7 +75,7 @@ final class ExperimentsController {
 		if ( ! is_array( $enabled ) ) {
 			return new WP_Error(
 				'cortext_experiments_invalid_payload',
-				__( 'Experiment settings must be an object.', 'cortext' ),
+				__( 'Send experiment settings as an object.', 'cortext' ),
 				array( 'status' => 400 )
 			);
 		}
