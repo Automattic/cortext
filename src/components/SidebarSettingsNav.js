@@ -1,13 +1,17 @@
 import { useNavigate, useParams } from '@tanstack/react-router';
 import { Button, Icon } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
-import { chevronLeft, globe, upload } from '@wordpress/icons';
+import { chevronLeft, globe, plugins, upload } from '@wordpress/icons';
 
 import {
+	SETTINGS_EXPERIMENTS_URI,
 	SETTINGS_IMPORT_URI,
 	SETTINGS_PUBLISHED_URI,
 } from '../router/useResolveEntity';
-import { isPublicWebAffordancesEnabled } from '../settings';
+import {
+	canManageCortextSettings,
+	isPublicWebAffordancesEnabled,
+} from '../settings';
 
 const NAV_ITEMS = [
 	{
@@ -22,6 +26,13 @@ const NAV_ITEMS = [
 		icon: globe,
 		label: () => __( 'Published', 'cortext' ),
 		isEnabled: isPublicWebAffordancesEnabled,
+	},
+	{
+		key: 'experiments',
+		uri: SETTINGS_EXPERIMENTS_URI,
+		icon: plugins,
+		label: () => __( 'Experiments', 'cortext' ),
+		isEnabled: canManageCortextSettings,
 	},
 ];
 

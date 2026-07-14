@@ -1,6 +1,7 @@
 import {
 	IMPORT_URI,
 	PUBLISHED_DOCUMENTS_URI,
+	SETTINGS_EXPERIMENTS_URI,
 	SETTINGS_IMPORT_URI,
 	SETTINGS_PUBLISHED_URI,
 	SETTINGS_URI,
@@ -20,6 +21,9 @@ export function parseTarget( splat, options = {} ) {
 	}
 	if ( splat === SETTINGS_IMPORT_URI ) {
 		return { kind: 'import', tail: '' };
+	}
+	if ( splat === SETTINGS_EXPERIMENTS_URI ) {
+		return { kind: 'experiments', tail: '' };
 	}
 	if ( splat === SETTINGS_PUBLISHED_URI ) {
 		if ( ! publicWebAffordances ) {
@@ -50,6 +54,8 @@ export function reducer( state, action ) {
 				active = { kind: 'empty' };
 			} else if ( target.kind === 'published' ) {
 				active = { kind: 'published' };
+			} else if ( target.kind === 'experiments' ) {
+				active = { kind: 'experiments' };
 			} else if ( target.kind === 'import' ) {
 				active = { kind: 'import' };
 			} else if ( target.kind === 'document' ) {
@@ -121,6 +127,8 @@ export function init( target ) {
 		active = { kind: 'empty' };
 	} else if ( target.kind === 'published' ) {
 		active = { kind: 'published' };
+	} else if ( target.kind === 'experiments' ) {
+		active = { kind: 'experiments' };
 	} else if ( target.kind === 'import' ) {
 		active = { kind: 'import' };
 	} else if ( target.kind === 'redirect' ) {

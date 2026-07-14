@@ -18,6 +18,7 @@ namespace Cortext\Admin;
 defined( 'ABSPATH' ) || exit;
 
 use Cortext\Runtime\Features;
+use Cortext\Runtime\Experiments;
 use Cortext\Theming\Preferences;
 
 final class Screen {
@@ -65,6 +66,24 @@ final class Screen {
 		return CORTEXT_URL . self::ICON_PATH;
 	}
 
+	/**
+	 * Returns the settings passed to the React shell at startup.
+	 *
+	 * @return array{adminUrl:string,capabilities:array{manageOptions:bool},experiments:array<string,bool>,features:array<string,bool>,iconUrl:string,menuSlug:string}
+	 */
+	public function client_settings(): array {
+		return array(
+			'adminUrl'     => admin_url(),
+			'capabilities' => array(
+				'manageOptions' => current_user_can( 'manage_options' ),
+			),
+			'experiments'  => ( new Experiments() )->to_client_settings(),
+			'features'     => ( new Features() )->to_client_settings(),
+			'iconUrl'      => $this->icon_url(),
+			'menuSlug'     => self::MENU_SLUG,
+		);
+	}
+
 	public function enqueue_assets( string $hook_suffix ): void {
 		if ( self::HOOK_SUFFIX !== $hook_suffix ) {
 			return;
@@ -103,14 +122,7 @@ final class Screen {
 
 		wp_add_inline_script(
 			self::SCRIPT_HANDLE,
-			'window.cortextSettings = ' . wp_json_encode(
-				array(
-					'adminUrl' => admin_url(),
-					'features' => ( new Features() )->to_client_settings(),
-					'iconUrl'  => $this->icon_url(),
-					'menuSlug' => self::MENU_SLUG,
-				)
-			) . ';',
+			'window.cortextSettings = ' . wp_json_encode( $this->client_settings() ) . ';',
 			'before'
 		);
 

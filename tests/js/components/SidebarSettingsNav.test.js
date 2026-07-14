@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 
 let mockRouteUri = 'settings/import';
+let mockCanManageSettings = true;
 let mockPublicWebAffordances = true;
 const mockNavigate = jest.fn();
 
@@ -31,10 +32,12 @@ jest.mock( '@wordpress/i18n', () => ( {
 jest.mock( '@wordpress/icons', () => ( {
 	chevronLeft: 'chevron-left',
 	globe: 'globe',
+	plugins: 'plugins',
 	upload: 'upload',
 } ) );
 
 jest.mock( '../../../src/settings', () => ( {
+	canManageCortextSettings: () => mockCanManageSettings,
 	isPublicWebAffordancesEnabled: () => mockPublicWebAffordances,
 } ) );
 
@@ -43,6 +46,7 @@ import SidebarSettingsNav from '../../../src/components/SidebarSettingsNav';
 beforeEach( () => {
 	mockNavigate.mockReset();
 	mockRouteUri = 'settings/import';
+	mockCanManageSettings = true;
 	mockPublicWebAffordances = true;
 } );
 
@@ -88,6 +92,39 @@ describe( 'SidebarSettingsNav', () => {
 		expect(
 			screen.queryByRole( 'button', { name: 'Published' } )
 		).not.toBeInTheDocument();
+	} );
+
+	it( 'only shows Experiments when settings can be managed', () => {
+		const { rerender } = render(
+			<SidebarSettingsNav collapsed={ false } onBack={ jest.fn() } />
+		);
+		expect(
+			screen.getByRole( 'button', { name: 'Experiments' } )
+		).toBeInTheDocument();
+
+		mockCanManageSettings = false;
+		rerender(
+			<SidebarSettingsNav collapsed={ false } onBack={ jest.fn() } />
+		);
+
+		expect(
+			screen.queryByRole( 'button', { name: 'Experiments' } )
+		).not.toBeInTheDocument();
+	} );
+
+	it( 'opens settings/experiments', () => {
+		render(
+			<SidebarSettingsNav collapsed={ false } onBack={ jest.fn() } />
+		);
+
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Experiments' } )
+		);
+
+		expect( mockNavigate ).toHaveBeenCalledWith( {
+			to: '/$',
+			params: { _splat: 'settings/experiments' },
+		} );
 	} );
 
 	it( 'presses the item for the current settings page', () => {
