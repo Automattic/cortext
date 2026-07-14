@@ -251,18 +251,21 @@ export default function PublicDataView( { collectionId, view: initialView } ) {
 		);
 	}, [] );
 
+	const dataViewsView = useMemo(
+		() =>
+			adaptViewForDataViews( reconciledView, {
+				applyDefaultTableTitleWidth: false,
+			} ),
+		[ reconciledView ]
+	);
 	const { data: dataFiltered, paginationInfo } = useMemo(
 		() =>
 			filterSortAndPaginateWithGroups(
 				data,
-				{ ...reconciledView, sort: null },
+				{ ...dataViewsView, sort: null },
 				fields
 			),
-		[ data, reconciledView, fields ]
-	);
-	const dataViewsView = useMemo(
-		() => adaptViewForDataViews( reconciledView ),
-		[ reconciledView ]
+		[ data, dataViewsView, fields ]
 	);
 
 	// Read-only: the public page shows the saved view, not an editable

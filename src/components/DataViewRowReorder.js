@@ -28,6 +28,7 @@ import {
 import './DataViewRowReorder.scss';
 
 import RowDragHandle from './RowDragHandle';
+import { DATA_VIEW_LIST_ROW_SELECTOR } from './dataViewItemLookup';
 
 const DRAG_ACTIVATION_DISTANCE = 5;
 const ROW_REORDER_NOTICE_ID = 'cortext-row-reorder-failed';
@@ -59,7 +60,7 @@ const HOVER_SUPPRESSION_RELEASE_DELAY = 120;
 const ROW_SELECTORS = {
 	table: '.dataviews-view-table tbody > tr',
 	list: [
-		'.dataviews-view-list > :is([role="row"], [role="article"])',
+		DATA_VIEW_LIST_ROW_SELECTOR,
 		'.dataviews-view-list > li',
 		'.dataviews-view-list > .dataviews-view-list__item',
 	].join( ',' ),
@@ -1705,7 +1706,11 @@ export default function DataViewRowReorder( {
 					row={ row }
 				/>
 			) ) }
-			<DragOverlay zIndex={ ROW_DRAG_OVERLAY_Z_INDEX }>
+			{ /* The optimistic reorder already places the row/card; skip dnd-kit's return flight. */ }
+			<DragOverlay
+				dropAnimation={ null }
+				zIndex={ ROW_DRAG_OVERLAY_Z_INDEX }
+			>
 				{ activeRow ? <RowDragPreview row={ activeRow } /> : null }
 			</DragOverlay>
 			{ pendingRequest ? (

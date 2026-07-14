@@ -43,6 +43,7 @@ const SKIP_HEADER_CLASSES = [
 // threshold, dnd-kit leaves the column-header menu trigger alone.
 const DRAG_ACTIVATION_DISTANCE = 5;
 const HEADER_BUTTON_SELECTOR = '.dataviews-view-table-header-button';
+const imperativeColumnWidths = new WeakMap();
 
 function fieldTypeFor( fieldId, fieldsById ) {
 	if ( fieldId === TITLE_FIELD_ID ) {
@@ -172,6 +173,40 @@ function toCssSize( width ) {
 	return Number.isFinite( numeric ) ? `${ numeric }px` : null;
 }
 
+function setImperativeColumnWidth( element, cssWidth, constrainWidth ) {
+	if ( ! element ) {
+		return;
+	}
+	element.style.width = cssWidth;
+	if ( constrainWidth ) {
+		element.style.maxWidth = cssWidth;
+	}
+	imperativeColumnWidths.set( element, {
+		width: cssWidth,
+		maxWidth: constrainWidth ? cssWidth : null,
+	} );
+}
+
+function clearImperativeColumnWidth( element ) {
+	if ( ! element ) {
+		return;
+	}
+	const applied = imperativeColumnWidths.get( element );
+	if ( ! applied ) {
+		return;
+	}
+	if ( element.style.width === applied.width ) {
+		element.style.removeProperty( 'width' );
+	}
+	const appliedMaxWidth =
+		applied.maxWidth ??
+		( element.tagName === 'COL' ? applied.width : null );
+	if ( appliedMaxWidth && element.style.maxWidth === appliedMaxWidth ) {
+		element.style.removeProperty( 'max-width' );
+	}
+	imperativeColumnWidths.delete( element );
+}
+
 // Buffer added to autofit measurements (px). Browsers can render text at
 // fractional pixel widths, and the copied measurement and live render don't
 // always round the same way; a couple of pixels of slack keeps proportional
@@ -254,18 +289,18 @@ function getAutoFitColumnWidth( headerEl, fieldType, fieldId ) {
 
 function applyColumnWidth( headerEl, width ) {
 	const cssWidth = toCssSize( width );
+	const col = getColumnElement( headerEl );
+	const bodyCells = getColumnBodyCells( headerEl );
 	if ( ! cssWidth ) {
+		for ( const element of [ col, headerEl, ...bodyCells ] ) {
+			clearImperativeColumnWidth( element );
+		}
 		return;
 	}
-	const col = getColumnElement( headerEl );
-	if ( col ) {
-		col.style.width = cssWidth;
-	}
-	headerEl.style.width = cssWidth;
-	headerEl.style.maxWidth = cssWidth;
-	for ( const td of getColumnBodyCells( headerEl ) ) {
-		td.style.width = cssWidth;
-		td.style.maxWidth = cssWidth;
+	setImperativeColumnWidth( col, cssWidth, false );
+	setImperativeColumnWidth( headerEl, cssWidth, true );
+	for ( const td of bodyCells ) {
+		setImperativeColumnWidth( td, cssWidth, true );
 	}
 }
 
@@ -570,14 +605,10 @@ function ColumnResizer( { fieldId, fieldType, headerEl, view, onChangeView } ) {
 
 			const applyLiveWidth = ( width ) => {
 				const px = `${ width }px`;
-				if ( col ) {
-					col.style.width = px;
-				}
-				headerEl.style.width = px;
-				headerEl.style.maxWidth = px;
+				setImperativeColumnWidth( col, px, false );
+				setImperativeColumnWidth( headerEl, px, true );
 				for ( const td of bodyCells ) {
-					td.style.width = px;
-					td.style.maxWidth = px;
+					setImperativeColumnWidth( td, px, true );
 				}
 			};
 
@@ -661,9 +692,7 @@ export default function DataViewColumnInteractions( {
 	useEffect( () => {
 		for ( const cell of cells ) {
 			const width = view?.layout?.styles?.[ cell.fieldId ]?.width;
-			if ( width !== undefined ) {
-				applyColumnWidth( cell.el, width );
-			}
+			applyColumnWidth( cell.el, width );
 		}
 	}, [ cells, view ] );
 

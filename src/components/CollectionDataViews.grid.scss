@@ -4,6 +4,7 @@
 $grid-card-background: $white;
 $grid-card-content-background: #f8f8f8;
 $grid-card-content-hover-background: #f3f3f3;
+$grid-card-gap: 32px;
 
 .cortext-data-view
 .dataviews-view-grid__card:hover
@@ -21,7 +22,7 @@ $grid-card-content-hover-background: #f3f3f3;
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(var(--cortext-grid-card-min, 240px), 1fr));
 		grid-auto-rows: minmax(var(--cortext-grid-card-height, 220px), auto);
-		gap: $grid-unit-20;
+		gap: $grid-card-gap;
 		padding: 0 $grid-unit-20 $grid-unit-20;
 	}
 
@@ -86,14 +87,16 @@ $grid-card-content-hover-background: #f3f3f3;
 	.dataviews-view-grid {
 		display: flex;
 		flex-direction: column;
-		gap: $grid-unit-20;
+		// DataViews 17's useGridColumns() chunks rows assuming a 32px gap.
+		// Keep the rendered gap identical so responsive column counts match.
+		gap: $grid-card-gap;
 		padding: $grid-unit-20;
 		margin-bottom: auto;
 	}
 
 	.dataviews-view-grid-items {
 		grid-auto-rows: minmax(var(--cortext-grid-card-height, 220px), auto);
-		gap: $grid-unit-20;
+		gap: $grid-card-gap;
 		padding: $grid-unit-20;
 		align-items: stretch;
 	}
@@ -101,7 +104,7 @@ $grid-card-content-hover-background: #f3f3f3;
 	.dataviews-view-grid__row {
 		display: grid;
 		grid-auto-rows: minmax(var(--cortext-grid-card-height, 220px), auto);
-		gap: $grid-unit-20;
+		gap: $grid-card-gap;
 		align-items: stretch;
 	}
 
@@ -198,9 +201,11 @@ $grid-card-content-hover-background: #f3f3f3;
 	.dataviews-view-grid .dataviews-view-grid__fields:not(:empty) {
 		order: 1;
 		box-sizing: border-box;
+		display: flex;
+		flex-direction: column;
 		width: 100%;
-		// DataViews 17 renders these pieces with `@wordpress/ui` Stack,
-		// which writes its compact gap inline.
+		// DataViews 17's Stack display rule is not injected into the editor
+		// iframe, so restore its flex layout before overriding the compact gap.
 		gap: $grid-unit-20 !important;
 		padding: $grid-unit-10 $grid-unit-20 0;
 		background: $grid-card-content-background;
@@ -320,6 +325,8 @@ $grid-card-content-hover-background: #f3f3f3;
 	.dataviews-view-grid .dataviews-view-grid__badge-fields,
 	.dataviews-view-grid .dataviews-view-grid__badge-fields:not(:empty) {
 		order: 1;
+		display: flex;
+		flex-wrap: wrap;
 		justify-content: flex-start;
 		gap: $grid-unit-10 !important;
 		box-sizing: border-box;
@@ -340,6 +347,8 @@ $grid-card-content-hover-background: #f3f3f3;
 	.dataviews-view-grid__card > .dataviews-view-grid__title-actions + * {
 		grid-row: 3;
 		grid-column: 1;
+		display: flex;
+		flex-direction: column;
 		width: 100%;
 		height: 100%;
 		min-width: 0;
@@ -465,5 +474,13 @@ $grid-card-content-hover-background: #f3f3f3;
 	.dataviews-view-grid__card:has(.dataviews-selection-checkbox input:checked) > .dataviews-selection-checkbox {
 		opacity: 1;
 		pointer-events: auto;
+	}
+
+	@media (hover: none) {
+
+		.dataviews-view-grid__card > .dataviews-selection-checkbox {
+			opacity: 1;
+			pointer-events: auto;
+		}
 	}
 }

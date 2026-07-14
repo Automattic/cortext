@@ -4,18 +4,25 @@ import { join } from 'path';
 import { render } from '@testing-library/react';
 import { DataViews as mockDataViews } from '@wordpress/dataviews/wp';
 
+const mockDataViewRowReorder = jest.fn( () => null );
+
 jest.mock( '@wordpress/dataviews/wp', () => {
+	const actual = jest.requireActual( '@wordpress/dataviews/wp' );
 	const MockDataViews = jest.fn( ( { children } ) => (
-		<div data-testid="dataviews">{ children }</div>
+		<div className="dataviews-wrapper" data-testid="dataviews">
+			{ children }
+		</div>
 	) );
 	MockDataViews.Search = () => null;
 	MockDataViews.FiltersToggle = () => null;
 	MockDataViews.LayoutSwitcher = () => null;
 	MockDataViews.ViewConfig = () => null;
 	MockDataViews.Filters = () => null;
-	MockDataViews.Layout = () => null;
+	MockDataViews.Layout = () => (
+		<div className="dataviews-layout__container" />
+	);
 	MockDataViews.Pagination = () => null;
-	return { DataViews: MockDataViews };
+	return { ...actual, DataViews: MockDataViews };
 } );
 
 jest.mock( '../../../src/components/CollectionFieldsContext', () => ( {
@@ -65,7 +72,10 @@ jest.mock(
 	'../../../src/components/DataViewColumnInteractions',
 	() => () => null
 );
-jest.mock( '../../../src/components/DataViewRowReorder', () => () => null );
+jest.mock(
+	'../../../src/components/DataViewRowReorder',
+	() => ( props ) => mockDataViewRowReorder( props )
+);
 jest.mock( '../../../src/components/GridNewRowPortal', () => () => null );
 jest.mock(
 	'../../../src/components/TableCalculationsFooter',
@@ -83,6 +93,15 @@ jest.mock( '../../../src/hooks/afterNextPaint', () => ( {
 	__esModule: true,
 	default: jest.fn( () => Promise.resolve() ),
 } ) );
+jest.mock( '../../../src/components/dataViewScroll', () => {
+	const actual = jest.requireActual(
+		'../../../src/components/dataViewScroll'
+	);
+	return {
+		...actual,
+		scrollToEndQuickly: jest.fn( actual.scrollToEndQuickly ),
+	};
+} );
 
 import { useCollectionFieldsContext } from '../../../src/components/CollectionFieldsContext';
 import CollectionDataViews from '../../../src/components/CollectionDataViews';
@@ -154,6 +173,7 @@ function makeScroller( {
 describe( 'CollectionDataViews loading state', () => {
 	beforeEach( () => {
 		mockDataViews.mockClear();
+		mockDataViewRowReorder.mockClear();
 		useCollectionFieldsContext.mockReturnValue( collectionFieldState );
 	} );
 
@@ -204,6 +224,146 @@ describe( 'CollectionDataViews loading state', () => {
 
 		expect( mockDataViews ).toHaveBeenCalled();
 		expect( mockDataViews.mock.calls.at( -1 )[ 0 ].isLoading ).toBe( true );
+	} );
+} );
+
+describe( 'CollectionDataViews DataViews 17 integration', () => {
+	const groupedRows = [
+		{ id: 1, status: 'B' },
+		{ id: 2, status: 'A' },
+		{ id: 3, status: 'B' },
+		{ id: 4, status: 'A' },
+	];
+	const groupedFieldState = {
+		...collectionFieldState,
+		fields: [
+			{
+				...collectionFieldState.fields[ 0 ],
+				getValue: ( { item } ) => item.status,
+				sort: ( left, right, direction ) =>
+					direction === 'desc'
+						? right.localeCompare( left )
+						: left.localeCompare( right ),
+			},
+		],
+	};
+	const legacyGroupedGridView = {
+		type: 'grid',
+		fields: [ 'title', 'field-11' ],
+		fieldsByType: { grid: [], list: [] },
+		layout: { previewSize: 230 },
+		layoutByType: {
+			table: { density: 'compact' },
+			grid: { previewSize: 230 },
+			list: {},
+		},
+		groupByField: 'field-11',
+		page: 1,
+		perPage: 10,
+	};
+
+	beforeEach( () => {
+		mockDataViews.mockClear();
+		mockDataViewRowReorder.mockClear();
+		scrollToEndQuickly.mockClear();
+		useCollectionFieldsContext.mockReturnValue( groupedFieldState );
+	} );
+
+	it( 'gives row reordering the same grouped order rendered by a server grid', () => {
+		useCollectionRows.mockReturnValue(
+			collectionRowsState( {
+				data: groupedRows,
+				paginationInfo: { totalItems: 4, totalPages: 1 },
+			} )
+		);
+
+		render(
+			<CollectionDataViews
+				collectionId={ 7 }
+				view={ legacyGroupedGridView }
+				onChangeView={ jest.fn() }
+			/>
+		);
+
+		const dataViewsProps = mockDataViews.mock.calls.at( -1 )[ 0 ];
+		expect( dataViewsProps.data.map( ( row ) => row.id ) ).toEqual( [
+			1, 2, 3, 4,
+		] );
+		expect( dataViewsProps.view.groupBy ).toEqual( {
+			field: 'field-11',
+			direction: 'asc',
+		} );
+		expect( dataViewsProps.view.groupByField ).toBeUndefined();
+		expect(
+			mockDataViewRowReorder.mock.calls
+				.at( -1 )[ 0 ]
+				.rows.map( ( row ) => row.id )
+		).toEqual( [ 1, 3, 2, 4 ] );
+	} );
+
+	it( 'applies migrated grouping before client-side pagination', () => {
+		useCollectionRows.mockReturnValue(
+			collectionRowsState( {
+				data: groupedRows,
+				paginationInfo: { totalItems: 4, totalPages: 2 },
+				queryMode: 'client',
+			} )
+		);
+
+		render(
+			<CollectionDataViews
+				collectionId={ 7 }
+				view={ { ...legacyGroupedGridView, perPage: 2 } }
+				onChangeView={ jest.fn() }
+			/>
+		);
+
+		expect(
+			mockDataViews.mock.calls.at( -1 )[ 0 ].data.map( ( row ) => row.id )
+		).toEqual( [ 2, 4 ] );
+		expect(
+			mockDataViewRowReorder.mock.calls
+				.at( -1 )[ 0 ]
+				.rows.map( ( row ) => row.id )
+		).toEqual( [ 2, 4 ] );
+	} );
+
+	it( 'reveals system fields through the DataViews layout scroller', () => {
+		useCollectionFieldsContext.mockReturnValue( {
+			...collectionFieldState,
+			fields: [
+				...collectionFieldState.fields,
+				{
+					id: 'created_at',
+					label: 'Created',
+					header: 'Created',
+					getValue: ( { item } ) => item.created_at,
+				},
+			],
+		} );
+		useCollectionRows.mockReturnValue( collectionRowsState() );
+		const onFieldRevealed = jest.fn();
+
+		render(
+			<CollectionDataViews
+				collectionId={ 7 }
+				view={ {
+					...tableView,
+					fields: [ ...tableView.fields, 'created_at' ],
+				} }
+				revealFieldId="created_at"
+				onFieldRevealed={ onFieldRevealed }
+				onChangeView={ jest.fn() }
+			/>
+		);
+
+		expect( scrollToEndQuickly ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				className: 'dataviews-layout__container',
+			} ),
+			{ trackEnd: true }
+		);
+		expect( onFieldRevealed ).toHaveBeenCalledWith( 'created_at' );
 	} );
 } );
 

@@ -106,7 +106,7 @@ describe( 'dataViewSelection', () => {
 		).toEqual( [ '1', '3', '2', '4' ] );
 	} );
 
-	it( 'keeps the legacy grouped view shape supported while saved views migrate', () => {
+	it( 'does not reorder lookup rows for an unadapted legacy view', () => {
 		const rows = [
 			{ id: 1, status: 'A' },
 			{ id: 2, status: 'B' },
@@ -127,6 +127,6 @@ describe( 'dataViewSelection', () => {
 					fields
 				)
 			)
-		).toEqual( [ '1', '3', '2' ] );
+		).toEqual( [ '1', '2', '3' ] );
 	} );
 } );

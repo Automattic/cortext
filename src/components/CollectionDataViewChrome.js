@@ -5,7 +5,12 @@ import {
 	__experimentalHStack as HStack,
 } from '@wordpress/components';
 import { DataViews } from '@wordpress/dataviews/wp';
-import { useCallback, useEffect, useMemo, useRef } from '@wordpress/element';
+import {
+	useCallback,
+	useLayoutEffect,
+	useMemo,
+	useRef,
+} from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { closeSmall, trash } from '@wordpress/icons';
 
@@ -29,14 +34,17 @@ function DataViewsViewConfig( { view } ) {
 		}
 		return ownerDocuments;
 	}, [] );
-	const syncBodyClass = useCallback( () => {
-		for ( const ownerDocument of getOwnerDocuments() ) {
-			ownerDocument?.body?.classList.toggle(
-				GRID_VIEW_OPTIONS_BODY_CLASS,
-				isGridView
-			);
-		}
-	}, [ getOwnerDocuments, isGridView ] );
+	const syncBodyClass = useCallback(
+		( isOpen ) => {
+			for ( const ownerDocument of getOwnerDocuments() ) {
+				ownerDocument?.body?.classList.toggle(
+					GRID_VIEW_OPTIONS_BODY_CLASS,
+					isGridView && isOpen
+				);
+			}
+		},
+		[ getOwnerDocuments, isGridView ]
+	);
 	const clearBodyClass = useCallback( () => {
 		for ( const ownerDocument of getOwnerDocuments() ) {
 			ownerDocument?.body?.classList.remove(
@@ -45,23 +53,39 @@ function DataViewsViewConfig( { view } ) {
 		}
 	}, [ getOwnerDocuments ] );
 
-	useEffect( () => {
-		if ( ! isGridView ) {
+	useLayoutEffect( () => {
+		const toggle = wrapperRef.current?.querySelector(
+			'button[aria-expanded]'
+		);
+		if ( ! toggle ) {
 			clearBodyClass();
+			return clearBodyClass;
 		}
-		return clearBodyClass;
-	}, [ clearBodyClass, isGridView ] );
+
+		const syncFromToggle = () => {
+			syncBodyClass( toggle.getAttribute( 'aria-expanded' ) === 'true' );
+		};
+		syncFromToggle();
+
+		const ownerWindow = toggle.ownerDocument?.defaultView;
+		const Observer = ownerWindow?.MutationObserver;
+		if ( ! Observer ) {
+			return clearBodyClass;
+		}
+		const observer = new Observer( syncFromToggle );
+		observer.observe( toggle, {
+			attributes: true,
+			attributeFilter: [ 'aria-expanded' ],
+		} );
+
+		return () => {
+			observer.disconnect();
+			clearBodyClass();
+		};
+	}, [ clearBodyClass, syncBodyClass ] );
 
 	return (
-		<span
-			ref={ wrapperRef }
-			onPointerDownCapture={ syncBodyClass }
-			onKeyDownCapture={ ( event ) => {
-				if ( event.key === 'Enter' || event.key === ' ' ) {
-					syncBodyClass();
-				}
-			} }
-		>
+		<span ref={ wrapperRef }>
 			<DataViews.ViewConfig />
 		</span>
 	);

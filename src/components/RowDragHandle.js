@@ -12,6 +12,16 @@ import { INTERACTIVE_DATA_VIEW_ITEM_IGNORE_SELECTOR } from './dataViewItemLookup
 const ROW_DRAGGING_CLASS = 'cortext-row-dragging';
 const ROW_SUPPRESS_HOVER_CLASS = 'cortext-row-reorder-suppress-hover';
 const HOVER_SUPPRESSION_PRIME_TIMEOUT = 800;
+const KEYBOARD_DRAG_CODES = new Set( [
+	'ArrowDown',
+	'ArrowLeft',
+	'ArrowRight',
+	'ArrowUp',
+	'Enter',
+	'Escape',
+	'Space',
+	'Tab',
+] );
 
 function primeRowHoverSuppression( ownerDocument = document ) {
 	const body = ownerDocument?.body ?? document.body;
@@ -32,6 +42,49 @@ function capturePointer( event ) {
 	event.currentTarget?.setPointerCapture?.( pointerId );
 }
 
+function applyActivatorAttributes( node, attributes ) {
+	const appliedAttributes = [];
+
+	for ( const [ name, value ] of Object.entries( attributes ?? {} ) ) {
+		// DataViews owns the grid item's composite semantics and roving tab
+		// index. Keep those intact while forwarding dnd-kit's ARIA state and
+		// screen-reader instructions to the same focusable element.
+		if ( name === 'role' || name === 'tabIndex' || value === undefined ) {
+			continue;
+		}
+
+		const previousValue = node.getAttribute( name );
+		const nextValue = String( value );
+		node.setAttribute( name, nextValue );
+		appliedAttributes.push( { name, nextValue, previousValue } );
+	}
+
+	return () => {
+		for ( const { name, nextValue, previousValue } of appliedAttributes ) {
+			// Do not undo an attribute that DataViews changed while this adapter
+			// was mounted.
+			if ( node.getAttribute( name ) !== nextValue ) {
+				continue;
+			}
+			if ( previousValue === null ) {
+				node.removeAttribute( name );
+			} else {
+				node.setAttribute( name, previousValue );
+			}
+		}
+	};
+}
+
+function nativeKeyboardEventForDnd( event, currentTarget ) {
+	return {
+		nativeEvent: event,
+		target: event.target,
+		currentTarget,
+		preventDefault: () => event.preventDefault(),
+		stopPropagation: () => event.stopPropagation(),
+	};
+}
+
 export default function RowDragHandle( {
 	row,
 	keyboardFocusable = true,
@@ -48,8 +101,11 @@ export default function RowDragHandle( {
 		id: `row:${ row.rowId }`,
 		data: row,
 		attributes: {
-			role: 'button',
+			role: activateFromRow
+				? row.el?.getAttribute( 'role' ) || 'group'
+				: 'button',
 			roleDescription: __( 'draggable item', 'cortext' ),
+			tabIndex: activateFromRow ? row.el?.tabIndex ?? 0 : 0,
 		},
 	} );
 
@@ -116,6 +172,56 @@ export default function RowDragHandle( {
 			),
 		[ listeners ]
 	);
+
+	useLayoutEffect( () => {
+		if ( ! activateFromRow || ! row.el ) {
+			return undefined;
+		}
+
+		const activator = row.el;
+		setActivatorNodeRef( activator );
+		const restoreAttributes = applyActivatorAttributes(
+			activator,
+			attributes
+		);
+		const onKeyDown = ( event ) => {
+			if ( isDragging && KEYBOARD_DRAG_CODES.has( event.code ) ) {
+				// Keep DataViews' composite from moving focus or opening the card.
+				// Do not stop propagation: KeyboardSensor handles the same event on
+				// the owner document to move, finish, or cancel the active drag.
+				event.preventDefault();
+				return;
+			}
+			if ( event.defaultPrevented || ! listeners?.onKeyDown ) {
+				return;
+			}
+
+			listeners.onKeyDown(
+				nativeKeyboardEventForDnd( event, activator )
+			);
+			// The keyboard sensor prevents the activation event. Stop only that
+			// event from reaching DataViews' item-opening handler; unhandled keys
+			// such as arrows continue to drive its composite grid navigation.
+			if ( event.defaultPrevented ) {
+				primeRowHoverSuppression( activator.ownerDocument );
+				event.stopPropagation();
+			}
+		};
+
+		activator.addEventListener( 'keydown', onKeyDown );
+		return () => {
+			activator.removeEventListener( 'keydown', onKeyDown );
+			restoreAttributes();
+			setActivatorNodeRef( null );
+		};
+	}, [
+		activateFromRow,
+		attributes,
+		isDragging,
+		listeners,
+		row.el,
+		setActivatorNodeRef,
+	] );
 
 	useLayoutEffect( () => {
 		if ( ! activateFromRow || ! row.el || ! listeners?.onPointerDown ) {

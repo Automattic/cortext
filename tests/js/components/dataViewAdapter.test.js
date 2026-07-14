@@ -56,6 +56,26 @@ describe( 'dataViewAdapter', () => {
 		} );
 	} );
 
+	it( 'can omit editor title-width defaults while preserving saved public widths', () => {
+		const unsizedView = adaptViewForDataViews(
+			{
+				...canonicalView,
+				layout: { density: 'compact' },
+				layoutByType: {
+					...canonicalView.layoutByType,
+					table: { density: 'compact' },
+				},
+			},
+			{ applyDefaultTableTitleWidth: false }
+		);
+		const savedWidthView = adaptViewForDataViews( canonicalView, {
+			applyDefaultTableTitleWidth: false,
+		} );
+
+		expect( unsizedView.layout ).toEqual( { density: 'compact' } );
+		expect( savedWidthView.layout.styles.title ).toEqual( { width: 280 } );
+	} );
+
 	it( 'uses titleField for grid without inheriting table fields', () => {
 		const view = adaptViewForDataViews( {
 			...canonicalView,
@@ -159,6 +179,27 @@ describe( 'dataViewAdapter', () => {
 
 		expect( view.infiniteScrollEnabled ).toBeUndefined();
 		expect( view.startPosition ).toBeUndefined();
+	} );
+
+	it( 'migrates legacy grouping to the DataViews 17 shape', () => {
+		const legacyView = {
+			...canonicalView,
+			groupByField: 'field-2',
+		};
+		const renderedView = adaptViewForDataViews( legacyView );
+
+		expect( renderedView.groupBy ).toEqual( {
+			field: 'field-2',
+			direction: 'asc',
+		} );
+		expect( renderedView.groupByField ).toBeUndefined();
+
+		const persistedView = mergeDataViewsChange( legacyView, renderedView );
+		expect( persistedView.groupBy ).toEqual( {
+			field: 'field-2',
+			direction: 'asc',
+		} );
+		expect( persistedView.groupByField ).toBeUndefined();
 	} );
 
 	it( 'round-trips table to grid to table without losing layout buckets', () => {

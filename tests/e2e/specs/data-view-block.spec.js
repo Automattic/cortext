@@ -289,11 +289,11 @@ async function expectTableActionsColumnSeparator( table ) {
 					);
 				}
 
+				const ownerWindow = tableElement.ownerDocument.defaultView;
 				const hasSeparator = ( element ) => {
 					if ( ! element ) {
 						return false;
 					}
-					const ownerWindow = element.ownerDocument.defaultView;
 					const styles = ownerWindow.getComputedStyle( element );
 					const beforeStyles = ownerWindow.getComputedStyle(
 						element,
@@ -308,24 +308,31 @@ async function expectTableActionsColumnSeparator( table ) {
 								'rgba(0, 0, 0, 0)' )
 					);
 				};
+				const separatorColor = ( element ) =>
+					element
+						? ownerWindow.getComputedStyle( element, '::before' )
+								.backgroundColor
+						: null;
+				const headerActionsCell = tableElement.querySelector(
+					'thead th.dataviews-view-table__actions-column'
+				);
+				const bodyActionsCell = tableElement.querySelector(
+					'tbody td.dataviews-view-table__actions-column'
+				);
 
 				return {
-					headerHasSeparator: hasSeparator(
-						tableElement.querySelector(
-							'thead th.dataviews-view-table__actions-column'
-						)
-					),
-					bodyHasSeparator: hasSeparator(
-						tableElement.querySelector(
-							'tbody td.dataviews-view-table__actions-column'
-						)
-					),
+					headerHasSeparator: hasSeparator( headerActionsCell ),
+					headerSeparatorColor: separatorColor( headerActionsCell ),
+					bodyHasSeparator: hasSeparator( bodyActionsCell ),
+					bodySeparatorColor: separatorColor( bodyActionsCell ),
 				};
 			} )
 		)
 		.toEqual( {
 			headerHasSeparator: true,
+			headerSeparatorColor: 'rgb(240, 240, 240)',
 			bodyHasSeparator: true,
+			bodySeparatorColor: 'rgb(240, 240, 240)',
 		} );
 }
 
@@ -1318,6 +1325,14 @@ test.describe( 'Collection view block', () => {
 						const gridRect = root
 							.querySelector( '.dataviews-view-grid' )
 							?.getBoundingClientRect();
+						const gridRow = root.querySelector(
+							'.dataviews-view-grid__row'
+						);
+						const gridRowStyle = gridRow
+							? gridRow.ownerDocument.defaultView.getComputedStyle(
+									gridRow
+							  )
+							: null;
 						const cardWidths = rects(
 							'.dataviews-view-grid__card'
 						).map( ( rect ) => Math.round( rect.width ) );
@@ -1355,6 +1370,9 @@ test.describe( 'Collection view block', () => {
 								Math.abs( newWidth - cardWidths[ 0 ] ) <= 2,
 							gridWideEnoughForThree:
 								( gridRect?.width ?? 0 ) >= 752,
+							columnGap: Number.parseFloat(
+								gridRowStyle?.columnGap ?? '0'
+							),
 							firstRowCardCount,
 							usesCompactPreviewSize:
 								cardWidths.length > 0 &&
@@ -1369,6 +1387,7 @@ test.describe( 'Collection view block', () => {
 				titlesVisible: true,
 				newAligned: true,
 				gridWideEnoughForThree: true,
+				columnGap: 32,
 				firstRowCardCount: 3,
 				usesCompactPreviewSize: true,
 			} );
@@ -1622,7 +1641,134 @@ test.describe( 'Collection view block', () => {
 		}
 	} );
 
-	test( 'keeps list field labels visually hidden on hover', async ( {
+	test.describe( 'hoverless selection controls', () => {
+		test.use( { hasTouch: true } );
+
+		test( 'keeps table and grid checkboxes visible and actionable', async ( {
+			admin,
+			page,
+			requestUtils,
+		} ) => {
+			const fixture = {};
+
+			try {
+				Object.assign(
+					fixture,
+					await createManualOrderFixture( requestUtils )
+				);
+
+				fixture.page = await requestUtils.rest( {
+					method: 'POST',
+					path: '/wp/v2/crtxt_documents',
+					data: {
+						title: 'Hoverless DataView selection',
+						status: 'private',
+						content: [
+							createDataViewBlockMarkup( fixture.collection.id, {
+								type: 'table',
+							} ),
+							createDataViewBlockMarkup( fixture.collection.id, {
+								type: 'grid',
+							} ),
+						].join( '\n' ),
+					},
+				} );
+
+				await admin.visitAdminPage(
+					'admin.php',
+					`page=cortext&p=/${ fixture.page.id }`
+				);
+
+				await page.waitForFunction(
+					( postId ) =>
+						window.wp?.data
+							?.select( 'core/editor' )
+							?.getCurrentPostId?.() === postId,
+					fixture.page.id,
+					{ timeout: 15_000 }
+				);
+
+				const canvas = page.frameLocator( '[name="editor-canvas"]' );
+				const tableView = canvas
+					.locator( '.cortext-data-view:has(.dataviews-view-table)' )
+					.first();
+				const gridView = canvas
+					.locator( '.cortext-data-view:has(.dataviews-view-grid)' )
+					.first();
+				await expect( tableView ).toBeVisible();
+				await expect( gridView ).toBeVisible();
+				await expect
+					.poll( () =>
+						tableView.evaluate(
+							( element ) =>
+								element.ownerDocument.defaultView.matchMedia(
+									'(hover: none)'
+								).matches
+						)
+					)
+					.toBe( true );
+
+				const selectionControls = [
+					tableView
+						.locator(
+							'thead .dataviews-view-table-selection-checkbox'
+						)
+						.first(),
+					tableView
+						.locator( 'tbody .dataviews-selection-checkbox' )
+						.first(),
+					gridView
+						.locator(
+							'.dataviews-view-grid__card > .dataviews-selection-checkbox'
+						)
+						.first(),
+				];
+
+				for ( const control of selectionControls ) {
+					await expect( control ).toHaveCSS( 'opacity', '1' );
+					await expect( control ).toHaveCSS(
+						'pointer-events',
+						'auto'
+					);
+					await expect( control.locator( 'input' ) ).toBeVisible();
+				}
+
+				const tableRowCheckbox =
+					selectionControls[ 1 ].locator( 'input' );
+				const gridCardCheckbox =
+					selectionControls[ 2 ].locator( 'input' );
+				await tableRowCheckbox.check();
+				await gridCardCheckbox.check();
+				await expect( tableRowCheckbox ).toBeChecked();
+				await expect( gridCardCheckbox ).toBeChecked();
+			} finally {
+				if ( fixture.rows ) {
+					for ( const row of fixture.rows ) {
+						await deleteIfCreated(
+							requestUtils,
+							`/wp/v2/crtxt_documents/${ row.id }`
+						);
+					}
+				}
+				await deleteIfCreated(
+					requestUtils,
+					fixture.page &&
+						`/wp/v2/crtxt_documents/${ fixture.page.id }`
+				);
+				await deleteIfCreated(
+					requestUtils,
+					fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
+				);
+				await deleteIfCreated(
+					requestUtils,
+					fixture.collection &&
+						`/wp/v2/crtxt_documents/${ fixture.collection.id }`
+				);
+			}
+		} );
+	} );
+
+	test( 'keeps grouped list rows on the Cortext visual baseline', async ( {
 		admin,
 		page,
 		requestUtils,
@@ -1660,6 +1806,10 @@ test.describe( 'Collection view block', () => {
 						mediaField: 'cover',
 						fields: [ 'title', fieldKey ],
 						fieldsByType: { list: [ fieldKey ] },
+						groupBy: {
+							field: fieldKey,
+							direction: 'asc',
+						},
 					} ),
 				},
 			} );
@@ -1680,10 +1830,13 @@ test.describe( 'Collection view block', () => {
 
 			const canvas = page.frameLocator( '[name="editor-canvas"]' );
 			const row = canvas
-				.locator( '.dataviews-view-list > [role="row"]' )
+				.locator( '.dataviews-view-list [role="row"]' )
 				.filter( { hasText: 'The Left Hand of Darkness' } )
 				.first();
 			await expect( row ).toBeVisible();
+			await expect(
+				canvas.locator( '.dataviews-view-list__group-header' )
+			).toHaveCount( 2 );
 			const titleCell = row.locator( '.dataviews-title-field' ).first();
 			await expect( titleCell ).toBeVisible();
 			await expect(
@@ -1691,7 +1844,7 @@ test.describe( 'Collection view block', () => {
 			).toBeVisible();
 			await expect( row.getByText( 'Ursula K. Le Guin' ) ).toBeVisible();
 			const secondRow = canvas
-				.locator( '.dataviews-view-list > [role="row"]' )
+				.locator( '.dataviews-view-list [role="row"]' )
 				.filter( { hasText: 'Dune' } )
 				.first();
 			await expect( secondRow ).toBeVisible();
@@ -1789,8 +1942,44 @@ test.describe( 'Collection view block', () => {
 				const mediaStyle = media
 					? media.ownerDocument.defaultView.getComputedStyle( media )
 					: null;
+				const rowStyle =
+					element.ownerDocument.defaultView.getComputedStyle(
+						element
+					);
+				const itemWrapper = element.querySelector(
+					'.dataviews-view-list__item-wrapper'
+				);
+				const itemWrapperStyle = itemWrapper
+					? itemWrapper.ownerDocument.defaultView.getComputedStyle(
+							itemWrapper
+					  )
+					: null;
+				const groupWrapper = element.parentElement;
+				const groupHeader = groupWrapper?.querySelector(
+					':scope > .dataviews-view-list__group-header'
+				);
+				const groupWrapperStyle = groupWrapper
+					? groupWrapper.ownerDocument.defaultView.getComputedStyle(
+							groupWrapper
+					  )
+					: null;
+				const groupHeaderStyle = groupHeader
+					? groupHeader.ownerDocument.defaultView.getComputedStyle(
+							groupHeader
+					  )
+					: null;
 
 				return {
+					rowIsNested:
+						element.parentElement !==
+						element.closest( '.dataviews-view-list' ),
+					rowBorderTopWidth: rowStyle.borderTopWidth,
+					groupGap: groupWrapperStyle?.gap ?? '',
+					groupHeaderPaddingInlineStart:
+						groupHeaderStyle?.paddingInlineStart ?? '',
+					itemWrapperPaddingTop: itemWrapperStyle?.paddingTop ?? '',
+					itemWrapperPaddingInlineStart:
+						itemWrapperStyle?.paddingInlineStart ?? '',
 					titleText: title?.textContent?.trim() ?? '',
 					titleWidth: titleRect?.width ?? 0,
 					titleLeft: titleRect
@@ -1834,6 +2023,12 @@ test.describe( 'Collection view block', () => {
 				};
 			} );
 			expect( listMetrics ).toMatchObject( {
+				rowIsNested: true,
+				rowBorderTopWidth: '0px',
+				groupGap: '0px',
+				groupHeaderPaddingInlineStart: '30px',
+				itemWrapperPaddingTop: '8px',
+				itemWrapperPaddingInlineStart: '30px',
 				titleText: expect.stringContaining(
 					'The Left Hand of Darkness'
 				),
@@ -1867,68 +2062,71 @@ test.describe( 'Collection view block', () => {
 			const actionAlignment = await canvas
 				.locator( '.dataviews-view-list' )
 				.evaluate( ( list ) =>
-					Array.from(
-						list.querySelectorAll( ':scope > [role="row"]' )
-					).map( ( listRow ) => {
-						const visibleActionButtons = Array.from(
-							listRow.querySelectorAll(
-								'.dataviews-view-list__item-actions .components-button'
-							)
-						).filter( ( button ) => {
-							const rect = button.getBoundingClientRect();
-							const style =
-								button.ownerDocument.defaultView.getComputedStyle(
-									button
+					Array.from( list.querySelectorAll( '[role="row"]' ) ).map(
+						( listRow ) => {
+							const visibleActionButtons = Array.from(
+								listRow.querySelectorAll(
+									'.dataviews-view-list__item-actions .components-button'
+								)
+							).filter( ( button ) => {
+								const rect = button.getBoundingClientRect();
+								const style =
+									button.ownerDocument.defaultView.getComputedStyle(
+										button
+									);
+								return (
+									style.display !== 'none' &&
+									style.visibility !== 'hidden' &&
+									rect.width > 0 &&
+									rect.height > 0
 								);
-							return (
-								style.display !== 'none' &&
-								style.visibility !== 'hidden' &&
-								rect.width > 0 &&
-								rect.height > 0
-							);
-						} );
-						const visibleFieldValues = Array.from(
-							listRow.querySelectorAll(
-								'.dataviews-view-list__field-value'
-							)
-						).filter( ( fieldValue ) => {
-							const rect = fieldValue.getBoundingClientRect();
-							const style =
-								fieldValue.ownerDocument.defaultView.getComputedStyle(
-									fieldValue
+							} );
+							const visibleFieldValues = Array.from(
+								listRow.querySelectorAll(
+									'.dataviews-view-list__field-value'
+								)
+							).filter( ( fieldValue ) => {
+								const rect = fieldValue.getBoundingClientRect();
+								const style =
+									fieldValue.ownerDocument.defaultView.getComputedStyle(
+										fieldValue
+									);
+								return (
+									style.display !== 'none' &&
+									style.visibility !== 'hidden' &&
+									rect.width > 0 &&
+									rect.height > 0
 								);
-							return (
-								style.display !== 'none' &&
-								style.visibility !== 'hidden' &&
-								rect.width > 0 &&
-								rect.height > 0
-							);
-						} );
-						const button = visibleActionButtons[ 0 ];
-						const rowRect = listRow.getBoundingClientRect();
-						const buttonRect = button?.getBoundingClientRect();
-						const metadataRect =
-							visibleFieldValues[ 0 ]?.getBoundingClientRect();
+							} );
+							const button = visibleActionButtons[ 0 ];
+							const rowRect = listRow.getBoundingClientRect();
+							const buttonRect = button?.getBoundingClientRect();
+							const metadataRect =
+								visibleFieldValues[ 0 ]?.getBoundingClientRect();
 
-						return {
-							text: listRow.textContent ?? '',
-							actionLeft: Math.round( buttonRect?.left ?? 0 ),
-							actionRight: Math.round( buttonRect?.right ?? 0 ),
-							actionRightInset: Math.round(
-								rowRect.right - ( buttonRect?.right ?? 0 )
-							),
-							metadataRight: Math.round(
-								metadataRect?.right ?? 0
-							),
-							actionCenterOffset: buttonRect
-								? Math.abs(
-										buttonRect.top +
-											buttonRect.height / 2 -
-											( rowRect.top + rowRect.height / 2 )
-								  )
-								: null,
-						};
-					} )
+							return {
+								text: listRow.textContent ?? '',
+								actionLeft: Math.round( buttonRect?.left ?? 0 ),
+								actionRight: Math.round(
+									buttonRect?.right ?? 0
+								),
+								actionRightInset: Math.round(
+									rowRect.right - ( buttonRect?.right ?? 0 )
+								),
+								metadataRight: Math.round(
+									metadataRect?.right ?? 0
+								),
+								actionCenterOffset: buttonRect
+									? Math.abs(
+											buttonRect.top +
+												buttonRect.height / 2 -
+												( rowRect.top +
+													rowRect.height / 2 )
+									  )
+									: null,
+							};
+						}
+					)
 				);
 			const firstAction = actionAlignment.find( ( metric ) =>
 				metric.text.includes( 'The Left Hand of Darkness' )
@@ -2183,6 +2381,41 @@ test.describe( 'Collection view block', () => {
 			expect( mediaMetrics.mediaToTitleCenterGap ).toBeLessThanOrEqual(
 				8
 			);
+
+			const rtlMetrics = await row.evaluate( ( element ) => {
+				const root = element.closest( '.cortext-data-view' );
+				root?.setAttribute( 'dir', 'rtl' );
+				const media = element.querySelector(
+					'.dataviews-view-list__media-wrapper'
+				);
+				const fieldWrapper = element.querySelector(
+					'.dataviews-view-list__field-wrapper'
+				);
+				const ownerWindow = element.ownerDocument.defaultView;
+				const mediaStyle = ownerWindow.getComputedStyle( media );
+				const fieldWrapperStyle =
+					ownerWindow.getComputedStyle( fieldWrapper );
+				const rowRect = element.getBoundingClientRect();
+				const mediaRect = media.getBoundingClientRect();
+
+				return {
+					direction:
+						ownerWindow.getComputedStyle( element ).direction,
+					mediaInlineStartInset: Math.round(
+						rowRect.right - mediaRect.right
+					),
+					mediaRight: mediaStyle.right,
+					fieldPaddingLeft: fieldWrapperStyle.paddingLeft,
+					fieldPaddingRight: fieldWrapperStyle.paddingRight,
+				};
+			} );
+			expect( rtlMetrics ).toEqual( {
+				direction: 'rtl',
+				mediaInlineStartInset: 16,
+				mediaRight: '0px',
+				fieldPaddingLeft: '0px',
+				fieldPaddingRight: '32px',
+			} );
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
@@ -2662,18 +2895,35 @@ test.describe( 'Collection view block', () => {
 				const fieldsStyles = fields
 					? ownerWindow.getComputedStyle( fields )
 					: null;
+				const fieldRects = Array.from(
+					fields?.querySelectorAll(
+						':scope > .dataviews-view-grid__field'
+					) ?? []
+				)
+					.map( ( field ) => field.getBoundingClientRect() )
+					.filter( ( rect ) => rect.width > 0 && rect.height > 0 );
 
 				return {
+					bodyDisplay: bodyStyles?.display ?? '',
 					bodyGap: Number.parseFloat(
 						bodyStyles?.rowGap || bodyStyles?.gap || '0'
 					),
+					fieldsDisplay: fieldsStyles?.display ?? '',
 					fieldsGap: Number.parseFloat(
 						fieldsStyles?.rowGap || fieldsStyles?.gap || '0'
 					),
+					fieldRowGaps: fieldRects
+						.slice( 1 )
+						.map( ( rect, index ) =>
+							Math.round( rect.top - fieldRects[ index ].bottom )
+						),
 				};
 			} );
+			expect( gridBodyRhythm.bodyDisplay ).toBe( 'flex' );
 			expect( gridBodyRhythm.bodyGap ).toBeGreaterThanOrEqual( 8 );
+			expect( gridBodyRhythm.fieldsDisplay ).toBe( 'flex' );
 			expect( gridBodyRhythm.fieldsGap ).toBeGreaterThanOrEqual( 16 );
+			expect( gridBodyRhythm.fieldRowGaps ).toEqual( [ 16 ] );
 			const relationChip = alphaCard
 				.locator( '.cortext-relation-ref', {
 					hasText: 'Los Angeles Azules Extended Relation Label',

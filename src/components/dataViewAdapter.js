@@ -31,14 +31,29 @@ function cloneLayout( layout ) {
 
 function withoutUnsupportedDataViewsState( view ) {
 	const next = { ...view };
+	if (
+		! Object.prototype.hasOwnProperty.call( next, 'groupBy' ) &&
+		typeof next.groupByField === 'string' &&
+		next.groupByField
+	) {
+		next.groupBy = { field: next.groupByField, direction: 'asc' };
+	}
+	delete next.groupByField;
 	for ( const key of UNSUPPORTED_DATAVIEWS_KEYS ) {
 		delete next[ key ];
 	}
 	return next;
 }
 
-function layoutForTableDataViews( layout ) {
+function layoutForTableDataViews(
+	layout,
+	{ applyDefaultTableTitleWidth = true } = {}
+) {
 	const nextLayout = cloneLayout( layout );
+	if ( ! applyDefaultTableTitleWidth ) {
+		return nextLayout;
+	}
+
 	const styles = isObject( nextLayout.styles )
 		? { ...nextLayout.styles }
 		: {};
@@ -147,7 +162,7 @@ function fieldsByTypeFromView( view = {} ) {
 	return buckets;
 }
 
-function withActiveLayout( view, type, layoutByType, fieldsByType ) {
+function withActiveLayout( view, type, layoutByType, fieldsByType, options ) {
 	const layout = cloneLayout( layoutByType[ type ] );
 	const next = {
 		...withoutUnsupportedDataViewsState( view ),
@@ -160,7 +175,7 @@ function withActiveLayout( view, type, layoutByType, fieldsByType ) {
 	if ( type === 'table' ) {
 		next.titleField = TITLE_FIELD_ID;
 		next.showTitle = false;
-		next.layout = layoutForTableDataViews( next.layout );
+		next.layout = layoutForTableDataViews( next.layout, options );
 		delete next.mediaField;
 		delete next.descriptionField;
 		return next;
@@ -175,13 +190,14 @@ function withActiveLayout( view, type, layoutByType, fieldsByType ) {
 	return next;
 }
 
-export function adaptViewForDataViews( view = {} ) {
+export function adaptViewForDataViews( view = {}, options = {} ) {
 	const type = normalizeType( view?.type );
 	return withActiveLayout(
 		view,
 		type,
 		layoutByTypeFromView( view ),
-		fieldsByTypeFromView( view )
+		fieldsByTypeFromView( view ),
+		options
 	);
 }
 
@@ -232,7 +248,7 @@ export function mergeDataViewsChange( previousView = {}, nextView = {} ) {
 
 	const next = {
 		...withoutUnsupportedDataViewsState( previousView ),
-		...nextView,
+		...withoutUnsupportedDataViewsState( nextView ),
 		type: nextType,
 		fields,
 		fieldsByType,

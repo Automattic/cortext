@@ -49,7 +49,23 @@ $list-row-open-background: #f3f3f3;
 		padding: $grid-unit-10 $grid-unit-20 $grid-unit-10;
 	}
 
-	.dataviews-view-list > :is([role="row"], [role="article"]) {
+	// DataViews 17 wraps grouped rows in an inline-styled Stack. Collapse that
+	// row gap to the ungrouped baseline and align the group label with row
+	// content instead of retaining DataViews' wider 24px inset.
+	.dataviews-view-list > :has(> .dataviews-view-list__group-header) {
+		gap: 0 !important;
+	}
+
+	.dataviews-view-list__group-header {
+		padding-inline: $grid-unit-20;
+	}
+
+	.dataviews-view-list:dir(ltr):has(.cortext-row-drag-handle)
+	.dataviews-view-list__group-header {
+		padding-inline-start: var(--cortext-row-drag-content-offset);
+	}
+
+	.dataviews-view-list :is([role="row"], [role="article"]) {
 		position: relative;
 		margin: 0;
 		border: 0;
@@ -80,21 +96,21 @@ $list-row-open-background: #f3f3f3;
 		}
 	}
 
-	.dataviews-view-list > :is([role="row"], [role="article"]):not(.is-selected):is(:hover, .is-hovered, :has(:focus-visible)) {
+	.dataviews-view-list :is([role="row"], [role="article"]):not(.is-selected):is(:hover, .is-hovered, :has(:focus-visible)) {
 		background-color: $list-row-hover-background;
 		color: $gray-900;
 	}
 
-	&[data-list-row-clickable="true"] .dataviews-view-list > :is([role="row"], [role="article"]) {
+	&[data-list-row-clickable="true"] .dataviews-view-list :is([role="row"], [role="article"]) {
 		cursor: pointer;
 	}
 
-	.dataviews-view-list > :is([role="row"], [role="article"]):not(:hover):not(.is-hovered):not(:has(.cortext-title-cell--is-open)):not(:has(.cortext-title-cell--is-opening)):focus-within:not(:has(:focus-visible)) {
+	.dataviews-view-list :is([role="row"], [role="article"]):not(:hover):not(.is-hovered):not(:has(.cortext-title-cell--is-open)):not(:has(.cortext-title-cell--is-opening)):focus-within:not(:has(:focus-visible)) {
 		background: transparent;
 		color: $gray-900;
 	}
 
-	.dataviews-view-list > :is([role="row"], [role="article"]) .dataviews-view-list__item-wrapper {
+	.dataviews-view-list :is([role="row"], [role="article"]) .dataviews-view-list__item-wrapper {
 		position: relative;
 		box-sizing: border-box;
 		width: 100%;
@@ -102,7 +118,7 @@ $list-row-open-background: #f3f3f3;
 		padding: $grid-unit-10 $grid-unit-20;
 	}
 
-	.dataviews-view-list > :is([role="row"], [role="article"]):has(.cortext-row-drag-handle) .dataviews-view-list__item-wrapper {
+	.dataviews-view-list :is([role="row"], [role="article"]):has(.cortext-row-drag-handle) .dataviews-view-list__item-wrapper {
 		padding-left: var(--cortext-row-drag-content-offset);
 	}
 
@@ -168,20 +184,25 @@ $list-row-open-background: #f3f3f3;
 	.dataviews-view-list__media-wrapper:has(img) {
 		position: absolute;
 		top: 50%;
-		left: 0;
+		inset-inline-start: 0;
 		transform: translateY(-50%);
 		z-index: 1;
 	}
 
-	.dataviews-view-list__media-wrapper:has(img)
-		+ .dataviews-view-list__field-wrapper {
-		box-sizing: border-box;
-		padding-left: $grid-unit-40;
+	.dataviews-view-list__field-wrapper {
+		min-width: 0;
+		width: 100%;
+		min-height: 0;
+		flex: 1 1 auto;
 	}
 
-	.dataviews-view-list__media-wrapper:has(img)
-		+ .dataviews-view-list__field-wrapper
-		.cortext-title-cell__icon {
+	.dataviews-view-list__media-wrapper:has(img) + .dataviews-view-list__field-wrapper {
+		box-sizing: border-box;
+		padding-inline-start: $grid-unit-40;
+	}
+
+	.dataviews-view-list__media-wrapper:has(img) + .dataviews-view-list__field-wrapper
+	.cortext-title-cell__icon {
 		display: none;
 	}
 
@@ -199,13 +220,6 @@ $list-row-open-background: #f3f3f3;
 
 	.dataviews-view-list__media-wrapper::after {
 		border-radius: 4px;
-	}
-
-	.dataviews-view-list__field-wrapper {
-		min-width: 0;
-		width: 100%;
-		min-height: 0;
-		flex: 1 1 auto;
 	}
 
 	.dataviews-view-list__field-wrapper > :first-child {
@@ -231,7 +245,7 @@ $list-row-open-background: #f3f3f3;
 		margin-left: auto;
 	}
 
-	.dataviews-view-list > :is([role="row"], [role="article"]) .dataviews-view-list__item-actions > :not(:last-child) {
+	.dataviews-view-list :is([role="row"], [role="article"]) .dataviews-view-list__item-actions > :not(:last-child) {
 		flex: 0 0 0;
 		width: 0;
 		overflow: hidden;
@@ -296,18 +310,18 @@ $list-row-open-background: #f3f3f3;
 		overflow: visible;
 	}
 
-	.dataviews-view-list > :is([role="row"], [role="article"]).is-selected .dataviews-title-field,
-	.dataviews-view-list > :is([role="row"], [role="article"]).is-selected .dataviews-view-list__field,
-	.dataviews-view-list > :is([role="row"], [role="article"]).is-selected .dataviews-view-list__field-value,
-	.dataviews-view-list > :is([role="row"], [role="article"]):not(.is-selected):hover .dataviews-title-field,
-	.dataviews-view-list > :is([role="row"], [role="article"]):not(.is-selected):hover .dataviews-view-list__field,
-	.dataviews-view-list > :is([role="row"], [role="article"]):not(.is-selected):hover .dataviews-view-list__field-value,
-	.dataviews-view-list > :is([role="row"], [role="article"]):not(.is-selected).is-hovered .dataviews-title-field,
-	.dataviews-view-list > :is([role="row"], [role="article"]):not(.is-selected).is-hovered .dataviews-view-list__field,
-	.dataviews-view-list > :is([role="row"], [role="article"]):not(.is-selected).is-hovered .dataviews-view-list__field-value,
-	.dataviews-view-list > :is([role="row"], [role="article"]):not(.is-selected):focus-within .dataviews-title-field,
-	.dataviews-view-list > :is([role="row"], [role="article"]):not(.is-selected):focus-within .dataviews-view-list__field,
-	.dataviews-view-list > :is([role="row"], [role="article"]):not(.is-selected):focus-within .dataviews-view-list__field-value {
+	.dataviews-view-list :is([role="row"], [role="article"]).is-selected .dataviews-title-field,
+	.dataviews-view-list :is([role="row"], [role="article"]).is-selected .dataviews-view-list__field,
+	.dataviews-view-list :is([role="row"], [role="article"]).is-selected .dataviews-view-list__field-value,
+	.dataviews-view-list :is([role="row"], [role="article"]):not(.is-selected):hover .dataviews-title-field,
+	.dataviews-view-list :is([role="row"], [role="article"]):not(.is-selected):hover .dataviews-view-list__field,
+	.dataviews-view-list :is([role="row"], [role="article"]):not(.is-selected):hover .dataviews-view-list__field-value,
+	.dataviews-view-list :is([role="row"], [role="article"]):not(.is-selected).is-hovered .dataviews-title-field,
+	.dataviews-view-list :is([role="row"], [role="article"]):not(.is-selected).is-hovered .dataviews-view-list__field,
+	.dataviews-view-list :is([role="row"], [role="article"]):not(.is-selected).is-hovered .dataviews-view-list__field-value,
+	.dataviews-view-list :is([role="row"], [role="article"]):not(.is-selected):focus-within .dataviews-title-field,
+	.dataviews-view-list :is([role="row"], [role="article"]):not(.is-selected):focus-within .dataviews-view-list__field,
+	.dataviews-view-list :is([role="row"], [role="article"]):not(.is-selected):focus-within .dataviews-view-list__field-value {
 		color: $gray-900;
 	}
 

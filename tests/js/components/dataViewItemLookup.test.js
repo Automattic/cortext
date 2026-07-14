@@ -85,6 +85,38 @@ describe( 'findDataViewItemFromEvent', () => {
 		} );
 	} );
 
+	it( 'resolves rows nested inside DataViews 17 list groups', () => {
+		const wrapper = document.createElement( 'div' );
+		wrapper.innerHTML = `
+			<div class="dataviews-view-list">
+				<div class="dataviews-view-list__group-wrapper">
+					<h3>Group A</h3>
+					<div role="row"><div class="dataviews-title-field">Alpha</div></div>
+				</div>
+				<div class="dataviews-view-list__group-wrapper">
+					<h3>Group B</h3>
+					<div role="row"><div class="dataviews-title-field">Beta</div></div>
+				</div>
+			</div>
+		`;
+		document.body.appendChild( wrapper );
+
+		const target = wrapper.querySelectorAll(
+			'.dataviews-title-field'
+		)[ 1 ];
+		const rowInfo = findDataViewItemFromEvent(
+			eventFrom( target ),
+			wrapper,
+			'list',
+			[ { id: 10 }, { id: 20 } ]
+		);
+
+		expect( rowInfo ).toEqual( {
+			id: '20',
+			row: { id: 20 },
+		} );
+	} );
+
 	it( 'ignores list rows outside the current wrapper', () => {
 		const wrapper = document.createElement( 'div' );
 		const otherWrapper = document.createElement( 'div' );

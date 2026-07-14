@@ -56,6 +56,7 @@ jest.mock( '@wordpress/notices', () => ( {
 let mockDndProps;
 let mockDragOverlayProps;
 let mockDraggableListeners;
+let mockDraggableAttributes;
 let mockDraggableRefs;
 let mockResizeObserverInstances;
 jest.mock( '@dnd-kit/core', () => {
@@ -95,7 +96,7 @@ jest.mock( '@dnd-kit/core', () => {
 			};
 			mockDraggableRefs[ options.id ] = refs;
 			return {
-				attributes: {},
+				attributes: mockDraggableAttributes,
 				listeners: mockDraggableListeners,
 				setActivatorNodeRef: refs.setActivatorNodeRef,
 				setNodeRef: refs.setNodeRef,
@@ -127,6 +128,7 @@ beforeEach( () => {
 	mockDndProps = null;
 	mockDragOverlayProps = null;
 	mockDraggableListeners = {};
+	mockDraggableAttributes = {};
 	mockDraggableRefs = {};
 	mockResizeObserverInstances = [];
 	window.ResizeObserver = class {
@@ -240,13 +242,13 @@ function createGridWrapper() {
 		<div class="dataviews-view-grid">
 			<div class="dataviews-view-grid-items">
 				<div class="dataviews-view-grid__row">
-					<div class="dataviews-view-grid__row__gridcell dataviews-view-grid__card">
+					<div class="dataviews-view-grid__row__gridcell dataviews-view-grid__card" role="gridcell" tabindex="0">
 						<div class="dataviews-view-grid__title-field">One</div>
 					</div>
-					<div class="dataviews-view-grid__row__gridcell dataviews-view-grid__card">
+					<div class="dataviews-view-grid__row__gridcell dataviews-view-grid__card" role="gridcell" tabindex="-1">
 						<div class="dataviews-view-grid__title-field">Two</div>
 					</div>
-					<div class="dataviews-view-grid__row__gridcell dataviews-view-grid__card">
+					<div class="dataviews-view-grid__row__gridcell dataviews-view-grid__card" role="gridcell" tabindex="-1">
 						<div class="dataviews-view-grid__title-field">Three</div>
 					</div>
 				</div>
@@ -479,6 +481,40 @@ describe( 'DataViewRowReorder', () => {
 		expect( handles[ 0 ] ).toHaveAttribute( 'tabindex', '-1' );
 	} );
 
+	it( 'decorates list rows nested inside DataViews groups', async () => {
+		const wrapper = createListWrapper();
+		const list = wrapper.querySelector( '.dataviews-view-list' );
+		const listRows = Array.from( list.children );
+		list.replaceChildren();
+		listRows.forEach( ( row, index ) => {
+			const group = document.createElement( 'div' );
+			group.className = 'dataviews-view-list__group-wrapper';
+			const heading = document.createElement( 'h3' );
+			heading.textContent = `Group ${ index + 1 }`;
+			group.append( heading, row );
+			list.appendChild( group );
+		} );
+
+		await renderReorder(
+			{
+				view: {
+					type: 'list',
+					sort: null,
+				},
+			},
+			{ wrapper }
+		);
+
+		await waitFor( () =>
+			expect( useDraggable ).toHaveBeenCalledTimes( 3 )
+		);
+		expect(
+			wrapper.querySelectorAll(
+				'.dataviews-view-list [role="row"].cortext-row-reorder-target'
+			)
+		).toHaveLength( 3 );
+	} );
+
 	it( 'decorates DataViews 17 infinite-scroll list articles for row reorder', async () => {
 		const wrapper = createListWrapper( undefined, 'article' );
 
@@ -561,7 +597,7 @@ describe( 'DataViewRowReorder', () => {
 		expect( overlay ).toHaveStyle( {
 			zIndex: '100002',
 		} );
-		expect( mockDragOverlayProps.dropAnimation ).toBeUndefined();
+		expect( mockDragOverlayProps.dropAnimation ).toBeNull();
 		expect(
 			overlay.querySelector( '.cortext-row-drag-preview' )
 		).toHaveClass( 'cortext-row-drag-preview--comfortable' );
@@ -1220,6 +1256,7 @@ describe( 'DataViewRowReorder', () => {
 		await waitFor( () =>
 			expect( useDraggable ).toHaveBeenCalledTimes( 3 )
 		);
+		expect( mockDragOverlayProps.dropAnimation ).toBeNull();
 
 		const cards = wrapper.querySelectorAll( '.dataviews-view-grid__card' );
 		expect( cards ).toHaveLength( 3 );
@@ -1253,6 +1290,66 @@ describe( 'DataViewRowReorder', () => {
 			request.resolve( { reseeded: false } );
 			await request.promise;
 		} );
+	} );
+
+	it( 'uses the focusable grid card as the keyboard drag activator', async () => {
+		const onKeyDown = jest.fn( ( event ) => {
+			if ( event.nativeEvent.code === 'Space' ) {
+				event.preventDefault();
+			}
+		} );
+		mockDraggableListeners = {
+			onPointerDown: jest.fn(),
+			onKeyDown,
+		};
+		mockDraggableAttributes = {
+			role: 'gridcell',
+			tabIndex: 0,
+			'aria-disabled': false,
+			'aria-roledescription': 'draggable item',
+			'aria-describedby': 'drag-instructions',
+		};
+		const wrapper = createGridWrapper();
+		const onGridKeyDown = jest.fn();
+		wrapper.addEventListener( 'keydown', onGridKeyDown );
+
+		await renderReorder(
+			{
+				view: {
+					type: 'grid',
+					sort: null,
+				},
+			},
+			{ wrapper }
+		);
+
+		const cards = wrapper.querySelectorAll( '.dataviews-view-grid__card' );
+		await waitFor( () =>
+			expect(
+				mockDraggableRefs[ 'row:1' ].setActivatorNodeRef
+			).toHaveBeenCalledWith( cards[ 0 ] )
+		);
+		expect( cards[ 0 ] ).toHaveAttribute( 'role', 'gridcell' );
+		expect( cards[ 0 ] ).toHaveAttribute( 'tabindex', '0' );
+		expect( cards[ 0 ] ).toHaveAttribute(
+			'aria-roledescription',
+			'draggable item'
+		);
+		expect( cards[ 0 ] ).toHaveAttribute(
+			'aria-describedby',
+			'drag-instructions'
+		);
+
+		fireEvent.keyDown( cards[ 0 ], { code: 'ArrowRight' } );
+		expect( onKeyDown ).toHaveBeenCalledTimes( 1 );
+		expect( onGridKeyDown ).toHaveBeenCalledTimes( 1 );
+
+		fireEvent.keyDown( cards[ 0 ], { code: 'Space' } );
+		expect( onKeyDown ).toHaveBeenCalledTimes( 2 );
+		expect( onGridKeyDown ).toHaveBeenCalledTimes( 1 );
+		expect( document.body ).toHaveClass(
+			'cortext-row-reorder-suppress-hover'
+		);
 	} );
 
 	it( 'posts immediately when there is no explicit sort', async () => {

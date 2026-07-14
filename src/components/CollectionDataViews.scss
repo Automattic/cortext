@@ -321,6 +321,26 @@ th.dataviews-view-table__checkbox-column > .dataviews-view-table-selection-check
 	pointer-events: auto;
 }
 
+// Hover-only disclosure leaves bulk selection unreachable on touch devices.
+// Match DataViews' own hoverless behavior and keep both row and select-all
+// checkboxes visible and actionable when the primary input cannot hover.
+@media (hover: none) {
+
+	.cortext-data-view
+	.dataviews-view-table
+	:is(
+		thead
+		th.dataviews-view-table__checkbox-column
+		> .dataviews-view-table-selection-checkbox,
+		tbody
+		td.dataviews-view-table__checkbox-column
+		.dataviews-selection-checkbox
+	) {
+		opacity: 1;
+		pointer-events: auto;
+	}
+}
+
 // The add-field button is portaled into DataViews' actions column header.
 // Hide the built-in "Actions" label; the row kebabs already explain the
 // column. The header cell needs its own sticky-right rule because the sticky
@@ -349,7 +369,8 @@ th.dataviews-view-table__checkbox-column > .dataviews-view-table-selection-check
 		inset-block: 0;
 		inset-inline-start: 0;
 		width: $border-width;
-		background: $gray-200;
+		// Match the separator shipped by the DataViews version on trunk.
+		background: $gray-100;
 		content: "";
 		pointer-events: none;
 	}

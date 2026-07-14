@@ -239,6 +239,35 @@ describe( 'PublicDataView', () => {
 		);
 	} );
 
+	it( 'does not apply editor title-column widths to an unsized public table', () => {
+		renderPublicDataView( {
+			type: 'table',
+			fields: [ 'title' ],
+			filters: [],
+			layout: { density: 'compact' },
+		} );
+
+		expect( mockDataViews.mock.calls.at( -1 )[ 0 ].view.layout ).toEqual( {
+			density: 'compact',
+		} );
+	} );
+
+	it( 'preserves an explicitly saved public title-column width', () => {
+		renderPublicDataView( {
+			type: 'table',
+			fields: [ 'title' ],
+			filters: [],
+			layout: {
+				density: 'compact',
+				styles: { title: { width: 240 } },
+			},
+		} );
+
+		expect(
+			mockDataViews.mock.calls.at( -1 )[ 0 ].view.layout.styles.title
+		).toEqual( { width: 240 } );
+	} );
+
 	it( 'keeps REST row order when the saved public view uses manual sort', () => {
 		renderPublicDataView( {
 			type: 'table',
@@ -259,6 +288,25 @@ describe( 'PublicDataView', () => {
 				.at( -1 )[ 0 ]
 				.data.map( ( item ) => item.title.rendered )
 		).toEqual( [ 'Gamma Manual', 'Alpha Manual', 'Beta Manual' ] );
+	} );
+
+	it( 'migrates legacy grouping before public pagination', () => {
+		renderPublicDataView( {
+			type: 'grid',
+			fields: [ 'title', 'field-11' ],
+			fieldsByType: { grid: [ 'field-11' ], list: [] },
+			groupByField: 'field-11',
+			filters: [],
+			page: 1,
+			perPage: 2,
+		} );
+
+		const queryView = mockFilterSortAndPaginate.mock.calls.at( -1 )[ 1 ];
+		expect( queryView.groupBy ).toEqual( {
+			field: 'field-11',
+			direction: 'asc',
+		} );
+		expect( queryView.groupByField ).toBeUndefined();
 	} );
 
 	it( 'keeps supported public sort for REST and disables local sorting', () => {
