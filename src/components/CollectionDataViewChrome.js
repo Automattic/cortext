@@ -30,7 +30,7 @@ function DataViewsViewConfig( { view } ) {
 				ownerDocuments.push( parentDocument );
 			}
 		} catch {
-			// Ignore cross-origin parent frames.
+			// Accessing the parent document can fail across origins.
 		}
 		return ownerDocuments;
 	}, [] );

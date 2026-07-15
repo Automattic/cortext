@@ -22,11 +22,10 @@ export const GHOST_FIELD_ID = '__add_field';
 export const MANUAL_SORT_ID = 'manual';
 export const MAX_COLUMN_WIDTH = 1200;
 
-// Per-type minimum widths. 32px is wide enough for a checkbox-sized
-// affordance and lets autofit shrink short values (single-digit integers,
-// short text) down to their rendered width. Title stays wider because it's
-// the row identity and needs room for the inline Open affordance; dates need
-// room for a typical formatted value.
+// A 32px minimum fits checkbox-sized controls and still lets autofit shrink
+// columns around short values such as single-digit numbers. The title needs
+// more room for the row identity and inline Open action; dates need to fit a
+// typical formatted value.
 export const MIN_WIDTHS = {
 	title: 160,
 	date: 64,
@@ -293,9 +292,9 @@ export function withNewlyVisibleFields(
 	return inserted ? { ...view, fields: next } : view;
 }
 
-// Applies a width to a single column. Always returns through the layout shape
-// the library reads. `width` is the user's chosen size; `maxWidth` remains a
-// real ceiling so future drags can grow the column again.
+// Keep widths in the layout shape DataViews expects. `width` stores the user's
+// choice, while `maxWidth` stays at the global limit so later drags can make
+// the column wider.
 export function withColumnWidth( view, fieldId, width, fieldType ) {
 	const clamped = clampWidth( width, fieldType, fieldId );
 	const layout = view?.layout ?? {};

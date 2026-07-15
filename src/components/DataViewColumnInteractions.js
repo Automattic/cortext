@@ -578,9 +578,8 @@ function ColumnResizer( { fieldId, fieldType, headerEl, view, onChangeView } ) {
 			const handle = event.currentTarget;
 			const ownerDocument = handle.ownerDocument;
 			const minWidth = getMinWidth( fieldType, fieldId );
-			// Pointer capture and ownerDocument listeners keep a resize that
-			// starts in the narrow edge from losing movement once the pointer
-			// leaves the handle or crosses the editor iframe boundary.
+			// Capture the pointer and listen on the owner document so resizing
+			// continues after it leaves the narrow handle or crosses the editor iframe.
 			handle.setPointerCapture?.( event.pointerId );
 			headerEl.classList.add( 'cortext-column-resizing' );
 			ownerDocument.body.classList.add( 'cortext-column-resizing' );

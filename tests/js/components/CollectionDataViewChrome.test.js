@@ -42,7 +42,7 @@ jest.mock( '@wordpress/dataviews/wp', () => {
 
 import { DataViewsChrome } from '../../../src/components/CollectionDataViewChrome';
 
-describe( 'DataViewsChrome grid options state', () => {
+describe( 'DataViewsChrome grid options', () => {
 	afterEach( () => {
 		document.body.classList.remove( 'cortext-grid-view-options-open' );
 	} );

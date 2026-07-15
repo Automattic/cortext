@@ -56,7 +56,8 @@ describe( 'DataViewColumnInteractions', () => {
 			expect( cell.style.maxWidth ).toBe( '220px' );
 		}
 
-		// A live resize can leave either property on any keyed table element.
+		// Live resizing may leave `width` or `maxWidth` on the column, header,
+		// or cells.
 		col.style.maxWidth = '220px';
 		rerender(
 			<DataViewColumnInteractions

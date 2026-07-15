@@ -5,9 +5,9 @@ $title-cell-icon-size: $grid-unit-20;
 $table-row-hover-background: #f8f8f8;
 $table-cell-hover-background: $gray-100;
 
-// DataViews row actions use the private @wordpress/components Menu, whose
-// Emotion styles can be injected outside the BlockCanvas iframe. Keep the
-// fallback on stable ARIA/data attributes instead of generated class names.
+// DataViews uses the private Menu for row actions, and its Emotion styles may
+// land outside BlockCanvas. These fallbacks target stable ARIA/data attributes
+// because generated class names can change.
 body.block-editor-iframe__body [data-dialog][role="menu"][data-open] {
 	position: relative;
 	z-index: 1000000;
@@ -321,9 +321,8 @@ th.dataviews-view-table__checkbox-column > .dataviews-view-table-selection-check
 	pointer-events: auto;
 }
 
-// Hover-only disclosure leaves bulk selection unreachable on touch devices.
-// Match DataViews' own hoverless behavior and keep both row and select-all
-// checkboxes visible and actionable when the primary input cannot hover.
+// Touch users cannot reveal controls that only appear on hover, so follow
+// DataViews and keep row and select-all checkboxes available without hover.
 @media (hover: none) {
 
 	.cortext-data-view
@@ -369,7 +368,7 @@ th.dataviews-view-table__checkbox-column > .dataviews-view-table-selection-check
 		inset-block: 0;
 		inset-inline-start: 0;
 		width: $border-width;
-		// Match the separator shipped by the DataViews version on trunk.
+		// Use the same separator color as DataViews trunk.
 		background: $gray-100;
 		content: "";
 		pointer-events: none;
@@ -1191,10 +1190,9 @@ tr:has(.cortext-title-cell--is-opening)
 		display: none;
 	}
 
-	// WP 7 moved more @wordpress/components layout/control styling to
-	// Emotion. Those styles can be injected outside the BlockCanvas iframe,
-	// leaving the DataViews toolbar stacked and the search input unskinned.
-	// Keep scoped fallbacks for the stable DataViews/control class names.
+	// In WP 7, some @wordpress/components styles may land outside BlockCanvas,
+	// leaving the DataViews toolbar and search field unstyled. These scoped
+	// rules target stable DataViews and control class names.
 	.dataviews__view-actions {
 		display: flex;
 		align-items: center;
@@ -1410,13 +1408,10 @@ tr:has(.cortext-title-cell--is-opening)
 			vertical-align: middle;
 		}
 
-		// DataViews wraps each cell's render in flex containers that shrink to
-		// the content's intrinsic width, so the hover/focus background on the
-		// editable shell only painted under the text instead of the whole cell.
-		// Force the wrappers to fill the td so every cell hovers edge-to-edge
-		// regardless of content length. The min/max reset also overrides
-		// DataViews's upstream 15ch floor, which otherwise lets narrow resized
-		// columns paint into their neighbors.
+		// DataViews lets these flex wrappers shrink to their content, so the
+		// editable hover/focus background stops at the text. Fill the td instead.
+		// Resetting min/max width also overrides the upstream 15ch floor that
+		// makes narrow columns overlap their neighbors.
 		/* stylelint-disable-next-line no-descending-specificity */
 		tbody .dataviews-view-table__cell-content-wrapper,
 		tbody .dataviews-view-table__primary-column-content {

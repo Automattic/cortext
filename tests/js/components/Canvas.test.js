@@ -158,7 +158,7 @@ describe( 'Canvas secondary sidebar', () => {
 		delete global.ResizeObserver;
 	} );
 
-	it( 'animates the desktop inserter width and slide together', () => {
+	it( "animates the desktop inserter's width and position together", () => {
 		const { container } = render(
 			<AnimatedSecondarySidebar>
 				<div>Library</div>
@@ -215,7 +215,7 @@ describe( 'Canvas secondary sidebar', () => {
 		expect( sidebar ).toHaveAttribute( 'data-motion-duration', '0' );
 	} );
 
-	it( 'keeps AnimatePresence mounted so closing can finish before removal', () => {
+	it( 'keeps the presence wrapper mounted when the sidebar closes', () => {
 		const { rerender } = render(
 			<CanvasInterfaceSkeleton
 				content={ <div>Document</div> }

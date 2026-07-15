@@ -564,7 +564,7 @@ describe( 'withNewlyVisibleFields', () => {
 } );
 
 describe( 'withColumnWidth', () => {
-	it( 'writes the clamped width plus per-type min and a reusable maxWidth', () => {
+	it( 'stores the clamped width and type minimum without capping future resizes', () => {
 		const view = { layout: { density: 'compact' } };
 		const next = withColumnWidth( view, 'field-1', 220, 'text' );
 		expect( next.layout.styles[ 'field-1' ] ).toEqual( {

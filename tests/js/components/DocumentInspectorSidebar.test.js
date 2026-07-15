@@ -151,7 +151,7 @@ describe( 'InspectorComplementaryArea', () => {
 		mockDisableComplementaryArea.mockClear();
 	} );
 
-	it( 'does not default-open the inspector on a small viewport', () => {
+	it( 'does not open the inspector by default on a small viewport', () => {
 		mockIsSmall = true;
 
 		render( <InspectorComplementaryArea { ...defaultProps } /> );
@@ -162,7 +162,7 @@ describe( 'InspectorComplementaryArea', () => {
 		);
 	} );
 
-	it( 'default-opens after an initially small viewport widens', () => {
+	it( 'opens by default after an initially small viewport widens', () => {
 		mockIsSmall = true;
 		const { rerender } = render(
 			<InspectorComplementaryArea { ...defaultProps } />
@@ -178,7 +178,7 @@ describe( 'InspectorComplementaryArea', () => {
 		);
 	} );
 
-	it( 'default-opens on a large viewport only when visibility is unset', () => {
+	it( 'opens by default on a large viewport only when visibility is unset', () => {
 		const { unmount } = render(
 			<InspectorComplementaryArea { ...defaultProps } />
 		);
@@ -196,7 +196,7 @@ describe( 'InspectorComplementaryArea', () => {
 		expect( mockEnableComplementaryArea ).not.toHaveBeenCalled();
 	} );
 
-	it( 'closes when shrinking and reopens after widening', () => {
+	it( 'closes when the viewport narrows and reopens when it widens', () => {
 		mockActiveArea = DOCUMENT_INSPECTOR;
 		const { rerender } = render(
 			<InspectorComplementaryArea { ...defaultProps } />
@@ -232,7 +232,7 @@ describe( 'InspectorComplementaryArea', () => {
 		);
 	} );
 
-	it( 'does not animate an inspector that is already active on mount', () => {
+	it( 'does not animate an inspector already open on mount', () => {
 		mockActiveArea = DOCUMENT_INSPECTOR;
 		const { container } = render(
 			<InspectorComplementaryArea { ...defaultProps } />
@@ -243,7 +243,7 @@ describe( 'InspectorComplementaryArea', () => {
 		expect( fill ).not.toHaveClass( 'is-opening' );
 	} );
 
-	it( 'does not animate the first default-open transition', () => {
+	it( 'does not animate when the inspector first opens by default', () => {
 		const { container, rerender } = render(
 			<InspectorComplementaryArea { ...defaultProps } />
 		);
@@ -256,7 +256,7 @@ describe( 'InspectorComplementaryArea', () => {
 		expect( fill ).not.toHaveClass( 'is-opening' );
 	} );
 
-	it( 'still animates a manual open from an explicit closed state', () => {
+	it( 'animates a manual open from an explicitly closed state', () => {
 		mockActiveArea = null;
 		const { container, rerender } = render(
 			<InspectorComplementaryArea { ...defaultProps } />
@@ -269,7 +269,7 @@ describe( 'InspectorComplementaryArea', () => {
 		expect( fill ).toHaveClass( 'is-open', 'is-animated', 'is-opening' );
 	} );
 
-	it( 'keeps the closing transition after an active inspector is toggled off', () => {
+	it( 'runs the closing animation when the active inspector is toggled off', () => {
 		mockActiveArea = DOCUMENT_INSPECTOR;
 		const { container, rerender } = render(
 			<InspectorComplementaryArea { ...defaultProps } />

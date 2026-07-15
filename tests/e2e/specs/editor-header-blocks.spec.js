@@ -621,7 +621,7 @@ test.describe( 'editor header blocks', () => {
 		}
 	} );
 
-	test( 'keeps inspector tab separators on the canvas palette', async ( {
+	test( 'uses the canvas palette for inspector tab separators', async ( {
 		admin,
 		page,
 		requestUtils,

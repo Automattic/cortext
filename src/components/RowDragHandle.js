@@ -46,9 +46,8 @@ function applyActivatorAttributes( node, attributes ) {
 	const appliedAttributes = [];
 
 	for ( const [ name, value ] of Object.entries( attributes ?? {} ) ) {
-		// DataViews owns the grid item's composite semantics and roving tab
-		// index. Keep those intact while forwarding dnd-kit's ARIA state and
-		// screen-reader instructions to the same focusable element.
+		// DataViews owns role and tabIndex for composite navigation. Forward
+		// dnd-kit's remaining ARIA state and screen-reader instructions.
 		if ( name === 'role' || name === 'tabIndex' || value === undefined ) {
 			continue;
 		}
@@ -61,8 +60,8 @@ function applyActivatorAttributes( node, attributes ) {
 
 	return () => {
 		for ( const { name, nextValue, previousValue } of appliedAttributes ) {
-			// Do not undo an attribute that DataViews changed while this adapter
-			// was mounted.
+			// Leave attributes alone if DataViews changed them after we applied
+			// ours.
 			if ( node.getAttribute( name ) !== nextValue ) {
 				continue;
 			}
@@ -186,9 +185,8 @@ export default function RowDragHandle( {
 		);
 		const onKeyDown = ( event ) => {
 			if ( isDragging && KEYBOARD_DRAG_CODES.has( event.code ) ) {
-				// Keep DataViews' composite from moving focus or opening the card.
-				// Do not stop propagation: KeyboardSensor handles the same event on
-				// the owner document to move, finish, or cancel the active drag.
+				// Block DataViews from moving focus or opening the card, but let the
+				// event reach KeyboardSensor on the owner document.
 				event.preventDefault();
 				return;
 			}
@@ -199,9 +197,9 @@ export default function RowDragHandle( {
 			listeners.onKeyDown(
 				nativeKeyboardEventForDnd( event, activator )
 			);
-			// The keyboard sensor prevents the activation event. Stop only that
-			// event from reaching DataViews' item-opening handler; unhandled keys
-			// such as arrows continue to drive its composite grid navigation.
+			// KeyboardSensor prevents the event only when it starts a drag. Stop that
+			// event before DataViews opens the card; otherwise, leave arrow navigation
+			// untouched.
 			if ( event.defaultPrevented ) {
 				primeRowHoverSuppression( activator.ownerDocument );
 				event.stopPropagation();

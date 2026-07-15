@@ -56,7 +56,7 @@ describe( 'dataViewAdapter', () => {
 		} );
 	} );
 
-	it( 'can omit editor title-width defaults while preserving saved public widths', () => {
+	it( 'omits default editor title widths without changing saved public widths', () => {
 		const unsizedView = adaptViewForDataViews(
 			{
 				...canonicalView,
@@ -109,7 +109,7 @@ describe( 'dataViewAdapter', () => {
 		expect( view.layout.previewSize ).toBe( DEFAULT_GRID_PREVIEW_SIZE );
 	} );
 
-	it( 'does not keep grid density state', () => {
+	it( 'drops table-only density state from grid views', () => {
 		const view = adaptViewForDataViews( {
 			...canonicalView,
 			type: 'grid',
@@ -168,7 +168,7 @@ describe( 'dataViewAdapter', () => {
 		expect( view.fields ).toEqual( [ 'field-2' ] );
 	} );
 
-	it( 'does not pass unsupported DataViews infinite-scroll state into the rendered view', () => {
+	it( 'removes unsupported infinite-scroll state before rendering a DataViews view', () => {
 		const view = adaptViewForDataViews( {
 			...canonicalView,
 			type: 'list',
@@ -305,7 +305,7 @@ describe( 'dataViewAdapter', () => {
 		expect( gridCanonical.layoutByType.grid.previewSize ).toBe( 430 );
 	} );
 
-	it( 'does not store grid density emitted by DataViews', () => {
+	it( 'ignores grid density emitted by DataViews', () => {
 		const gridCanonical = mergeDataViewsChange(
 			{
 				...canonicalView,
@@ -409,7 +409,7 @@ describe( 'dataViewAdapter', () => {
 		expect( tableCanonical.perPage ).toBe( 25 );
 	} );
 
-	it( 'drops unsupported DataViews infinite-scroll state from emitted view changes', () => {
+	it( 'drops unsupported infinite-scroll state from DataViews changes', () => {
 		const listCanonical = mergeDataViewsChange( canonicalView, {
 			type: 'list',
 			infiniteScrollEnabled: true,

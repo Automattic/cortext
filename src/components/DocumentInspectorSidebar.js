@@ -205,11 +205,9 @@ export function InspectorComplementaryArea( {
 			Boolean( previousActiveArea ) &&
 			Boolean( activeArea ) &&
 			activeArea !== previousActiveArea;
-		// `undefined` is the store's uninitialized state. Do not animate when
-		// the default inspector is first enabled, or when an already-active
-		// inspector remounts: both cases should paint at their final width.
-		// `null` is an explicit closed state, so a later manual toggle still
-		// gets the normal opening transition.
+		// The store uses `undefined` before initialization and `null` for an
+		// explicit close. Skip animation on initialization or remount, but keep
+		// it when the user reopens the inspector.
 		const shouldAnimate =
 			previousActiveArea !== undefined && ! isSwitchingAreas && ! isSmall;
 		let removeTimer;

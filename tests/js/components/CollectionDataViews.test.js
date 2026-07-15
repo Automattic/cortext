@@ -227,7 +227,7 @@ describe( 'CollectionDataViews loading state', () => {
 	} );
 } );
 
-describe( 'CollectionDataViews DataViews 17 integration', () => {
+describe( 'CollectionDataViews with DataViews 17', () => {
 	const groupedRows = [
 		{ id: 1, status: 'B' },
 		{ id: 2, status: 'A' },
@@ -269,7 +269,7 @@ describe( 'CollectionDataViews DataViews 17 integration', () => {
 		useCollectionFieldsContext.mockReturnValue( groupedFieldState );
 	} );
 
-	it( 'gives row reordering the same grouped order rendered by a server grid', () => {
+	it( 'passes the server-rendered group order to row reordering', () => {
 		useCollectionRows.mockReturnValue(
 			collectionRowsState( {
 				data: groupedRows,
@@ -328,7 +328,7 @@ describe( 'CollectionDataViews DataViews 17 integration', () => {
 		).toEqual( [ 2, 4 ] );
 	} );
 
-	it( 'reveals system fields through the DataViews layout scroller', () => {
+	it( 'scrolls the DataViews layout to reveal system fields', () => {
 		useCollectionFieldsContext.mockReturnValue( {
 			...collectionFieldState,
 			fields: [
@@ -387,7 +387,7 @@ describe( 'CollectionDataViews loading styles', () => {
 		expect( emptyLoadingRule ).toContain( 'display: none;' );
 	} );
 
-	it( 'uses DataViews structural hooks instead of legacy component stack classes', () => {
+	it( 'targets DataViews structure without legacy stack classes', () => {
 		const listStyles = readFileSync(
 			join(
 				process.cwd(),
@@ -521,7 +521,7 @@ describe( 'scrollToEndQuickly', () => {
 		now.mockRestore();
 	} );
 
-	it( 'keeps chasing the end without animation for reduced motion', () => {
+	it( 'tracks the table edge without animation for reduced motion', () => {
 		const now = jest
 			.spyOn( window.performance, 'now' )
 			.mockReturnValue( 0 );
@@ -543,7 +543,7 @@ describe( 'scrollToEndQuickly', () => {
 		now.mockRestore();
 	} );
 
-	it( 'stops chasing the end once the table width is stable', () => {
+	it( 'stops tracking the table edge once its width is stable', () => {
 		window.matchMedia = jest.fn( () => ( { matches: false } ) );
 		const now = jest
 			.spyOn( window.performance, 'now' )
@@ -583,7 +583,7 @@ describe( 'scrollElementInlineEndQuickly', () => {
 		document.body.innerHTML = '';
 	} );
 
-	it( 'reveals the element inline-end', () => {
+	it( "scrolls the element's inline end into view", () => {
 		const element = document.createElement( 'div' );
 		element.scrollIntoView = jest.fn();
 
@@ -596,7 +596,7 @@ describe( 'scrollElementInlineEndQuickly', () => {
 		} );
 	} );
 
-	it( 'pushes horizontal scroll ancestors to the end', () => {
+	it( 'scrolls horizontal ancestors to the end', () => {
 		const parent = document.createElement( 'div' );
 		const element = document.createElement( 'div' );
 		element.scrollIntoView = jest.fn();
@@ -681,7 +681,7 @@ describe( 'scrollElementInlineEndQuickly', () => {
 		now.mockRestore();
 	} );
 
-	it( 'stops tracking when the user scrolls an ancestor during settle', () => {
+	it( 'stops tracking when the user scrolls an ancestor while the layout settles', () => {
 		const now = jest
 			.spyOn( window.performance, 'now' )
 			.mockReturnValue( 0 );
