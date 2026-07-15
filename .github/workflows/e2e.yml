@@ -39,7 +39,7 @@ jobs:
                     changed_files="$(git diff --name-only "$base" "$head")"
                   fi
 
-                  e2e_paths='^(\.github/workflows/e2e\.yml|composer\.(json|lock)|package\.json|pnpm-lock\.yaml|playwright\.config\.js|\.wp-env\.json|cortext\.php|includes/|templates/|src/|build/|tests/e2e/|assets/brand/|seed-assets/|scripts/wp-env-seed\.mjs)'
+                  e2e_paths='^(\.github/workflows/e2e\.yml|composer\.(json|lock)|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|playwright\.config\.js|webpack\.config\.js|\.wp-env\.json|cortext\.php|includes/|templates/|src/|build/|tests/e2e/|assets/brand/|seed-assets/|scripts/wp-env-seed\.mjs|scripts/strip-emoji-cdn-loader\.js)'
 
                   if [ -n "$changed_files" ] && grep -Eq "$e2e_paths" <<< "$changed_files"; then
                     echo "e2e_changed=true" >> "$GITHUB_OUTPUT"
