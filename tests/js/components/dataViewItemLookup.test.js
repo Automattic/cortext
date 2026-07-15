@@ -59,32 +59,6 @@ describe( 'findDataViewItemFromEvent', () => {
 		} );
 	} );
 
-	it( 'resolves a DataViews 17 infinite-scroll list article to the matching rendered row', () => {
-		const wrapper = document.createElement( 'div' );
-		wrapper.innerHTML = `
-			<div class="dataviews-view-list" role="feed">
-				<div role="article"><div class="dataviews-title-field">Alpha</div></div>
-				<div role="article"><div class="dataviews-title-field">Beta</div></div>
-			</div>
-		`;
-		document.body.appendChild( wrapper );
-
-		const target = wrapper.querySelectorAll(
-			'.dataviews-title-field'
-		)[ 1 ];
-		const rowInfo = findDataViewItemFromEvent(
-			eventFrom( target ),
-			wrapper,
-			'list',
-			[ { id: 10 }, { id: 20 } ]
-		);
-
-		expect( rowInfo ).toEqual( {
-			id: '20',
-			row: { id: 20 },
-		} );
-	} );
-
 	it( 'resolves rows nested inside DataViews 17 list groups', () => {
 		const wrapper = document.createElement( 'div' );
 		wrapper.innerHTML = `

@@ -6,11 +6,9 @@ import { createBlock } from '@wordpress/blocks';
 import {
 	Button,
 	Disabled,
-	Fill,
 	Notice,
 	PanelBody,
 	privateApis as componentsPrivateApis,
-	Slot,
 } from '@wordpress/components';
 import {
 	useEntityProp,
@@ -29,13 +27,15 @@ import {
 } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import {
-	closeSmall,
 	home as homeIcon,
 	starEmpty,
 	starFilled,
 	trash,
 } from '@wordpress/icons';
-import { store as interfaceStore } from '@wordpress/interface';
+import {
+	ComplementaryArea,
+	store as interfaceStore,
+} from '@wordpress/interface';
 import apiFetch from '@wordpress/api-fetch';
 
 import CanvasOwnerInspector, {
@@ -70,8 +70,6 @@ const { Tabs } = unlock( componentsPrivateApis );
 export const INSPECTOR_SCOPE = 'cortext';
 export const DOCUMENT_INSPECTOR = 'cortext/document-inspector';
 export const BLOCK_INSPECTOR = 'cortext/block-inspector';
-const INSPECTOR_SLOT = `ComplementaryArea/${ INSPECTOR_SCOPE }`;
-const INSPECTOR_ANIMATION_DURATION_MS = 300;
 
 export function isInspectorArea( area ) {
 	return area === DOCUMENT_INSPECTOR || area === BLOCK_INSPECTOR;
@@ -88,28 +86,28 @@ export function getActiveInspectorArea( select ) {
 }
 
 export function InspectorSidebarSlot( props ) {
-	return <Slot name={ INSPECTOR_SLOT } { ...props } />;
+	return <ComplementaryArea.Slot scope={ INSPECTOR_SCOPE } { ...props } />;
 }
 
-function useAdjustInspectorToViewport( {
+function useRestoreDefaultInspectorAfterSmallMount( {
 	activeArea,
 	identifier,
-	isActive,
+	isActiveByDefault,
 	isSmall,
 } ) {
-	const previousIsSmall = useRef( false );
 	const shouldOpenWhenNotSmall = useRef( false );
-	const { enableComplementaryArea, disableComplementaryArea } =
-		useDispatch( interfaceStore );
+	const { enableComplementaryArea } = useDispatch( interfaceStore );
 
 	useEffect( () => {
-		if ( isActive && isSmall && ! previousIsSmall.current ) {
-			disableComplementaryArea( INSPECTOR_SCOPE );
+		if ( isSmall && activeArea === undefined && isActiveByDefault ) {
 			shouldOpenWhenNotSmall.current = true;
-		} else if (
+			return;
+		}
+
+		if (
 			shouldOpenWhenNotSmall.current &&
 			! isSmall &&
-			previousIsSmall.current
+			( activeArea === undefined || activeArea === null )
 		) {
 			shouldOpenWhenNotSmall.current = false;
 			enableComplementaryArea( INSPECTOR_SCOPE, identifier );
@@ -120,14 +118,11 @@ function useAdjustInspectorToViewport( {
 		) {
 			shouldOpenWhenNotSmall.current = false;
 		}
-
-		previousIsSmall.current = isSmall;
 	}, [
 		activeArea,
-		disableComplementaryArea,
 		enableComplementaryArea,
 		identifier,
-		isActive,
+		isActiveByDefault,
 		isSmall,
 	] );
 }
@@ -166,139 +161,35 @@ export function InspectorComplementaryArea( {
 		} ),
 		[]
 	);
-	const { enableComplementaryArea, disableComplementaryArea } =
-		useDispatch( interfaceStore );
-	const isActive = activeArea === identifier;
-	useAdjustInspectorToViewport( {
+	useRestoreDefaultInspectorAfterSmallMount( {
 		activeArea,
-		identifier,
-		isActive,
-		isSmall,
-	} );
-	useEffect( () => {
-		if ( activeArea !== undefined ) {
-			return;
-		}
-
-		if ( isSmall ) {
-			disableComplementaryArea( INSPECTOR_SCOPE );
-		} else if ( isActiveByDefault ) {
-			enableComplementaryArea( INSPECTOR_SCOPE, identifier );
-		}
-	}, [
-		activeArea,
-		disableComplementaryArea,
-		enableComplementaryArea,
 		identifier,
 		isActiveByDefault,
 		isSmall,
-	] );
-	const previousActiveAreaRef = useRef();
-	const [ isRendered, setIsRendered ] = useState( isActive );
-	const [ isOpen, setIsOpen ] = useState( isActive );
-	const [ isAnimated, setIsAnimated ] = useState( false );
-	const [ animationPhase, setAnimationPhase ] = useState( 'idle' );
-	useEffect( () => {
-		const previousActiveArea = previousActiveAreaRef.current;
-		previousActiveAreaRef.current = activeArea;
-		const isSwitchingAreas =
-			Boolean( previousActiveArea ) &&
-			Boolean( activeArea ) &&
-			activeArea !== previousActiveArea;
-		// The store uses `undefined` before initialization and `null` for an
-		// explicit close. Skip animation on initialization or remount, but keep
-		// it when the user reopens the inspector.
-		const shouldAnimate =
-			previousActiveArea !== undefined && ! isSwitchingAreas && ! isSmall;
-		let removeTimer;
-		let phaseTimer;
-
-		setIsAnimated( shouldAnimate );
-		setAnimationPhase( 'idle' );
-		if ( isSwitchingAreas ) {
-			setIsOpen( isActive );
-			setIsRendered( isActive );
-			return undefined;
-		}
-
-		if ( isActive ) {
-			setIsRendered( true );
-			setIsOpen( true );
-			if ( shouldAnimate ) {
-				setAnimationPhase( 'opening' );
-				phaseTimer = window.setTimeout(
-					() => setAnimationPhase( 'idle' ),
-					INSPECTOR_ANIMATION_DURATION_MS
-				);
-			}
-		} else {
-			setIsOpen( false );
-			if ( shouldAnimate ) {
-				setAnimationPhase( 'closing' );
-				removeTimer = window.setTimeout( () => {
-					setIsRendered( false );
-					setAnimationPhase( 'idle' );
-				}, INSPECTOR_ANIMATION_DURATION_MS );
-			} else {
-				setIsRendered( false );
-			}
-		}
-
-		return () => {
-			if ( removeTimer ) {
-				window.clearTimeout( removeTimer );
-			}
-			if ( phaseTimer ) {
-				window.clearTimeout( phaseTimer );
-			}
-		};
-	}, [ activeArea, isActive, isSmall ] );
-	const fillClasses = [
-		'interface-complementary-area__fill',
-		'cortext-inspector-fill',
-		isOpen ? 'is-open' : 'is-closed',
-		isAnimated ? 'is-animated' : 'is-static',
-		`is-${ animationPhase }`,
-	].join( ' ' );
-	const fillStyle = {
-		'--cortext-inspector-animation-duration': `${ INSPECTOR_ANIMATION_DURATION_MS }ms`,
-	};
+	} );
 
 	return (
-		<Fill name={ INSPECTOR_SLOT }>
-			{ isRendered ? (
-				<div className={ fillClasses } style={ fillStyle }>
-					<div
-						id={ identifier.replace( '/', ':' ) }
-						className="interface-complementary-area editor-sidebar__panel"
-						aria-label={ title }
-					>
-						<div className="components-panel__header interface-complementary-area-header editor-sidebar__panel-tabs">
-							<Tabs.Context.Provider value={ tabsContextValue }>
-								<InspectorTabsHeader tabs={ tabs } />
-							</Tabs.Context.Provider>
-							<Button
-								icon={ closeSmall }
-								size="compact"
-								label={ __( 'Close inspector', 'cortext' ) }
-								aria-controls={ identifier.replace( '/', ':' ) }
-								onClick={ () =>
-									disableComplementaryArea( INSPECTOR_SCOPE )
-								}
-							/>
-						</div>
-						<Tabs.Context.Provider value={ tabsContextValue }>
-							<Tabs.TabPanel
-								tabId={ identifier }
-								focusable={ false }
-							>
-								{ children }
-							</Tabs.TabPanel>
-						</Tabs.Context.Provider>
-					</div>
-				</div>
-			) : null }
-		</Fill>
+		<ComplementaryArea
+			scope={ INSPECTOR_SCOPE }
+			identifier={ identifier }
+			title={ title }
+			closeLabel={ __( 'Close inspector', 'cortext' ) }
+			isPinnable={ false }
+			isActiveByDefault={ isActiveByDefault }
+			className="editor-sidebar__panel"
+			headerClassName="editor-sidebar__panel-tabs"
+			header={
+				<Tabs.Context.Provider value={ tabsContextValue }>
+					<InspectorTabsHeader tabs={ tabs } />
+				</Tabs.Context.Provider>
+			}
+		>
+			<Tabs.Context.Provider value={ tabsContextValue }>
+				<Tabs.TabPanel tabId={ identifier } focusable={ false }>
+					{ children }
+				</Tabs.TabPanel>
+			</Tabs.Context.Provider>
+		</ComplementaryArea>
 	);
 }
 

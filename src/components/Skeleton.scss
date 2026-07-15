@@ -53,10 +53,8 @@
 	}
 }
 
-// tech-debt.md#td-dataviews-loading-skeletons: placeholder shaped like
-// the active layout while
-// useCollectionRows fetches. It sits beside <DataViews>; the wrapper handles
-// placement. Heights track DataViews v6 closely enough to keep the page steady.
+// tech-debt.md#td-dataviews-loading-skeletons: matching the active layout and
+// DataViews 17 row heights keeps the collection pane steady while rows load.
 .cortext-collection-skeleton {
 	display: flex;
 	flex-direction: column;

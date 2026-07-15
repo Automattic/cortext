@@ -199,7 +199,7 @@ describe( 'PublicDataView', () => {
 			},
 		],
 	] )( 'renders DataViews when the saved view has %s', ( _label, view ) => {
-		expect( () => renderPublicDataView( view ) ).not.toThrow();
+		renderPublicDataView( view );
 
 		expect( screen.getByTestId( 'dataviews' ) ).toBeInTheDocument();
 
@@ -290,7 +290,7 @@ describe( 'PublicDataView', () => {
 		).toEqual( [ 'Gamma Manual', 'Alpha Manual', 'Beta Manual' ] );
 	} );
 
-	it( 'migrates legacy grouping before public pagination', () => {
+	it( 'passes migrated grouping to the public client pipeline', () => {
 		renderPublicDataView( {
 			type: 'grid',
 			fields: [ 'title', 'field-11' ],

@@ -1,6 +1,3 @@
-import { readFileSync } from 'fs';
-import { join } from 'path';
-
 import { render } from '@testing-library/react';
 import { DataViews as mockDataViews } from '@wordpress/dataviews/wp';
 
@@ -17,7 +14,7 @@ jest.mock( '@wordpress/dataviews/wp', () => {
 	MockDataViews.FiltersToggle = () => null;
 	MockDataViews.LayoutSwitcher = () => null;
 	MockDataViews.ViewConfig = () => null;
-	MockDataViews.Filters = () => null;
+	MockDataViews.FiltersToggled = () => null;
 	MockDataViews.Layout = () => (
 		<div className="dataviews-layout__container" />
 	);
@@ -105,10 +102,7 @@ jest.mock( '../../../src/components/dataViewScroll', () => {
 
 import { useCollectionFieldsContext } from '../../../src/components/CollectionFieldsContext';
 import CollectionDataViews from '../../../src/components/CollectionDataViews';
-import {
-	scrollElementInlineEndQuickly,
-	scrollToEndQuickly,
-} from '../../../src/components/dataViewScroll';
+import { scrollToEndQuickly } from '../../../src/components/dataViewScroll';
 import useCollectionRows from '../../../src/hooks/useCollectionRows';
 
 const tableView = {
@@ -269,7 +263,7 @@ describe( 'CollectionDataViews with DataViews 17', () => {
 		useCollectionFieldsContext.mockReturnValue( groupedFieldState );
 	} );
 
-	it( 'passes the server-rendered group order to row reordering', () => {
+	it( 'migrates legacy grouping without enabling row reordering', () => {
 		useCollectionRows.mockReturnValue(
 			collectionRowsState( {
 				data: groupedRows,
@@ -294,11 +288,7 @@ describe( 'CollectionDataViews with DataViews 17', () => {
 			direction: 'asc',
 		} );
 		expect( dataViewsProps.view.groupByField ).toBeUndefined();
-		expect(
-			mockDataViewRowReorder.mock.calls
-				.at( -1 )[ 0 ]
-				.rows.map( ( row ) => row.id )
-		).toEqual( [ 1, 3, 2, 4 ] );
+		expect( mockDataViewRowReorder ).not.toHaveBeenCalled();
 	} );
 
 	it( 'applies migrated grouping before client-side pagination', () => {
@@ -321,11 +311,7 @@ describe( 'CollectionDataViews with DataViews 17', () => {
 		expect(
 			mockDataViews.mock.calls.at( -1 )[ 0 ].data.map( ( row ) => row.id )
 		).toEqual( [ 2, 4 ] );
-		expect(
-			mockDataViewRowReorder.mock.calls
-				.at( -1 )[ 0 ]
-				.rows.map( ( row ) => row.id )
-		).toEqual( [ 2, 4 ] );
+		expect( mockDataViewRowReorder ).not.toHaveBeenCalled();
 	} );
 
 	it( 'scrolls the DataViews layout to reveal system fields', () => {
@@ -360,71 +346,9 @@ describe( 'CollectionDataViews with DataViews 17', () => {
 		expect( scrollToEndQuickly ).toHaveBeenCalledWith(
 			expect.objectContaining( {
 				className: 'dataviews-layout__container',
-			} ),
-			{ trackEnd: true }
+			} )
 		);
 		expect( onFieldRevealed ).toHaveBeenCalledWith( 'created_at' );
-	} );
-} );
-
-describe( 'CollectionDataViews loading styles', () => {
-	it( 'does not reserve table space for empty DataViews loading notices', () => {
-		const stylesheet = readFileSync(
-			join( process.cwd(), 'src/components/CollectionDataViews.scss' ),
-			'utf8'
-		);
-
-		const nonEmptyLoadingRule =
-			stylesheet.match(
-				/\.dataviews-loading:not\(:empty\)\s*\{[^}]*\}/
-			)?.[ 0 ] ?? '';
-		const emptyLoadingRule =
-			stylesheet.match(
-				/\.dataviews-loading:empty\s*\{[^}]*\}/
-			)?.[ 0 ] ?? '';
-
-		expect( nonEmptyLoadingRule ).toContain( 'min-height: 160px;' );
-		expect( emptyLoadingRule ).toContain( 'display: none;' );
-	} );
-
-	it( 'targets DataViews structure without legacy stack classes', () => {
-		const listStyles = readFileSync(
-			join(
-				process.cwd(),
-				'src/components/CollectionDataViews.list.scss'
-			),
-			'utf8'
-		);
-		const gridStyles = readFileSync(
-			join(
-				process.cwd(),
-				'src/components/CollectionDataViews.grid.scss'
-			),
-			'utf8'
-		);
-		const reorderStyles = readFileSync(
-			join( process.cwd(), 'src/components/DataViewRowReorder.scss' ),
-			'utf8'
-		);
-
-		expect( listStyles ).not.toContain( 'components-h-stack' );
-		expect( gridStyles ).not.toContain( 'components-v-stack' );
-		expect( reorderStyles ).not.toMatch( /components-[hv]-stack/ );
-		expect( listStyles ).toMatch(
-			/:where\(\[role="gridcell"\]:has\(> \.dataviews-view-list__item\)\)\s*\+\s*\*/
-		);
-		expect( gridStyles ).toMatch(
-			/>\s*\.dataviews-view-grid__title-actions\s*\+\s*\*/
-		);
-		expect( reorderStyles ).toMatch(
-			/>\s*\.dataviews-view-grid__title-actions\s*\+\s*\*/
-		);
-		expect( listStyles ).not.toMatch(
-			/\.cortext-row-drag-handle\)[^{]+\.dataviews-view-list__media-wrapper:has\(img\)[^{]+left:\s*var\(--cortext-row-drag-content-offset\)/
-		);
-		expect( gridStyles ).toMatch(
-			/>\s*\.dataviews-view-grid__title-actions\s*\+\s*\*\s*\{[^}]*padding:\s*0\s+0\s+\$grid-unit-15;/
-		);
 	} );
 } );
 
@@ -460,44 +384,6 @@ describe( 'scrollToEndQuickly', () => {
 		expect( wrapper.scrollLeft ).toBe( -600 );
 	} );
 
-	it( 'marks the scroller when the create starts at the end', () => {
-		const wrapper = makeScroller( { scrollLeft: 600 } );
-
-		scrollToEndQuickly( wrapper, { snapIfAtEnd: true } );
-
-		expect( wrapper.dataset.cortextRevealAtEnd ).toBe( 'true' );
-		expect( wrapper.scrollLeft ).toBe( 600 );
-	} );
-
-	it( 'does not pre-scroll when the user is away from the end', () => {
-		window.matchMedia = jest.fn( () => ( { matches: false } ) );
-		window.requestAnimationFrame = jest.fn();
-		const wrapper = makeScroller( { scrollLeft: 200 } );
-
-		scrollToEndQuickly( wrapper, { snapIfAtEnd: true } );
-
-		expect( wrapper.scrollLeft ).toBe( 200 );
-		expect( wrapper.dataset.cortextRevealAtEnd ).toBeUndefined();
-		expect( window.requestAnimationFrame ).not.toHaveBeenCalled();
-	} );
-
-	it( 'snaps to the new end without animating when already marked', () => {
-		window.matchMedia = jest.fn( () => ( { matches: false } ) );
-		window.requestAnimationFrame = jest.fn();
-		const wrapper = makeScroller( { scrollLeft: 600 } );
-		Object.defineProperty( wrapper, 'scrollWidth', {
-			value: 1000,
-			configurable: true,
-		} );
-		wrapper.dataset.cortextRevealAtEnd = 'true';
-
-		scrollToEndQuickly( wrapper );
-
-		expect( wrapper.scrollLeft ).toBe( 800 );
-		expect( wrapper.dataset.cortextRevealAtEnd ).toBeUndefined();
-		expect( window.requestAnimationFrame ).not.toHaveBeenCalled();
-	} );
-
 	it( 'keeps chasing the end while the table grows', () => {
 		window.matchMedia = jest.fn( () => ( { matches: false } ) );
 		const now = jest
@@ -510,7 +396,7 @@ describe( 'scrollToEndQuickly', () => {
 		} );
 		const wrapper = makeScroller( { scrollWidth: 200 } );
 
-		scrollToEndQuickly( wrapper, { trackEnd: true } );
+		scrollToEndQuickly( wrapper );
 		Object.defineProperty( wrapper, 'scrollWidth', {
 			value: 500,
 			configurable: true,
@@ -532,7 +418,7 @@ describe( 'scrollToEndQuickly', () => {
 		} );
 		const wrapper = makeScroller( { scrollWidth: 200 } );
 
-		scrollToEndQuickly( wrapper, { trackEnd: true } );
+		scrollToEndQuickly( wrapper );
 		Object.defineProperty( wrapper, 'scrollWidth', {
 			value: 500,
 			configurable: true,
@@ -541,6 +427,22 @@ describe( 'scrollToEndQuickly', () => {
 
 		expect( wrapper.scrollLeft ).toBe( 300 );
 		now.mockRestore();
+	} );
+
+	it( 'stops following the edge when the user scrolls away', () => {
+		const frames = [];
+		window.requestAnimationFrame = jest.fn( ( callback ) => {
+			frames.push( callback );
+			return frames.length;
+		} );
+		const wrapper = makeScroller();
+
+		scrollToEndQuickly( wrapper );
+		wrapper.scrollLeft = 200;
+		frames.shift()();
+
+		expect( wrapper.scrollLeft ).toBe( 200 );
+		expect( frames ).toHaveLength( 0 );
 	} );
 
 	it( 'stops tracking the table edge once its width is stable', () => {
@@ -555,7 +457,7 @@ describe( 'scrollToEndQuickly', () => {
 		} );
 		const wrapper = makeScroller( { scrollWidth: 200 } );
 
-		scrollToEndQuickly( wrapper, { trackEnd: true } );
+		scrollToEndQuickly( wrapper );
 		Object.defineProperty( wrapper, 'scrollWidth', {
 			value: 500,
 			configurable: true,
@@ -566,148 +468,6 @@ describe( 'scrollToEndQuickly', () => {
 		frames.shift()();
 		frames.shift()();
 
-		expect( frames ).toHaveLength( 0 );
-		now.mockRestore();
-	} );
-} );
-
-describe( 'scrollElementInlineEndQuickly', () => {
-	let requestAnimationFrame;
-
-	beforeEach( () => {
-		requestAnimationFrame = window.requestAnimationFrame;
-	} );
-
-	afterEach( () => {
-		window.requestAnimationFrame = requestAnimationFrame;
-		document.body.innerHTML = '';
-	} );
-
-	it( "scrolls the element's inline end into view", () => {
-		const element = document.createElement( 'div' );
-		element.scrollIntoView = jest.fn();
-
-		scrollElementInlineEndQuickly( element );
-
-		expect( element.scrollIntoView ).toHaveBeenCalledWith( {
-			block: 'nearest',
-			inline: 'end',
-			behavior: 'auto',
-		} );
-	} );
-
-	it( 'scrolls horizontal ancestors to the end', () => {
-		const parent = document.createElement( 'div' );
-		const element = document.createElement( 'div' );
-		element.scrollIntoView = jest.fn();
-		parent.appendChild( element );
-		Object.defineProperty( parent, 'clientWidth', {
-			value: 200,
-			configurable: true,
-		} );
-		Object.defineProperty( parent, 'scrollWidth', {
-			value: 800,
-			configurable: true,
-		} );
-
-		scrollElementInlineEndQuickly( element );
-
-		expect( parent.scrollLeft ).toBe( 600 );
-	} );
-
-	it( 'animates horizontal scroll ancestors to the end', () => {
-		const now = jest
-			.spyOn( window.performance, 'now' )
-			.mockReturnValue( 0 );
-		let frame;
-		window.requestAnimationFrame = jest.fn( ( callback ) => {
-			frame = callback;
-			return 1;
-		} );
-		const parent = document.createElement( 'div' );
-		const element = document.createElement( 'div' );
-		element.scrollIntoView = jest.fn();
-		parent.appendChild( element );
-		Object.defineProperty( parent, 'clientWidth', {
-			value: 200,
-			configurable: true,
-		} );
-		Object.defineProperty( parent, 'scrollWidth', {
-			value: 800,
-			configurable: true,
-		} );
-
-		scrollElementInlineEndQuickly( element, { trackEnd: true } );
-		expect( parent.scrollLeft ).toBe( 0 );
-		frame( 90 );
-		expect( parent.scrollLeft ).toBeGreaterThan( 0 );
-		expect( parent.scrollLeft ).toBeLessThan( 600 );
-		frame( 180 );
-
-		expect( parent.scrollLeft ).toBe( 600 );
-		expect( element.scrollIntoView ).not.toHaveBeenCalled();
-		now.mockRestore();
-	} );
-
-	it( 'keeps scrolling ancestors while the layout settles', () => {
-		const now = jest
-			.spyOn( window.performance, 'now' )
-			.mockReturnValue( 0 );
-		let frame;
-		window.requestAnimationFrame = jest.fn( ( callback ) => {
-			frame = callback;
-			return 1;
-		} );
-		const parent = document.createElement( 'div' );
-		const element = document.createElement( 'div' );
-		parent.appendChild( element );
-		Object.defineProperty( parent, 'clientWidth', {
-			value: 200,
-			configurable: true,
-		} );
-		Object.defineProperty( parent, 'scrollWidth', {
-			value: 200,
-			configurable: true,
-		} );
-
-		scrollElementInlineEndQuickly( element, { trackEnd: true } );
-		Object.defineProperty( parent, 'scrollWidth', {
-			value: 500,
-			configurable: true,
-		} );
-		frame( 180 );
-
-		expect( parent.scrollLeft ).toBe( 300 );
-		now.mockRestore();
-	} );
-
-	it( 'stops tracking when the user scrolls an ancestor while the layout settles', () => {
-		const now = jest
-			.spyOn( window.performance, 'now' )
-			.mockReturnValue( 0 );
-		const frames = [];
-		window.requestAnimationFrame = jest.fn( ( callback ) => {
-			frames.push( callback );
-			return frames.length;
-		} );
-		const parent = document.createElement( 'div' );
-		const element = document.createElement( 'div' );
-		parent.appendChild( element );
-		Object.defineProperty( parent, 'clientWidth', {
-			value: 200,
-			configurable: true,
-		} );
-		Object.defineProperty( parent, 'scrollWidth', {
-			value: 800,
-			configurable: true,
-		} );
-
-		scrollElementInlineEndQuickly( element, { trackEnd: true } );
-		frames.shift()( 180 );
-		parent.scrollLeft = 200;
-		frames.shift()();
-
-		expect( parent.scrollLeft ).toBe( 200 );
 		expect( frames ).toHaveLength( 0 );
 		now.mockRestore();
 	} );

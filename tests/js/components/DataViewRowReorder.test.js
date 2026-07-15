@@ -250,17 +250,15 @@ function createGridWrapper(
 	const wrapper = document.createElement( 'div' );
 	wrapper.innerHTML = `
 		<div class="dataviews-view-grid">
-			<div class="dataviews-view-grid-items">
-				<div class="dataviews-view-grid__row">
-					<div class="dataviews-view-grid__row__gridcell dataviews-view-grid__card" role="gridcell" tabindex="0">
-						<div class="dataviews-view-grid__title-field">One</div>
-					</div>
-					<div class="dataviews-view-grid__row__gridcell dataviews-view-grid__card" role="gridcell" tabindex="-1">
-						<div class="dataviews-view-grid__title-field">Two</div>
-					</div>
-					<div class="dataviews-view-grid__row__gridcell dataviews-view-grid__card" role="gridcell" tabindex="-1">
-						<div class="dataviews-view-grid__title-field">Three</div>
-					</div>
+			<div class="dataviews-view-grid__row">
+				<div class="dataviews-view-grid__row__gridcell dataviews-view-grid__card" role="gridcell" tabindex="0">
+					<div class="dataviews-view-grid__title-field">One</div>
+				</div>
+				<div class="dataviews-view-grid__row__gridcell dataviews-view-grid__card" role="gridcell" tabindex="-1">
+					<div class="dataviews-view-grid__title-field">Two</div>
+				</div>
+				<div class="dataviews-view-grid__row__gridcell dataviews-view-grid__card" role="gridcell" tabindex="-1">
+					<div class="dataviews-view-grid__title-field">Three</div>
 				</div>
 			</div>
 		</div>
@@ -483,64 +481,6 @@ describe( 'DataViewRowReorder', () => {
 		expect( handles[ 0 ] ).toHaveAttribute( 'tabindex', '-1' );
 	} );
 
-	it( 'leaves grouped list rows and selection behavior untouched', async () => {
-		const wrapper = createListWrapper();
-		const list = wrapper.querySelector( '.dataviews-view-list' );
-		const listRows = Array.from( list.children );
-		list.replaceChildren();
-		listRows.forEach( ( row, index ) => {
-			const group = document.createElement( 'div' );
-			group.className = 'dataviews-view-list__group-wrapper';
-			const heading = document.createElement( 'h3' );
-			heading.textContent = `Group ${ index + 1 }`;
-			group.append( heading, row );
-			list.appendChild( group );
-		} );
-		const selection = document.createElement( 'input' );
-		selection.type = 'checkbox';
-		listRows[ 0 ].prepend( selection );
-		const onSelectionChange = jest.fn();
-		selection.addEventListener( 'change', onSelectionChange );
-
-		const { rerender } = await renderReorder(
-			{
-				view: {
-					type: 'list',
-					sort: null,
-				},
-			},
-			{ wrapper }
-		);
-		expect( useDraggable ).toHaveBeenCalledTimes( 3 );
-		expect(
-			wrapper.querySelectorAll( '.cortext-row-reorder-target' )
-		).toHaveLength( 3 );
-
-		rerender( {
-			view: {
-				type: 'list',
-				sort: null,
-				groupBy: { field: 'status', direction: 'asc' },
-			},
-		} );
-
-		await waitFor( () =>
-			expect(
-				screen.queryByTestId( 'dnd-context' )
-			).not.toBeInTheDocument()
-		);
-		await waitFor( () =>
-			expect(
-				wrapper.querySelectorAll( '.cortext-row-reorder-target' )
-			).toHaveLength( 0 )
-		);
-		expect( useDraggable ).toHaveBeenCalledTimes( 3 );
-
-		fireEvent.click( selection );
-		expect( selection ).toBeChecked();
-		expect( onSelectionChange ).toHaveBeenCalledTimes( 1 );
-	} );
-
 	it( 'moves a grid keyboard drag to the card below', () => {
 		const rect = ( top, left ) => ( {
 			top,
@@ -591,54 +531,6 @@ describe( 'DataViewRowReorder', () => {
 		expect( useSensor ).toHaveBeenCalledWith( KeyboardSensor, {
 			coordinateGetter: gridKeyboardCoordinates,
 		} );
-	} );
-
-	it( 'decorates DataViews 17 infinite-scroll list articles for row reorder', async () => {
-		const wrapper = createListWrapper( undefined, 'article' );
-
-		render(
-			<DataViewRowReorder
-				wrapperRef={ { current: wrapper } }
-				view={ {
-					type: 'list',
-					sort: null,
-					infiniteScrollEnabled: true,
-				} }
-				onChangeView={ jest.fn() }
-				collectionId={ 7 }
-				rows={ rows }
-				onReordered={ jest.fn() }
-			/>
-		);
-
-		await waitFor( () =>
-			expect( screen.getByTestId( 'dnd-context' ) ).toBeInTheDocument()
-		);
-		await waitFor( () =>
-			expect( useDraggable ).toHaveBeenCalledTimes( 3 )
-		);
-
-		const listRows = wrapper.querySelectorAll(
-			'.dataviews-view-list > [role="article"]'
-		);
-		const itemButtons = wrapper.querySelectorAll(
-			'.dataviews-view-list__item'
-		);
-		expect( listRows ).toHaveLength( 3 );
-		expect( itemButtons ).toHaveLength( 3 );
-		expect( listRows[ 0 ] ).toHaveClass( 'cortext-row-reorder-target' );
-		expect( listRows[ 1 ] ).toHaveClass( 'cortext-row-reorder-target' );
-		expect( listRows[ 2 ] ).toHaveClass( 'cortext-row-reorder-target' );
-		expect( itemButtons[ 0 ] ).not.toHaveClass(
-			'cortext-row-reorder-target'
-		);
-		expect( itemButtons[ 1 ] ).not.toHaveClass(
-			'cortext-row-reorder-target'
-		);
-		expect( itemButtons[ 2 ] ).not.toHaveClass(
-			'cortext-row-reorder-target'
-		);
-		expect( screen.getAllByLabelText( /^Reorder:/ ) ).toHaveLength( 3 );
 	} );
 
 	it( 'shows a row preview while dragging', async () => {
@@ -1409,6 +1301,30 @@ describe( 'DataViewRowReorder', () => {
 			await Promise.resolve();
 		} );
 		expect( onReordered ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'ignores another move while the first reorder is saving', async () => {
+		const request = deferred();
+		mockApiFetch.mockReturnValueOnce( request.promise );
+		const { mutateRows } = await renderReorder();
+
+		dragEnd( 1, gapDrop( 3, null, 3 ) );
+		dragEnd( 3, gapDrop( 0, 1, null ) );
+
+		expect( mutateRows ).toHaveBeenCalledTimes( 1 );
+		expect( mockApiFetch ).toHaveBeenCalledTimes( 1 );
+		await waitFor( () =>
+			expect(
+				useDraggable.mock.calls
+					.slice( -rows.length )
+					.every( ( [ options ] ) => options.disabled === true )
+			).toBe( true )
+		);
+
+		await act( async () => {
+			request.resolve( { reseeded: false } );
+			await request.promise;
+		} );
 	} );
 
 	it( 'settles the overlay into the open gap before committing the reorder', async () => {

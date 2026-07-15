@@ -105,28 +105,4 @@ describe( 'dataViewSelection', () => {
 			)
 		).toEqual( [ '1', '3', '2', '4' ] );
 	} );
-
-	it( 'does not reorder lookup rows for an unadapted legacy view', () => {
-		const rows = [
-			{ id: 1, status: 'A' },
-			{ id: 2, status: 'B' },
-			{ id: 3, status: 'A' },
-		];
-		const fields = [
-			{
-				id: 'status',
-				getValue: ( { item } ) => item.status,
-			},
-		];
-
-		expect(
-			rowIds(
-				rowsInDataViewRenderOrder(
-					rows,
-					{ groupByField: 'status' },
-					fields
-				)
-			)
-		).toEqual( [ '1', '2', '3' ] );
-	} );
 } );

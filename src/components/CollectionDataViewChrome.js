@@ -117,7 +117,7 @@ export function DataViewsChrome( { footer, view } ) {
 					<DataViewsViewConfig view={ view } />
 				</HStack>
 			</HStack>
-			<DataViews.Filters className="dataviews-filters__container" />
+			<DataViews.FiltersToggled className="dataviews-filters__container" />
 			<DataViews.Layout />
 			{ footer }
 		</>

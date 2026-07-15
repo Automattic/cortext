@@ -334,7 +334,6 @@ final class PerfBench {
 			return;
 		}
 
-		$this->register_dataset_collections( $manifest );
 		foreach ( $manifest['collections'] ?? array() as $collection ) {
 			$collection_id = (int) ( $collection['id'] ?? 0 );
 			if ( $collection_id > 0 ) {
@@ -363,7 +362,6 @@ final class PerfBench {
 		}
 
 		$this->ensure_post_types();
-		$this->register_dataset_collections( $manifest );
 		$this->ensure_rest_routes();
 		wp_set_current_user( $this->default_seed_user_id() );
 
@@ -1138,9 +1136,7 @@ final class PerfBench {
 	private function delete_dataset(): void {
 		global $wpdb;
 
-		$this->register_existing_dataset_collections();
-
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Some row CPTs may not be registered when reset runs.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Rows, fields, and collections have different post types; the dataset marker is their common cleanup key.
 		$ids = $wpdb->get_col(
 			$wpdb->prepare(
 				"SELECT DISTINCT post_id FROM {$wpdb->postmeta} WHERE meta_key = %s AND meta_value = %s",
@@ -1172,23 +1168,6 @@ final class PerfBench {
 
 		FieldValueIndex::flush_runtime_caches();
 		delete_option( self::DATASET_OPTION );
-	}
-
-	private function register_existing_dataset_collections(): void {
-		$manifest = get_option( self::DATASET_OPTION );
-		if ( is_array( $manifest ) ) {
-			$this->register_dataset_collections( $manifest );
-		}
-	}
-
-	/**
-	 * No-op in the universal-document model. Kept as a stable hook in case
-	 * future seed metadata needs to be applied when a manifest is loaded.
-	 *
-	 * @param array<string,mixed> $manifest Dataset manifest.
-	 */
-	private function register_dataset_collections( array $manifest ): void {
-		unset( $manifest );
 	}
 
 	/**

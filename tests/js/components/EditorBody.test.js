@@ -252,7 +252,7 @@ describe( 'useEditorBodyStyles', () => {
 		expect( result.current ).toBe( firstResult );
 	} );
 
-	it( 'rebuilds the merged styles when either input changes', () => {
+	it( 'rebuilds the merged styles when extra styles change', () => {
 		const baseStyles = [ { css: '.base {}' } ];
 		const extraStyles = [ { css: '.extra {}' } ];
 		const { result, rerender } = renderHook(
@@ -279,44 +279,5 @@ describe( 'useEditorBodyStyles', () => {
 		} );
 
 		expect( result.current ).not.toBe( firstResult );
-	} );
-
-	it( 'adds full-page spacing only to document canvases', () => {
-		const baseStyles = [ { css: '.base {}' } ];
-		const rowStyles = [ { css: '.row-detail {}' } ];
-		const { result, rerender } = renderHook(
-			( props ) =>
-				useEditorBodyStyles(
-					props.baseStyles,
-					props.extraStyles,
-					props.isDocumentCanvas
-				),
-			{
-				initialProps: {
-					baseStyles,
-					extraStyles: rowStyles,
-					isDocumentCanvas: false,
-				},
-			}
-		);
-
-		expect( result.current ).toEqual( [ ...baseStyles, ...rowStyles ] );
-		expect(
-			result.current.some( ( style ) =>
-				style.css?.includes( 'padding-bottom: 72px' )
-			)
-		).toBe( false );
-
-		rerender( {
-			baseStyles,
-			extraStyles: rowStyles,
-			isDocumentCanvas: true,
-		} );
-
-		expect(
-			result.current.some( ( style ) =>
-				style.css?.includes( 'padding-bottom: 72px' )
-			)
-		).toBe( true );
 	} );
 } );

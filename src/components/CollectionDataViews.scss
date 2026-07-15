@@ -61,21 +61,33 @@ body.block-editor-iframe__body
 
 body.block-editor-iframe__body
 [data-dialog][role="menu"][data-open]
-:is([role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"])[aria-disabled="true"] {
+:is(
+	[role="menuitem"],
+	[role="menuitemcheckbox"],
+	[role="menuitemradio"]
+)[aria-disabled="true"] {
 	color: $gray-600;
 	cursor: default;
 }
 
 body.block-editor-iframe__body
 [data-dialog][role="menu"][data-open]
-:is([role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"]):not([aria-disabled="true"]):is(:hover, [data-active-item]) {
+:is(
+	[role="menuitem"],
+	[role="menuitemcheckbox"],
+	[role="menuitemradio"]
+):not([aria-disabled="true"]):is(:hover, [data-active-item]) {
 	background: $gray-100;
 	color: $gray-900;
 }
 
 body.block-editor-iframe__body
 [data-dialog][role="menu"][data-open]
-:is([role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"])[data-focus-visible] {
+:is(
+	[role="menuitem"],
+	[role="menuitemcheckbox"],
+	[role="menuitemradio"]
+)[data-focus-visible] {
 	box-shadow: inset 0 0 0 $border-width $gray-400;
 }
 
@@ -140,8 +152,8 @@ body.block-editor-iframe__body
 // to fixed layout with content-width sizing and explicit per-cell
 // widths, so column count stops affecting the surviving columns'
 // widths and the table grows to its natural content width.
-// `.cortext-data-view > .dataviews-wrapper` declares `overflow: auto`
-// itself, so horizontal scroll kicks in once columns exceed the wrapper.
+// DataViews' layout container owns horizontal scrolling once columns exceed
+// the available width.
 .dataviews-view-table {
 	--cortext-table-column-default-width: 200px;
 	--cortext-table-field-header-icon-chrome: calc(var(--cortext-field-type-icon-size, 16px) + #{$grid-unit-05});
@@ -203,8 +215,10 @@ col[class^="dataviews-view-table__col-"]:not(
 .dataviews-view-table th.dataviews-view-table__checkbox-column + th,
 .dataviews-view-table td.dataviews-view-table__checkbox-column + td,
 .dataviews-view-table td.cortext-table-calculations__selection-spacer + td,
-.dataviews-view-table th:first-child:not(.dataviews-view-table__checkbox-column),
-.dataviews-view-table td:first-child:not(.dataviews-view-table__checkbox-column) {
+.dataviews-view-table
+th:first-child:not(.dataviews-view-table__checkbox-column),
+.dataviews-view-table
+td:first-child:not(.dataviews-view-table__checkbox-column) {
 	width: 320px;
 }
 
@@ -213,22 +227,18 @@ col[class^="dataviews-view-table__col-"]:not(
 .cortext-data-view
 .dataviews-view-table
 :where(
-	th:has(.cortext-column-header-marker):not(:first-child):not(.dataviews-view-table__checkbox-column + th),
-	th:has(.cortext-column-header-system-icon):not(:first-child):not(.dataviews-view-table__checkbox-column + th)
+	th:has(.cortext-column-header-marker):not(:first-child):not(
+		.dataviews-view-table__checkbox-column + th
+	),
+	th:has(.cortext-column-header-system-icon):not(:first-child):not(
+		.dataviews-view-table__checkbox-column + th
+	)
 ) {
 	width: calc(var(--cortext-table-column-default-width) + var(--cortext-table-field-header-icon-chrome));
 }
 
-// WordPress admin can load DataViews 6.0.0 alongside our bundled version. The
-// older sheet declares `padding-left: 48px` on the first td/th and `width: 1%`
-// on utility cells. Scope our table chrome to Cortext so load order cannot
-// widen the checkbox/actions columns or push the title column right.
-.cortext-data-view .dataviews-view-table tr td:first-child,
-.cortext-data-view .dataviews-view-table tr th:first-child {
-	padding-left: 24px;
-	padding-inline-start: 24px;
-}
-
+// Fixed utility columns must override DataViews' edge padding and automatic
+// widths even when the core stylesheet loads after Cortext's bundle.
 .cortext-data-view
 .dataviews-view-table
 tr
@@ -282,7 +292,9 @@ th.dataviews-view-table__checkbox-column > .dataviews-view-table-selection-check
 	margin-inline-start: 10px;
 }
 
-.cortext-data-view .dataviews-view-table thead > tr > th.dataviews-view-table__checkbox-column {
+.cortext-data-view
+.dataviews-view-table
+thead > tr > th.dataviews-view-table__checkbox-column {
 	cursor: default;
 	background-color: $white;
 }
@@ -356,8 +368,14 @@ th.dataviews-view-table__checkbox-column > .dataviews-view-table-selection-check
 	}
 }
 
-.cortext-data-view .dataviews-view-table tr th.dataviews-view-table__actions-column,
-.cortext-data-view .dataviews-view-table tr td.dataviews-view-table__actions-column {
+.cortext-data-view
+.dataviews-view-table
+tr
+th.dataviews-view-table__actions-column,
+.cortext-data-view
+.dataviews-view-table
+tr
+td.dataviews-view-table__actions-column {
 	position: sticky;
 	right: 0;
 	z-index: 2;
@@ -368,14 +386,16 @@ th.dataviews-view-table__checkbox-column > .dataviews-view-table-selection-check
 		inset-block: 0;
 		inset-inline-start: 0;
 		width: $border-width;
-		// Use the same separator color as DataViews trunk.
 		background: $gray-100;
 		content: "";
 		pointer-events: none;
 	}
 }
 
-.cortext-data-view .dataviews-view-table tr th.dataviews-view-table__actions-column {
+.cortext-data-view
+.dataviews-view-table
+tr
+th.dataviews-view-table__actions-column {
 	z-index: 3;
 }
 
@@ -398,7 +418,9 @@ th:has(.cortext-column-header-marker)
 // Hang the hover state off the <th> instead so the cell as a whole
 // reads as a clickable affordance (and the gray shows through any
 // transparent overlay above it).
-.cortext-data-view .dataviews-view-table thead > tr > th:not(.dataviews-view-table__checkbox-column):hover {
+.cortext-data-view
+.dataviews-view-table
+thead > tr > th:not(.dataviews-view-table__checkbox-column):hover {
 	background-color: $gray-100;
 }
 
@@ -413,10 +435,7 @@ th:has(.cortext-column-header-marker)
 	padding-left: 4px;
 }
 
-.cortext-data-view
-.dataviews-view-table
-tbody
-tr:is(:hover, .is-hovered) > td,
+.cortext-data-view .dataviews-view-table tbody tr:is(:hover, .is-hovered) > td,
 .cortext-data-view
 .dataviews-view-table
 tbody
@@ -1181,13 +1200,6 @@ tr:has(.cortext-title-cell--is-opening)
 		flex: 1 1 0;
 		min-width: 0;
 		min-height: 0;
-		// Own the scroll layer instead of relying on DataViews's upstream
-		// default. Wide tables were not getting a horizontal scrollbar.
-		overflow: auto;
-	}
-
-	.dataviews__view-actions:has(.dataviews-filters__visibility-toggle[aria-expanded="false"]) + .dataviews-filters__container {
-		display: none;
 	}
 
 	// In WP 7, some @wordpress/components styles may land outside BlockCanvas,
@@ -1348,8 +1360,10 @@ tr:has(.cortext-title-cell--is-opening)
 		color: $gray-900;
 	}
 
-	.dataviews__view-actions > :last-child .components-button.has-icon:not(.has-text),
-	.dataviews__view-actions > :last-child .dataviews-view-config__toggle-wrapper > .components-button {
+	.dataviews__view-actions > :last-child
+	.components-button.has-icon:not(.has-text),
+	.dataviews__view-actions > :last-child
+	.dataviews-view-config__toggle-wrapper > .components-button {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
@@ -1365,16 +1379,22 @@ tr:has(.cortext-title-cell--is-opening)
 	}
 
 	.dataviews-filters__visibility-toggle.components-button svg,
-	.dataviews__view-actions > :last-child .dataviews-view-config__toggle-wrapper > .components-button svg,
-	.dataviews__view-actions > :last-child .components-button.has-icon:not(.has-text) svg {
+	.dataviews__view-actions > :last-child
+	.dataviews-view-config__toggle-wrapper > .components-button
+	svg,
+	.dataviews__view-actions > :last-child
+	.components-button.has-icon:not(.has-text)
+	svg {
 		display: block;
 		flex: 0 0 auto;
 	}
 
 	.dataviews-filters__visibility-toggle.components-button:hover,
 	.dataviews-filters__visibility-toggle.components-button:focus,
-	.dataviews__view-actions > :last-child .components-button.has-icon:not(.has-text):is(:hover, :focus),
-	.dataviews__view-actions > :last-child .dataviews-view-config__toggle-wrapper > .components-button:is(:hover, :focus) {
+	.dataviews__view-actions > :last-child
+	.components-button.has-icon:not(.has-text):is(:hover, :focus),
+	.dataviews__view-actions > :last-child
+	.dataviews-view-config__toggle-wrapper > .components-button:is(:hover, :focus) {
 		background: $gray-100;
 		box-shadow: none;
 		color: $gray-900;
@@ -1382,7 +1402,8 @@ tr:has(.cortext-title-cell--is-opening)
 
 	@at-root body.cortext-grid-view-options-open {
 
-		.dataviews-config__popover .dataviews-view-config > :last-child > :nth-child(2) {
+		.dataviews-config__popover
+		.dataviews-view-config > :last-child > :nth-child(2) {
 			display: none;
 		}
 	}
@@ -1394,7 +1415,7 @@ tr:has(.cortext-title-cell--is-opening)
 	// DataViews's per-density row heights on the shell (and the checkbox
 	// cell, which shares the shell's dimensions). Headers (`<th>`) keep
 	// their padding so they still breathe. Balanced and comfortable mirror
-	// DataViews v6's td `padding-block` (12 and 16); compact is
+	// DataViews 17's td `padding-block` (12 and 16); compact is
 	// intentionally tighter than DataViews's default (4 -> 0) so the row
 	// matches the 40px editor floor and gets closer to a compact
 	// density. See tech-debt.md#td-dataviews-inline-editing.
@@ -1506,8 +1527,7 @@ tr:has(.cortext-title-cell--is-opening)
 		text-align: center;
 	}
 
-	.dataviews-no-results,
-	.dataviews-loading:not(:empty) {
+	.dataviews-no-results {
 		display: grid;
 		align-content: center;
 		min-height: 160px;
@@ -1518,13 +1538,6 @@ tr:has(.cortext-title-cell--is-opening)
 		p {
 			margin: 0;
 		}
-	}
-
-	// During a row refresh, DataViews can leave behind an empty loading notice
-	// even though the table is still painted. Hide it so inline saves do not add
-	// a blank strip below the rows.
-	.dataviews-loading:empty {
-		display: none;
 	}
 
 	// Loading shell hides DataViews chrome and the new-row footer so the rows

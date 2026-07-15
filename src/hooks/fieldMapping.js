@@ -1,13 +1,7 @@
 import { __ } from '@wordpress/i18n';
 import { dateI18n } from '@wordpress/date';
-import {
-	BaseControl,
-	Flex,
-	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
-	__experimentalNumberControl as NumberControl,
-} from '@wordpress/components';
 
-import EditableCell from '../components/EditableCell';
+import EditableCell, { formatNumberValue } from '../components/EditableCell';
 import { SystemFieldIcon } from '../components/fields/fieldTypes';
 import { parseDefaultConfig } from './fieldDefaults';
 import { elementsFromOptions } from './optionElements';
@@ -196,6 +190,19 @@ function rollupTargetFormat( meta ) {
 	return undefined;
 }
 
+function dataViewsNumberFormat( format ) {
+	if ( format?.decimals === undefined || format.decimals === null ) {
+		return undefined;
+	}
+	const decimals = Number( format.decimals );
+	return Number.isFinite( decimals ) ? { decimals } : undefined;
+}
+
+function getNumberValueFormatted( format ) {
+	return ( { item, field } ) =>
+		formatNumberValue( field.getValue( { item } ), format );
+}
+
 function fieldRelationConfig( field, type, rollupTargetType ) {
 	if ( type === 'relation' ) {
 		return {
@@ -249,66 +256,6 @@ function sortNumberValues( av, bv, direction ) {
 			? an - bn
 			: String( av ).localeCompare( String( bv ) );
 	return direction === 'asc' ? diff : -diff;
-}
-
-function numberFilterValue( value ) {
-	return value === '' || value === undefined ? undefined : Number( value );
-}
-
-function NumberFilterControl( {
-	data,
-	field,
-	onChange,
-	hideLabelFromVision,
-	operator,
-} ) {
-	const { id, label, description } = field;
-	const value = field.getValue( { item: data } ) ?? '';
-
-	if ( operator === 'between' ) {
-		const [ min = '', max = '' ] = Array.isArray( value ) ? value : [];
-		return (
-			<BaseControl __nextHasNoMarginBottom>
-				<Flex direction="row" gap={ 4 }>
-					<NumberControl
-						label={ __( 'Min.', 'cortext' ) }
-						value={ min }
-						onChange={ ( next ) =>
-							onChange( {
-								[ id ]: [ numberFilterValue( next ), max ],
-							} )
-						}
-						__next40pxDefaultSize
-						hideLabelFromVision={ hideLabelFromVision }
-					/>
-					<NumberControl
-						label={ __( 'Max.', 'cortext' ) }
-						value={ max }
-						onChange={ ( next ) =>
-							onChange( {
-								[ id ]: [ min, numberFilterValue( next ) ],
-							} )
-						}
-						__next40pxDefaultSize
-						hideLabelFromVision={ hideLabelFromVision }
-					/>
-				</Flex>
-			</BaseControl>
-		);
-	}
-
-	return (
-		<NumberControl
-			label={ label }
-			help={ description }
-			value={ value }
-			onChange={ ( next ) =>
-				onChange( { [ id ]: numberFilterValue( next ) } )
-			}
-			__next40pxDefaultSize
-			hideLabelFromVision={ hideLabelFromVision }
-		/>
-	);
 }
 
 function supportedDataViewsOperators( operators, candidates ) {
@@ -580,28 +527,19 @@ export function mapField( field ) {
 		cortextRecordId: field.id,
 	};
 
-	// DataViews v6's FieldType union is
-	// `'text' | 'integer' | 'datetime' | 'date' | 'media' | 'boolean' | 'email' | 'array'`.
-	// EditableCell drives the actual edit/display, so these mappings only
-	// affect column-level metadata (default sort comparator, future filter
-	// UI). We pick the closest honest type rather than the prettiest one:
-	// decimals go through 'integer' with DataViews' integer-only
-	// validator disabled because there's no exact number type
-	// (tech-debt.md#td-dataviews-fieldtype-union), url goes through 'text', and multiselect goes
-	// through 'array' so DataViews understands the value cardinality.
 	switch ( type ) {
 		case 'number':
 			return {
 				...base,
-				type: 'integer',
-				Edit: NumberFilterControl,
-				isValid: { custom: () => null },
+				type: 'number',
+				format: dataViewsNumberFormat( format ),
+				getValueFormatted: getNumberValueFormatted( format ),
 				sort: sortNumberValues,
 			};
 		case 'email':
 			return { ...base, type: 'email' };
 		case 'url':
-			return { ...base, type: 'text' };
+			return { ...base, type: 'url' };
 		case 'select':
 			return { ...base, type: 'text', elements };
 		case 'multiselect':
@@ -623,9 +561,9 @@ export function mapField( field ) {
 			if ( formulaResultType === 'number' ) {
 				return {
 					...base,
-					type: 'integer',
+					type: 'number',
 					editable: false,
-					isValid: { custom: () => null },
+					getValueFormatted: getNumberValueFormatted( format ),
 					sort: sortNumberValues,
 				};
 			}
@@ -662,10 +600,11 @@ export function mapField( field ) {
 			if ( ROLLUP_NUMERIC_AGGREGATORS.has( aggregator ) ) {
 				return {
 					...base,
-					type: 'integer',
+					type: 'number',
+					format: dataViewsNumberFormat( format ),
 					editable: false,
 					enableSorting: true,
-					isValid: { custom: () => null },
+					getValueFormatted: getNumberValueFormatted( format ),
 					sort: ( aValue, bValue, direction ) => {
 						const av = Number( aValue ?? 0 );
 						const bv = Number( bValue ?? 0 );

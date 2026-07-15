@@ -89,6 +89,7 @@ export default function RowDragHandle( {
 	keyboardFocusable = true,
 	activateFromRow = false,
 	renderHandle = true,
+	disabled = false,
 } ) {
 	const {
 		attributes,
@@ -99,6 +100,7 @@ export default function RowDragHandle( {
 	} = useDraggable( {
 		id: `row:${ row.rowId }`,
 		data: row,
+		disabled,
 		attributes: {
 			role: activateFromRow
 				? row.el?.getAttribute( 'role' ) || 'group'
@@ -273,7 +275,8 @@ export default function RowDragHandle( {
 			onTouchStart={ stopInteractionStart }
 			{ ...attributes }
 			role="button"
-			tabIndex={ keyboardFocusable ? 0 : -1 }
+			tabIndex={ ! disabled && keyboardFocusable ? 0 : -1 }
+			aria-disabled={ disabled }
 			{ ...guardedListeners }
 		/>,
 		row.handleEl

@@ -4,9 +4,7 @@ import DataViewNewRowButton from './DataViewNewRowButton';
 
 const GRID_VIEW_SELECTOR = '.dataviews-view-grid';
 const GRID_ROW_SELECTOR = '.dataviews-view-grid__row';
-const GRID_ITEMS_SELECTOR = '.dataviews-view-grid-items';
 const GRID_PORTAL_TARGET_SELECTOR = [
-	GRID_ITEMS_SELECTOR,
 	GRID_ROW_SELECTOR,
 	GRID_VIEW_SELECTOR,
 ].join( ',' );
@@ -56,7 +54,7 @@ export default function GridNewRowPortal( {
 		} );
 
 		return () => observer.disconnect();
-	}, [ hasRows, view, wrapperRef ] );
+	}, [ wrapperRef ] );
 
 	const newRowCard = (
 		<DataViewNewRowButton

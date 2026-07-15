@@ -34,7 +34,7 @@ jest.mock( '@wordpress/dataviews/wp', () => {
 			FiltersToggle: Empty,
 			LayoutSwitcher: Empty,
 			ViewConfig,
-			Filters: Empty,
+			FiltersToggled: Empty,
 			Layout: Empty,
 		},
 	};

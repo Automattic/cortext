@@ -68,11 +68,7 @@ const HOVER_SUPPRESSION_RELEASE_DELAY = 120;
 // or reorder hooks, so this adapter keeps its DOM selectors together.
 const ROW_SELECTORS = {
 	table: '.dataviews-view-table tbody > tr',
-	list: [
-		DATA_VIEW_LIST_ROW_SELECTOR,
-		'.dataviews-view-list > li',
-		'.dataviews-view-list > .dataviews-view-list__item',
-	].join( ',' ),
+	list: DATA_VIEW_LIST_ROW_SELECTOR,
 	grid: '.dataviews-view-grid__row__gridcell.dataviews-view-grid__card:not(.dataviews-view-grid__placeholder)',
 };
 
@@ -134,6 +130,7 @@ function rowRect( el ) {
 
 function rowViewportContainer( rowElement ) {
 	return (
+		rowElement.closest( '.dataviews-layout__container' ) ??
 		rowElement.closest( '.dataviews-wrapper' ) ??
 		rowElement.closest( '.cortext-data-view' )
 	);
@@ -669,7 +666,7 @@ function appendPlainPreviewContent( node, cells ) {
 function RowDragPreview( { row } ) {
 	const previewRef = useRef( null );
 	// The table row can be much wider than the visible block because DataViews
-	// keeps scrolled-out cells in the DOM. Use the measured wrapper width when
+	// keeps scrolled-out cells in the DOM. Use the measured viewport width when
 	// we have it, then fall back to the generated cells.
 	const cellsWidth = ( row.previewCells ?? [] ).reduce(
 		( width, cell ) => width + ( cell.width || 0 ),
@@ -850,23 +847,19 @@ function useRenderedRows( wrapperRef, view, rows, isDragging ) {
 			subtree: true,
 		} );
 		// Pull `ResizeObserver` from the wrapper's window so the block editor
-		// iframe uses its own constructor. We watch both the outer wrapper
-		// and DataViews' inner scroller: the preview width comes from the
-		// inner scroller, but the outer one moves whenever the embedding
-		// block resizes. If `.dataviews-wrapper` mounts later (lazy
-		// hydration, for example), MutationObserver above re-runs `sync` but
-		// doesn't re-attach the ResizeObserver. DataViews mounts that wrapper
-		// on first paint today, so a late remount is the next thing to chase
-		// if this breaks.
+		// iframe uses its own constructor. The outer wrapper tracks embedding
+		// changes; the layout container supplies the visible table width.
 		const ResizeObserverConstructor =
 			wrapper.ownerDocument?.defaultView?.ResizeObserver;
 		const resizeObserver = ResizeObserverConstructor
 			? new ResizeObserverConstructor( sync )
 			: null;
 		resizeObserver?.observe( wrapper );
-		const dataviewsWrapper = wrapper.querySelector( '.dataviews-wrapper' );
-		if ( dataviewsWrapper ) {
-			resizeObserver?.observe( dataviewsWrapper );
+		const layoutContainer = wrapper.querySelector(
+			'.dataviews-layout__container'
+		);
+		if ( layoutContainer ) {
+			resizeObserver?.observe( layoutContainer );
 		}
 		wrapper.addEventListener( 'scroll', sync, true );
 		window.addEventListener( 'resize', sync );
@@ -1618,6 +1611,7 @@ export default function DataViewRowReorder( {
 	const [ visualDrop, setVisualDrop ] = useState( null );
 	const [ pendingRequest, setPendingRequest ] = useState( null );
 	const [ isPosting, setIsPosting ] = useState( false );
+	const isPostingRef = useRef( false );
 	const { createErrorNotice } = useDispatch( noticesStore );
 	useRowDisplacement( renderedRows, visualRow, visualDrop, view );
 
@@ -1746,9 +1740,10 @@ export default function DataViewRowReorder( {
 	// non-manual sort to make the move visible) restores that sort too.
 	const performReorder = useCallback(
 		async ( request ) => {
-			if ( ! collectionId || ! request || isPosting ) {
+			if ( ! collectionId || ! request || isPostingRef.current ) {
 				return;
 			}
+			isPostingRef.current = true;
 			setIsPosting( true );
 			try {
 				await apiFetch( {
@@ -1789,20 +1784,19 @@ export default function DataViewRowReorder( {
 					}
 				);
 			} finally {
+				isPostingRef.current = false;
 				setIsPosting( false );
 			}
 		},
-		[
-			collectionId,
-			createErrorNotice,
-			flushRefreshAfterSortClear,
-			isPosting,
-		]
+		[ collectionId, createErrorNotice, flushRefreshAfterSortClear ]
 	);
 
 	const onDragStart = useCallback(
 		( event ) => {
 			pendingDropAnimationRef.current?.forceFinish();
+			if ( isPostingRef.current ) {
+				return;
+			}
 			const row = event.active?.data?.current ?? null;
 			setActiveRow( row );
 			setVisualRow( row );
@@ -1839,6 +1833,10 @@ export default function DataViewRowReorder( {
 	// detached node. Keep the gap open until the overlay lands.
 	const commitReorder = useCallback(
 		( request, { animateTo, clearSort } = {} ) => {
+			if ( isPostingRef.current ) {
+				clearDragState( { withoutTransition: true } );
+				return;
+			}
 			const canReorder = reorderDataByDrop(
 				dataRef.current,
 				request.rowId,
@@ -2191,6 +2189,7 @@ export default function DataViewRowReorder( {
 					keyboardFocusable={ view?.type !== 'list' }
 					activateFromRow={ usesGridItems( view ) }
 					renderHandle={ ! usesGridItems( view ) }
+					disabled={ isPosting }
 				/>
 			) ) }
 			{ rowGaps.map( ( gap ) => (

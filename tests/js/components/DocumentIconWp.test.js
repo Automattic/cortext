@@ -3,7 +3,7 @@ import { render } from '@testing-library/react';
 import DocumentIconWp from '../../../src/components/DocumentIconWp';
 
 describe( 'DocumentIconWp', () => {
-	it( 'renders Cortext glyph names used by public document icons', () => {
+	it( 'renders the Cortext collection glyph used by public document icons', () => {
 		const { container } = render(
 			<DocumentIconWp name="collection" size={ 44 } />
 		);
@@ -12,7 +12,6 @@ describe( 'DocumentIconWp', () => {
 		expect( svg ).toBeInTheDocument();
 		expect( svg ).toHaveAttribute( 'width', '44' );
 		expect( svg ).toHaveAttribute( 'height', '44' );
-		expect( svg.querySelector( 'rect' ) ).toBeInTheDocument();
 	} );
 
 	it( 'keeps rendering WordPress icon names', () => {

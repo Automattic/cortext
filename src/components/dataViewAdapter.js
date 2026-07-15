@@ -262,9 +262,5 @@ export function mergeDataViewsChange( previousView = {}, nextView = {} ) {
 	if ( nextType !== 'table' ) {
 		delete next.showTitle;
 	}
-	for ( const key of UNSUPPORTED_DATAVIEWS_KEYS ) {
-		delete next[ key ];
-	}
-
 	return next;
 }

@@ -66,10 +66,7 @@ import {
 	INTERACTIVE_DATA_VIEW_ITEM_IGNORE_SELECTOR,
 	findDataViewItemFromEvent,
 } from './dataViewItemLookup';
-import {
-	scrollElementInlineEndQuickly,
-	scrollToEndQuickly,
-} from './dataViewScroll';
+import { scrollToEndQuickly } from './dataViewScroll';
 import { saveRowDocumentField } from './rowDocumentMutations';
 import { getRowDetailMode, withRowDetailMode } from './rowDetailUtils';
 import {
@@ -218,11 +215,6 @@ export default function CollectionDataViews( {
 	const requestRevealCreatedField = useCallback( ( created ) => {
 		const fieldId = toDataViewId( created?.id );
 		if ( fieldId ) {
-			const wrapper =
-				tableWrapperRef.current?.querySelector( '.dataviews-wrapper' );
-			if ( wrapper ) {
-				scrollToEndQuickly( wrapper, { trackEnd: true } );
-			}
 			setLocalRevealFieldId( fieldId );
 		}
 	}, [] );
@@ -1295,19 +1287,11 @@ export default function CollectionDataViews( {
 				if ( ! marker ) {
 					return false;
 				}
-				scrollElementInlineEndQuickly(
-					marker.closest( 'th' ) ?? marker,
-					{
-						trackEnd: true,
-					}
-				);
 			}
 			const layoutScroller = dataViewsWrapper.querySelector(
 				'.dataviews-layout__container'
 			);
-			scrollToEndQuickly( layoutScroller ?? dataViewsWrapper, {
-				trackEnd: true,
-			} );
+			scrollToEndQuickly( layoutScroller ?? dataViewsWrapper );
 			if ( localRevealFieldId === pendingRevealFieldId ) {
 				setLocalRevealFieldId( null );
 			}
@@ -1371,11 +1355,6 @@ export default function CollectionDataViews( {
 			! previousFields.includes( lastFieldId );
 		if ( addedAtEnd ) {
 			setLocalRevealFieldId( lastFieldId );
-			const wrapper =
-				tableWrapperRef.current?.querySelector( '.dataviews-wrapper' );
-			if ( wrapper ) {
-				scrollToEndQuickly( wrapper, { trackEnd: true } );
-			}
 		}
 		previousVisibleFieldsRef.current = currentFields;
 	}, [
@@ -1614,16 +1593,18 @@ export default function CollectionDataViews( {
 											hasRows={ dataFiltered.length > 0 }
 										/>
 									) }
-									<DataViewRowReorder
-										wrapperRef={ tableWrapperRef }
-										view={ view }
-										onChangeView={ onChangeView }
-										collectionId={ collectionId }
-										rows={ dataFilteredInRenderOrder }
-										data={ data }
-										mutateRows={ mutateRows }
-										onReordered={ refresh }
-									/>
+									{ ! dataViewsView?.groupBy?.field && (
+										<DataViewRowReorder
+											wrapperRef={ tableWrapperRef }
+											view={ view }
+											onChangeView={ onChangeView }
+											collectionId={ collectionId }
+											rows={ dataFilteredInRenderOrder }
+											data={ data }
+											mutateRows={ mutateRows }
+											onReordered={ refresh }
+										/>
+									) }
 									{ isTableLayout && (
 										<TableCalculationsFooter
 											wrapperRef={ tableWrapperRef }

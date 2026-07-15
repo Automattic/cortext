@@ -91,12 +91,33 @@ describe( 'mapField', () => {
 		meta: { type: 'text', ...( overrides ?? {} ) },
 	} );
 
-	it( "maps Cortext's number to DataViews 'integer' with a decimal-safe filter control", () => {
+	it( "maps Cortext's number and precision to DataViews 'number'", () => {
+		const mapped = mapField(
+			baseField( {
+				type: 'number',
+				number_format: '{"style":"comma","decimals":3}',
+			} )
+		);
+
+		expect( mapped.type ).toBe( 'number' );
+		expect( mapped.format ).toEqual( { decimals: 3 } );
+		expect(
+			mapped.getValueFormatted( {
+				item: { 'field-5': 1234.5 },
+				field: mapped,
+			} )
+		).toBe( '1,234.500' );
+	} );
+
+	it( 'keeps natural precision and no grouping when no number format is saved', () => {
 		const mapped = mapField( baseField( { type: 'number' } ) );
 
-		expect( mapped.type ).toBe( 'integer' );
-		expect( mapped.Edit ).toEqual( expect.any( Function ) );
-		expect( mapped.isValid.custom() ).toBeNull();
+		expect(
+			mapped.getValueFormatted( {
+				item: { 'field-5': 1234.5 },
+				field: mapped,
+			} )
+		).toBe( '1234.5' );
 	} );
 
 	it( 'carries server query capabilities from the REST field record', () => {
@@ -314,15 +335,27 @@ describe( 'mapField', () => {
 		expect( mapped.relationMultiple ).toBe( false );
 	} );
 
-	it( "maps numeric rollups to read-only DataViews 'integer' fields with numeric sorting", () => {
+	it( "maps numeric rollups to read-only DataViews 'number' fields", () => {
 		const mapped = mapField(
-			baseField( { type: 'rollup', rollup_aggregator: 'sum' } )
+			baseField( {
+				type: 'rollup',
+				rollup_aggregator: 'sum',
+				rollup_target_type: 'number',
+				rollup_target_number_format: '{"decimals":1}',
+			} )
 		);
-		expect( mapped.type ).toBe( 'integer' );
+		expect( mapped.type ).toBe( 'number' );
+		expect( mapped.format ).toEqual( { decimals: 1 } );
 		expect( mapped.editable ).toBe( false );
 		expect( mapped.enableSorting ).toBe( true );
 		expect( mapped.rollupAggregator ).toBe( 'sum' );
 		expect( mapped.sort( 2, 10, 'asc' ) ).toBeLessThan( 0 );
+		expect(
+			mapped.getValueFormatted( {
+				item: { 'field-5': 12.34 },
+				field: mapped,
+			} )
+		).toBe( '12.3' );
 	} );
 
 	it( 'sorts numeric rollups through the DataViews client pipeline', () => {
@@ -455,8 +488,8 @@ describe( 'mapField', () => {
 		);
 	} );
 
-	it( "maps url to DataViews 'text' (DataViews has no 'url' type)", () => {
-		expect( mapField( baseField( { type: 'url' } ) ).type ).toBe( 'text' );
+	it( "maps url to DataViews 'url'", () => {
+		expect( mapField( baseField( { type: 'url' } ) ).type ).toBe( 'url' );
 	} );
 
 	it( 'maps date and datetime to matching DataViews date types', () => {

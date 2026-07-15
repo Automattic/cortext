@@ -50,7 +50,7 @@ body.cortext-row-reorder-no-transition .cortext-row-reorder-target {
 // a drag is active so list matches the table.
 body.cortext-row-dragging
 .dataviews-view-list
-:is([role="row"], [role="article"]).cortext-row-reorder-target {
+[role="row"].cortext-row-reorder-target {
 	transition:
 		transform 120ms ease,
 		opacity 120ms ease;
@@ -233,8 +233,8 @@ body.cortext-row-dragging .cortext-row-drop-indicator {
 	padding: 0;
 }
 
-// The overlay renders outside `.cortext-data-view` and misses its handle
-// offset. Add it here to keep the title aligned while the row settles.
+// Preview cells are divs, so the table-cell rules that reserve room for the
+// drag handle do not apply. Repeat that offset to keep the title aligned.
 .cortext-row-drag-preview .cortext-row-drag-preview__cell--primary {
 	padding-inline-start: var(--cortext-row-drag-content-offset);
 	padding-inline-end: 0;
@@ -527,28 +527,28 @@ tr.is-hovered:not(.is-selected)
 .dataviews-view-table__actions-column--sticky,
 body.cortext-row-reorder-suppress-hover
 .dataviews-view-list
-:is([role="row"], [role="article"]):not(.is-selected):hover,
+[role="row"]:not(.is-selected):hover,
 body.cortext-row-reorder-suppress-hover
 .dataviews-view-list
-:is([role="row"], [role="article"]):not(.is-selected).is-hovered {
+[role="row"]:not(.is-selected).is-hovered {
 	background-color: transparent;
 }
 
 body.cortext-row-reorder-suppress-hover
 .dataviews-view-list
-:is([role="row"], [role="article"]):not(.is-selected):hover
+[role="row"]:not(.is-selected):hover
 .dataviews-view-list__title-field,
 body.cortext-row-reorder-suppress-hover
 .dataviews-view-list
-:is([role="row"], [role="article"]):not(.is-selected):hover
+[role="row"]:not(.is-selected):hover
 .dataviews-view-list__fields,
 body.cortext-row-reorder-suppress-hover
 .dataviews-view-list
-:is([role="row"], [role="article"]):not(.is-selected).is-hovered
+[role="row"]:not(.is-selected).is-hovered
 .dataviews-view-list__title-field,
 body.cortext-row-reorder-suppress-hover
 .dataviews-view-list
-:is([role="row"], [role="article"]):not(.is-selected).is-hovered
+[role="row"]:not(.is-selected).is-hovered
 .dataviews-view-list__fields {
 	color: inherit;
 }

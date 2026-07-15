@@ -94,9 +94,6 @@ importers:
       '@wordpress/keycodes':
         specifier: ^4.49.0
         version: 4.49.0(@types/react@18.3.31)
-      '@wordpress/media-utils':
-        specifier: ^5.49.0
-        version: 5.49.0(@date-fns/tz@1.5.0)(@emotion/is-prop-valid@1.4.0)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(date-fns@4.4.0)(postcss@8.5.15)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(stylelint@16.26.1(typescript@6.0.3))
       '@wordpress/notices':
         specifier: ^5.49.0
         version: 5.49.0(@date-fns/tz@1.5.0)(@emotion/is-prop-valid@1.4.0)(@types/react@18.3.31)(postcss@8.5.15)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(stylelint@16.26.1(typescript@6.0.3))

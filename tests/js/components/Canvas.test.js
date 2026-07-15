@@ -1,8 +1,8 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 
 let mockIsMobile = false;
 let mockReducedMotion = false;
-let mediaQueryLists = [];
+let resizeObserverCallback;
 
 jest.mock( '@wordpress/i18n', () => ( { __: ( value ) => value } ) );
 jest.mock( '@wordpress/core-data', () => ( { useEntityRecord: jest.fn() } ) );
@@ -127,7 +127,6 @@ import {
 } from '../../../src/components/Canvas';
 
 function installMatchMedia() {
-	mediaQueryLists = [];
 	window.matchMedia = jest.fn( ( query ) => {
 		const mediaQueryList = {
 			matches: query.includes( 'max-width' )
@@ -138,7 +137,6 @@ function installMatchMedia() {
 			addListener: jest.fn(),
 			removeListener: jest.fn(),
 		};
-		mediaQueryLists.push( mediaQueryList );
 		return mediaQueryList;
 	} );
 }
@@ -147,18 +145,23 @@ describe( 'Canvas secondary sidebar', () => {
 	beforeEach( () => {
 		mockIsMobile = false;
 		mockReducedMotion = false;
+		resizeObserverCallback = null;
 		installMatchMedia();
-		global.ResizeObserver = jest.fn( () => ( {
-			observe: jest.fn(),
-			disconnect: jest.fn(),
-		} ) );
+		global.ResizeObserver = jest.fn( ( callback ) => {
+			resizeObserverCallback = callback;
+			return {
+				observe: jest.fn(),
+				disconnect: jest.fn(),
+			};
+		} );
 	} );
 
 	afterEach( () => {
+		jest.restoreAllMocks();
 		delete global.ResizeObserver;
 	} );
 
-	it( "animates the desktop inserter's width and position together", () => {
+	it( "configures the desktop inserter's width and position together", () => {
 		const { container } = render(
 			<AnimatedSecondarySidebar>
 				<div>Library</div>
@@ -177,12 +180,37 @@ describe( 'Canvas secondary sidebar', () => {
 		expect( sidebar ).toHaveAttribute( 'data-motion-open-width', '350' );
 		expect( sidebar ).toHaveAttribute( 'data-motion-duration', '0.25' );
 		expect( content ).toHaveAttribute( 'data-motion-duration', '0.25' );
-		expect(
-			mediaQueryLists.every(
-				( mediaQueryList ) =>
-					mediaQueryList.addListener.mock.calls.length === 0
-			)
-		).toBe( true );
+	} );
+
+	it( 'updates the desktop animation width when the inserter resizes', () => {
+		let measuredWidth = 420;
+		const rect = jest
+			.spyOn( window.Element.prototype, 'getBoundingClientRect' )
+			.mockImplementation( function () {
+				return {
+					width: this.hasAttribute( 'data-motion-closed-x' )
+						? measuredWidth
+						: 0,
+				};
+			} );
+
+		const { container } = render(
+			<AnimatedSecondarySidebar>
+				<div>Library</div>
+			</AnimatedSecondarySidebar>
+		);
+		const sidebar = container.querySelector(
+			'.interface-interface-skeleton__secondary-sidebar'
+		);
+
+		expect( sidebar ).toHaveAttribute( 'data-motion-open-width', '420' );
+		expect( resizeObserverCallback ).toEqual( expect.any( Function ) );
+
+		measuredWidth = 512;
+		act( () => resizeObserverCallback() );
+
+		expect( sidebar ).toHaveAttribute( 'data-motion-open-width', '512' );
+		rect.mockRestore();
 	} );
 
 	it( 'opens at viewport width without motion on mobile', () => {
@@ -234,6 +262,9 @@ describe( 'Canvas secondary sidebar', () => {
 				secondarySidebar={ null }
 			/>
 		);
+		expect(
+			screen.getByTestId( 'secondary-sidebar-presence' )
+		).toBeInTheDocument();
 		expect( screen.queryByText( 'Library' ) ).not.toBeInTheDocument();
 	} );
 } );

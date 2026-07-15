@@ -380,15 +380,7 @@ test.describe( 'Sidebar layout controls', () => {
 			const settings = page.locator(
 				'.cortext-document-actions .components-button[aria-label="Settings"]'
 			);
-			const inspector = page.locator(
-				'.interface-complementary-area.editor-sidebar__panel'
-			);
-			const animatedInspectorFill = page.locator(
-				'.interface-complementary-area__fill'
-			);
 			await expect( settings ).toBeVisible();
-			await expect( inspector ).toBeVisible();
-			await expect( animatedInspectorFill ).toBeVisible();
 
 			await page.evaluate( () => {
 				document
@@ -402,11 +394,9 @@ test.describe( 'Sidebar layout controls', () => {
 				)
 			) {
 				await settings.click();
-				await expect( animatedInspectorFill ).toHaveCount( 1 );
 			}
 
 			await expect( settings ).not.toHaveClass( /is-pressed/ );
-			await expect( inspector ).toBeHidden();
 			await page.mouse.move( 0, 0 );
 			const unpressedBeforeHover =
 				await readButtonChromeState( settings );
@@ -454,26 +444,9 @@ test.describe( 'Sidebar layout controls', () => {
 				)
 			) {
 				await settings.click();
-				await expect( animatedInspectorFill ).toBeVisible();
-				await expect( animatedInspectorFill ).toHaveClass(
-					/is-opening/
-				);
-				await expect
-					.poll( async () =>
-						animatedInspectorFill.evaluate( ( element ) =>
-							element
-								.getAnimations()
-								.some(
-									( animation ) =>
-										animation.playState !== 'finished'
-								)
-						)
-					)
-					.toBe( true );
 			}
 
 			await expect( settings ).toHaveClass( /is-pressed/ );
-			await expect( inspector ).toBeVisible();
 			await page.mouse.move( 0, 0 );
 			const beforeHover = await readButtonChromeState( settings );
 

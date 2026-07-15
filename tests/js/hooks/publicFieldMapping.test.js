@@ -90,12 +90,13 @@ describe( 'buildPublicFields', () => {
 		expect( data.map( ( item ) => item.id ) ).toEqual( [ 1 ] );
 	} );
 
-	it( 'keeps number values numeric for the public client filter pass', () => {
+	it( 'uses native number filters in the public client pass', () => {
 		const fields = buildPublicFields( [
 			{ id: 33, label: 'Score', type: 'number', options: null },
 		] );
 		const scoreField = fields.find( ( field ) => field.id === 'field-33' );
 
+		expect( scoreField.type ).toBe( 'number' );
 		expect(
 			scoreField.getValue( {
 				item: { meta: { 'field-33': '5' } },
@@ -111,7 +112,7 @@ describe( 'buildPublicFields', () => {
 				filters: [
 					{
 						field: 'field-33',
-						operator: 'is',
+						operator: 'greaterThan',
 						value: 5,
 					},
 				],
@@ -119,6 +120,44 @@ describe( 'buildPublicFields', () => {
 			fields
 		);
 
-		expect( data.map( ( item ) => item.id ) ).toEqual( [ 1 ] );
+		expect( data.map( ( item ) => item.id ) ).toEqual( [ 2 ] );
+	} );
+
+	it( 'uses the native URL field type', () => {
+		const fields = buildPublicFields( [
+			{ id: 44, label: 'Website', type: 'url', options: null },
+		] );
+
+		expect( fields.find( ( field ) => field.id === 'field-44' ).type ).toBe(
+			'url'
+		);
+	} );
+
+	it( 'renders public select values with their saved label and color', () => {
+		const fields = buildPublicFields( [
+			{
+				id: 55,
+				label: 'Status',
+				type: 'select',
+				options: JSON.stringify( [
+					{
+						value: 'in-progress',
+						label: 'In progress',
+						color: '#f0c36d',
+					},
+				] ),
+			},
+		] );
+		const status = fields.find( ( field ) => field.id === 'field-55' );
+		const rendered = status.render( {
+			item: { meta: { 'field-55': 'in-progress' } },
+		} );
+
+		expect( rendered.props ).toEqual(
+			expect.objectContaining( {
+				label: 'In progress',
+				color: '#f0c36d',
+			} )
+		);
 	} );
 } );

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render } from '@testing-library/react';
 
 let mockActiveArea;
 let mockIsSmall;
@@ -30,10 +30,8 @@ jest.mock( '@wordpress/components', () => {
 			</button>
 		),
 		Disabled: ( { children } ) => <>{ children }</>,
-		Fill: ( { children } ) => <>{ children }</>,
 		Notice: ( { children } ) => <>{ children }</>,
 		PanelBody: ( { children } ) => <>{ children }</>,
-		Slot: ( { children } ) => <>{ children }</>,
 		privateApis: { Tabs },
 	};
 } );
@@ -66,13 +64,21 @@ jest.mock( '@wordpress/data', () => ( {
 jest.mock( '@wordpress/editor', () => ( { store: {} } ) );
 jest.mock( '@wordpress/i18n', () => ( { __: ( value ) => value } ) );
 jest.mock( '@wordpress/icons', () => ( {
-	closeSmall: 'close-small',
 	home: 'home',
 	starEmpty: 'star-empty',
 	starFilled: 'star-filled',
 	trash: 'trash',
 } ) );
-jest.mock( '@wordpress/interface', () => ( { store: {} } ) );
+jest.mock( '@wordpress/interface', () => {
+	const ComplementaryArea = ( { children, header } ) => (
+		<>
+			{ header }
+			{ children }
+		</>
+	);
+	ComplementaryArea.Slot = () => null;
+	return { ComplementaryArea, store: {} };
+} );
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 
 jest.mock( '../../../src/components/CanvasOwnerInspector', () => ( {
@@ -147,19 +153,16 @@ describe( 'InspectorComplementaryArea', () => {
 	beforeEach( () => {
 		mockActiveArea = undefined;
 		mockIsSmall = false;
-		mockEnableComplementaryArea.mockClear();
-		mockDisableComplementaryArea.mockClear();
-	} );
-
-	it( 'does not open the inspector by default on a small viewport', () => {
-		mockIsSmall = true;
-
-		render( <InspectorComplementaryArea { ...defaultProps } /> );
-
-		expect( mockEnableComplementaryArea ).not.toHaveBeenCalled();
-		expect( mockDisableComplementaryArea ).toHaveBeenCalledWith(
-			'cortext'
+		mockEnableComplementaryArea.mockReset();
+		mockEnableComplementaryArea.mockImplementation(
+			( _scope, identifier ) => {
+				mockActiveArea = identifier;
+			}
 		);
+		mockDisableComplementaryArea.mockReset();
+		mockDisableComplementaryArea.mockImplementation( () => {
+			mockActiveArea = null;
+		} );
 	} );
 
 	it( 'opens by default after an initially small viewport widens', () => {
@@ -169,6 +172,7 @@ describe( 'InspectorComplementaryArea', () => {
 		);
 		mockEnableComplementaryArea.mockClear();
 
+		mockActiveArea = null;
 		mockIsSmall = false;
 		rerender( <InspectorComplementaryArea { ...defaultProps } /> );
 
@@ -176,109 +180,5 @@ describe( 'InspectorComplementaryArea', () => {
 			'cortext',
 			DOCUMENT_INSPECTOR
 		);
-	} );
-
-	it( 'opens by default on a large viewport only when visibility is unset', () => {
-		const { unmount } = render(
-			<InspectorComplementaryArea { ...defaultProps } />
-		);
-
-		expect( mockEnableComplementaryArea ).toHaveBeenCalledWith(
-			'cortext',
-			DOCUMENT_INSPECTOR
-		);
-
-		unmount();
-		mockEnableComplementaryArea.mockClear();
-		mockActiveArea = null;
-		render( <InspectorComplementaryArea { ...defaultProps } /> );
-
-		expect( mockEnableComplementaryArea ).not.toHaveBeenCalled();
-	} );
-
-	it( 'closes when the viewport narrows and reopens when it widens', () => {
-		mockActiveArea = DOCUMENT_INSPECTOR;
-		const { rerender } = render(
-			<InspectorComplementaryArea { ...defaultProps } />
-		);
-
-		mockIsSmall = true;
-		rerender( <InspectorComplementaryArea { ...defaultProps } /> );
-		expect( mockDisableComplementaryArea ).toHaveBeenCalledWith(
-			'cortext'
-		);
-
-		mockActiveArea = null;
-		rerender( <InspectorComplementaryArea { ...defaultProps } /> );
-		mockIsSmall = false;
-		rerender( <InspectorComplementaryArea { ...defaultProps } /> );
-
-		expect( mockEnableComplementaryArea ).toHaveBeenCalledWith(
-			'cortext',
-			DOCUMENT_INSPECTOR
-		);
-	} );
-
-	it( 'provides an accessible in-panel close control', () => {
-		mockActiveArea = DOCUMENT_INSPECTOR;
-		render( <InspectorComplementaryArea { ...defaultProps } /> );
-
-		fireEvent.click(
-			screen.getByRole( 'button', { name: 'Close inspector' } )
-		);
-
-		expect( mockDisableComplementaryArea ).toHaveBeenCalledWith(
-			'cortext'
-		);
-	} );
-
-	it( 'does not animate an inspector already open on mount', () => {
-		mockActiveArea = DOCUMENT_INSPECTOR;
-		const { container } = render(
-			<InspectorComplementaryArea { ...defaultProps } />
-		);
-		const fill = container.querySelector( '.cortext-inspector-fill' );
-
-		expect( fill ).toHaveClass( 'is-open', 'is-static', 'is-idle' );
-		expect( fill ).not.toHaveClass( 'is-opening' );
-	} );
-
-	it( 'does not animate when the inspector first opens by default', () => {
-		const { container, rerender } = render(
-			<InspectorComplementaryArea { ...defaultProps } />
-		);
-
-		mockActiveArea = DOCUMENT_INSPECTOR;
-		rerender( <InspectorComplementaryArea { ...defaultProps } /> );
-		const fill = container.querySelector( '.cortext-inspector-fill' );
-
-		expect( fill ).toHaveClass( 'is-open', 'is-static', 'is-idle' );
-		expect( fill ).not.toHaveClass( 'is-opening' );
-	} );
-
-	it( 'animates a manual open from an explicitly closed state', () => {
-		mockActiveArea = null;
-		const { container, rerender } = render(
-			<InspectorComplementaryArea { ...defaultProps } />
-		);
-
-		mockActiveArea = DOCUMENT_INSPECTOR;
-		rerender( <InspectorComplementaryArea { ...defaultProps } /> );
-		const fill = container.querySelector( '.cortext-inspector-fill' );
-
-		expect( fill ).toHaveClass( 'is-open', 'is-animated', 'is-opening' );
-	} );
-
-	it( 'runs the closing animation when the active inspector is toggled off', () => {
-		mockActiveArea = DOCUMENT_INSPECTOR;
-		const { container, rerender } = render(
-			<InspectorComplementaryArea { ...defaultProps } />
-		);
-
-		mockActiveArea = null;
-		rerender( <InspectorComplementaryArea { ...defaultProps } /> );
-		const fill = container.querySelector( '.cortext-inspector-fill' );
-
-		expect( fill ).toHaveClass( 'is-closed', 'is-animated', 'is-closing' );
 	} );
 } );

@@ -1,7 +1,3 @@
-/**
- * E2E coverage for the Cortext collection DataView block in the shell editor.
- */
-
 const { test, expect } = require( '@wordpress/e2e-test-utils-playwright' );
 
 const COVER_PNG = Buffer.from(
@@ -29,6 +25,27 @@ async function deleteIfCreated( requestUtils, path ) {
 	}
 }
 
+async function deleteCollectionFields( requestUtils, collectionId ) {
+	if ( ! collectionId ) {
+		return;
+	}
+	let collection;
+	try {
+		collection = await requestUtils.rest( {
+			path: `/wp/v2/crtxt_documents/${ collectionId }`,
+			params: { context: 'edit' },
+		} );
+	} catch {
+		return;
+	}
+	for ( const fieldId of collection.meta?.cortext_fields ?? [] ) {
+		await deleteIfCreated(
+			requestUtils,
+			`/wp/v2/crtxt_fields/${ fieldId }`
+		);
+	}
+}
+
 async function uploadCoverMedia( requestUtils, name, buffer = COVER_PNG ) {
 	return requestUtils.uploadMedia( {
 		name,
@@ -37,25 +54,44 @@ async function uploadCoverMedia( requestUtils, name, buffer = COVER_PNG ) {
 	} );
 }
 
-async function expectColumnRevealed( canvas, columnHeader ) {
+async function expectColumnRevealed(
+	columnHeader,
+	{ requireScroll = false } = {}
+) {
 	await expect
 		.poll( () =>
-			columnHeader.evaluate( ( element ) => {
+			columnHeader.evaluate( ( element, mustScroll ) => {
 				const rect = element.getBoundingClientRect();
 				const ownerWindow = element.ownerDocument.defaultView;
-				const viewportLeft = 0;
-				const viewportRight = ownerWindow.innerWidth;
-				const visibleWidth =
-					Math.min( rect.right, viewportRight ) -
-					Math.max( rect.left, viewportLeft );
-				return visibleWidth >= Math.min( 24, rect.width );
-			} )
+				const scroller =
+					element.closest( '.dataviews-layout__container' ) ??
+					element.closest( '.dataviews-wrapper' );
+				if ( ! scroller ) {
+					return false;
+				}
+				const scrollerRect = scroller.getBoundingClientRect();
+				const maxScroll = scroller.scrollWidth - scroller.clientWidth;
+				const isRtl =
+					ownerWindow.getComputedStyle( scroller ).direction ===
+					'rtl';
+				const target = isRtl ? -maxScroll : maxScroll;
+
+				return (
+					( ! mustScroll || maxScroll > 0 ) &&
+					( maxScroll <= 0 ||
+						Math.abs( scroller.scrollLeft - target ) <= 2 ) &&
+					rect.left >= scrollerRect.left - 1 &&
+					rect.right <= scrollerRect.right + 1
+				);
+			}, requireScroll )
 		)
 		.toBe( true );
 }
 
-function dataViewWrapper( canvas ) {
-	return canvas.locator( '.cortext-data-view > .dataviews-wrapper' ).first();
+function dataViewScroller( canvas ) {
+	return canvas
+		.locator( '.cortext-data-view .dataviews-layout__container' )
+		.first();
 }
 
 const TABLE_DATA_HEADER_SELECTOR =
@@ -81,428 +117,6 @@ function dataViewTableRow( canvas, title ) {
 	return canvas.locator( '.dataviews-view-table tbody tr' ).filter( {
 		hasText: title,
 	} );
-}
-
-async function expectOpenButtonFitsTitleCell( openButton ) {
-	await expect
-		.poll( () =>
-			openButton.evaluate( ( button ) => {
-				const titleCell = button.closest( '.cortext-title-cell' );
-				const tableCell = button.closest( 'td' );
-				const editableCell = titleCell?.querySelector(
-					'.cortext-editable-cell'
-				);
-				if ( ! titleCell || ! tableCell || ! editableCell ) {
-					return {
-						buttonInsideCell: false,
-						buttonWideEnough: false,
-						editableBeforeButton: false,
-						inlineButton: false,
-						actionColor: false,
-					};
-				}
-
-				const buttonRect = button.getBoundingClientRect();
-				const tableCellRect = tableCell.getBoundingClientRect();
-				const editableRect = editableCell.getBoundingClientRect();
-				const buttonStyles =
-					button.ownerDocument.defaultView.getComputedStyle( button );
-
-				return {
-					buttonInsideCell:
-						buttonRect.left >= tableCellRect.left - 1 &&
-						buttonRect.right <= tableCellRect.right + 1,
-					buttonWideEnough: buttonRect.width >= 60,
-					editableBeforeButton:
-						editableRect.right <= buttonRect.left + 1,
-					inlineButton: buttonStyles.position !== 'absolute',
-					actionColor: [
-						'rgb(56, 88, 233)',
-						'rgb(24, 58, 214)',
-					].includes( buttonStyles.color ),
-				};
-			} )
-		)
-		.toEqual( {
-			buttonInsideCell: true,
-			buttonWideEnough: true,
-			editableBeforeButton: true,
-			inlineButton: true,
-			actionColor: true,
-		} );
-}
-
-async function expectDataViewsToolbarChrome(
-	toolbar,
-	{ maxSearchWidth = 220, minSearchWidth = 160 } = {}
-) {
-	const search = toolbar.locator( '.dataviews-search' ).first();
-	const searchInput = search.locator( 'input[type="search"]' );
-	const filterToggle = toolbar.locator(
-		'.dataviews-filters__visibility-toggle'
-	);
-	await expect( searchInput ).toBeVisible();
-	await expect( filterToggle ).toBeVisible();
-	await expect
-		.poll( async () =>
-			search.evaluate(
-				( element, widths ) => {
-					const input = element.querySelector(
-						'input[type="search"]'
-					);
-					const icon = element.querySelector(
-						'.components-input-control__prefix svg'
-					);
-					const filter = element
-						.closest( '.dataviews__view-actions' )
-						?.querySelector(
-							'.dataviews-filters__visibility-toggle'
-						);
-					const filterIcon = filter?.querySelector( 'svg' );
-					const actionsToolbar = element.closest(
-						'.dataviews__view-actions'
-					);
-					const viewControls =
-						actionsToolbar?.children[
-							actionsToolbar.children.length - 1
-						];
-					const viewControlsRect =
-						viewControls.getBoundingClientRect();
-					const viewButtons = Array.from(
-						viewControls?.querySelectorAll(
-							'.components-button'
-						) ?? []
-					).filter(
-						( button ) => button.getBoundingClientRect().width > 0
-					);
-					const searchRect = element.getBoundingClientRect();
-					const inputRect = input.getBoundingClientRect();
-					const iconRect = icon.getBoundingClientRect();
-					const filterRect = filter.getBoundingClientRect();
-					const filterIconRect = filterIcon.getBoundingClientRect();
-					const viewButtonRects = viewButtons.map( ( button ) =>
-						button.getBoundingClientRect()
-					);
-					const viewIconRects = viewButtons.map( ( button ) =>
-						button.querySelector( 'svg' )?.getBoundingClientRect()
-					);
-					const inputStyles =
-						input.ownerDocument.defaultView.getComputedStyle(
-							input
-						);
-					const centerY = ( rect ) => rect.y + rect.height / 2;
-
-					return {
-						searchSingleRow:
-							searchRect.height >= 28 && searchRect.height <= 44,
-						searchCompactHeight:
-							inputRect.height >= 30 && inputRect.height <= 34,
-						searchCompactWidth:
-							searchRect.width >= widths.minimum &&
-							searchRect.width <= widths.maximum,
-						inputBorderTop: inputStyles.borderTopWidth,
-						iconAligned:
-							Math.abs(
-								centerY( iconRect ) - centerY( inputRect )
-							) <= 1,
-						filterAligned:
-							Math.abs(
-								centerY( filterRect ) - centerY( inputRect )
-							) <= 1,
-						filterIconAligned:
-							Math.abs(
-								centerY( filterIconRect ) - centerY( inputRect )
-							) <= 1,
-						filterAfterInput:
-							filterRect.x > inputRect.x + inputRect.width,
-						filterCloseToInput:
-							filterRect.x - ( inputRect.x + inputRect.width ) <=
-							32,
-						viewButtonCount: viewButtonRects.length,
-						viewButtonsCompact: viewButtonRects.every(
-							( rect ) =>
-								rect.width >= 30 &&
-								rect.width <= 34 &&
-								rect.height >= 30 &&
-								rect.height <= 34
-						),
-						viewControlsCompact:
-							viewControlsRect.height >= 30 &&
-							viewControlsRect.height <= 32,
-						viewControlsAligned:
-							Math.abs(
-								centerY( viewControlsRect ) -
-									centerY( inputRect )
-							) <= 1,
-						viewButtonsAligned: viewButtonRects.every(
-							( rect ) =>
-								Math.abs(
-									centerY( rect ) - centerY( inputRect )
-								) <= 1
-						),
-						viewIconsAligned: viewIconRects.every(
-							( rect ) =>
-								rect &&
-								Math.abs(
-									centerY( rect ) - centerY( inputRect )
-								) <= 1
-						),
-						viewButtonsAfterFilter:
-							viewButtonRects[ 0 ].x >
-							filterRect.x + filterRect.width,
-					};
-				},
-				{ maximum: maxSearchWidth, minimum: minSearchWidth }
-			)
-		)
-		.toEqual( {
-			searchSingleRow: true,
-			searchCompactHeight: true,
-			searchCompactWidth: true,
-			inputBorderTop: '0px',
-			iconAligned: true,
-			filterAligned: true,
-			filterIconAligned: true,
-			filterAfterInput: true,
-			filterCloseToInput: true,
-			viewButtonCount: 2,
-			viewButtonsCompact: true,
-			viewControlsCompact: true,
-			viewControlsAligned: true,
-			viewButtonsAligned: true,
-			viewIconsAligned: true,
-			viewButtonsAfterFilter: true,
-		} );
-}
-
-async function expectTableActionsColumnSeparator( table ) {
-	await expect
-		.poll( () =>
-			table.evaluate( async ( tableElement ) => {
-				const wrapper = tableElement.closest( '.dataviews-wrapper' );
-				if ( wrapper && wrapper.scrollWidth > wrapper.clientWidth ) {
-					wrapper.scrollLeft = wrapper.scrollWidth;
-					await new Promise( ( resolve ) =>
-						tableElement.ownerDocument.defaultView.requestAnimationFrame(
-							resolve
-						)
-					);
-				}
-
-				const ownerWindow = tableElement.ownerDocument.defaultView;
-				const hasSeparator = ( element ) => {
-					if ( ! element ) {
-						return false;
-					}
-					const styles = ownerWindow.getComputedStyle( element );
-					const beforeStyles = ownerWindow.getComputedStyle(
-						element,
-						'::before'
-					);
-					return (
-						Number.parseFloat( styles.borderLeftWidth ) > 0 ||
-						styles.boxShadow !== 'none' ||
-						( beforeStyles.content !== 'none' &&
-							Number.parseFloat( beforeStyles.width ) > 0 &&
-							beforeStyles.backgroundColor !==
-								'rgba(0, 0, 0, 0)' )
-					);
-				};
-				const separatorColor = ( element ) =>
-					element
-						? ownerWindow.getComputedStyle( element, '::before' )
-								.backgroundColor
-						: null;
-				const headerActionsCell = tableElement.querySelector(
-					'thead th.dataviews-view-table__actions-column'
-				);
-				const bodyActionsCell = tableElement.querySelector(
-					'tbody td.dataviews-view-table__actions-column'
-				);
-
-				return {
-					headerHasSeparator: hasSeparator( headerActionsCell ),
-					headerSeparatorColor: separatorColor( headerActionsCell ),
-					bodyHasSeparator: hasSeparator( bodyActionsCell ),
-					bodySeparatorColor: separatorColor( bodyActionsCell ),
-				};
-			} )
-		)
-		.toEqual( {
-			headerHasSeparator: true,
-			headerSeparatorColor: 'rgb(240, 240, 240)',
-			bodyHasSeparator: true,
-			bodySeparatorColor: 'rgb(240, 240, 240)',
-		} );
-}
-
-async function expectGridCardHasNoFloatingDragHandle( canvas ) {
-	const card = canvas
-		.locator( '.dataviews-view-grid__card' )
-		.filter( { hasText: 'Alpha Manual' } )
-		.first();
-	const handle = card.locator( '> .cortext-row-drag-handle' );
-	await expect( handle ).toHaveCount( 0 );
-}
-
-async function expectGridCardTitleBeforeFields( card ) {
-	await expect
-		.poll( () =>
-			card.evaluate( ( element ) => {
-				const media = element.querySelector(
-					'.dataviews-view-grid__media'
-				);
-				const titleActions = element.querySelector(
-					'.dataviews-view-grid__title-actions'
-				);
-				const fields = element.querySelector(
-					'.dataviews-view-grid__fields, .dataviews-view-grid__badge-fields'
-				);
-				if ( ! media || ! titleActions || ! fields ) {
-					return {
-						titleAfterMedia: false,
-						titleBeforeFields: false,
-						fieldsShareTitleSurface: false,
-						fieldsAlignedWithTitle: false,
-						fieldsHaveBreathingRoom: false,
-					};
-				}
-				const mediaRect = media.getBoundingClientRect();
-				const titleRect = titleActions.getBoundingClientRect();
-				const fieldsRect = fields.getBoundingClientRect();
-				const titleContent = titleActions.querySelector(
-					'.cortext-title-cell'
-				);
-				const fieldContent = fields.querySelector(
-					'.dataviews-view-grid__field-value > *, .cortext-chip, .cortext-relation-ref'
-				);
-				const ownerWindow = element.ownerDocument.defaultView;
-				const titleBackground =
-					ownerWindow.getComputedStyle(
-						titleActions
-					).backgroundColor;
-				const fieldsBackground =
-					ownerWindow.getComputedStyle( fields ).backgroundColor;
-				const titleContentRect = titleContent?.getBoundingClientRect();
-				const fieldContentRect = fieldContent?.getBoundingClientRect();
-
-				return {
-					titleAfterMedia: titleRect.top >= mediaRect.bottom - 1,
-					titleBeforeFields: titleRect.bottom <= fieldsRect.top + 1,
-					fieldsShareTitleSurface:
-						fieldsBackground === titleBackground,
-					fieldsAlignedWithTitle:
-						! titleContentRect ||
-						! fieldContentRect ||
-						( fieldContentRect.left >= titleContentRect.left - 4 &&
-							fieldContentRect.left <=
-								titleContentRect.left + 14 ),
-					fieldsHaveBreathingRoom:
-						! fieldContentRect ||
-						( fieldContentRect.top >= titleRect.bottom + 6 &&
-							fieldContentRect.top <= titleRect.bottom + 20 ),
-				};
-			} )
-		)
-		.toEqual( {
-			titleAfterMedia: true,
-			titleBeforeFields: true,
-			fieldsShareTitleSurface: true,
-			fieldsAlignedWithTitle: true,
-			fieldsHaveBreathingRoom: true,
-		} );
-}
-
-async function expectGridCardRestChrome( card ) {
-	await expect( card.locator( '> .cortext-row-drag-handle' ) ).toHaveCount(
-		0
-	);
-
-	await expect
-		.poll( () =>
-			card.evaluate( ( element ) => {
-				const titleActions = element.querySelector(
-					'.dataviews-view-grid__title-actions'
-				);
-				const actionButton = element.querySelector(
-					'.dataviews-view-grid__media-actions .dataviews-all-actions-button'
-				);
-				const checkbox = element.querySelector(
-					':scope > .dataviews-selection-checkbox'
-				);
-				if ( ! titleActions || ! actionButton || ! checkbox ) {
-					return {
-						actionInTitleChrome: false,
-						actionRightAligned: false,
-						checkboxHiddenAtRest: false,
-					};
-				}
-
-				const cardRect = element.getBoundingClientRect();
-				const titleRect = titleActions.getBoundingClientRect();
-				const actionRect = actionButton.getBoundingClientRect();
-				const checkboxStyles =
-					checkbox.ownerDocument.defaultView.getComputedStyle(
-						checkbox
-					);
-				const actionCenter = actionRect.top + actionRect.height / 2;
-
-				return {
-					actionInTitleChrome:
-						actionCenter >= titleRect.top &&
-						actionCenter <= titleRect.bottom,
-					actionRightAligned: cardRect.right - actionRect.right <= 24,
-					checkboxHiddenAtRest:
-						checkboxStyles.display === 'none' ||
-						( Number( checkboxStyles.opacity ) === 0 &&
-							checkboxStyles.pointerEvents === 'none' ),
-				};
-			} )
-		)
-		.toEqual( {
-			actionInTitleChrome: true,
-			actionRightAligned: true,
-			checkboxHiddenAtRest: true,
-		} );
-
-	await card.hover();
-	await expect
-		.poll( () =>
-			card.evaluate( ( element ) => {
-				const checkbox = element.querySelector(
-					':scope > .dataviews-selection-checkbox'
-				);
-				if ( ! checkbox ) {
-					return {
-						selectionVisibleOnHover: false,
-						selectionTopLeft: false,
-					};
-				}
-
-				const cardRect = element.getBoundingClientRect();
-				const checkboxRect = checkbox.getBoundingClientRect();
-				const checkboxStyles =
-					checkbox.ownerDocument.defaultView.getComputedStyle(
-						checkbox
-					);
-
-				return {
-					selectionVisibleOnHover:
-						checkboxStyles.display !== 'none' &&
-						Number( checkboxStyles.opacity ) > 0 &&
-						checkboxStyles.pointerEvents !== 'none' &&
-						checkboxRect.width > 0 &&
-						checkboxRect.height > 0,
-					selectionTopLeft:
-						checkboxRect.top - cardRect.top <= 24 &&
-						checkboxRect.left - cardRect.left <= 24,
-				};
-			} )
-		)
-		.toEqual( {
-			selectionVisibleOnHover: true,
-			selectionTopLeft: true,
-		} );
 }
 
 async function startSidePeekShellStabilityLog( page ) {
@@ -985,6 +599,10 @@ async function dragRenderedRow(
 		expect( chipBox ).toBeTruthy();
 		expect( chipBox.width ).toBeGreaterThan( 24 );
 		expect( chipBox.height ).toBeGreaterThan( 16 );
+		expect( chipBox.x ).toBeGreaterThanOrEqual( visiblePreviewBox.x - 1 );
+		expect( chipBox.x + chipBox.width ).toBeLessThanOrEqual(
+			visiblePreviewBox.x + visiblePreviewBox.width + 1
+		);
 		expect( chipBox.y ).toBeGreaterThanOrEqual( visiblePreviewBox.y - 1 );
 		expect( chipBox.y + chipBox.height ).toBeLessThanOrEqual(
 			visiblePreviewBox.y + visiblePreviewBox.height + 1
@@ -1073,136 +691,6 @@ test.describe( 'Collection view block', () => {
 				canvas.getByText( 'Ursula K. Le Guin' )
 			).toBeVisible();
 
-			const toolbar = canvas
-				.locator( '.dataviews__view-actions' )
-				.first();
-			await expectDataViewsToolbarChrome( toolbar );
-
-			const firstRow = canvas
-				.locator( '.dataviews-view-table tbody > tr' )
-				.first();
-			const headerSelectionCell = canvas
-				.locator(
-					'.dataviews-view-table thead th.dataviews-view-table__checkbox-column'
-				)
-				.first();
-			await expect( headerSelectionCell ).toHaveCSS(
-				'cursor',
-				'default'
-			);
-			await headerSelectionCell.hover();
-			await expect( headerSelectionCell ).toHaveCSS(
-				'background-color',
-				'rgb(255, 255, 255)'
-			);
-			await expect(
-				canvas
-					.locator(
-						'.dataviews-view-table thead .dataviews-view-table-selection-checkbox'
-					)
-					.first()
-			).toHaveCSS( 'opacity', '0' );
-			await expect(
-				firstRow.locator( '.dataviews-selection-checkbox' ).first()
-			).toHaveCSS( 'opacity', '0' );
-			const titleCell = firstRow
-				.locator( 'td:has(.cortext-title-cell)' )
-				.first();
-			const authorCell = firstRow
-				.locator(
-					'td:not(.dataviews-view-table__checkbox-column):not(.dataviews-view-table__actions-column):not(:has(.cortext-title-cell))'
-				)
-				.first();
-			await titleCell.hover();
-			await expect(
-				firstRow.locator( '.dataviews-selection-checkbox' ).first()
-			).toHaveCSS( 'opacity', '1' );
-			await expect
-				.poll( () =>
-					firstRow.evaluate( ( row ) => {
-						const styles = row.ownerDocument.defaultView;
-						const titleCellElement = row.querySelector(
-							'td:has(.cortext-title-cell)'
-						);
-						const checkboxCell = row.querySelector(
-							'td.dataviews-view-table__checkbox-column'
-						);
-						const authorCellElement = Array.from(
-							row.querySelectorAll(
-								'td:not(.dataviews-view-table__checkbox-column):not(.dataviews-view-table__actions-column)'
-							)
-						).find(
-							( cell ) =>
-								! cell.querySelector( '.cortext-title-cell' )
-						);
-						const actionsCell = row.querySelector(
-							'td.dataviews-view-table__actions-column'
-						);
-						const openButton = row.querySelector(
-							'.cortext-title-cell__open'
-						);
-
-						return {
-							checkboxBackground:
-								styles.getComputedStyle( checkboxCell )
-									.backgroundColor,
-							titleBackground:
-								styles.getComputedStyle( titleCellElement )
-									.backgroundColor,
-							authorBackground:
-								styles.getComputedStyle( authorCellElement )
-									.backgroundColor,
-							actionsBackground:
-								styles.getComputedStyle( actionsCell )
-									.backgroundColor,
-							openButtonActionColor: [
-								'rgb(56, 88, 233)',
-								'rgb(24, 58, 214)',
-							].includes(
-								styles.getComputedStyle( openButton ).color
-							),
-						};
-					} )
-				)
-				.toEqual( {
-					checkboxBackground: 'rgb(248, 248, 248)',
-					titleBackground: 'rgb(240, 240, 240)',
-					authorBackground: 'rgb(248, 248, 248)',
-					actionsBackground: 'rgb(248, 248, 248)',
-					openButtonActionColor: true,
-				} );
-			await authorCell.hover();
-			await expect
-				.poll( () =>
-					firstRow.evaluate( ( row ) => {
-						const styles = row.ownerDocument.defaultView;
-						const titleCellElement = row.querySelector(
-							'td:has(.cortext-title-cell)'
-						);
-						const authorCellElement = Array.from(
-							row.querySelectorAll(
-								'td:not(.dataviews-view-table__checkbox-column):not(.dataviews-view-table__actions-column)'
-							)
-						).find(
-							( cell ) =>
-								! cell.querySelector( '.cortext-title-cell' )
-						);
-
-						return {
-							titleBackground:
-								styles.getComputedStyle( titleCellElement )
-									.backgroundColor,
-							authorBackground:
-								styles.getComputedStyle( authorCellElement )
-									.backgroundColor,
-						};
-					} )
-				)
-				.toEqual( {
-					titleBackground: 'rgb(248, 248, 248)',
-					authorBackground: 'rgb(240, 240, 240)',
-				} );
-
 			await page.evaluate( async () => {
 				await window.wp.data.dispatch( 'core/editor' ).savePost();
 			} );
@@ -1250,7 +738,7 @@ test.describe( 'Collection view block', () => {
 		}
 	} );
 
-	test( 'aligns grid titles, cards, and the New card in the same columns', async ( {
+	test( 'keeps grid cards and the New card aligned without overlap', async ( {
 		admin,
 		page,
 		requestUtils,
@@ -1300,96 +788,69 @@ test.describe( 'Collection view block', () => {
 			await expect(
 				canvas.getByRole( 'button', { name: 'New', exact: true } )
 			).toBeVisible();
-			await page.mouse.move( 0, 0 );
-			await expectGridCardRestChrome(
-				canvas
-					.locator( '.dataviews-view-grid__card' )
-					.filter( { hasText: 'Alpha Manual' } )
-					.first()
-			);
 
 			const getGridMetrics = () =>
 				canvas
 					.locator( '.cortext-data-view' )
 					.first()
 					.evaluate( ( root ) => {
-						const rects = ( selector ) =>
-							Array.from( root.querySelectorAll( selector ) ).map(
-								( element ) => element.getBoundingClientRect()
-							);
+						const cardRects = Array.from(
+							root.querySelectorAll(
+								'.dataviews-view-grid__card'
+							)
+						).map( ( element ) => element.getBoundingClientRect() );
 						const newRect = root
 							.querySelector(
 								'.cortext-data-view__new-row-card-wrapper'
 							)
 							?.getBoundingClientRect();
-						const gridRect = root
-							.querySelector( '.dataviews-view-grid' )
-							?.getBoundingClientRect();
-						const gridRow = root.querySelector(
-							'.dataviews-view-grid__row'
+						const firstCardRect = cardRects[ 0 ];
+						const allRects = [ ...cardRects, newRect ].filter(
+							Boolean
 						);
-						const gridRowStyle = gridRow
-							? gridRow.ownerDocument.defaultView.getComputedStyle(
-									gridRow
-							  )
-							: null;
-						const cardWidths = rects(
-							'.dataviews-view-grid__card'
-						).map( ( rect ) => Math.round( rect.width ) );
-						const firstRowCardCount =
-							root
-								.querySelector( '.dataviews-view-grid__row' )
-								?.querySelectorAll(
-									'.dataviews-view-grid__card'
-								).length ?? 0;
-						const newWidth = newRect
-							? Math.round( newRect.width )
-							: 0;
-						const cardTitleTexts = Array.from(
-							root.querySelectorAll(
-								'.dataviews-view-grid__card .dataviews-view-grid__title-field'
-							)
-						)
-							.map( ( element ) => element.textContent?.trim() )
-							.filter( Boolean );
 
 						return {
-							cardCount: cardWidths.length,
-							cardsWide:
-								cardWidths.length > 0 &&
-								Math.min( ...cardWidths ) >= 180,
-							titlesVisible: [
-								'Alpha Manual',
-								'Beta Manual',
-								'Gamma Manual',
-							].every( ( title ) =>
-								cardTitleTexts.includes( title )
-							),
-							newAligned:
-								cardWidths.length > 0 &&
-								Math.abs( newWidth - cardWidths[ 0 ] ) <= 2,
-							gridWideEnoughForThree:
-								( gridRect?.width ?? 0 ) >= 752,
-							columnGap: Number.parseFloat(
-								gridRowStyle?.columnGap ?? '0'
-							),
-							firstRowCardCount,
-							usesCompactPreviewSize:
-								cardWidths.length > 0 &&
-								Math.min( ...cardWidths ) >= 220 &&
-								Math.max( ...cardWidths ) <= 360,
+							cardsShareRow:
+								cardRects.length === 3 &&
+								cardRects.every(
+									( rect ) =>
+										Math.abs(
+											rect.top - firstCardRect.top
+										) <= 2
+								),
+							newCardAlignsToColumn:
+								Boolean( newRect && firstCardRect ) &&
+								cardRects.some(
+									( rect ) =>
+										Math.abs( rect.left - newRect.left ) <=
+										2
+								),
+							newCardMatchesWidth:
+								Boolean( newRect && firstCardRect ) &&
+								Math.abs(
+									newRect.width - firstCardRect.width
+								) <= 2,
+							itemsDoNotOverlap:
+								allRects.length === 4 &&
+								allRects.every( ( rect, index ) =>
+									allRects
+										.slice( index + 1 )
+										.every(
+											( other ) =>
+												rect.right <= other.left + 1 ||
+												other.right <= rect.left + 1 ||
+												rect.bottom <= other.top + 1 ||
+												other.bottom <= rect.top + 1
+										)
+								),
 						};
 					} );
 
 			await expect.poll( getGridMetrics ).toEqual( {
-				cardCount: 3,
-				cardsWide: true,
-				titlesVisible: true,
-				newAligned: true,
-				gridWideEnoughForThree: true,
-				columnGap: 32,
-				firstRowCardCount: 3,
-				usesCompactPreviewSize: true,
+				cardsShareRow: true,
+				newCardAlignsToColumn: true,
+				newCardMatchesWidth: true,
+				itemsDoNotOverlap: true,
 			} );
 		} finally {
 			if ( fixture.rows ) {
@@ -1768,7 +1229,7 @@ test.describe( 'Collection view block', () => {
 		} );
 	} );
 
-	test( 'aligns grouped list rows with standard list rows', async ( {
+	test( 'renders grouped list rows without reorder controls', async ( {
 		admin,
 		page,
 		requestUtils,
@@ -1854,354 +1315,6 @@ test.describe( 'Collection view block', () => {
 				.filter( { hasText: 'Dune' } )
 				.first();
 			await expect( secondRow ).toBeVisible();
-			const listMetrics = await row.evaluate( ( element ) => {
-				const title = element.querySelector( '.dataviews-title-field' );
-				const fields = element.querySelector(
-					'.dataviews-view-list__fields'
-				);
-				const actions = element.querySelector(
-					'.dataviews-view-list__item-actions'
-				);
-				const visibleActionButtons = Array.from(
-					element.querySelectorAll(
-						'.dataviews-view-list__item-actions .components-button'
-					)
-				).filter( ( button ) => {
-					const rect = button.getBoundingClientRect();
-					const style =
-						button.ownerDocument.defaultView.getComputedStyle(
-							button
-						);
-					return (
-						style.display !== 'none' &&
-						style.visibility !== 'hidden' &&
-						rect.width > 0 &&
-						rect.height > 0
-					);
-				} );
-				const visibleSelectionCheckboxes = Array.from(
-					element.querySelectorAll( '.dataviews-selection-checkbox' )
-				).filter( ( checkbox ) => {
-					const rect = checkbox.getBoundingClientRect();
-					const style =
-						checkbox.ownerDocument.defaultView.getComputedStyle(
-							checkbox
-						);
-					return (
-						style.display !== 'none' &&
-						style.visibility !== 'hidden' &&
-						Number( style.opacity ) > 0 &&
-						rect.width > 0 &&
-						rect.height > 0
-					);
-				} );
-				const visibleFieldValues = Array.from(
-					element.querySelectorAll(
-						'.dataviews-view-list__field-value'
-					)
-				).filter( ( fieldValue ) => {
-					const rect = fieldValue.getBoundingClientRect();
-					const style =
-						fieldValue.ownerDocument.defaultView.getComputedStyle(
-							fieldValue
-						);
-					return (
-						style.display !== 'none' &&
-						style.visibility !== 'hidden' &&
-						rect.width > 0 &&
-						rect.height > 0
-					);
-				} );
-				const itemTarget = element.querySelector(
-					'.dataviews-view-list__item'
-				);
-				const itemTargetCell = itemTarget?.parentElement?.matches(
-					'[role="gridcell"]'
-				)
-					? itemTarget.parentElement
-					: null;
-				const media = element.querySelector(
-					'.dataviews-view-list__media-wrapper'
-				);
-				const rowRect = element.getBoundingClientRect();
-				const titleRect = title?.getBoundingClientRect();
-				const fieldsRect = fields?.getBoundingClientRect();
-				const actionsRect = actions?.getBoundingClientRect();
-				const metadataRect =
-					visibleFieldValues[ 0 ]?.getBoundingClientRect();
-				const actionButtonRect =
-					visibleActionButtons[ 0 ]?.getBoundingClientRect();
-				const itemTargetRect = itemTarget?.getBoundingClientRect();
-				const itemTargetCellRect =
-					itemTargetCell?.getBoundingClientRect();
-				const mediaRect = media?.getBoundingClientRect();
-				const itemTargetStyle = itemTarget
-					? itemTarget.ownerDocument.defaultView.getComputedStyle(
-							itemTarget
-					  )
-					: null;
-				const itemTargetCellStyle = itemTargetCell
-					? itemTargetCell.ownerDocument.defaultView.getComputedStyle(
-							itemTargetCell
-					  )
-					: null;
-				const mediaStyle = media
-					? media.ownerDocument.defaultView.getComputedStyle( media )
-					: null;
-				const rowStyle =
-					element.ownerDocument.defaultView.getComputedStyle(
-						element
-					);
-				const itemWrapper = element.querySelector(
-					'.dataviews-view-list__item-wrapper'
-				);
-				const itemWrapperStyle = itemWrapper
-					? itemWrapper.ownerDocument.defaultView.getComputedStyle(
-							itemWrapper
-					  )
-					: null;
-				const groupWrapper = element.parentElement;
-				const groupHeader = groupWrapper?.querySelector(
-					':scope > .dataviews-view-list__group-header'
-				);
-				const groupWrapperStyle = groupWrapper
-					? groupWrapper.ownerDocument.defaultView.getComputedStyle(
-							groupWrapper
-					  )
-					: null;
-				const groupHeaderStyle = groupHeader
-					? groupHeader.ownerDocument.defaultView.getComputedStyle(
-							groupHeader
-					  )
-					: null;
-
-				return {
-					rowIsNested:
-						element.parentElement !==
-						element.closest( '.dataviews-view-list' ),
-					rowBorderTopWidth: rowStyle.borderTopWidth,
-					groupGap: groupWrapperStyle?.gap ?? '',
-					groupHeaderPaddingInlineStart:
-						groupHeaderStyle?.paddingInlineStart ?? '',
-					itemWrapperPaddingTop: itemWrapperStyle?.paddingTop ?? '',
-					itemWrapperPaddingInlineStart:
-						itemWrapperStyle?.paddingInlineStart ?? '',
-					titleText: title?.textContent?.trim() ?? '',
-					titleWidth: titleRect?.width ?? 0,
-					titleLeft: titleRect
-						? Math.round( titleRect.left - rowRect.left )
-						: 0,
-					titleRight: titleRect
-						? Math.round( titleRect.right - rowRect.left )
-						: 0,
-					fieldsLeft: fieldsRect
-						? Math.round( fieldsRect.left - rowRect.left )
-						: 0,
-					metadataLeft: metadataRect
-						? Math.round( metadataRect.left - rowRect.left )
-						: 0,
-					metadataRight: metadataRect
-						? Math.round( metadataRect.right - rowRect.left )
-						: 0,
-					titleToFieldsGap:
-						titleRect && fieldsRect
-							? Math.round( fieldsRect.left - titleRect.right )
-							: 0,
-					actionsLeft: actionsRect
-						? Math.round( actionsRect.left - rowRect.left )
-						: 0,
-					visibleActionButtons: visibleActionButtons.length,
-					actionButtonWidth: actionButtonRect?.width ?? 0,
-					actionButtonHeight: actionButtonRect?.height ?? 0,
-					visibleSelectionCheckboxes:
-						visibleSelectionCheckboxes.length,
-					itemTargetPosition: itemTargetStyle?.position ?? '',
-					itemTargetBorderWidth:
-						itemTargetStyle?.borderTopWidth ?? '',
-					itemTargetWidth: itemTargetRect?.width ?? 0,
-					itemTargetCellPosition: itemTargetCellStyle?.position ?? '',
-					itemTargetCellBorderWidth:
-						itemTargetCellStyle?.borderTopWidth ?? '',
-					itemTargetCellWidth: itemTargetCellRect?.width ?? 0,
-					mediaDisplay: mediaStyle?.display ?? '',
-					mediaHasImage: Boolean( media?.querySelector( 'img' ) ),
-					mediaWidth: mediaRect?.width ?? 0,
-				};
-			} );
-			expect( listMetrics ).toMatchObject( {
-				rowIsNested: true,
-				rowBorderTopWidth: '0px',
-				groupGap: '0px',
-				groupHeaderPaddingInlineStart: '16px',
-				itemWrapperPaddingTop: '8px',
-				itemWrapperPaddingInlineStart: '16px',
-				titleText: expect.stringContaining(
-					'The Left Hand of Darkness'
-				),
-			} );
-			expect( listMetrics.titleWidth ).toBeGreaterThan( 120 );
-			expect( listMetrics.titleLeft ).toBeLessThan(
-				listMetrics.fieldsLeft
-			);
-			expect( listMetrics.titleToFieldsGap ).toBeGreaterThanOrEqual( 4 );
-			expect( listMetrics.metadataLeft ).toBeGreaterThanOrEqual(
-				listMetrics.titleRight + 4
-			);
-			expect( listMetrics.actionsLeft ).toBeGreaterThan(
-				listMetrics.metadataRight
-			);
-			expect( listMetrics.visibleActionButtons ).toBeGreaterThanOrEqual(
-				1
-			);
-			expect( listMetrics.actionButtonWidth ).toBeLessThanOrEqual( 40 );
-			expect( listMetrics.actionButtonHeight ).toBeLessThanOrEqual( 40 );
-			expect( listMetrics.visibleSelectionCheckboxes ).toBe( 0 );
-			expect( listMetrics.itemTargetPosition ).toBe( 'absolute' );
-			expect( listMetrics.itemTargetBorderWidth ).toBe( '0px' );
-			expect( listMetrics.itemTargetWidth ).toBeGreaterThan( 400 );
-			expect( listMetrics.itemTargetCellPosition ).toBe( 'absolute' );
-			expect( listMetrics.itemTargetCellBorderWidth ).toBe( '0px' );
-			expect( listMetrics.itemTargetCellWidth ).toBeGreaterThan( 400 );
-			expect( listMetrics.mediaHasImage ).toBe( false );
-			expect( listMetrics.mediaDisplay ).toBe( 'none' );
-			expect( listMetrics.mediaWidth ).toBe( 0 );
-			const actionAlignment = await canvas
-				.locator( '.dataviews-view-list' )
-				.evaluate( ( list ) =>
-					Array.from( list.querySelectorAll( '[role="row"]' ) ).map(
-						( listRow ) => {
-							const visibleActionButtons = Array.from(
-								listRow.querySelectorAll(
-									'.dataviews-view-list__item-actions .components-button'
-								)
-							).filter( ( button ) => {
-								const rect = button.getBoundingClientRect();
-								const style =
-									button.ownerDocument.defaultView.getComputedStyle(
-										button
-									);
-								return (
-									style.display !== 'none' &&
-									style.visibility !== 'hidden' &&
-									rect.width > 0 &&
-									rect.height > 0
-								);
-							} );
-							const visibleFieldValues = Array.from(
-								listRow.querySelectorAll(
-									'.dataviews-view-list__field-value'
-								)
-							).filter( ( fieldValue ) => {
-								const rect = fieldValue.getBoundingClientRect();
-								const style =
-									fieldValue.ownerDocument.defaultView.getComputedStyle(
-										fieldValue
-									);
-								return (
-									style.display !== 'none' &&
-									style.visibility !== 'hidden' &&
-									rect.width > 0 &&
-									rect.height > 0
-								);
-							} );
-							const button = visibleActionButtons[ 0 ];
-							const rowRect = listRow.getBoundingClientRect();
-							const buttonRect = button?.getBoundingClientRect();
-							const metadataRect =
-								visibleFieldValues[ 0 ]?.getBoundingClientRect();
-
-							return {
-								text: listRow.textContent ?? '',
-								actionLeft: Math.round( buttonRect?.left ?? 0 ),
-								actionRight: Math.round(
-									buttonRect?.right ?? 0
-								),
-								actionRightInset: Math.round(
-									rowRect.right - ( buttonRect?.right ?? 0 )
-								),
-								metadataRight: Math.round(
-									metadataRect?.right ?? 0
-								),
-								actionCenterOffset: buttonRect
-									? Math.abs(
-											buttonRect.top +
-												buttonRect.height / 2 -
-												( rowRect.top +
-													rowRect.height / 2 )
-									  )
-									: null,
-							};
-						}
-					)
-				);
-			const firstAction = actionAlignment.find( ( metric ) =>
-				metric.text.includes( 'The Left Hand of Darkness' )
-			);
-			const secondAction = actionAlignment.find( ( metric ) =>
-				metric.text.includes( 'Dune' )
-			);
-			expect( firstAction ).toBeTruthy();
-			expect( secondAction ).toBeTruthy();
-			expect(
-				Math.abs( firstAction.actionRight - secondAction.actionRight )
-			).toBeLessThanOrEqual( 1 );
-			expect(
-				Math.abs(
-					firstAction.metadataRight - secondAction.metadataRight
-				)
-			).toBeLessThanOrEqual( 1 );
-			expect(
-				firstAction.actionLeft - firstAction.metadataRight
-			).toBeGreaterThanOrEqual( 4 );
-			expect(
-				firstAction.actionLeft - firstAction.metadataRight
-			).toBeLessThanOrEqual( 32 );
-			expect(
-				secondAction.actionLeft - secondAction.metadataRight
-			).toBeGreaterThanOrEqual( 4 );
-			expect(
-				secondAction.actionLeft - secondAction.metadataRight
-			).toBeLessThanOrEqual( 32 );
-			expect( firstAction.actionRightInset ).toBeGreaterThanOrEqual( 8 );
-			expect( firstAction.actionRightInset ).toBeLessThanOrEqual( 32 );
-			expect( secondAction.actionRightInset ).toBeGreaterThanOrEqual( 8 );
-			expect( secondAction.actionRightInset ).toBeLessThanOrEqual( 32 );
-			expect( firstAction.actionCenterOffset ).toBeLessThanOrEqual( 2 );
-			expect( secondAction.actionCenterOffset ).toBeLessThanOrEqual( 2 );
-
-			const label = row
-				.locator( '.dataviews-view-list__field-label' )
-				.filter( { hasText: 'Author' } )
-				.first();
-			await expect( label ).toBeAttached();
-			await row.hover();
-
-			const labelMetrics = await label.evaluate( ( element ) => {
-				const rect = element.getBoundingClientRect();
-				const style = window.getComputedStyle( element );
-				return {
-					height: rect.height,
-					position: style.position,
-					width: rect.width,
-				};
-			} );
-			expect( labelMetrics ).toMatchObject( {
-				height: 1,
-				position: 'absolute',
-				width: 1,
-			} );
-			await expect( row ).toHaveCSS(
-				'background-color',
-				'rgb(248, 248, 248)'
-			);
-
-			const fieldColor = await row
-				.locator( '.dataviews-view-list__field' )
-				.first()
-				.evaluate(
-					( element ) => window.getComputedStyle( element ).color
-				);
-			expect( fieldColor ).not.toBe( 'rgb(56, 88, 233)' );
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
@@ -2228,7 +1341,7 @@ test.describe( 'Collection view block', () => {
 		}
 	} );
 
-	test( 'keeps list media aligned without duplicating the title icon', async ( {
+	test( 'keeps list media after the drag handle without duplicating the title icon', async ( {
 		admin,
 		page,
 		requestUtils,
@@ -2308,33 +1421,16 @@ test.describe( 'Collection view block', () => {
 				const media = element.querySelector(
 					'.dataviews-view-list__media-wrapper'
 				);
-				const mediaImage = media?.querySelector( 'img' );
-				const dragHandle = element.querySelector(
-					'.cortext-row-drag-handle'
-				);
 				const title = element.querySelector( '.dataviews-title-field' );
 				const titleIcon = element.querySelector(
 					'.cortext-title-cell__icon'
 				);
-				const visibleImages = Array.from(
-					element.querySelectorAll( 'img' )
-				).filter( ( image ) => {
-					const rect = image.getBoundingClientRect();
-					const style =
-						image.ownerDocument.defaultView.getComputedStyle(
-							image
-						);
-					return (
-						style.display !== 'none' &&
-						style.visibility !== 'hidden' &&
-						rect.width > 0 &&
-						rect.height > 0
-					);
-				} );
+				const dragHandle = element.querySelector(
+					'.cortext-row-drag-handle'
+				);
 				const mediaRect = media?.getBoundingClientRect();
-				const mediaImageRect = mediaImage?.getBoundingClientRect();
-				const dragHandleRect = dragHandle?.getBoundingClientRect();
 				const titleRect = title?.getBoundingClientRect();
+				const handleRect = dragHandle?.getBoundingClientRect();
 				const titleIconStyle = titleIcon
 					? titleIcon.ownerDocument.defaultView.getComputedStyle(
 							titleIcon
@@ -2342,7 +1438,10 @@ test.describe( 'Collection view block', () => {
 					: null;
 
 				return {
-					mediaToTitleCenterGap:
+					mediaAfterHandle:
+						Boolean( mediaRect && handleRect ) &&
+						mediaRect.left >= handleRect.right,
+					centerGap:
 						mediaRect && titleRect
 							? Math.abs(
 									mediaRect.top +
@@ -2350,78 +1449,37 @@ test.describe( 'Collection view block', () => {
 										( titleRect.top + titleRect.height / 2 )
 							  )
 							: null,
-					mediaWidth: mediaRect?.width ?? 0,
-					mediaHeight: mediaRect?.height ?? 0,
-					mediaImageWidth: mediaImageRect?.width ?? 0,
-					mediaImageHeight: mediaImageRect?.height ?? 0,
-					mediaToTitleGap:
+					titleGap:
 						mediaRect && titleRect
 							? Math.round( titleRect.left - mediaRect.right )
 							: null,
-					dragHandleToMediaGap:
-						dragHandleRect && mediaRect
-							? Math.round(
-									mediaRect.left - dragHandleRect.right
-							  )
-							: null,
-					titleIconDisplay: titleIconStyle?.display ?? '',
-					visibleImages: visibleImages.length,
+					titleIconHidden: titleIconStyle?.display === 'none',
+					visibleImages: Array.from(
+						element.querySelectorAll( 'img' )
+					).filter( ( image ) => {
+						const rect = image.getBoundingClientRect();
+						const style =
+							image.ownerDocument.defaultView.getComputedStyle(
+								image
+							);
+						return (
+							style.display !== 'none' &&
+							style.visibility !== 'hidden' &&
+							rect.width > 0 &&
+							rect.height > 0
+						);
+					} ).length,
 				};
 			} );
-			expect( mediaMetrics.visibleImages ).toBe( 1 );
-			expect( mediaMetrics.titleIconDisplay ).toBe( 'none' );
-			expect( mediaMetrics.mediaWidth ).toBeLessThanOrEqual( 32 );
-			expect( mediaMetrics.mediaHeight ).toBeLessThanOrEqual( 32 );
-			expect( mediaMetrics.mediaImageWidth ).toBeLessThanOrEqual( 32 );
-			expect( mediaMetrics.mediaImageHeight ).toBeLessThanOrEqual( 32 );
-			expect( mediaMetrics.dragHandleToMediaGap ).not.toBeNull();
-			expect( mediaMetrics.dragHandleToMediaGap ).toBeGreaterThanOrEqual(
-				4
-			);
-			expect( mediaMetrics.dragHandleToMediaGap ).toBeLessThanOrEqual(
-				16
-			);
-			expect( mediaMetrics.mediaToTitleGap ).not.toBeNull();
-			expect( mediaMetrics.mediaToTitleGap ).toBeGreaterThanOrEqual( 8 );
-			expect( mediaMetrics.mediaToTitleCenterGap ).not.toBeNull();
-			expect( mediaMetrics.mediaToTitleCenterGap ).toBeLessThanOrEqual(
-				8
-			);
-
-			const rtlMetrics = await row.evaluate( ( element ) => {
-				const root = element.closest( '.cortext-data-view' );
-				root?.setAttribute( 'dir', 'rtl' );
-				const media = element.querySelector(
-					'.dataviews-view-list__media-wrapper'
-				);
-				const fieldWrapper = element.querySelector(
-					'.dataviews-view-list__field-wrapper'
-				);
-				const ownerWindow = element.ownerDocument.defaultView;
-				const mediaStyle = ownerWindow.getComputedStyle( media );
-				const fieldWrapperStyle =
-					ownerWindow.getComputedStyle( fieldWrapper );
-				const rowRect = element.getBoundingClientRect();
-				const mediaRect = media.getBoundingClientRect();
-
-				return {
-					direction:
-						ownerWindow.getComputedStyle( element ).direction,
-					mediaInlineStartInset: Math.round(
-						rowRect.right - mediaRect.right
-					),
-					mediaRight: mediaStyle.right,
-					fieldPaddingLeft: fieldWrapperStyle.paddingLeft,
-					fieldPaddingRight: fieldWrapperStyle.paddingRight,
-				};
+			expect( mediaMetrics ).toEqual( {
+				mediaAfterHandle: true,
+				centerGap: expect.any( Number ),
+				titleGap: expect.any( Number ),
+				titleIconHidden: true,
+				visibleImages: 1,
 			} );
-			expect( rtlMetrics ).toEqual( {
-				direction: 'rtl',
-				mediaInlineStartInset: 16,
-				mediaRight: '0px',
-				fieldPaddingLeft: '0px',
-				fieldPaddingRight: '32px',
-			} );
+			expect( mediaMetrics.centerGap ).toBeLessThanOrEqual( 8 );
+			expect( mediaMetrics.titleGap ).toBeGreaterThanOrEqual( 8 );
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
@@ -2523,7 +1581,6 @@ test.describe( 'Collection view block', () => {
 					await expect(
 						canvas.locator( '.cortext-row-drag-handle' )
 					).toHaveCount( 0 );
-					await expectGridCardHasNoFloatingDragHandle( canvas );
 				} else {
 					await expect(
 						canvas.locator( '.cortext-row-drag-handle' )
@@ -2543,10 +1600,6 @@ test.describe( 'Collection view block', () => {
 								expect.stringContaining( 'Alpha Manual' ),
 								expect.stringContaining( 'Beta Manual' ),
 						  ];
-				const expectedOrderWithDelta = [
-					...expectedOrder,
-					expect.stringContaining( 'Delta Manual' ),
-				];
 				await dragRenderedRow(
 					page,
 					canvas,
@@ -2572,47 +1625,55 @@ test.describe( 'Collection view block', () => {
 					.poll( () => renderedManualTitles( canvas ) )
 					.toEqual( expectedOrder );
 
-				await page.evaluate( async () => {
-					await window.wp.data.dispatch( 'core/editor' ).savePost();
-				} );
-				await page.waitForFunction(
-					() =>
-						! window.wp.data.select( 'core/editor' ).isSavingPost()
-				);
-
-				await page.reload();
-				await expect
-					.poll( () => renderedManualTitles( canvas ) )
-					.toEqual( expectedOrder );
-
-				fixture.rows.push(
-					await requestUtils.rest( {
-						method: 'POST',
-						path: '/wp/v2/crtxt_documents',
-						data: {
-							title: 'Delta Manual',
-							status: 'private',
-							cortext_trait: fixture.collection.id,
-						},
-					} )
-				);
-
-				await page.reload();
-				await expect(
-					canvas.getByText( 'Delta Manual' )
-				).toBeVisible();
-				await expect
-					.poll( () =>
-						renderedManualTitles( canvas, [
-							'Alpha Manual',
-							'Beta Manual',
-							'Gamma Manual',
-							'Delta Manual',
-						] )
-					)
-					.toEqual( expectedOrderWithDelta );
-
 				if ( layout === 'table' ) {
+					const expectedOrderWithDelta = [
+						...expectedOrder,
+						expect.stringContaining( 'Delta Manual' ),
+					];
+					await page.evaluate( async () => {
+						await window.wp.data
+							.dispatch( 'core/editor' )
+							.savePost();
+					} );
+					await page.waitForFunction(
+						() =>
+							! window.wp.data
+								.select( 'core/editor' )
+								.isSavingPost()
+					);
+
+					await page.reload();
+					await expect
+						.poll( () => renderedManualTitles( canvas ) )
+						.toEqual( expectedOrder );
+
+					fixture.rows.push(
+						await requestUtils.rest( {
+							method: 'POST',
+							path: '/wp/v2/crtxt_documents',
+							data: {
+								title: 'Delta Manual',
+								status: 'private',
+								cortext_trait: fixture.collection.id,
+							},
+						} )
+					);
+
+					await page.reload();
+					await expect(
+						canvas.getByText( 'Delta Manual' )
+					).toBeVisible();
+					await expect
+						.poll( () =>
+							renderedManualTitles( canvas, [
+								'Alpha Manual',
+								'Beta Manual',
+								'Gamma Manual',
+								'Delta Manual',
+							] )
+						)
+						.toEqual( expectedOrderWithDelta );
+
 					await page.evaluate( () => {
 						const block = window.wp.data
 							.select( 'core/block-editor' )
@@ -2715,6 +1776,10 @@ test.describe( 'Collection view block', () => {
 				);
 				await deleteIfCreated(
 					requestUtils,
+					fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
+				);
+				await deleteIfCreated(
+					requestUtils,
 					fixture.collection &&
 						`/wp/v2/crtxt_documents/${ fixture.collection.id }`
 				);
@@ -2722,7 +1787,7 @@ test.describe( 'Collection view block', () => {
 		} );
 	}
 
-	test( 'renders rich grid drag previews without card controls', async ( {
+	test( 'keeps relation chips inside rich grid cards and drag previews', async ( {
 		admin,
 		page,
 		requestUtils,
@@ -2850,6 +1915,7 @@ test.describe( 'Collection view block', () => {
 					status: 'private',
 					content: createDataViewBlockMarkup( fixture.collection.id, {
 						type: 'grid',
+						mediaField: 'cover',
 						fields: [ 'title', relationFieldKey, statusFieldKey ],
 						fieldsByType: {
 							grid: [ relationFieldKey, statusFieldKey ],
@@ -2882,55 +1948,7 @@ test.describe( 'Collection view block', () => {
 					.locator( '.cortext-chip', { hasText: 'Finished' } )
 					.first()
 			).toBeVisible();
-			const alphaCard = canvas
-				.locator( '.dataviews-view-grid__card' )
-				.filter( { hasText: 'Alpha Manual' } )
-				.first();
-			await expectGridCardTitleBeforeFields( alphaCard );
-			const gridBodyRhythm = await alphaCard.evaluate( ( element ) => {
-				const body = element.querySelector(
-					':scope > .dataviews-view-grid__title-actions + *'
-				);
-				const fields = element.querySelector(
-					'.dataviews-view-grid__fields'
-				);
-				const ownerWindow = element.ownerDocument.defaultView;
-				const bodyStyles = body
-					? ownerWindow.getComputedStyle( body )
-					: null;
-				const fieldsStyles = fields
-					? ownerWindow.getComputedStyle( fields )
-					: null;
-				const fieldRects = Array.from(
-					fields?.querySelectorAll(
-						':scope > .dataviews-view-grid__field'
-					) ?? []
-				)
-					.map( ( field ) => field.getBoundingClientRect() )
-					.filter( ( rect ) => rect.width > 0 && rect.height > 0 );
-
-				return {
-					bodyDisplay: bodyStyles?.display ?? '',
-					bodyGap: Number.parseFloat(
-						bodyStyles?.rowGap || bodyStyles?.gap || '0'
-					),
-					fieldsDisplay: fieldsStyles?.display ?? '',
-					fieldsGap: Number.parseFloat(
-						fieldsStyles?.rowGap || fieldsStyles?.gap || '0'
-					),
-					fieldRowGaps: fieldRects
-						.slice( 1 )
-						.map( ( rect, index ) =>
-							Math.round( rect.top - fieldRects[ index ].bottom )
-						),
-				};
-			} );
-			expect( gridBodyRhythm.bodyDisplay ).toBe( 'flex' );
-			expect( gridBodyRhythm.bodyGap ).toBeGreaterThanOrEqual( 8 );
-			expect( gridBodyRhythm.fieldsDisplay ).toBe( 'flex' );
-			expect( gridBodyRhythm.fieldsGap ).toBeGreaterThanOrEqual( 16 );
-			expect( gridBodyRhythm.fieldRowGaps ).toEqual( [ 16 ] );
-			const relationChip = alphaCard
+			const relationChip = canvas
 				.locator( '.cortext-relation-ref', {
 					hasText: 'Los Angeles Azules Extended Relation Label',
 				} )
@@ -2939,142 +1957,26 @@ test.describe( 'Collection view block', () => {
 			await expect
 				.poll( () =>
 					relationChip.evaluate( ( chip ) => {
-						const shell = chip.closest(
-							'.cortext-editable-cell__shell'
-						);
-						const fieldValue = chip.closest(
-							'.dataviews-view-grid__field-value'
-						);
-						const field = chip.closest(
-							'.dataviews-view-grid__field'
-						);
 						const fields = chip.closest(
 							'.dataviews-view-grid__fields, .dataviews-view-grid__badge-fields'
 						);
-						const refs = chip.closest( '.cortext-relation-refs' );
 						const title = chip.querySelector(
 							'.cortext-relation-ref__title'
 						);
-						if (
-							! shell ||
-							! fieldValue ||
-							! field ||
-							! fields ||
-							! refs ||
-							! title
-						) {
-							return {
-								chipInsideFields: false,
-								chipInsideRefs: false,
-								chipBoxSizing: '',
-								fieldUsesSurfaceWidth: false,
-								shellUsesRowWidth: false,
-								shellHasPencilReserve: false,
-								titleHasRoom: false,
-							};
+						if ( ! fields || ! title ) {
+							return false;
 						}
-						const ownerWindow = chip.ownerDocument.defaultView;
 						const chipRect = chip.getBoundingClientRect();
-						const fieldValueRect =
-							fieldValue.getBoundingClientRect();
-						const fieldRect = field.getBoundingClientRect();
 						const fieldsRect = fields.getBoundingClientRect();
-						const refsRect = refs.getBoundingClientRect();
-						const shellRect = shell.getBoundingClientRect();
 						const titleRect = title.getBoundingClientRect();
-						const chipStyles = ownerWindow.getComputedStyle( chip );
-						const fieldsStyles =
-							ownerWindow.getComputedStyle( fields );
-						const fieldsPaddingRight = Number.parseFloat(
-							fieldsStyles.paddingRight
+						return (
+							titleRect.width > 80 &&
+							chipRect.left >= fieldsRect.left - 1 &&
+							chipRect.right <= fieldsRect.right + 1
 						);
-						const fieldsContentRight =
-							fieldsRect.right - fieldsPaddingRight;
-						const shellPaddingRight = Number.parseFloat(
-							ownerWindow.getComputedStyle( shell ).paddingRight
-						);
-
-						return {
-							chipInsideFields:
-								chipRect.left >= fieldsRect.left - 1 &&
-								chipRect.right <= fieldsRect.right + 1,
-							chipInsideRefs:
-								chipRect.left >= refsRect.left - 1 &&
-								chipRect.right <= refsRect.right + 1,
-							chipBoxSizing: chipStyles.boxSizing,
-							fieldUsesSurfaceWidth:
-								fieldRect.right >= fieldsContentRight - 1,
-							shellUsesRowWidth:
-								shellRect.right >= fieldValueRect.right - 1 &&
-								shellRect.right >= fieldsContentRight - 1,
-							shellHasPencilReserve: shellPaddingRight >= 20,
-							titleHasRoom: titleRect.width > 80,
-						};
 					} )
 				)
-				.toEqual( {
-					chipInsideFields: true,
-					chipInsideRefs: true,
-					chipBoxSizing: 'border-box',
-					fieldUsesSurfaceWidth: true,
-					shellUsesRowWidth: true,
-					shellHasPencilReserve: true,
-					titleHasRoom: true,
-				} );
-			await relationChip
-				.locator(
-					'xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " cortext-editable-cell__shell ")][1]'
-				)
-				.hover();
-			await expect
-				.poll( () =>
-					relationChip.evaluate( ( chip ) => {
-						const shell = chip.closest(
-							'.cortext-editable-cell__shell'
-						);
-						const indicator = shell?.querySelector(
-							'.cortext-editable-cell__edit-indicator'
-						);
-						if ( ! shell || ! indicator ) {
-							return {
-								indicatorVisible: false,
-								indicatorRightAligned: false,
-							};
-						}
-						const ownerWindow = chip.ownerDocument.defaultView;
-						const shellRect = shell.getBoundingClientRect();
-						const indicatorRect = indicator.getBoundingClientRect();
-						const fields = chip.closest(
-							'.dataviews-view-grid__fields, .dataviews-view-grid__badge-fields'
-						);
-						const fieldsRect = fields?.getBoundingClientRect();
-						const fieldsStyles = fields
-							? ownerWindow.getComputedStyle( fields )
-							: null;
-						const fieldsContentRight =
-							fieldsRect && fieldsStyles
-								? fieldsRect.right -
-								  Number.parseFloat( fieldsStyles.paddingRight )
-								: 0;
-						const indicatorStyles =
-							ownerWindow.getComputedStyle( indicator );
-
-						return {
-							indicatorVisible:
-								indicatorStyles.display !== 'none' &&
-								Number.parseFloat( indicatorStyles.opacity ) >
-									0.9,
-							indicatorRightAligned:
-								indicatorRect.right <= shellRect.right - 3 &&
-								indicatorRect.right >= shellRect.right - 16 &&
-								indicatorRect.right >= fieldsContentRight - 16,
-						};
-					} )
-				)
-				.toEqual( {
-					indicatorVisible: true,
-					indicatorRightAligned: true,
-				} );
+				.toBe( true );
 
 			await dragRenderedRow(
 				page,
@@ -3138,6 +2040,10 @@ test.describe( 'Collection view block', () => {
 				requestUtils,
 				fixture.relatedCollection &&
 					`/wp/v2/crtxt_documents/${ fixture.relatedCollection.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
 			);
 			await deleteIfCreated(
 				requestUtils,
@@ -3292,6 +2198,10 @@ test.describe( 'Collection view block', () => {
 			);
 			await deleteIfCreated(
 				requestUtils,
+				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
 				fixture.collection &&
 					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
 			);
@@ -3325,12 +2235,6 @@ test.describe( 'Collection view block', () => {
 			await expect( canvas.getByText( 'Alpha Manual' ) ).toBeVisible( {
 				timeout: 15_000,
 			} );
-			await expectDataViewsToolbarChrome(
-				canvas.locator( '.dataviews__view-actions' ).first()
-			);
-			await expectTableActionsColumnSeparator(
-				canvas.locator( '.dataviews-view-table' )
-			);
 			await expect(
 				canvas.locator( '.cortext-row-drag-handle' )
 			).toHaveCount( 3 );
@@ -3370,6 +2274,10 @@ test.describe( 'Collection view block', () => {
 					);
 				}
 			}
+			await deleteIfCreated(
+				requestUtils,
+				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
+			);
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
@@ -4415,7 +3323,6 @@ test.describe( 'Collection view block', () => {
 			await firstRow.hover();
 			await expect( titleCellOpenButton ).toHaveCSS( 'opacity', '1' );
 			await expect( titleCellOpenButton ).toContainText( 'Open' );
-			await expectOpenButtonFitsTitleCell( titleCellOpenButton );
 			await expect(
 				firstRow.locator( '.cortext-editable-cell__display' ).first()
 			).toHaveCSS( 'cursor', 'pointer' );
@@ -4997,7 +3904,6 @@ test.describe( 'Collection view block', () => {
 			const canvas = page.frameLocator( '[name="editor-canvas"]' );
 			await expect( canvas.getByText( 'Sample row' ) ).toBeVisible();
 
-			// URL: anchor with correct attributes.
 			const link = canvas.getByRole( 'link', {
 				name: 'https://example.com/welcome',
 			} );
@@ -5012,13 +3918,11 @@ test.describe( 'Collection view block', () => {
 				'noopener noreferrer'
 			);
 
-			// Number: decimal value renders intact.
 			await expect( canvas.getByText( '12.5' ) ).toBeVisible();
 
 			const table = canvas.locator( '.dataviews-view-table' );
 			const firstRow = table.locator( 'tbody > tr' ).first();
 
-			// Select: chip with the option's color.
 			const statusChip = tableDataCells( firstRow )
 				.nth( 4 )
 				.locator( '.cortext-chip', { hasText: 'Open' } );
@@ -5042,14 +3946,11 @@ test.describe( 'Collection view block', () => {
 				statusChipGeometry.shellWidth - 8
 			);
 
-			// Multiselect: one chip per value with their respective colors.
 			const tagAlpha = canvas.getByText( 'Alpha', { exact: true } );
 			const tagBeta = canvas.getByText( 'Beta', { exact: true } );
 			await expect( tagAlpha ).toHaveClass( /cortext-chip/ );
 			await expect( tagBeta ).toHaveClass( /cortext-chip/ );
 
-			// Checkbox: the cell is the editable CheckboxControl, not the
-			// formatDisplay icon path. Confirm a checked input is rendered.
 			const checkbox = canvas
 				.locator( '.cortext-cell-checkbox input[type="checkbox"]' )
 				.first();
@@ -5330,25 +4231,15 @@ test.describe( 'Collection view block', () => {
 			const canvas = page.frameLocator( '[name="editor-canvas"]' );
 			await expect( canvas.getByText( 'Sample row' ) ).toBeVisible();
 
-			// Each system field cell renders inside a read-only span; no
-			// EditableCell mounts, no inline edit affordance.
 			const readOnlyCells = canvas.locator(
 				'.cortext-data-view td .cortext-cell-readonly'
 			);
-			// At least one read-only cell per system column should be
-			// present (the row may also have read-only cells from any
-			// non-editable custom field types, but we configured none of
-			// those here).
 			await expect( readOnlyCells.first() ).toBeVisible();
 			expect( await readOnlyCells.count() ).toBeGreaterThanOrEqual( 4 );
 
-			// `created_by` resolves to a non-empty author name.
 			const createdByCell = readOnlyCells.nth( 1 );
 			await expect( createdByCell ).not.toHaveText( '' );
 
-			// Read-only cells don't expose an editable shell; clicking
-			// them must not produce a CheckboxControl, TextControl, or
-			// any of EditableCell's edit affordances.
 			await createdByCell.click();
 			await expect(
 				canvas.locator( '.cortext-editable-cell--editing' )
@@ -5387,7 +4278,6 @@ test.describe( 'Collection view block', () => {
 				await createCollectionFixture( requestUtils )
 			);
 
-			// A second entry whose Author value won't match the query.
 			fixture.entry2 = await requestUtils.rest( {
 				method: 'POST',
 				path: '/wp/v2/crtxt_documents',
@@ -5429,7 +4319,6 @@ test.describe( 'Collection view block', () => {
 
 			const canvas = page.frameLocator( '[name="editor-canvas"]' );
 
-			// The matching row should be visible.
 			await expect(
 				canvas.getByText( 'The Left Hand of Darkness' )
 			).toBeVisible();
@@ -5437,7 +4326,6 @@ test.describe( 'Collection view block', () => {
 				canvas.getByText( 'Ursula K. Le Guin' )
 			).toBeVisible();
 
-			// The non-matching row should be filtered out.
 			await expect( canvas.getByText( 'Dune' ) ).toBeHidden();
 			await expect( canvas.getByText( 'Frank Herbert' ) ).toBeHidden();
 		} finally {
@@ -6252,13 +5140,9 @@ test.describe( 'Collection view block', () => {
 			const canvas = page.frameLocator( '[name="editor-canvas"]' );
 			await expect( canvas.getByText( 'Alpha Book' ) ).toBeVisible();
 
-			const wrapper = dataViewWrapper( canvas );
-			await wrapper.evaluate( ( element ) => {
+			const scroller = dataViewScroller( canvas );
+			await scroller.evaluate( ( element ) => {
 				element.scrollLeft = 0;
-				const scroller = element.ownerDocument.scrollingElement;
-				if ( scroller ) {
-					scroller.scrollLeft = 0;
-				}
 			} );
 
 			const ghostAdd = canvas
@@ -6278,10 +5162,9 @@ test.describe( 'Collection view block', () => {
 				name: /Appendix/,
 			} );
 			await expect( appendixHeader ).toBeVisible();
-			await expectColumnRevealed( canvas, appendixHeader );
-			await expectTableActionsColumnSeparator(
-				canvas.locator( '.dataviews-view-table' )
-			);
+			await expectColumnRevealed( appendixHeader, {
+				requireScroll: true,
+			} );
 		} finally {
 			for ( const row of fixture.rows ?? [] ) {
 				await deleteIfCreated(
@@ -6293,12 +5176,10 @@ test.describe( 'Collection view block', () => {
 				requestUtils,
 				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
 			);
-			for ( const field of Object.values( fixture.fields ?? {} ) ) {
-				await deleteIfCreated(
-					requestUtils,
-					`/wp/v2/crtxt_fields/${ field.id }`
-				);
-			}
+			await deleteCollectionFields(
+				requestUtils,
+				fixture.collection?.id
+			);
 			await deleteIfCreated(
 				requestUtils,
 				fixture.collection &&
@@ -6931,8 +5812,8 @@ test.describe( 'Collection view block', () => {
 			// Select the data-view block so its toolbar (with Add field) renders.
 			// Clicking the canvas content tends to land on one of our
 			// interactive controls (column header dropdown, etc.) and
-			// open a popover instead of selecting the block; dispatch
-			// directly through core-data to avoid that. Pages now also carry
+			// open a popover instead of selecting the block; dispatch through
+			// the block editor store to avoid that. Pages now also carry
 			// locked header blocks, so pick the data-view block by name instead
 			// of assuming it is the first block.
 			await page.evaluate( () => {
@@ -6949,9 +5830,6 @@ test.describe( 'Collection view block', () => {
 				}
 			} );
 
-			// 1. Toolbar Add field: create a "Notes" text field. The
-			//    popover follows click-to-create behavior, so
-			//    picking a type submits.
 			await page
 				.getByRole( 'button', { name: 'Add field', exact: true } )
 				.first()
@@ -6968,14 +5846,14 @@ test.describe( 'Collection view block', () => {
 				name: /Notes/,
 			} );
 			await expect( notesHeader ).toBeVisible();
-			await expectColumnRevealed( canvas, notesHeader );
+			await expectColumnRevealed( notesHeader );
 
 			// `getByRole('button', { name })` would match both the visible
 			// combined-dropdown trigger (text label) and the transparent
 			// drag-handle overlay (aria-label = field name); filter by
 			// visible text to pick the trigger. The drag handle stacks
-			// above the trigger to capture drag, and forwards click
-			// events via JS — Playwright's strict click would flag the
+			// above the trigger to capture drag and forwards click
+			// events via JS. Playwright's strict click would flag the
 			// handle as intercepting, so click via dispatchEvent.
 			const openColumnDropdown = async ( scope, name ) => {
 				const button = scope
@@ -6986,9 +5864,6 @@ test.describe( 'Collection view block', () => {
 			const columnMenuItem = ( name ) =>
 				canvas.getByRole( 'menuitem', { name } );
 
-			// 2. Rename "Notes" → "Description" via the column-header
-			//    dropdown (combined Sort/Move/Hide + Rename/Duplicate/
-			//    Delete menu — see docs/tech-debt.md#td-dataviews-header-extension-slots).
 			await openColumnDropdown( notesHeader, 'Notes' );
 			await columnMenuItem( 'Rename' ).click();
 
@@ -7003,7 +5878,6 @@ test.describe( 'Collection view block', () => {
 				canvas.getByRole( 'columnheader', { name: /^Notes$/ } )
 			).toHaveCount( 0 );
 
-			// 3. Duplicate "Description" → "Copy of Description".
 			await openColumnDropdown( canvas, 'Description' );
 			await columnMenuItem( 'Duplicate' ).click();
 
@@ -7013,8 +5887,6 @@ test.describe( 'Collection view block', () => {
 				} )
 			).toBeVisible();
 
-			// 4. Delete "Copy of Description" via the dropdown + confirm
-			//    dialog.
 			await openColumnDropdown( canvas, 'Copy of Description' );
 			await columnMenuItem( 'Delete' ).click();
 			await page
@@ -7027,7 +5899,6 @@ test.describe( 'Collection view block', () => {
 				} )
 			).toHaveCount( 0 );
 
-			// 5. Ghost column `+` opens the same popover and creates a field.
 			const ghostAdd = canvas
 				.locator( 'th' )
 				.last()
@@ -7045,21 +5916,14 @@ test.describe( 'Collection view block', () => {
 				name: /Tags/,
 			} );
 			await expect( tagsHeader ).toBeVisible();
-			await expectColumnRevealed( canvas, tagsHeader );
+			await expectColumnRevealed( tagsHeader );
 
-			// 6. Title's column doesn't get the schema-action takeover —
-			//    its `<th>` keeps DataViews' built-in trigger and has no
-			//    Cortext combined-dropdown trigger.
 			await expect(
 				canvas
 					.getByRole( 'columnheader', { name: 'Title' } )
 					.locator( '.cortext-column-header-trigger' )
 			).toHaveCount( 0 );
 		} finally {
-			// Best-effort cleanup. The created/duplicated fields aren't
-			// tracked individually, but they cascade with their
-			// collection's force-delete (and the server cleanup hook
-			// removes their entry meta).
 			await deleteIfCreated(
 				requestUtils,
 				fixture.entry && `/wp/v2/crtxt_documents/${ fixture.entry.id }`
@@ -7068,9 +5932,9 @@ test.describe( 'Collection view block', () => {
 				requestUtils,
 				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
 			);
-			await deleteIfCreated(
+			await deleteCollectionFields(
 				requestUtils,
-				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
+				fixture.collection?.id
 			);
 			await deleteIfCreated(
 				requestUtils,
