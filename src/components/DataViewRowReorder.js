@@ -19,6 +19,7 @@ import {
 	KeyboardSensor,
 	PointerSensor,
 	closestCenter,
+	defaultKeyboardCoordinateGetter,
 	pointerWithin,
 	useDroppable,
 	useSensor,
@@ -34,6 +35,14 @@ const DRAG_ACTIVATION_DISTANCE = 5;
 const ROW_REORDER_NOTICE_ID = 'cortext-row-reorder-failed';
 const MANUAL_SORT_ID = 'manual';
 const ROW_DRAG_OVERLAY_Z_INDEX = 100002;
+const ROW_DROP_MOVE_DURATION = 80;
+const ROW_DROP_CORRECTION_DURATION = 60;
+const ROW_DROP_FADE_DURATION = 40;
+const ROW_DROP_EASING = 'cubic-bezier(0.2, 0, 0, 1)';
+const ROW_DROP_START_TIMEOUT = 100;
+const ROW_DROP_WATCHDOG_TIMEOUT = 500;
+const ROW_DROP_FRAME_TIMEOUT = 100;
+const ROW_DROP_REMEASURE_FRAMES = 2;
 const ROW_DISPLACED_CLASS = 'cortext-row-reorder-target--displaced';
 const ROW_ACTIVE_CLASS = 'cortext-row-reorder-target--active';
 const ROW_DROP_GAP = 'gap';
@@ -55,8 +64,8 @@ const ROW_ACTIONS_CHROME_RESERVE = 48;
 const ROW_DROP_ZONE_MAX_SIDE = 40;
 const HOVER_SUPPRESSION_RELEASE_DELAY = 120;
 
-// tech-debt.md#td-dataviews-row-reorder: DataViews doesn't expose row refs or reorder hooks.
-// Keep the DOM selectors for this adapter in one place.
+// tech-debt.md#td-dataviews-row-reorder: DataViews doesn't expose row refs
+// or reorder hooks, so this adapter keeps its DOM selectors together.
 const ROW_SELECTORS = {
 	table: '.dataviews-view-table tbody > tr',
 	list: [
@@ -89,6 +98,7 @@ function sameRowItems( a, b ) {
 				item.rect.height === b[ index ]?.rect.height &&
 				item.previewSignature === b[ index ]?.previewSignature &&
 				item.previewWidth === b[ index ]?.previewWidth &&
+				item.previewDirection === b[ index ]?.previewDirection &&
 				item.previewDensity === b[ index ]?.previewDensity
 		)
 	);
@@ -231,6 +241,13 @@ function measureRowCells( allCells ) {
 	} ) );
 }
 
+function elementDirection( element ) {
+	const ownerWindow = element.ownerDocument?.defaultView ?? window;
+	return ownerWindow.getComputedStyle( element ).direction === 'rtl'
+		? 'rtl'
+		: 'ltr';
+}
+
 function rectIntersectsViewport( rect, containerRect ) {
 	if ( ! containerRect ) {
 		return true;
@@ -238,31 +255,35 @@ function rectIntersectsViewport( rect, containerRect ) {
 	return rect.right > containerRect.left && rect.left < containerRect.right;
 }
 
-// Returns the horizontal box the field cells have to fit into and whether
-// the preview needs room on the right for the sticky actions cell. The
-// trailing-utility branch catches actions cells that haven't picked up
-// their class yet but are already taking a slot past the last
-// `view.fields` entry.
+// The actions slot may render before its class is set. A trailing utility cell
+// still needs to reserve that space.
 function computeContentBounds(
 	measuredCells,
 	containerRect,
-	expectedFieldCount
+	expectedFieldCount,
+	direction
 ) {
+	const isRtl = direction === 'rtl';
 	const intersects = ( rect ) =>
 		rectIntersectsViewport( rect, containerRect );
 	const hasActionsChrome = measuredCells.some(
 		( info ) => info.isKnownActions
 	);
-	const actionsLeft = measuredCells.reduce( ( left, info ) => {
-		if (
-			info.isKnownActions &&
-			info.rect.width > 0 &&
-			intersects( info.rect )
-		) {
-			return Math.min( left, info.rect.left );
-		}
-		return left;
-	}, Infinity );
+	const actionsEdge = measuredCells.reduce(
+		( edge, info ) => {
+			if (
+				info.isKnownActions &&
+				info.rect.width > 0 &&
+				intersects( info.rect )
+			) {
+				return isRtl
+					? Math.max( edge, info.rect.right )
+					: Math.min( edge, info.rect.left );
+			}
+			return edge;
+		},
+		isRtl ? -Infinity : Infinity
+	);
 	const hasTrailingUtilityCell =
 		expectedFieldCount !== null &&
 		measuredCells.filter(
@@ -274,18 +295,28 @@ function computeContentBounds(
 	const needsActionsReserve =
 		Boolean( containerRect ) &&
 		( hasActionsChrome || hasTrailingUtilityCell );
-	const reservedRight = needsActionsReserve
-		? containerRect.right - ROW_ACTIONS_CHROME_RESERVE
-		: containerRect?.right ?? Infinity;
+	const contentLeft = isRtl
+		? Math.max(
+				needsActionsReserve
+					? containerRect.left + ROW_ACTIONS_CHROME_RESERVE
+					: containerRect?.left ?? -Infinity,
+				Number.isFinite( actionsEdge ) ? actionsEdge : -Infinity
+		  )
+		: containerRect?.left ?? -Infinity;
+	const contentRight = isRtl
+		? containerRect?.right ?? Infinity
+		: Math.min(
+				needsActionsReserve
+					? containerRect.right - ROW_ACTIONS_CHROME_RESERVE
+					: containerRect?.right ?? Infinity,
+				Number.isFinite( actionsEdge ) ? actionsEdge : Infinity
+		  );
 	return {
 		intersects,
-		contentLeft: containerRect?.left ?? -Infinity,
-		contentRight: Math.min(
-			reservedRight,
-			Number.isFinite( actionsLeft ) ? actionsLeft : Infinity
-		),
-		trailingSpacerRight: needsActionsReserve
-			? Math.round( containerRect.right )
+		contentLeft,
+		contentRight,
+		trailingSpacerEdge: needsActionsReserve
+			? Math.round( isRtl ? containerRect.left : containerRect.right )
 			: null,
 	};
 }
@@ -350,18 +381,37 @@ function selectVisibleCells(
 	return visible;
 }
 
-// Walks the visible cells left to right and drops a spacer wherever two of
-// them left a horizontal gap (a hidden field, or a sticky cell that jumped
-// position). The final spacer fills the actions reserve so the preview
-// ends flush with the container's right edge.
-function interleavePreviewCells( visibleCells, trailingSpacerRight ) {
+function gapBeforeCell( cursor, left, right, isRtl ) {
+	if ( cursor === null ) {
+		return 0;
+	}
+	return isRtl ? cursor - right : left - cursor;
+}
+
+function cursorAfterCell( cursor, left, right, isRtl ) {
+	if ( cursor === null ) {
+		return isRtl ? left : right;
+	}
+	return isRtl ? Math.min( cursor, left ) : Math.max( cursor, right );
+}
+
+function trailingSpacerWidth( cursor, edge, isRtl ) {
+	if ( cursor === null || edge === null ) {
+		return 0;
+	}
+	return isRtl ? cursor - edge : edge - cursor;
+}
+
+function interleavePreviewCells( visibleCells, trailingSpacerEdge, direction ) {
+	const isRtl = direction === 'rtl';
 	const previewCells = [];
 	let cursor = null;
 	let primaryAssigned = false;
 	for ( const info of visibleCells ) {
 		const { left, right, width } = info.clipped;
-		if ( cursor !== null && left > cursor ) {
-			previewCells.push( { width: left - cursor, isSpacer: true } );
+		const gap = gapBeforeCell( cursor, left, right, isRtl );
+		if ( gap > 0 ) {
+			previewCells.push( { width: gap, isSpacer: true } );
 		}
 		const isPrimary = info.isField && ! primaryAssigned;
 		if ( isPrimary ) {
@@ -375,22 +425,23 @@ function interleavePreviewCells( visibleCells, trailingSpacerRight ) {
 			isCheckbox: info.isCheckbox,
 			isActions: info.isActions,
 		} );
-		cursor = cursor === null ? right : Math.max( cursor, right );
+		cursor = cursorAfterCell( cursor, left, right, isRtl );
 	}
-	if (
-		cursor !== null &&
-		trailingSpacerRight !== null &&
-		trailingSpacerRight > cursor
-	) {
+	const trailingGap = trailingSpacerWidth(
+		cursor,
+		trailingSpacerEdge,
+		isRtl
+	);
+	if ( trailingGap > 0 ) {
 		previewCells.push( {
-			width: trailingSpacerRight - cursor,
+			width: trailingGap,
 			isSpacer: true,
 		} );
 	}
 	return previewCells;
 }
 
-function rowPreviewCells( rowElement, layout, row, view ) {
+function rowPreviewCells( rowElement, layout, row, view, direction ) {
 	const label = rowLabel( row );
 	if ( layout === 'grid' ) {
 		return [ { source: rowElement, text: label, isGridCard: true } ];
@@ -409,7 +460,8 @@ function rowPreviewCells( rowElement, layout, row, view ) {
 	const bounds = computeContentBounds(
 		measuredCells,
 		containerRect,
-		expectedFieldCount
+		expectedFieldCount,
+		direction
 	);
 	const visible = selectVisibleCells(
 		measuredCells,
@@ -419,7 +471,8 @@ function rowPreviewCells( rowElement, layout, row, view ) {
 	);
 	const previewCells = interleavePreviewCells(
 		visible,
-		bounds.trailingSpacerRight
+		bounds.trailingSpacerEdge,
+		direction
 	);
 	return previewCells.length ? previewCells : [ { text: label } ];
 }
@@ -644,6 +697,7 @@ function RowDragPreview( { row } ) {
 	return (
 		<div
 			ref={ previewRef }
+			dir={ row.previewDirection }
 			className={
 				`cortext-row-drag-preview cortext-row-drag-preview--${ density }` +
 				( isGridCard ? ' cortext-row-drag-preview--grid-card' : '' ) +
@@ -684,7 +738,14 @@ function findRenderedRows( wrapper, view, rows ) {
 			}
 			const rect = renderedRowRect( el, layout );
 			const handleEl = handleTargetFor( el, layout );
-			const previewCells = rowPreviewCells( el, layout, row, view );
+			const previewDirection = elementDirection( el );
+			const previewCells = rowPreviewCells(
+				el,
+				layout,
+				row,
+				view,
+				previewDirection
+			);
 			return {
 				rowId: Number( row.id ),
 				index,
@@ -695,6 +756,7 @@ function findRenderedRows( wrapper, view, rows ) {
 				previewHeight:
 					layout === 'grid' || layout === 'list' ? rect.height : null,
 				previewLayout: layout,
+				previewDirection,
 				previewDensity: previewDensity( el, view ),
 				el,
 				handleEl,
@@ -718,6 +780,23 @@ function useRenderedRows( wrapperRef, view, rows, isDragging ) {
 	// down, so keep the snapshot from drag start.
 	const isDraggingRef = useRef( isDragging );
 	isDraggingRef.current = isDragging;
+
+	useEffect( () => {
+		if ( supportsLayout ) {
+			return;
+		}
+		for ( const el of decoratedRowsRef.current ) {
+			el.classList.remove( 'cortext-row-reorder-target' );
+		}
+		for ( const el of decoratedCellsRef.current ) {
+			el.classList.remove( 'cortext-row-reorder-cell' );
+		}
+		decoratedRowsRef.current = [];
+		decoratedCellsRef.current = [];
+		if ( renderedRowsRef.current.length ) {
+			setRenderedRows( [] );
+		}
+	}, [ supportsLayout ] );
 
 	useEffect( () => {
 		const wrapper = wrapperRef.current;
@@ -893,6 +972,103 @@ function rowCollisionDetection( args ) {
 	return closestCenter( args );
 }
 
+function rectCenter( rect ) {
+	return {
+		x: rect.left + rect.width / 2,
+		y: rect.top + rect.height / 2,
+	};
+}
+
+function overlapsOnAxis( source, target, axis ) {
+	const start = axis === 'x' ? 'left' : 'top';
+	const size = axis === 'x' ? 'width' : 'height';
+	const sourceEnd = source[ start ] + source[ size ];
+	const targetEnd = target[ start ] + target[ size ];
+	return source[ start ] < targetEnd && target[ start ] < sourceEnd;
+}
+
+// A 25px keyboard step may not clear a tall card, so dnd-kit can pick a
+// horizontal neighbour. Jump straight to the card in the arrow's direction.
+export function gridKeyboardCoordinates( event, args ) {
+	const directions = {
+		ArrowDown: { axis: 'y', perpendicularAxis: 'x', sign: 1 },
+		ArrowLeft: { axis: 'x', perpendicularAxis: 'y', sign: -1 },
+		ArrowRight: { axis: 'x', perpendicularAxis: 'y', sign: 1 },
+		ArrowUp: { axis: 'y', perpendicularAxis: 'x', sign: -1 },
+	};
+	const direction = directions[ event.code ];
+	if ( ! direction ) {
+		return defaultKeyboardCoordinateGetter( event, args );
+	}
+
+	const { context, currentCoordinates } = args;
+	const collisionRect = context?.collisionRect;
+	const containers = context?.droppableContainers?.getEnabled?.() ?? [];
+	const gridTargets = containers
+		.filter(
+			( container ) => container.data?.current?.type === ROW_DROP_ITEM
+		)
+		.map( ( container ) => context.droppableRects.get( container.id ) )
+		.filter( Boolean );
+
+	if ( ! collisionRect || gridTargets.length === 0 ) {
+		return defaultKeyboardCoordinateGetter( event, args );
+	}
+
+	const sourceCenter = rectCenter( collisionRect );
+	const candidates = gridTargets
+		.map( ( rect ) => {
+			const center = rectCenter( rect );
+			return {
+				rect,
+				center,
+				primaryDistance:
+					( center[ direction.axis ] -
+						sourceCenter[ direction.axis ] ) *
+					direction.sign,
+				perpendicularDistance: Math.abs(
+					center[ direction.perpendicularAxis ] -
+						sourceCenter[ direction.perpendicularAxis ]
+				),
+			};
+		} )
+		.filter( ( candidate ) => candidate.primaryDistance > 1 );
+
+	if ( candidates.length === 0 ) {
+		return undefined;
+	}
+
+	const alignedCandidates = candidates.filter( ( candidate ) =>
+		overlapsOnAxis(
+			collisionRect,
+			candidate.rect,
+			direction.perpendicularAxis
+		)
+	);
+	const rankedCandidates = alignedCandidates.length
+		? alignedCandidates
+		: candidates;
+	rankedCandidates.sort( ( a, b ) => {
+		if ( alignedCandidates.length ) {
+			return (
+				a.primaryDistance - b.primaryDistance ||
+				a.perpendicularDistance - b.perpendicularDistance
+			);
+		}
+		return (
+			a.primaryDistance +
+			a.perpendicularDistance * 2 -
+			( b.primaryDistance + b.perpendicularDistance * 2 )
+		);
+	} );
+
+	const targetCenter = rankedCandidates[ 0 ].center;
+	return {
+		x: currentCoordinates.x + targetCenter.x - sourceCenter.x,
+		y: currentCoordinates.y + targetCenter.y - sourceCenter.y,
+	};
+}
+
 function insertionIndexForDrop( ids, activeDrop ) {
 	if ( activeDrop?.type !== ROW_DROP_GAP ) {
 		return null;
@@ -987,10 +1163,97 @@ function displacementForDrop( renderedRows, activeRow, activeDrop, view ) {
 	return { activeId, activeOffset, offsets };
 }
 
+function dropTargetRect( renderedRows, activeRow, activeDrop, view ) {
+	const { activeOffset } = displacementForDrop(
+		renderedRows,
+		activeRow,
+		activeDrop,
+		view
+	);
+	if ( ! activeOffset || ! activeRow?.rect ) {
+		return null;
+	}
+
+	return {
+		left: activeRow.rect.left + activeOffset.x,
+		top: activeRow.rect.top + activeOffset.y,
+		width: activeRow.rect.width,
+		height: activeRow.rect.height,
+	};
+}
+
+function dropTransform( transform = {} ) {
+	const { x = 0, y = 0, scaleX = 1, scaleY = 1 } = transform;
+	return `translate3d(${ x }px, ${ y }px, 0) scaleX(${ scaleX }) scaleY(${ scaleY })`;
+}
+
+function waitForAnimation( animation ) {
+	return animation?.finished?.catch( () => undefined ) ?? Promise.resolve();
+}
+
+function nextAnimationFrame( ownerWindow ) {
+	return new Promise( ( resolve ) => {
+		let settled = false;
+		let timeout = null;
+		const finish = () => {
+			if ( settled ) {
+				return;
+			}
+			settled = true;
+			ownerWindow.clearTimeout( timeout );
+			resolve();
+		};
+		timeout = ownerWindow.setTimeout( finish, ROW_DROP_FRAME_TIMEOUT );
+		if ( typeof ownerWindow.requestAnimationFrame === 'function' ) {
+			ownerWindow.requestAnimationFrame( finish );
+		} else {
+			finish();
+		}
+	} );
+}
+
 function rowIds( rows ) {
 	return ( rows ?? [] )
 		.map( ( row ) => Number( row?.id ) )
 		.filter( ( rowId ) => rowId > 0 );
+}
+
+function sameRowIdOrder( ids, expectedIds ) {
+	return (
+		ids.length === expectedIds?.length &&
+		ids.every( ( rowId, index ) => rowId === expectedIds[ index ] )
+	);
+}
+
+async function committedGridRowRect( ownerWindow, renderedRowsRef, pending ) {
+	if ( pending.layout !== 'grid' || ! pending.expectedRowIds ) {
+		await nextAnimationFrame( ownerWindow );
+		return null;
+	}
+
+	// Rechunking changes the grid's DOM indexes. Wait for the new order to render
+	// before looking up the moved card.
+	for ( let frame = 0; frame < ROW_DROP_REMEASURE_FRAMES; frame++ ) {
+		await nextAnimationFrame( ownerWindow );
+		const rendered = renderedRowsRef.current;
+		if (
+			! sameRowIdOrder(
+				rendered.map( ( row ) => row.rowId ),
+				pending.expectedRowIds
+			)
+		) {
+			continue;
+		}
+
+		const movedRow = rendered.find(
+			( row ) => row.rowId === pending.rowId
+		);
+		if ( movedRow?.el?.isConnected ) {
+			return renderedRowRect( movedRow.el, 'grid' );
+		}
+	}
+
+	return null;
 }
 
 function reorderRequestForDrop( rows, rowId, activeDrop ) {
@@ -1176,7 +1439,10 @@ function usesGridItems( view ) {
 }
 
 function supportsRowReorder( view ) {
-	return usesLinearGaps( view ) || usesGridItems( view );
+	return (
+		! view?.groupBy?.field &&
+		( usesLinearGaps( view ) || usesGridItems( view ) )
+	);
 }
 
 function linearRowGaps( renderedRows, activeRow ) {
@@ -1345,6 +1611,8 @@ export default function DataViewRowReorder( {
 		rows,
 		activeRow !== null
 	);
+	const renderedRowsRef = useRef( renderedRows );
+	renderedRowsRef.current = renderedRows;
 	const [ activeDrop, setActiveDrop ] = useState( null );
 	const [ visualRow, setVisualRow ] = useState( null );
 	const [ visualDrop, setVisualDrop ] = useState( null );
@@ -1357,7 +1625,9 @@ export default function DataViewRowReorder( {
 		useSensor( PointerSensor, {
 			activationConstraint: { distance: DRAG_ACTIVATION_DISTANCE },
 		} ),
-		useSensor( KeyboardSensor )
+		useSensor( KeyboardSensor, {
+			coordinateGetter: gridKeyboardCoordinates,
+		} )
 	);
 
 	const viewRef = useRef( view );
@@ -1368,6 +1638,7 @@ export default function DataViewRowReorder( {
 	dataRef.current = data;
 	const mutateRowsRef = useRef( mutateRows );
 	mutateRowsRef.current = mutateRows;
+	const pendingDropAnimationRef = useRef( null );
 	const pendingRefreshAfterSortClearRef = useRef( false );
 	const hoverSuppressionTimeoutRef = useRef( null );
 	const noTransitionFrameRef = useRef( null );
@@ -1386,7 +1657,10 @@ export default function DataViewRowReorder( {
 	// reach the iframe body after `wrapperRef.current` clears.
 	const reorderBodyRef = useRef( null );
 	const getReorderBody = useCallback( () => {
-		const body = wrapperRef.current?.ownerDocument?.body ?? document.body;
+		const body =
+			wrapperRef.current?.ownerDocument?.body ??
+			reorderBodyRef.current ??
+			document.body;
 		reorderBodyRef.current = body;
 		return body;
 	}, [ wrapperRef ] );
@@ -1489,6 +1763,7 @@ export default function DataViewRowReorder( {
 						current_sort: request.currentSort ?? null,
 					},
 				} );
+				await request.visualSettled;
 				if ( request.refreshAfterSortClear ) {
 					pendingRefreshAfterSortClearRef.current = true;
 					flushRefreshAfterSortClear();
@@ -1496,6 +1771,7 @@ export default function DataViewRowReorder( {
 					onReorderedRef.current?.();
 				}
 			} catch {
+				await request.visualSettled;
 				if ( request.previousData && mutateRowsRef.current ) {
 					mutateRowsRef.current( request.previousData );
 				}
@@ -1526,6 +1802,7 @@ export default function DataViewRowReorder( {
 
 	const onDragStart = useCallback(
 		( event ) => {
+			pendingDropAnimationRef.current?.forceFinish();
 			const row = event.active?.data?.current ?? null;
 			setActiveRow( row );
 			setVisualRow( row );
@@ -1558,45 +1835,259 @@ export default function DataViewRowReorder( {
 		[ clearVisualState, getReorderBody ]
 	);
 
-	// Builds the request and applies an optimistic mutation so the user sees
-	// the new order before the API answers. If the active sort would hide the
-	// move (anything other than manual), pass it through the confirm dialog
-	// first; we clear the sort and snapshot it for rollback on failure.
+	// DataViews may replace the card while rechunking, leaving dnd-kit with a
+	// detached node. Keep the gap open until the overlay lands.
 	const commitReorder = useCallback(
-		( request, { clearSort } = {} ) => {
-			const previousData = dataRef.current;
-			const previousSort = viewRef.current?.sort ?? null;
-			const nextData = reorderDataByDrop(
-				previousData,
+		( request, { animateTo, clearSort } = {} ) => {
+			const canReorder = reorderDataByDrop(
+				dataRef.current,
 				request.rowId,
 				request.drop
 			);
-			if ( ! nextData || ! mutateRowsRef.current ) {
+			if ( ! canReorder || ! mutateRowsRef.current ) {
 				clearDragState( { withoutTransition: true } );
 				return;
 			}
-			clearDragState( { withoutTransition: true } );
-			mutateRowsRef.current( nextData );
-			if ( clearSort ) {
-				onChangeViewRef.current( {
-					...( viewRef.current ?? {} ),
-					sort: null,
+
+			let pending = null;
+			const applyReorder = ( visualSettled ) => {
+				// The collection may refresh while the card is dropping, so build the
+				// optimistic order from the latest data.
+				const previousData = dataRef.current;
+				const nextData = reorderDataByDrop(
+					previousData,
+					request.rowId,
+					request.drop
+				);
+				const previousSort = viewRef.current?.sort ?? null;
+				clearDragState( { withoutTransition: true } );
+				if ( ! nextData || ! mutateRowsRef.current ) {
+					return;
+				}
+				if ( pending ) {
+					const nextVisibleRows = reorderDataByDrop(
+						rowsRef.current,
+						request.rowId,
+						request.drop
+					);
+					pending.expectedRowIds = nextVisibleRows
+						? rowIds( nextVisibleRows )
+						: null;
+				}
+				mutateRowsRef.current( nextData );
+				if ( clearSort ) {
+					onChangeViewRef.current( {
+						...( viewRef.current ?? {} ),
+						sort: null,
+					} );
+				}
+				performReorder( {
+					...request,
+					previousData,
+					visualSettled,
+					...( clearSort
+						? {
+								previousSort,
+								refreshAfterSortClear: true,
+						  }
+						: {} ),
 				} );
+			};
+
+			const ownerWindow =
+				wrapperRef.current?.ownerDocument?.defaultView ?? window;
+			const reduceMotion = ownerWindow.matchMedia?.(
+				'(prefers-reduced-motion: reduce)'
+			)?.matches;
+			const canAnimate =
+				animateTo &&
+				! reduceMotion &&
+				typeof ownerWindow.Element?.prototype?.animate === 'function';
+
+			if ( ! canAnimate ) {
+				applyReorder();
+				return;
 			}
-			performReorder( {
-				...request,
-				previousData,
-				...( clearSort
-					? { previousSort, refreshAfterSortClear: true }
-					: {} ),
+
+			pendingDropAnimationRef.current?.forceFinish();
+			let resolveVisual;
+			const visualSettled = new Promise( ( resolve ) => {
+				resolveVisual = resolve;
 			} );
+			pending = {
+				rowId: Number( request.rowId ),
+				layout: viewRef.current?.type ?? 'table',
+				targetRect: animateTo,
+				animations: new Set(),
+				committed: false,
+				settled: false,
+				started: false,
+			};
+			pending.commitNow = () => {
+				if ( pending.committed ) {
+					return;
+				}
+				pending.committed = true;
+				applyReorder( visualSettled );
+			};
+			pending.settleNow = () => {
+				if ( pending.settled ) {
+					return;
+				}
+				ownerWindow.clearTimeout( pending.fallbackTimer );
+				pending.settled = true;
+				resolveVisual();
+				if ( pendingDropAnimationRef.current === pending ) {
+					pendingDropAnimationRef.current = null;
+				}
+			};
+			pending.forceFinish = () => {
+				ownerWindow.clearTimeout( pending.fallbackTimer );
+				for ( const animation of pending.animations ) {
+					animation.cancel();
+				}
+				pending.animations.clear();
+				pending.commitNow();
+				pending.settleNow();
+			};
+
+			pendingDropAnimationRef.current = pending;
+			// dnd-kit starts this animation from a layout effect. If it never fires,
+			// the timeout still commits the reorder.
+			pending.fallbackTimer = ownerWindow.setTimeout( () => {
+				if ( ! pending.started ) {
+					pending.forceFinish();
+				}
+			}, ROW_DROP_START_TIMEOUT );
 		},
-		[ clearDragState, performReorder ]
+		[ clearDragState, performReorder, wrapperRef ]
 	);
+
+	const animateRowDrop = useCallback( async ( args ) => {
+		const pending = pendingDropAnimationRef.current;
+		const rowId = Number(
+			args.active?.data?.current?.rowId ??
+				String( args.active?.id ?? '' ).replace( 'row:', '' )
+		);
+		const node = args.dragOverlay?.node;
+		if ( ! pending || pending.rowId !== rowId || ! node?.isConnected ) {
+			return;
+		}
+
+		pending.started = true;
+		const ownerWindow = node.ownerDocument.defaultView ?? window;
+		ownerWindow.clearTimeout( pending.fallbackTimer );
+		pending.fallbackTimer = ownerWindow.setTimeout(
+			pending.forceFinish,
+			ROW_DROP_WATCHDOG_TIMEOUT
+		);
+
+		try {
+			const currentRect = node.getBoundingClientRect();
+			const initialTransform = args.transform ?? {};
+			const finalTransform = {
+				...initialTransform,
+				x:
+					( initialTransform.x ?? 0 ) +
+					pending.targetRect.left -
+					currentRect.left,
+				y:
+					( initialTransform.y ?? 0 ) +
+					pending.targetRect.top -
+					currentRect.top,
+			};
+			const moveAnimation = node.animate(
+				[
+					{ transform: dropTransform( initialTransform ) },
+					{ transform: dropTransform( finalTransform ) },
+				],
+				{
+					duration: ROW_DROP_MOVE_DURATION,
+					easing: ROW_DROP_EASING,
+					fill: 'forwards',
+				}
+			);
+			pending.animations.add( moveAnimation );
+			await waitForAnimation( moveAnimation );
+			pending.animations.delete( moveAnimation );
+			if ( pending.settled ) {
+				return;
+			}
+
+			// Auto-height grid rows can move when the order is committed. Align the
+			// overlay with the card's new position before fading it out.
+			pending.commitNow();
+			const committedRect = await committedGridRowRect(
+				ownerWindow,
+				renderedRowsRef,
+				pending
+			);
+			if ( pending.settled || ! node.isConnected ) {
+				pending.settleNow();
+				return;
+			}
+
+			let correctedTransform = finalTransform;
+			if ( committedRect ) {
+				correctedTransform = {
+					...finalTransform,
+					x:
+						finalTransform.x +
+						committedRect.left -
+						pending.targetRect.left,
+					y:
+						finalTransform.y +
+						committedRect.top -
+						pending.targetRect.top,
+				};
+				if (
+					correctedTransform.x !== finalTransform.x ||
+					correctedTransform.y !== finalTransform.y
+				) {
+					const correctionAnimation = node.animate(
+						[
+							{ transform: dropTransform( finalTransform ) },
+							{
+								transform: dropTransform( correctedTransform ),
+							},
+						],
+						{
+							duration: ROW_DROP_CORRECTION_DURATION,
+							easing: ROW_DROP_EASING,
+							fill: 'forwards',
+						}
+					);
+					pending.animations.add( correctionAnimation );
+					await waitForAnimation( correctionAnimation );
+					pending.animations.delete( correctionAnimation );
+					if ( pending.settled || ! node.isConnected ) {
+						pending.settleNow();
+						return;
+					}
+				}
+			}
+
+			const fadeAnimation = node.animate(
+				[ { opacity: 1 }, { opacity: 0 } ],
+				{
+					duration: ROW_DROP_FADE_DURATION,
+					easing: 'linear',
+					fill: 'forwards',
+				}
+			);
+			pending.animations.add( fadeAnimation );
+			await waitForAnimation( fadeAnimation );
+			pending.animations.delete( fadeAnimation );
+			pending.settleNow();
+		} catch {
+			pending.forceFinish();
+		}
+	}, [] );
 
 	const onDragEnd = useCallback(
 		( event ) => {
-			const rowId = event.active?.data?.current?.rowId;
+			const draggedRow = event.active?.data?.current;
+			const rowId = draggedRow?.rowId;
 			const drop = parseDropData( event.over, renderedRows, rowId );
 			const reorder = reorderRequestForDrop(
 				rowsRef.current,
@@ -1619,14 +2110,22 @@ export default function DataViewRowReorder( {
 				currentSort,
 				drop,
 			};
-
 			if ( hasExplicitSort ) {
 				clearDragState( { withoutTransition: true } );
 				setPendingRequest( request );
 				return;
 			}
 
-			commitReorder( request, { clearSort: false } );
+			const animationTarget = dropTargetRect(
+				renderedRows,
+				draggedRow,
+				drop,
+				viewRef.current
+			);
+			commitReorder( request, {
+				animateTo: animationTarget,
+				clearSort: false,
+			} );
 		},
 		[ clearDragState, commitReorder, renderedRows ]
 	);
@@ -1651,6 +2150,7 @@ export default function DataViewRowReorder( {
 
 	useEffect( () => {
 		return () => {
+			pendingDropAnimationRef.current?.forceFinish();
 			clearHoverSuppressionTimeout();
 			clearNoTransitionFrame();
 			// `wrapperRef.current` is likely null at unmount, so reach for
@@ -1706,9 +2206,8 @@ export default function DataViewRowReorder( {
 					row={ row }
 				/>
 			) ) }
-			{ /* The optimistic reorder already places the row/card; skip dnd-kit's return flight. */ }
 			<DragOverlay
-				dropAnimation={ null }
+				dropAnimation={ animateRowDrop }
 				zIndex={ ROW_DRAG_OVERLAY_Z_INDEX }
 			>
 				{ activeRow ? <RowDragPreview row={ activeRow } /> : null }

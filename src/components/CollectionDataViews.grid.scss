@@ -87,8 +87,8 @@ $grid-card-gap: 32px;
 	.dataviews-view-grid {
 		display: flex;
 		flex-direction: column;
-		// DataViews 17's useGridColumns() chunks rows assuming a 32px gap.
-		// Keep the rendered gap identical so responsive column counts match.
+		// DataViews 17 uses a 32px gap to calculate columns. If the rendered gap
+		// changes, cards wrap at the wrong width.
 		gap: $grid-card-gap;
 		padding: $grid-unit-20;
 		margin-bottom: auto;
@@ -117,6 +117,9 @@ $grid-card-gap: 32px;
 	&__new-row-gridcell {
 		display: flex;
 		height: 100%;
+		// Moving this portal in the DOM when the grid is rechunked would blur its
+		// button. CSS order keeps it last without moving the node.
+		order: 1;
 	}
 
 	.dataviews-view-grid__card {
@@ -204,8 +207,8 @@ $grid-card-gap: 32px;
 		display: flex;
 		flex-direction: column;
 		width: 100%;
-		// DataViews 17's Stack display rule is not injected into the editor
-		// iframe, so restore its flex layout before overriding the compact gap.
+		// DataViews 17 doesn't include Stack's display rule in the editor iframe.
+		// Without it, the compact gap has no effect.
 		gap: $grid-unit-20 !important;
 		padding: $grid-unit-10 $grid-unit-20 0;
 		background: $grid-card-content-background;
@@ -465,7 +468,8 @@ $grid-card-gap: 32px;
 		transition: opacity 120ms ease;
 	}
 
-	.dataviews-view-grid__card > .dataviews-selection-checkbox .components-base-control__field {
+	.dataviews-view-grid__card > .dataviews-selection-checkbox
+	.components-base-control__field {
 		margin: 0;
 	}
 

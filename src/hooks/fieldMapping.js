@@ -236,23 +236,19 @@ function compareEmptyLast( aValue, bValue ) {
 	return null;
 }
 
-function sortNumberValues( getValue ) {
-	return ( a, b, direction ) => {
-		const av = getValue( { item: a } );
-		const bv = getValue( { item: b } );
-		const emptyCompare = compareEmptyLast( av, bv );
-		if ( emptyCompare !== null ) {
-			return emptyCompare;
-		}
+function sortNumberValues( av, bv, direction ) {
+	const emptyCompare = compareEmptyLast( av, bv );
+	if ( emptyCompare !== null ) {
+		return emptyCompare;
+	}
 
-		const an = Number( av );
-		const bn = Number( bv );
-		const diff =
-			Number.isFinite( an ) && Number.isFinite( bn )
-				? an - bn
-				: String( av ).localeCompare( String( bv ) );
-		return direction === 'asc' ? diff : -diff;
-	};
+	const an = Number( av );
+	const bn = Number( bv );
+	const diff =
+		Number.isFinite( an ) && Number.isFinite( bn )
+			? an - bn
+			: String( av ).localeCompare( String( bv ) );
+	return direction === 'asc' ? diff : -diff;
 }
 
 function numberFilterValue( value ) {
@@ -600,7 +596,7 @@ export function mapField( field ) {
 				type: 'integer',
 				Edit: NumberFilterControl,
 				isValid: { custom: () => null },
-				sort: sortNumberValues( base.getValue ),
+				sort: sortNumberValues,
 			};
 		case 'email':
 			return { ...base, type: 'email' };
@@ -630,7 +626,7 @@ export function mapField( field ) {
 					type: 'integer',
 					editable: false,
 					isValid: { custom: () => null },
-					sort: sortNumberValues( base.getValue ),
+					sort: sortNumberValues,
 				};
 			}
 			if ( formulaResultType === 'checkbox' ) {
@@ -670,9 +666,9 @@ export function mapField( field ) {
 					editable: false,
 					enableSorting: true,
 					isValid: { custom: () => null },
-					sort: ( a, b, direction ) => {
-						const av = Number( base.getValue( { item: a } ) ?? 0 );
-						const bv = Number( base.getValue( { item: b } ) ?? 0 );
+					sort: ( aValue, bValue, direction ) => {
+						const av = Number( aValue ?? 0 );
+						const bv = Number( bValue ?? 0 );
 						return direction === 'asc' ? av - bv : bv - av;
 					},
 				};

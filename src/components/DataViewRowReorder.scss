@@ -17,7 +17,7 @@ tbody > tr > td.cortext-row-reorder-cell,
 .cortext-data-view
 .dataviews-view-table.has-compact-density
 tbody > tr > td.cortext-row-reorder-cell {
-	padding-left: var(--cortext-row-drag-content-offset);
+	padding-inline-start: var(--cortext-row-drag-content-offset);
 }
 
 // Row reorder transitions are off at rest. The drop freeze applies transforms
@@ -38,8 +38,8 @@ body.cortext-row-dragging .cortext-row-reorder-target {
 	will-change: transform;
 }
 
-// Last-resort guard for `clearVisualState({ withoutTransition: true })`.
-// The body-class flip above is what prevents the drop flicker.
+// Normal drops remove the dragging class before cleanup. Forced cleanup can
+// skip that step, so this class suppresses the stale transition.
 body.cortext-row-reorder-no-transition .cortext-row-reorder-target {
 	transition: none !important;
 }
@@ -48,7 +48,9 @@ body.cortext-row-reorder-no-transition .cortext-row-reorder-target {
 // outranks the rule above, so displaced list rows would snap to the new spot
 // instead of sliding. Re-assert transform easing for reordered list rows while
 // a drag is active so list matches the table.
-body.cortext-row-dragging .dataviews-view-list :is([role="row"], [role="article"]).cortext-row-reorder-target {
+body.cortext-row-dragging
+.dataviews-view-list
+:is([role="row"], [role="article"]).cortext-row-reorder-target {
 	transition:
 		transform 120ms ease,
 		opacity 120ms ease;
@@ -68,7 +70,7 @@ body.cortext-row-dragging .dataviews-view-list :is([role="row"], [role="article"
 .cortext-row-drag-handle {
 	position: absolute;
 	top: 50%;
-	left: 0;
+	inset-inline-start: 0;
 	width: var(--cortext-row-drag-handle-size);
 	height: var(--cortext-row-drag-handle-size);
 	padding: 0;
@@ -98,28 +100,6 @@ body.cortext-row-dragging .dataviews-view-list :is([role="row"], [role="article"
 
 .cortext-row-drag-handle:hover,
 .cortext-row-drag-handle[data-dragging="true"] {
-	opacity: 1;
-}
-
-.cortext-data-view .dataviews-view-grid__card > .cortext-row-drag-handle {
-	top: $grid-unit-10;
-	right: $grid-unit-50;
-	left: auto;
-	border-radius: 4px;
-	background: rgba(255, 255, 255, 0.92);
-	box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
-	opacity: 1;
-	transform: none;
-	z-index: 2;
-}
-
-.cortext-data-view .dataviews-view-grid__card:hover > .cortext-row-drag-handle,
-.cortext-data-view
-.dataviews-view-grid__card:focus-within > .cortext-row-drag-handle,
-.cortext-data-view
-.dataviews-view-grid__card > .cortext-row-drag-handle:focus-visible,
-.cortext-data-view
-.dataviews-view-grid__card > .cortext-row-drag-handle[data-dragging="true"] {
 	opacity: 1;
 }
 
@@ -167,6 +147,10 @@ body.cortext-row-dragging .cortext-row-drop-indicator {
 // accent and outline; real borders, or an outer outline shadow, make it look
 // wider than the source row.
 .cortext-row-drag-preview {
+	--cortext-row-drag-handle-size: 24px;
+	--cortext-row-drag-content-gap: 6px;
+	--cortext-row-drag-content-offset: calc(var(--cortext-row-drag-handle-size) + var(--cortext-row-drag-content-gap));
+
 	display: flex;
 	align-items: stretch;
 	max-width: calc(100vw - 48px);
@@ -197,7 +181,10 @@ body.cortext-row-dragging .cortext-row-drop-indicator {
 
 .cortext-row-drag-preview__cell-content-wrapper {
 	display: flex;
+	flex: 1 1 auto;
 	align-items: center;
+	width: 100%;
+	min-width: 0;
 	min-height: $grid-unit-40;
 }
 
@@ -246,6 +233,23 @@ body.cortext-row-dragging .cortext-row-drop-indicator {
 	padding: 0;
 }
 
+// The overlay renders outside `.cortext-data-view` and misses its handle
+// offset. Add it here to keep the title aligned while the row settles.
+.cortext-row-drag-preview .cortext-row-drag-preview__cell--primary {
+	padding-inline-start: var(--cortext-row-drag-content-offset);
+	padding-inline-end: 0;
+}
+
+.cortext-row-drag-preview--compact .cortext-row-drag-preview__cell--primary {
+	padding-block: 0;
+}
+
+.cortext-row-drag-preview--compact
+.cortext-row-drag-preview__cell--primary
+.cortext-editable-cell__shell {
+	box-sizing: border-box;
+}
+
 .cortext-row-drag-preview--list-row {
 	display: block;
 	border-radius: 4px;
@@ -274,6 +278,7 @@ body.cortext-row-dragging .cortext-row-drop-indicator {
 	height: 100%;
 	min-width: 0;
 	padding: $grid-unit-10 $grid-unit-20;
+	padding-inline-start: var(--cortext-row-drag-content-offset);
 }
 
 .cortext-row-drag-preview__list-row
@@ -341,7 +346,7 @@ body.cortext-row-dragging .cortext-row-drop-indicator {
 	flex: 1 1 auto;
 	min-width: 0;
 	min-height: $grid-unit-30;
-	line-height: 1.4;
+	line-height: $grid-unit-30;
 	font-weight: 500;
 	color: $gray-900;
 }
@@ -520,15 +525,31 @@ body.cortext-row-reorder-suppress-hover
 .dataviews-view-table
 tr.is-hovered:not(.is-selected)
 .dataviews-view-table__actions-column--sticky,
-body.cortext-row-reorder-suppress-hover .dataviews-view-list :is([role="row"], [role="article"]):not(.is-selected):hover,
-body.cortext-row-reorder-suppress-hover .dataviews-view-list :is([role="row"], [role="article"]):not(.is-selected).is-hovered {
+body.cortext-row-reorder-suppress-hover
+.dataviews-view-list
+:is([role="row"], [role="article"]):not(.is-selected):hover,
+body.cortext-row-reorder-suppress-hover
+.dataviews-view-list
+:is([role="row"], [role="article"]):not(.is-selected).is-hovered {
 	background-color: transparent;
 }
 
-body.cortext-row-reorder-suppress-hover .dataviews-view-list :is([role="row"], [role="article"]):not(.is-selected):hover .dataviews-view-list__title-field,
-body.cortext-row-reorder-suppress-hover .dataviews-view-list :is([role="row"], [role="article"]):not(.is-selected):hover .dataviews-view-list__fields,
-body.cortext-row-reorder-suppress-hover .dataviews-view-list :is([role="row"], [role="article"]):not(.is-selected).is-hovered .dataviews-view-list__title-field,
-body.cortext-row-reorder-suppress-hover .dataviews-view-list :is([role="row"], [role="article"]):not(.is-selected).is-hovered .dataviews-view-list__fields {
+body.cortext-row-reorder-suppress-hover
+.dataviews-view-list
+:is([role="row"], [role="article"]):not(.is-selected):hover
+.dataviews-view-list__title-field,
+body.cortext-row-reorder-suppress-hover
+.dataviews-view-list
+:is([role="row"], [role="article"]):not(.is-selected):hover
+.dataviews-view-list__fields,
+body.cortext-row-reorder-suppress-hover
+.dataviews-view-list
+:is([role="row"], [role="article"]):not(.is-selected).is-hovered
+.dataviews-view-list__title-field,
+body.cortext-row-reorder-suppress-hover
+.dataviews-view-list
+:is([role="row"], [role="article"]):not(.is-selected).is-hovered
+.dataviews-view-list__fields {
 	color: inherit;
 }
 

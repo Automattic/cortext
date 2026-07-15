@@ -1,4 +1,5 @@
 import { render } from '@testing-library/react';
+import { filterSortAndPaginate } from '@wordpress/dataviews/wp';
 
 import {
 	elementsFromOptions,
@@ -271,27 +272,9 @@ describe( 'mapField', () => {
 	it( 'sorts number field values numerically with empty values last', () => {
 		const mapped = mapField( baseField( { type: 'number' } ) );
 
-		expect(
-			mapped.sort(
-				{ meta: { 'field-5': '2' } },
-				{ meta: { 'field-5': '10' } },
-				'asc'
-			)
-		).toBeLessThan( 0 );
-		expect(
-			mapped.sort(
-				{ meta: { 'field-5': '2' } },
-				{ meta: { 'field-5': '10' } },
-				'desc'
-			)
-		).toBeGreaterThan( 0 );
-		expect(
-			mapped.sort(
-				{ meta: { 'field-5': '' } },
-				{ meta: { 'field-5': '10' } },
-				'asc'
-			)
-		).toBeGreaterThan( 0 );
+		expect( mapped.sort( '2', '10', 'asc' ) ).toBeLessThan( 0 );
+		expect( mapped.sort( '2', '10', 'desc' ) ).toBeGreaterThan( 0 );
+		expect( mapped.sort( '', '10', 'asc' ) ).toBeGreaterThan( 0 );
 	} );
 
 	it( "maps checkbox to DataViews 'boolean' values", () => {
@@ -339,13 +322,26 @@ describe( 'mapField', () => {
 		expect( mapped.editable ).toBe( false );
 		expect( mapped.enableSorting ).toBe( true );
 		expect( mapped.rollupAggregator ).toBe( 'sum' );
-		expect(
-			mapped.sort(
-				{ meta: { 'field-5': 2 } },
-				{ meta: { 'field-5': 10 } },
-				'asc'
-			)
-		).toBeLessThan( 0 );
+		expect( mapped.sort( 2, 10, 'asc' ) ).toBeLessThan( 0 );
+	} );
+
+	it( 'sorts numeric rollups through the DataViews client pipeline', () => {
+		const mapped = mapField(
+			baseField( { type: 'rollup', rollup_aggregator: 'sum' } )
+		);
+		const items = [
+			{ id: 'high', meta: { 'field-5': 10 } },
+			{ id: 'low', meta: { 'field-5': 2 } },
+		];
+		const sort = ( direction ) =>
+			filterSortAndPaginate(
+				items,
+				{ sort: { field: mapped.id, direction } },
+				[ mapped ]
+			).data.map( ( item ) => item.id );
+
+		expect( sort( 'asc' ) ).toEqual( [ 'low', 'high' ] );
+		expect( sort( 'desc' ) ).toEqual( [ 'high', 'low' ] );
 	} );
 
 	it( "maps latest rollups against a date target to read-only DataViews 'date' fields", () => {

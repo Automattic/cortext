@@ -1250,7 +1250,7 @@ test.describe( 'Collection view block', () => {
 		}
 	} );
 
-	test( 'keeps grid titles, cards, and the New card in matching columns', async ( {
+	test( 'aligns grid titles, cards, and the New card in the same columns', async ( {
 		admin,
 		page,
 		requestUtils,
@@ -1416,7 +1416,7 @@ test.describe( 'Collection view block', () => {
 		}
 	} );
 
-	test( 'hides table density controls for grid views', async ( {
+	test( 'hides table-only density controls in grid views', async ( {
 		admin,
 		page,
 		requestUtils,
@@ -1526,7 +1526,7 @@ test.describe( 'Collection view block', () => {
 		}
 	} );
 
-	test( 'selects multiple grid cards without showing drag-handle chrome', async ( {
+	test( 'selects multiple grid cards without showing drag handles', async ( {
 		admin,
 		page,
 		requestUtils,
@@ -1641,10 +1641,10 @@ test.describe( 'Collection view block', () => {
 		}
 	} );
 
-	test.describe( 'hoverless selection controls', () => {
+	test.describe( 'selection controls without hover', () => {
 		test.use( { hasTouch: true } );
 
-		test( 'keeps table and grid checkboxes visible and actionable', async ( {
+		test( 'keeps table and grid checkboxes visible and usable', async ( {
 			admin,
 			page,
 			requestUtils,
@@ -1768,7 +1768,7 @@ test.describe( 'Collection view block', () => {
 		} );
 	} );
 
-	test( 'keeps grouped list rows on the Cortext visual baseline', async ( {
+	test( 'aligns grouped list rows with standard list rows', async ( {
 		admin,
 		page,
 		requestUtils,
@@ -1834,6 +1834,12 @@ test.describe( 'Collection view block', () => {
 				.filter( { hasText: 'The Left Hand of Darkness' } )
 				.first();
 			await expect( row ).toBeVisible();
+			await expect(
+				canvas.locator( '.cortext-row-drag-handle' )
+			).toHaveCount( 0 );
+			await expect(
+				canvas.locator( '.cortext-row-reorder-target' )
+			).toHaveCount( 0 );
 			await expect(
 				canvas.locator( '.dataviews-view-list__group-header' )
 			).toHaveCount( 2 );
@@ -2026,9 +2032,9 @@ test.describe( 'Collection view block', () => {
 				rowIsNested: true,
 				rowBorderTopWidth: '0px',
 				groupGap: '0px',
-				groupHeaderPaddingInlineStart: '30px',
+				groupHeaderPaddingInlineStart: '16px',
 				itemWrapperPaddingTop: '8px',
-				itemWrapperPaddingInlineStart: '30px',
+				itemWrapperPaddingInlineStart: '16px',
 				titleText: expect.stringContaining(
 					'The Left Hand of Darkness'
 				),
@@ -2716,7 +2722,7 @@ test.describe( 'Collection view block', () => {
 		} );
 	}
 
-	test( 'previews rich grid cards without dragging card controls', async ( {
+	test( 'renders rich grid drag previews without card controls', async ( {
 		admin,
 		page,
 		requestUtils,
@@ -3141,7 +3147,7 @@ test.describe( 'Collection view block', () => {
 		}
 	} );
 
-	test( 'previews rich list rows without dragging row controls', async ( {
+	test( 'renders rich list drag previews without row controls', async ( {
 		admin,
 		page,
 		requestUtils,
@@ -5863,9 +5869,8 @@ test.describe( 'Collection view block', () => {
 			const table = canvas.locator( '.dataviews-view-table' );
 			const header = tableDataHeaders( table ).nth( 1 );
 
-			// Author is the second data column (title is index 0, Author is
-			// index 1). Use a real mouse drag so this covers the handle's
-			// rendered hit area, not only the resize callback.
+			// Author is index 1 because the title is index 0. Drag the real
+			// handle so the test covers its hit area.
 			const resizer = header.locator( '.cortext-column-resizer' );
 			await expect( resizer ).toBeAttached();
 			const dragDelta = 160;
@@ -5873,8 +5878,7 @@ test.describe( 'Collection view block', () => {
 			expect( resizerBox ).not.toBeNull();
 			const headerBox = await header.boundingBox();
 			expect( headerBox ).not.toBeNull();
-			// Start just past the separator, where users naturally grab the
-			// edge from the next-column side.
+			// Start 6px into the next column to cover that side of the handle.
 			const startX = headerBox.x + headerBox.width + 6;
 			const startY = resizerBox.y + resizerBox.height / 2;
 			await page.mouse.move( startX, startY );
@@ -5971,7 +5975,7 @@ test.describe( 'Collection view block', () => {
 		}
 	} );
 
-	test( 'resizes a full-page collection column from a restricted saved width', async ( {
+	test( 'resizes a full-page collection column saved with a fixed width', async ( {
 		admin,
 		page,
 		requestUtils,

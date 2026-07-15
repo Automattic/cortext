@@ -86,6 +86,7 @@ jest.mock( '@dnd-kit/core', () => {
 		KeyboardSensor: jest.fn(),
 		PointerSensor: jest.fn(),
 		closestCenter: jest.fn(),
+		defaultKeyboardCoordinateGetter: jest.fn(),
 		pointerWithin: jest.fn(),
 		useSensor: jest.fn( () => ( {} ) ),
 		useSensors: jest.fn( ( ...sensors ) => sensors ),
@@ -110,9 +111,11 @@ jest.mock( '@dnd-kit/core', () => {
 	};
 } );
 
-import { useDraggable } from '@dnd-kit/core';
+import { KeyboardSensor, useDraggable, useSensor } from '@dnd-kit/core';
 
-import DataViewRowReorder from '../../../src/components/DataViewRowReorder';
+import DataViewRowReorder, {
+	gridKeyboardCoordinates,
+} from '../../../src/components/DataViewRowReorder';
 
 const rows = [
 	{ id: 1, title: { raw: 'One' } },
@@ -125,6 +128,7 @@ beforeEach( () => {
 	mockApiFetch.mockResolvedValue( { reseeded: false } );
 	mockCreateErrorNotice.mockClear();
 	useDraggable.mockClear();
+	useSensor.mockClear();
 	mockDndProps = null;
 	mockDragOverlayProps = null;
 	mockDraggableListeners = {};
@@ -236,7 +240,13 @@ function createListWrapper( heights = [ 88, 88, 88 ], rowRole = 'row' ) {
 	return wrapper;
 }
 
-function createGridWrapper() {
+function createGridWrapper(
+	rects = [
+		{ top: 10, left: 10, width: 180, height: 220 },
+		{ top: 10, left: 210, width: 180, height: 220 },
+		{ top: 250, left: 10, width: 180, height: 220 },
+	]
+) {
 	const wrapper = document.createElement( 'div' );
 	wrapper.innerHTML = `
 		<div class="dataviews-view-grid">
@@ -255,11 +265,6 @@ function createGridWrapper() {
 			</div>
 		</div>
 	`;
-	const rects = [
-		{ top: 10, left: 10, width: 180, height: 220 },
-		{ top: 10, left: 210, width: 180, height: 220 },
-		{ top: 250, left: 10, width: 180, height: 220 },
-	];
 	Array.from(
 		wrapper.querySelectorAll( '.dataviews-view-grid__card' )
 	).forEach( ( card, index ) => {
@@ -372,21 +377,18 @@ function itemDrop( rowId ) {
 }
 
 function dragEnd( draggedId, drop ) {
+	const draggableData = draggableDataFor( draggedId );
 	act( () => {
 		mockDndProps.onDragStart( {
 			active: {
-				data: {
-					current: { rowId: draggedId, label: `Row ${ draggedId }` },
-				},
+				data: { current: draggableData },
 			},
 		} );
 	} );
 	act( () => {
 		mockDndProps.onDragEnd( {
 			active: {
-				data: {
-					current: { rowId: draggedId, label: `Row ${ draggedId }` },
-				},
+				data: { current: draggableData },
 			},
 			over: {
 				data: {
@@ -481,7 +483,7 @@ describe( 'DataViewRowReorder', () => {
 		expect( handles[ 0 ] ).toHaveAttribute( 'tabindex', '-1' );
 	} );
 
-	it( 'decorates list rows nested inside DataViews groups', async () => {
+	it( 'leaves grouped list rows and selection behavior untouched', async () => {
 		const wrapper = createListWrapper();
 		const list = wrapper.querySelector( '.dataviews-view-list' );
 		const listRows = Array.from( list.children );
@@ -494,8 +496,13 @@ describe( 'DataViewRowReorder', () => {
 			group.append( heading, row );
 			list.appendChild( group );
 		} );
+		const selection = document.createElement( 'input' );
+		selection.type = 'checkbox';
+		listRows[ 0 ].prepend( selection );
+		const onSelectionChange = jest.fn();
+		selection.addEventListener( 'change', onSelectionChange );
 
-		await renderReorder(
+		const { rerender } = await renderReorder(
 			{
 				view: {
 					type: 'list',
@@ -504,15 +511,86 @@ describe( 'DataViewRowReorder', () => {
 			},
 			{ wrapper }
 		);
+		expect( useDraggable ).toHaveBeenCalledTimes( 3 );
+		expect(
+			wrapper.querySelectorAll( '.cortext-row-reorder-target' )
+		).toHaveLength( 3 );
+
+		rerender( {
+			view: {
+				type: 'list',
+				sort: null,
+				groupBy: { field: 'status', direction: 'asc' },
+			},
+		} );
 
 		await waitFor( () =>
-			expect( useDraggable ).toHaveBeenCalledTimes( 3 )
+			expect(
+				screen.queryByTestId( 'dnd-context' )
+			).not.toBeInTheDocument()
 		);
-		expect(
-			wrapper.querySelectorAll(
-				'.dataviews-view-list [role="row"].cortext-row-reorder-target'
-			)
-		).toHaveLength( 3 );
+		await waitFor( () =>
+			expect(
+				wrapper.querySelectorAll( '.cortext-row-reorder-target' )
+			).toHaveLength( 0 )
+		);
+		expect( useDraggable ).toHaveBeenCalledTimes( 3 );
+
+		fireEvent.click( selection );
+		expect( selection ).toBeChecked();
+		expect( onSelectionChange ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'moves a grid keyboard drag to the card below', () => {
+		const rect = ( top, left ) => ( {
+			top,
+			left,
+			width: 130,
+			height: 220,
+			right: left + 130,
+			bottom: top + 220,
+		} );
+		const right = rect( 0, 162 );
+		const below = rect( 252, 0 );
+		const containers = [
+			{
+				id: 'row-item:2',
+				data: { current: { type: 'item', rowId: 2 } },
+			},
+			{
+				id: 'row-item:3',
+				data: { current: { type: 'item', rowId: 3 } },
+			},
+		];
+		const coordinates = gridKeyboardCoordinates(
+			{ code: 'ArrowDown' },
+			{
+				currentCoordinates: { x: 0, y: 0 },
+				context: {
+					collisionRect: rect( 0, 0 ),
+					droppableContainers: {
+						getEnabled: () => containers,
+					},
+					droppableRects: new Map( [
+						[ 'row-item:2', right ],
+						[ 'row-item:3', below ],
+					] ),
+				},
+			}
+		);
+
+		expect( coordinates ).toEqual( { x: 0, y: 252 } );
+	} );
+
+	it( 'wires the directional grid getter into the keyboard sensor', async () => {
+		await renderReorder(
+			{ view: { type: 'grid', sort: null } },
+			{ wrapper: createGridWrapper() }
+		);
+
+		expect( useSensor ).toHaveBeenCalledWith( KeyboardSensor, {
+			coordinateGetter: gridKeyboardCoordinates,
+		} );
 	} );
 
 	it( 'decorates DataViews 17 infinite-scroll list articles for row reorder', async () => {
@@ -597,7 +675,9 @@ describe( 'DataViewRowReorder', () => {
 		expect( overlay ).toHaveStyle( {
 			zIndex: '100002',
 		} );
-		expect( mockDragOverlayProps.dropAnimation ).toBeNull();
+		expect( mockDragOverlayProps.dropAnimation ).toEqual(
+			expect.any( Function )
+		);
 		expect(
 			overlay.querySelector( '.cortext-row-drag-preview' )
 		).toHaveClass( 'cortext-row-drag-preview--comfortable' );
@@ -763,6 +843,120 @@ describe( 'DataViewRowReorder', () => {
 		expect( preview.textContent ).not.toContain( 'Hidden description' );
 		expect( preview.textContent ).not.toContain( 'Rock' );
 		expect( preview.textContent ).not.toMatch( /^0|0$/ );
+	} );
+
+	it( 'builds the table preview in RTL inline order', async () => {
+		const wrapper = document.createElement( 'div' );
+		wrapper.innerHTML = `
+			<div class="dataviews-wrapper">
+				<table class="dataviews-view-table">
+					<tbody>
+						<tr style="direction: rtl">
+							<td class="dataviews-view-table__checkbox-column"><input type="checkbox" /></td>
+							<td><span>Title</span></td>
+							<td><span>Status</span></td>
+							<td class="dataviews-view-table__actions-column dataviews-view-table__actions-column--sticky"><button type="button">0</button></td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+		`;
+		const dataviewsWrapper = wrapper.querySelector( '.dataviews-wrapper' );
+		dataviewsWrapper.getBoundingClientRect = () => ( {
+			top: 0,
+			left: 10,
+			width: 400,
+			height: 40,
+			right: 410,
+			bottom: 40,
+		} );
+		const rowElement = wrapper.querySelector( 'tr' );
+		rowElement.getClientRects = () => [ {} ];
+		rowElement.getBoundingClientRect = () => ( {
+			top: 0,
+			left: 10,
+			width: 400,
+			height: 40,
+			right: 410,
+			bottom: 40,
+		} );
+		[
+			[ 378, 32 ],
+			[ 260, 118 ],
+			[ 138, 122 ],
+			[ 10, 41 ],
+		].forEach( ( [ left, width ], index ) => {
+			const cell = rowElement.children[ index ];
+			cell.getBoundingClientRect = () => ( {
+				top: 0,
+				left,
+				width,
+				height: 40,
+				right: left + width,
+				bottom: 40,
+			} );
+		} );
+		document.body.appendChild( wrapper );
+
+		const { unmount } = render(
+			<DataViewRowReorder
+				wrapperRef={ { current: wrapper } }
+				view={ {
+					type: 'table',
+					sort: null,
+					fields: [ 'title', 'status' ],
+				} }
+				onChangeView={ jest.fn() }
+				collectionId={ 7 }
+				rows={ [ rows[ 0 ] ] }
+				onReordered={ jest.fn() }
+			/>
+		);
+
+		try {
+			await waitFor( () =>
+				expect(
+					screen.getByTestId( 'dnd-context' )
+				).toBeInTheDocument()
+			);
+			act( () => {
+				mockDndProps.onDragStart( {
+					active: {
+						data: { current: draggableDataFor( 1 ) },
+					},
+				} );
+			} );
+
+			const preview = screen
+				.getByTestId( 'drag-overlay' )
+				.querySelector( '.cortext-row-drag-preview' );
+			const previewCells = preview.querySelectorAll(
+				'.cortext-row-drag-preview__cell'
+			);
+
+			expect( preview ).toHaveAttribute( 'dir', 'rtl' );
+			expect( preview ).toHaveStyle( { width: '400px' } );
+			expect( previewCells ).toHaveLength( 5 );
+			expect( previewCells[ 0 ] ).toHaveClass(
+				'cortext-row-drag-preview__cell--checkbox'
+			);
+			expect( previewCells[ 1 ] ).toHaveClass(
+				'cortext-row-drag-preview__cell--primary'
+			);
+			expect( previewCells[ 1 ] ).toHaveTextContent( 'Title' );
+			expect( previewCells[ 2 ] ).toHaveTextContent( 'Status' );
+			expect( previewCells[ 3 ] ).toHaveClass(
+				'cortext-row-drag-preview__cell--spacer'
+			);
+			expect( previewCells[ 3 ] ).toHaveStyle( { flex: '0 0 87px' } );
+			expect( previewCells[ 4 ] ).toHaveClass(
+				'cortext-row-drag-preview__cell--actions'
+			);
+			expect( previewCells[ 4 ] ).toHaveStyle( { flex: '0 0 41px' } );
+		} finally {
+			unmount();
+			wrapper.remove();
+		}
 	} );
 
 	it( 'remeasures rows after the embedded block is resized', async () => {
@@ -1217,6 +1411,237 @@ describe( 'DataViewRowReorder', () => {
 		expect( onReordered ).toHaveBeenCalledTimes( 1 );
 	} );
 
+	it( 'settles the overlay into the open gap before committing the reorder', async () => {
+		const originalAnimate = window.Element.prototype.animate;
+		const animationSteps = [];
+		let overlay = null;
+		window.Element.prototype.animate = jest.fn( ( keyframes, options ) => {
+			const completion = deferred();
+			const animation = {
+				finished: completion.promise,
+				cancel: jest.fn( completion.resolve ),
+			};
+			animationSteps.push( {
+				...completion,
+				animation,
+				keyframes,
+				options,
+			} );
+			return animation;
+		} );
+
+		try {
+			const { mutateRows, onReordered, rerender } = await renderReorder();
+			const draggableData = draggableDataFor( 1 );
+
+			dragEnd( 1, gapDrop( 3, null, 3 ) );
+			expect( mutateRows ).not.toHaveBeenCalled();
+
+			overlay = document.createElement( 'div' );
+			overlay.getBoundingClientRect = () => ( {
+				left: 90,
+				top: 30,
+				width: 320,
+				height: 40,
+				right: 410,
+				bottom: 70,
+			} );
+			document.body.appendChild( overlay );
+			const animationPromise = mockDragOverlayProps.dropAnimation( {
+				active: {
+					id: 'row:1',
+					data: { current: draggableData },
+				},
+				dragOverlay: { node: overlay },
+				transform: { x: 80, y: 30, scaleX: 1, scaleY: 1 },
+			} );
+
+			expect( animationSteps ).toHaveLength( 1 );
+			expect( animationSteps[ 0 ].options ).toMatchObject( {
+				duration: 80,
+				fill: 'forwards',
+			} );
+			expect( animationSteps[ 0 ].keyframes[ 1 ].transform ).toBe(
+				'translate3d(0px, 80px, 0) scaleX(1) scaleY(1)'
+			);
+			expect( mutateRows ).not.toHaveBeenCalled();
+
+			const refreshedData = [
+				rows[ 0 ],
+				rows[ 1 ],
+				{ id: 4, title: { raw: 'Four' } },
+				rows[ 2 ],
+			];
+			rerender( { data: refreshedData } );
+
+			await act( async () => {
+				animationSteps[ 0 ].resolve();
+				await Promise.resolve();
+			} );
+			await waitFor( () => expect( animationSteps ).toHaveLength( 2 ) );
+			expect( mutateRows ).toHaveBeenCalledTimes( 1 );
+			expect(
+				mutateRows.mock.calls[ 0 ][ 0 ].map( ( row ) => row.id )
+			).toEqual( [ 2, 4, 3, 1 ] );
+			expect( animationSteps[ 1 ].keyframes ).toEqual( [
+				{ opacity: 1 },
+				{ opacity: 0 },
+			] );
+			expect( animationSteps[ 1 ].options ).toMatchObject( {
+				duration: 40,
+				fill: 'forwards',
+			} );
+
+			await act( async () => {
+				animationSteps[ 1 ].resolve();
+				await animationPromise;
+			} );
+			await waitFor( () =>
+				expect( onReordered ).toHaveBeenCalledTimes( 1 )
+			);
+		} finally {
+			overlay?.remove();
+			if ( originalAnimate ) {
+				window.Element.prototype.animate = originalAnimate;
+			} else {
+				delete window.Element.prototype.animate;
+			}
+		}
+	} );
+
+	it( 'corrects the overlay after a grid reorder changes row geometry', async () => {
+		const originalAnimate = window.Element.prototype.animate;
+		const originalRequestAnimationFrame = window.requestAnimationFrame;
+		const animationSteps = [];
+		const frames = [];
+		let overlay = null;
+		window.Element.prototype.animate = jest.fn( ( keyframes, options ) => {
+			const completion = deferred();
+			const animation = {
+				finished: completion.promise,
+				cancel: jest.fn( completion.resolve ),
+			};
+			animationSteps.push( {
+				...completion,
+				animation,
+				keyframes,
+				options,
+			} );
+			return animation;
+		} );
+
+		try {
+			const rects = [
+				{ top: 10, left: 10, width: 180, height: 220 },
+				{ top: 10, left: 210, width: 180, height: 220 },
+				{ top: 250, left: 10, width: 180, height: 220 },
+			];
+			const wrapper = createGridWrapper( rects );
+			const { mutateRows, onReordered, rerender } = await renderReorder(
+				{
+					view: { type: 'grid', sort: null },
+				},
+				{ wrapper }
+			);
+			window.requestAnimationFrame = jest.fn( ( callback ) => {
+				frames.push( callback );
+				return frames.length;
+			} );
+
+			dragEnd( 1, itemDrop( 3 ) );
+			expect( mutateRows ).not.toHaveBeenCalled();
+
+			overlay = document.createElement( 'div' );
+			overlay.getBoundingClientRect = () => ( {
+				left: 10,
+				top: 10,
+				width: 180,
+				height: 220,
+				right: 190,
+				bottom: 230,
+			} );
+			document.body.appendChild( overlay );
+			const animationPromise = mockDragOverlayProps.dropAnimation( {
+				active: {
+					id: 'row:1',
+					data: { current: draggableDataFor( 1 ) },
+				},
+				dragOverlay: { node: overlay },
+				transform: { x: 0, y: 0, scaleX: 1, scaleY: 1 },
+			} );
+
+			expect( animationSteps ).toHaveLength( 1 );
+			expect( animationSteps[ 0 ].keyframes[ 1 ].transform ).toBe(
+				'translate3d(0px, 240px, 0) scaleX(1) scaleY(1)'
+			);
+
+			await act( async () => {
+				animationSteps[ 0 ].resolve();
+				await Promise.resolve();
+			} );
+			await waitFor( () =>
+				expect( mutateRows ).toHaveBeenCalledTimes( 1 )
+			);
+			const nextData = mutateRows.mock.calls[ 0 ][ 0 ];
+			expect( nextData.map( ( row ) => row.id ) ).toEqual( [ 2, 3, 1 ] );
+
+			// Rechunking after the commit can move the card away from the original
+			// drop slot.
+			Object.assign( rects[ 2 ], { top: 330 } );
+			rerender( { rows: nextData, data: nextData } );
+			for (
+				let attempt = 0;
+				attempt < 6 && animationSteps.length < 2;
+				attempt++
+			) {
+				await act( async () => {
+					frames.shift()?.();
+					await Promise.resolve();
+				} );
+			}
+
+			await waitFor( () => expect( animationSteps ).toHaveLength( 2 ) );
+			expect( animationSteps[ 1 ].keyframes ).toEqual( [
+				{
+					transform: 'translate3d(0px, 240px, 0) scaleX(1) scaleY(1)',
+				},
+				{
+					transform: 'translate3d(0px, 320px, 0) scaleX(1) scaleY(1)',
+				},
+			] );
+			expect( animationSteps[ 1 ].options ).toMatchObject( {
+				duration: 60,
+				fill: 'forwards',
+			} );
+
+			await act( async () => {
+				animationSteps[ 1 ].resolve();
+				await Promise.resolve();
+			} );
+			await waitFor( () => expect( animationSteps ).toHaveLength( 3 ) );
+			expect( animationSteps[ 2 ].keyframes ).toEqual( [
+				{ opacity: 1 },
+				{ opacity: 0 },
+			] );
+
+			await act( async () => {
+				animationSteps[ 2 ].resolve();
+				await animationPromise;
+			} );
+			await waitFor( () =>
+				expect( onReordered ).toHaveBeenCalledTimes( 1 )
+			);
+		} finally {
+			overlay?.remove();
+			window.requestAnimationFrame = originalRequestAnimationFrame;
+			if ( originalAnimate ) {
+				window.Element.prototype.animate = originalAnimate;
+			} else {
+				delete window.Element.prototype.animate;
+			}
+		}
+	} );
+
 	it( 'reverts the optimistic mutation when the API rejects', async () => {
 		mockApiFetch.mockRejectedValueOnce( new Error( 'Nope' ) );
 		const { mutateRows, onReordered } = await renderReorder();
@@ -1256,7 +1681,9 @@ describe( 'DataViewRowReorder', () => {
 		await waitFor( () =>
 			expect( useDraggable ).toHaveBeenCalledTimes( 3 )
 		);
-		expect( mockDragOverlayProps.dropAnimation ).toBeNull();
+		expect( mockDragOverlayProps.dropAnimation ).toEqual(
+			expect.any( Function )
+		);
 
 		const cards = wrapper.querySelectorAll( '.dataviews-view-grid__card' );
 		expect( cards ).toHaveLength( 3 );
