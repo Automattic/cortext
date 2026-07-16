@@ -85,6 +85,7 @@ function InserterToggle( { disabled = false } ) {
 
 function DocumentActions( {
 	disabled = false,
+	canInsertBlocks = true,
 	isActive,
 	postId,
 	topBarActions,
@@ -120,7 +121,9 @@ function DocumentActions( {
 	return (
 		<TopBarActionsFill>
 			<div className="cortext-document-actions">
-				<InserterToggle disabled={ disabled } />
+				{ canInsertBlocks ? (
+					<InserterToggle disabled={ disabled } />
+				) : null }
 				{ topBarActions }
 				<DocumentPublishToggle
 					postId={ postId }
@@ -241,7 +244,7 @@ function CanvasEditor( {
 		postType: post.type ?? postType,
 		enabled: isActive,
 	} );
-	const { resetPost } = useDispatch( editorStore );
+	const { resetPost, setIsInserterOpened } = useDispatch( editorStore );
 	const discard = useCallback( () => resetPost(), [ resetPost ] );
 	const lastNotifiedBacklinkSaveRef = useRef( null );
 
@@ -312,6 +315,14 @@ function CanvasEditor( {
 		[]
 	);
 
+	// A collection's data view owns the whole body. Clear the editor flag too,
+	// or the inserter will pop open again when the user returns to a page.
+	useEffect( () => {
+		if ( isCollection && isInserterOpened ) {
+			setIsInserterOpened( false );
+		}
+	}, [ isCollection, isInserterOpened, setIsInserterOpened ] );
+
 	const hasProperties = Array.isArray( fields ) && fields.length > 0;
 	const [ arePropertiesVisible, setArePropertiesVisible ] = useState( true );
 	const [ isPropertiesLayoutEditing, setIsPropertiesLayoutEditing ] =
@@ -351,6 +362,7 @@ function CanvasEditor( {
 			<CortextMentions />
 			<DocumentActions
 				disabled={ postLock.isReadOnly }
+				canInsertBlocks={ ! isCollection }
 				isActive={ isActive }
 				postId={ post.id }
 				topBarActions={ topBarActions }
@@ -382,7 +394,9 @@ function CanvasEditor( {
 					</>
 				}
 				secondarySidebar={
-					isInserterOpened ? <CortextInserterSidebar /> : null
+					! isCollection && isInserterOpened ? (
+						<CortextInserterSidebar />
+					) : null
 				}
 				sidebar={ <InspectorSidebarSlot /> }
 			/>
