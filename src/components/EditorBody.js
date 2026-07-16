@@ -155,6 +155,21 @@ export function collectDuplicateHeaderClientIds(
 	return duplicateIds;
 }
 
+// A foreign data view lands in both lists: duplicate owners and new body
+// blocks. The duplicate pass removes it first, so skip it here instead of
+// dispatching removeBlock twice.
+export function collectCollectionBodyClientIdsToRemove(
+	collectionBodyClientIds,
+	snapshotClientIds,
+	removedClientIds
+) {
+	return collectionBodyClientIds.filter(
+		( clientId ) =>
+			! removedClientIds.has( clientId ) &&
+			! snapshotClientIds.has( clientId )
+	);
+}
+
 export function areCanvasReadyRequirementsMet( {
 	hasTitle,
 	needsCover = false,
@@ -779,13 +794,15 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 		}
 
 		if ( ownerBlockName && hasOwner && snapshot.initialized ) {
-			collectionBodyClientIds
-				.filter( ( clientId ) => ! snapshot.clientIds.has( clientId ) )
-				.forEach( ( clientId ) => {
-					removedClientIds.add( clientId );
-					updateBlockAttributes( clientId, { lock: {} } );
-					removeBlock( clientId, false );
-				} );
+			collectCollectionBodyClientIdsToRemove(
+				collectionBodyClientIds,
+				snapshot.clientIds,
+				removedClientIds
+			).forEach( ( clientId ) => {
+				removedClientIds.add( clientId );
+				updateBlockAttributes( clientId, { lock: {} } );
+				removeBlock( clientId, false );
+			} );
 		}
 
 		if ( isLocked ) {

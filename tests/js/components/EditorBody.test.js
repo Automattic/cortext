@@ -77,6 +77,7 @@ jest.mock( '../../../src/hooks/afterNextPaint', () => ( {
 
 const {
 	areCanvasReadyRequirementsMet,
+	collectCollectionBodyClientIdsToRemove,
 	collectDuplicateHeaderClientIds,
 } = require( '../../../src/components/EditorBody' );
 
@@ -172,6 +173,26 @@ describe( 'collectDuplicateHeaderClientIds', () => {
 		expect(
 			collectDuplicateHeaderClientIds( blocks, OWNER, COLLECTION_ID )
 		).toEqual( [ 'cover-2', 'title-2' ] );
+	} );
+} );
+
+describe( 'collectCollectionBodyClientIdsToRemove', () => {
+	it( 'skips a data view already removed as a duplicate', () => {
+		const collectionBodyClientIds = [
+			'new-collection',
+			'new-paragraph',
+			'legacy-paragraph',
+		];
+		const snapshotClientIds = new Set( [ 'legacy-paragraph' ] );
+		const removedClientIds = new Set( [ 'new-collection' ] );
+
+		expect(
+			collectCollectionBodyClientIdsToRemove(
+				collectionBodyClientIds,
+				snapshotClientIds,
+				removedClientIds
+			)
+		).toEqual( [ 'new-paragraph' ] );
 	} );
 } );
 

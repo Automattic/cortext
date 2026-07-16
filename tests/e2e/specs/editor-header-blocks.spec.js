@@ -267,6 +267,12 @@ async function readCollectionBodyState( page, collectionId ) {
 						block.name === 'core/paragraph' &&
 						getParagraphText( block ) === blockedText
 				).length,
+				invalidDataViewCount: blocks.filter(
+					( block ) =>
+						block.name === 'cortext/data-view' &&
+						Number( block.attributes?.collectionId ) !==
+							Number( postId )
+				).length,
 				legacyLock: legacyBlock?.attributes?.lock ?? null,
 				legacyPresent: Boolean( legacyBlock ),
 				ownerCount: ownerBlocks.length,
@@ -310,6 +316,14 @@ async function attemptCollectionBodyMutations( page, collectionId ) {
 			dispatch.insertBlocks(
 				window.wp.blocks.createBlock( 'core/paragraph', {
 					content: blockedText,
+				} ),
+				blocks.length,
+				undefined,
+				false
+			);
+			dispatch.insertBlocks(
+				window.wp.blocks.createBlock( 'cortext/data-view', {
+					intent: 'create-inline',
 				} ),
 				blocks.length,
 				undefined,
@@ -609,6 +623,28 @@ test.describe( 'editor header blocks', () => {
 				`page=cortext&p=/${ fixture.row.id }`
 			);
 			await waitForEditorPost( page, fixture.row.id );
+			const addBlockButton = page.getByRole( 'button', {
+				name: 'Add block',
+				exact: true,
+			} );
+			await expect( addBlockButton ).toBeEnabled();
+			await addBlockButton.click();
+			await expect(
+				page.locator( '.cortext-inserter-sidebar' )
+			).toBeVisible();
+			await expect
+				.poll( () =>
+					page.evaluate( () =>
+						window.wp.data
+							.select( 'core/editor' )
+							.isInserterOpened()
+					)
+				)
+				.toBe( true );
+			await addBlockButton.click();
+			await expect(
+				page.locator( '.cortext-inserter-sidebar' )
+			).toHaveCount( 0 );
 			await exerciseHeaderGuard( page );
 		} finally {
 			await deleteIfCreated(
@@ -663,13 +699,22 @@ test.describe( 'editor header blocks', () => {
 				ownerCount: 1,
 			} );
 
-			await attemptCollectionBodyMutations( page, collection.id );
+			const pageErrors = [];
+			const onPageError = ( error ) => pageErrors.push( error.message );
+			page.on( 'pageerror', onPageError );
+			try {
+				await attemptCollectionBodyMutations( page, collection.id );
 
-			await expectCollectionBodyState( page, collection.id, {
-				blockedCount: 0,
-				legacyPresent: true,
-				ownerCount: 1,
-			} );
+				await expectCollectionBodyState( page, collection.id, {
+					blockedCount: 0,
+					invalidDataViewCount: 0,
+					legacyPresent: true,
+					ownerCount: 1,
+				} );
+			} finally {
+				page.off( 'pageerror', onPageError );
+			}
+			expect( pageErrors ).toEqual( [] );
 			await selectFirstBlockByName( page, POST_TITLE_BLOCK );
 			await expect(
 				editorCanvas.getByRole( 'button', {
@@ -684,7 +729,7 @@ test.describe( 'editor header blocks', () => {
 		}
 	} );
 
-	test( 'preserves legacy collection body blocks after switching documents', async ( {
+	test( 'closes the inserter when opening a collection and keeps its legacy body', async ( {
 		admin,
 		page,
 		requestUtils,
@@ -721,6 +766,15 @@ test.describe( 'editor header blocks', () => {
 			);
 			await waitForEditorPost( page, sourcePage.id );
 			await expectParagraphsAfterTitle( page, [ BODY_A, BODY_B ] );
+			const addBlockButton = page.getByRole( 'button', {
+				name: 'Add block',
+				exact: true,
+			} );
+			await expect( addBlockButton ).toBeEnabled();
+			await addBlockButton.click();
+			await expect(
+				page.locator( '.cortext-inserter-sidebar' )
+			).toBeVisible();
 
 			await page
 				.locator( '.cortext-sidebar' )
@@ -730,6 +784,19 @@ test.describe( 'editor header blocks', () => {
 				} )
 				.click();
 			await waitForEditorPost( page, collection.id );
+			await expect( addBlockButton ).toHaveCount( 0 );
+			await expect(
+				page.locator( '.cortext-inserter-sidebar' )
+			).toHaveCount( 0 );
+			await expect
+				.poll( () =>
+					page.evaluate( () =>
+						window.wp.data
+							.select( 'core/editor' )
+							.isInserterOpened()
+					)
+				)
+				.toBe( false );
 			await expectCollectionBodyState( page, collection.id, {
 				blockedCount: 0,
 				legacyLock: {
@@ -740,6 +807,19 @@ test.describe( 'editor header blocks', () => {
 				legacyPresent: true,
 				ownerCount: 1,
 			} );
+
+			await page
+				.locator( '.cortext-sidebar' )
+				.getByRole( 'button', {
+					name: sourceTitle,
+					exact: true,
+				} )
+				.click();
+			await waitForEditorPost( page, sourcePage.id );
+			await expect( addBlockButton ).toBeEnabled();
+			await expect(
+				page.locator( '.cortext-inserter-sidebar' )
+			).toHaveCount( 0 );
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
