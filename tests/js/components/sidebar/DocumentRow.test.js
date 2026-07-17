@@ -1,15 +1,3 @@
-/**
- * Render and prop-contract tests for `src/components/sidebar/DocumentRow.js`.
- *
- * DocumentRow has two modes derived from the record's capabilities:
- *  - hierarchy (pages and collections without a trait term): real chevron,
- *    recursive children, three drop zones, add-child button.
- *  - leaf (rows — documents tagged with a trait term): chevron placeholder,
- *    no children, two drop zones, no add-child.
- *
- * The `documents` module is mocked so tests can inspect actions and feature
- * resolution without mounting the full sidebar provider stack each time.
- */
 import { fireEvent, render, screen } from '@testing-library/react';
 import { DndContext } from '@dnd-kit/core';
 
@@ -427,7 +415,6 @@ describe( 'DocumentRow (hierarchical mode)', () => {
 			childNodes: [ { page: child, children: [] } ],
 			expandedIds: new Set( [ 1 ] ),
 		} );
-		// Two rows total: root + child.
 		expect(
 			container.querySelectorAll( '.cortext-sidebar__row' )
 		).toHaveLength( 2 );
@@ -517,8 +504,6 @@ describe( 'DocumentRow (leaf mode)', () => {
 	} );
 
 	it( 'does not render child rows even when childNodes are passed', () => {
-		// Leaves never render child branches. Ignore passed nodes so stale tree
-		// data cannot show rows under a collection.
 		const stray = makeRow( {
 			id: 8,
 			title: { rendered: 'Stray', raw: 'Stray' },

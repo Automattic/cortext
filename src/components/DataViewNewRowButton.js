@@ -30,10 +30,8 @@ const TemplateEditorModal = lazy( () =>
 	import( /* webpackChunkName: "editor" */ './TemplateEditorModal' )
 );
 
-// Pull a simple `is` prefill from the active filters. Multi-value operators
-// are ignored for now; this path only handles one scalar value per field.
-// Filters already run on GET /cortext/v1/rows, so prefill is only a convenience
-// for new rows, not the reason filtering works.
+// Only scalar `is` filters can be copied without changing their meaning.
+// Filtering itself remains server-side.
 function prefillFromFilters( filters, fieldIds ) {
 	const prefill = {};
 	if ( ! Array.isArray( filters ) ) {

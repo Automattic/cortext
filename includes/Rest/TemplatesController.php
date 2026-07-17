@@ -163,12 +163,6 @@ final class TemplatesController {
 		return current_user_can( 'edit_posts' );
 	}
 
-	/**
-	 * Checks whether the current user can edit the target template.
-	 *
-	 * @param WP_REST_Request $request REST request.
-	 * @return bool|WP_Error
-	 */
 	public function can_edit_template( WP_REST_Request $request ) {
 		$id   = (int) $request->get_param( 'id' );
 		$post = get_post( $id );
@@ -293,12 +287,6 @@ final class TemplatesController {
 		return new WP_REST_Response( array( 'template' => $template ), 200 );
 	}
 
-	/**
-	 * Returns request body parameters as an array.
-	 *
-	 * @param WP_REST_Request $request REST request.
-	 * @return array<string,mixed>
-	 */
 	private function body_params( WP_REST_Request $request ): array {
 		$params = $request->get_json_params();
 		if ( ! is_array( $params ) || array() === $params ) {

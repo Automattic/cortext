@@ -103,12 +103,6 @@ final class Plugin {
 		( new Preferences() )->register();
 	}
 
-	/**
-	 * Registers experiments owned by the plugin.
-	 *
-	 * @param array<int,array<string,mixed>> $experiments Registered experiments.
-	 * @return array<int,array<string,mixed>>
-	 */
 	public function register_experiments( array $experiments ): array {
 		$experiments[] = array(
 			'id'          => Templates::EXPERIMENT_ID,

@@ -38,12 +38,6 @@ final class Templates {
 		return self::KIND_ROW === $kind ? self::KIND_ROW : self::KIND_PAGE;
 	}
 
-	/**
-	 * Sanitizes the loose field-default map stored on row templates.
-	 *
-	 * @param mixed $value Raw meta value.
-	 * @return array<string,mixed>
-	 */
 	public static function sanitize_field_values( $value ): array {
 		if ( is_object( $value ) ) {
 			$value = (array) $value;
@@ -62,12 +56,6 @@ final class Templates {
 		return $sanitized;
 	}
 
-	/**
-	 * Sanitizes one field value for template storage.
-	 *
-	 * @param mixed $value Raw field value.
-	 * @return mixed
-	 */
 	private static function sanitize_field_value( $value ) {
 		if ( is_array( $value ) ) {
 			return array_values(
@@ -80,12 +68,6 @@ final class Templates {
 		return self::sanitize_scalar_field_value( $value );
 	}
 
-	/**
-	 * Sanitizes one scalar field value for template storage.
-	 *
-	 * @param mixed $value Raw scalar field value.
-	 * @return bool|float|int|string|null
-	 */
 	private static function sanitize_scalar_field_value( $value ) {
 		if ( is_bool( $value ) || is_int( $value ) || is_float( $value ) || null === $value ) {
 			return $value;
@@ -93,12 +75,6 @@ final class Templates {
 		return sanitize_text_field( (string) $value );
 	}
 
-	/**
-	 * Lists templates matching the provided filters.
-	 *
-	 * @param array<string,mixed> $args Query args.
-	 * @return array<int,array<string,mixed>>
-	 */
 	public function list( array $args = array() ): array {
 		$kind          = isset( $args['kind'] ) ? self::sanitize_kind( $args['kind'] ) : null;
 		$collection_id = isset( $args['collection_id'] ) ? max( 0, (int) $args['collection_id'] ) : 0;
@@ -143,12 +119,6 @@ final class Templates {
 		);
 	}
 
-	/**
-	 * Creates a template post.
-	 *
-	 * @param array<string,mixed> $payload Template payload.
-	 * @return array<string,mixed>|WP_Error
-	 */
 	public function create( array $payload ) {
 		$normalized = $this->normalize_template_payload( $payload, true );
 		if ( $normalized instanceof WP_Error ) {
@@ -177,12 +147,6 @@ final class Templates {
 		return $post instanceof WP_Post ? $this->format_template( $post ) : $this->insert_failed_error();
 	}
 
-	/**
-	 * Creates a template from an existing document or row.
-	 *
-	 * @param int $document_id Source document id.
-	 * @return array<string,mixed>|WP_Error
-	 */
 	public function create_from_document( int $document_id ) {
 		$post = get_post( $document_id );
 		if ( ! $post instanceof WP_Post || Document::POST_TYPE !== $post->post_type ) {
@@ -230,13 +194,6 @@ final class Templates {
 		);
 	}
 
-	/**
-	 * Updates an existing template post.
-	 *
-	 * @param int                 $id      Template id.
-	 * @param array<string,mixed> $payload Template payload.
-	 * @return array<string,mixed>|WP_Error
-	 */
 	public function update( int $id, array $payload ) {
 		$template = $this->get_template_post( $id );
 		if ( $template instanceof WP_Error ) {
@@ -280,12 +237,6 @@ final class Templates {
 		return $post instanceof WP_Post ? $this->format_template( $post ) : $this->template_not_found_error();
 	}
 
-	/**
-	 * Duplicates a template post.
-	 *
-	 * @param int $id Template id.
-	 * @return array<string,mixed>|WP_Error
-	 */
 	public function duplicate( int $id ) {
 		$template = $this->get_template_post( $id );
 		if ( $template instanceof WP_Error ) {
@@ -314,13 +265,6 @@ final class Templates {
 		return (bool) wp_delete_post( $id, true );
 	}
 
-	/**
-	 * Instantiates a template into a page or row document.
-	 *
-	 * @param int                 $id   Template id.
-	 * @param array<string,mixed> $args Instantiation args.
-	 * @return array<string,mixed>|WP_Error
-	 */
 	public function instantiate( int $id, array $args = array() ) {
 		$template = $this->get_template_post( $id );
 		if ( $template instanceof WP_Error ) {
@@ -386,12 +330,6 @@ final class Templates {
 		return $this->format_template( $template );
 	}
 
-	/**
-	 * Formats a template for the Cortext REST API.
-	 *
-	 * @param WP_Post $template Template post.
-	 * @return array<string,mixed>
-	 */
 	public function format_template( WP_Post $template ): array {
 		$meta = $this->template_meta( $template );
 		return array(
@@ -405,13 +343,6 @@ final class Templates {
 		);
 	}
 
-	/**
-	 * Normalizes and validates a template payload.
-	 *
-	 * @param array<string,mixed> $payload Template payload.
-	 * @param bool                $creating Whether this payload is for a create request.
-	 * @return array{title:string,content:string,kind:string,collection_id:int,field_values:array<string,mixed>}|WP_Error
-	 */
 	private function normalize_template_payload( array $payload, bool $creating ) {
 		$kind = self::sanitize_kind( $payload['kind'] ?? self::KIND_PAGE );
 
@@ -447,12 +378,6 @@ final class Templates {
 		);
 	}
 
-	/**
-	 * Returns a template post by id.
-	 *
-	 * @param int $id Template post id.
-	 * @return WP_Post|WP_Error
-	 */
 	private function get_template_post( int $id ) {
 		$post = get_post( $id );
 		if ( ! $post instanceof WP_Post || TemplatePostType::POST_TYPE !== $post->post_type ) {
@@ -461,12 +386,6 @@ final class Templates {
 		return $post;
 	}
 
-	/**
-	 * Reads normalized template meta.
-	 *
-	 * @param WP_Post $template Template post.
-	 * @return array{kind:string,collection_id:int,field_values:array<string,mixed>}
-	 */
 	private function template_meta( WP_Post $template ): array {
 		return array(
 			'kind'          => self::sanitize_kind( get_post_meta( (int) $template->ID, TemplatePostType::META_KIND, true ) ),
@@ -557,14 +476,6 @@ final class Templates {
 		return true;
 	}
 
-	/**
-	 * Normalizes row field defaults for a collection.
-	 *
-	 * @param int                 $collection_id Collection document id.
-	 * @param array<string,mixed> $values Raw field defaults.
-	 * @param bool                $reject_invalid Whether invalid field keys should fail the request.
-	 * @return array<string,mixed>|WP_Error
-	 */
 	private function normalize_field_values_for_collection( int $collection_id, array $values, bool $reject_invalid ) {
 		$field_ids = array_flip( Document::collection_field_ids( $collection_id ) );
 		$next      = array();
@@ -592,13 +503,6 @@ final class Templates {
 		return $next;
 	}
 
-	/**
-	 * Normalizes a field default for a field type.
-	 *
-	 * @param mixed  $value Raw value.
-	 * @param string $type Field type.
-	 * @return mixed
-	 */
 	private function normalize_value_for_type( $value, string $type ) {
 		if ( 'checkbox' === $type ) {
 			return rest_sanitize_boolean( $value ) ? '1' : '0';
@@ -609,13 +513,6 @@ final class Templates {
 		return $value;
 	}
 
-	/**
-	 * Reads row field values into template defaults.
-	 *
-	 * @param int $row_id Row document id.
-	 * @param int $collection_id Collection document id.
-	 * @return array<string,mixed>
-	 */
 	private function field_values_from_row( int $row_id, int $collection_id ): array {
 		$values = array();
 		foreach ( Document::collection_field_ids( $collection_id ) as $field_id ) {
@@ -640,14 +537,6 @@ final class Templates {
 		return $values;
 	}
 
-	/**
-	 * Writes row template field values to a row document.
-	 *
-	 * @param int                 $row_id Row document id.
-	 * @param int                 $collection_id Collection document id.
-	 * @param array<string,mixed> $field_values Field defaults keyed by field id.
-	 * @return bool|WP_Error
-	 */
 	private function write_row_field_values( int $row_id, int $collection_id, array $field_values ): bool|WP_Error {
 		$index = new FieldValueIndex();
 
@@ -700,12 +589,6 @@ final class Templates {
 		return serialize_blocks( $filtered );
 	}
 
-	/**
-	 * Formats a created Cortext document for the REST response.
-	 *
-	 * @param int $post_id Created document id.
-	 * @return array<string,mixed>|WP_Error
-	 */
 	private function format_document_post( int $post_id ) {
 		$post = get_post( $post_id );
 		if ( ! $post instanceof WP_Post ) {

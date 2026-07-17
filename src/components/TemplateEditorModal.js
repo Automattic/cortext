@@ -93,9 +93,8 @@ export default function TemplateEditorModal( {
 	const apiRef = useRef( null );
 	const [ error, setError ] = useState( null );
 	const [ fieldValues, setFieldValues ] = useState( {} );
-	// Source of truth for in-flight saves. updateTemplate rewrites the whole
-	// field_values map server-side, so row-template property writes must be
-	// serialized and based on the latest acknowledged or optimistic map.
+	// The API replaces the entire map, so overlapping saves must run in order
+	// or a slower response can overwrite a newer field value.
 	const fieldValuesRef = useRef( fieldValues );
 	const fieldSaveChainRef = useRef( Promise.resolve() );
 	const { record, isResolving } = useEntityRecord(

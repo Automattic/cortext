@@ -20,45 +20,6 @@ import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { collectionIcon } from '../cortextIcons';
 import { useDocumentActions, useDocumentRecord } from '../../documents';
 
-/**
- * Sidebar row shared by pages and collections. The document layer tells it
- * which controls to show: tree controls, child rows, drop zones, and the
- * add-child button.
- *
- * `record` is the raw entity. `childNodes` comes from the page tree when the
- * row can have children; descendants render through this same component.
- *
- * `isFavorite`, `isHome`, and `isSelected` can be predicates. Sidebar owns
- * those checks, so the row does not need to know which list or route id to
- * inspect for each kind.
- *
- * @param {Object}                            props
- * @param {Object}                            props.record                      Raw document record.
- * @param {Array}                             [props.childNodes]                Child tree nodes (hierarchy only).
- * @param {Object}                            [props.childBranch]               Lazy-loaded child branch state.
- * @param {number}                            [props.depth]                     Nesting depth, 0 at the root.
- * @param {Set<number>}                       props.expandedIds                 Currently expanded row ids.
- * @param {?number}                           [props.draggedId]                 Id of the row being dragged.
- * @param {?{zone: string, targetId: number}} [props.activeDrop]                Active drop target metadata.
- * @param {boolean}                           [props.isHidden]                  True when an ancestor is collapsed.
- * @param {Function|boolean}                  props.isSelected                  Selection predicate or flag.
- * @param {Function}                          props.onSelect                    Called with the record on title click.
- * @param {Function}                          props.onToggleExpand              Called with the record id on chevron click.
- * @param {Function}                          props.onLoadMore                  Called with the parent id from a branch Show more button.
- * @param {Function}                          props.onCreateChild               Called with the parent id from the add-child button.
- * @param {Function}                          [props.onCreateBlankChild]        Called with the parent id to create a blank child page.
- * @param {Array}                             [props.pageTemplates]             Page templates available for child creation.
- * @param {Function}                          [props.onCreateChildFromTemplate] Called with parent id and template.
- * @param {Function}                          [props.onCreateChildCollection]   Called with the parent id to create a child collection.
- * @param {Function|boolean}                  props.isFavorite                  Favorite predicate or flag.
- * @param {boolean}                           [props.isFavoriteDisabled]        Disable favorite toggling.
- * @param {Function}                          props.onToggleFavorite            Called with the record from the menu.
- * @param {Function|boolean}                  props.isHome                      Home predicate or flag.
- * @param {Function}                          props.onSetHome                   Called with the record from the menu.
- * @param {boolean}                           [props.isHomeUpdating]            Disable set-as-home while a save is in flight.
- * @param {?number}                           [props.autoRenameId]              Row id that should immediately enter rename mode.
- * @param {Function}                          props.onAutoRenameConsumed        Called once rename mode has opened.
- */
 export default function DocumentRow( {
 	record,
 	childNodes = [],
@@ -124,8 +85,6 @@ export default function DocumentRow( {
 	const [ draftTitle, setDraftTitle ] = useState( '' );
 	const renameInputRef = useRef( null );
 
-	// The parent sets `autoRenameId` after create or duplicate so this row
-	// opens its title editor as soon as it renders.
 	useEffect( () => {
 		if ( autoRenameId === recordId ) {
 			setDraftTitle( record.title?.raw ?? record.title?.rendered ?? '' );
@@ -140,8 +99,7 @@ export default function DocumentRow( {
 		onAutoRenameConsumed,
 	] );
 
-	// TextControl keeps the real input inside its wrapper; focus and select
-	// that inner input when rename mode opens.
+	// TextControl owns the input, so the wrapper ref cannot be focused directly.
 	useEffect( () => {
 		if ( isRenaming && renameInputRef.current ) {
 			const input = renameInputRef.current.querySelector( 'input' );
@@ -168,8 +126,7 @@ export default function DocumentRow( {
 		setIsRenaming( true );
 	}
 
-	// Drag source. The existing DnD hook still expects page:/collection:
-	// prefixes, so keep that id shape while the row itself stays shared.
+	// useSidebarDnd still parses these legacy prefixes.
 	const {
 		attributes,
 		listeners,
@@ -179,8 +136,6 @@ export default function DocumentRow( {
 		data: { pageId: recordId },
 	} );
 
-	// Hierarchical rows accept before/inside/after drops. Leaves only accept
-	// before/after, matching what the REST guard allows.
 	const dropBefore = useDroppable( {
 		id: `before:${ recordId }`,
 		data: { zone: 'before', pageId: recordId },
