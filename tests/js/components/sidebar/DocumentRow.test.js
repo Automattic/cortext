@@ -261,7 +261,7 @@ describe( 'DocumentRow (hierarchical mode)', () => {
 		fireEvent.click( container.querySelector( '.cortext-sidebar__menu' ) );
 		fireEvent.click(
 			screen.getByRole( 'menuitem', {
-				name: 'New from Brief inside',
+				name: 'Add document from Brief',
 			} )
 		);
 		expect( props.onCreateChildFromTemplate ).toHaveBeenCalledWith(
@@ -279,12 +279,12 @@ describe( 'DocumentRow (hierarchical mode)', () => {
 
 		expect(
 			screen.queryByRole( 'menuitem', {
-				name: 'Blank document inside',
+				name: 'Add blank document',
 			} )
 		).toBeNull();
 		expect(
 			screen.queryByRole( 'menuitem', {
-				name: 'New from Brief inside',
+				name: 'Add document from Brief',
 			} )
 		).toBeNull();
 	} );

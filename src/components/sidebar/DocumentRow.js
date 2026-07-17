@@ -293,7 +293,7 @@ export default function DocumentRow( {
 													} }
 												>
 													{ __(
-														'Blank document inside',
+														'Add blank document',
 														'cortext'
 													) }
 												</MenuItem>
@@ -313,7 +313,7 @@ export default function DocumentRow( {
 															{ sprintf(
 																/* translators: %s: template title */
 																__(
-																	'New from %s inside',
+																	'Add document from %s',
 																	'cortext'
 																),
 																template.title ||

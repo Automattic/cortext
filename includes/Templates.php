@@ -314,7 +314,7 @@ final class Templates {
 		if ( self::KIND_PAGE !== $meta['kind'] ) {
 			return new WP_Error(
 				'cortext_template_default_invalid_kind',
-				__( 'Only page templates can be the default.', 'cortext' ),
+				__( 'Choose a document template as the default.', 'cortext' ),
 				array( 'status' => 400 )
 			);
 		}
