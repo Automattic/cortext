@@ -124,7 +124,7 @@ The second is a footer row for column summaries and table-level bulk actions. Th
 
 **DataViews has no row reorder API.**
 
-**What.** Manual order lives on the row posts, but DataViews doesn't give row refs, drag handles, drop targets, or an `onReorder` hook. Cortext decorates the layouts after DataViews renders them: finds rows by internal class selectors, matches them to `rows` by visible index, portals dnd-kit handles into the first table or list data cell, and uses the grid card itself as the drag activator. It places fixed drop targets over row gaps, clones part of each row or card for the drag preview, and holds CSS transforms while the REST request and refetch finish.
+**What.** Manual order lives on the row posts, but DataViews doesn't give row refs, drag handles, drop targets, or an `onReorder` hook. Cortext decorates the layouts after DataViews renders them: finds rows by internal class selectors, matches them to `rows` by visible index, portals dnd-kit handles into the first table cell or the list row, and uses the grid card itself as the drag activator. It places fixed drop targets over row gaps, clones part of each row or card for the drag preview, and holds CSS transforms while the REST request and refetch finish.
 
 That makes row reorder sensitive to DataViews DOM changes: density classes, bulk-selection cells, fullscreen mode, block embedding, and scroll containers all matter. Grid still uses before/after card targets because a linear row gap doesn't map cleanly to a two-dimensional card layout.
 
@@ -160,7 +160,7 @@ That makes row reorder sensitive to DataViews DOM changes: density classes, bulk
 
 **Where.** `src/components/dataViewAdapter.js`, `src/components/dataViewViewState.js`, `normalizeView` in `src/components/dataViewColumns.js`, the DataViews mounts in `src/components/CollectionDataViews.js` and `src/components/PublicDataView.js`, and the data-view block attributes in `src/blocks/data-view/block.json`.
 
-**Solution.** Native per-layout settings on DataViews would let Cortext map to upstream's shape instead of carrying separate buckets.
+**Solution.** Native per-layout settings on DataViews would let Cortext map to upstream's shape instead of carrying separate buckets. One cleanup does not need to wait for upstream: move the shared `infiniteScrollEnabled` and `startPosition` key list into `dataViewViewState.js`. Cortext strips both keys in the adapter, the saved-view normalizer, and the public renderer because its data loaders use page-based pagination. Those checks protect different boundaries, but they should not carry separate copies of the contract.
 
 <a id="td-dataviews-grid-density"></a>
 
@@ -172,11 +172,21 @@ That makes row reorder sensitive to DataViews DOM changes: density classes, bulk
 
 **Solution.** DataViews should calculate columns from the content width and the rendered gap.
 
+<a id="td-dataviews-grid-card-composition"></a>
+
+**DataViews grid has no card composition hooks.**
+
+**What.** Cortext keeps the native grid for density, grouping, selection, and keyboard behavior, then reshapes each card with CSS. The rules move the media, title, fields, badges, actions, and selection checkbox by relying on DataViews class names, direct children, and sibling order. Row reorder clones the same private structure for its drag preview. A markup change can break the live card and its preview independently.
+
+**Where.** The card layout in `src/components/CollectionDataViews.grid.scss`, `cloneGridCardPreview` in `src/components/DataViewRowReorder.js`, and the grid-preview rules in `src/components/DataViewRowReorder.scss`.
+
+**Solution.** DataViews could expose documented card parts or render slots. Cortext can also switch the grid to DataViews' free-composition mode and render the card DOM locally. That removes the private selectors, but Cortext would then own card selection, grouping, keyboard behavior, and row-drag integration. Moving to a local grid is a layout migration and is too large for this upgrade PR.
+
 <a id="td-dataviews-list-row-hooks"></a>
 
 **DataViews list lacks row-open and compact metadata hooks.**
 
-**What.** DataViews list is close enough to use, but it does not expose the pieces Cortext needs for the list it wants: opening a row from the blank part of the row, keeping focus without a selected-row state, showing metadata as a compact inline run, and placing "+ New" as the last row. Cortext keeps the native layout and fills those gaps locally: empty controlled selection, capture-phase pointer and keyboard handlers for row open, CSS that reshapes DataViews' title/media/field/action DOM, and a footer button styled like a row. The parts to watch are the `.dataviews-view-list > [role="row"]` lookup, `.dataviews-view-list__item` as the focus/open target, and the CSS grid/contents overrides that put title, metadata, media, and actions on one row.
+**What.** DataViews list is close enough to use, but it does not expose the pieces Cortext needs for the list it wants: opening a row from the blank part of the row, keeping focus without a selected-row state, showing metadata as a compact inline run, and placing "+ New" as the last row. Cortext keeps the native layout and fills those gaps locally: empty controlled selection, capture-phase pointer and keyboard handlers for row open, CSS that reshapes DataViews' title/media/field/action DOM, and a footer button styled like a row. The parts to watch are the `.dataviews-view-list [role="row"]` lookup, `.dataviews-view-list__item` as the focus/open target, and the CSS grid/contents overrides that put title, metadata, media, and actions on one row.
 
 **Where.** List open/focus handling in `src/components/CollectionDataViews.js`, list row lookup in `src/components/dataViewItemLookup.js`, list reorder decoration in `src/components/DataViewRowReorder.js`, `DataViewNewRowButton`'s `list-row` presentation, and the list rules in `src/components/CollectionDataViews.list.scss`.
 
@@ -339,6 +349,16 @@ The same selector shape affects user-visible save side effects. `didPostSaveRequ
 
 **Solution.** dnd-kit honors `inert` (or computed `pointer-events: none`) on an ancestor, letting consumers drop the prop-drilling. Any tree-shaped surface that uses a CSS-clipped collapse animation has to thread `disabled` through its rows itself until then.
 
+<a id="td-wordbless-wordpress-7-tag"></a>
+
+**WorDBless has not tagged its WordPress 7 support yet.**
+
+**What.** The PHP test suite follows WorDBless's `trunk` branch because the latest tagged release only accepts WordPress 6.6, while trunk accepts WordPress 7. `composer.lock` pins the commit used by CI, so installs are repeatable. A dependency update can still move the branch before a release is cut.
+
+**Where.** The `automattic/wordbless` requirement in `composer.json` and its pinned source reference in `composer.lock`.
+
+**Solution.** Move back to a tagged constraint as soon as WorDBless publishes a release that accepts WordPress 7. The lockfile already protects normal installs; adding another manual commit pin to `composer.json` would only create a second value to maintain.
+
 ---
 
 ## Internal debt
@@ -487,6 +507,26 @@ The row-detail layout setting means public rendering cannot just print every fie
 **Solution.** Fill in `DocumentPropertiesBlock::render()` so `the_content()` emits `<div class="cortext-document-properties">...</div>` with formatted values for rows whose collection has fields. Reuse `RowsController::format_typed_value()`, and add a small PHP normalizer for `detail_layout` so public markup follows the editor's field order and visibility. Share the same SCSS through `src/frontend.scss` so public markup matches the editor.
 
 ### Editor and workspace UX
+
+<a id="td-block-canvas-style-runtime-bridge"></a>
+
+**Bundled WordPress component styles stop at the BlockCanvas boundary.**
+
+**What.** DataViews 17 and `@wordpress/components` 36 register generated CSS through `@wordpress/style-runtime`. WordPress 7.0 does not register the BlockCanvas iframe as a target, so those rules land in the parent document while the DataView renders inside the canvas. Cortext copies the missing Menu, search, toolbar, InputControl, and Stack rules. The Menu fallback is the riskiest part: it uses broad ARIA and data selectors plus private child order, so it can also restyle an unrelated menu inside the iframe.
+
+**Where.** The Menu fallback and DataViews toolbar/search rules in `src/components/CollectionDataViews.scss`, the Stack fallback in `src/components/CollectionDataViews.grid.scss`, and the `BlockCanvas` mount in `src/components/EditorBody.js`.
+
+**Solution.** This can be fixed in Cortext now. Add `@wordpress/style-runtime` as a direct dependency, register the BlockCanvas iframe document while it is mounted, and remove the copied component rules once the generated styles reach the iframe. Keep the bridge only until BlockCanvas registers style-runtime documents itself.
+
+<a id="td-canvas-interface-skeleton-clone"></a>
+
+**Canvas carries a local copy of `InterfaceSkeleton`.**
+
+**What.** An earlier build resolved `InterfaceSkeleton` through a WordPress runtime that did not expose the component, so Cortext copied the part of the shell it uses. The copy now owns the secondary-sidebar animation, media-query listeners, a `ResizeObserver`, and the upstream `interface-interface-skeleton__*` class contract. Cortext still loads the upstream stylesheet, so a markup, breakpoint, or animation change can leave the local shell behind.
+
+**Where.** `CanvasInterfaceSkeleton`, `AnimatedSecondarySidebar`, and `useMediaQuery` in `src/components/Canvas.js`; the upstream stylesheet and class overrides in `src/components/Canvas.scss`; and `tests/js/components/Canvas.test.js`.
+
+**Solution.** The current build bundles `@wordpress/interface`, and the installed package exports `InterfaceSkeleton`, so this can be removed now. Restore the package component and keep the small Cortext layout overrides. If Cortext later chooses to own a different shell, give it Cortext classes and styles instead of copying the upstream DOM contract.
 
 <a id="td-data-view-block-height"></a>
 

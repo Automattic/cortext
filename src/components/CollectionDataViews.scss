@@ -5,9 +5,9 @@ $title-cell-icon-size: $grid-unit-20;
 $table-row-hover-background: #f8f8f8;
 $table-cell-hover-background: $gray-100;
 
-// DataViews uses the private Menu for row actions, and its Emotion styles may
-// land outside BlockCanvas. These fallbacks target stable ARIA/data attributes
-// because generated class names can change.
+// tech-debt.md#td-block-canvas-style-runtime-bridge: DataViews uses the private
+// Menu for row actions, and its generated styles land outside BlockCanvas.
+// These fallbacks use ARIA/data attributes because generated classes can move.
 body.block-editor-iframe__body [data-dialog][role="menu"][data-open] {
 	position: relative;
 	z-index: 1000000;
@@ -1202,9 +1202,8 @@ tr:has(.cortext-title-cell--is-opening)
 		min-height: 0;
 	}
 
-	// In WP 7, some @wordpress/components styles may land outside BlockCanvas,
-	// leaving the DataViews toolbar and search field unstyled. These scoped
-	// rules target stable DataViews and control class names.
+	// tech-debt.md#td-block-canvas-style-runtime-bridge: Some generated component
+	// styles land outside BlockCanvas, leaving this toolbar unstyled.
 	.dataviews__view-actions {
 		display: flex;
 		align-items: center;

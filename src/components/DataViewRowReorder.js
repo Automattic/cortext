@@ -568,6 +568,8 @@ function normalizeClonedCellContent( node ) {
 	} );
 }
 
+// tech-debt.md#td-dataviews-grid-card-composition: The live card uses private
+// DataViews structure, so its drag preview has to clone the same structure.
 function cloneGridCardPreview( source ) {
 	const previewCard = source.ownerDocument.createElement( 'div' );
 	previewCard.className =

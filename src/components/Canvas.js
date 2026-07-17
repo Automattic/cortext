@@ -238,6 +238,8 @@ function useMediaQuery( query ) {
 	return matches;
 }
 
+// tech-debt.md#td-canvas-interface-skeleton-clone: The WordPress runtime did
+// not expose InterfaceSkeleton, so Cortext carries the shell animation locally.
 export function AnimatedSecondarySidebar( { children } ) {
 	const contentRef = useRef( null );
 	const [ contentWidth, setContentWidth ] = useState(
