@@ -1,7 +1,3 @@
-/**
- * E2E coverage for shared page and row template instantiation.
- */
-
 const { test, expect } = require( '@wordpress/e2e-test-utils-playwright' );
 
 async function deleteIfCreated( requestUtils, path ) {
@@ -15,7 +11,7 @@ async function deleteIfCreated( requestUtils, path ) {
 			params: { force: true },
 		} );
 	} catch {
-		// Best-effort cleanup; the record may already be gone.
+		// Cleanup is idempotent; the record may already be gone.
 	}
 }
 
