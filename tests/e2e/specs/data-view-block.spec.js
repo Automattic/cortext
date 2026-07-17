@@ -61,14 +61,14 @@ async function expectColumnRevealed(
 	await expect
 		.poll( () =>
 			columnHeader.evaluate( ( element, mustScroll ) => {
-				const rect = element.getBoundingClientRect();
-				const ownerWindow = element.ownerDocument.defaultView;
 				const scroller =
 					element.closest( '.dataviews-layout__container' ) ??
 					element.closest( '.dataviews-wrapper' );
 				if ( ! scroller ) {
 					return false;
 				}
+				const rect = element.getBoundingClientRect();
+				const ownerWindow = element.ownerDocument.defaultView;
 				const scrollerRect = scroller.getBoundingClientRect();
 				const maxScroll = scroller.scrollWidth - scroller.clientWidth;
 				const isRtl =
