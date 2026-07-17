@@ -43,7 +43,6 @@ export function useTemplates( { kind, collectionId, enabled = true } = {} ) {
 	const [ templates, setTemplates ] = useState( [] );
 	const [ isResolving, setIsResolving ] = useState( enabled );
 	const [ error, setError ] = useState( null );
-	const queryKey = `${ kind ?? '' }:${ collectionId ?? '' }:${ enabled }`;
 
 	const refresh = useCallback( async () => {
 		if ( ! enabled ) {
@@ -95,9 +94,7 @@ export function useTemplates( { kind, collectionId, enabled = true } = {} ) {
 		return () => {
 			cancelled = true;
 		};
-		// `queryKey` encodes the two query inputs and keeps the effect compact.
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [ queryKey ] );
+	}, [ kind, collectionId, enabled ] );
 
 	useEffect( () => {
 		if ( ! enabled || typeof window === 'undefined' ) {
