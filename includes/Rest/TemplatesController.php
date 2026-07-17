@@ -163,7 +163,7 @@ final class TemplatesController {
 		return current_user_can( 'edit_posts' );
 	}
 
-	public function can_edit_template( WP_REST_Request $request ) {
+	public function can_edit_template( WP_REST_Request $request ): bool|WP_Error {
 		$id   = (int) $request->get_param( 'id' );
 		$post = get_post( $id );
 
