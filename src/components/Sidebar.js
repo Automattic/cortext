@@ -769,7 +769,7 @@ export default function Sidebar( {
 																				{ sprintf(
 																					/* translators: %s: template title */
 																					__(
-																						'New from %s',
+																						'Create from %s',
 																						'cortext'
 																					),
 																					template.title ||

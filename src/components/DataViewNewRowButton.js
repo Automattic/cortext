@@ -203,7 +203,7 @@ export default function DataViewNewRowButton( {
 					variant="tertiary"
 					icon={ chevronDown }
 					onClick={ onToggle }
-					label={ __( 'New row menu', 'cortext' ) }
+					label={ __( 'Choose how to create a row', 'cortext' ) }
 					disabled={
 						disabled ||
 						isCreating ||
@@ -238,7 +238,7 @@ export default function DataViewNewRowButton( {
 							>
 								{ sprintf(
 									/* translators: %s: template title. */
-									__( 'New from %s', 'cortext' ),
+									__( 'Create from %s', 'cortext' ),
 									template.title ||
 										__( 'Untitled template', 'cortext' )
 								) }
