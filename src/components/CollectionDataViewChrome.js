@@ -5,93 +5,11 @@ import {
 	__experimentalHStack as HStack,
 } from '@wordpress/components';
 import { DataViews } from '@wordpress/dataviews/wp';
-import {
-	useCallback,
-	useLayoutEffect,
-	useMemo,
-	useRef,
-} from '@wordpress/element';
+import { useMemo } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { closeSmall, trash } from '@wordpress/icons';
 
-const GRID_VIEW_OPTIONS_BODY_CLASS = 'cortext-grid-view-options-open';
-
-function DataViewsViewConfig( { view } ) {
-	const wrapperRef = useRef( null );
-	const isGridView = view?.type === 'grid';
-
-	const getOwnerDocuments = useCallback( () => {
-		const ownerDocument =
-			wrapperRef.current?.ownerDocument ?? globalThis.document;
-		const ownerDocuments = [ ownerDocument ].filter( Boolean );
-		try {
-			const parentDocument = ownerDocument?.defaultView?.parent?.document;
-			if ( parentDocument && parentDocument !== ownerDocument ) {
-				ownerDocuments.push( parentDocument );
-			}
-		} catch {
-			// Accessing the parent document can fail across origins.
-		}
-		return ownerDocuments;
-	}, [] );
-	const syncBodyClass = useCallback(
-		( isOpen ) => {
-			for ( const ownerDocument of getOwnerDocuments() ) {
-				ownerDocument?.body?.classList.toggle(
-					GRID_VIEW_OPTIONS_BODY_CLASS,
-					isGridView && isOpen
-				);
-			}
-		},
-		[ getOwnerDocuments, isGridView ]
-	);
-	const clearBodyClass = useCallback( () => {
-		for ( const ownerDocument of getOwnerDocuments() ) {
-			ownerDocument?.body?.classList.remove(
-				GRID_VIEW_OPTIONS_BODY_CLASS
-			);
-		}
-	}, [ getOwnerDocuments ] );
-
-	useLayoutEffect( () => {
-		const toggle = wrapperRef.current?.querySelector(
-			'button[aria-expanded]'
-		);
-		if ( ! toggle ) {
-			clearBodyClass();
-			return clearBodyClass;
-		}
-
-		const syncFromToggle = () => {
-			syncBodyClass( toggle.getAttribute( 'aria-expanded' ) === 'true' );
-		};
-		syncFromToggle();
-
-		const ownerWindow = toggle.ownerDocument?.defaultView;
-		const Observer = ownerWindow?.MutationObserver;
-		if ( ! Observer ) {
-			return clearBodyClass;
-		}
-		const observer = new Observer( syncFromToggle );
-		observer.observe( toggle, {
-			attributes: true,
-			attributeFilter: [ 'aria-expanded' ],
-		} );
-
-		return () => {
-			observer.disconnect();
-			clearBodyClass();
-		};
-	}, [ clearBodyClass, syncBodyClass ] );
-
-	return (
-		<span ref={ wrapperRef }>
-			<DataViews.ViewConfig />
-		</span>
-	);
-}
-
-export function DataViewsChrome( { footer, view } ) {
+export function DataViewsChrome( { footer } ) {
 	return (
 		<>
 			<HStack
@@ -114,7 +32,7 @@ export function DataViewsChrome( { footer, view } ) {
 					style={ { flexShrink: 0 } }
 				>
 					<DataViews.LayoutSwitcher />
-					<DataViewsViewConfig view={ view } />
+					<DataViews.ViewConfig />
 				</HStack>
 			</HStack>
 			<DataViews.FiltersToggled className="dataviews-filters__container" />

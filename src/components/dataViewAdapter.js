@@ -86,6 +86,14 @@ function layoutForGridDataViews( layout ) {
 		nextLayout.badgeFields = sourceLayout.badgeFields;
 	}
 
+	if (
+		[ 'compact', 'balanced', 'comfortable' ].includes(
+			sourceLayout.density
+		)
+	) {
+		nextLayout.density = sourceLayout.density;
+	}
+
 	return nextLayout;
 }
 

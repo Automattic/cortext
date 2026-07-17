@@ -1580,7 +1580,6 @@ export default function CollectionDataViews( {
 									>
 										<DataViewsChrome
 											footer={ dataViewsFooter }
-											view={ dataViewsView }
 										/>
 									</DataViews>
 									{ isGridLayout && (

@@ -160,15 +160,23 @@ describe( 'normalizePublicView', () => {
 		expect( view.fieldsByType ).toEqual( { grid: [], list: [] } );
 	} );
 
-	it( 'preserves the largest grid preview size', () => {
+	it( 'preserves public grid layout settings', () => {
 		const view = normalizePublicView( {
 			type: 'grid',
-			layout: { previewSize: 430 },
-			layoutByType: { grid: { previewSize: 430 } },
+			layout: { previewSize: 430, density: 'comfortable' },
+			layoutByType: {
+				grid: { previewSize: 430, density: 'comfortable' },
+			},
 		} );
 
-		expect( view.layout.previewSize ).toBe( 430 );
-		expect( view.layoutByType.grid.previewSize ).toBe( 430 );
+		expect( view.layout ).toEqual( {
+			previewSize: 430,
+			density: 'comfortable',
+		} );
+		expect( view.layoutByType.grid ).toEqual( {
+			previewSize: 430,
+			density: 'comfortable',
+		} );
 	} );
 
 	it( 'drops unsupported DataViews infinite-scroll state from public views', () => {
@@ -237,6 +245,23 @@ describe( 'PublicDataView', () => {
 				list: {},
 			}
 		);
+	} );
+
+	it( 'passes a saved grid density to DataViews', () => {
+		renderPublicDataView( {
+			type: 'grid',
+			fields: [],
+			filters: [],
+			layout: { previewSize: 290, density: 'comfortable' },
+			layoutByType: {
+				grid: { previewSize: 290, density: 'comfortable' },
+			},
+		} );
+
+		expect( mockDataViews.mock.calls.at( -1 )[ 0 ].view.layout ).toEqual( {
+			previewSize: 290,
+			density: 'comfortable',
+		} );
 	} );
 
 	it( 'does not apply editor title-column widths to an unsized public table', () => {

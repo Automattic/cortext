@@ -1400,14 +1400,6 @@ tr:has(.cortext-title-cell--is-opening)
 		color: $gray-900;
 	}
 
-	@at-root body.cortext-grid-view-options-open {
-
-		.dataviews-config__popover
-		.dataviews-view-config > :last-child > :nth-child(2) {
-			display: none;
-		}
-	}
-
 	// DataViews paints row height via td `padding-block` per density, but
 	// our shell's hover/edit background lives on the shell, so the gray
 	// floated inside the row instead of filling it. Zero the td's

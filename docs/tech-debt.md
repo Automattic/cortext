@@ -146,7 +146,7 @@ That makes row reorder sensitive to DataViews DOM changes: density classes, bulk
 
 **Loading skeletons track DataViews layouts by hand.**
 
-**What.** DataViews has no loading slot for individual layouts. Cortext renders `CollectionRowsSkeleton` beside `<DataViews>` while the first page loads; without it, the collection pane collapses and jumps when rows arrive. The placeholder has table/list row variants and a grid card variant, so switching layouts does not briefly show the wrong shape. The brittle part is sizing: the table/list skeleton copies DataViews row heights for compact, balanced, and comfortable density. The grid skeleton copies Cortext's card min size and spacing, which sit on top of DataViews' grid classes. The two match in the current build, but a DataViews density or markup change could make the placeholder drift from the real view.
+**What.** DataViews has no loading slot for individual layouts. Cortext renders `CollectionRowsSkeleton` beside `<DataViews>` while the first page loads; without it, the collection pane collapses and jumps when rows arrive. The placeholder has table/list row variants and a grid card variant, so switching layouts does not briefly show the wrong shape. The brittle part is sizing: the table/list skeleton copies DataViews row heights for compact, balanced, and comfortable density. The grid skeleton has its own card size and gap, so it can drift from the real grid when DataViews changes its markup or the user changes density.
 
 **Where.** `CollectionRowsSkeleton` in `src/components/Skeleton.js`, the rows-skeleton mount in `src/components/CollectionDataViews.js`, and the `.cortext-collection-skeleton` / `.cortext-data-view__rows-skeleton` rules in `src/components/Skeleton.scss` and `src/components/CollectionDataViews.scss`.
 
@@ -164,13 +164,13 @@ That makes row reorder sensitive to DataViews DOM changes: density classes, bulk
 
 <a id="td-dataviews-grid-density"></a>
 
-**Grid density and column count use different gaps.**
+**Grid column count ignores density and padding.**
 
-**What.** DataViews v17 calculates grid columns with a hard-coded 32px gap, while its density setting changes the rendered gap. Cards can wrap into a different number of columns than DataViews calculated. Cortext keeps the gap at 32px, removes grid density from saved view state, and hides Density in the grid options. DataViews has no way to omit one option, so the hide rule watches the popover toggle and targets the second option in its current markup. An upstream markup change could expose the broken setting again.
+**What.** DataViews v17 calculates the grid's column count with a fixed 32px gap and the container's outer width. The rendered gap is 16px, 24px, or 32px depending on density, and the cards sit inside a padded content area. Near a breakpoint, DataViews can pick the wrong number of columns: rows either leave room for another card or squeeze cards below the selected preview size. Cortext keeps the native density control and saves its value, so it inherits this mismatch.
 
-**Where.** `layoutForGridDataViews` in `src/components/dataViewAdapter.js`, `DataViewsViewConfig` in `src/components/CollectionDataViewChrome.js`, the `cortext-grid-view-options-open` rule in `src/components/CollectionDataViews.scss`, and the grid gap in `src/components/CollectionDataViews.grid.scss`.
+**Where.** `useGridColumns` in DataViews' grid preview-size picker calculates the count. Cortext stores the setting in `layoutForGridDataViews` in `src/components/dataViewAdapter.js` and lets DataViews render the corresponding gap.
 
-**Solution.** DataViews should calculate columns from the rendered gap, or expose the gap and individual view-config options so consumers do not need to hide settings by DOM position.
+**Solution.** DataViews should calculate columns from the content width and the rendered gap.
 
 <a id="td-dataviews-list-row-hooks"></a>
 

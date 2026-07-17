@@ -4,7 +4,6 @@
 $grid-card-background: $white;
 $grid-card-content-background: #f8f8f8;
 $grid-card-content-hover-background: #f3f3f3;
-$grid-card-gap: 32px;
 
 .cortext-data-view
 .dataviews-view-grid__card:hover
@@ -22,7 +21,6 @@ $grid-card-gap: 32px;
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(var(--cortext-grid-card-min, 240px), 1fr));
 		grid-auto-rows: minmax(var(--cortext-grid-card-height, 220px), auto);
-		gap: $grid-card-gap;
 		padding: 0 $grid-unit-20 $grid-unit-20;
 	}
 
@@ -87,9 +85,6 @@ $grid-card-gap: 32px;
 	.dataviews-view-grid {
 		display: flex;
 		flex-direction: column;
-		// DataViews 17 uses a 32px gap to calculate columns. If the rendered gap
-		// changes, cards wrap at the wrong width.
-		gap: $grid-card-gap;
 		padding: $grid-unit-20;
 		margin-bottom: auto;
 	}
@@ -97,7 +92,6 @@ $grid-card-gap: 32px;
 	.dataviews-view-grid__row {
 		display: grid;
 		grid-auto-rows: minmax(var(--cortext-grid-card-height, 220px), auto);
-		gap: $grid-card-gap;
 		align-items: stretch;
 	}
 

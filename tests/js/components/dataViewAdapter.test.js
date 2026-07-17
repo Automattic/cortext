@@ -109,7 +109,7 @@ describe( 'dataViewAdapter', () => {
 		expect( view.layout.previewSize ).toBe( DEFAULT_GRID_PREVIEW_SIZE );
 	} );
 
-	it( 'drops table-only density state from grid views', () => {
+	it( 'preserves grid density state', () => {
 		const view = adaptViewForDataViews( {
 			...canonicalView,
 			type: 'grid',
@@ -131,10 +131,12 @@ describe( 'dataViewAdapter', () => {
 		expect( view.layout ).toEqual( {
 			previewSize: 290,
 			badgeFields: [ 'field-2' ],
+			density: 'comfortable',
 		} );
 		expect( view.layoutByType.grid ).toEqual( {
 			previewSize: 290,
 			badgeFields: [ 'field-2' ],
+			density: 'comfortable',
 		} );
 	} );
 
@@ -305,7 +307,7 @@ describe( 'dataViewAdapter', () => {
 		expect( gridCanonical.layoutByType.grid.previewSize ).toBe( 430 );
 	} );
 
-	it( 'ignores grid density emitted by DataViews', () => {
+	it( 'stores grid density emitted by DataViews', () => {
 		const gridCanonical = mergeDataViewsChange(
 			{
 				...canonicalView,
@@ -325,10 +327,12 @@ describe( 'dataViewAdapter', () => {
 		expect( gridCanonical.layout ).toEqual( {
 			previewSize: 290,
 			badgeFields: [ 'field-2' ],
+			density: 'comfortable',
 		} );
 		expect( gridCanonical.layoutByType.grid ).toEqual( {
 			previewSize: 290,
 			badgeFields: [ 'field-2' ],
+			density: 'comfortable',
 		} );
 	} );
 

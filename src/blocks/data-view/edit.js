@@ -344,11 +344,14 @@ function CollectionInspectorControls( {
 	} = useCollectionFieldsContext();
 	const isCollectionValid = ! isResolving && collectionId && collection;
 	const visibleFieldIds = view?.fields ?? [];
-	const isTableView = view?.type === 'table';
-	const tableLayout = {
-		...( view?.layoutByType?.table ?? {} ),
-		...( isTableView ? view?.layout ?? {} : {} ),
+	const activeLayoutType = view?.type ?? 'table';
+	const activeLayout = {
+		...( view?.layoutByType?.[ activeLayoutType ] ?? {} ),
+		...( view?.layout ?? {} ),
 	};
+	const defaultDensity =
+		activeLayoutType === 'table' ? 'compact' : 'balanced';
+	const showDensityControl = [ 'table', 'grid' ].includes( activeLayoutType );
 
 	// Checked fields follow the table order. Unchecked fields keep schema order.
 	const visibleFieldsInOrder = visibleFieldIds
@@ -520,10 +523,10 @@ function CollectionInspectorControls( {
 								) ) }
 							</ToggleGroupControl>
 						) }
-						{ isTableView && (
+						{ showDensityControl && (
 							<SelectControl
 								label={ __( 'Density', 'cortext' ) }
-								value={ tableLayout.density ?? 'compact' }
+								value={ activeLayout.density ?? defaultDensity }
 								options={ DENSITY_OPTIONS }
 								onChange={ ( density ) =>
 									onChangeView( {
@@ -534,8 +537,8 @@ function CollectionInspectorControls( {
 										},
 										layoutByType: {
 											...( view?.layoutByType ?? {} ),
-											table: {
-												...tableLayout,
+											[ activeLayoutType ]: {
+												...activeLayout,
 												density,
 											},
 										},

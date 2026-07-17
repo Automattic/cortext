@@ -877,7 +877,7 @@ test.describe( 'Collection view block', () => {
 		}
 	} );
 
-	test( 'hides table-only density controls in grid views', async ( {
+	test( 'supports grid density in view options and the block inspector', async ( {
 		admin,
 		page,
 		requestUtils,
@@ -930,16 +930,27 @@ test.describe( 'Collection view block', () => {
 				'.dataviews-config__popover:visible'
 			);
 			await expect(
-				viewOptionsPopover.getByRole( 'heading', {
-					name: 'Appearance',
-				} )
-			).toBeVisible();
-			await expect(
-				viewOptionsPopover.getByText( 'Preview size' )
-			).toBeVisible();
-			await expect(
 				viewOptionsPopover.getByText( 'Density' )
-			).toBeHidden();
+			).toBeVisible();
+			await viewOptionsPopover
+				.getByText( 'Compact', { exact: true } )
+				.click();
+			await expect(
+				canvas.locator( '.dataviews-view-grid.has-compact-density' )
+			).toBeVisible();
+			await expect
+				.poll( () =>
+					canvas
+						.locator( '.dataviews-view-grid__row' )
+						.first()
+						.evaluate(
+							( row ) =>
+								row.ownerDocument.defaultView.getComputedStyle(
+									row
+								).gap
+						)
+				)
+				.toBe( '16px' );
 			await page.keyboard.press( 'Escape' );
 
 			await selectParentDataViewBlock( page );
@@ -959,9 +970,60 @@ test.describe( 'Collection view block', () => {
 			await expect(
 				page.getByRole( 'combobox', { name: 'Per page' } )
 			).toBeVisible();
+			const density = page.getByRole( 'combobox', { name: 'Density' } );
+			await expect( density ).toHaveValue( 'compact' );
+			await density.selectOption( 'comfortable' );
 			await expect(
-				page.getByRole( 'combobox', { name: 'Density' } )
-			).toHaveCount( 0 );
+				canvas.locator( '.dataviews-view-grid.has-comfortable-density' )
+			).toBeVisible();
+			await expect
+				.poll( () =>
+					canvas
+						.locator( '.dataviews-view-grid__row' )
+						.first()
+						.evaluate(
+							( row ) =>
+								row.ownerDocument.defaultView.getComputedStyle(
+									row
+								).gap
+						)
+				)
+				.toBe( '32px' );
+
+			await page.evaluate( async () => {
+				await window.wp.data.dispatch( 'core/editor' ).savePost();
+			} );
+			await page.waitForFunction(
+				() => ! window.wp.data.select( 'core/editor' ).isSavingPost()
+			);
+			await page.reload();
+			await expect( canvas.getByText( 'Alpha Manual' ) ).toBeVisible();
+			await expect(
+				canvas.locator( '.dataviews-view-grid.has-comfortable-density' )
+			).toBeVisible();
+			await expect
+				.poll( () =>
+					canvas
+						.locator( '.dataviews-view-grid__row' )
+						.first()
+						.evaluate(
+							( row ) =>
+								row.ownerDocument.defaultView.getComputedStyle(
+									row
+								).gap
+						)
+				)
+				.toBe( '32px' );
+			await expect
+				.poll( async () => {
+					const attributes =
+						await getParentDataViewAttributes( page );
+					return {
+						active: attributes.view?.layout?.density,
+						stored: attributes.view?.layoutByType?.grid?.density,
+					};
+				} )
+				.toEqual( { active: 'comfortable', stored: 'comfortable' } );
 		} finally {
 			if ( fixture.rows ) {
 				for ( const row of fixture.rows ) {
