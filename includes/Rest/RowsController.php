@@ -28,6 +28,7 @@ use Cortext\Relations;
 use Cortext\Taxonomy\TraitTaxonomy;
 use WP_Error;
 use WP_Post;
+use WP_Query;
 use WP_REST_Request;
 use WP_REST_Response;
 
@@ -117,7 +118,12 @@ final class RowsController {
 						'per_page'     => array(
 							'type'              => 'integer',
 							'default'           => 25,
-							'validate_callback' => static fn( $value ) => (int) $value >= 1 && (int) $value <= 100,
+							'validate_callback' => array( $this, 'validate_per_page_param' ),
+						),
+						'shape'        => array(
+							'type'    => 'string',
+							'default' => 'full',
+							'enum'    => array( 'full', 'ids' ),
 						),
 						'search'       => array(
 							'type'    => 'string',
@@ -226,6 +232,15 @@ final class RowsController {
 			return $collection;
 		}
 
+		$shape = (string) $request->get_param( 'shape' );
+		if ( 'ids' === $shape && 'edit' !== (string) $request->get_param( 'context' ) ) {
+			return new WP_Error(
+				'cortext_rows_ids_shape_requires_edit_context',
+				__( 'The ID-only response shape requires edit context.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+
 		$field_ids           = Document::collection_field_ids( $collection->ID );
 		$requested_fields    = $request->get_param( 'fields' );
 		$formatted_field_ids = is_array( $requested_fields )
@@ -250,6 +265,17 @@ final class RowsController {
 		// but future callers might.
 		$query_params = $request->get_query_params();
 		if ( array_key_exists( 'include', $query_params ) && count( (array) $request->get_param( 'include' ) ) === 0 ) {
+			if ( 'ids' === $shape ) {
+				return new WP_REST_Response(
+					array(
+						'ids'        => array(),
+						'total'      => 0,
+						'totalPages' => 0,
+					),
+					200
+				);
+			}
+
 			$response = array(
 				'rows'       => array(),
 				'total'      => 0,
@@ -298,12 +324,58 @@ final class RowsController {
 			FormulaMaterializer::recompute_collection( $collection_id );
 		}
 
+		$row_statuses = $this->row_statuses_for_request();
+
+		if ( 'ids' === $shape ) {
+			$ids_result = ( new FieldValueReadQuery() )->query_row_ids(
+				$collection_id,
+				$field_schema,
+				$request->get_param( 'filters' ),
+				$request->get_param( 'sort' ),
+				$search,
+				array_key_exists( 'include', $query_params ),
+				(int) $request->get_param( 'page' ),
+				(int) $request->get_param( 'per_page' ),
+				$row_statuses
+			);
+
+			if ( null !== $ids_result ) {
+				$ids         = $ids_result['ids'];
+				$total       = $ids_result['total'];
+				$total_pages = $ids_result['totalPages'];
+			} else {
+				$query = $this->run_rows_query_fallback(
+					$request,
+					$row_query,
+					$field_schema,
+					$where_sql,
+					$filter_sql,
+					$collection_id,
+					$row_statuses,
+					$search,
+					'ids'
+				);
+
+				$ids         = array_map( 'intval', (array) $query->posts );
+				$total       = (int) $query->found_posts;
+				$total_pages = (int) $query->max_num_pages;
+			}
+
+			return new WP_REST_Response(
+				array(
+					'ids'        => $ids,
+					'total'      => $total,
+					'totalPages' => $total_pages,
+				),
+				200
+			);
+		}
+
 		// Keep row-formatting metadata local to this rows response. Passing the
 		// context through the helpers avoids stale state in CLI and test runs.
 		$ctx              = new RowFormatContext();
 		$ctx->field_types = $this->field_types_map( $formatted_field_ids );
 		$multi_field_ids  = $this->multi_value_field_ids_from( $ctx->field_types );
-		$row_statuses     = $this->row_statuses_for_request();
 
 		$sidecar_result = ( new FieldValueReadQuery() )->query_rows(
 			$collection_id,
@@ -322,17 +394,16 @@ final class RowsController {
 			$total       = $sidecar_result['total'];
 			$total_pages = $sidecar_result['totalPages'];
 		} else {
-			$query_args = $this->build_query_args( $request, $collection_id, $row_statuses );
-			$scope      = new RowsQueryScope(
+			$query = $this->run_rows_query_fallback(
+				$request,
 				$row_query,
 				$field_schema,
 				$where_sql,
-				$filter_sql['join'],
-				$request->get_param( 'sort' ),
-				$search,
-				TraitTaxonomy::term_taxonomy_id_for_trait( $collection_id )
+				$filter_sql,
+				$collection_id,
+				$row_statuses,
+				$search
 			);
-			$query      = $scope->run( $query_args );
 
 			$posts       = $query->posts;
 			$total       = (int) $query->found_posts;
@@ -509,6 +580,52 @@ final class RowsController {
 		}
 
 		return $args;
+	}
+
+	/**
+	 * Runs a row query against postmeta when the field-value index cannot handle the request.
+	 *
+	 * Both response shapes share this path. Passing `ids` lets WP_Query skip
+	 * post hydration.
+	 *
+	 * @param WP_REST_Request $request       REST request.
+	 * @param RowsFilterQuery $row_query     Filter/sort SQL compiler.
+	 * @param array           $field_schema  Field schema for the collection.
+	 * @param string          $where_sql     Compiled filter/search WHERE clause.
+	 * @param array           $filter_sql    Compiled filter SQL parts (join/where).
+	 * @param int             $collection_id Collection (trait) post ID.
+	 * @param string[]        $row_statuses  Post statuses visible to this request.
+	 * @param string          $search        Raw REST search parameter.
+	 * @param string          $fields        WP_Query `fields` value ('' or 'ids').
+	 * @return WP_Query
+	 */
+	private function run_rows_query_fallback(
+		WP_REST_Request $request,
+		RowsFilterQuery $row_query,
+		array $field_schema,
+		string $where_sql,
+		array $filter_sql,
+		int $collection_id,
+		array $row_statuses,
+		string $search,
+		string $fields = ''
+	): WP_Query {
+		$query_args = $this->build_query_args( $request, $collection_id, $row_statuses );
+		if ( '' !== $fields ) {
+			$query_args['fields'] = $fields;
+		}
+
+		$scope = new RowsQueryScope(
+			$row_query,
+			$field_schema,
+			$where_sql,
+			$filter_sql['join'],
+			$request->get_param( 'sort' ),
+			$search,
+			TraitTaxonomy::term_taxonomy_id_for_trait( $collection_id )
+		);
+
+		return $scope->run( $query_args );
 	}
 
 	/**
@@ -1019,6 +1136,32 @@ final class RowsController {
 			);
 		}
 		return true;
+	}
+
+	/**
+	 * Validates the row page size. Full row responses keep the existing cap, while
+	 * ID responses allow larger pages because they skip row formatting.
+	 *
+	 * @param mixed           $value   Raw per_page value.
+	 * @param WP_REST_Request $request REST request.
+	 * @return true|WP_Error
+	 */
+	public function validate_per_page_param( mixed $value, WP_REST_Request $request ): bool|WP_Error {
+		$per_page = (int) $value;
+		$max      = 'ids' === (string) $request->get_param( 'shape' ) ? 1000 : 100;
+		if ( $per_page >= 1 && $per_page <= $max ) {
+			return true;
+		}
+
+		return new WP_Error(
+			'rest_invalid_param',
+			sprintf(
+				/* translators: %d: maximum number of rows allowed per page. */
+				__( 'per_page must be between 1 and %d.', 'cortext' ),
+				$max
+			),
+			array( 'status' => 400 )
+		);
 	}
 
 	/**

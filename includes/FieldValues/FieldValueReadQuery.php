@@ -80,6 +80,123 @@ final class FieldValueReadQuery {
 		int $per_page,
 		?array $post_statuses = null
 	): ?array {
+		$plan = $this->plan_for_query(
+			$collection_id,
+			$field_schema,
+			$filters,
+			$sort,
+			$search,
+			$has_include,
+			$post_statuses
+		);
+		if ( null === $plan ) {
+			return null;
+		}
+
+		$result = $this->run_plan_ids( $plan, $page, $per_page );
+		if ( null === $result ) {
+			return null;
+		}
+		if ( count( $result['ids'] ) === 0 ) {
+			return array(
+				'posts'      => array(),
+				'total'      => $result['total'],
+				'totalPages' => $result['totalPages'],
+			);
+		}
+
+		$posts = get_posts(
+			array(
+				'post_type'        => $plan['post_type'],
+				'post_status'      => $plan['statuses'],
+				'post__in'         => $result['ids'],
+				'orderby'          => 'post__in',
+				'posts_per_page'   => count( $result['ids'] ),
+				'suppress_filters' => false,
+			)
+		);
+
+		return array(
+			'posts'      => array_values(
+				array_filter(
+					$posts,
+					static fn( $post ): bool => $post instanceof WP_Post
+				)
+			),
+			'total'      => $result['total'],
+			'totalPages' => $result['totalPages'],
+		);
+	}
+
+	/**
+	 * Reads row IDs from the field-value index without hydrating posts.
+	 *
+	 * Returns null when the index cannot handle the request. The caller can then
+	 * fall back to postmeta.
+	 *
+	 * @param int    $collection_id Collection (trait) post ID.
+	 * @param array  $field_schema  Field schema from RowsFilterQuery::field_schema_for().
+	 * @param mixed  $filters       Raw REST filters parameter.
+	 * @param mixed  $sort          Raw REST sort parameter.
+	 * @param string $search        Raw REST search parameter.
+	 * @param bool   $has_include   Whether the request includes include[].
+	 * @param int    $page          One-based page number.
+	 * @param int    $per_page      Rows per page.
+	 * @param array  $post_statuses Row post statuses visible to this request.
+	 * @return array{ids:int[],total:int,totalPages:int}|null
+	 */
+	public function query_row_ids(
+		int $collection_id,
+		array $field_schema,
+		mixed $filters,
+		mixed $sort,
+		string $search,
+		bool $has_include,
+		int $page,
+		int $per_page,
+		?array $post_statuses = null
+	): ?array {
+		$plan = $this->plan_for_query(
+			$collection_id,
+			$field_schema,
+			$filters,
+			$sort,
+			$search,
+			$has_include,
+			$post_statuses
+		);
+		if ( null === $plan ) {
+			return null;
+		}
+
+		return $this->run_plan_ids( $plan, $page, $per_page );
+	}
+
+	/**
+	 * Builds the read plan shared by query_rows() and query_row_ids().
+	 *
+	 * Returns null if the index is unavailable, the collection has no trait term,
+	 * or the request must use postmeta. Pending index writes are flushed first so
+	 * the plan sees the latest values.
+	 *
+	 * @param int    $collection_id Collection (trait) post ID.
+	 * @param array  $field_schema  Field schema from RowsFilterQuery::field_schema_for().
+	 * @param mixed  $filters       Raw REST filters parameter.
+	 * @param mixed  $sort          Raw REST sort parameter.
+	 * @param string $search        Raw REST search parameter.
+	 * @param bool   $has_include   Whether the request includes include[].
+	 * @param array  $post_statuses Row post statuses visible to this request.
+	 * @return array|null
+	 */
+	private function plan_for_query(
+		int $collection_id,
+		array $field_schema,
+		mixed $filters,
+		mixed $sort,
+		string $search,
+		bool $has_include,
+		?array $post_statuses
+	): ?array {
 		if ( ! $this->index->can_read() ) {
 			return null;
 		}
@@ -104,7 +221,7 @@ final class FieldValueReadQuery {
 		}
 
 		$this->index->flush_pending_sync();
-		return $this->run_plan( $plan, $page, $per_page );
+		return $plan;
 	}
 
 	private function build_plan(
@@ -560,7 +677,7 @@ final class FieldValueReadQuery {
 			: 'p.ID ASC';
 	}
 
-	private function run_plan( array $plan, int $page, int $per_page ): ?array {
+	private function run_plan_ids( array $plan, int $page, int $per_page ): ?array {
 		global $wpdb;
 
 		$page     = max( 1, $page );
@@ -581,7 +698,7 @@ final class FieldValueReadQuery {
 		$total = (int) $total;
 		if ( 0 === $total ) {
 			return array(
-				'posts'      => array(),
+				'ids'        => array(),
 				'total'      => 0,
 				'totalPages' => 0,
 			);
@@ -605,30 +722,14 @@ final class FieldValueReadQuery {
 		$ids = array_map( 'intval', (array) $ids );
 		if ( count( $ids ) === 0 ) {
 			return array(
-				'posts'      => array(),
+				'ids'        => array(),
 				'total'      => $total,
 				'totalPages' => (int) ceil( $total / $per_page ),
 			);
 		}
 
-		$posts = get_posts(
-			array(
-				'post_type'        => $plan['post_type'],
-				'post_status'      => $plan['statuses'],
-				'post__in'         => $ids,
-				'orderby'          => 'post__in',
-				'posts_per_page'   => count( $ids ),
-				'suppress_filters' => false,
-			)
-		);
-
 		return array(
-			'posts'      => array_values(
-				array_filter(
-					$posts,
-					static fn( $post ): bool => $post instanceof WP_Post
-				)
-			),
+			'ids'        => $ids,
 			'total'      => $total,
 			'totalPages' => (int) ceil( $total / $per_page ),
 		);
