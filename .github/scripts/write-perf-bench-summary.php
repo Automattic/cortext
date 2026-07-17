@@ -163,6 +163,7 @@ function benchmark_summary_lines( array $report ): array {
 	$lines      = array(
 		'## Performance benchmark',
 		'',
+		'- Suite: ' . escape_cell( $report['suite'] ?? 'default' ),
 		'- Result: ' . ( ! empty( $report['passed'] ) ? 'passed' : 'failed' ),
 		'- Total time: ' . number_value( $report['elapsedMs'] ?? null ) . ' ms',
 		'- Runs: ' . integer_value( $iterations['measured'] ?? null ) . ' measured, ' . integer_value( $iterations['warmup'] ?? null ) . ' warm-up',
@@ -187,17 +188,126 @@ function benchmark_summary_lines( array $report ): array {
 			integer_value( $budget['sql_queries_p95'] ?? null ),
 			memory_value( $scenario['memory_bytes_p95'] ?? null ),
 			memory_value( $budget['memory_bytes_p95'] ?? null ),
+			payload_value( $scenario['payload_bytes_p50'] ?? null ),
+			payload_value( $scenario['payload_bytes_p95'] ?? null ),
+			payload_value( $budget['payload_bytes_p95'] ?? null ),
 		);
 	}
 
 	$lines = array_merge(
 		$lines,
 		markdown_table(
-			array( 'Status', 'Scenario', 'p50 ms', 'p95 ms', 'p95 limit', 'SQL p50', 'SQL p95', 'SQL limit', 'Memory p95', 'Memory limit' ),
-			array( 'left', 'left', 'right', 'right', 'right', 'right', 'right', 'right', 'right', 'right' ),
+			array( 'Status', 'Scenario', 'p50 ms', 'p95 ms', 'p95 limit', 'SQL p50', 'SQL p95', 'SQL limit', 'Memory p95', 'Memory limit', 'Payload p50', 'Payload p95', 'Payload limit' ),
+			array( 'left', 'left', 'right', 'right', 'right', 'right', 'right', 'right', 'right', 'right', 'right', 'right', 'right' ),
 			$scenario_rows
 		)
 	);
+
+	$comparisons = is_array( $report['comparisons'] ?? null ) ? $report['comparisons'] : array();
+	if ( count( $comparisons ) > 0 ) {
+		$lines[] = '';
+		$lines[] = '### Full vs. ID-only row responses';
+		$lines[] = '';
+
+		$comparison_rows = array();
+		foreach ( $comparisons as $case_id => $comparison ) {
+			if ( ! is_array( $comparison ) ) {
+				continue;
+			}
+
+			$comparison_rows[] = array(
+				escape_cell( $comparison['label'] ?? $case_id ),
+				escape_cell( (string) ( $comparison['full_scenario'] ?? '' ) . ' -> ' . (string) ( $comparison['ids_scenario'] ?? '' ) ),
+				comparison_value(
+					number_value( $comparison['full_p50_ms'] ?? null ),
+					number_value( $comparison['ids_p50_ms'] ?? null ),
+					percentage_value( $comparison['p50_reduction_pct'] ?? null )
+				),
+				comparison_value(
+					number_value( $comparison['full_p95_ms'] ?? null ),
+					number_value( $comparison['ids_p95_ms'] ?? null ),
+					percentage_value( $comparison['p95_reduction_pct'] ?? null )
+				),
+				comparison_value(
+					integer_value( $comparison['full_sql_queries_p95'] ?? null ),
+					integer_value( $comparison['ids_sql_queries_p95'] ?? null ),
+					integer_value( $comparison['sql_queries_p95_reduction'] ?? null )
+				),
+				comparison_value(
+					memory_value( $comparison['full_memory_bytes_p95'] ?? null ),
+					memory_value( $comparison['ids_memory_bytes_p95'] ?? null ),
+					percentage_value( $comparison['memory_p95_reduction_pct'] ?? null )
+				),
+				comparison_value(
+					payload_value( $comparison['full_payload_bytes_p95'] ?? null ),
+					payload_value( $comparison['ids_payload_bytes_p95'] ?? null ),
+					percentage_value( $comparison['payload_p95_reduction_pct'] ?? null )
+				),
+			);
+		}
+
+		$lines = array_merge(
+			$lines,
+			markdown_table(
+				array( 'Case', 'Scenario pair: full -> IDs', 'p50 ms: full -> IDs (reduction)', 'p95 ms: full -> IDs (reduction)', 'SQL p95: full -> IDs (reduction)', 'Memory p95: full -> IDs (reduction)', 'Payload p95: full -> IDs (reduction)' ),
+				array( 'left', 'left', 'right', 'right', 'right', 'right', 'right' ),
+				$comparison_rows
+			)
+		);
+	}
+
+	$link_comparisons = is_array( $report['linkSuggestionComparisons'] ?? null ) ? $report['linkSuggestionComparisons'] : array();
+	if ( count( $link_comparisons ) > 0 ) {
+		$lines[] = '';
+		$lines[] = '### Link suggestions: old enrichment vs. projected response';
+		$lines[] = '';
+
+		$link_rows = array();
+		foreach ( $link_comparisons as $case_id => $comparison ) {
+			if ( ! is_array( $comparison ) ) {
+				continue;
+			}
+
+			$link_rows[] = array(
+				escape_cell( $comparison['label'] ?? $case_id ),
+				escape_cell( (string) ( $comparison['forced_scenario'] ?? '' ) . ' -> ' . (string) ( $comparison['projected_scenario'] ?? '' ) ),
+				comparison_value(
+					number_value( $comparison['forced_p50_ms'] ?? null ),
+					number_value( $comparison['projected_p50_ms'] ?? null ),
+					percentage_value( $comparison['p50_reduction_pct'] ?? null )
+				),
+				comparison_value(
+					number_value( $comparison['forced_p95_ms'] ?? null ),
+					number_value( $comparison['projected_p95_ms'] ?? null ),
+					percentage_value( $comparison['p95_reduction_pct'] ?? null )
+				),
+				comparison_value(
+					integer_value( $comparison['forced_sql_queries_p95'] ?? null ),
+					integer_value( $comparison['projected_sql_queries_p95'] ?? null ),
+					integer_value( $comparison['sql_queries_p95_reduction'] ?? null )
+				),
+				comparison_value(
+					memory_value( $comparison['forced_memory_bytes_p95'] ?? null ),
+					memory_value( $comparison['projected_memory_bytes_p95'] ?? null ),
+					percentage_value( $comparison['memory_p95_reduction_pct'] ?? null )
+				),
+				comparison_value(
+					payload_value( $comparison['forced_payload_bytes_p95'] ?? null ),
+					payload_value( $comparison['projected_payload_bytes_p95'] ?? null ),
+					percentage_value( $comparison['payload_p95_reduction_pct'] ?? null )
+				),
+			);
+		}
+
+		$lines = array_merge(
+			$lines,
+			markdown_table(
+				array( 'Case', 'Scenario pair: forced -> projected', 'p50 ms: forced -> projected (reduction)', 'p95 ms: forced -> projected (reduction)', 'SQL p95: forced -> projected (reduction)', 'Memory p95: forced -> projected (reduction)', 'Payload p95: forced -> projected (reduction)' ),
+				array( 'left', 'left', 'right', 'right', 'right', 'right', 'right' ),
+				$link_rows
+			)
+		);
+	}
 
 	if ( ! empty( $report['failures'] ) ) {
 		$lines[] = '';
@@ -248,9 +358,38 @@ function memory_value( mixed $value ): string {
 	return is_numeric( $value ) ? number_format( (float) $value / 1048576, 1, '.', '' ) . ' MiB' : 'n/a';
 }
 
+function payload_value( mixed $value ): string {
+	if ( ! is_numeric( $value ) ) {
+		return 'n/a';
+	}
+
+	$bytes = (float) $value;
+	if ( $bytes >= 1048576 ) {
+		return number_format( $bytes / 1048576, 1, '.', '' ) . ' MiB';
+	}
+
+	if ( $bytes >= 1024 ) {
+		return number_format( $bytes / 1024, 1, '.', '' ) . ' KiB';
+	}
+
+	return number_format( $bytes, 0, '.', '' ) . ' B';
+}
+
+function percentage_value( mixed $value ): string {
+	return is_numeric( $value ) ? number_format( (float) $value, 1, '.', '' ) . '%' : 'n/a';
+}
+
+function comparison_value( string $full, string $ids, string $reduction ): string {
+	return "{$full} -> {$ids} ({$reduction})";
+}
+
 function failure_value( string $metric, mixed $value ): string {
 	if ( 'memory_bytes_p95' === $metric ) {
 		return memory_value( $value );
+	}
+
+	if ( 'payload_bytes_p95' === $metric ) {
+		return payload_value( $value );
 	}
 
 	if ( str_starts_with( $metric, 'sql_queries_' ) ) {
