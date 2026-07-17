@@ -123,11 +123,9 @@ export function pruneFiltersForFields( filters, validIds ) {
 	return changed ? next : filters;
 }
 
-// Reconciles a saved view against the live field set: drops style entries for
-// fields that no longer exist, clamps persisted widths into the current
-// [min, max] range, and re-prepends the title id when reorder/cleanup left it
-// out. Other view settings (sort, filters, density, search, perPage) are left
-// to the caller — those have their own reconciliation rules.
+// Saved views can outlive their fields. Clean stale references here so a
+// deleted field cannot break rendering or disable view interactions. Sort and
+// filters stay with their callers because each has extra validity rules.
 export function normalizeView( view, validIds, options = {} ) {
 	const titleId = options.titleId ?? TITLE_FIELD_ID;
 	const validSet =
@@ -158,6 +156,9 @@ export function normalizeView( view, validIds, options = {} ) {
 	const fieldsChanged =
 		currentFields.length !== nextFields.length ||
 		currentFields.some( ( id, i ) => id !== nextFields[ i ] );
+	const groupByField = view?.groupBy?.field;
+	const groupByChanged =
+		groupByField !== undefined && ! validSet.has( groupByField );
 	const rawCalculations = view?.calculations;
 	const hasCalculationObject =
 		rawCalculations &&
@@ -194,7 +195,12 @@ export function normalizeView( view, validIds, options = {} ) {
 		visibilityChanged ||
 		unsupportedViewStateChanged;
 
-	if ( ! fieldsChanged && ! layoutChanged && ! calculationsChanged ) {
+	if (
+		! fieldsChanged &&
+		! layoutChanged &&
+		! calculationsChanged &&
+		! groupByChanged
+	) {
 		return view;
 	}
 
@@ -221,6 +227,9 @@ export function normalizeView( view, validIds, options = {} ) {
 	if ( unsupportedViewStateChanged ) {
 		delete nextView.infiniteScrollEnabled;
 		delete nextView.startPosition;
+	}
+	if ( groupByChanged ) {
+		delete nextView.groupBy;
 	}
 	if ( layoutByTypeResult.layoutByType !== undefined ) {
 		nextView.layoutByType = layoutByTypeResult.layoutByType;

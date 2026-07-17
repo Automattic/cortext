@@ -210,6 +210,32 @@ describe( 'normalizeView', () => {
 		expect( next.fields ).toEqual( [ TITLE_FIELD_ID, 'field-1' ] );
 	} );
 
+	it( 'drops grouping when its field no longer exists', () => {
+		const view = {
+			...baseView(),
+			groupBy: { field: 'field-removed', direction: 'asc' },
+		};
+		const next = normalizeView(
+			view,
+			new Set( [ TITLE_FIELD_ID, 'field-1', 'field-2' ] )
+		);
+
+		expect( next.groupBy ).toBeUndefined();
+	} );
+
+	it( 'preserves grouping while its field still exists', () => {
+		const view = {
+			...baseView(),
+			groupBy: { field: 'field-2', direction: 'desc' },
+		};
+		const next = normalizeView(
+			view,
+			new Set( [ TITLE_FIELD_ID, 'field-1', 'field-2' ] )
+		);
+
+		expect( next ).toBe( view );
+	} );
+
 	it( 'drops the legacy add-field ghost column', () => {
 		const view = {
 			...baseView(),
