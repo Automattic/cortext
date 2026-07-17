@@ -165,7 +165,7 @@ describe( 'DataViewNewRowButton templates', () => {
 
 		const primaryButton = screen.getByRole( 'button', { name: 'New' } );
 		const optionsButton = screen.getByRole( 'button', {
-			name: 'New row menu',
+			name: 'Choose how to create a row',
 		} );
 
 		expect( primaryButton ).toBeDisabled();
@@ -189,7 +189,9 @@ describe( 'DataViewNewRowButton templates', () => {
 			enabled: false,
 		} );
 		expect(
-			screen.queryByRole( 'button', { name: 'New row menu' } )
+			screen.queryByRole( 'button', {
+				name: 'Choose how to create a row',
+			} )
 		).toBeNull();
 
 		fireEvent.click( screen.getByRole( 'button', { name: 'New' } ) );
@@ -210,11 +212,13 @@ describe( 'DataViewNewRowButton templates', () => {
 		renderButton();
 
 		fireEvent.click(
-			screen.getByRole( 'button', { name: 'New row menu' } )
+			screen.getByRole( 'button', {
+				name: 'Choose how to create a row',
+			} )
 		);
 		fireEvent.click(
 			screen.getByRole( 'menuitem', {
-				name: 'New from Alpha',
+				name: 'Create from Alpha',
 			} )
 		);
 
@@ -238,7 +242,9 @@ describe( 'DataViewNewRowButton templates', () => {
 		renderButton( { onCreated } );
 
 		fireEvent.click(
-			screen.getByRole( 'button', { name: 'New row menu' } )
+			screen.getByRole( 'button', {
+				name: 'Choose how to create a row',
+			} )
 		);
 		fireEvent.click(
 			screen.getByRole( 'menuitem', {
@@ -271,7 +277,7 @@ describe( 'DataViewNewRowButton templates', () => {
 
 		expect(
 			screen.queryByRole( 'menuitem', {
-				name: 'New from Only template',
+				name: 'Create from Only template',
 			} )
 		).toBeNull();
 		await waitFor( () =>
@@ -287,7 +293,9 @@ describe( 'DataViewNewRowButton templates', () => {
 		renderButton();
 
 		fireEvent.click(
-			screen.getByRole( 'button', { name: 'New row menu' } )
+			screen.getByRole( 'button', {
+				name: 'Choose how to create a row',
+			} )
 		);
 		fireEvent.click(
 			screen.getByRole( 'menuitem', {
