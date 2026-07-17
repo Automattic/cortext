@@ -20,6 +20,7 @@ declare( strict_types=1 );
 
 namespace Cortext\Tests;
 
+use Cortext\Taxonomy\TraitTaxonomy;
 use WP_Term;
 
 trait InMemoryTermStore {
@@ -48,6 +49,7 @@ trait InMemoryTermStore {
 		add_filter( 'terms_pre_query', array( $this, 'mock_terms_pre_query' ), 10, 2 );
 		add_filter( 'get_term', array( $this, 'mock_get_term_filter' ), 10, 2 );
 		add_filter( 'get_object_terms', array( $this, 'mock_get_object_terms' ), 10, 4 );
+		add_filter( 'get_the_terms', array( $this, 'mock_get_the_terms' ), 10, 3 );
 		add_filter( 'wp_get_object_terms_args', array( $this, 'noop_filter' ), 10, 1 );
 		add_action( 'set_object_terms', array( $this, 'mock_set_object_terms' ), 10, 6 );
 		add_action( 'delete_term', array( $this, 'mock_delete_term' ), 10, 5 );
@@ -59,9 +61,13 @@ trait InMemoryTermStore {
 		remove_filter( 'terms_pre_query', array( $this, 'mock_terms_pre_query' ), 10 );
 		remove_filter( 'get_term', array( $this, 'mock_get_term_filter' ), 10 );
 		remove_filter( 'get_object_terms', array( $this, 'mock_get_object_terms' ), 10 );
+		remove_filter( 'get_the_terms', array( $this, 'mock_get_the_terms' ), 10 );
 		remove_filter( 'wp_get_object_terms_args', array( $this, 'noop_filter' ), 10 );
 		remove_action( 'set_object_terms', array( $this, 'mock_set_object_terms' ), 10 );
 		remove_action( 'delete_term', array( $this, 'mock_delete_term' ), 10 );
+		foreach ( array_keys( self::$object_terms ) as $object_id ) {
+			wp_cache_delete( $object_id, TraitTaxonomy::TAXONOMY . '_relationships' );
+		}
 		self::$term_store   = array();
 		self::$object_terms = array();
 		self::$next_term_id = 1;
@@ -99,6 +105,7 @@ trait InMemoryTermStore {
 	 */
 	protected function memo_set_object_terms( int $object_id, array $term_ids ): void {
 		self::$object_terms[ $object_id ] = array_values( array_unique( array_map( 'intval', $term_ids ) ) );
+		wp_cache_set( $object_id, self::$object_terms[ $object_id ], TraitTaxonomy::TAXONOMY . '_relationships' );
 	}
 
 	/**
@@ -311,6 +318,46 @@ trait InMemoryTermStore {
 	}
 
 	/**
+	 * Supplies terms when WorDBless cannot hydrate cached term IDs.
+	 *
+	 * @param mixed  $terms    Existing terms.
+	 * @param int    $post_id  Post ID.
+	 * @param string $taxonomy Taxonomy slug.
+	 * @return mixed
+	 */
+	public function mock_get_the_terms( $terms, $post_id, $taxonomy ) {
+		if ( TraitTaxonomy::TAXONOMY !== (string) $taxonomy || is_wp_error( $terms ) ) {
+			return $terms;
+		}
+
+		$has_valid_terms = is_array( $terms ) && ! empty( $terms );
+		if ( $has_valid_terms ) {
+			foreach ( $terms as $term ) {
+				if ( ! ( $term instanceof WP_Term ) ) {
+					$has_valid_terms = false;
+					break;
+				}
+			}
+		}
+		if ( $has_valid_terms ) {
+			return $terms;
+		}
+
+		$matches = array();
+		foreach ( self::$object_terms[ (int) $post_id ] ?? array() as $term_id ) {
+			$row = self::$term_store[ $term_id ] ?? null;
+			if ( $row && TraitTaxonomy::TAXONOMY === $row['taxonomy'] ) {
+				$matches[] = $row;
+			}
+		}
+		if ( count( $matches ) === 0 ) {
+			return $has_valid_terms ? $terms : false;
+		}
+
+		return $this->shape_terms( $matches, 'all' );
+	}
+
+	/**
 	 * Captures `wp_set_object_terms` writes.
 	 *
 	 * @param int    $object_id  Object id.
@@ -344,6 +391,7 @@ trait InMemoryTermStore {
 			);
 		}
 		self::$object_terms[ $object_id ] = array_values( array_unique( array_merge( $current, $resolved ) ) );
+		wp_cache_set( $object_id, self::$object_terms[ $object_id ], $taxonomy . '_relationships' );
 	}
 
 	/**
@@ -366,6 +414,7 @@ trait InMemoryTermStore {
 					static fn( int $tid ): bool => $tid !== $term_id
 				)
 			);
+			wp_cache_set( $object_id, self::$object_terms[ $object_id ], TraitTaxonomy::TAXONOMY . '_relationships' );
 		}
 	}
 
