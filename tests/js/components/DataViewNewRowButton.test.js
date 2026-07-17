@@ -120,9 +120,7 @@ describe( 'DataViewNewRowButton templates', () => {
 	it( 'uses the view default template and sends eligible filter prefills as overrides', async () => {
 		const onCreated = jest.fn();
 		const template = { id: 10, title: 'Task starter' };
-		// A second template keeps the `templates.length === 1` fallback from
-		// reaching id 10, so the assertion below only passes if the
-		// defaultRowTemplateId lookup resolves it.
+		// Prevent the single-template fallback from masking the default lookup.
 		useTemplates.mockReturnValue( {
 			templates: [ template, { id: 11, title: 'Other starter' } ],
 		} );

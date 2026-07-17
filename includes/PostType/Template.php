@@ -110,12 +110,6 @@ final class Template {
 		);
 	}
 
-	/**
-	 * Clears the page-template default option when its target is deleted.
-	 *
-	 * @param int      $post_id Deleted post id.
-	 * @param \WP_Post $post    Deleted post.
-	 */
 	public function clear_deleted_default( int $post_id, \WP_Post $post ): void {
 		if ( self::POST_TYPE !== $post->post_type ) {
 			return;
