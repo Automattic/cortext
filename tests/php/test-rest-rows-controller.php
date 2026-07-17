@@ -19,6 +19,7 @@ declare( strict_types=1 );
 
 namespace Cortext\Tests;
 
+use Cortext\FieldValues\FieldValueIndex;
 use Cortext\Formula\Compiler as FormulaCompiler;
 use Cortext\Formula\Functions as FormulaFunctions;
 use Cortext\Formula\Materializer as FormulaMaterializer;
@@ -299,6 +300,216 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertSame( 'cortext_invalid_calculation', $response->as_error()->get_error_code() );
 	}
 
+	public function test_ids_shape_returns_paginated_ids_and_totals(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+		$fixture = $this->create_collection_fixture( 'ids-shape' );
+
+		$first  = $this->create_row_fixture( $fixture['collection_id'], 'Private row', 'private' );
+		$second = $this->create_row_fixture( $fixture['collection_id'], 'Draft row', 'draft' );
+		$this->create_row_fixture( $fixture['collection_id'], 'Published row', 'publish' );
+
+		$response = $this->query_rows(
+			array(
+				'trait'    => $fixture['collection_id'],
+				'shape'    => 'ids',
+				'per_page' => 2,
+			)
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertSame( array( $first, $second ), $data['ids'] );
+		$this->assertSame( 3, $data['total'] );
+		$this->assertSame( 2, $data['totalPages'] );
+		$this->assertArrayNotHasKey( 'rows', $data );
+		$this->assertArrayNotHasKey( 'fields', $data );
+	}
+
+	public function test_ids_shape_requires_edit_context(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+		$fixture = $this->create_collection_fixture( 'ids-context', 'text', 'publish' );
+
+		$response = $this->query_rows(
+			array(
+				'trait'   => $fixture['collection_id'],
+				'shape'   => 'ids',
+				'context' => 'view',
+			)
+		);
+
+		$this->assertSame( 400, $response->get_status() );
+	}
+
+	public function test_ids_shape_allows_larger_pages_than_full_rows(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+		$fixture = $this->create_collection_fixture( 'ids-large-page' );
+
+		$ids_response = $this->query_rows(
+			array(
+				'trait'    => $fixture['collection_id'],
+				'shape'    => 'ids',
+				'per_page' => 101,
+			)
+		);
+		$this->assertSame( 200, $ids_response->get_status() );
+
+		$full_response = $this->query_rows(
+			array(
+				'trait'    => $fixture['collection_id'],
+				'per_page' => 101,
+			)
+		);
+		$this->assertSame( 400, $full_response->get_status() );
+	}
+
+	public function test_ids_shape_reads_from_field_value_index_when_available(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+		$fixture = $this->create_collection_fixture( 'ids-index' );
+		$this->create_row_fixture( $fixture['collection_id'], 'Row one', 'private' );
+		$this->create_row_fixture( $fixture['collection_id'], 'Row two', 'private' );
+
+		// build_plan() only selects the index path when the sort uses an indexed
+		// field.
+		$params = array(
+			'trait' => $fixture['collection_id'],
+			'shape' => 'ids',
+			'sort'  => array(
+				'field'     => 'field-' . $fixture['field_id'],
+				'direction' => 'asc',
+			),
+		);
+
+		$fallback = $this->query_rows( $params );
+		$this->assertSame( 200, $fallback->get_status() );
+		$this->assertCount( 2, $fallback->get_data()['ids'] );
+
+		// WorDBless cannot run the sidecar aggregate SQL, so the indexed path
+		// returns no rows here. This distinguishes it from the two-row fallback.
+		$this->with_readable_index(
+			function () use ( $params ): void {
+				$response = $this->query_rows( $params );
+				$this->assertSame( 200, $response->get_status() );
+				$data = $response->get_data();
+				$this->assertSame( array(), $data['ids'] );
+				$this->assertSame( 0, $data['total'] );
+				$this->assertSame( 0, $data['totalPages'] );
+			}
+		);
+	}
+
+	public function test_wp_v2_row_records_include_cover_and_normalized_hydrated_meta(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+		$fixture = $this->create_collection_fixture( 'wpv2-hydrated', 'number' );
+		$select  = $this->add_field_to_collection(
+			$fixture['collection_id'],
+			'select',
+			array(
+				'options' => wp_json_encode(
+					array(
+						array( 'value' => 'Alpha' ),
+						array( 'value' => 'Beta' ),
+					)
+				),
+			)
+		);
+		$multi   = $this->add_field_to_collection(
+			$fixture['collection_id'],
+			'multiselect',
+			array(
+				'options' => wp_json_encode(
+					array(
+						array( 'value' => 'Alpha' ),
+						array( 'value' => 'Gamma' ),
+					)
+				),
+			)
+		);
+		$row_id  = $this->create_row_fixture( $fixture['collection_id'], 'Hydrated row', 'private' );
+
+		add_post_meta( $row_id, 'field-' . $fixture['field_id'], '7.5' );
+		add_post_meta( $row_id, 'field-' . $select, 'Beta, Alpha' );
+		add_post_meta( $row_id, 'field-' . $multi, 'Alpha; Missing; Gamma' );
+
+		$attachment_id = $this->create_attachment_fixture();
+		update_post_meta( $row_id, '_thumbnail_id', $attachment_id );
+		update_post_meta( $attachment_id, '_wp_attachment_image_alt', 'Cover alt' );
+
+		$image_filter = static function ( $downsize, int $image_id ) use ( $attachment_id ) {
+			if ( $image_id !== $attachment_id ) {
+				return $downsize;
+			}
+			return array( 'https://example.test/cover.jpg', 1200, 800, false );
+		};
+
+		add_filter( 'image_downsize', $image_filter, 10, 2 );
+		try {
+			$single = $this->get_document_record( $row_id );
+			$list   = $this->get_document_record_from_list( $row_id );
+		} finally {
+			remove_filter( 'image_downsize', $image_filter, 10 );
+		}
+
+		foreach ( array( $single, $list ) as $record ) {
+			$this->assertSame( 7.5, $record['cortext_hydrated_meta'][ 'field-' . $fixture['field_id'] ] );
+			$this->assertSame( 'Beta', $record['cortext_hydrated_meta'][ 'field-' . $select ] );
+			$this->assertSame( array( 'Alpha', 'Gamma' ), $record['cortext_hydrated_meta'][ 'field-' . $multi ] );
+			$this->assertSame(
+				array(
+					'id'  => $attachment_id,
+					'url' => 'https://example.test/cover.jpg',
+					'alt' => 'Cover alt',
+				),
+				$record['cover']
+			);
+		}
+	}
+
+	public function test_wp_v2_fields_projection_skips_unrequested_row_enrichment(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+		$fixture = $this->create_collection_fixture( 'wpv2-projected', 'number' );
+		$row_id  = $this->create_row_fixture( $fixture['collection_id'], 'Projected row', 'private' );
+
+		add_post_meta( $row_id, 'field-' . $fixture['field_id'], '7.5' );
+		update_post_meta( $row_id, '_modified_by', get_current_user_id() );
+		update_post_meta( $row_id, '_thumbnail_id', $this->create_attachment_fixture() );
+
+		$observed_keys = array();
+		$meta_filter   = static function ( $value, int $object_id, string $meta_key ) use ( &$observed_keys, $row_id ) {
+			if ( $row_id === $object_id ) {
+				$observed_keys[] = $meta_key;
+			}
+			return $value;
+		};
+
+		add_filter( 'get_post_metadata', $meta_filter, 10, 3 );
+		try {
+			$record = $this->get_document_record( $row_id, 'id,link,title' );
+		} finally {
+			remove_filter( 'get_post_metadata', $meta_filter, 10 );
+		}
+
+		$this->assertSame( array( 'id', 'link', 'title' ), array_keys( $record ) );
+		$this->assertNotContains( 'field-' . $fixture['field_id'], $observed_keys );
+		$this->assertNotContains( '_modified_by', $observed_keys );
+		$this->assertNotContains( '_thumbnail_id', $observed_keys );
+	}
+
+	public function test_wp_v2_row_format_context_is_fresh_for_each_request(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+		$fixture = $this->create_collection_fixture( 'wpv2-fresh-context', 'number' );
+		$row_id  = $this->create_row_fixture( $fixture['collection_id'], 'Converted row', 'private' );
+		$key     = 'field-' . $fixture['field_id'];
+
+		add_post_meta( $row_id, $key, '7.5' );
+		$first = $this->get_document_record( $row_id, 'cortext_hydrated_meta' );
+		$this->assertSame( 7.5, $first['cortext_hydrated_meta'][ $key ] );
+
+		update_post_meta( $fixture['field_id'], 'type', 'text' );
+
+		$second = $this->get_document_record( $row_id, 'cortext_hydrated_meta' );
+		$this->assertSame( '7.5', $second['cortext_hydrated_meta'][ $key ] );
+	}
+
 	public function test_field_definitions_in_response(): void {
 		wp_set_current_user( $this->create_user( 'author' ) );
 		$fixture  = $this->create_collection_fixture( 'fielddef', 'number' );
@@ -489,6 +700,61 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 	}
 
 	/**
+	 * Forces FieldValueIndex::can_read() to return true for the callback, then
+	 * restores the postmeta-only default. WorDBless has no index table, so this
+	 * checks path selection without running the indexed SQL.
+	 *
+	 * @param callable $callback Callback to run while the index reports readable.
+	 */
+	private function with_readable_index( callable $callback ): void {
+		$reflection  = new \ReflectionClass( FieldValueIndex::class );
+		$table_cache = $reflection->getProperty( 'table_exists_cache' );
+		$table_cache->setAccessible( true );
+
+		update_option( 'cortext_field_values_index_status', FieldValueIndex::STATUS_READY, false );
+		update_option( 'cortext_field_values_schema_version', 2, false );
+		$table_cache->setValue( null, array( ( new FieldValueIndex() )->table_name() => true ) );
+
+		try {
+			$callback();
+		} finally {
+			$table_cache->setValue( null, array() );
+			FieldValueIndex::flush_runtime_caches();
+			delete_option( 'cortext_field_values_index_status' );
+			delete_option( 'cortext_field_values_schema_version' );
+		}
+	}
+
+	private function get_document_record( int $document_id, ?string $fields = null ): array {
+		$request = new WP_REST_Request( 'GET', "/wp/v2/crtxt_documents/{$document_id}" );
+		$request->set_param( 'context', 'edit' );
+		if ( null !== $fields ) {
+			$request->set_param( '_fields', $fields );
+		}
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		return $response->get_data();
+	}
+
+	private function get_document_record_from_list( int $document_id ): array {
+		$request = new WP_REST_Request( 'GET', '/wp/v2/crtxt_documents' );
+		$request->set_param( 'context', 'edit' );
+		$request->set_param( 'status', array( 'draft', 'private', 'publish' ) );
+		$request->set_param( 'include', array( $document_id ) );
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		foreach ( $response->get_data() as $record ) {
+			if ( isset( $record['id'] ) && (int) $record['id'] === $document_id ) {
+				return $record;
+			}
+		}
+
+		$this->fail( 'Expected the list response to contain the document.' );
+	}
+
+	/**
 	 * Creates a collection document and one scalar field.
 	 *
 	 * @param string $slug        Cosmetic slug stored as `post_name`.
@@ -525,6 +791,21 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 				'post_status' => 'private',
 				'post_title'  => $title,
 				'meta_input'  => array( 'type' => $field_type ),
+			)
+		);
+
+		add_post_meta( $collection_id, 'cortext_fields', (string) $field_id );
+
+		return $field_id;
+	}
+
+	private function add_field_to_collection( int $collection_id, string $field_type, array $meta = array() ): int {
+		$field_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => ucfirst( $field_type ),
+				'meta_input'  => array_merge( array( 'type' => $field_type ), $meta ),
 			)
 		);
 
@@ -579,6 +860,17 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		FormulaMaterializer::recompute_collection( $collection_id );
 
 		return $field_id;
+	}
+
+	private function create_attachment_fixture(): int {
+		return (int) wp_insert_post(
+			array(
+				'post_type'      => 'attachment',
+				'post_status'    => 'inherit',
+				'post_mime_type' => 'image/jpeg',
+				'post_title'     => 'Cover',
+			)
+		);
 	}
 
 	private function create_user( string $role ): int {
