@@ -210,6 +210,32 @@ describe( 'normalizeView', () => {
 		expect( next.fields ).toEqual( [ TITLE_FIELD_ID, 'field-1' ] );
 	} );
 
+	it( 'drops grouping when its field no longer exists', () => {
+		const view = {
+			...baseView(),
+			groupBy: { field: 'field-removed', direction: 'asc' },
+		};
+		const next = normalizeView(
+			view,
+			new Set( [ TITLE_FIELD_ID, 'field-1', 'field-2' ] )
+		);
+
+		expect( next.groupBy ).toBeUndefined();
+	} );
+
+	it( 'preserves grouping while its field still exists', () => {
+		const view = {
+			...baseView(),
+			groupBy: { field: 'field-2', direction: 'desc' },
+		};
+		const next = normalizeView(
+			view,
+			new Set( [ TITLE_FIELD_ID, 'field-1', 'field-2' ] )
+		);
+
+		expect( next ).toBe( view );
+	} );
+
 	it( 'drops the legacy add-field ghost column', () => {
 		const view = {
 			...baseView(),
@@ -300,6 +326,31 @@ describe( 'normalizeView', () => {
 		expect( next.layout.styles[ 'field-2' ].width ).toBe( '20ch' );
 	} );
 
+	it( 'migrates numeric maxWidth values that lock the column to its current width', () => {
+		const view = {
+			...baseView(),
+			layout: {
+				density: 'compact',
+				styles: {
+					'field-1': {
+						width: 180,
+						minWidth: 52,
+						maxWidth: 180,
+					},
+				},
+			},
+		};
+		const next = normalizeView(
+			view,
+			new Set( [ TITLE_FIELD_ID, 'field-1' ] )
+		);
+		expect( next.layout.styles[ 'field-1' ] ).toEqual( {
+			width: 180,
+			minWidth: 52,
+			maxWidth: MAX_COLUMN_WIDTH,
+		} );
+	} );
+
 	it( 'preserves layout.density and other layout keys', () => {
 		const view = {
 			...baseView(),
@@ -344,6 +395,36 @@ describe( 'normalizeView', () => {
 		expect( next.titleField ).toBe( TITLE_FIELD_ID );
 		expect( next.descriptionField ).toBe( 'field-1' );
 		expect( next.mediaField ).toBeUndefined();
+	} );
+
+	it( 'drops stale hidden title state outside table layouts', () => {
+		const view = {
+			...baseView(),
+			type: 'list',
+			showTitle: false,
+		};
+		const next = normalizeView(
+			view,
+			new Set( [ TITLE_FIELD_ID, 'field-1', 'field-2' ] )
+		);
+
+		expect( next.showTitle ).toBeUndefined();
+	} );
+
+	it( 'drops unsupported DataViews infinite-scroll state from saved views', () => {
+		const view = {
+			...baseView(),
+			type: 'grid',
+			infiniteScrollEnabled: true,
+			startPosition: 26,
+		};
+		const next = normalizeView(
+			view,
+			new Set( [ TITLE_FIELD_ID, 'field-1', 'field-2' ] )
+		);
+
+		expect( next.infiniteScrollEnabled ).toBeUndefined();
+		expect( next.startPosition ).toBeUndefined();
 	} );
 
 	it( 'prunes stale grid badge fields', () => {
@@ -509,13 +590,13 @@ describe( 'withNewlyVisibleFields', () => {
 } );
 
 describe( 'withColumnWidth', () => {
-	it( 'writes the clamped width plus per-type min and matching maxWidth', () => {
+	it( 'stores the clamped width and type minimum without capping future resizes', () => {
 		const view = { layout: { density: 'compact' } };
 		const next = withColumnWidth( view, 'field-1', 220, 'text' );
 		expect( next.layout.styles[ 'field-1' ] ).toEqual( {
 			width: 220,
 			minWidth: DEFAULT_MIN_WIDTH + FIELD_HEADER_ICON_CHROME,
-			maxWidth: 220,
+			maxWidth: MAX_COLUMN_WIDTH,
 		} );
 	} );
 

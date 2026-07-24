@@ -23,7 +23,7 @@ const wpDocumentIconMarkers = document.querySelectorAll(
 );
 if ( wpDocumentIconMarkers.length ) {
 	import(
-		/* webpackChunkName: "document-icon-wp" */ './components/DocumentIconWp'
+		/* webpackChunkName: "document-icon-wp-frontend" */ './components/DocumentIconWp'
 	).then( ( { default: DocumentIconWp } ) => {
 		wpDocumentIconMarkers.forEach( ( el ) => {
 			const name = el.getAttribute( 'data-icon' );

@@ -1,15 +1,26 @@
 import * as icons from '@wordpress/icons';
-import { isValidElement } from '@wordpress/element';
 
-import { CORTEXT_GLYPHS } from './cortextIcons';
+import { collectionIcon } from './cortextIcons';
 
-// Resolve a glyph by name: Cortext's own glyphs first, then @wordpress/icons.
-// Keeping this in the lazy module means sidebar rows that only use emoji or
-// images do not load the whole icon namespace.
+const CORTEXT_DOCUMENT_GLYPHS = {
+	collection: collectionIcon,
+};
+
+// Public document-icon blocks may store Cortext names such as `collection`, so
+// resolve those before falling back to @wordpress/icons.
 export default function DocumentIconWp( { name, size = 16 } ) {
-	const Glyph = CORTEXT_GLYPHS[ name ] ?? icons[ name ];
+	const cortextGlyph = CORTEXT_DOCUMENT_GLYPHS[ name ];
 	const Icon = icons.Icon;
-	if ( ! Icon || ! isValidElement( Glyph ) || ! Glyph.type ) {
+	if ( cortextGlyph?.type === 'svg' ) {
+		return (
+			<svg { ...cortextGlyph.props } width={ size } height={ size }>
+				{ cortextGlyph.props.children }
+			</svg>
+		);
+	}
+
+	const Glyph = icons[ name ];
+	if ( ! Icon || ! Glyph?.type ) {
 		return null;
 	}
 	return <Icon icon={ Glyph } size={ size } />;

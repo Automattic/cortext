@@ -8,11 +8,16 @@ module.exports = {
 		'<rootDir>/tests/js/setup.js',
 	],
 	testMatch: [ '<rootDir>/tests/js/**/*.test.js' ],
-	// `@wordpress/core-data@7.45` pulls in `parsel-js` (ESM-only) via its
-	// awareness module. Default Jest doesn't transform node_modules, so the
-	// `export` keyword blows up at parse time. Allowlist parsel-js so Babel
-	// transpiles it before Node parses it.
+	// The WordPress build is ESM and injects CSS that jsdom cannot parse. Unit
+	// tests use the CJS build; Playwright still covers the real `/wp` entrypoint.
+	moduleNameMapper: {
+		...( base.moduleNameMapper ?? {} ),
+		'^@wordpress/dataviews/wp$': '@wordpress/dataviews',
+	},
+	// WordPress packages pull in a few ESM-only modules. Default Jest doesn't
+	// transform node_modules, so their `import` / `export` syntax blows up at
+	// parse time. Allowlist those packages so Babel transpiles them first.
 	transformIgnorePatterns: [
-		'node_modules/(?!(\\.pnpm/)?(parsel-js|@parsel-js)(@|/))',
+		'node_modules/(?!(\\.pnpm/)?(parsel-js|@parsel-js|uuid|marked)(@|/))',
 	],
 };

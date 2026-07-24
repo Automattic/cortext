@@ -2,15 +2,19 @@ import { __ } from '@wordpress/i18n';
 import { useEntityRecord } from '@wordpress/core-data';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { EditorProvider, store as editorStore } from '@wordpress/editor';
+import { store as interfaceStore } from '@wordpress/interface';
 import {
-	InterfaceSkeleton,
-	store as interfaceStore,
-} from '@wordpress/interface';
-import { Button } from '@wordpress/components';
+	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+	__unstableAnimatePresence as AnimatePresence,
+	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+	__unstableMotion as motion,
+	Button,
+} from '@wordpress/components';
 import { closeSmall, cog, pencil, plus, seen, unseen } from '@wordpress/icons';
 import {
 	useCallback,
 	useEffect,
+	useLayoutEffect,
 	useMemo,
 	useRef,
 	useState,
@@ -45,6 +49,7 @@ import DocumentInspectorSidebar, {
 	INSPECTOR_SCOPE,
 	InspectorSidebarSlot,
 	DOCUMENT_INSPECTOR,
+	getActiveInspectorArea,
 	isInspectorArea,
 } from './DocumentInspectorSidebar';
 import {
@@ -98,12 +103,7 @@ function DocumentActions( {
 	const { enableComplementaryArea, disableComplementaryArea } =
 		useDispatch( interfaceStore );
 	const isInspectorOpen = useSelect(
-		( select ) =>
-			isInspectorArea(
-				select( interfaceStore ).getActiveComplementaryArea(
-					INSPECTOR_SCOPE
-				)
-			),
+		( select ) => isInspectorArea( getActiveInspectorArea( select ) ),
 		[]
 	);
 	// Pages and rows both open the document tab first: page metadata for pages,
@@ -192,12 +192,176 @@ function VisualCanvas( {
 		<EditorBody
 			featuredMedia={ featuredMedia }
 			isActive={ isActive }
+			isDocumentCanvas
 			isLocked={ isLocked }
 			postId={ postId }
 			postType={ postType }
 			onReady={ onReady }
 			onRestored={ onRestored }
 		/>
+	);
+}
+
+const SECONDARY_SIDEBAR_ANIMATION_DURATION_SECONDS = 0.25;
+const SECONDARY_SIDEBAR_FALLBACK_WIDTH = 350;
+
+function useMediaQuery( query ) {
+	const readMatch = () =>
+		typeof window !== 'undefined' &&
+		typeof window.matchMedia === 'function' &&
+		window.matchMedia( query ).matches;
+	const [ matches, setMatches ] = useState( readMatch );
+
+	useEffect( () => {
+		if (
+			typeof window === 'undefined' ||
+			typeof window.matchMedia !== 'function'
+		) {
+			return undefined;
+		}
+
+		const mediaQuery = window.matchMedia( query );
+		const update = () => setMatches( mediaQuery.matches );
+		update();
+		if ( typeof mediaQuery.addEventListener === 'function' ) {
+			mediaQuery.addEventListener( 'change', update );
+		} else {
+			mediaQuery.addListener?.( update );
+		}
+
+		return () => {
+			if ( typeof mediaQuery.removeEventListener === 'function' ) {
+				mediaQuery.removeEventListener( 'change', update );
+			} else {
+				mediaQuery.removeListener?.( update );
+			}
+		};
+	}, [ query ] );
+
+	return matches;
+}
+
+// tech-debt.md#td-canvas-interface-skeleton-clone: The WordPress runtime did
+// not expose InterfaceSkeleton, so Cortext carries the shell animation locally.
+export function AnimatedSecondarySidebar( { children } ) {
+	const contentRef = useRef( null );
+	const [ contentWidth, setContentWidth ] = useState(
+		SECONDARY_SIDEBAR_FALLBACK_WIDTH
+	);
+	const isMobileViewport = useMediaQuery( '(max-width: 781px)' );
+	const disableMotion = useMediaQuery( '(prefers-reduced-motion: reduce)' );
+
+	useLayoutEffect( () => {
+		const content = contentRef.current;
+		if ( ! content ) {
+			return undefined;
+		}
+
+		const measure = () => {
+			const nextWidth = Math.ceil(
+				content.getBoundingClientRect().width
+			);
+			if ( nextWidth > 0 ) {
+				setContentWidth( nextWidth );
+			}
+		};
+		measure();
+
+		if (
+			typeof window === 'undefined' ||
+			typeof window.ResizeObserver === 'undefined'
+		) {
+			return undefined;
+		}
+		const observer = new window.ResizeObserver( measure );
+		observer.observe( content );
+		return () => observer.disconnect();
+	}, [] );
+
+	const transition = {
+		type: 'tween',
+		duration:
+			disableMotion || isMobileViewport
+				? 0
+				: SECONDARY_SIDEBAR_ANIMATION_DURATION_SECONDS,
+		ease: [ 0.6, 0, 0.4, 1 ],
+	};
+	const openWidth = isMobileViewport ? '100vw' : contentWidth;
+
+	return (
+		<motion.div
+			className="interface-interface-skeleton__secondary-sidebar"
+			role="region"
+			aria-label={ __( 'Block Library', 'cortext' ) }
+			initial="closed"
+			animate="open"
+			exit="closed"
+			variants={ {
+				open: { width: openWidth },
+				closed: { width: 0 },
+			} }
+			transition={ transition }
+		>
+			<motion.div
+				ref={ contentRef }
+				style={ {
+					position: 'absolute',
+					width: isMobileViewport ? '100vw' : 'fit-content',
+					height: '100%',
+					left: 0,
+				} }
+				variants={ {
+					open: { x: 0 },
+					closed: { x: '-100%' },
+				} }
+				transition={ transition }
+			>
+				{ children }
+			</motion.div>
+		</motion.div>
+	);
+}
+
+export function CanvasInterfaceSkeleton( {
+	className,
+	content,
+	secondarySidebar,
+	sidebar,
+} ) {
+	const classes = [ className, 'interface-interface-skeleton' ]
+		.filter( Boolean )
+		.join( ' ' );
+
+	return (
+		<div className={ classes }>
+			<div className="interface-interface-skeleton__editor">
+				<div className="interface-interface-skeleton__body">
+					<AnimatePresence initial={ false }>
+						{ secondarySidebar ? (
+							<AnimatedSecondarySidebar key="secondary-sidebar">
+								{ secondarySidebar }
+							</AnimatedSecondarySidebar>
+						) : null }
+					</AnimatePresence>
+					<div
+						className="interface-interface-skeleton__content"
+						role="region"
+						aria-label={ __( 'Content', 'cortext' ) }
+					>
+						{ content }
+					</div>
+					{ sidebar ? (
+						<div
+							className="interface-interface-skeleton__sidebar"
+							role="region"
+							aria-label={ __( 'Settings', 'cortext' ) }
+						>
+							{ sidebar }
+						</div>
+					) : null }
+				</div>
+			</div>
+		</div>
 	);
 }
 
@@ -372,7 +536,7 @@ function CanvasEditor( {
 				onEditPropertiesLayout={ requestPropertiesLayoutEdit }
 				onTogglePropertiesVisible={ togglePropertiesVisible }
 			/>
-			<InterfaceSkeleton
+			<CanvasInterfaceSkeleton
 				className="cortext-canvas"
 				content={
 					<>

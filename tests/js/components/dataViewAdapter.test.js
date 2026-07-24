@@ -1,4 +1,5 @@
 import {
+	DEFAULT_GRID_PREVIEW_SIZE,
 	adaptViewForDataViews,
 	mergeDataViewsChange,
 } from '../../../src/components/dataViewAdapter';
@@ -29,24 +30,63 @@ describe( 'dataViewAdapter', () => {
 		const view = adaptViewForDataViews( canonicalView );
 
 		expect( view.type ).toBe( 'table' );
+		expect( view.titleField ).toBe( 'title' );
+		expect( view.showTitle ).toBe( false );
 		expect( view.fields ).toEqual( [ 'title', 'field-1', 'field-2' ] );
 		expect( view.layout ).toEqual( {
 			density: 'compact',
-			styles: { title: { width: 280 } },
+			styles: { title: { minWidth: 160, width: 280 } },
 		} );
-		expect( view.titleField ).toBeUndefined();
 		expect( view.mediaField ).toBeUndefined();
+	} );
+
+	it( 'gives new table title columns enough room for row actions', () => {
+		const view = adaptViewForDataViews( {
+			...canonicalView,
+			layout: { density: 'compact' },
+			layoutByType: {
+				...canonicalView.layoutByType,
+				table: { density: 'compact' },
+			},
+		} );
+
+		expect( view.layout.styles.title ).toEqual( {
+			minWidth: 160,
+			width: 320,
+		} );
+	} );
+
+	it( 'omits default editor title widths without changing saved public widths', () => {
+		const unsizedView = adaptViewForDataViews(
+			{
+				...canonicalView,
+				layout: { density: 'compact' },
+				layoutByType: {
+					...canonicalView.layoutByType,
+					table: { density: 'compact' },
+				},
+			},
+			{ applyDefaultTableTitleWidth: false }
+		);
+		const savedWidthView = adaptViewForDataViews( canonicalView, {
+			applyDefaultTableTitleWidth: false,
+		} );
+
+		expect( unsizedView.layout ).toEqual( { density: 'compact' } );
+		expect( savedWidthView.layout.styles.title ).toEqual( { width: 280 } );
 	} );
 
 	it( 'uses titleField for grid without inheriting table fields', () => {
 		const view = adaptViewForDataViews( {
 			...canonicalView,
 			type: 'grid',
+			showTitle: false,
 			layout: canonicalView.layoutByType.grid,
 		} );
 
 		expect( view.type ).toBe( 'grid' );
 		expect( view.titleField ).toBe( 'title' );
+		expect( view.showTitle ).toBeUndefined();
 		expect( view.mediaField ).toBe( 'cover' );
 		expect( view.fields ).toEqual( [] );
 		expect( view.layout ).toEqual( {
@@ -55,17 +95,113 @@ describe( 'dataViewAdapter', () => {
 		} );
 	} );
 
+	it( 'uses the Cortext grid preview size when no grid size is saved', () => {
+		const view = adaptViewForDataViews( {
+			...canonicalView,
+			type: 'grid',
+			layout: {},
+			layoutByType: {
+				...canonicalView.layoutByType,
+				grid: {},
+			},
+		} );
+
+		expect( view.layout.previewSize ).toBe( DEFAULT_GRID_PREVIEW_SIZE );
+	} );
+
+	it( 'preserves grid density state', () => {
+		const view = adaptViewForDataViews( {
+			...canonicalView,
+			type: 'grid',
+			layout: {
+				previewSize: 290,
+				badgeFields: [ 'field-2' ],
+				density: 'comfortable',
+			},
+			layoutByType: {
+				...canonicalView.layoutByType,
+				grid: {
+					previewSize: 290,
+					badgeFields: [ 'field-2' ],
+					density: 'comfortable',
+				},
+			},
+		} );
+
+		expect( view.layout ).toEqual( {
+			previewSize: 290,
+			badgeFields: [ 'field-2' ],
+			density: 'comfortable',
+		} );
+		expect( view.layoutByType.grid ).toEqual( {
+			previewSize: 290,
+			badgeFields: [ 'field-2' ],
+			density: 'comfortable',
+		} );
+	} );
+
+	it( 'preserves the largest grid preview size', () => {
+		const view = adaptViewForDataViews( {
+			...canonicalView,
+			type: 'grid',
+			layout: { previewSize: 430 },
+			layoutByType: {
+				...canonicalView.layoutByType,
+				grid: { previewSize: 430 },
+			},
+		} );
+
+		expect( view.layout.previewSize ).toBe( 430 );
+		expect( view.layoutByType.grid.previewSize ).toBe( 430 );
+	} );
+
 	it( 'uses titleField for list without inheriting table fields', () => {
 		const view = adaptViewForDataViews( {
 			...canonicalView,
 			type: 'list',
+			showTitle: false,
 			layout: canonicalView.layoutByType.list,
 			fieldsByType: { grid: [], list: [ 'field-2' ] },
 		} );
 
 		expect( view.type ).toBe( 'list' );
 		expect( view.titleField ).toBe( 'title' );
+		expect( view.showTitle ).toBeUndefined();
 		expect( view.fields ).toEqual( [ 'field-2' ] );
+	} );
+
+	it( 'removes unsupported infinite-scroll state before rendering a DataViews view', () => {
+		const view = adaptViewForDataViews( {
+			...canonicalView,
+			type: 'list',
+			infiniteScrollEnabled: true,
+			startPosition: 26,
+			layout: canonicalView.layoutByType.list,
+		} );
+
+		expect( view.infiniteScrollEnabled ).toBeUndefined();
+		expect( view.startPosition ).toBeUndefined();
+	} );
+
+	it( 'migrates legacy grouping to the DataViews 17 shape', () => {
+		const legacyView = {
+			...canonicalView,
+			groupByField: 'field-2',
+		};
+		const renderedView = adaptViewForDataViews( legacyView );
+
+		expect( renderedView.groupBy ).toEqual( {
+			field: 'field-2',
+			direction: 'asc',
+		} );
+		expect( renderedView.groupByField ).toBeUndefined();
+
+		const persistedView = mergeDataViewsChange( legacyView, renderedView );
+		expect( persistedView.groupBy ).toEqual( {
+			field: 'field-2',
+			direction: 'asc',
+		} );
+		expect( persistedView.groupByField ).toBeUndefined();
 	} );
 
 	it( 'round-trips table to grid to table without losing layout buckets', () => {
@@ -125,11 +261,87 @@ describe( 'dataViewAdapter', () => {
 		expect( gridCanonical.fieldsByType.grid ).toEqual( [] );
 	} );
 
+	it( 'preserves the Cortext grid preview size when DataViews emits an empty grid layout', () => {
+		const gridCanonical = mergeDataViewsChange(
+			{
+				...canonicalView,
+				type: 'grid',
+				layout: {},
+				layoutByType: {
+					...canonicalView.layoutByType,
+					grid: {},
+				},
+			},
+			{
+				type: 'grid',
+				layout: {},
+			}
+		);
+
+		expect( gridCanonical.layout.previewSize ).toBe(
+			DEFAULT_GRID_PREVIEW_SIZE
+		);
+		expect( gridCanonical.layoutByType.grid.previewSize ).toBe(
+			DEFAULT_GRID_PREVIEW_SIZE
+		);
+	} );
+
+	it( 'keeps the largest grid preview size after a view change', () => {
+		const gridCanonical = mergeDataViewsChange(
+			{
+				...canonicalView,
+				type: 'grid',
+				layout: { previewSize: 430 },
+				layoutByType: {
+					...canonicalView.layoutByType,
+					grid: { previewSize: 430 },
+				},
+			},
+			{
+				type: 'grid',
+				layout: { previewSize: 430 },
+			}
+		);
+
+		expect( gridCanonical.layout.previewSize ).toBe( 430 );
+		expect( gridCanonical.layoutByType.grid.previewSize ).toBe( 430 );
+	} );
+
+	it( 'stores grid density emitted by DataViews', () => {
+		const gridCanonical = mergeDataViewsChange(
+			{
+				...canonicalView,
+				type: 'grid',
+				layout: canonicalView.layoutByType.grid,
+			},
+			{
+				type: 'grid',
+				layout: {
+					previewSize: 290,
+					badgeFields: [ 'field-2' ],
+					density: 'comfortable',
+				},
+			}
+		);
+
+		expect( gridCanonical.layout ).toEqual( {
+			previewSize: 290,
+			badgeFields: [ 'field-2' ],
+			density: 'comfortable',
+		} );
+		expect( gridCanonical.layoutByType.grid ).toEqual( {
+			previewSize: 290,
+			badgeFields: [ 'field-2' ],
+			density: 'comfortable',
+		} );
+	} );
+
 	it( 'stores grid field changes in the grid bucket only', () => {
 		const gridCanonical = mergeDataViewsChange(
 			{
 				...canonicalView,
 				type: 'grid',
+				showTitle: false,
 				layout: canonicalView.layoutByType.grid,
 			},
 			{
@@ -148,6 +360,7 @@ describe( 'dataViewAdapter', () => {
 			'field-2',
 		] );
 		expect( gridCanonical.fieldsByType.grid ).toEqual( [ 'field-2' ] );
+		expect( gridCanonical.showTitle ).toBeUndefined();
 	} );
 
 	it( 'updates the active layout bucket when the type does not change', () => {
@@ -198,5 +411,17 @@ describe( 'dataViewAdapter', () => {
 		expect( tableCanonical.search ).toBe( 'needle' );
 		expect( tableCanonical.page ).toBe( 2 );
 		expect( tableCanonical.perPage ).toBe( 25 );
+	} );
+
+	it( 'drops unsupported infinite-scroll state from DataViews changes', () => {
+		const listCanonical = mergeDataViewsChange( canonicalView, {
+			type: 'list',
+			infiniteScrollEnabled: true,
+			startPosition: 26,
+			layout: {},
+		} );
+
+		expect( listCanonical.infiniteScrollEnabled ).toBeUndefined();
+		expect( listCanonical.startPosition ).toBeUndefined();
 	} );
 } );

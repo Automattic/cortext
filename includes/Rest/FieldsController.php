@@ -862,8 +862,8 @@ final class FieldsController {
 	}
 
 	/**
-	 * Walks every Cortext entry CPT and applies the migration on rows that
-	 * carry the old value in `field-<id>` postmeta.
+	 * Applies the migration to every Cortext document that carries the old
+	 * value in `field-<id>` postmeta. That key only exists on collection rows.
 	 *
 	 * - clear: removes every matching meta row.
 	 * - replace on a single-value (select) field: rewrites the row.

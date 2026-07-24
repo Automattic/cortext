@@ -2,6 +2,129 @@
 @use "@wordpress/base-styles/variables" as *;
 
 $title-cell-icon-size: $grid-unit-20;
+$table-row-hover-background: #f8f8f8;
+$table-cell-hover-background: $gray-100;
+
+// tech-debt.md#td-block-canvas-style-runtime-bridge: DataViews uses the private
+// Menu for row actions, and its generated styles land outside BlockCanvas.
+// These fallbacks use ARIA/data attributes because generated classes can move.
+body.block-editor-iframe__body [data-dialog][role="menu"][data-open] {
+	position: relative;
+	z-index: 1000000;
+	display: grid;
+	grid-template-columns: minmax(0, max-content) 1fr;
+	box-sizing: border-box;
+	min-width: 160px;
+	max-width: 320px;
+	max-height: var(--popover-available-height, calc(100vh - #{$grid-unit-20}));
+	padding: $grid-unit-05;
+	overflow: auto;
+	overscroll-behavior: contain;
+	border-radius: 4px;
+	background: $white;
+	box-shadow:
+		0 0 0 $border-width $gray-300,
+		0 8px 16px rgba(0, 0, 0, 0.12);
+	font-family: $default-font;
+	font-size: $default-font-size;
+	line-height: 20px;
+	color: $gray-900;
+}
+
+body.block-editor-iframe__body
+[data-dialog][role="menu"][data-open]
+[role="group"] {
+	display: contents;
+}
+
+body.block-editor-iframe__body
+[data-dialog][role="menu"][data-open]
+:is([role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"]) {
+	all: unset;
+	position: relative;
+	display: grid;
+	grid-column: 1 / -1;
+	grid-template-columns: minmax(0, max-content) 1fr;
+	align-items: center;
+	box-sizing: border-box;
+	min-height: $grid-unit-40;
+	padding: $grid-unit-05 $grid-unit-15;
+	border-radius: 2px;
+	color: $gray-900;
+	cursor: pointer;
+	font-family: $default-font;
+	font-size: $default-font-size;
+	font-weight: 400;
+	line-height: 20px;
+	user-select: none;
+}
+
+body.block-editor-iframe__body
+[data-dialog][role="menu"][data-open]
+:is(
+	[role="menuitem"],
+	[role="menuitemcheckbox"],
+	[role="menuitemradio"]
+)[aria-disabled="true"] {
+	color: $gray-600;
+	cursor: default;
+}
+
+body.block-editor-iframe__body
+[data-dialog][role="menu"][data-open]
+:is(
+	[role="menuitem"],
+	[role="menuitemcheckbox"],
+	[role="menuitemradio"]
+):not([aria-disabled="true"]):is(:hover, [data-active-item]) {
+	background: $gray-100;
+	color: $gray-900;
+}
+
+body.block-editor-iframe__body
+[data-dialog][role="menu"][data-open]
+:is(
+	[role="menuitem"],
+	[role="menuitemcheckbox"],
+	[role="menuitemradio"]
+)[data-focus-visible] {
+	box-shadow: inset 0 0 0 $border-width $gray-400;
+}
+
+body.block-editor-iframe__body
+[data-dialog][role="menu"][data-open]
+:is([role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"]) > span:first-child {
+	grid-column: 1;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	color: $gray-700;
+}
+
+body.block-editor-iframe__body
+[data-dialog][role="menu"][data-open]
+:is([role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"]) > div {
+	grid-column: 2;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: $grid-unit-15;
+	min-width: 0;
+	pointer-events: none;
+}
+
+body.block-editor-iframe__body
+[data-dialog][role="menu"][data-open]
+[data-wp-component="Truncate"] {
+	display: block;
+	min-width: 0;
+	overflow: hidden;
+	color: inherit;
+	font-size: $default-font-size;
+	line-height: 20px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
 
 .cortext-collection-pane {
 	position: relative;
@@ -29,8 +152,8 @@ $title-cell-icon-size: $grid-unit-20;
 // to fixed layout with content-width sizing and explicit per-cell
 // widths, so column count stops affecting the surviving columns'
 // widths and the table grows to its natural content width.
-// `.cortext-data-view > .dataviews-wrapper` declares `overflow: auto`
-// itself, so horizontal scroll kicks in once columns exceed the wrapper.
+// DataViews' layout container owns horizontal scrolling once columns exceed
+// the available width.
 .dataviews-view-table {
 	--cortext-table-column-default-width: 200px;
 	--cortext-table-field-header-icon-chrome: calc(var(--cortext-field-type-icon-size, 16px) + #{$grid-unit-05});
@@ -42,6 +165,19 @@ $title-cell-icon-size: $grid-unit-20;
 .dataviews-view-table th,
 .dataviews-view-table td {
 	width: var(--cortext-table-column-default-width);
+}
+
+.dataviews-view-table
+col[class^="dataviews-view-table__col-"]:not(
+	.dataviews-view-table__col-checkbox
+):not(.dataviews-view-table__col-first-data):not(
+	.dataviews-view-table__col-actions
+):not(.dataviews-view-table__col-expand) {
+	width: var(--cortext-table-column-default-width);
+}
+
+.dataviews-view-table col.dataviews-view-table__col-first-data {
+	width: 320px;
 }
 
 // Keep the actions column only as wide as its kebab/`+` icon. Otherwise it
@@ -58,6 +194,10 @@ $title-cell-icon-size: $grid-unit-20;
 	padding-left: 0;
 }
 
+.dataviews-view-table col.dataviews-view-table__col-actions {
+	width: $grid-unit-50 + $grid-unit-05;
+}
+
 .dataviews-view-table th.dataviews-view-table__checkbox-column,
 .dataviews-view-table td.dataviews-view-table__checkbox-column,
 .dataviews-view-table td.cortext-table-calculations__selection-spacer {
@@ -66,14 +206,20 @@ $title-cell-icon-size: $grid-unit-20;
 	max-width: 44px;
 }
 
+.dataviews-view-table col.dataviews-view-table__col-checkbox {
+	width: 44px;
+}
+
 // Title carries the post name and tends to be longer than other
 // fields; give it more breathing room.
 .dataviews-view-table th.dataviews-view-table__checkbox-column + th,
 .dataviews-view-table td.dataviews-view-table__checkbox-column + td,
 .dataviews-view-table td.cortext-table-calculations__selection-spacer + td,
-.dataviews-view-table th:first-child:not(.dataviews-view-table__checkbox-column),
-.dataviews-view-table td:first-child:not(.dataviews-view-table__checkbox-column) {
-	width: 280px;
+.dataviews-view-table
+th:first-child:not(.dataviews-view-table__checkbox-column),
+.dataviews-view-table
+td:first-child:not(.dataviews-view-table__checkbox-column) {
+	width: 320px;
 }
 
 // Field headers include the type icon before the label. Add that chrome to
@@ -81,22 +227,18 @@ $title-cell-icon-size: $grid-unit-20;
 .cortext-data-view
 .dataviews-view-table
 :where(
-	th:has(.cortext-column-header-marker):not(:first-child):not(.dataviews-view-table__checkbox-column + th),
-	th:has(.cortext-column-header-system-icon):not(:first-child):not(.dataviews-view-table__checkbox-column + th)
+	th:has(.cortext-column-header-marker):not(:first-child):not(
+		.dataviews-view-table__checkbox-column + th
+	),
+	th:has(.cortext-column-header-system-icon):not(:first-child):not(
+		.dataviews-view-table__checkbox-column + th
+	)
 ) {
 	width: calc(var(--cortext-table-column-default-width) + var(--cortext-table-field-header-icon-chrome));
 }
 
-// WordPress admin can load DataViews 6.0.0 alongside our bundled version. The
-// older sheet declares `padding-left: 48px` on the first td/th and `width: 1%`
-// on utility cells. Scope our table chrome to Cortext so load order cannot
-// widen the checkbox/actions columns or push the title column right.
-.cortext-data-view .dataviews-view-table tr td:first-child,
-.cortext-data-view .dataviews-view-table tr th:first-child {
-	padding-left: 24px;
-	padding-inline-start: 24px;
-}
-
+// Fixed utility columns must override DataViews' edge padding and automatic
+// widths even when the core stylesheet loads after Cortext's bundle.
 .cortext-data-view
 .dataviews-view-table
 tr
@@ -142,9 +284,72 @@ th.dataviews-view-table__checkbox-column {
 	padding-inline-start: 8px;
 }
 
-.cortext-data-view .dataviews-view-table thead th.dataviews-view-table__checkbox-column > .dataviews-view-table-selection-checkbox {
+.cortext-data-view
+.dataviews-view-table
+thead
+th.dataviews-view-table__checkbox-column > .dataviews-view-table-selection-checkbox {
 	margin-left: 10px;
 	margin-inline-start: 10px;
+}
+
+.cortext-data-view
+.dataviews-view-table
+thead > tr > th.dataviews-view-table__checkbox-column {
+	cursor: default;
+	background-color: $white;
+}
+
+.cortext-data-view
+.dataviews-view-table
+:is(
+	thead
+	th.dataviews-view-table__checkbox-column
+	> .dataviews-view-table-selection-checkbox,
+	tbody
+	td.dataviews-view-table__checkbox-column
+	.dataviews-selection-checkbox
+) {
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity 80ms ease-out;
+}
+
+.cortext-data-view
+.dataviews-view-table
+:is(
+	thead
+	th.dataviews-view-table__checkbox-column:focus-within
+	> .dataviews-view-table-selection-checkbox,
+	tbody
+	tr:is(:hover, .is-hovered, :focus-within, .is-selected)
+	td.dataviews-view-table__checkbox-column
+	.dataviews-selection-checkbox
+),
+.cortext-data-view
+.dataviews-view-table:has(tbody tr.is-selected)
+thead
+th.dataviews-view-table__checkbox-column > .dataviews-view-table-selection-checkbox {
+	opacity: 1;
+	pointer-events: auto;
+}
+
+// Touch users cannot reveal controls that only appear on hover, so follow
+// DataViews and keep row and select-all checkboxes available without hover.
+@media (hover: none) {
+
+	.cortext-data-view
+	.dataviews-view-table
+	:is(
+		thead
+		th.dataviews-view-table__checkbox-column
+		> .dataviews-view-table-selection-checkbox,
+		tbody
+		td.dataviews-view-table__checkbox-column
+		.dataviews-selection-checkbox
+	) {
+		opacity: 1;
+		pointer-events: auto;
+	}
 }
 
 // The add-field button is portaled into DataViews' actions column header.
@@ -161,6 +366,37 @@ th.dataviews-view-table__checkbox-column {
 	> .dataviews-view-table-header {
 		display: none;
 	}
+}
+
+.cortext-data-view
+.dataviews-view-table
+tr
+th.dataviews-view-table__actions-column,
+.cortext-data-view
+.dataviews-view-table
+tr
+td.dataviews-view-table__actions-column {
+	position: sticky;
+	right: 0;
+	z-index: 2;
+	background-color: $white;
+
+	&::before {
+		position: absolute;
+		inset-block: 0;
+		inset-inline-start: 0;
+		width: $border-width;
+		background: $gray-100;
+		content: "";
+		pointer-events: none;
+	}
+}
+
+.cortext-data-view
+.dataviews-view-table
+tr
+th.dataviews-view-table__actions-column {
+	z-index: 3;
 }
 
 // Custom field columns carry a marker that `ColumnHeaderActions`
@@ -182,7 +418,9 @@ th:has(.cortext-column-header-marker)
 // Hang the hover state off the <th> instead so the cell as a whole
 // reads as a clickable affordance (and the gray shows through any
 // transparent overlay above it).
-.cortext-data-view .dataviews-view-table thead > tr > th:hover {
+.cortext-data-view
+.dataviews-view-table
+thead > tr > th:not(.dataviews-view-table__checkbox-column):hover {
 	background-color: $gray-100;
 }
 
@@ -195,6 +433,21 @@ th:has(.cortext-column-header-marker)
 // tds so column widths follow the header.
 .cortext-data-view .dataviews-view-table tbody > tr > td:not(:first-child) {
 	padding-left: 4px;
+}
+
+.cortext-data-view .dataviews-view-table tbody tr:is(:hover, .is-hovered) > td,
+.cortext-data-view
+.dataviews-view-table
+tbody
+tr:is(:hover, .is-hovered) > td.dataviews-view-table__actions-column {
+	background-color: $table-row-hover-background;
+}
+
+.cortext-data-view
+.dataviews-view-table
+tbody
+tr:is(:hover, .is-hovered) > td:is(:hover, :focus-within) {
+	background-color: $table-cell-hover-background;
 }
 
 .cortext-data-view
@@ -418,17 +671,18 @@ tbody > tr > td:not(:first-child) {
 		min-height: 28px;
 		padding: 0 $grid-unit-10;
 		border: $border-width solid transparent;
-		color: $gray-700;
+		color: var(--wp-admin-theme-color, #3858e9);
 		font-size: 12px;
 		line-height: 1;
 		box-sizing: border-box;
 		opacity: 0;
 		pointer-events: none;
 
+		&:focus-visible,
 		&:hover,
-		&:focus-visible {
+		&:focus {
 			border-color: $gray-300;
-			color: $gray-900;
+			color: var(--wp-admin-theme-color, #3858e9);
 		}
 	}
 }
@@ -436,6 +690,26 @@ tbody > tr > td:not(:first-child) {
 .cortext-title-cell:focus-within,
 .cortext-title-cell--with-open-action:hover {
 	background: $gray-100;
+}
+
+.cortext-title-cell:focus-within,
+.cortext-title-cell--with-open-action:hover,
+.cortext-data-view
+.dataviews-view-table
+tbody
+tr:hover
+.cortext-title-cell--with-open-action,
+.cortext-data-view
+.dataviews-view-table
+tbody
+tr:has(.cortext-title-cell--is-open)
+.cortext-title-cell--with-open-action,
+.cortext-data-view
+.dataviews-view-table
+tbody
+tr:has(.cortext-title-cell--is-opening)
+.cortext-title-cell--with-open-action {
+	padding-inline-end: $grid-unit-10;
 }
 
 .cortext-title-cell:focus-within .cortext-title-cell__open.components-button,
@@ -538,6 +812,7 @@ tr:has(.cortext-title-cell--is-opening)
 .cortext-relation-edit__selected-pill {
 	display: inline-flex;
 	align-items: center;
+	box-sizing: border-box;
 	max-width: 100%;
 	min-width: 0;
 	height: $grid-unit-30;
@@ -925,13 +1200,203 @@ tr:has(.cortext-title-cell--is-opening)
 		flex: 1 1 0;
 		min-width: 0;
 		min-height: 0;
-		// Own the scroll layer instead of relying on DataViews's upstream
-		// default. Wide tables were not getting a horizontal scrollbar.
-		overflow: auto;
 	}
 
-	.dataviews__view-actions:has(.dataviews-filters__visibility-toggle[aria-expanded="false"]) + .dataviews-filters__container {
-		display: none;
+	// tech-debt.md#td-block-canvas-style-runtime-bridge: Some generated component
+	// styles land outside BlockCanvas, leaving this toolbar unstyled.
+	.dataviews__view-actions {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: $grid-unit-05;
+		width: 100%;
+	}
+
+	.dataviews__search {
+		display: flex;
+		align-items: center;
+		justify-content: flex-start !important;
+		flex: 0 1 auto;
+		width: auto;
+		max-width: 100%;
+		gap: $grid-unit;
+		min-width: 0;
+	}
+
+	.dataviews__view-actions > :last-child {
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-05;
+		flex-shrink: 0;
+		height: $button-size-compact;
+		line-height: 0;
+	}
+
+	.dataviews-search.components-search-control {
+		display: block;
+		flex: 0 1 180px;
+		width: 180px;
+		min-width: 0;
+		max-width: 100%;
+	}
+
+	.dataviews-search .components-input-control__label {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		padding: 0;
+		margin: -1px;
+		overflow: hidden;
+		clip: rect(0 0 0 0);
+		clip-path: inset(50%);
+		border: 0;
+		white-space: nowrap;
+	}
+
+	.dataviews-search .components-input-control__container {
+		position: relative;
+		display: flex;
+		align-items: center;
+		box-sizing: border-box;
+		flex: 1 1 100%;
+		width: 100%;
+		min-width: 0;
+		border-radius: 2px;
+		background: $white;
+	}
+
+	.dataviews-search .components-input-control__backdrop {
+		position: absolute;
+		inset: 0;
+		box-sizing: border-box;
+		border: $border-width solid $gray-700;
+		border-radius: inherit;
+		pointer-events: none;
+	}
+
+	.dataviews-search
+	.components-input-control__container:focus-within
+	.components-input-control__backdrop {
+		border-color: var(--wp-admin-theme-color, #007cba);
+		box-shadow:
+			0 0 0 var(--wp-admin-border-width-focus, 2px)
+			var(--wp-admin-theme-color, #007cba);
+		outline: 2px solid transparent;
+		outline-offset: -2px;
+	}
+
+	.dataviews-search .components-input-control__prefix,
+	.dataviews-search .components-input-control__suffix {
+		display: flex;
+		align-items: center;
+		align-self: stretch;
+		box-sizing: border-box;
+		color: $gray-900;
+	}
+
+	.dataviews-search .components-input-control__prefix {
+		padding-inline-start: $grid-unit-05;
+	}
+
+	.dataviews-search .components-input-control__suffix {
+		padding-inline-end: $grid-unit-05;
+	}
+
+	.dataviews-search .components-input-control__prefix svg {
+		display: block;
+		flex: 0 0 auto;
+		width: $grid-unit-30;
+		height: $grid-unit-30;
+		transform: scaleX(-1);
+	}
+
+	.dataviews-search .components-input-control__input[type="search"] {
+		display: block;
+		box-sizing: border-box;
+		width: 100%;
+		height: $button-size-compact;
+		min-height: $button-size-compact;
+		margin: 0;
+		padding: 0 $grid-unit-05;
+		border: 0;
+		background: transparent;
+		box-shadow: none;
+		color: $gray-900;
+		font-family: inherit;
+		font-size: $default-font-size;
+		line-height: 1;
+		outline: none;
+	}
+
+	.dataviews-search
+	.components-input-control__input[type="search"]::-webkit-search-decoration,
+	.dataviews-search
+	.components-input-control__input[type="search"]::-webkit-search-cancel-button,
+	.dataviews-search
+	.components-input-control__input[type="search"]::-webkit-search-results-button,
+	.dataviews-search
+	.components-input-control__input[type="search"]::-webkit-search-results-decoration {
+		-webkit-appearance: none;
+	}
+
+	.dataviews-filters__container-visibility-toggle {
+		display: flex;
+		align-items: center;
+	}
+
+	.dataviews-filters__visibility-toggle.components-button {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: $button-size-compact;
+		min-width: $button-size-compact;
+		height: $button-size-compact;
+		padding: 0;
+		border: 0;
+		border-radius: 2px;
+		background: transparent;
+		box-shadow: none;
+		color: $gray-900;
+	}
+
+	.dataviews__view-actions > :last-child
+	.components-button.has-icon:not(.has-text),
+	.dataviews__view-actions > :last-child
+	.dataviews-view-config__toggle-wrapper > .components-button {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: $button-size-compact;
+		min-width: $button-size-compact;
+		height: $button-size-compact;
+		padding: 0;
+		border: 0;
+		border-radius: 2px;
+		background: transparent;
+		box-shadow: none;
+		color: $gray-900;
+	}
+
+	.dataviews-filters__visibility-toggle.components-button svg,
+	.dataviews__view-actions > :last-child
+	.dataviews-view-config__toggle-wrapper > .components-button
+	svg,
+	.dataviews__view-actions > :last-child
+	.components-button.has-icon:not(.has-text)
+	svg {
+		display: block;
+		flex: 0 0 auto;
+	}
+
+	.dataviews-filters__visibility-toggle.components-button:hover,
+	.dataviews-filters__visibility-toggle.components-button:focus,
+	.dataviews__view-actions > :last-child
+	.components-button.has-icon:not(.has-text):is(:hover, :focus),
+	.dataviews__view-actions > :last-child
+	.dataviews-view-config__toggle-wrapper > .components-button:is(:hover, :focus) {
+		background: $gray-100;
+		box-shadow: none;
+		color: $gray-900;
 	}
 
 	// DataViews paints row height via td `padding-block` per density, but
@@ -941,7 +1406,7 @@ tr:has(.cortext-title-cell--is-opening)
 	// DataViews's per-density row heights on the shell (and the checkbox
 	// cell, which shares the shell's dimensions). Headers (`<th>`) keep
 	// their padding so they still breathe. Balanced and comfortable mirror
-	// DataViews v6's td `padding-block` (12 and 16); compact is
+	// DataViews 17's td `padding-block` (12 and 16); compact is
 	// intentionally tighter than DataViews's default (4 -> 0) so the row
 	// matches the 40px editor floor and gets closer to a compact
 	// density. See tech-debt.md#td-dataviews-inline-editing.
@@ -955,20 +1420,18 @@ tr:has(.cortext-title-cell--is-opening)
 			vertical-align: middle;
 		}
 
-		// DataViews wraps each cell's render in a flex container that
-		// shrinks to the content's intrinsic width, so the hover/focus
-		// background on the editable shell only painted under the text
-		// instead of the whole cell. Force the wrapper to fill the td so
-		// every cell hovers edge-to-edge regardless of content length. The
-		// min/max reset also overrides DataViews's upstream 15ch floor, which
-		// otherwise lets narrow resized columns paint into their neighbors.
+		// DataViews lets these flex wrappers shrink to their content, so the
+		// editable hover/focus background stops at the text. Fill the td instead.
+		// Resetting min/max width also overrides the upstream 15ch floor that
+		// makes narrow columns overlap their neighbors.
 		/* stylelint-disable-next-line no-descending-specificity */
-		tbody .dataviews-view-table__cell-content-wrapper {
+		tbody .dataviews-view-table__cell-content-wrapper,
+		tbody .dataviews-view-table__primary-column-content {
+			align-items: center;
 			box-sizing: border-box;
 			width: 100%;
 			min-width: 0;
 			max-width: 100%;
-			align-items: center;
 		}
 
 		tfoot.cortext-table-calculations {
@@ -1055,8 +1518,7 @@ tr:has(.cortext-title-cell--is-opening)
 		text-align: center;
 	}
 
-	.dataviews-no-results,
-	.dataviews-loading:not(:empty) {
+	.dataviews-no-results {
 		display: grid;
 		align-content: center;
 		min-height: 160px;
@@ -1067,13 +1529,6 @@ tr:has(.cortext-title-cell--is-opening)
 		p {
 			margin: 0;
 		}
-	}
-
-	// During a row refresh, DataViews can leave behind an empty loading notice
-	// even though the table is still painted. Hide it so inline saves do not add
-	// a blank strip below the rows.
-	.dataviews-loading:empty {
-		display: none;
 	}
 
 	// Loading shell hides DataViews chrome and the new-row footer so the rows

@@ -1,9 +1,11 @@
 import { render, screen } from '@testing-library/react';
-import { DataViews as mockDataViews } from '@wordpress/dataviews';
+import { DataViews as mockDataViews } from '@wordpress/dataviews/wp';
+
+import { DEFAULT_GRID_PREVIEW_SIZE } from '../../../src/components/dataViewAdapter';
 
 const mockFilterSortAndPaginate = jest.fn();
 
-jest.mock( '@wordpress/dataviews', () => {
+jest.mock( '@wordpress/dataviews/wp', () => {
 	const MockDataViews = jest.fn( ( { data = [], children } ) => (
 		<div data-testid="dataviews">
 			{ children }
@@ -152,10 +154,40 @@ describe( 'normalizePublicView', () => {
 		expect( view.layout.styles ).toBeUndefined();
 		expect( view.layoutByType ).toEqual( {
 			table: { density: 'compact' },
-			grid: {},
+			grid: { previewSize: DEFAULT_GRID_PREVIEW_SIZE },
 			list: {},
 		} );
 		expect( view.fieldsByType ).toEqual( { grid: [], list: [] } );
+	} );
+
+	it( 'preserves public grid layout settings', () => {
+		const view = normalizePublicView( {
+			type: 'grid',
+			layout: { previewSize: 430, density: 'comfortable' },
+			layoutByType: {
+				grid: { previewSize: 430, density: 'comfortable' },
+			},
+		} );
+
+		expect( view.layout ).toEqual( {
+			previewSize: 430,
+			density: 'comfortable',
+		} );
+		expect( view.layoutByType.grid ).toEqual( {
+			previewSize: 430,
+			density: 'comfortable',
+		} );
+	} );
+
+	it( 'drops unsupported DataViews infinite-scroll state from public views', () => {
+		const view = normalizePublicView( {
+			type: 'list',
+			infiniteScrollEnabled: true,
+			startPosition: 26,
+		} );
+
+		expect( view.infiniteScrollEnabled ).toBeUndefined();
+		expect( view.startPosition ).toBeUndefined();
 	} );
 } );
 
@@ -175,7 +207,7 @@ describe( 'PublicDataView', () => {
 			},
 		],
 	] )( 'renders DataViews when the saved view has %s', ( _label, view ) => {
-		expect( () => renderPublicDataView( view ) ).not.toThrow();
+		renderPublicDataView( view );
 
 		expect( screen.getByTestId( 'dataviews' ) ).toBeInTheDocument();
 
@@ -199,6 +231,68 @@ describe( 'PublicDataView', () => {
 		).toBeInTheDocument();
 	} );
 
+	it( 'passes nested layout defaults to DataViews 17', () => {
+		renderPublicDataView( {
+			type: 'table',
+			fields: [ 'title' ],
+			filters: [],
+		} );
+
+		expect( mockDataViews.mock.calls.at( -1 )[ 0 ].defaultLayouts ).toEqual(
+			{
+				table: { layout: { density: 'compact' } },
+				grid: { layout: { previewSize: DEFAULT_GRID_PREVIEW_SIZE } },
+				list: {},
+			}
+		);
+	} );
+
+	it( 'passes a saved grid density to DataViews', () => {
+		renderPublicDataView( {
+			type: 'grid',
+			fields: [],
+			filters: [],
+			layout: { previewSize: 290, density: 'comfortable' },
+			layoutByType: {
+				grid: { previewSize: 290, density: 'comfortable' },
+			},
+		} );
+
+		expect( mockDataViews.mock.calls.at( -1 )[ 0 ].view.layout ).toEqual( {
+			previewSize: 290,
+			density: 'comfortable',
+		} );
+	} );
+
+	it( 'does not apply editor title-column widths to an unsized public table', () => {
+		renderPublicDataView( {
+			type: 'table',
+			fields: [ 'title' ],
+			filters: [],
+			layout: { density: 'compact' },
+		} );
+
+		expect( mockDataViews.mock.calls.at( -1 )[ 0 ].view.layout ).toEqual( {
+			density: 'compact',
+		} );
+	} );
+
+	it( 'preserves an explicitly saved public title-column width', () => {
+		renderPublicDataView( {
+			type: 'table',
+			fields: [ 'title' ],
+			filters: [],
+			layout: {
+				density: 'compact',
+				styles: { title: { width: 240 } },
+			},
+		} );
+
+		expect(
+			mockDataViews.mock.calls.at( -1 )[ 0 ].view.layout.styles.title
+		).toEqual( { width: 240 } );
+	} );
+
 	it( 'keeps REST row order when the saved public view uses manual sort', () => {
 		renderPublicDataView( {
 			type: 'table',
@@ -219,6 +313,25 @@ describe( 'PublicDataView', () => {
 				.at( -1 )[ 0 ]
 				.data.map( ( item ) => item.title.rendered )
 		).toEqual( [ 'Gamma Manual', 'Alpha Manual', 'Beta Manual' ] );
+	} );
+
+	it( 'passes migrated grouping to the public client pipeline', () => {
+		renderPublicDataView( {
+			type: 'grid',
+			fields: [ 'title', 'field-11' ],
+			fieldsByType: { grid: [ 'field-11' ], list: [] },
+			groupByField: 'field-11',
+			filters: [],
+			page: 1,
+			perPage: 2,
+		} );
+
+		const queryView = mockFilterSortAndPaginate.mock.calls.at( -1 )[ 1 ];
+		expect( queryView.groupBy ).toEqual( {
+			field: 'field-11',
+			direction: 'asc',
+		} );
+		expect( queryView.groupByField ).toBeUndefined();
 	} );
 
 	it( 'keeps supported public sort for REST and disables local sorting', () => {

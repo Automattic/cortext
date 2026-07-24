@@ -39,7 +39,7 @@ jobs:
                     changed_files="$(git diff --name-only "$base" "$head")"
                   fi
 
-                  desktop_paths='^(\.github/workflows/desktop-e2e\.yml|apps/desktop/)'
+                  desktop_paths='^(\.github/workflows/desktop-e2e\.yml|apps/desktop/|assets/brand/|includes/|scripts/|seed-assets/|src/|templates/|cortext\.php$|readme\.txt$|LICENSE$|composer\.(json|lock)$|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|webpack\.config\.js$)'
 
                   if [ -n "$changed_files" ] && grep -Eq "$desktop_paths" <<< "$changed_files"; then
                     echo "desktop_changed=true" >> "$GITHUB_OUTPUT"

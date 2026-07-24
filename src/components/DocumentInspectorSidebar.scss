@@ -4,8 +4,13 @@
 .cortext-document-inspector {
 
 	.components-panel__body {
-		border-top-color: var(--cortext-chrome-border);
+		border-bottom-color: var(--cortext-canvas-border);
+		border-top-color: var(--cortext-canvas-border);
 	}
+}
+
+.interface-complementary-area.editor-sidebar__panel > .components-panel__header.editor-sidebar__panel-tabs {
+	border-bottom-color: var(--cortext-canvas-border);
 }
 
 .cortext-document-inspector__tools {

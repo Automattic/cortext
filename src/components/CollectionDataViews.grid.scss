@@ -16,17 +16,19 @@ $grid-card-content-hover-background: #f3f3f3;
 }
 
 .cortext-data-view {
+	// tech-debt.md#td-dataviews-grid-card-composition: DataViews has no card
+	// composition slots, so these rules reshape its current grid DOM.
 
 	&__grid-new-row {
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(var(--cortext-grid-card-min, 240px), 1fr));
 		grid-auto-rows: minmax(var(--cortext-grid-card-height, 220px), auto);
-		gap: $grid-unit-20;
 		padding: 0 $grid-unit-20 $grid-unit-20;
 	}
 
 	&__new-row-card-wrapper {
 		box-sizing: border-box;
+		width: 100%;
 		height: 100%;
 		min-height: var(--cortext-grid-card-height, 220px);
 		min-width: 0;
@@ -83,25 +85,37 @@ $grid-card-content-hover-background: #f3f3f3;
 	}
 
 	.dataviews-view-grid {
-		// WP 6.7+ dataviews ships `display: flex; flex-direction: column` on
-		// the grid wrapper, which would stack cards in a single column.
-		// Force the grid layout we want so cards flow into multiple columns.
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-		grid-template-rows: none;
-		grid-auto-rows: minmax(var(--cortext-grid-card-height, 220px), auto);
-		grid-auto-flow: row;
-		gap: $grid-unit-20;
-		row-gap: $grid-unit-20;
-		column-gap: $grid-unit-20;
+		display: flex;
+		flex-direction: column;
 		padding: $grid-unit-20;
+		margin-bottom: auto;
+	}
+
+	.dataviews-view-grid__row {
+		display: grid;
+		grid-auto-rows: minmax(var(--cortext-grid-card-height, 220px), auto);
 		align-items: stretch;
+	}
+
+	.dataviews-view-grid__row__gridcell {
+		min-height: var(--cortext-grid-card-height, 220px);
+		min-width: 0;
+	}
+
+	&__new-row-gridcell {
+		display: flex;
+		height: 100%;
+		// Moving this portal in the DOM when the grid is rechunked would blur its
+		// button. CSS order keeps it last without moving the node.
+		order: 1;
 	}
 
 	.dataviews-view-grid__card {
 		position: relative;
-		display: flex;
-		flex-direction: column;
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		grid-template-rows: auto auto minmax(0, 1fr);
+		align-content: stretch;
 		box-sizing: border-box;
 		height: 100%;
 		min-height: var(--cortext-grid-card-height, 220px);
@@ -145,13 +159,19 @@ $grid-card-content-hover-background: #f3f3f3;
 		}
 	}
 
-	.dataviews-view-grid .dataviews-view-grid__card .dataviews-view-grid__title-actions {
+	.dataviews-view-grid
+	.dataviews-view-grid__card
+	.dataviews-view-grid__title-actions {
 		gap: $grid-unit-10;
 		align-items: center;
-		order: 1;
+		grid-row: 2;
+		grid-column: 1;
 		width: 100%;
 		box-sizing: border-box;
-		padding: $grid-unit-15 $grid-unit-20 $grid-unit-05;
+		min-height: $grid-unit-60;
+		padding:
+			$grid-unit-15 ($grid-unit-60 + $grid-unit-10) $grid-unit-05
+			$grid-unit-20;
 		border-bottom: 0;
 		background: $grid-card-content-background;
 		transition: background-color 120ms ease;
@@ -168,15 +188,27 @@ $grid-card-content-hover-background: #f3f3f3;
 		}
 	}
 
-	.dataviews-view-grid__fields {
-		padding-top: $grid-unit-05;
+	.dataviews-view-grid .dataviews-view-grid__fields {
+		order: 1;
+		box-sizing: border-box;
+		display: flex;
+		flex-direction: column;
+		width: 100%;
+		// tech-debt.md#td-block-canvas-style-runtime-bridge: Stack's generated
+		// display rule does not reach the editor iframe.
+		gap: $grid-unit-20 !important;
+		padding: $grid-unit-10 $grid-unit-20 0;
+		background: $grid-card-content-background;
 	}
 
 	.dataviews-view-grid__field {
 		align-items: baseline;
+		box-sizing: border-box;
+		display: flex;
 		justify-content: flex-start;
 		min-height: $grid-unit-20 + $grid-unit-05;
 		text-align: start;
+		width: 100%;
 	}
 
 	.dataviews-view-grid__field:has(.cortext-editable-cell__shell--empty) {
@@ -188,8 +220,12 @@ $grid-card-content-hover-background: #f3f3f3;
 	}
 
 	.dataviews-view-grid__field-value {
-		flex: 1 1 auto;
+		align-self: stretch;
+		box-sizing: border-box;
+		display: block;
+		flex: 1 1 100%;
 		width: 100%;
+		max-width: 100%;
 		min-width: 0;
 		color: $gray-900;
 		line-height: 1.4;
@@ -198,10 +234,15 @@ $grid-card-content-hover-background: #f3f3f3;
 	}
 
 	.dataviews-view-grid__field-value .cortext-editable-cell {
+		display: block;
+		box-sizing: border-box;
 		width: 100%;
+		max-width: 100%;
 	}
 
 	.dataviews-view-grid__field-value .cortext-editable-cell > :first-child {
+		box-sizing: border-box;
+		width: 100%;
 		min-height: $grid-unit-30;
 		padding: 0 $grid-unit-30 0 $grid-unit-05;
 		border-radius: 4px;
@@ -212,12 +253,18 @@ $grid-card-content-hover-background: #f3f3f3;
 			box-shadow 120ms ease;
 	}
 
+	.dataviews-view-grid__field-value .cortext-editable-cell__shell {
+		box-sizing: border-box;
+		width: 100%;
+	}
+
 	.dataviews-view-grid__field-value .cortext-editable-cell__shell:hover {
 		background: transparent;
 		box-shadow: inset 0 0 0 1px transparent;
 	}
 
-	.dataviews-view-grid__field-value .cortext-editable-cell__shell:focus-visible {
+	.dataviews-view-grid__field-value
+	.cortext-editable-cell__shell:focus-visible {
 		background: transparent;
 		box-shadow: inset 0 0 0 1px var(--cortext-accent);
 		outline: none;
@@ -236,8 +283,12 @@ $grid-card-content-hover-background: #f3f3f3;
 			opacity 120ms ease;
 	}
 
-	.dataviews-view-grid__field-value .cortext-editable-cell__shell:hover .cortext-editable-cell__edit-indicator,
-	.dataviews-view-grid__field-value .cortext-editable-cell__shell:focus-visible .cortext-editable-cell__edit-indicator {
+	.dataviews-view-grid__field-value
+	.cortext-editable-cell__shell:hover
+	.cortext-editable-cell__edit-indicator,
+	.dataviews-view-grid__field-value
+	.cortext-editable-cell__shell:focus-visible
+	.cortext-editable-cell__edit-indicator {
 		color: $gray-900;
 		opacity: 1;
 	}
@@ -250,7 +301,9 @@ $grid-card-content-hover-background: #f3f3f3;
 	.dataviews-view-grid .cortext-relation-ref-more,
 	.dataviews-view-grid .cortext-chip {
 		box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
-		box-shadow: inset 0 0 0 1px color-mix(in oklch, currentcolor 20%, transparent);
+		box-shadow:
+			inset 0 0 0 1px
+			color-mix(in oklch, currentcolor 20%, transparent);
 	}
 
 	.dataviews-view-grid .cortext-chip--neutral {
@@ -259,32 +312,79 @@ $grid-card-content-hover-background: #f3f3f3;
 		color: $gray-700;
 	}
 
-	.dataviews-view-grid__badge-fields {
+	.dataviews-view-grid .dataviews-view-grid__badge-fields {
+		order: 1;
+		display: flex;
+		flex-wrap: wrap;
 		justify-content: flex-start;
-		padding-top: $grid-unit-05;
+		gap: $grid-unit-10 !important;
+		box-sizing: border-box;
+		width: 100%;
+		padding: $grid-unit-10 $grid-unit-20 0;
+		background: $grid-card-content-background;
 	}
 
-	.dataviews-view-grid__card > .components-v-stack {
-		flex: 1 1 auto;
-		order: 2;
+	.dataviews-view-grid
+	.dataviews-view-grid__card
+	:is(
+		.dataviews-view-grid__fields,
+		.dataviews-view-grid__badge-fields
+	):last-child {
+		padding-bottom: $grid-unit-20;
+	}
+
+	.dataviews-view-grid__card > .dataviews-view-grid__title-actions + * {
+		grid-row: 3;
+		grid-column: 1;
+		display: flex;
+		flex-direction: column;
 		width: 100%;
+		height: 100%;
 		min-width: 0;
+		gap: $grid-unit-10 !important;
 		box-sizing: border-box;
-		padding: $grid-unit-10 $grid-unit-20 $grid-unit-15;
+		padding: 0 0 $grid-unit-15;
 		background: $grid-card-content-background;
 		transition: background-color 120ms ease;
 	}
 
+	.dataviews-view-grid__card > .dataviews-view-grid__title-actions + * > :not(
+	.dataviews-view-grid__badge-fields,
+	.dataviews-view-grid__fields
+) {
+		padding-right: $grid-unit-20;
+		padding-left: $grid-unit-20;
+	}
+
 	.dataviews-view-grid__card:hover .dataviews-view-grid__title-actions,
 	.dataviews-view-grid__card:focus-within .dataviews-view-grid__title-actions,
-	.dataviews-view-grid__card:hover > .components-v-stack,
-	.dataviews-view-grid__card:focus-within > .components-v-stack {
+	.dataviews-view-grid__card:hover .dataviews-view-grid__fields,
+	.dataviews-view-grid__card:focus-within .dataviews-view-grid__fields,
+	.dataviews-view-grid__card:hover .dataviews-view-grid__badge-fields,
+	.dataviews-view-grid__card:focus-within .dataviews-view-grid__badge-fields,
+	.dataviews-view-grid__card:hover > .dataviews-view-grid__title-actions + *,
+	.dataviews-view-grid__card:focus-within > .dataviews-view-grid__title-actions + * {
 		background: $grid-card-content-hover-background;
+	}
+
+	.dataviews-view-grid__media-actions {
+		z-index: 2;
+		display: flex;
+		grid-row: 2;
+		grid-column: 1;
+		align-self: center;
+		justify-self: end;
+		justify-content: flex-end;
+		width: auto;
+		height: auto;
+		margin: 0;
+		padding-right: $grid-unit-10;
 	}
 
 	.dataviews-view-grid__media {
 		position: relative;
-		order: 0;
+		grid-row: 1;
+		grid-column: 1;
 		width: 100%;
 		height: auto;
 		min-height: 0;
@@ -317,7 +417,8 @@ $grid-card-content-hover-background: #f3f3f3;
 		}
 	}
 
-	.dataviews-view-grid__title-actions .dataviews-all-actions-button.components-button {
+	.dataviews-view-grid__media-actions
+	.dataviews-all-actions-button.components-button {
 		display: inline-flex;
 		flex: 0 0 auto;
 		align-items: center;
@@ -340,6 +441,39 @@ $grid-card-content-hover-background: #f3f3f3;
 		&:focus-visible {
 			background: $gray-100;
 			box-shadow: none;
+		}
+	}
+
+	.dataviews-view-grid__card > .dataviews-selection-checkbox {
+		position: absolute;
+		top: $grid-unit-10;
+		left: $grid-unit-10;
+		z-index: 3;
+		width: max-content;
+		min-width: 0;
+		margin: 0;
+		opacity: 0;
+		pointer-events: none;
+		transition: opacity 120ms ease;
+	}
+
+	.dataviews-view-grid__card > .dataviews-selection-checkbox
+	.components-base-control__field {
+		margin: 0;
+	}
+
+	.dataviews-view-grid__card:hover > .dataviews-selection-checkbox,
+	.dataviews-view-grid__card:focus-within > .dataviews-selection-checkbox,
+	.dataviews-view-grid__card:has(.dataviews-selection-checkbox input:checked) > .dataviews-selection-checkbox {
+		opacity: 1;
+		pointer-events: auto;
+	}
+
+	@media (hover: none) {
+
+		.dataviews-view-grid__card > .dataviews-selection-checkbox {
+			opacity: 1;
+			pointer-events: auto;
 		}
 	}
 }

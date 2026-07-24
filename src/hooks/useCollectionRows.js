@@ -492,8 +492,8 @@ export default function useCollectionRows(
 		  } )
 		: null;
 
-	// tech-debt.md#td-rows-not-in-core-data: callers POST via apiFetch and bump refresh() to
-	// re-read. With rows in core-data this whole counter goes away.
+	// tech-debt.md#td-rows-not-in-core-data: collection queries bypass core-data,
+	// so callers bump this counter after saving a document with apiFetch.
 	const refresh = useCallback( () => {
 		setRefreshKey( ( key ) => key + 1 );
 	}, [] );

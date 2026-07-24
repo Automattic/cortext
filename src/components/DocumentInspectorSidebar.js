@@ -22,6 +22,7 @@ import {
 	useCallback,
 	useContext,
 	useEffect,
+	useRef,
 	useState,
 } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
@@ -75,8 +76,56 @@ export function isInspectorArea( area ) {
 	return area === DOCUMENT_INSPECTOR || area === BLOCK_INSPECTOR;
 }
 
+export function getActiveInspectorArea( select ) {
+	try {
+		return select( interfaceStore ).getActiveComplementaryArea(
+			INSPECTOR_SCOPE
+		);
+	} catch {
+		return null;
+	}
+}
+
 export function InspectorSidebarSlot( props ) {
 	return <ComplementaryArea.Slot scope={ INSPECTOR_SCOPE } { ...props } />;
+}
+
+function useRestoreDefaultInspectorAfterSmallMount( {
+	activeArea,
+	identifier,
+	isActiveByDefault,
+	isSmall,
+} ) {
+	const shouldOpenWhenNotSmall = useRef( false );
+	const { enableComplementaryArea } = useDispatch( interfaceStore );
+
+	useEffect( () => {
+		if ( isSmall && activeArea === undefined && isActiveByDefault ) {
+			shouldOpenWhenNotSmall.current = true;
+			return;
+		}
+
+		if (
+			shouldOpenWhenNotSmall.current &&
+			! isSmall &&
+			( activeArea === undefined || activeArea === null )
+		) {
+			shouldOpenWhenNotSmall.current = false;
+			enableComplementaryArea( INSPECTOR_SCOPE, identifier );
+		} else if (
+			shouldOpenWhenNotSmall.current &&
+			activeArea &&
+			activeArea !== identifier
+		) {
+			shouldOpenWhenNotSmall.current = false;
+		}
+	}, [
+		activeArea,
+		enableComplementaryArea,
+		identifier,
+		isActiveByDefault,
+		isSmall,
+	] );
 }
 
 function InspectorTabsHeader( { tabs } ) {
@@ -98,7 +147,7 @@ function InspectorTabsHeader( { tabs } ) {
 	);
 }
 
-function InspectorComplementaryArea( {
+export function InspectorComplementaryArea( {
 	children,
 	identifier,
 	isActiveByDefault,
@@ -106,6 +155,19 @@ function InspectorComplementaryArea( {
 	title,
 } ) {
 	const tabsContextValue = useContext( Tabs.Context );
+	const { activeArea, isSmall } = useSelect(
+		( select ) => ( {
+			activeArea: getActiveInspectorArea( select ),
+			isSmall: select( 'core/viewport' ).isViewportMatch( '< medium' ),
+		} ),
+		[]
+	);
+	useRestoreDefaultInspectorAfterSmallMount( {
+		activeArea,
+		identifier,
+		isActiveByDefault,
+		isSmall,
+	} );
 
 	return (
 		<ComplementaryArea
@@ -150,10 +212,10 @@ function DocumentIconInspectorControls( { postId, postType } ) {
 		( select ) => {
 			const blocks = select( blockEditorStore ).getBlocks();
 			const coverBlock = blocks.find(
-				( block ) => block.name === 'cortext/document-cover'
+				( block ) => block?.name === 'cortext/document-cover'
 			);
 			const iconBlock = blocks.find(
-				( block ) => block.name === 'cortext/document-icon'
+				( block ) => block?.name === 'cortext/document-icon'
 			);
 			return {
 				coverIndex: coverBlock ? blocks.indexOf( coverBlock ) : -1,
@@ -285,7 +347,7 @@ function PageFeaturedImageInspectorControls( { postId, postType } ) {
 		( select ) =>
 			select( blockEditorStore )
 				.getBlocks()
-				.find( ( block ) => block.name === 'cortext/document-cover' )
+				.find( ( block ) => block?.name === 'cortext/document-cover' )
 				?.clientId ?? null,
 		[]
 	);
@@ -695,10 +757,7 @@ export default function DocumentInspectorSidebar( {
 	);
 	const isReadOnly = isTrashed || isLocked || isStoreLocked;
 	const activeArea = useSelect(
-		( select ) =>
-			select( interfaceStore ).getActiveComplementaryArea(
-				INSPECTOR_SCOPE
-			),
+		( select ) => getActiveInspectorArea( select ),
 		[]
 	);
 	// Hide Block tabs that would be empty or redundant: no selection,

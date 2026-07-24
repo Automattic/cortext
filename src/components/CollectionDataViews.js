@@ -1,6 +1,6 @@
 import apiFetch from '@wordpress/api-fetch';
 import { Notice } from '@wordpress/components';
-import { DataViews } from '@wordpress/dataviews';
+import { DataViews } from '@wordpress/dataviews/wp';
 import {
 	useCallback,
 	useEffect,
@@ -62,6 +62,7 @@ import {
 	withNewlyVisibleFields,
 } from './dataViewColumns';
 import {
+	DATA_VIEW_LIST_ROW_SELECTOR,
 	INTERACTIVE_DATA_VIEW_ITEM_IGNORE_SELECTOR,
 	findDataViewItemFromEvent,
 } from './dataViewItemLookup';
@@ -93,7 +94,6 @@ const BULK_DELETE_CONCURRENCY = 4;
 // uses blank-row clicks and keyboard activation to open the row instead.
 const EMPTY_DATA_VIEW_SELECTION = [];
 const LIST_ROW_EMPTY_CLICK_TARGET_SELECTOR = '.dataviews-view-list__item';
-const LIST_ROW_SELECTOR = '.dataviews-view-list > [role="row"]';
 const ignoreDataViewsSelectionChange = () => {};
 
 export default function CollectionDataViews( {
@@ -215,11 +215,6 @@ export default function CollectionDataViews( {
 	const requestRevealCreatedField = useCallback( ( created ) => {
 		const fieldId = toDataViewId( created?.id );
 		if ( fieldId ) {
-			const wrapper =
-				tableWrapperRef.current?.querySelector( '.dataviews-wrapper' );
-			if ( wrapper ) {
-				scrollToEndQuickly( wrapper, { snapIfAtEnd: true } );
-			}
 			setLocalRevealFieldId( fieldId );
 		}
 	}, [] );
@@ -269,12 +264,12 @@ export default function CollectionDataViews( {
 			}
 			return filterSortAndPaginateWithGroups(
 				data,
-				view,
+				dataViewsView,
 				availableFields
 			);
 		}, [
 			data,
-			view,
+			dataViewsView,
 			availableFields,
 			isServerPaginated,
 			serverPaginationInfo,
@@ -283,7 +278,7 @@ export default function CollectionDataViews( {
 		if ( isServerPaginated ) {
 			return { data };
 		}
-		const calculationView = { ...( view ?? {} ) };
+		const calculationView = { ...( dataViewsView ?? {} ) };
 		// tech-debt.md#td-dataviews-layout-slots: summaries need the filtered row set before
 		// pagination, which DataViews does not expose as a separate result.
 		delete calculationView.page;
@@ -293,7 +288,7 @@ export default function CollectionDataViews( {
 			calculationView,
 			availableFields
 		);
-	}, [ data, view, availableFields, isServerPaginated ] );
+	}, [ data, dataViewsView, availableFields, isServerPaginated ] );
 	const activePaginationInfo = isServerPaginated
 		? serverPaginationInfo
 		: clientPaginationInfo;
@@ -843,7 +838,7 @@ export default function CollectionDataViews( {
 			}
 
 			const wrapper = tableWrapperRef.current;
-			const rowElement = target.closest( LIST_ROW_SELECTOR );
+			const rowElement = target.closest( DATA_VIEW_LIST_ROW_SELECTOR );
 			if (
 				! wrapper ||
 				! rowElement ||
@@ -869,7 +864,7 @@ export default function CollectionDataViews( {
 			}
 
 			const renderedRows = Array.from(
-				wrapper.querySelectorAll( LIST_ROW_SELECTOR )
+				wrapper.querySelectorAll( DATA_VIEW_LIST_ROW_SELECTOR )
 			);
 			const currentIndex = renderedRows.indexOf( rowElement );
 			if ( currentIndex < 0 ) {
@@ -1278,13 +1273,13 @@ export default function CollectionDataViews( {
 			return undefined;
 		}
 
-		const recordId = toRecordId( pendingRevealFieldId );
 		const reveal = () => {
-			const wrapper =
+			const dataViewsWrapper =
 				tableWrapperRef.current?.querySelector( '.dataviews-wrapper' );
-			if ( ! wrapper ) {
+			if ( ! dataViewsWrapper ) {
 				return false;
 			}
+			const recordId = toRecordId( pendingRevealFieldId );
 			if ( recordId ) {
 				const marker = tableWrapperRef.current?.querySelector(
 					`[data-cortext-field-marker="${ recordId }"]`
@@ -1293,7 +1288,10 @@ export default function CollectionDataViews( {
 					return false;
 				}
 			}
-			scrollToEndQuickly( wrapper, { trackEnd: true } );
+			const layoutScroller = dataViewsWrapper.querySelector(
+				'.dataviews-layout__container'
+			);
+			scrollToEndQuickly( layoutScroller ?? dataViewsWrapper );
 			if ( localRevealFieldId === pendingRevealFieldId ) {
 				setLocalRevealFieldId( null );
 			}
@@ -1357,11 +1355,6 @@ export default function CollectionDataViews( {
 			! previousFields.includes( lastFieldId );
 		if ( addedAtEnd ) {
 			setLocalRevealFieldId( lastFieldId );
-			const wrapper =
-				tableWrapperRef.current?.querySelector( '.dataviews-wrapper' );
-			if ( wrapper ) {
-				scrollToEndQuickly( wrapper, { trackEnd: true } );
-			}
 		}
 		previousVisibleFieldsRef.current = currentFields;
 	}, [
@@ -1599,16 +1592,18 @@ export default function CollectionDataViews( {
 											hasRows={ dataFiltered.length > 0 }
 										/>
 									) }
-									<DataViewRowReorder
-										wrapperRef={ tableWrapperRef }
-										view={ view }
-										onChangeView={ onChangeView }
-										collectionId={ collectionId }
-										rows={ dataFiltered }
-										data={ data }
-										mutateRows={ mutateRows }
-										onReordered={ refresh }
-									/>
+									{ ! dataViewsView?.groupBy?.field && (
+										<DataViewRowReorder
+											wrapperRef={ tableWrapperRef }
+											view={ view }
+											onChangeView={ onChangeView }
+											collectionId={ collectionId }
+											rows={ dataFilteredInRenderOrder }
+											data={ data }
+											mutateRows={ mutateRows }
+											onReordered={ refresh }
+										/>
+									) }
 									{ isTableLayout && (
 										<TableCalculationsFooter
 											wrapperRef={ tableWrapperRef }

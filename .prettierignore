@@ -8,6 +8,7 @@ vendor/
 build/
 dist/
 wordpress/
+artifacts/
 
 # Local env and test artifacts
 .wp-env.override.json

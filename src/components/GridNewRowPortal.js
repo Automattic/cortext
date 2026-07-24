@@ -3,6 +3,11 @@ import { createPortal, useLayoutEffect, useState } from '@wordpress/element';
 import DataViewNewRowButton from './DataViewNewRowButton';
 
 const GRID_VIEW_SELECTOR = '.dataviews-view-grid';
+const GRID_ROW_SELECTOR = '.dataviews-view-grid__row';
+const GRID_PORTAL_TARGET_SELECTOR = [
+	GRID_ROW_SELECTOR,
+	GRID_VIEW_SELECTOR,
+].join( ',' );
 
 // tech-debt.md#td-dataviews-layout-slots: DataViews has no grid append-card slot, so rows with data use
 // a portal into the rendered grid.
@@ -15,17 +20,41 @@ export default function GridNewRowPortal( {
 	disabled,
 	hasRows,
 } ) {
-	const [ gridElement, setGridElement ] = useState( null );
+	const [ portalTarget, setPortalTarget ] = useState( null );
 
 	useLayoutEffect( () => {
-		const grids = Array.from(
-			wrapperRef.current?.querySelectorAll( GRID_VIEW_SELECTOR ) ?? []
-		);
-		const nextGrid = grids.length ? grids[ grids.length - 1 ] : null;
-		setGridElement( ( currentGrid ) =>
-			currentGrid === nextGrid ? currentGrid : nextGrid
-		);
-	}, [ hasRows, wrapperRef ] );
+		const root = wrapperRef.current;
+		if ( ! root ) {
+			return undefined;
+		}
+
+		const updatePortalTarget = () => {
+			const targets = Array.from(
+				root.querySelectorAll( GRID_PORTAL_TARGET_SELECTOR )
+			);
+			const nextTarget = targets.length
+				? targets[ targets.length - 1 ]
+				: null;
+			setPortalTarget( ( currentTarget ) =>
+				currentTarget === nextTarget ? currentTarget : nextTarget
+			);
+		};
+
+		updatePortalTarget();
+
+		const Observer = root.ownerDocument?.defaultView?.MutationObserver;
+		if ( ! Observer ) {
+			return undefined;
+		}
+
+		const observer = new Observer( updatePortalTarget );
+		observer.observe( root, {
+			childList: true,
+			subtree: true,
+		} );
+
+		return () => observer.disconnect();
+	}, [ wrapperRef ] );
 
 	const newRowCard = (
 		<DataViewNewRowButton
@@ -38,8 +67,18 @@ export default function GridNewRowPortal( {
 		/>
 	);
 
-	if ( gridElement ) {
-		return createPortal( newRowCard, gridElement );
+	if ( portalTarget ) {
+		const portalChild = portalTarget.matches( GRID_ROW_SELECTOR ) ? (
+			<div
+				role="gridcell"
+				className="dataviews-view-grid__row__gridcell cortext-data-view__new-row-gridcell"
+			>
+				{ newRowCard }
+			</div>
+		) : (
+			newRowCard
+		);
+		return createPortal( portalChild, portalTarget );
 	}
 
 	if ( ! hasRows ) {

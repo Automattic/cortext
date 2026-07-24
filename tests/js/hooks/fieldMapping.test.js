@@ -1,4 +1,5 @@
 import { render } from '@testing-library/react';
+import { filterSortAndPaginate } from '@wordpress/dataviews/wp';
 
 import {
 	elementsFromOptions,
@@ -90,12 +91,33 @@ describe( 'mapField', () => {
 		meta: { type: 'text', ...( overrides ?? {} ) },
 	} );
 
-	it( "maps Cortext's number to DataViews 'integer' with a decimal-safe filter control", () => {
+	it( "maps Cortext's number and precision to DataViews 'number'", () => {
+		const mapped = mapField(
+			baseField( {
+				type: 'number',
+				number_format: '{"style":"comma","decimals":3}',
+			} )
+		);
+
+		expect( mapped.type ).toBe( 'number' );
+		expect( mapped.format ).toEqual( { decimals: 3 } );
+		expect(
+			mapped.getValueFormatted( {
+				item: { 'field-5': 1234.5 },
+				field: mapped,
+			} )
+		).toBe( '1,234.500' );
+	} );
+
+	it( 'keeps natural precision and no grouping when no number format is saved', () => {
 		const mapped = mapField( baseField( { type: 'number' } ) );
 
-		expect( mapped.type ).toBe( 'integer' );
-		expect( mapped.Edit ).toEqual( expect.any( Function ) );
-		expect( mapped.isValid.custom() ).toBeNull();
+		expect(
+			mapped.getValueFormatted( {
+				item: { 'field-5': 1234.5 },
+				field: mapped,
+			} )
+		).toBe( '1234.5' );
 	} );
 
 	it( 'carries server query capabilities from the REST field record', () => {
@@ -271,27 +293,9 @@ describe( 'mapField', () => {
 	it( 'sorts number field values numerically with empty values last', () => {
 		const mapped = mapField( baseField( { type: 'number' } ) );
 
-		expect(
-			mapped.sort(
-				{ meta: { 'field-5': '2' } },
-				{ meta: { 'field-5': '10' } },
-				'asc'
-			)
-		).toBeLessThan( 0 );
-		expect(
-			mapped.sort(
-				{ meta: { 'field-5': '2' } },
-				{ meta: { 'field-5': '10' } },
-				'desc'
-			)
-		).toBeGreaterThan( 0 );
-		expect(
-			mapped.sort(
-				{ meta: { 'field-5': '' } },
-				{ meta: { 'field-5': '10' } },
-				'asc'
-			)
-		).toBeGreaterThan( 0 );
+		expect( mapped.sort( '2', '10', 'asc' ) ).toBeLessThan( 0 );
+		expect( mapped.sort( '2', '10', 'desc' ) ).toBeGreaterThan( 0 );
+		expect( mapped.sort( '', '10', 'asc' ) ).toBeGreaterThan( 0 );
 	} );
 
 	it( "maps checkbox to DataViews 'boolean' values", () => {
@@ -331,21 +335,46 @@ describe( 'mapField', () => {
 		expect( mapped.relationMultiple ).toBe( false );
 	} );
 
-	it( "maps numeric rollups to read-only DataViews 'integer' fields with numeric sorting", () => {
+	it( "maps numeric rollups to read-only DataViews 'number' fields", () => {
 		const mapped = mapField(
-			baseField( { type: 'rollup', rollup_aggregator: 'sum' } )
+			baseField( {
+				type: 'rollup',
+				rollup_aggregator: 'sum',
+				rollup_target_type: 'number',
+				rollup_target_number_format: '{"decimals":1}',
+			} )
 		);
-		expect( mapped.type ).toBe( 'integer' );
+		expect( mapped.type ).toBe( 'number' );
+		expect( mapped.format ).toEqual( { decimals: 1 } );
 		expect( mapped.editable ).toBe( false );
 		expect( mapped.enableSorting ).toBe( true );
 		expect( mapped.rollupAggregator ).toBe( 'sum' );
+		expect( mapped.sort( 2, 10, 'asc' ) ).toBeLessThan( 0 );
 		expect(
-			mapped.sort(
-				{ meta: { 'field-5': 2 } },
-				{ meta: { 'field-5': 10 } },
-				'asc'
-			)
-		).toBeLessThan( 0 );
+			mapped.getValueFormatted( {
+				item: { 'field-5': 12.34 },
+				field: mapped,
+			} )
+		).toBe( '12.3' );
+	} );
+
+	it( 'sorts numeric rollups through the DataViews client pipeline', () => {
+		const mapped = mapField(
+			baseField( { type: 'rollup', rollup_aggregator: 'sum' } )
+		);
+		const items = [
+			{ id: 'high', meta: { 'field-5': 10 } },
+			{ id: 'low', meta: { 'field-5': 2 } },
+		];
+		const sort = ( direction ) =>
+			filterSortAndPaginate(
+				items,
+				{ sort: { field: mapped.id, direction } },
+				[ mapped ]
+			).data.map( ( item ) => item.id );
+
+		expect( sort( 'asc' ) ).toEqual( [ 'low', 'high' ] );
+		expect( sort( 'desc' ) ).toEqual( [ 'high', 'low' ] );
 	} );
 
 	it( "maps latest rollups against a date target to read-only DataViews 'date' fields", () => {
@@ -459,8 +488,8 @@ describe( 'mapField', () => {
 		);
 	} );
 
-	it( "maps url to DataViews 'text' (DataViews has no 'url' type)", () => {
-		expect( mapField( baseField( { type: 'url' } ) ).type ).toBe( 'text' );
+	it( "maps url to DataViews 'url'", () => {
+		expect( mapField( baseField( { type: 'url' } ) ).type ).toBe( 'url' );
 	} );
 
 	it( 'maps date and datetime to matching DataViews date types', () => {

@@ -23,7 +23,7 @@ const SITE_DIR = resolve( WORK_DIR, 'wordpress' );
 const RUNTIME_DIR = resolve( DESKTOP_DIR, 'runtime' );
 const OUTFILE = resolve( DESKTOP_DIR, 'snapshot.zip' );
 
-const WP_VERSION = '6.9';
+const WP_VERSION = '7.0.1';
 const WP_DOWNLOAD_URL = `https://wordpress.org/wordpress-${ WP_VERSION }.zip`;
 const SQLITE_PLUGIN_URL =
 	'https://downloads.wordpress.org/plugin/sqlite-database-integration.latest-stable.zip';

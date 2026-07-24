@@ -1,21 +1,25 @@
-import { readFileSync } from 'fs';
-import { join } from 'path';
-
 import { render } from '@testing-library/react';
-import { DataViews as mockDataViews } from '@wordpress/dataviews';
+import { DataViews as mockDataViews } from '@wordpress/dataviews/wp';
 
-jest.mock( '@wordpress/dataviews', () => {
+const mockDataViewRowReorder = jest.fn( () => null );
+
+jest.mock( '@wordpress/dataviews/wp', () => {
+	const actual = jest.requireActual( '@wordpress/dataviews/wp' );
 	const MockDataViews = jest.fn( ( { children } ) => (
-		<div data-testid="dataviews">{ children }</div>
+		<div className="dataviews-wrapper" data-testid="dataviews">
+			{ children }
+		</div>
 	) );
 	MockDataViews.Search = () => null;
 	MockDataViews.FiltersToggle = () => null;
 	MockDataViews.LayoutSwitcher = () => null;
 	MockDataViews.ViewConfig = () => null;
-	MockDataViews.Filters = () => null;
-	MockDataViews.Layout = () => null;
+	MockDataViews.FiltersToggled = () => null;
+	MockDataViews.Layout = () => (
+		<div className="dataviews-layout__container" />
+	);
 	MockDataViews.Pagination = () => null;
-	return { DataViews: MockDataViews };
+	return { ...actual, DataViews: MockDataViews };
 } );
 
 jest.mock( '../../../src/components/CollectionFieldsContext', () => ( {
@@ -65,7 +69,10 @@ jest.mock(
 	'../../../src/components/DataViewColumnInteractions',
 	() => () => null
 );
-jest.mock( '../../../src/components/DataViewRowReorder', () => () => null );
+jest.mock(
+	'../../../src/components/DataViewRowReorder',
+	() => ( props ) => mockDataViewRowReorder( props )
+);
 jest.mock( '../../../src/components/GridNewRowPortal', () => () => null );
 jest.mock(
 	'../../../src/components/TableCalculationsFooter',
@@ -83,6 +90,15 @@ jest.mock( '../../../src/hooks/afterNextPaint', () => ( {
 	__esModule: true,
 	default: jest.fn( () => Promise.resolve() ),
 } ) );
+jest.mock( '../../../src/components/dataViewScroll', () => {
+	const actual = jest.requireActual(
+		'../../../src/components/dataViewScroll'
+	);
+	return {
+		...actual,
+		scrollToEndQuickly: jest.fn( actual.scrollToEndQuickly ),
+	};
+} );
 
 import { useCollectionFieldsContext } from '../../../src/components/CollectionFieldsContext';
 import CollectionDataViews from '../../../src/components/CollectionDataViews';
@@ -151,6 +167,7 @@ function makeScroller( {
 describe( 'CollectionDataViews loading state', () => {
 	beforeEach( () => {
 		mockDataViews.mockClear();
+		mockDataViewRowReorder.mockClear();
 		useCollectionFieldsContext.mockReturnValue( collectionFieldState );
 	} );
 
@@ -204,24 +221,134 @@ describe( 'CollectionDataViews loading state', () => {
 	} );
 } );
 
-describe( 'CollectionDataViews loading styles', () => {
-	it( 'does not reserve table space for empty DataViews loading notices', () => {
-		const stylesheet = readFileSync(
-			join( process.cwd(), 'src/components/CollectionDataViews.scss' ),
-			'utf8'
+describe( 'CollectionDataViews with DataViews 17', () => {
+	const groupedRows = [
+		{ id: 1, status: 'B' },
+		{ id: 2, status: 'A' },
+		{ id: 3, status: 'B' },
+		{ id: 4, status: 'A' },
+	];
+	const groupedFieldState = {
+		...collectionFieldState,
+		fields: [
+			{
+				...collectionFieldState.fields[ 0 ],
+				getValue: ( { item } ) => item.status,
+				sort: ( left, right, direction ) =>
+					direction === 'desc'
+						? right.localeCompare( left )
+						: left.localeCompare( right ),
+			},
+		],
+	};
+	const legacyGroupedGridView = {
+		type: 'grid',
+		fields: [ 'title', 'field-11' ],
+		fieldsByType: { grid: [], list: [] },
+		layout: { previewSize: 230 },
+		layoutByType: {
+			table: { density: 'compact' },
+			grid: { previewSize: 230 },
+			list: {},
+		},
+		groupByField: 'field-11',
+		page: 1,
+		perPage: 10,
+	};
+
+	beforeEach( () => {
+		mockDataViews.mockClear();
+		mockDataViewRowReorder.mockClear();
+		scrollToEndQuickly.mockClear();
+		useCollectionFieldsContext.mockReturnValue( groupedFieldState );
+	} );
+
+	it( 'migrates legacy grouping without enabling row reordering', () => {
+		useCollectionRows.mockReturnValue(
+			collectionRowsState( {
+				data: groupedRows,
+				paginationInfo: { totalItems: 4, totalPages: 1 },
+			} )
 		);
 
-		const nonEmptyLoadingRule =
-			stylesheet.match(
-				/\.dataviews-loading:not\(:empty\)\s*\{[^}]*\}/
-			)?.[ 0 ] ?? '';
-		const emptyLoadingRule =
-			stylesheet.match(
-				/\.dataviews-loading:empty\s*\{[^}]*\}/
-			)?.[ 0 ] ?? '';
+		render(
+			<CollectionDataViews
+				collectionId={ 7 }
+				view={ legacyGroupedGridView }
+				onChangeView={ jest.fn() }
+			/>
+		);
 
-		expect( nonEmptyLoadingRule ).toContain( 'min-height: 160px;' );
-		expect( emptyLoadingRule ).toContain( 'display: none;' );
+		const dataViewsProps = mockDataViews.mock.calls.at( -1 )[ 0 ];
+		expect( dataViewsProps.data.map( ( row ) => row.id ) ).toEqual( [
+			1, 2, 3, 4,
+		] );
+		expect( dataViewsProps.view.groupBy ).toEqual( {
+			field: 'field-11',
+			direction: 'asc',
+		} );
+		expect( dataViewsProps.view.groupByField ).toBeUndefined();
+		expect( mockDataViewRowReorder ).not.toHaveBeenCalled();
+	} );
+
+	it( 'applies migrated grouping before client-side pagination', () => {
+		useCollectionRows.mockReturnValue(
+			collectionRowsState( {
+				data: groupedRows,
+				paginationInfo: { totalItems: 4, totalPages: 2 },
+				queryMode: 'client',
+			} )
+		);
+
+		render(
+			<CollectionDataViews
+				collectionId={ 7 }
+				view={ { ...legacyGroupedGridView, perPage: 2 } }
+				onChangeView={ jest.fn() }
+			/>
+		);
+
+		expect(
+			mockDataViews.mock.calls.at( -1 )[ 0 ].data.map( ( row ) => row.id )
+		).toEqual( [ 2, 4 ] );
+		expect( mockDataViewRowReorder ).not.toHaveBeenCalled();
+	} );
+
+	it( 'scrolls the DataViews layout to reveal system fields', () => {
+		useCollectionFieldsContext.mockReturnValue( {
+			...collectionFieldState,
+			fields: [
+				...collectionFieldState.fields,
+				{
+					id: 'created_at',
+					label: 'Created',
+					header: 'Created',
+					getValue: ( { item } ) => item.created_at,
+				},
+			],
+		} );
+		useCollectionRows.mockReturnValue( collectionRowsState() );
+		const onFieldRevealed = jest.fn();
+
+		render(
+			<CollectionDataViews
+				collectionId={ 7 }
+				view={ {
+					...tableView,
+					fields: [ ...tableView.fields, 'created_at' ],
+				} }
+				revealFieldId="created_at"
+				onFieldRevealed={ onFieldRevealed }
+				onChangeView={ jest.fn() }
+			/>
+		);
+
+		expect( scrollToEndQuickly ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				className: 'dataviews-layout__container',
+			} )
+		);
+		expect( onFieldRevealed ).toHaveBeenCalledWith( 'created_at' );
 	} );
 } );
 
@@ -257,44 +384,6 @@ describe( 'scrollToEndQuickly', () => {
 		expect( wrapper.scrollLeft ).toBe( -600 );
 	} );
 
-	it( 'marks the scroller when the create starts at the end', () => {
-		const wrapper = makeScroller( { scrollLeft: 600 } );
-
-		scrollToEndQuickly( wrapper, { snapIfAtEnd: true } );
-
-		expect( wrapper.dataset.cortextRevealAtEnd ).toBe( 'true' );
-		expect( wrapper.scrollLeft ).toBe( 600 );
-	} );
-
-	it( 'does not pre-scroll when the user is away from the end', () => {
-		window.matchMedia = jest.fn( () => ( { matches: false } ) );
-		window.requestAnimationFrame = jest.fn();
-		const wrapper = makeScroller( { scrollLeft: 200 } );
-
-		scrollToEndQuickly( wrapper, { snapIfAtEnd: true } );
-
-		expect( wrapper.scrollLeft ).toBe( 200 );
-		expect( wrapper.dataset.cortextRevealAtEnd ).toBeUndefined();
-		expect( window.requestAnimationFrame ).not.toHaveBeenCalled();
-	} );
-
-	it( 'snaps to the new end without animating when already marked', () => {
-		window.matchMedia = jest.fn( () => ( { matches: false } ) );
-		window.requestAnimationFrame = jest.fn();
-		const wrapper = makeScroller( { scrollLeft: 600 } );
-		Object.defineProperty( wrapper, 'scrollWidth', {
-			value: 1000,
-			configurable: true,
-		} );
-		wrapper.dataset.cortextRevealAtEnd = 'true';
-
-		scrollToEndQuickly( wrapper );
-
-		expect( wrapper.scrollLeft ).toBe( 800 );
-		expect( wrapper.dataset.cortextRevealAtEnd ).toBeUndefined();
-		expect( window.requestAnimationFrame ).not.toHaveBeenCalled();
-	} );
-
 	it( 'keeps chasing the end while the table grows', () => {
 		window.matchMedia = jest.fn( () => ( { matches: false } ) );
 		const now = jest
@@ -307,7 +396,7 @@ describe( 'scrollToEndQuickly', () => {
 		} );
 		const wrapper = makeScroller( { scrollWidth: 200 } );
 
-		scrollToEndQuickly( wrapper, { trackEnd: true } );
+		scrollToEndQuickly( wrapper );
 		Object.defineProperty( wrapper, 'scrollWidth', {
 			value: 500,
 			configurable: true,
@@ -315,6 +404,71 @@ describe( 'scrollToEndQuickly', () => {
 		frame( 180 );
 
 		expect( wrapper.scrollLeft ).toBe( 300 );
+		now.mockRestore();
+	} );
+
+	it( 'tracks the table edge without animation for reduced motion', () => {
+		const now = jest
+			.spyOn( window.performance, 'now' )
+			.mockReturnValue( 0 );
+		let frame;
+		window.requestAnimationFrame = jest.fn( ( callback ) => {
+			frame = callback;
+			return 1;
+		} );
+		const wrapper = makeScroller( { scrollWidth: 200 } );
+
+		scrollToEndQuickly( wrapper );
+		Object.defineProperty( wrapper, 'scrollWidth', {
+			value: 500,
+			configurable: true,
+		} );
+		frame();
+
+		expect( wrapper.scrollLeft ).toBe( 300 );
+		now.mockRestore();
+	} );
+
+	it( 'stops following the edge when the user scrolls away', () => {
+		const frames = [];
+		window.requestAnimationFrame = jest.fn( ( callback ) => {
+			frames.push( callback );
+			return frames.length;
+		} );
+		const wrapper = makeScroller();
+
+		scrollToEndQuickly( wrapper );
+		wrapper.scrollLeft = 200;
+		frames.shift()();
+
+		expect( wrapper.scrollLeft ).toBe( 200 );
+		expect( frames ).toHaveLength( 0 );
+	} );
+
+	it( 'stops tracking the table edge once its width is stable', () => {
+		window.matchMedia = jest.fn( () => ( { matches: false } ) );
+		const now = jest
+			.spyOn( window.performance, 'now' )
+			.mockReturnValue( 0 );
+		const frames = [];
+		window.requestAnimationFrame = jest.fn( ( callback ) => {
+			frames.push( callback );
+			return frames.length;
+		} );
+		const wrapper = makeScroller( { scrollWidth: 200 } );
+
+		scrollToEndQuickly( wrapper );
+		Object.defineProperty( wrapper, 'scrollWidth', {
+			value: 500,
+			configurable: true,
+		} );
+		frames.shift()( 180 );
+		expect( wrapper.scrollLeft ).toBe( 300 );
+		frames.shift()();
+		frames.shift()();
+		frames.shift()();
+
+		expect( frames ).toHaveLength( 0 );
 		now.mockRestore();
 	} );
 } );

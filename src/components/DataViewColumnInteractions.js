@@ -43,6 +43,7 @@ const SKIP_HEADER_CLASSES = [
 // threshold, dnd-kit leaves the column-header menu trigger alone.
 const DRAG_ACTIVATION_DISTANCE = 5;
 const HEADER_BUTTON_SELECTOR = '.dataviews-view-table-header-button';
+const imperativeColumnWidths = new WeakMap();
 
 function fieldTypeFor( fieldId, fieldsById ) {
 	if ( fieldId === TITLE_FIELD_ID ) {
@@ -152,6 +153,60 @@ function getColumnBodyCells( headerEl ) {
 	);
 }
 
+function getColumnElement( headerEl ) {
+	const tableEl = headerEl.closest( TABLE_SELECTOR );
+	const headerSiblings = headerEl.parentElement
+		? Array.from( headerEl.parentElement.children )
+		: [];
+	const colIndex = headerSiblings.indexOf( headerEl );
+	if ( colIndex < 0 || ! tableEl ) {
+		return null;
+	}
+	return tableEl.querySelector( 'colgroup' )?.children?.[ colIndex ] ?? null;
+}
+
+function toCssSize( width ) {
+	if ( typeof width === 'string' && width.trim() !== '' ) {
+		return width;
+	}
+	const numeric = Number( width );
+	return Number.isFinite( numeric ) ? `${ numeric }px` : null;
+}
+
+function setImperativeColumnWidth( element, cssWidth, constrainWidth ) {
+	if ( ! element ) {
+		return;
+	}
+	element.style.width = cssWidth;
+	if ( constrainWidth ) {
+		element.style.maxWidth = cssWidth;
+	}
+	imperativeColumnWidths.set( element, {
+		width: cssWidth,
+		maxWidth: constrainWidth ? cssWidth : null,
+	} );
+}
+
+function clearImperativeColumnWidth( element ) {
+	if ( ! element ) {
+		return;
+	}
+	const applied = imperativeColumnWidths.get( element );
+	if ( ! applied ) {
+		return;
+	}
+	if ( element.style.width === applied.width ) {
+		element.style.removeProperty( 'width' );
+	}
+	const appliedMaxWidth =
+		applied.maxWidth ??
+		( element.tagName === 'COL' ? applied.width : null );
+	if ( appliedMaxWidth && element.style.maxWidth === appliedMaxWidth ) {
+		element.style.removeProperty( 'max-width' );
+	}
+	imperativeColumnWidths.delete( element );
+}
+
 // Buffer added to autofit measurements (px). Browsers can render text at
 // fractional pixel widths, and the copied measurement and live render don't
 // always round the same way; a couple of pixels of slack keeps proportional
@@ -233,12 +288,19 @@ function getAutoFitColumnWidth( headerEl, fieldType, fieldId ) {
 }
 
 function applyColumnWidth( headerEl, width ) {
-	const px = `${ width }px`;
-	headerEl.style.width = px;
-	headerEl.style.maxWidth = px;
-	for ( const td of getColumnBodyCells( headerEl ) ) {
-		td.style.width = px;
-		td.style.maxWidth = px;
+	const cssWidth = toCssSize( width );
+	const col = getColumnElement( headerEl );
+	const bodyCells = getColumnBodyCells( headerEl );
+	if ( ! cssWidth ) {
+		for ( const element of [ col, headerEl, ...bodyCells ] ) {
+			clearImperativeColumnWidth( element );
+		}
+		return;
+	}
+	setImperativeColumnWidth( col, cssWidth, false );
+	setImperativeColumnWidth( headerEl, cssWidth, true );
+	for ( const td of bodyCells ) {
+		setImperativeColumnWidth( td, cssWidth, true );
 	}
 }
 
@@ -514,14 +576,13 @@ function ColumnResizer( { fieldId, fieldType, headerEl, view, onChangeView } ) {
 			const startX = event.clientX;
 			const startWidth = getColumnStyleWidth( headerEl );
 			const handle = event.currentTarget;
+			const ownerDocument = handle.ownerDocument;
 			const minWidth = getMinWidth( fieldType, fieldId );
-			// Pointer capture re-targets pointermove/pointerup for this
-			// pointerId to the handle, even if the pointer leaves the iframe
-			// or the viewport. Without it, dragging past the editor canvas
-			// loses the pointer mid-resize.
+			// Capture the pointer and listen on the owner document so resizing
+			// continues after it leaves the narrow handle or crosses the editor iframe.
 			handle.setPointerCapture?.( event.pointerId );
 			headerEl.classList.add( 'cortext-column-resizing' );
-			document.body.classList.add( 'cortext-column-resizing' );
+			ownerDocument.body.classList.add( 'cortext-column-resizing' );
 
 			// tech-debt.md#td-dataviews-column-interactions: DataViews doesn't provide a live resize hook, so
 			// we mutate the rendered cells during pointer movement and commit
@@ -531,6 +592,7 @@ function ColumnResizer( { fieldId, fieldType, headerEl, view, onChangeView } ) {
 			// cells in sync avoids a transient mismatch until React commits
 			// the persisted width back through DataViews.
 			const bodyCells = getColumnBodyCells( headerEl );
+			const col = getColumnElement( headerEl );
 
 			const computeWidth = ( clientX ) => {
 				const next = startWidth + ( clientX - startX );
@@ -542,11 +604,10 @@ function ColumnResizer( { fieldId, fieldType, headerEl, view, onChangeView } ) {
 
 			const applyLiveWidth = ( width ) => {
 				const px = `${ width }px`;
-				headerEl.style.width = px;
-				headerEl.style.maxWidth = px;
+				setImperativeColumnWidth( col, px, false );
+				setImperativeColumnWidth( headerEl, px, true );
 				for ( const td of bodyCells ) {
-					td.style.width = px;
-					td.style.maxWidth = px;
+					setImperativeColumnWidth( td, px, true );
 				}
 			};
 
@@ -575,18 +636,26 @@ function ColumnResizer( { fieldId, fieldType, headerEl, view, onChangeView } ) {
 				);
 			};
 
-			handle.addEventListener( 'pointermove', onPointerMove );
-			handle.addEventListener( 'pointerup', onPointerUp );
-			handle.addEventListener( 'pointercancel', onPointerUp );
+			ownerDocument.addEventListener( 'pointermove', onPointerMove );
+			ownerDocument.addEventListener( 'pointerup', onPointerUp );
+			ownerDocument.addEventListener( 'pointercancel', onPointerUp );
 			cleanupRef.current = () => {
-				handle.removeEventListener( 'pointermove', onPointerMove );
-				handle.removeEventListener( 'pointerup', onPointerUp );
-				handle.removeEventListener( 'pointercancel', onPointerUp );
+				ownerDocument.removeEventListener(
+					'pointermove',
+					onPointerMove
+				);
+				ownerDocument.removeEventListener( 'pointerup', onPointerUp );
+				ownerDocument.removeEventListener(
+					'pointercancel',
+					onPointerUp
+				);
 				if ( handle.hasPointerCapture?.( event.pointerId ) ) {
 					handle.releasePointerCapture?.( event.pointerId );
 				}
 				headerEl.classList.remove( 'cortext-column-resizing' );
-				document.body.classList.remove( 'cortext-column-resizing' );
+				ownerDocument.body.classList.remove(
+					'cortext-column-resizing'
+				);
 			};
 		},
 		[ autoFitColumn, fieldId, fieldType, headerEl, onChangeView, view ]
@@ -619,6 +688,13 @@ export default function DataViewColumnInteractions( {
 		} )
 	);
 
+	useEffect( () => {
+		for ( const cell of cells ) {
+			const width = view?.layout?.styles?.[ cell.fieldId ]?.width;
+			applyColumnWidth( cell.el, width );
+		}
+	}, [ cells, view ] );
+
 	const viewRef = useRef( view );
 	viewRef.current = view;
 	const onChangeViewRef = useRef( onChangeView );
@@ -628,6 +704,12 @@ export default function DataViewColumnInteractions( {
 	const dropTargetRef = useRef( dropTarget );
 	dropTargetRef.current = dropTarget;
 	const dragLayoutRef = useRef( null );
+	const dragBodyRef = useRef( null );
+	const getDragBody = useCallback( () => {
+		const body = wrapperRef.current?.ownerDocument?.body ?? document.body;
+		dragBodyRef.current = body;
+		return body;
+	}, [ wrapperRef ] );
 
 	const updateDropTarget = useCallback( ( event ) => {
 		const clientX = getDragClientX( event );
@@ -660,10 +742,10 @@ export default function DataViewColumnInteractions( {
 				cellsRef.current,
 				wrapperRef.current
 			);
-			document.body.classList.add( 'cortext-column-dragging' );
+			getDragBody().classList.add( 'cortext-column-dragging' );
 			setActiveColumn( event.active.data.current ?? null );
 		},
-		[ wrapperRef ]
+		[ getDragBody, wrapperRef ]
 	);
 
 	const onDragMove = useCallback(
@@ -679,7 +761,7 @@ export default function DataViewColumnInteractions( {
 				updateDropTarget( event ) ?? dropTargetRef.current;
 			const fromIndex = event.active.data.current?.index;
 
-			document.body.classList.remove( 'cortext-column-dragging' );
+			getDragBody().classList.remove( 'cortext-column-dragging' );
 			clearColumnDragPreview( cellsRef.current );
 			dragLayoutRef.current = null;
 			setDropTarget( null );
@@ -702,21 +784,23 @@ export default function DataViewColumnInteractions( {
 				)
 			);
 		},
-		[ updateDropTarget ]
+		[ getDragBody, updateDropTarget ]
 	);
 
 	const onDragCancel = useCallback( () => {
-		document.body.classList.remove( 'cortext-column-dragging' );
+		getDragBody().classList.remove( 'cortext-column-dragging' );
 		clearColumnDragPreview( cellsRef.current );
 		dragLayoutRef.current = null;
 		setDropTarget( null );
 		setActiveColumn( null );
-	}, [] );
+	}, [ getDragBody ] );
 
 	useEffect( () => {
 		return () => {
-			document.body.classList.remove( 'cortext-column-dragging' );
-			document.body.classList.remove( 'cortext-column-resizing' );
+			( dragBodyRef.current ?? document.body ).classList.remove(
+				'cortext-column-dragging',
+				'cortext-column-resizing'
+			);
 			clearColumnDragPreview( cellsRef.current );
 			dragLayoutRef.current = null;
 		};
@@ -763,7 +847,7 @@ export default function DataViewColumnInteractions( {
 					aria-hidden="true"
 				/>
 			) }
-			<DragOverlay dropAnimation={ null }>
+			<DragOverlay>
 				{ activeColumn ? (
 					<div className="cortext-column-drag-preview">
 						{ activeColumn.label }

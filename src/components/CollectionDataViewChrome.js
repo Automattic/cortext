@@ -4,7 +4,7 @@ import {
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalHStack as HStack,
 } from '@wordpress/components';
-import { DataViews } from '@wordpress/dataviews';
+import { DataViews } from '@wordpress/dataviews/wp';
 import { useMemo } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { closeSmall, trash } from '@wordpress/icons';
@@ -35,7 +35,7 @@ export function DataViewsChrome( { footer } ) {
 					<DataViews.ViewConfig />
 				</HStack>
 			</HStack>
-			<DataViews.Filters className="dataviews-filters__container" />
+			<DataViews.FiltersToggled className="dataviews-filters__container" />
 			<DataViews.Layout />
 			{ footer }
 		</>

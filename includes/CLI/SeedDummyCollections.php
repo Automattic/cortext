@@ -4852,7 +4852,6 @@ final class SeedDummyCollections {
 			$this->log( "Created field '{$title}' (ID {$field_id}, type: {$type})." );
 		}
 
-		// 4. Register field meta on the entry CPT (safe to call repeatedly).
 		foreach ( $field_ids as $title => $field_id ) {
 			$type = $field_types[ $title ];
 			register_post_meta(
