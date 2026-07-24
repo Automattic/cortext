@@ -2,10 +2,6 @@
 <#
 .SYNOPSIS
     Verifies this agent can set up Azure Artifact Signing for Cortext.
-
-    Cortext has no Windows build yet, so there is nothing to sign. This job
-    proves the credential path works now, so the NSIS build lands on a queue
-    that is already known good instead of debugging both at once.
 #>
 
 # PowerShell does not abort on a failed *native* command, only on failed cmdlets.
