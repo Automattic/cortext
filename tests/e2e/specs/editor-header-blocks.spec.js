@@ -2,7 +2,7 @@
  * E2E coverage for the locked document header block prefix.
  */
 
-const { test, expect } = require( '@wordpress/e2e-test-utils-playwright' );
+const { test, expect } = require( '../test' );
 
 const DOCUMENT_ICON_BLOCK = 'cortext/document-icon';
 const DOCUMENT_COVER_BLOCK = 'cortext/document-cover';

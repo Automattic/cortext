@@ -8,7 +8,7 @@
  *   3. Logged-in user without edit_posts → wp_die with 403.
  */
 
-const { test, expect } = require( '@wordpress/e2e-test-utils-playwright' );
+const { test, expect } = require( '../test' );
 
 const {
 	clearWordPressAuthCookies,

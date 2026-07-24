@@ -2,7 +2,7 @@
  * E2E coverage for the Cortext collection DataView block in the shell editor.
  */
 
-const { test, expect } = require( '@wordpress/e2e-test-utils-playwright' );
+const { test, expect } = require( '../test' );
 
 async function deleteIfCreated( requestUtils, path ) {
 	if ( ! path ) {

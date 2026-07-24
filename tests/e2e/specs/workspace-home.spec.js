@@ -2,7 +2,7 @@
  * E2E coverage for the per-user workspace home preference.
  */
 
-const { test, expect } = require( '@wordpress/e2e-test-utils-playwright' );
+const { test, expect } = require( '../test' );
 
 const SUFFIX = Date.now().toString( 36 ).slice( -4 );
 const PAGE_HOME_TITLE = `E2E Home Page ${ SUFFIX }`;

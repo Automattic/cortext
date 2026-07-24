@@ -2,7 +2,7 @@
  * E2E coverage for route transitions that should not tear down the canvas.
  */
 
-const { test, expect } = require( '@wordpress/e2e-test-utils-playwright' );
+const { test, expect } = require( '../test' );
 
 const SUFFIX = Date.now().toString( 36 ).slice( -4 );
 const FIRST_PAGE_TITLE = `E2E Lifecycle Page A ${ SUFFIX }`;

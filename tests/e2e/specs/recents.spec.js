@@ -2,7 +2,7 @@
  * E2E coverage for the per-user sidebar Recents list.
  */
 
-const { test, expect } = require( '@wordpress/e2e-test-utils-playwright' );
+const { test, expect } = require( '../test' );
 
 async function deleteIfCreated( requestUtils, path ) {
 	if ( ! path ) {

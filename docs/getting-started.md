@@ -77,7 +77,7 @@ pnpm run test:e2e         # run Playwright tests
 pnpm run test:e2e:debug   # run with the Playwright UI
 ```
 
-These run the same seed command as the dev environment, just pointed at `.wp-env.test.json`.
+These run the same seed command as the dev environment, just pointed at `.wp-env.test.json`. When tests target a development environment, Playwright opts out of local autologin per request, so the suite never changes the plugin's activation state.
 
 ## Parallel worktrees
 

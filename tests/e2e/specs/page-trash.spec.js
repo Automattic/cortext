@@ -7,7 +7,7 @@
  * via the banner unwinding the whole thing.
  */
 
-const { test, expect } = require( '@wordpress/e2e-test-utils-playwright' );
+const { test, expect } = require( '../test' );
 
 const SUFFIX = Date.now().toString( 36 ).slice( -4 );
 const PARENT_TITLE = `E2E Trash Parent ${ SUFFIX }`;

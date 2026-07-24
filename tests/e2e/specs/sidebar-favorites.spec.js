@@ -2,7 +2,7 @@
  * E2E coverage for per-user sidebar favorites.
  */
 
-const { test, expect } = require( '@wordpress/e2e-test-utils-playwright' );
+const { test, expect } = require( '../test' );
 
 const SUFFIX = Date.now().toString( 36 ).slice( -4 );
 const PAGE_TITLE = `E2E Favorite Page ${ SUFFIX }`;

@@ -3,7 +3,7 @@
  * keyboard shortcut, and reload persistence (the PHP bootstrap path).
  */
 
-const { test, expect } = require( '@wordpress/e2e-test-utils-playwright' );
+const { test, expect } = require( '../test' );
 
 const SHELL_PATH = 'admin.php';
 const SHELL_QUERY = 'page=cortext';

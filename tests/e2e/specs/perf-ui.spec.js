@@ -28,7 +28,7 @@
  *   - row_navigate_next: "Next" click in full detail view to the next row.
  */
 
-const { expect, test } = require( '@wordpress/e2e-test-utils-playwright' );
+const { expect, test } = require( '../test' );
 const fs = require( 'node:fs' );
 const path = require( 'node:path' );
 const { resolveCollectionAdminUrl } = require( '../perf-fixtures' );

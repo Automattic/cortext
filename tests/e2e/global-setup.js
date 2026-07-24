@@ -1,8 +1,7 @@
 const fs = require( 'fs' );
 const path = require( 'path' );
 const { execFileSync } = require( 'child_process' );
-
-const baseGlobalSetup = require( '@wordpress/scripts/config/playwright/global-setup.js' );
+const { createE2ERequestUtils } = require( './request-utils' );
 
 const BETA_NOTICE_STORAGE_KEY = 'cortext.betaNoticeSeen';
 
@@ -106,18 +105,26 @@ function runWpCli( args, wpEnvConfig, options = {} ) {
 	} );
 }
 
-function deactivateLocalAutologin( wpEnvConfig ) {
-	try {
-		runWpCli( [ 'plugin', 'deactivate', 'dev-autologin' ], wpEnvConfig, {
-			stdio: 'ignore',
-		} );
-	} catch {
-		// The local dev-autologin plugin only exists in some wp-env overrides.
-	}
-}
-
 function flushRewriteRules( wpEnvConfig ) {
 	runWpCli( [ 'rewrite', 'flush' ], wpEnvConfig );
+}
+
+async function createAuthenticatedStorageState( config ) {
+	const { baseURL, extraHTTPHeaders, storageState } =
+		config.projects[ 0 ].use;
+	const storageStatePath =
+		typeof storageState === 'string' ? storageState : undefined;
+	const { requestContext, requestUtils } = await createE2ERequestUtils( {
+		baseURL,
+		extraHTTPHeaders,
+		storageStatePath,
+	} );
+
+	try {
+		await requestUtils.setupRest();
+	} finally {
+		await requestContext.dispose();
+	}
 }
 
 /**
@@ -125,12 +132,11 @@ function flushRewriteRules( wpEnvConfig ) {
  * @return {Promise<void>}
  */
 async function globalSetup( config ) {
-	await baseGlobalSetup( config );
+	await createAuthenticatedStorageState( config );
 	const { storageState, baseURL } = config.projects[ 0 ].use;
 
 	const wpEnvConfig = resolveWpEnvConfig( baseURL );
 	if ( wpEnvConfig !== false ) {
-		deactivateLocalAutologin( wpEnvConfig );
 		flushRewriteRules( wpEnvConfig );
 	}
 

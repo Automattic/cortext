@@ -10,7 +10,7 @@
  * tests/js/blocks/data-view-variations.test.js.
  */
 
-const { test, expect } = require( '@wordpress/e2e-test-utils-playwright' );
+const { test, expect } = require( '../test' );
 
 async function deleteIfCreated( requestUtils, path ) {
 	if ( ! path ) {

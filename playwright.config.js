@@ -27,6 +27,7 @@ process.env.WP_BASE_URL = resolveBaseURL();
 
 const { defineConfig } = require( '@playwright/test' );
 const baseConfig = require( '@wordpress/scripts/config/playwright.config.js' );
+const { E2E_REQUEST_HEADERS } = require( './tests/e2e/request-utils' );
 
 module.exports = defineConfig( {
 	...baseConfig,
@@ -36,6 +37,11 @@ module.exports = defineConfig( {
 	webServer: undefined,
 	use: {
 		...baseConfig.use,
+		extraHTTPHeaders: {
+			...( baseConfig.use?.extraHTTPHeaders ?? {} ),
+			// Keep dev autologin enabled for real previews while tests opt out.
+			...E2E_REQUEST_HEADERS,
+		},
 		video: 'off',
 	},
 } );
