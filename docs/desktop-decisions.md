@@ -2,6 +2,26 @@
 
 Running log for desktop-specific runtime and packaging decisions. Keep the detailed benchmark numbers in PR comments or artifacts unless they become stable product guidance.
 
+## 2026-07-24 — Authenticate every local runtime request
+
+**Decision.** Each Electron launch generates a new random 256-bit token, keeps
+it in memory, and passes it to the local runtime through its environment.
+Electron adds the token as an internal header only for requests to
+`http://127.0.0.1:9402/`. The PHP, FrankenPHP, and PHP-FPM runtime paths reject
+requests without the matching token before serving WordPress or static files.
+The benchmark follows the same contract with its own ephemeral token and never
+includes it in the recorded results. The loopback address and fixed port 9402
+remain unchanged.
+
+**Why.** The desktop-only autologin makes every accepted WordPress request an
+administrator request. Requiring a per-launch secret prevents web pages and
+accidental localhost clients from reaching that session just because they know
+the port. The secret is not persisted, logged, or placed in a URL.
+
+**Limit.** This is a boundary against browser-originated and accidental local
+requests, not against hostile native software running as the same macOS user.
+Such a process can already read the user's Cortext application data.
+
 ## 2026-06-19 — In-place auto-updates over GitHub Releases
 
 **Decision.** The signed desktop app now updates itself from GitHub Releases with `electron-updater`. The mac build ships both `dmg` and `zip`: users download the DMG for first install, while Squirrel.Mac installs the zip. The `github` publish config makes electron-builder write `latest-mac.yml` and `app-update.yml`, and Buildkite uploads the zip, blockmap, and `latest-mac.yml` to the same draft Release as the DMG. The plugin workflow still owns the Release; Buildkite only attaches desktop assets. Drafts remain hidden from the updater. Once a human publishes a Release, the installed app can pick it up. The app menu has one `autoInstallUpdates` checkbox plus a "Check for Updates..." / "Restart to Apply Update" item. On first launch after an app update, Cortext also refreshes the bundled WordPress and plugin code in the extracted site, preserving the SQLite database, uploads, and wp-config. WordPress handles any database upgrade on the next load.

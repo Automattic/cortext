@@ -42,6 +42,10 @@
 				"to": "runtime/bin/php"
 			},
 			{
+				"from": "runtime/router.php",
+				"to": "runtime/router.php"
+			},
+			{
 				"from": "runtime/mu-plugins/cortext-update-lock.php",
 				"to": "runtime/mu-plugins/cortext-update-lock.php"
 			}

@@ -67,6 +67,16 @@ uses `router.php` for the rewrite behavior WordPress normally gets from
 nginx or Apache. Once PHP reports that it is accepting connections, the
 window loads `http://127.0.0.1:9402/wp-admin/admin.php?page=cortext`.
 
+Each launch creates a new 256-bit authentication token in memory. Electron
+adds it to requests for the local runtime, and the runtime rejects requests
+without the matching token before serving WordPress or static files. The token
+is passed to the runtime through its environment and is never written to disk,
+included in a URL, or added to benchmark results. This protects the local admin
+session from web pages and accidental localhost clients. It does not protect
+against native processes running as the same macOS user, which can already read
+that user's Cortext data. The loopback address and port remain
+`127.0.0.1:9402`.
+
 In a dev run, DevTools open by default; set `CORTEXT_DEVTOOLS=0` to turn them
 off. The packaged build never opens them. Closing the window kills the PHP
 process.
@@ -178,10 +188,9 @@ npm --prefix apps/desktop run snapshot
 npm --prefix apps/desktop run test:e2e
 ```
 
-The test removes `~/Library/Application Support/cortext-desktop/`, starts
-Electron, waits for the window to reach the Cortext admin page, and checks
-that `#cortext-root` is visible. It takes about 7 seconds locally once the
-snapshot exists.
+The test uses a temporary Electron user-data directory, starts Electron, waits
+for the window to reach the Cortext admin page, and checks that `#cortext-root`
+is visible. It takes about 7 seconds locally once the snapshot exists.
 
 ## Runtime files
 
