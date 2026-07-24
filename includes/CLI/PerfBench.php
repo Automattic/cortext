@@ -12,10 +12,12 @@ namespace Cortext\CLI;
 defined( 'ABSPATH' ) || exit;
 
 use Cortext\FieldValues\FieldValueIndex;
+use Cortext\FieldValues\FieldValueReadQuery;
 use Cortext\FieldValues\FieldValueStore;
 use Cortext\PostType\Document;
 use Cortext\PostType\Field;
 use Cortext\Relations;
+use Cortext\Rest\RowsFilterQuery;
 use Cortext\Taxonomy\TraitTaxonomy;
 use RuntimeException;
 use WP_Post;
@@ -140,8 +142,10 @@ final class PerfBench {
 	 * : Exit with an error when a scenario exceeds its budget.
 	 *
 	 * [--suite=<suite>]
-	 * : Suite to run. Use "default" for CI budget checks or "materialization"
-	 * for field-value index work. Default: default.
+	 * : Select a benchmark suite. Use "default" for CI budget checks,
+	 * "row-shapes" to compare full and ID-only row responses and benchmark
+	 * projected link suggestions, or "materialization" for field-value index work.
+	 * Default: default.
 	 *
 	 * [--scenario=<pattern>]
 	 * : Run only scenario IDs containing this text.
@@ -193,23 +197,26 @@ final class PerfBench {
 	/**
 	 * Summarizes measured samples.
 	 *
-	 * @param array<int,array{latency_ms:float,sql_queries:int,memory_bytes:int}> $samples Samples.
+	 * @param array<int,array{latency_ms:float,sql_queries:int,memory_bytes:int,payload_bytes:int}> $samples Samples.
 	 * @return array<string,int|float>
 	 */
 	public static function summarize_samples( array $samples ): array {
 		$latencies = array_column( $samples, 'latency_ms' );
 		$queries   = array_column( $samples, 'sql_queries' );
 		$memory    = array_column( $samples, 'memory_bytes' );
+		$payload   = array_column( $samples, 'payload_bytes' );
 
 		return array(
-			'runs'             => count( $samples ),
-			'p50_ms'           => round( (float) self::percentile( $latencies, 50 ), 3 ),
-			'p95_ms'           => round( (float) self::percentile( $latencies, 95 ), 3 ),
-			'mad_ms'           => round( (float) self::mad( $latencies ), 3 ),
-			'sql_queries_p50'  => (int) self::percentile( $queries, 50 ),
-			'sql_queries_p95'  => (int) self::percentile( $queries, 95 ),
-			'memory_bytes_p50' => (int) self::percentile( $memory, 50 ),
-			'memory_bytes_p95' => (int) self::percentile( $memory, 95 ),
+			'runs'              => count( $samples ),
+			'p50_ms'            => round( (float) self::percentile( $latencies, 50 ), 3 ),
+			'p95_ms'            => round( (float) self::percentile( $latencies, 95 ), 3 ),
+			'mad_ms'            => round( (float) self::mad( $latencies ), 3 ),
+			'sql_queries_p50'   => (int) self::percentile( $queries, 50 ),
+			'sql_queries_p95'   => (int) self::percentile( $queries, 95 ),
+			'memory_bytes_p50'  => (int) self::percentile( $memory, 50 ),
+			'memory_bytes_p95'  => (int) self::percentile( $memory, 95 ),
+			'payload_bytes_p50' => (int) self::percentile( $payload, 50 ),
+			'payload_bytes_p95' => (int) self::percentile( $payload, 95 ),
 		);
 	}
 
@@ -233,7 +240,7 @@ final class PerfBench {
 				: array();
 			$scenario_failure = array();
 
-			foreach ( array( 'p95_ms', 'sql_queries_p95', 'memory_bytes_p95' ) as $metric ) {
+			foreach ( array( 'p95_ms', 'sql_queries_p95', 'memory_bytes_p95', 'payload_bytes_p95' ) as $metric ) {
 				if ( ! isset( $limits[ $metric ], $summary[ $metric ] ) ) {
 					continue;
 				}
@@ -378,6 +385,33 @@ final class PerfBench {
 				throw new RuntimeException( 'The benchmark needs a third collection for the wide schema scenario.' );
 			}
 			$scenarios = $this->scenario_callbacks( $manifest );
+		} elseif ( 'row-shapes' === $suite ) {
+			$this->assert_row_shape_manifest( $manifest );
+
+			$cases            = $this->filter_row_shape_cases( $this->row_shape_cases( $manifest ), $scenario_filter, true );
+			$suggestion_cases = $this->filter_link_suggestion_cases( $this->link_suggestion_cases(), $scenario_filter );
+			if ( count( $cases ) === 0 && count( $suggestion_cases ) === 0 ) {
+				throw new RuntimeException( esc_html( "No row-shape benchmark cases matched: {$scenario_filter}." ) );
+			}
+
+			$summaries     = array_merge(
+				count( $cases ) > 0 ? $this->run_row_shape_cases( $cases, $iterations, $warmup ) : array(),
+				count( $suggestion_cases ) > 0 ? $this->run_link_suggestion_cases( $suggestion_cases, $iterations, $warmup ) : array()
+			);
+			$budget_result = self::apply_budgets( $summaries, $budget );
+
+			return $this->benchmark_report(
+				$started_at,
+				$manifest,
+				$iterations,
+				$warmup,
+				$budget_path,
+				$suite,
+				$scenario_filter,
+				$budget_result,
+				self::compare_row_shape_summaries( $budget_result['scenarios'] ),
+				self::compare_link_suggestion_summaries( $budget_result['scenarios'] )
+			);
 		} elseif ( 'materialization' === $suite ) {
 			if ( count( $manifest['primary_row_ids'] ?? array() ) < 10000 ) {
 				throw new RuntimeException( 'The materialization suite needs at least 10000 primary rows. Seed with `wp cortext perf-seed --reset --force --collections=1 --rows=10000 --relations=0 --rollups=0` or larger.' );
@@ -427,7 +461,46 @@ final class PerfBench {
 
 		$budget_result = self::apply_budgets( $summaries, $budget );
 
-		return array(
+		return $this->benchmark_report(
+			$started_at,
+			$manifest,
+			$iterations,
+			$warmup,
+			$budget_path,
+			$suite,
+			$scenario_filter,
+			$budget_result
+		);
+	}
+
+	/**
+	 * Builds the report structure shared by all benchmark suites.
+	 *
+	 * @param int                 $started_at      Benchmark start timestamp.
+	 * @param array<string,mixed> $manifest        Dataset manifest.
+	 * @param int                 $iterations      Measured iterations.
+	 * @param int                 $warmup          Warm-up iterations.
+	 * @param string              $budget_path     Budget path used for the config hash.
+	 * @param string              $suite           Suite ID.
+	 * @param string              $scenario_filter Scenario filter.
+	 * @param array<string,mixed> $budget_result    Scenario summaries with budget results.
+	 * @param array<string,mixed> $comparisons      Optional row-shape comparisons.
+	 * @param array<string,mixed> $link_comparisons Optional link-suggestion comparisons.
+	 * @return array<string,mixed>
+	 */
+	private function benchmark_report(
+		int $started_at,
+		array $manifest,
+		int $iterations,
+		int $warmup,
+		string $budget_path,
+		string $suite,
+		string $scenario_filter,
+		array $budget_result,
+		array $comparisons = array(),
+		array $link_comparisons = array()
+	): array {
+		$report = array(
 			'version'          => 1,
 			'suite'            => $suite,
 			'scenarioFilter'   => $scenario_filter,
@@ -442,6 +515,791 @@ final class PerfBench {
 			'failures'         => $budget_result['failures'],
 			'scenarios'        => $budget_result['scenarios'],
 		);
+
+		if ( count( $comparisons ) > 0 ) {
+			$report['comparisons'] = $comparisons;
+		}
+		if ( count( $link_comparisons ) > 0 ) {
+			$report['linkSuggestionComparisons'] = $link_comparisons;
+		}
+
+		return $report;
+	}
+
+	/**
+	 * Checks that the dataset is ready for the row-shapes suite.
+	 *
+	 * The default suite changes the migration field, so row-shapes must run from
+	 * a fresh seed. Otherwise the same config hash could refer to changed payloads
+	 * and empty filter results.
+	 *
+	 * @param array<string,mixed> $manifest Dataset manifest.
+	 * @throws RuntimeException When the fixture is incomplete or has been mutated.
+	 */
+	private function assert_row_shape_manifest( array $manifest ): void {
+		$config = is_array( $manifest['config'] ?? null ) ? $manifest['config'] : array();
+		if ( count( $manifest['primary_row_ids'] ?? array() ) < self::PAGE_50_ROWS ) {
+			throw new RuntimeException( 'Seed at least 1,250 primary rows to benchmark page 50.' );
+		}
+		if ( (int) ( $manifest['wide_collection_id'] ?? 0 ) < 1 || count( $manifest['wide_row_ids'] ?? array() ) < self::PAGE_SIZE ) {
+			throw new RuntimeException( 'Seed a third collection to run the wide-schema comparison.' );
+		}
+		if (
+			(int) ( $config['fields'] ?? 0 ) < self::DEFAULT_FIELDS
+			|| (int) ( $config['wide_fields'] ?? 0 ) < self::DEFAULT_WIDE_FIELDS
+			|| (int) ( $config['relations'] ?? 0 ) < 1
+			|| (int) ( $config['rollups'] ?? 0 ) < 1
+		) {
+			throw new RuntimeException( 'Seed the dataset with fields=8, wide-fields=40, relations=1, and rollups=1 or higher.' );
+		}
+		$wide_slug = (string) ( $manifest['wide_slug'] ?? '' );
+		if (
+			count( $manifest['target_row_ids'] ?? array() ) < self::RELATION_TARGETS
+			|| count( $manifest['fields']['primary']['relation_field_ids'] ?? array() ) < 1
+			|| count( $manifest['fields']['primary']['rollup_field_ids'] ?? array() ) < 1
+			|| count( $manifest['fields']['collections'][ $wide_slug ] ?? array() ) < self::DEFAULT_WIDE_FIELDS
+		) {
+			throw new RuntimeException( 'The row-shapes fixture is missing data for a relation, rollup, target row, or wide schema.' );
+		}
+
+		$primary_field_ids = array_map( 'intval', $manifest['fields']['primary']['scalar_field_ids'] ?? array() );
+		if (
+			count( $primary_field_ids ) < self::MIN_FIELDS
+			|| min( $primary_field_ids ) < 1
+			|| (int) ( $manifest['sort_field_id'] ?? 0 ) < 1
+			|| (int) ( $manifest['migration_field_id'] ?? 0 ) < 1
+		) {
+			throw new RuntimeException( 'The row-shapes fixture is missing the required scalar fields.' );
+		}
+		if ( ! ( new FieldValueIndex() )->can_read() ) {
+			throw new RuntimeException( 'The row-shapes suite requires a readable field-value index. Re-run `wp cortext perf-seed --reset --force`.' );
+		}
+		if ( Relations::trait_term_id_for_collection( (int) $manifest['primary_collection_id'] ) < 1 ) {
+			throw new RuntimeException( 'The row-shapes fixture has no trait term for the primary collection.' );
+		}
+
+		$primary_row_ids = array_map( 'intval', $manifest['primary_row_ids'] );
+		$migration_key   = Relations::meta_key( (int) ( $manifest['migration_field_id'] ?? 0 ) );
+		$first_value     = (string) get_post_meta( $primary_row_ids[0], $migration_key, true );
+		$stable_value    = (string) get_post_meta( $primary_row_ids[ self::MIGRATION_CAP_ROWS ], $migration_key, true );
+		if ( 'old-1000' !== $first_value || 'stable' !== $stable_value ) {
+			throw new RuntimeException( 'The row-shapes suite must run on a fresh dataset. Re-run `wp cortext perf-seed --reset --force`, then run row-shapes before the default suite.' );
+		}
+	}
+
+	/**
+	 * Builds matching workloads for full and ID-only row responses.
+	 *
+	 * Normal cases run the same query twice and change only the response shape.
+	 * The 1,000-row case compares ten full requests with one ID-only request for
+	 * the same ordered rows. Indexed sort and filter cases run once with the
+	 * sidecar disabled and once with it enabled.
+	 *
+	 * @param array<string,mixed> $manifest Dataset manifest.
+	 * @return array<string,array<string,mixed>>
+	 */
+	private function row_shape_cases( array $manifest ): array {
+		$primary_collection_id = (int) $manifest['primary_collection_id'];
+		$wide_collection_id    = (int) $manifest['wide_collection_id'];
+		$primary_field_ids     = array_map( 'intval', $manifest['fields']['primary']['scalar_field_ids'] ?? array() );
+		$number_field_id       = $primary_field_ids[1] ?? 0;
+		$tags_field_id         = $primary_field_ids[3] ?? 0;
+
+		$sort    = array(
+			'field'     => Relations::meta_key( $number_field_id ),
+			'direction' => 'asc',
+		);
+		$filters = array(
+			array(
+				'relation' => 'AND',
+				'filters'  => array(
+					array(
+						'field'    => Relations::meta_key( $number_field_id ),
+						'operator' => 'greaterThan',
+						'value'    => '500',
+					),
+					array(
+						'field'    => Relations::meta_key( $tags_field_id ),
+						'operator' => 'contains',
+						'value'    => 'alpha',
+					),
+				),
+			),
+		);
+
+		return array(
+			'page_1_fallback'         => $this->row_shape_case(
+				'First page (WP_Query fallback)',
+				false,
+				array(
+					'trait'    => $primary_collection_id,
+					'page'     => 1,
+					'per_page' => self::PAGE_SIZE,
+				)
+			),
+			'page_50_fallback'        => $this->row_shape_case(
+				'Deep page (WP_Query fallback)',
+				false,
+				array(
+					'trait'    => $primary_collection_id,
+					'page'     => 50,
+					'per_page' => self::PAGE_SIZE,
+				)
+			),
+			'page_100_fallback'       => $this->row_shape_case(
+				'100-row page (WP_Query fallback)',
+				false,
+				array(
+					'trait'    => $primary_collection_id,
+					'page'     => 1,
+					'per_page' => 100,
+				)
+			),
+			'first_1000_fallback'     => $this->row_shape_capacity_case(
+				'First 1,000 rows (10 full requests vs. one ID-only request)',
+				$primary_collection_id
+			),
+			'search_fallback'         => $this->row_shape_case(
+				'Text search (WP_Query fallback)',
+				false,
+				array(
+					'trait'    => $primary_collection_id,
+					'page'     => 1,
+					'per_page' => 100,
+					'search'   => 'Value',
+				)
+			),
+			'sort_fallback'           => $this->row_shape_case(
+				'Numeric custom-field sort (postmeta fallback)',
+				false,
+				array(
+					'trait'    => $primary_collection_id,
+					'page'     => 1,
+					'per_page' => 100,
+					'sort'     => $sort,
+				)
+			),
+			'sort_sidecar'            => $this->row_shape_case(
+				'Numeric custom-field sort (sidecar)',
+				true,
+				array(
+					'trait'    => $primary_collection_id,
+					'page'     => 1,
+					'per_page' => 100,
+					'sort'     => $sort,
+				)
+			),
+			'filter_fallback'         => $this->row_shape_case(
+				'Two-field filter (postmeta fallback)',
+				false,
+				array(
+					'trait'    => $primary_collection_id,
+					'page'     => 1,
+					'per_page' => 100,
+					'filters'  => $filters,
+				)
+			),
+			'filter_sidecar'          => $this->row_shape_case(
+				'Two-field filter (sidecar)',
+				true,
+				array(
+					'trait'    => $primary_collection_id,
+					'page'     => 1,
+					'per_page' => 100,
+					'filters'  => $filters,
+				)
+			),
+			'relation_heavy_fallback' => $this->row_shape_case(
+				'Relation-heavy page (WP_Query fallback)',
+				false,
+				array(
+					'trait'    => $primary_collection_id,
+					'page'     => 2,
+					'per_page' => self::PAGE_SIZE,
+				)
+			),
+			'rollup_heavy_fallback'   => $this->row_shape_case(
+				'Rollup-heavy page (WP_Query fallback)',
+				false,
+				array(
+					'trait'    => $primary_collection_id,
+					'page'     => 3,
+					'per_page' => self::PAGE_SIZE,
+				)
+			),
+			'wide_schema_fallback'    => $this->row_shape_case(
+				'Wide-schema page (WP_Query fallback)',
+				false,
+				array(
+					'trait'    => $wide_collection_id,
+					'page'     => 1,
+					'per_page' => self::PAGE_SIZE,
+				)
+			),
+		);
+	}
+
+	/**
+	 * Creates matching full and ID-only callbacks for one row query.
+	 *
+	 * @param string              $label           Human-readable case label.
+	 * @param bool                $sidecar_enabled Whether the field-value index can be used.
+	 * @param array<string,mixed> $params          Shared REST params.
+	 * @return array<string,mixed>
+	 */
+	private function row_shape_case( string $label, bool $sidecar_enabled, array $params ): array {
+		$params['context'] = 'edit';
+		$request           = fn( string $shape ) => $this->rest_request_with_field_value_index(
+			$sidecar_enabled,
+			'GET',
+			'/cortext/v1/rows',
+			array_merge(
+				$params,
+				array( 'shape' => $shape )
+			)
+		);
+
+		return array(
+			'label'           => $label,
+			'full'            => fn() => $request( 'full' ),
+			'ids'             => fn() => $request( 'ids' ),
+			'full_params'     => $params,
+			'ids_params'      => $params,
+			'sidecar_enabled' => $sidecar_enabled,
+			'expected_rows'   => 1,
+			'full_page_walk'  => false,
+		);
+	}
+
+	/**
+	 * Builds the 1,000-row comparison supported by the ID-only shape.
+	 *
+	 * Full responses stop at 100 rows, so the matching baseline needs ten pages.
+	 * Returning each raw response lets the payload measurement include all ten
+	 * response bodies.
+	 *
+	 * @param string $label         Human-readable case label.
+	 * @param int    $collection_id Collection post ID.
+	 * @return array<string,mixed>
+	 */
+	private function row_shape_capacity_case( string $label, int $collection_id ): array {
+		$full_params   = array_map(
+			static fn( int $page ): array => array(
+				'trait'    => $collection_id,
+				'page'     => $page,
+				'per_page' => 100,
+				'context'  => 'edit',
+			),
+			range( 1, 10 )
+		);
+		$ids_params    = array(
+			'trait'    => $collection_id,
+			'page'     => 1,
+			'per_page' => 1000,
+			'context'  => 'edit',
+		);
+		$full_requests = array_map(
+			fn( array $params ): callable => fn() => $this->rest_request_with_field_value_index(
+				false,
+				'GET',
+				'/cortext/v1/rows',
+				array_merge( $params, array( 'shape' => 'full' ) )
+			),
+			$full_params
+		);
+
+		return array(
+			'label'           => $label,
+			'full'            => fn() => array_map( static fn( callable $request ) => $request(), $full_requests ),
+			'full_requests'   => $full_requests,
+			'ids'             => fn() => $this->rest_request_with_field_value_index(
+				false,
+				'GET',
+				'/cortext/v1/rows',
+				array_merge( $ids_params, array( 'shape' => 'ids' ) )
+			),
+			'full_params'     => $full_params,
+			'ids_params'      => $ids_params,
+			'sidecar_enabled' => false,
+			'expected_rows'   => 1000,
+			'full_page_walk'  => true,
+		);
+	}
+
+	/**
+	 * Filters row-shape cases without splitting their full and ID-only variants.
+	 *
+	 * @param array<string,array<string,mixed>> $cases       Row-shape cases.
+	 * @param string                            $filter      Scenario ID substring.
+	 * @param bool                              $allow_empty Whether another case family may match instead.
+	 * @return array<string,array<string,mixed>>
+	 * @throws RuntimeException When no cases match.
+	 */
+	private function filter_row_shape_cases( array $cases, string $filter, bool $allow_empty = false ): array {
+		$filter = trim( $filter );
+		if ( '' === $filter ) {
+			return $cases;
+		}
+
+		$matches = array();
+		foreach ( $cases as $case_id => $case ) {
+			$scenario_id = "row_shape_{$case_id}";
+			if (
+				str_contains( $scenario_id, $filter )
+				|| str_contains( "{$scenario_id}_full", $filter )
+				|| str_contains( "{$scenario_id}_ids", $filter )
+			) {
+				$matches[ $case_id ] = $case;
+			}
+		}
+
+		if ( count( $matches ) === 0 && ! $allow_empty ) {
+			throw new RuntimeException( esc_html( "No row-shape benchmark cases matched: {$filter}." ) );
+		}
+
+		return $matches;
+	}
+
+	/**
+	 * Builds the projected REST requests sent by Gutenberg link pickers.
+	 *
+	 * The forced variant hides `_fields` during item preparation to reproduce the
+	 * old enrichment work. It restores the projection before WordPress filters the
+	 * response body.
+	 *
+	 * @return array<string,array<string,mixed>>
+	 */
+	private function link_suggestion_cases(): array {
+		$common = array(
+			'context' => 'edit',
+			'status'  => array( 'draft', 'private', 'publish' ),
+			'_fields' => 'id,link,title',
+		);
+
+		return array(
+			'initial_3' => $this->link_suggestion_case(
+				'Initial link suggestions (3 results)',
+				array_merge(
+					$common,
+					array(
+						'search'   => '',
+						'page'     => 1,
+						'per_page' => 3,
+					)
+				),
+				3
+			),
+			'search_20' => $this->link_suggestion_case(
+				'Link suggestions after typing (20 results)',
+				array_merge(
+					$common,
+					array(
+						'search'   => 'Perf Primary Row',
+						'page'     => 1,
+						'per_page' => 20,
+					)
+				),
+				20
+			),
+		);
+	}
+
+	/**
+	 * Builds one link-suggestion case with forced and projected variants.
+	 *
+	 * @param string              $label         Human-readable case label.
+	 * @param array<string,mixed> $params        Shared REST params.
+	 * @param int                 $expected_rows Expected result count.
+	 * @return array<string,mixed>
+	 */
+	private function link_suggestion_case( string $label, array $params, int $expected_rows ): array {
+		return array(
+			'label'         => $label,
+			'forced'        => fn() => $this->rest_link_suggestion_request( $params, true ),
+			'projected'     => fn() => $this->rest_link_suggestion_request( $params, false ),
+			'params'        => $params,
+			'expected_rows' => $expected_rows,
+		);
+	}
+
+	/**
+	 * Filters link-suggestion cases without splitting each pair.
+	 *
+	 * @param array<string,array<string,mixed>> $cases  Link-suggestion cases.
+	 * @param string                            $filter Scenario ID substring.
+	 * @return array<string,array<string,mixed>>
+	 */
+	private function filter_link_suggestion_cases( array $cases, string $filter ): array {
+		$filter = trim( $filter );
+		if ( '' === $filter ) {
+			return $cases;
+		}
+
+		$matches = array();
+		foreach ( $cases as $case_id => $case ) {
+			$scenario_id = "link_suggestions_{$case_id}";
+			if (
+				str_contains( $scenario_id, $filter )
+				|| str_contains( "{$scenario_id}_forced", $filter )
+				|| str_contains( "{$scenario_id}_projected", $filter )
+			) {
+				$matches[ $case_id ] = $case;
+			}
+		}
+
+		return $matches;
+	}
+
+	/**
+	 * Compares projected link suggestions with simulated old enrichment.
+	 *
+	 * @param array<string,array<string,mixed>> $cases      Suggestion cases.
+	 * @param int                               $iterations Measured iterations.
+	 * @param int                               $warmup     Warm-up iterations.
+	 * @return array<string,array<string,int|float|string>>
+	 */
+	private function run_link_suggestion_cases( array $cases, int $iterations, int $warmup ): array {
+		$summaries = array();
+		foreach ( $cases as $case_id => $case ) {
+			$this->assert_link_suggestion_parity( $case, (string) $case['label'] );
+
+			$samples = array(
+				'forced'    => array(),
+				'projected' => array(),
+			);
+			$total   = $warmup + $iterations;
+			for ( $index = 0; $index < $total; ++$index ) {
+				$order = 0 === $index % 2 ? array( 'forced', 'projected' ) : array( 'projected', 'forced' );
+				foreach ( $order as $variant ) {
+					$sample = $this->measure_rest_request( $case[ $variant ] );
+					if ( $index >= $warmup ) {
+						$samples[ $variant ][] = $sample;
+					}
+				}
+			}
+
+			$scenario_id                             = "link_suggestions_{$case_id}";
+			$summaries[ "{$scenario_id}_forced" ]    = array_merge(
+				array( 'label' => $case['label'] . ' (forced enrichment)' ),
+				self::summarize_samples( $samples['forced'] )
+			);
+			$summaries[ "{$scenario_id}_projected" ] = array_merge(
+				array( 'label' => $case['label'] . ' (projected)' ),
+				self::summarize_samples( $samples['projected'] )
+			);
+		}
+
+		return $summaries;
+	}
+
+	/**
+	 * Checks that simulated old enrichment returns the same projected response.
+	 *
+	 * @param array<string,mixed> $case_config Suggestion case.
+	 * @param string              $label       Case label for errors.
+	 * @throws RuntimeException When output differs or the fixture is empty.
+	 */
+	private function assert_link_suggestion_parity( array $case_config, string $label ): void {
+		$forced    = $case_config['forced']();
+		$projected = $case_config['projected']();
+		$expected  = (int) ( $case_config['expected_rows'] ?? 1 );
+		if ( ! is_array( $forced ) || ! is_array( $projected ) || count( $projected ) !== $expected || $forced !== $projected ) {
+			throw new RuntimeException( esc_html( "Forced enrichment and projection returned different results for {$label}." ) );
+		}
+
+		foreach ( $projected as $record ) {
+			if (
+				! is_array( $record )
+				|| ! isset( $record['id'], $record['link'], $record['title'] )
+				|| count( array_diff( array_keys( $record ), array( 'id', 'link', 'title' ) ) ) > 0
+			) {
+				throw new RuntimeException( esc_html( "{$label} returned fields other than id, link, and title." ) );
+			}
+		}
+	}
+
+	/**
+	 * Runs each pair in alternating AB/BA order.
+	 *
+	 * Alternating the order prevents MySQL's buffer pool from consistently
+	 * favouring one variant. `measure()` still clears the WordPress object cache
+	 * before each sample.
+	 *
+	 * @param array<string,array{label:string,full:callable,ids:callable}> $cases      Row-shape cases.
+	 * @param int                                                          $iterations Measured iterations.
+	 * @param int                                                          $warmup     Warm-up iterations.
+	 * @return array<string,array<string,int|float|string>>
+	 */
+	private function run_row_shape_cases( array $cases, int $iterations, int $warmup ): array {
+		$summaries = array();
+
+		foreach ( $cases as $case_id => $case ) {
+			$this->assert_row_shape_sidecar_case( $case, (string) $case['label'] );
+			$this->assert_row_shape_parity( $case, (string) $case['label'] );
+
+			$samples = array(
+				'full' => array(),
+				'ids'  => array(),
+			);
+			$total   = $warmup + $iterations;
+			for ( $index = 0; $index < $total; ++$index ) {
+				$order = 0 === $index % 2 ? array( 'full', 'ids' ) : array( 'ids', 'full' );
+				foreach ( $order as $variant ) {
+					$sample = 'full' === $variant && isset( $case['full_requests'] )
+						? $this->measure_request_batch( $case['full_requests'] )
+						: $this->measure_rest_request( $case[ $variant ] );
+					if ( $index >= $warmup ) {
+						$samples[ $variant ][] = $sample;
+					}
+				}
+			}
+
+			$scenario_id                        = "row_shape_{$case_id}";
+			$summaries[ "{$scenario_id}_full" ] = array_merge(
+				array( 'label' => $case['label'] . ' (full)' ),
+				self::summarize_samples( $samples['full'] )
+			);
+			$summaries[ "{$scenario_id}_ids" ]  = array_merge(
+				array( 'label' => $case['label'] . ' (IDs)' ),
+				self::summarize_samples( $samples['ids'] )
+			);
+		}
+
+		return $summaries;
+	}
+
+	/**
+	 * Checks that each sidecar case can use an indexed query plan.
+	 *
+	 * It also compares the indexed result with the forced postmeta fallback. The
+	 * separate full and ID-only check means the two assertions cover both query
+	 * paths and response shapes.
+	 *
+	 * @param array<string,mixed> $case_config Row-shape case.
+	 * @param string              $label       Case label for errors.
+	 * @throws RuntimeException When the index cannot run the case.
+	 */
+	private function assert_row_shape_sidecar_case( array $case_config, string $label ): void {
+		if ( empty( $case_config['sidecar_enabled'] ) ) {
+			return;
+		}
+
+		$params        = is_array( $case_config['ids_params'] ?? null ) ? $case_config['ids_params'] : array();
+		$collection_id = (int) ( $params['trait'] ?? 0 );
+		$field_schema  = ( new RowsFilterQuery() )->field_schema_for( $collection_id );
+		$supported     = ( new FieldValueReadQuery() )->supports_query(
+			$field_schema,
+			$params['filters'] ?? array(),
+			$params['sort'] ?? null,
+			(string) ( $params['search'] ?? '' ),
+			array_key_exists( 'include', $params )
+		);
+		if ( ! $supported ) {
+			throw new RuntimeException( esc_html( "The field-value index cannot run this row-shape case: {$label}." ) );
+		}
+
+		$this->assert_rest_rows_parity( $params, "{$label} postmeta/sidecar" );
+	}
+
+	/**
+	 * Checks that both variants return the same rows in the same order.
+	 *
+	 * @param array<string,mixed> $case_config Row-shape case.
+	 * @param string              $label       Case label for errors.
+	 * @throws RuntimeException When the variants return different rows, totals, or shapes.
+	 */
+	private function assert_row_shape_parity( array $case_config, string $label ): void {
+		$full = $case_config['full']();
+		$ids  = $case_config['ids']();
+		if ( ! is_array( $full ) || ! is_array( $ids ) ) {
+			throw new RuntimeException( esc_html( "Both response variants must return arrays for {$label}." ) );
+		}
+
+		$this->assert_ids_response_shape( $ids, $label );
+		$ids_ids       = array_map( 'intval', $ids['ids'] );
+		$expected_rows = max( 1, (int) ( $case_config['expected_rows'] ?? 1 ) );
+
+		if ( ! empty( $case_config['full_page_walk'] ) ) {
+			if ( ! array_is_list( $full ) || 10 !== count( $full ) ) {
+				throw new RuntimeException( esc_html( "{$label} must return 10 full-response pages." ) );
+			}
+
+			$full_ids   = array();
+			$full_total = null;
+			foreach ( $full as $page_index => $page_response ) {
+				if ( ! is_array( $page_response ) ) {
+					throw new RuntimeException( esc_html( "{$label} returned an invalid full-response page at position " . ( $page_index + 1 ) . '.' ) );
+				}
+				$this->assert_full_response_shape( $page_response, $label );
+				$full_ids     = array_merge( $full_ids, $this->rest_row_ids( $page_response ) );
+				$full_total ??= (int) $page_response['total'];
+				if ( $full_total !== (int) $page_response['total'] || (int) ceil( $full_total / 100 ) !== (int) $page_response['totalPages'] ) {
+					throw new RuntimeException( esc_html( "{$label} returned inconsistent totals across full-response pages." ) );
+				}
+			}
+
+			if ( (int) ceil( (int) $ids['total'] / 1000 ) !== (int) $ids['totalPages'] ) {
+				throw new RuntimeException( esc_html( "{$label} returned an incorrect totalPages value for the ID-only response." ) );
+			}
+		} else {
+			$this->assert_full_response_shape( $full, $label );
+			$full_ids   = $this->rest_row_ids( $full );
+			$full_total = (int) $full['total'];
+			if ( (int) $full['totalPages'] !== (int) $ids['totalPages'] ) {
+				throw new RuntimeException( esc_html( "Full and ID-only responses returned different totalPages values for {$label}." ) );
+			}
+		}
+
+		if ( count( $ids_ids ) < $expected_rows || $full_ids !== $ids_ids || (int) $full_total !== (int) $ids['total'] ) {
+			throw new RuntimeException( esc_html( "Full and ID-only responses returned different rows or totals for {$label}." ) );
+		}
+	}
+
+	/**
+	 * Checks the contract for a standard full rows response.
+	 *
+	 * @param array<string,mixed> $response REST response data.
+	 * @param string              $label    Case label for errors.
+	 * @throws RuntimeException When the response breaks the full-row contract.
+	 */
+	private function assert_full_response_shape( array $response, string $label ): void {
+		$valid = isset( $response['rows'], $response['collection'], $response['fields'] )
+			&& is_array( $response['rows'] )
+			&& is_array( $response['collection'] )
+			&& is_array( $response['fields'] )
+			&& array_key_exists( 'total', $response )
+			&& array_key_exists( 'totalPages', $response )
+			&& ! array_key_exists( 'ids', $response );
+		$ids   = $valid ? $this->rest_row_ids( $response ) : array();
+		if ( ! $valid || in_array( 0, $ids, true ) || count( $ids ) !== count( array_unique( $ids ) ) ) {
+			throw new RuntimeException( esc_html( "{$label} returned an invalid full-response shape." ) );
+		}
+	}
+
+	/**
+	 * Checks the contract for a minimal ID-only response.
+	 *
+	 * @param array<string,mixed> $response REST response data.
+	 * @param string              $label    Case label for errors.
+	 * @throws RuntimeException When the response breaks the ID-only contract.
+	 */
+	private function assert_ids_response_shape( array $response, string $label ): void {
+		$valid = isset( $response['ids'] )
+			&& is_array( $response['ids'] )
+			&& array_key_exists( 'total', $response )
+			&& array_key_exists( 'totalPages', $response )
+			&& ! array_key_exists( 'rows', $response )
+			&& ! array_key_exists( 'collection', $response )
+			&& ! array_key_exists( 'fields', $response );
+		$ids   = $valid ? array_map( 'intval', $response['ids'] ) : array();
+		if ( ! $valid || in_array( 0, $ids, true ) || count( $ids ) !== count( array_unique( $ids ) ) ) {
+			throw new RuntimeException( esc_html( "{$label} returned an invalid ID-only response shape." ) );
+		}
+	}
+
+	/**
+	 * Calculates resource savings for each full and ID-only pair.
+	 *
+	 * Positive percentages mean the ID-only shape used fewer resources. SQL uses
+	 * the raw query-count difference because percentages are misleading at low
+	 * counts.
+	 *
+	 * @param array<string,array<string,mixed>> $summaries Scenario summaries.
+	 * @return array<string,array<string,mixed>>
+	 */
+	public static function compare_row_shape_summaries( array $summaries ): array {
+		$comparisons = array();
+		foreach ( $summaries as $full_scenario => $full ) {
+			if ( ! str_starts_with( $full_scenario, 'row_shape_' ) || ! str_ends_with( $full_scenario, '_full' ) || ! is_array( $full ) ) {
+				continue;
+			}
+
+			$case_id      = substr( $full_scenario, strlen( 'row_shape_' ), -strlen( '_full' ) );
+			$ids_scenario = "row_shape_{$case_id}_ids";
+			$ids          = $summaries[ $ids_scenario ] ?? null;
+			if ( ! is_array( $ids ) ) {
+				continue;
+			}
+
+			$label                   = preg_replace( '/ \(full\)$/', '', (string) ( $full['label'] ?? $case_id ) );
+			$comparisons[ $case_id ] = array(
+				'label'                     => is_string( $label ) ? $label : $case_id,
+				'full_scenario'             => $full_scenario,
+				'ids_scenario'              => $ids_scenario,
+				'full_p50_ms'               => (float) ( $full['p50_ms'] ?? 0 ),
+				'ids_p50_ms'                => (float) ( $ids['p50_ms'] ?? 0 ),
+				'p50_reduction_pct'         => self::reduction_percentage( $full['p50_ms'] ?? 0, $ids['p50_ms'] ?? 0 ),
+				'full_p95_ms'               => (float) ( $full['p95_ms'] ?? 0 ),
+				'ids_p95_ms'                => (float) ( $ids['p95_ms'] ?? 0 ),
+				'p95_reduction_pct'         => self::reduction_percentage( $full['p95_ms'] ?? 0, $ids['p95_ms'] ?? 0 ),
+				'full_sql_queries_p95'      => (int) ( $full['sql_queries_p95'] ?? 0 ),
+				'ids_sql_queries_p95'       => (int) ( $ids['sql_queries_p95'] ?? 0 ),
+				'sql_queries_p95_reduction' => (int) ( $full['sql_queries_p95'] ?? 0 ) - (int) ( $ids['sql_queries_p95'] ?? 0 ),
+				'full_memory_bytes_p95'     => (int) ( $full['memory_bytes_p95'] ?? 0 ),
+				'ids_memory_bytes_p95'      => (int) ( $ids['memory_bytes_p95'] ?? 0 ),
+				'memory_p95_reduction_pct'  => self::reduction_percentage( $full['memory_bytes_p95'] ?? 0, $ids['memory_bytes_p95'] ?? 0 ),
+				'full_payload_bytes_p95'    => (int) ( $full['payload_bytes_p95'] ?? 0 ),
+				'ids_payload_bytes_p95'     => (int) ( $ids['payload_bytes_p95'] ?? 0 ),
+				'payload_p95_reduction_pct' => self::reduction_percentage( $full['payload_bytes_p95'] ?? 0, $ids['payload_bytes_p95'] ?? 0 ),
+			);
+		}
+
+		return $comparisons;
+	}
+
+	/**
+	 * Calculates the savings from projection for each link-suggestion case.
+	 *
+	 * @param array<string,array<string,mixed>> $summaries Scenario summaries.
+	 * @return array<string,array<string,mixed>>
+	 */
+	public static function compare_link_suggestion_summaries( array $summaries ): array {
+		$comparisons = array();
+		foreach ( $summaries as $forced_scenario => $forced ) {
+			if ( ! str_starts_with( $forced_scenario, 'link_suggestions_' ) || ! str_ends_with( $forced_scenario, '_forced' ) || ! is_array( $forced ) ) {
+				continue;
+			}
+
+			$case_id            = substr( $forced_scenario, strlen( 'link_suggestions_' ), -strlen( '_forced' ) );
+			$projected_scenario = "link_suggestions_{$case_id}_projected";
+			$projected          = $summaries[ $projected_scenario ] ?? null;
+			if ( ! is_array( $projected ) ) {
+				continue;
+			}
+
+			$label                   = preg_replace( '/ \(forced enrichment\)$/', '', (string) ( $forced['label'] ?? $case_id ) );
+			$comparisons[ $case_id ] = array(
+				'label'                       => is_string( $label ) ? $label : $case_id,
+				'forced_scenario'             => $forced_scenario,
+				'projected_scenario'          => $projected_scenario,
+				'forced_p50_ms'               => (float) ( $forced['p50_ms'] ?? 0 ),
+				'projected_p50_ms'            => (float) ( $projected['p50_ms'] ?? 0 ),
+				'p50_reduction_pct'           => self::reduction_percentage( $forced['p50_ms'] ?? 0, $projected['p50_ms'] ?? 0 ),
+				'forced_p95_ms'               => (float) ( $forced['p95_ms'] ?? 0 ),
+				'projected_p95_ms'            => (float) ( $projected['p95_ms'] ?? 0 ),
+				'p95_reduction_pct'           => self::reduction_percentage( $forced['p95_ms'] ?? 0, $projected['p95_ms'] ?? 0 ),
+				'forced_sql_queries_p95'      => (int) ( $forced['sql_queries_p95'] ?? 0 ),
+				'projected_sql_queries_p95'   => (int) ( $projected['sql_queries_p95'] ?? 0 ),
+				'sql_queries_p95_reduction'   => (int) ( $forced['sql_queries_p95'] ?? 0 ) - (int) ( $projected['sql_queries_p95'] ?? 0 ),
+				'forced_memory_bytes_p95'     => (int) ( $forced['memory_bytes_p95'] ?? 0 ),
+				'projected_memory_bytes_p95'  => (int) ( $projected['memory_bytes_p95'] ?? 0 ),
+				'memory_p95_reduction_pct'    => self::reduction_percentage( $forced['memory_bytes_p95'] ?? 0, $projected['memory_bytes_p95'] ?? 0 ),
+				'forced_payload_bytes_p95'    => (int) ( $forced['payload_bytes_p95'] ?? 0 ),
+				'projected_payload_bytes_p95' => (int) ( $projected['payload_bytes_p95'] ?? 0 ),
+				'payload_p95_reduction_pct'   => self::reduction_percentage( $forced['payload_bytes_p95'] ?? 0, $projected['payload_bytes_p95'] ?? 0 ),
+			);
+		}
+
+		return $comparisons;
+	}
+
+	private static function reduction_percentage( mixed $full, mixed $ids ): ?float {
+		$full = (float) $full;
+		if ( $full <= 0 ) {
+			return null;
+		}
+
+		return round( ( $full - (float) $ids ) / $full * 100, 2 );
 	}
 
 	/**
@@ -2450,9 +3308,9 @@ final class PerfBench {
 	 * highest step peak. Per-step fields only expose latency; SQL and memory
 	 * would make the report noisy without adding much.
 	 *
-	 * @param string                                                                            $label         Scenario label.
-	 * @param array<int,array{latency_ms:float,sql_queries:int,memory_bytes:int}>               $total_samples Aggregate samples per iteration.
-	 * @param array<string,array<int,array{latency_ms:float,sql_queries:int,memory_bytes:int}>> $step_samples Per-step samples per iteration, keyed by step name.
+	 * @param string                                                                                              $label         Scenario label.
+	 * @param array<int,array{latency_ms:float,sql_queries:int,memory_bytes:int,payload_bytes:int}>               $total_samples Aggregate samples per iteration.
+	 * @param array<string,array<int,array{latency_ms:float,sql_queries:int,memory_bytes:int,payload_bytes:int}>> $step_samples Per-step samples per iteration, keyed by step name.
 	 * @return array<string,mixed>
 	 */
 	public static function summarize_stepped_samples( string $label, array $total_samples, array $step_samples ): array {
@@ -2500,6 +3358,7 @@ final class PerfBench {
 			$iteration_latency = 0.0;
 			$iteration_sql     = 0;
 			$iteration_memory  = 0;
+			$iteration_payload = 0;
 			$per_step          = array();
 
 			foreach ( $steps as $step_name => $step_callback ) {
@@ -2508,6 +3367,7 @@ final class PerfBench {
 				$iteration_latency     += $sample['latency_ms'];
 				$iteration_sql         += $sample['sql_queries'];
 				$iteration_memory       = max( $iteration_memory, $sample['memory_bytes'] );
+				$iteration_payload     += $sample['payload_bytes'];
 			}
 
 			if ( $index >= $warmup ) {
@@ -2515,9 +3375,10 @@ final class PerfBench {
 					$step_samples[ $step_name ][] = $sample;
 				}
 				$total_samples[] = array(
-					'latency_ms'   => $iteration_latency,
-					'sql_queries'  => $iteration_sql,
-					'memory_bytes' => $iteration_memory,
+					'latency_ms'    => $iteration_latency,
+					'sql_queries'   => $iteration_sql,
+					'memory_bytes'  => $iteration_memory,
+					'payload_bytes' => $iteration_payload,
 				);
 			}
 		}
@@ -2529,7 +3390,7 @@ final class PerfBench {
 	 * Measures one callback.
 	 *
 	 * @param callable $callback Scenario callback.
-	 * @return array{latency_ms:float,sql_queries:int,memory_bytes:int}
+	 * @return array{latency_ms:float,sql_queries:int,memory_bytes:int,payload_bytes:int}
 	 */
 	private function measure( callable $callback ): array {
 		global $wpdb;
@@ -2540,14 +3401,18 @@ final class PerfBench {
 		$memory_before  = memory_get_usage();
 		$started_at     = hrtime( true );
 
-		$result       = $callback();
-		$memory_after = memory_get_usage();
+		$result         = $callback();
+		$elapsed_ms     = self::elapsed_ms( $started_at );
+		$memory_after   = memory_get_usage();
+		$encoded_result = wp_json_encode( $result, JSON_UNESCAPED_SLASHES );
+		$payload_bytes  = is_string( $encoded_result ) ? strlen( $encoded_result ) : 0;
 		unset( $result );
 
 		return array(
-			'latency_ms'   => self::elapsed_ms( $started_at ),
-			'sql_queries'  => (int) $wpdb->num_queries - $queries_before,
-			'memory_bytes' => max( 0, $memory_after - $memory_before ),
+			'latency_ms'    => $elapsed_ms,
+			'sql_queries'   => (int) $wpdb->num_queries - $queries_before,
+			'memory_bytes'  => max( 0, $memory_after - $memory_before ),
+			'payload_bytes' => $payload_bytes,
 		);
 	}
 
@@ -2579,6 +3444,110 @@ final class PerfBench {
 		}
 
 		return $response->get_data();
+	}
+
+	/**
+	 * Runs a link-suggestion request, optionally simulating the old enrichment path.
+	 *
+	 * WordPress builds projected post data before applying `rest_prepare_*`. To
+	 * simulate the old path, the benchmark hides `_fields` at priority 9, lets
+	 * Cortext enrich at priority 10, and restores the projection at priority 11.
+	 * Both variants then pass through the outer REST field filter once, so their
+	 * output and projection overhead stay comparable.
+	 *
+	 * @param array<string,mixed> $params           REST params.
+	 * @param bool                $force_enrichment Whether to simulate the old enrichment path.
+	 * @return mixed
+	 * @throws RuntimeException When REST dispatch fails.
+	 */
+	private function rest_link_suggestion_request( array $params, bool $force_enrichment ): mixed {
+		$route           = '/wp/v2/crtxt_documents';
+		$original_fields = null;
+		$before          = static function ( mixed $response, mixed $post, WP_REST_Request $request ) use ( $route, $force_enrichment, &$original_fields ): mixed {
+			unset( $post );
+			if ( $force_enrichment && $route === $request->get_route() ) {
+				$original_fields = $request->get_param( '_fields' );
+				$request->set_param( '_fields', null );
+			}
+			return $response;
+		};
+		$after           = static function ( mixed $response, mixed $post, WP_REST_Request $request ) use ( $route, $force_enrichment, &$original_fields ): mixed {
+			unset( $post );
+			if ( $force_enrichment && $route === $request->get_route() ) {
+				$request->set_param( '_fields', $original_fields );
+			}
+			return $response;
+		};
+		$hook            = 'rest_prepare_' . Document::POST_TYPE;
+
+		// Attach both callbacks to each variant so hook overhead stays the same.
+		add_filter( $hook, $before, 9, 3 );
+		add_filter( $hook, $after, 11, 3 );
+		try {
+			$request = new WP_REST_Request( 'GET', $route );
+			foreach ( $params as $key => $value ) {
+				$request->set_param( $key, $value );
+			}
+
+			$response = rest_do_request( $request );
+			if ( ! $response instanceof WP_REST_Response ) {
+				throw new RuntimeException( 'The link-suggestion request did not return a REST response.' );
+			}
+			$response = rest_filter_response_fields( $response, rest_get_server(), $request );
+			if ( $response->get_status() >= 400 ) {
+				throw new RuntimeException( 'The link-suggestion REST request failed.' );
+			}
+
+			return $response->get_data();
+		} finally {
+			remove_filter( $hook, $before, 9 );
+			remove_filter( $hook, $after, 11 );
+		}
+	}
+
+	/**
+	 * Measures a batch of sequential requests as separate PHP workloads.
+	 *
+	 * The batch sums latency, SQL queries, and payload. For memory, it keeps the
+	 * largest net increase from one request instead of retaining every response in
+	 * one process.
+	 *
+	 * @param array<int,callable> $requests Request callbacks in execution order.
+	 * @return array{latency_ms:float,sql_queries:int,memory_bytes:int,payload_bytes:int}
+	 */
+	private function measure_request_batch( array $requests ): array {
+		$aggregate = array(
+			'latency_ms'    => 0.0,
+			'sql_queries'   => 0,
+			'memory_bytes'  => 0,
+			'payload_bytes' => 0,
+		);
+
+		foreach ( $requests as $request ) {
+			$sample                      = $this->measure_rest_request( $request );
+			$aggregate['latency_ms']    += $sample['latency_ms'];
+			$aggregate['sql_queries']   += $sample['sql_queries'];
+			$aggregate['memory_bytes']   = max( $aggregate['memory_bytes'], $sample['memory_bytes'] );
+			$aggregate['payload_bytes'] += $sample['payload_bytes'];
+		}
+
+		return $aggregate;
+	}
+
+	/**
+	 * Measures one REST workload after flushing work left by the previous sample.
+	 *
+	 * A real PHP request flushes pending field-index sync during shutdown. The
+	 * benchmark reuses one process, so it flushes before timing the next request
+	 * to keep the samples independent.
+	 *
+	 * @param callable $callback REST request callback.
+	 * @return array{latency_ms:float,sql_queries:int,memory_bytes:int,payload_bytes:int}
+	 */
+	private function measure_rest_request( callable $callback ): array {
+		( new FieldValueIndex() )->flush_pending_sync();
+
+		return $this->measure( $callback );
 	}
 
 	/**

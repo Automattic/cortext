@@ -28,6 +28,7 @@ use Cortext\Relations;
 use Cortext\Taxonomy\TraitTaxonomy;
 use WP_Error;
 use WP_Post;
+use WP_Query;
 use WP_REST_Request;
 use WP_REST_Response;
 
@@ -68,6 +69,17 @@ final class RowsController {
 		'datetime',
 	);
 
+	/**
+	 * Formatting contexts cached for the lifetime of each core REST request.
+	 *
+	 * @var \WeakMap<WP_REST_Request,array<int,RowFormatContext>>
+	 */
+	private \WeakMap $rest_prepare_format_contexts;
+
+	public function __construct() {
+		$this->rest_prepare_format_contexts = new \WeakMap();
+	}
+
 	public function register(): void {
 		add_action( 'rest_api_init', array( $this, 'register_routes' ) );
 	}
@@ -106,7 +118,12 @@ final class RowsController {
 						'per_page'     => array(
 							'type'              => 'integer',
 							'default'           => 25,
-							'validate_callback' => static fn( $value ) => (int) $value >= 1 && (int) $value <= 100,
+							'validate_callback' => array( $this, 'validate_per_page_param' ),
+						),
+						'shape'        => array(
+							'type'    => 'string',
+							'default' => 'full',
+							'enum'    => array( 'full', 'ids' ),
 						),
 						'search'       => array(
 							'type'    => 'string',
@@ -215,6 +232,15 @@ final class RowsController {
 			return $collection;
 		}
 
+		$shape = (string) $request->get_param( 'shape' );
+		if ( 'ids' === $shape && 'edit' !== (string) $request->get_param( 'context' ) ) {
+			return new WP_Error(
+				'cortext_rows_ids_shape_requires_edit_context',
+				__( 'The ID-only response shape requires edit context.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+
 		$field_ids           = Document::collection_field_ids( $collection->ID );
 		$requested_fields    = $request->get_param( 'fields' );
 		$formatted_field_ids = is_array( $requested_fields )
@@ -239,6 +265,17 @@ final class RowsController {
 		// but future callers might.
 		$query_params = $request->get_query_params();
 		if ( array_key_exists( 'include', $query_params ) && count( (array) $request->get_param( 'include' ) ) === 0 ) {
+			if ( 'ids' === $shape ) {
+				return new WP_REST_Response(
+					array(
+						'ids'        => array(),
+						'total'      => 0,
+						'totalPages' => 0,
+					),
+					200
+				);
+			}
+
 			$response = array(
 				'rows'       => array(),
 				'total'      => 0,
@@ -287,12 +324,58 @@ final class RowsController {
 			FormulaMaterializer::recompute_collection( $collection_id );
 		}
 
+		$row_statuses = $this->row_statuses_for_request();
+
+		if ( 'ids' === $shape ) {
+			$ids_result = ( new FieldValueReadQuery() )->query_row_ids(
+				$collection_id,
+				$field_schema,
+				$request->get_param( 'filters' ),
+				$request->get_param( 'sort' ),
+				$search,
+				array_key_exists( 'include', $query_params ),
+				(int) $request->get_param( 'page' ),
+				(int) $request->get_param( 'per_page' ),
+				$row_statuses
+			);
+
+			if ( null !== $ids_result ) {
+				$ids         = $ids_result['ids'];
+				$total       = $ids_result['total'];
+				$total_pages = $ids_result['totalPages'];
+			} else {
+				$query = $this->run_rows_query_fallback(
+					$request,
+					$row_query,
+					$field_schema,
+					$where_sql,
+					$filter_sql,
+					$collection_id,
+					$row_statuses,
+					$search,
+					'ids'
+				);
+
+				$ids         = array_map( 'intval', (array) $query->posts );
+				$total       = (int) $query->found_posts;
+				$total_pages = (int) $query->max_num_pages;
+			}
+
+			return new WP_REST_Response(
+				array(
+					'ids'        => $ids,
+					'total'      => $total,
+					'totalPages' => $total_pages,
+				),
+				200
+			);
+		}
+
 		// Keep row-formatting metadata local to this rows response. Passing the
 		// context through the helpers avoids stale state in CLI and test runs.
 		$ctx              = new RowFormatContext();
 		$ctx->field_types = $this->field_types_map( $formatted_field_ids );
 		$multi_field_ids  = $this->multi_value_field_ids_from( $ctx->field_types );
-		$row_statuses     = $this->row_statuses_for_request();
 
 		$sidecar_result = ( new FieldValueReadQuery() )->query_rows(
 			$collection_id,
@@ -311,17 +394,16 @@ final class RowsController {
 			$total       = $sidecar_result['total'];
 			$total_pages = $sidecar_result['totalPages'];
 		} else {
-			$query_args = $this->build_query_args( $request, $collection_id, $row_statuses );
-			$scope      = new RowsQueryScope(
+			$query = $this->run_rows_query_fallback(
+				$request,
 				$row_query,
 				$field_schema,
 				$where_sql,
-				$filter_sql['join'],
-				$request->get_param( 'sort' ),
-				$search,
-				TraitTaxonomy::term_taxonomy_id_for_trait( $collection_id )
+				$filter_sql,
+				$collection_id,
+				$row_statuses,
+				$search
 			);
-			$query      = $scope->run( $query_args );
 
 			$posts       = $query->posts;
 			$total       = (int) $query->found_posts;
@@ -498,6 +580,52 @@ final class RowsController {
 		}
 
 		return $args;
+	}
+
+	/**
+	 * Runs a row query against postmeta when the field-value index cannot handle the request.
+	 *
+	 * Both response shapes share this path. Passing `ids` lets WP_Query skip
+	 * post hydration.
+	 *
+	 * @param WP_REST_Request $request       REST request.
+	 * @param RowsFilterQuery $row_query     Filter/sort SQL compiler.
+	 * @param array           $field_schema  Field schema for the collection.
+	 * @param string          $where_sql     Compiled filter/search WHERE clause.
+	 * @param array           $filter_sql    Compiled filter SQL parts (join/where).
+	 * @param int             $collection_id Collection (trait) post ID.
+	 * @param string[]        $row_statuses  Post statuses visible to this request.
+	 * @param string          $search        Raw REST search parameter.
+	 * @param string          $fields        WP_Query `fields` value ('' or 'ids').
+	 * @return WP_Query
+	 */
+	private function run_rows_query_fallback(
+		WP_REST_Request $request,
+		RowsFilterQuery $row_query,
+		array $field_schema,
+		string $where_sql,
+		array $filter_sql,
+		int $collection_id,
+		array $row_statuses,
+		string $search,
+		string $fields = ''
+	): WP_Query {
+		$query_args = $this->build_query_args( $request, $collection_id, $row_statuses );
+		if ( '' !== $fields ) {
+			$query_args['fields'] = $fields;
+		}
+
+		$scope = new RowsQueryScope(
+			$row_query,
+			$field_schema,
+			$where_sql,
+			$filter_sql['join'],
+			$request->get_param( 'sort' ),
+			$search,
+			TraitTaxonomy::term_taxonomy_id_for_trait( $collection_id )
+		);
+
+		return $scope->run( $query_args );
 	}
 
 	/**
@@ -1011,6 +1139,32 @@ final class RowsController {
 	}
 
 	/**
+	 * Validates the row page size. Full row responses keep the existing cap, while
+	 * ID responses allow larger pages because they skip row formatting.
+	 *
+	 * @param mixed           $value   Raw per_page value.
+	 * @param WP_REST_Request $request REST request.
+	 * @return true|WP_Error
+	 */
+	public function validate_per_page_param( mixed $value, WP_REST_Request $request ): bool|WP_Error {
+		$per_page = (int) $value;
+		$max      = 'ids' === (string) $request->get_param( 'shape' ) ? 1000 : 100;
+		if ( $per_page >= 1 && $per_page <= $max ) {
+			return true;
+		}
+
+		return new WP_Error(
+			'rest_invalid_param',
+			sprintf(
+				/* translators: %d: maximum number of rows allowed per page. */
+				__( 'per_page must be between 1 and %d.', 'cortext' ),
+				$max
+			),
+			array( 'status' => 400 )
+		);
+	}
+
+	/**
 	 * Formats resolved references for a relation field.
 	 *
 	 * @param int                   $row_id   Row post ID.
@@ -1459,14 +1613,30 @@ final class RowsController {
 	 *
 	 * @param WP_REST_Response $response The prepared response object.
 	 * @param WP_Post          $post     The post being prepared.
+	 * @param WP_REST_Request  $request  REST request used to prepare the post.
 	 * @return WP_REST_Response
 	 */
-	public function filter_rest_prepare_row( $response, WP_Post $post ): WP_REST_Response {
+	public function filter_rest_prepare_row( $response, WP_Post $post, ?WP_REST_Request $request = null ): WP_REST_Response {
 		if ( ! $response instanceof WP_REST_Response ) {
 			return $response;
 		}
 
 		if ( Document::POST_TYPE !== $post->post_type ) {
+			return $response;
+		}
+
+		$requested_fields    = $this->requested_rest_row_fields( $request );
+		$include             = static fn( string $field ): bool => null === $requested_fields
+			|| rest_is_field_included( $field, $requested_fields );
+		$include_created_at  = $include( 'created_at' );
+		$include_modified_at = $include( 'modified_at' );
+		$include_created_by  = $include( 'created_by' );
+		$include_modified_by = $include( 'modified_by' );
+		$include_cover       = $include( 'cover' );
+		$include_hydrated    = $include( 'cortext_hydrated_meta' );
+
+		if ( ! $include_created_at && ! $include_modified_at && ! $include_created_by
+			&& ! $include_modified_by && ! $include_cover && ! $include_hydrated ) {
 			return $response;
 		}
 
@@ -1480,31 +1650,49 @@ final class RowsController {
 		// Match `format_row` for system fields too. The normal WP response
 		// exposes `author` / `date_gmt`, which the row field getters do not
 		// read, so detail views would otherwise show "Empty".
-		$created_by_id       = (int) $post->post_author;
-		$modified_by_id      = (int) get_post_meta( $post->ID, '_modified_by', true );
-		$data['created_at']  = $this->format_gmt_date( $post->post_date_gmt );
-		$data['modified_at'] = $this->format_gmt_date( $post->post_modified_gmt );
-		$data['created_by']  = $this->display_name_for( $created_by_id );
-		$data['modified_by'] = $this->display_name_for(
-			$modified_by_id > 0 ? $modified_by_id : $created_by_id
-		);
+		$created_by_id = (int) $post->post_author;
+		if ( $include_created_at ) {
+			$data['created_at'] = $this->format_gmt_date( $post->post_date_gmt );
+		}
+		if ( $include_modified_at ) {
+			$data['modified_at'] = $this->format_gmt_date( $post->post_modified_gmt );
+		}
+		if ( $include_created_by ) {
+			$data['created_by'] = $this->display_name_for( $created_by_id );
+		}
+		if ( $include_modified_by ) {
+			$modified_by_id      = (int) get_post_meta( $post->ID, '_modified_by', true );
+			$data['modified_by'] = $this->display_name_for(
+				$modified_by_id > 0 ? $modified_by_id : $created_by_id
+			);
+		}
+		if ( $include_cover ) {
+			$data['cover'] = $this->cover_data_for_post( $post );
+		}
 
-		$field_ids = Document::collection_field_ids( $collection->ID );
+		$field_ids = $include_hydrated ? Document::collection_field_ids( $collection->ID ) : array();
 		if ( count( $field_ids ) > 0 ) {
 			FormulaMaterializer::recompute_row( $collection->ID, $post->ID );
 
 			// Keep hydrated values out of `meta`. Those keys are registered as
 			// strings; if autosave sends hydrated objects back, REST rejects the
 			// save with 400. `cortext_hydrated_meta` is read-only display data.
-			$hydrated = array();
+			$ctx             = $this->row_format_context_for_collection( $request, $collection->ID, $field_ids );
+			$related_row_ids = $this->collect_related_row_ids( array( $post ), $field_ids, $ctx );
+			if ( count( $related_row_ids ) > 0 ) {
+				_prime_post_caches( $related_row_ids, false, true );
+			}
+
+			$hydrated        = array();
+			$multi_field_ids = $this->multi_value_field_ids_from( $ctx->field_types );
 			foreach ( $field_ids as $field_id ) {
-				$field_type = (string) get_post_meta( $field_id, 'type', true );
+				$field_type = $ctx->field_types[ $field_id ] ?? (string) get_post_meta( $field_id, 'type', true );
 				$key        = "field-{$field_id}";
 
 				if ( 'relation' === $field_type ) {
-					$hydrated[ $key ] = $this->format_relation_value( $post->ID, $field_id );
+					$hydrated[ $key ] = $this->format_relation_value( $post->ID, $field_id, $ctx );
 				} elseif ( 'rollup' === $field_type ) {
-					$hydrated[ $key ] = $this->compute_rollup_value( $post->ID, $field_id );
+					$hydrated[ $key ] = $this->compute_rollup_value( $post->ID, $field_id, $ctx );
 				} elseif ( 'formula' === $field_type ) {
 					$hydrated[ $key ] = $this->format_typed_value(
 						$post->ID,
@@ -1512,16 +1700,38 @@ final class RowsController {
 						$this->formula_result_type_for( $field_id ),
 						false
 					);
+				} else {
+					$hydrated[ $key ] = $this->format_typed_value(
+						$post->ID,
+						$field_id,
+						$field_type,
+						isset( $multi_field_ids[ $field_id ] )
+					);
 				}
 			}
 
-			if ( count( $hydrated ) > 0 ) {
-				$data['cortext_hydrated_meta'] = $hydrated;
-			}
+			$data['cortext_hydrated_meta'] = $hydrated;
 		}
 
 		$response->set_data( $data );
 		return $response;
+	}
+
+	/**
+	 * Reads the core REST field projection to decide which row fields to add.
+	 *
+	 * WordPress treats a missing or empty `_fields` value as a full response.
+	 *
+	 * @param WP_REST_Request|null $request REST request used to prepare the post.
+	 * @return string[]|null Requested fields, or null for a full response.
+	 */
+	private function requested_rest_row_fields( ?WP_REST_Request $request ): ?array {
+		if ( null === $request || ! isset( $request['_fields'] ) ) {
+			return null;
+		}
+
+		$fields = array_map( 'trim', wp_parse_list( $request['_fields'] ) );
+		return count( $fields ) > 0 ? $fields : null;
 	}
 
 	/**
@@ -1533,11 +1743,7 @@ final class RowsController {
 	 * @return WP_Post|null
 	 */
 	private function find_trait_for_document( int $document_id ): ?WP_Post {
-		$terms = wp_get_object_terms(
-			$document_id,
-			TraitTaxonomy::TAXONOMY,
-			array( 'fields' => 'all' )
-		);
+		$terms = get_the_terms( $document_id, TraitTaxonomy::TAXONOMY );
 		if ( ! is_array( $terms ) || count( $terms ) === 0 ) {
 			return null;
 		}
@@ -1592,7 +1798,6 @@ final class RowsController {
 		$created_by_id  = (int) $post->post_author;
 		$modified_by_id = (int) get_post_meta( $post->ID, '_modified_by', true );
 		$cover_id       = (int) get_post_thumbnail_id( $post );
-		$cover          = $this->cover_data_for_post( $post );
 
 		return array(
 			'id'             => $post->ID,
@@ -1606,7 +1811,7 @@ final class RowsController {
 			'created_by'     => $this->display_name_for( $created_by_id ),
 			'modified_by'    => $this->display_name_for( $modified_by_id > 0 ? $modified_by_id : $created_by_id ),
 			'featured_media' => $cover_id,
-			'cover'          => $cover,
+			'cover'          => $this->cover_data_for_post( $post ),
 			'meta'           => $meta,
 		);
 	}
@@ -1636,6 +1841,36 @@ final class RowsController {
 			'url' => $cover_src[0],
 			'alt' => (string) get_post_meta( $cover_id, '_wp_attachment_image_alt', true ),
 		);
+	}
+
+	/**
+	 * Returns the formatter context shared by rows in one core REST request.
+	 *
+	 * @param WP_REST_Request|null $request       REST request used to prepare the post.
+	 * @param int                  $collection_id Collection post ID.
+	 * @param int[]                $field_ids     Field IDs in the collection.
+	 */
+	private function row_format_context_for_collection(
+		?WP_REST_Request $request,
+		int $collection_id,
+		array $field_ids
+	): RowFormatContext {
+		$contexts = null !== $request && isset( $this->rest_prepare_format_contexts[ $request ] )
+			? $this->rest_prepare_format_contexts[ $request ]
+			: array();
+		$ctx      = $contexts[ $collection_id ] ?? new RowFormatContext();
+		foreach ( $field_ids as $field_id ) {
+			if ( ! isset( $ctx->field_types[ $field_id ] ) ) {
+				$ctx->field_types[ $field_id ] = (string) get_post_meta( $field_id, 'type', true );
+			}
+		}
+
+		if ( null !== $request ) {
+			$contexts[ $collection_id ]                     = $ctx;
+			$this->rest_prepare_format_contexts[ $request ] = $contexts;
+		}
+
+		return $ctx;
 	}
 
 	/**
