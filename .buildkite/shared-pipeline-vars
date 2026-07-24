@@ -2,7 +2,7 @@
 
 # Sourced by the pipeline-upload step so these values land in the rendered pipeline.yml.
 
-CI_TOOLKIT_PLUGIN_VERSION='6.0.1'
+CI_TOOLKIT_PLUGIN_VERSION='6.2.0'
 NVM_PLUGIN_VERSION='0.6.0'
 XCODE_VERSION=$(sed -E 's/^~> ?//' .xcode-version)
 
